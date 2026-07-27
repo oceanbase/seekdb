@@ -6,11 +6,8 @@ oceanbase-ce:
     home_path: /data/{user}/{deploy_name}/observer/{server}
     production_mode: false
     memory_limit: '80G'
-    system_memory: '10G'
     datafile_size: '40G'
   runtime_dependencies:
-  - src_path: plugin_dir
-    target_path: plugin_dir
   - src_path: admin
     target_path: admin
   - src_path: lib
@@ -21,17 +18,3 @@ oceanbase-ce:
     target_path: etc
   - src_path: wallet
     target_path: wallet
-obproxy-ce:
-{{%% OBPORXY_SERVERS %%}}
-  global:
-    listen_port: {{%% LISTEN_PORT %%}}
-    prometheus_listen_port: {{%% PROMETHEUS_LISTEN_PORT %%}}
-    home_path: {{%% OBPORXY_HOME_PATH %%}}
-    enable_cluster_checkout: false
-    skip_proxy_sys_private_check: true
-    syslog_level: 'DEBUG'
-    enable_metadb_used: 'false'
-    enable_qa_mode: 'TRUE'
-    location_expire_period: '1'
-  depends:
-    - {{%% COMPONENT %%}}

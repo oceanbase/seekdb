@@ -17,10 +17,10 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_drop_index_task.h"
-#include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_sim_point.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_management_service.h"
 
 using namespace oceanbase::rootserver;
 using namespace oceanbase::common;
@@ -32,7 +32,7 @@ using namespace oceanbase::sql;
 
 ObDropIndexTask::ObDropIndexTask()
   : ObDDLTask(DDL_DROP_INDEX),
-    root_service_(nullptr),
+    local_management_service_(nullptr),
     drop_index_arg_()
 {
 }
@@ -57,9 +57,9 @@ int ObDropIndexTask::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_id), K(data_table_id),
         K(index_table_id), K(schema_version), K(parent_task_id));
-  } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, root service is null", K(ret));
+    LOG_WARN("error sys, local management service is null", K(ret));
   } else if (OB_FAIL(deep_copy_index_arg(allocator_, drop_index_arg, drop_index_arg_))) {
     LOG_WARN("deep copy drop index arg failed", K(ret));
   } else {
@@ -87,9 +87,9 @@ int ObDropIndexTask::init(
   if (OB_UNLIKELY(!task_record.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_record));
-  } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, root service is null", K(ret));
+    LOG_WARN("error sys, local management service is null", K(ret));
   } else {
   
     object_id_ = task_record.object_id_;
@@ -130,7 +130,7 @@ int ObDropIndexTask::update_index_status(const ObIndexStatus new_status)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
       schema_guard, schema_version_))) {
     LOG_WARN("fail to get schema guard", K(ret), K(target_object_id_), K(schema_version_));
   } else if (OB_FAIL(schema_guard.check_formal_guard())) {
@@ -154,7 +154,7 @@ int ObDropIndexTask::update_index_status(const ObIndexStatus new_status)
       LOG_WARN("get ddl rpc timeout fail", K(ret));
     } else if (OB_FAIL(DDL_SIM(task_id_, UPDATE_INDEX_STATUS_FAILED))) {
       LOG_WARN("ddl sim failure", K(ret), K(task_id_));
-    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->update_index_status(arg); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->update_index_status(arg); }))) {
       LOG_WARN("update index status failed", K(ret), K(arg));
     } else {
       LOG_INFO("notify index status changed finish", K(new_status), K(target_object_id_));
@@ -217,8 +217,8 @@ int ObDropIndexTask::drop_index_impl()
   const ObTableSchema *index_schema = nullptr;
   if (OB_ISNULL(GCTX.schema_service_) ) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("get tenant schema failed", K(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("get runtime schema failed", K(ret));
   } else if (OB_FAIL(schema_guard.check_table_exist(target_object_id_, is_index_exist))) {
     LOG_WARN("check table exist failed", K(ret), K(target_object_id_));
   } else if (!is_index_exist) {
@@ -260,7 +260,7 @@ int ObDropIndexTask::drop_index_impl()
       LOG_WARN("failed to get ddl rpc timeout", K(ret));
     } else if (OB_FAIL(DDL_SIM(task_id_, DROP_INDEX_RPC_FAILED))) {
       LOG_WARN("ddl sim failure", K(ret), K(task_id_));
-    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_index(drop_index_arg, drop_index_res); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_index(drop_index_arg, drop_index_res); }))) {
       LOG_WARN("drop index failed", K(ret), K(ddl_rpc_timeout));
     }
     LOG_INFO("drop index", K(ret), K(drop_index_sql.ptr()), K(drop_index_arg));
@@ -399,7 +399,7 @@ int ObDropIndexTask::check_switch_succ()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_ISNULL(root_service_)) {
+  } else if (OB_ISNULL(local_management_service_)) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys", K(ret));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
@@ -407,8 +407,8 @@ int ObDropIndexTask::check_switch_succ()
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(refresh_schema_version())) {
     LOG_WARN("refresh schema version failed", K(ret));
-  } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("get tenant schema failed", K(ret));
+  } else if (OB_FAIL(local_management_service_->get_schema_service().get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("get runtime schema failed", K(ret));
   } else if (OB_FAIL(schema_guard.check_table_exist(target_object_id_, is_index_exist))) {
     LOG_WARN("check table exist failed", K(ret), K(target_object_id_));
   } else if (!is_index_exist) {

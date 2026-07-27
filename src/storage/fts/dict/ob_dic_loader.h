@@ -23,7 +23,7 @@ namespace oceanbase
 {
 namespace storage
 {
-class ObTenantDicLoader
+class ObDicLoader
 {
 public:
   struct ObDicTableInfo
@@ -55,8 +55,8 @@ public:
   };
 
 public:
-  ObTenantDicLoader() : is_inited_(false), is_load_(false), ref_cnt_(0) { }
-  virtual ~ObTenantDicLoader() { }
+  ObDicLoader() : is_inited_(false), is_load_(false), ref_cnt_(0) { }
+  virtual ~ObDicLoader() { }
   virtual int init() = 0;
   int try_load_dictionary_in_trans(ObMySQLTransaction &trans);
   int try_load_dictionary_in_trans();
@@ -100,28 +100,28 @@ protected:
   bool is_load_;
   int64_t ref_cnt_;
   ObArray<ObDicTableInfo> dic_tables_info_;
-  DISALLOW_COPY_AND_ASSIGN(ObTenantDicLoader);
+  DISALLOW_COPY_AND_ASSIGN(ObDicLoader);
 };
 
-class ObTenantDicLoaderHandle
+class ObDicLoaderHandle
 {
 public:
-  ObTenantDicLoaderHandle() : loader_(nullptr) {}
-  ~ObTenantDicLoaderHandle() { reset(); }
-  ObTenantDicLoaderHandle(const ObTenantDicLoaderHandle &other)
+  ObDicLoaderHandle() : loader_(nullptr) {}
+  ~ObDicLoaderHandle() { reset(); }
+  ObDicLoaderHandle(const ObDicLoaderHandle &other)
     : loader_(nullptr)
   {
     *this = other;
   }
-  ObTenantDicLoaderHandle &operator=(const ObTenantDicLoaderHandle &other);
+  ObDicLoaderHandle &operator=(const ObDicLoaderHandle &other);
   void reset();
-  int set_loader(ObTenantDicLoader *loader);
+  int set_loader(ObDicLoader *loader);
   OB_INLINE bool is_valid() const { return nullptr != loader_; }
-  OB_INLINE ObTenantDicLoader *get_loader() const { return loader_; }
+  OB_INLINE ObDicLoader *get_loader() const { return loader_; }
   TO_STRING_KV(KPC_(loader));
 
 private:
-  ObTenantDicLoader *loader_;
+  ObDicLoader *loader_;
 };
 } //end storage
 } // end oceanbase

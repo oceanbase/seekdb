@@ -44,10 +44,10 @@ a
 1
 2
 begin;
-select * from t2 where a in (3,4) for update;
+select * from t2 where a in (3,4) order by a for update;
 a
-4
 3
+4
 select * from t2 where a in (1,2) order by a for update;
 select * from t2 where a in (3,4) order by a for update;
 ERROR HY000: Deadlock

@@ -25,7 +25,7 @@ namespace oceanbase
 {
 namespace storage
 {
-int ObTenantIKUTF8DicLoader::init()
+int ObIKUTF8DicLoader::init()
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -41,7 +41,7 @@ int ObTenantIKUTF8DicLoader::init()
   return ret;
 }
 
-int ObTenantIKUTF8DicLoader::get_dic_item(const uint64_t table_info_pos,
+int ObIKUTF8DicLoader::get_dic_item(const uint64_t table_info_pos,
                                           const uint64_t data_pos,
                                           ObDicItem &item)
 {
@@ -65,7 +65,7 @@ int ObTenantIKUTF8DicLoader::get_dic_item(const uint64_t table_info_pos,
   return ret;
 }
 
-int ObTenantIKUTF8DicLoader::fill_dic_item(const ObDicItem &item, share::ObDMLSqlSplicer &dml)
+int ObIKUTF8DicLoader::fill_dic_item(const ObDicItem &item, share::ObDMLSqlSplicer &dml)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dml.add_column("word", item.word_))) {
@@ -74,7 +74,7 @@ int ObTenantIKUTF8DicLoader::fill_dic_item(const ObDicItem &item, share::ObDMLSq
   return ret;
 }
 
-ObTenantDicLoader::ObDicTableInfo ObTenantIKUTF8DicLoader::get_main_dic_info()
+ObDicLoader::ObDicTableInfo ObIKUTF8DicLoader::get_main_dic_info()
 {
   static const ObIKDictLoader::RawDict main_dict = ObIKDictLoader::dict_text();
 
@@ -84,7 +84,7 @@ ObTenantDicLoader::ObDicTableInfo ObTenantIKUTF8DicLoader::get_main_dic_info()
                         share::OB_FT_DICT_IK_UTF8_TID);
 }
 
-ObTenantDicLoader::ObDicTableInfo ObTenantIKUTF8DicLoader::get_stop_dic_info()
+ObDicLoader::ObDicTableInfo ObIKUTF8DicLoader::get_stop_dic_info()
 {
   static const ObIKDictLoader::RawDict stop_dict = ObIKDictLoader::dict_stop();
   return ObDicTableInfo(stop_dict.data_,
@@ -93,7 +93,7 @@ ObTenantDicLoader::ObDicTableInfo ObTenantIKUTF8DicLoader::get_stop_dic_info()
                         share::OB_FT_STOPWORD_IK_UTF8_TID);
 }
 
-ObTenantDicLoader::ObDicTableInfo ObTenantIKUTF8DicLoader::get_quantifier_dic_info()
+ObDicLoader::ObDicTableInfo ObIKUTF8DicLoader::get_quantifier_dic_info()
 {
   static const ObIKDictLoader::RawDict quan_dict = ObIKDictLoader::dict_quen_text();
   return ObDicTableInfo(quan_dict.data_,

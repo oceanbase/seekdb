@@ -43,30 +43,5 @@ int ObOptimizeTableStmt::add_table_item(const ObTableItem &table_item)
   return ret;
 }
 
-ObOptimizeTenantStmt::ObOptimizeTenantStmt(ObIAllocator *name_pool)
-  : ObDDLStmt(name_pool, stmt::T_OPTIMIZE_TENANT), optimize_tenant_arg_()
-{
-}
-
-ObOptimizeTenantStmt::ObOptimizeTenantStmt()
-  : ObDDLStmt(stmt::T_OPTIMIZE_TENANT), optimize_tenant_arg_()
-{
-}
-
-void ObOptimizeTenantStmt::set_tenant_name(const ObString &tenant_name)
-{
-  optimize_tenant_arg_.tenant_name_ = tenant_name;
-}
-
-ObOptimizeAllStmt::ObOptimizeAllStmt(ObIAllocator *name_pool)
-  : ObDDLStmt(name_pool, stmt::T_OPTIMIZE_ALL), optimize_all_arg_()
-{
-}
-
-ObOptimizeAllStmt::ObOptimizeAllStmt()
-  : ObDDLStmt(stmt::T_OPTIMIZE_ALL), optimize_all_arg_()
-{
-}
-
 }  // end namespace sql
 }  // end namespace oceanbase

@@ -19478,11 +19478,7 @@ SQL: select avg(1) from t1;
 
 Outputs & filters: 
 -------------------------------------
-<<<<<<< HEAD
   0 - output([T_FUN_SUM(T_FUN_SUM(?)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(*)), DECIMAL(20, 0))]), filter(nil), 
-=======
-  0 - output([cast(T_FUN_SUM(T_FUN_SUM(?)) / T_FUN_COUNT_SUM(T_FUN_COUNT(*)), DECIMAL(5, 4))]), filter(nil), 
->>>>>>> 4ace446e738... fix aggr convert lost origin type
       group(nil), agg_func([T_FUN_SUM(T_FUN_SUM(?))], [T_FUN_COUNT_SUM(T_FUN_COUNT(*))])
   1 - output([T_FUN_SUM(?)], [T_FUN_COUNT(*)]), filter(nil)
   2 - output([T_FUN_SUM(?)], [T_FUN_COUNT(*)]), filter(nil), dop=1

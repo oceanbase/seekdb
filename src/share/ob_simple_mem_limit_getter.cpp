@@ -22,67 +22,66 @@ namespace oceanbase
 {
 namespace common
 {
-int ObSimpleMemLimitGetter::add_tenant(
+int ObSimpleMemLimitGetter::set_memory_limit(
     const int64_t lower_limit,
     const int64_t upper_limit)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false) ||
-      OB_UNLIKELY(lower_limit < 0) ||
+  if (OB_UNLIKELY(lower_limit < 0) ||
       OB_UNLIKELY(upper_limit < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret),
              K(lower_limit), K(upper_limit));
   } else {
-    ObTenantInfo tenant_info(lower_limit,
-                             upper_limit);
+    ObMemoryLimitInfo memory_limit_info(lower_limit,
+                                        upper_limit);
     SpinWLockGuard guard(lock_);
-    if (has_tenant_()) {
-      // tenant is exist do nothing
+    if (has_memory_limit_()) {
+      // A memory limit is already configured.
     } else {
-      tenant_info_ = tenant_info;
-      has_tenant_value_ = true;
+      memory_limit_info_ = memory_limit_info;
+      has_memory_limit_value_ = true;
     }
   }
   return ret;
 }
 
-bool ObSimpleMemLimitGetter::has_tenant() const
+bool ObSimpleMemLimitGetter::has_memory_limit() const
 {
   bool found = false;
   SpinRLockGuard guard(lock_);
-  found = has_tenant_();
+  found = has_memory_limit_();
   return found;
 }
 
-bool ObSimpleMemLimitGetter::has_tenant_() const
+bool ObSimpleMemLimitGetter::has_memory_limit_() const
 {
-  return has_tenant_value_;
+  return has_memory_limit_value_;
 }
 
 
-int ObSimpleMemLimitGetter::get_tenant_mem_limit(
+int ObSimpleMemLimitGetter::get_memory_limit(
     int64_t &lower_limit,
     int64_t &upper_limit) const
 {
   int ret = OB_SUCCESS;
   bool found = false;
   SpinRLockGuard guard(lock_);
-  if (has_tenant_value_) {
+  if (has_memory_limit_value_) {
     found = true;
-    lower_limit = tenant_info_.mem_lower_limit_;
-    upper_limit = tenant_info_.mem_upper_limit_;
+    lower_limit = memory_limit_info_.mem_lower_limit_;
+    upper_limit = memory_limit_info_.mem_upper_limit_;
   }
   if (!found) {
     ret = OB_ENTRY_NOT_EXIST;
-    LOG_ERROR("tenant is not exist", K(ret));
+    LOG_ERROR("memory limit is not configured", K(ret));
   }
   return ret;
 }
 
 void ObSimpleMemLimitGetter::reset()
 {
-  has_tenant_value_ = false;
+  has_memory_limit_value_ = false;
 }
 
 }

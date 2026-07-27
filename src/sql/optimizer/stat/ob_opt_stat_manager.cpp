@@ -441,7 +441,7 @@ int ObOptStatManager::refresh_system_stat_cache(const obcall::ObUpdateStatCacheA
     }
   }
   if (OB_SUCC(ret)) {
-    MOD_SCOPE {
+    SERVER_MODULE_SCOPE {
       sql::ObPlanCache *pc = share::g_mp->plan_cache();
       if (OB_FAIL(pc->flush_plan_cache())) {
         LOG_WARN("failed to evict plan", K(ret));
@@ -456,7 +456,7 @@ int ObOptStatManager::refresh_system_stat_cache(const obcall::ObUpdateStatCacheA
 int ObOptStatManager::invalidate_plan(const uint64_t table_id)
 {
   int ret = OB_SUCCESS;
-  MOD_SCOPE {
+  SERVER_MODULE_SCOPE {
     sql::ObPlanCache *pc = share::g_mp->plan_cache();
 
     if (OB_FAIL(pc->evict_plan(table_id))) {

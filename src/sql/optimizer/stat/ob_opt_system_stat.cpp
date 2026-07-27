@@ -97,16 +97,10 @@ int OptSystemIoBenchmark::run_benchmark(ObIAllocator &allocator)
   int64_t total_block_count = OB_STORAGE_OBJECT_MGR.get_total_macro_block_count();
   int64_t benchmark_block_count = free_block_count * 0.2;
   int64_t max_rnd_read_offset = OB_DEFAULT_MACRO_BLOCK_SIZE - load_size;
-  int64_t ss_first_id = ObIOFd::NORMAL_FILE_ID;  // first_id is not used in shared storage mode;
-  int64_t ss_second_id = OB_INVALID_FD;
+  int64_t first_file_id = ObIOFd::NORMAL_FILE_ID;
+  int64_t second_file_id = OB_INVALID_FD;
 
-  if (OB_UNLIKELY(!true || false)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant id invalid", KR(ret));
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (free_block_count <= MIN_CALIBRATION_BLOCK_COUNT ||
+  if (free_block_count <= MIN_CALIBRATION_BLOCK_COUNT ||
       1.0 * free_block_count / total_block_count < MIN_FREE_SPACE_PERCENTAGE) {
     ret = OB_SERVER_OUTOF_DISK_SPACE;
     LOG_WARN("out of space", K(ret), K(free_block_count), K(total_block_count));
@@ -122,7 +116,7 @@ int OptSystemIoBenchmark::run_benchmark(ObIAllocator &allocator)
   if (OB_SUCC(ret)) {
     for (int64_t i = 0; OB_SUCC(ret) && i < benchmark_block_count; ++i) {
       blocksstable::ObStorageObjectOpt obj_opt;
-      obj_opt.set_private_object_opt();
+      obj_opt.set_data_macro_object_opt();
       blocksstable::ObStorageObjectHandle block_handle;
       if (OB_FAIL(OB_STORAGE_OBJECT_MGR.alloc_object(obj_opt, block_handle))) {
         LOG_WARN("alloc macro block failed", K(ret), K(i));

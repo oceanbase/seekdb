@@ -457,27 +457,18 @@ inline int call_functor_with_arg_iter(const ObExpr &expr,
     ObArgBatchRawIter<typename ArithOp::L_RAW_TYPE> l(
         left.locate_batch_datums(ctx), left.get_rev_buf(ctx));
     ObArgScalarRawIter<typename ArithOp::R_RAW_TYPE> r(&right.locate_expr_datum(ctx));
-    ret = Functor<ArithOp>()(expr, ctx, skip, size, res, l, r,
-                             (left.get_eval_info(ctx).in_frame_notnull()
-                              && !right.locate_expr_datum(ctx).is_null()),
-                             args...);
+    ret = Functor<ArithOp>()(expr, ctx, skip, size, res, l, r, false, args...);
   } else if (!left.is_batch_result() && right.is_batch_result()) {
     ObArgScalarRawIter<typename ArithOp::L_RAW_TYPE> l(&left.locate_expr_datum(ctx));
     ObArgBatchRawIter<typename ArithOp::R_RAW_TYPE> r(
         right.locate_batch_datums(ctx), right.get_rev_buf(ctx));
-    ret = Functor<ArithOp>()(expr, ctx, skip, size, res, l, r,
-                             (right.get_eval_info(ctx).in_frame_notnull()
-                              && !left.locate_expr_datum(ctx).is_null()),
-                             args...);
+    ret = Functor<ArithOp>()(expr, ctx, skip, size, res, l, r, false, args...);
   } else if (left.is_batch_result() && right.is_batch_result()) {
     ObArgBatchRawIter<typename ArithOp::L_RAW_TYPE> l(
         left.locate_batch_datums(ctx), left.get_rev_buf(ctx));
     ObArgBatchRawIter<typename ArithOp::R_RAW_TYPE> r(
         right.locate_batch_datums(ctx), right.get_rev_buf(ctx));
-    ret = Functor<ArithOp>()(expr, ctx, skip, size, res, l, r,
-                             (left.get_eval_info(ctx).in_frame_notnull()
-                              && right.get_eval_info(ctx).in_frame_notnull()),
-                             args...);
+    ret = Functor<ArithOp>()(expr, ctx, skip, size, res, l, r, false, args...);
   } else {
     ret = common::OB_ERR_UNEXPECTED;
     SQL_LOG(WARN, "one argument must be batch result in arith batch evaluate",

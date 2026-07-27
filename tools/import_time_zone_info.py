@@ -12,15 +12,13 @@ class TimeZoneInfoImporter:
         parser = argparse.ArgumentParser(conflict_handler='resolve')
         parser.add_argument("-h", "--host", help="Connect to host", required=True)
         parser.add_argument("-P", "--port", help="Port number to use for connection", required=True)
-        parser.add_argument("-p", "--password", help="Password of sys tenant")
+        parser.add_argument("-p", "--password", help="Password of root user")
         parser.add_argument("-f", "--file", help="The script generate from MySQL mysql_tzinfo_to_sql", required=True)
-        parser.add_argument("-t", "--tenant", help="Tenant for import data if not sys")
         args = parser.parse_args()
         self.host=args.host
         self.port=args.port
         self.pwd=args.password
         self.file_name=args.file
-        self.tenant=args.tenant
         ##print "host:{0} port:{1} pwd:{2} file:{3}".format(host, port, pwd, file_name)
 
     def generate_sql(self):
@@ -98,33 +96,6 @@ class TimeZoneInfoImporter:
         self.conn = mysql.connector.connect(user='root', password=self.pwd, host=self.host, port=self.port, database='mysql')
         self.cur = self.conn.cursor(buffered=True)
         print ("INFO : sucess to connect server {0}:{1}".format(self.host, self.port))
-        try:
-            sql = "select value from oceanbase.__all_sys_parameter where name = 'enable_upgrade_mode';"
-            self.cur.execute(sql)
-            print ("INFO : execute sql -- {0}".format(sql))
-            result = self.cur.fetchall()
-            if 1 == len(result) and 1 == result[0][0]:
-                self.upgrade_mode = True
-            else:
-                self.upgrade_mode = False
-                sql = "select tenant_id from oceanbase.__all_tenant where tenant_name = '{0}';".format(str(self.tenant))
-                print ("INFO : execute sql -- {0}".format(sql))
-                self.cur.execute(sql)
-                result = self.cur.fetchall()
-                if 1 == len(result):
-                    print ("tenant_id = {0}".format(str(result[0][0])))
-                    self.tenant_id = result[0][0]
-                else:
-                    self.tenant_id = 0
-            if False == self.upgrade_mode and self.tenant_id != 1:
-                sql = "commit"
-                self.cur.execute(sql)
-                sql = "alter system change tenant " + str(self.tenant)
-                self.cur.execute(sql)
-        except mysql.connector.Error as err:
-            print("ERROR : " + sql)
-            print(err)
-            raise
     def execute_sql(self):
         try:
             for sql in self.sql_list:
@@ -169,10 +140,9 @@ def main():
     tz_info_importer.get_args()
     try:
         tz_info_importer.connect_server()
-        if False == tz_info_importer.upgrade_mode:
-            tz_info_importer.generate_sql()
-            tz_info_importer.execute_sql()
-            tz_info_importer.check_result()
+        tz_info_importer.generate_sql()
+        tz_info_importer.execute_sql()
+        tz_info_importer.check_result()
     except:
         print("except error in main")
 

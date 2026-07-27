@@ -42,7 +42,6 @@ insert into t1 values (201, 'P2_Data', 300);
 fork table t1 to t1_fork;
 
 --echo # 验证Fork表分区结构
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t1_fork;
 
 --echo # 验证各分区数据
@@ -77,7 +76,6 @@ insert into t2 values (4, 'Hash4', 400);
 fork table t2 to t2_fork;
 
 --echo # 验证Fork表分区结构
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t2_fork;
 
 --echo # 验证数据
@@ -109,7 +107,6 @@ insert into t3 values (3, 3, 300);
 fork table t3 to t3_fork;
 
 --echo # 验证Fork表分区结构
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t3_fork;
 
 --echo # 验证各分区数据
@@ -176,7 +173,6 @@ insert into t4 values (150, 1, 4, 400);
 fork table t4 to t4_fork;
 
 --echo # 验证Fork表二级分区结构
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t4_fork;
 
 --echo # 验证二级分区数据
@@ -210,11 +206,9 @@ fork table t5 to t5_fork;
 alter table t5 add partition (partition p3 values less than (400));
 
 --echo # 验证源表有新分区
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t5;
 
 --echo # 验证Fork表分区结构未变
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t5_fork;
 
 --echo # 在源表新分区插入数据

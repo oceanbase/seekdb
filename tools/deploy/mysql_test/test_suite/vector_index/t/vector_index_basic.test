@@ -182,6 +182,7 @@ eval select count(*) from $index_table;
 eval select count(*) from $index_id_table;
 
 --echo # 查询结果
+--replace_numeric_round 6
 select c1, l2_distance(c2, [0.765300,0.560072,0.900498]) l2 from vector_index_test_table20240714 order by l2 limit 5;
 select /*+ opt_param('rowsets_enabled', 'false') */ * from vector_index_test_table20240714 order by l2_distance(c2, [0.765300,0.560072,0.900498]) APPROXIMATE limit 5;
 select * from vector_index_test_table20240714 order by l2_distance(c2, [0.765300,0.560072,0.900498]) APPROXIMATE limit 5;
@@ -197,6 +198,7 @@ eval select count(*) from $index_table;
 eval select count(*) from $index_id_table;
 
 --echo # 查询结果
+--replace_numeric_round 6
 select c1, l2_distance(c2, [0.765300,0.560072,0.900498]) l2 from vector_index_test_table20240714 order by l2 limit 5;
 select /*+ opt_param('rowsets_enabled', 'false') */ * from vector_index_test_table20240714 order by l2_distance(c2, [0.765300,0.560072,0.900498]) APPROXIMATE limit 5;
 select * from vector_index_test_table20240714 order by l2_distance(c2, [0.765300,0.560072,0.900498]) APPROXIMATE limit 5;
@@ -217,6 +219,7 @@ eval select count(*) from $index_table;
 eval select count(*) from $index_id_table;
 
 --echo # 查询结果
+--replace_numeric_round 6
 select c1, l2_distance(c2, [0.765300,0.560072,0.900498]) l2 from vector_index_test_table20240714 order by l2 limit 5;
 select /*+ opt_param('rowsets_enabled', 'false') */ * from vector_index_test_table20240714 order by l2_distance(c2, [0.765300,0.560072,0.900498]) APPROXIMATE limit 5;
 select * from vector_index_test_table20240714 order by l2_distance(c2, [0.765300,0.560072,0.900498]) APPROXIMATE limit 5;

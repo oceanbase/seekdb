@@ -22,29 +22,29 @@
 #include "lib/container/ob_array.h"
 #include "storage/compaction/ob_compaction_suggestion.h"
 #include "storage/compaction/ob_sstable_merge_history.h"
-#include "share/rc/ob_tenant_base.h"
-#include "observer/omt/ob_multi_tenant.h"
+#include "share/rc/ob_server_runtime.h"
+#include "observer/omt/ob_server_runtime_controller.h"
 
 namespace oceanbase
 {
 namespace storage
 {
 
-class ObTenantSSTableMergeInfoMgr
+class ObSSTableMergeInfoMgr
 {
 public:
-  static int mtl_init(ObTenantSSTableMergeInfoMgr *&sstable_merge_info);
+  static int server_module_init(ObSSTableMergeInfoMgr *&sstable_merge_info);
   static int64_t cal_max();
-  static int get_next_info(compaction::ObIDiagnoseInfoMgr::Iterator &major_iter, 
-      compaction::ObIDiagnoseInfoMgr::Iterator &minor_iter, 
+  static int get_next_info(compaction::ObIDiagnoseInfoMgr::Iterator &major_iter,
+      compaction::ObIDiagnoseInfoMgr::Iterator &minor_iter,
       compaction::ObSSTableMergeHistory &merge_history, char *buf, const int64_t buf_len);
-  ObTenantSSTableMergeInfoMgr();
-  virtual ~ObTenantSSTableMergeInfoMgr();
+  ObSSTableMergeInfoMgr();
+  virtual ~ObSSTableMergeInfoMgr();
   int init(const int64_t page_size=compaction::ObIDiagnoseInfoMgr::INFO_PAGE_SIZE);
   int add_sstable_merge_info(compaction::ObSSTableMergeHistory &merge_history);
   void reset();
   void destroy();
-  int open_iter(compaction::ObIDiagnoseInfoMgr::Iterator &major_iter, 
+  int open_iter(compaction::ObIDiagnoseInfoMgr::Iterator &major_iter,
                 compaction::ObIDiagnoseInfoMgr::Iterator &minor_iter);
 
   int set_max(int64_t max_size);
@@ -54,7 +54,7 @@ public:
   int size();
 
 public:
-  static const int64_t MEMORY_PERCENTAGE = 1;   // max size = tenant memory size * MEMORY_PERCENTAGE / 100
+  static const int64_t MEMORY_PERCENTAGE = 1;   // max size = runtime memory size * MEMORY_PERCENTAGE / 100
   static const int64_t MINOR_MEMORY_PERCENTAGE = 75;
   static const int64_t POOL_MAX_SIZE = 32LL * 1024LL * 1024LL; // 32MB
 
@@ -62,7 +62,7 @@ private:
   bool is_inited_;
   compaction::ObIDiagnoseInfoMgr major_info_pool_;
   compaction::ObIDiagnoseInfoMgr minor_info_pool_;
-  DISALLOW_COPY_AND_ASSIGN(ObTenantSSTableMergeInfoMgr);
+  DISALLOW_COPY_AND_ASSIGN(ObSSTableMergeInfoMgr);
 };
 
 }//storage

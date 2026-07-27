@@ -36,12 +36,12 @@ ObDropPrimaryKeyTask::~ObDropPrimaryKeyTask()
 int ObDropPrimaryKeyTask::init(const ObTableSchema* src_table_schema, const ObTableSchema* dst_table_schema,
                                const int64_t task_id, const share::ObDDLType &ddl_type, const int64_t parallelism,
                                const int32_t sub_task_trace_id,
-                               const obcall::ObAlterTableArg &alter_table_arg, const uint64_t tenant_data_version,
+                               const obcall::ObAlterTableArg &alter_table_arg, const uint64_t data_format_version,
                                const int64_t task_status,const int64_t snapshot_version )
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableRedefinitionTask::init(src_table_schema, dst_table_schema, 0, task_id, ddl_type, parallelism,
-                                            sub_task_trace_id, alter_table_arg, tenant_data_version, task_status, snapshot_version))) {
+                                            sub_task_trace_id, alter_table_arg, data_format_version, task_status, snapshot_version))) {
     LOG_WARN("fail to init ObDropPrimaryKeyTask", K(ret));
   } else {
     set_gmt_create(ObTimeUtility::current_time());

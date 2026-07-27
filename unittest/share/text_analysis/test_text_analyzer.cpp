@@ -21,7 +21,7 @@
 #define private public
 
 #include "share/datum/ob_datum_funcs.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/text_analysis/ob_text_analyzer.h"
 #include "sql/engine/expr/ob_expr_basic_funcs.h"
 

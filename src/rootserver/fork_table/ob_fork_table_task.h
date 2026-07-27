@@ -74,7 +74,7 @@ private:
       const ObSEArray<ObTabletID, 4> &dst_tablet_ids,
       storage::ObTableForkInfo &fork_info);
   
-  ObRootService *root_service_;
+  ObLocalManagementService *local_management_service_;
   obcall::ObForkTableArg fork_table_arg_;
   bool is_data_complement_;
 

@@ -123,24 +123,24 @@ int64_t ObSimpleOutlineSchema::get_convert_size() const
 }
 
 ObOutlineMgr::ObOutlineMgr()
-    : local_allocator_(SET_USE_500(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
+    : local_allocator_(lib::ObMemAttr(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
       allocator_(local_allocator_),
-      outline_infos_(0, NULL, SET_USE_500(ObModIds::OB_SCHEMA_OUTLINE_INFO_VECTOR, ObCtxIds::SCHEMA_SERVICE)),
-      outline_id_map_(SET_USE_500(ObModIds::OB_SCHEMA_OUTLINE_ID_MAP, ObCtxIds::SCHEMA_SERVICE)),
-      outline_name_map_(SET_USE_500(ObModIds::OB_SCHEMA_OUTLINE_NAME_MAP, ObCtxIds::SCHEMA_SERVICE)),
-      signature_map_(SET_USE_500(ObModIds::OB_SCHEMA_OUTLINE_SQL_MAP, ObCtxIds::SCHEMA_SERVICE)),
-      sql_id_map_(SET_USE_500(ObModIds::OB_SCHEMA_OUTLINE_SQL_MAP, ObCtxIds::SCHEMA_SERVICE))
+      outline_infos_(0, NULL, lib::ObMemAttr(ObModIds::OB_SCHEMA_OUTLINE_INFO_VECTOR, ObCtxIds::SCHEMA_SERVICE)),
+      outline_id_map_(lib::ObMemAttr(ObModIds::OB_SCHEMA_OUTLINE_ID_MAP, ObCtxIds::SCHEMA_SERVICE)),
+      outline_name_map_(lib::ObMemAttr(ObModIds::OB_SCHEMA_OUTLINE_NAME_MAP, ObCtxIds::SCHEMA_SERVICE)),
+      signature_map_(lib::ObMemAttr(ObModIds::OB_SCHEMA_OUTLINE_SQL_MAP, ObCtxIds::SCHEMA_SERVICE)),
+      sql_id_map_(lib::ObMemAttr(ObModIds::OB_SCHEMA_OUTLINE_SQL_MAP, ObCtxIds::SCHEMA_SERVICE))
 {
 }
 
 ObOutlineMgr::ObOutlineMgr(ObIAllocator &allocator)
-    : local_allocator_(SET_USE_500(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
+    : local_allocator_(lib::ObMemAttr(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
       allocator_(allocator),
-      outline_infos_(0, NULL, SET_USE_500(ObModIds::OB_SCHEMA_OUTLINE_INFO_VECTOR, ObCtxIds::SCHEMA_SERVICE)),
-      outline_id_map_(SET_USE_500(ObModIds::OB_SCHEMA_OUTLINE_ID_MAP, ObCtxIds::SCHEMA_SERVICE)),
-      outline_name_map_(SET_USE_500(ObModIds::OB_SCHEMA_OUTLINE_NAME_MAP, ObCtxIds::SCHEMA_SERVICE)),
-      signature_map_(SET_USE_500(ObModIds::OB_SCHEMA_OUTLINE_SQL_MAP, ObCtxIds::SCHEMA_SERVICE)),
-      sql_id_map_(SET_USE_500(ObModIds::OB_SCHEMA_OUTLINE_SQL_MAP, ObCtxIds::SCHEMA_SERVICE))
+      outline_infos_(0, NULL, lib::ObMemAttr(ObModIds::OB_SCHEMA_OUTLINE_INFO_VECTOR, ObCtxIds::SCHEMA_SERVICE)),
+      outline_id_map_(lib::ObMemAttr(ObModIds::OB_SCHEMA_OUTLINE_ID_MAP, ObCtxIds::SCHEMA_SERVICE)),
+      outline_name_map_(lib::ObMemAttr(ObModIds::OB_SCHEMA_OUTLINE_NAME_MAP, ObCtxIds::SCHEMA_SERVICE)),
+      signature_map_(lib::ObMemAttr(ObModIds::OB_SCHEMA_OUTLINE_SQL_MAP, ObCtxIds::SCHEMA_SERVICE)),
+      sql_id_map_(lib::ObMemAttr(ObModIds::OB_SCHEMA_OUTLINE_SQL_MAP, ObCtxIds::SCHEMA_SERVICE))
 {
 }
 
@@ -243,25 +243,25 @@ bool ObOutlineMgr::check_inner_stat() const
 
 bool ObOutlineMgr::compare_outline(const ObSimpleOutlineSchema *lhs, const ObSimpleOutlineSchema *rhs)
 {
-  return lhs->get_tenant_outline_id() < rhs->get_tenant_outline_id();
+  return lhs->get_outline_id() < rhs->get_outline_id();
 }
 
 bool ObOutlineMgr::equal_outline(const ObSimpleOutlineSchema *lhs,
                                 const ObSimpleOutlineSchema *rhs)
 {
-  return lhs->get_tenant_outline_id() == rhs->get_tenant_outline_id();
+  return lhs->get_outline_id() == rhs->get_outline_id();
 }
 
-bool ObOutlineMgr::compare_with_tenant_outline_id(const ObSimpleOutlineSchema *lhs,
-                                                 const ObTenantOutlineId &tenant_outline_id)
+bool ObOutlineMgr::compare_with_outline_id(const ObSimpleOutlineSchema *lhs,
+                                                 const ObOutlineId &outline_id)
 {
-  return NULL != lhs ? (lhs->get_tenant_outline_id() < tenant_outline_id) : false;
+  return NULL != lhs ? (lhs->get_outline_id() < outline_id.outline_id_) : false;
 }
 
-bool ObOutlineMgr::equal_with_tenant_outline_id(const ObSimpleOutlineSchema *lhs,
-                                               const ObTenantOutlineId &tenant_outline_id)
+bool ObOutlineMgr::equal_with_outline_id(const ObSimpleOutlineSchema *lhs,
+                                               const ObOutlineId &outline_id)
 {
-  return NULL != lhs ? (lhs->get_tenant_outline_id() == tenant_outline_id) : false;
+  return NULL != lhs ? (lhs->get_outline_id() == outline_id.outline_id_) : false;
 }
 
 int ObOutlineMgr::add_outlines(const ObIArray<ObSimpleOutlineSchema> &outline_schemas)
@@ -390,7 +390,7 @@ int ObOutlineMgr::add_outline(const ObSimpleOutlineSchema &outline_schema)
   return ret;
 }
 
-int ObOutlineMgr::del_outline(const ObTenantOutlineId &outline)
+int ObOutlineMgr::del_outline(const ObOutlineId &outline)
 {
   int ret = OB_SUCCESS;
 
@@ -402,8 +402,8 @@ int ObOutlineMgr::del_outline(const ObTenantOutlineId &outline)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(outline));
   } else if (OB_FAIL(outline_infos_.remove_if(outline,
-                                              compare_with_tenant_outline_id,
-                                              equal_with_tenant_outline_id,
+                                              compare_with_outline_id,
+                                              equal_with_outline_id,
                                               schema_to_del))) {
     LOG_WARN("failed to remove outline schema, ",
              "outline_id",
@@ -624,15 +624,15 @@ int ObOutlineMgr::get_outline_schema_with_sql_id(const uint64_t database_id,
   return ret;
 }
 
-int ObOutlineMgr::get_outline_schemas_in_tenant(ObIArray<const ObSimpleOutlineSchema *> &outline_schemas) const
+int ObOutlineMgr::get_outline_schemas_in_runtime(ObIArray<const ObSimpleOutlineSchema *> &outline_schemas) const
 {
   int ret = OB_SUCCESS;
   outline_schemas.reset();
 
-  ObTenantOutlineId tenant_outine_id_lower(OB_MIN_ID);
-  ConstOutlineIter tenant_outline_begin =
-      outline_infos_.lower_bound(tenant_outine_id_lower, compare_with_tenant_outline_id);
-  for (ConstOutlineIter iter = tenant_outline_begin;
+  ObOutlineId outline_id_lower(OB_MIN_ID);
+  ConstOutlineIter outline_begin =
+      outline_infos_.lower_bound(outline_id_lower, compare_with_outline_id);
+  for (ConstOutlineIter iter = outline_begin;
       OB_SUCC(ret) && iter != outline_infos_.end(); ++iter) {
     const ObSimpleOutlineSchema *outline = NULL;
     if (OB_ISNULL(outline = *iter)) {
@@ -651,10 +651,10 @@ int ObOutlineMgr::get_outline_schemas_in_database(const uint64_t database_id, Ob
   int ret = OB_SUCCESS;
   outline_schemas.reset();
 
-  ObTenantOutlineId tenant_outine_id_lower(OB_MIN_ID);
-  ConstOutlineIter tenant_outline_begin =
-      outline_infos_.lower_bound(tenant_outine_id_lower, compare_with_tenant_outline_id);
-  for (ConstOutlineIter iter = tenant_outline_begin;
+  ObOutlineId outline_id_lower(OB_MIN_ID);
+  ConstOutlineIter outline_begin =
+      outline_infos_.lower_bound(outline_id_lower, compare_with_outline_id);
+  for (ConstOutlineIter iter = outline_begin;
       OB_SUCC(ret) && iter != outline_infos_.end(); ++iter) {
     const ObSimpleOutlineSchema *outline = NULL;
     if (OB_ISNULL(outline = *iter)) {

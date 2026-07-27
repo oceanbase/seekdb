@@ -55,7 +55,7 @@ private:
   volatile int64_t finish_worker_count_;
   int64_t expect_worker_count_;
   common::SimpleCond cond_;
-  // For convenience in tracing which workers are started by rpc
+  // Worker thread ids started by this SQC.
   common::ObArray<int64_t> tid_array_;
 };
 
@@ -67,8 +67,8 @@ public:
   ObPxSqcHandler() :
     mem_context_(NULL), reserved_px_thread_count_(0), process_flags_(0),
     end_ret_(OB_SUCCESS), reference_count_(1), notifier_(nullptr), exec_ctx_(nullptr),
-    des_phy_plan_(nullptr), sqc_init_args_(nullptr), sub_coord_(nullptr), rpc_level_(INT32_MAX),
-    node_sequence_id_(0), has_interrupted_(false),
+    des_phy_plan_(nullptr), sqc_init_args_(nullptr), sub_coord_(nullptr), request_level_(INT32_MAX),
+    has_interrupted_(false),
     part_ranges_spin_lock_(common::ObLatchIds::PX_TARGET_LOCK),
     is_session_query_locked_(false) {
   }
@@ -99,7 +99,7 @@ public:
   
   sql::ObDesExecContext &get_exec_ctx() { return *exec_ctx_; }
   ObPhysicalPlan &get_phy_plan() { return *des_phy_plan_; }
-  ObPxRpcInitSqcArgs &get_sqc_init_arg() { return *sqc_init_args_; }
+  ObPxInitSqcArgs &get_sqc_init_arg() { return *sqc_init_args_; }
   common::ObIAllocator *get_des_allocator() { return &mem_context_->get_safe_arena_allocator(); }
   int64_t get_reserved_px_thread_count() const { return reserved_px_thread_count_; }
   ObPxSubCoord &get_sub_coord() { return *sub_coord_; }
@@ -125,16 +125,15 @@ public:
   void set_end_ret(int ret) { end_ret_ = ret; }
   int get_end_ret() { return end_ret_; }
   void add_flag(uint64_t flag) { process_flags_ |= flag; };
-  int64_t get_rpc_level() { return rpc_level_; }
-  void set_rpc_level(int64_t level) { rpc_level_ = level; }
-  void set_node_sequence_id(uint64_t node_sequence_id) { node_sequence_id_ = node_sequence_id; }
+  int64_t get_request_level() { return request_level_; }
+  void set_request_level(int64_t level) { request_level_ = level; }
   int thread_count_auto_scaling(int64_t &reserved_px_thread_count);
   bool has_interrupted() const { return has_interrupted_; }
   const Ob2DArray<ObPxTabletRange> &get_partition_ranges() const { return part_ranges_; }
   int set_partition_ranges(const Ob2DArray<ObPxTabletRange> &part_ranges,
                            char *buf = NULL, int64_t max_size = 0);
   TO_STRING_KV(K_(reserved_px_thread_count), KP_(notifier),
-      K_(exec_ctx), K_(des_phy_plan), K_(sqc_init_args), KP_(sub_coord), K_(rpc_level));
+      K_(exec_ctx), K_(des_phy_plan), K_(sqc_init_args), KP_(sub_coord), K_(request_level));
 
 private:
   int destroy_sqc(int &report_ret);
@@ -148,10 +147,9 @@ private:
   ObPxWorkNotifier *notifier_;
   sql::ObDesExecContext *exec_ctx_;
   ObPhysicalPlan *des_phy_plan_;
-  ObPxRpcInitSqcArgs *sqc_init_args_;
+  ObPxInitSqcArgs *sqc_init_args_;
   ObPxSubCoord *sub_coord_;
-  int64_t rpc_level_;
-  uint64_t node_sequence_id_;
+  int64_t request_level_;
   /* At first， sqc must wait for all workers start, and then check whether it is interrupted. 
    * If so, sqc will broadcast interruption to all workers in case that some workers have not registered interruption when qc send interruption.
    * Then we find that sqc may hang at waiting for all workers start, so sqc check whether interrupted while waiting now.

@@ -198,7 +198,7 @@ int ObDependencyInfo::insert_schema_object_dependency(common::ObISQLClient &tran
   ObDependencyInfo& dep_info = *this;
   
   ObDMLSqlSplicer dml;
-  //This block is temporarily commented out because the virtual table __all_package under the system tenant has not been implemented.
+  // This block remains disabled until the __all_package virtual table is implemented.
   //int64_t ref_obj_create_time = -1;
   //ObString ref_obj_name;
   // OZ (get_object_create_time(trans, dep_info.get_ref_obj_type(),
@@ -724,7 +724,7 @@ int ObDependencyInfo::batch_invalidate_dependents(const common::ObIArray<Critica
 
 // modify_dep_obj_status / cascading_modify_obj_status / modify_all_obj_status
 // moved definition to the upper-layer owner cpp rootserver::ObDependencyDDLHelper(real upper-layer symbol user, declaration remains in the header, transitional state)
-// insert_dependency_infos defined at the end of this file(stayed member, master tenant-elim'd)
+// insert_dependency_infos is defined at the end of this file.
 
 void ObDependencyInfo::reset()
 {

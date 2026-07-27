@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/tx_table/ob_tx_ctx_memtable_mgr.h"
-#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
+#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 #include "storage/ls/ob_ls_tx_service.h"
 #include "storage/ls/ob_freezer.h"
 
@@ -57,7 +57,7 @@ void ObTxCtxMemtableMgr::destroy()
 
 int ObTxCtxMemtableMgr::init(const common::ObTabletID &tablet_id,
                              ObFreezer *freezer,
-                             ObTenantMetaMemMgr *t3m)
+                             ObStorageMetaMemMgr *t3m)
 {
   UNUSED(tablet_id);
   UNUSED(freezer);

@@ -23,14 +23,12 @@
 #include "lib/lock/ob_spin_rwlock.h"
 #include "lib/utility/ob_print_utils.h"
 #include <lib/lock/ob_thread_cond.h>
-#include "lib/net/ob_addr.h"
 #include "lib/time/ob_time_utility.h"
 #include "sql/dtl/ob_dtl_msg.h"
 #include "sql/dtl/ob_dtl_linked_buffer.h"
 #include "sql/dtl/ob_dtl_processor.h"
 #include "sql/dtl/ob_op_metric.h"
 #include "observer/ob_server_struct.h"
-#include "lib/compress/ob_compress_util.h"
 
 namespace oceanbase {
 
@@ -80,7 +78,6 @@ class ObDtlFlowControl;
 #define DTL_CHAN_DARIN   (1ULL << 2)
 #define DTL_CHAN_EOF     (1ULL << 3)
 #define DTL_CHAN_FIRST_BUF     (1ULL << 4)
-#define IS_LOCAL_CHANNEL(chan) (ObDtlChannel::DtlChannelType::LOCAL_CHANNEL == data_ch->get_channel_type())
 #define IS_RECEIVE_CHANNEL(chid) (!!(chid & 0x1))
 
 enum DTLChannelOwner
@@ -96,16 +93,9 @@ enum DTLChannelOwner
 class ObDtlChannel : public common::ObDLinkBase<ObDtlChannel>
 {
 public:
-  enum class DtlChannelType {
-    LOCAL_CHANNEL = 0,
-    RPC_CHANNEL = 1,
-    BASIC_CHANNEL = 2
-  };
-public:
-  explicit ObDtlChannel(uint64_t id, const common::ObAddr &peer, DtlChannelType type);
+  explicit ObDtlChannel(uint64_t id);
   virtual ~ObDtlChannel() {}
 
-  DtlChannelType get_channel_type() const { return channel_type_; };
   virtual int init() = 0;
 
   // typical queue interfaces
@@ -133,7 +123,6 @@ public:
   void set_send_buffer_size(int64_t send_buffer_size);
 
   uint64_t get_id() const;
-  const common::ObAddr &get_peer() const { return peer_; }
 
   virtual int clear_response_block() = 0;
   virtual int wait_response() = 0;
@@ -144,7 +133,7 @@ public:
   int64_t unpin();
   int64_t get_pins() const;
 
-  TO_STRING_KV(KP_(id), K_(peer));
+  TO_STRING_KV(KP_(id));
 
   static uint64_t generate_id(uint64_t ch_cnt = 1);
 
@@ -231,15 +220,11 @@ public:
 
   void set_enable_channel_sync(bool enable_channel_sync) { enable_channel_sync_ = enable_channel_sync; }
   uint64_t enable_channel_sync() const { return enable_channel_sync_; }
-  void set_send_by_tenant(bool send_by_tenant) { send_by_tenant_ = send_by_tenant; }
-  uint64_t send_by_tenant() const { return send_by_tenant_; }
 
   OB_INLINE void set_loop_index(int64_t loop_idx) { loop_idx_ = loop_idx; }
   OB_INLINE int64_t get_loop_index() { return loop_idx_; }
 
   OB_INLINE ObDtlChannelWatcher *get_msg_watcher() { return msg_watcher_; }
-
-  void set_compression_type(const common::ObCompressorType &type) { compressor_type_ = type; }
 
   void set_batch_id(int64_t batch_id) { batch_id_ = batch_id; }
   int64_t get_batch_id() { return batch_id_; }
@@ -265,7 +250,6 @@ protected:
   bool done_;
   int64_t send_buffer_size_;
   ObDtlChannelWatcher *msg_watcher_;
-  const common::ObAddr peer_;
   ObDtlChannelLoop *channel_loop_;
   ObDtlFlowControl *dfc_;
   bool first_recv_msg_;
@@ -287,14 +271,10 @@ protected:
 
   int64_t loop_idx_;
 
-  common::ObCompressorType compressor_type_;
-
   DTLChannelOwner owner_mod_;
   int64_t thread_id_;
   // choose new dtl channel sync or first buffer cache
   bool enable_channel_sync_;
-  DtlChannelType channel_type_;
-  bool send_by_tenant_;
 
 public:
   // ObDtlChannel is link base, so it add extra link
@@ -334,27 +314,12 @@ OB_INLINE bool ObDtlChannel::is_done() const
 
 OB_INLINE uint64_t ObDtlChannel::generate_id(uint64_t ch_cnt)
 {
-  //       channel ID
-  // |    <16>     |      <28>     |     20
-  //    server_id       timestamp     sequence
-  // id duplicate situation:
-  // Single second TPS directly exceeds 2^20, duplicates may occur.
-  // Machines with the same server id will not restart until 2^28 time.
-  //
-  int64_t start_id = (common::ObTimeUtility::current_time() / 1000000) << 20;
+  //              channel ID
+  // |         <44>          |     <20>
+  //   process start seconds     sequence
+  const uint64_t start_id = (common::ObTimeUtility::current_time() / 1000000) << 20;
   static volatile uint64_t sequence = start_id;
-  const uint64_t server_index = GCTX.get_server_index();
-  uint64_t ch_id = -1;
-  if (1 < ch_cnt) {
-    uint64_t org_ch_id = 0;
-    do {
-      org_ch_id = (sequence & 0x0000FFFFFFFFFFFF) | (server_index << 48);
-      ch_id = ((ATOMIC_AAF(&sequence, ch_cnt) & 0x0000FFFFFFFFFFFF) | (server_index << 48));
-    } while (ch_id < org_ch_id);
-  } else {
-    ch_id = ((ATOMIC_AAF(&sequence, 1) & 0x0000FFFFFFFFFFFF) | (server_index << 48));
-  }
-  return ch_id;
+  return ATOMIC_AAF(&sequence, 1 < ch_cnt ? ch_cnt : 1);
 }
 
 OB_INLINE int64_t ObDtlChannel::pin()

@@ -18,9 +18,8 @@
 
 #include "ob_trans_ctx_mgr_v4.h"
 #include "share/rc/ob_module_provider.h"
-#include "observer/ob_server.h"
 #include "ob_trans_functor.h"
-#include "storage/tx_storage/ob_ls_service.h"
+#include "storage/ls/ob_ls_tx_service.h"
 
 #define USING_LOG_PREFIX TRANS
 
@@ -32,7 +31,6 @@ using namespace share;
 using namespace common::hash;
 using namespace storage;
 using namespace memtable;
-using namespace observer;
 
 namespace transaction
 {
@@ -223,7 +221,6 @@ void ObLSTxCtxMgr::reset()
   online_ts_ = 0;
   txs_ = NULL;
   ts_mgr_ = NULL;
-  ls_retain_ctx_mgr_.reset();
 
   ObRemoveAllTxCtxFunctor fn;
   ls_tx_ctx_map_.remove_if(fn);
@@ -318,15 +315,12 @@ int ObLSTxCtxMgr::create_tx_ctx_(const ObTxCreateArg &arg,
     CtxLockGuard ctx_lock_guard;
     ObTxCtx *tmp = static_cast<ObTxCtx *>(tmp_ctx);
     if (OB_FAIL(tmp->init(arg.session_id_,
-                          arg.associated_session_id_,
                           arg.tx_id_,
                           arg.trans_expired_time_,
-                          arg.cluster_version_,
                           arg.trans_service_,
                           this,
                           arg.for_replay_,
-                          arg.ctx_source_,
-                          arg.xid_))) {
+                          arg.ctx_source_))) {
     } else if (FALSE_IT(inc_total_tx_ctx_count())) {
     } else if (FALSE_IT(tmp_ctx->get_ctx_guard(ctx_lock_guard))) {
     } else if (OB_FAIL(ls_tx_ctx_map_.insert_and_get(arg.tx_id_, tmp_ctx, &exist_ctx))) {
@@ -525,19 +519,11 @@ int ObLSTxCtxMgr::stop(const bool graceful)
       ret = OB_EAGAIN;
       TRANS_LOG(WARN, "readonly requests are active", K(ret), K(total_active_readonly_request_count));
     } else {
-      {
-        WLockGuard guard(minor_merge_lock_);
-        ATOMIC_STORE(&stopped_, true);
-      }
-
-      if (OB_SUCC(ret)) {
-        KillTxCtxFunctor fn(arg, cb_list);
-        fn.set_release_audit_mgr_lock(true);
-        if (OB_FAIL(ls_retain_ctx_mgr_.force_gc_retain_ctx())) {
-          TRANS_LOG(WARN, "force gc retain ctx mgr", K(ret));
-        } else if (OB_FAIL(ls_tx_ctx_map_.for_each(fn))) {
-          TRANS_LOG(WARN, "for each transaction context error", KR(ret), "manager", *this);
-        }
+      ATOMIC_STORE(&stopped_, true);
+      KillTxCtxFunctor fn(arg, cb_list);
+      fn.set_release_audit_mgr_lock(true);
+      if (OB_FAIL(ls_tx_ctx_map_.for_each(fn))) {
+        TRANS_LOG(WARN, "for each transaction context error", KR(ret), "manager", *this);
       }
     }
   }
@@ -559,9 +545,7 @@ int ObLSTxCtxMgr::kill_all_tx(const bool graceful, bool &is_all_tx_cleaned_up)
     WLockGuardWithRetryInterval guard(rwlock_, TRY_THRESOLD_US, RETRY_INTERVAL_US);
     const int64_t total_active_readonly_request_count = get_total_active_readonly_request_count();
     KillTxCtxFunctor fn(arg, cb_list);
-    if (OB_FAIL(ls_retain_ctx_mgr_.force_gc_retain_ctx())) {
-      TRANS_LOG(WARN, "force gc retain ctx mgr", K(ret));
-    } else if (OB_FAIL(ls_tx_ctx_map_.for_each(fn))) {
+    if (OB_FAIL(ls_tx_ctx_map_.for_each(fn))) {
       TRANS_LOG(WARN, "for each transaction context error", KR(ret), "manager", *this);
     }
     is_all_tx_cleaned_up = (get_tx_ctx_count_() == 0);
@@ -858,9 +842,6 @@ int ObLSTxCtxMgr::del_tx_ctx(ObTransCtx *ctx)
   } else if (OB_ISNULL(ctx)) {
     TRANS_LOG(WARN, "invalid argument", KP(ctx));
     ret = OB_INVALID_ARGUMENT;
-  } else if ((static_cast<ObTxCtx *>(ctx))->get_retain_cause() != RetainCause::UNKOWN) {
-    ret = OB_SUCCESS;
-    TRANS_LOG(INFO, "can not del a retain ctx", KPC(ctx));
   } else {
     ls_tx_ctx_map_.del(ctx->get_trans_id(), ctx);
   }

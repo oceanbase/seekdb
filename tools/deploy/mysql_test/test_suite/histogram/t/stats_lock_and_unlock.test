@@ -8,11 +8,8 @@ set @@session.explicit_defaults_for_timestamp=off;
 --enable_sorted_result
 --disable_warnings
 drop table if exists t1, t_part, t_subpart, TEST_STAT, T1_STAT, T_PART_STAT, T_SUBPART_STAT;
---error 0, 5151
-drop tablegroup tgroup;
 --enable_warnings
 
-create tablegroup tgroup;
 create table t1 (c1 int, c2 int, c3 int);
 create table t_part (c1 int, c2 int, c3 int) partition by hash(c1) partitions 4;
 create table t_subpart (c1 int, c2 int, c3 int) partition by hash(c1)
@@ -92,7 +89,7 @@ select TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,NUM_ROWS,AVG_ROW_LEN,STATTYPE
 
 
 --error 5935
-analyze table t1 compute statistics for all columns size 5;
+call dbms_stats.gather_table_stats(NULL, 't1', method_opt=>'for all columns size 5', estimate_percent=>100);
 --error 5935
 call dbms_stats.gather_table_stats('TEST', 'T1', method_opt=>'FOR ALL COLUMNS SIZE 10', granularity=>'ALL');
 --error 5935
@@ -259,5 +256,3 @@ call dbms_stats.drop_stat_table('TEST', 'T_SUBPART_STAT');
 drop table t1;
 drop table t_part;
 drop table t_subpart;
-drop tablegroup tgroup;
-

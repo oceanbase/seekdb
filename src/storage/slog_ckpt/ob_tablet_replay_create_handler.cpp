@@ -19,9 +19,8 @@
 
 #include "ob_tablet_replay_create_handler.h"
 #include "share/rc/ob_module_provider.h"
-#include "observer/omt/ob_tenant.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "storage/meta_store/ob_tenant_storage_meta_service.h"
+#include "storage/meta_store/ob_local_storage_meta_service.h"
 
 namespace oceanbase
 {
@@ -35,7 +34,6 @@ namespace storage
 int ObTabletReplayCreateTask::init(
     const int64_t task_idx,
     const ObTabletReplayCreateTask::Type type,
-    share::ObTenantBase *tenant_base,
     ObTabletReplayCreateHandler *handler)
 {
   int ret = OB_SUCCESS;
@@ -45,7 +43,6 @@ int ObTabletReplayCreateTask::init(
   } else {
     idx_ = task_idx;
     type_ = type;
-    tenant_base_ = tenant_base;
     handler_ = handler;
     handler->inc_inflight_task_cnt();
     is_inited_ = true;
@@ -59,7 +56,6 @@ void ObTabletReplayCreateTask::destroy()
     handler_->dec_inflight_task_cnt();
     idx_ = -1;
     type_ = Type::MAX;
-    tenant_base_ = nullptr;
     handler_ = nullptr;
     replay_item_range_arr_.reset();
     tablet_cnt_ = 0;
@@ -193,11 +189,11 @@ int ObTabletReplayCreateHandler::init(
 
 int ObTabletReplayCreateHandler::concurrent_replay(ObStartupAccelTaskHandler* startup_accel_handler)
 {
-// for version <= 4.1 or FILE type addr, only support discrete replay
+// FILE type addresses only support discrete replay.
 #define ADD_ITEM_RANGE_TO_TASK(                                                        \
-    startup_accel_handler, start_item_idx, end_item_idx, only_support_discrete)        \
+    startup_accel_handler, start_item_idx, end_item_idx, force_discrete)               \
   ObTabletReplayItemRange range(start_item_idx, end_item_idx);                         \
-  if (only_support_discrete) {                                                         \
+  if (force_discrete) {                                                                \
     if (OB_FAIL(add_item_range_to_task_(startup_accel_handler,                         \
         ObTabletReplayCreateTask::DISCRETE, range, discrete_task_))) {                 \
       LOG_WARN("fail to add_item_range_to_task_", K(ret), KPC(discrete_task_));        \
@@ -305,7 +301,7 @@ int ObTabletReplayCreateHandler::add_item_range_to_task_(ObStartupAccelTaskHandl
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc task buf", K(ret));
     } else if (FALSE_IT(task = new(task) ObTabletReplayCreateTask())) {
-    } else if (OB_FAIL(task->init(task_idx_++, type, MTL_CTX(), this))) {
+    } else if (OB_FAIL(task->init(task_idx_++, type, this))) {
       LOG_WARN("fail to init ObTabletReplayCreateTask", K(ret));
     }
   }
@@ -389,7 +385,7 @@ int ObTabletReplayCreateHandler::replay_discrete_tablets(const ObIArray<ObTablet
         // io maybe timeout, so need retry
         int64_t max_retry_time = 5;
         do {
-          if (OB_FAIL(share::g_mp->tenant_storage_meta_service()->read_from_disk(replay_item.addr_, 0 /* ls_epoch for share storage */, io_allocator, buf, buf_len))) {
+          if (OB_FAIL(share::g_mp->local_storage_meta_service()->read_from_disk(replay_item.addr_, io_allocator, buf, buf_len))) {
             LOG_WARN("fail to read from disk", K(ret), K(replay_item), KP(buf), K(buf_len));
           }
         } while (OB_FAIL(ret) && OB_TIMEOUT == ret && max_retry_time-- > 0);
@@ -428,7 +424,7 @@ int ObTabletReplayCreateHandler::replay_aggregate_tablets(const ObIArray<ObTable
     read_info.io_timeout_ms_ = 20000; // 20s
     read_info.io_desc_.set_mode(ObIOMode::READ);
     read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
-    read_info.io_desc_.set_sys_module_id(ObIOModule::SHARED_BLOCK_RW_IO);
+    read_info.io_desc_.set_sys_module_id(ObIOModule::LINKED_MACRO_BLOCK_IO);
     read_info.macro_block_id_ = total_tablet_item_arr_[range_arr.at(i).first].addr_.block_id();
     
     if (OB_FAIL(ObObjectManager::read_object(read_info, object_handle))) {
@@ -438,7 +434,7 @@ int ObTabletReplayCreateHandler::replay_aggregate_tablets(const ObIArray<ObTable
       const ObTabletReplayItem &replay_item = total_tablet_item_arr_[idx];
       if (OB_FAIL(ATOMIC_LOAD(&errcode_))) {
         LOG_WARN("replay create has already failed", K(ret));
-      } else if (OB_FAIL(ObSharedObjectReaderWriter::parse_data_from_object(object_handle, replay_item.addr_, buf, buf_len))) {
+      } else if (OB_FAIL(ObObjectReaderWriter::parse_data_from_object(object_handle, replay_item.addr_, buf, buf_len))) {
         LOG_WARN("fail to parse_data_from_macro_block", K(ret), K(object_handle), K(replay_item), K(i), K(idx));
       } else if (OB_FAIL(do_replay(replay_item, buf, buf_len, io_allocator))) {
         LOG_WARN("fail to do replay", K(ret), K(replay_item));

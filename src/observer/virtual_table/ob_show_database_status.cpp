@@ -103,8 +103,8 @@ int ObShowDatabaseStatus::add_all_database_status()
     if (OB_ISNULL(schema_guard_)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "schema manager should not be null", K(ret));
-    } else if (OB_FAIL(schema_guard_->get_database_schemas_in_tenant(database_schemas))) {
-      SERVER_LOG(WARN, "failed to get database schema of tenant");
+    } else if (OB_FAIL(schema_guard_->get_database_schemas_in_runtime(database_schemas))) {
+      SERVER_LOG(WARN, "failed to get database schemas");
     } else {
       ObServer &server = ObServer::get_instance();
       const ObAddr server_ip = server.get_self();

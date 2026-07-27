@@ -50,10 +50,12 @@ public:
   static int gen_table_dml_without_check(
       const ObTableSchema &table,
       const bool update_object_status_ignore_version,
-      share::ObDMLSqlSplicer &dml);
+      share::ObDMLSqlSplicer &dml,
+      const bool is_history = false);
   static int gen_column_dml_without_check(
       const ObColumnSchemaV2 &column,
-      share::ObDMLSqlSplicer &dml);
+      share::ObDMLSqlSplicer &dml,
+      const bool is_history = false);
   virtual int batch_create_table(ObIArray<ObTableSchema> &tables,
                            common::ObISQLClient &sql_client,
                            const common::ObString *ddl_stmt_str = NULL,
@@ -103,10 +105,6 @@ public:
                          share::schema::ObSchemaGetterGuard *schema_guard,
                          share::schema::DropTableIdHashSet *drop_table_set);
 
-  virtual int update_tablegroup(ObSchemaGetterGuard &schema_guard,
-                                ObTableSchema &new_table_schema,
-                                common::ObISQLClient &sql_client,
-                                const common::ObString *ddl_stmt_str = NULL);
   virtual int log_core_operation(common::ObISQLClient &sql_client,
                                  const int64_t schema_version);
   virtual int log_sys_operation(common::ObISQLClient &sql_client,
@@ -198,10 +196,6 @@ public:
                            const ObTableSchema &ori_table,
                            const ObTableSchema &inc_table,
                            const int64_t schema_version);
-  int alter_inc_part_policy(ObISQLClient &sql_client, const ObTableSchema &table_schema,
-      const ObTableSchema &inc_table_schema, const int64_t new_schema_version);
-  int alter_inc_subpart_policy(ObISQLClient &sql_client, const ObTableSchema &table_schema,
-      const ObTableSchema &inc_table_schema, const int64_t new_schema_version);
   int drop_inc_part_info(
       common::ObISQLClient &sql_client,
       const ObTableSchema &ori_table,
@@ -325,7 +319,8 @@ private:
   // just add single line, the caller should call finish_row
   int add_table_dml(const ObTableSchema &table,
       const bool update_object_status_ignore_version,
-      ObDMLSqlSplicer &all_table_dml);
+      ObDMLSqlSplicer &all_table_dml,
+      const bool is_history = false);
   int batch_add_table_for_create_table(common::ObISQLClient &sql_client, const ObIArray<ObTableSchema> &tables);
   int delete_from_all_table(common::ObISQLClient &sql_client,
                             const uint64_t table_id);
@@ -399,15 +394,15 @@ private:
   static int add_interval_range_val(share::ObDMLSqlSplicer &dml,
                                const ObTableSchema &table);
   static int gen_table_dml(const ObTableSchema &table,
-                    const bool update_object_status_ignore_version, share::ObDMLSqlSplicer &dml);
-  static int check_tenant_data_version_in_gen_table_dml(
-      const ObTableSchema &table,
-      uint64_t &data_version);
+                    const bool update_object_status_ignore_version,
+                    share::ObDMLSqlSplicer &dml,
+                    const bool is_history = false);
   int gen_table_options_dml(const ObTableSchema &table,
                             const bool update_object_status_ignore_version,
                             share::ObDMLSqlSplicer &dml);
   static int gen_column_dml(const ObColumnSchemaV2 &column,
-      share::ObDMLSqlSplicer &dml);
+      share::ObDMLSqlSplicer &dml,
+      const bool is_history = false);
   int gen_constraint_dml(const ObConstraint &constraint, share::ObDMLSqlSplicer &dml);
   int gen_constraint_column_dml(
       const ObConstraint &constraint,

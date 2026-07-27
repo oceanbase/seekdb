@@ -24,7 +24,7 @@
 #include "share/scn.h"
 #include "share/tablet/ob_tablet_info.h"
 #include "share/ob_tablet_autoincrement_param.h"
-#include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_dag_scheduler.h"
 #include "observer/vector_index/ob_vector_index_util.h"
 #include "observer/vector_index/ob_vector_kmeans_ctx.h"
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
@@ -96,20 +96,17 @@ public:
   ObTabletDirectLoadMgrKey(const common::ObTabletID &tablet_id, const ObDirectLoadType &type, const int64_t ctx_id) // make sure type and ctx_id is correct.
     : tablet_id_(tablet_id)
   {
-    if (is_shared_storage_dempotent_mode(type)) {
-      direct_load_type_ = DIRECT_LOAD_DDL_V2;
-      context_id_ = ctx_id;
-    } else {
+    if (is_full_direct_load(type)) {
       direct_load_type_ = DIRECT_LOAD_DDL;
       context_id_ = 0;
     }
   }
-  ObTabletDirectLoadMgrKey(const common::ObTabletID &tablet_id, const ObDirectLoadType &type) // constructor for shared nothing only.
-    : tablet_id_(tablet_id), direct_load_type_(DIRECT_LOAD_DDL), context_id_(0)
-  {}
-  ObTabletDirectLoadMgrKey(const common::ObTabletID &tablet_id, const int64_t ctx_id) // constructor for shared storage only.
-    : tablet_id_(tablet_id), direct_load_type_(DIRECT_LOAD_DDL_V2), context_id_(ctx_id)
+  ObTabletDirectLoadMgrKey(const common::ObTabletID &tablet_id, const ObDirectLoadType &type)
+    : tablet_id_(tablet_id), context_id_(0)
   {
+    direct_load_type_ = is_full_direct_load(type) ? DIRECT_LOAD_DDL
+                            : (is_incremental_minor_direct_load(type) ? DIRECT_LOAD_INCREMENTAL
+                                                              : DIRECT_LOAD_INCREMENTAL_MAJOR);
   }
   ~ObTabletDirectLoadMgrKey() = default;
   uint64_t hash() const { 
@@ -119,7 +116,8 @@ public:
   int hash(uint64_t &hash_val) const {hash_val = hash(); return OB_SUCCESS;}
   bool is_valid() const { 
     return tablet_id_.is_valid() && is_valid_direct_load(direct_load_type_) && 
-      (is_shared_storage_dempotent_mode(direct_load_type_) ? context_id_ > 0 : context_id_ == 0); }
+      (((is_incremental_minor_direct_load(direct_load_type_) || is_incremental_major_direct_load(direct_load_type_))
+          ? context_id_ > 0 : context_id_ == 0)); }
   bool operator == (const ObTabletDirectLoadMgrKey &other) const {
         return tablet_id_ == other.tablet_id_ && direct_load_type_ == other.direct_load_type_
             && context_id_ == other.context_id_; }
@@ -160,14 +158,14 @@ struct ObDirectInsertCommonParam final
 {
 public:
   ObDirectInsertCommonParam()
-    : tablet_id_(), direct_load_type_(DIRECT_LOAD_INVALID), data_format_version_(0), read_snapshot_(0), is_no_logging_(false)
+    : tablet_id_(), direct_load_type_(DIRECT_LOAD_INVALID), data_format_version_(0), read_snapshot_(0)
 
   {}
   ~ObDirectInsertCommonParam() = default;
   bool is_valid() const { return tablet_id_.is_valid()
       && data_format_version_ >= 0 && read_snapshot_ >= 0 && is_valid_direct_load(direct_load_type_);
   }
-  TO_STRING_KV(K_(tablet_id), K_(direct_load_type), K_(data_format_version), K_(read_snapshot), K_(is_no_logging));
+  TO_STRING_KV(K_(tablet_id), K_(direct_load_type), K_(data_format_version), K_(read_snapshot));
 public:
   common::ObTabletID tablet_id_;
   ObDirectLoadType direct_load_type_;
@@ -175,7 +173,6 @@ public:
   // read_snapshot_ is used to scan the source data.
   // For full direct load task, it is also the commit version of the target macro block.
   int64_t read_snapshot_;
-  bool is_no_logging_;
 };
 
 // only used in runtime execution
@@ -1048,7 +1045,7 @@ public:
 struct ObDDLMergeBucketLock 
 {
 public:
-  static int mtl_init(ObDDLMergeBucketLock *&ddl_merge_bucket_lock);
+  static int server_module_init(ObDDLMergeBucketLock *&ddl_merge_bucket_lock);
   ObDDLMergeBucketLock(): hash_set_(), mutex_(), is_inited_(false)
   {}
   ~ObDDLMergeBucketLock()

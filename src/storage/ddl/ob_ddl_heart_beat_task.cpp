@@ -1,4 +1,4 @@
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_management_service.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -75,7 +75,6 @@ int ObDDLHeartBeatTaskContainer::init()
 {
   int ret = OB_SUCCESS;
   ObMemAttr attr("register_tasks");
-  SET_USE_500(attr);
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObDDLHeartBeatTaskContainer inited twice", K(ret));
@@ -166,7 +165,7 @@ int ObDDLHeartBeatTaskContainer::send_task_status_to_rs()
           arg.task_id_ = task_id;
           
           
-          if (OB_FAIL(GCTX.root_service_->update_ddl_task_active_time(arg))) {
+          if (OB_FAIL(GCTX.local_management_service_->update_ddl_task_active_time(arg))) {
             LOG_WARN("send to task status fail", K(ret), K(rs_leader_addr), K(task_id));
           }
         }

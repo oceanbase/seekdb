@@ -40,27 +40,26 @@ int64_t get_memory_used();
 int64_t get_memory_avail();
 int64_t get_hard_memory_remain();
 
-void set_tenant_memory_limit(int64_t bytes);
-int64_t get_tenant_memory_limit();
-int64_t get_tenant_memory_hold();
-int64_t get_tenant_memory_hold(const uint64_t ctx_id);
-int64_t get_tenant_cache_hold();
-int64_t get_tenant_memory_remain();
-void get_tenant_label_memory(
+void set_allocator_memory_limit(int64_t bytes);
+int64_t get_allocator_memory_limit();
+int64_t get_allocator_memory_hold();
+int64_t get_allocator_memory_hold(const uint64_t ctx_id);
+int64_t get_allocator_cache_hold();
+int64_t get_allocator_memory_remain();
+void get_label_memory(
   ObLabel &label, common::ObLabelItem &item);
 void ob_set_reserved_memory(const int64_t bytes);
 int64_t ob_get_reserved_memory();
 
-// Set Work Area memory limit for specified tenant.
-// ms_pctg: percentage limitation of tenant memory can be used by MemStore
-// pc_pctg: percentage limitation of tenant memory can be used by Plan Cache
-// wa_pctg: percentage limitation of tenant memory can be used by Work Area
+// Set work-area memory limits.
+// ms_pctg: percentage available to MemStore
+// pc_pctg: percentage available to Plan Cache
+// wa_pctg: percentage available to Work Area
 
 int set_ctx_limit(uint64_t ctx_id, const int64_t limit);
 int set_wa_limit(int64_t wa_pctg);
 
-// set meta object memory limit for specified tenant.
-// - meta_obj_pct_lmt: percentage limitation of tenant memory can be used for meta object.
+// Set the metadata-object memory limit.
 int set_meta_obj_limit(int64_t meta_obj_pct_lmt);
 
 bool errsim_alloc(const ObMemAttr &attr);

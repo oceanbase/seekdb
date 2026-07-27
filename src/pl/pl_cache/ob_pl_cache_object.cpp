@@ -38,50 +38,23 @@ OB_SERIALIZE_MEMBER(ObPlParamInfo,
 void ObPLCacheObject::reset()
 {
   ObILibCacheObject::reset();
-  tenant_schema_version_ = OB_INVALID_VERSION;
+  runtime_schema_version_ = OB_INVALID_VERSION;
   sys_schema_version_ = OB_INVALID_VERSION;
   params_info_.reset();
   sql_expression_factory_.destroy();
   expr_operator_factory_.destroy();
   expressions_.reset();
-  concurrent_num_ = 0;
-  max_concurrent_num_ = ObMaxConcurrentParam::UNLIMITED;
 }
 
-int ObPLCacheObject::set_tenant_sys_schema_version(schema::ObSchemaGetterGuard &schema_guard)
+int ObPLCacheObject::set_runtime_and_system_schema_versions(schema::ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
-  int64_t tenant_schema_version = OB_INVALID_VERSION;
+  int64_t runtime_schema_version = OB_INVALID_VERSION;
   int64_t sys_schema_version = OB_INVALID_VERSION;
-  OZ (schema_guard.get_schema_version(tenant_schema_version));
+  OZ (schema_guard.get_schema_version(runtime_schema_version));
   OZ (schema_guard.get_schema_version(sys_schema_version));
-  OX (set_tenant_schema_version(tenant_schema_version));
+  OX (set_runtime_schema_version(runtime_schema_version));
   OX (set_sys_schema_version(sys_schema_version));
-  return ret;
-}
-
-int ObPLCacheObject::inc_concurrent_num()
-{
-  int ret = OB_SUCCESS;
-  int64_t concurrent_num = 0;
-  int64_t new_num = 0;
-  bool is_succ = false;
-  if (max_concurrent_num_ == ObMaxConcurrentParam::UNLIMITED) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("current pl object is unlimit", K(ret), K(max_concurrent_num_));
-  } else {
-    while(OB_SUCC(ret) && false == is_succ) {
-      concurrent_num = ATOMIC_LOAD(&concurrent_num_);
-      if (0 == max_concurrent_num_) {
-        ret = OB_REACH_MAX_CONCURRENT_NUM;
-      } else if (concurrent_num >= max_concurrent_num_) {
-        ret = OB_REACH_MAX_CONCURRENT_NUM;
-      } else {
-        new_num = concurrent_num + 1;
-        is_succ = ATOMIC_BCAS(&concurrent_num_, concurrent_num, new_num);
-      }
-    }
-  }
   return ret;
 }
 
@@ -215,7 +188,7 @@ int ObPLCacheObject::update_cache_obj_stat(sql::ObILibCacheCtx &ctx)
   stat.gen_time_ = ObTimeUtility::current_time();
   stat.last_active_time_ = ObTimeUtility::current_time();
   stat.hit_count_ = 0;
-  stat.pl_evict_version_ = get_tenant_schema_version();
+  stat.pl_evict_version_ = get_runtime_schema_version();
   MEMCPY(stat.sql_id_, pc_ctx.sql_id_, (int32_t)sizeof(pc_ctx.sql_id_));
 
   if (OB_SUCC(ret)) {

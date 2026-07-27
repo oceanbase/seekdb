@@ -449,7 +449,6 @@ TRUNCATE TABLE tab;
 CREATE TABLE tab2 AS SELECT * FROM tab;
 
 --echo # Check the table definition
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = 1/g
 SHOW CREATE TABLE tab2;
 
 --echo # Create a tigger and populate the values into tab2
@@ -536,7 +535,6 @@ if (0) {
   INSERT INTO geom_index SELECT * FROM gis_geometry;
 
   --echo # Check column datatypes
-  --replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = 1/g
   SHOW CREATE TABLE geom_index;
 
   SET @polygon = ST_GEOMFROMTEXT('POLYGON((0 0,0 10,10 10,10 0,0 0))');

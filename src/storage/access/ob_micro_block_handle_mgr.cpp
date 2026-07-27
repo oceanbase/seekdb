@@ -37,16 +37,13 @@ ObMicroBlockDataHandle::ObMicroBlockDataHandle()
     block_index_(-1),
     micro_info_(),
     des_meta_(),
-    encrypt_key_(),
     cache_handle_(),
     io_handle_(),
     handle_mgr_(nullptr),
     allocator_(nullptr),
     loaded_block_data_(),
     is_loaded_block_(false)
-{
-  des_meta_.encrypt_key_ = encrypt_key_;
-}
+{}
 
 ObMicroBlockDataHandle::~ObMicroBlockDataHandle()
 {
@@ -92,8 +89,6 @@ void ObMicroBlockDataHandle::move_from(ObMicroBlockDataHandle& other)
   this->block_index_ = other.block_index_;
   this->micro_info_ = other.micro_info_;
   this->des_meta_ = other.des_meta_;
-  this->des_meta_.encrypt_key_ = encrypt_key_;
-  MEMCPY(encrypt_key_, other.encrypt_key_, share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH);
   this->cache_handle_.move_from(other.cache_handle_);
   this->io_handle_ = other.io_handle_;
   this->handle_mgr_ = other.handle_mgr_;
@@ -123,8 +118,6 @@ int ObMicroBlockDataHandle::assign(const ObMicroBlockDataHandle& other)
       this->block_index_ = other.block_index_;
       this->micro_info_ = other.micro_info_;
       this->des_meta_ = other.des_meta_;
-      this->des_meta_.encrypt_key_ = encrypt_key_;
-      MEMCPY(encrypt_key_, other.encrypt_key_, share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH);
       this->io_handle_ = other.io_handle_;
       // this->handle_mgr_ = other.handle_mgr_;
       this->allocator_ = other.allocator_;
@@ -142,7 +135,7 @@ bool ObMicroBlockDataHandle::match(const blocksstable::MacroBlockId &macro_id,
   return offset == micro_info_.offset_
       && macro_id == macro_block_id_
       && size == micro_info_.size_
-      && true;
+      ;
 }
 
 int ObMicroBlockDataHandle::get_micro_block_data(
@@ -368,18 +361,18 @@ int ObCacheMemController::update_limit(const ObQueryFlag &query_flag)
   int ret = OB_SUCCESS;
   if (0 == (++update_limit_count_ % UPDATE_INTERVAL)) {
     
-    int64_t tenant_free_memory = lib::get_tenant_memory_limit() - lib::get_tenant_memory_hold();
-    hold_limit_ = HOLD_LIMIT_BASE + tenant_free_memory / 1024 ;
+    int64_t runtime_free_memory = lib::get_allocator_memory_limit() - lib::get_allocator_memory_hold();
+    hold_limit_ = HOLD_LIMIT_BASE + runtime_free_memory / 1024 ;
     int64_t cache_washable_size = 0;
     if (query_flag.is_use_block_cache()) {
       if (OB_FAIL(ObKVGlobalCache::get_instance().get_washable_size(cache_washable_size))) {
         LOG_WARN("Fail to get kvcache washable size", K(ret));
       } else {
-        data_block_use_cache_limit_ = tenant_free_memory / 5 + cache_washable_size / 10;
+        data_block_use_cache_limit_ = runtime_free_memory / 5 + cache_washable_size / 10;
         use_data_block_cache_ = data_block_submit_io_size_ <= data_block_use_cache_limit_;
       }
     }
-    LOG_DEBUG("Update limit details", K(tenant_free_memory), K(cache_washable_size),
+    LOG_DEBUG("Update limit details", K(runtime_free_memory), K(cache_washable_size),
                                  K(query_flag.is_use_block_cache()), KPC(this));
   }
   return ret;
@@ -466,7 +459,7 @@ int ObMicroBlockHandleMgr::get_micro_block_handle(
   } else if (OB_ISNULL(idx_header)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpect null index header", K(ret), KP(idx_header));
-  } else if (OB_FAIL(idx_header->fill_micro_des_meta(true /* deep_copy_key */, micro_block_handle.des_meta_))) {
+  } else if (OB_FAIL(idx_header->fill_micro_des_meta(micro_block_handle.des_meta_))) {
     LOG_WARN("Fail to fill micro block deserialize meta", K(ret));
   } else if (FALSE_IT(micro_block_handle.init(macro_id, offset, size, index_block_info.get_logic_micro_id(),
                                               index_block_info.get_data_checksum(), this))) {
@@ -526,12 +519,11 @@ int ObMicroBlockHandleMgr::prefetch_multi_data_block(
     LOG_WARN("Unexpected io params", K(ret), K(multi_io_params));
   } else {
     const MacroBlockId &macro_id = micro_data_infos[multi_io_params.prefetch_idx_[0] % max_micro_handle_cnt].get_macro_id();
-    const bool is_major_macro_preread = false;
     if (1 == multi_io_params.count()) {
       for (int64_t i = 0; OB_SUCC(ret) && i < multi_io_params.count(); i++) {
         const ObMicroIndexInfo &index_info = micro_data_infos[multi_io_params.prefetch_idx_[i] % max_micro_handle_cnt];
         if (OB_FAIL(data_block_cache_->prefetch(macro_id, index_info, true,
-                                                macro_handle, &block_io_allocator_, is_major_macro_preread))) {
+                                                macro_handle, &block_io_allocator_))) {
           LOG_WARN("Fail to prefetch micro block", K(ret), K(index_info), K(macro_handle));
         } else {
           ObMicroBlockDataHandle &micro_handle = micro_data_handles[multi_io_params.prefetch_idx_[i] % max_micro_handle_cnt];

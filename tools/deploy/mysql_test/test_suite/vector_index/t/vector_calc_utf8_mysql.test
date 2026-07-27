@@ -50,17 +50,25 @@ select cosine_distance([1,2,3], '[0,0,0]');
 
 select c1, c2, l1_distance(c1, c2), l1_distance([1,1,1], '[1,2,3]'), vector_distance([1,1,1], c2, manhattan) from test;
 select c1, c2, l1_distance(c2, NULL), vector_distance(NULL, c2, manhattan) from test;
+--replace_numeric_round 4
 select c1, c2, l2_distance(c1, c2), l2_distance(c1, '[1,2,3]'), l2_distance([1,1,1], c2), vector_distance([1,1,1], c2, euclidean) from test;
 select c1, c2, cosine_distance([1,1,1], [1,2,3]), cosine_distance(c1, [1,2,3]), cosine_distance(c2, '[1,1,1]'), vector_distance(c2, '[1,1,1]', cosine) from test;
+--replace_numeric_round 4
 select c1, c2, inner_product(c1, '[1,2,3]'), inner_product('[1,1,1]', '[1,2,3]'), inner_product('[1,1,1]', c2), vector_distance('[1,1,1]', c2, dot) from test;
+--replace_numeric_round 4
 select c1, c2, negative_inner_product(c1, '[1,2,3]'), negative_inner_product('[1,1,1]', '[1,2,3]'), negative_inner_product('[1,1,1]', c2), vector_distance('[1,1,1]', c2, dot) from test;
+--replace_numeric_round 4
 select c1, c4, l2_distance(c1, c4) from test where id = 1;
 select c3, c4, l2_distance(c3, c4) from test where id = 2;
 
+--replace_numeric_round 4
 select c1, l2_distance(c1, '[1,1,1]') from test group by l2_distance(c1, '[1,1,1]');
+--replace_numeric_round 4
 select c1, l2_distance(c1, '[1,1,1]') from test where l2_distance(c1, '[1,1,1]') < 100;
+--replace_numeric_round 4
 select l2_distance(c1, '[1,1,1]') + cosine_distance(c2, '[1,2,3]') from test;
 
+--replace_numeric_round 4
 select c1, l2_distance(c1, '[1,1,1]') from test1;
 select test1.id, test1.c1, test.c1, l2_distance(test1.c1, test.c1) from test1,test where test1.id = test.id and test.id = 2;
 select /*+parallel(2)*/test1.id, test1.c1, test.c1, l2_distance(test1.c1, test.c1) from test1,test where test1.id = test.id and test.id = 2;

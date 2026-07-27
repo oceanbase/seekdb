@@ -24,6 +24,9 @@
 #include "storage/multi_data_source/compile_utility/mds_register.h"
 #undef NEED_MDS_REGISTER_DEFINE
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
+#include "storage/multi_data_source/runtime_utility/mds_service.h"
+#include "share/rc/ob_server_runtime.h"
+#include "lib/utility/ob_smart_call.h"
 #include "logservice/ob_log_service.h"
 #include "storage/tx/ob_tx_log_operator.h"
 #include "storage/tx/ob_tx_print_time_guard.h"
@@ -47,15 +50,12 @@ using namespace tablelock;
 bool ObTxCtx::is_inited() const { return ATOMIC_LOAD(&is_inited_); }
 
 int ObTxCtx::init(const uint32_t session_id,
-                         const uint32_t associated_session_id,
-                         const ObTransID &trans_id,
-                         const int64_t trans_expired_time,
-                         const uint64_t cluster_version,
-                         ObTransService *trans_service,
-                         ObLSTxCtxMgr *ls_ctx_mgr,
-                         const bool for_replay,
-                         const TxCtxSource ctx_source,
-                         ObXATransID xid)
+                  const ObTransID &trans_id,
+                  const int64_t trans_expired_time,
+                  ObTransService *trans_service,
+                  ObLSTxCtxMgr *ls_ctx_mgr,
+                  const bool for_replay,
+                  const TxCtxSource ctx_source)
 {
   int ret = OB_SUCCESS;
 
@@ -68,10 +68,9 @@ int ObTxCtx::init(const uint32_t session_id,
     TRANS_LOG(WARN, "ObTxCtx inited twice");
     ret = OB_INIT_TWICE;
   } else if (OB_UNLIKELY(!trans_id.is_valid())
-             || OB_UNLIKELY(trans_expired_time <= 0) || OB_UNLIKELY(cluster_version < 0)
+             || OB_UNLIKELY(trans_expired_time <= 0)
              || OB_ISNULL(trans_service)) {
-    TRANS_LOG(WARN, "invalid argument", K(trans_id), K(cluster_version),
-              KP(trans_service));
+    TRANS_LOG(WARN, "invalid argument", K(trans_id), KP(trans_service));
     ret = OB_INVALID_ARGUMENT;
   } else {
     ls_tx_ctx_mgr_ = ls_ctx_mgr;
@@ -96,15 +95,12 @@ int ObTxCtx::init(const uint32_t session_id,
 
   if (OB_SUCC(ret)) {
     session_id_ = session_id;
-    associated_session_id_ = associated_session_id;
     addr_ = trans_service->get_server();
     trans_id_ = trans_id;
     for_replay_ = for_replay;
     trans_expired_time_ = trans_expired_time;
     ctx_create_time_ = ObClockGenerator::getClock();
     ctx_source_ = ctx_source;
-    cluster_version_accurate_ = cluster_version > 0;
-    cluster_version_ = cluster_version ?: LAST_BARRIER_DATA_VERSION;
     part_trans_action_ = ObPartTransAction::INIT;
     commit_retry_timeout_ = get_commit_retry_interval_us_();
     last_request_ts_ = ctx_create_time_;
@@ -112,10 +108,6 @@ int ObTxCtx::init(const uint32_t session_id,
     last_check_tx_status_ts_ = ObClockGenerator::getClock();
     pending_write_ = 0;
     block_frozen_memtable_ = nullptr;
-
-    if (!xid.empty()) {
-      exec_info_.xid_ = xid;
-    }
 
     if (is_for_replay()) {
       mt_ctx_.trans_replay_begin();
@@ -144,7 +136,7 @@ int ObTxCtx::init(const uint32_t session_id,
                        OB_ID(trans_id), trans_id,
                        OB_ID(ref), get_ref());
   TRANS_LOG(TRACE, "tx ctx init", K(ret), K(trans_id), K(trans_expired_time),
-            K(cluster_version), KP(trans_service));
+            KP(trans_service));
   return ret;
 }
 
@@ -207,12 +199,6 @@ void ObTxCtx::destroy()
       FORCE_PRINT_TRACE(tlog_, "[missing callback scheduler] ");
     }
 
-    if (OB_NOT_NULL(retain_ctx_func_ptr_)) {
-      TRANS_LOG(INFO, "the memory of retain_ctx_func_ptr is active, need free", K(ret),
-                KP(retain_ctx_func_ptr_), KPC(retain_ctx_func_ptr_), KPC(this));
-    }
-    (void)try_gc_retain_ctx_func_();
-
     exec_info_.destroy(mds_cache_);
 
     mds_cache_.destroy();
@@ -256,7 +242,6 @@ void ObTxCtx::default_init_()
 
   request_id_ = OB_INVALID_TIMESTAMP;
   session_id_ = 0;
-  associated_session_id_ = 0;
   timeout_task_.reset();
   trace_info_.reset();
   can_elr_ = false;
@@ -267,8 +252,6 @@ void ObTxCtx::default_init_()
   trans_expired_time_ = INT64_MAX;
   stmt_expired_time_ = INT64_MAX;
   cur_query_start_time_ = 0;
-  clean_retain_cause_();
-
   target_state_ = ObTxState::INIT;
   exec_info_.reset();
   ctx_tx_data_.reset();
@@ -282,7 +265,6 @@ void ObTxCtx::default_init_()
   big_segment_info_.reset();
   is_ctx_table_merged_ = false;
   mds_cache_.reset();
-  retain_ctx_func_ptr_ = nullptr;
   create_ctx_scn_.reset();
   ctx_source_ = TxCtxSource::UNKNOWN;
   replay_completeness_.reset();
@@ -668,7 +650,7 @@ int ObTxCtx::commit(const MonotonicTs &commit_time,
     } else {
       set_stc_by_now_();
     }
-    can_elr_ = (trans_service_->get_tx_elr_util().is_can_tenant_elr() ? true : false);
+    can_elr_ = trans_service_->get_tx_elr_util().is_can_elr();
     if (OB_FAIL(one_phase_commit_())) {
       TRANS_LOG(WARN, "start sp coimit fail", K(ret), KPC(this));
     }
@@ -878,7 +860,6 @@ int ObTxCtx::trans_replay_abort_(const SCN &final_log_ts)
 
 int ObTxCtx::trans_replay_commit_(const SCN &commit_version,
                                          const SCN &final_log_ts,
-                                         const uint64_t log_cluster_version,
                                          const uint64_t checksum)
 {
   ObTimeGuard tg("trans_replay_commit", 50 * 1000);
@@ -892,7 +873,6 @@ int ObTxCtx::trans_replay_commit_(const SCN &commit_version,
     if (OB_FAIL(mt_ctx_.trans_replay_end(true, /*commit*/
                                          commit_version,
                                          final_log_ts,
-                                         log_cluster_version,
                                          checksum))) {
       TRANS_LOG(WARN, "transaction replay end error", KR(ret), K(commit_version), K(checksum),
                 "context", *this);
@@ -1106,24 +1086,6 @@ int ObTxCtx::recover_tx_ctx_table_info(ObTxCtxTableInfo &ctx_info)
       mt_ctx_.set_skip_checksum_calc();
     }
 
-    // insert into retain ctx mgr if it will not replay commit or abort log
-    if (OB_FAIL(ret)) {
-      // do nothing
-    } else if (exec_info_.multi_data_source_.count() > 0
-               && (ObTxState::COMMIT == exec_info_.state_ || ObTxState::ABORT == exec_info_.state_
-                   || ObTxState::CLEAR == exec_info_.state_)) {
-      if (OB_FAIL(try_alloc_retain_ctx_func_())) {
-        TRANS_LOG(WARN, "alloc retain ctx func failed", K(ret), KPC(this));
-      } else if (OB_FAIL(insert_into_retain_ctx_mgr_(RetainCause::MDS_WAIT_GC_COMMIT_LOG,
-                                                     exec_info_.max_applying_log_ts_,
-                                                     exec_info_.max_durable_lsn_, false))) {
-        TRANS_LOG(WARN, "insert into retain ctx mgr failed", K(ret), KPC(this));
-      }
-      if (OB_SUCC(ret)) {
-        TRANS_LOG(INFO, "recover retain ctx into mgr success", K(ret), K(trans_id_));
-      }
-    }
-
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (ObTxState::COMMIT == exec_info_.state_ || ObTxState::ABORT == exec_info_.state_) {
@@ -1134,14 +1096,6 @@ int ObTxCtx::recover_tx_ctx_table_info(ObTxCtxTableInfo &ctx_info)
     if (OB_SUCC(ret)) {
       if (exec_info_.serial_final_scn_.is_valid()) {
         recovery_parallel_logging_();
-      }
-      if ((ObTxState::COMMIT == exec_info_.state_
-           && exec_info_.max_applying_log_ts_ == exec_info_.max_applied_log_ts_)
-          || ObTxState::CLEAR == exec_info_.state_) {
-        //update max_commit_ts for dup table because of migrate or recover
-        share::g_mp->trans_service()
-            ->get_tx_version_mgr()
-            .update_max_commit_ts(ctx_tx_data_.get_commit_version(), false);
       }
       create_ctx_scn_ = exec_info_.max_applying_log_ts_;
 
@@ -1169,9 +1123,7 @@ int ObTxCtx::serialize_tx_ctx_to_buffer(ObTxLocalBuffer &buffer, int64_t &serial
   CtxLockGuard guard(lock_);
   // 1. Tx ctx has already exited, so it means that it may have no chance to
   //    push its rec_log_ts to aggre_rec_log_ts, so we must not persist it
-  // NB: You need take note that retained tx ctx should be dumped due to
-  //     multi-source data.
-  if (is_exiting_ && get_retain_cause() == RetainCause::UNKOWN) {
+  if (is_exiting_) {
     ret = OB_TRANS_CTX_NOT_EXIST;
     TRANS_LOG(INFO, "tx ctx has exited", K(ret), KPC(this));
   // 2. Tx ctx has no persisted log, so donot need persisting
@@ -2017,13 +1969,6 @@ int ObTxCtx::on_success_ops_(ObTxLogCb *log_cb)
       runtime_state_.clear_state_log_submitting();
       if (ObTxLogType::TX_COMMIT_LOG == log_type) {
         if (OB_SUCC(ret)) {
-          if (exec_info_.multi_data_source_.count() > 0 && get_retain_cause() == RetainCause::UNKOWN
-              && OB_FAIL(insert_into_retain_ctx_mgr_(RetainCause::MDS_WAIT_GC_COMMIT_LOG, log_ts, log_lsn,
-                                                     false))) {
-            TRANS_LOG(WARN, "insert into retain_ctx_mgr failed", K(ret), KPC(log_cb), KPC(this));
-          }
-        }
-        if (OB_SUCC(ret)) {
           if (OB_FAIL(ctx_tx_data_.set_end_log_ts(log_ts))) {
             TRANS_LOG(WARN, "set end log ts failed", K(ret));
           } else {
@@ -2033,13 +1978,6 @@ int ObTxCtx::on_success_ops_(ObTxLogCb *log_cb)
           }
         }
       } else if (ObTxLogType::TX_ABORT_LOG == log_type) {
-        if (OB_SUCC(ret)) {
-          if (exec_info_.multi_data_source_.count() > 0 && get_retain_cause() == RetainCause::UNKOWN
-              && OB_FAIL(insert_into_retain_ctx_mgr_(RetainCause::MDS_WAIT_GC_COMMIT_LOG, log_ts, log_lsn,
-                                                     false))) {
-            TRANS_LOG(WARN, "insert into retain_ctx_mgr failed", K(ret), KPC(log_cb), KPC(this));
-          }
-        }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(ctx_tx_data_.set_end_log_ts(log_ts))) {
             TRANS_LOG(WARN, "set end log ts failed", K(ret));
@@ -2498,7 +2436,7 @@ int ObTxCtx::init_log_block_(ObTxLogBlock &log_block,
 {
   ObTxLogBlockHeader &header = log_block.get_header();
   // the log_entry_no will be backfill before log-block to be submitted
-  header.init(cluster_version_, -1 /*log_entry_no*/, trans_id_);
+  header.init(-1 /*log_entry_no*/, trans_id_);
   if (OB_UNLIKELY(serial_final)) { header.set_serial_final(); }
   if (OB_UNLIKELY(has_async_index_redo_)) { header.set_has_async_index(); }
   return log_block.init_for_fill(suggested_buf_size);
@@ -2507,7 +2445,7 @@ int ObTxCtx::init_log_block_(ObTxLogBlock &log_block,
 inline int ObTxCtx::reuse_log_block_(ObTxLogBlock &log_block)
 {
   ObTxLogBlockHeader &header = log_block.get_header();
-  header.init(cluster_version_, exec_info_.next_log_entry_no_, trans_id_);
+  header.init(exec_info_.next_log_entry_no_, trans_id_);
   if (OB_UNLIKELY(has_async_index_redo_)) { header.set_has_async_index(); }
   return log_block.reuse_for_fill();
 }
@@ -2595,9 +2533,8 @@ int ObTxCtx::submit_redo_commit_info_log_(ObTxLogBlock &log_block,
     TRANS_LOG(WARN, "decide commit info log barrier failed", K(ret), K(barrier), KPC(this));
   } else {
     ObTxCommitInfoLog commit_info_log(
-        exec_info_.is_dup_tx_, can_elr_, trace_info_.get_app_trace_id(),
-        trace_info_.get_app_trace_info(), exec_info_.prev_record_lsn_, exec_info_.redo_lsns_,
-        exec_info_.xid_);
+        can_elr_, trace_info_.get_app_trace_id(),
+        trace_info_.get_app_trace_info(), exec_info_.prev_record_lsn_, exec_info_.redo_lsns_);
 
     if (OB_FAIL(validate_commit_info_log_(commit_info_log))) {
       TRANS_LOG(WARN, "invalid commit info log", K(ret), K(commit_info_log), K(trans_id_));
@@ -2737,9 +2674,6 @@ int ObTxCtx::submit_commit_log_()
     if (OB_SUCC(ret)) {
       if (OB_FAIL(set_start_scn_in_commit_log_(commit_log))) {
         TRANS_LOG(WARN, "set start scn in commit log failed", K(ret), K(commit_log));
-      } else if ((exec_info_.multi_data_source_.count() > 0 || mds_cache_.count() > 0)
-                 && OB_FAIL(try_alloc_retain_ctx_func_())) {
-        TRANS_LOG(WARN, "alloc retain ctx func for mds trans failed", K(ret), K(mds_cache_), KPC(this));
       } else if (OB_FAIL(decide_state_log_barrier_type_(ObTxLogType::TX_COMMIT_LOG, commit_log_barrier_type))) {
         TRANS_LOG(WARN, "decide commit log barrier type failed", K(ret), K(commit_log_barrier_type),
                   KPC(this));
@@ -2898,13 +2832,6 @@ int ObTxCtx::submit_abort_log_()
   ObTxAbortLog abort_log(mds_cache_.get_final_notify_array());
 
   if (OB_SUCC(ret)) {
-    if ((exec_info_.multi_data_source_.count() > 0 || mds_cache_.count() > 0)) {
-      if (OB_FAIL(try_alloc_retain_ctx_func_())) {
-        TRANS_LOG(WARN, "alloc retain ctx func for mds trans failed", K(ret), K(mds_cache_),
-                  KPC(this));
-      }
-    }
-
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(abort_log.init_tx_data_backup(ctx_tx_data_.get_start_log_ts()))) {
@@ -3111,7 +3038,7 @@ int ObTxCtx::prepare_big_segment_submit_(ObTxLogCb *segment_cb,
     TRANS_LOG(WARN, "inactive segment buf", K(ret), K(big_segment_info_), KPC(this));
   } else if (OB_NOT_NULL(big_segment_info_.submit_log_cb_template_)) {
   } else if (OB_ISNULL(big_segment_info_.submit_log_cb_template_ = static_cast<ObTxLogCb *>(
-                           share::mtl_malloc(sizeof(ObTxLogCb), "BigSegmentCb")))) {
+                           share::server_malloc(sizeof(ObTxLogCb), "BigSegmentCb")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "alloc log cb template for big segment failed", K(ret), K(big_segment_info_));
   } else if (OB_FALSE_IT(new (big_segment_info_.submit_log_cb_template_) ObTxLogCb())) {
@@ -3241,7 +3168,7 @@ int ObTxCtx::submit_log_impl_(const ObTxLogType log_type)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  MOD_SCOPE
+  SERVER_MODULE_SCOPE
   {
     if (big_segment_info_.segment_buf_.is_active()) {
       ret = OB_LOG_TOO_LARGE;
@@ -3249,8 +3176,6 @@ int ObTxCtx::submit_log_impl_(const ObTxLogType log_type)
                 K(trans_id_), K(big_segment_info_));
     } else {
       switch (log_type) {
-      // for xa and duplicate table
-      // TODO. need submit log in sync log callback
       case ObTxLogType::TX_COMMIT_INFO_LOG: {
         ret = submit_redo_commit_info_log_();
         break;
@@ -3685,7 +3610,7 @@ int ObTxCtx::iter_next_log_for_replay(ObTxLogBlock &log_block,
       ret = OB_SUCCESS;
       if (OB_ISNULL(big_segment_info_.submit_log_cb_template_)) {
         if (OB_ISNULL(big_segment_info_.submit_log_cb_template_ = static_cast<ObTxLogCb *>(
-                          share::mtl_malloc(sizeof(ObTxLogCb), "BigSegmentCb")))) {
+                          share::server_malloc(sizeof(ObTxLogCb), "BigSegmentCb")))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           TRANS_LOG(WARN, "alloc log cb template for big segment failed", K(ret), K(log_scn),
                     K(big_segment_info_));
@@ -3731,9 +3656,6 @@ int ObTxCtx::replay_one_part_of_big_segment(const palf::LSN &offset,
     TRANS_LOG(WARN, "update replaying log no failed", K(ret), K(timestamp), K(part_log_no));
   }
 
-  if (OB_SUCC(ret) && OB_FAIL(check_and_merge_redo_lsns_(offset))) {
-    TRANS_LOG(WARN, "check and merge redo lsns failed", K(ret), K(trans_id_), K(timestamp), K(offset));
-  }
   return ret;
 }
 
@@ -3875,27 +3797,6 @@ void ObTxCtx::check_no_need_replay_checksum(const SCN &log_ts, const int index)
                 K(serial_replay), K(index), K(log_ts), KPC(this));
     }
   }
-}
-
-/*
- * since 4.2.4, redo_lsns can not be maintained on follower with order
- * because the redo were replay parallelly, instead, redo_lsns only
- * maintained on leader and when switch to follower, it will persistent
- * redo_lsns with `RecordLog`
- */
-int ObTxCtx::check_and_merge_redo_lsns_(const palf::LSN &offset)
-{
-  int ret = OB_SUCCESS;
-  if (!is_support_parallel_replay_()) {
-    int64_t cnt = exec_info_.redo_lsns_.count();
-    // TODO merge without same offset
-    if (cnt != 0 && exec_info_.redo_lsns_[cnt - 1] == offset) {
-      TRANS_LOG(INFO, "repeated redo log offset", K(offset), K(exec_info_.redo_lsns_), K(trans_id_));
-    } else if (OB_FAIL(exec_info_.redo_lsns_.push_back(offset))) {
-      TRANS_LOG(WARN, "redo log offset push back error", K(ret), K(offset), K(trans_id_));
-    }
-  }
-  return ret;
 }
 
 /*
@@ -4136,7 +4037,6 @@ int ObTxCtx::replay_commit_info(const ObTxCommitInfoLog &commit_info_log,
     TRANS_LOG(WARN, "set app trace id error", K(ret), K(commit_info_log), K(*this));
   } else {
     exec_info_.mark_write_state();
-    exec_info_.xid_ = commit_info_log.get_xid();
     can_elr_ = commit_info_log.is_elr();
     runtime_state_.set_info_log_submitted();
     reset_redo_lsns_();
@@ -4213,17 +4113,6 @@ int ObTxCtx::replay_commit(const ObTxCommitLog &commit_log,
       }
     }
     if (OB_SUCC(ret)) {
-      if (exec_info_.multi_data_source_.count() > 0 && get_retain_cause() == RetainCause::UNKOWN) {
-        if (OB_FAIL(try_alloc_retain_ctx_func_())) {
-          TRANS_LOG(WARN, "alloc retain ctx func failed", K(ret), K(commit_log), K(timestamp),
-                    K(offset), KPC(this));
-        } else if (OB_FAIL(insert_into_retain_ctx_mgr_(RetainCause::MDS_WAIT_GC_COMMIT_LOG, timestamp,
-                                                       offset, true))) {
-          TRANS_LOG(WARN, "insert into retain_ctx_mgr failed", K(ret), KPC(this));
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
       set_durable_state_(ObTxState::COMMIT);
       set_target_state(ObTxState::COMMIT);
     }
@@ -4252,7 +4141,6 @@ int ObTxCtx::replay_commit(const ObTxCommitLog &commit_log,
       TRANS_LOG(WARN, "errsim error", K(ret));
     } else if (OB_FAIL(trans_replay_commit_(ctx_tx_data_.get_commit_version(),
                                             timestamp,
-                                            cluster_version_,
                                             checksum))) {
       TRANS_LOG(WARN, "trans replay commit failed", KR(ret), K(commit_log), KPC(this));
     } else if (OB_FAIL(TX_REPLAY_COMMIT_FAIL_AFTER_COMMIT)) {
@@ -4387,17 +4275,6 @@ int ObTxCtx::replay_abort(const ObTxAbortLog &abort_log,
       }
     }
     if (OB_SUCC(ret)) {
-      if (exec_info_.multi_data_source_.count() > 0 && get_retain_cause() == RetainCause::UNKOWN) {
-        if (OB_FAIL(try_alloc_retain_ctx_func_())) {
-          TRANS_LOG(WARN, "alloc retain ctx func failed", K(ret), K(abort_log), K(timestamp),
-                    K(offset), KPC(this));
-        } else if (OB_FAIL(insert_into_retain_ctx_mgr_(RetainCause::MDS_WAIT_GC_COMMIT_LOG, timestamp,
-                                                       offset, true))) {
-          TRANS_LOG(WARN, "insert into retain_ctx_mgr failed", K(ret), KPC(this));
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
       set_durable_state_(ObTxState::ABORT);
       set_target_state(ObTxState::ABORT);
     }
@@ -4519,10 +4396,6 @@ int ObTxCtx::replay_multi_data_source(const ObTxMultiDataSourceLog &log,
     TRANS_LOG(WARN, "notify data source for ON_REDO failed", K(ret));
   } else if (OB_FAIL(replay_mds_to_tx_table_(increamental_array, timestamp))) {
     TRANS_LOG(WARN, "insert mds_op to tx_table failed", K(ret));
-  }
-
-  if (OB_SUCC(ret) && OB_FAIL(check_and_merge_redo_lsns_(lsn))) {
-    TRANS_LOG(WARN, "check and merge redo lsns failed", K(ret), K(trans_id_), K(timestamp), K(lsn));
   }
 
   // rollback mds log replay
@@ -4768,11 +4641,6 @@ int ObTxCtx::get_tx_ctx_table_info_(ObTxCtxTableInfo &info)
     TRANS_LOG(WARN, "fail to assign exec_info", K(ret), KPC(this));
   } else {
     info.tx_id_ = trans_id_;
-    if (cluster_version_accurate_) {
-      info.cluster_version_ = cluster_version_;
-    } else {
-      info.cluster_version_ = 0;
-    }
     if (OB_FAIL(mt_ctx_.get_table_lock_store_info(info.table_lock_info_))) {
       TRANS_LOG(WARN, "get_table_lock_store_info failed", K(ret), K(info));
     } else {
@@ -4872,7 +4740,7 @@ int ObTxCtx::deep_copy_mds_array_(const ObTxBufferNodeArray &mds_array,
           mds_cache_.free_mds_node(tmp_data, node.get_register_no());
           // mtl_free(tmp_data.ptr());
           if (OB_NOT_NULL(new_ctx)) {
-            share::g_mp->tenant_mds_service()->get_buffer_ctx_allocator().free(new_ctx);
+            share::g_mp->mds_service()->get_buffer_ctx_allocator().free(new_ctx);
             new_ctx = nullptr;
           }
           TRANS_LOG(WARN, "process_with_buffer_ctx failed", KR(ret), K(*this));
@@ -4880,7 +4748,7 @@ int ObTxCtx::deep_copy_mds_array_(const ObTxBufferNodeArray &mds_array,
                                          node.seq_no_, new_ctx))) {
           mds_cache_.free_mds_node(tmp_data, node.get_register_no());
           if (OB_NOT_NULL(new_ctx)) {
-            share::g_mp->tenant_mds_service()->get_buffer_ctx_allocator().free(new_ctx);
+            share::g_mp->mds_service()->get_buffer_ctx_allocator().free(new_ctx);
             new_ctx = nullptr;
           }
           TRANS_LOG(WARN, "init new node failed", KR(ret), K(*this));
@@ -4889,14 +4757,14 @@ int ObTxCtx::deep_copy_mds_array_(const ObTxBufferNodeArray &mds_array,
           mds_cache_.free_mds_node(tmp_data, node.get_register_no());
           // mtl_free(tmp_data.ptr());
           if (OB_NOT_NULL(new_ctx)) {
-            share::g_mp->tenant_mds_service()->get_buffer_ctx_allocator().free(new_ctx);
+            share::g_mp->mds_service()->get_buffer_ctx_allocator().free(new_ctx);
             new_ctx = nullptr;
           }
           TRANS_LOG(WARN, "set mds register_no failed", KR(ret), K(*this));
         } else if (OB_FAIL(tmp_buf_arr.push_back(new_node))) {
           mds_cache_.free_mds_node(tmp_data, node.get_register_no());
           if (OB_NOT_NULL(new_ctx)) {
-            share::g_mp->tenant_mds_service()->get_buffer_ctx_allocator().free(new_ctx);
+            share::g_mp->mds_service()->get_buffer_ctx_allocator().free(new_ctx);
             new_ctx = nullptr;
           }
           TRANS_LOG(WARN, "push multi source data failed", KR(ret), K(*this));
@@ -4988,7 +4856,7 @@ int ObTxCtx::deep_copy_mds_array_(const ObTxBufferNodeArray &mds_array,
 
 int ObTxCtx::prepare_mds_tx_op_(const ObTxBufferNodeArray &mds_array,
                                        SCN op_scn,
-                                       ObTenantTxDataOpAllocator &tx_op_allocator,
+                                       ObTxDataOpAllocator &tx_op_allocator,
                                        ObTxOpArray &tx_op_array,
                                        bool is_replay)
 {
@@ -5187,7 +5055,7 @@ int ObTxCtx::submit_multi_data_source_(ObTxLogBlock &log_block)
         TRANS_LOG(WARN, "reserve tx_op space failed", KR(ret), KPC(this));
       } else if (OB_FAIL(ls_tx_ctx_mgr_->get_tx_table()->alloc_tx_data(log_cb->get_tx_data_guard(), true, INT64_MAX))) {
         TRANS_LOG(WARN, "alloc tx_data failed", KR(ret), KPC(this));
-      } else if (OB_ISNULL(tmp_buf = mtl_malloc(sizeof(ObTxOpArray), "ObTxOpArray"))) {
+      } else if (OB_ISNULL(tmp_buf = server_malloc(sizeof(ObTxOpArray), "ObTxOpArray"))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         TRANS_LOG(WARN, "alloc memory failed", KR(ret), KPC(this));
       } else if (FALSE_IT(new (tmp_buf) ObTxOpArray())) {
@@ -5443,7 +5311,7 @@ int ObTxCtx::register_multi_data_source(const ObTxDataSourceType data_source_typ
       if (OB_FAIL(ret)) {
         mds_cache_.free_mds_node(data, node.get_register_no());
         if (OB_NOT_NULL(buffer_ctx)) {
-          share::g_mp->tenant_mds_service()->get_buffer_ctx_allocator().free(buffer_ctx);
+          share::g_mp->mds_service()->get_buffer_ctx_allocator().free(buffer_ctx);
         }
       } else if (OB_FAIL(notify_data_source_(NotifyType::REGISTER_SUCC, SCN(), false, tmp_array))) {
         if (OB_SUCCESS != (tmp_ret = mds_cache_.rollback_last_mds_node())) {
@@ -5492,75 +5360,6 @@ int ObTxCtx::register_multi_data_source(const ObTxDataSourceType data_source_typ
 
   return ret;
 }
-
-int ObTxCtx::del_retain_ctx()
-{
-  int ret = OB_SUCCESS;
-  bool need_del = false;
-
-  {
-    CtxLockGuard guard(lock_);
-
-    if (RetainCause::UNKOWN == get_retain_cause()) {
-      ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "can not del a normal ctx by retain inerface", K(ret), KPC(this));
-    } else if (is_exiting_) {
-      // +-----------------------------------------------+
-      // |                tx ctx exiting                 |
-      // |      but be retained because of MDS buf       |
-      // +-----------------------------------------------+
-      //   |
-      //   | stop server and recover
-      //   | ls_ckpt_ts < ctx_ckpt_ts
-      //   v
-      // +-----------------------------------------------+
-      // |          recover from exiting state           |
-      // +-----------------------------------------------+
-      //   |
-      //   | start replay from ls_ckpt_ts
-      //   v
-      // +-----------------------------------------------+
-      // |        replay redo in the exiting ctx         |
-      // +-----------------------------------------------+
-      //   |
-      //   |
-      //   v
-      // +-----------------------------------------------+
-      // |               froce kill tx ctx               |
-      // +-----------------------------------------------+
-      //   |
-      //   |
-      //   v
-      // +-----------------------------------------------+
-      // | need clear memtable_ctx even if it is exiting |
-      // +-----------------------------------------------+
-      trans_kill_();  // clear memtable calliback for replay
-
-      clean_retain_cause_();
-      print_trace_log_if_necessary_();
-
-      const int64_t ctx_ref = get_ref();
-      if (NULL == ls_tx_ctx_mgr_) {
-        TRANS_LOG(ERROR, "ls_tx_ctx_mgr_ is null, unexpected error", KP(ls_tx_ctx_mgr_), "context",
-                  *this);
-      } else {
-        need_del = true;
-        FLOG_INFO("del retain ctx after exiting", K(ctx_ref), KPC(this));
-      }
-    } else {
-      // MDS trans : allowed gc before clear log on_success
-      // del ctx by set_exiting_()
-      clean_retain_cause_();
-      FLOG_INFO("del retain ctx before exiting", KPC(this));
-    }
-  }
-  if (need_del && NULL != ls_tx_ctx_mgr_) {
-    ls_tx_ctx_mgr_->del_tx_ctx(this);
-  }
-  // TRANS_LOG(INFO, "after del retain ctx", K(ret), KPC(this));
-  return ret;
-}
-
 
 int ObTxCtx::submit_pending_log_block_(ObTxLogBlock &log_block,
                                               memtable::ObRedoLogSubmitHelper &helper,
@@ -5698,7 +5497,7 @@ int ObTxCtx::start_access(const ObTxDesc &tx_desc,
       if (alloc) {
         // in delete_insert table, delete and insert are in the same update trans
         // need to distinguish them by seq no., each takes one seq no.
-        int64_t seq_cnt = write_flag.is_delete_insert() ? 2 : 1;
+        const int64_t seq_cnt = 1;
         if (OB_FAIL(tx_desc.inc_and_get_tx_seq(branch,
                                                seq_cnt,
                                                data_scn))) {
@@ -6066,7 +5865,7 @@ int ObTxCtx::tx_keepalive_response_(const int64_t status)
   int ret = OB_SUCCESS;
 
   if ((OB_TRANS_CTX_NOT_EXIST == status || OB_TRANS_ROLLBACKED == status ||
-       OB_TRANS_KILLED == status || common::OB_TENANT_NOT_IN_SERVER == status) && can_be_recycled_()) {
+       OB_TRANS_KILLED == status || common::OB_SERVER_RUNTIME_NOT_READY == status) && can_be_recycled_()) {
     if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
       TRANS_LOG(WARN, "[TRANS GC] tx has quit, local tx will be aborted",
                 K(status), KPC(this));
@@ -6084,98 +5883,6 @@ int ObTxCtx::tx_keepalive_response_(const int64_t status)
   } else {
     TRANS_LOG(TRACE, "tx is alive", KPC(this));
   }
-  return ret;
-}
-
-int ObTxCtx::try_alloc_retain_ctx_func_()
-{
-  int ret = OB_SUCCESS;
-
-  if (is_support_tx_op_()) {
-    // do nothing
-  } else if (OB_ISNULL(retain_ctx_func_ptr_)) {
-
-    if (OB_ISNULL(retain_ctx_func_ptr_ = static_cast<ObMDSRetainCtxFunctor *>(
-                      ObTxRetainCtxMgr::alloc_object(sizeof(ObMDSRetainCtxFunctor))))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      TRANS_LOG(WARN, "alloc memory failed", K(ret), KPC(retain_ctx_func_ptr_), KPC(this));
-
-    } else if (OB_FALSE_IT(new (retain_ctx_func_ptr_) ObMDSRetainCtxFunctor())) {
-    }
-
-  } else if (!is_for_replay()) {
-    TRANS_LOG(INFO, "no need to alloc a new retain_ctx_func", K(ret), KP(retain_ctx_func_ptr_),
-              KPC(retain_ctx_func_ptr_), KPC(this));
-  }
-
-  return ret;
-}
-
-int ObTxCtx::try_gc_retain_ctx_func_()
-{
-  int ret = OB_SUCCESS;
-
-  if(OB_NOT_NULL(retain_ctx_func_ptr_))
-  {
-    ObTxRetainCtxMgr::free_object(retain_ctx_func_ptr_);
-    retain_ctx_func_ptr_ = nullptr;
-  }
-
-  return ret;
-}
-
-int ObTxCtx::insert_into_retain_ctx_mgr_(RetainCause cause,
-                                                const SCN &log_ts,
-                                                palf::LSN lsn,
-                                                bool for_replay)
-{
-  int ret = OB_SUCCESS;
-  int64_t retain_lock_timeout = INT64_MAX;
-  if (for_replay) {
-    retain_lock_timeout = 10 * 1000;
-  }
-  bool need_retain_ctx = !is_support_tx_op_();
-  if (need_retain_ctx) {
-    TRANS_LOG(INFO, "insert into retain_ctx", KPC(this), K(for_replay), K(log_ts));
-  }
-
-  ObTxRetainCtxMgr &retain_ctx_mgr = ls_tx_ctx_mgr_->get_retain_ctx_mgr();
-  if (!need_retain_ctx) {
-    // do nothing
-  } else if (OB_ISNULL(ls_tx_ctx_mgr_) || RetainCause::UNKOWN == cause) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", K(ret), K(cause), KP(ls_tx_ctx_mgr_), KPC(this));
-  } else if (OB_ISNULL(retain_ctx_func_ptr_)) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "unexpectd retain ctx function ptr error", K(cause), K(log_ts), K(lsn),
-              K(for_replay), KPC(retain_ctx_func_ptr_), KPC(this));
-  } else {
-
-    ObMDSRetainCtxFunctor *mds_retain_func_ptr =
-        static_cast<ObMDSRetainCtxFunctor *>(retain_ctx_func_ptr_);
-
-    if (OB_FAIL(ret)) {
-      // do nothing
-    } else if (OB_FAIL(mds_retain_func_ptr->init(this, cause, log_ts))) {
-      TRANS_LOG(WARN, "init retain ctx functor failed", K(ret), KPC(this));
-    } else if (OB_FAIL(retain_ctx_mgr.push_retain_ctx(retain_ctx_func_ptr_, retain_lock_timeout))) {
-      TRANS_LOG(WARN, "push into retain_ctx_mgr failed", K(ret), KPC(this));
-    }
-  }
-
-  if (OB_FAIL(ret)) {
-    clean_retain_cause_();
-    if (!(OB_EAGAIN == ret && for_replay)) {
-      TRANS_LOG(ERROR,
-                "insert into retain_ctx_mgr error, retain ctx will not be retained in ctx_mgr",
-                K(ret), KPC(this));
-      // ob_abort();
-    }
-  } else {
-    // insert into retain_ctx_mgr successfully, no need to gc memory
-    retain_ctx_func_ptr_ = nullptr;
-  }
-
   return ret;
 }
 
@@ -6573,11 +6280,6 @@ int ObTxCtx::set_replay_completeness_(const bool complete, const SCN replay_scn)
   return ret;
 }
 
-inline bool ObTxCtx::is_support_parallel_replay_() const
-{
-  return cluster_version_accurate_;
-}
-
 inline int ObTxCtx::switch_to_parallel_logging_(const share::SCN serial_final_scn,
                                                        const ObTxSEQ max_seq_no)
 {
@@ -6618,21 +6320,6 @@ inline void ObTxCtx::recovery_parallel_logging_()
     // by fake an replay success call
     mt_ctx_.replay_end(true, 0, exec_info_.serial_final_scn_);
   }
-}
-
-inline int ObTxCtx::correct_cluster_version_(uint64_t cluster_version_in_log)
-{
-  int ret = OB_SUCCESS;
-  if (cluster_version_in_log > 0 && cluster_version_ != cluster_version_in_log) {
-    if (cluster_version_accurate_) {
-      ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "cluster_version is different with TxCtx", K(ret), KPC(this));
-    } else {
-      cluster_version_ = cluster_version_in_log;
-      cluster_version_accurate_ = true;
-    }
-  }
-  return ret;
 }
 
 int ObTxCtx::get_stat_for_virtual_table(bool &has_write_state, int &busy_cbs_cnt)
@@ -6784,11 +6471,6 @@ int ObTxCtx::update_local_max_commit_version_(const SCN &commit_version)
   int ret = OB_SUCCESS;
   trans_service_->get_tx_version_mgr().update_max_commit_ts(commit_version, false);
   return ret;
-}
-
-inline bool ObTxCtx::is_support_tx_op_() const
-{
-  return cluster_version_accurate_;
 }
 
 } // namespace transaction

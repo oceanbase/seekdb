@@ -104,8 +104,7 @@ int ObTransformConditionalAggrCoalesce::check_basic_validity(ObDMLStmt *stmt,
   } else if (!stmt->is_select_stmt()) {
     // do nothing
   } else if (OB_FALSE_IT(select_stmt = static_cast<ObSelectStmt*>(stmt))) {
-  } else if (select_stmt->get_aggr_item_size() < 1 || select_stmt->is_set_stmt() || 
-            select_stmt->has_sequence() || 
+  } else if (select_stmt->get_aggr_item_size() < 1 || select_stmt->is_set_stmt() ||
              select_stmt->has_rollup()) {
     // do nothing
   } else if (OB_FAIL(collect_cond_aggrs_info(select_stmt, trans_param, cnt_unpullupable_aggr))) {

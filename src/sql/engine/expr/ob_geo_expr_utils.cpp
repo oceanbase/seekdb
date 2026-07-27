@@ -43,7 +43,7 @@ int ObGeoExprUtils::get_srs_item(omt::ObSrsCacheGuard &srs_guard,
 
   if (!ObGeoTypeUtil::need_get_srs(srid)) {
     // do nothing
-  } else if (OB_FAIL(OTSRS_MGR->get_tenant_srs_guard(srs_guard))) {
+  } else if (OB_FAIL(SRS_SERVICE->get_srs_guard(srs_guard))) {
     LOG_WARN("fail to get srs guard", K(ret));
   } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs))) {
     LOG_WARN("fail to get srs", K(ret), K(srid));
@@ -886,7 +886,6 @@ int ObGeoExprUtils::get_input_geometry(const char* func_name, MultimodeAlloctor 
           gis_arg->obj_meta_.has_lob_header(),
           wkb))) {
     LOG_WARN("fail to get real string data", K(ret), K(wkb));
-  } else if (FALSE_IT(allocator.add_baseline_size(wkb.length()))) {
   } else if (OB_FAIL(ObGeoTypeUtil::get_type_srid_from_wkb(wkb, type, srid))) {
     if (ret == OB_ERR_GIS_INVALID_DATA) {
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, func_name);

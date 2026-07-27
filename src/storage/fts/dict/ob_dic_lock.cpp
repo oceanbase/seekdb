@@ -23,16 +23,16 @@ namespace oceanbase
 {
 namespace storage
 {
-int ObDicLock::lock_dic_tables_out_trans(const ObTenantDicLoader &dic_loader, 
+int ObDicLock::lock_dic_tables_out_trans(const ObDicLoader &dic_loader,
     const transaction::tablelock::ObTableLockMode lock_mode, 
     const transaction::tablelock::ObTableLockOwnerID &lock_owner)
 {
   int ret = OB_SUCCESS;
   ObMySQLTransaction trans;
-  const ObArray<ObTenantDicLoader::ObDicTableInfo> &dic_tables_info = dic_loader.get_dic_tables_info();
-  if (OB_UNLIKELY(!true || dic_tables_info.count() <= 0)) {
+  const ObArray<ObDicLoader::ObDicTableInfo> &dic_tables_info = dic_loader.get_dic_tables_info();
+  if (OB_UNLIKELY(dic_tables_info.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the tenant id or dic loader is invalid", K(ret), K(dic_tables_info));
+    LOG_WARN("dic loader is invalid", K(ret), K(dic_tables_info));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", K(ret));
@@ -51,16 +51,16 @@ int ObDicLock::lock_dic_tables_out_trans(const ObTenantDicLoader &dic_loader,
   return ret;
 }
 
-int ObDicLock::lock_dic_tables_out_trans(const ObTenantDicLoader &dic_loader, 
+int ObDicLock::lock_dic_tables_out_trans(const ObDicLoader &dic_loader,
     const transaction::tablelock::ObTableLockMode lock_mode, 
     const transaction::tablelock::ObTableLockOwnerID &lock_owner,
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  const ObArray<ObTenantDicLoader::ObDicTableInfo> &dic_tables_info = dic_loader.get_dic_tables_info();
-  if (OB_UNLIKELY(!true || dic_tables_info.count() <= 0)) {
+  const ObArray<ObDicLoader::ObDicTableInfo> &dic_tables_info = dic_loader.get_dic_tables_info();
+  if (OB_UNLIKELY(dic_tables_info.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the tenant id or dic loader is invalid", K(ret), K(dic_tables_info));
+    LOG_WARN("dic loader is invalid", K(ret), K(dic_tables_info));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < dic_tables_info.count(); ++i) {
       const uint64_t table_id = dic_tables_info.at(i).table_id_;
@@ -72,16 +72,16 @@ int ObDicLock::lock_dic_tables_out_trans(const ObTenantDicLoader &dic_loader,
   return ret;
 }
 
-int ObDicLock::unlock_dic_tables(const ObTenantDicLoader &dic_loader, 
+int ObDicLock::unlock_dic_tables(const ObDicLoader &dic_loader,
     const transaction::tablelock::ObTableLockMode lock_mode, 
     const transaction::tablelock::ObTableLockOwnerID lock_owner,
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  const ObArray<ObTenantDicLoader::ObDicTableInfo> &dic_tables_info = dic_loader.get_dic_tables_info();
-  if (OB_UNLIKELY(!true || dic_tables_info.empty())) {
+  const ObArray<ObDicLoader::ObDicTableInfo> &dic_tables_info = dic_loader.get_dic_tables_info();
+  if (OB_UNLIKELY(dic_tables_info.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the tenant id or dic loader is invalid", K(ret), K(dic_tables_info));
+    LOG_WARN("dic loader is invalid", K(ret), K(dic_tables_info));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < dic_tables_info.count(); ++i) {
       const uint64_t table_id = dic_tables_info.at(i).table_id_;
@@ -94,16 +94,16 @@ int ObDicLock::unlock_dic_tables(const ObTenantDicLoader &dic_loader,
 }
 
 int ObDicLock::lock_dic_tables_in_trans(
-    const ObTenantDicLoader &dic_loader, 
+    const ObDicLoader &dic_loader,
     const transaction::tablelock::ObTableLockMode lock_mode, 
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
   observer::ObInnerSQLConnection *conn = NULL;
-  const ObArray<ObTenantDicLoader::ObDicTableInfo> &dic_tables_info = dic_loader.get_dic_tables_info();
-  if (OB_UNLIKELY(!true || dic_tables_info.empty())) {
+  const ObArray<ObDicLoader::ObDicTableInfo> &dic_tables_info = dic_loader.get_dic_tables_info();
+  if (OB_UNLIKELY(dic_tables_info.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the tenant id or dic loader is invalid", K(ret), K(dic_tables_info));
+    LOG_WARN("dic loader is invalid", K(ret), K(dic_tables_info));
   } else if (OB_ISNULL(conn = dynamic_cast<observer::ObInnerSQLConnection *>(trans.get_connection()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn_ is NULL", KR(ret));

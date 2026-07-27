@@ -38,13 +38,11 @@ namespace dtl {
 class ObDtlLocalChannel : public ObDtlBasicChannel
 {
 public:
-  explicit ObDtlLocalChannel(const uint64_t id, const common::ObAddr &peer, DtlChannelType type);
-  explicit ObDtlLocalChannel(const uint64_t id, const common::ObAddr &peer, const int64_t hash_val, DtlChannelType type);
+  explicit ObDtlLocalChannel(const uint64_t id);
+  explicit ObDtlLocalChannel(const uint64_t id, const int64_t hash_val);
   virtual ~ObDtlLocalChannel();
 
   virtual int init() override;
-  virtual void destroy();
-  
   virtual int feedup(ObDtlLinkedBuffer *&buffer) override;
   virtual int send_message(ObDtlLinkedBuffer *&buf);
 private:

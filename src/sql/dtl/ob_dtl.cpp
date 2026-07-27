@@ -289,9 +289,7 @@ int ObDtl::init()
   }
   return ret;
 }
-// Directly remove the channel from hash_table according to the channel id, and destruct it
-// With remove channel different, remove channel only removes from hash_table
-// Currently mainly used in rpc channel handling method
+// Remove the channel from the registry by id and destroy it after readers release their pins.
 int ObDtl::destroy_channel(uint64_t chid)
 {
   int ret = OB_SUCCESS;
@@ -337,11 +335,8 @@ int ObDtl::destroy_channel(uint64_t chid)
   }
   return ret;
 }
-// Here will split the channel release logic into 2 steps
-// First step: Remove from hash_table to avoid subsequent rpcs from getting the channel
-// Second step: wait for rpc unpin, then perform subsequent dfc (flow control) processing on the channel
-// Finally destruct the channel object
-// Mainly used for data channel destruction processing, because data channel requires some special handling of dfc
+// Data-channel release is split in two: detach it from the registry, then wait
+// for local readers to release their pins before DFC cleanup and destruction.
 int ObDtl::remove_channel(uint64_t chid, ObDtlChannel *&ch)
 {
   int ret = OB_SUCCESS;
@@ -363,7 +358,7 @@ int ObDtl::remove_channel(uint64_t chid, ObDtlChannel *&ch)
       // spin until there's no reference of this channel.
       while (chan->get_pins() != 0) {
       }
-      // Indicates that data dtl cleanup operations, such as dfc processing, only start after the rpc thread has finished processing
+      // DFC cleanup starts only after all local channel users release their pins.
       ch = chan;
       if (nullptr != ch->get_msg_watcher()) {
         ch->get_msg_watcher()->remove_data_list(ch, true);
@@ -403,36 +398,31 @@ int ObDtl::release_channel(ObDtlChannel *chan)
   return ret;
 }
 
-int ObDtl::create_local_channel(uint64_t chid, const ObAddr &peer,
-    ObDtlChannel *&chan, ObDtlFlowControl *dfc)
+int ObDtl::create_local_channel(uint64_t chid, ObDtlChannel *&chan, ObDtlFlowControl *dfc)
 {
   int ret = OB_SUCCESS;
   // if nullptr != chan, batch free chans until link_ch_sets
   const bool need_free_chan = (nullptr == chan);
-  if (nullptr == chan
-      && OB_FAIL(new_channel(chid, peer, chan, true))) {
-    LOG_WARN("create rpc channel fail", KP(chid), K(ret));
+  if (nullptr == chan && OB_FAIL(new_channel(chid, chan))) {
+    LOG_WARN("create local channel fail", KP(chid), K(ret));
   } else if (nullptr == chan) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("channel is null", KP(chid), K(ret));
-  } else if (OB_FAIL(init_channel(chid, peer, chan, dfc, need_free_chan))) {
+  } else if (OB_FAIL(init_channel(chid, chan, dfc, need_free_chan))) {
     LOG_WARN("failed to init channel", K(ret), KP(chid), K(chan));
   }
   return ret;
 }
 
-int ObDtl::new_channel(uint64_t chid, const ObAddr &peer,
-    ObDtlChannel *&chan, bool is_local)
+int ObDtl::new_channel(uint64_t chid, ObDtlChannel *&chan)
 {
   int ret = OB_SUCCESS;
-  UNUSED(is_local);
   if (!is_inited_) {
     ret = OB_NOT_INIT;
   } else {
-    // single-replica: only local (in-process) channels are supported.
     chan = static_cast<ObDtlChannel *> (ob_malloc(sizeof(ObDtlLocalChannel), ObMemAttr("SqlDtlChan")));
     if (nullptr != chan) {
-      new (chan) ObDtlLocalChannel(chid, peer, ObDtlChannel::DtlChannelType::LOCAL_CHANNEL);
+      new (chan) ObDtlLocalChannel(chid);
     }
     if (nullptr == chan) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -455,11 +445,10 @@ int ObDtl::get_dtl_channel_manager(uint64_t hash_val, ObDtlChannelManager *&ch_m
   return ret;
 }
 
-int ObDtl::init_channel(uint64_t chid, const ObAddr &peer,
-    ObDtlChannel *&chan, ObDtlFlowControl *dfc, const bool need_free_chan)
+int ObDtl::init_channel(uint64_t chid, ObDtlChannel *&chan,
+                        ObDtlFlowControl *dfc, const bool need_free_chan)
 {
   int ret = OB_SUCCESS;
-  UNUSED(peer);
   if (nullptr == chan) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("channel is null", KP(chid), K(ret));
@@ -467,8 +456,8 @@ int ObDtl::init_channel(uint64_t chid, const ObAddr &peer,
     LOG_WARN("init channel fail", KP(chid), K(ret));
   } else {
     if (nullptr != dfc) {
-      // If there is dfc, it must be established together with the channel, otherwise, after the channel is created, there is an rpc processor thread handling
-      // This way, setting the dfc of the channel to lag will result in this line's processing not having dfc
+      // Register DFC before publishing the channel so every local user observes
+      // the channel and its flow-control state atomically.
       if (OB_FAIL(dfc_server_.register_dfc_channel(*dfc, chan))) {
         LOG_WARN("failed to register channel to dfc", KP(chid), K(ret));
       }

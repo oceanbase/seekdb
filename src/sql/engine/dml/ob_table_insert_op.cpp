@@ -323,7 +323,7 @@ int ObTableInsertOp::write_rows_post_proc(int last_errno)
       }
     }
     int sync_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (sync_ret = plan_ctx->sync_last_value_global())) {
+    if (OB_SUCCESS != (sync_ret = plan_ctx->sync_last_value_to_store())) {
       LOG_WARN("failed to sync value globally", K(sync_ret));
     }
     NG_TRACE(sync_auto_value);

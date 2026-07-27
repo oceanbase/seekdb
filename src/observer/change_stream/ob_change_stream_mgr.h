@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Change Stream manager: tenant-level MTL module.
+ * Process-wide Change Stream manager owned by the server.
  * Owns Fetcher / Dispatcher / ObCSWorker (which owns multiple ObCSExecutor).
  */
 
@@ -29,7 +29,7 @@ namespace oceanbase
 namespace share
 {
 
-/// Tenant-level Change Stream manager (MTL module).
+/// Process-wide Change Stream manager.
 /// Plugin instances are created per-batch in ObCSExecCtx, not held at Mgr level.
 class ObChangeStreamMgr
 {
@@ -37,8 +37,8 @@ public:
   ObChangeStreamMgr();
   virtual ~ObChangeStreamMgr();
 
-  /// MTL init: called after default new; inits tenant and internal state.
-  static int mtl_init(ObChangeStreamMgr *&mgr);
+  /// Server module init: called after construction to initialize internal state.
+  static int server_module_init(ObChangeStreamMgr *&mgr);
 
   int init();
   int start();

@@ -103,16 +103,16 @@ int ObFileSystemRouter::init(const char *data_dir, const char *redo_dir)
   return ret;
 }
 
-int ObFileSystemRouter::get_tenant_clog_dir(
-    char (&tenant_clog_dir)[common::MAX_PATH_SIZE])
+int ObFileSystemRouter::get_server_clog_dir(
+    char (&server_clog_dir)[common::MAX_PATH_SIZE])
 {
   int ret = OB_SUCCESS;
   int pret = 0;
   {
-    pret = snprintf(tenant_clog_dir, MAX_PATH_SIZE, "%s/sys", clog_dir_);
+    pret = snprintf(server_clog_dir, MAX_PATH_SIZE, "%s/sys", clog_dir_);
     if (pret < 0 || pret >= MAX_PATH_SIZE) {
       ret = OB_BUF_NOT_ENOUGH;
-      LOG_ERROR("construct tenant clog path fail", K(ret));
+      LOG_ERROR("failed to construct server clog path", K(ret));
     }
   }
   return ret;

@@ -175,11 +175,9 @@ insert into t4 values (50, 'Charlie', 'Different LOB content for index testing')
 fork table t4 to t4_fork;
 
 --echo # 先验证原表的LOB索引
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t4;
 
 --echo # 验证Fork表的LOB索引
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t4_fork;
 
 --echo # 验证通过LOB前缀索引查询数据（使用like查询，可能使用索引）

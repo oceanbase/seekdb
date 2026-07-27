@@ -24,7 +24,7 @@
 #include "lib/thread/threads.h"
 #include "lib/thread/ob_thread_name.h"
 #include "observer/omt/ob_worker_processor.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -34,7 +34,7 @@ namespace omt
 {
 
 // Forward declarations
-class ObTenant;
+class ObServerRuntime;
 
 static const int64_t WORKER_CHECK_PERIOD = 500L;
 
@@ -46,7 +46,7 @@ enum { RQ_HIGH = QQ_MAX_PRIO, RQ_NORMAL, RQ_LOW, RQ_MAX_PRIO };
 class ObThWorker
     : public lib::Worker, public lib::Threads
 {
-  friend class ObTenant;
+  friend class ObServerRuntime;
 public:
   explicit ObThWorker();
   virtual ~ObThWorker();
@@ -68,10 +68,10 @@ public:
   void destroy();
   inline void reset();
 
-  OB_INLINE void set_tenant(ObTenant *tenant)
+  OB_INLINE void set_runtime(ObServerRuntime *runtime)
   {
-    tenant_ = tenant;
-    set_run_wrapper(MTL_CTX());
+    runtime_ = runtime;
+    set_run_wrapper(share::server_runtime());
   }
 
   void worker(int64_t &tid, int64_t &req_recv_timestamp, int32_t &worker_level);
@@ -81,7 +81,7 @@ public:
 
   OB_INLINE int64_t get_query_start_time() const { return query_start_time_; }
   OB_INLINE int64_t get_query_enqueue_time() const { return query_enqueue_time_; }
-  OB_INLINE ObTenant* get_tenant() { return tenant_; }
+  OB_INLINE ObServerRuntime *get_runtime() { return runtime_; }
   OB_INLINE const char *get_module_name() const { return module_name_; }
   OB_INLINE bool is_doing_ddl() const { return OB_NOT_NULL(is_doing_ddl_) ? (*is_doing_ddl_) : false; }
 
@@ -95,7 +95,7 @@ private:
 
   bool is_inited_;
 
-  ObTenant *tenant_;
+  ObServerRuntime *runtime_;
   common::ObThreadCond run_cond_;
 
   bool pause_flag_;
@@ -119,7 +119,7 @@ private:
 inline void ObThWorker::reset()
 {
   OB_ASSERT(!pause_flag_);
-  tenant_ = nullptr;
+  runtime_ = nullptr;
   group_ = nullptr;
   pause_flag_ = false;
   query_start_time_ = 0;
@@ -128,7 +128,7 @@ inline void ObThWorker::reset()
   need_retry_ = false;
 }
 
-int create_worker(ObThWorker* &worker, ObTenant *tenant);
+int create_worker(ObThWorker* &worker, ObServerRuntime *runtime);
 int destroy_worker(ObThWorker *worker);
 
 #define THIS_THWORKER static_cast<oceanbase::omt::ObThWorker &>(THIS_WORKER)

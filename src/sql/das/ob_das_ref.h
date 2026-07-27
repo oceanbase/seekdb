@@ -29,14 +29,12 @@ namespace sql
 {
 class ObDASScanOp;
 class ObDASInsertOp;
-class ObCallDasAsyncAccessCallBack;
 
 enum ObDasAggTaskStartStatus
 {
   DAS_AGG_TASK_UNSTART = 0,
   DAS_AGG_TASK_REACH_MEM_LIMIT,
-  DAS_AGG_TASK_PARALLEL_EXEC,
-  DAS_AGG_TASK_REMOTE_EXEC
+  DAS_AGG_TASK_PARALLEL_EXEC
 };
 
 enum ObDasParallelType
@@ -139,8 +137,7 @@ struct ObDasAggregatedTask
 {
  public:
   ObDasAggregatedTask(common::ObIAllocator &allocator)
-    : server_(),
-      tasks_(),
+    : tasks_(),
       failed_tasks_(),
       success_tasks_(),
       start_status_(DAS_AGG_TASK_UNSTART),
@@ -180,16 +177,14 @@ struct ObDasAggregatedTask
   }
   bool has_parallel_submiitted()
   {
-    return (start_status_ == DAS_AGG_TASK_PARALLEL_EXEC || start_status_ == DAS_AGG_TASK_REMOTE_EXEC);
+    return start_status_ == DAS_AGG_TASK_PARALLEL_EXEC;
   }
   ObDasAggTaskStartStatus get_start_status() { return start_status_; }
-  TO_STRING_KV(K(server_),
-               K(start_status_),
+  TO_STRING_KV(K(start_status_),
                K(tasks_.get_size()),
                K(failed_tasks_.get_size()),
                K(success_tasks_.get_size()),
                K(save_ret_));
-  common::ObAddr server_;
   DasTaskLinkedList tasks_;
   DasTaskLinkedList failed_tasks_;
   DasTaskLinkedList success_tasks_;
@@ -236,14 +231,13 @@ public:
   DASTaskIter begin_task_iter() { return batched_tasks_.begin(); }
   ObDASTaskFactory &get_das_factory() { return das_factory_; }
   void set_mem_attr(const common::ObMemAttr &memattr) { das_alloc_.set_attr(memattr); }
-  void set_enable_rich_format(const bool v) { enable_rich_format_ = v; }
   ObExecContext &get_exec_ctx() { return exec_ctx_; }
   template <typename DASOp>
   bool has_das_op(const ObDASTabletLoc *tablet_loc, DASOp *&das_op);
   ObIDASTaskOp* find_das_task(const ObDASTabletLoc *tablet_loc, ObDASOpType op_type);
   int add_aggregated_task(ObIDASTaskOp *das_task, ObDASOpType op_type);
-  int create_agg_task(ObDASOpType op_type, const ObDASTabletLoc *tablet_loc, ObDasAggregatedTask *&agg_task);
-  int find_agg_task(const ObDASTabletLoc *tablet_loc, ObDASOpType op_type, ObDasAggregatedTask *&agg_task);
+  int create_agg_task(ObDASOpType op_type, ObDasAggregatedTask *&agg_task);
+  int find_agg_task(ObDASOpType op_type, ObDasAggregatedTask *&agg_task);
   int add_batched_task(ObIDASTaskOp *das_task);
   // Create a DAS Task, and hold it by das_ref
   template <typename DASOp>
@@ -265,10 +259,8 @@ public:
   int retry_all_fail_tasks(common::ObIArray<ObIDASTaskOp *> &failed_tasks);
   int close_all_task();
   bool is_all_local_task() const;
-  bool is_snapshot_opt_enabled() { return use_snapshot_opt_; }
+  bool is_snapshot_opt_enabled() const { return use_snapshot_opt_; }
   void set_use_snapshot_opt(bool v) { use_snapshot_opt_ = v; }
-  void set_execute_directly(bool v) { execute_directly_ = v; }
-  bool is_execute_directly() const { return execute_directly_; }
   common::ObIAllocator &get_das_alloc() { return das_alloc_; }
   int64_t get_das_mem_used() const { return das_alloc_.used() - init_mem_used_; }
 
@@ -282,7 +274,6 @@ public:
   void set_lookup_iter(DASOpResultIter *lookup_iter) { wild_datum_info_.lookup_iter_ = lookup_iter; }
   DASRefCountContext &get_das_ref_count_ctx() { return das_ref_count_ctx_; }
   void clear_task_map();
-  int wait_tasks_and_process_response();
 private:
   DISABLE_COPY_ASSIGN(ObDASRef);
   int create_task_map();
@@ -318,10 +309,8 @@ public:
   union {
     uint64_t flags_;
     struct { // FARM COMPAT WHITELIST
-      uint64_t execute_directly_                : 1;
-      uint64_t enable_rich_format_              : 1; 
-      uint64_t use_snapshot_opt_               : 1;
-      uint64_t reserved_                        : 62;
+      uint64_t use_snapshot_opt_                : 1;
+      uint64_t reserved_                        : 63;
     };
   };
 };

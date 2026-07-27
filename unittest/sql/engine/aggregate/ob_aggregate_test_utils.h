@@ -30,7 +30,7 @@
 #include "sql/engine/aggregate/ob_scalar_aggregate.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "lib/worker.h"
-#include "share/config/ob_tenant_config_mgr.h"
+#include "share/config/ob_runtime_config.h"
 #include "observer/ob_server.h"
 
 using namespace oceanbase::share;
@@ -59,7 +59,7 @@ public:
     physical_plan_.reset();
     OBSERVER.init_schema();
     OBSERVER.init_tz_info_mgr();
-    ASSERT_EQ(OB_SUCCESS, my_session_.init_tenant(ObString::make_string("sys"), 1));
+    ASSERT_EQ(OB_SUCCESS, my_session_.init_runtime(ObString::make_string("sys")));
     ASSERT_EQ(OB_SUCCESS, ObPreProcessSysVars::init_sys_var());
     ASSERT_EQ(OB_SUCCESS, my_session_.load_default_sys_variable(false, true));
     ASSERT_EQ(OB_SUCCESS, my_session_.load_default_configs_in_pc());
@@ -108,7 +108,7 @@ public:
     OBSERVER.init_schema();
     OBSERVER.init_tz_info_mgr();
 
-    ASSERT_EQ(OB_SUCCESS, my_session_.init_tenant(ObString::make_string("sys"), 1));
+    ASSERT_EQ(OB_SUCCESS, my_session_.init_runtime(ObString::make_string("sys")));
     ASSERT_EQ(OB_SUCCESS, ObPreProcessSysVars::init_sys_var());
     ASSERT_EQ(OB_SUCCESS, my_session_.load_default_sys_variable(false, true));
     ASSERT_EQ(OB_SUCCESS, my_session_.load_default_configs_in_pc());
@@ -150,7 +150,7 @@ public:
     OBSERVER.init_schema();
     OBSERVER.init_tz_info_mgr();
 
-    ASSERT_EQ(OB_SUCCESS, my_session_.init_tenant(ObString::make_string("sys"), 1));
+    ASSERT_EQ(OB_SUCCESS, my_session_.init_runtime(ObString::make_string("sys")));
     ASSERT_EQ(OB_SUCCESS, ObPreProcessSysVars::init_sys_var());
     ASSERT_EQ(OB_SUCCESS, my_session_.load_default_sys_variable(false, true));
     ASSERT_EQ(OB_SUCCESS, my_session_.load_default_configs_in_pc());

@@ -21,7 +21,7 @@
 #include "share/geo/ob_geo_func_register.h"
 #include "lib/utility/ob_fast_convert.h"
 #include "common/mysqlclient/ob_mysql_global.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase {
 namespace common {

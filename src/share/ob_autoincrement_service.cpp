@@ -17,13 +17,15 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
 #include "share/ob_autoincrement_service.h"
-#include "share/ob_global_autoinc_service.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_sql_client_decorator.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/schema/ob_column_schema.h"
+#include "share/schema/ob_schema_utils.h"
+#include "share/schema/ob_table_schema.h"
 #include "lib/wait_event/ob_inner_sql_wait_type.h"
 
-using namespace oceanbase::obcall;
 using namespace oceanbase::common;
 using namespace oceanbase::common::hash;
 using namespace oceanbase::common::sqlclient;
@@ -110,7 +112,7 @@ int TableNode::alloc_handle(ObSmallAllocator &allocator,
     } else {
       bool reach_upper_limit = false;
       if (max_value == node.cache_end_) {
-        // won't get cache from global again
+        // No larger cache range is available.
         reach_upper_limit = true;
       }
       if (new_next_value > node.cache_end_) {
@@ -162,7 +164,17 @@ int TableNode::alloc_handle(ObSmallAllocator &allocator,
         handle->prefetch_start_ = new_next_value;
         handle->prefetch_end_ = needed_interval;
         handle->max_value_ = max_value;
-        next_value_ = needed_interval + increment;
+        // Consume the same raw integer interval as the former ORDER service.
+        // min_value is deliberately not aligned to offset/increment here:
+        // the next statement may use different session values and will align
+        // the first still-unallocated integer through calc_next_value().
+        if (min_value >= max_value
+            || 0 == increment
+            || desired_count > (max_value - min_value) / increment) {
+          next_value_ = max_value;
+        } else {
+          next_value_ = min_value + increment * desired_count;
+        }
         LOG_TRACE("succ to allocate cache handle", K(*handle), K(ret));
       }
     }
@@ -220,8 +232,6 @@ int CacheHandle::next_value(uint64_t &next_value)
 ObAutoincrementService::ObAutoincrementService()
   : node_allocator_(),
     handle_allocator_(),
-    mysql_proxy_(NULL),
-    schema_service_(NULL),
     map_mutex_(common::ObLatchIds::AUTO_INCREMENT_INIT_LOCK)
 {
 }
@@ -236,17 +246,13 @@ ObAutoincrementService &ObAutoincrementService::get_instance()
   return autoinc_service;
 }
 
-int ObAutoincrementService::init(ObMySQLProxy *mysql_proxy,
-                                 ObMultiVersionSchemaService *schema_service)
+int ObAutoincrementService::init(ObMySQLProxy *mysql_proxy)
 {
   int ret = OB_SUCCESS;
-  mysql_proxy_ = mysql_proxy;
-  schema_service_ = schema_service;
 
   ObMemAttr attr(ObModIds::OB_AUTOINCREMENT);
-  SET_USE_500(attr);
-  if (OB_FAIL(distributed_autoinc_service_.init(mysql_proxy))) {
-    LOG_WARN("fail init distributed_autoinc_service_ service", K(ret));
+  if (OB_FAIL(autoinc_store_.init(mysql_proxy))) {
+    LOG_WARN("fail to init autoincrement store", K(ret));
   } else if (OB_FAIL(node_allocator_.init(sizeof(TableNode), attr))) {
     LOG_WARN("failed to init table node allocator", K(ret));
   } else if (OB_FAIL(handle_allocator_.init(sizeof(CacheHandle), attr))) {
@@ -260,153 +266,19 @@ int ObAutoincrementService::init(ObMySQLProxy *mysql_proxy,
 
 //only used for logic backup
 
-int ObAutoincrementService::get_handle(AutoincParam &param,
-                                       CacheHandle *&handle)
+int ObAutoincrementService::get_handle(AutoincParam &param, CacheHandle *&handle)
 {
   ACTIVE_SESSION_FLAG_SETTER_GUARD(in_sequence_load);
-  int ret = param.autoinc_mode_is_order_ ?
-    get_handle_order(param, handle) : get_handle_noorder(param, handle);
-  return ret;
-}
-
-int ObAutoincrementService::get_handle(const ObSequenceSchema &schema, ObSequenceValue &nextval)
-{
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_sequence_load);
-  int ret = OB_SUCCESS;
-
-  if (OB_FAIL(global_autoinc_service_.get_sequence_next_value(
-        schema, nextval))) {
-    LOG_WARN("fail get value", K(ret));
-  } else {
-    LOG_TRACE("succ to allocate cache handle", K(nextval), K(ret));
-  }
-  return ret;
-}
-
-int ObAutoincrementService::get_handle_order(AutoincParam &param, CacheHandle *&handle)
-{
   int ret = OB_SUCCESS;
   
-  const uint64_t table_id      = param.autoinc_table_id_;
-  const uint64_t column_id     = param.autoinc_col_id_;
   const ObObjType column_type  = param.autoinc_col_type_;
   const uint64_t offset        = param.autoinc_offset_;
   const uint64_t increment     = param.autoinc_increment_;
   const uint64_t max_value     = get_max_value(column_type);
-  const int64_t auto_increment_cache_size = param.auto_increment_cache_size_;
-  const int64_t autoinc_version = param.autoinc_version_;
-
-  uint64_t desired_count = 0;
-  // calc nb_desired_values in MySQL
-  if (0 == param.autoinc_intervals_count_) {
-    desired_count = param.total_value_count_;
-  } else if (param.autoinc_intervals_count_ <= AUTO_INC_DEFAULT_NB_MAX_BITS) {
-    desired_count = AUTO_INC_DEFAULT_NB_ROWS * (1 << param.autoinc_intervals_count_);
-    if (desired_count > AUTO_INC_DEFAULT_NB_MAX) {
-      desired_count = AUTO_INC_DEFAULT_NB_MAX;
-    }
-  } else {
-    desired_count = AUTO_INC_DEFAULT_NB_MAX;
-  }
-
-  // allocate auto-increment value first time
-  if (0 == param.autoinc_desired_count_) {
-    param.autoinc_desired_count_ = desired_count;
-  }
-
-  desired_count = param.autoinc_desired_count_;
-  const uint64_t batch_count = increment * desired_count;
-
-  AutoincKey key(table_id, column_id);
-  uint64_t table_auto_increment = param.autoinc_auto_increment_;
+  uint64_t effective_base_value = param.autoinc_auto_increment_;
   if (OB_UNLIKELY(offset > 1 && increment >= offset)) {
-    // If auto_increment_offset has been set, the base_value should be the maximum value of
-    // offset and table_auto_increment.
-    table_auto_increment = MAX(table_auto_increment, offset);
+    effective_base_value = std::max(effective_base_value, offset);
   }
-  uint64_t start_inclusive = 0;
-  uint64_t end_inclusive = 0;
-  uint64_t sync_value = 0;
-  if (OB_UNLIKELY(table_auto_increment > max_value)) {
-    // During the generation of the auto-increment column, if the user-specified value exceeds
-    // the maximum value, `OB_DATA_OUT_OF_RANGE` is returned, otherwise `OB_ERR_REACH_AUTOINC_MAX`.
-    ret = param.autoinc_auto_increment_ > max_value ?
-      OB_ERR_REACH_AUTOINC_MAX : OB_DATA_OUT_OF_RANGE;
-    LOG_WARN("reach max autoinc", K(ret), K(table_auto_increment), K(max_value));
-  } else if (OB_FAIL(global_autoinc_service_.get_value(key, offset, increment, max_value,
-                                                       table_auto_increment, batch_count,
-                                                       auto_increment_cache_size, autoinc_version,
-                                                       sync_value, start_inclusive, end_inclusive))) {
-    LOG_WARN("fail get value", K(ret));
-  } else if (OB_UNLIKELY(sync_value > max_value || start_inclusive > max_value)) {
-    ret = OB_ERR_REACH_AUTOINC_MAX;
-    LOG_WARN("reach max autoinc", K(start_inclusive), K(max_value), K(ret));
-  } else {
-    uint64_t new_next_value = 0;
-    uint64_t needed_interval = 0;
-    if (start_inclusive >= max_value) {
-      new_next_value = max_value;
-      needed_interval = max_value;
-    } else if (OB_FAIL(calc_next_value(start_inclusive, offset, increment, new_next_value))) {
-      LOG_WARN("fail to calc next value", K(ret));
-    } else if (OB_UNLIKELY(new_next_value > end_inclusive)) {
-      if (max_value == end_inclusive) {
-        new_next_value = max_value;
-        needed_interval = max_value;
-      } else {
-        ret = OB_SIZE_OVERFLOW;
-        LOG_WARN("fail to alloc handle; cache is not enough",
-                K(start_inclusive), K(end_inclusive), K(offset), K(increment), K(max_value),
-                K(new_next_value), K(ret));
-      }
-    } else {
-      needed_interval = new_next_value + increment * (desired_count - 1);
-      // check overflow
-      if (needed_interval < new_next_value) {
-        needed_interval = UINT64_MAX;
-      }
-      if (needed_interval > end_inclusive) {
-        if (max_value == end_inclusive) {
-          needed_interval = max_value;
-        } else {
-          ret = OB_SIZE_OVERFLOW;
-          LOG_WARN("fail to alloc handle; cache is not enough", K(ret));
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_UNLIKELY(UINT64_MAX == needed_interval)) {
-        // compatible with MySQL; return error when reach UINT64_MAX
-        ret = OB_ERR_REACH_AUTOINC_MAX;
-        LOG_WARN("reach UINT64_MAX", K(ret));
-      } else if (OB_ISNULL(handle = static_cast<CacheHandle *>(handle_allocator_.alloc()))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("failed to alloc cache handle", K(ret));
-      } else {
-        handle = new (handle) CacheHandle;
-        handle->offset_ = offset;
-        handle->increment_ = increment;
-        handle->next_value_ = new_next_value;
-        handle->prefetch_start_ = new_next_value;
-        handle->prefetch_end_ = needed_interval;
-        handle->max_value_ = max_value;
-        LOG_TRACE("succ to allocate cache handle", K(*handle), K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObAutoincrementService::get_handle_noorder(AutoincParam &param, CacheHandle *&handle)
-{
-  int ret = OB_SUCCESS;
-  
-  const uint64_t table_id      = param.autoinc_table_id_;
-  const uint64_t column_id     = param.autoinc_col_id_;
-  const ObObjType column_type  = param.autoinc_col_type_;
-  const uint64_t offset        = param.autoinc_offset_;
-  const uint64_t increment     = param.autoinc_increment_;
-  const uint64_t max_value     = get_max_value(column_type);
 
   uint64_t desired_count = 0;
   // calc nb_desired_values in MySQL
@@ -430,17 +302,13 @@ int ObAutoincrementService::get_handle_noorder(AutoincParam &param, CacheHandle 
 
   TableNode *table_node = NULL;
   LOG_DEBUG("begin to get cache handle", K(param));
-  if (OB_FAIL(get_table_node(param, table_node))) {
+  if (OB_UNLIKELY(effective_base_value > max_value)) {
+    ret = param.autoinc_auto_increment_ > max_value
+            ? OB_ERR_REACH_AUTOINC_MAX : OB_DATA_OUT_OF_RANGE;
+    LOG_WARN("auto-increment base value exceeds column range",
+             K(ret), K(effective_base_value), K(max_value), K(param));
+  } else if (OB_FAIL(get_table_node(param, table_node))) {
     LOG_WARN("failed to get table node", K(param), K(ret));
-  }
-
-  if (OB_SUCC(ret)) {
-    int ignore_ret = try_periodic_refresh_global_sync_value(table_id,
-                                                            column_id,
-                                                            *table_node);
-    if (OB_SUCCESS != ignore_ret) {
-      LOG_INFO("fail refresh global sync value. ignore this failure.", K(ignore_ret));
-    }
   }
 
   // alloc handle
@@ -463,7 +331,6 @@ int ObAutoincrementService::get_handle_noorder(AutoincParam &param, CacheHandle 
         } else {
           LOG_TRACE("fetch table node success", K(param), K(mock_node), K(*table_node));
           atomic_update(table_node->local_sync_, mock_node.local_sync_);
-          atomic_update(table_node->last_refresh_ts_, mock_node.last_refresh_ts_);
           table_node->prefetch_node_.reset();
           if (mock_node.curr_node_.cache_start_ == table_node->curr_node_.cache_end_ + 1) {
             // when the above condition is true, it means that no other thread has consume
@@ -474,12 +341,6 @@ int ObAutoincrementService::get_handle_noorder(AutoincParam &param, CacheHandle 
             table_node->curr_node_.cache_end_ = mock_node.curr_node_.cache_end_;
           }
           table_node->curr_node_state_is_pending_ = false;
-          // in order mode, we always trust the next_value returned by global service,
-          // because the local next_value may be calculated with the previous increment params.
-          // and the increment_increment and increment_offset may be changed.
-          if (param.autoinc_mode_is_order_) {
-            table_node->next_value_ = mock_node.next_value_;
-          }
           if (OB_FAIL(table_node->alloc_handle(handle_allocator_,
                                                 offset, increment,
                                                 desired_count, max_value, handle))) {
@@ -510,7 +371,6 @@ int ObAutoincrementService::get_handle_noorder(AutoincParam &param, CacheHandle 
           LOG_TRACE("new table_node has been fetched by other, ignore");
         } else {
           atomic_update(table_node->local_sync_, mock_node.local_sync_);
-          atomic_update(table_node->last_refresh_ts_, mock_node.last_refresh_ts_);
           table_node->prefetch_node_.cache_start_ = mock_node.prefetch_node_.cache_start_;
           table_node->prefetch_node_.cache_end_ = mock_node.prefetch_node_.cache_end_;
         }
@@ -527,48 +387,6 @@ int ObAutoincrementService::get_handle_noorder(AutoincParam &param, CacheHandle 
   return ret;
 }
 
-int ObAutoincrementService::try_periodic_refresh_global_sync_value(
-    uint64_t table_id,
-    uint64_t column_id,
-    TableNode &table_node)
-{
-  int ret = OB_SUCCESS;
-  const int64_t cur_time = ObTimeUtility::current_time();
-  const int64_t cache_refresh_interval = GCONF.autoinc_cache_refresh_interval;
-  int64_t delta = cur_time - ATOMIC_LOAD(&table_node.last_refresh_ts_);
-  if (OB_LIKELY(delta * PRE_OP_THRESHOLD < cache_refresh_interval)) {
-    // do nothing
-  } else if (delta < cache_refresh_interval) {
-    // try to sync
-    if (OB_FAIL(table_node.sync_mutex_.trylock())) {
-      // other thread is doing sync; pass through
-      ret = OB_SUCCESS;
-    } else {
-      delta = cur_time - ATOMIC_LOAD(&table_node.last_refresh_ts_);
-      if (delta * PRE_OP_THRESHOLD < cache_refresh_interval) {
-        // do nothing; refreshed already
-      } else if (OB_FAIL(fetch_global_sync(table_id, column_id, table_node, true))) {
-        LOG_WARN("failed to get global sync", K(table_node), K(ret));
-      }
-      table_node.sync_mutex_.unlock();
-    }
-  } else {
-    // must sync
-    if (OB_FAIL(table_node.sync_mutex_.lock())) {
-      LOG_WARN("failed to get sync lock", K(table_node), K(ret));
-    } else {
-      delta = cur_time - ATOMIC_LOAD(&table_node.last_refresh_ts_);
-      if (delta * PRE_OP_THRESHOLD < cache_refresh_interval) {
-        // do nothing; refreshed already
-      } else if (OB_FAIL(fetch_global_sync(table_id, column_id, table_node))) {
-        LOG_WARN("failed to get global sync", K(table_node), K(ret));
-      }
-      table_node.sync_mutex_.unlock();
-    }
-  }
-  return ret;
-}
-
 void ObAutoincrementService::release_handle(CacheHandle *&handle)
 {
   handle_allocator_.free(handle);
@@ -576,23 +394,22 @@ void ObAutoincrementService::release_handle(CacheHandle *&handle)
   handle = NULL;
 }
 
-int ObAutoincrementService::refresh_sync_value_(const uint64_t table_id,
-                                                const uint64_t column_id,
-                                                const uint64_t sync_value)
+int ObAutoincrementService::refresh_local_sync_value(const uint64_t table_id,
+                                                     const uint64_t column_id,
+                                                     const uint64_t sync_value)
 {
   int ret = OB_SUCCESS;
-  LOG_DEBUG("begin to refresh local sync value", K(table_id), K(column_id), K(sync_value));
+  LOG_DEBUG("begin to refresh local auto-increment high watermark",
+            K(table_id), K(column_id), K(sync_value));
   TableNode *table_node = NULL;
   const AutoincKey key(table_id, column_id);
   if (OB_ENTRY_NOT_EXIST == (ret = node_map_.get(key, table_node))) {
-    LOG_TRACE("there is no local cache", K(key));
+    LOG_TRACE("there is no local auto-increment cache", K(key));
     ret = OB_SUCCESS;
   } else if (OB_SUCC(ret)) {
-    lib::ObMutexGuard guard(table_node->sync_mutex_);
     atomic_update(table_node->local_sync_, sync_value);
-    atomic_update(table_node->last_refresh_ts_, ObTimeUtility::current_time());
   } else {
-    LOG_WARN("failed to do get table node", K(ret));
+    LOG_WARN("failed to get local auto-increment cache", K(key), K(ret));
   }
   // table node must be reverted after get to decrement reference count
   if (NULL != table_node) {
@@ -748,9 +565,9 @@ int ObAutoincrementService::calculate_idempotent_autoinc_val_for_ddl(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(autoinc_param),
              K(table_all_slice_count), K(table_level_slice_idx), K(slice_row_idx));
-  } else if (autoinc_param->global_value_to_sync_ >= UINT64_MAX) {
+  } else if (autoinc_param->pending_value_to_sync_ >= UINT64_MAX) {
     ret = OB_ERR_REACH_AUTOINC_MAX;
-    LOG_WARN("autoinc reach max", K(ret), K(autoinc_param->global_value_to_sync_));
+    LOG_WARN("autoinc reach max", K(ret), K(autoinc_param->pending_value_to_sync_));
   } else {
     const int64_t range_id = slice_row_idx / autoinc_range_interval;
     const int64_t row_id_in_range = slice_row_idx % autoinc_range_interval;
@@ -760,17 +577,17 @@ int ObAutoincrementService::calculate_idempotent_autoinc_val_for_ddl(
     const uint64_t max_value = get_max_value(column_type);
     if (1 == table_all_slice_count) {
       // if generate in only one thread, calc next value by prev value and increment step to compat MySQL
-      autoinc_value = OB_UNLIKELY(0 == slice_row_idx) ? offset : min(autoinc_param->global_value_to_sync_ + autoinc_param->autoinc_increment_, max_value);
+      autoinc_value = OB_UNLIKELY(0 == slice_row_idx) ? offset : min(autoinc_param->pending_value_to_sync_ + autoinc_param->autoinc_increment_, max_value);
     } else {
       autoinc_value =
         min(offset + table_level_slice_idx * autoinc_range_interval +
                 (table_all_slice_count * range_id * autoinc_range_interval) + row_id_in_range,
             max_value);
     }
-    autoinc_param->global_value_to_sync_ = max(autoinc_param->global_value_to_sync_, autoinc_value);
+    autoinc_param->pending_value_to_sync_ = max(autoinc_param->pending_value_to_sync_, autoinc_value);
     LOG_TRACE("ddl calc idem autoinc value", K(ret), K(autoinc_value),
         K(table_all_slice_count), K(table_level_slice_idx), K(slice_row_idx), K(autoinc_range_interval),
-        K(autoinc_param->value_to_sync_), K(autoinc_param->global_value_to_sync_), K(autoinc_param->autoinc_increment_), K(offset));
+        K(autoinc_param->value_to_sync_), K(autoinc_param->pending_value_to_sync_), K(autoinc_param->autoinc_increment_), K(offset));
   }
 
   return ret;
@@ -792,9 +609,6 @@ int ObAutoincrementService::clear_autoinc_cache(const uint64_t table_id,
   if (OB_ENTRY_NOT_EXIST == ret) {
     // do nothing; key does not exist
     ret = OB_SUCCESS;
-  }
-  if (OB_SUCC(ret) && OB_FAIL(global_autoinc_service_.clear_global_autoinc_cache(key))) {
-    LOG_WARN("failed to clear global autoinc cache", K(ret));
   }
   return ret;
 }
@@ -874,6 +688,7 @@ int ObAutoincrementService::get_table_node(const AutoincParam &param, TableNode 
           } else {
             table_node->prefetch_node_.reset();
             table_node->autoinc_version_ = autoinc_version;
+            table_node->max_value_ = get_max_value(param.autoinc_col_type_);
             lib::ObMutexGuard guard(map_mutex_);
             if (OB_FAIL(node_map_.insert_and_get(key, table_node))) {
               LOG_WARN("failed to create table node", K(param), K(ret));
@@ -892,7 +707,7 @@ int ObAutoincrementService::get_table_node(const AutoincParam &param, TableNode 
       LOG_WARN("failed to get lock", K(ret));
     } else {
       //  local cache is expired
-       if (OB_UNLIKELY(autoinc_version > table_node->autoinc_version_)) {
+      if (OB_UNLIKELY(autoinc_version > table_node->autoinc_version_)) {
         LOG_INFO("start to reset table node", K(*table_node), K(param));
         table_node->next_value_ = 0;
         table_node->local_sync_ = 0;
@@ -901,10 +716,13 @@ int ObAutoincrementService::get_table_node(const AutoincParam &param, TableNode 
         table_node->prefetching_ = false;
         table_node->curr_node_state_is_pending_ = true;
         table_node->autoinc_version_ = autoinc_version;
+        table_node->max_value_ = get_max_value(param.autoinc_col_type_);
       // old request cannot get table node, it should retry
       } else if (OB_UNLIKELY(autoinc_version < table_node->autoinc_version_)) {
         ret = OB_AUTOINC_CACHE_NOT_EQUAL;
         LOG_WARN("old reqeust can not get table node, it should retry", KR(ret), K(autoinc_version), K(table_node->autoinc_version_));
+      } else {
+        table_node->max_value_ = get_max_value(param.autoinc_col_type_);
       }
       table_node->alloc_mutex_.unlock();
     }
@@ -963,8 +781,6 @@ int ObAutoincrementService::fetch_table_node(const AutoincParam &param,
       LOG_ERROR("unexpected auto_increment_cache_size", K(auto_increment_cache_size));
       auto_increment_cache_size = DEFAULT_INCREMENT_CACHE_SIZE;
     }
-    // For ORDER mode, the local cache_size is always 1, and the central(remote) cache_size
-    // is the configuration value.
     const uint64_t local_cache_size = auto_increment_cache_size;
     uint64_t prefetch_count = std::min(max_value / 100 / part_num, local_cache_size);
     uint64_t batch_count = 0;
@@ -978,7 +794,7 @@ int ObAutoincrementService::fetch_table_node(const AutoincParam &param,
     if (OB_UNLIKELY(table_auto_increment > max_value)) {
       ret = OB_ERR_REACH_AUTOINC_MAX;
       LOG_WARN("reach max autoinc", K(ret), K(table_auto_increment));
-    } else if (OB_FAIL(distributed_autoinc_service_.get_value(
+    } else if (OB_FAIL(autoinc_store_.get_value(
                           key, offset, increment, max_value, table_auto_increment,
                           batch_count, auto_increment_cache_size, autoinc_version, sync_value,
                           start_inclusive, end_inclusive))) {
@@ -990,7 +806,6 @@ int ObAutoincrementService::fetch_table_node(const AutoincParam &param,
 
     if (OB_SUCC(ret)) {
       atomic_update(table_node->local_sync_, sync_value);
-      atomic_update(table_node->last_refresh_ts_, ObTimeUtility::current_time());
       if (fetch_prefetch) {
         table_node->prefetch_node_.cache_start_ = start_inclusive;
         table_node->prefetch_node_.cache_end_ = std::min(max_value, end_inclusive);
@@ -1022,87 +837,13 @@ int ObAutoincrementService::fetch_table_node(const AutoincParam &param,
   return ret;
 }
 
-
-int ObAutoincrementService::set_pre_op_timeout(common::ObTimeoutCtx &ctx)
-{
-  int ret = OB_SUCCESS;
-  int64_t abs_timeout_us = ctx.get_abs_timeout();
-
-  if (abs_timeout_us < 0) {
-    abs_timeout_us = ObTimeUtility::current_time() + PRE_OP_TIMEOUT;
-  }
-  if (THIS_WORKER.get_timeout_ts() > 0 && THIS_WORKER.get_timeout_ts() < abs_timeout_us) {
-    abs_timeout_us = THIS_WORKER.get_timeout_ts();
-  }
-
-  if (OB_FAIL(ctx.set_abs_timeout(abs_timeout_us))) {
-    LOG_WARN("set timeout failed", K(ret), K(abs_timeout_us));
-  } else  if (ctx.is_timeouted()) {
-    ret = OB_TIMEOUT;
-    LOG_WARN("is timeout",
-             K(ret),
-             "abs_timeout", ctx.get_abs_timeout(),
-             "this worker timeout ts", THIS_WORKER.get_timeout_ts());
-  }
-
-  return ret;
-}
-int ObAutoincrementService::sync_insert_value_order(AutoincParam &param,
-                                                    CacheHandle *&cache_handle,
-                                                    const uint64_t insert_value)
-{
-  int ret = OB_SUCCESS;
-  
-  const uint64_t table_id      = param.autoinc_table_id_;
-  const uint64_t column_id     = param.autoinc_col_id_;
-  const ObObjType column_type  = param.autoinc_col_type_;
-  const uint64_t max_value     = get_max_value(column_type);
-  const uint64_t part_num      = param.autoinc_table_part_num_;
-  const int64_t autoinc_version = param.autoinc_version_;
-
-  uint64_t global_sync_value = 0;
-  AutoincKey key(table_id, column_id);
-  uint64_t value_to_sync = insert_value;
-  if (value_to_sync > max_value) {
-    value_to_sync = max_value;
-  }
-  if (OB_FAIL(global_autoinc_service_.local_push_to_global_value(
-                key, max_value, value_to_sync, autoinc_version, param.auto_increment_cache_size_,
-                global_sync_value))) {
-    LOG_WARN("fail sync value to global", K(key), K(insert_value), K(ret));
-  } else if (NULL != cache_handle) {
-    LOG_DEBUG("insert value, generate next val",
-              K(insert_value), K(cache_handle->prefetch_end_), K(cache_handle->next_value_));
-    if (insert_value < cache_handle->prefetch_end_) {
-      if (insert_value >= cache_handle->next_value_) {
-        if (OB_FAIL(calc_next_value(insert_value + 1,
-                                    param.autoinc_offset_,
-                                    param.autoinc_increment_,
-                                    cache_handle->next_value_))) {
-          LOG_WARN("failed to calc next value", K(cache_handle), K(param), K(ret));
-        }
-        LOG_DEBUG("generate next value when sync_insert_value", K(insert_value), K(cache_handle->next_value_));
-      }
-    } else {
-      // release handle No.
-      handle_allocator_.free(cache_handle);
-      cache_handle = NULL;
-      // invalid cache handle; record count
-      param.autoinc_intervals_count_++;
-    }
-  }
-  return ret;
-}
-
 /* core logic:
- * 1. write insert_value to global storage
- *    - only if insert_value > local_sync_
- * 2. notify other servers that a larger value written to global storage
- * 3. update local table node
+ * 1. persist insert_value when it is larger than local_sync_
+ * 2. update the local table node with the persisted high watermark
  */
-int ObAutoincrementService::sync_insert_value_noorder(AutoincParam &param,
-                                                      CacheHandle *&cache_handle,
-                                                      const uint64_t insert_value)
+int ObAutoincrementService::sync_insert_value_to_store(AutoincParam &param,
+                                                       CacheHandle *&cache_handle,
+                                                       const uint64_t insert_value)
 {
   int ret = OB_SUCCESS;
   
@@ -1110,50 +851,30 @@ int ObAutoincrementService::sync_insert_value_noorder(AutoincParam &param,
   const uint64_t column_id     = param.autoinc_col_id_;
   const ObObjType column_type  = param.autoinc_col_type_;
   const uint64_t max_value     = get_max_value(column_type);
-  const uint64_t part_num      = param.autoinc_table_part_num_;
   const int64_t autoinc_version = param.autoinc_version_;
   TableNode *table_node = NULL;
-  LOG_DEBUG("begin to sync insert value globally", K(param), K(insert_value));
+  LOG_DEBUG("begin to persist insert auto-increment value", K(param), K(insert_value));
   if (OB_FAIL(get_table_node(param, table_node))) {
     LOG_WARN("table node should exist", K(param), K(ret));
   } else {
-    // logic:
-    // 1. we should not compare insert_value with local cache node. it is meaningless.
-    //    e.g. insert_value = 15, A caches [20,30), B caches [0-10), you should not compare
-    //         insert_value with A without any information on B
-    // 2. local_sync_ semantics：we can make sure that other observer has seen a
-    //                           sync value larger than or equal to local_sync.
-    //    If observer has synced with global, we can predicate:
-    //    a newly inserted value less than local sync don't need to push to global. As we can
-    //    make a good guess that a larger value had already pushed to global by someone else.
-    // 3. only if insert_value > local_sync_ & insert_value > global_sync:
-    //    we can write insert_value into global storage. otherwise, don't sync
-    //
-    uint64_t global_sync_value = 0; // piggy back global value when we sync out insert_value
+    uint64_t stored_sync_value = 0;
     AutoincKey key(table_id, column_id);
-    // compare insert_value with local_sync/global_sync
     if (insert_value <= ATOMIC_LOAD(&table_node->local_sync_)) {
       // do nothing
     } else {
-      // For NOORDER mode, the central(remote) cache_size is the configuration value.
-      const uint64_t local_cache_size = MAX(1, param.auto_increment_cache_size_);
-      uint64_t value_to_sync = calc_next_cache_boundary(insert_value, local_cache_size, max_value);
-      if (OB_FAIL(distributed_autoinc_service_.local_push_to_global_value(key, max_value,
-                                                  value_to_sync, autoinc_version, 0, global_sync_value))) {
-        LOG_WARN("fail sync value to global", K(key), K(insert_value), K(ret));
+      // The persisted sync value tracks the greatest explicit value, while the
+      // sequence value already tracks the end of the reserved cache range.
+      // Rounding an explicit value to the cache boundary would discard the
+      // remaining local range and create a cache-sized gap.
+      const uint64_t value_to_sync = std::min(insert_value, max_value);
+      if (OB_FAIL(autoinc_store_.sync_value(key, max_value, value_to_sync,
+                                           autoinc_version, 0, stored_sync_value))) {
+        LOG_WARN("fail to persist autoincrement value", K(key), K(insert_value), K(ret));
+      } else if (OB_FAIL(alloc_autoinc_try_lock(table_node->alloc_mutex_))) {
+        LOG_WARN("fail to get alloc mutex", K(ret));
       } else {
-        if (OB_FAIL(alloc_autoinc_try_lock(table_node->alloc_mutex_))) {
-          LOG_WARN("fail to get alloc mutex", K(ret));
-        } else {
-          if (value_to_sync <= global_sync_value) {
-            atomic_update(table_node->local_sync_, global_sync_value);
-            atomic_update(table_node->last_refresh_ts_, ObTimeUtility::current_time());
-          } else {
-            atomic_update(table_node->local_sync_, value_to_sync);
-            atomic_update(table_node->last_refresh_ts_, ObTimeUtility::current_time());
-          }
-          table_node->alloc_mutex_.unlock();
-        }
+        atomic_update(table_node->local_sync_, stored_sync_value);
+        table_node->alloc_mutex_.unlock();
       }
     }
 
@@ -1188,8 +909,8 @@ int ObAutoincrementService::sync_insert_value_noorder(AutoincParam &param,
 
     if (OB_SUCC(ret)) {
       // Note: when insert_value is larger than current cache value, do we really need to
-      // refresh local cache? What if other thread in this server is refreshing local cache?
-      //   - if we don't, and other thread fetchs a small cache value, it is not OK.
+      // refresh local cache? What if another thread is refreshing local cache?
+      //   - if we don't, and another thread fetches a small cache value, it is not OK.
       // SO, we must fetch table node here.
       // syncing insert_value is not the common case. perf acceptable
       if (OB_FAIL(alloc_autoinc_try_lock(table_node->alloc_mutex_))) {
@@ -1223,28 +944,19 @@ int ObAutoincrementService::sync_insert_value_noorder(AutoincParam &param,
 }
 
 // sync last user specified value first(compatible with MySQL)
-int ObAutoincrementService::sync_insert_value_global(AutoincParam &param)
+int ObAutoincrementService::sync_insert_value(AutoincParam &param)
 {
   int ret = OB_SUCCESS;
-  if (0 != param.global_value_to_sync_) {
-    if (param.global_value_to_sync_ < param.autoinc_auto_increment_) {
+  if (0 != param.pending_value_to_sync_) {
+    if (param.pending_value_to_sync_ < param.autoinc_auto_increment_) {
       // do nothing, insert value directly
-    } else if (param.autoinc_mode_is_order_) {
-      if (OB_FAIL(sync_insert_value_order(param,
-                                          param.cache_handle_,
-                                          param.global_value_to_sync_))) {
-        SQL_ENG_LOG(WARN, "failed to sync insert value",
-                          "insert_value", param.global_value_to_sync_, K(ret));
-      }
-    } else {
-      if (OB_FAIL(sync_insert_value_noorder(param,
-                                          param.cache_handle_,
-                                          param.global_value_to_sync_))) {
-        SQL_ENG_LOG(WARN, "failed to sync insert value",
-                          "insert_value", param.global_value_to_sync_, K(ret));
-      }
+    } else if (OB_FAIL(sync_insert_value_to_store(param,
+                                                 param.cache_handle_,
+                                                 param.pending_value_to_sync_))) {
+      SQL_ENG_LOG(WARN, "failed to sync insert value",
+                        "insert_value", param.pending_value_to_sync_, K(ret));
     }
-    param.global_value_to_sync_ = 0;
+    param.pending_value_to_sync_ = 0;
   }
   return ret;
 }
@@ -1254,79 +966,42 @@ int ObAutoincrementService::sync_insert_value_local(AutoincParam &param)
 {
   int ret = OB_SUCCESS;
   if (param.sync_flag_) {
-    if (param.global_value_to_sync_ < param.value_to_sync_) {
-      param.global_value_to_sync_ = param.value_to_sync_;
+    if (param.pending_value_to_sync_ < param.value_to_sync_) {
+      param.pending_value_to_sync_ = param.value_to_sync_;
     }
     param.sync_flag_ = false;
   }
   return ret;
 }
 
-int ObAutoincrementService::refresh_auto_increment_cache(const uint64_t table_id,
-                                                         const uint64_t column_id,
-                                                         const uint64_t sync_value)
-{
-  LOG_INFO("begin to refresh auto_increment cache", K(sync_value), K(table_id), K(column_id));
-  return refresh_sync_value_(table_id, column_id, sync_value);
-}
-
-
-int ObAutoincrementService::fetch_global_sync(const uint64_t table_id,
-                                              const uint64_t column_id,
-                                              TableNode &table_node,
-                                              const bool sync_presync)
+int ObAutoincrementService::sync_auto_increment(const ObTableSchema &table_schema,
+                                                const uint64_t sync_value)
 {
   int ret = OB_SUCCESS;
-  uint64_t sync_value = 0;
-
-  // set timeout for presync
-  ObTimeoutCtx ctx;
-  if (sync_presync) {
-    if (OB_FAIL(set_pre_op_timeout(ctx))) {
-      LOG_WARN("failed to set timeout", K(ret));
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    AutoincKey key(table_id, column_id);
-    if (OB_FAIL(distributed_autoinc_service_.local_sync_with_global_value(key, table_node.autoinc_version_, sync_value))) {
-      LOG_WARN("fail refresh global value", K(ret));
-    } else {
-      atomic_update(table_node.local_sync_, sync_value);
-      atomic_update(table_node.last_refresh_ts_, ObTimeUtility::current_time());
-    }
-  }
-
-  // ignore error for presync
-  // other thread will try next time
-  if (sync_presync && OB_FAIL(ret)) {
-    LOG_WARN("failed to presync; ignore this", K(ret));
-    ret = OB_SUCCESS;
-  }
-
-  return ret;
-}
-
-uint64_t ObAutoincrementService::calc_next_cache_boundary(
-    uint64_t insert_value,
-    uint64_t cache_size,
-    uint64_t max_value)
-{
-  uint64_t new_next_boundary = 0;
-  const uint64_t insert_value_bak = insert_value;
-  // round up insert_value except cache_size. for example, when cache size is 1000,
-  // we will get the following results for different insert_values:
-  // insert_value = 999 -> new_next_boundary = 1000;
-  // insert_value = 1000 -> new_next_boundary = 1000;
-  // insert_value = 1001 -> new_next_boundary = 2000;
-  uint64_t v = (insert_value % cache_size == 0) ? 0 : 1;
-  insert_value = (insert_value / cache_size + v) * cache_size;
-  if (insert_value < insert_value_bak || insert_value > max_value) {
-    new_next_boundary = max_value;
+  const uint64_t table_id = table_schema.get_table_id();
+  const uint64_t column_id = table_schema.get_autoinc_column_id();
+  const ObColumnSchemaV2 *column_schema = table_schema.get_column_schema(column_id);
+  if (OB_UNLIKELY(OB_INVALID_ID == table_id || 0 == column_id)
+      || OB_ISNULL(column_schema)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid auto-increment schema", K(ret), K(table_id), K(column_id),
+             KP(column_schema));
   } else {
-    new_next_boundary = insert_value;
+    const uint64_t max_value = get_max_value(column_schema->get_data_type());
+    const uint64_t value_to_sync = std::min(sync_value, max_value);
+    const AutoincKey key(table_id, column_id);
+    // AUTO_INCREMENT is persisted in the table schema.  Existing local caches
+    // must observe the new lower bound, but the sequence row must not be
+    // advanced by ALTER TABLE itself.  A later allocation persists its cache
+    // reservation in the normal path.
+    LOG_INFO("begin to refresh local auto-increment lower bound",
+             K(key), K(value_to_sync), K(sync_value));
+    if (OB_FAIL(refresh_local_sync_value(table_id, column_id, value_to_sync))) {
+      LOG_WARN("failed to refresh local auto-increment lower bound",
+               K(ret), K(key), K(value_to_sync));
+    }
   }
-  return new_next_boundary;
+  return ret;
 }
 
 int ObAutoincrementService::calc_next_value(const uint64_t last_next_value,
@@ -1398,46 +1073,99 @@ int ObAutoincrementService::calc_prev_value(const uint64_t max_value,
   return ret;
 }
 
+int ObAutoincrementService::get_local_sequence_value_(const AutoincKey &key,
+                                                      const int64_t autoinc_version,
+                                                      uint64_t &seq_value,
+                                                      bool &found)
+{
+  int ret = OB_SUCCESS;
+  TableNode *table_node = nullptr;
+  found = false;
+
+  // The value persisted in __all_auto_increment is the end of the reserved
+  // cache range.  The current process owns the only auto-increment cache in a
+  // standalone deployment, so its next unallocated value is the logical
+  // sequence value exposed to SHOW/FORK, just as the former ORDER service did.
+  int tmp_ret = node_map_.get(key, table_node);
+  if (OB_SUCCESS == tmp_ret) {
+    if (OB_ISNULL(table_node)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("auto increment table node is null", K(ret), K(key));
+    } else if (OB_FAIL(alloc_autoinc_try_lock(table_node->alloc_mutex_))) {
+      LOG_WARN("failed to lock auto increment table node", K(ret), K(key));
+    } else {
+      if (autoinc_version == table_node->autoinc_version_
+          && table_node->max_value_ > 0
+          && (table_node->next_value_ > 0 || table_node->local_sync_ > 0)) {
+        const uint64_t local_sync = ATOMIC_LOAD(&table_node->local_sync_);
+        const uint64_t next_after_sync = local_sync == UINT64_MAX
+                                           ? UINT64_MAX : local_sync + 1;
+        seq_value = std::min(table_node->max_value_,
+                             std::max(table_node->next_value_, next_after_sync));
+        found = true;
+      }
+      table_node->alloc_mutex_.unlock();
+    }
+  } else if (OB_ENTRY_NOT_EXIST != tmp_ret) {
+    ret = tmp_ret;
+    LOG_WARN("failed to get auto increment table node", K(ret), K(key));
+  }
+  if (OB_NOT_NULL(table_node)) {
+    node_map_.revert(table_node);
+  }
+  return ret;
+}
+
 int ObAutoincrementService::get_sequence_value(const uint64_t table_id,
                                                const uint64_t column_id,
-                                               const bool is_order,
                                                const int64_t autoinc_version,
                                                uint64_t &seq_value)
 {
   int ret = OB_SUCCESS;
-  AutoincKey key;
-  
-  
-  key.table_id_  = table_id;
-  key.column_id_ = column_id;
-  if (is_order && OB_FAIL(global_autoinc_service_.get_sequence_value(key, autoinc_version, seq_value))) {
-    LOG_WARN("global autoinc service get sequence value failed", K(ret));
-  } else if (!is_order &&
-      OB_FAIL(distributed_autoinc_service_.get_sequence_value(key, autoinc_version, seq_value))) {
-    LOG_WARN("distributed autoinc service get sequence value failed", K(ret));
+  const AutoincKey key(table_id, column_id);
+  bool found_in_local_cache = false;
+  if (OB_FAIL(get_local_sequence_value_(key, autoinc_version, seq_value,
+                                        found_in_local_cache))) {
+    LOG_WARN("failed to get local auto increment sequence value", K(ret), K(key));
+  } else if (!found_in_local_cache
+             && OB_FAIL(autoinc_store_.get_sequence_value(
+                  key, autoinc_version, seq_value))) {
+    LOG_WARN("autoincrement store get sequence value failed", K(ret), K(key));
   }
   return ret;
 }
 
-// used for __tenant_virtual_all_table only
-int ObAutoincrementService::get_sequence_values(const ObIArray<AutoincKey> &order_autokeys,
-    const ObIArray<AutoincKey> &noorder_autokeys,
-    const ObIArray<int64_t> &order_autoinc_versions,
-    const ObIArray<int64_t> &noorder_autoinc_versions,
+// Used by SHOW TABLE STATUS.
+int ObAutoincrementService::get_sequence_values(const ObIArray<AutoincKey> &autoinc_keys,
+    const ObIArray<int64_t> &autoinc_versions,
     ObHashMap<AutoincKey, uint64_t> &seq_values)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(global_autoinc_service_.get_auto_increment_values(
-                order_autokeys, order_autoinc_versions, seq_values))) {
-    LOG_WARN("global_autoinc_service_ get sequence values failed", K(ret));
-  } else if (OB_FAIL(distributed_autoinc_service_.get_auto_increment_values(
-                       noorder_autokeys, noorder_autoinc_versions, seq_values))) {
-    LOG_WARN("distributed_autoinc_service_ get sequence values failed", K(ret));
+  if (OB_FAIL(autoinc_store_.get_auto_increment_values(
+                autoinc_keys, autoinc_versions, seq_values))) {
+    LOG_WARN("autoincrement store get sequence values failed", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < autoinc_keys.count(); ++i) {
+      const AutoincKey &key = autoinc_keys.at(i);
+      uint64_t seq_value = 0;
+      bool found = false;
+      if (i >= autoinc_versions.count()) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("auto increment version count does not match key count",
+                 K(ret), K(i), K(autoinc_keys.count()), K(autoinc_versions.count()));
+      } else if (OB_FAIL(get_local_sequence_value_(
+                   key, autoinc_versions.at(i), seq_value, found))) {
+        LOG_WARN("failed to get local auto increment sequence value", K(ret), K(key));
+      } else if (found && OB_FAIL(seq_values.set_refactored(
+                            key, seq_value, 1 /* overwrite */))) {
+        LOG_WARN("failed to update cached auto increment value", K(ret), K(key));
+      }
+    }
   }
   return ret;
 }
 
-int ObInnerTableGlobalAutoIncrementService::get_value(
+int ObInnerTableAutoincrementStore::get_value(
     const AutoincKey &key,
     const uint64_t offset,
     const uint64_t increment,
@@ -1466,15 +1194,15 @@ int ObInnerTableGlobalAutoIncrementService::get_value(
   return ret;
 }
 
-int ObInnerTableGlobalAutoIncrementService::get_sequence_value(const AutoincKey &key,
-                                                               const int64_t &autoinc_version,
-                                                               uint64_t &sequence_value)
+int ObInnerTableAutoincrementStore::get_sequence_value(const AutoincKey &key,
+                                                       const int64_t &autoinc_version,
+                                                       uint64_t &sequence_value)
 {
   uint64_t sync_value = 0; // unused
   return inner_table_proxy_.get_autoinc_value(key, autoinc_version, sequence_value, sync_value);
 }
 
-int ObInnerTableGlobalAutoIncrementService::get_auto_increment_values(
+int ObInnerTableAutoincrementStore::get_auto_increment_values(
     const common::ObIArray<AutoincKey> &autoinc_keys,
     const common::ObIArray<int64_t> &autoinc_versions,
     common::hash::ObHashMap<AutoincKey, uint64_t> &seq_values)
@@ -1483,7 +1211,7 @@ int ObInnerTableGlobalAutoIncrementService::get_auto_increment_values(
   return inner_table_proxy_.get_autoinc_value_in_batch(autoinc_keys, seq_values);
 }
 
-int ObInnerTableGlobalAutoIncrementService::local_push_to_global_value(
+int ObInnerTableAutoincrementStore::sync_value(
     const AutoincKey &key,
     const uint64_t max_value,
     const uint64_t insert_value,
@@ -1495,154 +1223,6 @@ int ObInnerTableGlobalAutoIncrementService::local_push_to_global_value(
   uint64_t seq_value = 0; // unused, * MUST * set seq_value to 0 here.
   return inner_table_proxy_.sync_autoinc_value(key, insert_value, max_value, autoinc_version,
                                                seq_value, sync_value);
-}
-
-int ObInnerTableGlobalAutoIncrementService::local_sync_with_global_value(
-    const AutoincKey &key,
-    const int64_t &autoinc_version,
-    uint64_t &sync_value)
-{
-  uint64_t seq_value = 0; // unused
-  return inner_table_proxy_.get_autoinc_value(key, autoinc_version, seq_value, sync_value);
-}
-
-int ObCallGlobalAutoIncrementService::get_value(
-    const AutoincKey &key,
-    const uint64_t offset,
-    const uint64_t increment,
-    const uint64_t max_value,
-    const uint64_t table_auto_increment,
-    const uint64_t desired_count,
-    const uint64_t cache_size,
-    const int64_t &autoinc_version,
-    uint64_t &sync_value,
-    uint64_t &start_inclusive,
-    uint64_t &end_inclusive)
-{
-  int ret = OB_SUCCESS;
-  ObGAISNextAutoIncValReq request;
-  obcall::ObGAISNextValResult result;
-  if (OB_FAIL(request.init(key, offset, increment, table_auto_increment, max_value,
-                           desired_count, cache_size, autoinc_version))) {
-    LOG_WARN("fail to init auto increment request", KR(ret));
-  } else if (OB_FAIL(share::g_mp->global_auto_inc_service()->handle_next_autoinc_request(
-                       request, result))) {
-    LOG_WARN("fail to allocate auto increment value", KR(ret), K(request));
-  } else {
-    start_inclusive = result.start_inclusive_;
-    end_inclusive = result.end_inclusive_;
-    sync_value = result.sync_value_;
-  }
-  return ret;
-}
-
-int ObCallGlobalAutoIncrementService::get_sequence_next_value(
-    const ObSequenceSchema &schema,
-    ObSequenceValue &nextval)
-{
-  int ret = OB_SUCCESS;
-  ObGAISNextSequenceValReq request;
-  obcall::ObGAISNextSequenceValResult result;
-  if (OB_FAIL(request.init(schema))) {
-    LOG_WARN("fail to init sequence request", KR(ret));
-  } else if (OB_FAIL(share::g_mp->global_auto_inc_service()->handle_next_sequence_request(
-                       request, result))) {
-    LOG_WARN("fail to allocate sequence value", KR(ret));
-  } else {
-    nextval.assign(result.nextval_);
-  }
-  return ret;
-}
-
-int ObCallGlobalAutoIncrementService::get_sequence_value(const AutoincKey &key,
-                                                        const int64_t &autoinc_version,
-                                                        uint64_t &sequence_value)
-{
-  int ret = OB_SUCCESS;
-  ObGAISAutoIncKeyArg request;
-  obcall::ObGAISCurrValResult result;
-  if (OB_FAIL(request.init(key, autoinc_version))) {
-    LOG_WARN("fail to init auto increment key", KR(ret));
-  } else if (OB_FAIL(share::g_mp->global_auto_inc_service()->handle_curr_autoinc_request(
-                       request, result))) {
-    LOG_WARN("fail to get auto increment value", KR(ret), K(key));
-  } else {
-    sequence_value = result.sequence_value_;
-  }
-  return ret;
-}
-
-int ObCallGlobalAutoIncrementService::get_auto_increment_values(
-    const common::ObIArray<AutoincKey> &autoinc_keys,
-    const common::ObIArray<int64_t> &autoinc_versions,
-    common::hash::ObHashMap<AutoincKey, uint64_t> &seq_values)
-{
-  int ret = OB_SUCCESS;
-  ObGAISAutoIncKeyArg request;
-  obcall::ObGAISCurrValResult result;
-  for (int64_t i = 0; OB_SUCC(ret) && i < autoinc_keys.count(); ++i) {
-    result.reset();
-    if (OB_FAIL(request.init(autoinc_keys.at(i), autoinc_versions.at(i)))) {
-      LOG_WARN("fail to init auto increment key", KR(ret));
-    } else if (OB_FAIL(share::g_mp->global_auto_inc_service()->handle_curr_autoinc_request(
-                         request, result))) {
-      LOG_WARN("fail to get auto increment value", KR(ret), K(request));
-    } else if (OB_FAIL(seq_values.set_refactored(autoinc_keys.at(i), result.sequence_value_))) {
-      LOG_WARN("fail to save auto increment value", KR(ret));
-    }
-  }
-  return ret;
-}
-
-int ObCallGlobalAutoIncrementService::local_push_to_global_value(
-    const AutoincKey &key,
-    const uint64_t max_value,
-    const uint64_t value,
-    const int64_t &autoinc_version,
-    const int64_t cache_size,
-    uint64_t &global_sync_value)
-{
-  int ret = OB_SUCCESS;
-  ObGAISPushAutoIncValReq request;
-  if (OB_FAIL(request.init(key, value, max_value, autoinc_version, cache_size))) {
-    LOG_WARN("fail to init auto increment sync request", KR(ret));
-  } else if (OB_FAIL(share::g_mp->global_auto_inc_service()->handle_push_autoinc_request(
-                       request, global_sync_value))) {
-    LOG_WARN("fail to sync auto increment value", KR(ret), K(request));
-  }
-  return ret;
-}
-
-int ObCallGlobalAutoIncrementService::local_sync_with_global_value(
-    const AutoincKey &key,
-    const int64_t &autoinc_version,
-    uint64_t &value)
-{
-  int ret = OB_SUCCESS;
-  ObGAISAutoIncKeyArg request;
-  obcall::ObGAISCurrValResult result;
-  if (OB_FAIL(request.init(key, autoinc_version))) {
-    LOG_WARN("fail to init auto increment key", KR(ret));
-  } else if (OB_FAIL(share::g_mp->global_auto_inc_service()->handle_curr_autoinc_request(
-                       request, result))) {
-    LOG_WARN("fail to get auto increment value", KR(ret), K(request));
-  } else {
-    value = result.sync_value_;
-  }
-  return ret;
-}
-
-int ObCallGlobalAutoIncrementService::clear_global_autoinc_cache(const AutoincKey &key)
-{
-  int ret = OB_SUCCESS;
-  ObGAISAutoIncKeyArg request;
-  if (OB_FAIL(request.init(key, OB_INVALID_VERSION))) {
-    LOG_WARN("fail to init auto increment key", KR(ret));
-  } else if (OB_FAIL(share::g_mp->global_auto_inc_service()->handle_clear_autoinc_cache_request(
-                       request))) {
-    LOG_WARN("fail to clear auto increment cache", KR(ret), K(request));
-  }
-  return ret;
 }
 
 int ObAutoIncInnerTableProxy::check_inner_autoinc_version(const int64_t &request_autoinc_version,
@@ -1894,9 +1474,7 @@ int ObAutoIncInnerTableProxy::get_autoinc_value(const AutoincKey &key,
   return ret;
 }
 
-// TODO: (xingrui.cwh)
-// If this interface is used by another function except for __tenant_virtual_all_table,
-// this interface will need to verfiy autoinc_version for correctness
+// TODO: verify autoinc_version before expanding this batch interface to other callers.
 int ObAutoIncInnerTableProxy::get_autoinc_value_in_batch(const common::ObIArray<AutoincKey> &keys,
     common::hash::ObHashMap<AutoincKey, uint64_t> &seq_values)
 {
@@ -2063,14 +1641,18 @@ int ObAutoIncInnerTableProxy::sync_autoinc_value(const AutoincKey &key,
     if (OB_SUCC(ret)) {
       uint64_t new_seq_value = 0;
       if (insert_value > sync_value) {
-        seq_value = std::max(fetch_seq_value, seq_value + 1);
-        sync_value = std::max(fetch_seq_value - 1, insert_value);
-        new_seq_value = sync_value >= max_value ? max_value : sync_value + 1;
+        // sequence_value is the end of the range already reserved by the
+        // local cache, whereas sync_value is the greatest explicit value.
+        // Keep the reservation when the explicit value falls inside it;
+        // otherwise advance the next sequence past the explicit value.
+        sync_value = insert_value;
+        const uint64_t next_after_insert =
+            insert_value >= max_value ? max_value : insert_value + 1;
+        new_seq_value = std::max(fetch_seq_value, next_after_insert);
+        seq_value = new_seq_value;
 
-        // if insert_value > global_sync
-        // 2. update __all_sequence(may get global_sync)
-        // 3. sync to other server
-        // 4. adjust cache_handle(prefetch) and table node
+        // Persist the explicit high watermark and the non-decreasing cache
+        // reservation atomically in __all_auto_increment.
         int64_t affected_rows = 0;
         // NOTE: Why the sequence value is also updated?
         //       > In order to support display correct AUTO_INCREMENT property in SHOW CREATE TABLE

@@ -76,11 +76,9 @@ public:
                                       rootserver::ObDDLOperator &ddl_operator,
                                       ObSchemaGetterGuard &schema_guard,
                                       const uint64_t user_id);
-  static int rebuild_triggers_on_hidden_table(const obcall::ObAlterTableArg &alter_table_arg,
-                                              const ObTableSchema &orig_table_schema,
+  static int rebuild_triggers_on_hidden_table(const ObTableSchema &orig_table_schema,
                                               const ObTableSchema &hidden_table_schema,
-                                              ObSchemaGetterGuard &src_tenant_schema_guard,
-                                              ObSchemaGetterGuard &dst_tenant_schema_guard,
+                                              ObSchemaGetterGuard &runtime_schema_guard,
                                               rootserver::ObDDLOperator &ddl_operator,
                                               ObMySQLTransaction &trans);
   static int rebuild_trigger_on_rename(share::schema::ObSchemaGetterGuard &schema_guard,
@@ -191,22 +189,6 @@ private:
                              rootserver::ObDDLService &ddl_service);
   //----End of functions for managing trigger----
 
-  //----Functions for restore table ddl ----
-  //  Dont rebuild trigger if 
-  //  1. database name has changed.
-  //  2. base_table name has changed.
-  //  3. database of the trigger does no exist.
-  //  4. same name trigger has existed.
-  static int check_and_construct_restore_trigger_info(
-        const obcall::ObAlterTableArg &alter_table_arg,
-        ObSchemaGetterGuard &src_tenant_schema_guard,
-        ObSchemaGetterGuard &dst_tenant_schema_guard,
-        const ObTableSchema &orig_table_schema,
-        const ObTableSchema &hidden_table_schema,
-        const ObTriggerInfo &src_trigger_info,
-        ObTriggerInfo &new_trigger_info,
-        bool &need_rebuild);
-//----End of functions for restore table ddl----
 };
 
 } // namespace rootserver

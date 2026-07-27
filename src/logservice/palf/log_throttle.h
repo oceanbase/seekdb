@@ -156,7 +156,7 @@ inline bool LogWritingThrottle::need_throttling_not_guarded_by_lock_(
   const NeedPurgingThrottlingFunc &need_purge_throttling) const
 {
   // Only need throttle under following conditions:
-  // 1. when the tenant writing throttling has been enabled and has been triggered;
+  // 1. when log writing throttling has been enabled and triggered;
   // 2. when there is no need to purge throttle.
   return need_throttling_with_options_not_guarded_by_lock_() && !need_purge_throttling();
 }

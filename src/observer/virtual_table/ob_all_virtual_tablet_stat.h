@@ -17,7 +17,7 @@
 #ifndef OB_ALL_VIRTUAL_TABLET_STAT_H_
 #define OB_ALL_VIRTUAL_TABLET_STAT_H_
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
-#include "storage/ob_tenant_tablet_stat_mgr.h"
+#include "storage/ob_tablet_stat_mgr.h"
 
 namespace oceanbase
 {
@@ -49,7 +49,7 @@ public:
 private:
 private:
   char ip_buf_[common::OB_IP_STR_BUFF];
-  // each tenant has a maximum 20000 of stats, and each stat occupies 88bytes memory, so the maximum memory usage is around 2.75MB. 
+  // At most 20000 stats are retained, with roughly 2.75 MB maximum memory usage.
   common::ObSEArray<storage::ObTabletStat, 128> tablet_stats_;
   ObTabletStat cur_stat_;
   int64_t cur_idx_;

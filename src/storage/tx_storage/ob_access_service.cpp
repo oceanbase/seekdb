@@ -25,7 +25,7 @@
 #include "storage/access/ob_table_scan_iterator.h"
 #include "storage/retrieval/ob_block_stat_iter.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"
+#include "storage/tx_storage/ob_memstore_freezer.h"
 #include "src/sql/engine/ob_exec_context.h"
 namespace oceanbase
 {
@@ -79,7 +79,7 @@ ObAccessService::~ObAccessService()
   destroy();
 }
 
-int ObAccessService::mtl_init(ObAccessService* &access_service)
+int ObAccessService::server_module_init(ObAccessService* &access_service)
 {
   int ret = OB_SUCCESS;
 
@@ -111,24 +111,17 @@ void ObAccessService::destroy()
   }
 }
 
-int ObAccessService::check_tenant_out_of_memstore_limit_(bool &is_out_of_mem)
+int ObAccessService::check_memstore_limit_(bool &is_out_of_mem)
 {
   int ret = OB_SUCCESS;
   is_out_of_mem = false;
-  ObTenantFreezer *freezer = nullptr;
-  freezer = share::g_mp->tenant_freezer();
+  ObMemstoreFreezer *freezer = nullptr;
+  freezer = share::g_mp->memstore_freezer();
   if (OB_FAIL(freezer->check_memstore_full(is_out_of_mem))) {
-    LOG_WARN("check tenant out of memstore limit", K(ret));
+    LOG_WARN("failed to check server memstore limit", K(ret));
   } else {
     // do nothing
   }
-  return ret;
-}
-
-int ObAccessService::check_data_disk_full_(bool &is_full)
-{
-  int ret = OB_SUCCESS;
-  is_full = false; // lite: sys tenant -> this disk-full check path is user-tenant-only
   return ret;
 }
 
@@ -322,7 +315,7 @@ int ObAccessService::table_scan(
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("The result_ is already pointed to an valid object",
         K(ret), K(vparam), KPC(result), K(lbt()));
-  } else if (OB_ISNULL(iter = mtl_sop_borrow_checked(ObTableScanIterator))) {
+  } else if (OB_ISNULL(iter = share::borrow_server_object<ObTableScanIterator>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("alloc table scan iterator fail", K(ret));
   } else if (FALSE_IT(result = iter)) {
@@ -605,8 +598,7 @@ int ObAccessService::check_write_allowed_(
 {
   int ret = OB_SUCCESS;
   bool is_out_of_mem = false;
-  bool is_disk_full = false;
-  ObLS *const ls = ctx_guard.get_ls();
+  ObLS *ls = nullptr;
   ObLockID lock_id;
   ObLockParam lock_param;
   const ObTableLockMode lock_mode = ROW_EXCLUSIVE;
@@ -622,16 +614,14 @@ int ObAccessService::check_write_allowed_(
     enable_table_lock = false;
     ret = OB_SUCCESS;
   }
-  if (OB_FAIL(check_tenant_out_of_memstore_limit_(is_out_of_mem))) {
-    LOG_WARN("fail to check tenant out of mem limit", K(ret));
+  if (OB_FAIL(check_memstore_limit_(is_out_of_mem))) {
+    LOG_WARN("fail to check server memstore limit", K(ret));
   } else if (is_out_of_mem && !tablet_id.is_inner_tablet()) {
-    ret = OB_TENANT_OUT_OF_MEM;
-    LOG_WARN("this tenant is already out of memstore limit", K(ret));
-  } else if (OB_FAIL(check_data_disk_full_(is_disk_full))) {
-    LOG_WARN("fail to check data disk full", K(ret));
-  } else if (is_disk_full) {
-    ret = OB_USER_OUTOF_DATA_DISK_SPACE;
-    LOG_WARN("data disk full, you should not do io now", K(ret));
+    ret = OB_SERVER_RUNTIME_OUT_OF_MEM;
+    LOG_WARN("server runtime is already out of memstore memory", K(ret));
+  } else if (OB_ISNULL(ls = ctx_guard.get_ls())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("ls should not be null", K(ret), K(tablet_id));
   } else {
     ObStoreCtx &store_ctx = ctx_guard.get_store_ctx();
     store_ctx.tablet_id_ = tablet_id;
@@ -1090,7 +1080,7 @@ int ObAccessService::revert_scan_iter(ObNewRowIterator *iter)
   } else if (iter->get_type() == ObNewRowIterator::ObTableScanIterator) {
     ObTableScanIterator *table_scan_iter = nullptr;
     table_scan_iter = static_cast<ObTableScanIterator *>(iter);
-    mtl_sop_return_checked(ObTableScanIterator, table_scan_iter);
+    share::return_server_object(table_scan_iter);
   } else {
     iter->~ObNewRowIterator();
   }
@@ -1174,7 +1164,7 @@ int ObAccessService::do_table_scan_(
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("The result_ is already pointed to an valid object",
         K(ret), K(data_tablet_id), KPC(result), K(lbt()));
-  } else if (OB_ISNULL(iter = mtl_sop_borrow(ObTableScanIterator))) {
+  } else if (OB_ISNULL(iter = share::borrow_server_object<ObTableScanIterator>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("alloc table scan iterator fail", K(ret));
   } else if (FALSE_IT(result = iter)) {

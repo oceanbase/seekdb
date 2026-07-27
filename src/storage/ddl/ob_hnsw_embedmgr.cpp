@@ -743,7 +743,7 @@ int ObEmbeddingTaskMgr::get_ai_config(const common::ObString &model_id)
     ObAIFuncExprInfo *info = nullptr;
     const share::ObAiModelEndpointInfo *endpoint_info = nullptr;
     omt::ObAiServiceGuard ai_service_guard;
-    omt::ObTenantAiService *ai_service = share::g_mp->tenant_ai_service();
+    omt::ObAiService *ai_service = share::g_mp->ai_service();
     bool use_request_model_name = false;
     if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(allocator_, const_cast<common::ObString&>(model_id), info))) {
       LOG_WARN("failed to get ai func info", K(ret), K(model_id));

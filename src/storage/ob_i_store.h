@@ -35,7 +35,7 @@ MULTI_VERSION_EXTRA_ROWKEY_DEF(MAX_EXTRA_ROWKEY, 0, NULL, NULL)
 #include "storage/blocksstable/ob_datum_rowkey.h"
 #include "storage/ob_table_store_stat_mgr.h"
 #include "storage/memtable/mvcc/ob_mvcc_acc_ctx.h"
-#include "storage/ob_tenant_tablet_stat_mgr.h"
+#include "storage/ob_tablet_stat_mgr.h"
 #include "lib/hash/ob_hashmap.h"
 
 namespace oceanbase

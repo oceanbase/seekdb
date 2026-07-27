@@ -72,7 +72,6 @@ enum ObPLCacheObjectType
   PACKAGE_BODY_TYPE,
   ANONYMOUS_BLOCK_TYPE,
   CALL_STMT_TYPE,
-  UDF_RESULT_TYPE,
   MAX_TYPE_NUM
 };
 
@@ -183,7 +182,7 @@ class ObPLCacheObject : public sql::ObILibCacheObject
 public:
   ObPLCacheObject(sql::ObLibCacheNameSpace ns, lib::MemoryContext &mem_context)
   : ObILibCacheObject(ns, mem_context),
-    tenant_schema_version_(OB_INVALID_VERSION),
+    runtime_schema_version_(OB_INVALID_VERSION),
     sys_schema_version_(OB_INVALID_VERSION),
     dependency_tables_(allocator_),
     params_info_( (ObWrapperAllocator(allocator_)) ),
@@ -193,9 +192,7 @@ public:
     expressions_(allocator_),
     expr_op_size_(0),
     frame_info_(allocator_),
-    stat_(),
-    concurrent_num_(0),
-    max_concurrent_num_(ObMaxConcurrentParam::UNLIMITED)
+    stat_()
     {}
 
   virtual ~ObPLCacheObject() {}
@@ -203,10 +200,10 @@ public:
   inline bool is_call_stmt() const { return sql::ObLibCacheNameSpace::NS_CALLSTMT == ns_; }
 
   inline void set_sys_schema_version(int64_t schema_version) { sys_schema_version_ = schema_version; }
-  inline void set_tenant_schema_version(int64_t schema_version) { tenant_schema_version_ = schema_version; }
-  inline int64_t get_tenant_schema_version() const { return tenant_schema_version_; }
+  inline void set_runtime_schema_version(int64_t schema_version) { runtime_schema_version_ = schema_version; }
+  inline int64_t get_runtime_schema_version() const { return runtime_schema_version_; }
   inline int64_t get_sys_schema_version() const { return sys_schema_version_; }
-  int set_tenant_sys_schema_version(share::schema::ObSchemaGetterGuard &schema_guard);
+  int set_runtime_and_system_schema_versions(share::schema::ObSchemaGetterGuard &schema_guard);
   inline int64_t get_dependency_table_size() const { return dependency_tables_.count(); }
   inline const sql::DependenyTableStore &get_dependency_table() const { return dependency_tables_; }
   int init_dependency_table_store(int64_t dependency_table_cnt) { return dependency_tables_.init(dependency_table_cnt); }
@@ -233,23 +230,14 @@ public:
   int init_params_info_str();
   int update_execute_time(int64_t exec_time);
   static int get_times(const ObPLCacheObject *pl_object, int64_t& execute_times, int64_t& elapsed_time);
-  inline bool is_limited_concurrent_num() const { return max_concurrent_num_ != share::schema::ObMaxConcurrentParam::UNLIMITED; }
-  inline int64_t get_max_concurrent_num() const { return ATOMIC_LOAD(&max_concurrent_num_); }
-  inline int64_t get_concurrent_num() const { return ATOMIC_LOAD(&concurrent_num_); }
-  inline void set_max_concurrent_num(int64_t max_concurrent_num) { ATOMIC_STORE(&max_concurrent_num_, max_concurrent_num); }
-  int inc_concurrent_num();
-  inline void dec_concurrent_num() { ATOMIC_DEC(&concurrent_num_); }
-
   TO_STRING_KV(K_(expr_op_size),
-               K_(tenant_schema_version),
+               K_(runtime_schema_version),
                K_(sys_schema_version),
                K_(dependency_tables),
-               K_(stat),
-               K_(concurrent_num),
-               K_(max_concurrent_num));
+               K_(stat));
 
 protected:
-  int64_t tenant_schema_version_;
+  int64_t runtime_schema_version_;
   int64_t sys_schema_version_;
   sql::DependenyTableStore dependency_tables_;
   // stored args information after paramalization
@@ -264,8 +252,6 @@ protected:
   sql::ObExprFrameInfo frame_info_;
   // stat info
   PLCacheObjStat stat_;
-  int64_t concurrent_num_;
-  int64_t max_concurrent_num_;
 };
 
 } // namespace pl end

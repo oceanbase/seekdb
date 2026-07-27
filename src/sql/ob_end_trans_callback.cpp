@@ -24,14 +24,6 @@ namespace oceanbase
 {
 namespace sql
 {
-ObSharedEndTransCallback::ObSharedEndTransCallback()
-{
-}
-
-ObSharedEndTransCallback::~ObSharedEndTransCallback()
-{
-}
-
 ObExclusiveEndTransCallback::ObExclusiveEndTransCallback()
 {
   reset();

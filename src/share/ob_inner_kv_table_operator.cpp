@@ -229,71 +229,6 @@ int ObInnerKVItem::parse_from(sqlclient::ObMySQLResult &result)
 
 
 /**
- * ------------------------------ObInnerKVItemTenantIdWrapper---------------------
- */
-
-ObInnerKVItemTenantIdWrapper::ObInnerKVItemTenantIdWrapper(ObInnerKVItem *item)
-  : ObInnerKVItem(nullptr), item_(item)
-{
-
-}
-
-
-
-// Return if primary key valid.
-bool ObInnerKVItemTenantIdWrapper::is_pkey_valid() const
-{
-  return nullptr != item_ && item_->is_pkey_valid() && (true);
-}
-
-bool ObInnerKVItemTenantIdWrapper::is_valid() const
-{
-  return nullptr != item_ && is_pkey_valid() && item_->is_valid();
-}
-
-int ObInnerKVItemTenantIdWrapper::fill_pkey_dml(share::ObDMLSqlSplicer &dml) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(item_->fill_pkey_dml(dml))) {
-    LOG_WARN("failed to fill item pkey dml", K(ret));
-  }
-
-  return ret;
-}
-
-int ObInnerKVItemTenantIdWrapper::fill_dml(share::ObDMLSqlSplicer &dml) const
-{
-  int ret = OB_SUCCESS;
-  if (!is_valid()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not a valid item", K(ret), K(this));
-  } else if (OB_FAIL(fill_pkey_dml(dml))) {
-    LOG_WARN("failed to fill pkey dml", K(ret));
-  } else if (OB_FAIL(get_kv_value()->fill_value_dml(dml))) {
-    LOG_WARN("failed to fill value dml", K(ret));
-  }
-
-  return ret;
-}
-
-// Parse one full item from sql result, the result has full columns.
-int ObInnerKVItemTenantIdWrapper::parse_from(sqlclient::ObMySQLResult &result)
-{
-  int ret = OB_SUCCESS;
-  
-
-  //EXTRACT_INT_FIELD_MYSQL(result, TENANT_ID_COLUMN_NAME, tenant, uint64_t);
-  
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(item_->parse_from(result))) {
-    LOG_WARN("failed to parse result", K(ret), K(*this));
-  }
-
-  return ret;
-}
-
-
-/**
  * ------------------------------ObInnerKVTableOperator---------------------
  */
 ObInnerKVTableOperator::ObInnerKVTableOperator()
@@ -374,5 +309,4 @@ int ObInnerKVTableOperator::increase_value_by(
 // Set column value to old_value + 'value' and return the old_value.
 
 // Set column value to old_value + 'value' and return the new_value.
-
 

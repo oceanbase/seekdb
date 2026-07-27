@@ -81,7 +81,7 @@ struct VectorCasterHelper
   // copy from `ob_datum_cast.cpp`
   static int get_cast_ret(const ObCastMode &cast_mode, int ret, int &warning)
   {
-    // compatibility for old ob
+    // Present time-zone conversion failures as a date-value error.
     if (OB_UNLIKELY(OB_ERR_UNEXPECTED_TZ_TRANSITION == ret)
         || OB_UNLIKELY(OB_ERR_UNKNOWN_TIME_ZONE == ret)) {
       ret = OB_INVALID_DATE_VALUE;

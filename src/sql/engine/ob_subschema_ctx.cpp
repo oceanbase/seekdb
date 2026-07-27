@@ -19,7 +19,7 @@
 #include "common/udt/ob_udt_type.h"
 #include "common/udt/ob_array_utils.h"
 #include "common/enumset/ob_enum_set_meta.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {

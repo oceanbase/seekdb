@@ -164,8 +164,8 @@ public:
         if (NULL == ptr) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           COMMON_LOG(WARN, "ob_malloc failed", K(ret), K_(alloc_size));
-          ObMallocAllocator::get_instance()->print_tenant_memory_usage(tenant_id_);
-          ObMallocAllocator::get_instance()->print_tenant_ctx_memory_usage(tenant_id_);
+          ObMallocAllocator::get_instance()->print_memory_usage(tenant_id_);
+          ObMallocAllocator::get_instance()->print_ctx_memory_usage(tenant_id_);
           break;
         } else {
           append_alloc_list(ptr);
@@ -202,8 +202,8 @@ public:
 
     if (OB_FAIL(ret)) {
       COMMON_LOG(WARN, "task process failed", K(ret));
-      ObMallocAllocator::get_instance()->print_tenant_memory_usage(tenant_id_);
-      ObMallocAllocator::get_instance()->print_tenant_ctx_memory_usage(tenant_id_);
+      ObMallocAllocator::get_instance()->print_memory_usage(tenant_id_);
+      ObMallocAllocator::get_instance()->print_ctx_memory_usage(tenant_id_);
       stat_->inc_fail_count();
     }
 
@@ -318,11 +318,11 @@ public:
           } else {
             COMMON_LOG(INFO, "task process succeed", "task", *task);
           }
-          ObMallocAllocator::get_instance()->print_tenant_memory_usage(500);
-          ObMallocAllocator::get_instance()->print_tenant_ctx_memory_usage(500);
+          ObMallocAllocator::get_instance()->print_memory_usage(500);
+          ObMallocAllocator::get_instance()->print_ctx_memory_usage(500);
 
-          ObMallocAllocator::get_instance()->print_tenant_memory_usage(task->tenant_id_);
-          ObMallocAllocator::get_instance()->print_tenant_ctx_memory_usage(task->tenant_id_);
+          ObMallocAllocator::get_instance()->print_memory_usage(task->tenant_id_);
+          ObMallocAllocator::get_instance()->print_ctx_memory_usage(task->tenant_id_);
         }
       }
     }

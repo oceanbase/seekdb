@@ -104,7 +104,6 @@ create table t4 (
 --echo # 使用反引号处理特殊字符
 fork table t4 to `t4-fork`;
 
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table `t4-fork`;
 
 drop table if exists `t4-fork`;
@@ -127,7 +126,6 @@ create table t5 (
 --echo # Fork到不同数据库
 fork table t5 to db_fork_error2.t5_fork;
 
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table db_fork_error2.t5_fork;
 
 drop table if exists db_fork_error2.t5_fork;
@@ -190,9 +188,7 @@ fork table t10_fk_parent to t10_fk_parent_fork;
 fork table t10_fk_child to t10_fk_child_fork;
 
 --echo # 验证：源表 child 有外键，fork 后 child 不包含外键
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t10_fk_child;
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t10_fk_child_fork;
 
 --echo # 行为验证：如果 fork 后没有外键，child_fork 可插入非法 parent_id

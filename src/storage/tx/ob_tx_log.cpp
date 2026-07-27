@@ -189,7 +189,6 @@ OB_DEF_DESERIALIZE(ObTxRedoLog)
   if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &tmp_size))) {
     TRANS_LOG(WARN, "decode mutator_size_ error", K(ret));
   } else {
-    // cluster_version_ = static_cast<uint64_t>(tmp_cluster_version);
     mutator_size_ = static_cast<int64_t>(tmp_size);
     replay_mutator_buf_ = buf + pos;
     pos = pos + mutator_size_;
@@ -213,23 +212,22 @@ OB_DEF_SERIALIZE_SIZE(ObTxRedoLog)
   return len;
 }
 
+// Other LogBody
 OB_SERIALIZE_MEMBER(ObTxCommitInfoLog,
-                       /* 1 */ is_dup_tx_,
-                       /* 2 */ can_elr_,
-                       /* 3 */ app_trace_id_str_,
-                       /* 4 */ app_trace_info_,
-                       /* 5 */ prev_record_lsn_,
-                       /* 6 */ redo_lsns_,
-                       /* 7 */ xid_);
+                       /* 1 */ can_elr_,
+                       /* 2 */ app_trace_id_str_,
+                       /* 3 */ app_trace_info_,
+                       /* 4 */ prev_record_lsn_,
+                       /* 5 */ redo_lsns_);
 
 OB_SERIALIZE_MEMBER(ObTxCommitLog,
-                       /* 1 */ commit_version_,
-                       /* 2 */ checksum_,
-                       /* 3 */ multi_source_data_,
-                       /* 4 */ tx_data_backup_,
-                       /* 5 */ prev_lsn_,
-                       /* 6 */ checksum_sig_serde_,
-                       /* 7 */ prev_log_type_);
+                    /* 1 */ commit_version_,
+                    /* 2 */ checksum_,
+                    /* 3 */ multi_source_data_,
+                    /* 4 */ tx_data_backup_,
+                    /* 5 */ prev_lsn_,
+                    /* 6 */ checksum_sig_serde_,
+                    /* 7 */ prev_log_type_);
 
 OB_SERIALIZE_MEMBER(ObTxClearLog);
 
@@ -243,16 +241,14 @@ OB_SERIALIZE_MEMBER(ObTxRollbackToLog, /* 1 */ from_, /* 2 */ to_);
 
 OB_SERIALIZE_MEMBER(ObTxMultiDataSourceLog, /* 1 */ data_);
 
-ObTxCommitInfoLog::ObTxCommitInfoLog(bool is_dup_tx,
-                                     bool is_elr,
+ObTxCommitInfoLog::ObTxCommitInfoLog(bool is_elr,
                                      common::ObString &app_trace_id,
                                      const common::ObString &app_trace_info,
                                      const LogOffSet &prev_record_lsn,
-                                     ObRedoLSNArray &redo_lsns,
-                                     const ObXATransID &xid)
-    : is_dup_tx_(is_dup_tx), can_elr_(is_elr),
+                                     ObRedoLSNArray &redo_lsns)
+    : can_elr_(is_elr),
       app_trace_id_str_(app_trace_id), app_trace_info_(app_trace_info),
-      prev_record_lsn_(prev_record_lsn), redo_lsns_(redo_lsns), xid_(xid)
+      prev_record_lsn_(prev_record_lsn), redo_lsns_(redo_lsns)
 {}
 
 ObTxCommitLog::ObTxCommitLog(share::SCN commit_version,
@@ -305,7 +301,7 @@ int ObTxRedoLog::set_mutator_size(const int64_t size, const bool after_fill)
   } else if (!after_fill) {
     int len = 0;
     SERIALIZE_SIZE_HEADER(UNIS_VERSION);
-    len += MUTATOR_SIZE_NEED_BYTES;
+    len = len + MUTATOR_SIZE_NEED_BYTES;
     if (size <= len) {
       ret = OB_SIZE_OVERFLOW;
       TRANS_LOG(WARN, "mutator buf is not enough", K(len), K(size));
@@ -749,7 +745,6 @@ int ObTxAbortLog::init_tx_data_backup(const share::SCN &start_scn)
 
 // ============================== Tx Log Block =============================
 OB_SERIALIZE_MEMBER(ObTxLogBlockHeader,
-                    cluster_version_,
                     __log_entry_no_,
                     tx_id_,
                     flags_);

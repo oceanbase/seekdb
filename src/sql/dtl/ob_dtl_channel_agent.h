@@ -21,8 +21,6 @@
 #include "sql/dtl/ob_dtl_msg.h"
 #include "sql/dtl/ob_dtl_basic_channel.h"
 #include "sql/dtl/ob_dtl_local_channel.h"
-#include "lib/allocator/page_arena.h"
-#include "share/ob_cluster_version.h"
 
 namespace oceanbase {
 namespace common {
@@ -78,7 +76,6 @@ public:
   ObDtlLinkedBuffer *get_buffer() { return buffer_; }
   void set_row_meta(RowMeta &meta) { meta_ = &meta; }
   void set_size_per_buffer(const int64_t size) { size_per_buffer_ = size; }
-  void set_plan_min_cluster_version(uint64_t plan_min_cluster_version) {plan_min_cluster_version_ = plan_min_cluster_version;};
 private:
   int64_t use_row_store_;
   ObDtlLinkedBuffer *buffer_;
@@ -91,52 +88,16 @@ private:
   ObDtlChannelEncoder *msg_writer_;
   RowMeta *meta_;
   int64_t size_per_buffer_;
-  uint64_t plan_min_cluster_version_;
-};
-
-class ObDtlBcastService
-{
-public:
-  ObDtlBcastService(bool send_by_tenant) : server_addr_(), bcast_buf_(nullptr), send_count_(0), bcast_ch_count_(0),
-              ch_infos_(), resps_(), peer_ids_(), active_chs_count_(0), send_by_tenant_(send_by_tenant) {}
-  virtual ~ObDtlBcastService() {}
-  int send_message(ObDtlLinkedBuffer *&bcast_buf, bool drain);
-  void set_bcast_ch_count(int64_t ch_count) { bcast_ch_count_ = ch_count; }
-  TO_STRING_KV(K_(server_addr), K_(bcast_ch_count), K_(peer_ids), K_(ch_infos));
-
-  // the destination server that will receive the buffer.
-  common::ObAddr server_addr_;
-  // the buffer we are try to broadcast.
-  ObDtlLinkedBuffer *bcast_buf_;
-  // when send_count_ == channel count, we do send buffer by rpc.
-  int64_t send_count_;
-  // the channel count of this broadcast group.
-  int64_t bcast_ch_count_;
-  // dtl channel info
-  common::ObArray<ObDtlChannelInfo> ch_infos_;
-  // ptr to channel' data member ----- response
-  common::ObArray<SendMsgResponse *> resps_;
-  // the destination channel id of the broadcast service.
-  common::ObArray<int64_t> peer_ids_;
-  // active channel count, some of channel in this group may by drained.
-  int64_t active_chs_count_;
-  bool send_by_tenant_;
 };
 
 class ObDtlChanAgent
 {
   typedef uint64_t (*hj_hash_fun)(const common::ObObj &obj, const uint64_t hash);
   const static int64_t BROADCAST_CH_IDX = 0;
-  struct ObServerChannel {
-    ObDtlBasicChannel *ch_;
-    int64_t ch_count_;
-    common::ObAddr server_addr_;
-    TO_STRING_KV(K(server_addr_), K(ch_count_));
-  };
 public:
   ObDtlChanAgent() : init_(false), local_channels_(),
   bcast_channel_(nullptr), current_buffer_(nullptr), dtl_buf_encoder_(), dtl_buf_allocator_(),
-  bc_services_(), dfo_key_(), sys_dtl_buf_size_(0)
+  dfo_key_(), sys_dtl_buf_size_(0)
     {};
   virtual ~ObDtlChanAgent() = default;
   int broadcast_row(const ObDtlMsg &msg, ObEvalCtx *eval_ctx = nullptr, bool is_eof = false);
@@ -148,17 +109,12 @@ public:
   int destroy();
   void set_row_meta(RowMeta &meta) { dtl_buf_encoder_.set_row_meta(meta); }
   void set_size_per_buffer(const int64_t size) { dtl_buf_encoder_.set_size_per_buffer(size); }
-  void set_plan_min_cluster_version(uint64_t plan_min_cluster_version) {
-    dtl_buf_encoder_.set_plan_min_cluster_version(plan_min_cluster_version);
-  }
 private:
   int switch_buffer(int64_t need_size);
   int send_last_buffer(ObDtlLinkedBuffer *&last_buffer);
   int inner_broadcast_row(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, bool is_eof);
 private:
   bool init_;
-  // use to allocate broadcast service.
-  common::ObArenaAllocator allocator_;
   // all local channel in this sqc.
   common::ObArray<ObDtlLocalChannel *> local_channels_;
   // the represent channel use to allocate buf from data manager.
@@ -169,8 +125,6 @@ private:
   ObDtlBufEncoder dtl_buf_encoder_;
   // warpper of dtl mem manager.
   ObDtlBufAllocator dtl_buf_allocator_;
-  // broadcast channel group.
-  common::ObArray<ObDtlBcastService *> bc_services_;
   // dfo infomation.
   ObDtlDfoKey dfo_key_;
   // sys config, default value is 64K.

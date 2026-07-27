@@ -1,6 +1,6 @@
 [test_table]
 table_id=1001
-compress_func_name=snappy_1.0
+compress_func_name=zstd_1.3.8
 table_type=1
 def_type=1
 column_info=4,1,2,c1,int

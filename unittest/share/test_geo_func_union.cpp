@@ -1523,7 +1523,7 @@ TEST_F(TestGeoFuncUnion, multipolygon_multipolygon)
   // std::cout << bg::dsv(*res) << std::endl;
 }
 
-int mock_get_tenant_srs_item(ObIAllocator &allocator, uint64_t srs_id, const ObSrsItem *&srs_item)
+int mock_get_srs_item(ObIAllocator &allocator, uint64_t srs_id, const ObSrsItem *&srs_item)
 {
     int ret = OB_SUCCESS;
     ObGeographicRs rs;
@@ -1564,7 +1564,7 @@ TEST_F(TestGeoFuncUnion, line_line_geog)
 {
   ObArenaAllocator allocator(ObModIds::TEST);
   const ObSrsItem *srs = NULL;
-  ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, 4326, srs));
+  ASSERT_EQ(OB_SUCCESS, mock_get_srs_item(allocator, 4326, srs));
   line_geog_t line_bg1, line_bg2;
   mline_geog_t ml;
   bg::read_wkt("LINESTRING(1.0 2.0, 2.0 4.0)", line_bg1);
@@ -1615,7 +1615,7 @@ TEST_F(TestGeoFuncUnion, polygon_multipolygon_geog)
 {
   ObArenaAllocator allocator(ObModIds::TEST);
   const ObSrsItem *srs = NULL;
-  ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, 4326, srs));  
+  ASSERT_EQ(OB_SUCCESS, mock_get_srs_item(allocator, 4326, srs));
   polygon_geog_t pol_bg;
   boost::geometry::read_wkt(
         "POLYGON((1.0 0.5, 2.0 0.5, 2.0 4.0, 1.0 4.0, 1.0 0.5))", pol_bg);  
@@ -1706,7 +1706,7 @@ TEST_F(TestGeoFuncUnion, multipoint_multiline_geog)
 {
   ObArenaAllocator allocator(ObModIds::TEST);
   const ObSrsItem *srs = NULL;
-  ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, 4326, srs));  
+  ASSERT_EQ(OB_SUCCESS, mock_get_srs_item(allocator, 4326, srs));
   mpoint_geom_t mp_bg{{{0.0, 0.5}, {15.0, 0.0}, {15.0, 10.0}, {5.0, 10.0}, {5.0, 1.0}}};
   mline_geom_t mls_bg{{{0.0, 0.0}, {0.0, 1.0}, {2.0, 1.0}},
                        {{1.0, 0.0}, {20.0, 0.0}}};
@@ -1781,7 +1781,7 @@ TEST_F(TestGeoFuncUnion, polygon_multiline_geog)
 {
   ObArenaAllocator allocator(ObModIds::TEST);
   const ObSrsItem *srs = NULL;
-  ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, 4326, srs));
+  ASSERT_EQ(OB_SUCCESS, mock_get_srs_item(allocator, 4326, srs));
 
   mline_geog_t mls_bg{{{0.0, 0.0}, {0.0, 1.0}, {2.0, 1.0}},
                        {{1.0, 0.0}, {2.0, 0.0}}};
@@ -1856,7 +1856,7 @@ TEST_F(TestGeoFuncUnion, point_multiline_geog)
 {
   ObArenaAllocator allocator(ObModIds::TEST);
   const ObSrsItem *srs = NULL;
-  ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, 4326, srs));
+  ASSERT_EQ(OB_SUCCESS, mock_get_srs_item(allocator, 4326, srs));
 
   mline_geog_t mls_bg{{{0.0, 0.0}, {0.0, 1.0}, {2.0, 1.0}},
                        {{1.0, 0.0}, {2.0, 0.0}}};
@@ -2078,7 +2078,7 @@ TEST_F(TestGeoFuncUnion, gc_union)
   ObCartesianMultipolygon *multi_poly_tree = static_cast<ObCartesianMultipolygon *>(poly_visitor.get_geometry());
 
   const ObSrsItem *srs = NULL;
-  ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, 4326, srs));
+  ASSERT_EQ(OB_SUCCESS, mock_get_srs_item(allocator, 4326, srs));
   lib::MemoryContext mem_context;
   ASSERT_EQ(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context, 
       lib::ContextParam().set_mem_attr("GIS_UT", ObCtxIds::DEFAULT_CTX_ID)), OB_SUCCESS);

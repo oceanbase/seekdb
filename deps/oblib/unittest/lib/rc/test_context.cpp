@@ -22,7 +22,6 @@
 #undef private
 #undef protected
 #include "lib/alloc/memory_dump.h"
-#include "lib/allocator/ob_mem_leak_checker.h"
 #include <csignal>
 
 using namespace oceanbase;
@@ -53,12 +52,9 @@ TEST_F(TestContext, Basic)
               context->tree_node_.parent_ == context->tree_node_.next_ &&
               context->tree_node_.parent_ == nullptr);
   uint64_t ctx_id = ObCtxIds::WORK_AREA;
-  ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-  ASSERT_EQ(OB_SUCCESS, ma->create_and_add_tenant_allocator());
-
   ObPageManager g_pm;
   ObPageManager::set_thread_local_instance(g_pm);
-  g_pm.set_tenant_ctx(ctx_id);
+  g_pm.set_ctx(ctx_id);
   MemoryContext &root = MemoryContext::root();
   ContextParam param;
   param.set_mem_attr("Context", ctx_id);
@@ -176,46 +172,6 @@ TEST_F(TestContext, Basic)
   DESTROY_CONTEXT(mem_context);
   ASSERT_EQ(g_pm.used_, used);
 
-  {
-    get_mem_leak_checker().init();
-    reset_mem_leak_checker_label("test1");
-    ob_malloc(100, "test1");
-    ob_malloc(100, common::ObNewModIds::OB_COMMON_ARRAY);
-    get_mem_leak_checker().print();
-
-    reset_mem_leak_checker_label("OB_COMMON_ARRAY");
-    ob_malloc(100, "test1");
-    void *ptr = ob_malloc(100, common::ObNewModIds::OB_COMMON_ARRAY);
-    get_mem_leak_checker().print();
-    ob_free(ptr);
-    get_mem_leak_checker().print();
-
-    reset_mem_leak_checker_label("");
-    ob_malloc(100, "test1");
-    ob_malloc(100, common::ObNewModIds::OB_COMMON_ARRAY);
-    get_mem_leak_checker().print();
-
-    reset_mem_leak_checker_label("NONE");
-    ob_malloc(100, "test1");
-    ob_malloc(100, common::ObNewModIds::OB_COMMON_ARRAY);
-    get_mem_leak_checker().print();
-
-    // test rate
-    reset_mem_leak_checker_label("test2");
-    int i = 20;
-    while (i--) {
-      ob_malloc(100, "test2");
-    }
-    get_mem_leak_checker().print();
-
-    usleep(1000 * 1000);
-    i = 20;
-    while (i--) {
-      ob_malloc(100, "test2");
-    }
-    get_mem_leak_checker().print();
-  }
-
   // Based on testing needs, this code is temporarily retained
   ob_malloc(10000000, ObNewModIds::OB_COMMON_ARRAY);
   ObMemoryDump::get_instance().init();
@@ -227,10 +183,10 @@ TEST_F(TestContext, Basic)
   task.type_ = STAT_LABEL;
   ObMemoryDump::get_instance().request_dump(task);
   usleep(1000000);
-  ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(ObCtxIds::DEFAULT_CTX_ID)->print_memory_usage();
+  ObMallocAllocator::get_instance()->get_ctx_allocator(ObCtxIds::DEFAULT_CTX_ID)->print_memory_usage();
 }
 
-bool req_cache_empty(ObTenantCtxAllocator *ta)
+bool req_cache_empty(ObCtxAllocator *ta)
 {
   for (int i = 0; i < ta->req_chunk_mgr_.parallel_; i++) {
     if (ta->req_chunk_mgr_.chunks_[i]) {
@@ -243,13 +199,11 @@ bool req_cache_empty(ObTenantCtxAllocator *ta)
 TEST_F(TestContext, PM_Wash)
 {
   uint64_t ctx_id = ObCtxIds::DEFAULT_CTX_ID;
-  ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-  ASSERT_EQ(OB_SUCCESS, ma->create_and_add_tenant_allocator());
-  auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(ctx_id);
+  auto ta = ObMallocAllocator::get_instance()->get_ctx_allocator(ctx_id);
   ObMemAttr attr("test", ctx_id);
   ObPageManager g_pm;
   ObPageManager::set_thread_local_instance(g_pm);
-  g_pm.set_tenant_ctx(ctx_id);
+  g_pm.set_ctx(ctx_id);
   ContextTLOptGuard guard(true);
   ContextParam param;
   param.set_mem_attr(attr);

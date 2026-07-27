@@ -429,26 +429,6 @@ int ObTableLockOwnerID::deserialize(const char* buf, const int64_t data_len, int
   return ret;
 }
 
-int ObTableLockOwnerID::get_data_version_(uint64_t &data_version) const
-{
-  int ret = OB_SUCCESS;
-  const static int64_t CACHE_REFRESH_INTERVAL = 1_s;
-  RLOCAL_INIT(int64_t, last_check_timestamp, 0);
-  RLOCAL_INIT(uint64_t, last_result, 0);
-  
-  int64_t current_time = ObClockGenerator::getClock();
-  uint64_t tmp_data_version = 0;
-  if (current_time - last_check_timestamp < CACHE_REFRESH_INTERVAL) {
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(tmp_data_version))) {
-    LOG_WARN("get data version failed", K(ret));
-  } else {
-    last_result = tmp_data_version;
-    last_check_timestamp = current_time;
-  }
-  data_version = last_result;
-  return ret;
-}
-
 int64_t ObTableLockOwnerID::get_serialize_size() const
 {
   int64_t len = 0;

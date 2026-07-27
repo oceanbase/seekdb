@@ -99,21 +99,11 @@ int ObDASGlobalLookupIter::add_rowkey()
     LOG_WARN("failed to get das ctx", KPC_(exec_ctx));
   } else {
     ObDASMergeIter *merge_iter = static_cast<ObDASMergeIter*>(data_table_iter_);
-    if (merge_iter->has_pseudo_part_id_columnref()) {
-      if (OB_FAIL(ObExprCalcPartitionBase::calc_part_and_subpart_and_tablet_id(calc_part_id_,
-                                            *eval_ctx_,
-                                            partition_id,
-                                            first_partition_id,
-                                            tablet_id))) {
-        LOG_WARN("failed to calc_part_and_subpart_and_tablet_id", K(ret), KPC(calc_part_id_));
-      }
-    } else {
-      if (OB_FAIL(ObExprCalcPartitionBase::calc_part_and_tablet_id(calc_part_id_,
-                                            *eval_ctx_,
-                                            partition_id,
-                                            tablet_id))) {
-        LOG_WARN("failed to calc_part_and_tablet_id", K(ret), KPC(calc_part_id_));
-      }
+    if (OB_FAIL(ObExprCalcPartitionBase::calc_part_and_tablet_id(calc_part_id_,
+                                          *eval_ctx_,
+                                          partition_id,
+                                          tablet_id))) {
+      LOG_WARN("failed to calc_part_and_tablet_id", K(ret), KPC(calc_part_id_));
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(das_ctx->extended_tablet_loc(*lookup_rtdef_->table_loc_,

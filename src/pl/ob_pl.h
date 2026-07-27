@@ -105,7 +105,6 @@ public:
 
 class ObPLFunctionBase
 {
-  static const int64_t DEBUG_MODE = 1; // DEBUG INFO
   static const int64_t CONTAINS_DYNAMIC_SQL = 2; // PS
   static const int64_t MULTI_RESULTS = 3; // SELECT
   static const int64_t HAS_COMMIT_OR_ROLLBACK = 4; // DDL
@@ -114,7 +113,6 @@ class ObPLFunctionBase
   static const int64_t IS_UDT_ROUTINE = 7; // function inside udt object
   static const int64_t HAS_OPEN_EXTERNAL_REF_CURSOR = 8; // A SUBPROGRAM MAY OPEN PARENT REF CURSOR
   static const int64_t IS_UDT_CONS = 9; // udt constructor
-  static const int64_t HAS_DEBUG_PRIV = 10;
 
 public:
   ObPLFunctionBase()
@@ -198,16 +196,6 @@ public:
   inline bool is_udt_cons() const {
     return has_flag(IS_UDT_CONS);
   }
-  inline bool has_debug_priv() const {
-    return has_flag(HAS_DEBUG_PRIV);
-  }
-  inline void set_debug_priv() {
-    flag_.add_member(HAS_DEBUG_PRIV);
-  }
-  inline void clean_debug_priv() {
-    flag_.del_member(HAS_DEBUG_PRIV);
-  }
-
 private:
   //Basic information
   ObProcType proc_type_;
@@ -266,7 +254,7 @@ public:
 
   TO_STRING_KV(K_(routine_table),
                K_(can_cached),
-               K_(tenant_schema_version),
+               K_(runtime_schema_version),
                K_(sys_schema_version),
                K_(stat),
                K_(stack_size));
@@ -290,7 +278,6 @@ protected:
 };
 
 class ObPLSymbolTable;
-class ObPLSymbolDebugInfoTable;
 class ObPLFunctionAST;
 
 class ObPLSqlStmt;
@@ -342,100 +329,31 @@ public:
   ObIAllocator *allocator_;
 };
 
-class ObPLVarDebugInfo
-{
-public:
-  struct ObPLVarScope {
-    ObPLVarScope() : start_(-1), end_(-1) {}
-    ObPLVarScope(int start, int end)
-      : start_(start), end_(end) {}
-
-    inline bool contain(int line) { return start_ <= line && end_ >= line; }
-
-    int start_;
-    int end_;
-
-    TO_STRING_KV(K_(start), K_(end));
-  };
-
-  ObPLVarDebugInfo()
-    : name_(), type_(ObPLType::PL_INVALID_TYPE), scope_() {}
-  ObPLVarDebugInfo(const common::ObString &name, ObPLType type, ObPLVarScope scope)
-    : name_(name), type_(type), scope_(scope) {}
-
-  inline bool contain(int line) { return scope_.contain(line); }
-
-  inline bool is_obj()
-  {
-    return ObPLType::PL_OBJ_TYPE == type_;
-  }
-  inline bool is_collection()
-  {
-    return ObPLType::PL_NESTED_TABLE_TYPE == type_
-      || ObPLType::PL_ASSOCIATIVE_ARRAY_TYPE == type_
-      || ObPLType::PL_VARRAY_TYPE == type_;
-  }
-  inline bool is_record()
-  {
-    return ObPLType::PL_RECORD_TYPE == type_;
-  }
-  inline const common::ObString& get_name() const { return name_; }
-
-  int deep_copy(ObIAllocator &allocator, const ObPLVarDebugInfo& other);
-
-  TO_STRING_KV(K_(name), K_(type), K_(scope));
-
-private:
-  common::ObString name_;
-  ObPLType type_;
-  ObPLVarScope scope_;
-};
-
-class ObPLNameDebugInfo
-{
-public:
-  ObPLNameDebugInfo() : owner_name_(), package_name_(), routine_name_() {}
-public:
-  ObString owner_name_;
-  ObString package_name_;
-  ObString routine_name_;
-};
-
 class ObPLFunction : public ObPLFunctionBase, public ObPLExecutableUnit
 {
 public:
   ObPLFunction(lib::MemoryContext &mem_context)
   : ObPLFunctionBase(), ObPLExecutableUnit(sql::ObLibCacheNameSpace::NS_PRCR, mem_context),
     variables_(allocator_),
-    variables_debuginfo_(allocator_),
     default_idxs_(allocator_),
     sql_infos_(allocator_),
     in_args_(),
     out_args_(),
     action_(0),
     ast_(NULL),
-    di_buf_(NULL),
-    di_len_(0),
     is_all_sql_stmt_(true),
     is_invoker_right_(false),
-    is_pipelined_(false),
-    name_debuginfo_(),
     function_name_(),
     has_parallel_affect_factor_(false) { }
-  virtual ~ObPLFunction();
+  virtual ~ObPLFunction() = default;
 
   inline const common::ObIArray<ObPLDataType> &get_variables() const { return variables_; }
-  inline const common::ObIArray<ObPLVarDebugInfo *> &get_variables_debuginfo() const
-  {
-    return variables_debuginfo_;
-  }
   inline const common::ObIArray<int64_t> &get_default_idxs() const { return default_idxs_; }
   inline sql::ObSqlExpression* get_default_expr(int64_t param)
   {
     int64_t idx = param >= 0 && param < default_idxs_.count() ? default_idxs_.at(param) : -1;
     return idx >= 0 && idx < expressions_.count() ? expressions_.at(idx) : NULL;
   }
-  inline const ObPLNameDebugInfo& get_name_debuginfo() const { return name_debuginfo_; }
   int set_variables(const ObPLSymbolTable &symbol_table);
   int set_types(const ObPLUserTypeTable &type_table);
   inline const common::ObBitSet<common::OB_DEFAULT_BITSET_SIZE> &get_in_args() const { return in_args_; }
@@ -461,9 +379,6 @@ public:
 
   inline bool is_invoker_right() const { return is_invoker_right_; }
   inline void set_invoker_right() { is_invoker_right_ = true; }
-
-  inline bool is_pipelined() const { return is_pipelined_; }
-  inline void set_pipelined(bool is_pipelined) { is_pipelined_ = is_pipelined; }
 
   inline bool get_has_parallel_affect_factor() const { return has_parallel_affect_factor_; }
   inline void set_has_parallel_affect_factor(bool value) { has_parallel_affect_factor_ = value; }
@@ -492,16 +407,6 @@ public:
   }
 
   bool should_init_as_session_cursor();
-  /*
-  * some package subprogram has special invoker right, though the package may have definer privs
-  * for example: dbms_utility package is definer privs, but some function such as
-  * name_resolve must be run as current_user.
-  * see: 
-  * we hacked it using name compared, for the interface funtion can't get the origin db name and id
-  * test -> oceanbase, we see oceanbase in interface but can't see test.
-  */
-  int is_special_pkg_invoke_right(ObSchemaGetterGuard &guard, bool &flag);
-
   common::ObFixedArray<ObPLSqlInfo, common::ObIAllocator>& get_sql_infos()
   {
     return sql_infos_;
@@ -509,7 +414,7 @@ public:
 
   TO_STRING_KV(K_(ns),
                K_(ref_count),
-               K_(tenant_schema_version),
+               K_(runtime_schema_version),
                K_(sys_schema_version),
                K_(object_id),
                K_(dependency_tables),
@@ -524,19 +429,14 @@ public:
 private:
   //symbol table information
   common::ObFixedArray<ObPLDataType, common::ObIAllocator> variables_; //Generated from the global symbol table of ObPLSymbolTable, all input and output parameters and all variables used within the PL body
-  common::ObFixedArray<ObPLVarDebugInfo*, common::ObIAllocator> variables_debuginfo_;
   common::ObFixedArray<int64_t, common::ObIAllocator> default_idxs_;
   common::ObFixedArray<ObPLSqlInfo, common::ObIAllocator> sql_infos_;
   common::ObBitSet<common::OB_DEFAULT_BITSET_SIZE> in_args_;
   common::ObBitSet<common::OB_DEFAULT_BITSET_SIZE> out_args_;
   ObFuncPtr action_;
   ObPLFunctionAST *ast_;  // retained resolved AST for the interpreter (non-owning)
-  char *di_buf_;
-  int64_t di_len_;
   bool is_all_sql_stmt_;
   bool is_invoker_right_;
-  bool is_pipelined_;
-  ObPLNameDebugInfo name_debuginfo_;
 
   common::ObString function_name_;
   common::ObString package_name_;
@@ -932,9 +832,6 @@ public:
   static int valid_execute_context(sql::ObExecContext &ctx);
   static int check_routine_legal(ObPLFunction &routine, bool in_function, bool in_tg);
 
-  static int debug_start(sql::ObSQLSessionInfo *sql_session);
-  static int debug_stop(sql::ObSQLSessionInfo *sql_session);
-
   static int get_exec_state_from_local(sql::ObSQLSessionInfo &session_info,
                                     int64_t package_id,
                                     int64_t routine_id,
@@ -957,10 +854,6 @@ public:
                                     int64_t routine_id,
                                     int64_t var_idx,
                                     const ObObjParam &value);
-  static int check_debug_priv(ObSchemaGetterGuard *guard,
-                              sql::ObSQLSessionInfo *sess_info,
-                              ObPLFunction *func);
-
   int inc_and_check_depth(int64_t package_id, int64_t routine_id, bool is_function);
   void dec_and_check_depth(int64_t package_id, int64_t routine_id, int &ret, bool inner_call);
 
@@ -1274,18 +1167,6 @@ public:
 private:
   sql::ObExecContext &exec_ctx_;
   ObPLContext *parent_stack_;
-};
-
-class ObPLConcurrentGuard
-{
-public:
-  ObPLConcurrentGuard(): inner_obj_(NULL), save_ret_(OB_ERROR) {}
-  ~ObPLConcurrentGuard();
-  int set_concurrent_num(ObPLFunction &routine, ObExecContext &ctx, ObPLPackageGuard &package_guard);
-
-private:
-  ObPLCacheObject* inner_obj_;
-  int64_t save_ret_;
 };
 
 class ObPLASHGuard

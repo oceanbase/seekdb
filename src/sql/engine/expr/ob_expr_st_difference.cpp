@@ -95,7 +95,6 @@ int ObExprSTDifference::process_input_geometry(const ObExpr &expr, ObEvalCtx &ct
                    gis_arg2->obj_meta_.has_lob_header(),
                    wkb2))) {
       LOG_WARN("fail to get real string data", K(ret), K(wkb2));
-    } else if (FALSE_IT(allocator.set_baseline_size(wkb1.length() + wkb2.length()))) {
     } else if (OB_FAIL(ObGeoTypeUtil::get_type_srid_from_wkb(wkb1, type1, srid1))) {
       if (ret == OB_ERR_GIS_INVALID_DATA) {
         LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_DIFFERENCE);
@@ -143,7 +142,7 @@ int ObExprSTDifference::eval_st_difference(const ObExpr &expr, ObEvalCtx &ctx, O
   const ObSrsItem *srs = nullptr;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_DIFFERENCE);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObGeometry *diff_res = nullptr;
   bool is_empty_res = false;
   if (OB_FAIL(
@@ -246,9 +245,6 @@ int ObExprSTDifference::eval_st_difference(const ObExpr &expr, ObEvalCtx &ctx, O
     } else {
       res.set_string(res_wkb);
     }
-  }
-  if (mem_ctx != nullptr) {
-    temp_allocator.add_ext_used((*mem_ctx)->arena_used());
   }
   return ret;
 }

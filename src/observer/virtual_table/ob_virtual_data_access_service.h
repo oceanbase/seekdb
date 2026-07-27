@@ -30,7 +30,7 @@ class ObServerConfig;
 }
 namespace rootserver
 {
-class ObRootService;
+class ObLocalManagementService;
 }
 namespace observer
 {
@@ -38,10 +38,10 @@ class ObVirtualDataAccessService : public common::ObITabletScan
 {
 public:
   ObVirtualDataAccessService(
-      rootserver::ObRootService &root_service,
+      rootserver::ObLocalManagementService &local_management_service,
       common::ObAddr &addr,
       common::ObServerConfig *config)
-      : vt_iter_factory_(root_service, addr, config)
+      : vt_iter_factory_(local_management_service, addr, config)
   {
   }
   virtual ~ObVirtualDataAccessService() {}

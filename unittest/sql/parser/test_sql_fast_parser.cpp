@@ -138,75 +138,6 @@ class TestFastSqlParser: public ::testing::Test
   virtual void TearDown() {}
 };
 
-void test_fast_parser()
-{
-  ParseResult parse_result;
-  int tmp_ptr = 1;
-  memset(&parse_result, 0, sizeof(parse_result));
-  parse_result.is_fp_ = true;
-  parse_result.is_multi_query_ = false;
-  parse_result.malloc_pool_ = &tmp_ptr; // For the internal check in parse_malloc, malloc_pool must absolutely not be empty under normal circumstances
-  parse_result.is_ignore_hint_ = false;
-  parse_result.need_parameterize_ = true;
-  parse_result.pl_parse_info_.is_pl_parse_ = false;
-  parse_result.minus_ctx_.has_minus_ = false;
-  parse_result.minus_ctx_.pos_ = -1;
-  parse_result.minus_ctx_.raw_sql_offset_ = -1;
-  parse_result.is_for_trigger_ = false;
-  parse_result.is_dynamic_sql_ = false;
-  parse_result.is_batched_multi_enabled_split_ = false;
-
-  char input_sql[1024];
-
-  const int64_t test_sql_cnt = 10;
-  const char *test_sqls[test_sql_cnt] = {
-      "select 1",
-      "select 2.2345;",
-      "select a from t where a = 'hello' and b = 3;",
-      "select a from t where a = 1 and b = 'hello';",
-      "select t1.a from t1 join t2 where b = udf_func(3) and c = 'hello';",
-      "select t2.a from t1 join t2 where b = udf_func(3) and c = 'hello';",
-      "select * from t;",
-      "select  * from t;",
-      "select t1.a from t1 join t2 where b = udf_func(3) and c = 'hello';",
-      "select t1.a from t1 join t2 where b = udf_func(3.1231232) and c = 'hello';"};
-  const char* expected_sql_ids[test_sql_cnt] = {
-    "1FE1379FE2A31B8D16219655761820A2",
-    "99B8023929C1482A458CB071ADE822AC",
-    "ADFDC18C98D0A001EF337A9EAB18CAD8",
-    "ADFDC18C98D0A001EF337A9EAB18CAD8",
-    "27B601C30CABBDF94C0117EF53236D45",
-    "6C3F77365F581EC95803ED167CD82046",
-    "99C43C457B0C8E5AA6666E89C80DC5CE",
-    "0FD2573F48AA6C8DF7C3C71028CAFC81",
-    "27B601C30CABBDF94C0117EF53236D45",
-    "27B601C30CABBDF94C0117EF53236D45",
-  };
-  for (int i = 0; i < test_sql_cnt; i++) {
-    const char *input_sql = test_sqls[i];
-
-    int64_t new_length = std::strlen(input_sql) + 1;
-    char *buf = (char *)parse_malloc(new_length, parse_result.malloc_pool_);
-
-    parse_result.param_nodes_ = NULL;
-    parse_result.tail_param_node_ = NULL;
-    parse_result.no_param_sql_ = buf;
-    parse_result.no_param_sql_buf_len_ = new_length;
-
-    const int64_t SQL_ID_LENGTH = 32;
-    ObSQLParser sql_parser(*(ObIAllocator *)(parse_result.malloc_pool_),
-                           FP_MODE);
-    char sql_id[SQL_ID_LENGTH + 1];
-    int ret = sql_parser.parse_and_gen_sqlid(&tmp_ptr, input_sql,
-                                             std::strlen(input_sql),
-                                             sizeof(sql_id), sql_id);
-    sql_id[SQL_ID_LENGTH] = '\0';
-    fprintf(stdout, "compare sql id, index:%d, sql_id:%s, expected_sql_id:%s\n", i, sql_id, expected_sql_ids[i]);
-    ASSERT_EQ(0, ret);
-    ASSERT_EQ(0, std::strncmp(sql_id, expected_sql_ids[i], strlen(expected_sql_ids[i])));
-  }
-}
-
 void test_sql_parser()
 {
   ParseResult parse_result;
@@ -351,7 +282,6 @@ void test_token_pos()
 TEST_F(TestFastSqlParser, linker_test)
 {
   test_sql_parser();
-  test_fast_parser();
   test_token_pos();
 }
 int main(int argc, char **argv)

@@ -35,9 +35,6 @@ int ObCallProcedureResolver::check_param_expr_legal(ObRawExpr *param)
     if (T_REF_QUERY == param->get_expr_type()) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "subqueries or stored function calls here");
-    } else if (T_FUN_SYS_PL_SEQ_NEXT_VALUE == param->get_expr_type()) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "not a valid function or procedure name");
     } /* else if (T_OP_GET_PACKAGE_VAR == param->get_expr_type()) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "not procedure or not defined!");
@@ -242,7 +239,6 @@ int ObCallProcedureResolver::generate_pl_cache_ctx(pl::ObPLCacheCtx &pc_ctx)
     pc_ctx.raw_sql_ = params_.cur_sql_;
     pc_ctx.key_.namespace_ = ObLibCacheNameSpace::NS_CALLSTMT;
     pc_ctx.key_.db_id_ = session_info_->get_database_id();
-    pc_ctx.key_.sessid_ = 0;
     pc_ctx.key_.key_id_ = OB_INVALID_ID;
     pc_ctx.key_.name_ = params_.cur_sql_;
     (void)ObSQLUtils::md5(pc_ctx.raw_sql_,
@@ -280,10 +276,8 @@ int ObCallProcedureResolver::add_call_proc_info(ObCallProcedureInfo *call_info)
       ret = OB_SUCCESS;
       LOG_DEBUG("plan cache don't support add this kind of plan now",  KPC(call_info));
     } else {
-      if (OB_REACH_MAX_CONCURRENT_NUM != ret && OB_REACH_MAX_CCL_CONCURRENT_NUM != ret) { // If it reaches the rate limit upper limit, then throw out the error code
-        ret = OB_SUCCESS; // add plan error, overwrite error code, ensure that failure of plan cache does not affect normal execution path
-        LOG_WARN("Failed to add plan to ObPlanCache", K(ret));
-      }
+      LOG_WARN("Failed to add plan to ObPlanCache", K(ret));
+      ret = OB_SUCCESS; // ensure that failure of plan cache does not affect normal execution path
     }
   }
   return ret;
@@ -337,7 +331,6 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("create call stmt failed", K(ret));
   } else if (FALSE_IT(stmt_ = stmt)) {
-  } else if (FALSE_IT(stmt->get_cacheobj_guard().init(CALLSTMT_HANDLE))) {
   } else if (params_.is_execute_call_stmt_ && 0 != params_.cur_sql_.length() &&
              OB_FAIL(find_call_proc_info(*stmt))) {
     LOG_WARN("fail to find call stmt", K(ret));
@@ -422,12 +415,12 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
         obj_version.object_type_ = DEPENDENCY_PROCEDURE;
         obj_version.version_ = proc_info->get_schema_version();
         
-        int64_t tenant_schema_version = OB_INVALID_VERSION;
+        int64_t runtime_schema_version = OB_INVALID_VERSION;
         int64_t sys_schema_version = OB_INVALID_VERSION;
         CK (OB_NOT_NULL(schema_checker_->get_schema_mgr()));
-        OZ (schema_checker_->get_schema_mgr()->get_schema_version(tenant_schema_version));
+        OZ (schema_checker_->get_schema_mgr()->get_schema_version(runtime_schema_version));
         OZ (schema_checker_->get_schema_mgr()->get_schema_version(sys_schema_version));
-        OX (call_proc_info->set_tenant_schema_version(tenant_schema_version));
+        OX (call_proc_info->set_runtime_schema_version(runtime_schema_version));
         OX (call_proc_info->set_sys_schema_version(sys_schema_version));
         OZ (deps.push_back(obj_version));
       }

@@ -56,25 +56,18 @@ public:
   inline uint64_t get_object_id() const { return object_id_; }
   inline int64_t get_mem_size() const { return allocator_.total(); }
   int64_t get_ref_count() const { return ATOMIC_LOAD(&ref_count_); }
-  int64_t inc_ref_count(const CacheRefHandleID ref_handle);
-  bool try_inc_ref_count(const CacheRefHandleID ref_handle);
+  int64_t inc_ref_count();
+  bool try_inc_ref_count();
   inline common::ObIAllocator &get_allocator() { return allocator_; }
   inline lib::MemoryContext &get_mem_context() { return mem_context_; }
   inline bool added_lc() const { return added_to_lc_; }
   inline void set_added_lc(const bool added_to_lc) { added_to_lc_ = added_to_lc; }
   inline int64_t get_logical_del_time() const { return log_del_time_; }
   inline void set_logical_del_time(const int64_t timestamp) { log_del_time_ = timestamp; }
-  
-  
-  inline CacheRefHandleID get_dynamic_ref_handle() const { return dynamic_ref_handle_; }
   inline bool should_release(const int64_t safe_timestamp) const
   {
     // only free leaked cache object
     return 0 != get_ref_count() && get_logical_del_time() < safe_timestamp;
-  }
-  inline void set_dynamic_ref_handle(CacheRefHandleID ref_handle)
-  {
-    dynamic_ref_handle_ = ref_handle;
   }
   inline void set_obj_status(CacheObjStatus status) { obj_status_ = status; }
   inline CacheObjStatus get_obj_status() const { return obj_status_; }
@@ -94,7 +87,7 @@ public:
                        K_(ns));
                        
 private:
-  int64_t dec_ref_count(const CacheRefHandleID ref_handle);
+  int64_t dec_ref_count();
 protected:
   lib::MemoryContext mem_context_;
   common::ObIAllocator &allocator_;
@@ -103,8 +96,6 @@ protected:
   int64_t log_del_time_;
   bool added_to_lc_;
   ObLibCacheNameSpace ns_;
-  
-  CacheRefHandleID dynamic_ref_handle_;
   CacheObjStatus obj_status_;
 };
 

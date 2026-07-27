@@ -44,12 +44,12 @@ int ObLatestSchemaGuard::check_inner_stat_()
   if (OB_ISNULL(schema_service_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("schema service is null", KR(ret));
-  } else if (OB_FAIL(schema_service_->get_tenant_refreshed_schema_version(schema_version))) {
+  } else if (OB_FAIL(schema_service_->get_runtime_refreshed_schema_version(schema_version))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
-      ret = OB_TENANT_NOT_EXIST;
-      LOG_WARN("tenant not exist", KR(ret));
+      ret = OB_RUNTIME_SCHEMA_NOT_READY;
+      LOG_WARN("runtime schema is not ready", KR(ret));
     } else {
-      LOG_WARN("fail to get tenant refreshed schema version", KR(ret));
+      LOG_WARN("fail to get refreshed runtime schema version", KR(ret));
     }
   }
   return ret;
@@ -156,28 +156,6 @@ int ObLatestSchemaGuard::put_to_local_cache_(
   schema_obj.schema_ = const_cast<ObSchema*>(schema);
   if (OB_FAIL(schema_objs_.push_back(schema_obj))) {
     LOG_WARN("add schema object failed", KR(ret), K(schema_type), K(schema_id));
-  }
-  return ret;
-}
-
-int ObLatestSchemaGuard::get_tablegroup_id(
-    const common::ObString &tablegroup_name,
-    uint64_t &tablegroup_id)
-{
-  int ret = OB_SUCCESS;
-  ObSchemaService *schema_service_impl = NULL;
-  ObISQLClient *sql_client = NULL;
-  tablegroup_id = OB_INVALID_ID;
-  if (OB_FAIL(check_and_get_service_(schema_service_impl, sql_client))) {
-    LOG_WARN("fail to check and get service", KR(ret));
-  } else if (OB_UNLIKELY(tablegroup_name.empty())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tablegroup_name is empty", KR(ret), K(tablegroup_name));
-  } else if (OB_FAIL(schema_service_impl->get_tablegroup_id(
-             *sql_client, tablegroup_name, tablegroup_id))) {
-    LOG_WARN("fail to get tablegroup id", KR(ret), K(tablegroup_name));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tablegroup_id)) {
-    LOG_INFO("tablegroup not exist", KR(ret), K(tablegroup_name));
   }
   return ret;
 }
@@ -309,34 +287,6 @@ int ObLatestSchemaGuard::get_foreign_key_id(
   return ret;
 }
 
-int ObLatestSchemaGuard::get_sequence_id(
-    const uint64_t database_id,
-    const ObString &sequence_name,
-    uint64_t &sequence_id,
-    bool &is_system_generated)
-{
-  int ret = OB_SUCCESS;
-  ObSchemaService *schema_service_impl = NULL;
-  ObISQLClient *sql_client = NULL;
-  sequence_id = OB_INVALID_ID;
-  is_system_generated = false;
-  if (OB_FAIL(check_and_get_service_(schema_service_impl, sql_client))) {
-    LOG_WARN("fail to check and get service", KR(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == database_id
-             || sequence_name.empty())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("database_id/sequence_name is invalid",
-             KR(ret), K(database_id), K(sequence_name));
-  } else if (OB_FAIL(schema_service_impl->get_sequence_id(
-             *sql_client, database_id,
-             sequence_name, sequence_id, is_system_generated))) {
-    LOG_WARN("fail to get sequence id", KR(ret), K(database_id), K(sequence_name));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == sequence_id)) {
-    LOG_INFO("sequence not exist", KR(ret), K(database_id), K(sequence_id));
-  }
-  return ret;
-}
-
 int ObLatestSchemaGuard::get_package_id(
     const uint64_t database_id,
     const ObString &package_name,
@@ -431,69 +381,6 @@ int ObLatestSchemaGuard::get_mock_fk_parent_table_schema(
   return ret;
 }
 
-int ObLatestSchemaGuard::get_tablegroup_schema_(
-    ObISQLClient &sql_client,
-    const uint64_t tablegroup_id,
-    const ObTablegroupSchema *&tablegroup_schema)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_ID == tablegroup_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tablegroup_id is invalid", KR(ret), K(tablegroup_id));
-  } else if (OB_FAIL(get_from_local_cache_(TABLEGROUP_SCHEMA,
-      tablegroup_id, tablegroup_schema))) {
-    if (OB_ENTRY_NOT_EXIST != ret) {
-      LOG_WARN("fail to get schema from cache", KR(ret), K(tablegroup_id));
-    } else {
-      ObRefreshSchemaStatus schema_status;
-      
-      const int64_t schema_version = INT64_MAX;
-      const ObSchema *base_schema = NULL;
-      ObTablegroupSchema *tmp_tablegroup_schema = NULL;
-      if (OB_FAIL(schema_service_->get_schema_service()->get_tablegroup_schema(schema_status,
-          tablegroup_id, schema_version, sql_client, local_allocator_, tmp_tablegroup_schema))) {
-        LOG_WARN("fail to get latest schema", KR(ret), K(tablegroup_id));
-      } else if (OB_ISNULL(tmp_tablegroup_schema)) {
-        // schema not exist
-      } else if (FALSE_IT(tablegroup_schema = tmp_tablegroup_schema))  {
-      } else if (FALSE_IT(base_schema = tmp_tablegroup_schema))  {
-      } else if (OB_FAIL(put_to_local_cache_(TABLEGROUP_SCHEMA,
-          tablegroup_id, base_schema))) {
-        LOG_WARN("fail to put to local cache", KR(ret), K(tablegroup_id));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObLatestSchemaGuard::get_tablegroup_schema(
-    const uint64_t tablegroup_id,
-    const ObTablegroupSchema *&tablegroup_schema)
-{
-  int ret = OB_SUCCESS;
-  tablegroup_schema = NULL;
-  if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tablegroup_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tablegroup_id is invalid", KR(ret), K(tablegroup_id));
-  } else if (OB_NOT_NULL(sql_client_)) {
-    // 'sql_client_ not null' means a transcation (ddl transaction is child class of ObISQLClient) is passed in 
-    // and we should use this sql_client to get visible tablegroup schema in current transaction
-    if (OB_FAIL(get_tablegroup_schema_(*sql_client_, tablegroup_id, tablegroup_schema))) {
-      LOG_WARN("fail to get tablegroup", KR(ret), K(tablegroup_id));
-    }
-  } else if (OB_FAIL(get_schema_(TABLEGROUP_SCHEMA,
-             tablegroup_id, tablegroup_schema))) {
-    LOG_WARN("fail to get tablegroup", KR(ret), K(tablegroup_id));
-  } 
-
-  if (OB_SUCC(ret) && OB_ISNULL(tablegroup_schema)) {
-    LOG_INFO("tablegroup not exist", KR(ret), K(tablegroup_id));
-  }
-  return ret;
-}
-
 int ObLatestSchemaGuard::get_database_schema(
     const uint64_t database_id,
     const ObDatabaseSchema *&database_schema)
@@ -514,18 +401,18 @@ int ObLatestSchemaGuard::get_database_schema(
   return ret;
 }
 
-int ObLatestSchemaGuard::get_tenant_schema(
-    const ObTenantSchema *&tenant_schema)
+int ObLatestSchemaGuard::get_server_runtime_schema(
+    const ObServerRuntimeSchema *&runtime_schema)
 {
   int ret = OB_SUCCESS;
-  tenant_schema = NULL;
+  runtime_schema = NULL;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_FAIL(get_schema_(TENANT_SCHEMA,
-             1, tenant_schema))) {
-    LOG_WARN("fail to get tenant", KR(ret));
-  } else if (OB_ISNULL(tenant_schema)) {
-    LOG_INFO("tenant not exist", KR(ret));
+  } else if (OB_FAIL(get_schema_(SERVER_RUNTIME_SCHEMA,
+             1, runtime_schema))) {
+    LOG_WARN("fail to get server runtime schema", KR(ret));
+  } else if (OB_ISNULL(runtime_schema)) {
+    LOG_INFO("server runtime schema does not exist", KR(ret));
   }
   return ret;
 }
@@ -620,24 +507,6 @@ int ObLatestSchemaGuard::get_obj_privs(const uint64_t obj_id,
   return ret;
 }
 
-int ObLatestSchemaGuard::get_sequence_schema(const uint64_t sequence_id,
-                                             const ObSequenceSchema *&sequence_schema)
-{
-  int ret = OB_SUCCESS;
-  sequence_schema = NULL;
-  if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == sequence_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("sequence_id is invalid", KR(ret), K(sequence_id));
-  } else if (OB_FAIL(get_schema_(SEQUENCE_SCHEMA, sequence_id, sequence_schema))) {
-    LOG_WARN("fail to get sequence", KR(ret), K(sequence_id));
-  } else if (OB_ISNULL(sequence_schema)) {
-    LOG_INFO("sequence not exist", KR(ret));
-  }
-  return ret;
-}
-
 int ObLatestSchemaGuard::get_trigger_info(const uint64_t trigger_id,
                                           const ObTriggerInfo *&trigger_info)
 {
@@ -656,53 +525,6 @@ int ObLatestSchemaGuard::get_trigger_info(const uint64_t trigger_id,
   return ret;
 }
 
-int ObLatestSchemaGuard::get_table_schemas_in_tablegroup(
-    const uint64_t tablegroup_id,
-    ObIArray<const ObTableSchema *> &table_schemas)
-{
-  int ret = OB_SUCCESS;
-  ObSchemaService *schema_service_impl = NULL;
-  ObISQLClient *sql_client = NULL;
-  if (OB_FAIL(check_and_get_service_(schema_service_impl, sql_client))) {
-    LOG_WARN("fail to check and get service", KR(ret));
-  } else if (OB_FAIL(schema_service_impl->get_table_schemas_in_tablegroup(local_allocator_,
-      *sql_client, tablegroup_id, table_schemas))) {
-    LOG_WARN("failed to get table schemas in tablegroup", KR(ret), K(tablegroup_id));
-  }
-  return ret;
-}
-
-int ObLatestSchemaGuard::check_database_exists_in_tablegroup(
-    const uint64_t tablegroup_id,
-    bool &exists)
-{
-  int ret = OB_SUCCESS;
-  ObSchemaService *schema_service_impl = NULL;
-  ObISQLClient *sql_client = NULL;
-  if (OB_FAIL(check_and_get_service_(schema_service_impl, sql_client))) {
-    LOG_WARN("fail to check and get service", KR(ret));
-  } else if (OB_FAIL(schema_service_impl->check_database_exists_in_tablegroup(*sql_client, tablegroup_id, exists))) {
-    LOG_WARN("failed to check database exists in tablegroup", KR(ret), K(tablegroup_id));
-  }
-  return ret;
-}
-
-int ObLatestSchemaGuard::get_table_id_and_table_name_in_tablegroup(
-    const uint64_t tablegroup_id,
-    ObIArray<ObString> &table_names,
-    ObIArray<uint64_t> &table_ids)
-{
-  int ret = OB_SUCCESS;
-  ObSchemaService *schema_service_impl = NULL;
-  ObISQLClient *sql_client = NULL;
-  if (OB_FAIL(check_and_get_service_(schema_service_impl, sql_client))) {
-    LOG_WARN("fail to check and get service", KR(ret));
-  } else if (OB_FAIL(schema_service_impl->get_table_id_and_table_name_in_tablegroup(local_allocator_, *sql_client, tablegroup_id, table_names, table_ids))) {
-    LOG_WARN("fail to get table names and ids in tablegroup", KR(ret), K(tablegroup_id));
-  }
-  return ret;
-}
-
 int ObLatestSchemaGuard::get_sys_variable_schema(const ObSysVariableSchema *&sys_variable_schema)
 {
   int ret = OB_SUCCESS;
@@ -710,7 +532,7 @@ int ObLatestSchemaGuard::get_sys_variable_schema(const ObSysVariableSchema *&sys
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(get_schema_(SYS_VARIABLE_SCHEMA, 1/*schema_id*/, sys_variable_schema))) {
-    LOG_WARN("fail to get tenant system variable", KR(ret), KPC(sys_variable_schema));
+    LOG_WARN("fail to get runtime system variable", KR(ret), KPC(sys_variable_schema));
   } else if (OB_ISNULL(sys_variable_schema)) {
     LOG_INFO("sys_variable_schema is null", KR(ret));
   }

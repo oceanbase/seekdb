@@ -118,7 +118,6 @@ public:
     what_(),
     nlsenv_(),
     charenv_(),
-    field1_(),
     scheduler_flags_(0),
     exec_env_(),
     job_name_(),
@@ -171,7 +170,6 @@ public:
                K(what_),
                K(nlsenv_),
                K(charenv_),
-               K(field1_),
                K(scheduler_flags_),
                K(enabled_),
                K(auto_drop_),
@@ -195,7 +193,6 @@ public:
   uint64_t get_user_id() { return user_id_; }
   uint64_t get_database_id() { return database_id_; }
   uint64_t get_job_id() { return job_; }
-  uint64_t get_job_id_with_tenant() { return job_; }
   int64_t  get_this_date() { return this_date_; }
   int64_t  get_next_date() { return next_date_; }
   int64_t  get_last_date() { return last_date_; }
@@ -220,7 +217,6 @@ public:
   common::ObString &get_lowner() { return lowner_; }
   common::ObString &get_powner() { return powner_; }
   common::ObString &get_cowner() { return cowner_; }
-  common::ObString &get_zone() { return field1_; }
   common::ObString &get_repeat_interval() { return repeat_interval_; }
   common::ObString &get_interval() { return interval_; }
   common::ObString &get_program_name() { return program_name_; }
@@ -231,7 +227,6 @@ public:
   common::ObString &get_this_exec_trace_id() { return this_exec_trace_id_; }
 
   bool is_default_job_class() const { return (0 == job_class_.case_compare("DEFAULT_JOB_CLASS")); }
-  bool is_mysql_event_job() const { return ObDBMSSchedFuncType::MYSQL_EVENT_JOB == get_func_type(); }
   bool is_stats_maintenance_job() const { return ObDBMSSchedFuncType::STAT_MAINTENANCE_JOB == get_func_type(); }
   bool is_user_job() const { return ObDBMSSchedFuncType::USER_JOB == get_func_type(); }
   bool is_shadow() const { return ObDBMSSchedFuncSet::instance_.is_shadow(get_func_type()); }
@@ -256,7 +251,6 @@ public:
   common::ObString what_;
   common::ObString nlsenv_;
   common::ObString charenv_;
-  common::ObString field1_;
   int64_t scheduler_flags_;
   common::ObString exec_env_;
   common::ObString job_name_;
@@ -479,7 +473,6 @@ public:
    * @retval OB_INVALID_ARGUMENT invalid argument
    */
   static int calc_dbms_sched_repeat_expr(const ObDBMSSchedJobInfo &job_info, int64_t &next_run_time);
-  static int zone_check_impl(const ObString &zone);
   static int job_class_check_impl(const ObString &job_class_name);
   static int get_max_failures_value(const ObString &src_str, int64_t &value);
   static int reserve_user_with_minimun_id(ObIArray<const share::schema::ObUserInfo *> &user_infos); // TO DO Lianyu delete

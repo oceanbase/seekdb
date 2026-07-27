@@ -38,8 +38,8 @@ namespace lib
 struct AChunk;
 struct ABlock;
 struct AObject;
-class ObTenantCtxAllocator;
-class ObTenantCtxAllocatorV2;
+class ObCtxAllocator;
+class ObCtxAllocatorState;
 }
 namespace common
 {
@@ -69,7 +69,7 @@ class ObMemoryDumpTask
 {
 public:
   TO_STRING_KV(K(type_), K(dump_all_), KP(p_context_), K(slot_idx_),
-               K(dump_tenant_ctx_), K(ctx_id_), KP(p_chunk_));
+               K(dump_ctx_), K(ctx_id_), KP(p_chunk_));
   DumpType type_;
   bool dump_all_;
   union
@@ -79,7 +79,7 @@ public:
       int slot_idx_;
     };
     struct {
-      bool dump_tenant_ctx_;
+      bool dump_ctx_;
       union {
         struct {
           
@@ -139,8 +139,8 @@ public:
   static constexpr const char *LOG_FILE = "log/memory_meta";
 private:
 friend class observer::ObAllVirtualMemoryInfo;
-friend class lib::ObTenantCtxAllocator;
-friend class lib::ObTenantCtxAllocatorV2;
+friend class lib::ObCtxAllocator;
+friend class lib::ObCtxAllocatorState;
 friend class lib::ObMallocAllocator;
 
 static const int PENDING_STAT_LABEL = 1;
@@ -151,9 +151,9 @@ static const int MAX_CHUNK_CNT = MAX_MEMORY / (2L << 20);
 static const int MAX_LABEL_ITEM_CNT = 4L << 10;
 static const int64_t STAT_LABEL_INTERVAL = INT64_MAX;
 
-struct TenantCtxRange
+struct CtxRange
 {
-  static bool compare(const TenantCtxRange &tcr,
+  static bool compare(const CtxRange &tcr,
                       const uint64_t cmp_ctx_id)
   {
     return tcr.ctx_id_ < cmp_ctx_id;
@@ -167,7 +167,7 @@ struct TenantCtxRange
 
 struct Stat {
   LabelItem up2date_items_[MAX_LABEL_ITEM_CNT];
-  TenantCtxRange tcrs_[ObCtxIds::MAX_CTX_ID];
+  CtxRange tcrs_[ObCtxIds::MAX_CTX_ID];
   lib::ObMallocSampleMap  malloc_sample_map_;
   int tcr_cnt_ = 0;
 };

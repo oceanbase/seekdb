@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "storage/blocksstable/ob_bloom_filter_cache.h"
 #include "storage/blocksstable/ob_macro_block_meta.h"
 
 namespace oceanbase
@@ -24,7 +23,7 @@ namespace oceanbase
 namespace blocksstable
 {
 ObDataBlockMetaVal::ObDataBlockMetaVal()
-  : version_(DATA_BLOCK_META_VAL_VERSION_V2),
+  : version_(DATA_BLOCK_META_VAL_VERSION),
     length_(0),
     data_checksum_(0),
     rowkey_count_(0),
@@ -40,13 +39,10 @@ ObDataBlockMetaVal::ObDataBlockMetaVal()
     row_count_(0),
     row_count_delta_(0),
     max_merged_trans_version_(0),
-    is_encrypted_(false),
     is_deleted_(false),
     contain_uncommitted_row_(false),
     is_last_row_last_flag_(false),
     compressor_type_(ObCompressorType::INVALID_COMPRESSOR),
-    master_key_id_(0),
-    encrypt_id_(0),
     row_store_type_(ObRowStoreType::MAX_ROW_STORE),
     schema_version_(0),
     snapshot_version_(0),
@@ -56,15 +52,11 @@ ObDataBlockMetaVal::ObDataBlockMetaVal()
     has_string_out_row_(false),
     all_lob_in_row_(false),
     agg_row_len_(0),
-    agg_row_buf_(nullptr),
-    macro_block_bf_size_(0),
-    macro_block_bf_buf_()
-{
-  MEMSET(encrypt_key_, 0, share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH);
-}
+    agg_row_buf_(nullptr)
+{}
 
 ObDataBlockMetaVal::ObDataBlockMetaVal(ObIAllocator &allocator)
-    : version_(DATA_BLOCK_META_VAL_VERSION_V2),
+    : version_(DATA_BLOCK_META_VAL_VERSION),
     length_(0),
     data_checksum_(0),
     rowkey_count_(0),
@@ -80,13 +72,10 @@ ObDataBlockMetaVal::ObDataBlockMetaVal(ObIAllocator &allocator)
     row_count_(0),
     row_count_delta_(0),
     max_merged_trans_version_(0),
-    is_encrypted_(false),
     is_deleted_(false),
     contain_uncommitted_row_(false),
     is_last_row_last_flag_(false),
     compressor_type_(ObCompressorType::INVALID_COMPRESSOR),
-    master_key_id_(0),
-    encrypt_id_(0),
     row_store_type_(ObRowStoreType::MAX_ROW_STORE),
     schema_version_(0),
     snapshot_version_(0),
@@ -96,12 +85,8 @@ ObDataBlockMetaVal::ObDataBlockMetaVal(ObIAllocator &allocator)
     has_string_out_row_(false),
     all_lob_in_row_(false),
     agg_row_len_(0),
-    agg_row_buf_(nullptr),
-    macro_block_bf_size_(0),
-    macro_block_bf_buf_()
-{
-  MEMSET(encrypt_key_, 0, share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH);
-}
+    agg_row_buf_(nullptr)
+{}
 ObDataBlockMetaVal::~ObDataBlockMetaVal()
 {
   reset();
@@ -124,14 +109,10 @@ void ObDataBlockMetaVal::reset()
   row_count_ = 0;
   row_count_delta_ = 0;
   max_merged_trans_version_ = 0;
-  is_encrypted_ = false;
   is_deleted_ = false;
   contain_uncommitted_row_ = false;
   is_last_row_last_flag_ = false;
   compressor_type_ = ObCompressorType::INVALID_COMPRESSOR;
-  master_key_id_ = 0;
-  encrypt_id_ = 0;
-  MEMSET(encrypt_key_, 0, share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH);
   row_store_type_ = ObRowStoreType::MAX_ROW_STORE;
   schema_version_ = 0;
   snapshot_version_ = 0;
@@ -142,13 +123,11 @@ void ObDataBlockMetaVal::reset()
   all_lob_in_row_ = false;
   agg_row_len_ = 0;
   agg_row_buf_ = nullptr;
-  macro_block_bf_size_ = 0;
-  macro_block_bf_buf_ = nullptr;
 }
 
 bool ObDataBlockMetaVal::is_valid() const
 {
-return (DATA_BLOCK_META_VAL_VERSION == version_ || DATA_BLOCK_META_VAL_VERSION_V2 == version_)
+  return DATA_BLOCK_META_VAL_VERSION == version_
     && rowkey_count_ >= 0
     && column_count_ > 0
     && micro_block_count_ >= 0
@@ -166,9 +145,7 @@ return (DATA_BLOCK_META_VAL_VERSION == version_ || DATA_BLOCK_META_VAL_VERSION_V
     && logic_id_.is_valid()
     && macro_id_.is_valid()
     && agg_row_len_ >= 0
-    && ((0 == agg_row_len_ && nullptr == agg_row_buf_) || (0 < agg_row_len_ && nullptr != agg_row_buf_))
-    && macro_block_bf_size_ >= 0
-    && (0 == macro_block_bf_size_ || nullptr != macro_block_bf_buf_);
+    && ((0 == agg_row_len_ && nullptr == agg_row_buf_) || (0 < agg_row_len_ && nullptr != agg_row_buf_));
 }
 
 int ObDataBlockMetaVal::assign(const ObDataBlockMetaVal &val)
@@ -197,14 +174,10 @@ int ObDataBlockMetaVal::assign(const ObDataBlockMetaVal &val)
     row_count_ = val.row_count_;
     row_count_delta_ = val.row_count_delta_;
     max_merged_trans_version_ = val.max_merged_trans_version_;
-    is_encrypted_ = val.is_encrypted_;
     is_deleted_ = val.is_deleted_;
     contain_uncommitted_row_ = val.contain_uncommitted_row_;
     is_last_row_last_flag_ = val.is_last_row_last_flag_;
     compressor_type_ = val.compressor_type_;
-    master_key_id_ = val.master_key_id_;
-    encrypt_id_ = val.encrypt_id_;
-    MEMCPY(encrypt_key_, val.encrypt_key_, share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH);
     row_store_type_ = val.row_store_type_;
     schema_version_ = val.schema_version_;
     snapshot_version_ = val.snapshot_version_;
@@ -214,8 +187,6 @@ int ObDataBlockMetaVal::assign(const ObDataBlockMetaVal &val)
     all_lob_in_row_ = val.all_lob_in_row_;
     agg_row_len_ = val.agg_row_len_;
     agg_row_buf_ = val.agg_row_buf_;
-    macro_block_bf_size_ = val.macro_block_bf_size_;
-    macro_block_bf_buf_ = val.macro_block_bf_buf_;
   }
   return ret;
 }
@@ -234,7 +205,7 @@ int ObDataBlockMetaVal::build_value(ObStorageDatum &datum,
     LOG_WARN("unexpected size", K(ret), K(size), K(estimate_size), KPC(this));
   } else if (OB_UNLIKELY(data_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fail to build value, invalid major working cluster version",
+    LOG_WARN("fail to build value, invalid data format version",
              K(ret), K(data_version), KPC(this));
   } else if (OB_ISNULL(buf = reinterpret_cast<char *>(allocator.alloc(size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -267,12 +238,7 @@ int ObDataBlockMetaVal::serialize(char *buf,
       LOG_WARN("fail to encode version", K(ret), K(buf_len), K(pos));
     } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, length_))) {
       LOG_WARN("fail to encode length", K(ret), K(buf_len), K(pos));
-    } else if (OB_UNLIKELY(pos + sizeof(encrypt_key_) > buf_len)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect buf_len", K(ret), K(buf_len), K(pos));
     } else {
-      MEMCPY(buf + pos, encrypt_key_, sizeof(encrypt_key_)); // do not serialize char[]
-      pos += sizeof(encrypt_key_);
       LST_DO_CODE(OB_UNIS_ENCODE,
                   data_checksum_,
                   rowkey_count_,
@@ -287,12 +253,9 @@ int ObDataBlockMetaVal::serialize(char *buf,
                   row_count_,
                   row_count_delta_,
                   max_merged_trans_version_,
-                  is_encrypted_,
                   is_deleted_,
                   contain_uncommitted_row_,
                   compressor_type_,
-                  master_key_id_,
-                  encrypt_id_,
                   row_store_type_,
                   schema_version_,
                   snapshot_version_,
@@ -307,14 +270,7 @@ int ObDataBlockMetaVal::serialize(char *buf,
       if (OB_SUCC(ret)) {
         MEMCPY(buf + pos, agg_row_buf_, agg_row_len_);
         pos += agg_row_len_;
-        // Determine whether to serialize the macro block bloom filter based on the current cluster's data version.
-        LST_DO_CODE(OB_UNIS_ENCODE, macro_block_bf_size_);
-        if (macro_block_bf_size_ > 0) {
-          MEMCPY(buf + pos, macro_block_bf_buf_, macro_block_bf_size_);
-          pos += macro_block_bf_size_;
-        }
-        if (OB_FAIL(ret)) {
-        } else if (OB_UNLIKELY(length_ != pos - start_pos)) {
+        if (OB_UNLIKELY(length_ != pos - start_pos)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected error, serialize may have bug", K(ret), K(pos), K(start_pos), KPC(this));
         }
@@ -334,17 +290,12 @@ int ObDataBlockMetaVal::deserialize(const char *buf, const int64_t data_len, int
     int64_t start_pos = pos;
     if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &version_))) {
       LOG_WARN("fail to decode version", K(ret), K(data_len), K(pos));
-    } else if (OB_UNLIKELY(version_ != DATA_BLOCK_META_VAL_VERSION && version_ != DATA_BLOCK_META_VAL_VERSION_V2)) {
+    } else if (OB_UNLIKELY(version_ != DATA_BLOCK_META_VAL_VERSION)) {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("object version mismatch", K(ret), K(version_));
     } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &length_))) {
       LOG_WARN("fail to decode length", K(ret), K(data_len), K(pos));
-    } else if (OB_UNLIKELY(pos + sizeof(encrypt_key_) > data_len)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect data_len", K(ret), K(data_len), K(pos));
     } else {
-      MEMCPY(encrypt_key_, buf + pos, sizeof(encrypt_key_));
-      pos += sizeof(encrypt_key_);
       LST_DO_CODE(OB_UNIS_DECODE,
                   data_checksum_,
                   rowkey_count_,
@@ -359,12 +310,9 @@ int ObDataBlockMetaVal::deserialize(const char *buf, const int64_t data_len, int
                   row_count_,
                   row_count_delta_,
                   max_merged_trans_version_,
-                  is_encrypted_,
                   is_deleted_,
                   contain_uncommitted_row_,
                   compressor_type_,
-                  master_key_id_,
-                  encrypt_id_,
                   row_store_type_,
                   schema_version_,
                   snapshot_version_,
@@ -383,14 +331,7 @@ int ObDataBlockMetaVal::deserialize(const char *buf, const int64_t data_len, int
           agg_row_buf_ = buf + pos;
           pos += agg_row_len_;
         }
-        // Deserialize macro block bloom filter.
-        LST_DO_CODE(OB_UNIS_DECODE, macro_block_bf_size_);
-        if (macro_block_bf_size_ > 0) {
-          macro_block_bf_buf_ = buf + pos;
-          pos += macro_block_bf_size_;
-        }
-        if (OB_FAIL(ret)) {
-        } else if (OB_UNLIKELY(length_ != pos - start_pos)) {
+        if (OB_UNLIKELY(length_ != pos - start_pos)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected error, deserialize may has bug", K(ret), K(pos), K(start_pos), KPC(this));
         }
@@ -403,17 +344,11 @@ int ObDataBlockMetaVal::deserialize(const char *buf, const int64_t data_len, int
 int64_t ObDataBlockMetaVal::get_max_serialize_size(const int64_t data_version) const
 {
   int64_t len = sizeof(*this);
-  len -= (sizeof(column_checksums_) + sizeof(agg_row_buf_) + sizeof(macro_block_bf_size_)
-          + sizeof(macro_block_bf_buf_));
+  len -= (sizeof(column_checksums_) + sizeof(agg_row_buf_));
   len += sizeof(int64_t); // serialize column count
   len += sizeof(int64_t) * column_count_; // serialize each checksum
   len += agg_row_len_;
-  if (version_ >= DATA_BLOCK_META_VAL_VERSION_V2) {
-    len += sizeof(int64_t);
-  }
-  // Get macro block bloom filter max serialize size.
-  len += sizeof(macro_block_bf_size_);
-  len += macro_block_bf_size_;
+  len += sizeof(int64_t);
   return len;
 }
 
@@ -422,7 +357,6 @@ int64_t ObDataBlockMetaVal::get_serialize_size(const int64_t data_version) const
   int64_t len = 0;
   len += serialization::encoded_length_i32(version_);
   len += serialization::encoded_length_i32(length_);
-  len += sizeof(encrypt_key_);
   LST_DO_CODE(OB_UNIS_ADD_LEN,
               data_checksum_,
               rowkey_count_,
@@ -437,12 +371,9 @@ int64_t ObDataBlockMetaVal::get_serialize_size(const int64_t data_version) const
               row_count_,
               row_count_delta_,
               max_merged_trans_version_,
-              is_encrypted_,
               is_deleted_,
               contain_uncommitted_row_,
               compressor_type_,
-              master_key_id_,
-              encrypt_id_,
               row_store_type_,
               schema_version_,
               snapshot_version_,
@@ -455,11 +386,6 @@ int64_t ObDataBlockMetaVal::get_serialize_size(const int64_t data_version) const
               is_last_row_last_flag_,
               agg_row_len_);
   len += agg_row_len_;
-  // Get macro block bloom filter serialize size.
-  LST_DO_CODE(OB_UNIS_ADD_LEN, macro_block_bf_size_);
-  if (macro_block_bf_size_ > 0) {
-    len += macro_block_bf_size_;
-  }
   return len;
 }
 
@@ -499,6 +425,9 @@ int ObDataMacroBlockMeta::assign(const ObDataMacroBlockMeta &meta)
   } else if (OB_FAIL(end_key_.assign(meta.end_key_.datums_,
                                      meta.end_key_.datum_cnt_))) {
     LOG_WARN("fail to assign end key", K(ret), K(end_key_));
+  } else {
+    nested_offset_ = meta.nested_offset_;
+    nested_size_ = meta.nested_size_;
   }
   return ret;
 }
@@ -508,7 +437,6 @@ int ObDataMacroBlockMeta::deep_copy(ObDataMacroBlockMeta *&dst, ObIAllocator &al
   int ret = OB_SUCCESS;
   const int64_t &rowkey_count = val_.rowkey_count_;
   char *agg_row_buf = nullptr;
-  char *macro_block_bf_buf = nullptr;
   char *buf = nullptr;
   const int64_t buf_len = sizeof(ObDataMacroBlockMeta) + sizeof(ObStorageDatum) * rowkey_count;
   if (OB_UNLIKELY(!is_valid())) {
@@ -521,10 +449,6 @@ int ObDataMacroBlockMeta::deep_copy(ObDataMacroBlockMeta *&dst, ObIAllocator &al
              && OB_ISNULL(agg_row_buf = static_cast<char *>(allocator.alloc(val_.agg_row_len_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate memory for agg row", K(ret), K_(val));
-  } else if (0 < val_.macro_block_bf_size_
-             && OB_ISNULL(macro_block_bf_buf = static_cast<char *>(allocator.alloc(val_.macro_block_bf_size_)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate memory for macro block bloom filter", K(ret), K_(val));
   } else {
     ObDataMacroBlockMeta *meta = new (buf) ObDataMacroBlockMeta(allocator);
     ObStorageDatum *endkey = new (buf + sizeof(ObDataMacroBlockMeta)) ObStorageDatum[rowkey_count];
@@ -539,13 +463,11 @@ int ObDataMacroBlockMeta::deep_copy(ObDataMacroBlockMeta *&dst, ObIAllocator &al
       } else if (OB_FAIL(meta->end_key_.assign(endkey, rowkey_count))) {
         LOG_WARN("fail to assign rowkey", K(ret), KP(endkey), K(rowkey_count));
       } else {
+        meta->nested_offset_ = nested_offset_;
+        meta->nested_size_ = nested_size_;
         if (val_.agg_row_len_ > 0) {
           MEMCPY(agg_row_buf, val_.agg_row_buf_, val_.agg_row_len_);
           meta->val_.agg_row_buf_ = agg_row_buf;
-        }
-        if (val_.macro_block_bf_size_ > 0) {
-          MEMCPY(macro_block_bf_buf, val_.macro_block_bf_buf_, val_.macro_block_bf_size_);
-          meta->val_.macro_block_bf_buf_ = macro_block_bf_buf;
         }
         dst = meta;
       }

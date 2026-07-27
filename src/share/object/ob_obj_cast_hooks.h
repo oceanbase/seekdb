@@ -17,14 +17,14 @@
 #define OCEANBASE_SHARE_OBJECT_OB_OBJ_CAST_HOOKS_H_
 #include <stdint.h>
 // obj_cast dependency hooks for upper-layer services:share declaration,owner modules register during static initialization。
-// purpose: remove share/object inverted include dependency on observer (tenant srs/tenant config)。
+// Purpose: remove the share/object inverted dependency on upper-layer SRS and runtime configuration.
 namespace oceanbase
 {
 namespace common
 {
 class ObSrsItem;
 
-// geo-cast SRS lookup(registered by observer/omt/ob_tenant_srs.cpp;
+// geo-cast SRS lookup(registered by observer/omt/ob_srs_service.cpp;
 // type-erased holder keeps omt::ObSrsCacheGuard to guarantee the SRS lifetime)
 struct ObSrsGuardErased
 {
@@ -36,7 +36,7 @@ struct ObSrsGuardErased
 typedef int (*ObObjCastGetSrsItemFn)(uint64_t srid, const ObSrsItem *&srs, ObSrsGuardErased &guard);
 extern ObObjCastGetSrsItemFn g_obj_cast_get_srs_item;
 
-// json parse max-depth tenant config(registered by sql ob_expr_json_func_helper.cpp;
+// JSON parse max depth is registered by sql/ob_expr_json_func_helper.cpp;
 // falls back to JSON_DOCUMENT_MAX_DEPTH when unregistered)
 typedef int32_t (*ObObjCastJsonMaxDepthFn)();
 extern ObObjCastJsonMaxDepthFn g_obj_cast_json_max_depth;

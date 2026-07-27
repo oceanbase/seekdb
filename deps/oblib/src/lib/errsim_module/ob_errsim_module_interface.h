@@ -22,22 +22,18 @@
 #include "lib/utility/utility.h"
 #include "ob_errsim_module_type.h"
 #include "lib/container/ob_array.h"
-#include "ob_tenant_errsim_event.h"
 
 namespace oceanbase
 {
 namespace common
 {
 
-int build_tenant_errsim_moulde(
+int update_errsim_module_config(
     const int64_t config_version,
     const common::ObArray<ObFixedLengthString<ObErrsimModuleTypeHelper::MAX_TYPE_NAME_LENGTH>> &module_array,
     const int64_t percentage);
 bool is_errsim_module(
     const ObErrsimModuleType::TYPE &type);
-int add_tenant_errsim_event(
-    const ObTenantErrsimEvent &event);
-
 } // namespace common
 } // namespace oceanbase
 

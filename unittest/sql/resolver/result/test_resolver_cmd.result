@@ -22,8 +22,6 @@ create database dbcmd;
   "name_case_mode":-1,
   "comment":"",
   "read_only":false,
-  "default_tablegroup_id":-1,
-  "default_tablegroup_name":"",
   "in_recyclebin":false,
   "primary_zone_array": [
   ]
@@ -761,7 +759,6 @@ show columns from rongxuan.t1
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -1675,7 +1672,6 @@ show columns from rongxuan.t1
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1,
@@ -1903,7 +1899,6 @@ show databases
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -2987,7 +2982,6 @@ show databases
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1,
@@ -3354,7 +3348,6 @@ show databases like 'ocean%'
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -4438,7 +4431,6 @@ show databases like 'ocean%'
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1,
@@ -4664,7 +4656,6 @@ show tables
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -5158,7 +5149,6 @@ show tables
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1,
@@ -5493,7 +5483,6 @@ show variables
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1,
@@ -5865,7 +5854,6 @@ show variables
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1,
@@ -5946,26 +5934,6 @@ alter system bootstrap CLUSTER primary REGION 'sys_region' ZONE 'zone1' SERVER '
 alter system bootstrap cluster standby REGION 'sys_region' ZONE 'zone1' SERVER '10.101.74.122:41425';
 {"stmt_type":77, "bootstrap_arg":{"server_list":["region":"sys_region", "zone":"zone1", "server":"10.101.74.122:41425"], "cluster_role":2}}
 ***************   Case 16   ***************
-alter system set cluster_id = 3;
-{
-  "stmt_type":175,
-  "rpc_arg": {
-    "items": [
-       {
-        "name":"cluster_id",
-        "value":"3",
-        "comment":"",
-        "zone":"",
-        "server":"0.0.0.0",
-        "tenant_name":"",
-        "exec_tenant_id":1,
-        "tenant_ids": [
-        ]
-      }
-    ]
-  }
-}
-***************   Case 17   ***************
 alter system COMMIT TO SWITCHOVER TO PRIMARY;
 {
   "stmt_type":169,
@@ -5973,7 +5941,7 @@ alter system COMMIT TO SWITCHOVER TO PRIMARY;
     "op_type":0
   }
 }
-***************   Case 18   ***************
+***************   Case 17   ***************
 alter system COMMIT TO SWITCHOVER TO PHYSICAL STANDBY;
 {
   "stmt_type":169,
@@ -5981,7 +5949,7 @@ alter system COMMIT TO SWITCHOVER TO PHYSICAL STANDBY;
     "op_type":1
   }
 }
-***************   Case 19   ***************
+***************   Case 18   ***************
 alter system remove cluster tt cluster_id = 4;
 {
   "stmt_type":174,

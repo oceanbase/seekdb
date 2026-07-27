@@ -83,21 +83,21 @@ int ObAiModelSchema::assign(const ObAiServiceModelInfo &model_info)
 
 ObAiModelMgr::ObAiModelMgr()
   : is_inited_(false),
-    local_allocator_(SET_USE_500(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
+    local_allocator_(lib::ObMemAttr(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
     allocator_(local_allocator_),
-    ai_model_infos_(0, nullptr, SET_USE_500("SchAiModel", ObCtxIds::SCHEMA_SERVICE)),
-    ai_model_id_map_(SET_USE_500("SchAiModel", ObCtxIds::SCHEMA_SERVICE)),
-    ai_model_name_map_(SET_USE_500("SchAiModel", ObCtxIds::SCHEMA_SERVICE))
+    ai_model_infos_(0, nullptr, lib::ObMemAttr("SchAiModel", ObCtxIds::SCHEMA_SERVICE)),
+    ai_model_id_map_(lib::ObMemAttr("SchAiModel", ObCtxIds::SCHEMA_SERVICE)),
+    ai_model_name_map_(lib::ObMemAttr("SchAiModel", ObCtxIds::SCHEMA_SERVICE))
 {
 }
 
 ObAiModelMgr::ObAiModelMgr(ObIAllocator &allocator)
   : is_inited_(false),
-    local_allocator_(SET_USE_500(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
+    local_allocator_(lib::ObMemAttr(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
     allocator_(allocator),
-    ai_model_infos_(0, nullptr, SET_USE_500("SchAiModel", ObCtxIds::SCHEMA_SERVICE)),
-    ai_model_id_map_(SET_USE_500("SchAiModel", ObCtxIds::SCHEMA_SERVICE)),
-    ai_model_name_map_(SET_USE_500("SchAiModel", ObCtxIds::SCHEMA_SERVICE))
+    ai_model_infos_(0, nullptr, lib::ObMemAttr("SchAiModel", ObCtxIds::SCHEMA_SERVICE)),
+    ai_model_id_map_(lib::ObMemAttr("SchAiModel", ObCtxIds::SCHEMA_SERVICE)),
+    ai_model_name_map_(lib::ObMemAttr("SchAiModel", ObCtxIds::SCHEMA_SERVICE))
 {
 }
 
@@ -331,7 +331,7 @@ int ObAiModelMgr::add_ai_model(const ObAiModelSchema &ai_model_schema, common::O
   return ret;
 }
 
-int ObAiModelMgr::del_ai_model(const ObTenantAiModelId &tenant_ai_model_id)
+int ObAiModelMgr::del_ai_model(const ObAiModelId &ai_model_id)
 {
   int ret = OB_SUCCESS;
   ObAiModelSchema *schema = nullptr;
@@ -339,17 +339,17 @@ int ObAiModelMgr::del_ai_model(const ObTenantAiModelId &tenant_ai_model_id)
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("ai model mgr not init", K(ret));
-  } else if (!tenant_ai_model_id.is_valid()) {
+  } else if (!ai_model_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid ai_model_id", K(ret), K(tenant_ai_model_id));
-  } else if (OB_FAIL(ai_model_infos_.remove_if(tenant_ai_model_id,
-                                               compare_with_tenant_ai_model_id,
-                                               equal_to_tenant_ai_model_id,
+    LOG_WARN("invalid ai_model_id", K(ret), K(ai_model_id));
+  } else if (OB_FAIL(ai_model_infos_.remove_if(ai_model_id,
+                                               compare_with_ai_model_id,
+                                               equal_to_ai_model_id,
                                                schema))) {
-    LOG_WARN("failed to remove ai_model_schema", K(ret), K(tenant_ai_model_id));
+    LOG_WARN("failed to remove ai_model_schema", K(ret), K(ai_model_id));
   } else if (OB_ISNULL(schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL ai_model_schema", K(ret), K(tenant_ai_model_id));
+    LOG_WARN("unexpected NULL ai_model_schema", K(ret), K(ai_model_id));
   } else {
     int hash_ret = OB_SUCCESS;
     ObAiModelHashWrapper hash_wrapper(schema->get_name(),
@@ -388,7 +388,7 @@ int ObAiModelMgr::del_ai_model(const ObTenantAiModelId &tenant_ai_model_id)
   return ret;
 }
 
-int ObAiModelMgr::get_ai_model_schemas_in_tenant(common::ObIArray<const ObAiModelSchema *> &ai_model_schemas) const
+int ObAiModelMgr::get_ai_model_schemas_in_runtime(common::ObIArray<const ObAiModelSchema *> &ai_model_schemas) const
 {
   int ret = OB_SUCCESS;
 

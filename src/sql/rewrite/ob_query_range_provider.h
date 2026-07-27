@@ -34,8 +34,7 @@ class ObRawExpr;
 typedef common::ObSEArray<common::ObNewRange *, 1> ObQueryRangeArray;
 typedef common::ObSEArray<common::ObNewRange, 4, common::ModulePageAllocator, true> ObRangesArray;
 typedef common::ObSEArray<ColumnItem, 16, common::ModulePageAllocator, true> ColumnArray;
-static const int64_t MAX_NOT_IN_SIZE = 10; //do not extract range for not in row over this size
-static const int64_t NEW_MAX_NOT_IN_SIZE = 1000; // mysql support 1000 not in range node
+static const int64_t MAX_NOT_IN_SIZE = 1000; // MySQL supports 1000 values in a NOT IN range node.
 struct ObFastFinalNLJRangeCtx;
 
 
@@ -43,7 +42,6 @@ class ObQueryRangeProvider
 {
 public:
   virtual ~ObQueryRangeProvider() {}
-  virtual bool is_new_query_range() const = 0;
   virtual int get_tablet_ranges(common::ObIAllocator &allocator,
                                 ObExecContext &exec_ctx,
                                 ObQueryRangeArray &ranges,
@@ -52,10 +50,6 @@ public:
   virtual int get_tablet_ranges(ObQueryRangeArray &ranges,
                                 bool &all_single_value_ranges,
                                 const common::ObDataTypeCastParams &dtc_params) = 0;
-  virtual int get_ss_tablet_ranges(common::ObIAllocator &allocator,
-                                   ObExecContext &exec_ctx,
-                                   ObQueryRangeArray &ss_ranges,
-                                   const common::ObDataTypeCastParams &dtc_params) const = 0;
   virtual int get_tablet_ranges(common::ObIAllocator &allocator,
                                 ObExecContext &exec_ctx,
                                 ObQueryRangeArray &ranges,
@@ -75,13 +69,9 @@ public:
   virtual bool is_precise_get() const = 0;
   virtual int64_t get_column_count() const = 0;
   virtual bool has_exec_param() const = 0;
-  virtual bool is_ss_range() const = 0;
-  virtual int64_t get_skip_scan_offset() const = 0;
-  virtual int reset_skip_scan_range() = 0;
   virtual bool has_range() const = 0;
   virtual bool is_contain_geo_filters() const = 0;
   virtual const common::ObIArray<ObRawExpr*> &get_range_exprs() const = 0;
-  virtual const common::ObIArray<ObRawExpr*> &get_ss_range_exprs() const = 0;
   virtual const common::ObIArray<ObRawExpr*> &get_unprecise_range_exprs() const = 0;
   virtual int get_prefix_info(int64_t &equal_prefix_count,
                               int64_t &range_prefix_count,
@@ -98,4 +88,3 @@ public:
 }
 #endif //OCEANBASE_SQL_REWRITE_QUERY_RANGE_PROVIDER_
 //// end of header file
-

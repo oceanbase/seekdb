@@ -134,11 +134,10 @@ int ObGVTxLockStat::inner_get_next_row(ObNewRow *&row)
       uint64_t col_id = output_column_ids_.at(i);
       switch(col_id) {
 
-      case OB_APP_MIN_COLUMN_ID + 0: {
+      case OB_APP_MIN_COLUMN_ID + 0:
         // trans_id
         cur_row_.cells_[i].set_int(tx_lock_stat.get_tx_id().get_id());
         break;
-      }
       case OB_APP_MIN_COLUMN_ID + 1:
         // tablet_id
         cur_row_.cells_[i].set_int(tx_lock_stat.get_memtable_key_info().get_tablet_id().id());

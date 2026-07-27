@@ -467,7 +467,7 @@ int ObSSTableRowWholeScanner::check_macro_block_recycle(const ObMacroBlockDesc &
              (last_micro_block_recycled_ || last_mvcc_row_already_output_)) {
     can_recycle = true;
   }
-  // TODO: @dengzhi.ldz enable recycle after making adaptor for migration
+  // Keep recycling disabled until scanner boundary validation covers every merge input.
   can_recycle = false;
   return ret;
 }
@@ -529,7 +529,7 @@ int ObSSTableRowWholeScanner::check_micro_block_recycle(const ObMicroBlockHeader
       can_recycle = true;
     }
   }
-  // TODO: @dengzhi.ldz enable recycle after making adaptor for migration
+  // Keep recycling disabled until scanner boundary validation covers every merge input.
   can_recycle = false;
   return ret;
 }

@@ -30,28 +30,28 @@ namespace share
 namespace schema
 {
 
-struct ObTenantTriggerId
+struct ObTriggerId
 {
 public:
-  ObTenantTriggerId()
+  ObTriggerId()
     : trigger_id_(common::OB_INVALID_ID)
   {}
-  ObTenantTriggerId(uint64_t trigger_id)
+  ObTriggerId(uint64_t trigger_id)
     : trigger_id_(trigger_id)
   {}
-  ObTenantTriggerId(const ObTenantTriggerId &other)
+  ObTriggerId(const ObTriggerId &other)
     : trigger_id_(other.trigger_id_)
   {}
-  ObTenantTriggerId &operator =(const ObTenantTriggerId &other)
+  ObTriggerId &operator =(const ObTriggerId &other)
   {
     trigger_id_ = other.trigger_id_;
     return *this;
   }
-  bool operator ==(const ObTenantTriggerId &rhs) const
+  bool operator ==(const ObTriggerId &rhs) const
   { return (trigger_id_ == rhs.trigger_id_); }
-  bool operator !=(const ObTenantTriggerId &rhs) const
+  bool operator !=(const ObTriggerId &rhs) const
   { return !(*this == rhs); }
-  bool operator <(const ObTenantTriggerId &rhs) const
+  bool operator <(const ObTriggerId &rhs) const
   {
     return trigger_id_ < rhs.trigger_id_;
   }
@@ -99,7 +99,6 @@ public:
   virtual bool is_valid() const
   {
     return (ObSchema::is_valid() &&
-            true &&
             common::OB_INVALID_ID != trigger_id_ &&
             common::OB_INVALID_ID != database_id_ &&
             !trigger_name_.empty() &&
@@ -119,8 +118,6 @@ public:
   inline uint64_t get_database_id() const { return database_id_; }
   inline int64_t get_schema_version() const { return schema_version_; }
   inline const common::ObString &get_trigger_name() const { return trigger_name_; }
-  inline ObTenantTriggerId get_tenant_trigger_id() const
-  { return ObTenantTriggerId(trigger_id_); }
   // TODO(jiuren):
   // consider if the database is in recyclebin after trigger support is enabled.
   inline bool is_in_recyclebin() const
@@ -171,7 +168,7 @@ private:
 
 inline bool ObTriggerNameHashWrapper::operator ==(const ObTriggerNameHashWrapper &rv) const
 {
-  ObCompareNameWithTenantID name_cmp;
+  ObSchemaNameComparator name_cmp;
   return (database_id_ == rv.get_database_id())
       && (0 == name_cmp.compare(trigger_name_, rv.get_trigger_name()));
 }
@@ -241,13 +238,13 @@ public:
   int get_schema_statistics(ObSchemaStatisticsInfo &schema_info) const;
 
   int add_trigger(const ObSimpleTriggerSchema &trigger_schema);
-  int del_trigger(const ObTenantTriggerId &tenant_trigger_id);
+  int del_trigger(const ObTriggerId &trigger_id);
   int add_triggers(const common::ObIArray<ObSimpleTriggerSchema> &trigger_schemas);
   int get_trigger_schema(uint64_t trigger_id, const ObSimpleTriggerSchema *&trigger_schema) const;
   int get_trigger_schema( uint64_t database_id,
                          const common::ObString &trigger_name,
                          const ObSimpleTriggerSchema *&trigger_schema) const;
-  int get_trigger_schemas_in_tenant(common::ObIArray<const ObSimpleTriggerSchema *> &trigger_schemas) const;
+  int get_trigger_schemas_in_runtime(common::ObIArray<const ObSimpleTriggerSchema *> &trigger_schemas) const;
   int get_trigger_schemas_in_database(uint64_t database_id,
                                       common::ObIArray<const ObSimpleTriggerSchema *> &trigger_schemas) const;
   int try_rebuild_trigger_hashmap();
@@ -256,10 +253,10 @@ private:
                                        const ObSimpleTriggerSchema *rhs);
   inline static bool equal_trigger(const ObSimpleTriggerSchema *lhs,
                                      const ObSimpleTriggerSchema *rhs);
-  inline static bool compare_with_tenant_trigger_id(const ObSimpleTriggerSchema *lhs,
-                                                    const ObTenantTriggerId &tenant_trigger_id);
-  inline static bool equal_with_tenant_trigger_id(const ObSimpleTriggerSchema *lhs,
-                                                  const ObTenantTriggerId &tenant_trigger_id);
+  inline static bool compare_with_trigger_id(const ObSimpleTriggerSchema *lhs,
+                                                    const ObTriggerId &trigger_id);
+  inline static bool equal_with_trigger_id(const ObSimpleTriggerSchema *lhs,
+                                                  const ObTriggerId &trigger_id);
 private:
   common::ObArenaAllocator local_allocator_;
   common::ObIAllocator &allocator_;

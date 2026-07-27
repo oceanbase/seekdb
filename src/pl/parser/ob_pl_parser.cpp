@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX PL
 #include "ob_pl_parser.h"
 #include "pl/ob_pl_resolver.h"
-#include "sql/parser/parse_malloc.h"
 
 
 #ifdef __cplusplus
@@ -43,94 +42,6 @@ namespace oceanbase
 using namespace common;
 namespace pl
 {
-
-#define ISSPACE(c) ((c) == ' ' || (c) == '\n' || (c) == '\r' || (c) == '\t' || (c) == '\f' || (c) == '\v')
-int ObPLParser::fast_parse(const ObString &query,
-                      ParseResult &parse_result)
-{
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_pl_parse);
-  int ret = OB_SUCCESS;
-  // Remove spaces at the end of the SQL statement
-  int64_t len = query.length();
-  while (len > 0 && ISSPACE(query[len - 1])) {
-    --len;
-  }
-  const ObString stmt_block(len, query.ptr());
-  ObParseCtx parse_ctx;
-  memset(&parse_ctx, 0, sizeof(ObParseCtx));
-  parse_ctx.global_errno_ = OB_SUCCESS;
-  parse_ctx.is_pl_fp_ = true;
-  parse_ctx.mem_pool_ = &allocator_;
-  parse_ctx.stmt_str_ = stmt_block.ptr();
-  parse_ctx.stmt_len_ = stmt_block.length();
-  parse_ctx.orig_stmt_str_ = query.ptr();
-  parse_ctx.orig_stmt_len_ = query.length();
-  parse_ctx.comp_mode_ = false;
-  parse_ctx.is_for_trigger_ = 0;
-  parse_ctx.is_dynamic_ = 0;
-  parse_ctx.is_inner_parse_ = 1;
-  parse_ctx.charset_info_ = ObCharset::get_charset(charsets4parser_.string_collation_);
-  parse_ctx.charset_info_nls_db_ = ObCharset::is_valid_collation(charsets4parser_.nls_collation_) ?
-          ObCharset::get_charset(charsets4parser_.nls_collation_) : NULL;
-  parse_ctx.is_not_utf8_connection_ = ObCharset::is_valid_collation(charsets4parser_.string_collation_) ?
-        (ObCharset::charset_type_by_coll(charsets4parser_.string_collation_) != CHARSET_UTF8MB4) : false;
-  parse_ctx.connection_collation_ = charsets4parser_.string_collation_;
-  parse_ctx.mysql_compatible_comment_ = false;
-  int64_t new_length = stmt_block.length() + 1;
-  char *buf = (char *)parse_malloc(new_length, parse_ctx.mem_pool_);
-  if (OB_UNLIKELY(NULL == buf)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("no memory for parser");
-  } else {
-    parse_ctx.no_param_sql_ = buf;
-    parse_ctx.no_param_sql_buf_len_ = new_length;
-  }
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(parse_stmt_block(parse_ctx, parse_result.result_tree_))) {
-      if (OB_ERR_PARSE_SQL == ret) {
-        int err_len = 0;
-        const char *err_str = "", *global_errmsg = "";
-        int err_line = 0;
-        if (parse_ctx.cur_error_info_ != NULL) {
-          int first_column = parse_ctx.cur_error_info_->stmt_loc_.first_column_;
-          int last_column = parse_ctx.cur_error_info_->stmt_loc_.last_column_;
-          err_len = last_column - first_column + 1;
-          err_str = parse_ctx.stmt_str_ + first_column;
-          err_line = parse_ctx.cur_error_info_->stmt_loc_.last_line_ + 1;
-          global_errmsg = parse_ctx.global_errmsg_;
-        }
-        ObString stmt(MIN(MAX_PRINT_LEN, parse_ctx.stmt_len_), parse_ctx.stmt_str_);
-        LOG_WARN("failed to parse pl stmt",
-                K(ret), K(err_line), K(global_errmsg), K(stmt));
-        LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX),
-                      err_len, err_str, err_line);
-      } else {
-        LOG_WARN("failed to parse pl stmt", K(ret));
-      }
-    } else {
-      int64_t buf_remain_len = parse_ctx.no_param_sql_buf_len_ - parse_ctx.no_param_sql_len_;
-      int64_t copy_len = parse_ctx.stmt_len_ - parse_ctx.copied_pos_;
-      if (buf_remain_len < copy_len) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Can not memmove due to remain buf len less than copy len",
-                K(ret), K(buf_remain_len), K(copy_len));
-      } else {
-        memmove(parse_ctx.no_param_sql_ + parse_ctx.no_param_sql_len_,
-                      parse_ctx.stmt_str_ + parse_ctx.copied_pos_, 
-                      copy_len);
-        parse_ctx.no_param_sql_len_ += copy_len;
-        parse_result.no_param_sql_ = parse_ctx.no_param_sql_;
-        parse_result.no_param_sql_len_ = parse_ctx.no_param_sql_len_;
-        parse_result.no_param_sql_buf_len_ = parse_ctx.no_param_sql_buf_len_;
-        parse_result.param_node_num_ = parse_ctx.param_node_num_;
-        parse_result.param_nodes_ = parse_ctx.param_nodes_;
-        parse_result.tail_param_node_ = parse_ctx.tail_param_node_;
-        parse_result.contain_sensitive_data_ = parse_ctx.contain_sensitive_data_;
-      }
-    }
-  }
-  return ret;
-}
 
 int ObPLParser::parse(const ObString &stmt_block,
                       const ObString &orig_stmt_block, // for preprocess

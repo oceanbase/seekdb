@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_routine_executor.h"
-#include "rootserver/ob_rs_serial_call.h"
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_ddl_serial_call.h"
+#include "rootserver/ob_local_management_service.h"
 #include "sql/resolver/ddl/ob_drop_routine_stmt.h"
 #include "sql/resolver/ddl/ob_alter_routine_stmt.h"
 #include "sql/resolver/cmd/ob_call_procedure_stmt.h"
@@ -27,7 +27,6 @@
 #include "sql/engine/expr/ob_expr_column_conv.h"
 #include "src/pl/pl_cache/ob_pl_cache_mgr.h"
 #include "src/pl/ob_pl_build.h"
-#include "src/pl/ob_pl_build_utils.h"
 
 namespace oceanbase
 {
@@ -41,12 +40,7 @@ int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &st
   obcall::ObCreateRoutineArg &crt_routine_arg = stmt.get_routine_arg();
   ObString first_stmt;
   
-  uint64_t database_id = crt_routine_arg.routine_info_.get_database_id();
-  ObString db_name = crt_routine_arg.db_name_;
-  ObString routine_name = crt_routine_arg.routine_info_.get_routine_name();
-  ObRoutineType type = crt_routine_arg.routine_info_.get_routine_type();
   obcall::ObRoutineDDLRes res;
-  bool has_error = ERROR_STATUS_HAS_ERROR == crt_routine_arg.error_info_.get_error_status();
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("fail to get first stmt" , K(ret));
   } else {
@@ -56,22 +50,8 @@ int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &st
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
-  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_routine_with_res(crt_routine_arg, res); }))) {
+  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_routine_with_res(crt_routine_arg, res); }))) {
     LOG_WARN("rpc proxy create procedure failed", K(ret), "dst", GCTX.self_addr());
-  }
-  if (OB_SUCC(ret)
-      && !has_error
-      && true
-      && GCONF.plsql_v2_compatibility) {
-    CK (OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
-    OZ (ObSPIService::force_refresh_schema(res.store_routine_schema_version_));
-    OZ (ctx.get_task_exec_ctx().schema_service_->
-      get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
-    OZ (pl::ObPLBuildUtils::build(ctx,
-                                       database_id,
-                                       routine_name,
-                                       pl::ObPLBuildUtils::get_pl_unit_type(type),
-                                       res.store_routine_schema_version_));
   }
   if(crt_routine_arg.with_if_not_exist_ && ret == OB_ERR_SP_ALREADY_EXISTS) {
     LOG_USER_WARN(OB_ERR_SP_ALREADY_EXISTS, "ROUTINE",  crt_routine_arg.routine_info_.get_routine_name().length(), crt_routine_arg.routine_info_.get_routine_name().ptr());
@@ -311,7 +291,7 @@ int ObDropRoutineExecutor::execute(ObExecContext &ctx, ObDropRoutineStmt &stmt)
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
-  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_routine(drop_routine_arg); }))) {
+  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_routine(drop_routine_arg); }))) {
     LOG_WARN("rpc proxy drop procedure failed", K(ret), "dst", GCTX.self_addr());
   }
   return ret;
@@ -323,11 +303,6 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
   ObTaskExecutorCtx *task_exec_ctx = NULL;
   obcall::ObCreateRoutineArg &alter_routine_arg = stmt.get_routine_arg();
   
-  uint64_t database_id = alter_routine_arg.routine_info_.get_database_id();
-  ObString db_name = alter_routine_arg.db_name_;
-  ObString routine_name = alter_routine_arg.routine_info_.get_routine_name();
-  ObRoutineType type = alter_routine_arg.routine_info_.get_routine_type();
-  bool has_error = ERROR_STATUS_HAS_ERROR == alter_routine_arg.error_info_.get_error_status();
   bool need_create_routine = (alter_routine_arg.is_need_alter_);
   ObString first_stmt;
   if (need_create_routine) {
@@ -344,22 +319,8 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
     } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       LOG_WARN("get task executor context failed", K(ret));
-    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->alter_routine_with_res(alter_routine_arg, res); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->alter_routine_with_res(alter_routine_arg, res); }))) {
       LOG_WARN("rpc proxy alter procedure failed", K(ret), "dst", GCTX.self_addr());
-    }
-    if (OB_SUCC(ret)
-        && !has_error
-        && true
-        && GCONF.plsql_v2_compatibility) {
-      CK (OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
-      OZ (ObSPIService::force_refresh_schema(res.store_routine_schema_version_));
-      OZ (ctx.get_task_exec_ctx().schema_service_->
-        get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
-      OZ (pl::ObPLBuildUtils::build(ctx,
-                                         database_id,
-                                         routine_name,
-                                         pl::ObPLBuildUtils::get_pl_unit_type(type),
-                                         res.store_routine_schema_version_));
     }
   } else {
     ObMySQLTransaction trans;
@@ -369,7 +330,7 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
     ObSArray<ObDependencyInfo> &dep_infos =
                       const_cast<ObSArray<ObDependencyInfo> &>(alter_routine_arg.dependency_infos_);
     OZ (ctx.get_task_exec_ctx().schema_service_->
-        get_tenant_schema_guard(schema_guard));
+        get_runtime_schema_guard(schema_guard));
     OZ(schema_guard.get_routine_info( alter_routine_arg.routine_info_.get_routine_id(), routine_info));
     CK (OB_NOT_NULL(routine_info));
     OZ (trans.start(GCTX.sql_proxy_, true));
@@ -388,19 +349,6 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
         LOG_ERROR("trans end failed", K(ret), K(tmp_ret));
         ret = OB_SUCCESS == ret ? tmp_ret : ret;
       }
-    }
-    if (OB_SUCC(ret)
-        && !has_error
-        && true
-        && GCONF.plsql_v2_compatibility) {
-      CK (OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
-      OZ (ctx.get_task_exec_ctx().schema_service_->
-        get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
-      OZ (pl::ObPLBuildUtils::build(ctx,
-                                         database_id,
-                                         routine_name,
-                                         pl::ObPLBuildUtils::get_pl_unit_type(type),
-                                         routine_info->get_schema_version()));
     }
   }
   return ret;

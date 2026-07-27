@@ -82,7 +82,6 @@ int ObSessionVariables::inner_get_next_row(ObNewRow *&row)
               case OB_APP_MIN_COLUMN_ID + 1: {
                 //deal with read_only
                 if (share::SYS_VAR_READ_ONLY == sys_var->get_type()) {
-                  //replace with tenant schema
                   if (sys_variable_schema_->is_read_only()) {
                     cells[cell_idx].set_varchar("ON");
                   } else {

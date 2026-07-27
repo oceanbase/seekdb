@@ -17,11 +17,11 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "rootserver/ddl_task/ob_drop_vec_ivf_index_task.h"
-#include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_local_ddl_serial_call.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_management_service.h"
 #include "observer/vector_index/ob_vector_index_util.h"
 #include "share/ob_ddl_sim_point.h"
 
@@ -34,7 +34,7 @@ namespace rootserver
 
 ObDropVecIVFIndexTask::ObDropVecIVFIndexTask()
   : ObDDLTask(DDL_DROP_VEC_IVFFLAT_INDEX),
-    root_service_(nullptr),
+    local_management_service_(nullptr),
     centroid_(),
     cid_vector_(),
     rowkey_cid_(), // delta_buffer_table
@@ -60,20 +60,21 @@ int ObDropVecIVFIndexTask::init(
     const ObVecIndexDDLChildTaskInfo &pq_centroid,
     const ObVecIndexDDLChildTaskInfo &pq_code,
     const int64_t schema_version,
-    const uint64_t tenant_data_version,
+    const uint64_t data_format_version,
     const obcall::ObDropIndexArg &drop_index_arg)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_data_format_version = tenant_data_version;
+  uint64_t runtime_data_format_version =
+      data_format_version > 0 ? data_format_version : DATA_CURRENT_VERSION;
   if (OB_UNLIKELY(task_id <= 0
                || OB_INVALID_ID == data_table_id
                || schema_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_id), K(data_table_id), K(centroid),
         K(cid_vector), K(rowkey_cid), K(sq_meta), K(pq_centroid), K(pq_code), K(schema_version));
-  } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, root service is null", K(ret));
+    LOG_WARN("error sys, local management service is null", K(ret));
   } else if (OB_FAIL(deep_copy_index_arg(allocator_, drop_index_arg, drop_index_arg_))) {
     LOG_WARN("deep copy drop index arg failed", K(ret));
   } else if (OB_FAIL(centroid_.deep_copy_from_other(centroid, allocator_))) {
@@ -88,8 +89,6 @@ int ObDropVecIVFIndexTask::init(
     LOG_WARN("fail to deep copy from other", K(ret), K(pq_centroid));
   } else if (OB_FAIL(pq_code_.deep_copy_from_other(pq_code, allocator_))) {
     LOG_WARN("fail to deep copy from other", K(ret), K(pq_code));
-  } else if (tenant_data_format_version <= 0 && OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_format_version))) {
-    LOG_WARN("get min data version failed", K(ret));
   } else {
     // get valid object id, target_object_id_ // not use this id
     if (centroid_.is_valid()) {
@@ -121,7 +120,7 @@ int ObDropVecIVFIndexTask::init(
       
       dst_schema_version_ = schema_version;
       is_inited_ = true;
-      data_format_version_ = tenant_data_format_version;
+      data_format_version_ = runtime_data_format_version;
       execution_id_ = 1L;
     }
   }
@@ -135,9 +134,9 @@ int ObDropVecIVFIndexTask::init(const ObDDLTaskRecord &task_record)
   if (OB_UNLIKELY(!task_record.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_record));
-  } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, root service is nullptr", K(ret));
+    LOG_WARN("unexpected error, local management service is nullptr", K(ret));
   } else {
     task_type_ = task_record.ddl_type_;
     
@@ -360,13 +359,13 @@ int ObDropVecIVFIndexTask::check_switch_succ()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("hasn't initialized", K(ret));
-  } else if (OB_ISNULL(root_service_)) {
+  } else if (OB_ISNULL(local_management_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, root service is nullptr", K(ret), KP(root_service_));
+    LOG_WARN("unexpected error, local management service is nullptr", K(ret), KP(local_management_service_));
   } else if (OB_FAIL(refresh_schema_version())) {
     LOG_WARN("refresh schema version failed", K(ret));
-  } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema", K(ret));
+  } else if (OB_FAIL(local_management_service_->get_schema_service().get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get runtime schema", K(ret));
   } else if (centroid_.is_valid() 
           && OB_FAIL(schema_guard.check_table_exist(centroid_.table_id_, is_centroid_exist))) {
     LOG_WARN("fail to check table exist", K(ret), K(centroid_));
@@ -474,11 +473,11 @@ int ObDropVecIVFIndexTask::drop_aux_ivfflat_index_table(const share::ObDDLTaskSt
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObDropVecIVFIndexTask has not been inited", K(ret));
-  } else if (OB_ISNULL(root_service_)) {
+  } else if (OB_ISNULL(local_management_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, root service is nullptr", K(ret), KP(root_service_));
-  } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", K(ret));
+    LOG_WARN("unexpected error, local management service is nullptr", K(ret), KP(local_management_service_));
+  } else if (OB_FAIL(local_management_service_->get_schema_service().get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get runtime schema guard", K(ret));
   } else if (0 == centroid_.task_id_ && centroid_.is_valid()
       && OB_FAIL(create_drop_index_task(schema_guard, centroid_.table_id_, centroid_.index_name_, centroid_.task_id_, true/* is_domain_index */))) {
       LOG_WARN("fail to create drop index task", K(ret), K(centroid_));
@@ -502,11 +501,11 @@ int ObDropVecIVFIndexTask::drop_aux_ivfsq8_index_table(const share::ObDDLTaskSta
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObDropVecIVFIndexTask has not been inited", K(ret));
-  } else if (OB_ISNULL(root_service_)) {
+  } else if (OB_ISNULL(local_management_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, root service is nullptr", K(ret), KP(root_service_));
-  } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", K(ret));
+    LOG_WARN("unexpected error, local management service is nullptr", K(ret), KP(local_management_service_));
+  } else if (OB_FAIL(local_management_service_->get_schema_service().get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get runtime schema guard", K(ret));
   } else if (0 == centroid_.task_id_ && centroid_.is_valid()
       && OB_FAIL(create_drop_index_task(schema_guard, centroid_.table_id_, centroid_.index_name_, centroid_.task_id_, true/* is_domain_index */))) {
       LOG_WARN("fail to create drop index task", K(ret), K(centroid_));
@@ -533,11 +532,11 @@ int ObDropVecIVFIndexTask::drop_aux_ivfpq_index_table(const share::ObDDLTaskStat
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObDropVecIVFIndexTask has not been inited", K(ret));
-  } else if (OB_ISNULL(root_service_)) {
+  } else if (OB_ISNULL(local_management_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, root service is nullptr", K(ret), KP(root_service_));
-  } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", K(ret));
+    LOG_WARN("unexpected error, local management service is nullptr", K(ret), KP(local_management_service_));
+  } else if (OB_FAIL(local_management_service_->get_schema_service().get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get runtime schema guard", K(ret));
   } else if (0 == centroid_.task_id_ && centroid_.is_valid()
       && OB_FAIL(create_drop_index_task(schema_guard, centroid_.table_id_, centroid_.index_name_, centroid_.task_id_, true/* is_domain_index */))) {
       LOG_WARN("fail to create drop index task", K(ret), K(centroid_));
@@ -677,9 +676,9 @@ int ObDropVecIVFIndexTask::create_drop_index_task(
   const ObDatabaseSchema *database_schema = nullptr;
   const ObTableSchema *data_table_schema = nullptr;
   bool is_index_exist = false;
-  if (OB_ISNULL(root_service_)) {
+  if (OB_ISNULL(local_management_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, root service is nullptr", K(ret), KP(root_service_));
+    LOG_WARN("unexpected error, local management service is nullptr", K(ret), KP(local_management_service_));
   } else if (OB_UNLIKELY(OB_INVALID_ID == index_tid || index_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(index_tid), K(index_name));
@@ -728,7 +727,7 @@ int ObDropVecIVFIndexTask::create_drop_index_task(
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(
             index_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout_us))) {
       LOG_WARN("fail to get ddl rpc timeout", K(ret));
-    } else if (OB_FAIL(rootserver::serial_call([&]{ return root_service_->drop_index(arg, res); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return local_management_service_->drop_index(arg, res); }))) {
       LOG_WARN("fail to drop index", K(ret), K(ddl_rpc_timeout_us), K(arg), K(res.task_id_));
     } else {
       task_id = res.task_id_;
@@ -757,9 +756,9 @@ int ObDropVecIVFIndexTask::cleanup_impl()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_ISNULL(root_service_)) {
+  } else if (OB_ISNULL(local_management_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("rootservice is null", K(ret));
+    LOG_WARN("local management service is null", K(ret));
   } else if (OB_FAIL(report_error_code(unused_str))) {
     LOG_WARN("report error code failed", K(ret));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {

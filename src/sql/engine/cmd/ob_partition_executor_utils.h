@@ -37,10 +37,8 @@ namespace sql
 class ObExecContext;
 class ObRawExpr;
 class ObCreateTableStmt;
-class ObCreateTablegroupStmt;
 class ObCreateIndexStmt;
 class ObTableStmt;
-class ObTablegroupStmt;
 
 class ObPartitionExecutorUtils
 {
@@ -86,43 +84,6 @@ public:
                                 const stmt::StmtType stmt_type,
                                 share::schema::ObTableSchema &table_schema,
                                 ObRawExpr *interval_expr);
-
-  /*--------------tablegroup related start------------------*/
-  static int calc_values_exprs(ObExecContext &ctx, ObCreateTablegroupStmt &stmt);
-
-  static int calc_values_exprs(ObExecContext &ctx, ObCreateTablegroupStmt &stmt, bool is_subpart);
-
-
-  static int cast_range_expr_to_obj(ObExecContext &ctx,
-                                    ObCreateTablegroupStmt &stmt,
-                                    bool is_subpart,
-                                    common::ObIArray<common::ObObj> &range_partition_obj);
-
-  static int cast_range_expr_to_obj(ObExecContext &ctx,
-                                    common::ObIArray<ObRawExpr *> &range_values_exprs,
-                                    const int64_t fun_expr_num,
-                                    const stmt::StmtType stmt_type,
-                                    const bool is_subpart,
-                                    const int64_t real_part_num,
-                                    share::schema::ObPartition **partition_array,
-                                    share::schema::ObSubPartition **subpartition_array,
-                                    common::ObIArray<common::ObObj> &range_partition_obj);
-
-  static int cast_list_expr_to_obj(ObExecContext &ctx,
-                                   ObCreateTablegroupStmt &stmt,
-                                   bool is_subpar);
-
-  static int cast_list_expr_to_obj(ObExecContext &ctx,
-                                   ObTablegroupStmt &stmt,
-                                   const bool is_subpart,
-                                   share::schema::ObPartition **partition_array,
-                                   share::schema::ObSubPartition **subpartition_array);
-
-  static int cast_expr_to_obj(ObExecContext &ctx,
-                              int64_t fun_expr_num,
-                              common::ObIArray<ObRawExpr *> &range_values_exprs,
-                              common::ObIArray<common::ObObj> &range_partition_obj);
-  /*--------------tablegroup related end------------------*/
 
   static int calc_range_values_exprs(ObExecContext &ctx, ObCreateIndexStmt &stmt);
 

@@ -119,7 +119,6 @@ struct ObKVMemBlockHandle : public common::ObDLink
   int64_t recent_get_cnt_;
   double score_;
   int64_t kv_cnt_;
-  int64_t ref_cnt_;
   int64_t seq_num_;
   int64_t last_modified_time_us_;
   ObKVMBHandleStatus status_;
@@ -210,8 +209,7 @@ struct ObKVCacheStoreMemblockInfo
 {
 public:
   ObKVCacheStoreMemblockInfo()
-    : ref_count_(-1),
-      using_status_(-1),
+    : using_status_(-1),
       policy_(-1),
       kv_cnt_(-1),
       get_cnt_(-1),
@@ -224,10 +222,9 @@ public:
   }
   ~ObKVCacheStoreMemblockInfo() = default;
   bool is_valid() const { return score_ >= 0; }
-  TO_STRING_KV(K_(ref_count), K_(using_status), K_(policy), K_(kv_cnt), K_(get_cnt),
+  TO_STRING_KV(K_(using_status), K_(policy), K_(kv_cnt), K_(get_cnt),
           K_(recent_get_cnt), K_(score), K_(align_size), KP_(memblock_ptr));
 public: 
-  int64_t ref_count_;
   int64_t using_status_;
   int64_t policy_;
   int64_t kv_cnt_;

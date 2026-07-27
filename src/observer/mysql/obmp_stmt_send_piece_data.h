@@ -175,7 +175,7 @@ class ObPieceCache {
       } else if (!piece_map_.created() &&
                   OB_FAIL(piece_map_.create(common::hash::cal_next_prime(32),
                                             ObModIds::OB_HASH_BUCKET, ObModIds::OB_HASH_NODE))) {
-        SQL_ENG_LOG(WARN, "create sequence current value map failed", K(ret));
+        SQL_ENG_LOG(WARN, "create piece map failed", K(ret));
       } else { /*do nothing*/ }
       return ret;
     }

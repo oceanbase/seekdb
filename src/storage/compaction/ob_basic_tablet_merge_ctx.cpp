@@ -23,8 +23,8 @@
 #include "storage/ob_storage_schema_util.h"
 #include "storage/ob_gc_upper_trans_helper.h"
 #include "ob_medium_list_checker.h"
-#include "observer/report/ob_tablet_table_updater.h" // for ObTabletTableUpdater
-#include "share/schema/ob_tenant_schema_service.h"
+#include "observer/ob_tablet_runtime_meta_updater.h" // for ObTabletRuntimeMetaUpdater
+#include "share/schema/ob_schema_runtime_service.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
 #include "storage/tablet/ob_mds_scan_param_helper.h"
 #include "share/ob_structured_event_logger.h"
@@ -103,10 +103,8 @@ ObStaticMergeParam::ObStaticMergeParam(ObTabletMergeDagParam &dag_param)
     is_full_merge_(false),
     is_schema_changed_(false),
     need_parallel_minor_merge_(true),
-    is_tenant_major_merge_(false),
+    is_database_major_merge_(false),
     is_backfill_(false),
-    is_delete_insert_merge_(false),
-    is_restore_complete_(true),
     for_unittest_(false),
     merge_level_(MICRO_BLOCK_MERGE_LEVEL),
     merge_reason_(ObAdaptiveMergePolicy::AdaptiveMergeReason::NONE),
@@ -149,8 +147,6 @@ void ObStaticMergeParam::reset()
   tablet_schema_guard_.reset();
   encoding_granularity_ = 0;
   for_unittest_ = false;
-  is_delete_insert_merge_ = false;
-  is_restore_complete_ = true;
 }
 
 bool ObStaticMergeParam::is_valid() const
@@ -406,7 +402,7 @@ int ObBasicTabletMergeCtx::prepare_merge_progress(
 {
   int ret = OB_SUCCESS;
   progress = nullptr;
-  if (get_is_tenant_major_merge()) {
+  if (get_is_database_major_merge()) {
     progress = OB_NEWx(ObPartitionMajorMergeProgress, &(mem_ctx_.get_safe_arena()), mem_ctx_.get_safe_arena());
   } else {
     progress = OB_NEWx(ObPartitionMergeProgress, &(mem_ctx_.get_safe_arena()), mem_ctx_.get_safe_arena());
@@ -441,7 +437,7 @@ int ObBasicTabletMergeCtx::build_ctx(bool &finish_flag)
     LOG_WARN(str, KR(ret), KPC(this)); CTX_SET_DIAGNOSE_LOCATION(*this);
   if (OB_FAIL(get_ls_and_tablet())) {
     if (OB_TABLET_NOT_EXIST != ret) {
-      LOG_PRINT_WRAPPER("failed to get ls, tablet handle, or rebuild sequence");
+      LOG_PRINT_WRAPPER("failed to get ls handle or tablet handle");
     }
   } else if (OB_FAIL(get_merge_tables(get_merge_table_result))) {
     if (OB_NO_NEED_MERGE != ret) {
@@ -588,18 +584,16 @@ int ObBasicTabletMergeCtx::get_ls_and_tablet()
   } else if (static_param_.ls_->is_offline()) {
     ret = OB_CANCELED;
     LOG_INFO("ls offline, skip merge", K(ret), "param", get_dag_param());
-  } else {
-    if (get_dag_param().need_swap_tablet_flag_) {
-      if (OB_FAIL(swap_tablet())) {
-        LOG_WARN("failed to swap tablet", K(ret), K(static_param_));
-      }
-    } else if (OB_FAIL(static_param_.ls_->get_tablet_svr()->get_tablet(
-            static_param_.get_tablet_id(),
-            tablet_handle_,
-            0/*timeout_us*/,
-            storage::ObMDSGetTabletMode::READ_ALL_COMMITED))) {
-      LOG_WARN("failed to get tablet", K(ret), K(static_param_));
+  } else if (get_dag_param().need_swap_tablet_flag_) {
+    if (OB_FAIL(swap_tablet())) {
+      LOG_WARN("failed to swap tablet", K(ret), K(static_param_));
     }
+  } else if (OB_FAIL(static_param_.ls_->get_tablet_svr()->get_tablet(
+          static_param_.get_tablet_id(),
+          tablet_handle_,
+          0/*timeout_us*/,
+          storage::ObMDSGetTabletMode::READ_ALL_COMMITED))) {
+    LOG_WARN("failed to get tablet", K(ret), K(static_param_));
   }
   return ret;
 }
@@ -640,7 +634,7 @@ int ObBasicTabletMergeCtx::swap_tablet()
 }
 
 bool ObBasicTabletMergeCtx::need_swap_tablet(
-    ObProtectedMemtableMgrHandle &memtable_mgr_handle,
+    storage::ObProtectedMemtableMgrHandle &memtable_mgr_handle,
     const int64_t row_count,
     const int64_t macro_count) {
   bool bret = false;
@@ -663,16 +657,10 @@ int ObBasicTabletMergeCtx::get_storage_schema()
 {
   int ret  = OB_SUCCESS;
   ObStorageSchema *schema_on_tablet = nullptr;
-  const ObTabletRestoreState &restore_state = get_tablet()->get_tablet_meta().restore_state_;
   if (OB_FAIL(get_tablet()->load_storage_schema(mem_ctx_.get_allocator(), schema_on_tablet))) {
     LOG_WARN("failed to load storage schema", K(ret), K_(tablet_handle));
-  } else if (OB_UNLIKELY(!restore_state.is_valid())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tablet restore state", K(ret), K(restore_state));
   } else {
     static_param_.schema_ = schema_on_tablet;
-    static_param_.is_delete_insert_merge_ = schema_on_tablet->is_delete_insert_merge_engine();
-    static_param_.is_restore_complete_ = restore_state.is_restore_status_full();
   }
   return ret;
 }
@@ -768,9 +756,7 @@ int ObBasicTabletMergeCtx::generate_macro_id_list(char *buf, const int64_t buf_l
     if (macro_count < 40) {
       MacroBlockId macro_id;
       for (int64_t i = 0; OB_SUCC(ret) && OB_SUCC(iter.get_next_macro_id(macro_id)); ++i) {
-        const int64_t block_seq = is_local_exec_mode(get_exec_mode())
-                                ? (macro_id.second_id())
-                                : macro_id.third_id();
+        const int64_t block_seq = macro_id.second_id();
         if (0 == i) {
           pret = snprintf(buf + strlen(buf), remain_len, "%ld", block_seq);
         } else {
@@ -856,7 +842,7 @@ void ObBasicTabletMergeCtx::add_sstable_merge_info(
     }
   }
 
-  if (OB_TMP_FAIL(share::g_mp->tenant_ss_table_merge_info_mgr()->add_sstable_merge_info(merge_history))) {
+  if (OB_TMP_FAIL(share::g_mp->sstable_merge_info_mgr()->add_sstable_merge_info(merge_history))) {
     LOG_ERROR_RET(tmp_ret, "failed to add sstable merge info", K(merge_history));
   }
   merge_history.info_param_ = nullptr;
@@ -877,14 +863,11 @@ int ObBasicTabletMergeCtx::init_static_desc()
                                 get_merge_type(), get_snapshot(),
                                 static_param_.scn_range_.end_scn_,
                                 static_param_.data_version_,
-                                static_param_.get_exec_mode(),
                                 get_tablet()->get_tablet_meta().micro_index_clustered_,
                                 get_concurrent_cnt(),
                                 true,
                                 static_param_.encoding_granularity_))) {
     LOG_WARN("failed to init static desc", KR(ret), KPC(this));
-  } else {
-    LOG_TRACE("[SharedStorage] success to set exec mode", KR(ret), "exec_mode", exec_mode_to_str(static_desc_.exec_mode_));
   }
   return ret;
 }
@@ -898,7 +881,7 @@ int ObBasicTabletMergeCtx::init_read_info()
   } else if (OB_FAIL(read_info_.init(mem_ctx_.get_allocator(), schema_stored_col_cnt, get_schema()->get_rowkey_column_num(),
             static_param_.multi_version_column_descs_))) {
     LOG_WARN("failed to init read info", KR(ret), KPC(this));
-  } 
+  }
   return ret;
 }
 
@@ -930,13 +913,14 @@ void ObBasicTabletMergeCtx::after_update_tablet_for_major()
   int tmp_ret = OB_SUCCESS;
   if (is_major_merge_type(get_merge_type())) {
     const ObTabletID &tablet_id = get_tablet_id();
-    if (OB_TMP_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(tablet_id, true/*need_diagnose*/))) {
+    if (OB_TMP_FAIL(share::g_mp->tablet_runtime_meta_updater()->submit_update_task(tablet_id, true/*need_diagnose*/))) {
       LOG_ERROR_RET(tmp_ret, "failed to submit tablet update task to report", K(tablet_id));
     } else if (OB_TMP_FAIL(get_ls()->get_tablet_svr()->update_tablet_report_status(tablet_id))) {
       LOG_ERROR_RET(tmp_ret, "failed to update tablet report status", K(tablet_id));
     }
-    if (OB_TMP_FAIL(share::g_mp->tenant_medium_checker()->add_tablet(tablet_id, get_merge_version()))) {
-      LOG_WARN_RET(tmp_ret, "failed to add tablet for check", K(tablet_id), "merge_version", get_merge_version());
+    if (OB_TMP_FAIL(share::g_mp->medium_checker()->add_tablet(tablet_id, get_merge_version()))) {
+      LOG_WARN_RET(tmp_ret, "failed to add tablet for check", K(tablet_id),
+          "merge_version", get_merge_version());
     }
   }
 }
@@ -972,9 +956,7 @@ int ObBasicTabletMergeCtx::build_update_table_store_param(
   param.sstable_ = sstable;
   param.allow_duplicate_sstable_ = false;
 
-  if (OB_FAIL(param.init_with_ha_info(ObHATableStoreParam()))) {
-    LOG_WARN("failed to init with ha info", KR(ret));
-  } else if (OB_FAIL(param.init_with_compaction_info(ObCompactionTableStoreParam(
+  if (OB_FAIL(param.init_with_compaction_info(ObCompactionTableStoreParam(
                      get_inner_table_merge_type(),
                      clog_checkpoint_scn,
                      is_major_merge_type(merge_type), /*need_report*/
@@ -1025,12 +1007,12 @@ int ObBasicTabletMergeCtx::try_set_upper_trans_version(blocksstable::ObSSTable &
     int tmp_ret = OB_SUCCESS;
     ObLS *ls = get_ls();
     int64_t new_upper_trans_version = INT64_MAX;
-    
+
     if (INT64_MAX != sstable.get_upper_trans_version()) {
       // all row committed, has set as max_merged_trans_version
     } else if (OB_TMP_FAIL(ObGCUpperTransHelper::try_get_sstable_upper_trans_version(*ls, sstable, new_upper_trans_version))) {
       LOG_WARN("failed to get new upper_trans_version for sstable", K(tmp_ret), K(sstable));
-    } else if (INT64_MAX != new_upper_trans_version 
+    } else if (INT64_MAX != new_upper_trans_version
             && OB_TMP_FAIL(sstable.set_upper_trans_version(mem_ctx_.get_allocator(), new_upper_trans_version))) {
       LOG_WARN("failed to set upper trans version", K(tmp_ret), K(sstable));
     } else {
@@ -1188,10 +1170,8 @@ int ObBasicTabletMergeCtx::prepare_from_medium_compaction_info(const ObMediumCom
 
   if (OB_SUCC(ret)) {
     static_param_.data_version_ = medium_info->data_version_;
-    static_param_.is_tenant_major_merge_ = medium_info->is_major_compaction();
-    if (medium_info->medium_compat_version_ >= ObMediumCompactionInfo::MEDIUM_COMPAT_VERSION_V4) {
-      static_param_.is_schema_changed_ = medium_info->is_schema_changed_;
-    }
+    static_param_.is_database_major_merge_ = medium_info->is_major_compaction();
+    static_param_.is_schema_changed_ = medium_info->is_schema_changed_;
     static_param_.encoding_granularity_ = medium_info->encoding_granularity_;
     static_param_.merge_reason_ = (ObAdaptiveMergePolicy::AdaptiveMergeReason)medium_info->medium_merge_reason_;
     FLOG_INFO("get storage schema to merge", "param", get_dag_param(), KPC(medium_info));
@@ -1267,7 +1247,7 @@ int ObBasicTabletMergeCtx::check_medium_info(
     const ObMediumCompactionInfo &next_medium_info,
     const int64_t last_major_snapshot)
 {
-  return ObMediumListChecker::check_next_schedule_medium(next_medium_info, last_major_snapshot, true/*force_check*/);
+  return ObMediumListChecker::check_next_schedule_medium(next_medium_info, last_major_snapshot);
 }
 
 int ObBasicTabletMergeCtx::swap_tablet(ObGetMergeTablesResult &get_merge_table_result)
@@ -1279,7 +1259,7 @@ int ObBasicTabletMergeCtx::swap_tablet(ObGetMergeTablesResult &get_merge_table_r
     LOG_WARN("other merge type not support swap tablet", KR(ret), "param", get_dag_param());
   } else {
     ObTablesHandleArray &tables_handle = get_merge_table_result.handle_;
-    ObProtectedMemtableMgrHandle *protected_handle = NULL;
+    storage::ObProtectedMemtableMgrHandle *protected_handle = nullptr;
     int64_t row_count = 0;
     int64_t macro_count = 0;
     const ObSSTable *sstable = nullptr;
@@ -1313,7 +1293,7 @@ int ObBasicTabletMergeCtx::get_meta_compaction_info()
   int64_t schema_version = 0;
   ObStorageSchema *storage_schema = nullptr;
   bool is_building_index = false; // placeholder
-  uint64_t min_data_version = 0;
+  const uint64_t data_version = DATA_CURRENT_VERSION;
 
   if (OB_UNLIKELY(!is_meta_major_merge(get_merge_type())
                || nullptr != static_param_.schema_)) {
@@ -1321,17 +1301,15 @@ int ObBasicTabletMergeCtx::get_meta_compaction_info()
     LOG_WARN("get unexpected static param", K(ret), K(static_param_), KPC(static_param_.schema_));
   } else if (OB_FAIL(ObStorageSchemaUtil::alloc_storage_schema(mem_ctx_.get_allocator(), storage_schema))) {
     LOG_WARN("failed to alloc storage schema", K(ret));
-  } else if (OB_ISNULL(schema_service = share::g_mp->tenant_schema_service()->get_schema_service())) {
+  } else if (OB_ISNULL(schema_service = share::g_mp->schema_runtime_service()->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get schema service from MTL", K(ret));
+    LOG_WARN("failed to get schema service from server module provider", K(ret));
   } else if (OB_FAIL(tablet->get_schema_version_from_storage_schema(schema_version))){
     LOG_WARN("failed to get schema version from tablet", KR(ret), KPC(tablet));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(min_data_version))) {
-    LOG_WARN("failed to get min data version", K(ret));
   } else if (OB_FAIL(ObMediumCompactionScheduleFunc::get_table_schema_to_merge(*schema_service,
                                                                                *tablet,
                                                                                schema_version,
-                                                                               min_data_version,
+                                                                               data_version,
                                                                                mem_ctx_.get_allocator(),
                                                                                *storage_schema,
                                                                                is_building_index))) {
@@ -1350,7 +1328,7 @@ int ObBasicTabletMergeCtx::get_meta_compaction_info()
   }
 
   if (OB_SUCC(ret)) {
-    static_param_.data_version_ = min_data_version;
+    static_param_.data_version_ = data_version;
     static_param_.is_schema_changed_ = true; // use MACRO_BLOCK_MERGE_LEVEL
     static_param_.merge_reason_ = ObAdaptiveMergePolicy::TOMBSTONE_SCENE;
     FLOG_INFO("get storage schema to meta merge", "param", get_dag_param(), KPC_(static_param_.schema));
@@ -1387,7 +1365,6 @@ int ObBasicTabletMergeCtx::init_sstable_merge_history()
   static_history_.concurrent_cnt_ = static_param_.concurrent_cnt_;
   static_history_.is_full_merge_ = static_param_.is_full_merge_;
   static_history_.merge_level_ = static_param_.merge_level_;
-  static_history_.exec_mode_ = get_exec_mode();
   static_history_.merge_reason_ = static_param_.merge_reason_;
   if (!static_history_.is_valid()) {
     ret = OB_ERR_UNEXPECTED;

@@ -19,16 +19,13 @@
 #include "lib/container/ob_array.h"
 #include "lib/hash/ob_link_hashmap.h"
 #include "ob_deadlock_key_wrapper.h"
-#include "lib/net/ob_addr.h"
 #include "ob_deadlock_parameters.h"
 #include "lib/function/ob_function.h"
 #include "lib/guard/ob_unique_guard.h"
 #include "lib/guard/ob_shared_guard.h"
 #include "lib/utility/utility.h"
 #include "lib/utility/ob_print_utils.h"
-#include "lib/container/ob_array_serialization.h"
 #include "share/ob_occam_time_guard.h"
-#include "storage/tx/ob_tx_seq.h"
 
 #define DETECT_TIME_GUARD(threshold) TIMEGUARD_INIT(DETECT, threshold)
 
@@ -38,18 +35,12 @@ namespace share
 {
 namespace detector
 {
-// if msg in map count below LCL_MSG_CACHE_LIMIT/2, all pending msg is accepted
-// if msg in map count greater than LCL_MSG_CACHE_LIMIT/2, but less than LCL_MSG_CACHE_LIMIT,
-// random drop appending msg, drop probability depends on how many msg keeping in map,
-// if msg count in map reach LCL_MSG_CACHE_LIMIT, drop probability is 100%, no more msg is accepted.
-constexpr int64_t LCL_MSG_CACHE_LIMIT = 4096;
-
-class ObLCLMessage;
 class ObDependencyResource;
 class ObDetectorPriority;
 class ObDetectorUserReportInfo;
 class ObDetectorInnerReportInfo;
-class ObDeadLockCollectInfoMessage;
+class ObLCLLabel;
+class ObDeadLockCycleInfo;
 typedef common::ObFunction<int(const common::ObIArray<ObDetectorInnerReportInfo> &,
                                const int64_t)> DetectCallBack;
 typedef common::ObFunction<int(ObIArray<ObDependencyResource>&,bool&)> BlockCallBack;
@@ -80,14 +71,14 @@ public:
   virtual int activate(const ObDependencyResource &) = 0;
   virtual int activate_all() = 0;
   virtual uint64_t get_resource_id() const = 0;// get self resource id
-  virtual int process_collect_info_message(const ObDeadLockCollectInfoMessage &) = 0;
-  // handle message for scheme LCL
-  virtual int process_lcl_message(const ObLCLMessage &) = 0;
+  virtual int process_cycle_info(const ObDeadLockCycleInfo &) = 0;
+  virtual int process_lcl_state(const int64_t lclv,
+                                const ObLCLLabel &label,
+                                const int64_t send_ts) = 0;
 };
 
 class ObDetectorPriority
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDetectorPriority(uint64_t priority_value);
   ObDetectorPriority(const PRIORITY_RANGE &priority_range, uint64_t priority_value);
@@ -108,7 +99,6 @@ private:
 
 class ObDetectorUserReportInfo
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDetectorUserReportInfo();
   ObDetectorUserReportInfo &operator=(const ObDetectorUserReportInfo &) = delete;
@@ -120,8 +110,8 @@ public:
   const common::ObString &get_module_name() const;
   const common::ObString &get_resource_visitor() const;
   const common::ObString &get_required_resource() const;
-  const common::ObSArray<common::ObString> &get_extra_columns_names() const;
-  const common::ObSArray<common::ObString> &get_extra_columns_values() const;
+  const common::ObArray<common::ObString> &get_extra_columns_names() const;
+  const common::ObArray<common::ObString> &get_extra_columns_values() const;
   // use this interface like:
   // set_extra_info("1","2",ObString("3"),"4","5",ObString("6"),ObString("7"),ObString("8"));
   //
@@ -158,13 +148,9 @@ private:
   common::ObString module_name_;// like 'transaction' to transaction module
   common::ObString resource_visitor_;// like 'transaction id' to transaction module
   common::ObString required_resource_;// like 'row key' to transaction module
-  transaction::ObTxSEQ blocked_seq_;// blocked tx holding row's lock by execute sql identified by this seq
-  // ObSEArray is not allowed here,
-  // cause different template parameter LOCAL_ARRAY_SIZE means different type
-  // may influence rpc deserialization in compat scenario
-  common::ObSArray<common::ObString> extra_columns_names_;// explain the meaning of extra columns
+  common::ObArray<common::ObString> extra_columns_names_;// explain the meaning of extra columns
   // extra info that user could describe more things
-  common::ObSArray<common::ObString> extra_columns_values_;
+  common::ObArray<common::ObString> extra_columns_values_;
   uint8_t valid_extra_column_size_;// indicate whether extra info valid, and how many of them valid
   common::ObSharedGuard<char> module_name_guard_;
   common::ObSharedGuard<char> resource_visitor_guard_;
@@ -175,21 +161,18 @@ private:
 
 class ObDetectorInnerReportInfo
 {
-  OB_UNIS_VERSION(1);
 public:
   ObDetectorInnerReportInfo();
   ObDetectorInnerReportInfo &operator=(const ObDetectorInnerReportInfo &) = delete;
   int assign(const ObDetectorInnerReportInfo &rhs);
   int set_args(const UserBinaryKey &binary_key,
-               const common::ObAddr &addr, const uint64_t detector_id,
+               const uint64_t detector_id,
                const int64_t report_time, const int64_t created_time,
                const uint64_t event_id, const char *role,
                const uint64_t start_delay,
                const ObDetectorPriority &priority,
                const ObDetectorUserReportInfo &user_report_info);
   const UserBinaryKey &get_user_key() const;
-  
-  const common::ObAddr &get_addr() const;
   uint64_t get_detector_id() const;
   int64_t get_created_time() const;
   uint64_t get_event_id() const;
@@ -197,26 +180,16 @@ public:
   uint64_t get_start_delay() const;
   const ObDetectorPriority &get_priority() const;
   const ObDetectorUserReportInfo &get_user_report_info() const;
-  TO_STRING_KV(K_(binary_key), K_(addr), K_(detector_id),
+  TO_STRING_KV(K_(binary_key), K_(detector_id),
                K_(report_time), K_(created_time),
                K_(event_id), K_(role), K_(start_delay), K_(priority), K_(user_report_info));
 private:
-  // binary key to describe user key info, to identify a dectector on a machine
+  // binary key to describe user key info and identify a detector in this process
   UserBinaryKey binary_key_;
-// the tenant who owns this detector
-  // machine internet address,together witch detector_id_ and report_time_
-  // identify a globally(through entire cluster) unique event
-  common::ObAddr addr_;
-  // detector id, together witch addr_ and report_time_
-  // identify a globally(through entire cluster) unique event
   uint64_t detector_id_;
-  // report info time during deadlock reconfirm process,
-  // together witch detector_id_ and addr_
-  // identify a globally(through entire cluster) unique event
   int64_t report_time_;
   int64_t created_time_;// the detector created time
-  uint64_t event_id_;// hash result with awakened detector's addr_,detector_id_,report_time_ field,
-                     // may not be globally(through entire cluster) unique, but mostly is
+  uint64_t event_id_;// hash of the local detector key, detector id and creation time
   common::ObString role_;// the role this detector plays
   // the delay time of detector start detect,
   // setted by detector user when detector created
@@ -226,26 +199,41 @@ private:
   ObDetectorUserReportInfo user_report_info_;// described by user
 };
 
-// ObDependencyResource describes the network resource on internet
-// this structure could uniquely identified a detector on internet by address and user key
+class ObDeadLockCycleInfo
+{
+public:
+  ObDeadLockCycleInfo() = default;
+  ~ObDeadLockCycleInfo() = default;
+  ObDeadLockCycleInfo &operator=(const ObDeadLockCycleInfo &) = delete;
+  int assign(const ObDeadLockCycleInfo &rhs);
+  int set_dest_key(const UserBinaryKey &dest_key);
+  int append(const ObDetectorInnerReportInfo &info);
+  bool is_valid() const;
+  const UserBinaryKey &get_dest_key() const;
+  const common::ObArray<ObDetectorInnerReportInfo> &get_collected_info() const;
+  TO_STRING_KV(K_(dest_key), K_(collected_info));
+private:
+  UserBinaryKey dest_key_;
+  common::ObArray<ObDetectorInnerReportInfo> collected_info_;
+};
+
+// ObDependencyResource identifies another detector in the same process.
 class ObDependencyResource
 {
 public:
   ObDependencyResource();
   ObDependencyResource(const ObDependencyResource &rhs);
-  ObDependencyResource(const common::ObAddr &addr, const UserBinaryKey &user_key);
+  explicit ObDependencyResource(const UserBinaryKey &user_key);
   ObDependencyResource &operator=(const ObDependencyResource &rhs);
   bool operator==(const ObDependencyResource &rhs) const;
   ~ObDependencyResource() = default;
-  int set_args(const common::ObAddr &addr, const UserBinaryKey &user_key);
-  const common::ObAddr &get_addr() const;
+  int set_args(const UserBinaryKey &user_key);
   const UserBinaryKey &get_user_key() const;
   bool is_valid() const;
   uint64_t hash() const;
   int hash(uint64_t &hash_val) const { hash_val = hash(); return OB_SUCCESS; }
-  TO_STRING_KV(K_(addr), K_(user_key));
+  TO_STRING_KV(K_(user_key));
 private:
-  common::ObAddr addr_;
   UserBinaryKey user_key_;
 };
 

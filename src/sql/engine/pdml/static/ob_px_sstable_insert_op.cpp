@@ -210,7 +210,7 @@ int ObPxMultiPartSSTableInsertOp::inner_get_next_row()
     }
     if (OB_SUCC(ret) && need_idempotent_table_autoinc_) {
       if (OB_FAIL(sync_table_level_autoinc_value())) {
-        LOG_WARN("sync global autoinc value failed", K(ret));
+        LOG_WARN("persist table-level autoinc value failed", K(ret));
       }
     }
   }
@@ -1065,7 +1065,7 @@ int ObPxMultiPartSSTableInsertOp::sync_table_level_autoinc_value()
       for (int64_t i = 0; OB_SUCC(ret) && i < autoinc_params.count(); ++i) {
         AutoincParam &autoinc_param = autoinc_params.at(i);
         autoinc_param.auto_increment_cache_size_ = 0; // set cache size to 0 to disable prefetch
-        if (OB_FAIL(auto_service.sync_insert_value_global(autoinc_param))) {
+        if (OB_FAIL(auto_service.sync_insert_value(autoinc_param))) {
           LOG_WARN("sync value failed", K(ret));
         }
       }

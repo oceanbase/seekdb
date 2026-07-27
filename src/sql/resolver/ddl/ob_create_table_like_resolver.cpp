@@ -55,9 +55,6 @@ int ObCreateTableLikeResolver::resolve(const ParseNode &parse_tree)
       if (NULL != parse_tree.children_[0]) {
         if (T_TEMPORARY == parse_tree.children_[0]->type_) {
           is_temporary_table = true;
-        } else if (T_EXTERNAL == parse_tree.children_[0]->type_) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "create external table like");
         } else {
           ret = OB_INVALID_ARGUMENT;
           SQL_RESV_LOG(WARN, "invalid argument.",

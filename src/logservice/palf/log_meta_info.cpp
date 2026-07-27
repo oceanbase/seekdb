@@ -179,7 +179,13 @@ DEFINE_SERIALIZE(LogSnapshotMeta)
 {
   int ret = OB_SUCCESS;
   int64_t new_pos = pos;
-  if (buf_len - new_pos < get_serialize_size()) {
+  if (OB_UNLIKELY(nullptr == buf || buf_len < 0 || pos < 0 || pos > buf_len)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (LOG_SNAPSHOT_META_VERSION != version_) {
+    ret = OB_VERSION_NOT_MATCH;
+    PALF_LOG(ERROR, "log snapshot metadata format version mismatch",
+             K(ret), K_(version), K(LOG_SNAPSHOT_META_VERSION));
+  } else if (buf_len - new_pos < get_serialize_size()) {
     ret = OB_BUF_NOT_ENOUGH;
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, version_)) ||
              OB_FAIL(base_lsn_.serialize(buf, buf_len, new_pos)) ||
@@ -197,10 +203,19 @@ DEFINE_DESERIALIZE(LogSnapshotMeta)
 {
   int ret = OB_SUCCESS;
   int64_t new_pos = pos;
-  if (data_len - new_pos < get_serialize_size()) {
+  int64_t decoded_version = -1;
+  if (OB_UNLIKELY(nullptr == buf || data_len < 0 || pos < 0 || pos > data_len)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (data_len - pos < serialization::encoded_length_i64(decoded_version)) {
     ret = OB_BUF_NOT_ENOUGH;
-  } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &version_)) ||
-             OB_FAIL(base_lsn_.deserialize(buf, data_len, new_pos)) ||
+  } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &decoded_version))) {
+    PALF_LOG(ERROR, "failed to deserialize log snapshot metadata version", K(ret), K(new_pos));
+  } else if (LOG_SNAPSHOT_META_VERSION != decoded_version) {
+    ret = OB_VERSION_NOT_MATCH;
+    PALF_LOG(ERROR, "log snapshot metadata format version mismatch",
+             K(ret), K(decoded_version), K(LOG_SNAPSHOT_META_VERSION));
+  } else if (FALSE_IT(version_ = decoded_version)) {
+  } else if (OB_FAIL(base_lsn_.deserialize(buf, data_len, new_pos)) ||
              OB_FAIL(prev_log_info_.deserialize(buf, data_len, new_pos)) ||
              OB_FAIL(prev_log_tail_lsn_.deserialize(buf, data_len, new_pos))) {
     PALF_LOG(ERROR, "LogSnapshotMeta deserialize failed", K(ret), K(new_pos));

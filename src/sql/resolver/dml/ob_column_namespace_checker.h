@@ -89,10 +89,6 @@ public:
   int check_ext_table_column_namespace(
     const ObQualifiedName &q_name,
     const TableItem *&table_item);
-  int check_parittion_id_table_column_namespace(
-      const ObQualifiedName &q_name,
-      const TableItem *&table_item);
-
   void enable_check_unique() { check_unique_ = true; }
   void disable_check_unique() { check_unique_ = false; }
 

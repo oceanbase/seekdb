@@ -124,8 +124,8 @@ int ObAllVirtualServerCompactionProgress::fill_cells()
     case ESTIMATED_FINISH_TIME:
       if (share::ObIDag::DAG_STATUS_FINISH != progress_.status_) {
         update_estimated_finish_time = 0;
-        MOD_SCOPE {
-          if (OB_TMP_FAIL(share::g_mp->tenant_dag_scheduler()->get_max_major_finish_time(progress_.merge_version_, update_estimated_finish_time))) {
+        SERVER_MODULE_SCOPE {
+          if (OB_TMP_FAIL(share::g_mp->dag_scheduler()->get_max_major_finish_time(progress_.merge_version_, update_estimated_finish_time))) {
             SERVER_LOG(WARN, "failed to get max major_finish_time", K(tmp_ret));
           }
         }
@@ -142,7 +142,7 @@ int ObAllVirtualServerCompactionProgress::fill_cells()
       MEMSET(event_buf_, '\0', sizeof(event_buf_));
       tmp_event.reset();
       if (share::ObIDag::DAG_STATUS_FINISH != progress_.status_) {
-        MOD_SCOPE {
+        SERVER_MODULE_SCOPE {
           share::g_mp->server_compaction_event_history()->get_last_event(tmp_event);
           if (tmp_event.compaction_scn_ == progress_.merge_version_) {
             if (OB_FAIL(tmp_event.generate_event_str(event_buf_, sizeof(event_buf_)))) {

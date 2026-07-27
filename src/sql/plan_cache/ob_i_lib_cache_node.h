@@ -156,8 +156,8 @@ public:
   virtual int update_node_stat(ObILibCacheCtx &ctx);
   StmtStat *get_node_stat() { return &node_stat_; }
   int unlock() { return rwlock_.unlock(); }
-  int64_t inc_ref_count(const CacheRefHandleID ref_handle);
-  int64_t dec_ref_count(const CacheRefHandleID ref_handle);
+  int64_t inc_ref_count();
+  int64_t dec_ref_count();
   int64_t get_ref_count() const { return ATOMIC_LOAD(&ref_count_); }
   common::ObIAllocator *get_allocator() { return &allocator_; }
   common::ObIAllocator &get_allocator_ref() { return allocator_; }

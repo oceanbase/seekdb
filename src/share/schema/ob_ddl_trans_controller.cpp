@@ -132,7 +132,7 @@ int ObDDLTransController::create_task_and_assign_schema_version(const uint64_t s
     if (OB_SUCC(ret)) {
       int64_t first_schema_version = schema_version_res.at(0);
       int64_t last_schema_version = schema_version_res.at(schema_version_res.count() - 1);
-      // check tenant schema_version
+      // Check the runtime schema version.
       for (int64_t i = tasks_.count() - 1; i >= 0; i--) {
         {
           if (first_schema_version <= tasks_.at(i).task_id_) {

@@ -386,12 +386,6 @@ int ObIODeviceLocalFileOp::rename(const char *oldpath, const char *newpath)
   return ret;
 }
 
-int ObIODeviceLocalFileOp::seal_file(const ObIOFd &fd)
-{
-  UNUSED(fd);
-  return OB_NOT_SUPPORTED;
-}
-
 int ObIODeviceLocalFileOp::scan_dir(const char *dir_name, int (*func)(const dirent *entry))
 {
   int ret = OB_SUCCESS;
@@ -432,13 +426,6 @@ int ObIODeviceLocalFileOp::scan_dir(const char *dir_name, int (*func)(const dire
     }
   }
   return ret;
-}
-
-int ObIODeviceLocalFileOp::is_tagging(const char *pathname, bool &is_tagging)
-{
-  UNUSED(pathname);
-  UNUSED(is_tagging);
-  return OB_NOT_SUPPORTED;
 }
 
 int ObIODeviceLocalFileOp::scan_dir(const char *dir_name, common::ObBaseDirEntryOperator &op)

@@ -39,7 +39,7 @@
 #include "mysqlclient/ob_mysql_result.h"
 #include "object/ob_object.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
-#include "share/ob_cluster_version.h"
+#include "share/ob_version_parser.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "share/schema/ob_objpriv_mysql_schema_struct.h"
 #include "share/schema/ob_schema_getter_guard.h"
@@ -334,7 +334,6 @@ int ObPrivSqlService::gen_delete_routine_priv_sql(
   // and find the original text written to __all_routine_privilege, then use it in DELETE statement.
   //
   // rowkey_columns = [
-  //     ('tenant', 'int'),
   //     ('user_id', 'int'),
   //     ('database_name', 'varbinary:OB_MAX_DATABASE_NAME_BINARY_LENGTH'),
   //     ('routine_name', 'varbinary:OB_MAX_ROUTINE_NAME_BINARY_LENGTH'),
@@ -742,13 +741,13 @@ int ObPrivSqlService::delete_db_priv(
     } else if (!is_single_row(affected_rows)) {
       //for mysql, if db name and table name is case sensitive, 
       //then for a privilege on t1 and T1 should exist 2 records in the inner table.
-      //but the key of the inner table is tenant, user_id and database_name
+      // The inner-table key contains user_id and database_name.
       //the database_name is varchar, and its charset is utf8_general_ci(insensitive).
       //so the record number could only be one.
       //here we bypass now, should fix the bug, then delete this code.
       ObNameCaseMode mode = OB_NAME_CASE_INVALID;
-      if (OB_FAIL(schema_guard.get_tenant_name_case_mode(mode))) {
-        LOG_WARN("fail to get tenant name case mode", K(ret));
+      if (OB_FAIL(schema_guard.get_runtime_name_case_mode(mode))) {
+        LOG_WARN("fail to get runtime name case mode", K(ret));
       } else if (mode != OB_ORIGIN_AND_SENSITIVE) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows expect to 1", K(affected_rows), K(ret));
@@ -818,13 +817,13 @@ int ObPrivSqlService::delete_table_priv(
     } else if (!is_single_row(affected_rows)) {
         //for mysql, if db name and table name is case sensitive, 
       //then for a privilege on t1 and T1 should exist 2 records in the inner table.
-      //but the key of the inner table is tenant, user_id and database_name, table_name
+      // The inner-table key contains user_id, database_name, and table_name.
       //the database_name and table_name is varchar, and its charset is utf8_general_ci(insensitive).
       //so the records number could be only exist one.
       //here we bypass now, should fix the bug, then delete this code.
       ObNameCaseMode mode = OB_NAME_CASE_INVALID;
-      if (OB_FAIL(schema_guard.get_tenant_name_case_mode(mode))) {
-        LOG_WARN("fail to get tenant name case mode", K(ret));
+      if (OB_FAIL(schema_guard.get_runtime_name_case_mode(mode))) {
+        LOG_WARN("fail to get runtime name case mode", K(ret));
       } else if (mode != OB_ORIGIN_AND_SENSITIVE) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows expect to 1", K(affected_rows), K(ret));
@@ -1099,12 +1098,8 @@ int ObPrivSqlService::gen_db_priv_dml(
   priv_others |= (priv_set & OB_PRIV_CREATE_ROUTINE) != 0 ? OB_PRIV_OTHERS_CREATE_ROUTINE : 0;
   priv_others |= (priv_set & OB_PRIV_REFERENCES) != 0 ? OB_PRIV_OTHERS_REFERENCES : 0;
   priv_others |= (priv_set & OB_PRIV_TRIGGER) != 0 ? OB_PRIV_OTHERS_TRIGGER : 0;
-  priv_others |= (priv_set & OB_PRIV_EVENT) != 0 ? OB_PRIV_OTHERS_EVENT : 0;
   priv_others |= (priv_set & OB_PRIV_LOCK_TABLE) != 0 ? OB_PRIV_OTHERS_LOCK_TABLE : 0;
-  uint64_t compat_version = 0;
-  if (OB_FAIL(GET_MIN_DATA_VERSION(compat_version))) {
-    LOG_WARN("fail to get data version", KR(ret));
-  } else if (OB_FAIL(dml.add_pk_column("user_id", ObSchemaUtils::get_extract_schema_id(
+  if (OB_FAIL(dml.add_pk_column("user_id", ObSchemaUtils::get_extract_schema_id(
                                               db_priv_key.user_id_)))
       || OB_FAIL(dml.add_pk_column("database_name", ObHexEscapeSqlStr(db_priv_key.db_)))
       || OB_FAIL(dml.add_column("PRIV_ALTER", priv_set & OB_PRIV_ALTER ? 1 : 0))
@@ -1127,7 +1122,7 @@ int ObPrivSqlService::gen_db_priv_dml(
   return ret;
 }
 
-/* construct dml for all_tenant_sysauth */
+/* construct DML for __all_sysauth */
 int ObPrivSqlService::gen_grant_sys_priv_dml(
     const uint64_t grantee_id,
     const uint64_t option,
@@ -1182,14 +1177,14 @@ int ObPrivSqlService::alter_user_default_role(
         LOG_WARN("add column failed", K(ret));
       }
 
-      // replace __all_tenant_role_grantee_map table
+      // replace __all_role_grantee_map
       OZ (exec.exec_update(OB_ALL_ROLE_GRANTEE_MAP_TNAME, dml, affected_rows));
       if (OB_SUCC(ret) && !is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("update should affect only 1 row", K(role_id), K(affected_rows), K(ret));
       }
 
-      // insert __all_tenant_role_grantee_map history table
+      // insert __all_role_grantee_map_history
       OZ (dml.add_pk_column("schema_version", new_schema_version));
       OZ (dml.add_column("is_deleted", 0));
       OZ (exec.exec_insert(OB_ALL_ROLE_GRANTEE_MAP_HISTORY_TNAME, dml, affected_rows));
@@ -1234,7 +1229,7 @@ int ObPrivSqlService::grant_revoke_role(
   ObSqlString sql;
   int64_t affected_rows = 0;
 
-  // __all_tenant_role_grantee_map
+  // __all_role_grantee_map
   if (OB_FAIL(ret)) {
   } else if (is_grant) {
     // grant role to grantee
@@ -1292,7 +1287,7 @@ int ObPrivSqlService::grant_revoke_role(
     }
   }
 
-  // insert into __all_tenant_role_grantee_map_history
+  // insert into __all_role_grantee_map_history
   sql.reset();
   if (FAILEDx(sql.append_fmt("INSERT INTO %s VALUES ", OB_ALL_ROLE_GRANTEE_MAP_HISTORY_TNAME))) {
     LOG_WARN("append table name failed, ", K(ret));
@@ -1402,11 +1397,11 @@ int ObPrivSqlService::grant_sys_priv_to_ur(
     /*
      * There are three cases for grant:
      * 1. grant
-     *      insert __all_tenant_sysauth
+     *      insert __all_sysauth
      * 2. grant with option
-     *      insert __all_tenant_sysauth
+     *      insert __all_sysauth
      * 3. add addtional option
-     *      replace __all_tenant_sysauth
+     *      replace __all_sysauth
      * There is only one case for revoke.
     */
     dml.reset();
@@ -1421,7 +1416,7 @@ int ObPrivSqlService::grant_sys_priv_to_ur(
       LOG_WARN("affected_rows unexpected to be one ",
                K(grantee_id), K(priv_array.at(idx)), K(affected_rows), K(ret));
     }
-    // insert __all_tenant_sysauth_history
+    // insert __all_sysauth_history
     OZ (dml.add_pk_column("schema_version", new_schema_version));
     OZ (dml.add_column("is_deleted", !is_grant));
     OZ (exec.exec_insert(OB_ALL_SYSAUTH_HISTORY_TNAME, dml, affected_rows));
@@ -1478,7 +1473,7 @@ int ObPrivSqlService::grant_object(
     if (OB_FAIL(gen_obj_mysql_priv_dml(obj_mysql_priv_key, priv_set, dml, grantor, grantor_host))) {
       LOG_WARN("gen_obj_mysql_priv_dml failed", K(obj_mysql_priv_key), K(priv_set), K(ret));
     }
-    // insert into __all_tenant_objauth_mysql
+    // insert into __all_objauth_mysql
     if (OB_SUCC(ret)) {
       if (is_deleted) {
         if (OB_FAIL(exec.exec_delete(OB_ALL_OBJAUTH_MYSQL_TNAME, dml, affected_rows))) {
@@ -1497,7 +1492,7 @@ int ObPrivSqlService::grant_object(
       }
     }
 
-    // insert into __all_tenant_objauth_mysql_history
+    // insert into __all_objauth_mysql_history
     if (OB_SUCC(ret)) {
       if (is_deleted) {
         if (OB_FAIL(dml.add_pk_column("schema_version", new_schema_version))

@@ -21,7 +21,7 @@
 #include "share/ob_global_stat_proxy.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
 #include "observer/change_stream/ob_change_stream_fetcher.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/oblog/ob_log_module.h"
 
 using namespace oceanbase::common;

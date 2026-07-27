@@ -35,7 +35,7 @@ namespace oceanbase
 
 namespace storage
 {
-class ObTenantStorageMetaService;
+class ObLocalStorageMetaService;
 class ObTabletHandle;
 struct ObTabletBlockInfo;
 }
@@ -115,7 +115,6 @@ public:
     }
     return bret;
   }
-  int fill_io_info_for_backup(const blocksstable::MacroBlockId &macro_id, ObIOInfo &io_info) const;
   TO_STRING_KV(KP_(buffer), K_(offset), K_(size), K_(io_timeout_ms), K_(io_desc), KP_(io_callback), KP_(device_handle), K_(has_backup_device_handle));
 public:
   const char *buffer_;
@@ -374,12 +373,12 @@ private:
       MacroBlkIdMap &mark_info,
       common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode> &macro_id_set,
       ObMacroBlockMarkerStatus &tmp_status);
-  int mark_held_shared_block(
+  int mark_held_block(
       const MacroBlockId &macro_id,
       MacroBlkIdMap &mark_info,
       common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode> &macro_id_set,
       ObMacroBlockMarkerStatus &tmp_status);
-  int mark_tenant_blocks(
+  int mark_local_storage_blocks(
       MacroBlkIdMap &mark_info,
       common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode> &macro_id_set,
       ObMacroBlockMarkerStatus &tmp_status);
@@ -408,10 +407,10 @@ private:
       storage::ObTabletHandle &handle,
       common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode> &macro_id_set,
       ObMacroBlockMarkerStatus &tmp_status);
-  int mark_tenant_ckpt_blocks(
+  int mark_local_checkpoint_blocks(
       MacroBlkIdMap &mark_info,
       common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode> &macro_id_set,
-      storage::ObTenantStorageMetaService &meta_service,
+      storage::ObLocalStorageMetaService &meta_service,
       ObMacroBlockMarkerStatus &tmp_status);
   int mark_tmp_file_blocks(
       MacroBlkIdMap &mark_info,

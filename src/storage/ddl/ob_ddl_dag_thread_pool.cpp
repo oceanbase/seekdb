@@ -38,7 +38,7 @@ int ObDDLDagThreadPool::init(const int64_t thread_count, ObDDLIndependentDag *dd
   } else if (OB_FAIL(set_thread_count(thread_count))) {
     LOG_WARN("set thread count failed", K(ret));
   } else {
-    set_run_wrapper(MTL_CTX());
+    set_run_wrapper(share::server_runtime());
     ddl_dag_ = ddl_dag;
     session_info_ = session_info;
     is_inited_ = true;

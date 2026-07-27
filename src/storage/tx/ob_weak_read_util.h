@@ -34,11 +34,10 @@ public:
   static const int64_t DEFAULT_MAX_STALE_BUFFER_TIME = 500 * 1000L;
   static const int64_t DEFAULT_REPLICA_KEEPALIVE_INTERVAL = 3000 * 1000L;
   static const int64_t BOOTSTRAP_REPLICA_KEEPALIVE_INTERVAL = 100 * 1000L;
-  static const int64_t IGNORE_TENANT_EXIST_WARN = 1;
   static int64_t replica_keepalive_interval();
   static int generate_min_weak_read_version(share::SCN &scn);
   static bool enable_monotonic_weak_read();
-  static int64_t max_stale_time_for_weak_consistency(int64_t ignore_warn = 0);
+  static int64_t max_stale_time_for_weak_consistency();
   static bool check_weak_read_service_available();
   static int64_t default_max_stale_time_for_weak_consistency() {
     return DEFAULT_MAX_STALE_TIME_FOR_WEAK_CONSISTENCY; };

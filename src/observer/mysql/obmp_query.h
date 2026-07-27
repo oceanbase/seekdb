@@ -63,9 +63,9 @@ protected:
   void assign_sql(const char * sql, int64_t sql_length) { sql_.assign_ptr(sql, sql_length); }
 private:
   int response_result(ObMySQLResultSet &result, bool force_sync_resp, bool &async_resp_used);
-  int get_tenant_schema_info_(ObTenantCachedSchemaGuardInfo *cache_info,
+  int get_schema_info_(ObCachedSchemaGuardInfo *cache_info,
                       share::schema::ObSchemaGetterGuard *&schema_guard,
-                      int64_t &tenant_version,
+                      int64_t &runtime_schema_version,
                       int64_t &sys_version);
   int do_process(sql::ObSQLSessionInfo &session,
                  bool has_more_result,

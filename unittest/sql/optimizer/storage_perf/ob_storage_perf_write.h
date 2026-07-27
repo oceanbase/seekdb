@@ -18,10 +18,8 @@
 #define OB_TOOLS_STORAGE_PERF_WRITE_H_
 
 #include "share/schema/ob_table_schema.h"
-#include "share/ob_tenant_mgr.h"
 #include "storage/blocksstable/ob_sstable.h"
 #include "lib/time/ob_time_utility.h"
-#include "share/ob_tenant_mgr.h"
 #include "lib/file/file_directory_utils.h"
 #include "ob_storage_perf_config.h"
 #include "share/schema/ob_table_schema.h"

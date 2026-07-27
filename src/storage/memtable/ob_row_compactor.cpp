@@ -75,7 +75,7 @@ int ObMemtableRowCompactor::compact(const SCN snapshot_version,
   if (!is_inited_) {
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!snapshot_version.is_valid() || SCN::max_scn() == snapshot_version ||
-                         nullptr == memtable_ || memtable_->is_delete_insert_table())) {
+                         nullptr == memtable_)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(ERROR, "unexpected compact info", K(ret), K(snapshot_version),
                 KPC_(memtable));
@@ -287,7 +287,7 @@ ObMvccTransNode *ObMemtableRowCompactor::construct_compact_node_(const SCN snaps
         } else {
           ret = OB_ITER_END;
         }
-      } else if (OB_ISNULL(datum_row = MTL_NEW(ObDatumRow, "mt_row_compact"))) {
+      } else if (OB_ISNULL(datum_row = SERVER_NEW(ObDatumRow, "mt_row_compact"))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         TRANS_LOG(WARN, "allocate memory for datum row failed", KR(ret), KP(this));
       } else if (OB_FAIL(row_reader.read_row(mtd->buf_, mtd->buf_len_, nullptr, *datum_row))) {
@@ -316,7 +316,7 @@ ObMvccTransNode *ObMemtableRowCompactor::construct_compact_node_(const SCN snaps
         }
       }
 
-      MTL_DELETE(ObDatumRow, "mt_row_compact", datum_row);
+      SERVER_DELETE(ObDatumRow, "mt_row_compact", datum_row);
     }
   }
   ret = (OB_ITER_END == ret) ? OB_SUCCESS : ret;

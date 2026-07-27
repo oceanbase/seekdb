@@ -90,18 +90,18 @@ CREATE TABLE `trade_dispute` (
 PRIMARY KEY (`dispute_id`),
 KEY `idx_boid` (`biz_order_id`) BLOCK_SIZE 16384,
 KEY `idx_poid` (`pay_order_id`) BLOCK_SIZE 16384,
-KEY `idx_bid_gc` (`buyer_id`, `gmt_create`, `dispute_status`, `biz_type`, `seller_id`)); 
+KEY `idx_bid_gc` (`buyer_id`, `gmt_create`, `dispute_status`, `biz_type`, `seller_id`));
 
 --real_sleep 5
 
-explain select dispute_id, buyer_id, seller_id, buyer_nick, seller_nick , biz_order_id, pay_order_id, 
-biz_type, out_biz_id, auction_id , auction_title, auction_url, refund_fee, refund_type, dispute_type 
-, dispute_reason_id, dispute_reason_text, dispute_sub_reason_id, dispute_sub_reason_text, multiple , 
-gmt_agreement_modified, dispute_end_time, gmt_timeout, timeout_type, dispute_desc , attributes, attribute_cc, 
-dispute_status, goods_status, goods_needs , goods_count, advance_status, cs_status, proof_status, from_group 
-, step_id, gmt_create, gmt_modified, dispute_request from `trade_dispute` `trade_dispute` where `buyer_id` 
-= 100 and `seller_id` = 100 and `dispute_type` = 100 and `from_group` != 101 and `gmt_create` > str_to_date('1969-12-31 
-16:01:41.0', '%Y-%m-%d %H:%i:%s') and `gmt_create` < str_to_date('1969-12-31 16:01:41.0', '%Y-%m-%d 
+explain select dispute_id, buyer_id, seller_id, buyer_nick, seller_nick , biz_order_id, pay_order_id,
+biz_type, out_biz_id, auction_id , auction_title, auction_url, refund_fee, refund_type, dispute_type
+, dispute_reason_id, dispute_reason_text, dispute_sub_reason_id, dispute_sub_reason_text, multiple ,
+gmt_agreement_modified, dispute_end_time, gmt_timeout, timeout_type, dispute_desc , attributes, attribute_cc,
+dispute_status, goods_status, goods_needs , goods_count, advance_status, cs_status, proof_status, from_group
+, step_id, gmt_create, gmt_modified, dispute_request from `trade_dispute` `trade_dispute` where `buyer_id`
+= 100 and `seller_id` = 100 and `dispute_type` = 100 and `from_group` != 101 and `gmt_create` > str_to_date('1969-12-31
+16:01:41.0', '%Y-%m-%d %H:%i:%s') and `gmt_create` < str_to_date('1969-12-31 16:01:41.0', '%Y-%m-%d
 %H:%i:%s') order by `gmt_create` desc limit 0, 100;
 
 CREATE TABLE `luna_core_bidword_diagnose` (
@@ -143,7 +143,7 @@ CREATE TABLE `luna_core_bidword_diagnose` (
       KEY `idx_cu_ca_ad` (`custid`, `campaignid`, `adgroupid`) LOCAL  BLOCK_SIZE 16384,
       KEY `idx_cu_ca_update` (`custid`, `platform`, `type`, `campaignid`, `adgroupid`, `bidwordid`, `originalword`) LOCAL  BLOCK_SIZE 16384,
       KEY `idx_bid_cid` (`bidwordid`, `custid`) LOCAL  BLOCK_SIZE 16384
-  );  
+  );
 #) partition by hash(custid);
 
 --real_sleep 5
@@ -304,7 +304,7 @@ explain select a.card_no
         where b.card_no is null
         order by a.card_no
         limit 0,2000;
-        
+
 CREATE TABLE `pcb_installment_00` (
   `BILL_NO` varchar(28) NOT NULL,
   `INSTALL_NUM` decimal(5,0) NOT NULL,
@@ -370,7 +370,7 @@ CREATE TABLE `wfsydp` (
     PRIMARY KEY (`WSJJDM`, `WSJJZH`, `WSDRDM`, `WSJYZH`),
     KEY `WSJJDM` (`WSJJDM`, `WSJWSY`) GLOBAL,
     KEY `WSJJDM_LOCAL` (`WSJJDM`, `WSJWSY`) LOCAL
-    ) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 3 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 10
+    ) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 10
 partition by key(`wsjjdm`, `wsjjzh`) partitions 31;
 
 explain select `WSJJDM`, `WSJWSY` from wfsydp where wsjjdm = '666888' order by `WSJJDM`, `WSJWSY` limit 0 , 181819;

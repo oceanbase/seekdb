@@ -19,7 +19,6 @@
 
 #include "observer/virtual_table/ob_table_columns.h"
 #include "pl/ob_pl_stmt.h"
-#include "share/catalog/ob_external_catalog.h"
 #include "sql/privilege_check/ob_privilege_check.h"
 #include "sql/resolver/ob_stmt_resolver.h"
 #include "share/schema/ob_schema_getter_guard.h"  // relocated-definition owner
@@ -29,7 +28,7 @@ using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
 using oceanbase::share::schema::ObColumnSchemaV2;
 using oceanbase::share::schema::ObTableSchema;
-using oceanbase::share::schema::ObTenantSchema;
+using oceanbase::share::schema::ObServerRuntimeSchema;
 using oceanbase::share::schema::ObDatabaseSchema;
 
 namespace oceanbase
@@ -129,29 +128,8 @@ int ObSchemaChecker::check_db_access(share::schema::ObSessionPrivInfo &s_priv,
   return ret;
 }
 
-int ObSchemaChecker::check_db_access(share::schema::ObSessionPrivInfo &s_priv,
-                                     const common::ObIArray<uint64_t> &enable_role_id_array,
-                                     const uint64_t catalog_id,
-                                     const ObString &database_name) const
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("schema checker is not inited", K(is_inited_), K(ret));
-  } else if (is_internal_catalog_id(catalog_id)) {
-    ret = check_db_access(s_priv, enable_role_id_array, database_name);
-  } else if (is_external_catalog_id(catalog_id)) {
-    ret = schema_mgr_->check_catalog_db_access(s_priv, enable_role_id_array, catalog_id, database_name);
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected", K(ret));
-  }
-  return ret;
-}
-
 int ObSchemaChecker::check_table_show(const share::schema::ObSessionPrivInfo &s_priv,
                                       const common::ObIArray<uint64_t> &enable_role_id_array,
-                                      const uint64_t catalog_id,
                                       const ObString &db,
                                       const ObString &table,
                                       bool &allow_show) const
@@ -163,8 +141,8 @@ int ObSchemaChecker::check_table_show(const share::schema::ObSessionPrivInfo &s_
   } else if (OB_UNLIKELY(!s_priv.is_valid() || db.empty() || table.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(s_priv), K(db), K(table), K(ret));
-  } else if (OB_FAIL(schema_mgr_->check_table_show(s_priv, enable_role_id_array, catalog_id, db, table, allow_show))) {
-    LOG_WARN("failed to check_table_show", K(s_priv), K(enable_role_id_array), K(catalog_id), K(db), K(table), K(ret));
+  } else if (OB_FAIL(schema_mgr_->check_table_show(s_priv, enable_role_id_array, db, table, allow_show))) {
+    LOG_WARN("failed to check_table_show", K(s_priv), K(enable_role_id_array), K(db), K(table), K(ret));
   } else {}
   return ret;
 }
@@ -259,8 +237,7 @@ int ObSchemaChecker::check_trigger_show(const share::schema::ObSessionPrivInfo &
   return ret;
 }
 
-int ObSchemaChecker::check_table_or_index_exists(const uint64_t catalog_id,
-                                                 const uint64_t database_id,
+int ObSchemaChecker::check_table_or_index_exists(const uint64_t database_id,
                                                  const ObString &table_name,
                                                  const bool with_hidden_flag,
                                                  const bool is_built_in_index,
@@ -271,28 +248,26 @@ int ObSchemaChecker::check_table_or_index_exists(const uint64_t catalog_id,
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("schema checker is not inited", K(is_inited_), K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == catalog_id || OB_INVALID_ID == database_id || table_name.empty())) {
+  } else if (OB_UNLIKELY(OB_INVALID_ID == database_id || table_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(catalog_id), K(database_id), K(table_name), K(ret));
-  } else if (OB_FAIL(check_table_exists(catalog_id, database_id, table_name, is_index_table, with_hidden_flag, is_exist))) {
-    LOG_WARN("check table exist failed", K(catalog_id), K(database_id), K(table_name), K(ret));
+    LOG_WARN("invalid arguments", K(database_id), K(table_name), K(ret));
+  } else if (OB_FAIL(check_table_exists(database_id, table_name, is_index_table, with_hidden_flag, is_exist))) {
+    LOG_WARN("check table exist failed", K(database_id), K(table_name), K(ret));
   } else if (!is_exist) {
     is_index_table = true;
-    if (OB_FAIL(check_table_exists(catalog_id,
-                                   database_id,
+    if (OB_FAIL(check_table_exists(database_id,
                                    table_name,
                                    is_index_table,
                                    with_hidden_flag,
                                    is_exist,
                                    is_built_in_index))) {
-      LOG_WARN("check index exist failed", K(catalog_id), K(database_id), K(table_name), K(ret), K(is_built_in_index));
+      LOG_WARN("check index exist failed", K(database_id), K(table_name), K(ret), K(is_built_in_index));
     }
   }
   return ret;
 }
 
-int ObSchemaChecker::check_table_exists(const uint64_t catalog_id,
-                                        const uint64_t database_id,
+int ObSchemaChecker::check_table_exists(const uint64_t database_id,
                                         const ObString &table_name,
                                         const bool is_index_table,
                                         const bool with_hidden_flag,
@@ -306,28 +281,17 @@ int ObSchemaChecker::check_table_exists(const uint64_t catalog_id,
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("schema checker is not inited", K(is_inited_), K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == catalog_id || OB_INVALID_ID == database_id || table_name.empty())) {
+  } else if (OB_UNLIKELY(OB_INVALID_ID == database_id || table_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(catalog_id), K(database_id), K(table_name), K(ret));
-  } else {
-    if (is_internal_catalog_id(catalog_id)) {
-      if (OB_FAIL(schema_mgr_->get_table_id(database_id,
-                                             table_name,
-                                             is_index_table,
-                                             with_hidden_flag ? ObSchemaGetterGuard::USER_HIDDEN_TABLE_TYPE
-                                                              : ObSchemaGetterGuard::ALL_NON_HIDDEN_TYPES,
-                                             table_id,
-                                             is_built_in_index))) {
-        LOG_WARN("get table id failed", K(ret), K(database_id), K(table_name), K(is_index_table));
-      }
-    } else if (is_external_catalog_id(catalog_id)) {
-      if (OB_FAIL(sql_schema_mgr_->get_catalog_table_id( catalog_id, database_id, table_name, table_id))) {
-        LOG_WARN("get catalog table id failed", K(ret), K(catalog_id), K(database_id), K(table_name));
-      }
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected", K(ret));
-    }
+    LOG_WARN("invalid arguments", K(database_id), K(table_name), K(ret));
+  } else if (OB_FAIL(schema_mgr_->get_table_id(database_id,
+                                                table_name,
+                                                is_index_table,
+                                                with_hidden_flag ? ObSchemaGetterGuard::USER_HIDDEN_TABLE_TYPE
+                                                                 : ObSchemaGetterGuard::ALL_NON_HIDDEN_TYPES,
+                                                table_id,
+                                                is_built_in_index))) {
+    LOG_WARN("get table id failed", K(ret), K(database_id), K(table_name), K(is_index_table));
   }
 
   if (OB_SUCC(ret)) {
@@ -335,7 +299,7 @@ int ObSchemaChecker::check_table_exists(const uint64_t catalog_id,
     if (is_exist == false) {
       bool exist = false;
       ObNameCaseMode mode = OB_NAME_CASE_INVALID;
-      if (OB_FAIL(schema_mgr_->get_tenant_name_case_mode(mode))) {
+      if (OB_FAIL(schema_mgr_->get_runtime_name_case_mode(mode))) {
         LOG_WARN("fail to get name case mode");
       } else if (OB_NAME_CASE_INVALID == mode) {
         ret = OB_ERR_UNEXPECTED;
@@ -358,8 +322,7 @@ int ObSchemaChecker::check_table_exists(const ObString &database_name,
                                         const bool is_index_table,
                                         const bool with_hidden_flag,
                                         bool &is_exist,
-                                        const bool is_built_in_index,
-                                        const uint64_t catalog_id)
+                                        const bool is_built_in_index)
 {
   int ret = OB_SUCCESS;
 
@@ -368,31 +331,17 @@ int ObSchemaChecker::check_table_exists(const ObString &database_name,
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("schema checker is not inited", K(is_inited_), K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == catalog_id || database_name.empty() || table_name.empty())) {
+  } else if (OB_UNLIKELY(database_name.empty() || table_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(catalog_id), K(database_name), K(table_name), K(ret));
-  } else {
-    if (is_internal_catalog_id(catalog_id)) {
-      if (OB_FAIL(schema_mgr_->get_table_id(database_name,
-                                            table_name,
-                                            is_index_table,
-                                            with_hidden_flag ? ObSchemaGetterGuard::USER_HIDDEN_TABLE_TYPE
-                                                             : ObSchemaGetterGuard::ALL_NON_HIDDEN_TYPES,
-                                            table_id,
-                                            is_built_in_index))) {
-        LOG_WARN("fail to check table exist", K(database_name), K(table_name), K(is_index_table), K(ret));
-      }
-    } else if (is_external_catalog_id(catalog_id)) {
-      uint64_t database_id = OB_INVALID_ID;
-      if (OB_FAIL(sql_schema_mgr_->get_catalog_database_id( catalog_id, database_name, database_id))) {
-        LOG_WARN("fail to get catalog database id", K(ret), K(catalog_id), K(database_name));
-      } else if (OB_FAIL(sql_schema_mgr_->get_catalog_table_id( catalog_id, database_id, table_name, table_id))) {
-        LOG_WARN("fail to check catalog table exist", K(ret), K(catalog_id), K(database_name), K(database_id));
-      }
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected", K(ret));
-    }
+    LOG_WARN("invalid arguments", K(database_name), K(table_name), K(ret));
+  } else if (OB_FAIL(schema_mgr_->get_table_id(database_name,
+                                               table_name,
+                                               is_index_table,
+                                               with_hidden_flag ? ObSchemaGetterGuard::USER_HIDDEN_TABLE_TYPE
+                                                                : ObSchemaGetterGuard::ALL_NON_HIDDEN_TYPES,
+                                               table_id,
+                                               is_built_in_index))) {
+    LOG_WARN("fail to check table exist", K(database_name), K(table_name), K(is_index_table), K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -416,13 +365,6 @@ int ObSchemaChecker::get_mock_fk_parent_table_with_name(const uint64_t database_
 
 int ObSchemaChecker::get_database_id(const ObString &database_name, uint64_t &database_id) const
 {
-  return get_database_id(OB_INTERNAL_CATALOG_ID, database_name, database_id);
-}
-
-int ObSchemaChecker::get_database_id(const uint64_t catalog_id,
-                                     const ObString &database_name,
-                                     uint64_t &database_id) const
-{
   int ret = OB_SUCCESS;
   database_id = OB_INVALID_ID;
 
@@ -432,64 +374,13 @@ int ObSchemaChecker::get_database_id(const uint64_t catalog_id,
   } else if (OB_UNLIKELY(database_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(database_name), K(ret));
-  } else {
-    if (is_internal_catalog_id(catalog_id)) {
-      if (OB_FAIL(OB_FAIL(schema_mgr_->get_database_id(database_name, database_id)))) {
-        LOG_WARN("fail to get database id", K(database_name), K(database_id), K(ret));
-      }
-    } else if (is_external_catalog_id(catalog_id)) {
-      if (OB_ISNULL(sql_schema_mgr_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret));
-      } else if (OB_FAIL(sql_schema_mgr_->get_catalog_database_id( catalog_id, database_name, database_id))) {
-        LOG_WARN("failed to get catalog database id", K(catalog_id), K(database_name), K(database_id), K(ret));
-      }
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected", K(ret));
-    }
+  } else if (OB_FAIL(schema_mgr_->get_database_id(database_name, database_id))) {
+    LOG_WARN("fail to get database id", K(database_name), K(database_id), K(ret));
   }
 
   if (OB_SUCC(ret) && OB_INVALID_ID == database_id) {
     ret = OB_ERR_BAD_DATABASE;
-    LOG_WARN("database is not exist", K(catalog_id), K(database_name), K(ret));
-  }
-  return ret;
-}
-
-int ObSchemaChecker::get_catalog_id_name(common::ObString &catalog_name,
-                                         uint64_t &catalog_id,
-                                         ObIAllocator *allocator,
-                                         bool allow_not_exist) const
-{
-  int ret = OB_SUCCESS;
-  catalog_id = OB_INVALID_ID;
-  const ObCatalogSchema *catalog_schema = NULL;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("schema checker is not inited", K(is_inited_), K(ret));
-  } else if (OB_ISNULL(schema_mgr_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_UNLIKELY(catalog_name.empty())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(catalog_name), K(ret));
-  } else if (OB_FAIL(schema_mgr_->get_catalog_schema_by_name( catalog_name, catalog_schema))) {
-    LOG_WARN("failed to get catalog schema", K(ret));
-  } else if (OB_ISNULL(catalog_schema)) {
-    if (allow_not_exist) {
-      // do nothing
-    } else {
-      ret = OB_CATALOG_NOT_EXIST;
-      LOG_WARN("catalog not exist", K(ret), K(catalog_name));
-      LOG_USER_ERROR(OB_CATALOG_NOT_EXIST, catalog_name.length(), catalog_name.ptr());
-    }
-  } else {
-    catalog_id = catalog_schema->get_catalog_id();
-    catalog_name = catalog_schema->get_catalog_name_str();
-    if (allocator != NULL && OB_FAIL(ob_write_string(*allocator, catalog_name, catalog_name))) {
-      LOG_WARN("failed to deep copy str", K(ret));
-    }
+    LOG_WARN("database is not exist", K(database_name), K(ret));
   }
   return ret;
 }
@@ -700,7 +591,6 @@ int ObSchemaChecker::get_table_schema( const ObString &database_name,
 }
 // Note: this function can only be used in the sql layer
 int ObSchemaChecker::get_table_schema(
-                                      const uint64_t catalog_id,
                                       const uint64_t database_id,
                                       const ObString &table_name,
                                       const bool is_index_table,
@@ -721,24 +611,14 @@ int ObSchemaChecker::get_table_schema(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(database_id), K(table_name), K(ret));
     ret = OB_INVALID_ARGUMENT;
-  } else {
-    if (is_internal_catalog_id(catalog_id)) {
-      if (OB_FAIL(schema_mgr_->get_table_schema( database_id, table_name, is_index_table, table, with_hidden_flag, is_built_in_index))) {
-        LOG_WARN("get table schema failed",
-             K(database_id),
-             K(table_name),
-             K(with_hidden_flag),
-             K(is_built_in_index),
-             K(is_index_table),
-             K(ret));
-      }
-    } else if (is_external_catalog_id(catalog_id)) {
-      if (OB_FAIL(sql_schema_mgr_->get_catalog_table_schema(catalog_id, database_id, table_name, table))) {
-        LOG_WARN("get catalog table schema failed", K(catalog_id), K(database_id), K(table_name), K(ret));
-      }
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-    }
+  } else if (OB_FAIL(schema_mgr_->get_table_schema( database_id, table_name, is_index_table, table, with_hidden_flag, is_built_in_index))) {
+    LOG_WARN("get table schema failed",
+         K(database_id),
+         K(table_name),
+         K(with_hidden_flag),
+         K(is_built_in_index),
+         K(is_index_table),
+         K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -748,7 +628,7 @@ int ObSchemaChecker::get_table_schema(
     // base table.
     if (cte_table_fisrt) {
       ObNameCaseMode mode = OB_NAME_CASE_INVALID;
-      if (OB_FAIL(schema_mgr_->get_tenant_name_case_mode(mode))) {
+      if (OB_FAIL(schema_mgr_->get_runtime_name_case_mode(mode))) {
         LOG_WARN("fail to get name case mode");
       } else if (OB_NAME_CASE_INVALID == mode) {
         ret = OB_ERR_UNEXPECTED;
@@ -787,26 +667,6 @@ int ObSchemaChecker::get_table_schema(
     }
   }
   return ret;
-}
-// Note: this function can only be used in the sql layer
-int ObSchemaChecker::get_table_schema(
-                                      const uint64_t database_id,
-                                      const ObString &table_name,
-                                      const bool is_index_table,
-                                      const bool cte_table_fisrt,
-                                      const bool with_hidden_flag,
-                                      const ObTableSchema *&table_schema,
-                                      const bool is_built_in_index /*= false*/)
-{
-  return get_table_schema(
-                          OB_INTERNAL_CATALOG_ID,
-                          database_id,
-                          table_name,
-                          is_index_table,
-                          cte_table_fisrt,
-                          with_hidden_flag,
-                          table_schema,
-                          is_built_in_index);
 }
 // Note: this function can only be used in the sql layer
 // tmp_cte_schemas_ is only maintained in resolver's SchemaChecker
@@ -913,22 +773,22 @@ int ObSchemaChecker::get_can_write_index_array(uint64_t table_id,
 }
 
 
-int ObSchemaChecker::get_tenant_info(const ObTenantSchema *&tenant_schema)
+int ObSchemaChecker::get_server_runtime_info(const ObServerRuntimeSchema *&runtime_schema)
 {
   int ret = OB_SUCCESS;
-  tenant_schema = NULL;
+  runtime_schema = NULL;
 
-  const ObTenantSchema *tenant = NULL;
+  const ObServerRuntimeSchema *runtime = NULL;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("schema checker is not inited", K(is_inited_), K(ret));
-  } else if (OB_FAIL(schema_mgr_->get_tenant_info(tenant))) {
-    LOG_WARN("get tenant schema failed", K(ret));
-  } else if (NULL == tenant) {
-    ret = OB_TENANT_NOT_EXIST;
-    LOG_WARN("tenant is not exist", K(ret));
+  } else if (OB_FAIL(schema_mgr_->get_server_runtime_info(runtime))) {
+    LOG_WARN("get server runtime schema failed", K(ret));
+  } else if (NULL == runtime) {
+    ret = OB_RUNTIME_SCHEMA_NOT_READY;
+    LOG_WARN("server runtime schema does not exist", K(ret));
   } else {
-    tenant_schema = tenant;
+    runtime_schema = runtime;
   }
   return ret;
 }
@@ -947,19 +807,8 @@ int ObSchemaChecker::get_database_schema(
   } else if (OB_UNLIKELY(OB_INVALID_ID == database_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(database_id), K(ret));
-  } else if (is_external_object_id(database_id)) {
-    // fetch database schema from ObSqlSchemaGuard
-    if (OB_ISNULL(sql_schema_mgr_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret));
-    } else if (OB_FAIL(sql_schema_mgr_->get_database_schema(database_id, database))) {
-      LOG_WARN("get catalog's database schema failed", K(ret));
-    }
-  } else {
-    // follow original logic
-    if (OB_FAIL(schema_mgr_->get_database_schema( database_id, database))) {
-      LOG_WARN("get database schema failed", K(database_id), K(ret));
-    }
+  } else if (OB_FAIL(schema_mgr_->get_database_schema( database_id, database))) {
+    LOG_WARN("get database schema failed", K(database_id), K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -1276,99 +1125,6 @@ int ObSchemaChecker::get_schema_version(uint64_t table_id, share::schema::ObSche
   return ret;
 }
 
-int ObSchemaChecker::get_tablegroup_schema(const ObString &tablegroup_name, const ObTablegroupSchema *&tablegroup_schema)
-{
-  int ret = OB_SUCCESS;
-  uint64_t tablegroup_id = OB_INVALID_ID;
-  if (tablegroup_name.empty()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablegroup_name));
-  } else if (OB_ISNULL(schema_mgr_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("invalid argument", K(ret), K(schema_mgr_));
-  } else if (OB_FAIL(schema_mgr_->get_tablegroup_id(tablegroup_name, tablegroup_id))) {
-    LOG_WARN("fail to get tablegroup id", K(ret), K(tablegroup_name));
-  } else if (OB_INVALID_ID == tablegroup_id) {
-    ret = OB_TABLEGROUP_NOT_EXIST;
-    LOG_WARN("table group not exist", K(ret), K(tablegroup_id));
-  } else if (OB_FAIL(schema_mgr_->get_tablegroup_schema( tablegroup_id, tablegroup_schema))) {
-    LOG_WARN("fail to get tablegroup schema", K(ret), K(tablegroup_id));
-  } else if (OB_ISNULL(tablegroup_schema)) {
-    ret = OB_TABLEGROUP_NOT_EXIST;
-    LOG_WARN("get invalid tablegroup schema", K(ret), K(tablegroup_name));
-  }
-  return ret;
-}
-
-int ObSchemaChecker::get_udf_info(
-                                  const common::ObString &udf_name,
-                                  const share::schema::ObUDF *&udf_info,
-                                  bool &exist)
-{
-  int ret = OB_SUCCESS;
-  if (udf_name.empty()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(udf_name));
-  } else if (OB_ISNULL(schema_mgr_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("invalid argument", K(ret), K(schema_mgr_));
-  } else if (OB_FAIL(schema_mgr_->get_udf_info( udf_name, udf_info, exist))) {
-    LOG_WARN("failed to get udf schema", K(ret));
-  }
-  return ret;
-}
-
-int ObSchemaChecker::check_sequence_exist_with_name(const uint64_t database_id,
-                                                    const common::ObString &sequence_name,
-                                                    bool &exists,
-                                                    uint64_t &sequence_id) const
-{
-  int ret = OB_SUCCESS;
-  bool is_system_generated = false;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("schema checker is not inited", K_(is_inited));
-  } else if (OB_FAIL(schema_mgr_->check_sequence_exist_with_name(database_id,
-                                                                 sequence_name,
-                                                                 exists,
-                                                                 sequence_id,
-                                                                 is_system_generated))) {
-    LOG_WARN("get sequence id failed",
-             K(database_id),
-             K(database_id),
-             K(sequence_name),
-             K(ret));
-  }
-  return ret;
-}
-
-int ObSchemaChecker::get_sequence_id(const common::ObString &database_name,
-                                     const common::ObString &sequence_name,
-                                     uint64_t &sequence_id) const
-{
-  int ret = OB_SUCCESS;
-  bool is_exist = false;
-  bool is_system_generated = false;
-  uint64_t database_id = 0;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("schema checker is not inited", K_(is_inited));
-  } else if (OB_FAIL(get_database_id(database_name, database_id))) {
-    LOG_WARN("fail to get_database_id", K(ret));
-  } else if (OB_FAIL(schema_mgr_->check_sequence_exist_with_name(database_id,
-                                                                 sequence_name,
-                                                                 is_exist,
-                                                                 sequence_id,
-                                                                 is_system_generated))) {
-    LOG_WARN("get sequence id failed", K(database_id), K(database_id),
-                                       K(sequence_name), K(ret));
-  } else if (!is_exist) {
-    ret = OB_ERR_SEQ_NOT_EXIST;
-  }
-  return ret;
-}
-
-// If the function execution ends with table_schema being empty, then it indicates that there is no index corresponding to index_name under the current db
 int ObSchemaChecker::get_idx_schema_by_origin_idx_name(const uint64_t database_id,
                                                        const ObString &index_name,
                                                        const ObTableSchema *&table_schema)
@@ -1407,51 +1163,6 @@ int ObSchemaChecker::get_idx_schema_by_origin_idx_name(const uint64_t database_i
     } else {
       table_schema = table;
     }
-  }
-  return ret;
-}
-
-int ObSchemaChecker::get_directory_id(const common::ObString &directory_name,
-                                      uint64_t &directory_id)
-{
-  int ret = OB_SUCCESS;
-  const ObDirectorySchema *schema = NULL;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("schema checker is not inited", K_(is_inited));
-  } else if (OB_FAIL(schema_mgr_->get_directory_schema_by_name(directory_name, schema))) {
-    LOG_WARN("get directory schema failed", K(ret));
-  } else if (OB_ISNULL(schema)) {
-    /* match directory privilege error reporting
-    SQL> GRANT READ ON DD TO U2;
-    GRANT READ ON DD TO U2
-                  *
-    ERROR at line 1:
-    table or view does not exist
-    */
-    ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("directory is not exists", K(directory_name));
-  } else {
-    directory_id = schema->get_directory_id();
-  }
-  return ret;
-}
-
-int ObSchemaChecker::get_location_id(const common::ObString &location_name,
-                                     uint64_t &location_id)
-{
-  int ret = OB_SUCCESS;
-  const ObLocationSchema *schema = NULL;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("schema checker is not inited", K_(is_inited));
-  } else if (OB_FAIL(schema_mgr_->get_location_schema_by_name(location_name, schema))) {
-    LOG_WARN("get location schema failed", K(ret));
-  } else if (OB_ISNULL(schema)) {
-    ret = OB_LOCATION_OBJ_NOT_EXIST;
-    LOG_WARN("location is not exists", K(location_name));
-  } else {
-    location_id = schema->get_location_id();
   }
   return ret;
 }
@@ -1524,17 +1235,6 @@ int ObSchemaChecker::check_exist_same_name_object_with_synonym(uint64_t database
       exist = true;
     }
 
-    //check sequence
-    if (OB_TABLE_NOT_EXIST == ret) {
-      uint64_t sequence_id = 0;
-      if (OB_FAIL(get_sequence_id(database_name, object_name, sequence_id))) {
-        if (OB_ERR_SEQ_NOT_EXIST == ret) {
-          ret = OB_TABLE_NOT_EXIST;
-        }
-      } else {
-        exist = true;
-      }
-    }
     //check procedure/function
     if (OB_TABLE_NOT_EXIST == ret) {
       uint64_t routine_id = 0;
@@ -1665,9 +1365,7 @@ int ObSchemaGetterGuard::check_priv(const ObSessionPrivInfo &session_priv,
   int ret = OB_SUCCESS;
   const ObStmtNeedPrivs::NeedPrivs &need_privs = stmt_need_privs.need_privs_;
 
-  if (OB_FAIL(check_tenant_schema_guard())) {
-    LOG_WARN("fail to check tenant schema guard", KR(ret));
-  } else if (session_priv.is_valid()) {
+  if (session_priv.is_valid()) {
     for (int64_t i = 0; OB_SUCC(ret) && i < need_privs.count(); ++i) {
       const ObNeedPriv &need_priv = need_privs.at(i);
       switch (need_priv.priv_level_) {
@@ -1676,16 +1374,6 @@ int ObSchemaGetterGuard::check_priv(const ObSessionPrivInfo &session_priv,
                                       enable_role_id_array,
                                       need_priv.priv_set_,
                                       OB_PRIV_CHECK_ALL == need_priv.priv_check_type_))) {
-            LOG_WARN("No privilege",
-                     "user_id", session_priv.user_id_,
-                     "need_priv", need_priv.priv_set_,
-                     "user_priv", session_priv.user_priv_set_,
-                     KR(ret));//need print priv
-          }
-          break;
-        }
-        case OB_PRIV_CATALOG_LEVEL: {
-          if (OB_FAIL(check_catalog_priv(session_priv, enable_role_id_array, need_priv))) {
             LOG_WARN("No privilege",
                      "user_id", session_priv.user_id_,
                      "need_priv", need_priv.priv_set_,

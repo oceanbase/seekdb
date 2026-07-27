@@ -30,16 +30,9 @@ namespace sql
 {
 namespace
 {
-int build_local_replica(ObLSReplicaLocation &replica)
+int build_local_location(ObLSLocation &location)
 {
-  int ret = OB_SUCCESS;
-  ObReplicaProperty property;
-  ObLSRestoreStatus restore_status(ObLSRestoreStatus::NONE);
-  if (OB_FAIL(replica.init(GCTX.self_addr(), common::LEADER, GCONF.mysql_port,
-                           REPLICA_TYPE_FULL, property, restore_status, 1))) {
-    LOG_WARN("init local replica failed", K(ret));
-  }
-  return ret;
+  return location.init(SYS_LS, GCTX.self_addr(), ObTimeUtility::current_time());
 }
 }
 
@@ -50,16 +43,19 @@ OB_SERIALIZE_MEMBER(DASRelatedTabletMap::MapEntry,
                     val_.part_id_,
                     val_.first_level_part_id_);
 
-int VirtualSvrPair::init(ObIAllocator &allocator,
-                         ObTableID vt_id,
-                         ObIArray<ObAddr> &part_locations)
+const uint64_t VirtualSvrPair::LOCAL_VIRTUAL_TABLE_TABLET_ID;
+const uint64_t VirtualSvrPair::EMPTY_VIRTUAL_TABLE_TABLET_ID;
+
+int VirtualSvrPair::init(ObTableID vt_id, const ObAddr &server)
 {
   int ret = OB_SUCCESS;
-  all_server_.set_allocator(&allocator);
-  all_server_.set_capacity(part_locations.count());
-  table_id_ = vt_id;
-  if (OB_FAIL(all_server_.assign(part_locations))) {
-    LOG_WARN("store addr to all server list failed", K(ret));
+  if (!server.is_valid() || server != GCTX.self_addr()) {
+    ret = OB_LOCATION_NOT_EXIST;
+    LOG_WARN("local virtual table location does not exist", K(ret), K(vt_id),
+             K(server), "local_server", GCTX.self_addr());
+  } else {
+    table_id_ = vt_id;
+    local_server_ = server;
   }
   return ret;
 }
@@ -67,17 +63,14 @@ int VirtualSvrPair::init(ObIAllocator &allocator,
 int VirtualSvrPair::get_server_by_tablet_id(const ObTabletID &tablet_id, ObAddr &addr) const
 {
   int ret = OB_SUCCESS;
-  //tablet id must start with 1, so the server addr index is (tablet_id - 1) in virtual table
-  int64_t idx = tablet_id.id() - 1;
   if (VirtualSvrPair::EMPTY_VIRTUAL_TABLE_TABLET_ID == tablet_id.id()) {
-    addr = GCTX.self_addr();
+    addr = local_server_;
   } else if (OB_UNLIKELY(!tablet_id.is_valid())
-      || OB_UNLIKELY(idx < 0)
-      || OB_UNLIKELY(idx >= all_server_.count())) {
+             || VirtualSvrPair::LOCAL_VIRTUAL_TABLE_TABLET_ID != tablet_id.id()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet_id is invalid", K(ret), K(tablet_id), K(all_server_));
+    LOG_WARN("invalid local virtual table tablet id", K(ret), K(tablet_id), K(local_server_));
   } else {
-    addr = all_server_.at(idx);
+    addr = local_server_;
   }
   return ret;
 }
@@ -86,14 +79,11 @@ int VirtualSvrPair::get_all_part_and_tablet_id(ObIArray<ObObjectID> &part_ids,
                                                ObIArray<ObTabletID> &tablet_ids) const
 {
   int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < all_server_.count(); ++i) {
-    //tablet id must start with 1,
-    //so use the all server index + 1 as the tablet id and partition_id in virtual table
-    if (OB_FAIL(part_ids.push_back(i + 1))) {
-      LOG_WARN("mock part id failed", K(ret), K(i));
-    } else if (OB_FAIL(tablet_ids.push_back(ObTabletID(i + 1)))) {
-      LOG_WARN("mock tablet id failed", K(ret), K(i));
-    }
+  if (OB_FAIL(part_ids.push_back(VirtualSvrPair::LOCAL_VIRTUAL_TABLE_TABLET_ID))) {
+    LOG_WARN("store local virtual table part id failed", K(ret));
+  } else if (OB_FAIL(tablet_ids.push_back(
+                 ObTabletID(VirtualSvrPair::LOCAL_VIRTUAL_TABLE_TABLET_ID)))) {
+    LOG_WARN("store local virtual table tablet id failed", K(ret));
   }
   return ret;
 }
@@ -103,17 +93,11 @@ int VirtualSvrPair::get_part_and_tablet_id_by_server(const ObAddr &addr,
                                                      ObTabletID &tablet_id) const
 {
   int ret = OB_SUCCESS;
-  for (int64_t i = 0; i < all_server_.count(); ++i) {
-    if (addr == all_server_.at(i)) {
-      //tablet id must start with 1,
-      //so use the all server index + 1 as the tablet id and partition_id in virtual table
-      part_id = i + 1;
-      tablet_id = i + 1;
-      break;
-    }
-  }
-  if (!tablet_id.is_valid()) {
-    LOG_DEBUG("virtual table partition not exists", K(ret), K(addr));
+  if (addr == local_server_) {
+    part_id = VirtualSvrPair::LOCAL_VIRTUAL_TABLE_TABLET_ID;
+    tablet_id = ObTabletID(VirtualSvrPair::LOCAL_VIRTUAL_TABLE_TABLET_ID);
+  } else {
+    LOG_DEBUG("local virtual table partition does not match server", K(addr), K(local_server_));
   }
 
   return ret;
@@ -615,8 +599,8 @@ int ObDASTabletMapper::get_default_tablet_and_object_id(const ObPartitionLevel p
         if (OB_ISNULL(GCTX.schema_service_)) {
           ret = OB_INVALID_ARGUMENT;
           LOG_ERROR("invalid schema service", KR(ret));
-        } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(guard))) {
-          LOG_WARN("get tenant schema guard fail", KR(ret));
+        } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard))) {
+          LOG_WARN("get runtime schema guard fail", KR(ret));
         }
         for (int64_t i = 0; OB_SUCC(ret) && i < related_info_.related_tids_->count(); ++i) {
           ObTableID related_table_id = related_info_.related_tids_->at(i);
@@ -715,8 +699,8 @@ int ObDASTabletMapper::get_related_partition_id(const ObTableID &src_table_id,
       if (OB_ISNULL(GCTX.schema_service_)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_ERROR("invalid schema service", KR(ret));
-      } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(guard))) {
-        LOG_WARN("get tenant schema guard fail", KR(ret));
+      } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard))) {
+        LOG_WARN("get runtime schema guard fail", KR(ret));
       } else if (OB_FAIL(guard.get_simple_table_schema( dst_table_id, dst_table_schema))) {
         LOG_WARN("get_table_schema fail", K(ret), K(dst_table_id));
       } else if (OB_ISNULL(dst_table_schema)) {
@@ -820,21 +804,23 @@ int ObDASLocationRouter::nonblock_get_candi_tablet_locations(const ObDASTableLoc
   if (OB_FAIL(candi_tablet_locs.prepare_allocate(N))) {
     LOG_WARN("Partition location list prepare error", K(ret));
   } else {
-    ObLSReplicaLocation local_replica;
+    ObLSLocation local_location;
     int64_t i = 0;
-    if (OB_FAIL(build_local_replica(local_replica))) {
-      LOG_WARN("build local replica failed", K(ret));
+    if (OB_FAIL(build_local_location(local_location))) {
+      LOG_WARN("build local location failed", K(ret));
     }
     for (; OB_SUCC(ret) && i < N; ++i) {
       ObCandiTabletLoc &candi_tablet_loc = candi_tablet_locs.at(i);
-      ObObjectID first_level_part_id = first_level_part_ids.empty() ? OB_INVALID_ID : first_level_part_ids.at(i);
+      const ObObjectID first_level_part_id = first_level_part_ids.empty()
+          ? OB_INVALID_ID : first_level_part_ids.at(i);
       if (OB_FAIL(all_tablet_list_.push_back(tablet_ids.at(i)))) {
         LOG_WARN("store all tablet list failed", K(ret), K(i));
-      } else if (OB_FAIL(candi_tablet_loc.set_local_tablet_loc(partition_ids.at(i),
-                                                               first_level_part_id,
-                                                               tablet_ids.at(i),
-                                                               local_replica))) {
-        LOG_WARN("set local tablet location failed", K(ret), K(i));
+      } else if (OB_FAIL(candi_tablet_loc.set_local_location(partition_ids.at(i),
+                                                             first_level_part_id,
+                                                             tablet_ids.at(i),
+                                                             local_location,
+                                                             GCTX.self_addr()))) {
+        LOG_WARN("set local tablet location failed", K(ret), K(i), K(local_location));
       }
     } // for end
   }
@@ -847,11 +833,11 @@ int ObDASLocationRouter::get_tablet_loc(const ObDASTableLocMeta &loc_meta,
                                         ObDASTabletLoc &tablet_loc)
 {
   UNUSED(loc_meta);
-  return nonblock_get_leader(tablet_id, tablet_loc);
+  return nonblock_get_local(tablet_id, tablet_loc);
 }
 
-int ObDASLocationRouter::nonblock_get_leader(const ObTabletID &tablet_id,
-                                             ObDASTabletLoc &tablet_loc)
+int ObDASLocationRouter::nonblock_get_local(const ObTabletID &tablet_id,
+                                            ObDASTabletLoc &tablet_loc)
 {
   int ret = OB_SUCCESS;
   tablet_loc.tablet_id_ = tablet_id;
@@ -878,14 +864,11 @@ int ObDASLocationRouter::get_vt_svr_pair(uint64_t vt_id, const VirtualSvrPair *&
   } else if (nullptr == vt_pair) {
     VirtualSvrPair empty_pair;
     VirtualSvrPair *tmp_pair = nullptr;
-    ObSEArray<ObAddr, 8> part_locations;
     if (OB_FAIL(virtual_server_list_.push_back(empty_pair))) {
       LOG_WARN("extend virtual server list failed", K(ret));
-    } else if (OB_FAIL(part_locations.push_back(GCTX.self_addr()))) {
-      LOG_WARN("add local virtual table location failed", K(ret), K(vt_id));
     } else {
       tmp_pair = &virtual_server_list_.get_last();
-      if (OB_FAIL(tmp_pair->init(allocator_, vt_id, part_locations))) {
+      if (OB_FAIL(tmp_pair->init(vt_id, GCTX.self_addr()))) {
         LOG_WARN("init tmp virtual table svr pair failed", K(ret), K(vt_id));
       } else {
         vt_pair = tmp_pair;
@@ -902,7 +885,7 @@ bool ObDASLocationRouter::is_refresh_location_error(int err_no) const
          is_get_location_timeout_error(err_no) ||
          is_server_down_error(err_no) ||
          is_has_no_readable_replica_err(err_no) ||
-         is_unit_migrate(err_no);
+         is_runtime_not_ready(err_no);
 }
 
 void ObDASLocationRouter::refresh_location_cache_by_errno(bool is_nonblock, int err_no)

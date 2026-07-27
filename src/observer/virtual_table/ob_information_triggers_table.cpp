@@ -54,8 +54,8 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
         SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
       } else {
         ObArray<const ObTriggerInfo *> tg_array;
-        if (OB_FAIL(schema_guard_->get_trigger_infos_in_tenant(tg_array))) {
-          SERVER_LOG(WARN, "Get trigger info with tenant id error", K(ret));
+        if (OB_FAIL(schema_guard_->get_trigger_infos_in_runtime(tg_array))) {
+          SERVER_LOG(WARN, "get trigger info failed", K(ret));
         } else {
           const ObTriggerInfo *tg_info = NULL;
           sql::ObExecEnv exec_env;

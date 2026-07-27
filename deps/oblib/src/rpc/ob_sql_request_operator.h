@@ -36,19 +36,16 @@ class ObPacket;
 
 struct ObSqlSockDesc
 {
-  ObSqlSockDesc(): type_(0), sock_desc_(NULL) {}
+  ObSqlSockDesc(): sock_desc_(NULL) {}
   ~ObSqlSockDesc() {}
   void reset() {
-    type_ = 0;
     sock_desc_ = NULL;
   }
-  void set(int type, void* desc) {
-    type_ = type;
+  void set(void* desc) {
     sock_desc_ = desc;
   }
 
   void clear_sql_session_info();
-  int type_;
   void* sock_desc_;
 };
 
@@ -122,63 +119,62 @@ public:
   ~ObSqlRequestOperator() {}
   void *get_sql_session(ObRequest* req);
   SSL *get_sql_ssl_st(ObRequest* req) {
-    return get_operator(req).get_sql_ssl_st(req);
+    return get_operator().get_sql_ssl_st(req);
   }
   char* alloc_sql_response_buffer(ObRequest* req, int64_t size) {
-    return get_operator(req).alloc_sql_response_buffer(req, size);
+    return get_operator().alloc_sql_response_buffer(req, size);
   }
   char *sql_reusable_alloc(ObRequest* req, const int64_t size) {
-    return get_operator(req).sql_reusable_alloc(req, size);
+    return get_operator().sql_reusable_alloc(req, size);
   }
   common::ObAddr get_peer(const ObRequest* req) {
-    return get_operator(req).get_peer(req);
+    return get_operator().get_peer(req);
   }
   void disconnect_sql_conn(ObRequest* req) {
-    return get_operator(req).disconnect_sql_conn(req);
+    return get_operator().disconnect_sql_conn(req);
   }
   void finish_sql_request(ObRequest* req) {
-    return get_operator(req).finish_sql_request(req);
+    return get_operator().finish_sql_request(req);
   }
 
   int create_read_handle(ObRequest* req, void *& read_handle) {
-    return get_operator(req).create_read_handle(req, read_handle);
+    return get_operator().create_read_handle(req, read_handle);
   }
 
   int release_read_handle(ObRequest* req, void * read_handle) {
-    return get_operator(req).release_read_handle(req, read_handle);
+    return get_operator().release_read_handle(req, read_handle);
   }
   int read_packet(ObRequest* req, obmysql::ObICSMemPool& mem_pool, void *read_handle, ObPacket*& pkt) {
-    return get_operator(req).read_packet(req, mem_pool, read_handle, *sock_processor_, pkt);
+    return get_operator().read_packet(req, mem_pool, read_handle, *sock_processor_, pkt);
   }
   int release_packet(ObRequest* req, void* read_handle, ObPacket* pkt) {
-    return get_operator(req).release_packet(req, read_handle, pkt);
+    return get_operator().release_packet(req, read_handle, pkt);
   }
 
   int write_response(ObRequest* req, const char* buf, int64_t sz) {
-    return get_operator(req).write_response(req, buf, sz);
+    return get_operator().write_response(req, buf, sz);
   }
   int async_write_response(ObRequest* req, const char* buf, int64_t sz) {
-    return get_operator(req).async_write_response(req, buf, sz);
+    return get_operator().async_write_response(req, buf, sz);
   }
   void get_sock_desc(ObRequest* req, ObSqlSockDesc& desc) {
-    return get_operator(req).get_sock_desc(req, desc);
+    return get_operator().get_sock_desc(req, desc);
   }
   void disconnect_by_sql_sock_desc(ObSqlSockDesc& desc) {
-    return get_operator(desc).disconnect_by_sql_sock_desc(desc);
+    return get_operator().disconnect_by_sql_sock_desc(desc);
   }
   void destroy(ObRequest* req) {
-    return get_operator(req).destroy(req);
+    return get_operator().destroy(req);
   }
   void set_sql_session_to_sock_desc(ObRequest* req, void* sess) {
-    return get_operator(req).set_sql_session_to_sock_desc(req, sess);
+    return get_operator().set_sql_session_to_sock_desc(req, sess);
   }
 
   void set_sql_sock_processor(obmysql::ObSqlSockProcessor& sock_processor) {
     sock_processor_ = &sock_processor;
   }
 private:
-  ObISqlRequestOperator& get_operator(const ObRequest* req);
-  ObISqlRequestOperator& get_operator(const ObSqlSockDesc& desc);
+  ObISqlRequestOperator& get_operator();
 
 private:
   obmysql::ObSqlSockProcessor *sock_processor_;

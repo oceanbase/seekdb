@@ -27,7 +27,7 @@ using namespace oceanbase::common;
 namespace oceanbase {
 namespace common {
 
-int OB_WEAK_SYMBOL build_tenant_errsim_moulde(
+int OB_WEAK_SYMBOL update_errsim_module_config(
     const int64_t config_version,
     const common::ObArray<ObFixedLengthString<ObErrsimModuleTypeHelper::MAX_TYPE_NAME_LENGTH>> &module_array,
     const int64_t percentage)
@@ -47,14 +47,5 @@ bool OB_WEAK_SYMBOL is_errsim_module(
   return b_ret;
 }
 
-int OB_WEAK_SYMBOL add_tenant_errsim_event(
-    const ObTenantErrsimEvent &event)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(event);
-  return ret;
-}
-
 } // common
 } // oceanbase
-

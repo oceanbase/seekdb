@@ -19,8 +19,8 @@
 #include "share/rc/ob_module_provider.h"
 #include "ob_server_log_block_mgr.h"
 #include "logservice/palf_handle_guard.h"
-#include "logservice/ob_tenant_mutil_allocator_mgr.h"
-#include "share/rc/ob_tenant_module_init_ctx.h"
+#include "logservice/ob_log_allocator_mgr.h"
+#include "share/rc/ob_server_module_init_ctx.h"
 #include "observer/ob_srv_network_frame.h"
 #include "storage/ob_file_system_router.h"
 #include "logservice/ob_net_keepalive_adapter.h"            // ObNetKeepAliveAdapter
@@ -60,52 +60,51 @@ ObLogService::~ObLogService()
   destroy();
 }
 
-int ObLogService::mtl_init(ObLogService* &logservice)
+int ObLogService::server_module_init(ObLogService* &logservice)
 {
   int ret = OB_SUCCESS;
   const ObAddr &self = GCTX.self_addr();
   
   observer::ObSrvNetworkFrame *net_frame = GCTX.net_frame_;
-  //log_disk_usage_limit_size cannot be actively obtained from the configuration item, and needs to be passed as a parameter during mtl initialization
-  const palf::PalfOptions &palf_options = MTL_INIT_CTX()->palf_options_;
-  const char *tenant_clog_dir = MTL_INIT_CTX()->tenant_clog_dir_;
+  const share::ObServerModuleInitCtx *module_init_ctx =
+      share::server_runtime()->get_module_init_ctx();
+  const palf::PalfOptions &palf_options = module_init_ctx->palf_options_;
+  const char *runtime_clog_dir = module_init_ctx->clog_dir_;
   const char *clog_dir = OB_FILE_SYSTEM_ROUTER.get_clog_dir();
   ObServerLogBlockMgr *log_block_mgr = GCTX.log_block_mgr_;
   common::ObILogAllocator *alloc_mgr = NULL;
   ObNetKeepAliveAdapter *net_keepalive_adapter = NULL;
-  if (OB_FAIL(TMA_MGR_INSTANCE.get_tenant_log_allocator(alloc_mgr))) {
-    CLOG_LOG(WARN, "get_tenant_log_allocator failed", K(ret));
-  } else if (OB_ISNULL(net_keepalive_adapter = MTL_NEW(ObNetKeepAliveAdapter, "logservice"))) {
+  if (OB_FAIL(LOG_ALLOCATOR_MGR_INSTANCE.get_log_allocator(alloc_mgr))) {
+    CLOG_LOG(WARN, "get_log_allocator failed", K(ret));
+  } else if (OB_ISNULL(net_keepalive_adapter = SERVER_NEW(ObNetKeepAliveAdapter, "logservice"))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     CLOG_LOG(WARN, "alloc memory failed", KR(ret), KP(net_keepalive_adapter));
   } else if (OB_FAIL(logservice->init(palf_options,
-                                      tenant_clog_dir,
+                                      runtime_clog_dir,
                                       self,
                                       alloc_mgr,
                                       share::g_mp->ls_service(),
                                       log_block_mgr,
                                       net_keepalive_adapter))) {
-    CLOG_LOG(ERROR, "init ObLogService failed", K(ret), K(tenant_clog_dir));
+    CLOG_LOG(ERROR, "init ObLogService failed", K(ret), K(runtime_clog_dir));
   } else if (OB_FAIL(FileDirectoryUtils::fsync_dir(clog_dir))) {
     CLOG_LOG(ERROR, "fsync_dir failed", K(ret), K(clog_dir));
   } else {
-    CLOG_LOG(INFO, "ObLogService mtl_init success");
+    CLOG_LOG(INFO, "ObLogService server_module_init success");
   }
   if (OB_FAIL(ret) && NULL != net_keepalive_adapter) {
-    MTL_DELETE(ObNetKeepAliveAdapter, "logservice", net_keepalive_adapter);
+    SERVER_DELETE(ObNetKeepAliveAdapter, "logservice", net_keepalive_adapter);
   }
   return ret;
 }
 
-void ObLogService::mtl_destroy(ObLogService* &logservice)
+void ObLogService::server_module_destroy(ObLogService* &logservice)
 {
   common::ob_delete(logservice);
   logservice = nullptr;
-  // Free tenant_log_allocator for this tenant after destroy logservice.
-  
   int ret = OB_SUCCESS;
-  if (OB_FAIL(TMA_MGR_INSTANCE.delete_tenant_log_allocator())) {
-    CLOG_LOG(WARN, "delete_tenant_log_allocator failed", K(ret));
+  if (OB_FAIL(LOG_ALLOCATOR_MGR_INSTANCE.delete_log_allocator())) {
+    CLOG_LOG(WARN, "delete_log_allocator failed", K(ret));
   }
 }
 
@@ -152,7 +151,7 @@ void ObLogService::destroy()
     palf_env_ = NULL;
   }
   if (NULL != net_keepalive_adapter_) {
-    MTL_DELETE(IObNetKeepAliveAdapter, "logservice", net_keepalive_adapter_);
+    SERVER_DELETE(IObNetKeepAliveAdapter, "logservice", net_keepalive_adapter_);
     net_keepalive_adapter_ = NULL;
   }
   alloc_mgr_ = NULL;
@@ -168,7 +167,7 @@ int check_and_prepare_dir(const char *dir)
     // means it's restart
   } else if (is_exist == true) {
     CLOG_LOG(INFO, "director exist", K(ret), K(dir));
-    // means it's create tenant
+    // means it is a first-time runtime directory creation
   } else if (OB_FAIL(common::FileDirectoryUtils::create_directory(dir))) {
     CLOG_LOG(WARN, "create_directory failed", K(ret), K(dir));
   } else {
@@ -583,7 +582,7 @@ int ObLogService::check_need_do_checkpoint(bool &need_do_checkpoint)
     CLOG_LOG(WARN, "get_disk_usage failed", K(ret));
   } else {
     int64_t unrecyclable_log_disk_size = 0;
-    const int64_t CHECKPOINT_PERCENTAGE = GCTX.is_shared_storage_mode() ? 60 : 30;
+    const int64_t CHECKPOINT_PERCENTAGE = 30;
     if (OB_FAIL(get_unrecyclable_log_disk_size(unrecyclable_log_disk_size))) {
       CLOG_LOG(WARN, "get unrecyclable log disk size failed", K(ret));
     } else {

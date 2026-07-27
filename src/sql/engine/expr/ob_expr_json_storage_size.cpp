@@ -89,7 +89,6 @@ int ObExprJsonStorageSize::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta
       LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT);
     } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(*allocator, data, meta, has_lob_header, j_str))) {
       LOG_WARN("fail to get real data.", K(ret), K(j_str));
-    } else if (OB_FALSE_IT(allocator->add_baseline_size(j_str.length()))) {
     } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, j_str, j_in_type,
                                                         j_in_type, j_base, 0,
                                                         ObJsonExprHelper::get_json_max_depth_config()))) {
@@ -120,7 +119,7 @@ int ObExprJsonStorageSize::eval_json_storage_size(const ObExpr &expr, ObEvalCtx 
   } else {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     
-    MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+    MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
     if (OB_FAIL(calc(ctx, *datum, arg->datum_meta_, arg->obj_meta_.has_lob_header(), &tmp_allocator, res))) {
       LOG_WARN("fail to calc json storage free result", K(ret), K(arg->datum_meta_));
     }

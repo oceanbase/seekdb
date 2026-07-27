@@ -20,7 +20,7 @@
 #include "common/row/ob_row_iterator.h"
 #include "common/object/ob_obj_type.h"
 #include "sql/ob_sql_define.h"
-#include "share/ob_cluster_version.h"
+#include "share/ob_version_parser.h"
 
 namespace oceanbase
 {

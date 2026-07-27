@@ -27,7 +27,6 @@
 #include "share/schema/ob_table_schema.h"
 #include "sql/ob_scanner.h"
 #include "sql/ob_sql_trans_util.h"
-#include "share/rpc/ob_batch_proxy.h"
 #include "storage/tx/ob_trans_define.h"
 
 namespace oceanbase
@@ -36,19 +35,6 @@ namespace sql
 {
 struct ObEvalCtx;
 
-// Relocated from the deleted ob_executor_rpc_proxy.h. Used by temp-table
-// transformation ops to describe interm-result ids for erase (the remote
-// erase RPC itself is removed on single-replica seekdb).
-struct ObEraseDtlIntermResultArg
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObEraseDtlIntermResultArg() {}
-
-  ObSEArray<uint64_t, 4> interm_result_ids_;
-
-  TO_STRING_KV(K_(interm_result_ids));
-};
 // Due to calling the rpc asynchronous callback interface, this interface does not call the destructor of the parameters,
 // Therefore the following classes should be designed not to rely on the destructor for memory release
 
@@ -318,34 +304,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObMiniTaskRetryInfo);
 };
 
-class ObRemoteResult : public obcall::ObIFill
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObRemoteResult() :
-    task_id_(),
-    result_(),
-    has_more_(false)
-  { }
-  int init() { return result_.init(); }
-  ObTaskID &get_task_id() { return task_id_; }
-  const ObTaskID &get_task_id() const { return task_id_; }
-  common::ObScanner &get_scanner() { return result_; }
-  void set_has_more(bool has_more) { has_more_ = has_more; }
-  bool has_more() const { return has_more_; }
-  virtual int fill_buffer(char* buf, int64_t size, int64_t &filled_size) const
-  {
-    filled_size = 0;
-    return serialize(buf, size, filled_size);
-  }
-  virtual int64_t get_req_size() const { return get_serialize_size(); }
-  virtual int64_t get_estimate_size() const { return result_.get_data_size(); }
-  TO_STRING_KV(K_(task_id), K_(result), K_(has_more));
-private:
-  ObTaskID task_id_;
-  common::ObScanner result_;
-  bool has_more_;
-};
 }
 }
 #endif /* OCEANBASE_SQL_EXECUTOR_OB_TASK_EVENT_ */

@@ -54,8 +54,8 @@ struct ObRetryParam
   ObRetryParam(const sql::ObSqlCtx &ctx,
                sql::ObResultSet &result,
                sql::ObSQLSessionInfo &session,
-               int64_t curr_query_tenant_local_schema_version,
-               int64_t curr_query_tenant_global_schema_version,
+               int64_t current_query_local_schema_version,
+               int64_t current_query_global_schema_version,
                int64_t curr_query_sys_local_schema_version,
                int64_t curr_query_sys_global_schema_version,
                const bool force_local_retry,
@@ -74,8 +74,8 @@ struct ObRetryParam
         ctx_(ctx),
         result_(result),
         session_(session),
-        curr_query_tenant_local_schema_version_(curr_query_tenant_local_schema_version),
-        curr_query_tenant_global_schema_version_(curr_query_tenant_global_schema_version),
+        current_query_local_schema_version_(current_query_local_schema_version),
+        current_query_global_schema_version_(current_query_global_schema_version),
         curr_query_sys_local_schema_version_(curr_query_sys_local_schema_version),
         curr_query_sys_global_schema_version_(curr_query_sys_global_schema_version),
         stmt_retry_times_(stmt_retry_times),
@@ -99,10 +99,10 @@ struct ObRetryParam
   const sql::ObSqlCtx &ctx_;
   sql::ObResultSet &result_; // for refresh location cache
   sql::ObSQLSessionInfo &session_;
-  const int64_t curr_query_tenant_local_schema_version_; // Schema version of the normal tenant shm before Query starts and Loc refreshes
-  const int64_t curr_query_tenant_global_schema_version_; // Schema version of the normal tenant at the start of the query
-  const int64_t curr_query_sys_local_schema_version_; // System tenant shm ver before Query starts and Loc refreshes
-  const int64_t curr_query_sys_global_schema_version_; // System tenant schema version at the start of the query
+  const int64_t current_query_local_schema_version_; // Local runtime schema version before the query starts and location refreshes
+  const int64_t current_query_global_schema_version_; // Global runtime schema version at query start
+  const int64_t curr_query_sys_local_schema_version_; // Local system schema version before query start and location refresh
+  const int64_t curr_query_sys_global_schema_version_; // Global system schema version at query start
   const int64_t stmt_retry_times_; // statement retry times, including each retry, local or packet
                                    // note: PL block don't have a stmt_retry_times_ attribute
   const int64_t local_retry_times_; // local retry times, reset to zero when packet retry
@@ -185,14 +185,12 @@ public:
                                  bool force_local_retry = false,
                                  bool is_inner_sql = false,
                                  bool is_from_pl = false);
-  void set_packet_retry(const int err) {
+  void set_packet_retry() {
     retry_type_ = RETRY_TYPE_PACKET;
-    retry_err_code_ = err;
   }
   void clear_state_before_each_retry(sql::ObQueryRetryInfo &retry_info)
   {
     retry_type_ = RETRY_TYPE_NONE;
-    retry_err_code_ = OB_SUCCESS;
     retry_info.clear_state_before_each_retry();
   }
   ObQueryRetryType get_retry_type() const
@@ -201,16 +199,7 @@ public:
   }
   sql::ObSessionRetryStatus need_retry() const
   {
-    sql::ObSessionRetryStatus ret = sql::SESS_NOT_IN_RETRY;
-    if (RETRY_TYPE_NONE != retry_type_) {
-      if (OB_USE_DUP_FOLLOW_AFTER_DML != retry_err_code_ &&
-          OB_NOT_MASTER != retry_err_code_) {
-        ret = sql::SESS_IN_RETRY;
-      } else {
-        ret = sql::SESS_IN_RETRY_FOR_DUP_TBL;
-      }
-    }
-    return ret; //RETRY_TYPE_NONE != retry_type_;
+    return RETRY_TYPE_NONE == retry_type_ ? sql::SESS_NOT_IN_RETRY : sql::SESS_IN_RETRY;
   }
   int64_t get_retry_times() const
   {
@@ -218,22 +207,22 @@ public:
   }
   void reset_retry_times() { retry_times_ = 0; }
 
-  // tenant version
-  int64_t get_tenant_global_schema_version() const
+  // runtime schema versions
+  int64_t get_current_global_schema_version() const
   {
-    return curr_query_tenant_global_schema_version_;
+    return current_query_global_schema_version_;
   }
-  void set_tenant_global_schema_version(int64_t version)
+  void set_current_global_schema_version(int64_t version)
   {
-    curr_query_tenant_global_schema_version_ = version;
+    current_query_global_schema_version_ = version;
   }
-  int64_t get_tenant_local_schema_version() const
+  int64_t get_current_local_schema_version() const
   {
-    return curr_query_tenant_local_schema_version_;
+    return current_query_local_schema_version_;
   }
-  void set_tenant_local_schema_version(int64_t version)
+  void set_current_local_schema_version(int64_t version)
   {
-    curr_query_tenant_local_schema_version_ = version;
+    current_query_local_schema_version_ = version;
   }
   // sys version
   int64_t get_sys_global_schema_version() const
@@ -327,13 +316,12 @@ private:
   // map_ is used to fast lookup the error code retry processor
   typedef common::ObTuple<retry_func, retry_func, sql::ObDASRetryCtrl::retry_func> RetryFuncs;
   static common::hash::ObHashMap<int, RetryFuncs, common::hash::NoPthreadDefendMode> map_;
-  int64_t curr_query_tenant_local_schema_version_; // Schema version of the normal tenant shm before Query starts and Loc refreshes
-  int64_t curr_query_tenant_global_schema_version_; // Schema version of the normal tenant at the start of the query
-  int64_t curr_query_sys_local_schema_version_; // System tenant shm ver before Query starts and Loc refreshes
-  int64_t curr_query_sys_global_schema_version_; // System tenant schema version at the start of the query
+  int64_t current_query_local_schema_version_; // Local runtime schema version before the query starts and location refreshes
+  int64_t current_query_global_schema_version_; // Global runtime schema version at query start
+  int64_t curr_query_sys_local_schema_version_; // Local system schema version before query start and location refresh
+  int64_t curr_query_sys_global_schema_version_; // Global system schema version at query start
   int64_t retry_times_;
   ObQueryRetryType retry_type_;
-  int retry_err_code_; // record the error code during retries (currently used to distinguish retries caused by table replication)
   /* disallow copy & assign */
   DISALLOW_COPY_AND_ASSIGN(ObQueryRetryCtrl);
 };

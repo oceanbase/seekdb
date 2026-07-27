@@ -23,7 +23,7 @@
 #include "share/schema/ob_schema_service.h"
 #include "rootserver/fork_table/ob_fork_table_util.h"
 #include "lib/utility/utility.h"
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_management_service.h"
 #include "common/mysqlclient/ob_mysql_transaction.h"
 #include "rootserver/ob_domain_index_builder_util.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
@@ -434,7 +434,7 @@ int ObForkTableUtil::obtain_snapshot(
     int64_t &new_fetched_snapshot)
 {
   int ret = OB_SUCCESS;
-  rootserver::ObDDLService &ddl_service = GCTX.root_service_->get_ddl_service();
+  rootserver::ObDDLService &ddl_service = GCTX.local_management_service_->get_ddl_service();
   new_fetched_snapshot = 0;
   ObSEArray<ObTabletID, 16> tablet_ids;
   SCN snapshot_scn;

@@ -47,7 +47,6 @@ public:
   bool is_view_table() const;
   int64_t get_block_size() const;
   int64_t get_progressive_merge_num() const;
-  bool use_bloom_filter() const;
   int64_t get_column_count() const;
   inline void set_index_using_type(share::schema::ObIndexUsingType);
   share::schema::ObIndexUsingType get_index_using_type();
@@ -74,15 +73,12 @@ public:
   const ObSelectStmt *get_view_define() const;
   ObSelectStmt *get_sub_select() { return sub_select_stmt_; }
   ObSelectStmt *get_view_define() { return view_define_; }
-  void set_sequence_ddl_arg(const obcall::ObSequenceDDLArg sequence_ddl_arg);
-  const obcall::ObSequenceDDLArg &get_sequence_ddl_arg() const;
   void set_masked_sql(const common::ObString &masked_sql) { masked_sql_ = masked_sql; }
   common::ObString get_masked_sql() const { return masked_sql_; }
   void set_insert_mode(uint64_t mode) { insert_mode_ = mode; }
   uint64_t get_insert_mode() const { return insert_mode_; }
 
   ObTableType get_table_type() const { return create_table_arg_.schema_.get_table_type(); }
-  uint64_t get_external_location_id() const { return create_table_arg_.schema_.get_external_location_id(); }
   INHERIT_TO_STRING_KV("ObTableStmt", ObTableStmt, K_(stmt_type), K_(create_table_arg), K_(index_arg_list));
 private:
 private:
@@ -171,26 +167,10 @@ inline int64_t ObCreateTableStmt::get_column_count() const
   return create_table_arg_.schema_.get_column_count();
 }
 
-inline bool ObCreateTableStmt::use_bloom_filter() const
-{
-  return create_table_arg_.schema_.is_use_bloomfilter();
-}
-
 inline void ObCreateTableStmt::set_index_using_type(
     const share::schema::ObIndexUsingType index_using_type)
 {
   return create_table_arg_.schema_.set_index_using_type(index_using_type);
-}
-
-inline void ObCreateTableStmt::set_sequence_ddl_arg(
-    const obcall::ObSequenceDDLArg sequence_ddl_arg)
-{
-  create_table_arg_.sequence_ddl_arg_ = sequence_ddl_arg; 
-}
-
-inline const obcall::ObSequenceDDLArg &ObCreateTableStmt::get_sequence_ddl_arg() const
-{
-  return create_table_arg_.sequence_ddl_arg_; 
 }
 
 inline void ObCreateTableStmt::set_sub_select(ObSelectStmt *select_stmt)

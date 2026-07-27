@@ -409,7 +409,6 @@ SQL: select c2, sum(c1) from t1 group by c2;
 =================================================================
 |ID|OPERATOR                       |NAME         |EST. ROWS|COST|
 -----------------------------------------------------------------
-<<<<<<< HEAD
 |0 |PX COORDINATOR                 |             |1        |229 |
 |1 | EXCHANGE OUT DISTR            |:EX10001     |1        |229 |
 |2 |  MERGE GROUP BY               |             |1        |228 |
@@ -418,15 +417,6 @@ SQL: select c2, sum(c1) from t1 group by c2;
 |5 |     PX PARTITION ITERATOR     |             |1        |228 |
 |6 |      MERGE GROUP BY           |             |1        |228 |
 |7 |       TABLE SCAN              |t1(idx_t1_c2)|1        |228 |
-=======
-|0 |PX COORDINATOR                 |             |1        |1   |
-|1 | EXCHANGE OUT DISTR            |:EX10001     |1        |1   |
-|2 |  MERGE GROUP BY               |             |1        |1   |
-|3 |   EXCHANGE IN MERGE SORT DISTR|             |1        |1   |
-|4 |    EXCHANGE OUT DISTR (HASH)  |:EX10000     |1        |1   |
-|5 |     PX PARTITION ITERATOR     |             |1        |1   |
-|6 |      TABLE SCAN               |t1(idx_t1_c2)|1        |1   |
->>>>>>> refine idnex scan cost
 =================================================================
 
 Outputs & filters: 
@@ -455,7 +445,6 @@ SQL: select c2, avg(c1) from t1 group by c2;
 =================================================================
 |ID|OPERATOR                       |NAME         |EST. ROWS|COST|
 -----------------------------------------------------------------
-<<<<<<< HEAD
 |0 |PX COORDINATOR                 |             |1        |229 |
 |1 | EXCHANGE OUT DISTR            |:EX10001     |1        |229 |
 |2 |  MERGE GROUP BY               |             |1        |228 |
@@ -464,15 +453,6 @@ SQL: select c2, avg(c1) from t1 group by c2;
 |5 |     PX PARTITION ITERATOR     |             |1        |228 |
 |6 |      MERGE GROUP BY           |             |1        |228 |
 |7 |       TABLE SCAN              |t1(idx_t1_c2)|1        |228 |
-=======
-|0 |PX COORDINATOR                 |             |1        |2   |
-|1 | EXCHANGE OUT DISTR            |:EX10001     |1        |1   |
-|2 |  MERGE GROUP BY               |             |1        |1   |
-|3 |   EXCHANGE IN MERGE SORT DISTR|             |1        |1   |
-|4 |    EXCHANGE OUT DISTR (HASH)  |:EX10000     |1        |1   |
-|5 |     PX PARTITION ITERATOR     |             |1        |1   |
-|6 |      TABLE SCAN               |t1(idx_t1_c2)|1        |1   |
->>>>>>> refine idnex scan cost
 =================================================================
 
 Outputs & filters: 
@@ -560,7 +540,6 @@ SQL: select c2 from t1 group by c2 order by c2 limit 100;
 ===================================================================
 |ID|OPERATOR                         |NAME         |EST. ROWS|COST|
 -------------------------------------------------------------------
-<<<<<<< HEAD
 |0 |LIMIT                            |             |1        |229 |
 |1 | PX COORDINATOR MERGE SORT       |             |1        |229 |
 |2 |  EXCHANGE OUT DISTR             |:EX10001     |1        |228 |
@@ -571,17 +550,6 @@ SQL: select c2 from t1 group by c2 order by c2 limit 100;
 |7 |       PX PARTITION ITERATOR     |             |1        |228 |
 |8 |        MERGE GROUP BY           |             |1        |228 |
 |9 |         TABLE SCAN              |t1(idx_t1_c2)|1        |228 |
-=======
-|0 |LIMIT                            |             |1        |1   |
-|1 | PX COORDINATOR MERGE SORT       |             |1        |1   |
-|2 |  EXCHANGE OUT DISTR             |:EX10001     |1        |1   |
-|3 |   LIMIT                         |             |1        |1   |
-|4 |    MERGE GROUP BY               |             |1        |1   |
-|5 |     EXCHANGE IN MERGE SORT DISTR|             |1        |1   |
-|6 |      EXCHANGE OUT DISTR (HASH)  |:EX10000     |1        |1   |
-|7 |       PX PARTITION ITERATOR     |             |1        |1   |
-|8 |        TABLE SCAN               |t1(idx_t1_c2)|1        |1   |
->>>>>>> refine idnex scan cost
 ===================================================================
 
 Outputs & filters: 
@@ -612,7 +580,6 @@ SQL: select sum(c1) from t1 group by c2 order by c2 limit 100;
 ===================================================================
 |ID|OPERATOR                         |NAME         |EST. ROWS|COST|
 -------------------------------------------------------------------
-<<<<<<< HEAD
 |0 |LIMIT                            |             |1        |229 |
 |1 | PX COORDINATOR MERGE SORT       |             |1        |229 |
 |2 |  EXCHANGE OUT DISTR             |:EX10001     |1        |229 |
@@ -623,17 +590,6 @@ SQL: select sum(c1) from t1 group by c2 order by c2 limit 100;
 |7 |       PX PARTITION ITERATOR     |             |1        |228 |
 |8 |        MERGE GROUP BY           |             |1        |228 |
 |9 |         TABLE SCAN              |t1(idx_t1_c2)|1        |228 |
-=======
-|0 |LIMIT                            |             |1        |1   |
-|1 | PX COORDINATOR MERGE SORT       |             |1        |1   |
-|2 |  EXCHANGE OUT DISTR             |:EX10001     |1        |1   |
-|3 |   LIMIT                         |             |1        |1   |
-|4 |    MERGE GROUP BY               |             |1        |1   |
-|5 |     EXCHANGE IN MERGE SORT DISTR|             |1        |1   |
-|6 |      EXCHANGE OUT DISTR (HASH)  |:EX10000     |1        |1   |
-|7 |       PX PARTITION ITERATOR     |             |1        |1   |
-|8 |        TABLE SCAN               |t1(idx_t1_c2)|1        |1   |
->>>>>>> refine idnex scan cost
 ===================================================================
 
 Outputs & filters: 
@@ -664,7 +620,6 @@ SQL: select sum(c1) from t1 where c1 > 0 group by c2 order by c2 limit 100;
 ===================================================================
 |ID|OPERATOR                         |NAME         |EST. ROWS|COST|
 -------------------------------------------------------------------
-<<<<<<< HEAD
 |0 |LIMIT                            |             |1        |229 |
 |1 | PX COORDINATOR MERGE SORT       |             |1        |229 |
 |2 |  EXCHANGE OUT DISTR             |:EX10001     |1        |229 |
@@ -675,17 +630,6 @@ SQL: select sum(c1) from t1 where c1 > 0 group by c2 order by c2 limit 100;
 |7 |       PX PARTITION ITERATOR     |             |1        |228 |
 |8 |        MERGE GROUP BY           |             |1        |228 |
 |9 |         TABLE SCAN              |t1(idx_t1_c2)|1        |228 |
-=======
-|0 |LIMIT                            |             |1        |1   |
-|1 | PX COORDINATOR MERGE SORT       |             |1        |1   |
-|2 |  EXCHANGE OUT DISTR             |:EX10001     |1        |1   |
-|3 |   LIMIT                         |             |1        |1   |
-|4 |    MERGE GROUP BY               |             |1        |1   |
-|5 |     EXCHANGE IN MERGE SORT DISTR|             |1        |1   |
-|6 |      EXCHANGE OUT DISTR (HASH)  |:EX10000     |1        |1   |
-|7 |       PX PARTITION ITERATOR     |             |1        |1   |
-|8 |        TABLE SCAN               |t1(idx_t1_c2)|1        |1   |
->>>>>>> refine idnex scan cost
 ===================================================================
 
 Outputs & filters: 
@@ -716,7 +660,6 @@ SQL: select count(c1) from t1 group by c2 order by c2 limit 100;
 ===================================================================
 |ID|OPERATOR                         |NAME         |EST. ROWS|COST|
 -------------------------------------------------------------------
-<<<<<<< HEAD
 |0 |LIMIT                            |             |1        |229 |
 |1 | PX COORDINATOR MERGE SORT       |             |1        |229 |
 |2 |  EXCHANGE OUT DISTR             |:EX10001     |1        |229 |
@@ -727,17 +670,6 @@ SQL: select count(c1) from t1 group by c2 order by c2 limit 100;
 |7 |       PX PARTITION ITERATOR     |             |1        |228 |
 |8 |        MERGE GROUP BY           |             |1        |228 |
 |9 |         TABLE SCAN              |t1(idx_t1_c2)|1        |228 |
-=======
-|0 |LIMIT                            |             |1        |1   |
-|1 | PX COORDINATOR MERGE SORT       |             |1        |1   |
-|2 |  EXCHANGE OUT DISTR             |:EX10001     |1        |1   |
-|3 |   LIMIT                         |             |1        |1   |
-|4 |    MERGE GROUP BY               |             |1        |1   |
-|5 |     EXCHANGE IN MERGE SORT DISTR|             |1        |1   |
-|6 |      EXCHANGE OUT DISTR (HASH)  |:EX10000     |1        |1   |
-|7 |       PX PARTITION ITERATOR     |             |1        |1   |
-|8 |        TABLE SCAN               |t1(idx_t1_c2)|1        |1   |
->>>>>>> refine idnex scan cost
 ===================================================================
 
 Outputs & filters: 
@@ -768,7 +700,6 @@ SQL: select count(*) from t1 group by c2 order by c2 limit 100;
 ===================================================================
 |ID|OPERATOR                         |NAME         |EST. ROWS|COST|
 -------------------------------------------------------------------
-<<<<<<< HEAD
 |0 |LIMIT                            |             |1        |229 |
 |1 | PX COORDINATOR MERGE SORT       |             |1        |229 |
 |2 |  EXCHANGE OUT DISTR             |:EX10001     |1        |228 |
@@ -779,17 +710,6 @@ SQL: select count(*) from t1 group by c2 order by c2 limit 100;
 |7 |       PX PARTITION ITERATOR     |             |1        |228 |
 |8 |        MERGE GROUP BY           |             |1        |228 |
 |9 |         TABLE SCAN              |t1(idx_t1_c2)|1        |228 |
-=======
-|0 |LIMIT                            |             |1        |1   |
-|1 | PX COORDINATOR MERGE SORT       |             |1        |1   |
-|2 |  EXCHANGE OUT DISTR             |:EX10001     |1        |1   |
-|3 |   LIMIT                         |             |1        |1   |
-|4 |    MERGE GROUP BY               |             |1        |1   |
-|5 |     EXCHANGE IN MERGE SORT DISTR|             |1        |1   |
-|6 |      EXCHANGE OUT DISTR (HASH)  |:EX10000     |1        |1   |
-|7 |       PX PARTITION ITERATOR     |             |1        |1   |
-|8 |        TABLE SCAN               |t1(idx_t1_c2)|1        |1   |
->>>>>>> refine idnex scan cost
 ===================================================================
 
 Outputs & filters: 
@@ -820,7 +740,6 @@ SQL: select sum(c1), count(*) from t1 group by c2 order by c2 limit 100;
 ===================================================================
 |ID|OPERATOR                         |NAME         |EST. ROWS|COST|
 -------------------------------------------------------------------
-<<<<<<< HEAD
 |0 |LIMIT                            |             |1        |229 |
 |1 | PX COORDINATOR MERGE SORT       |             |1        |229 |
 |2 |  EXCHANGE OUT DISTR             |:EX10001     |1        |229 |
@@ -831,17 +750,6 @@ SQL: select sum(c1), count(*) from t1 group by c2 order by c2 limit 100;
 |7 |       PX PARTITION ITERATOR     |             |1        |228 |
 |8 |        MERGE GROUP BY           |             |1        |228 |
 |9 |         TABLE SCAN              |t1(idx_t1_c2)|1        |228 |
-=======
-|0 |LIMIT                            |             |1        |2   |
-|1 | PX COORDINATOR MERGE SORT       |             |1        |2   |
-|2 |  EXCHANGE OUT DISTR             |:EX10001     |1        |1   |
-|3 |   LIMIT                         |             |1        |1   |
-|4 |    MERGE GROUP BY               |             |1        |1   |
-|5 |     EXCHANGE IN MERGE SORT DISTR|             |1        |1   |
-|6 |      EXCHANGE OUT DISTR (HASH)  |:EX10000     |1        |1   |
-|7 |       PX PARTITION ITERATOR     |             |1        |1   |
-|8 |        TABLE SCAN               |t1(idx_t1_c2)|1        |1   |
->>>>>>> refine idnex scan cost
 ===================================================================
 
 Outputs & filters: 
@@ -872,7 +780,6 @@ SQL: select c2, count(c1) from t1 group by c2;
 =================================================================
 |ID|OPERATOR                       |NAME         |EST. ROWS|COST|
 -----------------------------------------------------------------
-<<<<<<< HEAD
 |0 |PX COORDINATOR                 |             |1        |229 |
 |1 | EXCHANGE OUT DISTR            |:EX10001     |1        |229 |
 |2 |  MERGE GROUP BY               |             |1        |228 |
@@ -881,15 +788,6 @@ SQL: select c2, count(c1) from t1 group by c2;
 |5 |     PX PARTITION ITERATOR     |             |1        |228 |
 |6 |      MERGE GROUP BY           |             |1        |228 |
 |7 |       TABLE SCAN              |t1(idx_t1_c2)|1        |228 |
-=======
-|0 |PX COORDINATOR                 |             |1        |1   |
-|1 | EXCHANGE OUT DISTR            |:EX10001     |1        |1   |
-|2 |  MERGE GROUP BY               |             |1        |1   |
-|3 |   EXCHANGE IN MERGE SORT DISTR|             |1        |1   |
-|4 |    EXCHANGE OUT DISTR (HASH)  |:EX10000     |1        |1   |
-|5 |     PX PARTITION ITERATOR     |             |1        |1   |
-|6 |      TABLE SCAN               |t1(idx_t1_c2)|1        |1   |
->>>>>>> refine idnex scan cost
 =================================================================
 
 Outputs & filters: 
@@ -2647,7 +2545,6 @@ SQL: (select /*+no_use_px*/ c1 from t1) union (select c2 from t1) union (select 
 |7 |       TOP-N SORT                    |             |1        |228 |
 |8 |        PX PARTITION ITERATOR        |             |1        |228 |
 |9 |         TABLE SCAN                  |t1           |1        |228 |
-<<<<<<< HEAD
 |10|    LIMIT                            |             |1        |228 |
 |11|     PX COORDINATOR MERGE SORT       |             |1        |228 |
 |12|      EXCHANGE OUT DISTR             |:EX20001     |1        |228 |
@@ -2669,27 +2566,6 @@ SQL: (select /*+no_use_px*/ c1 from t1) union (select c2 from t1) union (select 
 |28|            SORT                     |             |1        |137 |
 |29|             PX PARTITION ITERATOR   |             |1        |137 |
 |30|              TABLE SCAN             |t2           |1        |137 |
-=======
-|10|    LIMIT                            |             |1        |1   |
-|11|     PX COORDINATOR MERGE SORT       |             |1        |1   |
-|12|      EXCHANGE OUT DISTR             |:EX20001     |1        |1   |
-|13|       LIMIT                         |             |1        |1   |
-|14|        MERGE DISTINCT               |             |1        |1   |
-|15|         EXCHANGE IN MERGE SORT DISTR|             |1        |1   |
-|16|          EXCHANGE OUT DISTR (HASH)  |:EX20000     |1        |1   |
-|17|           PX PARTITION ITERATOR     |             |1        |1   |
-|18|            TABLE SCAN               |t1(idx_t1_c2)|1        |1   |
-|19|    LIMIT                            |             |1        |137 |
-|20|     PX COORDINATOR MERGE SORT       |             |1        |137 |
-|21|      EXCHANGE OUT DISTR             |:EX30001     |1        |137 |
-|22|       LIMIT                         |             |1        |137 |
-|23|        MERGE DISTINCT               |             |1        |137 |
-|24|         SORT                        |             |1        |137 |
-|25|          EXCHANGE IN DISTR          |             |1        |137 |
-|26|           EXCHANGE OUT DISTR (HASH) |:EX30000     |1        |137 |
-|27|            PX PARTITION ITERATOR    |             |1        |137 |
-|28|             TABLE SCAN              |t2           |1        |137 |
->>>>>>> refine idnex scan cost
 =======================================================================
 
 Outputs & filters: 
@@ -2809,7 +2685,6 @@ SQL: select distinct(c2) from t1;
 =================================================================
 |ID|OPERATOR                       |NAME         |EST. ROWS|COST|
 -----------------------------------------------------------------
-<<<<<<< HEAD
 |0 |PX COORDINATOR                 |             |1        |228 |
 |1 | EXCHANGE OUT DISTR            |:EX10001     |1        |228 |
 |2 |  MERGE DISTINCT               |             |1        |228 |
@@ -2818,15 +2693,6 @@ SQL: select distinct(c2) from t1;
 |5 |     PX PARTITION ITERATOR     |             |1        |228 |
 |6 |      MERGE DISTINCT           |             |1        |228 |
 |7 |       TABLE SCAN              |t1(idx_t1_c2)|1        |228 |
-=======
-|0 |PX COORDINATOR                 |             |1        |1   |
-|1 | EXCHANGE OUT DISTR            |:EX10001     |1        |1   |
-|2 |  MERGE DISTINCT               |             |1        |1   |
-|3 |   EXCHANGE IN MERGE SORT DISTR|             |1        |1   |
-|4 |    EXCHANGE OUT DISTR (HASH)  |:EX10000     |1        |1   |
-|5 |     PX PARTITION ITERATOR     |             |1        |1   |
-|6 |      TABLE SCAN               |t1(idx_t1_c2)|1        |1   |
->>>>>>> refine idnex scan cost
 =================================================================
 
 Outputs & filters: 
@@ -2919,7 +2785,6 @@ Outputs & filters:
 
 SQL: select distinct(t1.c2), t2.c2 from t1, t2 where t1.c1 = t2.c1; 
 
-<<<<<<< HEAD
 ===============================================================
 |ID|OPERATOR                          |NAME    |EST. ROWS|COST|
 ---------------------------------------------------------------
@@ -2938,25 +2803,6 @@ SQL: select distinct(t1.c2), t2.c2 from t1, t2 where t1.c1 = t2.c1;
 |12|        PX PARTITION ITERATOR     |        |1        |30  |
 |13|         TABLE GET                |t1      |1        |30  |
 ===============================================================
-=======
-===================================================================
-|ID|OPERATOR                         |NAME         |EST. ROWS|COST|
--------------------------------------------------------------------
-|0 |PX COORDINATOR                   |             |1        |9   |
-|1 | EXCHANGE OUT DISTR              |:EX10002     |1        |9   |
-|2 |  MERGE DISTINCT                 |             |1        |8   |
-|3 |   SORT                          |             |1        |8   |
-|4 |    EXCHANGE IN DISTR            |             |1        |8   |
-|5 |     EXCHANGE OUT DISTR (HASH)   |:EX10001     |1        |8   |
-|6 |      NESTED-LOOP JOIN           |             |1        |8   |
-|7 |       EXCHANGE IN DISTR         |             |1        |1   |
-|8 |        EXCHANGE OUT DISTR (PKEY)|:EX10000     |1        |1   |
-|9 |         PX PARTITION ITERATOR   |             |1        |1   |
-|10|          TABLE SCAN             |t1(idx_t1_c2)|1        |1   |
-|11|       PX PARTITION ITERATOR     |             |1        |18  |
-|12|        TABLE GET                |t2           |1        |18  |
-===================================================================
->>>>>>> refine idnex scan cost
 
 Outputs & filters: 
 -------------------------------------
@@ -2965,7 +2811,6 @@ Outputs & filters:
   2 - output([t1.c2], [t2.c2]), filter(nil), 
       distinct([t1.c2], [t2.c2])
   3 - output([t1.c2], [t2.c2]), filter(nil), sort_keys([t1.c2, ASC], [t2.c2, ASC])
-<<<<<<< HEAD
   4 - (#keys=2, [t1.c2], [t2.c2]), output([t1.c2], [t2.c2]), filter(nil), dop=1
   5 - output([t1.c2], [t2.c2]), filter(nil), 
       distinct([t1.c2], [t2.c2])
@@ -2984,24 +2829,6 @@ Outputs & filters:
       affinitize, force partition granule.
   13 - output([t1.c2]), filter(nil), 
       access([t1.c2]), partitions(p[0-4]), 
-=======
-  4 - output([t1.c2], [t2.c2]), filter(nil)
-  5 - (#keys=2, [t1.c2], [t2.c2]), output([t1.c2], [t2.c2]), filter(nil), dop=1
-  6 - output([t1.c2], [t2.c2]), filter(nil), 
-      conds(nil), nl_params_([t1.c1]), batch_join=false
-  7 - output([t1.c2], [PARTITION_ID], [t1.c1]), filter(nil)
-  8 - (#keys=1, [t1.c1]), output([t1.c2], [PARTITION_ID], [t1.c1]), filter(nil), dop=1
-  9 - output([t1.c1], [t1.c2]), filter(nil), 
-      force partition granule.
-  10 - output([t1.c1], [t1.c2]), filter(nil), 
-      access([t1.c1], [t1.c2]), partitions(p[0-4]), 
-      is_index_back=false, 
-      range_key([t1.c2], [t1.c1]), range(MIN,MIN ; MAX,MAX)always true
-  11 - output([t2.c2]), filter(nil), 
-      affinitize, force partition granule.
-  12 - output([t2.c2]), filter(nil), 
-      access([t2.c2]), partitions(p[0-2]), 
->>>>>>> refine idnex scan cost
       is_index_back=false, 
       range_key([t2.c1]), range(MIN ; MAX), 
       range_cond([? = t2.c1])
@@ -3122,7 +2949,6 @@ SQL: select distinct c2 as ali_name from t1;
 =================================================================
 |ID|OPERATOR                       |NAME         |EST. ROWS|COST|
 -----------------------------------------------------------------
-<<<<<<< HEAD
 |0 |PX COORDINATOR                 |             |1        |228 |
 |1 | EXCHANGE OUT DISTR            |:EX10001     |1        |228 |
 |2 |  MERGE DISTINCT               |             |1        |228 |
@@ -3131,15 +2957,6 @@ SQL: select distinct c2 as ali_name from t1;
 |5 |     PX PARTITION ITERATOR     |             |1        |228 |
 |6 |      MERGE DISTINCT           |             |1        |228 |
 |7 |       TABLE SCAN              |t1(idx_t1_c2)|1        |228 |
-=======
-|0 |PX COORDINATOR                 |             |1        |1   |
-|1 | EXCHANGE OUT DISTR            |:EX10001     |1        |1   |
-|2 |  MERGE DISTINCT               |             |1        |1   |
-|3 |   EXCHANGE IN MERGE SORT DISTR|             |1        |1   |
-|4 |    EXCHANGE OUT DISTR (HASH)  |:EX10000     |1        |1   |
-|5 |     PX PARTITION ITERATOR     |             |1        |1   |
-|6 |      TABLE SCAN               |t1(idx_t1_c2)|1        |1   |
->>>>>>> refine idnex scan cost
 =================================================================
 
 Outputs & filters: 
@@ -3165,7 +2982,6 @@ Outputs & filters:
 
 SQL: select distinct c1 * c2 from t1; 
 
-<<<<<<< HEAD
 ============================================================
 |ID|OPERATOR                       |NAME    |EST. ROWS|COST|
 ------------------------------------------------------------
@@ -3179,20 +2995,6 @@ SQL: select distinct c1 * c2 from t1;
 |7 |       PX PARTITION ITERATOR   |        |1        |228 |
 |8 |        TABLE SCAN             |t1      |1        |228 |
 ============================================================
-=======
-================================================================
-|ID|OPERATOR                      |NAME         |EST. ROWS|COST|
-----------------------------------------------------------------
-|0 |PX COORDINATOR                |             |1        |1   |
-|1 | EXCHANGE OUT DISTR           |:EX10001     |1        |1   |
-|2 |  MERGE DISTINCT              |             |1        |1   |
-|3 |   SORT                       |             |1        |1   |
-|4 |    EXCHANGE IN DISTR         |             |1        |1   |
-|5 |     EXCHANGE OUT DISTR (HASH)|:EX10000     |1        |1   |
-|6 |      PX PARTITION ITERATOR   |             |1        |1   |
-|7 |       TABLE SCAN             |t1(idx_t1_c2)|1        |1   |
-================================================================
->>>>>>> refine idnex scan cost
 
 Outputs & filters: 
 -------------------------------------
@@ -3386,7 +3188,6 @@ Outputs & filters:
 
 SQL: select distinct c2 from t5 order by c3 limit 3; 
 
-<<<<<<< HEAD
 ==============================================================
 |ID|OPERATOR                         |NAME    |EST. ROWS|COST|
 --------------------------------------------------------------
@@ -3401,21 +3202,6 @@ SQL: select distinct c2 from t5 order by c3 limit 3;
 |8 |        MERGE DISTINCT           |        |1        |137 |
 |9 |         TABLE SCAN              |t5      |1        |137 |
 ==============================================================
-=======
-===================================================================
-|ID|OPERATOR                         |NAME         |EST. ROWS|COST|
--------------------------------------------------------------------
-|0 |LIMIT                            |             |1        |1   |
-|1 | PX COORDINATOR MERGE SORT       |             |1        |1   |
-|2 |  EXCHANGE OUT DISTR             |:EX10001     |1        |1   |
-|3 |   TOP-N SORT                    |             |1        |1   |
-|4 |    MERGE DISTINCT               |             |1        |1   |
-|5 |     EXCHANGE IN MERGE SORT DISTR|             |1        |1   |
-|6 |      EXCHANGE OUT DISTR (HASH)  |:EX10000     |1        |1   |
-|7 |       PX PARTITION ITERATOR     |             |1        |1   |
-|8 |        TABLE SCAN               |t5(idx_t5_c2)|1        |1   |
-===================================================================
->>>>>>> refine idnex scan cost
 
 Outputs & filters: 
 -------------------------------------
@@ -3445,7 +3231,6 @@ SQL: select distinct c2 from t5 order by c3;
 ==================================================================
 |ID|OPERATOR                        |NAME         |EST. ROWS|COST|
 ------------------------------------------------------------------
-<<<<<<< HEAD
 |0 |PX COORDINATOR MERGE SORT       |             |1        |138 |
 |1 | EXCHANGE OUT DISTR             |:EX10001     |1        |138 |
 |2 |  SORT                          |             |1        |137 |
@@ -3455,16 +3240,6 @@ SQL: select distinct c2 from t5 order by c3;
 |6 |      PX PARTITION ITERATOR     |             |1        |137 |
 |7 |       MERGE DISTINCT           |             |1        |137 |
 |8 |        TABLE SCAN              |t5(idx_t5_c2)|1        |137 |
-=======
-|0 |PX COORDINATOR MERGE SORT       |             |1        |1   |
-|1 | EXCHANGE OUT DISTR             |:EX10001     |1        |1   |
-|2 |  SORT                          |             |1        |1   |
-|3 |   MERGE DISTINCT               |             |1        |1   |
-|4 |    EXCHANGE IN MERGE SORT DISTR|             |1        |1   |
-|5 |     EXCHANGE OUT DISTR (HASH)  |:EX10000     |1        |1   |
-|6 |      PX PARTITION ITERATOR     |             |1        |1   |
-|7 |       TABLE SCAN               |t5(idx_t5_c2)|1        |1   |
->>>>>>> refine idnex scan cost
 ==================================================================
 
 Outputs & filters: 
@@ -5841,7 +5616,6 @@ Outputs & filters:
 
 SQL: select c1/c2 as v,sum(c1) from t1 group by v order by v; 
 
-<<<<<<< HEAD
 ============================================================
 |ID|OPERATOR                       |NAME    |EST. ROWS|COST|
 ------------------------------------------------------------
@@ -5855,20 +5629,6 @@ SQL: select c1/c2 as v,sum(c1) from t1 group by v order by v;
 |7 |       PX PARTITION ITERATOR   |        |1        |228 |
 |8 |        TABLE SCAN             |t1      |1        |228 |
 ============================================================
-=======
-================================================================
-|ID|OPERATOR                      |NAME         |EST. ROWS|COST|
-----------------------------------------------------------------
-|0 |PX COORDINATOR MERGE SORT     |             |1        |1   |
-|1 | EXCHANGE OUT DISTR           |:EX10001     |1        |1   |
-|2 |  MERGE GROUP BY              |             |1        |1   |
-|3 |   SORT                       |             |1        |1   |
-|4 |    EXCHANGE IN DISTR         |             |1        |1   |
-|5 |     EXCHANGE OUT DISTR (HASH)|:EX10000     |1        |1   |
-|6 |      PX PARTITION ITERATOR   |             |1        |1   |
-|7 |       TABLE SCAN             |t1(idx_t1_c2)|1        |1   |
-================================================================
->>>>>>> refine idnex scan cost
 
 Outputs & filters: 
 -------------------------------------
@@ -7992,7 +7752,6 @@ Outputs & filters:
 
 SQL: SELECT (select max(t1.c1) from t1) as field from t1 group by field; 
 
-<<<<<<< HEAD
 ============================================================
 |ID|OPERATOR                       |NAME    |EST. ROWS|COST|
 ------------------------------------------------------------
@@ -8008,22 +7767,6 @@ SQL: SELECT (select max(t1.c1) from t1) as field from t1 group by field;
 |9 |         PX PARTITION ITERATOR |        |1        |228 |
 |10|          TABLE SCAN           |t1      |1        |228 |
 ============================================================
-=======
-================================================================
-|ID|OPERATOR                      |NAME         |EST. ROWS|COST|
-----------------------------------------------------------------
-|0 |PX COORDINATOR                |             |1        |2   |
-|1 | EXCHANGE OUT DISTR           |:EX10001     |1        |2   |
-|2 |  MERGE GROUP BY              |             |1        |1   |
-|3 |   SORT                       |             |1        |1   |
-|4 |    EXCHANGE IN DISTR         |             |1        |1   |
-|5 |     EXCHANGE OUT DISTR (HASH)|:EX10000     |1        |1   |
-|6 |      SUBPLAN SCAN            |VIEW1        |1        |1   |
-|7 |       WINDOW FUNCTION        |             |1        |1   |
-|8 |        PX PARTITION ITERATOR |             |1        |1   |
-|9 |         TABLE SCAN           |t1(idx_t1_c2)|1        |1   |
-================================================================
->>>>>>> refine idnex scan cost
 
 Outputs & filters: 
 -------------------------------------
@@ -9083,7 +8826,6 @@ SQL: select sum(c1)+sum(c2), sum(c1) from t1 group by c2 having sum(c1) > 5;
 =================================================================
 |ID|OPERATOR                       |NAME         |EST. ROWS|COST|
 -----------------------------------------------------------------
-<<<<<<< HEAD
 |0 |PX COORDINATOR                 |             |1        |229 |
 |1 | EXCHANGE OUT DISTR            |:EX10001     |1        |229 |
 |2 |  MERGE GROUP BY               |             |1        |228 |
@@ -9092,15 +8834,6 @@ SQL: select sum(c1)+sum(c2), sum(c1) from t1 group by c2 having sum(c1) > 5;
 |5 |     PX PARTITION ITERATOR     |             |1        |228 |
 |6 |      MERGE GROUP BY           |             |1        |228 |
 |7 |       TABLE SCAN              |t1(idx_t1_c2)|1        |228 |
-=======
-|0 |PX COORDINATOR                 |             |1        |1   |
-|1 | EXCHANGE OUT DISTR            |:EX10001     |1        |1   |
-|2 |  MERGE GROUP BY               |             |1        |1   |
-|3 |   EXCHANGE IN MERGE SORT DISTR|             |1        |1   |
-|4 |    EXCHANGE OUT DISTR (HASH)  |:EX10000     |1        |1   |
-|5 |     PX PARTITION ITERATOR     |             |1        |1   |
-|6 |      TABLE SCAN               |t1(idx_t1_c2)|1        |1   |
->>>>>>> refine idnex scan cost
 =================================================================
 
 Outputs & filters: 
@@ -9129,7 +8862,6 @@ SQL: select sum(c1), c2, count(c1) from t1 group by c2 having sum(c1) > 5 and co
 =================================================================
 |ID|OPERATOR                       |NAME         |EST. ROWS|COST|
 -----------------------------------------------------------------
-<<<<<<< HEAD
 |0 |PX COORDINATOR                 |             |1        |228 |
 |1 | EXCHANGE OUT DISTR            |:EX10001     |1        |228 |
 |2 |  MERGE GROUP BY               |             |1        |228 |
@@ -9138,15 +8870,6 @@ SQL: select sum(c1), c2, count(c1) from t1 group by c2 having sum(c1) > 5 and co
 |5 |     PX PARTITION ITERATOR     |             |1        |228 |
 |6 |      MERGE GROUP BY           |             |1        |228 |
 |7 |       TABLE SCAN              |t1(idx_t1_c2)|1        |228 |
-=======
-|0 |PX COORDINATOR                 |             |1        |1   |
-|1 | EXCHANGE OUT DISTR            |:EX10001     |1        |1   |
-|2 |  MERGE GROUP BY               |             |1        |1   |
-|3 |   EXCHANGE IN MERGE SORT DISTR|             |1        |1   |
-|4 |    EXCHANGE OUT DISTR (HASH)  |:EX10000     |1        |1   |
-|5 |     PX PARTITION ITERATOR     |             |1        |1   |
-|6 |      TABLE SCAN               |t1(idx_t1_c2)|1        |1   |
->>>>>>> refine idnex scan cost
 =================================================================
 
 Outputs & filters: 
@@ -9173,7 +8896,6 @@ Outputs & filters:
 
 SQL: select distinct sum(c1) from t1 group by c2 having sum(c1) > 5; 
 
-<<<<<<< HEAD
 ======================================================================
 |ID|OPERATOR                            |NAME         |EST. ROWS|COST|
 ----------------------------------------------------------------------
@@ -9210,34 +8932,6 @@ Outputs & filters:
   10 - output([T_FUN_SUM(t1.c1)], [t1.c2]), filter(nil), 
       force partition granule.
   11 - output([T_FUN_SUM(t1.c1)], [t1.c2]), filter(nil), 
-=======
-=====================================================================
-|ID|OPERATOR                           |NAME         |EST. ROWS|COST|
----------------------------------------------------------------------
-|0 |PX COORDINATOR                     |             |1        |1   |
-|1 | EXCHANGE OUT DISTR                |:EX10002     |1        |1   |
-|2 |  MERGE DISTINCT                   |             |1        |1   |
-|3 |   SORT                            |             |1        |1   |
-|4 |    EXCHANGE IN DISTR              |             |1        |1   |
-|5 |     EXCHANGE OUT DISTR (HASH)     |:EX10001     |1        |1   |
-|6 |      MERGE GROUP BY               |             |1        |1   |
-|7 |       EXCHANGE IN MERGE SORT DISTR|             |1        |1   |
-|8 |        EXCHANGE OUT DISTR (HASH)  |:EX10000     |1        |1   |
-|9 |         PX PARTITION ITERATOR     |             |1        |1   |
-|10|          TABLE SCAN               |t1(idx_t1_c2)|1        |1   |
-=====================================================================
-
-Outputs & filters: 
--------------------------------------
-  0 - output([INTERNAL_FUNCTION(T_FUN_SUM(t1.c1))]), filter(nil)
-  1 - output([INTERNAL_FUNCTION(T_FUN_SUM(t1.c1))]), filter(nil), dop=1
-  2 - output([T_FUN_SUM(t1.c1)]), filter(nil), 
-      distinct([T_FUN_SUM(t1.c1)])
-  3 - output([T_FUN_SUM(t1.c1)]), filter(nil), sort_keys([T_FUN_SUM(t1.c1), ASC])
-  4 - output([T_FUN_SUM(t1.c1)]), filter(nil)
-  5 - (#keys=1, [T_FUN_SUM(t1.c1)]), output([T_FUN_SUM(t1.c1)]), filter(nil), dop=1
-  6 - output([T_FUN_SUM(t1.c1)]), filter([T_FUN_SUM(t1.c1) > ?]), 
->>>>>>> refine idnex scan cost
       group([t1.c2]), agg_func([T_FUN_SUM(t1.c1)])
   12 - output([t1.c1], [t1.c2]), filter(nil), 
       access([t1.c1], [t1.c2]), partitions(p[0-4]), 
@@ -9253,7 +8947,6 @@ SQL: select distinct sum(c1), c2, count(c1) from t1 group by c2 having sum(c1) >
 =================================================================
 |ID|OPERATOR                       |NAME         |EST. ROWS|COST|
 -----------------------------------------------------------------
-<<<<<<< HEAD
 |0 |PX COORDINATOR                 |             |1        |228 |
 |1 | EXCHANGE OUT DISTR            |:EX10001     |1        |228 |
 |2 |  MERGE GROUP BY               |             |1        |228 |
@@ -9262,15 +8955,6 @@ SQL: select distinct sum(c1), c2, count(c1) from t1 group by c2 having sum(c1) >
 |5 |     PX PARTITION ITERATOR     |             |1        |228 |
 |6 |      MERGE GROUP BY           |             |1        |228 |
 |7 |       TABLE SCAN              |t1(idx_t1_c2)|1        |228 |
-=======
-|0 |PX COORDINATOR                 |             |1        |1   |
-|1 | EXCHANGE OUT DISTR            |:EX10001     |1        |1   |
-|2 |  MERGE GROUP BY               |             |1        |1   |
-|3 |   EXCHANGE IN MERGE SORT DISTR|             |1        |1   |
-|4 |    EXCHANGE OUT DISTR (HASH)  |:EX10000     |1        |1   |
-|5 |     PX PARTITION ITERATOR     |             |1        |1   |
-|6 |      TABLE SCAN               |t1(idx_t1_c2)|1        |1   |
->>>>>>> refine idnex scan cost
 =================================================================
 
 Outputs & filters: 
@@ -9300,7 +8984,6 @@ SQL: select distinct sum(c1), c2, count(c1), avg(c1) from t1 group by c2 having 
 =================================================================
 |ID|OPERATOR                       |NAME         |EST. ROWS|COST|
 -----------------------------------------------------------------
-<<<<<<< HEAD
 |0 |PX COORDINATOR                 |             |1        |228 |
 |1 | EXCHANGE OUT DISTR            |:EX10001     |1        |228 |
 |2 |  MERGE GROUP BY               |             |1        |228 |
@@ -9309,15 +8992,6 @@ SQL: select distinct sum(c1), c2, count(c1), avg(c1) from t1 group by c2 having 
 |5 |     PX PARTITION ITERATOR     |             |1        |228 |
 |6 |      MERGE GROUP BY           |             |1        |228 |
 |7 |       TABLE SCAN              |t1(idx_t1_c2)|1        |228 |
-=======
-|0 |PX COORDINATOR                 |             |1        |1   |
-|1 | EXCHANGE OUT DISTR            |:EX10001     |1        |1   |
-|2 |  MERGE GROUP BY               |             |1        |1   |
-|3 |   EXCHANGE IN MERGE SORT DISTR|             |1        |1   |
-|4 |    EXCHANGE OUT DISTR (HASH)  |:EX10000     |1        |1   |
-|5 |     PX PARTITION ITERATOR     |             |1        |1   |
-|6 |      TABLE SCAN               |t1(idx_t1_c2)|1        |1   |
->>>>>>> refine idnex scan cost
 =================================================================
 
 Outputs & filters: 
@@ -9695,7 +9369,6 @@ SQL: select distinct sum(c1), c2, count(c1), avg(c1) as alias from t1 group by c
 =================================================================
 |ID|OPERATOR                       |NAME         |EST. ROWS|COST|
 -----------------------------------------------------------------
-<<<<<<< HEAD
 |0 |PX COORDINATOR                 |             |1        |228 |
 |1 | EXCHANGE OUT DISTR            |:EX10001     |1        |228 |
 |2 |  MERGE GROUP BY               |             |1        |228 |
@@ -9704,15 +9377,6 @@ SQL: select distinct sum(c1), c2, count(c1), avg(c1) as alias from t1 group by c
 |5 |     PX PARTITION ITERATOR     |             |1        |228 |
 |6 |      MERGE GROUP BY           |             |1        |228 |
 |7 |       TABLE SCAN              |t1(idx_t1_c2)|1        |228 |
-=======
-|0 |PX COORDINATOR                 |             |1        |1   |
-|1 | EXCHANGE OUT DISTR            |:EX10001     |1        |1   |
-|2 |  MERGE GROUP BY               |             |1        |1   |
-|3 |   EXCHANGE IN MERGE SORT DISTR|             |1        |1   |
-|4 |    EXCHANGE OUT DISTR (HASH)  |:EX10000     |1        |1   |
-|5 |     PX PARTITION ITERATOR     |             |1        |1   |
-|6 |      TABLE SCAN               |t1(idx_t1_c2)|1        |1   |
->>>>>>> refine idnex scan cost
 =================================================================
 
 Outputs & filters: 

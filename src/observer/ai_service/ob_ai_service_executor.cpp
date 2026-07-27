@@ -34,18 +34,18 @@ namespace share
 {
 
 namespace {
-int local_get_tenant_name_case_mode(ObNameCaseMode &name_case_mode)
+int local_get_runtime_name_case_mode(ObNameCaseMode &name_case_mode)
 {
   int ret = OB_SUCCESS;
   share::schema::ObMultiVersionSchemaService *schema_service = nullptr;
   if (OB_ISNULL(schema_service = GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "schema service must not be null", K(ret));
-  } else if (!schema_service->is_tenant_refreshed()) {
+  } else if (!schema_service->is_runtime_schema_refreshed()) {
     ret = OB_SCHEMA_EAGAIN;
     OB_LOG(WARN, "wait schema refreshed", K(ret));
-  } else if (OB_FAIL(schema_service->get_tenant_name_case_mode(name_case_mode))) {
-    OB_LOG(WARN, "failed to get tenant name case mode", K(ret));
+  } else if (OB_FAIL(schema_service->get_runtime_name_case_mode(name_case_mode))) {
+    OB_LOG(WARN, "failed to get runtime name case mode", K(ret));
   }
   return ret;
 }
@@ -118,7 +118,7 @@ int ObAiServiceExecutor::alter_ai_model_endpoint(ObArenaAllocator &allocator, co
   ObAiModelEndpointInfo tmp_endpoint;
   ObNameCaseMode name_case_mode;
   
-   // ai model name maybe case sensitive, so need user tenant id to get name case mode
+   // AI model names may be case-sensitive, so use the runtime name-case mode.
   int64_t new_endpoint_version = OB_INVALID_VERSION;
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -131,8 +131,8 @@ int ObAiServiceExecutor::alter_ai_model_endpoint(ObArenaAllocator &allocator, co
     LOG_WARN("failed to construct new endpoint", KR(ret), K(old_endpoint), K(alter_jbase));
   } else if (OB_FAIL(new_endpoint.check_valid())) {
     LOG_WARN("invalid endpoint", KR(ret), K(new_endpoint));
-  } else if (OB_FAIL(local_get_tenant_name_case_mode(name_case_mode))) {
-    LOG_WARN("failed to get tenant name case mode", K(ret));
+  } else if (OB_FAIL(local_get_runtime_name_case_mode(name_case_mode))) {
+    LOG_WARN("failed to get runtime name case mode", K(ret));
   } else if (ObCharset::case_mode_equal(name_case_mode, new_endpoint.get_ai_model_name(), old_endpoint.get_ai_model_name())) {
     // need check name case mode equal, if not change ai model name, just update the endpoint 
     LOG_INFO("ai model name is the same, just update the endpoint", KR(ret), K(name), K(name_case_mode), K(new_endpoint), K(old_endpoint));
@@ -229,8 +229,8 @@ int ObAiServiceExecutor::read_ai_endpoint_by_ai_model_name(ObArenaAllocator &all
   
   
   ObNameCaseMode name_case_mode;
-  if (OB_FAIL(local_get_tenant_name_case_mode(name_case_mode))) {
-    LOG_WARN("failed to get tenant name case mode", K(ret));
+  if (OB_FAIL(local_get_runtime_name_case_mode(name_case_mode))) {
+    LOG_WARN("failed to get runtime name case mode", K(ret));
   } else if (OB_NAME_CASE_INVALID >= name_case_mode || OB_NAME_CASE_MAX <= name_case_mode) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid name case mode", K(ret), K(name_case_mode));

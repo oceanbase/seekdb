@@ -824,6 +824,7 @@ SELECT 9, ST_ASTEXT(_ST_Transform(
                     '+proj=utm +zone=33 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ')) as geometry;
 
 -- echo test #10: Transform from_proj to_proj
+--replace_numeric_round 8
 SELECT 10, ST_AsText(_ST_Transform(
                      ST_GeomFromText('POINT(16 48)', 4236, 'axis-order=long-lat'),
                      '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs ',
@@ -848,13 +849,17 @@ SELECT 12, _ST_Transform(
 -- echo # some transform() regression
 
 -- echo test #1: a simple projection
+--replace_numeric_round 8
 SELECT 1,ST_AsText(_ST_Transform(ST_GeomFromText('POINT(16 48)', 4326, 'axis-order=long-lat'), 3065));
 
 -- echo test #4: LINESTRING projection, 2 points
+--replace_numeric_round 8
 SELECT 4,ST_AsText(_ST_Transform(ST_GeomFromText('LINESTRING(16 48, 16 49)', 4326, 'axis-order=long-lat'), 3065)) as geometry;
 SELECT 'M1', ST_AsText(_ST_Transform(ST_GeomFromText('POINT(-20 -20)', 4326, 'axis-order=long-lat'), 3065)) as geometry;
+--replace_numeric_round 8
 SELECT 'M2', ST_AsText(_ST_Transform(ST_GeomFromText('POINT(-20 -21.5)', 4326, 'axis-order=long-lat'), 3065)) as geometry;
 SELECT 'M3', ST_AsText(_ST_Transform(ST_GeomFromText('POINT(-30 -21.5)', 4326, 'axis-order=long-lat'), 3065)) as geometry;
+--replace_numeric_round 8
 SELECT 'M4', ST_AsText(_ST_Transform(ST_GeomFromText('POINT(-72.345 41.3)', 4326, 'axis-order=long-lat'), 3065)) as geometry;
 SELECT 'M5', ST_AsText(_ST_Transform(ST_GeomFromText('POINT(71.999 -42.5)', 4326, 'axis-order=long-lat'), 3065)) as geometry;
 

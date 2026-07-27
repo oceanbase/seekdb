@@ -40,7 +40,6 @@ private:
   enum CACHE_COLUMN
   {
     MEMBLOCK_PTR = common::OB_APP_MIN_COLUMN_ID,
-    REF_COUNT,
     STATUS,
     POLICY,
     KV_CNT,

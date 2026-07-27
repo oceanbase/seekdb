@@ -338,7 +338,6 @@ void ObMemoryDump::signal_stop()
 
 void ObMemoryDump::run1()
 {
-  SANITY_DISABLE_CHECK_RANGE();
   lib::set_thread_name("MemoryDump");
   int64_t last_stat_ts = 0;
   while (!has_set_stop()) {
@@ -600,34 +599,28 @@ void ObMemoryDump::handle(void *task)
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
   } else if (STAT_LABEL == m_task->type_) {
-    int tenant_cnt = 1;
     w_stat_->tcr_cnt_ = 0;
     w_stat_->malloc_sample_map_.clear();
     int64_t item_used = 0;
     int64_t log_pos = 0;
     IGNORE_RETURN databuff_printf(print_buf_, PRINT_BUF_LEN, log_pos,
-                                  "\ntenant_cnt: %d, max_chunk_cnt: %d\n" \
+                                  "\nmax_chunk_cnt: %d\n" \
                                   "%-15s%-15s%-15s%-15s\n",
-                                  tenant_cnt, MAX_CHUNK_CNT,
+                                  MAX_CHUNK_CNT,
                                   "ctx_id", "chunk_cnt", "label_cnt",
                                   "segv_cnt");
     const int64_t start_ts = ObTimeUtility::current_time();
     ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-    for (int tdx = 0; tdx < tenant_cnt; tdx++) {
-      
-      for (int ctx_id = 0; ctx_id < ObCtxIds::MAX_CTX_ID; ctx_id++) {
-        ObTenantCtxAllocatorGuard ta = ma->get_tenant_ctx_allocator(ctx_id);
-        if (nullptr == ta) {
-          ta = ma->get_tenant_ctx_allocator_unrecycled(ctx_id);
-        }
-        if (nullptr == ta) {
+    for (int ctx_id = 0; ctx_id < ObCtxIds::MAX_CTX_ID; ctx_id++) {
+        ObCtxAllocatorGuard ctx_allocator = ma->get_ctx_allocator(ctx_id);
+        if (nullptr == ctx_allocator) {
           continue;
         }
         int segv_cnt = 0;
         const int64_t orig_item_used = item_used;
         int chunk_cnt = 0;
         ret = OB_SUCCESS;
-        ta->get_chunks(chunks_, MAX_CHUNK_CNT, chunk_cnt);
+        ctx_allocator->get_chunks(chunks_, MAX_CHUNK_CNT, chunk_cnt);
         auto &w_stat = w_stat_;
         auto &lmap = lmap_;
         lmap.clear();
@@ -688,8 +681,7 @@ void ObMemoryDump::handle(void *task)
                                         ctx_id, chunk_cnt,
                                         item_used - orig_item_used, segv_cnt);
         }
-      } // iter ctx end
-    } // iter tenant end
+    } // iter ctx end
     if (segv_cnt_over) {
       ++huge_segv_cnt_;
     } else {
@@ -705,17 +697,14 @@ void ObMemoryDump::handle(void *task)
     if (log_pos > 0) {
       _OB_LOG(INFO, "statistics: %.*s", static_cast<int32_t>(log_pos), print_buf_);
     }
-    // switch stat as long as one tenant-ctx is generated, ignore the error code.
+    // Switch statistics after at least one context is generated.
     if (w_stat_->tcr_cnt_ > 0) {
       ObLatchWGuard guard(iter_lock_, common::ObLatchIds::MEM_DUMP_ITER_LOCK);
       std::swap(r_stat_, w_stat_);
     }
 
-    for (int tdx = 0; tdx < tenant_cnt; tdx++) {
-      
-      ma->print_tenant_memory_usage();
-      ma->print_tenant_ctx_memory_usage();
-    }
+    ma->print_memory_usage();
+    ma->print_ctx_memory_usage();
 
     print_malloc_sample_info();
 
@@ -765,27 +754,16 @@ void ObMemoryDump::handle(void *task)
       // chunk
       int cnt = 0;
       if (m_task->dump_all_) {
-        int tenant_cnt = 1;
-        for (int tdx = 0; tdx < tenant_cnt; tdx++) {
-          
-          for (int ctx_id = 0; ctx_id < ObCtxIds::MAX_CTX_ID; ctx_id++) {
-            auto ta =
-              ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(ctx_id);
-            if (nullptr == ta) {
-              ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator_unrecycled(ctx_id);
-            }
-            if (nullptr != ta) {
-              ta->get_chunks(chunks_, MAX_CHUNK_CNT, cnt);
-            }
+        for (int ctx_id = 0; ctx_id < ObCtxIds::MAX_CTX_ID; ctx_id++) {
+          auto ctx_allocator = ObMallocAllocator::get_instance()->get_ctx_allocator(ctx_id);
+          if (nullptr != ctx_allocator) {
+            ctx_allocator->get_chunks(chunks_, MAX_CHUNK_CNT, cnt);
           }
         }
-      } else if (m_task->dump_tenant_ctx_) {
-        auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(m_task->ctx_id_);
-        if (nullptr == ta) {
-          ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator_unrecycled(m_task->ctx_id_);
-        }
-        if (nullptr != ta) {
-          ta->get_chunks(chunks_, MAX_CHUNK_CNT, cnt);
+      } else if (m_task->dump_ctx_) {
+        auto ctx_allocator = ObMallocAllocator::get_instance()->get_ctx_allocator(m_task->ctx_id_);
+        if (nullptr != ctx_allocator) {
+          ctx_allocator->get_chunks(chunks_, MAX_CHUNK_CNT, cnt);
         }
       } else {
         AChunk *chunk = find_chunk(m_task->p_chunk_);

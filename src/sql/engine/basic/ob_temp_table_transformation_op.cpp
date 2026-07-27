@@ -25,7 +25,6 @@ using namespace common;
 using namespace storage;
 using namespace share;
 using namespace share::schema;
-using namespace obcall;
 namespace sql
 {
 DEF_TO_STRING(ObTempTableTransformationOpSpec)
@@ -138,62 +137,17 @@ int ObTempTableTransformationOp::inner_close()
 int ObTempTableTransformationOp::destory_interm_results()
 {
   int ret = OB_SUCCESS;
-  ObSEArray<ObAddr, 2> svrs;
-  ObSEArray<ObEraseDtlIntermResultArg, 2> args;
-  ObEraseDtlIntermResultArg interm_ids;
   ObExecContext &ctx = get_exec_ctx();
   const int64_t temp_table_count = ctx.get_temp_table_ctx().count();
-  int64_t idx = OB_INVALID_INDEX;
   for (int64_t i = 0; OB_SUCC(ret) && i < temp_table_count; ++i) {
     ObSqlTempTableCtx &temp_table_ctx = ctx.get_temp_table_ctx().at(i);
     for (int64_t j = 0; OB_SUCC(ret) && j < temp_table_ctx.interm_result_infos_.count(); ++j) {
       ObTempTableResultInfo &result_info = temp_table_ctx.interm_result_infos_.at(j);
-      if (result_info.addr_ == ctx.get_addr() || temp_table_ctx.is_local_interm_result_) {
-        if (OB_FAIL(destory_local_interm_results(result_info.interm_result_ids_))) {
-          LOG_WARN("failed to destory interm results.", K(ret));
-        }
-      } else if (has_exist_in_array(svrs, result_info.addr_, &idx)) {
-        if (OB_UNLIKELY(idx < 0 || idx >= args.count())) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected idx.", K(ret), K(idx), K(args.count()));
-        } else if (OB_FAIL(append(args.at(idx).interm_result_ids_,
-                                  result_info.interm_result_ids_))) {
-          LOG_WARN("failed to append args", K(ret));
-        }
-      } else if (OB_FAIL(svrs.push_back(result_info.addr_))) {
-        LOG_WARN("failed to push back svr", K(ret));
-      } else if (OB_FAIL(interm_ids.interm_result_ids_.assign(result_info.interm_result_ids_))) {
-        LOG_WARN("failed to assign interm result ids", K(ret));
-      } else if (OB_FAIL(args.push_back(interm_ids))) {
-        LOG_WARN("failed to push back args", K(ret));
+      if (OB_FAIL(destory_local_interm_results(result_info.interm_result_ids_))) {
+        LOG_WARN("failed to destory interm results.", K(ret));
       }
     }
   }
-
-#ifdef ERRSIM
-  int ecode = EventTable::EN_PX_TEMP_TABLE_NOT_DESTROY_REMOTE_INTERM_RESULT;
-  if (OB_SUCCESS != ecode && OB_SUCC(ret)) {
-    LOG_WARN("ObTempTableTransformationOp not destory_remote_interm_results by design", K(ret));
-    return ret;
-  }
-#endif
-
-  if (OB_SUCC(ret) && !svrs.empty() &&
-      OB_FAIL(destory_remote_interm_results(svrs, args))) {
-    LOG_WARN("failed to destory interm results", K(ret));
-  }
-  return ret;
-}
-
-int ObTempTableTransformationOp::destory_remote_interm_results(ObIArray<ObAddr> &svrs,
-                                                               ObIArray<ObEraseDtlIntermResultArg> &args)
-{
-  int ret = OB_ERR_UNEXPECTED;
-  UNUSED(args);
-  // Remote interm result destruction was done via obcall RPC, which is dead on
-  // single replica: all interm results are local (see the local destroy path in
-  // destory_interm_results), so this should never be reached.
-  LOG_WARN("destory_remote_interm_results is not supported on single replica", K(ret), K(svrs));
   return ret;
 }
 

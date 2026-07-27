@@ -206,18 +206,11 @@ public:
   OB_INLINE virtual bool is_valid() const {
     return  snapshot_.valid_ && ObVTableScanParam::is_valid() && (!is_mds_query_ || nullptr != mds_collector_);
   }
-  OB_INLINE bool use_index_skip_scan() const {
-    return (1 == ss_key_ranges_.count()) && (!ss_key_ranges_.at(0).is_whole_range());
-  }
   void destroy() override
   {
-    if (OB_UNLIKELY(ss_key_ranges_.get_capacity() > OB_DEFAULT_RANGE_COUNT)) {
-      ss_key_ranges_.destroy();
-    }
     ObVTableScanParam::destroy();
   }
   bool is_thread_scope_;
-  ObRangeArray ss_key_ranges_;  // used for index skip scan, use as postfix range for ObVTableScanParam::key_ranges_
   int64_t tx_seq_base_;  // used by lob when main table is read_latest
   ObVersionRange read_version_range_;
   bool need_update_tablet_param_; // whether need to update tablet-level param, such as split filter param
@@ -240,7 +233,7 @@ struct ObDMLBaseParam
         sql_mode_(DEFAULT_MYSQL_MODE),
         tz_info_(NULL),
         table_param_(NULL),
-        tenant_schema_version_(OB_INVALID_VERSION),
+        runtime_schema_version_(OB_INVALID_VERSION),
         is_total_quantity_log_(false),
         is_ignore_(false),
         prelock_(false),
@@ -268,7 +261,7 @@ struct ObDMLBaseParam
   ObSQLMode sql_mode_;
   const common::ObTimeZoneInfo *tz_info_;
   const share::schema::ObTableDMLParam *table_param_;
-  int64_t tenant_schema_version_;
+  int64_t runtime_schema_version_;
   bool is_total_quantity_log_;
   bool is_ignore_;
   bool prelock_;

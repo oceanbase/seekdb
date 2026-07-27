@@ -30,7 +30,6 @@
 #include "lib/string/ob_fixed_length_string.h"
 #include "sql/optimizer/stat/ob_topk_hist_estimator.h"
 #include "sql/engine/user_defined_function/ob_pl_user_defined_agg_function.h"
-#include "sql/engine/expr/ob_expr_dll_udf.h"
 #include "sql/engine/expr/ob_rt_datum_arith.h"
 #include "share/geo/ob_geo_mvt.h"
 #include "sql/engine/basic/ob_hp_infrastructure_manager.h"
@@ -129,7 +128,6 @@ public:
     pl_agg_udf_type_id_(common::OB_INVALID_ID),
     pl_agg_udf_params_type_(),
     pl_result_type_(),
-    dll_udf_(NULL),
     bucket_num_param_expr_(NULL),
     rollup_idx_(INT64_MAX),
     grouping_idxs_(),
@@ -235,7 +233,6 @@ public:
   common::ObFixedArray<ObExprResType, common::ObIAllocator> pl_agg_udf_params_type_;
   ObExprResType pl_result_type_;
 
-  ObAggDllUdfInfo *dll_udf_;
   //used for hybrid_hist
   ObExpr *bucket_num_param_expr_;
 
@@ -552,19 +549,6 @@ public:
 
     ObSortOpImpl *sort_op_;
     ObMaterialOpImpl *mat_op_;
-  };
-
-  struct DllUdfExtra : public ExtraResult
-  {
-    explicit DllUdfExtra(common::ObIAllocator &alloc, ObMonitorNode &op_monitor_info)
-        : ExtraResult(alloc, op_monitor_info), udf_fun_(NULL)
-    {
-    }
-
-    virtual ~DllUdfExtra();
-
-    ObAggUdfFunction *udf_fun_;
-    ObUdfFunction::ObUdfCtx udf_ctx_;
   };
 
   class AggrCell
@@ -1367,7 +1351,6 @@ OB_INLINE bool ObAggregateProcessor::need_extra_info(const ObExprOperatorType ex
     case T_FUN_KEEP_WM_CONCAT:
     case T_FUN_WM_CONCAT:
     case T_FUN_PL_AGG_UDF:
-    case T_FUN_AGG_UDF:
     case T_FUN_HYBRID_HIST:
     case T_FUN_TOP_FRE_HIST:
     case T_FUN_JSON_ARRAYAGG:

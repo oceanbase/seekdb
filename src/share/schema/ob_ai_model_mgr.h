@@ -29,12 +29,12 @@ namespace share
 namespace schema
 {
 
-class ObTenantAiModelId final
+class ObAiModelId final
 {
 public:
-  ObTenantAiModelId() : ai_model_id_(OB_INVALID_ID) {}
-  ObTenantAiModelId(const uint64_t ai_model_id) : ai_model_id_(ai_model_id) {}
-  bool operator==(const ObTenantAiModelId &other) const
+  ObAiModelId() : ai_model_id_(OB_INVALID_ID) {}
+  ObAiModelId(const uint64_t ai_model_id) : ai_model_id_(ai_model_id) {}
+  bool operator==(const ObAiModelId &other) const
   {
     return ai_model_id_ == other.ai_model_id_;
   }
@@ -146,7 +146,7 @@ public:
 
   inline bool operator==(const ObAiModelHashWrapper &other) const
   {
-    ObCompareNameWithTenantID name_cmp(case_mode_);
+    ObSchemaNameComparator name_cmp(case_mode_);
 
     return (case_mode_ == other.case_mode_)
             && (0 == name_cmp.compare(name_, other.name_));
@@ -209,10 +209,10 @@ public:
   int get_ai_model_schema( const common::ObString &name, const common::ObNameCaseMode case_mode, const ObAiModelSchema *&ai_model_schema) const;
   int add_ai_model(const ObAiModelSchema &ai_model_schema, common::ObNameCaseMode case_mode);
   int add_ai_models(const common::ObIArray<ObAiModelSchema> &ai_model_schemas, common::ObNameCaseMode case_mode);
-  int del_ai_model(const ObTenantAiModelId &tenant_ai_model_id);
+  int del_ai_model(const ObAiModelId &ai_model_id);
 
 private:
-  int get_ai_model_schemas_in_tenant(common::ObIArray<const ObAiModelSchema *> &ai_model_schemas) const;
+  int get_ai_model_schemas_in_runtime(common::ObIArray<const ObAiModelSchema *> &ai_model_schemas) const;
   int rebuild_ai_model_hashmap();
 
   OB_INLINE static bool compare_ai_model(const ObAiModelSchema *lhs, const ObAiModelSchema *rhs)
@@ -223,10 +223,10 @@ private:
   OB_INLINE static bool equal_ai_model(const ObAiModelSchema *lhs, const ObAiModelSchema *rhs) {
     return lhs->get_ai_model_id() == rhs->get_ai_model_id();
   }
-  OB_INLINE static bool equal_to_tenant_ai_model_id(const ObAiModelSchema *lhs, const ObTenantAiModelId &rhs) {
+  OB_INLINE static bool equal_to_ai_model_id(const ObAiModelSchema *lhs, const ObAiModelId &rhs) {
     return lhs->get_ai_model_id() == rhs.get_ai_model_id();
   }
-  OB_INLINE static bool compare_with_tenant_ai_model_id(const ObAiModelSchema *lhs, const ObTenantAiModelId &rhs) {
+  OB_INLINE static bool compare_with_ai_model_id(const ObAiModelSchema *lhs, const ObAiModelId &rhs) {
     return lhs->get_ai_model_id() < rhs.get_ai_model_id();
   }
 private:

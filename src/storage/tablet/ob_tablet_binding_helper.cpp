@@ -99,8 +99,16 @@ OB_SERIALIZE_MEMBER(ObBatchUnbindLobTabletArg, data_tablet_ids_);
 int ObTabletBindingHelper::get_ls(ObLS *&tenant_ls)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+  tenant_ls = nullptr;
+  ObLSService *ls_srv = nullptr;
+  if (OB_ISNULL(ls_srv = share::g_mp->ls_service())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("share::g_mp->ls_service() fail, server modules not initialized?", KR(ret));
+  } else if (OB_FAIL(ls_srv->get_ls(tenant_ls))) {
     LOG_ERROR("ls_srv->get_ls() fail", KR(ret));
+  } else if (OB_ISNULL(tenant_ls)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("local ls is null", KR(ret));
   }
   return ret;
 }
@@ -534,9 +542,9 @@ int ObTabletBindingMdsHelper::batch_get_tablet_binding(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(arg));
   } else {
-    MOD_SCOPE {
+    SERVER_MODULE_SCOPE {
       ObLS *tenant_ls = nullptr;
-      if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+      if (OB_FAIL(ObTabletBindingHelper::get_ls(tenant_ls))) {
         LOG_WARN("get ls failed", K(ret), K(arg));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < arg.tablet_ids_.count(); i++) {

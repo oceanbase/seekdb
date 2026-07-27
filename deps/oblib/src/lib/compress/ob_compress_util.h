@@ -30,8 +30,7 @@ enum ObCompressorType : uint8_t
   INVALID_COMPRESSOR             = 0,
   NONE_COMPRESSOR                = 1,
   ZSTD_1_3_8_COMPRESSOR          = 2,
-  STREAM_ZSTD_1_3_8_COMPRESSOR   = 3,
-  ZLIB_COMPRESSOR                = 4,
+  ZLIB_COMPRESSOR                = 3,
 
   MAX_COMPRESSOR
 };
@@ -41,7 +40,6 @@ const char *const all_compressor_name[] =
   "",
   "none",
   "zstd_1.3.8",
-  "stream_zstd_1.3.8",
   "zlib_1.0",
 };
 
@@ -50,12 +48,8 @@ STATIC_ASSERT(ARRAYSIZEOF(all_compressor_name) == ObCompressorType::MAX_COMPRESS
 const char *const compress_funcs[] =
 {
   "none",
-  "lz4_1.0",
-  "snappy_1.0",
   "zlib_1.0",
-  "zstd_1.0",
   "zstd_1.3.8",
-  "lz4_1.9.1",
 };
 
 const char *const perf_compress_funcs[] =

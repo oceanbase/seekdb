@@ -22,11 +22,7 @@ namespace oceanbase
 {
 namespace sql
 {
-class ObDASExtraData;
-class ObIDASTaskResult;
 class ObIDASTaskOp;
-class ObIDASTaskResult;
-class ObDASTaskArg;
 class ObDASRef;
 
 class ObDASTaskFactory
@@ -37,8 +33,6 @@ public:
   ~ObDASTaskFactory();
   void cleanup();
   int create_das_task_op(ObDASOpType op_type, ObIDASTaskOp *&das_op);
-  int create_das_task_result(ObDASOpType op_type, ObIDASTaskResult *&das_result);
-  int create_das_extra_data(ObDASExtraData *&extra_result);
   int create_das_ctdef(ObDASOpType op_type, ObDASBaseCtDef *&ctdef);
   int create_das_rtdef(ObDASOpType op_type, ObDASBaseRtDef *&rtdef);
   static int create_das_ctdef(ObDASOpType op_type, common::ObIAllocator &alloc, ObDASBaseCtDef *&ctdef);
@@ -61,25 +55,18 @@ public:
   struct AllocFun
   {
     int (*op_func_)(ObIAllocator &, ObIDASTaskOp *&);
-    int (*result_func_)(ObIAllocator &, ObIDASTaskResult *&);
     int (*ctdef_func_)(ObIAllocator &, ObDASBaseCtDef *&);
     int (*rtdef_func_)(ObIAllocator &, ObDASBaseRtDef *&);
   };
 private:
   typedef common::ObObjStore<ObIDASTaskOp*, common::ObIAllocator&> DasOpStore;
   typedef DasOpStore::Iterator DasOpIter;
-  typedef common::ObObjStore<ObIDASTaskResult*, common::ObIAllocator&> DasResultStore;
-  typedef DasResultStore::Iterator DasResultIter;
-  typedef common::ObObjStore<ObDASExtraData*, common::ObIAllocator&> DasExtraDataStore;
-  typedef DasExtraDataStore::Iterator DasExtraDataIter;
   typedef common::ObObjStore<ObDASBaseCtDef*, common::ObIAllocator&> DasCtDefStore;
   typedef DasCtDefStore::Iterator DasCtDefIter;
   typedef common::ObObjStore<ObDASBaseRtDef*, common::ObIAllocator&> DasRtDefStore;
   typedef DasRtDefStore::Iterator DasRtDefIter;
 
   DasOpStore das_op_store_;
-  DasResultStore das_result_store_;
-  DasExtraDataStore das_extra_data_store_;
   DasCtDefStore ctdef_store_;
   DasRtDefStore rtdef_store_;
   common::ObIAllocator &allocator_;

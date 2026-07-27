@@ -25,7 +25,7 @@ using namespace common;
 namespace observer
 {
 ObAllVirtualSysParameterStat::ObAllVirtualSysParameterStat()
-    : ObVirtualTableIterator(), sys_iter_(), tenant_iter_()
+    : ObVirtualTableIterator(), sys_iter_()
 {
 }
 
@@ -38,14 +38,12 @@ int ObAllVirtualSysParameterStat::inner_open()
 {
   int ret = OB_SUCCESS;
   sys_iter_ = GCONF.get_container().begin();
-  tenant_iter_ = tenant_config_->get_container().begin();
   return ret;
 }
 
 void ObAllVirtualSysParameterStat::reset()
 {
   sys_iter_ = GCONF.get_container().begin();
-  tenant_iter_ = tenant_config_->get_container().begin();
 }
 
 int ObAllVirtualSysParameterStat::inner_get_next_row(ObNewRow *&row)
@@ -71,12 +69,6 @@ int ObAllVirtualSysParameterStat::inner_sys_get_next_row(ObNewRow *&row)
       for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
         const uint64_t col_id = output_column_ids_.at(i);
         switch (col_id) {
-        case ZONE: {
-            cells[i].set_varchar(GCONF.zone);
-            cells[i].set_collation_type(
-                ObCharset::get_default_collation(ObCharset::get_default_charset()));
-            break;
-          }
         case SERVER_TYPE: {
             cells[i].set_varchar("observer");
             cells[i].set_collation_type(

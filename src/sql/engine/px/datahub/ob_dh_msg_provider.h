@@ -83,9 +83,7 @@ public:
     }
 
     if (OB_FAIL(ret)) {
-      // For local datahub message, we also need to do sync_wait if need_wait_whole_msg here,
-      // because the whole message will be ready once all local piece gathered.
-      // While for rpc datahub message, there is a wait_whole_msg action outside to wait rpc back.
+      // The whole message becomes ready after all local pieces are gathered.
     } else if ((need_sync || need_wait_whole_msg) && OB_FAIL(sync_wait(timeout_ts, task_cnt))) {
       SQL_ENG_LOG(WARN, "failed to sync_wait");
     } else if (need_wait_whole_msg) {
@@ -108,7 +106,7 @@ public:
         ++dh_msg_cnt_;
       }
       if (OB_SUCC(ret) && (dh_msg_cnt_ == task_cnt)) {
-        // only last piece is under obligation to send rpc message
+        // Only the last local piece publishes the aggregated message.
         is_last_piece = true;
         sqc_piece = &sqc_piece_msg_;
       }

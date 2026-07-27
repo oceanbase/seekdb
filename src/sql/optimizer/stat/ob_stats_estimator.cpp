@@ -417,9 +417,6 @@ int ObStatsEstimator::do_estimate(const ObOptStatGatherParam &gather_param,
                                        K(session), K(raw_sql.empty()));
     } else if (OB_FAIL(session->save_session(*session_value))) {
       LOG_WARN("failed to save session", K(ret));
-    } else if (session->is_in_external_catalog()
-               && OB_FAIL(session->set_internal_catalog_db())) {
-      LOG_WARN("failed to set catalog", K(ret));
     }
   }
   if (OB_SUCC(ret)) {

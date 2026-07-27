@@ -20,13 +20,13 @@ namespace oceanbase
 {
 namespace logservice
 {
-AppendCb* AppendCbBase::__get_class_address(ObLink *ptr)
+AppendCb* AppendCbBase::__get_class_address(common::ObLink *ptr)
 {
   return NULL != ptr ? CONTAINER_OF(ptr, AppendCb, __next_) : NULL;
 }
-ObLink* AppendCbBase::__get_member_address(AppendCb *ptr)
+common::ObLink* AppendCbBase::__get_member_address(AppendCb *ptr)
 {
-  return NULL != ptr ? reinterpret_cast<ObLink*>(ADDRESS_OF(ptr, AppendCb, __next_)) : NULL;
+  return NULL != ptr ? reinterpret_cast<common::ObLink*>(ADDRESS_OF(ptr, AppendCb, __next_)) : NULL;
 }
 
 void AppendCb::set_cb_first_handle_ts(const int64_t ts)

@@ -108,11 +108,6 @@ public:
   // new scanner basic 2
   static const int64_t NEW_SCANNER_BASIC_PARAM_FIELD_2 = 92;
   static const int64_t TRANS_ID_PARAM_FIELD = 93;
-  // for ObPostfixExpression::serialize
-  static const int64_t EXPR_OPERATOR = 94;
-  static const int64_t EXPR_QUESTIONMARK = 95;
-  static const int64_t EXPR_SYSTEM_VARIABLE = 96;
-  static const int64_t EXPR_USER_VARIABLE = 97;
 };
 } /* common */
 } /* oceanbase */

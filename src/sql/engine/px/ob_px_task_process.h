@@ -70,7 +70,7 @@ private:
     int ret_;
   };
 public:
-  ObPxTaskProcess(const observer::ObGlobalContext &gctx, ObPxRpcInitTaskArgs &arg);
+  ObPxTaskProcess(const observer::ObGlobalContext &gctx, ObPxInitTaskArgs &arg);
   virtual ~ObPxTaskProcess();
   int process();
   void run();
@@ -84,7 +84,7 @@ public:
   int64_t get_process_timestamp() const { return process_timestamp_; }
   int64_t get_exec_start_timestamp() const { return exec_start_timestamp_; }
   int64_t get_exec_end_timestamp() const { return exec_end_timestamp_; }
-  // For interface requirements, the following four methods need to be implemented, because thread pool is used instead of RPC, so we simulate it
+  // The worker-pool audit interface exposes the four lifecycle timestamps below.
   int64_t get_send_timestamp() const { return get_enqueue_timestamp(); }
   int64_t get_receive_timestamp() const { return get_enqueue_timestamp(); }
   int64_t get_run_timestamp() const { return get_process_timestamp(); }
@@ -113,7 +113,7 @@ private:
   void release();
   /* variables */
   const observer::ObGlobalContext &gctx_;
-  ObPxRpcInitTaskArgs &arg_;
+  ObPxInitTaskArgs &arg_;
   share::schema::ObSchemaGetterGuard schema_guard_;
   observer::ObVirtualTableIteratorFactory vt_iter_factory_;
 

@@ -167,8 +167,7 @@ int ObTransformSimplifyLimit::check_can_pushdown_limit_order(ObSelectStmt& upper
              upper_stmt.has_group_by() ||
              upper_stmt.has_rollup() ||
              upper_stmt.has_window_function() ||
-             upper_stmt.has_distinct() ||
-             upper_stmt.has_sequence()) {
+             upper_stmt.has_distinct()) {
     can_push = false;
   } else {
     // only push down generated table column in order by

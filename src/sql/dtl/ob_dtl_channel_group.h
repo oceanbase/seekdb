@@ -25,7 +25,6 @@ namespace oceanbase {
 namespace sql {
 namespace dtl {
 
-class ObDtlTask;
 class ObDtlChannel;
 class ObDtlChSet;
 struct ObDtlChannelInfo;
@@ -57,22 +56,13 @@ class ObDtlFlowControl;
 class ObDtlChannelGroup
 {
 public:
-  static int make_channel(const common::ObAddr &addr1,
-      const common::ObAddr &addr2,
-      ObDtlChannelInfo &ci1,
-      ObDtlChannelInfo &ci2);
+  static int make_channel(ObDtlChannelInfo &ci1, ObDtlChannelInfo &ci2);
   static int link_channel(const ObDtlChannelInfo &ci, ObDtlChannel *&ch, ObDtlFlowControl *dfc = nullptr);
   static int unlink_channel(const ObDtlChannelInfo &ci);
   static int remove_channel(const ObDtlChannelInfo &ci, ObDtlChannel *&ch);
 
-  static void make_transmit_channel(const common::ObAddr &peer_exec_addr,
-                                  uint64_t ch_id,
-                                  ObDtlChannelInfo &ci_producer,
-                                  bool is_local);
-  static void make_receive_channel(const common::ObAddr &peer_exec_addr,
-                                  uint64_t ch_id,
-                                  ObDtlChannelInfo &ci_consumer,
-                                  bool is_local);
+  static void make_transmit_channel(uint64_t ch_id, ObDtlChannelInfo &ci_producer);
+  static void make_receive_channel(uint64_t ch_id, ObDtlChannelInfo &ci_consumer);
 };
 
 

@@ -170,7 +170,7 @@ int ObExplainLogPlan::check_explain_generate_plan_with_outline(ObLogPlan *real_p
         sql_ctx->first_equal_param_cons_cnt_ = query_ctx->all_equal_param_constraints_.count();
         sql_ctx->first_const_param_cons_cnt_ = query_ctx->all_plan_const_param_constraints_.count();
         sql_ctx->first_expr_cons_cnt_ = query_ctx->all_expr_constraints_.count();
-        ret = OB_SQL_RETRY_SPM;
+        ret = OB_SQL_RETRY_OUTLINE;
         LOG_WARN("generate plan again for explain use outline", K(ret));
       }
     }

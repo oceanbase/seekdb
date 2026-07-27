@@ -29,11 +29,11 @@
 #include "lib/time/ob_clock_generator.h"
 #include "common/object/ob_obj_type.h"
 #include "share/ob_rpc_struct.h"
-#include "share/ob_storage_format.h"
 #include "storage/access/ob_table_param.h"
 #include "storage/mockcontainer/mock_ob_iterator.h"
-#include "mtlenv/mock_tenant_module_env.h"
+#include "mtlenv/mock_server_runtime_env.h"
 #include "storage/ls/ob_ls_tablet_service.h"
+#include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx/ob_trans_define.h"
 #include "storage/tx/ob_trans_service.h"
 
@@ -65,27 +65,20 @@ public:
       const ObIArray<uint64_t> &output_column_ids,
       share::schema::ObTableParam &table_param);
   static int build_table_scan_param(
-      const uint64_t tenant_id,
       ObTxReadSnapshot &read_snapshot,
       const share::schema::ObTableParam &table_param,
       ObTableScanParam &scan_param);
   static int build_table_scan_param(
-      const uint64_t tenant_id,
       ObTransID &tx_id,
       const share::schema::ObTableParam &table_param,
       ObTableScanParam &scan_param);
   static int build_table_scan_param_base_(
-      const uint64_t tenant_id,
       const share::schema::ObTableParam &table_param,
       bool read_latest,
       ObTableScanParam &scan_param);
-  static void build_data_table_schema(
-      const uint64_t tenant_id,
-      share::schema::ObTableSchema &table_schema);
-  static void build_index_table_schema(
-      const uint64_t tenant_id,
-      share::schema::ObTableSchema &table_schema);
-  static int build_tx_desc(const uint64_t tenant_id, ObTxDesc *&tx_desc);
+  static void build_data_table_schema(share::schema::ObTableSchema &table_schema);
+  static void build_index_table_schema(share::schema::ObTableSchema &table_schema);
+  static int build_tx_desc(ObTxDesc *&tx_desc);
   static void build_tx_param(ObTxParam &tx_param);
   static void release_tx_desc(ObTxDesc &tx_desc);
 public:
@@ -113,30 +106,18 @@ int TestDmlCommon::create_ls(ObLS *&ls)
   int ret = OB_SUCCESS;
   ls = nullptr;
 
-  ObLSService *ls_svr = MTL(ObLSService*);
+  ObLSService *ls_svr = nullptr;
 
-  if (OB_FAIL(ls_svr->create_ls())) {
+  if (OB_ISNULL(share::g_mp) || OB_ISNULL(ls_svr = share::g_mp->ls_service())) {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_LOG(WARN, "ls service is null", K(ret), KP(share::g_mp));
+  } else if (OB_FAIL(ls_svr->create_ls())) {
     STORAGE_LOG(WARN, "failed to create ls");
   } else if (OB_FAIL(ls_svr->get_ls(ls))) {
     STORAGE_LOG(WARN, "failed to get ls");
-  }
-
-  // check leader
-  STORAGE_LOG(INFO, "check leader");
-  ObRole role;
-  for (int i = 0; OB_SUCC(ret) && i < 15; i++) {
-    int64_t proposal_id = 0;
-    if (OB_FAIL(ls->get_log_handler()->get_role(role, proposal_id))) {
-      STORAGE_LOG(WARN, "failed to get role", K(ret));
-    } else if (role == ObRole::LEADER) {
-      break;
-    }
-    ::sleep(1);
-  }
-
-  if (OB_SUCC(ret) && OB_UNLIKELY(ObRole::LEADER != role)) {
+  } else if (OB_ISNULL(ls->get_log_handler()) || !ls->get_log_handler()->is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "unexpected error, role is not leader", K(ret), K(role));
+    STORAGE_LOG(WARN, "log handler is not ready", K(ret), KP(ls));
   }
 
   return ret;
@@ -162,12 +143,11 @@ int TestDmlCommon::build_table_param(
 
 /* table_scan read_latest of transaction: tx_id */
 int TestDmlCommon::build_table_scan_param(
-    const uint64_t tenant_id,
     ObTransID &tx_id,
     const share::schema::ObTableParam &table_param,
     ObTableScanParam &scan_param)
 {
-  int ret = build_table_scan_param_base_(tenant_id, table_param, true, scan_param);
+  int ret = build_table_scan_param_base_(table_param, true, scan_param);
   if (OB_SUCC(ret)) {
     scan_param.tx_id_ = tx_id;
   }
@@ -176,12 +156,11 @@ int TestDmlCommon::build_table_scan_param(
 
 /* table_scan read_by_snapshot */
 int TestDmlCommon::build_table_scan_param(
-    const uint64_t tenant_id,
     ObTxReadSnapshot &read_snapshot,
     const share::schema::ObTableParam &table_param,
     ObTableScanParam &scan_param)
 {
-  int ret = build_table_scan_param_base_(tenant_id, table_param, false, scan_param);
+  int ret = build_table_scan_param_base_(table_param, false, scan_param);
   if (FAILEDx(scan_param.snapshot_.assign(read_snapshot))) {
     STORAGE_LOG(WARN, "assign snapshot fail", K(ret));
   }
@@ -189,7 +168,6 @@ int TestDmlCommon::build_table_scan_param(
 }
 
 int TestDmlCommon::build_table_scan_param_base_(
-    const uint64_t tenant_id,
     const share::schema::ObTableParam &table_param,
     bool read_latest,
     ObTableScanParam &scan_param)
@@ -231,13 +209,12 @@ int TestDmlCommon::build_table_scan_param_base_(
   scan_param.sql_mode_ = SMO_DEFAULT;
   scan_param.scan_allocator_ = &CURRENT_CONTEXT->get_arena_allocator();
   scan_param.frozen_version_ = -1;
-  scan_param.force_refresh_lc_ = false;
   scan_param.output_exprs_ = nullptr;
   scan_param.aggregate_exprs_ = nullptr;
   scan_param.op_ = nullptr;
   scan_param.row2exprs_projector_ = nullptr;
   scan_param.schema_version_ = share::OB_CORE_SCHEMA_VERSION + 1;
-  scan_param.tenant_schema_version_ = share::OB_CORE_SCHEMA_VERSION + 1;
+  scan_param.runtime_schema_version_ = share::OB_CORE_SCHEMA_VERSION + 1;
   scan_param.limit_param_.limit_ = -1;
   scan_param.limit_param_.offset_ = 0;
   scan_param.need_scn_ = false;
@@ -253,16 +230,13 @@ int TestDmlCommon::build_table_scan_param_base_(
   return ret;
 }
 
-void TestDmlCommon::build_data_table_schema(
-    const uint64_t tenant_id,
-    share::schema::ObTableSchema &table_schema)
+void TestDmlCommon::build_data_table_schema(share::schema::ObTableSchema &table_schema)
 {
   const uint64_t table_id = TEST_DATA_TABLE_ID;
   const int64_t micro_block_size = 16 * 1024;
 
   table_schema.reset();
   table_schema.set_table_name("test_dml_common");
-  table_schema.set_tablegroup_id(1);
   table_schema.set_database_id(1);
   table_schema.set_table_id(table_id);
   table_schema.set_schema_version(share::OB_CORE_SCHEMA_VERSION + 1);
@@ -271,7 +245,6 @@ void TestDmlCommon::build_data_table_schema(
   table_schema.set_block_size(micro_block_size);
   table_schema.set_compress_func_name("none");
   table_schema.set_row_store_type(ObRowStoreType::ENCODING_ROW_STORE);
-  table_schema.set_storage_format_version(ObStorageFormatVersion::OB_STORAGE_FORMAT_VERSION_V4);
   table_schema.set_micro_index_clustered(false);
 
 #define TEST_DML_ADD_COLUMN(column_id, column_name, data_type, collation_type, is_row_key) \
@@ -297,9 +270,7 @@ void TestDmlCommon::build_data_table_schema(
 #undef TEST_DML_ADD_COLUMN
 }
 
-void TestDmlCommon::build_index_table_schema(
-    const uint64_t tenant_id,
-    share::schema::ObTableSchema &table_schema)
+void TestDmlCommon::build_index_table_schema(share::schema::ObTableSchema &table_schema)
 {
   const uint64_t data_table_id = TEST_DATA_TABLE_ID;
   const uint64_t index_table_id = TEST_INDEX_TABLE_ID;
@@ -307,7 +278,6 @@ void TestDmlCommon::build_index_table_schema(
 
   table_schema.reset();
   table_schema.set_table_name("test_dml_common_index");
-  table_schema.set_tablegroup_id(1);
   table_schema.set_database_id(1);
   table_schema.set_data_table_id(data_table_id);
   table_schema.set_table_id(index_table_id);
@@ -316,7 +286,6 @@ void TestDmlCommon::build_index_table_schema(
   table_schema.set_max_used_column_id(ObObjType::ObExtendType - 1);
   table_schema.set_block_size(micro_block_size);
   table_schema.set_row_store_type(ObRowStoreType::ENCODING_ROW_STORE);
-  table_schema.set_storage_format_version(ObStorageFormatVersion::OB_STORAGE_FORMAT_VERSION_V4);
 
   // add index column: a
   {
@@ -330,10 +299,10 @@ void TestDmlCommon::build_index_table_schema(
   }
 }
 
-int TestDmlCommon::build_tx_desc(const uint64_t tenant_id, ObTxDesc *&tx_desc)
+int TestDmlCommon::build_tx_desc(ObTxDesc *&tx_desc)
 {
   int ret = OB_SUCCESS;
-  transaction::ObTransService *tx_service = MTL(transaction::ObTransService*);
+  transaction::ObTransService *tx_service = share::g_mp->trans_service();
   if (OB_FAIL(tx_service->acquire_tx(tx_desc, 100))) {
     STORAGE_LOG(WARN, "failed to acquire tx", K(ret));
   } else {
@@ -352,7 +321,7 @@ void TestDmlCommon::build_tx_param(ObTxParam &tx_param)
 
 void TestDmlCommon::release_tx_desc(ObTxDesc &tx_desc)
 {
-  transaction::ObTransService *tx_service = MTL(transaction::ObTransService*);
+  transaction::ObTransService *tx_service = share::g_mp->trans_service();
   tx_service->release_tx(tx_desc);
 }
 

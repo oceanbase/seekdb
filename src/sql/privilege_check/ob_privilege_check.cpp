@@ -21,7 +21,6 @@
 #include "sql/resolver/ddl/ob_create_table_stmt.h"
 #include "sql/resolver/ddl/ob_create_database_stmt.h"
 #include "sql/resolver/ddl/ob_alter_table_stmt.h"
-#include "src/sql/resolver/ddl/ob_sequence_stmt.h"
 #include "sql/resolver/cmd/ob_variable_set_stmt.h" // ObVariableSetStmt
 #include "sql/resolver/ddl/ob_create_outline_stmt.h"
 #include "sql/resolver/ddl/ob_alter_outline_stmt.h"
@@ -40,17 +39,14 @@
 #include "sql/resolver/ddl/ob_create_table_like_stmt.h"
 #include "sql/resolver/ddl/ob_fork_table_stmt.h"
 #include "sql/resolver/ddl/ob_fork_database_stmt.h"
-#include "sql/resolver/ddl/ob_drop_tablegroup_stmt.h"
 #include "sql/resolver/ddl/ob_recyclebin_restore_stmt.h"
 #include "sql/resolver/cmd/ob_call_procedure_stmt.h"
 #include "sql/resolver/ddl/ob_lock_table_stmt.h"
 #include "sql/resolver/ddl/ob_alter_routine_stmt.h"
 #include "sql/resolver/ddl/ob_drop_routine_stmt.h"
 #include "sql/resolver/ddl/ob_trigger_stmt.h"
-#include "sql/resolver/ddl/ob_create_ccl_rule_stmt.h"
 #include "sql/resolver/dcl/ob_alter_user_profile_stmt.h"
 #include "sql/optimizer/ob_optimizer_util.h"
-#include "sql/resolver/cmd/ob_event_stmt.h"
 #include "sql/resolver/cmd/ob_merge_table_stmt.h"
 
 namespace oceanbase {
@@ -129,17 +125,11 @@ int add_col_priv_to_need_priv(
   int ret = OB_SUCCESS;
   ObStmtExprGetter visitor;
   ObNeedPriv need_priv;
-  need_priv.catalog_ = table_item.catalog_name_;
   need_priv.db_ = table_item.database_name_;
   need_priv.table_ = table_item.table_name_;
   need_priv.is_sys_table_ = table_item.is_system_table_;
   need_priv.is_for_update_ = table_item.for_update_;
   need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
-  if (need_priv.catalog_ != OB_INTERNAL_CATALOG_NAME) {
-    need_priv.priv_level_ = OB_PRIV_CATALOG_LEVEL;
-    need_priv.priv_set_ = OB_PRIV_USE_CATALOG;
-    ADD_NEED_PRIV(need_priv);
-  }
   const uint64_t table_id = table_item.table_id_;
   visitor.set_relation_scope();
   visitor.remove_scope(SCOPE_DML_COLUMN);
@@ -366,14 +356,6 @@ int get_dml_stmt_need_privs(
         } else { } //do nothing
         const ObDMLStmt *dml_stmt = static_cast<const ObDMLStmt*>(basic_stmt);
         int64_t table_size = dml_stmt->get_table_size();
-        if (stmt::T_SELECT != stmt_type) {
-          ObSEArray<const ObDmlTableInfo*, 4> table_infos;
-          if (OB_FAIL(static_cast<const ObDelUpdStmt*>(basic_stmt)->get_dml_table_infos(table_infos))) {
-            LOG_WARN("failed to get dml table infos", K(ret));
-          } else if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, table_infos, op_literal))) {
-            LOG_WARN("cann't do this operation on this database", K(ret), K(stmt_type));
-          }
-        }
         for (int64_t i = 0; OB_SUCC(ret) && i < table_size; i++) {
           const TableItem *table_item = dml_stmt->get_table_item(i);
           if (OB_ISNULL(table_item)) {
@@ -382,28 +364,19 @@ int get_dml_stmt_need_privs(
           } else if (TableItem::BASE_TABLE == table_item->type_
             || TableItem::ALIAS_TABLE == table_item->type_
             || table_item->is_view_table_) {
-            need_priv.catalog_ = table_item->catalog_name_;
             need_priv.db_ = table_item->database_name_;
             need_priv.table_ = table_item->table_name_;
             need_priv.is_sys_table_ = table_item->is_system_table_;
             need_priv.is_for_update_ = table_item->for_update_;
             need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
-            if (need_priv.catalog_ != OB_INTERNAL_CATALOG_NAME) {
-              need_priv.priv_level_ = OB_PRIV_CATALOG_LEVEL;
-              priv_set |= OB_PRIV_USE_CATALOG;
-            }
             //no check for information_schema select
-            if (stmt::T_SELECT != dml_stmt->get_stmt_type()) {
-              if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, table_item->database_name_))) {
-                LOG_WARN("Can not do this operation on the database", K(session_priv),
-                         K(ret), "stmt_type", dml_stmt->get_stmt_type());
-              } else if (ObPrivilegeCheck::is_mysql_org_table(table_item->database_name_, table_item->table_name_)) {
-                ret = OB_ERR_NO_TABLE_PRIVILEGE;
-                LOG_USER_ERROR(OB_ERR_NO_TABLE_PRIVILEGE, op_literal.length(), op_literal.ptr(),
-                               session_priv.user_name_.length(), session_priv.user_name_.ptr(),
-                               session_priv.host_name_.length(),session_priv.host_name_.ptr(),
-                               table_item->table_name_.length(), table_item->table_name_.ptr());
-              }
+            if (stmt::T_SELECT != dml_stmt->get_stmt_type()
+                && ObPrivilegeCheck::is_mysql_org_table(table_item->database_name_, table_item->table_name_)) {
+              ret = OB_ERR_NO_TABLE_PRIVILEGE;
+              LOG_USER_ERROR(OB_ERR_NO_TABLE_PRIVILEGE, op_literal.length(), op_literal.ptr(),
+                             session_priv.user_name_.length(), session_priv.user_name_.ptr(),
+                             session_priv.host_name_.length(),session_priv.host_name_.ptr(),
+                             table_item->table_name_.length(), table_item->table_name_.ptr());
             }
             if (OB_SUCC(ret)) {
               bool has = false;
@@ -414,15 +387,6 @@ int get_dml_stmt_need_privs(
                 LOG_WARN("failed to check has dml table info", K(ret));
               } else {
                 need_priv.priv_set_ = has ? priv_set : OB_PRIV_SELECT;
-              }
-            }
-            if (OB_SUCC(ret)) {
-              if (session_priv.is_tenant_changed()
-                  && 0 != table_item->database_name_.case_compare(OB_SYS_DATABASE_NAME)) {
-                ret = OB_ERR_NO_DB_PRIVILEGE;
-                LOG_USER_ERROR(OB_ERR_NO_DB_PRIVILEGE, session_priv.user_name_.length(), session_priv.user_name_.ptr(),
-                               session_priv.host_name_.length(),session_priv.host_name_.ptr(),
-                               table_item->database_name_.length(), table_item->database_name_.ptr());
               }
             }
             if (OB_SUCC(ret)) {
@@ -469,33 +433,17 @@ int get_alter_table_stmt_need_privs(
     ObNeedPriv need_priv;
     const ObAlterTableStmt *stmt = static_cast<const ObAlterTableStmt*>(basic_stmt);
     const ObSArray<obcall::ObCreateForeignKeyArg> &foreign_keys = stmt->get_read_only_foreign_key_arg_list();
-    if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, stmt->get_org_database_name()))) {
-      LOG_WARN("Can not alter table in the database", K(session_priv), K(ret),
-               "database_name", stmt->get_org_database_name());
-    } else if (ObPrivilegeCheck::is_mysql_org_table(stmt->get_org_database_name(),
-                                  stmt->get_org_table_name())
-               && false) {
-      ret = OB_ERR_NO_TABLE_PRIVILEGE;
-      LOG_USER_ERROR(OB_ERR_NO_TABLE_PRIVILEGE, (int)strlen("ALTER"), "ALTER",
-                     session_priv.user_name_.length(),session_priv.user_name_.ptr(),
-                     session_priv.host_name_.length(),session_priv.host_name_.ptr(),
-                     stmt->get_org_table_name().length(), stmt->get_org_table_name().ptr());
-    } else if (stmt->has_rename_action()) {
-      if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, stmt->get_database_name()))) {
-        LOG_WARN("Can not alter table in the database", K(session_priv), K(ret),
-                 "database_name", stmt->get_database_name());
-      } else {
-        need_priv.db_ = stmt->get_org_database_name();
-        need_priv.table_ = stmt->get_org_table_name();
-        need_priv.priv_set_ = OB_PRIV_ALTER | OB_PRIV_DROP;
-        need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
-        ADD_NEED_PRIV(need_priv);
-        need_priv.db_ = stmt->get_database_name();
-        need_priv.table_ = stmt->get_table_name();
-        need_priv.priv_set_ = OB_PRIV_CREATE | OB_PRIV_INSERT;
-        need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
-        ADD_NEED_PRIV(need_priv);
-      }
+    if (stmt->has_rename_action()) {
+      need_priv.db_ = stmt->get_org_database_name();
+      need_priv.table_ = stmt->get_org_table_name();
+      need_priv.priv_set_ = OB_PRIV_ALTER | OB_PRIV_DROP;
+      need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
+      ADD_NEED_PRIV(need_priv);
+      need_priv.db_ = stmt->get_database_name();
+      need_priv.table_ = stmt->get_table_name();
+      need_priv.priv_set_ = OB_PRIV_CREATE | OB_PRIV_INSERT;
+      need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
+      ADD_NEED_PRIV(need_priv);
     } else {
       need_priv.db_ = stmt->get_org_database_name();
       need_priv.table_ = stmt->get_org_table_name();
@@ -535,8 +483,6 @@ int get_create_database_stmt_need_privs(
     ObNeedPriv need_priv;
     const ObCreateDatabaseStmt *stmt = static_cast<const ObCreateDatabaseStmt*>(basic_stmt);
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, stmt->get_database_name()))) {
-      LOG_WARN("Can not create in the database", K(session_priv), "database_name", stmt->get_database_name(), K(ret));
     } else {
       need_priv.db_ = stmt->get_database_name();
       need_priv.priv_set_ = OB_PRIV_CREATE;
@@ -565,8 +511,7 @@ int get_alter_database_stmt_need_privs(
     const ObAlterDatabaseStmt *stmt = static_cast<const ObAlterDatabaseStmt*>(basic_stmt);
     const ObString &db_name = stmt->get_database_name();
     if (0 == db_name.case_compare(OB_INFORMATION_SCHEMA_NAME)
-        || (0 == db_name.case_compare(OB_SYS_DATABASE_NAME)
-            && !stmt->only_alter_primary_zone())) {
+        || 0 == db_name.case_compare(OB_SYS_DATABASE_NAME)) {
       ret = OB_ERR_NO_DB_PRIVILEGE;
       LOG_USER_ERROR(OB_ERR_NO_DB_PRIVILEGE, session_priv.user_name_.length(), session_priv.user_name_.ptr(),
                      session_priv.host_name_.length(), session_priv.host_name_.ptr(),
@@ -625,8 +570,6 @@ int get_create_table_stmt_need_privs(
     ObNeedPriv need_priv;
     const ObCreateTableStmt *stmt = static_cast<const ObCreateTableStmt*>(basic_stmt);
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, stmt->get_database_name()))) {
-      LOG_WARN("Can not create table in information_schema database", K(session_priv), K(ret));
     } else if (stmt->is_view_table()){
       for (int64_t i = 0; i < stmt->get_view_need_privs().count(); i++) {
         LOG_INFO("output need privs", K(stmt->get_view_need_privs().at(i)), K(i));
@@ -683,112 +626,10 @@ int get_drop_table_stmt_need_privs(
     const ObIArray<obcall::ObTableItem> &tables = stmt->get_drop_table_arg().tables_;
     for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); i++) {
       const obcall::ObTableItem &table_item = tables.at(i);
-      if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, table_item.database_name_))) {
-        LOG_WARN("Can not drop table in information_schema database", K(session_priv), K(ret));
-      } else if (ObPrivilegeCheck::is_mysql_org_table(table_item.database_name_, table_item.table_name_)
-                 && false) {
-        ret = OB_ERR_NO_TABLE_PRIVILEGE;
-        LOG_USER_ERROR(OB_ERR_NO_TABLE_PRIVILEGE, (int)strlen("DROP"), "DROP",
-                       session_priv.user_name_.length(), session_priv.user_name_.ptr(),
-                       session_priv.host_name_.length(),session_priv.host_name_.ptr(),
-                       table_item.table_name_.length(), table_item.table_name_.ptr());
-      } else {
-        need_priv.db_ = table_item.database_name_;
-        need_priv.table_ = table_item.table_name_;
-        need_priv.priv_set_ = OB_PRIV_DROP;
-        need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
-        ADD_NEED_PRIV(need_priv);
-      }
-    }
-    if ((share::schema::TMP_TABLE == stmt->get_drop_table_arg().table_type_
-        || share::schema::TMP_TABLE_ALL == stmt->get_drop_table_arg().table_type_)
-        && common::OB_INVALID_ID != stmt->get_drop_table_arg().session_id_
-        && false) {
-        ret = OB_ERR_NO_PRIVILEGE;
-        LOG_USER_ERROR(OB_ERR_NO_PRIVILEGE, "SUPER");
-      }
-  }
-  return ret;
-}
-
-int get_create_sequence_stmt_need_privs(
-    const ObSessionPrivInfo &session_priv,
-    const ObStmt *basic_stmt,
-    ObIArray<ObNeedPriv> &need_privs)
-{
-  int ret = OB_SUCCESS;
-  ObNeedPriv need_priv;
-  if (OB_ISNULL(basic_stmt)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else if (OB_UNLIKELY(stmt::T_CREATE_SEQUENCE != basic_stmt->get_stmt_type())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Stmt type should be T_CREATE_SEQUENCE", K(ret), "stmt type", basic_stmt->get_stmt_type());
-  } else {
-    const ObCreateSequenceStmt *stmt = static_cast<const ObCreateSequenceStmt*>(basic_stmt);
-    if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv,
-                                                         stmt->get_arg().get_database_name()))) {
-      LOG_WARN("Can not create sequence in current database", K(session_priv), K(ret));
-    } else {
-      need_priv.db_ = stmt->get_arg().get_database_name();
-      need_priv.priv_set_ = OB_PRIV_CREATE;
-      need_priv.priv_level_ = OB_PRIV_DB_LEVEL;
-      ADD_NEED_PRIV(need_priv);
-    }
-  }
-  return ret;
-}
-
-int get_alter_sequence_stmt_need_privs(
-    const ObSessionPrivInfo &session_priv,
-    const ObStmt *basic_stmt,
-    ObIArray<ObNeedPriv> &need_privs)
-{
-  int ret = OB_SUCCESS;
-  ObNeedPriv need_priv;
-  if (OB_ISNULL(basic_stmt)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else if (OB_UNLIKELY(stmt::T_ALTER_SEQUENCE != basic_stmt->get_stmt_type())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Stmt type should be T_ALTER_SEQUENCE", K(ret), "stmt type", basic_stmt->get_stmt_type());
-  } else {
-    const ObAlterSequenceStmt *stmt = static_cast<const ObAlterSequenceStmt*>(basic_stmt);
-    if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv,
-                                                         stmt->get_arg().get_database_name()))) {
-      LOG_WARN("Can not alter sequence in current database", K(session_priv), K(ret));
-    } else {
-      need_priv.db_ = stmt->get_arg().get_database_name();
-      need_priv.priv_set_ = OB_PRIV_ALTER;
-      need_priv.priv_level_ = OB_PRIV_DB_LEVEL;
-      ADD_NEED_PRIV(need_priv);
-    }
-  }
-  return ret;
-}
-
-int get_drop_sequence_stmt_need_privs(
-    const ObSessionPrivInfo &session_priv,
-    const ObStmt *basic_stmt,
-    ObIArray<ObNeedPriv> &need_privs)
-{
-  int ret = OB_SUCCESS;
-  ObNeedPriv need_priv;
-  if (OB_ISNULL(basic_stmt)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else if (OB_UNLIKELY(stmt::T_DROP_SEQUENCE != basic_stmt->get_stmt_type())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Stmt type should be T_DROP_SEQUENCE", K(ret), "stmt type", basic_stmt->get_stmt_type());
-  } else {
-    const ObDropSequenceStmt *stmt = static_cast<const ObDropSequenceStmt*>(basic_stmt);
-    if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv,
-                                                         stmt->get_arg().get_database_name()))) {
-      LOG_WARN("Can not drop sequence in current database", K(session_priv), K(ret));
-    } else {
-      need_priv.db_ = stmt->get_arg().get_database_name();
+      need_priv.db_ = table_item.database_name_;
+      need_priv.table_ = table_item.table_name_;
       need_priv.priv_set_ = OB_PRIV_DROP;
-      need_priv.priv_level_ = OB_PRIV_DB_LEVEL;
+      need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
       ADD_NEED_PRIV(need_priv);
     }
   }
@@ -810,15 +651,10 @@ int get_create_outline_stmt_need_privs(
     LOG_WARN("Stmt type should be T_CREATE_OUTLINE", K(ret), "stmt type", basic_stmt->get_stmt_type());
   } else {
     const ObCreateOutlineStmt *stmt = static_cast<const ObCreateOutlineStmt*>(basic_stmt);
-    if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv,
-                                                         stmt->get_create_outline_arg().db_name_))) {
-      LOG_WARN("Can not create outline in current database", K(session_priv), K(ret));
-    } else {
-      need_priv.db_ = stmt->get_create_outline_arg().db_name_;
-      need_priv.priv_set_ = OB_PRIV_CREATE;
-      need_priv.priv_level_ = OB_PRIV_DB_LEVEL;
-      ADD_NEED_PRIV(need_priv);
-    }
+    need_priv.db_ = stmt->get_create_outline_arg().db_name_;
+    need_priv.priv_set_ = OB_PRIV_CREATE;
+    need_priv.priv_level_ = OB_PRIV_DB_LEVEL;
+    ADD_NEED_PRIV(need_priv);
   }
   return ret;
 }
@@ -838,15 +674,10 @@ int get_alter_outline_stmt_need_privs(
     LOG_WARN("Stmt type should be T_ALTER_OUTLINE", K(ret), "stmt type", basic_stmt->get_stmt_type());
   } else {
     const ObAlterOutlineStmt *stmt = static_cast<const ObAlterOutlineStmt*>(basic_stmt);
-    if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv,
-                                                         stmt->get_alter_outline_arg().db_name_))) {
-      LOG_WARN("Can not alter outline in current database", K(session_priv), K(ret));
-    } else {
-      need_priv.db_ = stmt->get_alter_outline_arg().db_name_;
-      need_priv.priv_set_ = OB_PRIV_ALTER;
-      need_priv.priv_level_ = OB_PRIV_DB_LEVEL;
-      ADD_NEED_PRIV(need_priv);
-    }
+    need_priv.db_ = stmt->get_alter_outline_arg().db_name_;
+    need_priv.priv_set_ = OB_PRIV_ALTER;
+    need_priv.priv_level_ = OB_PRIV_DB_LEVEL;
+    ADD_NEED_PRIV(need_priv);
   }
   return ret;
 }
@@ -866,15 +697,10 @@ int get_drop_outline_stmt_need_privs(
     LOG_WARN("Stmt type should be T_DROP_OUTLINE", K(ret), "stmt type", basic_stmt->get_stmt_type());
   } else {
     const ObDropOutlineStmt *stmt = static_cast<const ObDropOutlineStmt*>(basic_stmt);
-    if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv,
-                                                         stmt->get_drop_outline_arg().db_name_))) {
-      LOG_WARN("Can not drop outline in current database", K(session_priv), K(ret));
-    } else {
-      need_priv.db_ = stmt->get_drop_outline_arg().db_name_;
-      need_priv.priv_set_ = OB_PRIV_DROP;
-      need_priv.priv_level_ = OB_PRIV_DB_LEVEL;
-      ADD_NEED_PRIV(need_priv);
-    }
+    need_priv.db_ = stmt->get_drop_outline_arg().db_name_;
+    need_priv.priv_set_ = OB_PRIV_DROP;
+    need_priv.priv_level_ = OB_PRIV_DB_LEVEL;
+    ADD_NEED_PRIV(need_priv);
   }
   return ret;
 }
@@ -936,15 +762,11 @@ int get_create_index_stmt_need_privs(
   } else {
     ObNeedPriv need_priv;
     const ObCreateIndexStmt *stmt = static_cast<const ObCreateIndexStmt*>(basic_stmt);
-    if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, stmt->get_database_name()))) {
-      LOG_WARN("Can not create index in information_schema database", K(session_priv), K(ret));
-    } else {
-      need_priv.db_ = stmt->get_database_name();
-      need_priv.table_ = stmt->get_table_name();
-      need_priv.priv_set_ = OB_PRIV_INDEX;
-      need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
-      ADD_NEED_PRIV(need_priv);
-    }
+    need_priv.db_ = stmt->get_database_name();
+    need_priv.table_ = stmt->get_table_name();
+    need_priv.priv_set_ = OB_PRIV_INDEX;
+    need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
+    ADD_NEED_PRIV(need_priv);
   }
   return ret;
 }
@@ -965,15 +787,11 @@ int get_drop_index_stmt_need_privs(
   } else {
     ObNeedPriv need_priv;
     const ObDropIndexStmt *stmt = static_cast<const ObDropIndexStmt*>(basic_stmt);
-    if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, stmt->get_database_name()))) {
-      LOG_WARN("Can not drop index in information_schema database", K(session_priv), K(ret));
-    } else {
-      need_priv.db_ = stmt->get_database_name();
-      need_priv.table_ = stmt->get_table_name();
-      need_priv.priv_set_ = OB_PRIV_INDEX;
-      need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
-      ADD_NEED_PRIV(need_priv);
-    }
+    need_priv.db_ = stmt->get_database_name();
+    need_priv.table_ = stmt->get_table_name();
+    need_priv.priv_set_ = OB_PRIV_INDEX;
+    need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
+    ADD_NEED_PRIV(need_priv);
   }
   return ret;
 }
@@ -1005,7 +823,6 @@ int get_grant_stmt_need_privs(
     } else if (is_root_user(session_priv.user_id_)) {
       //not neccessary
     } else {
-      need_priv.catalog_ = stmt->get_catalog_name();
       need_priv.db_ = stmt->get_database_name();
       need_priv.table_ = stmt->get_table_name();
       need_priv.priv_set_ = stmt->get_priv_set() | OB_PRIV_GRANT;
@@ -1064,7 +881,6 @@ int get_revoke_stmt_need_privs(
     ObIArray<ObNeedPriv> &need_privs)
 {
   int ret = OB_SUCCESS;
-  const bool check_revoke_all_user_create_user = true;
   if (OB_ISNULL(basic_stmt)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Basic stmt should be not be NULL", K(ret));
@@ -1077,8 +893,7 @@ int get_revoke_stmt_need_privs(
   } else {
     ObNeedPriv need_priv;
     const ObRevokeStmt *stmt = static_cast<const ObRevokeStmt *>(basic_stmt);
-    if (check_revoke_all_user_create_user &&
-      stmt->get_grant_level() == OB_PRIV_USER_LEVEL && stmt->get_priv_set() == OB_PRIV_ALL) {
+    if (stmt->get_grant_level() == OB_PRIV_USER_LEVEL && stmt->get_priv_set() == OB_PRIV_ALL) {
       need_priv.db_ = stmt->get_database_name();
       need_priv.table_ = stmt->get_table_name();
       need_priv.priv_set_ = OB_PRIV_CREATE_USER;
@@ -1089,7 +904,7 @@ int get_revoke_stmt_need_privs(
       ObSchemaGetterGuard schema_guard;
       bool need_add = false;
       CK (GCTX.schema_service_ != NULL);
-      OZ(GCTX.schema_service_->get_tenant_schema_guard(schema_guard));
+      OZ(GCTX.schema_service_->get_runtime_schema_guard(schema_guard));
       for (int i = 0; OB_SUCC(ret) && i < stmt->get_users().count(); i++) {
         const ObUserInfo *user_info = NULL;
         OZ(schema_guard.get_user_info(stmt->get_users().at(i), user_info));
@@ -1098,7 +913,6 @@ int get_revoke_stmt_need_privs(
       }
       if (OB_FAIL(ret)) {
       } else if (need_add) { //mysql8.0 if exists dynamic privs, then need SYSTEM_USER dynamic privilge to revoke all, now use SUPER to do so.
-        need_priv.catalog_ = stmt->get_catalog_name();
         need_priv.db_ = stmt->get_database_name();
         need_priv.table_ = stmt->get_table_name();
         need_priv.priv_set_ = OB_PRIV_SUPER;
@@ -1113,7 +927,6 @@ int get_revoke_stmt_need_privs(
     } else if (stmt->get_revoke_all()) {
       //check privs at resolver
     } else {
-      need_priv.catalog_ = stmt->get_catalog_name();
       need_priv.db_ = stmt->get_database_name();
       need_priv.table_ = stmt->get_table_name();
       need_priv.priv_set_ = stmt->get_priv_set() | OB_PRIV_GRANT;
@@ -1258,66 +1071,6 @@ int get_role_privs(
   return ret;
 }
 
-int get_catalog_privs(
-    const ObSessionPrivInfo &session_priv,
-    const ObStmt *basic_stmt,
-    ObIArray<ObNeedPriv> &need_privs)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(basic_stmt)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else {
-    ObNeedPriv need_priv;
-    stmt::StmtType stmt_type = basic_stmt->get_stmt_type();
-    switch (stmt_type) {
-      case stmt::T_CREATE_CATALOG:
-      case stmt::T_ALTER_CATALOG:
-      case stmt::T_DROP_CATALOG: {
-        need_priv.priv_set_ = OB_PRIV_CREATE_CATALOG;
-        need_priv.priv_level_ = OB_PRIV_USER_LEVEL;
-        ADD_NEED_PRIV(need_priv);
-        break;
-      }
-      default: {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("Stmt type not in types dealt in this function", K(ret), K(stmt_type));
-        break;
-      }
-    }
-  }
-  return ret;
-}
-
-int get_location_privs(const ObSessionPrivInfo &session_priv,
-                       const ObStmt *basic_stmt,
-                       ObIArray<ObNeedPriv> &need_privs)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(basic_stmt)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else {
-    ObNeedPriv need_priv;
-    stmt::StmtType stmt_type = basic_stmt->get_stmt_type();
-    switch (stmt_type) {
-      case stmt::T_CREATE_LOCATION:
-      case stmt::T_DROP_LOCATION: {
-        need_priv.priv_set_ = OB_PRIV_CREATE_LOCATION;
-        need_priv.priv_level_ = OB_PRIV_USER_LEVEL;
-        ADD_NEED_PRIV(need_priv);
-        break;
-      }
-      default: {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("Stmt type not in types dealt in this function", K(ret), K(stmt_type));
-        break;
-      }
-    }
-  }
-  return ret;
-}
-
 int get_variable_set_stmt_need_privs(
     const ObSessionPrivInfo &session_priv,
     const ObStmt *basic_stmt,
@@ -1438,48 +1191,6 @@ int get_trigger_stmt_need_privs(
   return ret;
 }
 
-int get_event_stmt_need_privs(
-    const ObSessionPrivInfo &session_priv,
-    const ObStmt *basic_stmt,
-    ObIArray<ObNeedPriv> &need_privs)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(basic_stmt)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else if (OB_UNLIKELY(stmt::T_EVENT_JOB_CREATE != basic_stmt->get_stmt_type()
-                        && stmt::T_EVENT_JOB_ALTER != basic_stmt->get_stmt_type()
-                        && stmt::T_EVENT_JOB_DROP != basic_stmt->get_stmt_type())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Stmt type should be event stmt",
-             K(ret), "stmt type", basic_stmt->get_stmt_type());
-  } else {
-    if (stmt::T_EVENT_JOB_CREATE == basic_stmt->get_stmt_type()) {
-      const ObCreateEventStmt *stmt = static_cast<const ObCreateEventStmt*>(basic_stmt);
-      ObNeedPriv need_priv;
-      need_priv.db_ = stmt->get_event_info().get_event_database();
-      need_priv.priv_level_ = OB_PRIV_DB_LEVEL;
-      need_priv.priv_set_ = OB_PRIV_EVENT;
-      ADD_NEED_PRIV(need_priv);
-    } else if (stmt::T_EVENT_JOB_ALTER == basic_stmt->get_stmt_type()) {
-      const ObAlterEventStmt *stmt = static_cast<const ObAlterEventStmt*>(basic_stmt);
-      ObNeedPriv need_priv;
-      need_priv.db_ = stmt->get_event_info().get_event_database();
-      need_priv.priv_level_ = OB_PRIV_DB_LEVEL;
-      need_priv.priv_set_ = OB_PRIV_EVENT;
-      ADD_NEED_PRIV(need_priv);
-    } else if (stmt::T_EVENT_JOB_DROP == basic_stmt->get_stmt_type()) {
-      const ObDropEventStmt *stmt = static_cast<const ObDropEventStmt*>(basic_stmt);
-      ObNeedPriv need_priv;
-      need_priv.db_ = stmt->get_event_info().get_event_database();
-      need_priv.priv_level_ = OB_PRIV_DB_LEVEL;
-      need_priv.priv_set_ = OB_PRIV_EVENT;
-      ADD_NEED_PRIV(need_priv);
-    }
-  }
-  return ret;
-}
-
 int get_truncate_table_stmt_need_privs(
     const ObSessionPrivInfo &session_priv,
     const ObStmt *basic_stmt,
@@ -1496,17 +1207,11 @@ int get_truncate_table_stmt_need_privs(
   } else {
     ObNeedPriv need_priv;
     const ObTruncateTableStmt *stmt = static_cast<const ObTruncateTableStmt *>(basic_stmt);
-    //as there is tenant id is truncate_table_arg, so I check this.
-    //And not allow truncate other tenant's table. Even sys tenant.
-    if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, stmt->get_database_name()))) {
-      LOG_WARN("Can not do this operation on the database", K(session_priv), K(ret));
-    } else {
-      need_priv.db_ = stmt->get_database_name();
-      need_priv.table_ = stmt->get_table_name();
-      need_priv.priv_set_ = OB_PRIV_DROP;
-      need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
-      ADD_NEED_PRIV(need_priv);
-    }
+    need_priv.db_ = stmt->get_database_name();
+    need_priv.table_ = stmt->get_table_name();
+    need_priv.priv_set_ = OB_PRIV_DROP;
+    need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
+    ADD_NEED_PRIV(need_priv);
   }
   return ret;
 }
@@ -1531,22 +1236,16 @@ int get_rename_table_stmt_need_privs(
       const obcall::ObRenameTableArg &arg = stmt->get_rename_table_arg();
       for (int64_t idx = 0; OB_SUCC(ret) && idx < arg.rename_table_items_.count(); ++idx) {
         const obcall::ObRenameTableItem &table_item = arg.rename_table_items_.at(idx);
-        if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, table_item.origin_db_name_))) {
-          LOG_WARN("Can not do this operation on the database", K(session_priv), K(ret));
-        } else if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, table_item.new_db_name_))) {
-          LOG_WARN("Can not do this operation on the database", K(session_priv), K(ret));
-        } else {
-          need_priv.db_ = table_item.origin_db_name_;
-          need_priv.table_ = table_item.origin_table_name_;
-          need_priv.priv_set_ = OB_PRIV_DROP | OB_PRIV_ALTER;
-          need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
-          ADD_NEED_PRIV(need_priv);
-          need_priv.db_ = table_item.new_db_name_;
-          need_priv.table_ = table_item.new_table_name_;
-          need_priv.priv_set_ = OB_PRIV_CREATE | OB_PRIV_INSERT;
-          need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
-          ADD_NEED_PRIV(need_priv);
-        }
+        need_priv.db_ = table_item.origin_db_name_;
+        need_priv.table_ = table_item.origin_table_name_;
+        need_priv.priv_set_ = OB_PRIV_DROP | OB_PRIV_ALTER;
+        need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
+        ADD_NEED_PRIV(need_priv);
+        need_priv.db_ = table_item.new_db_name_;
+        need_priv.table_ = table_item.new_table_name_;
+        need_priv.priv_set_ = OB_PRIV_CREATE | OB_PRIV_INSERT;
+        need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
+        ADD_NEED_PRIV(need_priv);
       }
     }
   }
@@ -1570,8 +1269,6 @@ int get_create_table_like_stmt_need_privs(
     ObNeedPriv need_priv;
     const ObCreateTableLikeStmt *stmt = static_cast<const ObCreateTableLikeStmt *>(basic_stmt);
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, stmt->get_new_db_name()))) {
-      LOG_WARN("Can not do this operation on the database", K(session_priv), K(ret));
     } else {
       need_priv.db_ = stmt->get_origin_db_name();
       need_priv.table_ = stmt->get_origin_table_name();
@@ -1606,8 +1303,6 @@ int get_fork_table_stmt_need_privs(
     const ObForkTableStmt *stmt = static_cast<const ObForkTableStmt *>(basic_stmt);
     const obcall::ObForkTableArg &fork_table_arg = stmt->get_fork_table_arg();
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, fork_table_arg.dst_database_name_))) {
-      LOG_WARN("Can not do this operation on the database", K(session_priv), K(ret));
     } else {
       // Need SELECT privilege on source table
       need_priv.db_ = fork_table_arg.src_database_name_;
@@ -1644,8 +1339,6 @@ int get_fork_database_stmt_need_privs(
     const ObForkDatabaseStmt *stmt = static_cast<const ObForkDatabaseStmt *>(basic_stmt);
     const obcall::ObForkDatabaseArg &fork_database_arg = stmt->get_fork_database_arg();
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, fork_database_arg.src_database_name_))) {
-      LOG_WARN("Can not do this operation on the source database", K(session_priv), K(ret));
     } else {
       // Need SELECT privilege on source database
       need_priv.db_ = fork_database_arg.src_database_name_;
@@ -1662,7 +1355,7 @@ int get_fork_database_stmt_need_privs(
   return ret;
 }
 
-int get_sys_tenant_super_priv(
+int get_server_super_priv(
     const ObSessionPrivInfo &session_priv,
     const ObStmt *basic_stmt,
     ObIArray<ObNeedPriv> &need_privs)
@@ -1671,11 +1364,6 @@ int get_sys_tenant_super_priv(
   if (OB_ISNULL(basic_stmt)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else if (false &&
-             stmt::T_ALTER_SYSTEM_SET_PARAMETER != basic_stmt->get_stmt_type()) {
-    ret = OB_ERR_NO_PRIVILEGE;
-    LOG_WARN("Only sys tenant can do this operation",
-             K(ret), "stmt type", basic_stmt->get_stmt_type());
   } else {
     ObNeedPriv need_priv;
     need_priv.priv_set_ = OB_PRIV_SUPER;
@@ -1685,7 +1373,7 @@ int get_sys_tenant_super_priv(
   return ret;
 }
 
-int get_sys_tenant_alter_system_priv(
+int get_server_alter_system_priv(
     const ObSessionPrivInfo &session_priv,
     const ObStmt *basic_stmt,
     ObIArray<ObNeedPriv> &need_privs)
@@ -1694,20 +1382,6 @@ int get_sys_tenant_alter_system_priv(
   if (OB_ISNULL(basic_stmt)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else if (false &&
-             stmt::T_FLUSH_CACHE != basic_stmt->get_stmt_type() &&
-             stmt::T_ALTER_SYSTEM_SET_PARAMETER != basic_stmt->get_stmt_type() &&
-             stmt::T_FREEZE != basic_stmt->get_stmt_type() &&
-             stmt::T_CLEAR_MERGE_ERROR != basic_stmt->get_stmt_type() &&
-             stmt::T_ADMIN_MERGE != basic_stmt->get_stmt_type() &&
-             stmt::T_RECOVER != basic_stmt->get_stmt_type() &&
-             stmt::T_ALTER_SYSTEM_RESET_PARAMETER != basic_stmt->get_stmt_type() &&
-             stmt::T_MODULE_DATA != basic_stmt->get_stmt_type() &&
-             stmt::T_SERVICE_NAME != basic_stmt->get_stmt_type() &&
-             stmt::T_TRIGGER_STORAGE_CACHE != basic_stmt->get_stmt_type()) {
-    ret = OB_ERR_NO_PRIVILEGE;
-    LOG_WARN("Only sys tenant can do this operation",
-             K(ret), "stmt type", basic_stmt->get_stmt_type());
   } else {
     ObNeedPriv need_priv;
     need_priv.priv_set_ = OB_PRIV_ALTER_SYSTEM;
@@ -1773,85 +1447,6 @@ int get_load_data_stmt_need_privs(
     }
   }
 
-  return ret;
-}
-
-int get_create_tablegroup_stmt_need_privs(
-    const ObSessionPrivInfo &session_priv,
-    const ObStmt *basic_stmt,
-    ObIArray<ObNeedPriv> &need_privs)
-{
-  UNUSED(session_priv);
-  int ret = OB_SUCCESS;
-  UNUSED(session_priv);
-  if (OB_ISNULL(basic_stmt)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else if (OB_UNLIKELY(stmt::T_CREATE_TABLEGROUP != basic_stmt->get_stmt_type())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Stmt type should be T_CREATE_TABLEGROUP",
-             K(ret), "stmt type", basic_stmt->get_stmt_type());
-  } else {
-    if (OB_SUCC(ret)) {
-      ObNeedPriv need_priv;
-      need_priv.priv_set_ = OB_PRIV_CREATE;
-      need_priv.priv_level_ = OB_PRIV_USER_LEVEL;
-      ADD_NEED_PRIV(need_priv);
-    }
-  }
-  return ret;
-}
-
-int get_drop_tablegroup_stmt_need_privs(
-    const ObSessionPrivInfo &session_priv,
-    const ObStmt *basic_stmt,
-    ObIArray<ObNeedPriv> &need_privs)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(basic_stmt)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else if (OB_UNLIKELY(stmt::T_DROP_TABLEGROUP != basic_stmt->get_stmt_type())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Stmt type should be T_DROP_TABLEGROUP",
-             K(ret), "stmt type", basic_stmt->get_stmt_type());
-  } else {
-    const ObDropTablegroupStmt *stmt = static_cast<const ObDropTablegroupStmt *>(basic_stmt);
-    if (false
-        && 0 == stmt->get_tablegroup_name().compare(OB_SYS_TABLEGROUP_NAME)) { //tablegroup case sensetitive
-      ret = OB_ERR_NO_PRIVILEGE;
-      LOG_WARN("Only sys tenant can do drop sys tablegroup",
-               K(ret), "stmt type", basic_stmt->get_stmt_type());
-    } else {
-      ObNeedPriv need_priv;
-      need_priv.priv_set_ = OB_PRIV_DROP;
-      need_priv.priv_level_ = OB_PRIV_USER_LEVEL;
-      ADD_NEED_PRIV(need_priv);
-    }
-  }
-  return ret;
-}
-
-int get_alter_tablegroup_stmt_need_privs(
-    const ObSessionPrivInfo &session_priv,
-    const ObStmt *basic_stmt,
-    ObIArray<ObNeedPriv> &need_privs)
-{
-  UNUSED(session_priv);
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(basic_stmt)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else if (OB_UNLIKELY(stmt::T_ALTER_TABLEGROUP != basic_stmt->get_stmt_type())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Stmt type should be T_ALTER_TABLEGROUP",
-             K(ret), "stmt type", basic_stmt->get_stmt_type());
-  } else {
-    ObNeedPriv need_priv;
-    need_priv.priv_set_ = OB_PRIV_ALTER;
-    need_priv.priv_level_ = OB_PRIV_USER_LEVEL;
-    ADD_NEED_PRIV(need_priv);
-  }
   return ret;
 }
 
@@ -2015,10 +1610,6 @@ int get_lock_table_priv(
       if (OB_ISNULL(table_item)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table item is null");
-      } else if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv,
-                                                                  table_item->database_name_))) {
-        LOG_WARN("Can not do this operation on the database", K(session_priv),
-                 K(ret), "stmt_type", stmt->get_stmt_type());
       } else {
         need_priv.db_ = table_item->database_name_;
         need_priv.priv_set_ = OB_PRIV_LOCK_TABLE;
@@ -2036,50 +1627,6 @@ int get_lock_table_priv(
         }
       }
     }
-  }
-  return ret;
-}
-
-int get_create_ccl_priv(
-    const ObSessionPrivInfo &session_priv,
-    const ObStmt *basic_stmt,
-    ObIArray<ObNeedPriv> &need_privs)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(session_priv);
-  ObNeedPriv need_priv;
-  if (OB_ISNULL(basic_stmt)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else if (stmt::T_CREATE_CCL_RULE != basic_stmt->get_stmt_type()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected stmt type", K(basic_stmt->get_stmt_type()), K(ret));
-  } else {
-    need_priv.priv_set_ = OB_PRIV_CREATE;
-    need_priv.priv_level_ = OB_PRIV_USER_LEVEL;
-    ADD_NEED_PRIV(need_priv);
-  }
-  return ret;
-}
-
-int get_drop_ccl_priv(
-    const ObSessionPrivInfo &session_priv,
-    const ObStmt *basic_stmt,
-    ObIArray<ObNeedPriv> &need_privs)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(session_priv);
-  ObNeedPriv need_priv;
-  if (OB_ISNULL(basic_stmt)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else if (stmt::T_DROP_CCL_RULE != basic_stmt->get_stmt_type()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected stmt type", K(basic_stmt->get_stmt_type()), K(ret));
-  } else {
-    need_priv.priv_set_ = OB_PRIV_DROP;
-    need_priv.priv_level_ = OB_PRIV_USER_LEVEL;
-    ADD_NEED_PRIV(need_priv);
   }
   return ret;
 }
@@ -2161,9 +1708,8 @@ int ObPrivilegeCheck::check_privilege(
     ObStmtNeedPrivs &stmt_need_privs)
 {
   int ret = OB_SUCCESS;
-  if (ctx.disable_privilege_check_ == PRIV_CHECK_FLAG_DISABLE || ctx.is_remote_sql_) {
+  if (ctx.disable_privilege_check_ == PRIV_CHECK_FLAG_DISABLE) {
     //do not check privilege
-    // Remote SQL generation and execution plan do not need to check permissions, permission checks are all completed on the control end, unified process
   } else {
     if (OB_ISNULL(basic_stmt)
         || OB_ISNULL(ctx.session_info_)
@@ -2311,53 +1857,12 @@ int ObPrivilegeCheck::one_level_stmt_need_priv(const ObSessionPrivInfo &session_
         || stmt::get_stmt_type_idx(stmt_type) >= static_cast<int64_t>(sizeof(priv_check_funcs_) / sizeof(ObGetStmtNeedPrivsFunc))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Stmt type is error", K(ret), K(stmt_type));
-    } else if (session_priv.is_tenant_changed()
-               && !ObStmt::check_change_tenant_stmt(stmt_type)
-               && stmt_type != stmt::T_SYSTEM_GRANT) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("stmt invalid", K(ret), K(stmt_type), K(session_priv));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant changed, statement");
     } else if (OB_ISNULL(priv_check_funcs_[stmt::get_stmt_type_idx(stmt_type)])) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("No stmt privilege check function", K(ret), K(stmt_type));
     } else if (OB_FAIL(priv_check_funcs_[stmt::get_stmt_type_idx(stmt_type)](session_priv, basic_stmt, need_privs))) {
       LOG_WARN("Failed to check priv", K(ret), K(stmt_type));
     } else { }//do nothing
-  }
-  return ret;
-}
-
-int ObPrivilegeCheck::can_do_operation_on_db(
-    const ObSessionPrivInfo &session_priv,
-    const ObString &db_name)
-{
-  int ret = OB_SUCCESS;
-  if (session_priv.is_tenant_changed()
-      && 0 != db_name.case_compare(OB_SYS_DATABASE_NAME)) {
-    ret = OB_ERR_NO_DB_PRIVILEGE;
-    LOG_USER_ERROR(OB_ERR_NO_DB_PRIVILEGE, session_priv.user_name_.length(), session_priv.user_name_.ptr(),
-                   session_priv.host_name_.length(),session_priv.host_name_.ptr(),
-                   db_name.length(), db_name.ptr());
-  } else if (0 == db_name.case_compare(OB_INFORMATION_SCHEMA_NAME)
-             || 0 == db_name.case_compare(OB_RECYCLEBIN_SCHEMA_NAME)
-             //|| 0 == db_name.case_compare(OB_MYSQL_SCHEMA_NAME)
-             || 0 == db_name.case_compare(OB_SYS_DATABASE_NAME)) {
-    {
-      //do nothing
-		}
-  } else {
-		//do nothing
-  }
-  return ret;
-}
-
-int ObPrivilegeCheck::can_do_operation_on_db(const ObSessionPrivInfo &session_priv,
-                                             const ObIArray<const ObDmlTableInfo*> &table_infos,
-                                             const ObString &op_literal)
-{
-  int ret = OB_SUCCESS;
-  {
-    /* system tenant, no checking */
   }
   return ret;
 }
@@ -2369,18 +1874,11 @@ int ObPrivilegeCheck::can_do_grant_on_db_table(
     const ObString &table_name)
 {
   int ret = OB_SUCCESS;
-  if (session_priv.is_tenant_changed()) {
+  if (0 == db_name.case_compare(OB_INFORMATION_SCHEMA_NAME)) {
     ret = OB_ERR_NO_DB_PRIVILEGE;
     LOG_USER_ERROR(OB_ERR_NO_DB_PRIVILEGE, session_priv.user_name_.length(), session_priv.user_name_.ptr(),
                    session_priv.host_name_.length(),session_priv.host_name_.ptr(),
                    db_name.length(), db_name.ptr());
-  } else {
-    if (0 == db_name.case_compare(OB_INFORMATION_SCHEMA_NAME)) {
-      ret = OB_ERR_NO_DB_PRIVILEGE;
-      LOG_USER_ERROR(OB_ERR_NO_DB_PRIVILEGE, session_priv.user_name_.length(), session_priv.user_name_.ptr(),
-                     session_priv.host_name_.length(),session_priv.host_name_.ptr(),
-                     db_name.length(), db_name.ptr());
-    }
   }
   return ret;
 }
@@ -2390,12 +1888,7 @@ int ObPrivilegeCheck::can_do_drop_operation_on_db(
     const ObString &db_name)
 {
   int ret = OB_SUCCESS;
-  if (session_priv.is_tenant_changed()) {
-    ret = OB_ERR_NO_DB_PRIVILEGE;
-    LOG_USER_ERROR(OB_ERR_NO_DB_PRIVILEGE, session_priv.user_name_.length(), session_priv.user_name_.ptr(),
-                   session_priv.host_name_.length(),session_priv.host_name_.ptr(),
-                   db_name.length(), db_name.ptr());
-  } else if (0 == db_name.case_compare(OB_INFORMATION_SCHEMA_NAME)
+  if (0 == db_name.case_compare(OB_INFORMATION_SCHEMA_NAME)
       || 0 == db_name.case_compare(OB_SYS_DATABASE_NAME)
       || 0 == db_name.case_compare(OB_RECYCLEBIN_SCHEMA_NAME)
       || 0 == db_name.case_compare(OB_PUBLIC_SCHEMA_NAME)

@@ -28,9 +28,8 @@ namespace sql {
  *
  * DAS cannot unconditionally retry for the error of tablet_location or ls_location, like -4725, -4721,
  * and needs to determine whether the real cause of the error is due to DDL operations or stale location cache.
- * 1. When the table, partition or tenant was dropped, which is caused by DDL, das task cannot be retried.
- * 2. When tablet location cache is stale after metadata changes, tablet location cache should
- *    be updated and das task needs to be retried.
+ * 1. When the table or partition was dropped by DDL, the DAS task cannot be retried.
+ * 2. When tablet location cache is stale, tablet location cache should be updated and das task needs to be retried.
  *
  **/
 void ObDASRetryCtrl::tablet_location_retry_proc(ObDASRef &das_ref,
@@ -51,10 +50,10 @@ void ObDASRetryCtrl::tablet_location_retry_proc(ObDASRef &das_ref,
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid schema service", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    // tenant could be dropped
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    // The runtime schema may not be ready.
     task_op.set_errcode(ret);
-    LOG_WARN("get tenant schema guard fail", KR(ret));
+    LOG_WARN("get runtime schema guard fail", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( ref_table_id, table_schema))) {
     task_op.set_errcode(ret);
     LOG_WARN("failed to get table schema", KR(ret), K(ref_table_id));
@@ -88,11 +87,6 @@ void ObDASRetryCtrl::tablet_nothing_readable_proc(ObDASRef &das_ref, ObIDASTaskO
   } else {
     need_retry = true;
   }
-}
-
-void ObDASRetryCtrl::task_network_retry_proc(ObDASRef &, ObIDASTaskOp &, bool &need_retry)
-{
-  need_retry = true;
 }
 
 }  // namespace sql

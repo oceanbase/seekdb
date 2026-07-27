@@ -19,7 +19,7 @@
 
 #include "common/log/ob_log_cursor.h"
 #include "storage/slog_ckpt/ob_linked_macro_block_reader.h"
-#include "observer/omt/ob_tenant_meta.h"
+#include "observer/omt/ob_server_runtime_meta.h"
 namespace oceanbase
 {
 namespace storage
@@ -34,17 +34,17 @@ public:
 
   int read_checkpoint(const ObServerSuperBlock &super_block);
   common::ObIArray<blocksstable::MacroBlockId> &get_meta_block_list();
-  // Single sys tenant meta, valid=false if checkpoint has none
-  int get_tenant_meta(omt::ObTenantMeta &tenant_meta, bool &is_valid);
+  // Single server runtime meta; is_valid is false when no checkpoint entry exists.
+  int get_runtime_meta(omt::ObServerRuntimeMeta &runtime_meta, bool &is_valid);
 
 private:
-  int read_tenant_meta_checkpoint(const blocksstable::MacroBlockId &entry_block);
-  int deserialize_tenant_meta(const char *buf, const int64_t buf_len);
+  int read_runtime_meta_checkpoint(const blocksstable::MacroBlockId &entry_block);
+  int deserialize_runtime_meta(const char *buf, const int64_t buf_len);
 
 private:
-  ObLinkedMacroBlockItemReader tenant_meta_item_reader_;
-  omt::ObTenantMeta tenant_meta_;
-  bool tenant_meta_valid_ = false;
+  ObLinkedMacroBlockItemReader runtime_meta_item_reader_;
+  omt::ObServerRuntimeMeta runtime_meta_;
+  bool runtime_meta_valid_ = false;
 
 };
 

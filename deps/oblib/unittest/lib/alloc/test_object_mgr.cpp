@@ -173,12 +173,12 @@ TEST_F(TestObjectMgr, TestSubObjectMgr)
   void *ptr = ::mmap(0, total_size, PROT_READ, MAP_SHARED, fd, 0);
   abort_unless(ptr != MAP_FAILED);
   int64_t ctx_id = ObCtxIds::DEFAULT_CTX_ID;
-  auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(
+  auto ta = ObMallocAllocator::get_instance()->get_ctx_allocator(
     ctx_id);
   ObjectMgr som(*ta.ref_allocator(), false, INTACT_NORMAL_AOBJECT_SIZE, 1, false, NULL);
   ObMemAttr attr;
-  ObTenantResourceMgrHandle resource_handle;
-  ObResourceMgr::get_instance().get_tenant_resource_mgr(
+  ObResourceMgrHandle resource_handle;
+  ObResourceMgr::get_instance().get_handle(
 		  resource_handle);
   map<int64_t, AObject*> allocs;
   int i = total_size/sizeof(Record);

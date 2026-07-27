@@ -21,8 +21,7 @@
 #include "logservice/palf/log_group_buffer.h"
 #include "logservice/palf/log_group_entry.h"
 #include "logservice/palf/log_writer_utils.h"
-#include "share/rc/ob_tenant_base.h"
-#include "share/ob_cluster_version.h"
+#include "share/rc/ob_server_runtime.h"
 #undef private
 
 #include <gtest/gtest.h>
@@ -236,20 +235,28 @@ TEST(TestPaddingLogEntry, test_invalid_padding_log_entry)
   EXPECT_EQ(OB_SUCCESS, LogEntryHeader::generate_padding_log_buf(1+min_padding_valid_data_len, share::SCN::min_scn(), buf, min_padding_valid_data_len));
 }
 
-TEST(TestLogBaseHeader, reject_compressed_payload)
+TEST(TestLogBaseHeader, serialize_and_restore)
 {
   char buf[128] = {'\0'};
   logservice::ObLogBaseHeader encoded(logservice::ObLogBaseType::TRANS_SERVICE_LOG_BASE_TYPE,
-                                      logservice::ObReplayBarrierType::NO_NEED_BARRIER);
-  encoded.flag_ |= logservice::ObLogBaseHeader::PAYLOAD_IS_COMPRESSED;
+                                      logservice::ObReplayBarrierType::STRICT_BARRIER,
+                                      12345);
+  ASSERT_TRUE(encoded.is_valid());
+  EXPECT_TRUE(encoded.need_pre_replay_barrier());
+  EXPECT_TRUE(encoded.need_post_replay_barrier());
   int64_t pos = 0;
   ASSERT_EQ(OB_SUCCESS, encoded.serialize(buf, sizeof(buf), pos));
+  EXPECT_EQ(encoded.get_serialize_size(), pos);
 
   logservice::ObLogBaseHeader decoded;
   int64_t decode_pos = 0;
-  EXPECT_EQ(OB_NOT_SUPPORTED, decoded.deserialize(buf, pos, decode_pos));
-  EXPECT_TRUE(decoded.is_compressed());
+  ASSERT_EQ(OB_SUCCESS, decoded.deserialize(buf, pos, decode_pos));
   EXPECT_EQ(pos, decode_pos);
+  EXPECT_TRUE(decoded.is_valid());
+  EXPECT_EQ(logservice::ObLogBaseType::TRANS_SERVICE_LOG_BASE_TYPE, decoded.get_log_type());
+  EXPECT_TRUE(decoded.need_pre_replay_barrier());
+  EXPECT_TRUE(decoded.need_post_replay_barrier());
+  EXPECT_EQ(12345, decoded.get_replay_hint());
 }
 
 TEST(TestPaddingLogEntry, test_padding_log_entry)
@@ -364,10 +371,9 @@ TEST(TestPaddingLogEntry, test_padding_log_entry)
   LogGroupBuffer group_buffer;
   LSN start_lsn(0);
 
-  ObMallocAllocator::get_instance()->create_and_add_tenant_allocator();
   // init MTL
-  share::ObTenantBase tbase(1001);
-  share::ObTenantEnv::set_tenant(&tbase);
+  static share::ObServerRuntimeState runtime_state;
+  share::g_server_runtime = &runtime_state;
   EXPECT_EQ(OB_SUCCESS, group_buffer.init(start_lsn));
 
   const int64_t padding_valid_data_len = deserialize_group_entry.get_header().get_serialize_size() + padding_log_entry_header.get_serialize_size() + base_header.get_serialize_size();
@@ -382,7 +388,6 @@ TEST(TestPaddingLogEntry, test_padding_log_entry)
   serialize_buffer = NULL;
 
   group_buffer.destroy();
-  ObMallocAllocator::get_instance()->recycle_tenant_allocator();
 }
 
 TEST(TestPaddingLogEntry, test_generate_padding_log_entry)
@@ -517,8 +522,6 @@ int main(int argc, char **argv)
   system("rm -f print_info*");
   OB_LOGGER.set_file_name("test_log_entry_and_group_entry.log", true);
   OB_LOGGER.set_log_level("INFO");
-  oceanbase::common::ObClusterVersion::get_instance().cluster_version_ = CLUSTER_CURRENT_VERSION;
-  oceanbase::common::ObClusterVersion::get_instance().update_data_version(DATA_CURRENT_VERSION);
   PALF_LOG(INFO, "begin unittest::test_log_entry_and_group_entry");
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

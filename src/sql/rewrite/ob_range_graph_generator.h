@@ -79,8 +79,7 @@ public:
     : allocator_(allocator),
       ctx_(ctx),
       pre_range_graph_(pre_range_graph),
-      max_precise_offset_(column_cnt),
-      ss_max_precise_offset_(column_cnt)
+      max_precise_offset_(column_cnt)
   {}
 
   int generate_range_graph(const ObIArray<ObRawExpr*> &exprs,
@@ -132,8 +131,6 @@ private:
                           uint64_t *range_sizes,
                           bool &start_from_zero,
                           int64_t &min_offset);
-  int check_skip_scan_valid(ObRangeNode *range_node,
-                            ObRangeNode *&ss_head);
   static int generate_node_id(ObRangeNode *range_node, uint64_t &node_count);
 
   int check_graph_type(ObRangeNode *range_node);
@@ -160,7 +157,6 @@ private:
   int generate_expr_final_info();
 
   inline void update_max_precise_offset(int64_t offset) { max_precise_offset_ = std::min(max_precise_offset_, offset); }
-  inline void update_ss_max_precise_offset(int64_t offset) { ss_max_precise_offset_ = std::min(ss_max_precise_offset_, offset); }
   inline bool is_const_expr_or_null(int64_t idx) const
   {
     return idx < OB_RANGE_EXTEND_VALUE || OB_RANGE_NULL_VALUE == idx;
@@ -203,7 +199,6 @@ private:
   ObQueryRangeCtx &ctx_;
   ObPreRangeGraph *pre_range_graph_;
   int64_t max_precise_offset_;
-  int64_t ss_max_precise_offset_;
 };
 
 

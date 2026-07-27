@@ -93,7 +93,6 @@ int ObExprPrivSTClipByBox2D::process_input_geometry(omt::ObSrsCacheGuard &srs_gu
                    wkb2))) {
       LOG_WARN(
           "fail to read real string data", K(ret), K(arg2->obj_meta_.has_lob_header()), K(wkb2));
-    } else if (FALSE_IT(allocator.set_baseline_size(wkb1.length() + wkb2.length()))) {
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(
                    ctx, srs_guard, wkb1, srs1, true, N_PRIV_ST_CLIPBYBOX2D))) {
       LOG_WARN("fail to get srs item", K(ret), K(wkb1));
@@ -135,7 +134,7 @@ int ObExprPrivSTClipByBox2D::eval_priv_st_clipbybox2d(
   const ObSrsItem *srs2 = nullptr;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_CLIPBYBOX2D);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObString res_wkb;
   omt::ObSrsCacheGuard srs_guard;
 
@@ -184,9 +183,6 @@ int ObExprPrivSTClipByBox2D::eval_priv_st_clipbybox2d(
         res.set_string(res_wkb);
       }
     }
-  }
-  if (mem_ctx != nullptr) {
-    temp_allocator.add_ext_used((*mem_ctx)->arena_used());
   }
   return ret;
 }

@@ -27,7 +27,6 @@
 #include "sql/plan_cache/ob_plan_cache_value.h"
 #include "sql/plan_cache/ob_plan_set.h"
 #include "sql/plan_cache/ob_lib_cache_register.h"
-#include "sql/executor/ob_task_runner_notifier_service.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
 #include "sql/ob_end_trans_callback.h"
 #include "sql/plan_cache/ob_cache_object_factory.h"
@@ -80,14 +79,7 @@ inline int init_sql_expr_static_var()
 
 inline int init_sql_executor_singletons()
 {
-  int ret = common::OB_SUCCESS;
-  if (OB_FAIL(ObTaskRunnerNotifierService::build_instance())) {
-    SQL_LOG(ERROR, "fail to build ObTaskRunnerNotifierService instance", K(ret));
-  }
-  if (OB_FAIL(ret)) {
-    SQL_LOG(ERROR, "fail to init sql singletons", K(ret));
-  }
-  return ret;
+  return common::OB_SUCCESS;
 }
 
 inline void print_sql_stat()

@@ -34,12 +34,11 @@ static ObSimpleMemLimitGetter getter;
 namespace storage
 {
 
-class TestStorageLogRW : public TestDataFilePrepare
+class TestStorageLogRW : public blocksstable::TestDataFilePrepare
 {
 public:
   TestStorageLogRW()
-    : TestDataFilePrepare(&getter, "TestStorageLogRW"),
-      tenant_base1_(OB_SERVER_TENANT_ID),
+    : blocksstable::TestDataFilePrepare(&getter, "TestStorageLogRW"),
       slogger_(nullptr)
   {
   }
@@ -65,7 +64,6 @@ public:
       MAX(128, sysconf(_SC_NPROCESSORS_ONLN) * 2) : 64;
 
 public:
-  ObTenantBase tenant_base1_;
   ObLogCursor start_cursor_;
   blocksstable::ObLogFileSpec log_file_spec_;
   ObStorageLogBatchHeader dummy_header_;
@@ -82,11 +80,9 @@ void TestStorageLogRW::SetUp()
   log_file_spec_.log_create_policy_ = "normal";
   log_file_spec_.log_write_policy_ = "truncate";
 
-  ObTenantEnv::set_tenant(&tenant_base1_);
-  ASSERT_EQ(OB_SUCCESS, tenant_base1_.init());
-
-  TestDataFilePrepare::SetUp();
+  blocksstable::TestDataFilePrepare::SetUp();
   slogger_ = OB_NEW(ObStorageLogger, ObModIds::TEST);
+  ASSERT_NE(nullptr, slogger_);
   ASSERT_EQ(OB_SUCCESS, slogger_->init(
       OB_FILE_SYSTEM_ROUTER.get_slog_dir(),
       ObLogConstants::MAX_LOG_FILE_SIZE,
@@ -99,8 +95,11 @@ void TestStorageLogRW::SetUp()
 
 void TestStorageLogRW::TearDown()
 {
-  slogger_->destroy();
-  TestDataFilePrepare::TearDown();
+  if (nullptr != slogger_) {
+    slogger_->destroy();
+    OB_DELETE(ObStorageLogger, ObModIds::TEST, slogger_);
+  }
+  blocksstable::TestDataFilePrepare::TearDown();
 }
 
 TEST_F(TestStorageLogRW, test_basic)

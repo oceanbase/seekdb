@@ -98,7 +98,6 @@ adb shell "/data/local/tmp/seekdb --nodaemon \
   --parameter datafile_size=2G \
   --parameter datafile_maxsize=4G \
   --parameter log_disk_size=2G \
-  --parameter system_memory=1G \
   --log-level INFO"
 ```
 

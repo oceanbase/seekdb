@@ -33,7 +33,7 @@ namespace rootserver
 }
 namespace share
 {
-  class ObTabletReplica;
+  class ObTabletRuntimeInfo;
 }
 using namespace storage;
 using namespace share;
@@ -344,7 +344,7 @@ int ObIDiagnoseInfoMgr::alloc_and_add(const int64_t key, T *input_info)
 */
 class ObScheduleSuspectInfoMgr : public ObIDiagnoseInfoMgr {
 public:
-  static int mtl_init(ObScheduleSuspectInfoMgr *&schedule_suspect_info);
+  static int server_module_init(ObScheduleSuspectInfoMgr *&schedule_suspect_info);
   static int64_t cal_max();
   ObScheduleSuspectInfoMgr()
     : ObIDiagnoseInfoMgr()
@@ -358,7 +358,7 @@ public:
   int add_suspect_info(const int64_t key_value, ObScheduleSuspectInfo &info);
 
 public:
-  static constexpr double MEMORY_PERCENTAGE = 0.5;   // max size = tenant memory size * MEMORY_PERCENTAGE / 100
+  static constexpr double MEMORY_PERCENTAGE = 0.5;   // max size = runtime memory size * MEMORY_PERCENTAGE / 100
   static const int64_t POOL_MAX_SIZE = 48LL * 1024LL * 1024LL; // 48MB
 };
 
@@ -427,11 +427,11 @@ public:
   void reset();
   int init(common::ObIAllocator *allocator, ObCompactionDiagnoseInfo *info_array, const int64_t max_cnt);
   int diagnose_all_tablets();
-  int diagnose_tenant_tablet();
-  int diagnose_tenant(
+  int diagnose_database_tablets();
+  int diagnose_database(
     bool &diagnose_major_flag,
     int64_t &compaction_scn);
-  void diagnose_tenant_merge_state(
+  void diagnose_database_ls(
     const bool diagnose_major_flag,
     const int64_t compaction_scn,
     const ObLSStatusCache &ls_status);
@@ -439,11 +439,11 @@ public:
   void diagnose_failed_report_task(
       const ObTabletID &tablet_id,
       const int64_t compaction_scn);
-  // diagnose waiting or processing report task
-  void diagnose_existing_report_task();
+  // Diagnose waiting or processing local runtime metadata update tasks.
+  void diagnose_existing_runtime_meta_update_task();
   // output the count of different diagnose infos
   void diagnose_count_info();
-  int diagnose_tenant_major_merge();
+  int diagnose_database_major_merge();
   int64_t get_cnt() { return idx_; }
   ObCompactionDiagnoseInfo::ObDiagnoseStatus gen_diagnose_status(int64_t scn) 
   {
@@ -457,10 +457,10 @@ public:
       const int64_t merge_version,
       ObTabletMergeDag &dag,
       ObDiagnoseTabletCompProgress &input_progress);
-  static bool is_compaction_report_info(const share::ObSuspectInfoType &suspect_info_type)
+  static bool is_runtime_meta_update_suspect(const share::ObSuspectInfoType &suspect_info_type)
   {
-    return ObSuspectInfoType::SUSPECT_COMPACTION_REPORT_ADD_FAILED == suspect_info_type
-      || ObSuspectInfoType::SUSPECT_COMPACTION_REPORT_PROGRESS_FAILED == suspect_info_type;
+    return ObSuspectInfoType::SUSPECT_RUNTIME_META_UPDATE_ADD_FAILED == suspect_info_type
+      || ObSuspectInfoType::SUSPECT_RUNTIME_META_UPDATE_PROGRESS_FAILED == suspect_info_type;
   }
 
 private:
@@ -496,7 +496,6 @@ private:
       char *buf,
       const int64_t buf_len);
 
-  int diagnose_medium_scn_table();
   OB_INLINE bool can_add_diagnose_info() { return idx_ < max_cnt_; }
   int get_and_set_suspect_info(
       const ObMergeType merge_type,
@@ -510,15 +509,15 @@ private:
       const int64_t buf_len);
   int check_if_need_diagnose(rootserver::ObMajorFreezeService *&major_freeze_service,
                              bool &need_diagnose) const;
-  int do_tenant_major_merge_diagnose(rootserver::ObMajorFreezeService *major_freeze_service);
-  int add_uncompacted_tablet_to_diagnose(const ObIArray<share::ObTabletReplica> &uncompacted_tablets);
+  int do_database_major_merge_diagnose(rootserver::ObMajorFreezeService *major_freeze_service);
+  int add_uncompacted_tablet_to_diagnose(const ObIArray<share::ObTabletRuntimeInfo> &uncompacted_tablets);
   void add_uncompacted_table_ids_to_diagnose(const ObIArray<uint64_t> &uncompacted_table_ids);
 private:
   static const int64_t NS_TIME = 1000L * 1000L * 1000L;
   static const int64_t WAIT_MEDIUM_SCHEDULE_INTERVAL = NS_TIME * 60L * 5; // 5min // ns
   static const int64_t TOLERATE_MEDIUM_SCHEDULE_INTERVAL = NS_TIME * 60L * 60L * 36; // 36 hour
   static const int64_t DIAGNOSE_TABELT_MAX_COUNT = 10; // same type diagnose tablet max count
-  static const int64_t MAX_REPORT_TASK_DIAGNOSE_CNT = 3;
+  static const int64_t MAX_RUNTIME_META_TASK_DIAGNOSE_CNT = 3;
   typedef ObSEArray<ObDiagnoseTablet, ObDiagnoseTabletMgr::DEFAULT_DIAGNOSE_TABLET_COUNT> DiagnoseTabletArray;
   bool is_inited_;
   bool normal_; // true means the tablet doesn't have any diagnose info

@@ -19,7 +19,7 @@
 
 #include "lib/utility/ob_print_utils.h"
 #include "lib/container/ob_array.h"
-#include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_dag_scheduler.h"
 #include "storage/ddl/ob_ddl_batch_datum_rows.h"
 #include "storage/ddl/ob_ddl_row_tmp_file.h"
 

@@ -114,7 +114,7 @@ TEST(TestDtlRpcChannel, Basic)
 
 //   // Create a DtlChannelInfo object, ci1 and ci2 are the channel information at both ends of the same channel.
 //   ObDtlChannelInfo ci1, ci2;
-//   const uint64_t tenant_id = OB_SERVER_TENANT_ID;
+//   const uint64_t tenant_id = OB_SERVER_RUNTIME_ID;
 //   int ret = ObDtlChannelGroup::make_channel(tenant_id, self_addr, self_addr, ci1, ci2);
 //   ASSERT_EQ(OB_SUCCESS, ret);
 
@@ -129,7 +129,7 @@ TEST(TestDtlRpcChannel, Basic)
 //   // Simulate sending a message in one of the ChannelPort (ch1)
 //   ObMallocAllocator *malloc_allocator = ObMallocAllocator::get_instance();
 //   ASSERT_NE(nullptr, malloc_allocator);
-//   auto ta = malloc_allocator->get_tenant_ctx_allocator(tenant_id);
+//   auto ta = malloc_allocator->get_ctx_allocator(tenant_id);
 //   ASSERT_NE(nullptr, ta);
 //   const uint64_t hold = ta->get_hold();
 //   Msg msg1;

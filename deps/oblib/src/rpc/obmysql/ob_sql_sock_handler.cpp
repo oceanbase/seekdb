@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RPC_OBMYSQL
 #include "rpc/obmysql/ob_sql_sock_handler.h"
 #include "rpc/obmysql/ob_sql_sock_processor.h"
+#include "rpc/frame/ob_req_deliver.h"
 
 namespace oceanbase
 {
@@ -77,43 +78,6 @@ void ObSqlSockHandler::on_flushed(void* udata)
   sess->on_flushed();
 }
 
-/*
-share::ObTenantSpace* global_tenant_space = NULL;
-int process_my_request(rpc::frame::ObReqProcessor& processor, rpc::ObRequest& req)
-{
-  ObAddr myaddr;
-  ObCurTraceId::set(req.generate_trace_id(myaddr));
-  ob_setup_default_tsi_warning_buffer();
-  ob_reset_tsi_warning_buffer();
-
-  processor.set_ob_request(req);
-  processor.run();
-  ObCurTraceId::reset();
-  return 0;
-}
-
-int handle_sql_req_inplace(void* udata)
-{
-  int ret = OB_SUCCESS;
-  auto *pm = common::ObPageManager::thread_local_instance();
-  pm->set_tenant_ctx(OB_SERVER_TENANT_ID, ObCtxIds::DEFAULT_CTX_ID);
-  lib::ContextTLOptGuard guard(true);
-  lib::ContextParam param;
-  param.set_mem_attr(ObModIds::OB_SQL_EXECUTOR, ObCtxIds::DEFAULT_CTX_ID)
-      .set_properties(lib::USE_TL_PAGE_OPTIONAL)
-      .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
-  CREATE_WITH_TEMP_CONTEXT(param) {
-    THIS_WORKER.set_allocator(&CURRENT_CONTEXT->get_arena_allocator());
-    CREATE_WITH_TEMP_ENTITY(RESOURCE_OWNER, OB_SERVER_TENANT_ID) {
-      WITH_ENTITY(global_tenant_space) {
-        ObSqlSockSession* sess = (ObSqlSockSession*)udata;
-        ret = process_my_request(sess->req_processor_, sess->sock_req_);
-      }
-    }
-  }
-  return ret;
-}
-*/
 int ObSqlSockHandler::on_readable(void* udata)
 {
   int ret = OB_SUCCESS;

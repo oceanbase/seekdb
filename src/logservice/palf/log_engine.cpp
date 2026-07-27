@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX PALF
 #include "log_engine.h"
-#include "logservice/ob_tenant_mutil_allocator.h"  // ObILogAllocator
+#include "logservice/ob_log_allocator.h"  // ObILogAllocator
 #include "log_io_worker.h"                              // LogIOWorker
 #include "log_shared_task.h"                            // LogSharedTask
 
@@ -57,7 +57,7 @@ int LogEngine::append_log_meta_(const LogMeta &log_meta)
   int64_t pos = 0;
   char *buf = NULL;
   const int64_t buf_len = MAX_META_ENTRY_SIZE;
-  if (NULL == (buf = reinterpret_cast<char *>(mtl_malloc(buf_len,
+  if (NULL == (buf = reinterpret_cast<char *>(ob_malloc(buf_len,
             "LogEngine")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     PALF_LOG(ERROR, "allocate memory failed", K(ret), K_(is_inited));
@@ -67,7 +67,7 @@ int LogEngine::append_log_meta_(const LogMeta &log_meta)
     PALF_LOG(ERROR, "log_meta_storage_ append failed", K(ret), K_(is_inited));
   }
   if (NULL != buf) {
-    mtl_free(buf);
+    ob_free(buf);
   }
   return ret;
 }
@@ -424,8 +424,7 @@ int LogEngine::submit_purge_throttling_task(const PurgeThrottlingType purge_type
   } else if (OB_UNLIKELY(!purge_cb_ctx.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "Invalid argument!!!", K(purge_cb_ctx));
-  } else if ((!need_force_purge(purge_type)) &&
-             (cur_ts - last_purge_throttling_ts_ <= PURGE_THROTTLING_INTERVAL)) {
+  } else if (cur_ts - last_purge_throttling_ts_ <= PURGE_THROTTLING_INTERVAL) {
     PALF_LOG(INFO, "no need to purge throttling according to PURGE_THROTTLING_INTERVAL",
     K(purge_cb_ctx), K(last_purge_throttling_ts_), K(cur_ts), K(PURGE_THROTTLING_INTERVAL));
   } else if (OB_FAIL(generate_purge_throttling_task_(purge_cb_ctx, purge_task))) {
@@ -434,8 +433,8 @@ int LogEngine::submit_purge_throttling_task(const PurgeThrottlingType purge_type
     PALF_LOG(WARN, "submit_io_task failed", K(purge_cb_ctx));
   } else {
     last_purge_throttling_ts_ = cur_ts;
-    PALF_LOG(INFO, "submit_purge_throttling success", K(last_purge_throttling_ts_), "purge_type",
-             get_purge_throttling_type_str(purge_type));
+    PALF_LOG(INFO, "submit_purge_throttling success", K(last_purge_throttling_ts_),
+        "purge_type", purge_throttling_type_2_str(purge_type));
   }
   if (OB_FAIL(ret) && OB_NOT_NULL(purge_task)) {
     alloc_mgr_->free_log_io_purge_throttling_task(purge_task);
@@ -598,7 +597,7 @@ int LogEngine::delete_block(const block_id_t &block_id)
     PALF_LOG(INFO, "delete success", K(block_id), K_(is_inited));
   }
 
-  // the block whose names with 'block_id' may be concurrently delete by rebuild,
+  // The block named by 'block_id' may be concurrently deleted while advancing base info;
   // in this way, we don't need update min block info.
   if (OB_NO_SUCH_FILE_OR_DIRECTORY == ret) {
     PALF_LOG(INFO, "file not exist, may be concurrently delete by others module", K(ret), K(block_id));
@@ -672,7 +671,7 @@ int LogEngine::get_min_block_info_for_gc(block_id_t &block_id, SCN &max_scn)
   } else if (OB_FAIL(get_block_min_scn(min_block_id+1, min_block_max_scn))) {
     PALF_LOG(TRACE, "get_block_min_scn failed", K(ret));
   } else {
-    // after the first call, 'min_block_max_scn_' is always valid except after rebuild or truncate.
+    // after the first call, 'min_block_max_scn_' is always valid (except after base-info advancement or truncate)
     // it's important to get 'min_block_info_cache_version' before 'get_block_min_scn', otherwise, the cache of
     // min block info(i.e. min_block_max_scn_, min_block_min_scn_) is incorrect, consider following case:
     // T1 timestamp, thread A call get_min_block_info_for_gc, and get_block_min_scn successfully(e.g. min_block_id is 10);
@@ -714,7 +713,7 @@ int LogEngine::get_min_block_info(block_id_t &block_id, SCN &min_scn)
   } else if (OB_FAIL(get_block_min_scn(min_block_id, min_block_min_scn))) {
     PALF_LOG(TRACE, "get_block_min_scn failed", K(ret));
   } else {
-    // after the first call, 'min_block_min_scn_' is always valid except after rebuild or truncate.
+    // after the first call, 'min_block_min_scn_' is always valid (except after base-info advancement or truncate)
     // it's important to get 'min_block_info_cache_version' before 'get_block_min_scn', otherwise, the cache of
     // min block info(i.e. min_block_min_scn_) is incorrect, consider following case:
     //
@@ -992,7 +991,7 @@ int LogEngine::generate_flush_meta_task_(const FlushMetaCbCtx &flush_meta_cb_ctx
   } else if (NULL == (flush_meta_task = alloc_mgr_->alloc_log_io_flush_meta_task(palf_epoch_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     PALF_LOG(ERROR, "alloc_log_io_flush_meta_task failed", K(ret));
-  } else if (NULL == (buf = reinterpret_cast<char *>(mtl_malloc(buf_len,
+  } else if (NULL == (buf = reinterpret_cast<char *>(ob_malloc(buf_len,
             "LogEngine")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     PALF_LOG(ERROR, "allocate memory failed", K(ret), K_(is_inited));
@@ -1007,7 +1006,7 @@ int LogEngine::generate_flush_meta_task_(const FlushMetaCbCtx &flush_meta_cb_ctx
   if (OB_FAIL(ret)) {
     //free memory
     if (NULL != buf) {
-      mtl_free(buf);
+      ob_free(buf);
     }
     if (NULL != flush_meta_task) {
       alloc_mgr_->free_log_io_flush_meta_task(flush_meta_task);
@@ -1076,7 +1075,6 @@ int LogEngine::serialize_log_meta_(const LogMeta& log_meta, char *buf, int64_t b
   return ret;
 }
 
-
 // Background: 
 int LogEngine::try_clear_up_holes_and_check_storage_integrity_(
     const LSN &last_entry_begin_lsn,
@@ -1103,7 +1101,7 @@ int LogEngine::try_clear_up_holes_and_check_storage_integrity_(
       && OB_ENTRY_NOT_EXIST != ret) {
     PALF_LOG(ERROR, "get_block_id_range failed", K(ret), K_(is_inited));
   } else if (OB_ENTRY_NOT_EXIST == ret) {
-    // For empty directory, ethier 'base_lsn' is initial lsn or 'prev_log_info(rebuild)' is valid,
+    // For an empty directory, either 'base_lsn' is the initial LSN or restored 'prev_log_info' is valid;
     // meanwhile, 'expected_next_block_id' must be smaller than or eaul to 'base_block_id'.
     if (true == is_valid_block_id(expected_next_block_id)
         && expected_next_block_id > base_block_id) {
@@ -1116,8 +1114,8 @@ int LogEngine::try_clear_up_holes_and_check_storage_integrity_(
       ret = OB_SUCCESS;
     }
     // If log_storage_ is not empty but last_group_entry_header is invalid, unexpected error.
-    // For rebuild, the base_lsn may be greater than the log_tail of LogStorage because we
-    // update LogSnapshotMeta firstly.
+    // During physical restore, base_lsn may be greater than LogStorage's tail because
+    // LogSnapshotMeta is updated first.
   } else if (log_storage_.get_end_lsn() != base_lsn && !last_group_entry_header.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     PALF_LOG(ERROR, "unexpected error, LogStorage are not empty bus last log entry is invalid",
@@ -1132,7 +1130,7 @@ int LogEngine::try_clear_up_holes_and_check_storage_integrity_(
     //
     // Ensure that:
     // 1. check LogStorage integrity only when 'expected_next_block_id' is greater than
-    // 'base_block_id', consider rebuild, all blocks on disk may be deleted.;
+    // 'base_block_id'; physical restore may have discarded all older blocks;
     // 2. 'min_block_id' must be smaller than or equal to 'base_block_id';
     // 3. the last block is integral, means that 'max_block_id' is ethier equal to
     // 'expected_next_block_id'(last block is
@@ -1155,7 +1153,7 @@ int LogEngine::try_clear_up_holes_and_check_storage_integrity_(
                "less than base block "
                "or last block is incorrect)",
                K(min_block_id), K(base_block_id), K(expected_next_block_id), K(max_block_id));
-      // NB: If just advance 'base_lsn' in rebuild, we need handle holes for 'get_block_id_range',
+      // NB: Advancing 'base_lsn' can create holes that 'get_block_id_range' must handle;
       // an easy way to do this is that, after advance 'base_lsn', the 'min_block_id_' of
       // 'LogBlockMgr' is lsn_2_block('base_lsn', PALF_BLOCK_SIZE), meanwhile, we need make
       // 'BlockGCTimerTask' can see the really 'min_block_id_' and 'max_block_id_'.
@@ -1164,8 +1162,8 @@ int LogEngine::try_clear_up_holes_and_check_storage_integrity_(
 
     // Deleting holes before 'base_block_id'
     // NB: deleting holes only when 'prev_log_info' is valid. 'prev_log_info' is valid means that
-    // the rebuild option has occured, and we can't known previous log which before 'base_lsn'
-    // whether has been confirmed, therefore, delete these blocks.
+    // physical restore has advanced base info and we cannot determine whether logs before
+    // 'base_lsn' were confirmed, so delete these blocks.
     // if the tail of last entry (log_storage_tail) is smaller than or equal to base lsn, need
     // reset last_group_entry_header, PalfHandleImpl will be inited with the prev log info saved
     // snapshot meta.
@@ -1175,7 +1173,7 @@ int LogEngine::try_clear_up_holes_and_check_storage_integrity_(
             K(base_block_id), K_(is_inited));
       } else if (base_lsn >= last_group_entry_header.get_committed_end_lsn()) {
         PALF_LOG(WARN, "the max committed end lsn is smaller than or equal to base_lsn,"
-            " there is a rebuild operation before restart, and we will use prev_log_info"
+            " base info was advanced before restart, and we will use prev_log_info"
             " to construct PalfBaseInfo", K(base_lsn), K(last_group_entry_header),
             K(log_snapshot_meta));
         last_group_entry_header.reset();

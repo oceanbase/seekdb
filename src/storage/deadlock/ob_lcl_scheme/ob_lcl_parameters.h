@@ -25,16 +25,16 @@ namespace share
 namespace detector
 {
 
-constexpr const int64_t MAX_CLOCK_DIFF = 50L * 1000L;// 50ms
-constexpr const int64_t MAX_MSG_DELAY = 40L * 1000L;// 40ms
-constexpr const int64_t SEND_MSG_LIMIT_INTERVAL = 10L * 1000L;// 10ms
-constexpr const int64_t MIN_CYCLY_SIZE_SUPPORTED = 10;// 10 node
-constexpr const int64_t RANDOM_DELAY_RANGE = 100L * 1000L;// 100ms
+constexpr const int64_t LOCAL_TIMER_JITTER = 50L * 1000L;// 50ms
+constexpr const int64_t LOCAL_DISPATCH_BUDGET = 40L * 1000L;// 40ms
+constexpr const int64_t LOCAL_PROPAGATION_INTERVAL = 10L * 1000L;// 10ms
+constexpr const int64_t MIN_CYCLE_SIZE_SUPPORTED = 10;// 10 nodes
+constexpr const int64_t LOCAL_RANDOM_DELAY_RANGE = 100L * 1000L;// 100ms
 constexpr const int64_t TIMER_SCHEDULE_RESERVE_TIME = 1L * 1000L;// 1ms
-constexpr const int64_t PHASE_TIME = 2 * MAX_CLOCK_DIFF +
-                                     RANDOM_DELAY_RANGE + 
-                                     (MAX_MSG_DELAY + SEND_MSG_LIMIT_INTERVAL) * 
-                                     MIN_CYCLY_SIZE_SUPPORTED;// 700ms
+constexpr const int64_t PHASE_TIME = 2 * LOCAL_TIMER_JITTER +
+                                     LOCAL_RANDOM_DELAY_RANGE +
+                                     (LOCAL_DISPATCH_BUDGET + LOCAL_PROPAGATION_INTERVAL) *
+                                     MIN_CYCLE_SIZE_SUPPORTED;// 700ms
 constexpr const int64_t PERIOD = 2 * PHASE_TIME;// 1.4s
 constexpr const int64_t COMMON_BLOCK_SIZE = 3;// assume element number in block list not more than 3
                                               // in most scenarios

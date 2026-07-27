@@ -163,8 +163,8 @@ public:
 private:
 
   OB_INLINE static int64_t &global_stack_top() { RLOCAL(int64_t, val); return val; }
-  OB_INLINE static ObPostfixExpressionCalcStack *global_stack()
-  { return GET_TSI_MULT(ObPostfixExpressionCalcStack, TSI_STACK_IDENTIFIER); }
+  OB_INLINE static ObExpressionCalcStack *global_stack()
+  { return GET_TSI_MULT(ObExpressionCalcStack, TSI_STACK_IDENTIFIER); }
 
   int eval(common::ObExprCtx &expr_ctx, const common::ObNewRow &row,
       common::ObObj *stack, const int64_t pos) const;

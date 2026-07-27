@@ -34,7 +34,6 @@
 #include "ob_log_window_function.h"
 #include "ob_log_select_into.h"
 #include "ob_log_topk.h"
-#include "ob_log_sequence.h"
 #include "ob_log_insert.h"
 #include "ob_log_granule_iterator.h"
 #include "ob_log_monitoring_dump.h"
@@ -229,13 +228,6 @@ ObLogicalOperator *ObLogOperatorFactory::allocate(ObLogPlan &plan, ObLogOpType t
     ptr = allocator_.alloc(sizeof(ObLogJoinFilter));
     if (NULL != ptr) {
       ret_op = new (ptr) ObLogJoinFilter(plan);
-    } else { /* do nothing */ }
-    break;
-  }
-  case LOG_SEQUENCE: {
-    ptr = allocator_.alloc(sizeof(ObLogSequence));
-    if (NULL != ptr) {
-      ret_op = new (ptr) ObLogSequence(plan);
     } else { /* do nothing */ }
     break;
   }

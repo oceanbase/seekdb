@@ -131,7 +131,7 @@ def check_data_and_format(data, var):
 
         common_ordered_dict = OrderedDict()
         for key in common_item:
-            if key not in ['cluster','tenant']:
+            if key not in ['cluster','runtime']:
                 print("[merge_extra][ERROR] extra 文件字段数据不合预期, 请检查输入文件")
                 exit(ERROR_CODE.COMMON_ERROR)
             next_common_data = common_item[key]
@@ -177,8 +177,8 @@ def format_json(data, indent=2):
     json_str = json.dumps(data, indent=indent, separators=(',', ': '), ensure_ascii=False)
     # 动态生成缩进
     indent_str = " " * (indent + 4)  # 缩进 = 父级缩进 + 4 个空格
-    # 替换 "tenant": [] 为 "tenant": [\n]
-    json_str = json_str.replace('"tenant": []', '"tenant": [\n{}]'.format(indent_str))
+    # Preserve the expanded formatting of an empty runtime list.
+    json_str = json_str.replace('"runtime": []', '"runtime": [\n{}]'.format(indent_str))
     json_str = json_str.replace('"cluster": []', '"cluster": [\n{}]'.format(indent_str))
     return json_str
 
@@ -215,7 +215,7 @@ def merge_scenario(default_scenario, extra_scenario, var):
         extra_params = extra_scenario.get('parameters', {})
     merged_params = {}
     
-    # 处理cluster和tenant的合并
+    # Merge cluster and runtime parameter groups.
     for param_type in default_params:
         default_list = default_params.get(param_type, [])
         extra_list = extra_params.get(param_type, [])

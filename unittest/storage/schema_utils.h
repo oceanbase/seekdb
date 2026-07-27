@@ -40,7 +40,6 @@ public:
 private:
   static const int64_t TEST_ROWKEY_COLUMN_CNT = 3;
   static const int64_t TEST_COLUMN_CNT = 6;
-  static const uint64_t TEST_TENANT_ID = 1;
 };
 
 void TestSchemaUtils::prepare_data_schema(share::schema::ObTableSchema &table_schema)
@@ -54,7 +53,6 @@ void TestSchemaUtils::prepare_data_schema(share::schema::ObTableSchema &table_sc
   ret = table_schema.set_table_name("test_ls_tablet_service_data_table");
   ASSERT_EQ(common::OB_SUCCESS, ret);
   table_schema.set_schema_version(100);
-  table_schema.set_tablegroup_id(1);
   table_schema.set_database_id(1);
   table_schema.set_table_id(table_id);
   table_schema.set_rowkey_column_num(TEST_ROWKEY_COLUMN_CNT);
@@ -104,7 +102,6 @@ void TestSchemaUtils::prepare_index_schema(share::schema::ObTableSchema &index_s
   index_schema.reset();
   ret = index_schema.set_table_name("test_ls_tablet_service_index_table");
   ASSERT_EQ(common::OB_SUCCESS, ret);
-  index_schema.set_tablegroup_id(1);
   index_schema.set_database_id(1);
   index_schema.set_table_id(index_table_id);
   index_schema.set_rowkey_column_num(col_cnt);

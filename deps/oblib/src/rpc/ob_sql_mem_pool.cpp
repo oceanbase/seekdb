@@ -43,7 +43,7 @@ struct ObSqlMemPool::Page
 };
 static void* rpc_mem_pool_direct_alloc(const char* label, int64_t sz) {
   ObMemAttr attr(label, common::ObCtxIds::DEFAULT_CTX_ID);
-  lib::ObTenantCtxAllocatorGuard allocator = lib::ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(common::ObCtxIds::DEFAULT_CTX_ID);
+  lib::ObCtxAllocatorGuard allocator = lib::ObMallocAllocator::get_instance()->get_ctx_allocator(common::ObCtxIds::DEFAULT_CTX_ID);
   if (OB_ISNULL(allocator)) {
     
   }

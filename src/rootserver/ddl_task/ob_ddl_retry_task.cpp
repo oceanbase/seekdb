@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_ddl_retry_task.h"
-#include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "share/ob_ddl_sim_point.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
@@ -29,7 +29,7 @@ using namespace oceanbase::rootserver;
 using namespace oceanbase::obcall;
 
 ObDDLRetryTask::ObDDLRetryTask()
-  : ObDDLTask(share::DDL_INVALID), ddl_arg_(nullptr), root_service_(nullptr), affected_rows_(0), 
+  : ObDDLTask(share::DDL_INVALID), ddl_arg_(nullptr), local_management_service_(nullptr), affected_rows_(0),
     forward_user_message_(), allocator_(lib::ObLabel("RedefTask")), is_schema_change_done_(false)
 {
 }
@@ -148,9 +148,9 @@ int ObDDLRetryTask::init(const int64_t task_id,
       ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_id), K(object_id),
       K(schema_version), K(ddl_type), KP(ddl_arg), K(task_status));
-  } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, root service is null", K(ret));
+    LOG_WARN("error sys, local management service is null", K(ret));
     LOG_WARN("fail to init task table operator", K(ret));
   } else if (OB_FAIL(deep_copy_ddl_arg(allocator_, ddl_type, ddl_arg))) {
     LOG_WARN("deep copy ddl arg failed", K(ret));
@@ -181,9 +181,9 @@ int ObDDLRetryTask::init(const ObDDLTaskRecord &task_record)
     LOG_WARN("invalid argument", K(ret), K(task_record));
   } else if (OB_FAIL(DDL_SIM(task_record.task_id_, DDL_TASK_INIT_BY_RECORD_FAILED))) {
     LOG_WARN("ddl sim failure", K(task_record.task_id_));
-  } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, root service is null", K(ret));
+    LOG_WARN("error sys, local management service is null", K(ret));
   } else {
   
     object_id_ = task_record.object_id_;
@@ -338,7 +338,7 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
         arg->is_add_to_scheduler_ = false;
         arg->task_id_ = task_id_;
         ObDDLUtil::get_ddl_rpc_timeout_for_database(object_id_, timeout_us);
-        if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_database(*arg, drop_database_res); }))) {
+        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_database(*arg, drop_database_res); }))) {
           LOG_WARN("fail to drop database", K(ret));
         } else {
           affected_rows_ = drop_database_res.affected_row_;
@@ -350,7 +350,7 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
         obcall::ObDropTableArg *arg = static_cast<obcall::ObDropTableArg *>(ddl_arg_);
         arg->is_add_to_scheduler_ = false;
         arg->task_id_ = task_id_;
-        if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_table(*arg, res); }))) {
+        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_table(*arg, res); }))) {
           LOG_WARN("fail to drop table", K(ret));
         }
         break;
@@ -360,7 +360,7 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
         obcall::ObTruncateTableArg *arg = static_cast<obcall::ObTruncateTableArg *>(ddl_arg_);
         arg->is_add_to_scheduler_ = false;
         arg->task_id_ = task_id_;
-        if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->truncate_table(*arg, res); }))) {
+        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->truncate_table(*arg, res); }))) {
           LOG_WARN("fail to truncate table", K(ret));
         }
         break;
@@ -374,7 +374,7 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
         obcall::ObAlterTableArg *arg = static_cast<obcall::ObAlterTableArg *>(ddl_arg_);
         arg->is_add_to_scheduler_ = false;
         arg->task_id_ = task_id_;
-        if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->alter_table(*arg, alter_table_res_); }))) {
+        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->alter_table(*arg, alter_table_res_); }))) {
           LOG_WARN("fail to alter table", K(ret));
         }
         break;

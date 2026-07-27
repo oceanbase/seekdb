@@ -315,7 +315,7 @@ st_astext(lin)
 LINESTRING(1 1,2 2)
 drop table gis_line;
 DROP TABLE IF EXISTS gis_point;
-CREATE TABLE `gis_point` (   `id` bigint(20) NOT NULL AUTO_INCREMENT,   `x` decimal(19,16) DEFAULT NULL,   `y` decimal(19,16) DEFAULT NULL,   `poi` point NOT NULL /*!80003 SRID 4326 */,   PRIMARY KEY (`id`),   KEY `xy_index` (`x`, `y`) BLOCK_SIZE 16384 LOCAL,   SPATIAL KEY `poi_index` (`poi`) BLOCK_SIZE 16384 LOCAL ) AUTO_INCREMENT = 1196000001 DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 3 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0;
+CREATE TABLE `gis_point` (   `id` bigint(20) NOT NULL AUTO_INCREMENT,   `x` decimal(19,16) DEFAULT NULL,   `y` decimal(19,16) DEFAULT NULL,   `poi` point NOT NULL /*!80003 SRID 4326 */,   PRIMARY KEY (`id`),   KEY `xy_index` (`x`, `y`) BLOCK_SIZE 16384 LOCAL,   SPATIAL KEY `poi_index` (`poi`) BLOCK_SIZE 16384 LOCAL ) AUTO_INCREMENT = 1196000001 DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0;
 select concat((select st_astext(poi) from gis_point order by id desc limit 1),(select st_astext(poi) from gis_point order by id desc limit 1)) ;
 concat((select st_astext(poi) from gis_point order by id desc limit 1),(select st_astext(poi) from gis_point order by id desc limit 1))
 NULL
@@ -423,7 +423,7 @@ drop table cities;
 CREATE TABLE `t_geo` (
 `geo` geometry NOT NULL,
 SPATIAL KEY `SP_GEO` (`geo`) BLOCK_SIZE 16384 LOCAL
-) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0;
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0;
 insert into t_geo values(st_geomfromtext('POINT(1.2345678987654322e24 -1.2345678998765433e25)'));
 insert into t_geo values(st_geomfromtext('GEOMETRYCOLLECTION(MULTIPOINT((2 -1),(11831.743318109031 -63273.949623278015),(0 -1)))'));
 insert into t_geo values(st_geomfromtext('GEOMETRYCOLLECTION EMPTY'));

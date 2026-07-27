@@ -988,9 +988,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>UNION_MERGE { return UNION_MERGE_HINT; }
 <hint>USE_DAS { return USE_DAS_HINT; }
 <hint>NO_USE_DAS { return NO_USE_DAS_HINT; }
-<hint>INDEX_SS { return INDEX_SS_HINT; }
-<hint>INDEX_SS_ASC { return INDEX_SS_ASC_HINT; }
-<hint>INDEX_SS_DESC { return INDEX_SS_DESC_HINT; }
 <hint>USE_NL { return USE_NL; }
 <hint>NO_USE_NL { return NO_USE_NL; }
 <hint>USE_NL_MATERIALIZATION { return USE_NL_MATERIALIZATION; }
@@ -1004,7 +1001,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>FROZEN  { return FROZEN; }
 <hint>NONE  { return NONE; }
 <hint>DEFAULT  { return DEFAULT; }
-<hint>MAX_CONCURRENT { return MAX_CONCURRENT; }
 <hint>PARALLEL { return PARALLEL; }
 <hint>MANUAL { return MANUAL; }
 <hint>NO_PARALLEL { return NO_PARALLEL; }
@@ -1051,7 +1047,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>LOAD_BATCH_SIZE { return LOAD_BATCH_SIZE; }
 <hint>TRACING { return TRACING; }
 <hint>DOP { return DOP; }
-<hint>FORCE_REFRESH_LOCATION_CACHE { return FORCE_REFRESH_LOCATION_CACHE; }
 <hint>STAT { return STAT; }
 <hint>PX_JOIN_FILTER { return PX_JOIN_FILTER; }
 <hint>NO_PX_JOIN_FILTER { return NO_PX_JOIN_FILTER; }
@@ -1169,9 +1164,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>NO_DECORRELATE { return NO_DECORRELATE; }
 <hint>PQ_GBY { return PQ_GBY; }
 <hint>PQ_DISTINCT { return PQ_DISTINCT; }
-<hint>PX_NODE_POLICY {return PX_NODE_POLICY; }
-<hint>PX_NODE_ADDRS {return PX_NODE_ADDRS; }
-<hint>PX_NODE_COUNT {return PX_NODE_COUNT; }
 <hint>{identifier} {
   if (!(IS_FAST_PARAMETERIZE)) {
     check_value(yylval);

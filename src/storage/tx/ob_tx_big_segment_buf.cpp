@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_tx_big_segment_buf.h"
 
 namespace oceanbase
@@ -28,7 +28,7 @@ OB_SERIALIZE_MEMBER(BigSegmentPartHeader, prev_part_id_, remain_length_, part_le
 void ObTxBigSegmentBuf::reset()
 {
   if (OB_NOT_NULL(segment_buf_)) {
-    share::mtl_free(segment_buf_);
+    share::server_free(segment_buf_);
   }
   segment_buf_ = nullptr;
   segment_buf_len_ = 0;
@@ -251,7 +251,7 @@ int ObTxBigSegmentBuf::basic_init_(const int64_t segment_len, bool for_serialize
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid serialize size", K(ret), KPC(this), K(segment_len));
   } else if (OB_ISNULL(segment_buf_ =
-                           static_cast<char *>(share::mtl_malloc(segment_len, "BigSegment")))) {
+                           static_cast<char *>(share::server_malloc(segment_len, "BigSegment")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "alloc memory for big segment", K(ret), KPC(this), K(segment_len));
   } else {

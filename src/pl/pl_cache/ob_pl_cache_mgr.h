@@ -36,16 +36,15 @@ namespace pl
 {
   #define HANDLE_PL_CACHE_RET_VALUE(ret) \
   do { \
-    if ((ret) != OB_ERR_UNEXPECTED && (ret) != OB_REACH_MAX_CONCURRENT_NUM) { \
+    if ((ret) != OB_ERR_UNEXPECTED) { \
       (ret) = OB_SUCCESS; \
     } \
   } while (0)
 
 struct ObGetPLKVEntryOp : public sql::ObKVEntryTraverseOp
 {
-  explicit ObGetPLKVEntryOp(LCKeyValueArray *key_val_list,
-                            const CacheRefHandleID ref_handle)
-    : ObKVEntryTraverseOp(key_val_list, ref_handle)
+  explicit ObGetPLKVEntryOp(LCKeyValueArray *key_val_list)
+    : ObKVEntryTraverseOp(key_val_list)
   {
   }
   virtual int check_entry_match(LibCacheKVEntry &entry, bool &is_match)
@@ -67,9 +66,8 @@ struct ObGetPLKVEntryBySchemaIdOp : public ObKVEntryTraverseOp
 {
   explicit ObGetPLKVEntryBySchemaIdOp(uint64_t db_id,
                                  uint64_t schema_id,
-                                 LCKeyValueArray *key_val_list,
-                                 const CacheRefHandleID ref_handle)
-    : ObKVEntryTraverseOp(key_val_list, ref_handle),
+                                 LCKeyValueArray *key_val_list)
+    : ObKVEntryTraverseOp(key_val_list),
       db_id_(db_id),
       schema_id_(schema_id)
   {
@@ -101,9 +99,8 @@ struct ObGetPLKVEntryByDbIdOp : public ObKVEntryTraverseOp
 {
   explicit ObGetPLKVEntryByDbIdOp(uint64_t db_id,
                                  uint64_t schema_id,
-                                 LCKeyValueArray *key_val_list,
-                                 const CacheRefHandleID ref_handle)
-    : ObKVEntryTraverseOp(key_val_list, ref_handle),
+                                 LCKeyValueArray *key_val_list)
+    : ObKVEntryTraverseOp(key_val_list),
       db_id_(db_id)
   {
   }
@@ -127,9 +124,8 @@ struct ObGetPLKVEntryBySQLIDOp : public ObKVEntryTraverseOp
 {
   explicit ObGetPLKVEntryBySQLIDOp(uint64_t db_id,
                                  common::ObString sql_id,
-                                 LCKeyValueArray *key_val_list,
-                                 const CacheRefHandleID ref_handle)
-    : ObKVEntryTraverseOp(key_val_list, ref_handle),
+                                 LCKeyValueArray *key_val_list)
+    : ObKVEntryTraverseOp(key_val_list),
       db_id_(db_id),
       sql_id_(sql_id)
   {

@@ -167,14 +167,12 @@ int ObInsertResolver::resolve_insert_clause(const ParseNode &node)
   } else if (OB_FAIL(generate_column_conv_function(insert_stmt->get_insert_table_info()))) {
     LOG_WARN("failed to generate column conv function", K(ret));
   } else if (OB_FAIL(replace_gen_col_dependent_col(insert_stmt->get_insert_table_info()))) {
-    // In static engine we need to replace the dependent column of generate column with the
+    // Replace the dependent column of a generated column with the
     // new insert value. e.g.:
     //   c3 as c1 + c2
     // after add_column_conv_function() the c3's new value is: column_conv(c1 + c2)
     // should be replaced to: column_conv(column_conv(__values.c1) + column_conv(__values.c2).
     //
-    // The old engine no need to do this because it calculate generate column with the
-    // new inserted row.
     LOG_WARN("failed to replace gen col dependent col", K(ret));
   }
   
@@ -956,10 +954,6 @@ int ObInsertResolver::check_insert_select_field(ObInsertStmt &insert_stmt,
                         table_name.length(), table_name.ptr());
         }
       }
-    } else if (!session_info_->is_in_user_scope() && value_desc->is_always_identity_column()) {
-      // create table as select not need check here
-      ret = OB_ERR_INSERT_INTO_GENERATED_ALWAYS_IDENTITY_COLUMN;
-      LOG_USER_ERROR(OB_ERR_INSERT_INTO_GENERATED_ALWAYS_IDENTITY_COLUMN);
     }
     if (OB_FAIL(ret)) {
       //do nothing
@@ -1311,8 +1305,6 @@ int ObInsertResolver::check_view_insertable()
  * The handling here is similar to that of set operations (e.g., union).
  * The main reason is to align the type of the select item in insert into select with the type of the columns in insert, mainly to be able to
  * form a PK plan for pdml. Different types cannot be used for PKEY.
- *
- * What impact does it have on the old plan? In the old plan scenario, there may be some performance degradation.
  *
  */
 

@@ -27,7 +27,6 @@ namespace oceanbase
 {
 namespace sql
 {
-/*About why template is used instead of inheritance, please see the explanation in ddl/ob_tenant_resolver.h*/
 template <class T>
 class ObDatabaseResolver
 {
@@ -41,12 +40,10 @@ public:
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDatabaseResolver);
 public:
-  static int resolve_primary_zone(T *stmt, ParseNode *node);
   int resolve_database_options(T *stmt, ParseNode *node, ObSQLSessionInfo *session_info);
   const common::ObBitSet<> &get_alter_option_bitset() const { return alter_option_bitset_; };
 private:
   int resolve_database_option(T *stmt, ParseNode *node, ObSQLSessionInfo *session_info);
-  int resolve_zone_list(T *stmt, ParseNode *node) const;
 private:
   common::ObBitSet<> alter_option_bitset_;
   // A create/alter database statement may contain multiple charset/collate, used to mark whether it has appeared before flag
@@ -79,14 +76,6 @@ int ObDatabaseResolver<T>::resolve_database_options(T *stmt, ParseNode *node, Ob
 }
 
 template <class T>
-int ObDatabaseResolver<T>::resolve_primary_zone(T *stmt, ParseNode *node)
-{
-  int ret = OB_NOT_SUPPORTED;
-  SQL_LOG(WARN, "database with primary_zone", KR(ret));
-  return ret;
-}
-
-template <class T>
 int ObDatabaseResolver<T>::resolve_database_option(T *stmt, ParseNode *node, ObSQLSessionInfo *session_info)
 {
   int ret = common::OB_SUCCESS;
@@ -98,24 +87,6 @@ int ObDatabaseResolver<T>::resolve_database_option(T *stmt, ParseNode *node, ObS
     //nothing to do
   } else {
     switch (option_node->type_) {
-      case T_REPLICA_NUM: {
-        int32_t replica_num = static_cast<int32_t>(option_node->value_);
-        if (replica_num <= 0 || replica_num > common::OB_TABLET_MAX_REPLICA_COUNT) {
-          ret = common::OB_NOT_SUPPORTED;
-          OB_LOG(WARN, "Invalid replica_num", K(replica_num));
-        } else {
-          if (stmt::T_ALTER_DATABASE == stmt->get_stmt_type()) {
-            if (OB_FAIL(alter_option_bitset_.add_member(
-                    obcall::ObAlterDatabaseArg::REPLICA_NUM))) {
-              OB_LOG(WARN, "failed to add member to bitset!", K(ret));
-            }
-          }
-        }
-        break;
-      }
-      case T_PRIMARY_ZONE: {
-        break;
-      }
       case T_CHARSET:
       case T_COLLATION: {
         common::ObCharsetType charset_type = common::CHARSET_INVALID;
@@ -193,35 +164,6 @@ int ObDatabaseResolver<T>::resolve_database_option(T *stmt, ParseNode *node, ObS
         }
         break;
       }
-      case T_DEFAULT_TABLEGROUP: {
-        common::ObString tablegroup_name(option_node->str_len_, option_node->str_value_);
-        if (OB_FAIL(stmt->set_default_tablegroup_name(tablegroup_name))) {
-          OB_LOG(WARN, "failed to set default tablegroup name", K(ret));
-        }
-
-        if (common::OB_SUCCESS == ret && stmt->get_stmt_type() == stmt::T_ALTER_DATABASE) {
-          if (OB_FAIL(alter_option_bitset_.add_member(
-                  obcall::ObAlterDatabaseArg::DEFAULT_TABLEGROUP))) {
-            OB_LOG(WARN, "failed to add member to bitset!", K(ret));
-          }
-        }
-        break;
-      }
-      case T_DATABASE_ID: {
-        if (stmt::T_CREATE_DATABASE != stmt->get_stmt_type()) {
-          ret = common::OB_ERR_PARSE_SQL;
-          SQL_RESV_LOG(WARN, "database id can be set in create database", K(ret));
-        } else {
-          if (OB_ISNULL(option_node->children_[0])) {
-            ret = common::OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(WARN, "option_node child is null", K(option_node->children_[0]), K(ret));
-          } else {
-            uint64_t database_id = static_cast<uint64_t>(option_node->children_[0]->value_);
-            stmt->set_database_id(database_id);
-          }
-        }
-        break;
-      }
       default: {
         OB_LOG(WARN, "invalid type of parse node", K(option_node));
         break;
@@ -231,37 +173,6 @@ int ObDatabaseResolver<T>::resolve_database_option(T *stmt, ParseNode *node, ObS
   return ret;
 }
 
-template <class T>
-int ObDatabaseResolver<T>::resolve_zone_list(T *stmt, ParseNode *node) const
-{
-  int ret = common::OB_SUCCESS;
-  if (OB_ISNULL(stmt) || OB_ISNULL(node) || T_ZONE_LIST != node->type_ || OB_ISNULL(node->children_)) {
-    ret = common::OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "invalid argument", K(ret), K(stmt), K(node));
-  } else {
-    for (int32_t i = 0; ret == common::OB_SUCCESS && i < node->num_child_; i++) {
-      ParseNode *elem = node->children_[i];
-      if (OB_ISNULL(elem)) {
-        ret = common::OB_ERR_PARSER_SYNTAX;
-        OB_LOG(WARN, "Wrong zone", K(node));
-      } else {
-        if (OB_LIKELY(T_VARCHAR == elem->type_)) {
-          common::ObSqlString buf;
-          if (OB_FAIL(buf.append(elem->str_value_, elem->str_len_))) {
-            OB_LOG(WARN, "fail to assign str value to buf", K(ret));
-          } else {
-            ret = stmt->add_zone(buf.ptr());
-          }
-        } else {
-          ret = common::OB_ERR_PARSER_SYNTAX;
-          OB_LOG(WARN, "Wrong zone");
-          break;
-        }
-      }
-    }
-  }
-  return ret;
-}
 }  // namespace sql
 } //namespace oceanbase
 

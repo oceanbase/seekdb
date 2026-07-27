@@ -61,8 +61,6 @@ public:
 
   static bool is_stats_job(const ObString &job_name);
 
-  static int get_async_gather_stats_job_for_upgrade(common::ObMySQLProxy *sql_proxy);
-  
   static int check_job_exists(common::ObMySQLProxy *sql_proxy,
                               const char* job_name,
                               bool &is_join_exists);

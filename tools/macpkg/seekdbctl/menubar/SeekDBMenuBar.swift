@@ -976,7 +976,7 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
         guard !serviceOperationInProgress else { return }
         guard confirmAction(
             message: "Initialize Database?",
-            info: "This will erase all database data and bootstrap a fresh instance.\nConfiguration and plugins will be preserved.\n\nThis cannot be undone."
+            info: "This will erase all database data and bootstrap a fresh instance.\nConfiguration will be preserved.\n\nThis cannot be undone."
         ) else { return }
         guard authorizeAdmin(prompt: "seekdb Monitor needs your password to initialize the database. All current data will be erased.") else { return }
         serviceOperationInProgress = true

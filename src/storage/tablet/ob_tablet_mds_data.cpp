@@ -338,7 +338,6 @@ int ObTabletMdsData::init_for_evict_medium_info(
       extra_medium_info_.last_compaction_type_ = is_major_merge(merge_type) ? compaction::ObMediumCompactionInfo::MAJOR_COMPACTION : compaction::ObMediumCompactionInfo::MEDIUM_COMPACTION;
       extra_medium_info_.last_medium_scn_ = finish_medium_scn;
       extra_medium_info_.wait_check_flag_ = false;
-      // no need check in shared storage
     } else {
       extra_medium_info_ = other.extra_medium_info_;
     }
@@ -792,7 +791,7 @@ int ObTabletMdsData::read_items(
 {
   int ret = OB_SUCCESS;
   common::ObIAllocator *allocator = input_array_struct.allocator_;
-  ObSharedObjectLinkIter iter;
+  ObObjectLinkIter iter;
   ITEM *info = nullptr;
   char *buf = nullptr;
   int64_t len = 0;
@@ -861,7 +860,7 @@ int ObTabletMdsData::build_mds_data(
       LOG_WARN("failed to alloc and new mda data medium info list", K(ret));
     } else if (OB_FAIL(mds_data.medium_info_list_.ptr_->init_for_first_creation(allocator))) {
       LOG_WARN("failed to init mda data medium info list", K(ret));
-    } // the interface is for compat, no need init with truncate info
+    }
 
     DLIST_FOREACH(info, medium_info_list) {
       if (OB_FAIL(mds_data.medium_info_list_.ptr_->append(*info))) {

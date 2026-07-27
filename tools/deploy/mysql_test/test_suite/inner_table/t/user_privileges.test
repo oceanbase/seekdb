@@ -20,7 +20,7 @@ create user tmp_user_user_privileges identified by '123';
 select * from information_schema.user_privileges where grantee like '%tmp_user_user_privileges%';
 
 
-#grant 
+#grant
 grant select on *.* to tmp_user_user_privileges;
 #should be one row
 --real_sleep 3
@@ -53,7 +53,7 @@ drop user tmp_user_user_privileges;
 
 #should be empty
 --real_sleep 3
-select * from information_schema.user_privileges where grantee like '%tmp_user_user_privileges%'; 
+select * from information_schema.user_privileges where grantee like '%tmp_user_user_privileges%';
 
 #test root & admin
 --real_sleep 3

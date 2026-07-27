@@ -103,7 +103,7 @@ private:
 
 private:
   static const int64_t OB_DROP_FTS_INDEX_TASK_VERSION = 1;
-  ObRootService *root_service_;
+  ObLocalManagementService *local_management_service_;
   ObFTSDDLChildTaskInfo rowkey_doc_;
   ObFTSDDLChildTaskInfo doc_rowkey_;
   ObFTSDDLChildTaskInfo domain_index_;

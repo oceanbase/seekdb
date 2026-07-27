@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX RS
 #include "ob_partition_exchange.h"
 #include "observer/schema/ob_schema_service_sql_impl.h"
-#include "ob_root_service.h"
 #include "share/tablet/ob_tablet_to_table_history_operator.h" // ObTabletToTableHistoryOperator
 #include "share/tablet/ob_tablet_mapping_operator.h"
 #include "storage/tablet/ob_tablet_binding_helper.h"
@@ -374,7 +373,7 @@ int ObPartitionExchange::do_exchange_partitions_(
     LOG_WARN("invalid partition exchange type", KR(ret), K(part_exchange_type),
         K(arg.exchange_partition_level_), K(base_table_schema), K(inc_table_schema));
   } else if (OB_FAIL(schema_guard.get_schema_version(schema_version))) {
-    LOG_WARN("failed to get tenant schema version", K(ret), K(schema_version));
+    LOG_WARN("failed to get runtime schema version", K(ret), K(schema_version));
   } else if (OB_FAIL(trans.start(&ddl_service_.get_sql_proxy(), schema_version))) {
     LOG_WARN("start transaction failed", K(ret), K(schema_version));
   } else {
@@ -484,10 +483,6 @@ int ObPartitionExchange::check_table_conditions_in_common_(
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("offline ddl is being executed, other ddl operations are not allowed", K(ret), K(base_table_schema.check_can_do_ddl()), K(inc_table_schema.check_can_do_ddl()), K(base_table_schema), K(inc_table_schema));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "execute ddl while other ddl operations are executing long running ddl");
-  } else if (OB_UNLIKELY(share::ObDuplicateScope::DUPLICATE_SCOPE_NONE != base_table_schema.get_duplicate_scope() || share::ObDuplicateScope::DUPLICATE_SCOPE_NONE != inc_table_schema.get_duplicate_scope())) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("can't support exchanging parition between duplicate tables", K(ret), K(base_table_schema.get_duplicate_scope()), K(inc_table_schema.get_duplicate_scope()));
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "exchange partition in duplicate tables");
   } else if (OB_UNLIKELY(base_table_schema.is_aux_table() != inc_table_schema.is_aux_table())) {
     LOG_WARN("aux table attribute of exchanging partition tables are not equal", K(ret), K(base_table_schema.is_aux_table()), K(inc_table_schema.is_aux_table()));
   } else if (OB_FAIL(check_tablespace_(base_table_schema, inc_table_schema))) {
@@ -500,9 +495,7 @@ int ObPartitionExchange::check_table_conditions_in_common_(
     LOG_WARN("fail to check table lob infos", K(ret), K(base_table_schema), K(inc_table_schema));
   } else {
     is_equal = false;
-    if (OB_UNLIKELY(base_table_schema.get_tablegroup_id() != inc_table_schema.get_tablegroup_id())) {
-      LOG_WARN("the tablegroup id of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_tablegroup_id()), K(inc_table_schema.get_tablegroup_id()));
-    } else if (OB_UNLIKELY(base_table_schema.get_load_type() != inc_table_schema.get_load_type())) {
+    if (OB_UNLIKELY(base_table_schema.get_load_type() != inc_table_schema.get_load_type())) {
       LOG_WARN("the load type of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_load_type()), K(inc_table_schema.get_load_type()));
     } else if (OB_UNLIKELY(share::schema::TABLE_DEF_TYPE_USER != base_table_schema.get_def_type() || share::schema::TABLE_DEF_TYPE_USER != inc_table_schema.get_def_type())) {
       LOG_WARN("not support to exchange partition in internal table", K(ret), K(base_table_schema.get_def_type()), K(inc_table_schema.get_def_type()));
@@ -516,8 +509,6 @@ int ObPartitionExchange::check_table_conditions_in_common_(
       ret = OB_ERR_PARTITION_EXCHANGE_DIFFERENT_OPTION;
       LOG_WARN("store format of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_store_format()), K(inc_table_schema.get_store_format()));
       LOG_USER_ERROR(OB_ERR_PARTITION_EXCHANGE_DIFFERENT_OPTION, "ROW_FORMAT");
-    } else if (OB_UNLIKELY(base_table_schema.is_use_bloomfilter() != inc_table_schema.is_use_bloomfilter())) {
-      LOG_WARN("use bloomfilter flag of exchanging partition tables are not equal", K(ret), K(base_table_schema.is_use_bloomfilter()), K(inc_table_schema.is_use_bloomfilter()));
     } else if (OB_UNLIKELY(base_table_schema.get_block_size() != inc_table_schema.get_block_size())) {
       LOG_WARN("block size of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_block_size()), K(inc_table_schema.get_block_size()));
     } else if (OB_UNLIKELY(base_table_schema.get_collation_type() != inc_table_schema.get_collation_type())) {
@@ -530,16 +521,10 @@ int ObPartitionExchange::check_table_conditions_in_common_(
       LOG_WARN("partition status of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_partition_status()), K(inc_table_schema.get_partition_status()));
     } else if (OB_UNLIKELY(base_table_schema.get_partition_schema_version() != inc_table_schema.get_partition_schema_version())) {
       LOG_WARN("partition schema version of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_partition_schema_version()), K(inc_table_schema.get_partition_schema_version()));
-    } else if (OB_UNLIKELY(base_table_schema.get_storage_format_version() != inc_table_schema.get_storage_format_version())) {
-      LOG_WARN("storage format version of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_storage_format_version()), K(inc_table_schema.get_storage_format_version()));
     } else if (OB_UNLIKELY(base_table_schema.get_table_mode() != inc_table_schema.get_table_mode())) {
       LOG_WARN("table mode of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_table_mode()), K(inc_table_schema.get_table_mode()));
-    } else if (OB_UNLIKELY(0 != base_table_schema.get_encryption_str().compare(inc_table_schema.get_encryption_str()))) {
-      LOG_WARN("encryption str of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_encryption_str()), K(inc_table_schema.get_encryption_str()));
     } else if (OB_UNLIKELY(base_table_schema.get_table_flags() != inc_table_schema.get_table_flags())) {
       LOG_WARN("table flags of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_table_flags()), K(inc_table_schema.get_table_flags()));
-    } else if (OB_UNLIKELY(0 != base_table_schema.get_ttl_definition().compare(inc_table_schema.get_ttl_definition()))) {
-      LOG_WARN("ttl definition of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_ttl_definition()), K(inc_table_schema.get_ttl_definition()));
     } else if (OB_UNLIKELY(base_table_schema.get_index_using_type() != inc_table_schema.get_index_using_type())) {
       LOG_WARN("index using type of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_index_using_type()), K(inc_table_schema.get_index_using_type()));
     } else if (OB_UNLIKELY(base_table_schema.get_row_store_type() != inc_table_schema.get_row_store_type())) {
@@ -550,8 +535,6 @@ int ObPartitionExchange::check_table_conditions_in_common_(
       LOG_WARN("charset type of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_charset_type()), K(inc_table_schema.get_charset_type()));
     } else if (OB_UNLIKELY(base_table_schema.get_compressor_type() != inc_table_schema.get_compressor_type())) {
       LOG_WARN("compressor type of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_compressor_type()), K(inc_table_schema.get_compressor_type()));
-    } else if (OB_UNLIKELY(0 != base_table_schema.get_expire_info().compare(inc_table_schema.get_expire_info()))) {
-      LOG_WARN("expire info of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_expire_info()), K(inc_table_schema.get_expire_info()));
     } else if (OB_UNLIKELY(base_table_schema.get_foreign_key_infos().count() != 0 || inc_table_schema.get_foreign_key_infos().count() != 0)) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "exchanging partition tables have foreign key are");
@@ -1726,7 +1709,7 @@ int ObPartitionExchange::update_exchange_table_non_schema_attributes_(const ObTa
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(old_partition_ids), K(new_partition_ids), K(old_table_schema), K(new_table_id), K(old_tablet_ids));
   } else {
-    // modify tablet mapping, __all_sequence_value, __all_table_stat, __all_column_stat, __all_histogram_stat, __all_monitor_modified
+    // modify inner table __all_tablet_to_ls, __all_table_stat, __all_column_stat, __all_histogram_stat, __all_monitor_modified
     if (OB_FAIL(update_table_to_tablet_ids_mapping_( new_table_id, old_tablet_ids, trans))) {
       LOG_WARN("fail to update table to tablet id mapping", K(ret), K(new_table_id), K(old_tablet_ids));
     } else if (!old_table_schema.is_aux_table()) {

@@ -89,7 +89,7 @@ private:
 
 class ObTxDataCacheValue : public common::ObIKVCacheValue {
 public:
-  ObTxDataCacheValue() : is_inited_(false), tx_data_(nullptr), undo_node_array_(nullptr), mtl_alloc_buf_(nullptr) {}
+  ObTxDataCacheValue() : is_inited_(false), tx_data_(nullptr), undo_node_array_(nullptr), server_alloc_buf_(nullptr) {}
   ~ObTxDataCacheValue();
 
   int init(const ObTxData &tx_data);
@@ -102,7 +102,7 @@ public:
 
   void destroy();
 
-  TO_STRING_KV(K_(is_inited), KP_(tx_data), KPC_(tx_data), KP_(mtl_alloc_buf), KP(&reserved_buf_));
+  TO_STRING_KV(K_(is_inited), KP_(tx_data), KPC_(tx_data), KP_(server_alloc_buf), KP(&reserved_buf_));
 
 public:  // derived from ObIKVCacheValue
   virtual int64_t size() const { return (IS_INIT && OB_NOT_NULL(tx_data_)) ? sizeof(*this) + tx_data_->size_need_cache() : 0; }
@@ -117,7 +117,7 @@ private:
   bool is_inited_;
   storage::ObTxData *tx_data_;
   storage::ObUndoStatusNode *undo_node_array_;
-  void *mtl_alloc_buf_;
+  void *server_alloc_buf_;
   storage::ObTxData reserved_buf_;
 };
 

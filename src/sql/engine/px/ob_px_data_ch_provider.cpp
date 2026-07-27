@@ -32,11 +32,10 @@ int ObPxTransmitChProvider::init()
 
 int ObPxTransmitChProvider::get_data_ch_nonblock(
   const int64_t sqc_id, const int64_t task_id, int64_t timeout_ts, ObPxTaskChSet &ch_set,
-  ObDtlChTotalInfo **ch_info, const common::ObAddr &qc_addr,
-  int64_t query_start_time)
+  ObDtlChTotalInfo **ch_info)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObPxChProviderUtil::check_status(timeout_ts, qc_addr, query_start_time))) {
+  if (OB_FAIL(ObPxChProviderUtil::check_status(timeout_ts))) {
     // nop
   } else if (!msg_set_) {
     ret = OB_DTL_WAIT_EAGAIN;
@@ -114,12 +113,10 @@ int ObPxTransmitChProvider::get_part_ch_map(ObPxPartChInfo &map, int64_t timeout
 }
 
 int ObPxTransmitChProvider::get_part_ch_map_nonblock(ObPxPartChInfo &map,
-                                                      int64_t timeout_ts,
-                                                      const common::ObAddr &qc_addr,
-                                                      int64_t query_start_time)
+                                                      int64_t timeout_ts)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObPxChProviderUtil::check_status(timeout_ts, qc_addr, query_start_time))) {
+  if (OB_FAIL(ObPxChProviderUtil::check_status(timeout_ts))) {
     // nop
   } else if (!msg_set_) {
     ret = OB_DTL_WAIT_EAGAIN;
@@ -145,13 +142,13 @@ int ObPxTransmitChProvider::inner_get_part_ch_map(ObPxPartChInfo &map)
       int64_t sqc_id = part_ch_item.second_;
       // prefix_task_counts_[sqc_id] + task_id is the global task_id corresponding to a certain task of this sqc with sqc_id
       ObIArray<int64_t> &receive_prefix_task_counts =
-                msg_.get_ch_total_info().receive_exec_server_.prefix_task_counts_;
+                msg_.get_ch_total_info().receive_task_layout_.prefix_task_counts_;
       // Since the partition id has already saved the mapping with sqc,
       // So here we only need to map all worker idx of partition and sqc
       int64_t sqc_task_count = 0;
       int64_t pre_sqc_task_count = receive_prefix_task_counts.at(sqc_id);
       if (sqc_id == receive_prefix_task_counts.count() - 1) {
-        sqc_task_count = msg_.get_ch_total_info().receive_exec_server_.total_task_cnt_;
+        sqc_task_count = msg_.get_ch_total_info().receive_task_layout_.total_task_cnt_;
       } else {
         sqc_task_count = receive_prefix_task_counts.at(sqc_id + 1);
       }
@@ -262,9 +259,7 @@ int ObPxReceiveChProvider::get_data_ch_nonblock(
   const int64_t task_id,
   int64_t timeout_ts,
   ObPxTaskChSet &ch_set,
-  ObDtlChTotalInfo *ch_info,
-  const common::ObAddr &qc_addr,
-  int64_t query_start_time)
+  ObDtlChTotalInfo *ch_info)
 {
   int ret = OB_SUCCESS;
   bool found = false;
@@ -272,7 +267,7 @@ int ObPxReceiveChProvider::get_data_ch_nonblock(
   if (child_dfo_id < 0 || child_dfo_id >= ObDfo::MAX_DFO_ID) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid msg", K(child_dfo_id), K(ret));
-  } else if (OB_FAIL(ObPxChProviderUtil::check_status(timeout_ts, qc_addr, query_start_time))) {
+  } else if (OB_FAIL(ObPxChProviderUtil::check_status(timeout_ts))) {
     LOG_WARN("Fail to check status", K(child_dfo_id), K(msg_set_), K(msgs_), K(ret));
   } else {
     ObLockGuard<ObSpinLock> lock_guard(lock_);
@@ -414,8 +409,7 @@ int ObPxReceiveChProvider::wait_msg(int64_t child_dfo_id, int64_t timeout_ts)
   return ret;
 }
 
-int ObPxChProviderUtil::check_status(int64_t timeout_ts, const ObAddr &qc_addr,
-                                     int64_t query_start_time)
+int ObPxChProviderUtil::check_status(int64_t timeout_ts)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(IS_INTERRUPTED())) {
@@ -427,10 +421,6 @@ int ObPxChProviderUtil::check_status(int64_t timeout_ts, const ObAddr &qc_addr,
   } else if (timeout_ts <= ObTimeUtility::current_time()) {
     ret = OB_TIMEOUT;
     LOG_WARN("timeout and abort", K(timeout_ts), K(ret));
-  } else if (OB_UNLIKELY(ObPxCheckAlive::is_in_blacklist(qc_addr, query_start_time))) {
-    ret = OB_RPC_CONNECT_ERROR;
-    LOG_WARN("peer no in communication, maybe crashed", K(ret), K(qc_addr),
-              K(static_cast<int64_t>(GCONF.cluster_id)));
   }
   return ret;
 }

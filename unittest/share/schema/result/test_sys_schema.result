@@ -12,9 +12,6 @@
   "collation_type":"invalid_type",
   "name_case_mode":2,
   "comment":"default db",
-  "read_only":false,
-  "default_tablegroup_id":-1,
-  "default_tablegroup_name":""
+  "read_only":false
 }
 =============[oceanbasedatabase schema end ------------------
-

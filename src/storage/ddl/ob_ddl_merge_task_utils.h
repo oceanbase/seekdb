@@ -19,7 +19,7 @@
 
 #include "share/scn.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
-#include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_dag_scheduler.h"
 #include "storage/blocksstable/index_block/ob_index_block_builder.h"
 #include "storage/blocksstable/ob_macro_block_struct.h"
 #include "storage/ddl/ob_ddl_struct.h"
@@ -57,7 +57,7 @@ public:
                            const ObDirectLoadType &direct_load_type,
                            const share::SCN start_scn,
                            const int64_t snapshot_version,
-                           const uint64_t tenant_data_version);
+                           const uint64_t data_format_version);
     
   static int check_idempodency(const ObIArray<ObDDLBlockMeta> &input_metas, ObIArray<ObDDLBlockMeta> &output_metas, ObDDLWriteStat *write_stat);
 

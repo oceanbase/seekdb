@@ -41,8 +41,7 @@ public:
         threads_(nullptr),
         stack_size_(global_thread_stack_size),
         stop_(true),
-        run_wrapper_(nullptr),
-        numa_info_()
+        run_wrapper_(nullptr)
   {}
   virtual ~Threads();
   static IRunWrapper *&get_expect_run_wrapper();
@@ -68,7 +67,7 @@ public:
   int try_thread_recycle();
 
   int init();
-  // IRunWrapper is used to specify the tenant context when creating multi-tenant threads.
+  // IRunWrapper specifies the runtime context inherited by worker threads.
   void set_run_wrapper(IRunWrapper *run_wrapper)
   {
     run_wrapper_ = run_wrapper;
@@ -84,27 +83,11 @@ public:
     IRunWrapper *run_wrapper = run_wrapper_;
     return OB_NOT_NULL(run_wrapper) ? run_wrapper : get_default_run_wrapper();
   }
-  struct NumaInfo {
-  public:
-    NumaInfo(): numa_node_(OB_NUMA_SHARED_INDEX), num_nodes_(UINT32_MAX), interleave_(false) {}
-    ~NumaInfo()
-    {
-      numa_node_ = OB_NUMA_SHARED_INDEX;
-      interleave_ = false;
-      num_nodes_ = UINT32_MAX;
-    }
-  public:
-    int32_t numa_node_;
-    uint32_t num_nodes_;
-    bool interleave_;
-  };
   virtual int start();
   virtual void stop();
   virtual void wait();
   void destroy();
   virtual void run(int64_t idx);
-   void set_numa_info(bool enable_numa_aware, int32_t group_index);
-
 public:
   template <class Functor>
   int submit(const Functor &func)
@@ -141,7 +124,7 @@ private:
 
   int do_thread_recycle(bool try_mode);
   /// \brief Create thread
-  int create_thread(Thread *&thread, int64_t idx, int32_t numa_node = OB_NUMA_SHARED_INDEX);
+  int create_thread(Thread *&thread, int64_t idx);
 
   /// \brief Destroy thread.
   void destroy_thread(Thread *thread);
@@ -155,9 +138,8 @@ private:
   bool stop_;
   // protect for thread count changing.
   common::SpinRWLock lock_ __attribute__((__aligned__(16)));
-  // tenant ctx
+  // Runtime context.
   IRunWrapper *run_wrapper_;
-  NumaInfo numa_info_;
 };
 
 class ObPThread : public Threads

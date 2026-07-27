@@ -22,7 +22,7 @@
 #include "sql/engine/basic/ob_ra_row_store.h"
 #include "sql/engine/basic/ob_chunk_row_store.h"
 #include "sql/engine/ob_sql_mem_mgr_processor.h"
-#include "sql/engine/ob_tenant_sql_memory_manager.h"
+#include "sql/engine/ob_sql_memory_manager.h"
 #include "sql/dtl/ob_dtl_interm_result_manager.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
 
@@ -55,7 +55,6 @@ public:
   virtual int inner_close() override;
   virtual void destroy() override;
   int destory_interm_results();
-  int destory_remote_interm_results(ObIArray<ObAddr> &svrs, ObIArray<ObEraseDtlIntermResultArg> &args);
   int destory_local_interm_results(ObIArray<uint64_t> &result_ids);
 
   bool init_temp_table_;

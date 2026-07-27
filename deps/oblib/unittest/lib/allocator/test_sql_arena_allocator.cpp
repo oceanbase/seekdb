@@ -15,7 +15,7 @@
  */
 
 #include <gtest/gtest.h>
-#include "lib/alloc/ob_tenant_ctx_allocator.h"
+#include "lib/alloc/ob_ctx_allocator.h"
 using namespace oceanbase::common;
 using namespace oceanbase::lib;
 
@@ -50,19 +50,6 @@ void TestSQLArenaAllocator::SetUp()
 void TestSQLArenaAllocator::TearDown()
 {
 }
-
-#define GET_DEFAULT() \
-  ({ \
-    ma->get_tenant_ctx_mod_usage(tenant_id, ObCtxIds::DEFAULT_CTX_ID, label, item); \
-    int64_t hold = item.hold_; \
-    hold; \
-  })
-#define GET_AREA() \
-  ({ \
-    ma->get_tenant_ctx_mod_usage(tenant_id, ObCtxIds::WORK_AREA, label, item); \
-    int64_t hold = item.hold_; \
-    hold; \
-  })
 
 int main(int argc, char **argv)
 {

@@ -187,7 +187,7 @@ int ObDatumRowStore::new_block(int64_t block_size, ObDatumRowStore::BlockInfo *&
   } else {
     block_size = NORMAL_BLOCK_SIZE;
   }
-  // make sure all memory allocated under the right tenant
+  // Ensure all memory is allocated in the active server runtime.
   block = static_cast<BlockInfo *>(inner_alloc_.alloc(block_size + sizeof(BlockInfo)));
   if (OB_ISNULL(block)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;

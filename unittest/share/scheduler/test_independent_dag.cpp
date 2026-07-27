@@ -56,22 +56,17 @@ public:
       addr_(1683068975, 9999),
       allocator_("IndependentDag"),
       scheduler_(nullptr),
-      old_mp_(nullptr),
-      is_inited_(false) {}
+      old_mp_(nullptr) {}
   virtual ~TestIndependentDag() {}
   void SetUp() override
   {
-    if (!is_inited_) {
-      ObMallocAllocator::get_instance()->create_and_add_tenant_allocator();
-      is_inited_ = true;
-    }
-    scheduler_ = OB_NEW(ObTenantDagScheduler, ObModIds::TEST);
+    scheduler_ = OB_NEW(ObDagScheduler, ObModIds::TEST);
     provider_.dag_scheduler_ = scheduler_;
     old_mp_ = share::g_mp;
     share::g_mp = &provider_;
 
     ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-    ASSERT_EQ(OB_SUCCESS, ma->set_tenant_limit(1LL << 30));
+    ASSERT_EQ(OB_SUCCESS, ma->set_allocator_limit(1LL << 30));
 
     ASSERT_EQ(OB_SUCCESS, ObSysTaskStatMgr::get_instance().set_self_addr(addr_));
     ASSERT_EQ(OB_SUCCESS, scheduler_->init( 1000 /*check_period*/));
@@ -90,10 +85,9 @@ private:
   const uint64_t tenant_id_;
   ObAddr addr_;
   ObArenaAllocator allocator_;
-  ObTenantDagScheduler *scheduler_;
+  ObDagScheduler *scheduler_;
   TestDagModuleProvider provider_;
   share::ObIModuleProvider *old_mp_;
-  bool is_inited_;
   DISALLOW_COPY_AND_ASSIGN(TestIndependentDag);
 };
 
@@ -1255,7 +1249,7 @@ TEST_F(TestIndependentDag, test_pure_independent_dag)
   const int64_t x = 10;
   const int64_t y = 20;
   ObIndependentInitParam param(&res1, &res2, x, y);
-  ASSERT_EQ(OB_SUCCESS, ObTenantDagScheduler::alloc_dag(allocator_,false /*is_ha_dag*/, dag));
+  ASSERT_EQ(OB_SUCCESS, ObDagScheduler::alloc_dag(allocator_,false /*use_reserved_allocator*/, dag));
   ASSERT_NE(nullptr, dag);
   
   ASSERT_EQ(OB_SUCCESS, dag->init(&param, nullptr /*dag_id*/));
@@ -1286,7 +1280,7 @@ TEST_F(TestIndependentDag, test_pure_independent_dag_stress)
       bool generate_before_process = i % 3 == 0;
       COMMON_LOG(INFO, "[TestIndependentDag] test_pure_independent_dag_stress", K(i), K(thread_cnt), K(x), K(y), K(random_abort), K(generate_before_process));
       ObIndependentInitParam param(&res1, &res2, x, y, random_abort, generate_before_process);
-      ASSERT_EQ(OB_SUCCESS, ObTenantDagScheduler::alloc_dag(allocator_, false /*is_ha_dag*/, dag));
+      ASSERT_EQ(OB_SUCCESS, ObDagScheduler::alloc_dag(allocator_, false /*use_reserved_allocator*/, dag));
       ASSERT_NE(nullptr, dag);
       
       ASSERT_EQ(OB_SUCCESS, dag->init(&param, nullptr /*dag_id*/));
@@ -1320,7 +1314,7 @@ TEST_F(TestIndependentDag, test_pure_power_dag)
   const int64_t base = 10;
   const int64_t layer = 4;
   ObIndependentInitParam param(&res1, &res2, base, layer);
-  ASSERT_EQ(OB_SUCCESS, ObTenantDagScheduler::alloc_dag(allocator_, false /*is_ha_dag*/, dag));
+  ASSERT_EQ(OB_SUCCESS, ObDagScheduler::alloc_dag(allocator_, false /*use_reserved_allocator*/, dag));
   ASSERT_NE(nullptr, dag);
   
   ASSERT_EQ(OB_SUCCESS, dag->init(&param, nullptr /*dag_id*/));
@@ -1345,7 +1339,7 @@ TEST_F(TestIndependentDag, test_pure_power_dag_stress)
       const int64_t layer = 1 + ObRandom::rand(0, 3);
       COMMON_LOG(INFO, "[TestDagScheduler] test_pure_power_dag_stress", K(i), K(base), K(layer));
       ObIndependentInitParam param(&res1, &res2, base, layer);
-      ASSERT_EQ(OB_SUCCESS, ObTenantDagScheduler::alloc_dag(allocator_, false /*is_ha_dag*/, dag));
+      ASSERT_EQ(OB_SUCCESS, ObDagScheduler::alloc_dag(allocator_, false /*use_reserved_allocator*/, dag));
       ASSERT_NE(nullptr, dag);
       
       ASSERT_EQ(OB_SUCCESS, dag->init(&param, nullptr /*dag_id*/));
@@ -1366,7 +1360,7 @@ TEST_F(TestIndependentDag, test_independent_post_generate_dag)
   OB_LOGGER.set_log_level("ERROR");
   ObIndependentPostGenerateDag *dag = nullptr;
   ObIndependentPostGenerateDagInitParam param;
-  ASSERT_EQ(OB_SUCCESS, ObTenantDagScheduler::alloc_dag(allocator_, false /*is_ha_dag*/, dag));
+  ASSERT_EQ(OB_SUCCESS, ObDagScheduler::alloc_dag(allocator_, false /*use_reserved_allocator*/, dag));
   ASSERT_NE(nullptr, dag);
   ASSERT_EQ(OB_SUCCESS, dag->init(&param, nullptr /*dag_id*/));
   ASSERT_EQ(true, dag->is_independent_);
@@ -1383,7 +1377,7 @@ TEST_F(TestIndependentDag, test_increasing_add_task)
 {
   OB_LOGGER.set_log_level("TRACE");
   ObIndependentExampleDag *dag = nullptr;
-  ASSERT_EQ(OB_SUCCESS, ObTenantDagScheduler::alloc_dag(allocator_, false /*is_ha_dag*/, dag));
+  ASSERT_EQ(OB_SUCCESS, ObDagScheduler::alloc_dag(allocator_, false /*use_reserved_allocator*/, dag));
   ASSERT_NE(nullptr, dag);
   ASSERT_EQ(true, dag->is_independent_);
   ObIDag::TaskList task_list;
@@ -1427,7 +1421,7 @@ TEST_F(TestIndependentDag, test_priority_task)
   const int64_t x = 10;
   const int64_t y = 20;
   ObIndependentInitParam param(&res1, &res2, x, y);
-  ASSERT_EQ(OB_SUCCESS, ObTenantDagScheduler::alloc_dag(allocator_, false /*is_ha_dag*/, dag));
+  ASSERT_EQ(OB_SUCCESS, ObDagScheduler::alloc_dag(allocator_, false /*use_reserved_allocator*/, dag));
   ASSERT_NE(nullptr, dag);
   
   ASSERT_EQ(OB_SUCCESS, dag->init(&param, nullptr /*dag_id*/));
@@ -1487,7 +1481,7 @@ TEST_F(TestIndependentDag, test_independent_suspend_task)
   int64_t round = 20;
   int64_t step = 10;
   ObIndependentSuspendInitParam param(&result, round, step);
-  ASSERT_EQ(OB_SUCCESS, ObTenantDagScheduler::alloc_dag(allocator_, false /*is_ha_dag*/, dag));
+  ASSERT_EQ(OB_SUCCESS, ObDagScheduler::alloc_dag(allocator_, false /*use_reserved_allocator*/, dag));
   ASSERT_NE(nullptr, dag);
   ASSERT_EQ(OB_SUCCESS, dag->init(&param, nullptr /*dag_id*/));
   ASSERT_EQ(true, dag->is_independent_);
@@ -1514,7 +1508,7 @@ TEST_F(TestIndependentDag, test_independent_suspend_task_v2)
   int64_t round = 20;
   int64_t step = 10;
   ObIndependentSuspendInitParam param(&result, round, step);
-  ASSERT_EQ(OB_SUCCESS, ObTenantDagScheduler::alloc_dag(allocator_, false /*is_ha_dag*/, dag));
+  ASSERT_EQ(OB_SUCCESS, ObDagScheduler::alloc_dag(allocator_, false /*use_reserved_allocator*/, dag));
   ASSERT_NE(nullptr, dag);
   ASSERT_EQ(OB_SUCCESS, dag->init(&param, nullptr /*dag_id*/));
   ASSERT_EQ(true, dag->is_independent_);
@@ -1534,7 +1528,7 @@ TEST_F(TestIndependentDag, test_independent_dag_print)
   const int64_t x = 10;
   const int64_t y = 20;
   ObIndependentInitParam param(&res1, &res2, x, y);
-  ASSERT_EQ(OB_SUCCESS, ObTenantDagScheduler::alloc_dag(allocator_, false /*is_ha_dag*/, dag));
+  ASSERT_EQ(OB_SUCCESS, ObDagScheduler::alloc_dag(allocator_, false /*use_reserved_allocator*/, dag));
   ASSERT_NE(nullptr, dag);
   
   ASSERT_EQ(OB_SUCCESS, dag->init(&param, nullptr /*dag_id*/));

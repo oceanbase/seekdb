@@ -180,7 +180,7 @@ int ObDDLEpochMgr::promote_ddl_epoch(int64_t wait_us, int64_t &ddl_epoch_ret)
         }
         // refresh schema to promise schema_version newest
         else if (OB_FAIL(schema_service_->refresh_and_add_schema())) {
-          LOG_WARN("refresh_tenant_schema fail", KR(ret));
+          LOG_WARN("refresh_runtime_schema fail", KR(ret));
         }
         // update ddl epoch
         else if (OB_FAIL(update_ddl_epoch_(new_ddl_epoch))) {
@@ -203,9 +203,8 @@ int ObDDLEpochMgr::promote_ddl_epoch_inner_(int64_t &new_ddl_epoch)
 {
   int ret = OB_SUCCESS;
   // bugfix: 52360960
-  // Consider this function will be called only once for each tenant after rs restarts.
+  // This function is called once after the management service restarts.
   // To simplify related logic and mangement of memory, single mutex lock will be used.
-  // (TODO): Actually, we can lock by tenant for better performance.
   lib::ObMutexGuard mutex_guard(mutex_for_promote_);
   ObMySQLTransaction trans;
   int64_t ddl_epoch_tmp = 0;

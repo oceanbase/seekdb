@@ -60,8 +60,7 @@ public:
       common::ObString &db,
       common::ObString &table,
       share::schema::ObPrivLevel &grant_level,
-      ObIAllocator &allocator,
-      common::ObString &catalog);
+      ObIAllocator &allocator);
 
   static int resolve_priv_level_with_object_type(const ObSQLSessionInfo *session_info,
                                                  const ParseNode *priv_object_node,
@@ -73,7 +72,6 @@ public:
                                  ObSchemaChecker *schema_checker_,
                                  common::ObString &db,
                                  common::ObString &table,
-                                 common::ObString &catalog,
                                  ObIAllocator *allocator,
                                  bool is_grant = true); // revoke on object which has been deleted
 
@@ -212,16 +210,6 @@ int ObGrantResolver::resolve_priv_set(
           } else {
             priv_set |= priv_type;
           }
-        } else if (OB_PRIV_CATALOG_LEVEL == grant_level) {
-          if (OB_PRIV_ALL == priv_type) {
-            priv_set |= OB_PRIV_CATALOG_ACC;
-          } else if (priv_type & (~(OB_PRIV_CATALOG_ACC | OB_PRIV_GRANT))) {
-            ret = OB_ILLEGAL_GRANT_FOR_TABLE;
-            SQL_RESV_LOG(WARN, "Grant/Revoke privilege than can not be used",
-                      "priv_type", ObPrintPrivSet(priv_type), K(ret));
-          } else {
-            priv_set |= priv_type;
-          }
         } else if (OB_PRIV_OBJECT_LEVEL == grant_level) {
           if (OB_PRIV_ALL == priv_type) {
             priv_set |= OB_PRIV_OBJECT_ACC;
@@ -250,7 +238,6 @@ int ObGrantResolver::resolve_priv_object(const ParseNode *priv_object_node,
                                          ObSchemaChecker *schema_checker,
                                          common::ObString &db,
                                          common::ObString &table,
-                                         common::ObString &catalog,
                                          ObIAllocator *allocator,
                                          bool is_grant)
 {
@@ -292,18 +279,6 @@ int ObGrantResolver::resolve_priv_object(const ParseNode *priv_object_node,
           object_type = ObObjectType::FUNCTION;
         }
         object_id = routine_id;
-      }
-    } else if (priv_object_node->value_ == 4) {
-      object_type = ObObjectType::CATALOG;
-      if (OB_FAIL(schema_checker->get_catalog_id_name(catalog, object_id, allocator, !is_grant))) {
-        LOG_WARN("failed to get catalog id", K(ret));
-      } else {
-        grant_stmt->set_catalog_name(catalog);
-      }
-    } else if (priv_object_node->value_ == 5) {
-      object_type = ObObjectType::LOCATION;
-      if (OB_FAIL(schema_checker->get_location_id(table, object_id))) {
-        LOG_WARN("failed to get location id", K(ret));
       }
     }
   } else {

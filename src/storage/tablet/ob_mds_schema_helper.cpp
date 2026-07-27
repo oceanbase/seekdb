@@ -219,8 +219,6 @@ int ObMdsSchemaHelper::build_table_schema(const int64_t database_id,
     table_schema.set_row_store_type(ObRowStoreType::FLAT_ROW_STORE);
     table_schema.set_table_name(MDS_TABLE_NAME);
     table_schema.set_schema_version(MDS_SCHEMA_VERSION);
-    // Disable macro block bloom filter for mds table.
-    table_schema.set_enable_macro_block_bloom_filter(false);
   }
 
   if (OB_FAIL(ret)) {
@@ -258,8 +256,7 @@ int ObMdsSchemaHelper::build_rowkey_read_info(
       allocator,
       full_stored_col_cnt,
       storage_schema.get_rowkey_column_num(),
-      cols_desc,
-      true/*use_default_compat_version*/))) {
+      cols_desc))) {
     LOG_WARN("fail to init rowkey read info", K(ret));
   }
 

@@ -30,16 +30,16 @@ int ObAllVirtualReplayStat::inner_get_next_row(common::ObNewRow *&row)
     logservice::ObLogService *log_service = share::g_mp->log_service();
     if (NULL == log_service) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "tenant has no ObLogService", K(ret));
+      SERVER_LOG(WARN, "log service is unavailable", K(ret));
     } else if (OB_FAIL(log_service->stat_replay(replay_stat))) {
       SERVER_LOG(WARN, "stat replay failed", K(ret));
     } else if (OB_FAIL(insert_stat_(replay_stat))) {
-      SERVER_LOG(WARN, "insert stat failed", K(ret));
+      SERVER_LOG(WARN, "insert stat failed", K(ret), K(replay_stat));
     } else {
       SERVER_LOG(INFO, "stat replay success", K(replay_stat));
     }
     if (OB_FAIL(ret)) {
-      SERVER_LOG(WARN, "iter tenant failed", K(ret));
+      SERVER_LOG(WARN, "iterate replay stat failed", K(ret));
     } else {
       start_to_read_ = true;
       row = &cur_row_;

@@ -63,7 +63,7 @@ protected:
 TestAggRow::TestAggRow()
     : allocator_()
 {
-  data_version_ = DATA_VERSION_1_0_0_0;
+  data_version_ = cal_version(1, 0, 0, 0);
 }
 TestAggRow::~TestAggRow()
 {

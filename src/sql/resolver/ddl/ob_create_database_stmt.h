@@ -38,7 +38,6 @@ class ObCreateDatabaseStmt : public ObDDLStmt
     common::ObCollationType get_collation_type() const;
     const common::ObString &get_database_name() const;
     void set_read_only(const bool read_only);
-    int set_default_tablegroup_name(const common::ObString &tablegroup_name);
     obcall::ObCreateDatabaseArg &get_create_database_arg();
     virtual bool cause_implicit_commit() const { return true; }
     virtual obcall::ObDDLArg &get_ddl_arg() { return create_database_arg_; }

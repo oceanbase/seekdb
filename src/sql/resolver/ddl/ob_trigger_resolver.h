@@ -91,7 +91,6 @@ private:
                           common::ObString &schema_name);
   int resolve_alter_clause(const ParseNode &alter_clause,
                            share::schema::ObTriggerInfo &tg_info,
-                           const ObString &db_name,
                            bool &is_set_status);
   int fill_package_info(share::schema::ObTriggerInfo &trigger_info);
 

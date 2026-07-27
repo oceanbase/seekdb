@@ -43,7 +43,6 @@ void ObTxStat::reset()
   flushed_log_size_ = 0;
   session_id_ = 0;
   is_exiting_ = false;
-  xid_.reset();
   last_request_ts_ = OB_INVALID_TIMESTAMP;
   busy_cbs_cnt_ = 0;
   replay_completeness_ = -1;
@@ -59,7 +58,7 @@ int ObTxStat::init(const common::ObAddr &addr, const ObTransID &tx_id,  const bo
                    const void* const tx_ctx_addr,
                    const int64_t pending_log_size, const int64_t flushed_log_size,
                    const int64_t session_id,
-                   const bool is_exiting, const ObXATransID &xid,
+                   const bool is_exiting,
                    const int64_t last_request_ts,
                    SCN start_scn, SCN end_scn, SCN rec_scn,
                    const int busy_cbs_cnt,
@@ -88,7 +87,6 @@ int ObTxStat::init(const common::ObAddr &addr, const ObTransID &tx_id,  const bo
     flushed_log_size_ = flushed_log_size;
     session_id_ = session_id;
     is_exiting_ = is_exiting;
-    xid_ = xid;
     last_request_ts_ = last_request_ts;
     start_scn_ = start_scn;
     end_scn_ = end_scn;
@@ -140,7 +138,6 @@ int ObTxSchedulerStat::init(const common::ObAddr &addr,
                             const uint32_t sess_id,
                             const ObTransID &tx_id,
                             const int64_t state,
-                            const ObXATransID &xid,
                             const bool has_write_state,
                             const ObTxWriteState &write_state,
                             const ObTxIsolationLevel &isolation,
@@ -169,7 +166,6 @@ int ObTxSchedulerStat::init(const common::ObAddr &addr,
     sess_id_ = sess_id;
     tx_id_ = tx_id;
     state_ = state;
-    xid_ = xid;
     has_write_state_ = has_write_state;
     if (has_write_state_) {
       write_state_ = write_state;
@@ -197,7 +193,6 @@ void ObTxSchedulerStat::reset()
   sess_id_ = 0;
   tx_id_.reset();
   state_ = 0;
-  xid_.reset();
   has_write_state_ = false;
   write_state_ = ObTxWriteState();
   isolation_ = ObTxIsolationLevel::INVALID;

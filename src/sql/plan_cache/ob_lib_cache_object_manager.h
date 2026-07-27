@@ -41,9 +41,9 @@ public:
             lib::MemoryContext &parent_context);
   int destroy_cache_obj(const bool is_leaked,
                         const uint64_t object_id);
-  void free(ObILibCacheObject *&obj, const CacheRefHandleID ref_handle)
+  void free(ObILibCacheObject *&obj)
   {
-    common_free(obj, ref_handle);
+    common_free(obj);
     obj = NULL;
   }
   template<class _callback>
@@ -54,7 +54,7 @@ public:
   int atomic_get_cache_obj(ObCacheObjID id, _callback &callback);
   template<class _callback>
   int atomic_get_alloc_cache_obj(ObCacheObjID id, _callback &callback);
-  int erase_cache_obj(ObCacheObjID id, const CacheRefHandleID ref_handle);
+  int erase_cache_obj(ObCacheObjID id);
   int add_cache_obj(ObILibCacheObject *obj);
   int64_t get_cache_obj_size() const { return cache_obj_map_.size(); }
   IdCacheObjectMap &get_cache_obj_map() { return cache_obj_map_; }
@@ -62,12 +62,11 @@ public:
   uint64_t allocate_object_id() { return __sync_add_and_fetch(&object_id_, 1); }
   template<typename ClassT>
   static int alloc(lib::MemoryContext &mem_ctx,
-                   ObILibCacheObject *&obj,
-                   CacheRefHandleID ref_handle);
+                   ObILibCacheObject *&obj);
 
 private:
   void inner_free(ObILibCacheObject *obj);
-  void common_free(ObILibCacheObject *obj, const CacheRefHandleID ref_handle);
+  void common_free(ObILibCacheObject *obj);
 
 private:
   // used for generate cache obj ids
@@ -137,8 +136,7 @@ int ObLCObjectManager::atomic_get_alloc_cache_obj(ObCacheObjID id, _callback &ca
 
 template<typename ClassT>
 int ObLCObjectManager::alloc(lib::MemoryContext &mem_ctx,
-                             ObILibCacheObject *&cache_obj,
-                             CacheRefHandleID ref_handle)
+                             ObILibCacheObject *&cache_obj)
 {
   int ret = OB_SUCCESS;
   void *ptr = NULL;
@@ -148,8 +146,7 @@ int ObLCObjectManager::alloc(lib::MemoryContext &mem_ctx,
     OB_LOG(WARN, "failed to allocate memory for lib cache node", K(ret));
   } else {
     cache_obj = new(ptr)ClassT(mem_ctx);
-    
-    cache_obj->inc_ref_count(ref_handle);
+    cache_obj->inc_ref_count();
   }
   return ret;
 }

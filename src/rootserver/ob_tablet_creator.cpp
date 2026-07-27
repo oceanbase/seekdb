@@ -32,7 +32,7 @@ bool ObTabletCreatorArg::is_valid() const
 {
   bool is_valid = table_schemas_.count() > 0
                   && table_schemas_.count() == tablet_ids_.count()
-                  && tenant_data_version_ > 0
+                  && data_format_version_ > 0
                   && need_create_empty_majors_.count() == table_schemas_.count()
                   && (create_commit_versions_.empty() || create_commit_versions_.count() == tablet_ids_.count());
   for (int64_t i = 0; i < tablet_ids_.count() && is_valid; i++) {
@@ -48,15 +48,15 @@ int ObTabletCreatorArg::init(
     const ObTabletID data_tablet_id,
     const ObIArray<const share::schema::ObTableSchema*> &table_schemas,
     const bool is_create_bind_hidden_tablets,
-    const uint64_t tenant_data_version,
+    const uint64_t data_format_version,
     const ObIArray<bool> &need_create_empty_majors,
     const ObIArray<int64_t> &create_commit_versions,
     const ObIArray<share::ObForkTabletInfo> &fork_tablet_infos)
 {
   int ret = OB_SUCCESS;
   bool is_valid = table_schemas.count() > 0
-                  && table_schemas.count() == tablet_ids.count() 
-                  && tenant_data_version > 0
+                  && table_schemas.count() == tablet_ids.count()
+                  && data_format_version > 0
                   && need_create_empty_majors.count() == table_schemas.count()
                   && (fork_tablet_infos.count() == 0 || fork_tablet_infos.count() == tablet_ids.count());
   for (int64_t i = 0; i < tablet_ids.count() && is_valid; i++) {
@@ -66,7 +66,7 @@ int ObTabletCreatorArg::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(tablet_ids),
              "count", table_schemas.count(), K(tablet_ids),
-             K(tenant_data_version), "count_to_create_empty_major", need_create_empty_majors.count(),
+             K(data_format_version), "count_to_create_empty_major", need_create_empty_majors.count(),
              "fork_tablet_infos_count", fork_tablet_infos.count());
   } else if (OB_FAIL(tablet_ids_.assign(tablet_ids))) {
     LOG_WARN("failed to assign table schemas", KR(ret), K(tablet_ids));
@@ -81,7 +81,7 @@ int ObTabletCreatorArg::init(
   } else {
     data_tablet_id_ = data_tablet_id;
     is_create_bind_hidden_tablets_ = is_create_bind_hidden_tablets;
-    tenant_data_version_ = tenant_data_version;
+    data_format_version_ = data_format_version;
   }
   return ret;
 }
@@ -91,13 +91,13 @@ int ObTabletCreatorArg::init(
     const ObTabletID data_tablet_id,
     const ObIArray<const share::schema::ObTableSchema*> &table_schemas,
     const bool is_create_bind_hidden_tablets,
-    const uint64_t tenant_data_version,
+    const uint64_t data_format_version,
     const ObIArray<bool> &need_create_empty_majors,
     const ObIArray<int64_t> &create_commit_versions)
 {
   ObArray<share::ObForkTabletInfo> empty_fork_tablet_infos;
   return init(tablet_ids, data_tablet_id, table_schemas,
-              is_create_bind_hidden_tablets, tenant_data_version,
+              is_create_bind_hidden_tablets, data_format_version,
               need_create_empty_majors, create_commit_versions,
               empty_fork_tablet_infos);
 }
@@ -106,7 +106,7 @@ DEF_TO_STRING(ObTabletCreatorArg)
 {
   int64_t pos = 0;
   J_KV(K_(tablet_ids), K_(data_tablet_id), K_(table_schemas), K_(is_create_bind_hidden_tablets),
-    K_(tenant_data_version), K_(need_create_empty_majors), K_(create_commit_versions), K_(fork_tablet_infos));
+    K_(data_format_version), K_(need_create_empty_majors), K_(create_commit_versions), K_(fork_tablet_infos));
   return pos;
 }
 
@@ -137,13 +137,13 @@ int ObBatchCreateTabletHelper::add_arg_to_batch_arg(
     ObArray<int64_t> index_array;
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_arg.table_schemas_.count(); ++i) {
       const share::schema::ObTableSchema *table_schema = tablet_arg.table_schemas_.at(i);
-      const uint64_t tenant_data_version = tablet_arg.tenant_data_version_;
+      const uint64_t data_format_version = tablet_arg.data_format_version_;
       const bool need_create_empty_major = tablet_arg.need_create_empty_majors_.at(i);
       int64_t index = OB_INVALID_INDEX;
       if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table schema is null", KR(ret), K(i), K(tablet_arg));
-      } else if (OB_FAIL(try_add_table_schema(table_schema, tenant_data_version,
+      } else if (OB_FAIL(try_add_table_schema(table_schema, data_format_version,
           need_create_empty_major, index))) {
         LOG_WARN("failed to add table schema to batch", KR(ret), K(table_schema), K(need_create_empty_major), K(index), K(batch_arg_));
       } else if (OB_UNLIKELY(OB_INVALID_INDEX == index)) {
@@ -172,7 +172,7 @@ int ObBatchCreateTabletHelper::add_arg_to_batch_arg(
 
 int ObBatchCreateTabletHelper::add_table_schema_(
     const share::schema::ObTableSchema &const_table_schema,
-    const uint64_t tenant_data_version,
+    const uint64_t data_format_version,
     const bool need_create_empty_major,
     int64_t &index)
 {
@@ -194,14 +194,14 @@ int ObBatchCreateTabletHelper::add_table_schema_(
     } else if (FALSE_IT(create_tablet_schema = new (create_tablet_schema_ptr)ObCreateTabletSchema())) {
     } else if (OB_FAIL(create_tablet_schema->init(batch_arg_.allocator_, table_schema,
                                                   false /*skip_column_info*/,
-                                                  tenant_data_version))) {
+                                                  data_format_version))) {
       LOG_WARN("failed to init storage schema", KR(ret), K(table_schema));
     } else if (OB_FAIL(batch_arg_.create_tablet_schemas_.push_back(create_tablet_schema))) {
       LOG_WARN("failed to push back table schema", KR(ret), K(table_schema));
-    } else if (OB_FAIL(create_tablet_extr_info.init(tenant_data_version, 
-                                                    need_create_empty_major, 
+    } else if (OB_FAIL(create_tablet_extr_info.init(data_format_version,
+                                                    need_create_empty_major,
                                                     table_schema.get_micro_index_clustered()))) {
-      LOG_WARN("init create table extra info failed", K(ret), K(tenant_data_version), K(need_create_empty_major), K(table_schema));
+      LOG_WARN("init create table extra info failed", K(ret), K(data_format_version), K(need_create_empty_major), K(table_schema));
     } else if (OB_FAIL(batch_arg_.tablet_extra_infos_.push_back(create_tablet_extr_info))) {
       LOG_WARN("failed to push back tablet extra infos", K(ret), K(create_tablet_extr_info));
     }
@@ -211,8 +211,8 @@ int ObBatchCreateTabletHelper::add_table_schema_(
 }
 
 int ObBatchCreateTabletHelper::try_add_table_schema(
-    const share::schema::ObTableSchema *table_schema, 
-    const uint64_t tenant_data_version,
+    const share::schema::ObTableSchema *table_schema,
+    const uint64_t data_format_version,
     const bool need_create_empty_major,
     int64_t &index)
 {
@@ -226,7 +226,7 @@ int ObBatchCreateTabletHelper::try_add_table_schema(
     //nothing
   } else if(OB_HASH_NOT_EXIST == ret)  {
     ret = OB_SUCCESS;
-    if (OB_FAIL(add_table_schema_(*table_schema, tenant_data_version, need_create_empty_major, index))) {
+    if (OB_FAIL(add_table_schema_(*table_schema, data_format_version, need_create_empty_major, index))) {
       LOG_WARN("failed to push back table schema", KR(ret), KPC(table_schema));
     } else if (OB_FAIL(table_schemas_map_.set_refactored(table_schema->get_table_id(), index))) {
       LOG_WARN("failed to set table schema map", KR(ret), K(index), KPC(table_schema));

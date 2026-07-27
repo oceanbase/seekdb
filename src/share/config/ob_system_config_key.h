@@ -22,7 +22,6 @@
 #include "lib/hash_func/murmur_hash.h"
 #include "lib/string/ob_string.h"
 #include "lib/utility/utility.h"
-#include "common/ob_zone.h"
 
 namespace oceanbase
 {
@@ -45,7 +44,6 @@ public:
   const char *name() const { return name_; }
 
 private:
-  static const char *DEFAULT_VALUE;
   char name_[OB_MAX_CONFIG_NAME_LEN];
   // ObSystemConfig uses the object's copy constructor in ObHashMap, cannot be prohibited
   //DISALLOW_COPY_AND_ASSIGN(ObSystemConfigKey);

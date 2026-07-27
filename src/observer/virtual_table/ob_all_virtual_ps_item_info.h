@@ -37,13 +37,12 @@ public:
   virtual ~ObAllVirtualPsItemInfo() {}
 
   virtual int inner_get_next_row() override;
-  virtual int inner_open() override;
   virtual void reset() override;
 private:
   int fill_cells(ObPsStmtId stmt_id,
                  sql::ObPsStmtItem *stmt_item,
                  sql::ObPsStmtInfo *stmt_info);
-  int get_next_row_from_specified_tenant(bool &is_end);
+  int get_next_row(bool &is_end);
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualPsItemInfo);
 
 private:

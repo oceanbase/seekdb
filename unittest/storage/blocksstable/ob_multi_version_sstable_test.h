@@ -27,14 +27,14 @@
 #include "storage/ls/ob_ls.h"
 #include "storage/ls/ob_ls_tablet_service.h"
 #include "storage/mock_disk_usage_report.h"
-#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
+#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 #include "lib/file/file_directory_utils.h"
 #include "share/ob_device_manager.h"
 #include "share/ob_local_device.h"
-#include "share/schema/ob_tenant_schema_service.h"
+#include "share/schema/ob_schema_runtime_service.h"
 #include "storage/tablet/ob_tablet_create_delete_helper.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"
-#include "mtlenv/mock_tenant_module_env.h"
+#include "storage/tx_storage/ob_memstore_freezer.h"
+#include "mtlenv/mock_server_runtime_env.h"
 #include "storage/test_dml_common.h"
 #include "share/ob_simple_mem_limit_getter.h"
 #include "../mockcontainer/mock_ob_iterator.h"
@@ -42,7 +42,6 @@
 #include "unittest/storage/mock_ob_table_read_info.h"
 #include "storage/compaction/ob_compaction_memory_context.h"
 #include "storage/ob_storage_schema_util.h"
-#include "storage/blocksstable/ob_sstable_private_object_cleaner.h"
 
 #define OK(ass) ASSERT_EQ(OB_SUCCESS, (ass))
 
@@ -99,9 +98,7 @@ int init_io_device(const char *test_name,
     storage_env.clog_dir_ = clog_dir;
 
     storage_env.bf_cache_miss_count_threshold_ = 10000;
-    storage_env.storage_meta_cache_priority_ = 10;
     storage_env.ethernet_speed_ = 1000000;
-    storage_env.redundancy_level_ = ObStorageEnv::NORMAL_REDUNDANCY;
 
     storage_env.clog_file_spec_.retry_write_policy_ = "normal";
     storage_env.clog_file_spec_.log_create_policy_ = "normal";
@@ -113,9 +110,9 @@ int init_io_device(const char *test_name,
 
     storage_env.data_disk_size_ = macro_block_count * macro_block_size;
     GCONF.micro_block_merge_verify_level = 0;
-    ObAddr tmp_addr = GCTX.self_addr();
+    ObAddr tmp_addr = GCONF.self_addr_;
     tmp_addr.set_ip_addr("100.1.2.3", 456);
-    GCTX.self_addr_seq_.set_addr(tmp_addr);
+    GCONF.self_addr_ = tmp_addr;
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ObIODeviceWrapper::get_instance().init(
@@ -126,13 +123,7 @@ int init_io_device(const char *test_name,
         storage_env.data_disk_size_))) {
       STORAGE_LOG(WARN, "init io device fail", K(ret), K(storage_env));
     } else if (OB_FAIL(OB_STORE_CACHE.init(
-        storage_env.index_block_cache_priority_,
-        storage_env.user_block_cache_priority_,
-        storage_env.user_row_cache_priority_,
-        storage_env.fuse_row_cache_priority_,
-        storage_env.bf_cache_priority_,
-        storage_env.bf_cache_miss_count_threshold_,
-        storage_env.storage_meta_cache_priority_))) {
+        storage_env.bf_cache_miss_count_threshold_))) {
       STORAGE_LOG(WARN, "Fail to init OB_STORE_CACHE, ", K(ret), K(storage_env.data_dir_));
     }
   }
@@ -165,8 +156,7 @@ public:
       const char **micro_data, 
       const int64_t schema_rowkey_cnt, 
       const ObScnRange &scn_range, 
-      const int64_t snapshot_version,
-      const ObMergeEngineType merge_engine_type = ObMergeEngineType::OB_MERGE_ENGINE_PARTIAL_UPDATE);
+      const int64_t snapshot_version);
   void init_tablet();
   void reset_writer(const int64_t snapshot_version, const ObMergeType &merge_type = MINOR_MERGE);
   void prepare_one_macro(
@@ -193,18 +183,16 @@ public:
     MIX_DELETE_WITH_UPDATE = 2,
   };
 
-  static const uint64_t tenant_id_ = 1001;
   static const uint64_t tablet_id_ = 300000;
   static const uint64_t table_id_ = 300000;
 
   ObMergeType merge_type_;
-  ObTenantFreezeInfoMgr *mgr_;
+  ObFreezeInfoMgr *mgr_;
   ObTableSchema table_schema_;
 
   ObITable::TableKey table_key_;
   ObWholeDataStoreDesc data_desc_;
   ObWholeDataStoreDesc index_desc_;
-  ObSSTablePrivateObjectCleaner cleaner_;
   ObMacroBlockWriter macro_writer_;
   ObMicroBlockWriter micro_writer_;
   ObRowStoreType row_store_type_;
@@ -234,11 +222,12 @@ compaction::ObCompactionMemoryContext ObMultiVersionSSTableTest::mem_ctx_(ObMult
 void ObMultiVersionSSTableTest::SetUpTestCase()
 {
   int ret = OB_SUCCESS;
-  ret = MockTenantModuleEnv::get_instance().init();
+  ret = MockServerRuntimeEnv::get_instance().init();
   ASSERT_EQ(OB_SUCCESS, ret);
   SERVER_STORAGE_META_SERVICE.is_started_ = true;
   //OK(init_io_device("multi_version_test"));
 
+  // create ls
   ObLS *ls = nullptr;
   ret = TestDmlCommon::create_ls(ls);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -250,7 +239,7 @@ void ObMultiVersionSSTableTest::TearDownTestCase()
   //ObIODeviceWrapper::get_instance().destroy();
   OB_STORE_CACHE.destroy();
 
-  MockTenantModuleEnv::get_instance().destroy();
+  MockServerRuntimeEnv::get_instance().destroy();
 }
 
 ObMultiVersionSSTableTest::ObMultiVersionSSTableTest(
@@ -273,7 +262,7 @@ ObMultiVersionSSTableTest::~ObMultiVersionSSTableTest()
 
 void ObMultiVersionSSTableTest::SetUp()
 {
-  ASSERT_TRUE(MockTenantModuleEnv::get_instance().is_inited());
+  ASSERT_TRUE(MockServerRuntimeEnv::get_instance().is_inited());
 }
 
 void ObMultiVersionSSTableTest::TearDown()
@@ -306,8 +295,7 @@ void ObMultiVersionSSTableTest::prepare_table_schema(
     const char **micro_data,
     const int64_t schema_rowkey_cnt,
     const ObScnRange &scn_range,
-    const int64_t snapshot_version,
-    const ObMergeEngineType merge_engine_type)
+    const int64_t snapshot_version)
 {
   full_read_info_.reset();
   data_iter_cursor_ = 0;
@@ -341,8 +329,6 @@ void ObMultiVersionSSTableTest::prepare_table_schema(
   //init table schema
   table_schema_.reset();
   ASSERT_EQ(OB_SUCCESS, table_schema_.set_table_name("test_index_block"));
-  table_schema_.set_tenant_id(tenant_id_);
-  table_schema_.set_tablegroup_id(1);
   table_schema_.set_database_id(1);
   table_schema_.set_table_id(table_id_);
   table_schema_.set_rowkey_column_num(full_read_info_.get_schema_rowkey_count());
@@ -350,9 +336,6 @@ void ObMultiVersionSSTableTest::prepare_table_schema(
   table_schema_.set_block_size(2 * 1024);
   table_schema_.set_compress_func_name("none");
   table_schema_.set_row_store_type(FLAT_ROW_STORE);
-  table_schema_.set_storage_format_version(OB_STORAGE_FORMAT_VERSION_V4);
-  table_schema_.set_merge_engine_type(merge_engine_type);
-
   ObColumnSchemaV2 column;
   //init column
   char name[OB_MAX_FILE_NAME_LENGTH];
@@ -391,7 +374,7 @@ void ObMultiVersionSSTableTest::init_tablet()
 {
   ObTabletID tablet_id(tablet_id_);
   ObLS *ls = nullptr;
-  ObLSService *ls_svr = MTL(ObLSService*);
+  ObLSService *ls_svr = share::g_mp->ls_service();
   ASSERT_EQ(OB_SUCCESS, ls_svr->get_ls(ls));
 
   ObTabletHandle tablet_handle;
@@ -423,7 +406,7 @@ void ObMultiVersionSSTableTest::reset_writer(
   ObTabletID tablet_id(tablet_id_);
   SCN scn;
   scn.convert_for_tx(snapshot_version);
-  ASSERT_EQ(OB_SUCCESS, data_desc_.init(false/*is_ddl*/, table_schema_, tablet_id, merge_type, snapshot_version, DATA_VERSION_1_0_0_0,
+  ASSERT_EQ(OB_SUCCESS, data_desc_.init(false/*is_ddl*/, table_schema_, tablet_id, merge_type, snapshot_version, cal_version(1, 0, 0, 0),
                                         table_schema_.get_micro_index_clustered(), 0/*concurrent_cnt*/, scn));
   void *builder_buf = allocator_.alloc(sizeof(ObSSTableIndexBuilder));
   root_index_builder_ = new (builder_buf) ObSSTableIndexBuilder(false /* not need writer buffer*/);
@@ -440,7 +423,7 @@ void ObMultiVersionSSTableTest::reset_writer(
   seq_param.seq_type_ = ObMacroSeqParam::SEQ_TYPE_INC;
   seq_param.start_ = start_seq.macro_data_seq_;
   ObPreWarmerParam pre_warm_param(MEM_PRE_WARM);
-  ASSERT_EQ(OB_SUCCESS, macro_writer_.open(data_desc_.get_desc(), 0/*parallel_idx*/, seq_param, pre_warm_param, cleaner_));
+  ASSERT_EQ(OB_SUCCESS, macro_writer_.open(data_desc_.get_desc(), 0/*parallel_idx*/, seq_param, pre_warm_param));
 }
 
 void ObMultiVersionSSTableTest::prepare_one_macro(
@@ -534,13 +517,10 @@ void ObMultiVersionSSTableTest::prepare_data_end(
   param.occupy_size_ = 0;
   param.original_size_ = 0;
   param.compressor_type_ = ObCompressorType::NONE_COMPRESSOR;
-  param.encrypt_id_ = 0;
-  param.master_key_id_ = 0;
   param.nested_size_ = res.nested_size_;
   param.nested_offset_ = res.nested_offset_;
   param.ddl_scn_.set_min();
   param.table_backup_flag_.reset();
-  param.table_shared_flag_.reset();
   param.filled_tx_scn_ = table_key_.get_end_scn();
   param.tx_data_recycle_scn_.set_min();
   param.sstable_logic_seq_ = 0;

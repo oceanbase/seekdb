@@ -18,7 +18,7 @@
 #define OCEANBASE_LOGSERVICE_LOG_STORAGE_
 
 #include "lib/lock/ob_spin_lock.h" // ObSpinLock
-#include "share/rc/ob_tenant_base.h"  // MTL_ID, previously hidden behind a removed include chain, make the dependency explicit
+#include "share/rc/ob_server_runtime.h"  // SERVER_ID
 #include "share/ob_errno.h"        // errno
 #include "log_block_header.h"      // LogBlockHeader
 #include "log_block_mgr.h"         // LogBlockMgr
@@ -154,7 +154,7 @@ private:
   int append_block_header_(const LSN &block_min_lsn, const share::SCN &block_min_scn);
   int update_block_header_(const block_id_t block_id, const LSN &block_min_lsn, const share::SCN &block_min_scn);
   bool need_switch_block_() const;
-  // 1. Use group_entry_iterator to iterate the last file, and rebuild block_header;
+  // 1. Use group_entry_iterator to iterate the last file and reconstruct block_header;
   // 2. Get endpoint information from iterator;
   // 3. Initialize dio_aligned_buf.
   template <class EntryHeaderType>

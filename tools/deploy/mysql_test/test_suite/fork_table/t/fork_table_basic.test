@@ -46,7 +46,6 @@ insert into t1 values (150, 'Eve', 32, 1);
 fork table t1 to t1_fork;
 
 --echo # 验证Fork后的表结构
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t1_fork;
 
 --echo # 验证Fork后的数据
@@ -151,7 +150,6 @@ create table t2 (
 fork table t2 to t2_fork;
 
 --echo # 验证Fork表结构
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t2_fork;
 
 --echo # 验证Fork表为空

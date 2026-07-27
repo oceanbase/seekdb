@@ -38,7 +38,7 @@ int ObExternalTabletCntMap::init(const int64_t bucket_num)
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (bucket_num <= 0 || false) {
+  } else if (bucket_num <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(bucket_num));
   } else if (OB_FAIL(ex_tablet_map_.create(bucket_num, "ExTabletCntMap", "ExTabletCntMap"))) {

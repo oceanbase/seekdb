@@ -18,7 +18,7 @@
 #include "lib/oblog/ob_log_module.h"
 #include "share/rc/ob_module_provider.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "lib/cpu/ob_cpu_topology.h"
 
@@ -74,7 +74,7 @@ ObChangeStreamMgr::~ObChangeStreamMgr()
   destroy();
 }
 
-int ObChangeStreamMgr::mtl_init(ObChangeStreamMgr *&mgr)
+int ObChangeStreamMgr::server_module_init(ObChangeStreamMgr *&mgr)
 {
   int ret = common::OB_SUCCESS;
   if (OB_ISNULL(mgr)) {
@@ -83,7 +83,7 @@ int ObChangeStreamMgr::mtl_init(ObChangeStreamMgr *&mgr)
   } else if (OB_FAIL(mgr->init())) {
     LOG_WARN("ObChangeStreamMgr init failed", KR(ret));
   } else {
-    LOG_INFO("ObChangeStreamMgr mtl_init success",  KP(MTL_CTX()));
+    LOG_INFO("ObChangeStreamMgr server_module_init success",  KP(share::server_runtime()));
   }
   return ret;
 }

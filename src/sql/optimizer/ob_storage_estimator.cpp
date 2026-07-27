@@ -122,7 +122,7 @@ int ObStorageEstimator::storage_estimate_partition_batch_rowcount(const ObSimple
     double &physical_row_count)
 {
   int ret = OB_SUCCESS;
-  MOD_SCOPE {
+  SERVER_MODULE_SCOPE {
     int64_t rc_logical = 0;
     int64_t rc_physical = 0;
     ObArenaAllocator allocator;
@@ -171,7 +171,7 @@ int ObStorageEstimator::storage_estimate_block_count_and_row_count(
     res.memtable_row_count_ = memtable_row_count;
   } else {
     
-    MOD_SCOPE {
+    SERVER_MODULE_SCOPE {
       const int64_t timeout_us = THIS_WORKER.get_timeout_remain();
       ObAccessService *access_service = NULL;
       if (OB_ISNULL(access_service = share::g_mp->access_service())) {

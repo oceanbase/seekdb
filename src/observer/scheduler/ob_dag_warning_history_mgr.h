@@ -23,7 +23,7 @@
 #include "lib/string/ob_string.h"
 #include "lib/ob_errno.h"
 #include "lib/hash/ob_hashmap.h"
-#include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_dag_scheduler.h"
 #include "storage/compaction/ob_compaction_diagnose.h"
 
 namespace oceanbase
@@ -88,7 +88,7 @@ OB_INLINE void ObDagWarningInfo::reset()
 
 class ObDagWarningHistoryManager : public compaction::ObIDiagnoseInfoMgr {
 public:
-  static int mtl_init(ObDagWarningHistoryManager *&dag_warning_history);
+  static int server_module_init(ObDagWarningHistoryManager *&dag_warning_history);
   static int64_t cal_max();
   ObDagWarningHistoryManager()
     : compaction::ObIDiagnoseInfoMgr(),
@@ -104,7 +104,7 @@ public:
   }
 
 public:
-  static const int64_t MEMORY_PERCENTAGE = 1;   // max size = tenant memory size * MEMORY_PERCENTAGE / 100
+  static const int64_t MEMORY_PERCENTAGE = 1;   // max size = runtime memory size * MEMORY_PERCENTAGE / 100
   static const int64_t POOL_MAX_SIZE = 64LL * 1024LL * 1024LL; // 64MB
 
 private:

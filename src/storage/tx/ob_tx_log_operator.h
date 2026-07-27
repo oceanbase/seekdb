@@ -209,11 +209,8 @@ OB_INLINE int ObTxCtxLogOperator<T>::prepare_generic_resource_()
         tx_ctx_->get_ctx_guard(guard, CtxLockGuard::MODE::CTX);
       }
 
-      // From 4.3, we must init the cluster_version_ of the log block header before init the log
-      // block.
       // the log_entry_no will be backfill before log-block to be submitted
-      log_block_->get_header().init(tx_ctx_->cluster_version_,
-                                    INT64_MAX /*log_entry_no*/, tx_ctx_->trans_id_);
+      log_block_->get_header().init(INT64_MAX /*log_entry_no*/, tx_ctx_->trans_id_);
     }
     log_op_arg_.submit_arg_.suggested_buf_size_ = log_op_arg_.submit_arg_.suggested_buf_size_ <= 0
                                                       ? ObTxAdaptiveLogBuf::NORMAL_LOG_BUF_SIZE

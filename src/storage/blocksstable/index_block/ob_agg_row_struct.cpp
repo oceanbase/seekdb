@@ -24,7 +24,7 @@ namespace  blocksstable
 {
 
 ObAggRowHeader::ObAggRowHeader()
-  :version_(AGG_ROW_HEADER_VERSION_2),
+  :version_(AGG_ROW_HEADER_VERSION),
    length_(0),
    agg_col_cnt_(0),
    pack_(0)
@@ -38,7 +38,7 @@ ObAggRowWriter::ObAggRowWriter()
     col_meta_list_(),
     header_(),
     row_helper_(),
-    major_working_cluster_version_(0)
+    data_format_version_(0)
     {}
 
 ObAggRowWriter::~ObAggRowWriter()
@@ -52,7 +52,7 @@ void ObAggRowWriter::reset()
 
 int ObAggRowWriter::init(const ObIArray<ObSkipIndexColMeta> &agg_col_arr,
                          const ObSkipIndexAggResult &agg_data,
-                         const int64_t major_working_cluster_version,
+                         const int64_t data_format_version,
                          ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
@@ -63,7 +63,7 @@ int ObAggRowWriter::init(const ObIArray<ObSkipIndexColMeta> &agg_col_arr,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("column count not match", K(ret), K(agg_col_arr), K(agg_data));
   } else if (FALSE_IT(agg_data_ = &agg_data)) {
-  } else if (FALSE_IT(major_working_cluster_version_ = major_working_cluster_version)) {
+  } else if (FALSE_IT(data_format_version_ = data_format_version)) {
   } else if (OB_FAIL(sort_metas(agg_col_arr, allocator))) {
     LOG_WARN("failed to sort agg col metas", K(ret));
   } else if (OB_FAIL(calc_serialize_agg_buf_size())) {
@@ -102,7 +102,7 @@ int ObAggRowWriter::calc_serialize_agg_buf_size()
   int ret = OB_SUCCESS;
   int64_t agg_header_size = 0;
   int64_t agg_data_size = 0;
-  header_.version_ = ObAggRowHeader::AGG_ROW_HEADER_VERSION_2;
+  header_.version_ = ObAggRowHeader::AGG_ROW_HEADER_VERSION;
   header_.pack_ = 0;
   header_.agg_col_idx_size_ = 0;
   header_.bitmap_size_ = ObAggRowHeader::AGG_COL_TYPE_BITMAP_SIZE;
@@ -444,7 +444,7 @@ int ObAggRowReader::read_cell(
   int64_t cell_type_bitmap_val = 0;
   int64_t tar_mask = 1L << type;
   int64_t cell_size = 0;
-  const int64_t bitmap_arr_size = has_cell_prefix_bitmap() ? (2 * header_->bitmap_size_) : header_->bitmap_size_;
+  const int64_t bitmap_arr_size = 2 * header_->bitmap_size_;
   if (OB_UNLIKELY(buf_size < bitmap_arr_size)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected buf size", K(ret), K(buf_size), KPC_(header));
@@ -470,10 +470,8 @@ int ObAggRowReader::read_cell(
     }
     col_off = col_off_arr.at(pre_cnt);
     col_len = col_off_arr.at(pre_cnt + 1) - col_off;
-    if (has_cell_prefix_bitmap()) {
-      int64_t cell_prefix_bitmap_val = row_helper_.col_bitmap_gen_.get_array().at(ObAggRowHeader::PREFIX_BITMAP_IDX);
-      is_prefix = cell_prefix_bitmap_val & tar_mask;
-    }
+    int64_t cell_prefix_bitmap_val = row_helper_.col_bitmap_gen_.get_array().at(ObAggRowHeader::PREFIX_BITMAP_IDX);
+    is_prefix = cell_prefix_bitmap_val & tar_mask;
     LOG_DEBUG("read cell", K(ret), K(pre_cnt), K(col_off), K(col_len));
   }
   return ret;

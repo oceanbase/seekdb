@@ -34,11 +34,7 @@ OB_SERIALIZE_MEMBER(AutoincParam,
                     autoinc_old_value_index_,
                     autoinc_increment_,
                     autoinc_offset_,
-                    autoinc_first_part_num_,
-                    part_level_,
                     auto_increment_cache_size_,
-                    part_value_no_order_,
-                    autoinc_mode_is_order_,
                     autoinc_version_,
                     autoinc_auto_increment_);
 

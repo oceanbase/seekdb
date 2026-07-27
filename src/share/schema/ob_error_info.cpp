@@ -382,7 +382,7 @@ int ObErrorInfo::handle_error_info(const IObErrorInfo *info,
   ObMySQLTransaction trans;
   if (OB_FAIL(collect_error_info(info, obj_type))) {
     LOG_WARN("collect error info failed", K(ret));
-  } else if (!MTL_TENANT_ROLE_CACHE_IS_PRIMARY()) {
+  } else if (!share::server_is_primary()) {
     // do nothing
   }
   else if (OB_FAIL(trans.start(GCTX.sql_proxy_, true))) {
@@ -405,7 +405,7 @@ int ObErrorInfo::delete_error(const IObErrorInfo *info,
 {
   int ret = OB_SUCCESS;
   ObMySQLProxy *sql_proxy = nullptr;
-  if (!MTL_TENANT_ROLE_CACHE_IS_PRIMARY()) {
+  if (!share::server_is_primary()) {
     // do nothing
   } else if (OB_ISNULL(sql_proxy = GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;

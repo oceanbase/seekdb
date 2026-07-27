@@ -182,8 +182,6 @@ int ObExprCalcPartitionBase::cg_expr(ObExprCGCtx &expr_cg_ctx,
         if (OB_FAIL(ret)) {
         } else if (fallback) {
         } else if (table_schema->is_hash_part()) {
-          // The execution period involves inner_functions;
-          // disable this path during the upgrade.
           {
             rt_expr.inner_func_cnt_ = 1;
             void **func_buf = NULL;
@@ -1407,14 +1405,8 @@ int ObExprCalcPartitionBase::get_first_part_id(ObExecContext &ctx, const ObExpr 
   first_part_id = OB_INVALID_ID;
   uint64_t expr_ctx_id = static_cast<uint64_t>(expr.expr_ctx_id_);
   if (ObExpr::INVALID_EXP_CTX_ID == expr_ctx_id) {
-    // during upgrade, expr ctx not exist.
-    CalcPartitionBaseInfo *calc_part_info = reinterpret_cast<CalcPartitionBaseInfo *>(expr.extra_info_);
-    if (OB_ISNULL(calc_part_info)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("extra info is null", K(ret));
-    } else {
-      first_part_id = calc_part_info->first_part_id_;
-    }
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("partition expression context is missing", K(ret), K(expr_ctx_id));
   } else {
     ObExprCalcPartCtx *calc_part_ctx = NULL;
     if (OB_ISNULL(calc_part_ctx = static_cast<ObExprCalcPartCtx *>(ctx.get_expr_op_ctx(expr_ctx_id)))
@@ -1432,14 +1424,8 @@ int ObExprCalcPartitionBase::set_first_part_id(ObExecContext &ctx, const ObExpr 
   int ret = OB_SUCCESS;
   uint64_t expr_ctx_id = static_cast<uint64_t>(expr.expr_ctx_id_);
   if (ObExpr::INVALID_EXP_CTX_ID == expr_ctx_id) {
-    // during upgrade, expr ctx not exist.
-    CalcPartitionBaseInfo *calc_part_info = reinterpret_cast<CalcPartitionBaseInfo *>(expr.extra_info_);
-    if (OB_ISNULL(calc_part_info)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("extra info is null", K(ret));
-    } else {
-      calc_part_info->first_part_id_ = first_part_id;
-    }
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("partition expression context is missing", K(ret), K(expr_ctx_id));
   } else {
     ObExprCalcPartCtx *calc_part_ctx = NULL;
     if (OB_ISNULL(calc_part_ctx = static_cast<ObExprCalcPartCtx *>(ctx.get_expr_op_ctx(expr_ctx_id)))
@@ -1447,26 +1433,6 @@ int ObExprCalcPartitionBase::set_first_part_id(ObExecContext &ctx, const ObExpr 
       LOG_WARN("create expr op ctx failed", K(ret));
     } else {
       calc_part_ctx->first_part_id_ = first_part_id;
-    }
-  }
-  return ret;
-}
-
-int ObExprCalcPartitionBase::update_part_id_calc_type_for_upgrade(
-    ObExecContext &ctx,
-    const ObExpr &expr,
-    PartitionIdCalcType calc_type)
-{
-  int ret = OB_SUCCESS;
-  uint64_t expr_ctx_id = static_cast<uint64_t>(expr.expr_ctx_id_);
-  if (ObExpr::INVALID_EXP_CTX_ID == expr_ctx_id) {
-    // Mixed running requires dynamic modification of partition_id_calc_type, 434 and below will not set this expr_ctx_id_
-    CalcPartitionBaseInfo *calc_part_info = reinterpret_cast<CalcPartitionBaseInfo *>(expr.extra_info_);
-    if (OB_ISNULL(calc_part_info)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("extra info is null", K(ret));
-    } else {
-      calc_part_info->partition_id_calc_type_ = calc_type;
     }
   }
   return ret;

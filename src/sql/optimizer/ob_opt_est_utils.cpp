@@ -714,7 +714,7 @@ int ObOptEstObjToScalar::convert_objs_to_scalars(
           ++skip_count;
           if (NULL != out_ptr && NULL != in_ptr) {
             if (OB_FAIL(convert_obj_to_scalar_obj(in_ptr, out_ptr))) {
-              LOG_WARN("Failed to convert obj using old method", K(ret));
+              LOG_WARN("Failed to convert obj using general method", K(ret));
             }
           }
         }
@@ -887,7 +887,7 @@ int ObOptEstObjToScalar::find_string_scalar_offset_base(
     }
     if (max == min || (UINT8_MAX == min && 0 == max)) {
       //if no char processed, or only one non-digit non-upper-or-lower char processed,
-      //fallback to old method
+      // use the full byte range when a dynamic base cannot be derived
       offset = 0;
       base = 256;
     } else {

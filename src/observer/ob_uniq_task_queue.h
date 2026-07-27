@@ -30,7 +30,7 @@
 #include "share/ob_thread_pool.h"
 #include "share/ob_debug_sync.h"
 #include "share/ob_debug_sync_point.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -201,12 +201,12 @@ private:
 // TODO: init should not trigger start(), have to remove start() out of init()
 template <typename Task, typename Process>
 int ObUniqTaskQueue<Task, Process>::init(Process *updater, const int64_t thread_num,
-                                         const int64_t queue_size, const char *thread_name/*OB_SERVER_TENANT_ID*/)
+                                         const int64_t queue_size, const char *thread_name/*OB_SERVER_RUNTIME_ID*/)
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(init_only(updater, thread_num, queue_size, thread_name))) {
     SERVER_LOG(WARN, "fail to init only", K(ret), K(thread_num), K(queue_size));
-  } else if (FALSE_IT(share::ObThreadPool::set_run_wrapper(MTL_CTX()))) {  // seekdb: always set (was 500!=1)
+  } else if (FALSE_IT(share::ObThreadPool::set_run_wrapper(share::server_runtime()))) {  // seekdb: always set (was 500!=1)
   } else if (OB_FAIL(start())) {
     inited_ = false;
     SERVER_LOG(WARN, "start thread failed", K(ret), K(thread_num));
@@ -218,11 +218,10 @@ int ObUniqTaskQueue<Task, Process>::init(Process *updater, const int64_t thread_
 
 template <typename Task, typename Process>
 int ObUniqTaskQueue<Task, Process>::init_only(Process *updater, const int64_t thread_num,
-                                              const int64_t queue_size, const char *thread_name/*OB_SERVER_TENANT_ID*/)
+                                              const int64_t queue_size, const char *thread_name/*OB_SERVER_RUNTIME_ID*/)
 {
   int ret = common::OB_SUCCESS;
   ObMemAttr attr(common::ObModIds::OB_PARTITION_TABLE_TASK);
-  SET_USE_500(attr);
   const int64_t group_count = 128;
   if (inited_) {
     ret = common::OB_INIT_TWICE;

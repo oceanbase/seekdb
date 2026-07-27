@@ -254,7 +254,7 @@ int ObExprSpatialCollection::eval_spatial_collection(const ObExpr &expr,
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, get_func_name());
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   ObWkbBuffer res_wkb_buf(tmp_allocator);
   uint32_t srid = 0;
   bool is_null_result = false;
@@ -289,7 +289,6 @@ int ObExprSpatialCollection::eval_spatial_collection(const ObExpr &expr,
       } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator, *datum,
                  expr.args_[i]->datum_meta_, expr.args_[i]->obj_meta_.has_lob_header(), wkb))) {
         LOG_WARN("fail to get real string data", K(ret), K(i), K(wkb));
-      } else if (FALSE_IT(tmp_allocator.add_baseline_size(wkb.length()))) {
       } else if (ObGeoType::LINESTRING == geo_type) { // linestring
         if (OB_FAIL(calc_linestring(wkb, res_wkb_buf))) {
           LOG_WARN("fail to calc linestring", K(ret), K(wkb));

@@ -40,14 +40,14 @@ struct ObBasicScheduleTabletFunc
   virtual const ObCompactionTimeGuard &get_time_guard() const = 0;
   int64_t get_loop_cnt() const { return loop_cnt_; }
   VIRTUAL_TO_STRING_KV(K_(merge_version), K_(ls_status),
-    K_(ls_could_schedule_new_round), K_(ls_could_schedule_merge), K_(is_skip_merge_tenant),
+    K_(ls_could_schedule_new_round), K_(ls_could_schedule_merge), K_(should_skip_merge),
     K_(tablet_cnt), K_(loop_cnt));
   /*
    * diagnose section
   */
   int diagnose_init(storage::ObLS *ls);
 protected:
-  void update_tenant_cached_status();
+  void update_runtime_cached_status();
   virtual void schedule_freeze_dag(const bool force);
   int check_with_schedule_scn(
     const storage::ObTablet &tablet,
@@ -67,7 +67,7 @@ protected:
   ObBatchFreezeTabletsParam freeze_param_;
   bool ls_could_schedule_new_round_;
   bool ls_could_schedule_merge_;  // suspend merge OR during restore inner_table
-  bool is_skip_merge_tenant_; // remote tenant OR during restore tenant with(Standby role)
+  bool should_skip_merge_; // Database role or restore state may temporarily suspend major merge.
   int64_t loop_cnt_;
 };
 

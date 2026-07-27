@@ -159,7 +159,7 @@ int ObExprSTAsGeoJson::eval_st_asgeojson(const ObExpr &expr, ObEvalCtx &ctx, ObD
   bool is_null_res = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_ASGEOJSON);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   uint32_t max_dec_digits = INT_MAX32;
   uint8_t flag = 0;
   ObGeometry *geo = nullptr;
@@ -173,9 +173,6 @@ int ObExprSTAsGeoJson::eval_st_asgeojson(const ObExpr &expr, ObEvalCtx &ctx, ObD
     ObWkbToJsonBinVisitor visitor(&temp_allocator, max_dec_digits, flag, srid);
     if (OB_FAIL(visitor.to_jsonbin(geo, json_res))) {
       LOG_WARN("fail to convert geo to jsonbin", K(ret));
-    } else {
-      temp_allocator.set_baseline_size(geo->length() + json_res.length());
-      temp_allocator.memory_usage_check_if_need();
     }
   }
   // set result

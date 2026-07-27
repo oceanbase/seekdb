@@ -298,7 +298,7 @@ int ObExprPrivSTGeoHash::eval_priv_st_geohash(const ObExpr &expr, ObEvalCtx &ctx
   bool is_null_res = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_GEOHASH);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObGeometry *geo = nullptr;
   ObString geohash_res;
   ObGeogBox *gbox = nullptr;

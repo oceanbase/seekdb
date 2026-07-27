@@ -38,7 +38,6 @@ ObTableScanIterator::ObTableScanIterator()
       get_merge_(NULL),
       scan_merge_(NULL),
       multi_scan_merge_(NULL),
-      skip_scan_merge_(NULL),
       memtable_row_sample_iterator_(NULL),
       row_sample_iterator_(NULL),
       block_sample_iterator_(NULL),
@@ -69,7 +68,6 @@ void ObTableScanIterator::reset()
   reset_scan_iter(get_merge_);
   reset_scan_iter(scan_merge_);
   reset_scan_iter(multi_scan_merge_);
-  reset_scan_iter(skip_scan_merge_);
   reset_scan_iter(memtable_row_sample_iterator_);
   reset_scan_iter(block_sample_iterator_);
   reset_scan_iter(ddl_block_sample_iterator_);
@@ -115,7 +113,6 @@ void ObTableScanIterator::reuse_row_iters()
   REUSE_SCAN_ITER(get_merge_);
   REUSE_SCAN_ITER(scan_merge_);
   REUSE_SCAN_ITER(multi_scan_merge_);
-  REUSE_SCAN_ITER(skip_scan_merge_);
   REUSE_SCAN_ITER(memtable_row_sample_iterator_);
   REUSE_SCAN_ITER(block_sample_iterator_);
   REUSE_SCAN_ITER(ddl_block_sample_iterator_);
@@ -147,8 +144,7 @@ bool ObTableScanIterator::can_use_global_iter_pool(const ObQRIterType iter_type)
 {
   bool use_pool = false;
   if (main_table_param_.iter_param_.tablet_id_.is_inner_tablet()) {
-  } else if (scan_param_->use_index_skip_scan() ||
-             !scan_param_->sample_info_.is_no_sample() ||
+  } else if (!scan_param_->sample_info_.is_no_sample() ||
              main_table_param_.iter_param_.enable_pd_aggregate() ||
              main_table_param_.iter_param_.enable_pd_group_by() ||
              main_table_param_.iter_param_.has_lob_column_out_) {
@@ -307,7 +303,7 @@ int ObTableScanIterator::advance_scan(ObTableScanParam &scan_param)
     STORAGE_LOG(WARN, "Failed to check advance scan supported", K(ret));
   } else {
     STORAGE_LOG(DEBUG, "table scan iterate advance scan", K_(is_inited), K(lbt()), K(scan_param_));
-    main_table_param_.iter_param_.set_is_advance_skip_scan();
+    main_table_param_.iter_param_.set_is_advance_scan();
     if (FALSE_IT(table_scan_range_.reset())) {
     } else if (OB_FAIL(table_scan_range_.init(*scan_param_))) {
       STORAGE_LOG(WARN, "Failed to init table scan range", K(ret));
@@ -414,7 +410,6 @@ int ObTableScanIterator::rescan_for_iter()
     RESET_NOT_REFRESHED_ITER(get_table_param_.refreshed_merge_, get_merge_);
     RESET_NOT_REFRESHED_ITER(get_table_param_.refreshed_merge_, scan_merge_);
     RESET_NOT_REFRESHED_ITER(get_table_param_.refreshed_merge_, multi_scan_merge_);
-    RESET_NOT_REFRESHED_ITER(get_table_param_.refreshed_merge_, skip_scan_merge_);
     RESET_NOT_REFRESHED_ITER(get_table_param_.refreshed_merge_, memtable_row_sample_iterator_);
     RESET_NOT_REFRESHED_ITER(get_table_param_.refreshed_merge_, block_sample_iterator_);
     RESET_NOT_REFRESHED_ITER(get_table_param_.refreshed_merge_, ddl_block_sample_iterator_);
@@ -440,7 +435,6 @@ int ObTableScanIterator::switch_param_for_iter()
   SWITCH_PARAM_FOR_ITER(get_merge_, ret);
   SWITCH_PARAM_FOR_ITER(scan_merge_, ret);
   SWITCH_PARAM_FOR_ITER(multi_scan_merge_, ret);
-  SWITCH_PARAM_FOR_ITER(skip_scan_merge_, ret);
 #undef SWITCH_PARAM_FOR_ITER
   return ret;
 }
@@ -502,21 +496,6 @@ do {                                                                     \
       main_iter_ = ITER_PTR;                                             \
     }                                                                    \
   }                                                                      \
-} while(0)
-
-#define INIT_AND_OPEN_SKIP_SCAN_ITER(ITER_PTR, RANGE, SUFFIX_RANGE, USE_FUSE_CACHE) \
-do {                                                                                \
-  STORAGE_LOG(TRACE, "skip scan", K(main_table_param_), K(RANGE), K(SUFFIX_RANGE)); \
-  if (nullptr == ITER_PTR && OB_FAIL(init_scan_iter(ITER_PTR))) {                   \
-    STORAGE_LOG(WARN, "Failed to init single merge", K(ret));                       \
-  } else {                                                                          \
-    main_table_ctx_.use_fuse_row_cache_ = USE_FUSE_CACHE;                           \
-    if (OB_FAIL(ITER_PTR->open(RANGE, SUFFIX_RANGE))) {                             \
-      STORAGE_LOG(WARN, "Fail to open multiple merge iterator", K(ret));            \
-    } else {                                                                        \
-      main_iter_ = ITER_PTR;                                                        \
-    }                                                                               \
-  }                                                                                 \
 } while(0)
 
 int ObTableScanIterator::open_iter()
@@ -640,15 +619,9 @@ int ObTableScanIterator::init_and_open_scan_merge_iter_()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("error caused by unknown reasons", K(ret));
       }
-    } else if (scan_param_->use_index_skip_scan()) {
-      INIT_AND_OPEN_SKIP_SCAN_ITER(
-          skip_scan_merge_, table_scan_range_.get_ranges().at(0), table_scan_range_.get_suffix_ranges().at(0), false);
     } else {
       INIT_AND_OPEN_ITER(scan_merge_, table_scan_range_.get_ranges().at(0), false);
     }
-  } else if (scan_param_->use_index_skip_scan()) {
-    ret = OB_NOT_SUPPORTED;
-    STORAGE_LOG(WARN, "multiple ranges are not supported in index skip scan now");
   } else {
     INIT_AND_OPEN_ITER(multi_scan_merge_, table_scan_range_.get_ranges(), false);
   }
@@ -657,7 +630,6 @@ int ObTableScanIterator::init_and_open_scan_merge_iter_()
 }
 
 #undef INIT_AND_OPEN_ITER
-#undef INIT_AND_OPEN_SKIP_SCAN_ITER
 
 int ObTableScanIterator::get_next_row(ObNewRow *&row)
 {
@@ -684,8 +656,7 @@ int ObTableScanIterator::get_next_row(blocksstable::ObDatumRow *&row)
     if (OB_FAIL(main_iter_->get_next_row(row))) {
       if (OB_ITER_END != ret) {
         STORAGE_LOG(WARN, "Fail to get next row, ", K(ret), KPC_(scan_param), K_(main_table_param),
-            KP(single_merge_), KP(get_merge_), KP(scan_merge_), KP(multi_scan_merge_),
-            KP(skip_scan_merge_), KPC(cached_iter_node_));
+            KP(single_merge_), KP(get_merge_), KP(scan_merge_), KP(multi_scan_merge_), KPC(cached_iter_node_));
       }
     }
   }
@@ -719,8 +690,7 @@ int ObTableScanIterator::get_next_rows(int64_t &count, int64_t capacity)
     if (OB_FAIL(main_iter_->get_next_rows(count, capacity))) {
       if (OB_ITER_END != ret) {
         STORAGE_LOG(WARN, "Fail to get next row, ", K(ret), K(*scan_param_), K_(main_table_param),
-            KP(single_merge_), KP(get_merge_), KP(scan_merge_), KP(multi_scan_merge_),
-            KP(skip_scan_merge_), KPC(cached_iter_node_));
+            KP(single_merge_), KP(get_merge_), KP(scan_merge_), KP(multi_scan_merge_), KPC(cached_iter_node_));
       }
     }
   }
@@ -759,15 +729,13 @@ int ObTableScanIterator::check_advance_scan_supported()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(scan_param_->scan_flag_.scan_order_ != ObQueryFlag::Forward ||
                   !scan_param_->sample_info_.is_no_sample() ||
-                  scan_param_->use_index_skip_scan() ||
                   main_table_param_.iter_param_.enable_pd_aggregate() ||
                   main_table_param_.iter_param_.enable_pd_group_by())) {
       ret = OB_NOT_SUPPORTED;
-      STORAGE_LOG(WARN, "advance_scan not supported for not forward scan/sample/index skip scan/group by pushdown",
+      STORAGE_LOG(WARN, "advance_scan not supported for not forward scan/sample/group by pushdown",
       K(ret),
       K(scan_param_->scan_flag_.scan_order_),
       K(scan_param_->sample_info_.is_no_sample()),
-      K(scan_param_->use_index_skip_scan()),
       K(main_table_param_.iter_param_.enable_pd_aggregate()),
       K(main_table_param_.iter_param_.enable_pd_group_by()),
       K(lbt()));

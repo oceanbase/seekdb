@@ -50,7 +50,6 @@ public:
   void destroy();
   int erase_all();
   int erase_all(const int64_t cache_id);
-  int erase_tenant(const bool force_erase = false);
   int clean_garbage_node(int64_t &start_pos, const int64_t clean_num);
   int replace_fragment_node(int64_t &start_pos, int64_t &replace_node_count, const int64_t replace_num);
   int put(

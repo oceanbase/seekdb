@@ -70,7 +70,6 @@ int ObExprPrivSTEquals::get_input_geometry(omt::ObSrsCacheGuard &srs_guard, Mult
           gis_arg->obj_meta_.has_lob_header(),
           wkb))) {
     LOG_WARN("fail to get real string data", K(ret), K(wkb));
-  } else if (FALSE_IT(allocator.add_baseline_size(wkb.length()))) {
   } else if (OB_FAIL(ObGeoTypeUtil::get_type_srid_from_wkb(wkb, type, srid))) {
     if (ret == OB_ERR_GIS_INVALID_DATA) {
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_EQUALS);
@@ -108,7 +107,7 @@ int ObExprPrivSTEquals::eval_priv_st_equals(const ObExpr &expr, ObEvalCtx &ctx, 
   const ObSrsItem *srs2 = nullptr;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_EQUALS);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObDatum *gis_datum1 = nullptr;
   ObDatum *gis_datum2 = nullptr;
   if (OB_FAIL(temp_allocator.eval_arg(gis_arg1, ctx, gis_datum1)) || OB_FAIL(temp_allocator.eval_arg(gis_arg2, ctx, gis_datum2))) {
@@ -148,9 +147,6 @@ int ObExprPrivSTEquals::eval_priv_st_equals(const ObExpr &expr, ObEvalCtx &ctx, 
       } else {
         res.set_bool(result);
       }
-    }
-    if (mem_ctx != nullptr) {
-      temp_allocator.add_ext_used((*mem_ctx)->arena_used());
     }
   }
   return ret;

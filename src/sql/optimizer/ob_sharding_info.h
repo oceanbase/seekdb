@@ -54,8 +54,7 @@ public:
       all_partition_indexes_(),
       all_subpartition_indexes_(),
       is_partition_single_(false),
-      is_subpartition_sinlge_(false),
-      can_reselect_replica_(false)
+      is_subpartition_sinlge_(false)
   {}
   ObShardingInfo(ObTableLocationType type)
   : part_level_(share::schema::PARTITION_LEVEL_MAX),
@@ -71,8 +70,7 @@ public:
     all_partition_indexes_(),
     all_subpartition_indexes_(),
     is_partition_single_(false),
-    is_subpartition_sinlge_(false),
-    can_reselect_replica_(false)
+    is_subpartition_sinlge_(false)
   {}
 
   virtual ~ObShardingInfo()
@@ -231,8 +229,7 @@ public:
   }
   inline bool is_sharding() const
   {
-    return (OB_TBL_LOCATION_REMOTE == location_type_ ||
-            OB_TBL_LOCATION_DISTRIBUTED == location_type_);
+    return OB_TBL_LOCATION_DISTRIBUTED == location_type_;
   }
   inline bool is_distributed() const
   {
@@ -250,14 +247,6 @@ public:
   {
     location_type_ = OB_TBL_LOCATION_ALL;
   }
-  inline bool is_remote() const
-  {
-    return (OB_TBL_LOCATION_REMOTE == location_type_);
-  }
-  inline void set_remote()
-  {
-    location_type_ = OB_TBL_LOCATION_REMOTE;
-  }
   bool is_local() const
   {
     return OB_TBL_LOCATION_LOCAL == location_type_;
@@ -269,29 +258,11 @@ public:
   bool is_single() const
   {
     return (OB_TBL_LOCATION_LOCAL == location_type_ ||
-            OB_TBL_LOCATION_ALL == location_type_ ||
-            OB_TBL_LOCATION_REMOTE == location_type_);
+            OB_TBL_LOCATION_ALL == location_type_);
   }
   bool is_uninitial() const {
     return OB_TBL_LOCATION_UNINITIALIZED == location_type_;
   }
-  void set_can_reselect_replica(const bool b) { can_reselect_replica_ = b; }
-  inline bool get_can_reselect_replica() const 
-  { 
-    bool ret = false;
-    if (!can_reselect_replica_) {
-      ret = false;
-    } else if (NULL == phy_table_location_info_ ||
-        (1 != phy_table_location_info_->get_partition_cnt())) {
-      ret = false;
-    } else {
-      ret = phy_table_location_info_->get_phy_part_loc_info_list().at(0)
-                                      .get_partition_location()
-                                      .get_local_replica().is_valid();
-    }
-    return ret;
-  }
-
   inline bool is_distributed_without_table_location() const {
     return is_distributed() && NULL == phy_table_location_info_;
   }
@@ -321,7 +292,6 @@ public:
 
   int copy_with_part_keys(const ObShardingInfo &other);
   int copy_without_part_keys(const ObShardingInfo &other);
-  int get_remote_addr(ObAddr &remote) const;
   int get_total_part_cnt(int64_t &total_part_cnt) const;
   static int get_all_partition_key(ObOptimizerContext &ctx,
                                    const ObDMLStmt &stmt,
@@ -333,7 +303,6 @@ public:
                K_(subpart_func_type),
                K_(part_num),
                K_(location_type),
-               K_(can_reselect_replica),
                K_(phy_table_location_info));
 
 private:
@@ -402,7 +371,6 @@ private:
   bool is_partition_single_;
   // In the phy_table_location_info_ of the secondary partition table, does each primary partition involve only one secondary partition
   bool is_subpartition_sinlge_;
-  bool can_reselect_replica_; // Can reselect partition's leader, only the lowest level replication table is allowed, not allowed after inheritance
   DISALLOW_COPY_AND_ASSIGN(ObShardingInfo);
 };
 }

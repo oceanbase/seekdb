@@ -31,7 +31,7 @@ int ObVecITaskExecutor::init(storage::ObLS *ls)
   ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
   if (OB_ISNULL(vector_index_service) || OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED; 
-    LOG_WARN("tenant vector index load task fail", K(ret), KP(vector_index_service), KP(ls));
+    LOG_WARN("vector index load task failed", K(ret), KP(vector_index_service), KP(ls));
   } else {
     vector_index_service_ = vector_index_service;
     ls_ = ls;
@@ -52,7 +52,7 @@ int ObVecITaskExecutor::get_index_mgr(ObPluginVectorIndexMgr *&index_mgr)
   return ret;
 }
 
-// resume from __all_vector_index_task of filter tenant
+// Resume matching tasks from __all_vector_index_task.
 int ObVecITaskExecutor::resume_task()
 {
   int ret = OB_SUCCESS;
@@ -60,9 +60,8 @@ int ObVecITaskExecutor::resume_task()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("vector index load task not inited", KR(ret));
-  } else if (!check_operation_allow()) { // skip
   } else if (OB_FAIL(get_index_mgr(index_mgr))) { // skip
-    LOG_WARN("fail to get index ls mgr", K(ret));
+    LOG_WARN("fail to get index manager", K(ret));
   } else {
     const bool for_update = true; // select for update
     ObVecIndexAsyncTaskOption &task_opt = index_mgr->get_async_task_opt();
@@ -84,10 +83,9 @@ int ObVecITaskExecutor::load_task_from_inner_table()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("vector index load task not inited", KR(ret));
-  } else if (!check_operation_allow()) { // skip
   } else if (OB_FAIL(get_index_mgr(index_mgr))) {
-    LOG_WARN("fail to get index ls mgr", K(ret));
-  } else if (OB_ISNULL(sql_proxy)) {
+    LOG_WARN("fail to get index manager", K(ret));
+  } else if (OB_ISNULL(index_mgr) || OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null pointer", K(ret), K(sql_proxy));
   } else {
@@ -119,7 +117,6 @@ int ObVecITaskExecutor::start_task()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("vector async task not init", K(ret));
-  } else if (!check_operation_allow()) { // skip
   } else if (OB_ISNULL(vector_index_service_) || OB_ISNULL(ls_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(ret), KP(vector_index_service_), KP(ls_));

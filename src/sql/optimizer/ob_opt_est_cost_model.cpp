@@ -36,8 +36,6 @@ int ObCostTableScanInfo::assign(const ObCostTableScanInfo &est_cost_info)
   int ret = OB_SUCCESS;
   if (OB_FAIL(ranges_.assign(est_cost_info.ranges_))) {
     LOG_WARN("failed to assign range", K(ret));
-  } else if (OB_FAIL(ss_ranges_.assign(est_cost_info.ss_ranges_))) {
-    LOG_WARN("failed to assign range", K(ret));
   } else if (OB_FAIL(range_columns_.assign(est_cost_info.range_columns_))) {
     LOG_WARN("failed to assign range columns", K(ret));
   } else if (OB_FAIL(access_column_items_.assign(est_cost_info.access_column_items_))) {
@@ -47,8 +45,6 @@ int ObCostTableScanInfo::assign(const ObCostTableScanInfo &est_cost_info)
   } else if (OB_FAIL(prefix_filters_.assign(est_cost_info.prefix_filters_))) {
     LOG_WARN("failed to assign access columns", K(ret));
   } else if (OB_FAIL(pushdown_prefix_filters_.assign(est_cost_info.pushdown_prefix_filters_))) {
-    LOG_WARN("failed to assign access columns", K(ret));
-  } else if (OB_FAIL(ss_postfix_range_filters_.assign(est_cost_info.ss_postfix_range_filters_))) {
     LOG_WARN("failed to assign access columns", K(ret));
   } else if (OB_FAIL(postfix_filters_.assign(est_cost_info.postfix_filters_))) {
     LOG_WARN("failed to assign access columns", K(ret));
@@ -75,8 +71,6 @@ int ObCostTableScanInfo::assign(const ObCostTableScanInfo &est_cost_info)
     postfix_filter_sel_ = est_cost_info.postfix_filter_sel_;
     table_filter_sel_ = est_cost_info.table_filter_sel_;
     join_filter_sel_ = est_cost_info.join_filter_sel_;
-    ss_prefix_ndv_ = est_cost_info.ss_prefix_ndv_;
-    ss_postfix_range_filters_sel_ = est_cost_info.ss_postfix_range_filters_sel_;
     logical_query_range_row_count_ = est_cost_info.logical_query_range_row_count_;
     phy_query_range_row_count_ = est_cost_info.phy_query_range_row_count_;
     index_back_row_count_ = est_cost_info.index_back_row_count_;
@@ -127,8 +121,6 @@ int ObCostTableScanInfo::has_exec_param(bool &bool_ret) const
   bool_ret = false;
   if (OB_FAIL(has_exec_param(prefix_filters_, bool_ret))) {
   } else if (OB_FAIL(has_exec_param(pushdown_prefix_filters_, bool_ret))) {
-    LOG_WARN("failed to has_exec_param");
-  } else if (OB_FAIL(has_exec_param(ss_postfix_range_filters_, bool_ret))) {
     LOG_WARN("failed to has_exec_param");
   } else if (OB_FAIL(has_exec_param(postfix_filters_, bool_ret))) {
     LOG_WARN("failed to has_exec_param");
@@ -1179,14 +1171,6 @@ double ObOptEstCostModel::cost_hash_distinct(double rows,
 }
 
 /**
- * @brief     Estimate the cost function of the Sequence operator under Select
- */
-double ObOptEstCostModel::cost_sequence(double rows, double uniq_sequence_cnt)
-{
-  return cost_params_.get_cpu_tuple_cost(sys_stat_) * rows + 
-          cost_params_.get_cpu_operator_cost(sys_stat_) * uniq_sequence_cnt;
-}
-/**
  * @brief      Estimate the cost of the Limit operator function.
  * @formula    cost = rows * CPU_TUPLE_COST
  * @return     The cost of the operator itself
@@ -1348,7 +1332,6 @@ int ObOptEstCostModel::cost_basic_table(const ObCostTableScanInfo &est_cost_info
                               est_cost_info.limit_rows_;
   double index_scan_cost = 0;
   double index_back_cost = 0;
-  double das_rpc_cost = 0.0;
   // calc scan one partition cost 
   if (OB_FAIL(cost_index_scan(est_cost_info, 
                               row_count_per_part,
@@ -1360,8 +1343,6 @@ int ObOptEstCostModel::cost_basic_table(const ObCostTableScanInfo &est_cost_info
                                     per_part_limit_cnt,
                                     index_back_cost))) {
     LOG_WARN("failed to calc index back cost", K(ret));
-  } else if (OB_FAIL(calc_das_rpc_cost(est_cost_info, das_rpc_cost))) {
-    LOG_WARN("failed to calc das rpc cost", K(ret));
   } else {
     cost += index_scan_cost;
     OPT_TRACE_COST_MODEL(KV(cost), "+=", KV(index_scan_cost));
@@ -1370,10 +1351,7 @@ int ObOptEstCostModel::cost_basic_table(const ObCostTableScanInfo &est_cost_info
     // calc one parallel scan cost
     cost *= part_cnt_per_dop;
     OPT_TRACE_COST_MODEL(KV(cost), "*=", KV(part_cnt_per_dop));
-    // calc das rescan scan rpc cost
-    cost += das_rpc_cost;
-    OPT_TRACE_COST_MODEL(KV(cost), "+=", KV(das_rpc_cost));
-    LOG_TRACE("OPT:[ESTIMATE FINISH]", K(cost), K(part_cnt_per_dop), K(das_rpc_cost), K(est_cost_info));
+    LOG_TRACE("OPT:[ESTIMATE FINISH]", K(cost), K(part_cnt_per_dop), K(est_cost_info));
   }
   return ret;
 }
@@ -1411,10 +1389,6 @@ int ObOptEstCostModel::cost_row_store_index_scan(const ObCostTableScanInfo &est_
                                                 double &index_scan_cost) 
 {
   int ret = OB_SUCCESS;
-  //refine row count for index skip scan
-  if (!est_cost_info.ss_ranges_.empty() && est_cost_info.ss_prefix_ndv_ > 0) {
-    row_count /= est_cost_info.ss_prefix_ndv_;
-  }
   if (ObSimpleBatch::T_GET == est_cost_info.batch_type_ || 
       ObSimpleBatch::T_MULTI_GET == est_cost_info.batch_type_) {
     if (OB_FAIL(cost_range_get(est_cost_info,
@@ -1472,13 +1446,6 @@ int ObOptEstCostModel::cost_row_store_index_scan(const ObCostTableScanInfo &est_
     index_scan_cost = fulltext_scan_cost;
     LOG_TRACE("OPT::[COST FULLTEXT INDEX SCAN]", K(fulltext_scan_cost), K(ret));
   }
-  //add index skip scan cost
-  if (OB_FAIL(ret)) {
-  } else if (!est_cost_info.ss_ranges_.empty()) {
-    index_scan_cost *= est_cost_info.ss_prefix_ndv_;
-    OPT_TRACE_COST_MODEL(KV(index_scan_cost), "*=", KV_(est_cost_info.ss_prefix_ndv));
-    LOG_TRACE("OPT::[COST INDEX SKIP SCAN]", K(est_cost_info.ss_prefix_ndv_), K(index_scan_cost));
-  }
   return ret;
 }
 
@@ -1513,66 +1480,6 @@ int ObOptEstCostModel::cost_row_store_index_back(const ObCostTableScanInfo &est_
   return ret;
 }
 
-
-int ObOptEstCostModel::calc_das_rpc_cost(const ObCostTableScanInfo &est_cost_info,
-                                         double &das_rpc_cost)
-{
-  int ret = OB_SUCCESS;
-  das_rpc_cost = 0.0;
-  double remote_rpc_cnt = 0;
-  double local_rpc_cnt = 0;
-  if (OB_ISNULL(est_cost_info.sel_ctx_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(est_cost_info.sel_ctx_));
-  } else if (!est_cost_info.sel_ctx_->get_opt_ctx().enable_425_opt_batch_rescan()) {
-    /* do nothing */
-  } else if (!est_cost_info.is_das_scan_ || !est_cost_info.is_rescan_) {
-    /* do nothing */
-  } else if (OB_FAIL(get_rescan_rpc_cnt(est_cost_info.rescan_left_server_list_,
-                                        est_cost_info.rescan_server_list_,
-                                        remote_rpc_cnt,
-                                        local_rpc_cnt))) {
-    LOG_WARN("failed to get rescan rpc cnt", K(ret));
-  } else if (est_cost_info.is_batch_rescan_) {
-    //  ignore local rpc now
-    das_rpc_cost = remote_rpc_cnt * cost_params_.get_das_batch_rescan_per_row_rpc_cost(sys_stat_);
-  } else {
-    das_rpc_cost = remote_rpc_cnt * cost_params_.get_das_rescan_per_row_rpc_cost(sys_stat_);
-  }
-  return ret;
-}
-
-int ObOptEstCostModel::get_rescan_rpc_cnt(const ObIArray<common::ObAddr> *left_server_list,
-                                          const ObIArray<common::ObAddr> *right_server_list,
-                                          double &remote_rpc_cnt,
-                                          double &local_rpc_cnt)
-{
-  int ret = OB_SUCCESS;
-  remote_rpc_cnt = 0;
-  local_rpc_cnt = 0;
-  if (OB_ISNULL(right_server_list) || OB_UNLIKELY(right_server_list->empty())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected right server list", K(ret), KPC(right_server_list));
-  } else if (NULL == left_server_list || left_server_list->empty()
-             || ObShardingInfo::is_shuffled_server_list(*left_server_list)) {
-    remote_rpc_cnt = right_server_list->count();
-  } else if (1 == left_server_list->count() && 1 == right_server_list->count()) {
-    if (left_server_list->at(0) == right_server_list->at(0)) {
-      local_rpc_cnt = 1;
-    } else {
-      remote_rpc_cnt = 1;
-    }
-  } else if (ObOptimizerUtil::is_subset(*left_server_list, *right_server_list)) {
-    remote_rpc_cnt = right_server_list->count() - 1;
-    local_rpc_cnt = 1;
-  } else {
-    remote_rpc_cnt = right_server_list->count();
-    local_rpc_cnt = 0;
-  }
-  LOG_TRACE("OPT:[GET RESCAN RPC CNT]", KPC(left_server_list), KPC(right_server_list),
-                                          K(remote_rpc_cnt), K(local_rpc_cnt));
-  return ret;
-}
 
 /*
  * estimate the network transform and rpc cost for global index,

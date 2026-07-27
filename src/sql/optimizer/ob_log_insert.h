@@ -128,7 +128,7 @@ protected:
   // for insert_up update caluse
   common::ObArray<IndexDMLInfo *, common::ModulePageAllocator, true> index_upd_infos_;
   bool insert_up_; // insert on duplicate update statement
-  //for SPM Pruning
+  // Whether the inserted rows come from a SELECT query.
   bool is_insert_select_;
   const common::ObIArray<ObUniqueConstraintInfo> *constraint_infos_;
 };

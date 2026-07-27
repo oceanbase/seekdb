@@ -30,7 +30,7 @@ namespace storage
 {
 ObStorageLogger::ObStorageLogger()
   : is_inited_(false), log_writer_(nullptr),
-    tenant_log_writer_(), server_log_writer_(),
+    local_log_writer_(), server_log_writer_(),
     log_seq_(0), build_log_mutex_(common::ObLatchIds::SLOG_PROCESSING_MUTEX),
     log_file_spec_(), is_start_(false)
 {
@@ -58,12 +58,12 @@ int ObStorageLogger::init(
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "invalid arguments", K(ret), KP(root_dir), K(max_log_file_size));
   } else {
-    if (is_server) {  // seekdb: server-level slog (super block / tenant meta), distinct stream for replay ordering
+    if (is_server) {  // Server metadata uses a distinct stream to preserve replay ordering.
       log_writer_ = &server_log_writer_;
-      pret = snprintf(tnt_slog_dir_, MAX_PATH_SIZE, "%s/server", root_dir);
-    } else {  // the single (process) tenant storage slog
-      log_writer_ = &tenant_log_writer_;
-      pret = snprintf(tnt_slog_dir_, MAX_PATH_SIZE, "%s/sys", root_dir);
+      pret = snprintf(slog_dir_, MAX_PATH_SIZE, "%s/server", root_dir);
+    } else {  // Local database storage metadata.
+      log_writer_ = &local_log_writer_;
+      pret = snprintf(slog_dir_, MAX_PATH_SIZE, "%s/sys", root_dir);
     }
   }
 
@@ -71,11 +71,11 @@ int ObStorageLogger::init(
     // do nothing
   } else if (pret < 0 || pret >= MAX_PATH_SIZE) {
     ret = OB_BUF_NOT_ENOUGH;
-    STORAGE_REDO_LOG(ERROR, "construct tenant slog path fail", K(ret));
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(tnt_slog_dir_))) {
-    STORAGE_REDO_LOG(WARN, "fail to create tenant dir.", K(ret), K_(tnt_slog_dir));
-  } else if (OB_FAIL(log_writer_->init(tnt_slog_dir_, max_log_file_size, max_log_size, log_file_spec))) {
-    STORAGE_REDO_LOG(WARN, "fail to init log_writer_", K(ret), K_(tnt_slog_dir), K(max_log_file_size));
+    STORAGE_REDO_LOG(ERROR, "construct storage slog path fail", K(ret));
+  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(slog_dir_))) {
+    STORAGE_REDO_LOG(WARN, "fail to create storage slog directory", K(ret), K_(slog_dir));
+  } else if (OB_FAIL(log_writer_->init(slog_dir_, max_log_file_size, max_log_size, log_file_spec))) {
+    STORAGE_REDO_LOG(WARN, "fail to init log_writer_", K(ret), K_(slog_dir), K(max_log_file_size));
   } else {
     log_file_spec_ = log_file_spec;
     is_inited_ = true;
@@ -106,7 +106,7 @@ void ObStorageLogger::destroy()
     log_writer_->destroy();
     log_writer_ = nullptr;
   }
-  MEMSET(tnt_slog_dir_, 0, sizeof(tnt_slog_dir_));
+  MEMSET(slog_dir_, 0, sizeof(slog_dir_));
   is_inited_ = false;
   log_seq_ = 0;
 }
@@ -411,7 +411,7 @@ int ObStorageLogger::alloc_log_buffer(void *&log_buffer)
   if (OB_ISNULL(log_buffer = ob_malloc_align(
       ObLogConstants::LOG_FILE_ALIGN_SIZE,
       NORMAL_LOG_ITEM_SIZE,
-      SET_USE_UNEXPECTED_500("StorageLoggerM")))) {
+      "StorageLoggerM"))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_REDO_LOG(ERROR, "Fail to alloc memory for log buffer", K(ret),
         LITERAL_K(NORMAL_LOG_ITEM_SIZE), LITERAL_K(ObLogConstants::LOG_FILE_ALIGN_SIZE));
@@ -438,7 +438,7 @@ int ObStorageLogger::alloc_log_item(ObStorageLogItem *&log_item)
   int ret = OB_SUCCESS;
   log_item = nullptr;
 
-  if (OB_ISNULL(log_item = OB_NEW(ObStorageLogItem, SET_USE_UNEXPECTED_500("StorageLoggerM")))) {
+  if (OB_ISNULL(log_item = OB_NEW(ObStorageLogItem, "StorageLoggerM"))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_REDO_LOG(ERROR, "Fail to alloc memory for log item", K(ret),
         "size", sizeof(ObStorageLogItem));
@@ -455,7 +455,7 @@ int ObStorageLogger::free_log_item(ObStorageLogItem *log_item)
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "Invalid argument", K(ret), KP(log_item));
   } else {
-    OB_DELETE(ObStorageLogItem, SET_USE_UNEXPECTED_500("StorageLoggerM"), log_item);
+    OB_DELETE(ObStorageLogItem, "StorageLoggerM", log_item);
   }
 
   return ret;
@@ -541,7 +541,7 @@ int ObStorageLogger::get_start_file_id(int64_t &start_file_id)
   int64_t min_log_id = 0;
   int64_t max_log_id = 0;
 
-  if (OB_FAIL(file_handler.init(tnt_slog_dir_, 256 << 20))) {
+  if (OB_FAIL(file_handler.init(slog_dir_, 256 << 20))) {
     STORAGE_REDO_LOG(WARN, "Fail to init log file handler.", K(ret));
   } else if (OB_FAIL(file_handler.get_file_id_range(min_log_id, max_log_id))
       && OB_ENTRY_NOT_EXIST != ret) {

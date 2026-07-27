@@ -19,7 +19,6 @@
 
 #include "ob_pl.h"
 #include "ob_pl_stmt.h"
-#include "ob_pl_persistent.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/alloc/ob_malloc_callback.h"
 
@@ -44,13 +43,9 @@ class ObPLPackageAST;
 class ObPLPackage;
 class ObPLPackageGuard;
 class ObPLResolver;
-class ObPLVarDebugInfo;
-class ObRoutinePersistentInfo;
 
-// PL front-end: parses and semantically resolves PL source (anonymous blocks,
-// standalone routines, packages) into an executable AST unit (ObPLFunction /
-// ObPLPackage). It emits no native code; the interpreter is the back-end that
-// walks the produced AST.
+// PL front-end: parses and semantically resolves anonymous blocks, standalone
+// routines, and packages into executable AST units consumed by the interpreter.
 class ObPLBuilder
 {
 public:
@@ -132,12 +127,9 @@ private:
                                 ObString &package_name);
   int compile(const share::schema::ObRoutineInfo &routine, ObPLFunctionAST &func_ast, ObPLFunction &func);
 public:
-  // Bind a resolved raw expr's runtime ObExpr into the PL ObSqlExpression. Relocated off
-  // the deleted native-code generator; ObPLBuilder is a friend of ObRawExpr so it may read
-  // the protected rt_expr_.
+  // Bind a resolved raw expr's runtime ObExpr into the PL ObSqlExpression.
   static int link_sql_expr_rt(sql::ObRawExpr &raw_expr, sql::ObSqlExpression &sql_expr);
-  // Propagate a unit's profiler info to all nested routines (native-code-generation-free; relocated off the
-  // deleted code generator).
+  // Propagate a unit's profiler info to all nested routines.
   static int set_profiler_unit_info_recursive(const ObPLExecutableUnit &unit);
 private:
   common::ObIAllocator &allocator_;

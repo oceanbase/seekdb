@@ -39,7 +39,7 @@ protected:
                              ObIAllocator &alloc,
                              ObIArray<ObIDASTaskOp*> &src_task_list,
                              ObIArray<ObIDASTaskOp*> &new_task_list,
-                             ObDASRemoteInfo &remote_info,
+                             ObDASCopyContext &copy_context,
                              ObDasAggregatedTask &das_task_wrapper);
   int deep_copy_das_task(ObDASTaskFactory &das_factory,
                          ObIDASTaskOp *src_op,

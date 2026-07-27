@@ -291,7 +291,7 @@ class ObCStringHelper
   const static int64_t HELPER_MEMORY_LIMIT = 64L << 20;
 public:
   ObCStringHelper()
-    : allocator_(SET_USE_500("CStringHelper"))
+    : allocator_("CStringHelper")
   {
 #ifdef ENABLE_DEBUG_LOG
     force_alloc();

@@ -52,7 +52,7 @@ bool ObMicroBlockHeader::is_valid() const
 {
   bool valid_data =
       header_size_ == get_serialize_size(column_count_, has_column_checksum_)
-      && version_ >= MICRO_BLOCK_HEADER_VERSION_1
+      && version_ == MICRO_BLOCK_HEADER_VERSION
       && MICRO_BLOCK_HEADER_MAGIC == magic_
       && column_count_ >= rowkey_column_count_
       && rowkey_column_count_ >= 0
@@ -321,7 +321,7 @@ int ObMicroBlockHeader::deserialize(const char *buf, int64_t buf_len, int64_t &p
 
 bool ObMicroBlockHeader::is_contain_hash_index() const
 {
-  return version_ >= MICRO_BLOCK_HEADER_VERSION_3 && contains_hash_index_ == 1;
+  return contains_hash_index_ == 1;
 }
 
 }//end namespace blocksstable

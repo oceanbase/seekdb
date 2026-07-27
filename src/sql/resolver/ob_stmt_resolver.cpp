@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ob_stmt_resolver.h"
 
-#include "share/catalog/ob_catalog_utils.h"
 #include "sql/session/ob_sql_session_info.h"
 
 namespace oceanbase
@@ -40,37 +39,14 @@ uint64_t ObStmtResolver::generate_table_id()
 int ObStmtResolver::resolve_table_relation_node(const ParseNode *node,
                                                 ObString &table_name,
                                                 ObString &db_name,
-                                                ObString &catalog_name,
-                                                bool is_org /*false*/)
-{
-  int ret = OB_SUCCESS;
-  bool is_db_explicit = false;
-  UNUSED(is_db_explicit);
-  if (OB_FAIL(resolve_table_relation_node_v2(node,
-                                             table_name,
-                                             db_name,
-                                             catalog_name,
-                                             is_db_explicit,
-                                             is_org))) {
-    LOG_WARN("failed to resolve table name", K(ret));
-  } else {
-    // do nothing
-  }
-  return ret;
-}
-
-int ObStmtResolver::resolve_table_relation_node(const ParseNode *node,
-                                                ObString &table_name,
-                                                ObString &db_name,
                                                 bool is_org/*false*/)
 {
   int ret = OB_SUCCESS;
-  ObString catalog_name;
-  UNUSED(catalog_name);
-  if (OB_FAIL(resolve_table_relation_node(node,
+  bool is_db_explicit = false;
+  if (OB_FAIL(resolve_table_relation_node_v2(node,
                                              table_name,
                                              db_name,
-                                             catalog_name,
+                                             is_db_explicit,
                                              is_org))) {
     LOG_WARN("failed to resolve table name", K(ret));
   } else {
@@ -88,23 +64,17 @@ int ObStmtResolver::resolve_table_relation_node(const ParseNode *node,
 int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
                                                    ObString &table_name,
                                                    ObString &db_name,
-                                                   common::ObString &catalog_name,
                                                    bool &is_db_explicit,
                                                    bool is_org /*false*/)
 {
   int ret = OB_SUCCESS;
   is_db_explicit = false;
-  uint64_t catalog_id = OB_INTERNAL_CATALOG_ID;
-  ParseNode *catalog_node = NULL;
   ParseNode *db_node = node->children_[0];
   ParseNode *relation_node = node->children_[1];
   int32_t table_len = static_cast<int32_t>(relation_node->str_len_);
   table_name.assign_ptr(const_cast<char*>(relation_node->str_value_), table_len);
   ObNameCaseMode mode = OB_NAME_CASE_INVALID;
   ObCollationType cs_type = CS_TYPE_INVALID;
-  if (node->num_child_ == 4 && NULL != node->children_[3]) {
-    catalog_node = node->children_[3];
-  }
   if (OB_ISNULL(session_info_) || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL", K(ret));
@@ -112,11 +82,6 @@ int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
     SERVER_LOG(WARN, "fail to get name case mode", K(mode), K(ret));
   } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
     LOG_WARN("fail to get collation_connection", K(ret));
-  } else if (OB_FAIL(resolve_catalog_node(catalog_node, catalog_id, catalog_name))) {
-    LOG_WARN("fail to resolve catalog node", K(ret));
-  } else if (OB_UNLIKELY(is_external_catalog_id(catalog_id) && !is_catalog_supported_stmt_())) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "this operation in catalog is");
   } else {
     bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
     int tmp_ret = ObSQLUtils::check_and_convert_table_name(cs_type, perserve_lettercase, table_name);
@@ -140,16 +105,11 @@ int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
         if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(cs_type, perserve_lettercase, db_name))) {
           LOG_WARN("fail to check and convert database name", K(db_name), K(ret));
         } else {
-          if (is_external_catalog_id(catalog_id)) {
-            CK(OB_NOT_NULL(schema_checker_->get_sql_schema_guard()));
-            OZ(ObSQLUtils::cvt_db_name_to_org(*schema_checker_->get_sql_schema_guard(), session_info_, catalog_id, db_name, allocator_));
-          } else {
-            CK (OB_NOT_NULL(schema_checker_->get_schema_guard()));
-            OZ (ObSQLUtils::cvt_db_name_to_org(*schema_checker_->get_schema_guard(),
-                                               session_info_,
-                                               db_name,
-                                               allocator_));
-          }
+          CK (OB_NOT_NULL(schema_checker_->get_schema_guard()));
+          OZ (ObSQLUtils::cvt_db_name_to_org(*schema_checker_->get_schema_guard(),
+                                             session_info_,
+                                             db_name,
+                                             allocator_));
         }
       }
       if (OB_SUCCESS == ret && (OB_ERR_TOO_LONG_IDENT == tmp_ret || OB_WRONG_TABLE_NAME == tmp_ret)) {
@@ -159,7 +119,7 @@ int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
          
          const bool is_hidden = session_info_->is_table_name_hidden();
          const bool is_built_in_index = true;
-         if (OB_FAIL(schema_checker_->check_table_exists(db_name, table_name, true, is_hidden, is_index_table, catalog_id))) {
+         if (OB_FAIL(schema_checker_->check_table_exists(db_name, table_name, true, is_hidden, is_index_table))) {
            LOG_WARN("fail to check and convert table name", K(db_name), K(table_name), K(ret));
          } else if (!is_index_table && // check again
              OB_FAIL(schema_checker_->check_table_exists(db_name, table_name, true, is_hidden, is_index_table, is_built_in_index))) {
@@ -178,78 +138,6 @@ int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
     }
   }
   return ret;
-}
-
-// If catalog_node is null, we will deduce catalog_id/catalog_name from session
-// If user is in internal_catalog, we will assign catalog_id = 0, catalog_name = OB_INTERNAL_CATALOG_NAME
-// If user specific ParseNode(catalog), we will parse it, and retrieve catalog_id/catalog_name from it
-int ObStmtResolver::resolve_catalog_node(const ParseNode *catalog_node, uint64_t &catalog_id, common::ObString &catalog_name)
-{
-  int ret = OB_SUCCESS;
-  // assign default catalog_id and catalog_name first
-  catalog_id = OB_INTERNAL_CATALOG_ID;
-  catalog_name = OB_INTERNAL_CATALOG_NAME;
-  
-  ObNameCaseMode case_mode = OB_NAME_CASE_INVALID;
-  const ObCatalogSchema *catalog_schema = NULL;
-  if (OB_UNLIKELY(NULL == session_info_ || NULL == allocator_ || NULL == schema_checker_ || NULL == schema_checker_->get_schema_guard())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
-  } else if (OB_FALSE_IT(catalog_id = session_info_->get_current_default_catalog())) {
-  } else if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
-    LOG_WARN("failed to get name case mode", K(ret));
-  } else if (NULL != catalog_node) {
-    // if catalog ParseNode is not null, deduce catalog from ParseNode
-    ObString catalog_node_str{static_cast<int32_t>(catalog_node->str_len_), const_cast<char *>(catalog_node->str_value_)};
-    if (share::ObCatalogUtils::is_internal_catalog_name(catalog_node_str, case_mode)) {
-      catalog_id = OB_INTERNAL_CATALOG_ID;
-      catalog_name = OB_INTERNAL_CATALOG_NAME;
-    } else {
-      if (OB_FAIL(schema_checker_->get_schema_guard()->get_catalog_schema_by_name( catalog_node_str, catalog_schema))) {
-        LOG_WARN("failed to get catalog schema by name", K(ret), K(catalog_node_str));
-      } else if (OB_ISNULL(catalog_schema)) {
-        ret = OB_CATALOG_NOT_EXIST;
-        LOG_USER_ERROR(OB_CATALOG_NOT_EXIST, catalog_node_str.length(), catalog_node_str.ptr());
-      } else if (OB_FAIL(ob_write_string(*allocator_, catalog_schema->get_catalog_name(), catalog_name))) {
-        // use catalog name from CatalogSchema and deep copy it
-        LOG_WARN("deep copy catalog_name failed", K(ret));
-      } else {
-        catalog_id = catalog_schema->get_catalog_id();
-      }
-    }
-  } else if (is_external_catalog_id(catalog_id)) {
-    // if catalog ParseNode is null, deduce catalog from session's catalog_id
-    // catalog is not explict specific, use catalog_id from session
-    if (OB_FAIL(schema_checker_->get_schema_guard()->get_catalog_schema_by_id( catalog_id, catalog_schema))) {
-      LOG_WARN("failed to get catalog schema by name", K(ret), K(catalog_id));
-    } else if (OB_ISNULL(catalog_schema)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("catalog schema is null", K(ret), K(catalog_id));
-    } else if (OB_FAIL(ob_write_string(*allocator_, catalog_schema->get_catalog_name(), catalog_name))) {
-      // use catalog name from CatalogSchema and deep copy it
-      LOG_WARN("deep copy catalog_name failed", K(ret));
-    }
-  } else {
-    // do nothing
-    // use INTERNAL_CATALOG_ID and INTERNAL_CATALOG_NAME
-  }
-  return ret;
-}
-
-bool ObStmtResolver::is_catalog_supported_stmt_()
-{
-  bool is_supported = true;
-  stmt::StmtType stmt_type;
-  if (OB_ISNULL(stmt_)) {
-    // do nothing
-    // For example desc catalog.db.tbl, at this point stmt_ has not been set
-  } else if (OB_FALSE_IT(stmt_type = stmt_->get_stmt_type())) {
-  } else if (ObStmt::is_dml_stmt(stmt_type)) {
-    is_supported = ObStmt::is_catalog_supported_dml_stmt(stmt_type);
-  } else if (ObStmt::is_ddl_stmt(stmt_type, stmt_->has_global_variable())) {
-    is_supported = ObStmt::is_catalog_supported_ddl_stmt(stmt_type, stmt_->has_global_variable());
-  }
-  return is_supported;
 }
 
 int ObStmtResolver::resolve_ref_factor(const ParseNode *node,
@@ -294,36 +182,11 @@ int ObStmtResolver::resolve_ref_factor(const ParseNode *node,
       }
     }
 
-    if (OB_SUCC(ret)) {
-      bool is_internal_catalog_query = true;
-      // use catalog name from ParseNode if explict
-      // if catalog name in ParseNode is not specific, we will deduce catalog name from session's catalog id
-      // this function only support non-catalog query now, if user query catalog's resources, we will return OB_NOT_SUPPORTED
-      if (node->num_child_ >= 4) {
-        ParseNode *catalog_node = node->children_[3];
-        ObString catalog_name;
-        catalog_name.assign_ptr(catalog_node->str_value_, catalog_node->str_len_);
-        if (!share::ObCatalogUtils::is_internal_catalog_name(catalog_name, mode)) {
-          is_internal_catalog_query = false;
-        }
-      } else {
-        if (!is_internal_catalog_id(session_info->get_current_default_catalog())) {
-          is_internal_catalog_query = false;
-        }
-      }
-
-      if (OB_SUCC(ret) && !is_internal_catalog_query) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not support in external catalog", K(ret));
-        LOG_USER_WARN(OB_NOT_SUPPORTED, "This operation is catalog is");
-      }
-    }
   }
   return ret;
 }
 
 int ObStmtResolver::resolve_database_factor(const ParseNode *node,
-                                            const uint64_t catalog_id,
                                             uint64_t &database_id,
                                             ObString &db_name)
 {
@@ -338,7 +201,7 @@ int ObStmtResolver::resolve_database_factor(const ParseNode *node,
   } else if (FALSE_IT(db_name.assign_ptr(const_cast<char*>(node->str_value_),
                                   static_cast<int32_t>(node->str_len_)))) {
     // won't be here
-  } else if (OB_FAIL(schema_checker_->get_database_id(catalog_id, db_name, database_id))) {
+  } else if (OB_FAIL(schema_checker_->get_database_id(db_name, database_id))) {
     LOG_USER_ERROR(OB_ERR_BAD_DATABASE, db_name.length(), db_name.ptr());
   }
   return ret;

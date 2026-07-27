@@ -152,7 +152,7 @@ int ObTabletAutoincSeqRpcHandler::fetch_tablet_autoinc_seq_cache(
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret), K_(is_inited));
   } else {
-    MOD_SCOPE {
+    SERVER_MODULE_SCOPE {
       ObLS *tenant_ls = nullptr;
       ObTabletHandle tablet_handle;
       ObTabletAutoincInterval autoinc_interval;
@@ -196,7 +196,7 @@ int ObTabletAutoincSeqRpcHandler::batch_get_tablet_autoinc_seq(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(arg));
   } else {
-    MOD_SCOPE {
+    SERVER_MODULE_SCOPE {
       ObLS *tenant_ls = nullptr;
       if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
         LOG_WARN("get ls failed", K(ret));
@@ -207,7 +207,7 @@ int ObTabletAutoincSeqRpcHandler::batch_get_tablet_autoinc_seq(
           int tmp_ret = OB_SUCCESS;
           const ObTabletID &src_tablet_id = arg.src_tablet_ids_.at(i);
           ObTabletHandle tablet_handle;
-          share::ObMigrateTabletAutoincSeqParam autoinc_param;
+          share::ObTabletAutoincSeqCopyParam autoinc_param;
           ObArenaAllocator allocator("BatchGetSeq");
           autoinc_param.src_tablet_id_ = src_tablet_id;
           autoinc_param.dest_tablet_id_ = arg.dest_tablet_ids_.at(i);
@@ -248,7 +248,7 @@ int ObTabletAutoincSeqRpcHandler::batch_set_tablet_autoinc_seq(
   } else if (OB_FAIL(res.autoinc_params_.assign(arg.autoinc_params_))) {
     LOG_WARN("failed to assign autoinc params", K(ret), K(arg));
   } else {
-    MOD_SCOPE {
+    SERVER_MODULE_SCOPE {
       ObLS *tenant_ls = nullptr;
       if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
         LOG_WARN("get ls failed", K(ret));
@@ -256,7 +256,7 @@ int ObTabletAutoincSeqRpcHandler::batch_set_tablet_autoinc_seq(
         for (int64_t i = 0; OB_SUCC(ret) && i < res.autoinc_params_.count(); i++) {
           int tmp_ret = OB_SUCCESS;
           ObTabletHandle tablet_handle;
-          share::ObMigrateTabletAutoincSeqParam &autoinc_param = res.autoinc_params_.at(i);
+          share::ObTabletAutoincSeqCopyParam &autoinc_param = res.autoinc_params_.at(i);
           ObBucketHashWLockGuard lock_guard(bucket_lock_, autoinc_param.dest_tablet_id_.hash());
           if (OB_TMP_FAIL(tenant_ls->get_tablet(autoinc_param.dest_tablet_id_, tablet_handle,
               ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {

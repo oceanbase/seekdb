@@ -28,6 +28,48 @@ struct TestUndoAction : public ::testing::Test
   virtual void SetUp() {}
   virtual void TearDown() {}
 };
+
+TEST_F(TestUndoAction, tx_seq_current_format)
+{
+  const ObTxSEQ seq(42, 7);
+  const uint64_t expected_raw = (1ULL << 62) | (42ULL << 15) | 7;
+  EXPECT_TRUE(seq.is_valid());
+  EXPECT_EQ(42, seq.get_seq());
+  EXPECT_EQ(7, seq.get_branch());
+  EXPECT_EQ(expected_raw, seq.cast_to_int());
+  EXPECT_EQ(seq, ObTxSEQ::cast_from_int(seq.cast_to_int()));
+
+  EXPECT_FALSE(ObTxSEQ::INVL().is_valid());
+  EXPECT_TRUE(ObTxSEQ::MIN_VAL().is_min());
+  EXPECT_EQ(1, ObTxSEQ::MIN_VAL().get_seq());
+  EXPECT_EQ(0, ObTxSEQ::MIN_VAL().get_branch());
+  EXPECT_TRUE(ObTxSEQ::MAX_VAL().is_max());
+  EXPECT_EQ(static_cast<uint64_t>(INT64_MAX), ObTxSEQ::MAX_VAL().cast_to_int());
+  EXPECT_EQ((1LL << 47) - 1, ObTxSEQ::MAX_VAL().get_seq());
+  EXPECT_EQ(INT16_MAX, ObTxSEQ::MAX_VAL().get_branch());
+
+  ObTxSEQ atomic_seq;
+  EXPECT_EQ(static_cast<int64_t>(seq.cast_to_int()), atomic_seq.inc_update(seq));
+  EXPECT_EQ(seq, atomic_seq.atomic_load());
+  atomic_seq.atomic_store(ObTxSEQ::MIN_VAL());
+  EXPECT_TRUE(atomic_seq.atomic_load().is_min());
+  atomic_seq.atomic_reset();
+  EXPECT_EQ(ObTxSEQ::INVL(), atomic_seq.atomic_load());
+
+  char buf[32] = {};
+  int64_t pos = 0;
+  ASSERT_EQ(OB_SUCCESS, seq.serialize(buf, sizeof(buf), pos));
+  ObTxSEQ decoded;
+  int64_t decode_pos = 0;
+  ASSERT_EQ(OB_SUCCESS, decoded.deserialize(buf, pos, decode_pos));
+  EXPECT_EQ(seq, decoded);
+
+  pos = 0;
+  ASSERT_EQ(OB_SUCCESS, common::serialization::encode_vi64(buf, sizeof(buf), pos, 42));
+  decode_pos = 0;
+  EXPECT_EQ(OB_VERSION_NOT_MATCH, decoded.deserialize(buf, pos, decode_pos));
+}
+
 TEST_F(TestUndoAction, valid)
 {
   ObUndoAction a1(ObTxSEQ(100, 0), ObTxSEQ(1, 1));

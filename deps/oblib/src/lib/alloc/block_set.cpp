@@ -16,7 +16,7 @@
 
 
 #include "block_set.h"
-#include "lib/alloc/ob_tenant_ctx_allocator.h"
+#include "lib/alloc/ob_ctx_allocator.h"
 #include "lib/time/ob_time_utility.h"
 #ifdef _WIN32
 #include <windows.h>
@@ -78,7 +78,7 @@ inline int ob_wash_memory(void *addr, size_t length, int &error_code)
 } // namespace
 
 BlockSet::BlockSet()
-    : tallocator_(NULL),
+    : ctx_allocator_(NULL),
       locker_(NULL),
       chunk_mgr_(NULL),
       clist_(NULL),
@@ -109,11 +109,11 @@ void BlockSet::reset()
   last_ordinary_wash_ts_ = 0;
 }
 
-void BlockSet::set_tenant_ctx_allocator(ObTenantCtxAllocator &allocator)
+void BlockSet::set_ctx_allocator(ObCtxAllocator &allocator)
 {
-  if (&allocator != tallocator_) {
+  if (&allocator != ctx_allocator_) {
     reset();
-    tallocator_ = &allocator;
+    ctx_allocator_ = &allocator;
     attr_ = ObMemAttr(nullptr, allocator.get_ctx_id());
   }
 }
@@ -308,7 +308,7 @@ void BlockSet::take_off_free_block(ABlock *block, int nblocks, AChunk *chunk)
 AChunk *BlockSet::alloc_chunk(const uint64_t size, const ObMemAttr &attr)
 {
   AChunk *chunk = NULL;
-  if (OB_NOT_NULL(tallocator_)) {
+  if (OB_NOT_NULL(ctx_allocator_)) {
     const uint64_t all_size = AChunkMgr::aligned(size);
     chunk = chunk_mgr_->alloc_chunk(static_cast<int64_t>(size), attr);
     if (chunk != nullptr) {
@@ -362,11 +362,11 @@ void BlockSet::free_chunk(AChunk *const chunk)
   }
   uint64_t payload = 0;
   const uint64_t hold = chunk->hold(&payload);
-  if (OB_NOT_NULL(tallocator_)) {
+  if (OB_NOT_NULL(ctx_allocator_)) {
     UNUSED(ATOMIC_FAA(&total_hold_, -hold));
     UNUSED(ATOMIC_FAA(&total_payload_, -payload));
     if (chunk->washed_size_ != 0) {
-      tallocator_->update_wash_stat(-1, -chunk->washed_blks_, -chunk->washed_size_);
+      ctx_allocator_->update_wash_stat(-1, -chunk->washed_blks_, -chunk->washed_size_);
     }
     // The chunk manager only caches or frees whole chunks. Cached chunks are
     // outside BlockSet, so they will not receive block-level wash later.
@@ -409,38 +409,34 @@ int64_t BlockSet::wash_free_blocks(const int64_t wash_size,
         ABlock *next = block == tail ? nullptr : block->next_;
         scanned_blks++;
         AChunk *chunk = block->chunk();
-        if (chunk->is_hugetlb_) {
-          _OB_LOG(DEBUG, "cannot be applied to Huge TLB pages");
+#if MEMCHK_LEVEL >= 1
+        abort_unless(!block->in_use_ && !block->is_washed_);
+        int nblocks = chunk->blk_nblocks(block);
+        abort_unless(nblocks == cls);
+#endif
+        char *data = chunk->blk_data(block);
+        if ((reinterpret_cast<uint64_t>(data) & (ps - 1)) != 0 ||
+            (len & (ps - 1)) != 0) {
+          _OB_LOG(DEBUG, "cannot be applied to non-multiple of page-size, page_size: %zd", ps);
+        } else if (delay_us > 0 && now - block->free_time_us_ < delay_us) {
         } else {
-        #if MEMCHK_LEVEL >= 1
-          abort_unless(!block->in_use_ && !block->is_washed_);
-          int nblocks = chunk->blk_nblocks(block);
-          abort_unless(nblocks == cls);
-        #endif
-          char *data = chunk->blk_data(block);
-          if ((reinterpret_cast<uint64_t>(data) & (ps - 1)) != 0 ||
-              (len & (ps - 1)) != 0) {
-            _OB_LOG(DEBUG, "cannot be applied to non-multiple of page-size, page_size: %zd", ps);
-          } else if (delay_us > 0 && now - block->free_time_us_ < delay_us) {
+          int error_code = 0;
+          int result = ob_wash_memory(data, len, error_code);
+          if (-1 == result) {
+            _OB_LOG_RET(WARN, OB_ERR_SYS, "page wash failed, error_code: %d", error_code);
           } else {
-            int error_code = 0;
-            int result = ob_wash_memory(data, len, error_code);
-            if (-1 == result) {
-              _OB_LOG_RET(WARN, OB_ERR_SYS, "page wash failed, error_code: %d", error_code);
-            } else {
-              take_off_free_block(block, cls, chunk);
-              block->is_washed_ = true;
-              // Washed spans stay in chunk metadata only; BlockSet never
-              // reuses them after page wash.
-              if (0 == chunk->washed_blks_) {
-                abort_unless(0 == chunk->washed_size_);
-                related_chunks++;
-              }
-              chunk->washed_size_ += len;
-              chunk->washed_blks_++;
-              washed_blks++;
-              washed_size += len;
+            take_off_free_block(block, cls, chunk);
+            block->is_washed_ = true;
+            // Washed spans stay in chunk metadata only; BlockSet never
+            // reuses them after page wash.
+            if (0 == chunk->washed_blks_) {
+              abort_unless(0 == chunk->washed_size_);
+              related_chunks++;
             }
+            chunk->washed_size_ += len;
+            chunk->washed_blks_++;
+            washed_blks++;
+            washed_size += len;
           }
         }
         block = next;
@@ -451,8 +447,8 @@ int64_t BlockSet::wash_free_blocks(const int64_t wash_size,
   if (washed_size > 0) {
     UNUSED(ATOMIC_FAA(&total_hold_, -washed_size));
     UNUSED(ATOMIC_FAA(&total_payload_, -washed_size));
-    tallocator_->dec_hold(washed_size);
-    tallocator_->update_wash_stat(related_chunks, washed_blks, washed_size);
+    ctx_allocator_->dec_hold(washed_size);
+    ctx_allocator_->update_wash_stat(related_chunks, washed_blks, washed_size);
   }
 #if MEMCHK_LEVEL >= 1
   if (0 == washed_size && ABLOCK_SIZE & (ps - 1)) {

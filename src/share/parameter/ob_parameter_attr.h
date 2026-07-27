@@ -24,10 +24,10 @@ namespace common {
 #define DECL_EVAL_MACRO(macro, args...) macro(args)
 #define DECL_ATTR_LIST(M)                                                              \
   DECL_EVAL_MACRO(M, Section, ROOT_SERVICE, LOAD_BALANCE, DAILY_MERGE, LOCATION_CACHE, \
-                  SSTABLE, LOGSERVICE, CACHE, TRANS, TENANT, RPC, OBPROXY, OBSERVER,   \
+                  SSTABLE, LOGSERVICE, CACHE, TRANS, RUNTIME, RPC, OBSERVER,           \
                   RESOURCE_LIMIT, AI);                                                 \
-  DECL_EVAL_MACRO(M, Scope, CLUSTER, TENANT);                                          \
-  DECL_EVAL_MACRO(M, Source, DEFAULT, FILE, OBADMIN, CMDLINE, CLUSTER, TENANT);        \
+  DECL_EVAL_MACRO(M, Scope, CLUSTER, RUNTIME);                                         \
+  DECL_EVAL_MACRO(M, Source, DEFAULT, FILE, OBADMIN, CMDLINE, CLUSTER, RUNTIME);       \
   DECL_EVAL_MACRO(M, Session, NO, YES);                                                \
   DECL_EVAL_MACRO(M, VisibleLevel, SYS, COMMON, INVISIBLE);                            \
   DECL_EVAL_MACRO(M, EditLevel, READONLY, STATIC_EFFECTIVE, DYNAMIC_EFFECTIVE);        \

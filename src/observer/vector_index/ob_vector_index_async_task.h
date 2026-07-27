@@ -14,36 +14,35 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_OBSERVER_OB_VECTOR_INDEX_ASYNC_TASK_DEFINE_H_
-#define OCEANBASE_OBSERVER_OB_VECTOR_INDEX_ASYNC_TASK_DEFINE_H_
+#ifndef OCEANBASE_OBSERVER_OB_VECTOR_INDEX_ASYNC_TASK_H_
+#define OCEANBASE_OBSERVER_OB_VECTOR_INDEX_ASYNC_TASK_H_
 
+#include "observer/vector_index/ob_plugin_vector_index_util.h"
 #include "observer/vector_index/ob_vector_index_async_task_util.h"
 #include "observer/vector_index/ob_plugin_vector_index_adaptor.h"
 #include "observer/vector_index/ob_vector_index_i_task_executor.h"
 
-namespace oceanbase 
+namespace oceanbase
 {
-namespace share 
+namespace share
 {
-// schedule vector tasks for a ls
+// Schedule HNSW vector index tasks for an LS.
 class ObPluginVectorIndexMgr;
-class ObVecAsyncTaskExector : public ObVecITaskExecutor 
+class ObVecAsyncTaskExector : public ObVecITaskExecutor
 {
-public: 
-  ObVecAsyncTaskExector() 
+public:
+  ObVecAsyncTaskExector()
     : ObVecITaskExecutor()
   {}
   virtual ~ObVecAsyncTaskExector() {}
   int load_task(uint64_t &task_trace_base_num) override;
   int check_and_set_thread_pool() override;
-private:  
-  bool check_operation_allow() override;
 };
 
 class ObVecTaskManager
 {
 public:
-  ObVecTaskManager(int64_t index_table_id, ObVecIndexAsyncTaskType task_type) 
+  ObVecTaskManager(int64_t index_table_id, ObVecIndexAsyncTaskType task_type)
       : index_table_id_(index_table_id),
         task_type_(task_type),
         task_ids_()
@@ -53,14 +52,72 @@ public:
   int create_task();
   int check_task_status();
   TO_STRING_KV(K_(index_table_id), K_(task_type), K_(task_ids));
+
 private:
-  
   int64_t index_table_id_;
   ObVecIndexAsyncTaskType task_type_;
   ObSEArray<int64_t, 4> task_ids_;
 };
 
-} // namespace share
-} // namespace oceanbase
+/**
+ * the task for clear vec history task in __all_vector_index_task_history
+*/
+class ObVectorIndexHistoryTask : public common::ObTimerTask
+{
+public:
+  ObVectorIndexHistoryTask()
+  : sql_proxy_(nullptr),
+    is_inited_(false),
+    is_paused_(false)
+  {}
+  ~ObVectorIndexHistoryTask() {}
+  int init(common::ObMySQLProxy &sql_proxy);
+  virtual void runTimerTask() override;
+  void destroy() {}
+  void pause();
+  void resume();
+  void do_work();
 
-#endif // OCEANBASE_OBSERVER_OB_VECTOR_INDEX_ASYNC_TASK_DEFINE_H_
+  static const int64_t OB_VEC_INDEX_TASK_HISTORY_SAVE_TIME_US = 7 * 24 * 60 * 60 * 1000 * 1000ll; // 7 day
+  static const int64_t OB_VEC_INDEX_TASK_MOVE_BATCH_SIZE = 1024L;
+  static const int64_t OB_VEC_INDEX_TASK_DEL_COUNT_PER_TASK = 4096L;
+
+private:
+  int clear_history_task();
+  int move_task_to_history_table();
+
+private:
+  common::ObMySQLProxy *sql_proxy_;
+  bool is_inited_;
+  bool is_paused_;
+};
+
+class ObVecAsyncTaskScheduler
+{
+public:
+  static const int64_t VEC_INDEX_CLEAR_TASK_PERIOD = 10 * 1000L * 1000L; // 10s
+  explicit ObVecAsyncTaskScheduler()
+    : is_inited_(false),
+      timer_(),
+      vec_history_task_()
+  {}
+
+  virtual ~ObVecAsyncTaskScheduler() {}
+  int init(ObMySQLProxy &sql_proxy);
+  int start();
+  void wait();
+  void stop();
+  void destroy();
+  void resume();
+  void pause();
+private:
+  bool is_inited_;
+
+  common::ObTimer timer_;
+  ObVectorIndexHistoryTask vec_history_task_;
+};
+
+} // end namespace share
+} // end namespace oceanbase
+
+#endif /* OCEANBASE_OBSERVER_OB_VECTOR_INDEX_ASYNC_TASK_H_ */

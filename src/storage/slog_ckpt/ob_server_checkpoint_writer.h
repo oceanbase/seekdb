@@ -45,13 +45,13 @@ public:
   common::ObIArray<blocksstable::MacroBlockId> &get_meta_block_list();
 
 private:
-  int write_tenant_meta_checkpoint(blocksstable::MacroBlockId &block_entry);
+  int write_runtime_meta_checkpoint(blocksstable::MacroBlockId &block_entry);
 
 private:
   bool is_inited_;
   ObStorageLogger *server_slogger_;
   common::ObConcurrentFIFOAllocator allocator_;
-  ObLinkedMacroBlockItemWriter tenant_meta_item_writer_;
+  ObLinkedMacroBlockItemWriter runtime_meta_item_writer_;
 };
 
 }  // end namespace storage

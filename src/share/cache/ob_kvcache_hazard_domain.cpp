@@ -21,7 +21,6 @@
 #include "share/cache/ob_kvcache_hazard_pointer.h"
 #include "share/cache/ob_kvcache_struct.h"
 #include "share/cache/ob_kv_storecache.h"
-#include "share/config/ob_server_config.h"
 
 namespace oceanbase {
 namespace common {
@@ -77,8 +76,6 @@ HazardDomain::HazardDomain()
       retire_list_(nullptr),
       retired_memory_size_(0)
 {
-  lib::DoNotUseMe(bit_set_attr_);
-  lib::DoNotUseMe(hazptr_attr_);
   bit_set_.set_attr(bit_set_attr_);
   bit_set_mu_.enable_record_stat(false);
 }
@@ -86,8 +83,7 @@ HazardDomain::HazardDomain()
 int HazardDomain::init(int64_t mb_handle_num)
 {
   int ret = OB_SUCCESS;
-  if (!GCONF._enable_kvcache_hazard_pointer) {
-  } else if (OB_FAIL(bit_set_.reserve(mb_handle_num))) {
+  if (OB_FAIL(bit_set_.reserve(mb_handle_num))) {
     COMMON_LOG(WARN, "failed to reserve bits in bit_set_");
   }
   return ret;
@@ -154,30 +150,23 @@ HazptrHolder::~HazptrHolder()
   reset();
 }
 
-#define DISPATCH_HAZPTR_REFCNT(func, ...)                \
-  if (OB_LIKELY(GCONF._enable_kvcache_hazard_pointer)) { \
-    return hazptr_##func(__VA_ARGS__);                   \
-  } else {                                               \
-    return refcnt_##func(__VA_ARGS__);                   \
-  }
-
 int HazptrHolder::protect(bool& success, ObKVMemBlockHandle* mb_handle, int32_t seq_num)
 {
-  DISPATCH_HAZPTR_REFCNT(protect, success, mb_handle, seq_num);
+  return hazptr_protect(success, mb_handle, seq_num);
 }
 
 int HazptrHolder::protect(bool& success, ObKVMemBlockHandle* mb_handle)
 {
-  DISPATCH_HAZPTR_REFCNT(protect, success, mb_handle);
+  return hazptr_protect(success, mb_handle);
 }
 
 void HazptrHolder::release() {
-  DISPATCH_HAZPTR_REFCNT(release);
+  hazptr_release();
 }
 
 ObKVMemBlockHandle* HazptrHolder::get_mb_handle() const
 {
-  DISPATCH_HAZPTR_REFCNT(get_mb_handle);
+  return hazptr_get_mb_handle();
 }
 
 bool HazptrHolder::is_valid() const
@@ -187,17 +176,17 @@ bool HazptrHolder::is_valid() const
 
 void HazptrHolder::reset()
 {
-  DISPATCH_HAZPTR_REFCNT(reset);
+  hazptr_reset();
 }
 
 void HazptrHolder::move_from(HazptrHolder& other)
 {
-  DISPATCH_HAZPTR_REFCNT(move_from, other);
+  hazptr_move_from(other);
 }
 
 int HazptrHolder::assign(const HazptrHolder& other)
 {
-  DISPATCH_HAZPTR_REFCNT(assign, other);
+  return hazptr_assign(other);
 }
 
 int HazptrHolder::hazptr_protect(bool& success, ObKVMemBlockHandle* mb_handle, int32_t seq_num)
@@ -314,78 +303,6 @@ void HazptrHolder::hazptr_move_from(HazptrHolder& other)
     hazptr_ = other.hazptr_;
     other.hazptr_ = nullptr;
   }
-}
-
-int HazptrHolder::refcnt_protect(bool& success, ObKVMemBlockHandle* mb_handle, int32_t seq_num)
-{
-  int ret = OB_SUCCESS;
-  success = false;
-  if (OB_ISNULL(mb_handle)) {
-    ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "mb_handle is null", KP(mb_handle));
-  } else if (OB_UNLIKELY(mb_handle_)) {
-    ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "release is not called!");
-  } else {
-    if ((success = ObKVGlobalCache::get_instance().store_.add_handle_ref(mb_handle, seq_num))) {
-      this->mb_handle_ = mb_handle;
-    }
-  }
-  return ret;
-}
-
-int HazptrHolder::refcnt_protect(bool& success, ObKVMemBlockHandle* mb_handle)
-{
-  int ret = OB_SUCCESS;
-  success = false;
-  if (OB_ISNULL(mb_handle)) {
-    ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "mb_handle is null", KP(mb_handle));
-  } else if (OB_UNLIKELY(mb_handle_)) {
-    ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "release is not called!");
-  } else {
-    refcnt_reset();
-    if ((success = ObKVGlobalCache::get_instance().store_.add_handle_ref(mb_handle))) {
-      this->mb_handle_ = mb_handle;
-    }
-  }
-  return ret;
-}
-
-void HazptrHolder::refcnt_release()
-{
-  if (OB_NOT_NULL(mb_handle_)) {
-    ObKVGlobalCache::get_instance().store_.de_handle_ref(mb_handle_);
-    mb_handle_ = nullptr;
-  }
-}
-
-void HazptrHolder::refcnt_reset()
-{
-  refcnt_release();
-}
-
-ObKVMemBlockHandle* HazptrHolder::refcnt_get_mb_handle() const
-{
-  return mb_handle_;
-}
-
-int HazptrHolder::refcnt_assign(const HazptrHolder& other)
-{
-  refcnt_reset();
-  if (OB_LIKELY(this != &other) && OB_NOT_NULL(other.mb_handle_)) {
-    ATOMIC_INC(&other.mb_handle_->ref_cnt_);
-    mb_handle_ = other.mb_handle_;
-  }
-  return OB_SUCCESS;
-}
-
-void HazptrHolder::refcnt_move_from(HazptrHolder& other)
-{
-  refcnt_reset();
-  mb_handle_ = other.mb_handle_;
-  other.mb_handle_ = nullptr;
 }
 
 };  // namespace common

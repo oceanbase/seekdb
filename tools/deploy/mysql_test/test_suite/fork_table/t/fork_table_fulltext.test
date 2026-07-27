@@ -48,7 +48,6 @@ fork table t_src to t_fork;
 --source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
 
 --echo # 验证Fork表全文索引结构
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_fork;
 
 --echo # 验证全文索引查询

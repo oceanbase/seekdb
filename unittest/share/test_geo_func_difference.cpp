@@ -1275,7 +1275,7 @@ void apply_bg_diff_point_test(GeometryType1 &geo1, GeometryType2 &geo2, const Ob
     boost::geometry::difference(geo1, geo2, res, point_strategy);
 }
 
-int mock_get_tenant_srs_item(ObIAllocator &allocator, uint64_t srs_id, const ObSrsItem *&srs_item)
+int mock_get_srs_item(ObIAllocator &allocator, uint64_t srs_id, const ObSrsItem *&srs_item)
 {
     int ret = OB_SUCCESS;
     ObGeographicRs rs;
@@ -1315,7 +1315,7 @@ TEST_F(TestGeoFuncDifference, point_point_geog)
 {
     ObArenaAllocator allocator(ObModIds::TEST);
     const ObSrsItem *srs = NULL;
-    ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, 4326, srs));
+    ASSERT_EQ(OB_SUCCESS, mock_get_srs_item(allocator, 4326, srs));
 
     ObJsonBuffer data(&allocator);
     create_point(data, 1.2, 3.5);
@@ -1355,7 +1355,7 @@ TEST_F(TestGeoFuncDifference, point_line_geog)
     ObArenaAllocator allocator(ObModIds::TEST);
     ObJsonBuffer data(&allocator);
     const ObSrsItem *srs = NULL;
-    ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, 4326, srs));    
+    ASSERT_EQ(OB_SUCCESS, mock_get_srs_item(allocator, 4326, srs));
     create_point(data, 1.2, 3.5);
     ObIWkbGeogPoint p;
     p.set_data(data.string());
@@ -1391,7 +1391,7 @@ TEST_F(TestGeoFuncDifference, point_polygon_geog)
 {
     ObArenaAllocator allocator(ObModIds::TEST);
     const ObSrsItem *srs = NULL;
-    ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, 4326, srs));
+    ASSERT_EQ(OB_SUCCESS, mock_get_srs_item(allocator, 4326, srs));
     ObJsonBuffer data(&allocator);
     create_point(data, 1.2, 3.5);
     ObIWkbGeogPoint p;
@@ -1435,7 +1435,7 @@ TEST_F(TestGeoFuncDifference, point_multipoint_geog)
 {
     ObArenaAllocator allocator(ObModIds::TEST);
     const ObSrsItem *srs = NULL;
-    ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, 4326, srs));    
+    ASSERT_EQ(OB_SUCCESS, mock_get_srs_item(allocator, 4326, srs));
     ObJsonBuffer data(&allocator);
     create_point(data, 1.2, 3.5);
     ObIWkbGeogPoint p;
@@ -1475,7 +1475,7 @@ TEST_F(TestGeoFuncDifference, point_multiline_geog)
 {
     ObArenaAllocator allocator(ObModIds::TEST);
     const ObSrsItem *srs = NULL;
-    ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, 4326, srs));
+    ASSERT_EQ(OB_SUCCESS, mock_get_srs_item(allocator, 4326, srs));
     ObJsonBuffer data(&allocator);
     create_point(data, 1.2, 3.5);
     ObIWkbGeogPoint p;
@@ -1520,7 +1520,7 @@ TEST_F(TestGeoFuncDifference, point_multipolygon_geog)
 {
     ObArenaAllocator allocator(ObModIds::TEST);
     const ObSrsItem *srs = NULL;
-    ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, 4326, srs));
+    ASSERT_EQ(OB_SUCCESS, mock_get_srs_item(allocator, 4326, srs));
     ObJsonBuffer data(&allocator);
     create_point(data, 1.2, 3.5);
     ObIWkbGeogPoint p;
@@ -1570,7 +1570,7 @@ TEST_F(TestGeoFuncDifference, line_point_geog)
 {
     ObArenaAllocator allocator(ObModIds::TEST);
     const ObSrsItem *srs = NULL;
-    ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, 4326, srs));
+    ASSERT_EQ(OB_SUCCESS, mock_get_srs_item(allocator, 4326, srs));
     ObJsonBuffer data(&allocator);
     std::vector< std::pair<double, double> > val;
     val.push_back(std::make_pair(1.4, 2.3));
@@ -1636,7 +1636,7 @@ TEST_F(TestGeoFuncDifference, line_line_geog)
 
     ObArenaAllocator allocator(ObModIds::TEST);
     const ObSrsItem *srs = NULL;
-    ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, 4326, srs));
+    ASSERT_EQ(OB_SUCCESS, mock_get_srs_item(allocator, 4326, srs));
     ObJsonBuffer data(&allocator);
     std::vector< std::pair<double, double> > val;
     val.push_back(std::make_pair(0.0, 0.0));
@@ -1711,7 +1711,7 @@ TEST_F(TestGeoFuncDifference, line_polygon_geog)
 {
     ObArenaAllocator allocator(ObModIds::TEST);
     const ObSrsItem *srs = NULL;
-    ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, 4326, srs));
+    ASSERT_EQ(OB_SUCCESS, mock_get_srs_item(allocator, 4326, srs));
 
     line_geog_t green;
     polygon_geog_t blue;
@@ -1808,7 +1808,7 @@ TEST_F(TestGeoFuncDifference, line_multiline_geog)
 
     ObArenaAllocator allocator(ObModIds::TEST);
     const ObSrsItem *srs = NULL;
-    ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, 4326, srs));
+    ASSERT_EQ(OB_SUCCESS, mock_get_srs_item(allocator, 4326, srs));
     ObJsonBuffer data(&allocator);
     std::vector< std::pair<double, double> > val;
     val.push_back(std::make_pair(0.0, 0.0));
@@ -1865,7 +1865,7 @@ TEST_F(TestGeoFuncDifference, line_multipolygon_geog)
 {
     ObArenaAllocator allocator(ObModIds::TEST);
     const ObSrsItem *srs = NULL;
-    ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, 4326, srs));
+    ASSERT_EQ(OB_SUCCESS, mock_get_srs_item(allocator, 4326, srs));
 
     line_geog_t ls;
     boost::geometry::read_wkt(
@@ -1934,7 +1934,7 @@ TEST_F(TestGeoFuncDifference, polygon_polygon_geog)
 {
     ObArenaAllocator allocator(ObModIds::TEST);
     const ObSrsItem *srs = NULL;
-    ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, 4326, srs));
+    ASSERT_EQ(OB_SUCCESS, mock_get_srs_item(allocator, 4326, srs));
 
     polygon_geog_t green, blue;
 
@@ -2034,7 +2034,7 @@ TEST_F(TestGeoFuncDifference, polygon_multipolygon_geog)
 {
     ObArenaAllocator allocator(ObModIds::TEST);
     const ObSrsItem *srs = NULL;
-    ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, 4326, srs));
+    ASSERT_EQ(OB_SUCCESS, mock_get_srs_item(allocator, 4326, srs));
 
     polygon_geog_t pol;
     boost::geometry::read_wkt(

@@ -30,17 +30,8 @@ extern const char * MEMORY_LABEL;
 
 using namespace common;
 
-uint64_t UserBinaryKey::BufferFactory::malloc_times = 0;
-uint64_t UserBinaryKey::BufferFactory::free_times = 0;
-
-
-
 void UserBinaryKey::reset()
 {
-  // if (nullptr != key_binary_code_buffer_) {
-  //   BufferFactory::revert_buffer(key_binary_code_buffer_);
-  //   key_binary_code_buffer_ = nullptr;
-  // }
   key_type_id_ = INVALID_VALUE;
   key_binary_code_buffer_length_ = 0;
 }
@@ -106,75 +97,6 @@ int64_t UserBinaryKey::to_string(char *buffer, const int64_t length) const
   }
 
   return used_length;
-}
-
-int UserBinaryKey::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
-{
-  #define PRINT_WRAPPER KR(ret), K(start_pos), K(pos), K(*this)
-  int ret = common::OB_SUCCESS;
-  int64_t start_pos = pos;
-
-  if (OB_FAIL(common::serialization::encode(buf, buf_len, pos, key_type_id_))) {
-    // do nothing
-  } else if (OB_FAIL(common::serialization::encode(buf,
-                                                   buf_len,
-                                                   pos,
-                                                   key_binary_code_buffer_length_))) {
-    // do nothing
-  } else if (OB_SUCCESS != (ret = common::serialization::encode<char, BUFFER_LIMIT_SIZE>
-                           (buf, buf_len, pos, key_binary_code_buffer_))) {
-    // do nothing
-  } else {
-    // do nothing
-  }
-
-  // roll back path
-  if (OB_FAIL(ret)) {
-    DETECT_LOG(WARN, "serialization failed", PRINT_WRAPPER);
-    pos = start_pos;
-  } else {
-    // do nothing
-  }
-
-  return ret;
-  #undef PRINT_WRAPPER
-}
-
-int UserBinaryKey::deserialize(const char *buf, const int64_t data_len, int64_t &pos)
-{
-  #define PRINT_WRAPPER KR(ret), K(pos), K(*this)
-  int ret = common::OB_SUCCESS;
-
-  if (OB_FAIL(common::serialization::decode(buf, data_len, pos, key_type_id_))) {
-    // do nothing
-  } else if (OB_FAIL(common::serialization::decode(buf,
-                                                   data_len,
-                                                   pos,
-                                                   key_binary_code_buffer_length_))) {
-    // do nothing
-  } else if (OB_SUCCESS != (ret = common::serialization::decode<char, BUFFER_LIMIT_SIZE>
-                           (buf, data_len, pos, key_binary_code_buffer_))) {
-    // do nothing
-  } else {
-    // do nothing
-  }
-
-  // roll back path
-  if (OB_FAIL(ret)) {
-    DETECT_LOG(WARN, "serialization failed", PRINT_WRAPPER);
-  } else {
-    // do nothing
-  }
-
-  return ret;
-  #undef PRINT_WRAPPER
-}
-
-int64_t UserBinaryKey::get_serialize_size(void) const
-{
-  return common::serialization::encoded_length(key_type_id_) +
-         common::serialization::encoded_length(key_binary_code_buffer_length_) +
-         common::serialization::encoded_length<char, BUFFER_LIMIT_SIZE>(key_binary_code_buffer_);
 }
 
 UserBinaryKey& UserBinaryKey::operator=(const UserBinaryKey &other)

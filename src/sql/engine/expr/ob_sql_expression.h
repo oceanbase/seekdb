@@ -93,10 +93,6 @@ public:
   }
   virtual void reset();
 
-  virtual void start_gen_infix_exr() { gen_infix_expr_ = true; }
-  bool is_gen_infix_expr() const { return gen_infix_expr_; }
-  void set_gen_infix_expr(const bool is_gen_infix_expr ) { gen_infix_expr_ = is_gen_infix_expr; }
-
   ObInfixExpression &get_infix_expr() { return infix_expr_; }
 
   /**
@@ -112,7 +108,7 @@ public:
   virtual int calc(common::ObExprCtx &expr_ctx, const common::ObNewRow &row1,
                    const common::ObNewRow &row2,
                    common::ObObj &result) const;
-  TO_STRING_KV(K_(infix_expr), K_(post_expr), K_(gen_infix_expr), KP(expr_));
+  TO_STRING_KV(K_(infix_expr), KP(expr_));
 
   // check expression type
   int generate_idx_for_regexp_ops(int16_t &cur_regexp_op_count);
@@ -132,15 +128,11 @@ private:
 protected:
   friend class ::ObAggregateFunctionTest;
   common::ObIAllocator &inner_alloc_;
-  // data members
-  ObPostfixExpression post_expr_;
-  // fast expr currently does not serialize, not executed remotely
+  // Fast expressions are not serialized with worker execution state.
   ObFastExprOperator *fast_expr_;
   ObInfixExpression infix_expr_;
   int32_t array_param_index_;
   bool need_construct_binding_array_;
-   // used for infix generation, no need to serialize
-  bool gen_infix_expr_;
 
   // expression for static engine, only used in PL
   bool is_pl_mock_default_expr_;
@@ -150,9 +142,7 @@ protected:
 inline void ObSqlExpression::reset(void)
 {
   common::ObDLinkBase<ObSqlExpression>::reset();
-  post_expr_.reset();
   fast_expr_ = NULL;
-  gen_infix_expr_ = false;
   infix_expr_.reset();
   need_construct_binding_array_ = false;
   array_param_index_ = common::OB_INVALID_INDEX;
@@ -160,7 +150,7 @@ inline void ObSqlExpression::reset(void)
 
 inline bool ObSqlExpression::is_empty() const
 {
-  return infix_expr_.is_empty() && post_expr_.is_empty();
+  return infix_expr_.is_empty();
 }
 
 class ObColumnExpression: public ObSqlExpression, public common::ObIColumnExpression
@@ -241,13 +231,6 @@ public:
   int init_aggr_cs_type_count(int64_t count) { return aggr_cs_types_.init(count); }
   int add_aggr_cs_type(common::ObCollationType cs_type) { return aggr_cs_types_.push_back(cs_type); }
   const common::ObIArray<common::ObCollationType> *get_aggr_cs_types() const { return &aggr_cs_types_; }
-  virtual void start_gen_infix_exr() {
-    gen_infix_expr_ = true;
-    separator_param_expr_.start_gen_infix_exr();
-    window_size_param_expr_.start_gen_infix_exr();
-    item_size_param_expr_.start_gen_infix_exr();
-    bucket_num_expr_.start_gen_infix_exr();
-  }
   inline int add_window_size_param_expr_item(const ObPostExprItem &item,
                                              const ObRawExpr *raw_expr) {
     return window_size_param_expr_.add_expr_item(item, raw_expr); }

@@ -586,7 +586,6 @@ const char *ObMockIteratorBuilder::STR_MIN = "min";
 const char *ObMockIteratorBuilder::STR_INT32_MIN = "int32_min";
 const char *ObMockIteratorBuilder::STR_MIN_2_TRANS = "min2";
 const char *ObMockIteratorBuilder::STR_MAGIC = "magic";
-const char *ObMockIteratorBuilder::STR_DELETE_INSERT_VERSION = "di_version";
 ObObjMeta ObMockIteratorBuilder::INT_TYPE;
 ObObjMeta ObMockIteratorBuilder::BIGINT_TYPE;
 ObObjMeta ObMockIteratorBuilder::VAR_TYPE;
@@ -2198,13 +2197,6 @@ int ObMockIteratorBuilder::parse_row(const ObString &str,
             row.row_val_.cells_[idx++].set_int(INT32_MIN);
           }
           break;
-        case EXT_DELETE_INSERT_VERSION:
-          if (ObMockIteratorBuilder::parse_obj_int != fp && ObMockIteratorBuilder::parse_obj_bigint != fp) {
-            row.row_val_.cells_[idx++].set_min_value();
-          } else {
-            row.row_val_.cells_[idx++].set_int(-common::DELETE_INSERT_TRANS_SEQUENCE);
-          }
-          break;
         case EXT_MIN_2_TRANS:
           if (ObMockIteratorBuilder::parse_obj_int != fp && ObMockIteratorBuilder::parse_obj_bigint != fp) {
             row.row_val_.cells_[idx++].set_min_value();
@@ -2319,8 +2311,6 @@ int ObMockIteratorBuilder::get_ext(const common::ObString &word)
     ext = EXT_GHOST;
   } else if (0 == word.case_compare(STR_INT32_MIN)) {
     ext = EXT_INT32_MIN;
-  } else if (0 == word.case_compare(STR_DELETE_INSERT_VERSION)) {
-    ext = EXT_DELETE_INSERT_VERSION;
   } else {
     ext = NOT_EXT;
   }

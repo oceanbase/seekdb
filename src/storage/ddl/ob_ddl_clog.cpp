@@ -18,7 +18,7 @@
 
 #include "ob_ddl_clog.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/ddl/ob_direct_insert_sstable_ctx_new.h"
+#include "storage/ddl/ob_direct_insert_sstable_ctx.h"
 #include "storage/ddl/ob_ddl_merge_schedule.h"
 #include "storage/ddl/ob_tablet_fork_task.h"
 namespace oceanbase
@@ -257,11 +257,11 @@ int ObDDLMacroBlockClogCb::on_success()
   ObTablet *tablet = nullptr;
 
   ObTabletDirectLoadMgrHandle direct_load_mgr_handle;
-  ObTenantDirectLoadMgr *tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr();
+  ObDirectLoadMgr *direct_load_mgr = share::g_mp->direct_load_mgr();
   
   /* param for check idempotence */
   ObDDLKvMgrHandle kv_mgr_handle;
-  if (OB_ISNULL(tenant_direct_load_mgr)) {
+  if (OB_ISNULL(direct_load_mgr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected err", K(ret));
   } else if (OB_ISNULL(tablet = tablet_handle_.get_obj())) {
@@ -269,7 +269,7 @@ int ObDDLMacroBlockClogCb::on_success()
     LOG_WARN("tablet is nullptr", K(ret));
   } else if (ObDDLUtil::use_idempotent_mode()) {
     /* Do not fetch direct load mgr. */
-  } else if (OB_FAIL(tenant_direct_load_mgr->get_tablet_mgr_and_check_major(
+  } else if (OB_FAIL(direct_load_mgr->get_tablet_mgr_and_check_major(
         tablet->get_tablet_meta().tablet_id_, true/*is_full_direct_load*/, direct_load_mgr_handle, is_major_sstable_exist))) {
     if (OB_ENTRY_NOT_EXIST == ret && is_major_sstable_exist) {
       ret = OB_TASK_EXPIRED;

@@ -62,7 +62,6 @@ CREATE OR REPLACE PACKAGE BODY dbms_ischeduler
                            IN comments           VARCHAR(255),
                            IN credential_name    VARCHAR(255),
                            IN destination_name   VARCHAR(255),
-                           IN my_zone            VARCHAR(128),
                            IN program_name       VARCHAR(255),
                            IN job_style          VARCHAR(255),
                            IN interval_ts        BIGINT,
@@ -99,8 +98,6 @@ CREATE OR REPLACE PACKAGE BODY dbms_ischeduler
     DECLARE what VARCHAR(128);
     DECLARE nlsenv VARCHAR(128);
     DECLARE env VARCHAR(128);
-    DECLARE my_zone VARCHAR(128);
-
     DECLARE invalid_job_id CONDITION FOR SQLSTATE 'HY000';
 
     IF JOB < 1 THEN
@@ -121,11 +118,10 @@ CREATE OR REPLACE PACKAGE BODY dbms_ischeduler
     SET what = job_action;
     SET nlsenv = NULL;
     SET env = NULL;
-    SET my_zone = NULL;
     CALL do_create_job(JOB, LUSER, PUSER, CUSER, final_next_date, my_interval, my_flag, what,
                        nlsenv, env, job_name, job_type, job_action, number_of_argument, final_start_date,
                        repeat_interval, final_end_date, job_class, enabled, auto_drop, comments,
-                       credential_name, destination_name, my_zone, program_name, job_style, interval_ts, max_run_duration);
+                       credential_name, destination_name, program_name, job_style, interval_ts, max_run_duration);
   END;
 
 END dbms_ischeduler;

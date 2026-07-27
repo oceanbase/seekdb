@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_ls_meta.h"
-#include "storage/meta_store/ob_tenant_storage_meta_service.h"
+#include "storage/meta_store/ob_local_storage_meta_service.h"
 
 namespace oceanbase
 {
@@ -30,7 +30,7 @@ namespace storage
 typedef ObFunction<int(const int64_t, const ObLSMeta &)> WriteSlog;
 WriteSlog ObLSMeta::write_slog_ = [](const int64_t ls_epoch, const ObLSMeta &ls_meta) {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(TENANT_STORAGE_META_PERSISTER.update_ls_meta(ls_epoch, ls_meta))) {
+  if (OB_FAIL(LOCAL_STORAGE_META_PERSISTER.update_ls_meta(ls_epoch, ls_meta))) {
     LOG_WARN("fail to update ls meta", K(ret), K(ls_epoch), K(ls_meta));
   }
   return ret;
@@ -42,7 +42,6 @@ ObLSMeta::ObLSMeta()
     ls_persistent_state_(),
     clog_checkpoint_scn_(ObScnRange::MIN_SCN),
     clog_base_lsn_(PALF_INITIAL_LSN_VAL),
-    offline_scn_(),
     restore_status_(ObRestoreStatus::Status::RESTORE_STATUS_MAX),
     replayable_point_(),
     tablet_change_checkpoint_scn_(SCN::min_scn()),
@@ -57,7 +56,6 @@ ObLSMeta::ObLSMeta(const ObLSMeta &ls_meta)
     ls_persistent_state_(ls_meta.ls_persistent_state_),
     clog_checkpoint_scn_(ls_meta.clog_checkpoint_scn_),
     clog_base_lsn_(ls_meta.clog_base_lsn_),
-    offline_scn_(ls_meta.offline_scn_),
     restore_status_(ls_meta.restore_status_),
     replayable_point_(ls_meta.replayable_point_),
     tablet_change_checkpoint_scn_(ls_meta.tablet_change_checkpoint_scn_),
@@ -72,6 +70,20 @@ int ObLSMeta::set_start_work_state()
   ObReentrantWLockGuard update_guard(update_lock_);
   ObReentrantWLockGuard guard(rw_lock_);
   return ls_persistent_state_.start_work();
+}
+
+int ObLSMeta::set_start_restore_state()
+{
+  ObReentrantWLockGuard update_guard(update_lock_);
+  ObReentrantWLockGuard guard(rw_lock_);
+  return ls_persistent_state_.start_restore();
+}
+
+int ObLSMeta::set_finish_restore_state()
+{
+  ObReentrantWLockGuard update_guard(update_lock_);
+  ObReentrantWLockGuard guard(rw_lock_);
+  return ls_persistent_state_.finish_restore();
 }
 
 int ObLSMeta::set_remove_state()
@@ -96,7 +108,6 @@ ObLSMeta &ObLSMeta::operator=(const ObLSMeta &other)
     ls_persistent_state_ = other.ls_persistent_state_;
     clog_base_lsn_ = other.clog_base_lsn_;
     clog_checkpoint_scn_ = other.clog_checkpoint_scn_;
-    offline_scn_ = other.offline_scn_;
     restore_status_ = other.restore_status_;
     replayable_point_ = other.replayable_point_;
     tablet_change_checkpoint_scn_ = other.tablet_change_checkpoint_scn_;
@@ -113,7 +124,6 @@ void ObLSMeta::reset()
   
   clog_base_lsn_.reset();
   clog_checkpoint_scn_ = ObScnRange::MIN_SCN;
-  offline_scn_.reset();
   restore_status_ = ObRestoreStatus::Status::RESTORE_STATUS_MAX;
   replayable_point_.reset();
   tablet_change_checkpoint_scn_ = SCN::min_scn();
@@ -195,20 +205,7 @@ int ObLSMeta::set_tablet_change_checkpoint_scn(
 
 bool ObLSMeta::is_valid() const
 {
-  return restore_status_.is_valid() ;
-}
-
-int ObLSMeta::get_offline_scn(SCN &offline_scn)
-{
-  int ret = OB_SUCCESS;
-  ObReentrantRLockGuard guard(rw_lock_);
-  if (!is_valid()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("log stream meta is not valid, cannot get_offline_scn", K(ret), K(*this));
-  } else {
-    offline_scn = offline_scn_;
-  }
-  return ret;
+  return restore_status_.is_valid();
 }
 
 int ObLSMeta::set_restore_status(const int64_t ls_epoch, const ObRestoreStatus &restore_status)
@@ -229,10 +226,14 @@ int ObLSMeta::set_restore_status(const int64_t ls_epoch, const ObRestoreStatus &
       LOG_WARN("restore_status write slog failed", K(ret));
     } else {
       ObReentrantWLockGuard guard(rw_lock_);
-      ObRestoreStatus original_status = restore_status_;
-      restore_status_ = restore_status;
-      FLOG_INFO("succeed to set ls restore status", "original status",
-                original_status, "current status", restore_status);
+      if (restore_status.is_none() && OB_FAIL(set_finish_restore_state())) {
+        LOG_WARN("set finish restore state failed", KR(ret));
+      } else {
+        ObRestoreStatus original_status = restore_status_;
+        restore_status_ = restore_status;
+        FLOG_INFO("succeed to set ls restore status", "original status",
+                  original_status, "current status", restore_status);
+      }
     }
   }
   return ret;
@@ -514,7 +515,6 @@ OB_SERIALIZE_MEMBER(ObLSMeta,
                     ls_persistent_state_,   // FARM COMPAT WHITELIST
                     clog_checkpoint_scn_,
                     clog_base_lsn_,
-                    offline_scn_,
                     restore_status_,
                     replayable_point_,
                     tablet_change_checkpoint_scn_,

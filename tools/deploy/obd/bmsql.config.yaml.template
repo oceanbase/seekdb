@@ -2,14 +2,12 @@
 {{%% SERVERS %%}}
   tag: {{%% TAG %%}}
   global:
-    devname: lo
     production_mode: false
     cluster_id: 1
     memory_limit: '64G'
     datafile_disk_percentage: '50'
     datafile_size: '50G'
     log_disk_percentage: '10'
-    system_memory: '3G'
     cpu_count: '24'
     stack_size: '256K'
     cache_wash_threshold: '1G'
@@ -18,5 +16,3 @@
     schema_history_expire_time: '1d'
     net_thread_count: '4'
 {{%% EXTRA_PARAM %%}}
-
-{{%% PROXY_CONF %%}}

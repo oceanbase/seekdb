@@ -274,14 +274,12 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
   ObSEArray<int64_t, 16> no_param_pos;
   ObSEArray<int64_t, 16> raw_sql_offset;
   ObPhysicalPlanCtx *phy_ctx = NULL;
-  uint64_t data_version = 0;
   if (pc_ctx.sql_ctx_.handle_batched_multi_stmt() ||
       session_info.is_inner() ||
       session_info.get_is_in_retry() ||
       fp_result.values_tokens_.empty() ||
       !GCONF._enable_values_table_folding) {
     /* do nothing */
-  /* TODO NOTE@sean.yyj: remove following upgrade checking after next barrier version */
   } else if (!is_support_compress_values_table(pc_ctx.raw_sql_)) {
     /* do nothing */
   } else if (OB_ISNULL(phy_ctx = pc_ctx.exec_ctx_.get_physical_plan_ctx())) {

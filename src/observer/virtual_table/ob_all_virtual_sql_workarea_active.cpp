@@ -44,7 +44,7 @@ void ObSqlWorkareaActiveIterator::reset()
 int ObSqlWorkareaActiveIterator::init()
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(GCTX.omt_)) {
+  if (OB_ISNULL(GCTX.server_runtime_controller_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null of omt", KR(ret));
   }
@@ -59,9 +59,9 @@ int ObSqlWorkareaActiveIterator::get_next_batch_wa_active()
   if (done_) {
     ret = OB_ITER_END;
   } else {
-    MOD_SCOPE {
-      ObTenantSqlMemoryManager *sql_mem_mgr = nullptr;
-      sql_mem_mgr = share::g_mp->tenant_sql_memory_manager();
+    SERVER_MODULE_SCOPE {
+      ObSqlMemoryManager *sql_mem_mgr = nullptr;
+      sql_mem_mgr = share::g_mp->sql_memory_manager();
       if (nullptr != sql_mem_mgr && OB_FAIL(sql_mem_mgr->get_all_active_workarea(wa_actives_))) {
         LOG_WARN("failed to get workarea stat", K(ret));
       }

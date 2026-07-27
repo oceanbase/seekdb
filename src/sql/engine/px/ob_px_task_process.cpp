@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_px_task_process.h"
 #include "observer/ob_server.h"
-#include "sql/executor/ob_executor_rpc_processor.h"
+#include "sql/executor/ob_worker_session_guard.h"
 #include "sql/engine/px/ob_px_worker_stat.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
 #include "sql/engine/px/exchange/ob_px_transmit_op.h"
@@ -37,7 +37,7 @@ using namespace oceanbase::lib;
 using namespace oceanbase::sql;
 using namespace oceanbase::sql::dtl;
 
-ObPxTaskProcess::ObPxTaskProcess(const observer::ObGlobalContext &gctx, ObPxRpcInitTaskArgs &arg)
+ObPxTaskProcess::ObPxTaskProcess(const observer::ObGlobalContext &gctx, ObPxInitTaskArgs &arg)
   : gctx_(gctx), arg_(arg),
     schema_guard_(share::schema::ObSchemaMgrItem::MOD_PX_TASK_PROCESSS),
     vt_iter_factory_(*gctx.vt_iter_creator_),
@@ -81,7 +81,7 @@ int ObPxTaskProcess::check_inner_stat()
 }
 
 
-// The Tenant Px Pool will invoke this function
+// The runtime PX pool invokes this function.
 void ObPxTaskProcess::run()
 {
   int ret = OB_SUCCESS;
@@ -101,7 +101,7 @@ void ObPxTaskProcess::run()
   ret = process();
   ObPxWorkerStatList::instance().remove(stat);
   LOG_TRACE("end process task", KP(this), K(ret));
-  // Tenant Px Pool don't have any feedback, so all error should be handled by interruption.
+  // The runtime PX pool has no feedback channel, so interruption handles every error.
   UNUSED(ret);
 }
 
@@ -126,7 +126,7 @@ int ObPxTaskProcess::process()
     LOG_WARN("store query string to session failed", K(ret));
   } else {
     // Set diagnostic function environment
-    ObPxRpcInitSqcArgs &arg = arg_.sqc_handler_->get_sqc_init_arg();
+    ObPxInitSqcArgs &arg = arg_.sqc_handler_->get_sqc_init_arg();
     SQL_INFO_GUARD(arg.sqc_.get_monitoring_info().cur_sql_, session->get_cur_sql_id());
     const bool enable_sqlstat = session->is_sqlstat_enabled();
     ObAuditRecordData &audit_record = session->get_raw_audit_record();
@@ -137,7 +137,6 @@ int ObPxTaskProcess::process()
     observer::ObProcessMallocCallback pmcb(0,
           session->get_raw_audit_record().request_memory_used_);
     lib::ObMallocCallbackGuard guard(pmcb);
-    session->set_peer_addr(arg_.task_.get_sqc_addr());
     session->set_cur_phy_plan(arg_.des_phy_plan_);
     session->set_thread_id(GETTID());
     arg_.exec_ctx_->reference_my_plan(arg_.des_phy_plan_);
@@ -178,8 +177,7 @@ int ObPxTaskProcess::process()
       sqlstat_record.record_sqlstat_end_value();
       ObString sql = ObString::make_string("PX DFO EXECUTING");
       sqlstat_record.set_is_plan_cache_hit(arg_.exec_ctx_->get_sql_ctx()->plan_cache_hit_);
-      sqlstat_record.move_to_sqlstat_cache(*session,
-                            sql, NULL, true/*is_px_remote_exec*/);
+      sqlstat_record.move_to_sqlstat_cache(*session, sql, NULL);
     }
 
     if (OB_ISNULL(arg_.sqc_task_ptr_)){
@@ -195,8 +193,7 @@ int ObPxTaskProcess::process()
       const ObPhysicalPlan *phy_plan = arg_.des_phy_plan_;
       ObString sql = ObString::make_string("");
       sqlstat_record.set_is_plan_cache_hit(arg_.exec_ctx_->get_sql_ctx()->plan_cache_hit_);
-      sqlstat_record.move_to_sqlstat_cache(*session,
-                            sql, phy_plan, true/*is_px_remote_exec*/);
+      sqlstat_record.move_to_sqlstat_cache(*session, sql, phy_plan);
     }
 
     {
@@ -219,13 +216,11 @@ int ObPxTaskProcess::process()
         audit_record.dfo_id_ = get_dfo_id();
         audit_record.sqc_id_ = get_sqc_id();
         audit_record.worker_id_ = get_worker_id();
-        //audit_record.client_addr_ = arg_.task_.sqc_addr_;
         audit_record.affected_rows_ = 0;
         audit_record.return_rows_ = 0;
 
         audit_record.plan_id_ =  phy_plan->get_plan_id();
         audit_record.plan_type_ =  phy_plan->get_plan_type();
-        audit_record.is_executor_rpc_ = true;
         audit_record.is_inner_sql_ = session->is_inner();
         audit_record.is_hit_plan_cache_ = true;
         audit_record.is_multi_stmt_ = false;
@@ -361,7 +356,7 @@ int ObPxTaskProcess::do_process()
     LOG_WARN("check task processor inner stat fail", K(ret));
   } else {
     // 1. Build execution environment
-    //   - reference sql/executor/ob_executor_rpc_processor.cpp
+    //   - reference sql/executor/ob_worker_session_guard.cpp
     //   - exec, stat etc.
     // In input there are the execution parameters of the operators,
     // If input was populated before sending in the old framework,
@@ -374,29 +369,23 @@ int ObPxTaskProcess::do_process()
     //   - Task Id number needs to be set
     // 4. Execute
     LOG_TRACE("TIMERECORD ", "reserve:=0 name:=TASK dfoid:",dfo_id,"sqcid:",
-             sqc_id,"taskid:", task_id,"start:", ObTimeUtility::current_time(),
-             "addr:", arg_.task_.get_exec_addr());
+             sqc_id,"taskid:", task_id,"start:", ObTimeUtility::current_time());
     LOG_DEBUG("begin to execute sql task", K(task_id));
     LOG_DEBUG("async task physical plan", "phy_plan", arg_.des_phy_plan_);
 
     if (OB_SUCC(ret)) {
       ObTaskExecutorCtx *executor_ctx = NULL;
-      if (OB_ISNULL(gctx_.schema_service_) || OB_ISNULL(gctx_.sql_engine_)
-          || OB_ISNULL(gctx_.executor_rpc_)) {
+      if (OB_ISNULL(gctx_.schema_service_) || OB_ISNULL(gctx_.sql_engine_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", K(ret),
                   KP(gctx_.schema_service_),
                   KP(gctx_.sql_engine_),
-                  KP(arg_.exec_ctx_),
-                  KP(gctx_.executor_rpc_));
-      } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(
+                  KP(arg_.exec_ctx_));
+      } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(
                   schema_guard_))) {
         LOG_WARN("fail to get schema guard", K(ret));
-      } else if (OB_FAIL(schema_guard_.get_schema_version(
-                 arg_.task_.px_worker_execute_start_schema_version_))) {
-        LOG_WARN("get px worker start schema version failed", K(ret));
       } else {
-        // Used for the initialization of parameters of the virtual table for remote execution
+        // Initialize virtual-table parameters for the local PX worker.
         ObVirtualTableCtx vt_ctx;
         ObExecContext &exec_ctx = *arg_.exec_ctx_;
         vt_ctx.vt_iter_factory_ = &vt_iter_factory_;
@@ -452,12 +441,9 @@ int ObPxTaskProcess::do_process()
 
     if (OB_SUCC(ret)) {
       if (nullptr != arg_.op_spec_root_) {
-        const ObPxSqcMeta &sqc_meta = arg_.sqc_handler_->get_sqc_init_arg().sqc_;
         // show monitoring information from qc
-        LOG_DEBUG("receive monitoring information", K(sqc_meta.get_monitoring_info()));
-        ObExtraServerAliveCheck qc_alive_checker(sqc_meta.get_qc_addr(),
-          arg_.exec_ctx_->get_my_session()->get_process_query_time());
-        ObExtraServerAliveCheck::Guard check_guard(*arg_.exec_ctx_, qc_alive_checker);
+        LOG_DEBUG("receive monitoring information",
+                  K(arg_.sqc_handler_->get_sqc_init_arg().sqc_.get_monitoring_info()));
         if (OB_FAIL(execute(*arg_.op_spec_root_))) {
           LOG_WARN("failed to execute plan", K(ret), K(arg_.op_spec_root_->id_));
         }
@@ -476,13 +462,9 @@ int ObPxTaskProcess::do_process()
   (void)record_exec_feedback_info();
 
   LOG_TRACE("TIMERECORD ", "reserve:=0 name:=TASK dfoid:",dfo_id,"sqcid:",
-           sqc_id,"taskid:", task_id,"end:", ObTimeUtility::current_time(),
-           "addr:", arg_.task_.get_exec_addr());
+           sqc_id,"taskid:", task_id,"end:", ObTimeUtility::current_time());
   // Task and Sqc are in two different threads, task needs to communicate with sqc
   if (NULL != arg_.sqc_task_ptr_) {
-    if (OB_FAIL(ret)) {
-      ObInterruptUtil::update_schema_error_code(arg_.exec_ctx_, ret, arg_.task_.px_worker_execute_start_schema_version_);
-    }
     arg_.sqc_task_ptr_->set_result(ret);
     if (OB_NOT_NULL(arg_.exec_ctx_)) {
       int das_retry_rc = DAS_CTX(*arg_.exec_ctx_).get_location_router().get_last_errno();
@@ -498,7 +480,7 @@ int ObPxTaskProcess::do_process()
     } else {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS == ERRSIM_INTERRUPT_QC_FAILED) {
-        if (OB_SUCCESS != (tmp_ret = ObInterruptUtil::interrupt_qc(arg_.task_, ret, arg_.exec_ctx_))) {
+        if (OB_SUCCESS != (tmp_ret = ObInterruptUtil::interrupt_qc(arg_.task_, ret))) {
           LOG_WARN("interrupt_qc failed", K(tmp_ret));
         }
       }
@@ -528,7 +510,7 @@ int ObPxTaskProcess::record_user_error_msg(int retcode)
         const common::ObWarningBuffer::WarningItem *item = wb->get_warning_item(idx);
         if (item != NULL) {
           if (OB_FAIL(rcode.warnings_.push_back(*item))) {
-            RPC_OBCALL_LOG(WARN, "Failed to add warning", K(ret));
+            LOG_WARN("failed to add warning", K(ret));
           }
         } else {
           not_null = false;
@@ -903,5 +885,3 @@ uint64_t ObPxTaskProcess::get_session_id() const
   }
   return session_id;
 }
-
-

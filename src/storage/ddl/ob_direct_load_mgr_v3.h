@@ -19,7 +19,7 @@
 
 #include "common/ob_tablet_id.h"
 #include "storage/ddl/ob_i_direct_load_mgr.h"
-#include "storage/ddl/ob_direct_insert_sstable_ctx_new.h"
+#include "storage/ddl/ob_direct_insert_sstable_ctx.h"
 namespace oceanbase
 {
 
@@ -107,7 +107,6 @@ public:
   bool get_micro_index_clustered() override { return micro_index_clustered_; }
   ObDirectLoadMgrRole get_role() { return role_; }
   const ObStorageSchema *get_storage_schema() const { return storage_schema_; }
-  virtual void update_store_desc_exec_mode(ObStaticDataStoreDesc &ob_data_store_desc) = 0;
   static const int64_t TRY_LOCK_TIMEOUT = 10 * 1000000; // 10s
 protected:
   ObArenaAllocator arena_allocator_;
@@ -142,49 +141,6 @@ protected:
   int inner_close();
   int schedule_merge_tablet_task(const ObTabletDDLCompleteArg &arg, const bool wait_major = false);
 
-  void update_store_desc_exec_mode(ObStaticDataStoreDesc &ob_data_store_desc) override
-  {
-    UNUSED(ob_data_store_desc);
-  }
-};
-
-class ObSSTabletDirectLoadMgr: public ObTabletDirectLoadMgrV3
-{
-public:
-  ObSSTabletDirectLoadMgr();
-  ~ObSSTabletDirectLoadMgr();
-  int init_v2(const ObTabletDirectLoadInsertParam &build_param,
-              const int64_t execution_id,
-              const ObDirectLoadMgrRole role) override;
-  int fill_sstable_slice_v2(const ObDirectLoadSliceInfo &slice_info,
-                                    ObIStoreRowIterator *iter,
-                                    ObDirectLoadSliceWriter &slice_writer, 
-                                    blocksstable::ObMacroDataSeq &next_seq,
-                                    ObInsertMonitor *insert_monitor,
-                                    int64_t &affected_rows) override;
-  int update_max_lob_id(const int64_t lob_id) override;
-protected:
-  int inner_close() override;
-  int update_table_store(const blocksstable::ObSSTable *sstable,
-                         const ObStorageSchema *storage_schema,
-                         ObITable::TableKey &table_key,
-                         ObTablet &tablet);
-  int create_ddl_ro_sstable(ObTablet &tablet,
-                            common::ObArenaAllocator &allocator,
-                            ObTableHandleV2 &sstable_handle);
-  void update_max_data_macro_seq(const int64_t cur_data_seq);
-  void update_max_meta_macro_seq(const int64_t cur_meta_seq);
-  int calc_root_macro_seq(int64_t &root_seq);
-  void update_store_desc_exec_mode(ObStaticDataStoreDesc &ob_data_store_desc) { ob_data_store_desc.exec_mode_ = compaction::EXEC_MODE_OUTPUT; }
-private:
-  int64_t last_data_seq_;
-  int64_t last_meta_seq_;
-  int64_t last_lob_id_;
-  /* slice_cnt_ mean that the tablet has been split some slice
-   * task_cnt_ means prallelisim, the number of thread that process this task
-   * one thread may process a few tasks
-  */
-  int64_t total_slice_cnt_;
 };
 
 }// namespace storage

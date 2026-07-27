@@ -55,16 +55,15 @@ static void seekdb_cov_init_profile_file(int argc, char **argv)
 #include "lib/oblog/ob_easy_log.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/oblog/ob_warning_buffer.h"
-#include "lib/allocator/ob_mem_leak_checker.h"
 #include "rpc/ob_libeasy_mem_pool.h"
 #include "lib/signal/ob_signal_struct.h"
 #include "lib/utility/ob_defer.h"
 #include "observer/ob_command_line_parser.h"
 #include "observer/ob_server.h"
+#include "share/ob_encryption_util.h"
 #include "observer/ob_server_utils.h"
 #include "observer/ob_signal_handle.h"
 #include "share/config/ob_server_config.h"
-#include "share/ob_tenant_mgr.h"
 #include "share/ob_version.h"
 #include <curl/curl.h>
 #include <stdlib.h>
@@ -596,7 +595,7 @@ static int check_uid_before_start(const char *dir_path)
     /* do nothing */
   } else {
     if (current_uid != dir_info.st_uid) {
-      ret = OB_UTL_FILE_ACCESS_DENIED;
+      ret = OB_FILE_OR_DIRECTORY_PERMISSION_DENIED;
       MPRINT("ERROR: current user(uid=%u) that starts seekdb is not the same with the original one(uid=%u), seekdb starts failed!",
               current_uid, dir_info.st_uid);
     }
@@ -662,8 +661,6 @@ int inner_main(int argc, char *argv[])
   int64_t memory_used = get_virtual_memory_used();
 
   // Fake routines for current thread.
-
-  get_mem_leak_checker().init();
 
   ObCurTraceId::SeqGenerator::seq_generator_  = ObTimeUtility::current_time();
   static const int  LOG_FILE_SIZE             = DEFAULT_LOG_FILE_SIZE_MB * 1024 * 1024;

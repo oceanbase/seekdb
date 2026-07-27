@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "ob_lob_access_utils.h"
-#include "share/ob_i_lob_read_service.h"          // lob-read domain port(injected through MTL)
-#include "share/rc/ob_tenant_base.h"              // share::g_mp->lob_read_service()
+#include "share/ob_i_lob_read_service.h"          // Lob-read domain port injected by the server.
+#include "share/rc/ob_server_runtime.h"              // share::g_mp->lob_read_service()
 #include "storage/lob/ob_lob_diff_struct.h"  // storage::ObLobDiffHeader(pure header conf L2)
 
 namespace oceanbase

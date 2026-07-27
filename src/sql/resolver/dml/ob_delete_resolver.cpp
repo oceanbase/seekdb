@@ -19,23 +19,21 @@
 #include "sql/optimizer/ob_optimizer_util.h"
 
 /**
- * DELETE syntax from MySQL 5.7
+ * DELETE syntax supported by seekdb
  *
  * Single-Table Syntax:
- *   DELETE [LOW_PRIORITY] [QUICK] [IGNORE] FROM tbl_name
+ *   DELETE FROM tbl_name
  *   [PARTITION (partition_name,...)]
  *   [WHERE where_condition]
  *   [ORDER BY ...]
  *   [LIMIT row_count]
  *
  * Multiple-Table Syntax
- *   DELETE [LOW_PRIORITY] [QUICK] [IGNORE]
- *   tbl_name[.*] [, tbl_name[.*]] ...
+ *   DELETE tbl_name[.*] [, tbl_name[.*]] ...
  *   FROM table_references
  *   [WHERE where_condition]
  *  Or:
- *   DELETE [LOW_PRIORITY] [QUICK] [IGNORE]
- *   FROM tbl_name[.*] [, tbl_name[.*]] ...
+ *   DELETE FROM tbl_name[.*] [, tbl_name[.*]] ...
  *   USING table_references
  *   [WHERE where_condition]
  */
@@ -62,7 +60,6 @@ int ObDeleteResolver::resolve(const ParseNode &parse_tree)
   // create the delete stmt
   ObDeleteStmt *delete_stmt = NULL;
   bool is_multi_table_delete = false;
-  const bool disable_limit_offset = true;
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
@@ -114,7 +111,7 @@ int ObDeleteResolver::resolve(const ParseNode &parse_tree)
         LOG_WARN("resolve delete where clause failed", K(ret));
       } else if (OB_FAIL(resolve_order_clause(parse_tree.children_[ORDER_BY]))) {
         LOG_WARN("resolve delete order clause failed", K(ret));
-      } else if (OB_FAIL(resolve_limit_clause(parse_tree.children_[LIMIT], disable_limit_offset))) {
+      } else if (OB_FAIL(resolve_limit_clause(parse_tree.children_[LIMIT], true))) {
         LOG_WARN("resolve delete limit clause failed", K(ret));
       } else if (OB_FAIL(delete_stmt->formalize_stmt(session_info_))) {
         LOG_WARN("pull stmt all expr relation ids failed", K(ret));

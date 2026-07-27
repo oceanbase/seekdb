@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_LOGSERVICE_OB_APPEND_CALLBACK_
 #define OCEANBASE_LOGSERVICE_OB_APPEND_CALLBACK_
 #include "palf/lsn.h"
+#include "lib/queue/ob_link.h"
 #include "lib/utility/utility.h"
 #include "share/scn.h"
 
@@ -41,9 +42,9 @@ public:
   void __set_lsn(const palf::LSN &lsn) { __start_lsn_ = lsn; }
   const share::SCN& __get_scn() const { return __scn_; }
   void __set_scn(const share::SCN& scn) { __scn_ = scn; }
-  static AppendCb* __get_class_address(ObLink *ptr);
-  static ObLink* __get_member_address(AppendCb *ptr);
-  ObLink *__next_;
+  static AppendCb* __get_class_address(common::ObLink *ptr);
+  static common::ObLink* __get_member_address(AppendCb *ptr);
+  common::ObLink *__next_;
   VIRTUAL_TO_STRING_KV(KP(__next_), K(__start_lsn_), K(__scn_));
 private:
   palf::LSN __start_lsn_;

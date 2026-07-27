@@ -356,12 +356,12 @@ int ObPluginVectorIndexUtils::get_extra_column_count(
   
   const ObTableSchema *delta_buffer_schema = nullptr;
   const ObTableSchema *table_schema = nullptr;
-  ObMultiVersionSchemaService *schema_service = share::g_mp->tenant_schema_service()->get_schema_service();
+  ObMultiVersionSchemaService *schema_service = share::g_mp->schema_runtime_service()->get_schema_service();
   int64_t extra_info_actual_size = 0;
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), KP(schema_service));
-  } else if (OB_FAIL(schema_service->get_tenant_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("failed to get schema manager", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( adapter.get_inc_table_id(), delta_buffer_schema))) {
     LOG_WARN("failed to get table schema by index id.", K(ret), K(adapter.get_inc_table_id()));
@@ -394,12 +394,12 @@ int ObPluginVectorIndexUtils::get_data_table_out_column_id(
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *delta_buffer_schema = nullptr;
   const ObTableSchema *table_schema = nullptr;
-  ObMultiVersionSchemaService *schema_service = share::g_mp->tenant_schema_service()->get_schema_service();
+  ObMultiVersionSchemaService *schema_service = share::g_mp->schema_runtime_service()->get_schema_service();
   int64_t extra_info_actual_size = 0;
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), KP(schema_service));
-  } else if (OB_FAIL(schema_service->get_tenant_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("failed to get schema manager", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( incr_index_table_id, delta_buffer_schema))) {
     LOG_WARN("failed to get table schema by index id.", K(ret), K(incr_index_table_id));
@@ -942,7 +942,7 @@ int ObPluginVectorIndexUtils::refresh_memdata(ObPluginVectorIndexAdaptor *adapte
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid adapter", K(ret), KPC(adapter));
   } else {
-    MOD_SCOPE {
+    SERVER_MODULE_SCOPE {
       ObPluginVectorIndexAdaptor *new_adapter = adapter;
       ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
       ObPluginVectorIndexMgr *vec_idx_mgr = nullptr;
@@ -1220,7 +1220,6 @@ int ObPluginVectorIndexUtils::init_common_scan_param(storage::ObTableScanParam& 
     scan_param.for_update_wait_timeout_ = scan_param.timeout_;
     scan_param.scan_allocator_ = scan_allocator;
     scan_param.frozen_version_ = -1;
-    scan_param.force_refresh_lc_ = false;
     scan_param.output_exprs_ = nullptr;
     scan_param.aggregate_exprs_ = nullptr;
     scan_param.op_ = nullptr;
@@ -1255,7 +1254,7 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
     LOG_WARN("fail to get schema", KR(ret), KR(table_id));
@@ -1623,7 +1622,7 @@ int ObPluginVectorIndexUtils::get_special_index_aux_table_column_count(
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = NULL;
   ObSEArray<uint64_t, 4> column_ids;
-  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
+  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
     LOG_WARN("fail to get schema", KR(ret), K(table_id));
@@ -1677,7 +1676,7 @@ int ObPluginVectorIndexUtils::get_shared_table_rowkey_colum_count(schema::ObInde
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = NULL;
   ObSEArray<uint64_t, 4> column_ids;
-  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
+  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
     LOG_WARN("fail to get schema", KR(ret), KR(table_id));
@@ -2062,18 +2061,18 @@ int ObPluginVectorIndexUtils::fill_ivf_mem_context_detail_info(ObPluginVectorInd
   return ret;
 }
 
-int ObPluginVectorIndexUtils::get_tenant_vector_index_ids(bool &has_ivf_index, common::ObIArray<uint64_t> &table_id_array)
+int ObPluginVectorIndexUtils::get_vector_index_ids(bool &has_ivf_index, common::ObIArray<uint64_t> &table_id_array)
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   ObMultiVersionSchemaService &schema_service = ObMultiVersionSchemaService::get_instance();
-  if (!schema_service.is_tenant_full_schema()) {
+  if (!schema_service.is_runtime_schema_ready()) {
     ret = OB_EAGAIN;
-    LOG_INFO("tenant does not has a full schema already, maybe server is restart, need retry!");
-  } else if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
+    LOG_INFO("runtime schema is not ready after server restart, retry later");
+  } else if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("fail to get schema guard", KR(ret));
-  } else if (OB_FAIL(schema_guard.get_vector_info_index_ids_in_tenant( has_ivf_index, table_id_array))) {
-    LOG_WARN("fail to get table ids in tenant", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_vector_info_index_ids_in_runtime( has_ivf_index, table_id_array))) {
+    LOG_WARN("fail to get vector index table ids in runtime", KR(ret));
   }
   return ret;
 }

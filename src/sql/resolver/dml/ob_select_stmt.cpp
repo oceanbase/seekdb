@@ -61,12 +61,9 @@ int ObSelectIntoItem::deep_copy(ObIAllocator &allocator,
   max_file_size_ = other.max_file_size_;
   escaped_cht_ = other.escaped_cht_;
   cs_type_ = other.cs_type_;
-  file_partition_expr_ = other.file_partition_expr_;
   buffer_size_ = other.buffer_size_;
   user_vars_.assign(other.user_vars_);
-  if (OB_FAIL(copier.copy(other.file_partition_expr_, file_partition_expr_))) {
-    LOG_WARN("deep copy file partition expr failed", K(ret));
-  } else if (OB_FAIL(ob_write_string(allocator, other.external_properties_, external_properties_))) {
+  if (OB_FAIL(ob_write_string(allocator, other.external_properties_, external_properties_))) {
     LOG_WARN("failed to deep copy string", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < other.pl_vars_.count(); ++i) {
@@ -99,7 +96,7 @@ int ObSelectStmt::check_table_be_modified(uint64_t ref_table_id, bool& is_exists
       LOG_ERROR("table item is NULL", K(ret), K(i), K(table_items_.count()));
     } else if (table_item->for_update_ && ref_table_id == table_item->ref_id_) {
       is_exists = true;
-      LOG_DEBUG("duplicate table is used in select for update", K(is_exists), K(ref_table_id), K(table_items_.count()));
+      LOG_DEBUG("table is referenced more than once in select for update", K(is_exists), K(ref_table_id), K(table_items_.count()));
     }
   }
   if (OB_SUCC(ret) && !is_exists) {
@@ -412,10 +409,6 @@ int ObSelectStmt::iterate_stmt_expr(ObStmtExprVisitor &visitor)
       if (OB_FAIL(visitor.visit(into_item_->pl_vars_.at(i), SCOPE_SELECT_INTO))) {
         LOG_WARN("failed to visit select into", K(ret));
       }
-    }
-    if (OB_SUCC(ret) && into_item_->file_partition_expr_ != NULL
-        && OB_FAIL(visitor.visit(into_item_->file_partition_expr_, SCOPE_SELECT))) {
-      LOG_WARN("failed to visit select into", K(ret));
     }
   }
   return ret;
@@ -779,8 +772,7 @@ bool ObSelectStmt::is_spj() const
            || get_aggr_item_size() != 0
            || get_from_item_size() == 0
            || is_contains_assignment()
-           || has_window_function()
-           || has_sequence());
+           || has_window_function());
   return bret;
 }
 
@@ -796,8 +788,7 @@ bool ObSelectStmt::is_spjg() const
            || has_limit()
            || get_from_item_size() == 0
            || is_contains_assignment()
-           || has_window_function()
-           || has_sequence());
+           || has_window_function());
   return bret;
 }
 
@@ -996,8 +987,7 @@ int ObSelectStmt::check_is_simple_lock_stmt(bool &is_valid) const
       !has_order_by() &&
       get_aggr_item_size() == 0 &&
       !is_contains_assignment() &&
-      !has_window_function() &&
-      !has_sequence()) {
+      !has_window_function()) {
     bool contain_lock_expr = false;
     for (int64_t i = 0; !contain_lock_expr && i < select_items_.count(); i ++) {
       if (OB_FAIL(ObRawExprUtils::check_contain_lock_exprs(select_items_.at(i).expr_, contain_lock_expr))) {

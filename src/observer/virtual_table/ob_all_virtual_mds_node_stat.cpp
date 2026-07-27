@@ -84,7 +84,7 @@ int ObAllVirtualMdsNodeStat::inner_get_next_row(common::ObNewRow *&row)
       MDS_LOG(WARN, "tablet_id must be specified", KR(ret), K(*this));
     } else {
       char *temp_buffer = nullptr;
-      if (OB_ISNULL(temp_buffer = (char *)mtl_malloc(BUFFER_SIZE, "VirMdsStat"))) {
+      if (OB_ISNULL(temp_buffer = (char *)server_malloc(BUFFER_SIZE, "VirMdsStat"))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         MDS_LOG(WARN, "fail to alloc buffer", K(*this));
       } else {
@@ -97,7 +97,7 @@ int ObAllVirtualMdsNodeStat::inner_get_next_row(common::ObNewRow *&row)
         } else if (OB_FAIL(ls_service->get_ls(ls))) {
           MDS_LOG(WARN, "get log stream failed", K(ret));
         } else if (OB_FAIL(get_tablet_info_(*ls, apply_on_table_op))) {
-          MDS_LOG(WARN, "iterate mds node failed", K(ret));
+          MDS_LOG(WARN, "iterate mds nodes failed", K(ret));
           ret = OB_SUCCESS;
         }
         if (OB_FAIL(ret)) {
@@ -106,7 +106,7 @@ int ObAllVirtualMdsNodeStat::inner_get_next_row(common::ObNewRow *&row)
           scanner_it_ = scanner_.begin();
           start_to_read_ = true;
         }
-        mtl_free(temp_buffer);
+        server_free(temp_buffer);
       }
     }
   }

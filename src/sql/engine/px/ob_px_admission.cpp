@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL
 #include "ob_px_admission.h"
-#include "observer/omt/ob_tenant.h"
+#include "observer/omt/ob_server_runtime.h"
 #include "ob_px_target_monitor.h"
 
 using namespace oceanbase::common;
@@ -45,7 +45,7 @@ int ObPxAdmission::get_parallel_session_target(ObSQLSessionInfo &session,
       session_target = std::max(parallel_servers_target / pmas, minimal_session_target);
     }
   } else {
-    // tenant_config is invalid, use parallel_servers_target
+    // runtime_config is invalid, use parallel_servers_target
     session_target = parallel_servers_target;
   }
   LOG_TRACE("PX get parallel session target", K(true),
@@ -60,8 +60,7 @@ int ObPxAdmission::get_parallel_session_target(ObSQLSessionInfo &session,
 //   Inference: A request that requires **excess** threads will only be scheduled after the system becomes idle
 int64_t ObPxAdmission::admit(ObSQLSessionInfo &session, ObExecContext &exec_ctx,
                              int64_t wait_time_us, int64_t minimal_px_worker_count,
-                             int64_t &session_target, ObHashMap<ObAddr, int64_t> &worker_map,
-                             int64_t req_cnt, int64_t &admit_cnt)
+                             int64_t &session_target, int64_t req_cnt, int64_t &admit_cnt)
 {
   int ret = OB_SUCCESS;
   // when pmas enabled, block thread until got expected thread resource
@@ -71,7 +70,8 @@ int64_t ObPxAdmission::admit(ObSQLSessionInfo &session, ObExecContext &exec_ctx,
   do {
     if (OB_FAIL(THIS_WORKER.check_status())) {
       LOG_WARN("fail check query status", K(ret));
-    } else if (OB_FAIL(OB_PX_TARGET_MONITOR.apply_target(worker_map, wait_time_us, session_target, req_cnt, admit_cnt))) {
+    } else if (OB_FAIL(OB_PX_TARGET_MONITOR.apply_target(
+                   wait_time_us, session_target, req_cnt, admit_cnt))) {
       LOG_WARN("apply target failed", K(ret), K(req_cnt));
     } else if (0 != admit_cnt) {
       exec_ctx.set_admission_acquired(true);
@@ -106,33 +106,12 @@ int ObPxAdmission::enter_query_admission(ObSQLSessionInfo &session,
                                          ObPhysicalPlan &plan)
 {
   int ret = OB_SUCCESS;
-  // For the scenario where only dop=1, skip the check, because this scenario goes through the RPC thread and does not consume PX threads
-  // 
+  // DOP 1 executes on the query worker and does not consume PX worker quota.
   if (stmt::T_EXPLAIN != stmt_type
       && plan.is_use_px()
       && 1 != plan.get_px_dop()
       && plan.get_expected_worker_count() > 0) {
-    // use for appointment
-    const auto &req_px_worker_map = plan.get_expected_worker_map();
-    ObHashMap<ObAddr, int64_t> *acl_px_worker_map = nullptr;
-    if (OB_FAIL(exec_ctx.get_admission_addr_map(acl_px_worker_map))) {
-      LOG_WARN("failed to get acl_px_worker_map");
-    } else if (OB_ISNULL(acl_px_worker_map)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("acl_px_worker_map is null");
-    } else if (acl_px_worker_map->created()) {
-      acl_px_worker_map->clear();
-    } else if (OB_FAIL(acl_px_worker_map->create(hash::cal_next_prime(10), ObModIds::OB_SQL_PX, ObModIds::OB_SQL_PX))){
-      LOG_WARN("create hash map failed", K(ret));
-    }
     if (OB_SUCC(ret)) {
-      for (auto it = req_px_worker_map.begin(); 
-          OB_SUCC(ret) && it != req_px_worker_map.end(); ++it) {
-        if (OB_FAIL(acl_px_worker_map->set_refactored(it->first, it->second))){
-          LOG_WARN("set refactored failed", K(ret), K(it->first), K(it->second));
-        }
-      }
-      // use for exec
       int64_t req_worker_count = plan.get_expected_worker_count();
       int64_t minimal_px_worker_count = plan.get_minimal_worker_count();
       int64_t admit_worker_count = 0;
@@ -150,7 +129,7 @@ int ObPxAdmission::enter_query_admission(ObSQLSessionInfo &session,
         LOG_WARN("fail check query status", K(ret));
       } else if (OB_FAIL(ObPxAdmission::admit(session, exec_ctx,
                                               wait_time_us, minimal_px_worker_count, session_target,
-                                              *acl_px_worker_map, req_worker_count, admit_worker_count))) {
+                                              req_worker_count, admit_worker_count))) {
         LOG_WARN("fail do px admission",
                 K(ret), K(wait_time_us), K(session_target));
       } else if (admit_worker_count <= 0) {
@@ -171,7 +150,6 @@ int ObPxAdmission::enter_query_admission(ObSQLSessionInfo &session,
         if (OB_ISNULL(plan_ctx) || OB_ISNULL(task_exec_ctx)) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          plan_ctx->set_worker_count(admit_worker_count);
           // indicates the number calculated by optimizer
           task_exec_ctx->set_expected_worker_cnt(req_worker_count);
           task_exec_ctx->set_minimal_worker_cnt(minimal_px_worker_count);
@@ -202,39 +180,31 @@ void ObPxAdmission::exit_query_admission(ObSQLSessionInfo &session,
       && 1 != plan.get_px_dop()
       && exec_ctx.get_admission_acquired()) {
     int ret = OB_SUCCESS;
-    
-    hash::ObHashMap<ObAddr, int64_t> *addr_map = nullptr;
-    if (OB_FAIL(exec_ctx.get_admission_addr_map(addr_map))) {
-      LOG_WARN("failed to get addr_map");
-    } else if (OB_ISNULL(addr_map)) {
+    ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(exec_ctx);
+    if (OB_ISNULL(task_exec_ctx)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("addr_map is null");
-    } else if (OB_FAIL(OB_PX_TARGET_MONITOR.release_target(*addr_map))) {
+      LOG_WARN("task executor ctx is null", K(ret));
+    } else if (OB_FAIL(OB_PX_TARGET_MONITOR.release_target(
+                   task_exec_ctx->get_admited_worker_cnt()))) {
       LOG_WARN("release target failed", K(ret));
     }
-    (void)addr_map->destroy();
     LOG_DEBUG("release resource, notify wait threads");
   }
 }
-// Supply SQC end used Admission module
-// Each tenant one resource pool
+// Supply SQC end used Admission module.
+// Bound SQC admission by local server CPU capacity.
 void ObPxSubAdmission::acquire(int64_t max, int64_t min, int64_t &acquired_cnt)
 {
   UNUSED(min);
-  oceanbase::omt::ObTenant *tenant = nullptr;
+  oceanbase::omt::ObServerRuntime *runtime = nullptr;
   oceanbase::omt::ObThWorker *worker = nullptr;
   int64_t upper_bound = 1;
   if (nullptr == (worker = THIS_THWORKER_SAFE)) {
-    LOG_ERROR_RET(OB_ERR_UNEXPECTED, "Oooops! can't find tenant. Unexpected!", K(max), K(min));
-  } else if (nullptr == (tenant = worker->get_tenant())) {
-    LOG_ERROR_RET(OB_ERR_UNEXPECTED, "Oooops! can't find tenant. Unexpected!", KP(worker), K(max), K(min));
+    LOG_ERROR_RET(OB_ERR_UNEXPECTED, "can't find server worker", K(max), K(min));
+  } else if (nullptr == (runtime = worker->get_runtime())) {
+    LOG_ERROR_RET(OB_ERR_UNEXPECTED, "can't find server runtime", KP(worker), K(max), K(min));
   } else {
-    if (!true) {
-      LOG_WARN_RET(OB_ERR_UNEXPECTED, "get tenant config failed, use default cpu_quota_concurrency");
-      upper_bound = tenant->unit_min_cpu() * 4;
-    } else {
-      upper_bound = tenant->unit_min_cpu() * GCONF._max_px_workers_per_cpu;
-    }
+    upper_bound = runtime->min_cpu() * GCONF._max_px_workers_per_cpu;
   }
   acquired_cnt = std::min(max, upper_bound);
 }

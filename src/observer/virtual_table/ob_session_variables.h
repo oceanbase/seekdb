@@ -19,13 +19,6 @@
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 namespace oceanbase
 {
-namespace share
-{
-namespace schema
-{
-class ObTenantSchema;
-}
-}
 namespace sql
 {
 class ObSQLSessionInfo;

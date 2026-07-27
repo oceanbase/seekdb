@@ -37,7 +37,7 @@ public:
     free_queue_len_(0), total_memory_size_(0), real_alloc_cnt_(0), real_free_cnt_(0)
   {}
 
-  void set_mem_pool_info(sql::dtl::ObTenantDfc *&tenant_dfc, sql::dtl::ObDtlChannelMemManager *mgr);
+  void set_mem_pool_info(sql::dtl::ObDfc *&dfc_manager, sql::dtl::ObDtlChannelMemManager *mgr);
 
   TO_STRING_KV(K(seqno_));
 
@@ -68,9 +68,8 @@ public:
   void reset();
 
   int init();
-  int prepare_tenants();
   int get_next_memory_pools();
-  int get_tenant_memory_pool_infos();
+  int get_memory_pool_infos();
 
   int get_next_mem_pool_info(ObAllVirtualDtlMemoryPoolInfo &memory_pool_info);
 private:

@@ -114,22 +114,18 @@ INSERT INTO fts_table_2 VALUES (1, 1, "name1", "title 1", "content1"),
                                (3, 3, "name3", "title 3", "content3");
 
 ALTER TABLE fts_table_2 ADD CONSTRAINT fk_constraint FOREIGN KEY (id) REFERENCES fts_fk_table(id);
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE fts_table_2;
 SELECT name FROM fts_table_2 WHERE MATCH (title) AGAINST ("title") order by name;
 
 ALTER TABLE fts_table_2 DROP FOREIGN KEY fk_constraint;
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE fts_table_2;
 SELECT name FROM fts_table_2 WHERE MATCH (title) AGAINST ("title") order by name;
 
 ALTER TABLE fts_table_2 ADD CONSTRAINT cons CHECK (id <= 10000);
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE fts_table_2;
 SELECT name FROM fts_table_2 WHERE MATCH (title) AGAINST ("title") order by name;
 
 ALTER TABLE fts_table_2 DROP CONSTRAINT cons;
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE fts_table_2;
 SELECT name FROM fts_table_2 WHERE MATCH (title) AGAINST ("title") order by name;
 
@@ -145,22 +141,18 @@ DESCRIBE fts_table_3;
 SELECT name FROM fts_table_3 WHERE MATCH (titles) AGAINST ("title") order by name;
 
 ALTER TABLE fts_table_3 ROW_FORMAT=COMPACT;
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE fts_table_3;
 SELECT name FROM fts_table_3 WHERE MATCH (titles) AGAINST ("title") order by name;
 
 ALTER TABLE fts_table_3 BLOCK_SIZE=2048;
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE fts_table_3;
 SELECT name FROM fts_table_3 WHERE MATCH (titles) AGAINST ("title") order by name;
 
 ALTER TABLE fts_table_3 COMPRESSION='zstd_1.3.8';
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE fts_table_3;
 SELECT name FROM fts_table_3 WHERE MATCH (titles) AGAINST ("title") order by name;
 
 OPTIMIZE TABLE fts_table_3;
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE fts_table_3;
 SELECT name FROM fts_table_3 WHERE MATCH (titles) AGAINST ("title") order by name;
 
@@ -178,7 +170,6 @@ alter table fts_table add partition (partition p3 values less than(30));
 insert into fts_table values(27, "jerry b");
 select * from fts_table order by 1;
 alter table fts_table add partition (partition p4 values less than(40), partition p5 values less than(50));
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table fts_table;
 drop table fts_table;
 

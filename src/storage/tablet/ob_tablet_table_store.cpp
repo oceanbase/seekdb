@@ -44,13 +44,12 @@ ObTabletTableStore::ObTabletTableStore()
     mds_sstables_(),
     memtables_(),
     ddl_mem_sstables_(),
-    major_ckm_info_(),
     memtables_lock_(),
     is_ready_for_read_(false),
     is_inited_(false)
 {
 #if defined(__x86_64__)
-  static_assert(sizeof(ObTabletTableStore) == 408, "The size of ObTabletTableStore will affect the meta memory manager, and the necessity of adding new fields needs to be considered.");
+  static_assert(sizeof(ObTabletTableStore) == 352, "The size of ObTabletTableStore will affect the meta memory manager, and the necessity of adding new fields needs to be considered.");
 #endif
 }
 
@@ -69,7 +68,6 @@ void ObTabletTableStore::reset()
   mds_sstables_.reset();
   memtables_.reset();
   ddl_mem_sstables_.reset();
-  major_ckm_info_.reset();
   is_ready_for_read_ = false;
   is_inited_ = false;
 }
@@ -95,7 +93,6 @@ int ObTabletTableStore::serialize(char *buf, const int64_t buf_len, int64_t &pos
         ddl_sstables_,
         meta_major_tables_,
         mds_sstables_);
-    LST_DO_CODE(OB_UNIS_ENCODE, major_ckm_info_);
   }
   return ret;
 }
@@ -134,8 +131,6 @@ int ObTabletTableStore::deserialize(
     LOG_WARN("fail to deserialize meta major sstables", K(ret));
   } else if (pos - start_pos < serialized_length && OB_FAIL(mds_sstables_.deserialize(allocator, buf, data_len, pos))) {
     LOG_WARN("fail to deserialize mds sstables", K(ret));
-  } else if (OB_FAIL(major_ckm_info_.deserialize(allocator, buf, data_len, pos))) {
-    LOG_WARN("fail to deserialize major ckm info", K(ret));
   } else if (OB_FAIL(build_memtable_array(tablet))) {
     LOG_WARN("fail to pull memtables from tablet", K(ret));
   } else if (OB_FAIL(pull_ddl_memtables(allocator, tablet))) {
@@ -169,15 +164,13 @@ int64_t ObTabletTableStore::get_serialize_size() const
       ddl_sstables_,
       meta_major_tables_,
       mds_sstables_);
-  LST_DO_CODE(OB_UNIS_ADD_LEN, major_ckm_info_);
   return len;
 }
 
 int ObTabletTableStore::init(
     ObArenaAllocator &allocator,
     const ObTablet &tablet,
-    const ObSSTable *sstable,
-    const ObMajorChecksumInfo *ckm_info)
+    const ObSSTable *sstable)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
@@ -196,14 +189,6 @@ int ObTabletTableStore::init(
     is_ready_for_read_ = true; // exist major sstable and no minor sstable, must be ready for read
     try_cache_local_sstables(allocator);
   }
-  if (OB_FAIL(ret) || OB_ISNULL(ckm_info)) {
-  } else if (OB_UNLIKELY(!ckm_info->is_valid() || !major_ckm_info_.is_empty())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("input checksum info is invalid or checksum info on tablet is not empty", KR(ret), KPC(ckm_info), K_(major_ckm_info));
-  } else if (OB_FAIL(major_ckm_info_.assign(*ckm_info, &allocator))) {
-    LOG_WARN("fail to assign major ckm info", K(ret), KPC(ckm_info));
-  }
-
   if (OB_SUCC(ret)) {
     is_inited_ = true;
   }
@@ -218,7 +203,7 @@ int ObTabletTableStore::init(
 {
   int ret = OB_SUCCESS;
   int64_t inc_base_snapshot_version = -1;
-  const ObTabletRestoreState &restore_state = tablet.get_tablet_meta().restore_state_;
+  const ObTabletLocalStatus &local_status = tablet.get_tablet_meta().local_status_;
   const ObSSTable *new_sstable = param.sstable_;
 
   if (is_valid() || get_table_count() > 0) {
@@ -232,7 +217,7 @@ int ObTabletTableStore::init(
     LOG_WARN("get unexpected table type", K(ret), KPC(new_sstable));
   } else if (OB_FAIL(build_major_tables(allocator, param, old_store, inc_base_snapshot_version))) {
     LOG_WARN("failed to build major_tables", K(ret));
-  } else if (OB_FAIL(build_minor_tables(allocator, param, old_store.minor_tables_, inc_base_snapshot_version, restore_state))) {
+  } else if (OB_FAIL(build_minor_tables(allocator, param, old_store.minor_tables_, inc_base_snapshot_version, local_status))) {
     if (OB_UNLIKELY(OB_NO_NEED_MERGE != ret)) {
       LOG_WARN("failed to build minor_tables", K(ret));
     }
@@ -244,8 +229,6 @@ int ObTabletTableStore::init(
     LOG_WARN("failed to pull memtable from memtable_mgr", K(ret));
   } else if (OB_FAIL(pull_ddl_memtables(allocator, tablet))) {
     LOG_WARN("pull_ddl_memtables failed", K(ret));
-  } else if (OB_FAIL(build_major_checksum_info(old_store, &param, allocator))) {
-    LOG_WARN("failed to build major checksum info", KR(ret), K(param));
   } else if (OB_FAIL(build_mds_minor_tables(allocator, new_sstable, old_store.mds_sstables_))) {
     LOG_WARN("failed to build mds sstables", K(ret));
   } else {
@@ -275,8 +258,7 @@ int ObTabletTableStore::init(
 int ObTabletTableStore::init(
     ObArenaAllocator &allocator,
     common::ObIArray<ObITable *> &sstables,
-    common::ObIArray<ObMetaDiskAddr> &addrs,
-    const ObMajorChecksumInfo &major_ckm_info)
+    common::ObIArray<ObMetaDiskAddr> &addrs)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
@@ -324,10 +306,7 @@ int ObTabletTableStore::init(
     }
   } // end for
 
-  if (FAILEDx(major_ckm_info_.assign(major_ckm_info, &allocator))) {
-    LOG_WARN("fail to assign major ckm info", K(ret), K(major_ckm_info));
-  } else {
-    LOG_INFO("success to assign major ckm info", K(ret), K(major_ckm_info));
+  if (OB_SUCC(ret)) {
     is_ready_for_read_ = false; // can not read temp table store for serialize
     is_inited_ = true;
   }
@@ -380,8 +359,6 @@ int ObTabletTableStore::init(
     LOG_WARN("failed to pull memtable from memtable_mgr", K(ret));
   } else if (OB_FAIL(pull_ddl_memtables(allocator, tablet))) {
     LOG_WARN("pull_ddl_memtables failed", K(ret));
-  } else if (OB_FAIL(build_major_checksum_info(old_store, NULL/*param*/, allocator))) {
-    LOG_WARN("failed to build major checksum info", KR(ret), K(old_store));
   } else {
     is_inited_ = true;
     if (OB_FAIL(check_ready_for_read(tablet))) {
@@ -438,8 +415,7 @@ int64_t ObTabletTableStore::get_try_cache_size() const
         + minor_tables_.get_deep_copy_size()
         + ddl_mem_sstables_.get_deep_copy_size()
         + ddl_sstables_.get_deep_copy_size()
-        + meta_major_tables_.get_deep_copy_size()
-        + major_ckm_info_.get_deep_copy_size();
+        + meta_major_tables_.get_deep_copy_size();
 }
 
 int ObTabletTableStore::deep_copy(
@@ -470,8 +446,6 @@ int ObTabletTableStore::deep_copy(
       LOG_WARN("fail to deep copy meta major sstables", K(ret));
     } else if (OB_FAIL(mds_sstables_.deep_copy(buf, buf_len, pos, new_table_store->mds_sstables_))) {
       LOG_WARN("fail to deep copy mds sstables", K(ret));
-    } else if (OB_FAIL(major_ckm_info_.deep_copy(buf, buf_len, pos, new_table_store->major_ckm_info_))) {
-      LOG_WARN("fail to assign major ckm info", K(ret), K(major_ckm_info_));
     } else if (OB_FAIL(memtables_.assign(new_table_store->memtables_))) {
       LOG_WARN("fail to assign memtable pointers to new table store", K(ret));
     } else {
@@ -479,7 +453,7 @@ int ObTabletTableStore::deep_copy(
       new_table_store->is_inited_ = is_inited_;
       new_table_store->is_ready_for_read_ = is_ready_for_read_;
       value = new_table_store;
-      LOG_DEBUG("succeed to deep_copy table store", K(new_table_store->major_ckm_info_),
+      LOG_DEBUG("succeed to deep_copy table store",
                 K(major_tables_), K(minor_tables_), K(memtables_), K(PRINT_TS(*this)));
     }
   }
@@ -765,7 +739,7 @@ int ObTabletTableStore::get_table(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("found null table pointer", K(ret), K(table_key));
   } else if (table->is_memtable()) {
-    ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+    ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
     if (OB_FAIL(handle.set_table(table, t3m, table->get_key().table_type_))) {
       LOG_WARN("Failed to set memtable to handle", K(ret), K(handle), K(table_key), KPC(table));
     }
@@ -1096,10 +1070,6 @@ int ObTabletTableStore::build_major_tables(
 
   if (nullptr != new_table && ObITable::is_major_sstable(new_table->get_table_type()) && OB_FAIL(major_tables.push_back(new_table))) {
     LOG_WARN("failed to add table into tables handle", K(ret), K(param));
-  } else if (param.ha_info_.is_only_replace_major_ || param.ha_info_.need_replace_remote_sstable_) {
-    if (OB_FAIL(inner_build_major_tables_for_ha_(allocator, param, old_store, major_tables, inc_base_snapshot_version))) {
-      LOG_WARN("failed to build major tables for ha", K(ret));
-    }
   } else if (!major_tables.empty()
           && !old_store.ddl_sstables_.empty()
           && OB_FAIL(check_new_sstable_can_be_accepted_(old_store.ddl_sstables_, new_table))) {
@@ -1111,28 +1081,6 @@ int ObTabletTableStore::build_major_tables(
                                                param.allow_duplicate_sstable_,
                                                inc_base_snapshot_version))) {
     LOG_WARN("failed to build major tables", K(ret), K(param), K(major_tables));
-  }
-  return ret;
-}
-
-// TODO(@DanLing) split ha update table store from compaction
-int ObTabletTableStore::inner_build_major_tables_for_ha_(
-    common::ObArenaAllocator &allocator,
-    const ObUpdateTableStoreParam &param,
-    const ObTabletTableStore &old_store,
-    const ObIArray<ObITable *> &major_tables,
-    int64_t &inc_base_snapshot_version)
-{
-  int ret = OB_SUCCESS;
-  ObSSTable *new_table = const_cast<ObSSTable *>(param.sstable_);
-  if (param.ha_info_.is_only_replace_major_) {
-    if (OB_FAIL(only_replace_major_(allocator, old_store, major_tables, inc_base_snapshot_version))) {
-      LOG_WARN("failed to do only replace major", K(ret), K(param), K(major_tables));
-    }
-  } else if (param.ha_info_.need_replace_remote_sstable_) {
-    if (OB_FAIL(inner_replace_remote_major_sstable_(allocator, old_store, new_table))) {
-      LOG_WARN("failed to inner replace remote major sstable", K(ret));
-    }
   }
   return ret;
 }
@@ -1238,64 +1186,12 @@ int ObTabletTableStore::inner_build_major_tables_(
   return ret;
 }
 
-int ObTabletTableStore::inner_replace_remote_major_sstable_(
-    common::ObArenaAllocator &allocator,
-    const ObTabletTableStore &old_store,
-    ObITable *new_table)
-{
-  int ret = OB_SUCCESS;
-  ObSEArray<ObITable *, OB_DEFAULT_SE_ARRAY_COUNT> old_tables_array;
-  ObSEArray<ObITable *, OB_DEFAULT_SE_ARRAY_COUNT> new_tables_array;
-  ObITable *old_table = nullptr;
-  bool has_backup_macro = false;
-
-  if (OB_ISNULL(new_table)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("new table is null", K(ret), KP(new_table));
-  } else if (old_store.major_tables_.empty()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("no major table exist", K(ret), K(old_store), KPC(new_table));
-  } else if (OB_FAIL(ObTableStoreUtil::check_has_backup_macro_block(new_table, has_backup_macro))) {
-    LOG_WARN("failed to check new table has backup macro block", K(ret), KPC(new_table));
-  } else if (has_backup_macro) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("new table still has backup macro block", K(ret), KPC(new_table));
-  } else if (OB_FAIL(old_store.major_tables_.get_all_tables(old_tables_array))) {
-    LOG_WARN("failed to get major tables from old store", K(ret), K(old_store));
-  }
-
-  for (int64_t idx = 0; OB_SUCC(ret) && idx < old_tables_array.count(); ++idx) {
-    old_table = old_tables_array.at(idx);
-    if (OB_ISNULL(old_table)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null table", K(ret), K(old_store));
-    } else if (OB_FAIL(ObTableStoreUtil::check_has_backup_macro_block(old_table, has_backup_macro))) {
-      LOG_WARN("failed to check table has backup macro block", K(ret), KPC(old_table));
-    } else if (old_table->get_key() != new_table->get_key() || !has_backup_macro) {
-      if (OB_FAIL(new_tables_array.push_back(old_table))) {
-        LOG_WARN("failed to push back", K(ret));
-      }
-    } else if (OB_FAIL(new_tables_array.push_back(new_table))) {
-      LOG_WARN("failed to push back", K(ret));
-    } else {
-      LOG_INFO("replace one remote major sstable", KPC(old_table), KPC(new_table));
-    }
-  }
-
-  if (FAILEDx(major_tables_.init(allocator, new_tables_array))) {
-    LOG_WARN("failed to init major tables", K(ret), K(new_tables_array));
-  } else {
-    LOG_INFO("succeed replace ha remote major sstables", K(old_store), K(new_tables_array), KPC(new_table));
-  }
-  return ret;
-}
-
 int ObTabletTableStore::build_minor_tables(
     common::ObArenaAllocator &allocator,
     const ObUpdateTableStoreParam &param,
     const ObSSTableArray &old_minor_tables,
     const int64_t inc_base_snapshot_version,
-    const ObTabletRestoreState &restore_state)
+    const ObTabletLocalStatus &local_status)
 {
   int ret = OB_SUCCESS;
   ObITable *new_table = const_cast<ObITable *>(static_cast<const ObITable *>(param.sstable_)); //table can be null
@@ -1318,8 +1214,8 @@ int ObTabletTableStore::build_minor_tables(
     LOG_WARN("failed to inner process tables", K(ret), K(old_minor_tables), KPC(new_table));
   } else if (sstables.empty()) {
     // empty minor tables, do nothing
-  } else if (!restore_state.check_allow_read()) {
-    LOG_INFO("tablet restore is incomplete, skip recycling minor sstable", K(restore_state));
+  } else if (!local_status.check_allow_read()) {
+    LOG_INFO("tablet local data is not readable, no need to recycle minor sstable", K(local_status));
     if (OB_FAIL(minor_tables_.init(allocator, sstables))) {
       LOG_WARN("failed to init minor_tables", K(ret));
     }
@@ -1503,7 +1399,6 @@ OB_INLINE int ObTabletTableStore::check_major_sstable_empty(const share::SCN &dd
   is_empty = major_tables_.empty() && !ddl_commit_scn.is_valid_and_not_min(); // ddl logic major sstable require commit scn valid
   if (!is_empty) { // major not empty
   } else if (!(tablet.get_tablet_id().is_user_tablet())) { // inner tablet not need to check ddl complete
-  } else if (tablet.get_tablet_meta().ddl_data_format_version_ < DDL_IDEM_DATA_FORMAT_VERSION) { // tablet not set ddl complete
   } else {
     ret = check_ddl_complete(tablet, is_empty);
   }
@@ -2120,20 +2015,6 @@ int ObTabletTableStore::check_new_sstable_can_be_accepted_(
   return ret;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 int ObTabletTableStore::get_mini_minor_sstables_(ObTableStoreIterator &iter) const
 {
   int ret = OB_SUCCESS;
@@ -2373,40 +2254,6 @@ int ObTabletTableStore::build_fork_minor_tables_(
   return ret;
 }
 
-// TODO(@DanLing) support split inc major sstable here.
-int ObTabletTableStore::only_replace_major_(
-    common::ObArenaAllocator &allocator,
-    const ObTabletTableStore &old_store,
-    const ObIArray<ObITable *> &tables_array,
-    int64_t &inc_base_snapshot_version)
-{
-  int ret = OB_SUCCESS;
-  inc_base_snapshot_version = -1;
-  ObSSTableWrapper wrapper;
-
-  for (int64_t i = 0; OB_SUCC(ret) && i < tables_array.count(); ++i) {
-    const ObITable *table = tables_array.at(i);
-    ObITable *old_major_table = nullptr;
-    wrapper.reset();
-    if (OB_ISNULL(table)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table should not be NULL", K(ret), KP(table));
-    } else if (OB_FAIL(old_store.major_tables_.get_table(table->get_key(), wrapper))) {
-      LOG_WARN("failed to get table", K(ret), KPC(table), K(old_store));
-    } else if (!wrapper.is_valid()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("old major table do not exist, unexpected", K(ret), K(wrapper), KPC(table), K(old_store));
-    }
-  }
-
-  if (FAILEDx(replace_sstables(allocator, &tables_array, old_store.major_tables_, major_tables_))) {
-    LOG_WARN("failed to get replaced major tables", K(ret));
-  } else {
-    inc_base_snapshot_version = major_tables_.at(0)->get_snapshot_version();
-  }
-  return ret;
-}
-
 int64_t ObTabletTableStore::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
@@ -2415,7 +2262,7 @@ int64_t ObTabletTableStore::to_string(char *buf, const int64_t buf_len) const
   } else {
     J_OBJ_START();
     J_KV(KP(this), K_(version), K_(major_tables), K_(minor_tables), K_(ddl_sstables), K_(meta_major_tables),
-         K_(mds_sstables), K_(memtables), K_(major_ckm_info), K_(is_ready_for_read));
+         K_(mds_sstables), K_(memtables), K_(is_ready_for_read));
     J_COMMA();
     J_ARRAY_START();
     if (major_tables_.is_valid()) {
@@ -2496,25 +2343,6 @@ int64_t ObTabletTableStore::to_string(char *buf, const int64_t buf_len) const
     J_OBJ_END();
   }
   return pos;
-}
-
-int ObTabletTableStore::build_major_checksum_info(
-    const ObTabletTableStore &old_store,
-    const ObUpdateTableStoreParam *param,
-    ObArenaAllocator &allocator)
-{
-  int ret = OB_SUCCESS;
-  const ObMajorChecksumInfo *ptr = NULL;
-
-  if (OB_FAIL(ret) || OB_ISNULL(ptr) || ptr->is_empty()) {
-  } else if (major_tables_.empty() || major_tables_.get_boundary_table(true/*last*/)->get_snapshot_version() < ptr->get_compaction_scn()) {
-    if (OB_FAIL(major_ckm_info_.assign(*ptr, &allocator))) {
-      LOG_WARN("failed to assgin major ckm info", KR(ret), KPC(ptr));
-    } else {
-      LOG_INFO("success to build major checksum info", KR(ret), K_(major_ckm_info), KPC(param));
-    }
-  }
-  return ret;
 }
 
 ObPrintTableStore::ObPrintTableStore(const ObTabletTableStore &table_store)

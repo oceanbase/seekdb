@@ -273,7 +273,7 @@ void LogIOFlushMetaTask::destroy()
     is_inited_ = false;
     buf_len_ = 0;
     if (NULL != buf_) {
-      mtl_free(const_cast<char*>(buf_));
+      server_free(const_cast<char*>(buf_));
       buf_ = NULL;
     }
     flush_meta_cb_ctx_.reset();

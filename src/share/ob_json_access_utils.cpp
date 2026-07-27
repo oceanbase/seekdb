@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/ob_json_access_utils.h"
-#include "share/ob_cluster_version.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/ob_version_parser.h"
+#include "share/rc/ob_server_runtime.h"
 #include "common/json_type/ob_json_base.h"
 #include "lib/utility/ob_smart_call.h"
 namespace oceanbase

@@ -65,7 +65,6 @@ select adddate('9999-12-31 23:59:59',INTERVAL 1 MONTH);
 drop table if exists t1;
 --enable_warnings
 create table t1(a date);
---source mysql_test/include/drop_and_restore_table.inc
 insert into t1 values('2010-01-01');
 select adddate(a, interval 1 day) from t1;
 select adddate(a, interval 1 minute) from t1;
@@ -75,7 +74,6 @@ select adddate(a, interval 1 microsecond) from t1;
 drop table if exists t1;
 --enable_warnings
 create table t1(a datetime);
---source mysql_test/include/drop_and_restore_table.inc
 insert into t1 values('2010-01-01 01:01:01');
 select adddate(a, interval 1 day) from t1;
 select adddate(a, interval 1 minute) from t1;
@@ -85,7 +83,6 @@ select adddate(a, interval 1 microsecond) from t1;
 drop table if exists t1;
 --enable_warnings
 create table t1(a datetime(2));
---source mysql_test/include/drop_and_restore_table.inc
 insert into t1 values('2010-01-01 01:01:01');
 select adddate(a, interval 1 day) from t1;
 select adddate(a, interval 1 minute) from t1;
@@ -110,7 +107,6 @@ select adddate('9999-12-31 23:59:59', 30);
 drop table if exists t1;
 --enable_warnings
 create table t1(a date);
---source mysql_test/include/drop_and_restore_table.inc
 insert into t1 values('2010-01-01');
 select adddate(a,  1) from t1;
 select adddate(a,  2) from t1;
@@ -120,7 +116,6 @@ select adddate(a,  30) from t1;
 drop table if exists t1;
 --enable_warnings
 create table t1(a datetime);
---source mysql_test/include/drop_and_restore_table.inc
 insert into t1 values('2010-01-01 01:01:01');
 select adddate(a,  1) from t1;
 select adddate(a,  2) from t1;
@@ -130,7 +125,6 @@ select adddate(a,  30) from t1;
 drop table if exists t1;
 --enable_warnings
 create table t1(a datetime(2));
---source mysql_test/include/drop_and_restore_table.inc
 insert into t1 values('2010-01-01 01:01:01');
 select adddate(a,  1) from t1;
 select adddate(a,  2) from t1;

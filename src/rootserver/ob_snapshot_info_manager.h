@@ -40,9 +40,6 @@ public:
   virtual ~ObSnapshotInfoManager() {}
   int init(const common::ObAddr &self_addr);
 
-  int check_restore_point(common::ObMySQLProxy &proxy,
-                          const int64_t table_id,
-                          bool &is_exist);
   int batch_acquire_snapshot(
       common::ObMySQLTransaction &trans,
       share::ObSnapShotType snapshot_type,

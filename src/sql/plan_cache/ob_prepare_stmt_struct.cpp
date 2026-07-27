@@ -253,7 +253,7 @@ ObPsStmtInfo::ObPsStmtInfo(ObIAllocator *inner_allocator)
     dep_objs_(NULL),
     dep_objs_cnt_(0),
     ps_item_(NULL),
-    tenant_version_(OB_INVALID_VERSION),
+    runtime_schema_version_(OB_INVALID_VERSION),
     is_expired_(false),
     is_expired_evicted_(false),
     allocator_(inner_allocator),
@@ -282,7 +282,7 @@ ObPsStmtInfo::ObPsStmtInfo(ObIAllocator *inner_allocator,
     dep_objs_(NULL),
     dep_objs_cnt_(0),
     ps_item_(NULL),
-    tenant_version_(OB_INVALID_VERSION),
+    runtime_schema_version_(OB_INVALID_VERSION),
     is_expired_(false),
     is_expired_evicted_(false),
     allocator_(inner_allocator),
@@ -435,7 +435,7 @@ int ObPsStmtInfo::deep_copy(const ObPsStmtInfo &other)
     can_direct_use_param_ = other.can_direct_use_param();
     item_and_info_size_ = other.item_and_info_size_;
     ps_item_ = other.ps_item_;
-    tenant_version_ = other.tenant_version_;
+    runtime_schema_version_ = other.runtime_schema_version_;
     is_expired_ = other.is_expired_;
     is_expired_evicted_ = other.is_expired_evicted_;
     literal_stmt_type_ = other.literal_stmt_type_;
@@ -609,7 +609,7 @@ int64_t ObPsStmtInfo::to_string(char *buf, const int64_t buf_len) const
        K_(can_direct_use_param),
        K_(question_mark_count),
        K_(last_closed_timestamp),
-       K_(tenant_version),
+       K_(runtime_schema_version),
        K_(no_param_sql),
        K_(num_of_returning_into));
   J_COMMA();

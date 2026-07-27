@@ -48,7 +48,6 @@ struct SqlInfo: public ParameterizationHashValue
     total_ = that.total_;
     not_param_index_ = that.not_param_index_;
     neg_param_index_ = that.neg_param_index_;
-    fixed_param_index_ = that.fixed_param_index_;
     param_charset_type_ = that.param_charset_type_;
     sql_traits_ = that.sql_traits_;
     last_active_time_ = that.last_active_time_;
@@ -69,7 +68,6 @@ struct SqlInfo: public ParameterizationHashValue
   int64_t total_;
   common::ObBitSet<> not_param_index_;
   common::ObBitSet<> neg_param_index_;
-  common::ObBitSet<> fixed_param_index_;//record the positions in the rate-limiting statement that are parameterizable and not '?'
   common::ObBitSet<> trans_from_minus_index_;
   common::ObBitSet<> must_be_positive_index_; // record which constants must be positive
   common::ObBitSet<> fmt_int_or_ch_decint_idx_;
@@ -137,7 +135,6 @@ public:
                                    SqlInfo &sql_info,
                                    ParamStore &params,
                                    SelectItemParamInfoArray *select_item_param_infos,
-                                   share::schema::ObMaxConcurrentParam::FixParamStore &fixed_param_store,
                                    bool is_transform_outline,
                                    SQL_EXECUTION_MODE execution_mode = INVALID_MODE,
                                    bool is_from_pl = false);

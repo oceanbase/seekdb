@@ -39,7 +39,6 @@ create table t1(c1 int primary key, c2 int);
     "schema": {
       "tenant_id":1,
       "database_id":1099511628779,
-      "tablegroup_id":1099511627777,
       "table_id":-1,
       "table_name":"t1",
       "max_used_column_id":17,
@@ -47,7 +46,6 @@ create table t1(c1 int primary key, c2 int);
       "index_column_num":0,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "step_merge_num":1,
       "replica_num":0,
       "load_type":0,
@@ -70,10 +68,8 @@ create table t1(c1 int primary key, c2 int);
         "part_num":1
       },
       "comment":"",
-      "tablegroup_name":"",
       "compress_func_name":"none",
       "primary_zone":"",
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -167,7 +163,6 @@ create table t2(c1 int primary key, c2 int, c3 varchar(32));
     "schema": {
       "tenant_id":1,
       "database_id":1099511628779,
-      "tablegroup_id":1099511627777,
       "table_id":-1,
       "table_name":"t2",
       "max_used_column_id":18,
@@ -175,7 +170,6 @@ create table t2(c1 int primary key, c2 int, c3 varchar(32));
       "index_column_num":0,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "step_merge_num":1,
       "replica_num":0,
       "load_type":0,
@@ -198,10 +192,8 @@ create table t2(c1 int primary key, c2 int, c3 varchar(32));
         "part_num":1
       },
       "comment":"",
-      "tablegroup_name":"",
       "compress_func_name":"none",
       "primary_zone":"",
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",

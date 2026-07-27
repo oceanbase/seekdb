@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_STORAGE_HA_RESTORE_STATUS_H_
-#define OCEANBASE_STORAGE_HA_RESTORE_STATUS_H_
+#ifndef OCEANBASE_STORAGE_RESTORE_STATUS_H_
+#define OCEANBASE_STORAGE_RESTORE_STATUS_H_
 
 
 namespace oceanbase
@@ -67,6 +67,5 @@ private:
 } // namespace storage
 } // namespace oceanbase
 
-#endif // OCEANBASE_STORAGE_HA_RESTORE_STATUS_H_
-
+#endif // OCEANBASE_STORAGE_RESTORE_STATUS_H_
 

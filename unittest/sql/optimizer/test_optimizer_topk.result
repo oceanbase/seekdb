@@ -47,14 +47,8 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       GBY_PUSHDOWN(@"SEL$1")
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -94,7 +88,6 @@ SQL: select /*+topk(20 6)*/ avg(c1), avg(c2), avg(c3) from t1_topk  where c2 <10
 
 Outputs & filters: 
 -------------------------------------
-<<<<<<< HEAD
   0 - output([INTERNAL_FUNCTION(T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0)), T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2)), DECIMAL(20, 0)), T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1)))]), filter(nil), sort_keys([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0)), ASC])
   1 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [INTERNAL_FUNCTION(T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0)), T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2)), DECIMAL(20, 0)), T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1)))]), filter(nil), dop=1
   2 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1))))]), filter(nil), sort_keys([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0)), ASC])
@@ -106,16 +99,6 @@ Outputs & filters:
       group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))], [T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))])
   7 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), sort_keys([t1_topk.c2, ASC])
   8 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
-=======
-  0 - output([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))]), filter(nil), sort_keys([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1), ASC])
-  1 - output([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))]), filter(nil), dop=1
-  2 - output([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))]), filter(nil), sort_keys([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1), ASC])
-  3 - output([T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)]), filter(nil), 
-      group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)])
-  4 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil)
-  5 - (#keys=1, [t1_topk.c2]), output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), dop=1
-  6 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
->>>>>>> 4ace446e738... fix aggr convert lost origin type
       force partition granule.
   9 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter([t1_topk.c2 < ?]), 
       access([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), partitions(p[0-1]), 
@@ -131,14 +114,8 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       GBY_PUSHDOWN(@"SEL$1")
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -175,7 +152,6 @@ SQL: select /*+topk(20 6)*/ avg(c1), avg(c2), avg(c3) from t1_topk  where c2 <10
 
 Outputs & filters: 
 -------------------------------------
-<<<<<<< HEAD
   0 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
   1 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1))))]), filter(nil), 
       group(nil), agg_func([T_FUN_SUM(T_FUN_SUM(t1_topk.c1))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1))))])
@@ -183,15 +159,6 @@ Outputs & filters:
   3 - output([T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))], [T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))]), filter(nil), dop=1
   4 - output([T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))], [T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))]), filter(nil), 
       group(nil), agg_func([T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))], [T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))])
-=======
-  0 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) / T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2))], [cast(T_FUN_SUM(T_FUN_SUM(t1_topk.c3)) / T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3)), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
-  1 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c3))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))]), filter(nil), 
-      group(nil), agg_func([T_FUN_SUM(T_FUN_SUM(t1_topk.c1))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c3))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))])
-  2 - output([T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)]), filter(nil)
-  3 - output([T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)]), filter(nil), dop=1
-  4 - output([T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)]), filter(nil), 
-      group(nil), agg_func([T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)])
->>>>>>> 4ace446e738... fix aggr convert lost origin type
   5 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
       force partition granule.
   6 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter([t1_topk.c2 < ?]), 
@@ -208,14 +175,8 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       GBY_PUSHDOWN(@"SEL$1")
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      NO_USE_HASH_AGGREGATION(@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -256,7 +217,6 @@ SQL: select /*+topk(20 6)*/ avg(c1), avg(c2), avg(c3) from t1_topk  where c2 <10
 
 Outputs & filters: 
 -------------------------------------
-<<<<<<< HEAD
   0 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
   1 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1))))]), filter(nil), sort_keys([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0)), ASC])
   2 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1))))]), filter(nil), dop=1
@@ -268,18 +228,6 @@ Outputs & filters:
   7 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))], [T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))]), filter(nil), 
       group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))], [T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))])
   8 - output([t1_topk.c2], [t1_topk.c1], [t1_topk.c3]), filter(nil), sort_keys([t1_topk.c2, ASC])
-=======
-  0 - output([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))]), filter(nil)
-  1 - output([T_FUN_SUM(t1_topk.c1)], [t1_topk.c1], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [t1_topk.c2], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [t1_topk.c3], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)]), filter(nil), limit(5), offset(nil)
-  2 - output([T_FUN_SUM(t1_topk.c1)], [t1_topk.c1], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [t1_topk.c2], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [t1_topk.c3], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)]), filter(nil), sort_keys([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1), ASC])
-  3 - output([T_FUN_SUM(t1_topk.c1)], [t1_topk.c1], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [t1_topk.c2], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [t1_topk.c3], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)]), filter(nil), dop=1
-  4 - output([T_FUN_SUM(t1_topk.c1)], [t1_topk.c1], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [t1_topk.c2], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [t1_topk.c3], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)]), filter(nil), limit(5), offset(nil)
-  5 - output([T_FUN_SUM(t1_topk.c1)], [t1_topk.c1], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [t1_topk.c2], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [t1_topk.c3], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)]), filter(nil), sort_keys([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1), ASC]), topn(5)
-  6 - output([T_FUN_SUM(t1_topk.c1)], [t1_topk.c1], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [t1_topk.c2], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [t1_topk.c3], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)]), filter(nil), 
-      group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)])
-  7 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil)
-  8 - (#keys=1, [t1_topk.c2]), output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), dop=1
->>>>>>> 4ace446e738... fix aggr convert lost origin type
   9 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
       force partition granule.
   10 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter([t1_topk.c2 < ?]), 
@@ -296,14 +244,8 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       GBY_PUSHDOWN(@"SEL$1")
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -344,7 +286,6 @@ SQL: select avg(c1), avg(c2), avg(c3) from t1_topk  where c2 <10 group by c2 ord
 
 Outputs & filters: 
 -------------------------------------
-<<<<<<< HEAD
   0 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
   1 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1))))]), filter(nil), sort_keys([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0)), ASC])
   2 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1))))]), filter(nil), dop=1
@@ -357,18 +298,6 @@ Outputs & filters:
       group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))], [T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))])
   8 - output([t1_topk.c2], [t1_topk.c1], [t1_topk.c3]), filter(nil), sort_keys([t1_topk.c2, ASC])
   9 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
-=======
-  0 - output([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
-  1 - output([T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)]), filter(nil), sort_keys([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1), ASC])
-  2 - output([T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)]), filter(nil), dop=1
-  3 - output([T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)]), filter(nil), limit(5), offset(nil)
-  4 - output([T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)]), filter(nil), sort_keys([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1), ASC]), topn(5)
-  5 - output([T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)]), filter(nil), 
-      group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)])
-  6 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil)
-  7 - (#keys=1, [t1_topk.c2]), output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), dop=1
-  8 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
->>>>>>> 4ace446e738... fix aggr convert lost origin type
       force partition granule.
   10 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter([t1_topk.c2 < ?]), 
       access([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), partitions(p[0-1]), 
@@ -384,14 +313,8 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       GBY_PUSHDOWN(@"SEL$1")
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -432,7 +355,6 @@ SQL: select /*+topk(20 6)*/ sql_calc_found_rows avg(c2), avg(c3)  from t1_topk w
 
 Outputs & filters: 
 -------------------------------------
-<<<<<<< HEAD
   0 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
   1 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1))))]), filter(nil), sort_keys([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0)), ASC])
   2 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1))))]), filter(nil), dop=1
@@ -445,17 +367,6 @@ Outputs & filters:
       group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))], [T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)])
   8 - output([t1_topk.c2], [t1_topk.c3], [t1_topk.c1]), filter(nil), sort_keys([t1_topk.c2, ASC])
   9 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
-=======
-  0 - output([T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
-  1 - output([T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)]), filter(nil), sort_keys([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1), ASC])
-  2 - output([T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)]), filter(nil), dop=1
-  3 - output([T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)]), filter(nil), sort_keys([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1), ASC])
-  4 - output([T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)]), filter(nil), 
-      group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)])
-  5 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil)
-  6 - (#keys=1, [t1_topk.c2]), output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), dop=1
-  7 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
->>>>>>> 4ace446e738... fix aggr convert lost origin type
       force partition granule.
   10 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter([t1_topk.c2 < ?]), 
       access([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), partitions(p[0-1]), 
@@ -471,14 +382,8 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       GBY_PUSHDOWN(@"SEL$1")
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -523,13 +428,8 @@ SQL: select /*+topk(20 6)*/  avg(c1), avg(c2), avg(c3)  from t1_topk where c2 <1
 
 Outputs & filters: 
 -------------------------------------
-<<<<<<< HEAD
   0 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
   1 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1))))]), filter(nil), 
-=======
-  0 - output([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
-  1 - output([T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)]), filter(nil), 
->>>>>>> 4ace446e738... fix aggr convert lost origin type
       exec_params_(nil), onetime_exprs_([subquery(1)]), init_plan_idxs_(nil)
   2 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1))))]), filter(nil)
   3 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1))))]), filter(nil), dop=1
@@ -564,16 +464,9 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       GBY_PUSHDOWN(@"SEL$1")
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
       FULL(@"SEL$2" "opt"."t1_topk"@"SEL$2")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-      FULL(@"SEL$2" "opt"."t1_topk"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -621,7 +514,6 @@ SQL: select /*+topk(20 6)*/ distinct avg(c1), avg(c2), avg(c3)  from t1_topk whe
 
 Outputs & filters: 
 -------------------------------------
-<<<<<<< HEAD
   0 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
   1 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1))]), filter(nil), sort_keys([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0)), ASC])
   2 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1))]), filter(nil), dop=1
@@ -641,22 +533,6 @@ Outputs & filters:
       group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))], [T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))])
   13 - output([t1_topk.c2], [t1_topk.c1], [t1_topk.c3]), filter(nil), sort_keys([t1_topk.c2, ASC])
   14 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
-=======
-  0 - output([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
-  1 - output([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))]), filter(nil), sort_keys([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1), ASC])
-  2 - output([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))]), filter(nil), dop=1
-  3 - output([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
-  4 - output([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))]), filter(nil), 
-      distinct([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))])
-  5 - output([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))]), filter(nil), sort_keys([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1), ASC], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2), ASC], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1)), ASC])
-  6 - output([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))]), filter(nil)
-  7 - (#keys=3, [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))]), output([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))]), filter(nil), dop=1
-  8 - output([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))]), filter(nil), 
-      group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)])
-  9 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil)
-  10 - (#keys=1, [t1_topk.c2]), output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), dop=1
-  11 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
->>>>>>> 4ace446e738... fix aggr convert lost origin type
       force partition granule.
   15 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter([t1_topk.c2 < ?]), 
       access([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), partitions(p[0-1]), 
@@ -672,15 +548,9 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       DISTINCT_PUSHDOWN(@"SEL$1")
       GBY_PUSHDOWN(@"SEL$1")
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -745,13 +615,7 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      NO_USE_HASH_AGGREGATION(@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -792,7 +656,6 @@ SQL: select /*+topk(20 6)*/  avg(c1), avg(c2), avg(c3) from (select *  from t1_t
 
 Outputs & filters: 
 -------------------------------------
-<<<<<<< HEAD
   0 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
   1 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1))))]), filter(nil), sort_keys([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0)), ASC])
   2 - output([T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1))))]), filter(nil), dop=1
@@ -805,18 +668,6 @@ Outputs & filters:
       group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))], [T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))])
   8 - output([t1_topk.c2], [t1_topk.c1], [t1_topk.c3]), filter(nil), sort_keys([t1_topk.c2, ASC])
   9 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
-=======
-  0 - output([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
-  1 - output([T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)]), filter(nil), sort_keys([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1), ASC])
-  2 - output([T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)]), filter(nil), dop=1
-  3 - output([T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)]), filter(nil), limit(5), offset(nil)
-  4 - output([T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)]), filter(nil), sort_keys([T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1), ASC]), topn(5)
-  5 - output([T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)]), filter(nil), 
-      group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c2)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c3)])
-  6 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil)
-  7 - (#keys=1, [t1_topk.c2]), output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), dop=1
-  8 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
->>>>>>> 4ace446e738... fix aggr convert lost origin type
       force partition granule.
   10 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter([t1_topk.c2 < ?]), 
       access([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), partitions(p[0-1]), 
@@ -832,15 +683,9 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       GBY_PUSHDOWN(@"SEL$CFEA49FE")
       FULL(@"SEL$CFEA49FE" "opt"."t1_topk"@"SEL$2")
       MERGE(@"SEL$2" > "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -889,7 +734,6 @@ SQL: select /*+topk(20 6)*/ distinct avg(t1_topk.c1), avg(t1_topk.c2), avg(t1_to
 
 Outputs & filters: 
 -------------------------------------
-<<<<<<< HEAD
   0 - output([T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c2)), DECIMAL(20, 0))], [T_FUN_SUM(VIEW1.T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
   1 - output([T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c2)), DECIMAL(20, 0))], [T_FUN_SUM(VIEW1.T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1))]), filter(nil), 
       distinct([T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c2)), DECIMAL(20, 0))], [T_FUN_SUM(VIEW1.T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1))])
@@ -897,16 +741,6 @@ Outputs & filters:
   3 - output([T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c1))], [T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c1))], [T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c2))], [T_FUN_SUM(VIEW1.T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1))))]), filter(nil), 
       group([VIEW1.t1_topk.c2]), agg_func([T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c1))], [T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c1))], [T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c2))], [T_FUN_SUM(VIEW1.T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1))))])
   4 - output([VIEW1.T_FUN_SUM(t1_topk.c1)], [VIEW1.T_FUN_COUNT(t1_topk.c1)], [VIEW1.T_FUN_SUM(t1_topk.c2)], [VIEW1.T_FUN_COUNT(t1_topk.c2)], [VIEW1.T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))], [VIEW1.T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))], [VIEW1.t1_topk.c2]), filter(nil), 
-=======
-  0 - output([T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c1)) / T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c1))], [T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c2)) / T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c2))], [cast(T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c3)) / T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c3)), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
-  1 - output([T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c1)) / T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c1))], [T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c2)) / T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c2))], [cast(T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c3)) / T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c3)), DOUBLE(-1, -1))]), filter(nil), 
-      distinct([T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c1)) / T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c1))], [T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c2)) / T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c2))], [cast(T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c3)) / T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c3)), DOUBLE(-1, -1))])
-  2 - output([T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c1)) / T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c1))], [T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c2)) / T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c2))], [cast(T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c3)) / T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c3)), DOUBLE(-1, -1))]), filter(nil), sort_keys([T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c1)) / T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c1)), ASC], [T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c2)) / T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c2)), ASC], [cast(T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c3)) / T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c3)), DOUBLE(-1, -1)), ASC])
-  3 - output([T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c1)) / T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c1))], [T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c2)) / T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c2))], [cast(T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c3)) / T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c3)), DOUBLE(-1, -1))]), filter(nil), 
-      group([VIEW1.t1_topk.c2]), agg_func([T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c1))], [T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c1))], [T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c2))], [T_FUN_SUM(VIEW1.T_FUN_SUM(t1_topk.c3))], [T_FUN_COUNT_SUM(VIEW1.T_FUN_COUNT(t1_topk.c3))])
-  4 - output([VIEW1.T_FUN_SUM(t1_topk.c1)], [VIEW1.T_FUN_COUNT(t1_topk.c1)], [VIEW1.T_FUN_SUM(t1_topk.c2)], [VIEW1.T_FUN_COUNT(t1_topk.c2)], [VIEW1.T_FUN_SUM(t1_topk.c3)], [VIEW1.T_FUN_COUNT(t1_topk.c3)], [VIEW1.t1_topk.c2]), filter(nil), sort_keys([VIEW1.t1_topk.c2, ASC])
-  5 - output([VIEW1.T_FUN_SUM(t1_topk.c1)], [VIEW1.T_FUN_COUNT(t1_topk.c1)], [VIEW1.T_FUN_SUM(t1_topk.c2)], [VIEW1.T_FUN_COUNT(t1_topk.c2)], [VIEW1.T_FUN_SUM(t1_topk.c3)], [VIEW1.T_FUN_COUNT(t1_topk.c3)], [VIEW1.t1_topk.c2]), filter(nil), 
->>>>>>> 4ace446e738... fix aggr convert lost origin type
       conds(nil), nl_params_(nil), batch_join=false
   5 - output([VIEW1.T_FUN_SUM(t1_topk.c1)], [VIEW1.T_FUN_COUNT(t1_topk.c1)], [VIEW1.T_FUN_SUM(t1_topk.c2)], [VIEW1.T_FUN_COUNT(t1_topk.c2)], [VIEW1.T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))], [VIEW1.T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))], [VIEW1.t1_topk.c2]), filter(nil)
   6 - output([VIEW1.T_FUN_SUM(t1_topk.c1)], [VIEW1.T_FUN_COUNT(t1_topk.c1)], [VIEW1.T_FUN_SUM(t1_topk.c2)], [VIEW1.T_FUN_COUNT(t1_topk.c2)], [VIEW1.T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))], [VIEW1.T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))], [VIEW1.t1_topk.c2]), filter(nil), dop=1
@@ -943,7 +777,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       USE_HASH_AGGREGATION(@"SEL$94AA298F")
       LEADING(@"SEL$94AA298F" ("VIEW1"@"SEL$1" "opt"."t2_topk"@"SEL$1"))
       USE_NL(@"SEL$94AA298F" "opt"."t2_topk"@"SEL$1")
@@ -954,17 +787,6 @@ Outline Data:
       FULL(@"SEL$94AA298D" "opt"."t1_topk"@"SEL$1")
       FULL(@"SEL$94AA298F" "opt"."t2_topk"@"SEL$1")
       PLACE_GROUP_BY(@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      NO_USE_HASH_AGGREGATION(@"SEL$1")
-      LEADING(@"SEL$1" ("VIEW1"@"SEL$1" "opt.t2_topk"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("opt.t2_topk"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2_topk"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t2_topk"@"SEL$1" ))
-      NO_USE_HASH_AGGREGATION(@"SEL$2")
-      FULL(@"SEL$2" "opt"."t1_topk"@"SEL$2")
-      FULL(@"SEL$1" "opt"."t2_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1038,10 +860,6 @@ Outline Data:
       GBY_PUSHDOWN(@"SEL$1")
       USE_HASH_AGGREGATION(@"SEL$1")
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-<<<<<<< HEAD
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1113,13 +931,7 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1191,13 +1003,7 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1269,13 +1075,7 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1347,13 +1147,7 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1396,7 +1190,6 @@ SQL: select /*+topk(1 1)*/ c2, avg(c1), sum(c2), sum(c1) + sum(c2), count(c3), m
 
 Outputs & filters: 
 -------------------------------------
-<<<<<<< HEAD
   0 - output([t1_topk.c2], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) + T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))], [T_FUN_MIN(T_FUN_MIN(t1_topk.c3))], [T_FUN_MAX(T_FUN_MAX(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_SUM(T_FUN_SUM(t1_topk.c1)), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
   1 - output([t1_topk.c2], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))], [T_FUN_MIN(T_FUN_MIN(t1_topk.c3))], [T_FUN_MAX(T_FUN_MAX(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))]), filter(nil), sort_keys([T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1)), ASC], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / T_FUN_SUM(T_FUN_SUM(t1_topk.c2)), ASC])
   2 - output([t1_topk.c2], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))], [T_FUN_MIN(T_FUN_MIN(t1_topk.c3))], [T_FUN_MAX(T_FUN_MAX(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))]), filter(nil), dop=1
@@ -1411,18 +1204,6 @@ Outputs & filters:
       group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))], [T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))])
   10 - output([t1_topk.c2], [t1_topk.c3], [t1_topk.c1]), filter(nil), sort_keys([t1_topk.c2, ASC])
   11 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
-=======
-  0 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3) / T_FUN_SUM(t1_topk.c1)]), filter(nil), limit(5), offset(nil)
-  1 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) / T_FUN_SUM(t1_topk.c2)]), filter(nil), sort_keys([cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1)), ASC], [T_FUN_SUM(t1_topk.c1) / T_FUN_SUM(t1_topk.c2), ASC])
-  2 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) / T_FUN_SUM(t1_topk.c2)]), filter(nil), dop=1
-  3 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) / T_FUN_SUM(t1_topk.c2)]), filter(nil), limit(5), offset(nil)
-  4 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) / T_FUN_SUM(t1_topk.c2)]), filter(nil), sort_keys([cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1)), ASC], [T_FUN_SUM(t1_topk.c1) / T_FUN_SUM(t1_topk.c2), ASC]), topn(5)
-  5 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) / T_FUN_SUM(t1_topk.c2)]), filter(nil), 
-      group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)])
-  6 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil)
-  7 - (#keys=1, [t1_topk.c2]), output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), dop=1
-  8 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
->>>>>>> 4ace446e738... fix aggr convert lost origin type
       force partition granule.
   12 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter([t1_topk.c2 < ?]), 
       access([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), partitions(p[0-1]), 
@@ -1438,13 +1219,7 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1487,7 +1262,6 @@ SQL: select /*+topk(1 1)*/ c1, avg(c1), sum(c2), sum(c1) + sum(c2), count(c3), m
 
 Outputs & filters: 
 -------------------------------------
-<<<<<<< HEAD
   0 - output([t1_topk.c1], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) + T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))], [T_FUN_MIN(T_FUN_MIN(t1_topk.c3))], [T_FUN_MAX(T_FUN_MAX(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_SUM(T_FUN_SUM(t1_topk.c1)), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
   1 - output([t1_topk.c1], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))], [T_FUN_MIN(T_FUN_MIN(t1_topk.c3))], [T_FUN_MAX(T_FUN_MAX(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))]), filter(nil), sort_keys([T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1)), DESC], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / T_FUN_SUM(T_FUN_SUM(t1_topk.c2)), ASC])
   2 - output([t1_topk.c1], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))], [T_FUN_MIN(T_FUN_MIN(t1_topk.c3))], [T_FUN_MAX(T_FUN_MAX(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))]), filter(nil), dop=1
@@ -1502,18 +1276,6 @@ Outputs & filters:
       group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))], [T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))])
   10 - output([t1_topk.c1], [t1_topk.c3], [t1_topk.c2]), filter(nil), sort_keys([t1_topk.c2, ASC])
   11 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
-=======
-  0 - output([t1_topk.c1], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3) / T_FUN_SUM(t1_topk.c1)]), filter(nil), limit(5), offset(nil)
-  1 - output([t1_topk.c1], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) / T_FUN_SUM(t1_topk.c2)]), filter(nil), sort_keys([cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1)), DESC], [T_FUN_SUM(t1_topk.c1) / T_FUN_SUM(t1_topk.c2), ASC])
-  2 - output([t1_topk.c1], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) / T_FUN_SUM(t1_topk.c2)]), filter(nil), dop=1
-  3 - output([t1_topk.c1], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) / T_FUN_SUM(t1_topk.c2)]), filter(nil), limit(5), offset(nil)
-  4 - output([t1_topk.c1], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) / T_FUN_SUM(t1_topk.c2)]), filter(nil), sort_keys([cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1)), DESC], [T_FUN_SUM(t1_topk.c1) / T_FUN_SUM(t1_topk.c2), ASC]), topn(5)
-  5 - output([t1_topk.c1], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) / T_FUN_SUM(t1_topk.c2)]), filter(nil), 
-      group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)])
-  6 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil)
-  7 - (#keys=1, [t1_topk.c2]), output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), dop=1
-  8 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
->>>>>>> 4ace446e738... fix aggr convert lost origin type
       force partition granule.
   12 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter([t1_topk.c2 < ?]), 
       access([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), partitions(p[0-1]), 
@@ -1529,13 +1291,7 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1578,7 +1334,6 @@ SQL: select /*+topk(1 1)*/ c2, avg(c1), sum(c2), sum(c1) + sum(c2), count(c3), m
 
 Outputs & filters: 
 -------------------------------------
-<<<<<<< HEAD
   0 - output([t1_topk.c2], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) + T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))], [T_FUN_MIN(T_FUN_MIN(t1_topk.c3))], [T_FUN_MAX(T_FUN_MAX(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_SUM(T_FUN_SUM(t1_topk.c1)), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
   1 - output([t1_topk.c2], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))], [T_FUN_MIN(T_FUN_MIN(t1_topk.c3))], [T_FUN_MAX(T_FUN_MAX(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))]), filter(nil), sort_keys([T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1)), DESC], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) + T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2)), DECIMAL(20, 0)), ASC])
   2 - output([t1_topk.c2], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))], [T_FUN_MIN(T_FUN_MIN(t1_topk.c3))], [T_FUN_MAX(T_FUN_MAX(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) / T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) + T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c2)), DECIMAL(20, 0))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))]), filter(nil), dop=1
@@ -1593,18 +1348,6 @@ Outputs & filters:
       group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))], [T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))], [T_FUN_COUNT(t1_topk.c2)])
   10 - output([t1_topk.c2], [t1_topk.c3], [t1_topk.c1]), filter(nil), sort_keys([t1_topk.c2, ASC])
   11 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
-=======
-  0 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c1) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3) / T_FUN_SUM(t1_topk.c1)]), filter(nil), limit(5), offset(nil)
-  1 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) / T_FUN_SUM(t1_topk.c2) + T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)]), filter(nil), sort_keys([cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1)), DESC], [T_FUN_SUM(t1_topk.c1) / T_FUN_SUM(t1_topk.c2) + T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2), ASC])
-  2 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) / T_FUN_SUM(t1_topk.c2) + T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)]), filter(nil), dop=1
-  3 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) / T_FUN_SUM(t1_topk.c2) + T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)]), filter(nil), limit(5), offset(nil)
-  4 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) / T_FUN_SUM(t1_topk.c2) + T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)]), filter(nil), sort_keys([cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1)), DESC], [T_FUN_SUM(t1_topk.c1) / T_FUN_SUM(t1_topk.c2) + T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2), ASC]), topn(5)
-  5 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) / T_FUN_SUM(t1_topk.c2) + T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c2)]), filter(nil), 
-      group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [T_FUN_COUNT(t1_topk.c2)])
-  6 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil)
-  7 - (#keys=1, [t1_topk.c2]), output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), dop=1
-  8 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
->>>>>>> 4ace446e738... fix aggr convert lost origin type
       force partition granule.
   12 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter([t1_topk.c2 < ?]), 
       access([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), partitions(p[0-1]), 
@@ -1620,13 +1363,7 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1667,7 +1404,6 @@ SQL: select /*+topk(0 0)*/ c2, sum(c2), sum(c1) + sum(c2), count(c3), min(c3), m
 
 Outputs & filters: 
 -------------------------------------
-<<<<<<< HEAD
   0 - output([t1_topk.c2], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) + T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))], [T_FUN_MIN(T_FUN_MIN(t1_topk.c3))], [T_FUN_MAX(T_FUN_MAX(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_SUM(T_FUN_SUM(t1_topk.c1)), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
   1 - output([t1_topk.c2], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))], [T_FUN_MIN(T_FUN_MIN(t1_topk.c3))], [T_FUN_MAX(T_FUN_MAX(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))]), filter(nil), sort_keys([T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1)), DESC], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) + T_FUN_SUM(T_FUN_SUM(t1_topk.c2)), ASC])
   2 - output([t1_topk.c2], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))], [T_FUN_MIN(T_FUN_MIN(t1_topk.c3))], [T_FUN_MAX(T_FUN_MAX(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) + T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))]), filter(nil), dop=1
@@ -1680,18 +1416,6 @@ Outputs & filters:
       group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))], [T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))])
   8 - output([t1_topk.c2], [t1_topk.c3], [t1_topk.c1]), filter(nil), sort_keys([t1_topk.c2, ASC])
   9 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
-=======
-  0 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3) / T_FUN_SUM(t1_topk.c1)]), filter(nil), limit(5), offset(nil)
-  1 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)]), filter(nil), sort_keys([cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1)), DESC], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2), ASC])
-  2 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)]), filter(nil), dop=1
-  3 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)]), filter(nil), limit(5), offset(nil)
-  4 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)]), filter(nil), sort_keys([cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1)), DESC], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2), ASC]), topn(5)
-  5 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)]), filter(nil), 
-      group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)])
-  6 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil)
-  7 - (#keys=1, [t1_topk.c2]), output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), dop=1
-  8 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
->>>>>>> 4ace446e738... fix aggr convert lost origin type
       force partition granule.
   10 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter([t1_topk.c2 < ?]), 
       access([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), partitions(p[0-1]), 
@@ -1707,14 +1431,8 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       GBY_PUSHDOWN(@"SEL$1")
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1757,7 +1475,6 @@ SQL: select /*+topk(50 0)*/ c2, sum(c2), sum(c1) + sum(c2), count(c3), min(c3), 
 
 Outputs & filters: 
 -------------------------------------
-<<<<<<< HEAD
   0 - output([t1_topk.c2], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) + T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))], [T_FUN_MIN(T_FUN_MIN(t1_topk.c3))], [T_FUN_MAX(T_FUN_MAX(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_SUM(T_FUN_SUM(t1_topk.c1)), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
   1 - output([t1_topk.c2], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))], [T_FUN_MIN(T_FUN_MIN(t1_topk.c3))], [T_FUN_MAX(T_FUN_MAX(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))]), filter(nil), sort_keys([T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1)), DESC], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) + T_FUN_SUM(T_FUN_SUM(t1_topk.c2)), ASC])
   2 - output([t1_topk.c2], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))], [T_FUN_MIN(T_FUN_MIN(t1_topk.c3))], [T_FUN_MAX(T_FUN_MAX(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) + T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))]), filter(nil), dop=1
@@ -1772,18 +1489,6 @@ Outputs & filters:
       group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))], [T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))])
   10 - output([t1_topk.c2], [t1_topk.c3], [t1_topk.c1]), filter(nil), sort_keys([t1_topk.c2, ASC])
   11 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
-=======
-  0 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3) / T_FUN_SUM(t1_topk.c1)]), filter(nil), limit(5), offset(nil)
-  1 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)]), filter(nil), sort_keys([cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1)), DESC], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2), ASC])
-  2 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)]), filter(nil), dop=1
-  3 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)]), filter(nil), limit(5), offset(nil)
-  4 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)]), filter(nil), sort_keys([cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1)), DESC], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2), ASC]), topn(5)
-  5 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)]), filter(nil), 
-      group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)])
-  6 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil)
-  7 - (#keys=1, [t1_topk.c2]), output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), dop=1
-  8 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
->>>>>>> 4ace446e738... fix aggr convert lost origin type
       force partition granule.
   12 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter([t1_topk.c2 < ?]), 
       access([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), partitions(p[0-1]), 
@@ -1799,13 +1504,7 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1848,7 +1547,6 @@ SQL: select /*+topk(10000 1)*/ c2, sum(c2), sum(c1) + sum(c2), count(c3), min(c3
 
 Outputs & filters: 
 -------------------------------------
-<<<<<<< HEAD
   0 - output([t1_topk.c2], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) + T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))], [T_FUN_MIN(T_FUN_MIN(t1_topk.c3))], [T_FUN_MAX(T_FUN_MAX(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_SUM(T_FUN_SUM(t1_topk.c1)), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
   1 - output([t1_topk.c2], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))], [T_FUN_MIN(T_FUN_MIN(t1_topk.c3))], [T_FUN_MAX(T_FUN_MAX(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))]), filter(nil), sort_keys([T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1)), DESC], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) + T_FUN_SUM(T_FUN_SUM(t1_topk.c2)), ASC])
   2 - output([t1_topk.c2], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))], [T_FUN_MIN(T_FUN_MIN(t1_topk.c3))], [T_FUN_MAX(T_FUN_MAX(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) + T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))]), filter(nil), dop=1
@@ -1863,18 +1561,6 @@ Outputs & filters:
       group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))], [T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))])
   10 - output([t1_topk.c2], [t1_topk.c3], [t1_topk.c1]), filter(nil), sort_keys([t1_topk.c2, ASC])
   11 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
-=======
-  0 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3) / T_FUN_SUM(t1_topk.c1)]), filter(nil), limit(5), offset(nil)
-  1 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)]), filter(nil), sort_keys([cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1)), DESC], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2), ASC])
-  2 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)]), filter(nil), dop=1
-  3 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)]), filter(nil), limit(5), offset(nil)
-  4 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)]), filter(nil), sort_keys([cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1)), DESC], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2), ASC]), topn(5)
-  5 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)]), filter(nil), 
-      group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)])
-  6 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil)
-  7 - (#keys=1, [t1_topk.c2]), output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), dop=1
-  8 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
->>>>>>> 4ace446e738... fix aggr convert lost origin type
       force partition granule.
   12 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter([t1_topk.c2 < ?]), 
       access([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), partitions(p[0-1]), 
@@ -1890,13 +1576,7 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -1939,7 +1619,6 @@ SQL: select /*+topk(1 10000)*/ c2, sum(c2), sum(c1) + sum(c2), count(c3), min(c3
 
 Outputs & filters: 
 -------------------------------------
-<<<<<<< HEAD
   0 - output([t1_topk.c2], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) + T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))], [T_FUN_MIN(T_FUN_MIN(t1_topk.c3))], [T_FUN_MAX(T_FUN_MAX(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1)), DECIMAL(20, 0))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_SUM(T_FUN_SUM(t1_topk.c1)), DOUBLE(-1, -1))]), filter(nil), limit(5), offset(nil)
   1 - output([t1_topk.c2], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))], [T_FUN_MIN(T_FUN_MIN(t1_topk.c3))], [T_FUN_MAX(T_FUN_MAX(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))]), filter(nil), sort_keys([T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1)), DESC], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) + T_FUN_SUM(T_FUN_SUM(t1_topk.c2)), ASC])
   2 - output([t1_topk.c2], [T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c3))], [T_FUN_MIN(T_FUN_MIN(t1_topk.c3))], [T_FUN_MAX(T_FUN_MAX(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1))))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1))], [T_FUN_SUM(T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))), DOUBLE(-1, -1))], [T_FUN_SUM(T_FUN_SUM(t1_topk.c1)) + T_FUN_SUM(T_FUN_SUM(t1_topk.c2))], [T_FUN_COUNT_SUM(T_FUN_COUNT(t1_topk.c1))]), filter(nil), dop=1
@@ -1954,18 +1633,6 @@ Outputs & filters:
       group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(cast(t1_topk.c3, DOUBLE(-1, -1)))], [T_FUN_COUNT(cast(t1_topk.c3, DOUBLE(-1, -1)))])
   10 - output([t1_topk.c2], [t1_topk.c3], [t1_topk.c1]), filter(nil), sort_keys([t1_topk.c2, ASC])
   11 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
-=======
-  0 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_SUM(t1_topk.c2) / T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3) / T_FUN_SUM(t1_topk.c1)]), filter(nil), limit(5), offset(nil)
-  1 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)]), filter(nil), sort_keys([cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1)), DESC], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2), ASC])
-  2 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)]), filter(nil), dop=1
-  3 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)]), filter(nil), limit(5), offset(nil)
-  4 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)]), filter(nil), sort_keys([cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1)), DESC], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2), ASC]), topn(5)
-  5 - output([t1_topk.c2], [T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)], [cast(T_FUN_SUM(t1_topk.c3) / T_FUN_COUNT(t1_topk.c3), DOUBLE(-1, -1))], [T_FUN_SUM(t1_topk.c1) + T_FUN_SUM(t1_topk.c2)]), filter(nil), 
-      group([t1_topk.c2]), agg_func([T_FUN_SUM(t1_topk.c2)], [T_FUN_SUM(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c3)], [T_FUN_MIN(t1_topk.c3)], [T_FUN_MAX(t1_topk.c1)], [T_FUN_COUNT(t1_topk.c1)], [T_FUN_SUM(t1_topk.c3)])
-  6 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil)
-  7 - (#keys=1, [t1_topk.c2]), output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), dop=1
-  8 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter(nil), 
->>>>>>> 4ace446e738... fix aggr convert lost origin type
       force partition granule.
   12 - output([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), filter([t1_topk.c2 < ?]), 
       access([t1_topk.c1], [t1_topk.c2], [t1_topk.c3]), partitions(p[0-1]), 
@@ -1981,13 +1648,7 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$1")
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2059,14 +1720,8 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       FULL(@"SEL$F53088DF" "opt"."t1_topk"@"SEL$2")
       MERGE(@"SEL$2" < "SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$2")
-      FULL(@"SEL$2" "opt"."t1_topk"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2158,7 +1813,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$6FCAE2AA" ("opt"."t1_topk"@"SEL$1" "VIEW1"@"SEL$1"))
       USE_NL(@"SEL$6FCAE2AA" "VIEW1"@"SEL$1")
       PQ_DISTRIBUTE(@"SEL$6FCAE2AA" "VIEW1"@"SEL$1" LOCAL LOCAL)
@@ -2166,16 +1820,6 @@ Outline Data:
       FULL(@"SEL$6FCAE2AA" "opt"."t1_topk"@"SEL$1")
       FULL(@"SEL$2" "opt"."t1_topk"@"SEL$2")
       UNNEST(@"SEL$2")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" ("opt.t1_topk"@"SEL$1" "VIEW1"@"SEL$1" ))
-      USE_NL(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("VIEW1"@"SEL$1" ) LOCAL LOCAL)
-      USE_NL_MATERIALIZATION(@"SEL$1" ("VIEW1"@"SEL$1" ))
-      FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-      USE_HASH_AGGREGATION(@"SEL$2")
-      FULL(@"SEL$2" "opt"."t1_topk"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2269,16 +1913,10 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       GBY_PUSHDOWN(@"SEL$21FA2A17")
       FULL(@"SEL$21FA2A17" "opt"."t1_topk"@"SEL$1")
       USE_HASH_SET(@"SET$7AED123F")
       MATERIALIZE(@"SET$1" ("SEL$1", "SEL$2"))
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$4")
-      FULL(@"SEL$4" "opt"."t1_topk"@"SEL$4")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2366,13 +2004,7 @@ Outline Data:
   /*+
       BEGIN_OUTLINE_DATA
       FULL(@"SEL$1" "opt"."t1_topk"@"SEL$1")
-<<<<<<< HEAD
       FULL(@"SEL$2" "opt"."t1_topk"@"SEL$2")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      USE_HASH_AGGREGATION(@"SEL$2")
-      FULL(@"SEL$2" "opt"."t1_topk"@"SEL$2")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 
@@ -2485,7 +2117,6 @@ Outline Data:
 -------------------------------------
   /*+
       BEGIN_OUTLINE_DATA
-<<<<<<< HEAD
       LEADING(@"SEL$1" (("a"@"SEL$1" "opt"."t2_topk"@"SEL$1") "opt"."t3_topk"@"SEL$1"))
       USE_NL(@"SEL$1" "opt"."t3_topk"@"SEL$1")
       PQ_DISTRIBUTE(@"SEL$1" "opt"."t3_topk"@"SEL$1" PARTITION NONE)
@@ -2494,18 +2125,6 @@ Outline Data:
       FULL(@"SEL$2" "opt"."t1_topk"@"SEL$2")
       FULL(@"SEL$1" "opt"."t2_topk"@"SEL$1")
       FULL(@"SEL$1" "opt"."t3_topk"@"SEL$1")
-      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
-=======
-      LEADING(@"SEL$1" (("a"@"SEL$1" "opt.t2_topk"@"SEL$1" )"opt.t3_topk"@"SEL$1" ))
-      USE_HASH(@"SEL$1" ("opt.t3_topk"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t3_topk"@"SEL$1" ) PARTITION NONE)
-      USE_HASH(@"SEL$1" ("opt.t2_topk"@"SEL$1" ))
-      PQ_DISTRIBUTE(@"SEL$1" ("opt.t2_topk"@"SEL$1" ) PARTITION NONE)
-      USE_HASH_AGGREGATION(@"SEL$2")
-      FULL(@"SEL$2" "opt"."t1_topk"@"SEL$2")
-      FULL(@"SEL$1" "opt"."t2_topk"@"SEL$1")
-      FULL(@"SEL$1" "opt"."t3_topk"@"SEL$1")
->>>>>>> implement spm part1
       END_OUTLINE_DATA
   */
 

@@ -1017,10 +1017,5 @@ int ObDebugSync::set_global_action(const bool reset, const bool clear,
   return ret;
 }
 
-void ObDebugSync::set_rpc_proxy(void * /*rpc_proxy*/)
-{
-  // no-op: direct dispatch through GCTX.root_service_
-}
-
 } // end namespace common
 } // end namespace oceanbase

@@ -92,13 +92,13 @@ int ObUpdateIndexStatusHelper::generate_schemas_()
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (INDEX_STATUS_INDEX_ERROR == new_status_ && arg_.convert_status_) {
-    const ObTenantSchema *tenant_schema = nullptr;
-    if (OB_FAIL(schema_guard_wrapper_.get_tenant_schema( tenant_schema))) {
-      LOG_WARN("fail to get tenant schema", KR(ret));
-    } else if (OB_ISNULL(tenant_schema)) {
-      ret = OB_TENANT_NOT_EXIST;
-      LOG_WARN("tenant not exist", KR(ret));
-    } else if (tenant_schema->is_restore()) {
+    const ObServerRuntimeSchema *runtime_schema = nullptr;
+    if (OB_FAIL(schema_guard_wrapper_.get_server_runtime_schema( runtime_schema))) {
+      LOG_WARN("fail to get runtime schema", KR(ret));
+    } else if (OB_ISNULL(runtime_schema)) {
+      ret = OB_RUNTIME_SCHEMA_NOT_READY;
+      LOG_WARN("runtime schema does not exist", KR(ret));
+    } else if (runtime_schema->is_restore()) {
       new_status_ = INDEX_STATUS_RESTORE_INDEX_ERROR;
       LOG_INFO("conver error index status", KR(ret), K_(new_status));
     }
@@ -183,12 +183,12 @@ int ObUpdateIndexStatusHelper::operate_schemas_()
       LOG_WARN("fail to update index status", KR(ret), K_(arg_.index_table_id), K_(arg_.data_table_id), K_(new_status));
     } else if (arg_.task_id_ != 0) {
       ObSchemaVersionGenerator *tsi_generator = GET_TSI(TSISchemaVersionGenerator);
-      int64_t consensus_schema_version = OB_INVALID_VERSION;
-      if (OB_FAIL(tsi_generator->get_end_version(consensus_schema_version))) {
+      int64_t published_schema_version = OB_INVALID_VERSION;
+      if (OB_FAIL(tsi_generator->get_end_version(published_schema_version))) {
         LOG_WARN("fail to get end version", KR(ret), K_(arg));
-      } else if (OB_FAIL(ObDDLTaskRecordOperator::update_consensus_schema_version(
-                         get_trans_(), arg_.task_id_, consensus_schema_version))) {
-        LOG_WARN("fail to update consensus_schema_version", KR(ret), K_(arg_.task_id), K(consensus_schema_version));
+      } else if (OB_FAIL(ObDDLTaskRecordOperator::update_published_schema_version(
+                         get_trans_(), arg_.task_id_, published_schema_version))) {
+        LOG_WARN("fail to update published_schema_version", KR(ret), K_(arg_.task_id), K(published_schema_version));
       } else if (orig_index_table_schema_->get_index_status() != new_status_ && new_status_ == INDEX_STATUS_AVAILABLE) {
         ObTableLockOwnerID owner_id;
         if (OB_ISNULL(new_data_table_schema_)) {

@@ -84,7 +84,7 @@ public:
   //Temp fix
   //Current implement group iter is eval in das task context.
   //Whe Das task retry we hard to ues allocator pass from eval ctx, we can not free or
-  //reuse LastDASStoreRow memory because when das task is remote the alloctor is change,
+  //reuse LastDASStoreRow memory because a copied DAS task changes the allocator,
   //only memory from eval ctx can be reuse.
   //So we just introduce this temp fix use a new alloctor make LastDASStoreRow have a same
   //life cycle with ObGroupResultRows.

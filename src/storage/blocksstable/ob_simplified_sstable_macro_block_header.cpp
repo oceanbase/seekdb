@@ -33,11 +33,8 @@ ObSimplifiedSSTableMacroBlockHeader::ObSimplifiedSSTableMacroBlockHeader()
       micro_block_count_(0),
       row_store_type_(ObRowStoreType::FLAT_ROW_STORE),
       compressor_type_(ObCompressorType::INVALID_COMPRESSOR),
-      encrypt_id_(0),
-      master_key_id_(-1),
       is_inited_(false)
 {
-  MEMSET(encrypt_key_, 0x26, OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH);
 }
 
 
@@ -54,11 +51,8 @@ void ObSimplifiedSSTableMacroBlockHeader::reset()
   first_data_micro_block_offset_ = 0;
   rowkey_column_count_ = 0;
   micro_block_count_ = 0;
-  encrypt_id_ = 0;
-  master_key_id_ = -1;
   row_store_type_ = ObRowStoreType::FLAT_ROW_STORE;
   compressor_type_ = ObCompressorType::INVALID_COMPRESSOR;
-  MEMSET(encrypt_key_, 0x26, OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH);
   is_inited_ = false;
 }
 
@@ -86,11 +80,8 @@ int ObSimplifiedSSTableMacroBlockHeader::init(const ObSSTableMacroBlockHeader &m
     first_data_micro_block_offset_ = macro_header_pos + macro_header.get_serialize_size() - simplified_macro_header_pos;
     rowkey_column_count_ = macro_header.fixed_header_.rowkey_column_count_;
     micro_block_count_ = macro_header.fixed_header_.micro_block_count_;
-    encrypt_id_ = macro_header.fixed_header_.encrypt_id_;
-    master_key_id_ = macro_header.fixed_header_.master_key_id_;
     row_store_type_ = static_cast<common::ObRowStoreType>(macro_header.fixed_header_.row_store_type_);
     compressor_type_ = macro_header.fixed_header_.compressor_type_;
-    MEMCPY(encrypt_key_, macro_header.fixed_header_.encrypt_key_, sizeof(macro_header.fixed_header_.encrypt_key_));
     is_inited_ = true;
   }
   return ret;
@@ -148,11 +139,8 @@ bool ObSimplifiedSSTableMacroBlockHeader::is_valid() const
       && first_data_micro_block_offset_ > 0
       && rowkey_column_count_ >= 0
       && micro_block_count_ > 0
-      && encrypt_id_ >= 0
-      && master_key_id_ >= -1
       && row_store_type_ >= ObRowStoreType::FLAT_ROW_STORE
-      && (row_store_type_ < ObRowStoreType::MAX_ROW_STORE
-          || ObRowStoreType::DUMMY_ROW_STORE == row_store_type_)
+      && row_store_type_ < ObRowStoreType::MAX_ROW_STORE
       && compressor_type_ > ObCompressorType::INVALID_COMPRESSOR
       && compressor_type_ < ObCompressorType::MAX_COMPRESSOR;
 }
@@ -201,5 +189,3 @@ int ObSimplifiedSSTableMacroBlockHeader::simplify_macro_block(
 
 } // end namespace blocksstable
 } // end namespace oceanbase
-
-

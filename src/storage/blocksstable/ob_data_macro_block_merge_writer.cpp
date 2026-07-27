@@ -47,7 +47,6 @@ int ObDataMacroBlockMergeWriter::open(
     const int64_t parallel_idx,
     const blocksstable::ObMacroSeqParam &macro_seq_param,
     const share::ObPreWarmerParam &pre_warm_param,
-    ObSSTablePrivateObjectCleaner &object_cleaner,
     ObIMacroBlockFlushCallback *callback,
     ObIMacroBlockValidator *validator,
     ObIODevice *device_handle)
@@ -60,7 +59,7 @@ int ObDataMacroBlockMergeWriter::open(
   next_block_use_freespace_ = false;
   if (OB_FAIL(ObMacroBlockWriter::open(
           data_store_desc, parallel_idx, macro_seq_param, pre_warm_param,
-          object_cleaner, callback, validator))) {
+          callback, validator))) {
     STORAGE_LOG(WARN, "Fail to open macro block writer", K(ret));
   }
 

@@ -578,7 +578,7 @@ int ObDbmsStatsHistoryManager::backup_having_column_stats(ObMySQLTransaction &tr
         }
       }
     } else {
-      // tenant = xx and table_id = xx and ((partition_id in xx and column_id in xx) or ((partition_id, column_id) in ((xx))))
+      // table_id = xx and ((partition_id in xx and column_id in xx) or ((partition_id, column_id) in ((xx))))
       ObSqlString partition_list;
       ObSqlString part_col_list;
       bool is_first_part_list = true;

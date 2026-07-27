@@ -27,28 +27,21 @@ namespace transaction
 struct SessionIDPair {
   OB_UNIS_VERSION(1);
 public:
-  SessionIDPair() : sess_id_(0), assoc_sess_id_(0) {}
-  SessionIDPair(const uint32_t sess_id, const uint32_t assoc_sess_id)
-  : sess_id_(sess_id),
-  assoc_sess_id_(assoc_sess_id) {}
+  SessionIDPair() : sess_id_(0) {}
+  explicit SessionIDPair(const uint32_t sess_id) : sess_id_(sess_id) {}
   uint32_t get_valid_sess_id() const {
-    uint32_t valid_sess_id = assoc_sess_id_;
-    if (valid_sess_id == 0) {
-      valid_sess_id = sess_id_;
-      if (valid_sess_id == 0) {
-        DETECT_LOG_RET(WARN, OB_ERR_UNEXPECTED, "get_vald_sess_id is 0", K(*this));
-      }
+    if (sess_id_ == 0) {
+      DETECT_LOG_RET(WARN, OB_ERR_UNEXPECTED, "get_valid_sess_id is 0", K(*this));
     }
-    return valid_sess_id;
+    return sess_id_;
   }
   bool is_valid() const {
-    return assoc_sess_id_ != 0 || sess_id_ != 0;
+    return sess_id_ != 0;
   }
-  TO_STRING_KV(K_(sess_id), K_(assoc_sess_id));
+  TO_STRING_KV(K_(sess_id));
   uint32_t sess_id_;
-  uint32_t assoc_sess_id_;
 };
-OB_SERIALIZE_MEMBER_TEMP(inline, SessionIDPair, sess_id_, assoc_sess_id_);
+OB_SERIALIZE_MEMBER_TEMP(inline, SessionIDPair, sess_id_);
 
 }
 }

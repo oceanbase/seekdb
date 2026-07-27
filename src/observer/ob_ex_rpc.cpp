@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 // ex_rpc in-process dispatch.
-//  - sync_call: runs the op on the caller's tenant ReqWorker (real ObThWorker:
+//  - sync_call: runs the op on the server runtime ReqWorker (real ObThWorker:
 //    full check_status / interrupt / trace / big stack / per-op timeout) and waits,
 //    exactly reproducing the former loopback sync RPC (recv_request to self + wait).
-//  - async_call: fire-and-forget on the same tenant ReqWorker (no separate pool).
+//  - async_call: fire-and-forget on the same runtime ReqWorker (no separate pool).
 #include "share/ob_ex_rpc.h"
 #include "observer/ob_srv_task.h"
-#include "observer/omt/ob_multi_tenant.h"
+#include "observer/omt/ob_server_runtime_controller.h"
 #include "observer/ob_server_struct.h"
 #include "lib/worker.h"
 #include "lib/lock/ob_futex.h"
@@ -32,7 +32,7 @@ namespace ex_rpc {
 using namespace oceanbase::common;
 using namespace oceanbase::lib;
 
-// ===================== sync_call -> tenant ReqWorker =====================
+// ===================== sync_call -> runtime ReqWorker =====================
 
 // Caller-owned completion context: created on the caller's stack, lives across the
 // wait, so it survives the framework freeing the task after run().
@@ -87,22 +87,11 @@ static int dispatch_(int64_t timeout_us, std::function<int()> fn, SyncCtx *sync_
     task->proc_.trace_id_.set(*ObCurTraceId::get_trace_id());
     task->set_receive_timestamp(ObClockGenerator::getClock());
     task->proc_.set_ob_request(*task);
-    if (OB_ISNULL(GCTX.omt_)) {
+    if (OB_ISNULL(GCTX.server_runtime_controller_)) {
       ret = OB_ERR_UNEXPECTED;
       ob_delete(task);
-    } else {
-      // ObMultiTenant::recv_request only accepts sys tenant and rejects
-      // every other tenant. Route to the specific tenant directly so that
-      // sync_call / async_call work for user tenants too.
-      ObTenant *tenant = nullptr;
-      if (OB_FAIL(GCTX.omt_->get_tenant(tenant))) {
-        ob_delete(task);
-      } else if (OB_ISNULL(tenant)) {
-        ret = OB_ERR_UNEXPECTED;
-        ob_delete(task);
-      } else if (OB_FAIL(tenant->recv_request(*task))) {
-        ob_delete(task);
-      }
+    } else if (OB_FAIL(GCTX.server_runtime_controller_->recv_request(*task))) {
+      ob_delete(task);
     }
   }
   return ret;
@@ -121,9 +110,9 @@ int sync_call_internal(int64_t timeout_us, std::function<int()> fn)
   return ret;
 }
 
-// ===================== async_call -> tenant ReqWorker =====================
+// ===================== async_call -> runtime ReqWorker =====================
 
-// Fire-and-forget on the caller's tenant ReqWorker (real ObThWorker, empty session),
+// Fire-and-forget on the server runtime ReqWorker (real ObThWorker, empty session),
 // the same dispatch path sync_call uses -- faithful to the former async RPC's
 // receive-side execution context. No sync_ctx: the task carries its own completion
 // signalling via the captured AsyncHandle.

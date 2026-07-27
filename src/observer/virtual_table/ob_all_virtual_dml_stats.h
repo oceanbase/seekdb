@@ -64,7 +64,6 @@ public:
   virtual ~ObAllVirtualDMmlStats();
   virtual void reset() override;
   virtual int inner_get_next_row(common::ObNewRow *&row) override;
-  virtual int inner_open() override;
 private:
   enum COLUMNS
   {

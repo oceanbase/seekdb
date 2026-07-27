@@ -21,7 +21,7 @@
 #include "logservice/palf/log_writer_utils.h"
 #include "logservice/palf/log_entry_header.h"
 #undef private
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -51,10 +51,8 @@ TestLogGroupBuffer::~TestLogGroupBuffer()
 
 void TestLogGroupBuffer::SetUp()
 {
-  ObMallocAllocator::get_instance()->create_and_add_tenant_allocator();
-  // init MTL
-  ObTenantBase tbase(1001);
-  ObTenantEnv::set_tenant(&tbase);
+  static ObServerRuntimeState runtime_state;
+  share::g_server_runtime = &runtime_state;
 }
 
 void TestLogGroupBuffer::TearDown()
@@ -62,7 +60,6 @@ void TestLogGroupBuffer::TearDown()
   PALF_LOG(INFO, "TestLogGroupBuffer has TearDown");
   PALF_LOG(INFO, "TearDown success");
   log_group_buffer_.destroy();
-  ObMallocAllocator::get_instance()->recycle_tenant_allocator();
 }
 
 TEST_F(TestLogGroupBuffer, test_init)

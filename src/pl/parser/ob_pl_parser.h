@@ -47,8 +47,6 @@ public:
       charsets4parser_(charsets4parser),
       sql_mode_(sql_mode)
   {}
-  int fast_parse(const ObString &stmt_block,
-                 ParseResult &parse_result);
   int parse(const common::ObString &stmt_block,
             const common::ObString &orig_stmt_block,
             ParseResult &parse_result,

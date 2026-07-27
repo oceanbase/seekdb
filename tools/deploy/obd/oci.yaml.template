@@ -21,16 +21,5 @@ oceanbase-ce:
     home_path: /data/{user}/{deploy_name}/observer/{server}
     production_mode: false
     memory_limit: '80G'
-    system_memory: '10G'
     datafile_size: '40G'
     # cpu_count: '24'
-obproxy-ce:
-  servers:
-    - 127.0.0.1
-  global:
-    listen_port: ${proxy_listen_port}
-    prometheus_listen_port: ${prometheus_listen_port}
-    home_path: ${proxy_home_path}
-  include: obd/obproxy.include.yaml
-  depends:
-    - oceanbase-ce

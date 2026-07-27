@@ -28,11 +28,11 @@ namespace oceanbase
 {
 namespace tmp_file
 {
-class ObSNTenantTmpFileManager : public ObITenantTmpFileManager
+class ObSNTmpFileManager : public ObITmpFileManager
 {
 public:
-  ObSNTenantTmpFileManager();
-  ~ObSNTenantTmpFileManager();
+  ObSNTmpFileManager();
+  ~ObSNTmpFileManager();
 
 public:
   virtual int alloc_dir(int64_t &dir_id) override;

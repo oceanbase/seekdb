@@ -41,29 +41,24 @@ struct ObTabletAttr final
 public:
   ObTabletAttr()
     :v_(0),
-     restore_state_(0),
+     local_status_(0),
      all_sstable_data_occupy_size_(0),
      all_sstable_data_required_size_(0),
-     tablet_meta_size_(0),
-     ss_public_sstable_occupy_size_(0),
-     backup_bytes_(0)
+     tablet_meta_size_(0)
     {}
   ~ObTabletAttr() { reset(); }
   void reset() 
   { 
     v_ = 0; 
-    restore_state_ = 0;
+    local_status_ = 0;
     all_sstable_data_occupy_size_ = 0; 
     all_sstable_data_required_size_ = 0; 
-    tablet_meta_size_ = 0; 
-    ss_public_sstable_occupy_size_ = 0;
-    backup_bytes_ = 0;
+    tablet_meta_size_ = 0;
   }
   bool is_valid() const { return valid_; }
   TO_STRING_KV(K_(valid), K_(is_empty_shell),
-      K_(has_next_tablet), K_(has_nested_table), K_(restore_state),
-      K_(all_sstable_data_occupy_size), K_(all_sstable_data_required_size), K_(tablet_meta_size),
-      K_(ss_public_sstable_occupy_size), K_(backup_bytes)
+      K_(has_next_tablet), K_(has_nested_table), K_(local_status),
+      K_(all_sstable_data_occupy_size), K_(all_sstable_data_required_size), K_(tablet_meta_size)
       );
 public:
   union {
@@ -72,30 +67,24 @@ public:
         bool valid_ : 1; // valid_ = true means attr is filled
         bool is_empty_shell_ : 1;
         bool has_next_tablet_ : 1;
-        bool has_nested_table_: 1;
+        bool has_nested_table_ : 1;
     };
   };
 
-  int64_t restore_state_;
+  int64_t local_status_;
   // all sstable data occupy_size, include major sstable
-  // <data_block real_size> + <small_sstable_nest_size (in share_nothing)>
   int64_t all_sstable_data_occupy_size_;
   // all sstable data requred_size, data_block_count * 2MB, include major sstable
   int64_t all_sstable_data_required_size_;
-  // meta_size in shared_nothing, meta_block_count * 2MB
+  // Resident tablet metadata size, measured in macro blocks.
   int64_t tablet_meta_size_;
-  // major sstable data occupy_size
-  // which is same as major_sstable_required_size_; 
-  // because the alignment size is 1B in object_storage.
-  int64_t ss_public_sstable_occupy_size_; 
-  int64_t backup_bytes_;
 };
 
 class ObTabletPointer final
 {
   friend class ObTablet;
   friend class ObLSTabletService;
-  friend class ObTenantMetaMemMgr;
+  friend class ObStorageMetaMemMgr;
   friend class ObTabletResidentInfo;
   friend class ObTabletPointerMap;
   friend class ObFlyingTabletPointerMap;
@@ -106,7 +95,7 @@ public:
   ~ObTabletPointer();
   int get_in_memory_obj(ObMetaObjGuard<ObTablet> &guard);
   void get_obj(ObMetaObjGuard<ObTablet> &guard);
-  void set_obj_pool(ObITenantMetaObjPool &obj_pool);
+  void set_obj_pool(ObIStorageMetaObjPool &obj_pool);
   void set_obj(const ObMetaObjGuard<ObTablet> &guard);
   void set_addr_with_reset_obj(const ObMetaDiskAddr &addr);
   OB_INLINE const ObMetaDiskAddr &get_addr() const { return phy_addr_; }
@@ -212,8 +201,6 @@ public:
   int64_t get_required_size() const { return attr_.all_sstable_data_required_size_; }
   int64_t get_occupy_size() const { return attr_.all_sstable_data_occupy_size_; }
   uint64_t get_tablet_meta_size() const { return attr_.tablet_meta_size_; }
-  int64_t get_ss_public_sstable_occupy_size() const { return attr_.ss_public_sstable_occupy_size_; }
-  int64_t get_backup_size() const { return attr_.backup_bytes_; }
   void reset() 
   { 
     attr_.reset();

@@ -57,7 +57,6 @@ private:
   int is_local_generate_schema_(bool &is_local_generate);
   int create_table_();
   int create_tablets_();
-  int add_index_name_to_cache_();
   int check_fk_related_table_ddl_(const share::schema::ObTableSchema &data_table_schema,
                                   const share::ObDDLType &ddl_type);
   virtual int init_() override;

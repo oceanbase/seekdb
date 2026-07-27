@@ -17,12 +17,12 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_rebuild_index_task.h"
-#include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "share/ob_ddl_sim_point.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
-#include "rootserver/ob_root_service.h"
-#include "share/ob_tenant_timezone_mgr.h"               // for OTTZ_MGR
+#include "rootserver/ob_local_management_service.h"
+#include "share/ob_timezone_mgr.h"               // for OTTZ_MGR
 #include "observer/vector_index/ob_vector_index_util.h"
 #include "src/storage/ddl/ob_ddl_lock.h"
 
@@ -52,7 +52,7 @@ int ObRebuildIndexTask::init(
     const int64_t parent_task_id,
     const int32_t sub_task_trace_id,
     const int64_t parallelism,
-    const uint64_t tenant_data_version,
+    const uint64_t data_format_version,
     const ObTableSchema &index_schema,
     const obcall::ObRebuildIndexArg &rebuild_index_arg)
 {
@@ -64,9 +64,9 @@ int ObRebuildIndexTask::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", KR(ret), K(task_id), K(data_table_id),
                                   K(index_table_id), K(schema_version), K(parent_task_id));
-  } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, root service is null", KR(ret));
+    LOG_WARN("error sys, local management service is null", KR(ret));
   } else if (OB_FAIL(deep_copy_index_arg(allocator_, rebuild_index_arg, rebuild_index_arg_))) {
     LOG_WARN("deep copy drop index arg failed", KR(ret));
   } else if (OB_FALSE_IT(tmp_table_name = index_schema.get_table_name())) {
@@ -84,7 +84,7 @@ int ObRebuildIndexTask::init(
     task_version_ = OB_REBUILD_INDEX_TASK_VERSION;
     
     dst_schema_version_ = schema_version_;
-    data_format_version_ = tenant_data_version;
+    data_format_version_ = data_format_version;
     parallelism_ = parallelism;
     is_inited_ = true;
   }
@@ -99,9 +99,9 @@ int ObRebuildIndexTask::init(
   if (OB_UNLIKELY(!task_record.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", KR(ret), K(task_record));
-  } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, root service is null", KR(ret));
+    LOG_WARN("error sys, local management service is null", KR(ret));
   } else {
   
     object_id_ = task_record.object_id_;
@@ -167,8 +167,8 @@ int ObRebuildIndexTask::drop_index_impl()
     index_drop_task_id_ = -1; // new index table maybe not build yet, drop nothing
     LOG_INFO("new index table not exist, maybe not build yet", K(ret), K(target_object_name_), K(new_index_id_));
   } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().
-                                                  get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("get tenant schema failed", KR(ret));
+                                                  get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("get runtime schema failed", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, index_schema))) {
     LOG_WARN("get index schema failed", KR(ret), K(target_object_id_));
   } else if (OB_ISNULL(index_schema)) {
@@ -193,7 +193,7 @@ int ObRebuildIndexTask::drop_index_impl()
     } else if (OB_UNLIKELY(ERRSIM_DROP_INDEX_IMPL_ERROR)) {
       ret = OB_EAGAIN;
       LOG_WARN("errsim ERRSIM_DROP_INDEX_IMPL_ERROR", KR(ret));
-    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_index(drop_index_arg, drop_index_res); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_index(drop_index_arg, drop_index_res); }))) {
       LOG_WARN("drop index failed", KR(ret), K(ddl_rpc_timeout));
     } else {
       index_drop_task_id_ = drop_index_res.task_id_;
@@ -261,8 +261,8 @@ int ObRebuildIndexTask::rebuild_vec_index_impl()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().
-                                                  get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("get tenant schema failed", KR(ret));
+                                                  get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("get runtime schema failed", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, index_schema))) {
     LOG_WARN("get index schema failed", KR(ret), K(target_object_id_));
   } else if (OB_ISNULL(index_schema)) {
@@ -332,7 +332,7 @@ int ObRebuildIndexTask::rebuild_vec_index_impl()
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(target_object_id_, ddl_rpc_timeout))) {
         LOG_WARN("get ddl rpc timeout failed", K(ret));
-      } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_index(create_index_arg, res); }))) {
+      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_index(create_index_arg, res); }))) {
         LOG_WARN("fail to create vec index", K(ret), K(create_index_arg));
       } else {
         index_build_task_id_ = res.task_id_;  // create vector index task ID
@@ -427,8 +427,8 @@ int ObRebuildIndexTask::switch_index_name(const ObDDLTaskStatus next_task_status
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("task status not match", KR(ret), K(task_status_));
   } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().
-                                                  get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("get tenant schema failed", KR(ret));
+                                                  get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("get runtime schema failed", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, index_schema))) {
     LOG_WARN("get old index schema failed", KR(ret), K(target_object_id_));
   } else if (OB_ISNULL(index_schema)) {
@@ -462,15 +462,15 @@ int ObRebuildIndexTask::switch_index_name(const ObDDLTaskStatus next_task_status
       
       if (OB_FAIL(DDL_SIM(task_id_, DDL_TASK_SWITCH_INDEX_NAME_FAILED))) {
         LOG_WARN("ddl sim failure", K(ret), K(task_id_));
-      } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_map_wrap))) {
-        LOG_WARN("get tenant timezone map failed", K(ret));
+      } else if (OB_FAIL(OTTZ_MGR.get_timezone_map(tz_map_wrap))) {
+        LOG_WARN("get time zone map failed", K(ret));
       } else if (FALSE_IT(alter_table_arg.set_tz_info_map(tz_map_wrap.get_tz_map()))) {
       } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(target_object_id_, rpc_timeout))) {
         LOG_WARN("get ddl rpc timeout failed", K(ret));
       } else if (OB_UNLIKELY(ERRSIM_SWITCH_INDEX_NAME_ERROR)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("errsim ERRSIM_SWITCH_INDEX_NAME_ERROR", KR(ret));
-      } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->execute_ddl_task(alter_table_arg, unused_ids); }))) {
+      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->execute_ddl_task(alter_table_arg, unused_ids); }))) {
         LOG_WARN("fail to swap original and hidden table state", K(ret));
       } else {
         LOG_INFO("success to switch index name", K(ret), K(origin_table_name), K(alter_table_arg));
@@ -608,8 +608,8 @@ int ObRebuildIndexTask::cleanup_impl()
     const int64_t old_index_table_id = OB_INVALID_ID;
     const int64_t new_index_table_id = OB_INVALID_ID;
     const bool is_global_vector_index = false;
-    if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("get tenant schema guard failed", K(ret));
+    if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
+      LOG_WARN("get runtime schema guard failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, data_schema))) {
       LOG_WARN("fail to get table schema", K(ret), K(object_id_));
     } else if (OB_ISNULL(data_schema)) {

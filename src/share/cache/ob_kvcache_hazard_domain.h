@@ -25,7 +25,6 @@
 #include "share/cache/ob_kvcache_hazard_pointer.h"
 #include "share/cache/ob_kvcache_store.h"
 #include "share/cache/ob_kvcache_struct.h"
-#include "share/config/ob_server_config.h"
 
 namespace oceanbase {
 namespace common {
@@ -75,24 +74,12 @@ private:
   ObKVMemBlockHandle* hazptr_get_mb_handle() const;
   int hazptr_assign(const HazptrHolder& other);
   void hazptr_move_from(HazptrHolder& other);
-  int refcnt_protect(bool& success, ObKVMemBlockHandle* mb_handle, int32_t seq_num);
-  int refcnt_protect(bool& success, ObKVMemBlockHandle* mb_handle);
-  void refcnt_release();
-  void refcnt_reset();
-  void refcnt_move_from(HazptrHolder& other);
-  ObKVMemBlockHandle* refcnt_get_mb_handle() const;
-  int refcnt_assign(const HazptrHolder& other);
 
-union {
-  struct {
-    union {
-      HazardPointer* hazptr_;
-      SharedHazptr shared_hazptr_;
-    };
-    bool is_shared_;
+  union {
+    HazardPointer* hazptr_;
+    SharedHazptr shared_hazptr_;
   };
-  ObKVMemBlockHandle* mb_handle_;
-};
+  bool is_shared_;
 };
 
 template<typename T>
@@ -388,8 +375,7 @@ int HazardDomain::reclaim(F func)
   uint64_t reclaimed_memory_size = 0, retired_memory_size = ATOMIC_LOAD_RLX(&retired_memory_size_);
 
   // COMMON_LOG(INFO, "[KV_CACHE_HAZARD_DOMAIN] start to reclaim", K(free_list_size_), K(retired_memory_size));
-  if (OB_UNLIKELY(!GCONF._enable_kvcache_hazard_pointer)) {
-  } else if (retired_memory_size > 0) {
+  if (retired_memory_size > 0) {
     reclaim_list = ATOMIC_TAS(&retire_list_, nullptr);
     // MEM_BARRIER();
     if (OB_ISNULL(reclaim_list)) {

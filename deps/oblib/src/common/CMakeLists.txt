@@ -4,9 +4,6 @@ ob_set_subtarget(oblib_common common
   ob_accuracy.cpp
   ob_field.cpp
   ob_file_common_header.cpp
-  ob_member.cpp
-  ob_member_list.ipp
-  ob_learner_list.ipp
   ob_range.cpp
   ob_record_header.cpp
   ob_role.cpp
@@ -16,9 +13,8 @@ ob_set_subtarget(oblib_common common
   ob_string_buf.ipp
   ob_tablet_id.cpp
   ob_timeout_ctx.cpp
-  ob_zone_type.cpp
   ob_version_def.cpp
-  ob_tenant_data_version_mgr.cpp
+  ob_data_version_mgr.cpp
 )
 
 ob_set_subtarget(oblib_common common_mixed

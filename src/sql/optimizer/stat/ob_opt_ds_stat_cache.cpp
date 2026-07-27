@@ -32,10 +32,10 @@ int ObOptDSStatCache::get_value(const ObOptDSStat::Key &key, ObOptDSStatHandle &
     if (OB_ENTRY_NOT_EXIST != ret) {
       COMMON_LOG(WARN, "fail to get value from cache", K(ret), K(key));
     }
-    EVENT_INC(ObStatEventIds::OPT_DS_STAT_CACHE_MISS);
+    EVENT_INC(OPT_DS_STAT_CACHE_MISS);
   } else {
     handle.cache_ = this;
-    EVENT_INC(ObStatEventIds::OPT_DS_STAT_CACHE_HIT);
+    EVENT_INC(OPT_DS_STAT_CACHE_HIT);
   }
   return ret;
 }

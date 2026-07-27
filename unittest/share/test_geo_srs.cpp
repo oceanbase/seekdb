@@ -15,12 +15,12 @@
  */
  
 #include <gtest/gtest.h>
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #define private public
 #include "src/share/schema/ob_server_schema_service.h"
 #undef private
 namespace oceanbase {
 using namespace oceanbase::share::schema;
-using namespace omt; 
 namespace common {
 static common::ObMySQLProxy sql_proxy;
 class TestGeoSrs : public ::testing::Test {
@@ -55,15 +55,15 @@ TEST_F(TestGeoSrs, mock_srs_info)
 }
 TEST_F(TestGeoSrs, srs_mgr_srsid_4326)
 {
-  omt::ObTenantSrsMgr &tenant_srs_mgr_instance = OTSRS_MGR;
+  omt::ObSrsService &srs_service_instance = SRS_SERVICE;
   ObAddr tmp_addr(ObAddr::IPV4, "127.0.0.1", 80);
   ObMultiVersionSchemaService &tmp_schema_service = ObMultiVersionSchemaService::get_instance();
-  ASSERT_EQ(OB_SUCCESS, tenant_srs_mgr_instance.init(&sql_proxy, tmp_addr, &tmp_schema_service));
+  ASSERT_EQ(OB_SUCCESS, srs_service_instance.init(&sql_proxy, tmp_addr, &tmp_schema_service));
   const ObSrsItem *srs_item = NULL;
   uint64_t srs_id = 4326;
-  ASSERT_EQ(OB_HASH_NOT_EXIST, tenant_srs_mgr_instance.get_tenant_srs_item(OB_SYS_TENANT_ID, 1213, srs_item));
-  ASSERT_EQ(OB_HASH_NOT_EXIST, tenant_srs_mgr_instance.get_tenant_srs_item(1001, srs_id, srs_item));
-  ASSERT_EQ(OB_SUCCESS, tenant_srs_mgr_instance.get_tenant_srs_item(OB_SYS_TENANT_ID, srs_id, srs_item));
+  ASSERT_EQ(OB_HASH_NOT_EXIST, srs_service_instance.get_srs_item(OB_SERVER_RUNTIME_ID, 1213, srs_item));
+  ASSERT_EQ(OB_HASH_NOT_EXIST, srs_service_instance.get_srs_item(1001, srs_id, srs_item));
+  ASSERT_EQ(OB_SUCCESS, srs_service_instance.get_srs_item(OB_SERVER_RUNTIME_ID, srs_id, srs_item));
   ASSERT_EQ(srs_item->is_wgs84(), true);
   ASSERT_EQ(srs_item->srs_type(), ObSrsType::GEOGRAPHIC_SRS);
   ASSERT_EQ(srs_item->is_lat_long_order(), true);
@@ -88,7 +88,7 @@ TEST_F(TestGeoSrs, srs_mgr_srsid_4326)
   ASSERT_EQ(OB_SUCCESS, srs_item->longtitude_convert_from_radians(val, res));
   ASSERT_TRUE(std::abs(res - 15) < 0.001);
   
-  tenant_srs_mgr_instance.destroy();
+  srs_service_instance.destroy();
 }
 #endif
 } // namespace common

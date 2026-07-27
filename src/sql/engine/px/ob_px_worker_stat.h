@@ -69,7 +69,6 @@ public:
   static ObPxWorkerStatList &instance(); 
   int push(ObPxWorkerStat &stat_value);
   int remove(ObPxWorkerStat &stat_value);
-  // param[in] tenant  if tenant is sys, list all tenant stat, else list target tenant stat
   int list_to_array(common::ObArray<ObPxWorkerStat> &stat_array);
 private:
   common::ObDList<ObPxWorkerStat> worker_stat_list_;
@@ -84,4 +83,3 @@ private:
 }
 }
 #endif
-

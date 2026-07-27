@@ -180,7 +180,7 @@ int ObSessionValMap::free_mem()
         }
       }
     }
-    _OB_LOG(DEBUG, "[%ld] val migrate", count);
+    _OB_LOG(DEBUG, "[%ld] values copied", count);
     if (OB_SUCC(ret)) {
       str_buf_[current_buf_index_]->reuse();
       current_buf_index_ = next_index;

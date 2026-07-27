@@ -17,9 +17,9 @@
 #define USING_LOG_PREFIX RS
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_modify_autoinc_task.h"
-#include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_management_service.h"
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "share/ob_ddl_sim_point.h"
 #include "storage/ddl/ob_ddl_lock.h"
@@ -49,12 +49,12 @@ int ObUpdateAutoincSequenceTask::process()
 {
   int ret = OB_SUCCESS;
   ObTraceIdGuard trace_id_guard(trace_id_);
-  ObRootService *root_service = GCTX.root_service_;
+  ObLocalManagementService *local_management_service = GCTX.local_management_service_;
   int64_t max_value = 0;
   int tmp_ret = OB_SUCCESS;
-  if (OB_ISNULL(root_service)) {
+  if (OB_ISNULL(local_management_service)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, root service must not be nullptr", K(ret));
+    LOG_WARN("error sys, local management service must not be nullptr", K(ret));
   } else if (OB_UNLIKELY(column_id_ == OB_INVALID_ID || data_table_id_ == OB_INVALID_ID
              || orig_column_type_ >= ObMaxType || dest_table_id_ == OB_INVALID_ID)) {
     ret = OB_INVALID_ARGUMENT;
@@ -63,7 +63,7 @@ int ObUpdateAutoincSequenceTask::process()
   } else if (OB_FAIL(DDL_SIM(task_id_, UPDATE_AUTOINC_SEQUENCE_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(task_id_));
   } else {
-    ObDDLService &ddl_service = root_service->get_ddl_service();
+    ObDDLService &ddl_service = local_management_service->get_ddl_service();
     ObMultiVersionSchemaService &schema_service = ddl_service.get_schema_service();
     ObMySQLProxy &sql_proxy = ddl_service.get_sql_proxy();
     const ObTableSchema *table_schema = nullptr;
@@ -71,7 +71,7 @@ int ObUpdateAutoincSequenceTask::process()
     const ObColumnSchemaV2 *column_schema = nullptr;
     ObSchemaGetterGuard schema_guard;
     ObDDLTaskKey task_key(dest_table_id_, schema_version_);
-    if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
+    if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
       LOG_WARN("get schema guard failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema( dest_table_id_, table_schema))) {
       LOG_WARN("get data table schema failed", K(ret), K(dest_table_id_));
@@ -130,7 +130,7 @@ int ObUpdateAutoincSequenceTask::process()
   char table_id_buffer[256];
   snprintf(table_id_buffer, sizeof(table_id_buffer), "data_table_id:%ld, dest_table_id:%ld", 
             data_table_id_, dest_table_id_);
-  ROOTSERVICE_EVENT_ADD("ddl scheduler", "update autoinc sequence task process",
+  MANAGEMENT_EVENT_ADD("ddl scheduler", "update autoinc sequence task process",
     "ret", ret,
     K_(trace_id),
     K_(task_id),
@@ -319,13 +319,13 @@ int ObModifyAutoincTask::modify_autoinc()
 {
   int ret = OB_SUCCESS;
   bool is_update_autoinc_end = false;
-  ObRootService *root_service = GCTX.root_service_;
+  ObLocalManagementService *local_management_service = GCTX.local_management_service_;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
-  } else if (OB_ISNULL(root_service)) {
+  } else if (OB_ISNULL(local_management_service)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, root service must not be nullptr", K(ret));
+    LOG_WARN("error sys, local management service must not be nullptr", K(ret));
   } else if (OB_FAIL(DDL_SIM(task_id_, MODIFY_AUTOINC_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(task_id_));
   } else if (OB_FAIL(check_update_autoinc_end(is_update_autoinc_end))) {
@@ -335,10 +335,10 @@ int ObModifyAutoincTask::modify_autoinc()
     const ObTableSchema *orig_table_schema = nullptr;
     ObTableSchema new_table_schema;
     ObSchemaGetterGuard schema_guard;
-    ObDDLService &ddl_service = root_service->get_ddl_service();
+    ObDDLService &ddl_service = local_management_service->get_ddl_service();
     ObMultiVersionSchemaService &schema_service = ddl_service.get_schema_service();
     const AlterTableSchema &alter_table_schema = alter_table_arg_.alter_table_schema_;
-    if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
+    if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
       LOG_WARN("get schema guard failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, orig_table_schema))) {
       LOG_WARN("get data table schema failed", K(ret), K(object_id_));
@@ -375,7 +375,7 @@ int ObModifyAutoincTask::modify_autoinc()
           ObUpdateAutoincSequenceTask task(object_id_, target_object_id_, schema_version_,
                                           alter_column_id, column_type, alter_table_arg_.sql_mode_,
                                           trace_id_, task_id_);
-          if (OB_FAIL(root_service->submit_ddl_single_replica_build_task(task))) {
+          if (OB_FAIL(local_management_service->submit_ddl_local_build_task(task))) {
             LOG_WARN("fail to submit ObUpdateAutoincSequenceTask", K(ret));
           } else {
             update_autoinc_job_time_ = ObTimeUtility::current_time();
@@ -400,13 +400,13 @@ int ObModifyAutoincTask::wait_trans_end()
   int tmp_ret = OB_SUCCESS;
   ObDDLTaskStatus new_status = WAIT_TRANS_END;
   const ObDDLTaskStatus next_task_status = SUCCESS;
-  ObRootService *root_service = GCTX.root_service_;
+  ObLocalManagementService *local_management_service = GCTX.local_management_service_;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
-  } else if (OB_ISNULL(root_service)) {
+  } else if (OB_ISNULL(local_management_service)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, root service must not be nullptr", K(ret));
+    LOG_WARN("error sys, local management service must not be nullptr", K(ret));
   } else if (snapshot_version_ > 0) {
     new_status = next_task_status;
   }
@@ -414,9 +414,9 @@ int ObModifyAutoincTask::wait_trans_end()
   if (OB_SUCC(ret) && new_status != next_task_status && !wait_trans_ctx_.is_inited()) {
     const ObTableSchema *updated_table_schema = nullptr;
     ObSchemaGetterGuard schema_guard;
-    ObDDLService &ddl_service = root_service->get_ddl_service();
+    ObDDLService &ddl_service = local_management_service->get_ddl_service();
     ObMultiVersionSchemaService &schema_service = ddl_service.get_schema_service();
-    if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
+    if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
       LOG_WARN("get schema guard failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, updated_table_schema))) {
       LOG_WARN("get data table schema failed", K(ret), K(object_id_));
@@ -470,7 +470,7 @@ int ObModifyAutoincTask::set_schema_available()
     
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(object_id_, rpc_timeout))) {
       LOG_WARN("get rpc timeout failed", K(ret));
-    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->        execute_ddl_task(alter_table_arg_, unused_ids); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->        execute_ddl_task(alter_table_arg_, unused_ids); }))) {
       LOG_WARN("alter table failed", K(ret));
     }
   }
@@ -498,7 +498,7 @@ int ObModifyAutoincTask::rollback_schema()
         alter_table_arg.alter_table_schema_.reset_column_info();
         if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(object_id_, rpc_timeout))) {
           LOG_WARN("get rpc timeout failed", K(ret));
-        } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->            execute_ddl_task(alter_table_arg, unused_ids); }))) {
+        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->            execute_ddl_task(alter_table_arg, unused_ids); }))) {
           LOG_WARN("alter table failed", K(ret));
         }
       }
@@ -595,7 +595,7 @@ int ObModifyAutoincTask::check_health()
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *index_schema = nullptr;
     bool is_source_table_exist = false;
-    if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
+    if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
       LOG_WARN("get tanant schema guard failed", K(ret));
     } else if (OB_FAIL(schema_guard.check_table_exist(object_id_, is_source_table_exist))) {
       LOG_WARN("check data table exist failed", K(ret), K(object_id_));

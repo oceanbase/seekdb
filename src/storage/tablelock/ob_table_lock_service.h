@@ -226,13 +226,13 @@ public:
       is_inited_(false) {}
   ~ObTableLockService() {}
   int init();
-  static int mtl_init(ObTableLockService* &lock_service);
+  static int server_module_init(ObTableLockService* &lock_service);
   int start();
   void stop();
   void wait();
   void destroy();
 
-  // generate a tenant unique owner id
+  // Generate an owner ID unique within the database runtime.
   // this owner id can be used to link OUT_TRANS_LOCK and OUT_TRANS_UNLOCK operation.
   // ---------------------------- interface for OUT_TRANS lock ------------------------------/
   // lock and unlock with anonymous trans.

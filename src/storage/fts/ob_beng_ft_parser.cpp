@@ -20,7 +20,6 @@
 #include "storage/fts/ob_fts_struct.h"
 
 using namespace oceanbase::common;
-using namespace oceanbase::plugin;
 
 namespace oceanbase
 {
@@ -129,22 +128,7 @@ void ObBEngFTParser::reset()
   is_inited_ = false;
 }
 
-ObBasicEnglishFTParserDesc::ObBasicEnglishFTParserDesc()
-  : is_inited_(false)
-{
-}
-
-int ObBasicEnglishFTParserDesc::init(ObPluginParam *param)
-{
-  is_inited_ = true;
-  return OB_SUCCESS;
-}
-
-int ObBasicEnglishFTParserDesc::deinit(ObPluginParam *param)
-{
-  reset();
-  return OB_SUCCESS;
-}
+ObBasicEnglishFTParserDesc::ObBasicEnglishFTParserDesc() {}
 
 int ObBasicEnglishFTParserDesc::segment(
     ObFTParserParam *param,
@@ -152,10 +136,7 @@ int ObBasicEnglishFTParserDesc::segment(
 {
   int ret = OB_SUCCESS;
   ObBEngFTParser *parser = nullptr;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("default ft parser desc hasn't be initialized", K(ret), K(is_inited_));
-  } else if (OB_ISNULL(param) || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
+  if (OB_ISNULL(param) || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(param));
   } else if (OB_ISNULL(parser = OB_NEWx(ObBEngFTParser, param->allocator_, *(param->allocator_)))) {

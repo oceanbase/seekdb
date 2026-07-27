@@ -78,7 +78,6 @@ struct ObMicroBlockDataHandle
   int32_t block_index_;
   blocksstable::ObMicroBlockInfo micro_info_;
   blocksstable::ObMicroBlockDesMeta des_meta_;
-  char encrypt_key_[share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH];
   blocksstable::ObMicroBlockBufferHandle cache_handle_;
   blocksstable::ObStorageObjectHandle io_handle_;
   ObMicroBlockHandleMgr *handle_mgr_;

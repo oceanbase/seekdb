@@ -18,14 +18,9 @@
           "name": "max_syslog_file_count",
           "value": 80,
           "comment": "when enable_syslog_recycle is enabled, should set this value to a proper value. 80 is an empirical value."
-        },
-        {
-          "name": "__min_full_resource_pool_memory",
-          "value": 2147483648,
-          "comment": "the min memory value which is specified for a full resource pool."
         }
       ],
-      "tenant": [
+      "runtime": [
       ]
     }
   },
@@ -48,14 +43,9 @@
           "name": "max_syslog_file_count",
           "value": 80,
           "comment": "when enable_syslog_recycle is enabled, should set this value to a proper value. 80 is an empirical value."
-        },
-        {
-          "name": "__min_full_resource_pool_memory",
-          "value": 2147483648,
-          "comment": "the min memory value which is specified for a full resource pool."
         }
       ],
-      "tenant": [
+      "runtime": [
       ]
     }
   },
@@ -78,14 +68,9 @@
           "name": "max_syslog_file_count",
           "value": 80,
           "comment": "when enable_syslog_recycle is enabled, should set this value to a proper value. 80 is an empirical value."
-        },
-        {
-          "name": "__min_full_resource_pool_memory",
-          "value": 2147483648,
-          "comment": "the min memory value which is specified for a full resource pool."
         }
       ],
-      "tenant": [
+      "runtime": [
       ]
     }
   },
@@ -108,14 +93,9 @@
           "name": "max_syslog_file_count",
           "value": 80,
           "comment": "when enable_syslog_recycle is enabled, should set this value to a proper value. 80 is an empirical value."
-        },
-        {
-          "name": "__min_full_resource_pool_memory",
-          "value": 2147483648,
-          "comment": "the min memory value which is specified for a full resource pool."
         }
       ],
-      "tenant": [
+      "runtime": [
       ]
     }
   }

@@ -27,7 +27,7 @@ void request_finish_callback()
   bool unused = false;
   memtable::ObLockWaitMgr *lock_wait_mgr = share::g_mp->lock_wait_mgr();
   if (OB_ISNULL(lock_wait_mgr)) {
-    TRANS_LOG(TRACE, "MTL(lock wait mgr) is null");
+    TRANS_LOG(TRACE, "server lock wait mgr is null");
   } else {
     lock_wait_mgr->post_process(false, unused);
   }
@@ -80,7 +80,7 @@ ObLockWaitMgr::ObLockWaitMgr()
 
 ObLockWaitMgr::~ObLockWaitMgr() {}
 
-int ObLockWaitMgr::mtl_init(ObLockWaitMgr *&lock_wait_mgr)
+int ObLockWaitMgr::server_module_init(ObLockWaitMgr *&lock_wait_mgr)
 {
   return lock_wait_mgr->init();
 }
@@ -94,7 +94,7 @@ int ObLockWaitMgr::init()
   } else if (OB_FAIL(row_holder_mapper_.init())) {
     TRANS_LOG(WARN, "can't init row_holder", KR(ret));
   } else {
-    share::ObThreadPool::set_run_wrapper(MTL_CTX());
+    share::ObThreadPool::set_run_wrapper(share::server_runtime());
     last_check_session_idle_ts_ = ObClockGenerator::getClock();
     total_wait_node_ = 0;
     is_inited_ = true;
@@ -535,24 +535,10 @@ void ObLockWaitMgr::retire_node(ObLink*& tail, Node* node)
   }
 }
 
-void ObLockWaitMgr::delay_header_node_run_ts(const uint64_t hash)
-{
-  Node* node = NULL;
-  CriticalGuard(get_qs());
-  node = hash_.get_next_internal(hash);
-  if (NULL != node && !node->is_dummy()) {
-    // delay the execution of the header node by 10ms to ensure that the remote
-    // request can be executed successfully
-    node->update_run_ts(ObTimeUtility::current_time() + 50 * 1000);
-    TRANS_LOG(INFO, "LOCK_MGR: delay header node");
-  }
-}
-
 int ObLockWaitMgr::post_lock(const int tmp_ret,
                              const ObTabletID &tablet_id,
                              const ObStoreRowkey &row_key,
                              const int64_t timeout,
-                             const bool is_remote_sql,
                              const int64_t last_compact_cnt,
                              const int64_t total_trans_node_cnt,
                              const uint32_t sess_id,
@@ -577,9 +563,6 @@ int ObLockWaitMgr::post_lock(const int tmp_ret,
         uint64_t hash = wait_on_row ? row_hash : tx_hash;
         if (hold_key == hash) {
           hold_key = 0;
-        }
-        if (is_remote_sql) {
-          delay_header_node_run_ts(hash);
         }
         transaction::ObTransService *tx_service = nullptr;
         uint32_t holder_session_id = sql::ObSQLSessionInfo::INVALID_SESSID;
@@ -622,7 +605,6 @@ int ObLockWaitMgr::post_lock(const int tmp_ret,
                              const ObTabletID &tablet_id,
                              const ObLockID &lock_id,
                              const int64_t timeout,
-                             const bool is_remote_sql,
                              const int64_t last_compact_cnt,
                              const int64_t total_trans_node_cnt,
                              const uint32_t sess_id,
@@ -640,16 +622,12 @@ int ObLockWaitMgr::post_lock(const int tmp_ret,
   } else if (NULL == (node = get_thread_node())) {
   } else if (OB_TRY_LOCK_ROW_CONFLICT == tmp_ret) {
     uint64_t hash = LockHashHelper::hash_lock_id(lock_id);
-    const bool need_delay = is_remote_sql;
     char lock_id_buf[common::MAX_LOCK_ID_BUF_LENGTH];
     lock_id.to_string(lock_id_buf, sizeof(lock_id_buf));
     lock_id_buf[common::MAX_LOCK_ID_BUF_LENGTH - 1] = '\0';
     uint64_t &hold_key = get_thread_hold_key();
     if (hold_key == hash) {
       hold_key = 0;
-    }
-    if (need_delay) {
-      delay_header_node_run_ts(hash);
     }
     int64_t lock_seq = get_seq(hash);
     bool need_wait = false;

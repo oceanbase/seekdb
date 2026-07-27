@@ -85,16 +85,6 @@ void ObSchemaStore::update_baseline_schema_version(int64_t version)
   }
 }
 
-void ObSchemaStore::update_consensus_version(int64_t version)
-{
-  if (version > consensus_version_) {
-    inc_update(&consensus_version_, version);
-    LOG_INFO("[SCHEMA_STORE] schema store update version",
-             K(version), K_(consensus_version));
-  }
-}
-
-
 }; // end namespace schema
 }; // end namespace share
 }; // end namespace oceanbase

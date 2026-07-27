@@ -76,30 +76,6 @@ struct ObLSVTInfo
                K_(tablet_change_checkpoint_scn),
                K_(tx_blocked));
 };
-// Diagnose vtable statistics information
-struct DiagnoseInfo
-{
-  DiagnoseInfo() { reset(); }
-  ~DiagnoseInfo() { reset(); }
-  palf::PalfDiagnoseInfo palf_diagnose_info_;
-  logservice::ApplyDiagnoseInfo apply_diagnose_info_;
-  logservice::ReplayDiagnoseInfo replay_diagnose_info_;
-  checkpoint::ObLsClogCheckpointStat ls_clog_checkpoint_stat_;
-  char read_only_tx_info_[1024];
-  TO_STRING_KV(K(palf_diagnose_info_),
-               K(apply_diagnose_info_),
-               K(replay_diagnose_info_),
-               K(ls_clog_checkpoint_stat_),
-               K(read_only_tx_info_));
-  void reset() {
-    palf_diagnose_info_.reset();
-    apply_diagnose_info_.reset();
-    replay_diagnose_info_.reset();
-    ls_clog_checkpoint_stat_.reset();
-    read_only_tx_info_[0] = '\0';
-  }
-};
-
 class ObIComponentFactory;
 
 class ObLS
@@ -198,6 +174,7 @@ public:
   int get_ls_info(ObLSVTInfo &ls_info);
   // set disk state of ls.
   int set_start_work_state();
+  int set_start_restore_state();
   int set_remove_state();
   ObLSPersistentState get_persistent_state() const;
   int finish_create_ls();
@@ -243,17 +220,10 @@ public:
   int check_can_replay_clog(bool &can_replay);
   int check_ls_need_online(bool &need_online);
 
-  // for delaying the resource recycle after correctness issue
-  bool need_delay_resource_recycle() const;
-  void set_delay_resource_recycle();
-  void clear_delay_resource_recycle();
-
   TO_STRING_KV(K_(running_state), K_(ls_meta), K_(switch_epoch), K_(log_handler) ,K_(is_inited),
-    K_(tablet_gc_handler), K_(need_delay_resource_recycle));
+    K_(tablet_gc_handler));
 private:
   void update_state_seq_();
-  int ls_init_for_dup_table_();
-  int ls_destory_for_dup_table_();
   int stop_();
   void wait_();
   int prepare_for_safe_destroy_();
@@ -315,10 +285,6 @@ public:
   // @param [out] restore status.
   // int get_restore_status(share::ObRestoreStatus &status);
   DELEGATE_WITH_RET(ls_meta_, get_restore_status, int);
-  // get offline ts
-  // @param [in] offline ts.
-  // int get_offline_scn(const share::SCN &offline_scn);
-  DELEGATE_WITH_RET(ls_meta_, get_offline_scn, int);
   // @param [in] replayable point.
   int update_ls_replayable_point(const share::SCN &replayable_point)
   {
@@ -329,7 +295,7 @@ public:
   // @param [in] replayable point
   // int get_ls_replayable_point(int64_t &replayable_point);
   DELEGATE_WITH_RET(ls_meta_, get_ls_replayable_point, int);
-    // ObLSTabletService interface:
+  // ObLSTabletService interface:
   // update tablet by checkpoint
   // @param [in] key, key of tablet that will be updated
   // @param [in] new_addr, new addr of the tablet
@@ -376,7 +342,7 @@ public:
   // int remove_ls_inner_tablet(
   //     const common::ObTabletID &tablet_id);
   DELEGATE_WITH_RET(ls_tablet_svr_, remove_ls_inner_tablet, int);
-  DELEGATE_WITH_RET(ls_tablet_svr_, update_tablet_column_store_schema, int);
+  DELEGATE_WITH_RET(ls_tablet_svr_, get_tablet_without_memtables, int);
   DELEGATE_WITH_RET(ls_tablet_svr_, update_tablet_restore_status, int);
   DELEGATE_WITH_RET(ls_tablet_svr_, flush_mds_table, int);
   DELEGATE_WITH_RET(ls_tablet_svr_, get_tablet_with_timeout, int);
@@ -448,14 +414,11 @@ public:
   DELEGATE_WITH_RET(lock_table_, check_and_clear_obj_lock, int);
   DELEGATE_WITH_RET(lock_table_, add_lock_into_queue, int);
 
-  DELEGATE_WITH_RET(log_handler_, bootstrap, int);
-
   // disable clog sync.
   // with ls read lock and log write lock.
   // WARNING: must has ls read lock and log write lock.
   // @brief, disable replay for current ls.
   // with ls read lock and log write lock.
-  int disable_replay();
   // WARNING: must has ls read lock and log write lock.
   // @brief, get max decided log scn considering both apply and replay.
   // @param[out] share::SCN&, max decided log scn.
@@ -620,7 +583,7 @@ public:
   // @param [in] abs_timeout_ts, wait until timeout if lock conflict
   int advance_checkpoint_by_flush(share::SCN recycle_scn,
                                   const int64_t abs_timeout_ts = INT64_MAX,
-                                  const bool is_tenant_freeze = false,
+                                  const bool is_global_freeze = false,
                                   const ObFreezeSourceFlag source = ObFreezeSourceFlag::INVALID_SOURCE);
 
   // ObDataCheckpoint interface:
@@ -649,8 +612,6 @@ public:
       const ObTableHandleV2 &mds_mini_sstable_handle,
       const share::SCN &flush_scn,
       ObTabletHandle &handle);
-  int diagnose(DiagnoseInfo &info) const;
-
   DELEGATE_WITH_RET(reserved_snapshot_mgr_, replay_reserved_snapshot_log, int);
   DELEGATE_WITH_RET(reserved_snapshot_mgr_, get_min_reserved_snapshot, int64_t);
   DELEGATE_WITH_RET(reserved_snapshot_mgr_, add_dependent_medium_tablet, int);
@@ -725,8 +686,6 @@ private:
   // this is used for the meta lock, and will be removed later
   RWLock meta_rwlock_;
 
-  // for delaying the resource recycle after correctness issue
-  bool need_delay_resource_recycle_;
 };
 
 }

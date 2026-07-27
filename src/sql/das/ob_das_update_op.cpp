@@ -30,12 +30,12 @@ namespace common
 namespace serialization
 {
 template <>
-struct EnumEncoder<false, const sql::ObDASUpdCtDef *> : sql::DASCtEncoder<sql::ObDASUpdCtDef>
+struct EnumEncoder<false, const sql::ObDASUpdCtDef *> : sql::DASCtRefEncoder<sql::ObDASUpdCtDef>
 {
 };
 
 template <>
-struct EnumEncoder<false, sql::ObDASUpdRtDef *> : sql::DASRtEncoder<sql::ObDASUpdRtDef>
+struct EnumEncoder<false, sql::ObDASUpdRtDef *> : sql::DASRtRefEncoder<sql::ObDASUpdRtDef>
 {
 };
 } // end namespace serialization
@@ -513,53 +513,12 @@ int ObDASUpdateOp::record_task_result_to_rtdef()
   return ret;
 }
 
-int ObDASUpdateOp::decode_task_result(ObIDASTaskResult *task_result)
-{
-  int ret = OB_SUCCESS;
-#if !defined(NDEBUG)
-  CK(typeid(*task_result) == typeid(ObDASUpdateResult));
-  CK(task_id_ == task_result->get_task_id());
-#endif
-  if (OB_SUCC(ret)) {
-    ObDASUpdateResult *del_result = static_cast<ObDASUpdateResult*>(task_result);
-    affected_rows_ = del_result->get_affected_rows();
-  }
-  return ret;
-}
-
-int ObDASUpdateOp::fill_task_result(ObIDASTaskResult &task_result, bool &has_more, int64_t &memory_limit)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(memory_limit);
-#if !defined(NDEBUG)
-  CK(typeid(task_result) == typeid(ObDASUpdateResult));
-#endif
-  if (OB_SUCC(ret)) {
-    ObDASUpdateResult &del_result = static_cast<ObDASUpdateResult&>(task_result);
-    del_result.set_affected_rows(affected_rows_);
-    has_more = false;
-  }
-  return ret;
-}
-
 int ObDASUpdateOp::init_task_info(uint32_t row_extend_size)
 {
   int ret = OB_SUCCESS;
   if (!write_buffer_.is_inited()
       && OB_FAIL(write_buffer_.init(op_alloc_, row_extend_size, "DASUpdateBuffer"))) {
     LOG_WARN("init update buffer failed", K(ret));
-  }
-  return ret;
-}
-
-int ObDASUpdateOp::swizzling_remote_task(ObDASRemoteInfo *remote_info)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIDASTaskOp::swizzling_remote_task(remote_info))) {
-    LOG_WARN("fail to swizzling remote task", K(ret));
-  } else if (remote_info != nullptr) {
-    //DAS update is executed remotely
-    trans_desc_ = remote_info->trans_desc_;
   }
   return ret;
 }
@@ -583,31 +542,5 @@ OB_SERIALIZE_MEMBER((ObDASUpdateOp, ObIDASTaskOp),
                     upd_rtdef_,
                     write_buffer_);
 
-ObDASUpdateResult::ObDASUpdateResult()
-  : ObIDASTaskResult(),
-    affected_rows_(0)
-{
-}
-
-ObDASUpdateResult::~ObDASUpdateResult()
-{
-}
-
-int ObDASUpdateResult::init(const ObIDASTaskOp &op, common::ObIAllocator &alloc)
-{
-  UNUSED(op);
-  UNUSED(alloc);
-  return OB_SUCCESS;
-}
-
-int ObDASUpdateResult::reuse()
-{
-  int ret = OB_SUCCESS;
-  affected_rows_ = 0;
-  return ret;
-}
-
-OB_SERIALIZE_MEMBER((ObDASUpdateResult, ObIDASTaskResult),
-                    affected_rows_);
 }  // namespace sql
 }  // namespace oceanbase

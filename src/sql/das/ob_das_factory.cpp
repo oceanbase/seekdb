@@ -24,7 +24,6 @@
 #include "sql/das/ob_das_ir_define.h"
 #include "sql/das/ob_das_vec_define.h"
 #include "share/datum/ob_datum_util.h"
-#include "sql/das/ob_das_extra_data.h"
 
 #define STORE_DAS_OBJ(obj_store, das_obj, class_name)       \
   if (OB_SUCC(ret)) {                                       \
@@ -43,8 +42,6 @@ namespace sql
 template <int TYPE>
   struct AllocDASOpHelper;
 template <int TYPE>
-  struct AllocDASOpResultHelper;
-template <int TYPE>
   struct AllocDASCtDefHelper;
 template <int TYPE>
   struct AllocDASRtDefHelper;
@@ -60,13 +57,6 @@ template <>
 struct AllocDASOpHelper<0>
 {
   static int alloc(ObIAllocator &, ObIDASTaskOp *&)
-  { return report_not_registered(0); }
-};
-
-template <>
-struct AllocDASOpResultHelper<0>
-{
-  static int alloc(ObIAllocator &, ObIDASTaskResult *&)
   { return report_not_registered(0); }
 };
 
@@ -97,24 +87,6 @@ struct AllocDASOpHelper
       LOG_WARN("allocate Op buffer failed", K(ret), K(sizeof(OpType)));
     } else {
       das_op = new(buffer) OpType(alloc);
-    }
-    return ret;
-  }
-};
-
-template <int TYPE>
-struct AllocDASOpResultHelper
-{
-  static int alloc(ObIAllocator &alloc, ObIDASTaskResult *&op_result)
-  {
-    int ret = OB_SUCCESS;
-    typedef typename das_reg::ObDASOpTypeTraits<TYPE>::DASOpResult OpResultType;
-    void *buffer = nullptr;
-    if (OB_ISNULL(buffer = alloc.alloc(sizeof(OpResultType)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate OpResult buffer failed", K(ret), K(sizeof(OpResultType)));
-    } else {
-      op_result = new(buffer) OpResultType();
     }
     return ret;
   }
@@ -172,7 +144,6 @@ struct DASInitAllocFunc
     static constexpr int attached = das_reg::ObDASOpTypeTraits<N>::attached_;
     G_DAS_ALLOC_FUNCTION_ARRAY[N] = ObDASTaskFactory::AllocFun {
           ((registered && !attached) ? &AllocDASOpHelper<N * registered>::alloc : NULL),
-          ((registered && !attached) ? &AllocDASOpResultHelper<N * registered>::alloc : NULL),
           (registered ? &AllocDASCtDefHelper<N * registered>::alloc : NULL),
           (registered ? &AllocDASRtDefHelper<N * registered>::alloc : NULL)
     };
@@ -183,8 +154,6 @@ bool G_DAS_ALLOC_FUNC_SET = common::ObArrayConstIniter<DAS_OP_MAX, DASInitAllocF
 
 ObDASTaskFactory::ObDASTaskFactory(ObIAllocator &allocator)
   : das_op_store_(allocator),
-    das_result_store_(allocator),
-    das_extra_data_store_(allocator),
     ctdef_store_(allocator),
     rtdef_store_(allocator),
     allocator_(allocator)
@@ -252,33 +221,6 @@ int ObDASTaskFactory::create_das_task_op(ObDASOpType op_type, ObIDASTaskOp *&das
   return ret;
 }
 
-int ObDASTaskFactory::create_das_task_result(ObDASOpType op_type, ObIDASTaskResult *&das_result)
-{
-  int ret = OB_SUCCESS;
-  if (!is_registered(op_type)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid das op type", K(ret), K(op_type));
-  } else if (OB_FAIL(G_DAS_ALLOC_FUNCTION_ARRAY[op_type].result_func_(allocator_, das_result))) {
-    LOG_WARN("allocate das task op result failed", K(ret), K(op_type));
-  }
-  STORE_DAS_OBJ(das_result_store_, das_result, ObIDASTaskResult);
-  return ret;
-}
-
-int ObDASTaskFactory::create_das_extra_data(ObDASExtraData *&extra_result)
-{
-  int ret = OB_SUCCESS;
-  void *buffer = nullptr;
-  if (OB_ISNULL(buffer = allocator_.alloc(sizeof(ObDASExtraData)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc das extra result buffer failed", K(ret), K(sizeof(ObDASExtraData)));
-  } else {
-    extra_result = new(buffer) ObDASExtraData();
-    STORE_DAS_OBJ(das_extra_data_store_, extra_result, ObDASExtraData);
-  }
-  return ret;
-}
-
 void ObDASTaskFactory::cleanup()
 {
   if (OB_LIKELY(!das_op_store_.empty())) {
@@ -292,30 +234,6 @@ void ObDASTaskFactory::cleanup()
       }
     }
     das_op_store_.clear();
-  }
-  if (OB_UNLIKELY(!das_result_store_.empty())) {
-    for (DasResultIter result_iter = das_result_store_.begin();
-        !result_iter.is_end();
-        ++result_iter) {
-      ObIDASTaskResult *op_result = result_iter.get_item();
-      if (op_result != nullptr) {
-        op_result->~ObIDASTaskResult();
-        op_result = nullptr;
-      }
-    }
-    das_result_store_.clear();
-  }
-  if (OB_UNLIKELY(!das_extra_data_store_.empty())) {
-    for (DasExtraDataIter extra_iter = das_extra_data_store_.begin();
-        !extra_iter.is_end();
-        ++extra_iter) {
-      ObDASExtraData *extra_result = extra_iter.get_item();
-      if (extra_result != nullptr) {
-        extra_result->~ObDASExtraData();
-        extra_result = nullptr;
-      }
-    }
-    das_extra_data_store_.clear();
   }
   if (OB_UNLIKELY(!ctdef_store_.empty())) {
     for (DasCtDefIter ctdef_iter = ctdef_store_.begin();

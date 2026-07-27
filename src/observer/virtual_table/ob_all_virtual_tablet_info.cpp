@@ -138,7 +138,7 @@ int ObAllVirtualTabletInfo::inner_get_next_row(ObNewRow *&row)
         case OB_APP_MIN_COLUMN_ID + 6: {
           // restore_status
           ObTabletRestoreStatus::STATUS restore_status;
-          if (OB_FAIL(tablet_meta.restore_state_.get_restore_status(restore_status))) {
+          if (OB_FAIL(tablet_meta.local_status_.get_restore_status(restore_status))) {
             SERVER_LOG(WARN, "failed to get restore status", K(ret), K(tablet_meta));
           } else {
             cur_row_.cells_[i].set_int(restore_status);

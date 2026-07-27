@@ -263,14 +263,6 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
         }
       }
     }
-    if (OB_NOT_NULL(session_info_)
-        && true
-        /*&& !session_info_->is_inner()*/) {
-      // Low version upgrade to 2274, the old upgrade script included the creation of Package statements, some statements will produce Warning on 2274 Server
-      // For example: Create Package pack IS Procedure proc(x Boolean := 1); End; will report a Warning of illegal default value for Boolean expression
-      // 2274's upgrade script will also rebuild this package using the latest Package script to avoid the upgrade failure caused by generated Warnings, here we clean up the Warnings
-      common::ob_reset_tsi_warning_buffer();
-    }
     if (need_reset_default_database) {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = session_info_->set_default_database(old_database_name.string()))) {
@@ -364,9 +356,6 @@ int ObCreatePackageResolver::resolve_functions_spec(const ObPackageInfo &package
       }
       if (pl_routine_info->is_parallel_enable()) {
         routine_info.set_parallel_enable();
-      }
-      if (pl_routine_info->is_pipelined()) {
-        routine_info.set_pipelined();
       }
       //set data access info 
       if (pl_routine_info->is_no_sql()) {
@@ -712,20 +701,6 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
         error_info.collect_error_info(&pkg_info);
       }
     }
-    if (OB_NOT_NULL(session_info_)
-        && true
-        /*&& !session_info_->is_inner()*/) {
-      /* NOTE: REMOVE IS_INNER
-       * Some system package like dbms_utility may produce warings in create stage under system tenant.
-       * It will failed upgrade OCEANBASE.
-       * But package still work, It will recompile in normal tenant without warnings.
-       * So here, we ignore warnings in system package create stage.
-       */
-      // Low version upgrade to 2274, the old upgrade script included the creation of Package statements, some statements will produce Warning on 2274 Server
-      // For example: Create Package pack IS Procedure proc(x Boolean := 1); End; will report a Warning of illegal default value for Boolean expression
-      // 2274's upgrade script will also rebuild this package using the latest Package script to avoid the upgrade failure caused by the generated Warning, here we clean up the Warning
-      common::ob_reset_tsi_warning_buffer();
-    }
   }
   return ret;
 }
@@ -777,9 +752,6 @@ int ObCreatePackageBodyResolver::update_routine_route_sql(ObIAllocator &allocato
           }
           if (pl_routine_info->is_rps()) {
             routine_info.set_rps();
-          }
-          if (pl_routine_info->is_has_sequence()) {
-            routine_info.set_has_sequence();
           }
           if (pl_routine_info->is_has_out_param()) {
             routine_info.set_has_out_param();

@@ -33,8 +33,7 @@ public:
     const int64_t last_major_snapshot);
   static int check_next_schedule_medium(
     const ObMediumCompactionInfo &next_schedule_info,
-    const int64_t last_major_snapshot,
-    const bool force_check = true);
+    const int64_t last_major_snapshot);
 
 private:
   static int check_continue(

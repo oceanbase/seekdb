@@ -41,24 +41,6 @@ struct ObCheckpointVTInfo
   );
 };
 
-struct ObLsClogCheckpointStat
-{
-  ObLsClogCheckpointStat() { reset(); }
-  ~ObLsClogCheckpointStat() { reset(); }
-  share::SCN clog_checkpoint_scn_;
-  share::SCN min_rec_scn_;
-  logservice::ObLogBaseType min_rec_scn_log_type_;
-  TO_STRING_KV(K(clog_checkpoint_scn_),
-               K(min_rec_scn_),
-               K(min_rec_scn_log_type_));
-  void reset()
-  {
-    clog_checkpoint_scn_.reset();
-    min_rec_scn_.reset();
-    min_rec_scn_log_type_ = logservice::ObLogBaseType::INVALID_LOG_BASE_TYPE;
-  }
-};
-
 class ObCheckpointExecutor
 {
 public:
@@ -90,8 +72,6 @@ public:
 
 
   void get_min_rec_scn(int &log_type, share::SCN &min_rec_scn) const;
-
-  int get_clog_checkpoint_stat(ObLsClogCheckpointStat &stat) const;
 
   int traversal_flush() const;
 

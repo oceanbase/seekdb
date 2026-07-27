@@ -106,7 +106,7 @@ call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
 'my_model_endpoint4', '{
     "ai_model_name" : "my_model3"
   }');
-ERROR HY000: This ai model endpoint 'my_model_endpoint4' not found in the tenant
+ERROR HY000: This AI model endpoint 'my_model_endpoint4' was not found
 call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint1');
 call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint4');
 call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
@@ -122,9 +122,9 @@ ENDPOINT_NAME	AI_MODEL_NAME	SCOPE	URL	ACCESS_KEY = 'sk-xxxxxxxxxxxx'	PROVIDER	RE
 my_model_endpoint4	my_model4	ALL	https://www.baidu.com/	1	openai	text-embedding-v2	NULL	NULL	NULL
 call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint4');
 call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint2');
-ERROR HY000: This ai model endpoint 'my_model_endpoint2' not found in the tenant
+ERROR HY000: This AI model endpoint 'my_model_endpoint2' was not found
 call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint3');
-ERROR HY000: This ai model endpoint 'my_model_endpoint3' not found in the tenant
+ERROR HY000: This AI model endpoint 'my_model_endpoint3' was not found
 call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('');
 ERROR HY000: The param 'name' is empty or null
 call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('user_ai_model_endpoint_1');

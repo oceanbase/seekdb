@@ -42,7 +42,7 @@ ObMultiVersionGarbageCollector::ObMultiVersionGarbageCollector()
 
 ObMultiVersionGarbageCollector::~ObMultiVersionGarbageCollector() {}
 
-int ObMultiVersionGarbageCollector::mtl_init(ObMultiVersionGarbageCollector *&m)
+int ObMultiVersionGarbageCollector::server_module_init(ObMultiVersionGarbageCollector *&m)
 {
   return m->init();
 }
@@ -224,8 +224,8 @@ int ObMultiVersionGarbageCollector::study()
   if (OB_SUCC(ret)) {
     bool is_primary = true;
     
-    if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(is_primary))) {
-      MVCC_LOG(WARN, "fail to execute mtl_check_if_tenant_role_is_primary", KR(ret));
+    if (OB_FAIL(ObShareUtil::check_if_server_role_is_primary(is_primary))) {
+      MVCC_LOG(WARN, "fail to execute check_if_server_role_is_primary", KR(ret));
     } else if (is_primary && OB_FAIL(study_min_unallocated_WRS(min_unallocated_WRS))) {
       MVCC_LOG(WARN, "study min unallocated GTS failed", K(ret), K(is_primary));
     } else if (!min_unallocated_WRS.is_valid() || min_unallocated_WRS.is_min()) {

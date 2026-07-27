@@ -139,15 +139,12 @@ int ObAllVirtualMemoryInfo::inner_get_next_row(ObNewRow *&row)
       };
       {
         for (int ctx_id = 0; ctx_id < ObCtxIds::MAX_CTX_ID; ctx_id++) {
-          auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(ctx_id);
-          if (nullptr == ta) {
-            ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator_unrecycled(ctx_id);
-          }
-          if (nullptr == ta) {
+          auto ctx_allocator = ObMallocAllocator::get_instance()->get_ctx_allocator(ctx_id);
+          if (nullptr == ctx_allocator) {
             continue;
           }
           if (OB_SUCC(ret)) {
-            ret = ta->iter_label([&](lib::ObLabel &label, LabelItem *l_item)
+            ret = ctx_allocator->iter_label([&](lib::ObLabel &label, LabelItem *l_item)
               {
                 return add_row(ctx_id, label.str_, l_item->hold_, l_item->used_, l_item->count_);
               });

@@ -69,7 +69,7 @@ int ObExprPrivSTGeomFromEWKB::eval_st_geomfromewkb(const ObExpr &expr, ObEvalCtx
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_GEOMFROMEWKB);
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   ObDatum *datum = NULL;
   int num_args = expr.arg_cnt_;
   bool is_null_result = false;
@@ -94,7 +94,6 @@ int ObExprPrivSTGeomFromEWKB::eval_st_geomfromewkb(const ObExpr &expr, ObEvalCtx
     if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *datum,
         expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), ewkb))) {
       LOG_WARN("fail to get real string data", K(ret), K(ewkb));
-    } else if (FALSE_IT(tmp_allocator.set_baseline_size(ewkb.length()))) {
     } else if (OB_FAIL(get_header_info_from_ewkb(ewkb, header))) {
       LOG_WARN("fail to get ewkb header info from ewkb", K(ret), K(ewkb));
       ret = OB_ERR_GIS_INVALID_DATA;

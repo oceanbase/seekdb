@@ -132,6 +132,11 @@ private:
   (::oceanbase::share::ObStructuredEventLogger::log("rootservice", args))
 #define ROOTSERVICE_EVENT_ADD_TRUNCATE(args...) ROOTSERVICE_EVENT_ADD(args)
 
+// Standalone management events use the shared structured sink.
+#define MANAGEMENT_EVENT_ADD(args...) \
+  (::oceanbase::share::ObStructuredEventLogger::log("management", args))
+#define MANAGEMENT_EVENT_ADD_TRUNCATE(args...) MANAGEMENT_EVENT_ADD(args)
+
 #define CLUSTER_EVENT_SYNC_ADD(args...) \
   (::oceanbase::share::ObStructuredEventLogger::log("cluster", args))
 

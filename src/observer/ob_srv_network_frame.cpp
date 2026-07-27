@@ -18,7 +18,6 @@
 #include "observer/ob_srv_network_frame.h"
 #include "rpc/obmysql/ob_sql_nio_server.h"
 #include "observer/mysql/obsm_conn_callback.h"
-#include "lib/resource/ob_affinity_ctrl.h"
 
 
 using namespace oceanbase::rpc::frame;
@@ -34,31 +33,20 @@ ObSrvNetworkFrame::ObSrvNetworkFrame(ObGlobalContext &gctx)
       deliver_(request_qhandler_),
       last_ssl_info_hash_(UINT64_MAX),
       lock_()
-{
-  // obcall local-procedure-call dispatch hook removed: no in-process obcall RPC
-  // is delivered through deliver_ anymore. deliver_ / the request queue handler /
-  // the MySQL listener remain (shared by the MySQL serving path).
-}
+{}
 
 ObSrvNetworkFrame::~ObSrvNetworkFrame()
 {
   // empty
 }
 
-static bool enable_new_sql_nio()
-{
-  return GCONF._enable_new_sql_nio;
-}
-
 static int update_tcp_keepalive_parameters_for_sql_nio_server(int tcp_keepalive_enabled, int64_t tcp_keepidle, int64_t tcp_keepintvl, int64_t tcp_keepcnt)
 {
   int ret = OB_SUCCESS;
-  if (enable_new_sql_nio()) {
-    if (NULL != global_sql_nio_server) {
-      tcp_keepidle = max(tcp_keepidle/1000000, 1);
-      tcp_keepintvl = max(tcp_keepintvl/1000000, 1);
-      global_sql_nio_server->update_tcp_keepalive_params(tcp_keepalive_enabled, tcp_keepidle, tcp_keepintvl, tcp_keepcnt);
-    }
+  if (NULL != global_sql_nio_server) {
+    tcp_keepidle = max(tcp_keepidle/1000000, 1);
+    tcp_keepintvl = max(tcp_keepintvl/1000000, 1);
+    global_sql_nio_server->update_tcp_keepalive_params(tcp_keepalive_enabled, tcp_keepidle, tcp_keepintvl, tcp_keepcnt);
   }
   return ret;
 }
@@ -66,49 +54,17 @@ static int update_tcp_keepalive_parameters_for_sql_nio_server(int tcp_keepalive_
 int ObSrvNetworkFrame::init()
 {
   int ret = OB_SUCCESS;
-  const char* mysql_unix_path = "unix:run/sql.sock";
-  const char* rpc_unix_path = "unix:run/rpc.sock";
-  const uint32_t rpc_port = static_cast<uint32_t>(GCONF.rpc_port);
-  ObNetOptions opts;
-  int io_cnt = static_cast<int>(GCONF.net_thread_count);
-  // make net thread count adaptive
-  if (0 == io_cnt) {
-    io_cnt = get_default_net_thread_count();
-  }
-  const int hp_io_cnt = static_cast<int>(GCONF.high_priority_net_thread_count);
-  uint8_t negotiation_enable = 0;
-  opts.rpc_io_cnt_ = io_cnt;
-  opts.high_prio_rpc_io_cnt_ = hp_io_cnt;
-  opts.mysql_io_cnt_ = io_cnt;
-  if (enable_new_sql_nio()) {
-    opts.mysql_io_cnt_ = 0; // if sql_nio enabled, not to create MysqlIO under the old easy framework
-  }
-  opts.batch_rpc_io_cnt_ = io_cnt;
-  opts.use_ipv6_ = GCONF.use_ipv6;
-  //TODO(tony.wzh): fix opts.tcp_keepidle  negative
-  opts.tcp_user_timeout_ = static_cast<int>(GCONF.dead_socket_detection_timeout);
-  opts.tcp_keepidle_     = static_cast<int>(GCONF.tcp_keepidle);
-  opts.tcp_keepintvl_    = static_cast<int>(GCONF.tcp_keepintvl);
-  opts.tcp_keepcnt_      = static_cast<int>(GCONF.tcp_keepcnt);
-
-  if (GCONF.enable_tcp_keepalive) {
-    opts.enable_tcp_keepalive_ = 1;
-  } else {
-    opts.enable_tcp_keepalive_ = 0;
-  }
-  LOG_INFO("io thread connection negotiation enabled!");
-  negotiation_enable = 1;
 
   if (OB_FAIL(request_qhandler_.init())) {
-    LOG_ERROR("init rpc request qhandler fail", K(ret));
+    LOG_ERROR("init request queue handler fail", K(ret));
 
   } else if (OB_FAIL(deliver_.init())) {
-    LOG_ERROR("init rpc deliverer fail", K(ret));
+    LOG_ERROR("init request deliverer fail", K(ret));
 
   } else if (OB_FAIL(reload_ssl_config())) {
     LOG_ERROR("load_ssl_config fail", K(ret));
   } else {
-    LOG_INFO("init rpc network frame successfully",
+    LOG_INFO("init network frame successfully",
              "ssl_client_authentication", GCONF.ssl_client_authentication.str());
   }
   return ret;
@@ -141,16 +97,8 @@ int ObSrvNetworkFrame::start()
         sql_net_thread_count = GCONF.net_thread_count;
       }
     }
-    if (GCONF._enable_numa_aware) {
-      int numa_node_count = AFFINITY_CTRL.get_num_nodes();
-      if (sql_net_thread_count < numa_node_count) {
-        sql_net_thread_count = common::upper_align(sql_net_thread_count, numa_node_count);
-        LOG_INFO("sql nio net thread count adjusted", K(sql_net_thread_count));
-      }
-    }
     if (OB_FAIL(obmysql::global_sql_nio_server->start(
-            GCONF.mysql_port, &deliver_, sql_net_thread_count,
-            GCONF._enable_numa_aware, disable_tcp))) {
+            GCONF.mysql_port, &deliver_, sql_net_thread_count, disable_tcp))) {
       LOG_ERROR("sql nio server start failed", K(ret));
     }
   }
@@ -161,19 +109,10 @@ int ObSrvNetworkFrame::start()
 int ObSrvNetworkFrame::reload_config()
 {
   int ret = common::OB_SUCCESS;
-  int enable_easy_keepalive = 0;
   int enable_tcp_keepalive  = 0;
   int32_t tcp_keepidle      = static_cast<int>(GCONF.tcp_keepidle);
   int32_t tcp_keepintvl     = static_cast<int>(GCONF.tcp_keepintvl);
   int32_t tcp_keepcnt       = static_cast<int>(GCONF.tcp_keepcnt);
-  int32_t user_timeout      = static_cast<int>(GCONF.dead_socket_detection_timeout);
-
-  if (GCONF._enable_easy_keepalive) {
-    enable_easy_keepalive = 1;
-    LOG_INFO("easy keepalive enabled.");
-  } else {
-    LOG_INFO("easy keepalive disabled.");
-  }
 
   if (GCONF.enable_tcp_keepalive) {
     enable_tcp_keepalive = 1;
@@ -323,23 +262,19 @@ int ObSrvNetworkFrame::reload_ssl_config()
 {
   int ret = common::OB_SUCCESS;
   if (GCONF.ssl_client_authentication) {
-    ObString ssl_config(GCONF.ssl_external_kms_info.str());
     bool file_exist = false;
     const char *intl_file[3] = {OB_SSL_CA_FILE, OB_SSL_CERT_FILE, OB_SSL_KEY_FILE};
     const char *sm_file[5] = {OB_SSL_CA_FILE, OB_SSL_SM_SIGN_CERT_FILE, OB_SSL_SM_SIGN_KEY_FILE, OB_SSL_SM_ENC_CERT_FILE,
     OB_SSL_SM_ENC_KEY_FILE};
-    const uint64_t new_hash_value = ssl_config.empty()
-        ? get_ssl_file_hash(intl_file, sm_file, file_exist)
-        : ssl_config.hash();
+    const uint64_t new_hash_value = get_ssl_file_hash(intl_file, sm_file, file_exist);
 
-    if (ssl_config.empty() && !file_exist) {
+    if (!file_exist) {
       ret = OB_INVALID_CONFIG;
       LOG_WARN("ssl file not available", K(new_hash_value));
       LOG_USER_ERROR(OB_INVALID_CONFIG, "ssl file not available");
     } else if (last_ssl_info_hash_ == new_hash_value) {
       LOG_INFO("no need reload_ssl_config", K(new_hash_value));
     } else {
-      bool use_bkmi = false;
       bool use_sm = false;
       const char *ca_cert = NULL;
       const char *public_cert = NULL;
@@ -355,20 +290,18 @@ int ObSrvNetworkFrame::reload_ssl_config()
       if (OB_SUCC(ret)) {
         int64_t ssl_key_expired_time = 0;
         if (OB_FAIL(extract_expired_time(OB_SSL_CERT_FILE, ssl_key_expired_time))) {
-          OB_LOG(WARN, "extract_expired_time intl failed", K(ret), K(use_bkmi));
+          OB_LOG(WARN, "extract_expired_time intl failed", K(ret));
         } else {
           GCTX.ssl_key_expired_time_ =  ssl_key_expired_time;
           last_ssl_info_hash_ = new_hash_value;
-          LOG_INFO("finish reload_ssl_config", K(use_bkmi), K(use_bkmi), K(use_sm),
+          LOG_INFO("finish reload_ssl_config", K(use_sm),
                    "ssl_key_expired_time", GCTX.ssl_key_expired_time_, K(new_hash_value));
           if (OB_SUCC(ret)) {
-            if (enable_new_sql_nio()) {
-              common::ObSSLConfig ssl_config(!use_bkmi, use_sm, ca_cert, public_cert, private_key, NULL, NULL);
-              if (OB_FAIL(ob_ssl_load_config(OB_SSL_CTX_ID_SQL_NIO, ssl_config))) {
-                LOG_WARN("create ssl ctx failed!", K(ret));
-              } else {
-                LOG_INFO("create ssl ctx success!", K(use_bkmi), K(use_sm));
-              }
+            common::ObSSLConfig ssl_config(true, use_sm, ca_cert, public_cert, private_key, NULL, NULL);
+            if (OB_FAIL(ob_ssl_load_config(OB_SSL_CTX_ID_SQL_NIO, ssl_config))) {
+              LOG_WARN("create ssl ctx failed!", K(ret));
+            } else {
+              LOG_INFO("create ssl ctx success!", K(use_sm));
             }
           }
         }

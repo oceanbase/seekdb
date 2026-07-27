@@ -114,7 +114,7 @@ public:
                               const common::ObIArray<common::ObTabletID> *del_data_tablet_ids,
                               const share::schema::ObTableSchema *index_schema,
                               const int64_t parallelism,
-                              const uint64_t tenant_data_version,
+                              const uint64_t data_format_version,
                               common::ObIAllocator &allocator,
                               ObDDLTaskRecord &task_record,
                               const int64_t new_fetched_snapshot = 0);
@@ -125,7 +125,7 @@ public:
                                 const common::ObIArray<common::ObTabletID> *del_data_tablet_ids,
                                 const share::schema::ObTableSchema *index_schema,
                                 const int64_t parallelism,
-                                const uint64_t tenant_data_version,
+                                const uint64_t data_format_version,
                                 common::ObIAllocator &allocator,
                                 ObDDLTaskRecord &task_record);
   int drop_index_on_failed(const obcall::ObDropIndexArg &arg, obcall::ObDropIndexRes &res);

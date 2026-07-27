@@ -16,8 +16,8 @@
 
 #include "ob_lcl_node.h"
 #include "share/rc/ob_module_provider.h"
+#include "storage/deadlock/ob_deadlock_detector_mgr.h"
 #include "storage/deadlock/ob_deadlock_inner_table_service.h"
-#include "storage/deadlock/ob_deadlock_detector_rpc.h"
 
 namespace oceanbase
 {
@@ -48,9 +48,10 @@ ObLCLNode::ObLCLNode(const UserBinaryKey &user_key,
   collect_callback_(on_collect_operation),
   auto_activate_when_detected_(auto_activate_when_detected),
   is_timer_task_canceled_(false),
+  is_timer_task_running_(false),
   lcl_period_(0),
   last_report_waiting_for_period_(0),
-  last_send_collect_info_period_(0),
+  last_send_cycle_info_period_(0),
   count_down_allow_detect_(count_down_allow_detect),
   lock_(ObLatchIds::DEADLOCK_LOCK)
 {
@@ -124,7 +125,31 @@ int ObLCLNode::register_timer_task()
 
 void ObLCLNode::unregister_timer_task()
 {
-  ATOMIC_STORE(&is_timer_task_canceled_, true);
+  int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
+  bool need_revert_self_ref = false;
+  bool wait_running_task = false;
+  {
+    LockGuard lock_guard(lock_);
+    if (!ATOMIC_LOAD(&is_timer_task_canceled_)) {
+      ATOMIC_STORE(&is_timer_task_canceled_, true);
+      ObTimeWheel &time_wheel = share::g_mp->dead_lock_detector_mgr()->get_time_wheel();
+      if (OB_SUCCESS == (tmp_ret = time_wheel.cancel(&push_state_task_))) {
+        need_revert_self_ref = true;
+        wait_running_task = ATOMIC_LOAD(&is_timer_task_running_);
+      } else if (OB_TIMER_TASK_HAS_NOT_SCHEDULED != tmp_ret) {
+        DETECT_LOG_(WARN, "cancel detector timer task failed", K(tmp_ret), K(*this));
+      }
+    }
+  }
+  while (wait_running_task && ATOMIC_LOAD(&is_timer_task_running_)) {
+    ob_usleep(1000);
+  }
+  if (need_revert_self_ref) {
+    // The recurring timer owns one detector-map reference. Releasing it must be
+    // the last action because this node may be destroyed here.
+    revert_self_ref_count_();
+  }
 }
 
 void ObLCLNode::dec_count_down_allow_detect()
@@ -151,7 +176,10 @@ int ObLCLNode::register_timer_with_necessary_retry_with_lock_()
   LockGuard lock_guard(lock_);// for protecting task_.expected_executed_ts
   int64_t next_expect_ts = push_state_task_.expected_executed_ts;// last executed ts value, actually
 
-  do {
+  if (ATOMIC_LOAD(&is_timer_task_canceled_)) {
+    ret = OB_CANCELED;
+  }
+  while (OB_SUCC(ret)) {
     int64_t cur_ts = ObClockGenerator::getRealClock();
     int64_t baseline_ts = cur_ts > allow_detect_time_ ? cur_ts : allow_detect_time_;
     int64_t lcl_op_interval = ObServerConfig::get_instance()._lcl_op_interval;
@@ -165,10 +193,12 @@ int ObLCLNode::register_timer_with_necessary_retry_with_lock_()
       delay = TIMER_SCHEDULE_RESERVE_TIME;
     }
     DETECT_LOG_(DEBUG, "delay value is", K(delay), K(*this));
-  // the only contidion that could retry, otherwise will dead loop
-  } while (CLICK() &&
-           OB_INVALID_ARGUMENT ==(ret = time_wheel.schedule(&push_state_task_, delay)) &&
-           delay < 0);
+    ret = time_wheel.schedule(&push_state_task_, delay);
+    // The only condition that could retry; otherwise this would loop forever.
+    if (!(CLICK() && OB_INVALID_ARGUMENT == ret && delay < 0)) {
+      break;
+    }
+  }
 
   if (OB_SUCCESS != ret) {
     DETECT_LOG_(WARN, "register next task failed", KR(ret), K(*this));
@@ -216,19 +246,15 @@ int ObLCLNode::add_resource_to_list_(const ObDependencyResource &resource,
 
   DETECT_TIME_GUARD(100_ms);
   for (; i < block_list.count(); ++i) {
-    if (block_list.at(i).get_addr() == resource.get_addr() &&
-        block_list.at(i).get_user_key() == resource.get_user_key()) {
+    if (block_list.at(i).get_user_key() == resource.get_user_key()) {
       break;
     }
   }
   CLICK();
   if (i != block_list.count()) {
     ret = OB_ENTRY_EXIST;
-  } else {
-    ObDependencyResource new_resource(resource.get_addr(), resource.get_user_key());
-    if (OB_FAIL(block_list.push_back(resource))) {
-      DETECT_LOG_(WARN, "block_list_ push resource failed", K(resource));
-    }
+  } else if (OB_FAIL(block_list.push_back(resource))) {
+    DETECT_LOG_(WARN, "block_list_ push resource failed", K(resource));
   }
 
   return ret;
@@ -364,7 +390,7 @@ int ObLCLNode::replace_block_list(const ObIArray<ObDependencyResource> &new_list
         for (int64_t idx2 = 0; idx2 < block_list_.count(); ++idx2) {
           if (new_list.at(idx1) == block_list_.at(idx2)) {
             resource_exist = true;
-          } else if (new_list.at(idx1) == ObDependencyResource(GCTX.self_addr(), self_key_)) {
+          } else if (new_list.at(idx1) == ObDependencyResource(self_key_)) {
             resource_exist = true;
             DETECT_LOG_(ERROR, "replace block list to block myself, should not happen", PRINT_WRAPPER);
           }
@@ -417,7 +443,7 @@ int ObLCLNode::get_resource_from_callback_list_(BlockList &blocklist_snapshot,
           if (!resource_array[idx].is_valid()) {
             ret = OB_ERR_UNEXPECTED;
             DETECT_LOG_(WARN, "get invalid resource", KR(ret), K(*this));
-          } else if (resource_array[idx] == ObDependencyResource(GCTX.self_addr(), self_key_)) {
+          } else if (resource_array[idx] == ObDependencyResource(self_key_)) {
             ret = OB_ERR_UNEXPECTED;
             DETECT_LOG_(WARN, "result of callback shows block myself, should not happen",
                               KR(ret), K(resource_array[idx]), K(*this));
@@ -494,25 +520,26 @@ int ObLCLNode::broadcast_(const BlockList &list,
                           int64_t lclv,
                           const ObLCLLabel &public_label) {
   int ret = OB_SUCCESS;
-  ObLCLMessage msg;
   DETECT_TIME_GUARD(100_ms);
   for (int64_t idx = 0; idx < list.count() && OB_SUCC(ret); ++idx) {
-    msg.set_args(list.at(idx).get_addr(),
-                 list.at(idx).get_user_key(),
-                 GCTX.self_addr(),
-                 self_key_,
-                 lclv,
-                 public_label,
-                 ObClockGenerator::getRealClock());
-    share::g_mp->dead_lock_detector_mgr()->sender_thread_.cache_msg(list.at(idx), msg);
+    if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->post_lcl_state_(
+            list.at(idx).get_user_key(),
+            lclv,
+            public_label,
+            ObClockGenerator::getRealClock()))) {
+      DETECT_LOG_(WARN, "enqueue local lcl state failed",
+                  KR(ret), K(list.at(idx)), K(lclv), K(public_label), K(*this));
+    }
   }
   
   return ret;
 }
 
-int ObLCLNode::process_lcl_message(const ObLCLMessage &lcl_msg)
+int ObLCLNode::process_lcl_state(const int64_t lclv,
+                                 const ObLCLLabel &label,
+                                 const int64_t send_ts)
 {
-  #define PRINT_WRAPPER KR(ret), K(*this), K(lcl_msg)
+  #define PRINT_WRAPPER KR(ret), K(*this), K(lclv), K(label), K(send_ts)
   int ret = OB_SUCCESS;
   bool detected_flag = false;
   int64_t lclv_snapshot = INVALID_VALUE;
@@ -523,8 +550,8 @@ int ObLCLNode::process_lcl_message(const ObLCLMessage &lcl_msg)
   update_lcl_period_if_necessary_with_lock_();
   CLICK();
   const int64_t current_ts = ObClockGenerator::getClock();
-  if (CLICK() && !if_phase_match_(current_ts, lcl_msg)) {
-    int64_t diff = current_ts - lcl_msg.get_send_ts();
+  if (CLICK() && !if_phase_match_(current_ts, send_ts)) {
+    int64_t diff = current_ts - send_ts;
     if (diff > PHASE_TIME / 3) {
       DETECT_LOG_(WARN, "phase not match", K(diff), K(current_ts), K(*this));
     }
@@ -534,12 +561,12 @@ int ObLCLNode::process_lcl_message(const ObLCLMessage &lcl_msg)
       LockGuard guard(lock_);
       CLICK();
       if ((current_ts / PHASE_TIME) % 2 == 0) {// LCLP
-        if (CLICK() && OB_SUCC(process_msg_as_lclp_msg_(lcl_msg))) {
+        if (CLICK() && OB_SUCC(process_lclp_state_(lclv))) {
           CLICK();
           (void)get_state_snapshot_(blocklist_snapshot, lclv_snapshot, public_label_snapshot);
         }
       } else {// LCLS
-        if (CLICK() && OB_SUCC(process_msg_as_lcls_msg_(lcl_msg, detected_flag))) {
+        if (CLICK() && OB_SUCC(process_lcls_state_(lclv, label, detected_flag))) {
           CLICK();
           (void)get_state_snapshot_(blocklist_snapshot, lclv_snapshot, public_label_snapshot);
         }
@@ -548,9 +575,12 @@ int ObLCLNode::process_lcl_message(const ObLCLMessage &lcl_msg)
     }
     if (detected_flag) {
       CLICK();
-      ObDeadLockCollectInfoMessage collect_info_message;
-      collect_info_message.set_dest_key(self_key_);
-      (void)process_collect_info_message(collect_info_message);
+      ObDeadLockCycleInfo cycle_info;
+      cycle_info.set_dest_key(self_key_);
+      if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->post_cycle_info_(cycle_info))) {
+        DETECT_LOG_(WARN, "enqueue initial deadlock cycle info failed",
+                    KR(ret), K(cycle_info), K(*this));
+      }
     }
   }
 
@@ -558,80 +588,79 @@ int ObLCLNode::process_lcl_message(const ObLCLMessage &lcl_msg)
   #undef PRINT_WRAPPER
 }
 
-int ObLCLNode::process_msg_as_lclp_msg_(const ObLCLMessage &lcl_msg)
+int ObLCLNode::process_lclp_state_(const int64_t lclv)
 {
   int ret = OB_SUCCESS;
 
   DETECT_TIME_GUARD(100_ms);
-  if (lcl_msg.get_lclv() + 1 > lclv_) {
-    lclv_ = lcl_msg.get_lclv() + 1;
+  if (lclv + 1 > lclv_) {
+    lclv_ = lclv + 1;
   }
-  // DETECT_LOG_(INFO, "process lclp message done", KR(ret), K(lcl_msg), K(*this));
   return ret;
 }
 
-int ObLCLNode::process_msg_as_lcls_msg_(const ObLCLMessage &lcl_msg,
-                                        bool &detected_flag)
+int ObLCLNode::process_lcls_state_(const int64_t lclv,
+                                   const ObLCLLabel &label,
+                                   bool &detected_flag)
 {
   int ret = OB_SUCCESS;
 
   DETECT_TIME_GUARD(100_ms);
-  if (lcl_msg.get_lclv() >= lclv_) {
-    lclv_ = lcl_msg.get_lclv();
-    if (lcl_msg.get_lclv() == lclv_ &&
-        lcl_msg.get_label() == private_label_) {
-      if (last_send_collect_info_period_ == lcl_period_) {
+  if (lclv >= lclv_) {
+    lclv_ = lclv;
+    if (lclv == lclv_ &&
+        label == private_label_) {
+      if (last_send_cycle_info_period_ == lcl_period_) {
         ret = OB_EAGAIN;
         if (REACH_TIME_INTERVAL(PHASE_TIME)) {
-          DETECT_LOG_(INFO, "collect info msg has been send in this period, giving up this time",
-                            K(lcl_msg), K(*this)); 
+          DETECT_LOG_(INFO, "cycle info has been sent in this period, giving up this time",
+                            K(lclv), K(label), K(*this));
         }
       } else {
-        DETECT_LOG_(INFO, "detect cycle", K(lcl_msg), K(*this));
-        last_send_collect_info_period_ = lcl_period_;
+        DETECT_LOG_(INFO, "detect cycle", K(lclv), K(label), K(*this));
+        last_send_cycle_info_period_ = lcl_period_;
         detected_flag = true;
       }
-    } else if (lcl_msg.get_label() < public_label_) {
-      public_label_ = lcl_msg.get_label();
+    } else if (label < public_label_) {
+      public_label_ = label;
     }
   }
-  // DETECT_LOG_(INFO, "process lcls message done", KR(ret), K(lcl_msg), K(*this));
   return ret;
 }
 
-int ObLCLNode::process_collect_info_message(const ObDeadLockCollectInfoMessage &msg)
+int ObLCLNode::process_cycle_info(const ObDeadLockCycleInfo &cycle_info)
 {
-  CHECK_ARGS(msg);
-  #define PRINT_WRAPPER KR(ret), K(*this), K(msg_copy)
+  CHECK_ARGS(cycle_info);
+  #define PRINT_WRAPPER KR(ret), K(*this), K(cycle_info_copy)
   int ret = OB_SUCCESS;
   uint64_t event_id = 0;
 
-  ObDeadLockCollectInfoMessage msg_copy;
-  if (OB_FAIL(msg_copy.assign(msg))) {
-    DETECT_LOG_(WARN, "fail to copy message", PRINT_WRAPPER);
+  ObDeadLockCycleInfo cycle_info_copy;
+  if (OB_FAIL(cycle_info_copy.assign(cycle_info))) {
+    DETECT_LOG_(WARN, "fail to copy cycle info", PRINT_WRAPPER);
   } else {
-    const ObSArray<ObDetectorInnerReportInfo> &collected_info = msg_copy.get_collected_info();
+    const ObArray<ObDetectorInnerReportInfo> &collected_info = cycle_info_copy.get_collected_info();
     if (!collected_info.empty()) {
       int64_t detector_id = private_label_.get_id();
       const UserBinaryKey &victim = collected_info[0].get_user_key(); 
       DETECT_LOG_(INFO, "witness deadlock", KP(this), K(detector_id), K_(self_key), K(victim));
     }
     DETECT_TIME_GUARD(100_ms);
-    DETECT_LOG_(INFO, "reveive collect info message", K(collected_info.count()), PRINT_WRAPPER);
-    if (CLICK() && OB_SUCC(check_and_process_completely_collected_msg_with_lock_(collected_info))) {
-      DETECT_LOG_(INFO, "collect info done", PRINT_WRAPPER);
+    DETECT_LOG_(INFO, "receive deadlock cycle info", K(collected_info.count()), PRINT_WRAPPER);
+    if (CLICK() && OB_SUCC(check_and_process_complete_cycle_(collected_info))) {
+      DETECT_LOG_(INFO, "cycle collection done", PRINT_WRAPPER);
       CLICK();
       (void) ObDeadLockInnerTableService::insert_all(collected_info);
     } else if (CLICK() && check_dead_loop_with_lock_(collected_info)) {
-      DETECT_LOG_(INFO, "message dead loop, just drop this message", PRINT_WRAPPER);
+      DETECT_LOG_(INFO, "cycle info looped, drop it", PRINT_WRAPPER);
     } else if (CLICK() && OB_FAIL(generate_event_id_with_lock_(collected_info, event_id))) {
       DETECT_LOG_(WARN, "generate event id failed", PRINT_WRAPPER);
-    } else if (CLICK() && OB_FAIL(append_report_info_to_msg_(msg_copy, event_id))) {
-      DETECT_LOG_(WARN, "append report info to collect info message failed", PRINT_WRAPPER);
-    } else if (CLICK() && OB_FAIL(broadcast_with_lock_(msg_copy))) {
-      DETECT_LOG_(WARN, "keep boardcasting collect info msg failed", PRINT_WRAPPER);
+    } else if (CLICK() && OB_FAIL(append_report_info_(cycle_info_copy, event_id))) {
+      DETECT_LOG_(WARN, "append report info to cycle info failed", PRINT_WRAPPER);
+    } else if (CLICK() && OB_FAIL(broadcast_cycle_info_(cycle_info_copy))) {
+      DETECT_LOG_(WARN, "keep broadcasting cycle info failed", PRINT_WRAPPER);
     } else {
-      DETECT_LOG_(INFO, "successfully keep broadcasting collect info msg", PRINT_WRAPPER);
+      DETECT_LOG_(INFO, "successfully keep broadcasting cycle info", PRINT_WRAPPER);
     }
   }
 
@@ -639,14 +668,14 @@ int ObLCLNode::process_collect_info_message(const ObDeadLockCollectInfoMessage &
   #undef PRINT_WRAPPER
 }
 
-int ObLCLNode::check_and_process_completely_collected_msg_with_lock_(
+int ObLCLNode::check_and_process_complete_cycle_(
                const ObIArray<ObDetectorInnerReportInfo> &collected_info)
 {
   int ret = OB_SUCCESS;
 
   DETECT_TIME_GUARD(100_ms);
   if (!collected_info.empty() &&
-      collected_info.at(0).get_addr() == GCTX.self_addr() &&
+      collected_info.at(0).get_user_key() == self_key_ &&
       collected_info.at(0).get_detector_id() == private_label_.get_id()) {
     if (CLICK() && !if_self_has_lowest_priority_(collected_info)) {
       DETECT_LOG_(WARN, "killed node do not have the lowest priority in this cycle",
@@ -655,18 +684,17 @@ int ObLCLNode::check_and_process_completely_collected_msg_with_lock_(
       CLICK();
       LockGuard guard(lock_);
       if (CLICK() && OB_FAIL(detect_callback_(collected_info, 0))) {
-        DETECT_LOG_(WARN, "execute user call back failed", K(*this));
+        DETECT_LOG(WARN, "execute user call back failed", K(*this));
       } else {
         CLICK();
-        DETECT_LOG_(INFO, "deadlock detected",
-                          K(collected_info.count()), K(collected_info), K(*this));
+        DETECT_LOG(INFO, "deadlock detected",
+                         K(collected_info.count()), K(collected_info), K(*this));
         if (auto_activate_when_detected_) {
           int64_t next_idx = 1;
           if (collected_info.count() == next_idx) {
             next_idx = 0;
           }
-          ObDependencyResource peer_resource(collected_info.at(next_idx).get_addr(),
-                                             collected_info.at(next_idx).get_user_key());
+          ObDependencyResource peer_resource(collected_info.at(next_idx).get_user_key());
           int64_t peer_resource_idx = -1;
           for (int64_t idx = 0; idx < block_list_.count(); ++idx) {
             if (peer_resource == block_list_.at(idx)) {
@@ -711,9 +739,8 @@ int ObLCLNode::generate_event_id_with_lock_(const ObIArray<ObDetectorInnerReport
   event_id = 0;
   LockGuard guard(lock_);
   if (collected_info.empty()) {
-    event_id = murmurhash(&GCTX.self_addr(),
-                          sizeof(GCTX.self_addr()),
-                          event_id);
+    const uint64_t key_hash = self_key_.hash();
+    event_id = murmurhash(&key_hash, sizeof(key_hash), event_id);
     uint64_t id = private_label_.get_id();
     event_id = murmurhash(&id, sizeof(id), event_id);
     int64_t create_time = created_time_;
@@ -732,7 +759,7 @@ bool ObLCLNode::check_dead_loop_with_lock_(const ObIArray<ObDetectorInnerReportI
   DETECT_TIME_GUARD(100_ms);
   LockGuard guard(lock_);
   for (; idx < collected_info.count() && OB_SUCC(ret); ++idx) {
-    if (collected_info.at(idx).get_addr() == GCTX.self_addr() &&
+    if (collected_info.at(idx).get_user_key() == self_key_ &&
         collected_info.at(idx).get_detector_id() == private_label_.get_id()) {
       DETECT_LOG_(INFO, "dead loop occured", K(collected_info), K(*this));
       break;
@@ -741,8 +768,8 @@ bool ObLCLNode::check_dead_loop_with_lock_(const ObIArray<ObDetectorInnerReportI
   return idx != collected_info.count();
 }
 
-int ObLCLNode::append_report_info_to_msg_(ObDeadLockCollectInfoMessage &msg,
-                                          const uint64_t event_id)
+int ObLCLNode::append_report_info_(ObDeadLockCycleInfo &cycle_info,
+                                   const uint64_t event_id)
 {
   int ret = OB_SUCCESS;
   ObDetectorInnerReportInfo inner_report_info;
@@ -758,26 +785,25 @@ int ObLCLNode::append_report_info_to_msg_(ObDeadLockCollectInfoMessage &msg,
     CLICK();
     LockGuard guard(lock_);
     if (CLICK() && 
-       OB_FAIL(inner_report_info.set_args(self_key_, GCTX.self_addr(),
+       OB_FAIL(inner_report_info.set_args(self_key_,
                                           private_label_.get_id(), ObClockGenerator::getRealClock(),
                                           created_time_, event_id,
-                                          msg.get_collected_info().empty() ?
+                                          cycle_info.get_collected_info().empty() ?
                                           ROLE::VICTIM : ROLE::WITNESS,
                                           allow_detect_time_ - created_time_,
                                           private_label_.get_priority(),
                                           user_report_info))) {
-      DETECT_LOG_(WARN, "construct inner report info failed", K(*this), K(msg));
-    } else if (CLICK() && OB_FAIL(msg.append(inner_report_info))) {
-      DETECT_LOG_(WARN, "append msg to collect info message failed", K(*this), K(msg));
+      DETECT_LOG_(WARN, "construct inner report info failed", K(*this), K(cycle_info));
+    } else if (CLICK() && OB_FAIL(cycle_info.append(inner_report_info))) {
+      DETECT_LOG_(WARN, "append report to cycle info failed", K(*this), K(cycle_info));
     }
   }
   return ret;
 }
 
-int ObLCLNode::broadcast_with_lock_(ObDeadLockCollectInfoMessage &msg)
+int ObLCLNode::broadcast_cycle_info_(ObDeadLockCycleInfo &cycle_info)
 {
   int ret = OB_SUCCESS;
-  UserBinaryKey self_key_copy;
   BlockList block_list_copy;
 
   DETECT_TIME_GUARD(100_ms);
@@ -785,17 +811,15 @@ int ObLCLNode::broadcast_with_lock_(ObDeadLockCollectInfoMessage &msg)
     int64_t unused_1;
     ObLCLLabel uneused_2;
     LockGuard guard(lock_);
-    self_key_copy = self_key_;
     block_list_copy.assign(block_list_);
     get_state_snapshot_(block_list_copy, unused_1, uneused_2);
   }
   CLICK();
   for (int64_t idx = 0; idx < block_list_copy.count() && OB_SUCC(ret); ++idx) {
-    msg.set_dest_key(block_list_copy.at(idx).get_user_key());
+    cycle_info.set_dest_key(block_list_copy.at(idx).get_user_key());
     if (CLICK() &&
-        OB_FAIL(share::g_mp->dead_lock_detector_mgr()->get_rpc().
-                post_collect_info_message(block_list_copy.at(idx).get_addr(), msg))) {
-      DETECT_LOG_(WARN, "send collect info message failed", KR(ret), K(msg));
+        OB_FAIL(share::g_mp->dead_lock_detector_mgr()->post_cycle_info_(cycle_info))) {
+      DETECT_LOG_(WARN, "enqueue deadlock cycle info failed", KR(ret), K(cycle_info));
     }
   }
   return ret;
@@ -830,20 +854,15 @@ int ObLCLNode::push_state_to_downstreams_with_lock_()
     if (blocklist_snapshot.empty()) {
       DETECT_LOG_(WARN, "not waiting", K(*this), K_(last_report_waiting_for_period));
     } else {
-      int64_t detector_id = private_label_.get_id();
       DETECT_LOG_(INFO, "waiting for", K_(self_key), K(blocklist_snapshot), KPC(this));
     }
 
     if (!parent_list_.empty()) {
-      ObDeadLockNotifyParentMessage notify_msg;
       for (int64_t idx = 0; idx < parent_list_.count(); ++idx) {
-        notify_msg.set_args(parent_list_.at(idx).get_addr(),
-                            parent_list_.at(idx).get_user_key(),
-                            GCTX.self_addr(),
-                            self_key_);
-        if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->get_rpc().
-                    post_notify_parent_message(parent_list_.at(idx).get_addr(), notify_msg))) {
-          DETECT_LOG_(WARN, "post notify parent message failed", KR(ret), K(notify_msg), K(*this));
+        if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->post_parent_notification_(
+                parent_list_.at(idx).get_user_key(), self_key_))) {
+          DETECT_LOG_(WARN, "enqueue parent notification failed",
+                      KR(ret), K(parent_list_.at(idx)), K(*this));
         }
       }
     }
@@ -876,13 +895,13 @@ void ObLCLNode::update_lcl_period_if_necessary_with_lock_()
 }
 
 bool ObLCLNode::if_phase_match_(const int64_t ts,
-                                const ObLCLMessage &msg) {
+                                const int64_t send_ts) {
   bool ret = true;
   int64_t my_phase = ts / PHASE_TIME;
-  int64_t msg_phase = msg.get_send_ts() / PHASE_TIME;
+  int64_t state_phase = send_ts / PHASE_TIME;
 
   DETECT_TIME_GUARD(10_ms);
-  if (my_phase != msg_phase) {
+  if (my_phase != state_phase) {
     ret = false;
   }
   return ret;
@@ -894,7 +913,9 @@ void ObLCLNode::PushStateTask::runTimerTask()
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
+  bool need_revert_self_ref = false;
   const int64_t current_ts = ObClockGenerator::getRealClock();
+  ATOMIC_STORE(&lcl_node_.is_timer_task_running_, true);
 
   DETECT_TIME_GUARD(100_ms);
   int64_t warn_threshold_ts = lcl_node_.timeout_ts_ ?
@@ -922,9 +943,14 @@ void ObLCLNode::PushStateTask::runTimerTask()
 
     if (CLICK() && OB_TMP_FAIL(lcl_node_.register_timer_with_necessary_retry_with_lock_())) {
       DETECT_LOG(ERROR, "register timer task with retry failed", K(tmp_ret), K(*this));
+      need_revert_self_ref = !is_scheduled();
     } else {}
   } else {
-    // may destory itself here, make sure it is the last action of this function
+    need_revert_self_ref = true;
+  }
+  ATOMIC_STORE(&lcl_node_.is_timer_task_running_, false);
+  if (need_revert_self_ref) {
+    // May destroy lcl_node_; keep this as the last action of the callback.
     lcl_node_.revert_self_ref_count_();
   }
 }

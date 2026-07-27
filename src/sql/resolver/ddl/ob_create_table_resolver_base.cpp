@@ -90,13 +90,9 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
     table_schema.set_pctfree(pctfree_);
     table_schema.set_collation_type(collation_type_);
     table_schema.set_charset_type(charset_type_);
-    table_schema.set_is_use_bloomfilter(use_bloom_filter_);
     table_schema.set_auto_increment(auto_increment_);
     
-    table_schema.set_tablegroup_id(OB_INVALID_ID);
-    table_schema.set_table_id(table_id_);
     table_schema.set_read_only(read_only_);
-    table_schema.set_duplicate_attribute(duplicate_scope_, duplicate_read_consistency_);
     table_schema.set_enable_row_movement(enable_row_movement_);
     table_schema.set_table_mode_struct(table_mode_);
     table_schema.set_dop(table_dop_);
@@ -135,12 +131,6 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
       }
     }
 
-    if (OB_SUCC(ret)) {
-      if (OB_STORAGE_FORMAT_VERSION_INVALID == storage_format_version_) {
-        storage_format_version_ = OB_STORAGE_FORMAT_VERSION_V4;
-      }
-    }
-
     // set compress method
     if (OB_SUCC(ret)) {
       if (compress_method_.empty()) {
@@ -173,13 +163,8 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
       table_schema.set_row_store_type(row_store_type_);
       table_schema.set_store_format(store_format_);
       table_schema.set_progressive_merge_round(progressive_merge_round);
-      table_schema.set_storage_format_version(storage_format_version_);
-      if (OB_FAIL(table_schema.set_expire_info(expire_info_)) ||
-          OB_FAIL(table_schema.set_compress_func_name(compress_method_)) ||
-          OB_FAIL(table_schema.set_comment(comment_)) ||
-          OB_FAIL(table_schema.set_tablegroup_name(tablegroup_name_)) ||
-          OB_FAIL(table_schema.set_ttl_definition(ttl_definition_)) ||
-          OB_FAIL(table_schema.set_storage_cache_policy(storage_cache_policy_))) {
+      if (OB_FAIL(table_schema.set_compress_func_name(compress_method_)) ||
+          OB_FAIL(table_schema.set_comment(comment_))) {
         SQL_RESV_LOG(WARN, "set table_options failed", K(ret));
       }
     }
@@ -264,13 +249,13 @@ int ObCreateTableResolverBase::add_primary_key_part(const ObString &column_name,
 }
 
 
-int ObCreateTableResolverBase::resolve_table_organization(common::ObServerConfig *tenant_config, ParseNode *node)
+int ObCreateTableResolverBase::resolve_table_organization(common::ObServerConfig *runtime_config, ParseNode *node)
 {
   int ret = OB_SUCCESS;
-  // get the table organization from the tenant config
+  // Get the table organization from the server runtime configuration.
   {
     const char *ptr = NULL;
-    if (OB_ISNULL(ptr = tenant_config->default_table_organization.get_value())) {
+    if (OB_ISNULL(ptr = runtime_config->default_table_organization.get_value())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("default organization ptr is null", K(ret));
     } else {

@@ -78,10 +78,9 @@ public:
 
 
   // for px_admission
-  int apply_target(hash::ObHashMap<ObAddr, int64_t> &worker_map,
-                   int64_t wait_time_us, int64_t session_target, int64_t req_cnt,
+  int apply_target(int64_t wait_time_us, int64_t session_target, int64_t req_cnt,
                    int64_t &admit_count);
-  int release_target(hash::ObHashMap<ObAddr, int64_t> &worker_map);
+  int release_target(int64_t worker_count);
 
   // for virtual_table iter
   int get_all_target_info(common::ObIArray<ObPxTargetInfo> &target_info_array);
@@ -93,10 +92,7 @@ private:
   ObAddr server_;
   int64_t parallel_servers_target_;
   int64_t px_target_used_;
-  // Protects px_target_used_ from concurrent apply/release/reset.
-  // apply_target and release_target serialize on this lock since both read-modify-write
-  // the single px_target_used_ counter (unlike the old hash map where per-server entries
-  // allowed concurrent updates).
+  // Protects the local PX worker quota counters.
   SpinRWLock spin_lock_;
   int64_t parallel_session_count_;
   ObPxTargetCond target_cond_;

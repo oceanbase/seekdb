@@ -70,14 +70,12 @@ protected:
 
 void TestMicroBlockReader::SetUp()
 {
-  oceanbase::ObClusterVersion::get_instance().update_data_version(DATA_CURRENT_VERSION);
   const int64_t table_id = 3001;
   ObTableSchema table_schema;
   ObColumnSchemaV2 column;
   //init table schema
   table_schema.reset();
   ASSERT_EQ(OB_SUCCESS, table_schema.set_table_name("test_row_reader"));
-  table_schema.set_tablegroup_id(1);
   table_schema.set_database_id(1);
   table_schema.set_table_id(table_id);
   table_schema.set_rowkey_column_num(rowkey_column_count);

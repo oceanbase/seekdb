@@ -72,9 +72,7 @@ public:
                K_(res),
                K_(replace_mock_fk_parent_table_id),
                K_(new_tables),
-               K_(new_mock_fk_parent_tables),
-               K_(new_sequences),
-               K_(has_index));
+               K_(new_mock_fk_parent_tables));
 private:
   virtual int init_() override;
   virtual int lock_objects_() override;
@@ -82,8 +80,6 @@ private:
   virtual int operation_before_commit_() override;
   virtual int clean_on_fail_commit_() override;
   virtual int construct_and_adjust_result_(int &return_ret) override;
-  int add_index_name_to_cache_();
-
   int lock_database_by_obj_name_();
   int lock_objects_by_name_();
   int lock_objects_by_id_();
@@ -93,13 +89,11 @@ private:
   int prefetch_schemas_();
   int check_and_set_database_id_();
   int check_table_name_();
-  int set_tablegroup_id_();
   int check_and_set_parent_table_id_();
 
   virtual int generate_table_schema_() override;
   virtual int generate_aux_table_schemas_() override;
   virtual int generate_foreign_keys_() override;
-  virtual int generate_sequence_object_() override;
   int get_mock_fk_parent_table_info_(
       const obcall::ObCreateForeignKeyArg &foreign_key_arg,
       share::schema::ObForeignKeyInfo &foreign_key_info,
@@ -111,7 +105,6 @@ private:
   uint64_t replace_mock_fk_parent_table_id_;
   // new table schema for data/index/lob tables
   common::hash::ObHashMap<MockFKParentTableNameWrapper, share::schema::ObMockFKParentTableSchema*> new_mock_fk_parent_table_map_;
-  bool has_index_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObCreateTableHelper);
 };

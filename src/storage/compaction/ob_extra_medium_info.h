@@ -38,24 +38,12 @@ public:
   int deserialize(const char *buf, const int64_t data_len, int64_t &pos);
   int64_t get_serialize_size() const;
 
-  TO_STRING_KV(K_(info), K_(compat), K_(last_compaction_type),
+  TO_STRING_KV(K_(last_compaction_type),
                K_(wait_check_flag), K_(last_medium_scn));
 
 public:
-  static constexpr int64_t MEDIUM_LIST_VERSION_V1 = 1;
-  static constexpr int32_t MEDIUM_LIST_INFO_RESERVED_BITS = 51;
-public:
-  union
-  {
-    uint64_t info_;
-    struct
-    {
-      uint64_t compat_                  : 8;
-      uint64_t last_compaction_type_    : 4; // check inner_table when last_compaction is major
-      uint64_t wait_check_flag_         : 1; // true: need check finish, false: no need check
-      uint64_t reserved_                : MEDIUM_LIST_INFO_RESERVED_BITS;
-    };
-  };
+  uint8_t last_compaction_type_; // check inner_table when last_compaction is major
+  bool wait_check_flag_; // true: need check finish, false: no need check
   int64_t last_medium_scn_;
 };
 } // namespace compaction

@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 
-#ifndef SRC_SHARE_ERRSIM_MODULE_OB_TENANT_ERRSIM_MODULE_INTERFACE_IMP_H_
-#define SRC_SHARE_ERRSIM_MODULE_OB_TENANT_ERRSIM_MODULE_INTERFACE_IMP_H_
+#ifndef SRC_SHARE_ERRSIM_MODULE_OB_ERRSIM_MODULE_INTERFACE_IMP_H_
+#define SRC_SHARE_ERRSIM_MODULE_OB_ERRSIM_MODULE_INTERFACE_IMP_H_
 
-#include "ob_tenant_errsim_module_mgr.h"
+#include "ob_errsim_module_mgr.h"
 #include "lib/ob_define.h"
 #include "lib/utility/ob_print_utils.h"
-#include "lib/errsim_module/ob_tenant_errsim_event.h"
 
 
 namespace oceanbase
@@ -28,16 +27,12 @@ namespace oceanbase
 namespace common
 {
 
-int build_tenant_errsim_moulde(
+int update_errsim_module_config(
     const int64_t config_version,
     const common::ObArray<ObFixedLengthString<ObErrsimModuleTypeHelper::MAX_TYPE_NAME_LENGTH>> &module_array,
     const int64_t percentage);
 bool is_errsim_module(
     const ObErrsimModuleType::TYPE &type);
-int add_tenant_errsim_event(
-    const ObTenantErrsimEvent &event);
-
-
 } // namespace common
 } // namespace oceanbase
 #endif

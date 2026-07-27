@@ -68,10 +68,7 @@ public:
 
 
 protected:
-  // Check if this replay operation will update the tablet status(ObTabletCreateDeleteMdsUserData), for example, the following
-  // types of ObTxDataSourceType need return TRUE.
-  // 1. CREATE_TABLET
-  // 2. REMOVE_TABLET
+  // Check whether replay updates tablet create/delete/split MDS status.
   virtual bool is_replay_update_tablet_status_() const = 0;
 
   // replay to the tablet

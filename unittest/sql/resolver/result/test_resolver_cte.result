@@ -22,8 +22,6 @@ create database cte_db;
   "name_case_mode":-1,
   "comment":"",
   "read_only":false,
-  "default_tablegroup_id":-1,
-  "default_tablegroup_name":"",
   "in_recyclebin":false,
   "primary_zone_array": [
   ]
@@ -35,16 +33,16 @@ use cte_db;
 }
 ***************   Case 4   ***************
 create table emp(id int, name varchar(20), leaderid int);
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"emp", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}], "subpartition_array":null, "index_status":1}, "max_used_column_id":18, "max_used_constraint_id":0, "rowkey_column_num":3, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "zone_replica_num_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"lz4_1.0", "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":1, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":true}, {"length":0, "column_id":4, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":true}, {"length":0, "column_id":5, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":true}], "capacity":3}, "partition_key_info":{"columns":null, "capacity":0}}, "index_arg_list":[], "constraint_list":[], "db_name":"cte_db"}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"emp", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}], "subpartition_array":null, "index_status":1}, "max_used_column_id":18, "max_used_constraint_id":0, "rowkey_column_num":3, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "zone_replica_num_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":1, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":true}, {"length":0, "column_id":4, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":true}, {"length":0, "column_id":5, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":true}], "capacity":3}, "partition_key_info":{"columns":null, "capacity":0}}, "index_arg_list":[], "constraint_list":[], "db_name":"cte_db"}, "index_arg_list":[]}
 ***************   Case 5   ***************
 create table t1(c1 int, c2 int, c3 int);
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"t1", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}], "subpartition_array":null, "index_status":1}, "max_used_column_id":18, "max_used_constraint_id":0, "rowkey_column_num":3, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "zone_replica_num_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"lz4_1.0", "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":1, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":true}, {"length":0, "column_id":4, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":true}, {"length":0, "column_id":5, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":true}], "capacity":3}, "partition_key_info":{"columns":null, "capacity":0}}, "index_arg_list":[], "constraint_list":[], "db_name":"cte_db"}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"t1", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}], "subpartition_array":null, "index_status":1}, "max_used_column_id":18, "max_used_constraint_id":0, "rowkey_column_num":3, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "zone_replica_num_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":1, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":true}, {"length":0, "column_id":4, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":true}, {"length":0, "column_id":5, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":true}], "capacity":3}, "partition_key_info":{"columns":null, "capacity":0}}, "index_arg_list":[], "constraint_list":[], "db_name":"cte_db"}, "index_arg_list":[]}
 ***************   Case 6   ***************
 create table t2(c1 int, c2 int);
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"t2", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}], "subpartition_array":null, "index_status":1}, "max_used_column_id":17, "max_used_constraint_id":0, "rowkey_column_num":3, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "zone_replica_num_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"lz4_1.0", "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":1, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":true}, {"length":0, "column_id":4, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":true}, {"length":0, "column_id":5, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":true}], "capacity":3}, "partition_key_info":{"columns":null, "capacity":0}}, "index_arg_list":[], "constraint_list":[], "db_name":"cte_db"}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"t2", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}], "subpartition_array":null, "index_status":1}, "max_used_column_id":17, "max_used_constraint_id":0, "rowkey_column_num":3, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "zone_replica_num_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":1, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":true}, {"length":0, "column_id":4, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":true}, {"length":0, "column_id":5, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":true}], "capacity":3}, "partition_key_info":{"columns":null, "capacity":0}}, "index_arg_list":[], "constraint_list":[], "db_name":"cte_db"}, "index_arg_list":[]}
 ***************   Case 7   ***************
 create table t3(c3 int primary key, c4 int);
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"t3", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}], "subpartition_array":null, "index_status":1}, "max_used_column_id":17, "max_used_constraint_id":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "zone_replica_num_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"lz4_1.0", "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":true}], "capacity":1}, "partition_key_info":{"columns":null, "capacity":0}}, "index_arg_list":[], "constraint_list":[], "db_name":"cte_db"}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"t3", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}], "subpartition_array":null, "index_status":1}, "max_used_column_id":17, "max_used_constraint_id":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "zone_replica_num_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":true}], "capacity":1}, "partition_key_info":{"columns":null, "capacity":0}}, "index_arg_list":[], "constraint_list":[], "db_name":"cte_db"}, "index_arg_list":[]}
 ***************   Case 8   ***************
 with cte(a) as (select count(c1) from t2 group by c2 limit 5) select * from cte;
 {
@@ -233,7 +231,6 @@ with cte(a) as (select count(c1) from t2 group by c2 limit 5) select * from cte;
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -683,7 +680,6 @@ with cte(a) as (select count(c1) from t2 group by c2 limit 5) select * from cte;
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -898,7 +894,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -1206,7 +1201,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -1421,7 +1415,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -1729,7 +1722,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -1944,7 +1936,6 @@ WITH cte1 (name1, name2) AS (select c1, c2 from t1) select name1 from cte1;
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -2252,7 +2243,6 @@ WITH cte1 (name1, name2) AS (select c1, c2 from t1) select name1 from cte1;
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -2467,7 +2457,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1), cte2 AS (SELECT c1, c2 FROM t2) select c1 
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -2775,7 +2764,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1), cte2 AS (SELECT c1, c2 FROM t2) select c1 
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -3093,7 +3081,6 @@ WITH cte1 AS (select * from t1) select c1, c2 from cte1;
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -3504,7 +3491,6 @@ WITH cte1 AS (select * from t1) select c1, c2 from cte1;
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -3822,7 +3808,6 @@ WITH cte1 (c1)AS(select c1 from t1), cte2 AS (select * from t1) select c1, c2 fr
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -4233,7 +4218,6 @@ WITH cte1 (c1)AS(select c1 from t1), cte2 AS (select * from t1) select c1, c2 fr
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -4654,7 +4638,6 @@ WITH cte0 AS ( select * from t1) select * from cte0 for update;
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -5065,7 +5048,6 @@ WITH cte0 AS ( select * from t1) select * from cte0 for update;
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -5280,7 +5262,6 @@ with cte as (select count(*) from t1) select * from cte;
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -5466,7 +5447,6 @@ with cte as (select count(*) from t1) select * from cte;
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -5791,7 +5771,6 @@ with cte as (select count(*) as k from t1) select * from cte where k = 1;
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -5977,7 +5956,6 @@ with cte as (select count(*) as k from t1) select * from cte where k = 1;
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -6302,7 +6280,6 @@ with cte (k1) as (select count(*) as k from t1) select * from cte where k1 = 1;
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -6488,7 +6465,6 @@ with cte (k1) as (select count(*) as k from t1) select * from cte where k1 = 1;
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -6916,7 +6892,6 @@ with  cte1 (c22, c21) AS (select c1, c2 from t1) select c22 as c21, c21 from cte
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -7224,7 +7199,6 @@ with  cte1 (c22, c21) AS (select c1, c2 from t1) select c22 as c21, c21 from cte
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -8215,7 +8189,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -8626,7 +8599,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -9313,7 +9285,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -9621,7 +9592,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -9929,7 +9899,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             ],
             "use_late_materialization":-1,
             "log_level":"",
-            "max_concurrent":-1,
             "only_concurrent_hint":false,
             "has_hint_exclude_concurrent":false,
             "parallel":-1
@@ -10245,7 +10214,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -11133,7 +11101,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -11441,7 +11408,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -11753,7 +11719,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -12071,7 +12036,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -12279,7 +12243,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -12488,7 +12451,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -12878,7 +12840,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n+1 from cte where n < 10) se
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -13154,7 +13115,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n+1 from cte where n < 10) se
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -13604,7 +13564,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n+1 from cte where n < 10) se
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -14193,7 +14152,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -14425,7 +14383,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -14977,7 +14934,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -15718,7 +15674,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -15950,7 +15905,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -16502,7 +16456,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -17491,7 +17444,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
       ],
       "use_late_materialization":-1,
       "log_level":"",
-      "max_concurrent":-1,
       "only_concurrent_hint":false,
       "has_hint_exclude_concurrent":false,
       "parallel":-1
@@ -18012,7 +17964,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
             ],
             "use_late_materialization":-1,
             "log_level":"",
-            "max_concurrent":-1,
             "only_concurrent_hint":false,
             "has_hint_exclude_concurrent":false,
             "parallel":-1
@@ -18615,7 +18566,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
             ],
             "use_late_materialization":-1,
             "log_level":"",
-            "max_concurrent":-1,
             "only_concurrent_hint":false,
             "has_hint_exclude_concurrent":false,
             "parallel":-1
@@ -19262,7 +19212,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -19470,7 +19419,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -19679,7 +19627,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -20110,7 +20057,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -20318,7 +20264,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -20527,7 +20472,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -20917,7 +20861,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) select n from cte
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -21125,7 +21068,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) select n from cte
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -21334,7 +21276,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) select n from cte
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -21889,7 +21830,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -22302,7 +22242,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -23305,7 +23244,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -24590,7 +24528,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -24798,7 +24735,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -25007,7 +24943,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -25500,7 +25435,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -25708,7 +25642,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -25917,7 +25850,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -26410,7 +26342,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello+1 from cte where he
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -26686,7 +26617,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello+1 from cte where he
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -27136,7 +27066,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello+1 from cte where he
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -28034,7 +27963,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -28558,7 +28486,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -29161,7 +29088,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -30116,7 +30042,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -30640,7 +30565,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -31243,7 +31167,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -32199,7 +32122,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
       ],
       "use_late_materialization":-1,
       "log_level":"",
-      "max_concurrent":-1,
       "only_concurrent_hint":false,
       "has_hint_exclude_concurrent":false,
       "parallel":-1
@@ -32720,7 +32642,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
             ],
             "use_late_materialization":-1,
             "log_level":"",
-            "max_concurrent":-1,
             "only_concurrent_hint":false,
             "has_hint_exclude_concurrent":false,
             "parallel":-1
@@ -33323,7 +33244,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
             ],
             "use_late_materialization":-1,
             "log_level":"",
-            "max_concurrent":-1,
             "only_concurrent_hint":false,
             "has_hint_exclude_concurrent":false,
             "parallel":-1
@@ -34279,7 +34199,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -34803,7 +34722,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -35406,7 +35324,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -36052,7 +35969,6 @@ with cte(n) as (select 1 from dual) search depth first by n set abc select * fro
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -36176,7 +36092,6 @@ with cte(n) as (select 1 from dual) search depth first by n set abc select * fro
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -36391,7 +36306,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -36699,7 +36613,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -36914,7 +36827,6 @@ with cte(a) as (select 1 from dual union all select 2 from dual), cte_1(b) as (s
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -37041,7 +36953,6 @@ with cte(a) as (select 1 from dual union all select 2 from dual), cte_1(b) as (s
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -37250,7 +37161,6 @@ with cte(a) as (select 1 from dual union all select 2 from dual), cte_1(b) as (s
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -37377,7 +37287,6 @@ with cte(a) as (select 1 from dual union all select 2 from dual), cte_1(b) as (s
                 ],
                 "use_late_materialization":-1,
                 "log_level":"",
-                "max_concurrent":-1,
                 "only_concurrent_hint":false,
                 "has_hint_exclude_concurrent":false,
                 "parallel":-1
@@ -37505,7 +37414,6 @@ with cte(a) as (select 1 from dual union all select 2 from dual), cte_1(b) as (s
                 ],
                 "use_late_materialization":-1,
                 "log_level":"",
-                "max_concurrent":-1,
                 "only_concurrent_hint":false,
                 "has_hint_exclude_concurrent":false,
                 "parallel":-1
@@ -38423,7 +38331,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -38731,7 +38638,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -39039,7 +38945,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             ],
             "use_late_materialization":-1,
             "log_level":"",
-            "max_concurrent":-1,
             "only_concurrent_hint":false,
             "has_hint_exclude_concurrent":false,
             "parallel":-1
@@ -39355,7 +39260,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -39572,7 +39476,6 @@ with cte(n) as (select 1 from dual) search depth first by n set abc select * fro
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -39696,7 +39599,6 @@ with cte(n) as (select 1 from dual) search depth first by n set abc select * fro
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -40117,7 +40019,6 @@ with cte(a,b,c) as (select * from emp) search depth first by a set abc select * 
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -40528,7 +40429,6 @@ with cte(a,b,c) as (select * from emp) search depth first by a set abc select * 
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -40745,7 +40645,6 @@ with cte(n) as (select 1 union all select n+1 from cte where n < 23) select n fr
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -40977,7 +40876,6 @@ with cte(n) as (select 1 union all select n+1 from cte where n < 23) select n fr
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -41529,7 +41427,6 @@ with cte(n) as (select 1 union all select n+1 from cte where n < 23) select n fr
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -42599,7 +42496,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -43216,7 +43112,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -43740,7 +43635,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
               ],
               "use_late_materialization":-1,
               "log_level":"",
-              "max_concurrent":-1,
               "only_concurrent_hint":false,
               "has_hint_exclude_concurrent":false,
               "parallel":-1
@@ -44343,7 +44237,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
               ],
               "use_late_materialization":-1,
               "log_level":"",
-              "max_concurrent":-1,
               "only_concurrent_hint":false,
               "has_hint_exclude_concurrent":false,
               "parallel":-1

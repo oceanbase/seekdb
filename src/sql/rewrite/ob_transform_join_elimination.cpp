@@ -3470,7 +3470,7 @@ int ObTransformJoinElimination::eliminate_join_in_joined_table(ObDMLStmt *stmt,
   } else if (joined_table->is_full_join()) {
     // full outer join internal elimination is not performed for now, trans_conditions may be passed out after join elimination
     // to do: full outer join internal will not pass out trans_conditions when it can be eliminated
-    ret = extract_candi_table(joined_table, child_candi_tables);//allow using child table to eliminate external table
+    ret = extract_candi_table(joined_table, child_candi_tables);
   } else if (IS_OUTER_JOIN(joined_table->joined_type_)) {
     bool left_happened = false;
     bool right_happened = false;

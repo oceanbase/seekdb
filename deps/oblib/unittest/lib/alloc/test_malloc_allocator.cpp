@@ -24,11 +24,11 @@ TEST(TestMallocAllocator, idle)
 {
   ObMallocAllocator *malloc_allocator = ObMallocAllocator::get_instance();
   const uint64_t ctx_id = 1;
-  auto ta = malloc_allocator->get_tenant_ctx_allocator(ctx_id);
+  auto ta = malloc_allocator->get_ctx_allocator(ctx_id);
   ASSERT_TRUE(NULL != ta);
-  ASSERT_EQ(OB_SUCCESS, malloc_allocator->set_tenant_limit(1024 * 1024 * 1024));
+  ASSERT_EQ(OB_SUCCESS, malloc_allocator->set_allocator_limit(1024 * 1024 * 1024));
 
-  ASSERT_EQ(OB_SUCCESS, malloc_allocator->set_tenant_ctx_idle(ctx_id,
+  ASSERT_EQ(OB_SUCCESS, malloc_allocator->set_ctx_idle(ctx_id,
                                                               OB_MALLOC_BIG_BLOCK_SIZE));
 }
 

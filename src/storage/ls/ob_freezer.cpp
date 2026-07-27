@@ -16,11 +16,11 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_freezer.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"  // previously hidden behind a transitive include
+#include "share/ob_ex_rpc.h"
 #include "share/rc/ob_module_provider.h"
 #include "logservice/ob_log_service.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
-#include "storage/compaction/ob_tenant_tablet_scheduler.h"
+#include "storage/compaction/ob_tablet_scheduler.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 
 namespace oceanbase
@@ -372,7 +372,7 @@ ObFreezer::ObFreezer()
     is_async_tablet_freeze_task_existing_(false),
     is_async_ls_freeze_task_existing_(false),
     throttle_is_skipping_(false),
-    tenant_replay_is_pending_(false),
+    replay_is_pending_(false),
     async_freeze_tablets_() {}
 
 ObFreezer::ObFreezer(ObLS *ls)
@@ -392,7 +392,7 @@ ObFreezer::ObFreezer(ObLS *ls)
     is_async_tablet_freeze_task_existing_(false),
     is_async_ls_freeze_task_existing_(false),
     throttle_is_skipping_(false),
-    tenant_replay_is_pending_(false),
+    replay_is_pending_(false),
     async_freeze_tablets_() {}
 
 ObFreezer::~ObFreezer()
@@ -418,7 +418,7 @@ void ObFreezer::reset()
   is_async_tablet_freeze_task_existing_ = false;
   is_async_ls_freeze_task_existing_ = false;
   throttle_is_skipping_ = false;
-  tenant_replay_is_pending_ = false;
+  replay_is_pending_ = false;
 }
 
 int ObFreezer::init(ObLS *ls)
@@ -444,7 +444,7 @@ int ObFreezer::init(ObLS *ls)
     is_async_tablet_freeze_task_existing_ = false;
     is_async_ls_freeze_task_existing_ = false;
     throttle_is_skipping_ = false;
-    tenant_replay_is_pending_ = false;
+    replay_is_pending_ = false;
 
     is_inited_ = true;
   }
@@ -605,7 +605,7 @@ void ObFreezer::resubmit_log_if_needed_(const int64_t start_time,
                 K(is_try),
                 K(cost_time),
                 K(throttle_is_skipping_),
-                K(tenant_replay_is_pending_),
+                K(replay_is_pending_),
                 KPC(memtable));
   stat_.add_diagnose_info("wait freeze finish costs too much time");
 }
@@ -635,7 +635,7 @@ struct AsyncFreezeFunctor {
 };
 
 /**
- * @brief Try pushing back an async freeze task into Tenant Freeze Task Queue.
+ * @brief Try pushing an asynchronous task into the database freeze queue.
  *        To minimize the number of tasks in the async task queue as much as possible,
  *        we control the task count by async task existing flag.
  *
@@ -648,34 +648,33 @@ struct AsyncFreezeFunctor {
 void ObFreezer::submit_an_async_freeze_task(const bool is_ls_freeze)
 {
   int ret = OB_SUCCESS;
-  ObTenantFreezer *tenant_freezer = nullptr;
   bool submit_succ = false;
 
   if (OB_UNLIKELY(!enable_) || OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_RUNNING;
     LOG_ERROR("freezer is offline, can not freeze now", K(ret));
-  } else if (OB_ISNULL(tenant_freezer = share::g_mp->tenant_freezer())) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "ObTenantFreezer is null", K(ret));
   } else if (async_freeze_task_already_exists_(is_ls_freeze)) {
     submit_succ = false;
-  } else {
-    ObSpinLockGuard freeze_thread_pool(tenant_freezer->freeze_thread_pool_lock_);
-
-    if (acquired_exec_async_task_permission_(is_ls_freeze)) {
-      AsyncFreezeFunctor async_freeze_functor(is_ls_freeze, this);
-      do {
-        ret = tenant_freezer->freeze_thread_pool_.commit_task_ignore_ret(async_freeze_functor);
-        if (OB_FAIL(ret) && REACH_TIME_INTERVAL(5LL * 1000LL * 1000LL)) {
-          STORAGE_LOG(WARN, "commit task to freeze thread pool failed", KR(ret));
-        }
-      } while (OB_FAIL(ret));
+  } else if (acquired_exec_async_task_permission_(is_ls_freeze)) {
+    AsyncFreezeFunctor async_freeze_functor(is_ls_freeze, this);
+    ret = ex_rpc::async_call_internal([async_freeze_functor]() mutable {
+      (void)async_freeze_functor();
+    });
+    if (OB_FAIL(ret)) {
+      if (is_ls_freeze) {
+        ATOMIC_STORE(&is_async_ls_freeze_task_existing_, false);
+      } else {
+        ATOMIC_STORE(&is_async_tablet_freeze_task_existing_, false);
+      }
+      STORAGE_LOG(WARN, "dispatch async freeze task failed", KR(ret), K(is_ls_freeze));
+    } else {
       submit_succ = true;
       STORAGE_LOG(INFO, "finish submit async freeze task", KR(ret), K(is_ls_freeze), K(submit_succ));
     }
   }
 
-  if (!submit_succ && REACH_TIME_INTERVAL(1LL * 1000LL * 1000LL /* 1 second */)) {
+  if (!submit_succ && OB_SUCC(ret)
+      && REACH_TIME_INTERVAL(1LL * 1000LL * 1000LL /* 1 second */)) {
     TRANS_LOG(INFO,
               "async freeze task already exists, skip submitting one task",
               K(is_ls_freeze),
@@ -1011,19 +1010,6 @@ void ObFreezer::handle_set_tablet_freeze_failed(const bool need_rewrite_meta,
   }
 }
 
-int ObFreezer::decide_real_snapshot_version_(const ObTabletID &tablet_id,
-                                             const ObTablet *tablet,
-                                             const SCN freeze_snapshot_version,
-                                             SCN &real_snapshot_version)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(tablet_id);
-  UNUSED(tablet);
-  real_snapshot_version = freeze_snapshot_version;
-
-  return ret;
-}
-
 int ObFreezer::handle_no_active_memtable_(const ObTabletID &tablet_id,
                                           const ObTablet *tablet,
                                           SCN freeze_snapshot_version)
@@ -1032,11 +1018,6 @@ int ObFreezer::handle_no_active_memtable_(const ObTabletID &tablet_id,
   ObProtectedMemtableMgrHandle *protected_handle = NULL;
   if (OB_FAIL(tablet->get_protected_memtable_mgr_handle(protected_handle))) {
     LOG_WARN("failed to get_protected_memtable_mgr_handle", K(ret), KPC(tablet));
-  } else if (OB_FAIL(decide_real_snapshot_version_(tablet_id,
-                                                   tablet,
-                                                   freeze_snapshot_version,
-                                                   freeze_snapshot_version))) {
-    LOG_WARN("failed to decide real snapshot version", K(ret), KPC(tablet));
   } else if (!protected_handle->has_memtable()) {
     // We need trigger a dag to rewrite the snapshot version of tablet
     // meta for the major merge and medium merge. While the implementation
@@ -1061,7 +1042,7 @@ int ObFreezer::handle_no_active_memtable_(const ObTabletID &tablet_id,
     bool is_exist = false;
     if (OB_FAIL(tmp_mini_dag.init_by_param(&param))) {
       LOG_WARN("failed to init mini dag", K(ret), K(param));
-    } else if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->check_dag_exist(&tmp_mini_dag, is_exist))) {
+    } else if (OB_FAIL(share::g_mp->dag_scheduler()->check_dag_exist(&tmp_mini_dag, is_exist))) {
       LOG_WARN("failed to check dag exists", K(ret), K(tablet_id));
     } else if (is_exist) {
       // we need to wait the current mini compaction dag to complete
@@ -1075,10 +1056,9 @@ int ObFreezer::handle_no_active_memtable_(const ObTabletID &tablet_id,
     } else if (protected_handle->get_max_saved_version_from_medium_info_recorder() >=
                freeze_snapshot_version.get_val_for_tx()) {
       int tmp_ret = OB_SUCCESS;
-      if (OB_TMP_FAIL(compaction::ObTenantTabletScheduler::schedule_merge_dag(*tablet,
+      if (OB_TMP_FAIL(compaction::ObTabletScheduler::schedule_merge_dag(*tablet,
                                                                               MEDIUM_MERGE,
-                                                                              freeze_snapshot_version.get_val_for_tx(),
-                                                                              EXEC_MODE_LOCAL))) {
+                                                                              freeze_snapshot_version.get_val_for_tx()))) {
         if (OB_SIZE_OVERFLOW != tmp_ret && OB_EAGAIN != tmp_ret) {
           ret = tmp_ret;
           LOG_ERROR("failed to schedule medium merge dag", K(ret), K(tablet_id));

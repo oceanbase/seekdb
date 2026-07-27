@@ -30,7 +30,6 @@ CREATE OR REPLACE PACKAGE dbms_ischeduler
                            IN comments           VARCHAR(255),
                            IN credential_name    VARCHAR(255),
                            IN destination_name   VARCHAR(255),
-                           IN my_zone            VARCHAR(128),
                            IN program_name       VARCHAR(255),
                            IN job_style          VARCHAR(255),
                            IN interval_ts        BIGINT,

@@ -90,8 +90,8 @@ int ObTruncatePartKeyInfo::init(
   ObSchemaGetterGuard schema_guard;
   const ObPartitionLevel part_level = data_table_schema.get_part_level();
   const uint64_t data_table_id = data_table_schema.get_table_id();
-  if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("Failed to get tenant schema guard", K(ret));
+  if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("Failed to get runtime schema guard", K(ret));
   } else if (OB_FAIL(create_tmp_session(schema_guard, free_session_ctx_, session_))) {
     LOG_WARN("Failed to create temp session", K(ret));
   } else if (OB_UNLIKELY(ObPartitionLevel::PARTITION_LEVEL_ONE != part_level
@@ -301,8 +301,7 @@ int ObTruncatePartKeyInfo::create_tmp_session(
   int ret = OB_SUCCESS;
   session = nullptr;
   uint32_t sid = ObSQLSessionInfo::INVALID_SESSID;
-  const schema::ObTenantSchema *tenant_info = nullptr;
-  const ObDatabaseSchema *database_schema = nullptr;
+  const schema::ObServerRuntimeSchema *runtime_info = nullptr;
   if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
     LOG_WARN("Failed to create sess id", K(ret));
   } else if (OB_FAIL(GCTX.session_mgr_->create_session(sid, session))) {
@@ -311,17 +310,17 @@ int ObTruncatePartKeyInfo::create_tmp_session(
   } else {
     free_session_ctx.sessid_ = sid;
   }
-  if (FAILEDx(schema_guard.get_tenant_info(tenant_info))) {
-    LOG_WARN("Failed to get tenant info", K(ret));
-  } else if (OB_ISNULL(tenant_info)) {
+  if (FAILEDx(schema_guard.get_server_runtime_info(runtime_info))) {
+    LOG_WARN("Failed to get server runtime info", K(ret));
+  } else if (OB_ISNULL(runtime_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null tenant schema", K(ret));
+    LOG_WARN("Unexpected null server runtime schema", K(ret));
   } else if (OB_FAIL(session->load_default_sys_variable(false, false))) {
     LOG_WARN("Failed to load default sys variable", K(ret));
   } else if (OB_FAIL(session->load_default_configs_in_pc())) {
     LOG_WARN("Failed to load default configs in pc", K(ret));
-  } else if (OB_FAIL(session->init_tenant(tenant_info->get_tenant_name()))) {
-     LOG_WARN("Failed to init tenant in session", K(ret));
+  } else if (OB_FAIL(session->init_runtime(runtime_info->get_runtime_name()))) {
+     LOG_WARN("Failed to init runtime in session", K(ret));
   } else {
     session->set_inner_session();
   }

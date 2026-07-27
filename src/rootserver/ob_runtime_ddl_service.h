@@ -1,0 +1,129 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ROOTSERVER_OB_RUNTIME_DDL_SERVICE_H_
+#define OCEANBASE_ROOTSERVER_OB_RUNTIME_DDL_SERVICE_H_
+
+#include "share/ob_rpc_struct.h"
+#include "share/config/ob_server_config.h"
+
+namespace oceanbase
+{
+namespace common
+{
+using ObAddrIArray = ObIArray<ObAddr>;
+using ObAddrArray = ObSEArray<ObAddr, 3>;
+class ObServerConfig;
+}
+namespace share
+{
+namespace schema
+{
+class ObDDLTransController;
+}
+}
+namespace rootserver
+{
+class ObDDLService;
+struct ObSysStat
+{
+  struct Item;
+  typedef common::ObDList<Item> ItemList;
+
+  struct Item : public common::ObDLinkBase<Item>
+  {
+    Item() : name_(NULL), value_(), info_(NULL) {}
+    Item(ItemList &list, const char *name, const char *info);
+
+    TO_STRING_KV("name", common::ObString(name_), K_(value), "info", common::ObString(info_));
+    const char *name_;
+    common::ObObj value_;
+    const char *info_;
+  };
+
+  ObSysStat();
+
+  // set values after bootstrap
+  int set_initial_values();
+
+  TO_STRING_KV(K_(item_list));
+
+  ItemList item_list_;
+
+  // Server-wide identifiers.
+  Item ob_max_used_server_id_;
+  Item ob_max_used_ddl_task_id_;
+
+  // Runtime-local identifiers.
+  Item ob_max_used_normal_rowid_table_tablet_id_;
+  Item ob_max_used_sys_pl_object_id_;
+  Item ob_max_used_object_id_;
+};
+class ObRuntimeDDLService
+{
+public:
+  ObRuntimeDDLService() : inited_(false), stopped_(false), ddl_service_(NULL),
+  schema_service_(NULL),
+  ddl_trans_controller_(NULL) {}
+
+  virtual int create_system_runtime(share::schema::ObServerRuntimeSchema &runtime_schema);
+  void stop() { stopped_ = true; }
+  void restart() { stopped_ = false; }
+  bool is_stopped() { return stopped_; }
+
+  int init(
+      ObDDLService &ddl_service,
+      common::ObMySQLProxy &sql_proxy,
+      share::schema::ObMultiVersionSchemaService &schema_service);
+
+public:
+  static int replace_sys_stat(ObSysStat &sys_stat,
+      common::ObISQLClient &trans);
+
+private:
+  int insert_global_merge_info_(common::ObMySQLTransaction &trans);
+  int init_runtime_sys_stats_(common::ObMySQLTransaction &trans);
+
+private:
+  int check_inner_stat();
+
+  int get_runtime_schema_guard_with_version_in_inner_table(share::schema::ObSchemaGetterGuard &schema_guard);
+
+  int publish_schema();
+
+  int init_system_variables(
+      const ObServerRuntimeSchema &runtime_schema,
+      ObSysVariableSchema &sys_variable_schema);
+  int update_mysql_runtime_sys_var(
+      const share::schema::ObServerRuntimeSchema &runtime_schema,
+      share::schema::ObSysParam *sys_params,
+      int64_t params_capacity);
+  int update_special_runtime_sys_var(
+      const share::schema::ObSysVariableSchema &sys_variable,
+      share::schema::ObSysParam *sys_params,
+      int64_t params_capacity);
+
+private:
+  bool inited_;
+  volatile bool stopped_;
+  ObDDLService *ddl_service_;
+  common::ObMySQLProxy *sql_proxy_;
+  share::schema::ObMultiVersionSchemaService *schema_service_;
+  share::schema::ObDDLTransController *ddl_trans_controller_;
+};
+}
+}
+#endif // OCEANBASE_ROOTSERVER_OB_RUNTIME_DDL_SERVICE_H_

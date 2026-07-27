@@ -30,7 +30,6 @@
 #include "lib/utility/ob_utility.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/utility/ob_bits_utils.h"
-#include "lib/alloc/memory_sanity.h"
 namespace oceanbase
 {
 namespace common
@@ -116,7 +115,6 @@ struct ModulePageAllocator: public ObIAllocator
   {
     return (nullptr != allocator_
             && !attr_.label_.is_valid()
-            && true
             && 0 == attr_.ctx_id_)
                 ? allocator_->alloc(sz) : alloc(sz, attr_);
   }
@@ -228,8 +226,6 @@ private: // data
   int64_t total_;       // total number of bytes occupied by pages
   PageAllocatorT page_allocator_;
   TracerContext *tc_;
-  bool enable_sanity_;
-
 private: // helpers
 
   Page *insert_head(Page *page)
@@ -261,10 +257,6 @@ private: // helpers
 
     if (NULL != ptr) {
       page  = new(ptr) Page((char *)ptr + sz);
-      if (SANITY_BOOL_EXPR(enable_sanity_)) {
-        SANITY_POISON(page->buf_, page->page_end_ - page->buf_);
-      }
-
       total_  += sz;
       ++pages_;
     } else {
@@ -277,9 +269,6 @@ private: // helpers
   }
   void free_page(Page *page)
   {
-    if (SANITY_BOOL_EXPR(enable_sanity_)) {
-      SANITY_UNPOISON(page->buf_, page->page_end_ - page->buf_);
-    }
     page_allocator_.free(page);
   }
 
@@ -401,12 +390,10 @@ private: // helpers
 public: // API
   /** constructor */
   PageArena(const int64_t page_size,
-            const PageAllocatorT &alloc,
-            const bool enable_sanity = false)
+            const PageAllocatorT &alloc)
       : cur_page_(NULL), header_(NULL), tailer_(NULL),
         page_limit_(0), page_size_(page_size),
-        pages_(0), used_(0), total_(0), page_allocator_(alloc), tc_(nullptr),
-        enable_sanity_(enable_sanity)
+        pages_(0), used_(0), total_(0), page_allocator_(alloc), tc_(nullptr)
   {
     if (page_size < (int64_t)sizeof(Page)) {
       _OB_LOG_RET(ERROR, OB_ERROR, "invalid page size(page_size=%ld, page=%ld)", page_size,
@@ -414,7 +401,7 @@ public: // API
     }
   }
   PageArena(const int64_t page_size)
-    : PageArena(page_size, PageAllocatorT(), true) {}
+    : PageArena(page_size, PageAllocatorT()) {}
   PageArena() : PageArena(DEFAULT_PAGE_SIZE) {}
   virtual ~PageArena() { free(); }
 
@@ -508,17 +495,7 @@ public: // API
   }
   CharT *alloc(const int64_t sz)
   {
-    CharT *ret = NULL;
-    if (!SANITY_BOOL_EXPR(enable_sanity_)) {
-      ret = _alloc(sz);
-    } else {
-      ret = _alloc(lib::align_up2(sz, 8) + 8);
-      if (ret != NULL) {
-        SANITY_UNPOISON(ret, sz);
-        SANITY_POISON((void*)((uint64_t)ret + sz), 8);
-      }
-    }
-    return ret;
+    return _alloc(sz);
   }
   CharT *alloc(const int64_t sz, const lib::ObMemAttr &attr)
   {
@@ -583,17 +560,7 @@ public: // API
 
   CharT *alloc_aligned(const int64_t sz, const int64_t alignment = 16)
   {
-    CharT *ret = NULL;
-    if (!SANITY_BOOL_EXPR(enable_sanity_)) {
-      ret = _alloc_aligned(sz, alignment);
-    } else {
-      ret = _alloc_aligned(lib::align_up2(sz, 8) + 8, alignment);
-      if (ret != NULL) {
-        SANITY_UNPOISON(ret, sz);
-        SANITY_POISON((void*)((uint64_t)ret + sz), 8);
-      }
-    }
-    return ret;
+    return _alloc_aligned(sz, alignment);
   }
 
   /**
@@ -641,7 +608,7 @@ public: // API
     } else {
       ret = p;
       // if we're the last one on the current page with enough space
-      if (!SANITY_BOOL_EXPR(enable_sanity_) && p + oldsz == cur_page_->alloc_end_
+      if (p + oldsz == cur_page_->alloc_end_
           && p + newsz  < cur_page_->page_end_) {
         cur_page_->alloc_end_ = (char *)p + newsz;
         ret = p;
@@ -783,11 +750,6 @@ public: // API
         free_page(page);
       }
       page = NULL;
-    }
-    if (remain_page != NULL) {
-      if (SANITY_BOOL_EXPR(enable_sanity_)) {
-        SANITY_POISON(remain_page->buf_, remain_page->page_end_ - remain_page->buf_);
-      }
     }
     header_ = cur_page_ = remain_page;
     if (NULL == cur_page_) {
@@ -936,13 +898,6 @@ public: // API
 
   void fast_reuse()
   {
-    if (SANITY_BOOL_EXPR(enable_sanity_)) {
-      Page *page = header_;
-      while (NULL != page) {
-        SANITY_POISON(page->buf_, page->page_end_ - page->buf_);
-        page = page->next_page_;
-      }
-    }
     used_ = 0;
     cur_page_ = header_;
     if (NULL != cur_page_) {
@@ -987,13 +942,12 @@ public:
   ObArenaAllocator(const lib::ObLabel &label = ObModIds::OB_MODULE_PAGE_ALLOCATOR,
                    const int64_t page_size = OB_MALLOC_NORMAL_BLOCK_SIZE,
                    int64_t ctx_id = 0)
-    : arena_(page_size, ModulePageAllocator(label, ctx_id), true) {}
-  ObArenaAllocator(ObIAllocator &allocator, const int64_t page_size = OB_MALLOC_NORMAL_BLOCK_SIZE,
-                   const bool enable_sanity = false)
-    : arena_(page_size, ModulePageAllocator(allocator), enable_sanity) {};
+    : arena_(page_size, ModulePageAllocator(label, ctx_id)) {}
+  ObArenaAllocator(ObIAllocator &allocator, const int64_t page_size = OB_MALLOC_NORMAL_BLOCK_SIZE)
+    : arena_(page_size, ModulePageAllocator(allocator)) {};
   ObArenaAllocator(const lib::ObMemAttr &attr,
                    const int64_t page_size = OB_MALLOC_NORMAL_BLOCK_SIZE)
-    : arena_(page_size, ModulePageAllocator(attr), true) {}
+    : arena_(page_size, ModulePageAllocator(attr)) {}
   virtual ~ObArenaAllocator() {};
 public:
   virtual void *alloc(const int64_t sz) { return arena_.alloc_aligned(sz); }

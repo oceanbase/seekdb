@@ -143,7 +143,6 @@ void TestThrottlingUtils::SetUp()
 void TestThrottlingUtils::TearDown()
 {
   LOG_INFO("TestThrottlingUtils has TearDown");
-  //ObMallocAllocator::get_instance()->recycle_tenant_allocator(1001);
 }
 
 TEST_F(TestThrottlingUtils, test_calc_decay_factor)

@@ -85,7 +85,7 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
   const ObSrsItem *src_srs_item = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_TRANSFORM);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   int64_t param_num = expr.arg_cnt_;
   ObString src_proj4_param;
   ObString dest_proj4_param;
@@ -108,13 +108,12 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
     if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *gis_datum,
                 expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
       LOG_WARN("fail to get real data.", K(ret), K(wkb));
-    } else if (FALSE_IT(temp_allocator.add_baseline_size(wkb.length()))) {
     } else if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(wkb, src_srid))) {
       ret = OB_ERR_GIS_INVALID_DATA;
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_TRANSFORM);
       LOG_WARN("get srid from wkb failed", K(wkb), K(ret));
-    } else if (OB_FAIL(OTSRS_MGR->get_tenant_srs_guard(srs_guard))) {
-      LOG_WARN("get tenant srs guard failed", K(src_srid), K(ret));
+    } else if (OB_FAIL(SRS_SERVICE->get_srs_guard(srs_guard))) {
+      LOG_WARN("get runtime SRS guard failed", K(src_srid), K(ret));
     } else if (src_srid != 0 && OB_FAIL(srs_guard.get_srs_item(src_srid, src_srs_item))) {
       LOG_WARN("failed to get srs item", K(ret), K(src_srid));
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb, src_geo, src_srs_item, N_PRIV_ST_TRANSFORM, 
@@ -162,7 +161,6 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
             if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *datum2,
                         expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), dest_proj4_param))) {
               LOG_WARN("fail to get real data.", K(ret), K(dest_proj4_param));
-            } else if (FALSE_IT(temp_allocator.add_baseline_size(dest_proj4_param.length()))) {
             } 
           }
         }
@@ -181,7 +179,6 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
         if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *datum2,
                     expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), src_proj4_param))) {
           LOG_WARN("fail to get real data.", K(ret), K(src_proj4_param));
-        } else if (FALSE_IT(temp_allocator.add_baseline_size(src_proj4_param.length()))) {
         } else if (OB_FAIL(temp_allocator.eval_arg(expr.args_[2], ctx, datum3))) {
           LOG_WARN("failed to eval datum", K(ret));
         } else if (ob_is_integer_type(expr.args_[2]->datum_meta_.type_)) {
@@ -206,7 +203,6 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
           if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *datum3,
                       expr.args_[2]->datum_meta_, expr.args_[2]->obj_meta_.has_lob_header(), dest_proj4_param))) {
             LOG_WARN("fail to get real data.", K(ret), K(dest_proj4_param));
-          } else if (FALSE_IT(temp_allocator.add_baseline_size(dest_proj4_param.length()))) {
           } 
         }
       }
@@ -265,9 +261,6 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
           }
         } 
       } 
-      if (mem_ctx != nullptr) {
-        temp_allocator.add_ext_used((*mem_ctx)->arena_used());
-      }
     }
   }
 

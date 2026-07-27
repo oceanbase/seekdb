@@ -25,12 +25,6 @@ using namespace sql;
 using namespace observer;
 using namespace common;
 
-int ObAllVirtualPsStat::inner_open()
-{
-  int ret = OB_SUCCESS;
-  return ret;
-}
-
 int ObAllVirtualPsStat::fill_cells(ObPsCache &ps_cache)
 {
   int ret = OB_SUCCESS;
@@ -81,7 +75,7 @@ int ObAllVirtualPsStat::inner_get_next_row()
     ret = OB_ITER_END;
   } else {
     iter_end_ = true;
-    MOD_SCOPE {
+    SERVER_MODULE_SCOPE {
       ObPsCache *ps_cache = share::g_mp->ps_cache();
       if (OB_ISNULL(ps_cache)) {
         SERVER_LOG(DEBUG, "ps_cache is NULL, ignore this", K(ret));

@@ -922,7 +922,7 @@ public:
 
   double semi_minor_axis() const;
 
-  friend class ObTenantSrs;
+  friend class ObSrsService;
 
 private:
   ObSpatialReferenceSystemBase *srs_info_;

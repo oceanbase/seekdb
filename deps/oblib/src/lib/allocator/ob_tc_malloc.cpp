@@ -29,7 +29,6 @@
 #include "lib/signal/ob_signal_struct.h"
 #include "lib/utility/ob_tracepoint.h"
 #include "lib/utility/ob_platform_utils.h"
-#include "lib/allocator/ob_mem_leak_checker.h"
 #include "lib/alloc/malloc_hook.h"
 #include "lib/alloc/alloc_func.h"
 
@@ -43,22 +42,6 @@ namespace common
 
 ObIAllocator *global_default_allocator = NULL;
 
-ObMemLeakChecker &get_mem_leak_checker()
-{
-  return ObMemLeakChecker::get_instance();
-}
-
-void reset_mem_leak_checker_label(const char *str)
-{
-  get_mem_leak_checker().set_str(str);
-  get_mem_leak_checker().reset();
-}
-
-void reset_mem_leak_checker_rate(int64_t rate)
-{
-  get_mem_leak_checker().set_rate(rate);
-}
-
 const ObCtxInfo &get_global_ctx_info()
 {
   static ObCtxInfo info;
@@ -68,7 +51,6 @@ const ObCtxInfo &get_global_ctx_info()
 void  __attribute__((constructor(MALLOC_INIT_PRIORITY))) init_global_memory_pool()
 {
   auto& t = EventTable::instance();
-  auto& c = get_mem_leak_checker();
   auto& a = AChunkMgr::instance();
   // Set unlimited memory limit early to avoid 8GB default limit issue
   // This will be reset to proper value in main() after config is loaded
@@ -76,9 +58,6 @@ void  __attribute__((constructor(MALLOC_INIT_PRIORITY))) init_global_memory_pool
   in_hook()= true;
   global_default_allocator = ObMallocAllocator::get_instance();
   in_hook()= false;
-#ifdef ENABLE_SANITY
-  abort_unless(init_sanity());
-#endif
 }
 
 int64_t get_virtual_memory_used(int64_t *resident_size)

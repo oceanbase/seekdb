@@ -34,8 +34,6 @@ OB_DEF_DESERIALIZE(ObJoinFilterNdv)
 {
   int ret = OB_SUCCESS;
   hllc_.set_deserialize_allocator(&allocator_);
-  // ObJoinFilterNdv may send from a lower version(QC), which don't have hllc, make sure you will
-  // not deserialize it
   LST_DO_CODE(OB_UNIS_DECODE, in_filter_active_, in_filter_ndv_, use_hllc_estimate_ndv_,
               bf_ndv_, hllc_);
   return ret;
@@ -255,7 +253,7 @@ int ObJoinFilterCountRowPieceMsgCtx::send_whole_msg_to_one_sqc(ObPxSqcMeta *sqc,
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ch->flush())) {
-    LOG_WARN("failed to wait for channel", K(ret), "peer", ch->get_peer());
+    LOG_WARN("failed to wait for channel", K(ret));
   }
   return ret;
 }

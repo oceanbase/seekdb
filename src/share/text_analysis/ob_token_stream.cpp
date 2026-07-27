@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/text_analysis/ob_token_stream.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {

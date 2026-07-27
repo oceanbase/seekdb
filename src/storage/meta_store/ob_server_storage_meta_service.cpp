@@ -18,12 +18,12 @@
 #ifndef _WIN32
 #include <sys/statvfs.h>
 #endif
-#include "observer/omt/ob_multi_tenant.h"
+#include "observer/omt/ob_server_runtime_controller.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/ob_file_system_router.h"
 #include "share/ob_local_device.h"  // relocated-definition owner
-#include "storage/meta_store/ob_tenant_storage_meta_service.h"
+#include "storage/meta_store/ob_local_storage_meta_service.h"
 
 namespace oceanbase
 {
@@ -216,7 +216,7 @@ int ObServerStorageMetaService::check_log_disk(
 int ObServerStorageMetaService::get_using_disk_space(int64_t &using_space) const
 {
   int ret = OB_SUCCESS;
-  omt::ObMultiTenant *omt = GCTX.omt_;
+  omt::ObServerRuntimeController *omt = GCTX.server_runtime_controller_;
   using_space = 0;
   if (OB_FAIL(server_slogger_.get_using_disk_space(using_space))) {
     LOG_WARN("fail to get using disk space", K(ret), K(using_space));
@@ -224,18 +224,17 @@ int ObServerStorageMetaService::get_using_disk_space(int64_t &using_space) const
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, omt is nullptr", K(ret), KP(omt));
   } else {
-    MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
-    if (OB_FAIL(guard.switch_to(false))) {
-      LOG_WARN("fail to switch tenant", K(ret));
+    if (OB_FAIL(share::check_server_runtime_ready())) {
+      LOG_WARN("server runtime is not ready", K(ret));
     } else {
-      int64_t tenant_using_size = 0;
-      if (OB_FAIL(share::g_mp->tenant_storage_meta_service()->get_slogger().get_using_disk_space(tenant_using_size))) {
+      int64_t local_storage_using_size = 0;
+      if (OB_FAIL(share::g_mp->local_storage_meta_service()->get_slogger().get_using_disk_space(local_storage_using_size))) {
         LOG_WARN("fail to get the disk space that slog used", K(ret));
       } else {
-        using_space += tenant_using_size;
+        using_space += local_storage_using_size;
       }
     }
-    if (OB_TENANT_NOT_IN_SERVER == ret) {
+    if (OB_SERVER_RUNTIME_NOT_READY == ret) {
       ret = OB_SUCCESS;
     }
   }

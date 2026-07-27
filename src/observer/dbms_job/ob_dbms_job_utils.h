@@ -63,7 +63,6 @@ public:
     what_(),
     nlsenv_(),
     charenv_(),
-    field1_(),
     scheduler_flags_(0),
     exec_env_() {}
 
@@ -82,7 +81,6 @@ public:
                K(what_),
                K(nlsenv_),
                K(charenv_),
-               K(field1_),
                K(scheduler_flags_));
 
   bool valid()
@@ -94,7 +92,6 @@ public:
 
   
   uint64_t get_job_id() { return job_; }
-  uint64_t get_job_id_with_tenant() { return job_; }
   int64_t  get_this_date() { return this_date_; }
   int64_t  get_next_date() { return next_date_; }
   int64_t  get_last_date() { return last_date_; }
@@ -103,12 +100,9 @@ public:
   bool is_broken() { return 0x1 == (flag_ & 0x1); }
   bool is_mysql_audit_job() { return !!(flag_ & JOB_FLAG_MASK_MYSQL); }
   bool is_running(){ return this_date_ != 0; }
-  bool is_broadcast() { return 0 == get_zone().case_compare(__ALL_SERVER_BC); }
-
   common::ObString &get_what() { return what_; }
   common::ObString &get_exec_env() { return exec_env_; }
   common::ObString &get_lowner() { return lowner_; }
-  common::ObString &get_zone() { return field1_; }
   common::ObString &get_interval() { return interval_; }
 
   int deep_copy(common::ObIAllocator &allocator, const ObDBMSJobInfo &other);
@@ -129,14 +123,12 @@ public:
   common::ObString what_;
   common::ObString nlsenv_;
   common::ObString charenv_;
-  common::ObString field1_;
   int64_t scheduler_flags_;
   common::ObString exec_env_;
 
 public:
   static const int64_t JOB_FLAG_MASK_BROKEN = 1;
   static const int64_t JOB_FLAG_MASK_MYSQL = 2;
-  static const char *__ALL_SERVER_BC; // broadcast
 };
 
 class ObDBMSJobUtils
@@ -156,7 +148,7 @@ public:
   int get_dbms_job_info(
     uint64_t job_id,
     common::ObIAllocator &allocator, ObDBMSJobInfo &job_info);
-  int get_dbms_job_infos_in_tenant(
+  int get_dbms_job_infos_in_runtime(
     common::ObIAllocator &allocator, common::ObIArray<ObDBMSJobInfo> &job_infos);
 
   int extract_info(

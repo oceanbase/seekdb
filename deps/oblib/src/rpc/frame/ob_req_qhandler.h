@@ -41,7 +41,7 @@ public:
   int onThreadCreated(obsys::CThread *);
   int onThreadDestroy(obsys::CThread *);
 
-  bool handlePacketQueue(ObRequest *req, void *args);
+  bool handle_request(ObRequest *req);
 
 private:
   ObReqTranslator &translator_;

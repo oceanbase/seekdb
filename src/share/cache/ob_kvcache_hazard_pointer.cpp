@@ -92,7 +92,7 @@ void HazardPointer::set_next_atomic(HazardPointer* next)
   ATOMIC_STORE_RLX(&this->next_, next);
 }
 
-ObMemAttr SharedHazptr::attr_ = SET_USE_500("shr_hazptr");
+ObMemAttr SharedHazptr::attr_("shr_hazptr");
 
 int SharedHazptr::make(HazardPointer& hazptr, SharedHazptr& shared_hazptr)
 {

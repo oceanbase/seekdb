@@ -421,7 +421,7 @@ int ObRowStore::Iterator::next_iter_pos(const BlockInfo *&iter_block, int64_t &i
 
 ////////////////////////////////////////////////////////////////
 ObRowStore::ObRowStore(ObIAllocator &alloc,
-                       const lib::ObLabel &label/*=OB_INVALID_TENANT_ID*/,
+                       const lib::ObLabel &label,
                        bool use_compact_row /*= true*/)
 :   inner_alloc_(),
     reserved_columns_(alloc),
@@ -443,7 +443,7 @@ ObRowStore::ObRowStore(ObIAllocator &alloc,
 {
   inner_alloc_.set_label(label);
 }
-ObRowStore::ObRowStore(const lib::ObLabel &label/*=OB_INVALID_TENANT_ID*/,
+ObRowStore::ObRowStore(const lib::ObLabel &label,
                        bool use_compact_row /*= true*/)
 :   inner_alloc_(),
     reserved_columns_(inner_alloc_),
@@ -522,7 +522,7 @@ ObRowStore::BlockInfo* ObRowStore::new_block(int64_t block_size)
   } else {
     block_size = NORMAL_BLOCK_SIZE;
   }
-  // make sure all memory allocated under the right tenant
+  // Make sure all memory is allocated under the active runtime context.
   ObMemAttr attr(label_, ctx_id_);
   block = static_cast<BlockInfo *>(alloc_.alloc(block_size, attr));
   if (OB_ISNULL(block)) {

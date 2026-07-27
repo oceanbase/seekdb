@@ -66,29 +66,18 @@ alter table alter_table1 rename to alter_t1
 alter table alter_table1 set comment = 'hahaha'
 #compression
 alter table alter_table1 set compression = 'none'
-#expire info
-ALTER TABLE test SET EXPIRE_INFO (c1 > 9)
-#alter table alter_table1 set EXPIRE_INFO = (thedate < date_sub(merging_frozen_time(), INTERVAL 1 DAY))
 #replica num
 alter table alter_table1 replica_num = 3
 #Partition block size
 alter table alter_table1 set block_size = 16384
-#BloomFilter
-alter table alter_table1 set use_bloom_filter = true
 #step merge num range(1~64)
 alter table alter_table1 set progressive_merge_num = 1
-#table group
-alter table alter_table1 tablegroup = 'tp1'
-alter table alter_table1 drop tablegroup
 #zone list
 #alter table alter_table1 zone_list = ('z1', 'z2')
 #primary zone
 alter table alter_table1 primary_zone = 'z1'
 #autoincrement
 alter table alter_table1 auto_increment = 1
-
-##tablegroup
-alter table alter_table1 drop tablegroup
 
 ###error
 #duplicate column c3
@@ -117,7 +106,7 @@ alter table alter_table1 drop tablegroup
 #--error 5057
 #alter table alter_table1 add primary key (c2);
 #--error 5057
-#alter table alter_table1 add primary key (c2) GLOBAL COMMENT 'string' COMPRESSION 'lz4_1.0' BLOCK_SIZE 1024 STORING(c3, c4);
+#alter table alter_table1 add primary key (c2) GLOBAL COMMENT 'string' COMPRESSION 'zstd_1.3.8' BLOCK_SIZE 1024 STORING(c3, c4);
 #table not exist
 #--error 5019
 #alter table alter_table2 rename TO t5

@@ -342,7 +342,6 @@ public:
         ref_table_id_(common::OB_INVALID_ID ),
         index_table_id_(common::OB_INVALID_ID ),
         session_id_(0),
-        advisor_table_id_(OB_INVALID_ID),
         is_index_global_(false),
         is_spatial_index_(false),
         is_multivalue_index_(false),
@@ -360,8 +359,6 @@ public:
         filter_before_index_back_(),
         table_partition_info_(NULL),
         ranges_(),
-        ss_ranges_(),
-        is_skip_scan_(),
         limit_count_expr_(NULL),
         limit_offset_expr_(NULL),
         sample_info_(),
@@ -458,18 +455,6 @@ public:
     return index_table_id_;
   }
 
-  inline uint64_t get_advisor_table_id() const
-  {
-    return advisor_table_id_;
-  }
-
-  inline void set_advisor_table_id(uint64_t advise_table_id)
-  {
-    advisor_table_id_ = advise_table_id;
-  }
-
-  bool is_duplicate_table();
-
   /**
    *  Get pre query range
    */
@@ -481,7 +466,7 @@ public:
     return static_cast<const ObQueryRangeProvider *>(pre_range_graph_);
   }
 
-  inline bool is_new_query_range() const
+  inline bool has_range_graph() const
   { return pre_range_graph_ != nullptr; }
 
   /**
@@ -598,12 +583,6 @@ public:
   inline common::ObIArray<ObRawExpr *> &get_access_exprs()
   { return access_exprs_; }
 
-  inline const common::ObIArray<ObRawExpr *> &get_pseudo_columnref_exprs() const
-  { return pseudo_columnref_exprs_; }
-
-  inline common::ObIArray<ObRawExpr *> &get_pseudo_columnref_exprs()
-  { return pseudo_columnref_exprs_; }
-
 // removal it in cg layer, up to opt layer.
   inline const common::ObIArray<uint64_t> &get_ddl_output_column_ids() const
   { return ddl_output_column_ids_; }
@@ -682,8 +661,6 @@ public:
            ((NULL == pre_range_graph_) ||
             (1 == ranges_.count() && ranges_.at(0).is_whole_range()));
   }
-  void set_skip_scan(bool is_skip_scan) { is_skip_scan_ = is_skip_scan; }
-  bool is_skip_scan() const { return is_skip_scan_; }
   virtual bool is_table_scan() const override { return true; }
   bool is_whole_range_scan() const
   {
@@ -697,7 +674,7 @@ public:
   void set_is_multi_part_table_scan(bool multi_part_tsc)
   { is_multi_part_table_scan_ = multi_part_tsc; }
   bool get_is_multi_part_table_scan() { return is_multi_part_table_scan_; }
-  int set_query_ranges(ObIArray<ObNewRange> &ranges, ObIArray<ObNewRange> &ss_ranges);
+  int set_query_ranges(ObIArray<ObNewRange> &ranges);
   virtual int inner_replace_op_exprs(ObRawExprReplacer &replacer) override;
   inline common::ObIArray<bool> &get_filter_before_index_flags() { return filter_before_index_back_; }
   inline const common::ObIArray<bool> &get_filter_before_index_flags() const { return filter_before_index_back_; }
@@ -1092,14 +1069,12 @@ private: // member functions
   int build_column_expr(ObRawExprFactory &expr_factory,
                         const share::schema::ObColumnSchemaV2 &column_schema,
                         ObColumnRefRawExpr *&column_expr);
-  int check_is_delete_insert_scan(bool &is_delete_insert_scan) const;
 protected: // memeber variables
   // basic info
   uint64_t table_id_; //table id or alias table id
   uint64_t ref_table_id_; //base table id
   uint64_t index_table_id_;
   uint64_t session_id_; //for temporary table, record session id
-  uint64_t advisor_table_id_; // used for duplicate table replica selection in the plan cache
   bool is_index_global_;
   bool is_spatial_index_;
   bool is_multivalue_index_;
@@ -1170,8 +1145,6 @@ protected: // memeber variables
                                                //because its used in EXCHANGE stage, and
                                                //copy_without_child used before this
   ObRangesArray ranges_;//For explain. Code generator and executor cannot use this.
-  ObRangesArray ss_ranges_;//For explain. Code generator and executor cannot use this.
-  bool is_skip_scan_;
 
   // limit params from upper limit op
   ObRawExpr *limit_count_expr_;
@@ -1219,7 +1192,7 @@ protected: // memeber variables
   // end for global index lookup
 
   share::schema::ObTableType table_type_;
-  // in the new fts version, doc_id_table_id_ may be invalid.
+  // Mapping-table IDs may be invalid when the data table's hidden primary key is used directly.
   uint64_t doc_id_table_id_; // used for rowkey lookup of fulltext, JSON multi-value and vector index
   // text retrieval as index scan
   ObTextRetrievalInfo text_retrieval_info_;
@@ -1239,8 +1212,8 @@ protected: // memeber variables
   // begin for table scan with doc id
   bool is_tsc_with_doc_id_;
   uint64_t rowkey_doc_tid_;
-  bool is_skip_rowkey_doc_; // in the new fts version, is_skip_rowkey_doc_ is true.
-  bool is_skip_rowkey_vid_; // in the new fts version, is_skip_rowkey_vid_ is true.
+  bool is_skip_rowkey_doc_; // true when doc IDs are derived directly from the data-table rowkey
+  bool is_skip_rowkey_vid_; // true when vector IDs are derived directly from the data-table rowkey
   common::ObSEArray<std::pair<ObRowkeyIdExprType, ObRawExpr*>, 4, common::ModulePageAllocator, true> rowkey_id_exprs_;
   uint64_t multivalue_col_idx_;
   int32_t multivalue_type_;
@@ -1258,8 +1231,6 @@ protected: // memeber variables
 
   int64_t index_prefix_;
   bool is_scan_resumable_;
-  common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> pseudo_columnref_exprs_;
-
   // disallow copy and assign
   DISALLOW_COPY_AND_ASSIGN(ObLogTableScan);
 };

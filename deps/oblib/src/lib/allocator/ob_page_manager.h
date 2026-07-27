@@ -23,7 +23,6 @@
 #include "lib/alloc/ob_malloc_allocator.h"
 #include "lib/alloc/alloc_interface.h"
 #include "lib/lock/ob_mutex.h"
-#include "lib/resource/ob_affinity_ctrl.h"
 
 namespace oceanbase
 {
@@ -37,7 +36,7 @@ using lib::AChunk;
 using lib::ABlock;
 using lib::ObMemAttr;
 using lib::ObMallocAllocator;
-using lib::ObTenantCtxAllocator;
+using lib::ObCtxAllocator;
 
 class ObPageManager : public lib::IBlockMgr
 {
@@ -50,7 +49,7 @@ public:
   ObPageManager();
   ~ObPageManager() {}
   static ObPageManager *thread_local_instance() { return tl_instance_; }
-  int set_tenant_ctx(const int64_t ctx_id);
+  int set_ctx(const int64_t ctx_id);
   int64_t get_hold() const;
   int64_t get_tid() const { return tid_; }
   // IBlockMgr interface
@@ -62,7 +61,7 @@ private:
   int init();
   RLOCAL_STATIC(ObPageManager *,tl_instance_);
 private:
-  lib::ObTenantCtxAllocatorGuard ta_;
+  lib::ObCtxAllocatorGuard ctx_allocator_;
   lib::BlockSet bs_;
   int64_t used_;
   const int64_t tid_;
@@ -81,7 +80,7 @@ inline ObPageManager::ObPageManager()
 {
 }
 
-inline int ObPageManager::set_tenant_ctx(const int64_t ctx_id)
+inline int ObPageManager::set_ctx(const int64_t ctx_id)
 {
   int ret = OB_SUCCESS;
   
@@ -102,12 +101,12 @@ inline int ObPageManager::init()
   } else if (OB_ISNULL(ma)) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(ERROR, "null ptr", K(ret));
-  } else if (OB_ISNULL(ta_ = ma->get_tenant_ctx_allocator(ctx_id_))) {
+  } else if (OB_ISNULL(ctx_allocator_ = ma->get_ctx_allocator(ctx_id_))) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(ERROR, "null ptr", K(ret));
   } else {
-    bs_.set_tenant_ctx_allocator(*ta_.ref_allocator());
-    bs_.set_chunk_mgr(&ta_->get_req_chunk_mgr());
+    bs_.set_ctx_allocator(*ctx_allocator_.ref_allocator());
+    bs_.set_chunk_mgr(&ctx_allocator_->get_req_chunk_mgr());
     is_inited_ = true;
   }
   return ret;
@@ -135,8 +134,8 @@ inline ABlock *ObPageManager::alloc_block(uint64_t size, const ObMemAttr &attr)
     if (OB_UNLIKELY(nullptr == block)) {
       _OB_LOG(WARN, "oops, alloc failed, ctx_id=%ld hold=%ld limit=%ld",
               ctx_id_,
-              ta_->get_hold(),
-              ta_->get_limit());
+              ctx_allocator_->get_hold(),
+              ctx_allocator_->get_limit());
     } else {
       used_ += size;
     }

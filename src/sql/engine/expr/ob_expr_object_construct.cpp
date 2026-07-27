@@ -86,7 +86,7 @@ int ObExprObjectConstruct::newx(ObEvalCtx &ctx, ObObj &result, uint64_t udt_id, 
   if (OB_SUCC(ret)) {
     // if called by check_default_value in ddl resolver, no sql ctx, get guard from session cache
     if (OB_ISNULL(exec_ctx.get_sql_ctx()) || OB_ISNULL(exec_ctx.get_sql_ctx()->schema_guard_)) {
-      if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+      if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
         LOG_WARN("fail to get schema guard", K(ret));
       } else {
         schema_guard_ptr = &schema_guard;

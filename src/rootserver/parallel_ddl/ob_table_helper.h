@@ -53,14 +53,12 @@ protected:
   virtual int generate_table_schema_() = 0;
   virtual int generate_aux_table_schemas_() = 0;
   virtual int generate_foreign_keys_() = 0;
-  virtual int generate_sequence_object_() = 0;
   int inner_create_table_(const ObString *ddl_stmt_str,
                           const uint64_t replace_mock_fk_parent_table_id);
   int create_schemas_(const ObString *ddl_stmt_str,
                       const uint64_t replace_mock_fk_parent_table_id);
   int create_tables_(const ObString *ddl_stmt_str);
   int inner_generate_aux_table_schema_(const ObCreateTableArg &arg);
-  int create_sequences_();
   int deal_with_mock_fk_parent_tables_(
       const uint64_t replace_mock_fk_parent_table_id);
   int create_tablets_();
@@ -69,7 +67,6 @@ protected:
 
 protected:
   common::ObArray<ObTableSchema> new_tables_;
-  common::ObArray<ObSequenceSchema *> new_sequences_;
   common::ObArray<ObMockFKParentTableSchema *> new_mock_fk_parent_tables_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTableHelper);

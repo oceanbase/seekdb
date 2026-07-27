@@ -33,7 +33,7 @@ int ObSqlMemMgrProcessor::init(
 {
   int ret = OB_SUCCESS;
   bool tmp_enable_auto_mem_mgr = false;
-  ObTenantSqlMemoryManager *sql_mem_mgr = get_sql_mem_mgr();
+  ObSqlMemoryManager *sql_mem_mgr = get_sql_mem_mgr();
   is_auto_mgr_ = false;
   reset();
   profile_.set_operator_type(op_type);
@@ -355,9 +355,9 @@ int ObSqlWorkareaUtil::get_workarea_size(const ObSqlWorkAreaType wa_type,
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(session)) {
     if (HASH_WORK_AREA == wa_type) {
-      value = session->get_tenant_hash_area_size();
+      value = session->get_hash_area_size();
     } else if (SORT_WORK_AREA == wa_type) {
-      value = session->get_tenant_sort_area_size();
+      value = session->get_sort_area_size();
     } else {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected status: workarea type", K(wa_type));

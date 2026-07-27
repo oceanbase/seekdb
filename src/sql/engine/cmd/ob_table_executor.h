@@ -121,8 +121,7 @@ private:
       obcall::ObAlterTableArg &alter_table_arg,
       obcall::ObAlterTableRes &res,
       common::ObIAllocator &allocator,
-      ObSQLSessionInfo *my_session,
-      const bool is_sync_ddl_user);
+      ObSQLSessionInfo *my_session);
 
   int alter_table_exchange_partition_rpc(
       obcall::ObExchangePartitionArg &exchange_partition_arg,
@@ -284,26 +283,6 @@ public:
   ObOptimizeTableExecutor() = default;
   virtual ~ObOptimizeTableExecutor() = default;
   int execute(ObExecContext &ctx, ObOptimizeTableStmt &stmt);
-};
-
-class ObOptimizeTenantStmt;
-class ObOptimizeTenantExecutor
-{
-public:
-  ObOptimizeTenantExecutor() = default;
-  virtual ~ObOptimizeTenantExecutor() = default;
-  int execute(ObExecContext &ctx, ObOptimizeTenantStmt &stmt);
-  static int optimize_tenant(const obcall::ObOptimizeTenantArg &arg,
-      share::schema::ObMultiVersionSchemaService &schema_service);
-};
-
-class ObOptimizeAllStmt;
-class ObOptimizeAllExecutor
-{
-public:
-  ObOptimizeAllExecutor() = default;
-  virtual ~ObOptimizeAllExecutor() = default;
-  int execute(ObExecContext &ctx, ObOptimizeAllStmt &stmt);
 };
 
 } //end namespace sql

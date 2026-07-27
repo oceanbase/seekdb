@@ -28,7 +28,6 @@ namespace observer
 
 ObGVTxSchedulerStat::ObGVTxSchedulerStat()
     : ObVirtualTableScannerIterator(),
-      xid_(),
       tx_scheduler_stat_iter_()
 {
 }
@@ -44,7 +43,6 @@ void ObGVTxSchedulerStat::reset()
   parts_buffer_[0] = '\0';
   tx_desc_addr_buffer_[0] = '\0';
   savepoints_buffer_[0] = '\0';
-  xid_.reset();
   ObVirtualTableScannerIterator::reset();
 }
 
@@ -92,7 +90,6 @@ int ObGVTxSchedulerStat::inner_get_next_row(common::ObNewRow *&row)
     }
   } else {
     const int64_t col_count = output_column_ids_.count();
-    xid_ = tx_scheduler_stat.xid_;
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
@@ -176,29 +173,6 @@ int ObGVTxSchedulerStat::inner_get_next_row(common::ObNewRow *&row)
           break;
         case CAN_EARLY_LOCK_RELEASE:
           cur_row_.cells_[i].set_bool(tx_scheduler_stat.can_elr_);
-          break;
-        case GTRID:
-          if (!xid_.empty()) {
-            cur_row_.cells_[i].set_varchar(xid_.get_gtrid_str());
-            cur_row_.cells_[i].set_default_collation_type();
-          } else {
-            cur_row_.cells_[i].reset();
-          }
-          break;
-        case BQUAL:
-          if (!xid_.empty()) {
-            cur_row_.cells_[i].set_varchar(xid_.get_bqual_str());
-            cur_row_.cells_[i].set_default_collation_type();
-          } else {
-            cur_row_.cells_[i].reset();
-          }
-          break;
-        case FORMAT_ID:
-          if (!xid_.empty()) {
-            cur_row_.cells_[i].set_int(xid_.get_format_id());
-          } else {
-            cur_row_.cells_[i].set_int(-1);
-          }
           break;
         default:
           ret = OB_ERR_UNEXPECTED;

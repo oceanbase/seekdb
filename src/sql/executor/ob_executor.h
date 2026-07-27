@@ -47,13 +47,10 @@ private:
   ObExecutor(const ObExecutor &other);
   ObExecutor &operator=(const ObExecutor &ohter);
 private:
-  int execute_remote_single_partition_plan(ObExecContext &ctx);
-  int execute_distributed_plan(ObExecContext &ctx);
   int execute_static_cg_px_plan(ObExecContext &ctx);
 private:
   bool inited_;
   ObPhysicalPlan *phy_plan_;
-  // Used for distributed scheduler
   uint64_t execution_id_;
 };
 }

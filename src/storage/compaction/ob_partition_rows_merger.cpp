@@ -684,7 +684,7 @@ int ObPartitionMergeHelper::has_incremental_data(bool &has_incremental_data) con
     } else if (OB_UNLIKELY(nullptr == top_item || !top_item->is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "unexpected top item", K(ret), KPC(top_item));
-    } else if (!top_item->iter_->is_base_iter() || !top_item->iter_->is_macro_merge_iter() /* for small sstable */) {
+    } else if (!top_item->iter_->is_base_iter() || !top_item->iter_->is_macro_merge_iter()) {
       has_incremental_data = true;
     }
   }
@@ -930,7 +930,6 @@ ObPartitionMergeIter *ObPartitionMajorMergeHelper::alloc_merge_iter(const ObMerg
   } else if (!table->is_major_sstable() || merge_param.is_full_merge()) {
     merge_iter = alloc_helper<ObPartitionRowMergeIter>(allocator_, allocator_);
   } else if (static_cast<const ObSSTable *>(table)->is_small_sstable()) {
-    const uint64_t compat_version = merge_param.static_param_.data_version_;
     if (MICRO_BLOCK_MERGE_LEVEL == merge_param.static_param_.merge_level_) {
       merge_iter = alloc_helper<ObPartitionMicroMergeIter>(allocator_, allocator_);
     } else {
@@ -981,7 +980,8 @@ ObPartitionMergeIter *ObPartitionMinorMergeHelper::alloc_merge_iter(const ObMerg
   ObPartitionMergeIter *merge_iter = nullptr;
   if (OB_ISNULL(table)) {
     // do nothing
-  } else if (!(table->is_sstable() && static_cast<const ObSSTable*>(table)->is_small_sstable())
+  } else if (!(table->is_sstable()
+               && static_cast<const ObSSTable *>(table)->is_small_sstable())
       && !is_mini_merge(static_param.get_merge_type())
       && !static_param.is_full_merge_
       && static_param.sstable_logic_seq_ < ObMacroDataSeq::MAX_SSTABLE_SEQ) {

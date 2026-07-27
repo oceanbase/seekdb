@@ -20,8 +20,8 @@
 #include "storage/slog/ob_storage_log_struct.h"
 #include <inttypes.h>
 #include "storage/ob_super_block_struct.h"
-#include "observer/omt/ob_tenant_meta.h"
-#include "share/ob_unit_getter.h"
+#include "observer/omt/ob_server_runtime_meta.h"
+#include "share/resource/ob_server_runtime_config.h"
 #include "storage/ls/ob_ls_meta.h"
 
 namespace oceanbase
@@ -33,78 +33,59 @@ namespace share
 namespace storage
 {
 class ObTablet;
-struct ObCreateTenantPrepareLog : public ObIBaseStorageLogEntry
+struct ObCreateRuntimePrepareLog : public ObIBaseStorageLogEntry
 {
 public:
-  explicit ObCreateTenantPrepareLog(omt::ObTenantMeta &meta);
-  virtual ~ObCreateTenantPrepareLog() {}
+  explicit ObCreateRuntimePrepareLog(omt::ObServerRuntimeMeta &meta);
+  virtual ~ObCreateRuntimePrepareLog() {}
   virtual bool is_valid() const override;
   TO_STRING_KV(K_(meta));
   OB_UNIS_VERSION_V(1);
 
 private:
-  omt::ObTenantMeta &meta_;
+  omt::ObServerRuntimeMeta &meta_;
 };
 
-struct ObCreateTenantCommitLog : public ObIBaseStorageLogEntry
+struct ObCreateRuntimeCommitLog : public ObIBaseStorageLogEntry
 {
 public:
-  explicit ObCreateTenantCommitLog();
-  virtual ~ObCreateTenantCommitLog() {}
+  explicit ObCreateRuntimeCommitLog();
+  virtual ~ObCreateRuntimeCommitLog() {}
   virtual bool is_valid() const override;
-  TO_STRING_KV("type", "ObCreateTenantCommitLog");
+  TO_STRING_KV("type", "ObCreateRuntimeCommitLog");
   OB_UNIS_VERSION_V(1);
 };
 
-struct ObCreateTenantAbortLog : public ObIBaseStorageLogEntry
+struct ObCreateRuntimeAbortLog : public ObIBaseStorageLogEntry
 {
 public:
-  explicit ObCreateTenantAbortLog();
-  virtual ~ObCreateTenantAbortLog() {}
+  explicit ObCreateRuntimeAbortLog();
+  virtual ~ObCreateRuntimeAbortLog() {}
   virtual bool is_valid() const override;
-  TO_STRING_KV("type", "ObCreateTenantAbortLog");
+  TO_STRING_KV("type", "ObCreateRuntimeAbortLog");
   OB_UNIS_VERSION_V(1);
 };
 
-struct ObDeleteTenantPrepareLog : public ObIBaseStorageLogEntry
+struct ObUpdateServerResourcesLog : public ObIBaseStorageLogEntry
 {
 public:
-  explicit ObDeleteTenantPrepareLog();
-  virtual ~ObDeleteTenantPrepareLog() {}
-  virtual bool is_valid() const override;
-  TO_STRING_KV("type", "ObDeleteTenantPrepareLog");
-  OB_UNIS_VERSION_V(1);
-};
-struct ObDeleteTenantCommitLog : public ObIBaseStorageLogEntry
-{
-public:
-  explicit ObDeleteTenantCommitLog();
-  virtual ~ObDeleteTenantCommitLog() {}
-  virtual bool is_valid() const override;
-  TO_STRING_KV("type", "ObDeleteTenantCommitLog");
-  OB_UNIS_VERSION_V(1);
-};
-
-struct ObUpdateTenantUnitLog : public ObIBaseStorageLogEntry
-{
-public:
-  explicit ObUpdateTenantUnitLog(share::ObUnitInfoGetter::ObTenantConfig &unit);
-  virtual ~ObUpdateTenantUnitLog() {}
+  explicit ObUpdateServerResourcesLog(share::ObServerRuntimeConfig &runtime_config);
+  virtual ~ObUpdateServerResourcesLog() {}
   virtual bool is_valid() const override;
 
-  TO_STRING_KV(K_(unit));
+  TO_STRING_KV(K_(runtime_config));
 
   OB_UNIS_VERSION_V(1);
 
 private:
-  share::ObUnitInfoGetter::ObTenantConfig  &unit_;
+  share::ObServerRuntimeConfig  &runtime_config_;
 };
 
-struct ObUpdateTenantSuperBlockLog : public ObIBaseStorageLogEntry
+struct ObUpdateRuntimeSuperBlockLog : public ObIBaseStorageLogEntry
 {
 public:
-  explicit ObUpdateTenantSuperBlockLog(ObTenantSuperBlock &super_block);
-  virtual ~ObUpdateTenantSuperBlockLog() {}
+  explicit ObUpdateRuntimeSuperBlockLog(ObServerRuntimeSuperBlock &super_block);
+  virtual ~ObUpdateRuntimeSuperBlockLog() {}
   virtual bool is_valid() const override;
 
   TO_STRING_KV(K_(super_block));
@@ -112,7 +93,7 @@ public:
   OB_UNIS_VERSION_V(1);
 
 private:
-  ObTenantSuperBlock &super_block_;
+  ObServerRuntimeSuperBlock &super_block_;
 };
 
 struct ObLSMetaLog : public ObIBaseStorageLogEntry

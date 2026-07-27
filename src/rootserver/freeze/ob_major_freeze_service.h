@@ -20,13 +20,13 @@
 #include "logservice/ob_log_base_type.h"
 #include "share/scn.h"
 #include "lib/lock/ob_recursive_mutex.h"
-#include "rootserver/freeze/ob_tenant_major_freeze.h"
+#include "rootserver/freeze/ob_local_major_freeze.h"
 
 namespace oceanbase
 {
 namespace rootserver
 {
-class ObTenantMajorFreeze;
+class ObLocalMajorFreeze;
 
 enum ObMajorFreezeServiceType : uint8_t {
   SERVICE_TYPE_INVALID = 0,
@@ -45,7 +45,7 @@ public:
       is_launched_(false), lock_(common::ObLatchIds::MAJOR_FREEZE_SERVICE_LOCK),
       rw_lock_(common::ObLatchIds::MAJOR_FREEZE_LOCK),
       switch_lock_(common::ObLatchIds::MAJOR_FREEZE_SWITCH_LOCK),
-      tenant_major_freeze_(nullptr)
+      local_major_freeze_(nullptr)
   {}
   virtual ~ObMajorFreezeService();
 
@@ -90,7 +90,7 @@ public:
 
   bool is_paused() const;
   int get_uncompacted_tablets(
-    common::ObArray<share::ObTabletReplica> &uncompacted_tablets,
+    common::ObArray<share::ObTabletRuntimeInfo> &uncompacted_tablets,
     common::ObArray<uint64_t> &uncompacted_table_ids) const;
 
 protected:
@@ -100,8 +100,8 @@ protected:
   }
 
 private:
-  int alloc_tenant_major_freeze();
-  int delete_tenant_major_freeze();
+  int alloc_local_major_freeze();
+  int delete_local_major_freeze();
   int inner_switch_to_follower();
   int check_inner_stat();
 
@@ -116,7 +116,7 @@ private:
   common::SpinRWLock rw_lock_;
   // switch_lock_: used for avoiding switch_to_leader, switch_to_follower concurrently execute. 
   common::ObRecursiveMutex switch_lock_;
-  ObTenantMajorFreeze *tenant_major_freeze_;
+  ObLocalMajorFreeze *local_major_freeze_;
 };
 
 class ObPrimaryMajorFreezeService : public ObMajorFreezeService
@@ -125,7 +125,7 @@ public:
   ObPrimaryMajorFreezeService();
   virtual ~ObPrimaryMajorFreezeService();
 
-  static int mtl_init(ObPrimaryMajorFreezeService *&service);
+  static int server_module_init(ObPrimaryMajorFreezeService *&service);
 
 protected:
   virtual ObMajorFreezeServiceType get_service_type() const override;
@@ -137,7 +137,7 @@ public:
   ObRestoreMajorFreezeService();
   virtual ~ObRestoreMajorFreezeService();
 
-  static int mtl_init(ObRestoreMajorFreezeService *&service);
+  static int server_module_init(ObRestoreMajorFreezeService *&service);
 
 protected:
   virtual ObMajorFreezeServiceType get_service_type() const override;

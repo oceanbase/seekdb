@@ -44,7 +44,7 @@ public:
   int init_session(
     sql::ObSQLSessionInfo &session,
     share::schema::ObSchemaGetterGuard &schema_guard,
-    const common::ObString &tenant_name,
+    const common::ObString &runtime_name,
     const common::ObString &database_name, uint64_t database_id,
     const share::schema::ObUserInfo* user_info,
     sql::ObExecEnv &exec_env);
@@ -63,4 +63,3 @@ private:
 }
 }
 #endif /* SRC_OBSERVER_DBMS_JOB_EXECUTOR_H_ */
-

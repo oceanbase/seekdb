@@ -54,7 +54,7 @@ int ObReqQHandler::onThreadDestroy(obsys::CThread *th)
   return translator_.th_destroy();
 }
 
-bool ObReqQHandler::handlePacketQueue(ObRequest *req, void */* arg */)
+bool ObReqQHandler::handle_request(ObRequest *req)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(req)) {
@@ -65,7 +65,7 @@ bool ObReqQHandler::handlePacketQueue(ObRequest *req, void */* arg */)
   ObReqProcessor *processor = NULL;
   if (OB_SUCC(ret)) {
     if (OB_FAIL(translator_.translate(*req, processor))) {
-      LOG_WARN("translate reqeust fail", K(*req), K(ret));
+      LOG_WARN("translate request fail", K(*req), K(ret));
       processor = NULL;
     }
   }
@@ -77,9 +77,9 @@ bool ObReqQHandler::handlePacketQueue(ObRequest *req, void */* arg */)
       on_translate_fail(req, ret);
     }
   } else {
-    req->set_trace_point(ObRequest::OB_EASY_REQUEST_QHANDLER_PROCESSOR_RUN);
+    req->set_trace_point(ObRequest::OB_REQUEST_QHANDLER_PROCESSOR_RUN);
     if (OB_FAIL(processor->run())) {
-      LOG_WARN("process rpc fail", K(ret));
+      LOG_WARN("process request fail", K(ret));
     }
     translator_.release(processor);
   }

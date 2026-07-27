@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_DTL
 #include "ob_dtl_channel_loop.h"
-#include "sql/engine/px/ob_px_util.h"
 
 using namespace oceanbase::common;
 
@@ -35,8 +34,7 @@ ObDtlChannelLoop::ObDtlChannelLoop()
       ignore_interrupt_(false),
       timeout_(INT64_MAX),
       spin_lock_(common::ObLatchIds::DTL_CHANNEL_LIST_LOCK),
-      mock_addr_(),
-      sentinel_node_(0, mock_addr_, ObDtlChannel::DtlChannelType::LOCAL_CHANNEL),
+      sentinel_node_(0),
       n_first_no_data_(0),
       op_monitor_info_(default_op_monitor_info_),
       first_data_get_(false),
@@ -64,8 +62,7 @@ ObDtlChannelLoop::ObDtlChannelLoop(ObMonitorNode &op_monitor_info)
       ignore_interrupt_(false),
       timeout_(INT64_MAX),
       spin_lock_(common::ObLatchIds::DTL_CHANNEL_LIST_LOCK),
-      mock_addr_(),
-      sentinel_node_(0, mock_addr_, ObDtlChannel::DtlChannelType::LOCAL_CHANNEL),
+      sentinel_node_(0),
       n_first_no_data_(0),
       op_monitor_info_(op_monitor_info),
       first_data_get_(false),
@@ -135,7 +132,7 @@ int ObDtlChannelLoop::find(ObDtlChannel* ch, int64_t &out_idx)
   }
   if (OB_INVALID_ID == out_idx) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("channel not found", K(ch), KP(ch->get_id()), K(ch->get_peer()), K(out_idx));
+    LOG_WARN("channel not found", K(ch), KP(ch->get_id()), K(out_idx));
   }
   return ret;
 }
@@ -260,26 +257,12 @@ int ObDtlChannelLoop::process_base(ObIDltChannelLoopPred *pred, int64_t &hinted_
           ObDtlBasicChannel *channel = static_cast<ObDtlBasicChannel *> (chans_.at(idx));
           LOG_INFO("dump channel info for query which active for more than 100 seconds",
                    K(idx), K(channel->get_id()),
-                   K(channel->get_peer_id()), K(channel->get_peer()),
+                   K(channel->get_peer_id()),
                    K(channel->get_op_metric()));
         }
       }
     }
-    if ((loop_times_ & (SERVER_ALIVE_CHECK_TIMES - 1)) == 0) {
-      for (int64_t i = 0; i < chans_.count(); ++i) {
-        if (nullptr != chans_.at(i)) {
-          ObDtlBasicChannel *ch = static_cast<ObDtlBasicChannel *> (chans_.at(i));
-          if (OB_UNLIKELY(ObPxCheckAlive::is_in_blacklist(ch->get_peer(),
-                              get_process_query_time()))) {
-            ret = OB_RPC_CONNECT_ERROR;
-            LOG_WARN("peer no in communication, maybe crashed", K(ret), K(ch->get_peer()),
-                      K(static_cast<int64_t>(GCONF.cluster_id)));
-          }
-        }
-      }
-    }
-    if (OB_UNLIKELY(OB_RPC_CONNECT_ERROR == ret)) {
-    } else if (ignore_interrupt_) {
+    if (ignore_interrupt_) {
       // do nothing.
     } else if ((loop_times_ & (INTERRUPT_CHECK_TIMES - 1)) == 0 && OB_UNLIKELY(IS_INTERRUPTED())) {
       // Interrupt error handling
@@ -354,7 +337,7 @@ int ObDtlChannelLoop::process_channels(ObIDltChannelLoopPred *pred, int64_t &nth
           // return which channel is end
           ret = OB_ERR_UNEXPECTED;
           nth_channel = next_idx_;
-          LOG_WARN("finish get data from channel", K(nth_channel), K(ret), KP(chan->get_id()), K(chan->get_peer()));
+          LOG_WARN("finish get data from channel", K(nth_channel), K(ret), KP(chan->get_id()));
         }
       }
       ++next_idx_;
@@ -411,12 +394,6 @@ int ObDtlChannelLoop::process_channel(int64_t &nth_channel)
       ObInterruptCode &code = GET_INTERRUPT_CODE();
       ret = code.code_;
       LOG_WARN("message loop is interrupted", K(code), K(ret));
-    } else if ((loop_times_ & (SERVER_ALIVE_CHECK_TIMES - 1)) == 0
-               && OB_UNLIKELY(ObPxCheckAlive::is_in_blacklist(ch->get_peer(),
-                              get_process_query_time()))) {
-      ret = OB_RPC_CONNECT_ERROR;
-      LOG_WARN("peer no in communication, maybe crashed", K(ret), K(ch->get_peer()),
-                K(static_cast<int64_t>(GCONF.cluster_id)));
     }
     ch = sentinel_node_.next_link_;
     ++n_times;

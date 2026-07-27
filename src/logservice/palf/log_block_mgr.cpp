@@ -300,7 +300,7 @@ int LogBlockMgr::load_block_handler(const block_id_t block_id, const offset_t of
 // NB: attention to truncate and delete concurrently
 // For block gc, truncate will not concurrent with delete(truncate and delete block will not
 // operate the same range).
-// For migrate(truncate prefix), only one log io worker to execute truncate suffix and prefix.
+// When advancing the base info, one log IO worker executes suffix and prefix truncation.
 // TODO by runlin: Even if the work of truncate_prefix_block is done by the GC thread, there should not be any concurrency
 int LogBlockMgr::do_truncate_(const block_id_t block_id,
                               const offset_t offset)

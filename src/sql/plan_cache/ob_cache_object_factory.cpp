@@ -31,7 +31,7 @@ namespace sql
 int ObCacheObjectFactory::alloc(ObCacheObjGuard& guard, ObLibCacheNameSpace ns)
 {
   int ret = OB_SUCCESS;
-  MOD_SCOPE {
+  SERVER_MODULE_SCOPE {
     ObPlanCache *lib_cache = share::g_mp->plan_cache();
     if (OB_ISNULL(lib_cache)) {
       ret = OB_INVALID_ARGUMENT;
@@ -43,29 +43,27 @@ int ObCacheObjectFactory::alloc(ObCacheObjGuard& guard, ObLibCacheNameSpace ns)
   return ret;
 }
 
-void ObCacheObjectFactory::inner_free(ObILibCacheObject *&cache_obj,
-                                      const CacheRefHandleID ref_handle)
+void ObCacheObjectFactory::inner_free(ObILibCacheObject *&cache_obj)
 {
   int ret = OB_SUCCESS;
   
-  MOD_SCOPE {
+  SERVER_MODULE_SCOPE {
     ObPlanCache *lib_cache = share::g_mp->plan_cache();
     if (OB_ISNULL(lib_cache)) {
       LOG_WARN_RET(OB_ERR_UNEXPECTED, "invalid null plan cache");
     } else {
-      lib_cache->free_cache_obj(cache_obj, ref_handle);
+      lib_cache->free_cache_obj(cache_obj);
     }
   }
 }
 
 void ObCacheObjectFactory::inner_free(ObPlanCache *pc,
-                                      ObILibCacheObject *&cache_obj,
-                                      const CacheRefHandleID ref_handle)
+                                      ObILibCacheObject *&cache_obj)
 {
   if (OB_ISNULL(pc)) {
     LOG_WARN_RET(OB_INVALID_ARGUMENT, "invalid null plan cache");
   } else {
-    pc->free_cache_obj(cache_obj, ref_handle);
+    pc->free_cache_obj(cache_obj);
   }
 }
 
@@ -92,7 +90,7 @@ int ObCacheObjGuard::force_early_release(ObPlanCache *plan_cache)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("is null", K(ret));
   } else {
-    ObCacheObjectFactory::free(plan_cache, cache_obj_, ref_handle_);
+    ObCacheObjectFactory::free(plan_cache, cache_obj_);
     cache_obj_ = NULL;
   }
   return ret;

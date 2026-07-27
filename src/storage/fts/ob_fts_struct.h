@@ -20,7 +20,6 @@
 #include "lib/charset/ob_charset.h"
 #include "lib/hash/ob_hashmap.h"
 #include "object/ob_object.h"
-#include "plugin/interface/ob_plugin_ftparser_intf.h"
 #include "share/datum/ob_datum_funcs.h"
 
 namespace oceanbase

@@ -27,50 +27,6 @@ namespace sql
 {
 
 #define ENG_OP typename ObEngineOpTraits<NEW_ENG>
-ObTaskSpliter::ObTaskSpliter()
-    : server_(),
-      plan_ctx_(NULL),
-      exec_ctx_(NULL),
-      allocator_(NULL),
-      job_(NULL),
-      task_store_(ObModIds::OB_SQL_EXECUTOR_TASK_SPLITER, OB_MALLOC_NORMAL_BLOCK_SIZE)
-{
-}
-
-ObTaskSpliter::~ObTaskSpliter()
-{
-  FOREACH_CNT(t, task_store_) {
-    if (NULL != *t) {
-      (*t)->~ObTaskInfo();
-      *t = NULL;
-    }
-  }
-  task_store_.reset();
-}
-
-int ObTaskSpliter::init(ObPhysicalPlanCtx *plan_ctx,
-                        ObExecContext *exec_ctx,
-                        ObJob &job,
-                        common::ObIAllocator &allocator)
-{
-  int ret = OB_SUCCESS;
-  ObOpSpec *op_spec_ = job.get_root_spec(); // for static engine
-  plan_ctx_ = plan_ctx;
-  exec_ctx_ = exec_ctx;
-  job_ = &job;
-  allocator_ = &allocator;
-  if (OB_I(t1) (
-        OB_ISNULL(plan_ctx)
-        || OB_ISNULL(exec_ctx)
-        || OB_ISNULL(op_spec_))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid NULL ptr", K(plan_ctx), K(exec_ctx), K(op_spec_));
-  } else {
-    server_ = exec_ctx->get_task_exec_ctx().get_self_addr();
-  }
-  return ret;
-}
-
 int ObTaskSpliter::find_scan_ops(ObIArray<const ObTableScanSpec*> &scan_ops, const ObOpSpec &op)
 {
   return find_scan_ops_inner<true>(scan_ops, op);

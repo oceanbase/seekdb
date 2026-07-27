@@ -278,7 +278,7 @@ if (1) {
   DROP TABLE spatial_index_dml_constraint;
 }
 
-# bugfix: 
+# bugfix:
 --disable_warnings
 DROP TABLE IF EXISTS t;
 --enable_warnings
@@ -287,7 +287,7 @@ CREATE TABLE t(p POINT);
 INSERT INTO t VALUES(1);
 DROP TABLE t;
 
-# bugfix: 
+# bugfix:
 create table T_GEO (gid int auto_increment primary key,geo geometry );
 replace into T_GEO VALUES (1,st_geomfromtext('point(90 90)'));
 select st_astext(geo) from T_GEO;
@@ -297,7 +297,7 @@ replace into T_GEO VALUES (1,st_geomfromtext('point(80 80)'));
 select st_astext(geo) from T_GEO;
 drop table T_GEO;
 
-# bugfix: 
+# bugfix:
 create table T_GEO (gid int auto_increment primary key,g point srid 4326);
 --error 3643
 replace into T_GEO VALUES (1,st_geomfromtext('point(90 90)', 0));
@@ -314,27 +314,27 @@ replace into T_GEO VALUES (3,st_geomfromtext('LINESTRING(90 90, 1 1)', 0));
 select st_astext(g) from T_GEO;
 drop table T_GEO;
 
-# budfix: 
+# budfix:
 create table T_GEO (gid int auto_increment primary key, geo geometry ,geo_c GEOMETRYCOLLECTION,poi point,lin linestring ,pol polygon,M_POI MULTIPOINT,M_LIN MULTILINESTRING ,M_POL MULTIPOLYGON);
 REPLACE INTO T_GEO(geo) VALUES ( st_geomfromtext('point(90 90)'));
 select st_astext(geo) from T_GEO;
 drop table T_GEO;
 
-# bugfix: 
+# bugfix:
 create table T_GEO (gid int auto_increment primary key, geo geometry ,geo_c GEOMETRYCOLLECTION,poi point,lin linestring ,pol polygon,M_POI MULTIPOINT,M_LIN MULTILINESTRING ,M_POL MULTIPOLYGON );
 INSERT INTO T_GEO VALUES (1,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);
 --error 1416
 UPDATE T_GEO SET GEO=0;
 drop table T_GEO;
 
-# bugfix : 
+# bugfix :
 create table tt1(id int , g geometry not null srid 4236 , spatial index(g));
 insert into tt1(g) values(st_geomfromtext('POINT(0 0)', 4236));
 --error 3548
 select id ,st_astext(g) from tt1 where ST_Intersects(ST_GeomFromText('point(10 20)',426),g);
 drop table tt1;
 
-# bugfix : 
+# bugfix :
 --disable_warnings
 DROP TABLE IF EXISTS gis_line;
 --enable_warnings
@@ -348,11 +348,11 @@ select /*+index (gis_line lin_index)*/ * from gis_line where _st_covers(lin, ST_
 select /*+index (gis_line lin_index)*/ st_astext(lin) from gis_line where _st_covers(lin, ST_GeomFromText('point(1 1)', 4326));
 drop table gis_line;
 
-# bugfix : 
+# bugfix :
 --disable_warnings
 DROP TABLE IF EXISTS gis_point;
 --enable_warnings
-CREATE TABLE `gis_point` (   `id` bigint(20) NOT NULL AUTO_INCREMENT,   `x` decimal(19,16) DEFAULT NULL,   `y` decimal(19,16) DEFAULT NULL,   `poi` point NOT NULL /*!80003 SRID 4326 */,   PRIMARY KEY (`id`),   KEY `xy_index` (`x`, `y`) BLOCK_SIZE 16384 LOCAL,   SPATIAL KEY `poi_index` (`poi`) BLOCK_SIZE 16384 LOCAL ) AUTO_INCREMENT = 1196000001 DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 3 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0; 
+CREATE TABLE `gis_point` (   `id` bigint(20) NOT NULL AUTO_INCREMENT,   `x` decimal(19,16) DEFAULT NULL,   `y` decimal(19,16) DEFAULT NULL,   `poi` point NOT NULL /*!80003 SRID 4326 */,   PRIMARY KEY (`id`),   KEY `xy_index` (`x`, `y`) BLOCK_SIZE 16384 LOCAL,   SPATIAL KEY `poi_index` (`poi`) BLOCK_SIZE 16384 LOCAL ) AUTO_INCREMENT = 1196000001 DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0;
 select concat((select st_astext(poi) from gis_point order by id desc limit 1),(select st_astext(poi) from gis_point order by id desc limit 1)) ;
 drop table gis_point;
 
@@ -367,7 +367,7 @@ select i, st_astext(g) from spatial_index where ST_Intersects(g, ST_GEOMFROMTEXT
 update spatial_index set g=ST_GEOMFROMTEXT('POINT(2 2)', 4326) where i=1;
 select i, st_astext(g) from spatial_index where ST_Intersects(g, ST_GEOMFROMTEXT('POINT(2 2)', 4326));
 
-# bugfix : 
+# bugfix :
 --disable_warnings
 DROP TABLE IF EXISTS t3;
 --enable_warnings
@@ -425,11 +425,11 @@ select hex(Location) from cities;
 select st_astext(Location) from cities;
 drop table cities;
 
-# bugfix : 
+# bugfix :
 CREATE TABLE `t_geo` (
   `geo` geometry NOT NULL,
   SPATIAL KEY `SP_GEO` (`geo`) BLOCK_SIZE 16384 LOCAL
-) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0;
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0;
 
 insert into t_geo values(st_geomfromtext('POINT(1.2345678987654322e24 -1.2345678998765433e25)'));
 insert into t_geo values(st_geomfromtext('GEOMETRYCOLLECTION(MULTIPOINT((2 -1),(11831.743318109031 -63273.949623278015),(0 -1)))'));

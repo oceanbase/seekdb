@@ -72,9 +72,6 @@ private:
     FLUSHED_LOG_SIZE,
     IS_EXITING,
     LAST_REQUEST_TS,
-    GTRID,
-    BQUAL,
-    FORMAT_ID,
     START_SCN,
     END_SCN,
     REC_SCN,
@@ -88,7 +85,6 @@ private:
   char ctx_addr_buffer_[CTX_ADDR_BUFFER_SIZE];
 private:
   transaction::ObTxStatIterator tx_stat_iter_;
-  transaction::ObXATransID xid_;
   ObCStringHelper cstring_helper_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObGVTxStat);

@@ -176,11 +176,9 @@ alter table t3 add partition (partition p2 values less than (300));
 
 --echo # 验证Fork表分区结构（应该不包含新分区）
 connection default;
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t3_fork;
 
 --echo # 验证源表分区结构（应该包含新分区）
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t3;
 
 --echo ============================================
@@ -231,11 +229,9 @@ alter table t4 drop partition p2;
 
 --echo # 验证Fork表分区结构（应该包含所有分区）
 connection default;
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t4_fork;
 
 --echo # 验证源表分区结构（p2应该被删除）
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t4;
 
 --echo ============================================
@@ -638,11 +634,9 @@ alter table t12 add partition (partition p2 values less than (300));
 
 --echo # 验证Fork表分区结构
 connection default;
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t12_fork;
 
 --echo # 验证源表分区结构
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t12;
 
 --echo ============================================

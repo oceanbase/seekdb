@@ -143,9 +143,7 @@ public:
   int deep_copy(const ObPLPackage &package, common::ObIAllocator &alloc);
   int instantiate_package_state(const ObPLResolveCtx &resolve_ctx,
                                 ObExecContext &exec_ctx,
-                                ObPLPackageState &package_state,
-                                const ObPLPackage *spec,
-                                const ObPLPackage *body);
+                                ObPLPackageState &package_state);
   int execute_init_routine(ObIAllocator &allocator, ObExecContext &exec_ctx);
   void set_public_syn_count(int64_t public_syn_count) { public_syn_count_ = public_syn_count; }
   int64_t get_public_syn_count() const { return public_syn_count_; }

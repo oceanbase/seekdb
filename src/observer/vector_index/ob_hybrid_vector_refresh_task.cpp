@@ -37,9 +37,8 @@ int ObVecEmbeddingAsyncTaskExecutor::load_task(uint64_t &task_trace_base_num)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("vector async task not init", KR(ret));
-  } else if (!check_operation_allow()) { // skip
   } else if (OB_FAIL(get_index_mgr(index_mgr))) { // skip
-    LOG_WARN("fail to get index ls mgr", K(ret));
+    LOG_WARN("fail to get index manager", K(ret));
   } else {
     ObVecIndexAsyncTaskOption &task_opt = index_mgr->get_async_task_opt();
     ObIAllocator *allocator = task_opt.get_allocator();
@@ -120,21 +119,6 @@ int ObVecEmbeddingAsyncTaskExecutor::load_task(uint64_t &task_trace_base_num)
     }
   }
   return ret;
-}
-
-bool ObVecEmbeddingAsyncTaskExecutor::check_operation_allow()
-{
-  int ret = OB_SUCCESS;
-  uint64_t tenant_data_version = 0;
-  bool bret = true;
-  if (OB_FAIL(oceanbase::common::ObClusterVersion::get_instance().get_tenant_data_version(tenant_data_version))) {
-    bret = false;
-    LOG_WARN("get tenant data version failed", K(ret));
-  } else if (tenant_data_version < DATA_VERSION_1_0_0_0) {
-    bret = false;
-    LOG_DEBUG("vector index async task can not work with data version less than 1_0_0_0", K(tenant_data_version));
-  }
-  return bret;
 }
 
 /*
@@ -291,7 +275,7 @@ int ObHybridVectorRefreshTask::get_index_id_column_ids(ObPluginVectorIndexAdapto
   if (OB_ISNULL(task_ctx)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret), KPC(task_ctx));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( adaptor.get_vbitmap_table_id(), table_schema))) {
     LOG_WARN("fail to get schema", KR(ret), K(adaptor));
@@ -368,7 +352,7 @@ int ObHybridVectorRefreshTask::get_embedded_table_column_ids(ObPluginVectorIndex
   if (OB_ISNULL(task_ctx)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret), KPC(task_ctx));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( adaptor.get_embedded_table_id(), table_schema))) {
     LOG_WARN("fail to get schema", KR(ret), K(adaptor));
@@ -455,7 +439,7 @@ int ObHybridVectorRefreshTask::init_dml_param(uint64_t table_id,
   if (OB_ISNULL(task_ctx) || OB_ISNULL(oas) || OB_ISNULL(tx_desc)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret), KPC(task_ctx), K(oas), K(tx_desc));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
     LOG_WARN("fail to get schema", KR(ret), K(table_id));
@@ -464,7 +448,7 @@ int ObHybridVectorRefreshTask::init_dml_param(uint64_t table_id,
     LOG_WARN("get null table schema", KR(ret), K(table_id));
   } else if (OB_FAIL(table_param.convert(table_schema, table_schema->get_schema_version(), dml_column_ids))) {
     LOG_WARN("failed to convert table dml param.", K(ret));
-  } else if (OB_FAIL(schema_guard.get_schema_version(dml_param.tenant_schema_version_))) {
+  } else if (OB_FAIL(schema_guard.get_schema_version(dml_param.runtime_schema_version_))) {
     LOG_WARN("failed to get schema version", K(ret));
   } else {
     dml_param.sql_mode_ = SMO_DEFAULT;
@@ -490,7 +474,7 @@ int ObHybridVectorRefreshTask::init_endpoint(ObPluginVectorIndexAdaptor &adaptor
   int ret = OB_SUCCESS;
   bool use_request_model_name = false;
   ObAIFuncExprInfo *ai_func_info = nullptr;
-  omt::ObTenantAiService *ai_service = share::g_mp->tenant_ai_service();
+  omt::ObAiService *ai_service = share::g_mp->ai_service();
   ObHybridVectorRefreshTaskCtx *task_ctx = static_cast<ObHybridVectorRefreshTaskCtx *>(get_task_ctx());
   if (OB_ISNULL(ai_service) || OB_ISNULL(task_ctx)) {
     ret = OB_ERR_UNEXPECTED;

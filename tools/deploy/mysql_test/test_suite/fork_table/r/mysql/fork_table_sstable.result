@@ -8,8 +8,8 @@ SET ob_query_timeout = 100000000;
 alter system set debug_sync_timeout = '120s';
 set ob_global_debug_sync = 'reset';
 # 加速major freeze
-alter system set merger_check_interval = '10s' tenant sys;
-alter system set ob_compaction_schedule_interval = '3s' tenant sys;
+alter system set merger_check_interval = '10s';
+alter system set ob_compaction_schedule_interval = '3s';
 ============================================
 Case 1: Fork表与混合SSTable（Major + Minor + Memtable）
 ============================================

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_meta_obj_struct.h"
-#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
+#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 
 namespace oceanbase
 {
@@ -29,7 +29,6 @@ ObMetaDiskAddr::ObMetaDiskAddr()
     second_id_(0),
     third_id_(0),
     fourth_id_(0),
-    fifth_id_(0),
     sixth_id_(0)
 {
   static_assert(DiskType::MAX <= MAX_TYPE, "ObMetaDiskAddr's disk type is overflow");
@@ -42,7 +41,6 @@ void ObMetaDiskAddr::reset()
   second_id_ = 0;
   third_id_ = 0;
   fourth_id_ = 0;
-  fifth_id_ = 0;
   sixth_id_ = 0;
   type_ = DiskType::MAX;
 }
@@ -57,8 +55,10 @@ int ObMetaDiskAddr::get_block_addr(
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("type isn't block, not support", K(ret), KPC(this));
   } else {
-    blocksstable::MacroBlockId id(first_id_, second_id_, third_id_, fifth_id_);
-    id.set_version_v2();
+    blocksstable::MacroBlockId id;
+    id.set_first_id(first_id_);
+    id.set_second_id(second_id_);
+    id.set_third_id(third_id_);
     macro_id = id;
     offset = offset_;
     size = size_;
@@ -83,7 +83,6 @@ int ObMetaDiskAddr::set_block_addr(
     first_id_ = macro_id.first_id();
     second_id_ = macro_id.second_id();
     third_id_ = macro_id.third_id();
-    fifth_id_ = macro_id.fourth_id();
     offset_ = offset;
     size_ = size;
     type_ = block_type;
@@ -151,9 +150,7 @@ OB_SERIALIZE_MEMBER(ObMetaDiskAddr,
                     first_id_,
                     second_id_,
                     third_id_,
-                    fourth_id_,
-                    fifth_id_ // FOR the fourth_id_ of MacroBlockId // FARM COMPAT WHITELIST
-                    ); 
+                    fourth_id_);
 
 bool ObMetaDiskAddr::is_valid() const
 {
@@ -186,37 +183,10 @@ bool ObMetaDiskAddr::is_valid() const
 int64_t ObMetaDiskAddr::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
-  // 1. print detail info of first_id
   block_id().first_id_to_string(buf, buf_len, pos);
-
-  // 2. print other info
-  switch (type_) {
-  case FILE:
-    databuff_printf(buf, buf_len, pos,
-                     "[2nd=%lu][3rd=%lu][file_id=%ld,offset=%lu,size=%lu,type=%lu,seq=%lu][5th=%lu][6th=%lu]}",
-                     second_id_,
-                     third_id_,
-                     (uint64_t) offset_,
-                     (uint64_t) size_,
-                     (uint64_t) type_,
-                     (uint64_t) seq_,
-                     fifth_id_,
-                     sixth_id_,
-                     file_id_);
-    break;
-  default:
-    databuff_printf(buf, buf_len, pos,
-                    "[2nd=%lu][3rd=%lu][offset=%lu,size=%lu,type=%lu,seq=%lu][4th=%lu][6th=%lu]}",
-                    second_id_,
-                    third_id_,
-                    (uint64_t) offset_,
-                    (uint64_t) size_,
-                    (uint64_t) type_,
-                    (uint64_t) seq_,
-                    (uint64_t) block_id().fourth_id(),
-                    sixth_id_);
-    break;
-  };
+  databuff_printf(buf, buf_len, pos,
+                  "[2nd=%ld][3rd=%ld][offset=%lu,size=%lu,type=%lu,seq=%lu][6th=%ld]}",
+                  second_id_, third_id_, offset_, size_, type_, seq_, sixth_id_);
 
   return pos;
 }
@@ -231,29 +201,12 @@ bool ObMetaDiskAddr::is_equal_for_persistence(const ObMetaDiskAddr &other) const
   return first_id_  == other.first_id_
       && second_id_ == other.second_id_
       && third_id_  == other.third_id_
-      && fourth_id_ == other.fourth_id_
-      && fifth_id_ == other.fifth_id_;
+      && fourth_id_ == other.fourth_id_;
 }
 
 bool ObMetaDiskAddr::operator !=(const ObMetaDiskAddr &other) const
 {
   return !(other == *this);
-}
-
-int ObMetaDiskAddr::memcpy_deserialize(const char* buf, const int64_t data_len, int64_t& pos)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(buf) || OB_UNLIKELY(data_len <= 0 || pos < 0 || pos >= data_len)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments.", KP(buf), K(data_len), K(pos), K(ret));
-  }
-  DESERIALIZE_MEMBER_WITH_MEMCPY(first_id_);
-  DESERIALIZE_MEMBER_WITH_MEMCPY(second_id_);
-  DESERIALIZE_MEMBER_WITH_MEMCPY(third_id_);
-  DESERIALIZE_MEMBER_WITH_MEMCPY(fourth_id_);
-  DESERIALIZE_MEMBER_WITH_MEMCPY(fifth_id_);
-  sixth_id_  = 0;
-  return ret;
 }
 
 } // end namespace storage

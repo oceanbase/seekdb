@@ -1,7 +1,5 @@
 set ob_enable_index_direct_select=1;
-alter system set merger_check_interval = '10s' tenant sys;
-alter system set merger_check_interval = '10s' tenant all_user;
-alter system set merger_check_interval = '10s' tenant all_meta;
+alter system set merger_check_interval='10s';
 DROP TABLE if exists trade_sequence_000;
 DROP TABLE if exists BUSINESS_ACTION_000;
 DROP TABLE if exists BUSINESS_ACTIVITY_000;

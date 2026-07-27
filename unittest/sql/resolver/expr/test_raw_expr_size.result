@@ -7,16 +7,14 @@
 | ObUserVarIdentRawExpr | 264 |
 | ObExecParamRawExpr | 288 |
 | ObQueryRefRawExpr | 1536 |
-| ObColumnRefRawExpr | 320 |
+| ObColumnRefRawExpr | 312 |
 | ObSetOpRawExpr | 184 |
 | ObAliasRefRawExpr | 192 |
 | ObNonTerminalRawExpr | 184 |
 | ObOpRawExpr | 232 |
 | ObCaseOpRawExpr | 736 |
-| ObAggFunRawExpr | 544 |
+| ObAggFunRawExpr | 488 |
 | ObSysFunRawExpr | 248 |
-| ObSequenceRawExpr | 304 |
-| ObNormalDllUdfRawExpr | 696 |
 | ObCollectionConstructRawExpr | 576 |
 | ObObjectConstructRawExpr | 696 |
 | ObUDFRawExpr | 1480 |
@@ -30,7 +28,7 @@
 | ObMultiSetRawExpr | 240 |
 | ObCollPredRawExpr | 240 |
 | ObWinFunRawExpr | 752 |
-| ObPseudoColumnRawExpr | 216 |
+| ObPseudoColumnRawExpr | 200 |
 | ObOpPseudoColumnRawExpr | 184 |
 | ObMatchFunRawExpr | 728 |
 | ObPlQueryRefRawExpr | 504 |

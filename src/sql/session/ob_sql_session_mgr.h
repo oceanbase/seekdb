@@ -51,9 +51,7 @@ public:
   static const uint32_t MAX_VERSION = UINT8_MAX;//255
   static const int64_t BUCKET_COUNT = 1024;
   typedef SessionInfoKey Key;
-  typedef common::hash::ObHashMap<uint64_t, ObSQLSessionInfo*> SessionMap;
   explicit ObSQLSessionMgr():
-      //null_callback_(),
       sessinfo_map_(),
       next_sessid_(1)
   {
@@ -99,9 +97,6 @@ public:
   template <typename Function>
   int for_each_session(Function &fn);
 
-  template <typename Function>
-  int for_each_hold_session(Function &fn);
-
   int kill_query(ObSQLSessionInfo &session);
   int set_query_deadlocked(ObSQLSessionInfo &session);
   static int kill_query(ObSQLSessionInfo &session,
@@ -111,8 +106,8 @@ public:
   int kill_session(ObSQLSessionInfo &session);
   int disconnect_session(ObSQLSessionInfo &session);
 
-  // kill all sessions from this tenant.
-  int kill_tenant();
+  // Kill every active session during server shutdown.
+  int kill_all_sessions(bool force_kill);
 
   /**
    * @brief timing clean time out session
@@ -125,11 +120,7 @@ public:
 
   //used for guarantee the unique sessid when observer generates sessid
   int create_sessid(uint32_t &sessid);
-  //inline ObNullEndTransCallback &get_null_callback() { return null_callback_; }
-  SessionMap &get_sess_hold_map() { return sess_hold_map_; }
 private:
-  int check_session_leak();
-
   class ValueAlloc
   {
   public:
@@ -138,7 +129,7 @@ private:
         free_total_count_(0)
     {}
     ~ValueAlloc() {}
-    int clean_tenant();
+    int clean_sessions();
     ObSQLSessionInfo* alloc_value();
     void free_value(ObSQLSessionInfo *sess);
     SessionInfoHashNode* alloc_node(ObSQLSessionInfo* value)
@@ -160,13 +151,12 @@ private:
     static const int64_t MAX_SYS_VAR_MEM = 256 * 1024;
   };
 
-  typedef common::ObTenantLinkHashMap<Key, ObSQLSessionInfo, ValueAlloc> HashMap;
-
-  struct DumpHoldSession
-  {
-    DumpHoldSession() {}
-    int operator()(common::hash::HashMapPair<uint64_t, ObSQLSessionInfo *> &entry);
-  };
+#ifdef OB_USE_ASAN
+  typedef common::ObAllocatingLinkHashMap<Key, ObSQLSessionInfo, ValueAlloc,
+                                          common::ZeroRefHandle> HashMap;
+#else
+  typedef common::ObAllocatingLinkHashMap<Key, ObSQLSessionInfo, ValueAlloc> HashMap;
+#endif
 
   class CheckSessionFunctor
   {
@@ -179,11 +169,11 @@ private:
     ObSQLSessionMgr *sess_mgr_;
   };
 
-  class KillTenant
+  class KillAllSessions
   {
   public:
-    explicit KillTenant(ObSQLSessionMgr *mgr) :
-      ret_(common::OB_SUCCESS), mgr_(mgr)
+    KillAllSessions(ObSQLSessionMgr *mgr, bool force_kill) :
+      ret_(common::OB_SUCCESS), mgr_(mgr), force_kill_(force_kill)
     {}
     bool operator()(sql::ObSQLSessionMgr::Key key, ObSQLSessionInfo *sess_info);
     int get_ret_code()
@@ -194,18 +184,17 @@ private:
   private:
     int ret_;
     ObSQLSessionMgr *mgr_;
+    bool force_kill_;
   };
 
 private:
   // Note: Must be defined before session_map_, depends on the order of destruction.
-  //ObNullEndTransCallback null_callback_;
   // used for manage ObSQLSessionInfo
   HashMap sessinfo_map_;
   // Monotonically increasing session id allocator. Wraps around at UINT32_MAX, skips 0.
   uint32_t next_sessid_ CACHE_ALIGNED;
-  SessionMap sess_hold_map_;
   DISALLOW_COPY_AND_ASSIGN(ObSQLSessionMgr);
-}; // end of class ObSQLSessionMgr
+}; // end of class ObSQLSessionPool
 
 template <typename Function>
 int ObSQLSessionMgr::for_each_session(Function &fn)
@@ -213,32 +202,13 @@ int ObSQLSessionMgr::for_each_session(Function &fn)
   return sessinfo_map_.for_each(fn);
 }
 
-template <typename Function>
-int ObSQLSessionMgr::for_each_hold_session(Function &fn)
-{
-  return get_sess_hold_map().foreach_refactored(fn);
-}
-
 inline int ObSQLSessionMgr::get_session(uint32_t sessid, ObSQLSessionInfo *&sess_info)
 {
-  int ret = sessinfo_map_.get(Key(sessid), sess_info);
-  const bool v = GCONF._enable_trace_session_leak;
-  if (OB_UNLIKELY(v)) {
-    if (OB_LIKELY(sess_info)) {
-      sess_info->on_get_session();
-    }
-  }
-  return ret;
+  return sessinfo_map_.get(Key(sessid), sess_info);
 }
 
 inline void ObSQLSessionMgr::revert_session(ObSQLSessionInfo *sess_info)
 {
-  const bool v = GCONF._enable_trace_session_leak;
-  if (OB_UNLIKELY(v)) {
-    if (OB_LIKELY(nullptr != sess_info)) {
-      sess_info->on_revert_session();
-    }
-  }
   sessinfo_map_.revert(sess_info);
 }
 
@@ -265,18 +235,18 @@ private:
   ObSQLSessionInfo *session_;
 };
 
-class ObTenantSQLSessionMgr
+class ObSQLSessionPool
 {
 public:
-  explicit ObTenantSQLSessionMgr();
-  ~ObTenantSQLSessionMgr();
+  explicit ObSQLSessionPool();
+  ~ObSQLSessionPool();
 
   int init();
   void destroy();
-  static int mtl_new(ObTenantSQLSessionMgr *&tenant_session_mgr);
-  static int mtl_init(ObTenantSQLSessionMgr *&tenant_session_mgr);
-  static void mtl_wait(ObTenantSQLSessionMgr *&tenant_session_mgr);
-  static void mtl_destroy(ObTenantSQLSessionMgr *&tenant_session_mgr);
+  static int server_module_new(ObSQLSessionPool *&session_pool);
+  static int server_module_init(ObSQLSessionPool *&session_pool);
+  static void server_module_wait(ObSQLSessionPool *&session_pool);
+  static void server_module_destroy(ObSQLSessionPool *&session_pool);
   ObSQLSessionInfo *alloc_session();
   void free_session(ObSQLSessionInfo *session);
   void clean_session_pool();
@@ -304,7 +274,7 @@ private:
   SessionPool session_pool_;
   int64_t count_;
   ObFixedClassAllocator<ObSQLSessionInfo> session_allocator_;
-  DISALLOW_COPY_AND_ASSIGN(ObTenantSQLSessionMgr);
+  DISALLOW_COPY_AND_ASSIGN(ObSQLSessionPool);
 }; // end of class ObSQLSessionMgr
 
 } // end of namespace sql

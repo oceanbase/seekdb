@@ -169,7 +169,7 @@ class ObSqlUdtMetaUtils final
   
 public:
 
-  // get udttypeinfo from schema by tenant id and udt id, get child udt defines recursively
+  // Get UDT type information by object id and recursively resolve child types.
   static int generate_udt_meta_from_schema(ObSchemaGetterGuard *schema_guard,
                                            ObSubSchemaCtx *subschema_ctx,
                                            common::ObIAllocator &allocator,

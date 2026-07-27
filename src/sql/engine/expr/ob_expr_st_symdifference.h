@@ -17,7 +17,7 @@
 #define OCEANBASE_SQL_OB_EXPR_ST_SYMDIFFERENCE_H_
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "share/geo/ob_geo_utils.h"
-#include "observer/omt/ob_tenant_srs.h"
+#include "observer/omt/ob_srs_service.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
 
 namespace oceanbase

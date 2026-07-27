@@ -53,7 +53,7 @@ int ObAllVirtualLockWaitStat::inner_get_next_row(ObNewRow *&row)
     const int type = get_lock_type(node_iter_->hash_);
     const int64_t col_count = output_column_ids_.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
-      const uint64_t col_id = output_column_ids_.at(i);
+      uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case TABLET_ID:
           cur_row_.cells_[i].set_int(node_iter_->tablet_id_);
@@ -113,8 +113,6 @@ int ObAllVirtualLockWaitStat::inner_get_next_row(ObNewRow *&row)
               snprintf(lock_mode_, sizeof(lock_mode_), "%s", lock_mode_tmp);
               cur_row_.cells_[i].set_varchar(lock_mode_);
             }
-          } else {
-            cur_row_.cells_[i].set_varchar("UNKNOWN");
           }
           if (OB_SUCC(ret)) {
             cur_row_.cells_[i].set_collation_type(
@@ -188,7 +186,7 @@ int ObAllVirtualLockWaitStat::get_rowkey_holder(int64_t hash, transaction::ObTra
   ObLockWaitMgr *lwm = NULL;
   if (OB_ISNULL(lwm = share::g_mp->lock_wait_mgr())) {
     ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(ERROR, "MTL(LockWaitMgr) is null");
+    SERVER_LOG(ERROR, "server LockWaitMgr is null");
   } else if (OB_FAIL(lwm->get_hash_holder(hash, holder))){
     SERVER_LOG(WARN, "get rowkey holder from lock wait mgr failed", K(ret), K(hash));
   }

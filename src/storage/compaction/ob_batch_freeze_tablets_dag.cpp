@@ -16,8 +16,8 @@
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/compaction/ob_batch_freeze_tablets_dag.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/compaction/ob_tenant_tablet_scheduler.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"
+#include "storage/compaction/ob_tablet_scheduler.h"
+#include "storage/tx_storage/ob_memstore_freezer.h"
 #include "storage/tx_storage/ob_ls_service.h"
 namespace oceanbase
 {
@@ -147,7 +147,7 @@ int ObBatchFreezeTabletsTask::inner_process()
       LOG_WARN_RET(tmp_ret, "get invalid tablet pair", K(cur_pair));
     } else if (cur_pair.schedule_merge_scn_ > weak_read_ts) {
       // no need to force freeze
-    } else if (OB_TMP_FAIL(share::g_mp->tenant_freezer()->tablet_freeze(cur_pair.tablet_id_,
+    } else if (OB_TMP_FAIL(share::g_mp->memstore_freezer()->tablet_freeze(cur_pair.tablet_id_,
                                                                  true/*is_sync*/,
                                                                  max_retry_time_us,
                                                                  true,/*need_rewrite_meta*/
@@ -183,7 +183,7 @@ int ObBatchFreezeTabletsTask::schedule_tablet_major_after_freeze(
   int ret = OB_SUCCESS;
   ObTabletHandle tablet_handle;
   ObTablet *tablet = NULL;
-  if (!share::g_mp->tenant_tablet_scheduler()->could_major_merge_start()) {
+  if (!share::g_mp->tablet_scheduler()->could_major_merge_start()) {
     // merge is suspended
   } else if (OB_FAIL(ls.get_tablet_svr()->get_tablet(
                  cur_pair.tablet_id_, tablet_handle, 0 /*timeout_us*/,
@@ -194,9 +194,9 @@ int ObBatchFreezeTabletsTask::schedule_tablet_major_after_freeze(
     // do nothing
   } else if (!tablet->is_data_complete()) {
     // no need to schedule merge
-  } else if (OB_FAIL(ObTenantTabletScheduler::schedule_merge_dag(
+  } else if (OB_FAIL(ObTabletScheduler::schedule_merge_dag(
                  *tablet, MEDIUM_MERGE,
-                 cur_pair.schedule_merge_scn_, EXEC_MODE_LOCAL))) {
+                 cur_pair.schedule_merge_scn_))) {
     if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {
       LOG_ERROR("failed to schedule medium merge dag", K(ret), K(cur_pair));
     }

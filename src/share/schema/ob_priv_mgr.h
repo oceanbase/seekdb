@@ -22,7 +22,6 @@
 #include "lib/container/ob_vector.h"
 #include "lib/allocator/page_arena.h"
 #include "share/schema/ob_schema_struct.h"
-#include "share/schema/ob_catalog_schema_struct.h"
 #include "share/schema/ob_objpriv_mysql_schema_struct.h"
 
 namespace oceanbase
@@ -146,13 +145,11 @@ class ObPrivMgr
   typedef common::ObSortedVector<ObColumnPriv *> ColumnPrivInfos;
   typedef common::ObSortedVector<ObObjPriv *>ObjPrivInfos;
   typedef common::ObSortedVector<ObSysPriv *>SysPrivInfos;
-  typedef common::ObSortedVector<ObCatalogPriv *> CatalogPrivInfos;
   typedef common::ObSortedVector<ObObjMysqlPriv *> ObjMysqlPrivInfos;
   typedef common::hash::ObPointerHashMap<ObTablePrivSortKey, ObTablePriv *, ObGetTablePrivKeyV3, 128> TablePrivMap;
   typedef common::hash::ObPointerHashMap<ObRoutinePrivSortKey, ObRoutinePriv *, ObGetRoutinePrivKeyV3, 128> RoutinePrivMap;
   typedef common::hash::ObPointerHashMap<ObColumnPrivSortKey, ObColumnPriv *, ObGetColumnPrivKeyV3, 128> ColumnPrivMap;
   typedef common::hash::ObPointerHashMap<ObObjPrivSortKey, ObObjPriv *, ObGetObjPrivKey, 128> ObjPrivMap;
-  typedef common::hash::ObPointerHashMap<ObCatalogPrivSortKey, ObCatalogPriv *, ObGetCatalogPrivKey, 128> CatalogPrivMap;
   typedef common::hash::ObPointerHashMap<ObObjMysqlPrivSortKey, ObObjMysqlPriv *, ObGetObjMysqlPrivKey, 128> ObjMysqlPrivMap;
   typedef DBPrivInfos::iterator DBPrivIter;
   typedef DBPrivInfos::const_iterator ConstDBPrivIter;
@@ -167,8 +164,6 @@ class ObPrivMgr
   typedef SysPrivInfos::const_iterator ConstSysPrivIter;
   typedef ObjPrivInfos::iterator ObjPrivIter;
   typedef ObjPrivInfos::const_iterator ConstObjPrivIter;
-  typedef CatalogPrivInfos::iterator CatalogPrivIter;
-  typedef CatalogPrivInfos::const_iterator ConstCatalogPrivIter;
   typedef ObjMysqlPrivInfos::iterator ObjMysqlPrivIter;
   typedef ObjMysqlPrivInfos::const_iterator ConstObjMysqlPrivIter;
 public:
@@ -260,16 +255,6 @@ public:
   int get_sys_priv_array(const ObSysPrivKey &sys_priv_key,
                          const ObPackedPrivArray &packed_priv_array) const;
 
-  // catalog priv
-  int add_catalog_privs(const common::ObIArray<ObCatalogPriv> &catalog_privs);
-  int add_catalog_priv(const ObCatalogPriv &catalog_priv);
-  int del_catalog_priv(const ObCatalogPrivSortKey &catalog_priv_key);
-  int get_catalog_priv(const ObCatalogPrivSortKey &catalog_priv_key,
-                       const ObCatalogPriv *&catalog_priv) const;
-  int get_catalog_priv_set(const ObCatalogPrivSortKey &catalog_priv_key,
-                           ObPrivSet &priv_set) const;
-  int get_catalog_privs_in_user(const uint64_t user_id,
-                                common::ObIArray<const ObCatalogPriv *> &catalog_privs) const;
   // obj mysql priv
   int add_obj_mysql_privs(const common::ObIArray<ObObjMysqlPriv> &obj_mysql_privs);
   int del_obj_mysql_privs(const common::ObIArray<ObObjMysqlPrivSortKey> &obj_mysql_priv_keys);
@@ -280,10 +265,10 @@ public:
   int get_obj_mysql_priv_set(const ObObjMysqlPrivSortKey &obj_mysql_priv_key, 
                              ObPrivSet &priv_set) const;
   // other
-  int get_db_privs_in_tenant(common::ObIArray<const ObDBPriv *> &db_privs) const;
+  int get_db_privs_in_runtime(common::ObIArray<const ObDBPriv *> &db_privs) const;
   int get_db_privs_in_user(const uint64_t user_id,
                            common::ObIArray<const ObDBPriv *> &db_privs) const;
-  int get_table_privs_in_tenant(common::ObIArray<const ObTablePriv *> &table_privs) const;
+  int get_table_privs_in_runtime(common::ObIArray<const ObTablePriv *> &table_privs) const;
   int get_table_privs_in_user(const uint64_t user_id,
                               common::ObIArray<const ObTablePriv *> &table_privs) const;
   int get_routine_privs_in_user(const uint64_t user_id,
@@ -302,7 +287,7 @@ public:
                                const uint64_t obj_type,
                                common::ObIArray<const ObObjPriv *> &obj_privs,
                                bool reset_flag) const;
-  int get_sys_privs_in_tenant(common::ObIArray<const ObSysPriv *> &sys_privs) const;
+  int get_sys_privs_in_runtime(common::ObIArray<const ObSysPriv *> &sys_privs) const;
   int get_sys_priv_in_grantee(const uint64_t grantee_id,
                               ObSysPriv *& sys_priv) const;
   int get_obj_mysql_privs_in_user(const uint64_t user_id,
@@ -338,12 +323,9 @@ private:
   ObjPrivInfos obj_privs_;
   ObjPrivMap obj_priv_map_;
   SysPrivInfos sys_privs_;
-  CatalogPrivInfos catalog_privs_;
-  CatalogPrivMap catalog_priv_map_;
   ObjMysqlPrivInfos obj_mysql_privs_;
   ObjMysqlPrivMap obj_mysql_priv_map_;
 
-  static const char *priv_names_[];
 };
 
 } //end of schema

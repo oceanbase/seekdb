@@ -98,7 +98,6 @@ int ObExprSTOverlaps::process_input_geometry(omt::ObSrsCacheGuard &srs_guard, co
                    gis_arg2->obj_meta_.has_lob_header(),
                    wkb2))) {
       LOG_WARN("fail to get real string data", K(ret), K(wkb2));
-    } else if (FALSE_IT(allocator.set_baseline_size(wkb1.length() + wkb2.length()))) {
     } else if (OB_FAIL(ObGeoTypeUtil::get_type_srid_from_wkb(wkb1, type1, srid1))) {
       if (ret == OB_ERR_GIS_INVALID_DATA) {
         LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_OVERLAPS);
@@ -140,7 +139,7 @@ int ObExprSTOverlaps::eval_st_overlaps(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   const ObSrsItem *srs = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_OVERLAPS);
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   if (OB_FAIL(process_input_geometry(srs_guard, expr, ctx, temp_allocator, geo1, geo2, is_null_res, srs))) {
     LOG_WARN("fail to process input geometry", K(ret));
   } 
@@ -182,9 +181,6 @@ int ObExprSTOverlaps::eval_st_overlaps(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     } else {
       res.set_bool(result);
     }
-  }
-  if (mem_ctx != nullptr) {
-    temp_allocator.add_ext_used((*mem_ctx)->arena_used());
   }
   return ret;
 }

@@ -61,37 +61,25 @@ public:
     OPERATION_TYPE_MAX = 100
   };
 
-  ObInnerSQLTransmitArg() : ctrl_svr_(), runner_svr_(),
-      conn_id_(OB_INVALID_ID), inner_sql_(NULL), operation_type_(OPERATION_TYPE_INVALID),
-      source_cluster_id_(OB_INVALID_CLUSTER_ID),
+  ObInnerSQLTransmitArg() : conn_id_(OB_INVALID_ID), inner_sql_(NULL),
+      operation_type_(OPERATION_TYPE_INVALID),
       worker_timeout_(OB_DEFAULT_SESSION_TIMEOUT),
       query_timeout_(OB_DEFAULT_SESSION_TIMEOUT), trx_timeout_(OB_DEFAULT_SESSION_TIMEOUT),
       sql_mode_(0), tz_info_wrap_(), ddl_info_(), is_load_data_exec_(false), nls_formats_{},
       use_external_session_(false) {};
-  ObInnerSQLTransmitArg(common::ObAddr ctrl_svr, common::ObAddr runner_svr,
-                        uint64_t conn_id, common::ObString inner_sql,
+  ObInnerSQLTransmitArg(uint64_t conn_id, common::ObString inner_sql,
                         InnerSQLOperationType operation_type,
-                        const int64_t source_cluster_id, const int64_t worker_timeout,
+                        const int64_t worker_timeout,
                         const int64_t query_timeout, const int64_t trx_timeout,
                         ObSQLMode sql_mode, ObSessionDDLInfo ddl_info, const bool is_load_data_exec,
                         const bool use_external_session)
-        : ctrl_svr_(ctrl_svr), runner_svr_(runner_svr),
-          conn_id_(conn_id), inner_sql_(inner_sql),
+        : conn_id_(conn_id), inner_sql_(inner_sql),
           operation_type_(operation_type),
-          source_cluster_id_(source_cluster_id), worker_timeout_(worker_timeout),
+          worker_timeout_(worker_timeout),
           query_timeout_(query_timeout), trx_timeout_(trx_timeout), sql_mode_(sql_mode),
           tz_info_wrap_(), ddl_info_(ddl_info), is_load_data_exec_(is_load_data_exec), nls_formats_{},
           use_external_session_(use_external_session) {}
   ~ObInnerSQLTransmitArg() {}
-
-  const common::ObAddr &get_ctrl_svr() const { return ctrl_svr_; }
-  void set_ctrl_svr(const common::ObAddr &ctrl_svr) { ctrl_svr_ = ctrl_svr; }
-
-  const common::ObAddr &get_runner_svr() const { return runner_svr_; }
-  void set_runner_svr(const common::ObAddr &runner_svr) { runner_svr_ = runner_svr; }
-
-  
-  
 
   uint64_t get_conn_id() const { return conn_id_; }
   void set_conn_id(const uint64_t conn_id) { conn_id_ = conn_id; }
@@ -102,13 +90,6 @@ public:
   InnerSQLOperationType get_operation_type() const { return operation_type_; }
   void set_operation_type(const InnerSQLOperationType operation_type)
   { operation_type_ = operation_type; }
-
-  void set_source_cluster_id(const int64_t source_cluster_id) {
-    source_cluster_id_ = source_cluster_id;
-  }
-  int64_t get_source_cluster_id() const {
-    return source_cluster_id_;
-  }
 
   void set_worker_timeout(const int64_t worker_timeout) {
     worker_timeout_ = worker_timeout;
@@ -145,13 +126,9 @@ public:
   const ObString *get_nls_formats() const { return nls_formats_; }
   bool get_use_external_session() const { return use_external_session_; }
 
-  TO_STRING_KV(K_(ctrl_svr),
-               K_(runner_svr),
-               
-               K_(conn_id),
+  TO_STRING_KV(K_(conn_id),
                K_(inner_sql),
                K_(operation_type),
-               K_(source_cluster_id),
                K_(worker_timeout),
                K_(query_timeout),
                K_(trx_timeout),
@@ -163,13 +140,9 @@ public:
                K_(use_external_session));
 
 private:
-  common::ObAddr ctrl_svr_;
-  common::ObAddr runner_svr_;
-  
   uint64_t conn_id_;
   common::ObString inner_sql_;
   InnerSQLOperationType operation_type_;
-  int64_t source_cluster_id_;
   int64_t worker_timeout_;
   int64_t query_timeout_;
   int64_t trx_timeout_;

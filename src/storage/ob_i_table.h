@@ -27,7 +27,7 @@
 #include "lib/oblog/ob_log_module.h"
 #include "storage/ob_i_store.h"
 #include "storage/access/ob_table_read_info.h"
-#include "storage/meta_mem/ob_tenant_meta_obj_pool.h"
+#include "storage/meta_mem/ob_storage_meta_obj_pool.h"
 #include "storage/meta_mem/ob_storage_meta_cache.h"
 #include "share/ob_table_range.h"
 #include "share/scn.h"
@@ -69,7 +69,7 @@ class ObTxDataMemtable;
 class ObTxCtxMemtable;
 class ObLSMemberMemtable;
 class ObDDLKV;
-class ObTenantMetaMemMgr;
+class ObStorageMetaMemMgr;
 struct ObTableIterParam;
 struct ObTableAccessParam;
 struct ObTableAccessContext;
@@ -441,7 +441,7 @@ public:
 
   OB_INLINE ObITable *get_table() { return table_; }
   OB_INLINE const ObITable *get_table() const { return table_; }
-  OB_INLINE ObTenantMetaMemMgr *get_t3m() { return t3m_; }
+  OB_INLINE ObStorageMetaMemMgr *get_t3m() { return t3m_; }
   OB_INLINE common::ObIAllocator *get_allocator() { return allocator_; }
 
   int get_sstable(blocksstable::ObSSTable *&sstable);
@@ -457,7 +457,7 @@ public:
   ObTableHandleV2(const ObTableHandleV2 &other);
   ObTableHandleV2 &operator= (const ObTableHandleV2 &other);
 
-  int set_table(ObITable *const table, ObTenantMetaMemMgr *const t3m, const ObITable::TableType table_type);
+  int set_table(ObITable *const table, ObStorageMetaMemMgr *const t3m, const ObITable::TableType table_type);
   // TODO: simplify set_sstable interfaces
   // only used when create stand alone sstable
   int set_sstable(ObITable *table, common::ObIAllocator *allocator);
@@ -469,7 +469,7 @@ public:
       K_(meta_handle), K_(lifetime_guaranteed_by_tablet));
 private:
   ObITable *table_;
-  ObTenantMetaMemMgr *t3m_;
+  ObStorageMetaMemMgr *t3m_;
   common::ObIAllocator *allocator_;
   ObStorageMetaHandle meta_handle_;
   ObITable::TableType table_type_;

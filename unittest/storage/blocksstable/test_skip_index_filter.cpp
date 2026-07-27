@@ -19,7 +19,7 @@
 #define OK(ass) ASSERT_EQ(OB_SUCCESS, (ass))
 #define private public
 #include "storage/blocksstable/ob_row_generate.h"
-#include "mtlenv/mock_tenant_module_env.h"
+#include "mtlenv/mock_server_runtime_env.h"
 #include "ob_row_generate.h"
 
 namespace oceanbase
@@ -95,13 +95,11 @@ TestSkipIndexFilter::~TestSkipIndexFilter()
 
 void TestSkipIndexFilter::SetUp()
 {
-  oceanbase::ObClusterVersion::get_instance().update_data_version(DATA_CURRENT_VERSION);
   row_count_ = 10;
   const int64_t tid = 200001;
   ObTableSchema table;
   ObColumnSchemaV2 col;
   table.reset();
-  table.set_tablegroup_id(1);
   table.set_database_id(1);
   table.set_table_id(tid);
   table.set_table_name("test_skip_index_filter_schema");
@@ -110,7 +108,6 @@ void TestSkipIndexFilter::SetUp()
   table.set_block_size(2 * 1024);
   table.set_compress_func_name("none");
   table.set_row_store_type(ENCODING_ROW_STORE);
-  table.set_storage_format_version(OB_STORAGE_FORMAT_VERSION_V4);
 
   ObSqlString str;
   for (int64_t i = 0; i < COLUMN_CNT; ++i) {

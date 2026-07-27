@@ -39,13 +39,6 @@ class ObPlanStat;
 namespace observer
 {
 
-enum ObPlanCacheStatType
-{
-  TENANT_INVALID = 0,
-  TENANT_PLAN_CACHE = 1,
-  TENANT_PLAN =2,
-};
-
 class ObAllPlanCacheBase : public common::ObVirtualTableIterator
 {
 public:
@@ -66,12 +59,10 @@ class ObAllPlanCacheStat : public ObAllPlanCacheBase
 public:
   ObAllPlanCacheStat() {}
   virtual ~ObAllPlanCacheStat() {}
-  virtual int inner_open();
-  int inner_get_next_row() { return get_row_from_tenants(); }
+  int inner_get_next_row() { return get_row(); }
 protected:
-  int get_row_from_tenants();
+  int get_row();
   int fill_cells(sql::ObPlanCache &plan_cache);
-  virtual int get_all_ids(common::ObIArray<uint64_t> &batch_ids);
 private:
   enum
   {
@@ -83,61 +74,11 @@ private:
     HIT_RATE,
     PLAN_NUM,
     MEM_LIMIT,
-    HASH_BUCKET,
-    STMTKEY_NUM,
-    PC_REF_PLAN_LOCAL,
-    PC_REF_PLAN_REMOTE,
-    PC_REF_PLAN_DIST,
-    PC_REF_PLAN_ARR,
-    PC_REF_PLAN_STAT,
-    PC_REF_PL,
-    PC_REF_PL_STAT,
-    PLAN_GEN,
-    CLI_QUERY,
-    OUTLINE_EXEC,
-    PLAN_EXPLAIN,
-    ASYN_BASELINE,
-    LOAD_BASELINE,
-    PS_EXEC,
-    GV_SQL,
-    PL_ANON,
-    PL_ROUTINE,
-    PACKAGE_VAR,
-    PACKAGE_TYPE,
-    PACKAGE_SPEC,
-    PACKAGE_BODY,
-    PACKAGE_RESV,
-    GET_PKG,
-    INDEX_BUILDER,
-    PCV_SET,
-    PCV_RD,
-    PCV_WR,
-    PCV_GET_PLAN_KEY,
-    PCV_GET_PL_KEY,
-    PCV_EXPIRE_BY_USED,
-    PCV_EXPIRE_BY_MEM,
-    LC_REF_CACHE_NODE,
-    LC_NODE,
-    LC_NODE_RD,
-    LC_NODE_WR,
-    LC_REF_CACHE_OBJ_STAT
+    HASH_BUCKET
   };
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllPlanCacheStat);
 }; // end of class ObAllPlanCacheStat
-
-class ObAllPlanCacheStatI1 : public ObAllPlanCacheStat
-{
-
-public:
-  ObAllPlanCacheStatI1() {}
-  virtual ~ObAllPlanCacheStatI1() {}
-protected:
-  int set_ids(const common::ObIArray<common::ObNewRange> &ranges, common::ObIArray<uint64_t> &batch_ids);
-  virtual int get_all_ids(common::ObIArray<uint64_t> &batch_ids);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAllPlanCacheStatI1);
-};
 
 } // end of namespace observer
 } // end of namespace oceanbase

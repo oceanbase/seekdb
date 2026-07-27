@@ -49,7 +49,7 @@ int ObDDLErrorMessageTableOperator::ObBuildDDLErrorMessage::prepare_user_message
 bool ObDDLErrorMessageTableOperator::ObBuildDDLErrorMessage::operator==(const ObBuildDDLErrorMessage &other) const
 {
   bool equal = ret_code_ == other.ret_code_ && ddl_type_ == other.ddl_type_
-       && consensus_schema_version_ == other.consensus_schema_version_
+       && published_schema_version_ == other.published_schema_version_
        && 0 == STRNCMP(dba_message_, other.dba_message_, OB_MAX_ERROR_MSG_LEN);
   if (equal) {
     if (nullptr == user_message_ && nullptr == other.user_message_) {
@@ -135,7 +135,7 @@ int ObDDLErrorMessageTableOperator::load_ddl_user_error(const int64_t task_id,
       LOG_WARN("fail to execute sql", K(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ITER_END;
-      LOG_INFO("single replica has not reported before", K(ret), K(table_id));
+      LOG_INFO("local build has not reported before", K(ret), K(table_id));
     } else {
       while (OB_SUCC(ret)) {
         if (OB_FAIL(result->next())) {
@@ -186,7 +186,7 @@ int ObDDLErrorMessageTableOperator::get_ddl_error_message(const int64_t task_id,
       LOG_WARN("invalid arguments", K(ret), K(task_id), K(target_object_id), K(addr));
     } else if (OB_FAIL(sql.append("SELECT ret_code, ddl_type, affected_rows, dba_message "))) {
       LOG_WARN("fail to append sql", KR(ret));
-    } else if (OB_FAIL(sql.append(" ,consensus_schema_version "))) {
+    } else if (OB_FAIL(sql.append(" ,published_schema_version "))) {
       LOG_WARN("fail to append sql", KR(ret));
     } else if (!is_ddl_retry_task && OB_FAIL(sql.append(" ,user_message "))) {
       LOG_WARN("fail to append sql", KR(ret));
@@ -230,8 +230,8 @@ int ObDDLErrorMessageTableOperator::get_ddl_error_message(const int64_t task_id,
       EXTRACT_INT_FIELD_MYSQL(*result, "ret_code", error_message.ret_code_, int);
       EXTRACT_VARCHAR_FIELD_MYSQL(*result, "dba_message", str_dba_message);
       EXTRACT_VARCHAR_FIELD_MYSQL(*result, "user_message", str_user_message);
-      EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(*result, "consensus_schema_version",
-      error_message.consensus_schema_version_, int64_t, false /*skip null error*/,
+      EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(*result, "published_schema_version",
+      error_message.published_schema_version_, int64_t, false /*skip null error*/,
       true /*skip column error*/, OB_INVALID_VERSION);
       forward_user_msg_len = str_user_message.length();
       const int64_t buf_size = str_user_message.length() + 1;
@@ -295,8 +295,8 @@ int ObDDLErrorMessageTableOperator::get_ddl_error_message(const int64_t task_id,
       EXTRACT_INT_FIELD_MYSQL(*result, "ret_code", error_message.ret_code_, int);
       EXTRACT_VARCHAR_FIELD_MYSQL(*result, "dba_message", str_dba_message);
       EXTRACT_VARCHAR_FIELD_MYSQL(*result, "user_message", str_user_message);
-      EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(*result, "consensus_schema_version",
-      error_message.consensus_schema_version_, int64_t, false /*skip null error*/,
+      EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(*result, "published_schema_version",
+      error_message.published_schema_version_, int64_t, false /*skip null error*/,
       true /*skip column error*/, OB_INVALID_VERSION);
       forward_user_msg_len = str_user_message.length();
       const int64_t buf_size = str_user_message.length() + 1;
@@ -394,9 +394,9 @@ int ObDDLErrorMessageTableOperator::report_ddl_error_message(const ObBuildDDLErr
           LOG_WARN("failed to add column trace_id", KR(ret), K(trace_id));
         } else if (OB_FAIL(dml_splicer.add_column(K(parent_task_id)))) {
           LOG_WARN("failed to add column parent_task_id", KR(ret), K(parent_task_id));
-        } else if (0 < error_message.consensus_schema_version_ // prevent of reset to invalid after been valid
-                   && OB_FAIL(dml_splicer.add_column("consensus_schema_version", error_message.consensus_schema_version_))) {
-          LOG_WARN("fail to add column consensus_schema_version", KR(ret), K_(error_message.consensus_schema_version));
+        } else if (0 < error_message.published_schema_version_ // prevent of reset to invalid after been valid
+                   && OB_FAIL(dml_splicer.add_column("published_schema_version", error_message.published_schema_version_))) {
+          LOG_WARN("fail to add column published_schema_version", KR(ret), K_(error_message.published_schema_version));
         }
       }
       if (OB_SUCC(ret)) {
@@ -478,7 +478,7 @@ int ObDDLErrorMessageTableOperator::generate_index_ddl_error_message(const int r
 {
   int ret = OB_SUCCESS;
   ObBuildDDLErrorMessage error_message;
-  uint64_t tenant_data_format_version = 0;
+  uint64_t data_format_version = 0;
   
   const uint64_t data_table_id = index_schema.get_data_table_id();
   const uint64_t index_table_id = index_schema.get_table_id();
@@ -492,10 +492,10 @@ int ObDDLErrorMessageTableOperator::generate_index_ddl_error_message(const int r
   } else if (OB_FALSE_IT(memset(error_message.user_message_, 0, OB_MAX_ERROR_MSG_LEN))) {
   } else if (OB_FAIL(index_schema.get_index_name(index_name))) {        //get index name
     LOG_WARN("fail to get index name", K(ret), K(index_name), K(index_table_id));
-  } else if (OB_FAIL(ObShareUtil::fetch_current_data_version(sql_proxy, tenant_data_format_version))) {
+  } else if (OB_FAIL(ObShareUtil::fetch_current_data_version(sql_proxy, data_format_version))) {
     LOG_WARN("get min data version failed", K(ret));
   } else if (OB_FAIL(build_ddl_error_message(ret_code, data_table_id, error_message, index_name,
-      index_table_id, get_create_index_type(tenant_data_format_version, index_schema), index_key, report_ret_code))) {
+      index_table_id, get_create_index_type(data_format_version, index_schema), index_key, report_ret_code))) {
     LOG_WARN("build ddl error message failed", K(ret), K(data_table_id), K(index_name));
   } else if (OB_FAIL(report_ddl_error_message(error_message, trace_id, task_id, parent_task_id, data_table_id, schema_version, object_id, addr, sql_proxy))) {
     LOG_WARN("fail to report ddl error message", K(ret), K(1UL), K(data_table_id),

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Tenant system-time-zone helper used by DDL paths.
+// Runtime system-time-zone helper used by DDL paths.
 #ifndef OCEANBASE_SHARE_OB_SYS_TIME_ZONE_UTIL_H_
 #define OCEANBASE_SHARE_OB_SYS_TIME_ZONE_UTIL_H_
 #include "lib/string/ob_fixed_length_string.h"
@@ -26,7 +26,7 @@ namespace share
 class ObSysTimeZoneUtil
 {
 public:
-  static int get_tenant_sys_time_zone_wrap(common::ObFixedLengthString<common::OB_MAX_TIMESTAMP_TZ_LENGTH> &time_zone,
+  static int get_runtime_sys_time_zone_wrap(common::ObFixedLengthString<common::OB_MAX_TIMESTAMP_TZ_LENGTH> &time_zone,
       common::ObTimeZoneInfoWrap &time_zone_info_wrap);
 };
 } // namespace share

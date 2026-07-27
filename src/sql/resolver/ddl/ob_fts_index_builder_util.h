@@ -155,7 +155,7 @@ public:
   static int try_load_and_lock_dictionary_tables(
       const ObTableSchema &index_schema,
       ObMySQLTransaction &trans);
-  static int try_load_dictionary_for_all_tenants();
+  static int try_load_dictionary();
   static int check_supportability_for_loader_key(const ObString &parser_name,
         const ObCharsetType charset_type);
   static int check_supportability_for_building_index(

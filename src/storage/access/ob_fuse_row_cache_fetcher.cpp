@@ -68,7 +68,7 @@ int ObFuseRowCacheFetcher::get_fuse_row_cache(const ObDatumRowkey &rowkey, ObFus
         STORAGE_LOG(WARN, "fail to get row from fuse row cache", K(ret), K(cache_key));
       }
     } else {
-      EVENT_INC(ObStatEventIds::FUSE_ROW_CACHE_HIT);
+      EVENT_INC(FUSE_ROW_CACHE_HIT);
     }
   }
 

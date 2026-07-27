@@ -17,13 +17,13 @@
 
 #include "ob_share_throttle_define.h"
 #include "storage/throttle/ob_throttle_info.h"
-#include "storage/allocator/ob_tenant_vector_allocator.h"
+#include "storage/allocator/ob_vector_allocator.h"
 #include "share/config/ob_server_config.h"
 #include "share/ob_task_define.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/throttle/ob_throttle_info.h"
-#include "storage/allocator/ob_tenant_vector_allocator.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"
+#include "storage/allocator/ob_vector_allocator.h"
+#include "storage/tx_storage/ob_memstore_freezer.h"
 
 
 namespace oceanbase {
@@ -49,26 +49,26 @@ void FakeAllocatorForTxShare::init_throttle_config(int64_t &resource_limit,
 
   int64_t hard_memory_limit = lib::get_hard_memory_limit();
 
-  common::ObServerConfig *tenant_config = &GCONF;
+  common::ObServerConfig *runtime_config = &GCONF;
   {
-    int64_t share_mem_limit = tenant_config->_tx_share_memory_limit_percentage;
+    int64_t share_mem_limit = runtime_config->_tx_share_memory_limit_percentage;
     // if _tx_share_memory_limit_percentage equals 0, use (MAX(memstore_limit_percentage, vector_mem_limit_percentage + 5) + 10) as default value
     if (0 == share_mem_limit) {
       int64_t memstore_limit = OB_NOT_NULL(g_memstore_limit_percentage_fn)
           ? g_memstore_limit_percentage_fn()
           : static_cast<int64_t>(GCONF.memstore_limit_percentage);
-      int64_t vector_limit = ObTenantVectorAllocator::get_vector_mem_limit_percentage(tenant_config);
+      int64_t vector_limit = ObVectorAllocator::get_vector_mem_limit_percentage(runtime_config);
       share_mem_limit = MAX(memstore_limit, vector_limit + 5) + 10;
     }
     resource_limit = hard_memory_limit * share_mem_limit / 100LL;
-    trigger_percentage = tenant_config->writing_throttling_trigger_percentage;
-    max_duration = tenant_config->writing_throttling_maximum_duration;
+    trigger_percentage = runtime_config->writing_throttling_trigger_percentage;
+    max_duration = runtime_config->writing_throttling_maximum_duration;
   }
 }
 
 /**
  * @brief Because the TxShare may can not use enough memory as the config specified, it need dynamic modify
- * resource_limit according to the memory remained of the tenant.
+ * resource_limit according to the remaining process memory.
  *
  * @param[in] holding_size this allocator current holding memory size
  * @param[in] config_specify_resource_limit the memory limit which _tx_share_memory_limit_percentage specified
@@ -114,7 +114,7 @@ void FakeAllocatorForTxShare::adaptive_update_limit(const int64_t holding_size,
                 "Config Specify Resource Limit(MB)", config_specify_resource_limit / 1024 / 1024,
                 "TxShare Current Memory Limit(MB)", resource_limit / 1024 / 1024,
                 "Holding Memory(MB)", holding_size / 1024 / 1024,
-                "Tenant Remain Memory(MB)", remain_memory / 1024 / 1024,
+                "Remaining Memory(MB)", remain_memory / 1024 / 1024,
                 "Usable Remain Memory(MB)", usable_remain_memory / 1024 /1024,
                 "Last Update Limit Timestamp", last_update_limit_ts,
                 "Is Updated", is_updated);

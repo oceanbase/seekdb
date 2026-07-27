@@ -1,0 +1,111 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SHARE_OB_MERGE_INFO_
+#define OCEANBASE_SHARE_OB_MERGE_INFO_
+
+#include "lib/list/ob_dlink_node.h"
+#include "lib/list/ob_dlist.h"
+#include "lib/utility/ob_print_utils.h"
+#include "share/scn.h"
+
+namespace oceanbase
+{
+namespace share
+{
+struct ObMergeInfoItem : public common::ObDLinkBase<ObMergeInfoItem>
+{
+public:
+  typedef common::ObDList<ObMergeInfoItem> ItemList;
+  ObMergeInfoItem(ItemList &list, const char *name, const SCN &scn, const bool need_update);
+  ObMergeInfoItem(ItemList &list, const char *name, const int64_t value, const bool need_update);
+  ObMergeInfoItem(const ObMergeInfoItem &item);
+
+  ObMergeInfoItem &operator = (const ObMergeInfoItem &item);
+  // Differ from operator=, won't assign <need_update_>
+  void assign_value(const ObMergeInfoItem &item);
+  bool is_valid() const;
+  void set_val(const int64_t value, const bool need_update);
+  void set_scn(const SCN &scn, const bool need_update);
+  int set_scn(const uint64_t scn_val);
+  int set_scn(const uint64_t scn_val, const bool need_update);
+  const SCN &get_scn() const { return scn_; }
+  //this interface is just used for operations of reading or writing inner tables
+  uint64_t get_scn_val() const { return scn_.get_val_for_inner_table_field(); }
+  int64_t get_value() const { return value_; }
+
+  TO_STRING_KV(K_(name), K_(is_scn), K_(scn), K_(value), K_(need_update));
+public:
+  const char *name_;
+  bool is_scn_;
+  SCN scn_;
+  int64_t value_;
+  bool need_update_; // used to mark the table field need to be updated or not
+};
+
+struct ObGlobalMergeInfo
+{
+public:
+  enum MergeStatus
+  {
+    MERGE_STATUS_IDLE,
+    MERGE_STATUS_MERGING,
+    MERGE_STATUS_MAX
+  };
+  enum ObMergeErrorType
+  {
+    NONE_ERROR,
+    CHECKSUM_ERROR,
+    ERROR_TYPE_MAX
+  };
+  ObGlobalMergeInfo();
+  void reset();
+  bool is_last_merge_complete() const;
+  bool is_in_merge() const;
+  bool is_valid() const;
+  bool is_merge_error() const;
+  ObGlobalMergeInfo &operator = (const ObGlobalMergeInfo &other) = delete;
+  int assign(const ObGlobalMergeInfo &other);
+  // differ from assign, only exclude 'need_update_' copy
+  int assign_value(const ObGlobalMergeInfo &other);
+
+  const SCN &frozen_scn() const { return frozen_scn_.get_scn(); }
+  const SCN &global_broadcast_scn() const { return global_broadcast_scn_.get_scn(); }
+  const SCN &last_merged_scn() const { return last_merged_scn_.get_scn(); }
+
+  TO_STRING_KV(K_(frozen_scn),
+    K_(global_broadcast_scn), K_(last_merged_scn), K_(is_merge_error),
+    K_(merge_status), K_(error_type), K_(suspend_merging), K_(merge_start_time),
+    K_(last_merged_time));
+
+public:
+  ObMergeInfoItem::ItemList list_;
+
+  ObMergeInfoItem frozen_scn_;
+  ObMergeInfoItem global_broadcast_scn_;
+  ObMergeInfoItem last_merged_scn_;
+  ObMergeInfoItem is_merge_error_;
+  ObMergeInfoItem merge_status_;
+  ObMergeInfoItem error_type_;
+  ObMergeInfoItem suspend_merging_;
+  ObMergeInfoItem merge_start_time_;
+  ObMergeInfoItem last_merged_time_;
+};
+
+} // end namespace share
+} // end namespace oceanbase
+
+#endif  // OCEANBASE_SHARE_OB_MERGE_INFO_

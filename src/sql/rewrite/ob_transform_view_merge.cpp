@@ -371,7 +371,6 @@ int ObTransformViewMerge::check_semi_right_table_can_be_merged(ObDMLStmt *stmt,
              || ref_query->has_window_function()
              || ref_query->has_limit()
              || ref_query->is_contains_assignment()
-             || ref_query->has_sequence()
              || ref_query->has_ora_rowscn()
              || (ref_query->has_for_update())) {
     can_be = false;
@@ -511,7 +510,6 @@ int ObTransformViewMerge::check_basic_validity(ObDMLStmt *parent_stmt,
              || child_stmt->has_limit()
              || child_stmt->get_aggr_item_size() != 0
              || child_stmt->has_window_function()
-             || child_stmt->has_sequence()
              || child_stmt->has_ora_rowscn()) {
     can_be = false;
     OPT_TRACE("not a valid view");

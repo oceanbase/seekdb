@@ -110,7 +110,7 @@ class ObResourceLimitCalculator
 public:
   ObResourceLimitCalculator() : is_inited_(false) { }
   ~ObResourceLimitCalculator() { destroy(); }
-  static int mtl_init(ObResourceLimitCalculator *&calculator);
+  static int server_module_init(ObResourceLimitCalculator *&calculator);
   int init();
   void destroy()
   {
@@ -127,10 +127,9 @@ public:
   int get_logic_resource_constraint_value(const int64_t type,
                                           ObResoureConstraintValue &val);
 
-  int get_tenant_logical_resource(ObUserResourceCalculateArg &arg);
+  int get_runtime_logical_resource(ObUserResourceCalculateArg &arg);
   // CALCULCATOR
-  int get_tenant_min_phy_resource_value(ObMinPhyResourceResult &res);
-  int get_tenant_min_phy_resource_value(const ObUserResourceCalculateArg &arg,
+  int get_min_phy_resource_value(const ObUserResourceCalculateArg &arg,
                                         ObMinPhyResourceResult &res);
 private:
   bool is_inited_;

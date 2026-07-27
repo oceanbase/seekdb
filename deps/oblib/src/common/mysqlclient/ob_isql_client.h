@@ -52,7 +52,6 @@ public:
 
   // FIXME baihua: replace 'const char *' with 'const ObString &'
   // execute query and return data result
-  virtual int read(ReadResult &res, const int64_t cluster_id, const char *sql) = 0;
   virtual int read(ReadResult &res, const char *sql) { return this->read(res, sql, 0); }
   virtual int read(ReadResult &res, const char *sql, const int32_t group_id) = 0;
 

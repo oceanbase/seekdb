@@ -24,11 +24,9 @@ drop table if exists t_vec;
 alter system set ob_vector_memory_limit_percentage = 20;
 sleep 3;
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 call dbms_vector.rebuild_index('idx1','t_vec','c2');
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
@@ -41,7 +39,6 @@ connection conn1;
 drop table if exists t_vec;
 --enable_warnings
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
@@ -67,7 +64,6 @@ reap;
 connection conn2;
 reap;
 
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 --replace_regex /idx_[0-9]+/idx_new/g
 show index from t_vec;
@@ -81,7 +77,6 @@ connection conn1;
 drop table if exists t_vec;
 --enable_warnings
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 
@@ -107,7 +102,6 @@ reap;
 connection conn2;
 reap;
 
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 --replace_regex /idx_[0-9]+/idx_new/g
 show index from t_vec;
@@ -122,7 +116,6 @@ drop table if exists t_vec;
 --enable_warnings
 set recyclebin='on';
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 drop index idx1 on t_vec;
@@ -138,7 +131,6 @@ drop table if exists t_vec;
 --enable_warnings
 create table t_vec(c1 int, c2 int, primary key(c1));
 insert into t_vec values(1, 1);
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 
 connection conn_sys;
@@ -174,7 +166,6 @@ let $sess_1=query_get_value(select connection_id() as id, id, 1);
 drop table if exists t_vec;
 --enable_warnings
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 --replace_regex /idx_[0-9]+/idx_new/g
 show index from t_vec;
@@ -208,7 +199,6 @@ disconnect conn1;
 connect (conn1,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
 connection conn1;
 
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 drop table t_vec;
@@ -223,7 +213,6 @@ let $sess_1=query_get_value(select connection_id() as id, id, 1);
 drop table if exists t_vec;
 --enable_warnings
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 --replace_regex /idx_[0-9]+/idx_new/g
 show index from t_vec;
@@ -257,7 +246,6 @@ disconnect conn1;
 connect (conn1,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
 connection conn1;
 
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 drop table t_vec;
@@ -274,7 +262,6 @@ let $sess_1=query_get_value(select connection_id() as id, id, 1);
 drop table if exists t_vec;
 --enable_warnings
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 --replace_regex /idx_[0-9]+/idx_new/g
 show index from t_vec;
@@ -308,7 +295,6 @@ disconnect conn1;
 connect (conn1,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
 connection conn1;
 
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 drop table t_vec;
@@ -323,7 +309,6 @@ drop table if exists t_vec;
 --enable_warnings
 set recyclebin='on';
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 drop table t_vec;
@@ -339,7 +324,6 @@ connection conn1;
 drop table if exists t_vec;
 --enable_warnings
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 --error 1235
@@ -361,11 +345,9 @@ call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=l2, type'
 call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=l2');
 
 call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=l2, type=hnsw');
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=l2, type=hnsw_sq');
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 show index from t_vec;
 

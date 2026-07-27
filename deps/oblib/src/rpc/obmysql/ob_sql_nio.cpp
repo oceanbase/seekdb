@@ -693,7 +693,7 @@ private:
   void* alloc_io_buffer(int64_t sz) { return direct_alloc(sz); }
   void free_io_buffer(void* p) { direct_free(p); }
   static void* direct_alloc(int64_t sz) {
-    return ob_malloc(sz, SET_USE_UNEXPECTED_500(ObModIds::OB_COMMON_NETWORK));
+    return ob_malloc(sz, ObModIds::OB_COMMON_NETWORK);
   }
   static void direct_free(void* p) { ob_free(p); }
 private:
@@ -1725,7 +1725,7 @@ private:
     }
   }
   static void* direct_alloc(int64_t sz) {
-    return common::ob_malloc(sz, SET_USE_UNEXPECTED_500(common::ObModIds::OB_COMMON_NETWORK));
+    return common::ob_malloc(sz, common::ObModIds::OB_COMMON_NETWORK);
   }
   static void direct_free(void* p) { common::ob_free(p); }
 

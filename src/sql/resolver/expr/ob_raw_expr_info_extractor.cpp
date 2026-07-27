@@ -489,7 +489,6 @@ int ObRawExprInfoExtractor::visit(ObSysFunRawExpr &expr)
         || T_OP_GET_PACKAGE_VAR == expr.get_expr_type()
         || T_OP_GET_SUBPROGRAM_VAR == expr.get_expr_type()
         || (T_FUN_SYS_SYSDATE == expr.get_expr_type())
-        || T_FUN_NORMAL_UDF == expr.get_expr_type()
         || T_FUN_SYS_GENERATOR == expr.get_expr_type()
         || (T_FUN_UDF == expr.get_expr_type()
             && !static_cast<ObUDFRawExpr&>(expr).is_deterministic())
@@ -514,21 +513,6 @@ int ObRawExprInfoExtractor::visit(ObSysFunRawExpr &expr)
               || T_FUN_SYS_UUID_SHORT == expr.get_expr_type()) {
       if (OB_FAIL(expr.add_flag(IS_RAND_FUNC))) {
         LOG_WARN("failed to add flag IS_RAND_FUNC", K(ret));
-      }
-    } else if (T_FUN_SYS_SEQ_NEXTVAL == expr.get_expr_type()) {
-      if (OB_FAIL(expr.add_flag(IS_SEQ_EXPR))) {
-        LOG_WARN("failed to add flag IS_SEQ_EXPR", K(ret));
-      }
-    } else if (T_FUN_NORMAL_UDF == expr.get_expr_type()
-               || T_FUN_AGG_UDF == expr.get_expr_type()) {
-      /*
-       * it seems we have no choice but to set the udf uncalculable.
-       * we can not say a udf expr is const or not util we finish the xxx_init() function.
-       * but we do the xxx_init() at the expr deduce type stage which was done after we
-       * extractor info from expr.
-       * */
-      if (OB_FAIL(expr.add_flag(IS_SO_UDF_EXPR))) {
-        LOG_WARN("failed to add flag IS_SO_UDF_EXPR", K(ret));
       }
     } else if (T_FUN_SYS_REMOVE_CONST == expr.get_expr_type()) {
       OZ(expr.add_flag(CNT_VOLATILE_CONST));

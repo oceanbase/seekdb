@@ -22,7 +22,7 @@
 #include "share/ob_ddl_checksum.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "share/ob_ddl_sim_point.h"
-#include "storage/compaction/ob_tenant_tablet_scheduler.h"
+#include "storage/compaction/ob_tablet_scheduler.h"
 #include "storage/ob_storage_schema_util.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/ddl/ob_direct_load_struct.h"
@@ -44,14 +44,14 @@ int ObDDLMergeGuardTask::init(const bool for_replay, const ObTabletID &tablet_id
 {
   int ret = OB_SUCCESS;
   char* buf = nullptr;
-  ObDDLMergeBucketLock *mtl_bucket_lock = share::g_mp->ddl_merge_bucket_lock();
+  ObDDLMergeBucketLock *server_bucket_lock = share::g_mp->ddl_merge_bucket_lock();
   if (!tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id));
-  } else if (OB_ISNULL(mtl_bucket_lock)) {
+  } else if (OB_ISNULL(server_bucket_lock)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("bucket lock should not be null", K(ret));
-  } else if (OB_FAIL(mtl_bucket_lock->lock(tablet_id))) {
+  } else if (OB_FAIL(server_bucket_lock->lock(tablet_id))) {
     if (OB_EAGAIN == ret && !for_replay) {
       LOG_ERROR("failed to lock tablet, but execute again", K(ret), K(tablet_id));
       ret = OB_DAG_TASK_IS_SUSPENDED;
@@ -72,14 +72,14 @@ int ObDDLMergeGuardTask::init(const bool for_replay, const ObTabletID &tablet_id
 int ObDDLMergeGuardTask::process()
 {
   int ret = OB_SUCCESS;
-  ObDDLMergeBucketLock *mtl_bucket_lock = share::g_mp->ddl_merge_bucket_lock();
+  ObDDLMergeBucketLock *server_bucket_lock = share::g_mp->ddl_merge_bucket_lock();
   if (!tablet_id_.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected tablet id val", K(ret));
-  } else if (OB_ISNULL(mtl_bucket_lock)) {
+  } else if (OB_ISNULL(server_bucket_lock)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("bucket lock should not be null", K(ret));
-  } else if (OB_FAIL(mtl_bucket_lock->unlock(tablet_id_))) {
+  } else if (OB_FAIL(server_bucket_lock->unlock(tablet_id_))) {
     LOG_WARN("[DDL_MERGE_TASK] failed to finish guard task", K(ret), K(tablet_id_));
   } else {
     FLOG_INFO("[DDL_MERGE_TASK] success to finish guard task", K(ret), K(tablet_id_));
@@ -91,11 +91,11 @@ int ObDDLMergeGuardTask::process()
 ObDDLMergeGuardTask::~ObDDLMergeGuardTask()
 {
   int ret = OB_SUCCESS;
-  ObDDLMergeBucketLock *mtl_bucket_lock = share::g_mp->ddl_merge_bucket_lock();
-   if (OB_ISNULL(mtl_bucket_lock)) {
+  ObDDLMergeBucketLock *server_bucket_lock = share::g_mp->ddl_merge_bucket_lock();
+   if (OB_ISNULL(server_bucket_lock)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("bucket lock should not be null", K(ret));
-  } else if (tablet_id_.is_valid() && OB_FAIL(mtl_bucket_lock->unlock(tablet_id_))) {
+  } else if (tablet_id_.is_valid() && OB_FAIL(server_bucket_lock->unlock(tablet_id_))) {
     LOG_WARN("failed to unlock tablet", K(ret), K(tablet_id_));
   } else {
     is_inited_ = false;

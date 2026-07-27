@@ -1822,7 +1822,6 @@ int ObGranuleIteratorOp::do_single_runtime_filter_extract_query_range(
   int ret = OB_SUCCESS;
   bool has_extrct = false;
   ObIArray<ObNewRange> &ranges = gi_task_info.ranges_;
-  ObIArray<ObNewRange> &ss_ranges = gi_task_info.ss_ranges_;
   if (gi_task_info.ranges_.empty()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ranges_ is empty ", K(ret));
@@ -1836,25 +1835,6 @@ int ObGranuleIteratorOp::do_single_runtime_filter_extract_query_range(
       if (OB_SUCC(ret) && OB_NOT_NULL(rf_msg) && rf_msg->check_ready()) {
         if (OB_FAIL(rf_msg->try_extract_query_range(has_extrct, ranges))) {
           LOG_WARN("failed to try_extract_query_range");
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (has_extrct) {
-        ss_ranges.reset();
-        if (ranges.empty()) {
-          // do nothing
-        } else {
-          ObNewRange whole_range;
-          const ObNewRange &key_range = ranges.at(0);
-          whole_range.set_whole_range();
-          whole_range.table_id_ = key_range.table_id_;
-          whole_range.flag_ = key_range.flag_;
-          for (int64_t i = 0; OB_SUCC(ret) && i < ranges.count(); ++i) {
-            if (OB_FAIL(ss_ranges.push_back(whole_range))) {
-              LOG_WARN("push back ss_ranges failed", K(ret));
-            }
-          }
         }
       }
     }

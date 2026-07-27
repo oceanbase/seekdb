@@ -23,7 +23,7 @@
 #include "observer/change_stream/ob_change_stream_fetcher.h"
 #include "observer/change_stream/ob_change_stream_plugin.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/ob_global_stat_proxy.h"
 
 namespace oceanbase
@@ -58,7 +58,7 @@ int ObCSExecutor::init(int64_t executor_id, int64_t thread_num, int64_t task_que
   } else if (executor_id < 0 || thread_num <= 0 || task_queue_limit <= 0 || OB_ISNULL(name)) {
     ret = common::OB_INVALID_ARGUMENT;
     LOG_WARN("ObCSExecutor invalid argument", K(ret), K(executor_id), K(thread_num), K(task_queue_limit), KP(name));
-  } else if (FALSE_IT(set_run_wrapper(MTL_CTX()))) {
+  } else if (FALSE_IT(set_run_wrapper(share::server_runtime()))) {
   } else if (OB_FAIL(set_thread_count(thread_num))) {
     LOG_WARN("ObCSExecutor set_thread_count failed", K(ret), K(executor_id));
     ObLinkQueueThreadPool::destroy();

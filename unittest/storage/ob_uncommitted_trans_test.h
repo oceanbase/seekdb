@@ -75,12 +75,12 @@ public:
       const int64_t log_ts,
       transaction::ObTransTableStatusType &status,
       int64_t &trans_version,
-      uint64_t &cluster_version) override
+      uint64_t &data_format_version) override
   {
     UNUSEDx(log_ts);
     int ret = OB_SUCCESS;
     const transaction::ObTransID *trans_id_ptr = &data_trans_id;
-    cluster_version = CLUSTER_VERSION_1_0_0_0;
+    data_format_version = DATA_CURRENT_VERSION;
     if (peek_flag_) {
       trans_id_ptr = &default_trans_id_;
     }
@@ -96,7 +96,7 @@ public:
       } else {
         trans_version = INT64_MAX;
       }
-      STORAGE_LOG(INFO, "get trans status", K(data_trans_id), KPC(trans_status), K(cluster_version), K(this));
+      STORAGE_LOG(INFO, "get trans status", K(data_trans_id), KPC(trans_status), K(data_format_version), K(this));
     }
     return ret;
   }
@@ -168,10 +168,10 @@ public:
   {
     int ret = OB_SUCCESS;
     transaction::ObTransTableStatusType status;
-    uint64_t cluster_version = 0;
+    uint64_t data_format_version = 0;
     transaction::ObTransID data_trans_id = lock_for_read_arg.data_trans_id_;
     int32_t data_sql_sequence = lock_for_read_arg.data_sql_sequence_;
-    if (OB_FAIL(get_transaction_status_with_log_ts(data_trans_id, 0, status, trans_version, cluster_version))) {
+    if (OB_FAIL(get_transaction_status_with_log_ts(data_trans_id, 0, status, trans_version, data_format_version))) {
       STORAGE_LOG(WARN, "failed to clear trans status map", K(ret));
     } else if (ROLLBACK_SQL_SEQUENCE != data_sql_sequence
         && ROLLBACK_SQL_SEQUENCE_2 != data_sql_sequence

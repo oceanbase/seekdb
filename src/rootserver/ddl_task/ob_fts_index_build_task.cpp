@@ -17,12 +17,12 @@
 #define USING_LOG_PREFIX RS
 
 #include "rootserver/ddl_task/ob_fts_index_build_task.h"
-#include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_local_ddl_serial_call.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_management_service.h"
 #include "storage/ddl/ob_ddl_lock.h"
 #include "share/ob_ddl_sim_point.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
@@ -55,7 +55,7 @@ ObFtsIndexBuildTask::ObFtsIndexBuildTask()
     fts_doc_word_task_id_(0),
     drop_index_task_id_(-1),
     drop_index_task_submitted_(false),
-    root_service_(nullptr),
+    local_management_service_(nullptr),
     is_rowkey_doc_succ_(false),
     is_doc_rowkey_succ_(false),
     is_domain_aux_succ_(false),
@@ -82,7 +82,7 @@ int ObFtsIndexBuildTask::init(
     const int64_t schema_version,
     const int64_t parallelism,
     const obcall::ObCreateIndexArg &create_index_arg,
-    const uint64_t tenant_data_version,
+    const uint64_t data_format_version,
     const int64_t parent_task_id /* = 0 */,
     const int64_t task_status /* PREPARE */,
     const int64_t snapshot_version,
@@ -93,9 +93,9 @@ int ObFtsIndexBuildTask::init(
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("root_service is null", K(ret), KP(root_service_));
+    LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("ddl service not started", KR(ret));
@@ -159,14 +159,12 @@ int ObFtsIndexBuildTask::init(
     }
     task_version_ = OB_FTS_INDEX_BUILD_TASK_VERSION;
     start_time_ = ObTimeUtility::current_time();
-    data_format_version_ = tenant_data_version;
+    data_format_version_ = data_format_version;
     is_retryable_ddl_ = is_retryable_ddl;
     if (OB_FAIL(ret)) {
     } else if (FALSE_IT(task_status_ = static_cast<ObDDLTaskStatus>(task_status))) {
     } else if (OB_FAIL(init_ddl_task_monitor_info(index_schema->get_table_id()))) {
       LOG_WARN("init ddl task monitor info failed", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::get_no_logging_param(is_no_logging_))) {
-      LOG_WARN("fail to get no logging param", K(ret));
     } else {
       
       dst_schema_version_ = schema_version_;
@@ -188,9 +186,9 @@ int ObFtsIndexBuildTask::init(const ObDDLTaskRecord &task_record)
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("root_service is null", K(ret), KP(root_service_));
+    LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("ddl service not started", KR(ret));
@@ -363,8 +361,8 @@ int ObFtsIndexBuildTask::check_health()
     const ObTableSchema *index_schema = nullptr;
     bool is_data_table_exist = false;
     bool is_all_indexes_exist = false;
-    if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("get tenant schema guard failed", K(ret));
+    if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
+      LOG_WARN("get runtime schema guard failed", K(ret));
     } else if (OB_FAIL(schema_guard.check_table_exist(object_id_,
                                                       is_data_table_exist))) {
       LOG_WARN("check data table exist failed", K(ret), K(object_id_));
@@ -521,7 +519,7 @@ int ObFtsIndexBuildTask::prepare_aux_table(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to assign create index arg", K(ret));
       } else if (OB_FALSE_IT(arg.snapshot_version_ = snapshot_version_)) {
-      } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_aux_index(arg, res); }))) {
+      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_aux_index(arg, res); }))) {
         LOG_WARN("generate fts aux index schema failed", K(ret), K(arg));
       } else if (res.schema_generated_) {
         task_submitted = true;
@@ -605,7 +603,7 @@ int ObFtsIndexBuildTask::prepare_aux_index_tables()
   ObDDLTaskStatus next_status;
   const ObString &parser_name = create_index_arg_.index_option_.parser_name_;
   bool need_to_load_dic = false;
-  ObTenantDicLoaderHandle dic_loader_handle;
+  ObDicLoaderHandle dic_loader_handle;
   ObCharsetType charset_type = ObCharsetType::CHARSET_ANY;
   ObTableLockOwnerID owner_id;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -835,11 +833,11 @@ int ObFtsIndexBuildTask::load_dictionary()
   int ret = OB_SUCCESS;
   ObMySQLTransaction trans;
   ObDDLTaskStatus next_status = task_status_;
-  ObTenantDicLoaderHandle dic_loader_handle;
+  ObDicLoaderHandle dic_loader_handle;
   ObCharsetType charset_type = ObCharsetType::CHARSET_ANY;
   const ObString &parser_name = create_index_arg_.index_option_.parser_name_;
   ObTimeoutCtx timeout_ctx;
-  const int64_t default_timeout = ObTenantDicLoader::DEFAULT_TIMEOUT_US;
+  const int64_t default_timeout = ObDicLoader::DEFAULT_TIMEOUT_US;
   const int64_t timeout = MIN(GCONF._ob_ddl_timeout, MAX(default_timeout, GCONF.internal_sql_execute_timeout));
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -902,15 +900,15 @@ int ObFtsIndexBuildTask::get_charset_type(ObCharsetType &charset_type)
   common::ObSEArray<obcall::ObColumnSortItem,
       common::OB_PREALLOCATED_NUM> &index_columns = create_index_arg_.index_columns_;
   ObString column_name;
-  ObMultiVersionSchemaService &schema_service = root_service_->get_schema_service();
+  ObMultiVersionSchemaService &schema_service = local_management_service_->get_schema_service();
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *data_schema = nullptr;
   const ObColumnSchemaV2 *col_schema = nullptr;
   charset_type = CHARSET_INVALID;
   if (CHARSET_INVALID != charset_type_) {
     charset_type = charset_type_;
-  } else if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("get tenant schema guard failed", K(ret));
+  } else if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("get runtime schema guard failed", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, data_schema))) {
     LOG_WARN("fail to get table schema", K(ret), K(object_id_));
   } else if (OB_ISNULL(data_schema)) {
@@ -1714,8 +1712,8 @@ int ObFtsIndexBuildTask::submit_drop_fts_index_task()
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("get tenant schema guard failed", K(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("get runtime schema guard failed", K(ret));
   } else if (OB_INVALID_ID != rowkey_doc_aux_table_id_ &&
              OB_FAIL(drop_index_arg.index_ids_.push_back(rowkey_doc_aux_table_id_))) {
     LOG_WARN("fail to push back rowkey_doc_aux_table_id_", K(ret), K(rowkey_doc_aux_table_id_));
@@ -1765,7 +1763,7 @@ int ObFtsIndexBuildTask::submit_drop_fts_index_task()
       LOG_WARN("failed to get ddl rpc timeout", KR(ret));
     } else if (OB_FAIL(DDL_SIM(task_id_, DROP_INDEX_RPC_FAILED))) {
       LOG_WARN("ddl sim failure", KR(ret), K(task_id_));
-    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_index_on_failed(drop_index_arg, drop_index_res); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_index_on_failed(drop_index_arg, drop_index_res); }))) {
       LOG_WARN("drop index failed", KR(ret), K(ddl_rpc_timeout));
     } else {
       drop_index_task_submitted_ = true;
@@ -1829,7 +1827,7 @@ int ObFtsIndexBuildTask::collect_longops_stat(ObLongopsValue &value)
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
-  databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "TENANT_ID: 1, TASK_ID: %ld, ", task_id_);
+  databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "TASK_ID: %ld, ", task_id_);
   switch(status) {
     case ObDDLTaskStatus::PREPARE: {
       if (OB_FAIL(OB_FAIL(databuff_printf(stat_info_.message_,
@@ -1950,11 +1948,11 @@ int ObFtsIndexBuildTask::cleanup_impl()
     ObMySQLTransaction trans;
     bool need_to_load_dic = false;
     const ObString &parser_name = create_index_arg_.index_option_.parser_name_;
-    ObTenantDicLoaderHandle dic_loader_handle;
+    ObDicLoaderHandle dic_loader_handle;
     ObCharsetType charset_type = CHARSET_INVALID;
     bool is_skip_unlock = false;
-    if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("get tenant schema guard failed", K(ret));
+    if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+      LOG_WARN("get runtime schema guard failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema(
                                                      data_table_id,
                                                      data_schema))) {
@@ -2074,9 +2072,9 @@ int ObFtsIndexBuildTask::wait_schema_refresh_and_trans_end()
     LOG_WARN("failed to get next status", K(ret));
   } else if (is_fts_task()) {
     ObSchemaGetterGuard schema_guard;
-    ObMultiVersionSchemaService &schema_service = root_service_->get_schema_service();
-    if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("fail to get tenant schema guard", K(ret));
+    ObMultiVersionSchemaService &schema_service = local_management_service_->get_schema_service();
+    if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
+      LOG_WARN("fail to get runtime schema guard", K(ret));
     } else if (!fts_index_aux_is_trans_end_ && OB_FAIL(check_schema_and_trans_end(task_id_,
                                                                                   domain_index_aux_table_id_,
                                                                                   schema_guard,
@@ -2151,13 +2149,13 @@ int ObFtsIndexBuildTask::try_release_snapshot(ObMySQLTransaction &trans)
       snapshot_version_ = 0;
     } else if (OB_FAIL(snapshot_scn.convert_for_tx(snapshot_version_))) {
       LOG_WARN("failed to convert scn", K(ret),K(snapshot_version_), K(snapshot_scn));
-    } else if (OB_ISNULL(GCTX.root_service_)) {
+    } else if (OB_ISNULL(GCTX.local_management_service_)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", KR(ret), KP(GCTX.root_service_));
-    } else if (OB_UNLIKELY(!GCTX.root_service_->get_ddl_service().is_inited())) {
+      LOG_WARN("invalid argument", KR(ret), KP(GCTX.local_management_service_));
+    } else if (OB_UNLIKELY(!GCTX.local_management_service_->get_ddl_service().is_inited())) {
       ret = OB_NOT_INIT;
       LOG_WARN("not init", KR(ret));
-    } else if (OB_FAIL(GCTX.root_service_->get_ddl_service().get_snapshot_mgr().batch_release_snapshot_in_trans(
+    } else if (OB_FAIL(GCTX.local_management_service_->get_ddl_service().get_snapshot_mgr().batch_release_snapshot_in_trans(
             trans, SNAPSHOT_FOR_DDL, rowkey_doc_schema_version_, snapshot_scn, tablet_ids))) {
       LOG_WARN("batch release snapshot failed", K(ret), K(tablet_ids));
     } else if (OB_FAIL(ObDDLTaskRecordOperator::update_snapshot_version(trans,

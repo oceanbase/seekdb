@@ -153,11 +153,11 @@ int ObSetNamesExecutor::get_global_sys_var_character_set_client(
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(ERROR, "schema service is null");
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
               schema_guard))) {
     SQL_ENG_LOG(WARN, "get schema guard failed", K(ret));
-  } else if (OB_FAIL(schema_guard.get_tenant_system_variable(SYS_VAR_CHARACTER_SET_CLIENT, var_schema))) {
-    SQL_ENG_LOG(WARN, "get tenant system variable failed", K(ret));
+  } else if (OB_FAIL(schema_guard.get_system_variable(SYS_VAR_CHARACTER_SET_CLIENT, var_schema))) {
+    SQL_ENG_LOG(WARN, "get runtime system variable failed", K(ret));
   } else if (OB_ISNULL(var_schema)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "var_schema is null");
@@ -181,4 +181,3 @@ int ObSetNamesExecutor::get_global_sys_var_character_set_client(
   }
   return ret;
 }
-

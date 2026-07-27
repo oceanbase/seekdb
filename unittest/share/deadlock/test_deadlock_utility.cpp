@@ -33,7 +33,7 @@ public:
   virtual void SetUp() {}
   virtual void TearDown() {}
 };
-// Serialization and deserialization functionality
+// Local report interface.
 TEST_F(TestDeadLockUtility, interface) {
   ObDetectorUserReportInfo info;
   ObSharedGuard<char> ptr;

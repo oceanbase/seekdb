@@ -28,7 +28,7 @@ namespace oceanbase
 {
 namespace tmp_file
 {
-ObITenantTmpFileManager::ObITenantTmpFileManager()
+ObITmpFileManager::ObITmpFileManager()
   : is_inited_(false),
     is_running_(false),
     tmp_file_allocator_(),
@@ -39,20 +39,17 @@ ObITenantTmpFileManager::ObITenantTmpFileManager()
 {
 }
 
-ObITenantTmpFileManager::~ObITenantTmpFileManager()
+ObITmpFileManager::~ObITmpFileManager()
 {
   destroy();
 }
 
-int ObITenantTmpFileManager::init()
+int ObITmpFileManager::init()
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(IS_INIT)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObITenantTmpFileManager init twice", KR(ret), K(is_inited_));
-  } else if (OB_UNLIKELY(!true)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tenant id", KR(ret));
+    LOG_WARN("ObITmpFileManager init twice", KR(ret), K(is_inited_));
   } else if (OB_FAIL(files_.init("TmpFileMap"))) {
     LOG_WARN("fail to init tmp files map", KR(ret));
   } else if (OB_FAIL(tmp_file_allocator_.init(common::OB_MALLOC_MIDDLE_BLOCK_SIZE,
@@ -82,15 +79,15 @@ int ObITenantTmpFileManager::init()
   return ret;
 }
 
-int ObITenantTmpFileManager::start()
+int ObITmpFileManager::start()
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
+    LOG_WARN("ObITmpFileManager has not been inited", KR(ret));
   } else if (OB_UNLIKELY(is_running())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObITenantTmpFileManager has already been started", KR(ret));
+    LOG_WARN("ObITmpFileManager has already been started", KR(ret));
   } else if (OB_FAIL(start_sub_module_())) {
     LOG_WARN("fail to start sub module", KR(ret));
   } else {
@@ -100,7 +97,7 @@ int ObITenantTmpFileManager::start()
   return ret;
 }
 
-void ObITenantTmpFileManager::stop()
+void ObITmpFileManager::stop()
 {
   int ret = OB_SUCCESS;
   if (is_running_) {
@@ -112,7 +109,7 @@ void ObITenantTmpFileManager::stop()
   }
 }
 
-void ObITenantTmpFileManager::wait()
+void ObITmpFileManager::wait()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(wait_sub_module_())) {
@@ -120,7 +117,7 @@ void ObITenantTmpFileManager::wait()
   }
 }
 
-void ObITenantTmpFileManager::destroy()
+void ObITmpFileManager::destroy()
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
@@ -161,10 +158,10 @@ void ObITenantTmpFileManager::destroy()
     }
   }
 
-  LOG_INFO("ObITenantTmpFileManager destroy", KP(this));
+  LOG_INFO("ObITmpFileManager destroy", KP(this));
 }
 
-int ObITenantTmpFileManager::remove(const int64_t fd)
+int ObITmpFileManager::remove(const int64_t fd)
 {
   int ret = OB_SUCCESS;
   ObITmpFileHandle tmp_file_handle;
@@ -173,13 +170,13 @@ int ObITenantTmpFileManager::remove(const int64_t fd)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
+    LOG_WARN("ObITmpFileManager has not been inited", KR(ret));
   // } else if (OB_UNLIKELY(!is_running())) {
   //   // some modules remove tmp file when they are destroying.
   //   // at this time, the tmp file mgr is not running because of stop().
   //   // thus, we need to support this case
   //   ret = OB_ERR_UNEXPECTED;
-  //   LOG_WARN("ObITenantTmpFileManager is not running", KR(ret), K(is_running_));
+  //   LOG_WARN("ObITmpFileManager is not running", KR(ret), K(is_running_));
   } else if (OB_FAIL(files_.erase(ObTmpFileKey(fd), tmp_file_handle))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
@@ -223,7 +220,7 @@ int ObITenantTmpFileManager::remove(const int64_t fd)
   return ret;
 }
 
-int ObITenantTmpFileManager::aio_read(const ObTmpFileIOInfo &io_info,
+int ObITmpFileManager::aio_read(const ObTmpFileIOInfo &io_info,
                                       ObTmpFileIOHandle &io_handle)
 {
   int ret = OB_SUCCESS;
@@ -231,13 +228,10 @@ int ObITenantTmpFileManager::aio_read(const ObTmpFileIOInfo &io_info,
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
+    LOG_WARN("ObITmpFileManager has not been inited", KR(ret));
   } else if (OB_UNLIKELY(!io_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to aio read, invalid argument", KR(ret), K(io_info));
-  } else if (OB_UNLIKELY(false)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant id not match", KR(ret));
   } else if (OB_UNLIKELY(io_handle.is_valid() && !io_handle.is_finished())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tmp file io handle has remain data need to be waited", KR(ret), K(io_info), K(io_handle));
@@ -256,7 +250,7 @@ int ObITenantTmpFileManager::aio_read(const ObTmpFileIOInfo &io_info,
   return ret;
 }
 
-int ObITenantTmpFileManager::aio_pread(const ObTmpFileIOInfo &io_info,
+int ObITmpFileManager::aio_pread(const ObTmpFileIOInfo &io_info,
                                        const int64_t offset,
                                        ObTmpFileIOHandle &io_handle)
 {
@@ -265,13 +259,10 @@ int ObITenantTmpFileManager::aio_pread(const ObTmpFileIOInfo &io_info,
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
+    LOG_WARN("ObITmpFileManager has not been inited", KR(ret));
   } else if (OB_UNLIKELY(!io_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to aio read, invalid argument", KR(ret), K(io_info));
-  } else if (OB_UNLIKELY(false)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant id not match", KR(ret));
   } else if (OB_UNLIKELY(io_handle.is_valid() && !io_handle.is_finished())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tmp file io handle has remain data need to be waited", KR(ret), K(io_info), K(io_handle));
@@ -290,7 +281,7 @@ int ObITenantTmpFileManager::aio_pread(const ObTmpFileIOInfo &io_info,
   return ret;
 }
 
-int ObITenantTmpFileManager::read(const ObTmpFileIOInfo &io_info,
+int ObITmpFileManager::read(const ObTmpFileIOInfo &io_info,
                                   ObTmpFileIOHandle &io_handle)
 {
   int ret = OB_SUCCESS;
@@ -298,13 +289,10 @@ int ObITenantTmpFileManager::read(const ObTmpFileIOInfo &io_info,
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
+    LOG_WARN("ObITmpFileManager has not been inited", KR(ret));
   } else if (OB_UNLIKELY(!io_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to aio read, invalid argument", KR(ret), K(io_info));
-  } else if (OB_UNLIKELY(false)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant id not match", KR(ret));
   } else if (OB_UNLIKELY(io_handle.is_valid() && !io_handle.is_finished())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tmp file io handle has remain data need to be waited", KR(ret), K(io_info), K(io_handle));
@@ -331,7 +319,7 @@ int ObITenantTmpFileManager::read(const ObTmpFileIOInfo &io_info,
   return ret;
 }
 
-int ObITenantTmpFileManager::pread(const ObTmpFileIOInfo &io_info,
+int ObITmpFileManager::pread(const ObTmpFileIOInfo &io_info,
                                    const int64_t offset,
                                    ObTmpFileIOHandle &io_handle)
 {
@@ -340,13 +328,10 @@ int ObITenantTmpFileManager::pread(const ObTmpFileIOInfo &io_info,
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
+    LOG_WARN("ObITmpFileManager has not been inited", KR(ret));
   } else if (OB_UNLIKELY(!io_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to aio read, invalid argument", KR(ret), K(io_info));
-  } else if (OB_UNLIKELY(false)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant id not match", KR(ret));
   } else if (OB_UNLIKELY(io_handle.is_valid() && !io_handle.is_finished())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tmp file io handle has remain data need to be waited", KR(ret), K(io_info), K(io_handle));
@@ -373,7 +358,7 @@ int ObITenantTmpFileManager::pread(const ObTmpFileIOInfo &io_info,
   return ret;
 }
 
-int ObITenantTmpFileManager::aio_write(const ObTmpFileIOInfo &io_info,
+int ObITmpFileManager::aio_write(const ObTmpFileIOInfo &io_info,
                                        ObTmpFileIOHandle &io_handle)
 {
   int ret = OB_SUCCESS;
@@ -382,13 +367,10 @@ int ObITenantTmpFileManager::aio_write(const ObTmpFileIOInfo &io_info,
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
+    LOG_WARN("ObITmpFileManager has not been inited", KR(ret));
   } else if (OB_UNLIKELY(!io_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to aio write, invalid argument", KR(ret), K(io_info));
-  } else if (OB_UNLIKELY(false)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant id not match", KR(ret));
   } else if (OB_FAIL(get_tmp_file(io_info.fd_, tmp_file_handle))) {
     LOG_WARN("fail to get tmp file io handle", KR(ret), K(io_info));
   } else if (OB_FAIL(io_handle.init_write(io_info))) {
@@ -404,7 +386,7 @@ int ObITenantTmpFileManager::aio_write(const ObTmpFileIOInfo &io_info,
 }
 
 // tmp file is always buffer writing, there are no io tasks need to be waited
-int ObITenantTmpFileManager::write(const ObTmpFileIOInfo &io_info)
+int ObITmpFileManager::write(const ObTmpFileIOInfo &io_info)
 {
   int ret = OB_SUCCESS;
   ObTmpFileIOHandle io_handle;
@@ -417,14 +399,14 @@ int ObITenantTmpFileManager::write(const ObTmpFileIOInfo &io_info)
   return ret;
 }
 
-int ObITenantTmpFileManager::truncate(const int64_t fd, const int64_t offset)
+int ObITmpFileManager::truncate(const int64_t fd, const int64_t offset)
 {
   int ret = OB_SUCCESS;
   ObITmpFileHandle tmp_file_handle;
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
+    LOG_WARN("ObITmpFileManager has not been inited", KR(ret));
   } else if (OB_UNLIKELY(fd == ObTmpFileGlobal::INVALID_TMP_FILE_FD || offset < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(offset), K(fd));
@@ -438,14 +420,14 @@ int ObITenantTmpFileManager::truncate(const int64_t fd, const int64_t offset)
   return ret;
 }
 
-int ObITenantTmpFileManager::seal(const int64_t fd)
+int ObITmpFileManager::seal(const int64_t fd)
 {
   int ret = OB_SUCCESS;
   ObITmpFileHandle tmp_file_handle;
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
+    LOG_WARN("ObITmpFileManager has not been inited", KR(ret));
   } else if (OB_FAIL(get_tmp_file(fd, tmp_file_handle))) {
     LOG_WARN("fail to get tmp file handle", KR(ret), K(fd));
   } else if (OB_FAIL(tmp_file_handle.get()->seal())) {
@@ -457,7 +439,7 @@ int ObITenantTmpFileManager::seal(const int64_t fd)
 }
 
 // Get tmp file and increase its refcnt
-int ObITenantTmpFileManager::get_tmp_file(const int64_t fd, ObITmpFileHandle &file_handle)
+int ObITmpFileManager::get_tmp_file(const int64_t fd, ObITmpFileHandle &file_handle)
 {
   int ret = OB_SUCCESS;
 
@@ -478,13 +460,13 @@ int ObITenantTmpFileManager::get_tmp_file(const int64_t fd, ObITmpFileHandle &fi
   return ret;
 }
 
-int ObITenantTmpFileManager::get_tmp_file_size(const int64_t fd, int64_t &size)
+int ObITmpFileManager::get_tmp_file_size(const int64_t fd, int64_t &size)
 {
   int ret = OB_SUCCESS;
   ObITmpFileHandle tmp_file_handle;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
+    LOG_WARN("ObITmpFileManager has not been inited", KR(ret));
   } else if (OB_FAIL(get_tmp_file(fd, tmp_file_handle))) {
     LOG_WARN("fail to get tmp file handle", KR(ret), K(fd));
   } else {
@@ -495,7 +477,7 @@ int ObITenantTmpFileManager::get_tmp_file_size(const int64_t fd, int64_t &size)
   return ret;
 }
 
-bool ObITenantTmpFileManager::CollectTmpFileKeyFunctor::operator()(
+bool ObITmpFileManager::CollectTmpFileKeyFunctor::operator()(
      const ObTmpFileKey &key, const ObITmpFileHandle &tmp_file_handle)
 {
   int ret = OB_SUCCESS;
@@ -510,13 +492,13 @@ bool ObITenantTmpFileManager::CollectTmpFileKeyFunctor::operator()(
   return OB_SUCCESS == ret;
 }
 
-int ObITenantTmpFileManager::get_tmp_file_fds(ObIArray<int64_t> &fd_arr)
+int ObITmpFileManager::get_tmp_file_fds(ObIArray<int64_t> &fd_arr)
 {
   int ret = OB_SUCCESS;
   CollectTmpFileKeyFunctor func(fd_arr);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
+    LOG_WARN("ObITmpFileManager has not been inited", KR(ret));
   } else if (OB_FAIL(files_.for_each(func))) {
     LOG_WARN("fail to collect tmp file fds", KR(ret));
   }
@@ -524,13 +506,13 @@ int ObITenantTmpFileManager::get_tmp_file_fds(ObIArray<int64_t> &fd_arr)
   return ret;
 }
 
-int ObITenantTmpFileManager::get_tmp_file_info(const int64_t fd, ObTmpFileInfo &tmp_file_info)
+int ObITmpFileManager::get_tmp_file_info(const int64_t fd, ObTmpFileInfo &tmp_file_info)
 {
   int ret = OB_SUCCESS;
   ObITmpFileHandle file_handle;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObITenantTmpFileManager has not been inited", KR(ret));
+    LOG_WARN("ObITmpFileManager has not been inited", KR(ret));
   } else if (OB_FAIL(get_tmp_file(fd, file_handle))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       LOG_INFO("tmp file not exist", KR(ret), K(fd));

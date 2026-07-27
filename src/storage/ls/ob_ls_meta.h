@@ -22,7 +22,6 @@
 #include "logservice/palf/lsn.h"
 #include "lib/ob_define.h"
 #include "lib/function/ob_function.h"
-#include "share/ob_unit_getter.h"
 #include "storage/ls/ob_ls_state.h"
 #include "logservice/ob_log_handler.h"
 #include "share/ls/ob_ls_restore_status.h"
@@ -46,6 +45,8 @@ public:
   void reset();
   bool is_valid() const;
   int set_start_work_state();
+  int set_start_restore_state();
+  int set_finish_restore_state();
   int set_remove_state();
   const ObLSPersistentState &get_persistent_state() const;
   ObLSMeta &operator=(const ObLSMeta &other);
@@ -55,8 +56,6 @@ public:
                           const palf::LSN &clog_checkpoint_lsn,
                           const share::SCN &clog_checkpoint_scn,
                           const bool write_slog);
-  int get_offline_scn(share::SCN &offline_scn);
-
   int set_restore_status(const int64_t ls_epoch, const ObRestoreStatus &restore_status);
   int get_restore_status(ObRestoreStatus &restore_status) const;
   int update_ls_replayable_point(const int64_t ls_epoch, const share::SCN &replayable_point);
@@ -116,7 +115,6 @@ public:
   };
   TO_STRING_KV(K_(ls_persistent_state),
                K_(clog_checkpoint_scn), K_(clog_base_lsn),
-               K(offline_scn_),
                K_(restore_status), K_(replayable_point), K_(tablet_change_checkpoint_scn),
                K_(all_id_meta));
 private:
@@ -140,7 +138,6 @@ private:
   // 2. log_scn of log entry that clog_base_lsn_ points to is smaller than/equal to clog_checkpoint_scn_
   // 3. clog starts to replay log entries from clog_base_lsn_ on crash recovery
   palf::LSN clog_base_lsn_;
-  share::SCN offline_scn_;
   ObRestoreStatus restore_status_;
   share::SCN replayable_point_;
   //TODO(yaoying.yyy):modify this

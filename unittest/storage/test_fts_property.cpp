@@ -19,8 +19,9 @@
 #include "common/json_type/ob_json_tree.h"
 #include "lib/ob_errno.h"
 #include "lib/string/ob_string.h"
+#include "share/ob_errno.h"
+#include "storage/fts/ob_fts_parser_helper.h"
 #include "storage/fts/ob_fts_parser_property.h"
-#include "storage/fts/ob_fts_plugin_helper.h"
 
 #include <cstdint>
 #include <gtest/gtest.h>
@@ -47,9 +48,6 @@ public:
   TestFTParserProperty();
   ~TestFTParserProperty() = default;
 
-  static void SetUpTestCase();
-  static void TearDownTestCase();
-
   virtual void SetUp() override;
   virtual void TearDown() override;
 
@@ -57,19 +55,11 @@ private:
   static const int64_t FT_MIN_TOKEN_SIZE;
   static const int64_t FT_MAX_TOKEN_SIZE;
   static const int64_t FT_NGRAM_TOKEN_SIZE;
-  static const char *SPACE_PARSER_NAME;
-  static const char *NGRAM_PARSER_NAME;
-  static const char *BENG_PARSER_NAME;
-  static const char *IK_PARSER_NAME;
   static const char *SPACE_PARSER_STR;
   static const char *NGRAM_PARSER_STR;
   static const char *BENG_PARSER_STR;
   static const char *IK_PARSER_STR;
   static const char *NON_BUILTIN_PARSER_STR;
-  static ObFTParser space_parser_;
-  static ObFTParser ngram_parser_;
-  static ObFTParser beng_parser_;
-  static ObFTParser ik_parser_;
 };
 
 TestFTParserProperty::TestFTParserProperty()
@@ -80,31 +70,11 @@ const int64_t TestFTParserProperty::FT_MIN_TOKEN_SIZE = 3;
 const int64_t TestFTParserProperty::FT_MAX_TOKEN_SIZE = 84;
 const int64_t TestFTParserProperty::FT_NGRAM_TOKEN_SIZE = 2;
 
-const char *TestFTParserProperty::SPACE_PARSER_NAME = "space";
-const char *TestFTParserProperty::NGRAM_PARSER_NAME = "ngram";
-const char *TestFTParserProperty::BENG_PARSER_NAME = "beng";
-const char *TestFTParserProperty::IK_PARSER_NAME = "ik";
-
 const char *TestFTParserProperty::SPACE_PARSER_STR = "space.1";
 const char *TestFTParserProperty::NGRAM_PARSER_STR = "ngram.1";
 const char *TestFTParserProperty::BENG_PARSER_STR = "beng.1";
 const char *TestFTParserProperty::IK_PARSER_STR = "ik.1";
 const char *TestFTParserProperty::NON_BUILTIN_PARSER_STR = "jieba.1";
-
-ObFTParser TestFTParserProperty::space_parser_;
-ObFTParser TestFTParserProperty::ngram_parser_;
-ObFTParser TestFTParserProperty::beng_parser_;
-ObFTParser TestFTParserProperty::ik_parser_;
-
-void TestFTParserProperty::SetUpTestCase()
-{
-  space_parser_.set_name_and_version(share::ObPluginName(SPACE_PARSER_NAME), 1);
-  ngram_parser_.set_name_and_version(share::ObPluginName(NGRAM_PARSER_NAME), 1);
-  beng_parser_.set_name_and_version(share::ObPluginName(BENG_PARSER_NAME), 1);
-  ik_parser_.set_name_and_version(share::ObPluginName(IK_PARSER_NAME), 1);
-}
-
-void TestFTParserProperty::TearDownTestCase() {}
 
 void TestFTParserProperty::SetUp() {}
 
@@ -586,7 +556,7 @@ TEST_F(TestFTParserProperty, test_parse_for_ddl)
     ret = json_props.rebuild_props_for_ddl(NON_BUILTIN_PARSER_STR,
                                            ObCollationType::CS_TYPE_UTF8MB4_BIN,
                                            false);
-    ASSERT_EQ(OB_SUCCESS, ret);
+    ASSERT_EQ(common::OB_FUNCTION_NOT_DEFINED, ret);
   }
 }
 

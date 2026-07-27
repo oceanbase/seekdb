@@ -48,7 +48,7 @@ int ObObjPrivMysqlDDLOperator::grant_object(
     LOG_WARN("object_priv_key is invalid", K(object_priv_key), K(ret));
   } else if (0 == priv_set) {
     //do nothing
-  } else if (OB_FAIL(schema_service_.get_tenant_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(schema_service_.get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("failed to get schema guard", K(ret));
   } else {
     ObPrivSet new_priv = priv_set;
@@ -116,7 +116,7 @@ int ObObjPrivMysqlDDLOperator::revoke_object(
   } else if (!object_priv_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("db_priv_key is invalid", K(object_priv_key), K(ret));
-  } else if (OB_FAIL(schema_service_.get_tenant_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(schema_service_.get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("failed to get schema guard", K(ret));
   } else {
     ObPrivSet object_priv_set = OB_PRIV_SET_EMPTY;
@@ -174,7 +174,7 @@ int ObObjPrivMysqlDDLOperator::drop_obj_mysql_privs(const ObString &obj_name,
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
 
-  OZ (schema_service_.get_tenant_schema_guard(schema_guard));
+  OZ (schema_service_.get_runtime_schema_guard(schema_guard));
   OZ (drop_obj_mysql_privs(obj_name, obj_type, trans, schema_service_, schema_guard));
 
   return ret;

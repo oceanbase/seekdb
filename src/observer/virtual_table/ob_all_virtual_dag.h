@@ -47,7 +47,7 @@ public:
 
 private:
   common::ObArenaAllocator allocator_;
-  common::ObArray<void*> all_tenants_dag_infos_;
+  common::ObArray<void*> dag_infos_;
 
   int64_t cur_idx_;
   bool is_opened_;

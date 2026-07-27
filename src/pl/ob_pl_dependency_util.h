@@ -23,7 +23,6 @@
 
 namespace oceanbase
 {
-
 namespace pl
 {
 
@@ -37,36 +36,51 @@ public:
   static int add_dependency_objects(ObPLDependencyTable &dep_tbl,
                                     const ObPLResolveCtx &resolve_ctx,
                                     const ObPLDataType &type);
-  static int add_dependency_object_impl(const ObPLDependencyTable *dep_tbl,
-                                        const share::schema::ObSchemaObjVersion &obj_version);
-  static int add_dependency_object_impl(ObPLDependencyTable &dep_tbl,
-                             const share::schema::ObSchemaObjVersion &obj_version);
+  static int add_dependency_object_impl(
+      const ObPLDependencyTable *dep_tbl,
+      const share::schema::ObSchemaObjVersion &obj_version);
+  static int add_dependency_object_impl(
+      ObPLDependencyTable &dep_tbl,
+      const share::schema::ObSchemaObjVersion &obj_version);
+  static int check_dep_schema(share::schema::ObSchemaGetterGuard &schema_guard,
+                              const ObPLDependencyTable &dep_schema_objs,
+                              int64_t merge_version,
+                              bool &match);
+  static int check_dep_schema(share::schema::ObSchemaGetterGuard &schema_guard,
+                              const sql::DependenyTableStore &dep_schema_objs,
+                              int64_t merge_version,
+                              bool &match);
 };
 
 class ObPLDependencyGuard
 {
 public:
-  ObPLDependencyGuard(const ObPLExternalNS *src_external_ns, const ObPLExternalNS *dst_external_ns)
-  : old_external_ns_(nullptr), old_dependency_table_(nullptr) {
+  ObPLDependencyGuard(const ObPLExternalNS *src_external_ns,
+                      const ObPLExternalNS *dst_external_ns)
+      : old_external_ns_(nullptr), old_dependency_table_(nullptr)
+  {
     if (OB_NOT_NULL(src_external_ns)
-    && OB_NOT_NULL(dst_external_ns)
-    && dst_external_ns->get_dependency_table() != src_external_ns->get_dependency_table()) {
+        && OB_NOT_NULL(dst_external_ns)
+        && dst_external_ns->get_dependency_table() != src_external_ns->get_dependency_table()) {
       old_external_ns_ = const_cast<ObPLExternalNS *>(dst_external_ns);
       old_dependency_table_ = old_external_ns_->get_dependency_table();
-      old_external_ns_->set_dependency_table(const_cast<ObPLExternalNS *>(src_external_ns)->get_dependency_table());
+      old_external_ns_->set_dependency_table(
+          const_cast<ObPLExternalNS *>(src_external_ns)->get_dependency_table());
     }
   }
-  ~ObPLDependencyGuard() {
+  ~ObPLDependencyGuard()
+  {
     if (OB_NOT_NULL(old_external_ns_)) {
       old_external_ns_->set_dependency_table(old_dependency_table_);
     }
   }
+
 private:
   ObPLExternalNS *old_external_ns_;
   ObPLDependencyTable *old_dependency_table_;
 };
 
-}
-}
+} // namespace pl
+} // namespace oceanbase
 
-#endif
+#endif // OCEANBASE_SRC_PL_OB_PL_DEPENDENCY_MANAGER_H_

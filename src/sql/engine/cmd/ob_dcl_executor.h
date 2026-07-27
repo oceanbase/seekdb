@@ -48,7 +48,6 @@ public:
   int execute(ObExecContext &ctx, ObRevokeStmt &stmt);
 private:
   int revoke_user(ObRevokeStmt &stmt);
-  int revoke_catalog(ObRevokeStmt &stmt);
   int revoke_db(ObRevokeStmt &stmt);
   int revoke_table(ObRevokeStmt &stmt,
                    ObExecContext &ctx);

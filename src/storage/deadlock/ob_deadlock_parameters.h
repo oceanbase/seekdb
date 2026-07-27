@@ -34,26 +34,21 @@ constexpr const int64_t INVALID_VALUE = INT64_MAX;
 constexpr const int64_t TIME_WHEEL_PRECISION_US = 10 * 1000;
 constexpr const int TIMER_THREAD_COUNT = 1;// timeWheel thread number
 constexpr const char *DETECTOR_TIMER_NAME = "DetectorTimer";// timeWheel thread name
-// used within ObDeadLockRpc
-constexpr const int64_t OB_DETECTOR_RPC_TIMEOUT = 5 * 1000 * 1000;// timeout time for rpc, set to 5s
 // used within ObDetectUserReportInfo
 // 3 extra columns in inner table that user could describe more things
 constexpr const int64_t EXTRA_INFO_COLUMNS = 3;
 // used within ObDetectUserReportInfo
 // the length of string showed in inner table should less than 65536
 constexpr const int64_t STR_LEN_LIMIT = 65536;
-// used within ObDeadLockDetector
-// at lest 1s between two collect info process in one detector
-constexpr const int64_t COLLECT_INFO_INTERVAL = 1000 * 1000;
 // used within ObDeadLockInnerTableServic::ObDeadLockEventHistoryTableOperator::async_delete
 // remain last 7 days event records
 constexpr const int64_t REMAIN_RECORD_DURATION = 7LL * 24LL * 60LL * 60LL * 1000LL * 1000LL;
 // used when report deadlock inner info
 struct ROLE
 {
-  // the detector who find there is a deadlock exist, starting collect info phase
+  // the detector that starts local cycle collection
   static constexpr const char *EXECUTOR = "executor";
-  // the detectors who tansfer message between executor and victim
+  // the detectors visited while collecting a local cycle
   static constexpr const char *WITNESS = "witness";
   static constexpr const char *VICTIM = "victim";// the detector who finally killed
   static constexpr const char *SUICIDE = "executor-victim";// the executor who suicide

@@ -37,7 +37,7 @@ public:
       const int64_t schema_version,
       const int64_t parallelism,
       const obcall::ObCreateIndexArg &create_index_arg,
-      const uint64_t tenant_data_version,
+      const uint64_t data_format_version,
       const int64_t parent_task_id = 0,
       const int64_t task_status = share::ObDDLTaskStatus::PREPARE,
       const int64_t snapshot_version = 0,
@@ -212,7 +212,7 @@ private:
   int64_t fts_doc_word_task_id_;
   int64_t drop_index_task_id_;
   bool drop_index_task_submitted_;
-  ObRootService *root_service_;
+  ObLocalManagementService *local_management_service_;
   bool is_rowkey_doc_succ_;
   bool is_doc_rowkey_succ_;
   bool is_domain_aux_succ_;

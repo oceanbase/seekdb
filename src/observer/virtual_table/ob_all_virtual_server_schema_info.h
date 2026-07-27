@@ -36,6 +36,11 @@ public:
 public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
 private:
+  enum COLUMN_ID {
+    REFRESHED_SCHEMA_VERSION = common::OB_APP_MIN_COLUMN_ID,
+    RECEIVED_SCHEMA_VERSION,
+    SCHEMA_COUNT
+  };
   share::schema::ObMultiVersionSchemaService &schema_service_;
 }; //class ObAllVirtualServerSchemaInfo
 }//namespace observer

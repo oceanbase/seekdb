@@ -40,7 +40,6 @@
 namespace oceanbase {
 
 using namespace oceanbase::share::schema;
-using namespace omt; 
 namespace common {
 
 class TestGeoBin : public ::testing::Test {
@@ -2546,7 +2545,7 @@ TEST_F(TestGeoBin, wkb_size_visitor_geom_collection)
     ASSERT_EQ(data.length(), visitor.geo_size());
 }
 
-int mock_get_tenant_srs_item(ObIAllocator &allocator, uint64_t srs_id, const ObSrsItem *&srs_item)
+int mock_get_srs_item(ObIAllocator &allocator, uint64_t srs_id, const ObSrsItem *&srs_item)
 {
     int ret = OB_SUCCESS;
     ObGeographicRs rs;
@@ -2584,7 +2583,7 @@ int mock_get_tenant_srs_item(ObIAllocator &allocator, uint64_t srs_id, const ObS
 
 void get_srs_item(ObIAllocator &allocator, uint64_t srs_id, const ObSrsItem *&srs_item)
 {
-  ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, srs_id, srs_item));
+  ASSERT_EQ(OB_SUCCESS, mock_get_srs_item(allocator, srs_id, srs_item));
 }
 
 TEST_F(TestGeoBin, coordinate_range_visitor_point)

@@ -21,7 +21,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "mtlenv/mock_tenant_module_env.h"
+#include "mtlenv/mock_server_runtime_env.h"
 #include "storage/tablet/ob_tablet_binding_info.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 
@@ -81,12 +81,12 @@ TestTablet::~TestTablet()
 void TestTablet::SetUpTestCase()
 {
   ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
-  EXPECT_EQ(OB_SUCCESS, MockTenantModuleEnv::get_instance().init());
+  EXPECT_EQ(OB_SUCCESS, MockServerRuntimeEnv::get_instance().init());
 }
 
 void TestTablet::TearDownTestCase()
 {
-  MockTenantModuleEnv::get_instance().destroy();
+  MockServerRuntimeEnv::get_instance().destroy();
   ObTimerService::get_instance().stop();
   ObTimerService::get_instance().wait();
   ObTimerService::get_instance().destroy();
@@ -95,8 +95,8 @@ void TestTablet::TearDownTestCase()
 void TestTablet::SetUp()
 {
   OB_LOG(INFO, "ObTabletMeta", K(sizeof(ObTabletMeta)),
-        K(sizeof(ObTabletRestoreState)), K(sizeof(ObTabletReportStatus)), K(sizeof(ObTabletTableStoreFlag)),
-        K(sizeof(ObTabletSpaceUsage)));
+        K(sizeof(ObTabletLocalStatus)), K(sizeof(ObTabletReportStatus)), K(sizeof(ObTabletTableStoreFlag)),
+        K(sizeof(ObTabletSpaceUsage)), K(sizeof(lib::Worker::CompatMode)));
 
   const int64_t tablet_size = sizeof(ObTablet);
   const int64_t rowkey_size = sizeof(ObRowkeyReadInfo);

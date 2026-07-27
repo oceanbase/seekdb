@@ -210,7 +210,7 @@ int ObSSTableRowLockMultiChecker::fetch_row(ObSSTableReadHandle &read_handle)
       LOG_DEBUG("all prefetched blocks checked", K(ret), K(read_handle),
           K(prefetcher_.cur_micro_data_fetch_idx_), K(prefetcher_.is_prefetch_end_));
       if (prefetcher_.is_prefetch_end_) {
-        multi_checker->inc_empty_read(read_handle);
+        multi_checker->inc_empty_read();
         ++prefetcher_.cur_range_fetch_idx_;
       }
     }
@@ -264,7 +264,7 @@ int ObSSTableRowLockMultiChecker::open_cur_data_block(ObSSTableReadHandle &read_
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), K_(prefetcher), K(read_handle));
   } else {
-    micro_block_multi_checker->inc_empty_read(read_handle);
+    micro_block_multi_checker->inc_empty_read();
     micro_block_multi_checker->reuse();
     blocksstable::ObMicroIndexInfo &micro_info = prefetcher_.current_micro_info();
     ObMicroBlockDataHandle &micro_handle = prefetcher_.current_micro_handle();

@@ -675,14 +675,8 @@ struct StringRangeChecker
       } else {
         res_vec->set_string(idx, res_datum.get_string());
         bool has_result = false;
-        // int64_t max_allowed_packet = 0;
         if (OB_FAIL(packet_ret)) {
-          if (OB_ENTRY_NOT_EXIST == ret) { // for compatibility with server before 1470
-            ret = OB_SUCCESS;
-            max_allowed_packet = OB_MAX_VARCHAR_LENGTH;
-          } else {
-            SQL_LOG(WARN, "Failed to get max allow packet size", K(ret));
-          }
+          SQL_LOG(WARN, "Failed to get max allow packet size", K(ret));
         } else if (accuracy_length > max_allowed_packet &&
                     accuracy_length <= INT32_MAX) {
           res_vec->set_null(idx);

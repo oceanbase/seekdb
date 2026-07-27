@@ -215,7 +215,6 @@ struct ObPLObjectKey : public ObILibCacheKey
   : ObILibCacheKey(ObLibCacheNameSpace::NS_INVALID), 
     db_id_(common::OB_INVALID_ID),
     key_id_(common::OB_INVALID_ID),
-    sessid_(0),
     name_(),
     mode_(ObjectMode::NORMAL),
     sys_vars_str_() {}
@@ -223,7 +222,6 @@ struct ObPLObjectKey : public ObILibCacheKey
   : ObILibCacheKey(ObLibCacheNameSpace::NS_INVALID),
     db_id_(db_id),
     key_id_(key_id),
-    sessid_(0),
     name_(),
     mode_(ObjectMode::NORMAL),
     sys_vars_str_() {}
@@ -247,10 +245,6 @@ struct ObPLObjectKey : public ObILibCacheKey
 
   uint64_t  db_id_;
   uint64_t  key_id_; // routine id or package id
-  uint32_t sessid_;
-
-  // sessid_ != 0 and mode_ == NORMAL marks DEBUG compile, for now
-  // TODO: unify DEBUG and PROFILE compile or add DEBUG mode separately
   common::ObString name_;
   ObjectMode mode_;
   common::ObString sys_vars_str_;
@@ -263,7 +257,7 @@ public:
   ObPLObjectValue(common::ObIAllocator &alloc) :
     pc_alloc_(&alloc),
     sys_schema_version_(OB_INVALID_VERSION),
-    tenant_schema_version_(OB_INVALID_VERSION),
+    runtime_schema_version_(OB_INVALID_VERSION),
     sessid_(OB_INVALID_ID),
     sess_create_time_(0),
     contain_sys_name_table_(false),
@@ -277,7 +271,7 @@ public:
   int init(const ObILibCacheObject &cache_obj, ObPLCacheCtx &pc_ctx);
   int set_stored_schema_objs(const DependenyTableStore &dep_table_store,
                               share::schema::ObSchemaGetterGuard *schema_guard);
-  int lift_tenant_schema_version(int64_t new_schema_version);
+  int lift_runtime_schema_version(int64_t new_schema_version);
   int obtain_new_column_infos(share::schema::ObSchemaGetterGuard &schema_guard,
                                               const PCVPlSchemaObj &schema_obj,
                                               ObIArray<ObPLTableColumnInfo> &column_infos);
@@ -319,9 +313,6 @@ public:
   int match_params_info(const ParamStore *params,
                                  bool &is_same);                             
   
-  int set_max_concurrent_num_for_add(ObPLCacheCtx &pc_ctx);
-  int set_max_concurrent_num_for_get(ObPLCacheCtx &pc_ctx);
-  int inner_set_max_concurrent_num(const ObOutlineInfo *outline_info);
   OB_INLINE void copy_obj_schema_version(ObSchemaObjVersion& dest, const PCVPlSchemaObj *src)
   {
     dest.object_id_ = src->schema_id_;
@@ -332,7 +323,7 @@ public:
   int64_t get_mem_size();
 
   TO_STRING_KV(K_(sys_schema_version),
-               K_(tenant_schema_version),
+               K_(runtime_schema_version),
                K_(sessid),
                K_(sess_create_time),
                K_(contain_sys_name_table),
@@ -343,17 +334,13 @@ public:
 public:
   common::ObIAllocator *pc_alloc_;
   int64_t sys_schema_version_;
-  int64_t tenant_schema_version_;
+  int64_t runtime_schema_version_;
   uint64_t sessid_; // session id for temporary table
   uint64_t sess_create_time_; // sess_create_time_ for temporary table
   bool contain_sys_name_table_;
   bool contain_tmp_table_;
-  /* The update of the system package/class will only push up the schema version of the system tenant.
-     If the object under the common tenant depends on the system package/class,
-     In the update scenario, since the schema_version of ordinary users is not pushed up,
-     it may miss checking whether the system package/type is out of date,
-     Causes routine objects that depend on system packages/classes to be unavailable after updating,
-     so schema checks are always performed on classes containing system packages/classes*/
+  /* System package/class changes may advance only the system schema version.
+     Always check cached objects that depend on those packages or classes. */
   bool contain_sys_pl_object_;
   common::ObFixedArray<PCVPlSchemaObj *, common::ObIAllocator> stored_schema_objs_;
   common::Ob2DArray<ObPlParamInfo, common::OB_MALLOC_BIG_BLOCK_SIZE,
@@ -368,7 +355,6 @@ struct ObPLCacheCtx : public ObILibCacheCtx
 {
   ObPLCacheCtx()
     : ObILibCacheCtx(),
-      handle_id_(MAX_HANDLE),
       key_(),
       session_info_(NULL),
       schema_guard_(NULL),
@@ -381,7 +367,6 @@ struct ObPLCacheCtx : public ObILibCacheCtx
     sql_id_[common::OB_MAX_SQL_ID_LENGTH] = '\0';
   }
 
-  CacheRefHandleID handle_id_;
   ObPLObjectKey key_;
   char sql_id_[common::OB_MAX_SQL_ID_LENGTH + 1];
   ObSQLSessionInfo *session_info_;

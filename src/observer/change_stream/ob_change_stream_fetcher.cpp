@@ -38,7 +38,7 @@
 #include "storage/tx_storage/ob_ls_service.h"
 #include "logservice/ob_log_handler.h"
 #include "logservice/palf/log_io_context.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_ts_mgr.h"
 
 namespace oceanbase
@@ -77,7 +77,7 @@ int ObCSFetcher::init(ObCSDispatcher *dispatcher)
     LOG_WARN("CSFetcher: dispatcher is null", KR(ret));
   } else if (OB_FAIL(tx_info_.create(CS_FETCHER_TX_INFO_BUCKET_CNT, "CSFetcherTx"))) {
     LOG_WARN("CSFetcher: fail to create tx_info map", KR(ret));
-  } else if (FALSE_IT(ObThreadPool::set_run_wrapper(MTL_CTX()))) {
+  } else if (FALSE_IT(ObThreadPool::set_run_wrapper(share::server_runtime()))) {
   } else if (OB_FAIL(ObThreadPool::init())) {
     LOG_WARN("CSFetcher: fail to init thread pool", KR(ret));
   } else if (OB_FAIL(idle_cond_.init(ObWaitEventIds::THREAD_IDLING_COND_WAIT))) {
@@ -139,7 +139,7 @@ int ObCSFetcher::init_consumption_position_()
     }
   }
   if (OB_SUCC(ret)) {
-    palf::LogIOContext io_ctx(palf::LogIOUser::CHANGE_STREAM);
+    palf::LogIOContext io_ctx(palf::LogIOUser::CDC);
     if (OB_FAIL(iter_.set_io_context(io_ctx))) {
       LOG_WARN("CSFetcher: fail to set_io_context", KR(ret));
     }
@@ -372,8 +372,8 @@ int ObCSFetcher::get_has_async_cached_(bool &has_async)
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("CSFetcher: schema_service is null", KR(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_refreshed_schema_version(refreshed_version))) {
-    LOG_WARN("CSFetcher: get_tenant_refreshed_schema_version failed", KR(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_refreshed_schema_version(refreshed_version))) {
+    LOG_WARN("CSFetcher: get_runtime_refreshed_schema_version failed", KR(ret));
   } else if (refreshed_version == last_checked_schema_version_) {
     has_async = has_async_index_tables_;
   } else {
@@ -387,7 +387,7 @@ int ObCSFetcher::get_has_async_cached_(bool &has_async)
   return ret;
 }
 
-// check_has_async_index_tables_: uses get_tenant_schema_guard_with_version_in_inner_table
+// check_has_async_index_tables_: uses get_runtime_schema_guard_with_version_in_inner_table
 // so that OB_SCHEMA_EAGAIN is handled (refresh + retry). On success sets has_async to true
 // only if at least one vector index has sync_mode=ASYNC in index_params.
 int ObCSFetcher::check_has_async_index_tables_(bool &has_async)
@@ -399,13 +399,13 @@ int ObCSFetcher::check_has_async_index_tables_(bool &has_async)
     LOG_WARN("CSFetcher: schema_service or sql_proxy is null", KR(ret));
   } else {
     schema::ObSchemaGetterGuard guard;
-    if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard_with_version_in_inner_table(guard))) {
-      LOG_WARN("CSFetcher: fail to get_tenant_schema_guard_with_version_in_inner_table", KR(ret));
+    if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard_with_version_in_inner_table(guard))) {
+      LOG_WARN("CSFetcher: fail to get_runtime_schema_guard_with_version_in_inner_table", KR(ret));
     } else {
       bool has_ivf_index = false;
       common::ObArray<uint64_t> table_ids;
-      if (OB_FAIL(guard.get_vector_info_index_ids_in_tenant( has_ivf_index, table_ids))) {
-        LOG_WARN("CSFetcher: fail to get_vector_info_index_ids_in_tenant", KR(ret));
+      if (OB_FAIL(guard.get_vector_info_index_ids_in_runtime( has_ivf_index, table_ids))) {
+        LOG_WARN("CSFetcher: fail to get_vector_info_index_ids_in_runtime", KR(ret));
       } else {
         for (int64_t i = 0; !has_async && i < table_ids.count(); ++i) {
           const schema::ObTableSchema *table_schema = nullptr;
@@ -794,7 +794,7 @@ void ObCSFetcher::run1()
   // Determine initial mode: check if any async vector index tables exist.
   if (!has_set_stop()) {
     int64_t refreshed_version = 0;
-    if (OB_SUCC(GCTX.schema_service_->get_tenant_refreshed_schema_version(
+    if (OB_SUCC(GCTX.schema_service_->get_runtime_refreshed_schema_version(
                     refreshed_version))) {
       last_checked_schema_version_ = refreshed_version;
     }
@@ -887,7 +887,7 @@ void ObCSFetcher::run1()
       if (IDLE == running_mode_ && !has_set_stop()) {
         int64_t current_version = 0;
         if (OB_NOT_NULL(GCTX.schema_service_)) {
-          GCTX.schema_service_->get_tenant_refreshed_schema_version(current_version);
+          GCTX.schema_service_->get_runtime_refreshed_schema_version(current_version);
         }
         if (current_version == last_checked_schema_version_) {
           idle_cond_.wait(CS_FETCHER_IDLE_COND_WAIT_MS);

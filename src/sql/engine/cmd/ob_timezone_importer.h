@@ -18,7 +18,7 @@
 #define OCEANBASE_SHARE_TABLE_OB_TIMEZONE_IMPORTER_H_
 
 #include "common/mysqlclient/ob_mysql_proxy.h"
-#include "sql/engine/cmd/ob_redis_importer.h"
+#include "share/ob_module_data_arg.h"
 
 namespace oceanbase
 {

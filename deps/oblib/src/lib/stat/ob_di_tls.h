@@ -107,9 +107,8 @@ T* ObDITls<T, tag>::get_instance()
   if (OB_LIKELY(!di_tls.is_valid() && !is_thread_in_exit)) {
     static const char* label = get_label();
     di_tls.instance_ = (T*)PLACE_HOLDER;
-    // add tenant
+    // Allocate in the active runtime context.
     ObMemAttr attr(label);
-    SET_USE_500(attr);
     di_tls.instance_ = OB_NEW(T, attr);
   }
   return di_tls.instance_;
@@ -187,8 +186,7 @@ T* ObDITls<T[N], tag>::get_instance()
     static const char* label = get_label();
     di_tls.instance_ = (T*)PLACE_HOLDER;
     ObMemAttr attr(label);
-    SET_USE_500(attr);
-    // add tenant
+    // Allocate in the active runtime context.
     if (OB_NOT_NULL(di_tls.instance_ = (T*)ob_malloc(sizeof(T) * N, attr))) {
       for (auto i = 0; i < N; ++i) {
         new (di_tls.instance_ + i) T;

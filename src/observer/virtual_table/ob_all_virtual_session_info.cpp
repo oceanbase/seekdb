@@ -58,7 +58,7 @@ int ObAllVirtualSessionInfo::inner_get_next_row(ObNewRow *&row)
                                      schema_guard_,
                                      table_schema_))) {
         SERVER_LOG(WARN, "init fill_scanner fail", K(ret));
-      } else if (OB_FAIL(session_mgr_->for_each_hold_session(fill_scanner_))) {
+      } else if (OB_FAIL(session_mgr_->for_each_session(fill_scanner_))) {
         SERVER_LOG(WARN, "fill scanner fail", K(ret));
       } else {
         scanner_it_ = scanner_.begin();
@@ -78,11 +78,11 @@ int ObAllVirtualSessionInfo::inner_get_next_row(ObNewRow *&row)
   return ret;
 }
 
-int ObAllVirtualSessionInfo::FillScanner::operator()(
-              hash::HashMapPair<uint64_t, ObSQLSessionInfo *> &entry)
+bool ObAllVirtualSessionInfo::FillScanner::operator()(
+              sql::ObSQLSessionMgr::Key key, ObSQLSessionInfo *sess_info)
 {
   int ret = OB_SUCCESS;
-  ObSQLSessionInfo *sess_info = entry.second;
+  UNUSED(key);
   if (OB_UNLIKELY(NULL == scanner_
                   || NULL == allocator_
                   || NULL == cur_row_
@@ -111,9 +111,7 @@ int ObAllVirtualSessionInfo::FillScanner::operator()(
     char ip_buf[common::OB_IP_STR_BUFF];
     char peer_buf[common::OB_IP_PORT_STR_BUFF];
     char sql_id[common::OB_MAX_SQL_ID_LENGTH + 1];
-    //If you are in system tenant, you can see all thread.
-    if ((1UL == 1UL)) {
-      ObSQLSessionInfo::LockGuard lock_guard(sess_info->get_thread_data_lock());
+    ObSQLSessionInfo::LockGuard lock_guard(sess_info->get_thread_data_lock());
       const int64_t col_count = output_column_ids_.count();
       ObCharsetType default_charset = ObCharset::get_default_charset();
       ObCollationType default_collation = ObCharset::get_default_collation(default_charset);
@@ -148,11 +146,6 @@ int ObAllVirtualSessionInfo::FillScanner::operator()(
               cur_row_->cells_[cell_idx].set_varchar(sess_info->get_user_name());
               cur_row_->cells_[cell_idx].set_collation_type(default_collation);
             }
-            break;
-          }
-          case TENANT: {
-            cur_row_->cells_[cell_idx].set_varchar(sess_info->get_tenant_name());
-            cur_row_->cells_[cell_idx].set_collation_type(default_collation);
             break;
           }
           case HOST: {
@@ -271,15 +264,6 @@ int ObAllVirtualSessionInfo::FillScanner::operator()(
             }
             break;
           }
-          case REF_COUNT: {
-            cur_row_->cells_[cell_idx].set_int(sess_info->get_sess_ref_cnt());
-            break;
-          }
-          case BACKTRACE: {
-            cur_row_->cells_[cell_idx].set_varchar(sess_info->get_sess_bt());
-            cur_row_->cells_[cell_idx].set_collation_type(default_collation);
-            break;
-          }
           case TRANS_STATE: {
             if (sess_info->is_in_transaction()) {
               cur_row_->cells_[cell_idx].set_varchar(
@@ -320,9 +304,8 @@ int ObAllVirtualSessionInfo::FillScanner::operator()(
       if (OB_UNLIKELY(OB_SUCCESS == ret && OB_SUCCESS != (ret = scanner_->add_row(*cur_row_)))) {
         SERVER_LOG(WARN, "fail to add row", K(ret), K(*cur_row_));
       }
-    }
   }
-  return ret;
+  return OB_SUCCESS == ret;
 }
 
 void ObAllVirtualSessionInfo::FillScanner::reset()

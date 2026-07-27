@@ -63,13 +63,7 @@ ObTableLockService::ObTableLockCtx::ObTableLockCtx() :
   is_for_replace_(false)
 {
   is_enable_lock_priority_ = false;
-  
-  if (!true) {
-    // if tenant config is invalid, this config will be set as false
-    LOG_WARN_RET(OB_INVALID_ARGUMENT, "tenant config is invalid");
-  } else {
-    is_enable_lock_priority_ = GCONF.enable_lock_priority;
-  }
+  is_enable_lock_priority_ = GCONF.enable_lock_priority;
 }
 
 void ObTableLockService::ObRetryCtx::reuse()
@@ -413,7 +407,7 @@ bool ObTableLockService::ObTableLockCtx::is_deadlock_avoid_enabled() const
   return tablelock::is_deadlock_avoid_enabled(is_from_sql_, origin_timeout_us_);
 }
 
-int ObTableLockService::mtl_init(ObTableLockService* &lock_service)
+int ObTableLockService::server_module_init(ObTableLockService* &lock_service)
 {
   return lock_service->init();
 }
@@ -1698,15 +1692,14 @@ int ObTableLockService::check_op_allowed_(const uint64_t table_id,
 
   if (!table_schema->is_user_table()
       && !table_schema->is_tmp_table()
-      && !ObInnerTableLockUtil::in_inner_table_lock_white_list(table_id)
-      && !table_schema->is_external_table()) {
+      && !ObInnerTableLockUtil::in_inner_table_lock_white_list(table_id)) {
     // all the tmp table is a normal table now, deal it as a normal user table
     // table lock not support virtual table/sys table(not in white list) etc.
     is_allowed = false;
   } else {
     bool is_primary = true;
-    if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(is_primary))) {
-      LOG_WARN("fail to execute mtl_check_if_tenant_role_is_primary", KR(ret));
+    if (OB_FAIL(ObShareUtil::check_if_server_role_is_primary(is_primary))) {
+      LOG_WARN("fail to execute check_if_server_role_is_primary", KR(ret));
     } else if (!is_primary) {
       is_allowed = false;
     }
@@ -1911,7 +1904,7 @@ bool ObTableLockService::need_retry_single_task_(const ObTableLockCtx &ctx,
 
 bool ObTableLockService::need_retry_whole_task_(const int ret)
 {
-  return (OB_TENANT_NOT_IN_SERVER == ret);
+  return (OB_SERVER_RUNTIME_NOT_READY == ret);
 }
 
 bool ObTableLockService::need_retry_partial_task_(const int ret,

@@ -150,12 +150,6 @@ int ObPurgeDatabaseResolver::resolve(const ParseNode &parser_tree)
   if (OB_ISNULL(session_info_) || T_PURGE_DATABASE != parser_tree.type_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session_info is null", K(ret));
-  } else if (OB_UNLIKELY(is_external_catalog_id(session_info_->get_current_default_catalog()))) {
-    // Here we need to intercept additionally because pruge database did not go through resolve ParseNode logic, it was directly assigned
-    // So the interception at resolve is invalid
-    // If we need to support pruge database catalog.db this syntax in the future, then we need to follow the resolve ParseNode logic, so the interception here can be removed
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "purge database in catalog is");
   }
   //create Purge table stmt
   if (OB_SUCC(ret)) {
@@ -207,7 +201,7 @@ int ObPurgeRecycleBinResolver::resolve(const ParseNode &parser_tree)
   if (OB_SUCC(ret)) {
     if (NULL == (purge_recyclebin_stmt = create_stmt<ObPurgeRecycleBinStmt>())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_ERROR("failed to create Purge tenant stmt", K(ret));
+      LOG_ERROR("failed to create purge statement", K(ret));
     } else {
       stmt_ = purge_recyclebin_stmt;
     }

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_compaction_tablet_diagnose.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase 
 {
@@ -25,7 +25,7 @@ namespace compaction
 /*
  * ObDiagnoseTabletMgr implement
  * */
-int ObDiagnoseTabletMgr::mtl_init(ObDiagnoseTabletMgr *&diagnose_tablet_mgr)
+int ObDiagnoseTabletMgr::server_module_init(ObDiagnoseTabletMgr *&diagnose_tablet_mgr)
 {
   return diagnose_tablet_mgr->init();
 }

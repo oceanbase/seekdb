@@ -55,13 +55,6 @@ void ObCreateDatabaseStmt::set_read_only(const bool read_only)
   create_database_arg_.database_schema_.set_read_only(read_only);
 }
 
-int ObCreateDatabaseStmt::set_default_tablegroup_name(const common::ObString &tablegroup_name)
-{
-  return create_database_arg_.database_schema_.set_default_tablegroup_name(tablegroup_name);
-}
-
-
-
 int ObCreateDatabaseStmt::set_database_name(const ObString &database_name)
 {
   return create_database_arg_.database_schema_.set_database_name(database_name);

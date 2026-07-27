@@ -131,16 +131,8 @@ bool ObVirtualOpenCursorTable::FillScanner::operator()(sql::ObSQLSessionMgr::Key
                 K(cur_row_->count_),
                 K(output_column_ids_.count()));
   } else {
-    ObServer &server = ObServer::get_instance();
     uint64_t cell_idx = 0;
-    bool display_non_session_cursor = true ? GCONF._display_non_session_cursor : false;
-    char ip_buf[common::OB_IP_STR_BUFF];
-    char peer_buf[common::OB_IP_PORT_STR_BUFF];
-    char sql_id[common::OB_MAX_SQL_ID_LENGTH + 1];
-    //If you are in system tenant, you can see all thread.
-    //Otherwise, you can show only the threads at the same Tenant with you.
-    //If you have the PROCESS privilege, you can show all threads at your Tenant.
-    //Otherwise, you can show only your own threads.
+    bool display_non_session_cursor = GCONF._display_non_session_cursor;
     if (sess_info->is_shadow()) {
       //this session info is logical free, shouldn't be added to scanner
     } else {

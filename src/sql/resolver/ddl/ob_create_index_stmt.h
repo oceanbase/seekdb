@@ -41,7 +41,6 @@ public:
   int add_hidden_storing_column(const common::ObString &column_name);
   int add_sort_column(const obcall::ObColumnSortItem &sort_column);
   void set_comment(const common::ObString &comment);
-  void set_storage_cache_policy(const common::ObString &storage_cache_policy);
   void set_index_name(const common::ObString &index_name);
   
   void set_index_dop(int64_t index_dop);

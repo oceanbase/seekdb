@@ -120,11 +120,6 @@ int ObDirectLoadMgrUtil::alloc_direct_load_mgr(
         LOG_WARN("failed to alloc direct load mgr", K(ret), K(direct_load_type));
       }
       break;
-    case ObDirectLoadType::SS_IDEM_DIRECT_LOAD_DDL :
-      if (OB_ISNULL(direct_load_mgr = OB_NEWx(ObSSTabletDirectLoadMgr, &allocator))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      }
-      break;
     default:
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("not supported direct load type", K(ret), K(direct_load_type));
@@ -193,20 +188,14 @@ int ObDirectLoadMgrUtil::create_idem_tablet_direct_load_mgr(const int64_t execut
   return ret;
 }
 
-ObDirectLoadType ObDirectLoadMgrUtil::ddl_get_direct_load_type(const uint64_t data_format_version)
+ObDirectLoadType ObDirectLoadMgrUtil::ddl_get_direct_load_type()
 {
-  ObDirectLoadType direct_load_type = ObDirectLoadType::DIRECT_LOAD_INVALID;
-  if (data_format_version < DDL_IDEM_DATA_FORMAT_VERSION) {
-    direct_load_type = ObDirectLoadType::DIRECT_LOAD_DDL;
-  } else {
-    direct_load_type = ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DDL;
-  }
-  return direct_load_type;
+  return ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DDL;
 }
 
 /*
  * tablet direct load mgr craetor, used for both previous and idme direct_load_mgr
- *    - for previous version, mgr handle should get from tenant direct load mgr
+ *    - Older versions obtained the handle from a per-runtime direct-load manager.
  *    - for idem version,     mgr handle are local param, get from the return param
 */
 int ObDirectLoadMgrUtil::create_tablet_direct_load_mgr(const int64_t execution_id,
@@ -225,14 +214,14 @@ int ObDirectLoadMgrUtil::create_tablet_direct_load_mgr(const int64_t execution_i
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(execution_id), K(build_param));
   } else if (!is_idem_type(build_param.common_param_.direct_load_type_)) {
-    ObTenantDirectLoadMgr *tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr();
+    ObDirectLoadMgr *direct_load_mgr = share::g_mp->direct_load_mgr();
     ObLSService *ls_service = share::g_mp->ls_service();
     ObLS *ls = nullptr;
     ObTabletHandle tablet_handle;
-    if (OB_ISNULL(tenant_direct_load_mgr)) {
+    if (OB_ISNULL(direct_load_mgr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected err", K(ret));
-    } else if (OB_FAIL(tenant_direct_load_mgr->create_tablet_direct_load(context_id, execution_id, build_param))) {
+    } else if (OB_FAIL(direct_load_mgr->create_tablet_direct_load(context_id, execution_id, build_param))) {
       LOG_WARN("create tablet manager failed", K(ret));
     } 
 
@@ -247,9 +236,6 @@ int ObDirectLoadMgrUtil::create_tablet_direct_load_mgr(const int64_t execution_i
     } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid tablet handle", K(ret), K(tablet_handle));
-    } else if (tablet_handle.get_obj()->get_tablet_meta().ddl_data_format_version_ >= DDL_IDEM_DATA_FORMAT_VERSION && is_full_direct_load(build_param.common_param_.direct_load_type_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid version", K(ret), K(tablet_handle.get_obj()->get_tablet_meta()), K(build_param));
     }
   } else if (is_idem_type(build_param.common_param_.direct_load_type_)) {
     if (OB_FAIL(ObDirectLoadMgrUtil::create_idem_tablet_direct_load_mgr( execution_id, allocator, build_param, is_major_eixst, data_mgr_handle, lob_mgr_handle))) {

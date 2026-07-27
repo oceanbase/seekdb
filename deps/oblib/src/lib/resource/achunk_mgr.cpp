@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX LIB
 
 #include "achunk_mgr.h"
+#include "lib/profile/ob_trace_id.h"
 #include "lib/utility/utility.h"
-#include "lib/resource/ob_affinity_ctrl.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -32,7 +32,6 @@
 #endif
 
 using namespace oceanbase::lib;
-int ObLargePageHelper::large_page_type_ = INVALID_LARGE_PAGE_TYPE;
 
 #ifdef _WIN32
 // Windows implementation of mmap compatible function
@@ -68,29 +67,6 @@ static int ob_madvise_impl(void* addr, size_t length, int advice) {
 }
 #endif
 
-void ObLargePageHelper::set_param(const char *param)
-{
-  if (OB_NOT_NULL(param)) {
-    if (0 == strcasecmp(param, "false")) {
-      large_page_type_ = NO_LARGE_PAGE;
-    } else if (0 == strcasecmp(param, "true")) {
-      large_page_type_ = PREFER_LARGE_PAGE;
-    } else if (0 == strcasecmp(param, "only")) {
-      large_page_type_ = ONLY_LARGE_PAGE;
-    }
-    LOG_INFO("set large page param", K(large_page_type_));
-  }
-}
-
-int ObLargePageHelper::get_type()
-{
-#ifndef ENABLE_SANITY
-  return large_page_type_;
-#else
-  return NO_LARGE_PAGE;
-#endif
-}
-
 AChunkMgr &AChunkMgr::instance()
 {
   static AChunkMgr mgr;
@@ -106,13 +82,13 @@ AChunkMgr::AChunkMgr()
     slots_[HUGE_ACHUNK_INDEX]->set_max_chunk_cache_size(0);
 }
 
-void *AChunkMgr::direct_alloc(const uint64_t size, const bool can_use_huge_page, bool &huge_page_used, const bool alloc_shadow)
+void *AChunkMgr::direct_alloc(const uint64_t size)
 {
   common::ObTimeGuard time_guard(__func__, 1000 * 1000);
   int orig_errno = errno;
 
   void *ptr = nullptr;
-  ptr = low_alloc(size, can_use_huge_page, huge_page_used, alloc_shadow);
+  ptr = low_alloc(size);
   if (nullptr != ptr) {
     if (((uint64_t)ptr & (ACHUNK_ALIGN_SIZE - 1)) != 0) {
       // not aligned
@@ -136,8 +112,7 @@ void *AChunkMgr::direct_alloc(const uint64_t size, const bool can_use_huge_page,
       }
 #else
       uint64_t new_size = size + ACHUNK_ALIGN_SIZE;
-      /* alloc_shadow should be set to false since partitial sanity_munmap is not supported */
-      ptr = low_alloc(new_size, can_use_huge_page, huge_page_used, false/*alloc_shadow*/);
+      ptr = low_alloc(new_size);
       if (nullptr != ptr) {
         const uint64_t addr = align_up2((uint64_t)ptr, ACHUNK_ALIGN_SIZE);
         if (addr - (uint64_t)ptr > 0) {
@@ -176,57 +151,22 @@ void AChunkMgr::direct_free(const void *ptr, const uint64_t size)
 }
 
 
-void *AChunkMgr::low_alloc(const uint64_t size, const bool can_use_huge_page, bool &huge_page_used, const bool alloc_shadow)
+void *AChunkMgr::low_alloc(const uint64_t size)
 {
   void *ptr = nullptr;
-  huge_page_used = false;
   const int prot = PROT_READ | PROT_WRITE;
-  int flags = MAP_PRIVATE | MAP_ANONYMOUS;
-  int huge_flags = flags;
-#ifdef MAP_HUGETLB
-  if (OB_LIKELY(can_use_huge_page)) {
-    huge_flags = flags | MAP_HUGETLB;
-  }
-#endif
+  const int flags = MAP_PRIVATE | MAP_ANONYMOUS;
   // for debug more efficiently
   // On macOS, fd must be -1 when using MAP_ANONYMOUS, otherwise mmap returns EINVAL
   const int fd = -1;
   const int offset = 0;
-  const int large_page_type = ObLargePageHelper::get_type();
   ObUnmanagedMemoryStat::DisableGuard guard;
-  if (SANITY_BOOL_EXPR(alloc_shadow)) {
-    ptr = SANITY_MMAP(size);
-  }
-  if (NULL == ptr) {
-    if (OB_LIKELY(ObLargePageHelper::PREFER_LARGE_PAGE != large_page_type) &&
-        OB_LIKELY(ObLargePageHelper::ONLY_LARGE_PAGE != large_page_type)) {
 #ifdef _WIN32
-      if (MAP_FAILED == (ptr = ob_mmap(ptr, size, prot, flags, fd, offset))) {
+  if (MAP_FAILED == (ptr = ob_mmap(ptr, size, prot, flags, fd, offset))) {
 #else
-      if (MAP_FAILED == (ptr = ::mmap(ptr, size, prot, flags, fd, offset))) {
+  if (MAP_FAILED == (ptr = ::mmap(ptr, size, prot, flags, fd, offset))) {
 #endif
-        ptr = nullptr;
-      }
-    } else {
-#ifdef _WIN32
-      if (MAP_FAILED == (ptr = ob_mmap(ptr, size, prot, huge_flags, fd, offset))) {
-#else
-      if (MAP_FAILED == (ptr = ::mmap(ptr, size, prot, huge_flags, fd, offset))) {
-#endif
-        ptr = nullptr;
-        if (ObLargePageHelper::PREFER_LARGE_PAGE == large_page_type) {
-#ifdef _WIN32
-          if (MAP_FAILED == (ptr = ob_mmap(ptr, size, prot, flags, fd, offset))) {
-#else
-          if (MAP_FAILED == (ptr = ::mmap(ptr, size, prot, flags, fd, offset))) {
-#endif
-            ptr = nullptr;
-          }
-        }
-      } else {
-        huge_page_used = huge_flags != flags;
-      }
-    }
+    ptr = nullptr;
   }
   return ptr;
 }
@@ -234,16 +174,7 @@ void *AChunkMgr::low_alloc(const uint64_t size, const bool can_use_huge_page, bo
 void AChunkMgr::low_free(const void *ptr, const uint64_t size)
 {
   ObUnmanagedMemoryStat::DisableGuard guard;
-  if (SANITY_ADDR_IN_RANGE(ptr, size)) {
-    AChunk *chunk = (AChunk*)ptr;
-#ifdef ENABLE_SANITY
-    void *ref = chunk->ref_;
-    *(void**)ptr = ref;
-#endif
-    SANITY_MUNMAP((void*)ptr, size);
-  } else {
-    this->munmap((void*)ptr, size);
-  }
+  this->munmap((void*)ptr, size);
 }
 
 AChunk *AChunkMgr::alloc_chunk(const uint64_t size, bool high_prio)
@@ -260,8 +191,6 @@ AChunk *AChunkMgr::alloc_chunk(const uint64_t size, bool high_prio)
       // do-nothing
     } else if (hold_size > orig_hold_size) {
       need_free = !try_inc_hold_soft(hold_size - orig_hold_size);
-    } else if (chunk->is_hugetlb_) {
-      need_free = true;
     } else {
       int result = this->madvise((char*)chunk + hold_size, orig_hold_size - hold_size, MADV_DONTNEED);
       if (-1 == result) {
@@ -291,17 +220,9 @@ AChunk *AChunkMgr::alloc_chunk(const uint64_t size, bool high_prio)
       }
     }
     if (updated || try_inc_hold_hard(hold_size, high_prio)) {
-      bool hugetlb_used = false;
-      void *ptr = direct_alloc(all_size, true, hugetlb_used, SANITY_BOOL_EXPR(true));
+      void *ptr = direct_alloc(all_size);
       if (ptr != nullptr) {
-#ifdef ENABLE_SANITY
-        void *ref = *(void**)ptr;
         chunk = new (ptr) AChunk();
-        chunk->ref_ = ref;
-#else
-        chunk = new (ptr) AChunk();
-#endif
-        chunk->is_hugetlb_ = hugetlb_used;
       } else {
         dec_hold(hold_size);
       }
@@ -309,7 +230,6 @@ AChunk *AChunkMgr::alloc_chunk(const uint64_t size, bool high_prio)
   }
   if (OB_NOT_NULL(chunk)) {
     chunk->alloc_bytes_ = size;
-    SANITY_UNPOISON(chunk, all_size); // maybe no need?
   } else {
     if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
       LOG_DBA_WARN_V2(OB_LIB_ALLOCATE_MEMORY_FAIL, OB_ALLOCATE_MEMORY_FAILED,
@@ -359,12 +279,9 @@ AChunk *AChunkMgr::alloc_co_chunk(const uint64_t size)
     }
   }
   if (updated || try_inc_hold_hard(hold_size, true)) {
-    // there is performance drop when thread stack on huge_page memory.
-    bool hugetlb_used = false;
-    void *ptr = direct_alloc(all_size, false, hugetlb_used, SANITY_BOOL_EXPR(false));
+    void *ptr = direct_alloc(all_size);
     if (ptr != nullptr) {
       chunk = new (ptr) AChunk();
-      chunk->is_hugetlb_ = hugetlb_used;
     } else {
       dec_hold(hold_size);
     }
@@ -372,7 +289,6 @@ AChunk *AChunkMgr::alloc_co_chunk(const uint64_t size)
 
   if (OB_NOT_NULL(chunk)) {
     chunk->alloc_bytes_ = size;
-    //SANITY_UNPOISON(chunk, all_size); // maybe no need?
   } else if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
     LOG_DBA_WARN_V2(OB_LIB_ALLOCATE_MEMORY_FAIL, OB_ALLOCATE_MEMORY_FAILED,
         "[OOPS]: over total memory limit. ", "The details: ",
@@ -516,13 +432,6 @@ int64_t AChunkMgr::to_string(char *buf, const int64_t buf_len) const
   if (OB_SUCC(ret)) {
     ret = UNMAMAGED_MEMORY_STAT.format_dist(buf, buf_len, pos);
   }
-#ifdef ENABLE_SANITY
-  if (OB_SUCC(ret)) {
-    ret = databuff_printf(buf, buf_len, pos,
-        " sanity_min_addr=0x%lx sanity_max_addr=0x%lx max_used_addr=0x%lx",
-        sanity_min_addr, sanity_max_addr, get_global_addr());
-  }
-#endif
   if (OB_SUCC(ret)) {
     ret = databuff_printf(buf, buf_len, pos,
 #ifdef _WIN32

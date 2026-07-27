@@ -20,7 +20,7 @@
 #include "sql/engine/px/datahub/ob_dh_dtl_proc.h"
 #include "sql/engine/px/datahub/ob_dh_msg_ctx.h"
 #include "sql/engine/px/datahub/ob_dh_msg_provider.h"
-#include "share/ob_cluster_version.h"
+#include "share/ob_version_parser.h"
 namespace oceanbase
 {
 namespace sql

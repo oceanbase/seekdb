@@ -84,19 +84,19 @@ ObMockFKParentTableHashWrapper ObGetMockFKParentTableKey<
 
 ObMockFKParentTableMgr::ObMockFKParentTableMgr()
     : is_inited_(false),
-      local_allocator_(SET_USE_500(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
+      local_allocator_(lib::ObMemAttr(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
       allocator_(local_allocator_),
-      mock_fk_parent_table_infos_(0, NULL, SET_USE_500("MockFkParentTab", ObCtxIds::SCHEMA_SERVICE)),
-      mock_fk_parent_table_map_(SET_USE_500("MockFkParentTab", ObCtxIds::SCHEMA_SERVICE))
+      mock_fk_parent_table_infos_(0, NULL, lib::ObMemAttr("MockFkParentTab", ObCtxIds::SCHEMA_SERVICE)),
+      mock_fk_parent_table_map_(lib::ObMemAttr("MockFkParentTab", ObCtxIds::SCHEMA_SERVICE))
 {
 }
 
 ObMockFKParentTableMgr::ObMockFKParentTableMgr(ObIAllocator &allocator)
     : is_inited_(false),
-      local_allocator_(SET_USE_500(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
+      local_allocator_(lib::ObMemAttr(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
       allocator_(allocator),
-      mock_fk_parent_table_infos_(0, NULL, SET_USE_500("MockFkParentTab", ObCtxIds::SCHEMA_SERVICE)),
-      mock_fk_parent_table_map_(SET_USE_500("MockFkParentTab", ObCtxIds::SCHEMA_SERVICE))
+      mock_fk_parent_table_infos_(0, NULL, lib::ObMemAttr("MockFkParentTab", ObCtxIds::SCHEMA_SERVICE)),
+      mock_fk_parent_table_map_(lib::ObMemAttr("MockFkParentTab", ObCtxIds::SCHEMA_SERVICE))
 {
 }
 
@@ -425,7 +425,7 @@ int ObMockFKParentTableMgr::get_mock_fk_parent_table_schema(
   return ret;
 }
 
-int ObMockFKParentTableMgr::get_mock_fk_parent_table_schemas_in_tenant(
+int ObMockFKParentTableMgr::get_mock_fk_parent_table_schemas_in_runtime(
     ObIArray<const ObSimpleMockFKParentTableSchema *> &schemas) const
 {
   int ret = OB_SUCCESS;

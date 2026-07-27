@@ -198,7 +198,6 @@ public:
   uint32_t acc_checksum_;
   int64_t version_;
   int32_t flag_; // currently, unused
-  uint8_t rowid_version_;
   int64_t column_cnt_;
 };
 

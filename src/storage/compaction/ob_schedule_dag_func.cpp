@@ -19,6 +19,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "storage/multi_data_source/ob_mds_table_merge_dag.h"
 #include "storage/multi_data_source/ob_mds_table_merge_dag_param.h"
+#include "storage/ddl/ob_ddl_merge_task.h"
 #include "storage/ddl/ob_tablet_fork_task.h"
 #include "storage/compaction/ob_batch_freeze_tablets_dag.h"
 
@@ -31,7 +32,7 @@ namespace compaction
 {
 
 #define CREATE_DAG(T)                                                          \
-  if (OB_FAIL(share::g_mp->tenant_dag_scheduler()                                      \
+  if (OB_FAIL(share::g_mp->dag_scheduler()                                      \
                   ->create_and_add_dag<T>(&param, is_emergency))) {            \
     if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {                         \
       LOG_WARN("failed to create merge dag", K(ret), K(param));                \
@@ -110,20 +111,17 @@ int ObDagParamFunc::fill_param(
     const storage::ObTablet &tablet,
     const ObMergeType merge_type,
     const int64_t &merge_snapshot_version,
-    const ObExecMode exec_mode,
     ObTabletMergeDagParam &param)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid_merge_type(merge_type)
-    || merge_snapshot_version < ObVersion::MIN_VERSION
-    || !is_valid_exec_mode(exec_mode))) {
+    || merge_snapshot_version < ObVersion::MIN_VERSION)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(merge_snapshot_version), K(exec_mode));
+    LOG_WARN("invalid argument", KR(ret), K(merge_type), K(merge_snapshot_version));
   } else {
     param.tablet_id_ = tablet.get_tablet_meta().tablet_id_;
     param.merge_type_ = merge_type;
     param.merge_version_ = merge_snapshot_version;
-    param.exec_mode_ = exec_mode;
   }
   return ret;
 }

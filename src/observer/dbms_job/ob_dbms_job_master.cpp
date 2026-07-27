@@ -261,8 +261,6 @@ int ObDBMSJobMaster::init(ObISQLClient *sql_client,
     LOG_WARN("trace id is null", K(ret));
   } else {
     trace_id_ = ObCurTraceId::get();
-    self_addr_ = GCONF.self_addr_;
-    schema_service_ = schema_service;
     inited_ = true;
   }
   LOG_INFO("dbms job master inited!", K(ret));
@@ -281,7 +279,7 @@ int ObDBMSJobMaster::start()
     LOG_WARN("fail to start scheduler thread", K(ret));
   } else if (OB_FAIL(scheduler_task_.start())) {
     LOG_WARN("fail to start ready queue", K(ret));
-  } else if (OB_FAIL(register_check_tenant_job())) {
+  } else if (OB_FAIL(load_and_register_new_jobs())) {
     LOG_WARN("fail to load all dbms jobs", K(ret));
   }
   LOG_WARN("dbms job master started", K(ret));
@@ -352,9 +350,7 @@ int ObDBMSJobMaster::scheduler_job(ObDBMSJobKey *job_key, bool is_retry)
 {
   int ret = OB_SUCCESS;
 
-  ObAddr execute_addr;
   ObDBMSJobInfo job_info;
-  bool can_running = false;
 
   UNUSED(is_retry);
 
@@ -363,8 +359,6 @@ int ObDBMSJobMaster::scheduler_job(ObDBMSJobKey *job_key, bool is_retry)
   CK (OB_LIKELY(job_key->is_valid()));
 
   if (OB_FAIL(ret)) {
-  } else if (job_key->is_check_new_tenant()) {
-    OZ (load_and_register_all_jobs(job_key));
   } else if (job_key->is_check_new()) {
     OZ (load_and_register_new_jobs(job_key));
   } else {
@@ -379,35 +373,17 @@ int ObDBMSJobMaster::scheduler_job(ObDBMSJobKey *job_key, bool is_retry)
         bool can_running = false;
         OZ (job_utils_.check_job_can_running(can_running));
         if (OB_SUCC(ret) && can_running) {
-          if (job_info.is_broadcast()) {
-            ObArray<ObAddr> all_servers;
-            OZ (get_all_servers(job_info.get_zone(), all_servers), job_info);
-            for (uint64_t i = 0; OB_SUCC(ret) && i < all_servers.count(); ++i) {
-              // RPC removed: target is self on single replica; run executor in-process.
-              const uint64_t run_job_id = job_key->get_job_id();
-              ex_rpc::async_call([run_job_id]() {
-                ObDBMSJobExecutor executor;
-                if (OB_NOT_NULL(GCTX.sql_proxy_) && OB_NOT_NULL(GCTX.schema_service_)
-                    && OB_SUCCESS == executor.init(GCTX.sql_proxy_, GCTX.schema_service_)) {
-                  (void)executor.run_dbms_job(run_job_id);
-                }
-              });
+          OZ (job_utils_.update_for_start(
+            job_info,
+            (job_info.next_date_ == job_key->get_execute_at())));
+          const uint64_t run_job_id = job_key->get_job_id();
+          ex_rpc::async_call([run_job_id]() {
+            ObDBMSJobExecutor executor;
+            if (OB_NOT_NULL(GCTX.sql_proxy_) && OB_NOT_NULL(GCTX.schema_service_)
+                && OB_SUCCESS == executor.init(GCTX.sql_proxy_, GCTX.schema_service_)) {
+              (void)executor.run_dbms_job(run_job_id);
             }
-          } else {
-            OZ (get_execute_addr(job_info, execute_addr));
-            OZ (job_utils_.update_for_start(
-              job_info,
-              (job_info.next_date_ == job_key->get_execute_at())));
-            // RPC removed: target is self on single replica; run executor in-process.
-            const uint64_t run_job_id = job_key->get_job_id();
-            ex_rpc::async_call([run_job_id]() {
-              ObDBMSJobExecutor executor;
-              if (OB_NOT_NULL(GCTX.sql_proxy_) && OB_NOT_NULL(GCTX.schema_service_)
-                  && OB_SUCCESS == executor.init(GCTX.sql_proxy_, GCTX.schema_service_)) {
-                (void)executor.run_dbms_job(run_job_id);
-              }
-            });
-          }
+          });
         }
         ignore_nextdate = true;
       }
@@ -417,7 +393,7 @@ int ObDBMSJobMaster::scheduler_job(ObDBMSJobKey *job_key, bool is_retry)
         LOG_WARN("failed to register job to job queue", K(tmp_ret));
       }
     } else {
-      int tmp = alive_jobs_.erase_refactored(job_info.get_job_id_with_tenant());
+      int tmp = alive_jobs_.erase_refactored(job_info.get_job_id());
       if (tmp != OB_SUCCESS) {
         LOG_INFO("failed delete valid job from hash set", K(ret), K(job_info));
       }
@@ -440,7 +416,7 @@ int ObDBMSJobMaster::destroy()
 int ObDBMSJobMaster::alloc_job_key(
   ObDBMSJobKey *&job_key, uint64_t job_id,
   uint64_t execute_at, uint64_t delay,
-  bool check_job, bool check_new, bool check_new_tenant)
+  bool check_job, bool check_new)
 {
   int ret = OB_SUCCESS;
   ObSpinLockGuard guard(lock_);
@@ -452,135 +428,9 @@ int ObDBMSJobMaster::alloc_job_key(
   } else if (OB_ISNULL(job_key =
     new(ptr)ObDBMSJobKey(job_id,
                          execute_at, delay,
-                         check_job, check_new, check_new_tenant))) {
+                         check_job, check_new))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to init scheduler job id", K(ret));
-  }
-  return ret;
-}
-
-int ObDBMSJobMaster::get_execute_addr(ObDBMSJobInfo &job_info, ObAddr &execute_addr)
-{
-  int ret = OB_SUCCESS;
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init yet", K(ret), K(inited_));
-  } else if (!job_info.valid()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("dbms job info is invalid", K(ret), K(job_info));
-  }
-  OZ (server_random_pick(job_info.get_zone(), execute_addr));
-  return ret;
-}
-
-int ObDBMSJobMaster::get_all_servers(ObString &pick_zone, ObIArray<ObAddr> &servers)
-{
-  int ret = OB_SUCCESS;
-  ObSchemaGetterGuard schema_guard;
-  const ObTenantSchema *tenant_info = NULL;
-  common::ObArray<common::ObZone> zone_list;
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init yet", K(ret), K(inited_));
-  } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail get schema guard", K(ret));
-  } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_info))) {
-    LOG_WARN("fail to get tenant info", K(ret));
-  } else if (OB_ISNULL(tenant_info)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null ptr", K(ret), K(tenant_info));
-  } else if (OB_FAIL(tenant_info->get_zone_list(zone_list))) {
-    LOG_WARN("fail to get zone list", K(ret));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < zone_list.count(); ++i) {
-      common::ObZone zone = zone_list.at(i);
-      if (pick_zone.empty()
-       || 0 == pick_zone.case_compare(dbms_job::ObDBMSJobInfo::__ALL_SERVER_BC)
-       || 0 == pick_zone.case_compare(zone.str())) {
-         if (common::is_contain(servers, GCTX.self_addr())) {
-           // do nothing
-         } else if (OB_FAIL(servers.push_back(GCTX.self_addr()))) {
-           LOG_WARN("fail to push server to total", K(ret));
-         }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObDBMSJobMaster::server_random_pick(ObString &pick_zone, ObAddr &server)
-{
-  int ret = OB_SUCCESS;
-  common::ObArray<ObAddr> total_server;
-  if (OB_FAIL(get_all_servers(pick_zone, total_server))) {
-    LOG_WARN("failed to get all server", K(pick_zone));
-  }
-  if (OB_SUCC(ret) && total_server.count() <= 0) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("can not find an alive server", K(ret), K(total_server), K(pick_zone));
-  }
-  if (OB_SUCC(ret)) {
-    ObAddr pick;
-    bool is_alive = true, is_active = false;
-    int64_t pos = rand_.get(0, total_server.count() - 1);
-    int64_t cnt = 0;
-    CK (pos >= 0 && pos < total_server.count());
-    while (OB_SUCC(ret) && cnt < total_server.count()) {
-      pos = (pos + 1) % total_server.count();
-      pick = total_server.at(pos);
-      is_active = GCTX.start_service_time_ > 0;
-      if (is_alive && is_active) {
-        break;
-      }
-      cnt++;
-    }
-    if (OB_FAIL(ret)) {
-    } else if (cnt >= total_server.count()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("can not find a alive server", K(ret), K(cnt), K(total_server.count()));
-    } else {
-      LOG_INFO("GET A ADDR FOR EXECUTE", K(ret), K(pick));
-      server = pick;
-    }
-  }
-  return ret;
-}
-
-int ObDBMSJobMaster::register_check_tenant_job()
-{
-  int ret = OB_SUCCESS;
-  ObDBMSJobKey *job_key = NULL;
-  int64_t now = ObTimeUtility::current_time();
-  int64_t delay = MIN_SCHEDULER_INTERVAL;
-  OZ (alloc_job_key(job_key, 0, now + delay, delay, false, false, true));
-  CK (OB_NOT_NULL(job_key));
-  OZ (scheduler_task_.scheduler(job_key));
-  return ret;
-}
-
-int ObDBMSJobMaster::load_and_register_all_jobs(ObDBMSJobKey *job_key)
-{
-  int ret = OB_SUCCESS;
-  ObSchemaGetterGuard schema_guard;
-  int64_t now = ObTimeUtility::current_time();
-  int64_t delay = MIN_SCHEDULER_INTERVAL;
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("dbms job not init yet", K(ret), K(inited_));
-  } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard))) {
-    ret = OB_SCHEMA_ERROR;
-    LOG_WARN("fail get schema guard", K(ret));
-  } else {
-    
-    CK (OB_NOT_NULL(job_key));
-    CK (job_key->is_check_new_tenant());
-    // single tenant: only sys tenant, the user-tenant (id > sys tenant) branch is dead
-    if (OB_NOT_NULL(job_key)) {
-      
-      job_key->set_execute_at(now + delay);
-      job_key->set_delay(delay);
-      scheduler_task_.scheduler(job_key);
-    }
   }
   return ret;
 }
@@ -590,7 +440,7 @@ int ObDBMSJobMaster::load_and_register_new_jobs(ObDBMSJobKey *job_key)
   int ret = OB_SUCCESS;
   ObSEArray<ObDBMSJobInfo, 32> job_infos;
   ObArenaAllocator allocator;
-  OZ (job_utils_.get_dbms_job_infos_in_tenant(allocator, job_infos));
+  OZ (job_utils_.get_dbms_job_infos_in_runtime(allocator, job_infos));
   LOG_INFO("load and register new jobs", K(ret), KPC(job_key), K(job_key), K(job_infos));
   OZ (register_jobs(job_infos, job_key));
   return ret;
@@ -609,12 +459,12 @@ int ObDBMSJobMaster::register_jobs(
   for (int64_t i = 0; OB_SUCC(ret) && i < job_infos.count(); i++) {
     job_info = job_infos.at(i);
     if (job_info.valid()) {
-      int tmp = alive_jobs_.exist_refactored(job_info.get_job_id_with_tenant());
+      int tmp = alive_jobs_.exist_refactored(job_info.get_job_id());
       if (OB_HASH_EXIST == tmp) {
         // do nothing ...
       } else if (OB_HASH_NOT_EXIST) {
         OZ (register_job(job_info));
-        OZ (alive_jobs_.set_refactored(job_info.get_job_id_with_tenant()));
+        OZ (alive_jobs_.set_refactored(job_info.get_job_id()));
       } else {
         LOG_ERROR("dbms job master check job exist failed", K(ret), K(job_info));
       }
@@ -624,7 +474,7 @@ int ObDBMSJobMaster::register_jobs(
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(job_key)) {
     OZ (alloc_job_key(
-        job_key, max_job_id, now + delay, delay, false, true, false));
+        job_key, max_job_id, now + delay, delay, false, true));
     CK (OB_NOT_NULL(job_key));
     CK (job_key->is_valid());
   } else {
@@ -688,7 +538,6 @@ int ObDBMSJobMaster::register_job(
     OX (job_key->set_delay(delay));
     OX (job_key->set_check_job(check_job));
     OX (job_key->set_check_new(false));
-    OX (job_key->set_check_new_tenant(false));
   }
   OZ (scheduler_task_.scheduler(job_key));
   if (OB_FAIL(ret) && OB_NOT_NULL(job_key)) {

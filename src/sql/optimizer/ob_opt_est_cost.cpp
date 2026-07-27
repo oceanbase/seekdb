@@ -240,15 +240,6 @@ double ObOptEstCost::cost_hash_distinct(double rows,
                                   distinct_columns);
 }
 
-double ObOptEstCost::cost_sequence(double rows,
-                                   double uniq_sequence_cnt,
-                                   const ObOptimizerContext &opt_ctx)
-{
-  GET_COST_MODEL();
-  return model->cost_sequence(rows, 
-                              uniq_sequence_cnt);
-}
-
 double ObOptEstCost::cost_get_rows(double rows, const ObOptimizerContext &opt_ctx)
 {
   GET_COST_MODEL();
@@ -656,14 +647,6 @@ int ObOptEstCost::calculate_filter_selectivity(AccessPath &path)
   } else if (OB_FAIL(ObOptSelectivity::calculate_conditional_selectivity(*est_cost_info.table_metas_,
                                                                          *est_cost_info.sel_ctx_,
                                                                          apply_filters,
-                                                                         est_cost_info.ss_postfix_range_filters_,
-                                                                         total_sel,
-                                                                         est_cost_info.ss_postfix_range_filters_sel_,
-                                                                         all_predicate_sel))) {
-    LOG_WARN("failed to calculate prefix filter sel", K(est_cost_info.ss_postfix_range_filters_));
-  } else if (OB_FAIL(ObOptSelectivity::calculate_conditional_selectivity(*est_cost_info.table_metas_,
-                                                                         *est_cost_info.sel_ctx_,
-                                                                         apply_filters,
                                                                          est_cost_info.postfix_filters_,
                                                                          total_sel,
                                                                          est_cost_info.postfix_filter_sel_,
@@ -683,7 +666,6 @@ int ObOptEstCost::calculate_filter_selectivity(AccessPath &path)
         K(est_cost_info.prefix_filters_), K(est_cost_info.pushdown_prefix_filters_),
         K(est_cost_info.postfix_filters_), K(est_cost_info.table_filters_),
         K(est_cost_info.prefix_filter_sel_), K(est_cost_info.pushdown_prefix_filter_sel_),
-        K(est_cost_info.ss_postfix_range_filters_), K(est_cost_info.ss_postfix_range_filters_sel_),
         K(est_cost_info.postfix_filter_sel_), K(est_cost_info.table_filter_sel_));
   }
   return ret;

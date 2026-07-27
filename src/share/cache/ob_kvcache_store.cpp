@@ -20,7 +20,6 @@
 
 #include "share/cache/ob_kvcache_store.h"
 #include "share/cache/ob_kvcache_hazard_domain.h"
-#include "share/config/ob_server_config.h"
 #include "lib/stat/ob_diagnose_info.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/statistic_event/ob_stat_event.h"
@@ -95,7 +94,6 @@ ObKVCacheStore::ObKVCacheStore()
       wash_out_lock_(common::ObLatchIds::WASH_OUT_LOCK),
       washbale_size_info_(),
       tmp_washbale_size_info_(),
-      tenant_reserve_mem_ratio_(TENANT_RESERVE_MEM_RATIO),
       wash_itid_(-1),
       mem_limit_getter_(NULL)
 {
@@ -108,7 +106,7 @@ ObKVCacheStore::~ObKVCacheStore()
 
 int ObKVCacheStore::init(const int64_t max_cache_size,
                          const int64_t block_size,
-                         const ObITenantMemLimitGetter &mem_limit_getter)
+                         const ObIServerMemLimitGetter &mem_limit_getter)
 {
   int ret = OB_SUCCESS;
   void *buf = NULL;
@@ -203,13 +201,8 @@ int ObKVCacheStore::free(ObKVMemBlockHandle *mb_handle)
     ret = common::OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "mb_handle is null", K(ret), KP(mb_handle));
   } else if (FALSE_IT(mb_handle->set_full(0))) {
-  } else if (OB_LIKELY(GCONF._enable_kvcache_hazard_pointer)) {
-    mb_handle->retire();
   } else {
-    if (ATOMIC_BCAS(&mb_handle->status_, FULL, FREE)) {
-      ATOMIC_STORE_RLX(&mb_handle->seq_num_, mb_handle->seq_num_ + 1);
-      de_handle_ref(mb_handle);
-    }
+    mb_handle->retire();
   }
   return ret;
 }
@@ -368,7 +361,7 @@ bool ObKVCacheStore::wash()
   }
   lib::ObMutexGuard guard(wash_out_lock_);
 
-  //compute the wash size of each tenant
+  // Compute the process-wide wash size.
   start_time = ObTimeUtility::current_time();
 
   compute_global_wash_size(global_wash_size);
@@ -422,9 +415,9 @@ bool ObKVCacheStore::wash()
           if (OB_TMP_FAIL(tmp_washbale_size_info_.add_washable_size(
                   mb_handles_[i].mem_block_->get_hold_size()))) {
             COMMON_LOG(WARN,
-                      "Fail to add tenant washable size",
+                      "Fail to add washable size",
                       K(tmp_ret),
-                      K(OB_SERVER_TENANT_ID));
+                      K(OB_SERVER_RUNTIME_ID));
           }
           wash_heap_.add(&mb_handles_[i]);
         }
@@ -438,7 +431,7 @@ bool ObKVCacheStore::wash()
     washbale_size_info_.copy_from(tmp_washbale_size_info_);
   }
 
-  //wash memory in tenant wash heap
+  // Wash memory selected by the process-wide heap.
   if (wash_heap_.mb_cnt_ > 0) {
     wash_mbs(wash_heap_);
     COMMON_LOG(INFO, "Wash memory globally, ",
@@ -465,7 +458,7 @@ int ObKVCacheStore::get_washable_size(int64_t &washable_size)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(washbale_size_info_.get_size(washable_size))) {
-    COMMON_LOG(WARN, "Fail to get tenant wash info", K(ret));
+    COMMON_LOG(WARN, "Fail to get washable size", K(ret));
   }
   COMMON_LOG(DEBUG, "get washable size details", K(ret), K(washable_size));
 
@@ -483,7 +476,7 @@ void ObKVCacheStore::flush_washable_mbs()
     {
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(flush_washable_mbs(false))) {
-        COMMON_LOG(WARN, "Fail to flush tenant washable memblock", K(tmp_ret));
+        COMMON_LOG(WARN, "Fail to flush washable memblock", K(tmp_ret));
       }
     }
   }
@@ -508,57 +501,6 @@ int ObKVCacheStore::flush_washable_mbs(const bool force_flush)
   }
 
   return ret;
-}
-
-bool ObKVCacheStore::add_handle_ref(ObKVMemBlockHandle *mb_handle, const int64_t seq_num) const
-{
-  bool bret = false;
-  if (NULL != mb_handle) {
-    if (seq_num != mb_handle->get_seq_num()) {
-      bret = false;
-    } else {
-      ATOMIC_FAA(&mb_handle->ref_cnt_, 1);
-      if (seq_num != ATOMIC_LOAD_RLX(&mb_handle->seq_num_)) {
-        ATOMIC_SAF(&mb_handle->ref_cnt_, 1);
-        bret = false;
-      } else {
-        bret = true;
-      }
-    }
-  }
-  return bret;
-}
-
-bool ObKVCacheStore::add_handle_ref(ObKVMemBlockHandle *mb_handle) const
-{
-  bool bret = false;
-  if (NULL != mb_handle) {
-    if (FREE == mb_handle->get_status()) {
-      bret = false;
-    } else {
-      ATOMIC_FAA(&mb_handle->ref_cnt_, 1);
-      if (FREE == ATOMIC_LOAD_RLX(&mb_handle->status_)) {
-        ATOMIC_SAF(&mb_handle->ref_cnt_, 1);
-        bret = false;
-      } else {
-        bret = true;
-      }
-    }
-  }
-  return bret;
-}
-
-
-int64_t ObKVCacheStore::de_handle_ref(ObKVMemBlockHandle *mb_handle, const bool do_retire)
-{
-  int64_t ref_cnt = 0;
-  if (0 == (ref_cnt = ATOMIC_SAF(&mb_handle->ref_cnt_, 1))) {
-    int tmp_ret = 0;
-    if (OB_TMP_FAIL(free_mbhandle(mb_handle, do_retire))) {
-      COMMON_LOG_RET(WARN, tmp_ret, "free_mbhandle failed");
-    }
-  }
-  return ref_cnt;
 }
 
 int ObKVCacheStore::sync_wash_mbs(const int64_t size_to_wash,
@@ -603,7 +545,7 @@ void ObKVCacheStore::SyncWashCallBack::operator()(ObKVMemBlockHandle* handle)
   }
 }
 
-void ObKVCacheStore::free_mbs(lib::ObTenantResourceMgrHandle& resource_handle,
+void ObKVCacheStore::free_mbs(lib::ObResourceMgrHandle& resource_handle,
     lib::ObICacheWasher::ObCacheMemBlock* wash_blocks)
 {
   ObICacheWasher::ObCacheMemBlock* wash_block = wash_blocks;
@@ -623,7 +565,7 @@ int ObKVCacheStore::try_flush_washable_mb(ObICacheWasher::ObCacheMemBlock*& wash
   ObDLink *head = nullptr;
   if (NULL == (head = &mb_list_.head_)) {
     ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(WARN, "Tenant memblock list is null", K(ret));
+    COMMON_LOG(WARN, "Memblock list is null", K(ret));
   } else {
     int64_t size_washed = 0;
     const int64_t start = ObTimeUtility::current_time();
@@ -645,14 +587,14 @@ int ObKVCacheStore::try_flush_washable_mb(ObICacheWasher::ObCacheMemBlock*& wash
         ret = OB_CACHE_FREE_BLOCK_NOT_ENOUGH;
         INIT_SUCC(tmp_ret);
         if (TC_REACH_TIME_INTERVAL(3 * 1000 * 1000 /* 3s */)) {
-          if (OB_TMP_FAIL(print_tenant_memblock_info(head))) {
-            COMMON_LOG(WARN, "Fail to print tenant memblock info", K(tmp_ret));
+          if (OB_TMP_FAIL(print_memblock_info(head))) {
+            COMMON_LOG(WARN, "Fail to print memblock info", K(tmp_ret));
           }
         }
         COMMON_LOG(INFO, "can not find enough memory block to wash", K(ret), K(size_washed), K(size_to_wash));
       }
-      EVENT_ADD(ObStatEventIds::KVCACHE_SYNC_WASH_TIME, ObTimeUtility::current_time() - start);
-      EVENT_INC(ObStatEventIds::KVCACHE_SYNC_WASH_COUNT);
+      EVENT_ADD(KVCACHE_SYNC_WASH_TIME, ObTimeUtility::current_time() - start);
+      EVENT_INC(KVCACHE_SYNC_WASH_COUNT);
     }
 
     if (OB_FAIL(ret)) {
@@ -684,146 +626,72 @@ int ObKVCacheStore::inner_flush_washable_mb(const int64_t size_to_wash, int64_t&
   int64_t check_idx = 0;
   HazardList retire_list;
   ObDLink* head = &mb_list_.head_;
-  
-  if (OB_LIKELY(GCONF._enable_kvcache_hazard_pointer)) {
-    // retire memblock and reclaim until
-    // 1. wash out enough memory, or
-    // 2. iterate over the whole tenant memblock list, or
-    // 3. time out
-    ObKVMemBlockHandle* handle = nullptr;
-    HazptrHolder hazptr_holder;
-    bool protect_success;
-    while (OB_SUCC(ret) && size_washed < size_to_wash && head != handle) {
-      {
-        QClockGuard guard(get_qclock());
-        handle = static_cast<ObKVMemBlockHandle*>(link_next(head));
-        while (OB_SUCC(ret) && size_retired < size_to_retire && head != handle) {
-          bool can_try_wash = false;
-          int64_t status = -1;
-          int64_t size;
-          do {
-            ret = hazptr_holder.protect(protect_success, handle);
-          } while (OB_UNLIKELY(OB_ALLOCATE_MEMORY_FAILED == ret));
-          if (OB_FAIL(ret)) {
-            COMMON_LOG(WARN, "failed to protect mb_handle", KP(handle));
-          }
-          if (protect_success) {
-            status = handle->get_status();
-            if (FULL == status) {
-              size = handle->mem_block_->get_size();
-              can_try_wash = true;
-            }
-            hazptr_holder.release();
-          }
-          if (can_try_wash) {
-            if (handle->retire()) {
-              size_retired += size;
-            }
-          } else {
-            if (force_flush && protect_success) {
-              ret = OB_ERR_UNEXPECTED;
-              COMMON_LOG(WARN,
-                  "Can not sync wash memblock of erased tenant",
-                  K(ret),
-                  KPC(handle),
-                  K(status));
-            }
-          }
-          handle = static_cast<ObKVMemBlockHandle*>(link_next(handle));
 
-          if (!force_flush && check_idx > 0 && 0 == check_idx % check_interval) {
-            const int64_t cost = ObTimeUtility::current_time() - start;
-            if (cost > SYNC_WASH_MB_TIMEOUT_US) {
-              ret = OB_SYNC_WASH_MB_TIMEOUT;
-              COMMON_LOG(WARN, "sync wash mb timeout", K(cost), LITERAL_K(SYNC_WASH_MB_TIMEOUT_US));
-            }
+  // Retire memblocks and reclaim until enough memory is washed, the list has
+  // been scanned, or the synchronous wash times out.
+  ObKVMemBlockHandle* handle = nullptr;
+  HazptrHolder hazptr_holder;
+  bool protect_success;
+  while (OB_SUCC(ret) && size_washed < size_to_wash && head != handle) {
+    {
+      QClockGuard guard(get_qclock());
+      handle = static_cast<ObKVMemBlockHandle*>(link_next(head));
+      while (OB_SUCC(ret) && size_retired < size_to_retire && head != handle) {
+        bool can_try_wash = false;
+        int64_t status = -1;
+        int64_t size;
+        do {
+          ret = hazptr_holder.protect(protect_success, handle);
+        } while (OB_UNLIKELY(OB_ALLOCATE_MEMORY_FAILED == ret));
+        if (OB_FAIL(ret)) {
+          COMMON_LOG(WARN, "failed to protect mb_handle", KP(handle));
+        }
+        if (protect_success) {
+          status = handle->get_status();
+          if (FULL == status) {
+            size = handle->mem_block_->get_size();
+            can_try_wash = true;
           }
-          ++check_idx;
+          hazptr_holder.release();
         }
-      }  // qclock guard
-
-      if (OB_FAIL(ret)) {
-      } else if (size_retired >= size_to_wash - size_washed || size_to_wash == INT64_MAX) {
-        // do recliam if has retired enough memory
-        int64_t start_time = ObTimeUtility::current_time();
-        SyncWashCallBack callback(*this, retire_list, wash_blocks, size_washed, size_to_wash);
-        // avoid reclaiming while holding qclock
-        HazardDomain::get_instance().reclaim(callback);
-        int64_t reclaim_time = ObTimeUtility::current_time() - start_time;
-        COMMON_LOG(INFO, "KVCache sync wash / flush reclaim", K(size_washed), K(size_to_wash), K(reclaim_time));
-        if (size_to_wash == INT64_MAX) {
-          // flush
-          break;
-        } else if (size_washed < size_to_wash) {
-          size_to_retire = (size_to_wash - size_washed) * retire_wash_retry_ratio;
-          size_retired = 0;
-        }
-      }
-    }
-  } else {
-    // try wash memblock that can be washed until
-    // 1. wash out enough memory, or
-    // 2. iterate over the whole tenant memblock list, or
-    // 3. time out
-    QClockGuard guard(get_qclock());
-    ObKVMemBlockHandle* handle = static_cast<ObKVMemBlockHandle*>(link_next(head));
-    while (OB_SUCC(ret) && size_washed < size_to_wash && head != handle) {
-      bool can_try_wash = false, add_ref_success;
-      int64_t ref_cnt = -1;
-      int64_t status = -1;
-      if ((add_ref_success = add_handle_ref(handle))) {
-        status = handle->get_status();
-        ref_cnt = handle->ref_cnt_;
-        if (FULL == status && 2 == ref_cnt) {
-          can_try_wash = true;
-        }
-        if (0 == de_handle_ref(handle)) {
-          can_try_wash = false;
-        }
-      }
-      if (can_try_wash) {
-        void* buf = nullptr;
-        int64_t mb_size = 0;
-        if (try_wash_mb(handle, buf, mb_size)) {
-          if (nullptr == buf) {
-            ret = OB_ERR_UNDEFINED;
-            COMMON_LOG(ERROR, "Try wash memblock is null", K(ret));
-          } else {
-            size_washed += mb_size;
-            ObICacheWasher::ObCacheMemBlock* mem_block = new (buf) ObICacheWasher::ObCacheMemBlock();
-            mem_block->next_ = wash_blocks;
-            wash_blocks = mem_block;
+        if (can_try_wash) {
+          if (handle->retire()) {
+            size_retired += size;
           }
-          dl_del(handle);
-          retire_list.push(&handle->retire_link_);
-        } else if (force_flush) {
+        } else if (force_flush && protect_success) {
           ret = OB_ERR_UNEXPECTED;
           COMMON_LOG(WARN,
-              "Fail to try wash memblock.",
+              "Can not synchronously wash an active memblock",
               K(ret),
               KPC(handle),
-              K(status),
-              K(ref_cnt));
+              K(status));
         }
-      } else if (force_flush && add_ref_success) {
-        ret = OB_ERR_UNEXPECTED;
-        COMMON_LOG(WARN,
-            "Can not sync wash memblock of erased tenant",
-            K(ret),
-            KPC(handle),
-            K(status),
-            K(ref_cnt));
-      }
-      handle = static_cast<ObKVMemBlockHandle*>(link_next(handle));
+        handle = static_cast<ObKVMemBlockHandle*>(link_next(handle));
 
-      if (!force_flush && check_idx > 0 && 0 == check_idx % check_interval) {
-        const int64_t cost = ObTimeUtility::current_time() - start;
-        if (cost > SYNC_WASH_MB_TIMEOUT_US) {
-          ret = OB_SYNC_WASH_MB_TIMEOUT;
-          COMMON_LOG(WARN, "sync wash mb timeout", K(cost), LITERAL_K(SYNC_WASH_MB_TIMEOUT_US));
+        if (!force_flush && check_idx > 0 && 0 == check_idx % check_interval) {
+          const int64_t cost = ObTimeUtility::current_time() - start;
+          if (cost > SYNC_WASH_MB_TIMEOUT_US) {
+            ret = OB_SYNC_WASH_MB_TIMEOUT;
+            COMMON_LOG(WARN, "sync wash mb timeout", K(cost), LITERAL_K(SYNC_WASH_MB_TIMEOUT_US));
+          }
         }
+        ++check_idx;
       }
-      ++check_idx;
+    }  // qclock guard
+
+    if (OB_FAIL(ret)) {
+    } else if (size_retired >= size_to_wash - size_washed || size_to_wash == INT64_MAX) {
+      const int64_t start_time = ObTimeUtility::current_time();
+      SyncWashCallBack callback(*this, retire_list, wash_blocks, size_washed, size_to_wash);
+      HazardDomain::get_instance().reclaim(callback);
+      const int64_t reclaim_time = ObTimeUtility::current_time() - start_time;
+      COMMON_LOG(INFO, "KVCache sync wash / flush reclaim", K(size_washed), K(size_to_wash), K(reclaim_time));
+      if (size_to_wash == INT64_MAX) {
+        break;
+      } else if (size_washed < size_to_wash) {
+        size_to_retire = (size_to_wash - size_washed) * retire_wash_retry_ratio;
+        size_retired = 0;
+      }
     }
   }
   retire_mb_handles(retire_list, true /* do retire */);
@@ -835,7 +703,6 @@ int ObKVCacheStore::inner_push_memblock_info(const ObKVMemBlockHandle &handle, O
   INIT_SUCC(ret);
   ObKVStoreMemBlock* memblock = handle.mem_block_;
   ObKVCacheStoreMemblockInfo mb_info;
-  mb_info.ref_count_ = ATOMIC_LOAD_RLX(&handle.ref_cnt_);
   mb_info.using_status_ = handle.get_status();
   mb_info.policy_ = handle.policy_;
   mb_info.kv_cnt_ = handle.kv_cnt_;
@@ -887,7 +754,7 @@ int ObKVCacheStore::get_memblock_info(ObIArray<ObKVCacheStoreMemblockInfo> &memb
   return ret;
 }
 
-int ObKVCacheStore::print_tenant_memblock_info(ObDLink* head)
+int ObKVCacheStore::print_memblock_info(ObDLink* head)
 {
   int ret = OB_SUCCESS;
 
@@ -907,7 +774,7 @@ int ObKVCacheStore::print_tenant_memblock_info(ObDLink* head)
       int64_t ctx_pos = 0;
       if (nullptr == buf) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        COMMON_LOG(WARN, "Fail to allocate memory for print tenant memblock info", K(ret), KP(buf));
+        COMMON_LOG(WARN, "Fail to allocate memory for memblock diagnostics", K(ret), KP(buf));
       } else {
         QClockGuard guard(get_qclock());
         ObKVMemBlockHandle *handle = static_cast<ObKVMemBlockHandle *>(link_next(head));
@@ -924,7 +791,7 @@ int ObKVCacheStore::print_tenant_memblock_info(ObDLink* head)
                 handle->kv_cnt_,
                 handle->get_cnt_,
                 handle->score_))) {
-              COMMON_LOG(WARN, "Fail to print tenant memblock info", K(ret), K(ctx_pos));
+              COMMON_LOG(WARN, "Fail to print memblock info", K(ret), K(ctx_pos));
             }
             hazptr_holder.release();
           }
@@ -933,7 +800,7 @@ int ObKVCacheStore::print_tenant_memblock_info(ObDLink* head)
       } // qclock guard
       if (OB_SUCC(ret)) {
         HazardDomain::get_instance().print_info();
-        _OB_LOG(WARN, "[CACHE-SYNC-WASH] len: %8ld tenant sync wash failed, cache memblock info: \n%s", ctx_pos, buf);
+        _OB_LOG(WARN, "[CACHE-SYNC-WASH] len: %8ld sync wash failed, cache memblock info: \n%s", ctx_pos, buf);
       }
     }
   }
@@ -1038,11 +905,7 @@ int ObKVCacheStore::alloc_mbhandle(
       mb_handle->policy_ = policy;
       mb_handle->mem_block_ = mem_block;
       mb_handle->last_modified_time_us_ = ObTimeUtility::current_time_us();
-      if (OB_UNLIKELY(!GCONF._enable_kvcache_hazard_pointer)) {
-        ATOMIC_AAF(&mb_handle->ref_cnt_, 1);
-      } else {
-        WEAK_BARRIER();
-      }
+      WEAK_BARRIER();
       ATOMIC_STORE_RLX(&mb_handle->status_, ObKVMBHandleStatus::USING);
     }
   }
@@ -1067,8 +930,7 @@ bool ObKVCacheStore::compute_global_wash_size(int64_t &wash_size)
   bool is_wash_valid = false;
   wash_size = 0;
 
-  // seekdb runs with only sys tenant, so washing against the process-wide
-  // memory budget is the intended policy after removing tenant-partitioned accounting.
+  // Wash against the process-wide memory budget.
   const int64_t memory_limit = lib::get_memory_limit();
   int64_t reserve_mem = 0;
   if (memory_limit <= 1024L * 1024L * 1024L) {
@@ -1108,34 +970,26 @@ bool ObKVCacheStore::is_global_wash_valid(const int64_t total_global_wash_block_
 
 void ObKVCacheStore::wash_mbs(WashHeap &heap)
 {
-  if (OB_LIKELY(GCONF._enable_kvcache_hazard_pointer)) {
-    uint64_t retired_mb_sizes[MAX_CACHE_NUM] = {0};
-    uint64_t total_retired_size = 0;
-    if (OB_NOT_NULL(heap.heap_) && OB_LIKELY(heap.mb_cnt_ > 0)) {
-      ObLink* head = nullptr;
-      ObLink* tail = nullptr;
-      uint32_t seq_num;
-      for (int64_t i = 0; i < heap.mb_cnt_; ++i) {
-        if (FULL == heap.heap_[i]->get_status() && ATOMIC_BCAS(&heap.heap_[i]->status_, FULL, FREE)) {
-          ATOMIC_STORE_RLX(&heap.heap_[i]->seq_num_, heap.heap_[i]->seq_num_ + 1);
-          if (OB_ISNULL(tail)) {
-            head = tail = &heap.heap_[i]->retire_link_;
-          } else {
-            tail->next_ = &heap.heap_[i]->retire_link_;
-            tail = tail->next_;
-          }
-          total_retired_size += heap.heap_[i]->mem_block_->get_hold_size();
+  uint64_t total_retired_size = 0;
+  if (OB_NOT_NULL(heap.heap_) && OB_LIKELY(heap.mb_cnt_ > 0)) {
+    ObLink* head = nullptr;
+    ObLink* tail = nullptr;
+    for (int64_t i = 0; i < heap.mb_cnt_; ++i) {
+      if (FULL == heap.heap_[i]->get_status() && ATOMIC_BCAS(&heap.heap_[i]->status_, FULL, FREE)) {
+        ATOMIC_STORE_RLX(&heap.heap_[i]->seq_num_, heap.heap_[i]->seq_num_ + 1);
+        if (OB_ISNULL(tail)) {
+          head = tail = &heap.heap_[i]->retire_link_;
+        } else {
+          tail->next_ = &heap.heap_[i]->retire_link_;
+          tail = tail->next_;
         }
-      }
-      if (OB_NOT_NULL(tail)) {
-        tail->next_ = nullptr;
-        ATOMIC_FAA(&global_status_.retired_size_, total_retired_size);
-        HazardDomain::get_instance().retire(head, tail, total_retired_size);
+        total_retired_size += heap.heap_[i]->mem_block_->get_hold_size();
       }
     }
-  } else {
-    for (int64_t i = 0; i < heap.mb_cnt_; ++i) {
-      wash_mb(heap.heap_[i]);
+    if (OB_NOT_NULL(tail)) {
+      tail->next_ = nullptr;
+      ATOMIC_FAA(&global_status_.retired_size_, total_retired_size);
+      HazardDomain::get_instance().retire(head, tail, total_retired_size);
     }
   }
 }
@@ -1143,36 +997,8 @@ void ObKVCacheStore::wash_mbs(WashHeap &heap)
 void ObKVCacheStore::wash_mb(ObKVMemBlockHandle* mb_handle)
 {
   if (OB_NOT_NULL(mb_handle)) {
-    if (OB_LIKELY(GCONF._enable_kvcache_hazard_pointer)) {
-      mb_handle->retire();
-    } else {
-      if (ATOMIC_BCAS(&mb_handle->status_, FULL, FREE)) {
-        ATOMIC_STORE_RLX(&mb_handle->seq_num_, mb_handle->seq_num_ + 1);
-        de_handle_ref(mb_handle);
-      }
-    }
+    mb_handle->retire();
   }
-}
-
-bool ObKVCacheStore::try_wash_mb(ObKVMemBlockHandle *mb_handle, void *&buf, int64_t &mb_size)
-{
-  int ret = OB_SUCCESS;
-  bool block_washed = false;
-  uint32_t seq_num;
-  if (NULL == mb_handle) {
-    COMMON_LOG_RET(ERROR, common::OB_INVALID_ARGUMENT, "invalid arguments", KP(mb_handle));
-  } else {
-    if (FULL == mb_handle->get_status() && ATOMIC_BCAS(&mb_handle->status_, FULL, FREE)) {
-      ATOMIC_STORE_RLX(&mb_handle->seq_num_, mb_handle->seq_num_ + 1);
-      if (0 != ATOMIC_SAF(&mb_handle->ref_cnt_, 1)) {
-      } else if (OB_FAIL(do_wash_mb(mb_handle, buf, mb_size))) {
-        COMMON_LOG(ERROR, "do_wash_mb failed", K(ret));
-      } else {
-        block_washed = true;
-      }
-    }
-  }
-  return block_washed;
 }
 
 int ObKVCacheStore::do_wash_mb(ObKVMemBlockHandle *mb_handle, void *&buf, int64_t &mb_size)
@@ -1239,7 +1065,7 @@ void ObKVCacheStore::destroy_wash_structs()
   tmp_washbale_size_info_.destroy();
 }
 
-void *ObKVCacheStore::alloc_mb(ObTenantResourceMgrHandle &resource_handle,
+void *ObKVCacheStore::alloc_mb(ObResourceMgrHandle &resource_handle,
     const int64_t block_size)
 {
   void *ptr = NULL;
@@ -1254,7 +1080,7 @@ void *ObKVCacheStore::alloc_mb(ObTenantResourceMgrHandle &resource_handle,
   return ptr;
 }
 
-void ObKVCacheStore::free_mb(ObTenantResourceMgrHandle &resource_handle, void *ptr)
+void ObKVCacheStore::free_mb(ObResourceMgrHandle &resource_handle, void *ptr)
 {
   if (NULL != ptr) {
     if (!resource_handle.is_valid()) {

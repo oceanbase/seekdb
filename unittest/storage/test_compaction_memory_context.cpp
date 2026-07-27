@@ -20,7 +20,7 @@
 #define protected public
 #define private public
 
-#include "mtlenv/mock_tenant_module_env.h"
+#include "mtlenv/mock_server_runtime_env.h"
 
 namespace oceanbase
 {
@@ -48,12 +48,12 @@ TestCompactionMemCtx::TestCompactionMemCtx()
 
 void TestCompactionMemCtx::SetUpTestCase()
 {
-  EXPECT_EQ(OB_SUCCESS, MockTenantModuleEnv::get_instance().init());
+  EXPECT_EQ(OB_SUCCESS, MockServerRuntimeEnv::get_instance().init());
 }
 
 void TestCompactionMemCtx::TearDownTestCase()
 {
-  MockTenantModuleEnv::get_instance().destroy();
+  MockServerRuntimeEnv::get_instance().destroy();
 }
 
 void TestCompactionMemCtx::SetUp()

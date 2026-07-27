@@ -17,9 +17,11 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_pl_expr_subquery.h"
+#include "observer/mysql/ob_query_retry_ctrl.h"
 #include "pl/ob_pl_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "observer/mysql/ob_query_retry_ctrl.h"
 
 namespace oceanbase
 {
@@ -29,14 +31,13 @@ namespace sql
 
 OB_SERIALIZE_MEMBER(
     (ObExprOpSubQueryInPl, ObFuncExprOperator),
-    id_, type_, route_sql_, result_type_, is_ignore_fail_, ps_sql_, type_info_);
+    type_, route_sql_, result_type_, is_ignore_fail_, ps_sql_, type_info_);
 
 
 ObExprOpSubQueryInPl::ObExprOpSubQueryInPl(common::ObIAllocator &alloc)
     : ObFuncExprOperator(
         alloc, T_FUN_SUBQUERY, N_PL_SUBQUERY_CONSTRUCT,
         PARAM_NUM_UNKNOWN, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION, INTERNAL_IN_MYSQL_MODE),
-      id_(common::OB_INVALID_ID),
       ps_sql_(ObString()),
       type_(stmt::T_NONE),
       route_sql_(ObString()),
@@ -156,14 +157,9 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
   CK (OB_NOT_NULL(ctx.exec_ctx_.get_sql_ctx()));
 
   observer::ObQueryRetryCtrl retry_ctrl;
-  int64_t tenant_version = 0;
+  int64_t runtime_schema_version = 0;
   int64_t sys_version = 0;
   bool is_stack_overflow = false;
-
-  if (info->id_ != common::OB_INVALID_ID) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "observer version need upate to 4.1 ver");
-  }
 
   OZ(check_stack_overflow(is_stack_overflow));
   if (OB_SUCC(ret) && is_stack_overflow) {
@@ -201,14 +197,14 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
             spi_result.reset_member_for_retry(*session);
           }
           retry_ctrl.clear_state_before_each_retry(session->get_retry_info_for_update());
-          if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(spi_result.get_scheme_guard()))) {
+          if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(spi_result.get_scheme_guard()))) {
             LOG_WARN("get schema guard failed", K(ret));
-          } else if (OB_FAIL(spi_result.get_scheme_guard().get_schema_version(tenant_version))) {
+          } else if (OB_FAIL(spi_result.get_scheme_guard().get_schema_version(runtime_schema_version))) {
             LOG_WARN("fail get schema version", K(ret));
           } else if (OB_FAIL(spi_result.get_scheme_guard().get_schema_version(sys_version))) {
             LOG_WARN("fail get sys schema version", K(ret));
           } else {
-            retry_ctrl.set_tenant_local_schema_version(tenant_version);
+            retry_ctrl.set_current_local_schema_version(runtime_schema_version);
             retry_ctrl.set_sys_local_schema_version(sys_version);
             spi_result.get_sql_ctx().schema_guard_ = &spi_result.get_scheme_guard();
             OZ (ObSPIService::inner_open(&pl_exec_ctx,
@@ -366,7 +362,6 @@ OB_DEF_SERIALIZE(ObExprPlSubQueryInfo)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE,
-              id_,
               type_,
               route_sql_,
               result_type_,
@@ -380,7 +375,6 @@ OB_DEF_DESERIALIZE(ObExprPlSubQueryInfo)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE,
-              id_,
               type_,
               route_sql_,
               result_type_,
@@ -394,7 +388,6 @@ OB_DEF_SERIALIZE_SIZE(ObExprPlSubQueryInfo)
 {
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-              id_,
               type_,
               route_sql_,
               result_type_,
@@ -431,7 +424,6 @@ int ObExprPlSubQueryInfo::from_raw_expr(RE &raw_expr, const ObSQLSessionInfo *se
     const_cast<ObPlQueryRefRawExpr &> (static_cast<const ObPlQueryRefRawExpr&>(raw_expr));
   const ObEnumSetMeta *enum_set_meta = NULL;
 
-  id_ = common::OB_INVALID_ID;
   type_ = subquery_expr.get_stmt_type();
   result_type_ = subquery_expr.get_result_type();
   is_ignore_fail_ = subquery_expr.is_ignore_fail();

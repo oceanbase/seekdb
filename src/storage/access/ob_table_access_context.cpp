@@ -136,7 +136,7 @@ int ObTableAccessContext::build_lob_locator_helper(ObTableScanParam &scan_param,
   } else if (!scan_param.table_param_->enable_lob_locator_v2()) {
     // if lob locator v2 is enabled, locator will be used for all types of lobs, including mysql mode
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "Unexpected tenant mode", K(ret));
+    STORAGE_LOG(WARN, "unexpected compatibility mode", K(ret));
   } else if (OB_ISNULL(buf = lob_allocator_.alloc(sizeof(ObLobLocatorHelper)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_LOG(WARN, "Failed to alloc memory for ObLobLocatorHelper", K(ret));

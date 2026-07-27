@@ -31,25 +31,19 @@ int ObAllVirtualPsItemInfo::inner_get_next_row()
   int ret = OB_SUCCESS;
   bool is_sub_end = false;
 
-  // At most one MOD_SCOPE pass
+  // At most one SERVER_MODULE_SCOPE pass
   if (iter_end_) {
     ret = OB_ITER_END;
   } else {
-    MOD_SCOPE {
-      if (OB_FAIL(get_next_row_from_specified_tenant(is_sub_end))) {
-        SERVER_LOG(WARN, "get_next_row_from_specified_tenant failed", K(ret));
+    SERVER_MODULE_SCOPE {
+      if (OB_FAIL(get_next_row(is_sub_end))) {
+        SERVER_LOG(WARN, "get_next_row failed", K(ret));
       } else if (is_sub_end) {
         iter_end_ = true;
         ret = OB_ITER_END;
       }
     }
   }
-  return ret;
-}
-
-int ObAllVirtualPsItemInfo::inner_open()
-{
-  int ret = OB_SUCCESS;
   return ret;
 }
 
@@ -144,7 +138,7 @@ int ObAllVirtualPsItemInfo::fill_cells(ObPsStmtId stmt_id,
   return ret;
 }
 
-int ObAllVirtualPsItemInfo::get_next_row_from_specified_tenant(bool &is_end)
+int ObAllVirtualPsItemInfo::get_next_row(bool &is_end)
 {
   int ret = OB_SUCCESS;
   is_end = false;

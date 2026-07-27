@@ -254,8 +254,7 @@ int ObTransformSimplifySubquery::is_subquery_to_expr_valid(const ObSelectStmt *s
              && 0 == stmt->get_condition_size()
              && 0 == stmt->get_having_expr_size()
              && !stmt->has_limit()
-             && !stmt->is_set_stmt()
-             && !stmt->has_sequence()) {
+             && !stmt->is_set_stmt()) {
     is_valid = true;
   }
   if (OB_SUCC(ret) && is_valid) {
@@ -2138,7 +2137,6 @@ int ObTransformSimplifySubquery::empty_table_subquery_can_be_eliminated_in_exist
              ref_stmt->is_contains_assignment() ||
              ref_stmt->has_group_by() ||
              ref_stmt->has_having() ||
-             ref_stmt->has_sequence() ||
              ref_stmt->has_window_function()) {
     is_valid = false;
   } else {

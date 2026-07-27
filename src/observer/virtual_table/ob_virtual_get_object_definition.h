@@ -1,0 +1,117 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_GET_OBJECT_DEFINITION_
+#define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_GET_OBJECT_DEFINITION_
+
+#include "lib/container/ob_se_array.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "common/ob_range.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObSQLSessionInfo;
+}
+namespace share
+{
+namespace schema
+{
+class ObTableSchema;
+}
+}
+namespace observer
+{
+class ObGetObjectDefinition : public common::ObVirtualTableScannerIterator
+{
+  enum GetDDLObjectType
+  {
+    T_GET_DDL_TABLE,            // table, view, index
+    T_GET_DDL_PROCEDURE,        // procedure
+    T_GET_DDL_PACKAGE,          // package
+    T_GET_DDL_CONSTRAINT,       // check/pk constraint
+    T_GET_DDL_REF_CONSTRAINT,   // foreign key constraint
+    T_GET_DDL_TABLESPACE,       // table space
+    T_GET_DDL_TRIGGER,          // trigger
+    T_GET_DDL_USER,             // user
+    T_GET_DDL_SYNONYM,          // synonym
+    T_GET_DDL_TYPE,             // user defined type
+    T_GET_DDL_TYPE_SPEC,        // user defined type spec
+    T_GET_DDL_TYPE_BODY,        // user defined type body
+    T_GET_DDL_ROLE,
+    T_GET_DDL_PACKAGE_SPEC,     // package spec
+    T_GET_DDL_PACKAGE_BODY,     // package body
+    T_GET_DDL_FUNCTION,         // function
+    T_GET_DDL_MAX
+  };
+  static const char *ObjectTypeName[T_GET_DDL_MAX];
+public:
+  ObGetObjectDefinition();
+  virtual ~ObGetObjectDefinition();
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+  virtual void reset();
+private:
+  int get_object_type_and_name(GetDDLObjectType &object_type,
+                              ObString &object_name,
+                              ObString &ob_schema,
+                              ObString &version,
+                              ObString &model,
+                              ObString &transform);
+  int get_ddl_creation_str(ObString &ddl_str,
+                          GetDDLObjectType object_type,
+                          const ObString &object_name,
+                          const ObString &db_name);
+  OB_INLINE int print_error_log(GetDDLObjectType object_type,
+                                const common::ObString &db_name,
+                                const common::ObString &object_name);
+  int fill_row_cells(ObString &ddl_str,
+                    int64_t object_type,
+                    ObString &object_name,
+                    ObString &ob_schema,
+                    ObString &version,
+                    ObString &model,
+                    ObString &transform);
+
+  int get_table_definition(ObString &ddl_str, const uint64_t table_id);
+  int get_routine_definition(ObString &ddl_str, const ObString &routine_name,
+                             const ObString &db_name, GetDDLObjectType object_type);
+  int get_constraint_definition(ObString &ddl_str, const ObString &constraint_name,
+                                const ObString &db_name,
+                                GetDDLObjectType object_type);
+  int get_foreign_key_definition(ObString &ddl_str, const ObString &foreign_key_name,
+                                const ObString &db_name,
+                                GetDDLObjectType object_type);
+  int get_trigger_definition(ObString &ddl_str, const ObString &trigger_name,
+                                const ObString &db_name,
+                                GetDDLObjectType object_type);
+  int get_user_definition(ObString &ddl_str, const ObString &user_name,
+                                const ObString &db_name,
+                                GetDDLObjectType object_type,
+                                bool is_role);
+  int get_database_id(const ObString db_name,
+                      uint64_t &database_id);
+  int get_package_definition(ObString &ddl_str,
+                                const ObString &package_name,
+                                const ObString &db_name,
+                                share::schema::ObPackageType package_type,
+                                GetDDLObjectType object_type);
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObGetObjectDefinition);
+};
+}// observer
+}// oceanbase
+#endif /* OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_GET_OBJECT_DEFINITION_ */

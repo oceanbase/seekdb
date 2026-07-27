@@ -19,7 +19,6 @@
 #include "observer/virtual_table/ob_virtual_table_iterator.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 
-#include "share/catalog/ob_external_object_ctx.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -396,19 +395,11 @@ int ObVirtualTableIterator::get_next_row(ObNewRow *&row)
     } else if (OB_UNLIKELY(col_schema->get_data_type() != cur_row->cells_[i].get_type()
                            && ObNullType != cur_row->cells_[i].get_type())) {
       ret = OB_ERR_UNEXPECTED;
-      if (GCONF.in_upgrade_mode()) {
-        LOG_WARN("column type in this row is not expected type", K(ret), K(i),
-                 "table_name", table_schema_->get_table_name_str(),
-                 "column_name", col_schema->get_column_name_str(),
-                 K(column_id), K(cur_row->cells_[i]),
-                 K(col_schema->get_data_type()), K(output_column_ids_));
-      } else {
-        LOG_ERROR("column type in this row is not expected type", K(ret), K(i),
-                  "table_name", table_schema_->get_table_name_str(),
-                  "column_name", col_schema->get_column_name_str(),
-                  K(column_id), K(cur_row->cells_[i]), K(cur_row->cells_[i].get_type()),
-                  K(col_schema->get_data_type()), K(output_column_ids_));
-      }
+      LOG_ERROR("column type in this row is not expected type", K(ret), K(i),
+                "table_name", table_schema_->get_table_name_str(),
+                "column_name", col_schema->get_column_name_str(),
+                K(column_id), K(cur_row->cells_[i]), K(cur_row->cells_[i].get_type()),
+                K(col_schema->get_data_type()), K(output_column_ids_));
     }
     if (OB_SUCC(ret)
         && is_lob_storage(col_schema->get_data_type())
@@ -510,8 +501,6 @@ int ObVirtualTableIterator::get_next_row()
                  OB_FAIL(ob_adjust_lob_datum(row->cells_[i], expr->obj_meta_,
                                              expr->obj_datum_map_, *allocator_, datum))) {
         LOG_WARN("adjust lob datum failed", K(ret), K(i), K(row->cells_[i].get_meta()), K(expr->obj_meta_));
-      } else {
-        SANITY_CHECK_RANGE(datum.ptr_, datum.len_);
       }
     }
   }
@@ -559,13 +548,7 @@ int ObVirtualTableIterator::check_priv(const ObString &level_str,
   OZ (session_->get_session_priv_info(session_priv));
   // bool allow_show = true;
   if (OB_SUCC(ret)) {
-    //tenant in table is static casted to int64_t,
-    //and use statis_cast<uint64_t> for retrieving(same with schema_service)
-    // After schema split, the tenant of the normal tenant schema table is 0, at this time, authentication takes session_priv.tenant_
-    if (false
-        && true) {
-      //not current tenant's row
-    } else if (0 == level_str.case_compare("db_acc")) {
+    if (0 == level_str.case_compare("db_acc")) {
       if (OB_FAIL(schema_guard_->check_db_show(session_priv, enable_role_id_array, db_name, passed))) {
           LOG_WARN("Check db show failed", K(ret));
       }
@@ -586,12 +569,11 @@ int ObVirtualTableIterator::check_priv(const ObString &level_str,
 int ObVirtualTableIterator::init_sql_schema_guard_()
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(schema_guard_) || OB_ISNULL(scan_param_) || OB_ISNULL(scan_param_->external_object_ctx_)) {
+  if (OB_ISNULL(schema_guard_)) {
     // don't do anything
     // ignore ret
-  } else if (OB_FALSE_IT(sql_schema_guard_.set_schema_guard(schema_guard_))) {
-  } else if (OB_FAIL(sql_schema_guard_.recover_schema_from_external_objects(scan_param_->external_object_ctx_->get_external_objects()))) {
-    LOG_WARN("recover external objects failed", K(ret));
+  } else {
+    sql_schema_guard_.set_schema_guard(schema_guard_);
   }
   return ret;
 }

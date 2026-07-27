@@ -18,7 +18,6 @@
 #define OCEANBASE_SQL_TASK_EXECUTOR_CTX_
 
 #include "share/ob_autoincrement_service.h"
-#include "sql/executor/ob_executor_rpc_impl.h"
 #include "sql/executor/ob_execute_result.h"
 #include "sql/ob_phy_table_location.h"
 #include "sql/optimizer/ob_table_partition_info.h"
@@ -45,7 +44,6 @@ typedef common::ObIArray<ObPhyTableLocation> ObPhyTableLocationIArray;
 typedef common::ObIArray<ObCandiTableLoc> ObCandiTableLocIArray;
 typedef common::ObSEArray<ObPhyTableLocation, 2> ObPhyTableLocationFixedArray;
 
-class ObJobControl;
 class ObExecContext;
 class ObTaskExecutorCtx
 {
@@ -75,15 +73,6 @@ public:
   int append_table_location(const ObCandiTableLoc &phy_location_info);
 
   const ObTablePartitionInfoArray &get_partition_infos() const;
-  inline RemoteExecuteStreamHandle* get_stream_handler()
-  {
-    return task_resp_handler_;
-  }
-  int reset_and_init_stream_handler();
-  ObExecutorRpcImpl *get_task_executor_rpc()
-  {
-    return GCTX.executor_rpc_;
-  }
   inline ObExecuteResult &get_execute_result()
   {
     return execute_result_;
@@ -92,14 +81,13 @@ public:
   {
     return GCTX.vt_par_ser_;
   }
-  inline void set_query_tenant_begin_schema_version(const int64_t schema_version)
+  inline void set_query_begin_schema_version(const int64_t schema_version)
   {
-    query_tenant_begin_schema_version_ = schema_version;
+    query_begin_schema_version_ = schema_version;
   }
-  const common::ObAddr get_self_addr() const;
-  inline int64_t get_query_tenant_begin_schema_version() const
+  inline int64_t get_query_begin_schema_version() const
   {
-    return query_tenant_begin_schema_version_;
+    return query_begin_schema_version_;
   }
   inline void set_query_sys_begin_schema_version(const int64_t schema_version)
   {
@@ -133,21 +121,6 @@ public:
   {
     return retry_times_;
   }
-  //FIXME qianfu compatibility code, remove this function after 1.4.0
-  // Equals INVALID_CLUSTER_VERSION means it is serialized from an old observer on a remote node
-  inline bool min_cluster_version_is_valid() const
-  {
-    return ObExecutorRpcCtx::INVALID_CLUSTER_VERSION != min_cluster_version_;
-  }
-  inline void set_min_cluster_version(uint64_t min_cluster_version)
-  {
-    min_cluster_version_ = min_cluster_version;
-  }
-  inline uint64_t get_min_cluster_version() const
-  {
-    return min_cluster_version_;
-  }
-
   void set_sys_job_id(const int64_t id) { sys_job_id_ = id; }
   int64_t get_sys_job_id() const { return sys_job_id_; }
 
@@ -165,11 +138,6 @@ public:
 private:
   // BEGIN local local variable
   //
-  // RPC provided streaming processing interface, LocalReceiveOp reads remote data from this interface
-  // The reason this variable is placed in ObTaskExecutorCtx is: task_resp_handler_
-  // Must be initialized in Scheduler, used in LocalReceiveOp, so it utilizes
-  // ObTaskExecutorCtx pass variables
-  RemoteExecuteStreamHandle *task_resp_handler_;
   // Used to encapsulate the Op Tree of the top-level Job of executor, outputting data externally
   ObExecuteResult execute_result_;
   // Used for temporarily passing parameters when calculating the partition id of a virtual table, it's best to reset this member variable after calculation
@@ -187,17 +155,13 @@ private:
   ObPhyTableLocationFixedArray table_locations_;
   // The number of retries
   int64_t retry_times_;
-  //
-  // Global observer minimum version number
-  uint64_t min_cluster_version_;
-  //
   //  END variables that need to be serialized
 
   int64_t sys_job_id_;
 public:
   // BEGIN global singleton variable
   //
-  int64_t query_tenant_begin_schema_version_; // Query start time to get the latest global tenant schema version
+  int64_t query_begin_schema_version_; // Latest global runtime schema version at query start
   int64_t query_sys_begin_schema_version_; // Query start time to get the latest global sys schema version
   share::schema::ObMultiVersionSchemaService *schema_service_;
   //
@@ -205,19 +169,14 @@ public:
 
 
   DISALLOW_COPY_AND_ASSIGN(ObTaskExecutorCtx);
-  TO_STRING_KV(K(table_locations_), K(retry_times_), K(min_cluster_version_), K(expected_worker_cnt_),
-      K(admited_worker_cnt_), K(query_tenant_begin_schema_version_), K(query_sys_begin_schema_version_),
+  TO_STRING_KV(K(table_locations_), K(retry_times_), K(expected_worker_cnt_),
+      K(admited_worker_cnt_), K(query_begin_schema_version_), K(query_sys_begin_schema_version_),
       K(minimal_worker_cnt_));
 };
 
-class ObExecutorRpcImpl;
 class ObTaskExecutorCtxUtil
 {
 public:
-  // trigger a location update task and clear location in cache
-  static int get_stream_handler(ObExecContext &ctx, RemoteExecuteStreamHandle *&handler);
-  static int get_task_executor_rpc(ObExecContext &ctx, ObExecutorRpcImpl *&rpc);
-
   template<typename DEST_TYPE, typename SRC_TYPE>
   static int merge_task_result_meta(DEST_TYPE &dest, const SRC_TYPE &task_meta);
 }; /* class ObTaskExecutorCtxUtil */

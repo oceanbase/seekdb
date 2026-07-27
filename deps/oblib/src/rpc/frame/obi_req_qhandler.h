@@ -29,7 +29,6 @@ class ObRequest;
 namespace frame
 {
 
-class ObPacketQueueSessionHandler;
 class ObiReqQHandler
 {
 public:
@@ -38,7 +37,7 @@ public:
   virtual int onThreadCreated(obsys::CThread *) = 0;
   virtual int onThreadDestroy(obsys::CThread *) = 0;
 
-  virtual bool handlePacketQueue(ObRequest *req, void *args) = 0;
+  virtual bool handle_request(ObRequest *req) = 0;
 };
 
 } // end of namespace frame

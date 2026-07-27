@@ -25,8 +25,6 @@ namespace transaction
 
 int ObTimestampService::init()
 {
-  const ObAddr &self = GCTX.self_addr();
-  self_ = self;
   service_type_ = ServiceType::TimestampService;
   pre_allocated_range_ = TIMESTAMP_PREALLOCATED_RANGE;
   ATOMIC_STORE(&last_gts_, 0);
@@ -35,7 +33,7 @@ int ObTimestampService::init()
   return OB_SUCCESS;
 }
 
-int ObTimestampService::mtl_init(ObTimestampService *&timestamp_service)
+int ObTimestampService::server_module_init(ObTimestampService *&timestamp_service)
 {
   int ret = OB_SUCCESS;
   ret = timestamp_service->init();
@@ -47,9 +45,9 @@ int ObTimestampService::mtl_init(ObTimestampService *&timestamp_service)
 // The timestamp service uses the machine clock as its base. Persisted preallocation can make the
 // allocated range temporarily larger than the machine clock, so the service may need to slow down
 // and wait for the machine clock. But we don't want the service to advance too slowly (when request
-// rate is low), since the observer may wait too long before the gts timestamp crosses log SCN. 
-// So we periodically check the gts service's advancing speed, and if it's far slower than the 
-// machine clock, we manually push the gts ahead. 
+// rate is low), since the observer may wait too long before the gts timestamp crosses log SCN.
+// So we periodically check the gts service's advancing speed, and if it's far slower than the
+// machine clock, we manually push the gts ahead.
 int ObTimestampService::get_timestamp(int64_t &gts)
 {
   int ret = OB_SUCCESS;
@@ -99,7 +97,7 @@ int ObTimestampService::get_timestamp(int64_t &gts)
       ATOMIC_STORE(&check_gts_speed_lock_, 0);
     }
   }
-  
+
   return ret;
 }
 

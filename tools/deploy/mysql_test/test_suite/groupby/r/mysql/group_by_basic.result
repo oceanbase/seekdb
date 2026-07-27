@@ -1,5 +1,5 @@
 drop table if exists t1, t2, t3, t4, t5;
-drop sequence if exists s1;
+SET @test_counter_s1 = NULL;
 create table t1(c1 int primary key, c2 int, c3 varchar(10));
 create table t2(c1 int primary key,
 c2 int,
@@ -415,8 +415,8 @@ CREATE TABLE `t1` (
 `c4` decimal(64,11) DEFAULT NULL,
 `c8` int(127) NOT NULL
 );
-create sequence s1 cache 10000000;
-insert into t1 select s1.nextval c1, s1.nextval c2, s1.nextval c3 from table(generator(20000));
+SET @test_counter_s1 = 0;
+insert into t1 select (@test_counter_s1 := @test_counter_s1 + 1) c1, (@test_counter_s1 := @test_counter_s1 + 1) c2, (@test_counter_s1 := @test_counter_s1 + 1) c3 from table(generator(20000));
 explain basic SELECT t29_25.c1, t29_25.c8
 FROM   (SELECT (SELECT t29_25.c1
 FROM   t1 AS t29_25
@@ -465,14 +465,14 @@ GROUP  BY t29_25.c1, t29_25.c8
 HAVING Count(t29_25.c4) <> 990;
 select * from t2 limit 10;
 c1	c8
-20000.0	1
-20000.0	2
-20000.0	3
-20000.0	4
-20000.0	5
-20000.0	6
-20000.0	7
-20000.0	8
-20000.0	9
-20000.0	10
+59998.0	3
+59998.0	6
+59998.0	9
+59998.0	12
+59998.0	15
+59998.0	18
+59998.0	21
+59998.0	24
+59998.0	27
+59998.0	30
 drop table t1, t2;

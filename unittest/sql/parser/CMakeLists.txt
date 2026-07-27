@@ -5,7 +5,7 @@ sql_unittest(test_parser)
 sql_unittest(test_multi_parser)
 sql_unittest(test_fts_parser)
 
-# test_sql_fast_parser links only the lightweight proxy parser static lib
+# test_sql_fast_parser links only the lightweight parser static library
 # (not full oblib), so the CPU-dispatch global oceanbase::common::arches
 # referenced by ob_parse_simd.cpp is otherwise undefined at runtime. Compile
 # the defining TU directly into the test to resolve it.

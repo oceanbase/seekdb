@@ -35,10 +35,7 @@ public:
   virtual int release_op() override;
   virtual int record_task_result_to_rtdef() override;
   virtual int assign_task_result(ObIDASTaskOp *other) override;
-  virtual int decode_task_result(ObIDASTaskResult *task_result) override;
-  virtual int fill_task_result(ObIDASTaskResult &task_result, bool &has_more, int64_t &memory_limit) override;
   virtual int init_task_info(uint32_t row_extend_size) override;
-  virtual int swizzling_remote_task(ObDASRemoteInfo *remote_info) override;
   virtual const ObDASBaseCtDef *get_ctdef() const override { return upd_ctdef_; }
   virtual ObDASBaseRtDef *get_rtdef() override { return upd_rtdef_; }
   int write_row(const ExprFixedArray &row,
@@ -60,22 +57,6 @@ private:
   ObDASUpdRtDef *upd_rtdef_;
   ObDASWriteBuffer write_buffer_;
   int64_t affected_rows_;  // local execute result, no need to serialize
-};
-
-class ObDASUpdateResult : public ObIDASTaskResult
-{
-  OB_UNIS_VERSION_V(1);
-public:
-  ObDASUpdateResult();
-  virtual ~ObDASUpdateResult();
-  virtual int init(const ObIDASTaskOp &op, common::ObIAllocator &alloc) override;
-  virtual int reuse() override;
-  int64_t get_affected_rows() const { return affected_rows_; }
-  void set_affected_rows(int64_t affected_rows) { affected_rows_ = affected_rows; }
-  INHERIT_TO_STRING_KV("ObIDASTaskResult", ObIDASTaskResult,
-                        K_(affected_rows));
-private:
-  int64_t affected_rows_;
 };
 }  // namespace sql
 }  // namespace oceanbase

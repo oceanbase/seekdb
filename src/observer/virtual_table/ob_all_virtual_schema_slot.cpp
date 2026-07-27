@@ -21,36 +21,48 @@ namespace oceanbase
 {
 namespace observer
 {
-void ObAllVirtualSchemaSlot::reset_slot_infos_(common::ObIAllocator &allocator)
+void ObAllVirtualSchemaSlot::release_slot_infos(common::ObIAllocator &allocator,
+                                                common::ObIArray<ObSchemaSlot> &slot_infos)
 {
-  for (int64_t i = 0; i < schema_slot_infos_.count(); ++i) {
-    const char *ptr = schema_slot_infos_.at(i).get_mod_ref_infos().ptr();
+  const char *ptr = NULL;
+  common::ObString str;
+  int ret = OB_SUCCESS;
+  int len = slot_infos.count();
+
+  for (int64_t i = 0; i < len && OB_SUCC(ret); ++i) {
+    ptr = slot_infos.at(i).get_mod_ref_infos().ptr();
     if (OB_NOT_NULL(ptr)) {
       allocator.free(const_cast<char*>(ptr));
     }
-    schema_slot_infos_.at(i).reset();
+    slot_infos.at(i).reset();
   }
-  schema_slot_infos_.reset();
+  slot_infos.reset();
 }
 
-int ObAllVirtualSchemaSlot::get_next_slot_info_(ObSchemaSlot &schema_slot)
-{
+int ObAllVirtualSchemaSlot::get_next_slot_info(ObSchemaSlot &schema_slot) {
   int ret = OB_SUCCESS;
 
   if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("allocator_ is null", KR(ret));
-  } else if (OB_INVALID_INDEX == slot_idx_) {
-    if (OB_FAIL(schema_service_.get_tenant_slot_info(*allocator_, 1UL, schema_slot_infos_))) {
-      LOG_WARN("fail to get tenant slot info", KR(ret));
-      reset_slot_infos_(*allocator_);
+  } else if (!loaded_) {
+    release_slot_infos(*allocator_, schema_slot_infos_);
+    if (OB_FAIL(schema_service_.get_runtime_slot_info(*allocator_, 1UL, schema_slot_infos_))) {
+      LOG_WARN("fail to get schema slot info", KR(ret));
+      release_slot_infos(*allocator_, schema_slot_infos_);
     } else {
+      loaded_ = true;
       slot_idx_ = 0;
     }
+  } else if (slot_idx_ >= schema_slot_infos_.count()) {
+    ret = OB_ITER_END;
+  }
+  if (OB_SUCC(ret) && slot_idx_ >= schema_slot_infos_.count()) {
+    ret = OB_ITER_END;
   }
   if (OB_SUCC(ret)) {
     if (slot_idx_ >= schema_slot_infos_.count()) {
-      reset_slot_infos_(*allocator_);
+      release_slot_infos(*allocator_, schema_slot_infos_);
       ret = OB_ITER_END;
     } else {
       schema_slot = schema_slot_infos_[slot_idx_++];
@@ -64,9 +76,9 @@ int ObAllVirtualSchemaSlot::inner_get_next_row(common::ObNewRow *&row)
   int ret = OB_SUCCESS;
   ObSchemaSlot schema_slot;
 
-  if (OB_FAIL(get_next_slot_info_(schema_slot))) {
+  if (OB_FAIL(get_next_slot_info(schema_slot))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("fail to get next tenant_info", KR(ret));
+      LOG_WARN("fail to get next schema slot info", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {

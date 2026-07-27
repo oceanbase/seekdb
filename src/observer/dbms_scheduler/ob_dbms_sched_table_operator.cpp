@@ -43,7 +43,6 @@ int ObDBMSSchedTableOperator::update_next_date(
   const int64_t now = ObTimeUtility::current_time();
 
   CK (OB_NOT_NULL(sql_proxy_));
-  CK (OB_LIKELY(true));
   CK (OB_LIKELY(job_info.job_ != OB_INVALID_ID));
 
   OZ (dml.add_gmt_modified(now));
@@ -68,7 +67,6 @@ int ObDBMSSchedTableOperator::update_for_start(
   uint64_t data_version = 0;
 
   CK (OB_NOT_NULL(sql_proxy_));
-  CK (OB_LIKELY(true));
   CK (OB_LIKELY(job_info.job_ != OB_INVALID_ID));
 
   OX (job_info.this_date_ = now);
@@ -100,7 +98,6 @@ int ObDBMSSchedTableOperator::update_for_start_execute(
   int64_t affected_rows = 0;
   const int64_t now = ObTimeUtility::current_time();
   CK (OB_NOT_NULL(sql_proxy_));
-  CK (OB_LIKELY(true));
   CK (OB_LIKELY(job_info.job_ != OB_INVALID_ID));
   OZ (dml.add_gmt_modified(now));
   OZ (dml.add_pk_column("job", job_info.job_));
@@ -170,7 +167,6 @@ int ObDBMSSchedTableOperator::update_for_rollback(ObDBMSSchedJobInfo &job_info)
   int64_t affected_rows = 0;
   
   CK (OB_NOT_NULL(sql_proxy_));
-  CK (OB_LIKELY(true));
   CK (OB_LIKELY(job_info.job_ != OB_INVALID_ID));
   OZ (_build_job_rollback_start_dml(job_info, sql1));
 
@@ -212,7 +208,6 @@ int ObDBMSSchedTableOperator::update_for_end(ObDBMSSchedJobInfo &job_info, int e
   UNUSED(errmsg);
   
   CK (OB_NOT_NULL(sql_proxy_));
-  CK (OB_LIKELY(true));
   CK (OB_LIKELY(job_info.job_ != OB_INVALID_ID));
   if (OB_FAIL(ret)) {
   } else if ((now >= job_info.end_date_ || (job_info.get_interval_ts() == 0 && (job_info.get_repeat_interval().empty() || 0 == job_info.get_repeat_interval().case_compare("null")))) && (true == job_info.auto_drop_)) {
@@ -253,7 +248,6 @@ int ObDBMSSchedTableOperator::update_for_kill(ObDBMSSchedJobInfo &job_info)
   const int64_t now = ObTimeUtility::current_time();
   
   CK (OB_NOT_NULL(sql_proxy_));
-  CK (OB_LIKELY(true));
   CK (OB_LIKELY(job_info.job_ != OB_INVALID_ID));
   OZ (_build_job_drop_dml(now, job_info, sql1));
   OZ (trans.start(sql_proxy_, true));
@@ -268,42 +262,12 @@ int ObDBMSSchedTableOperator::update_for_kill(ObDBMSSchedJobInfo &job_info)
   return ret; 
 }
 
-int ObDBMSSchedTableOperator::update_for_mysql_event_database_not_exist(ObDBMSSchedJobInfo &job_info)
-{
-  int ret = OB_SUCCESS;
-  ObMySQLTransaction trans;
-  ObSqlString sql1;
-  int64_t affected_rows = 0;
-  const int64_t now = ObTimeUtility::current_time();
-  
-  CK (OB_NOT_NULL(sql_proxy_));
-  CK (OB_LIKELY(true));
-  CK (OB_LIKELY(job_info.job_ != OB_INVALID_ID));
-  if (OB_FAIL(ret)) {
-  } else {
-    OZ (_build_job_drop_dml(now, job_info, sql1));
-  }
-
-  OZ (trans.start(sql_proxy_, true));
-  OZ (trans.write(sql1.ptr(), affected_rows));
-  if (trans.is_started()) {
-    int tmp_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-      LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
-      ret = OB_SUCC(ret) ? tmp_ret : ret;
-    }
-  }  
-  return ret;
-}
-
 int ObDBMSSchedTableOperator::check_job_can_running(int64_t alive_job_count, bool &can_running)
 {
   int ret = OB_SUCCESS;
   uint64_t job_queue_processor = 0;
   uint64_t job_running_cnt = 0;
   ObSqlString sql;
-  share::schema::ObSchemaGetterGuard guard;
-  bool is_restore = false;
   OX (can_running = false);
   CK (true);
   OX (job_queue_processor = GCONF.job_queue_processes);
@@ -314,13 +278,7 @@ int ObDBMSSchedTableOperator::check_job_can_running(int64_t alive_job_count, boo
   } else {
     OZ (sql.append_fmt("select count(*) from %s where this_date is not null", OB_ALL_SCHEDULER_JOB_TNAME));
 
-    CK (OB_NOT_NULL(GCTX.schema_service_));
-    OZ (GCTX.schema_service_->get_tenant_schema_guard(guard));
-    OZ (guard.check_tenant_is_restore(is_restore));
-
-    // job can not run in standy cluster and restore.
-    if (OB_SUCC(ret) && job_queue_processor > 0
-        && !is_restore) {
+    if (OB_SUCC(ret) && job_queue_processor > 0) {
       SMART_VAR(ObMySQLProxy::MySQLResult, result) {
         if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
           LOG_WARN("execute query failed", K(ret), K(sql));
@@ -425,7 +383,6 @@ do {                                                                  \
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "what", job_info_local.what_);
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "nlsenv", job_info_local.nlsenv_);
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "charenv", job_info_local.charenv_);
-  EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "field1", job_info_local.field1_);
   EXTRACT_INT_FIELD_MYSQL_SKIP_RET(result, "scheduler_flags", job_info_local.scheduler_flags_, uint64_t);
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "exec_env", job_info_local.exec_env_);
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "job_name", job_info_local.job_name_);
@@ -476,7 +433,6 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_info(
   int64_t affected_rows = 0;
 
   CK (OB_NOT_NULL(sql_proxy_));
-  CK (OB_LIKELY(true));
   CK (OB_LIKELY(job_id != OB_INVALID_ID));
 
   if (!job_name.empty()) {
@@ -523,7 +479,7 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_info(
   return ret;
 }
 
-int ObDBMSSchedTableOperator::get_dbms_sched_job_infos_in_tenant(
+int ObDBMSSchedTableOperator::get_dbms_sched_job_infos_in_runtime(
   ObIAllocator &allocator, ObIArray<ObDBMSSchedJobInfo> &job_infos)
 {
   int ret = OB_SUCCESS;
@@ -531,7 +487,6 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_infos_in_tenant(
   int64_t affected_rows = 0;
 
   CK (OB_NOT_NULL(sql_proxy_));
-  CK (OB_LIKELY(true));
 
   OZ (sql.append_fmt("select * from %s where job > 0 and job_name != \'%s\' and (state is NULL or state != \'%s\')",
       OB_ALL_SCHEDULER_JOB_TNAME,
@@ -592,7 +547,6 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_class_info(
   int64_t affected_rows = 0;
 
   CK (OB_NOT_NULL(sql_proxy_));
-  CK (OB_LIKELY(true));
   CK (OB_LIKELY(!job_class_name.empty()));
   OZ (sql.append_fmt("select * from %s where job_class_name = \'%.*s\'",
       OB_ALL_SCHEDULER_JOB_CLASS_TNAME, job_class_name.length(), job_class_name.ptr()));
@@ -628,14 +582,13 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_class_info(
   return ret;
 }
 
-int ObDBMSSchedTableOperator::get_dbms_sched_job_class_infos_in_tenant(
+int ObDBMSSchedTableOperator::get_dbms_sched_job_class_infos_in_runtime(
   ObIAllocator &allocator, ObIArray<ObDBMSSchedJobClassInfo> &job_class_infos)
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
   int64_t affected_rows = 0;
   CK (OB_NOT_NULL(sql_proxy_));
-  CK (OB_LIKELY(true));
 
   OZ (sql.append_fmt("select * from %s order by log_history desc",
       OB_ALL_SCHEDULER_JOB_CLASS_TNAME));

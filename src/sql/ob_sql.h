@@ -41,7 +41,6 @@ namespace share
 {
 namespace schema
 {
-class ObMaxConcurrentParam;
 class ObOutlineInfo;
 }
 }
@@ -91,10 +90,6 @@ public:
   virtual int stmt_query(const common::ObString &stmt,
                          ObSqlCtx &context,
                          ObResultSet &result);
-  int handle_remote_query(const ObRemoteSqlInfo &remote_sql_info,
-                          ObSqlCtx &context,
-                          ObExecContext &exec_ctx,
-                          ObCacheObjGuard& guard);
   virtual int stmt_prepare(const common::ObString &stmt,
                            ObSqlCtx &context,
                            ObResultSet &result,
@@ -123,11 +118,7 @@ public:
   // @param result [out]
   //
   // @return oceanbase error code defined in share/ob_errno.h
-  // Get plan cache by tenant id
-  // if not exist, create a new plan cacha object
-  //
-  // @param tenant [in]
-  //
+  // Get the server runtime prepared-statement cache.
   ObPsCache* get_ps_cache(const ObPCMemPctConf &pc_mem_conf);
   int get_plan_retry(ObPlanCache &plan_cache, ObPlanCacheCtx &pc_ctx, ObCacheObjGuard &guard);
 
@@ -429,16 +420,13 @@ private:
                   ObPlanCache *plan_cache,
                   bool& plan_added);
   // Check if the parameterized template SQL can be prepared
-  void check_template_sql_can_be_prepare(ObPlanCacheCtx &pc_ctx, ObPhysicalPlan &plan);
   int execute_get_plan(ObPlanCache &plan_cache,
                        ObPlanCacheCtx &pc_ctx,
                        ObCacheObjGuard& guard);
   int after_get_plan(ObPlanCacheCtx &pc_ctx,
                      ObSQLSessionInfo &session,
                      ObPhysicalPlan *plan,
-                     bool from_plan_cache,
-                     const ParamStore *ps_params,
-                     uint64_t min_cluster_version);
+                     bool from_plan_cache);
   int need_add_plan(const ObPlanCacheCtx &ctx,
                     ObResultSet &result,
                     bool is_enable_pc,
@@ -458,10 +446,6 @@ private:
                                 ObSqlTraits &sql_traits);
   int get_reconstructed_batch_stmt(ObPlanCacheCtx &pc_ctx, ObString& stmt_sql);
   void rollback_implicit_trans_when_fail(ObResultSet &result, int &ret);
-  int try_get_plan(ObPlanCacheCtx &ctx,
-                   ObResultSet &result,
-                   bool is_enable_pc,
-                   bool &add_plan_to_pc);
   friend class ::test::TestOptimizerUtils;
 
 public:

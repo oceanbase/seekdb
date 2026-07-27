@@ -104,9 +104,8 @@ private:
 class ObCacheObjIterator
 {
   public:
-    ObCacheObjIterator(common::ObSEArray<uint64_t, 16> &id_array):
-    id_arr_(id_array),
-    id_arr_idx_(-1),
+    ObCacheObjIterator():
+    loaded_(false),
     plan_id_array_()
     {}
 
@@ -114,8 +113,7 @@ class ObCacheObjIterator
 
     int next(sql::ObCacheObjGuard &guard);
 
-    common::ObSEArray<uint64_t, 16> &id_arr_;
-    int64_t id_arr_idx_;
+    bool loaded_;
     common::ObSEArray<uint64_t, 16> plan_id_array_;
 };
 
@@ -135,9 +133,7 @@ public:
   ObPlanCachePlanExplain()
     : plan_id_(common::OB_INVALID_INDEX),
       scan_all_plan_(true),
-      id_arr_(),
-      id_arr_idx_(0),
-      cache_obj_iterator_(id_arr_),
+      cache_obj_iterator_(),
       iter_end_(false),
       static_engine_exp_visitor_(output_column_ids_,
                                  cur_row_,
@@ -147,12 +143,10 @@ public:
   virtual int inner_open();
   virtual int inner_get_next_row(common::ObNewRow *&row);
 private:
-  int set_tenant_plan_id(const common::ObIArray<common::ObNewRange> &ranges);
+  int set_plan_id_filter(const common::ObIArray<common::ObNewRange> &ranges);
   
   int64_t plan_id_;
   bool scan_all_plan_;
-  common::ObSEArray<uint64_t, 16> id_arr_;
-  int64_t id_arr_idx_;
   ObCacheObjIterator cache_obj_iterator_;
   bool iter_end_;
   ObOpSpecExpVisitor static_engine_exp_visitor_;

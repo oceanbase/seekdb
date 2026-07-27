@@ -43,10 +43,9 @@ class ObInnerSQLResult : public common::sqlclient::ObMySQLResult
 {
   friend class ObInnerSQLConnection;
 public:
-  explicit ObInnerSQLResult(sql::ObSQLSessionInfo &session, bool is_inner_session, ObDiagnosticInfo *di);
+  explicit ObInnerSQLResult(sql::ObSQLSessionInfo &session, bool is_inner_session);
   virtual ~ObInnerSQLResult();
   int init();
-  int init(bool has_tenant_resource);
   virtual int open();
   virtual int close();
   virtual int next();
@@ -91,9 +90,6 @@ public:
 
   sql::ObResultSet &result_set() { OB_ASSERT(result_set_ != nullptr); return *result_set_; }
 
-  bool has_tenant_resource() const { return has_tenant_resource_; }
-  void set_has_tenant_resource(bool has_tenant_resource)
-  { has_tenant_resource_ = has_tenant_resource; }
   sql::ObResultSet *get_result_set() { return result_set_; }
 
   void set_execute_start_ts(int64_t ts) { execute_start_ts_ = ts; }
@@ -163,10 +159,8 @@ private:
   bool store_first_row_; // whether got 1 row
   bool iter_end_;
   bool is_read_; //for some write sql , do not need prefetch 1 row in open
-  bool has_tenant_resource_;
-  omt::ObTenant *tenant_;
+  omt::ObServerRuntime *runtime_;
   bool is_inner_session_;
-  ObDiagnosticInfo *inner_sql_di_;
   ObInterruptChecker interrupt_checker_;
 
   DISALLOW_COPY_AND_ASSIGN(ObInnerSQLResult);

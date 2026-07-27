@@ -29,7 +29,6 @@ int ObDropOutlineResolver::resolve(const ParseNode &parse_tree)
   int ret = OB_SUCCESS;
   ParseNode *node = const_cast<ParseNode *>(&parse_tree);
   ObDropOutlineStmt *drop_outline_stmt = NULL;
-  uint64_t compat_version = 0;
   if (OB_ISNULL(node)
       || OB_UNLIKELY(node->type_ != T_DROP_OUTLINE)
       || OB_UNLIKELY(node->num_child_ != OUTLINE_CHILD_COUNT)) {
@@ -41,14 +40,9 @@ int ObDropOutlineResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session info is NULL");
-  } else if (OB_UNLIKELY(is_external_catalog_id(session_info_->get_current_default_catalog()))) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "drop outline in catalog is");
   } else if (OB_ISNULL(drop_outline_stmt = create_stmt<ObDropOutlineStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to create drop_outline_stmt", K(ret));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(compat_version))) {
-    LOG_WARN("fail to get data version", KR(ret));
   } else {
     stmt_ = drop_outline_stmt;
     //resolve database_name and outline_name

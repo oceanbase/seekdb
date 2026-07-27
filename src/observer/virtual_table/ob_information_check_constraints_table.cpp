@@ -50,8 +50,8 @@ int ObInfoSchemaCheckConstraintsTable::inner_get_next_row(common::ObNewRow *&row
   }
   if (OB_SUCC(ret) && !start_to_read_) {
     ObSArray<const ObDatabaseSchema*> database_schemas;
-    if (OB_FAIL(schema_guard_->get_database_schemas_in_tenant(database_schemas))) {
-      SERVER_LOG(WARN, "failed to get database schema of tenant", K(ret));
+    if (OB_FAIL(schema_guard_->get_database_schemas_in_runtime(database_schemas))) {
+      SERVER_LOG(WARN, "failed to get database schemas", K(ret));
     } else {
       ObObj *cells = NULL;
       const int64_t col_count = output_column_ids_.count();

@@ -98,7 +98,7 @@ static struct timespec make_timespec(int64_t us)
 
 extern "C" {
 #if defined(__APPLE__) || defined(_WIN32)
-// futex_hook platform emulation is provided by ob_tenant_hook.cpp
+// futex_hook platform emulation is provided by ob_thread_hook.cpp.
 int OB_WEAK_SYMBOL futex_hook(uint32_t *uaddr, int futex_op, uint32_t val, const struct timespec* timeout)
 {
   (void)uaddr;

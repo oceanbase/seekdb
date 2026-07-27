@@ -41,7 +41,7 @@ public:
   int notify_need_writing_throttling(const bool &need_throtting);
   int64_t get_last_working_time() const;
   TO_STRING_KV(K_(is_inited), K_(log_io_worker));
-  
+
 private:
   LogIOWorker log_io_worker_;
   LogWritingThrottle throttle_;

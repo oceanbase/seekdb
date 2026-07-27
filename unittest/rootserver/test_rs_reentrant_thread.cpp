@@ -18,7 +18,6 @@
 
 #include "gmock/gmock.h"
 #define private public
-#include "share/ob_cluster_version.h"
 #include "rootserver/ob_rs_reentrant_thread.h"
 
 using ::testing::_;
@@ -34,7 +33,7 @@ using namespace oceanbase::share;
 
 class ObTestThread : public ObRsReentrantThread
 {
-public: 
+public:
   ObTestThread() : ObRsReentrantThread(true) {}
   virtual int blocking_run() override { BLOCKING_RUN_IMPLEMENT(); }
 
@@ -99,6 +98,5 @@ int main(int argc, char **argv)
   oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
   OB_LOGGER.set_log_level("INFO");
   testing::InitGoogleTest(&argc, argv);
-  oceanbase::common::ObClusterVersion::get_instance().init(CLUSTER_VERSION_1_0_0_0);
   return RUN_ALL_TESTS();
 }

@@ -31,13 +31,13 @@ static ObConfigContainer *local_container()
 class TestObParallelDDLControl : public ::testing::Test
 {
 public:
-#undef OB_TENANT_PARAMETER
-#define OB_TENANT_PARAMETER(args...) args
-DEF_MODE_WITH_PARSER(_parallel_ddl_control, OB_TENANT_PARAMETER, "",
+#undef OB_RUNTIME_PARAMETER
+#define OB_RUNTIME_PARAMETER(args...) args
+DEF_MODE_WITH_PARSER(_parallel_ddl_control, OB_RUNTIME_PARAMETER, "",
         common::ObParallelDDLControlParser,
         "switch for parallel capability of parallel DDL",
         ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-#undef OB_TENANT_PARAMETER
+#undef OB_RUNTIME_PARAMETER
 };
 
 TEST_F(TestObParallelDDLControl, test_parse)

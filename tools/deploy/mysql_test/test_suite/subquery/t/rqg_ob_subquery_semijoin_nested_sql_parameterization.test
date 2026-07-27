@@ -1,8 +1,8 @@
 # owner: xiaoyi.xy
 # owner group: SQL3
 # tags: optimizer
-# description: 
-# 
+# description:
+#
 
 --disable_warnings
 drop table if exists GG;
@@ -28,7 +28,7 @@ CREATE TABLE `GG` (
     KEY `idx9` (`col_datetime_key`) BLOCK_SIZE 16384,
     KEY `idx7` (`col_date_key`) BLOCK_SIZE 16384,
     KEY `idx1` (`col_int_key`) BLOCK_SIZE 16384
-    ) DEFAULT CHARSET = utf8mb4 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE;
+    ) DEFAULT CHARSET = utf8mb4 BLOCK_SIZE = 16384;
 
 CREATE TABLE `F` (
     `col_date` date DEFAULT NULL,
@@ -48,8 +48,7 @@ CREATE TABLE `F` (
     KEY `idx1` (`col_int_key`) BLOCK_SIZE 16384,
     KEY `idx5` (`col_varchar_20_key`) BLOCK_SIZE 16384,
     KEY `idx9` (`col_datetime_key`) BLOCK_SIZE 16384
-    ) DEFAULT CHARSET = utf8mb4 BLOCK_SIZE = 16384
-USE_BLOOM_FILTER = FALSE;
+    ) DEFAULT CHARSET = utf8mb4 BLOCK_SIZE = 16384;
 
 CREATE TABLE `Q` (
     `col_int_key` int(11) DEFAULT NULL,
@@ -69,8 +68,7 @@ CREATE TABLE `Q` (
     KEY `idx7` (`col_date_key`) BLOCK_SIZE 16384,
     KEY `idx3` (`col_varchar_10_key`) BLOCK_SIZE 16384,
     KEY `idx9` (`col_datetime_key`) BLOCK_SIZE 16384
-    ) DEFAULT CHARSET = utf8mb4 BLOCK_SIZE = 16384
-USE_BLOOM_FILTER = FALSE;
+    ) DEFAULT CHARSET = utf8mb4 BLOCK_SIZE = 16384;
 
 
 

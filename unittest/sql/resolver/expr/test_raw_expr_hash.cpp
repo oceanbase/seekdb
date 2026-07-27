@@ -84,8 +84,6 @@ TEST_F(TestRawExprToStr, basic)
   ctx.is_extract_param_type_ = false;
   ObSQLSessionInfo session;
   ctx.session_info_ = &session;
-  OBSERVER.init_version();
-
   EXPECT_TRUE(OB_SUCCESS == oceanbase::ObPreProcessSysVars::init_sys_var());
   EXPECT_TRUE(OB_SUCCESS == session.test_init(0, 0, NULL));
   EXPECT_TRUE(OB_SUCCESS == session.load_default_sys_variable(false, true));

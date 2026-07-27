@@ -18,7 +18,7 @@
 #define private public
 #include "logservice/palf/fixed_sliding_window.h"
 #undef private
-#include "logservice/ob_tenant_mutil_allocator_mgr.h"
+#include "logservice/ob_log_allocator_mgr.h"
 
 
 namespace oceanbase
@@ -216,8 +216,8 @@ TEST(TestBaseSlidingWindow, test_base_sliding_window)
 {
   // sliding window construct and destruct
   common::ObILogAllocator *alloc_mgr = NULL;
-  ObTenantMutilAllocatorMgr::get_instance().init();
-  EXPECT_EQ(common::OB_SUCCESS, TMA_MGR_INSTANCE.get_tenant_log_allocator(alloc_mgr));
+  ObLogAllocatorMgr::get_instance().init();
+  EXPECT_EQ(common::OB_SUCCESS, LOG_ALLOCATOR_MGR_INSTANCE.get_log_allocator(alloc_mgr));
   FixedSlidingWindow<LogDummyData> sw0;
   EXPECT_EQ(common::OB_INVALID_ARGUMENT, sw0.init(10, 100, alloc_mgr));
   EXPECT_EQ(common::OB_INVALID_ARGUMENT, sw0.init(-2, 100, alloc_mgr));
@@ -306,8 +306,8 @@ TEST(TestConcurrentSlidingWindow, test_concurrent_sliding_window)
   // 0-3 threads [1, 2048], 4-7 threads [1025, 3072], ...
 
   common::ObILogAllocator *alloc_mgr = NULL;
-  ObTenantMutilAllocatorMgr::get_instance().init();
-  EXPECT_EQ(common::OB_SUCCESS, TMA_MGR_INSTANCE.get_tenant_log_allocator(alloc_mgr));
+  ObLogAllocatorMgr::get_instance().init();
+  EXPECT_EQ(common::OB_SUCCESS, LOG_ALLOCATOR_MGR_INSTANCE.get_log_allocator(alloc_mgr));
   FixedSlidingWindow<LogDummyData> sw;
   EXPECT_EQ(common::OB_SUCCESS, sw.init(1, sw_size, alloc_mgr));
 
@@ -369,8 +369,8 @@ TEST(TestConcurrentSlidingWindow, test_concurrent_sliding_window)
 // {
 //   // sliding window construct and destruct
 //   common::ObILogAllocator *alloc_mgr = NULL;
-//   ObTenantMutilAllocatorMgr::get_instance().init();
-//   EXPECT_EQ(common::OB_SUCCESS, TMA_MGR_INSTANCE.get_tenant_log_allocator(alloc_mgr));
+//   ObLogAllocatorMgr::get_instance().init();
+//   EXPECT_EQ(common::OB_SUCCESS, LOG_ALLOCATOR_MGR_INSTANCE.get_log_allocator(alloc_mgr));
 
 //   // 1. set [0, 128) can slide
 //   const int64_t size = 128;

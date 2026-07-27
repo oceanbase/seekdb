@@ -22,8 +22,6 @@ create database altertable;
   "name_case_mode":-1,
   "comment":"",
   "read_only":false,
-  "default_tablegroup_id":-1,
-  "default_tablegroup_name":"",
   "in_recyclebin":false,
   "primary_zone_array": [
   ]
@@ -35,10 +33,10 @@ use altertable;
 }
 ***************   Case 4   ***************
 create table ta(c1 int primary key, c2 int auto_increment) comment='test', auto_increment= 5;
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"ta", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false, "duplicate_scope":0}, "max_used_column_id":17, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"test", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"zstd_1.0", "row_store_type":1, "store_format":3, "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":17, "auto_increment":5, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"altertable", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"ta", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":17, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"test", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "row_store_type":1, "store_format":3, "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":17, "auto_increment":5, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"altertable", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
 ***************   Case 5   ***************
 create table alter_table1(c1 int primary key, c2 varchar(11) not null default 'c2', c3 tinyint default 3, c4 char(11)) partition by hash(c1) partitions 3;
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"alter_table1", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":1, "part_option":{"part_func_type":0, "part_func_expr":"c1", "part_num":3, "partition_cnt_within_partition_table":-1, "max_used_part_id":2}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":3, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}, {"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":1, "name":"p1", "high_bound_val":, "list_row_values":[], "part_idx":1}, "mapping_pg_part_id":-1}, {"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":2, "name":"p2", "high_bound_val":, "list_row_values":[], "part_idx":2}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false, "duplicate_scope":0}, "max_used_column_id":19, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"zstd_1.0", "row_store_type":1, "store_format":3, "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"altertable", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"alter_table1", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":1, "part_option":{"part_func_type":0, "part_func_expr":"c1", "part_num":3, "partition_cnt_within_partition_table":-1, "max_used_part_id":2}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":3, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}, {"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":1, "name":"p1", "high_bound_val":, "list_row_values":[], "part_idx":1}, "mapping_pg_part_id":-1}, {"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":2, "name":"p2", "high_bound_val":, "list_row_values":[], "part_idx":2}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":19, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":1, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "row_store_type":1, "store_format":3, "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "partition_key_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":1}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"altertable", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
 ***************   Case 6   ***************
 create index idx_c1 on alter_table1(c1) LOCAL;
 {
@@ -69,10 +67,8 @@ create index idx_c1 on alter_table1(c1) LOCAL;
       "block_size":16384,
       "replica_num":0,
       "index_status":1,
-      "use_bloom_filter":false,
       "compress_method":"none",
       "comment":"",
-      "tablegroup_name":"",
       "progressive_merge_num":0,
       "primary_zone":"",
       "parser_name":"TAOBAO_CHN",
@@ -88,7 +84,6 @@ create index idx_c1 on alter_table1(c1) LOCAL;
       "simple_table_schema": {
         "tenant_id":1,
         "database_id":-1,
-        "tablegroup_id":-1,
         "table_id":-1,
         "table_name":"",
         "replica_num":0,
@@ -126,8 +121,7 @@ create index idx_c1 on alter_table1(c1) LOCAL;
         "partition_array":null,
         "subpartition_array":null,
         "index_status":1,
-        "binding":false,
-        "duplicate_scope":0
+        "binding":false
       },
       "max_used_column_id":0,
       "max_used_constraint_id":0,
@@ -136,7 +130,6 @@ create index idx_c1 on alter_table1(c1) LOCAL;
       "index_column_num":0,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":0,
       "tablet_size":134217728,
       "pctfree":10,
@@ -157,11 +150,9 @@ create index idx_c1 on alter_table1(c1) LOCAL;
       ],
       "region_replica_num_array": [
       ],
-      "tablegroup_name":"",
       "compress_func_name":"",
       "row_store_type":1,
       "store_format":0,
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -196,7 +187,7 @@ create index idx_c1 on alter_table1(c1) LOCAL;
 }
 ***************   Case 7   ***************
 create table test(c1 int , c2 int, c3 varchar(50), c4 varchar(50), c5 int , c6 double, c7 int, primary key(c1, c2, c3));
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"test", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false, "duplicate_scope":0}, "max_used_column_id":22, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":3, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"zstd_1.0", "row_store_type":1, "store_format":3, "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}, {"length":0, "column_id":17, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}, {"length":50, "column_id":18, "type":{"type":"VARCHAR", "collation":"utf8mb4_general_ci", "coercibility":"INVALID"}, "order":0, "fulltext_flag":false}], "capacity":3}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"altertable", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"test", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":22, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":3, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "row_store_type":1, "store_format":3, "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":16, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}, {"length":0, "column_id":17, "type":{"type":"INT", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}, {"length":50, "column_id":18, "type":{"type":"VARCHAR", "collation":"utf8mb4_general_ci", "coercibility":"INVALID"}, "order":0, "fulltext_flag":false}], "capacity":3}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"altertable", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
 ***************   Case 8   ***************
 create index test_indx on test(c4, c5);
 {
@@ -233,10 +224,8 @@ create index test_indx on test(c4, c5);
       "block_size":16384,
       "replica_num":0,
       "index_status":1,
-      "use_bloom_filter":false,
       "compress_method":"none",
       "comment":"",
-      "tablegroup_name":"",
       "progressive_merge_num":0,
       "primary_zone":"",
       "parser_name":"TAOBAO_CHN",
@@ -252,7 +241,6 @@ create index test_indx on test(c4, c5);
       "simple_table_schema": {
         "tenant_id":1,
         "database_id":-1,
-        "tablegroup_id":-1,
         "table_id":-1,
         "table_name":"",
         "replica_num":0,
@@ -290,8 +278,7 @@ create index test_indx on test(c4, c5);
         "partition_array":null,
         "subpartition_array":null,
         "index_status":1,
-        "binding":false,
-        "duplicate_scope":0
+        "binding":false
       },
       "max_used_column_id":20,
       "max_used_constraint_id":0,
@@ -300,7 +287,6 @@ create index test_indx on test(c4, c5);
       "index_column_num":2,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":0,
       "tablet_size":134217728,
       "pctfree":10,
@@ -321,11 +307,9 @@ create index test_indx on test(c4, c5);
       ],
       "region_replica_num_array": [
       ],
-      "tablegroup_name":"",
       "compress_func_name":"",
       "row_store_type":1,
       "store_format":0,
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -445,7 +429,6 @@ alter table alter_table1 add column nc3 int null default 0
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -483,8 +466,7 @@ alter table alter_table1 add column nc3 int null default 0
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -493,7 +475,6 @@ alter table alter_table1 add column nc3 int null default 0
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -514,11 +495,9 @@ alter table alter_table1 add column nc3 int null default 0
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -590,7 +569,6 @@ alter table alter_table1 add (nc3 int null default 0, nc4 varchar(11))
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -628,8 +606,7 @@ alter table alter_table1 add (nc3 int null default 0, nc4 varchar(11))
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -638,7 +615,6 @@ alter table alter_table1 add (nc3 int null default 0, nc4 varchar(11))
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -659,11 +635,9 @@ alter table alter_table1 add (nc3 int null default 0, nc4 varchar(11))
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -743,7 +717,6 @@ alter table alter_table1 add key(c2)
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -781,8 +754,7 @@ alter table alter_table1 add key(c2)
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -791,7 +763,6 @@ alter table alter_table1 add key(c2)
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -812,11 +783,9 @@ alter table alter_table1 add key(c2)
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -881,10 +850,8 @@ alter table alter_table1 add key(c2)
         "block_size":16384,
         "replica_num":0,
         "index_status":1,
-        "use_bloom_filter":false,
         "compress_method":"",
         "comment":"",
-        "tablegroup_name":"",
         "progressive_merge_num":0,
         "primary_zone":"",
         "parser_name":"TAOBAO_CHN",
@@ -900,7 +867,6 @@ alter table alter_table1 add key(c2)
         "simple_table_schema": {
           "tenant_id":-1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"",
           "replica_num":0,
@@ -938,8 +904,7 @@ alter table alter_table1 add key(c2)
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -948,7 +913,6 @@ alter table alter_table1 add key(c2)
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":134217728,
         "pctfree":10,
@@ -969,11 +933,9 @@ alter table alter_table1 add key(c2)
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":1,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -1046,7 +1008,6 @@ alter table alter_table1 add index(c2)
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -1084,8 +1045,7 @@ alter table alter_table1 add index(c2)
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -1094,7 +1054,6 @@ alter table alter_table1 add index(c2)
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -1115,11 +1074,9 @@ alter table alter_table1 add index(c2)
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -1184,10 +1141,8 @@ alter table alter_table1 add index(c2)
         "block_size":16384,
         "replica_num":0,
         "index_status":1,
-        "use_bloom_filter":false,
         "compress_method":"",
         "comment":"",
-        "tablegroup_name":"",
         "progressive_merge_num":0,
         "primary_zone":"",
         "parser_name":"TAOBAO_CHN",
@@ -1203,7 +1158,6 @@ alter table alter_table1 add index(c2)
         "simple_table_schema": {
           "tenant_id":-1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"",
           "replica_num":0,
@@ -1241,8 +1195,7 @@ alter table alter_table1 add index(c2)
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -1251,7 +1204,6 @@ alter table alter_table1 add index(c2)
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":134217728,
         "pctfree":10,
@@ -1272,11 +1224,9 @@ alter table alter_table1 add index(c2)
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":1,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -1349,7 +1299,6 @@ alter table alter_table1 add index idx2(c2 DESC)
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -1387,8 +1336,7 @@ alter table alter_table1 add index idx2(c2 DESC)
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -1397,7 +1345,6 @@ alter table alter_table1 add index idx2(c2 DESC)
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -1418,11 +1365,9 @@ alter table alter_table1 add index idx2(c2 DESC)
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -1487,10 +1432,8 @@ alter table alter_table1 add index idx2(c2 DESC)
         "block_size":16384,
         "replica_num":0,
         "index_status":1,
-        "use_bloom_filter":false,
         "compress_method":"",
         "comment":"",
-        "tablegroup_name":"",
         "progressive_merge_num":0,
         "primary_zone":"",
         "parser_name":"TAOBAO_CHN",
@@ -1506,7 +1449,6 @@ alter table alter_table1 add index idx2(c2 DESC)
         "simple_table_schema": {
           "tenant_id":-1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"",
           "replica_num":0,
@@ -1544,8 +1486,7 @@ alter table alter_table1 add index idx2(c2 DESC)
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -1554,7 +1495,6 @@ alter table alter_table1 add index idx2(c2 DESC)
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":134217728,
         "pctfree":10,
@@ -1575,11 +1515,9 @@ alter table alter_table1 add index idx2(c2 DESC)
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":1,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -1652,7 +1590,6 @@ alter table alter_table1 add index idx1(c1,c2)
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -1690,8 +1627,7 @@ alter table alter_table1 add index idx1(c1,c2)
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -1700,7 +1636,6 @@ alter table alter_table1 add index idx1(c1,c2)
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -1721,11 +1656,9 @@ alter table alter_table1 add index idx1(c1,c2)
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -1796,10 +1729,8 @@ alter table alter_table1 add index idx1(c1,c2)
         "block_size":16384,
         "replica_num":0,
         "index_status":1,
-        "use_bloom_filter":false,
         "compress_method":"",
         "comment":"",
-        "tablegroup_name":"",
         "progressive_merge_num":0,
         "primary_zone":"",
         "parser_name":"TAOBAO_CHN",
@@ -1815,7 +1746,6 @@ alter table alter_table1 add index idx1(c1,c2)
         "simple_table_schema": {
           "tenant_id":-1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"",
           "replica_num":0,
@@ -1853,8 +1783,7 @@ alter table alter_table1 add index idx1(c1,c2)
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -1863,7 +1792,6 @@ alter table alter_table1 add index idx1(c1,c2)
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":134217728,
         "pctfree":10,
@@ -1884,11 +1812,9 @@ alter table alter_table1 add index idx1(c1,c2)
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":1,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -1961,7 +1887,6 @@ alter table alter_table1 add index idx1(c1,c2 DESC)
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -1999,8 +1924,7 @@ alter table alter_table1 add index idx1(c1,c2 DESC)
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -2009,7 +1933,6 @@ alter table alter_table1 add index idx1(c1,c2 DESC)
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -2030,11 +1953,9 @@ alter table alter_table1 add index idx1(c1,c2 DESC)
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -2105,10 +2026,8 @@ alter table alter_table1 add index idx1(c1,c2 DESC)
         "block_size":16384,
         "replica_num":0,
         "index_status":1,
-        "use_bloom_filter":false,
         "compress_method":"",
         "comment":"",
-        "tablegroup_name":"",
         "progressive_merge_num":0,
         "primary_zone":"",
         "parser_name":"TAOBAO_CHN",
@@ -2124,7 +2043,6 @@ alter table alter_table1 add index idx1(c1,c2 DESC)
         "simple_table_schema": {
           "tenant_id":-1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"",
           "replica_num":0,
@@ -2162,8 +2080,7 @@ alter table alter_table1 add index idx1(c1,c2 DESC)
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -2172,7 +2089,6 @@ alter table alter_table1 add index idx1(c1,c2 DESC)
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":134217728,
         "pctfree":10,
@@ -2193,11 +2109,9 @@ alter table alter_table1 add index idx1(c1,c2 DESC)
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":1,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -2270,7 +2184,6 @@ alter table alter_table1 add index idx1(c1 ASC, c2 DESC)
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -2308,8 +2221,7 @@ alter table alter_table1 add index idx1(c1 ASC, c2 DESC)
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -2318,7 +2230,6 @@ alter table alter_table1 add index idx1(c1 ASC, c2 DESC)
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -2339,11 +2250,9 @@ alter table alter_table1 add index idx1(c1 ASC, c2 DESC)
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -2414,10 +2323,8 @@ alter table alter_table1 add index idx1(c1 ASC, c2 DESC)
         "block_size":16384,
         "replica_num":0,
         "index_status":1,
-        "use_bloom_filter":false,
         "compress_method":"",
         "comment":"",
-        "tablegroup_name":"",
         "progressive_merge_num":0,
         "primary_zone":"",
         "parser_name":"TAOBAO_CHN",
@@ -2433,7 +2340,6 @@ alter table alter_table1 add index idx1(c1 ASC, c2 DESC)
         "simple_table_schema": {
           "tenant_id":-1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"",
           "replica_num":0,
@@ -2471,8 +2377,7 @@ alter table alter_table1 add index idx1(c1 ASC, c2 DESC)
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -2481,7 +2386,6 @@ alter table alter_table1 add index idx1(c1 ASC, c2 DESC)
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":134217728,
         "pctfree":10,
@@ -2502,11 +2406,9 @@ alter table alter_table1 add index idx1(c1 ASC, c2 DESC)
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":1,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -2581,7 +2483,6 @@ alter table alter_table1 add index idx1(c1) GLOBAL COMMENT 'string' BLOCK_SIZE 1
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -2619,8 +2520,7 @@ alter table alter_table1 add index idx1(c1) GLOBAL COMMENT 'string' BLOCK_SIZE 1
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -2629,7 +2529,6 @@ alter table alter_table1 add index idx1(c1) GLOBAL COMMENT 'string' BLOCK_SIZE 1
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -2650,11 +2549,9 @@ alter table alter_table1 add index idx1(c1) GLOBAL COMMENT 'string' BLOCK_SIZE 1
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -2721,10 +2618,8 @@ alter table alter_table1 add index idx1(c1) GLOBAL COMMENT 'string' BLOCK_SIZE 1
         "block_size":16384,
         "replica_num":0,
         "index_status":1,
-        "use_bloom_filter":false,
         "compress_method":"",
         "comment":"string",
-        "tablegroup_name":"",
         "progressive_merge_num":0,
         "primary_zone":"",
         "parser_name":"TAOBAO_CHN",
@@ -2740,7 +2635,6 @@ alter table alter_table1 add index idx1(c1) GLOBAL COMMENT 'string' BLOCK_SIZE 1
         "simple_table_schema": {
           "tenant_id":-1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"",
           "replica_num":0,
@@ -2778,8 +2672,7 @@ alter table alter_table1 add index idx1(c1) GLOBAL COMMENT 'string' BLOCK_SIZE 1
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -2788,7 +2681,6 @@ alter table alter_table1 add index idx1(c1) GLOBAL COMMENT 'string' BLOCK_SIZE 1
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":134217728,
         "pctfree":10,
@@ -2809,11 +2701,9 @@ alter table alter_table1 add index idx1(c1) GLOBAL COMMENT 'string' BLOCK_SIZE 1
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":1,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -2886,7 +2776,6 @@ alter table alter_table1 add index idx1(c1) GLOBAL COMMENT 'string' BLOCK_SIZE =
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -2924,8 +2813,7 @@ alter table alter_table1 add index idx1(c1) GLOBAL COMMENT 'string' BLOCK_SIZE =
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -2934,7 +2822,6 @@ alter table alter_table1 add index idx1(c1) GLOBAL COMMENT 'string' BLOCK_SIZE =
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -2955,11 +2842,9 @@ alter table alter_table1 add index idx1(c1) GLOBAL COMMENT 'string' BLOCK_SIZE =
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -3026,10 +2911,8 @@ alter table alter_table1 add index idx1(c1) GLOBAL COMMENT 'string' BLOCK_SIZE =
         "block_size":16384,
         "replica_num":0,
         "index_status":1,
-        "use_bloom_filter":false,
         "compress_method":"",
         "comment":"string",
-        "tablegroup_name":"",
         "progressive_merge_num":0,
         "primary_zone":"",
         "parser_name":"TAOBAO_CHN",
@@ -3045,7 +2928,6 @@ alter table alter_table1 add index idx1(c1) GLOBAL COMMENT 'string' BLOCK_SIZE =
         "simple_table_schema": {
           "tenant_id":-1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"",
           "replica_num":0,
@@ -3083,8 +2965,7 @@ alter table alter_table1 add index idx1(c1) GLOBAL COMMENT 'string' BLOCK_SIZE =
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -3093,7 +2974,6 @@ alter table alter_table1 add index idx1(c1) GLOBAL COMMENT 'string' BLOCK_SIZE =
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":134217728,
         "pctfree":10,
@@ -3114,11 +2994,9 @@ alter table alter_table1 add index idx1(c1) GLOBAL COMMENT 'string' BLOCK_SIZE =
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":1,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -3191,7 +3069,6 @@ alter table alter_table1 add unique index uidx1(c1)
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -3229,8 +3106,7 @@ alter table alter_table1 add unique index uidx1(c1)
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -3239,7 +3115,6 @@ alter table alter_table1 add unique index uidx1(c1)
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -3260,11 +3135,9 @@ alter table alter_table1 add unique index uidx1(c1)
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -3329,10 +3202,8 @@ alter table alter_table1 add unique index uidx1(c1)
         "block_size":16384,
         "replica_num":0,
         "index_status":1,
-        "use_bloom_filter":false,
         "compress_method":"",
         "comment":"",
-        "tablegroup_name":"",
         "progressive_merge_num":0,
         "primary_zone":"",
         "parser_name":"TAOBAO_CHN",
@@ -3348,7 +3219,6 @@ alter table alter_table1 add unique index uidx1(c1)
         "simple_table_schema": {
           "tenant_id":-1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"",
           "replica_num":0,
@@ -3386,8 +3256,7 @@ alter table alter_table1 add unique index uidx1(c1)
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -3396,7 +3265,6 @@ alter table alter_table1 add unique index uidx1(c1)
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":134217728,
         "pctfree":10,
@@ -3417,11 +3285,9 @@ alter table alter_table1 add unique index uidx1(c1)
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":1,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -3494,7 +3360,6 @@ alter table alter_table1 add unique uidx1(c1)
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -3532,8 +3397,7 @@ alter table alter_table1 add unique uidx1(c1)
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -3542,7 +3406,6 @@ alter table alter_table1 add unique uidx1(c1)
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -3563,11 +3426,9 @@ alter table alter_table1 add unique uidx1(c1)
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -3632,10 +3493,8 @@ alter table alter_table1 add unique uidx1(c1)
         "block_size":16384,
         "replica_num":0,
         "index_status":1,
-        "use_bloom_filter":false,
         "compress_method":"",
         "comment":"",
-        "tablegroup_name":"",
         "progressive_merge_num":0,
         "primary_zone":"",
         "parser_name":"TAOBAO_CHN",
@@ -3651,7 +3510,6 @@ alter table alter_table1 add unique uidx1(c1)
         "simple_table_schema": {
           "tenant_id":-1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"",
           "replica_num":0,
@@ -3689,8 +3547,7 @@ alter table alter_table1 add unique uidx1(c1)
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -3699,7 +3556,6 @@ alter table alter_table1 add unique uidx1(c1)
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":134217728,
         "pctfree":10,
@@ -3720,11 +3576,9 @@ alter table alter_table1 add unique uidx1(c1)
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":1,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -3789,7 +3643,6 @@ alter table alter_table1 alter column c3 set default 13
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -3827,8 +3680,7 @@ alter table alter_table1 alter column c3 set default 13
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -3837,7 +3689,6 @@ alter table alter_table1 alter column c3 set default 13
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -3858,11 +3709,9 @@ alter table alter_table1 alter column c3 set default 13
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -3934,7 +3783,6 @@ alter table alter_table1 alter column c3 drop default
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -3972,8 +3820,7 @@ alter table alter_table1 alter column c3 drop default
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -3982,7 +3829,6 @@ alter table alter_table1 alter column c3 drop default
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -4003,11 +3849,9 @@ alter table alter_table1 alter column c3 drop default
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -4079,7 +3923,6 @@ alter table alter_table1 change column c4 nc4 char(20)
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -4117,8 +3960,7 @@ alter table alter_table1 change column c4 nc4 char(20)
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -4127,7 +3969,6 @@ alter table alter_table1 change column c4 nc4 char(20)
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -4148,11 +3989,9 @@ alter table alter_table1 change column c4 nc4 char(20)
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -4224,7 +4063,6 @@ alter table alter_table1 modify c3 tinyint default 33
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -4262,8 +4100,7 @@ alter table alter_table1 modify c3 tinyint default 33
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -4272,7 +4109,6 @@ alter table alter_table1 modify c3 tinyint default 33
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -4293,11 +4129,9 @@ alter table alter_table1 modify c3 tinyint default 33
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -4369,7 +4203,6 @@ alter table alter_table1 drop column c3
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -4407,8 +4240,7 @@ alter table alter_table1 drop column c3
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -4417,7 +4249,6 @@ alter table alter_table1 drop column c3
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -4438,11 +4269,9 @@ alter table alter_table1 drop column c3
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -4526,7 +4355,6 @@ alter table alter_table1 rename index idx_c1 to idx_2
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -4564,8 +4392,7 @@ alter table alter_table1 rename index idx_c1 to idx_2
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -4574,7 +4401,6 @@ alter table alter_table1 rename index idx_c1 to idx_2
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -4595,11 +4421,9 @@ alter table alter_table1 rename index idx_c1 to idx_2
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -4683,7 +4507,6 @@ alter table alter_table1 rename index idx_2 to idx_c1
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -4721,8 +4544,7 @@ alter table alter_table1 rename index idx_2 to idx_c1
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -4731,7 +4553,6 @@ alter table alter_table1 rename index idx_2 to idx_c1
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -4752,11 +4573,9 @@ alter table alter_table1 rename index idx_2 to idx_c1
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -4828,7 +4647,6 @@ alter table alter_table1 rename to alter_t1
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_t1",
           "replica_num":0,
@@ -4866,8 +4684,7 @@ alter table alter_table1 rename to alter_t1
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -4876,7 +4693,6 @@ alter table alter_table1 rename to alter_t1
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -4897,11 +4713,9 @@ alter table alter_table1 rename to alter_t1
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -4973,7 +4787,6 @@ alter table alter_table1 set comment = 'hahaha'
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -5011,8 +4824,7 @@ alter table alter_table1 set comment = 'hahaha'
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -5021,7 +4833,6 @@ alter table alter_table1 set comment = 'hahaha'
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -5042,11 +4853,9 @@ alter table alter_table1 set comment = 'hahaha'
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -5118,7 +4927,6 @@ alter table alter_table1 set compression = 'none'
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -5156,8 +4964,7 @@ alter table alter_table1 set compression = 'none'
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -5166,7 +4973,6 @@ alter table alter_table1 set compression = 'none'
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -5187,11 +4993,9 @@ alter table alter_table1 set compression = 'none'
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"none",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -5233,7 +5037,6 @@ alter table alter_table1 set compression = 'none'
   ]
 }
 ***************   Case 32   ***************
-ALTER TABLE test SET EXPIRE_INFO (c1 > 9)
 {
   "ObTableStmt": {
     "partition_fun_expr": [
@@ -5263,7 +5066,6 @@ ALTER TABLE test SET EXPIRE_INFO (c1 > 9)
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"test",
           "replica_num":0,
@@ -5301,8 +5103,7 @@ ALTER TABLE test SET EXPIRE_INFO (c1 > 9)
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -5311,7 +5112,6 @@ ALTER TABLE test SET EXPIRE_INFO (c1 > 9)
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -5332,11 +5132,9 @@ ALTER TABLE test SET EXPIRE_INFO (c1 > 9)
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -5408,7 +5206,6 @@ alter table alter_table1 replica_num = 3
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":3,
@@ -5446,8 +5243,7 @@ alter table alter_table1 replica_num = 3
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -5456,7 +5252,6 @@ alter table alter_table1 replica_num = 3
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -5477,11 +5272,9 @@ alter table alter_table1 replica_num = 3
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -5553,7 +5346,6 @@ alter table alter_table1 set block_size = 16384
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -5591,8 +5383,7 @@ alter table alter_table1 set block_size = 16384
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -5601,7 +5392,6 @@ alter table alter_table1 set block_size = 16384
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -5622,11 +5412,9 @@ alter table alter_table1 set block_size = 16384
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -5668,7 +5456,7 @@ alter table alter_table1 set block_size = 16384
   ]
 }
 ***************   Case 35   ***************
-alter table alter_table1 set use_bloom_filter = true
+alter table alter_table1 set progressive_merge_num = 1
 {
   "ObTableStmt": {
     "partition_fun_expr": [
@@ -5698,7 +5486,6 @@ alter table alter_table1 set use_bloom_filter = true
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -5736,8 +5523,7 @@ alter table alter_table1 set use_bloom_filter = true
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -5746,8 +5532,7 @@ alter table alter_table1 set use_bloom_filter = true
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":true,
-        "progressive_merge_num":0,
+        "progressive_merge_num":1,
         "tablet_size":-1,
         "pctfree":10,
         "load_type":0,
@@ -5767,11 +5552,9 @@ alter table alter_table1 set use_bloom_filter = true
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -5813,7 +5596,7 @@ alter table alter_table1 set use_bloom_filter = true
   ]
 }
 ***************   Case 36   ***************
-alter table alter_table1 set progressive_merge_num = 1
+alter table alter_table1 primary_zone = 'z1'
 {
   "ObTableStmt": {
     "partition_fun_expr": [
@@ -5843,7 +5626,6 @@ alter table alter_table1 set progressive_merge_num = 1
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -5873,7 +5655,7 @@ alter table alter_table1 set progressive_merge_num = 1
           "locality_str":"",
           "zone_list": [
           ],
-          "primary_zone":"",
+          "primary_zone":"z1",
           "part_num":0,
           "subpart_num":0,
           "partition_num":0,
@@ -5881,8 +5663,7 @@ alter table alter_table1 set progressive_merge_num = 1
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -5891,8 +5672,7 @@ alter table alter_table1 set progressive_merge_num = 1
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
-        "progressive_merge_num":1,
+        "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
         "load_type":0,
@@ -5912,11 +5692,9 @@ alter table alter_table1 set progressive_merge_num = 1
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -5958,7 +5736,7 @@ alter table alter_table1 set progressive_merge_num = 1
   ]
 }
 ***************   Case 37   ***************
-alter table alter_table1 tablegroup = 'tp1'
+alter table alter_table1 auto_increment = 1
 {
   "ObTableStmt": {
     "partition_fun_expr": [
@@ -5988,7 +5766,6 @@ alter table alter_table1 tablegroup = 'tp1'
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"alter_table1",
           "replica_num":0,
@@ -6026,8 +5803,7 @@ alter table alter_table1 tablegroup = 'tp1'
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -6036,7 +5812,6 @@ alter table alter_table1 tablegroup = 'tp1'
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -6057,11 +5832,9 @@ alter table alter_table1 tablegroup = 'tp1'
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"tp1",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -6103,594 +5876,14 @@ alter table alter_table1 tablegroup = 'tp1'
   ]
 }
 ***************   Case 38   ***************
-alter table alter_table1 drop tablegroup
-{
-  "ObTableStmt": {
-    "partition_fun_expr": [
-    ],
-    "range_values_exprs": [
-    ],
-    "list_values_exprs": [
-    ],
-    "index_partition_resolve_results": [
-    ],
-    "part_type":8
-  },
-  "stmt_type":22,
-  "alter_table_arg": {
-    "is_alter_columns":false,
-    "is_alter_indexs":false,
-    "is_alter_options":true,
-    "session_id":-1,
-    "index_arg_list": [
-    ],
-    "alter_table_schema": {
-      "alter_type":"OB_INVALID_DDL_OP",
-      "origin_table_name":"alter_table1",
-      "new_database_name":"altertable",
-      "origin_database_name":"altertable",
-      "alter_table_schema": {
-        "simple_table_schema": {
-          "tenant_id":1,
-          "database_id":-1,
-          "tablegroup_id":-1,
-          "table_id":-1,
-          "table_name":"alter_table1",
-          "replica_num":0,
-          "previous_locality_str":"",
-          "min_partition_id":0,
-          "session_id":0,
-          "index_type":0,
-          "table_type":3,
-          "data_table_id":0,
-          "name_casemode":-1,
-          "schema_version":0,
-          "part_level":0,
-          "part_option": {
-            "part_func_type":0,
-            "part_func_expr":"",
-            "part_num":1,
-            "partition_cnt_within_partition_table":-1,
-            "max_used_part_id":-1
-          },
-          "sub_part_option": {
-            "part_func_type":0,
-            "part_func_expr":"",
-            "part_num":1,
-            "partition_cnt_within_partition_table":-1,
-            "max_used_part_id":-1
-          },
-          "locality_str":"",
-          "zone_list": [
-          ],
-          "primary_zone":"",
-          "part_num":0,
-          "subpart_num":0,
-          "partition_num":0,
-          "subpartition_num":0,
-          "partition_array":null,
-          "subpartition_array":null,
-          "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
-        },
-        "max_used_column_id":0,
-        "max_used_constraint_id":0,
-        "sess_active_time":0,
-        "rowkey_column_num":0,
-        "index_column_num":0,
-        "rowkey_split_pos":0,
-        "block_size":16384,
-        "is_use_bloomfilter":false,
-        "progressive_merge_num":0,
-        "tablet_size":-1,
-        "pctfree":10,
-        "load_type":0,
-        "index_using_type":0,
-        "def_type":1,
-        "charset_type":0,
-        "collation_type":0,
-        "create_mem_version":0,
-        "index_status":1,
-        "partition_status":0,
-        "code_version":1,
-        "last_modified_frozen_version":0,
-        "comment":"",
-        "pk_comment":"",
-        "create_host":"",
-        "zone_replica_attr_array": [
-        ],
-        "region_replica_num_array": [
-        ],
-        "tablegroup_name":"",
-        "compress_func_name":"",
-        "row_store_type":3,
-        "store_format":0,
-        "expire_info":"",
-        "view_schema": {
-          "view_definition":"",
-          "check_option":"none",
-          "is_updatable":"false",
-          "is_materialized":"false"
-        },
-        "autoinc_column_id":0,
-        "auto_increment":1,
-        "read_only":false,
-        "primary_zone_array": [
-        ],
-        "index_tid_array": [
-        ],
-        "mv_tid_array": [
-        ],
-        "aux_vp_tid_array": [
-        ],
-        "base_table_ids": [
-        ],
-        "rowkey_info": {
-          "columns":null,
-          "capacity":0
-        },
-        "partition_key_info": {
-          "columns":null,
-          "capacity":0
-        },
-        "aux_vp_tid_array": [
-        ]
-      }
-    },
-    "nls_formats": [
-      "",
-      "",
-      ""
-    ]
-  },
-  "index_arg_list": [
-  ]
-}
-***************   Case 39   ***************
-alter table alter_table1 primary_zone = 'z1'
-{
-  "ObTableStmt": {
-    "partition_fun_expr": [
-    ],
-    "range_values_exprs": [
-    ],
-    "list_values_exprs": [
-    ],
-    "index_partition_resolve_results": [
-    ],
-    "part_type":8
-  },
-  "stmt_type":22,
-  "alter_table_arg": {
-    "is_alter_columns":false,
-    "is_alter_indexs":false,
-    "is_alter_options":true,
-    "session_id":-1,
-    "index_arg_list": [
-    ],
-    "alter_table_schema": {
-      "alter_type":"OB_INVALID_DDL_OP",
-      "origin_table_name":"alter_table1",
-      "new_database_name":"altertable",
-      "origin_database_name":"altertable",
-      "alter_table_schema": {
-        "simple_table_schema": {
-          "tenant_id":1,
-          "database_id":-1,
-          "tablegroup_id":-1,
-          "table_id":-1,
-          "table_name":"alter_table1",
-          "replica_num":0,
-          "previous_locality_str":"",
-          "min_partition_id":0,
-          "session_id":0,
-          "index_type":0,
-          "table_type":3,
-          "data_table_id":0,
-          "name_casemode":-1,
-          "schema_version":0,
-          "part_level":0,
-          "part_option": {
-            "part_func_type":0,
-            "part_func_expr":"",
-            "part_num":1,
-            "partition_cnt_within_partition_table":-1,
-            "max_used_part_id":-1
-          },
-          "sub_part_option": {
-            "part_func_type":0,
-            "part_func_expr":"",
-            "part_num":1,
-            "partition_cnt_within_partition_table":-1,
-            "max_used_part_id":-1
-          },
-          "locality_str":"",
-          "zone_list": [
-          ],
-          "primary_zone":"z1",
-          "part_num":0,
-          "subpart_num":0,
-          "partition_num":0,
-          "subpartition_num":0,
-          "partition_array":null,
-          "subpartition_array":null,
-          "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
-        },
-        "max_used_column_id":0,
-        "max_used_constraint_id":0,
-        "sess_active_time":0,
-        "rowkey_column_num":0,
-        "index_column_num":0,
-        "rowkey_split_pos":0,
-        "block_size":16384,
-        "is_use_bloomfilter":false,
-        "progressive_merge_num":0,
-        "tablet_size":-1,
-        "pctfree":10,
-        "load_type":0,
-        "index_using_type":0,
-        "def_type":1,
-        "charset_type":0,
-        "collation_type":0,
-        "create_mem_version":0,
-        "index_status":1,
-        "partition_status":0,
-        "code_version":1,
-        "last_modified_frozen_version":0,
-        "comment":"",
-        "pk_comment":"",
-        "create_host":"",
-        "zone_replica_attr_array": [
-        ],
-        "region_replica_num_array": [
-        ],
-        "tablegroup_name":"",
-        "compress_func_name":"",
-        "row_store_type":3,
-        "store_format":0,
-        "expire_info":"",
-        "view_schema": {
-          "view_definition":"",
-          "check_option":"none",
-          "is_updatable":"false",
-          "is_materialized":"false"
-        },
-        "autoinc_column_id":0,
-        "auto_increment":1,
-        "read_only":false,
-        "primary_zone_array": [
-        ],
-        "index_tid_array": [
-        ],
-        "mv_tid_array": [
-        ],
-        "aux_vp_tid_array": [
-        ],
-        "base_table_ids": [
-        ],
-        "rowkey_info": {
-          "columns":null,
-          "capacity":0
-        },
-        "partition_key_info": {
-          "columns":null,
-          "capacity":0
-        },
-        "aux_vp_tid_array": [
-        ]
-      }
-    },
-    "nls_formats": [
-      "",
-      "",
-      ""
-    ]
-  },
-  "index_arg_list": [
-  ]
-}
-***************   Case 40   ***************
-alter table alter_table1 auto_increment = 1
-{
-  "ObTableStmt": {
-    "partition_fun_expr": [
-    ],
-    "range_values_exprs": [
-    ],
-    "list_values_exprs": [
-    ],
-    "index_partition_resolve_results": [
-    ],
-    "part_type":8
-  },
-  "stmt_type":22,
-  "alter_table_arg": {
-    "is_alter_columns":false,
-    "is_alter_indexs":false,
-    "is_alter_options":true,
-    "session_id":-1,
-    "index_arg_list": [
-    ],
-    "alter_table_schema": {
-      "alter_type":"OB_INVALID_DDL_OP",
-      "origin_table_name":"alter_table1",
-      "new_database_name":"altertable",
-      "origin_database_name":"altertable",
-      "alter_table_schema": {
-        "simple_table_schema": {
-          "tenant_id":1,
-          "database_id":-1,
-          "tablegroup_id":-1,
-          "table_id":-1,
-          "table_name":"alter_table1",
-          "replica_num":0,
-          "previous_locality_str":"",
-          "min_partition_id":0,
-          "session_id":0,
-          "index_type":0,
-          "table_type":3,
-          "data_table_id":0,
-          "name_casemode":-1,
-          "schema_version":0,
-          "part_level":0,
-          "part_option": {
-            "part_func_type":0,
-            "part_func_expr":"",
-            "part_num":1,
-            "partition_cnt_within_partition_table":-1,
-            "max_used_part_id":-1
-          },
-          "sub_part_option": {
-            "part_func_type":0,
-            "part_func_expr":"",
-            "part_num":1,
-            "partition_cnt_within_partition_table":-1,
-            "max_used_part_id":-1
-          },
-          "locality_str":"",
-          "zone_list": [
-          ],
-          "primary_zone":"",
-          "part_num":0,
-          "subpart_num":0,
-          "partition_num":0,
-          "subpartition_num":0,
-          "partition_array":null,
-          "subpartition_array":null,
-          "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
-        },
-        "max_used_column_id":0,
-        "max_used_constraint_id":0,
-        "sess_active_time":0,
-        "rowkey_column_num":0,
-        "index_column_num":0,
-        "rowkey_split_pos":0,
-        "block_size":16384,
-        "is_use_bloomfilter":false,
-        "progressive_merge_num":0,
-        "tablet_size":-1,
-        "pctfree":10,
-        "load_type":0,
-        "index_using_type":0,
-        "def_type":1,
-        "charset_type":0,
-        "collation_type":0,
-        "create_mem_version":0,
-        "index_status":1,
-        "partition_status":0,
-        "code_version":1,
-        "last_modified_frozen_version":0,
-        "comment":"",
-        "pk_comment":"",
-        "create_host":"",
-        "zone_replica_attr_array": [
-        ],
-        "region_replica_num_array": [
-        ],
-        "tablegroup_name":"",
-        "compress_func_name":"",
-        "row_store_type":3,
-        "store_format":0,
-        "expire_info":"",
-        "view_schema": {
-          "view_definition":"",
-          "check_option":"none",
-          "is_updatable":"false",
-          "is_materialized":"false"
-        },
-        "autoinc_column_id":0,
-        "auto_increment":1,
-        "read_only":false,
-        "primary_zone_array": [
-        ],
-        "index_tid_array": [
-        ],
-        "mv_tid_array": [
-        ],
-        "aux_vp_tid_array": [
-        ],
-        "base_table_ids": [
-        ],
-        "rowkey_info": {
-          "columns":null,
-          "capacity":0
-        },
-        "partition_key_info": {
-          "columns":null,
-          "capacity":0
-        },
-        "aux_vp_tid_array": [
-        ]
-      }
-    },
-    "nls_formats": [
-      "",
-      "",
-      ""
-    ]
-  },
-  "index_arg_list": [
-  ]
-}
-***************   Case 41   ***************
-alter table alter_table1 drop tablegroup
-{
-  "ObTableStmt": {
-    "partition_fun_expr": [
-    ],
-    "range_values_exprs": [
-    ],
-    "list_values_exprs": [
-    ],
-    "index_partition_resolve_results": [
-    ],
-    "part_type":8
-  },
-  "stmt_type":22,
-  "alter_table_arg": {
-    "is_alter_columns":false,
-    "is_alter_indexs":false,
-    "is_alter_options":true,
-    "session_id":-1,
-    "index_arg_list": [
-    ],
-    "alter_table_schema": {
-      "alter_type":"OB_INVALID_DDL_OP",
-      "origin_table_name":"alter_table1",
-      "new_database_name":"altertable",
-      "origin_database_name":"altertable",
-      "alter_table_schema": {
-        "simple_table_schema": {
-          "tenant_id":1,
-          "database_id":-1,
-          "tablegroup_id":-1,
-          "table_id":-1,
-          "table_name":"alter_table1",
-          "replica_num":0,
-          "previous_locality_str":"",
-          "min_partition_id":0,
-          "session_id":0,
-          "index_type":0,
-          "table_type":3,
-          "data_table_id":0,
-          "name_casemode":-1,
-          "schema_version":0,
-          "part_level":0,
-          "part_option": {
-            "part_func_type":0,
-            "part_func_expr":"",
-            "part_num":1,
-            "partition_cnt_within_partition_table":-1,
-            "max_used_part_id":-1
-          },
-          "sub_part_option": {
-            "part_func_type":0,
-            "part_func_expr":"",
-            "part_num":1,
-            "partition_cnt_within_partition_table":-1,
-            "max_used_part_id":-1
-          },
-          "locality_str":"",
-          "zone_list": [
-          ],
-          "primary_zone":"",
-          "part_num":0,
-          "subpart_num":0,
-          "partition_num":0,
-          "subpartition_num":0,
-          "partition_array":null,
-          "subpartition_array":null,
-          "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
-        },
-        "max_used_column_id":0,
-        "max_used_constraint_id":0,
-        "sess_active_time":0,
-        "rowkey_column_num":0,
-        "index_column_num":0,
-        "rowkey_split_pos":0,
-        "block_size":16384,
-        "is_use_bloomfilter":false,
-        "progressive_merge_num":0,
-        "tablet_size":-1,
-        "pctfree":10,
-        "load_type":0,
-        "index_using_type":0,
-        "def_type":1,
-        "charset_type":0,
-        "collation_type":0,
-        "create_mem_version":0,
-        "index_status":1,
-        "partition_status":0,
-        "code_version":1,
-        "last_modified_frozen_version":0,
-        "comment":"",
-        "pk_comment":"",
-        "create_host":"",
-        "zone_replica_attr_array": [
-        ],
-        "region_replica_num_array": [
-        ],
-        "tablegroup_name":"",
-        "compress_func_name":"",
-        "row_store_type":3,
-        "store_format":0,
-        "expire_info":"",
-        "view_schema": {
-          "view_definition":"",
-          "check_option":"none",
-          "is_updatable":"false",
-          "is_materialized":"false"
-        },
-        "autoinc_column_id":0,
-        "auto_increment":1,
-        "read_only":false,
-        "primary_zone_array": [
-        ],
-        "index_tid_array": [
-        ],
-        "mv_tid_array": [
-        ],
-        "aux_vp_tid_array": [
-        ],
-        "base_table_ids": [
-        ],
-        "rowkey_info": {
-          "columns":null,
-          "capacity":0
-        },
-        "partition_key_info": {
-          "columns":null,
-          "capacity":0
-        },
-        "aux_vp_tid_array": [
-        ]
-      }
-    },
-    "nls_formats": [
-      "",
-      "",
-      ""
-    ]
-  },
-  "index_arg_list": [
-  ]
-}
-***************   Case 42   ***************
 alter table test add unique (c3(0));
-***************   Case 43   ***************
+***************   Case 39   ***************
 alter table test add unique (xxx(0));
-***************   Case 44   ***************
+***************   Case 40   ***************
 alter table test rename to ``
-***************   Case 45   ***************
+***************   Case 41   ***************
 alter table test rename to `    `
-***************   Case 46   ***************
+***************   Case 42   ***************
 alter table test add index using btree(c1) using hash;
 {
   "ObTableStmt": {
@@ -6729,7 +5922,6 @@ alter table test add index using btree(c1) using hash;
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"test",
           "replica_num":0,
@@ -6767,8 +5959,7 @@ alter table test add index using btree(c1) using hash;
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -6777,7 +5968,6 @@ alter table test add index using btree(c1) using hash;
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -6798,11 +5988,9 @@ alter table test add index using btree(c1) using hash;
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -6867,10 +6055,8 @@ alter table test add index using btree(c1) using hash;
         "block_size":16384,
         "replica_num":0,
         "index_status":1,
-        "use_bloom_filter":false,
         "compress_method":"",
         "comment":"",
-        "tablegroup_name":"",
         "progressive_merge_num":0,
         "primary_zone":"",
         "parser_name":"TAOBAO_CHN",
@@ -6886,7 +6072,6 @@ alter table test add index using btree(c1) using hash;
         "simple_table_schema": {
           "tenant_id":-1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"",
           "replica_num":0,
@@ -6924,8 +6109,7 @@ alter table test add index using btree(c1) using hash;
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -6934,7 +6118,6 @@ alter table test add index using btree(c1) using hash;
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":134217728,
         "pctfree":10,
@@ -6955,11 +6138,9 @@ alter table test add index using btree(c1) using hash;
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":1,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -6993,7 +6174,7 @@ alter table test add index using btree(c1) using hash;
     }
   ]
 }
-***************   Case 47   ***************
+***************   Case 43   ***************
 alter table test add unique index using btree(c1) using hash;
 {
   "ObTableStmt": {
@@ -7032,7 +6213,6 @@ alter table test add unique index using btree(c1) using hash;
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"test",
           "replica_num":0,
@@ -7070,8 +6250,7 @@ alter table test add unique index using btree(c1) using hash;
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -7080,7 +6259,6 @@ alter table test add unique index using btree(c1) using hash;
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -7101,11 +6279,9 @@ alter table test add unique index using btree(c1) using hash;
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -7170,10 +6346,8 @@ alter table test add unique index using btree(c1) using hash;
         "block_size":16384,
         "replica_num":0,
         "index_status":1,
-        "use_bloom_filter":false,
         "compress_method":"",
         "comment":"",
-        "tablegroup_name":"",
         "progressive_merge_num":0,
         "primary_zone":"",
         "parser_name":"TAOBAO_CHN",
@@ -7189,7 +6363,6 @@ alter table test add unique index using btree(c1) using hash;
         "simple_table_schema": {
           "tenant_id":-1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"",
           "replica_num":0,
@@ -7227,8 +6400,7 @@ alter table test add unique index using btree(c1) using hash;
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -7237,7 +6409,6 @@ alter table test add unique index using btree(c1) using hash;
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":134217728,
         "pctfree":10,
@@ -7258,11 +6429,9 @@ alter table test add unique index using btree(c1) using hash;
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":1,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -7296,12 +6465,12 @@ alter table test add unique index using btree(c1) using hash;
     }
   ]
 }
-***************   Case 48   ***************
+***************   Case 44   ***************
 alter table test add index using hash(c1), add index using btree(c2)
-***************   Case 49   ***************
+***************   Case 45   ***************
 create table wang_01(c1 int, c2 varchar(30), c3 bigint, c4 timestamp, c5 decimal(7,3), c6 varbinary(1024), c7 char(32), c8 tinyint);
-{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "tablegroup_id":1099511627777, "table_id":18446744073709551615, "table_name":"wang_01", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false, "duplicate_scope":0}, "max_used_column_id":23, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":3, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "is_use_bloomfilter":false, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "tablegroup_name":"", "compress_func_name":"zstd_1.0", "row_store_type":1, "store_format":3, "expire_info":"", "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":1, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}, {"length":0, "column_id":4, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}, {"length":0, "column_id":5, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":3}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"altertable", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
-***************   Case 50   ***************
+{"ObTableStmt":{"partition_fun_expr":[], "range_values_exprs":[], "list_values_exprs":[], "index_partition_resolve_results":[], "part_type":8}, "stmt_type":20, "create_table_arg":{"if_not_exist":false, "schema":{"simple_table_schema":{"tenant_id":1, "database_id":18446744073709551615, "table_id":18446744073709551615, "table_name":"wang_01", "replica_num":0, "previous_locality_str":"", "min_partition_id":0, "session_id":0, "index_type":0, "table_type":3, "data_table_id":0, "name_casemode":-1, "schema_version":0, "part_level":0, "part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":0}, "sub_part_option":{"part_func_type":0, "part_func_expr":"", "part_num":1, "partition_cnt_within_partition_table":-1, "max_used_part_id":-1}, "locality_str":"", "zone_list":[], "primary_zone":"", "part_num":0, "subpart_num":0, "partition_num":1, "subpartition_num":0, "partition_array":[{"BasePartition":{"tenant_id":18446744073709551615, "table_id":18446744073709551615, "part_id":0, "name":"p0", "high_bound_val":, "list_row_values":[], "part_idx":0}, "mapping_pg_part_id":-1}], "subpartition_array":null, "index_status":1, "binding":false}, "max_used_column_id":23, "max_used_constraint_id":0, "sess_active_time":0, "rowkey_column_num":3, "index_column_num":0, "rowkey_split_pos":0, "block_size":16384, "progressive_merge_num":0, "tablet_size":134217728, "pctfree":10, "load_type":0, "index_using_type":0, "def_type":1, "charset_type":2, "collation_type":45, "create_mem_version":0, "index_status":1, "partition_status":0, "code_version":1, "last_modified_frozen_version":0, "comment":"", "pk_comment":"", "create_host":"", "zone_replica_attr_array":[], "region_replica_num_array":[], "compress_func_name":"zstd_1.3.8", "row_store_type":1, "store_format":3, "view_schema":{"view_definition":"", "check_option":"none", "is_updatable":"false", "is_materialized":"false"}, "autoinc_column_id":0, "auto_increment":1, "read_only":false, "primary_zone_array":[], "index_tid_array":[], "mv_tid_array":[], "aux_vp_tid_array":[], "base_table_ids":[], "rowkey_info":{"columns":[{"length":0, "column_id":1, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}, {"length":0, "column_id":4, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}, {"length":0, "column_id":5, "type":{"type":"BIGINT UNSIGNED", "collation":"binary", "coercibility":"NUMERIC"}, "order":0, "fulltext_flag":false}], "capacity":3}, "partition_key_info":{"columns":null, "capacity":0}, "aux_vp_tid_array":[]}, "index_arg_list":[], "constraint_list":[], "db_name":"altertable", "last_replay_log_id":0, "foreign_key_arg_list":[], "vertical_partition_arg_list":[]}, "index_arg_list":[]}
+***************   Case 46   ***************
 alter table wang_01 add constraint unique key(c2);
 {
   "ObTableStmt": {
@@ -7340,7 +6509,6 @@ alter table wang_01 add constraint unique key(c2);
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"wang_01",
           "replica_num":0,
@@ -7378,8 +6546,7 @@ alter table wang_01 add constraint unique key(c2);
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -7388,7 +6555,6 @@ alter table wang_01 add constraint unique key(c2);
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -7409,11 +6575,9 @@ alter table wang_01 add constraint unique key(c2);
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -7478,10 +6642,8 @@ alter table wang_01 add constraint unique key(c2);
         "block_size":16384,
         "replica_num":0,
         "index_status":1,
-        "use_bloom_filter":false,
         "compress_method":"",
         "comment":"",
-        "tablegroup_name":"",
         "progressive_merge_num":0,
         "primary_zone":"",
         "parser_name":"TAOBAO_CHN",
@@ -7497,7 +6659,6 @@ alter table wang_01 add constraint unique key(c2);
         "simple_table_schema": {
           "tenant_id":-1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"",
           "replica_num":0,
@@ -7535,8 +6696,7 @@ alter table wang_01 add constraint unique key(c2);
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -7545,7 +6705,6 @@ alter table wang_01 add constraint unique key(c2);
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":134217728,
         "pctfree":10,
@@ -7566,11 +6725,9 @@ alter table wang_01 add constraint unique key(c2);
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":1,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -7604,7 +6761,7 @@ alter table wang_01 add constraint unique key(c2);
     }
   ]
 }
-***************   Case 51   ***************
+***************   Case 47   ***************
 alter table wang_01 add constraint const_name unique key(c3);
 {
   "ObTableStmt": {
@@ -7643,7 +6800,6 @@ alter table wang_01 add constraint const_name unique key(c3);
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"wang_01",
           "replica_num":0,
@@ -7681,8 +6837,7 @@ alter table wang_01 add constraint const_name unique key(c3);
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -7691,7 +6846,6 @@ alter table wang_01 add constraint const_name unique key(c3);
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -7712,11 +6866,9 @@ alter table wang_01 add constraint const_name unique key(c3);
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -7781,10 +6933,8 @@ alter table wang_01 add constraint const_name unique key(c3);
         "block_size":16384,
         "replica_num":0,
         "index_status":1,
-        "use_bloom_filter":false,
         "compress_method":"",
         "comment":"",
-        "tablegroup_name":"",
         "progressive_merge_num":0,
         "primary_zone":"",
         "parser_name":"TAOBAO_CHN",
@@ -7800,7 +6950,6 @@ alter table wang_01 add constraint const_name unique key(c3);
         "simple_table_schema": {
           "tenant_id":-1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"",
           "replica_num":0,
@@ -7838,8 +6987,7 @@ alter table wang_01 add constraint const_name unique key(c3);
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -7848,7 +6996,6 @@ alter table wang_01 add constraint const_name unique key(c3);
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":134217728,
         "pctfree":10,
@@ -7869,11 +7016,9 @@ alter table wang_01 add constraint const_name unique key(c3);
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":1,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -7907,7 +7052,7 @@ alter table wang_01 add constraint const_name unique key(c3);
     }
   ]
 }
-***************   Case 52   ***************
+***************   Case 48   ***************
 alter table wang_01 add constraint const_name unique key uk_name_1(c4);
 {
   "ObTableStmt": {
@@ -7946,7 +7091,6 @@ alter table wang_01 add constraint const_name unique key uk_name_1(c4);
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"wang_01",
           "replica_num":0,
@@ -7984,8 +7128,7 @@ alter table wang_01 add constraint const_name unique key uk_name_1(c4);
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -7994,7 +7137,6 @@ alter table wang_01 add constraint const_name unique key uk_name_1(c4);
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -8015,11 +7157,9 @@ alter table wang_01 add constraint const_name unique key uk_name_1(c4);
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -8084,10 +7224,8 @@ alter table wang_01 add constraint const_name unique key uk_name_1(c4);
         "block_size":16384,
         "replica_num":0,
         "index_status":1,
-        "use_bloom_filter":false,
         "compress_method":"",
         "comment":"",
-        "tablegroup_name":"",
         "progressive_merge_num":0,
         "primary_zone":"",
         "parser_name":"TAOBAO_CHN",
@@ -8103,7 +7241,6 @@ alter table wang_01 add constraint const_name unique key uk_name_1(c4);
         "simple_table_schema": {
           "tenant_id":-1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"",
           "replica_num":0,
@@ -8141,8 +7278,7 @@ alter table wang_01 add constraint const_name unique key uk_name_1(c4);
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -8151,7 +7287,6 @@ alter table wang_01 add constraint const_name unique key uk_name_1(c4);
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":134217728,
         "pctfree":10,
@@ -8172,11 +7307,9 @@ alter table wang_01 add constraint const_name unique key uk_name_1(c4);
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":1,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -8210,7 +7343,7 @@ alter table wang_01 add constraint const_name unique key uk_name_1(c4);
     }
   ]
 }
-***************   Case 53   ***************
+***************   Case 49   ***************
 alter table wang_01 add constraint cons_name_1 unique key(c5);
 {
   "ObTableStmt": {
@@ -8249,7 +7382,6 @@ alter table wang_01 add constraint cons_name_1 unique key(c5);
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"wang_01",
           "replica_num":0,
@@ -8287,8 +7419,7 @@ alter table wang_01 add constraint cons_name_1 unique key(c5);
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -8297,7 +7428,6 @@ alter table wang_01 add constraint cons_name_1 unique key(c5);
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -8318,11 +7448,9 @@ alter table wang_01 add constraint cons_name_1 unique key(c5);
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -8387,10 +7515,8 @@ alter table wang_01 add constraint cons_name_1 unique key(c5);
         "block_size":16384,
         "replica_num":0,
         "index_status":1,
-        "use_bloom_filter":false,
         "compress_method":"",
         "comment":"",
-        "tablegroup_name":"",
         "progressive_merge_num":0,
         "primary_zone":"",
         "parser_name":"TAOBAO_CHN",
@@ -8406,7 +7532,6 @@ alter table wang_01 add constraint cons_name_1 unique key(c5);
         "simple_table_schema": {
           "tenant_id":-1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"",
           "replica_num":0,
@@ -8444,8 +7569,7 @@ alter table wang_01 add constraint cons_name_1 unique key(c5);
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -8454,7 +7578,6 @@ alter table wang_01 add constraint cons_name_1 unique key(c5);
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":134217728,
         "pctfree":10,
@@ -8475,11 +7598,9 @@ alter table wang_01 add constraint cons_name_1 unique key(c5);
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":1,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -8513,7 +7634,7 @@ alter table wang_01 add constraint cons_name_1 unique key(c5);
     }
   ]
 }
-***************   Case 54   ***************
+***************   Case 50   ***************
 alter table wang_01 add constraint unique key uk_name_2(c6);
 {
   "ObTableStmt": {
@@ -8552,7 +7673,6 @@ alter table wang_01 add constraint unique key uk_name_2(c6);
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"wang_01",
           "replica_num":0,
@@ -8590,8 +7710,7 @@ alter table wang_01 add constraint unique key uk_name_2(c6);
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -8600,7 +7719,6 @@ alter table wang_01 add constraint unique key uk_name_2(c6);
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -8621,11 +7739,9 @@ alter table wang_01 add constraint unique key uk_name_2(c6);
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -8690,10 +7806,8 @@ alter table wang_01 add constraint unique key uk_name_2(c6);
         "block_size":16384,
         "replica_num":0,
         "index_status":1,
-        "use_bloom_filter":false,
         "compress_method":"",
         "comment":"",
-        "tablegroup_name":"",
         "progressive_merge_num":0,
         "primary_zone":"",
         "parser_name":"TAOBAO_CHN",
@@ -8709,7 +7823,6 @@ alter table wang_01 add constraint unique key uk_name_2(c6);
         "simple_table_schema": {
           "tenant_id":-1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"",
           "replica_num":0,
@@ -8747,8 +7860,7 @@ alter table wang_01 add constraint unique key uk_name_2(c6);
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -8757,7 +7869,6 @@ alter table wang_01 add constraint unique key uk_name_2(c6);
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":134217728,
         "pctfree":10,
@@ -8778,11 +7889,9 @@ alter table wang_01 add constraint unique key uk_name_2(c6);
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":1,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -8816,7 +7925,7 @@ alter table wang_01 add constraint unique key uk_name_2(c6);
     }
   ]
 }
-***************   Case 55   ***************
+***************   Case 51   ***************
 alter table wang_01 add constraint cons_name unique key uk_name_3(c7);
 {
   "ObTableStmt": {
@@ -8855,7 +7964,6 @@ alter table wang_01 add constraint cons_name unique key uk_name_3(c7);
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"wang_01",
           "replica_num":0,
@@ -8893,8 +8001,7 @@ alter table wang_01 add constraint cons_name unique key uk_name_3(c7);
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -8903,7 +8010,6 @@ alter table wang_01 add constraint cons_name unique key uk_name_3(c7);
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -8924,11 +8030,9 @@ alter table wang_01 add constraint cons_name unique key uk_name_3(c7);
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -8993,10 +8097,8 @@ alter table wang_01 add constraint cons_name unique key uk_name_3(c7);
         "block_size":16384,
         "replica_num":0,
         "index_status":1,
-        "use_bloom_filter":false,
         "compress_method":"",
         "comment":"",
-        "tablegroup_name":"",
         "progressive_merge_num":0,
         "primary_zone":"",
         "parser_name":"TAOBAO_CHN",
@@ -9012,7 +8114,6 @@ alter table wang_01 add constraint cons_name unique key uk_name_3(c7);
         "simple_table_schema": {
           "tenant_id":-1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"",
           "replica_num":0,
@@ -9050,8 +8151,7 @@ alter table wang_01 add constraint cons_name unique key uk_name_3(c7);
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -9060,7 +8160,6 @@ alter table wang_01 add constraint cons_name unique key uk_name_3(c7);
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":134217728,
         "pctfree":10,
@@ -9081,11 +8180,9 @@ alter table wang_01 add constraint cons_name unique key uk_name_3(c7);
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":1,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -9119,7 +8216,7 @@ alter table wang_01 add constraint cons_name unique key uk_name_3(c7);
     }
   ]
 }
-***************   Case 56   ***************
+***************   Case 52   ***************
 alter table wang_01 add constraint unique key uk_name_4(c8);
 {
   "ObTableStmt": {
@@ -9158,7 +8255,6 @@ alter table wang_01 add constraint unique key uk_name_4(c8);
         "simple_table_schema": {
           "tenant_id":1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"wang_01",
           "replica_num":0,
@@ -9196,8 +8292,7 @@ alter table wang_01 add constraint unique key uk_name_4(c8);
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -9206,7 +8301,6 @@ alter table wang_01 add constraint unique key uk_name_4(c8);
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":-1,
         "pctfree":10,
@@ -9227,11 +8321,9 @@ alter table wang_01 add constraint unique key uk_name_4(c8);
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":3,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -9296,10 +8388,8 @@ alter table wang_01 add constraint unique key uk_name_4(c8);
         "block_size":16384,
         "replica_num":0,
         "index_status":1,
-        "use_bloom_filter":false,
         "compress_method":"",
         "comment":"",
-        "tablegroup_name":"",
         "progressive_merge_num":0,
         "primary_zone":"",
         "parser_name":"TAOBAO_CHN",
@@ -9315,7 +8405,6 @@ alter table wang_01 add constraint unique key uk_name_4(c8);
         "simple_table_schema": {
           "tenant_id":-1,
           "database_id":-1,
-          "tablegroup_id":-1,
           "table_id":-1,
           "table_name":"",
           "replica_num":0,
@@ -9353,8 +8442,7 @@ alter table wang_01 add constraint unique key uk_name_4(c8);
           "partition_array":null,
           "subpartition_array":null,
           "index_status":1,
-          "binding":false,
-          "duplicate_scope":0
+          "binding":false
         },
         "max_used_column_id":0,
         "max_used_constraint_id":0,
@@ -9363,7 +8451,6 @@ alter table wang_01 add constraint unique key uk_name_4(c8);
         "index_column_num":0,
         "rowkey_split_pos":0,
         "block_size":16384,
-        "is_use_bloomfilter":false,
         "progressive_merge_num":0,
         "tablet_size":134217728,
         "pctfree":10,
@@ -9384,11 +8471,9 @@ alter table wang_01 add constraint unique key uk_name_4(c8);
         ],
         "region_replica_num_array": [
         ],
-        "tablegroup_name":"",
         "compress_func_name":"",
         "row_store_type":1,
         "store_format":0,
-        "expire_info":"",
         "view_schema": {
           "view_definition":"",
           "check_option":"none",
@@ -9422,7 +8507,7 @@ alter table wang_01 add constraint unique key uk_name_4(c8);
     }
   ]
 }
-***************   Case 57   ***************
+***************   Case 53   ***************
 drop database altertable;
 {
   "drop_database_arg":"tenant_id",

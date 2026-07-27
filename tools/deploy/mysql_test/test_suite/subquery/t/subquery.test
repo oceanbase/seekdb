@@ -293,14 +293,14 @@ explain select * from t1 where b > exists(select b from t2 where b > exists(sele
 explain select * from t1 where b > exists(select a from t2 where b > exists(select sum(a) from t3));
 explain select * from t1 where b > exists(select sum(a) from t2 where t2.b > exists(select sum(a) from t3));
 
-## bug: 
+## bug:
 --disable_warnings
 drop table if exists T;
 --enable_warnings
 create table T (pk int);
 explain select pk from t table1 where (table1.pk >= (select 1 from T limit 1)) AND ((1,9) in (select 1,9));
 
-## bug: 
+## bug:
 explain select (select 1 except select pk),
         (select 1 except select pk),
         (select 1 except select pk),
@@ -367,13 +367,13 @@ drop table if exists t1,t2,t3;
 --echo #
 CREATE TABLE `t1` (
   `c1` varbinary(20) DEFAULT NULL
-) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0;
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0;
 CREATE TABLE `t2` (
   `a` int(11) NOT NULL,
   `b` varchar(20) DEFAULT NULL,
   `c` decimal(20,10) DEFAULT NULL,
   PRIMARY KEY (`a`)
-) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
  partition by hash(a) partitions 2;
 
 insert into t1 values(1), (2);
@@ -393,12 +393,12 @@ CREATE TABLE `t1` (
   `c4` timestamp(6) NULL DEFAULT '2012-01-01 04:00:00.000000',
   `c5` int(11) DEFAULT NULL,
   PRIMARY KEY (`pk1`, `pk2`)
-) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0;
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0;
 insert into t1 values(1, '2', 3, 3, null, null, null);
 select /*+no_rewrite*/ c1, (select max(c2) FROM t1 ) a FROM t1  order by (select c1 FROM t1  where c2 in (select c1 FROM t1  where c2 = a)) + 1;
 drop table t1 ;
 
-# bug: 
+# bug:
 --disable_warnings
 drop table if exists table0_hash_pk_parts_1_bigint;
 drop table if exists s;

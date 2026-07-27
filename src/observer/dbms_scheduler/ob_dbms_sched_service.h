@@ -20,13 +20,13 @@
 #include "share/ob_define.h"
 #include "logservice/ob_log_base_type.h"                        //ObILocalLogHandler ObICheckpointSubHandler ObIReplaySubHandler
 #include "observer/dbms_scheduler/ob_dbms_sched_job_master.h"
-#include "rootserver/ob_tenant_thread_helper.h" // for ObTenantThreadHelper
+#include "rootserver/ob_server_thread_helper.h" // for ObServerThreadHelper
 
 namespace oceanbase
 {
 namespace rootserver
 {
-class ObDBMSSchedService : public ObTenantThreadHelper,
+class ObDBMSSchedService : public ObServerThreadHelper,
                            public logservice::ObICheckpointSubHandler,
                            public logservice::ObIReplaySubHandler
 {
@@ -39,7 +39,7 @@ public:
     destroy();
   }
 
-  static int mtl_init(ObDBMSSchedService *&dbms_sched_service);
+  static int server_module_init(ObDBMSSchedService *&dbms_sched_service);
   static void wakeup_scheduler();
   int init();
   int start();

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_ai_complete.h"
 #include "share/rc/ob_module_provider.h"
-#include "observer/omt/ob_tenant_ai_service.h"
+#include "observer/omt/ob_ai_service.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -102,7 +102,7 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
   } else {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     
-    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
     lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_COMPLETE));
     ObAIFuncExprInfo *info = nullptr;
     ObString model_id = arg_model_id->get_string();
@@ -110,7 +110,7 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
     ObJsonObject *config = nullptr;
     ObString config_str;
     omt::ObAiServiceGuard ai_service_guard;
-    omt::ObTenantAiService *ai_service = share::g_mp->tenant_ai_service();
+    omt::ObAiService *ai_service = share::g_mp->ai_service();
     const share::ObAiModelEndpointInfo *endpoint_info = nullptr;
     ObExpr *arg_expr_prompt = expr.args_[1];
     if ( OB_ISNULL(arg_expr_prompt) ) {
@@ -253,7 +253,7 @@ int ObExprAIComplete::get_vector_params(const ObExpr &expr,
     ObString config_str;
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     
-    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
     lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_COMPLETE));
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(
           temp_allocator,
@@ -436,11 +436,11 @@ int ObExprAIComplete::eval_ai_complete_vector(const ObExpr &expr, ObEvalCtx &ctx
   } else {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     
-    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
     lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_COMPLETE));
     ObAIFuncExprInfo *info = nullptr;
     omt::ObAiServiceGuard ai_service_guard;
-    omt::ObTenantAiService *ai_service = share::g_mp->tenant_ai_service();
+    omt::ObAiService *ai_service = share::g_mp->ai_service();
     const share::ObAiModelEndpointInfo *endpoint_info = nullptr;
     ObArray<ObString> header_array;
     ObArray<ObJsonObject *> bodies;
@@ -581,11 +581,11 @@ int ObExprAIComplete::eval_ai_complete_vector_v2(const ObExpr &expr, ObEvalCtx &
   } else {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     
-    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
     lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_COMPLETE));
     ObAIFuncExprInfo *info = nullptr;
     omt::ObAiServiceGuard ai_service_guard;
-    omt::ObTenantAiService *ai_service = share::g_mp->tenant_ai_service();
+    omt::ObAiService *ai_service = share::g_mp->ai_service();
     const ObAiModelEndpointInfo *endpoint_info = nullptr;
     ObArray<ObString> header_array;
     ObJsonObject *body = nullptr;

@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SHARE_VECTOR_VECTOR_BASIC_OP_H_
 #define OCEANBASE_SHARE_VECTOR_VECTOR_BASIC_OP_H_
 
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/ob_lob_access_utils.h"
 #include "common/json_type/ob_json_parse.h"
 #include "common/json_type/ob_json_base.h"

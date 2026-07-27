@@ -1,5 +1,5 @@
-#include "rootserver/ob_root_service.h"
-#include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_local_management_service.h"
+#include "rootserver/ob_local_ddl_serial_call.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -270,7 +270,7 @@ int ObDBMSAiService::create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, 
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("failed to get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_ai_model_schema( model_name, ai_model_schema))) {
     LOG_WARN("failed to get ai model schema", K(ret), K(model_name));
@@ -297,7 +297,7 @@ int ObDBMSAiService::create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, 
       arg.ddl_stmt_str_ = ctx.exec_ctx_->get_sql_ctx()->cur_sql_;
       if (OB_FAIL(arg.check_valid())) {
         LOG_WARN("invalid create ai model arg", K(ret), K(arg));
-      } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_ai_model(arg); }))) {
+      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_ai_model(arg); }))) {
         LOG_WARN("failed to create ai model", K(ret), K(arg));
       }
     }
@@ -334,7 +334,7 @@ int ObDBMSAiService::drop_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, co
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("failed to get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_ai_model_schema( model_name, ai_model_schema))) {
     LOG_WARN("failed to get ai model schema", K(ret), K(model_name));
@@ -351,7 +351,7 @@ int ObDBMSAiService::drop_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, co
   } else {
     ObDropAiModelArg arg(model_name);
     arg.ddl_stmt_str_ = ctx.exec_ctx_->get_sql_ctx()->cur_sql_;
-      if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_ai_model(arg); }))) {
+      if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_ai_model(arg); }))) {
       LOG_WARN("failed to drop ai model", K(ret), K(arg));
     }
 

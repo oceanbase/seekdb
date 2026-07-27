@@ -538,7 +538,7 @@ CREATE TABLE `mp_multiimg` (
 ) ENGINE=InnoDB ;
 
 drop VIEW if exists mp_v_masssendmaterials;
-CREATE ALGORITHM=UNDEFINED  SQL SECURITY INVOKER VIEW `mp_v_masssendmaterials` AS select `mp_wxaccount`.`cWXAccountName` AS `cWXAccountName`,`mp_wxaccount`.`iCorpID` AS `iCorpID`,`mp_wxaccount`.`cAppID` AS `cAppID`,`mp_img`.`cWXAccountID` AS `cWXAccountID`,1 AS `iType`,`mp_img`.`id` AS `id`,`mp_img`.`cTitle` AS `cTitle`,`mp_img`.`dCreateTime` AS `dCreateTime`,`mp_img`.`iPurpose` AS `iPurpose` from (`mp_img` join `mp_wxaccount` on((`mp_img`.`cWXAccountID` = `mp_wxaccount`.`cWXAccountID`))) where (ifnull(`mp_img`.`iMultiID`,0) = 0) union select `mp_wxaccount`.`cWXAccountName` AS `cWXAccountName`,`mp_wxaccount`.`iCorpID` AS `iCorpID`,`mp_wxaccount`.`cAppID` AS `cAppID`,`mp_multiimg`.`cWXAccountID` AS `cWXAccountID`,2 AS `iType`,`mp_multiimg`.`id` AS `id`,`mp_multiimg`.`cUtitle` AS `cTitle`,`mp_multiimg`.`dCreateTime` AS `dCreateTime`,`mp_multiimg`.`iPurpose` AS `iPurpose` from (`mp_multiimg` join `mp_wxaccount` on((`mp_multiimg`.`cWXAccountID` = `mp_wxaccount`.`cWXAccountID`))) ;
+CREATE ALGORITHM=UNDEFINED  SQL SECURITY DEFINER VIEW `mp_v_masssendmaterials` AS select `mp_wxaccount`.`cWXAccountName` AS `cWXAccountName`,`mp_wxaccount`.`iCorpID` AS `iCorpID`,`mp_wxaccount`.`cAppID` AS `cAppID`,`mp_img`.`cWXAccountID` AS `cWXAccountID`,1 AS `iType`,`mp_img`.`id` AS `id`,`mp_img`.`cTitle` AS `cTitle`,`mp_img`.`dCreateTime` AS `dCreateTime`,`mp_img`.`iPurpose` AS `iPurpose` from (`mp_img` join `mp_wxaccount` on((`mp_img`.`cWXAccountID` = `mp_wxaccount`.`cWXAccountID`))) where (ifnull(`mp_img`.`iMultiID`,0) = 0) union select `mp_wxaccount`.`cWXAccountName` AS `cWXAccountName`,`mp_wxaccount`.`iCorpID` AS `iCorpID`,`mp_wxaccount`.`cAppID` AS `cAppID`,`mp_multiimg`.`cWXAccountID` AS `cWXAccountID`,2 AS `iType`,`mp_multiimg`.`id` AS `id`,`mp_multiimg`.`cUtitle` AS `cTitle`,`mp_multiimg`.`dCreateTime` AS `dCreateTime`,`mp_multiimg`.`iPurpose` AS `iPurpose` from (`mp_multiimg` join `mp_wxaccount` on((`mp_multiimg`.`cWXAccountID` = `mp_wxaccount`.`cWXAccountID`))) ;
 
 /*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
 SET FOREIGN_KEY_CHECKS = 0;
@@ -640,6 +640,5 @@ CREATE TABLE IF NOT EXISTS `rpa_language` (
      UNIQUE KEY `rpa_language_corpid_langsequence` (`corpid`,`langSequence`) USING BTREE,
      UNIQUE KEY `rpa_language_corpid_langcode` (`corpid`,`langCode`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC COMMENT='多语';
-
 
 

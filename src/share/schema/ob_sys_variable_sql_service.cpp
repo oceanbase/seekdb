@@ -74,7 +74,7 @@ int ObSysVariableSqlService::replace_sys_variable(
         LOG_WARN("execute sql failed", K(sql), K(ret));
       }
     }
-    // It won't log ddl_operation while create sys tenant.
+    // Initial runtime bootstrap does not record a DDL operation.
     if (OB_SUCC(ret) && OB_DDL_MAX_OP != operation_type) {
       // log operation
       ObSchemaOperation op;

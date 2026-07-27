@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-#include "mtlenv/mock_tenant_module_env.h"
+#include "mtlenv/mock_server_runtime_env.h"
 
 #include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/ob_errno.h"
-#include "storage/tx_storage/ob_tenant_mem_limit_getter.h"
+#include "storage/tx_storage/ob_server_mem_limit_getter.h"
 #include "storage/fts/dict/ob_ft_cache.h"
 #include "storage/fts/dict/ob_ft_cache_dict.h"
 #include "storage/fts/dict/ob_ft_dat_dict.h"
@@ -45,8 +45,6 @@
 #include <vector>
 
 #define USING_LOG_PREFIX STORAGE_FTS
-
-using namespace oceanbase::plugin;
 
 namespace oceanbase
 {
@@ -92,12 +90,12 @@ protected:
   static void SetUpTestCase()
   {
     LOG_INFO("SetUpTestCase");
-    EXPECT_EQ(OB_SUCCESS, MockTenantModuleEnv::get_instance().init());
+    EXPECT_EQ(OB_SUCCESS, MockServerRuntimeEnv::get_instance().init());
   }
   static void TearDownTestCase()
   {
     LOG_INFO("TearDownTestCase");
-    MockTenantModuleEnv::get_instance().destroy();
+    MockServerRuntimeEnv::get_instance().destroy();
   }
   virtual void SetUp()
   {
@@ -106,7 +104,7 @@ protected:
     const int64_t DEFAULT_MAX_CACHE_SIZE = 1024LL * 1024 * 1024 * 1024;
     int ret = OB_SUCCESS;
     ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
-    if (OB_FAIL(ObKVGlobalCache::get_instance().init(&(ObTenantMemLimitGetter::get_instance()),
+    if (OB_FAIL(ObKVGlobalCache::get_instance().init(&(ObServerMemLimitGetter::get_instance()),
                                                      DEFAULT_BUCKET_NUM,
                                                      DEFAULT_MAX_CACHE_SIZE,
                                                      lib::ACHUNK_SIZE,
@@ -903,7 +901,6 @@ int main(int argc, char **argv)
   system("rm -rf test_ft_parser.log");
   OB_LOGGER.set_file_name("test_ft_parser.log", true);
   OB_LOGGER.set_log_level("DEBUG");
-  // oceanbase::storage::ObTestFTPluginHelper::file_name = argv[0];
   testing::InitGoogleTest(&argc, argv);
 
   return RUN_ALL_TESTS();

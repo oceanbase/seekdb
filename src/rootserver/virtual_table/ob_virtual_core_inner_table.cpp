@@ -80,25 +80,97 @@ int ObVritualCoreInnerTable::inner_open()
   } else {
     {
       
-      const ObSimpleTenantSchema *tenant = NULL;
-      if (OB_FAIL(schema_guard_->get_tenant_info(tenant))) {
-        LOG_WARN("fail to get tenant info", KR(ret));
-      } else if (OB_ISNULL(tenant) || !tenant->is_normal()) {
+      const ObSimpleServerRuntimeSchema *runtime_schema = NULL;
+      if (OB_FAIL(schema_guard_->get_server_runtime_info(runtime_schema))) {
+        LOG_WARN("fail to get server runtime info", KR(ret));
+      } else if (OB_ISNULL(runtime_schema) || !runtime_schema->is_normal()) {
         // skip
       } else {
         ObCoreTableProxy core_table(table_name_, *sql_proxy_);
         if (OB_FAIL(core_table.load())) {
           LOG_WARN("core_table load failed", KR(ret));
         } else {
+          struct CoreHistoryRowInfo
+          {
+            int64_t table_id_;
+            int64_t column_id_;
+            int64_t schema_version_;
+            int64_t row_id_;
+            bool is_deleted_;
+            TO_STRING_EMPTY();
+          };
+          ObArray<CoreHistoryRowInfo> latest_rows;
+          const bool is_column_table = OB_ALL_VIRTUAL_CORE_COLUMN_TABLE_TID == table_id_;
+          while (OB_SUCC(ret) && OB_SUCC(core_table.next())) {
+            const ObCoreTableProxy::Row *row = NULL;
+            int64_t table_id = OB_INVALID_ID;
+            int64_t column_id = OB_INVALID_ID;
+            int64_t schema_version = OB_INVALID_VERSION;
+            int64_t deleted = 0;
+            if (OB_FAIL(core_table.get_cur_row(row))) {
+              LOG_WARN("get current row failed", KR(ret));
+            } else if (OB_ISNULL(row)) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("current row is null", KR(ret));
+            } else if (OB_FAIL(row->get_int("table_id", table_id))
+                || (is_column_table && OB_FAIL(row->get_int("column_id", column_id)))
+                || OB_FAIL(row->get_int("schema_version", schema_version))
+                || OB_FAIL(row->get_int("is_deleted", deleted))) {
+              LOG_WARN("get core history rowkey failed", KR(ret), K(is_column_table));
+            } else {
+              int64_t idx = 0;
+              for (; idx < latest_rows.count(); ++idx) {
+                if (latest_rows.at(idx).table_id_ == table_id
+                    && (!is_column_table || latest_rows.at(idx).column_id_ == column_id)) {
+                  break;
+                }
+              }
+              if (idx == latest_rows.count()) {
+                const CoreHistoryRowInfo latest_row = {
+                  table_id, column_id, schema_version, row->get_row_id(), 0 != deleted
+                };
+                if (OB_FAIL(latest_rows.push_back(latest_row))) {
+                  LOG_WARN("save core history row failed", KR(ret), K(table_id),
+                           K(column_id), K(schema_version));
+                }
+              } else if (schema_version > latest_rows.at(idx).schema_version_) {
+                CoreHistoryRowInfo &latest_row = latest_rows.at(idx);
+                latest_row.schema_version_ = schema_version;
+                latest_row.row_id_ = row->get_row_id();
+                latest_row.is_deleted_ = 0 != deleted;
+              }
+            }
+          }
+          if (OB_ITER_END == ret) {
+            ret = OB_SUCCESS;
+          }
+          if (OB_SUCC(ret) && OB_FAIL(core_table.seek_to_head())) {
+            LOG_WARN("seek core history to head failed", KR(ret));
+          }
           ObArray<Column> columns;
           while (OB_SUCC(ret) && OB_SUCC(core_table.next())) {
-            columns.reuse();
-            if (OB_FAIL(get_full_row(table_schema, core_table, columns))) {
-              LOG_WARN("get_full_row failed", K(table_schema), KR(ret));
-            } else if (OB_FAIL(project_row(columns, cur_row_))) {
-              LOG_WARN("project_row failed", K(columns), KR(ret));
-            } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
-              LOG_WARN("add_row failed", K_(cur_row), KR(ret));
+            const ObCoreTableProxy::Row *row = NULL;
+            if (OB_FAIL(core_table.get_cur_row(row))) {
+              LOG_WARN("get current row failed", KR(ret));
+            } else if (OB_ISNULL(row)) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("current row is null", KR(ret));
+            } else {
+              int64_t idx = 0;
+              for (; idx < latest_rows.count()
+                  && latest_rows.at(idx).row_id_ != row->get_row_id(); ++idx) {}
+              if (idx == latest_rows.count() || latest_rows.at(idx).is_deleted_) {
+                // Skip obsolete history rows and tombstones.
+              } else {
+                columns.reuse();
+                if (OB_FAIL(get_full_row(table_schema, core_table, columns))) {
+                  LOG_WARN("get_full_row failed", K(table_schema), KR(ret));
+                } else if (OB_FAIL(project_row(columns, cur_row_))) {
+                  LOG_WARN("project_row failed", K(columns), KR(ret));
+                } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
+                  LOG_WARN("add_row failed", K_(cur_row), KR(ret));
+                }
+              }
             }
           } // end while
           if (OB_ITER_END == ret) {

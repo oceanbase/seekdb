@@ -177,13 +177,13 @@ int ObExprMysqlProcInfo::get_routine_info(ObSQLSessionInfo *session,
 
   CK (OB_NOT_NULL(session));
   CK (OB_NOT_NULL(GCTX.schema_service_));
-  OZ (GCTX.schema_service_->get_tenant_schema_guard(schema_guard));
+  OZ (GCTX.schema_service_->get_runtime_schema_guard(schema_guard));
   OZ (schema_guard.get_routine_info( routine_id, routine_info));
   
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(OB_ISNULL(routine_info))) { //refresh schema try again
     OZ (ObSPIService::force_refresh_schema());
-    OZ (GCTX.schema_service_->get_tenant_schema_guard(schema_guard));
+    OZ (GCTX.schema_service_->get_runtime_schema_guard(schema_guard));
     OZ (schema_guard.get_routine_info( routine_id, routine_info));
   }
   CK (OB_NOT_NULL(routine_info));

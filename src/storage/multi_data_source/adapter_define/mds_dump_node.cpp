@@ -480,16 +480,22 @@ int MdsDumpNode::deserialize(common::ObIAllocator &allocator, const char *buf, c
               version,
               mds_table_id_,
               mds_unit_id_,
-              writer_id_,
-              seq_no_);
+              writer_id_);
 
-  LST_DO_CODE(OB_UNIS_DECODE,
-              redo_scn_,
-              end_scn_,
-              trans_version_,
-              status_,
-              crc_check_number_,
-              user_data);
+  if (OB_FAIL(ret)) {
+  } else if (UNIS_VERSION != version) {
+    ret = OB_ERR_UNEXPECTED;
+    MDS_LOG(WARN, "unexpected mds dump node version", K(ret), K(version), K(UNIS_VERSION));
+  } else {
+    LST_DO_CODE(OB_UNIS_DECODE,
+                seq_no_,
+                redo_scn_,
+                end_scn_,
+                trans_version_,
+                status_,
+                crc_check_number_,
+                user_data);
+  }
 
   if (OB_SUCC(ret)) {
     allocator_ = &allocator;

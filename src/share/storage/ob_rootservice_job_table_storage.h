@@ -26,7 +26,7 @@ namespace oceanbase
 namespace share
 {
 
-struct ObRootServiceJobEntry
+struct ObLocalManagementServiceJobEntry
 {
   int64_t gmt_create_;
   int64_t gmt_modified_;
@@ -35,7 +35,7 @@ struct ObRootServiceJobEntry
   common::ObString job_status_;
   int64_t result_code_;
 
-  ObRootServiceJobEntry()
+  ObLocalManagementServiceJobEntry()
     : gmt_create_(0),
       gmt_modified_(0),
       job_id_(0),
@@ -56,16 +56,16 @@ struct ObRootServiceJobEntry
   TO_STRING_EMPTY();
 };
 
-class ObRootServiceJobTableStorage
+class ObLocalManagementServiceJobTableStorage
 {
 public:
-  ObRootServiceJobTableStorage();
-  virtual ~ObRootServiceJobTableStorage();
+  ObLocalManagementServiceJobTableStorage();
+  virtual ~ObLocalManagementServiceJobTableStorage();
 
   int init(ObSQLiteConnectionPool *pool);
   bool is_inited() const { return nullptr != pool_; }
 
-  int create_job(const ObRootServiceJobEntry &entry);
+  int create_job(const ObLocalManagementServiceJobEntry &entry);
   int complete_job(const int64_t job_id, const common::ObString &job_status, const int64_t result_code);
   int find_job(const common::ObString &job_type, int64_t &job_id);
   int get_job_count(const common::ObString &job_type, int64_t &job_count);
@@ -75,7 +75,7 @@ private:
   int create_table_if_not_exists_();
 
   ObSQLiteConnectionPool *pool_;
-  DISALLOW_COPY_AND_ASSIGN(ObRootServiceJobTableStorage);
+  DISALLOW_COPY_AND_ASSIGN(ObLocalManagementServiceJobTableStorage);
 };
 
 } // namespace share

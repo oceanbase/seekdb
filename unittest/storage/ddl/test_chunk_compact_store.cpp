@@ -25,7 +25,8 @@
 #include "storage/blocksstable/ob_row_generate.h"
 #include "storage/blocksstable/ob_data_file_prepare.h"
 #include "unittest/storage/blocksstable/ob_data_file_prepare.h"
-#include "mtlenv/mock_tenant_module_env.h"
+#include "mtlenv/mock_server_runtime_env.h"
+#include "observer/omt/ob_server_module_lifecycle.h"
 #undef private
 
 namespace oceanbase
@@ -44,15 +45,12 @@ int64_t RESULT_ADD[6] = {0,0,0,0,0,0};
 int64_t RESULT_BUILD[6] = {0,0,0,0,0,0};
 static ObSimpleMemLimitGetter getter;
 
-// Single-tenant seekdb: ObTenantBase module slots are gone; route the test's
-// ObTenantIOManager / ObTenantTmpFileManager through share::g_mp.
+// Route the test's process-wide temporary-file manager through share::g_mp.
 class FakeModuleProvider : public share::ObIModuleProvider
 {
 public:
-  common::ObTenantIOManager *tenant_io_manager() override { return io_manager_; }
-  tmp_file::ObTenantTmpFileManager *tenant_tmp_file_manager() override { return tmp_file_mgr_; }
-  common::ObTenantIOManager *io_manager_ = nullptr;
-  tmp_file::ObTenantTmpFileManager *tmp_file_mgr_ = nullptr;
+  tmp_file::ObTmpFileManager *tmp_file_manager() override { return tmp_file_mgr_; }
+  tmp_file::ObTmpFileManager *tmp_file_mgr_ = nullptr;
 };
 
 typedef ObChunkDatumStore::StoredRow StoredRow;
@@ -170,8 +168,7 @@ int ObStoredRowGenerate::get_stored_row_irregular(StoredRow **&sr)
 class TestCompactChunk : public TestDataFilePrepare
 {
 public:
-  TestCompactChunk() :
-    TestDataFilePrepare(&getter, "TestTmpFile", 2 * 1024 * 1024, 2048) {};
+  TestCompactChunk();
   void SetUp();
   void TearDown();
   static void SetUpTestCase()
@@ -185,14 +182,14 @@ public:
     ObTimerService::get_instance().destroy();
   }
 
-  int init_tenant_mgr()
+  int init_memory_limit()
   {
     int ret = OB_SUCCESS;
     ObAddr self;
     self.set_ip_addr("127.0.0.1", 8086);
     const int64_t ulmt = 128LL << 30;
     const int64_t llmt = 128LL << 30;
-    ret = getter.add_tenant(ulmt, llmt);
+    ret = getter.set_memory_limit(llmt, ulmt);
     EXPECT_EQ(OB_SUCCESS, ret);
     lib::set_memory_limit(128LL << 32);
     return ret;
@@ -201,7 +198,17 @@ public:
 protected:
   ObStoredRowGenerate row_generate_;
   ObArenaAllocator allocator_;
+  FakeModuleProvider provider_;
+  tmp_file::ObTmpFileManager *tmp_file_mgr_;
+  share::ObIModuleProvider *old_module_provider_;
 };
+TestCompactChunk::TestCompactChunk()
+  : TestDataFilePrepare(&getter, "TestTmpFile", 2 * 1024 * 1024, 2048),
+    provider_(),
+    tmp_file_mgr_(nullptr),
+    old_module_provider_(nullptr)
+{
+}
 void TestCompactChunk::SetUp()
 {
   int ret = OB_SUCCESS;
@@ -209,7 +216,7 @@ void TestCompactChunk::SetUp()
   const int64_t max_cache_size = 1024 * 1024 * 1024;
   const int64_t block_size = common::OB_MALLOC_BIG_BLOCK_SIZE;
   TestDataFilePrepare::SetUp();
-  ret = getter.add_tenant(8LL * 1024 * 1024, 2LL * 1024 * 1024 * 1024);
+  ret = getter.set_memory_limit(8LL * 1024 * 1024, 2LL * 1024 * 1024 * 1024);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = ObKVGlobalCache::get_instance().init(&getter, bucket_num, max_cache_size, block_size);
   if (OB_INIT_TWICE == ret) {
@@ -220,30 +227,20 @@ void TestCompactChunk::SetUp()
   // set observer memory limit
   CHUNK_MGR.set_limit(8LL * 1024 * 1024 * 1024);
 
-  EXPECT_EQ(OB_SUCCESS, init_tenant_mgr());
+  EXPECT_EQ(OB_SUCCESS, init_memory_limit());
   ASSERT_EQ(OB_SUCCESS, common::ObClockGenerator::init());
   ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache"));
   ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpPageCache::get_instance().init("sn_tmp_page_cache"));
   ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
 
-  static ObTenantBase tenant_ctx(OB_SERVER_TENANT_ID);
-  static FakeModuleProvider provider;
-  share::g_mp = &provider;
-  ObTenantEnv::set_tenant(&tenant_ctx);
-  ObTenantIOManager *io_service = nullptr;
-  EXPECT_EQ(OB_SUCCESS, ObTenantIOManager::mtl_new(io_service));
-  EXPECT_EQ(OB_SUCCESS, ObTenantIOManager::mtl_init(io_service));
-  EXPECT_EQ(OB_SUCCESS, io_service->start());
-  provider.io_manager_ = io_service;
-
-  tmp_file::ObTenantTmpFileManager *tf_mgr = nullptr;
-  EXPECT_EQ(OB_SUCCESS, mtl_new_default(tf_mgr));
-  EXPECT_EQ(OB_SUCCESS, tmp_file::ObTenantTmpFileManager::mtl_init(tf_mgr));
-  tf_mgr->get_sn_file_manager().page_cache_controller_.write_buffer_pool_.default_wbp_memory_limit_ = 40*1024*1024;
-  EXPECT_EQ(OB_SUCCESS, tf_mgr->start());
-  provider.tmp_file_mgr_ = tf_mgr;
+  old_module_provider_ = share::g_mp;
+  ASSERT_EQ(OB_SUCCESS, server_module_new_default(tmp_file_mgr_));
+  ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpFileManager::server_module_init(tmp_file_mgr_));
+  tmp_file_mgr_->get_sn_file_manager().page_cache_controller_.write_buffer_pool_.default_wbp_memory_limit_ = 40*1024*1024;
+  ASSERT_EQ(OB_SUCCESS, tmp_file_mgr_->start());
+  provider_.tmp_file_mgr_ = tmp_file_mgr_;
+  share::g_mp = &provider_;
   SERVER_STORAGE_META_SERVICE.is_started_ = true;
-  ObTenantEnv::set_tenant(&tenant_ctx);
 }
 
 void TestCompactChunk::TearDown()
@@ -251,6 +248,15 @@ void TestCompactChunk::TearDown()
   ObKVGlobalCache::get_instance().destroy();
   allocator_.reuse();
   row_generate_.allocator_.reuse();
+  // The temporary-file manager depends on the block manager owned by the base fixture.
+  if (OB_NOT_NULL(tmp_file_mgr_)) {
+    tmp_file_mgr_->stop();
+    tmp_file_mgr_->wait();
+    server_module_destroy_default(tmp_file_mgr_);
+  }
+  provider_.tmp_file_mgr_ = nullptr;
+  share::g_mp = old_module_provider_;
+  old_module_provider_ = nullptr;
   TestDataFilePrepare::TearDown();
 
   tmp_file::ObTmpBlockCache::get_instance().destroy();

@@ -24,20 +24,20 @@ namespace oceanbase
 {
 namespace rootserver
 {
-int ObSysDDLReplicaBuilderUtil::push_task(ObAsyncTask &task)
+int ObSysDDLLocalBuilderUtil::push_task(ObAsyncTask &task)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(GCTX.omt_)) {
+  if (OB_ISNULL(GCTX.server_runtime_controller_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.omt_));
-  } else if (OB_UNLIKELY(!GCTX.omt_->has_tenant())) {
-    ret = OB_TENANT_NOT_EXIST;
-    LOG_WARN("local server does not have SYS tenant resource", KR(ret));
+    LOG_WARN("invalid argument", KR(ret), KP(GCTX.server_runtime_controller_));
+  } else if (OB_UNLIKELY(!GCTX.server_runtime_controller_->has_runtime())) {
+    ret = OB_RUNTIME_SCHEMA_NOT_READY;
+    LOG_WARN("local runtime is unavailable", KR(ret));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("ddl service not started", KR(ret));
   } else {
-    MOD_SCOPE {
+    SERVER_MODULE_SCOPE {
       rootserver::ObDDLScheduler* sys_ddl_scheduler = share::g_mp->ddl_scheduler();
       if (OB_ISNULL(sys_ddl_scheduler)) {
         ret = OB_ERR_UNEXPECTED;

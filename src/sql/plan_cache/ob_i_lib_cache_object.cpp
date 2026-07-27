@@ -34,7 +34,6 @@ ObILibCacheObject::ObILibCacheObject(ObLibCacheNameSpace ns, lib::MemoryContext 
     log_del_time_(INT64_MAX),
     added_to_lc_(false),
     ns_(ns),
-    dynamic_ref_handle_(MAX_HANDLE),
     obj_status_(ObILibCacheObject::ACTIVE)
 {
 }
@@ -46,8 +45,6 @@ void ObILibCacheObject::reset()
   log_del_time_ = INT64_MAX;
   added_to_lc_ = false;
   ns_ = NS_INVALID;
-  
-  dynamic_ref_handle_ = MAX_HANDLE;
   obj_status_ = ObILibCacheObject::ACTIVE;
 }
 
@@ -94,52 +91,22 @@ int ObILibCacheObject::update_cache_obj_stat(ObILibCacheCtx &ctx)
   return ret;
 }
 
-int64_t ObILibCacheObject::inc_ref_count(const CacheRefHandleID ref_handle)
+int64_t ObILibCacheObject::inc_ref_count()
 {
-  int ret = OB_SUCCESS;
-  if (GCONF._enable_plan_cache_mem_diagnosis) {
-    ObPlanCache *lib_cache = share::g_mp->plan_cache();
-    if (OB_ISNULL(lib_cache)) {
-      // ignore ret
-      LOG_ERROR("invalid null lib cache", K(ret));
-    } else {
-      lib_cache->get_ref_handle_mgr().record_ref_op(ref_handle);
-    }
-  }
   return ATOMIC_AAF(&ref_count_, 1);
 }
 
-bool ObILibCacheObject::try_inc_ref_count(const CacheRefHandleID ref_handle)
+bool ObILibCacheObject::try_inc_ref_count()
 {
-  int ret = OB_SUCCESS;
   int64_t ref_cnt = ATOMIC_LOAD(&ref_count_);
   while (ref_cnt > 0 && !ATOMIC_BCAS(&ref_count_, ref_cnt, ref_cnt + 1)) {
     ref_cnt = ATOMIC_LOAD(&ref_count_);
   }
-  if (ref_cnt > 0 && GCONF._enable_plan_cache_mem_diagnosis) {
-    ObPlanCache *lib_cache = share::g_mp->plan_cache();
-    if (OB_ISNULL(lib_cache)) {
-      // ignore ret
-      LOG_ERROR("invalid null lib cache", K(ret));
-    } else {
-      lib_cache->get_ref_handle_mgr().record_ref_op(ref_handle);
-    }
-  }
   return ref_cnt > 0;
 }
 
-int64_t ObILibCacheObject::dec_ref_count(const CacheRefHandleID ref_handle)
+int64_t ObILibCacheObject::dec_ref_count()
 {
-  int ret = OB_SUCCESS;
-  if (GCONF._enable_plan_cache_mem_diagnosis) {
-    ObPlanCache *lib_cache = share::g_mp->plan_cache();
-    if (OB_ISNULL(lib_cache)) {
-      // ignore ret
-      LOG_ERROR("invalid null lib cache", K(ret));
-    } else {
-      lib_cache->get_ref_handle_mgr().record_deref_op(ref_handle);
-    }
-  }
   return ATOMIC_SAF(&ref_count_, 1);
 }
 

@@ -44,7 +44,6 @@ enum ObDDLMacroBlockType
   DDL_MB_INDEX_TYPE = 2,
   DDL_MB_SSTABLE_META_TYPE = 3,
   DDL_MB_TABLET_META_TYPE = 4,
-  DDL_MB_SS_EMPTY_DATA_TYPE = 5,
 };
 
 class ObDDLMacroHandle
@@ -70,8 +69,8 @@ public:
   ~ObDDLMacroBlock();
   const blocksstable::MacroBlockId &get_block_id() const { return block_handle_.get_block_id(); }
   int set_data_macro_meta(const blocksstable::MacroBlockId &macro_id,
-                          const char* macor_block_buf, 
-                          const int64_t size, 
+                          const char* macor_block_buf,
+                          const int64_t size,
                           const ObDDLMacroBlockType &block_type,
                           const bool force_set_macro_meta = false);
   bool is_valid() const;
@@ -122,19 +121,19 @@ class ObDDLKVPendingGuard final
 {
 public:
   static int set_macro_block(
-    ObTablet *tablet, 
-    const ObDDLMacroBlock &macro_block, 
+    ObTablet *tablet,
+    const ObDDLMacroBlock &macro_block,
     const int64_t snapshot_version,
     const uint64_t data_format_version,
     ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
     const ObDirectLoadType direct_load_type);
 public:
   ObDDLKVPendingGuard(
-    ObTablet *tablet, 
-    const share::SCN &scn, 
+    ObTablet *tablet,
+    const share::SCN &scn,
     const share::SCN &start_scn,
-    const int64_t snapshot_version, // used for shared-storage mode.
-    const uint64_t data_format_version, // used for shared-storage mode.
+    const int64_t snapshot_version,
+    const uint64_t data_format_version,
     ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
     const ObDirectLoadType direct_load_type);
   ~ObDDLKVPendingGuard();
@@ -213,7 +212,7 @@ private:
   ObIAllocator *allocator;
 };
 
-class ObIDirectLoadRowIterator : public ObIStoreRowIterator 
+class ObIDirectLoadRowIterator : public ObIStoreRowIterator
 {
 public:
   ObIDirectLoadRowIterator() {}
@@ -240,8 +239,8 @@ static inline bool is_full_ddl_kv(const ObDDLKVType &type)
 
 static ObDDLKVType convert_direct_load_type_to_ddl_kv_type(const ObDirectLoadType &direct_load_type)
 {
-  return is_valid_direct_load(direct_load_type) ? ObDDLKVType::DDL_KV_FULL
-                                                : ObDDLKVType::DDL_KV_INVALID;
+  return is_full_direct_load(direct_load_type) ? ObDDLKVType::DDL_KV_FULL
+                                               : ObDDLKVType::DDL_KV_INVALID;
 }
 
 struct ObInsertMonitor final {
@@ -281,33 +280,31 @@ public:
 struct ObDDLTaskParam
 {
 public:
-  ObDDLTaskParam() : tenant_data_version_(0), snapshot_version_(0), schema_version_(0), ddl_task_id_(0), execution_id_(0), 
-    target_table_id_(0),  is_no_logging_(false), max_batch_size_(0), is_offline_index_rebuild_(false) {}
+  ObDDLTaskParam() : data_format_version_(0), snapshot_version_(0), schema_version_(0), ddl_task_id_(0), execution_id_(0),
+    target_table_id_(0), max_batch_size_(0), is_offline_index_rebuild_(false) {}
   void reset()
   {
-    tenant_data_version_ = 0;
+    data_format_version_ = 0;
     snapshot_version_ = 0;
     schema_version_ = 0;
     ddl_task_id_ = 0;
     execution_id_ = 0;
     target_table_id_ = 0;
-    is_no_logging_ = false;
     max_batch_size_ = 0;
     is_offline_index_rebuild_ = false;
   }
-  bool is_valid() const { return ddl_task_id_ > 0 && execution_id_ >= 0 && tenant_data_version_ > 0 && snapshot_version_ >= 0 && target_table_id_ > 0 && schema_version_ > 0; }
-  TO_STRING_KV(K_(ddl_task_id), K_(execution_id), K_(tenant_data_version), K_(snapshot_version), K_(target_table_id), K_(schema_version), K_(is_no_logging), K_(max_batch_size), K_(is_offline_index_rebuild));
+  bool is_valid() const { return ddl_task_id_ > 0 && execution_id_ >= 0 && data_format_version_ > 0 && snapshot_version_ >= 0 && target_table_id_ > 0 && schema_version_ > 0; }
+  TO_STRING_KV(K_(ddl_task_id), K_(execution_id), K_(data_format_version), K_(snapshot_version), K_(target_table_id), K_(schema_version), K_(max_batch_size), K_(is_offline_index_rebuild));
 public:
   /* necessary param */
-  int64_t tenant_data_version_;
+  int64_t data_format_version_;
   int64_t snapshot_version_;
-  
+
   /* optional param only used for leader major merge */
   int64_t schema_version_;
   int64_t ddl_task_id_;
   int64_t execution_id_;
   int64_t target_table_id_;
-  bool is_no_logging_;
   int64_t max_batch_size_; // for batch rows when load data, from hint named load_batch_size
   bool is_offline_index_rebuild_;
 };
@@ -470,27 +467,26 @@ struct ObWriteMacroParam final
 {
 public:
   ObWriteMacroParam()
-    : tablet_id_(), tenant_data_version_(0), is_no_logging_(false),
-      schema_version_(0), slice_idx_(0), slice_count_(0), ddl_thread_count_(0), snapshot_version_(0), direct_load_type_(DIRECT_LOAD_INVALID),
+    : tablet_id_(), lob_meta_tablet_id_(), data_format_version_(0), schema_version_(0), slice_idx_(0), slice_count_(0),
+      ddl_thread_count_(0), snapshot_version_(0), direct_load_type_(DIRECT_LOAD_INVALID),
       task_id_(0), is_index_table_(false), ddl_table_schema_(), tablet_param_(), lob_meta_tablet_param_(),
       ddl_dag_(nullptr), tablet_context_(nullptr), max_batch_size_(0), start_sequence_(), row_offset_(0)
   {}
   ~ObWriteMacroParam() = default;
   bool is_valid() const
   {
-    return tablet_id_.is_valid() && tenant_data_version_ > 0 && schema_version_ > 0
-        && slice_idx_ >= 0 && snapshot_version_ > 0 && is_valid_direct_load(direct_load_type_)
+    return tablet_id_.is_valid() && data_format_version_ > 0 && schema_version_ > 0
+        && slice_idx_ >= 0 && snapshot_version_ > 0 && is_full_direct_load(direct_load_type_)
         && task_id_ > 0;
   }
   int64_t get_logic_parallel_count() const { return slice_count_ > 0 ? slice_count_ : ddl_thread_count_; }
-  TO_STRING_KV(K_(tablet_id), K_(lob_meta_tablet_id), K_(tenant_data_version), K_(is_no_logging),
+  TO_STRING_KV(K_(tablet_id), K_(lob_meta_tablet_id), K_(data_format_version),
       K_(schema_version), K_(slice_idx), K_(slice_count), K_(ddl_thread_count), K_(snapshot_version), K_(direct_load_type),
       K_(task_id), K_(is_index_table), K_(ddl_table_schema), K_(tablet_param), K_(lob_meta_tablet_param), KP_(tablet_context));
 public:
   ObTabletID tablet_id_;
   ObTabletID lob_meta_tablet_id_;
-  int64_t tenant_data_version_;
-  bool is_no_logging_;
+  int64_t data_format_version_;
   int64_t schema_version_;
   int64_t slice_idx_;
   int64_t slice_count_;

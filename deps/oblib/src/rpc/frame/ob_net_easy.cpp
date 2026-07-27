@@ -16,8 +16,7 @@
 
 #define USING_LOG_PREFIX RPC_FRAME
 
-#include "rpc/frame/ob_net_easy.h"
-#include "io/easy_io.h"   // easy_io symbols (formerly pulled via ob_net_keepalive.h)
+#include "io/easy_io.h"
 
 #include "lib/utility/utility.h"
 #include "lib/thread/ob_thread_name.h"
@@ -542,7 +541,5 @@ void update_easy_log_level()
  
 };
 };
-
-
 
 

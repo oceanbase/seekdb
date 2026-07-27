@@ -82,7 +82,7 @@ void ObSliceAlloc::destroy()
       dlink = nullptr;  // break
     }
   }
-  tmallocator_ = NULL;
+  owner_ = NULL;
   bsize_ = 0;
 }
 

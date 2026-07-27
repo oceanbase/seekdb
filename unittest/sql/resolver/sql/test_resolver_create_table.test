@@ -130,7 +130,7 @@ CREATE TABLE s013 (c1 int primary key, c2 varchar(50), c3 int,c4 int, key (c1), 
 create table s014 (a int primary key, b int, c int, key(b), key(b, c), key(c));
 ##测试table_option是否被index_option冲掉
 #index option should not specify compress method
-CREATE TABLE s015 (c1 int primary key, index idx(c1))compression='lz4_1.0';
+CREATE TABLE s015 (c1 int primary key, index idx(c1))compression='zstd_1.3.8';
 
 ##index
 ##without index_name
@@ -205,38 +205,28 @@ CREATE TABLE f008 (c1 int primary key, c2 varchar(50)) DEFAULT CHARSET 'utf8'
 CREATE TABLE g001 (c1 int primary key, c2 varchar(50))COMMENT = 'the table_name of tt1'
 CREATE TABLE g002 (c1 int primary key, c2 varchar(50))COMMENT 'the table_name of tt1'
 
-##COMPRESSION 'none（默认值'不压缩）、lz4_1.0、lzo_1.0、snappy_1.0、zlib_1.0
+##COMPRESSION 'none（默认值'不压缩）、zstd_1.3.8、lzo_1.0、zstd_1.3.8、zlib_1.0
 CREATE TABLE h001 (c1 int primary key, c2 varchar(50))COMPRESSION = 'none'
 CREATE TABLE h002 (c1 int primary key, c2 varchar(50))COMPRESSION 'none'
-CREATE TABLE h003 (c1 int primary key, c2 varchar(50))COMPRESSION 'lz4_1.0'
-CREATE TABLE h004 (c1 int primary key, c2 varchar(50))COMPRESSION 'LZ4_1.0'
+CREATE TABLE h003 (c1 int primary key, c2 varchar(50))COMPRESSION 'zstd_1.3.8'
+CREATE TABLE h004 (c1 int primary key, c2 varchar(50))COMPRESSION 'zstd_1.3.8'
 --error 4002
 CREATE TABLE h005 (c1 int primary key, c2 varchar(50))COMPRESSION 'abc'
 
 ##CONSISTENT_MODE ,指定表的默认一致性' static、frozen、weak、strong
 #CREATE TABLE t021 (c1 int primary key, c2 varchar(50))CONSISTENT_MODE = 'static'
 
-##EXPIRE_INFO
-#--error 4007
-#CREATE TABLE i001 (c1 int primary key, c2 varchar(50))EXPIRE_INFO = (c1<100)
-#--error 4007
-#CREATE TABLE i002 (c1 int primary key, c2 varchar(50))EXPIRE_INFO (c1<100)
-
 ##REPLICA_NUM
 CREATE TABLE j001 (c1 int primary key, c2 varchar(50))REPLICA_NUM = 3
 CREATE TABLE j002 (c1 int primary key, c2 varchar(50))REPLICA_NUM 3
 
-##TABLE_ID//如果指定的table_id小于1000'需要打开RootServer的配置项开关“ddl_system_table_switch”。
-CREATE TABLE k001 (c1 int primary key, c2 varchar(50))TABLE_ID = 4000
-CREATE TABLE k002 (c1 int primary key, c2 varchar(50))TABLE_ID 4000
+##default internal table identity
+CREATE TABLE k001 (c1 int primary key, c2 varchar(50))
+CREATE TABLE k002 (c1 int primary key, c2 varchar(50))
 
 ##BLOCK_SIZE
 CREATE TABLE l001 (c1 int primary key, c2 varchar(50))BLOCK_SIZE = 16384
 CREATE TABLE l002 (c1 int primary key, c2 varchar(50))BLOCK_SIZE 16384
-
-##USE_BLOOM_FILTER
-CREATE TABLE m001 (c1 int primary key, c2 varchar(50))USE_BLOOM_FILTER = false
-CREATE TABLE m002 (c1 int primary key, c2 varchar(50))USE_BLOOM_FILTER false
 
 ##progressive_merge_num
 CREATE TABLE n001 (c1 int primary key, c2 varchar(50))progressive_merge_num = 5
@@ -246,9 +236,8 @@ CREATE TABLE n002 (c1 int primary key, c2 varchar(50))progressive_merge_num 5
 CREATE TABLE o001 (c1 int primary key, c2 varchar(50))AUTO_INCREMENT = 1
 CREATE TABLE o002 (c1 int primary key, c2 varchar(50))AUTO_INCREMENT 1
 
-##TABLEGROUP
-CREATE TABLE p001 (c1 int primary key, c2 varchar(50))tablegroup = 'tablegroup_name'
-CREATE TABLE p002 (c1 int primary key, c2 varchar(50))tablegroup 'tablegroup_name'
+CREATE TABLE p001 (c1 int primary key, c2 varchar(50))
+CREATE TABLE p002 (c1 int primary key, c2 varchar(50))
 
 ##ZONE_LIST
 #CREATE TABLE q001 (c1 int primary key, c2 varchar(50))ZONE_LIST = ('a','b','c')
@@ -320,11 +309,6 @@ create view vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 
 #alias_name length
 select c1 as tttttttttttttttttttttttttttttttttttttttttttt from t1;
-
-#tablegroup name length
-create tablegroup tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt;
---error 5179
-create tablegroup  tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt1tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt1tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt1;
 
 #pk data length
 create table r017(c1 int,c2 varchar(4096) primary key);

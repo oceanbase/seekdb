@@ -20,11 +20,7 @@ select id, chunkserver, status as verbose from t_status;
 
 select id, chunkserver, grants.status as verbose from t_status grants;
 
---error 1064
-select use_bloom_filter() from dual;
-
 --error  1305
 select use_bloom() from dual;
 
 drop table t_status;
-

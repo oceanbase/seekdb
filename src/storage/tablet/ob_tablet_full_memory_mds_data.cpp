@@ -77,8 +77,7 @@ int ObTabletFullMemoryMdsData::init(common::ObArenaAllocator &allocator, const O
   } else if (OB_FAIL(read_auto_inc_seq(allocator, mds_data.auto_inc_seq_, auto_inc_seq_))) {
     LOG_WARN("failed to read auto inc seq", K(ret));
   } else {
-    medium_info_list_.extra_medium_info_.info_ = mds_data.extra_medium_info_.info_;
-    medium_info_list_.extra_medium_info_.last_medium_scn_ = mds_data.extra_medium_info_.last_medium_scn_;
+    medium_info_list_.extra_medium_info_ = mds_data.extra_medium_info_;
 
     is_inited_ = true;
   }

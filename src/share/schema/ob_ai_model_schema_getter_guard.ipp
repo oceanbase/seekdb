@@ -43,17 +43,14 @@ int ObSchemaGetterGuard::get_ai_model_schema(
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
-  } else if (!true
-              || ai_model_name.empty()) {
+  } else if (ai_model_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument",
              K(ai_model_name), KR(ret));
-  } else if (OB_FAIL(check_tenant_schema_guard())) {
-    LOG_WARN("fail to check tenant schema guard", KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
     LOG_WARN("fail to check lazy guard", KR(ret));
-  } else if (OB_FAIL(get_tenant_name_case_mode(mode))) {
-    LOG_WARN("fail to get_tenant_name_case_mode", K(ret));
+  } else if (OB_FAIL(get_runtime_name_case_mode(mode))) {
+    LOG_WARN("fail to get_runtime_name_case_mode", K(ret));
   } else if (OB_NAME_CASE_INVALID == mode) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid case mode", K(ret), K(mode));
@@ -74,13 +71,10 @@ int ObSchemaGetterGuard::get_ai_model_schema(
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
-  } else if (!true
-              || (OB_INVALID_ID == ai_model_id)) {
+  } else if (OB_INVALID_ID == ai_model_id) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument",
              K(ai_model_id), KR(ret));
-  } else if (OB_FAIL(check_tenant_schema_guard())) {
-    LOG_WARN("fail to check tenant schema guard", KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
     LOG_WARN("fail to check lazy guard", KR(ret));
   } else if (OB_FAIL(mgr->get_ai_model_schema( ai_model_id, ai_model_schema))){

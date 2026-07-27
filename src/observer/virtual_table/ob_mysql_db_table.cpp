@@ -56,7 +56,7 @@ int ObMySQLDBTable::inner_get_next_row(common::ObNewRow *&row)
       } else {
         ObArray<const ObDBPriv *> db_array;
         if (OB_FAIL(schema_guard_->get_db_priv_by_id(db_array))) {
-          SERVER_LOG(WARN, "Get user info with tenant id error", K(ret));
+          SERVER_LOG(WARN, "get database privilege info failed", K(ret));
         } else {
           ObString user_name;
           const ObUserInfo *user_info = NULL;
@@ -119,7 +119,6 @@ int ObMySQLDBTable::inner_get_next_row(common::ObNewRow *&row)
                   EXIST_PRIV_CASE(CREATE_ROUTINE);
                   EXIST_PRIV_CASE(ALTER_ROUTINE);
                   EXIST_PRIV_CASE(EXECUTE);
-                  EXIST_PRIV_CASE(EVENT);
                   EXIST_PRIV_CASE(TRIGGER);
 
 #undef EXIST_PRIV_CASE

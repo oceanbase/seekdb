@@ -654,12 +654,9 @@ int ObMutatorWriter::append_row_kv(
   uint64_t table_id = 0;
   ObStoreRowkey rowkey;
   const ObMemtableKey *mtk = &redo.key_;
-  uint64_t cluster_version = 0;
   bool is_with_head = true;
   if (OB_ISNULL(redo.callback_)) {
     is_with_head = false;
-  } else if (OB_FAIL(redo.callback_->get_cluster_version(cluster_version))) {
-    TRANS_LOG(WARN, "get cluster version faild.", K(ret));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(mtk)) {

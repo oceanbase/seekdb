@@ -129,10 +129,6 @@ bool ObShowProcesslist::FillScanner::operator()(sql::ObSQLSessionMgr::Key key, O
     } else {
       type_is_double = tmp_column_schema->get_meta_type().is_double();
     }
-    //If you are in system tenant, you can see all thread.
-    //Otherwise, you can show only the threads at the same Tenant with you.
-    //If you have the PROCESS privilege, you can show all threads at your Tenant.
-    //Otherwise, you can show only your own threads.
     if (sess_info->is_shadow()) {
       // do not show shadow session
     } else {
@@ -161,11 +157,6 @@ bool ObShowProcesslist::FillScanner::operator()(sql::ObSQLSessionMgr::Key key, O
               cur_row_->cells_[cell_idx].set_varchar(sess_info->get_user_name());
               cur_row_->cells_[cell_idx].set_collation_type(default_collation);
             }
-            break;
-          }
-          case TENANT: {
-            cur_row_->cells_[cell_idx].set_varchar(sess_info->get_tenant_name());
-            cur_row_->cells_[cell_idx].set_collation_type(default_collation);
             break;
           }
           case HOST: {
@@ -366,31 +357,6 @@ bool ObShowProcesslist::FillScanner::operator()(sql::ObSQLSessionMgr::Key key, O
           case RECORD_POLICY: {
             cur_row_->cells_[cell_idx].set_null();
           } break;
-          case VID: {
-            if (OB_INVALID_ID == sess_info->get_vid()) {
-              cur_row_->cells_[cell_idx].set_null();
-            } else {
-              cur_row_->cells_[cell_idx].set_int(sess_info->get_vid());
-            }
-            break;
-          }
-          case VIP: {
-            if (sess_info->get_vip().empty()) {
-              cur_row_->cells_[cell_idx].set_null();
-            } else {
-              cur_row_->cells_[cell_idx].set_varchar(sess_info->get_vip());
-              cur_row_->cells_[cell_idx].set_collation_type(default_collation);
-            }
-            break;
-          }
-          case VPORT: {
-            if (!sess_info->get_vport()) {
-              cur_row_->cells_[cell_idx].set_null();
-            } else {
-              cur_row_->cells_[cell_idx].set_int(sess_info->get_vport());
-            }
-            break;
-          }
           case IN_BYTES: {
             cur_row_->cells_[cell_idx].set_int(sess_info->get_in_bytes());
             break;

@@ -418,7 +418,8 @@ public:
       int64_t &table_id);
 
   static int64_t get_processing_task_cnt(ObVecIndexAsyncTaskOption &task_opt);
-  static bool check_can_do_work();
+  static bool check_runtime_ready();
+  static int get_table_ids(common::ObIArray<uint64_t> &table_id_array);
   
   static int fetch_new_task_id(int64_t &new_task_id);
   static int add_sys_task(ObVecIndexAsyncTaskCtx *task);
@@ -436,7 +437,7 @@ public:
   static int insert_new_task(ObVecIndexTaskCtxArray &task_ctx_array);
   static int construct_read_task_sql(const char *tname,
       const bool for_update /* select for update*/,
-      const bool is_read_tenant_async_task,
+      const bool is_read_global_task,
       const ObVecIndexFieldArray &filters,
       common::ObISQLClient &proxy,
       ObSqlString &sql);

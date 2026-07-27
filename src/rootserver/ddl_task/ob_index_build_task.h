@@ -38,17 +38,16 @@ public:
       const common::ObCurTraceId::TraceId &trace_id,
       const int64_t parallelism,
       const bool is_partitioned_local_index_task,
-      ObRootService *root_service,
       const bool is_retryable_ddl)
       : task_id_(task_id), data_table_id_(data_table_id), dest_table_id_(dest_table_id),
         schema_version_(schema_version), snapshot_version_(snapshot_version), execution_id_(execution_id),
         trace_id_(trace_id), parallelism_(parallelism), is_partitioned_local_index_task_(is_partitioned_local_index_task),
-        allocator_("IdxSSTBuildTask"), root_service_(root_service), is_retryable_ddl_(is_retryable_ddl)
+        allocator_("IdxSSTBuildTask"), is_retryable_ddl_(is_retryable_ddl)
   {
     set_retry_times(0);
   }
 
-  int send_build_replica_sql() const;
+  int send_local_build_sql() const;
   int set_nls_format(const ObString &nls_date_format,
                      const ObString &nls_timestamp_format,
                      const ObString &nls_timestamp_tz_format);
@@ -77,7 +76,6 @@ private:
   ObString nls_date_format_;
   ObString nls_timestamp_format_;
   ObString nls_timestamp_tz_format_;
-  ObRootService *root_service_;
   ObDDLTaskInfo addition_info_;
   bool is_retryable_ddl_;
 
@@ -100,7 +98,7 @@ public:
       const obcall::ObCreateIndexArg &create_index_arg,
       const share::ObDDLType task_type,
       const int64_t parent_task_id /* = 0 */,
-      const uint64_t tenant_data_version,
+      const uint64_t data_format_version,
       const int64_t task_status = share::ObDDLTaskStatus::PREPARE,
       const int64_t snapshot_version = 0,
       const bool is_retryable_ddl = true);
@@ -148,14 +146,14 @@ private:
       const share::schema::ObIndexStatus new_status,
       ObSchemaGetterGuard &schema_guard);
   int check_health();
-  int reap_old_replica_build_task(bool &need_exec_new_inner_sql);
-  int send_build_single_replica_request(const bool &is_partitioned_local_index_task,
+  int reap_old_local_build_task(bool &need_exec_new_inner_sql);
+  int send_local_build_request(const bool &is_partitioned_local_index_task,
                                         const int64_t &parallelism,
                                         const int64_t &task_execution_id,
                                         const ObIArray<ObTabletID> &index_partition_ids);
-  int wait_and_send_single_partition_replica_task(bool &state_finished);
-  int check_build_single_replica(bool &is_end);
-  int check_build_local_index_single_replica(bool &is_end);
+  int wait_and_send_local_partition_build_task(bool &state_finished);
+  int check_local_build(bool &is_end);
+  int check_local_index_build(bool &is_end);
   int check_need_verify_checksum(bool &need_verify);
   bool is_sstable_complete_task_submitted();
   bool is_create_partitioned_local_index();
@@ -168,7 +166,7 @@ private:
   using ObDDLTask::schema_version_;
   using ObDDLTask::snapshot_version_;
   uint64_t &index_table_id_;
-  ObRootService *root_service_;
+  ObLocalManagementService *local_management_service_;
   bool is_sstable_complete_task_submitted_;
   int64_t sstable_complete_request_time_;
   int64_t sstable_complete_ts_;

@@ -296,16 +296,6 @@ public:
   int self_freeze_task();
 
   /**
-   * @brief the start_tx_scn used for deciding whether existed tx data sstable can be reused or not(in rebuild
-   * situation)
-   *
-   * This scn can be simply interpreted as the end_scn of the oldest transaction in tx data sstables. For more details,
-   * see 
-   *
-   * @param[out] start_tx_scn
-   */
-
-  /**
    * @brief get min_start_scn of uncommitted tx recorded on TxTable
    *
    * @param[out] min_start_scn the minimum start_scn of all uncommitted tx
@@ -326,7 +316,7 @@ public:
   void recycle_tx_data_finish(const share::SCN recycle_scn);
 
   /**
-   * @brief The tx data table may receive freeze request but don't really do freeze because of MIN_FREEZE_TX_DATA_INTERVAL. So TenantFreezer will check if there are some freeze requests which are not executed and retry freeze after a while.
+   * @brief A tx-data table may defer a freeze because of MIN_FREEZE_TX_DATA_INTERVAL. The runtime freezer retries deferred requests later.
    * 
    * @return true do freeze again
    * @return false do not need freeze

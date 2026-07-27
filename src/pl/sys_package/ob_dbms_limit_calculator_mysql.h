@@ -35,25 +35,11 @@ public:
       sql::ObExecContext &ctx,
       sql::ParamStore &params,
       common::ObObj &result);
-  static int phy_res_calculate_by_unit(
-      sql::ObExecContext &ctx,
-      sql::ParamStore &params,
-      common::ObObj &result);
-  static int phy_res_calculate_by_standby_tenant(
-      sql::ObExecContext &ctx,
-      sql::ParamStore &params,
-      common::ObObj &result);
 private:
   static int parse_dict_like_args_(
       const char* ptr,
       share::ObUserResourceCalculateArg &arg);
   static int get_json_result_(
-      const ObMinPhyResourceResult &res,
-      char *buf,
-      const int64_t buf_len,
-      int64_t &pos);
-  static int get_json_result_(
-      const ObAddr &addr,
       const ObMinPhyResourceResult &res,
       char *buf,
       const int64_t buf_len,

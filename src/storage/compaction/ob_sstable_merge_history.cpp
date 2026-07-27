@@ -125,7 +125,6 @@ ObMergeStaticInfo::ObMergeStaticInfo()
     participant_table_info_(),
     mds_filter_info_str_("\0"),
     merge_level_(MERGE_LEVEL_MAX),
-    exec_mode_(ObExecMode::EXEC_MODE_MAX),
     merge_reason_(ObAdaptiveMergePolicy::NONE),
     is_full_merge_(false),
     is_fake_(false)
@@ -135,7 +134,7 @@ bool ObMergeStaticInfo::is_valid() const
 {
   return ((tablet_id_.is_valid() && is_valid_merge_type(merge_type_)) ||
           BATCH_EXEC == merge_type_) &&
-         compaction_scn_ > 0 && is_valid_exec_mode(exec_mode_);
+         compaction_scn_ > 0;
 }
 
 void ObMergeStaticInfo::reset()
@@ -149,7 +148,6 @@ void ObMergeStaticInfo::reset()
   kept_snapshot_info_.reset();
   participant_table_info_.reset();
   merge_level_ = MERGE_LEVEL_MAX;
-  exec_mode_ = ObExecMode::EXEC_MODE_MAX;
   merge_reason_ = ObAdaptiveMergePolicy::NONE;
   is_full_merge_ = false;
   MEMSET(mds_filter_info_str_, '\0', sizeof(mds_filter_info_str_));
@@ -166,7 +164,6 @@ void ObMergeStaticInfo::shallow_copy(const ObMergeStaticInfo &other)
   kept_snapshot_info_ = other.kept_snapshot_info_;
   participant_table_info_ = other.participant_table_info_;
   merge_level_ = other.merge_level_;
-  exec_mode_ = other.exec_mode_;
   merge_reason_ = other.merge_reason_;
   is_full_merge_ = other.is_full_merge_;
   MEMSET(mds_filter_info_str_, '\0', sizeof(mds_filter_info_str_));

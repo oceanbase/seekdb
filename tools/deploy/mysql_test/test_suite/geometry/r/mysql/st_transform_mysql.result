@@ -249,7 +249,7 @@ ST_GeomFromText('POINT(16 48)', 4236, 'axis-order=long-lat'),
 '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs ',
 '+proj=utm +zone=33 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ')) as geometry;
 10	geometry
-10	POINT(574595.1124860339 5316784.009235403)
+10	POINT(574595.11248603 5316784.0092354)
 test #11: Transform from_proj to_srid
 SELECT 11, ST_AsText(_ST_Transform(
 ST_GeomFromText('POINT(16 48)', 0, 'axis-order=long-lat'),
@@ -268,23 +268,23 @@ ERROR HY000: Unknown exception thrown in function.
 test #1: a simple projection
 SELECT 1,ST_AsText(_ST_Transform(ST_GeomFromText('POINT(16 48)', 4326, 'axis-order=long-lat'), 3065));
 1	ST_AsText(_ST_Transform(ST_GeomFromText('POINT(16 48)', 4326, 'axis-order=long-lat'), 3065))
-1	POINT(574595.1124860339 5316784.009235403)
+1	POINT(574595.11248603 5316784.0092354)
 test #4: LINESTRING projection, 2 points
 SELECT 4,ST_AsText(_ST_Transform(ST_GeomFromText('LINESTRING(16 48, 16 49)', 4326, 'axis-order=long-lat'), 3065)) as geometry;
 4	geometry
-4	LINESTRING(574595.1124860339 5316784.009235403,573142.0122827202 5427937.523464922)
+4	LINESTRING(574595.11248603 5316784.0092354,573142.01228272 5427937.52346492)
 SELECT 'M1', ST_AsText(_ST_Transform(ST_GeomFromText('POINT(-20 -20)', 4326, 'axis-order=long-lat'), 3065)) as geometry;
 M1	geometry
 M1	POINT(-3345527.4198776903 -2652698.674177202)
 SELECT 'M2', ST_AsText(_ST_Transform(ST_GeomFromText('POINT(-20 -21.5)', 4326, 'axis-order=long-lat'), 3065)) as geometry;
 M2	geometry
-M2	POINT(-3298015.597990941 -2843775.4055208303)
+M2	POINT(-3298015.59799094 -2843775.40552083)
 SELECT 'M3', ST_AsText(_ST_Transform(ST_GeomFromText('POINT(-30 -21.5)', 4326, 'axis-order=long-lat'), 3065)) as geometry;
 M3	geometry
 M3	POINT(-4535797.865108145 -3228356.4454949675)
 SELECT 'M4', ST_AsText(_ST_Transform(ST_GeomFromText('POINT(-72.345 41.3)', 4326, 'axis-order=long-lat'), 3065)) as geometry;
 M4	geometry
-M4	POINT(-5713160.571357482 9662432.583766244)
+M4	POINT(-5713160.57135748 9662432.58376624)
 SELECT 'M5', ST_AsText(_ST_Transform(ST_GeomFromText('POINT(71.999 -42.5)', 4326, 'axis-order=long-lat'), 3065)) as geometry;
 M5	geometry
 M5	POINT(5111719.904548044 -6576329.479659087)

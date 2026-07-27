@@ -197,7 +197,6 @@ int TableItem::deep_copy(ObIRawExprCopier &expr_copier,
   ddl_schema_version_ = other.ddl_schema_version_;
   ddl_table_id_ = other.ddl_table_id_;
   ref_query_ = other.ref_query_;
-  catalog_name_ = other.catalog_name_;
   SampleInfo *buf = NULL;
   if (is_json_table() 
       && OB_FAIL(deep_copy_json_table_def(*other.json_table_def_, expr_copier, allocator))) {
@@ -343,7 +342,6 @@ ObDMLStmt::ObDMLStmt(stmt::StmtType type)
       has_top_limit_(false),
       is_contains_assignment_(false),
       affected_last_insert_id_(false),
-      has_part_key_sequence_(false),
       table_items_(),
       column_items_(),
       condition_exprs_(),
@@ -441,10 +439,6 @@ int ObDMLStmt::assign(const ObDMLStmt &other)
     LOG_WARN("assgin pseudo column exprs fail", K(ret));
   } else if (OB_FAIL(autoinc_params_.assign(other.autoinc_params_))) {
     LOG_WARN("assign autoinc params fail", K(ret));
-  } else if (OB_FAIL(nextval_sequence_ids_.assign(other.nextval_sequence_ids_))) {
-    LOG_WARN("failed to assign sequence ids", K(ret));
-  } else if (OB_FAIL(currval_sequence_ids_.assign(other.currval_sequence_ids_))) {
-    LOG_WARN("failed to assign sequence ids", K(ret));
   } else if (OB_FAIL(user_var_exprs_.assign(other.user_var_exprs_))) {
     LOG_WARN("assign user var exprs fail", K(ret));
   } else if (OB_FAIL(check_constraint_items_.assign(other.check_constraint_items_))) {
@@ -463,7 +457,6 @@ int ObDMLStmt::assign(const ObDMLStmt &other)
     has_top_limit_ = other.has_top_limit_;
     is_contains_assignment_ = other.is_contains_assignment_;
     affected_last_insert_id_ = other.affected_last_insert_id_;
-    has_part_key_sequence_ = other.has_part_key_sequence_;
     has_vec_approx_ = other.has_vec_approx_;
   }
   return ret;
@@ -616,10 +609,6 @@ int ObDMLStmt::deep_copy_stmt_struct(ObIAllocator &allocator,
     LOG_WARN("assign stmt hint failed", K(ret));
   } else if (OB_FAIL(autoinc_params_.assign(other.autoinc_params_))) {
     LOG_WARN("assign autoinc params failed", K(ret));
-  } else if (OB_FAIL(nextval_sequence_ids_.assign(other.nextval_sequence_ids_))) {
-    LOG_WARN("failed to assign sequence ids", K(ret));
-  } else if (OB_FAIL(currval_sequence_ids_.assign(other.currval_sequence_ids_))) {
-    LOG_WARN("failed to assign sequence ids", K(ret));
   } else if (OB_FAIL(vector_index_query_param_.assign(other.vector_index_query_param_))) {
     LOG_WARN("faield to assign vector index query param", K(ret));
   } else {
@@ -627,7 +616,6 @@ int ObDMLStmt::deep_copy_stmt_struct(ObIAllocator &allocator,
     has_top_limit_ = other.has_top_limit_;
     is_contains_assignment_ = other.is_contains_assignment_;
     affected_last_insert_id_ = other.affected_last_insert_id_;
-    has_part_key_sequence_ = other.has_part_key_sequence_;
     has_fetch_ = other.has_fetch_;
     is_fetch_with_ties_ = other.is_fetch_with_ties_;
     has_vec_approx_ = other.has_vec_approx_;
@@ -1296,7 +1284,7 @@ int ObDMLStmt::update_table_item_id(const ObDMLStmt &other,
       } else if (OB_FAIL(get_qb_name(new_item.qb_name_))) {
         LOG_WARN("fail to get qb_name", K(ret), K(get_stmt_id()));
       } else if (OB_FAIL(adjust_duplicated_table_name(*allocator, new_item, adjusted))) {
-        LOG_WARN("fail to update dup table name", K(ret), K(new_item));
+        LOG_WARN("fail to disambiguate repeated table name", K(ret), K(new_item));
       } else if (OB_FAIL(set_table_bit_index(new_table_id))) {
         LOG_WARN("failed to set table bit index", K(ret));
       } else if (&new_item == &old_item) {
@@ -1426,7 +1414,7 @@ int ObDMLStmt::adjust_duplicated_table_names(ObIAllocator &allocator, bool &adju
     } else if (OB_FAIL(adjust_duplicated_table_name(allocator,
                                                     *table_item,
                                                     is_adjusted))) {
-      LOG_WARN("fail to update dup table name", K(ret), KPC(table_item));
+      LOG_WARN("fail to disambiguate repeated table name", K(ret), KPC(table_item));
     } else {
       adjusted |= is_adjusted;
     }
@@ -2128,7 +2116,6 @@ int ObDMLStmt::set_sharable_expr_reference(ObRawExpr &expr, ExplicitedRefType re
   if (OB_SUCC(ret) &&
       (expr.has_flag(CNT_COLUMN) || expr.has_flag(CNT_AGG) ||
        expr.has_flag(CNT_WINDOW_FUNC) || expr.has_flag(CNT_SUB_QUERY) ||
-       expr.has_flag(CNT_SEQ_EXPR) ||
        expr.has_flag(CNT_PSEUDO_COLUMN) || expr.has_flag(CNT_ONETIME) ||
        expr.has_flag(CNT_DYNAMIC_PARAM) || expr.has_flag(CNT_MATCH_EXPR))) {
     ref_type = expr.is_match_against_expr() ? ExplicitedRefType::REF_BY_MATCH_EXPR : ref_type;
@@ -3696,8 +3683,7 @@ int ObDMLStmt::check_relation_exprs_deterministic(bool &is_deterministic) const
   int ret = OB_SUCCESS;
   ObSEArray<ObRawExpr*, 4> rel_exprs;
   is_deterministic = true;
-  if (is_contains_assignment()
-      || has_sequence()) {
+  if (is_contains_assignment()) {
     is_deterministic = false;
   } else if (OB_FAIL(get_relation_exprs(rel_exprs))) {
     LOG_WARN("failed to get relation exprs", K(ret));
@@ -4167,48 +4153,6 @@ bool ObDMLStmt::has_ora_rowscn() const
           T_ORA_ROWSCN == pseudo_column_like_exprs_.at(i)->get_expr_type();
   }
   return has;
-}
-
-int ObDMLStmt::get_sequence_expr(ObRawExpr *&expr,
-                                 const ObString seq_name, // sequence object name
-                                 const ObString seq_action, // NEXTVAL or CURRVAL
-                                 const uint64_t seq_id) const
-{
-  int ret = OB_SUCCESS;
-  expr = NULL;
-  ObRawExpr *cur_expr = NULL;
-  bool find = false;
-  for (int64_t i = 0; OB_SUCC(ret) && !find && i < pseudo_column_like_exprs_.count(); ++i) {
-    if (OB_ISNULL(cur_expr = pseudo_column_like_exprs_.at(i))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null expr", K(ret));
-    } else if (T_FUN_SYS_SEQ_NEXTVAL == cur_expr->get_expr_type()) {
-      ObSequenceRawExpr *seq_expr = static_cast<ObSequenceRawExpr *>(cur_expr);
-      if (seq_expr->get_name() == seq_name && seq_expr->get_action() == seq_action &&
-          seq_expr->get_sequence_id() == seq_id) {
-        expr = cur_expr;
-        find = true;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObDMLStmt::get_sequence_exprs(ObIArray<ObRawExpr *> &exprs) const
-{
-  int ret = OB_SUCCESS;
-  ObRawExpr *cur_expr = NULL;
-  for (int64_t i = 0; OB_SUCC(ret) && i < pseudo_column_like_exprs_.count(); ++i) {
-    if (OB_ISNULL(cur_expr = pseudo_column_like_exprs_.at(i))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null expr", K(ret));
-    } else if (T_FUN_SYS_SEQ_NEXTVAL == cur_expr->get_expr_type()) {
-      if (OB_FAIL(exprs.push_back(cur_expr))) {
-        LOG_WARN("fail push expr", K(ret), K(i));
-      }
-    }
-  }
-  return ret;
 }
 
 int ObDMLStmt::find_var_assign_in_query_ctx(bool &is_found) const

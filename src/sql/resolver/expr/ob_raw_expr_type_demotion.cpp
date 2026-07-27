@@ -196,7 +196,7 @@ int ObRawExprTypeDemotion::init_query_ctx_flags(bool &disabled)
     // type demotion flag has been initialized and can be accessed directly.
   } else {
     query_ctx_->type_demotion_flag_ = 0;
-    // check tenant configure.
+    // Check runtime configuration.
     
     if (OB_LIKELY(true)) {
       query_ctx_->enable_constant_type_demotion_ = GCONF._enable_constant_type_demotion;

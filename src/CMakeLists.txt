@@ -7,7 +7,6 @@ target_include_directories(
   ob_base_without_pass INTERFACE
   ${CMAKE_SOURCE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}
-  ${CMAKE_CURRENT_SOURCE_DIR}/plugin/include
   ${CMAKE_CURRENT_SOURCE_DIR}/objit/include)
 
 target_compile_features(ob_base_without_pass INTERFACE cxx_std_11)
@@ -41,5 +40,4 @@ add_subdirectory(rootserver)
 add_subdirectory(logservice)
 add_subdirectory(storage)
 add_subdirectory(observer)
-add_subdirectory(plugin)
 add_subdirectory(include)

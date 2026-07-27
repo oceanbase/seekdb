@@ -1014,11 +1014,6 @@ public:
                                 ObIArray<uint64_t> &col_ids,
                                 uint64_t &table_id);
 
-  static int classify_quals_deprecated(const OptSelectivityCtx &ctx,
-                            const ObIArray<ObRawExpr*> &quals,
-                            ObIArray<ObExprSelPair> &all_predicate_sel,
-                            ObIArray<OptSelInfo> &column_sel_infos);
-
   static int classify_quals(const OptTableMetas &table_metas,
                             const OptSelectivityCtx &ctx,
                             const ObIArray<ObRawExpr*> &quals,

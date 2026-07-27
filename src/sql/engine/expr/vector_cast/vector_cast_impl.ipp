@@ -162,7 +162,7 @@ struct VectorCastFuncInit
   {
     constexpr VecValueTypeClass in_tc = static_cast<VecValueTypeClass>(N);
     constexpr VecValueTypeClass out_tc = static_cast<VecValueTypeClass>(M);
-    // if eval_vector is not defined, func ptr must set to `expr_default_eval_vector_func` for upgrading compatiblity.
+    // Undefined specializations use the generic evaluator.
     VECTOR_CAST_FUNCS[N][M][IMPLICIT_CAST_FLAG] =
       VectorCaster<in_tc, out_tc, IMPLICIT_CAST_FLAG>::defined_ ?
         VectorCaster<in_tc, out_tc, IMPLICIT_CAST_FLAG>::eval_vector :

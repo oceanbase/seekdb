@@ -88,11 +88,11 @@ int ObMySQLTransaction::start(
 }
 
 int ObMySQLTransaction::start(ObISQLClient *proxy,
-                              const int64_t &tenant_refreshed_schema_version,
+                              const int64_t &runtime_refreshed_schema_version,
                               bool with_snapshot)
 {
   int ret = OB_NOT_SUPPORTED;
-  UNUSEDx(proxy, tenant_refreshed_schema_version, with_snapshot);
+  UNUSEDx(proxy, runtime_refreshed_schema_version, with_snapshot);
   return ret;
 }
 

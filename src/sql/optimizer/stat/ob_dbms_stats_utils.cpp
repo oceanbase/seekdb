@@ -23,7 +23,7 @@
 #include "share/ob_sql_client_decorator.h"
 #include "sql/optimizer/stat/ob_dbms_stats_executor.h"
 #include "sql/optimizer/ob_optimizer_util.h"
-#include "observer/omt/ob_tenant.h"
+#include "observer/omt/ob_server_runtime.h"
 
 
 namespace oceanbase
@@ -191,14 +191,14 @@ int ObDbmsStatsUtils::cast_number_to_double(const number::ObNumber &src_val, dou
   return ret;
 }
 
-// gather statistic related inner table should not read or write restore or standby tenant
+// statistics inner tables are read-only during restore or on a standby database
 int ObDbmsStatsUtils::check_table_read_write_valid(bool &is_valid)
 {
   int ret = OB_SUCCESS;
   is_valid = true;
   bool is_primary = true;
-  if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(is_primary))) {
-    LOG_WARN("fail to execute mtl_check_if_tenant_role_is_primary", KR(ret));
+  if (OB_FAIL(ObShareUtil::check_if_server_role_is_primary(is_primary))) {
+    LOG_WARN("fail to execute check_if_server_role_is_primary", KR(ret));
   } else if (OB_UNLIKELY(!is_primary)) {
     is_valid = false;
   }
@@ -240,7 +240,7 @@ int ObDbmsStatsUtils::check_is_sys_table(share::schema::ObSchemaGetterGuard &sch
                                          bool &is_valid)
 {
   bool ret = OB_SUCCESS;
-  const ObSimpleTenantSchema *tenant = NULL;
+  const ObSimpleServerRuntimeSchema *runtime_schema = NULL;
   is_valid = false;
   if (!is_sys_table(table_id) ||
       ObSysTableChecker::is_sys_table_index_tid(table_id) ||
@@ -259,10 +259,10 @@ int ObDbmsStatsUtils::check_is_sys_table(share::schema::ObSchemaGetterGuard &sch
       table_id == share::OB_ALL_SYS_VARIABLE_HISTORY_TID ||//circular dependency
       table_id == share::OB_ALL_MONITOR_MODIFIED_TID) {
     is_valid = false;
-  } else if (OB_FAIL(schema_guard.get_tenant_info(tenant))) {
-    LOG_WARN("fail to get tenant info", KR(ret));
-  //now sys table stat only use and gather in normal tenant
-  } else if (OB_ISNULL(tenant) || !tenant->is_normal()) {
+  } else if (OB_FAIL(schema_guard.get_server_runtime_info(runtime_schema))) {
+    LOG_WARN("fail to get runtime schema", KR(ret));
+  //system table statistics are gathered only while the runtime is normal
+  } else if (OB_ISNULL(runtime_schema) || !runtime_schema->is_normal()) {
     is_valid = false;
   } else {
     is_valid = true;
@@ -277,14 +277,10 @@ bool ObDbmsStatsUtils::is_no_stat_virtual_table(const int64_t table_id)
          table_id == share::OB_PROC_TID ||
          table_id == share::OB_ALL_VIRTUAL_ALL_TABLE_TID ||
          table_id == share::OB_ALL_VIRTUAL_TABLE_COLUMN_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_CATALOG_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SHOW_CATALOG_DATABASES_TID ||
          table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_DATABASE_TID ||
          table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_TABLE_TID ||
-         table_id == share::OB_ALL_VIRTUAL_CURRENT_TENANT_TID ||
          table_id == share::OB_ALL_VIRTUAL_SHOW_TABLES_TID ||
          table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_PROCEDURE_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_TABLEGROUP_TID ||
          table_id == share::OB_ALL_VIRTUAL_OBJECT_DEFINITION_TID ||
          table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_TRIGGER_TID ||
          table_id == share::OB_ALL_VIRTUAL_INFORMATION_COLUMNS_TID ||
@@ -292,11 +288,11 @@ bool ObDbmsStatsUtils::is_no_stat_virtual_table(const int64_t table_id)
          table_id == share::OB_ALL_VIRTUAL_TX_DATA_TID ||
          table_id == share::OB_ALL_VIRTUAL_TRANS_LOCK_STAT_TID ||
          table_id == share::OB_ALL_VIRTUAL_TRANS_SCHEDULER_TID ||
-         table_id == share::OB_ALL_VIRTUAL_MDS_NODE_STAT_TID ||
+         table_id == share::OB_ALL_VIRTUAL_MDS_NODE_STAT_TID
 #if defined(__APPLE__) || defined(__ANDROID__)
-         table_id == share::OB_ALL_VIRTUAL_THREAD_TID ||
+         || table_id == share::OB_ALL_VIRTUAL_THREAD_TID
 #endif
-         table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_LOCATION_TID;
+         ;
 }
 
 bool ObDbmsStatsUtils::is_virtual_index_table(const int64_t table_id)
@@ -1965,15 +1961,15 @@ int ObDbmsStatsUtils::get_max_work_area_size(int64_t &max_wa_memory_size)
 {
   int ret = OB_SUCCESS;
   max_wa_memory_size = 0;
-  const ObTenantBase *tenant = NULL;
-  if (OB_ISNULL(tenant = MTL_CTX())) {
+  const ObServerRuntimeState *runtime = NULL;
+  if (OB_ISNULL(runtime = share::server_runtime())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else {
-    int64_t worker_cnt = std::max(static_cast<const omt::ObTenant *>(tenant)->min_worker_cnt(), static_cast<int64_t>(4L));
-    max_wa_memory_size = lib::get_tenant_memory_limit() / worker_cnt;
+    int64_t worker_cnt = std::max(static_cast<const omt::ObServerRuntime *>(runtime)->min_worker_cnt(), static_cast<int64_t>(4L));
+    max_wa_memory_size = lib::get_allocator_memory_limit() / worker_cnt;
     if (lib::ObMallocAllocator::get_instance() != NULL) {
-      ObTenantCtxAllocatorGuard ta = lib::ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(common::ObCtxIds::WORK_AREA);
+      ObCtxAllocatorGuard ta = lib::ObMallocAllocator::get_instance()->get_ctx_allocator(common::ObCtxIds::WORK_AREA);
       max_wa_memory_size = ta->get_limit() / worker_cnt;
     }
     max_wa_memory_size = std::max(MIN_GATHER_WORK_ARANA_SIZE, max_wa_memory_size);
@@ -1990,8 +1986,6 @@ int ObDbmsStatsUtils::get_table_index_infos(share::schema::ObSchemaGetterGuard *
   if (OB_ISNULL(schema_guard)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(schema_guard));
-  } else if (share::is_real_table_mapping_virtual_table(table_id)) {
-    // do not gather stats for mapped inner table indexes
   } else if (OB_FAIL(schema_guard->get_can_read_index_array(table_id,
                                                             index_tid_arr,
                                                             index_count,

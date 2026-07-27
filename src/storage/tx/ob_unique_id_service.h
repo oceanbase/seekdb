@@ -31,7 +31,7 @@ class ObUniqueIDService
 public:
   ObUniqueIDService() {}
   ~ObUniqueIDService() {}
-  static int mtl_init(ObUniqueIDService *&unique_id_service)
+  static int server_module_init(ObUniqueIDService *&unique_id_service)
   {
     return OB_SUCCESS;
   }

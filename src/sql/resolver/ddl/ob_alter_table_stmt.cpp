@@ -27,8 +27,8 @@ namespace sql
 {
 
 ObAlterTableStmt::ObAlterTableStmt(common::ObIAllocator *name_pool)
-    : ObTableStmt(name_pool, stmt::T_ALTER_TABLE), is_comment_table_(false), 
-      is_alter_system_(false), fts_arg_allocator_(nullptr), is_alter_triggers_(false), 
+    : ObTableStmt(name_pool, stmt::T_ALTER_TABLE), is_comment_table_(false),
+      is_alter_system_(false), fts_arg_allocator_(nullptr), is_alter_triggers_(false),
       interval_expr_(NULL), transition_expr_(NULL), alter_table_action_count_(0)
 {
 }
@@ -140,6 +140,8 @@ int ObAlterTableStmt::set_exchange_partition_arg(const obcall::ObExchangePartiti
 
 void ObAlterTableStmt::set_lock_priority()
 {
+  int ret = OB_SUCCESS;
+
   if (GCONF.enable_lock_priority) {
     alter_table_arg_.lock_priority_ = ObTableLockPriority::HIGH1;
   }

@@ -146,7 +146,7 @@ private:
   common::TCRWLock lock_;
   obcall::ObAlterTableArg alter_table_arg_;
   common::ObArenaAllocator allocator_;
-  ObRootService *root_service_;
+  ObLocalManagementService *local_management_service_;
   int64_t check_job_ret_code_;
   int64_t check_replica_request_time_;
   bool is_table_hidden_;

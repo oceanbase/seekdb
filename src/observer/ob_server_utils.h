@@ -105,11 +105,11 @@ private:
                               const int64_t default_disk_percentage,
                               int64_t& disk_size,
                               int64_t& disk_percentage);
-  static int cal_all_part_disk_default_percentage(int64_t &data_disk_total_size,
-                                                  int64_t& data_disk_percentage,
-                                                  int64_t &log_disk_total_size,
-                                                  int64_t& log_disk_percentage,
-                                                  bool &shared_mode);
+  static int calculate_disk_layout_defaults(int64_t &data_disk_total_size,
+                                            int64_t &data_disk_percentage,
+                                            int64_t &log_disk_total_size,
+                                            int64_t &log_disk_percentage,
+                                            bool &same_filesystem);
   DISALLOW_COPY_AND_ASSIGN(ObServerUtils);
 };
 } // namespace observer

@@ -142,12 +142,6 @@ private:
   int is_inited_;
 };
 
-class ObResetThreadTenantIdGuard {
-public:
-  DISABLE_COPY_ASSIGN(ObResetThreadTenantIdGuard);
-  ObResetThreadTenantIdGuard() = default;
-  ~ObResetThreadTenantIdGuard() = default;
-};
 }
 }
 

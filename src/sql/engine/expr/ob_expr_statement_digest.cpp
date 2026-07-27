@@ -20,6 +20,7 @@
 #include "sql/plan_cache/ob_sql_parameterization.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/resolver/ob_resolver_utils.h"
+#include "share/ob_encryption_util.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -74,7 +75,7 @@ int calc_digest_text_inner(const ObString &query,
                                                                 charsets4parser))) {
       LOG_WARN("fail to parameterize syntax tree", K(query), K(ret));
     } else {
-      digest_str = pc_ctx.sql_ctx_.bl_key_.format_sql_;
+      digest_str = pc_ctx.sql_ctx_.plan_key_.format_sql_;
     }
   } else {
     digest_str = query;

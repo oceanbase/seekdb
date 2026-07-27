@@ -117,7 +117,7 @@ int ObTabletDeleteMdsHelper::delete_tablets(
 {
   MDS_TG(1_s);
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
   bool exist = false;
   ObTabletHandle tablet_handle;
   ObTabletMapKey key;

@@ -72,16 +72,13 @@ public:
         : (share::schema::OB_PRIV_DB_LEVEL == grant_level_ ? static_cast<obcall::ObDDLArg &>(db_arg_)
         : (share::schema::OB_PRIV_TABLE_LEVEL == grant_level_ ?  static_cast<obcall::ObDDLArg &>(table_arg_)
         : (share::schema::OB_PRIV_ROUTINE_LEVEL == grant_level_ ?  static_cast<obcall::ObDDLArg &>(routine_arg_)
-        : (share::schema::OB_PRIV_CATALOG_LEVEL == grant_level_ ?  static_cast<obcall::ObDDLArg &>(catalog_arg_)
         : (share::schema::OB_PRIV_OBJECT_LEVEL == grant_level_ ?  static_cast<obcall::ObDDLArg &>(obj_mysql_arg_)
-        : static_cast<obcall::ObDDLArg &>(syspriv_arg_)))))); 
+        : static_cast<obcall::ObDDLArg &>(syspriv_arg_)))));
   }
   int add_column_privs(const ObString& column_name,const ObPrivSet priv_set) { return column_names_priv_.push_back(std::make_pair(column_name, priv_set)); }
   const ObIArray<std::pair<ObString, ObPrivType>> &get_column_privs() const { return column_names_priv_; }
   void set_table_schema_version(int64_t schema_version) { table_schema_version_ = schema_version; }
   int64_t get_table_schema_version() { return table_schema_version_; }
-  void set_catalog_name(const common::ObString &catalog_name) { catalog_arg_.catalog_ = catalog_name; }
-  const common::ObString& get_catalog_name() const { return catalog_arg_.catalog_; }
 
   bool is_grant_stmt() const { return false; }
   DECLARE_VIRTUAL_TO_STRING;
@@ -111,7 +108,6 @@ private:
   bool has_warning_;
   ObSEArray<std::pair<ObString, ObPrivType>, 4, common::ModulePageAllocator, true> column_names_priv_;
   int64_t table_schema_version_;
-  obcall::ObRevokeCatalogArg catalog_arg_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObRevokeStmt);
 };

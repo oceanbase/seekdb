@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_plugin_vector_index_util.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"
+#include "storage/tx_storage/ob_memstore_freezer.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/das/iter/ob_das_iter.h"
 
@@ -613,7 +613,7 @@ int ObPluginVectorIndexHelper::get_vector_memory_limit_size(int64_t& memory_limi
   bool ret = OB_SUCCESS;
   {
     int64_t total_memory = lib::get_hard_memory_limit();
-    int64_t vector_limit = ObTenantVectorAllocator::get_vector_mem_limit_percentage(&GCONF);
+    int64_t vector_limit = ObVectorAllocator::get_vector_mem_limit_percentage(&GCONF);
     memory_limit = total_memory * vector_limit / 100;
     LOG_TRACE("vector index memory limit debug", K(total_memory), K(vector_limit), K(memory_limit));
   }

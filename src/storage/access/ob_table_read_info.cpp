@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_table_read_info.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
+#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 #include "share/truncate_info/ob_truncate_info_util.h"
 namespace oceanbase
 {
@@ -224,10 +224,7 @@ void ObReadInfoStruct::reset()
 {
   is_inited_ = false;
   allocator_ = nullptr;
-  schema_column_count_ = 0;
-  compat_version_ = READ_INFO_VERSION_LATEST;
-  is_delete_insert_table_ = false;
-  reserved_ = 0;
+  info_ = 0;
   schema_rowkey_cnt_ = 0;
   rowkey_cnt_ = 0;
   cols_desc_.reset();
@@ -238,12 +235,10 @@ void ObReadInfoStruct::reset()
 
 void ObReadInfoStruct::init_basic_info(const int64_t schema_column_count,
                      const int64_t schema_rowkey_cnt,
-                     const bool is_delete_insert_table,
                      const bool is_global_index_table) {
   schema_column_count_ = schema_column_count;
   schema_rowkey_cnt_ = schema_rowkey_cnt;
   rowkey_cnt_ = schema_rowkey_cnt + storage::ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
-  is_delete_insert_table_ = is_delete_insert_table;
   is_global_index_table_ = is_global_index_table;
 }
 
@@ -253,8 +248,7 @@ int64_t ObReadInfoStruct::to_string(char *buf, const int64_t buf_len) const
   if (OB_ISNULL(buf) || buf_len <= 0) {
   } else {
     J_OBJ_START();
-    J_KV(K_(is_inited), K_(compat_version),
-        K_(is_delete_insert_table),
+    J_KV(K_(is_inited),
         K_(schema_column_count),
         K_(schema_rowkey_cnt),
         K_(rowkey_cnt),
@@ -265,13 +259,6 @@ int64_t ObReadInfoStruct::to_string(char *buf, const int64_t buf_len) const
     J_OBJ_END();
   }
   return pos;
-}
-
-int ObReadInfoStruct::init_compat_version()
-{
-  int ret = OB_SUCCESS;
-  compat_version_ = READ_INFO_VERSION_V5;
-  return ret;
 }
 
 /*
@@ -331,17 +318,14 @@ int ObTableReadInfo::init(
     const common::ObIArray<int32_t> *storage_cols_index,
     const common::ObIArray<ObColumnParam *> *cols_param,
     const common::ObIArray<ObColExtend> *cols_extend,
-    const bool need_truncate_filter,
-    const bool is_delete_insert_table)
+    const bool need_truncate_filter)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_pre_check(schema_column_count, schema_rowkey_cnt, cols_desc,
                              storage_cols_index, cols_param, cols_extend))) {
     LOG_WARN("failed to pre check", K(ret));
-  } else if (OB_FAIL(init_compat_version())) { // init compat verion
-    LOG_WARN("failed to init compat version", KR(ret));
   } else if (FALSE_IT(init_basic_info(schema_column_count, schema_rowkey_cnt,
-      is_delete_insert_table, false/*is_global_index_table*/))) { // init basic info
+      false/*is_global_index_table*/))) { // init basic info
   } else if (OB_FAIL(ObReadInfoStruct::prepare_arrays(allocator, cols_desc, cols_desc.count()))) {
     LOG_WARN("failed to prepare arrays", K(ret), K(cols_desc.count()));
   } else if (nullptr != cols_param && OB_FAIL(cols_param_.init_and_assign(*cols_param, allocator))) {
@@ -676,8 +660,6 @@ int ObRowkeyReadInfo::init(
     const int64_t schema_column_count,
     const int64_t schema_rowkey_cnt,
     const common::ObIArray<ObColDesc> &rowkey_col_descs,
-    const bool use_default_compat_version,
-    const bool is_delete_insert_table,
     const bool is_global_index_table)
 {
   int ret = OB_SUCCESS;
@@ -691,12 +673,10 @@ int ObRowkeyReadInfo::init(
     || schema_rowkey_cnt > schema_column_count)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), K(schema_rowkey_cnt), K(rowkey_col_descs.count()), K(out_cols_cnt), K(schema_column_count));
-  } else if (OB_FAIL(init_compat_version())) { // init compat verion
-    LOG_WARN("failed to init compat version", KR(ret));
   }
   if (OB_SUCC(ret)) {
     init_basic_info(schema_column_count, schema_rowkey_cnt,
-                    is_delete_insert_table, is_global_index_table); // init basic info
+                    is_global_index_table); // init basic info
     if (OB_FAIL(prepare_arrays(allocator, rowkey_col_descs, out_cols_cnt))) {
       LOG_WARN("failed to prepare arrays", K(ret), K(out_cols_cnt));
     } else if (OB_FAIL(datum_utils_.init(cols_desc_, schema_rowkey_cnt_,

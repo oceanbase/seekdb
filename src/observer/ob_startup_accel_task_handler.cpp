@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "observer/ob_startup_accel_task_handler.h"
-#include "share/rc/ob_tenant_base.h"
 
 namespace oceanbase
 {
@@ -27,7 +26,6 @@ const int64_t ObStartupAccelTaskHandler::MAX_THREAD_NUM = 64;
 
 ObStartupAccelTaskHandler::ObStartupAccelTaskHandler()
   : is_inited_(false),
-    accel_type_(SERVER_ACCEL),
     task_allocator_()
 {}
 
@@ -36,7 +34,7 @@ ObStartupAccelTaskHandler::~ObStartupAccelTaskHandler()
   destroy();
 }
 
-int ObStartupAccelTaskHandler::init(ObStartupAccelType accel_type)
+int ObStartupAccelTaskHandler::init()
 {
   int ret = OB_SUCCESS;
   ObMemAttr mem_attr = ObMemAttr("StartupTask",
@@ -46,12 +44,11 @@ int ObStartupAccelTaskHandler::init(ObStartupAccelType accel_type)
     LOG_WARN("ObStartupAccelTaskHandler has already been inited", K(ret));
   } else if (OB_FAIL(task_allocator_.init(lib::ObMallocAllocator::get_instance(),
       OB_MALLOC_NORMAL_BLOCK_SIZE, mem_attr))) {
-    LOG_WARN("fail to init tenant tiny allocator", K(ret));
-  } else if (FALSE_IT(accel_type_ = accel_type)) {
+    LOG_WARN("fail to init startup task allocator", K(ret));
   } else if (OB_FAIL(common::ObSimpleThreadPool::init(get_thread_cnt(),
                                                       MAX_QUEUED_TASK_NUM,
                                                       "StartupAccel"))) {
-    LOG_WARN("fail to init startup accel thread pool", K(ret), K(accel_type), K(get_thread_cnt()));
+    LOG_WARN("fail to init startup accel thread pool", K(ret), K(get_thread_cnt()));
   } else {
     is_inited_ = true;
   }
@@ -67,11 +64,7 @@ int64_t ObStartupAccelTaskHandler::get_thread_cnt()
   if (lib::is_mini_mode()) {
     thread_cnt = 1;
   } else {
-    if (SERVER_ACCEL == accel_type_) {
-      thread_cnt = common::get_cpu_count();
-    } else {
-      thread_cnt = MTL_CPU_COUNT();
-    }
+    thread_cnt = common::get_cpu_count();
   }
 
   return std::min(MAX_THREAD_NUM, thread_cnt);

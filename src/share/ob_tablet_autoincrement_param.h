@@ -134,11 +134,11 @@ public:
   OB_UNIS_VERSION(1);
 };
 
-struct ObMigrateTabletAutoincSeqParam final
+struct ObTabletAutoincSeqCopyParam final
 {
   OB_UNIS_VERSION(1);
 public:
-  ObMigrateTabletAutoincSeqParam()
+  ObTabletAutoincSeqCopyParam()
     : src_tablet_id_(), dest_tablet_id_(), ret_code_(OB_SUCCESS), autoinc_seq_(0)
   {}
   bool is_valid() const { return src_tablet_id_.is_valid(); }

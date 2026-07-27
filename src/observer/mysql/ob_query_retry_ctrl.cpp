@@ -147,23 +147,6 @@ typedef ObCommonRetryPolicy<RETRY_SLEEP_TYPE_INDEX, ObRetryPolicy::WAIT_RETRY_LO
 typedef ObCommonRetryPolicy<RETRY_SLEEP_TYPE_INDEX, ObRetryPolicy::WAIT_RETRY_SHORT_US>  ObCommonRetryIndexShortWaitPolicy;
 
 
-class ObFastFailRetryPolicy : public ObRetryPolicy
-{
-public:
-  ObFastFailRetryPolicy() = default;
-  ~ObFastFailRetryPolicy() = default;
-  virtual void test(ObRetryParam &v) const override
-  {
-    if (v.session_.get_retry_info_for_update()
-        .should_fast_fail()) {
-      v.client_ret_ = v.err_;
-      v.retry_type_ = RETRY_TYPE_NONE;
-      v.no_more_test_ = true;
-      LOG_WARN_RET(v.err_, "server down error, fast fail", K(v));
-    }
-  }
-};
-
 class ObForceLocalRetryPolicy : public ObRetryPolicy
 {
 public:
@@ -288,9 +271,9 @@ public:
       LOG_WARN("invalid argument", K(v));
     } else {
       ObSchemaGetterGuard schema_guard;
-      int64_t local_tenant_version_latest = 0;
+      int64_t latest_local_version = 0;
       int64_t local_sys_version_latest = 0;
-      if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
+      if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
                   schema_guard))) {
         // No need to retry, and let it return the error code from get_schema_guard because it is the cause of not retrying
         LOG_WARN("get schema guard failed", K(v), K(ret));
@@ -298,8 +281,8 @@ public:
         v.retry_type_ = RETRY_TYPE_NONE;
         v.no_more_test_ = true;
       } else if (OB_FAIL(schema_guard.get_schema_version(
-                  local_tenant_version_latest))) {
-        LOG_WARN("fail get tenant schema version", K(v), K(ret));
+                  latest_local_version))) {
+        LOG_WARN("fail to get local runtime schema version", K(v), K(ret));
         v.client_ret_ = ret;
         v.retry_type_ = RETRY_TYPE_NONE;
         v.no_more_test_ = true;
@@ -310,10 +293,8 @@ public:
         v.retry_type_ = RETRY_TYPE_NONE;
         v.no_more_test_ = true;
       } else {
-        bool local_schema_not_full = GCTX.schema_service_->is_schema_error_need_retry(
-                                     &schema_guard);
-        int64_t local_tenant_version_start = v.curr_query_tenant_local_schema_version_;
-        int64_t global_tenant_version_start = v.curr_query_tenant_global_schema_version_;
+        int64_t local_version_at_query_start = v.current_query_local_schema_version_;
+        int64_t global_version_at_query_start = v.current_query_global_schema_version_;
         int64_t local_sys_version_start = v.curr_query_sys_local_schema_version_;
         int64_t global_sys_version_start = v.curr_query_sys_global_schema_version_;
         // (c1) Need to consider the scenario where the remote machine's Schema is behind the local one, and the remote machine throws a Schema error
@@ -325,17 +306,15 @@ public:
         // (c5) Reviewed the usage of OB_SCHEMA_EAGAIN, this error code should trigger SQL retry where it appears on the main path
         // (c2) table exists or not/database exists or not/user exists or not, and retry when local and global versions are not equal
         // (c3) Any other SQL starts execution with a local version smaller than the current local version causing schema errors
-        // (c6) For local server, related tenant's schema maybe not refreshed yet when observer restarts or create tenant.
-        // (c7) For remote server, related tenant's schema maybe not refreshed yet when observer restarts or create tenant.
+        // (c6) The remote server runtime schema may not be ready yet.
         if ((OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH == v.err_) || // (c1)
             (OB_SCHEMA_NOT_UPTODATE == v.err_) || // (c4)
             (OB_SCHEMA_EAGAIN == v.err_) || // (c5)
-            (global_tenant_version_start > local_tenant_version_start) || // (c2)
+            (global_version_at_query_start > local_version_at_query_start) || // (c2)
             (global_sys_version_start > local_sys_version_start) || // (c2)
-            (local_tenant_version_latest > local_tenant_version_start) || // (c3)
+            (latest_local_version > local_version_at_query_start) || // (c3)
             (local_sys_version_latest > local_sys_version_start) || // (c3)
-            (local_schema_not_full) || // (c6)
-            (OB_ERR_REMOTE_SCHEMA_NOT_FULL == v.err_) // (c7)
+            (OB_ERR_REMOTE_SCHEMA_NOT_FULL == v.err_) // (c6)
            ) {
           if (v.stmt_retry_times_ < ObQueryRetryCtrl::MAX_SCHEMA_ERROR_LOCAL_RETRY_TIMES) {
             v.retry_type_ = RETRY_TYPE_LOCAL;
@@ -360,12 +339,12 @@ public:
   }
 };
 
-// if tenant status is abnormal, do not retry sql
-class ObCheckTenantStatusPolicy : public ObRetryPolicy
+// Do not retry SQL while the server runtime is in an abnormal state.
+class ObCheckRuntimeStatusPolicy : public ObRetryPolicy
 {
 public:
-  ObCheckTenantStatusPolicy() = default;
-  ~ObCheckTenantStatusPolicy() = default;
+  ObCheckRuntimeStatusPolicy() = default;
+  ~ObCheckRuntimeStatusPolicy() = default;
   virtual void test(ObRetryParam &v) const override
   {
     int ret = OB_SUCCESS;
@@ -374,58 +353,27 @@ public:
       LOG_TRACE("invalid schema_service", KR(ret), K(v));
     } else {
       ObSchemaGetterGuard schema_guard;
-      const ObTenantSchema *tenant_schema = NULL;
-      if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
+      const ObServerRuntimeSchema *runtime_schema = NULL;
+      if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
           schema_guard))) {
-        LOG_TRACE("get sys tenant schema guard failed", KR(ret), K(v));
-      } else if (OB_FAIL(schema_guard.get_tenant_info(
-          tenant_schema))) {
-        LOG_TRACE("fail get tenant info", KR(ret),
+        LOG_TRACE("get server runtime schema guard failed", KR(ret), K(v));
+      } else if (OB_FAIL(schema_guard.get_server_runtime_info(
+          runtime_schema))) {
+        LOG_TRACE("fail to get runtime info", KR(ret),
              K(v));
-      } else if (OB_ISNULL(tenant_schema) || !tenant_schema->is_normal()) {
-        // use LOG_TRACE to prevent too much warning during creating tenant
-        LOG_TRACE("tenant status is abnormal, do not retry",
-             KPC(tenant_schema), K(v));
-        // tenant status is abnormal, do not retry and return v.err_
+      } else if (OB_ISNULL(runtime_schema) || !runtime_schema->is_normal()) {
+        LOG_TRACE("runtime status is abnormal, do not retry",
+             KPC(runtime_schema), K(v));
+        // Runtime status is abnormal; do not retry and return v.err_.
         v.client_ret_ = v.err_;
         v.retry_type_ = RETRY_TYPE_NONE;
         v.no_more_test_ = true;
       } else {
-        // tenant status is normal, check passed
+        // Runtime status is normal; the check passed.
       }
     }
   }
 };
-
-class ObDMLPeerServerStateUncertainPolicy : public ObRetryPolicy
-{
-public:
-  ObDMLPeerServerStateUncertainPolicy() = default;
-  ~ObDMLPeerServerStateUncertainPolicy() = default;
-  virtual void test(ObRetryParam &v) const override
-  {
-    if (OB_ISNULL(v.result_.get_physical_plan())) {
-      // issue#43741246, plan not generated, won't be a remote trans
-      // safe to continue with other retry test
-    } else if (ObStmt::is_dml_write_stmt(v.result_.get_stmt_type())) {
-      // bugfix: 
-      // bugfix: 
-      bool autocommit = v.session_.get_local_autocommit();
-      ObPhyPlanType plan_type = v.result_.get_physical_plan()->get_plan_type();
-      bool in_transaction = v.session_.is_in_transaction();
-      if (ObSqlTransUtil::is_remote_trans(autocommit, in_transaction, plan_type)) {
-        // The current observer cannot retry internally
-        // err is OB_RPC_CONNECT_ERROR
-        v.client_ret_ = v.err_;
-        v.retry_type_ = RETRY_TYPE_NONE;
-        v.no_more_test_ = true;
-        LOG_WARN_RET(v.err_, "server down error, the write dml is remote, don't retry",
-                 K(autocommit), K(plan_type), K(in_transaction), K(v));
-      }
-    }
-  }
-};
-
 
 class ObLockRowConflictRetryPolicy : public ObRetryPolicy
 {
@@ -519,10 +467,7 @@ public:
   ~ObInnerCommonCheckSchemaPolicy() = default;
   virtual void test(ObRetryParam &v) const override
   {
-    int ret = OB_SUCCESS;
-    bool local_schema_not_full = GSCHEMASERVICE.is_schema_error_need_retry(
-                                 NULL);
-    if (local_schema_not_full || OB_ERR_REMOTE_SCHEMA_NOT_FULL == v.err_) {
+    if (OB_ERR_REMOTE_SCHEMA_NOT_FULL == v.err_) {
       v.no_more_test_ = true;
       v.retry_type_ = RETRY_TYPE_LOCAL;
       sleep_before_local_retry(v,
@@ -701,9 +646,8 @@ void ObQueryRetryCtrl::try_lock_row_conflict_proc(ObRetryParam &v)
 void ObQueryRetryCtrl::location_error_proc(ObRetryParam &v)
 {
   ObRetryObject retry_obj(v);
-  ObFastFailRetryPolicy fast_fail;
   ObCommonRetryIndexLongWaitPolicy retry_long_wait;
-  retry_obj.test(fast_fail).test(retry_long_wait);
+  retry_obj.test(retry_long_wait);
   if (RETRY_TYPE_LOCAL == v.retry_type_) {
     ObRefreshLocationCacheBlockPolicy block_refresh; // FIXME: why block?
     retry_obj.test(block_refresh);
@@ -716,10 +660,9 @@ void ObQueryRetryCtrl::location_error_proc(ObRetryParam &v)
 void ObQueryRetryCtrl::nonblock_location_error_proc(ObRetryParam &v)
 {
   ObRetryObject retry_obj(v);
-  ObFastFailRetryPolicy fast_fail;
   ObCommonRetryIndexLongWaitPolicy retry_long_wait;
   ObRefreshLocationCacheNonblockPolicy nonblock_refresh;
-  retry_obj.test(fast_fail).test(retry_long_wait).test(nonblock_refresh);
+  retry_obj.test(retry_long_wait).test(nonblock_refresh);
 }
 
 void ObQueryRetryCtrl::location_error_nothing_readable_proc(ObRetryParam &v)
@@ -735,11 +678,9 @@ void ObQueryRetryCtrl::location_error_nothing_readable_proc(ObRetryParam &v)
 void ObQueryRetryCtrl::peer_server_status_uncertain_proc(ObRetryParam &v)
 {
   ObRetryObject retry_obj(v);
-  ObFastFailRetryPolicy fast_fail;
   ObRefreshLocationCacheNonblockPolicy nonblock_refresh;
-  ObDMLPeerServerStateUncertainPolicy check_dml; // will abort check if dml has remote trans
   ObCommonRetryIndexLongWaitPolicy retry_long_wait;
-  retry_obj.test(fast_fail).test(nonblock_refresh).test(check_dml).test(retry_long_wait);
+  retry_obj.test(nonblock_refresh).test(retry_long_wait);
 }
 
 void ObQueryRetryCtrl::schema_error_proc(ObRetryParam &v)
@@ -838,20 +779,19 @@ void ObQueryRetryCtrl::inner_location_error_proc(ObRetryParam &v)
   const uint64_t *trace_id = ObCurTraceId::get();
   bool sql_trigger_by_user_req = (NULL != trace_id && 0 != trace_id[0] && 0 != trace_id[1]);
   ObRetryObject retry_obj(v);
-  ObCheckTenantStatusPolicy check_tenant;
+  ObCheckRuntimeStatusPolicy check_runtime;
   ObRefreshLocationCacheBlockPolicy block_refresh;
-  retry_obj.test(check_tenant);
+  retry_obj.test(check_runtime);
   if (true == v.no_more_test_) {
-    // case1: tenant status is abnormal, do not retry
+    // case1: runtime status is abnormal, do not retry
   } else if (v.session_.get_ddl_info().is_ddl()) {
     // case2: inner sql ddl need retry (add by shuangcan.yjw)
     ObCommonRetryIndexLongWaitPolicy retry_long_wait;
     retry_obj.test(retry_long_wait).test(block_refresh);
   } else if (sql_trigger_by_user_req) {
     // case3: sql trigger by user request, e.g. PL
-    ObFastFailRetryPolicy fast_fail; // only enable fast fail for user triggered req
     ObCommonRetryLinearShortWaitPolicy short_wait_retry;
-    retry_obj.test(fast_fail).test(short_wait_retry).test(block_refresh);
+    retry_obj.test(short_wait_retry).test(block_refresh);
   } else {
     // case 4: do nothing for other inner sql
     empty_proc(v);
@@ -888,9 +828,8 @@ void ObQueryRetryCtrl::inner_peer_server_status_uncertain_proc(ObRetryParam &v)
 {
   ObRetryObject retry_obj(v);
   if (v.session_.get_ddl_info().is_ddl()) {
-    ObFastFailRetryPolicy fast_fail;
     ObCommonRetryLinearShortWaitPolicy short_wait_retry;
-    retry_obj.test(fast_fail).test(short_wait_retry);
+    retry_obj.test(short_wait_retry);
   } else {
     empty_proc(v);
   }
@@ -975,12 +914,10 @@ int ObQueryRetryCtrl::init()
   // register your error code retry handler here, no order required
   /* schema */
   ERR_RETRY_FUNC("SCHEMA",   OB_SCHEMA_ERROR,                    schema_error_proc,          empty_proc,                                           nullptr);
-  ERR_RETRY_FUNC("SCHEMA",   OB_TENANT_EXIST,                    schema_error_proc,          empty_proc,                                           nullptr);
-  ERR_RETRY_FUNC("SCHEMA",   OB_TENANT_NOT_EXIST,                schema_error_proc,          empty_proc,                                           nullptr);
+  ERR_RETRY_FUNC("SCHEMA",   OB_SERVER_RUNTIME_ALREADY_ACTIVE,                    schema_error_proc,          empty_proc,                                           nullptr);
+  ERR_RETRY_FUNC("SCHEMA",   OB_RUNTIME_SCHEMA_NOT_READY,                schema_error_proc,          empty_proc,                                           nullptr);
   ERR_RETRY_FUNC("SCHEMA",   OB_ERR_BAD_DATABASE,                schema_error_proc,          empty_proc,                                           nullptr);
   ERR_RETRY_FUNC("SCHEMA",   OB_DATABASE_EXIST,                  schema_error_proc,          empty_proc,                                           nullptr);
-  ERR_RETRY_FUNC("SCHEMA",   OB_TABLEGROUP_NOT_EXIST,            schema_error_proc,          empty_proc,                                           nullptr);
-  ERR_RETRY_FUNC("SCHEMA",   OB_TABLEGROUP_EXIST,                schema_error_proc,          empty_proc,                                           nullptr);
   ERR_RETRY_FUNC("SCHEMA",   OB_TABLE_NOT_EXIST,                 schema_error_proc,          inner_common_schema_error_proc,                       nullptr);
   ERR_RETRY_FUNC("SCHEMA",   OB_ERR_TABLE_EXIST,                 schema_error_proc,          empty_proc,                                           nullptr);
   ERR_RETRY_FUNC("SCHEMA",   OB_ERR_BAD_FIELD_ERROR,             schema_error_proc,          empty_proc,                                           nullptr);
@@ -1000,7 +937,7 @@ int ObQueryRetryCtrl::init()
   ERR_RETRY_FUNC("SCHEMA",   OB_SCHEMA_EAGAIN,                   schema_error_proc,          inner_schema_error_proc,                              nullptr);
   ERR_RETRY_FUNC("SCHEMA",   OB_SCHEMA_NOT_UPTODATE,             schema_error_proc,          inner_schema_error_proc,                              nullptr);
   ERR_RETRY_FUNC("SCHEMA",   OB_ERR_PARALLEL_DDL_CONFLICT,       schema_error_proc,          inner_schema_error_proc,                              nullptr);
-  ERR_RETRY_FUNC("SCHEMA",   OB_ERR_DDL_RESOURCE_NOT_ENOUGH,     short_wait_retry_proc,      short_wait_retry_proc,                                nullptr);
+  ERR_RETRY_FUNC("SCHEMA",   OB_DDL_RESOURCE_NOT_ENOUGH,     short_wait_retry_proc,      short_wait_retry_proc,                                nullptr);
   ERR_RETRY_FUNC("SCHEMA",   OB_AUTOINC_CACHE_NOT_EQUAL,         autoinc_cache_not_equal_retry_proc, autoinc_cache_not_equal_retry_proc, nullptr);
   ERR_RETRY_FUNC("SCHEMA",   OB_NO_PARTITION_FOR_GIVEN_VALUE_SCHEMA_ERROR, schema_error_proc,  empty_proc,                                           nullptr);
 
@@ -1016,9 +953,8 @@ int ObQueryRetryCtrl::init()
   ERR_RETRY_FUNC("LOCATION", OB_PARTITION_IS_STOPPED,            location_error_proc,        inner_location_error_proc,                            ObDASRetryCtrl::tablet_location_retry_proc);
   ERR_RETRY_FUNC("LOCATION", OB_SERVER_IS_INIT,                  location_error_proc,        inner_location_error_proc,                            ObDASRetryCtrl::tablet_location_retry_proc);
   ERR_RETRY_FUNC("LOCATION", OB_SERVER_IS_STOPPING,              location_error_proc,        inner_location_error_proc,                            ObDASRetryCtrl::tablet_location_retry_proc);
-  ERR_RETRY_FUNC("LOCATION", OB_TENANT_NOT_IN_SERVER,            location_error_proc,        inner_location_error_proc,                            ObDASRetryCtrl::tablet_location_retry_proc);
+  ERR_RETRY_FUNC("LOCATION", OB_SERVER_RUNTIME_NOT_READY,            location_error_proc,        inner_location_error_proc,                            ObDASRetryCtrl::tablet_location_retry_proc);
   ERR_RETRY_FUNC("LOCATION", OB_TRANS_RPC_TIMEOUT,               location_error_proc,        inner_location_error_proc,                            nullptr);
-  ERR_RETRY_FUNC("LOCATION", OB_USE_DUP_FOLLOW_AFTER_DML,        location_error_proc,        inner_location_error_proc,                            ObDASRetryCtrl::tablet_location_retry_proc);
   ERR_RETRY_FUNC("LOCATION", OB_TRANS_STMT_NEED_RETRY,           location_error_proc,        inner_location_error_proc,                            nullptr);
   ERR_RETRY_FUNC("LOCATION", OB_LS_NOT_EXIST,                    location_error_proc,        inner_location_error_proc,                            ObDASRetryCtrl::tablet_location_retry_proc);
   // OB_TABLET_NOT_EXIST may be caused by old version schema or incorrect location.
@@ -1033,9 +969,9 @@ int ObQueryRetryCtrl::init()
 
 
   /* network */
-  ERR_RETRY_FUNC("NETWORK",  OB_RPC_CONNECT_ERROR,               peer_server_status_uncertain_proc, inner_peer_server_status_uncertain_proc,       ObDASRetryCtrl::task_network_retry_proc);
-  ERR_RETRY_FUNC("NETWORK",  OB_RPC_SEND_ERROR,                  peer_server_status_uncertain_proc, inner_peer_server_status_uncertain_proc,       ObDASRetryCtrl::task_network_retry_proc);
-  ERR_RETRY_FUNC("NETWORK",  OB_RPC_POST_ERROR,                  peer_server_status_uncertain_proc, inner_peer_server_status_uncertain_proc,       ObDASRetryCtrl::task_network_retry_proc);
+  ERR_RETRY_FUNC("NETWORK",  OB_RPC_CONNECT_ERROR,               peer_server_status_uncertain_proc, inner_peer_server_status_uncertain_proc,       nullptr);
+  ERR_RETRY_FUNC("NETWORK",  OB_RPC_SEND_ERROR,                  peer_server_status_uncertain_proc, inner_peer_server_status_uncertain_proc,       nullptr);
+  ERR_RETRY_FUNC("NETWORK",  OB_RPC_POST_ERROR,                  peer_server_status_uncertain_proc, inner_peer_server_status_uncertain_proc,       nullptr);
 
   /* storage */
   ERR_RETRY_FUNC("STORAGE",  OB_SNAPSHOT_DISCARDED,              snapshot_discard_proc,         short_wait_retry_proc,                             nullptr);
@@ -1047,7 +983,7 @@ int ObQueryRetryCtrl::init()
   ERR_RETRY_FUNC("TRX",      OB_TRY_LOCK_ROW_CONFLICT,           try_lock_row_conflict_proc, inner_try_lock_row_conflict_proc,                     nullptr);
   ERR_RETRY_FUNC("TRX",      OB_TRANSACTION_SET_VIOLATION,       trx_set_violation_proc,     trx_set_violation_proc,                               nullptr);
   ERR_RETRY_FUNC("TRX",      OB_TRANS_CANNOT_SERIALIZE,          trx_can_not_serialize_proc, trx_can_not_serialize_proc,                           nullptr);
-  ERR_RETRY_FUNC("TRX",      OB_TX_PENDING_LOG_OVERFLOW,         short_wait_retry_proc,      short_wait_retry_proc,                                ObDASRetryCtrl::task_network_retry_proc);
+  ERR_RETRY_FUNC("TRX",      OB_TX_PENDING_LOG_OVERFLOW,         short_wait_retry_proc,      short_wait_retry_proc,                                nullptr);
   ERR_RETRY_FUNC("TRX",      OB_GTS_NOT_READY,                   short_wait_retry_proc,      short_wait_retry_proc,                                nullptr);
   ERR_RETRY_FUNC("TRX",      OB_GTI_NOT_READY,                   short_wait_retry_proc,      short_wait_retry_proc,                                nullptr);
   ERR_RETRY_FUNC("TRX",      OB_TRANS_WEAK_READ_VERSION_NOT_READY, short_wait_retry_proc,    short_wait_retry_proc,                                nullptr);
@@ -1059,7 +995,7 @@ int ObQueryRetryCtrl::init()
   // wait and retry, will see new part
   ERR_RETRY_FUNC("SQL",      OB_NO_PARTITION_FOR_INTERVAL_PART,  short_wait_retry_proc,             short_wait_retry_proc,                         nullptr);
   ERR_RETRY_FUNC("SQL",      OB_BATCHED_MULTI_STMT_ROLLBACK,     batch_execute_opt_retry_proc,      batch_execute_opt_retry_proc,                  nullptr);
-  ERR_RETRY_FUNC("SQL",      OB_SQL_RETRY_SPM,                   force_local_retry_proc,            force_local_retry_proc,                        nullptr);
+  ERR_RETRY_FUNC("SQL",      OB_SQL_RETRY_OUTLINE,               force_local_retry_proc,            force_local_retry_proc,                        nullptr);
 
   /* timeout */
   ERR_RETRY_FUNC("SQL",      OB_TIMEOUT,                         timeout_proc,                timeout_proc,                                        nullptr);
@@ -1081,13 +1017,12 @@ void ObQueryRetryCtrl::destroy()
 }
 
 ObQueryRetryCtrl::ObQueryRetryCtrl()
-  : curr_query_tenant_local_schema_version_(0),
-    curr_query_tenant_global_schema_version_(0),
+  : current_query_local_schema_version_(0),
+    current_query_global_schema_version_(0),
     curr_query_sys_local_schema_version_(0),
     curr_query_sys_global_schema_version_(0),
     retry_times_(0),
-    retry_type_(RETRY_TYPE_NONE),
-    retry_err_code_(OB_SUCCESS)
+    retry_type_(RETRY_TYPE_NONE)
 {
 }
 
@@ -1141,7 +1076,6 @@ void ObQueryRetryCtrl::test_and_save_retry_state(const ObGlobalContext &gctx,
   ObInterruptCheckerGuard checker_guard(tmp_checker);
   client_ret = err;
   retry_type_ = RETRY_TYPE_NONE;
-  retry_err_code_ = OB_SUCCESS;
   retry_func func = nullptr;
   ObSQLSessionInfo *session = result.get_exec_context().get_my_session();
   if (OB_ISNULL(session)) {
@@ -1164,8 +1098,8 @@ void ObQueryRetryCtrl::test_and_save_retry_state(const ObGlobalContext &gctx,
         is_part_of_pl_sql ? (retry_times_ == 0 ? 1 : retry_times_):
         session->get_retry_info().get_retry_cnt();
     ObRetryParam retry_param(ctx, result, *session,
-                             curr_query_tenant_local_schema_version_,
-                             curr_query_tenant_global_schema_version_,
+                             current_query_local_schema_version_,
+                             current_query_global_schema_version_,
                              curr_query_sys_local_schema_version_,
                              curr_query_sys_global_schema_version_,
                              force_local_retry,
@@ -1191,10 +1125,6 @@ void ObQueryRetryCtrl::test_and_save_retry_state(const ObGlobalContext &gctx,
     // this retry times only apply to current thread retry.
     // reset to 0 after each packet retry
     retry_times_++;
-  }
-  // xiaochu: I don't like the idea 'retry_err_code_', remove it later
-  if (RETRY_TYPE_NONE != retry_type_) {
-    retry_err_code_ = client_ret;
   }
   if (RETRY_TYPE_NONE != retry_type_) {
     struct CloseFailFunctor {

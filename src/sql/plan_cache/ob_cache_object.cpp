@@ -49,7 +49,7 @@ OB_SERIALIZE_MEMBER(ObParamInfo,
 
 ObPlanCacheObject::ObPlanCacheObject(ObLibCacheNameSpace ns, lib::MemoryContext &mem_context)
   : ObILibCacheObject(ns, mem_context),
-    tenant_schema_version_(OB_INVALID_VERSION),
+    runtime_schema_version_(OB_INVALID_VERSION),
     sys_schema_version_(OB_INVALID_VERSION),
     dependency_tables_(allocator_),
     outline_state_(),
@@ -136,7 +136,7 @@ int ObPlanCacheObject::get_base_table_version(const uint64_t table_id, int64_t &
 void ObPlanCacheObject::reset()
 {
   ObILibCacheObject::reset();
-  tenant_schema_version_ = OB_INVALID_VERSION;
+  runtime_schema_version_ = OB_INVALID_VERSION;
   sys_schema_version_ = OB_INVALID_VERSION;
   dependency_tables_.reset();
   outline_state_.reset();
@@ -281,11 +281,6 @@ int ObPlanCacheObject::pre_calculation(const bool is_ignore_stmt,
   ObPhysicalPlanCtx *phy_plan_ctx = exec_ctx.get_physical_plan_ctx();
   ObSQLSessionInfo *session = exec_ctx.get_my_session();
   ObSEArray<ObDatumObjParam, 4> datum_params;
-  // TODO [zongmei.zzm]
-  // create table t (a int primary key) partition by hash(a) partitions 2;
-  // select * from t where a = '1' + 1
-  // New engine type inference will add implicit cast: select * from t where cast (a as double) = ?
-  // The result is that the query range of this sql cannot be extracted under the new engine, while the old engine can extract the query range
   if (OB_ISNULL(phy_plan_ctx) || OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid session or phy plan ctx", K(ret), K(phy_plan_ctx), K(session));

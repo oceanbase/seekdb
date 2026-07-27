@@ -23,7 +23,7 @@
 
 #include "rpc/obmysql/packet/ompk_prepare.h"
 #include "rpc/obmysql/packet/ompk_field.h"
-#include "observer/omt/ob_tenant.h"
+#include "observer/omt/ob_server_runtime.h"
 #include "sql/ob_sql.h"
 
 namespace oceanbase
@@ -59,23 +59,6 @@ int ObMPStmtPrepare::deserialize()
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     sql_.assign_ptr(const_cast<char *>(pkt.get_cdata()), pkt.get_clen()-1);
-  }
-
-  return ret;
-}
-
-int ObMPStmtPrepare::before_process()
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObMPBase::before_process())) {
-    LOG_WARN("failed to pre processing packet", K(ret));
-  } else if (0 == sql_.case_compare("call dbms_output.get_line(?, ?)")) {
-    // do nothing
-  } else if (!GCONF._ob_enable_prepared_statement) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED,
-    "while parameter _ob_enable_prepared_statement is disabled, prepared statement");
-    send_error_packet(ret, NULL);
   }
 
   return ret;
@@ -155,9 +138,9 @@ int ObMPStmtPrepare::process()
   } else if (OB_UNLIKELY(!conn->is_in_authed_phase())) {
     ret = OB_ERR_NO_PRIVILEGE;
     LOG_WARN("receive sql without session", K_(sql), K(ret));
-  } else if (OB_ISNULL(conn->tenant_)) {
+  } else if (OB_ISNULL(conn->runtime_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid tenant", K_(sql), K(conn->tenant_), K(ret));
+    LOG_ERROR("invalid runtime", K_(sql), K(conn->runtime_), K(ret));
   } else if (OB_FAIL(get_session(sess))) {
     LOG_WARN("get session fail", K_(sql), K(ret));
   } else if (OB_ISNULL(sess)) {
@@ -174,7 +157,7 @@ int ObMPStmtPrepare::process()
     observer::ObProcessMallocCallback pmcb(0,
           session.get_raw_audit_record().request_memory_used_);
     lib::ObMallocCallbackGuard guard(pmcb);
-    int64_t tenant_version = 0;
+    int64_t runtime_schema_version = 0;
     int64_t sys_version = 0;
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     int64_t packet_len = pkt.get_clen();
@@ -187,19 +170,19 @@ int ObMPStmtPrepare::process()
                K(session.get_server_sid()), K(ret));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
       LOG_WARN("fail to get query timeout", K_(sql), K(ret));
-    } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
-                tenant_version))) {
-      LOG_WARN("fail get tenant broadcast version", K(ret));
-    } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
+    } else if (OB_FAIL(gctx_.schema_service_->get_runtime_received_broadcast_version(
+                runtime_schema_version))) {
+      LOG_WARN("fail to get runtime schema broadcast version", K(ret));
+    } else if (OB_FAIL(gctx_.schema_service_->get_runtime_received_broadcast_version(
                 sys_version))) {
-      LOG_WARN("fail get tenant broadcast version", K(ret));
+      LOG_WARN("fail to get system schema broadcast version", K(ret));
     } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
       need_disconnect = false;
       LOG_WARN("packet too large than allowd for the session", K_(sql), K(ret));
     } else {
       THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
-      retry_ctrl_.set_tenant_global_schema_version(tenant_version);
+      retry_ctrl_.set_current_global_schema_version(runtime_schema_version);
       retry_ctrl_.set_sys_global_schema_version(sys_version);
       session.set_pl_can_retry(true);
 
@@ -253,7 +236,7 @@ int ObMPStmtPrepare::process_prepare_stmt(const ObMultiStmtItem &multi_stmt_item
 {
   int ret = OB_SUCCESS;
   bool need_response_error = true;
-  int64_t tenant_version = 0;
+  int64_t runtime_schema_version = 0;
   int64_t sys_version = 0;
   setup_wb(session);
 
@@ -276,18 +259,18 @@ int ObMPStmtPrepare::process_prepare_stmt(const ObMultiStmtItem &multi_stmt_item
         share::schema::ObSchemaGetterGuard schema_guard;
         retry_ctrl_.clear_state_before_each_retry(session.get_retry_info_for_update());
         if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(
+        } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(
                     schema_guard))) {
           LOG_WARN("get schema guard failed", K(ret));
         } else if (OB_FAIL(schema_guard.get_schema_version(
-                    tenant_version))) {
+                    runtime_schema_version))) {
           LOG_WARN("fail get schema version", K(ret));
         } else if (OB_FAIL(schema_guard.get_schema_version(
                     sys_version))) {
           LOG_WARN("fail get sys schema version", K(ret));
         } else {
           ctx_.schema_guard_ = &schema_guard;
-          retry_ctrl_.set_tenant_local_schema_version(tenant_version);
+          retry_ctrl_.set_current_local_schema_version(runtime_schema_version);
           retry_ctrl_.set_sys_local_schema_version(sys_version);
         }
         if (OB_SUCC(ret)) {
@@ -333,10 +316,9 @@ int ObMPStmtPrepare::check_and_refresh_schema()
     if (OB_ISNULL(ctx_.session_info_)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid session info", K(ret), K(ctx_.session_info_));
-    } else if (OB_FAIL(gctx_.schema_service_->get_tenant_refreshed_schema_version(local_version))) {
-      LOG_WARN("fail to get tenant refreshed schema version", K(ret));
-    } else if (OB_FAIL(ctx_.session_info_->get_last_ddl_schema_version(last_version))) {
-      LOG_WARN("failed to get session DDL schema fence", K(ret));
+    } else if (OB_FAIL(gctx_.schema_service_->get_runtime_refreshed_schema_version(local_version))) {
+      LOG_WARN("fail to get refreshed runtime schema version", K(ret));
+    } else if (FALSE_IT(last_version = ctx_.session_info_->get_last_ddl_schema_version())) {
     } else if (local_version >= last_version) {
       // skip
     } else if (OB_FAIL(gctx_.schema_service_->async_refresh_schema(last_version))) {
@@ -384,9 +366,8 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("task executor ctx can not be NULL", K(task_ctx), K(ret));
       } else {
-        task_ctx->set_query_tenant_begin_schema_version(retry_ctrl_.get_tenant_global_schema_version());
+        task_ctx->set_query_begin_schema_version(retry_ctrl_.get_current_global_schema_version());
         task_ctx->set_query_sys_begin_schema_version(retry_ctrl_.get_sys_global_schema_version());
-        task_ctx->set_min_cluster_version(GET_MIN_CLUSTER_VERSION());
         ctx_.retry_times_ = retry_ctrl_.get_retry_times();
         if (OB_ISNULL(ctx_.schema_guard_)) {
           ret = OB_INVALID_ARGUMENT;
@@ -476,7 +457,6 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
               "retry_type", retry_ctrl_.get_retry_type(),
               "timeout_remain", THIS_WORKER.get_timeout_remain());
     } else {
-      // Immediately freeze partition hit after the first plan execution completes
       // store the warning message from the most recent statement in the current session
       if (OB_SUCC(ret) && is_diagnostics_stmt) {
         // if diagnostic stmt execute successfully, it dosen't clear the warning message

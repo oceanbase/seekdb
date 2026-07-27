@@ -26,7 +26,6 @@ class ObUseDatabaseStmt : public ObDDLStmt
 {
 public:
   ObUseDatabaseStmt() : ObDDLStmt(stmt::T_USE_DATABASE),
-    catalog_id_(common::OB_INVALID_ID),
     db_id_(common::OB_INVALID_ID),
     db_name_(),
     db_charset_(),
@@ -37,7 +36,6 @@ public:
 
   explicit ObUseDatabaseStmt(common::ObIAllocator *name_pool)
       : ObDDLStmt(name_pool, stmt::T_USE_DATABASE),
-      catalog_id_(common::OB_INVALID_ID),
       db_id_(common::OB_INVALID_ID),
       db_name_(),
       db_charset_(),
@@ -50,8 +48,6 @@ public:
   {}
   void set_db_name(const common::ObString &db_name)
   { db_name_.assign_ptr(db_name.ptr(), db_name.length()); }
-  void set_catalog_id(const uint64_t catalog_id) { catalog_id_ = catalog_id; }
-  uint64_t get_catalog_id() const { return catalog_id_; }
   void set_db_id(const int64_t db_id) { db_id_ = db_id; }
   const common::ObString& get_db_name() const { return db_name_; }
   int64_t get_db_id() const { return db_id_; }
@@ -65,7 +61,6 @@ public:
   virtual obcall::ObDDLArg &get_ddl_arg() { return use_database_arg_; }
   virtual bool cause_implicit_commit() const { return false; }
 private:
-  uint64_t catalog_id_;
   int64_t db_id_;
   common::ObString db_name_;
   common::ObString db_charset_;

@@ -28,10 +28,6 @@
 
 namespace oceanbase
 {
-namespace unittest
-{
-class TestObDeadLockDetector;
-}
 namespace share
 {
 namespace detector
@@ -93,7 +89,6 @@ class ObLCLNode : public ObIDeadLockDetector
   typedef common::ObSEArray<ObDependencyResource, 1> ParentList;
   typedef common::ObSEArray<BlockCallBack, COMMON_BLOCK_SIZE> CallBackList;
   friend class PushStateTask;
-  friend class unittest::TestObDeadLockDetector;
 public:
   ObLCLNode(const UserBinaryKey &user_key,
             const uint64_t resource_id,
@@ -123,14 +118,15 @@ public:
   // remove all dependency
   int activate_all() override;
   uint64_t get_resource_id() const { return private_label_.get_id(); }
-  int process_collect_info_message(const ObDeadLockCollectInfoMessage &) override;
-  // handle message for scheme LCL
-  int process_lcl_message(const ObLCLMessage &) override;
+  int process_cycle_info(const ObDeadLockCycleInfo &) override;
+  int process_lcl_state(const int64_t lclv,
+                        const ObLCLLabel &label,
+                        const int64_t send_ts) override;
   TO_STRING_KV(KP(this), K_(self_key), K_(parent_key), KTIME_(timeout_ts), K_(lclv), K_(private_label),
                K_(public_label), K_(detect_callback),
                K_(auto_activate_when_detected), KTIME_(created_time), KTIME_(allow_detect_time),
-               K_(is_timer_task_canceled), K_(block_list), K_(parent_list),
-               K_(lcl_period), K_(last_send_collect_info_period), K(block_callback_list_.count()),
+               K_(is_timer_task_canceled), K_(is_timer_task_running), K_(block_list), K_(parent_list),
+               K_(lcl_period), K_(last_send_cycle_info_period), K(block_callback_list_.count()),
                K(ATOMIC_LOAD(&count_down_allow_detect_)))
 private:
   class PushStateTask : public common::ObTimeWheelTask
@@ -147,8 +143,10 @@ private:
 private:
   int block_(const ObDependencyResource &);
   int activate_(const ObDependencyResource &);
-  int process_msg_as_lclp_msg_(const ObLCLMessage &);
-  int process_msg_as_lcls_msg_(const ObLCLMessage &, bool &);
+  int process_lclp_state_(const int64_t lclv);
+  int process_lcls_state_(const int64_t lclv,
+                          const ObLCLLabel &label,
+                          bool &detected_flag);
   int add_resource_to_list_(const ObDependencyResource &, BlockList &);
   void get_state_snapshot_(BlockList &, int64_t &, ObLCLLabel &);
   int get_resource_from_callback_list_(BlockList &, common::ObIArray<bool> &);
@@ -157,17 +155,17 @@ private:
   int push_state_to_downstreams_with_lock_();
   int add_self_ref_count_();
   void revert_self_ref_count_();
-  int check_and_process_completely_collected_msg_with_lock_(
+  int check_and_process_complete_cycle_(
       const common::ObIArray<ObDetectorInnerReportInfo> &);
   int generate_event_id_with_lock_(const common::ObIArray<ObDetectorInnerReportInfo> &,
                                     uint64_t &);
   bool check_dead_loop_with_lock_(const common::ObIArray<ObDetectorInnerReportInfo> &);
   bool if_self_has_lowest_priority_(const common::ObIArray<ObDetectorInnerReportInfo>&);
-  int append_report_info_to_msg_(ObDeadLockCollectInfoMessage &, const uint64_t);
+  int append_report_info_(ObDeadLockCycleInfo &, const uint64_t);
   void update_lcl_period_if_necessary_with_lock_();
-  bool if_phase_match_(const int64_t, const ObLCLMessage &);
+  bool if_phase_match_(const int64_t current_ts, const int64_t send_ts);
   int broadcast_(const BlockList &, int64_t, const ObLCLLabel &);
-  int broadcast_with_lock_(ObDeadLockCollectInfoMessage &);
+  int broadcast_cycle_info_(ObDeadLockCycleInfo &);
   // for debug
   DetectCallBack &get_detect_callback_() { return detect_callback_; }
 private:
@@ -183,12 +181,13 @@ private:
   int64_t created_time_;
   int64_t allow_detect_time_;
   bool is_timer_task_canceled_;
+  bool is_timer_task_running_;
   BlockList block_list_;
   ParentList parent_list_;
   CallBackList block_callback_list_;
   int64_t lcl_period_;
   int64_t last_report_waiting_for_period_;
-  int64_t last_send_collect_info_period_;
+  int64_t last_send_cycle_info_period_;
   bool successfully_constructed_;
   uint32_t count_down_allow_detect_;
   mutable common::ObSpinLock lock_;

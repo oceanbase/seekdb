@@ -55,9 +55,13 @@ insert into t1 values(3, 3, [1,2,3]);
 insert into t1 values(4, 4, [100,1,2]);
 insert into t1 values(5, 5, [1000,100,1]);
 
+--replace_numeric_round 6
 select cosine_similarity(c3, [1,1,2]) from t1;
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5;
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
 select/* +index(t1 idx1)*/ * from t1 where c2 > 3 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
 
@@ -72,9 +76,13 @@ insert into t1 values(3, 3, [1,2,3]);
 insert into t1 values(4, 4, [100,1,2]);
 insert into t1 values(5, 5, [1000,100,1]);
 
+--replace_numeric_round 6
 select cosine_similarity(c3, [1,1,2]) from t1;
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5;
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
 select/* +index(t1 idx1)*/ * from t1 where c2 > 3 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
 
@@ -126,8 +134,11 @@ insert into t1 values(4, 4, [100,1,2]);
 insert into t1 values(5, 5, [1000,100,1]);
 
 select l2_similarity(c3, [1,1,2]) from t1;
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5;
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
 select/* +index(t1 idx1)*/ * from t1 where c2 > 3 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
 
@@ -143,8 +154,11 @@ insert into t1 values(4, 4, [100,1,2]);
 insert into t1 values(5, 5, [1000,100,1]);
 
 select l2_similarity(c3, [1,1,2]) from t1;
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5;
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
 select/* +index(t1 idx1)*/ * from t1 where c2 > 3 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
 
@@ -224,8 +238,11 @@ insert into t1 values(3, 3, [1,2,3]);
 insert into t1 values(4, 4, [100,1,2]);
 insert into t1 values(5, 5, [1000,100,1]);
 
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5;
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
 
 --disable_warnings
@@ -239,8 +256,11 @@ insert into t1 values(3, 3, [1,2,3]);
 insert into t1 values(4, 4, [100,1,2]);
 insert into t1 values(5, 5, [1000,100,1]);
 
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5;
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
 
 --disable_warnings
@@ -286,8 +306,11 @@ insert into t1 values(3, 3, [1,2,3]);
 insert into t1 values(4, 4, [100,1,2]);
 insert into t1 values(5, 5, [1000,100,1]);
 
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5;
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
 
 --disable_warnings
@@ -301,8 +324,11 @@ insert into t1 values(3, 3, [1,2,3]);
 insert into t1 values(4, 4, [100,1,2]);
 insert into t1 values(5, 5, [1000,100,1]);
 
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5;
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
 
 --disable_warnings
@@ -348,8 +374,11 @@ insert into t1 values(3, 3, [1,2,3]);
 insert into t1 values(4, 4, [100,1,2]);
 insert into t1 values(5, 5, [1000,100,1]);
 
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5;
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
 
 --disable_warnings
@@ -363,8 +392,11 @@ insert into t1 values(3, 3, [1,2,3]);
 insert into t1 values(4, 4, [100,1,2]);
 insert into t1 values(5, 5, [1000,100,1]);
 
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5;
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+--replace_numeric_round 6
 select c1, cosine_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
 
 --disable_warnings
@@ -379,6 +411,7 @@ insert into t1 values(2, 2, [1,1,2]);
 select * from t1 order by negative_inner_product(c3, [1,0,0]) approx limit 5;
 --error 1235
 select * from t1 order by negative_inner_product(c3, [1,0,0]) approx limit 5 parameters (similarity=0.7);
+--replace_numeric_round 6
 select inner_product_similarity(c3, [2,2,3]) from t1;
 
 
@@ -395,6 +428,7 @@ insert into t1 values(2, 2, [1,1,2]);
 select * from t1 order by negative_inner_product(c3, [1,0,0]) approx limit 5;
 --error 1235
 select * from t1 order by negative_inner_product(c3, [1,0,0]) approx limit 5 parameters (similarity=0.7);
+--replace_numeric_round 6
 select inner_product_similarity(c3, [2,2,3]) from t1;
 
 
@@ -411,7 +445,9 @@ select * from t1 order by negative_inner_product(c3, [1,0,0]) approx limit 5;
 select * from t1 order by negative_inner_product(c3, [1,0,0]) approx limit 5 parameters (similarity=0.7);
 
 # expr
+--replace_numeric_round 6
 select cosine_similarity([0,1,2], [1,1,2]);
+--replace_numeric_round 6
 select cosine_similarity(0x000000000000803F00000040,'[2,2,3]');
 --error 1582
 select cosine_similarity([0,1,2]);
@@ -424,7 +460,9 @@ select cosine_similarity([0,1,2], [1]);
 --error 1064
 select cosine_similarity(?,?);
 
+--replace_numeric_round 6
 select inner_product_similarity([0,1,2], [1,1,2]);
+--replace_numeric_round 6
 select inner_product_similarity(0x000000000000803F00000040,'[2,2,3]');
 --error 1582
 select inner_product_similarity([0,1,2]);

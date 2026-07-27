@@ -51,15 +51,7 @@ private:
                              ObAnalyzeStmt &analyze_stmt);
   int inner_resolve_partition_info(const ParseNode *part_node,
                                   ObAnalyzeTableInfo &table_info);
-  int resolve_statistic_info(const ParseNode *statistic_node,
-                             ObAnalyzeStmt &analyze_stmt);
-  int resolve_for_clause_info(const ParseNode *for_clause_node,
-                              ObAnalyzeStmt &analyze_stmt);
-  int resolve_for_clause_element(const ParseNode *for_clause_node,
-                                 const bool is_hist_subpart,
-                                 ObAnalyzeStmt &analyze_stmt);
-  int resolve_sample_clause_info(const ParseNode *sample_clause_node,
-                                 ObAnalyzeStmt &analyze_stmt);
+  int resolve_default_column_info(ObAnalyzeStmt &analyze_stmt);
 
 
   // disallow copy

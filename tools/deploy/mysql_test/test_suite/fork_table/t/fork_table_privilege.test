@@ -73,7 +73,6 @@ select count(*) as cnt from t_priv;
 fork table t_priv to t_priv_fork;
 
 --echo # 验证Fork表创建成功
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_priv_fork;
 
 --echo # 验证Fork表数据（即使是创建fork表的用户，也需要显式授权才能访问）

@@ -31,7 +31,6 @@ class ObAllVirtualTabletCompactionInfo : public ObVirtualTableTabletIter
     WAIT_CHECK_SCN,
     MAX_RECEIVED_SCN,
     SERIALIZE_SCN_LIST,
-    VALIDATED_SCN,
   };
 public:
   ObAllVirtualTabletCompactionInfo();

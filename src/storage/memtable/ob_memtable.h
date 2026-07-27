@@ -19,8 +19,6 @@
 
 #include "storage/allocator/ob_memstore_allocator.h"
 #include "share/rc/ob_module_provider.h"
-#include "share/ob_tenant_mgr.h"
-#include "share/ob_cluster_version.h"
 #include "lib/literals/ob_literals.h"
 #include "lib/worker.h"
 
@@ -359,9 +357,7 @@ public:
     return ObITable::get_end_scn() == ObITable::get_start_scn() &&
       share::ObScnRange::MIN_SCN == get_max_end_scn();
   }
-  void fill_compaction_param_(
-    const int64_t current_time,
-    compaction::ObTabletMergeDagParam &param);
+  void fill_compaction_param_(compaction::ObTabletMergeDagParam &param);
   int resolve_snapshot_version_();
   int resolve_max_end_scn_();
   // User should take response of the recommend scn. All version smaller than
@@ -373,9 +369,7 @@ public:
     recommend_snapshot_version_.atomic_set(recommend_scn);
     ATOMIC_STORE(&recommend_snapshot_freeze_flag_, true);
   }
-  inline bool has_recommend_snapshot_freeze() const { return ATOMIC_LOAD(&recommend_snapshot_freeze_flag_); }
-  virtual void set_delete_insert_flag(const bool rhs) override { is_delete_insert_table_ = rhs; }
-  inline bool is_delete_insert_table() const { return is_delete_insert_table_; }
+  inline bool is_recommend_freeze() const { return ATOMIC_LOAD(&recommend_snapshot_freeze_flag_); }
   virtual uint32_t get_freeze_flag() override;
   blocksstable::ObDatumRange &m_get_real_range(blocksstable::ObDatumRange &real_range,
                                         const blocksstable::ObDatumRange &range, const bool is_reverse) const;
@@ -402,8 +396,7 @@ public:
                        K_(snapshot_version),
                        K_(contain_hotspot_row),
                        K_(recommend_snapshot_freeze_flag),
-                       K_(recommend_snapshot_version),
-                       K_(is_delete_insert_table));
+                       K_(recommend_snapshot_version));
 private:
   static const int64_t OB_EMPTY_MEMSTORE_MAX_SIZE = 10L << 20; // 10MB
 
@@ -501,7 +494,6 @@ private:
   bool is_inited_;
   bool recommend_snapshot_freeze_flag_;
   bool contain_hotspot_row_;
-  bool is_delete_insert_table_;
 
   storage::ObLS *ls_;
   ObSingleMemstoreAllocator local_allocator_;

@@ -80,19 +80,5 @@ int ObDBMSMonitor::mod_act_trace_disable(sql::ObExecContext &ctx,
   return full_link_trace_not_supported(ctx, params, result);
 }
 
-int ObDBMSMonitor::tenant_trace_enable(sql::ObExecContext &ctx,
-                                       sql::ParamStore &params,
-                                       common::ObObj &result)
-{
-  return full_link_trace_not_supported(ctx, params, result);
-}
-
-int ObDBMSMonitor::tenant_trace_disable(sql::ObExecContext &ctx,
-                                        sql::ParamStore &params,
-                                        common::ObObj &result)
-{
-  return full_link_trace_not_supported(ctx, params, result);
-}
-
 } // namespace pl
 } // namespace oceanbase

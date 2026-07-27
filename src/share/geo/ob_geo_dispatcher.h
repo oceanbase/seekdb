@@ -1136,10 +1136,10 @@ int ObIGeoDispatcher<RetType, Functype>::eval_geo_func(
   int ret = OB_SUCCESS;
   lib::MemoryContext mem_ctx = gis_context.get_mem_ctx();
   WITH_CONTEXT(mem_ctx) {
-    if (CURRENT_CONTEXT->attr_.label_ != "GISModule" || CURRENT_CONTEXT->attr_.use_500()) {
+    if (CURRENT_CONTEXT->attr_.label_ != "GISModule") {
       // only warning, not return error
       OB_LOG(WARN, "should not use other label expect GISModule", 
-          K(ret), K(CURRENT_CONTEXT->attr_), K(CURRENT_CONTEXT->attr_.use_500()), K(lbt()));
+          K(ret), K(CURRENT_CONTEXT->attr_), K(lbt()));
     }
     ret = eval_geo_func_inner(gis_context, result);
   } else {
@@ -1228,9 +1228,9 @@ int ObIGeoDispatcher<RetType, Functype>::eval_geo_func_split(
   int ret = OB_SUCCESS;
   lib::MemoryContext mem_ctx = gis_context.get_mem_ctx();
   WITH_CONTEXT(mem_ctx) {
-    if (CURRENT_CONTEXT->attr_.label_ != "GISModule" || CURRENT_CONTEXT->attr_.use_500()) {
+    if (CURRENT_CONTEXT->attr_.label_ != "GISModule") {
       OB_LOG(WARN, "should not use other label expect GISModule",
-          K(ret), K(CURRENT_CONTEXT->attr_), K(CURRENT_CONTEXT->attr_.use_500()), K(lbt()));
+          K(ret), K(CURRENT_CONTEXT->attr_), K(lbt()));
     }
     try {
       switch (gis_context.get_geo_count()) {

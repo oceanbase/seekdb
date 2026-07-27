@@ -42,15 +42,14 @@ subpartition template(
   partition p2 values less than(300),
   partition p3 values less than(10000));
 
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE sub_part_t1;
 SHOW INDEX FROM sub_part_t1;
 
 set ob_enable_index_direct_select = 'ON';
 
 let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'sub_part_t1' AND database_id = $database_id, table_id, 1);
-let $fts_index1_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 15 AND data_table_id = $data_table_id AND table_name like '%idx1', table_name, 1);
-let $fts_index2_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 15 AND data_table_id = $data_table_id AND table_name like '%idx2', table_name, 1);
+let $fts_index1_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id AND table_name like '%idx1', table_name, 1);
+let $fts_index2_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id AND table_name like '%idx2', table_name, 1);
 
 let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
 
@@ -314,7 +313,7 @@ CREATE TABLE `t6_y` (
   KEY `i_0_VUgpDp` (`c1`, `c2`, `c13`) LOCAL,
   KEY `i_2_Cd` (`c11`, `c12`) LOCAL,
   KEY `i_3_uClzM` (`c7`, `c1`) LOCAL
-) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0;
+) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0;
 --enable_warnings
 
 insert into t6_y(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13)
@@ -350,7 +349,7 @@ INSERT INTO dml_without_null(name, description) VALUES
 ('Product 6', 'This is the description for product 6.');
 
 let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'dml_without_null' AND database_id = $database_id, table_id, 1);
-let $fts_index = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 15 AND data_table_id = $data_table_id AND table_name like '%fts_idx', table_name, 1);
+let $fts_index = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id AND table_name like '%fts_idx', table_name, 1);
 
 let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
 
@@ -414,7 +413,7 @@ CREATE TABLE `bug2024111900105177241` (
   KEY `g_i_1_mBsUB` (`c2`, `c8`) BLOCK_SIZE 16384 GLOBAL,
   KEY `i_2_IvQoVzH` (`c2`, `c27`, `c14`, `c31`) BLOCK_SIZE 16384 LOCAL,
   KEY `i_3_d` (`c3`, `c31`) BLOCK_SIZE 16384 LOCAL
-) AUTO_INCREMENT = 100425246 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 3 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+) AUTO_INCREMENT = 100425246 DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
  partition by key(c26,c33,c25,c18,c21,c11,c16)
 (partition `p0`,
 partition `p1`,
@@ -426,7 +425,7 @@ partition `p6`,
 partition `p7`,
 partition `p8`);
 
-INSERT INTO bug2024111900105177241 (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19, c20, c21, c22, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33) VALUES 
+INSERT INTO bug2024111900105177241 (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19, c20, c21, c22, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33) VALUES
 (NULL, 'sCQSxYSFaeyEpscltWxEpNroEOKl abc def11370205', '11370205', 'zqijCuJJzuOIyYqIctNLCiyXejshOnAbkOgVxXWoWnKyZA abc d11370205', NULL, NULL, NULL, '11370205', '1993-08-22 05:32:48.0000', 814, 'IdfrAXJtNMtLAwpOUGSZfeVyWNKrdXbNQqKcszIcPMAdqHNpRpYVLAfijDKLBlryIEMLoGEkrxtBKwwAYlUduahdGerjomP STU VWX11370205', NULL, '11370205', 'cjfuOwLtTkxQLjkhrIGDVhHMrNAoCAwAHwjRqDNWCoLpgFzxHdSTU VWX 11370205', NULL, '11370205', 9615, '11370205', 2024, 'yTBRHreEsywEvGbJRNyuALqWwWlZdbMloXaBSSApnGpFrRylqr stu v11370205', '11370205', NULL, 2090, 'IFBXmqCBLfhwKaXMktBnZAkCIoWvQhMUH STU VWX', '11370205', 'rXo11370205', '11370205', '2011-04-27 00:00:00', 2125, NULL, 'SJxMbNPKRDjimEUBHSPqTEvCiwDmdEVhGugfImuzKTDsB pqr stu11370205', '2013-06-18', 'HXnkSpivqZu vwx yz11370205'),
 (NULL, 'NGRVdnJQVWX YZA 56161745', '56161745', 'YCBlarUSXIGcJUgZPfuHgbLOExeqszGYIjYdlMAPXAbAhTZU VWX YZA56161745', NULL, NULL, NULL, '56161745', '1993-08-22 05:32:48.0000', 814, 'LjrgmdQBvyMDzDBpvRlFBELyhbZBPVZqXAlRvcYwIWByqjzUZSqAhYHABC DEF 56161745', NULL, '56161745', 'OTLJHzkkIqpOBHdGBqqliSzzMRdSzmfTU VWX Y56161745', NULL, '56161745', 9615, '56161745', 2024, 'wO56161745', '56161745', NULL, 2090, 'IFBXmqCBLfhwKaXMktBnZAkCIoWvQhMUH STU VWX', '56161745', 'diTJQDMtbJHPakoNLLTmno pqr 56161745', '56161745', '2011-04-27 00:00:00', 2125, NULL, 'XUoxjshpsGhyhqVXKwIKmRjNHYSWvqNJwPemFnZJlZiJOoHnpNspghi jkl 56161745', '2013-06-18', 'zUjS56161745'),
 (NULL, 'h35454912', '35454912', 'BzjjCKyzBEYhnzNDdRWsZoposWRxapNJeCP YZA abc35454912', NULL, NULL, NULL, '35454912', '1993-08-22 05:32:48.0000', 814, 'YmuouHYDsfmSbWelHPfhuWNWVAzQClGcBWeiNApDDkaxVDBwNnreEQaCiDUPSuBVunRhdlyvmKVKuLnxXlSeNFFnEunmStcJKL MNO 35454912', NULL, '35454912', 'CFcOvzfFbIzuzEjgNXMEaAkMbqYqJw YZA abc35454912', NULL, '35454912', 9615, '35454912', 2024, 'TiPUfhJPigpqkJcIuIyVtR STU VW35454912', '35454912', NULL, 2090, 'IFBXmqCBLfhwKaXMktBnZAkCIoWvQhMUH STU VWX', '35454912', 'psFWFJoxtoTEfGBlSfjRWpbDALPMkarUDqJmno pqr 35454912', '35454912', '2011-04-27 00:00:00', 2125, NULL, 'PlZiDaTvquCBUrORHaBihubKlomfIMoEUBYvBLOMJzTcDhCeTXTEFEGzfFKsgPmLQAb ghi jkl35454912', '2013-06-18', 'FnyGFoFpemyKTZuXDswaXllzeOMuUgwOGISCuLepnkfAFPcOztVgVlYjbuDjISxvYzFTEamOwlwUJTfNxvDF GHI JK35454912'),

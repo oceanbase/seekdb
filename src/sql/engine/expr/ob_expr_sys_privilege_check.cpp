@@ -26,7 +26,7 @@ namespace sql
 {
 
 ObExprSysPrivilegeCheck::ObExprSysPrivilegeCheck(ObIAllocator &alloc)
-  : ObFuncExprOperator(alloc, T_FUN_SYS_SYS_PRIVILEGE_CHECK, N_SYS_PRIVILEGE_CHECK, MORE_THAN_ONE, NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
+  : ObFuncExprOperator(alloc, T_FUN_SYS_SYS_PRIVILEGE_CHECK, N_SYS_PRIVILEGE_CHECK, MORE_THAN_ZERO, NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
 {
 }
 
@@ -43,7 +43,7 @@ int ObExprSysPrivilegeCheck::calc_result_typeN(
   UNUSED(type_ctx);
   int ret = OB_SUCCESS;
   CK(NULL != types);
-  CK(2 <= param_num && param_num <= 5);
+  CK(1 <= param_num && param_num <= 4);
   CK(NOT_ROW_DIMENSION == row_dimension_);
   if (OB_SUCC(ret)) {
     type.set_int();
@@ -52,19 +52,18 @@ int ObExprSysPrivilegeCheck::calc_result_typeN(
 
     types[0].set_type(ObVarcharType);
     types[0].set_calc_collation_type(ObCharset::get_system_collation());
-    types[1].set_calc_type(ObIntType);
-    // if param_num == 2, it means only check user-level privilege
-    if (param_num >= 3) { // db_name
+    // A single argument checks user-level privileges.
+    if (param_num >= 2) { // db_name
+      types[1].set_type(ObVarcharType);
+      types[1].set_calc_collation_type(ObCharset::get_system_collation());
+    }
+    if (param_num >= 3) { // obj_name
       types[2].set_type(ObVarcharType);
       types[2].set_calc_collation_type(ObCharset::get_system_collation());
     }
-    if (param_num >= 4) { // obj_name
-      types[3].set_type(ObVarcharType);
+    if (param_num >= 4) { // routine_type
+      types[3].set_type(ObIntType);
       types[3].set_calc_collation_type(ObCharset::get_system_collation());
-    }
-    if (param_num >= 5) { // routine_type
-      types[4].set_type(ObIntType);
-      types[4].set_calc_collation_type(ObCharset::get_system_collation());
     }
   }
   return ret;
@@ -87,14 +86,8 @@ int ObExprSysPrivilegeCheck::check_show_priv(bool &allow_show,
   }
   allow_show = true;
   if (OB_SUCC(ret)) {
-    //tenant in table is static casted to int64_t,
-    //and use statis_cast<uint64_t> for retrieving(same with schema_service)
-    // After schema split, the tenant of the normal tenant schema table is 0, at this time, authorization takes session_priv.tenant_
     if (OB_FAIL(exec_ctx.get_my_session()->get_session_priv_info(session_priv))) {
       LOG_WARN("fail to get session priv info", K(ret));
-    } else if (false
-        && true) {
-      //not current tenant's row
     } else if (0 == level_str.case_compare("db_acc")) {
       if (OB_FAIL(const_cast<share::schema::ObSchemaGetterGuard *>(schema_guard)->check_db_show(
                   session_priv, enable_role_id_array, db_name, allow_show))) {
@@ -122,7 +115,7 @@ int ObExprSysPrivilegeCheck::check_show_priv(bool &allow_show,
 int ObExprSysPrivilegeCheck::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &expr) const
 {
   int ret = OB_SUCCESS;
-  CK(2 <= expr.arg_cnt_ && expr.arg_cnt_ <= 5);
+  CK(1 <= expr.arg_cnt_ && expr.arg_cnt_ <= 4);
   expr.eval_func_ = eval_sys_privilege_check;
   return ret;
 }
@@ -132,16 +125,12 @@ int ObExprSysPrivilegeCheck::eval_sys_privilege_check(
 {
   int ret = OB_SUCCESS;
   ObDatum *level = NULL;
-  ObDatum *tenant = NULL;
   ObDatum *db = NULL;
   ObDatum *obj = NULL;
   ObDatum *routine_type = NULL;
   bool allow_show = true;
-  if (OB_FAIL(expr.eval_param_value(ctx, level, tenant, db, obj, routine_type))) {
+  if (OB_FAIL(expr.eval_param_value(ctx, level, db, obj, routine_type))) {
     LOG_WARN("evaluate parameters failed", K(ret));
-  } else if (tenant->is_null()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant is null", K(ret));
   } else if (OB_FAIL(check_show_priv(allow_show, ctx.exec_ctx_,
                                      level->is_null() ? ObString() : level->get_string(),
                                      (NULL == db || db->is_null()) ? ObString() : db->get_string(),

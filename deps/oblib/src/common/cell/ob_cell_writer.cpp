@@ -156,18 +156,13 @@ int ObCellWriter::write_text(const ObObj &obj, const enum ObObjType store_type, 
 {
   int ret = OB_SUCCESS;
   CellMeta meta;
-  ObLength max_length = 0;
-  if (old_text_format()) {
-    max_length = ObAccuracy::MAX_ACCURACY_OLD[obj.get_type()].get_length();
-  } else {
-    max_length = ObAccuracy::MAX_ACCURACY[obj.get_type()].get_length();
-  }
+  const ObLength max_length = ObAccuracy::MAX_ACCURACY[obj.get_type()].get_length();
 
   meta.type_ = CellMeta::SF_MASK_TYPE & static_cast<uint8_t>(store_type);
   if (CS_TYPE_UTF8MB4_GENERAL_CI == obj.get_collation_type()) {
-    meta.attr_ = old_text_format() ? TEXT_VARCHAR_NO_COLL : TEXT_SCALE_NO_COLL;
+    meta.attr_ = TEXT_SCALE_NO_COLL;
   } else {
-    meta.attr_ = old_text_format() ? TEXT_VARCHAR_COLL : TEXT_SCALE_COLL;
+    meta.attr_ = TEXT_SCALE_COLL;
   }
 
   if (OB_SUCC(ret)) {
@@ -180,7 +175,7 @@ int ObCellWriter::write_text(const ObObj &obj, const enum ObObjType store_type, 
       }
     }
   }
-  if (OB_SUCC(ret) && !old_text_format()) {
+  if (OB_SUCC(ret)) {
     ObLobScale lob_scale(obj.get_scale());
     if (obj.has_lob_header()) {
       lob_scale.set_has_lob_header();
@@ -309,12 +304,11 @@ ObCellWriter::ObCellWriter()
      last_append_pos_(0),
      cell_cnt_(0),
      store_type_(SPARSE),
-     old_text_format_(false),
      is_inited_(false)
 {
 }
 
-int ObCellWriter::init(char *buf, int64_t size, const ObCompactStoreType store_type, const bool old_text_format)
+int ObCellWriter::init(char *buf, int64_t size, const ObCompactStoreType store_type)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
@@ -332,7 +326,6 @@ int ObCellWriter::init(char *buf, int64_t size, const ObCompactStoreType store_t
     pos_ = 0;
     cell_cnt_ = 0;
     store_type_ = store_type;
-    old_text_format_ = old_text_format;
     is_inited_ = true;
   }
   return ret;

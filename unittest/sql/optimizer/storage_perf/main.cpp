@@ -22,7 +22,6 @@
 #include "ob_storage_perf_thread.h"
 #include "lib/stat/ob_diagnose_info.h"
 #include "share/ob_srv_rpc_proxy.h"
-#include "share/ob_tenant_mgr.h"
 #include <gtest/gtest.h>
 
 using namespace oceanbase;

@@ -22,11 +22,11 @@ namespace oceanbase
 {
 namespace storage
 {
-class ObTenantIKUTF8DicLoader final : public ObTenantDicLoader
+class ObIKUTF8DicLoader final : public ObDicLoader
 {
 public:
-  ObTenantIKUTF8DicLoader()  = default;
-  virtual ~ObTenantIKUTF8DicLoader() = default;
+  ObIKUTF8DicLoader()  = default;
+  virtual ~ObIKUTF8DicLoader() = default;
   virtual int init() override;
 private:
   virtual int get_dic_item(const uint64_t i, const uint64_t pos, ObDicItem& item) override;
@@ -34,7 +34,7 @@ private:
   virtual ObDicTableInfo get_main_dic_info() override;
   virtual ObDicTableInfo get_stop_dic_info() override;
   virtual ObDicTableInfo get_quantifier_dic_info() override;
-  DISALLOW_COPY_AND_ASSIGN(ObTenantIKUTF8DicLoader);
+  DISALLOW_COPY_AND_ASSIGN(ObIKUTF8DicLoader);
 };
 } //end storage
 } // end oceanbase

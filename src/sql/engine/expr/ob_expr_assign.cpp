@@ -103,7 +103,7 @@ int calc_assign_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
     if (val_res->is_null()) {
       obj.set_null();
       obj_meta.set_null();
-      // same as old engine. but why...
+      // A NULL assignment keeps the default implicit collation metadata.
       obj_meta.set_collation_level(CS_LEVEL_IMPLICIT);
       obj_meta.set_collation_type(ObCharset::get_default_collation(
                                   ObCharset::get_default_charset()));

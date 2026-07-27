@@ -19,7 +19,7 @@
 
 #include "ob_px_transmit_op.h"
 #include "sql/engine/sort/ob_sort_basic_info.h"
-#include "sql/engine/ob_tenant_sql_memory_manager.h"
+#include "sql/engine/ob_sql_memory_manager.h"
 #include "sql/engine/basic/ob_vector_result_holder.h"
 
 namespace oceanbase

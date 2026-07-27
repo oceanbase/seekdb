@@ -25,12 +25,11 @@ namespace oceanbase {
 namespace sql {
 namespace dtl {
 
-OB_SERIALIZE_MEMBER(ObDtlChannelInfo, chid_, type_, peer_, role_);
-OB_SERIALIZE_MEMBER(ObDtlChSet, exec_addr_, ch_info_set_);
-OB_SERIALIZE_MEMBER(ObDtlTask, jobid_, taskid_, cis_, chans_cnt_);
-OB_SERIALIZE_MEMBER(ObDtlExecServer, total_task_cnt_, exec_addrs_, prefix_task_counts_);
-OB_SERIALIZE_MEMBER(ObDtlChTotalInfo, start_channel_id_, transmit_exec_server_,
-                    receive_exec_server_, channel_count_, is_local_shuffle_);
+OB_SERIALIZE_MEMBER(ObDtlChannelInfo, chid_, role_);
+OB_SERIALIZE_MEMBER(ObDtlChSet, ch_info_set_);
+OB_SERIALIZE_MEMBER(ObDtlTaskLayout, total_task_cnt_, prefix_task_counts_);
+OB_SERIALIZE_MEMBER(ObDtlChTotalInfo, start_channel_id_, transmit_task_layout_,
+                    receive_task_layout_, channel_count_, is_local_shuffle_);
 
 
 int ObDtlChSet::add_channel_info(const ObDtlChannelInfo &info)
@@ -60,7 +59,6 @@ int ObDtlChSet::get_channel_info(int64_t chan_idx, ObDtlChannelInfo &ci) const
 int ObDtlChSet::assign(const ObDtlChSet &other)
 {
   int ret = OB_SUCCESS;
-  exec_addr_ = other.exec_addr_;
   ch_info_set_.reuse();
   if (0 < other.ch_info_set_.count()) {
     if (OB_FAIL(ch_info_set_.prepare_allocate(other.ch_info_set_.count()))) {
@@ -74,16 +72,11 @@ int ObDtlChSet::assign(const ObDtlChSet &other)
   return ret;
 }
 
-int ObDtlExecServer::assign(const ObDtlExecServer &other)
+int ObDtlTaskLayout::assign(const ObDtlTaskLayout &other)
 {
   int ret = OB_SUCCESS;
   total_task_cnt_ = other.total_task_cnt_;
-  if (0 < other.exec_addrs_.count()) {
-    OZ(exec_addrs_.prepare_allocate(other.exec_addrs_.count()));
-    for (int64_t i = 0; i < other.exec_addrs_.count() && OB_SUCC(ret); ++i) {
-      exec_addrs_.at(i) = other.exec_addrs_.at(i);
-    }
-  }
+  prefix_task_counts_.reuse();
   if (0 < other.prefix_task_counts_.count()) {
     OZ(prefix_task_counts_.prepare_allocate(other.prefix_task_counts_.count()));
     for (int64_t i = 0; i < other.prefix_task_counts_.count() && OB_SUCC(ret); ++i) {
@@ -98,101 +91,11 @@ int ObDtlChTotalInfo::assign(const ObDtlChTotalInfo &other)
   int ret = OB_SUCCESS;
   start_channel_id_ = other.start_channel_id_;
   channel_count_ = other.channel_count_;
-  OZ(transmit_exec_server_.assign(other.transmit_exec_server_));
-  OZ(receive_exec_server_.assign(other.receive_exec_server_));
+  OZ(transmit_task_layout_.assign(other.transmit_task_layout_));
+  OZ(receive_task_layout_.assign(other.receive_task_layout_));
   is_local_shuffle_ = other.is_local_shuffle_;
   return ret;
 }
-
-int ObDtlExecServer::add_exec_addr(const common::ObAddr &exec_addr)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(exec_addrs_.push_back(exec_addr))) {
-    LOG_WARN("fail push back exec addr", K(exec_addr), K(ret));
-  }
-  return ret;
-}
-
-// int ObDtlTask::link_chans()
-// {
-//   int ret = OB_SUCCESS;
-//   int i = 0;
-//   for (i = 0; OB_SUCC(ret) && i < chans_cnt_; i++) {
-//     auto &ci = cis_[i];
-//     const auto chid = ci.chid_;
-//     auto &chan = chans_[i];
-//     if (ci.type_ == DTL_CT_LOCAL) {
-//       if (ci.role_ == DTL_CR_PUSHER) {
-//         // if (OB_FAIL(DTL.create_local_channel(ci.chid_, chan))) {
-//         //   LOG_WARN("create local channel fail", K(i), K(ret));
-//         // }
-//       } else {
-//         if (OB_FAIL(DTL.get_channel(ci.chid_, chan))) {
-//           LOG_WARN("get channel with ID fail", KP(chid), K(ret));
-//           break;
-//         } else {
-//           chan->pin();
-//         }
-//       }
-//     } else if (ci.role_ == DTL_CR_PUSHER) {
-//       if (OB_FAIL(DTL.create_rpc_channel(ci.chid_, chan))) {
-//         LOG_WARN("create rpc channel fail", K(i), K(ret));
-//       }
-//     } else {
-//       auto proxy = DTL.get_rpc_proxy().to(GCTX.self_addr());
-//       obcall::ObDtlRpcChanArgs args;
-//       args.chid_ = ci.chid_;
-//       args.peer_ = ci.peer_;
-//       if (OB_FAIL(proxy.create_channel(args))) {
-//         LOG_WARN("create rpc channel fail", K(i), K(ret));
-//       }
-//     }
-//   }
-//   if (OB_FAIL(ret)) {
-//     unlink_chans();
-//   }
-//   return ret;
-// }
-
-// // int ObDtlTask::link_chans()
-// // {
-// //   int ret = OB_SUCCESS;
-// //   for (int i = 0; OB_SUCC(ret) && i < chans_cnt_; i++) {
-// //     auto &ci = cis_[i];
-// //     const auto chid = ci.chid_;
-// //     auto &chan = chans_[i];
-// //     if (OB_FAIL(DTL.get_channel(ci.chid_, chan))) {
-// //       LOG_WARN("get channel with ID fail", KP(chid), K(ret));
-// //       break;
-// //     } else {
-// //       chan->pin();
-// //     }
-// //   }
-// //   if (OB_FAIL(ret)) {
-// //     unlink_chans();
-// //   }
-// //   return ret;
-// // }
-
-// void ObDtlTask::unlink_chans()
-// {
-//   int ret = OB_SUCCESS;
-//   for (int i = 0; i < chans_cnt_; i++) {
-//     auto &ci = cis_[i];
-//     auto &chan = chans_[i];
-//     if (nullptr != chan) {
-//       if (!(ci.type_ == DTL_CT_LOCAL && ci.role_ == DTL_CR_PUSHER)) {
-//         if (OB_FAIL(DTL.destroy_channel(ci.chid_))) {
-//           LOG_WARN("destroy channel fail", K(ret));
-//         }
-//       } else {
-//         DTL.release_channel(chan);
-//       }
-//       chan = nullptr;
-//     }
-//   }
-// }
-
 
 }  // dtl
 }  // sql

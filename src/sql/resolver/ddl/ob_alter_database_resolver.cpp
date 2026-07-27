@@ -50,9 +50,6 @@ int ObAlterDatabaseResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session info should not be null", K(ret));
-  } else if (is_external_catalog_id(session_info_->get_current_default_catalog())) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter database in catalog is");
   } else {
     ObAlterDatabaseStmt *alter_database_stmt = NULL;
     if (OB_ISNULL(alter_database_stmt = create_stmt<ObAlterDatabaseStmt>())) {
@@ -117,18 +114,7 @@ int ObAlterDatabaseResolver::resolve(const ParseNode &parse_tree)
                                                       session_info_))) {
           LOG_WARN("resolve database option failed", K(ret));
         } else {
-          if(resolver.get_alter_option_bitset().has_member(obcall::ObAlterDatabaseArg::PRIMARY_ZONE)) {
-            bool is_sync_ddl_user = false;
-            if (OB_FAIL(ObResolverUtils::check_sync_ddl_user(session_info_, is_sync_ddl_user))) {
-              LOG_WARN("Failed to check sync_ddl_user", K(ret));
-            } else if (is_sync_ddl_user) {
-              ret = OB_IGNORE_SQL_IN_RESTORE;
-              LOG_ERROR("Cannot support for sync ddl user to alter primary zone", K(ret), K(session_info_->get_user_name()));
-            }
-          }
-          if (OB_SUCC(ret)) {
-            alter_database_stmt->set_alter_option_set(resolver.get_alter_option_bitset());
-          }
+          alter_database_stmt->set_alter_option_set(resolver.get_alter_option_bitset());
         }
       }
     }

@@ -25,7 +25,7 @@
 #include "lib/time/ob_time_utility.h"
 #include "lib/queue/ob_fixed_queue.h"
 #include "common/storage/ob_freeze_define.h"
-#include "share/ob_cluster_version.h"
+#include "share/ob_version_parser.h"
 #include "share/scn.h"
 #include "share/ob_schema_version_info.h"
 
@@ -171,7 +171,7 @@ public:
 
   int get_freeze_schema_info(common::ObISQLClient &sql_proxy,
                             const SCN &frozen_scn,
-                            TenantIdAndSchemaVersion &schema_version_info);
+                            SchemaVersionInfo &schema_version_info);
 
 
 private:

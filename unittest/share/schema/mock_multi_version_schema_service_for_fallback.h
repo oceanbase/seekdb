@@ -51,12 +51,12 @@ public:
   void dump_mem_mgr_for_liboblog() {
     mem_mgr_for_liboblog_.dump();
   }
-  int add_tenant(const ObSimpleTenantSchema &tenant);
+  int add_runtime_schema(const ObSimpleServerRuntimeSchema &tenant);
   int add_sys_variable(const ObSimpleSysVariableSchema &sys_variable);
   int add_table(const ObSimpleTableSchemaV2 &table);
   int add_database(const ObSimpleDatabaseSchema &databse);
-  void get_tenant_schema(const int64_t tenant_id,
-                         ObSimpleTenantSchema &tenant);
+  void get_server_runtime_schema(const int64_t tenant_id,
+                         ObSimpleServerRuntimeSchema &tenant);
 
   virtual int fallback_schema_mgr(ObSchemaMgr &schema_mgr,
                                   const int64_t schema_version);
@@ -126,9 +126,9 @@ int MockMultiVersionSchemaServiceForFallback::add_database(const ObSimpleDatabas
   return ret;
 }
 
-int MockMultiVersionSchemaServiceForFallback::add_tenant(const ObSimpleTenantSchema &tenant)
+int MockMultiVersionSchemaServiceForFallback::add_runtime_schema(const ObSimpleServerRuntimeSchema &tenant)
 {
-  int ret = schema_mgr_for_cache_->add_tenant(tenant);
+  int ret = schema_mgr_for_cache_->add_runtime_schema(tenant);
   if (OB_FAIL(ret)) return ret;
   schema_mgr_for_cache_->set_schema_version(tenant.get_schema_version());
   return ret;
@@ -169,10 +169,10 @@ int MockMultiVersionSchemaServiceForFallback::fallback_schema_mgr(ObSchemaMgr &s
     schema_mgr.set_schema_version(schema_version);
   } else {
     for (int64_t i = cur_version + 1; i <= schema_version; ++i) {//do forward
-      ObSimpleTenantSchema tenant;
+      ObSimpleServerRuntimeSchema tenant;
       tenant.set_schema_version(i);
-      get_tenant_schema(i, tenant);
-      ret = schema_mgr.add_tenant(tenant);
+      get_server_runtime_schema(i, tenant);
+      ret = schema_mgr.add_runtime_schema(tenant);
       if (OB_FAIL(ret)) return ret;
       ObSimpleSysVariableSchema sys_variable;
       sys_variable.set_tenant_id(tenant.get_tenant_id());
@@ -188,9 +188,9 @@ int MockMultiVersionSchemaServiceForFallback::fallback_schema_mgr(ObSchemaMgr &s
 
 int MockMultiVersionSchemaServiceForFallback::prepare(const int64_t max_version)
 {
-//  ObSimpleTenantSchema tenant;
-//  get_tenant_schema(OB_SYS_TENANT_ID, tenant);
-//  ret = schema_service.add_tenant(tenant);
+//  ObSimpleServerRuntimeSchema tenant;
+//  get_server_runtime_schema(OB_SERVER_RUNTIME_ID, tenant);
+//  ret = schema_service.add_runtime_schema(tenant);
 //  ASSERT_EQ(OB_SUCCESS, ret);
 //  ret = schema_service.add_schema(); //add to schema_mgr cache
 //  ASSERT_EQ(OB_SUCCESS, ret);
@@ -199,10 +199,10 @@ int MockMultiVersionSchemaServiceForFallback::prepare(const int64_t max_version)
   int64_t user_tenant_id = 1;
   int64_t schema_version = 1;
   for (; schema_version <= max_version;) {
-    ObSimpleTenantSchema user_tenant;
+    ObSimpleServerRuntimeSchema user_tenant;
     user_tenant.set_schema_version(schema_version++);
-    get_tenant_schema(user_tenant_id++, user_tenant);
-    ret = add_tenant(user_tenant);
+    get_server_runtime_schema(user_tenant_id++, user_tenant);
+    ret = add_runtime_schema(user_tenant);
     if (OB_FAIL(ret)) return ret;
     ret = add_schema(); //add to schema_mgr cache
     if (OB_FAIL(ret)) return ret;
@@ -218,13 +218,13 @@ int MockMultiVersionSchemaServiceForFallback::prepare(const int64_t max_version)
   return ret;
 }
 
-void MockMultiVersionSchemaServiceForFallback::get_tenant_schema(const int64_t tenant_id,
-                                                                 ObSimpleTenantSchema &tenant)
+void MockMultiVersionSchemaServiceForFallback::get_server_runtime_schema(const int64_t tenant_id,
+                                                                 ObSimpleServerRuntimeSchema &tenant)
 {
   char name[20];
   sprintf(name, "%s_%ld", "tenant", tenant_id);
   tenant.set_tenant_id(tenant_id);
-  tenant.set_tenant_name(common::ObString::make_string(name));
+  tenant.set_runtime_name(common::ObString::make_string(name));
 }
 
 

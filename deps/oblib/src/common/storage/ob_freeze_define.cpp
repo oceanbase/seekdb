@@ -23,6 +23,6 @@ namespace oceanbase
 namespace storage
 {
 OB_SERIALIZE_MEMBER(ObFrozenStatus, frozen_version_,
-                    frozen_timestamp_, status_, schema_version_, cluster_version_);
+                    frozen_timestamp_, status_, schema_version_, data_format_version_);
 } // end namespace storage
 } // end namespace oceanbase

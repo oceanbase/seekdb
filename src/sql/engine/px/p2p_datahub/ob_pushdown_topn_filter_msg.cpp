@@ -149,8 +149,6 @@ int ObPushDownTopNFilterMsg::init(const ObPushDownTopNFilterInfo *pd_topn_filter
       compares_.at(i).is_ascending_ = sort_collations->at(i).is_ascending_;
       compares_.at(i).null_pos_ = sort_collations->at(i).null_pos_;
     }
-    set_msg_expect_cnt(1); // TODO fix me in shared msg
-    set_msg_cur_cnt(1);
   }
   LOG_TRACE("[TopN Filter] init ObPushDownTopNFilterMsg", K(ret), K(effective_sk_cnt));
   return ret;

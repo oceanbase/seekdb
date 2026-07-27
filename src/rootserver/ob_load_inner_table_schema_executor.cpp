@@ -31,7 +31,7 @@ namespace rootserver
 ERRSIM_POINT_DEF(ERRSIM_LOAD_INNER_TABLE_SCHEMA);
 
 int ObLoadInnerTableSchemaExecutor::load_inner_table_schema(
-    const obcall::ObLoadTenantTableSchemaArg &arg)
+    const obcall::ObLoadRuntimeTableSchemaArg &arg)
 {
   int ret = OB_SUCCESS;
   DEBUG_SYNC(LOAD_INNER_TABLE_SCHEMA);
@@ -66,7 +66,7 @@ int ObLoadInnerTableSchemaExecutor::load_inner_table_schema(
 }
 
 int ObLoadInnerTableSchemaExecutor::load_inner_table_schema(
-    const obcall::ObLoadTenantTableSchemaArg &arg,
+    const obcall::ObLoadRuntimeTableSchemaArg &arg,
     const share::ObLoadInnerTableSchemaInfo &info)
 {
   int ret = OB_SUCCESS;
@@ -127,7 +127,7 @@ int ObLoadInnerTableSchemaExecutor::append_arg(const ObIArray<int64_t> &insert_i
     const share::ObLoadInnerTableSchemaInfo &info)
 {
   int ret = OB_SUCCESS;
-  obcall::ObLoadTenantTableSchemaArg arg;
+  obcall::ObLoadRuntimeTableSchemaArg arg;
   if (insert_idx.count() == 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("idx is empty", KR(ret), K(info), K(insert_idx));
@@ -237,6 +237,8 @@ int ObLoadInnerTableSchemaExecutor::load_schema_version(common::ObISQLClient &cl
     LOG_WARN("failed to set core_schema_version", KR(ret));
   } else if (OB_FAIL(proxy.set_sys_schema_version(sys_schema_version))) {
     LOG_WARN("failed to set sys_schema_version", KR(ret));
+  } else if (OB_FAIL(proxy.set_normal_schema_version(sys_schema_version))) {
+    LOG_WARN("failed to set normal_schema_version", KR(ret));
   }
   return ret;
 }

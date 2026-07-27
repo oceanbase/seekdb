@@ -53,7 +53,6 @@ int ObViewTableResolver::do_resolve_set_query(const ParseNode &parse_tree,
 int ObViewTableResolver::expand_view(TableItem &view_item)
 {
   int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
   if (OB_ISNULL(session_info_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("session info is null");
@@ -66,7 +65,6 @@ int ObViewTableResolver::expand_view(TableItem &view_item)
     uint64_t database_id = OB_INVALID_ID;
     ObString old_database_name;
     uint64_t old_database_id = session_info_->get_database_id();
-    ObSwitchCatalogHelper switch_catalog_helper;
     if (OB_ISNULL(schema_checker_)
         || OB_ISNULL(schema_guard = schema_checker_->get_schema_guard())) {
       ret = OB_ERR_UNEXPECTED;
@@ -90,18 +88,8 @@ int ObViewTableResolver::expand_view(TableItem &view_item)
       view_resolver.set_current_view_item(view_item);
       view_resolver.set_parent_view_resolver(this);
       view_resolver.set_parent_namespace_resolver(parent_namespace_resolver_);
-      if (session_info_->is_in_external_catalog()
-          && OB_FAIL(session_info_->set_internal_catalog_db(&switch_catalog_helper))) {
-        LOG_WARN("failed to set catalog", K(ret));
-      }
-      if (OB_SUCC(ret) && OB_FAIL(do_expand_view(view_item, view_resolver))) {
+      if (OB_FAIL(do_expand_view(view_item, view_resolver))) {
         LOG_WARN("do expand view failed", K(ret));
-      }
-      if (switch_catalog_helper.is_set()) {
-        if (OB_SUCCESS != (tmp_ret = switch_catalog_helper.restore())) {
-          ret = OB_SUCCESS == ret ? tmp_ret : ret;
-          LOG_WARN("failed to reset catalog", K(ret), K(tmp_ret));
-        }
       }
     }
   }
@@ -126,10 +114,8 @@ int ObViewTableResolver::check_view_circular_reference(const TableItem &view_ite
     LOG_USER_ERROR(OB_ERR_VIEW_RECURSIVE, view_db_name_.length(), view_db_name_.ptr(),
                     view_name_.length(), view_name_.ptr());
   } else {
-    // The original detection logic has a problem, for the example at the beginning, an error should not be reported when creating v3, or rather, the situation where v1 and v2 reference each other should not occur
-    // but should error when create or replace v1/v2 causes v1 and v2 to reference each other.
-    // Although now we have added this detection logic, checking that v does not appear after expanding the definition when creating view v can avoid mutual references,
-    // But the original detection logic should also be retained. If a view with loops was created before the upgrade, selecting from this view will result in an error below.
+    // Reject an indirect recursive view even when immediate expansion did not
+    // encounter the current view name.
     do {
       if (OB_UNLIKELY(view_item.ref_id_ == cur_resolver->current_view_item.ref_id_)) {
         ret = OB_ERR_VIEW_RECURSIVE;

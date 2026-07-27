@@ -31,22 +31,22 @@ class ObTxELRUtil
 {
 public:
   ObTxELRUtil() : last_refresh_ts_(0),
-                  can_tenant_elr_(false) {}
+                  can_elr_(false) {}
   int check_and_update_tx_elr_info();
-  bool is_can_tenant_elr() const { return can_tenant_elr_; }
+  bool is_can_elr() const { return can_elr_; }
   void reset()
   {
     last_refresh_ts_ = 0;
-    can_tenant_elr_ = false;
+    can_elr_ = false;
   }
-  TO_STRING_KV(K_(last_refresh_ts), K_(can_tenant_elr));
+  TO_STRING_KV(K_(last_refresh_ts), K_(can_elr));
 private:
-  void refresh_elr_tenant_config_();
+  void refresh_elr_runtime_config_();
 private:
   static const int64_t REFRESH_INTERVAL = 5000000;
 private:
   int64_t last_refresh_ts_;
-  bool can_tenant_elr_;
+  bool can_elr_;
 };
 
 } // transaction

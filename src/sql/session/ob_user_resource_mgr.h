@@ -26,11 +26,11 @@
 namespace oceanbase {
 namespace sql {
 class ObSQLSessionInfo;
-class ObTenantUserKey {
+class ObUserKey {
 public:
-  ObTenantUserKey() : user_id_(0)
+  ObUserKey() : user_id_(0)
   {}
-  ObTenantUserKey(const uint64_t user_id) :
+  ObUserKey(const uint64_t user_id) :
     user_id_(user_id)
   {}
   uint64_t hash() const
@@ -42,7 +42,7 @@ public:
     hash_val = hash();
     return OB_SUCCESS;
   };
-  int compare(const ObTenantUserKey& r) const
+  int compare(const ObUserKey& r) const
   {
     int cmp = 0;
     {
@@ -56,17 +56,17 @@ public:
     }
     return cmp;
   }
-  bool operator== (const ObTenantUserKey &other) const { return 0 == compare(other); }
-  bool operator!=(const ObTenantUserKey &other) const { return !operator==(other); }
-  bool operator<(const ObTenantUserKey &other) const { return -1 == compare(other); }
+  bool operator== (const ObUserKey &other) const { return 0 == compare(other); }
+  bool operator!=(const ObUserKey &other) const { return !operator==(other); }
+  bool operator<(const ObUserKey &other) const { return -1 == compare(other); }
   TO_STRING_KV(K(user_id_));
 
 public:
   uint64_t user_id_;
 };
 
-typedef common::LinkHashNode<ObTenantUserKey> ObConnectResHashNode;
-typedef common::LinkHashValue<ObTenantUserKey> ObConnectResHashValue;
+typedef common::LinkHashNode<ObUserKey> ObConnectResHashNode;
+typedef common::LinkHashValue<ObUserKey> ObConnectResHashValue;
 
 class ObConnectResource : public ObConnectResHashValue {
 public:
@@ -110,19 +110,16 @@ public:
   void free_node(ObConnectResHashNode* node);
 };
 
-typedef common::ObLinkHashMap<ObTenantUserKey, ObConnectResource, ObConnectResAlloc> ObConnResMap;
+typedef common::ObLinkHashMap<ObUserKey, ObConnectResource, ObConnectResAlloc> ObConnResMap;
 
 class ObConnectResourceMgr {
 public:
   ObConnectResourceMgr();
   virtual ~ObConnectResourceMgr();
   int init(share::schema::ObMultiVersionSchemaService &schema_service, common::ObTimer &timer);
-  // ask for tenant connection resource.
-  int apply_for_tenant_conn_resource(const ObPrivSet &priv,
-                     const uint64_t max_tenant_connections);
-  void release_tenant_conn_resource();
-  int get_tenant_cur_connections(bool &tenant_exists,
-                                 uint64_t &cur_connections);
+  int apply_for_server_conn_resource(const ObPrivSet &priv,
+                                     const uint64_t max_connections);
+  void release_server_conn_resource();
   int get_or_insert_user_resource(const uint64_t user_id,
       const uint64_t max_user_connections,
       const uint64_t max_connections_per_hour,
@@ -141,14 +138,14 @@ public:
                       const uint64_t max_global_connections,
                       ObSQLSessionInfo& session);
   int on_user_disconnect(ObSQLSessionInfo &session);
-  int erase_tenant_conn_res_map();
+  int erase_connection_resources();
 private:
-  struct EraseTenantMapFunc
+  struct EraseUserResourceFunc
   {
-    EraseTenantMapFunc()
+    EraseUserResourceFunc()
       : erase_cnt_(0) {}
-    ~EraseTenantMapFunc() {}
-    bool operator()(const ObTenantUserKey &key, const ObConnectResource *value) {
+    ~EraseUserResourceFunc() {}
+    bool operator()(const ObUserKey &key, const ObConnectResource *value) {
       bool res = true;
       erase_cnt_ += res ? 1 : 0;
       return res;
@@ -163,7 +160,7 @@ private:
       ObConnResMap &conn_res_map)
     : schema_guard_(schema_guard), conn_res_map_(conn_res_map)
     {}
-    bool operator() (ObTenantUserKey key, ObConnectResource *user_res);
+    bool operator() (ObUserKey key, ObConnectResource *user_res);
   private:
     share::schema::ObSchemaGetterGuard &schema_guard_;
     ObConnResMap &conn_res_map_;
@@ -185,9 +182,8 @@ private:
 private:
   bool inited_;
   ObConnResMap user_res_map_;
-  // single-tenant: tenant conn resource collapsed from a map to one inline value
-  ObConnectResource tenant_res_;
-  bool tenant_res_inited_;
+  ObConnectResource server_res_;
+  bool server_res_inited_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
   common::ObTimer *timer_;
   ConnResourceCleanUpTask cleanup_task_;

@@ -256,7 +256,7 @@ public:  // ObTxDataTable
                KP_(&tx_data_allocator));
 
 public: // getter and setter
-  share::ObTenantTxDataAllocator *get_tx_data_allocator() { return tx_data_allocator_; }
+  share::ObTxDataAllocator *get_tx_data_allocator() { return tx_data_allocator_; }
   TxDataReadSchema &get_read_schema() { return read_schema_; };
 
   void disable_upper_trans_calculation();
@@ -345,7 +345,7 @@ private:
   ObTabletID tablet_id_;
   // Allocator to allocate ObTxData and ObUndoStatus
   ObArenaAllocator arena_allocator_;
-  share::ObTenantTxDataAllocator *tx_data_allocator_;
+  share::ObTxDataAllocator *tx_data_allocator_;
   ObLS *ls_;
   // Pointer to tablet service, used for get tx data memtable mgr
   ObLSTabletService *ls_tablet_svr_;

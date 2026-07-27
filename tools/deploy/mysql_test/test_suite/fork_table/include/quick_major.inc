@@ -4,10 +4,10 @@ connect (obsys_quick_major,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
 connection obsys_quick_major;
 
 # 设置 merger_check_interval = 10s
-alter system set merger_check_interval = '10s' tenant sys;
+alter system set merger_check_interval = '10s';
 
 # 设置 ob_compaction_schedule_interval = 3s
-alter system set ob_compaction_schedule_interval = '3s' tenant sys;
+alter system set ob_compaction_schedule_interval = '3s';
 disconnect obsys_quick_major;
 connection default;
 

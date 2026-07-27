@@ -47,7 +47,7 @@ int ObAllVirtualDagWarningHistory::inner_get_next_row(common::ObNewRow *&row)
   int n = 0;
   if (!dag_warning_info_iter_.is_opened()) {
     if (OB_FAIL(share::g_mp->dag_warning_history_manager()->open_iter(dag_warning_info_iter_))) {
-      STORAGE_LOG(WARN, "fail to begin ObTenantSSTableMergeInfoMgr::Iterator", K(ret));
+      STORAGE_LOG(WARN, "fail to begin ObSSTableMergeInfoMgr::Iterator", K(ret));
     }
   }
   if (OB_SUCC(ret)) {

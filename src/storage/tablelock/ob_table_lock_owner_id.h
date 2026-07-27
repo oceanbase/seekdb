@@ -164,8 +164,6 @@ public:
   TO_STRING_KV("type_name", get_name(static_cast<ObLockOwnerType>(type_)), K_(id), K_(hash_value));
 
 private:
-  int get_data_version_(uint64_t &data_version) const;
-private:
   unsigned char type_;
   int64_t id_;
   uint64_t hash_value_;

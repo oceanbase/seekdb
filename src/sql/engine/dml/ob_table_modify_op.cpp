@@ -737,7 +737,7 @@ void ObTableModifyOp::clear_dml_evaluated_flag()
 ObDasParallelType ObTableModifyOp::check_das_parallel_type()
 {
   ObDasParallelType type = DAS_SERIALIZATION;
-  // lite: sys tenant (not user) -> DAS always serial
+  // Local DAS modification runs serially.
   return type;
 }
 
@@ -767,7 +767,6 @@ OB_INLINE int ObTableModifyOp::init_das_dml_ctx()
                                         ? MY_SPEC.expr_frame_info_
                                         : &MY_SPEC.plan_->get_expr_frame_info());
   dml_rtctx_.das_ref_.set_mem_attr(memattr);
-  dml_rtctx_.das_ref_.set_execute_directly(!MY_SPEC.use_dist_das_);
   dml_rtctx_.das_ref_.get_das_parallel_ctx().set_das_parallel_type(check_das_parallel_type());
   dml_rtctx_.das_ref_.get_das_parallel_ctx().set_das_dop(ctx_.get_das_ctx().get_real_das_dop());
   if (check_das_parallel_type() != DAS_SERIALIZATION) {

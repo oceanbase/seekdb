@@ -133,7 +133,7 @@ protected:
   ObColumnDecoderCtx *ctxs_;
   common::ObArenaAllocator decoder_allocator_;
   // For highly concurrently get row on wide tables(eg: more then 100 columns),
-  // frequently allocate from MTL(ObDecodeResourcePool*), resulting in a bottleneck
+  // Frequently allocating from a shared ObDecodeResourcePool can become a bottleneck.
   // for atomic operations under ARM, so we allocate mem for decoders in ObEncodeBlockGetReader
   common::ObArenaAllocator buf_allocator_;
   char *allocated_decoders_buf_;

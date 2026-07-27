@@ -24,9 +24,7 @@
 #include "ob_imicro_block_writer.h"
 #include "ob_macro_block_common_header.h"
 #include "ob_sstable_meta.h"
-#include "share/ob_encryption_util.h"
 #include "storage/blocksstable/ob_macro_block_meta.h"
-#include "storage/blocksstable/ob_macro_block_bloom_filter.h"
 #include "storage/compaction/ob_compaction_util.h"
 #include "storage/compaction/ob_compaction_memory_pool.h"
 #include "storage/compaction/ob_sstable_merge_history.h"
@@ -38,7 +36,6 @@ struct ObMicroBlockDesc;
 struct ObMacroBlocksWriteCtx;
 class ObStorageObjectHandle;
 struct ObDataStoreDesc;
-class ObBloomFilter;
 class ObIMacroBlockFlusher;
 
 class ObMicroBlockCompressor
@@ -66,11 +63,9 @@ public:
   virtual ~ObMacroBlock();
   int init(const ObDataStoreDesc &spec,
            const int64_t &cur_macro_seq,
-           compaction::ObMergeBlockInfo &merge_block_info,
-           const int64_t bf_max_row_count /* 0 for default */);
+           compaction::ObMergeBlockInfo &merge_block_info);
   int write_micro_block(const ObMicroBlockDesc &micro_block_desc,
-                        int64_t &data_offset,
-                        const ObMicroBlockBloomFilter *micro_block_bf);
+                        int64_t &data_offset);
   int write_index_micro_block(
       const ObMicroBlockDesc &micro_block_desc,
       const bool is_leaf_index_block,
@@ -89,8 +84,6 @@ public:
   int64_t get_remain_size() const;
   int64_t get_current_macro_seq() const {return cur_macro_seq_; }
   OB_INLINE int64_t get_data_capacity() const { return data_.capacity(); }
-  OB_INLINE ObMacroBlockBloomFilter * get_macro_block_bloom_filter() { return &macro_block_bf_; }
-  OB_INLINE int64_t get_macro_block_bloom_filter_serialize_size() const { return macro_block_bf_.get_serialize_size(); }
   OB_INLINE char *get_data_buf() { return data_.data(); }
   OB_INLINE const char *get_data_buf() const { return data_.data(); }
   OB_INLINE int32_t get_row_count() const { return macro_header_.fixed_header_.row_count_; }
@@ -114,8 +107,7 @@ public:
   const storage::ObCompactionBufferBlock &get_block_buffer() const { return data_.get_block_buffer(); } // for dump macro
   static int64_t calc_basic_micro_block_data_offset(
     const int64_t column_cnt,
-    const int64_t rowkey_col_cnt,
-    const uint16_t fixed_header_version);
+    const int64_t rowkey_col_cnt);
 private:
   int inner_init();
   int reserve_header(const ObDataStoreDesc &spec, const int64_t &cur_macro_seq);
@@ -137,7 +129,6 @@ private:
   int64_t data_base_offset_;
   ObDatumRowkey last_rowkey_;
   compaction::ObLocalArena allocator_;
-  ObMacroBlockBloomFilter macro_block_bf_;
   bool is_dirty_;
   ObMacroBlockCommonHeader common_header_;
   int64_t max_merged_trans_version_;

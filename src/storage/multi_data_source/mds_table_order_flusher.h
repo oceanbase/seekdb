@@ -25,7 +25,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "meta_programming/ob_type_traits.h"
 #include "lib/hash/ob_linear_hash_map.h"
-#include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/container/ob_array_iterator.h"
 #include "mds_for_each_map_flush_operation.h"
 #include <algorithm>
@@ -48,11 +48,10 @@ struct MdsFlusherModulePageAllocator : public ModulePageAllocator {
                                          const lib::ObLabel &label = "MdsFlusherArray")
   : ModulePageAllocator(allocator, label) {}
   virtual ~MdsFlusherModulePageAllocator() {}
-  // just change ob_malloc to ob_tenant_malloc
   void *alloc(const int64_t size) { return ModulePageAllocator::alloc(size); }
   void *alloc(const int64_t size, const ObMemAttr &attr);
   void free(void *p) {
-    (NULL == allocator_) ? share::mtl_free(p) : allocator_->free(p); p = NULL;
+    (NULL == allocator_) ? share::server_free(p) : allocator_->free(p); p = NULL;
   }
 };
 

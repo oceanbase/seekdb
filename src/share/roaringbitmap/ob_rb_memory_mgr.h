@@ -38,7 +38,7 @@ static roaring_memory_t roaring_memory_mgr;
   }
 
 class ObRbMemMgr;
-// Lib-bridge to ObServer-owned ObRbMemMgr (defined in share/rc/ob_tenant_base.cpp).
+// Lib-bridge to ObServer-owned ObRbMemMgr (defined in share/rc/ob_server_runtime.cpp).
 extern ObRbMemMgr *get_rb_mem_mgr();
 
 class ObRbMemMgr
@@ -52,7 +52,7 @@ private:
 public:
   ObRbMemMgr() : is_inited_(false), vec_idx_used_(0), block_alloc_(), allocator_() {}
   ~ObRbMemMgr() {}
-  static int mtl_init(ObRbMemMgr *&rb_allocator) { return rb_allocator->init(); };
+  static int server_module_init(ObRbMemMgr *&rb_allocator) { return rb_allocator->init(); };
 
   int init();
   int start() { return OB_SUCCESS; }

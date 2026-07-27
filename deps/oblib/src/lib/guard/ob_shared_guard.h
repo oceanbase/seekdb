@@ -131,7 +131,6 @@ struct DefaultSharedGuardAllocator : public ObIAllocator {
     total_alive_num++;
 #endif
     static lib::ObMemAttr attr("ObGuard");
-    SET_USE_500(attr);
     return ob_malloc(size, attr);
   }
   void* alloc(const int64_t size, const ObMemAttr &attr) override {

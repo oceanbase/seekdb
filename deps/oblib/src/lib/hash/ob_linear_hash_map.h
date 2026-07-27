@@ -361,7 +361,7 @@ private:
   static const double LOAD_FCT_DEF_L_LMT;
   static const uint64_t LOAD_FCT_REFR_LMT = 100; // Refresh load factor periodically. Worst case: 6400 ops trigger one update.
   /* Mod id for ob_malloc. */
-  static const int TENANT_ID = OB_SERVER_TENANT_ID;
+  static const int RUNTIME_ID = OB_SERVER_RUNTIME_ID;
   static constexpr const char *LABEL = ObModIds::OB_LINEAR_HASH_MAP;
 
 public:
@@ -654,10 +654,10 @@ int ObLinearHashMap<Key, Value, MemMgrTag>::HashMapMemMgrCore::init()
   int ret = OB_SUCCESS;
   dir_alloc_.set_attr(ObMemAttr("LinearHashMapDi"));
   cnter_alloc_.set_attr(ObMemAttr("LinearHashMapCn"));
-  map_array_.set_attr(SET_USE_500("HashMapArray"));
+  map_array_.set_attr(ObMemAttr("HashMapArray"));
   // Init node alloc.
   ret = node_alloc_.init(static_cast<int64_t>(sizeof(Node)),
-                         SET_USE_500(ObMemAttr("LinearHashMapNo")));
+                         ObMemAttr("LinearHashMapNo"));
   if (OB_FAIL(ret)) {
     LIB_LOG(WARN, "failed to init node alloc", K(ret));
   }
@@ -904,7 +904,7 @@ int ObLinearHashMap<Key, Value, MemMgrTag>::init(const ObMemAttr &mem_attr)
 }
 
 template <typename Key, typename Value, typename MemMgrTag>
-int ObLinearHashMap<Key, Value, MemMgrTag>::init(const lib::ObLabel &label /*=TENANT_ID*/)
+int ObLinearHashMap<Key, Value, MemMgrTag>::init(const lib::ObLabel &label /*=RUNTIME_ID*/)
 {
   return init(ObMemAttr(label));
 }

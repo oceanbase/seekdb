@@ -34,14 +34,14 @@ class TestBlockSet
 {
 public:
   TestBlockSet()
-      : tallocator_()
+      : ctx_allocator_()
   {}
   virtual void SetUp()
   {
-    tallocator_ = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(0);
-    tallocator_->set_limit(1000L << 20);
-    cs_.set_chunk_mgr(&tallocator_->get_chunk_mgr());
-    cs_.set_tenant_ctx_allocator(*tallocator_.ref_allocator());
+    ctx_allocator_ = ObMallocAllocator::get_instance()->get_ctx_allocator(0);
+    ctx_allocator_->set_limit(1000L << 20);
+    cs_.set_chunk_mgr(&ctx_allocator_->get_chunk_mgr());
+    cs_.set_ctx_allocator(*ctx_allocator_.ref_allocator());
   }
 
   virtual void TearDown()
@@ -67,7 +67,7 @@ public:
   }
 
 protected:
-  ObTenantCtxAllocatorGuard tallocator_;
+  ObCtxAllocatorGuard ctx_allocator_;
   BlockSet cs_;
 };
 

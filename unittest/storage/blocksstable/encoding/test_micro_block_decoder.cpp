@@ -22,7 +22,6 @@
 #include "storage/blocksstable/encoding/ob_micro_block_encoder.h"
 #include "storage/blocksstable/encoding/ob_micro_block_decoder.h"
 #include "../ob_row_generate.h"
-#include "share/ob_storage_format.h"
 
 namespace oceanbase
 {
@@ -36,9 +35,9 @@ using namespace share::schema;
 class TestMicroBlockDecoder : public ::testing::Test
 {
 public:
-  TestMicroBlockDecoder(): tenant_ctx_(500)
+  TestMicroBlockDecoder(): runtime_state_()
   {
-    share::ObTenantEnv::set_tenant(&tenant_ctx_);
+    share::g_server_runtime = &runtime_state_;
   }
   static const int64_t ROWKEY_CNT = 1;
   static const int64_t COLUMN_CNT = ObExtendType - 1;
@@ -54,7 +53,7 @@ protected:
   ObMicroBlockEncoder encoder_;
   ObArenaAllocator allocator_;
   ObObjType *col_obj_types_;
-  share::ObTenantBase tenant_ctx_;
+  share::ObServerRuntimeState runtime_state_;
   int64_t extra_rowkey_cnt_;
   int64_t column_cnt_;
   int64_t full_column_cnt_;
@@ -84,7 +83,6 @@ void TestMicroBlockDecoder::SetUp()
   ObTableSchema table;
   ObColumnSchemaV2 col;
   table.reset();
-  table.set_tablegroup_id(1);
   table.set_database_id(1);
   table.set_table_id(tid);
   table.set_table_name("test_micro_block_decoder_schema");
@@ -93,7 +91,6 @@ void TestMicroBlockDecoder::SetUp()
   table.set_block_size(2 * 1024);
   table.set_compress_func_name("none");
   table.set_row_store_type(ENCODING_ROW_STORE);
-  table.set_storage_format_version(OB_STORAGE_FORMAT_VERSION_V4);
 
   ObSqlString str;
   for (int64_t i = 0; i < COLUMN_CNT; ++i) {

@@ -18,7 +18,7 @@
 #include "sql/dtl/ob_dtl_channel_group.h"
 #include "share/rc/ob_module_provider.h"
 #include "sql/engine/px/ob_dfo_scheduler.h"
-#include "sql/engine/px/ob_px_rpc_processor.h"
+#include "sql/engine/px/ob_px_local_sqc_launcher.h"
 #include "ob_px_coord_op.h"
 #include "sql/engine/px/ob_px_util.h"
 #include "sql/dtl/ob_dtl_interm_result_manager.h"
@@ -67,37 +67,6 @@ int ObDfoSchedulerBasic::init_all_dfo_channel(ObExecContext &ctx) const
   return ret;
 }
 
-int ObDfoSchedulerBasic::prepare_schedule_info(ObExecContext &exec_ctx)
-{
-  int ret = OB_SUCCESS;
-  // for temp table
-  if (!coord_info_.p2p_temp_table_info_.temp_access_ops_.empty()) {
-    ObIArray<ObSqlTempTableCtx>& temp_ctx = exec_ctx.get_temp_table_ctx();
-    ObSqlTempTableCtx *ctx = nullptr;
-    CK(coord_info_.p2p_temp_table_info_.temp_access_ops_.count() ==
-       coord_info_.p2p_temp_table_info_.dfos_.count());
-    for (int i = 0; i < coord_info_.p2p_temp_table_info_.dfos_.count() && OB_SUCC(ret); ++i) {
-      ObDfo *parent_dfo = coord_info_.p2p_temp_table_info_.dfos_.at(i);
-      ctx = nullptr;
-      if (parent_dfo->need_p2p_info() && parent_dfo->get_p2p_dh_addrs().empty()) {
-        for (int64_t j = 0; nullptr == ctx && j < temp_ctx.count(); j++) {
-          if (parent_dfo->get_temp_table_id() == temp_ctx.at(j).temp_table_id_) {
-            ctx = &temp_ctx.at(j);
-          }
-        }
-        if (OB_NOT_NULL(ctx) && !ctx->interm_result_infos_.empty()) {
-          for (int j = 0; OB_SUCC(ret) && j < ctx->interm_result_infos_.count(); ++j) {
-            if (OB_FAIL(parent_dfo->get_p2p_dh_addrs().push_back(ctx->interm_result_infos_.at(j).addr_))) {
-              LOG_WARN("fail to push back p2p dh addrs", K(ret));
-            }
-          }
-        }
-      }
-    }
-  }
-  return ret;
-}
-
 int ObDfoSchedulerBasic::on_sqc_threads_inited(ObExecContext &ctx, ObDfo &dfo) const
 {
   int ret = OB_SUCCESS;
@@ -121,7 +90,7 @@ int ObDfoSchedulerBasic::on_sqc_threads_inited(ObExecContext &ctx, ObDfo &dfo) c
   LOG_TRACE("on_sqc_threads_inited: dfo data xchg ch allocated", K(ret));
   return ret;
 }
-// Build m * n network shuffle
+// Build the m * n in-process worker shuffle.
 int ObDfoSchedulerBasic::build_data_mn_xchg_ch(ObExecContext &ctx, ObDfo &child, ObDfo &parent) const
 {
   int ret = OB_SUCCESS;
@@ -259,11 +228,11 @@ int ObSerialDfoScheduler::init_all_dfo_channel(ObExecContext &ctx) const
       LOG_WARN("dfo is null", K(ret));
     } else if (!child->has_child_dfo() && !child->is_thread_inited()) {
       if (child->has_temp_table_scan()) {
-        if (OB_FAIL(ObPXServerAddrUtil::alloc_by_temp_child_distribution(ctx,
+        if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_temp_child_distribution(ctx,
                                                                          *child))) {
-          LOG_WARN("fail alloc addr by temp child distribution", K(child), K(ret));
+          LOG_WARN("fail to allocate local sqc by temp child distribution", K(child), K(ret));
         } else { /*do nothing.*/ }
-      } else if (OB_FAIL(ObPXServerAddrUtil::alloc_by_data_distribution(
+      } else if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_data_distribution(
           coord_info_.pruning_table_location_,
           ctx, *child))) {
         LOG_WARN("fail to alloc data distribution", K(ret));
@@ -279,29 +248,29 @@ int ObSerialDfoScheduler::init_all_dfo_channel(ObExecContext &ctx) const
     if (OB_SUCC(ret)) {
       const bool has_reference_child = IS_HASH_SLAVE_MAPPING(parent->get_in_slave_mapping_type());
       if (parent->is_thread_inited()) {
-      } else if (has_reference_child && OB_FAIL(ObPXServerAddrUtil::alloc_distribution_of_reference_child(
+      } else if (has_reference_child && OB_FAIL(ObPxSqcDistributionUtil::alloc_distribution_of_reference_child(
             coord_info_.pruning_table_location_, ctx, *parent))) {
         LOG_WARN("alloc distribution of reference child failed", K(ret));
       } else if (parent->has_temp_table_scan()) {
-        if (OB_FAIL(ObPXServerAddrUtil::alloc_by_temp_child_distribution(ctx, *parent))) {
-          LOG_WARN("fail alloc addr by data distribution", K(parent), K(ret));
+        if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_temp_child_distribution(ctx, *parent))) {
+          LOG_WARN("fail to allocate local sqc by data distribution", K(parent), K(ret));
         }
       } else if (parent->is_root_dfo()) {
-        if (OB_FAIL(ObPXServerAddrUtil::alloc_by_local_distribution(ctx, *parent))) {
+        if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_local_distribution(ctx, *parent))) {
           LOG_WARN("fail to alloc local distribution", K(ret));
         }
       } else if (parent->has_scan_op() || parent->has_dml_op()) {
-        if (OB_FAIL(ObPXServerAddrUtil::alloc_by_data_distribution(
+        if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_data_distribution(
                 coord_info_.pruning_table_location_, ctx, *parent))) {
-          LOG_WARN("fail alloc addr by data distribution", K(parent), K(ret));
+          LOG_WARN("fail to allocate local sqc by data distribution", K(parent), K(ret));
         }
         LOG_TRACE("alloc_by_data_distribution", K(*parent));
       } else if (has_reference_child) {
-        if (OB_FAIL(ObPXServerAddrUtil::alloc_by_reference_child_distribution(*parent))) {
-          LOG_WARN("fail alloc addr by data distribution", K(parent), K(child), K(ret));
+        if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_reference_child_distribution(*parent))) {
+          LOG_WARN("fail to allocate local sqc by data distribution", K(parent), K(child), K(ret));
         }
         LOG_TRACE("alloc_by_reference_child_distribution", K(*parent));
-      } else if (OB_FAIL(ObPXServerAddrUtil::alloc_by_data_distribution(
+      } else if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_data_distribution(
                      coord_info_.pruning_table_location_, ctx, *parent))) {
         LOG_WARN("fail to alloc data distribution", K(ret));
       }
@@ -316,7 +285,7 @@ int ObSerialDfoScheduler::init_all_dfo_channel(ObExecContext &ctx) const
     } else if (parent->need_access_store() && parent->is_in_slave_mapping()
                && ObPQDistributeMethod::HASH == child->get_dist_method()
                && child->is_out_slave_mapping()) {
-      if (OB_FAIL(ObPXServerAddrUtil::check_slave_mapping_location_constraint(*child, *parent))) {
+      if (OB_FAIL(ObPxSqcDistributionUtil::check_slave_mapping_location_constraint(*child, *parent))) {
         LOG_WARN("slave mapping location constraint not satisfy", K(parent->get_dfo_id()),
                  K(child->get_dfo_id()));
       }
@@ -425,23 +394,12 @@ int ObSerialDfoScheduler::dispatch_sqcs(ObExecContext &exec_ctx,
       LOG_WARN("no memory", K(ret));
     }
   }
-  bool ignore_vtable_error = coord_info_.should_ignore_vtable_error();
-  int64_t cluster_id = GCONF.cluster_id;
+  const bool ignore_vtable_error = coord_info_.should_ignore_vtable_error();
   ARRAY_FOREACH_X(sqcs, idx, cnt, OB_SUCC(ret)) {
     ObPxSqcMeta &sqc = sqcs.at(idx);
-    const ObAddr &addr = sqc.get_exec_addr();
-    if (OB_UNLIKELY(ObPxCheckAlive::is_in_blacklist(addr, session->get_process_query_time()))) {
-      if (!ignore_vtable_error) {
-        ret = OB_RPC_CONNECT_ERROR;
-        LOG_WARN("peer no in communication, maybe crashed", K(ret), K(sqc), K(cluster_id),
-                K(session->get_process_query_time()));
-      } else {
-        LOG_WARN("ignore the black server list with virtual table", K(addr), K(ret));
-      }
-    }
     if (OB_FAIL(ret)) {
     } else {
-      SMART_VAR(ObPxRpcInitSqcArgs, args) {
+      SMART_VAR(ObPxInitSqcArgs, args) {
         int64_t timeout_us = phy_plan_ctx->get_timeout_timestamp() - ObTimeUtility::current_time();
         args.set_serialize_param(exec_ctx, const_cast<ObOpSpec &>(*dfo.get_root_op_spec()), *phy_plan);
         if ((NULL != dfo.parent() && !dfo.parent()->is_root_dfo()) ||
@@ -466,30 +424,20 @@ int ObSerialDfoScheduler::dispatch_sqcs(ObExecContext &exec_ctx,
         } else if (OB_FAIL(args.sqc_.assign(sqc))) {
           LOG_WARN("fail assign sqc", K(ret));
         } else if (FALSE_IT(sqc.set_need_report(true))) {
-          // Must be set to true before sending rpc
-          // Reason see
+          // The SQC reports completion after local asynchronous launch.
         } else if (OB_FAIL(OB_E(EventTable::EN_PX_SQC_INIT_FAILED) OB_SUCCESS)) {
           sqc.set_need_report(false);
-          LOG_WARN("[SIM] server down. fail to init sqc", K(ret));
+          LOG_WARN("[SIM] fail to init local sqc", K(ret));
           if (ignore_vtable_error && ObVirtualTableErrorWhitelist::should_ignore_vtable_error(ret)) {
-            ObFastInitSqcReportQCMessageCall call(&sqc, ret, phy_plan_ctx->get_timeout_timestamp(), true);
+            ObLocalSqcFailureReporter call(
+                &sqc, ret, phy_plan_ctx->get_timeout_timestamp());
             call.mock_sqc_finish_msg();
             ret = OB_SUCCESS;
-            sqc.set_server_not_alive(true);
           }
         } else {
-          // single-replica: QC and SQC are on the same node. Serialize the args
-          // exactly as the old fast_init_sqc rpc would, then launch the SQC
-          // ASYNCHRONOUSLY on a tenant ReqWorker (a separate thread), restoring
-          // the pre-in-process topology. The fast path runs the SQC's task inline
-          // on the worker (transmit included); doing this under a blocking
-          // sync_call would deadlock -- the inline transmit fills the qc-sqc dtl
-          // send buffer and waits for the QC to drain it, while the QC is blocked
-          // waiting for the sync_call to return. With async_call the QC returns
-          // immediately and drains the channel from its msg loop. It learns this
-          // sqc's outcome via the dtl FINISH_SQC_RESULT report (success or
-          // post-link failure) or via an interrupt (pre-link failure, raised
-          // inside px_init_sqc_fast_in_proc).
+          // Deep-clone the SQC arguments before dispatching them to a runtime worker.
+          // worker. Asynchronous launch lets the coordinator drain the local
+          // DTL channel while the SQC task is producing rows.
           int64_t ser_len = args.get_serialize_size();
           std::shared_ptr<char[]> ser_buf(new (std::nothrow) char[ser_len]);
           int64_t ser_pos = 0;
@@ -500,7 +448,7 @@ int ObSerialDfoScheduler::dispatch_sqcs(ObExecContext &exec_ctx,
             LOG_WARN("fail to serialize sqc init args", K(ret));
           } else {
             (void)ex_rpc::async_call([ser_buf, ser_pos]() {
-              return px_init_sqc_fast_in_proc(ser_buf.get(), ser_pos); });
+              return launch_sqc_fast_local(ser_buf.get(), ser_pos); });
           }
         }
       }
@@ -527,16 +475,12 @@ int ObSerialDfoScheduler::do_schedule_dfo(ObExecContext &ctx, ObDfo &dfo) const
     ObPxSqcMeta &sqc = sqcs.at(idx);
     ObDtlChannelInfo &qc_ci = sqc.get_qc_channel_info();
     ObDtlChannelInfo &sqc_ci = sqc.get_sqc_channel_info();
-    const ObAddr &sqc_exec_addr = sqc.get_exec_addr();
-    const ObAddr &qc_exec_addr = sqc.get_qc_addr();
-    if (OB_FAIL(ObDtlChannelGroup::make_channel(sqc_exec_addr, /* producer exec addr */
-                                                qc_exec_addr, /* consumer exec addr */
-                                                sqc_ci /* producer */,
+    if (OB_FAIL(ObDtlChannelGroup::make_channel(sqc_ci /* producer */,
                                                 qc_ci /* consumer */))) {
       LOG_WARN("fail make channel for QC-SQC", K(ret));
     } else {
-      LOG_TRACE("Make a new channel for qc & sqc",
-                K(idx), K(cnt), K(sqc_ci), K(qc_ci), K(sqc_exec_addr), K(qc_exec_addr));
+      LOG_TRACE("make a new local channel for qc and sqc",
+                K(idx), K(cnt), K(sqc_ci), K(qc_ci));
     }
   }
 
@@ -589,7 +533,7 @@ int ObSerialDfoScheduler::do_schedule_dfo(ObExecContext &ctx, ObDfo &dfo) const
 
 // in-process implementation of the old ObPxCleanDtlIntermResP::process().
 // Single-replica seekdb: target is always self, so erase DTL interm results
-// locally in the arg's tenant context.
+// locally in the argument's runtime context.
 int ObSerialDfoScheduler::clean_dtl_interm_result_local(ObPxCleanDtlIntermResArgs &arg)
 {
   int ret = OB_SUCCESS;
@@ -631,31 +575,6 @@ int ObSerialDfoScheduler::clean_dtl_interm_result_local(ObPxCleanDtlIntermResArg
   return ret;
 }
 
-bool ObSerialDfoScheduler::CleanDtlIntermRes::operator()(const ObAddr &attr,
-                                                         ObPxCleanDtlIntermResArgs *arg)
-{
-  int ret = OB_SUCCESS;
-
-  // single-replica: target is always self; dispatch in-process synchronously.
-  // arg is owned by the query exec_ctx allocator and is destructed here just
-  // like the old NULL-cb rpc path, so a synchronous local erase avoids any
-  // use-after-free that a deferred async run could cause.
-  ex_rpc::sync_call([&]() {
-    int ret = OB_SUCCESS;
-    MOD_SCOPE {
-      if (OB_FAIL(ObSerialDfoScheduler::clean_dtl_interm_result_local(*arg))) {
-        LOG_WARN("clean dtl interm result failed", K(ret), KPC(arg));
-      }
-    }
-    return ret;
-  });
-  LOG_TRACE("clean dtl res map", K(attr), KPC(arg));
-  arg->~ObPxCleanDtlIntermResArgs();
-  arg = NULL;
-  UNUSED(ret);
-  return true;
-}
-
 void ObSerialDfoScheduler::clean_dtl_interm_result(ObExecContext &exec_ctx)
 {
   int ret = OB_SUCCESS;
@@ -672,11 +591,8 @@ void ObSerialDfoScheduler::clean_dtl_interm_result(ObExecContext &exec_ctx)
     // all dfo scheduled, do nothing.
     LOG_TRACE("all dfo scheduled.");
   } else {
-    const ObDfo *root = coord_info_.dfo_mgr_.get_root_dfo();
-    int64_t batch_size = coord_info_.get_rescan_param_count();
-    ObSEArray<ObDfo*, 8> dfos;
-    ObLinearHashMap<ObAddr, ObPxCleanDtlIntermResArgs *> map;
-    ObIAllocator &allocator = exec_ctx.get_allocator();
+    ObPxCleanDtlIntermResArgs arg;
+    arg.batch_size_ = coord_info_.get_rescan_param_count();
     for (int64_t i = 0; i < all_dfos.count(); i++) {
       ObDfo *dfo = all_dfos.at(i);
       ObDfo *parent = NULL;
@@ -692,49 +608,21 @@ void ObSerialDfoScheduler::clean_dtl_interm_result(ObExecContext &exec_ctx)
             }
           }
           if (OB_LIKELY(msg_idx < sqc.get_serial_receive_channels().count())) {
-            ObPxCleanDtlIntermResArgs *arg = NULL;
-            if (!map.is_inited() && OB_FAIL(map.init("CleanDtlRes"))) {
-              LOG_WARN("init map failed", K(ret));
-            } else if (OB_FAIL(map.get(sqc.get_exec_addr(), arg))) {
-              if (OB_ENTRY_NOT_EXIST == ret) {
-                void *buf = NULL;
-                if (OB_ISNULL(buf = allocator.alloc(sizeof(ObPxCleanDtlIntermResArgs)))) {
-                  ret = OB_ALLOCATE_MEMORY_FAILED;
-                  LOG_WARN("alloc failed", K(ret));
-                } else {
-                  arg = new(buf) ObPxCleanDtlIntermResArgs();
-                  arg->batch_size_ = coord_info_.get_rescan_param_count();
-                  if (OB_FAIL(map.insert(sqc.get_exec_addr(), arg))) {
-                    LOG_WARN("insert failed", K(ret));
-                  }
-                }
-              } else {
-                LOG_WARN("get refactored failed", K(ret));
-              }
-            }
-            if (OB_SUCC(ret) && OB_NOT_NULL(arg)) {
-              ObPxReceiveDataChannelMsg &msg = sqc.get_serial_receive_channels().at(msg_idx);
-              if (OB_FAIL(arg->info_.push_back(ObPxCleanDtlIntermResInfo(msg.get_ch_total_info(),
-                          sqc.get_sqc_id(), sqc.get_task_count())))) {
-                LOG_WARN("push back failed", K(ret));
-              }
+            ObPxReceiveDataChannelMsg &msg = sqc.get_serial_receive_channels().at(msg_idx);
+            if (OB_FAIL(arg.info_.push_back(ObPxCleanDtlIntermResInfo(msg.get_ch_total_info(),
+                        sqc.get_sqc_id(), sqc.get_task_count())))) {
+              LOG_WARN("push back failed", K(ret));
             }
           }
         }
       }
     }
-    // ignore allocate, set_refactored and push_back failure.
-    //  send rpc to addrs inserted into the map successfully.
-    if (OB_UNLIKELY(map.count() != 0)) {
-      LOG_TRACE("clean dtl res map", K(map.count()));
-      ObSQLSessionInfo *session = exec_ctx.get_my_session();
-      
-      CleanDtlIntermRes clean_dtl_interm_res(coord_info_);
-      if (OB_FAIL(map.for_each(clean_dtl_interm_res))) {
-        LOG_WARN("map for each clean_dtl_interm_res fail", KR(ret));
-      }
+    if (OB_SUCC(ret) && !arg.info_.empty()
+        && OB_FAIL(clean_dtl_interm_result_local(arg))) {
+      LOG_WARN("failed to clean local DTL intermediate results", K(ret));
     }
   }
+  UNUSED(exec_ctx);
 }
 // -------------division line-----------
 // Start DFO's SQC thread
@@ -756,16 +644,12 @@ int ObParallelDfoScheduler::do_schedule_dfo(ObExecContext &exec_ctx, ObDfo &dfo)
     ObPxSqcMeta &sqc = sqcs.at(idx);
     ObDtlChannelInfo &qc_ci = sqc.get_qc_channel_info();
     ObDtlChannelInfo &sqc_ci = sqc.get_sqc_channel_info();
-    const ObAddr &sqc_exec_addr = sqc.get_exec_addr();
-    const ObAddr &qc_exec_addr = sqc.get_qc_addr();
-    if (OB_FAIL(ObDtlChannelGroup::make_channel(sqc_exec_addr, /* producer exec addr */
-                                                qc_exec_addr, /* consumer exec addr */
-                                                sqc_ci /* producer */,
+    if (OB_FAIL(ObDtlChannelGroup::make_channel(sqc_ci /* producer */,
                                                 qc_ci /* consumer */))) {
       LOG_WARN("fail make channel for QC-SQC", K(ret));
     } else {
-      LOG_TRACE("Make a new channel for qc & sqc",
-                K(idx), K(cnt), K(sqc_ci), K(qc_ci), K(sqc_exec_addr), K(qc_exec_addr));
+      LOG_TRACE("make a new local channel for qc and sqc",
+                K(idx), K(cnt), K(sqc_ci), K(qc_ci));
     }
   }
 
@@ -944,30 +828,7 @@ int ObParallelDfoScheduler::dispatch_receive_channel_info(ObExecContext &ctx,
         LOG_WARN("Unexpected param", KP(ch), K(parent), K(sqc_id), K(ret));
       } else {
         ObDtlChTotalInfo *ch_info = nullptr;
-        if (parent.need_access_store() && parent.is_in_slave_mapping()
-            && child.is_out_slave_mapping()
-            && ObPQDistributeMethod::HASH == child.get_dist_method()) {
-          // for slave mapping under union all, the parent dfo may contain scan ops
-          // the sqc addr's sequence for each union branch may be different
-          // we should map the sqc pair of parent and child for slave mapping
-          bool found = false;
-          const ObAddr &parent_sqc_addr = sqcs.at(idx).get_exec_addr();
-          for (int64_t k = 0; k < child.get_dfo_ch_total_infos().count() && OB_SUCC(ret); ++k) {
-            ch_info = &child.get_dfo_ch_total_infos().at(k);
-            if (OB_UNLIKELY(ch_info->receive_exec_server_.exec_addrs_.count() != 1)) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("unexpected exec addrs count", K(*ch_info));
-            } else if (ch_info->receive_exec_server_.exec_addrs_.at(0) == parent_sqc_addr) {
-              found = true;
-              break;
-            }
-          }
-          if (OB_FAIL(ret)) {
-          } else if (OB_UNLIKELY(!found)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("ch_info not found");
-          }
-        } else if (OB_FAIL(child.get_dfo_ch_info(idx, ch_info))) {
+        if (OB_FAIL(child.get_dfo_ch_info(idx, ch_info))) {
           LOG_WARN("failed to get task receive chs", K(ret));
         }
 
@@ -1208,23 +1069,13 @@ int ObParallelDfoScheduler::dispatch_sqc(ObExecContext &exec_ctx,
       sqc.set_adjoining_root_dfo(true);
     }
   }
-  // Distribute sqc may need retry,
-  // Distribute sqc's rpc successfully, but the minimum number of worker threads cannot be allocated on sqc, `dispatch_sqc` retries internally,
-  // If multiple retries (reaching the timeout) are unsuccessful, there is no need to retry the entire DFO (because it has already timed out)
-  // single-replica: QC and every SQC are on the same node. Replace the old
-  // async OB_PX_ASYNC_INIT_SQC rpc fan-out (ObPxSqcAsyncProxy / ObSqcAsyncCB)
-  // with per-sqc in-process launches: serialize the args exactly as the proxy
-  // did, run px_init_sqc_async_in_proc (which deserializes into a fresh
-  // ObPxSqcHandler, registers the SQC interrupt, and spawns the worker threads),
-  // and feed the response into on_sqc_init_msg. Errors are reported the same way
-  // (deal_with_init_sqc_error for data-not-readable/server-down, set_need_report
-  // / set_server_not_alive otherwise) so QC waiting/retry semantics are kept.
-  ObSEArray<ObPxRpcInitSqcResponse, 8> responses;
+  // Clone each local SQC execution context, launch it on a runtime worker, and
+  // feed the admission response into the coordinator message path.
+  ObSEArray<ObPxInitSqcResponse, 8> responses;
   ObSEArray<int, 8> resp_rets;
-  ObSEArray<ex_rpc::HandleRef<ObPxRpcInitSqcResponse>, 8> handles;
-  int64_t error_index = 0;
+  ObSEArray<ex_rpc::HandleRef<ObPxInitSqcResponse>, 8> handles;
   if (OB_SUCC(ret) && sqcs.count() > 0) {
-    SMART_VAR(ObPxRpcInitSqcArgs, args) {
+    SMART_VAR(ObPxInitSqcArgs, args) {
       if (sqcs.count() > 1) {
         args.enable_serialize_cache();
       }
@@ -1232,11 +1083,7 @@ int ObParallelDfoScheduler::dispatch_sqc(ObExecContext &exec_ctx,
       ARRAY_FOREACH_X(sqcs, idx, count, OB_SUCC(ret)) {
         ObPxSqcMeta &sqc = sqcs.at(idx);
         int64_t timeout_us = phy_plan_ctx->get_timeout_timestamp() - ObTimeUtility::current_time();
-        if (OB_UNLIKELY(ObPxCheckAlive::is_in_blacklist(sqc.get_exec_addr(),
-                        session->get_process_query_time()))) {
-          ret = OB_RPC_CONNECT_ERROR;
-          LOG_WARN("peer no in communication, maybe crashed", K(ret), K(sqc));
-        } else if (timeout_us < 0) {
+        if (timeout_us < 0) {
           ret = OB_TIMEOUT;
         } else if (OB_FAIL(args.sqc_.assign(sqc))) {
           LOG_WARN("fail assign sqc", K(ret));
@@ -1250,22 +1097,19 @@ int ObParallelDfoScheduler::dispatch_sqc(ObExecContext &exec_ctx,
           } else if (OB_FAIL(args.serialize(ser_buf, ser_len, ser_pos))) {
             LOG_WARN("fail to serialize sqc init args", K(ret));
           } else {
-            ex_rpc::HandleRef<ObPxRpcInitSqcResponse> handle =
-                ex_rpc::async_call<ObPxRpcInitSqcResponse>(
-                    [ser_buf, ser_pos](ObPxRpcInitSqcResponse &resp) -> int {
-                      return px_init_sqc_async_in_proc(ser_buf, ser_pos, resp); });
+            ex_rpc::HandleRef<ObPxInitSqcResponse> handle =
+                ex_rpc::async_call<ObPxInitSqcResponse>(
+                    [ser_buf, ser_pos](ObPxInitSqcResponse &resp) -> int {
+                      return launch_sqc_async_local(ser_buf, ser_pos, resp); });
             if (!handle) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
-              error_index = idx;
               LOG_WARN("fail to dispatch in-proc sqc", K(ret), K(sqc));
             } else if (OB_FAIL(handles.push_back(handle))) {
-              error_index = idx;
               LOG_WARN("fail to push sqc handle", K(ret));
             }
           }
         }
         if (OB_FAIL(ret)) {
-          error_index = idx;
           break;
         }
       }
@@ -1282,21 +1126,11 @@ int ObParallelDfoScheduler::dispatch_sqc(ObExecContext &exec_ctx,
     }
     if (OB_SUCCESS != launch_ret && OB_SUCC(ret)) {
       ret = launch_ret;
-      error_index = hidx;
       LOG_WARN("fail to init in-proc sqc", K(ret), K(hidx));
     }
   }
 
   if (OB_FAIL(ret)) {
-    if (is_data_not_readable_err(ret) || is_server_down_error(ret)) {
-      ObPxSqcMeta &sqc = sqcs.at(error_index);
-      LOG_WARN("fail to init sqc in-process", K(ret), K(sqc), K(exec_ctx));
-      int temp_ret = deal_with_init_sqc_error(exec_ctx, sqc, ret);
-      if (temp_ret != OB_SUCCESS) {
-        LOG_WARN("fail to deal with init sqc error", K(exec_ctx), K(sqc), K(temp_ret));
-      }
-    }
-    // mark which sqcs need report / are not alive, like the old process_failed_proxy.
     for (int64_t i = 0; i < sqcs.count(); ++i) {
       ObPxSqcMeta &sqc = sqcs.at(i);
       if (i < responses.count() && i < resp_rets.count()
@@ -1304,12 +1138,13 @@ int ObParallelDfoScheduler::dispatch_sqc(ObExecContext &exec_ctx,
           && OB_SUCCESS == responses.at(i).rc_) {
         sqc.set_need_report(true);
       } else {
-        sqc.set_server_not_alive(true);
+        sqc.set_need_report(false);
+        sqc.set_thread_finish(true);
       }
     }
   } else {
     ARRAY_FOREACH(responses, idx) {
-      ObPxRpcInitSqcResponse &resp = responses.at(idx);
+      ObPxInitSqcResponse &resp = responses.at(idx);
       ObPxSqcMeta &sqc = sqcs.at(idx);
       sqc.set_need_report(true);
       if (!fast_sqc) {
@@ -1333,30 +1168,6 @@ int ObParallelDfoScheduler::dispatch_sqc(ObExecContext &exec_ctx,
   }
   return ret;
 }
-
-int ObParallelDfoScheduler::deal_with_init_sqc_error(ObExecContext &exec_ctx,
-                                                 const ObPxSqcMeta &sqc,
-                                                 int rc) const
-{
-  int ret = OB_SUCCESS;
-  if (is_data_not_readable_err(rc) || is_server_down_error(ret)) {
-    // Distributed execution read to a follower that is too far behind or a replica that is replaying logs,
-    // Add this observer from the remote to the invalid servers in the retry info.
-    const ObAddr &invalid_server = sqc.get_exec_addr();
-    ObSQLSessionInfo *session = NULL;
-    if (OB_ISNULL(session = GET_MY_SESSION(exec_ctx))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("session is NULL", K(ret));
-    } else { }
-  }
-  return ret;
-}
-
-
-/* When sending sqc times out, it may be due to a deadlock.
- * The strategy is: terminate all sqc under dfo, clear the qc-sqc channel,
- * wait for a period of time, then reschedule the entire dfo
- */
 
 int ObParallelDfoScheduler::try_schedule_next_dfo(ObExecContext &ctx)
 {
@@ -1417,15 +1228,15 @@ int ObParallelDfoScheduler::schedule_pair(ObExecContext &exec_ctx,
                K(child), K(ret));
     } else if (!child.is_scheduled()) {
       if (child.has_temp_table_scan()) {
-        if (OB_FAIL(ObPXServerAddrUtil::alloc_by_temp_child_distribution(exec_ctx,
+        if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_temp_child_distribution(exec_ctx,
                                                                          child))) {
-          LOG_WARN("fail alloc addr by temp table distribution", K(child), K(ret));
+          LOG_WARN("fail to allocate local sqc by temp table distribution", K(child), K(ret));
         } else { /*do nohting.*/ }
-      } else if (OB_FAIL(ObPXServerAddrUtil::alloc_by_data_distribution(
+      } else if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_data_distribution(
             coord_info_.pruning_table_location_,
             exec_ctx,
             child))) {
-        LOG_WARN("fail alloc addr by data distribution", K(child), K(ret));
+        LOG_WARN("fail to allocate local sqc by data distribution", K(child), K(ret));
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(set_temp_table_ctx_for_sqc(exec_ctx, child))) {
@@ -1440,17 +1251,17 @@ int ObParallelDfoScheduler::schedule_pair(ObExecContext &exec_ctx,
   if (OB_SUCC(ret)) {
     if (!parent.is_scheduled()) {
       const bool has_reference_child = IS_HASH_SLAVE_MAPPING(parent.get_in_slave_mapping_type());
-      if (has_reference_child && OB_FAIL(ObPXServerAddrUtil::alloc_distribution_of_reference_child(
+      if (has_reference_child && OB_FAIL(ObPxSqcDistributionUtil::alloc_distribution_of_reference_child(
             coord_info_.pruning_table_location_, exec_ctx, parent))) {
         LOG_WARN("alloc distribution of reference child failed", K(ret));
       } else if (parent.has_temp_table_scan()) {
-        if (OB_FAIL(ObPXServerAddrUtil::alloc_by_temp_child_distribution(exec_ctx,
+        if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_temp_child_distribution(exec_ctx,
                                                                          parent))) {
-          LOG_WARN("fail alloc addr by data distribution", K(parent), K(ret));
+          LOG_WARN("fail to allocate local sqc by data distribution", K(parent), K(ret));
         } else { /*do nohting.*/ }
       } else if (parent.is_root_dfo()) {
         // QC/local dfo, directly execute on the local machine and thread, no need to calculate execution location
-        if (OB_FAIL(ObPXServerAddrUtil::alloc_by_local_distribution(exec_ctx,
+        if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_local_distribution(exec_ctx,
                                                                     parent))) {
           LOG_WARN("alloc SQC on local failed", K(parent), K(ret));
         }
@@ -1470,9 +1281,9 @@ int ObParallelDfoScheduler::schedule_pair(ObExecContext &exec_ctx,
           // When TSC exists in DFO or global index maintain op in pdml:
           // 1. When TSC exists, the location information of sqcs uses the location information from the tsc table
           // 2. When it is pdml, dml+px situation, sqcs's locations information uses the locations of the DML corresponding table
-          if (OB_FAIL(ObPXServerAddrUtil::alloc_by_data_distribution(
+          if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_data_distribution(
             coord_info_.pruning_table_location_, exec_ctx, parent))) {
-            LOG_WARN("fail alloc addr by data distribution", K(parent), K(ret));
+            LOG_WARN("fail to allocate local sqc by data distribution", K(parent), K(ret));
           }
           LOG_TRACE("alloc_by_data_distribution", K(parent));
         } else if (parent.is_single()) {
@@ -1480,17 +1291,17 @@ int ObParallelDfoScheduler::schedule_pair(ObExecContext &exec_ctx,
           // For example, parent might be a scalar group by, which is marked as is_local, at this time
           // Walk alloc_by_data_distribution, internally it will allocate a QC local thread to execute
           // or nested PX scenario
-          if (OB_FAIL(ObPXServerAddrUtil::alloc_by_data_distribution(
+          if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_data_distribution(
             coord_info_.pruning_table_location_, exec_ctx, parent))) {
-            LOG_WARN("fail alloc addr by data distribution", K(parent), K(ret));
+            LOG_WARN("fail to allocate local sqc by data distribution", K(parent), K(ret));
           }
           LOG_TRACE("alloc_by_local_distribution", K(parent));
         } else if (has_reference_child) {
-          if (OB_FAIL(ObPXServerAddrUtil::alloc_by_reference_child_distribution(parent))) {
-            LOG_WARN("fail alloc addr by data distribution", K(parent), K(child), K(ret));
+          if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_reference_child_distribution(parent))) {
+            LOG_WARN("fail to allocate local sqc by data distribution", K(parent), K(child), K(ret));
           }
-        } else if (OB_FAIL(ObPXServerAddrUtil::alloc_by_random_distribution(exec_ctx, child, parent, px_node_pool_))) {
-          LOG_WARN("fail alloc addr by random distribution", K(parent), K(child), K(ret));
+        } else if (OB_FAIL(ObPxSqcDistributionUtil::alloc_by_local_distribution(exec_ctx, parent))) {
+          LOG_WARN("fail to allocate local sqc", K(parent), K(ret));
         }
         LOG_TRACE("alloc_by_child_distribution", K(child), K(parent));
       }
@@ -1508,7 +1319,7 @@ int ObParallelDfoScheduler::schedule_pair(ObExecContext &exec_ctx,
   } else if (parent.need_access_store() && parent.is_in_slave_mapping()
              && ObPQDistributeMethod::HASH == child.get_dist_method()
              && child.is_out_slave_mapping()) {
-    if (OB_FAIL(ObPXServerAddrUtil::check_slave_mapping_location_constraint(child, parent))) {
+    if (OB_FAIL(ObPxSqcDistributionUtil::check_slave_mapping_location_constraint(child, parent))) {
       LOG_WARN("slave mapping location constraint not satisfy", K(parent.get_dfo_id()),
                K(child.get_dfo_id()));
     }
@@ -1546,117 +1357,5 @@ int ObParallelDfoScheduler::schedule_pair(ObExecContext &exec_ctx,
     }
   }
 
-  return ret;
-}
-
-int ObPxNodePool::init(ObExecContext &exec_ctx)
-{
-  int ret = OB_SUCCESS;
-  if (px_node_policy_ == ObPxNodePolicy::INVALID) {
-    if (OB_ISNULL(exec_ctx.get_physical_plan_ctx()) || 
-        OB_ISNULL(exec_ctx.get_physical_plan_ctx()->get_phy_plan())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL phy plan ctx", K(ret), K(exec_ctx.get_physical_plan_ctx()));
-    } else {
-      const ObPhysicalPlan *phy_plan = exec_ctx.get_physical_plan_ctx()->get_phy_plan();
-      // PX_NODE_ADDRS has a higher priority than PX_NODE_COUNT and PX_NODE_POLICY.
-      if (!phy_plan->get_px_node_addrs().empty()) {
-        set_px_node_selection_mode(ObPxNodeSelectionMode::SPECIFY_NODE);
-      } else {
-        if (phy_plan->get_px_node_count() != ObPxNodeHint::UNSET_PX_NODE_COUNT) {
-          set_px_node_selection_mode(ObPxNodeSelectionMode::SPECIFY_COUNT);
-        } else {
-          set_px_node_selection_mode(ObPxNodeSelectionMode::DEFAULT);
-        }
-        // For PX_NODE_POLICY,
-        // the priority of hints is higher than that of tenant configuration settings.
-        if (phy_plan->get_px_node_policy() != ObPxNodePolicy::INVALID) {
-          set_px_node_policy(phy_plan->get_px_node_policy());
-        } else {
-          ObPxNodePolicy tenant_config_px_node_policy = ObPxNodePolicy::INVALID;
-          if (OB_FAIL(get_tenant_config_px_node_policy(tenant_config_px_node_policy))) {
-            LOG_WARN("Failed to get tenant config px_node_policy", K(ret));
-          } else {
-            set_px_node_policy(tenant_config_px_node_policy);
-          }
-        }
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      bool locations_empty = false;
-      ObTMArray<ObAddr> calc_nodes;
-      int64_t data_node_cnt = OB_INVALID_SIZE;
-      if (get_px_node_selection_mode() == ObPxNodeSelectionMode::SPECIFY_NODE) {
-        // In this case, data_node_cnt is meaningless and will not be used in the future.
-        // Only need to avoid setting special values like -1 and 0.
-        if (OB_FAIL(ObPXServerAddrUtil::get_specified_servers(exec_ctx, calc_nodes, locations_empty, data_node_cnt))) {
-          LOG_WARN("Failed to get zone servers", K(ret));
-        }
-      } else {
-        switch (get_px_node_policy()) {
-          case ObPxNodePolicy::DATA: {
-            if (OB_FAIL(ObPXServerAddrUtil::get_data_servers(exec_ctx, calc_nodes, locations_empty, data_node_cnt))) {
-              LOG_WARN("Failed to get zone servers", K(ret));
-            }
-            break;
-          }
-          case ObPxNodePolicy::ZONE: {
-            if (OB_FAIL(ObPXServerAddrUtil::get_zone_servers(exec_ctx, calc_nodes, locations_empty, data_node_cnt))) {
-              LOG_WARN("Failed to get zone servers", K(ret));
-            }
-            break;
-          }
-          case ObPxNodePolicy::CLUSTER: {
-            if (OB_FAIL(ObPXServerAddrUtil::get_cluster_servers(exec_ctx, calc_nodes, locations_empty, data_node_cnt))) {
-              LOG_WARN("Failed to get cluster servers", K(ret));
-            }
-            break;
-          }
-          default: {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected px_node_policy", K(get_px_node_policy()),
-                    K(get_px_node_selection_mode()));
-            break;
-          }
-        }
-      }
-      if (OB_SUCC(ret)) {
-        candidate_node_pool_.set_allocator(&exec_ctx.get_allocator());
-        if (OB_FAIL(candidate_node_pool_.assign(calc_nodes))) {
-          LOG_WARN("exec_ctx failed to set_px_node_pool", K(ret));
-        } else if (locations_empty) {
-          set_data_node_cnt(0);
-        } else {
-          set_data_node_cnt(data_node_cnt);
-          LOG_TRACE("decide calc node pool", K(calc_nodes), K(data_node_cnt),
-                  K(get_px_node_policy()), K(get_px_node_selection_mode()));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObPxNodePool::get_tenant_config_px_node_policy(ObPxNodePolicy &px_node_policy)
-{
-  int ret = OB_SUCCESS;
-  if (!true) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant config is invalid", K(ret));
-  } else {
-    ObString config_px_node_policy = GCONF.px_node_policy.get_value_string();
-    if (0 == config_px_node_policy.case_compare("data")) {
-      px_node_policy = ObPxNodePolicy::DATA;
-    } else if (0 == config_px_node_policy.case_compare("zone")) {
-      px_node_policy = ObPxNodePolicy::ZONE;
-    } else if (0 == config_px_node_policy.case_compare("cluster")) {
-      px_node_policy = ObPxNodePolicy::CLUSTER;
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tenant config px_node_policy unexpected",
-                K(ret), K(config_px_node_policy));
-    }
-  }
   return ret;
 }

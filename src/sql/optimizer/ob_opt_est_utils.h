@@ -132,7 +132,7 @@ public:
   // When to use this optimization : all given objs (2 to 4, min and max may be NULL) are string
   // or min or max.
   //
-  // If this optimization is not used, use old method to convert objs.
+  // Non-string inputs use the general scalar conversion path.
   // dongyun.zdy
   static int convert_objs_to_scalars(const common::ObObj *min,
                                      const common::ObObj *max,

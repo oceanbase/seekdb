@@ -32,7 +32,6 @@ create table t1 (a int , b int);
     "schema": {
       "tenant_id":1,
       "database_id":1099511628804,
-      "tablegroup_id":1099511627777,
       "table_id":-1,
       "table_name":"t1",
       "max_used_column_id":17,
@@ -40,7 +39,6 @@ create table t1 (a int , b int);
       "index_column_num":0,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":1,
       "replica_num":0,
       "load_type":0,
@@ -63,10 +61,8 @@ create table t1 (a int , b int);
         "part_num":1
       },
       "comment":"",
-      "tablegroup_name":"",
       "compress_func_name":"none",
       "primary_zone":"",
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -190,7 +186,6 @@ create table t2 (c int , d int);
     "schema": {
       "tenant_id":1,
       "database_id":1099511628804,
-      "tablegroup_id":1099511627777,
       "table_id":-1,
       "table_name":"t2",
       "max_used_column_id":17,
@@ -198,7 +193,6 @@ create table t2 (c int , d int);
       "index_column_num":0,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":1,
       "replica_num":0,
       "load_type":0,
@@ -221,10 +215,8 @@ create table t2 (c int , d int);
         "part_num":1
       },
       "comment":"",
-      "tablegroup_name":"",
       "compress_func_name":"none",
       "primary_zone":"",
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",
@@ -348,7 +340,6 @@ create table t3 (e int , b int);
     "schema": {
       "tenant_id":1,
       "database_id":1099511628804,
-      "tablegroup_id":1099511627777,
       "table_id":-1,
       "table_name":"t3",
       "max_used_column_id":17,
@@ -356,7 +347,6 @@ create table t3 (e int , b int);
       "index_column_num":0,
       "rowkey_split_pos":0,
       "block_size":16384,
-      "is_use_bloomfilter":false,
       "progressive_merge_num":1,
       "replica_num":0,
       "load_type":0,
@@ -379,10 +369,8 @@ create table t3 (e int , b int);
         "part_num":1
       },
       "comment":"",
-      "tablegroup_name":"",
       "compress_func_name":"none",
       "primary_zone":"",
-      "expire_info":"",
       "view_schema": {
         "view_definition":"",
         "check_option":"none",

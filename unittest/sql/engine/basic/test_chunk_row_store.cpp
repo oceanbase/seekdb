@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL
 
-#include "mtlenv/mock_tenant_module_env.h"
+#include "mtlenv/mock_server_runtime_env.h"
 #include "storage/blocksstable/ob_data_file_prepare.h"
 #include "sql/ob_sql_init.h"
 
@@ -56,15 +56,15 @@ public:
   static void SetUpTestCase()
   {
     ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
-    // Single-tenant seekdb: MockTenantModuleEnv builds the real single ObServer
-    // module set (ObTenantIOManager / ObTenantTmpFileManager), inits the tmp
+    // Single-runtime seekdb: MockServerRuntimeEnv builds the real ObServer
+    // module set (ObIOService / ObTmpFileManager), inits the tmp
     // block/page caches and SERVER_STORAGE_META_SERVICE, and publishes
     // share::g_mp = &OBSERVER so ObTmpFileManager::alloc_dir resolves.
-    ASSERT_EQ(OB_SUCCESS, MockTenantModuleEnv::get_instance().init());
+    ASSERT_EQ(OB_SUCCESS, MockServerRuntimeEnv::get_instance().init());
   }
   static void TearDownTestCase()
   {
-    MockTenantModuleEnv::get_instance().destroy();
+    MockServerRuntimeEnv::get_instance().destroy();
     ObTimerService::get_instance().stop();
     ObTimerService::get_instance().wait();
     ObTimerService::get_instance().destroy();
@@ -73,9 +73,9 @@ public:
   virtual void SetUp() override
   {
     int ret = OB_SUCCESS;
-    // The single ObServer module set (ObTenantIOManager / ObTenantTmpFileManager),
+    // The single ObServer module set (ObIOService / ObTmpFileManager),
     // tmp block/page caches and SERVER_STORAGE_META_SERVICE are already brought up
-    // by MockTenantModuleEnv in SetUpTestCase; nothing tenant-specific to do here.
+    // by MockServerRuntimeEnv in SetUpTestCase; nothing runtime-specific to do here.
     row_.count_ = COLS;
     row_.cells_ = cells_;
     cells_[1].set_null();
@@ -233,7 +233,7 @@ protected:
   ObChunkRowStore rs_;
   ObChunkRowStore::Iterator it_;
 
-  int64_t tenant_id_ = OB_SERVER_TENANT_ID;
+  int64_t tenant_id_ = OB_SERVER_RUNTIME_ID;
   int64_t ctx_id_ = ObCtxIds::WORK_AREA;
   const char *label_ = ObModIds::OB_SQL_ROW_STORE;
 
@@ -881,10 +881,10 @@ TEST_F(TestChunkRowStore, disk_with_chunk)
 //   LOG_WARN("average row size", K(avg_row_size));
 
 //   lib::ObMallocAllocator *malloc_allocator = lib::ObMallocAllocator::get_instance();
-//   malloc_allocator->set_tenant_limit(OB_SYS_TENANT_ID, 1L << 30);
+//   malloc_allocator->set_allocator_limit(OB_SERVER_RUNTIME_ID, 1L << 30);
 //   ASSERT_EQ(OB_SUCCESS, ret);
 //   // 50MB for work area
-//   ret = lib::set_wa_limit(OB_SYS_TENANT_ID, 5);
+//   ret = lib::set_wa_limit(OB_SERVER_RUNTIME_ID, 5);
 //   ASSERT_EQ(OB_SUCCESS, ret);
 
 //   rs.reset();
@@ -945,8 +945,8 @@ TEST_F(TestChunkRowStore, disk_with_chunk)
 //   }
 //   ASSERT_LT(idx, rows);
 
-//   lib::ObMallocAllocator::get_instance()->print_tenant_ctx_memory_usage(tenant_id_);
-//   lib::ObMallocAllocator::get_instance()->print_tenant_memory_usage(tenant_id_);
+//   lib::ObMallocAllocator::get_instance()->print_ctx_memory_usage(tenant_id_);
+//   lib::ObMallocAllocator::get_instance()->print_memory_usage(tenant_id_);
 
 //   ASSERT_EQ(rs.get_file_size(), 0);
 //   rs.reset();

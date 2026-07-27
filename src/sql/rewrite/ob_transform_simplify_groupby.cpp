@@ -225,7 +225,6 @@ int ObTransformSimplifyGroupby::get_valid_child_stmts(ObSelectStmt *upper_stmt,
              || stmt->has_window_function()//condition 1
              || stmt->has_having()
              || stmt->has_distinct()
-             || stmt->has_sequence()
              || stmt->has_limit()) {
     is_valid = false;
   } else if (OB_FAIL(get_upper_column_exprs(*upper_stmt, *stmt, // get upper stmt column item's child aggr column and non-aggr column

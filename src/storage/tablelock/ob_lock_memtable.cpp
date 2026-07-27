@@ -489,9 +489,9 @@ int ObLockMemtable::post_obj_lock_conflict_(ObMvccAccessCtx &acc_ctx,
     ? mem_ctx->get_lock_wait_start_ts()
     : current_ts;
   int64_t lock_wait_expire_ts = acc_ctx.eval_lock_expire_ts(lock_wait_start_ts);
-  if (OB_ISNULL(lock_wait_mgr = MTL_WITH_CHECK(ObLockWaitMgr *))) {
+  if (OB_ISNULL(lock_wait_mgr = share::server_module<ObLockWaitMgr *>())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("can not get tenant lock_wait_mgr MTL");
+    LOG_WARN("can not get server lock_wait_mgr");
   } else {
     int tmp_ret = OB_SUCCESS;
     auto tx_id = acc_ctx.get_tx_id();
@@ -501,10 +501,9 @@ int ObLockMemtable::post_obj_lock_conflict_(ObMvccAccessCtx &acc_ctx,
                                              LS_LOCK_TABLET,
                                              lock_id,
                                              lock_wait_expire_ts,
-                                             false,
                                              -1,
                                              -1,  // total_trans_node_cnt
-                                             acc_ctx.tx_desc_->get_assoc_session_id(),
+                                             acc_ctx.tx_desc_->get_session_id(),
                                              tx_id,
                                              conflict_tx_id,
                                              lock_mode,
@@ -1098,7 +1097,7 @@ int ObLockMemtable::register_into_deadlock_detector_(
       tx_lock_part_id, priority))) {
     LOG_WARN("register trans lock part failed", K(ret), K(tx_lock_part_id));
   } else if (OB_FAIL(ObTableLockDeadlockDetectorHelper::add_parent(
-      tx_lock_part_id, GCTX.self_addr(), lock_op.create_trans_id_))) {
+      tx_lock_part_id, lock_op.create_trans_id_))) {
     LOG_WARN("add parent failed", K(ret), K(tx_lock_part_id));
   } else if (OB_FAIL(ObTableLockDeadlockDetectorHelper::block(tx_lock_part_id, lock_op))) {
     LOG_WARN("add dependency failed", K(ret), K(tx_lock_part_id));

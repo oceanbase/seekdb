@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_dcl_executor.h"
-#include "rootserver/ob_rs_serial_call.h"
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_ddl_serial_call.h"
+#include "rootserver/ob_local_management_service.h"
 
 #include "lib/encrypt/ob_encrypted_helper.h"
 #include "sql/engine/ob_exec_context.h"
@@ -146,8 +146,8 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("failed to get tenant schema guard", K(ret));
+    } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+      LOG_WARN("failed to get runtime schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
                                                   user_info))) {
       LOG_WARN("failed to get user info", K(ret));
@@ -167,7 +167,7 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->grant(arg); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->grant(arg); }))) {
       LOG_WARN("Grant privileges to user error", K(ret), K(arg));
     }
   }
@@ -210,12 +210,6 @@ int ObRevokeExecutor::execute(ObExecContext &ctx, ObRevokeStmt &stmt)
         }
         break;
       }
-      case OB_PRIV_CATALOG_LEVEL : {
-        if (OB_FAIL(revoke_catalog(stmt))) {
-          LOG_WARN("grant_revoke_catalog error", K(ret));
-        }
-        break;
-      }
       case OB_PRIV_OBJECT_LEVEL: {
         if (OB_FAIL(revoke_object(stmt, ctx))) {
           LOG_WARN("grant_revoke_object error", K(ret));
@@ -243,7 +237,7 @@ int ObRevokeExecutor::revoke_user(ObRevokeStmt &stmt)
   if (is_role) {
     for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); ++i) {
       arg.user_id_ = user_ids.at(i);
-      if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->revoke_user(arg); }))) {
+      if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->revoke_user(arg); }))) {
         LOG_WARN("revoke user error", K(arg), K(ret));
       }
     }
@@ -255,29 +249,7 @@ int ObRevokeExecutor::revoke_user(ObRevokeStmt &stmt)
     arg.priv_set_ = stmt.get_priv_set();
     for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
       arg.user_id_ = user_ids.at(i);
-      if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->revoke_user(arg); }))) {
-        LOG_WARN("revoke user error", K(arg), K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObRevokeExecutor::revoke_catalog(ObRevokeStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  obcall::ObRevokeCatalogArg &arg = static_cast<obcall::ObRevokeCatalogArg &>(stmt.get_ddl_arg());
-  
-  arg.priv_set_ = stmt.get_priv_set();
-  // arg.catalog_ has been set in resolve phase
-  const ObIArray<uint64_t> &user_ids = stmt.get_users();
-  if (0 == user_ids.count()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("User ids is empty, resolver may be error", K(ret));
-  } else {
-    for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
-      arg.user_id_ = user_ids.at(i);
-      if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->revoke_catalog(arg); }))) {
+      if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->revoke_user(arg); }))) {
         LOG_WARN("revoke user error", K(arg), K(ret));
       }
     }
@@ -299,7 +271,7 @@ int ObRevokeExecutor::revoke_db(ObRevokeStmt &stmt)
   } else {
     for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
       arg.user_id_ = user_ids.at(i);
-      if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->revoke_database(arg); }))) {
+      if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->revoke_database(arg); }))) {
         LOG_WARN("revoke user error", K(arg), K(ret));
       }
     }
@@ -347,8 +319,8 @@ int ObRevokeExecutor::revoke_table(ObRevokeStmt &stmt,
       //todo: pl routine and others
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("failed to get tenant schema guard", K(ret));
+    } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+      LOG_WARN("failed to get runtime schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
                                                   user_info))) {
       LOG_WARN("failed to get user info", K(ret));
@@ -375,7 +347,7 @@ int ObRevokeExecutor::revoke_table(ObRevokeStmt &stmt,
     } else {
       for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
         arg.user_id_ = user_ids.at(i);
-        if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->revoke_table(arg); }))) {
+        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->revoke_table(arg); }))) {
           LOG_WARN("revoke user error", K(arg), K(ret));
         }
       }
@@ -405,8 +377,8 @@ int ObRevokeExecutor::revoke_routine(ObRevokeStmt &stmt,
     arg.grantor_id_ = stmt.get_grantor_id();
     arg.revoke_all_ora_ = stmt.get_revoke_all_ora();
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("failed to get tenant schema guard", K(ret));
+    } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+      LOG_WARN("failed to get runtime schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
                                                   user_info))) {
       LOG_WARN("failed to get user info", K(ret));
@@ -433,7 +405,7 @@ int ObRevokeExecutor::revoke_routine(ObRevokeStmt &stmt,
     } else {
       for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
         arg.user_id_ = user_ids.at(i);
-        if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->revoke_routine(arg); }))) {
+        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->revoke_routine(arg); }))) {
           LOG_WARN("revoke user error", K(arg), K(ret));
         }
       }
@@ -459,8 +431,8 @@ int ObRevokeExecutor::revoke_object(ObRevokeStmt &stmt,
     arg.obj_name_ = stmt.get_table_name();
     arg.obj_type_ = static_cast<uint64_t>(stmt.get_object_type());
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("failed to get tenant schema guard", K(ret));
+    } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+      LOG_WARN("failed to get runtime schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
                   user_info))) {
       LOG_WARN("failed to get user info", K(ret));
@@ -487,7 +459,7 @@ int ObRevokeExecutor::revoke_object(ObRevokeStmt &stmt,
     } else {
       for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
         arg.user_id_ = user_ids.at(i);
-        if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->revoke_object(arg); }))) {
+        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->revoke_object(arg); }))) {
           LOG_WARN("revoke user error", K(arg), K(ret));
         }
       }

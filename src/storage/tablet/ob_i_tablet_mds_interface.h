@@ -57,7 +57,7 @@ struct MdsDefaultDeepCopyOperation {
 class ObITabletMdsInterface
 {
   friend class ObTabletCreateDeleteHelper;
-  friend class ObTenantDirectLoadMgr; // TODO(@gaishun.gs): refactor later
+  friend class ObDirectLoadMgr; // TODO(@gaishun.gs): refactor later
 public:
   // new mds
   // Currently, we only support read LATEST multi source data, so please pass MAX_SCN as snapshot.

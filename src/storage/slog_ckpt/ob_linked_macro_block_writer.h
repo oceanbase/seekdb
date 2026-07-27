@@ -74,13 +74,13 @@ public:
   ~ObLinkedMacroBlockItemWriter() = default;
   ObLinkedMacroBlockItemWriter(const ObLinkedMacroBlockItemWriter &) = delete;
   ObLinkedMacroBlockItemWriter &operator=(const ObLinkedMacroBlockItemWriter &) = delete;
-  // used for writing macro_info both in shared_nothing and shared_storage
+  // Initialize an object-backed linked macro-block stream.
   int init_for_object(
     const uint64_t tablet_id,
     const int64_t snapshot_version,
     const int64_t start_macro_seq,
     blocksstable::ObIMacroBlockFlushCallback *write_callback = nullptr);
-  // only used for ckpt_slog in shared_nothing
+  // Initialize the local checkpoint slog stream.
   int init(const bool need_disk_addr, const ObMemAttr &mem_attr);
   int write_item(const char *item_buf, const int64_t item_buf_len, int64_t *item_idx = nullptr);
   int close();

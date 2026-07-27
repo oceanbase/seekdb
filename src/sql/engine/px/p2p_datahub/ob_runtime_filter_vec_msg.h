@@ -299,7 +299,6 @@ public:
       uint64_t *batch_hash_values);
 
   virtual int reuse() override;
-  void check_finish_receive() override final;
   void after_process() override;
   int try_extract_query_range(bool &has_extract, ObIArray<ObNewRange> &ranges,
                               bool need_deep_copy = false,

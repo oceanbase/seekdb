@@ -51,18 +51,18 @@ struct ObFrozenStatus
                      frozen_timestamp_(INVALID_TIMESTAMP),
                      status_(common::FREEZE_STATUS_MAX),
                      schema_version_(INVALID_SCHEMA_VERSION),
-                     cluster_version_(0)
+                     data_format_version_(0)
   {}
   ObFrozenStatus(const common::ObVersion &frozen_version,
                  const int64_t frozen_timestamp,
                  const common::ObFreezeStatus &status,
                  const int64_t schema_version,
-                 const int64_t cluster_version)
+                 const int64_t data_format_version)
   : frozen_version_(frozen_version.version_),
     frozen_timestamp_(frozen_timestamp),
     status_(status),
     schema_version_(schema_version),
-    cluster_version_(cluster_version)
+    data_format_version_(data_format_version)
   {}
 
   void reset()
@@ -71,7 +71,7 @@ struct ObFrozenStatus
     frozen_timestamp_ = INVALID_TIMESTAMP;
     status_ = common::FREEZE_STATUS_MAX;
     schema_version_ = INVALID_SCHEMA_VERSION;
-    cluster_version_ = 0;
+    data_format_version_ = 0;
   }
   bool is_valid() const
   {
@@ -86,19 +86,19 @@ struct ObFrozenStatus
           && this->frozen_timestamp_ == other.frozen_timestamp_
           && this->status_ == other.status_
           && this->schema_version_ == other.schema_version_
-          && this->cluster_version_ == other.cluster_version_));
+          && this->data_format_version_ == other.data_format_version_));
   }
   TO_STRING_KV(N_FROZEN_VERSION, frozen_version_,
               "frozen_timestamp", frozen_timestamp_,
               "freeze_status", status_,
               N_SCHEMA_VERSION, schema_version_,
-              "cluster_version", cluster_version_);
+              "data_format_version", data_format_version_);
 
   common::ObVersion frozen_version_;
   int64_t frozen_timestamp_;
   common::ObFreezeStatus status_;
   int64_t schema_version_;
-  int64_t cluster_version_;
+  int64_t data_format_version_;
 
   OB_UNIS_VERSION(1);
 };

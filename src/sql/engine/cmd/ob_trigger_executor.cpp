@@ -16,10 +16,9 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_trigger_executor.h"
-#include "rootserver/ob_rs_serial_call.h"
-#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_local_ddl_serial_call.h"
+#include "rootserver/ob_local_management_service.h"
 #include "pl/ob_pl_package.h"
-#include "pl/ob_pl_build_utils.h"
 #include "sql/resolver/ddl/ob_trigger_resolver.h"
 
 namespace oceanbase
@@ -37,15 +36,12 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
   ObTaskExecutorCtx *task_exec_ctx = NULL;
   ObCreateTriggerArg &arg = stmt.get_trigger_arg();
   
-  bool has_error = false;
   ObString first_stmt;
   obcall::ObCreateTriggerRes res;
-  pl::ObPL *pl_engine = nullptr;
-  CK (OB_NOT_NULL(pl_engine = ctx.get_my_session()->get_pl_engine()));
   OZ (stmt.get_first_stmt(first_stmt));
   arg.ddl_stmt_str_ = first_stmt;
   OV (OB_NOT_NULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
-  OZ (rootserver::serial_call([&]{ return GCTX.root_service_->create_trigger_with_res(arg, res); }), GCTX.self_addr());
+  OZ (rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_trigger_with_res(arg, res); }), GCTX.self_addr());
   // Here needs to refresh schema, otherwise may not get the latest trigger_info
   OZ (ObSPIService::force_refresh_schema());
   CK (OB_NOT_NULL(ctx.get_sql_ctx()));
@@ -54,13 +50,12 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
   CK (OB_NOT_NULL(ctx.get_sql_proxy()));
   CK (OB_NOT_NULL(ctx.get_task_exec_ctx().schema_service_));
   OZ (ctx.get_task_exec_ctx().schema_service_->
-      get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
+      get_runtime_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
   OZ (analyze_dependencies(*ctx.get_sql_ctx()->schema_guard_,
                            ctx.get_my_session(),
                            ctx.get_sql_proxy(),
                            ctx.get_allocator(),
                            arg));
-  OX (has_error = ERROR_STATUS_HAS_ERROR == arg.error_info_.get_error_status());
   OZ (ctx.get_sql_ctx()->schema_guard_->reset());
   if (OB_SUCC(ret)) {
     arg.ddl_stmt_str_.reset();
@@ -71,24 +66,11 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
     OZ (arg.based_schema_object_infos_.push_back(ObBasedSchemaObjectInfo(arg.trigger_info_.get_trigger_id(),
                                                                           TRIGGER_SCHEMA,
                                                                           res.trigger_schema_version_)));
-    OZ (rootserver::serial_call([&]{ return GCTX.root_service_->create_trigger_with_res(arg, res); }), GCTX.self_addr());
+    OZ (rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_trigger_with_res(arg, res); }), GCTX.self_addr());
     if (OB_ERR_PARALLEL_DDL_CONFLICT == ret) {
       LOG_WARN("trigger or base table maybe changed by other session, ignore the error", K(ret), K(res));
       ret = OB_SUCCESS;
     }
-  }
-  if (OB_SUCC(ret)
-      && !has_error
-      && true
-      && GCONF.plsql_v2_compatibility) {
-    OZ (ObSPIService::force_refresh_schema(res.trigger_schema_version_));
-    OZ (ctx.get_task_exec_ctx().schema_service_->
-          get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
-    OZ (pl::ObPLBuildUtils::build(ctx,
-                                       arg.trigger_info_.get_database_id(),
-                                       arg.trigger_info_.get_trigger_name(),
-                                       pl::ObPLBuildUtils::PL_UNIT_TRIGGER,
-                                       res.trigger_schema_version_));
   }
   if(arg.with_if_not_exist_ && ret == OB_ERR_TRIGGER_ALREADY_EXIST) {
     const ObString &trigger_name = arg.trigger_info_.get_trigger_name();
@@ -108,7 +90,7 @@ int ObDropTriggerExecutor::execute(ObExecContext &ctx, ObDropTriggerStmt &stmt)
   OZ (stmt.get_first_stmt(first_stmt));
   arg.ddl_stmt_str_ = first_stmt;
   OV (OB_NOT_NULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
-  OZ (rootserver::serial_call([&]{ return GCTX.root_service_->drop_trigger(arg); }), GCTX.self_addr());
+  OZ (rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_trigger(arg); }), GCTX.self_addr());
   return ret;
 }
 
@@ -118,34 +100,14 @@ int ObAlterTriggerExecutor::execute(ObExecContext &ctx, ObAlterTriggerStmt &stmt
   ObTaskExecutorCtx *task_exec_ctx = NULL;
   ObAlterTriggerArg &arg = stmt.get_trigger_arg();
   ObString first_stmt;
-  pl::ObPL *pl_engine = nullptr;
-  CK (arg.trigger_infos_.count() > 0);
-  CK (OB_NOT_NULL(pl_engine = ctx.get_my_session()->get_pl_engine()));
   OZ (stmt.get_first_stmt(first_stmt));
   if (OB_SUCC(ret)) {
-    const ObTriggerInfo& trigger_info = arg.trigger_infos_.at(0);
-    int64_t latest_schema_version = OB_INVALID_VERSION;
     arg.ddl_stmt_str_ = first_stmt;
     OV (OB_NOT_NULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
     if (OB_FAIL(ret)) {
     } else {
       obcall::ObRoutineDDLRes res;
-      OZ (rootserver::serial_call([&]{ return GCTX.root_service_->alter_trigger_with_res(arg, res); }), GCTX.self_addr());
-      if (OB_SUCC(ret)) {
-        OZ (ObSPIService::force_refresh_schema(res.store_routine_schema_version_));
-        OX (latest_schema_version = res.store_routine_schema_version_);
-      }
-    }
-    if (OB_SUCC(ret)
-        && true
-        && GCONF.plsql_v2_compatibility) {
-      OZ (ctx.get_task_exec_ctx().schema_service_->
-          get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
-      OZ (pl::ObPLBuildUtils::build(ctx,
-                                         trigger_info.get_database_id(),
-                                         trigger_info.get_trigger_name(),
-                                         pl::ObPLBuildUtils::PL_UNIT_TRIGGER,
-                                         latest_schema_version));
+      OZ (rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->alter_trigger_with_res(arg, res); }), GCTX.self_addr());
     }
   }
   return ret;

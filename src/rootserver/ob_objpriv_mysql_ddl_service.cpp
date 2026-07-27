@@ -41,7 +41,7 @@ int ObObjPrivMysqlDDLService::grant_object(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
-    LOG_WARN("failed to get tenant schema version", KR(ret));
+    LOG_WARN("failed to get runtime schema version", KR(ret));
   } else if (!object_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("object_key is invalid", K(object_key), K(ret));
@@ -95,10 +95,10 @@ int ObObjPrivMysqlDDLService::revoke_object(
   } else if (!object_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("object_key is invalid", K(object_key), K(ret));
-  } else if (OB_FAIL(ddl_service_->get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
+  } else if (OB_FAIL(ddl_service_->get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
     LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
-    LOG_WARN("failed to get tenant schema version", KR(ret));
+    LOG_WARN("failed to get runtime schema version", KR(ret));
   } else {
     ObDDLSQLTransaction trans(&ddl_service_->get_schema_service());
     if (OB_FAIL(trans.start(&ddl_service_->get_sql_proxy(), refreshed_schema_version))) {

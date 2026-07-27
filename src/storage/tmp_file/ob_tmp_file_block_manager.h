@@ -91,7 +91,7 @@ private:
 };
 
 // ObTmpFileBlock records the usage of a macro block.
-// each macro block could be referenced by one or more tmp files of a tenant.
+// Each macro block may be referenced by one or more local temporary files.
 class ObTmpFileBlock final
 {
   enum BlockState {

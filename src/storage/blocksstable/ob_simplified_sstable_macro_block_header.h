@@ -44,8 +44,7 @@ public:
   bool is_valid() const;
   TO_STRING_KV(K_(idx_block_offset), K_(idx_block_size), K_(first_data_micro_block_offset),
         K_(rowkey_column_count), K_(micro_block_count), K_(row_store_type), 
-        K_(compressor_type), K_(encrypt_id), K_(master_key_id),
-        KPHEX_(encrypt_key, sizeof(encrypt_key_)));
+        K_(compressor_type));
 public:
   static int simplify_macro_block(char *macro_block_buf,
                                   const int64_t macro_block_buf_size,
@@ -59,9 +58,6 @@ public:
   int32_t micro_block_count_;
   common::ObRowStoreType row_store_type_;
   common::ObCompressorType compressor_type_;
-  int64_t encrypt_id_;
-  int64_t master_key_id_;
-  char encrypt_key_[share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH];
   bool is_inited_;
 };
 

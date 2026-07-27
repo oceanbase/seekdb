@@ -88,7 +88,7 @@ int ObExprSTDistanceSphere::eval_st_distance_sphere(const ObExpr &expr,
   bool is_null_result = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_DISTANCE_SPHERE);
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   omt::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs1 = NULL;
   const ObSrsItem *srs2 = NULL;
@@ -121,7 +121,6 @@ int ObExprSTDistanceSphere::eval_st_distance_sphere(const ObExpr &expr,
   } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *wkb2_datum,
             expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), wkb2))) {
     LOG_WARN("fail to get real string data", K(ret), K(wkb2));
-  } else if (FALSE_IT(tmp_allocator.set_baseline_size(wkb1.length() + wkb2.length()))) {
   } else if (OB_FAIL(ob_write_string(tmp_allocator, wkb1, wkb1_copy))) {
     LOG_WARN("fail to copy wkb1", K(ret), K(wkb1));
   } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb1_copy, srs1,
@@ -213,9 +212,6 @@ int ObExprSTDistanceSphere::eval_st_distance_sphere(const ObExpr &expr,
     } else {
       res.set_double(result);
     }
-  }
-  if (mem_ctx != nullptr) {
-    tmp_allocator.add_ext_used((*mem_ctx)->arena_used());
   }
   return ret;
 }

@@ -46,7 +46,7 @@ public:
   static const char *get_comp_event_str(enum ObCompactionEvent event);
   enum ObCompactionRole : uint8_t
   {
-    TENANT_RS = 0,
+    ROOT_SERVICE = 0,
     STORAGE,
     LS_LEADER,
     LS_SVR,
@@ -99,10 +99,10 @@ public:
   ObServerCompactionEventHistory()
   : ObInfoRingArray(allocator_)
   {
-    allocator_.set_attr(SET_USE_500("CompEventMgr"));
+    allocator_.set_attr(lib::ObMemAttr("CompEventMgr"));
   }
   ~ObServerCompactionEventHistory() {}
-  static int mtl_init(ObServerCompactionEventHistory* &event_history);
+  static int server_module_init(ObServerCompactionEventHistory* &event_history);
   int init();
   void destroy();
 
@@ -141,7 +141,7 @@ private:
 PUSH_COMPACTION_EVENT(MAJOR_MERGE, compaction_scn, event, ObServerCompactionEvent::STORAGE, timestamp, __VA_ARGS__)
 
 #define ADD_RS_COMPACTION_EVENT(compaction_scn, event, timestamp, ...) \
-PUSH_COMPACTION_EVENT(MAJOR_MERGE, compaction_scn, event, ObServerCompactionEvent::TENANT_RS, timestamp, __VA_ARGS__)
+PUSH_COMPACTION_EVENT(MAJOR_MERGE, compaction_scn, event, ObServerCompactionEvent::ROOT_SERVICE, timestamp, __VA_ARGS__)
 
 #define ADD_ROLE_COMPACTION_EVENT(role, compaction_scn, event, timestamp, ...) \
 PUSH_COMPACTION_EVENT(MAJOR_MERGE, compaction_scn, event, role, timestamp, __VA_ARGS__)

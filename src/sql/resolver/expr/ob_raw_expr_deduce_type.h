@@ -110,9 +110,7 @@ private:
   int get_row_expr_param_type(const ObRawExpr &expr, ObIExprResTypes &types);
   int deduce_type_visit_for_special_func(int64_t param_index, const ObRawExpr &expr, ObIExprResTypes &types);
   // init udf expr
-  int init_normal_udf_expr(ObNonTerminalRawExpr &expr, ObExprOperator *op);
   // get agg udf result type
-  int set_agg_udf_result_type(ObAggFunRawExpr &expr);
 
   int set_agg_group_concat_result_type(ObAggFunRawExpr &expr, ObExprResType &result_type);
   int set_json_agg_result_type(ObAggFunRawExpr &expr, ObExprResType& result_type, bool &need_add_cast);

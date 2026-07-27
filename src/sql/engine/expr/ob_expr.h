@@ -136,11 +136,6 @@ struct ObEvalInfo
   }
   DECLARE_TO_STRING;
 
-  // if want to use this interface to opt in vectorization 1.0,
-  // When converting the new format to the old format in vectorization 2.0,
-  // the notnull_ and point_to_frame_ tags need to be maintained
-  inline bool in_frame_notnull() const { return false; }
-
 	union {
 		struct {
 			// is already evaluated

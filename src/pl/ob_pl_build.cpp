@@ -18,6 +18,7 @@
 
 #include "pl/ob_pl_build.h"
 #include "src/sql/resolver/ob_resolver_utils.h"
+#include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/code_generator/ob_static_engine_expr_cg.h"
 #include "sql/code_generator/ob_expr_generator_impl.h"
 #include "pl/ob_pl_package.h"
@@ -35,9 +36,7 @@ ObMutex ObPLBuilder::package_dep_info_lock_;
 
 namespace
 {
-// Prepare the routine/package's runtime ObSqlExpressions and finalize them through
-// the SQL static engine, reusing the expression-preparation subset of the old
-// ObPLCodeGenerator path that the tree-walking interpreter still needs.
+// Prepare routine and package expressions for interpreter execution.
 int pl_prepare_expressions(ObPLAstUnit &ast, ObPLExecutableUnit &unit)
 {
   int ret = OB_SUCCESS;
@@ -65,8 +64,7 @@ int pl_finalize_expressions(sql::ObSQLSessionInfo &session_info,
                             ObPLExecutableUnit &unit)
 {
   int ret = OB_SUCCESS;
-  // Obj-access attr getters used to be prepared by the native-code path; the
-  // interpreter does not support obj-access, so leave the attr-getter address at 0.
+  // Obj-access expressions are resolved at runtime by the interpreter.
   for (int64_t i = 0; OB_SUCC(ret) && i < ast.get_obj_access_exprs().count(); ++i) {
     ObRawExpr *expr = ast.get_obj_access_expr(i);
     if (OB_ISNULL(expr) || !expr->is_obj_access_expr()) {
@@ -85,8 +83,7 @@ int pl_finalize_expressions(sql::ObSQLSessionInfo &session_info,
                                     &session_info,
                                     &schema_guard,
                                     0 /*original param cnt*/,
-                                    0 /*param cnt*/,
-                                    GET_MIN_CLUSTER_VERSION());
+                                    0 /*param cnt*/);
     se_cg.set_rt_question_mark_eval(true);
     OZ (se_cg.generate(raw_exprs, unit.get_frame_info()));
 
@@ -314,10 +311,6 @@ int ObPLBuilder::compile(
         LOG_WARN("failed to init resolver", K(block), K(ret));
       } else if (OB_FAIL(resolver.resolve_root(block, func_ast))) {
         LOG_WARN("failed to analyze pl body", K(block), K(ret));
-      } else if (session_info_.is_pl_debug_on()) {
-        if (OB_FAIL(func_ast.generate_symbol_debuginfo())) {
-          LOG_WARN("failed to generate symbol debuginfo", K(ret));
-        }
       }
     }
 
@@ -337,7 +330,7 @@ int ObPLBuilder::compile(
     if (OB_SUCC(ret)) {
       {
         lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(OB_PL_BUILD)));
-        // Interpreter path: prepare expressions + copy metadata + retain AST, with no native code generation.
+        // Prepare expressions and AST metadata for interpreter execution.
         if (OB_FAIL(ObPL::check_session_alive(session_info_))) {
           LOG_WARN("query or session is killed", K(ret));
         } else {
@@ -348,7 +341,6 @@ int ObPLBuilder::compile(
           OZ (func.set_types(func_ast.get_user_type_table()));
           OZ (func.get_dependency_table().assign(func_ast.get_dependency_table()));
           OZ (func.add_members(func_ast.get_flag()));
-          OX (func.set_pipelined(func_ast.get_pipelined()));
           OX (func.set_can_cached(func_ast.get_can_cached()));
           OX (func.set_has_incomplete_rt_dep_error(func_ast.has_incomplete_rt_dep_error()));
           OX (func.set_is_all_sql_stmt(func_ast.get_is_all_sql_stmt()));
@@ -380,14 +372,14 @@ int ObPLBuilder::compile(
         if (OB_SUCC(ret)) {
           //anonymous + ps situation func also needs to enter plan cache, therefore version needs to be set
           
-          int64_t tenant_schema_version = OB_INVALID_VERSION;
+          int64_t runtime_schema_version = OB_INVALID_VERSION;
           int64_t sys_schema_version = OB_INVALID_VERSION;
-          if (OB_FAIL(schema_guard_.get_schema_version(tenant_schema_version))
+          if (OB_FAIL(schema_guard_.get_schema_version(runtime_schema_version))
               || OB_FAIL(schema_guard_.get_schema_version(sys_schema_version))) {
             LOG_WARN("fail to get schema version", K(ret));
           } else {
             func.get_stat_for_update().pl_cg_mem_hold_ = 0;
-            func.set_tenant_schema_version(tenant_schema_version);
+            func.set_runtime_schema_version(runtime_schema_version);
             func.set_sys_schema_version(sys_schema_version);
           }
         }
@@ -469,9 +461,6 @@ int ObPLBuilder::compile(
     if (routine.is_invoker_right()) {
       func_ast.get_compile_flag().add_invoker_right();
     }
-    if (routine.is_pipelined()) {
-      func_ast.set_pipelined();
-    }
     if (routine.is_procedure()
         && (ROUTINE_PROCEDURE_TYPE == routine.get_routine_type()
             || ROUTINE_UDT_TYPE == routine.get_routine_type())) {
@@ -543,9 +532,6 @@ int ObPLBuilder::compile(
     OZ (resolver.init(func_ast));
     OZ (resolver.init_default_exprs(func_ast, routine.get_routine_params()));
     OZ (resolver.resolve_root(parse_tree, func_ast));
-    if (session_info_.is_pl_debug_on()) {
-      OZ (func_ast.generate_symbol_debuginfo());
-    }
     ObErrorInfo error_info;
     
     if (OB_SUCC(ret)) {
@@ -568,10 +554,7 @@ int ObPLBuilder::compile(
   //Step 4: Code Generator
   if (OB_SUCC(ret)) {
     {
-      // Interpreter path: no native code generation and no persistent DLL. Prepare the
-      // routine's ObSqlExpressions + copy AST metadata onto the func; the tree-walking
-      // interpreter executes the retained AST (func.set_ast happens in the caller),
-      // and func.get_action() stays 0 (unused, ObPLExecState::execute() interprets).
+      // Prepare expressions and AST metadata for interpreter execution.
       lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(OB_PL_BUILD)));
       OZ (pl_prepare_expressions(func_ast, func));
       OZ (pl_finalize_expressions(session_info_, schema_guard_, func_ast, func));
@@ -580,13 +563,12 @@ int ObPLBuilder::compile(
       OZ (func.set_types(func_ast.get_user_type_table()));
       OZ (func.get_dependency_table().assign(func_ast.get_dependency_table()));
       OZ (func.add_members(func_ast.get_flag()));
-      OX (func.set_pipelined(func_ast.get_pipelined()));
       OX (func.set_can_cached(func_ast.get_can_cached()));
       OX (func.set_has_incomplete_rt_dep_error(func_ast.has_incomplete_rt_dep_error()));
       OX (func.set_is_all_sql_stmt(func_ast.get_is_all_sql_stmt()));
       OX (func.set_has_parallel_affect_factor(func_ast.has_parallel_affect_factor()));
       if (OB_SUCC(ret)) {
-        OZ (func.set_tenant_sys_schema_version(schema_guard_));
+        OZ (func.set_runtime_and_system_schema_versions(schema_guard_));
         OX (func.set_ret_type(func_ast.get_ret_type()));
         OX (func.get_stat_for_update().schema_version_ = routine.get_schema_version());
         OX (func.get_stat_for_update().pl_cg_mem_hold_ = 0);
@@ -634,7 +616,7 @@ int ObPLBuilder::update_schema_object_dep_info(ObIArray<ObSchemaObjVersion> &dp_
   ObMySQLProxy *sql_proxy = nullptr;
   ObMySQLTransaction trans;
   bool skip = false;
-  if (!MTL_TENANT_ROLE_CACHE_IS_PRIMARY()) {
+  if (!share::server_is_primary()) {
     skip = true;
   } else if (ObTriggerInfo::is_trigger_package_id(dep_obj_id)) {
       skip = true;
@@ -800,11 +782,6 @@ int ObPLBuilder::generate_package(const ObString &exec_env, ObPLPackageAST &pack
   CK (OB_NOT_NULL(session_info_.get_pl_engine()));
   if (OB_SUCC(ret)) {
     WITH_CONTEXT(package.get_mem_context()) {
-      bool exist_same_name_obj_with_public_synonym = false;
-      OZ (ObRoutinePersistentInfo::has_same_name_dependency_with_public_synonym(schema_guard_,
-                                                                            package_ast.get_dependency_table(),
-                                                                            exist_same_name_obj_with_public_synonym,
-                                                                            session_info_));
       CK (package.is_inited());
       OZ (package.get_dependency_table().assign(package_ast.get_dependency_table()));
       OZ (generate_package_conditions(package_ast.get_condition_table(), package));
@@ -877,7 +854,7 @@ int ObPLBuilder::build_package(const ObPackageInfo &package_info,
   if (OB_SUCC(ret)) {
     {
       lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(pl::OB_PL_BUILD)));
-      // Interpreter path: prepare the package's expressions only, with no native code generation.
+      // Prepare package expressions for interpreter execution.
       OZ (ObPL::check_session_alive(session_info_));
       OZ (pl_prepare_expressions(package_ast, package));
       OZ (pl_finalize_expressions(session_info_, schema_guard_, package_ast, package));
@@ -937,11 +914,11 @@ int ObPLBuilder::build_package(const ObPackageInfo &package_info,
   if (OB_SUCC(ret)) {
     int64_t public_syn_cnt = 0;
     
-    int64_t tenant_schema_version = OB_INVALID_VERSION;
+    int64_t runtime_schema_version = OB_INVALID_VERSION;
     int64_t sys_schema_version = OB_INVALID_VERSION;
-    OZ (schema_guard_.get_schema_version(tenant_schema_version));
+    OZ (schema_guard_.get_schema_version(runtime_schema_version));
     OZ (schema_guard_.get_schema_version(sys_schema_version));
-    OX (package.set_tenant_schema_version(tenant_schema_version));
+    OX (package.set_runtime_schema_version(runtime_schema_version));
     OX (package.set_sys_schema_version(sys_schema_version));
     OX (package.set_public_syn_count(public_syn_cnt));
   }
@@ -951,7 +928,7 @@ int ObPLBuilder::build_package(const ObPackageInfo &package_info,
   OZ (ObPLCacheCtx::assemble_format_routine_name(format_name, &package));
   OX (package.get_stat_for_update().compile_time_ = compile_end - compile_start);
   OX (session_info_.add_plsql_compile_time(compile_end - compile_start));
-  OZ (package.set_tenant_sys_schema_version(schema_guard_));
+  OZ (package.set_runtime_and_system_schema_versions(schema_guard_));
   if (package_info.is_for_trigger()) {
     CK (OB_NOT_NULL(trigger_info));
     OX (package.get_stat_for_update().schema_version_ = trigger_info->get_schema_version());
@@ -1335,7 +1312,7 @@ int ObPLBuilder::compile_subprogram_table(common::ObIAllocator &allocator,
         OZ (init_function(schema_guard, exec_env, *routine_info, *routine));
         if (OB_SUCC(ret)) {
           lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(pl::OB_PL_BUILD)));
-          // Interpreter path: prepare expressions + copy metadata + retain AST, with no native code generation.
+          // Prepare expressions and AST metadata for interpreter execution.
           OZ (pl_prepare_expressions(*routine_ast, *routine));
           OZ (pl_finalize_expressions(session_info, schema_guard, *routine_ast, *routine));
           OZ (routine->get_enum_set_ctx().assgin(routine_ast->get_enum_set_ctx()));
@@ -1343,7 +1320,6 @@ int ObPLBuilder::compile_subprogram_table(common::ObIAllocator &allocator,
           OZ (routine->set_types(routine_ast->get_user_type_table()));
           OZ (routine->get_dependency_table().assign(routine_ast->get_dependency_table()));
           OZ (routine->add_members(routine_ast->get_flag()));
-          OX (routine->set_pipelined(routine_ast->get_pipelined()));
           OX (routine->set_can_cached(routine_ast->get_can_cached()));
           OX (routine->set_has_incomplete_rt_dep_error(routine_ast->has_incomplete_rt_dep_error()));
           OX (routine->set_is_all_sql_stmt(routine_ast->get_is_all_sql_stmt()));

@@ -143,7 +143,6 @@ public:
   virtual int close_px_resource_analyze(CLOSE_PX_RESOURCE_ANALYZE_DECLARE_ARG) override;
   int compute_spf_batch_rescan();
   int compute_spf_batch_rescan(bool &can_batch);
-  int compute_spf_batch_rescan_compat(bool &can_batch);
   int check_right_is_local_scan(int64_t &local_scan_type) const;
   static int need_compare_batch_rescan(const ObLogSubPlanFilter &first_op,
                                        const ObLogSubPlanFilter &second_op,

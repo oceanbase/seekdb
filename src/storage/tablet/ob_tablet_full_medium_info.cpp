@@ -43,7 +43,7 @@ int ObTabletFullMediumInfo::assign(common::ObIAllocator &allocator, const ObTabl
   if (OB_FAIL(medium_info_list_.assign(allocator, other.medium_info_list_))) {
     LOG_WARN("failed to assign", K(ret), K(other));
   } else {
-    extra_medium_info_.info_ = other.extra_medium_info_.info_;
+    extra_medium_info_ = other.extra_medium_info_;
     extra_medium_info_.last_medium_scn_ = other.extra_medium_info_.last_medium_scn_;
   }
 

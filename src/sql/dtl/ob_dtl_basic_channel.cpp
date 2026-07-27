@@ -142,10 +142,8 @@ int SendMsgResponse::wait()
 }
 
 ObDtlBasicChannel::ObDtlBasicChannel(
-    const uint64_t id,
-    const ObAddr &peer,
-    DtlChannelType type)
-    : ObDtlChannel(id, peer, type),
+    const uint64_t id)
+    : ObDtlChannel(id),
       is_inited_(false),
       local_id_(id),
       peer_id_(id ^ 1),
@@ -161,7 +159,6 @@ ObDtlBasicChannel::ObDtlBasicChannel(
       dfc_idx_(OB_INVALID_ID),
       got_from_dtl_cache_(true),
       msg_writer_(nullptr),
-      bc_service_(nullptr),
       times_(0),
       write_buf_use_time_(0),
       send_use_time_(0),
@@ -178,10 +175,8 @@ ObDtlBasicChannel::ObDtlBasicChannel(
 
 ObDtlBasicChannel::ObDtlBasicChannel(
     const uint64_t id,
-    const ObAddr &peer,
-    const int64_t hash_val,
-    DtlChannelType type)
-    : ObDtlChannel(id, peer, type),
+    const int64_t hash_val)
+    : ObDtlChannel(id),
           is_inited_(false),
           local_id_(id),
           peer_id_(id ^ 1),
@@ -197,7 +192,6 @@ ObDtlBasicChannel::ObDtlBasicChannel(
           dfc_idx_(OB_INVALID_ID),
           got_from_dtl_cache_(true),
           msg_writer_(nullptr),
-          bc_service_(nullptr),
           times_(0),
           write_buf_use_time_(0),
           send_use_time_(0),
@@ -343,7 +337,7 @@ int ObDtlBasicChannel::mock_eof_buffer(int64_t timeout_ts)
   int ret = OB_SUCCESS;
   int64_t min_buf_size = ObChunkDatumStore::Block::min_buf_size(0);
   ObDtlLinkedBuffer *buffer = NULL;
-  MOD_SCOPE {
+  SERVER_MODULE_SCOPE {
     ObChunkDatumStore row_store("MockDtlStore");
     ObChunkDatumStore::Block* block = NULL;
     if (OB_ISNULL(buffer = alloc_buf(min_buf_size))) {
@@ -442,7 +436,7 @@ int ObDtlBasicChannel::block_on_increase_size(int64_t size)
     if (OB_FAIL(dfc_->find(this, ch_idx))) {
       LOG_WARN("failed to find channel", K(ret));
     } else if (OB_FAIL(dfc_server.block_on_increase_size(dfc_, ch_idx, size))) {
-      LOG_WARN("failed to block channel", K(ret), KP(id_), K(peer_), K(dfc_), K(ch_idx));
+      LOG_WARN("failed to block channel", K(ret), KP(id_), K(dfc_), K(ch_idx));
     }
   }
   return ret;
@@ -457,7 +451,7 @@ int ObDtlBasicChannel::unblock_on_decrease_size(int64_t size)
     if (OB_FAIL(dfc_->find(this, ch_idx))) {
       LOG_WARN("failed to find channel", K(ret));
     } else if (OB_FAIL(dfc_server.unblock_on_decrease_size(dfc_, ch_idx, size))) {
-      LOG_WARN("failed to block channel", K(ret), KP(id_), K(peer_), K(dfc_), K(ch_idx));
+      LOG_WARN("failed to block channel", K(ret), KP(id_), K(dfc_), K(ch_idx));
     }
   }
   return ret;
@@ -467,14 +461,15 @@ int ObDtlBasicChannel::unblock_on_decrease_size(int64_t size)
 int ObDtlBasicChannel::clean_recv_list()
 {
   int ret = OB_SUCCESS;
-  LOG_TRACE("clean recv list", K(belong_to_receive_data()), KP(id_), K_(peer), K(ret), K(get_processed_buffer_cnt()), K(get_recv_buffer_cnt()));
+  LOG_TRACE("clean recv list", K(belong_to_receive_data()), KP(id_), K(ret), K(get_processed_buffer_cnt()), K(get_recv_buffer_cnt()));
   if (belong_to_receive_data()) {
-    LOG_TRACE("clean process buffer", KP(id_), K_(peer), K(ret), K(get_processed_buffer_cnt()), K(get_recv_buffer_cnt()));
+    LOG_TRACE("clean process buffer", KP(id_), K(ret), K(get_processed_buffer_cnt()), K(get_recv_buffer_cnt()));
     if (nullptr != process_buffer_) {
       auto &buffer = process_buffer_;
-      LOG_TRACE("free process buffer for dfc", K(buffer->size()), KP(id_), K_(peer), K(ret), K(get_processed_buffer_cnt()), K(get_recv_buffer_cnt()));
+      LOG_TRACE("free process buffer for dfc", K(buffer->size()), KP(id_), K(ret), K(get_processed_buffer_cnt()), K(get_recv_buffer_cnt()));
       if (OB_FAIL(unblock_on_decrease_size(buffer->size()))) {
-        LOG_WARN("failed to decrease buffer size for dfc", KP(id_), K_(peer), K(ret), K(get_processed_buffer_cnt()), K(get_recv_buffer_cnt()));
+        LOG_WARN("failed to decrease buffer size for dfc", KP(id_), K(ret),
+                 K(get_processed_buffer_cnt()), K(get_recv_buffer_cnt()));
       }
       free_buf(buffer);
       process_buffer_ = nullptr;
@@ -483,10 +478,11 @@ int ObDtlBasicChannel::clean_recv_list()
     while (OB_SUCC(recv_list_.pop(link))) {
       process_buffer_ = static_cast<ObDtlLinkedBuffer *>(link);
       auto &buffer = process_buffer_;
-      LOG_TRACE("free recv list buffer for dfc", K(buffer->size()), KP(id_), K_(peer), K(ret),
+      LOG_TRACE("free recv list buffer for dfc", K(buffer->size()), KP(id_), K(ret),
         K(get_processed_buffer_cnt()), K(get_recv_buffer_cnt()), K(lbt()));
       if (OB_FAIL(unblock_on_decrease_size(buffer->size()))) {
-        LOG_WARN("failed to decrease buffer size for dfc", KP(id_), K_(peer), K(ret), K(get_processed_buffer_cnt()), K(get_recv_buffer_cnt()));
+        LOG_WARN("failed to decrease buffer size for dfc", KP(id_), K(ret),
+                 K(get_processed_buffer_cnt()), K(get_recv_buffer_cnt()));
       }
       free_buf(buffer);
       process_buffer_ = nullptr;
@@ -504,7 +500,8 @@ int ObDtlBasicChannel::get_processed_buffer(int64_t timeout)
     recv_sem_.wait(key, timeout);
     ObLink *link = nullptr;
     if (OB_SUCC(recv_list_.pop(link))) {
-      LOG_TRACE("pop recv list", KP(id_), K_(peer), K(ret), K(get_processed_buffer_cnt()), K(get_recv_buffer_cnt()), K(link));
+      LOG_TRACE("pop recv list", KP(id_), K(ret), K(get_processed_buffer_cnt()),
+                K(get_recv_buffer_cnt()), K(link));
       process_buffer_ = static_cast<ObDtlLinkedBuffer *>(link);
       if (belong_to_receive_data()) {
         if (1 == process_buffer_->seq_no()) {
@@ -521,7 +518,7 @@ int ObDtlBasicChannel::get_processed_buffer(int64_t timeout)
           first_recv_msg_ = false;
         } else if (first_recv_msg_) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("it's not the first msg", KP(id_), K_(peer), K(ret),
+          LOG_WARN("it's not the first msg", KP(id_), K(ret),
             K(get_processed_buffer_cnt()), K(get_recv_buffer_cnt()),
             K(process_buffer_->seq_no()), K(1UL),
             K(got_from_dtl_cache_), K(dfc_idx_), K(process_buffer_->is_eof()));
@@ -534,7 +531,8 @@ int ObDtlBasicChannel::get_processed_buffer(int64_t timeout)
       if (nullptr != msg_watcher_) {
         msg_watcher_->remove_data_list(this);
       }
-      LOG_TRACE("failed to pop recv list", KP(id_), K_(peer), K(ret), K(get_processed_buffer_cnt()), K(get_recv_buffer_cnt()));
+      LOG_TRACE("failed to pop recv list", KP(id_), K(ret), K(get_processed_buffer_cnt()),
+                K(get_recv_buffer_cnt()));
     }
   }
   return ret;
@@ -585,7 +583,7 @@ int ObDtlBasicChannel::process1(
                 ret = OB_DTL_WAIT_EAGAIN;
               }
             }
-            LOG_TRACE("process one piece", KP(id_), K_(peer), K(ret),
+            LOG_TRACE("process one piece", KP(id_), K(ret),
                       K(get_processed_buffer_cnt()), K(get_recv_buffer_cnt()),
                       K(buffer->is_data_msg()), K(buffer->is_eof()),
                       K(transferred));
@@ -593,7 +591,7 @@ int ObDtlBasicChannel::process1(
             if (OB_SUCCESS != (tmp_ret = unblock_on_decrease_size(buffer->size()))) {
               ret = tmp_ret;
               LOG_WARN("failed to decrease buffer size for dfc",
-                       KP(id_), K_(peer), K(ret), K(get_processed_buffer_cnt()),
+                       KP(id_), K(ret), K(get_processed_buffer_cnt()),
                        K(get_recv_buffer_cnt()));
             }
             if (transferred) {
@@ -613,7 +611,7 @@ int ObDtlBasicChannel::process1(
       ObDTLIntermResultKey key;
       key.channel_id_ = id_;
       key.batch_id_ = batch_id_;
-      MOD_SCOPE {
+      SERVER_MODULE_SCOPE {
         if (channel_is_eof_) {
           ret = OB_DTL_WAIT_EAGAIN;
         } else if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->atomic_get_interm_result_info(
@@ -695,8 +693,7 @@ int ObDtlBasicChannel::send1(
   }
   return ret;
 }
-// force_flush indicates that all msgs in the channel need to be sent
-// wait_resp indicates whether to wait for the RPC response, to maintain compatibility with previous semantics, msg must be forcibly sent along with wait_resp to wait for the response
+// force_flush sends all buffered messages; wait_resp waits for the local consumer result.
 int ObDtlBasicChannel::flush(bool force_flush, bool wait_resp)
 {
   int ret = OB_SUCCESS;
@@ -715,7 +712,7 @@ int ObDtlBasicChannel::flush(bool force_flush, bool wait_resp)
       if (OB_SUCC(send_list_.pop(link))) {
         auto buffer = static_cast<ObDtlLinkedBuffer *>(link);
         if (OB_FAIL(send_message(buffer))) {
-          LOG_WARN("send message failed", K_(peer), K(ret), K(buffer));
+          LOG_WARN("send message failed", KP(id_), K(ret), K(buffer));
           if (nullptr != buffer) {
             free_buf(buffer);
           }
@@ -733,7 +730,7 @@ int ObDtlBasicChannel::flush(bool force_flush, bool wait_resp)
   }
   if (OB_SUCC(ret) && force_flush && wait_resp) {
     if (OB_FAIL(wait_response())) {
-      LOG_WARN("send previous message fail", K(ret), K(peer_), K(peer_id_), K(lbt()));
+      LOG_WARN("send previous message fail", K(ret), K(peer_id_), K(lbt()));
     }
   }
   return ret;
@@ -756,12 +753,12 @@ int ObDtlBasicChannel::wait_unblocking_if_blocked()
         LOG_WARN("failed to set block", K(ret));
       } else {
         // only block this channel, for other channels, it will also set block, or other channel can't be blocked
-        LOG_TRACE("set block dfc", K(ret), KP(id_), K(peer_));
+        LOG_TRACE("set block dfc", K(ret), KP(id_));
       }
     }
     if (OB_SUCC(ret)) {
-      LOG_TRACE("wait unblocking if blocked", K(msg_response_.is_block()), K(dfc_->is_block(this)), K(ret), KP(id_), KP(peer_id_),
-        K(peer_), K(ret));
+      LOG_TRACE("wait unblocking if blocked", K(msg_response_.is_block()), K(dfc_->is_block(this)),
+                K(ret), KP(id_), KP(peer_id_));
       if (dfc_->is_block(this)) {
         if (OB_FAIL(wait_unblocking())) {
           LOG_WARN("failed to block", K(ret));
@@ -794,13 +791,13 @@ int ObDtlBasicChannel::wait_unblocking()
       int64_t last_t = 0;
       int64_t print_log_t = 10 * 60 * 1000000;
       block_proc_.set_ch_idx_var(&idx);
-      LOG_TRACE("wait unblocking", K(ret), K(dfc_->is_block()), KP(id_), K(peer_));
+      LOG_TRACE("wait unblocking", K(ret), K(dfc_->is_block()), KP(id_));
       do {
         int64_t got_channel_idx = idx;
         if (is_drain()) {
           // if drain,then ignore blocking
           if (OB_FAIL(dfc_->unblock_channel(this))) {
-            LOG_WARN("fail to unblock channel", K(ret), K(dfc_->is_block()), KP(id_), K(peer_));
+            LOG_WARN("fail to unblock channel", K(ret), K(dfc_->is_block()), KP(id_));
           }
           break;
         } else if (OB_FAIL(channel_loop_->process_one_if(
@@ -820,13 +817,6 @@ int ObDtlBasicChannel::wait_unblocking()
                 LOG_WARN("worker interrupt", K(tmp_ret), K(ret));
                 break;
               }
-              if (OB_UNLIKELY(ObPxCheckAlive::is_in_blacklist(peer_,
-                              channel_loop_->get_process_query_time()))) {
-                ret = OB_RPC_CONNECT_ERROR;
-                LOG_WARN("peer no in communication, maybe crashed", K(ret), K(peer_),
-                         K(static_cast<int64_t>(GCONF.cluster_id)));
-                break;
-              }
               if (end_t - start_t > print_log_t) {
                 bool print_log = false;
                 if (0 == last_t || end_t - last_t > interval_t) {
@@ -842,7 +832,7 @@ int ObDtlBasicChannel::wait_unblocking()
               ret = OB_SUCCESS;
             }
           } else {
-            LOG_WARN("fail to process unblocking msg", K(ret), K(dfc_->is_block()), KP(id_), K(peer_));
+            LOG_WARN("fail to process unblocking msg", K(ret), K(dfc_->is_block()), KP(id_));
           }
         } else {
           // receive unblocking msg:
@@ -852,13 +842,13 @@ int ObDtlBasicChannel::wait_unblocking()
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("no channel is processed", K(ret), K(got_channel_idx), K(idx));
           } else if (OB_FAIL(dfc_->unblock_channel(this))) {
-            LOG_WARN("fail to unblock channel", K(ret), K(dfc_->is_block()), KP(id_), K(peer_));
+            LOG_WARN("fail to unblock channel", K(ret), K(dfc_->is_block()), KP(id_));
           }
         }
       } while (dfc_->is_block(this) && OB_SUCC(ret));
-      LOG_TRACE("unblocking successfully", K(ret), K(dfc_->is_block()), KP(id_), K(peer_));
+      LOG_TRACE("unblocking successfully", K(ret), K(dfc_->is_block()), KP(id_));
     }
-    LOG_TRACE("unblocking:", K(ret), K(dfc_->is_block()), K(dfc_->is_block(this)), KP(id_), K(peer_));
+    LOG_TRACE("unblocking:", K(ret), K(dfc_->is_block()), K(dfc_->is_block(this)), KP(id_));
   }
   return ret;
 }
@@ -873,10 +863,10 @@ ObDtlLinkedBuffer *ObDtlBasicChannel::alloc_buf(const int64_t payload_size)
 {
   int ret = OB_SUCCESS;
   ObDtlLinkedBuffer *buf = nullptr;
-  ObDtlTenantMemManager *tenant_mem_mgr = DTL.get_dfc_server().get_tenant_mem_manager();
-  if (nullptr == tenant_mem_mgr) {
+  ObDtlMemManager *mem_mgr = DTL.get_dfc_server().get_mem_manager();
+  if (nullptr == mem_mgr) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("tenant_mem_mgr is null", K(ret));
+    LOG_ERROR("mem_mgr is null", K(ret));
   } else {
     //int64_t hash = nullptr != dfc_ ? reinterpret_cast<int64_t>(dfc_) : id_;
     // int64_t hash = reinterpret_cast<int64_t>(this);
@@ -884,7 +874,7 @@ ObDtlLinkedBuffer *ObDtlBasicChannel::alloc_buf(const int64_t payload_size)
     // Through duplicate_join_table sysbench test, it was found that when channel applies for buffer
     // If using channel id, thread id (GETTID()), or dfc_ and channel memory address, they cannot be well hashed
     // And using random can achieve good distribution
-    buf = tenant_mem_mgr->alloc(hash_val_, payload_size);
+    buf = mem_mgr->alloc(hash_val_, payload_size);
     if (nullptr != buf) {
       alloc_buffer_count();
     }
@@ -895,24 +885,16 @@ ObDtlLinkedBuffer *ObDtlBasicChannel::alloc_buf(const int64_t payload_size)
 void ObDtlBasicChannel::free_buf(ObDtlLinkedBuffer *buf)
 {
   int ret = OB_SUCCESS;
-  ObDtlTenantMemManager *tenant_mem_mgr = DTL.get_dfc_server().get_tenant_mem_manager();
+  ObDtlMemManager *mem_mgr = DTL.get_dfc_server().get_mem_manager();
 
-  if (OB_NOT_NULL(buf)
-      && buf->is_bcast()
-      && belong_to_transmit_data()
-      && OB_NOT_NULL(bc_service_)) {
-    // do nothing, this buffer is allocated by bcast channel agent.
-    // bcast channel agent will release this buffer.
+  if (nullptr == buf) {
+  } else if (nullptr == mem_mgr) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("mem_mgr is null", K(lbt()), K(ret));
+  } else if (OB_FAIL(mem_mgr->free(buf))) {
+    LOG_WARN("failed to free buffer", K(ret), K(lbt()));
   } else {
-    if (nullptr == tenant_mem_mgr) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("tenant_mem_mgr is null", K(lbt()), K(ret));
-    } else if (OB_FAIL(tenant_mem_mgr->free(buf))) {
-      LOG_WARN("failed to free buffer", K(ret), K(lbt()));
-    }
-    if (nullptr != buf) {
-      free_buffer_count();
-    }
+    free_buffer_count();
   }
 }
 
@@ -961,7 +943,7 @@ int ObDtlBasicChannel::push_back_send_list()
       KP(id_), KP(peer_id_), K(1UL), K(is_data_msg_),
       K(write_buffer_->size()), K(write_buffer_->pos()), K(get_send_buffer_cnt()),
       K(write_buffer_->is_data_msg()), K(write_buffer_->is_eof()), K(get_msg_seq_no()),
-      K(write_buffer_->msg_type()), K(get_channel_type()));
+      K(write_buffer_->msg_type()));
     write_buffer_ = nullptr;
   }
   return ret;
@@ -984,7 +966,6 @@ int ObDtlBasicChannel::switch_writer(const ObDtlMsg &msg)
       } else if (DtlWriterType::VECTOR_ROW_WRITER == msg_writer_map[px_row.get_data_type()]) {
         vector_row_msg_writer_.set_row_meta(meta_);
         msg_writer_ = &vector_row_msg_writer_;
-        vector_row_msg_writer_.set_plan_min_cluster_version(plan_min_cluster_version_);
       } else if (DtlWriterType::VECTOR_WRITER == msg_writer_map[px_row.get_data_type()]) {
         msg_writer_ = &vector_msg_writer_;
       } else {
@@ -1196,8 +1177,7 @@ int ObDtlBasicChannel::push_buffer_batch_info()
 void ObDtlBasicChannel::switch_msg_type(const ObDtlMsg &msg)
 {
   if (msg.is_data_msg()
-      && static_cast<const ObPxNewRow &> (msg).get_data_type() == PX_VECTOR
-       && DtlChannelType::LOCAL_CHANNEL == get_channel_type()) {
+      && static_cast<const ObPxNewRow &> (msg).get_data_type() == PX_VECTOR) {
     static_cast<ObPxNewRow &> (const_cast<ObDtlMsg &> (msg)).set_data_type(PX_VECTOR_ROW);
   }
 }
@@ -1583,13 +1563,9 @@ int ObDtlControlMsgWriter::write(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, const
   write_buffer_->set_data_msg(false);
   write_buffer_->is_eof() = is_eof;
   if (OB_FAIL(serialization::encode(buf, size, pos, header))) {
-    LOG_WARN(
-        "serialize RPC channel message type fail",
-        K(size), K(pos), K(ret));
+    LOG_WARN("serialize control message type fail", K(size), K(pos), K(ret));
   } else if (OB_FAIL(serialization::encode(buf, size, pos, msg))) {
-    LOG_WARN(
-        "serialize RPC channel message fail",
-        K(size), K(pos), K(ret));
+    LOG_WARN("serialize control message fail", K(size), K(pos), K(ret));
   }
   return ret;
 }

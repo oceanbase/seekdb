@@ -103,7 +103,6 @@ int ObGlobalVariables::inner_get_next_row(ObNewRow *&row)
                 case OB_APP_MIN_COLUMN_ID + 1: {
                   //deal with read_only
                   if (sysvar->get_type() == SYS_VAR_READ_ONLY) {
-                    //replace with tenant schema
                     if (sys_variable_schema_->is_read_only()) {
                       cells[cell_idx].set_varchar("ON");
                     } else {

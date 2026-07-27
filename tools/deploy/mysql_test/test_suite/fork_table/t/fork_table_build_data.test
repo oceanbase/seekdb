@@ -44,7 +44,6 @@ insert into t1 values (101, 'b', 20, 'd2');
 alter table t1 drop column drop_col;
 
 --echo # 源表结构确认
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t1;
 
 --echo # Fork表
@@ -52,7 +51,6 @@ fork table t1 to t1_fork;
 --source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
 
 --echo # 目标表结构应不包含被删除列
---replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t1_fork;
 
 --echo # 目标表数据应与删列后的源表一致

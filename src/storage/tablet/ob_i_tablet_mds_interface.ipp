@@ -436,7 +436,7 @@ int ObITabletMdsInterface::get_latest(OP &&read_op,
     MDS_LOG(WARN, "failed to check data completion");
   } else if (!is_data_complete) {
     ret = OB_EAGAIN;
-    MDS_LOG(INFO, "mds_data is not complete, try again later", K(ret), K(get_tablet_meta_().restore_state_));
+    MDS_LOG(INFO, "mds_data is not complete, try again later", K(ret), K(get_tablet_meta_().local_status_));
   } else if (OB_ISNULL(get_tablet_pointer_())) {
     ret = OB_BAD_NULL_ERROR;
     MDS_LOG(ERROR, "pointer on tablet should not be null");
@@ -519,7 +519,7 @@ int ObITabletMdsInterface::get_latest_committed(OP &&read_op) const
     MDS_LOG(WARN, "failed to check data completion");
   } else if (!is_data_complete) {
     ret = OB_EAGAIN;
-    MDS_LOG(INFO, "mds_data is not complete, try again later", K(ret), K(get_tablet_meta_().restore_state_));
+    MDS_LOG(INFO, "mds_data is not complete, try again later", K(ret), K(get_tablet_meta_().local_status_));
   } else if (OB_ISNULL(get_tablet_pointer_())) {    
     ret = OB_BAD_NULL_ERROR;
     MDS_LOG(ERROR, "pointer on tablet should not be null");
@@ -606,7 +606,7 @@ int ObITabletMdsInterface::get_snapshot(const Key &key,
     MDS_LOG(WARN, "failed to check data completion");
   } else if (!is_data_complete) {
     ret = OB_EAGAIN;
-    MDS_LOG(INFO, "mds_data is not complete, try again later", K(ret), K(get_tablet_meta_().restore_state_));
+    MDS_LOG(INFO, "mds_data is not complete, try again later", K(ret), K(get_tablet_meta_().local_status_));
   } else if (OB_ISNULL(get_tablet_pointer_())) {
     ret = OB_BAD_NULL_ERROR;
     MDS_LOG(ERROR, "pointer on tablet should not be null");
@@ -865,7 +865,9 @@ template <class T, typename std::enable_if<!OB_TRAIT_IS_SAME_CLASS(T, ObTabletCr
 int ObITabletMdsInterface::check_mds_data_complete_(bool &is_complete) const 
 {
   int ret = OB_SUCCESS;
-  is_complete = true;
+  // Multi-source data (excluding tablet_status) is readable only after the
+  // local tablet has finished materializing it.
+  is_complete = get_tablet_meta_().local_status_.is_data_status_complete();
   return ret;
 }
 

@@ -27,7 +27,6 @@
 #include "lib/lock/ob_thread_cond.h"
 #include "sql/dtl/ob_dtl_channel.h"
 #include "sql/dtl/ob_dtl_task.h"
-#include "lib/compress/ob_compress_util.h"
 #include "lib/utility/ob_tracepoint.h"
 namespace oceanbase {
 namespace sql {
@@ -88,7 +87,7 @@ class ObDtlFlowControl
 public:
   ObDtlFlowControl() :
   timeout_ts_(0), communicate_flag_(0),
-  compressor_type_(common::ObCompressorType::NONE_COMPRESSOR), is_init_(false), block_ch_cnt_(0),
+  is_init_(false), block_ch_cnt_(0),
   total_memory_size_(0), total_buffer_cnt_(0), accumulated_blocked_cnt_(0), blocks_(), chans_(), drain_ch_cnt_(0),
   dfo_key_(), op_metric_(nullptr),
   chan_loop_(nullptr), ch_info_(nullptr)
@@ -219,8 +218,6 @@ public:
   void set_total_ch_info(ObDtlChTotalInfo *ch_info)
   { ch_info_ = ch_info; }
 
-  common::ObCompressorType get_compressor_type() { return compressor_type_; }
-
 private:
   static const int64_t THRESHOLD_SIZE = 2097152;
   static const int64_t MAX_BUFFER_CNT = 3;
@@ -228,7 +225,6 @@ private:
   int64_t timeout_ts_;
   // Identify whether it is transmit, receive, qc, etc.
   int communicate_flag_;
-  common::ObCompressorType compressor_type_;
   bool is_init_;
   int64_t block_ch_cnt_;
   int64_t total_memory_size_;

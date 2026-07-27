@@ -572,9 +572,7 @@ void ObSimpleFixedArray<T>::destroy()
   inited_ = false;
 }
 
-// KVCache is single-tenant: the former pseudo-hash (buckets_/nodes_/Node) only
-// ever stored one int64_t washable size for tenant bucket 0. It is collapsed to
-// a single atomic int64_t. The wash path concurrently reads (get_washable_size)
+// Store the process-wide washable size in one atomic value. The wash path concurrently reads (get_washable_size)
 // while the wash thread writes (reuse/add/copy_from), so all access goes through
 // ATOMIC_* to keep the original concurrency-safety guarantee.
 class ObWashableSizeInfo

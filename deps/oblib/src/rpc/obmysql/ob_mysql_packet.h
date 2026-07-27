@@ -132,7 +132,7 @@ union ObServerStatusFlags
     uint16_t OB_SERVER_STATUS_DB_DROPPED:           1;
     uint16_t OB_SERVER_STATUS_NO_BACKSLASH_ESCAPES: 1;
     uint16_t OB_SERVER_STATUS_METADATA_CHANGED:     1;
-    uint16_t OB_SERVER_QUERY_WAS_SLOW:              1;
+    uint16_t:                                        1;
     uint16_t OB_SERVER_PS_OUT_PARAMS:               1;
     uint16_t OB_SERVER_STATUS_IN_TRANS_READONLY:    1;  // in a read-only transaction
     uint16_t OB_SERVER_SESSION_STATE_CHANGED:       1;  // connection state information has changed
@@ -223,8 +223,7 @@ enum ObServerStatusFlagsPos
   OB_SERVER_STATUS_DB_DROPPED_POS,
   OB_SERVER_STATUS_NO_BACKSLASH_ESCAPES_POS,
   OB_SERVER_STATUS_METADATA_CHANGED_POS,
-  OB_SERVER_QUERY_WAS_SLOW_POS,
-  OB_SERVER_PS_OUT_PARAMS_POS,
+  OB_SERVER_PS_OUT_PARAMS_POS = 12,
   OB_SERVER_STATUS_IN_TRANS_READONLY_POS,
   OB_SERVER_SESSION_STATE_CHANGED_POS,
 };

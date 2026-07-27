@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "rootserver/ddl_task/ob_drop_vec_index_task.h"
-#include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_local_ddl_serial_call.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
 
 using namespace oceanbase::share;
@@ -29,7 +29,7 @@ namespace rootserver
 
 ObDropVecIndexTask::ObDropVecIndexTask()
   : ObDDLTask(DDL_DROP_VEC_INDEX),
-    root_service_(nullptr),
+    local_management_service_(nullptr),
     rowkey_vid_(),
     vid_rowkey_(),
     domain_index_(), // delta_buffer_table
@@ -37,7 +37,7 @@ ObDropVecIndexTask::ObDropVecIndexTask()
     vec_index_snapshot_data_(),
     hybrid_embedded_vec_(),
     drop_index_arg_(),
-    replica_builder_(),
+    local_builder_(),
     check_dag_exit_tablets_map_(),
     wait_trans_ctx_(),
     delte_lob_meta_request_time_(0),
@@ -62,21 +62,22 @@ int ObDropVecIndexTask::init(
     const ObVecIndexDDLChildTaskInfo &vec_index_snapshot_data,
     const ObVecIndexDDLChildTaskInfo &hybrid_embedded_vec,
     const int64_t schema_version,
-    const uint64_t tenant_data_version,
+    const uint64_t data_format_version,
     const obcall::ObDropIndexArg &drop_index_arg)
 {
   int ret = OB_SUCCESS;
 
-  uint64_t tenant_data_format_version = tenant_data_version;
+  uint64_t runtime_data_format_version =
+      data_format_version > 0 ? data_format_version : DATA_CURRENT_VERSION;
   if (OB_UNLIKELY(task_id <= 0
                || OB_INVALID_ID == data_table_id
                || schema_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_id), K(data_table_id), K(rowkey_vid),
         K(vid_rowkey), K(domain_index), K(vec_delta_buffer), K(vec_index_snapshot_data), K(hybrid_embedded_vec), K(schema_version));
-  } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, root service is null", K(ret));
+    LOG_WARN("error sys, local management service is null", K(ret));
   } else if (OB_FAIL(deep_copy_index_arg(allocator_, drop_index_arg, drop_index_arg_))) {
     LOG_WARN("deep copy drop index arg failed", K(ret));
   } else if (OB_FAIL(rowkey_vid_.deep_copy_from_other(rowkey_vid, allocator_))) {
@@ -89,8 +90,6 @@ int ObDropVecIndexTask::init(
     LOG_WARN("fail to deep copy from other", K(ret), K(vec_delta_buffer));
   } else if (OB_FAIL(vec_index_snapshot_data_.deep_copy_from_other(vec_index_snapshot_data, allocator_))) {
     LOG_WARN("fail to deep copy from other", K(ret), K(vec_index_snapshot_data));
-  } else if (tenant_data_format_version <= 0 && OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_format_version))) {
-    LOG_WARN("get min data version failed", K(ret));
   } else if (OB_FAIL(hybrid_embedded_vec_.deep_copy_from_other(hybrid_embedded_vec, allocator_))) {
     LOG_WARN("fail to deep copy from other", K(ret), K(hybrid_embedded_vec));
   } else {
@@ -124,7 +123,7 @@ int ObDropVecIndexTask::init(
       
       dst_schema_version_ = schema_version;
       is_inited_ = true;
-      data_format_version_ = tenant_data_format_version;
+      data_format_version_ = runtime_data_format_version;
       execution_id_ = 1L;
     }
   }
@@ -138,9 +137,9 @@ int ObDropVecIndexTask::init(const ObDDLTaskRecord &task_record)
   if (OB_UNLIKELY(!task_record.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_record));
-  } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, root service is nullptr", K(ret));
+    LOG_WARN("unexpected error, local management service is nullptr", K(ret));
   } else {
     task_type_ = task_record.ddl_type_;
     
@@ -243,7 +242,7 @@ int ObDropVecIndexTask::obtain_snapshot(const share::ObDDLTaskStatus next_task_s
 int ObDropVecIndexTask::drop_lob_meta_row(const ObDDLTaskStatus next_task_status)
 {
   int ret = OB_SUCCESS;
-  bool is_build_replica_end = false;
+  bool is_local_build_end = false;
   bool is_exist = true;
   DEBUG_SYNC(DROP_VECTOR_INDEX_BEFORE_DELETE_LOB_META);
   if (OB_UNLIKELY(!is_inited_)) {
@@ -253,21 +252,21 @@ int ObDropVecIndexTask::drop_lob_meta_row(const ObDDLTaskStatus next_task_status
     ret = OB_TASK_EXPIRED;
     LOG_WARN("task status not match", K(ret), K(task_status_));
   } else if (OB_UNLIKELY(snapshot_version_ <= 0)) {
-    is_build_replica_end = true;
+    is_local_build_end = true;
     LOG_INFO("finish drop lob meta and release snapshot", K(ret));
   } else if (vec_index_snapshot_data_.is_valid() && !del_lob_meta_row_task_submitted_ && OB_FAIL(check_snapshot_table_exist(is_exist))) {
     LOG_WARN("fail to check snapshot table exist", K(ret));
   } else if (!is_exist) {
-    is_build_replica_end = true;
+    is_local_build_end = true;
     LOG_INFO("snapshot table not exist, skip drop lob meta row", K(ret));
-  } else if (vec_index_snapshot_data_.is_valid() && !del_lob_meta_row_task_submitted_ && OB_FAIL(send_build_single_replica_request())) {
-    LOG_WARN("fail to send build single replica request", K(ret));
-  } else if (vec_index_snapshot_data_.is_valid() && del_lob_meta_row_task_submitted_ && OB_FAIL(check_build_single_replica(is_build_replica_end))) {
-    LOG_WARN("fail to check build single replica", K(ret), K(is_build_replica_end));
+  } else if (vec_index_snapshot_data_.is_valid() && !del_lob_meta_row_task_submitted_ && OB_FAIL(send_local_build_request())) {
+    LOG_WARN("fail to send build local build request", K(ret));
+  } else if (vec_index_snapshot_data_.is_valid() && del_lob_meta_row_task_submitted_ && OB_FAIL(check_local_build(is_local_build_end))) {
+    LOG_WARN("fail to check build local build", K(ret), K(is_local_build_end));
   } else if (!vec_index_snapshot_data_.is_valid()) {
-    is_build_replica_end = true;
+    is_local_build_end = true;
   }
-  if (is_build_replica_end) {
+  if (is_local_build_end) {
     DEBUG_SYNC(DROP_VECTOR_INDEX_AFTER_DELETE_LOB_META);
     // Only consume async job return code when the delete-lob-meta job was actually submitted.
     // For skip paths (e.g. snapshot table not exist), keep current ret to allow state transition.
@@ -554,8 +553,8 @@ int ObDropVecIndexTask::check_switch_succ()
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
   } else if (OB_FAIL(refresh_schema_version())) {
     LOG_WARN("refresh schema version failed", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema", K(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get runtime schema", K(ret));
   } else if (domain_index_.is_valid() 
           && OB_FAIL(schema_guard.check_table_exist(domain_index_.table_id_, is_domain_index_exist))) {
     LOG_WARN("fail to check table exist", K(ret), K(domain_index_));
@@ -632,8 +631,8 @@ int ObDropVecIndexTask::drop_aux_index_table(const share::ObDDLTaskStatus &new_s
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", K(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get runtime schema guard", K(ret));
   } else if (0 == domain_index_.task_id_ && domain_index_.is_valid()
       && OB_FAIL(create_drop_index_task(schema_guard, domain_index_.table_id_, domain_index_.index_name_, domain_index_.task_id_, true/* is_domain_index */))) {
       LOG_WARN("fail to create drop index task", K(ret), K(domain_index_));
@@ -858,7 +857,7 @@ int ObDropVecIndexTask::create_drop_index_task(
             index_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout_us))) {
       LOG_WARN("fail to get ddl rpc timeout", K(ret));
       ret = OB_INVALID_ARGUMENT;
-    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_index(arg, res); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_index(arg, res); }))) {
       LOG_WARN("fail to drop index", K(ret), K(ddl_rpc_timeout_us), K(arg), K(res.task_id_));
     } else {
       task_id = res.task_id_;
@@ -880,8 +879,8 @@ int ObDropVecIndexTask::create_drop_share_index_task()
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", K(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get runtime schema guard", K(ret));
   } else if (0 == rowkey_vid_.task_id_ && rowkey_vid_.is_valid()
       && OB_FAIL(create_drop_index_task(schema_guard, rowkey_vid_.table_id_, rowkey_vid_.index_name_, rowkey_vid_.task_id_))) {
     LOG_WARN("fail to create drop index task", K(ret), K(rowkey_vid_));
@@ -908,7 +907,7 @@ int ObDropVecIndexTask::check_and_cancel_del_dag(bool &all_dag_exit)
     LOG_WARN("not init", K(ret));
   } else if (!vec_index_snapshot_data_.is_valid() || !del_lob_meta_row_task_submitted_) {
     all_dag_exit = true;
-  } else if (OB_FAIL(ObDDLUtil::check_and_cancel_single_replica_dag(this, vec_index_snapshot_data_.table_id_, 
+  } else if (OB_FAIL(ObDDLUtil::check_and_cancel_local_build_dag(this, vec_index_snapshot_data_.table_id_,
             vec_index_snapshot_data_.table_id_, check_dag_exit_tablets_map_, data_format_version_, check_dag_exit_retry_cnt_, false/*is_complement_data_dag*/, all_dag_exit))) {
     LOG_WARN("fail to check and cancel delete lob mete row dag", K(ret), K(vec_index_snapshot_data_));
   }
@@ -993,15 +992,14 @@ int ObDropVecIndexTask::cleanup_impl()
   return ret;
 }
 
-int ObDropVecIndexTask::send_build_single_replica_request()
+int ObDropVecIndexTask::send_local_build_request()
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_data_format_version = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObColumnRedefinitionTask has not been inited", K(ret));
   } else {
-    ObDDLReplicaBuildExecutorParam param;
+    ObDDLLocalBuildExecutorParam param;
     
     
     param.ddl_type_ = task_type_;
@@ -1010,7 +1008,6 @@ int ObDropVecIndexTask::send_build_single_replica_request()
     param.parallelism_ = std::max(parallelism_, static_cast<int64_t>(1));
     param.execution_id_ = execution_id_; // should >= 0
     param.data_format_version_ = data_format_version_; // should > 0
-    param.is_no_logging_ = is_no_logging_;
 
     if (OB_FAIL(ObDDLUtil::get_tablets(vec_index_snapshot_data_.table_id_, param.source_tablet_ids_))) {
       LOG_WARN("fail to get tablets", K(ret), K(object_id_));
@@ -1036,8 +1033,8 @@ int ObDropVecIndexTask::send_build_single_replica_request()
     }
 
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(replica_builder_.build(param))) {
-      LOG_WARN("fail to send build single replica", K(ret), K(param));
+    } else if (OB_FAIL(local_builder_.build(param))) {
+      LOG_WARN("fail to send build local build", K(ret), K(param));
     } else {
       del_lob_meta_row_task_submitted_ = true;
       delte_lob_meta_request_time_ = ObTimeUtility::current_time();
@@ -1047,14 +1044,14 @@ int ObDropVecIndexTask::send_build_single_replica_request()
 }
 
 // check whether all leaders have completed the task
-int ObDropVecIndexTask::check_build_single_replica(bool &is_end)
+int ObDropVecIndexTask::check_local_build(bool &is_end)
 {
   int ret = OB_SUCCESS;
   is_end = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLRedefinitionTask has not been inited", K(ret));
-  } else if (OB_FAIL(replica_builder_.check_build_end(false/*do not need check sum*/,is_end, delte_lob_meta_job_ret_code_))) {
+  } else if (OB_FAIL(local_builder_.check_build_end(false/*do not need check sum*/,is_end, delte_lob_meta_job_ret_code_))) {
     LOG_WARN("fail to check build end", K(ret));
   } else if (!is_end) {
     if (delte_lob_meta_request_time_ + ObDDLUtil::calc_inner_sql_execute_timeout() < ObTimeUtility::current_time()) {   // timeout, retry
@@ -1075,8 +1072,8 @@ int ObDropVecIndexTask::check_snapshot_table_exist(bool &is_exist)
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", K(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get runtime schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, snapshot_table_schema))) {
     LOG_WARN("get table schema failed", K(ret), K(table_id));
   } else if (OB_ISNULL(snapshot_table_schema)) {
@@ -1086,7 +1083,7 @@ int ObDropVecIndexTask::check_snapshot_table_exist(bool &is_exist)
   return ret;
 }
 
-// update sstable complement status for all leaders
+// Update the local SSTable complement status.
 int ObDropVecIndexTask::update_drop_lob_meta_row_job_status(const common::ObTabletID &tablet_id,
                                                             const ObAddr &addr,
                                                             const int64_t snapshot_version,
@@ -1095,6 +1092,7 @@ int ObDropVecIndexTask::update_drop_lob_meta_row_job_status(const common::ObTabl
                                                             const ObDDLTaskInfo &addition_info)
 {
   int ret = OB_SUCCESS;
+  UNUSED(addr);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObDropVecIndexTask has not been inited", K(ret));
@@ -1105,8 +1103,7 @@ int ObDropVecIndexTask::update_drop_lob_meta_row_job_status(const common::ObTabl
     LOG_WARN("snapshot version not match", K(ret), K(snapshot_version), K(snapshot_version_));
   } else if (execution_id < execution_id_) {
     LOG_INFO("receive a mismatch execution result, ignore", K(ret_code), K(execution_id), K(execution_id_));
-  } else if (OB_FAIL(replica_builder_.update_build_progress(tablet_id,
-                                                            addr,
+  } else if (OB_FAIL(local_builder_.update_build_progress(tablet_id,
                                                             ret_code,
                                                             addition_info.row_scanned_,
                                                             addition_info.row_inserted_,

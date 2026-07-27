@@ -2334,11 +2334,8 @@ inline int ObNumber::round_v3(const int64_t scale, const bool for_to_char/*false
 
 inline int ObNumber::round_for_sci(const int64_t scale, const bool for_to_char/*false*/)
 {
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(true)) {
-    ret = OB_ERR_UNEXPECTED;
-    LIB_LOG(WARN, "unsupported scientific rounding path", K(ret));
-  }
+  int ret = OB_ERR_UNEXPECTED;
+  LIB_LOG(WARN, "unsupported scientific rounding path", K(ret));
   return ret;
 }
 

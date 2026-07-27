@@ -28,16 +28,9 @@ using namespace oceanbase::sql;
  * This file describes:
  * To improve efficiency, ObPxNewRow does some rather trick things in the deserialization process
  *
- * General process:
- *  obj -> netbuf -> transport -> netbuf -> obj -> use it
- *      sender           |            receiver
- *
- * ObPxNewRow process:
- *  obj -> netbuf -> transport -> netbuf -> copy netbuf to local buf -> obj -> use it
- *      sender           |            receiver
- *
- * Why copy netbuf to local buf? Because after process(DtlMsg) ends, DtlMsg still needs to be kept,
- * cannot be released with the end of process() and the release of netbuf
+ * ObPxNewRow copies the serialized row payload out of the local DTL buffer.
+ * The linked buffer can then be released when its processing callback ends,
+ * while the decoded row remains valid for get_next_row().
  */
 
 void ObPxNewRow::set_eof_row()
@@ -102,7 +95,7 @@ OB_DEF_DESERIALIZE(ObPxNewRow)
 // Used to copy row from DTL memory to get_next_row context for output
 // If not copied, the memory of row will be released after the DTL process call ends,
 // get_next_row will obtain an illegal memory reference
-// Deserialize the row received from the remote end and construct it into an ObNewRow structure
+// Decode the buffered row and construct an ObNewRow view.
 
 int ObReceiveRowReader::add_buffer(dtl::ObDtlLinkedBuffer &buf, bool &transferred)
 {
@@ -185,7 +178,7 @@ void ObReceiveRowReader::free(dtl::ObDtlLinkedBuffer *buf)
   if (NULL != buf) {
     LOG_DEBUG("free dtl linked buffer", KP(buf), K(1UL));
     int ret = OB_SUCCESS;
-    auto mgr = DTL.get_dfc_server().get_tenant_mem_manager();
+    auto mgr = DTL.get_dfc_server().get_mem_manager();
     CK(NULL != mgr);
     OZ(mgr->free(buf));
   }
@@ -359,9 +352,8 @@ int ObReceiveRowReader::to_expr(const ObChunkDatumStore::StoredRow *srow,
     if (dynamic_const_exprs.count() > 0) {
       for (int64_t i = 0; OB_SUCC(ret) && i < dynamic_const_exprs.count(); i++) {
         ObExpr *expr = dynamic_const_exprs.at(i);
-        if (0 == expr->res_buf_off_) {
-          // for compat 4.0, do nothing
-        } else if (OB_FAIL(expr->deep_copy_self_datum(eval_ctx))) {
+        // Fixed-width datums do not reserve an external result buffer.
+        if (0 != expr->res_buf_off_ && OB_FAIL(expr->deep_copy_self_datum(eval_ctx))) {
           LOG_WARN("fail to deep copy datum", K(ret), K(eval_ctx), K(*expr));
         }
       }
@@ -439,9 +431,8 @@ int ObReceiveRowReader::attach_rows(const common::ObIArray<ObExpr*> &exprs,
       for (int64_t i = 0; OB_SUCC(ret) && i < dynamic_const_exprs.count(); i++) {
         ObExpr *expr = dynamic_const_exprs.at(i);
         OB_ASSERT(!expr->is_batch_result());
-        if (0 == expr->res_buf_off_) {
-          // for compat 4.0, do nothing
-        } else if (OB_FAIL(expr->deep_copy_self_datum(eval_ctx))) {
+        // Fixed-width datums do not reserve an external result buffer.
+        if (0 != expr->res_buf_off_ && OB_FAIL(expr->deep_copy_self_datum(eval_ctx))) {
           LOG_WARN("fail to deep copy datum", K(ret), K(eval_ctx), K(*expr));
         }
       }
@@ -487,9 +478,8 @@ int ObReceiveRowReader::attach_vectors(const common::ObIArray<ObExpr*> &exprs,
       for (int64_t i = 0; OB_SUCC(ret) && i < dynamic_const_exprs.count(); i++) {
         ObExpr *expr = dynamic_const_exprs.at(i);
         OB_ASSERT(!expr->is_batch_result());
-        if (0 == expr->res_buf_off_) {
-          // for compat 4.0, do nothing
-        } else if (OB_FAIL(expr->deep_copy_self_datum(eval_ctx))) {
+        // Fixed-width datums do not reserve an external result buffer.
+        if (0 != expr->res_buf_off_ && OB_FAIL(expr->deep_copy_self_datum(eval_ctx))) {
           LOG_WARN("fail to deep copy datum", K(ret), K(eval_ctx), K(*expr));
         }
       }
@@ -569,9 +559,8 @@ int ObReceiveRowReader::attach_vectors(const common::ObIArray<ObExpr*> &exprs,
     for (int64_t i = 0; OB_SUCC(ret) && i < dynamic_const_exprs.count(); i++) {
       ObExpr *expr = dynamic_const_exprs.at(i);
       OB_ASSERT(!expr->is_batch_result());
-      if (0 == expr->res_buf_off_) {
-        // for compat 4.0, do nothing
-      } else if (OB_FAIL(expr->deep_copy_self_datum(eval_ctx))) {
+      // Fixed-width datums do not reserve an external result buffer.
+      if (0 != expr->res_buf_off_ && OB_FAIL(expr->deep_copy_self_datum(eval_ctx))) {
         LOG_WARN("fail to deep copy datum", K(ret), K(eval_ctx), K(*expr));
       }
     }
@@ -777,5 +766,3 @@ void ObReceiveRowReader::reset()
   row_meta_.reset();
   row_meta_init_ = false;
 }
-
-

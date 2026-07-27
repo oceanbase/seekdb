@@ -190,9 +190,8 @@ public:
   // Whether it is a nlj with conditional descent.
   bool nlj_with_param_down_;
   common::ObFixedArray<int64_t, ObIAllocator> pw_dml_tsc_ids_;
-  // Currently all properties of GI are set in the flag, use the flag when possible instead of the above
-  // A few separate variables. Currently, due to compatibility reasons, the above variables cannot be deleted, newly added
-  // The attributes of GI are all determined through this flag.
+  // gi_attri_flag_ is the canonical packed representation of GI attributes;
+  // the direct fields above remain the runtime accessors used by existing paths.
   uint64_t gi_attri_flag_;
   // FULL PARTITION WISE case, GI can be allocated on INSERT/REPLACE operators, GI will control the task partitioning of the insert/replace table
   // for partition join filter

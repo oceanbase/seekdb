@@ -120,7 +120,7 @@ void ObLibXml2SaxHandler::destroy()
 
 // libxml has pthread variable xmlGlobalState
 // this variable is dynamic use malloc and can 
-// not belong to tenant, so use observer tenant
+// XML parsing runs in the server runtime context.
 void ObLibXml2SaxHandler::reset_libxml_last_error()
 {
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("XmlGlobal"));

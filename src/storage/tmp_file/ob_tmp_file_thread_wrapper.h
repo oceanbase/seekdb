@@ -30,7 +30,7 @@ namespace oceanbase
 {
 namespace tmp_file
 {
-class ObSNTenantTmpFileManager;
+class ObSNTmpFileManager;
 class ObTmpFileFlushManager;
 
 // When originally designed, ObTmpFileFlushThread was an independent thread. In order to reduce the
@@ -170,7 +170,7 @@ private:
   ObTmpWriteBufferPool &wbp_;
   ObTmpFileEvictionManager &evict_mgr_;
   ObTmpFilePageCacheController &pc_ctrl_;
-  ObSNTenantTmpFileManager *file_mgr_;
+  ObSNTmpFileManager *file_mgr_;
 };
 
 }  // end namespace tmp_file

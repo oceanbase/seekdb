@@ -30,7 +30,7 @@ namespace observer
 ObInnerSQLConnectionPool::ObInnerSQLConnectionPool()
     : inited_(false), stop_(false), total_conn_cnt_(0),
       free_conn_list_(), used_conn_list_(),
-      allocator_(SET_USE_500(ObMemAttr(ObModIds::OB_INNER_SQL_CONN_POOL))),
+      allocator_(ObMemAttr(ObModIds::OB_INNER_SQL_CONN_POOL)),
       schema_service_(NULL),
       ob_sql_(NULL),
       vt_iter_creator_(NULL),

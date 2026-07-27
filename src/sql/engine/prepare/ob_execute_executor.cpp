@@ -62,15 +62,15 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
       SMART_VAR(ObResultSet, result_set, *ctx.get_my_session(), ctx.get_allocator()) {
         result_set.set_ps_protocol();
         ObTaskExecutorCtx *task_ctx = result_set.get_exec_context().get_task_executor_ctx();
-        int64_t tenant_version = 0;
+        int64_t runtime_schema_version = 0;
         int64_t sys_version = 0;
         if (OB_ISNULL(task_ctx)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_ERROR("task executor ctx can not be NULL", K(task_ctx), K(ret));
-        } else if (OB_FAIL(GCTX.schema_service_->get_tenant_received_broadcast_version(
-                    tenant_version))) {
-          LOG_WARN("fail get tenant schema version", K(ret));
-        } else if (OB_FAIL(GCTX.schema_service_->get_tenant_received_broadcast_version(
+        } else if (OB_FAIL(GCTX.schema_service_->get_runtime_received_broadcast_version(
+                    runtime_schema_version))) {
+          LOG_WARN("fail to get runtime schema version", K(ret));
+        } else if (OB_FAIL(GCTX.schema_service_->get_runtime_received_broadcast_version(
                     sys_version))) {
           LOG_WARN("fail get sys schema version", K(ret));
         } else {
@@ -82,9 +82,8 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
           sql_ctx.is_prepare_stage_ = ctx.get_sql_ctx()->is_prepare_stage_;
           sql_ctx.schema_guard_ = ctx.get_sql_ctx()->schema_guard_;
           task_ctx->schema_service_ = GCTX.schema_service_;
-          task_ctx->set_query_tenant_begin_schema_version(tenant_version);
+          task_ctx->set_query_begin_schema_version(runtime_schema_version);
           task_ctx->set_query_sys_begin_schema_version(sys_version);
-          task_ctx->set_min_cluster_version(GET_MIN_CLUSTER_VERSION());
           if(OB_FAIL(ctx.get_my_session()->add_ps_stmt_id_in_use(stmt.get_prepare_id()))) {
             LOG_WARN("fail add ps stmt id to hash set", K(ret), K(stmt.get_prepare_id()));
           } else {
@@ -215,5 +214,3 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
 
 }
 }
-
-

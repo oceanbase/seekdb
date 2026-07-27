@@ -22,8 +22,8 @@ namespace oceanbase
 {
 namespace share
 {
-class ObTabletReplica;
-class ObTabletReplicaChecksumItem;
+class ObTabletRuntimeInfo;
+class ObTabletLocalChecksumItem;
 }
 namespace compaction
 {
@@ -260,36 +260,17 @@ public:
   void reset();
   void add_table(const uint64_t table_id);
   void add_skip_verify_table(const uint64_t table_id);
-  void add_tablet(const share::ObTabletReplica &replica);
+  void add_tablet(const share::ObTabletRuntimeInfo &tablet_info);
   void add_tablet(const common::ObTabletID &tablet_id);
   int get_uncompact_info(
-    common::ObIArray<share::ObTabletReplica> &input_tablets,
+    common::ObIArray<share::ObTabletRuntimeInfo> &input_tablets,
     common::ObIArray<uint64_t> &input_table_ids) const;
   static const int64_t DEBUG_INFO_CNT = 3;
   static const int64_t SKIP_VERIFY_TABLE_CNT = 10;
   common::SpinRWLock diagnose_rw_lock_;
-  common::ObSEArray<share::ObTabletReplica, DEBUG_INFO_CNT> tablets_; // record for diagnose
+  common::ObSEArray<share::ObTabletRuntimeInfo, DEBUG_INFO_CNT> tablets_; // record for diagnose
   common::ObSEArray<uint64_t, DEBUG_INFO_CNT> table_ids_; // record for diagnose
   common::ObSEArray<uint64_t, SKIP_VERIFY_TABLE_CNT> skip_verify_tables_; // record for print
-};
-
-struct ObReplicaCkmItems
-{
-  ObReplicaCkmItems()
-    : array_(),
-      tablet_cnt_(0)
-  {}
-  DELEGATE_WITH_RET(array_, empty, bool);
-  DELEGATE_WITH_RET(array_, count, int64_t);
-  DELEGATE_WITH_RET(array_, at, const share::ObTabletReplicaChecksumItem&);
-  void reuse()
-  {
-    array_.reuse();
-    tablet_cnt_ = 0;
-  }
-  TO_STRING_KV(K_(array), K_(tablet_cnt));
-  ObArray<share::ObTabletReplicaChecksumItem> array_;
-  int64_t tablet_cnt_;
 };
 
 } // namespace compaction

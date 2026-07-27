@@ -1,5 +1,5 @@
 ***************   Case 0   ***************
-SQL: select * from t1, t2 where t1.c1 > 10 and t1.c1 in (select c2 from t2); 
+SQL: select * from t1, t2 where t1.c1 > 10 and t1.c1 in (select c2 from t2);
 {
   "stmt_type":1,
   "table": [
@@ -908,7 +908,6 @@ SQL: select * from t1, t2 where t1.c1 > 10 and t1.c1 in (select c2 from t2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -932,7 +931,7 @@ SQL: select * from t1, t2 where t1.c1 > 10 and t1.c1 in (select c2 from t2);
   "is_hierarchical_query":false
 }
 ***************   Case 1   ***************
-SQL: select * from t1 where c1 >ANY (select c2 from t2); 
+SQL: select * from t1 where c1 >ANY (select c2 from t2);
 {
   "stmt_type":1,
   "table": [
@@ -1405,7 +1404,6 @@ SQL: select * from t1 where c1 >ANY (select c2 from t2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -1429,7 +1427,7 @@ SQL: select * from t1 where c1 >ANY (select c2 from t2);
   "is_hierarchical_query":false
 }
 ***************   Case 2   ***************
-SQL: select * from t1, t2 where t1.c1 In (select c1 from t2); 
+SQL: select * from t1, t2 where t1.c1 In (select c1 from t2);
 {
   "stmt_type":1,
   "table": [
@@ -2232,7 +2230,6 @@ SQL: select * from t1, t2 where t1.c1 In (select c1 from t2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -2437,7 +2434,6 @@ SQL: select * from t1, t2 where t1.c1 In (select c1 from t2);
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -2465,7 +2461,7 @@ SQL: select * from t1, t2 where t1.c1 In (select c1 from t2);
   "is_hierarchical_query":false
 }
 ***************   Case 3   ***************
-SQL: select * from t1 where Exists (select c1 from t2); 
+SQL: select * from t1 where Exists (select c1 from t2);
 {
   "stmt_type":1,
   "table": [
@@ -2840,7 +2836,6 @@ SQL: select * from t1 where Exists (select c1 from t2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -3061,7 +3056,6 @@ SQL: select * from t1 where Exists (select c1 from t2);
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -3089,7 +3083,7 @@ SQL: select * from t1 where Exists (select c1 from t2);
   "is_hierarchical_query":false
 }
 ***************   Case 4   ***************
-SQL: select * from t1 where c1 In (select c1 from t2); 
+SQL: select * from t1 where c1 In (select c1 from t2);
 {
   "stmt_type":1,
   "table": [
@@ -3567,7 +3561,6 @@ SQL: select * from t1 where c1 In (select c1 from t2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -3772,7 +3765,6 @@ SQL: select * from t1 where c1 In (select c1 from t2);
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -3800,7 +3792,7 @@ SQL: select * from t1 where c1 In (select c1 from t2);
   "is_hierarchical_query":false
 }
 ***************   Case 5   ***************
-SQL: select * from t1 where c1 =ANY (select c1 from t2); 
+SQL: select * from t1 where c1 =ANY (select c1 from t2);
 {
   "stmt_type":1,
   "table": [
@@ -4278,7 +4270,6 @@ SQL: select * from t1 where c1 =ANY (select c1 from t2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -4483,7 +4474,6 @@ SQL: select * from t1 where c1 =ANY (select c1 from t2);
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -4511,7 +4501,7 @@ SQL: select * from t1 where c1 =ANY (select c1 from t2);
   "is_hierarchical_query":false
 }
 ***************   Case 6   ***************
-SQL: select * from t1 where c1 >ANY (select c1 from t2); 
+SQL: select * from t1 where c1 >ANY (select c1 from t2);
 {
   "stmt_type":1,
   "table": [
@@ -4984,7 +4974,6 @@ SQL: select * from t1 where c1 >ANY (select c1 from t2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -5008,7 +4997,7 @@ SQL: select * from t1 where c1 >ANY (select c1 from t2);
   "is_hierarchical_query":false
 }
 ***************   Case 7   ***************
-SQL: select * from t1 where c1 <ALL (select c1 from t2); 
+SQL: select * from t1 where c1 <ALL (select c1 from t2);
 {
   "stmt_type":1,
   "table": [
@@ -5481,7 +5470,6 @@ SQL: select * from t1 where c1 <ALL (select c1 from t2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -5505,7 +5493,7 @@ SQL: select * from t1 where c1 <ALL (select c1 from t2);
   "is_hierarchical_query":false
 }
 ***************   Case 8   ***************
-SQL: select * from t1 where c1 <ALL (select c1 from t2 limit 1); 
+SQL: select * from t1 where c1 <ALL (select c1 from t2 limit 1);
 {
   "stmt_type":1,
   "table": [
@@ -5929,7 +5917,6 @@ SQL: select * from t1 where c1 <ALL (select c1 from t2 limit 1);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -6163,7 +6150,6 @@ SQL: select * from t1 where c1 <ALL (select c1 from t2 limit 1);
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -6191,7 +6177,7 @@ SQL: select * from t1 where c1 <ALL (select c1 from t2 limit 1);
   "is_hierarchical_query":false
 }
 ***************   Case 9   ***************
-SQL: select * from t1 where 1 < ANY(select c1 from t2); 
+SQL: select * from t1 where 1 < ANY(select c1 from t2);
 {
   "stmt_type":1,
   "table": [
@@ -6603,7 +6589,6 @@ SQL: select * from t1 where 1 < ANY(select c1 from t2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -6808,7 +6793,6 @@ SQL: select * from t1 where 1 < ANY(select c1 from t2);
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -6836,7 +6820,7 @@ SQL: select * from t1 where 1 < ANY(select c1 from t2);
   "is_hierarchical_query":false
 }
 ***************   Case 10   ***************
-SQL: select * from t1 where 1 < ANY(select c1 from t2 limit 1); 
+SQL: select * from t1 where 1 < ANY(select c1 from t2 limit 1);
 {
   "stmt_type":1,
   "table": [
@@ -7248,7 +7232,6 @@ SQL: select * from t1 where 1 < ANY(select c1 from t2 limit 1);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -7482,7 +7465,6 @@ SQL: select * from t1 where 1 < ANY(select c1 from t2 limit 1);
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -7510,7 +7492,7 @@ SQL: select * from t1 where 1 < ANY(select c1 from t2 limit 1);
   "is_hierarchical_query":false
 }
 ***************   Case 11   ***************
-SQL: select * from t1 where Exists (select c1 from t2 where c2 >ALL (select c1 from t3)); 
+SQL: select * from t1 where Exists (select c1 from t2 where c2 >ALL (select c1 from t3));
 {
   "stmt_type":1,
   "table": [
@@ -7887,7 +7869,6 @@ SQL: select * from t1 where Exists (select c1 from t2 where c2 >ALL (select c1 f
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -8518,7 +8499,6 @@ SQL: select * from t1 where Exists (select c1 from t2 where c2 >ALL (select c1 f
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -8546,7 +8526,7 @@ SQL: select * from t1 where Exists (select c1 from t2 where c2 >ALL (select c1 f
   "is_hierarchical_query":false
 }
 ***************   Case 12   ***************
-SQL: select * from t1 where Exists (select c1 from t2 where t1.c2=t2.c2); 
+SQL: select * from t1 where Exists (select c1 from t2 where t1.c2=t2.c2);
 {
   "stmt_type":1,
   "table": [
@@ -9072,7 +9052,6 @@ SQL: select * from t1 where Exists (select c1 from t2 where t1.c2=t2.c2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -9096,7 +9075,7 @@ SQL: select * from t1 where Exists (select c1 from t2 where t1.c2=t2.c2);
   "is_hierarchical_query":false
 }
 ***************   Case 13   ***************
-SQL: select * from t1 where c1 <ALL (select c1 from t2 where t1.c2=t2.c2); 
+SQL: select * from t1 where c1 <ALL (select c1 from t2 where t1.c2=t2.c2);
 {
   "stmt_type":1,
   "table": [
@@ -9741,7 +9720,6 @@ SQL: select * from t1 where c1 <ALL (select c1 from t2 where t1.c2=t2.c2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -9765,7 +9743,7 @@ SQL: select * from t1 where c1 <ALL (select c1 from t2 where t1.c2=t2.c2);
   "is_hierarchical_query":false
 }
 ***************   Case 14   ***************
-SQL: select * from t1 where c1 !=ANY (select c1 from t2 where t1.c2=t2.c2 limit 1); 
+SQL: select * from t1 where c1 !=ANY (select c1 from t2 where t1.c2=t2.c2 limit 1);
 {
   "stmt_type":1,
   "table": [
@@ -10191,7 +10169,6 @@ SQL: select * from t1 where c1 !=ANY (select c1 from t2 where t1.c2=t2.c2 limit 
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -10597,7 +10574,6 @@ SQL: select * from t1 where c1 !=ANY (select c1 from t2 where t1.c2=t2.c2 limit 
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -10625,7 +10601,7 @@ SQL: select * from t1 where c1 !=ANY (select c1 from t2 where t1.c2=t2.c2 limit 
   "is_hierarchical_query":false
 }
 ***************   Case 15   ***************
-SQL: select * from t1 where c1 < (select c1 from t2); 
+SQL: select * from t1 where c1 < (select c1 from t2);
 {
   "stmt_type":1,
   "table": [
@@ -11049,7 +11025,6 @@ SQL: select * from t1 where c1 < (select c1 from t2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -11254,7 +11229,6 @@ SQL: select * from t1 where c1 < (select c1 from t2);
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -11282,7 +11256,7 @@ SQL: select * from t1 where c1 < (select c1 from t2);
   "is_hierarchical_query":false
 }
 ***************   Case 16   ***************
-SQL: select * from t1 where exists (select c1 from t2 where t1.c1 = t2.c1); 
+SQL: select * from t1 where exists (select c1 from t2 where t1.c1 = t2.c1);
 {
   "stmt_type":1,
   "table": [
@@ -11756,7 +11730,6 @@ SQL: select * from t1 where exists (select c1 from t2 where t1.c1 = t2.c1);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -11780,7 +11753,7 @@ SQL: select * from t1 where exists (select c1 from t2 where t1.c1 = t2.c1);
   "is_hierarchical_query":false
 }
 ***************   Case 17   ***************
-SQL: select * from t1 where exists (select c1 from t2); 
+SQL: select * from t1 where exists (select c1 from t2);
 {
   "stmt_type":1,
   "table": [
@@ -12155,7 +12128,6 @@ SQL: select * from t1 where exists (select c1 from t2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -12376,7 +12348,6 @@ SQL: select * from t1 where exists (select c1 from t2);
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -12404,7 +12375,7 @@ SQL: select * from t1 where exists (select c1 from t2);
   "is_hierarchical_query":false
 }
 ***************   Case 18   ***************
-SQL: select * from t1 where exists (select c1 from t2 limit 10, 2); 
+SQL: select * from t1 where exists (select c1 from t2 limit 10, 2);
 {
   "stmt_type":1,
   "table": [
@@ -12779,7 +12750,6 @@ SQL: select * from t1 where exists (select c1 from t2 limit 10, 2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -13031,7 +13001,6 @@ SQL: select * from t1 where exists (select c1 from t2 limit 10, 2);
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -13059,7 +13028,7 @@ SQL: select * from t1 where exists (select c1 from t2 limit 10, 2);
   "is_hierarchical_query":false
 }
 ***************   Case 19   ***************
-SQL: select * from t1 where exists (select c1 from t2 group by c1); 
+SQL: select * from t1 where exists (select c1 from t2 group by c1);
 {
   "stmt_type":1,
   "table": [
@@ -13434,7 +13403,6 @@ SQL: select * from t1 where exists (select c1 from t2 group by c1);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -13655,7 +13623,6 @@ SQL: select * from t1 where exists (select c1 from t2 group by c1);
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -13683,7 +13650,7 @@ SQL: select * from t1 where exists (select c1 from t2 group by c1);
   "is_hierarchical_query":false
 }
 ***************   Case 20   ***************
-SQL: select * from t1 where (t1.c1, t1.c2) in (select c1,c2 from t2 where c3 = 1); 
+SQL: select * from t1 where (t1.c1, t1.c2) in (select c1,c2 from t2 where c3 = 1);
 {
   "stmt_type":1,
   "table": [
@@ -14522,7 +14489,6 @@ SQL: select * from t1 where (t1.c1, t1.c2) in (select c1,c2 from t2 where c3 = 1
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -14621,7 +14587,7 @@ SQL: select * from t1 where (t1.c1, t1.c2) in (select c1,c2 from t2 where c3 = 1
   "is_hierarchical_query":false
 }
 ***************   Case 21   ***************
-SQL: select * from t1 where (t1.c1, t1.c2) not in (select c1,c2 from t2 where c3 = 1); 
+SQL: select * from t1 where (t1.c1, t1.c2) not in (select c1,c2 from t2 where c3 = 1);
 {
   "stmt_type":1,
   "table": [
@@ -15460,7 +15426,6 @@ SQL: select * from t1 where (t1.c1, t1.c2) not in (select c1,c2 from t2 where c3
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -15559,7 +15524,7 @@ SQL: select * from t1 where (t1.c1, t1.c2) not in (select c1,c2 from t2 where c3
   "is_hierarchical_query":false
 }
 ***************   Case 22   ***************
-SQL: select * from t1 where (t1.c1, t1.c2) = ANY(select c1,c2 from t2 where c3 = 1); 
+SQL: select * from t1 where (t1.c1, t1.c2) = ANY(select c1,c2 from t2 where c3 = 1);
 {
   "stmt_type":1,
   "table": [
@@ -16398,7 +16363,6 @@ SQL: select * from t1 where (t1.c1, t1.c2) = ANY(select c1,c2 from t2 where c3 =
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -16497,7 +16461,7 @@ SQL: select * from t1 where (t1.c1, t1.c2) = ANY(select c1,c2 from t2 where c3 =
   "is_hierarchical_query":false
 }
 ***************   Case 23   ***************
-SQL: select * from t1 where (t1.c1, t1.c2) != ANY(select c1,c2 from t2 where c3 = 1); 
+SQL: select * from t1 where (t1.c1, t1.c2) != ANY(select c1,c2 from t2 where c3 = 1);
 {
   "stmt_type":1,
   "table": [
@@ -17335,7 +17299,6 @@ SQL: select * from t1 where (t1.c1, t1.c2) != ANY(select c1,c2 from t2 where c3 
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -17434,7 +17397,7 @@ SQL: select * from t1 where (t1.c1, t1.c2) != ANY(select c1,c2 from t2 where c3 
   "is_hierarchical_query":false
 }
 ***************   Case 24   ***************
-SQL: select * from t1 where (t1.c1, t1.c2) = ALL(select c1,c2 from t2 where c3 = 1); 
+SQL: select * from t1 where (t1.c1, t1.c2) = ALL(select c1,c2 from t2 where c3 = 1);
 {
   "stmt_type":1,
   "table": [
@@ -18272,7 +18235,6 @@ SQL: select * from t1 where (t1.c1, t1.c2) = ALL(select c1,c2 from t2 where c3 =
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -18371,7 +18333,7 @@ SQL: select * from t1 where (t1.c1, t1.c2) = ALL(select c1,c2 from t2 where c3 =
   "is_hierarchical_query":false
 }
 ***************   Case 25   ***************
-SQL: select * from t1 where (t1.c1, t1.c2) != ALL(select c1,c2 from t2 where c3 = 1); 
+SQL: select * from t1 where (t1.c1, t1.c2) != ALL(select c1,c2 from t2 where c3 = 1);
 {
   "stmt_type":1,
   "table": [
@@ -19210,7 +19172,6 @@ SQL: select * from t1 where (t1.c1, t1.c2) != ALL(select c1,c2 from t2 where c3 
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -19309,7 +19270,7 @@ SQL: select * from t1 where (t1.c1, t1.c2) != ALL(select c1,c2 from t2 where c3 
   "is_hierarchical_query":false
 }
 ***************   Case 26   ***************
-SQL: select * from t1 where (t1.c1, t1.c2) != ANY(select c1,c2 from t2 where t1.c2 = t2.c2); 
+SQL: select * from t1 where (t1.c1, t1.c2) != ANY(select c1,c2 from t2 where t1.c2 = t2.c2);
 {
   "stmt_type":1,
   "table": [
@@ -20104,7 +20065,6 @@ SQL: select * from t1 where (t1.c1, t1.c2) != ANY(select c1,c2 from t2 where t1.
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -20128,7 +20088,7 @@ SQL: select * from t1 where (t1.c1, t1.c2) != ANY(select c1,c2 from t2 where t1.
   "is_hierarchical_query":false
 }
 ***************   Case 27   ***************
-SQL: select * from t1 where (t1.c1, t1.c2) = ALL(select c1,c2 from t2 where t1.c1 > t2.c1); 
+SQL: select * from t1 where (t1.c1, t1.c2) = ALL(select c1,c2 from t2 where t1.c1 > t2.c1);
 {
   "stmt_type":1,
   "table": [
@@ -20922,7 +20882,6 @@ SQL: select * from t1 where (t1.c1, t1.c2) = ALL(select c1,c2 from t2 where t1.c
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -20946,7 +20905,7 @@ SQL: select * from t1 where (t1.c1, t1.c2) = ALL(select c1,c2 from t2 where t1.c
   "is_hierarchical_query":false
 }
 ***************   Case 28   ***************
-SQL: select * from t3 where (t3.c1, t3.c2, t3.c3) in (select c1,c2,c3 from t2 where t3.c3 <> t2.c3); 
+SQL: select * from t3 where (t3.c1, t3.c2, t3.c3) in (select c1,c2,c3 from t2 where t3.c3 <> t2.c3);
 {
   "stmt_type":1,
   "table": [
@@ -21982,7 +21941,6 @@ SQL: select * from t3 where (t3.c1, t3.c2, t3.c3) in (select c1,c2,c3 from t2 wh
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -22006,7 +21964,7 @@ SQL: select * from t3 where (t3.c1, t3.c2, t3.c3) in (select c1,c2,c3 from t2 wh
   "is_hierarchical_query":false
 }
 ***************   Case 29   ***************
-SQL: select * from t1 where exists (select 1, round(1.1) from dual); 
+SQL: select * from t1 where exists (select 1, round(1.1) from dual);
 {
   "stmt_type":1,
   "table": [
@@ -22399,7 +22357,6 @@ SQL: select * from t1 where exists (select 1, round(1.1) from dual);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -22665,7 +22622,6 @@ SQL: select * from t1 where exists (select 1, round(1.1) from dual);
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -22765,7 +22721,7 @@ SQL: select * from t1 where exists (select 1, round(1.1) from dual);
   "is_hierarchical_query":false
 }
 ***************   Case 30   ***************
-SQL: select * from t1 where not exists (select 1, round(1.1) from dual); 
+SQL: select * from t1 where not exists (select 1, round(1.1) from dual);
 {
   "stmt_type":1,
   "table": [
@@ -23158,7 +23114,6 @@ SQL: select * from t1 where not exists (select 1, round(1.1) from dual);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -23424,7 +23379,6 @@ SQL: select * from t1 where not exists (select 1, round(1.1) from dual);
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -23524,7 +23478,7 @@ SQL: select * from t1 where not exists (select 1, round(1.1) from dual);
   "is_hierarchical_query":false
 }
 ***************   Case 31   ***************
-SQL: select * from t1 where exists (select max(c1) from t2); 
+SQL: select * from t1 where exists (select max(c1) from t2);
 {
   "stmt_type":1,
   "table": [
@@ -23844,7 +23798,6 @@ SQL: select * from t1 where exists (select max(c1) from t2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -23868,7 +23821,7 @@ SQL: select * from t1 where exists (select max(c1) from t2);
   "is_hierarchical_query":false
 }
 ***************   Case 32   ***************
-SQL: select * from t1 where not exists (select max(c1) from t2); 
+SQL: select * from t1 where not exists (select max(c1) from t2);
 {
   "stmt_type":1,
   "table": [
@@ -24188,7 +24141,6 @@ SQL: select * from t1 where not exists (select max(c1) from t2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -24212,7 +24164,7 @@ SQL: select * from t1 where not exists (select max(c1) from t2);
   "is_hierarchical_query":false
 }
 ***************   Case 33   ***************
-SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1)  from t2); 
+SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1)  from t2);
 {
   "stmt_type":1,
   "table": [
@@ -24532,7 +24484,6 @@ SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1)  from t2)
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -24556,7 +24507,7 @@ SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1)  from t2)
   "is_hierarchical_query":false
 }
 ***************   Case 34   ***************
-SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1)  from t2); 
+SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1)  from t2);
 {
   "stmt_type":1,
   "table": [
@@ -24876,7 +24827,6 @@ SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1)  from
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -24900,7 +24850,7 @@ SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1)  from
   "is_hierarchical_query":false
 }
 ***************   Case 35   ***************
-SQL: select * from t1, (select * from t2 where exists(select sum(c1) from t3)) tx where t1.c1 = tx.c1; 
+SQL: select * from t1, (select * from t2 where exists(select sum(c1) from t3)) tx where t1.c1 = tx.c1;
 {
   "stmt_type":1,
   "table": [
@@ -25635,7 +25585,6 @@ SQL: select * from t1, (select * from t2 where exists(select sum(c1) from t3)) t
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -26076,7 +26025,6 @@ SQL: select * from t1, (select * from t2 where exists(select sum(c1) from t3)) t
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -26104,7 +26052,7 @@ SQL: select * from t1, (select * from t2 where exists(select sum(c1) from t3)) t
   "is_hierarchical_query":false
 }
 ***************   Case 36   ***************
-SQL: select * from t1 where t1.c1 in (select c1 from t2 where exists(select count(c1) from t3)); 
+SQL: select * from t1 where t1.c1 in (select c1 from t2 where exists(select count(c1) from t3));
 {
   "stmt_type":1,
   "table": [
@@ -26582,7 +26530,6 @@ SQL: select * from t1 where t1.c1 in (select c1 from t2 where exists(select coun
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -26817,7 +26764,6 @@ SQL: select * from t1 where t1.c1 in (select c1 from t2 where exists(select coun
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -26845,7 +26791,7 @@ SQL: select * from t1 where t1.c1 in (select c1 from t2 where exists(select coun
   "is_hierarchical_query":false
 }
 ***************   Case 37   ***************
-SQL: select * from t1 where exists (select group_concat(c1, c2) from t2 group by c1) ; 
+SQL: select * from t1 where exists (select group_concat(c1, c2) from t2 group by c1) ;
 {
   "stmt_type":1,
   "table": [
@@ -27220,7 +27166,6 @@ SQL: select * from t1 where exists (select group_concat(c1, c2) from t2 group by
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -27493,7 +27438,6 @@ SQL: select * from t1 where exists (select group_concat(c1, c2) from t2 group by
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -27521,7 +27465,7 @@ SQL: select * from t1 where exists (select group_concat(c1, c2) from t2 group by
   "is_hierarchical_query":false
 }
 ***************   Case 38   ***************
-SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1) from t2 group by c1) ; 
+SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1) from t2 group by c1) ;
 {
   "stmt_type":1,
   "table": [
@@ -27932,7 +27876,6 @@ SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1) from t2 g
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -28153,7 +28096,6 @@ SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1) from t2 g
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -28181,7 +28123,7 @@ SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1) from t2 g
   "is_hierarchical_query":false
 }
 ***************   Case 39   ***************
-SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1) from t2 group by c1 having c1 > 1); 
+SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1) from t2 group by c1 having c1 > 1);
 {
   "stmt_type":1,
   "table": [
@@ -28594,7 +28536,6 @@ SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1) from t2 g
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -28925,7 +28866,6 @@ SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1) from t2 g
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -28953,7 +28893,7 @@ SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1) from t2 g
   "is_hierarchical_query":false
 }
 ***************   Case 40   ***************
-SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1) from t2 group by c1 having sum(c1) > 1); 
+SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1) from t2 group by c1 having sum(c1) > 1);
 {
   "stmt_type":1,
   "table": [
@@ -29366,7 +29306,6 @@ SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1) from t2 g
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -29861,7 +29800,6 @@ SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1) from t2 g
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -29889,7 +29827,7 @@ SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1) from t2 g
   "is_hierarchical_query":false
 }
 ***************   Case 41   ***************
-SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1) from t2 group by c1 having sum(c1) > 1 and count(c1) > 0);  select * from t1 where not exists (select group_concat(c1, c2) from t2 group by c1) ; 
+SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1) from t2 group by c1 having sum(c1) > 1 and count(c1) > 0);  select * from t1 where not exists (select group_concat(c1, c2) from t2 group by c1) ;
 {
   "stmt_type":1,
   "table": [
@@ -30302,7 +30240,6 @@ SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1) from t2 g
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -31028,7 +30965,6 @@ SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1) from t2 g
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -31056,7 +30992,7 @@ SQL: select * from t1 where exists (select max(c1), sum(c1), count(c1) from t2 g
   "is_hierarchical_query":false
 }
 ***************   Case 42   ***************
-SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1) from t2 group by c1) ; 
+SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1) from t2 group by c1) ;
 {
   "stmt_type":1,
   "table": [
@@ -31467,7 +31403,6 @@ SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1) from 
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -31688,7 +31623,6 @@ SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1) from 
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -31716,7 +31650,7 @@ SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1) from 
   "is_hierarchical_query":false
 }
 ***************   Case 43   ***************
-SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1) from t2 group by c1 having c1 > 1); 
+SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1) from t2 group by c1 having c1 > 1);
 {
   "stmt_type":1,
   "table": [
@@ -32129,7 +32063,6 @@ SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1) from 
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -32460,7 +32393,6 @@ SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1) from 
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -32488,7 +32420,7 @@ SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1) from 
   "is_hierarchical_query":false
 }
 ***************   Case 44   ***************
-SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1) from t2 group by c1 having sum(c1) > 1); 
+SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1) from t2 group by c1 having sum(c1) > 1);
 {
   "stmt_type":1,
   "table": [
@@ -32901,7 +32833,6 @@ SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1) from 
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -33396,7 +33327,6 @@ SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1) from 
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -33424,7 +33354,7 @@ SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1) from 
   "is_hierarchical_query":false
 }
 ***************   Case 45   ***************
-SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1) from t2 group by c1 having sum(c1) > 1 and count(c1) > 0); 
+SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1) from t2 group by c1 having sum(c1) > 1 and count(c1) > 0);
 {
   "stmt_type":1,
   "table": [
@@ -33837,7 +33767,6 @@ SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1) from 
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -34563,7 +34492,6 @@ SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1) from 
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -34591,7 +34519,7 @@ SQL: select * from t1 where not exists (select max(c1), sum(c1), count(c1) from 
   "is_hierarchical_query":false
 }
 ***************   Case 46   ***************
-SQL: select * from t1 where exists(select max(c1) from t2 group by c1 having max(c1) > 1); 
+SQL: select * from t1 where exists(select max(c1) from t2 group by c1 having max(c1) > 1);
 {
   "stmt_type":1,
   "table": [
@@ -34968,7 +34896,6 @@ SQL: select * from t1 where exists(select max(c1) from t2 group by c1 having max
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -35463,7 +35390,6 @@ SQL: select * from t1 where exists(select max(c1) from t2 group by c1 having max
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -35491,7 +35417,7 @@ SQL: select * from t1 where exists(select max(c1) from t2 group by c1 having max
   "is_hierarchical_query":false
 }
 ***************   Case 47   ***************
-SQL: select * from t1, (select * from t2 having c1 > 1) as tx where t1.c1 = tx.c1; 
+SQL: select * from t1, (select * from t2 having c1 > 1) as tx where t1.c1 = tx.c1;
 {
   "stmt_type":1,
   "table": [
@@ -36226,7 +36152,6 @@ SQL: select * from t1, (select * from t2 having c1 > 1) as tx where t1.c1 = tx.c
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -36747,7 +36672,6 @@ SQL: select * from t1, (select * from t2 having c1 > 1) as tx where t1.c1 = tx.c
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -36775,7 +36699,7 @@ SQL: select * from t1, (select * from t2 having c1 > 1) as tx where t1.c1 = tx.c
   "is_hierarchical_query":false
 }
 ***************   Case 48   ***************
-SQL: select * from t1, (select * from t2 where exists(select sum(c1)  from t3 group by c1 having c1 > 1)) as tx where t1.c1 = tx.c1; 
+SQL: select * from t1, (select * from t2 where exists(select sum(c1)  from t3 group by c1 having c1 > 1)) as tx where t1.c1 = tx.c1;
 {
   "stmt_type":1,
   "table": [
@@ -37510,7 +37434,6 @@ SQL: select * from t1, (select * from t2 where exists(select sum(c1)  from t3 gr
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -38008,7 +37931,6 @@ SQL: select * from t1, (select * from t2 where exists(select sum(c1)  from t3 gr
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -38339,7 +38261,6 @@ SQL: select * from t1, (select * from t2 where exists(select sum(c1)  from t3 gr
             ],
             "use_late_materialization":-1,
             "log_level":"",
-            "max_concurrent":-1,
             "only_concurrent_hint":false,
             "has_hint_exclude_concurrent":false,
             "parallel":-1
@@ -38371,7 +38292,7 @@ SQL: select * from t1, (select * from t2 where exists(select sum(c1)  from t3 gr
   "is_hierarchical_query":false
 }
 ***************   Case 49   ***************
-SQL: select * from t1 where exists (select max(c1) from t2 group by c1 having exists (select * from t3 where t3.c1 > max(t2.c1))); 
+SQL: select * from t1 where exists (select max(c1) from t2 group by c1 having exists (select * from t3 where t3.c1 > max(t2.c1)));
 {
   "stmt_type":1,
   "table": [
@@ -38750,7 +38671,6 @@ SQL: select * from t1 where exists (select max(c1) from t2 group by c1 having ex
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -39223,7 +39143,6 @@ SQL: select * from t1 where exists (select max(c1) from t2 group by c1 having ex
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -39793,7 +39712,6 @@ SQL: select * from t1 where exists (select max(c1) from t2 group by c1 having ex
             ],
             "use_late_materialization":-1,
             "log_level":"",
-            "max_concurrent":-1,
             "only_concurrent_hint":false,
             "has_hint_exclude_concurrent":false,
             "parallel":-1
@@ -39825,7 +39743,7 @@ SQL: select * from t1 where exists (select max(c1) from t2 group by c1 having ex
   "is_hierarchical_query":false
 }
 ***************   Case 50   ***************
-SQL: select * from t1 where exists (select sum(c1) from t2 group by c1 having exists (select * from t3 where t3.c1 > sum(t2.c1))); 
+SQL: select * from t1 where exists (select sum(c1) from t2 group by c1 having exists (select * from t3 where t3.c1 > sum(t2.c1)));
 {
   "stmt_type":1,
   "table": [
@@ -40204,7 +40122,6 @@ SQL: select * from t1 where exists (select sum(c1) from t2 group by c1 having ex
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -40677,7 +40594,6 @@ SQL: select * from t1 where exists (select sum(c1) from t2 group by c1 having ex
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -41247,7 +41163,6 @@ SQL: select * from t1 where exists (select sum(c1) from t2 group by c1 having ex
             ],
             "use_late_materialization":-1,
             "log_level":"",
-            "max_concurrent":-1,
             "only_concurrent_hint":false,
             "has_hint_exclude_concurrent":false,
             "parallel":-1
@@ -41279,7 +41194,7 @@ SQL: select * from t1 where exists (select sum(c1) from t2 group by c1 having ex
   "is_hierarchical_query":false
 }
 ***************   Case 51   ***************
-SQL: select * from t1 where c2 > exists(select c2 from t2 where c2 > exists(select c2 from t3)); 
+SQL: select * from t1 where c2 > exists(select c2 from t2 where c2 > exists(select c2 from t3));
 {
   "stmt_type":1,
   "table": [
@@ -41733,7 +41648,6 @@ SQL: select * from t1 where c2 > exists(select c2 from t2 where c2 > exists(sele
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -42115,7 +42029,6 @@ SQL: select * from t1 where c2 > exists(select c2 from t2 where c2 > exists(sele
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -42336,7 +42249,6 @@ SQL: select * from t1 where c2 > exists(select c2 from t2 where c2 > exists(sele
             ],
             "use_late_materialization":-1,
             "log_level":"",
-            "max_concurrent":-1,
             "only_concurrent_hint":false,
             "has_hint_exclude_concurrent":false,
             "parallel":-1
@@ -42368,7 +42280,7 @@ SQL: select * from t1 where c2 > exists(select c2 from t2 where c2 > exists(sele
   "is_hierarchical_query":false
 }
 ***************   Case 52   ***************
-SQL: select * from t1 where c2 > exists(select c1 from t2 where c2 > exists(select sum(c1) from t3)); 
+SQL: select * from t1 where c2 > exists(select c1 from t2 where c2 > exists(select sum(c1) from t3));
 {
   "stmt_type":1,
   "table": [
@@ -42822,7 +42734,6 @@ SQL: select * from t1 where c2 > exists(select c1 from t2 where c2 > exists(sele
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -43202,7 +43113,6 @@ SQL: select * from t1 where c2 > exists(select c1 from t2 where c2 > exists(sele
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -43230,7 +43140,7 @@ SQL: select * from t1 where c2 > exists(select c1 from t2 where c2 > exists(sele
   "is_hierarchical_query":false
 }
 ***************   Case 53   ***************
-SQL: select * from t1 where c2 > exists(select sum(c1) from t2 where c2 > exists(select sum(c1) from t3)); 
+SQL: select * from t1 where c2 > exists(select sum(c1) from t2 where c2 > exists(select sum(c1) from t3));
 {
   "stmt_type":1,
   "table": [
@@ -43627,7 +43537,6 @@ SQL: select * from t1 where c2 > exists(select sum(c1) from t2 where c2 > exists
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -43651,7 +43560,7 @@ SQL: select * from t1 where c2 > exists(select sum(c1) from t2 where c2 > exists
   "is_hierarchical_query":false
 }
 ***************   Case 54   ***************
-SQL: SELECT c1 FROM pullup1 WHERE EXISTS(SELECT DISTINCT c1 FROM pullup2); 
+SQL: SELECT c1 FROM pullup1 WHERE EXISTS(SELECT DISTINCT c1 FROM pullup2);
 {
   "stmt_type":1,
   "table": [
@@ -43923,7 +43832,6 @@ SQL: SELECT c1 FROM pullup1 WHERE EXISTS(SELECT DISTINCT c1 FROM pullup2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -44144,7 +44052,6 @@ SQL: SELECT c1 FROM pullup1 WHERE EXISTS(SELECT DISTINCT c1 FROM pullup2);
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -44172,7 +44079,7 @@ SQL: SELECT c1 FROM pullup1 WHERE EXISTS(SELECT DISTINCT c1 FROM pullup2);
   "is_hierarchical_query":false
 }
 ***************   Case 55   ***************
-SQL: SELECT c1 FROM pullup1 WHERE EXISTS(SELECT DISTINCT c1 FROM pullup2 LIMIT 1); 
+SQL: SELECT c1 FROM pullup1 WHERE EXISTS(SELECT DISTINCT c1 FROM pullup2 LIMIT 1);
 {
   "stmt_type":1,
   "table": [
@@ -44446,7 +44353,6 @@ SQL: SELECT c1 FROM pullup1 WHERE EXISTS(SELECT DISTINCT c1 FROM pullup2 LIMIT 1
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -44680,7 +44586,6 @@ SQL: SELECT c1 FROM pullup1 WHERE EXISTS(SELECT DISTINCT c1 FROM pullup2 LIMIT 1
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -44708,7 +44613,7 @@ SQL: SELECT c1 FROM pullup1 WHERE EXISTS(SELECT DISTINCT c1 FROM pullup2 LIMIT 1
   "is_hierarchical_query":false
 }
 ***************   Case 56   ***************
-SQL: SELECT c1 FROM pullup1 WHERE EXISTS(SELECT DISTINCT c1 FROM pullup2 LIMIT 1 OFFSET 2); 
+SQL: SELECT c1 FROM pullup1 WHERE EXISTS(SELECT DISTINCT c1 FROM pullup2 LIMIT 1 OFFSET 2);
 {
   "stmt_type":1,
   "table": [
@@ -44982,7 +44887,6 @@ SQL: SELECT c1 FROM pullup1 WHERE EXISTS(SELECT DISTINCT c1 FROM pullup2 LIMIT 1
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -45247,7 +45151,6 @@ SQL: SELECT c1 FROM pullup1 WHERE EXISTS(SELECT DISTINCT c1 FROM pullup2 LIMIT 1
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -45275,7 +45178,7 @@ SQL: SELECT c1 FROM pullup1 WHERE EXISTS(SELECT DISTINCT c1 FROM pullup2 LIMIT 1
   "is_hierarchical_query":false
 }
 ***************   Case 57   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2);
 {
   "stmt_type":1,
   "table": [
@@ -45650,7 +45553,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -45855,7 +45757,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2);
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -45883,7 +45784,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2);
   "is_hierarchical_query":false
 }
 ***************   Case 58   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 WHERE pullup2.c3 = pullup1.c3); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 WHERE pullup2.c3 = pullup1.c3);
 {
   "stmt_type":1,
   "table": [
@@ -46533,7 +46434,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 WHERE pullup2.c3
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -46892,7 +46792,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 WHERE pullup2.c3
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -46920,7 +46819,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 WHERE pullup2.c3
   "is_hierarchical_query":false
 }
 ***************   Case 59   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 WHERE pullup2.c1 = pullup2.c3); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 WHERE pullup2.c1 = pullup2.c3);
 {
   "stmt_type":1,
   "table": [
@@ -47295,7 +47194,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 WHERE pullup2.c1
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -47723,7 +47621,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 WHERE pullup2.c1
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -47751,7 +47648,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 WHERE pullup2.c1
   "is_hierarchical_query":false
 }
 ***************   Case 60   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 WHERE pullup2.c1 = pullup1.c3 AND pullup2.c1 = pullup2.c3); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 WHERE pullup2.c1 = pullup1.c3 AND pullup2.c1 = pullup2.c3);
 {
   "stmt_type":1,
   "table": [
@@ -48401,7 +48298,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 WHERE pullup2.c1
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -48931,7 +48827,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 WHERE pullup2.c1
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -48959,7 +48854,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 WHERE pullup2.c1
   "is_hierarchical_query":false
 }
 ***************   Case 61   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 ORDER BY pullup2.c3); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 ORDER BY pullup2.c3);
 {
   "stmt_type":1,
   "table": [
@@ -49334,7 +49229,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 ORDER BY pullup2
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -49591,7 +49485,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 ORDER BY pullup2
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -49619,7 +49512,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 ORDER BY pullup2
   "is_hierarchical_query":false
 }
 ***************   Case 62   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2);
 {
   "stmt_type":1,
   "table": [
@@ -49994,7 +49887,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -50199,7 +50091,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2);
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -50227,7 +50118,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2);
   "is_hierarchical_query":false
 }
 ***************   Case 63   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2 WHERE pullup2.c3 = pullup1.c3); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2 WHERE pullup2.c3 = pullup1.c3);
 {
   "stmt_type":1,
   "table": [
@@ -50877,7 +50768,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2 WHERE pullu
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -51236,7 +51126,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2 WHERE pullu
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -51264,7 +51153,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2 WHERE pullu
   "is_hierarchical_query":false
 }
 ***************   Case 64   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2 WHERE pullup2.c1 = pullup2.c3); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2 WHERE pullup2.c1 = pullup2.c3);
 {
   "stmt_type":1,
   "table": [
@@ -51639,7 +51528,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2 WHERE pullu
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -52067,7 +51955,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2 WHERE pullu
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -52095,7 +51982,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2 WHERE pullu
   "is_hierarchical_query":false
 }
 ***************   Case 65   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2 WHERE pullup2.c1 = pullup1.c3 AND pullup2.c1 = pullup2.c3); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2 WHERE pullup2.c1 = pullup1.c3 AND pullup2.c1 = pullup2.c3);
 {
   "stmt_type":1,
   "table": [
@@ -52745,7 +52632,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2 WHERE pullu
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -53275,7 +53161,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2 WHERE pullu
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -53303,7 +53188,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2 WHERE pullu
   "is_hierarchical_query":false
 }
 ***************   Case 66   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2 ORDER BY pullup2.c3); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2 ORDER BY pullup2.c3);
 {
   "stmt_type":1,
   "table": [
@@ -53678,7 +53563,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2 ORDER BY pu
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -53935,7 +53819,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2 ORDER BY pu
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -53963,7 +53846,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT uniq_c2 FROM pullup2 ORDER BY pu
   "is_hierarchical_query":false
 }
 ***************   Case 67   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT DISTINCT c1 FROM pullup2); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT DISTINCT c1 FROM pullup2);
 {
   "stmt_type":1,
   "table": [
@@ -54338,7 +54221,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT DISTINCT c1 FROM pullup2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -54543,7 +54425,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT DISTINCT c1 FROM pullup2);
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -54571,7 +54452,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT DISTINCT c1 FROM pullup2);
   "is_hierarchical_query":false
 }
 ***************   Case 68   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT DISTINCT c1 FROM pullup2 WHERE pullup2.c1 = pullup2.c3); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT DISTINCT c1 FROM pullup2 WHERE pullup2.c1 = pullup2.c3);
 {
   "stmt_type":1,
   "table": [
@@ -54946,7 +54827,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT DISTINCT c1 FROM pullup2 WHERE p
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -55322,7 +55202,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT DISTINCT c1 FROM pullup2 WHERE p
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -55350,7 +55229,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT DISTINCT c1 FROM pullup2 WHERE p
   "is_hierarchical_query":false
 }
 ***************   Case 69   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT DISTINCT c1 FROM pullup2 WHERE pullup2.c3 = pullup1.c3); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT DISTINCT c1 FROM pullup2 WHERE pullup2.c3 = pullup1.c3);
 {
   "stmt_type":1,
   "table": [
@@ -55725,7 +55604,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT DISTINCT c1 FROM pullup2 WHERE p
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -56102,7 +55980,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT DISTINCT c1 FROM pullup2 WHERE p
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -56130,7 +56007,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT DISTINCT c1 FROM pullup2 WHERE p
   "is_hierarchical_query":false
 }
 ***************   Case 70   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 LIMIT 1); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 LIMIT 1);
 {
   "stmt_type":1,
   "table": [
@@ -56501,7 +56378,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 LIMIT 1);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -56735,7 +56611,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 LIMIT 1);
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -56763,7 +56638,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 LIMIT 1);
   "is_hierarchical_query":false
 }
 ***************   Case 71   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 GROUP BY pullup2.c1); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 GROUP BY pullup2.c1);
 {
   "stmt_type":1,
   "table": [
@@ -57134,7 +57009,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 GROUP BY pullup2
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -57434,7 +57308,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 GROUP BY pullup2
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -57462,7 +57335,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 GROUP BY pullup2
   "is_hierarchical_query":false
 }
 ***************   Case 72   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 UNION ALL SELECT pk FROM pullup3); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 UNION ALL SELECT pk FROM pullup3);
 {
   "stmt_type":1,
   "table": [
@@ -57783,7 +57656,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 UNION ALL SELECT
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -57991,7 +57863,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 UNION ALL SELECT
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -58200,7 +58071,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 UNION ALL SELECT
           ],
           "use_late_materialization":-1,
           "log_level":"",
-          "max_concurrent":-1,
           "only_concurrent_hint":false,
           "has_hint_exclude_concurrent":false,
           "parallel":-1
@@ -58362,7 +58232,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM pullup2 UNION ALL SELECT
   "is_hierarchical_query":false
 }
 ***************   Case 73   ***************
-SQL: SELECT c1 FROM pullup1 WHERE 1 IN (SELECT c1 FROM pullup2); 
+SQL: SELECT c1 FROM pullup1 WHERE 1 IN (SELECT c1 FROM pullup2);
 {
   "stmt_type":1,
   "table": [
@@ -58671,7 +58541,6 @@ SQL: SELECT c1 FROM pullup1 WHERE 1 IN (SELECT c1 FROM pullup2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -58876,7 +58745,6 @@ SQL: SELECT c1 FROM pullup1 WHERE 1 IN (SELECT c1 FROM pullup2);
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -58904,7 +58772,7 @@ SQL: SELECT c1 FROM pullup1 WHERE 1 IN (SELECT c1 FROM pullup2);
   "is_hierarchical_query":false
 }
 ***************   Case 74   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT 1 FROM pullup2); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT 1 FROM pullup2);
 {
   "stmt_type":1,
   "table": [
@@ -59223,7 +59091,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT 1 FROM pullup2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -59363,7 +59230,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT 1 FROM pullup2);
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -59391,7 +59257,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT 1 FROM pullup2);
   "is_hierarchical_query":false
 }
 ***************   Case 75   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT floor(pk) FROM pullup2); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT floor(pk) FROM pullup2);
 {
   "stmt_type":1,
   "table": [
@@ -59800,7 +59666,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT floor(pk) FROM pullup2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -59824,7 +59689,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT floor(pk) FROM pullup2);
   "is_hierarchical_query":false
 }
 ***************   Case 76   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT c1 FROM pullup2); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT c1 FROM pullup2);
 {
   "stmt_type":1,
   "table": [
@@ -60195,7 +60060,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT c1 FROM pullup2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -60219,7 +60083,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT c1 FROM pullup2);
   "is_hierarchical_query":false
 }
 ***************   Case 77   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pullup2.pk FROM pullup2, pullup3); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pullup2.pk FROM pullup2, pullup3);
 {
   "stmt_type":1,
   "table": [
@@ -60602,7 +60466,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pullup2.pk FROM pullup2, pullup3
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -60626,7 +60489,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pullup2.pk FROM pullup2, pullup3
   "is_hierarchical_query":false
 }
 ***************   Case 78   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM (select * from pullup2 limit 1)); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM (select * from pullup2 limit 1));
 {
   "stmt_type":1,
   "table": [
@@ -60997,7 +60860,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM (select * from pullup2 l
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -61540,7 +61402,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM (select * from pullup2 l
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -61568,7 +61429,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pk FROM (select * from pullup2 l
   "is_hierarchical_query":false
 }
 ***************   Case 79   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pullup2.pk FROM pullup2 JOIN pullup3 on pullup2.c3 = pullup3.c3); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pullup2.pk FROM pullup2 JOIN pullup3 on pullup2.c3 = pullup3.c3);
 {
   "stmt_type":1,
   "table": [
@@ -62206,7 +62067,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pullup2.pk FROM pullup2 JOIN pul
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -62230,7 +62090,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT pullup2.pk FROM pullup2 JOIN pul
   "is_hierarchical_query":false
 }
 ***************   Case 80   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT DISTINCT pullup2.c1 FROM pullup2 WHERE pullup1.c3 = pullup2.c3); 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT DISTINCT pullup2.c1 FROM pullup2 WHERE pullup1.c3 = pullup2.c3);
 {
   "stmt_type":1,
   "table": [
@@ -62605,7 +62465,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT DISTINCT pullup2.c1 FROM pullup2
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -62982,7 +62841,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT DISTINCT pullup2.c1 FROM pullup2
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
@@ -63010,7 +62868,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT DISTINCT pullup2.c1 FROM pullup2
   "is_hierarchical_query":false
 }
 ***************   Case 81   ***************
-SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT c1 FROM pullup2) ORDER BY c3; 
+SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT c1 FROM pullup2) ORDER BY c3;
 {
   "stmt_type":1,
   "table": [
@@ -63479,7 +63337,6 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT c1 FROM pullup2) ORDER BY c3;
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -63503,7 +63360,7 @@ SQL: SELECT c1 FROM pullup1 WHERE c1 IN (SELECT c1 FROM pullup2) ORDER BY c3;
   "is_hierarchical_query":false
 }
 ***************   Case 82   ***************
-SQL: SELECT c1 FROM pullup1 GROUP BY c1 HAVING c1 IN (SELECT c1 FROM pullup2); 
+SQL: SELECT c1 FROM pullup1 GROUP BY c1 HAVING c1 IN (SELECT c1 FROM pullup2);
 {
   "stmt_type":1,
   "table": [
@@ -63917,7 +63774,6 @@ SQL: SELECT c1 FROM pullup1 GROUP BY c1 HAVING c1 IN (SELECT c1 FROM pullup2);
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -63941,7 +63797,7 @@ SQL: SELECT c1 FROM pullup1 GROUP BY c1 HAVING c1 IN (SELECT c1 FROM pullup2);
   "is_hierarchical_query":false
 }
 ***************   Case 83   ***************
-SQL: SELECT * FROM pullup2 WHERE pk IN (SELECT pullup2.pk FROM pullup2 GROUP BY pullup2.pk DESC); 
+SQL: SELECT * FROM pullup2 WHERE pk IN (SELECT pullup2.pk FROM pullup2 GROUP BY pullup2.pk DESC);
 {
   "stmt_type":1,
   "table": [
@@ -64625,7 +64481,6 @@ SQL: SELECT * FROM pullup2 WHERE pk IN (SELECT pullup2.pk FROM pullup2 GROUP BY 
     ],
     "use_late_materialization":-1,
     "log_level":"",
-    "max_concurrent":-1,
     "only_concurrent_hint":false,
     "has_hint_exclude_concurrent":false,
     "parallel":-1
@@ -64876,7 +64731,6 @@ SQL: SELECT * FROM pullup2 WHERE pk IN (SELECT pullup2.pk FROM pullup2 GROUP BY 
         ],
         "use_late_materialization":-1,
         "log_level":"",
-        "max_concurrent":-1,
         "only_concurrent_hint":false,
         "has_hint_exclude_concurrent":false,
         "parallel":-1
