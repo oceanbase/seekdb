@@ -132,7 +132,7 @@ private:
   int try_cleanout_tx_node_(
       ObMvccRow *value,
       ObMvccTransNode *tnode,
-      const bool ignore_snapshot_gc_history);
+      const bool is_snapshot_gc_scn_row);
   bool is_snapshot_gc_scn_row_(const ObMemtableKey *key) const;
   DISALLOW_COPY_AND_ASSIGN(ObMultiVersionRowIterator);
 private:
@@ -146,7 +146,7 @@ private:
   int64_t insert_row_count_;
   int64_t update_row_count_;
   int64_t delete_row_count_;
-  int64_t snapshot_gc_history_row_count_;
+  int64_t snapshot_gc_scn_row_count_;
 };
 
 }

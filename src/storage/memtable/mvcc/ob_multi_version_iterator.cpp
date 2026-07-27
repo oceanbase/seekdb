@@ -503,7 +503,7 @@ ObMultiVersionRowIterator::ObMultiVersionRowIterator()
       insert_row_count_(0),
       update_row_count_(0),
       delete_row_count_(0),
-      snapshot_gc_history_row_count_(0)
+      snapshot_gc_scn_row_count_(0)
 {
 }
 
@@ -590,11 +590,11 @@ int ObMultiVersionRowIterator::try_cleanout_mvcc_row_(
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "try cleanout mvcc row failed", K(ret), KPC(key), KPC(value));
   } else {
-    const bool ignore_snapshot_gc_history = is_snapshot_gc_scn_row_(key);
+    const bool is_snapshot_gc_scn_row = is_snapshot_gc_scn_row_(key);
     ObRowLatchGuard guard(value->latch_);
     ObMvccTransNode *iter = value->get_list_head();
     while (NULL != iter && OB_SUCC(ret)) {
-      if (OB_FAIL(try_cleanout_tx_node_(value, iter, ignore_snapshot_gc_history))) {
+      if (OB_FAIL(try_cleanout_tx_node_(value, iter, is_snapshot_gc_scn_row))) {
         TRANS_LOG(WARN, "try cleanout tx state failed", K(ret), KPC(value), KPC(iter));
       } else {
         iter = iter->prev_;
@@ -608,7 +608,7 @@ int ObMultiVersionRowIterator::try_cleanout_mvcc_row_(
 int ObMultiVersionRowIterator::try_cleanout_tx_node_(
     ObMvccRow *value,
     ObMvccTransNode *tnode,
-    const bool ignore_snapshot_gc_history)
+    const bool is_snapshot_gc_scn_row)
 {
   int ret = OB_SUCCESS;
   const ObTransID data_tx_id = tnode->tx_id_;
@@ -626,14 +626,11 @@ int ObMultiVersionRowIterator::try_cleanout_tx_node_(
       ++insert_row_count_;
     } else if (blocksstable::ObDmlFlag::DF_UPDATE == dml_flag) {
       ++update_row_count_;
-      if (!ignore_snapshot_gc_history) {
-        ++snapshot_gc_history_row_count_;
+      if (is_snapshot_gc_scn_row) {
+        ++snapshot_gc_scn_row_count_;
       }
     } else if (blocksstable::ObDmlFlag::DF_DELETE == dml_flag) {
       ++delete_row_count_;
-      if (!ignore_snapshot_gc_history) {
-        ++snapshot_gc_history_row_count_;
-      }
     }
   }
   return ret;
@@ -664,7 +661,7 @@ void ObMultiVersionRowIterator::get_tnode_dml_stat(storage::ObTransNodeDMLStat &
   stat.insert_row_count_ += insert_row_count_;
   stat.update_row_count_ += update_row_count_;
   stat.delete_row_count_ += delete_row_count_;
-  stat.snapshot_gc_history_row_count_ += snapshot_gc_history_row_count_;
+  stat.snapshot_gc_scn_row_count_ += snapshot_gc_scn_row_count_;
 }
 
 void ObMultiVersionRowIterator::reset()
@@ -684,7 +681,7 @@ void ObMultiVersionRowIterator::reset()
   insert_row_count_ = 0;
   update_row_count_ = 0;
   delete_row_count_ = 0;
-  snapshot_gc_history_row_count_ = 0;
+  snapshot_gc_scn_row_count_ = 0;
 }
 
 

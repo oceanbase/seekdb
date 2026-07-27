@@ -41,8 +41,8 @@ void ObTransNodeDMLStat::atomic_inc(const ObTransNodeDMLStat &other)
     (void) ATOMIC_AAFx(&insert_row_count_, other.insert_row_count_, 0/*placeholder*/);
     (void) ATOMIC_AAFx(&update_row_count_, other.update_row_count_, 0/*placeholder*/);
     (void) ATOMIC_AAFx(&delete_row_count_, other.delete_row_count_, 0/*placeholder*/);
-    (void) ATOMIC_AAFx(&snapshot_gc_history_row_count_,
-        other.snapshot_gc_history_row_count_, 0/*placeholder*/);
+    (void) ATOMIC_AAFx(&snapshot_gc_scn_row_count_,
+        other.snapshot_gc_scn_row_count_, 0/*placeholder*/);
   }
 }
 

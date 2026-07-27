@@ -168,27 +168,31 @@ void ObTabletMiniMergeCtx::try_update_snapshot_gc_renew_target()
   int tmp_ret = OB_SUCCESS;
   const ObSSTable *new_sstable = nullptr;
   storage::ObTenantFreezeInfoMgr *freeze_info_mgr = nullptr;
-  int64_t history_scn = 0;
-  if (info_collector_.tnode_stat_.snapshot_gc_history_row_count_ <= 0) {
-    // No update/delete history, or this mini merge only contains the snapshot_gc_scn row.
+  const ObTransNodeDMLStat &tnode_stat = info_collector_.tnode_stat_;
+  int64_t target_scn = 0;
+  if (tnode_stat.get_dml_count() <= 0) {
+    // No committed DML is published by this mini merge.
+  } else if (tnode_stat.has_only_snapshot_gc_scn_rows()) {
+    // Ignore only the renewal write itself. Other mini merges, including pure INSERT,
+    // must advance the target so normal minor merge can continue.
   } else if (OB_TMP_FAIL(merged_table_handle_.get_sstable(new_sstable))) {
-    LOG_WARN_RET(tmp_ret, "failed to get merged sstable for snapshot gc history event",
+    LOG_WARN_RET(tmp_ret, "failed to get merged sstable for snapshot gc renewal target",
         K(tmp_ret), K(get_dag_param()), K_(merged_table_handle));
   } else if (OB_ISNULL(new_sstable)) {
-    LOG_WARN_RET(OB_ERR_UNEXPECTED, "merged sstable is null for snapshot gc history event",
+    LOG_WARN_RET(OB_ERR_UNEXPECTED, "merged sstable is null for snapshot gc renewal target",
         K(get_dag_param()), K_(merged_table_handle));
-  } else if (FALSE_IT(history_scn = new_sstable->get_max_merged_trans_version())) {
-  } else if (history_scn <= 0 || INT64_MAX == history_scn) {
+  } else if (FALSE_IT(target_scn = new_sstable->get_max_merged_trans_version())) {
+  } else if (target_scn <= 0 || INT64_MAX == target_scn) {
     // An unresolved transaction is covered when its upper_trans_version becomes finite.
   } else if (OB_ISNULL(share::g_mp)
       || OB_ISNULL(freeze_info_mgr = share::g_mp->tenant_freeze_info_mgr())) {
     LOG_WARN_RET(OB_ERR_UNEXPECTED, "tenant freeze info mgr is null",
-        K(history_scn), K(get_dag_param()));
+        K(target_scn), K(get_dag_param()));
   } else {
     freeze_info_mgr->get_snapshot_gc_scn_renewal_state().update_target_scn(
-        history_scn);
+        target_scn);
     LOG_INFO("update snapshot gc renewal target after mini merge",
-        K(history_scn), K(get_dag_param()), "tnode_stat", info_collector_.tnode_stat_);
+        K(target_scn), K(get_dag_param()), K(tnode_stat));
   }
 }
 

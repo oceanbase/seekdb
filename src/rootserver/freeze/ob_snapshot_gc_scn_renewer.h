@@ -25,16 +25,16 @@ namespace rootserver
 {
 class ObMajorMergeInfoManager;
 
-// Renews the tenant snapshot_gc_scn according to history-producing events.
+// Renews the tenant snapshot_gc_scn according to published mini merge progress.
 //
-// Mini merge and upper_trans_version resolution publish a monotonically
-// increasing renewal target SCN. The shared major-freeze timer calls
+// Successful mini merge and upper_trans_version resolution publish one
+// monotonically increasing target SCN. The shared major-freeze timer calls
 // try_renew(), which keeps the renew decision and transaction inside this
-// class. Becoming primary requests one immediate catch-up renewal. Later
-// renewals wait until the target history is older than undo_retention, and
-// failures are retried at a fixed interval. Each successful renewal records the
-// new snapshot_gc_scn, and renewal stops after its GC boundary covers the latest
-// target.
+// class. When the latest snapshot_gc_scn has not reached the target, renewer
+// runs at the next timer opportunity. Once it catches up, renewer waits until
+// target + undo_retention and renews again to cover the target with its GC
+// boundary. Failures and concurrent targets are rate-limited to the fixed
+// renewal interval.
 //
 // Restore services, paused services, and inactive primary services never renew.
 // Role transitions and the complete renew transaction are serialized by
@@ -65,12 +65,10 @@ private:
   static int64_t calc_gc_boundary_(
       const int64_t snapshot_gc_scn,
       const int64_t undo_retention_s);
-  int64_t latch_next_renew_ts_(
-      const int64_t renew_target_scn,
-      const int64_t undo_retention_s);
+  void schedule_next_renew_(const int64_t desired_renew_ts, const int64_t now);
 
 private:
-  // Fixed interval between renewal attempts after a failed or incomplete attempt.
+  // Fixed minimum interval between actual renewal attempts.
   static const int64_t RENEW_INTERVAL_US = 10 * 1000 * 1000; // 10s
 
   // Whether init() has completed successfully.
@@ -87,6 +85,9 @@ private:
   // The next wall-clock time in microseconds at which renewal may run.
   // Zero means no renewal is scheduled; primary catch-up treats zero as immediate.
   int64_t next_renew_ts_ = 0;
+  // Wall-clock time in microseconds of the most recent renewal attempt.
+  // It prevents a new target from increasing the fixed attempt frequency.
+  int64_t last_renew_attempt_ts_ = 0;
   // The snapshot_gc_scn written by the most recent successful renewal.
   // Its GC boundary is compared directly with the latest renewal target.
   int64_t last_renewed_snapshot_gc_scn_ = 0;

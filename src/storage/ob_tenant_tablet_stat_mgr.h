@@ -45,14 +45,20 @@ public:
   bool empty() const;
   void atomic_inc(const ObTransNodeDMLStat &other);
   int64_t get_dml_count() const { return insert_row_count_ + update_row_count_ + delete_row_count_; }
+  bool has_only_snapshot_gc_scn_rows() const
+  {
+    return get_dml_count() > 0 && get_dml_count() == snapshot_gc_scn_row_count_;
+  }
 
   TO_STRING_KV(K_(insert_row_count), K_(update_row_count), K_(delete_row_count),
-      K_(snapshot_gc_history_row_count));
+      K_(snapshot_gc_scn_row_count));
 public:
   int64_t insert_row_count_;
   int64_t update_row_count_;
   int64_t delete_row_count_;
-  int64_t snapshot_gc_history_row_count_;
+  // UPDATE transaction nodes for the exact __all_global_stat/snapshot_gc_scn row.
+  // They are excluded from snapshot GC renewal events to avoid self-triggering.
+  int64_t snapshot_gc_scn_row_count_;
 };
 
 

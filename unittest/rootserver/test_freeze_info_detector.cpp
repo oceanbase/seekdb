@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include "storage/ob_tenant_tablet_stat_mgr.h"
+
 #define private public
 #include "rootserver/freeze/ob_freeze_info_detector.h"
 #include "rootserver/freeze/ob_snapshot_gc_scn_renewer.h"
@@ -29,7 +31,7 @@ namespace rootserver
 namespace unittest
 {
 
-TEST(TestSnapshotGcScnRenewer, snapshot_gc_history_waits_for_undo_retention)
+TEST(TestSnapshotGcScnRenewer, target_waits_for_undo_retention)
 {
   static const int64_t SECOND_NS = 1000L * 1000L * 1000L;
   static const int64_t SECOND_US = 1000L * 1000L;
@@ -46,20 +48,48 @@ TEST(TestSnapshotGcScnRenewer, snapshot_gc_history_waits_for_undo_retention)
           HISTORY_SCN + 999, 0));
 }
 
-TEST(TestSnapshotGcScnRenewer, later_history_does_not_change_next_renew_time)
+TEST(TestSnapshotGcScnRenewer, later_target_changes_coverage_renew_time)
 {
   static const int64_t SECOND_NS = 1000L * 1000L * 1000L;
   static const int64_t SECOND_US = 1000L * 1000L;
   static const int64_t FIRST_HISTORY_SCN = 100L * SECOND_NS;
   static const int64_t LATEST_HISTORY_SCN = 110L * SECOND_NS;
-  ObSnapshotGcScnRenewer renewer;
 
   EXPECT_EQ(120L * SECOND_US,
-      renewer.latch_next_renew_ts_(FIRST_HISTORY_SCN, 20));
-  EXPECT_EQ(120L * SECOND_US,
-      renewer.latch_next_renew_ts_(LATEST_HISTORY_SCN, 20));
-  EXPECT_EQ(120L * SECOND_US,
-      renewer.latch_next_renew_ts_(LATEST_HISTORY_SCN, 60));
+      ObSnapshotGcScnRenewer::calc_next_renew_ts_(FIRST_HISTORY_SCN, 20));
+  EXPECT_EQ(130L * SECOND_US,
+      ObSnapshotGcScnRenewer::calc_next_renew_ts_(LATEST_HISTORY_SCN, 20));
+  EXPECT_EQ(170L * SECOND_US,
+      ObSnapshotGcScnRenewer::calc_next_renew_ts_(LATEST_HISTORY_SCN, 60));
+}
+
+TEST(TestSnapshotGcScnRenewer, immediate_target_renew_is_rate_limited)
+{
+  static const int64_t NOW = 100L * 1000L * 1000L;
+  ObSnapshotGcScnRenewer renewer;
+  renewer.last_renew_attempt_ts_ = NOW;
+
+  renewer.schedule_next_renew_(NOW, NOW);
+  EXPECT_EQ(NOW + renewer.RENEW_INTERVAL_US, renewer.next_renew_ts_);
+
+  renewer.schedule_next_renew_(NOW + 20L * 1000L * 1000L, NOW);
+  EXPECT_EQ(NOW + 20L * 1000L * 1000L, renewer.next_renew_ts_);
+}
+
+TEST(TestSnapshotGcScnRenewer, all_mini_merges_except_self_update_publish_target)
+{
+  storage::ObTransNodeDMLStat tnode_stat;
+  storage::ObSnapshotGcScnRenewalState renewal_state;
+
+  tnode_stat.update_row_count_ = 1;
+  tnode_stat.snapshot_gc_scn_row_count_ = 1;
+  EXPECT_TRUE(tnode_stat.has_only_snapshot_gc_scn_rows());
+
+  ++tnode_stat.insert_row_count_;
+  EXPECT_FALSE(tnode_stat.has_only_snapshot_gc_scn_rows());
+  renewal_state.update_target_scn(200);
+  renewal_state.update_target_scn(100);
+  EXPECT_EQ(200, renewal_state.get_target_scn());
 }
 
 TEST(TestSnapshotGcScnRenewer, standby_start_and_restart_only_reload)
@@ -146,6 +176,7 @@ TEST(TestSnapshotGcScnRenewer, renew_failure_retries_on_fixed_interval)
   renewer.is_primary_service_ = true;
   renewer.is_primary_active_ = true;
   renewer.need_primary_catchup_ = true;
+  renewer.last_renew_attempt_ts_ = START_TS;
   renewer.next_renew_ts_ =
       START_TS + renewer.RENEW_INTERVAL_US;
 
