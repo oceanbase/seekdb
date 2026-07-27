@@ -3526,6 +3526,8 @@ int ObSchemaGetterGuard::check_routine_definer_existed(const ObString &user_name
 {
   int ret = OB_SUCCESS;
   const ObSchemaMgr *mgr = NULL;
+  ObSEArray<const ObSimpleRoutineSchema *, 16> routine_schemas;
+  existed = false;
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
@@ -3535,8 +3537,25 @@ int ObSchemaGetterGuard::check_routine_definer_existed(const ObString &user_name
     LOG_WARN("invalid argument", KR(ret), K(user_name));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
     LOG_WARN("fail to check lazy guard", KR(ret));
-  } else if (OB_FAIL(mgr->routine_mgr_.check_user_reffered_by_definer(user_name, existed))) {
-    LOG_WARN("check routine definer failed", KR(ret), K(user_name));
+  } else if (OB_FAIL(mgr->routine_mgr_.get_routine_schemas_in_runtime(routine_schemas))) {
+    LOG_WARN("get routine schemas in runtime failed", KR(ret), K(user_name));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && !existed && i < routine_schemas.count(); ++i) {
+      const ObSimpleRoutineSchema *routine_schema = routine_schemas.at(i);
+      const ObDatabaseSchema *database_schema = NULL;
+      if (OB_ISNULL(routine_schema)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("routine schema is null", KR(ret), K(i));
+      } else if (0 != user_name.compare(routine_schema->get_priv_user())) {
+        // Ignore routines owned by another definer.
+      } else if (OB_FAIL(get_database_schema(routine_schema->get_database_id(), database_schema))) {
+        LOG_WARN("get database schema failed", KR(ret), KPC(routine_schema));
+      } else if (NULL != database_schema && !database_schema->is_in_recyclebin()) {
+        existed = true;
+      }
+      // A routine whose database has been dropped or moved to the recycle bin
+      // is no longer a live definer reference.
+    }
   }
   return ret;
 }

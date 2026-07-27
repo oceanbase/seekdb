@@ -46,7 +46,6 @@ send load data /*+ parallel(1) load_batch_size(100) */ infile 'data_for_mysqltes
 
 # Query __all_virtual_load_data_stat during loading data
 connection conn_query;
---sleep 1
 --sorted_result
 select table_name,file_path,table_column,file_column,batch_size,parallel,load_mode,total_bytes from __all_virtual_load_data_stat;
 disconnect conn_query;
