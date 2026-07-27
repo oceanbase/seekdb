@@ -81,6 +81,16 @@ OB_INLINE int round_floating_to_uint64(const double in_val,
   out_val = 0;
   if (std::isnan(rounded)) {
     ret = OB_DATA_OUT_OF_RANGE;
+  } else if (is_column_convert) {
+    if (rounded < 0) {
+      out_val = 0;
+      ret = OB_DATA_OUT_OF_RANGE;
+    } else if (rounded >= UINT64_UPPER_BOUND_AS_DOUBLE) {
+      out_val = UINT64_MAX;
+      ret = OB_DATA_OUT_OF_RANGE;
+    } else {
+      out_val = static_cast<uint64_t>(rounded);
+    }
   } else if (rounded <= INT64_MIN_AS_DOUBLE) {
     out_val = static_cast<uint64_t>(INT64_MIN);
     ret = OB_DATA_OUT_OF_RANGE;
@@ -89,13 +99,6 @@ OB_INLINE int round_floating_to_uint64(const double in_val,
         ? static_cast<uint64_t>(INT64_MIN)
         : static_cast<uint64_t>(INT64_MAX);
     ret = OB_DATA_OUT_OF_RANGE;
-  } else if (is_column_convert) {
-    if (rounded < 0) {
-      out_val = 0;
-      ret = OB_DATA_OUT_OF_RANGE;
-    } else {
-      out_val = static_cast<uint64_t>(rounded);
-    }
   } else if (rounded < 0) {
     out_val = static_cast<uint64_t>(static_cast<int64_t>(rounded));
     ret = OB_DATA_OUT_OF_RANGE;

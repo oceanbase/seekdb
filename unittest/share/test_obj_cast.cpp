@@ -111,6 +111,26 @@ TEST_F(TestObjCast, deterministic_floating_to_integer)
                 true,
                 out_val));
   EXPECT_EQ(0, out_val);
+  EXPECT_EQ(OB_DATA_OUT_OF_RANGE,
+            round_floating_to_uint64(
+                static_cast<double>(static_cast<float>(-2.0e28)),
+                true,
+                true,
+                out_val));
+  EXPECT_EQ(0, out_val);
+  EXPECT_EQ(OB_DATA_OUT_OF_RANGE,
+            round_floating_to_uint64(
+                static_cast<double>(static_cast<float>(2.0e28)),
+                true,
+                true,
+                out_val));
+  EXPECT_EQ(UINT64_MAX, out_val);
+  EXPECT_EQ(OB_DATA_OUT_OF_RANGE,
+            round_floating_to_uint64(-2.0e28, false, true, out_val));
+  EXPECT_EQ(0, out_val);
+  EXPECT_EQ(OB_DATA_OUT_OF_RANGE,
+            round_floating_to_uint64(2.0e28, false, true, out_val));
+  EXPECT_EQ(UINT64_MAX, out_val);
   EXPECT_EQ(OB_SUCCESS,
             round_floating_to_uint64(
                 static_cast<double>(
