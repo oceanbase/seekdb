@@ -60,16 +60,14 @@ private:
   int check_need_broadcast(bool &need_broadcast);
   int try_broadcast_freeze_info();
   int try_minor_freeze();
-  int try_update_zone_info();
+  int try_reload_merge_info();
 
   int can_start_work(bool &can_work);
   bool is_primary_service() const { return is_primary_service_; }
-  int check_tenant_is_restore(bool &is_restore);
   int try_reload_freeze_info();
-  // adjust global_merge_info in memory to avoid useless major freezes on restore major_freeze_service
+  // Adjust global_merge_info in memory before scheduling major freezes.
   int try_adjust_global_merge_info();
   int check_global_merge_info(bool &is_initial) const;
-  static bool need_reload_freeze_info_(const bool is_primary_service);
   void update_last_run_timestamp_();
 private:
   static const int64_t UPDATER_INTERVAL_US = 10 * 1000 * 1000; // 10s

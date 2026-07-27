@@ -22,6 +22,7 @@
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "storage/compaction/ob_sstable_merge_info_mgr.h"
+#include "storage/compaction/ob_freeze_info_mgr.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "storage/compaction/ob_sstable_merge_info_mgr.h"
 #include "storage/ob_gc_upper_trans_helper.h"
@@ -411,6 +412,7 @@ int ObTabletScheduler::try_update_upper_trans_version_and_gc_sstable(
       } else if (!tablet->get_tablet_meta().local_status_.check_allow_read()) {
       } else {
         int64_t multi_version_start = 0;
+        int64_t max_resolved_upper_trans_version = 0;
         int tmp_ret = OB_SUCCESS;
         bool need_update = false; // need update table store
         // The new_upper_trans array comes from the old table store. The last minor
@@ -419,7 +421,9 @@ int ObTabletScheduler::try_update_upper_trans_version_and_gc_sstable(
         new_upper_trans.set_attr(ObMemAttr("NewUpTxnVer"));
         UpdateUpperTransParam upper_trans_param;
         upper_trans_param.new_upper_trans_ = &new_upper_trans;
-        if (OB_TMP_FAIL(ObGCUpperTransHelper::check_need_gc_or_update_upper_trans_version(ls, *tablet, multi_version_start, upper_trans_param, need_update))) {
+        if (OB_TMP_FAIL(ObGCUpperTransHelper::check_need_gc_or_update_upper_trans_version(
+            ls, *tablet, multi_version_start, upper_trans_param, need_update,
+            max_resolved_upper_trans_version))) {
           LOG_WARN("faild to check need gc or update", K(tmp_ret), K(tablet_id));
         } else if (need_update) {
           ObArenaAllocator tmp_arena("RmOldTblTmp", OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -432,8 +436,22 @@ int ObTabletScheduler::try_update_upper_trans_version_and_gc_sstable(
             if (OB_TMP_FAIL(ls.update_tablet_table_store(tablet_id, param, new_tablet_handle))) {
               LOG_WARN("failed to update table store", K(tmp_ret), K(param), K(tablet_id));
             } else {
+              ObFreezeInfoMgr *freeze_info_mgr = nullptr;
               FLOG_INFO("success to remove old table in table store", K(tmp_ret),
                   K(tablet_id), K(multi_version_start), KPC(tablet));
+              if (max_resolved_upper_trans_version > 0
+                  && INT64_MAX != max_resolved_upper_trans_version) {
+                if (OB_ISNULL(share::g_mp)
+                    || OB_ISNULL(freeze_info_mgr = share::g_mp->freeze_info_mgr())) {
+                  LOG_WARN_RET(OB_ERR_UNEXPECTED, "freeze info mgr is null",
+                      K(tablet_id), K(max_resolved_upper_trans_version));
+                } else {
+                  freeze_info_mgr->get_snapshot_gc_scn_renewal_state()
+                      .update_target_scn(max_resolved_upper_trans_version);
+                  LOG_INFO("update snapshot gc renewal target after resolving upper trans version",
+                      K(tablet_id), K(max_resolved_upper_trans_version));
+                }
+              }
             }
           }
           ObTabletObjLoadHelper::free(tmp_arena, storage_schema);

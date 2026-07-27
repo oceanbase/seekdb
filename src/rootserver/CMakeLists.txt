@@ -2,7 +2,7 @@ ob_set_subtarget(ob_rootserver ALONE
   ob_debug_sync_rs.cpp
   ob_ddl_service.cpp
   ob_ddl_service_launcher.cpp
-  ob_root_service.cpp
+  ob_local_management_service.cpp
   ddl_task/ob_ddl_redefinition_task.cpp
   ob_lonely_table_cleaner.cpp
 )
@@ -11,9 +11,7 @@ ob_set_subtarget(ob_rootserver common
   ddl_task/ob_ddl_common_rs_impl.cpp
   ob_snapshot_table_proxy.cpp
   ddl_task/ob_ddl_longops.cpp
-  ob_sequence_ddl_proxy.cpp
   ob_bootstrap.cpp
-  ob_ddl_help.cpp
   ob_ddl_operator.cpp
   ob_dependency_ddl_helper.cpp
   ob_ddl_sql_generator.cpp
@@ -31,26 +29,18 @@ ob_set_subtarget(ob_rootserver common
   ob_table_creator.cpp
   ob_thread_idling.cpp
   ob_vertical_partition_builder.cpp
-  ob_tenant_thread_helper.cpp
+  ob_server_thread_helper.cpp
   ob_system_admin_util.cpp
-  ob_schema_history_recycler.cpp
   ob_lob_piece_builder.cpp
   ob_lob_meta_builder.cpp
   ob_partition_exchange.cpp
-  ob_catalog_ddl_operator.cpp
-  ob_catalog_ddl_service.cpp
-  ob_tenant_ddl_service.cpp
+  ob_runtime_ddl_service.cpp
   ob_load_inner_table_schema_executor.cpp
   ob_alter_table_constraint_checker.cpp
-  ob_ccl_ddl_service.cpp
-  ob_ccl_ddl_operator.cpp
   ob_ai_model_ddl_operator.cpp
   ob_ai_model_ddl_service.cpp
-  ob_location_ddl_operator.cpp
-  ob_location_ddl_service.cpp
   ob_objpriv_mysql_ddl_operator.cpp
   ob_objpriv_mysql_ddl_service.cpp
-  ob_objpriv_mysql_schema_history_recycler.cpp
   ob_create_index_on_empty_table_helper.cpp
 )
 
@@ -59,7 +49,7 @@ ob_set_subtarget(ob_rootserver ddl_task
   ddl_task/ob_constraint_task.cpp
   ddl_task/ob_ddl_retry_task.cpp
   ddl_task/ob_ddl_scheduler.cpp
-  ddl_task/ob_ddl_single_replica_executor.cpp
+  ddl_task/ob_ddl_local_build_executor.cpp
   ddl_task/ob_ddl_task.cpp
   ddl_task/ob_drop_index_task.cpp
   ddl_task/ob_drop_fts_index_task.cpp
@@ -83,7 +73,6 @@ ob_set_subtarget(ob_rootserver parallel_ddl
   parallel_ddl/ob_ddl_helper.cpp
   parallel_ddl/ob_create_table_helper.cpp
   parallel_ddl/ob_create_view_helper.cpp
-  parallel_ddl/ob_index_name_checker.cpp
   parallel_ddl/ob_set_comment_helper.cpp
   parallel_ddl/ob_create_index_helper.cpp
   parallel_ddl/ob_update_index_status_helper.cpp
@@ -93,20 +82,17 @@ ob_set_subtarget(ob_rootserver parallel_ddl
 )
 
 ob_set_subtarget(ob_rootserver freeze
-  freeze/ob_tenant_major_freeze.cpp
+  freeze/ob_local_major_freeze.cpp
   freeze/ob_major_merge_scheduler.cpp
   freeze/ob_major_merge_progress_checker.cpp
   freeze/ob_freeze_info_detector.cpp
   freeze/ob_snapshot_gc_scn_renewer.cpp
   freeze/ob_freeze_reentrant_thread.cpp
-  freeze/ob_tenant_all_zone_merge_strategy.cpp
-  freeze/ob_tenant_major_merge_strategy.cpp
-  freeze/ob_zone_merge_manager.cpp
+  freeze/ob_global_merge_manager.cpp
   freeze/ob_major_merge_info_manager.cpp
   freeze/ob_daily_major_freeze_launcher.cpp
   freeze/ob_checksum_validator.cpp
   freeze/ob_major_freeze_service.cpp
-  freeze/ob_major_freeze_rpc_define.cpp
   freeze/ob_major_freeze_helper.cpp
   freeze/ob_major_freeze_util.cpp
   freeze/ob_major_merge_progress_util.cpp

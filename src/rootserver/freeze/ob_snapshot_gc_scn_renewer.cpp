@@ -19,9 +19,8 @@
 #include "rootserver/freeze/ob_snapshot_gc_scn_renewer.h"
 
 #include "rootserver/freeze/ob_major_merge_info_manager.h"
-#include "rootserver/ob_root_service.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/compaction/ob_tenant_freeze_info_mgr.h"
+#include "storage/compaction/ob_freeze_info_mgr.h"
 
 namespace oceanbase
 {
@@ -115,7 +114,7 @@ int ObSnapshotGcScnRenewer::try_renew()
   ObRecursiveMutexGuard role_guard(role_lock_);
   int ret = OB_SUCCESS;
   const int64_t now = ObTimeUtility::current_time();
-  storage::ObTenantFreezeInfoMgr *freeze_info_mgr = nullptr;
+  storage::ObFreezeInfoMgr *freeze_info_mgr = nullptr;
   int64_t renew_target_scn = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -125,9 +124,9 @@ int ObSnapshotGcScnRenewer::try_renew()
       || !is_primary_active_) {
     // nothing
   } else if (OB_ISNULL(share::g_mp)
-      || OB_ISNULL(freeze_info_mgr = share::g_mp->tenant_freeze_info_mgr())) {
+      || OB_ISNULL(freeze_info_mgr = share::g_mp->freeze_info_mgr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant freeze info mgr is null", KR(ret));
+    LOG_WARN("freeze info mgr is null", KR(ret));
   } else if (!need_renew_(now)) {
     // IDLE or waiting for the next scheduled renewal time.
   } else {
@@ -167,7 +166,7 @@ int ObSnapshotGcScnRenewer::try_renew()
 bool ObSnapshotGcScnRenewer::need_renew_(const int64_t now)
 {
   ObRecursiveMutexGuard role_guard(role_lock_);
-  storage::ObTenantFreezeInfoMgr *freeze_info_mgr = nullptr;
+  storage::ObFreezeInfoMgr *freeze_info_mgr = nullptr;
   bool need_renew = false;
   if (!ATOMIC_LOAD(&is_paused_)
       && is_primary_service_
@@ -176,7 +175,7 @@ bool ObSnapshotGcScnRenewer::need_renew_(const int64_t now)
       schedule_next_renew_(now, now);
       need_renew = now >= next_renew_ts_;
     } else if (OB_NOT_NULL(share::g_mp)
-        && OB_NOT_NULL(freeze_info_mgr = share::g_mp->tenant_freeze_info_mgr())) {
+        && OB_NOT_NULL(freeze_info_mgr = share::g_mp->freeze_info_mgr())) {
       const int64_t renew_target_scn =
           freeze_info_mgr->get_snapshot_gc_scn_renewal_state().get_target_scn();
       const int64_t gc_boundary = calc_gc_boundary_(

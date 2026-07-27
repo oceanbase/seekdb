@@ -131,7 +131,6 @@ int ObMultiVersionValueIterator::get_next_uncommitted_node(
 {
   int ret = OB_SUCCESS;
   int64_t state = -1;
-  uint64_t cluster_version = 0;
   tnode = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -154,7 +153,7 @@ int ObMultiVersionValueIterator::get_next_uncommitted_node(
       } else {
         bool need_get_state = version_iter_->get_tx_end_scn() > merge_scn_;
         if (need_get_state) {
-          if (OB_FAIL(get_state_of_curr_trans_node(trans_id, state, cluster_version))) {
+          if (OB_FAIL(get_state_of_curr_trans_node(trans_id, state))) {
             TRANS_LOG(WARN, "failed to get status of curr trans node", K(ret), K(merge_scn_));
           }
         }
@@ -204,7 +203,6 @@ int ObMultiVersionValueIterator::check_next_sql_sequence(
   int ret = OB_SUCCESS;
   same_sql_sequence_flag = false;
   int64_t state;
-  uint64_t cluster_version = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "ObMultiVersionValueIterator is not inited", K(ret));
@@ -215,7 +213,7 @@ int ObMultiVersionValueIterator::check_next_sql_sequence(
     }
     if (nullptr != version_iter_) {
       ObTransID trans_id;
-      if (OB_FAIL(get_state_of_curr_trans_node(trans_id, state, cluster_version))) {
+      if (OB_FAIL(get_state_of_curr_trans_node(trans_id, state))) {
         if (OB_TRANS_CTX_NOT_EXIST == ret) {
           ret = OB_SUCCESS;
         } else {
@@ -235,8 +233,7 @@ int ObMultiVersionValueIterator::check_next_sql_sequence(
 
 int ObMultiVersionValueIterator::get_state_of_curr_trans_node(
     ObTransID &trans_id,
-    int64_t &state,
-    uint64_t &cluster_version)
+    int64_t &state)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(version_iter_)) {
@@ -248,7 +245,7 @@ int ObMultiVersionValueIterator::get_state_of_curr_trans_node(
 
     if (version_iter_->is_aborted()) {
       state = ObTxData::ABORT;
-    } else if (OB_FAIL(get_trans_status(trans_id, state, cluster_version))) {
+    } else if (OB_FAIL(get_trans_status(trans_id, state))) {
       TRANS_LOG(WARN, "failed to get trans status in running status",
                 K(ret), K(trans_id), K(sql_sequence), K(merge_scn_));
     }
@@ -257,10 +254,8 @@ int ObMultiVersionValueIterator::get_state_of_curr_trans_node(
 }
 
 int ObMultiVersionValueIterator::get_trans_status(const transaction::ObTransID &trans_id,
-                                                  int64_t &state,
-                                                  uint64_t &cluster_version)
+                                                  int64_t &state)
 {
-  UNUSED(cluster_version);
   int ret = OB_SUCCESS;
   SCN trans_version = SCN::max_scn();
   storage::ObTxTableGuards &tx_table_guards = ctx_->get_tx_table_guards();

@@ -20,7 +20,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "storage/compaction/ob_partition_merge_progress.h"
 #include "share/scn.h"
-#include "storage/ob_tenant_tablet_stat_mgr.h"
+#include "storage/ob_tablet_stat_mgr.h"
 #include "storage/compaction/ob_tablet_merge_info.h"
 #include "storage/compaction/ob_basic_tablet_merge_ctx.h"
 

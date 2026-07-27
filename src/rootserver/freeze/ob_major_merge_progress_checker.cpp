@@ -59,6 +59,10 @@ int ObMajorMergeProgressChecker::init(
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
+  } else if (OB_FAIL(tablet_status_map_.create(TABLET_ID_BATCH_CHECK_SIZE, "RSCompStMap", "RSCompStMap"))) {
+    LOG_WARN("fail to create tablet compaction status map", KR(ret));
+  } else if (OB_FAIL(table_compaction_map_.create(TABLE_MAP_BUCKET_CNT, "RSCompactMap", "RSCompactMap"))) {
+    LOG_WARN("fail to create table compaction info map", KR(ret), K(TABLE_MAP_BUCKET_CNT));
   } else if (OB_FAIL(ckm_validator_.init(is_primary_service, sql_proxy))) {
     LOG_WARN("fail to init checksum validator", KR(ret));
   } else {
@@ -71,36 +75,6 @@ int ObMajorMergeProgressChecker::init(
     is_inited_ = true;
   }
   return ret;
-}
-
-int ObMajorMergeProgressChecker::create_progress_maps()
-{
-  int ret = OB_SUCCESS;
-  const bool tablet_status_map_created = tablet_status_map_.created();
-  const bool table_compaction_map_created = table_compaction_map_.created();
-  if (OB_UNLIKELY(tablet_status_map_created || table_compaction_map_created)) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("progress maps already created", KR(ret),
-        K(tablet_status_map_created), K(table_compaction_map_created));
-  } else if (OB_FAIL(tablet_status_map_.create(TABLET_ID_BATCH_CHECK_SIZE, "RSCompStMap", "RSCompStMap"))) {
-    LOG_WARN("fail to create tablet compaction status map", KR(ret));
-  } else if (OB_FAIL(table_compaction_map_.create(TABLE_MAP_BUCKET_CNT, "RSCompactMap", "RSCompactMap"))) {
-    LOG_WARN("fail to create table compaction info map", KR(ret), K(TABLE_MAP_BUCKET_CNT));
-  }
-  if (OB_SUCCESS != ret) {
-    destroy_progress_maps();
-  }
-  return ret;
-}
-
-void ObMajorMergeProgressChecker::destroy_progress_maps()
-{
-  if (tablet_status_map_.created()) {
-    (void)tablet_status_map_.destroy();
-  }
-  if (table_compaction_map_.created()) {
-    (void)table_compaction_map_.destroy();
-  }
 }
 
 int ObMajorMergeProgressChecker::rebuild_tablet_status_map()
@@ -130,10 +104,7 @@ int ObMajorMergeProgressChecker::set_basic_info(
     LOG_WARN("invalid argument", KR(ret), K(freeze_info));
   } else if (OB_FAIL(clear_cached_info())) {
     LOG_WARN("fail to clear cached info", KR(ret));
-  } else if (OB_FAIL(create_progress_maps())) {
-    LOG_WARN("fail to create progress maps", KR(ret));
   } else if (OB_FAIL(ckm_validator_.set_basic_info(freeze_info))) {
-    destroy_progress_maps();
     LOG_WARN("failed to set basic info", KR(ret), K(freeze_info));
   } else {
     freeze_info_ = freeze_info;
@@ -145,19 +116,23 @@ int ObMajorMergeProgressChecker::set_basic_info(
 int ObMajorMergeProgressChecker::clear_cached_info()
 {
   int ret = OB_SUCCESS;
-  const share::SCN compaction_scn = get_compaction_scn();
-  freeze_info_.reset();
-  first_loop_in_cur_round_ = true;
-  table_ids_.reset();
-  idx_ckm_validate_array_.reset();
-  finish_tablet_ids_.reset();
-  finish_tablet_ckm_array_.reset();
-  progress_.reset();
-  ckm_validator_.clear_cached_info();
-  loop_cnt_ = 0;
-  reset_uncompacted_tablets();
-  destroy_progress_maps();
-  LOG_INFO("success to clear cached info", KR(ret), K(compaction_scn));
+  if (OB_FAIL(tablet_status_map_.reuse())) {
+    LOG_WARN("fail to reuse tablet_compaction_map", KR(ret));
+  } else if (OB_FAIL(table_compaction_map_.reuse())) {
+    LOG_WARN("fail to reuse table_compaction_map", KR(ret));
+  } else {
+    LOG_INFO("success to clear cached info", KR(ret), "compaction_scn", get_compaction_scn());
+    freeze_info_.reset();
+    first_loop_in_cur_round_ = true;
+    table_ids_.reset();
+    idx_ckm_validate_array_.reset();
+    finish_tablet_ids_.reset();
+    finish_tablet_ckm_array_.reset();
+    progress_.reset();
+    ckm_validator_.clear_cached_info();
+    loop_cnt_ = 0;
+    reset_uncompacted_tablets();
+  }
   return ret;
 }
 

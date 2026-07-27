@@ -386,6 +386,7 @@ public:
   compaction::ObTabletScheduler * tablet_scheduler() override { return mods_tablet_scheduler_; }
   compaction::ObMediumChecker * medium_checker() override { return mods_medium_checker_; }
   storage::ObCompactionMemPool * compaction_mem_pool() override { return mods_compaction_mem_pool_; }
+  storage::ObDDLMergeBucketLock * ddl_merge_bucket_lock() override { return mods_ddl_merge_bucket_lock_; }
   storage::ObDirectLoadMgr * direct_load_mgr() override { return mods_direct_load_mgr_; }
   share::ObDagScheduler * dag_scheduler() override { return mods_dag_scheduler_; }
   storage::ObFreezeInfoMgr * freeze_info_mgr() override { return mods_freeze_info_mgr_; }
@@ -465,6 +466,7 @@ private:
   compaction::ObTabletScheduler * mods_tablet_scheduler_ = nullptr;
   compaction::ObMediumChecker * mods_medium_checker_ = nullptr;
   storage::ObCompactionMemPool * mods_compaction_mem_pool_ = nullptr;
+  storage::ObDDLMergeBucketLock * mods_ddl_merge_bucket_lock_ = nullptr;
   storage::ObDirectLoadMgr * mods_direct_load_mgr_ = nullptr;
   share::ObDagScheduler * mods_dag_scheduler_ = nullptr;
   storage::ObFreezeInfoMgr * mods_freeze_info_mgr_ = nullptr;

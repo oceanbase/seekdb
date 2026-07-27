@@ -456,6 +456,8 @@ ObNumber ObNumberConstValue::MYSQL_MIN[ObNumber::MAX_PRECISION + 1][ObNumber::MA
 ObNumber ObNumberConstValue::MYSQL_MAX[ObNumber::MAX_PRECISION + 1][ObNumber::MAX_SCALE + 1] = {};
 ObNumber ObNumberConstValue::MYSQL_CHECK_MIN[ObNumber::MAX_PRECISION + 1][ObNumber::MAX_SCALE + 1] = {};
 ObNumber ObNumberConstValue::MYSQL_CHECK_MAX[ObNumber::MAX_PRECISION + 1][ObNumber::MAX_SCALE + 1] = {};
+ObNumber ObNumberConstValue::NUMBER_CHECK_MIN[OB_MAX_NUMBER_PRECISION + 1][ObNumberConstValue::SCALE_RANGE_SIZE + 1] = {};
+ObNumber ObNumberConstValue::NUMBER_CHECK_MAX[OB_MAX_NUMBER_PRECISION + 1][ObNumberConstValue::SCALE_RANGE_SIZE + 1] = {};
 
 int ObNumberConstValue::init(ObIAllocator &allocator)
 {
@@ -512,6 +514,52 @@ int ObNumberConstValue::init(ObIAllocator &allocator)
     }
   }
 
+  {
+    for (int16_t precision = OB_MIN_NUMBER_PRECISION; OB_SUCC(ret) && precision <= OB_MAX_NUMBER_PRECISION; ++precision) {
+      for (int16_t scale = ObNumber::MIN_SCALE; OB_SUCC(ret) && scale <= ObNumber::MAX_SCALE; ++scale) {
+        pos = 1;
+        MEMSET(buf + pos, 0, BUFFER_SIZE - pos);
+        ObNumber &min_check_num = NUMBER_CHECK_MIN[precision][scale + SCALE_DELTA];
+        ObNumber &max_check_num = NUMBER_CHECK_MAX[precision][scale + SCALE_DELTA];
+        ObString tmp_string;
+
+        if (precision >= scale && scale >= 0) {
+          /* number(3, 1) => legal range(-99.95, 99.95) */
+          if (precision == scale) {
+            buf[pos++] = '0';
+          }
+          MEMSET(buf + pos, '9', precision + 1);
+          buf[pos + precision - scale] = '.';
+          buf[pos + precision + 1] = '5';
+          tmp_string.assign_ptr(buf, pos + precision + 1 + 1);
+        } else if (scale < 0) {
+          /* number(2, -3) => legal range: (-99500, 99500) */
+          MEMSET(buf + pos, '9', precision);
+          buf[pos + precision] = '5';
+          MEMSET(buf + pos + precision + 1, '0', 0 - scale - 1);
+          tmp_string.assign_ptr(buf, pos + precision - scale);
+        } else {
+          //number(2, 3) => legal range:(-0.0995, 0.0995)
+           buf[pos++] = '0';
+           buf[pos++] = '.';
+           MEMSET(buf + pos, '0', scale - precision);
+           MEMSET(buf + pos + scale - precision, '9', precision);
+           buf[pos + scale] = '5';
+           tmp_string.assign_ptr(buf, pos + scale + 1);
+        }
+
+        // make min and max numbers.
+        if (OB_FAIL(min_check_num.from(tmp_string.ptr(), tmp_string.length(), allocator))) {
+          LOG_ERROR("fail to call from", K(precision), K(scale), K(tmp_string), K(ret));
+        } else if (OB_FAIL(max_check_num.from(tmp_string.ptr() + 1, tmp_string.length() - 1, allocator))) {
+          LOG_ERROR("fail to call from", K(precision), K(scale), K(tmp_string), K(ret));
+        } else {
+          total_alloc_size += sizeof(uint32_t) * (min_check_num.get_length() + max_check_num.get_length());
+          LOG_DEBUG("succ to build min max number", K(precision), K(scale), K(tmp_string), K(total_alloc_size), K(min_check_num), K(max_check_num));
+        }
+      }
+    }
+  }
   return ret;
 }
 

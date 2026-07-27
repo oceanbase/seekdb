@@ -44,8 +44,8 @@ int ObMajorMergeInfoManager::init(
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
-  } else if (OB_FAIL(zone_merge_mgr_.init(sql_proxy))) {
-    LOG_WARN("fail to init zone_merge_mgr", KR(ret));
+  } else if (OB_FAIL(global_merge_mgr_.init(sql_proxy))) {
+    LOG_WARN("fail to init global_merge_mgr", KR(ret));
   } else if (OB_FAIL(freeze_info_mgr_.init(sql_proxy))) {
     LOG_WARN("fail to init freeze_info_mgr", KR(ret));
   } else {
@@ -68,17 +68,17 @@ int ObMajorMergeInfoManager::try_reload()
   return ret;
 }
 
-int ObMajorMergeInfoManager::reload(const bool reload_zone_merge_info)
+int ObMajorMergeInfoManager::reload(const bool force_reload_global_info)
 {
   int ret = OB_SUCCESS;
   ObRecursiveMutexGuard guard(lock_);
 
   SCN global_broadcast_scn;
-  if (reload_zone_merge_info && OB_FAIL(zone_merge_mgr_.reload())) {
-    LOG_WARN("fail to reload zone_merge_info", KR(ret));
-  } else if (!reload_zone_merge_info && OB_FAIL(zone_merge_mgr_.try_reload())) {
-    LOG_WARN("fail to try reload zone_merge_info", KR(ret));
-  } else if (OB_FAIL(zone_merge_mgr_.get_global_broadcast_scn(global_broadcast_scn))) {
+  if (force_reload_global_info && OB_FAIL(global_merge_mgr_.reload())) {
+    LOG_WARN("fail to reload global merge info", KR(ret));
+  } else if (!force_reload_global_info && OB_FAIL(global_merge_mgr_.try_reload())) {
+    LOG_WARN("fail to try reload global merge info", KR(ret));
+  } else if (OB_FAIL(global_merge_mgr_.get_global_broadcast_scn(global_broadcast_scn))) {
     LOG_WARN("fail to get broadcast version", KR(ret));
   } else if (OB_FAIL(freeze_info_mgr_.reload(global_broadcast_scn))) {
     LOG_WARN("fail to update freeze info", KR(ret), K(global_broadcast_scn));
@@ -116,20 +116,16 @@ int ObMajorMergeInfoManager::set_freeze_info(const ObMajorFreezeReason freeze_re
       LOG_WARN("fail to select for update", KR(ret));
     } else {
       int64_t schema_version_in_frozen_ts = 0;
-      uint64_t data_version = 0;
-
       // 2. generate new frozen_scn
       if (OB_FAIL(generate_frozen_scn(remote_snapshot_gc_scn, new_frozen_scn))) {
         LOG_WARN("fail to generate frozen timestamp", KR(ret));
       // 3. get schema_version at frozen_scn
       } else if (OB_FAIL(get_schema_version(new_frozen_scn, schema_version_in_frozen_ts))) {
         LOG_WARN("fail to get schema version", KR(ret), K(new_frozen_scn));
-      } else if (OB_FAIL(GET_MIN_DATA_VERSION(data_version))) {
-        LOG_WARN("fail to get min data version", KR(ret));
       } else {
         freeze_info.frozen_scn_ = new_frozen_scn;
         freeze_info.schema_version_ = schema_version_in_frozen_ts;
-        freeze_info.data_version_ = data_version;
+        freeze_info.data_version_ = DATA_CURRENT_VERSION;
         // 4. insert freeze info
         if (OB_FAIL(freeze_info_proxy.set_freeze_info(trans, freeze_info))) {
           LOG_WARN("fail to set freeze info", KR(ret), K(freeze_info));
@@ -149,7 +145,7 @@ int ObMajorMergeInfoManager::set_freeze_info(const ObMajorFreezeReason freeze_re
   }
 
   LOG_INFO("finish set freeze info", KR(ret), K(freeze_info));
-  ROOTSERVICE_EVENT_ADD("major_merge", "root_major_freeze",
+  MANAGEMENT_EVENT_ADD("major_merge", "root_major_freeze",
                         K(ret), "new_frozen_scn", new_frozen_scn.get_val_for_inner_table_field(),
                         "freeze_reason", major_freeze_reason_to_str(freeze_reason));
   return ret;
@@ -178,8 +174,6 @@ int ObMajorMergeInfoManager::generate_frozen_scn(
   SCN tmp_frozen_scn;
   share::ObFreezeInfo latest_frozen_status;
   SCN local_max_frozen_scn;
-  uint64_t cur_min_data_version = 0;
-
   ObFreezeInfo max_frozen_status;
   ObFreezeInfoProxy freeze_info_proxy{};
   if (FAILEDx(freeze_info_proxy.get_max_freeze_info(*GCTX.sql_proxy_, max_frozen_status))) {
@@ -200,14 +194,6 @@ int ObMajorMergeInfoManager::generate_frozen_scn(
       LOG_WARN("max frozen_scn in cache is larger than max frozen_scn in table", KR(ret),
                K(local_max_frozen_scn), K(max_frozen_status));
     }
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(cur_min_data_version))) {
-    LOG_WARN("fail to get min data version", KR(ret));
-  } else if (cur_min_data_version < max_frozen_status.data_version_) {
-    // do not allow data_version of freeze_info rollback
-    ret = OB_MAJOR_FREEZE_NOT_ALLOW;
-    LOG_WARN("major freeze is not allowed now, please check and upgrade observer", KR(ret),
-             K(cur_min_data_version), "last_min_data_version",
-             max_frozen_status.data_version_);
   } else if (OB_FAIL(get_gts(tmp_frozen_scn))) {
     LOG_WARN("fail to get gts", KR(ret));
   } else if ((tmp_frozen_scn <= snapshot_gc_scn)
@@ -366,7 +352,7 @@ int ObMajorMergeInfoManager::try_gc_freeze_info()
   return ret;
 }
 
-int ObMajorMergeInfoManager::try_update_zone_info()
+int ObMajorMergeInfoManager::try_reload_merge_info()
 {
   int ret = OB_SUCCESS;
   ObRecursiveMutexGuard guard(lock_);
@@ -384,9 +370,9 @@ int ObMajorMergeInfoManager::inner_get_min_freeze_info(ObFreezeInfo &freeze_info
 
   if (OB_FAIL(try_reload())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_FAIL(zone_merge_mgr_.try_reload())) {
-    LOG_WARN("fail to try_reload zone_merge_info", KR(ret));
-  } else if (OB_FAIL(zone_merge_mgr_.get_global_last_merged_scn(global_last_merged_scn))) {
+  } else if (OB_FAIL(global_merge_mgr_.try_reload())) {
+    LOG_WARN("fail to reload global merge info", KR(ret));
+  } else if (OB_FAIL(global_merge_mgr_.get_global_last_merged_scn(global_last_merged_scn))) {
     LOG_WARN("fail to get global_last_merged_scn", KR(ret));
   } else if (OB_FAIL(freeze_info_mgr_.get_min_freeze_info_greater_than(
              global_last_merged_scn, freeze_info))) {
@@ -404,7 +390,7 @@ int ObMajorMergeInfoManager::check_need_broadcast(bool &need_broadcast)
   if (OB_FAIL(inner_get_min_freeze_info(freeze_info))) {
     LOG_WARN("fail to get min freeze info", KR(ret));
   } else if (freeze_info.is_valid()) {
-    if (OB_FAIL(zone_merge_mgr_.check_need_broadcast(freeze_info.frozen_scn_, need_broadcast))) {
+    if (OB_FAIL(global_merge_mgr_.check_need_broadcast(freeze_info.frozen_scn_, need_broadcast))) {
       LOG_WARN("fail to check need broadcast", KR(ret), K(freeze_info));
     }
   }
@@ -420,7 +406,7 @@ int ObMajorMergeInfoManager::broadcast_freeze_info()
   if (OB_FAIL(inner_get_min_freeze_info(freeze_info))) {
     LOG_WARN("fail to get min freeze info", KR(ret));
   } else if (freeze_info.is_valid()) {
-    if (OB_FAIL(zone_merge_mgr_.set_global_freeze_info(freeze_info.frozen_scn_))) {
+    if (OB_FAIL(global_merge_mgr_.set_global_freeze_info(freeze_info.frozen_scn_))) {
       LOG_WARN("fail to set global freeze info", KR(ret), K(freeze_info));
     }
   }
@@ -433,7 +419,7 @@ int ObMajorMergeInfoManager::adjust_global_merge_info()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("merge info mgr not inited", KR(ret));
-  } else if (OB_FAIL(zone_merge_mgr_.adjust_global_merge_info())) {
+  } else if (OB_FAIL(global_merge_mgr_.adjust_global_merge_info())) {
     LOG_WARN("fail to adjust global merge info", KR(ret));
   }
   return ret;

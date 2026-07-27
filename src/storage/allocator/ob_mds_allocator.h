@@ -31,7 +31,7 @@ OB_INLINE int64_t &mds_throttled_alloc()
 
 class ObMdsAllocator : public ObIAllocator {
 private:
-  static const int64_t MDS_ALLOC_CONCURRENCY = 8;
+  static const int64_t MDS_ALLOC_CONCURRENCY = 32;
 public:
   DEFINE_CUSTOM_FUNC_FOR_THROTTLE(Mds);
 

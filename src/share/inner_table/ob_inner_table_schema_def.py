@@ -5570,6 +5570,7 @@ def_table_schema(
 
 # 12323: __all_virtual_mock_fk_parent_table_column_history # removed (single-tenant: iterate VT mechanism deleted)
 
+
 # 12326: __all_virtual_kv_ttl_task (abandoned)
 # 12327: __all_virtual_kv_ttl_task_history (abandoned)
 # 12328: __all_virtual_tenant_datafile
@@ -10736,6 +10737,7 @@ def_table_schema(
 )
 
 
+
 # 21307: CDB_OB_KV_TTL_TASKS (abandoned)
 # 21308: CDB_OB_KV_TTL_TASK_HISTORY (abandoned)
 # 21309: CDB_OB_DATAFILE
@@ -13553,8 +13555,8 @@ def_table_schema(
 
 
 # 21586: GV$OB_NIC_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_nic_info)
-# 21587: GV$OB_QUERY_RESPONSE_TIME_HISTOGRAM # removed (query response time statistics deleted)
-# 21588: V$OB_QUERY_RESPONSE_TIME_HISTOGRAM # removed (query response time statistics deleted)
+# 21587: GV$OB_QUERY_RESPONSE_TIME_HISTOGRAM # removed (single-tenant GV/V collapse; folded into V$OB_QUERY_RESPONSE_TIME_HISTOGRAM)
+
 
 
 # 21591: DBA_OB_SERVER_SPACE_USAGE (abandoned)

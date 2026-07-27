@@ -19,7 +19,7 @@
 
 #include "lib/lock/ob_recursive_mutex.h"
 #include "share/ob_freeze_info_manager.h"
-#include "rootserver/freeze/ob_zone_merge_manager.h"
+#include "rootserver/freeze/ob_global_merge_manager.h"
 #include "share/ob_freeze_info_proxy.h"
 #include "common/storage/ob_freeze_define.h"
 #include "share/ob_rpc_struct.h"
@@ -39,28 +39,28 @@ class ObFreezeInfoManager;
 }
 namespace rootserver
 {
-class ObZoneMergeManager;
+class ObGlobalMergeManager;
 
 
-// ObMajorMergeInfoManager (tenant level)
+// Database runtime major-merge state.
 class ObMajorMergeInfoManager
 {
 public:
   ObMajorMergeInfoManager()
     : is_inited_(false),
-      zone_merge_mgr_(),
+      global_merge_mgr_(),
       freeze_info_mgr_(),
       lock_(common::ObLatchIds::OB_MAJOR_MERGE_INFO_MANAGER_LOCK)
   {}
   virtual ~ObMajorMergeInfoManager() {}
-  ObZoneMergeManager &get_zone_merge_mgr() { return zone_merge_mgr_; }
+  ObGlobalMergeManager &get_global_merge_mgr() { return global_merge_mgr_; }
   share::ObFreezeInfoManager &get_freeze_info_mgr() { return freeze_info_mgr_; }
   int init(common::ObMySQLProxy &sql_proxy);
   int try_reload();
-  int reload(const bool reload_zone_merge_info = false);
+  int reload(const bool force_reload_global_info = false);
   void reset_info()
   {
-    zone_merge_mgr_.reset_merge_info();
+    global_merge_mgr_.reset_merge_info();
     freeze_info_mgr_.reset_freeze_info();
   };
 
@@ -68,7 +68,7 @@ public:
 
   int renew_snapshot_gc_scn(share::SCN &new_snapshot_gc_scn);
   int try_gc_freeze_info();
-  int try_update_zone_info();
+  int try_reload_merge_info();
 
   int check_need_broadcast(bool &need_broadcast);
   int broadcast_freeze_info();
@@ -90,7 +90,7 @@ private:
 private:
   bool is_inited_;
   
-  ObZoneMergeManager zone_merge_mgr_;
+  ObGlobalMergeManager global_merge_mgr_;
   share::ObFreezeInfoManager freeze_info_mgr_;
   mutable common::ObRecursiveMutex lock_;
 

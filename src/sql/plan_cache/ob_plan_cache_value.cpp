@@ -152,7 +152,6 @@ ObPlanCacheValue::ObPlanCacheValue()
   not_param_info_.set_attr(ObMemAttr("NotParamInfo"));
   not_param_var_.set_attr(ObMemAttr("NotParamVar"));
   param_charset_type_.set_attr(ObMemAttr("ParamCharsType"));
-  param_charset_type_.set_block_size(PARAM_CHARSET_TYPE_BLOCK_SIZE);
   fmt_int_or_ch_decint_idx_.set_attr(ObMemAttr("FMTIntPrecIdx"));
 }
 

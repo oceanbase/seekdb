@@ -18,7 +18,6 @@
 
 #include "storage/memtable/ob_memtable_iterator.h"
 #include "storage/memtable/ob_row_conflict_handler.h"
-#include "storage/memtable/ob_memtable_block_row_scanner.h"
 #include "storage/memtable/ob_memtable_read_row_util.h"
 #include "storage/truncate_info/ob_truncate_partition_filter.h"
 #include "ob_memtable.h"
@@ -169,7 +168,6 @@ ObMemtableScanIterator::ObMemtableScanIterator()
       is_scan_start_(false),
       param_(nullptr),
       context_(nullptr),
-      mt_blk_scanner_(nullptr),
       single_row_reader_(),
       cur_range_(),
       memtable_(nullptr)
@@ -178,7 +176,6 @@ ObMemtableScanIterator::ObMemtableScanIterator()
 
 ObMemtableScanIterator::~ObMemtableScanIterator()
 {
-  FREE_ITER_FROM_ALLOCATOR(context_->allocator_, mt_blk_scanner_, ObMemtableBlockRowScanner);
   //reset is not necessary since there is no resource to release
   //reset();
 }
@@ -218,30 +215,9 @@ int ObMemtableScanIterator::base_init_(const ObTableIterParam &param,
     STORAGE_LOG(WARN, "table and query_range can not be null", KP(table), KP(query_range), K(ret));
   } else if (OB_FAIL(single_row_reader_.init(static_cast<ObMemtable *>(table), param, context))) {
     STORAGE_LOG(WARN, "init scan iterator fail", K(ret));
-  } else if (param.is_delete_insert_ && OB_FAIL(enable_block_scan_(param, context))) {
-    STORAGE_LOG(WARN, "enable block scan for memtable scan iterator failed", KR(ret), K(param));
   } else {
     // base init finish
     param_ = &param;
-  }
-  return ret;
-}
-
-int ObMemtableScanIterator::enable_block_scan_(const ObTableIterParam &param, ObTableAccessContext &context)
-{
-  int ret = OB_SUCCESS;
-  void *blk_scanner_buffer = nullptr;
-  if (OB_ISNULL(blk_scanner_buffer = context.allocator_->alloc(sizeof(ObMemtableBlockRowScanner)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    STORAGE_LOG(WARN, "allocate block scan ctx failed", KR(ret));
-  } else if (FALSE_IT(mt_blk_scanner_ = new (blk_scanner_buffer) ObMemtableBlockRowScanner(*context.allocator_))) {
-  } else if (OB_FAIL(mt_blk_scanner_->init(param, context, single_row_reader_))) {
-    TRANS_LOG(WARN, "Failed to init datum row batch", KR(ret));
-  } else {
-    if (param.is_delete_insert_) {
-      context.store_ctx_->mvcc_acc_ctx_.major_snapshot_ = context.trans_version_range_.base_version_;
-      context.store_ctx_->mvcc_acc_ctx_.is_delete_insert_ = param.is_delete_insert_;
-    }
   }
   return ret;
 }
@@ -282,10 +258,8 @@ int ObMemtableScanIterator::inner_get_next_row(const ObDatumRow *&row)
   }
 
   if (OB_FAIL(ret)) {
-  } else if (!param_->is_delete_insert_) {
-    ret = single_row_reader_.get_next_row(row);
   } else {
-    ret = mt_blk_scanner_->get_next_row(row);
+    ret = single_row_reader_.get_next_row(row);
   }
 
   if (OB_SUCC(ret)) {
@@ -297,10 +271,9 @@ int ObMemtableScanIterator::inner_get_next_row(const ObDatumRow *&row)
     STORAGE_LOG(WARN,
                 "get next row from memtable scan iteartor failed",
                 KR(ret),
-                K(is_scan_start_),
-                K(param_->is_delete_insert_));
+                K(is_scan_start_));
   }
-  STORAGE_LOG(DEBUG, "finish memtable get next row", KR(ret), K(is_scan_start_), K(param_->is_delete_insert_), KPC(row));
+  STORAGE_LOG(DEBUG, "finish memtable get next row", KR(ret), K(is_scan_start_), KPC(row));
   return ret;
 }
 
@@ -308,7 +281,6 @@ void ObMemtableScanIterator::reset()
 {
   is_inited_ = false;
   is_scan_start_ = false;
-  FREE_ITER_FROM_ALLOCATOR(context_->allocator_, mt_blk_scanner_, ObMemtableBlockRowScanner);
   context_ = nullptr;
   param_ = nullptr;
   cur_range_.reset();
@@ -330,7 +302,7 @@ int ObMemtableScanIterator::advance_scan(const blocksstable::ObDatumRange &range
     if (OB_FAIL(init(*param, *context, memtable, &range))) {
       LOG_WARN("failed to init memtable iter", K(ret));
     }
-    LOG_DEBUG("[INDEX SKIP SCAN] memtable skip to range", K(ret), K(range));
+    LOG_DEBUG("[ADVANCE SCAN] memtable skip to range", K(ret), K(range));
   }
   return ret;
 }
@@ -540,7 +512,6 @@ int ObMemtableMScanIterator::inner_get_next_row(const ObDatumRow *&row)
 ObMemtableMultiVersionScanIterator::ObMemtableMultiVersionScanIterator()
     : MAGIC_(VALID_MAGIC_NUM),
       is_inited_(false),
-      enable_delete_insert_(false),
       read_info_(NULL),
       start_key_(NULL),
       end_key_(NULL),
@@ -613,7 +584,6 @@ int ObMemtableMultiVersionScanIterator::init(
       TRANS_LOG(WARN, "Failed to init datum row", K(ret));
     } else {
       TRANS_LOG(TRACE, "multi version scan iterator init succ", K(param.table_id_), K(range), KPC(read_info_), K(row_));
-      enable_delete_insert_ = param.is_delete_insert_;
       trans_version_col_idx_ = param.get_schema_rowkey_count();
       sql_sequence_col_idx_ = param.get_schema_rowkey_count() + 1;
       is_inited_ = true;
@@ -897,10 +867,7 @@ int ObMemtableMultiVersionScanIterator::switch_scan_state()
     }
     break;
   case SCAN_COMPACT_ROW:
-    if (enable_delete_insert_ && !value_iter_->has_multi_commit_trans() &&
-        !value_iter_->is_last_compact_node()) {
-      // ouput all delete_insert rows in single trans
-    } else if (!value_iter_->is_multi_version_iter_end()) {
+    if (!value_iter_->is_multi_version_iter_end()) {
       scan_state_ = SCAN_MULTI_VERSION_ROW;
     } else {
       scan_state_ = SCAN_END;
@@ -927,7 +894,6 @@ int ObMemtableMultiVersionScanIterator::switch_scan_state()
 void ObMemtableMultiVersionScanIterator::reset()
 {
   is_inited_ = false;
-  enable_delete_insert_ = false;
   read_info_ = NULL;
   start_key_ = NULL;
   end_key_ = NULL;
@@ -975,10 +941,6 @@ int ObMemtableMultiVersionScanIterator::iterate_compacted_row(
     TRANS_LOG(WARN, "iterate row get invalid argument", K(ret), KP(value_iter_));
   } else if (OB_FAIL(ObReadRow::iterate_row_key(key, row))) {
     TRANS_LOG(WARN, "iterate_row_key fail", K(ret), K(key));
-  } else if (enable_delete_insert_ && !value_iter_->has_multi_commit_trans()) {
-    if (OB_FAIL(iterate_delete_insert_compacted_row_value_(row))) {
-      TRANS_LOG(WARN, "iterate_delete_insert_row_value fail", K(ret), K(key), KP(value_iter_));
-    }
   } else if (OB_FAIL(iterate_compacted_row_value_(row))) {
     TRANS_LOG(WARN, "iterate_row_value fail", K(ret), K(key), KP(value_iter_));
   }
@@ -1118,72 +1080,6 @@ int ObMemtableMultiVersionScanIterator::iterate_compacted_row_value_(ObDatumRow 
   return ret;
 }
 
-// compact delete_insert rows which are in one transaction
-// delete1 -> insert1 -> delete2 -> insert2 -> delete3 -> insert3 ==> delete1 -> insert3
-// insert1 -> delete2-> insert2 -> delete3-> insert3 ==> insert3
-// delete1 -> insert1 -> delete2 -> insert2 -> delete3 ==> delete1
-// insert1 -> delete2 -> insert2 -> delete3 ==> delete3(need output last flag)
-int ObMemtableMultiVersionScanIterator::iterate_delete_insert_compacted_row_value_(blocksstable::ObDatumRow &row)
-{
-  int ret = OB_SUCCESS;
-  bool read_finished = false;
-  const void *tnode = NULL;
-  const ObMemtableDataHeader *mtd = NULL;
-  const ObRowHeader *row_header = nullptr;
-  row.row_flag_.set_flag(ObDmlFlag::DF_NOT_EXIST);
-  row.snapshot_version_ = 0;
-  bitmap_.reuse();
-
-  while (OB_SUCC(ret)) {
-    bool first_delete_node = value_iter_->is_first_delete_compact_node();
-    if (first_delete_node && row.row_flag_.is_insert()) {
-      // delete1->insert1->delete2->insert2: cur_node(delete1), cur_row(insert2)
-      break;
-    } else if (OB_FAIL(value_iter_->get_next_node_for_compact(tnode))) {
-      if (OB_ITER_END != ret) {
-        TRANS_LOG(WARN, "failed to get next node", K(ret), K(*this), K(value_iter_));
-      }
-    } else if (OB_ISNULL(tnode)) {
-      ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "trans node is null", K(ret), KP(tnode));
-    } else if (OB_ISNULL(mtd = reinterpret_cast<const ObMemtableDataHeader *>(reinterpret_cast<const ObMvccTransNode *>(tnode)->buf_))) {
-      ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "transa node value is null", K(ret), KP(tnode), KP(mtd));
-    } else {
-      set_flag_and_version_for_compacted_row(reinterpret_cast<const ObMvccTransNode *>(tnode), row);
-      if (first_delete_node) {
-        // delete1->insert1->delete2: cur_node(delete1), cur_row(delete2), reset cur_row and read first_delete_node
-        row.row_flag_.set_flag(ObDmlFlag::DF_NOT_EXIST);
-        bitmap_.reuse();
-      }
-
-      read_finished = false;
-      if (OB_FAIL(row_reader_.read_memtable_row(mtd->buf_, mtd->buf_len_, *read_info_, row, bitmap_, read_finished, row_header))) {
-        TRANS_LOG(WARN, "Failed to read memtable row", K(ret), K(row));
-      } else if (OB_UNLIKELY(!read_finished && read_info_->get_schema_column_count() == row_header->get_column_count())) {
-        ret = OB_ERR_UNEXPECTED;
-        TRANS_LOG(WARN, "Unexpected not empty bitmap", K(ret), K(row), K(read_finished), KPC(row_header), KPC_(read_info));
-      } else {
-        row.set_compacted_multi_version_row();
-        if (row.row_flag_.is_not_exist()) {
-          row.storage_datums_[trans_version_col_idx_].reuse();
-          row.storage_datums_[sql_sequence_col_idx_].reuse();
-          row.storage_datums_[trans_version_col_idx_].set_int(-value_iter_->get_committed_max_trans_version());
-          row.storage_datums_[sql_sequence_col_idx_].set_int(0);
-          row.row_flag_.set_flag(mtd->dml_flag_);
-        }
-
-        if (value_iter_->is_last_compact_node()) {
-          row.mvcc_row_flag_.set_last_multi_version_row(value_iter_->is_multi_version_iter_end());
-          break;
-        }
-      }
-    }
-  } // while
-  ret = (OB_ITER_END == ret) ? OB_SUCCESS : ret;
-  return ret;
-}
-
 int ObMemtableMultiVersionScanIterator::iterate_multi_version_row_value_(ObDatumRow &row)
 {
   int ret = OB_SUCCESS;
@@ -1201,12 +1097,7 @@ int ObMemtableMultiVersionScanIterator::iterate_multi_version_row_value_(ObDatum
   }
   bitmap_.reuse();
   while (OB_SUCC(ret)) {
-    bool first_delete_node = value_iter_->is_first_delete_multi_version_node();
-    if (enable_delete_insert_ && first_delete_node && row.row_flag_.is_insert()) {
-      // delete1->insert1->delete2->insert2: cur_node(delete1), cur_row(insert2)
-      // not from update, insert after delete in one trans also need to mark as delete_insert
-      break;
-    } else if (OB_FAIL(value_iter_->get_next_multi_version_node(tnode))) {
+    if (OB_FAIL(value_iter_->get_next_multi_version_node(tnode))) {
       if (OB_ITER_END != ret) {
         TRANS_LOG(WARN, "failed to get next node", K(ret), K(*this), K(value_iter_));
       }
@@ -1218,11 +1109,6 @@ int ObMemtableMultiVersionScanIterator::iterate_multi_version_row_value_(ObDatum
       TRANS_LOG(WARN, "trans node value is null", K(ret), KP(tnode), KP(mtd));
     } else {
       if (row.row_flag_.is_not_exist()) {
-        row.row_flag_.set_flag(mtd->dml_flag_);
-      } else if (enable_delete_insert_ && first_delete_node) {
-        // delete1->insert1->delete2: cur_node(delete1), cur_row(delete2), reset cur_row and read first_delete_node
-        bitmap_.reuse();
-        trans_version = INT64_MIN;
         row.row_flag_.set_flag(mtd->dml_flag_);
       }
       compare_trans_version = reinterpret_cast<const ObMvccTransNode *>(tnode)->trans_version_.get_val_for_tx();

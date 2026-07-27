@@ -34,7 +34,6 @@ public:
   static int server_module_init(ObTransIDService *&trans_id_service);
   void destroy() { reset(); }
   static const int64_t TRANS_ID_PREALLOCATED_RANGE = 1000000; // TransID default preallocated size
-  int alloc_trans_id_range(const int64_t range, int64_t &start_id, int64_t &end_id);
 };
 
 }

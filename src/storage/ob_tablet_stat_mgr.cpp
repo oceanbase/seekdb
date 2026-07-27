@@ -41,6 +41,8 @@ void ObTransNodeDMLStat::atomic_inc(const ObTransNodeDMLStat &other)
     (void) ATOMIC_AAFx(&insert_row_count_, other.insert_row_count_, 0/*placeholder*/);
     (void) ATOMIC_AAFx(&update_row_count_, other.update_row_count_, 0/*placeholder*/);
     (void) ATOMIC_AAFx(&delete_row_count_, other.delete_row_count_, 0/*placeholder*/);
+    (void) ATOMIC_AAFx(&snapshot_gc_scn_row_count_,
+        other.snapshot_gc_scn_row_count_, 0/*placeholder*/);
   }
 }
 
@@ -370,7 +372,10 @@ int ObTabletStream::get_all_tablet_stat(common::ObIArray<ObTabletStat> &tablet_s
 /************************************* ObTabletStreamPool *************************************/
 ObTabletStreamPool::ObTabletStreamPool()
   : dynamic_allocator_{},
+    free_list_allocator_(ObMemAttr("FreeTbltStream")),
+    free_list_(),
     lru_list_(),
+    max_free_list_num_(0),
     max_dynamic_node_num_(0),
     allocated_dynamic_num_(0),
     is_inited_(false)
@@ -389,38 +394,67 @@ void ObTabletStreamPool::destroy()
 
   DLIST_REMOVE_ALL_NORET(node, lru_list_) {
     lru_list_.remove(node);
-    node->~ObTabletStreamNode();
-    // ObFIFOAllocator::reset does not release memory by default.
-    dynamic_allocator_.free(node);
+    if (DYNAMIC_ALLOC == node->flag_) {
+      node->~ObTabletStreamNode();
+      // ObFIFOAllocator::reset does not release memory by default.
+      dynamic_allocator_.free(node);
+    } else {
+      node->~ObTabletStreamNode();
+    }
     node = nullptr;
   }
   lru_list_.reset();
 
+  while (OB_SUCCESS == free_list_.pop(node)) {
+    if (OB_NOT_NULL(node)) {
+      node->~ObTabletStreamNode();
+      node = nullptr;
+    }
+  }
+
   dynamic_allocator_.reset();
-  max_dynamic_node_num_ = 0;
-  allocated_dynamic_num_ = 0;
+  free_list_.destroy();
+  free_list_allocator_.reset();
 }
 
-int ObTabletStreamPool::init(const int64_t max_dynamic_node_num)
+int ObTabletStreamPool::init(
+    const int64_t max_free_list_num,
+    const int64_t max_dynamic_node_num)
 {
   int ret = OB_SUCCESS;
   const char *LABEL = "IncTbltStream";
+  ObTabletStreamNode *buf = nullptr;
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTabletStreamPool has been inited", K(ret));
-  } else if (max_dynamic_node_num <= 0) {
+  } else if (max_free_list_num <= 0 || max_dynamic_node_num < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid argument", K(ret), K(max_dynamic_node_num));
+    LOG_WARN("get invalid argument", K(ret), K(max_free_list_num), K(max_dynamic_node_num));
   } else if (OB_FAIL(dynamic_allocator_.init(ObMallocAllocator::get_instance(), OB_MALLOC_NORMAL_BLOCK_SIZE,
                                              ObMemAttr(LABEL)))) {
     LOG_WARN("failed to init fifo allocator", K(ret));
+  } else if (OB_FAIL(free_list_.init(max_free_list_num, &free_list_allocator_))) {
+    LOG_WARN("failed to init free list", K(ret), K(max_free_list_num));
+  } else if (OB_ISNULL(buf = static_cast<ObTabletStreamNode*>(free_list_allocator_.alloc(sizeof(ObTabletStreamNode) * max_free_list_num)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate memory for stream node in free list", K(ret), K(max_free_list_num));
   } else {
-    max_dynamic_node_num_ = max_dynamic_node_num;
-    is_inited_ = true;
-  }
-  if (OB_FAIL(ret)) {
-    destroy();
+    ObTabletStreamNode *node = nullptr;
+    for (int64_t i = 0; OB_SUCC(ret) && i < max_free_list_num; ++i) {
+      node = new (buf + i) ObTabletStreamNode(FIXED_ALLOC);
+      if (OB_FAIL(free_list_.push(node))) {
+        LOG_WARN("failed to push node to free list", K(ret));
+      }
+    }
+
+    if (OB_FAIL(ret)) {
+      destroy();
+    } else {
+      max_free_list_num_ = max_free_list_num;
+      max_dynamic_node_num_ = max_dynamic_node_num;
+      is_inited_ = true;
+    }
   }
   return ret;
 }
@@ -431,26 +465,43 @@ int ObTabletStreamPool::alloc(ObTabletStreamNode *&free_node, bool &is_retired)
   is_retired = false;
   void *buf = nullptr;
 
+  // 1. try to alloc node from free_list
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTabletStreamPool not inited", K(ret));
   } else if (OB_NOT_NULL(free_node)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get invalid argument", K(ret), K(free_node));
-  } else if (allocated_dynamic_num_ >= max_dynamic_node_num_) {
-    if (OB_UNLIKELY(lru_list_.is_empty())) {
+  } else if (OB_FAIL(free_list_.pop(free_node))) {
+    if (OB_ENTRY_NOT_EXIST != ret) {
+      LOG_WARN("failed to pop free node from free list", K(ret));
+    }
+  }
+
+  // 2. no free node in free_list, try to alloc node dynamically
+  if (OB_ENTRY_NOT_EXIST == ret) {
+    ret = OB_SUCCESS;
+    if (allocated_dynamic_num_ >= max_dynamic_node_num_) {
+      ret = OB_SIZE_OVERFLOW;
+    } else if (OB_ISNULL(buf = dynamic_allocator_.alloc(sizeof(ObTabletStreamNode)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate memory for free node", K(ret));
+    } else {
+      free_node = new (buf) ObTabletStreamNode(DYNAMIC_ALLOC);
+      ++allocated_dynamic_num_;
+    }
+  }
+
+  // 3. dynamic node has reached the upper limit, try to retire the oldest node in lru_list
+  if (OB_SIZE_OVERFLOW == ret) {
+    ret = OB_SUCCESS;
+    if (lru_list_.is_empty()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("lru list is unexpected null", K(ret));
     } else {
       free_node = lru_list_.get_last();
       is_retired = true;
     }
-  } else if (OB_ISNULL(buf = dynamic_allocator_.alloc(sizeof(ObTabletStreamNode)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory for tablet stream node", K(ret));
-  } else {
-    free_node = new (buf) ObTabletStreamNode();
-    ++allocated_dynamic_num_;
   }
   return ret;
 }
@@ -463,10 +514,13 @@ void ObTabletStreamPool::free(ObTabletStreamNode *node)
       tmp_ret = OB_NOT_INIT;
       LOG_ERROR_RET(tmp_ret, "[MEMORY LEAK] ObTabletStreamPool is not inited, cannot free this node!!!",
           K(tmp_ret), KPC(node));
-    } else {
+    } else if (DYNAMIC_ALLOC == node->flag_) {
       node->~ObTabletStreamNode();
       dynamic_allocator_.free(node);
       --allocated_dynamic_num_;
+    } else {
+      node->~ObTabletStreamNode();
+      OB_ASSERT(OB_SUCCESS == free_list_.push(node));
     }
   }
 }
@@ -502,7 +556,7 @@ int ObTabletStatMgr::init()
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTabletStatMgr init twice", K(ret));
-  } else if (OB_FAIL(stream_pool_.init(DEFAULT_UP_LIMIT_STREAM_CNT))) {
+  } else if (OB_FAIL(stream_pool_.init(DEFAULT_MAX_FREE_STREAM_CNT, DEFAULT_UP_LIMIT_STREAM_CNT))) {
     LOG_WARN("failed to init tablet stream pool", K(ret));
   } else if (OB_FAIL(stream_map_.create(DEFAULT_BUCKET_NUM, ObMemAttr("TabletStats")))) {
     LOG_WARN("failed to create TabletStats", K(ret));

@@ -141,7 +141,7 @@ public:
   static const int64_t TABLET_TRANSFORM_INTERVAL_US = 2 * 1000 * 1000L; // 2s
 
   static const int64_t LITE_MODE_MAX_TABLET_CNT_IN_OBJ_POOL = MIN_MODE_MAX_TABLET_CNT_IN_OBJ_POOL / 4;
-  static const int64_t LITE_MODE_MAX_MEMTABLE_CNT_IN_OBJ_POOL = 256;
+  static const int64_t LITE_MODE_MAX_MEMTABLE_CNT_IN_OBJ_POOL = 2 * LITE_MODE_MAX_TABLET_CNT_IN_OBJ_POOL;
 
   static int64_t get_default_tablet_pool_count()
   {
