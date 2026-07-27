@@ -15,11 +15,11 @@
  */
 
 #define USING_LOG_PREFIX SQL_PC
+#include "share/rc/ob_module_provider.h"
 #include "ob_adaptive_auto_dop.h"
 #include "sql/engine/table/ob_table_scan_op.h"
 #include "sql/optimizer/ob_access_path_estimation.h"
 #include "sql/optimizer/ob_storage_estimator.h"
-#include "observer/ob_service.h"
 
 using namespace oceanbase::common;
 
@@ -223,22 +223,6 @@ int ObAdaptiveAutoDop::build_storage_estimation_tasks(
   return ret;
 }
 
-int ObAdaptiveAutoDop::get_task(ObIArray<ObBatchEstTasks *> &tasks,
-                                ObBatchEstTasks *&task)
-{
-  int ret = OB_SUCCESS;
-  task = NULL;
-  for (int64_t i = 0; OB_SUCC(ret) && i < tasks.count(); ++i) {
-    if (OB_ISNULL(tasks.at(i))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid batch estimation task", K(ret));
-    } else if (NULL == task) {
-      task = tasks.at(i);
-    }
-  }
-  return ret;
-}
-
 int ObAdaptiveAutoDop::add_estimation_tasks(const ObTableScanSpec &tsc_spec,
                                             const ObCostTableScanSimpleInfo &cost_tsc_info,
                                             const int64_t schema_version,
@@ -251,10 +235,11 @@ int ObAdaptiveAutoDop::add_estimation_tasks(const ObTableScanSpec &tsc_spec,
   ObSqlCtx *sql_ctx = ctx_.get_sql_ctx();
   common::ObIAllocator &allocator = ctx_.get_allocator();
   obcall::ObEstPartArgElement *index_est_arg = NULL;
-  if (OB_FAIL(get_task(tasks, task))) {
-    LOG_WARN("failed to get task", K(ret));
-  } else if (NULL != task) {
-    // do nothing
+  if (!tasks.empty()) {
+    if (OB_ISNULL(task = tasks.at(0))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid local storage estimation task", K(ret));
+    }
   } else if (OB_ISNULL(ptr = allocator.alloc(sizeof(ObBatchEstTasks)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("memory is not enough", K(ret));
@@ -382,7 +367,7 @@ int ObAdaptiveAutoDop::calculate_tsc_auto_dop(const ObIArray<ObBatchEstTasks *> 
     LOG_WARN("failed to get sys variable parallel threshold", K(ret));
   }
   if (OB_SUCC(ret) && 0 == parallel_degree_limit) {
-    const ObServerRuntimeState *runtime = NULL;
+    const ObServerRuntimeState *runtime = nullptr;
     int64_t parallel_servers_target = 0;
     if (OB_ISNULL(runtime = share::server_runtime())) {
       ret = OB_ERR_UNEXPECTED;

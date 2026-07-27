@@ -91,7 +91,7 @@ void ObTriggerInfo::reset()
   reset_string(reference_names_[RT_PARENT]);
   reset_string(when_condition_);
   reset_string(trigger_body_);
-  // pl_flag / pl_comp_flag / pl_exec_env are reset below.
+  // pl_flag / pl_exec_env are reset below.
   package_spec_info_.reset();
   package_body_info_.reset();
   reset_string(priv_user_);
@@ -185,17 +185,17 @@ int64_t ObTriggerInfo::get_convert_size() const
 
 // trigger package source macro DSL moved together with the gen/fill function family to sql/resolver/ddl/ob_trigger_resolver.cpp
 
-// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state)
 
-// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(parser vocabulary)
 
-// ObTriggerInfo::gen_package_source_simple moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in this class header, transitional state)
 
-// gen_package_source_compound moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(parser vocabulary)
 
-// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(parser vocabulary)
 
-// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(macro DSL user, fill family)
+
+
+
+
+
+
 
 int ObTriggerInfo::fill_compound_declare_body(const char *body_fmt,
                                               const common::ObString &body_declare,
@@ -207,19 +207,19 @@ int ObTriggerInfo::fill_compound_declare_body(const char *body_fmt,
   return ret;
 }
 
-// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(macro DSL user)
 
-// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(macro DSL user)
 
-// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(macro DSL user)
 
-// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(macro DSL user, fill family)
 
-// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(macro DSL user, fill family)
 
-// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(macro DSL user, fill family)
 
-// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(macro DSL user, fill family)
+
+
+
+
+
+
+
 
 void ObTriggerInfo::TriggerContext::dispatch_decalare_execute(const ObTriggerInfo &trigger_info,
                                                               ObString *&simple_declare,
@@ -242,7 +242,7 @@ void ObTriggerInfo::TriggerContext::dispatch_decalare_execute(const ObTriggerInf
   tg_body = &trigger_body_;
 }
 
-// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(parser vocabulary)
+
 
 bool ObTriggerInfo::ActionOrderComparator::operator()(const ObTriggerInfo *left, const ObTriggerInfo *right)
 {
@@ -260,7 +260,7 @@ bool ObTriggerInfo::ActionOrderComparator::operator()(const ObTriggerInfo *left,
 
 
 // for rebuild trigger body due to rename table
-// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state)
+
 
 } // namespace schema
 } // namespace share

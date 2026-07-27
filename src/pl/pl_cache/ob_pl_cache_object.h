@@ -66,7 +66,7 @@ struct ObPlParamInfo : public sql::ObParamInfo
 
 enum ObPLCacheObjectType
 {
-  INVALID_PL_OBJECT_TYPE = 5, // start with OB_PHY_PLAN_UNCERTAIN, distict ObPhyPlanType
+  INVALID_PL_OBJECT_TYPE = 4, // starts after ObPhyPlanType
   STANDALONE_ROUTINE_TYPE,
   PACKAGE_TYPE,
   PACKAGE_BODY_TYPE,

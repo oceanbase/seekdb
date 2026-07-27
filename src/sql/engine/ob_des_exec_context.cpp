@@ -158,7 +158,6 @@ DEFINE_DESERIALIZE(ObDesExecContext)
       // alloc from session manager, increase active session number
       if (OB_SUCC(ret) && free_session_ctx_.sessid_ != ObSQLSessionInfo::INVALID_SESSID) {
         
-        EVENT_INC(ACTIVE_SESSIONS);
         free_session_ctx_.has_inc_active_num_ = true;
       }
     }
@@ -179,7 +178,7 @@ DEFINE_DESERIALIZE(ObDesExecContext)
     if (OB_FAIL(init_expr_op(phy_plan_ctx_->get_expr_op_size()))) {
       LOG_WARN("init exec context expr op failed", K(ret));
     } else {
-      das_ctx_.get_location_router().set_retry_info(&my_session_->get_retry_info());
+      das_ctx_.set_retry_info(&my_session_->get_retry_info());
     }
   }
   use_temp_expr_ctx_cache_ = true;

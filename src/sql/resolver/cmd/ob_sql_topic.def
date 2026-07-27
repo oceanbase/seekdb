@@ -565,26 +565,6 @@ DEFINE_SQL_TOPIC(
 
 
 DEFINE_SQL_TOPIC(
-29, 
-"STRICT_CURRENT_TIMESTAMP",
-31,
-" *   格式: STRICT_CURRENT_TIMESTAMP()  \n"
-"\n" 
-" *   从UpdateServer所在服务器获取时间。 \n"
-"\n", 
-"mysql> select STRICT_CURRENT_TIMESTAMP(); \n"
-"+----------------------------+ \n"
-"| STRICT_CURRENT_TIMESTAMP() | \n"
-"+----------------------------+ \n"
-"| 2014-02-17 13:40:25.539522 | \n"
-"+----------------------------+ \n"
-"1 row in set (0.14 sec)",
-"www.taobao.com")
-
-
-
-
-DEFINE_SQL_TOPIC(
 30, 
 "TIME_TO_USEC",
 31,
@@ -1582,7 +1562,6 @@ DEFINE_SQL_TOPIC(
 " *                          'user' IDENTIFIED BY 'password'  \n"
 "\n"
 " *   创建新的OceanBase用户。创建新用户后，可以使用该用户连接OceanBase。\n"
-"     * 新建用户仅拥有系统表“__all_server”和“__all_cluster”的SELECT权限，以及“__all_client”的REPLACE和SELECT权限。\n"
 "     * 必须拥有全局的CREATE USER权限或对__all_user表的INSERT权限，才可以使用CREATE USER命令。\n"
 "     * 新建用户后，__all_user表会新增一行该用户的表项。如果同名用户已经存在，则报错。\n"
 "     * 使用IDENTIFIED BY子句，为账户给定一个密码。\n"

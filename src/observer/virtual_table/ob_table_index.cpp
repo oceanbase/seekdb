@@ -40,7 +40,6 @@ ObTableIndex::ObTableIndex()
       is_rowkey_end_(false),
       is_normal_end_(false),
       ft_dep_col_idx_(OB_INVALID_ID),
-      min_data_version_(OB_INVALID_VERSION),
       vec_dep_col_idx_(OB_INVALID_ID)
 {
 }
@@ -86,14 +85,11 @@ void ObTableIndex::reset()
   is_rowkey_end_ = false;
   simple_index_infos_.reset();
   ft_dep_col_idx_ = OB_INVALID_ID;
-  min_data_version_ = OB_INVALID_VERSION;
   vec_dep_col_idx_ = OB_INVALID_ID;
 }
 
 int ObTableIndex::init() {
-  int ret = OB_SUCCESS;
-  min_data_version_ = DATA_CURRENT_VERSION;
-  return ret;
+  return OB_SUCCESS;
 }
 
 int ObTableIndex::inner_get_next_row(common::ObNewRow *&row)

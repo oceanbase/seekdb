@@ -22,8 +22,61 @@ namespace oceanbase {
 using namespace common;
 namespace sql {
 
-const char *ObLoadDataUtils::NULL_STRING = "NULL";
 const char ObLoadDataUtils::NULL_VALUE_FLAG = '\xff';
+
+int ObParallelTaskController::init(int64_t max_parallelism)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(max_parallelism <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(vacant_cond_.init(common::ObWaitEventIds::DEFAULT_COND_WAIT))) {
+    LOG_WARN("init vacant condition failed", K(ret));
+  } else {
+    max_parallelism_ = max_parallelism;
+  }
+  return ret;
+}
+
+int ObParallelTaskController::on_next_task()
+{
+  int ret = OB_SUCCESS;
+  ObThreadCondGuard guard(vacant_cond_);
+  if (ATOMIC_AAF(&processing_cnt_, 1) > max_parallelism_) {
+    ret = vacant_cond_.wait();
+  }
+  return ret;
+}
+
+int ObParallelTaskController::on_task_finished()
+{
+  int ret = OB_SUCCESS;
+  if (max_parallelism_ == ATOMIC_AAF(&processing_cnt_, -1)) {
+    ObThreadCondGuard guard(vacant_cond_);
+    ret = vacant_cond_.signal();
+  }
+  return ret;
+}
+
+void ObParallelTaskController::wait_all_task_finish(const char *task_name, int64_t until_ts)
+{
+  int64_t wait_duration_ms = 0;
+  const int64_t begin_ts = ObTimeUtil::current_time();
+  bool is_too_long = false;
+  while (get_processing_task_cnt() > 0) {
+    ob_usleep(10 * 1000);
+    wait_duration_ms += 10;
+    if (0 == wait_duration_ms % 1000 && ObTimeUtil::current_time() > until_ts) {
+      LOG_ERROR_RET(OB_TIMEOUT, "waiting local load data task exceeded deadline",
+                    K(task_name), K(begin_ts), K(until_ts));
+    }
+    if (!is_too_long && wait_duration_ms > 10 * 1000) {
+      is_too_long = true;
+      LOG_WARN_RET(OB_ERR_UNEXPECTED, "waiting local load data task too long",
+                   K(task_name), "processing_count", get_processing_task_cnt(),
+                   K(wait_duration_ms), K(until_ts));
+    }
+  }
+}
 
 int ObLoadDataUtils::build_insert_sql_string_head(ObLoadDupActionType insert_mode,
                                                   const ObString &table_name,
@@ -78,126 +131,6 @@ int ObLoadDataUtils::build_insert_sql_string_head(ObLoadDupActionType insert_mod
 
   return ret;
 }
-
-
-int ObLoadDataUtils::append_values_for_one_row(const int64_t table_column_count,
-                                               const ObExprValueBitSet &expr_value_bitset,
-                                               const ObIArray<ObString> &insert_values,
-                                               ObSqlString &insertsql,
-                                               ObDataBuffer &data_buffer,
-                                               const int64_t skipped_row_count)
-{
-  int ret = OB_SUCCESS;
-  int64_t value_offset = skipped_row_count * table_column_count;
-
-  if (OB_UNLIKELY(skipped_row_count * table_column_count + table_column_count > insert_values.count())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(skipped_row_count), K(table_column_count), K(insert_values.count()));
-  }
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(insertsql.append("("))) {
-      LOG_WARN("append failed", K(ret), K(insertsql.length()));
-    }
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < table_column_count; ++i) {
-    const ObString &value = insert_values.at(i + value_offset);
-    bool is_expr_value = expr_value_bitset.has_member(i);
-    ObString cur_column_str;
-    if (!is_expr_value) {
-      cur_column_str = escape_quotation(value, data_buffer);
-      remove_last_slash(cur_column_str);
-    } else {
-      cur_column_str = value;
-    }
-    if (i != 0) {
-      if (OB_FAIL(insertsql.append(","))) {
-        LOG_WARN("append failed", K(ret), K(insertsql.length()));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(append_value(cur_column_str, insertsql, is_expr_value))) {
-        LOG_WARN("append failed", K(ret), K(insertsql.length()), K(cur_column_str));
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(insertsql.append(")"))) {
-      LOG_WARN("append failed", K(ret), K(insertsql.length()));
-    }
-  }
-  return ret;
-}
-
-int ObLoadDataUtils::append_value(const ObString &cur_column_str, ObSqlString &sqlstr_values, bool is_expr_value)
-{
-  int ret = OB_SUCCESS;
-  if (!is_expr_value) {
-    if (is_null_field(cur_column_str)) {
-      if (OB_FAIL(sqlstr_values.append(NULL_STRING))) {
-        LOG_WARN("append failed", K(ret));
-      }
-    } else {
-      if (OB_FAIL(sqlstr_values.append_fmt("'%.*s'", cur_column_str.length(), cur_column_str.ptr()))) {
-        LOG_WARN("append failed", K(ret));
-      }
-    }
-  } else {
-    if (OB_FAIL(sqlstr_values.append(cur_column_str))) {
-      LOG_WARN("append failed", K(ret));
-    }
-  }
-  return ret;
-}
-
-
-
-
-ObString ObLoadDataUtils::escape_quotation(const ObString &value, ObDataBuffer &data_buf)
-{
-  char *buf = data_buf.get_data();
-  ObString result;
-
-  if (OB_ISNULL(buf)) {
-    LOG_WARN_RET(OB_NOT_INIT, "data buf is not inited");
-  } else {
-    //check if escape is needed
-    bool need_escape = false;
-    const char *src = value.ptr();
-    int64_t str_len = value.length();
-    ObLoadEscapeSM escape_sm;
-    escape_sm.set_escape_char(ObLoadEscapeSM::ESCAPE_CHAR_MYSQL);
-    for (int64_t i = 0; !need_escape && i < str_len; ++i) {
-      if (*(src + i) == '\'' && !escape_sm.is_escaping()) {
-        need_escape = true;
-      }
-      escape_sm.shift_by_input(*(src + i));
-    }
-
-    if (!need_escape) {
-      result = value;
-    } else {
-      int64_t pos = 0;
-      escape_sm.reset();
-      for (int64_t i = 0; i < str_len && pos < data_buf.get_capacity(); ++i) {
-        if (*(src + i) == '\'' && !escape_sm.is_escaping()) {
-          buf[pos++] = static_cast<char>(ObLoadEscapeSM::ESCAPE_CHAR_MYSQL);
-        }
-        buf[pos++] = src[i];
-        escape_sm.shift_by_input(*(src + i));
-      }
-      if (OB_UNLIKELY(pos >= data_buf.get_capacity())) {
-        LOG_ERROR_RET(OB_ERR_UNEXPECTED, "data is too long"); //this should never happened, just for protection
-        result.reset();
-      } else {
-        result.assign_ptr(buf, static_cast<int32_t>(pos));
-      }
-    }
-  }
-
-  return result;
-}
-
-
 
 
 int ObLoadDataUtils::check_session_status(ObSQLSessionInfo &session, int64_t reserved_us) {
@@ -357,10 +290,6 @@ ObGlobalLoadDataStatMap *ObGlobalLoadDataStatMap::getInstance()
 ObGlobalLoadDataStatMap *ObGlobalLoadDataStatMap::instance_ = new ObGlobalLoadDataStatMap();
 
 volatile int64_t ObLoadDataGID::GlobalLoadDataID = 0;
-
-OB_SERIALIZE_MEMBER(ObLoadTaskStatus, task_status_);
-
-OB_SERIALIZE_MEMBER(ObLoadDataGID, id);
 
 
 }

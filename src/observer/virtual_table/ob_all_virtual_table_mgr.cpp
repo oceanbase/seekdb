@@ -263,19 +263,6 @@ int ObAllVirtualTableMgr::inner_get_next_row(common::ObNewRow *&row)
           cur_row_.cells_[i].set_int(data_checksum);
           break;
         }
-        case TABLE_FLAG: {
-          int32_t flag = 0;
-          if (table->is_sstable()) {
-            blocksstable::ObSSTableMetaHandle sst_meta_hdl;
-            if (OB_FAIL(static_cast<blocksstable::ObSSTable *>(table)->get_meta(sst_meta_hdl))) {
-              SERVER_LOG(WARN, "fail to get sstable meta handle", K(ret));
-            } else {
-              flag = sst_meta_hdl.get_sstable_meta().get_table_backup_flag().get_flag();
-            }
-          }
-          cur_row_.cells_[i].set_int(flag);
-          break;
-        }
         default:
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "invalid col_id", K(ret), K(col_id));

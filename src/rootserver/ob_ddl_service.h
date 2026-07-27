@@ -25,7 +25,6 @@
 #include "lib/container/ob_array.h"
 #include "lib/hash/ob_placement_hashset.h"
 #include "share/ob_rpc_struct.h"
-#include "lib/worker.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "rootserver/ob_ddl_operator.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
@@ -61,7 +60,6 @@ class SCN;
 class ObAutoincrementService;
 namespace schema
 {
-class ObServerRuntimeSchema;
 class ObDatabaseSchema;
 class ObTableSchema;
 class ObMultiVersionSchemaService;
@@ -153,7 +151,6 @@ public:
       const common::ObString &ddl_stmt_str,
       const share::schema::ObErrorInfo &error_info,
       common::ObIArray<share::schema::ObTableSchema> &table_schemas,
-      share::schema::ObSchemaGetterGuard &schema_guard,
       const uint64_t last_replay_log_id,
       const common::ObIArray<share::schema::ObDependencyInfo> *dependency_infos,
       ObIArray<ObMockFKParentTableSchema> &mock_fk_parent_table_schema_array,
@@ -835,13 +832,6 @@ static int get_runtime_schema_guard_with_version_in_inner_table(share::schema::O
     const bool need_redistribute_column_id,
     share::schema::ObTableSchema &new_table_schema);
 private:
-  enum PartitionBornMethod : int64_t
-  {
-    PBM_INVALID = 0,
-    PBM_DIRECTLY_CREATE,
-    PBM_BINDING,
-    PBM_MAX,
-  };
   static const int64_t WAIT_ELECT_LEADER_TIMEOUT_US = 120 * 1000 * 1000;  // 120s
   static const int64_t REFRESH_SCHEMA_INTERVAL_US = 500 * 1000;              //500ms
 
@@ -1277,8 +1267,6 @@ int check_will_be_having_domain_index_operation(
   int get_orig_and_hidden_table_schema(
       const obcall::ObAlterTableArg &alter_table_arg,
       share::schema::ObSchemaGetterGuard &schema_guard,
-      share::schema::ObSchemaGetterGuard &dest_schema_guard,
-      const share::schema::AlterTableSchema &alter_table_schema,
       const share::schema::ObTableSchema *&orig_table_schema,
       const share::schema::ObTableSchema *&hidden_table_schema);
   int build_hidden_index_table_map(
@@ -1287,8 +1275,6 @@ int check_will_be_having_domain_index_operation(
       common::hash::ObHashMap<common::ObString, uint64_t> &new_index_table_map);
   int get_rebuild_foreign_key_infos(
       const obcall::ObAlterTableArg &alter_table_arg,
-      share::schema::ObSchemaGetterGuard &src_runtime_schema_guard,
-      share::schema::ObSchemaGetterGuard &dst_runtime_schema_guard,
       const ObTableSchema &orig_table_schema,
       const ObTableSchema &hidden_table_schema,
       const bool rebuild_child_table_fk,
@@ -1299,8 +1285,7 @@ int check_will_be_having_domain_index_operation(
       const share::schema::ObTableSchema &orig_table_schema,
       const share::schema::ObTableSchema &hidden_table_schema,
       const bool rebuild_child_table_fk,
-      share::schema::ObSchemaGetterGuard &src_runtime_schema_guard,
-      share::schema::ObSchemaGetterGuard &dst_runtime_schema_guard,
+      share::schema::ObSchemaGetterGuard &schema_guard,
       common::ObMySQLTransaction &trans,
       common::ObSArray<uint64_t> &cst_ids);
   int get_hidden_table_column_id_by_orig_column_id(
@@ -1340,7 +1325,6 @@ int check_will_be_having_domain_index_operation(
       const share::schema::ObTableSchema &orig_table_schema,
       const ObTableSchema &hidden_table_schema,
       ObSchemaGetterGuard &schema_guard,
-      ObSchemaGetterGuard &dest_schema_guard,
       ObDDLOperator &ddl_operator,
       common::ObMySQLTransaction &trans,
       ObSArray<ObTableSchema> &new_table_schemas,
@@ -1354,7 +1338,6 @@ int check_will_be_having_domain_index_operation(
       const share::schema::ObTableSchema &orig_table_schema,
       const share::schema::ObTableSchema &hidden_table_schema,
       share::schema::ObSchemaGetterGuard &schema_guard,
-      share::schema::ObSchemaGetterGuard &dest_schema_guard,
       const common::ObIArray<uint64_t> &drop_cols_id_arr,
       const share::ObColumnNameMap &col_name_map,
       const common::ObTimeZoneInfo &tz_info,
@@ -1714,7 +1697,6 @@ private:
 public:
   // used only by create normal runtime
   const char* ddl_type_str(const share::ObDDLType ddl_type);
-public:
   int ddl_rlock();
   int ddl_wlock();
   int ddl_unlock() { return ddl_lock_.unlock(); }

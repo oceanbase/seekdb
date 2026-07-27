@@ -227,7 +227,6 @@ private:
   void del_block_list(BlockInfo *del_block);
   int adjust_row_cells_reference();
 private:
-  // xiyu@TODO: add runtime-level control
   DefaultPageAllocator inner_alloc_;
   ObFixedArray<int64_t, common::ObIAllocator> reserved_columns_;
   BlockList blocks_;  // ASSERT: all linked blocks has at least one row stored

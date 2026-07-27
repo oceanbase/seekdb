@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "sql/engine/cmd/ob_table_executor.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ob_local_management_service.h"
@@ -625,7 +624,7 @@ int ObAlterTableExecutor::refresh_schema_for_table()
   } else if (OB_FAIL(schema_service->get_runtime_refreshed_schema_version(
           local_version))) {
     LOG_WARN("fail to get local version", K(ret));
-  } else if (OB_FAIL(schema_service->get_runtime_received_broadcast_version(
+  } else if (OB_FAIL(schema_service->get_published_schema_version(
           global_version))) {
     LOG_WARN("fail to get global version", K(ret));
   } else if (local_version < global_version) {
@@ -1114,7 +1113,6 @@ int ObAlterTableExecutor::calc_range_part_high_bound(
     LOG_WARN("Failed to wrap expr ctx", K(ret));
   } else {
     expr_ctx.cast_mode_ = CM_WARN_ON_FAIL; //always set to WARN_ON_FAIL to allow calculate
-    EXPR_SET_CAST_CTX_MODE(expr_ctx);
     const common::ObRowkey &row_key = part.get_high_bound_val();
     int64_t obj_cnt = row_key.get_obj_cnt();
     for (int64_t i = 0; OB_SUCC(ret) && i < obj_cnt; ++i) {
@@ -1252,7 +1250,6 @@ int ObAlterTableExecutor::calc_list_part_rows(
   } else {
     new_part.reset_list_row_values();
     expr_ctx.cast_mode_ = CM_WARN_ON_FAIL; //always set to WARN_ON_FAIL to allow calculate
-    EXPR_SET_CAST_CTX_MODE(expr_ctx);
     const common::ObIArray<common::ObNewRow>& row_list = orig_part.get_list_row_values();
     for (int64_t i = 0; OB_SUCC(ret) && i < row_list.count(); i ++) {
       const common::ObNewRow &row = row_list.at(i);

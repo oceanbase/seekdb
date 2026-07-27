@@ -23,15 +23,6 @@
 
 namespace oceanbase
 {
-namespace share
-{
-namespace detector
-{
-class ObDetectorUserReportInfo;
-class ObDependencyResource;
-}
-}
-
 namespace transaction
 {
 namespace tablelock

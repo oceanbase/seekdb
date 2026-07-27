@@ -38,9 +38,7 @@ class TestIndexBlockAggregator : public ::testing::Test
 {
 public:
   TestIndexBlockAggregator()
-  {
-    data_version_ = cal_version(1, 0, 0, 0);
-  }
+  {}
   virtual ~TestIndexBlockAggregator() {}
   virtual void SetUp() {}
   virtual void TearDown() {}
@@ -92,7 +90,6 @@ public:
   ObAggRowWriter agg_row_writer_;
   ObMicroBlockEncodingCtx ctx_;
   ObIMicroBlockWriter *micro_writer_;
-  int64_t data_version_;
 };
 
 void TestIndexBlockAggregator::init_schema(const int64_t col_count, const int64_t rowkey_count, const ObObjType *col_obj_types)
@@ -141,7 +138,6 @@ void TestIndexBlockAggregator::init_data_encoder(ObIMicroBlockWriter *&micro_wri
   ctx_.rowkey_column_cnt_ = rowkey_count_;
   ctx_.column_cnt_ = full_column_count_;
   ctx_.col_descs_ = &col_descs_;
-  ctx_.data_format_version_ = cal_version(1, 0, 0, 0);
   ctx_.row_store_type_ = ObRowStoreType::ENCODING_ROW_STORE;
   ctx_.compressor_type_ = common::ObCompressorType::NONE_COMPRESSOR;
   ctx_.need_calc_column_chksum_ = true;
@@ -471,7 +467,7 @@ void TestIndexBlockAggregator::serialize_agg_row(
   char *buf = nullptr;
   int64_t size = 0;
   int64_t pos = 0;
-  ASSERT_EQ(OB_SUCCESS, agg_row_writer_.init(full_agg_metas_, agg_data, data_version_, allocator_));
+  ASSERT_EQ(OB_SUCCESS, agg_row_writer_.init(full_agg_metas_, agg_data, allocator_));
   size = agg_row_writer_.get_serialize_data_size();
   buf = static_cast<char *>(allocator_.alloc(size));
   ASSERT_TRUE(nullptr != buf);
@@ -524,8 +520,8 @@ TEST_F(TestIndexBlockAggregator, basic_aggregate)
     reset_min_max_row();
     data_agg_result.reuse();
     index_agg_result.reuse();
-    ASSERT_EQ(OB_SUCCESS, data_aggregator.init(is_major, full_agg_metas_, col_descs_, data_version_, allocator_));
-    ASSERT_EQ(OB_SUCCESS, index_aggregator.init(is_major, full_agg_metas_, col_descs_, data_version_, allocator_));
+    ASSERT_EQ(OB_SUCCESS, data_aggregator.init(is_major, full_agg_metas_, col_descs_, allocator_));
+    ASSERT_EQ(OB_SUCCESS, index_aggregator.init(is_major, full_agg_metas_, col_descs_, allocator_));
 
     const ObSkipIndexAggResult *data_agg_row = nullptr;
     const ObSkipIndexAggResult *index_agg_row = nullptr;
@@ -562,8 +558,8 @@ TEST_F(TestIndexBlockAggregator, basic_aggregate)
   reset_min_max_row();
   data_agg_result.reuse();
   index_agg_result.reuse();
-  ASSERT_EQ(OB_SUCCESS, data_aggregator.init(is_major, full_agg_metas_, col_descs_, data_version_, allocator_));
-  ASSERT_EQ(OB_SUCCESS, index_aggregator.init(is_major, full_agg_metas_, col_descs_, data_version_, allocator_));
+  ASSERT_EQ(OB_SUCCESS, data_aggregator.init(is_major, full_agg_metas_, col_descs_, allocator_));
+  ASSERT_EQ(OB_SUCCESS, index_aggregator.init(is_major, full_agg_metas_, col_descs_, allocator_));
   const ObSkipIndexAggResult *data_agg_row = nullptr;
   const ObSkipIndexAggResult *index_agg_row = nullptr;
   ObDatumRow generate_row;
@@ -679,9 +675,9 @@ TEST_F(TestIndexBlockAggregator, test_sum)
   ObArenaAllocator allocator;
   for (int64_t test_round = 0; test_round < 7; ++test_round) {
     allocator.reuse();
-    ASSERT_EQ(OB_SUCCESS, data_aggregator.init(is_major, full_agg_metas_, col_descs_, data_version_, allocator_));
-    ASSERT_EQ(OB_SUCCESS, reuse_data_aggregator.init(is_major, full_agg_metas_, col_descs_, data_version_, allocator_));
-    ASSERT_EQ(OB_SUCCESS, index_aggregator.init(is_major, full_agg_metas_, col_descs_, data_version_, allocator_));
+    ASSERT_EQ(OB_SUCCESS, data_aggregator.init(is_major, full_agg_metas_, col_descs_, allocator_));
+    ASSERT_EQ(OB_SUCCESS, reuse_data_aggregator.init(is_major, full_agg_metas_, col_descs_, allocator_));
+    ASSERT_EQ(OB_SUCCESS, index_aggregator.init(is_major, full_agg_metas_, col_descs_, allocator_));
 
     const ObSkipIndexAggResult *data_agg_row = nullptr;
     const ObSkipIndexAggResult *reuse_data_agg_row = nullptr;
@@ -728,8 +724,8 @@ TEST_F(TestIndexBlockAggregator, test_sum)
   for (int64_t col_id = 0; col_id < test_column_cnt + ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt(); ++col_id) {
     sum_res[col_id].set_null();
   }
-  ASSERT_EQ(OB_SUCCESS, data_aggregator.init(is_major, full_agg_metas_, col_descs_, data_version_, allocator_));
-  ASSERT_EQ(OB_SUCCESS, index_aggregator.init(is_major, full_agg_metas_, col_descs_, data_version_, allocator_));
+  ASSERT_EQ(OB_SUCCESS, data_aggregator.init(is_major, full_agg_metas_, col_descs_, allocator_));
+  ASSERT_EQ(OB_SUCCESS, index_aggregator.init(is_major, full_agg_metas_, col_descs_, allocator_));
   const ObSkipIndexAggResult *data_agg_row = nullptr;
   const ObSkipIndexAggResult *index_agg_row = nullptr;
   ObDatumRow generate_row;
@@ -774,7 +770,7 @@ TEST_F(TestIndexBlockAggregator, min_max_agg_from_encoder)
   char *block_buf = nullptr;
   int64_t block_size = 0;
   const bool is_major = true;
-  ASSERT_EQ(OB_SUCCESS, aggregator.init(is_major, full_agg_metas_, col_descs_, data_version_, allocator_));
+  ASSERT_EQ(OB_SUCCESS, aggregator.init(is_major, full_agg_metas_, col_descs_, allocator_));
 
   const ObSkipIndexAggResult *agg_row = nullptr;
   ObDatumRow generate_row;
@@ -825,7 +821,7 @@ TEST_F(TestIndexBlockAggregator, sum_agg_from_encoder)
   char *block_buf = nullptr;
   int64_t block_size = 0;
   const bool is_major = true;
-  ASSERT_EQ(OB_SUCCESS, aggregator.init(is_major, full_agg_metas_, col_descs_, data_version_, allocator_));
+  ASSERT_EQ(OB_SUCCESS, aggregator.init(is_major, full_agg_metas_, col_descs_, allocator_));
 
   const ObSkipIndexAggResult *agg_row = nullptr;
   ObDatumRow generate_row;
@@ -857,12 +853,12 @@ TEST_F(TestIndexBlockAggregator, min_max_agg_calc_with_prefix)
   ObStorageDatum min_varchar_agg_res;
   ObSkipIndexDatumAttr min_varchar_res_attr;
   const bool is_major = true;
-  ASSERT_EQ(OB_SUCCESS, min_varchar_aggregator.init(is_major, varchar_desc, DATA_CURRENT_VERSION, min_varchar_agg_res, min_varchar_res_attr));
+  ASSERT_EQ(OB_SUCCESS, min_varchar_aggregator.init(is_major, varchar_desc, min_varchar_agg_res, min_varchar_res_attr));
 
   ObColMaxAggregator max_varchar_aggregator;
   ObStorageDatum max_varchar_agg_res;
   ObSkipIndexDatumAttr max_varchar_res_attr;
-  ASSERT_EQ(OB_SUCCESS, max_varchar_aggregator.init(is_major, varchar_desc, DATA_CURRENT_VERSION, max_varchar_agg_res, max_varchar_res_attr));
+  ASSERT_EQ(OB_SUCCESS, max_varchar_aggregator.init(is_major, varchar_desc, max_varchar_agg_res, max_varchar_res_attr));
 
   // TODO: add text for other types
   ObColDesc medium_text_desc;
@@ -873,12 +869,12 @@ TEST_F(TestIndexBlockAggregator, min_max_agg_calc_with_prefix)
   ObColMinAggregator min_text_aggregator;
   ObStorageDatum min_text_agg_res;
   ObSkipIndexDatumAttr min_text_res_attr;
-  ASSERT_EQ(OB_SUCCESS, min_text_aggregator.init(is_major, medium_text_desc, DATA_CURRENT_VERSION, min_text_agg_res, min_text_res_attr));
+  ASSERT_EQ(OB_SUCCESS, min_text_aggregator.init(is_major, medium_text_desc, min_text_agg_res, min_text_res_attr));
 
   ObColMaxAggregator max_text_aggregator;
   ObStorageDatum max_text_agg_res;
   ObSkipIndexDatumAttr max_text_res_attr;
-  ASSERT_EQ(OB_SUCCESS, max_text_aggregator.init(is_major, medium_text_desc, DATA_CURRENT_VERSION, max_text_agg_res, max_text_res_attr));
+  ASSERT_EQ(OB_SUCCESS, max_text_aggregator.init(is_major, medium_text_desc, max_text_agg_res, max_text_res_attr));
 
   {
     // same datum
@@ -1087,8 +1083,8 @@ TEST_F(TestIndexBlockAggregator, test_loose_min_max_pre_agg)
   ASSERT_EQ(OB_SUCCESS, index_agg_result.init(full_agg_metas_.count(), allocator_));
 
   const bool is_major = false;
-  ASSERT_EQ(OB_SUCCESS, data_aggregator.init(is_major, full_agg_metas_, col_descs_, data_version_, allocator_));
-  ASSERT_EQ(OB_SUCCESS, index_aggregator.init(is_major, full_agg_metas_, col_descs_, data_version_, allocator_));
+  ASSERT_EQ(OB_SUCCESS, data_aggregator.init(is_major, full_agg_metas_, col_descs_, allocator_));
+  ASSERT_EQ(OB_SUCCESS, index_aggregator.init(is_major, full_agg_metas_, col_descs_, allocator_));
   const ObSkipIndexAggResult *data_agg_row = nullptr;
   const ObSkipIndexAggResult *index_agg_row = nullptr;
   ObDatumRow generate_row;
@@ -1169,8 +1165,8 @@ TEST_F(TestIndexBlockAggregator, test_inv_idx_agg)
   ASSERT_EQ(OB_SUCCESS, data_agg_result.init(full_agg_metas_.count(), allocator_));
   ASSERT_EQ(OB_SUCCESS, index_agg_result.init(full_agg_metas_.count(), allocator_));
 
-  ASSERT_EQ(OB_SUCCESS, data_aggregator.init(is_major, full_agg_metas_, col_descs_, data_version_, allocator_));
-  ASSERT_EQ(OB_SUCCESS, index_aggregator.init(is_major, full_agg_metas_, col_descs_, data_version_, allocator_));
+  ASSERT_EQ(OB_SUCCESS, data_aggregator.init(is_major, full_agg_metas_, col_descs_, allocator_));
+  ASSERT_EQ(OB_SUCCESS, index_aggregator.init(is_major, full_agg_metas_, col_descs_, allocator_));
 
   ObIMicroBlockWriter *encoder = nullptr;
   init_data_encoder(encoder);

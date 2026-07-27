@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX RS_COMPACTION
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_checksum_validator.h"
 #include "rootserver/freeze/ob_major_merge_progress_checker.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
@@ -106,8 +105,8 @@ int ObChecksumValidator::deal_with_special_table_at_last(bool &finish_validate)
         KPC(simple_schema_), K_(cur_tablet_ids));
     }
   } else if (FALSE_IT(table_compaction_info_.set_index_ckm_verified())) {
-  } else if (OB_FAIL(validate_cross_cluster_checksum())) {
-    LOG_WARN("failed to validate cross cluster checksum", K(ret));
+  } else if (OB_FAIL(validate_standby_checksum())) {
+    LOG_WARN("failed to validate physical standby checksum", K(ret));
   } else {
     finish_validate = true;
     LOG_INFO("success to deal with special table", KR(ret), K_(table_id), K_(table_compaction_info));
@@ -125,13 +124,13 @@ int ObChecksumValidator::set_need_validate()
     if (OB_FAIL(check_tablet_checksum_sync_finish(true /*force_check*/))) {
       LOG_WARN("failed to check tablet checksum sync finish", K(ret), K_(is_primary_service));
     } else {
-      // for primary service, if cross cluster ckm sync finish, need to validate cur round checksum & inner_table
+      // Once the standby checksum is synchronized, validate this merge round.
       // else: write ckm into inner table
-      need_validate_cross_cluster_ckm_ = cross_cluster_ckm_sync_finish_;
+      need_validate_standby_ckm_ = standby_ckm_sync_finish_;
     }
   } else { // standby database
     need_validate_index_ckm_ = false;
-    need_validate_cross_cluster_ckm_ = true;
+    need_validate_standby_ckm_ = true;
   }
   return ret;
 }
@@ -174,7 +173,7 @@ int ObChecksumValidator::check_inner_status()
 
 void ObChecksumValidator::clear_cached_info()
 {
-  cross_cluster_ckm_sync_finish_ = false;
+  standby_ckm_sync_finish_ = false;
   freeze_info_.reset();
   major_merge_start_us_ = 0;
   schema_guard_ = nullptr;
@@ -269,8 +268,8 @@ int ObChecksumValidator::validate_checksum(
         KPC(simple_schema_), K_(cur_tablet_ids));
     } else if (OB_FAIL(validate_index_checksum())) {
       LOG_WARN("failed to validate index checksum", K(ret));
-    } else if (OB_FAIL(validate_cross_cluster_checksum())) {
-      LOG_WARN("failed to validate cross cluster checksum", K(ret));
+    } else if (OB_FAIL(validate_standby_checksum())) {
+      LOG_WARN("failed to validate physical standby checksum", K(ret));
     }
     if (OB_FAIL(ret)) {
     } else if (table_compaction_info_.unfinish_index_cnt_ <= 0
@@ -399,8 +398,8 @@ int ObChecksumValidator::get_local_tablet_checksum_and_validate(const bool inclu
 
 
 ///////////////////////////////////////////////////////////////////////////////
-/* Cross Cluster Checksum Validator Section */
-int ObChecksumValidator::validate_cross_cluster_checksum()
+/* Physical Standby Checksum Validator Section */
+int ObChecksumValidator::validate_standby_checksum()
 {
   int ret = OB_SUCCESS;
 
@@ -408,13 +407,12 @@ int ObChecksumValidator::validate_cross_cluster_checksum()
     ret = OB_CANCELED;
     LOG_WARN("already stop", KR(ret));
   } else if (table_compaction_info_.is_index_ckm_verified()) {
-    // not sync/valid cross cluster before validate index checksum
-    if (need_validate_cross_cluster_ckm_) { // need to validate cross-cluster checksum
-      if (cross_cluster_ckm_sync_finish_ && OB_FAIL(validate_local_and_tablet_checksum())) {
-        LOG_ERROR("fail to validate cross-cluster checksum", KR(ret), K_(stop),
+    if (need_validate_standby_ckm_) {
+      if (standby_ckm_sync_finish_ && OB_FAIL(validate_local_and_tablet_checksum())) {
+        LOG_ERROR("fail to validate physical standby checksum", KR(ret), K_(stop),
                  "compaction_scn", get_compaction_scn(), K_(table_id));
       }
-    } else { // no need to validate cross-cluster checksum, write checksum to inner_table
+    } else { // The primary writes the checksum for its standby consumer.
       if (OB_FAIL(try_update_tablet_checksum_items())) {
         LOG_WARN("fail to wrote checksum", KR(ret), "compaction_scn", get_compaction_scn(), KPC_(simple_schema));
       }
@@ -425,10 +423,10 @@ int ObChecksumValidator::validate_cross_cluster_checksum()
         LOG_WARN("failed to push back tablet ids", KR(ret));
       } else {
         table_compaction_info_.set_verified();
-        LOG_TRACE("after cross cluster validate table checksum", K(ret), K_(table_compaction_info));
+        LOG_TRACE("after physical standby table checksum validation", K(ret), K_(table_compaction_info));
       }
     }
-  } else {  // no need to validate cross-cluster checksum
+  } else {
     // do nothing. index validator should already wrote ckm and updated report_scn
   }
   return ret;
@@ -491,17 +489,17 @@ int ObChecksumValidator::check_tablet_checksum_sync_finish(const bool force_chec
   // need check inner table:
   // 1) force check when first init
   // 2) ckm not sync finish in standby service
-  if (!force_check && (is_primary_service_ || cross_cluster_ckm_sync_finish_)) {
+  if (!force_check && (is_primary_service_ || standby_ckm_sync_finish_)) {
   } else if (OB_FAIL(ObTabletChecksumOperator::is_first_tablet_checksum_exist(*sql_proxy_, get_compaction_scn(), is_exist))) {
     LOG_WARN("fail to check first tablet checksum", KR(ret), "compaction_scn", get_compaction_scn());
   } else if (is_exist) {
-    cross_cluster_ckm_sync_finish_ = true;
+    standby_ckm_sync_finish_ = true;
   } else if (is_primary_service_) {
-    cross_cluster_ckm_sync_finish_ = false;
+    standby_ckm_sync_finish_ = false;
   } else {
-    cross_cluster_ckm_sync_finish_ = check_waiting_tablet_checksum_timeout();
-    if (TC_REACH_TIME_INTERVAL(PRINT_CROSS_CLUSTER_LOG_INVERVAL)) {
-      LOG_ERROR("can not check cross-cluster checksum until the first tablet checksum exists",
+    standby_ckm_sync_finish_ = check_waiting_tablet_checksum_timeout();
+    if (TC_REACH_TIME_INTERVAL(PRINT_STANDBY_CHECKSUM_LOG_INTERVAL)) {
+      LOG_ERROR("can not check physical standby checksum until the first tablet checksum exists",
              "compaction_scn", get_compaction_scn(), K_(major_merge_start_us),
              "fast_current_time_us", ObTimeUtil::fast_current_time(), K(is_exist), K_(is_primary_service));
     }

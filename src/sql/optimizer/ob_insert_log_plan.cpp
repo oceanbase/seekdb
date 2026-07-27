@@ -528,24 +528,6 @@ int ObInsertLogPlan::build_lock_row_flag_expr(ObConstRawExpr *&lock_row_flag_exp
   return ret;
 }
 
-int ObInsertLogPlan::get_osg_type(bool is_multi_part_dml,
-                                  int64_t distributed_method,
-                                  OSG_TYPE &type)
-{
-  int ret = OB_SUCCESS;
-  type = OSG_TYPE::NORMAL_OSG;
-  if (DIST_PARTITION_WISE == distributed_method ||
-      DIST_PULL_TO_LOCAL == distributed_method) {
-    //need merge stats
-    type = OSG_TYPE::GATHER_OSG;
-  } else if (DIST_BASIC_METHOD == distributed_method) {
-    if (is_multi_part_dml) {
-      type = OSG_TYPE::NORMAL_OSG;
-    }
-  }
-  return ret;
-}
-
 int ObInsertLogPlan::create_insert_plans(ObIArray<CandidatePlan> &candi_plans,
                                          ObTablePartitionInfo *insert_table_part,
                                          ObShardingInfo *insert_table_sharding,
@@ -583,10 +565,10 @@ int ObInsertLogPlan::create_insert_plans(ObIArray<CandidatePlan> &candi_plans,
     } else if (0 == distributed_methods) {
       /*do nothing*/
     } else if (osg_info != NULL &&
-               OB_FAIL(get_osg_type(is_multi_part_dml,
-                                    distributed_methods,
-                                    osg_type))) {
-      LOG_WARN("failed to get osg type", K(ret));
+               FALSE_IT(osg_type = (DIST_PARTITION_WISE == distributed_methods ||
+                                    DIST_PULL_TO_LOCAL == distributed_methods)
+                                   ? OSG_TYPE::GATHER_OSG
+                                   : OSG_TYPE::NORMAL_OSG)) {
     } else if (osg_info != NULL &&
                OB_FAIL(allocate_optimizer_stats_gathering_as_top(candi_plan.plan_tree_,
                                                                  *osg_info,
@@ -608,7 +590,7 @@ int ObInsertLogPlan::create_insert_plans(ObIArray<CandidatePlan> &candi_plans,
       } else if (OB_FAIL(ObOptimizerUtil::compute_basic_sharding_info(
                                                 get_optimizer_context().get_local_server_addr(),
                                                 input_shardings,
-                                                get_optimizer_context().get_allocator(),
+                                                get_allocator(),
                                                 insert_op_sharding,
                                                 inherit_sharding_index))) {
         LOG_WARN("failed to compute basic sharding info", K(ret));

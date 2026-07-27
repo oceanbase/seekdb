@@ -52,6 +52,7 @@ namespace rootserver
 {
 struct ObSysStat;
 class ObTableCreator;
+class ObSystemBootstrapService;
 
 class ObBaseBootstrap
 {
@@ -78,7 +79,7 @@ public:
   virtual int prepare_bootstrap(common::ObAddr &master_rs);
 
 private:
-  // wait leader elect time + root service start time
+  // wait leader elect time + local DDL service start time
   static const int64_t WAIT_ELECT_SYS_LEADER_TIMEOUT_US = 30 * 1000 * 1000;
   static const int64_t NOTIFY_RESOURCE_RPC_TIMEOUT = 9 * 1000 * 1000; // 9 second
 
@@ -144,7 +145,6 @@ private:
   virtual int check_is_already_bootstrap(bool &is_bootstrap);
   virtual int init_global_stat();
   virtual int init_system_data();
-
   int create_system_runtime();
   int set_in_bootstrap();
   int add_sys_table_lob_aux_table(

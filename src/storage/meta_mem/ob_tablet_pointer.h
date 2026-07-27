@@ -166,7 +166,7 @@ private:
   bool need_push_to_flying_() const;
   bool need_remove_from_flying_() const;
 private:
-  ObMetaDiskAddr phy_addr_; // 48B
+  ObMetaDiskAddr phy_addr_; // 40B
   ObMetaObj<ObTablet> obj_; // 40B
   ObLS *ls_; // 8B
   ObDDLKvMgrHandle ddl_kv_mgr_handle_; // 48B

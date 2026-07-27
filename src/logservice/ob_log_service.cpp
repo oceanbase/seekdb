@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX CLOG
 #include "ob_log_service.h"
+#include "palf_handle_guard.h"
 #include "share/rc/ob_module_provider.h"
 #include "ob_server_log_block_mgr.h"
 #include "logservice/palf_handle_guard.h"
@@ -23,12 +24,11 @@
 #include "share/rc/ob_server_module_init_ctx.h"
 #include "observer/ob_srv_network_frame.h"
 #include "storage/ob_file_system_router.h"
-#include "logservice/ob_net_keepalive_adapter.h"            // ObNetKeepAliveAdapter
 #include "share/ob_io_device_helper.h"
 #include "lib/ob_running_mode.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "share/ob_share_util.h"  // relocated-definition owner
+#include "share/ob_share_util.h"
 
 namespace oceanbase
 {
@@ -46,7 +46,6 @@ ObLogService::ObLogService() :
   is_running_(false),
   self_(),
   palf_env_(NULL),
-  net_keepalive_adapter_(NULL),
   alloc_mgr_(NULL),
   apply_service_(),
   replay_service_(),
@@ -65,7 +64,6 @@ int ObLogService::server_module_init(ObLogService* &logservice)
   int ret = OB_SUCCESS;
   const ObAddr &self = GCTX.self_addr();
   
-  observer::ObSrvNetworkFrame *net_frame = GCTX.net_frame_;
   const share::ObServerModuleInitCtx *module_init_ctx =
       share::server_runtime()->get_module_init_ctx();
   const palf::PalfOptions &palf_options = module_init_ctx->palf_options_;
@@ -73,27 +71,20 @@ int ObLogService::server_module_init(ObLogService* &logservice)
   const char *clog_dir = OB_FILE_SYSTEM_ROUTER.get_clog_dir();
   ObServerLogBlockMgr *log_block_mgr = GCTX.log_block_mgr_;
   common::ObILogAllocator *alloc_mgr = NULL;
-  ObNetKeepAliveAdapter *net_keepalive_adapter = NULL;
   if (OB_FAIL(LOG_ALLOCATOR_MGR_INSTANCE.get_log_allocator(alloc_mgr))) {
     CLOG_LOG(WARN, "get_log_allocator failed", K(ret));
-  } else if (OB_ISNULL(net_keepalive_adapter = SERVER_NEW(ObNetKeepAliveAdapter, "logservice"))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    CLOG_LOG(WARN, "alloc memory failed", KR(ret), KP(net_keepalive_adapter));
   } else if (OB_FAIL(logservice->init(palf_options,
                                       runtime_clog_dir,
                                       self,
                                       alloc_mgr,
                                       share::g_mp->ls_service(),
                                       log_block_mgr,
-                                      net_keepalive_adapter))) {
+                                      GCTX.sql_proxy_))) {
     CLOG_LOG(ERROR, "init ObLogService failed", K(ret), K(runtime_clog_dir));
   } else if (OB_FAIL(FileDirectoryUtils::fsync_dir(clog_dir))) {
     CLOG_LOG(ERROR, "fsync_dir failed", K(ret), K(clog_dir));
   } else {
     CLOG_LOG(INFO, "ObLogService server_module_init success");
-  }
-  if (OB_FAIL(ret) && NULL != net_keepalive_adapter) {
-    SERVER_DELETE(ObNetKeepAliveAdapter, "logservice", net_keepalive_adapter);
   }
   return ret;
 }
@@ -102,10 +93,6 @@ void ObLogService::server_module_destroy(ObLogService* &logservice)
 {
   common::ob_delete(logservice);
   logservice = nullptr;
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(LOG_ALLOCATOR_MGR_INSTANCE.delete_log_allocator())) {
-    CLOG_LOG(WARN, "delete_log_allocator failed", K(ret));
-  }
 }
 
 int ObLogService::start()
@@ -150,10 +137,6 @@ void ObLogService::destroy()
     PalfEnv::destroy_palf_env(palf_env_);
     palf_env_ = NULL;
   }
-  if (NULL != net_keepalive_adapter_) {
-    SERVER_DELETE(IObNetKeepAliveAdapter, "logservice", net_keepalive_adapter_);
-    net_keepalive_adapter_ = NULL;
-  }
   alloc_mgr_ = NULL;
   FLOG_INFO("ObLogService is destroyed");
 }
@@ -164,10 +147,8 @@ int check_and_prepare_dir(const char *dir)
   int ret = OB_SUCCESS;
   if (OB_FAIL(common::FileDirectoryUtils::is_exists(dir, is_exist))) {
     CLOG_LOG(WARN, "chcck dir exist failed", K(ret), K(dir));
-    // means it's restart
   } else if (is_exist == true) {
     CLOG_LOG(INFO, "director exist", K(ret), K(dir));
-    // means it is a first-time runtime directory creation
   } else if (OB_FAIL(common::FileDirectoryUtils::create_directory(dir))) {
     CLOG_LOG(WARN, "create_directory failed", K(ret), K(dir));
   } else {
@@ -182,7 +163,7 @@ int ObLogService::init(const PalfOptions &options,
                        common::ObILogAllocator *alloc_mgr,
                        ObLSService *ls_service,
                        palf::ILogBlockPool *log_block_pool,
-                       IObNetKeepAliveAdapter *net_keepalive_adapter)
+                       common::ObMySQLProxy *sql_proxy)
 {
   int ret = OB_SUCCESS;
 
@@ -194,10 +175,11 @@ int ObLogService::init(const PalfOptions &options,
     CLOG_LOG(WARN, "ObLogService init twice", K(ret));
   } else if (false == options.is_valid() || OB_ISNULL(base_dir) || OB_UNLIKELY(!self.is_valid())
       || OB_ISNULL(alloc_mgr) || OB_ISNULL(ls_service)
-      || OB_ISNULL(log_block_pool) || OB_ISNULL(net_keepalive_adapter)) {
+      || OB_ISNULL(log_block_pool)
+      || OB_ISNULL(sql_proxy)) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid arguments", K(ret), K(options), KP(base_dir), K(self),
-             KP(alloc_mgr), KP(ls_service), KP(log_block_pool), KP(net_keepalive_adapter));
+             KP(alloc_mgr), KP(ls_service), KP(log_block_pool), KP(sql_proxy));
   } else if (OB_FAIL(PalfEnv::create_palf_env(options, base_dir, self,
                                               alloc_mgr, log_block_pool, &monitor_, &LOCAL_DEVICE_INSTANCE,
                                               &OB_IO_MANAGER, palf_env_))) {
@@ -212,12 +194,10 @@ int ObLogService::init(const PalfOptions &options,
   } else if (OB_FAIL(replay_service_.init(palf_env_, &ls_adapter_, alloc_mgr))) {
     CLOG_LOG(WARN, "failed to init replay_service", K(ret));
   } else {
-    net_keepalive_adapter_ = net_keepalive_adapter;
     alloc_mgr_ = alloc_mgr;
     self_ = self;
     is_inited_ = true;
-    FLOG_INFO("ObLogService init success", K(ret), K(base_dir), K(self),
-        KP(ls_service), K(enable_shared_storage_));
+    FLOG_INFO("ObLogService init success", K(ret), K(base_dir), K(self), KP(ls_service));
   }
 
   if (OB_FAIL(ret) && OB_INIT_TWICE != ret) {
@@ -624,7 +604,7 @@ int ObLogService::get_unrecyclable_log_disk_size(int64_t &unrecyclable_log_disk_
 }//end of namespace oceanbase
 
 // ===== definition moved from share/ob_share_util.cpp =====
-// removes share→logservice inverted include; declaration remains in share/ob_share_util.h, resolved at link time(transitional state, final state should split the class)
+
 namespace oceanbase
 {
 namespace share

@@ -130,7 +130,6 @@ int ObDMLRunningCtx::prepare_relative_table(
     const SCN &read_snapshot)
 {
   int ret = OB_SUCCESS;
-  bool need_get_src_split_tables = false;
   if (OB_FAIL(relative_table_.init(&schema, tablet_handle.get_obj()->get_tablet_meta().tablet_id_,
       schema.is_storage_index_table() && !schema.can_read_index()))) {
     LOG_WARN("fail to init relative_table_", K(ret), K(tablet_handle), K(schema.get_index_status()));

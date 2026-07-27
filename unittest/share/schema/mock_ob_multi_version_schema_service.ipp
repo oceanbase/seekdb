@@ -70,7 +70,6 @@ inline int MockObMultiVersionSchemaService::add_table_schema(ObTableSchema &tabl
 {
   int ret = common::OB_SUCCESS;
   schema::ObSchemaGetterGuard schema_guard;
-  const ObServerRuntimeSchema *runtime_schema = NULL;
   const ObSysVariableSchema *sys_variable = NULL;
   if (OB_FAIL(get_schema_guard(schema_guard, INT64_MAX))) {
     _OB_LOG(WARN, "get schema guard fail, ret %d", ret);
@@ -120,7 +119,6 @@ inline int MockObMultiVersionSchemaService::add_database_schema(ObDatabaseSchema
 {
   int ret = common::OB_SUCCESS;
   schema::ObSchemaGetterGuard schema_guard;
-  const ObServerRuntimeSchema *runtime_schema = NULL;
   const ObSysVariableSchema *sys_variable = NULL;
   if (OB_FAIL(get_schema_guard(schema_guard, INT64_MAX))) {
     _OB_LOG(WARN, "get schema guard fail, ret %d", ret);

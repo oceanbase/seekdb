@@ -38,7 +38,11 @@ int ObPxDistTransmitOp::inner_open()
     LOG_WARN("PX transmit open failed", K(ret));
   } else if (!MY_SPEC.sampling_saving_row_.empty()) {
     if (MY_SPEC.is_vectorized()) {
-      OZ(brs_holder_.init(MY_SPEC.sampling_saving_row_, eval_ctx_));
+      if (!get_spec().use_rich_format_) {
+        OZ(brs_holder_.init(MY_SPEC.sampling_saving_row_, eval_ctx_));
+      } else {
+        OZ(vec_holder_.init(MY_SPEC.sampling_saving_row_, eval_ctx_));
+      }
     } else {
       OZ(last_row_.init(ctx_.get_allocator(), MY_SPEC.sampling_saving_row_.count()));
     }
@@ -77,7 +81,7 @@ int ObPxDistTransmitOp::inner_get_next_row()
 
 int ObPxDistTransmitOp::inner_get_next_batch(const int64_t max_row_cnt)
 {
-  return next_batch(max_row_cnt);
+  return get_spec().use_rich_format_ ? next_vector(max_row_cnt) : next_batch(max_row_cnt);
 }
 
 int ObPxDistTransmitOp::next_batch(const int64_t max_row_cnt)
@@ -131,6 +135,60 @@ int ObPxDistTransmitOp::next_batch(const int64_t max_row_cnt)
   return ret;
 }
 
+int ObPxDistTransmitOp::next_vector(const int64_t max_row_cnt)
+{
+  int ret = OB_SUCCESS;
+  if (sample_done_ && NULL != cur_transmit_sampled_rows_) {
+    clear_evaluated_flag();
+    int64_t size = std::min(std::min(max_row_cnt, MY_SPEC.max_batch_size_),
+                            cur_transmit_sampled_rows_->second - cur_transmit_sampled_rows_->first);
+    for (int64_t i = 0;
+         i < MY_SPEC.sampling_saving_row_.count() && OB_SUCC(ret); i++) {
+      if (OB_FAIL(MY_SPEC.sampling_saving_row_.at(i)->init_vector(
+              eval_ctx_,
+              MY_SPEC.sampling_saving_row_.at(i)->is_batch_result()
+                  ? VEC_UNIFORM
+                  : VEC_UNIFORM_CONST,
+              size))) {
+        LOG_WARN("init vector failed", K(ret));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      brs_.size_ = size;
+      brs_.end_ = false;
+      brs_.skip_->reset(brs_.size_);
+      ObEvalCtx::BatchInfoScopeGuard g(eval_ctx_);
+      g.set_batch_size(brs_.size_);
+      sampled_input_rows_it_age_.inc();
+      for (int64_t i = 0; OB_SUCC(ret) && i < brs_.size_; i++) {
+        g.set_batch_idx(i);
+        const ObRADatumStore::StoredRow *sr = NULL;
+        OZ(sampled_input_rows_.get_row(cur_transmit_sampled_rows_->first + i, sr));
+        OZ(sr->to_expr(MY_SPEC.sampling_saving_row_, eval_ctx_));
+        if (OB_SUCC(ret)) {
+          LOG_DEBUG("fetch row for transmit", "row", ROWEXPR2STR(eval_ctx_, MY_SPEC.sampling_saving_row_));
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      cur_transmit_sampled_rows_->first += brs_.size_;
+      if (cur_transmit_sampled_rows_->first >= cur_transmit_sampled_rows_->second) {
+        if (cur_transmit_sampled_rows_
+            == &sampled_rows2transmit_.at(sampled_rows2transmit_.count() - 1)) {
+          cur_transmit_sampled_rows_ = NULL;
+        } else {
+          cur_transmit_sampled_rows_ += 1;
+        }
+      }
+    }
+  } else {
+    OZ(vec_holder_.restore());
+    vec_holder_.reset();
+    OZ(ObPxTransmitOp::inner_get_next_batch(max_row_cnt));
+  }
+  return ret;
+}
+
 int ObPxDistTransmitOp::do_transmit()
 {
   int ret = OB_SUCCESS;
@@ -143,10 +201,8 @@ int ObPxDistTransmitOp::do_transmit()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid PX distribution method",  K(ret), K(MY_SPEC.dist_method_));
   } else if (ObPQDistributeMethod::BROADCAST == MY_SPEC.dist_method_) {
-    use_bcast_opt_ = true;
     if (OB_FAIL(chs_agent_.init(
         dfc_,
-        task_ch_set_,
         task_channels_,
         phy_plan_ctx->get_timeout_timestamp()))) {
       LOG_WARN("failed to init chs agent", K(ret));
@@ -308,12 +364,12 @@ int ObPxDistTransmitOp::do_broadcast_dist()
   ObBroadcastSliceIdCalc slice_id_calc(ctx_.get_allocator(),
                                        task_channels_.count(),
                                        MY_SPEC.null_row_dist_method_);
-  if (!use_bcast_opt_) {
-    if (OB_FAIL(send_rows<ObSliceIdxCalc::BROADCAST>(slice_id_calc))) {
+  if (get_spec().use_rich_format_) {
+    if (OB_FAIL(broadcast_rows<true>(slice_id_calc))) {
       LOG_WARN("row distribution failed", K(ret));
     }
   } else {
-    if (OB_FAIL(broadcast_rows(slice_id_calc))) {
+    if (OB_FAIL(broadcast_rows<false>(slice_id_calc))) {
       LOG_WARN("row distribution failed", K(ret));
     }
   }
@@ -556,7 +612,11 @@ int ObPxDistTransmitOp::build_row_sample_piece_msg(int64_t expected_range_count,
           ObCtxIds::WORK_AREA, "PxSampleRow"));
   sampled_input_rows_.set_io_observer(&io_event_observer_);
   if (is_vectorized()) {
-    OZ(add_batch_row_for_piece_msg(*sample_store));
+    if (get_spec().use_rich_format_) {
+      OZ(add_batch_row_for_piece_msg_vec(*sample_store));
+    } else {
+      OZ(add_batch_row_for_piece_msg(*sample_store));
+    }
   } else {
     OZ(add_row_for_piece_msg(*sample_store));
   }
@@ -754,6 +814,108 @@ int ObPxDistTransmitOp::add_batch_row_for_piece_msg(ObChunkDatumStore &sample_st
     if (OB_FAIL(ret)) {
     } else if (!brs_.end_) {
       OZ(brs_holder_.save(std::min((int64_t)DYNAMIC_SAMPLE_ROW_COUNT, MY_SPEC.max_batch_size_)));
+    } else {
+      brs_.end_ = false;
+    }
+    OZ(setup_sampled_rows_output());
+
+    if (OB_SUCC(ret)) {
+      const int64_t input_rows = sampled_input_rows_.get_row_cnt();
+      int64_t sample_rows = input_rows / DYNAMIC_SAMPLE_INTERVAL;
+      sample_rows = std::max(sample_rows, std::min(input_rows, (int64_t)DYNAMIC_SAMPLE_ROW_COUNT));
+      sample_rows = std::min(sample_rows, (int64_t)MAX_DYNAMIC_SAMPLE_ROW_COUNT);
+      const int64_t step = input_rows / sample_rows;
+
+      ObEvalCtx::BatchInfoScopeGuard g(eval_ctx_);
+      g.set_batch_size(1);
+      g.set_batch_idx(0);
+      for (int64_t i = 0; OB_SUCC(ret) && i < input_rows; i += step) {
+        clear_evaluated_flag();
+        const ObRADatumStore::StoredRow *sr = NULL;
+        OZ(sampled_input_rows_.get_row(i, sr));
+        OZ(sr->to_expr(MY_SPEC.sampling_saving_row_, eval_ctx_));
+        OZ(sample_store.add_row(MY_SPEC.dist_exprs_, &eval_ctx_));
+      }
+      clear_evaluated_flag();
+    }
+  }
+  return ret;
+}
+
+int ObPxDistTransmitOp::add_batch_row_for_piece_msg_vec(ObChunkDatumStore &sample_store)
+{
+  int ret = OB_SUCCESS;
+  if (iter_end_) {
+    // do nothing
+  } else {
+    int64_t max_input_rows = HEADER_INPUT_SAMPLE == MY_SPEC.sample_type_
+        ? DYNAMIC_SAMPLE_ROW_COUNT
+        : INT64_MAX;
+    int64_t mem_hold = 0;
+    do {
+      // For auto memory manage, ObRADatumStore can not shrink memory used right now,
+      // no need to update memory statistics after dumped
+      if (!sampled_input_rows_.is_file_open()) {
+        bool updated = false;
+        OZ(sql_mem_processor_.update_max_available_mem_size_periodically(
+                &mem_context_->get_malloc_allocator(),
+                [&](int64_t loop_cnt) { return sampled_input_rows_.get_row_cnt() > loop_cnt; },
+                updated));
+        if (OB_SUCC(ret) && updated) {
+          sampled_input_rows_.set_mem_limit(sql_mem_processor_.get_mem_bound());
+        }
+        if (sampled_input_rows_.get_mem_hold() != mem_hold) {
+          mem_hold = sampled_input_rows_.get_mem_hold();
+          // try extend memory bound when used memory close to memory bound.
+          if (GCONF.is_sql_operator_dump_enabled()
+              && mem_hold >= sql_mem_processor_.get_mem_bound() - ObRADatumStore::BIG_BLOCK_SIZE) {
+            bool dumped = false;
+            OZ(sql_mem_processor_.extend_max_memory_size(
+                &mem_context_->get_malloc_allocator(),
+                [&](int64_t mem_bould) { return mem_hold > mem_bould; },
+                dumped, mem_hold));
+            if (OB_SUCC(ret)) {
+              sampled_input_rows_.set_mem_limit(sql_mem_processor_.get_mem_bound());
+            }
+          }
+        }
+      } else {
+        if (profile_.get_number_pass() == 0) {
+          profile_.set_number_pass(1);
+        }
+      }
+
+      // add batch rows to sampled input row store.
+      {
+        ObEvalCtx::BatchInfoScopeGuard g(eval_ctx_);
+        g.set_batch_size(brs_.size_);
+        for (int64_t i = 0; OB_SUCC(ret) && i < brs_.size_; i++) {
+          if (brs_.skip_->at(i)) {
+            continue;
+          }
+          g.set_batch_idx(i);
+          OZ(sampled_input_rows_.add_row(MY_SPEC.sampling_saving_row_, &eval_ctx_));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        int64_t cnt = std::min(max_input_rows - sampled_input_rows_.get_row_cnt(),
+                               MY_SPEC.max_batch_size_);
+        if (cnt > 0) {
+          ret = inner_get_next_batch(cnt);
+          FOREACH_CNT_X(e, MY_SPEC.sampling_saving_row_, OB_SUCC(ret)) {
+            if (OB_FAIL((*e)->cast_to_uniform(brs_.size_, eval_ctx_, brs_.skip_))) {
+              LOG_WARN("cast expr to uniform failed", K(ret), KPC(*e), K_(eval_ctx));
+            }
+          }
+        }
+      }
+    } while (OB_SUCC(ret)
+             && sampled_input_rows_.get_row_cnt() < max_input_rows
+             && !(brs_.end_ && brs_.size_ == 0));
+
+    if (OB_FAIL(ret)) {
+    } else if (!brs_.end_) {
+      OZ(vec_holder_.save(std::min((int64_t)DYNAMIC_SAMPLE_ROW_COUNT, MY_SPEC.max_batch_size_)));
     } else {
       brs_.end_ = false;
     }

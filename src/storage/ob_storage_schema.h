@@ -67,9 +67,6 @@ public:
   void reset();
   void destroy(ObIAllocator &allocator);
   bool is_valid() const;
-  int construct_column_param(
-      const uint64_t data_version,
-      share::schema::ObColumnParam &column_param) const;
   inline common::ColumnType get_data_type() const { return meta_type_.get_type(); }
   inline bool is_generated_column() const { return is_generated_column_; }
   inline bool is_column_stored_in_sstable() const { return is_column_stored_in_sstable_;}
@@ -108,8 +105,7 @@ public:
   int init(
       common::ObIAllocator &allocator,
       const share::schema::ObTableSchema &input_schema,
-      const bool skip_column_info = false,
-      const uint64_t data_format_version = DATA_CURRENT_VERSION);
+      const bool skip_column_info = false);
   int init(
       common::ObIAllocator &allocator,
       const ObStorageSchema &old_schema,
@@ -192,10 +188,8 @@ public:
   inline bool is_aux_lob_meta_table() const { return share::schema::is_aux_lob_meta_table(table_type_); }
   inline bool is_aux_lob_piece_table() const { return share::schema::is_aux_lob_piece_table(table_type_); }
   OB_INLINE bool is_user_hidden_table() const { return share::schema::TABLE_STATE_IS_HIDDEN_MASK & table_mode_.state_flag_; }
-  int set_storage_schema_version(const uint64_t data_format_version);
-
-  VIRTUAL_TO_STRING_KV(KP(this), K_(storage_schema_version), K_(version),
-      K_(column_info_simplified), K_(compat_mode), K_(table_type), K_(index_type),
+  VIRTUAL_TO_STRING_KV(KP(this), K_(format_version),
+      K_(column_info_simplified), K_(table_type), K_(index_type),
       K_(row_store_type), K_(schema_version),
       K_(column_cnt), K_(store_column_cnt), K_(tablet_size), K_(pctfree), K_(block_size), K_(progressive_merge_round),
       K_(compressor_type),
@@ -227,27 +221,22 @@ private:
   bool check_column_array_valid(const common::ObIArray<T> &array) const;
 
 public:
-  static const uint32_t INVALID_ID = UINT32_MAX;
-  // The compatibility of the ObRowkeyColumnSchema&ObColumnSchema uses the version_ of the ObStorageSchema
   static const int32_t SS_ONE_BIT = 1;
-  static const int32_t SS_HALF_BYTE = 4;
-  static const int32_t SS_ONE_BYTE = 8;
-  static const int32_t SS_RESERVED_BITS = 19;
+  static const int32_t SS_RESERVED1_BITS = 8;
+  static const int32_t SS_RESERVED2_BITS = 23;
 
   // Storage schema uses a custom serializer because deserialization needs an allocator.
-  static const int64_t STORAGE_SCHEMA_VERSION = 1;
-  static const int64_t STORAGE_SCHEMA_VERSION_LATEST = STORAGE_SCHEMA_VERSION;
+  static const int64_t STORAGE_SCHEMA_FORMAT_VERSION = 1;
   common::ObIAllocator *allocator_;
-  int64_t storage_schema_version_;
+  int64_t format_version_;
 
   union {
     uint32_t info_;
     struct
     {
-      uint32_t version_                          : SS_ONE_BYTE;
-      uint32_t compat_mode_                      : SS_HALF_BYTE;
+      uint32_t reserved1_                        : SS_RESERVED1_BITS;
       uint32_t column_info_simplified_           : SS_ONE_BIT;
-      uint32_t reserved_                         : SS_RESERVED_BITS;
+      uint32_t reserved2_                        : SS_RESERVED2_BITS;
     };
   };
   share::schema::ObTableType table_type_;
@@ -298,8 +287,7 @@ public:
   }
   int init(common::ObIAllocator &allocator,
       const share::schema::ObTableSchema &input_schema,
-      const bool skip_column_info,
-      const uint64_t data_format_version);
+      const bool skip_column_info);
   int init(common::ObIAllocator &allocator,
       const ObCreateTabletSchema &old_schema);
   INHERIT_TO_STRING_KV("ObStorageSchema", ObStorageSchema, K_(table_id), K_(index_status), K_(truncate_version));

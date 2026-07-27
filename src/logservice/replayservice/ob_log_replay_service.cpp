@@ -16,6 +16,7 @@
 
 #include "ob_log_replay_service.h"
 #include "share/rc/ob_module_provider.h"
+#include "share/config/ob_server_config.h"
 #include "logservice/ob_ls_adapter.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
@@ -310,7 +311,6 @@ void ObLogReplayService::destroy()
 void ObLogReplayService::handle(common::LinkTask *task)
 {
   int ret = OB_SUCCESS;
-  ObDIActionGuard ag("LogService", "LogReplayService", "ReplayTask");
   ObReplayServiceTask *task_to_handle = static_cast<ObReplayServiceTask *>(task);
   ObReplayStatus *replay_status = NULL;
   bool need_push_back = false;
@@ -1187,7 +1187,6 @@ int ObLogReplayService::handle_submit_task_(ObReplayServiceSubmitTask *submit_ta
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  ObDIActionGuard ag("SUBMIT_LOG");
   ObReplayStatus *replay_status = NULL;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -1316,7 +1315,6 @@ int ObLogReplayService::handle_replay_task_(ObReplayServiceReplayTask *task_queu
           static const int64_t LOG_TYPE_STR_LEN = 64;
           char log_type_str[LOG_TYPE_STR_LEN] = "";
           log_base_type_to_string(replay_task->log_type_, log_type_str, LOG_TYPE_STR_LEN);
-          ObDIActionGuard ag(log_type_str);
           if (OB_FAIL(do_replay_task_(replay_task, replay_status, task_queue->idx()))) {
             (void)process_replay_ret_code_(ret, *replay_status, *task_queue, *replay_task);
           } else if (OB_FAIL(statistics_replay_cost_(replay_task->init_task_ts_, replay_task->first_handle_ts_))) {

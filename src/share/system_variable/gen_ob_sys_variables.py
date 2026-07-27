@@ -1128,7 +1128,7 @@ def generate_essential_sys_vars_in_init_cpp(cpp_filename, list_sorted_by_id):
 
   for var_name_upper, name, var_type in essential_vars:
     if var_type == "core" and not core_vars_written:
-      essential_array_content.append('  // compatibility mode related vars - affect SQL parsing and execution behavior')
+      essential_array_content.append('  // core session vars - affect SQL parsing and execution behavior')
       core_vars_written = True
     elif var_type == "influence_plan" and not influence_plan_vars_written:
       essential_array_content.append('')

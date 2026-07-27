@@ -41,6 +41,8 @@ namespace oceanbase
 {
 namespace sql
 {
+static constexpr int64_t SLAVE_MAPPING_DOP_TO_PARTITION_RATIO = 2;
+
 struct JoinFilterInfo;
 struct EstimateCostInfo;
 struct ObSqlPlanItem;
@@ -471,9 +473,7 @@ struct ObExchangeInfo
     wf_hybrid_pby_exprs_cnt_array_(),
     may_add_interval_part_(MayAddIntervalPart::NO),
     sample_type_(NOT_INIT_SAMPLE_TYPE),
-    parallel_(ObGlobalHint::UNSET_PARALLEL),
-    server_cnt_(0),
-    server_list_()
+    parallel_(ObGlobalHint::UNSET_PARALLEL)
   {
     repartition_table_id_ = 0;
   }
@@ -532,8 +532,6 @@ struct ObExchangeInfo
   // sample type for range distribution or partition range distribution
   ObPxSampleType sample_type_;
   int64_t parallel_;
-  int64_t server_cnt_;
-  common::ObSEArray<common::ObAddr, 4> server_list_;
 
   TO_STRING_KV(K_(is_task_order),
                K_(is_merge_sort),
@@ -556,9 +554,7 @@ struct ObExchangeInfo
                K_(wf_hybrid_pby_exprs_cnt_array),
                K_(may_add_interval_part),
                K_(sample_type),
-               K_(parallel),
-               K_(server_cnt),
-               K_(server_list));
+               K_(parallel));
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExchangeInfo);
 };
@@ -1097,15 +1093,6 @@ public:
     return op_ordering_;
   }
 
-  inline common::ObIArray<common::ObAddr> &get_server_list()
-  {
-    return server_list_;
-  }
-  inline const common::ObIArray<common::ObAddr> &get_server_list() const
-  {
-    return server_list_;
-  }
-
   inline const ObFdItemSet& get_fd_item_set() const
   {
     return NULL == fd_item_set_ ? empty_fd_item_set_ : *fd_item_set_;
@@ -1284,7 +1271,7 @@ public:
 
   virtual int compute_op_interesting_order_info();
 
-  virtual int compute_op_parallel_and_server_info();
+  virtual int compute_op_parallel_info();
 
   virtual int compute_table_set();
 
@@ -1325,8 +1312,8 @@ public:
   virtual int compute_property();
 
   int check_property_valid() const;
-  int compute_normal_multi_child_parallel_and_server_info();
-  int set_parallel_and_server_info_for_match_all();
+  int compute_normal_multi_child_parallel_info();
+  int set_parallel_info_for_match_all();
   int get_limit_offset_value(ObRawExpr *percent_expr,
                              ObRawExpr *limit_expr,
                              ObRawExpr *offset_expr,
@@ -1504,11 +1491,6 @@ public:
   {
     contain_pw_merge_op_ = contain_pw_merge_op;
   }
-  inline bool get_contains_match_all_fake_cte() const { return contain_match_all_fake_cte_; }
-  inline void set_contains_match_all_fake_cte(bool contain_match_all_fake_cte)
-  {
-    contain_match_all_fake_cte_ = contain_match_all_fake_cte;
-  }
   inline bool get_contains_das_op() const { return contain_das_op_; }
   inline void set_contains_das_op(bool contain_das_op)
   {
@@ -1611,9 +1593,6 @@ public:
   inline OpParallelRule get_op_parallel_rule() const { return op_parallel_rule_; }
   inline int64_t get_available_parallel() const { return available_parallel_; }
   inline void set_available_parallel(int64_t available_parallel) { available_parallel_ = available_parallel; }
-  inline void set_server_cnt(int64_t count) { server_cnt_ = count; }
-  inline int64_t get_server_cnt() const { return server_cnt_; }
-
   void set_late_materialization(bool need_mater) { need_late_materialization_ = need_mater; }
   bool need_late_materialization() const { return need_late_materialization_; }
   /**
@@ -1685,8 +1664,8 @@ public:
   // 2. If this operator is single-child and block, then open and close its child.
   // 3. If this operator has multiple children, open all children by default and
   //    operators should override this function according to their unique execution logic.
-  // append_map = false means it's in the progress of LogSet searching for child
-  //   with max running thread/group count, and we will not modify max_count or max_map.
+  // update_max = false means a parent is comparing alternative child branches
+  // for the largest running thread/group count without updating the plan-wide peaks.
   virtual int open_px_resource_analyze(OPEN_PX_RESOURCE_ANALYZE_DECLARE_ARG);
   // Make the operator in state that all data has been outputted already.
   virtual int close_px_resource_analyze(CLOSE_PX_RESOURCE_ANALYZE_DECLARE_ARG);
@@ -1697,9 +1676,6 @@ public:
   int pre_check_can_px_batch_rescan(bool &find_nested_rescan,
                                     bool &find_rescan_px,
                                     bool nested) const;
-  int check_contain_dist_das(const ObIArray<ObAddr> &exec_server_list,
-                             bool &contain_dist_das) const;
-
   inline bool can_re_parallel() { return !is_distributed() && !is_match_all() && 1 < get_available_parallel() && !get_is_at_most_one_row(); }
   int check_op_orderding_used_by_parent(bool &used);
 
@@ -1924,7 +1900,6 @@ protected:
   bool contain_fake_cte_;
   bool contain_pw_merge_op_;
   bool contain_das_op_;
-  bool contain_match_all_fake_cte_;
   ObShardingInfo *strong_sharding_;
   common::ObSEArray<ObShardingInfo*, 8, common::ModulePageAllocator, true> weak_sharding_;
   bool is_pipelined_plan_;
@@ -1940,8 +1915,6 @@ protected:
   int64_t parallel_;
   OpParallelRule op_parallel_rule_;
   int64_t available_parallel_;  // parallel degree used by serial op to enable parallel again
-  int64_t server_cnt_;
-  ObSEArray<common::ObAddr, 8, common::ModulePageAllocator, true> server_list_;
   bool need_late_materialization_;
   // all non_const exprs for this op, generated by allocate_expr_pre and used by project pruning
   ObSEArray<ObRawExpr*, 8, common::ModulePageAllocator, true> op_exprs_;

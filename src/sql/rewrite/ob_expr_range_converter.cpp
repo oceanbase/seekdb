@@ -20,7 +20,6 @@
 #include "common/timezone/ob_time_convert.h"
 #include "lib/container/ob_array_serialization.h"
 #include "share/geo/ob_geo_utils.h"
-#include "lib/rc/ob_rc.h"
 #include "sql/resolver/dml/ob_dml_stmt.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/expr/ob_expr_like.h"

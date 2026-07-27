@@ -189,9 +189,7 @@ const int64_t OB_MAX_UUID_LENGTH = 16;
 const int64_t OB_MAX_UUID_STR_LENGTH = 36;
 const int64_t OB_MAX_CON_INFO_STR_LENGTH = 512;
 const int64_t MAX_LOAD_DATA_MESSAGE_LENGTH = 4096;
-const int64_t MAX_ZONE_LENGTH = 128;
-const int32_t MAX_ZONE_NUM = 64;
-const int32_t DEFAULT_ZONE_COUNT = 5;
+const int64_t MAX_GTS_NAME_LENGTH = 128;
 const int64_t MAX_OPERATOR_NAME_LENGTH = 32;
 const int64_t MAX_LONG_OPS_NAME_LENGTH = 128;
 const int64_t MAX_LONG_OPS_TARGET_LENGTH = 128;
@@ -597,17 +595,6 @@ const int64_t OB_MAX_PART_LIST_SIZE = 10L * 1024L * 1024L;//10MB
 const int64_t OB_MAX_TABLE_ID_LIST_SIZE = 10L * 1024L * 1024L;//10MB
 
 const int64_t OB_MAX_SCHEDULER_JOB_NAME_LENGTH = 128;
-
-enum ObServerRole
-{
-  OB_INVALID = 0,
-  OB_ROOTSERVER = 1,  // rs
-  OB_CHUNKSERVER = 2, // cs
-  OB_MERGESERVER = 3, // ms
-  OB_UPDATESERVER = 4, // ups
-  OB_SERVER = 6,
-  OB_OBLOG = 8, // liboblog
-};
 
 const int OB_FAKE_MS_PORT = 2828;
 const uint64_t OB_MAX_PS_PARAM_COUNT = 65535;

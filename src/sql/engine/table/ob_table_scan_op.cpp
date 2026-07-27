@@ -18,7 +18,6 @@
 
 
 #include "ob_table_scan_op.h"
-#include "common/json_type/ob_json_bin.h"
 #include "share/rc/ob_module_provider.h"
 #include "sql/das/ob_das_attach_define.h"
 #include "sql/das/ob_das_vec_define.h"
@@ -773,8 +772,6 @@ OB_INLINE int ObTableScanOp::create_one_das_task(ObDASTabletLoc *tablet_loc)
   if (OB_SUCC(ret)) {
     if (OB_FAIL(cherry_pick_range_by_tablet_id(scan_op))) {
       LOG_WARN("prune query range by partition id failed", K(ret), KPC(tablet_loc));
-    } else if (OB_NOT_NULL(DAS_GROUP_SCAN_OP(scan_op))) {
-      static_cast<ObDASGroupScanOp*>(scan_op)->init_group_range(0, tsc_rtdef_.group_size_);
     }
   }
   return ret;
@@ -1292,7 +1289,6 @@ int ObTableScanOp::prepare_scan_range()
 int ObTableScanOp::prepare_batch_scan_range()
 {
   int ret = OB_SUCCESS;
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_extract_query_range);
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
   int64_t batch_size = 0;
   if (OB_SUCC(ret)) {
@@ -1368,7 +1364,6 @@ int ObTableScanOp::build_bnlj_params()
 int ObTableScanOp::prepare_single_scan_range(int64_t group_idx, bool need_sort)
 {
   int ret = OB_SUCCESS;
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_extract_query_range);
   ObQueryRangeArray key_ranges;
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
   ObIAllocator &range_allocator = (table_rescan_allocator_ != nullptr ?
@@ -1430,7 +1425,6 @@ int ObTableScanOp::prepare_single_scan_range(int64_t group_idx, bool need_sort)
 int ObTableScanOp::prepare_index_merge_scan_range(int64_t group_idx, bool need_sort)
 {
   int ret = OB_SUCCESS;
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_extract_query_range);
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
   ObIAllocator &range_allocator = (table_rescan_allocator_ != nullptr ?
       *table_rescan_allocator_ : ctx_.get_allocator());
@@ -2734,6 +2728,9 @@ int ObTableScanOp::construct_partition_range(ObArenaAllocator &allocator,
           end_row_key[i] = scan_range.end_key_.get_obj_ptr()[pos];
           sql::ObExpr *expr = part_dep_cols.at(i);
           sql::ObDatum &datum = expr->locate_datum_for_write(eval_ctx_);
+          if (get_spec().use_rich_format_) {
+            expr->init_vector_for_write(eval_ctx_, VEC_UNIFORM, 1);
+          }
           if (OB_FAIL(datum.from_obj(start_row_key[i], expr->obj_datum_map_))) {
             LOG_WARN("convert obj to datum failed", K(ret));
           } else if (is_lob_storage(start_row_key[i].get_type()) &&
@@ -2835,14 +2832,10 @@ void ObTableScanOp::set_cache_stat(const ObPlanStat &plan_stat)
   const int64_t TRY_USE_CACHE_INTERVAL = 15;
   ObQueryFlag &query_flag = tsc_rtdef_.scan_rtdef_.scan_flag_;
   bool try_use_cache = !(plan_stat.execute_times_ & TRY_USE_CACHE_INTERVAL);
-  if (try_use_cache) {
+  if (try_use_cache || plan_stat.enable_bf_cache_) {
     query_flag.set_use_bloomfilter_cache();
   } else {
-    if (plan_stat.enable_bf_cache_) {
-      query_flag.set_use_bloomfilter_cache();
-    } else {
-      query_flag.set_not_use_bloomfilter_cache();
-    }
+    query_flag.set_not_use_bloomfilter_cache();
   }
   if (try_use_cache && !plan_stat.enable_row_cache_) {
     query_flag.set_use_row_cache();

@@ -56,7 +56,7 @@ public:
 
   int64_t block_index() const { return block_index_; }
   void set_block_index(const int64_t block_index) { block_index_ = block_index; }
-  int64_t write_seq() const { return write_seq_; }
+  uint64_t write_seq() const { return write_seq_; }
   void set_write_seq(const uint64_t write_seq) { write_seq_ = write_seq; }
 
   void set_from_io_fd(const common::ObIOFd &block_id)

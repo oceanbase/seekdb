@@ -38,17 +38,17 @@ namespace hash
 // bool equal (Key key, Value const* value);
 // @endcode
 //
-// Example for @c ObMysqlServerSession keyed by the origin server IP address.
+// Example for an entry keyed by an integer identifier.
 //
 // @code
 // struct Hasher {
-//   typedef sockaddr const &Key;
-//   typedef ObMysqlServerSession Value;
-//   typedef ObDLList(ObMysqlServerSession, ip_hash_link_) ListHead;
+//   typedef uint64_t Key;
+//   typedef Entry Value;
+//   typedef ObDLList(Entry, hash_link_) ListHead;
 //
 //   static uint64_t hash(Key key) { return do_hash(key); }
-//   static sockaddr const &key(Value const *value) { return &value->ip_.sa_ }
-//   static bool equal(Key lhs, Key rhs) { return ops_ip_addr_port_eq(lhs, rhs); }
+//   static Key key(Value const *value) { return value->id_; }
+//   static bool equal(Key lhs, Key rhs) { return lhs == rhs; }
 //   // Alternatively
 //   // static uint64_t hash(Key key);
 //   // static Key key(Value const *value);
@@ -56,10 +56,10 @@ namespace hash
 // };
 // @endcode
 //
-// In @c ObMysqlServerSession is the definition
+// In @c Entry is the definition
 //
 // @code
-// LINK(ObMysqlServerSession, ip_hash_link_);
+// LINK(Entry, hash_link_);
 // @endcode
 //
 // which creates the internal links used by @c ObBuildInHashMap.

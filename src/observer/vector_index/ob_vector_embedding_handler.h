@@ -17,6 +17,8 @@
 #ifndef OCEANBASE_SHARE_VECTOR_INDEX_OB_VECTOR_EMBEDDING_HANDLER_H_
 #define OCEANBASE_SHARE_VECTOR_INDEX_OB_VECTOR_EMBEDDING_HANDLER_H_
 
+#include <curl/curl.h>
+
 #include "ob_vector_index_util.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/lock/ob_latch.h"

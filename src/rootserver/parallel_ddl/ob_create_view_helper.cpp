@@ -773,10 +773,6 @@ int ObCreateViewHelper::drop_obj_privs_()
                                                                                new_schema_version, get_trans_()))) {
         LOG_WARN("fail to drop obj privs", KR(ret), K(obj_privs_.at(i)));
       }
-      // should not appear, just for compatible with old routine
-      if (OB_UNLIKELY(OB_SEARCH_NOT_FOUND != ret)) {
-        ret = OB_SUCCESS;
-      }
     }
   }
   return ret;
@@ -791,7 +787,7 @@ int ObCreateViewHelper::handle_error_info_()
     // do nothing
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected compat mode add create view error info", KR(ret));
+    LOG_WARN("unexpected create view error info", KR(ret));
   }
   return ret;
 }

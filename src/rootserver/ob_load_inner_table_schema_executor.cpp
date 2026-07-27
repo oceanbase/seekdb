@@ -139,7 +139,7 @@ int ObLoadInnerTableSchemaExecutor::append_arg(const ObIArray<int64_t> &insert_i
   return ret;
 }
 
-int ObLoadInnerTableSchemaExecutor::init_args_(ObIArray<ObTableSchema> &table_schemas)
+int ObLoadInnerTableSchemaExecutor::init_args_(ObIArray<share::schema::ObTableSchema> &table_schemas)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -205,7 +205,9 @@ int ObLoadInnerTableSchemaExecutor::init_args_(ObIArray<ObTableSchema> &table_sc
   return ret;
 }
 
-int ObLoadInnerTableSchemaExecutor::init(ObIArray<ObTableSchema> &table_schemas, const int64_t max_cpu)
+int ObLoadInnerTableSchemaExecutor::init(
+    ObIArray<share::schema::ObTableSchema> &table_schemas,
+    const int64_t max_cpu)
 {
   int ret = OB_SUCCESS;
   

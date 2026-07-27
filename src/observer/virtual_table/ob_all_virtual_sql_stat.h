@@ -17,7 +17,6 @@
 #ifndef OB_ALL_VIRTUAL_SQL_STAT_H
 #define OB_ALL_VIRTUAL_SQL_STAT_H
 
-#include "sql/engine/ob_sql_memory_manager.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "common/row/ob_row.h"

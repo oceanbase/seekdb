@@ -1147,15 +1147,17 @@ int ObSSTable::deserialize_fixed_struct(const char *buf, const int64_t data_len,
   } else {
     int64_t version = 0;
     int64_t payload_size = 0;
+    int64_t payload_end = 0;
     OB_UNIS_DECODE(version);
     OB_UNIS_DECODE(payload_size);
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(version != SSTABLE_VERSION)) {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("sstable version not match", K(ret), K(version));
-    } else if (OB_UNLIKELY(pos + payload_size > data_len)) {
+    } else if (OB_UNLIKELY(payload_size < 0 || payload_size > data_len - pos)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("semi deserialize buffer not enough", K(ret), K(pos), K(payload_size), K(data_len));
+    } else if (FALSE_IT(payload_end = pos + payload_size)) {
     } else {
       LST_DO_CODE(OB_UNIS_DECODE, addr_);
     }
@@ -1166,8 +1168,11 @@ int ObSSTable::deserialize_fixed_struct(const char *buf, const int64_t data_len,
     }
 
     if (OB_SUCC(ret)) {
-      valid_for_reading_ = key_.is_valid();
-      if (OB_FAIL(ObSSTableMetaCompactUtil::fix_filled_tx_scn_value_for_compact(key_, meta_cache_.filled_tx_scn_))) {
+      if (OB_UNLIKELY(!meta_cache_.is_valid() || pos != payload_end)) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_WARN("sstable fixed payload format mismatch", K(ret), K(meta_cache_), K(pos), K(payload_end));
+      } else if (FALSE_IT(valid_for_reading_ = key_.is_valid())) {
+      } else if (OB_FAIL(ObSSTableMetaCompactUtil::fix_filled_tx_scn_value_for_compact(key_, meta_cache_.filled_tx_scn_))) {
         LOG_WARN("failed to fix filled tx scn value for compact", K(ret), K_(meta));
       }
     }
@@ -1610,14 +1615,9 @@ int ObSSTable::get_last_rowkey(const ObDatumRowkey *&sstable_endkey)
 
 int ObSSTable::persist_linked_block_if_need(
     ObArenaAllocator &allocator,
-    const ObTabletID &tablet_id,
-    const int64_t snapshot_version,
-    blocksstable::ObIMacroBlockFlushCallback *ddl_redo_cb,
-    int64_t &macro_start_seq,
     ObObjectsWriteCtx &linked_block_write_ctx)
 {
   int ret = OB_SUCCESS;
-  ObSSTableLinkBlockWriteInfo link_write_info(macro_start_seq);
 #ifdef ERRSIM
   const int64_t block_cnt_config_value = GCONF.errsim_storage_meta_macro_ids_threshold;
   const int64_t block_cnt_threshold = 0 == block_cnt_config_value ? ObSSTableMacroInfo::BLOCK_CNT_THRESHOLD
@@ -1636,16 +1636,9 @@ int ObSSTable::persist_linked_block_if_need(
   } else if (meta_->macro_info_.get_data_block_count() + meta_->macro_info_.get_other_block_count()
               < block_cnt_threshold) {
     // need not persist linked_block
-  } else if (OB_FAIL(link_write_info.init(ddl_redo_cb))) {
-    LOG_WARN("fail to init link_write_info", K(ret), KP(ddl_redo_cb));
-  } else if (OB_FAIL(meta_->macro_info_.persist_block_ids(tablet_id,
-                                                          snapshot_version,
-                                                          allocator,
-                                                          &link_write_info,
+  } else if (OB_FAIL(meta_->macro_info_.persist_block_ids(allocator,
                                                           linked_block_write_ctx))) {
-    LOG_WARN("fail to persist linked_block", K(ret), K(meta_->macro_info_), K(tablet_id), K(snapshot_version), K(link_write_info));
-  } else {
-    macro_start_seq += link_write_info.get_written_macro_cnt();
+    LOG_WARN("fail to persist linked_block", K(ret), K(meta_->macro_info_));
   }
   return ret;
 }

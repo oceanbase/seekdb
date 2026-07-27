@@ -17,6 +17,7 @@
 #ifndef _OB_RESOLVER_UTILS_H
 #define _OB_RESOLVER_UTILS_H
 #include "share/ob_rpc_struct.h"
+#include "share/ob_compatibility_control.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/charset/ob_charset.h"
 #include "common/object/ob_object.h"
@@ -367,6 +368,7 @@ public:
                            ObExprInfo *parents_expr_info,
                            const ObSQLMode mode,
                            bool enable_decimal_int_type,
+                           const share::ObCompatType compat_type,
                            const bool enable_mysql_compatible_dates,
                            int8_t min_const_integer_precision,
                            bool is_from_pl = false,
@@ -599,8 +601,7 @@ public:
         const obcall::ObCreateForeignKeyArg &arg);
   static int check_foreign_key_set_null_satisfy(
         const obcall::ObCreateForeignKeyArg &arg,
-        const share::schema::ObTableSchema &child_table_schema,
-        const bool is_mysql_compat_mode);
+        const share::schema::ObTableSchema &child_table_schema);
   static int check_match_columns(const common::ObIArray<ObString> &parent_columns,
                                  const common::ObIArray<ObString> &key_columns,
                                  bool &is_match);
@@ -617,7 +618,6 @@ public:
                                          const ObIArray<ObString> &key_columns,
                                          bool &is_match);
   static int check_foreign_key_columns_type(
-      const bool is_mysql_compat_mode,
       const share::schema::ObTableSchema &child_table_schema,
       const share::schema::ObTableSchema &parent_table_schema,
       const common::ObIArray<common::ObString> &child_columns,

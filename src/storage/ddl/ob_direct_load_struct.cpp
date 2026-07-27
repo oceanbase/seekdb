@@ -18,7 +18,6 @@
 
 #include "ob_direct_load_struct.h"
 #include "storage/ddl/ob_ddl_storage_util.h"
-#include "storage/ddl/ob_ddl_vector_utils.h"
 #include "share/rc/ob_module_provider.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "storage/ob_tablet_autoincrement_service.h"
@@ -507,17 +506,12 @@ int ObMacroBlockSliceStore::init(
     init_param.start_scn_ = start_scn;
     init_param.task_id_ = ddl_task_id;
     init_param.data_format_version_ = data_format_version;
-    if (OB_UNLIKELY(!is_full_direct_load(direct_load_type))) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("only full direct load is supported", KR(ret), K(direct_load_type));
-    } else {
-      init_param.block_type_ = DDL_MB_DATA_TYPE;
-      if (OB_ISNULL(ddl_redo_callback_ = OB_NEW(ObDDLRedoLogWriterCallback, ObMemAttr("DDL_MBSS")))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc memory", K(ret));
-      } else if (OB_FAIL(static_cast<ObDDLRedoLogWriterCallback *>(ddl_redo_callback_)->init(init_param))) {
-        LOG_WARN("fail to init full ddl_redo_callback_", K(ret), K(init_param));
-      }
+    init_param.block_type_ = DDL_MB_DATA_TYPE;
+    if (OB_ISNULL(ddl_redo_callback_ = OB_NEW(ObDDLRedoLogWriterCallback, ObMemAttr("DDL_MBSS")))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to alloc memory", K(ret));
+    } else if (OB_FAIL(static_cast<ObDDLRedoLogWriterCallback *>(ddl_redo_callback_)->init(init_param))) {
+      LOG_WARN("fail to init full ddl_redo_callback_", K(ret), K(init_param));
     }
     if (OB_SUCC(ret)) {
       ObMacroSeqParam macro_seq_param;
@@ -898,24 +892,6 @@ int ObDirectLoadSliceWriter::fill_lob_sstable_slice(
       }
     }
   } 
-  return ret;
-}
-
-int ObDirectLoadSliceWriter::fill_lob_into_memtable(
-    ObIAllocator &allocator,
-    const ObBatchSliceWriteInfo &info,
-    const common::ObObjMeta &col_type,
-    const ObLobStorageParam &lob_storage_param,
-    blocksstable::ObStorageDatum &datum)
-{
-  // to insert lob data into memtable.
-  int ret = OB_SUCCESS;
-  const int64_t timeout_ts = ObTimeUtility::fast_current_time() + ObInsertLobColumnHelper::LOB_ACCESS_TX_TIMEOUT;
-  if (OB_FAIL(ObInsertLobColumnHelper::insert_lob_column(
-    allocator, info.data_tablet_id_, col_type.get_type(), col_type.get_collation_type(),
-    lob_storage_param, datum, timeout_ts, true/*has_lob_header*/))) {
-    LOG_WARN("fail to insert_lob_col", K(ret), K(datum));
-  }
   return ret;
 }
 
@@ -1343,11 +1319,11 @@ int ObDirectLoadSliceWriter::fill_sstable_slice(
         } else if (OB_UNLIKELY(i >= column_items.count()) || OB_UNLIKELY(!column_items.at(i).is_valid_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("column schema is wrong", K(ret), K(i), K(column_items));
-        } else if (OB_FAIL(ObDDLVectorUtils::reshape_storage_vector(column_items.at(i).col_type_,
-                                                                    column_items.at(i).col_accuracy_,
-                                                                    arena,
-                                                                    vector,
-                                                                    selector))) {
+        } else if (OB_FAIL(ObDASUtils::reshape_vector_value(column_items.at(i).col_type_,
+                                                            column_items.at(i).col_accuracy_,
+                                                            arena,
+                                                            vector,
+                                                            selector))) {
           LOG_WARN("fail to reshape vector value", K(ret));
         }
       }

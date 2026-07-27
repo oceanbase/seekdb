@@ -52,40 +52,6 @@ int ObDBMSJobExecutor::init(
   return ret;
 }
 
-int ObDBMSJobExecutor::init_session(
-  sql::ObSQLSessionInfo &session,
-  ObSchemaGetterGuard &schema_guard,
-  const ObString &runtime_name,
-  const ObString &database_name, uint64_t database_id,
-  const ObUserInfo* user_info,
-  ObExecEnv &exec_env)
-{
-  int ret = OB_SUCCESS;
-  ObObj mysql_sql_mode;
-  ObArenaAllocator *allocator = NULL;
-  const bool print_info_log = true;
-  const bool use_server_defaults = true;
-  ObPCMemPctConf pc_mem_conf;
-  mysql_sql_mode.set_uint(ObUInt64Type, DEFAULT_MYSQL_MODE);
-  OZ (session.init(1, allocator));
-  OX (session.set_inner_session());
-  OZ (session.load_default_sys_variable(print_info_log, use_server_defaults));
-  OZ (session.update_max_packet_size());
-  OZ (session.init_runtime(runtime_name.ptr()));
-  OZ (session.load_all_sys_vars(schema_guard));
-  OZ (session.update_sys_variable(share::SYS_VAR_SQL_MODE, mysql_sql_mode));
-  OZ (session.set_default_database(database_name));
-  OZ (session.get_pc_mem_conf(pc_mem_conf));
-  CK (OB_NOT_NULL(GCTX.sql_engine_));
-  OX (session.set_database_id(database_id));
-  OZ (session.set_user(
-    user_info->get_user_name(), user_info->get_host_name_str(), user_info->get_user_id()));
-  OX (session.set_user_priv_set(OB_PRIV_ALL | OB_PRIV_GRANT));
-  OZ (exec_env.store(session));
-  return ret;
-}
-
-
 int ObDBMSJobExecutor::run_dbms_job(
   ObDBMSJobInfo &job_info, ObIAllocator &allocator)
 {

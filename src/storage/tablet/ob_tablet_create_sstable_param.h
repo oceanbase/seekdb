@@ -24,7 +24,6 @@
 #include "storage/meta_mem/ob_meta_obj_struct.h"
 #include "share/scn.h"
 #include "storage/ddl/ob_ddl_struct.h"
-#include "storage/blocksstable/ob_table_flag.h"
 #include "storage/compaction/ob_compaction_util.h"
 
 namespace oceanbase
@@ -173,8 +172,6 @@ public:
       K_(recycle_version),
       K_(nested_offset),
       K_(nested_size),
-      K_(root_macro_seq),
-      K_(table_backup_flag),
       K_(uncommitted_tx_id));
 private:
   static const int64_t DEFAULT_MACRO_BLOCK_CNT = 64;
@@ -230,7 +227,6 @@ public:
   int64_t root_macro_seq_;
   common::ObSEArray<blocksstable::MacroBlockId, DEFAULT_MACRO_BLOCK_CNT> data_block_ids_;
   common::ObSEArray<blocksstable::MacroBlockId, DEFAULT_MACRO_BLOCK_CNT> other_block_ids_;
-  storage::ObTableBackupFlag table_backup_flag_; //ObTableBackupFlag will be updated by ObSSTableMergeRes
   int64_t uncommitted_tx_id_;
 };
 

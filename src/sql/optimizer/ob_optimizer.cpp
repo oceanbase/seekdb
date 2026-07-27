@@ -21,6 +21,7 @@
 #include "sql/optimizer/ob_select_log_plan.h"
 #include "sql/optimizer/ob_opt_cost_model_parameter.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 
 using namespace oceanbase;
 using namespace sql;
@@ -737,7 +738,6 @@ int ObOptimizer::extract_opt_ctx_basic_flags(const ObDMLStmt &stmt, ObSQLSession
   bool enable_spf_batch_rescan = session.is_spf_mlj_group_rescan_enabled();
   bool enable_px_ordered_coord = GCONF._enable_px_ordered_coord;
   int64_t das_batch_rescan_flag = true ? GCONF._enable_das_batch_rescan_flag : 0;
-  bool enable_distributed_das_scan = true ? GCONF._enable_distributed_das_scan : true;
   const ObOptParamHint &opt_params = ctx_.get_global_hint().opt_params_;
   if (OB_ISNULL(query_ctx)) {
     ret = OB_ERR_UNEXPECTED;
@@ -779,7 +779,7 @@ int ObOptimizer::extract_opt_ctx_basic_flags(const ObDMLStmt &stmt, ObSQLSession
   } else if (OB_FAIL(opt_params.get_bool_opt_param(ObOptParamHint::OPTIMIZER_BETTER_INLIST_COSTING, better_inlist_costing))) {
     LOG_WARN("failed to get opt param better inlist costing", K(ret));
   } else if (OB_FAIL(session.get_nlj_batching_enabled(enable_use_batch_nlj))) {
-    LOG_WARN("failed to get join cache size variable", K(ret));
+    LOG_WARN("failed to get NLJ batching variable", K(ret));
   } else if (OB_FAIL(opt_params.get_bool_opt_param(ObOptParamHint::NLJ_BATCHING_ENABLED, enable_use_batch_nlj))) {
     LOG_WARN("failed to get opt param nlj batching enable", K(ret));
   } else if (OB_FAIL(opt_params.get_bool_opt_param(ObOptParamHint::ENABLE_SPF_BATCH_RESCAN, enable_spf_batch_rescan))) {
@@ -815,7 +815,6 @@ int ObOptimizer::extract_opt_ctx_basic_flags(const ObDMLStmt &stmt, ObSQLSession
       ctx_.set_push_join_pred_into_view_enabled(push_join_pred_into_view_enabled);
     }
     ctx_.set_enable_px_ordered_coord(enable_px_ordered_coord);
-    ctx_.set_enable_distributed_das_scan(enable_distributed_das_scan);
     if (!hash_join_enabled
         && !optimizer_sortmerge_join_enabled
         && !nested_loop_join_enabled) {

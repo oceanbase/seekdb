@@ -18,9 +18,7 @@
 #define OBDEV_SRC_SQL_DAS_OB_DAS_SCAN_OP_H_
 #include "sql/das/ob_das_task.h"
 #include "storage/access/ob_dml_param.h"
-#include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "sql/engine/table/ob_index_lookup_op_impl.h"
-#include "sql/das/ob_group_scan_iter.h"
 #include "sql/das/iter/ob_das_iter.h"
 #include "sql/rewrite/ob_query_range_define.h"
 #include "sql/das/ob_domain_id.h"
@@ -175,6 +173,7 @@ public:
   { }
 
   virtual ~ObDASScanRtDef();
+  bool enable_rich_format() const { return scan_flag_.enable_rich_format_; }
 
   INHERIT_TO_STRING_KV("ObDASBaseRtDef", ObDASBaseRtDef,
                        K_(runtime_schema_version),
@@ -233,9 +232,9 @@ private:
 
 class ObDASScanOp : public ObIDASTaskOp
 {
-  friend class DASOpResultIter;
   friend class ObDASMergeIter;
-  OB_UNIS_VERSION(1);
+  friend class DASOpResultIter;
+  OB_UNIS_VERSION(2);
 public:
   ObDASScanOp(common::ObIAllocator &op_alloc);
   virtual ~ObDASScanOp();
@@ -253,8 +252,6 @@ public:
   virtual int init_task_info(uint32_t row_extend_size) override;
   virtual const ObDASBaseCtDef *get_ctdef() const override { return scan_ctdef_; }
   virtual ObDASBaseRtDef *get_rtdef() override { return scan_rtdef_; }
-  bool need_check_output_datum() const { return scan_rtdef_->need_check_output_datum_; }
-  virtual const ExprFixedArray &get_result_outputs() const;
   void set_scan_ctdef(const ObDASScanCtDef *scan_ctdef) { scan_ctdef_ = scan_ctdef; }
   void set_scan_rtdef(ObDASScanRtDef *scan_rtdef) { scan_rtdef_ = scan_rtdef; }
   int reserve_related_buffer(const int64_t related_scan_cnt);
@@ -300,6 +297,7 @@ public:
       common::ObTabletID &rowkey_doc_tid);
   int get_index_merge_tablet_ids(common::ObIArray<common::ObTabletID> &index_merge_tablet_ids);
   int get_func_lookup_tablet_ids(ObDASRelatedTabletID &related_tablet_ids);
+  bool enable_rich_format() const { return scan_rtdef_->enable_rich_format(); }
   INHERIT_TO_STRING_KV("parent", ObIDASTaskOp,
                        KPC_(scan_ctdef),
                        KPC_(scan_rtdef),
@@ -424,20 +422,6 @@ protected:
     };
   };
   common::ObTabletID index_tablet_id_;
-};
-
-// Batch-scan task used by local DAS group scan.
-class ObDASGroupScanOp : public ObDASScanOp
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObDASGroupScanOp(common::ObIAllocator &op_alloc);
-  virtual ~ObDASGroupScanOp();
-  void init_group_range(int64_t cur_group_idx, int64_t group_size);
-private:
-  ObGroupScanIter iter_;
-  int64_t cur_group_idx_;
-  int64_t group_size_;
 };
 
 }  // namespace sql

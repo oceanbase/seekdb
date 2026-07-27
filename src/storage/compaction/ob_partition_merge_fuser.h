@@ -150,11 +150,10 @@ protected:
 class ObMajorPartitionMergeFuser : public ObIPartitionMergeFuser
 {
 public:
-  ObMajorPartitionMergeFuser(common::ObIAllocator &allocator, const int64_t data_format_version)
+  explicit ObMajorPartitionMergeFuser(common::ObIAllocator &allocator)
     : ObIPartitionMergeFuser(allocator),
       default_row_(),
-      generated_cols_(allocator_),
-      data_format_version_(data_format_version)
+      generated_cols_(allocator_)
   {}
   virtual ~ObMajorPartitionMergeFuser();
   virtual int end_fuse_row(const storage::ObNopPos &nop_pos, blocksstable::ObDatumRow &result_row) override;
@@ -164,7 +163,6 @@ protected:
 protected:
   blocksstable::ObDatumRow default_row_;
   ObFixedArray<int32_t, ObIAllocator> generated_cols_;
-  const int64_t data_format_version_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMajorPartitionMergeFuser);
 };
@@ -192,7 +190,6 @@ protected:
 class ObMergeFuserBuilder {
 public:
   static int build(const ObMergeParameter &merge_param,
-                   const int64_t data_format_version,
                    ObIAllocator &allocator,
                    ObIPartitionMergeFuser *&partition_fuser);
 };

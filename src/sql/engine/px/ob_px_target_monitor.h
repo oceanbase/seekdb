@@ -17,7 +17,6 @@
 #ifndef __SQL_ENG_PX_TARGET_MONITOR_H__
 #define __SQL_ENG_PX_TARGET_MONITOR_H__
 
-#include "lib/net/ob_addr.h"
 #include "share/ob_define.h"
 #include "lib/lock/ob_monitor.h"
 #include "lib/lock/mutex.h"
@@ -31,15 +30,10 @@ namespace sql
 
 struct ObPxTargetInfo
 {
-  ObAddr server_;
-  bool is_leader_;
-  ObAddr peer_server_;
-  int64_t parallel_servers_target_;
-  int64_t peer_target_used_;
-  int64_t local_target_used_;
+  int64_t local_target_;
+  int64_t target_used_;
   int64_t local_parallel_session_count_;
-  TO_STRING_KV(K_(server), K_(is_leader), K_(peer_server),
-               K_(parallel_servers_target), K_(peer_target_used), K_(local_target_used),
+  TO_STRING_KV(K_(local_target), K_(target_used),
                K_(local_parallel_session_count));
 };
 
@@ -68,7 +62,7 @@ public:
   ObPxTargetMonitor() : spin_lock_(common::ObLatchIds::PX_TARGET_LOCK) { reset(); }
   virtual ~ObPxTargetMonitor() {}
   static ObPxTargetMonitor &get_instance();
-  int init(const ObAddr &server);
+  int init();
   void reset();
 
   // for monitor
@@ -83,13 +77,13 @@ public:
   int release_target(int64_t worker_count);
 
   // for virtual_table iter
-  int get_all_target_info(common::ObIArray<ObPxTargetInfo> &target_info_array);
+  void get_target_info(ObPxTargetInfo &target_info);
 
-  TO_STRING_KV(K_(is_init), K_(server), K_(px_target_used));
+  TO_STRING_KV(K_(is_init), K_(parallel_servers_target), K_(px_target_used),
+               K_(parallel_session_count));
 
 private:
   bool is_init_;
-  ObAddr server_;
   int64_t parallel_servers_target_;
   int64_t px_target_used_;
   // Protects the local PX worker quota counters.

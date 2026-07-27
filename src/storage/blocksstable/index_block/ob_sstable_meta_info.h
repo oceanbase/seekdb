@@ -30,7 +30,6 @@ namespace storage
 {
 class ObLinkedMacroBlockItemReader;
 class ObLinkedMacroBlockItemWriter;
-struct ObSSTableLinkBlockWriteInfo;
 }
 namespace blocksstable
 {
@@ -232,17 +231,11 @@ private:
       MacroBlockId *&other_block_ids,
       int64_t &other_block_count);
   int persist_block_ids(
-      const ObTabletID &tablet_id,
-      const int64_t snapshot_version,
       common::ObArenaAllocator &allocator,
-      storage::ObSSTableLinkBlockWriteInfo * const link_write_info,
       ObObjectsWriteCtx &linked_block_write_ctx);
   int write_block_ids(
-      const ObTabletID &tablet_id,
-      const int64_t snapshot_version,
       storage::ObLinkedMacroBlockItemWriter &writer,
-      MacroBlockId &entry_id,
-      storage::ObSSTableLinkBlockWriteInfo * const link_write_info) const;
+      MacroBlockId &entry_id) const;
   static int flush_ids(
       const MacroBlockId *blk_ids,
       const int64_t blk_cnt,

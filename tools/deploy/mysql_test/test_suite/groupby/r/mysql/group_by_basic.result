@@ -1,5 +1,4 @@
 drop table if exists t1, t2, t3, t4, t5;
-SET @test_counter_s1 = NULL;
 create table t1(c1 int primary key, c2 int, c3 varchar(10));
 create table t2(c1 int primary key,
 c2 int,

@@ -407,7 +407,6 @@ int ObDeadLockDetectorMgr::init()
                                  TIMER_THREAD_COUNT,
                                  DETECTOR_TIMER_NAME))) {
       DETECT_LOG(WARN, "time_wheel_ init failed", PRINT_WRAPPER);
-    } else if (FALSE_IT(time_wheel_inited = true)) {
     } else if (OB_FAIL(detector_map_.init(attr))) {
       DETECT_LOG(WARN, "detector_map_ init failed", PRINT_WRAPPER);
     } else if (FALSE_IT(detector_map_inited = true)) {
@@ -419,16 +418,6 @@ int ObDeadLockDetectorMgr::init()
       DETECT_LOG(INFO, "ObDeadLockDetectorMgr init success", PRINT_WRAPPER);
     }
     DETECT_LOG(INFO, "ObDeadLockDetectorMgr init called", PRINT_WRAPPER, K(lbt()));
-  }
-
-  if (OB_FAIL(ret)) {
-    local_task_queue_.destroy();
-    if (detector_map_inited) {
-      detector_map_.destroy();
-    }
-    if (time_wheel_inited) {
-      time_wheel_.destroy();
-    }
   }
 
   return ret;
@@ -633,10 +622,18 @@ int ObDeadLockDetectorMgr::process_parent_notification_(const UserBinaryKey &par
   ObIDeadLockDetector *p_detector = nullptr;
 
   const UserBinaryKey &binary_key = parent_key;
+  ObDependencyResource resource(child_key);
   if (common::OB_SUCCESS == (ret = detector_map_.get(binary_key, p_detector))) {
-    ret = common::OB_ENTRY_EXIST;
+    if (OB_FAIL(p_detector->block(resource))) {
+      if (OB_ENTRY_EXIST == ret) {
+        ret = OB_SUCCESS;
+      } else {
+        DETECT_LOG(WARN, "block child on existing parent failed", PRINT_WRAPPER);
+      }
+    }
     detector_map_.revert(p_detector);
-  } else {
+  } else if (OB_ENTRY_NOT_EXIST == ret) {
+    ret = OB_SUCCESS;
     ObMemAttr attr(MEMORY_LABEL);
     ObDeadLockDetectorMgr *p_deadlock_detector_mgr = share::g_mp->dead_lock_detector_mgr();
     if (OB_ISNULL(p_deadlock_detector_mgr)) {
@@ -684,7 +681,6 @@ int ObDeadLockDetectorMgr::process_parent_notification_(const UserBinaryKey &par
       (void)detector_map_.del(binary_key);
       detector_map_.revert(p_detector);
     } else {
-      ObDependencyResource resource(child_key);
       if (OB_FAIL(p_detector->block(resource))) {
         DETECT_LOG(WARN, "block child failed", PRINT_WRAPPER);
         p_detector->unregister_timer_task();
@@ -694,6 +690,8 @@ int ObDeadLockDetectorMgr::process_parent_notification_(const UserBinaryKey &par
       }
       detector_map_.revert(p_detector);
     }
+  } else {
+    DETECT_LOG(WARN, "get parent detector failed", PRINT_WRAPPER);
   }
 
   return ret;
@@ -732,9 +730,7 @@ uint64_t ObDeadLockDetectorMgr::calculate_cycle_hash_(
   uint64_t hash = 0;
   const ObArray<ObDetectorInnerReportInfo> &collected_info = cycle_info.get_collected_info();
   for (int64_t idx = 0; idx < collected_info.count(); ++idx) {
-    const uint64_t key_hash = collected_info.at(idx).get_user_key().hash();
     const uint64_t id = collected_info.at(idx).get_detector_id();
-    hash = murmurhash(&key_hash, sizeof(key_hash), hash);
     hash = murmurhash(&id, sizeof(id), hash);
   }
   return hash;

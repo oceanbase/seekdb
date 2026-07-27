@@ -146,12 +146,6 @@ public:
   int64_t get_expected_worker_count() const { return stat_.expected_worker_count_; }
   void set_minimal_worker_count(int64_t c) { stat_.minimal_worker_count_ = c; }
   int64_t get_minimal_worker_count() const { return stat_.minimal_worker_count_; }
-  int set_expected_worker_map(const common::hash::ObHashMap<ObAddr, int64_t> &c);
-  const ObPlanStat::AddrMap& get_expected_worker_map() const;
-  int set_minimal_worker_map(const common::hash::ObHashMap<ObAddr, int64_t> &c);
-  const common::hash::ObHashMap<ObAddr, int64_t>& get_minimal_worker_map() const;
-  int assign_worker_map(ObPlanStat::AddrMap &worker_map,
-                        const common::hash::ObHashMap<ObAddr, int64_t> &c);
   const char* get_sql_id() const { return stat_.sql_id_.ptr(); }
   const ObString& get_sql_id_string() const { return stat_.sql_id_; }
   uint32_t get_next_phy_operator_id() { return next_phy_operator_id_++; }
@@ -182,7 +176,6 @@ public:
   uint64_t get_signature() const { return signature_; }
   void set_plan_hash_value(uint64_t v) { stat_.plan_hash_value_ = v; }
   int32_t *alloc_projector(int64_t projector_size);
-  int add_table_location(const ObPhyTableLocation &table_location);
   ObExprOperatorFactory &get_expr_op_factory() { return expr_op_factory_; }
   const ObExprOperatorFactory &get_expr_op_factory() const { return expr_op_factory_; }
 
@@ -294,6 +287,8 @@ public:
   inline int64_t get_ddl_execution_id() const { return ddl_execution_id_; }
   inline void set_ddl_task_id(const int64_t ddl_task_id) { ddl_task_id_ = ddl_task_id; }
   inline int64_t get_ddl_task_id() const { return ddl_task_id_; }
+  inline void set_use_rich_format(const bool v) { use_rich_format_ = v; }
+  inline bool get_use_rich_format() const { return use_rich_format_; }
   void set_record_plan_info(bool v) { need_record_plan_info_ = v; }
   bool need_record_plan_info() const { return need_record_plan_info_; }
   bool try_record_plan_info();
@@ -385,11 +380,6 @@ public:
   const ObSubSchemaCtx &get_subschema_ctx() const { return subschema_ctx_; }
   int set_all_local_session_vars(ObIArray<ObLocalSessionVar> *all_local_session_vars);
   ObIArray<ObLocalSessionVar> & get_all_local_session_vars() { return all_local_session_vars_; }
-  void set_direct_load_need_sort(const bool direct_load_need_sort)
-  {
-    direct_load_need_sort_ = direct_load_need_sort;
-  }
-  bool get_direct_load_need_sort() const { return direct_load_need_sort_; }
   inline bool get_insertup_can_do_gts_opt() const {return insertup_can_do_gts_opt_; }
   inline void set_insertup_can_do_gts_opt(bool v) { insertup_can_do_gts_opt_ = v; }
   void set_is_use_auto_dop(bool use_auto_dop)  { stat_.is_use_auto_dop_ = use_auto_dop; }
@@ -540,6 +530,8 @@ public:
   bool has_instead_of_trigger_; // mask if has instead of trigger on view
   bool need_record_plan_info_;
   ObLogicalPlanRawData logical_plan_;
+  // for detector manager
+  bool use_rich_format_;
   ObSubSchemaCtx subschema_ctx_;
   int64_t das_dop_;
   bool disable_auto_memory_mgr_;
@@ -554,7 +546,6 @@ private:
   bool need_switch_to_table_lock_worker_; // for table lock switch worker thread
   bool data_complement_gen_doc_id_;
 private:
-  bool direct_load_need_sort_;
   bool insertup_can_do_gts_opt_;
   int64_t px_worker_share_plan_enabled_;
 };

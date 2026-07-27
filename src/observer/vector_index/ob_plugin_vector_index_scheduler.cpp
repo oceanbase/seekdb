@@ -1513,7 +1513,6 @@ int ObVectorIndexTask::process()
 
     while(!need_stop && OB_SUCC(ret)) {
       lib::ContextParam param;
-      // Use the DAG runtime id for the vector index task parameter.
       param.set_mem_attr("VecIdxTaskCP", ObCtxIds::DEFAULT_CTX_ID)
         .set_properties(lib::USE_TL_PAGE_OPTIONAL);
       CREATE_WITH_TEMP_CONTEXT(param) {

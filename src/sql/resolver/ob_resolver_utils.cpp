@@ -2139,6 +2139,7 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
                                    ObExprInfo *parents_expr_info,
                                    const ObSQLMode sql_mode,
                                    bool enable_decimal_int_type,
+                                   const share::ObCompatType compat_type,
                                    const bool enable_mysql_compatible_dates,
                                    int8_t min_const_integer_precision,
                                    bool is_from_pl /* false */,
@@ -2527,10 +2528,16 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
       break;
     };
     case T_NULL: {
-      val.set_null();
-      val.unset_result_flag(NOT_NULL_FLAG);
-      val.set_length(0);
-      val.set_param_meta(val.get_meta());
+      if (OB_UNLIKELY(share::COMPAT_MYSQL8 == compat_type && node->value_ == 1)) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "\\N in MySQL8");
+        LOG_WARN("\\N is not supported in MySQL8", K(ret));
+      } else {
+        val.set_null();
+        val.unset_result_flag(NOT_NULL_FLAG);
+        val.set_length(0);
+        val.set_param_meta(val.get_meta());
+      }
       break;
     }
     default: {
@@ -2879,11 +2886,6 @@ bool ObResolverUtils::is_valid_partition_column_type(const ObObjType type,
       bret = true;
     } else if (PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_type &&
                 is_partition_range_column_type(type)) {
-      /*
-        if the server version is greater than 4_3_0_1, we then make
-        other columns types such as timestamp, float, double, decimal available to range columns
-        not compatible with MySql, relaied by size partition
-      */
       bret = true;
     }
   }
@@ -4712,7 +4714,7 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
         data_type.set_obj_type(ObUNumberType);
       }
   }
-  const ObAccuracy &default_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][data_type.get_obj_type()];
+  const ObAccuracy &default_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY[data_type.get_obj_type()];
 
   LOG_DEBUG("resolve_data_type", K(ret), K(has_specify_scale), K(type_node.type_), K(type_node.param_num_), K(number_type), K(scale), K(precision), K(length));
   switch (data_type.get_type_class()) {
@@ -5301,8 +5303,7 @@ int ObResolverUtils::check_self_reference_fk_columns_satisfy(
 
 int ObResolverUtils::check_foreign_key_set_null_satisfy(
     const obcall::ObCreateForeignKeyArg &arg,
-    const share::schema::ObTableSchema &child_table_schema,
-    const bool is_mysql_compat_mode)
+    const share::schema::ObTableSchema &child_table_schema)
 {
   int ret = OB_SUCCESS;
   if (arg.delete_action_ == ACTION_SET_NULL || arg.update_action_ == ACTION_SET_NULL) {
@@ -5316,11 +5317,11 @@ int ObResolverUtils::check_foreign_key_set_null_satisfy(
       } else if (fk_col_schema->is_generated_column()) {
         ret = OB_ERR_UNSUPPORTED_FK_SET_NULL_ON_GENERATED_COLUMN;
         LOG_WARN("foreign key column is generated column", K(ret), K(i), K(fk_col_name));
-      } else if (!fk_col_schema->is_nullable() && is_mysql_compat_mode) {
+      } else if (!fk_col_schema->is_nullable()) {
         ret = OB_ERR_FK_COLUMN_NOT_NULL;
         ObCStringHelper helper;
         LOG_USER_ERROR(OB_ERR_FK_COLUMN_NOT_NULL, helper.convert(fk_col_name), helper.convert(arg.foreign_key_name_));
-      } else if (is_mysql_compat_mode) {
+      } else {
         // check if fk column is base column of virtual generated column in MySQL mode
         const uint64_t fk_col_id = fk_col_schema->get_column_id();
         bool is_stored_base_col = false;
@@ -5585,8 +5586,7 @@ int ObResolverUtils::check_match_columns_strict_with_order(const ObTableSchema *
 // @param [in] parent_columns       foreign key column names of the parent table
 
 // @return oceanbase error code defined in lib/ob_errno.def
-int ObResolverUtils::check_foreign_key_columns_type(const bool is_mysql_compat_mode,
-                                                    const ObTableSchema &child_table_schema,
+int ObResolverUtils::check_foreign_key_columns_type(const ObTableSchema &child_table_schema,
                                                     const ObTableSchema &parent_table_schema,
                                                     const ObIArray<ObString> &child_columns,
                                                     const ObIArray<ObString> &parent_columns,
@@ -5638,8 +5638,7 @@ int ObResolverUtils::check_foreign_key_columns_type(const bool is_mysql_compat_m
             LOG_WARN("The collation types are different", K(ret),
                 K(child_col->get_collation_type()),
                 K(parent_col->get_collation_type()));
-          } else if (is_mysql_compat_mode &&
-                    (child_col->get_data_length() < parent_col->get_data_length())) {
+          } else if (child_col->get_data_length() < parent_col->get_data_length()) {
             ret = OB_ERR_INVALID_CHILD_COLUMN_LENGTH_FK;
             LOG_USER_ERROR(OB_ERR_INVALID_CHILD_COLUMN_LENGTH_FK,
                 child_col->get_column_name_str().length(),
@@ -7509,6 +7508,7 @@ int ObResolverUtils::resolver_param(ObPlanCacheCtx &pc_ctx,
   ObString literal_prefix;
   const bool is_paramlize = false;
   int64_t server_collation = CS_TYPE_INVALID;
+  share::ObCompatType compat_type = share::COMPAT_MYSQL57;
   obj_param.reset();
   if (OB_ISNULL(pc_param) || OB_ISNULL(raw_param = pc_param->node_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -7542,6 +7542,7 @@ int ObResolverUtils::resolver_param(ObPlanCacheCtx &pc_ctx,
                        static_cast<ObCollationType>(server_collation), NULL,
                        session.get_sql_mode(),
                        enable_decimal_int,
+                       compat_type,
                        enable_mysql_compatible_dates,
                        session.get_min_const_integer_precision(),
                        false, /* is_from_pl */

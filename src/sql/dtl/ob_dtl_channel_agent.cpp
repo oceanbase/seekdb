@@ -31,6 +31,15 @@ int ObDtlBufEncoder::switch_writer(const ObDtlMsg &msg)
         msg_writer_ = &row_msg_writer_;
       } else if (DtlWriterType::CHUNK_DATUM_WRITER == msg_writer_map[px_row.get_data_type()]) {
         msg_writer_ = &datum_msg_writer_;
+      } else if (DtlWriterType::VECTOR_FIXED_WRITER == msg_writer_map[px_row.get_data_type()]) {
+        vector_fixed_msg_writer_.set_size_per_buffer(size_per_buffer_);
+        msg_writer_ = &vector_fixed_msg_writer_;
+      } else if (DtlWriterType::VECTOR_ROW_WRITER == msg_writer_map[px_row.get_data_type()]) {
+        vector_row_msg_writer_.set_row_meta(meta_);
+        msg_writer_ = &vector_row_msg_writer_;
+      } else if (DtlWriterType::VECTOR_WRITER == msg_writer_map[px_row.get_data_type()]) {
+        //TODO : support local channel shuffle in vector mode
+        msg_writer_ = &vector_row_msg_writer_;
       } else {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unkown msg writer", K(msg.get_type()), K(msg_writer_->type()));
@@ -44,6 +53,19 @@ int ObDtlBufEncoder::switch_writer(const ObDtlMsg &msg)
         LOG_WARN("unkown msg writer", K(msg.get_type()), K(msg_writer_->type()));
       }
     }
+  } else {
+// #ifndef NDEBUG
+    // if (msg.is_data_msg() && msg_writer_->type() != DtlWriterType::VECTOR_ROW_WRITER) {
+    //   const ObPxNewRow &px_row = static_cast<const ObPxNewRow&>(msg);
+    //   if (msg_writer_map[px_row.get_data_type()] != msg_writer_->type()) {
+    //     ret = OB_ERR_UNEXPECTED;
+    //   }
+    // } else {
+    //   if (msg_writer_map[msg.get_type()] != msg_writer_->type()) {
+    //     ret = OB_ERR_UNEXPECTED;
+    //   }
+    // }
+// #endif
   }
   return ret;
 }
@@ -75,7 +97,6 @@ int ObDtlBufEncoder::write_data_msg(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, bo
 }
 
 int ObDtlChanAgent::init(dtl::ObDtlFlowControl &dfc,
-                         ObPxTaskChSet &task_ch_set,
                          ObIArray<ObDtlChannel *> &channels,
                          int64_t time_ts)
 {
@@ -86,19 +107,9 @@ int ObDtlChanAgent::init(dtl::ObDtlFlowControl &dfc,
   sys_dtl_buf_size_ = GCONF.dtl_buffer_size;
   dfo_key_ = dfc.get_dfo_key();
 
-  if (init_) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("this channel agent has been initiated", K(ret));
-  }
-
   for (int64_t i = 0; i < channels.count() && OB_SUCC(ret); ++i) {
     ObDtlBasicChannel *data_ch = (ObDtlBasicChannel*)channels.at(i);
     int64_t sys_buffer_size = data_ch->get_send_buffer_size();
-
-    ObDtlChannelInfo ch_info;
-    if (OB_FAIL(task_ch_set.get_channel_info(i, ch_info))) {
-      LOG_WARN("failed to get channel info", K(ret));
-    }
     dtl_buf_allocator_.set_sys_buffer_size(sys_buffer_size);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(local_channels_.push_back((ObDtlLocalChannel *)data_ch))) {

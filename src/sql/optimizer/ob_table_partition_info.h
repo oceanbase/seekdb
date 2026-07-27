@@ -19,7 +19,6 @@
 
 #include "sql/optimizer/ob_phy_table_location_info.h"
 #include "sql/optimizer/ob_table_location.h"
-#include "sql/ob_phy_table_location.h"
 
 namespace oceanbase
 {
@@ -60,15 +59,11 @@ public:
                                         const ParamStore &params,
                                         const common::ObDataTypeCastParams &dtc_params);
 
-  int calculate_local_tablet_locations(ObExecContext &exec_ctx,
-                                       const ParamStore &params,
-                                       const common::ObDataTypeCastParams &dtc_params);
   int replace_final_location_key(ObExecContext &exec_ctx, uint64_t ref_table_id, bool is_local_index);
 
   int set_table_location_direction(const ObOrderDirection &direction);
   int fill_phy_tbl_loc_info_direction();
-  int get_location_type(const common::ObAddr &server, ObTableLocationType &type) const;
-  int get_all_servers(common::ObIArray<common::ObAddr> &servers) const;
+  ObTableLocationType get_location_type() const;
 
   ObTableLocation &get_table_location()
   {
@@ -94,11 +89,6 @@ public:
     table_location_ = tbl;
   }
 
-  /*ObPhyTableLocation &get_phy_table_location()
-  {
-    return phy_tbl_location_;
-  }*/
-
   uint64_t get_table_id() const { return table_location_.get_table_id(); }
   uint64_t get_ref_table_id() const { return table_location_.get_ref_table_id(); }
   share::schema::ObPartitionLevel get_part_level() const { return table_location_.get_part_level(); }
@@ -109,20 +99,10 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObTablePartitionInfo);
 
 private:
-  /**
-   * ObTableLocation is the structure we stored to calculate the physical table location,
-   * which is represented by ObPhyTableLocation, for a given table(logical) in a given statement.
-   *
-   * The info we keep in ObTableLocation is constant for a parameterized query among multiple
-   * times of execution, which is stored to short-cut to plan matching and location calculation
-   * since we can skip a bunch of steps in query processing, such as parsing, resolving,
-   * optimization and code generation.
-   */
   common::ObArenaAllocator inner_allocator_;
   ObIAllocator &allocator_;
   ObTableLocation table_location_;
   ObCandiTableLoc candi_table_loc_;
-  //ObPhyTableLocation phy_tbl_location_;
 };
 
 }

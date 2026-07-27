@@ -593,8 +593,6 @@ int ObKVCacheStore::try_flush_washable_mb(ObICacheWasher::ObCacheMemBlock*& wash
         }
         COMMON_LOG(INFO, "can not find enough memory block to wash", K(ret), K(size_washed), K(size_to_wash));
       }
-      EVENT_ADD(KVCACHE_SYNC_WASH_TIME, ObTimeUtility::current_time() - start);
-      EVENT_INC(KVCACHE_SYNC_WASH_COUNT);
     }
 
     if (OB_FAIL(ret)) {

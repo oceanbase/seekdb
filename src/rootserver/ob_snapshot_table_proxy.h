@@ -38,7 +38,7 @@ enum ObSnapShotType
   SNAPSHOT_FOR_MAJOR = 0,
   SNAPSHOT_FOR_DDL = 1,
   SNAPSHOT_FOR_MULTI_VERSION = 2,
-  SNAPSHOT_FOR_RESTORE_POINT = 3,
+  SNAPSHOT_TYPE_RESERVED_3 = 3,
   SNAPSHOT_FOR_BACKUP_POINT = 4,
   MAX_SNAPSHOT_TYPE,
 };
@@ -58,6 +58,7 @@ public:
            const int64_t schema_version, const char* comment);
   void reset();
   bool is_valid() const;
+  static bool is_valid_snapshot_type(const ObSnapShotType snapshot_type);
   static const char * get_snapshot_type_str(const ObSnapShotType &snapshot_type);
   static const char *ObSnapShotTypeStr[];
   TO_STRING_KV(K_(snapshot_type),

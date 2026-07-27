@@ -29,7 +29,6 @@
 using namespace oceanbase::rootserver;
 using namespace oceanbase::common;
 using namespace oceanbase::common::sqlclient;
-using namespace oceanbase::obcall;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::sql;

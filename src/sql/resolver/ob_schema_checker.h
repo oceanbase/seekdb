@@ -42,7 +42,6 @@ namespace share
 {
 namespace schema
 {
-class ObServerRuntimeSchema;
 class ObUserInfo;
 class ObDatabaseSchema;
 class ObTableSchema;
@@ -55,6 +54,7 @@ class ObSchemaGetterGuard;
 }
 namespace sql
 {
+struct ObSqlCtx;
 // wrapper of schema manager which is used by SQL module
 
 #define LBCA_OP_FLAG  1
@@ -181,7 +181,6 @@ public:
   //int check_is_index_table(uint64_t table_id, bool &is_index_table) const;
   int get_can_read_index_array(uint64_t table_id, uint64_t *index_tid_array, int64_t &size) const;
   int get_can_write_index_array(uint64_t table_id, uint64_t *index_tid_array, int64_t &size, bool only_global = false) const;
-  int get_server_runtime_info(const share::schema::ObServerRuntimeSchema *&runtime_schema);
   int get_database_schema(
                           const uint64_t database_id,
                           const share::schema::ObDatabaseSchema *&database_schema);

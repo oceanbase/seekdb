@@ -31,6 +31,10 @@
 #include "share/datum/ob_datum_funcs.h"
 #include "common/expression/ob_expr_string_buf.h"
 #include "share/object/ob_obj_cast.h"
+#include "sql/engine/vector/ob_uniform_vector.h"
+#include "sql/engine/vector/ob_discrete_vector.h"
+#include "sql/engine/vector/ob_fixed_length_vector.h"
+#include "sql/engine/vector/ob_continuous_vector.h"
 #include "common/object/ob_obj_compare.h"
 #include "common/ob_accuracy.h"
 #include "common/mysqlclient/ob_mysql_global.h"
@@ -1908,7 +1912,11 @@ public:
   static int calc_result2_mysql(const ObExpr &expr, ObEvalCtx &ctx,
                                 ObDatum &res_datum);
 
+  static int calc_bitwise_result2_mysql_vector(VECTOR_EVAL_FUNC_ARG_DECL);
   DECLARE_SET_LOCAL_SESSION_VARS;
+
+private:
+  static void convert_tc_size(VecValueTypeClass vec_tc, int &len);
 
 protected:
   enum BitOperator
@@ -1923,6 +1931,9 @@ protected:
     BIT_MAX,
   };
 
+  static int dispatch_calc_vector(VECTOR_EVAL_FUNC_ARG_DECL, ObCastMode cast_mode);
+  template <typename RES_VEC, typename L_VEC, typename R_VEC>
+  static int inner_calc_vector(VECTOR_EVAL_FUNC_ARG_DECL, ObCastMode cast_mode);
   // Get int64/uint64 from datum, for number rounding/truncation operations are needed, for int tc will get directly
   // int value
   typedef int (*GetIntFunc)(const ObDatumMeta &, const common::ObDatum &, bool, int64_t &,
@@ -2259,8 +2270,6 @@ private:
                        is_null_safe, \
                        expr_ctx.tz_offset_,\
                        default_null_pos())
-#define EXPR_SET_CAST_CTX_MODE(expr_ctx) \
-    ObSQLUtils::set_compatible_cast_mode((expr_ctx).my_session_, (expr_ctx).cast_mode_)
 // external variables: expr_ctx.
 #define EXPR_DEFINE_CAST_CTX(expr_ctx, cast_mode)                       \
     EXPR_DEFINE_CAST_CTX_ZF(expr_ctx, cast_mode , NULL)
@@ -2277,10 +2286,6 @@ private:
         cast_coll_type = ObCharset::get_default_collation(                 \
             ObCharset::get_default_charset());                             \
       }                                                                    \
-    }                                                                      \
-    if (common::OB_SUCCESS != ObSQLUtils::set_compatible_cast_mode(        \
-                                (expr_ctx).my_session_, cp_cast_mode_)) {  \
-      SQL_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "fail to get compatible mode for cast_mode");         \
     }                                                                      \
   } else {                                                                 \
     SQL_LOG_RET(WARN, common::OB_ERR_UNEXPECTED, "session is null");                                      \

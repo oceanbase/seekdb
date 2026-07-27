@@ -44,8 +44,7 @@ DEF_TO_STRING(ObSubPlanFilterVecSpec)
        K_(onetime_exprs),
        K_(init_plan_idxs),
        K_(one_time_idxs),
-       K_(update_set),
-       K_(exec_param_idxs_inited));
+       K_(update_set));
   J_OBJ_END();
   return pos;
 }
@@ -172,6 +171,7 @@ int ObSubPlanFilterVecOp::init_subplan_iters()
 {
   int ret = OB_SUCCESS;
   CK(child_cnt_ >= 2);
+  CK(child_cnt_ - 1 == MY_SPEC.exec_param_array_.count());
   LOG_TRACE("init subplan iters in ObSubPlanFilterVecOp", K(child_cnt_));
   if (OB_SUCC(ret)) {
     OZ(subplan_iters_.prepare_allocate(child_cnt_ - 1));
@@ -194,7 +194,7 @@ int ObSubPlanFilterVecOp::init_subplan_iters()
             MY_SPEC.enable_px_batch_rescans_.at(i)) {
           // enable_left_px_batch_ = true;
         }
-        if (!MY_SPEC.exec_param_idxs_inited_) {
+        if (!MY_SPEC.enable_subquery_result_cache_) {
           // Non-deterministic subqueries bypass the parameter-result cache.
         } else if (OB_FAIL(iter->init_mem_entity())) {
           LOG_WARN("failed to init mem_entity", K(ret));

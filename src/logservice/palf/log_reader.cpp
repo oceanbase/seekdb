@@ -15,8 +15,6 @@
  */
 
 #include "log_reader.h"
-#include "lib/stat/ob_diagnose_info.h"    // ObStatEventIds
-#include "lib/stat/ob_diagnostic_info_guard.h"    // EVENT_*
 #include "log_io_adapter.h"               // LogIOAdapter
 #include "share/rc/ob_server_runtime.h"
 
@@ -117,9 +115,6 @@ int LogReader::pread(const block_id_t block_id,
     if (OB_SUCC(ret)) {
       const int64_t cost_ts = ObTimeUtility::fast_current_time() - start_ts;
       io_ctx.inc_read_disk_cost_ts(cost_ts);
-      EVENT_INC(PALF_READ_IO_COUNT_FROM_DISK);
-      EVENT_ADD(PALF_READ_SIZE_FROM_DISK, out_read_size);
-      EVENT_ADD(PALF_READ_TIME_FROM_DISK, cost_ts);
       const int64_t accum_read_io_count = ATOMIC_AAF(&accum_read_io_count_, 1);
       const int64_t accum_read_log_size = ATOMIC_AAF(&accum_read_log_size_, out_read_size);
       const int64_t accum_read_cost_ts = ATOMIC_AAF(&accum_read_cost_ts_, cost_ts);

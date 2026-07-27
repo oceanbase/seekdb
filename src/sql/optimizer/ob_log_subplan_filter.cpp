@@ -293,7 +293,6 @@ int ObLogSubPlanFilter::get_re_est_cost_infos(const EstimateCostInfo &param,
       cur_param.need_batch_rescan_ = enable_das_group_rescan()
                                      && !init_plan_idxs_.has_member(i)
                                      && !one_time_idxs_.has_member(i);
-      cur_param.rescan_left_server_list_ = &get_server_list();
     }
 
     if (OB_FAIL(ret)) {
@@ -376,7 +375,6 @@ int ObLogSubPlanFilter::compute_sharding_info()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(get_plan()), K(ret));
   } else if (DistAlgo::DIST_BASIC_METHOD == dist_algo_) {
-    ObShardingInfo *sharding = NULL;
     if (OB_FAIL(ObOptimizerUtil::compute_basic_sharding_info(
                                     get_plan()->get_optimizer_context().get_local_server_addr(),
                                     get_child_list(),
@@ -775,10 +773,9 @@ int ObLogSubPlanFilter::rebuild_repart_sharding_info(const ObShardingInfo *input
   return ret;
 }
 
-int ObLogSubPlanFilter::compute_op_parallel_and_server_info()
+int ObLogSubPlanFilter::compute_op_parallel_info()
 {
   int ret = OB_SUCCESS;
-  get_server_list().reuse();
   ObLogicalOperator *child = NULL;;
   ObLogicalOperator *first_op = get_child(first_child);
   ObLogicalOperator *sub_query_op = get_child(second_child);
@@ -794,23 +791,11 @@ int ObLogSubPlanFilter::compute_op_parallel_and_server_info()
       }
     }
     set_parallel(1);
-    set_server_cnt(1);
     set_available_parallel(available_parallel);
-    if (DistAlgo::DIST_BASIC_METHOD == dist_algo_ &&
-        OB_FAIL(get_server_list().assign(first_op->get_server_list()))) {
-      LOG_WARN("failed to assign server list", K(ret));
-    } else if (DistAlgo::DIST_PULL_TO_LOCAL == dist_algo_
-               && OB_FAIL(get_server_list().push_back(get_plan()->get_optimizer_context().get_local_server_addr()))) {
-      LOG_WARN("failed to push back server list", K(ret));
-    }
   } else if (DistAlgo::DIST_NONE_ALL == dist_algo_
              || DistAlgo::DIST_RANDOM_ALL == dist_algo_
              || DistAlgo::DIST_HASH_ALL == dist_algo_) {
     set_parallel(first_op->get_parallel());
-    set_server_cnt(first_op->get_server_cnt());
-    if (OB_FAIL(get_server_list().assign(first_op->get_server_list()))) {
-      LOG_WARN("failed to assign server list", K(ret));
-    }
   } else if (DistAlgo::DIST_PARTITION_WISE == get_distributed_algo()
              || DistAlgo::DIST_PARTITION_NONE == get_distributed_algo()) {
     int64_t parallel = ObGlobalHint::DEFAULT_PARALLEL;
@@ -824,10 +809,6 @@ int ObLogSubPlanFilter::compute_op_parallel_and_server_info()
       need_re_est_child_cost_ = true;
     }
     set_parallel(parallel);
-    set_server_cnt(sub_query_op->get_server_cnt());
-    if (OB_FAIL(get_server_list().assign(sub_query_op->get_server_list()))) {
-      LOG_WARN("failed to assign server list", K(ret));
-    }
   } else {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected dist algo", K(ret), K(dist_algo_));
@@ -1057,7 +1038,6 @@ int ObLogSubPlanFilter::check_right_is_local_scan(int64_t &local_scan_type) cons
   int ret = OB_SUCCESS;
   local_scan_type = 2;  // 0: dist scan, 1: local das scan, 2: local scan
   const ObLogicalOperator *child = NULL;
-  bool contain_dist_das = false;
   for (int64_t i = 1; 0 < local_scan_type && OB_SUCC(ret) && i < get_num_of_child(); i++) {
     if (init_plan_idxs_.has_member(i) || one_time_idxs_.has_member(i)) {
       /* do nothing */
@@ -1068,13 +1048,6 @@ int ObLogSubPlanFilter::check_right_is_local_scan(int64_t &local_scan_type) cons
       local_scan_type = 0;
     } else if (!child->get_contains_das_op()) {
       /* do nothing */
-    } else if (1 != get_server_list().count()
-               || ObShardingInfo::is_shuffled_server_list(get_server_list())) {
-      local_scan_type = 0;
-    } else if (OB_FAIL(child->check_contain_dist_das(get_server_list(), contain_dist_das))) {
-      LOG_WARN("failed to check contain dist das", K(ret));
-    } else if (contain_dist_das) {
-      local_scan_type = 0;
     } else {
       local_scan_type = 1;
     }

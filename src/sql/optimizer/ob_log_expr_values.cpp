@@ -570,13 +570,13 @@ int ObLogExprValues::inner_replace_op_exprs(ObRawExprReplacer &replacer)
   return ret;
 }
 
-int ObLogExprValues::compute_op_parallel_and_server_info()
+int ObLogExprValues::compute_op_parallel_info()
 {
   int ret = common::OB_SUCCESS;
   if (get_num_of_child() == 0) {
-    ret = set_parallel_and_server_info_for_match_all();
+    ret = set_parallel_info_for_match_all();
   } else {
-    ret = ObLogicalOperator::compute_op_parallel_and_server_info();
+    ret = ObLogicalOperator::compute_op_parallel_info();
   }
   return ret;
 }

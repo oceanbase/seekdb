@@ -18,10 +18,12 @@
 
 #include "ob_dfo_mgr.h"
 #include "sql/engine/basic/ob_temp_table_access_op.h"
+#include "sql/engine/basic/ob_temp_table_access_vec_op.h"
 #include "sql/engine/basic/ob_material_op.h"
 #include "sql/engine/join/ob_join_filter_op.h"
 #include "src/sql/engine/px/exchange/ob_px_transmit_op.h"
 #include "sql/engine/px/ob_px_coord_op.h"
+#include "sql/engine/basic/ob_material_vec_op.h"
 #include "sql/engine/basic/ob_select_into_op.h"
 
 using namespace oceanbase::common;
@@ -158,6 +160,16 @@ int ObDfoSchedDepthGenerator::try_set_dfo_block(ObExecContext &exec_ctx, ObDfo &
         ObMaterialOpInput *mat_input = static_cast<ObMaterialOpInput *>(kit->input_);
         mat_input->set_bypass(!block); // so that this dfo will have a blocked material op
       }
+    } else if (PHY_VEC_MATERIAL == child->type_) {
+      const ObMaterialVecSpec *mat = static_cast<const ObMaterialVecSpec *>(child);
+      ObOperatorKit *kit = exec_ctx.get_operator_kit(mat->id_);
+      if (OB_ISNULL(kit) || OB_ISNULL(kit->input_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("operator is NULL", K(ret), KP(kit));
+      } else {
+        ObMaterialVecOpInput *mat_input = static_cast<ObMaterialVecOpInput *>(kit->input_);
+        mat_input->set_bypass(!block); // so that this dfo will have a blocked material op
+      }
     }
   }
   return ret;
@@ -189,9 +201,6 @@ int ObDfoWorkerAssignment::calc_admited_worker_count(const ObIArray<ObDfo*> &dfo
     const int64_t query_admited = task_exec_ctx->get_admited_worker_cnt();
     if (query_expected > 0 && 0 >= query_admited) {
       ret = OB_ERR_INSUFFICIENT_PX_WORKER;
-      ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(dop_, px_expected);
-      ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(required_px_workers_number_, query_expected);
-      ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(admitted_px_workers_number_, query_admited);
       LOG_WARN("not enough thread resource", K(ret), K(px_expected), K(query_admited), K(query_expected));
     } else if (0 == query_expected) {
       // note: For single table, dop=1 queries, it will take the fast dfo path, at this time query_expected = 0
@@ -488,6 +497,10 @@ int ObDfoMgr::do_split(ObExecContext &exec_ctx,
   } else if (phy_op->get_type() == PHY_TEMP_TABLE_ACCESS && NULL != parent_dfo) {
     parent_dfo->set_temp_table_scan(true);
     const ObTempTableAccessOpSpec *access = static_cast<const ObTempTableAccessOpSpec*>(phy_op);
+    parent_dfo->set_temp_table_id(access->get_table_id());
+  } else if (phy_op->get_type() == PHY_VEC_TEMP_TABLE_ACCESS && NULL != parent_dfo) {
+    parent_dfo->set_temp_table_scan(true);
+    const ObTempTableAccessVecOpSpec *access = static_cast<const ObTempTableAccessVecOpSpec*>(phy_op);
     parent_dfo->set_temp_table_id(access->get_table_id());
   } else if (IS_PX_GI(phy_op->get_type()) && NULL != parent_dfo) {
     const ObGranuleIteratorSpec *gi_spec =

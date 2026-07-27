@@ -24,7 +24,7 @@
 #include "sql/resolver/ob_stmt_resolver.h"
 #include "observer/mysql/ob_query_driver.h"
 #include "pl/ob_pl_dependency_util.h"
-#include "share/schema/ob_routine_info.h"  // relocated-definition owner
+#include "share/schema/ob_routine_info.h"
 namespace oceanbase
 {
 using namespace common;

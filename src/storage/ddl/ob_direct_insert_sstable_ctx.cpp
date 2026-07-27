@@ -281,15 +281,6 @@ int ObDirectLoadMgr::create_tablet_direct_load(
   #endif
     if (OB_FAIL(ret)) {
       (void) tablet_exec_context_map_.erase_refactored(exec_id);
-      if (is_incremental_direct_load(build_param.common_param_.direct_load_type_)) {
-        // Clean up failed incremental direct load. Background gc removes failed full direct load.
-        if (data_mgr_key.is_valid()) {
-          (void)remove_tablet_direct_load_nolock(data_mgr_key);
-        }
-        if (lob_mgr_key.is_valid()) {
-          (void)remove_tablet_direct_load_nolock(lob_mgr_key);
-        }
-      }
     }
   }
   return ret;
@@ -812,9 +803,7 @@ int ObDirectLoadMgr::GetGcCandidateOp::operator() (common::hash::HashMapPair<ObT
   const ObTabletDirectLoadMgrKey &key = kv.first;
   ObBaseTabletDirectLoadMgr *tablet_direct_load_mgr = kv.second;
   if (1 == tablet_direct_load_mgr->get_ref()) {
-    if (is_incremental_direct_load(key.direct_load_type_)) {
-      // incremental direct load mgr shoule be freed by the front only.
-    } else if (OB_FAIL(candidate_mgrs_.push_back(key))) {
+    if (OB_FAIL(candidate_mgrs_.push_back(key))) {
       LOG_WARN("failed to push back", K(ret));
     }
   }
@@ -1795,7 +1784,7 @@ int ObTabletFullDirectLoadMgr::open(const int64_t current_execution_id, share::S
   } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet handle is invalid", K(ret), K(tablet_handle));
-  } else if (OB_FAIL(SERVER_TMP_FILE_MANAGER.alloc_dir(dir_id_))) {
+  } else if (OB_FAIL(share::g_mp->tmp_file_manager()->alloc_dir(dir_id_))) {
     LOG_WARN("alloc dir id failed", K(ret));
   } else if (current_execution_id < execution_id_
     || current_execution_id < tablet_handle.get_obj()->get_tablet_meta().ddl_execution_id_) {

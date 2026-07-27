@@ -23,6 +23,10 @@
 #include "share/compaction/ob_array_with_map.h"
 namespace oceanbase
 {
+namespace share
+{
+struct ObColumnChecksumErrorInfo;
+}
 namespace compaction
 {
 struct ObIndexCkmValidatePair

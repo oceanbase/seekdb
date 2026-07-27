@@ -224,7 +224,9 @@ void ObReadInfoStruct::reset()
 {
   is_inited_ = false;
   allocator_ = nullptr;
-  info_ = 0;
+  schema_column_count_ = 0;
+  format_version_ = READ_INFO_FORMAT_VERSION;
+  reserved_ = 0;
   schema_rowkey_cnt_ = 0;
   rowkey_cnt_ = 0;
   cols_desc_.reset();
@@ -248,7 +250,7 @@ int64_t ObReadInfoStruct::to_string(char *buf, const int64_t buf_len) const
   if (OB_ISNULL(buf) || buf_len <= 0) {
   } else {
     J_OBJ_START();
-    J_KV(K_(is_inited),
+    J_KV(K_(is_inited), K_(format_version),
         K_(schema_column_count),
         K_(schema_rowkey_cnt),
         K_(rowkey_cnt),
@@ -504,6 +506,9 @@ int ObTableReadInfo::deserialize(
               group_idx_col_index_,
               seq_read_column_count_);
   if (OB_FAIL(ret)) {
+  } else if (OB_UNLIKELY(READ_INFO_FORMAT_VERSION != format_version_)) {
+    ret = OB_VERSION_NOT_MATCH;
+    LOG_WARN("table read info format version mismatch", K(ret), K_(format_version), K(READ_INFO_FORMAT_VERSION));
   } else if (OB_FAIL(cols_desc_.deserialize(buf, data_len, pos, allocator))) {
     LOG_WARN("Fail to deserialize cols_desc", K(ret), K(data_len), K(pos));
   } else if (FALSE_IT(cols_index_.rowkey_mode_ = false)) {
@@ -769,6 +774,9 @@ int ObRowkeyReadInfo::deserialize(
               schema_rowkey_cnt_,
               rowkey_cnt_);
   if (OB_FAIL(ret)) {
+  } else if (OB_UNLIKELY(READ_INFO_FORMAT_VERSION != format_version_)) {
+    ret = OB_VERSION_NOT_MATCH;
+    LOG_WARN("rowkey read info format version mismatch", K(ret), K_(format_version), K(READ_INFO_FORMAT_VERSION));
   } else if (OB_FAIL(cols_desc_.deserialize(buf, data_len, pos, allocator))) {
     LOG_WARN("Fail to deserialize cols_desc", K(ret), K(data_len), K(pos));
   } else if (OB_FAIL(cols_index_.deserialize(buf, data_len, pos, allocator))) {

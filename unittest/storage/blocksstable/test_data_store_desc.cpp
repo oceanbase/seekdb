@@ -183,7 +183,7 @@ TEST_F(TestObDataStoreDesc, gen_index_desc)
   scn.convert_for_tx(100);
   ASSERT_EQ(OB_SUCCESS,
             data_desc.init(false/*is_ddl*/, table_schema, mock_tablet_id_,
-                             MAJOR_MERGE, snapshot, 1/*clsuter_version*/,
+                             MAJOR_MERGE, snapshot, DATA_CURRENT_VERSION,
                              table_schema.get_micro_index_clustered(), 0/*concurrent_cnt*/));
   ASSERT_TRUE(data_desc.is_valid());
   const ObDataStoreDesc &data_store_desc = data_desc.get_desc();

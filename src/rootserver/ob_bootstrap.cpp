@@ -18,6 +18,7 @@
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "rootserver/ob_bootstrap.h"
+#include "rootserver/ob_runtime_ddl_service.h"
 #include "share/rc/ob_module_provider.h"
 
 #include "share/ob_global_stat_proxy.h"
@@ -793,7 +794,7 @@ int ObBootstrap::init_global_stat()
 
 int ObBootstrap::create_system_runtime()
 {
-  int ret= OB_SUCCESS;
+  int ret = OB_SUCCESS;
   ObServerRuntimeSchema runtime_schema;
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("check_inner_stat failed", K(ret));
@@ -806,7 +807,7 @@ int ObBootstrap::create_system_runtime()
       LOG_WARN("set_comment failed", "comment", "server runtime", K(ret));
     } else if (OB_FAIL(runtime_ddl_service_.create_system_runtime(runtime_schema))) {
       LOG_WARN("create server runtime failed", K(ret), K(runtime_schema));
-    } else {} // no more to do
+    }
   }
 
   LOG_INFO("create server runtime", K(ret), K(runtime_schema));

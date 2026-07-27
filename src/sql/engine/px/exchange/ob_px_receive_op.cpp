@@ -21,6 +21,7 @@
 #include "sql/dtl/ob_dtl_channel_group.h"
 #include "sql/engine/px/exchange/ob_px_ms_receive_op.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
+#include "share/config/ob_server_config.h"
 
 namespace oceanbase
 {
@@ -99,13 +100,16 @@ ObPxReceiveOp::ObPxReceiveOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOp
     iter_end_(false),
     channel_linked_(false),
     task_channels_(),
-    row_reader_(),
+    row_reader_(get_spec().id_, &(static_cast<const ObPxReceiveSpec &>(spec_).child_exprs_),
+                          true,
+                          &ctx_.get_allocator()),
     px_row_msg_proc_(&row_reader_),
     msg_loop_(op_monitor_info_),
     ts_cnt_(0),
     ts_(0),
     ch_info_(),
-    stored_rows_(NULL)
+    stored_rows_(NULL),
+    vector_rows_(nullptr)
 {}
 
 int ObPxReceiveOp::inner_open()
@@ -120,6 +124,14 @@ int ObPxReceiveOp::inner_open()
       if (NULL == stored_rows_) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("alloc stored rows pointer failed", K(ret));
+      }
+      if (OB_SUCC(ret) && get_spec().use_rich_format_) {
+        vector_rows_ = static_cast<const ObCompactRow **>(
+          ctx_.get_allocator().alloc(spec_.max_batch_size_ * sizeof(*vector_rows_)));
+        if (NULL == vector_rows_) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("alloc vector rows pointer failed", K(ret));
+        }
       }
     }
   }
@@ -665,7 +677,9 @@ int ObPxFifoReceiveOp::fetch_rows(const int64_t row_cnt)
     int64_t timeout_ts = phy_plan_ctx->get_timeout_timestamp();
     int64_t retry_cnt = 0;
     do {
-      ret = get_rows_from_channels(row_cnt, timeout_ts - get_timestamp());
+      ret = get_spec().use_rich_format_
+              ? get_rows_from_channels_vec(row_cnt, timeout_ts - get_timestamp())
+              : get_rows_from_channels(row_cnt, timeout_ts - get_timestamp());
       if (OB_SUCCESS == ret) {
         metric_.mark_first_out();
         metric_.set_last_out_ts(::oceanbase::common::ObTimeUtility::current_time());
@@ -784,5 +798,50 @@ int ObPxFifoReceiveOp::get_rows_from_channels(const int64_t row_cnt, int64_t tim
   return ret;
 }
 
+int ObPxFifoReceiveOp::get_rows_from_channels_vec(const int64_t row_cnt, int64_t timeout_us)
+{
+  int ret = OB_SUCCESS;
+  bool got_row = false;
+  UNUSED(timeout_us);
+  while (!got_row && OB_SUCC(ret)) {
+    // Check uniterated rows first, then check all channels are EOF.
+    // Because channel may mark to EOF after transfer buffer to reader, rows still in reader.
+    int64_t left = row_reader_.left_rows();
+    if (left >= row_cnt || (left > 0 && msg_loop_.all_eof(task_channels_.count()))) {
+      clear_evaluated_flag();
+      clear_dynamic_const_parent_flag();
+      int64_t read_rows = 0;
+      if (OB_FAIL(row_reader_.get_next_batch_vec(MY_SPEC.child_exprs_,
+                                              MY_SPEC.dynamic_const_exprs_,
+                                              eval_ctx_,
+                                              row_cnt,
+                                              read_rows,
+                                              vector_rows_))) {
+        LOG_WARN("get next batch failed", K(ret));
+      } else {
+        got_row = true;
+        brs_.size_ = read_rows;
+        brs_.all_rows_active_ = true;
+      }
+      break;
+    }
+    if (msg_loop_.all_eof(task_channels_.count())) {
+      ret = OB_ITER_END;
+      LOG_TRACE("no more date in all channels", K(ret));
+      break;
+    }
+    if (OB_FAIL(msg_loop_.process_any())) {
+      if (OB_DTL_WAIT_EAGAIN != ret) {
+        LOG_WARN("fail pop sqc execution result from channel", K(ret));
+      } else {
+        ret = OB_DTL_WAIT_EAGAIN;
+      }
+    }
+  }
+  if (OB_SUCC(ret) && !got_row) {
+    ret = OB_DTL_WAIT_EAGAIN;
+  }
+  return ret;
+}
 } // end namespace sql
 } // end namespace oceanbase

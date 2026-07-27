@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX SERVER
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "obmp_stmt_close.h"
 #include "lib/trace/ob_trace.h"
 #include "observer/omt/ob_server_runtime.h"
@@ -68,6 +67,7 @@ int ObMPStmtClose::process()
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
+    session->init_use_rich_format();
     LOG_TRACE("close ps stmt or cursor", K_(stmt_id), K(session->get_server_sid()));
     if (is_cursor_close()) {
       if (OB_FAIL(session->close_cursor(stmt_id_))) {
@@ -90,12 +90,6 @@ int ObMPStmtClose::process()
         ret = tmp_ret;
       }
     }
-  }
-  {
-    int64_t exec_end = ObTimeUtility::current_time();
-    const int64_t time_cost = exec_end - get_receive_timestamp();
-    EVENT_INC(SQL_PS_CLOSE_COUNT);
-    EVENT_ADD(SQL_PS_CLOSE_TIME, time_cost);
   }
   if (NULL != session) {
     revert_session(session);

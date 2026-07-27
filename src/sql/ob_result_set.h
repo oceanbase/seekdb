@@ -39,7 +39,6 @@
 #include "sql/engine/ob_exec_context.h"
 #include "sql/ob_sql_trans_control.h"
 #include "sql/plan_cache/ob_cache_object_factory.h"
-#include "observer/ob_inner_sql_transmit_struct.h"
 #include "observer/ob_req_time_service.h"
 #include "sql/resolver/tcl/ob_end_trans_stmt.h"
 
@@ -572,7 +571,7 @@ inline void ObResultSet::set_errcode(int code)
   errcode_ = code;
   //Save the current execution state to determine whether to refresh location
   //and perform other necessary cleanup operations when the statement exits.
-  DAS_CTX(get_exec_context()).get_location_router().save_cur_exec_status(code);
+  DAS_CTX(get_exec_context()).save_cur_exec_status(code);
 }
 
 inline int ObResultSet::add_field_column(const common::ObField &field)

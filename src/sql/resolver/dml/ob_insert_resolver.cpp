@@ -91,10 +91,7 @@ int ObInsertResolver::resolve(const ParseNode &parse_tree)
   }
 
   if (OB_SUCC(ret)) {
-    if (insert_stmt->is_replace() && insert_stmt->is_ignore()) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "replace statement with ignore");
-    } else if (insert_stmt->is_ignore() && insert_stmt->has_global_index()) {
+    if (insert_stmt->is_ignore() && insert_stmt->has_global_index()) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "ignore with global index");
     } else { /*do nothing*/ }

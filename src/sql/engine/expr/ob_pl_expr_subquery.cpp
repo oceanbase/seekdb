@@ -157,8 +157,7 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
   CK (OB_NOT_NULL(ctx.exec_ctx_.get_sql_ctx()));
 
   observer::ObQueryRetryCtrl retry_ctrl;
-  int64_t runtime_schema_version = 0;
-  int64_t sys_version = 0;
+  int64_t database_schema_version = 0;
   bool is_stack_overflow = false;
 
   OZ(check_stack_overflow(is_stack_overflow));
@@ -199,13 +198,10 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
           retry_ctrl.clear_state_before_each_retry(session->get_retry_info_for_update());
           if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(spi_result.get_scheme_guard()))) {
             LOG_WARN("get schema guard failed", K(ret));
-          } else if (OB_FAIL(spi_result.get_scheme_guard().get_schema_version(runtime_schema_version))) {
+          } else if (OB_FAIL(spi_result.get_scheme_guard().get_schema_version(database_schema_version))) {
             LOG_WARN("fail get schema version", K(ret));
-          } else if (OB_FAIL(spi_result.get_scheme_guard().get_schema_version(sys_version))) {
-            LOG_WARN("fail get sys schema version", K(ret));
           } else {
-            retry_ctrl.set_current_local_schema_version(runtime_schema_version);
-            retry_ctrl.set_sys_local_schema_version(sys_version);
+            retry_ctrl.set_current_local_schema_version(database_schema_version);
             spi_result.get_sql_ctx().schema_guard_ = &spi_result.get_scheme_guard();
             OZ (ObSPIService::inner_open(&pl_exec_ctx,
                                         expr.arg_cnt_ == 0 ? info->route_sql_.ptr() : nullptr,

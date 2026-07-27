@@ -55,7 +55,7 @@ int ObDataAccessService::execute_das_task(
   if (OB_FAIL(execute_local_das_task(task_ops))) {
     LOG_WARN("failed to execute local das task", K(ret));
   }
-  DAS_CTX(das_ref.get_exec_ctx()).get_location_router().save_cur_exec_status(ret);
+  DAS_CTX(das_ref.get_exec_ctx()).save_cur_exec_status(ret);
   return ret;
 }
 
@@ -86,7 +86,7 @@ int ObDataAccessService::clear_task_exec_env(ObDASRef &das_ref, ObIDASTaskOp &ta
   if (OB_FAIL(task_op.end_das_task())) {
     LOG_WARN("end das task failed", K(ret));
   }
-  DAS_CTX(das_ref.get_exec_ctx()).get_location_router().save_cur_exec_status(OB_SUCCESS);
+  DAS_CTX(das_ref.get_exec_ctx()).save_cur_exec_status(OB_SUCCESS);
   return ret;
 }
 
@@ -95,22 +95,13 @@ int ObDataAccessService::refresh_task_location_info(ObDASRef &das_ref, ObIDASTas
   int ret = OB_SUCCESS;
   ObExecContext &exec_ctx = das_ref.get_exec_ctx();
   ObDASTabletLoc *tablet_loc = const_cast<ObDASTabletLoc*>(task_op.get_tablet_loc());
-  int64_t retry_cnt = DAS_CTX(exec_ctx).get_location_router().get_cur_retry_cnt();
+  int64_t retry_cnt = DAS_CTX(exec_ctx).get_cur_retry_cnt();
   if (OB_FAIL(ObDASUtils::wait_das_retry(retry_cnt))) {
     LOG_WARN("wait das retry failed", K(ret));
-  } else if (OB_FAIL(DAS_CTX(exec_ctx).get_location_router().get_tablet_loc(*tablet_loc->loc_meta_,
-                                                                            tablet_loc->tablet_id_,
-                                                                            *tablet_loc))) {
+  } else if (OB_FAIL(DAS_CTX(exec_ctx).build_local_tablet_loc(tablet_loc->loc_meta_->ref_table_id_,
+                                                              tablet_loc->tablet_id_,
+                                                              *tablet_loc))) {
     LOG_WARN("get tablet location failed", K(ret), KPC(tablet_loc));
-  } else {
-    if (!task_op.is_local_task()) {
-      int64_t task_id;
-      if (OB_FAIL(share::g_mp->data_access_service()->get_das_task_id(task_id))) {
-        LOG_WARN("retry get das task id failed", KR(ret));
-      } else {
-        task_op.set_task_id(task_id);
-      }
-    }
   }
   return ret;
 }
@@ -118,11 +109,10 @@ int ObDataAccessService::refresh_task_location_info(ObDASRef &das_ref, ObIDASTas
 int ObDataAccessService::retry_das_task(ObDASRef &das_ref, ObIDASTaskOp &task_op)
 {
   int ret = task_op.errcode_;
-  ObArenaAllocator tmp_alloc;
-  ObDasAggregatedTask das_task_wrapper(tmp_alloc);
+  ObDasAggregatedTask das_task_wrapper;
   bool retry_continue = false;
-  ObDASLocationRouter &location_router = DAS_CTX(das_ref.get_exec_ctx()).get_location_router();
-  location_router.reset_cur_retry_cnt();
+  ObDASCtx &das_ctx = DAS_CTX(das_ref.get_exec_ctx());
+  das_ctx.reset_cur_retry_cnt();
   do {
     ObDASRetryCtrl::retry_func retry_func = nullptr;
 
@@ -137,12 +127,12 @@ int ObDataAccessService::retry_das_task(ObDASRef &das_ref, ObIDASTaskOp &task_op
       retry_func(das_ref, task_op, need_retry);
       LOG_INFO("[DAS RETRY] check if need tablet level retry",
                KR(task_op.errcode_), K(need_retry), K(task_op.task_flag_),
-               "continuous_retry_cnt", location_router.get_cur_retry_cnt(),
-               "total_retry_cnt", location_router.get_total_retry_cnt(),
+               "continuous_retry_cnt", das_ctx.get_cur_retry_cnt(),
+               "total_retry_cnt", das_ctx.get_total_retry_cnt(),
                KPC(loc_meta), KPC(tablet_loc));
       if (need_retry &&
           task_op.get_inner_rescan() &&
-          location_router.get_total_retry_cnt() > 100) { //hard code retry 100 times.
+          das_ctx.get_total_retry_cnt() > 100) { //hard code retry 100 times.
         // disable das retry for rescan.
         need_retry = false;
         retry_continue = false;
@@ -150,8 +140,8 @@ int ObDataAccessService::retry_das_task(ObDASRef &das_ref, ObIDASTaskOp &task_op
       }
       if (need_retry) {
         task_op.in_part_retry_ = true;
-        location_router.set_last_errno(task_op.get_errcode());
-        location_router.inc_cur_retry_cnt();
+        das_ctx.set_last_errno(task_op.get_errcode());
+        das_ctx.inc_cur_retry_cnt();
         if (OB_TMP_FAIL(clear_task_exec_env(das_ref, task_op))) {
           LOG_WARN("clear task execution environment failed", K(tmp_ret));
         }
@@ -170,17 +160,17 @@ int ObDataAccessService::retry_das_task(ObDASRef &das_ref, ObIDASTaskOp &task_op
           }
           if (OB_SUCCESS == ret) {
             LOG_INFO("[DAS RETRY] DAS Task succeeds after multiple retries",
-                     "continuous_retry_cnt", location_router.get_cur_retry_cnt(),
-                     "total_retry_cnt", location_router.get_total_retry_cnt(),
+                     "continuous_retry_cnt", das_ctx.get_cur_retry_cnt(),
+                     "total_retry_cnt", das_ctx.get_total_retry_cnt(),
                      KPC(task_op.get_tablet_loc()));
           } else {
-            int64_t cur_retry_cnt = location_router.get_cur_retry_cnt();
-            int64_t total_retry_cnt = location_router.get_total_retry_cnt();
+            int64_t cur_retry_cnt = das_ctx.get_cur_retry_cnt();
+            int64_t total_retry_cnt = das_ctx.get_total_retry_cnt();
             if (cur_retry_cnt >= 100 && cur_retry_cnt % 50L == 0) {
               LOG_INFO("[DAS RETRY] The DAS task has been retried multiple times without success, "
                        "and the execution may be blocked by a specific exception", KR(ret),
                        "continuous_retry_cnt", cur_retry_cnt,
-                       "total_retry_cnt", location_router.get_total_retry_cnt(),
+                       "total_retry_cnt", das_ctx.get_total_retry_cnt(),
                        KPC(task_op.get_tablet_loc()));
             }
           }
@@ -188,7 +178,7 @@ int ObDataAccessService::retry_das_task(ObDASRef &das_ref, ObIDASTaskOp &task_op
         task_op.errcode_ = ret;
         retry_continue = (OB_SUCCESS != ret);
         if (!retry_continue) {
-          location_router.accumulate_retry_count();
+          das_ctx.accumulate_retry_count();
         }
         if (retry_continue && IS_INTERRUPTED()) {
           retry_continue = false;
@@ -225,8 +215,7 @@ int ObDataAccessService::rescan_das_task(ObDASRef &das_ref, ObDASScanOp &scan_op
 {
   int ret = OB_SUCCESS;
 
-  ObArenaAllocator tmp_alloc;
-  ObDasAggregatedTask das_task_wrapper(tmp_alloc);
+  ObDasAggregatedTask das_task_wrapper;
   if (scan_op.is_local_task()) {
     if (OB_FAIL(scan_op.rescan())) {
       LOG_WARN("rescan das task failed", K(ret));

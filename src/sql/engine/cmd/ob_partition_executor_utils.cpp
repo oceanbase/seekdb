@@ -617,7 +617,6 @@ int ObPartitionExecutorUtils::expr_cal_and_cast(
     // TO_DAYS('abc') is compatible with MySQL, regardless of what cast_mode is set to in the session, WARN_ON_FAIL is required here
     // Because abc is an invalid parameter, let to_days return NULL
     expr_ctx.cast_mode_ = CM_WARN_ON_FAIL; //always set to WARN_ON_FAIL to allow calculate
-    EXPR_SET_CAST_CTX_MODE(expr_ctx);
     ObNewRow tmp_row;
     RowDesc row_desc;
     ObTempExpr *temp_expr = NULL;
@@ -713,7 +712,6 @@ int ObPartitionExecutorUtils::expr_cal_and_cast_with_check_varchar_len(
     // TO_DAYS('abc') compatible with mysql, regardless of what cast_mode is set in the session, WARN_ON_FAIL is required here
     // Because abc is an invalid parameter, let to_days return NULL
     expr_ctx.cast_mode_ |= CM_WARN_ON_FAIL; //always set to WARN_ON_FAIL to allow calculate
-    EXPR_SET_CAST_CTX_MODE(expr_ctx);
     ObNewRow tmp_row;
     RowDesc row_desc;
     ObTempExpr *temp_expr = NULL;

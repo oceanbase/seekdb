@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_ddl_replay_executor.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
@@ -359,7 +358,6 @@ int check_idem_block_exist(const ObDDLMacroBlockRedoInfo &redo_info, ObTabletHan
     LOG_WARN("failed to calc block checksum", K(ret), K(redo_info));
   } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->check_idem_block_exist(redo_info.block_type_,
                                                                          redo_info.type_,
-                                                                         redo_info.macro_block_id_,
                                                                          redo_info.logic_id_,
                                                                          checksum,
                                                                          redo_info.table_key_.table_type_,
@@ -386,7 +384,6 @@ int set_idem_block_checksum(ObTabletHandle &tablet_handle, const ObDDLMacroBlock
     LOG_WARN("ddl kv mgr handle not valid", K(ret));
   } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->set_idem_block_checksum(redo_info.block_type_,
                                                                           redo_info.type_,
-                                                                          redo_info.macro_block_id_,
                                                                           redo_info.logic_id_,
                                                                           checksum,
                                                                           redo_info.table_key_.table_type_))) {

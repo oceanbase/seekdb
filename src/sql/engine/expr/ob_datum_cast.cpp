@@ -22,7 +22,6 @@
 #endif
 #include "share/object/ob_decint_scale_util.h"
 #include "share/object/ob_obj_cast_util.h"
-#include "share/ob_lob_access_utils.h"
 #include "share/ob_json_access_utils.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "share/object/ob_array_cast.h"
@@ -1102,7 +1101,7 @@ static OB_INLINE int common_string_number(const ObExpr &expr,
       }
       bool is_neg = (in_str[i] == '-');
       int tmp_ret = OB_SUCCESS;
-      const ObAccuracy &def_acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][out_type];
+      const ObAccuracy &def_acc = ObAccuracy::DDL_DEFAULT_ACCURACY[out_type];
       const ObPrecision prec = def_acc.get_precision();
       const ObScale scale = def_acc.get_scale();
       const number::ObNumber *bound_num = NULL;

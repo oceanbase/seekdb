@@ -534,6 +534,7 @@ int ObSQLUtils::se_calc_const_expr(ObSQLSessionInfo *session,
                                 && out_ctx->get_physical_plan_ctx() != NULL
                                 && (&params == &out_ctx->get_physical_plan_ctx()->get_param_store()));
   if (!use_tmp_phy_plan_ctx && !out_ctx->get_physical_plan_ctx()->is_param_datum_frame_inited()) {
+    out_ctx->get_physical_plan_ctx()->set_rich_format(session->use_rich_format());
     if (OB_FAIL(out_ctx->get_physical_plan_ctx()->init_datum_param_store())) {
       LOG_WARN("init datum param store failed", K(ret));
     }
@@ -549,6 +550,7 @@ int ObSQLUtils::se_calc_const_expr(ObSQLSessionInfo *session,
       phy_plan_ctx = out_ctx->get_physical_plan_ctx();
     } else {
       phy_plan_ctx = &tmp_phy_plan_ctx;
+      phy_plan_ctx->set_rich_format(session->use_rich_format());
       for (int i = 0; OB_SUCC(ret) && i < params.count(); i++) {
         if (OB_FAIL(phy_plan_ctx->get_param_store_for_update().push_back(params.at(i)))) {
           LOG_WARN("failed to push back element", K(ret));
@@ -2363,38 +2365,6 @@ int ObSQLUtils::revise_hash_part_object(common::ObObj &obj)
   return ret;
 }
 
-int ObSQLUtils::get_local_partition_for_estimation(
-                          const ObCandiTabletLoc &tablet_location,
-                          EstimatedPartition &partition)
-{
-  int ret = OB_SUCCESS;
-  partition.reset();
-  const ObOptTabletLoc &local_tablet = tablet_location.get_partition_location();
-  const ObAddr &server = local_tablet.get_server();
-  if (!server.is_valid()) {
-    ret = OB_NO_READABLE_REPLICA;
-    LOG_WARN("local tablet location is not readable", K(ret), K(local_tablet));
-  } else {
-    partition.set(server, local_tablet.get_tablet_id());
-  }
-  return ret;
-}
-
-int ObSQLUtils::get_local_partition_addr(const ObCandiTabletLoc &tablet_location,
-                                         ObAddr &local_addr)
-{
-  int ret = OB_SUCCESS;
-  local_addr.reset();
-  const ObAddr &server = tablet_location.get_partition_location().get_server();
-  if (server.is_valid()) {
-    local_addr = server;
-  } else {
-    ret = OB_NO_READABLE_REPLICA;
-    LOG_WARN("local tablet location is not readable", K(ret), K(tablet_location));
-  }
-  return ret;
-}
-
 int ObSQLUtils::wrap_column_convert_ctx(const ObExprCtx &expr_ctx, ObCastCtx &column_conv_ctx)
 {
   int ret = OB_SUCCESS;
@@ -2728,7 +2698,7 @@ int ObSQLUtils::update_session_last_schema_version(ObMultiVersionSchemaService &
   int ret = OB_SUCCESS;
   int64_t received_schema_version = OB_INVALID_VERSION;
   
-  if (OB_FAIL(schema_service.get_runtime_received_broadcast_version(received_schema_version))) {
+  if (OB_FAIL(schema_service.get_published_schema_version(received_schema_version))) {
     LOG_WARN("fail to get runtime received broadcast version", K(ret));
   } else {
     session_info.set_last_ddl_schema_version(received_schema_version);

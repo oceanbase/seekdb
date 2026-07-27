@@ -18,6 +18,7 @@
 #undef private
 #include "lib/allocator/ob_malloc.h"
 #include "lib/coro/testing.h"
+#include "lib/resource/ob_resource_mgr.h"
 #include <gtest/gtest.h>
 
 using namespace oceanbase::lib;

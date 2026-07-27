@@ -17,10 +17,9 @@
 #define USING_LOG_PREFIX SQL_OPT
 
 #include "ob_phy_table_location_info.h"
-#include "sql/das/ob_das_location_router.h"
+#include "sql/das/ob_das_tablet_mapper.h"
 using namespace oceanbase::common;
 using namespace oceanbase::share;
-using namespace oceanbase::transaction;
 namespace oceanbase
 {
 namespace sql

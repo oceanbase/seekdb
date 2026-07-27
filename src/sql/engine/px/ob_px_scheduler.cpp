@@ -302,7 +302,6 @@ int ObPxMsgProc::process_sqc_finish_msg_once(ObExecContext &ctx, const ObPxFinis
   if (OB_FAIL(ret)) {
   } else if (common::OB_INVALID_ID != pkt.temp_table_id_) {
     if (OB_FAIL(ctx.add_temp_table_interm_result_ids(pkt.temp_table_id_,
-                                                     GCTX.self_addr(),
                                                      pkt.interm_result_ids_))) {
       LOG_WARN("failed to add temp table interm result ids.", K(ret));
     }
@@ -360,12 +359,12 @@ int ObPxMsgProc::process_sqc_finish_msg_once(ObExecContext &ctx, const ObPxFinis
       pkt.rc_, pkt.err_msg_);
   if (OB_SUCC(ret)) {
     if (OB_FAIL(pkt.rc_)) {
-      DAS_CTX(ctx).get_location_router().save_cur_exec_status(pkt.rc_);
+      DAS_CTX(ctx).save_cur_exec_status(pkt.rc_);
       log_warn_sqc_fail(ret, pkt, sqc);
     } else {
       // pkt rc_ == OB_SUCCESS
       // Process dml + px framework affected row
-      DAS_CTX(ctx).get_location_router().save_cur_exec_status(pkt.das_retry_rc_);
+      DAS_CTX(ctx).save_cur_exec_status(pkt.das_retry_rc_);
       if (OB_ISNULL(ctx.get_physical_plan_ctx())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("phy plan ctx is null", K(ret));
@@ -450,6 +449,18 @@ int ObPxMsgProc::on_piece_msg(
     const ObOptStatsGatherPieceMsg &pkt)
 {
   ObDhPieceMsgProc<ObOptStatsGatherPieceMsg> proc;
+  return proc.on_piece_msg(coord_info_, ctx, pkt);
+}
+
+int ObPxMsgProc::on_piece_msg(ObExecContext &ctx, const SPWinFuncPXPieceMsg &pkt)
+{
+  ObDhPieceMsgProc<SPWinFuncPXPieceMsg> proc;
+  return proc.on_piece_msg(coord_info_, ctx, pkt);
+}
+
+int ObPxMsgProc::on_piece_msg(ObExecContext &ctx, const RDWinFuncPXPieceMsg &pkt)
+{
+  ObDhPieceMsgProc<RDWinFuncPXPieceMsg> proc;
   return proc.on_piece_msg(coord_info_, ctx, pkt);
 }
 

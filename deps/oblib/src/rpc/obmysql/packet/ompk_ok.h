@@ -49,7 +49,6 @@ public:
   void set_state_changed(const bool state_changed);
   void set_use_standard_serialize(const bool value);
   int add_system_var(const ObStringKV &system_var);
-  int add_user_var(const ObStringKV &user_var);
   inline void set_capability(const ObMySQLCapabilityFlags &cap) { capability_ = cap; }
   inline void set_track_session_cap(const bool flag)
   {
@@ -65,7 +64,6 @@ public:
   inline const common::ObString &get_changed_schema() const { return changed_schema_; };
   inline bool is_state_changed() const { return state_changed_; }
   inline const common::ObIArray<ObStringKV> &get_system_vars() const { return system_vars_; }
-  inline const common::ObIArray<ObStringKV> &get_user_vars() const { return user_vars_; }
   inline ObMySQLCapabilityFlags get_capability() const  { return capability_; }
   inline ObMySQLPacketType get_mysql_packet_type() { return ObMySQLPacketType::PKT_OKP; }
 
@@ -74,13 +72,11 @@ private:
   int decode_session_state_info(const char *&pos);
   uint64_t get_state_info_len() const;
   uint64_t get_track_system_vars_len() const;
-  uint64_t get_standard_track_system_vars_len() const;
   int serialize_string_kv(char *buffer,
                           const int64_t length,
                           int64_t &pos,
                           const ObStringKV &string_kv) const;
   static uint64_t get_kv_encode_len(const ObStringKV &string_kv);
-  static ObStringKV get_separator_kv();
 
 private:
   const static int64_t SESSION_TRACK_SYSTEM_VARIABLES = 0x00;
@@ -97,18 +93,13 @@ private:
   common::ObString changed_schema_;
   bool state_changed_;
   common::ObSEArray<ObStringKV, 16> system_vars_;
-  common::ObSEArray<ObStringKV, 8> user_vars_;
   ObMySQLCapabilityFlags capability_;
 
   // use to track database changed;
   // changed_schema_ may be empty for operations such as DROP DATABASE, but the
   // schema-change marker still needs to be sent to clients.
   bool is_schema_changed_;
-
-  //current serialize is not compat with mysql, proxy is also uncompat.
-  //we cannot fix it for compatibility.
-  //when obclient connect observer directly, we should set this true.
-  //it will affect  OB_SERVER_SESSION_STATE_CHANGED encoding
+  // Standard OK packets do not prepend the legacy OceanBase info space.
   bool use_standard_serialize_;
 };
 

@@ -163,7 +163,8 @@ ObDtlBasicChannel::ObDtlBasicChannel(
       write_buf_use_time_(0),
       send_use_time_(0),
       msg_count_(0),
-      result_info_guard_()
+      result_info_guard_(),
+      meta_(nullptr)
 {
   ObRandom rand;
   hash_val_ = rand.get();
@@ -194,7 +195,8 @@ ObDtlBasicChannel::ObDtlBasicChannel(
           times_(0),
           write_buf_use_time_(0),
           send_use_time_(0),
-          msg_count_(0)
+          msg_count_(0),
+          meta_(nullptr)
 {
   // The server version at dtl creation determines whether to send the old ser method or the new chunk row store method
   use_crs_writer_ = true;
@@ -632,15 +634,27 @@ int ObDtlBasicChannel::process1(
           LOG_WARN("there is no row store in internal result", K(ret));
         } else if (OB_FAIL(DTL_IR_STORE_DO(*result_info, finish_add_row, true))) {
           LOG_WARN("failed to finish add row", K(ret));
-        } else if (OB_FAIL(result_info->datum_store_->begin(datum_iter_))) {
-          LOG_WARN("begin iterator failed", K(ret));
+        } else if (!result_info->is_rich_format()) {
+          if (OB_FAIL(result_info->datum_store_->begin(datum_iter_))) {
+            LOG_WARN("begin iterator failed", K(ret));
+          }
+        } else {
+          if (OB_FAIL(result_info->get_row_store()->begin(row_iter_))) {
+            LOG_WARN("failed to begin chunk row store.", K(ret));
+          }
         }
       }
       if (OB_SUCC(ret) && !channel_is_eof()) {
         ObDtlLinkedBuffer mock_buffer;
         mock_buffer.set_data_msg(true);
         ObDtlMsgType type = ObDtlMsgType::PX_DATUM_ROW;
-        mock_buffer.set_buf(reinterpret_cast<char *>(&datum_iter_));
+        if (OB_ISNULL(result_info) || !result_info->is_rich_format()) {
+          mock_buffer.set_buf(reinterpret_cast<char *>(&datum_iter_));
+        } else {
+          mock_buffer.set_buf(reinterpret_cast<char *>(&row_iter_));
+          mock_buffer.set_row_meta(result_info->get_row_store()->get_row_meta());
+          type = ObDtlMsgType::PX_VECTOR_ROW;
+        }
         type = static_cast<ObDtlMsgType>(-type);
         // set type to negative value for interm result mock buffer.
         mock_buffer.set_msg_type(type);
@@ -882,28 +896,9 @@ void ObDtlBasicChannel::free_buf(ObDtlLinkedBuffer *buf)
   } else {
     free_buffer_count();
   }
-}
-
-void ObDtlBasicChannel::clean_broadcast_buffer()
-{
-  int ret = OB_SUCCESS;
-  bool done = false;
-  // Theoretically only 1
-  if (nullptr != process_buffer_ && process_buffer_->is_bcast()) {
-    done = true;
-    process_buffer_ = nullptr;
+  if (nullptr != buf) {
+    free_buffer_count();
   }
-  if (!done) {
-    ObLink *link = nullptr;
-    if (OB_SUCC(recv_list_.top(link))) {
-      ObDtlLinkedBuffer *linked_buffer = static_cast<ObDtlLinkedBuffer *>(link);
-      if (linked_buffer->is_bcast()) {
-        done = true;
-        recv_list_.pop(link);
-      }
-    }
-  }
-  LOG_TRACE("trace clean broadcast dtl buffer", K(done), K(*this));
 }
 
 int ObDtlBasicChannel::push_back_send_list()
@@ -938,6 +933,7 @@ int ObDtlBasicChannel::push_back_send_list()
 int ObDtlBasicChannel::switch_writer(const ObDtlMsg &msg)
 {
   int ret = OB_SUCCESS;
+  switch_msg_type(msg);
   if (OB_UNLIKELY(nullptr == msg_writer_)) {
     if (msg.is_data_msg()) {
       const ObPxNewRow &px_row = static_cast<const ObPxNewRow&>(msg);
@@ -945,6 +941,14 @@ int ObDtlBasicChannel::switch_writer(const ObDtlMsg &msg)
         msg_writer_ = &row_msg_writer_;
       } else if (DtlWriterType::CHUNK_DATUM_WRITER == msg_writer_map[px_row.get_data_type()]) {
         msg_writer_ = &datum_msg_writer_;
+      } else if (DtlWriterType::VECTOR_FIXED_WRITER == msg_writer_map[px_row.get_data_type()]) {
+        vector_fixed_msg_writer_.set_size_per_buffer(send_buffer_size_);
+        msg_writer_ = &vector_fixed_msg_writer_;
+      } else if (DtlWriterType::VECTOR_ROW_WRITER == msg_writer_map[px_row.get_data_type()]) {
+        vector_row_msg_writer_.set_row_meta(meta_);
+        msg_writer_ = &vector_row_msg_writer_;
+      } else if (DtlWriterType::VECTOR_WRITER == msg_writer_map[px_row.get_data_type()]) {
+        msg_writer_ = &vector_msg_writer_;
       } else {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unkown msg writer", K(msg.get_type()),
@@ -1055,6 +1059,9 @@ int ObDtlBasicChannel::switch_buffer(const int64_t min_size, const bool is_eof,
       write_buffer_ = nullptr;
       LOG_WARN("failed to init message writer", K(ret));
     } else {
+      if (VECTOR_ROW_WRITER == msg_writer_->type()) {
+        (static_cast<ObDtlVectorRowMsgWriter *> (msg_writer_))->set_row_meta(meta_);
+      }
       if (OB_NOT_NULL(dfc_)) {
         write_buffer_->set_dfo_key(dfc_->get_dfo_key());
         write_buffer_->set_sqc_id(dfc_->get_sender_sqc_info().sqc_id_);
@@ -1146,6 +1153,14 @@ int ObDtlBasicChannel::push_buffer_batch_info()
     LOG_WARN("linked buffer push batch failed", K(ret));
   }
   return ret;
+}
+
+void ObDtlBasicChannel::switch_msg_type(const ObDtlMsg &msg)
+{
+  if (msg.is_data_msg()
+      && static_cast<const ObPxNewRow &> (msg).get_data_type() == PX_VECTOR) {
+    static_cast<ObPxNewRow &> (const_cast<ObDtlMsg &> (msg)).set_data_type(PX_VECTOR_ROW);
+  }
 }
 
 //----ObDtlRowMsgWriter
@@ -1296,6 +1311,224 @@ int ObDtlDatumMsgWriter::serialize()
 }
 //--------------end ObDtlDatumMsgWriter---------------
 
+
+//-----------------start ObDtlVectorRowMsgWrite-------------
+ObDtlVectorRowMsgWriter::ObDtlVectorRowMsgWriter() :
+  type_(VECTOR_ROW_WRITER), write_buffer_(nullptr), block_(nullptr),
+  block_buffer_(nullptr), meta_(nullptr), row_cnt_(0), write_ret_(OB_SUCCESS)
+{}
+
+ObDtlVectorRowMsgWriter::~ObDtlVectorRowMsgWriter()
+{
+  reset();
+}
+
+int ObDtlVectorRowMsgWriter::init(ObDtlLinkedBuffer *buffer)
+{
+  int ret = OB_SUCCESS;
+  if (nullptr == buffer) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("write buffer is null", K(ret));
+  } else {
+    reset();
+    ObTempBlockStore::Block *blk = NULL;
+    if (OB_FAIL(ObTempBlockStore::init_dtl_block_buffer(buffer->buf(), buffer->size(), blk))) {
+      LOG_WARN("fail to init block buffer", K(ret));
+    } else {
+      block_ = static_cast<ObTempRowStore::DtlRowBlock *>(blk);
+      block_buffer_ = static_cast<ObTempBlockStore::ShrinkBuffer *>(
+        static_cast<void *>(reinterpret_cast<char *>(blk) + blk->buf_off_));
+      write_buffer_ = buffer;
+    }
+  }
+  return ret;
+}
+
+int ObDtlVectorRowMsgWriter::need_new_buffer(
+  const ObDtlMsg &msg, ObEvalCtx *ctx, int64_t &need_size, bool &need_new)
+{
+  int ret = OB_SUCCESS;
+  if (OB_LIKELY(OB_BUF_NOT_ENOUGH != write_ret_ && nullptr != write_buffer_)) {
+    need_new = false;
+  } else {
+    int64_t serialize_need_size = 0;
+    const ObPxNewRow &px_row = static_cast<const ObPxNewRow&>(msg);
+    const ObIArray<ObExpr *> *row = px_row.get_exprs();
+    if (nullptr == row) {
+      serialize_need_size = ObTempRowStore::Block::min_blk_size<true>(0);
+      need_size = serialize_need_size;
+    } else {
+      if (OB_ISNULL(meta_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to get meta", K(ret));
+      } else if (OB_FAIL(ObTempRowStore::RowBlock::calc_row_size(*row, *meta_, *ctx, serialize_need_size))) {
+        LOG_WARN("failed to calc row store size", K(ret));
+      }
+      need_size = ObTempRowStore::Block::min_blk_size<true>(serialize_need_size);
+    }
+    need_new = nullptr == write_buffer_ || (remain() < serialize_need_size);
+    if(need_new && nullptr != write_buffer_) {
+      write_buffer_->pos() = rows() > 0 ? used() : 0;
+    }
+  }
+  write_ret_ = OB_SUCCESS;
+  return ret;
+}
+
+void ObDtlVectorRowMsgWriter::reset()
+{
+  block_ = nullptr;
+  write_buffer_ = nullptr;
+  row_cnt_ = 0;
+  block_buffer_ = nullptr;
+  meta_ = nullptr;
+}
+
+int ObDtlVectorRowMsgWriter::serialize()
+{
+  return OB_SUCCESS;
+}
+//--------------end ObDtlVectorRowMsgWriter---------------
+
+//--------------start ObDtlVectorsMsgWriter---------------
+ObDtlVectorMsgWriter::ObDtlVectorMsgWriter() :
+  type_(VECTOR_WRITER), write_buffer_(nullptr), block_(nullptr),
+  block_buffer_(nullptr), write_ret_(OB_SUCCESS)
+{}
+
+ObDtlVectorMsgWriter::~ObDtlVectorMsgWriter()
+{
+  reset();
+}
+
+int ObDtlVectorMsgWriter::init(ObDtlLinkedBuffer *buffer)
+{
+  int ret = OB_SUCCESS;
+  if (nullptr == buffer) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("write buffer is null", K(ret));
+  } else {
+    reset();
+    if (OB_FAIL(ObDtlVectorsBuffer::init_vector_buffer(
+        static_cast<void *>(buffer->buf()), buffer->size(), block_))) {
+      LOG_WARN("init shrink buffer failed", K(ret));
+    } else {
+      block_buffer_ = block_->get_buffer();
+      write_buffer_ = buffer;
+    }
+  }
+  return ret;
+}
+
+int ObDtlVectorMsgWriter::need_new_buffer(
+  const ObDtlMsg &msg, ObEvalCtx *ctx, int64_t &need_size, bool &need_new)
+{
+  int ret = OB_SUCCESS;
+  need_size = 0;
+  if (OB_LIKELY(OB_BUF_NOT_ENOUGH != write_ret_ && nullptr != write_buffer_)) {
+    need_new = false;
+  } else {
+    int64_t serialize_need_size = 0;
+    const ObPxNewRow &px_row = static_cast<const ObPxNewRow&>(msg);
+    const ObIArray<ObExpr *> *row = px_row.get_exprs();
+    if (nullptr == write_buffer_) {
+      need_new = true;
+      ObDtlVectorsBuffer::calc_new_buffer_size(row, ctx->get_batch_idx(), *ctx, need_size);
+    } else if (nullptr == row) {
+      serialize_need_size = ObDtlVectorsBuffer::min_buf_size();
+      need_size = serialize_need_size;
+      if (block_buffer_->remain() < serialize_need_size) {
+        need_new = true;
+      }
+    } else if (!block_buffer_->can_append_row(*row, ctx->get_batch_idx(), *ctx, need_size)) {
+      need_new = true;
+    }
+    if(need_new && nullptr != write_buffer_) {
+      write_buffer_->pos() = rows() > 0 ? used() : 0;
+    }
+  }
+  write_ret_ = OB_SUCCESS;
+  return ret;
+}
+
+void ObDtlVectorMsgWriter::reset()
+{
+  block_ = nullptr;
+  block_buffer_ = nullptr;
+  write_buffer_ = nullptr;
+}
+
+int ObDtlVectorMsgWriter::serialize()
+{
+  return OB_SUCCESS;
+}
+//--------------end ObDtlVectorsMsgWriter---------------
+
+//--------------end ObDtlVectorsFixedMsgWriter---------------
+ObDtlVectorFixedMsgWriter::ObDtlVectorFixedMsgWriter() :
+  type_(VECTOR_FIXED_WRITER), write_buffer_(nullptr), vector_buffer_(),
+  write_ret_(OB_SUCCESS), size_per_buffer_(-1)
+{}
+
+ObDtlVectorFixedMsgWriter::~ObDtlVectorFixedMsgWriter()
+{
+  reset();
+}
+
+int ObDtlVectorFixedMsgWriter::init(ObDtlLinkedBuffer *buffer)
+{
+  int ret = OB_SUCCESS;
+  if (nullptr == buffer || size_per_buffer_ < 0 || buffer->size() < size_per_buffer_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("write buffer is null", K(ret), K(size_per_buffer_), K(buffer->size()), K(lbt()));
+  } else {
+    reset();
+    vector_buffer_.set_buf(buffer->buf(), size_per_buffer_); /*keep fixed msg use buffer with same size*/
+    write_buffer_ = buffer;
+  }
+  return ret;
+}
+
+int ObDtlVectorFixedMsgWriter::need_new_buffer(
+  const ObDtlMsg &msg, ObEvalCtx *ctx, int64_t &need_size, bool &need_new)
+{
+  int ret = OB_SUCCESS;
+  need_size = 0;
+  if (OB_LIKELY(OB_BUF_NOT_ENOUGH != write_ret_ && nullptr != write_buffer_)) {
+    need_new = false;
+  } else {
+    int64_t serialize_need_size = 0;
+    const ObPxNewRow &px_row = static_cast<const ObPxNewRow&>(msg);
+    const ObIArray<ObExpr *> *row = px_row.get_exprs();
+    if (nullptr == write_buffer_) {
+      need_new = true;
+    } else if (nullptr == row) {
+      serialize_need_size = ObDtlVectors::min_buf_size();
+      need_size = serialize_need_size;
+      need_new = false;
+    } else if (vector_buffer_.get_row_cnt() >= vector_buffer_.get_row_limit()) {
+      need_new = true;
+    }
+    if(need_new && nullptr != write_buffer_) {
+      write_buffer_->pos() = rows() > 0 ? vector_buffer_.get_mem_used() : 0;
+    }
+  }
+  write_ret_ = OB_SUCCESS;
+  return ret;
+}
+
+void ObDtlVectorFixedMsgWriter::reset()
+{
+  vector_buffer_.reset();
+  write_buffer_ = nullptr;
+}
+
+int ObDtlVectorFixedMsgWriter::serialize()
+{
+  return OB_SUCCESS;
+}
+
+//--------------end ObDtlVectorsFixedMsgWriter---------------
 
 //----------------start ObDtlControlMsgWriter----------
 int ObDtlControlMsgWriter::write(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, const bool is_eof)

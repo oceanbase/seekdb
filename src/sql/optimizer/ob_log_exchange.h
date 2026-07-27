@@ -63,7 +63,6 @@ public:
       random_expr_(NULL),
       need_null_aware_shuffle_(false),
       sample_type_(NOT_INIT_SAMPLE_TYPE),
-      in_server_cnt_(0),
       px_info_(NULL)
   {
     repartition_table_id_ = 0;
@@ -132,7 +131,7 @@ public:
   virtual uint64_t hash(uint64_t seed) const override;
   bool is_task_order() const { return is_task_order_; }
   virtual int compute_op_ordering() override;
-  virtual int compute_op_parallel_and_server_info() override;
+  virtual int compute_op_parallel_info() override;
   virtual int est_cost() override;
   virtual int do_re_est_cost(EstimateCostInfo &param, double &card, double &op_cost, double &cost) override;
   int inner_est_cost(int64_t parallel, double child_card, double &op_cost);
@@ -189,8 +188,7 @@ public:
                             int64_t &pos, 
                             ExplainType type,
                             const ObIArray<ObRawExpr *> &keys);
-  inline void set_in_server_cnt(int64_t in_server_cnt) {  in_server_cnt_ = in_server_cnt;  }
-  inline int64_t get_in_server_cnt() {  return in_server_cnt_;  }
+  bool support_rich_format_vectorize() const;
   virtual int open_px_resource_analyze(OPEN_PX_RESOURCE_ANALYZE_DECLARE_ARG) override;
   virtual int close_px_resource_analyze(CLOSE_PX_RESOURCE_ANALYZE_DECLARE_ARG) override;
   void set_px_info(ObPxResourceAnalyzer::PxInfo *px_info) { px_info_ = px_info; }
@@ -270,7 +268,6 @@ private:
   // -for pkey range/range
   ObPxSampleType sample_type_;
   // -end pkey range/range
-  int64_t in_server_cnt_; // for producer, need use exchange in server cnt to compute cost
   ObPxResourceAnalyzer::PxInfo *px_info_;
   DISALLOW_COPY_AND_ASSIGN(ObLogExchange);
 };

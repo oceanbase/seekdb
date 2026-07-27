@@ -723,8 +723,6 @@ int ObDependencyInfo::batch_invalidate_dependents(const common::ObIArray<Critica
 }
 
 // modify_dep_obj_status / cascading_modify_obj_status / modify_all_obj_status
-// moved definition to the upper-layer owner cpp rootserver::ObDependencyDDLHelper(real upper-layer symbol user, declaration remains in the header, transitional state)
-// insert_dependency_infos is defined at the end of this file.
 
 void ObDependencyInfo::reset()
 {

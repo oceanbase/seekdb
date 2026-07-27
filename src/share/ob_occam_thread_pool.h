@@ -28,6 +28,7 @@
 
 #ifndef OCEANBASE_LIB_THREAD_OB_EASY_THREAD_POOL_H
 #define OCEANBASE_LIB_THREAD_OB_EASY_THREAD_POOL_H
+#include "share/rc/ob_module_provider.h"
 
 #include <assert.h>
 #include <type_traits>                                   // std::invoke_result

@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX  SQL_ENG
 #include "sql/engine/cmd/ob_get_diagnostics_executor.h"
 #include "observer/ob_inner_sql_connection_pool.h"
-#include "share/ob_lob_access_utils.h"
 #include "sql/session/ob_basic_session_info.h"
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -359,6 +358,7 @@ int ObGetDiagnosticsExecutor::get_condition_num(ObExecContext &ctx, ObGetDiagnos
  
 int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &stmt) {
   int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
   ObSQLSessionInfo *session_info = ctx.get_my_session();
   ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
   sqlclient::ObISQLConnection *conn = NULL;
@@ -367,7 +367,6 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
    
   int64_t warning_count = 0;
   ObSqlString query_virtual;
-  int tmp_ret = OB_SUCCESS;
   if (OB_ISNULL(session_info)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), KP(session_info));

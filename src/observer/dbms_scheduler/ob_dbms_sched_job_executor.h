@@ -47,7 +47,6 @@ private:
   static int init_session(
     sql::ObSQLSessionInfo &session,
     share::schema::ObSchemaGetterGuard &schema_guard,
-    const common::ObString &runtime_name,
     const common::ObString &database_name, uint64_t database_id,
     const share::schema::ObUserInfo* user_info,
     ObDBMSSchedJobInfo &job_info);

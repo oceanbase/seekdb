@@ -491,7 +491,7 @@ int ObComplementDataDag::create_first_task()
   } else if (!param_.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("error unexpected", K(ret), K(param_));
-  } else if (OB_FAIL(mock_scn.convert_for_tx(SS_DDL_START_SCN_VAL))) {
+  } else if (OB_FAIL(mock_scn.convert_for_tx(DDL_START_SCN_VAL))) {
     LOG_WARN("failed to convert from ts", K(ret));
   } else if (OB_UNLIKELY(nullptr != context_.tablet_ctx_)) {
     ret = OB_ERR_UNEXPECTED;

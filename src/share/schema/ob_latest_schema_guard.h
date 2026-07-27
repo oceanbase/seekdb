@@ -252,12 +252,6 @@ public:
       const uint64_t database_id,
       const ObDatabaseSchema *&database_schema);
 
-  // 1. cache the server runtime schema in the guard
-  // @param[out]:
-  // - runtime_schema: return NULL if the runtime schema is unavailable
-  int get_server_runtime_schema(
-      const ObServerRuntimeSchema *&runtime_schema);
-
   // 1. will cache udt schema in guard
   // @param[in]:
   // - udt_id

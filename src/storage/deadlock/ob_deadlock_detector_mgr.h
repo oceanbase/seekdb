@@ -242,8 +242,6 @@ private:
     bool operator()(const UserBinaryKey &key, ObIDeadLockDetector *p_detector);
   };
 
-  template <typename KeyType>
-  int try_create_inner_detector_(const KeyType &key);
   int get_detector_(const UserBinaryKey &user_key, DetectorRefGuard &detector_guard);
 
   bool is_inited_;// marked ObDeadLockDetectorMgr hash been inited or not

@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
+#include "share/rc/ob_module_provider.h"
 #include "ob_error_info.h"
 #include "lib/oblog/ob_warning_buffer.h"
 #include "share/ob_server_struct.h"

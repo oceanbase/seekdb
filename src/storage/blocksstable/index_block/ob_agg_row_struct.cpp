@@ -37,8 +37,7 @@ ObAggRowWriter::ObAggRowWriter()
     col_idx_count_(0),
     col_meta_list_(),
     header_(),
-    row_helper_(),
-    data_format_version_(0)
+    row_helper_()
     {}
 
 ObAggRowWriter::~ObAggRowWriter()
@@ -52,7 +51,6 @@ void ObAggRowWriter::reset()
 
 int ObAggRowWriter::init(const ObIArray<ObSkipIndexColMeta> &agg_col_arr,
                          const ObSkipIndexAggResult &agg_data,
-                         const int64_t data_format_version,
                          ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
@@ -63,7 +61,6 @@ int ObAggRowWriter::init(const ObIArray<ObSkipIndexColMeta> &agg_col_arr,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("column count not match", K(ret), K(agg_col_arr), K(agg_data));
   } else if (FALSE_IT(agg_data_ = &agg_data)) {
-  } else if (FALSE_IT(data_format_version_ = data_format_version)) {
   } else if (OB_FAIL(sort_metas(agg_col_arr, allocator))) {
     LOG_WARN("failed to sort agg col metas", K(ret));
   } else if (OB_FAIL(calc_serialize_agg_buf_size())) {

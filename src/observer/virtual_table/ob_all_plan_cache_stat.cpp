@@ -18,8 +18,7 @@
 
 #include "observer/virtual_table/ob_all_plan_cache_stat.h"
 #include "share/rc/ob_module_provider.h"
-
-#include "src/sql/plan_cache/ob_pcv_set.h"
+#include "sql/plan_cache/ob_plan_cache.h"
 
 #include "observer/ob_server_utils.h"
 

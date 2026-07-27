@@ -310,6 +310,42 @@ int ObIDService::get_number(const int64_t range, const int64_t base_id, int64_t 
 	return ret;
 }
 
+int ObIDService::allocate_number_(const int64_t range, const int64_t base_id,
+                                  int64_t &start_id, int64_t &end_id)
+{
+  int ret = OB_SUCCESS;
+  int64_t tmp_id = 0;
+  const int64_t last_id = ATOMIC_LOAD(&last_id_);
+  int64_t limit_id = ATOMIC_LOAD(&limited_id_);
+  const int64_t allocated_range = min(min(limit_id - base_id, limit_id - last_id), range);
+  if (allocated_range <= 0) {
+    ret = OB_EAGAIN;
+  } else {
+    if (base_id > last_id) {
+      if (ATOMIC_BCAS(&last_id_, last_id, base_id + allocated_range)) {
+        tmp_id = base_id;
+      } else {
+        tmp_id = ATOMIC_FAA(&last_id_, allocated_range);
+      }
+    } else {
+      tmp_id = ATOMIC_FAA(&last_id_, allocated_range);
+    }
+    // Caution: get limit id again, compete with switch_to_follower_gracefully
+    limit_id = ATOMIC_LOAD(&limited_id_);
+    if (tmp_id >= limit_id) {
+      ret = OB_EAGAIN;
+    } else {
+      start_id = tmp_id;
+      end_id = min(start_id + allocated_range, limit_id);
+    }
+  }
+  if (OB_EAGAIN == ret || (limited_id_ - last_id_) < (pre_allocated_range_ * 2 / 3)) {
+    const int64_t pre_allocated_id = min(max_pre_allocated_id_(base_id), max(base_id, limited_id_) + max(range * 10, pre_allocated_range_));
+    submit_log_with_lock_(pre_allocated_id, pre_allocated_id);
+  }
+  return ret;
+}
+
 
 int64_t ObIDService::max_pre_allocated_id_(const int64_t base_id)
 {

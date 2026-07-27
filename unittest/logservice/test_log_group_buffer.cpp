@@ -51,8 +51,6 @@ TestLogGroupBuffer::~TestLogGroupBuffer()
 
 void TestLogGroupBuffer::SetUp()
 {
-  static ObServerRuntimeState runtime_state;
-  share::g_server_runtime = &runtime_state;
 }
 
 void TestLogGroupBuffer::TearDown()

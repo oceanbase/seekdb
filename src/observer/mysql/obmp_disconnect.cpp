@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "obmp_disconnect.h"
 
 
@@ -75,7 +74,6 @@ int ObMPDisconnect::run()
       if (OB_FAIL(GCTX.session_mgr_->free_session(ctx_))) {
         LOG_WARN("free session fail", K(ctx_));
       } else {
-        EVENT_INC(SQL_USER_LOGOUTS_CUMULATIVE);
         LOG_INFO("free session successfully", "sessid", ctx_.sessid_);
       }
     }

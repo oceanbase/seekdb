@@ -19,8 +19,6 @@
 
 #include <stdint.h>
 #include <lib/ob_define.h>
-#include <lib/net/ob_addr.h>
-#include "lib/atomic/ob_atomic.h"
 #include "lib/container/ob_array_serialization.h"
 
 namespace oceanbase {
@@ -73,7 +71,8 @@ protected:
   common::ObSEArray<dtl::ObDtlChannelInfo, 12> ch_info_set_;
 };
 
-
+// A single server can still run several local SQC task groups.  Preserve the
+// task layout used to map those groups onto DTL channels.
 class ObDtlTaskLayout
 {
   OB_UNIS_VERSION(1);
@@ -93,10 +92,6 @@ public:
   TO_STRING_KV(K_(total_task_cnt), K_(prefix_task_counts));
 public:
   int64_t total_task_cnt_;
-  // Indicates the total number of tasks preceding each sqc
-  // eg:sqc workers:      [0-2], [3-5], [6,7]
-  //    prefix taskcount: [0], [3], [6]
-  // That is, prefix_task_counts_[idx] + task_id is the global task_id corresponding to some task of this sqc
   common::ObSEArray<int64_t, 8> prefix_task_counts_;
 };
 
@@ -134,7 +129,7 @@ public:
   int64_t start_channel_id_;
   ObDtlTaskLayout transmit_task_layout_;
   ObDtlTaskLayout receive_task_layout_;
-  int64_t channel_count_;   // transmit task count * receive task count
+  int64_t channel_count_;
   bool is_local_shuffle_;
 };
 

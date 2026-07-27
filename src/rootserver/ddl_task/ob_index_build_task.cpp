@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX RS
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_index_build_task.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_checksum.h"
@@ -29,7 +28,6 @@
 using namespace oceanbase::rootserver;
 using namespace oceanbase::common;
 using namespace oceanbase::common::sqlclient;
-using namespace oceanbase::obcall;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::sql;
@@ -78,7 +76,6 @@ int ObIndexSSTableBuildTask::process()
   ObString partition_names;
   ObArray<ObString> batch_partition_names;
   ObTabletID unused_tablet_id;
-  ObAddr unused_addr;
   const ObTableSchema *data_schema = nullptr;
   const ObTableSchema *index_schema = nullptr;
   bool need_padding = false;
@@ -172,14 +169,11 @@ int ObIndexSSTableBuildTask::process()
         session_param.nls_formats_[ObNLSFormatEnum::NLS_DATE] = nls_date_format_;
         session_param.nls_formats_[ObNLSFormatEnum::NLS_TIMESTAMP] = nls_timestamp_format_;
         session_param.nls_formats_[ObNLSFormatEnum::NLS_TIMESTAMP_TZ] = nls_timestamp_tz_format_;
-        session_param.use_external_session_ = true;  // means session id dispatched by session mgr
-
         int tmp_ret = OB_SUCCESS;
         user_sql_proxy = GCTX.ddl_sql_proxy_;
         DEBUG_SYNC(BEFORE_INDEX_SSTABLE_BUILD_TASK_SEND_SQL);
         ObTimeoutCtx timeout_ctx;
         const int64_t DDL_INNER_SQL_EXECUTE_TIMEOUT = ObDDLUtil::calc_inner_sql_execute_timeout();
-        ObASHSetInnerSqlWaitGuard ash_inner_sql_guard(ObInnerSqlWaitTypeId::RS_CREATE_INDEX_LOCAL_BUILD);
         add_event_info(ret, "index sstable build task send innersql");
         LOG_INFO("execute sql" , K(sql_string), K(data_table_id_), K(DDL_INNER_SQL_EXECUTE_TIMEOUT), "ddl_event_info", ObDDLEventInfo());
         if (OB_FAIL(timeout_ctx.set_trx_timeout_us(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
@@ -213,7 +207,7 @@ int ObIndexSSTableBuildTask::process()
   ObDDLTaskKey task_key(dest_table_id_, schema_version_);
   ObDDLTaskInfo info;
   int tmp_ret = ObSysDDLSchedulerUtil::on_sstable_complement_job_reply(
-      unused_tablet_id, unused_addr, task_key, snapshot_version_, execution_id_, ret, addition_info_);
+      unused_tablet_id, task_key, snapshot_version_, execution_id_, ret, addition_info_);
   if (OB_SUCCESS != tmp_ret) {
     LOG_WARN("report build finish failed", K(ret), K(tmp_ret));
     ret = OB_SUCCESS == ret ? tmp_ret : ret;
@@ -480,7 +474,7 @@ int ObIndexBuildTask::init(const ObDDLTaskRecord &task_record)
     snapshot_version_ = task_record.snapshot_version_;
     execution_id_ = task_record.execution_id_;
     task_status_ = static_cast<ObDDLTaskStatus>(task_record.task_status_);
-    task_type_ = task_record.ddl_type_; // could be create index / mlog
+    task_type_ = task_record.ddl_type_;
     published_schema_version_ = task_record.published_schema_version_;
     if (ObDDLTaskStatus::VALIDATE_CHECKSUM == task_status_) {
       sstable_complete_ts_ = ObTimeUtility::current_time();
@@ -837,8 +831,7 @@ int ObIndexBuildTask::reap_old_local_build_task(bool &need_exec_new_inner_sql)
         LOG_WARN("failed to check and wait old complement task", K(ret));
       }
     } else if (!need_exec_new_inner_sql) {
-      ObAddr unused_addr;
-      if (OB_FAIL(update_complete_sstable_job_status(unused_tablet_id, unused_addr, snapshot_version_, old_execution_id, old_ret_code, unused_addition_info))) {
+      if (OB_FAIL(update_complete_sstable_job_status(unused_tablet_id, snapshot_version_, old_execution_id, old_ret_code, unused_addition_info))) {
         LOG_INFO("succ to wait and complete old task finished!", K(ret));
       }
     }
@@ -1076,7 +1069,7 @@ int ObIndexBuildTask::wait_data_complement()
         LOG_WARN("data table not exist", KR(ret));
       } else if (OB_FAIL(ObFtsIndexBuilderUtil::get_doc_id_column_id(data_table_schema, doc_id_col_id))) {
         LOG_WARN("failed to get doc id column id", KR(ret));
-      } else if (doc_id_col_id != OB_INVALID &&
+      } else if (doc_id_col_id != OB_INVALID_ID &&
                 OB_FAIL(ignore_col_ids.push_back(doc_id_col_id))) {
         LOG_WARN("failed to push back to ignore_col_ids", KR(ret));
       }
@@ -1174,7 +1167,7 @@ int ObIndexBuildTask::wait_local_index_data_complement()
         LOG_WARN("data table not exist", KR(ret));
       } else if (OB_FAIL(ObFtsIndexBuilderUtil::get_doc_id_column_id(data_table_schema, doc_id_col_id))) {
         LOG_WARN("failed to get doc id column id", KR(ret));
-      } else if (doc_id_col_id != OB_INVALID &&
+      } else if (doc_id_col_id != OB_INVALID_ID &&
                 OB_FAIL(ignore_col_ids.push_back(doc_id_col_id))) {
         LOG_WARN("failed to push back to ignore_col_ids", KR(ret));
       }
@@ -1385,7 +1378,6 @@ int ObIndexBuildTask::update_column_checksum_calc_status(
 
 int ObIndexBuildTask::update_complete_sstable_job_status(
     const common::ObTabletID &tablet_id,
-    const ObAddr &addr,
     const int64_t snapshot_version,
     const int64_t execution_id,
     const int ret_code,
@@ -1398,7 +1390,7 @@ int ObIndexBuildTask::update_complete_sstable_job_status(
     LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(snapshot_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(snapshot_version), K(addr), K(ret_code));
+    LOG_WARN("invalid argument", K(ret), K(snapshot_version), K(ret_code));
   } else if (OB_FAIL(DDL_SIM(task_id_, UPDATE_COMPLETE_SSTABLE_FAILED))) {
     LOG_WARN("ddl sim failure", K(task_id_));
   } else if (ObDDLTaskStatus::REDEFINITION != task_status_) {
@@ -1406,7 +1398,7 @@ int ObIndexBuildTask::update_complete_sstable_job_status(
     LOG_INFO("not waiting data complete, may finished", K(task_status_));
   } else if (snapshot_version != snapshot_version_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("snapshot version not match", K(ret), K(addr), K(snapshot_version), K(snapshot_version_));
+    LOG_WARN("snapshot version not match", K(ret), K(snapshot_version), K(snapshot_version_));
   } else {
     if (is_create_partitioned_local_index()) {
       if (OB_UNLIKELY(addition_info.partition_ids_.count() < 1)) {
@@ -1425,7 +1417,7 @@ int ObIndexBuildTask::update_complete_sstable_job_status(
       execution_id_ = execution_id;
     }
   }
-  LOG_INFO("update complete sstable job return code", K(ret), K(addr), K(target_object_id_), K(tablet_id), K(snapshot_version), K(ret_code), K(execution_id_));
+  LOG_INFO("update complete sstable job return code", K(ret), K(target_object_id_), K(tablet_id), K(snapshot_version), K(ret_code), K(execution_id_));
   return ret;
 }
 

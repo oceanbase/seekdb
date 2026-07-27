@@ -25,7 +25,6 @@ namespace oceanbase
 {
 
 using namespace common;
-using namespace obcall;
 
 namespace transaction
 {
@@ -40,20 +39,8 @@ const char *ObLSTxCtxMgrFactory::mod_type_ = "OB_PARTITION_TRANS_CTX_MGR";
 
 //static TransObjFactory<TransRpcTask> trans_rpc_task_factory("OB_TRANS_RPC_TASK");
 
-#define OB_FREE(object, ...) ob_free(object)
 #define RP_FREE(object, LABEL) rp_free(object, LABEL)
-#define OB_ALLOC(object, LABEL) object##alloc()
-
 #define RP_ALLOC(object, LABEL) rp_alloc(object, LABEL)
-
-#define MAKE_OB_ALLOC(object_name, LABEL)  \
-  object_name *object_name##alloc() \
-  {  \
-    object_name *object = NULL;  \
-    object = (object_name*)ob_malloc(sizeof(object_name), LABEL);  \
-    return object == NULL ? object : new(object) object_name(); \
-  }  \
-
 
 #define MAKE_FACTORY_CLASS_IMPLEMENT(object_name, LABEL, allocator_type, arg...)  \
   int64_t object_name##Factory::alloc_count_ = 0; \
@@ -97,7 +84,6 @@ const char *ObLSTxCtxMgrFactory::mod_type_ = "OB_PARTITION_TRANS_CTX_MGR";
     return mod_type_;\
   }\
 
-#define MAKE_FACTORY_CLASS_IMPLEMENT_USE_OB_ALLOC(object_name, LABEL, arg...) MAKE_FACTORY_CLASS_IMPLEMENT(object_name, LABEL, OB, arg)
 #define MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(object_name, LABEL, arg...) MAKE_FACTORY_CLASS_IMPLEMENT(object_name, LABEL, RP, arg)
 
 ObTxCtx *ObTxCtxFactory::alloc()

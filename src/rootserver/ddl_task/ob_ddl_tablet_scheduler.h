@@ -23,6 +23,8 @@ namespace oceanbase
 {
 namespace rootserver
 {
+class ObLocalDDLService;
+
 class ObDDLTabletScheduler final
 {
   OB_UNIS_VERSION(1);

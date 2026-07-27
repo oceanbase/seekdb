@@ -167,8 +167,6 @@ int ObExchangeInfo::assign(const ObExchangeInfo &other)
     LOG_WARN("failed to assign hybrid phy exprs cnt array", K(ret));
   } else if (OB_FAIL(repart_all_tablet_ids_.assign(other.repart_all_tablet_ids_))) {
     LOG_WARN("failed to assign partition ids", K(ret));
-  } else if (OB_FAIL(server_list_.assign(other.server_list_))) {
-    LOG_WARN("failed to assign server list", K(ret));
   } else {
     is_task_order_ = other.is_task_order_;
     is_merge_sort_ = other.is_merge_sort_;
@@ -190,7 +188,6 @@ int ObExchangeInfo::assign(const ObExchangeInfo &other)
     may_add_interval_part_ = other.may_add_interval_part_;
     sample_type_ = other.sample_type_;
     parallel_ = other.parallel_;
-    server_cnt_ = other.server_cnt_;
   }
   return ret;
 }
@@ -402,7 +399,6 @@ ObLogicalOperator::ObLogicalOperator(ObLogPlan &plan)
     contain_fake_cte_(false),
     contain_pw_merge_op_(false),
     contain_das_op_(false),
-    contain_match_all_fake_cte_(false),
     strong_sharding_(NULL),
     weak_sharding_(),
     is_pipelined_plan_(false),
@@ -418,7 +414,6 @@ ObLogicalOperator::ObLogicalOperator(ObLogPlan &plan)
     parallel_(ObGlobalHint::UNSET_PARALLEL),
     op_parallel_rule_(OpParallelRule::OP_DOP_RULE_MAX),
     available_parallel_(ObGlobalHint::DEFAULT_PARALLEL),
-    server_cnt_(1),
     need_late_materialization_(false),
     op_exprs_(),
     inherit_sharding_index_(-1),
@@ -481,11 +476,6 @@ double FilterCompare::get_selectivity(ObRawExpr *expr)
 {
   bool found = false;
   double selectivity = 1;
-  if (OB_NOT_NULL(expr) && T_FUN_LABEL_SE_LABEL_VALUE_CMP_LE == expr->get_expr_type()) {
-    // security filter should be calc firstly
-    found = true;
-    selectivity = -1.0;
-  }
   for (int64_t i = 0; !found && i < predicate_selectivities_.count(); i++) {
     if (predicate_selectivities_.at(i).expr_ == expr) {
       found = true;
@@ -698,7 +688,7 @@ int ObLogicalOperator::compute_op_interesting_order_info()
   return ret;
 }
 
-int ObLogicalOperator::compute_op_parallel_and_server_info()
+int ObLogicalOperator::compute_op_parallel_info()
 {
   int ret = OB_SUCCESS;
   ObLogicalOperator* child = NULL;
@@ -710,23 +700,19 @@ int ObLogicalOperator::compute_op_parallel_and_server_info()
   } else if (OB_ISNULL(child = get_child(first_child))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect null child", K(ret), K(child));
-  } else if (OB_FAIL(get_server_list().assign(child->get_server_list()))) {
-    LOG_WARN("failed to assign server list", K(ret));
   } else {
     set_parallel(child->get_parallel());
     set_available_parallel(child->get_available_parallel());
-    set_server_cnt(child->get_server_cnt());
   }
   return ret;
 }
 
 
-int ObLogicalOperator::compute_normal_multi_child_parallel_and_server_info()
+int ObLogicalOperator::compute_normal_multi_child_parallel_info()
 {
   int ret = OB_SUCCESS;
   const ObLogicalOperator *max_parallel_child = NULL;
   bool max_parallel_from_exch = false;
-  ObPQDistributeMethod::Type child_distribute_method_type = ObPQDistributeMethod::NONE;
   int64_t max_available_parallel = ObGlobalHint::DEFAULT_PARALLEL;
   const ObLogicalOperator *child = NULL;
   for (int64_t i = 0; OB_SUCC(ret) && i < get_num_of_child(); ++i) {
@@ -753,31 +739,19 @@ int ObLogicalOperator::compute_normal_multi_child_parallel_and_server_info()
   } else if (OB_ISNULL(max_parallel_child)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null ", K(ret), K(max_parallel_child));
-  } else if (OB_FAIL(get_server_list().assign(max_parallel_child->get_server_list()))) {
-    LOG_WARN("failed to assign server list", K(ret));
   } else {
     set_parallel(max_parallel_child->get_parallel());
     set_available_parallel(max_available_parallel);
-    set_server_cnt(max_parallel_child->get_server_cnt());
   }
   return ret;
 }
 
-int ObLogicalOperator::set_parallel_and_server_info_for_match_all()
+int ObLogicalOperator::set_parallel_info_for_match_all()
 {
   int ret = OB_SUCCESS;
-  get_server_list().reuse();
-  if (OB_ISNULL(get_plan())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(get_plan()));
-  } else if (OB_FAIL(get_server_list().push_back(get_plan()->get_optimizer_context().get_local_server_addr()))) {
-    LOG_WARN("failed to push back server list", K(ret));
-  } else {
-    set_parallel(ObGlobalHint::DEFAULT_PARALLEL);
-    set_available_parallel(ObGlobalHint::DEFAULT_PARALLEL);
-    set_op_parallel_rule(OpParallelRule::OP_DAS_DOP);
-    set_server_cnt(1);
-  }
+  set_parallel(ObGlobalHint::DEFAULT_PARALLEL);
+  set_available_parallel(ObGlobalHint::DEFAULT_PARALLEL);
+  set_op_parallel_rule(OpParallelRule::OP_DAS_DOP);
   return ret;
 }
 
@@ -926,23 +900,6 @@ int ObLogicalOperator::compute_op_other_info()
       }
     }
 
-    // compute contains fake cte match all sharding
-    if (OB_SUCC(ret)) {
-      if (get_type() == log_op_def::ObLogOpType::LOG_SET &&
-          static_cast<ObLogSet*>(this)->is_recursive_union()) {
-        /*do nothing*/
-      } else {
-        for (int64_t i = 0; OB_SUCC(ret) && !contain_match_all_fake_cte_ && i < get_num_of_child(); i++) {
-          if (OB_ISNULL(get_child(i))) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected null", K(ret));
-          } else {
-            contain_match_all_fake_cte_ |= get_child(i)->get_contains_match_all_fake_cte();
-          }
-        }
-      }
-    }
-
     // compute contains merge style op
     if (OB_SUCC(ret)) {
       for (int64_t i = 0; OB_SUCC(ret) && !contain_pw_merge_op_ && i < get_num_of_child(); i++) {
@@ -1042,7 +999,6 @@ int ObLogicalOperator::compute_property(Path *path)
     set_location_type(path->location_type_);
     set_contains_fake_cte(path->contain_fake_cte_);
     set_contains_pw_merge_op(path->contain_pw_merge_op_);
-    set_contains_match_all_fake_cte(path->contain_match_all_fake_cte_);
     set_contains_das_op(path->contain_das_op_);
     is_pipelined_plan_ = path->is_pipelined_path();
     is_nl_style_pipelined_plan_ = path->is_nl_style_pipelined_path();
@@ -1057,12 +1013,9 @@ int ObLogicalOperator::compute_property(Path *path)
     set_is_range_order(path->is_range_order_);
     set_parallel(path->parallel_);
     set_op_parallel_rule(path->op_parallel_rule_);
-    set_available_parallel(path->available_parallel_),
-    set_server_cnt(path->server_cnt_);
+    set_available_parallel(path->available_parallel_);
     set_inherit_sharding_index(path->inherit_sharding_index_);
-    if (OB_FAIL(server_list_.assign(path->server_list_))) {
-      LOG_WARN("failed to assign path's server list to op", K(ret));
-    } else if (OB_FAIL(ambient_card_.assign(path->parent_->get_ambient_card()))) {
+    if (OB_FAIL(ambient_card_.assign(path->parent_->get_ambient_card()))) {
       LOG_WARN("failed to assign ambient cards", K(ret));
     } else if (OB_FAIL(check_property_valid())) {
       LOG_WARN("failed to check property valid", K(ret), KPC(path));
@@ -1281,8 +1234,8 @@ int ObLogicalOperator::compute_property()
     LOG_WARN("failed to compute op ordering", K(ret));
   } else if (OB_FAIL(compute_op_interesting_order_info())) {
     LOG_WARN("failed to compute op ordering match info", K(ret));
-  } else if (OB_FAIL(compute_op_parallel_and_server_info())) {
-    LOG_WARN("failed to compute op server info", K(ret));
+  } else if (OB_FAIL(compute_op_parallel_info())) {
+    LOG_WARN("failed to compute op parallel info", K(ret));
   } else if (OB_FAIL(est_width())) {
     LOG_WARN("failed to compute width", K(ret));
   } else if (OB_FAIL(est_cost())) {
@@ -1354,11 +1307,9 @@ int ObLogicalOperator::inner_est_ambient_card_by_child(int64_t child_idx)
 int ObLogicalOperator::check_property_valid() const
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(ObGlobalHint::DEFAULT_PARALLEL > get_parallel()
-                  || get_server_cnt() < 1)) {
+  if (OB_UNLIKELY(ObGlobalHint::DEFAULT_PARALLEL > get_parallel())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("has invalid parallel or server info", K(ret), K(get_parallel()),
-                                                    K(get_server_list()), K(get_server_cnt()));
+    LOG_WARN("has invalid parallel info", K(ret), K(get_parallel()));
   }
   return ret;
 }
@@ -3710,7 +3661,7 @@ int ObLogicalOperator::explain_print_partitions(ObTablePartitionInfo &table_part
     ObLogicalOperator::PartInfo part_info;
     const ObOptTabletLoc &part_loc = partitions.at(i).get_partition_location();
     if (is_virtual_table(ref_table_id)) {
-      if (VirtualSvrPair::EMPTY_VIRTUAL_TABLE_TABLET_ID == part_loc.get_partition_id()) {
+      if (EMPTY_VIRTUAL_TABLE_TABLET_ID == part_loc.get_partition_id()) {
 
       } else {
         part_info.part_id_ = part_loc.get_partition_id();
@@ -6307,7 +6258,7 @@ int ObLogicalOperator::find_max_px_resource_child(OPEN_PX_RESOURCE_ANALYZE_DECLA
     int64_t max_child_thread_cnt = -1;
     int64_t max_child_group_cnt = -1;
     ObLogicalOperator *child = NULL;
-    bool append_map = false;
+    update_max = false;
     for (int64_t i = first_nonblock_child; i < get_num_of_child() && OB_SUCC(ret); i++) {
       if (OB_ISNULL(child = get_child(i))) {
         ret = OB_ERR_UNEXPECTED;
@@ -6382,33 +6333,6 @@ int ObLogicalOperator::check_op_orderding_used_by_parent(bool &used)
     } else {
       child = parent;
       parent = parent->get_parent();
-    }
-  }
-  return ret;
-}
-
-int ObLogicalOperator::check_contain_dist_das(const ObIArray<ObAddr> &exec_server_list,
-                                              bool &contain_dist_das) const
-{
-  int ret = OB_SUCCESS;
-  contain_dist_das = false;
-  if (!get_contains_das_op()) {
-    contain_dist_das = false;
-  } else if (LOG_TABLE_SCAN == get_type() && static_cast<const ObLogTableScan*>(this)->use_das()) {
-    if (1 != exec_server_list.count()
-        || 1 != get_server_list().count()
-        || exec_server_list.at(0) != get_server_list().at(0)) {
-      contain_dist_das = true;
-    }
-  } else {
-    ObLogicalOperator *child = NULL;
-    for (int64_t i = 0; !contain_dist_das && OB_SUCC(ret) && i < get_num_of_child(); ++i) {
-      if (OB_ISNULL(child = get_child(i))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("child is null", K(ret), K(i));
-      } else if (OB_FAIL(SMART_CALL(child->check_contain_dist_das(exec_server_list, contain_dist_das)))) {
-        LOG_WARN("failed to smart call check contain dist das", K(ret));
-      }
     }
   }
   return ret;

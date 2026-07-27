@@ -17,6 +17,9 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/ob_dump_task_generator.h"
+#ifdef _WIN32
+#include <fcntl.h>
+#endif
 #include "lib/alloc/memory_dump.h"
 #include "sql/parser/ob_parser.h"
 
@@ -86,37 +89,29 @@ int ObDumpTaskGenerator::generate_task_from_file()
     LOG_WARN("nullptr", K(cmd), K(ret));
   } else {
     LOG_INFO("read command", K(cmd));
-    ObMemoryDumpTask task;
-    task.type_ = node->value_ <= 1 ? DUMP_CONTEXT : DUMP_CHUNK;
-    task.dump_all_ = 0 == node->value_ || 2 == node->value_;
-    char atoi_buf[32];
-    if (CONTEXT_ALL == node->value_) {
-      // do-nothing
-    } else if (CONTEXT == node->value_) {
-      snprintf(atoi_buf, sizeof(atoi_buf), "%.*s",
-               (int32_t)node->children_[0]->str_len_, node->children_[0]->str_value_);
-      task.p_context_ = (void*)std::stoll(atoi_buf, nullptr, 0);
-      task.slot_idx_ = node->children_[1]->value_;
-    } else if (CHUNK_ALL == node->value_) {
-      // do-nothing
-    } else if (CHUNK_OF_CTX == node->value_) {
-      task.dump_ctx_ = true;
-
-      uint64_t ctx_id = 0;
-      if (!get_global_ctx_info().is_valid_ctx_name(node->children_[0]->str_value_, ctx_id)) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid ctx", K(node->children_[0]->str_value_));
-      } else {
-        task.ctx_id_ = ctx_id;
+    {
+      ObMemoryDumpTask task;
+      task.type_ = node->value_ <= 1 ? DUMP_CONTEXT : DUMP_CHUNK;
+      task.dump_all_ = 0 == node->value_ || 2 == node->value_;
+      char atoi_buf[32];
+      if (CONTEXT_ALL == node->value_) {
+        // do-nothing
+      } else if (CONTEXT == node->value_) {
+        snprintf(atoi_buf, sizeof(atoi_buf), "%.*s",
+                 (int32_t)node->children_[0]->str_len_, node->children_[0]->str_value_);
+        task.p_context_ = (void*)std::stoll(atoi_buf, nullptr, 0);
+        task.slot_idx_ = node->children_[1]->value_;
+      } else if (CHUNK_ALL == node->value_) {
+        // do-nothing
+      } else if (CHUNK == node->value_) {
+        snprintf(atoi_buf, sizeof(atoi_buf), "%.*s",
+                 (int32_t)node->children_[0]->str_len_, node->children_[0]->str_value_);
+        task.p_chunk_ = (void*)std::stoll(atoi_buf, nullptr, 0);
       }
-    } else if (CHUNK == node->value_) {
-      snprintf(atoi_buf, sizeof(atoi_buf), "%.*s",
-               (int32_t)node->children_[0]->str_len_, node->children_[0]->str_value_);
-      task.p_chunk_ = (void*)std::stoll(atoi_buf, nullptr, 0);
-    }
-    LOG_INFO("task info", K(task));
-    if (OB_FAIL(mem_dump.request_dump(task))) {
-      LOG_WARN("request dump failed", K(ret));
+      LOG_INFO("task info", K(task));
+      if (OB_FAIL(mem_dump.request_dump(task))) {
+        LOG_WARN("request dump failed", K(ret));
+      }
     }
   }
   return ret;

@@ -286,7 +286,6 @@ bool ObGlobalHint::has_hint_exclude_concurrent() const
          || false != disable_transform_
          || false != disable_cost_based_transform_
          || !opt_params_.empty()
-         || !ob_ddl_schema_versions_.empty()
          || has_gather_opt_stat_hint()
          || false != has_dbms_stats_hint_
          || -1 != dynamic_sampling_
@@ -312,7 +311,6 @@ void ObGlobalHint::reset()
   disable_transform_ = false;
   disable_cost_based_transform_ = false;
   opt_params_.reset();
-  ob_ddl_schema_versions_.reuse();
   osg_hint_.flags_ = 0;
   has_dbms_stats_hint_ = false;
   dynamic_sampling_ = ObGlobalHint::UNSET_DYNAMIC_SAMPLING;
@@ -326,9 +324,7 @@ int ObGlobalHint::merge_global_hint(const ObGlobalHint &other)
   merge_read_consistency_hint(other.read_consistency_, other.frozen_version_);
   merge_topk_hint(other.topk_precision_, other.sharding_minimum_row_count_);
   merge_query_timeout_hint(other.query_timeout_);
-  enable_lock_early_release_ |= other.enable_lock_early_release_;
   merge_log_level_hint(other.log_level_);
-  enable_lock_early_release_ |= other.enable_lock_early_release_;
   merge_plan_cache_hint(other.plan_cache_policy_);
   merge_parallel_dml_hint(other.pdml_option_);
   force_trace_log_ |= other.force_trace_log_;
@@ -347,8 +343,6 @@ int ObGlobalHint::merge_global_hint(const ObGlobalHint &other)
     LOG_WARN("failed to merge dop hints", K(ret));
   } else if (OB_FAIL(opt_params_.merge_opt_param_hint(other.opt_params_))) {
     LOG_WARN("failed to merge opt param hint", K(ret));
-  } else if (OB_FAIL(append(ob_ddl_schema_versions_, other.ob_ddl_schema_versions_))) {
-    LOG_WARN("failed to append ddl schema version hints", K(ret));
   }
   return ret;
 }
@@ -427,11 +421,6 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
   }
   if (OB_SUCC(ret) && force_trace_log_) { //TRACE_LOG
     PRINT_GLOBAL_HINT_STR("TRACE_LOG");
-  }
-  if (OB_SUCC(ret) && enable_lock_early_release_) { //TRANS_PARAM
-    if (OB_FAIL(BUF_PRINTF("%sTRANS_PARAM(\'ENABLE_EARLY_LOCK_RELEASE\' \'true\')", outline_indent))) {
-      LOG_WARN("failed to print hint TRANS_PARAM hint", K(ret));
-    }
   }
   if (OB_SUCC(ret) && !log_level_.empty()) { //LOG_LEVEL
     if (OB_FAIL(BUF_PRINTF("%sLOG_LEVEL(\"%.*s\")", outline_indent,
@@ -683,6 +672,7 @@ bool ObOptParamHint::is_param_val_valid(const OptParamType param_type, const ObO
     case USE_PART_SORT_MGB:
     case USE_DEFAULT_OPT_STAT:
     case ENABLE_IN_RANGE_OPTIMIZATION:
+    case ENABLE_RICH_VECTOR_FORMAT:
     case _ENABLE_STORAGE_CARDINALITY_ESTIMATION:
     case PRESERVE_ORDER_FOR_PAGINATION:
     case ENABLE_DAS_KEEP_ORDER:

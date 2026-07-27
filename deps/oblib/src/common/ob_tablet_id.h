@@ -37,6 +37,9 @@ public:
 
   static const uint64_t MIN_USER_NORMAL_ROWID_TABLE_TABLET_ID = MIN_USER_TABLET_ID;
   static const uint64_t MAX_USER_NORMAL_ROWID_TABLE_TABLET_ID = ((uint64_t)1 << 37) - 1;
+  // seekdb has one user-tablet id range; keep the upstream rowid-table name as
+  // a compatibility alias for code shared with OceanBase.
+  static const uint64_t MAX_USER_TABLET_ID = MAX_USER_NORMAL_ROWID_TABLE_TABLET_ID;
 
   // for LS inner tablet
   static const uint64_t MIN_LS_INNER_TABLET_ID = OB_MIN_LS_INNER_TABLE_ID;

@@ -15,10 +15,8 @@
  */
 
 #define USING_LOG_PREFIX SERVER
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/mysql/obmp_stmt_fetch.h"
 #include "observer/mysql/obsm_utils.h"
-#include "share/ob_lob_access_utils.h"
 #include "sql/ob_sql.h"
 #include "observer/omt/ob_server_runtime.h"
 #include "observer/mysql/ob_sync_plan_driver.h"
@@ -165,7 +163,6 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
 
     {
       audit_record.exec_record_.record_end();
-      record_stat(stmt::T_EXECUTE, exec_end_timestamp_);
       audit_record.stmt_type_ = stmt::T_EXECUTE;
       audit_record.update_event_stage_state();
     }
@@ -524,7 +521,7 @@ int ObMPStmtFetch::process_fetch_stmt(ObSQLSessionInfo &session,
   {
     int tmp_ret = OB_SUCCESS;
     //Clear WARNING BUFFER
-    tmp_ret = do_after_process(session, false/*no asyn response*/);
+    tmp_ret = do_after_process(session, false/*no asyn response*/, ret);
     UNUSED(tmp_ret);
   }
   return ret;
@@ -562,6 +559,7 @@ int ObMPStmtFetch::process()
     THIS_WORKER.set_session(sess);
     ObSQLSessionInfo::LockGuard lock_guard(session.get_query_lock());
     session.set_current_trace_id(ObCurTraceId::get_trace_id());
+    session.init_use_rich_format();
     session.get_raw_audit_record().request_memory_used_ = 0;
     observer::ObProcessMallocCallback pmcb(0,
           session.get_raw_audit_record().request_memory_used_);
@@ -581,7 +579,7 @@ int ObMPStmtFetch::process()
       LOG_WARN("packet too large than allowed for the session", K_(cursor_id), K(ret));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
       LOG_WARN("fail to get query timeout", K(ret));
-    } else if (OB_FAIL(gctx_.schema_service_->get_runtime_received_broadcast_version(
+    } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(
                 runtime_version))) {
       LOG_WARN("fail to get runtime broadcast version", K(ret));
     } else {
@@ -626,17 +624,6 @@ int ObMPStmtFetch::process()
   }
   return (OB_SUCCESS != ret) ? ret : flush_ret;
 }
-
-void ObMPStmtFetch::record_stat(const stmt::StmtType type, const int64_t end_time) const
-{
-  UNUSED(type);
-  {
-    const int64_t time_cost = end_time - get_receive_timestamp();
-    EVENT_INC(SQL_OTHER_COUNT);
-    EVENT_ADD(SQL_OTHER_TIME, time_cost);
-  }
-}
-
 
 int ObMPStmtFetch::response_row(ObSQLSessionInfo &session,
                                 common::ObNewRow &src_row,

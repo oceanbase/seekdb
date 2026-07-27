@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_dbms_xplan.h"
 #include "observer/ob_inner_sql_connection_pool.h"
-#include "share/ob_lob_access_utils.h"
 #include "sql/ob_spi.h"
 #include "sql/resolver/ddl/ob_explain_stmt.h" // ObExplainDisplayOpt
 
@@ -678,7 +677,6 @@ int ObDbmsXplan::get_plan_info_by_session_id(sql::ObExecContext &ctx,
                         WHERE ID=%ld \
                         LIMIT 1) E\
                       ON A.PLAN_ID = E.PLAN_ID\
-                    WHERE 1 = 1\
                     ORDER BY A.ID",
                     session_id))) {
     LOG_WARN("failed to assign string", K(ret));

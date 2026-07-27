@@ -20,7 +20,6 @@
 #include "sql/engine/table/ob_table_scan_op.h"
 #include "ob_opt_est_parameter_normal.h"
 #include "sql/optimizer/ob_sel_estimator.h"
-#include "observer/ob_service.h"
 namespace oceanbase {
 using namespace share::schema;
 using namespace share;
@@ -648,7 +647,7 @@ int ObAccessPathEstimation::process_storage_estimation(ObOptimizerContext &ctx,
       range_limit = ObOptEstCost::MAX_STORAGE_RANGE_ESTIMATION_NUM;
     }
   }
-  // for each access path, find a partition/server for estimation
+  // For each access path, choose local tablets for estimation.
   for (int64_t i = 0; OB_SUCC(ret) && i < paths.count(); ++i) {
     AccessPath *ap = NULL;
     ObBatchEstTasks *task = NULL;
@@ -670,9 +669,6 @@ int ObAccessPathEstimation::process_storage_estimation(ObOptimizerContext &ctx,
         result_helper->path_ = ap;
         result_helper->result_.valid_partition_count_ = ap->est_cost_info_.index_meta_info_.index_part_count_;
         result_helper->total_scan_range_count_ = get_scan_range_count(ap->est_cost_info_.ranges_);
-        ObPhysicalPlanCtx *plan_ctx = ctx.get_exec_ctx()->get_physical_plan_ctx();
-        const int64_t cur_time = plan_ctx->has_cur_time() ?
-            plan_ctx->get_cur_time().get_timestamp() : ObTimeUtility::current_time();
         OPT_TRACE("Process index", ap->index_id_, "ref table", table_part_info->get_ref_table_id());
         if (partition_limit >= result_helper->result_.valid_partition_count_ || partition_limit <= 0) {
           // do storage estimation for all partitions
@@ -817,18 +813,18 @@ int ObAccessPathEstimation::add_storage_estimation_task(ObOptimizerContext &ctx,
     LOG_TRACE("choose partitions and ranges to estimate rowcount", K(ap.index_id_), K(chosen_partitions));
     LOG_TRACE("choose ranges to estimate rowcount", K(chosen_scan_ranges));
     for (int64_t i = 0; OB_SUCC(ret) && i < chosen_partitions.count(); i ++) {
-      EstimatedPartition local_partition;
+      EstimatedTablet local_tablet;
       ObBatchEstTasks *task = NULL;
       if (OB_FAIL(get_storage_estimation_task(ctx,
                                               arena,
                                               chosen_partitions.at(i),
                                               *table_meta,
                                               tasks,
-                                              local_partition,
+                                              local_tablet,
                                               task))) {
         LOG_WARN("failed to get task", K(ret));
       } else if (NULL != task) {
-        if (OB_FAIL(add_index_info(ctx, arena, task, local_partition, ap, chosen_scan_ranges))) {
+        if (OB_FAIL(add_index_info(ctx, arena, task, local_tablet, ap, chosen_scan_ranges))) {
           LOG_WARN("failed to add task info", K(ret));
         }
       }
@@ -923,18 +919,18 @@ int ObAccessPathEstimation::add_storage_estimation_task_by_ranges(ObOptimizerCon
           K(ap.index_id_), K(chosen_scan_ranges.at(i)), K(chosen_partitions), K(valid_partitions_for_range), K(tablet_ids));
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < chosen_partitions.count(); j ++) {
-      EstimatedPartition local_partition;
+      EstimatedTablet local_tablet;
       ObBatchEstTasks *task = NULL;
       if (OB_FAIL(get_storage_estimation_task(ctx,
                                               arena,
                                               chosen_partitions.at(j),
                                               *table_meta,
                                               tasks,
-                                              local_partition,
+                                              local_tablet,
                                               task))) {
         LOG_WARN("failed to get task", K(ret));
       } else if (NULL != task) {
-        if (OB_FAIL(add_index_info(ctx, arena, task, local_partition, ap, chosen_range, i))) {
+        if (OB_FAIL(add_index_info(ctx, arena, task, local_tablet, ap, chosen_range, i))) {
           LOG_WARN("failed to add task info", K(ret));
         }
       }
@@ -943,26 +939,36 @@ int ObAccessPathEstimation::add_storage_estimation_task_by_ranges(ObOptimizerCon
   return ret;
 }
 
+bool ObAccessPathEstimation::get_local_estimation_tablet(const ObCandiTabletLoc &partition,
+                                                         EstimatedTablet &tablet)
+{
+  const ObOptTabletLoc &tablet_location = partition.get_partition_location();
+  tablet.reset();
+  if (tablet_location.is_valid()) {
+    tablet.set(tablet_location.get_tablet_id());
+  }
+  return tablet.is_valid();
+}
+
 int ObAccessPathEstimation::get_storage_estimation_task(ObOptimizerContext &ctx,
                                                         ObIAllocator &arena,
                                                         const ObCandiTabletLoc &partition,
                                                         const ObTableMetaInfo &table_meta,
                                                         ObIArray<ObBatchEstTasks *> &tasks,
-                                                        EstimatedPartition &local_partition,
+                                                        EstimatedTablet &local_tablet,
                                                         ObBatchEstTasks *&task)
 {
   int ret = OB_SUCCESS;
   task = NULL;
   void *ptr = NULL;
-  if (OB_FAIL(ObSQLUtils::get_local_partition_for_estimation(partition,
-                                                              local_partition))) {
-    LOG_WARN("failed to get local partition for estimation", K(ret));
-  } else if (!local_partition.is_valid()) {
+  get_local_estimation_tablet(partition, local_tablet);
+  if (!local_tablet.is_valid()) {
     // does not do storage estimation for this index partition
-  } else if (OB_FAIL(get_task(tasks, task))) {
-    LOG_WARN("failed to get task", K(ret));
-  } else if (NULL != task) {
-    // do nothing
+  } else if (!tasks.empty()) {
+    if (OB_ISNULL(task = tasks.at(0))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid local storage estimation task", K(ret));
+    }
   } else if (OB_ISNULL(ptr = arena.alloc(sizeof(ObBatchEstTasks)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("memory is not enough", K(ret));
@@ -1432,7 +1438,7 @@ int ObAccessPathEstimation::get_valid_partition_info(ObOptimizerContext &ctx,
 int ObAccessPathEstimation::add_index_info(ObOptimizerContext &ctx,
                                            ObIAllocator &allocator,
                                            ObBatchEstTasks *task,
-                                           const EstimatedPartition &part,
+                                           const EstimatedTablet &tablet,
                                            AccessPath &ap,
                                            const ObIArray<common::ObNewRange> &chosen_scan_ranges,
                                            int64_t range_idx/* = -1*/)
@@ -1451,13 +1457,13 @@ int ObAccessPathEstimation::add_index_info(ObOptimizerContext &ctx,
   } else if (OB_ISNULL(index_est_arg = task->arg_.index_params_.alloc_place_holder())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate index argument", K(ret));
-  } else if (OB_FAIL(get_key_ranges(ctx, allocator, part.tablet_id_, ap, scan_ranges))) {
+  } else if (OB_FAIL(get_key_ranges(ctx, allocator, tablet.tablet_id_, ap, scan_ranges))) {
     LOG_WARN("failed to get key ranges", K(ret));
   } else {
     index_est_arg->index_id_ = ap.index_id_;
     index_est_arg->scan_flag_.index_back_ = ap.est_cost_info_.index_meta_info_.is_index_back_;
     index_est_arg->range_columns_count_ = ap.est_cost_info_.range_columns_.count();
-    index_est_arg->tablet_id_ = part.tablet_id_;
+    index_est_arg->tablet_id_ = tablet.tablet_id_;
     
     
     index_est_arg->tx_id_ = ctx.get_session_info()->get_tx_id();
@@ -1528,22 +1534,6 @@ int ObAccessPathEstimation::process_statistics_estimation(ObIArray<AccessPath *>
     if (OB_FAIL(process_statistics_estimation(paths.at(i)))) {
       LOG_WARN("failed to process table default estimation", K(ret));
     }  
-  }
-  return ret;
-}
-
-int ObAccessPathEstimation::get_task(ObIArray<ObBatchEstTasks *> &tasks,
-                                     ObBatchEstTasks *&task)
-{
-  int ret = OB_SUCCESS;
-  task = NULL;
-  for (int64_t i = 0; OB_SUCC(ret) && i < tasks.count(); ++i) {
-    if (OB_ISNULL(tasks.at(i))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid batch estimation task", K(ret));
-    } else if (NULL == task) {
-      task = tasks.at(i);
-    }
   }
   return ret;
 }
@@ -1679,7 +1669,7 @@ int ObAccessPathEstimation::storage_estimate_full_table_rowcount(ObOptimizerCont
                                                                  ObTableMetaInfo &meta)
 {
   int ret = OB_SUCCESS;
-  EstimatedPartition local_partition;
+  EstimatedTablet local_tablet;
   ObArenaAllocator arena("CardEstimation");
   HEAP_VAR(ObBatchEstTasks, task) {
     obcall::ObEstPartArg &arg = task.arg_;
@@ -1691,10 +1681,7 @@ int ObAccessPathEstimation::storage_estimate_full_table_rowcount(ObOptimizerCont
       LOG_WARN("get unexpected null", K(ret));
     } else if (is_virtual_table(meta.ref_table_id_)) {
       // do nothing
-    } else if (OB_FAIL(ObSQLUtils::get_local_partition_for_estimation(
-                part_loc_info, local_partition))) {
-      LOG_WARN("failed to get local partition", K(ret));
-    } else if (local_partition.is_valid()) {
+    } else if (get_local_estimation_tablet(part_loc_info, local_tablet)) {
       obcall::ObEstPartArgElement path_arg;
       ObNewRange *range = NULL;
 
@@ -1702,7 +1689,7 @@ int ObAccessPathEstimation::storage_estimate_full_table_rowcount(ObOptimizerCont
       path_arg.index_id_ = meta.ref_table_id_;
       path_arg.range_columns_count_ = meta.table_rowkey_count_;
       path_arg.batch_.type_ = ObSimpleBatch::T_SCAN;
-      path_arg.tablet_id_ = local_partition.tablet_id_;
+      path_arg.tablet_id_ = local_tablet.tablet_id_;
       
       path_arg.tx_id_ = ctx.get_session_info()->get_tx_id();
       if (OB_FAIL(ObSQLUtils::make_whole_range(arena,
@@ -1806,14 +1793,14 @@ int ObAccessPathEstimation::storage_estimate_range_rowcount(ObOptimizerContext &
     LOG_TRACE("choose ranges to estimate rowcount", K(chosen_scan_ranges));
   }
   for (int64_t i = 0; OB_SUCC(ret) && !need_fallback && i < chosen_partitions.count(); i ++) {
-    EstimatedPartition local_partition;
+    EstimatedTablet local_tablet;
     ObBatchEstTasks *task = NULL;
     if (OB_FAIL(get_storage_estimation_task(ctx,
                                             arena,
                                             chosen_partitions.at(i),
                                             meta,
                                             tasks,
-                                            local_partition,
+                                            local_tablet,
                                             task))) {
       LOG_WARN("failed to get task", K(ret));
     } else if (NULL != task) {
@@ -1822,7 +1809,7 @@ int ObAccessPathEstimation::storage_estimate_range_rowcount(ObOptimizerContext &
       path_arg.index_id_ = meta.ref_table_id_;
       path_arg.range_columns_count_ = meta.table_rowkey_count_;
       path_arg.batch_.type_ = ObSimpleBatch::T_SCAN;
-      path_arg.tablet_id_ = local_partition.tablet_id_;
+      path_arg.tablet_id_ = local_tablet.tablet_id_;
       
       path_arg.tx_id_ = ctx.get_session_info()->get_tx_id();
       if (OB_FAIL(construct_scan_range_batch(ctx.get_allocator(), chosen_scan_ranges, path_arg.batch_))) {

@@ -405,7 +405,6 @@ do {                                                                  \
   //comments not used
   //credential_name not used
   //destination_name not used
-  EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "this_exec_addr", job_info_local.this_exec_addr_);
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "this_exec_trace_id", job_info_local.this_exec_trace_id_);
   OZ (job_info.deep_copy(allocator, job_info_local));
   return ret;

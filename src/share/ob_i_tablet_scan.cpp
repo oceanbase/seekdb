@@ -26,8 +26,5 @@ OB_SERIALIZE_MEMBER(ObLimitParam, offset_, limit_);
 OB_SERIALIZE_MEMBER(SampleInfo, table_id_, method_, scope_, percent_, seed_, force_block_);
 OB_SERIALIZE_MEMBER(ObEstRowCountRecord, table_id_, table_type_, version_range_, logical_row_count_, physical_row_count_);
 OB_SERIALIZE_MEMBER(ObTableScanOption, io_read_batch_size_, io_read_gap_size_, storage_rowsets_size_);
-
-
-// ObVTableScanParam::to_string moved definition to sql/engine/table/ob_table_scan_op.cpp(printing ObFixedArray<sql::ObExpr*> needs ObExpr complete type)
 }
 }

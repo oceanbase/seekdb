@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SQL_PC
 #include "ob_plan_cache.h"
 #include "share/ob_truncated_string.h"
-#include "lib/rc/ob_rc.h"
 #include "sql/plan_cache/ob_plan_cache_callback.h"
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "sql/plan_cache/ob_values_table_compression.h"
@@ -609,44 +608,43 @@ int ObPlanCache::construct_fast_parser_result(common::ObIAllocator &allocator,
                                                     raw_sql,
                                                     fp_result))) {
         LOG_WARN("failed to fast parser", K(ret), K(sql_mode), K(pc_ctx.raw_sql_));
-      } else {
-        if (OB_FAIL(check_can_do_insert_opt(allocator,
-                                                  pc_ctx,
-                                                  fp_result,
-                                                  can_do_batch_insert,
-                                                  batch_count,
-                                                  first_truncated_sql,
-                                                  is_insert_values))) {
-          LOG_WARN("fail to do insert optimization", K(ret));
-        } else if (can_do_batch_insert) {
-          if (OB_FAIL(rebuild_raw_params(allocator,
-                                        pc_ctx,
-                                        fp_result,
-                                        batch_count))) {
-            LOG_WARN("fail to rebuild raw_param", K(ret), K(batch_count));
-          } else if (pc_ctx.insert_batch_opt_info_.multi_raw_params_.empty()) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected multi_raw_params, can't do batch insert opt, but not need to return error",
-                K(batch_count), K(first_truncated_sql), K(pc_ctx.raw_sql_), K(fp_result));
-          } else if (OB_ISNULL(pc_ctx.insert_batch_opt_info_.multi_raw_params_.at(0))) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected null ptr, can't do batch insert opt, but not need to return error",
-                K(batch_count), K(first_truncated_sql), K(pc_ctx.raw_sql_), K(fp_result));
+      } else if (OB_FAIL(check_can_do_insert_opt(allocator,
+                                                pc_ctx,
+                                                fp_result,
+                                                can_do_batch_insert,
+                                                batch_count,
+                                                first_truncated_sql,
+                                                is_insert_values))) {
+        LOG_WARN("fail to do insert optimization", K(ret));
+      } else if (can_do_batch_insert) {
+        if (OB_FAIL(rebuild_raw_params(allocator,
+                                      pc_ctx,
+                                      fp_result,
+                                      batch_count))) {
+          LOG_WARN("fail to rebuild raw_param", K(ret), K(batch_count));
+        } else if (pc_ctx.insert_batch_opt_info_.multi_raw_params_.empty()) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected multi_raw_params, can't do batch insert opt, but not need to return error",
+              K(batch_count), K(first_truncated_sql), K(pc_ctx.raw_sql_), K(fp_result));
+        } else if (OB_ISNULL(pc_ctx.insert_batch_opt_info_.multi_raw_params_.at(0))) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected null ptr, can't do batch insert opt, but not need to return error",
+              K(batch_count), K(first_truncated_sql), K(pc_ctx.raw_sql_), K(fp_result));
+        } else {
+          fp_result.raw_params_.reset();
+          if (OB_FAIL(fp_result.raw_params_.assign(
+                  *pc_ctx.insert_batch_opt_info_.multi_raw_params_.at(0)))) {
+            LOG_WARN("fail to assign raw_param", K(ret));
           } else {
-            fp_result.raw_params_.reset();
-            if (OB_FAIL(fp_result.raw_params_.assign(*pc_ctx.insert_batch_opt_info_.multi_raw_params_.at(0)))) {
-              LOG_WARN("fail to assign raw_param", K(ret));
-            } else {
-              pc_ctx.sql_ctx_.set_is_do_insert_batch_opt(batch_count);
-              fp_result.pc_key_.name_.assign_ptr(first_truncated_sql.ptr(), first_truncated_sql.length());
-              LOG_DEBUG("print new fp_result.pc_key_.name_", K(fp_result.pc_key_.name_));
-            }
+            pc_ctx.sql_ctx_.set_is_do_insert_batch_opt(batch_count);
+            fp_result.pc_key_.name_.assign_ptr(first_truncated_sql.ptr(), first_truncated_sql.length());
+            LOG_DEBUG("print new fp_result.pc_key_.name_", K(fp_result.pc_key_.name_));
           }
-        } else if (!is_insert_values &&
-                  OB_FAIL(ObValuesTableCompression::try_batch_exec_params(allocator, pc_ctx,
-                                                        *pc_ctx.sql_ctx_.session_info_, fp_result))) {
-          LOG_WARN("failed to check fold params valid", K(ret));
         }
+      } else if (!is_insert_values &&
+                 OB_FAIL(ObValuesTableCompression::try_batch_exec_params(allocator, pc_ctx,
+                                                       *pc_ctx.sql_ctx_.session_info_, fp_result))) {
+        LOG_WARN("failed to check fold params valid", K(ret));
       }
     }
   }
@@ -1823,8 +1821,6 @@ int ObPlanCache::get_ps_plan(ObCacheObjGuard& guard,
   } else if (FALSE_IT(pc_ctx.fp_result_.cache_params_ =
     &(pc_ctx.exec_ctx_.get_physical_plan_ctx()->get_param_store_for_update()))) {
     //do nothing
-  } else if (FALSE_IT(original_param_cnt = pc_ctx.fp_result_.cache_params_->count())) {
-    // do nothing
   } else if (OB_FAIL(construct_plan_cache_key(pc_ctx, ObLibCacheNameSpace::NS_CRSR))) {
     LOG_WARN("fail to construct plan cache key", K(ret));
   } else {
@@ -1905,6 +1901,18 @@ OB_INLINE int ObPlanCache::construct_plan_cache_key(ObSQLSessionInfo &session,
   pc_key.namespace_ = ns;
   OZ (session.get_sys_var_in_pc_str(pc_key.sys_vars_str_));
   pc_key.config_str_ = session.get_config_in_pc_str();
+  // here we use `initial_use_rich_format` instead of `use_rich_format` as part of key
+  // consider scenario of binding outline:
+  // ```
+  //   set _enable_rich_vector_format = true;
+  //   create outline xx on select /*+opt_param('enable_rich_vector_format', 'false')*/ * from t on select * from t;
+  //   select * from t;
+  // ```
+  // rich_format is forced off by hint, thus `use_rich_format() = false`, `initial_use_rich_format() = true`
+  // added plan's key will be `true + other_info`, same as key constructed for getting plan.
+  // if `use_rich_format()` is used as part of key, added plan's key will be `false + other_info`.
+  pc_key.use_rich_vector_format_ = session.initial_use_rich_format();
+  pc_key.config_use_rich_format_ = session.config_use_rich_format();
   OZ (session.get_sys_var_config_hash_val(pc_key.sys_var_config_hash_val_));
   pc_key.enable_mysql_compatible_dates_ = session.enable_mysql_compatible_dates();
   return ret;

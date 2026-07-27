@@ -19,7 +19,6 @@
 
 #include "share/config/ob_server_config.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
-#include "storage/ob_i_table.h"
 
 namespace oceanbase
 {
@@ -27,7 +26,6 @@ namespace storage
 {
 class ObRowsInfo;
 class ObRowKeysInfo;
-class ObSSTableReadHandle;
 }
 namespace blocksstable
 {
@@ -73,7 +71,7 @@ public:
   ObBloomFilterCacheKey(const MacroBlockId &block_id, const int8_t prefix_rowkey_len);
   virtual ~ObBloomFilterCacheKey();
   virtual bool operator ==(const common::ObIKVCacheKey &other) const;
-  
+
   virtual uint64_t hash() const;
   virtual int64_t size() const;
   virtual int deep_copy(char *buf, const int64_t buf_len, common::ObIKVCacheKey *&key) const;
@@ -81,7 +79,7 @@ public:
   inline int64_t get_prefix_rowkey_len() const { return prefix_rowkey_len_; }
   TO_STRING_KV(K_(macro_block_id), K_(prefix_rowkey_len) );
 private:
-  
+
   MacroBlockId macro_block_id_;
   int8_t prefix_rowkey_len_;
 private:
@@ -150,8 +148,7 @@ public:
    * @param [in] bloom_filter
    */
   int put_bloom_filter(const MacroBlockId& macro_block_id,
-      const ObBloomFilterCacheValue &bloom_filter,
-      const bool adaptive = false);
+      const ObBloomFilterCacheValue &bloom_filter);
   /**
    * check if the macro block contains the rowkey
    * @param [in] macro_block_id

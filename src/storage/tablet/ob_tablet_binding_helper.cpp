@@ -25,7 +25,6 @@
 #include "observer/ob_inner_sql_connection.h"
 #include "rootserver/ob_ddl_service.h"
 
-using namespace oceanbase::obcall;
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::transaction;

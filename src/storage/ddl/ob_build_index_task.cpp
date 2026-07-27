@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_build_index_task.h"
 #include "share/rc/ob_module_provider.h"
 #include "rootserver/ob_local_management_service.h"

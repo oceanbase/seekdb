@@ -404,66 +404,59 @@ int ObMemtableMutatorRow::deserialize(const char *buf, const int64_t buf_len, in
 {
   int ret = OB_SUCCESS;
   int64_t new_pos = pos;
-  uint32_t encrypted_len = 0;
-  const char *decrypted_buf = nullptr;
-  int64_t decrypted_len = 0;
+  uint32_t row_size = 0;
+  const char *row_buf = nullptr;
+  int64_t row_buf_len = 0;
   UNUSED(is_big_row);
   if (OB_ISNULL(buf) || pos < 0 || pos > buf_len) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(decode_i32(buf, buf_len, new_pos, (int32_t *)&encrypted_len))) {
-    TRANS_LOG(WARN, "deserialize encrypted length fail", K(ret), K(buf_len), K(new_pos));
-  } else if (pos + encrypted_len > buf_len) {
+  } else if (OB_FAIL(decode_i32(buf, buf_len, new_pos, (int32_t *)&row_size))) {
+    TRANS_LOG(WARN, "deserialize row size fail", K(ret), K(buf_len), K(new_pos));
+  } else if (pos + row_size > buf_len) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "size overflow", K(ret), KP(buf), K(buf_len), K(pos), K(encrypted_len));
+    TRANS_LOG(ERROR, "size overflow", K(ret), KP(buf), K(buf_len), K(pos), K(row_size));
   } else if (OB_FAIL(decode_vi64(buf, buf_len, new_pos, (int64_t *)&table_id_))) {
     TRANS_LOG(WARN, "deserialize table id failed", K(ret), K(buf_len), K(new_pos));
   } else {
     int64_t data_pos = new_pos;
-    decrypted_buf = buf + data_pos;
-    decrypted_len = encrypted_len - (data_pos - pos);
-    row_size_ = encrypted_len;
+    row_buf = buf + data_pos;
+    row_buf_len = row_size - (data_pos - pos);
+    row_size_ = row_size;
     new_pos = 0;
-    if (OB_SUCC(ret)) {
-      if (NULL == decrypted_buf) {
-        ret = OB_ERR_UNEXPECTED;
-        TRANS_LOG(WARN, "decrypted_buf init fail", "ret", ret);
-      } else if (OB_FAIL(rowkey_.deserialize(decrypted_buf, decrypted_len, new_pos))
-                || OB_FAIL(decode_vi64(decrypted_buf, decrypted_len, new_pos, &table_version_))
-                || OB_FAIL(decode_i8(decrypted_buf, decrypted_len, new_pos, (int8_t *)&dml_flag_))
-                || OB_FAIL(decode_vi32(decrypted_buf, decrypted_len, new_pos, (int32_t *)&update_seq_))
-                || OB_FAIL(new_row_.deserialize(decrypted_buf, decrypted_len, new_pos))
-                || OB_FAIL(old_row_.deserialize(decrypted_buf, decrypted_len, new_pos))) {
-        TRANS_LOG(WARN, "deserialize row fail", K(ret), K(table_id_));
-      } else {
-        acc_checksum_ = 0;
-        version_ = 0;
-        if (new_pos < decrypted_len) {
-          if (OB_FAIL(decode_vi32(decrypted_buf, decrypted_len, new_pos, (int32_t *)&acc_checksum_))) {
-            TRANS_LOG(WARN, "deserialize acc checksum fail", K(ret), K(table_id_), K(decrypted_len), K(new_pos));
-          } else if (OB_FAIL(decode_vi64(decrypted_buf, decrypted_len, new_pos, (int64_t *)&version_))) {
-            TRANS_LOG(WARN, "deserialize version fail", K(ret), K(table_id_), K(decrypted_len), K(new_pos));
-          } else {
-            // do nothing
-          }
+    if (OB_FAIL(rowkey_.deserialize(row_buf, row_buf_len, new_pos))
+              || OB_FAIL(decode_vi64(row_buf, row_buf_len, new_pos, &table_version_))
+              || OB_FAIL(decode_i8(row_buf, row_buf_len, new_pos, (int8_t *)&dml_flag_))
+              || OB_FAIL(decode_vi32(row_buf, row_buf_len, new_pos, (int32_t *)&update_seq_))
+              || OB_FAIL(new_row_.deserialize(row_buf, row_buf_len, new_pos))
+              || OB_FAIL(old_row_.deserialize(row_buf, row_buf_len, new_pos))) {
+      TRANS_LOG(WARN, "deserialize row fail", K(ret), K(table_id_));
+    } else {
+      acc_checksum_ = 0;
+      version_ = 0;
+      if (new_pos < row_buf_len) {
+        if (OB_FAIL(decode_vi32(row_buf, row_buf_len, new_pos, (int32_t *)&acc_checksum_))) {
+          TRANS_LOG(WARN, "deserialize acc checksum fail", K(ret), K(table_id_), K(row_buf_len), K(new_pos));
+        } else if (OB_FAIL(decode_vi64(row_buf, row_buf_len, new_pos, (int64_t *)&version_))) {
+          TRANS_LOG(WARN, "deserialize version fail", K(ret), K(table_id_), K(row_buf_len), K(new_pos));
         }
-        if (OB_SUCC(ret) && (new_pos < decrypted_len)) {
-          if (OB_FAIL(decode_vi32(decrypted_buf, decrypted_len, new_pos, (int32_t *)&flag_))) {
-            TRANS_LOG(WARN, "deserialize flag fail", K(ret), K(table_id_), K(decrypted_len), K(new_pos));
-          }
+      }
+      if (OB_SUCC(ret) && (new_pos < row_buf_len)) {
+        if (OB_FAIL(decode_vi32(row_buf, row_buf_len, new_pos, (int32_t *)&flag_))) {
+          TRANS_LOG(WARN, "deserialize flag fail", K(ret), K(table_id_), K(row_buf_len), K(new_pos));
         }
-        if (OB_SUCC(ret) && (new_pos < decrypted_len)) {
-          if (OB_FAIL(seq_no_.deserialize(decrypted_buf, decrypted_len, new_pos))) {
-            TRANS_LOG(WARN, "deserialize seq no fail", K(ret), K(table_id_), K(decrypted_len), K(new_pos));
-          }
+      }
+      if (OB_SUCC(ret) && (new_pos < row_buf_len)) {
+        if (OB_FAIL(seq_no_.deserialize(row_buf, row_buf_len, new_pos))) {
+          TRANS_LOG(WARN, "deserialize seq no fail", K(ret), K(table_id_), K(row_buf_len), K(new_pos));
         }
-        if (OB_SUCC(ret) && (new_pos < decrypted_len)) {
-          if (OB_FAIL(decode_vi64(decrypted_buf, decrypted_len, new_pos, (int64_t *)&column_cnt_))) {
-            TRANS_LOG(WARN, "deserialize column cnt fail", K(ret), K(table_id_), K(decrypted_len), K(new_pos));
-          }
+      }
+      if (OB_SUCC(ret) && (new_pos < row_buf_len)) {
+        if (OB_FAIL(decode_vi64(row_buf, row_buf_len, new_pos, (int64_t *)&column_cnt_))) {
+          TRANS_LOG(WARN, "deserialize column cnt fail", K(ret), K(table_id_), K(row_buf_len), K(new_pos));
         }
-        if (OB_SUCC(ret)) {
-          pos += encrypted_len;
-        }
+      }
+      if (OB_SUCC(ret)) {
+        pos += row_size;
       }
     }
   }
@@ -584,7 +577,7 @@ int ObMutatorTableLock::deserialize(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(decode_i32(buf, buf_len, new_pos,
                      (int32_t *)&row_size_))) {
-    TRANS_LOG(WARN, "deserialize encrypted length fail", K(ret),
+    TRANS_LOG(WARN, "deserialize row size fail", K(ret),
               K(buf_len), K(new_pos));
   } else if (pos + row_size_ > buf_len) {
     ret = OB_ERR_UNEXPECTED;

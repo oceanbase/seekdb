@@ -430,6 +430,11 @@ int ObUserDefinedType::deserialize_obj(ObObj &obj, const char* buf, const int64_
   uint8_t pl_type = PL_INVALID_TYPE;
   uint64_t id = OB_INVALID_ID;
   OZ (serialization::decode(buf, len, pos, version));
+  if (OB_SUCC(ret) && OB_UNLIKELY(DATA_CURRENT_VERSION != static_cast<uint64_t>(version))) {
+    ret = OB_VERSION_NOT_MATCH;
+    LOG_WARN("PL user type data format version does not match",
+             KR(ret), K(version), "expected_version", DATA_CURRENT_VERSION);
+  }
   OZ (serialization::decode(buf, len, pos, pl_type));
   OZ (serialization::decode(buf, len, pos, id));
   if (OB_SUCC(ret)) {

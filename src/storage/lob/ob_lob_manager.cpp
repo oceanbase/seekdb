@@ -19,12 +19,10 @@
 #include "ob_lob_manager.h"
 #include "share/rc/ob_module_provider.h"
 #include "observer/ob_server.h"
-#include "storage/lob/ob_lob_location.h"
 #include "storage/lob/ob_lob_handler.h"
 #include "storage/lob/ob_lob_locator_struct.h"
 #include "storage/lob/ob_lob_tablet_dml.h"
-#include "storage/blocksstable/ob_datum_row.h"
-#include "share/ob_lob_access_utils.h"  // relocated-definition owner
+#include "share/ob_lob_access_utils.h"
 
 namespace oceanbase
 {
@@ -160,7 +158,7 @@ int ObLobManager::fill_lob_header(ObIAllocator &allocator, ObString &data, ObStr
 // Only use for default lob col val.
 int ObLobManager::fill_lob_header(
     ObIAllocator &allocator,
-    blocksstable::ObStorageDatum &datum)
+    ObStorageDatum &datum)
 {
   int ret = OB_SUCCESS;
   if (datum.is_null() || datum.is_nop_value()) {
@@ -375,7 +373,7 @@ int ObLobManager::load_all(ObLobAccessParam &param, ObLobPartialData &partial_da
     LOG_WARN("alloc fail", K(ret), K(param));
   } else if (OB_FALSE_IT(output_data.assign_buffer(output_buf, output_len))) {
   } else if (OB_FAIL(query(param, output_data))) {
-    LOG_WARN("do remote query fail", K(ret), K(param), K(output_len));
+    LOG_WARN("load lob data fail", K(ret), K(param), K(output_len));
   } else if (OB_FAIL(partial_data.data_.push_back(ObLobChunkData(output_data)))) {
     LOG_WARN("push_back lob chunk data fail", KR(ret));
   } else {
@@ -413,9 +411,7 @@ int ObLobManager::query(
 {
   INIT_SUCC(ret);
   ObLobAccessParam *param = nullptr;
-  bool is_remote_lob = false;
   bool is_partial_data_alloc = false;
-  common::ObAddr dst_addr;
   if (! locator.has_lob_header() || ! locator.is_persist_lob() || locator.is_inrow()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid locator", KR(ret), K(locator));
@@ -434,8 +430,6 @@ int ObLobManager::query(
   } else if (OB_ISNULL(param->lob_data_ = reinterpret_cast<ObLobData*>(param->lob_common_->buffer_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lob data is null", K(ret), KPC(param->lob_common_), KPC(param));
-  } else if (OB_FAIL(ObLobLocationUtil::is_remote(*param, is_remote_lob, dst_addr))) {
-    LOG_WARN("check is remote fail", K(ret), K(param));
   } else if (OB_ISNULL(partial_data)) {
     is_partial_data_alloc = true;
     if (OB_ISNULL(partial_data = OB_NEWx(ObLobPartialData, allocator))) {
@@ -448,14 +442,10 @@ int ObLobManager::query(
     } else {
       partial_data->data_length_ = param->byte_size_;
       partial_data->locator_.assign_ptr(locator.ptr_, locator.size_);
-      // new alloc partial_data do load data if need
-      if ((is_load_all || is_remote_lob) && OB_FAIL(load_all(*param, *partial_data))) {
+      if (is_load_all && OB_FAIL(load_all(*param, *partial_data))) {
         LOG_WARN("load_all fail", K(ret));
       }
     }
-  }
-  if (is_remote_lob) {
-    LOG_INFO("remote_lob", KPC(param->lob_common_), KPC(param->lob_data_), K(dst_addr));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(cursor->init(allocator, param, partial_data, lob_ctx_.lob_meta_mngr_))) {
@@ -910,18 +900,11 @@ int ObLobManager::append(
     }
     ObLobCommon *lob_common = param.lob_common_;
     ObLobData *lob_data = param.lob_data_;
-    bool is_remote_lob = false;
-    common::ObAddr dst_addr;
     int64_t append_lob_len = 0;
     ObString ori_inrow_data;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(param.check_handle_size())) {
       LOG_WARN("check handle size failed.", K(ret));
-    } else if (OB_FAIL(ObLobLocationUtil::is_remote(param, is_remote_lob, dst_addr))) {
-      LOG_WARN("check is remote failed.", K(ret), K(param));
-    } else if (is_remote_lob) {
-      ret = OB_NOT_IMPLEMENT;
-      LOG_WARN("Unsupport remote append", K(ret), K(param));
     } else if (OB_FAIL(lob.get_lob_data_byte_len(append_lob_len))) {
       LOG_WARN("fail to get append lob byte len", K(ret), K(lob));
     } else if (OB_FAIL(check_need_out_row(param, append_lob_len, ori_inrow_data, false, alloc_inside, need_out_row))) {
@@ -1013,18 +996,11 @@ int ObLobManager::append(ObLobAccessParam& param, ObLobLocatorV2& lob, ObLobMeta
     }
     ObLobCommon *lob_common = param.lob_common_;
     ObLobData *lob_data = param.lob_data_;
-    bool is_remote_lob = false;
-    common::ObAddr dst_addr;
     int64_t append_lob_len = 0;
     ObString ori_inrow_data;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(param.check_handle_size())) {
       LOG_WARN("check handle size failed.", K(ret));
-    } else if (OB_FAIL(ObLobLocationUtil::is_remote(param, is_remote_lob, dst_addr))) {
-      LOG_WARN("check is remote failed.", K(ret), K(param));
-    } else if (is_remote_lob) {
-      ret = OB_NOT_IMPLEMENT;
-      LOG_WARN("Unsupport remote append", K(ret), K(param));
     } else if (OB_FAIL(lob.get_lob_data_byte_len(append_lob_len))) {
       LOG_WARN("fail to get append lob byte len", K(ret), K(lob));
     } else if (OB_FAIL(check_need_out_row(param, append_lob_len, ori_inrow_data, false, alloc_inside, need_out_row))) {
@@ -1196,18 +1172,11 @@ int ObLobManager::append(
     }
     ObLobCommon *lob_common = param.lob_common_;
     ObLobData *lob_data = param.lob_data_;
-    bool is_remote_lob = false;
     bool ori_is_inrow = (lob_common == nullptr) ? false : (lob_common->in_row_ == 1);
-    common::ObAddr dst_addr;
     int64_t store_chunk_size = 0;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(param.check_handle_size())) {
       LOG_WARN("check handle size failed.", K(ret));
-    } else if (OB_FAIL(ObLobLocationUtil::is_remote(param, is_remote_lob, dst_addr))) {
-      LOG_WARN("check is remote failed.", K(ret), K(param));
-    } else if (is_remote_lob) {
-      ret = OB_NOT_IMPLEMENT;
-      LOG_WARN("Unsupport remote append", K(ret), K(param));
     } else if (OB_FAIL(check_need_out_row(param, data.length(), data, true, alloc_inside, need_out_row))) {
       LOG_WARN("process out row check failed.", K(ret), K(param), KPC(lob_common), KPC(lob_data), K(data));
     } else if (OB_ISNULL(lob_common = param.lob_common_)) { // check_need_out_row may change lob_common
@@ -1735,16 +1704,9 @@ int ObLobManager::write(ObLobAccessParam& param, ObLobLocatorV2& lob, uint64_t o
   } else if (OB_FAIL(param.prepare())) {
     LOG_WARN("param prepare fail", K(ret), K(param));
   } else {
-    bool is_remote_lob = false;
-    common::ObAddr dst_addr;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(param.check_handle_size())) {
       LOG_WARN("check handle size failed.", K(ret));
-    } else if (OB_FAIL(ObLobLocationUtil::is_remote(param, is_remote_lob, dst_addr))) {
-      LOG_WARN("check is remote failed.", K(ret), K(param));
-    } else if (is_remote_lob) {
-      ret = OB_NOT_IMPLEMENT;
-      LOG_WARN("Unsupport remote write", K(ret), K(param));
     } else {
       ObString old_data;
       bool out_row = false;
@@ -1828,17 +1790,10 @@ int ObLobManager::erase(ObLobAccessParam& param)
   } else if (OB_FAIL(param.prepare())) {
     LOG_WARN("param prepare fail", K(ret), K(param));
   } else {
-    bool is_remote_lob = false;
-    common::ObAddr dst_addr;
     if (OB_FAIL(OB_ISNULL(param.lob_common_))) {
       LOG_WARN("get lob locator null.", K(ret));
     } else if (OB_FAIL(param.check_handle_size())) {
       LOG_WARN("check handle size failed.", K(ret));
-    } else if (OB_FAIL(ObLobLocationUtil::is_remote(param, is_remote_lob, dst_addr))) {
-      LOG_WARN("check is remote failed.", K(ret), K(param));
-    } else if (is_remote_lob) {
-      ret = OB_NOT_IMPLEMENT;
-      LOG_WARN("Unsupport remote erase", K(ret), K(param));
     } else if (param.lob_common_->in_row_) {
       if (param.lob_common_->is_init_) {
         param.lob_data_ = reinterpret_cast<ObLobData*>(param.lob_common_->buffer_);
@@ -1939,18 +1894,11 @@ int ObLobManager::build_lob_param(ObLobAccessParam& param,
       // outrow arg for do lob meta scan
       if (OB_SUCC(ret) && lob.is_persist_lob() && !lob.has_inrow_data()) {
         ObMemLobLocationInfo *location_info = nullptr;
-        ObMemLobExternHeader *extern_header = NULL;
-        bool is_remote = false;
-        if (OB_FAIL(lob.get_extern_header(extern_header))) {
-          LOG_WARN("failed to get extern header", K(ret), K(lob));
-          LOG_WARN("failed to get tx info", K(ret), K(lob));
-        } else if (OB_FAIL(lob.get_location_info(location_info))) {
+        if (OB_FAIL(lob.get_location_info(location_info))) {
           LOG_WARN("failed to get location info", K(ret), K(lob));
         } else if (OB_FALSE_IT(param.tablet_id_ = ObTabletID(location_info->tablet_id_))) {
         } else if (OB_FAIL(param.set_tx_read_snapshot(lob))) {
           LOG_WARN("set_tx_read_snapshot fail", K(ret), K(param), K(lob));
-        } else if (OB_FAIL(ObLobLocationUtil::is_remote(param, is_remote, param.addr_))) {
-          LOG_WARN("get lob addr fail", K(ret), K(param), K(lob));
         }
       }
     }

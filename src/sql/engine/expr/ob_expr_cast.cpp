@@ -16,11 +16,11 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_cast.h"
-#include "sql/engine/expr/ob_datum_cast.h"
 #include "share/geo/ob_geometry_cast.h"
 #include "sql/engine/expr/ob_expr_subquery_ref.h"
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
 #include "pl/ob_pl_resolver.h"
+#include "sql/engine/expr/vector_cast/vector_cast.h"
 
 // from sql_parser_base.h
 #define DEFAULT_STR_LENGTH -1
@@ -381,7 +381,6 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
     }
     if (OB_SUCC(ret)) {
       ObCollationType collation_connection = type_ctx.get_coll_type();
-      ObCollationType collation_nation = session->get_nls_collation_nation();
       type1.set_calc_type(get_calc_cast_type(type1.get_type(), dst_type.get_type()));
       int32_t length = 0;
       if (ob_is_string_or_lob_type(dst_type.get_type())
@@ -745,6 +744,19 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
                                                       cast_mode, *(op_cg_ctx.allocator_),
                                                       just_eval_arg, rt_expr))) {
           LOG_WARN("choose_cast_func failed", K(ret));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        int tmp_ret = OB_E(EventTable::EN_ENABLE_VECTOR_CAST) OB_SUCCESS;
+        rt_expr.eval_vector_func_ =
+          tmp_ret == OB_SUCCESS ?
+            VectorCasterUtil::get_vector_cast(rt_expr.args_[0]->get_vec_value_tc(),
+                                              rt_expr.get_vec_value_tc(), just_eval_arg,
+                                              rt_expr.eval_func_, cast_mode) :
+            nullptr;
+        // Some VEC_TC_XXXX classes still have some types not yet implemented for vectorization, and they still use the non-vectorized interface
+        if (ObTinyTextType == in_type || ObTinyTextType == out_type) {
+          rt_expr.eval_vector_func_ = nullptr;
         }
       }
     }

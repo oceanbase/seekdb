@@ -116,10 +116,6 @@ static int build_compressed_packet(ObEasyBuffer &src_buf,
                                                static_cast<int32_t>(len_before_compress), pos))) {
       SERVER_LOG(WARN, "failed to store_int3", K(ret));
     } else {
-      if (context.conn_->pkt_rec_wrapper_.enable_proto_dia()) {
-        context.conn_->pkt_rec_wrapper_.end_seal_comp_pkt(
-                          static_cast<uint32_t>(dst_data_size), context.seq_);
-      }
       SERVER_LOG(DEBUG, "succ to build compressed pkt", "comp_len", dst_data_size,
                  "comp_seq", context.seq_, K(len_before_compress), K(next_compress_size),
                  K(src_buf), K(dst_buf), K(context), K(context.conn_->sessid_));

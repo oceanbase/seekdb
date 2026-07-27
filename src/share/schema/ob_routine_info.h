@@ -284,7 +284,7 @@ public:
   {
     return static_cast<pl::ObPLIntegerType>((flag_ & SP_PARAM_INTEGER_MASK) >> 2);
   }
-  // get_pl_data_type constructs by value in the body pl::ObPLDataType, moved definition to pl/ob_pl_type.cpp
+
   pl::ObPLDataType get_pl_data_type() const;
   OB_INLINE bool is_schema_routine_param() const { return true; }
 
