@@ -5,6 +5,9 @@ BUILD_SH=$TOPDIR/build.sh
 
 DEP_DIR=${TOPDIR}/deps/3rd/usr/local/oceanbase/deps/devel
 TOOLS_DIR=${TOPDIR}/deps/3rd/usr/local/oceanbase/devtools
+SOURCE_DEPS_DIR=""
+SOURCE_DEPS_PLATFORM=""
+SOURCE_DEPS_TRIPLET=""
 
 # Get CPU cores and CMAKE command, compatible with macOS and Linux
 if [[ "$(uname -s)" == "Darwin" ]]; then
@@ -36,6 +39,20 @@ function echo_log() {
 
 function echo_err() {
   echo -e "[build.sh][ERROR] $@" 1>&2
+}
+
+# Keep all native build tools and helper programs on the repository toolchain.
+# In particular, ICU and other source builds execute freshly-built host tools;
+# their runtime loader must see the matching libstdc++ from devtools as well.
+function setup_linux_toolchain_env()
+{
+    if [[ "$(uname -s)" != "Linux" || ! -d "$TOOLS_DIR/bin" ]]; then
+      return 0
+    fi
+    export PATH="$TOOLS_DIR/bin:$PATH"
+    if [[ -d "$TOOLS_DIR/lib64" ]]; then
+      export LD_LIBRARY_PATH="$TOOLS_DIR/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    fi
 }
 
 function usage
@@ -102,6 +119,24 @@ function parse_args
 
     BUILD_ARGS+=("-DWITH_COVERAGE=$WITH_COVERAGE")
     [[ "$WITH_COVERAGE" == "ON" ]] && BUILD_ARGS+=("-DENABLE_BOLT=OFF")
+
+    if [[ "$ANDROID_BUILD" == true ]]; then
+      SOURCE_DEPS_PLATFORM=android
+      SOURCE_DEPS_TRIPLET=android-arm64-v8a
+    elif [[ "$(uname -s)" == "Darwin" ]]; then
+      SOURCE_DEPS_PLATFORM=macos
+      MACOS_MAJOR=$(sw_vers -productVersion | awk -F. '{print $1}')
+      SOURCE_DEPS_TRIPLET="macos${MACOS_MAJOR}-$(uname -m)"
+    elif [[ "$(uname -s)" == "Linux" ]]; then
+      SOURCE_DEPS_PLATFORM=linux
+      SOURCE_DEPS_TRIPLET="linux-$(uname -m)"
+    else
+      SOURCE_DEPS_PLATFORM=windows
+      SOURCE_DEPS_TRIPLET=windows-x86_64
+    fi
+    SOURCE_DEPS_DIR="${TOPDIR}/deps/devel/${SOURCE_DEPS_TRIPLET}/install"
+    DEP_DIR="${SOURCE_DEPS_DIR}"
+    BUILD_ARGS+=("-DDEP_DIR=${SOURCE_DEPS_DIR}")
 }
 
 # try call command make, if use give --make in command line.
@@ -156,6 +191,48 @@ function do_init
     if [ $? -ne 0 ]; then
       exit $?
     fi
+
+    if [[ ! -x "$TOPDIR/deps/dependencies/build.sh" ]]; then
+      echo_err "source dependency submodule is missing"
+      echo_err "run: git submodule update --init deps/dependencies"
+      exit 1
+    fi
+
+    setup_linux_toolchain_env
+
+    local source_cc="${CC:-}"
+    local source_cxx="${CXX:-}"
+    local source_cmake="${CMAKE_PATH:-}"
+    local source_ar="${AR:-}"
+    local source_ranlib="${RANLIB:-}"
+    local source_nm="${NM:-}"
+    local source_strip="${STRIP:-}"
+    local source_objcopy="${OBJCOPY:-}"
+    if [[ "$(uname -s)" == "Linux" ]]; then
+      source_cc="${TOOLS_DIR}/bin/gcc"
+      source_cxx="${TOOLS_DIR}/bin/g++"
+      source_cmake="${TOOLS_DIR}/bin/cmake"
+      source_ar="${TOOLS_DIR}/bin/ar"
+      source_ranlib="${TOOLS_DIR}/bin/ranlib"
+      source_nm="${TOOLS_DIR}/bin/nm"
+      source_strip="${TOOLS_DIR}/bin/strip"
+      source_objcopy="${TOOLS_DIR}/bin/objcopy"
+    fi
+    if [[ "$ANDROID_BUILD" == true ]]; then
+      source_cc=""
+      source_cxx=""
+      source_cmake=""
+    fi
+    echo_log "building source SDKs into ${SOURCE_DEPS_DIR}"
+    if ! env PATH="$PATH" LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \
+      CC="$source_cc" CXX="$source_cxx" CMAKE="$source_cmake" \
+      AR="$source_ar" RANLIB="$source_ranlib" NM="$source_nm" \
+      STRIP="$source_strip" OBJCOPY="$source_objcopy" JOBS="$CPU_CORES" \
+      bash "$TOPDIR/deps/dependencies/build.sh" \
+      --platform "$SOURCE_DEPS_PLATFORM" --prefix "$SOURCE_DEPS_DIR"; then
+      echo_err "failed to build source SDKs"
+      exit 1
+    fi
     time2_ms=$(get_timestamp_ms)
 
     cost_time_ms=$(($time2_ms - $time1_ms))
@@ -169,6 +246,8 @@ function do_init
 # make build directory && cmake && make (if need)
 function do_build
 {
+    setup_linux_toolchain_env
+
     # Check if cmake exists, compatible with macOS and Linux
     CMAKE_PATH=""
     if [[ "$(uname -s)" == "Darwin" ]]; then
@@ -280,6 +359,9 @@ function build
       xpackage) 
         # automatic determination of packaging type 
         build_package "$@"
+        ;;
+      xsanity)
+        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_SANITY=ON -DOB_ENABLE_MCMODEL=ON
         ;;
       *)
         BUILD_ARGS=(debug "${BUILD_ARGS[@]}")
