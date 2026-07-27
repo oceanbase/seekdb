@@ -110,14 +110,14 @@ struct AutoDOPParams {
       parallel_min_scan_time_threshold_(1000)
     { }
 
-  int64_t get_parallel_degree_limit() const {
+  int64_t get_parallel_degree_limit(const int64_t server_cnt) const {
     int64_t limit = 0;
     if (0 < parallel_degree_limit_) {
       limit = parallel_degree_limit_;
-    } else if (0 >= parallel_servers_target_ || 0 >= min_cpu_) {
-      limit = std::max(parallel_servers_target_, min_cpu_);
+    } else if (0 >= parallel_servers_target_ || 0 >= min_cpu_ || 0 >= server_cnt) {
+      limit = std::max(parallel_servers_target_, server_cnt * min_cpu_);
     } else {
-      limit = std::min(parallel_servers_target_, min_cpu_);
+      limit = std::min(parallel_servers_target_, server_cnt * min_cpu_);
     }
     return std::max(limit, static_cast<int64_t>(1));
   }
@@ -290,6 +290,7 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
     partition_wise_plan_enabled_(true),
     enable_px_ordered_coord_(false),
     enable_opt_row_goal_(ObEnableOptRowGoal::MAX),
+    enable_distributed_das_scan_(true),
     enable_topn_runtime_filter_(true)
   { }
   inline common::ObOptStatManager *get_opt_stat_manager() { return opt_stat_manager_; }
@@ -375,7 +376,7 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   void set_das_keep_order_enabled(bool das_keep_order_enabled) { das_keep_order_enabled_ = das_keep_order_enabled; }
   inline int64_t get_parallel() const { return parallel_; }
   inline int64_t get_max_parallel() const { return max_parallel_; }
-  inline int64_t get_parallel_degree_limit() const { return auto_dop_params_.get_parallel_degree_limit(); }
+  inline int64_t get_parallel_degree_limit(const int64_t server_cnt) const { return auto_dop_params_.get_parallel_degree_limit(server_cnt); }
   inline int64_t get_session_parallel_degree_limit() const { return auto_dop_params_.parallel_degree_limit_; }
   inline int64_t get_parallel_min_scan_time_threshold() const { return auto_dop_params_.parallel_min_scan_time_threshold_; }
   inline bool force_disable_parallel() const  { return px_parallel_rule_ >= PL_UDF_DAS_FORCE_SERIALIZE
@@ -458,6 +459,7 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   static const int BATCH_RESCAN_BIT_NON_BASIC_SCAN = 9;
   static const int BATCH_RESCAN_BIT_STARTUP_FILTER = 10;
  
+  // Whether a batch rescan scenario is enabled is controlled by its configuration bit.
   void init_batch_rescan_flags(const bool enable_batch_nlj,
                                const bool enable_batch_spf,
                                const int64_t batch_rescan_flag)
@@ -727,6 +729,8 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   inline void set_push_join_pred_into_view_enabled(bool enabled) { push_join_pred_into_view_enabled_ = enabled; }
   inline void set_enable_opt_row_goal(int64_t type) { enable_opt_row_goal_ = static_cast<ObEnableOptRowGoal>(type); }
   inline ObEnableOptRowGoal get_enable_opt_row_goal() const { return enable_opt_row_goal_; }
+  inline bool is_enable_distributed_das_scan() const { return enable_distributed_das_scan_; }
+  inline void set_enable_distributed_das_scan(bool enabled) { enable_distributed_das_scan_ = enabled; }
   inline bool enable_topn_runtime_filter() const { return enable_topn_runtime_filter_; }
   inline void set_enable_topn_runtime_filter(bool enabled) { enable_topn_runtime_filter_ = enabled; }
 private:
@@ -838,6 +842,7 @@ private:
   bool partition_wise_plan_enabled_;
   bool enable_px_ordered_coord_;
   ObEnableOptRowGoal enable_opt_row_goal_;
+  bool enable_distributed_das_scan_;
   bool enable_topn_runtime_filter_;
 };
 }
