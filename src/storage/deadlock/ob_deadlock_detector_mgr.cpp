@@ -101,19 +101,19 @@ int ObDeadLockLocalTaskQueue::init(ObDeadLockDetectorMgr *mgr)
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(mgr)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(common::ObSimpleThreadPool::init(
+  } else if (OB_FAIL(common::ObLinkQueueThreadPool::init(
                  1, DEADLOCK_LOCAL_TASK_QUEUE_LIMIT, "DeadLockLocal"))) {
     DETECT_LOG(WARN, "init local deadlock task queue failed", KR(ret));
   } else if (FALSE_IT(thread_pool_inited = true)) {
-  } else if (OB_FAIL(common::ObSimpleThreadPool::set_adaptive_thread(1, 1))) {
+  } else if (OB_FAIL(common::ObLinkQueueThreadPool::set_adaptive_thread(1, 1))) {
     DETECT_LOG(WARN, "fix local deadlock task queue worker count failed", KR(ret));
   } else {
-    common::ObSimpleThreadPool::set_run_wrapper(share::server_runtime());
+    common::ObLinkQueueThreadPool::set_run_wrapper(share::server_runtime());
     mgr_ = mgr;
     is_inited_ = true;
   }
   if (OB_FAIL(ret) && thread_pool_inited) {
-    common::ObSimpleThreadPool::destroy();
+    common::ObLinkQueueThreadPool::destroy();
   }
   return ret;
 }
@@ -123,8 +123,8 @@ int ObDeadLockLocalTaskQueue::start()
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-  } else if (common::ObSimpleThreadPool::get_thread_count() <= 0 &&
-             !common::ObSimpleThreadPool::try_expand_one(1)) {
+  } else if (common::ObLinkQueueThreadPool::get_thread_count() <= 0 &&
+             !common::ObLinkQueueThreadPool::try_expand_one(1)) {
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(WARN, "start local deadlock task queue failed", KR(ret));
   } else {
@@ -137,23 +137,23 @@ void ObDeadLockLocalTaskQueue::stop()
 {
   if (is_inited_) {
     ATOMIC_STORE(&is_running_, false);
-    common::ObSimpleThreadPool::stop();
+    common::ObLinkQueueThreadPool::stop();
   }
 }
 
 void ObDeadLockLocalTaskQueue::wait()
 {
   if (is_inited_) {
-    common::ObSimpleThreadPool::wait();
+    common::ObLinkQueueThreadPool::wait();
   }
 }
 
 void ObDeadLockLocalTaskQueue::destroy()
 {
   if (is_inited_) {
-    common::ObSimpleThreadPool::stop();
-    common::ObSimpleThreadPool::wait();
-    common::ObSimpleThreadPool::destroy();
+    common::ObLinkQueueThreadPool::stop();
+    common::ObLinkQueueThreadPool::wait();
+    common::ObLinkQueueThreadPool::destroy();
     ATOMIC_STORE(&is_running_, false);
     mgr_ = nullptr;
     is_inited_ = false;
@@ -169,7 +169,7 @@ int ObDeadLockLocalTaskQueue::push_task_(Task *task)
     ret = OB_NOT_INIT;
   } else if (!ATOMIC_LOAD(&is_running_)) {
     ret = OB_NOT_RUNNING;
-  } else if (OB_FAIL(common::ObSimpleThreadPool::push(task))) {
+  } else if (OB_FAIL(common::ObLinkQueueThreadPool::push(task))) {
     DETECT_LOG(WARN, "push local deadlock task failed", KR(ret), K(task->type_));
   }
   if (OB_FAIL(ret) && OB_NOT_NULL(task)) {
@@ -224,7 +224,7 @@ int ObDeadLockLocalTaskQueue::push_parent_notification(const UserBinaryKey &pare
   return ret;
 }
 
-void ObDeadLockLocalTaskQueue::handle(void *task)
+void ObDeadLockLocalTaskQueue::handle(common::LinkTask *task)
 {
   int ret = OB_SUCCESS;
   Task *local_task = static_cast<Task *>(task);
@@ -259,7 +259,7 @@ void ObDeadLockLocalTaskQueue::handle(void *task)
   }
 }
 
-void ObDeadLockLocalTaskQueue::handle_drop(void *task)
+void ObDeadLockLocalTaskQueue::handle_drop(common::LinkTask *task)
 {
   destroy_task_(static_cast<Task *>(task));
 }

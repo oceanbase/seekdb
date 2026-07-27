@@ -39,7 +39,7 @@ namespace detector
 {
 class ObDeadLockDetectorMgr;
 
-class ObDeadLockLocalTaskQueue : public common::ObSimpleThreadPool
+class ObDeadLockLocalTaskQueue : public common::ObLinkQueueThreadPool
 {
 public:
   ObDeadLockLocalTaskQueue();
@@ -57,8 +57,8 @@ public:
   int push_parent_notification(const UserBinaryKey &parent_key,
                                const UserBinaryKey &child_key);
 protected:
-  void handle(void *task) override;
-  void handle_drop(void *task) override;
+  void handle(common::LinkTask *task) override;
+  void handle_drop(common::LinkTask *task) override;
 private:
   enum class TaskType
   {
@@ -66,7 +66,7 @@ private:
     CYCLE_INFO,
     PARENT_NOTIFICATION
   };
-  class Task
+  class Task : public common::LinkTask
   {
   public:
     explicit Task(const TaskType type);
