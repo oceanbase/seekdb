@@ -22,6 +22,7 @@
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
+#include "observer/ob_inner_sql_connection.h"
 #include "observer/vector_index/ob_vector_index_async_task.h"
 
 namespace oceanbase {

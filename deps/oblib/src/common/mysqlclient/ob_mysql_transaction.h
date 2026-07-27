@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_MYSQL_TRANSACTION_H_
 #define OCEANBASE_MYSQL_TRANSACTION_H_
 
+#include "lib/hash/ob_hashmap.h"
 #include "lib/string/ob_sql_string.h"
 #include "lib/oblog/ob_log_module.h"
 #include "common/mysqlclient/ob_isql_client.h"

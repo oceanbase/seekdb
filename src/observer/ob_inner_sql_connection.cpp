@@ -206,7 +206,7 @@ int ObInnerSQLConnection::create_impl(
     }
   } else {
     void *mem = ob_malloc(sizeof(ObInnerSQLConnection),
-                          SET_USE_500(ObModIds::OB_INNER_SQL_CONN_POOL));
+                          ObMemAttr(ObModIds::OB_INNER_SQL_CONN_POOL));
     if (OB_ISNULL(mem)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate inner sql connection failed", K(ret));
