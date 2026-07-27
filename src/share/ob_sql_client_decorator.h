@@ -39,8 +39,7 @@ public:
   virtual sqlclient::ObISQLConnection *get_connection() override;
   virtual int acquire_connection(sqlclient::ObISQLConnection *&conn,
                                  const int32_t group_id) override;
-  virtual int release_connection(sqlclient::ObISQLConnection *conn,
-                                 const bool success) override;
+  virtual int release_connection(sqlclient::ObISQLConnection *conn) override;
   using ObISQLClient::read;
   using ObISQLClient::write;
 

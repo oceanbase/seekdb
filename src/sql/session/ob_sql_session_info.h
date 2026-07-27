@@ -389,8 +389,8 @@ public:
   //for test
   int test_init(uint32_t version, uint32_t sessid,
            common::ObIAllocator *bucket_allocator);
-  void destroy(bool skip_sys_var = false);
-  void reset(bool skip_sys_var);
+  void destroy() override;
+  void reset() override;
   void clean_status();
   void set_plan_cache(ObPlanCache *cache) { plan_cache_ = cache; }
   void set_ps_cache(ObPsCache *cache) { ps_cache_ = cache; }

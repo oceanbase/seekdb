@@ -165,7 +165,6 @@ public:
                           ObObj *result,
                           bool is_sql) override;
   virtual int start_transaction(bool with_snap_shot = false) override;
-  virtual sqlclient::ObCommonServerConnectionPool *get_common_server_pool() override;
   virtual int rollback() override;
   virtual int commit() override;
   sql::ObSQLSessionInfo &get_session() { return NULL == extern_session_ ? *inner_session_ : *extern_session_; }
@@ -191,12 +190,6 @@ public:
   // Destroy and free the connection when its reference count reaches zero.
   void unref();
   int64_t get_ref() const { return ref_cnt_; }
-  int64_t to_string(char *buf, const int64_t buf_len) const
-  {
-    UNUSED(buf);
-    UNUSED(buf_len);
-    return 0;
-  }
 
   ObVTIterCreator *get_vt_iter_creator() const { return vt_iter_creator_; }
   ObInnerSQLReadContext *&get_prev_read_ctx() { return ref_ctx_; }
@@ -362,6 +355,10 @@ private:
 
   // The inner SQL connection always executes in the local server runtime.
   bool is_in_trans_;
+
+  // ask the inner sql connection to use external session instead of internal one
+  // this enables show session / kill session using sql query command
+  bool use_external_session_; 
   int32_t group_id_;
   //support set user timeout of stream rpc but not depend on internal_sql_execute_timeout
   int64_t user_timeout_;

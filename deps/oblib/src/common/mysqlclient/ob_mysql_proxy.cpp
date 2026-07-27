@@ -37,10 +37,9 @@ int OB_WEAK_SYMBOL create_inner_sql_connection_for_proxy(
 }
 
 int OB_WEAK_SYMBOL release_inner_sql_connection_for_proxy(
-    sqlclient::ObISQLConnection *conn,
-    bool success)
+    sqlclient::ObISQLConnection *conn)
 {
-  UNUSEDx(conn, success);
+  UNUSED(conn);
   return OB_NOT_SUPPORTED;
 }
 
@@ -91,7 +90,7 @@ int ObCommonSqlProxy::read(ReadResult &result, const char *sql, const int32_t gr
   } else if (OB_FAIL(read(conn, result, sql))) {
     LOG_WARN("read failed", K(ret));
   }
-  close(conn, ret);
+  close(conn);
   return ret;
 }
 
@@ -121,7 +120,7 @@ int ObCommonSqlProxy::read(ReadResult &result, const char *sql, const ObSessionP
   } else if (OB_FAIL(read(conn, result, sql))) {
     LOG_WARN("read failed", K(ret));
   }
-  close(conn, ret);
+  close(conn);
   return ret;
 }
 
@@ -166,7 +165,7 @@ int ObCommonSqlProxy::write(const char *sql, const int32_t group_id, int64_t &af
       LOG_WARN("execute sql failed", K(ret), K(conn), K(start), KCSTRING(sql));
     }
   }
-  close(conn, ret);
+  close(conn);
   LOG_TRACE("execute sql", KCSTRING(sql), K(ret));
   return ret;
 }
@@ -223,17 +222,17 @@ int ObCommonSqlProxy::write(const ObString sql,
       LOG_TRACE("execute sql successfully", K(sql));
     }
   }
-  close(conn, ret);
+  close(conn);
   LOG_TRACE("execute sql", K(sql), K(ret));
   return ret;
 }
 
 
-int ObCommonSqlProxy::close(ObISQLConnection *conn, const int succ)
+int ObCommonSqlProxy::close(ObISQLConnection *conn)
 {
   int ret = OB_SUCCESS;
   if (conn != NULL) {
-    ret = release_connection(conn, OB_SUCCESS == succ);
+    ret = release_connection(conn);
     if (OB_FAIL(ret)) {
       LOG_WARN("release connection failed", K(ret), K(conn));
     }
@@ -283,14 +282,12 @@ int ObCommonSqlProxy::acquire_connection(
   return ret;
 }
 
-int ObCommonSqlProxy::release_connection(
-    ObISQLConnection *conn,
-    const bool success)
+int ObCommonSqlProxy::release_connection(ObISQLConnection *conn)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(conn)) {
   } else {
-    ret = release_inner_sql_connection_for_proxy(conn, success);
+    ret = release_inner_sql_connection_for_proxy(conn);
   }
   return ret;
 }

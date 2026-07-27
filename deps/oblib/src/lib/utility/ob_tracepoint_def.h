@@ -176,7 +176,6 @@ GLOBAL_ERRSIM_POINT_DEF(319, EN_DAS_SIMULATE_INDEX_MERGE_MODE, "");
 
 GLOBAL_ERRSIM_POINT_DEF(351, EN_REPLAY_STORAGE_SCHEMA_FAILURE, "");
 GLOBAL_ERRSIM_POINT_DEF(352, EN_SKIP_GET_STORAGE_SCHEMA, "");
-GLOBAL_ERRSIM_POINT_DEF(353, EN_DISABLE_RICH_FORMAT_IN_STORAGE, "");
 
 GLOBAL_ERRSIM_POINT_DEF(360, EN_PREVENT_SYNC_REPORT, "");
 GLOBAL_ERRSIM_POINT_DEF(361, EN_PREVENT_ASYNC_REPORT, "");
@@ -339,7 +338,6 @@ GLOBAL_ERRSIM_POINT_DEF(1171, EN_FLUSH_PC_NOT_CLEANUP_LEAK_MEM_ERROR, "");
 GLOBAL_ERRSIM_POINT_DEF(1172, EN_PC_NOT_SWALLOW_ERROR, "");
 // END OF sql parameterization 1170-1180
 
-GLOBAL_ERRSIM_POINT_DEF(1186, EN_SESS_POOL_MGR_CTRL, "Used for session pool use");
 // session info diagnosis control
 GLOBAL_ERRSIM_POINT_DEF(1187, EN_SESS_INFO_DIAGNOSIS_CONTROL, "");
 GLOBAL_ERRSIM_POINT_DEF(1188, EN_SESS_CLEAN_KILL_MAP_TIME, "Used to clean up kill session map time control");
@@ -374,29 +372,16 @@ GLOBAL_ERRSIM_POINT_DEF(2104, EN_ENABLE_ORA_DECINT_CONST, "wether to parse const
 GLOBAL_ERRSIM_POINT_DEF(2105, EN_ENABLE_CLEAN_INTERM_RES, "Used to control whether interm results are cleaned up in exceptional circumstances.");
 GLOBAL_ERRSIM_POINT_DEF(2106, EN_UNIQ_TASK_QUEUE_GET_GROUP_FAIL, "");
 
-GLOBAL_ERRSIM_POINT_DEF(2200, EN_DISABLE_VEC_SORT, "Used to control whether to turn off the vectorization 2.0 sort operator. It is turned on by default.");
-GLOBAL_ERRSIM_POINT_DEF(2201, EN_DISABLE_VEC_HASH_DISTINCT, "Used to control whether to turn off the vectorization 2.0 hash distinct operator. It is turned on by default.");
-GLOBAL_ERRSIM_POINT_DEF(2202, EN_DISABLE_VEC_HASH_JOIN, "Used to control whether to turn off the vectorization 2.0 when use Hash Join Operator");
-GLOBAL_ERRSIM_POINT_DEF(2203, EN_DISABLE_VEC_HASH_GROUP_BY, "Used to control whether to turn off the vectorization 2.0 when use Hash Group By Operator");
-GLOBAL_ERRSIM_POINT_DEF(2204, EN_DISABLE_VEC_SCALAR_GROUP_BY, "wether to use scalar groupby operator of vectorization 2.0");
-GLOBAL_ERRSIM_POINT_DEF(2205, EN_DTL_OPTION, "Control DTL Vectorization 2.0 format");
 GLOBAL_ERRSIM_POINT_DEF(2206, EN_ENABLE_RANDOM_BATCH_SIZE, "Used to random batch size in vectorization");
-GLOBAL_ERRSIM_POINT_DEF(2207, EN_ENABLE_VECTOR_CAST, "wether to use casting functions of vectorization 2.0");
 GLOBAL_ERRSIM_POINT_DEF(2208, EN_DISABLE_SORTKEY_SEPARATELY, "Used to control whether to turn off the separate storage of sort keys and addon fields. It is enabled by default.");
-GLOBAL_ERRSIM_POINT_DEF(2209, EN_ENABLE_VECTOR_IN, "Used to control whether the capability for in-expr vectorization 2.0 is enabled.");
 GLOBAL_ERRSIM_POINT_DEF(2210, EN_SQL_MEMORY_MRG_OPTION, "Control automatic memory management global bound size");
 GLOBAL_ERRSIM_POINT_DEF(2211, EN_ENABLE_RANDOM_TSC, "wether to randomize batch_size & skips of table scan's output ");
-GLOBAL_ERRSIM_POINT_DEF(2213, EN_DISABLE_VEC_MERGE_GBY, "Used to control whether to turn off the vectorization 2.0 merge group by operator. It is turned on by default.");
-GLOBAL_ERRSIM_POINT_DEF(2214, EN_DISABLE_VEC_MERGE_JOIN, "Used to control whether to turn off the vectorization 2.0 when use Merge Join Operator");
 GLOBAL_ERRSIM_POINT_DEF(2302, EN_DISABLE_HASH_BASE_DISTINCT, "");
-GLOBAL_ERRSIM_POINT_DEF(2303, EN_DISABLE_VEC_WINDOW_FUNCTION, "Disable window function operator of vectorization 2.0");
 GLOBAL_ERRSIM_POINT_DEF(2304, EN_FORCE_WINFUNC_STORE_DUMP, "Force to dump row store of window function operator");
 GLOBAL_ERRSIM_POINT_DEF(2305, EN_TRACEPOINT_TEST, "For testing new versions of tracepoint");
 
-GLOBAL_ERRSIM_POINT_DEF(2306, EN_DISABLE_VEC_MERGE_DISTINCT, "Used to control whether to turn off the vectorization 2.0 merge distinct operator. It is turned on by default.");
 // force dump
 GLOBAL_ERRSIM_POINT_DEF(2400, EN_SQL_FORCE_DUMP, "For testing force dump once");
-GLOBAL_ERRSIM_POINT_DEF(2401, EN_TEST_FOR_HASH_UNION, "Used to control whether to turn off the vectorization 2.0 hash set operator. It is turned on by default.");
 
 GLOBAL_ERRSIM_POINT_DEF(2501, EN_CHECK_SORT_CMP, "Used to check the legality of the compare method for std::sort");
 // PL begin 2550 - 2600

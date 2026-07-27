@@ -255,12 +255,6 @@ public:
     ~UserScopeGuard() { sql_scope_flags_.set_is_in_user_scope(false); }
     SqlScopeFlags &sql_scope_flags_;
   };
-  enum class ForceRichFormatStatus
-  {
-    Disable = 0,
-    FORCE_ON,
-    FORCE_OFF
-  };
   // Switching autonomous transactions must switch nested statements, otherwise the context information of statement execution may have changed when switching back to the main transaction, for example:
   // 
   // So in principle TransSavedValue should contain all attributes of StmtSavedValue, consider making the former a subclass of the latter,
@@ -306,7 +300,6 @@ public:
     bool need_serial_exec_;
     int64_t cur_query_buf_len_;
     char *cur_query_;
-    ForceRichFormatStatus force_rich_format_status_;
   public:
     // Original TransSavedValue properties
 //  transaction::ObTxDesc trans_desc_;   // Both have trans_desc, but the operations performed are completely different, so it is not placed in the base class.
@@ -373,8 +366,7 @@ public:
   virtual int test_init(uint32_t sessid,
                    common::ObIAllocator *bucket_allocator);
   virtual void destroy();
-  //called before put session to freelist: unlock/set invalid
-  virtual void reset(bool skip_sys_var = false);
+  virtual void reset();
   void reset_user_var();
   virtual void clean_status();
   //setters
@@ -419,49 +411,8 @@ public:
   ObLengthSemantics get_default_length_semantics() const;
   ObLengthSemantics get_actual_length_semantics() const;
   int64_t get_local_timestamp() const;
-  const common::ObString get_local_nls_date_format() const;
-  const common::ObString get_local_nls_timestamp_format() const;
-  const common::ObString get_local_nls_timestamp_tz_format() const;
-  int get_local_nls_format(const ObObjType type, ObString &format_str) const;
   int set_time_zone(const common::ObString &str_val, const bool is_oralce_mode,
                     const bool need_check_valid /* true */);
-  void init_use_rich_format()
-  {
-    config_use_rich_format_ = GCONF._global_enable_rich_vector_format;
-    if (!config_use_rich_format_) {
-      use_rich_vector_format_ = false;
-      force_rich_vector_format_ = ForceRichFormatStatus::FORCE_OFF;
-    } else {
-      use_rich_vector_format_ = sys_vars_cache_.get_enable_rich_vector_format();
-      force_rich_vector_format_ = ForceRichFormatStatus::Disable;
-    }
-  }
-  bool is_force_off_rich_format() {
-    return force_rich_vector_format_ == ForceRichFormatStatus::FORCE_OFF;
-  }
-  bool use_rich_format() const {
-    if (force_rich_vector_format_ != ForceRichFormatStatus::Disable) {
-      return force_rich_vector_format_ == ForceRichFormatStatus::FORCE_ON;
-    } else {
-      return use_rich_vector_format_;
-    }
-  }
-
-  bool config_use_rich_format() { return config_use_rich_format_; }
-
-  bool initial_use_rich_format() const {
-    return use_rich_vector_format_;
-  }
-
-  ObBasicSessionInfo::ForceRichFormatStatus get_force_rich_format_status() const
-  {
-    return force_rich_vector_format_;
-  }
-
-  void set_force_rich_format(ObBasicSessionInfo::ForceRichFormatStatus status)
-  {
-    force_rich_vector_format_ = status;
-  }
   //getters
   const common::ObString get_runtime_name() const;
 
@@ -589,10 +540,6 @@ public:
   const common::ObTimeZoneInfo *get_timezone_info() const { return tz_info_wrap_.get_time_zone_info(); }
   const common::ObTimeZoneInfoWrap &get_tz_info_wrap() const { return tz_info_wrap_; }
   inline int set_tz_info_wrap(const common::ObTimeZoneInfoWrap &other) { return tz_info_wrap_.deep_copy(other); }
-  inline void set_nls_formats(const common::ObString *nls_formats)
-  {
-    UNUSED(nls_formats);
-  }
   int get_influence_plan_sys_var(ObSysVarInPC &sys_vars) const;
   int get_sys_var_in_pc_str(common::ObString &str) {
     int ret = OB_SUCCESS;
@@ -940,9 +887,6 @@ public:
   inline ObDataTypeCastParams get_dtc_params() const
   {
     return ObDataTypeCastParams(get_timezone_info(),
-                                get_local_nls_date_format(),
-                                get_local_nls_timestamp_format(),
-                                get_local_nls_timestamp_tz_format(),
                                 get_nls_collation(),
                                 get_nls_collation_nation(),
                                 get_local_collation_connection());
@@ -1110,8 +1054,8 @@ public:
   int restore_basic_session(StmtSavedValue &saved_value);
   int begin_nested_session(StmtSavedValue &saved_value, bool skip_cur_stmt_tables = false);
   int end_nested_session(StmtSavedValue &saved_value);
-  int begin_autonomous_session(TransSavedValue &saved_value);
-  int end_autonomous_session(TransSavedValue &saved_value);
+  int begin_inner_tx_session(TransSavedValue &saved_value);
+  int end_inner_tx_session(TransSavedValue &saved_value);
   int merge_stmt_tables();
   int set_start_stmt();
   int set_end_stmt();
@@ -1134,14 +1078,6 @@ public:
   void set_reserved_snapshot_version(const share::SCN snapshot_version) { reserved_read_snapshot_version_ = snapshot_version; }
   void reset_reserved_snapshot_version() { reserved_read_snapshot_version_.reset(); }
 
-  bool is_acquire_from_pool() const { return acquire_from_pool_; }
-  void set_acquire_from_pool(bool acquire_from_pool) { acquire_from_pool_ = acquire_from_pool; }
-  bool can_release_to_pool() const { return release_to_pool_; }
-  void set_release_from_pool(bool release_to_pool) { release_to_pool_ = release_to_pool; }
-  bool is_server_stopping() { return ATOMIC_LOAD(&server_stopping_) > 0; }
-  void set_server_stopping() { ATOMIC_STORE(&server_stopping_, 1); }
-  bool is_use_inner_allocator() const;
-  int64_t get_reused_count() const { return reused_count_; }
   inline void set_first_need_txn_stmt_type(stmt::StmtType stmt_type)
   {
     if (stmt::T_NONE == first_need_txn_stmt_type_) {
@@ -1174,7 +1110,6 @@ protected:
                                const bool check_timezone_valid = true,
                                const bool is_update_sys_var = false,
                                const bool is_load_default = false);
-  int process_session_variable_fast();
   //@brief process session log_level setting like 'all.*:info, sql.*:debug'.
   //int process_session_ob_binlog_row_image(const common::ObObj &value);
   int process_session_log_level(const common::ObObj &val);
@@ -1413,7 +1348,6 @@ public:
         runtime_filter_wait_time_ms_(0),
         runtime_filter_max_in_num_(0),
         runtime_bloom_filter_max_size_(INT_MAX32),
-        enable_rich_vector_format_(false),
         enable_sql_plan_monitor_(false)
     {}
     ~SysVarsCacheData() {}
@@ -1453,7 +1387,6 @@ public:
       runtime_filter_wait_time_ms_ = 0;
       runtime_filter_max_in_num_ = 0;
       runtime_bloom_filter_max_size_ = INT32_MAX;
-      enable_rich_vector_format_ = false;
       default_lob_inrow_threshold_ = OB_DEFAULT_LOB_INROW_THRESHOLD;
       enable_sql_plan_monitor_ = false;
     }
@@ -1488,7 +1421,6 @@ public:
             log_row_value_option_ == other.log_row_value_option_ &&
             ob_max_read_stale_time_ == other.ob_max_read_stale_time_ &&
             ob_max_read_stale_time_ == other.ob_max_read_stale_time_  &&
-            enable_rich_vector_format_ == other.enable_rich_vector_format_ &&
             default_lob_inrow_threshold_ == other.default_lob_inrow_threshold_;
       return equal1;
     }
@@ -1563,7 +1495,6 @@ public:
     int64_t runtime_filter_wait_time_ms_;
     int64_t runtime_filter_max_in_num_;
     int64_t runtime_bloom_filter_max_size_;
-    bool enable_rich_vector_format_;
     // No use. Placeholder.
     bool enable_sql_plan_monitor_;
   };
@@ -1661,7 +1592,6 @@ private:
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, runtime_filter_wait_time_ms);
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, runtime_filter_max_in_num);
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, runtime_bloom_filter_max_size);
-    DEF_SYS_VAR_CACHE_FUNCS(bool, enable_rich_vector_format);
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, default_lob_inrow_threshold);
     DEF_SYS_VAR_CACHE_FUNCS(bool, enable_sql_plan_monitor);
     void set_autocommit_info(bool inc_value)
@@ -1718,7 +1648,6 @@ private:
         bool inc_runtime_filter_wait_time_ms_:1;
         bool inc_runtime_filter_max_in_num_:1;
         bool inc_runtime_bloom_filter_max_size_:1;
-        bool inc_enable_rich_vector_format_:1; 
         bool inc_default_lob_inrow_threshold_:1;
         bool inc_ob_enable_pl_cache_:1;
         bool inc_enable_sql_plan_monitor_:1;
@@ -1727,7 +1656,6 @@ private:
   };
 protected:
 private:
-  static const int64_t CACHED_SYS_VAR_VERSION = 721;// a magic num
   // data structure related:
   common::ObRecursiveMutex query_mutex_;//mutex multiple query requests on the same session
   common::ObRecursiveMutex thread_data_mutex_;//mutex multiple threads for concurrent read and write to the same session member, protecting the consistency of thread_data_
@@ -1744,7 +1672,6 @@ private:
   uint64_t client_create_time_;
   int64_t global_vars_version_; // version of the loaded global system variables
   int64_t last_ddl_schema_version_; // internal Read-After-DDL schema fence
-  int64_t sys_var_base_version_;
   /*******************************************
    * transaction ctrl relative for session
    *******************************************/
@@ -1770,7 +1697,7 @@ protected:
   // free() call returns memory back to block pool
   common::ObSmallBlockAllocator<> block_allocator_;
   common::ObSmallBlockAllocator<> ps_session_info_allocator_;
-  common::ObSmallBlockAllocator<> cursor_info_allocator_; // for alloc memory of PS CURSOR/SERVER REF CURSOR
+  common::ObSmallBlockAllocator<> cursor_info_allocator_; // for prepared-statement server cursors
   common::ObSmallBlockAllocator<> package_info_allocator_; // for alloc memory of session package state
   common::ObStringBuf sess_level_name_pool_; // will reset when disconnect session
   common::ObStringBuf conn_level_name_pool_; // will reset when reset connection and disconnect session
@@ -1867,12 +1794,6 @@ private:
   // The end time of the previous statement
   int64_t curr_trans_last_stmt_end_time_;
 
-  bool acquire_from_pool_;
-  // In the constructor it is initialized to true, and set to false in some specific error cases, indicating that the session cannot be released back to the session pool.
-  // So reset interface does not need to, and cannot reset release_to_pool_.
-  bool release_to_pool_;
-  volatile int64_t server_stopping_;  // use int64_t for ATOMIC_LOAD / ATOMIC_STORE.
-  int64_t reused_count_;
   // type of first stmt which need transaction
   // either transactional read or transactional write
   stmt::StmtType first_need_txn_stmt_type_;
@@ -1890,15 +1811,7 @@ private:
   // timestamp of processing current query. refresh when retry.
   int64_t process_query_time_;
   int64_t last_update_tz_time_; //timestamp of last attempt to update timezone info
-  bool use_rich_vector_format_;
   int64_t last_refresh_schema_version_;
-  // rich format specified hint, e.g. `select /*+opt_param('enable_rich_vector_format', 'true')*/ * from t`
-  // force_rich_vector_format_ == FORCE_ON => use_rich_format() returns true
-  // force_rich_vector_format_ == FORCE_OFF => use_rich_format() returns false
-  // otherwise use_rich_format() returns use_rich_vector_format_
-  ForceRichFormatStatus force_rich_vector_format_;
-  // just used to plan cache key
-  bool config_use_rich_format_;
 
   common::ObSEArray<uint64_t, 4> enable_role_ids_;
   uint64_t sys_var_config_hash_val_;
@@ -1995,34 +1908,6 @@ inline int64_t ObBasicSessionInfo::get_local_timestamp() const
 {
   return sys_vars_cache_.get_timestamp();
 }
-inline const common::ObString ObBasicSessionInfo::get_local_nls_date_format() const
-{
-  return ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT;
-}
-inline const common::ObString ObBasicSessionInfo::get_local_nls_timestamp_format() const
-{
-  return ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_FORMAT;
-}
-inline const common::ObString ObBasicSessionInfo::get_local_nls_timestamp_tz_format() const
-{
-  return ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT;
-}
-
-inline int ObBasicSessionInfo::get_local_nls_format(const ObObjType type, ObString &format_str) const
-{
-  int ret = common::OB_SUCCESS;
-  switch (type) {
-    case ObDateTimeType:
-      format_str = ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT;
-      break;
-    default:
-      ret = OB_INVALID_DATE_VALUE;
-      SQL_SESSION_LOG(WARN, "invalid argument. wrong type for source.", K(ret), K(type));
-      break;
-  }
-  return ret;
-}
-
 // Object (currently only used for PL, subsequent expr will be handled similarly) execution environment
 class ObExecEnv
 {

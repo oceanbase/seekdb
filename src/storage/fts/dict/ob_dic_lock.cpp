@@ -110,7 +110,7 @@ int ObDicLock::lock_dic_tables_in_trans(
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < dic_tables_info.count(); ++i) {
       const uint64_t table_id = dic_tables_info.at(i).table_id_;
-      LOG_INFO("lock table", KR(ret), K(table_id), KPC(conn));
+      LOG_INFO("lock table", KR(ret), K(table_id), KP(conn));
       if (OB_FAIL(transaction::tablelock::ObInnerConnectionLockUtil::lock_table(table_id, lock_mode, DEFAULT_TIMEOUT, conn))) {
         LOG_WARN("lock dest table failed", KR(ret), K(table_id));
       }

@@ -73,16 +73,14 @@ int ObSingleConnectionProxy::acquire_connection(
   return ret;
 }
 
-int ObSingleConnectionProxy::release_connection(
-    ObISQLConnection *conn,
-    const bool success)
+int ObSingleConnectionProxy::release_connection(ObISQLConnection *conn)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(sql_client_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("sql client is null", K(ret));
   } else {
-    ret = sql_client_->release_connection(conn, success);
+    ret = sql_client_->release_connection(conn);
   }
   return ret;
 }
@@ -132,7 +130,7 @@ int ObSingleConnectionProxy::write(
 void ObSingleConnectionProxy::close()
 {
   if (NULL != sql_client_ && NULL != conn_) {
-    sql_client_->release_connection(conn_, OB_SUCCESS == errno_);
+    sql_client_->release_connection(conn_);
   }
   conn_ = NULL;
   sql_client_ = NULL;

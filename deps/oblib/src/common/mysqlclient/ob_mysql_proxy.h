@@ -34,9 +34,7 @@ int create_inner_sql_connection_for_proxy(
     bool is_ddl,
     int32_t group_id,
     sqlclient::ObISQLConnection *&conn);
-int release_inner_sql_connection_for_proxy(
-    sqlclient::ObISQLConnection *conn,
-    bool success);
+int release_inner_sql_connection_for_proxy(sqlclient::ObISQLConnection *conn);
 
 struct InnerDDLInfo final
 {
@@ -192,8 +190,7 @@ public:
   virtual sqlclient::ObISQLConnection *get_connection() override { return NULL; }
   virtual int acquire_connection(sqlclient::ObISQLConnection *&conn,
                                  const int32_t group_id) override;
-  virtual int release_connection(sqlclient::ObISQLConnection *conn,
-                                 const bool success) override;
+  virtual int release_connection(sqlclient::ObISQLConnection *conn) override;
   void stop()
   {
     stopped_ = true;
@@ -203,7 +200,7 @@ public:
   void assign(const ObCommonSqlProxy &proxy) { *this = proxy; }
 
   // relase the connection
-  int close(sqlclient::ObISQLConnection *conn, const int succ);
+  int close(sqlclient::ObISQLConnection *conn);
 
 
 protected:

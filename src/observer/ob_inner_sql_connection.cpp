@@ -124,6 +124,7 @@ ObInnerSQLConnection::ObInnerSQLConnection()
       execute_start_timestamp_(0),
       execute_end_timestamp_(0),
       is_in_trans_(false),
+      use_external_session_(false),
       group_id_(0),
       user_timeout_(0),
       inner_sess_query_locked_(false)
@@ -206,7 +207,7 @@ int ObInnerSQLConnection::create_impl(
     }
   } else {
     void *mem = ob_malloc(sizeof(ObInnerSQLConnection),
-                          ObMemAttr(ObModIds::OB_INNER_SQL_CONN_POOL));
+                          ObMemAttr(ObModIds::OB_INNER_SQL_CONN));
     if (OB_ISNULL(mem)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate inner sql connection failed", K(ret));
@@ -469,8 +470,8 @@ int ObInnerSQLConnection::init_session(sql::ObSQLSessionInfo* extern_session, co
   int ret = OB_SUCCESS;
   if (NULL == extern_session) {
     const bool is_extern_session = false;
-    const bool has_session_mgr = OB_NOT_NULL(GCTX.session_mgr_);
-    if (has_session_mgr && is_inner_session_mgr_enable()) {
+    const bool is_create_session_mgr = OB_NOT_NULL(GCTX.session_mgr_);
+    if (is_create_session_mgr && is_inner_session_mgr_enable()) {
       if (OB_FAIL(create_session_by_mgr())) {
         LOG_WARN("failed to create inner session by GCTX.session_mgr, will create default session", K(ret));
       }
@@ -962,11 +963,6 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
     retry_info.reset();
   }
   return ret;
-}
-
-common::sqlclient::ObCommonServerConnectionPool *ObInnerSQLConnection::get_common_server_pool()
-{
-  return NULL;
 }
 
 template <typename T>
@@ -1545,21 +1541,13 @@ int ObInnerSQLConnection::destroy_inner_session()
       inner_session_->set_session_sleep();
       inner_session_->~ObSQLSessionInfo();
       ob_free(inner_session_);
+    } else if (OB_ISNULL(GCTX.session_mgr_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("session mgr is null", K(ret));
     } else {
-      const bool has_session_mgr = OB_NOT_NULL(GCTX.session_mgr_);
-      if (has_session_mgr) {
-        inner_session_->set_session_sleep();
-        if (OB_ISNULL(GCTX.session_mgr_)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_ERROR("session mgr is null", K(ret));
-        } else {
-          GCTX.session_mgr_->revert_session(inner_session_);
-          GCTX.session_mgr_->free_session(free_session_ctx_);
-        }
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("failed to free session by session mgr", K(ret), K(has_session_mgr));
-      }
+      inner_session_->set_session_sleep();
+      GCTX.session_mgr_->revert_session(inner_session_);
+      GCTX.session_mgr_->free_session(free_session_ctx_);
     }
     inner_session_ = NULL;
   }
@@ -1612,11 +1600,8 @@ int create_inner_sql_connection_for_proxy(
   return ret;
 }
 
-int release_inner_sql_connection_for_proxy(
-    sqlclient::ObISQLConnection *conn,
-    bool success)
+int release_inner_sql_connection_for_proxy(sqlclient::ObISQLConnection *conn)
 {
-  UNUSED(success);
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(conn)) {
     static_cast<observer::ObInnerSQLConnection *>(conn)->unref();

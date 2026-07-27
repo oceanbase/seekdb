@@ -85,11 +85,9 @@ int ObISQLClient::acquire_connection(
   return OB_NOT_SUPPORTED;
 }
 
-int ObISQLClient::release_connection(
-    ObISQLConnection *conn,
-    const bool success)
+int ObISQLClient::release_connection(ObISQLConnection *conn)
 {
-  UNUSEDx(conn, success);
+  UNUSED(conn);
   return OB_NOT_SUPPORTED;
 }
 

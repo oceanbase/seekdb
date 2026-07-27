@@ -69,8 +69,7 @@ public:
 
   virtual int acquire_connection(sqlclient::ObISQLConnection *&conn,
                                  const int32_t group_id);
-  virtual int release_connection(sqlclient::ObISQLConnection *conn,
-                                 const bool success);
+  virtual int release_connection(sqlclient::ObISQLConnection *conn);
 
   class ReadResult
   {

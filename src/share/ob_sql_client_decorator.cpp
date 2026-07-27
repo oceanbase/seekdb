@@ -108,15 +108,13 @@ int ObSQLClientRetry::acquire_connection(
   return ret;
 }
 
-int ObSQLClientRetry::release_connection(
-    sqlclient::ObISQLConnection *conn,
-    const bool success)
+int ObSQLClientRetry::release_connection(sqlclient::ObISQLConnection *conn)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(sql_client_)) {
     ret = OB_NOT_INIT;
   } else {
-    ret = sql_client_->release_connection(conn, success);
+    ret = sql_client_->release_connection(conn);
   }
   return ret;
 }

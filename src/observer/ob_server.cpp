@@ -284,7 +284,7 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
     } else if (OB_FAIL(parse_role(opts))) {
       LOG_ERROR("parse role failed", KR(ret));
     } else if (OB_FAIL(init_sql_proxy())) {
-      LOG_ERROR("init sql connection pool failed", KR(ret));
+      LOG_ERROR("init sql proxy failed", KR(ret));
     }
     if (OB_SUCC(ret)) {
     if (OB_FAIL(ObDeviceManager::get_instance().init_devices_env())) {
