@@ -859,22 +859,22 @@ fn run_all_tests() -> i32 {
             Err(e) => {
                 println!("FAIL");
                 eprintln!("::error::Absolute-path same-directory check failed: {:?}", e);
-                close();
                 return 1;
             }
         }
     }
     
-    close();
-    
+    let exit_code = if passed == total { 0 } else { 1 };
+    binding_exit_probe(exit_code);
+
     if passed == total {
         println!("::notice::All tests passed successfully!");
         println!("{}", "=".repeat(70));
-        0
+        exit_code
     } else {
         eprintln!("::error::{} test(s) failed", failed);
         println!("{}", "=".repeat(70));
-        1
+        exit_code
     }
 }
 
@@ -894,5 +894,8 @@ fn binding_exit_probe(code: i32) {
 fn main() {
     let code = run_all_tests();
     binding_exit_probe(code);
+    if std::env::var("SEEKDB_BINDING_EXIT_PROBE").ok().as_deref() != Some("1") {
+        close();
+    }
     std::process::exit(code);
 }

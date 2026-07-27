@@ -108,6 +108,8 @@ public:
   bool is_prepare_stopped();
   void set_stop();
   bool is_stopped();
+  // Graceful shutdown for libseekdb embed: stop services and tenant modules without destroy().
+  void embed_shutdown();
 
 public:
   //Refer to ObPurgeCompletedMonitorInfoTask

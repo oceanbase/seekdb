@@ -422,17 +422,40 @@ Invoke-BindingSection "Python" {
       $env:PYTHONUNBUFFERED = "1"
       # If python.exe never returns, the whole CI step never finishes. Use Start-Process + wall-clock deadline, then taskkill /T; exit 1 stops the script (do not continue to Node).
       $timeoutMs = 600000
-      Write-BindLog "Python: wall-clock timeout ${timeoutMs}ms"
+      if ($env:SEEKDB_BINDING_TEST_TIMEOUT_MS -match '^\d+$') {
+        $timeoutMs = [int]$env:SEEKDB_BINDING_TEST_TIMEOUT_MS
+      }
+      $graceMs = 15000
+      if ($env:SEEKDB_NODE_POST_SUCCESS_FORCE_KILL_MS -match '^\d+$') {
+        $graceMs = [int]$env:SEEKDB_NODE_POST_SUCCESS_FORCE_KILL_MS
+      }
+      Write-BindLog "Python: wall-clock timeout ${timeoutMs}ms; exit-probe grace ${graceMs}ms"
       # Pass full process environment explicitly — GHA + Start-Process can drop session env (SEEKDB_* / PATH).
       $childEnv = [System.Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
       Get-ChildItem -Path Env: | ForEach-Object { $childEnv[$_.Name] = [string]$_.Value }
-      $p = Start-Process -FilePath $pyExe -ArgumentList @('-u', 'test.py', '.\seekdb.db', 'test') -WorkingDirectory (Get-Location) -PassThru -NoNewWindow -Environment $childEnv
-      if ($null -eq $p) {
-        throw "Start-Process python returned null"
+      $prevProbe = $env:SEEKDB_BINDING_EXIT_PROBE
+      $childEnv['SEEKDB_BINDING_EXIT_PROBE'] = '1'
+      $env:SEEKDB_BINDING_EXIT_PROBE = '1'
+      try {
+        $p = Start-Process -FilePath $pyExe -ArgumentList @('-u', 'test.py', '.\seekdb.db', 'test') -WorkingDirectory (Get-Location) -PassThru -NoNewWindow -Environment $childEnv
+        if ($null -eq $p) {
+          throw "Start-Process python returned null"
+        }
+        $wr = Wait-ProcessWithDeadline -Process $p -TimeoutMs $timeoutMs -Label "python test.py" -HeartbeatSec 60 -UseBindingExitProbe -BindingExitProbeGraceMs $graceMs
       }
-      $wr = Wait-ProcessWithDeadline -Process $p -TimeoutMs $timeoutMs -Label "python test.py" -HeartbeatSec 60
+      finally {
+        if ($null -eq $prevProbe) {
+          Remove-Item Env:\SEEKDB_BINDING_EXIT_PROBE -ErrorAction SilentlyContinue
+        }
+        else {
+          $env:SEEKDB_BINDING_EXIT_PROBE = $prevProbe
+        }
+      }
       $pythonTimedOut = [bool]($wr['TimedOut'])
       $pyExit = if ($pythonTimedOut) { -1 } else { $wr['ExitCode'] }
+      if ($wr['ForcedAfterProbe']) {
+        Write-Host "::notice::[seekdb-bind] python test.py — exit code from probe $pyExit (process did not terminate; likely DLL unload hang)"
+      }
       if ($pythonTimedOut) {
         Write-Host "::error::Python binding tests exceeded ${timeoutMs} ms"
       }

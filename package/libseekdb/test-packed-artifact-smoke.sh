@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Smoke-test a packed libseekdb zip the same way seekdb-js loads it:
+# Smoke-test a packed libseekdb zip using the embedded Node.js load layout:
 #   <runtime>/libseekdb.dylib + <runtime>/libs/ + <runtime>/seekdb.node (@loader_path)
 #
 # The old flow used nodejs_napi linked to build_release (@rpath), which did NOT
-# exercise the packaged zip layout and could pass while seekdb-js failed.
+# exercise the packaged zip layout and could pass while standalone embed failed.
 #
 # Usage:
 #   ./test-packed-artifact-smoke.sh package/libseekdb/libseekdb-darwin-arm64.zip
@@ -15,6 +15,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOP_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LOADER_DIR="$SCRIPT_DIR/smoke-loader"
 NAPI_DIR="$TOP_DIR/unittest/include/nodejs_napi"
+# shellcheck source=../../unittest/include/binding-exit-probe.sh
+source "$TOP_DIR/unittest/include/binding-exit-probe.sh"
 
 if [[ ! -f "$ZIP" ]]; then
   echo "error: zip not found: $ZIP" >&2
@@ -53,7 +55,7 @@ else
   echo "[smoke] layout: $MAIN_NAME (no libs/)"
 fi
 
-# --- Build seekdb.node INTO the unpack tree (@loader_path), matching seekdb-js ---
+# --- Build seekdb.node INTO the unpack tree (@loader_path) ---
 if [[ ! -d "$LOADER_DIR/node_modules" ]]; then
   echo "[smoke] npm install (smoke-loader, no lifecycle build)"
   (cd "$LOADER_DIR" && npm install --ignore-scripts)
@@ -81,7 +83,7 @@ else
   fi
 fi
 
-# Ad-hoc sign like seekdb-js build:package (macOS only)
+# Ad-hoc sign dylibs (macOS only)
 if [[ "$(uname -s)" == Darwin ]] && command -v codesign >/dev/null 2>&1; then
   echo "[smoke] codesign (ad-hoc) main + libs/"
   codesign --force --sign - "$UNPACK_DIR/$MAIN_NAME"
@@ -94,34 +96,37 @@ if [[ "$(uname -s)" == Darwin ]] && command -v codesign >/dev/null 2>&1; then
   codesign --force --sign - "$UNPACK_DIR/seekdb.node"
 fi
 
-# --- Run the same vector/hybrid N-API tests, loading ./seekdb.node from unpack dir ---
 DB_DIR="$UNPACK_DIR/smoke-seekdb.db"
 rm -rf "$DB_DIR"
 
-if [[ ! -d "$NAPI_DIR/node_modules" ]]; then
-  echo "[smoke] npm install (nodejs_napi test.js)"
-  (cd "$NAPI_DIR" && npm install)
-fi
-
-echo "[smoke] vsag + hybrid search (seekdb-js-critical path)"
+echo "[smoke] vsag + hybrid search (embedded N-API path)"
 (
   cd "$UNPACK_DIR"
-  node "$LOADER_DIR/smoke-vsag.js" "$DB_DIR"
+  if [[ "$(uname -s)" == "Linux" ]]; then
+    # libseekdb.so is whole-archive linked; loading it as seekdb.node's DT_NEEDED
+    # after Node starts can exceed glibc's static TLS block. Preload at startup.
+    export LD_PRELOAD="$UNPACK_DIR/$MAIN_NAME${LD_PRELOAD:+:$LD_PRELOAD}"
+  fi
+  run_node_with_binding_exit_probe "$BINDING_TEST_TIMEOUT_MS" "$BINDING_EXIT_PROBE_GRACE_MS" -- \
+    "$LOADER_DIR/smoke-vsag.js" "$DB_DIR"
 )
 
 # Optional: full nodejs_napi suite (can SIGSEGV on some macOS builds at exit; not required for pack gate)
 if [[ "${SMOKE_FULL_NAPI:-0}" == "1" ]]; then
+  if [[ ! -d "$NAPI_DIR/node_modules" ]]; then
+    echo "[smoke] npm install (nodejs_napi test.js)"
+    (cd "$NAPI_DIR" && npm install)
+  fi
   echo "[smoke] running full nodejs_napi test.js (SMOKE_FULL_NAPI=1)"
   export SEEKDB_NODE_NAPI_SKIP_HEAVY=0
   (
     cd "$UNPACK_DIR"
-    node "$NAPI_DIR/test.js" "$DB_DIR" "test"
+    if [[ "$(uname -s)" == "Linux" ]]; then
+      export LD_PRELOAD="$UNPACK_DIR/$MAIN_NAME${LD_PRELOAD:+:$LD_PRELOAD}"
+    fi
+    run_node_with_binding_exit_probe "$BINDING_TEST_TIMEOUT_MS" "$BINDING_EXIT_PROBE_GRACE_MS" -- \
+      "$NAPI_DIR/test.js" "$DB_DIR" "test"
   )
 fi
 
-if [[ -n "${SEEKDB_JS_ROOT:-}" ]] && [[ -x "$SCRIPT_DIR/test-packed-artifact-smoke-js.sh" ]]; then
-  echo "[smoke] SEEKDB_JS_ROOT set — running seekdb-js embedded smoke"
-  SEEKDB_JS_ROOT="$SEEKDB_JS_ROOT" "$SCRIPT_DIR/test-packed-artifact-smoke-js.sh" "$ZIP"
-fi
-
-echo "[smoke] passed (seekdb-js-compatible load path + vsag)"
+echo "[smoke] passed (packed zip load path + vsag)"

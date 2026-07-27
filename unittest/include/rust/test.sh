@@ -2,6 +2,8 @@
 set -e
 
 cd "$(dirname "$0")"
+# shellcheck source=../binding-exit-probe.sh
+source "$(cd "$(dirname "$0")/.." && pwd)/binding-exit-probe.sh"
 
 # Set library path (Linux: .so, macOS: .dylib)
 SEEKDB_LIB_DIR="$(cd ../../../build_release/src/include && pwd)"
@@ -64,7 +66,7 @@ if [ ! -f "$TEST_BIN" ]; then
     exit 1
 fi
 
-"$TEST_BIN" "${DB_DIR}" "test"
+run_with_binding_exit_probe "$BINDING_TEST_TIMEOUT_MS" "$BINDING_EXIT_PROBE_GRACE_MS" -- "$TEST_BIN" "${DB_DIR}" "test"
 RUST_EXIT=$?
 if [ $RUST_EXIT -ne 0 ]; then
     echo "First run (relative path) failed with exit $RUST_EXIT"
@@ -77,7 +79,7 @@ rm -rf "${DB_DIR_ABS}"
 echo ""
 echo "Running Rust tests with absolute path: $DB_DIR_ABS"
 echo ""
-"$TEST_BIN" "${DB_DIR_ABS}" "test"
+run_with_binding_exit_probe "$BINDING_TEST_TIMEOUT_MS" "$BINDING_EXIT_PROBE_GRACE_MS" -- "$TEST_BIN" "${DB_DIR_ABS}" "test"
 ABS_EXIT=$?
 rm -rf "${DB_DIR_ABS}" 2>/dev/null || true
 if [ $ABS_EXIT -ne 0 ]; then

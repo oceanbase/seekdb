@@ -915,7 +915,6 @@ func runAllTests() int {
 		fmt.Fprintf(os.Stderr, "::error::Failed to open database: %v\n", err)
 		return 1
 	}
-	defer seekdb.Close()
 	
 	testCases := []struct {
 		name string
@@ -1006,15 +1005,18 @@ func runAllTests() int {
 		fmt.Println("PASS")
 	}
 
-	if passed == total {
-		fmt.Println("::notice::All tests passed successfully!")
-		fmt.Println(strings.Repeat("=", 70))
-		return 0
-	} else {
+	exitCode := 0
+	if passed != total {
+		exitCode = 1
 		fmt.Fprintf(os.Stderr, "::error::%d test(s) failed\n", failed)
 		fmt.Println(strings.Repeat("=", 70))
-		return 1
+	} else {
+		fmt.Println("::notice::All tests passed successfully!")
+		fmt.Println(strings.Repeat("=", 70))
 	}
+
+	bindingExitProbe(exitCode)
+	return exitCode
 }
 
 func bindingExitProbe(code int) {
@@ -1035,5 +1037,8 @@ func bindingExitProbe(code int) {
 func main() {
 	code := runAllTests()
 	bindingExitProbe(code)
+	if os.Getenv("SEEKDB_BINDING_EXIT_PROBE") != "1" {
+		seekdb.Close()
+	}
 	os.Exit(code)
 }

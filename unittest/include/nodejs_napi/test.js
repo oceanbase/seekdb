@@ -35,10 +35,25 @@ function bindingExitProbe(line) {
     }
     try {
         const probePath = path.join(os.tmpdir(), `seekdb_binding_exit_probe_${process.pid}.log`);
-        fs.appendFileSync(probePath, `${new Date().toISOString()} ${line}\n`);
+        const fd = fs.openSync(probePath, 'a');
+        try {
+            fs.writeSync(fd, `${line}\n`);
+            fs.fsyncSync(fd);
+        } finally {
+            fs.closeSync(fd);
+        }
     } catch (_) {
         /* ignore */
     }
+}
+
+function exitAfterBindingTests(code) {
+    bindingExitProbe(`before_process_exit code=${code}`);
+    if (process.env.SEEKDB_BINDING_EXIT_PROBE === '1' || process.env.SEEKDB_NODE_BINDING_PROBE === '1') {
+        process.exit(code);
+    }
+    try { seekdb.close(); } catch { }
+    process.exit(code);
 }
 
 // Load the native module
@@ -746,49 +761,41 @@ function runAllTests() {
         console.log(`Total: ${passed}/${total} passed, ${failed} failed`);
         console.log('');
 
+        const exitCode = passed === total ? 0 : 1;
+
         // Same-directory absolute open before close (aligned with python test.py; avoids a second node process on Windows).
         if (passed === total) {
             const absSame = path.resolve(dbDir);
-            process.stdout.write('[TEST] Absolute path (same DB directory)               ... ');
             try {
                 seekdb.open(absSame);
-                console.log('PASS');
+                console.log('[TEST] Absolute path (same DB directory)               ... PASS');
             } catch (e) {
-                console.log('FAIL');
+                console.log('[TEST] Absolute path (same DB directory)               ... FAIL');
                 console.error(`::error::Absolute-path same-directory check failed: ${e.message}`);
-                try { seekdb.close(); } catch { }
                 return 1;
             }
         }
 
-        seekdb.close();
-
         if (passed === total) {
             console.log('::notice::All tests passed successfully!');
             console.log('='.repeat(70));
-            return 0;
+            return exitCode;
         } else {
             console.error(`::error::${failed} test(s) failed`);
             console.log('='.repeat(70));
-            return 1;
+            return exitCode;
         }
     } catch (e) {
         console.error(`::error::Unexpected error during tests: ${e.message}`);
         console.error(e.stack);
-        try {
-            seekdb.close();
-        } catch { }
         return 1;
     }
 }
 
 // Run tests
 try {
-    const code = runAllTests();
-    bindingExitProbe(`before_process_exit code=${code}`);
-    process.exit(code);
+    exitAfterBindingTests(runAllTests());
 } catch (error) {
     console.error('::error::Fatal error:', error.message);
-    bindingExitProbe('before_process_exit code=1');
-    process.exit(1);
+    exitAfterBindingTests(1);
 }

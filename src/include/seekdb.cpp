@@ -201,10 +201,8 @@ struct SeekdbConnection;
 // Use OBSERVER macro directly like Python embed does
 // OBSERVER is defined in observer/ob_server.h as ObServer::get_instance()
 
-// Store last affected rows in connection for seekdb_affected_rows()
-// Define this early so it can be used in seekdb_execute_update()
-// Use unsigned long long directly since my_ulonglong is defined in ob_mysql_global.h
-static thread_local unsigned long long g_last_affected_rows = 0;
+// Store last affected rows per connection for seekdb_affected_rows().
+// Must not use thread_local: Go CGO can call seekdb_query and seekdb_affected_rows on different OS threads.
 
 // Internal structures - define SeekdbRowData first, then SeekdbResultSet
 // so that SeekdbResultSet can properly delete SeekdbRowData in destructor
@@ -266,10 +264,12 @@ struct SeekdbConnection {
     int current_result_index;  // Current result set index for multiple results
     std::string last_error;
     bool initialized;
+    unsigned long long last_affected_rows;
     
     SeekdbConnection() : embed_conn(nullptr), embed_session(nullptr), 
                          embed_result(nullptr), last_result_set(nullptr), 
-                         use_result_set(nullptr), current_result_index(-1), initialized(false) {}
+                         use_result_set(nullptr), current_result_index(-1), initialized(false),
+                         last_affected_rows(0) {}
     ~SeekdbConnection() {
         // Cleanup last result set (only if still owned by connection)
         // If it was transferred to user via seekdb_store_result(), it's nullptr
@@ -1246,6 +1246,13 @@ int seekdb_open_with_service(const char* db_dir, int port) {
     return result;
 }
 
+// Gracefully stop embedded observer background threads without calling destroy().
+// destroy() tears down static singletons and can double-free at process exit.
+static void embed_observer_shutdown()
+{
+    OBSERVER.embed_shutdown();
+}
+
 void seekdb_close(void) {
     std::lock_guard<std::mutex> lock(g_init_mutex);
     if (g_embedded_opened) {
@@ -1274,10 +1281,10 @@ void seekdb_close(void) {
         }
 #endif
 
-        // Note: We skip observer.destroy() because:
-        // 1. It may cause segfault/OB_ABORT during cleanup (static destructor ordering issues)
-        // 2. The process will exit anyway, and OS will reclaim all resources
-        // 3. This aligns with common practice for embedded databases
+        embed_observer_shutdown();
+
+        // Skip observer.destroy(): static singleton ordering can segfault at exit.
+        // PID file cleanup below; exit-probe scripts remain as a last-resort fallback.
         
         // Only clean up the PID file
         if (g_embedded_pid_locked) {
@@ -2345,7 +2352,7 @@ static int do_seekdb_execute_inner(ExecuteParams* params) {
             // For DML statements (INSERT/UPDATE/DELETE), get affected rows from result set
             int64_t affected_rows = inner_result_dml->result_set().get_affected_rows();
             if (affected_rows >= 0) {
-                g_last_affected_rows = static_cast<unsigned long long>(affected_rows);
+                conn->last_affected_rows = static_cast<unsigned long long>(affected_rows);
             }
         }
     }
@@ -3326,7 +3333,10 @@ int seekdb_execute_update(SeekdbHandle handle, const char* sql, int64_t* affecte
     
     // Store affected rows for seekdb_affected_rows()
     if (params.ret_code == SEEKDB_SUCCESS && affected_rows) {
-        g_last_affected_rows = static_cast<unsigned long long>(*affected_rows);
+        SeekdbConnection* conn = static_cast<SeekdbConnection*>(handle);
+        if (conn) {
+            conn->last_affected_rows = static_cast<unsigned long long>(*affected_rows);
+        }
     }
     
     return params.ret_code;
@@ -3475,9 +3485,11 @@ int seekdb_autocommit(SeekdbHandle handle, bool mode) {
 }
 
 my_ulonglong seekdb_affected_rows(SeekdbHandle handle) {
-    // Return the last affected rows count
-    // This should be set after INSERT/UPDATE/DELETE operations
-    return g_last_affected_rows;
+    SeekdbConnection* conn = static_cast<SeekdbConnection*>(handle);
+    if (!conn || !conn->initialized) {
+        return 0;
+    }
+    return conn->last_affected_rows;
 }
 
 my_ulonglong seekdb_insert_id(SeekdbHandle handle) {

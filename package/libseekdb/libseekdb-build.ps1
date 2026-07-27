@@ -5,7 +5,7 @@
 
   Runtime DLLs are collected with cmake/BundleRuntimeDllsWindows.cmake (same as POST_BUILD on
   libseekdb and the binding-test PATH layout). macOS packs deps under libs/ via dylibbundler;
-  Windows zip must match that layout for standalone consumers (e.g. seekdb-js).
+  Windows zip must match that layout for standalone embed consumers.
 
 .EXAMPLE
   cd package\libseekdb

@@ -2,6 +2,8 @@
 set -e
 
 cd "$(dirname "$0")"
+# shellcheck source=../binding-exit-probe.sh
+source "$(cd "$(dirname "$0")/.." && pwd)/binding-exit-probe.sh"
 
 SCRIPT_DIR="$(pwd)"
 PROJECT_ROOT="$(cd ../../.. && pwd)"
@@ -81,7 +83,8 @@ fi
 echo "Running Java tests..."
 echo ""
 JAVA_LIB_PATH="${JNI_BUILD_DIR}:${SEEKDB_LIB_DIR}"
-java -Djava.library.path="${JAVA_LIB_PATH}" \
+run_with_binding_exit_probe "$BINDING_TEST_TIMEOUT_MS" "$BINDING_EXIT_PROBE_GRACE_MS" -- \
+  java -Djava.library.path="${JAVA_LIB_PATH}" \
     -cp "target/classes:target/test-classes" \
     seekdb.SeekdbTest "${DB_DIR}"
 
@@ -97,7 +100,8 @@ rm -rf "${DB_DIR_ABS}"
 echo ""
 echo "Running Java tests with absolute path: $DB_DIR_ABS"
 echo ""
-java -Djava.library.path="${JAVA_LIB_PATH}" \
+run_with_binding_exit_probe "$BINDING_TEST_TIMEOUT_MS" "$BINDING_EXIT_PROBE_GRACE_MS" -- \
+  java -Djava.library.path="${JAVA_LIB_PATH}" \
     -cp "target/classes:target/test-classes" \
     seekdb.SeekdbTest "${DB_DIR_ABS}"
 

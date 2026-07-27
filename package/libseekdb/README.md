@@ -39,6 +39,21 @@ CI Linux builds use **pypa/manylinux2014** (CentOS 7–based), which ships **gli
 
 To check your system: `ldd --version` or `getconf GNU_LIBC_VERSION`.
 
+### Linux (Node.js / static TLS)
+
+On Linux, loading `libseekdb.so` as a dependency of `seekdb.node` after Node has started can fail with:
+
+`cannot allocate memory in static TLS block`
+
+The library is whole-archive linked and needs a large static TLS reservation. Preload it when launching Node:
+
+```bash
+export LD_PRELOAD="/path/to/libseekdb.so${LD_PRELOAD:+:$LD_PRELOAD}"
+node your-app.js
+```
+
+`test-packed-artifact-smoke.sh` sets this automatically on Linux.
+
 ### macOS compatibility
 
 CI macOS builds use **macOS 14** runners and set **CMAKE_OSX_DEPLOYMENT_TARGET=11.0**, so the prebuilt `libseekdb.dylib` runs on **macOS 11 (Big Sur) and later** (12, 13, 14, 15). Setting the deployment target to 11.0 allows use on most current and recent macOS versions.
@@ -48,23 +63,17 @@ CI macOS builds use **macOS 14** runners and set **CMAKE_OSX_DEPLOYMENT_TARGET=1
 After `libseekdb-build.sh`, CI runs `test-packed-artifact-smoke.sh` on the zip. It:
 
 1. Unpacks the zip into a temp directory (`libseekdb.dylib` + `libs/` on macOS).
-2. Ad-hoc signs dylibs (same as seekdb-js `build:package`).
+2. Ad-hoc signs dylibs (macOS).
 3. Builds `seekdb.node` **into that directory** with `@loader_path` (`smoke-loader/binding.gyp`).
 4. Runs `smoke-loader/smoke-vsag.js` (VECTOR INDEX `lib=vsag` + `DBMS_HYBRID_SEARCH.SEARCH`).
 
-Layout matches **seekdb-js** (`pkgs/js-bindings/seekdb.node` + `@loader_path/libseekdb.dylib` + `libs/`).  
-The old smoke used `nodejs_napi` linked to `build_release` via `@rpath`, which could pass while seekdb-js failed.
-
-On **macOS CI**, when `SEEKDB_JS_ROOT` is set, the same script also runs `test-packed-artifact-smoke-js.sh` (checks out [seekdb-js](https://github.com/oceanbase/seekdb-js), rebuilds bindings, runs embedded vitest `sparseEmbedding`). That path reproduces `vsag::VsagException` on bad darwin zips; the N-API-only smoke can still pass.
+This exercises the standalone embed layout (`seekdb.node` + `@loader_path/libseekdb` + `libs/`). The old smoke used `nodejs_napi` linked to `build_release` via `@rpath`, which could pass while the packaged zip failed.
 
 Locally:
 
 ```bash
 cd package/libseekdb
 ./test-packed-artifact-smoke.sh libseekdb-darwin-arm64.zip
-
-# Full seekdb-js reproduction (requires pnpm install in seekdb-js once):
-SEEKDB_JS_ROOT=../seekdb-js ./test-packed-artifact-smoke-js.sh libseekdb-darwin-arm64.zip
 ```
 
 ### Pack debugging (local vs CI / S3)
@@ -92,8 +101,6 @@ Compare two artifacts:
 If `diagnose-packed-artifact.sh` shows a **different main library sha256** for the same source commit, the bug is in the **CI compile**, not dylibbundler. If only `libs/*` differ, check **dylibbundler / brew** versions. If smoke fails only on the CI zip, use metadata + diagnose output in the seekdb issue.
 
 **ccache:** macOS/Linux CI ccache keys include `COMMIT_SHA` so object files from other commits are not restored into the same cache slot.
-
-**seekdb-js:** [embedded CI](https://github.com/oceanbase/seekdb-js/actions) passes on **Linux** (`libseekdb-linux-*.zip`). A bad **darwin-arm64** S3 zip can fail macOS embedded tests while Linux stays green—use the smoke script on the macOS zip before publishing.
 
 ## Package contents and standalone distribution
 

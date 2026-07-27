@@ -1008,6 +1008,18 @@ bool ObServer::is_stopped()
   return stop_;
 }
 
+void ObServer::embed_shutdown()
+{
+  // Do not call stop(): it runs multi_tenant_/net_frame teardown that can block
+  // indefinitely in embed CI. Signal modules to exit instead.
+  if (!gctx_.is_inited() || !gctx_.is_embedded_mode() || stop_) {
+    return;
+  }
+  set_stop();
+  obs_stop_modules();
+  obs_wait_modules();
+}
+
 void ObServer::set_stop()
 {
   stop_ = true;

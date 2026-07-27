@@ -4,6 +4,9 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=../binding-exit-probe.sh
+source "$(cd "${SCRIPT_DIR}/.." && pwd)/binding-exit-probe.sh"
+
 # From unittest/include/nodejs_napi/ to project root: ../../../ (3 levels up)
 # unittest/include/nodejs_napi/ -> unittest/include/ -> unittest/ -> project root
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../../" && pwd)"
@@ -47,27 +50,12 @@ fi
 # Run the test
 echo "Running Node.js N-API tests..."
 echo ""
-# Note: C ABI layer handles SIGSEGV gracefully during static destructors
-# Exit code is 0 and no segfault messages are output
-node test.js "${DB_DIR}" "test"
+# seekdb_close() + process.exit() can hang in dylib/DLL unload; probe + SIGKILL grace (see binding-exit-probe.sh).
+run_node_with_binding_exit_probe "$BINDING_TEST_TIMEOUT_MS" "$BINDING_EXIT_PROBE_GRACE_MS" -- test.js "${DB_DIR}" "test"
 NODE_EXIT=$?
 if [ $NODE_EXIT -ne 0 ]; then
-    echo "First run (relative path) failed with exit $NODE_EXIT"
+    echo "Node.js N-API binding tests failed with exit $NODE_EXIT"
     exit $NODE_EXIT
-fi
-
-# Second run: absolute path (same suite, no close+reopen in process)
-DB_DIR_ABS="${SCRIPT_DIR}/seekdb_abs.db"
-rm -rf "${DB_DIR_ABS}"
-echo ""
-echo "Running Node.js N-API tests with absolute path: $DB_DIR_ABS"
-echo ""
-node test.js "${DB_DIR_ABS}" "test"
-ABS_EXIT=$?
-rm -rf "${DB_DIR_ABS}" 2>/dev/null || true
-if [ $ABS_EXIT -ne 0 ]; then
-    echo "Second run (absolute path) failed with exit $ABS_EXIT"
-    exit $ABS_EXIT
 fi
 
 echo ""

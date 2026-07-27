@@ -14,7 +14,7 @@
 # Artifacts: platform zips including libseekdb-android-arm64-v8a.zip; combined artifact libseekdb-all-platforms; optional S3 upload when DESTINATION_TARGET_PATH or AWS_S3_BUCKET and credentials are set.
 #
 # Job step order: Checkout → caches → compile → setup Node/Rust/Go/Java → FFI binding tests (continue-on-error per language
-# so all languages run; final summary step fails the job if any binding test failed) → pack → packed-zip smoke (nodejs_napi)
+# so all languages run; final summary step fails the job if any binding test failed) → pack → packed-zip smoke (smoke-loader)
 # → upload artifact → save caches (always).
 # macOS ccache keys include COMMIT_SHA so object files from other commits are not reused (see package/libseekdb/README.md).
 # Android: compile → setup toolchains → host-skip FFI notice → pack → verify zip → upload → save caches → summary (see job comment).
@@ -412,28 +412,9 @@ jobs:
           CODESIGN_ENTITLEMENTS: ${{ github.workspace }}/package/libseekdb/entitlements.plist
         run: cd package/libseekdb && bash libseekdb-build.sh
 
-      - name: Checkout seekdb-js (macOS JS smoke)
-        uses: actions/checkout@v4
-        with:
-          repository: oceanbase/seekdb-js
-          path: seekdb-js
-          fetch-depth: 1
-
-      - name: Setup Node/pnpm (macOS JS smoke)
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Install seekdb-js deps (macOS JS smoke)
-        working-directory: seekdb-js
-        run: pnpm install --filter seekdb --filter @seekdb/js-bindings-build
-
       - name: Smoke test packed artifact (macOS)
-        env:
-          SEEKDB_JS_ROOT: ${{ github.workspace }}/seekdb-js
         run: |
-          chmod +x package/libseekdb/test-packed-artifact-smoke.sh \
-            package/libseekdb/test-packed-artifact-smoke-js.sh
+          chmod +x package/libseekdb/test-packed-artifact-smoke.sh
           package/libseekdb/test-packed-artifact-smoke.sh package/libseekdb/libseekdb-darwin-arm64.zip
 
       - name: Upload artifact

@@ -5,6 +5,8 @@
  */
 'use strict';
 
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
 // Resolved from cwd (unpacked zip tree), not __dirname (smoke-loader/).
 const nodePath = path.join(process.cwd(), 'seekdb.node');
@@ -12,9 +14,40 @@ const seekdb = require(nodePath);
 
 const dbDir = process.argv[2] || path.join(__dirname, 'smoke-vsag.db');
 
+function bindingExitProbe(line) {
+  if (process.env.SEEKDB_BINDING_EXIT_PROBE !== '1' && process.env.SEEKDB_NODE_BINDING_PROBE !== '1') {
+    return;
+  }
+  try {
+    const probePath = path.join(os.tmpdir(), `seekdb_binding_exit_probe_${process.pid}.log`);
+    const fd = fs.openSync(probePath, 'a');
+    try {
+      fs.writeSync(fd, `${line}\n`);
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch (_) {
+    /* ignore */
+  }
+}
+
+function exitWithCode(code) {
+  bindingExitProbe(`before_process_exit code=${code}`);
+  if (process.env.SEEKDB_BINDING_EXIT_PROBE === '1' || process.env.SEEKDB_NODE_BINDING_PROBE === '1') {
+    process.exit(code);
+  }
+  try {
+    seekdb.close();
+  } catch (_) {
+    /* ignore */
+  }
+  process.exit(code);
+}
+
 function fail(msg) {
   console.error('::error::', msg);
-  process.exit(1);
+  exitWithCode(1);
 }
 
 function run() {
@@ -66,6 +99,7 @@ function run() {
     }
     console.log('[smoke-vsag] SEARCH ok, rows:', rows.length);
     seekdb.connectClose(conn);
+    conn = null;
   } catch (e) {
     if (conn) {
       try {
@@ -75,8 +109,8 @@ function run() {
     fail(e.message || String(e));
   }
 
-  seekdb.close();
   console.log('[smoke-vsag] passed');
+  exitWithCode(0);
 }
 
 try {

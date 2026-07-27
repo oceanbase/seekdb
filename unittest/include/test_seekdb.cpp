@@ -2577,7 +2577,7 @@ TestResult test_very_long_document_100kb() {
     return {true, ""};
 }
 
-// seekdb-js collection DDL: document STRING column, 100KB round-trip.
+// Embedded collection DDL: document STRING column, 100KB round-trip.
 TestResult test_collection_string_document_100kb() {
     SeekdbHandle handle = nullptr;
     int ret = seekdb_connect(&handle, "test", true);
@@ -2762,7 +2762,7 @@ TestResult test_special_characters_in_metadata() {
     return {true, ""};
 }
 
-// JSON column parameterized INSERT (seekdb-js collection metadata path).
+// JSON column parameterized INSERT (embedded collection metadata path).
 TestResult test_json_column_param_insert() {
     SeekdbHandle handle = nullptr;
     int ret = seekdb_connect(&handle, "test", true);
@@ -2854,7 +2854,7 @@ TestResult test_json_column_param_insert() {
     return {true, ""};
 }
 
-// Empty JSON object "{}" in a JSON column must round-trip (like seekdb-js collection metadata).
+// Empty JSON object "{}" in a JSON column must round-trip (embedded collection metadata).
 TestResult test_empty_json_metadata() {
     SeekdbHandle handle = nullptr;
     int ret = seekdb_connect(&handle, "test", true);

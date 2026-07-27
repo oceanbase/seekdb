@@ -2,6 +2,8 @@
 set -e
 
 cd "$(dirname "$0")"
+# shellcheck source=../binding-exit-probe.sh
+source "$(cd "$(dirname "$0")/.." && pwd)/binding-exit-probe.sh"
 
 # Set library path (Linux: .so, macOS: .dylib)
 SEEKDB_LIB_DIR="$(cd ../../../build_release/src/include && pwd)"
@@ -10,6 +12,7 @@ case "$(uname -s)" in
     *)       SEEKDB_LIB_EXT=".so" ;;
 esac
 export SEEKDB_LIB_PATH="${SEEKDB_LIB_DIR}/libseekdb${SEEKDB_LIB_EXT}"
+apply_linux_libseekdb_preload "${SEEKDB_LIB_PATH}"
 
 echo "=== Testing Python FFI Binding ==="
 echo "SEEKDB_LIB_PATH: $SEEKDB_LIB_PATH"
@@ -49,10 +52,8 @@ fi
 # Run the test (-u for unbuffered output)
 echo "Running Python tests..."
 echo ""
-# Note: C ABI layer handles SIGSEGV gracefully during static destructors
-# Python also uses os._exit() to avoid cleanup issues
-# Exit code is 0 and no segfault messages are output
-$PYTHON_CMD -u test.py "${DB_DIR}" "test"
+run_with_binding_exit_probe "$BINDING_TEST_TIMEOUT_MS" "$BINDING_EXIT_PROBE_GRACE_MS" -- \
+  $PYTHON_CMD -u test.py "${DB_DIR}" "test"
 PY_EXIT=$?
 if [ $PY_EXIT -ne 0 ]; then
     echo "Python binding tests failed with exit $PY_EXIT"

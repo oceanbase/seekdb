@@ -20,11 +20,11 @@
 #include "observer/change_stream/ob_change_stream_mgr.h"
 #include "share/rc/ob_tenant_base.h"
 #include "storage/tx/ob_ts_mgr.h"
-#include <unistd.h>
+#include "lib/cpu/ob_cpu_topology.h"
 
 #ifndef GET_THREAD_NUM_BY_NPROCESSORS
 #define GET_THREAD_NUM_BY_NPROCESSORS(factor) \
-  (sysconf(_SC_NPROCESSORS_ONLN) / (factor) > 0 ? sysconf(_SC_NPROCESSORS_ONLN) / (factor) : 1)
+  (common::get_cpu_count() / (factor) > 0 ? common::get_cpu_count() / (factor) : 1)
 #endif
 
 #ifdef OB_BUILD_EMBED_MODE

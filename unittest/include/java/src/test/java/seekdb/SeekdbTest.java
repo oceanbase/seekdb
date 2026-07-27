@@ -383,19 +383,24 @@ public class SeekdbTest {
             }
         }
 
-        Seekdb.close();
+        int exitCode = (passed == total) ? 0 : 1;
+        writeBindingExitProbe(exitCode);
 
         if (passed == total) {
             System.out.println("::notice::All tests passed successfully!");
             System.out.println("=".repeat(70));
-            writeBindingExitProbe(0);
-            System.exit(0);
         } else {
             System.err.println("::error::" + failed + " test(s) failed");
             System.out.println("=".repeat(70));
-            writeBindingExitProbe(1);
-            System.exit(1);
         }
+
+        if (!"1".equals(System.getenv("SEEKDB_BINDING_EXIT_PROBE"))) {
+            try {
+                Seekdb.close();
+            } catch (Exception ignored) {
+            }
+        }
+        System.exit(exitCode);
     }
 
     private static String getTestName(int i) {

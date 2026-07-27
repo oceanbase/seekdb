@@ -2,7 +2,7 @@
   "name": "libseekdb-smoke-loader",
   "private": true,
   "version": "1.0.0",
-  "description": "Build seekdb.node into a packed zip tree (@loader_path), matching seekdb-js layout",
+  "description": "Build seekdb.node into a packed zip tree (@loader_path) for smoke tests",
   "scripts": {
     "build": "node-gyp rebuild"
   },

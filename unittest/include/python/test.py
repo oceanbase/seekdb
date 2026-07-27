@@ -710,43 +710,56 @@ def run_all_tests():
             except Exception as e:
                 print('FAIL')
                 print(f'::error::Absolute-path same-directory check failed: {e}', file=sys.stderr)
-                Seekdb.close()
                 return 1
 
-        _probe("test.py:before_final_Seekdb_close")
-        Seekdb.close()
-        _probe("test.py:after_final_Seekdb_close")
+        exit_code = 0 if passed == total else 1
 
         if passed == total:
             _probe("test.py:before_success_messages")
             print('::notice::All tests passed successfully!')
             print('=' * 70)
             _probe("test.py:after_success_messages")
-            try:
-                sys.stdout.flush()
-                sys.stderr.flush()
-            except Exception:
-                pass
-            _probe("test.py:before_os_exit_0")
-            os._exit(0)
+            return exit_code
         else:
             print(f'::error::{failed} test(s) failed', file=sys.stderr)
             print('=' * 70)
-            return 1
+            return exit_code
     except Exception as e:
         print(f'::error::Unexpected error during tests: {e}', file=sys.stderr)
         import traceback
         traceback.print_exc()
-        try:
-            Seekdb.close()
-        except:
-            pass
         return 1
+
+
+def _binding_exit_probe(code: int) -> None:
+    if os.environ.get('SEEKDB_BINDING_EXIT_PROBE') != '1':
+        return
+    import tempfile
+    path = os.path.join(tempfile.gettempdir(), f'seekdb_binding_exit_probe_{os.getpid()}.log')
+    try:
+        with open(path, 'a', encoding='utf-8') as f:
+            f.write(f'before_process_exit code={code}\n')
+            f.flush()
+            os.fsync(f.fileno())
+    except OSError:
+        pass
 
 
 if __name__ == '__main__':
     _probe_init()
     _probe("test.py:main_before_run_all_tests")
     exit_code = run_all_tests()
-    _probe("test.py:main_after_run_all_tests")
+    _binding_exit_probe(exit_code)
+    if os.environ.get('SEEKDB_BINDING_EXIT_PROBE') != '1':
+        _probe("test.py:before_final_Seekdb_close")
+        try:
+            Seekdb.close()
+        except Exception:
+            pass
+        _probe("test.py:after_final_Seekdb_close")
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception:
+        pass
     os._exit(exit_code)

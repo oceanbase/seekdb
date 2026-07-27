@@ -2,6 +2,8 @@
 set -e
 
 cd "$(dirname "$0")"
+# shellcheck source=../binding-exit-probe.sh
+source "$(cd "$(dirname "$0")/.." && pwd)/binding-exit-probe.sh"
 
 # Set library path (Linux: .so, macOS: .dylib)
 SEEKDB_LIB_DIR="$(cd ../../../build_release/src/include && pwd)"
@@ -43,7 +45,7 @@ echo "Running Go tests..."
 echo ""
 # Note: C ABI layer handles SIGSEGV gracefully during static destructors
 # Exit code is 0 and no segfault messages are output
-go run test.go "${DB_DIR}"
+run_with_binding_exit_probe "$BINDING_TEST_TIMEOUT_MS" "$BINDING_EXIT_PROBE_GRACE_MS" -- go run test.go "${DB_DIR}"
 GO_EXIT=$?
 if [ $GO_EXIT -ne 0 ]; then
     echo "First run (relative path) failed with exit $GO_EXIT"
@@ -56,7 +58,7 @@ rm -rf "${DB_DIR_ABS}"
 echo ""
 echo "Running Go tests with absolute path: $DB_DIR_ABS"
 echo ""
-go run test.go "${DB_DIR_ABS}"
+run_with_binding_exit_probe "$BINDING_TEST_TIMEOUT_MS" "$BINDING_EXIT_PROBE_GRACE_MS" -- go run test.go "${DB_DIR_ABS}"
 ABS_EXIT=$?
 rm -rf "${DB_DIR_ABS}" 2>/dev/null || true
 if [ $ABS_EXIT -ne 0 ]; then
