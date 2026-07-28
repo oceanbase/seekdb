@@ -81,7 +81,7 @@ ob_set_subtarget(ob_sql engine_vector_fixed
 )
 
 set_source_files_properties(
-  engine/expr/ob_deterministic_distribution.cpp
+  engine/expr/ob_distribution.cpp
   PROPERTIES COMPILE_OPTIONS "-ffp-contract=off"
 )
 
@@ -804,7 +804,7 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_substr.cpp
   engine/expr/ob_expr_generator_func.cpp
   engine/expr/ob_expr_zipf.cpp
-  engine/expr/ob_deterministic_distribution.cpp
+  engine/expr/ob_distribution.cpp
   engine/expr/ob_expr_uniform.cpp
   engine/expr/ob_expr_normal.cpp
   engine/expr/ob_expr_substrb.cpp
