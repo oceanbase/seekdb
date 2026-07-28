@@ -80,7 +80,6 @@ if(ANDROID)
   # Extra sources required by specific test macros (rs_unittest, aggr_unittest2)
   target_sources(all_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/rootserver/ob_rs_test_utils.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/rootserver/fake_freeze_info_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sql/engine/test_op_engine.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sql/engine/ob_fake_table_scan_vec_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/storage/ob_truncate_info_helper.cpp)

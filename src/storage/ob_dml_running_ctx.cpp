@@ -46,8 +46,8 @@ static int resolve_has_async_index_from_schema_(
     const uint64_t table_id = dml_param.table_param_->get_data_table().get_table_id();
     share::schema::ObSchemaGetterGuard guard;
     const share::schema::ObTableSchema *table_schema = nullptr;
-    if (OB_FAIL(schema_service->get_tenant_schema_guard(guard))) {
-      LOG_WARN("get tenant schema guard failed", KR(ret));
+    if (OB_FAIL(schema_service->get_runtime_schema_guard(guard))) {
+      LOG_WARN("get runtime schema guard failed", KR(ret));
     } else if (OB_FAIL(guard.get_table_schema(table_id, table_schema))) {
       LOG_WARN("get table schema failed", KR(ret), K(table_id));
     } else if (OB_ISNULL(table_schema) || !table_schema->is_user_table()) {

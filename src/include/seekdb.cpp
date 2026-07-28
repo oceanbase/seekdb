@@ -47,12 +47,11 @@
 #include "sql/parser/parse_node.h"
 #include "share/schema/ob_priv_type.h"
 #include "share/ob_define.h"
-#include "share/rc/ob_tenant_base.h"  // MOD_SCOPE for read_lob_data (ObLobManager)
 #include "sql/session/ob_system_variable.h"
 #include "share/system_variable/ob_sys_var_class_type.h"
 #include "share/ob_errno.h"  // For ob_strerror
 #include "sql/ob_sql_utils.h"  // For ObSQLUtils::update_session_last_schema_version (DDL visibility)
-#include "lib/ob_define.h"  // For OB_SYS_TENANT_NAME, OB_SYS_USER_ID
+#include "lib/ob_define.h"  // For OB_SYS_USER_ID
 #include "lib/profile/ob_trace_id.h"  // For ObCurTraceId
 #include "lib/worker.h"  // For lib::Worker
 #include "lib/thread/threads.h"  // For global_thread_stack_size, THREAD_STACK_RESERVED_SIZE
@@ -120,7 +119,6 @@ static void seekdb_munmap_anonymous_stack(void *addr, size_t stack_size)
 #endif
 }
 
-using namespace oceanbase::table;
 using namespace oceanbase::common;
 using namespace oceanbase::sqlclient;
 using namespace oceanbase::observer;
@@ -129,9 +127,12 @@ using namespace oceanbase::share;
 namespace share = oceanbase::share;
 using namespace oceanbase::lib;
 
-static oceanbase::observer::ObInnerSQLConnectionPool &get_embed_inner_sql_conn_pool()
+static oceanbase::observer::ObInnerSQLConnectionPool *get_embed_inner_sql_conn_pool()
 {
-  return GCTX.res_inner_conn_pool_->get_inner_sql_conn_pool();
+  if (OB_ISNULL(GCTX.sql_proxy_)) {
+    return nullptr;
+  }
+  return static_cast<oceanbase::observer::ObInnerSQLConnectionPool *>(GCTX.sql_proxy_->get_pool());
 }
 
 // RAII: redirect stdout/stderr to /dev/null for the scope so LOG_STDOUT (e.g. "successfully init log writer") does not print.
@@ -306,8 +307,11 @@ struct SeekdbConnection {
             embed_result = nullptr;
         }
         // Release connection (using OBSERVER macro like Python embed)
-        if (embed_conn && OB_NOT_NULL(GCTX.res_inner_conn_pool_)) {
-            get_embed_inner_sql_conn_pool().release(embed_conn, true);
+        if (embed_conn) {
+            oceanbase::observer::ObInnerSQLConnectionPool *pool = get_embed_inner_sql_conn_pool();
+            if (OB_NOT_NULL(pool)) {
+                pool->release(embed_conn, true);
+            }
             embed_conn = nullptr;
         }
         // Release session (like Python embed does)
@@ -1072,21 +1076,9 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
             set_error(nullptr, "change dir failed");
         } else {
             FLOG_INFO("observer start finish wait service ", "cost", ObTimeUtility::current_time() - start_time);
-            // Wait for RS usable. Non-Windows: require FULL_SERVICE (timer-driven do_restart).
-            // Windows embed CI: do_restart may not advance to FULL_SERVICE while RS is already IN_SERVICE;
-            // waiting only for is_full_service() then hangs seekdb_open indefinitely.
-            while (true) {
-                if (OB_ISNULL(GCTX.root_service_)) {
-                    ob_usleep(100 * 1000);  // 100ms
-#ifdef _WIN32
-                } else if (GCTX.root_service_->in_service()) {
-#else
-                } else if (GCTX.root_service_->is_full_service()) {
-#endif
-                    break;
-                } else {
-                    ob_usleep(100 * 1000);  // 100ms
-                }
+            // Wait until observer reports serving (replaces legacy ObRootService readiness checks).
+            while (GCTX.start_service_time_ <= 0) {
+                ob_usleep(100 * 1000);  // 100ms
             }
             FLOG_INFO("seekdb start success ", "cost", ObTimeUtility::current_time() - start_time);
 #ifdef OB_BUILD_EMBED_MODE
@@ -1312,14 +1304,7 @@ static void refresh_session_schema_version(oceanbase::sql::ObSQLSessionInfo* ses
     if (OB_ISNULL(session) || OB_ISNULL(GCTX.schema_service_)) return;
     (void)GCTX.schema_service_->refresh_and_add_schema(false);
     int64_t schema_version = OB_INVALID_VERSION;
-    oceanbase::share::schema::ObServerSchemaService* server_svc =
-        static_cast<oceanbase::share::schema::ObServerSchemaService*>(GCTX.schema_service_);
-    if (OB_SUCCESS == server_svc->get_tenant_schema_version(schema_version)
-        && OB_INVALID_VERSION != schema_version) {
-        session->set_last_ddl_schema_version(schema_version);
-        return;
-    }
-    if (OB_SUCCESS != GCTX.schema_service_->get_tenant_refreshed_schema_version(schema_version)
+    if (OB_SUCCESS != GCTX.schema_service_->get_runtime_refreshed_schema_version(schema_version)
         || OB_INVALID_VERSION == schema_version) {
         (void)oceanbase::sql::ObSQLUtils::update_session_last_schema_version(*GCTX.schema_service_, *session);
         return;
@@ -1332,11 +1317,12 @@ static void check_and_refresh_schema_for_embed(oceanbase::sql::ObSQLSessionInfo*
     if (OB_ISNULL(session) || OB_ISNULL(GCTX.schema_service_)) return;
     int64_t local_version = OB_INVALID_VERSION;
     int64_t last_version = OB_INVALID_VERSION;
-    if (OB_SUCCESS != GCTX.schema_service_->get_tenant_refreshed_schema_version(local_version)) {
+    if (OB_SUCCESS != GCTX.schema_service_->get_runtime_refreshed_schema_version(local_version)) {
         refresh_session_schema_version(session);
         return;
     }
-    if (OB_SUCCESS != session->get_last_ddl_schema_version(last_version)) {
+    last_version = session->get_last_ddl_schema_version();
+    if (OB_INVALID_VERSION == last_version) {
         refresh_session_schema_version(session);
         return;
     }
@@ -1404,7 +1390,7 @@ static int do_seekdb_connect_inner(ConnectParams* params) {
         return OB_SUCCESS;
     } else if (FALSE_IT(ob_setup_tsi_warning_buffer(&session->get_warnings_buffer()))) {
     } else if (FALSE_IT(conn->embed_session = session)) {
-    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
         set_error(conn, "failed to get schema guard");
         delete conn;
         params->result = SEEKDB_ERROR_CONNECTION_FAILED;
@@ -1438,8 +1424,6 @@ static int do_seekdb_connect_inner(ConnectParams* params) {
             set_error(conn, "load_default_sys_variable failed");
         } else if (OB_FAIL(session->load_default_configs_in_pc())) {
             set_error(conn, "load_default_configs_in_pc failed");
-        } else if (OB_FAIL(session->init_tenant(OB_SYS_TENANT_NAME))) {
-            set_error(conn, "init_tenant failed");
         } else if (OB_FAIL(session->load_all_sys_vars(schema_guard))) {
             set_error(conn, "load_all_sys_vars failed");
         } else {
@@ -1492,7 +1476,8 @@ static int do_seekdb_connect_inner(ConnectParams* params) {
     
     // Use OBSERVER macro directly like Python embed does
     if (OB_SUCC(ret)) {
-        if (OB_ISNULL(GCTX.res_inner_conn_pool_)) {
+        oceanbase::observer::ObInnerSQLConnectionPool *inner_sql_pool = get_embed_inner_sql_conn_pool();
+        if (OB_ISNULL(inner_sql_pool)) {
             set_error(conn, "inner sql conn pool not ready");
             if (session) {
                 GCTX.session_mgr_->revert_session(session);
@@ -1500,7 +1485,7 @@ static int do_seekdb_connect_inner(ConnectParams* params) {
             delete conn;
             params->result = SEEKDB_ERROR_CONNECTION_FAILED;
             return OB_SUCCESS;
-        } else if (OB_FAIL(get_embed_inner_sql_conn_pool().acquire(session, inner_conn))) {
+        } else if (OB_FAIL(inner_sql_pool->acquire(session, inner_conn))) {
             set_error(conn, "acquire conn failed");
             if (session) {
                 GCTX.session_mgr_->revert_session(session);
@@ -1951,11 +1936,8 @@ static int do_seekdb_execute_inner(ExecuteParams* params) {
     if (inner_result) {
         // Try to get field columns from result set
         const oceanbase::common::ColumnsFieldIArray* fields = nullptr;
-        if (inner_result->has_tenant_resource()) {
+        if (OB_NOT_NULL(inner_result->get_result_set())) {
             fields = inner_result->result_set().get_field_columns();
-        } else {
-            // For remote results, try to get from remote_result_set
-            // Note: This may not be available in all cases
         }
         
         if (fields && fields->count() == column_count) {
@@ -2136,9 +2118,9 @@ static int do_seekdb_execute_inner(ExecuteParams* params) {
         }
     }
     
-    // Fetch all rows (MOD_SCOPE so read_lob_data can access ObLobManager for out-of-row LOB, e.g. 100KB)
+    // Fetch all rows (embed mode: modules are ready after observer start)
     int64_t row_count = 0;
-    MOD_SCOPE {
+    {
     while (OB_SUCCESS == sql_result->next()) {
         std::vector<std::string> row;
         std::vector<bool> row_null;
@@ -2337,7 +2319,7 @@ static int do_seekdb_execute_inner(ExecuteParams* params) {
         row_count++;
     }
     result_set->row_count = row_count;
-    }  // MOD_SCOPE
+    }
     
     // Update affected rows from result set for DML statements (INSERT/UPDATE/DELETE)
     // This allows seekdb_affected_rows() to return correct value even when using seekdb_query()
@@ -2626,7 +2608,7 @@ static bool get_insert_column_types(
     
     // Get schema guard from schema service
     schema::ObSchemaGetterGuard schema_guard;
-    int schema_ret = GCTX.schema_service_->get_tenant_schema_guard(schema_guard);
+    int schema_ret = GCTX.schema_service_->get_runtime_schema_guard(schema_guard);
     if (schema_ret != OB_SUCCESS) {
         // Schema service is required
         return false;

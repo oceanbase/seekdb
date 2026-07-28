@@ -736,11 +736,9 @@ int ObExternalTableRowIterator::calc_file_partition_list_value(const int64_t par
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error");
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
-              scan_param_->tenant_id_,
-              schema_guard))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("get_schema_guard failed", K(ret));
-  } else if (OB_FAIL(schema_guard.get_table_schema(scan_param_->tenant_id_, scan_param_->index_id_, table_schema))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema(scan_param_->index_id_, table_schema))) {
     LOG_WARN("get table schema failed", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
