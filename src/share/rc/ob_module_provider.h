@@ -70,7 +70,6 @@ class ObSSTableMergeInfoMgr;
 class ObLobManager;
 class ObMemstoreFreezer;
 class ObCompactionMemPool;
-struct ObDDLMergeBucketLock;
 class ObDirectLoadMgr;
 class ObFreezeInfoMgr;
 class ObAccessService;
@@ -189,7 +188,6 @@ public:
   virtual compaction::ObTabletScheduler * tablet_scheduler() { return nullptr; }
   virtual compaction::ObMediumChecker * medium_checker() { return nullptr; }
   virtual storage::ObCompactionMemPool * compaction_mem_pool() { return nullptr; }
-  virtual storage::ObDDLMergeBucketLock * ddl_merge_bucket_lock() { return nullptr; }
   virtual storage::ObDirectLoadMgr * direct_load_mgr() { return nullptr; }
   virtual share::ObDagScheduler * dag_scheduler() { return nullptr; }
   virtual storage::ObFreezeInfoMgr * freeze_info_mgr() { return nullptr; }

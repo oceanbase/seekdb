@@ -64,35 +64,15 @@ at the same time data tablet should also control the dependency on lob tablet
                       +-------------------+          |
                       | assemble_task()   |          |
                       +-------------------+          |
-                              |                      |
-                              +----------------------+ 
-                              |
-                              |
-                              v
-                      +-------------------+ 
-                      | guard_task()      | 
-                      +-------------------+ 
+                                                     |
+                              +----------------------+
 
 
 
 two major class are build to fullfil the dag progress
 1. Task  Class，which mainly control dependecy relationship, including Prepare Task， MergeSlice Task， Assemble Task
-   Guard Task is a task that used for holding tablet merge guard
-2. Heper Class, which real execute those actions, since too many diffrent type need to be supported
+2. Helper Class, which real execute those actions, since too many diffrent type need to be supported
 */
-class ObDDLMergeGuardTask: public share::ObITask
-{
-public:
-  ObDDLMergeGuardTask(): ObITask(ObITaskType::TASK_TYPE_DDL_MERGE_GUARD), tablet_id_(), is_inited_(false) {}
-  ~ObDDLMergeGuardTask();
-  int init(const bool for_replay, const ObTabletID &tablet_id);
-  int process();
-  virtual void task_debug_info_to_string(char *buf, const int64_t buf_len, int64_t &pos) const override;
-  INHERIT_TO_STRING_KV("MergeGuardTask", share::ObITask, K(tablet_id_));
-public:
-  ObTabletID tablet_id_;
-  bool is_inited_;
-};
 class ObDDLMergePrepareTask: public share::ObITask
 {
 public:
@@ -103,11 +83,10 @@ public:
   int inner_process();
   virtual int process() override;
   virtual void task_debug_info_to_string(char *buf, const int64_t buf_len, int64_t &pos) const override;
-  INHERIT_TO_STRING_KV("MergePrepareTask", share::ObITask, K(merge_param_), KP(guard_task_), K(is_inited_));
+  INHERIT_TO_STRING_KV("MergePrepareTask", share::ObITask, K(merge_param_), K(is_inited_));
 private:
   ObArenaAllocator allocator_;
   ObDDLTabletMergeDagParamV2 merge_param_;
-  ObDDLMergeGuardTask *guard_task_;
   bool is_inited_;
   DISALLOW_COPY_AND_ASSIGN(ObDDLMergePrepareTask);
 };
