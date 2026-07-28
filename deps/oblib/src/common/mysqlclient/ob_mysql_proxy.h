@@ -33,8 +33,7 @@ class ObISQLConnection;
 int create_inner_sql_connection_for_proxy(
     bool is_ddl,
     int32_t group_id,
-    sqlclient::ObISQLConnection *&conn);
-int release_inner_sql_connection_for_proxy(sqlclient::ObISQLConnection *conn);
+    sqlclient::ObISQLConnectionGuard &conn);
 
 struct InnerDDLInfo final
 {
@@ -188,9 +187,8 @@ public:
 
   bool is_inited() const { return inited_; }
   virtual sqlclient::ObISQLConnection *get_connection() override { return NULL; }
-  virtual int acquire_connection(sqlclient::ObISQLConnection *&conn,
+  virtual int acquire_connection(sqlclient::ObISQLConnectionGuard &conn,
                                  const int32_t group_id) override;
-  virtual int release_connection(sqlclient::ObISQLConnection *conn) override;
   void stop()
   {
     stopped_ = true;
@@ -199,13 +197,9 @@ public:
   // can only use assign() to copy to prevent passing ObCommonSqlProxy by value unintentionally.
   void assign(const ObCommonSqlProxy &proxy) { *this = proxy; }
 
-  // relase the connection
-  int close(sqlclient::ObISQLConnection *conn);
-
-
 protected:
-  int acquire(sqlclient::ObISQLConnection *&conn) { return this->acquire(conn, 0); }
-  int acquire(sqlclient::ObISQLConnection *&conn, const int32_t group_id);
+  int acquire(sqlclient::ObISQLConnectionGuard &conn) { return this->acquire(conn, 0); }
+  int acquire(sqlclient::ObISQLConnectionGuard &conn, const int32_t group_id);
   int read(sqlclient::ObISQLConnection *conn, ReadResult &result, const char *sql);
 
   bool inited_;

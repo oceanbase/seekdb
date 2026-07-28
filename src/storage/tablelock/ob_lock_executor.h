@@ -19,6 +19,7 @@
 
 #include "sql/session/ob_basic_session_info.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
+#include "common/mysqlclient/ob_isql_connection.h"
 
 namespace oceanbase
 {
@@ -66,6 +67,7 @@ public:
     last_insert_id_ = 0;
     database_id_ = OB_INVALID_ID;
     database_name_.reset();
+    inner_conn_guard_.reset();
     inner_conn_ = nullptr;
     store_inner_conn_ = nullptr;
     my_exec_ctx_ = nullptr;
@@ -103,6 +105,7 @@ private:
   uint64_t last_insert_id_;
   uint64_t database_id_;
   ObSqlString database_name_;
+  common::sqlclient::ObISQLConnectionGuard inner_conn_guard_;
   observer::ObInnerSQLConnection *inner_conn_;
   observer::ObInnerSQLConnection *store_inner_conn_;
   sql::ObExecContext *my_exec_ctx_; //my exec context

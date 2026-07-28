@@ -385,14 +385,16 @@ int ObVariableSetExecutor::execute_subquery_expr(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
   observer::ObInnerSQLConnection *conn = NULL;
+  sqlclient::ObISQLConnectionGuard conn_guard;
   
   if (OB_ISNULL(session_info) || OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(session_info), K(sql_proxy));
   } else if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_external_session(
-                         session_info, conn))) {
+                         session_info, conn_guard))) {
     LOG_WARN("failed to acquire connection", K(ret));
   } else {
+    conn = static_cast<observer::ObInnerSQLConnection *>(conn_guard.get_ptr());
     int64_t idx = 0;
     ObObj tmp_value;
     SMART_VAR(ObISQLClient::ReadResult, res) {
@@ -417,10 +419,6 @@ int ObVariableSetExecutor::execute_subquery_expr(ObExecContext &ctx,
       LOG_WARN("failed to write value", K(ret));
     }
     LOG_TRACE("succ to calculate value by executing inner sql", K(ret), K(value_obj), K(subquery_expr));
-  }
-  if (OB_NOT_NULL(conn)) {
-    conn->unref();
-    conn = NULL;
   }
   return ret;
 }

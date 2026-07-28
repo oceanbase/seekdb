@@ -421,15 +421,17 @@ int ObStatsEstimator::do_estimate(const ObOptStatGatherParam &gather_param,
   }
   if (OB_SUCC(ret)) {
     observer::ObInnerSQLConnection *conn = NULL;
+    sqlclient::ObISQLConnectionGuard conn_guard;
     session->set_inner_session();
     //
     session->set_autocommit(true);
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_external_session(
-                      session, conn))) {
+                      session, conn_guard))) {
         LOG_WARN("failed to acquire inner connection", K(ret));
-      } else if (OB_ISNULL(conn)) {
+      } else if (OB_ISNULL(conn = static_cast<observer::ObInnerSQLConnection *>(
+                               conn_guard.get_ptr()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("conn is null", K(ret), K(conn));
       } else if (OB_FAIL(conn->execute_read(raw_sql.ptr(), proxy_result))) {
@@ -467,11 +469,9 @@ int ObStatsEstimator::do_estimate(const ObOptStatGatherParam &gather_param,
           ret = OB_SUCCESS;
         }
       }
-      if (OB_NOT_NULL(conn)) {
-        conn->unref();
-        conn = NULL;
-      }
     }
+    conn = NULL;
+    conn_guard.reset();
     int tmp_ret = OB_SUCCESS;
     if (session_value != NULL && OB_SUCCESS != (tmp_ret = session->restore_session(*session_value))) {
       LOG_ERROR("failed to restore session", K(tmp_ret));

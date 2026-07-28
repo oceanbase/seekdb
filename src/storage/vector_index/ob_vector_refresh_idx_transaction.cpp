@@ -105,24 +105,22 @@ ObVectorRefreshIdxTransaction::~ObVectorRefreshIdxTransaction()
 int ObVectorRefreshIdxTransaction::connect(ObSQLSessionInfo *session_info, ObISQLClient *sql_client)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(nullptr != sql_client_ || nullptr != conn_)) {
+  if (OB_UNLIKELY(nullptr != sql_client_ || conn_.is_valid())) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("transaction can only be started once", KR(ret), K(sql_client_), K(conn_));
   } else if (OB_UNLIKELY(nullptr == session_info || nullptr == sql_client)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KP(session_info), KP(sql_client));
   } else {
-    ObInnerSQLConnection *conn = nullptr;
     if (OB_FAIL(
             ObInnerSQLConnection::create_spi_connection_with_external_session(
-                session_info, conn))) {
+                session_info, conn_))) {
       LOG_WARN("create connection failed", KR(ret), K(session_info));
-    } else if (OB_ISNULL(conn)) {
+    } else if (!conn_.is_valid()) {
       ret = OB_INNER_STAT_ERROR;
       LOG_WARN("connection can not be NULL", KR(ret));
     } else {
       sql_client_ = sql_client;
-      conn_ = conn;
     }
   }
   return ret;
@@ -130,10 +128,7 @@ int ObVectorRefreshIdxTransaction::connect(ObSQLSessionInfo *session_info, ObISQ
 
 void ObVectorRefreshIdxTransaction::close()
 {
-  if (OB_NOT_NULL(conn_)) {
-    static_cast<ObInnerSQLConnection *>(conn_)->unref();
-  }
-  conn_ = nullptr;
+  conn_.reset();
   sql_client_ = nullptr;
   errno_ = OB_SUCCESS;
 }

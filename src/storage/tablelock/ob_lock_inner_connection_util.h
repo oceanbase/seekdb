@@ -17,6 +17,7 @@
 #ifndef OCEABASE_OB_LOCK_INNER_CONNECTION_UTIL_
 #define OCEABASE_OB_LOCK_INNER_CONNECTION_UTIL_
 
+#include "common/mysqlclient/ob_isql_client.h"
 #include "storage/tablelock/ob_table_lock_common.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 
@@ -101,8 +102,8 @@ public:
   static int replace_lock(
       const ObReplaceAllLocksRequest &req,
       observer::ObInnerSQLConnection *conn);
-  static int create_inner_conn(sql::ObSQLSessionInfo *session_info,
-                               observer::ObInnerSQLConnection *&inner_conn);
+  static int acquire_inner_conn(sql::ObSQLSessionInfo *session_info,
+                                common::sqlclient::ObISQLConnectionGuard &conn_guard);
   static int execute_write_sql(observer::ObInnerSQLConnection *conn, const ObSqlString &sql, int64_t &affected_rows);
   static int execute_read_sql(observer::ObInnerSQLConnection *conn,
                               const ObSqlString &sql,

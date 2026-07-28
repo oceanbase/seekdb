@@ -300,6 +300,7 @@ protected:
   virtual void record_err_for_load_data(int err_ret, int row_num) { UNUSED(err_ret); UNUSED(row_num); }
 public:
   common::ObMySQLProxy *sql_proxy_;
+  common::sqlclient::ObISQLConnectionGuard inner_conn_guard_;
   observer::ObInnerSQLConnection *inner_conn_;
   observer::ObInnerSQLConnection::SavedValue saved_conn_;
   bool need_foreign_key_check_;
@@ -308,9 +309,7 @@ public:
   ObObjPrintParams obj_print_params_;
   bool iter_end_;
   ObDMLRtCtx dml_rtctx_;
-  bool is_error_logging_;
   bool execute_single_row_;
-  ObErrLogRtDef err_log_rt_def_;
   ObSEArray<ObExpr *, 4> trigger_clear_exprs_;
   ObDMLModifyRowsList dml_modify_rows_;
   ObSEArray<ObForeignKeyChecker *, 4> fk_checkers_;

@@ -237,8 +237,10 @@ int ObLockContext::open_inner_conn_()
     LOG_WARN("inner_conn_ or store_inner_conn_ should be null", K(ret), KP(inner_conn_), KP(store_inner_conn_));
   } else if (FALSE_IT(store_inner_conn_ = static_cast<observer::ObInnerSQLConnection *>(session->get_inner_conn()))) {
   } else if (FALSE_IT(session->set_inner_conn(nullptr))) {
-  } else if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session, inner_conn))) {
+  } else if (OB_FAIL(ObInnerConnectionLockUtil::acquire_inner_conn(session, inner_conn_guard_))) {
     LOG_WARN("create inner connection failed", K(ret), KPC(session));
+  } else if (FALSE_IT(inner_conn = static_cast<observer::ObInnerSQLConnection *>(
+                          inner_conn_guard_.get_ptr()))) {
   } else if (OB_ISNULL(inner_conn)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("inner connection is still null", KPC(session));
@@ -269,7 +271,7 @@ int ObLockContext::close_inner_conn_()
       ret = OB_NOT_INIT;
       LOG_WARN("inner_conn of session is NULL", K(ret), KP(inner_conn_));
     } else {
-      inner_conn_->unref();
+      inner_conn_guard_.reset();
     }
     if (OB_ISNULL(session = my_exec_ctx_->get_my_session())) {
       ret = OB_NOT_INIT;

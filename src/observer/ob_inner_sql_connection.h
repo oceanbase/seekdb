@@ -18,6 +18,7 @@
 #define OCEANBASE_OBSERVER_OB_INNER_SQL_CONNECTION_H_
 
 #include "common/mysqlclient/ob_isql_connection.h"
+#include "lib/guard/ob_weak_guard.h"
 #include "storage/tx/ob_multi_data_source.h"  // ObRegisterMdsFlag complete type(previously hidden behind the rpc_struct include chain)
 #include "lib/container/ob_2d_array.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -135,13 +136,13 @@ public:
   static int create_connection_with_owned_session(
       const bool use_static_engine,
       const int32_t group_id,
-      ObInnerSQLConnection *&conn);
+      common::sqlclient::ObISQLConnectionGuard &conn);
   static int create_connection_with_external_session(
       sql::ObSQLSessionInfo *session_info,
-      ObInnerSQLConnection *&conn);
+      common::sqlclient::ObISQLConnectionGuard &conn);
   static int create_spi_connection_with_external_session(
       sql::ObSQLSessionInfo *session_info,
-      ObInnerSQLConnection *&conn);
+      common::sqlclient::ObISQLConnectionGuard &conn);
 
   int init(sql::ObSql *ob_sql,
            ObVTIterCreator *vt_iter_creator,
@@ -150,12 +151,16 @@ public:
            const bool use_static_engine = false,
            const int32_t group_id = 0);
   int destroy(void);
-  inline void reset() { destroy(); }
+  inline void reset()
+  {
+    destroy();
+    // rp_free() calls reset() instead of the destructor.
+    self_weak_guard_.reset();
+  }
   virtual int execute_read(const ObString &sql,
                            common::ObISQLClient::ReadResult &res, bool is_user_sql = false) override;
   virtual int execute_write(const ObString &sql,
                             int64_t &affected_rows, bool is_user_sql = false) override;
-
   virtual int execute_proc(ObIAllocator &allocator,
                           ParamStore &params,
                           ObString &sql,
@@ -186,30 +191,14 @@ public:
   virtual int64_t get_user_timeout() const { return user_timeout_; }
   int try_acquire_query_lock();
   void try_release_query_lock();
-  void ref();
-  // Destroy and free the connection when its reference count reaches zero.
-  void unref();
-  int64_t get_ref() const { return ref_cnt_; }
 
   ObVTIterCreator *get_vt_iter_creator() const { return vt_iter_creator_; }
   ObInnerSQLReadContext *&get_prev_read_ctx() { return ref_ctx_; }
+  common::sqlclient::ObISQLConnectionGuard get_shared_guard() const
+  {
+    return self_weak_guard_.upgrade();
+  }
   void dump_conn_bt_info();
-  class RefGuard {
-  public:
-    explicit RefGuard(ObInnerSQLConnection &conn)
-      : conn_(conn)
-    {
-      conn_.ref();
-    }
-    ~RefGuard()
-    {
-      conn_.unref();
-    }
-    ObInnerSQLConnection &get_conn() { return conn_; }
-
-  private:
-    ObInnerSQLConnection &conn_;
-  };
 public:
   int64_t get_send_timestamp() const { return get_session().get_query_start_time(); }
   int64_t get_receive_timestamp() const { return get_session().get_query_start_time(); }
@@ -283,7 +272,6 @@ public:
   int64_t get_init_timestamp() const { return init_timestamp_; }
 public:
   static const int64_t LOCK_RETRY_TIME = 1L * 1000 * 1000;
-  static const int64_t TOO_MANY_REF_ALERT = 1024;
   static const uint32_t INNER_SQL_SESS_ID = 1;
   static const int64_t MAX_BT_SIZE = 20;
   static const int64_t EXTRA_REFRESH_LOCATION_TIME = 1L * 1000 * 1000;
@@ -333,15 +321,15 @@ private:
                     const bool use_static_engine,
                     const int32_t group_id,
                     const bool use_spi_allocator,
-                    ObInnerSQLConnection *&conn);
+                    common::sqlclient::ObISQLConnectionGuard &conn);
   void free_self();
 private:
   bool inited_;
   observer::ObQueryRetryCtrl retry_ctrl_;
   sql::ObSQLSessionInfo *extern_session_;   // nested sql and spi both use it, rename to extern.
   sql::ObSQLSessionInfo *inner_session_;
+  common::ObWeakGuard<common::sqlclient::ObISQLConnection> self_weak_guard_;
   bool is_spi_conn_;
-  int64_t ref_cnt_;
   sql::ObSql *ob_sql_;
   ObVTIterCreator *vt_iter_creator_;
   ObInnerSQLReadContext *ref_ctx_;
@@ -358,7 +346,7 @@ private:
 
   // ask the inner sql connection to use external session instead of internal one
   // this enables show session / kill session using sql query command
-  bool use_external_session_; 
+  bool use_external_session_;
   int32_t group_id_;
   //support set user timeout of stream rpc but not depend on internal_sql_execute_timeout
   int64_t user_timeout_;

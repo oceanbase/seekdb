@@ -18,6 +18,7 @@
 #define OCEANBASE_MYSQL_PROXY_OB_ISQL_CLIENT_H_
 
 #include "lib/allocator/page_arena.h"
+#include "lib/guard/ob_shared_guard.h"
 
 namespace oceanbase
 {
@@ -29,6 +30,7 @@ namespace sqlclient
 class ObISQLResultHandler;
 class ObMySQLResult;
 class ObISQLConnection;
+using ObISQLConnectionGuard = common::ObSharedGuard<ObISQLConnection>;
 class ObIExecutor;
 };
 
@@ -67,9 +69,8 @@ public:
 
   virtual sqlclient::ObISQLConnection *get_connection() = 0;
 
-  virtual int acquire_connection(sqlclient::ObISQLConnection *&conn,
+  virtual int acquire_connection(sqlclient::ObISQLConnectionGuard &conn,
                                  const int32_t group_id);
-  virtual int release_connection(sqlclient::ObISQLConnection *conn);
 
   class ReadResult
   {

@@ -29,17 +29,10 @@ namespace common
 int OB_WEAK_SYMBOL create_inner_sql_connection_for_proxy(
     bool is_ddl,
     int32_t group_id,
-    sqlclient::ObISQLConnection *&conn)
+    sqlclient::ObISQLConnectionGuard &conn)
 {
   UNUSEDx(is_ddl, group_id);
-  conn = NULL;
-  return OB_NOT_SUPPORTED;
-}
-
-int OB_WEAK_SYMBOL release_inner_sql_connection_for_proxy(
-    sqlclient::ObISQLConnection *conn)
-{
-  UNUSED(conn);
+  conn.reset();
   return OB_NOT_SUPPORTED;
 }
 
@@ -84,22 +77,21 @@ void ObCommonSqlProxy::operator=(const ObCommonSqlProxy &o)
 int ObCommonSqlProxy::read(ReadResult &result, const char *sql, const int32_t group_id)
 {
   int ret = OB_SUCCESS;
-  ObISQLConnection *conn = NULL;
+  ObISQLConnectionGuard conn;
   if (OB_FAIL(acquire(conn, group_id))) {
-    LOG_WARN("acquire connection failed", K(ret), K(conn));
-  } else if (OB_FAIL(read(conn, result, sql))) {
+    LOG_WARN("acquire connection failed", K(ret), KP(conn.get_ptr()));
+  } else if (OB_FAIL(read(conn.get_ptr(), result, sql))) {
     LOG_WARN("read failed", K(ret));
   }
-  close(conn);
   return ret;
 }
 
 int ObCommonSqlProxy::read(ReadResult &result, const char *sql, const ObSessionParam *session_param, int64_t user_set_timeout)
 {
   int ret = OB_SUCCESS;
-  ObISQLConnection *conn = NULL;
+  ObISQLConnectionGuard conn;
   if (OB_FAIL(acquire(conn, 0/*group_id*/))) {
-    LOG_WARN("acquire connection failed", K(ret), K(conn));
+    LOG_WARN("acquire connection failed", K(ret), KP(conn.get_ptr()));
   } else if (nullptr != session_param) {
     conn->set_ddl_info(&session_param->ddl_info_);
     if (nullptr != session_param->sql_mode_) {
@@ -117,10 +109,9 @@ int ObCommonSqlProxy::read(ReadResult &result, const char *sql, const ObSessionP
 
   if (OB_FAIL(ret)) {
   } else if (FALSE_IT(conn->set_user_timeout(user_set_timeout))) {
-  } else if (OB_FAIL(read(conn, result, sql))) {
+  } else if (OB_FAIL(read(conn.get_ptr(), result, sql))) {
     LOG_WARN("read failed", K(ret));
   }
-  close(conn);
   return ret;
 }
 
@@ -148,13 +139,13 @@ int ObCommonSqlProxy::write(const char *sql, const int32_t group_id, int64_t &af
 {
   int ret = OB_SUCCESS;
   int64_t start = ::oceanbase::common::ObTimeUtility::current_time();
-  ObISQLConnection *conn = NULL;
+  ObISQLConnectionGuard conn;
   if (OB_ISNULL(sql)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("empty sql");
   } else if (OB_FAIL(acquire(conn, group_id))) {
-    LOG_WARN("acquire connection failed", K(ret), K(conn));
-  } else if (OB_ISNULL(conn)) {
+    LOG_WARN("acquire connection failed", K(ret), KP(conn.get_ptr()));
+  } else if (!conn.is_valid()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("connection can not be NULL");
   } else if (stopped_) { // check stop state again after connection acquired
@@ -165,7 +156,6 @@ int ObCommonSqlProxy::write(const char *sql, const int32_t group_id, int64_t &af
       LOG_WARN("execute sql failed", K(ret), K(conn), K(start), KCSTRING(sql));
     }
   }
-  close(conn);
   LOG_TRACE("execute sql", KCSTRING(sql), K(ret));
   return ret;
 }
@@ -177,13 +167,13 @@ int ObCommonSqlProxy::write(const ObString sql,
   int ret = OB_SUCCESS;
   bool is_user_sql = false;
   int64_t start = ::oceanbase::common::ObTimeUtility::current_time();
-  ObISQLConnection *conn = NULL;
+  ObISQLConnectionGuard conn;
   if (OB_UNLIKELY(sql.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("empty sql");
   } else if (OB_FAIL(acquire(conn, 0/*group_id*/))) {
-    LOG_WARN("acquire connection failed", K(ret), K(conn));
-  } else if (OB_ISNULL(conn)) {
+    LOG_WARN("acquire connection failed", K(ret), KP(conn.get_ptr()));
+  } else if (!conn.is_valid()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("connection can not be NULL");
   } else if (stopped_) { // check stop state again after connection acquired
@@ -222,23 +212,10 @@ int ObCommonSqlProxy::write(const ObString sql,
       LOG_TRACE("execute sql successfully", K(sql));
     }
   }
-  close(conn);
   LOG_TRACE("execute sql", K(sql), K(ret));
   return ret;
 }
 
-
-int ObCommonSqlProxy::close(ObISQLConnection *conn)
-{
-  int ret = OB_SUCCESS;
-  if (conn != NULL) {
-    ret = release_connection(conn);
-    if (OB_FAIL(ret)) {
-      LOG_WARN("release connection failed", K(ret), K(conn));
-    }
-  }
-  return ret;
-}
 
 int ObCommonSqlProxy::escape(const char *from, const int64_t from_size,
     char *to, const int64_t to_size, int64_t &out_size)
@@ -265,11 +242,11 @@ int ObCommonSqlProxy::escape(const char *from, const int64_t from_size,
 }
 
 int ObCommonSqlProxy::acquire_connection(
-    ObISQLConnection *&conn,
+    ObISQLConnectionGuard &conn,
     const int32_t group_id)
 {
   int ret = OB_SUCCESS;
-  conn = NULL;
+  conn.reset();
   if (!is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("mysql proxy not inited", K(ret));
@@ -282,27 +259,17 @@ int ObCommonSqlProxy::acquire_connection(
   return ret;
 }
 
-int ObCommonSqlProxy::release_connection(ObISQLConnection *conn)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(conn)) {
-  } else {
-    ret = release_inner_sql_connection_for_proxy(conn);
-  }
-  return ret;
-}
-
-int ObCommonSqlProxy::acquire(sqlclient::ObISQLConnection *&conn, const int32_t group_id)
+int ObCommonSqlProxy::acquire(sqlclient::ObISQLConnectionGuard &conn, const int32_t group_id)
 {
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("mysql proxy not inited", K(ret));
   } else if (OB_FAIL(acquire_connection(conn, group_id))) {
-    LOG_WARN("acquire connection failed", K(ret), K(conn));
-  } else if (OB_ISNULL(conn)) {
+    LOG_WARN("acquire connection failed", K(ret), KP(conn.get_ptr()));
+  } else if (!conn.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("connection must not be null", K(ret), K(conn));
+    LOG_ERROR("connection must not be null", K(ret));
   }
   return ret;
 }

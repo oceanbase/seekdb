@@ -320,19 +320,25 @@ int ObInnerConnectionLockUtil::replace_lock_(const ObReplaceAllLocksRequest &req
   return ret;
 }
 
-int ObInnerConnectionLockUtil::create_inner_conn(sql::ObSQLSessionInfo *session_info,
-                                                 observer::ObInnerSQLConnection *&inner_conn)
+int ObInnerConnectionLockUtil::acquire_inner_conn(sql::ObSQLSessionInfo *session_info,
+                                                  common::sqlclient::ObISQLConnectionGuard &conn_guard)
 {
   int ret = OB_SUCCESS;
+  observer::ObInnerSQLConnection *inner_conn = nullptr;
+  conn_guard.reset();
   if (OB_ISNULL(session_info)) {
     ret = OB_NOT_INIT;
     LOG_WARN("session is NULL", KP(session_info));
   } else if (OB_NOT_NULL(inner_conn = static_cast<observer::ObInnerSQLConnection *>(session_info->get_inner_conn()))) {
-    LOG_INFO("session has had inner connection, no need to create again", KPC(session_info));
+    conn_guard = inner_conn->get_shared_guard();
+    if (!conn_guard.is_valid()) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("failed to retain inner connection from session", KR(ret), KPC(session_info));
+    }
   } else if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_external_session(
-                         session_info, inner_conn))) {
+                         session_info, conn_guard))) {
     LOG_WARN("create inner sql connection failed", KR(ret), KPC(session_info));
-  } else if (OB_ISNULL(inner_conn)) {
+  } else if (!conn_guard.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("acquire new connection but it's null", KR(ret), KPC(session_info));
   }

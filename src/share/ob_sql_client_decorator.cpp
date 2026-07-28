@@ -96,7 +96,7 @@ sqlclient::ObISQLConnection *ObSQLClientRetry::get_connection()
 }
 
 int ObSQLClientRetry::acquire_connection(
-    sqlclient::ObISQLConnection *&conn,
+    sqlclient::ObISQLConnectionGuard &conn,
     const int32_t group_id)
 {
   int ret = OB_SUCCESS;
@@ -104,17 +104,6 @@ int ObSQLClientRetry::acquire_connection(
     ret = OB_NOT_INIT;
   } else {
     ret = sql_client_->acquire_connection(conn, group_id);
-  }
-  return ret;
-}
-
-int ObSQLClientRetry::release_connection(sqlclient::ObISQLConnection *conn)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(sql_client_)) {
-    ret = OB_NOT_INIT;
-  } else {
-    ret = sql_client_->release_connection(conn);
   }
   return ret;
 }

@@ -113,8 +113,9 @@ ObInnerSQLConnection::TimeoutGuard::~TimeoutGuard()
 
 ObInnerSQLConnection::ObInnerSQLConnection()
     : inited_(false), extern_session_(NULL), inner_session_(NULL),
+      self_weak_guard_(),
       is_spi_conn_(false),
-      ref_cnt_(0), ob_sql_(NULL), vt_iter_creator_(NULL),
+      ob_sql_(NULL), vt_iter_creator_(NULL),
       ref_ctx_(NULL),
       sql_modifier_(NULL),
       init_timestamp_(0),
@@ -134,9 +135,6 @@ ObInnerSQLConnection::ObInnerSQLConnection()
 
 ObInnerSQLConnection::~ObInnerSQLConnection()
 {
-  if (0 < ref_cnt_) {
-    LOG_ERROR_RET(OB_ERROR, "connection be referenced while destruct", K_(ref_cnt));
-  }
   if (OB_NOT_NULL(inner_session_) && OB_NOT_NULL(inner_session_->get_tx_desc())) {
     if (OB_SUCCESS == share::check_server_runtime_ready()) {
       share::g_mp->trans_service()->release_tx(*inner_session_->get_tx_desc());
@@ -151,7 +149,7 @@ ObInnerSQLConnection::~ObInnerSQLConnection()
 int ObInnerSQLConnection::create_connection_with_owned_session(
     const bool use_static_engine,
     const int32_t group_id,
-    ObInnerSQLConnection *&conn)
+    sqlclient::ObISQLConnectionGuard &conn)
 {
   return create_impl(NULL, use_static_engine, group_id,
                      false, conn);
@@ -159,7 +157,7 @@ int ObInnerSQLConnection::create_connection_with_owned_session(
 
 int ObInnerSQLConnection::create_connection_with_external_session(
     ObSQLSessionInfo *session_info,
-    ObInnerSQLConnection *&conn)
+    sqlclient::ObISQLConnectionGuard &conn)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(session_info)) {
@@ -173,7 +171,7 @@ int ObInnerSQLConnection::create_connection_with_external_session(
 
 int ObInnerSQLConnection::create_spi_connection_with_external_session(
     ObSQLSessionInfo *session_info,
-    ObInnerSQLConnection *&conn)
+    sqlclient::ObISQLConnectionGuard &conn)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(session_info)) {
@@ -190,11 +188,11 @@ int ObInnerSQLConnection::create_impl(
     const bool use_static_engine,
     const int32_t group_id,
     const bool use_spi_allocator,
-    ObInnerSQLConnection *&conn)
+    sqlclient::ObISQLConnectionGuard &conn)
 {
   int ret = OB_SUCCESS;
   ObInnerSQLConnection *new_conn = NULL;
-  conn = NULL;
+  conn.reset();
   if (OB_ISNULL(GCTX.sql_engine_) || OB_ISNULL(GCTX.vt_iter_creator_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("inner sql dependency is null", K(ret), KP(GCTX.sql_engine_),
@@ -233,8 +231,17 @@ int ObInnerSQLConnection::create_impl(
     }
   } else {
     new_conn->is_spi_conn_ = use_spi_allocator;
-    new_conn->ref();
-    conn = new_conn;
+    if (OB_FAIL(conn.assign(
+            static_cast<sqlclient::ObISQLConnection *>(new_conn),
+            [](sqlclient::ObISQLConnection *conn) {
+              static_cast<ObInnerSQLConnection *>(conn)->free_self();
+            }))) {
+      LOG_WARN("create shared guard for inner sql connection failed", K(ret));
+      new_conn->free_self();
+      new_conn = NULL;
+    } else {
+      (void)new_conn->self_weak_guard_.assign(conn);
+    }
   }
   return ret;
 }
@@ -284,14 +291,8 @@ int ObInnerSQLConnection::destroy()
   try_release_query_lock();
   // uninited connection can be destroy too
   if (inited_) {
-    if (0 < ref_cnt_) {
-      ret = OB_REF_NUM_NOT_ZERO;
-      LOG_ERROR("connection be referenced while destroy", K(ret), K_(ref_cnt));
-    }
-
     // continue execute while error happen.
     inited_ = false;
-    ref_cnt_ = 0;
     if (OB_SUCC(ret) && OB_FAIL(destroy_inner_session())) {
       LOG_WARN("failed to destroy inner session when inner sql connection destroy", K(ret));
     }
@@ -300,35 +301,6 @@ int ObInnerSQLConnection::destroy()
     user_timeout_ = 0;
   }
   return ret;
-}
-
-void ObInnerSQLConnection::ref()
-{
-  if (!inited_) {
-    LOG_WARN_RET(OB_NOT_INIT, "not init");
-  } else {
-    ref_cnt_++;
-    if (ref_cnt_ > TOO_MANY_REF_ALERT) {
-      LOG_WARN_RET(OB_ERR_UNEXPECTED, "connection be referenced too many times, this should be rare",
-          K_(ref_cnt));
-    }
-  }
-}
-
-void ObInnerSQLConnection::unref()
-{
-  int ret = OB_SUCCESS;
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(lbt()));
-  } else {
-    if (0 == --ref_cnt_) {
-      free_self();
-    } else {
-      // see
-      // extern_session_ = NULL;
-    }
-  }
 }
 
 void ObInnerSQLConnection::free_self()
@@ -1586,25 +1558,13 @@ namespace common
 int create_inner_sql_connection_for_proxy(
     bool is_ddl,
     int32_t group_id,
-    sqlclient::ObISQLConnection *&conn)
+    sqlclient::ObISQLConnectionGuard &conn)
 {
   int ret = OB_SUCCESS;
-  observer::ObInnerSQLConnection *inner_conn = NULL;
-  conn = NULL;
+  conn.reset();
   if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_owned_session(
-          is_ddl, group_id, inner_conn))) {
+          is_ddl, group_id, conn))) {
     LOG_WARN("create inner sql connection failed", K(ret));
-  } else {
-    conn = inner_conn;
-  }
-  return ret;
-}
-
-int release_inner_sql_connection_for_proxy(sqlclient::ObISQLConnection *conn)
-{
-  int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(conn)) {
-    static_cast<observer::ObInnerSQLConnection *>(conn)->unref();
   }
   return ret;
 }

@@ -1494,6 +1494,7 @@ int ObDbmsStatsExecutor::update_online_stat(ObExecContext &ctx,
       int64_t old_trx_lock_timeout = -1;
       bool need_restore_session = false;
       bool need_reset_trx_lock_timeout = false;
+      common::sqlclient::ObISQLConnectionGuard conn_guard;
       common::sqlclient::ObISQLConnection *conn = NULL;
       ctx.set_is_online_stats_gathering(true);
       if (OB_FAIL(ObDbmsStatsUtils::cancel_async_gather_stats(ctx))) {
@@ -1505,8 +1506,11 @@ int ObDbmsStatsExecutor::update_online_stat(ObExecContext &ctx,
                                                                          old_trx_lock_timeout,
                                                                          need_restore_session,
                                                                          need_reset_trx_lock_timeout,
-                                                                         conn))) {
+                                                                         conn_guard))) {
         LOG_WARN("failed to prepare conn and store session for online stats", K(ret));
+      } else if (OB_ISNULL(conn = conn_guard.get_ptr())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("inner sql connection is null", K(ret));
       } else if (OB_FAIL(ObDbmsStatsUtils::get_current_opt_stats(allocator,
                                                                  conn,
                                                                  param,
@@ -1539,10 +1543,8 @@ int ObDbmsStatsExecutor::update_online_stat(ObExecContext &ctx,
       }
       //release source
       ctx.set_is_online_stats_gathering(false);
-      if (OB_NOT_NULL(conn)) {
-        static_cast<observer::ObInnerSQLConnection *>(conn)->unref();
-        conn = NULL;
-      }
+      conn = NULL;
+      conn_guard.reset();
       //restore session
       if (need_restore_session) {
         int tmp_ret = OB_SUCCESS;
@@ -1575,7 +1577,7 @@ int ObDbmsStatsExecutor::prepare_conn_and_store_session_for_online_stats(sql::Ob
                                                                          int64_t &old_trx_lock_timeout,
                                                                          bool &need_restore_session,
                                                                          bool &need_reset_trx_lock_timeout,
-                                                                         sqlclient::ObISQLConnection *&conn)
+                                                                         sqlclient::ObISQLConnectionGuard &conn)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(session) || OB_ISNULL(schema_guard)) {
@@ -1606,12 +1608,9 @@ int ObDbmsStatsExecutor::prepare_conn_and_store_session_for_online_stats(sql::Ob
       } else {
         need_reset_trx_lock_timeout = true;
         //3.get conn to update stats
-        observer::ObInnerSQLConnection *inner_conn = NULL;
         if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_external_session(
-                        session, inner_conn))) {
+                        session, conn))) {
           LOG_WARN("failed to acquire conn", K(ret));
-        } else {
-          conn = inner_conn;
         }
       }
     }

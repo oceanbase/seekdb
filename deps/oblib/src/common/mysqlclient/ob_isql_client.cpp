@@ -18,6 +18,7 @@
 #define USING_LOG_PREFIX LIB_MYSQLC
 #endif
 #include "common/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_isql_connection.h"
 #include "common/mysqlclient/ob_isql_result_handler.h"
 #include "common/mysqlclient/ob_mysql_result.h"
 
@@ -77,17 +78,11 @@ void ObISQLClient::ReadResult::reuse()
 }
 
 int ObISQLClient::acquire_connection(
-    ObISQLConnection *&conn,
+    ObISQLConnectionGuard &conn,
     const int32_t group_id)
 {
   UNUSED(group_id);
-  conn = NULL;
-  return OB_NOT_SUPPORTED;
-}
-
-int ObISQLClient::release_connection(ObISQLConnection *conn)
-{
-  UNUSED(conn);
+  conn.reset();
   return OB_NOT_SUPPORTED;
 }
 

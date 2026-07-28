@@ -664,6 +664,7 @@ ObTableModifyOp::ObTableModifyOp(ObExecContext &ctx,
                                  ObOpInput *input)
   : ObOperator(ctx, spec, input),
     sql_proxy_(NULL),
+    inner_conn_guard_(),
     inner_conn_(NULL),
     saved_conn_(),
     need_foreign_key_check_(false),
@@ -993,7 +994,6 @@ int ObTableModifyOp::open_inner_conn()
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = NULL;
-  ObInnerSQLConnection *conn = NULL;
   if (OB_ISNULL(sql_proxy_ = ctx_.get_sql_proxy())) {
     ret = OB_NOT_INIT;
     LOG_WARN("sql proxy is NULL", K(ret));
@@ -1004,14 +1004,15 @@ int ObTableModifyOp::open_inner_conn()
     // do nothing.
   } else if (OB_FAIL(
                  ObInnerSQLConnection::create_connection_with_external_session(
-                     session, conn))) {
+                     session, inner_conn_guard_))) {
     LOG_WARN("failed to acquire inner connection", K(ret));
   } else {
     /**
      * session is the only data struct which can pass through multi layer nested sql,
      * so we put inner conn in session to share it within multi layer nested sql.
      */
-    session->set_inner_conn(conn);
+    session->set_inner_conn(
+        static_cast<ObInnerSQLConnection *>(inner_conn_guard_.get_ptr()));
     need_close_conn_ = true;
   }
   if (OB_SUCC(ret)) {
@@ -1032,19 +1033,13 @@ int ObTableModifyOp::close_inner_conn()
     if (OB_ISNULL(session)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("session is NULL", K(ret), KP(session));
-      if (OB_NOT_NULL(inner_conn_)) {
-        inner_conn_->unref();
-      }
     } else if (OB_ISNULL(session->get_inner_conn())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("inner connection is NULL", K(ret));
-      if (OB_NOT_NULL(inner_conn_)) {
-        inner_conn_->unref();
-      }
     } else {
-      static_cast<ObInnerSQLConnection *>(session->get_inner_conn())->unref();
-      OX(session->set_inner_conn(NULL));
+      session->set_inner_conn(NULL);
     }
+    inner_conn_guard_.reset();
     need_close_conn_ = false;
   }
   sql_proxy_ = NULL;

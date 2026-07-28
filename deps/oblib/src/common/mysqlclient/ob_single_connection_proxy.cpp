@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON_MYSQLP
 #include "ob_single_connection_proxy.h"
+#include "common/mysqlclient/ob_isql_connection.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::common::sqlclient;
@@ -23,7 +24,7 @@ using namespace oceanbase::common::sqlclient;
 ObSingleConnectionProxy::ObSingleConnectionProxy()
     :errno_(OB_SUCCESS),
      statement_count_(0),
-     conn_(NULL),
+     conn_(),
      sql_client_(NULL)
 {
 }
@@ -39,20 +40,20 @@ int ObSingleConnectionProxy::connect(const int32_t group_id, ObISQLClient *sql_c
   if (NULL == sql_client || group_id < 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(sql_client), K(group_id));
-  } else if (NULL != sql_client_ || NULL != conn_) {
+  } else if (NULL != sql_client_ || conn_.is_valid()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("transaction can only be started once", K_(sql_client), K_(conn));
+    LOG_WARN("transaction can only be started once", K_(sql_client), KP(conn_.get_ptr()));
   } else {
     if (OB_FAIL(sql_client->acquire_connection(conn_, group_id))) {
       LOG_WARN("acquire connection failed", K(ret), K(sql_client));
-    } else if (NULL == conn_) {
+    } else if (!conn_.is_valid()) {
       ret = OB_INNER_STAT_ERROR;
       LOG_WARN("connection can not be NULL", K(ret));
     } else {
       sql_client_ = sql_client;
     }
     if (OB_FAIL(ret)) {
-      conn_ = NULL;
+      conn_.reset();
       sql_client_ = NULL;
     }
   }
@@ -60,7 +61,7 @@ int ObSingleConnectionProxy::connect(const int32_t group_id, ObISQLClient *sql_c
 }
 
 int ObSingleConnectionProxy::acquire_connection(
-    ObISQLConnection *&conn,
+    ObISQLConnectionGuard &conn,
     const int32_t group_id)
 {
   int ret = OB_SUCCESS;
@@ -69,18 +70,6 @@ int ObSingleConnectionProxy::acquire_connection(
     LOG_WARN("sql client is null", K(ret));
   } else {
     ret = sql_client_->acquire_connection(conn, group_id);
-  }
-  return ret;
-}
-
-int ObSingleConnectionProxy::release_connection(ObISQLConnection *conn)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(sql_client_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("sql client is null", K(ret));
-  } else {
-    ret = sql_client_->release_connection(conn);
   }
   return ret;
 }
@@ -129,10 +118,7 @@ int ObSingleConnectionProxy::write(
 
 void ObSingleConnectionProxy::close()
 {
-  if (NULL != sql_client_ && NULL != conn_) {
-    sql_client_->release_connection(conn_);
-  }
-  conn_ = NULL;
+  conn_.reset();
   sql_client_ = NULL;
   errno_ = OB_SUCCESS;
 }

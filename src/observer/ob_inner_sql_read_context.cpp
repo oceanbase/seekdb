@@ -22,15 +22,17 @@ namespace observer
 {
 
 ObInnerSQLReadContext::ObInnerSQLReadContext(ObInnerSQLConnection &conn)
-    : conn_ref_(conn), vt_iter_factory_(*conn.get_vt_iter_creator()),
+    : conn_guard_(conn.get_shared_guard()), vt_iter_factory_(*conn.get_vt_iter_creator()),
       result_(conn.get_session(), conn.is_inner_session())
 {
 }
 
 ObInnerSQLReadContext::~ObInnerSQLReadContext()
 {
-  if (this == conn_ref_.get_conn().get_prev_read_ctx()) {
-    conn_ref_.get_conn().get_prev_read_ctx() = NULL;
+  ObInnerSQLConnection *conn =
+      static_cast<ObInnerSQLConnection *>(conn_guard_.get_ptr());
+  if (OB_NOT_NULL(conn) && this == conn->get_prev_read_ctx()) {
+    conn->get_prev_read_ctx() = NULL;
   }
 }
 
