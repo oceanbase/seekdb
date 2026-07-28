@@ -33,3 +33,6 @@ show tables;
 # clear
 drop user if exists check_privilege_user;
 drop database if exists check_privilege_db;
+--disable_query_log
+purge recyclebin;
+--enable_query_log
