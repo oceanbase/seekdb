@@ -20,9 +20,9 @@
 #include <limits>
 #include <random>
 
-#include "sql/engine/expr/ob_deterministic_distribution.h"
+#include "sql/engine/expr/ob_distribution.h"
 
-using oceanbase::sql::ObDeterministicDistribution;
+using oceanbase::sql::ObDistribution;
 
 namespace
 {
@@ -48,23 +48,23 @@ uint64_t int_bits(int64_t value)
 TEST(ObDeterministicDistribution, uniform_int_matches_gcc12)
 {
   std::mt19937_64 gen(3);
-  EXPECT_EQ(-3, ObDeterministicDistribution::uniform_int(gen, -10, 2));
+  EXPECT_EQ(-3, ObDistribution::uniform_int(gen, -10, 2));
 
   gen.seed(3);
-  EXPECT_EQ(1, ObDeterministicDistribution::uniform_int(gen, 0, 2));
+  EXPECT_EQ(1, ObDistribution::uniform_int(gen, 0, 2));
 
   gen.seed(3);
-  EXPECT_EQ(16, ObDeterministicDistribution::uniform_int(gen, 10, 20));
+  EXPECT_EQ(16, ObDistribution::uniform_int(gen, 10, 20));
 
   gen.seed(3);
-  EXPECT_EQ(10, ObDeterministicDistribution::uniform_int(gen, 10, 10));
+  EXPECT_EQ(10, ObDistribution::uniform_int(gen, 10, 10));
 }
 
 TEST(ObDeterministicDistribution, uniform_int_handles_full_int64_range)
 {
   std::mt19937_64 actual_gen(42);
   std::mt19937_64 expected_gen(42);
-  const int64_t value = ObDeterministicDistribution::uniform_int(
+  const int64_t value = ObDistribution::uniform_int(
       actual_gen, std::numeric_limits<int64_t>::min(), std::numeric_limits<int64_t>::max());
   const uint64_t expected_bits = expected_gen()
                                + static_cast<uint64_t>(std::numeric_limits<int64_t>::min());
@@ -74,14 +74,14 @@ TEST(ObDeterministicDistribution, uniform_int_handles_full_int64_range)
 TEST(ObDeterministicDistribution, uniform_real_matches_gcc12)
 {
   std::mt19937_64 gen(3);
-  const double value = ObDeterministicDistribution::uniform_real(gen, 3.1415, 20.0);
+  const double value = ObDistribution::uniform_real(gen, 3.1415, 20.0);
   EXPECT_EQ(UINT64_C(0x40291f7737ce087c), double_bits(value));
 }
 
 TEST(ObDeterministicDistribution, normal_matches_gcc12)
 {
   std::mt19937_64 gen(3);
-  const double value = ObDeterministicDistribution::normal(gen, 3.1415, 2.0);
+  const double value = ObDistribution::normal(gen, 3.1415, 2.0);
   EXPECT_EQ(UINT64_C(0x3fdb2ffaeda08b88), double_bits(value));
 }
 

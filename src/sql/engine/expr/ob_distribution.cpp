@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "sql/engine/expr/ob_deterministic_distribution.h"
+#include "sql/engine/expr/ob_distribution.h"
 
 #include <cmath>
 #include <cstring>
@@ -24,7 +24,7 @@ namespace oceanbase
 namespace sql
 {
 
-uint64_t ObDeterministicDistribution::uniform_below(std::mt19937_64 &gen, uint64_t range)
+uint64_t ObDistribution::uniform_below(std::mt19937_64 &gen, uint64_t range)
 {
   // Lemire's unbiased nearly divisionless downscaling. This is the mapping
   // used by GCC 12.3 libstdc++ for a 64-bit URBG.
@@ -40,21 +40,21 @@ uint64_t ObDeterministicDistribution::uniform_below(std::mt19937_64 &gen, uint64
   return static_cast<uint64_t>(product >> 64);
 }
 
-int64_t ObDeterministicDistribution::uniform_int(
+int64_t ObDistribution::uniform_int(
     std::mt19937_64 &gen, int64_t min_value, int64_t max_value)
 {
   const uint64_t range = static_cast<uint64_t>(max_value)
                        - static_cast<uint64_t>(min_value) + 1;
   // A zero range represents all 2^64 possible int64_t bit patterns.
   const uint64_t offset = range == 0 ? gen() : uniform_below(gen, range);
-  const uint64_t result_bits = static_cast<uint64_t>(min_value) + offset;
+  const uint64_t result_bits = min_value + offset;
   int64_t result = 0;
   static_assert(sizeof(result) == sizeof(result_bits), "unexpected int64_t size");
   std::memcpy(&result, &result_bits, sizeof(result));
   return result;
 }
 
-double ObDeterministicDistribution::canonical_double(std::mt19937_64 &gen)
+double ObDistribution::canonical_double(std::mt19937_64 &gen)
 {
   // Reproduce GCC 12.3's pre-P0952 generate_canonical<double, 53> mapping for
   // mt19937_64. The cast intentionally happens before the scaling.
@@ -67,7 +67,7 @@ double ObDeterministicDistribution::canonical_double(std::mt19937_64 &gen)
   return result;
 }
 
-double ObDeterministicDistribution::uniform_real(
+double ObDistribution::uniform_real(
     std::mt19937_64 &gen, double min_value, double max_value)
 {
   const double unit = canonical_double(gen);
@@ -76,7 +76,7 @@ double ObDeterministicDistribution::uniform_real(
   return scaled + min_value;
 }
 
-double ObDeterministicDistribution::normal(
+double ObDistribution::normal(
     std::mt19937_64 &gen, double mean, double stddev)
 {
   // Marsaglia polar method, matching GCC 12.3 libstdc++. The current NORMAL

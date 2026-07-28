@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX  SQL_ENG
 
 #include "sql/engine/expr/ob_expr_uniform.h"
-#include "sql/engine/expr/ob_deterministic_distribution.h"
+#include "sql/engine/expr/ob_distribution.h"
 #include "sql/engine/ob_exec_context.h"
 
 namespace oceanbase
@@ -51,7 +51,7 @@ int ObExprUniform::ObExprUniformIntCtx::initialize(ObEvalCtx &ctx, const ObExpr 
 int ObExprUniform::ObExprUniformIntCtx::generate_next_value(int64_t seed, int64_t &res)
 {
   gen_.seed(static_cast<uint64_t>(seed));
-  res = ObDeterministicDistribution::uniform_int(gen_, min_, max_);
+  res = ObDistribution::uniform_int(gen_, min_, max_);
   return OB_SUCCESS;
 }
 
@@ -80,7 +80,7 @@ int ObExprUniform::ObExprUniformRealCtx::initialize(ObEvalCtx &ctx, const ObExpr
 int ObExprUniform::ObExprUniformRealCtx::generate_next_value(int64_t seed, double &res)
 {
   gen_.seed(static_cast<uint64_t>(seed));
-  res = ObDeterministicDistribution::uniform_real(gen_, min_, max_);
+  res = ObDistribution::uniform_real(gen_, min_, max_);
   return OB_SUCCESS;
 }
 

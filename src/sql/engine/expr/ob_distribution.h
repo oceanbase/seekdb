@@ -28,7 +28,7 @@ namespace sql
 // std::mt19937_64 has a standardized output sequence, but the mappings in
 // std::*_distribution are implementation-defined. Keep those mappings here so
 // seeded data-generator functions return the same values on every platform.
-class ObDeterministicDistribution
+class ObDistribution
 {
 public:
   static int64_t uniform_int(std::mt19937_64 &gen, int64_t min_value, int64_t max_value);

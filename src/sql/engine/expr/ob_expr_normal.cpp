@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX  SQL_ENG
 #include "sql/engine/expr/ob_expr_normal.h"
-#include "sql/engine/expr/ob_deterministic_distribution.h"
+#include "sql/engine/expr/ob_distribution.h"
 #include "sql/engine/ob_exec_context.h"
 
 namespace oceanbase
@@ -45,7 +45,7 @@ int ObExprNormal::ObExprNormalCtx::initialize(ObEvalCtx &ctx, const ObExpr &expr
 int ObExprNormal::ObExprNormalCtx::generate_next_value(int64_t seed, double &result)
 {
   gen_.seed(static_cast<uint64_t>(seed));
-  result = ObDeterministicDistribution::normal(gen_, mean_, stddev_);
+  result = ObDistribution::normal(gen_, mean_, stddev_);
   return OB_SUCCESS;
 }
 
