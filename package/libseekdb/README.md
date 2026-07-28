@@ -76,18 +76,6 @@ cd package/libseekdb
 ./test-packed-artifact-smoke.sh libseekdb-darwin-arm64.zip
 ```
 
-### Pack debugging (local vs CI / S3)
-
-Each zip may include `pack-metadata.json` (uname, sha256, `otool -L`, CI env).
-
-Compare two artifacts:
-
-```bash
-./diagnose-packed-artifact.sh \
-  package/libseekdb/libseekdb-darwin-arm64.zip \
-  'https://oceanbase-seekdb-builds.s3.ap-southeast-1.amazonaws.com/libseekdb/all_commits/<sha>/libseekdb-darwin-arm64.zip'
-```
-
 ### macOS CI vs local dev builds (likely causes of divergent zips)
 
 | Factor | GitHub Actions (macos-14) | Typical local Mac |
@@ -98,7 +86,7 @@ Compare two artifacts:
 | Pack input | Bundled dylib from CI `build_release` | Bundled from local `build_release` |
 | Codesign | Optional Developer ID + entitlements (repo secrets) | Often ad-hoc only |
 
-If `diagnose-packed-artifact.sh` shows a **different main library sha256** for the same source commit, the bug is in the **CI compile**, not dylibbundler. If only `libs/*` differ, check **dylibbundler / brew** versions. If smoke fails only on the CI zip, use metadata + diagnose output in the seekdb issue.
+If smoke fails only on the CI zip, compare the main library and `libs/` sha256 between local and CI artifacts for the same commit.
 
 **ccache:** macOS/Linux CI ccache keys include `COMMIT_SHA` so object files from other commits are not restored into the same cache slot.
 

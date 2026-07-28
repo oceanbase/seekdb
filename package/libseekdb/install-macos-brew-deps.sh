@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install Homebrew deps for macOS libseekdb CI with pinned versions where drift broke darwin packs.
-# CI was bundling thrift 0.23 while many dev machines use thrift@0.22 (see diagnose-packed-artifact.sh).
+# CI was bundling thrift 0.23 while many dev machines use thrift@0.22.
 set -euo pipefail
 
 export HOMEBREW_NO_ENV_HINTS=1
