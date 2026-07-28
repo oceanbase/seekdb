@@ -10,6 +10,7 @@ endfunction()
 
 #rs_unittest(test_bootstrap)
 rs_unittest(test_rs_reentrant_thread)
+rs_unittest(test_freeze_info_detector)
 #rs_unittest(test_multi_cluster_manager)
 #rs_unittest(test_ob_backup_task_scheduler)
 rs_unittest(test_ddl_task_struct)

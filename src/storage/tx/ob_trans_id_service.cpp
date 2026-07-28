@@ -34,5 +34,19 @@ int ObTransIDService::init()
   return OB_SUCCESS;
 }
 
+int ObTransIDService::alloc_trans_id_range(const int64_t range, int64_t &start_id, int64_t &end_id)
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_UNLIKELY(range <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    TRANS_LOG(WARN, "invalid argument", KR(ret), K(range));
+  } else if (OB_FAIL(get_number(range, 0, start_id, end_id))) {
+    if (OB_EAGAIN != ret) {
+      TRANS_LOG(WARN, "get trans id failed", KR(ret));
+    }
+  }
+  return ret;
+}
 }
 }

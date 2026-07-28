@@ -66,11 +66,10 @@ public:
 
   int set_freeze_info(const ObMajorFreezeReason freeze_reason);
 
-  int renew_snapshot_gc_scn();
+  int renew_snapshot_gc_scn(share::SCN &new_snapshot_gc_scn);
   int try_gc_freeze_info();
   int try_reload_merge_info();
 
-  int check_snapshot_gc_scn();
   int check_need_broadcast(bool &need_broadcast);
   int broadcast_freeze_info();
   int get_local_latest_frozen_scn(share::SCN &frozen_scn);
@@ -87,10 +86,6 @@ private:
       int64_t &schema_version) const;
 
   int inner_get_min_freeze_info(share::ObFreezeInfo &frozen_status);
-
-public:
-  static const int64_t SNAPSHOT_GC_TS_WARN = 30LL * 60LL * 1000LL * 1000LL;
-  static const int64_t SNAPSHOT_GC_TS_ERROR = 2LL * 60LL * 60LL * 1000LL * 1000LL;
 
 private:
   bool is_inited_;

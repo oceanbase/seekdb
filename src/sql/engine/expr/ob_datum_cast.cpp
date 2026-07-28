@@ -4310,21 +4310,8 @@ CAST_FUNC_NAME(float, uint)
   EVAL_ARG()
   {
     DEF_IN_OUT_VAL(float, uint64_t, 0);
-    if (in_val <= static_cast<double>(LLONG_MIN) || in_val >= static_cast<double>(ULLONG_MAX)) {
-      out_val = static_cast<uint64_t>(LLONG_MIN);
-      ret = OB_DATA_OUT_OF_RANGE;
-    } else {
-      if (CM_IS_COLUMN_CONVERT(expr.extra_)) {
-        out_val = static_cast<uint64_t>(rint(in_val));
-      } else {
-        out_val = static_cast<uint64_t>(static_cast<int64_t>(rint(in_val)));
-      }
-      if (in_val < 0 && out_val != 0) {
-        // Here processing [LLONG_MIN, 0) range of in, converting to unsigned should report OB_DATA_OUT_OF_RANGE.
-        // out not equal to 0 to avoid values in [-0.5, 0) being misjudged, because their rounded values are 0, which are within the valid range.
-        ret = OB_DATA_OUT_OF_RANGE;
-      }
-    }
+    ret = round_floating_to_uint64(
+        static_cast<double>(in_val), true, CM_IS_COLUMN_CONVERT(expr.extra_), out_val);
     if (CAST_FAIL(ret)) {
       LOG_WARN("cast float to uint failed", K(ret), K(in_val), K(out_val));
     } else if (CM_NEED_RANGE_CHECK(expr.extra_) &&
@@ -4576,7 +4563,8 @@ CAST_FUNC_NAME(float, bit)
   {
     float val_float = child_res->get_float();
     // Here there is no need to call SET_RES_BIT, because ret must be OB_SUCCESS
-    res_datum.set_bit(static_cast<uint64_t>(val_float));
+    res_datum.set_bit(static_cast<uint64_t>(
+        truncate_floating_to_int64_clamped(val_float)));
   }
   return ret;
 }
@@ -4642,26 +4630,8 @@ CAST_FUNC_NAME(double, uint)
   EVAL_ARG()
   {
     DEF_IN_OUT_VAL(double, uint64_t, 0);
-    if (in_val <= static_cast<double>(LLONG_MIN)) {
-      out_val = static_cast<uint64_t>(LLONG_MIN);
-      ret = OB_DATA_OUT_OF_RANGE;
-    } else if (in_val >= static_cast<double>(ULLONG_MAX)) {
-      out_val = static_cast<uint64_t>(LLONG_MAX);
-      ret = OB_DATA_OUT_OF_RANGE;
-    } else {
-      if (CM_IS_COLUMN_CONVERT(expr.extra_)) {
-        out_val = static_cast<uint64_t>(rint(in_val));
-      } else if (in_val >= static_cast<double>(LLONG_MAX)) {
-        out_val = static_cast<uint64_t>(LLONG_MAX);
-      } else {
-        out_val = static_cast<uint64_t>(static_cast<int64_t>(rint(in_val)));
-      }
-      if (in_val < 0 && out_val != 0) {
-        // Here processing [LLONG_MIN, 0) range of in, converting to unsigned should report OB_DATA_OUT_OF_RANGE.
-        // out is not equal to 0 to avoid values in the range [-0.5, 0) being misjudged, because their rounded values are 0, which fall within the valid range.
-        ret = OB_DATA_OUT_OF_RANGE;
-      }
-    }
+    ret = round_floating_to_uint64(
+        in_val, false, CM_IS_COLUMN_CONVERT(expr.extra_), out_val);
     if (CAST_FAIL(ret)) {
       LOG_WARN("cast float to uint failed", K(ret), K(in_val), K(out_val));
     } else if (CM_NEED_RANGE_CHECK(expr.extra_) &&
@@ -4881,7 +4851,8 @@ CAST_FUNC_NAME(double, bit)
 {
   EVAL_ARG()
   {
-    res_datum.set_bit(static_cast<uint64_t>(child_res->get_double()));
+    res_datum.set_bit(static_cast<uint64_t>(
+        truncate_floating_to_int64_clamped(child_res->get_double())));
   }
   return ret;
 }
@@ -9917,7 +9888,8 @@ CAST_ENUMSET_FUNC_NAME(float, enum)
       res_datum.set_null();
     } else {
       int warning = 0;
-      uint64_t val_uint = static_cast<uint64_t>(static_cast<int64_t>(child_res->get_float()));
+      uint64_t val_uint = static_cast<uint64_t>(
+          truncate_floating_to_int64_clamped(child_res->get_float()));
       uint64_t value = 0;
       ret = uint_to_enum(val_uint, str_values, cast_mode, warning, value);
       SET_RES_ENUM(value);
@@ -9930,7 +9902,8 @@ CAST_ENUMSET_FUNC_NAME(float, set)
 {
   EVAL_ARG() {
     int warning = 0;
-    uint64_t val_uint = static_cast<uint64_t>(static_cast<int64_t>(child_res->get_float()));
+    uint64_t val_uint = static_cast<uint64_t>(
+        truncate_floating_to_int64_clamped(child_res->get_float()));
     uint64_t value = 0;
     ret = uint_to_set(val_uint, str_values, cast_mode, warning, value);
     SET_RES_SET(value);
@@ -9945,7 +9918,8 @@ CAST_ENUMSET_FUNC_NAME(double, enum)
       res_datum.set_null();
     } else {
       int warning = 0;
-      uint64_t val_uint = static_cast<uint64_t>(static_cast<int64_t>(child_res->get_double()));
+      uint64_t val_uint = static_cast<uint64_t>(
+          truncate_floating_to_int64_clamped(child_res->get_double()));
       uint64_t value = 0;
       ret = uint_to_enum(val_uint, str_values, cast_mode, warning, value);
       SET_RES_ENUM(value);
@@ -9958,7 +9932,8 @@ CAST_ENUMSET_FUNC_NAME(double, set)
 {
   EVAL_ARG() {
     int warning = 0;
-    uint64_t val_uint = static_cast<uint64_t>(static_cast<int64_t>(child_res->get_double()));
+    uint64_t val_uint = static_cast<uint64_t>(
+        truncate_floating_to_int64_clamped(child_res->get_double()));
     uint64_t value = 0;
     ret = uint_to_set(val_uint, str_values, cast_mode, warning, value);
     SET_RES_SET(value);
@@ -9975,7 +9950,8 @@ CAST_ENUMSET_FUNC_NAME(number, enum)
   } else if (res_datum.is_null()) {
     //do nothing
   } else {
-    uint64_t val_uint = static_cast<uint64_t>(static_cast<int64_t>(res_datum.get_double()));
+    uint64_t val_uint = static_cast<uint64_t>(
+        truncate_floating_to_int64_clamped(res_datum.get_double()));
     uint64_t value = 0;
     ret = uint_to_enum(val_uint, str_values, cast_mode, warning, value);
     SET_RES_ENUM(value);
@@ -9992,7 +9968,8 @@ CAST_ENUMSET_FUNC_NAME(number, set)
   } else if (res_datum.is_null()) {
     //do nothing
   } else {
-    uint64_t val_uint = static_cast<uint64_t>(static_cast<int64_t>(res_datum.get_double()));
+    uint64_t val_uint = static_cast<uint64_t>(
+        truncate_floating_to_int64_clamped(res_datum.get_double()));
     uint64_t value = 0;
     ret = uint_to_set(val_uint, str_values, cast_mode, warning, value);
     SET_RES_SET(value);
@@ -10718,7 +10695,8 @@ CAST_ENUMSET_FUNC_NAME(decimalint, enum)
   } else if (res_datum.is_null()) {
     // do nothing
   } else {
-    uint64_t val_uint = static_cast<uint64_t>(static_cast<int64_t>(res_datum.get_double()));
+    uint64_t val_uint = static_cast<uint64_t>(
+        truncate_floating_to_int64_clamped(res_datum.get_double()));
     uint64_t value = 0;
     ret = uint_to_enum(val_uint, str_values, cast_mode, warning, value);
     SET_RES_ENUM(value);
@@ -10735,7 +10713,8 @@ CAST_ENUMSET_FUNC_NAME(decimalint, set)
   } else if (res_datum.is_null()) {
     // do nothing
   } else {
-    uint64_t val_uint = static_cast<uint64_t>(static_cast<int64_t>(res_datum.get_double()));
+    uint64_t val_uint = static_cast<uint64_t>(
+        truncate_floating_to_int64_clamped(res_datum.get_double()));
     uint64_t value = 0;
     ret = uint_to_set(val_uint, str_values, cast_mode, warning, value);
     SET_RES_SET(value);

@@ -21,6 +21,7 @@
 #include "rootserver/freeze/ob_freeze_info_detector.h"
 
 #include "rootserver/freeze/ob_major_merge_info_manager.h"
+#include "rootserver/freeze/ob_snapshot_gc_scn_renewer.h"
 #include "rootserver/ob_root_utils.h"
 #include "share/ob_global_merge_table_operator.h"
 #include "share/ob_global_stat_proxy.h"
@@ -36,8 +37,10 @@ namespace rootserver
 {
 ObMajorMergeInfoDetector::ObMajorMergeInfoDetector()
   : is_inited_(false), is_paused_(false), is_primary_service_(true),
-    is_global_merge_info_adjusted_(false), is_gc_scn_inited_(false), sql_proxy_(nullptr), last_gc_timestamp_(0), last_run_timestamp_(0),
-    major_merge_info_mgr_(nullptr), major_scheduler_idling_(nullptr),
+    is_global_merge_info_adjusted_(false), is_gc_scn_inited_(false), sql_proxy_(nullptr),
+    last_run_timestamp_(0),
+    major_merge_info_mgr_(nullptr), snapshot_gc_scn_renewer_(nullptr),
+    major_scheduler_idling_(nullptr),
     last_schedule_ts_(0), need_immediate_run_(true),
     timer_()
 {}
@@ -51,6 +54,7 @@ int ObMajorMergeInfoDetector::init(
     const bool is_primary_service,
     ObMySQLProxy &sql_proxy,
     ObMajorMergeInfoManager &major_merge_info_mgr,
+    ObSnapshotGcScnRenewer &snapshot_gc_scn_renewer,
     ObThreadIdling &major_scheduler_idling)
 {
   int ret = OB_SUCCESS;
@@ -60,9 +64,9 @@ int ObMajorMergeInfoDetector::init(
   } else {
     is_primary_service_ = is_primary_service;
     is_global_merge_info_adjusted_ = false;
-    last_gc_timestamp_ = ObTimeUtility::current_time();
     sql_proxy_ = &sql_proxy;
     major_merge_info_mgr_ = &major_merge_info_mgr;
+    snapshot_gc_scn_renewer_ = &snapshot_gc_scn_renewer;
     major_scheduler_idling_ = &major_scheduler_idling;
     if (OB_FAIL(timer_.init("FrzInfoDetTimer", ObMemAttr("FrzInfoDet")))) {
       LOG_WARN("init freeze info detector timer failed", KR(ret));
@@ -107,7 +111,6 @@ void ObMajorMergeInfoDetector::runTimerTask()
     ATOMIC_STORE(&need_immediate_run_, false);
     ATOMIC_STORE(&last_schedule_ts_, now);
     SERVER_MODULE_SCOPE {
-      const int64_t start_time_us = ObTimeUtil::current_time();
       LOG_INFO("start freeze_info_detector");
       update_last_run_timestamp_();
       ObCurTraceId::init(GCONF.self_addr_);
@@ -117,8 +120,11 @@ void ObMajorMergeInfoDetector::runTimerTask()
       if (OB_FAIL(can_start_work(can_work))) {
         LOG_WARN("fail to judge can start work", KR(ret));
       } else if (can_work) {
-          if (is_primary_service()) {
-            if (OB_FAIL(try_renew_snapshot_gc_scn())) {
+          if (OB_ISNULL(snapshot_gc_scn_renewer_)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("snapshot gc scn renewer is null", KR(ret));
+          } else if (OB_FAIL(snapshot_gc_scn_renewer_->try_renew())) {
+            if (REACH_TIME_INTERVAL(60 * 1000 * 1000L)) {
               LOG_WARN("fail to renew gc snapshot", KR(ret), K_(is_primary_service));
             }
           }
@@ -143,13 +149,6 @@ void ObMajorMergeInfoDetector::runTimerTask()
             ret = OB_SUCCESS;
             if (OB_FAIL(try_broadcast_freeze_info())) {
               LOG_WARN("fail to broadcast freeze info", KR(ret));
-            }
-          }
-
-          ret = OB_SUCCESS;
-          if (is_primary_service() && need_check_snapshot_gc_scn(start_time_us)) {
-            if (OB_FAIL(major_merge_info_mgr_->check_snapshot_gc_scn())) {
-              LOG_WARN("fail to check_snapshot_gc_ts", KR(ret));
             }
           }
 
@@ -191,21 +190,14 @@ int ObMajorMergeInfoDetector::try_broadcast_freeze_info()
   return ret;
 }
 
-int ObMajorMergeInfoDetector::try_renew_snapshot_gc_scn()
+void ObMajorMergeInfoDetector::pause()
 {
-  int ret = OB_SUCCESS;
-  int64_t now = ObTimeUtility::current_time();
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
-  } else if ((now - last_gc_timestamp_) < MODIFY_GC_SNAPSHOT_INTERVAL) {
-    // nothing
-  } else if (OB_FAIL(major_merge_info_mgr_->renew_snapshot_gc_scn())) {
-    LOG_WARN("fail to renew snapshot gc scn", KR(ret));
-  } else {
-    last_gc_timestamp_ = now;
-  }
-  return ret;
+  ATOMIC_STORE(&is_paused_, true);
+}
+
+void ObMajorMergeInfoDetector::resume()
+{
+  ATOMIC_STORE(&is_paused_, false);
 }
 
 int ObMajorMergeInfoDetector::try_minor_freeze()
@@ -308,10 +300,11 @@ int ObMajorMergeInfoDetector::destroy()
   if (is_inited_) {
     timer_.destroy();
   }
-  is_paused_ = false;
+  ATOMIC_STORE(&is_paused_, false);
   is_inited_ = false;
   sql_proxy_ = nullptr;
   major_merge_info_mgr_ = nullptr;
+  snapshot_gc_scn_renewer_ = nullptr;
   major_scheduler_idling_ = nullptr;
   return ret;
 }
@@ -370,12 +363,6 @@ int ObMajorMergeInfoDetector::check_global_merge_info(bool &is_initial) const
     }
   }
   return ret;
-}
-
-bool ObMajorMergeInfoDetector::need_check_snapshot_gc_scn(const int64_t start_time_us)
-{
-  const int64_t START_CHECK_INTERVAL_US = 10 * 60 * 1000 * 1000; // 10 min
-  return (ObTimeUtility::current_time() - start_time_us) > START_CHECK_INTERVAL_US;
 }
 
 void ObMajorMergeInfoDetector::update_last_run_timestamp_()

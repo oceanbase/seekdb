@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_COMMON_OB_OBJ_CAST_UTIL_
 #define OCEANBASE_COMMON_OB_OBJ_CAST_UTIL_
 
+#include <cmath>
 #include "share/ob_errno.h"
 #include "common/object/ob_object.h"
 #include "common/object/ob_obj_type.h"
@@ -37,6 +38,79 @@ struct ObJsonZeroVal
   ObLobCommon header_;
   char json_bin_[4];
 };
+
+// Floating-point values at and beyond these exact powers of two cannot be
+// converted to int64_t/uint64_t before checking the range. Such conversions
+// have undefined behavior in C++ and produce different results on x86_64 and
+// arm64.
+static constexpr double INT64_MIN_AS_DOUBLE = -9223372036854775808.0;
+static constexpr double INT64_UPPER_BOUND_AS_DOUBLE = 9223372036854775808.0;
+static constexpr double UINT64_UPPER_BOUND_AS_DOUBLE = 18446744073709551616.0;
+
+// MySQL Field_bit/Field_enum/Field_set::store(double) first clamps the value to
+// the signed 64-bit range and then applies the destination type's own range
+// and warning rules.
+template <typename FloatingType>
+OB_INLINE int64_t truncate_floating_to_int64_clamped(const FloatingType in_val)
+{
+  const double value = static_cast<double>(in_val);
+  int64_t out_val = 0;
+  if (std::isnan(value)) {
+    out_val = 0;
+  } else if (value < INT64_MIN_AS_DOUBLE) {
+    out_val = INT64_MIN;
+  } else if (value >= INT64_UPPER_BOUND_AS_DOUBLE) {
+    out_val = INT64_MAX;
+  } else {
+    out_val = static_cast<int64_t>(value);
+  }
+  return out_val;
+}
+
+// Convert FLOAT/DOUBLE to an unsigned integer without executing an
+// out-of-range floating-to-integer cast. FLOAT has a MySQL-compatible
+// CAST-AS-UNSIGNED special case at 2^63, while DOUBLE keeps the existing
+// INT64_MAX result for that non-column conversion.
+OB_INLINE int round_floating_to_uint64(const double in_val,
+                                       const bool is_float_source,
+                                       const bool is_column_convert,
+                                       uint64_t &out_val)
+{
+  int ret = OB_SUCCESS;
+  const double rounded = std::rint(in_val);
+  out_val = 0;
+  if (std::isnan(rounded)) {
+    ret = OB_DATA_OUT_OF_RANGE;
+  } else if (is_column_convert) {
+    if (rounded < 0) {
+      out_val = 0;
+      ret = OB_DATA_OUT_OF_RANGE;
+    } else if (rounded >= UINT64_UPPER_BOUND_AS_DOUBLE) {
+      out_val = UINT64_MAX;
+      ret = OB_DATA_OUT_OF_RANGE;
+    } else {
+      out_val = static_cast<uint64_t>(rounded);
+    }
+  } else if (rounded <= INT64_MIN_AS_DOUBLE) {
+    out_val = static_cast<uint64_t>(INT64_MIN);
+    ret = OB_DATA_OUT_OF_RANGE;
+  } else if (rounded >= UINT64_UPPER_BOUND_AS_DOUBLE) {
+    out_val = is_float_source
+        ? static_cast<uint64_t>(INT64_MIN)
+        : static_cast<uint64_t>(INT64_MAX);
+    ret = OB_DATA_OUT_OF_RANGE;
+  } else if (rounded < 0) {
+    out_val = static_cast<uint64_t>(static_cast<int64_t>(rounded));
+    ret = OB_DATA_OUT_OF_RANGE;
+  } else if (rounded >= INT64_UPPER_BOUND_AS_DOUBLE) {
+    out_val = is_float_source
+        ? static_cast<uint64_t>(INT64_MIN)
+        : static_cast<uint64_t>(INT64_MAX);
+  } else {
+    out_val = static_cast<uint64_t>(static_cast<int64_t>(rounded));
+  }
+  return ret;
+}
 
 
 // check with given lower and upper limit.

@@ -39,7 +39,7 @@ public:
   static const int64_t TX_DATA_LIMIT_PERCENTAGE = 20;
   static const int64_t TX_DATA_THROTTLE_TRIGGER_PERCENTAGE = 60;
   static const int64_t TX_DATA_THROTTLE_MAX_DURATION = 2LL * 60LL * 60LL * 1000LL * 1000LL;  // 2 hours
-  static const int64_t ALLOC_TX_DATA_MAX_CONCURRENCY = 32;
+  static const int64_t ALLOC_TX_DATA_MAX_CONCURRENCY = 8;
   static const uint32_t THROTTLE_TX_DATA_INTERVAL = 20 * 1000; // 20ms
 
   // The tx data memtable will trigger a freeze if its memory use is more than 5%
@@ -82,7 +82,7 @@ private:
 
 class ObTxDataOpAllocator : public ObIAllocator {
 private:
-  static const int64_t MDS_ALLOC_CONCURRENCY = 32;
+  static const int64_t MDS_ALLOC_CONCURRENCY = 8;
 public:
   DEFINE_CUSTOM_FUNC_FOR_THROTTLE(Mds);
 

@@ -18,6 +18,7 @@
 #define OB_STORAGE_DDL_DIRECT_LOAD_TYPE_H
 
 #include <cstdint>
+#include "common/ob_version_def.h"
 
 namespace oceanbase
 {
@@ -34,7 +35,8 @@ enum ObDirectLoadType {
   DIRECT_LOAD_INCREMENTAL_MAJOR = 6,
   DIRECT_LOAD_MAX
 };
-static int64_t DDL_TABLET_BUCKET_NUM = 1007;
+/* TODO@zhuoran.zzr wait to set as newest master version*/
+static int64_t DDL_IDEM_DATA_FORMAT_VERSION = DATA_CURRENT_VERSION;
 static int64_t DDL_SLICE_BUCKET_NUM = 1007;
 static inline bool is_complete_logic(const ObDirectLoadType &type)
 {

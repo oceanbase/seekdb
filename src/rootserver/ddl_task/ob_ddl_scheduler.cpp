@@ -402,12 +402,11 @@ int ObDDLTaskQueue::abort_task(const ObDDLTaskID &task_id)
 }
 
 ObDDLTaskHeartBeatMananger::ObDDLTaskHeartBeatMananger()
-  : is_inited_(false), bucket_lock_()
+  : register_task_times_(), is_inited_(false), lock_()
 {}
 
 ObDDLTaskHeartBeatMananger::~ObDDLTaskHeartBeatMananger()
 {
-  bucket_lock_.destroy();
 }
 
 int ObDDLTaskHeartBeatMananger::init()
@@ -416,10 +415,6 @@ int ObDDLTaskHeartBeatMananger::init()
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObManagerRegisterHeartBeatTask inited twice", K(ret));
-  } else if (OB_FAIL(register_task_time_.create(BUCKET_LOCK_BUCKET_CNT, "register_task", "register_task"))) {
-    LOG_WARN("failed to create register_task_time map", K(ret));
-  } else if (OB_FAIL(bucket_lock_.init(BUCKET_LOCK_BUCKET_CNT))) {
-    LOG_WARN("fail to init bucket lock", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -436,13 +431,21 @@ int ObDDLTaskHeartBeatMananger::update_task_active_time(const ObDDLTaskID &task_
     ret = OB_INVALID_ARGUMENT;
     LOG_INFO("invalid argument", K(ret), K(task_id));
   } else {
-    ObBucketHashWLockGuard lock_guard(bucket_lock_, task_id.task_id_);
-    // setting flag=1 to update the old time-value in the hash map with current time
     if (OB_FAIL(DDL_SIM(task_id.task_id_, HEART_BEAT_UPDATE_ACTIVE_TIME))) {
       LOG_WARN("ddl sim failed", K(ret), K(task_id));
-    } else if (OB_FAIL(register_task_time_.set_refactored(task_id,
-        ObTimeUtility::current_time(), 1, 0, 0))) {
-      LOG_WARN("set register task time failed", K(ret), K(task_id));
+    } else {
+      bool found = false;
+      const int64_t active_time = ObTimeUtility::current_time();
+      common::ObSpinLockGuard guard(lock_);
+      for (int64_t i = 0; !found && i < register_task_times_.count(); ++i) {
+        if (register_task_times_.at(i).task_id_ == task_id) {
+          register_task_times_.at(i).active_time_ = active_time;
+          found = true;
+        }
+      }
+      if (!found && OB_FAIL(register_task_times_.push_back(TaskActiveTime(task_id, active_time)))) {
+        LOG_WARN("set register task time failed", K(ret), K(task_id));
+      }
     }
   }
   return ret;
@@ -458,9 +461,19 @@ int ObDDLTaskHeartBeatMananger::remove_task(const ObDDLTaskID &task_id)
     ret = OB_INVALID_ARGUMENT;
     LOG_INFO("invalid argument", K(ret), K(task_id));
   } else {
-    ObBucketHashWLockGuard lock_guard(bucket_lock_, task_id.task_id_);
-    if (OB_FAIL(register_task_time_.erase_refactored(task_id))) {
-      LOG_WARN("remove register task time failed", K(ret));
+    bool found = false;
+    common::ObSpinLockGuard guard(lock_);
+    for (int64_t i = 0; !found && i < register_task_times_.count(); ++i) {
+      if (register_task_times_.at(i).task_id_ == task_id) {
+        found = true;
+        if (OB_FAIL(register_task_times_.remove(i))) {
+          LOG_WARN("remove register task time failed", K(ret), K(task_id));
+        }
+      }
+    }
+    if (!found) {
+      ret = OB_HASH_NOT_EXIST;
+      LOG_WARN("remove register task time failed", K(ret), K(task_id));
     }
   }
   return ret;
@@ -474,17 +487,13 @@ int ObDDLTaskHeartBeatMananger::get_inactive_ddl_task_ids(ObArray<ObDDLTaskID>& 
     LOG_WARN("ObManagerRegisterHeartBeatTask not inited", K(ret));
   } else {
     const int64_t TIME_OUT_THRESHOLD = 5L * 60L * 1000L * 1000L;
-    ObBucketTryRLockAllGuard all_ddl_task_guard(bucket_lock_);
-    if (OB_FAIL(all_ddl_task_guard.get_ret())) {
-      if (OB_EAGAIN == ret) {
-        ret = OB_SUCCESS;
-      }
-    } else {
-      for (common::hash::ObHashMap<ObDDLTaskID, int64_t>::iterator it = register_task_time_.begin(); OB_SUCC(ret) && it != register_task_time_.end(); it++) {
-        if (ObTimeUtility::current_time() - it->second > TIME_OUT_THRESHOLD) {
-          if (OB_FAIL(remove_task_ids.push_back(it->first))) {
-            LOG_WARN("remove_task_ids push_back task_id fail", K(ret), K(it->first));
-          }
+    const int64_t now = ObTimeUtility::current_time();
+    common::ObSpinLockGuard guard(lock_);
+    for (int64_t i = 0; OB_SUCC(ret) && i < register_task_times_.count(); ++i) {
+      const TaskActiveTime &task_active_time = register_task_times_.at(i);
+      if (now - task_active_time.active_time_ > TIME_OUT_THRESHOLD) {
+        if (OB_FAIL(remove_task_ids.push_back(task_active_time.task_id_))) {
+          LOG_WARN("remove_task_ids push_back task_id fail", K(ret), K(task_active_time));
         }
       }
     }

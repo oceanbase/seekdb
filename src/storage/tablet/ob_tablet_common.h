@@ -56,7 +56,6 @@ class ObTabletCommon final
 public:
   static const int64_t DEFAULT_ITERATOR_TABLET_ID_CNT = 128;
   static const int64_t BUCKET_LOCK_BUCKET_CNT = 10243L;
-  static const int64_t TABLET_ID_SET_BUCKET_CNT = 10243L;
   static const int64_t DEFAULT_GET_TABLET_NO_WAIT = 0; // 0s
   static const int64_t DEFAULT_GET_TABLET_DURATION_US = 1_s;
   static const int64_t DEFAULT_GET_TABLET_DURATION_10_S = 10_s;

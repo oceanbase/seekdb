@@ -493,15 +493,10 @@ public:
   static int init(ObIAllocator &allocator);
 
 public:
-  static const ObScale SCALE_DELTA = 0 - number::ObNumber::MIN_SCALE;
-  static const ObScale SCALE_RANGE_SIZE = number::ObNumber::MAX_SCALE - number::ObNumber::MIN_SCALE;
-
   static number::ObNumber MYSQL_MIN[number::ObNumber::MAX_PRECISION + 1][number::ObNumber::MAX_SCALE + 1];
   static number::ObNumber MYSQL_MAX[number::ObNumber::MAX_PRECISION + 1][number::ObNumber::MAX_SCALE + 1];
   static number::ObNumber MYSQL_CHECK_MIN[number::ObNumber::MAX_PRECISION + 1][number::ObNumber::MAX_SCALE + 1];
   static number::ObNumber MYSQL_CHECK_MAX[number::ObNumber::MAX_PRECISION + 1][number::ObNumber::MAX_SCALE + 1];
-  static number::ObNumber NUMBER_CHECK_MIN[OB_MAX_NUMBER_PRECISION + 1][SCALE_RANGE_SIZE + 1];
-  static number::ObNumber NUMBER_CHECK_MAX[OB_MAX_NUMBER_PRECISION + 1][SCALE_RANGE_SIZE + 1];
 };
 
 class ObGeoCastUtils

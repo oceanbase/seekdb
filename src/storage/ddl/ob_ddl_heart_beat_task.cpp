@@ -66,22 +66,16 @@ int ObRedefTableHeartBeatTask::send_task_status_to_rs()
   return ret;
 }
 
-ObDDLHeartBeatTaskContainer::ObDDLHeartBeatTaskContainer() : is_inited_(false), bucket_lock_() {}
+ObDDLHeartBeatTaskContainer::ObDDLHeartBeatTaskContainer() : register_tasks_(), is_inited_(false), lock_() {}
 ObDDLHeartBeatTaskContainer::~ObDDLHeartBeatTaskContainer()
 {
-  bucket_lock_.destroy();
 }
 int ObDDLHeartBeatTaskContainer::init()
 {
   int ret = OB_SUCCESS;
-  ObMemAttr attr("register_tasks");
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObDDLHeartBeatTaskContainer inited twice", K(ret));
-  } else if (OB_FAIL(register_tasks_.create(BUCKET_LOCK_BUCKET_CNT, attr, attr))) {
-    LOG_WARN("failed to create register_tasks map", K(ret));
-  } else if (OB_FAIL(bucket_lock_.init(BUCKET_LOCK_BUCKET_CNT))) {
-    LOG_WARN("failed to init bucket lock", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -94,10 +88,20 @@ int ObDDLHeartBeatTaskContainer::set_register_task_id(const int64_t task_id)
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLHeartBeatTaskContainer not inited", K(ret));
+  } else if (OB_UNLIKELY(!rootserver::ObDDLTaskID(task_id).is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(task_id));
   } else {
-    ObBucketHashWLockGuard lock_guard(bucket_lock_, task_id);
-    if (OB_FAIL(register_tasks_.set_refactored(rootserver::ObDDLTaskID(task_id), 0))) {
-      LOG_ERROR("set register task id failed", KR(ret));
+    const rootserver::ObDDLTaskID ddl_task_id(task_id);
+    bool found = false;
+    common::ObSpinLockGuard guard(lock_);
+    for (int64_t i = 0; !found && i < register_tasks_.count(); ++i) {
+      if (register_tasks_.at(i) == ddl_task_id) {
+        found = true;
+      }
+    }
+    if (!found && OB_FAIL(register_tasks_.push_back(ddl_task_id))) {
+      LOG_ERROR("set register task id failed", KR(ret), K(task_id));
     }
   }
   return ret;
@@ -109,13 +113,18 @@ int ObDDLHeartBeatTaskContainer::remove_register_task_id(const int64_t task_id)
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLHeartBeatTaskContainer not inited", K(ret));
+  } else if (OB_UNLIKELY(!rootserver::ObDDLTaskID(task_id).is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(task_id));
   } else {
-    ObBucketHashWLockGuard lock_guard(bucket_lock_, task_id);
-    if (OB_FAIL(register_tasks_.erase_refactored(rootserver::ObDDLTaskID(task_id)))) {
-      if (OB_HASH_NOT_EXIST == ret) {
-        ret = OB_SUCCESS;
-      } else {
-        LOG_WARN("remove register task id failed", KR(ret), K(task_id));
+    const rootserver::ObDDLTaskID ddl_task_id(task_id);
+    common::ObSpinLockGuard guard(lock_);
+    for (int64_t i = 0; OB_SUCC(ret) && i < register_tasks_.count(); ++i) {
+      if (register_tasks_.at(i) == ddl_task_id) {
+        if (OB_FAIL(register_tasks_.remove(i))) {
+          LOG_WARN("remove register task id failed", KR(ret), K(task_id));
+        }
+        break;
       }
     }
   }
@@ -129,45 +138,24 @@ int ObDDLHeartBeatTaskContainer::send_task_status_to_rs()
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLHeartBeatTaskContainer not inited", K(ret));
   } else {
-    int64_t cnt = 0;
     ObAddr rs_leader_addr = GCTX.self_addr();
-    ObArray<ObDDLHeartBeatTaskInfo> heart_beart_task_infos;
-    while (OB_SUCC(ret) && cnt < RETRY_COUNT) {
-      ObBucketTryRLockAllGuard all_reg_task_guard(bucket_lock_);
-      if (OB_FAIL(all_reg_task_guard.get_ret())) {
-        if (OB_EAGAIN == ret) {
-          cnt++;
-          LOG_INFO("all reg task guard failed, please try again, retry count: ", K(cnt));
-          ret = OB_SUCCESS;
-          sleep(RETRY_TIME_INTERVAL);
+    ObArray<rootserver::ObDDLTaskID> task_ids;
+    {
+      common::ObSpinLockGuard guard(lock_);
+      for (int64_t i = 0; OB_SUCC(ret) && i < register_tasks_.count(); ++i) {
+        if (OB_FAIL(task_ids.push_back(register_tasks_.at(i)))) {
+          LOG_WARN("task_ids push back failed", K(ret));
         }
-      } else {
-        for (common::hash::ObHashMap<rootserver::ObDDLTaskID, uint64_t>::iterator it = register_tasks_.begin(); OB_SUCC(ret) && it != register_tasks_.end(); it++) {
-          int64_t task_id = it->first.task_id_;
-          
-          if (OB_FAIL(heart_beart_task_infos.push_back(ObDDLHeartBeatTaskInfo(task_id)))) {
-            LOG_WARN("task_ids push_back failed", K(ret));
-          }
-        }
-        break;
       }
     }
     if (OB_FAIL(ret)) {
     } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < heart_beart_task_infos.count(); i++) {
-        ObDDLHeartBeatTaskInfo heart_beart_task_info;
+      for (int64_t i = 0; OB_SUCC(ret) && i < task_ids.count(); i++) {
         obcall::ObUpdateDDLTaskActiveTimeArg arg;
-        if (OB_FAIL(heart_beart_task_infos.at(i, heart_beart_task_info))) {
-          LOG_WARN("get task id failed", K(ret));
-        } else {
-          int64_t task_id = heart_beart_task_info.get_task_id();
-          
-          arg.task_id_ = task_id;
-          
-          
-          if (OB_FAIL(GCTX.local_management_service_->update_ddl_task_active_time(arg))) {
-            LOG_WARN("send to task status fail", K(ret), K(rs_leader_addr), K(task_id));
-          }
+        int64_t task_id = task_ids.at(i).task_id_;
+        arg.task_id_ = task_id;
+        if (OB_FAIL(GCTX.local_management_service_->update_ddl_task_active_time(arg))) {
+          LOG_WARN("send to task status fail", K(ret), K(rs_leader_addr), K(task_id));
         }
       }
     }

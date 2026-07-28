@@ -147,6 +147,8 @@ private:
     const uint64_t data_table_id,
     const int64_t finish_index_cnt,
     const compaction::ObTableCkmItems &data_table_ckm);
+  int create_progress_maps();
+  void destroy_progress_maps();
   int rebuild_table_compaction_map(const int64_t table_id_count);
   bool should_ignore_cur_table(const share::schema::ObSimpleTableSchemaV2 *simple_schema);
   int deal_with_rest_data_table();

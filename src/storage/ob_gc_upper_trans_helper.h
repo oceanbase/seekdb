@@ -38,7 +38,8 @@ static int check_need_gc_or_update_upper_trans_version(
     const ObTablet &tablet,
     int64_t &multi_version_start,
     UpdateUpperTransParam &upper_trans_param,
-    bool &need_update);
+    bool &need_update,
+    int64_t &max_resolved_upper_trans_version);
 };
 
 } // namespace storage

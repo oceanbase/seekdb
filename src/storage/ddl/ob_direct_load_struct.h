@@ -1042,25 +1042,6 @@ public:
   ObConcurrentFIFOAllocator allocator_;
 };
 
-struct ObDDLMergeBucketLock 
-{
-public:
-  static int server_module_init(ObDDLMergeBucketLock *&ddl_merge_bucket_lock);
-  ObDDLMergeBucketLock(): hash_set_(), mutex_(), is_inited_(false)
-  {}
-  ~ObDDLMergeBucketLock()
-  {}
-  int init();
-  void destroy()
-  {/* do nothing */}
-  int lock(const ObTabletID &tablet_id);
-  int unlock(const ObTabletID &tablet_id);
-private:
-  hash::ObHashSet<int64_t> hash_set_;
-  lib::ObMutex mutex_;
-  bool is_inited_;
-};
-
 }// namespace storage
 }// namespace oceanbase
 

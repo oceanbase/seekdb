@@ -180,6 +180,7 @@ int ObMvccEngine::scan(
     ObMvccAccessCtx &ctx,
     const ObMvccScanRange &range,
     const common::ObVersionRange &version_range,
+    const ObTabletID &tablet_id,
     ObMultiVersionRowIterator &row_iter)
 {
   int ret = OB_SUCCESS;
@@ -192,7 +193,8 @@ int ObMvccEngine::scan(
   } else if (OB_FAIL(row_iter.init(*query_engine_,
                                    ctx,
                                    version_range,
-                                   range))) {
+                                   range,
+                                   tablet_id))) {
     TRANS_LOG(WARN, "row_iter init fail", K(ret));
   } else {
     // do nothing
