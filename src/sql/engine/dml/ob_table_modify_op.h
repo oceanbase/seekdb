@@ -308,7 +308,9 @@ public:
   ObObjPrintParams obj_print_params_;
   bool iter_end_;
   ObDMLRtCtx dml_rtctx_;
+  bool is_error_logging_;
   bool execute_single_row_;
+  ObErrLogRtDef err_log_rt_def_;
   ObSEArray<ObExpr *, 4> trigger_clear_exprs_;
   ObDMLModifyRowsList dml_modify_rows_;
   ObSEArray<ObForeignKeyChecker *, 4> fk_checkers_;

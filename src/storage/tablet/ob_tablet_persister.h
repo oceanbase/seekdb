@@ -318,6 +318,7 @@ private:
   int persist_sstable_linked_block_if_need(
       ObArenaAllocator &allocator,
       ObITable * const table,
+      int64_t &macro_start_seq,
       ObIArray<ObObjectsWriteCtx> &sstable_meta_write_ctxs);
   int fetch_and_persist_sstable(
       ObTableStoreIterator &table_iter,
@@ -384,6 +385,11 @@ private:
       const ObMultiTimeStats::TimeStats &time_stats,
       const int64_t stats_warn_threshold,
       const int64_t print_interval);
+  static int build_tablet_meta_opt(
+      const ObTabletPersisterParam &persist_param,
+      const storage::ObMetaDiskAddr &old_tablet_addr,
+      blocksstable::ObStorageObjectOpt &opt);
+  static int wait_write_info_callback(const common::ObIArray<ObObjectWriteInfo> &write_infos);
 public:
   static const int64_t SSTABLE_MAX_SERIALIZE_SIZE = 1966080L;  // 1.875MB
   static const int64_t DEFAULT_CTX_ID = 0;
@@ -392,6 +398,7 @@ private:
   ObArenaAllocator allocator_;
   ObMultiTimeStats multi_stats_;
   const ObTabletPersisterParam &param_;
+  int64_t cur_macro_seq_;
 
   DISALLOW_COPY_AND_ASSIGN(ObTabletPersister);
 };

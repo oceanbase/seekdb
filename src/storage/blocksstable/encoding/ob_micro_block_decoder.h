@@ -61,6 +61,10 @@ public:
       const int64_t row_cap,
       common::ObDatum *datums);
 
+  int decode_vector(
+      const ObIRowIndex* row_index,
+      ObVectorDecodeCtx &vector_ctx);
+
   int get_row_count(
       const ObIRowIndex *row_index,
       const int32_t *row_ids,
@@ -338,6 +342,30 @@ public:
       const char **cell_datas,
       const int64_t row_cap,
       storage::ObGroupByCell &group_by_cell) override;
+  virtual int get_group_by_aggregate_result(
+      const ObTableIterParam &iter_param,
+      const ObTableAccessContext &context,
+      const int32_t *row_ids,
+      const char **cell_datas,
+      const int64_t row_cap,
+      const int64_t vec_offset,
+      const common::ObIArray<blocksstable::ObStorageDatum> &default_datums,
+      uint32_t *len_array,
+      sql::ObEvalCtx &eval_ctx,
+      storage::ObGroupByCellVec &group_by_cell) override;
+  virtual int get_rows(
+      const common::ObIArray<int32_t> &cols,
+      const common::ObIArray<const share::schema::ObColumnParam *> &col_params,
+      const common::ObIArray<blocksstable::ObStorageDatum> *default_datums,
+      const bool is_padding_mode,
+      const int32_t *row_ids,
+      const int64_t row_cap,
+      const char **cell_datas,
+      const int64_t vec_offset,
+      uint32_t *len_array,
+      sql::ObEvalCtx &eval_ctx,
+      sql::ObExprPtrIArray &exprs,
+      const bool need_init_vector) override;
   virtual bool has_lob_out_row() const override final
   { return nullptr != header_ && header_->has_lob_out_row(); }
 
@@ -392,6 +420,7 @@ private:
       const share::schema::ObColumnParam *col_param,
       ObStorageDatum &decoded_datum,
       common::ObBitmap &result_bitmap);
+  int get_col_data(const int32_t col_id, ObVectorDecodeCtx &vector_ctx);
 
 private:
   const ObMicroBlockHeader *header_;

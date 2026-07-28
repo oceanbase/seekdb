@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX SHARE
-#include "share/rc/ob_module_provider.h"
 
 #include "share/redolog/ob_log_file_reader.h"
 #include "share/redolog/ob_log_file_handler.h"

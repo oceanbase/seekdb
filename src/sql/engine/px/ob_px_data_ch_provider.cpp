@@ -137,18 +137,27 @@ int ObPxTransmitChProvider::inner_get_part_ch_map(ObPxPartChInfo &map)
     ObPxPartChMapItem tmp_part_ch_item;
     tmp_part_ch_item.assign(part_ch_item);
     if (INT64_MAX == tmp_part_ch_item.third_) {
+      // slave mapping, as well as PDML random scenario etc.
+      // The sqc to be processed in this loop. get_part_affinity_map() contains all sqc
       int64_t sqc_id = part_ch_item.second_;
-      if (OB_UNLIKELY(0 != sqc_id)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("local PX requires SQC id zero", K(ret), K(sqc_id));
+      // prefix_task_counts_[sqc_id] + task_id is the global task_id corresponding to a certain task of this sqc with sqc_id
+      ObIArray<int64_t> &receive_prefix_task_counts =
+                msg_.get_ch_total_info().receive_task_layout_.prefix_task_counts_;
+      // Since the partition id has already saved the mapping with sqc,
+      // So here we only need to map all worker idx of partition and sqc
+      int64_t sqc_task_count = 0;
+      int64_t pre_sqc_task_count = receive_prefix_task_counts.at(sqc_id);
+      if (sqc_id == receive_prefix_task_counts.count() - 1) {
+        sqc_task_count = msg_.get_ch_total_info().receive_task_layout_.total_task_cnt_;
       } else {
-        for (int64_t task_idx = 0;
-             task_idx < msg_.get_ch_total_info().receive_task_layout_.total_task_cnt_ && OB_SUCC(ret);
-             ++task_idx) {
-          tmp_part_ch_item.second_ = task_idx;
-          if (OB_FAIL(map.part_ch_array_.push_back(tmp_part_ch_item))) {
-            LOG_WARN("failed to push back part ch item", K(ret));
-          }
+        sqc_task_count = receive_prefix_task_counts.at(sqc_id + 1);
+      }
+      for (int64_t task_idx = pre_sqc_task_count; task_idx < sqc_task_count && OB_SUCC(ret); ++task_idx) {
+        tmp_part_ch_item.second_ = task_idx; // global task idx
+        if (OB_FAIL(map.part_ch_array_.push_back(tmp_part_ch_item))) {
+          LOG_WARN("failed to push back part ch item", K(ret));
+        } else {
+          LOG_DEBUG("debug partition map", K(tmp_part_ch_item));
         }
       }
       LOG_DEBUG("debug get partition map", K(map.part_ch_array_));

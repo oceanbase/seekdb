@@ -160,6 +160,7 @@ int handle_tx_commit_result_(ObTxDesc &tx,
                              const share::SCN commit_version = share::SCN());
 int local_ls_commit_tx_(const ObTransID &tx_id,
                         const int64_t &expire_ts,
+                        const common::ObString &app_trace_info,
                         const int64_t &request_id,
                         const share::SCN commit_start_scn,
                         share::SCN &commit_version);
@@ -210,6 +211,7 @@ int sync_rollback_to_savepoint_(ObTxCtx *part_ctx,
 void tx_post_terminate_(ObTxDesc &tx);
 int start_epoch_(ObTxDesc &tx);
 int tx_sanity_check_(ObTxDesc &tx);
+void fetch_cflict_tx_ids_from_mem_ctx_to_desc_(memtable::ObMvccAccessCtx &acc_ctx);
 MonotonicTs get_req_receive_mts_();
 static bool common_retryable_error_(const int ret);
 void direct_execute_commit_cb_(ObTxDesc &tx);

@@ -80,14 +80,17 @@ int ObMPUtils::add_changed_session_info(OMPKOK &ok_pkt, sql::ObSQLSessionInfo &s
         } else if (OB_FAIL(ok_pkt.add_system_var(str_kv))) {
           LOG_WARN("failed to add system variable", K(str_kv), K(ret));
         } else {
+          if (OB_FAIL(ret)) {
+          } else {
 #ifndef NDEBUG
-          LOG_INFO("success add system var to ok pack", K(str_kv), K(change_var), K(new_val),
-             K(session.get_server_sid()));
+            LOG_INFO("success add system var to ok pack", K(str_kv), K(change_var), K(new_val),
+               K(session.get_server_sid()));
 #else
-          // for autocommit change record.
-          LOG_TRACE("success add system var to ok pack", K(str_kv), K(change_var), K(new_val),
-             K(session.get_server_sid()), K(change_var.id_));
+            // for autocommit change record.
+            LOG_TRACE("success add system var to ok pack", K(str_kv), K(change_var), K(new_val),
+               K(session.get_server_sid()), K(change_var.id_));
 #endif
+          }
         }
       } else {
         LOG_TRACE("sys var not actully changed", K(changed), K(change_var), K(new_val),
@@ -96,6 +99,63 @@ int ObMPUtils::add_changed_session_info(OMPKOK &ok_pkt, sql::ObSQLSessionInfo &s
     }
   }
 
+  if (session.is_user_var_changed()) {
+    const ObIArray<ObString> &user_var = session.get_changed_user_var();
+    ObSessionValMap &user_map = session.get_user_var_val_map();
+    for (int64_t i = 0; i < user_var.count() && OB_SUCCESS == ret; ++i) {
+      ObString name = user_var.at(i);
+      ObSessionVariable sess_var;
+      if (name.empty()) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid variable name", K(name), K(ret));
+      } else if (OB_FAIL(user_map.get_refactored(name, sess_var))) {
+        LOG_WARN("unknown user variable", K(name), K(ret));
+      } else {
+        ObStringKV str_kv;
+        str_kv.key_ = name;
+        if (OB_FAIL(get_user_sql_literal(allocator, sess_var.value_, str_kv.value_, session.create_obj_print_params()))) {
+          LOG_WARN("fail to get user sql literal", K(sess_var.value_), K(ret));
+        } else if (OB_FAIL(ok_pkt.add_user_var(str_kv))) {
+          LOG_WARN("fail to add user var", K(str_kv), K(ret));
+        } else {
+          LOG_DEBUG("succ to add user var", K(str_kv), K(ret));
+        }
+      }
+    }
+  }
+
+  return ret;
+}
+
+int ObMPUtils::add_nls_format(OMPKOK &okp, sql::ObSQLSessionInfo &session, const bool only_changed/*false*/)
+{
+  int ret = OB_SUCCESS;
+  if (!only_changed) {
+    okp.set_state_changed(false);
+
+    ObStringKV nls_date_str_kv;
+    ObStringKV nls_timestamp_str_kv;
+    ObStringKV nls_timestamp_tz_str_kv;
+    nls_date_str_kv.key_.assign_ptr("nls_date_format", static_cast<int32_t>(strlen("nls_date_format")));
+    nls_date_str_kv.value_ = session.get_local_nls_date_format();
+    nls_timestamp_str_kv.key_.assign_ptr("nls_timestamp_format",
+                                         static_cast<int32_t>(strlen("nls_timestamp_format")));
+    nls_timestamp_str_kv.value_ = session.get_local_nls_timestamp_format();
+    nls_timestamp_tz_str_kv.key_.assign_ptr("nls_timestamp_tz_format",
+                                            static_cast<int32_t>(strlen("nls_timestamp_tz_format")));
+    nls_timestamp_tz_str_kv.value_ = session.get_local_nls_timestamp_tz_format();
+
+    if (OB_FAIL(okp.add_system_var(nls_date_str_kv))) {
+      LOG_WARN("fail to add system var", K(nls_date_str_kv), K(ret));
+    } else if (OB_FAIL(okp.add_system_var(nls_timestamp_str_kv))) {
+      LOG_WARN("fail to add system var", K(nls_timestamp_str_kv), K(ret));
+    } else if (OB_FAIL(okp.add_system_var(nls_timestamp_tz_str_kv))) {
+      LOG_WARN("fail to add system var", K(nls_timestamp_tz_str_kv), K(ret));
+    }
+  } else {
+    // NLS system variables are fixed in MySQL-only mode, so there is no changed
+    // variable payload to append after login.
+  }
   return ret;
 }
 

@@ -53,8 +53,8 @@ public:
     : is_inited_(false),
       is_primary_service_(false),
       need_validate_index_ckm_(false),
-      need_validate_standby_ckm_(false),
-      standby_ckm_sync_finish_(false),
+      need_validate_cross_cluster_ckm_(false),
+      cross_cluster_ckm_sync_finish_(false),
       stop_(stop),
       table_id_(OB_INVALID_ID),
       freeze_info_(),
@@ -131,8 +131,8 @@ private:
     compaction::ObTableCompactionInfo &data_compaction_info,
     compaction::ObTableCompactionInfo &index_compaction_info);
 
-  /* Physical Standby Checksum Section */
-  int validate_standby_checksum();
+  /* Cross Cluster Checksum Section */
+  int validate_cross_cluster_checksum();
   int check_tablet_checksum_sync_finish(const bool force_check);
   int validate_local_and_tablet_checksum();
   bool check_waiting_tablet_checksum_timeout() const;
@@ -145,7 +145,7 @@ private:
     compaction::ObTableCkmItems &data_table_ckm,
     ObIArray<int64_t> &finish_table_ids);
   int finish_verify_fts_ckm(const int64_t table_id);
-  static const int64_t PRINT_STANDBY_CHECKSUM_LOG_INTERVAL = 10 * 60 * 1000 * 1000; // 10 mins
+  static const int64_t PRINT_CROSS_CLUSTER_LOG_INVERVAL = 10 * 60 * 1000 * 1000; // 10 mins
 #ifdef _WIN32
   static constexpr int64_t MAX_TABLET_CHECKSUM_WAIT_TIME_US = 129600000000LL;  // 36 hours
 #else
@@ -156,8 +156,8 @@ private:
   bool is_inited_;
   bool is_primary_service_;
   bool need_validate_index_ckm_;
-  bool need_validate_standby_ckm_;
-  bool standby_ckm_sync_finish_;
+  bool need_validate_cross_cluster_ckm_;
+  bool cross_cluster_ckm_sync_finish_;
   volatile bool &stop_;
   uint64_t table_id_;
   share::ObFreezeInfo freeze_info_;

@@ -97,6 +97,7 @@ int init_io_device(const char *test_name,
 
     storage_env.clog_dir_ = clog_dir;
 
+    storage_env.bf_cache_miss_count_threshold_ = 10000;
     storage_env.ethernet_speed_ = 1000000;
 
     storage_env.clog_file_spec_.retry_write_policy_ = "normal";
@@ -519,6 +520,7 @@ void ObMultiVersionSSTableTest::prepare_data_end(
   param.nested_size_ = res.nested_size_;
   param.nested_offset_ = res.nested_offset_;
   param.ddl_scn_.set_min();
+  param.table_backup_flag_.reset();
   param.filled_tx_scn_ = table_key_.get_end_scn();
   param.tx_data_recycle_scn_.set_min();
   param.sstable_logic_seq_ = 0;

@@ -312,6 +312,8 @@ public:
    */
   int refresh_seq_no(const int64_t tx_seq_base);
 
+  void convert_to_out_tx();
+
   ObTxReadSnapshot();
   ~ObTxReadSnapshot();
   TO_STRING_KV(KP(this),
@@ -404,7 +406,6 @@ class ObTxDesc final : public share::ObLightHashLink<ObTxDesc>
   OB_UNIS_VERSION(1);
 protected:
   ObTraceInfo trace_info_;
-  uint64_t data_version_;  // persistent transaction data format version
   int64_t seq_base_;          // tx_seq's base value, use to calculate absolute value of tx_seq
   ObTxConsistencyType tx_consistency_type_; // transaction level consistency_type : strong or bounded read
 
@@ -579,7 +580,6 @@ public:
                K_(commit_version),
                K_(commit_times),
                KP_(commit_cb),
-               K_(data_version),
                K_(seq_base),
                K_(flags_.SHADOW),
                K_(flags_.INTERRUPTED),
@@ -605,7 +605,6 @@ public:
 
   uint32_t get_session_id() const { return sess_id_; }
   ObAddr get_addr() const { return addr_; }
-  uint64_t get_data_version() const { return data_version_; }
   ObTxConsistencyType get_tx_consistency_type() const { return tx_consistency_type_; }
   ObTxIsolationLevel get_isolation_level() const { return isolation_; }
   bool is_RR_or_SERIAL_isolevel() const {

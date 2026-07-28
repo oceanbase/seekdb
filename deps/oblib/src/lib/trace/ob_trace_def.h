@@ -80,7 +80,11 @@ FLT_DEF_SPAN(com_query_process, "com_query process")
 
   // for das
   FLT_DEF_SPAN(do_local_das_task, "execute local das task")
+  FLT_DEF_SPAN(das_async_rpc_process, "das task async process")
+  FLT_DEF_SPAN(das_sync_rpc_process, "das task sync process")
   FLT_DEF_SPAN(close_das_task, "close das task")
+  FLT_DEF_SPAN(fetch_das_extra_result, "fetch das extra result")
+    FLT_DEF_SPAN(fetch_das_result_process, "fetch das result process")
 
   // for ddl task
   FLT_DEF_SPAN(ddl_prepare, "prepare phase of ddl task")
@@ -198,6 +202,7 @@ FLT_DEF_TAG(blockscan_block_cnt, "blockscaned micro block read count")
 FLT_DEF_TAG(data_block_cache_hits, "data block cache hit count")
 FLT_DEF_TAG(row_cache_hits, "row cache hit count")
 FLT_DEF_TAG(fuse_row_cache_hits, "fuse row cache hit count")
+FLT_DEF_TAG(bloomfilter_cache_hits, "bloomfilter cache hit count")
 FLT_DEF_TAG(index_block_cache_hits, "index block cache hit count")
 FLT_DEF_TAG(sstable_read_cnt, "sstable count involved in the scan")
 FLT_DEF_TAG(rescan_read_cnt, "table scan iterator rescan count")
@@ -244,6 +249,11 @@ FLT_DEF_TAG(pl_spi_streaming_cursor, "PL spi cursor type (streaming or non-strea
 FLT_DEF_TAG(pl_handle_sql_execute_time, "PL handle sql execute time")
 FLT_DEF_TAG(pl_handle_sql_execute_sql, "PL handle sql execute SQL text")
 #endif // __HIGH_LEVEL_TAG
+
+#ifdef __MIDDLE_LEVEL_TAG
+// PL
+FLT_DEF_TAG(pl_anony_parameter_sql_text, "PL anonymous block parameterized sql text")
+#endif // __MIDDLE_LEVEL_TAG
 
 #ifdef __LOW_LEVEL_TAG
 FLT_DEF_TAG(table_id, "place holder")

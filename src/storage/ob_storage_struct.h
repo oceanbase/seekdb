@@ -247,7 +247,8 @@ public:
   TO_STRING_KV(K_(keep_old_ddl_sstable), K_(update_with_major_flag),
                K_(ddl_start_scn), K_(ddl_commit_scn), K_(ddl_checkpoint_scn),
                K_(ddl_snapshot_version), K_(ddl_execution_id),
-               K_(data_format_version), K(slice_sstables_.count()));
+               K_(data_format_version), KP_(ddl_redo_callback),
+               KP_(ddl_finish_callback), K(slice_sstables_.count()));
 
 public:
   bool keep_old_ddl_sstable_;
@@ -258,6 +259,8 @@ public:
   int64_t ddl_snapshot_version_;
   int64_t ddl_execution_id_;
   int64_t data_format_version_;
+  blocksstable::ObIMacroBlockFlushCallback *ddl_redo_callback_;
+  blocksstable::ObIMacroBlockFlushCallback *ddl_finish_callback_;
   ObArray<const blocksstable::ObSSTable *> slice_sstables_;
 };
 

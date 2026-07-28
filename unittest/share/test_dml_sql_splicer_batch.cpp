@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
+#include "lib/stat/ob_diagnose_info.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "common/mysqlclient/ob_isql_client.h"
 

@@ -43,9 +43,7 @@ public:
 
 public:
   virtual int alloc_dir(int64_t &dir_id) = 0;
-  virtual int open(int64_t &fd,
-                   const int64_t &dir_id,
-                   const char *const label = "TmpFile") = 0;
+  virtual int open(int64_t &fd, const int64_t &dir_id, const char* const label) = 0;
   int remove(const int64_t fd);
   int aio_read(const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
   int aio_pread(const ObTmpFileIOInfo &io_info, const int64_t offset, ObTmpFileIOHandle &io_handle);

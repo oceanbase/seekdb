@@ -25,6 +25,7 @@
 #include "lib/ob_define.h"                  // OB_MAX_FILE_NAME_LENGTH
 #include "lib/lock/ob_tc_rwlock.h"          // ObTCRWLock
 #include "lib/lock/ob_spin_lock.h"          // ObSpinLock
+#include "lib/function/ob_function.h"       // ObFunction
 #include "palf/log_define.h"                // block_id_t
 #include "palf/log_block_pool_interface.h"  // ObIServerLogBlockPool
 #include "palf/log_io_utils.h"              // ObBaseDirFunctor
@@ -128,6 +129,8 @@ private:
   int scan_runtime_dir_(const char *runtime_dir, int64_t &has_allocated_block_cnt);
   int scan_ls_dir_(const char *ls_dir, int64_t &has_allocated_block_cnt);
 private:
+  typedef common::ObFunction<int(int64_t&)> GetRuntimeLogDiskSize;
+  GetRuntimeLogDiskSize get_runtime_log_disk_size_func_;
   // NB: in progress of expanding, the free size byte calcuated by BLOCK_SIZE * (max_block_id_ - min_block_id_) may be greater than
   //     curr_total_size_, if we calcuated log disk in use by curr_total_size_ - 'free size byte', the resule may be negative.
   int64_t block_cnt_in_use_;

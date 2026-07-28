@@ -193,7 +193,8 @@ int ObBatchCreateTabletHelper::add_table_schema_(
       LOG_WARN("failed to allocate storage schema", KR(ret), K(table_schema));
     } else if (FALSE_IT(create_tablet_schema = new (create_tablet_schema_ptr)ObCreateTabletSchema())) {
     } else if (OB_FAIL(create_tablet_schema->init(batch_arg_.allocator_, table_schema,
-                                                  false /*skip_column_info*/))) {
+                                                  false /*skip_column_info*/,
+                                                  data_format_version))) {
       LOG_WARN("failed to init storage schema", KR(ret), K(table_schema));
     } else if (OB_FAIL(batch_arg_.create_tablet_schemas_.push_back(create_tablet_schema))) {
       LOG_WARN("failed to push back table schema", KR(ret), K(table_schema));

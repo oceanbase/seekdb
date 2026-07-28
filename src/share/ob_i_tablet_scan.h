@@ -18,7 +18,7 @@
 #define OCEANBASE_OB_I_TABLET_SCAN_H_
 
 #include "common/ob_common_types.h"
-#include "lib/literals/ob_literals.h"
+#include "lib/literals/ob_literals.h"  // _MB literal, previously hidden behind a removed include chain, make the dependency explicit
 #include "sql/engine/cmd/ob_load_data_parser.h"  // ObExternalFileFormat by-value member real user(pure header is already conf L2)
 #include "common/ob_tablet_id.h"
 #include "common/sql_mode/ob_sql_mode.h"
@@ -90,7 +90,7 @@ struct SampleInfo
   uint64_t hash(uint64_t seed) const;
   void reset()
   {
-    table_id_ = OB_INVALID_ID;
+    table_id_ = OB_INVALID;
     method_ = NO_SAMPLE;
     scope_ = SAMPLE_ALL_DATA;
     percent_ = 100;
@@ -358,9 +358,10 @@ typedef common::ObSEArray<common::ObSpatialMBR, OB_DEFAULT_MBR_FILTER_COUNT> ObM
 /**
  *  This is the common interface for storage service.
  *
- *  So far there are two components that implement the interface:
+ *  So far there are three components that implement the interface:
  *    1. partition storage
  *    2. virtual table
+ *    3. external table
  */
 class ObVTableScanParam
 {

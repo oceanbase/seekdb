@@ -35,6 +35,11 @@ namespace share
 namespace schema
 {
 
+#define GEN_TENANT_SCHEMA(runtime_schema, tenant_id, tenant_name, schema_version) \
+  runtime_schema.set_tenant_id(tenant_id); \
+  runtime_schema.set_runtime_name(tenant_name); \
+  runtime_schema.set_schema_version(schema_version);
+
 #define GEN_USER_SCHEMA(user_schema, tenant_id, user_id, user_name, schema_version) \
   user_schema.set_tenant_id(tenant_id); \
   user_schema.set_user_id(user_id); \
@@ -91,6 +96,14 @@ public:
   SchemaTestUtils() {}
   virtual ~SchemaTestUtils() {}
 
+  static bool equal_tenant_schema(
+      const ObServerRuntimeSchema &a,
+      const ObServerRuntimeSchema &b)
+  {
+    return a.get_tenant_id() == b.get_tenant_id() &&
+      a.get_runtime_name_str() == b.get_runtime_name_str() &&
+      a.get_schema_version() == b.get_schema_version();
+  }
   static bool equal_user_schema(
       const ObUserInfo &a,
       const ObUserInfo &b)

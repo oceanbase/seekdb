@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_storage_meta_mem_mgr.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/tablelock/ob_lock_memtable.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -338,7 +337,7 @@ void ObStorageMetaMemMgr::destroy()
   destroy_gc_memtable_set_(gc_memtable_set_);
   destroy_gc_memtable_set_(gc_uninit_memtable_set_);
   bucket_lock_.destroy();
-  for (int64_t i = 0; i < ObITable::TableType::MAX_TABLE_TYPE; i++) {
+  for (int64_t i = 0; i <= ObITable::TableType::REMOTE_LOGICAL_MINOR_SSTABLE; i++) {
     pool_arr_[i] = nullptr;
   }
   meta_cache_io_allocator_.destroy();

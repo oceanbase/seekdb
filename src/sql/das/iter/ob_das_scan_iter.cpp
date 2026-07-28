@@ -126,6 +126,7 @@ int ObDASScanIter::advance_scan()
 int ObDASScanIter::inner_get_next_row()
 {
   int ret = OB_SUCCESS;
+  common::ObASHTabletIdSetterGuard ash_tablet_id_guard(scan_param_ != nullptr? scan_param_->index_id_ : 0);
 
   if (OB_ISNULL(result_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -141,6 +142,7 @@ int ObDASScanIter::inner_get_next_row()
 int ObDASScanIter::inner_get_next_rows(int64_t &count, int64_t capacity)
 {
   int ret = OB_SUCCESS;
+  common::ObASHTabletIdSetterGuard ash_tablet_id_guard(scan_param_ != nullptr? scan_param_->index_id_ : 0);
 
   if (OB_ISNULL(result_)) {
     ret = OB_ERR_UNEXPECTED;

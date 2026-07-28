@@ -90,27 +90,33 @@ public:
   static const uint8_t BIG_ROW_NEW = 1;
   static const uint8_t BIG_ROW_OLD = 2;
   static const uint8_t MAX = 3;
+  static const uint8_t ENCRYPT = (1 << 3);
 public:
   static bool is_valid_row_flag(const uint8_t row_flag)
   {
-    return row_flag < MAX;
+    const uint8_t real_flag = row_flag & (~ENCRYPT);
+    return real_flag < MAX;
   }
   // Is it the beginning of a line
   static bool is_row_start(const uint8_t row_flag)
   {
-    return NORMAL_ROW == row_flag;
+    const uint8_t real_flag = row_flag & (~ENCRYPT);
+    return NORMAL_ROW == real_flag;
   }
   static bool is_normal_row(const uint8_t row_flag)
   {
-    return row_flag == NORMAL_ROW;
+    const uint8_t real_flag = row_flag & (~ENCRYPT);
+    return real_flag == NORMAL_ROW;
   }
   static bool is_big_row(const uint8_t row_flag)
   {
-    return BIG_ROW_NEW == row_flag || BIG_ROW_OLD == row_flag;
+    const uint8_t real_flag = row_flag & (~ENCRYPT);
+    return BIG_ROW_NEW == real_flag || BIG_ROW_OLD == real_flag;
   }
   static bool is_big_row_new(const uint8_t row_flag)
   {
-    return BIG_ROW_NEW == row_flag;
+    const uint8_t real_flag = row_flag & (~ENCRYPT);
+    return BIG_ROW_NEW == real_flag;
   }
   static bool is_big_row_start(const uint8_t row_flag)
   {
@@ -126,6 +132,18 @@ public:
   {
     UNUSED(row_flag);
     return false;
+  }
+  static bool is_encrypted(const uint8_t row_flag)
+  {
+    return row_flag & ENCRYPT;
+  }
+  static void add_encrypt_flag(uint8_t &row_flag)
+  {
+    row_flag |= ENCRYPT;
+  }
+  static void remove_encrypt_flag(uint8_t &row_flag)
+  {
+    row_flag &= (~ENCRYPT);
   }
 };
 
@@ -316,6 +334,7 @@ class ObMemtableCtx : public ObIMemtableCtx
   using RDLockGuard = common::SpinRLockGuard;
   static const int64_t SLOW_QUERY_THRESHOULD = 500 * 1000;
   static const int64_t LOG_CONFLICT_INTERVAL = 3 * 1000 * 1000;
+  static const int64_t MAX_RESERVED_CONFLICT_TX_NUM = 30;
 public:
   ObMemtableCtx();
   virtual ~ObMemtableCtx();
@@ -326,6 +345,10 @@ public:
   virtual void old_row_free(void *row) override;
   virtual common::ObIAllocator &get_query_allocator();
   virtual void inc_lock_for_read_retry_count();
+  // Record conflicting transaction IDs in the transaction context for deadlock detection.
+  virtual int add_conflict_trans_id(const transaction::ObTransID conflict_trans_id);
+  void reset_conflict_trans_ids();
+  int get_conflict_trans_ids(common::ObIArray<transaction::ObTransID> &array);
   virtual int read_lock_yield()
   {
     return ATOMIC_LOAD(&end_code_);
@@ -583,6 +606,11 @@ private:
   // Used to indicate whether mvcc row is updated or not.
   // When a statement is update or select for update, the value can be set ture;
   bool has_row_updated_;
+  // For deaklock detection
+  // The trans id of the holder of the conflict row lock
+  // TODO(Handora), for non-local execution, if no-occupy-thread wait is implemented,
+  // it should be carried back the same way as local execution
+  common::ObArray<transaction::ObTransID> conflict_trans_ids_;
   transaction::ObMemtableCtxObjPool mem_ctx_obj_pool_;
   // table lock mem ctx.
   transaction::tablelock::ObLockMemCtx lock_mem_ctx_;

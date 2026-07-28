@@ -122,6 +122,8 @@ public:
   // More than one operator will use datahub, so the size can default to 1
   common::ObSEArray<ObPxDatahubDataProvider *, 1> whole_msg_provider_list_;
   common::ObSEArray<std::pair<int64_t, int64_t>, 1> init_channel_msg_cnts_; // <op_id, piece_cnt>
+  ObSPWinFuncPXWholeMsgP sp_winfunc_whole_msg_proc_;
+  ObRDWinFuncPXWholeMsgP rd_winfunc_whole_msg_proc_;
   ObJoinFilterCountRowWholeMsgP join_filter_count_row_whole_msg_proc_;
   /* for ddl */
   ObArenaAllocator arena_allocator_;
@@ -135,3 +137,4 @@ private:
 }
 #endif /* __OB_SQL_PX_SQC_CTX_H__ */
 //// end of header file
+

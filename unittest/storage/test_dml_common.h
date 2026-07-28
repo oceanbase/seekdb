@@ -197,6 +197,7 @@ int TestDmlCommon::build_table_scan_param_base_(
                          false, // full_row
                          false, // index_back
                          false, // query_stat
+                         ObQueryFlag::MysqlMode, // sql_mode
                          read_latest // read_latest
                         );
   scan_param.scan_flag_.flag_ = query_flag.flag_;

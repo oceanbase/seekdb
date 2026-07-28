@@ -37,7 +37,7 @@ public:
     : is_inited_(false), server_slogger_(nullptr) {}
   ObServerStorageMetaPersister(const ObServerStorageMetaPersister &) = delete;
   ObServerStorageMetaPersister &operator=(const ObServerStorageMetaPersister &) = delete;
-
+      
   int init(ObStorageLogger *server_slogger);
   int start();
   void stop();
@@ -49,7 +49,7 @@ public:
   int update_runtime_super_block(const ObServerRuntimeSuperBlock &super_block);
   int update_server_resources(const share::ObServerRuntimeConfig &runtime_config);
   int clear_runtime_log_dirs();
-
+  
 private:
   int write_prepare_create_runtime_slog_(const omt::ObServerRuntimeMeta &meta);
   int write_abort_create_runtime_slog_();
@@ -57,10 +57,12 @@ private:
   int write_update_runtime_super_block_slog_(const ObServerRuntimeSuperBlock &super_block);
   int write_update_server_resources_slog_(const share::ObServerRuntimeConfig &runtime_config);
 
+
 private:
   bool is_inited_;
   storage::ObStorageLogger *server_slogger_;
   common::ObConcurrentFIFOAllocator allocator_;
+  
 };
 
 } // namespace storage

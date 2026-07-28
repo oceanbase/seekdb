@@ -193,6 +193,7 @@ void ObMaintainDepInfoTaskQueue::run2()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else {
+    ObDIActionGuard ag("AsyncTaskThreadPool", "MaintainDepInfoTaskQueue", "detect task");
     ObAddr zero_addr;
     while (!stop_) {
       IGNORE_RETURN lib::Thread::update_loop_ts();
@@ -246,6 +247,7 @@ void ObMaintainDepInfoTaskQueue::run2()
         // generate trace id
         ObCurTraceId::init(zero_addr);
         // just do it
+        ObDIActionGuard ag1("MaintainObjDepInfoTask");
         ret = task->process();
         if (OB_FAIL(ret)) {
           LOG_WARN("task process failed, start retry", "max retry time",

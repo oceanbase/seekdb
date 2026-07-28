@@ -485,7 +485,7 @@ int ObTransDeadlockDetectorAdapter::create_detector_node_(CollectCallBack &on_co
 
 // Call from SQL trans control, check if need register to deadlock or replace block list
 // (depends on session status, is registered to deadlock or not)
-//
+// 
 // @param [in] on_collect_op collect deadlock related info when deadlock detected.
 // @param [in] func the block function to tell detector waiting for who.
 // @param [in] self_trans_id who am i.
@@ -654,15 +654,15 @@ int ObTransDeadlockDetectorAdapter::change_detector_waiting_obj_from_row_to_tran
   #undef PRINT_WRAPPER
 }
 
-// Register the dependency between a parent transaction and a temporary inner transaction.
+// Register autonomous trans dependency relationship, no need session id here, cause this trans should not be killed
 // 
 // @param [in] last_trans_id who is the trans before start autonomous trans.
 // @param [in] now_trans_id who is the trans after start autonomous trans.
 // @param [in] query_timeout from session, to tell detector how long it will live(avoid leak).
 // @return void.
-int ObTransDeadlockDetectorAdapter::inner_tx_register_to_deadlock(const ObTransID last_trans_id,
-                                                                 const ObTransID now_trans_id,
-                                                                 const int64_t query_timeout)
+int ObTransDeadlockDetectorAdapter::autonomous_register_to_deadlock(const ObTransID last_trans_id,
+                                                                   const ObTransID now_trans_id,
+                                                                   const int64_t query_timeout)
 {
   #define PRINT_WRAPPER KR(ret), K(last_trans_id), K(now_trans_id), K(query_timeout)
   CHECK_DEADLOCK_ENABLED();

@@ -123,13 +123,34 @@ int ObExecuteResult::open() const
 int ObExecuteResult::get_next_row() const
 {
   int ret = OB_SUCCESS;
+  bool got_row = false;
   if (OB_ISNULL(static_engine_root_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), KP(static_engine_root_));
-  } else if (OB_FAIL(static_engine_root_->get_next_row())
-             && OB_ITER_END != ret
-             && OB_TRY_LOCK_ROW_CONFLICT != ret) {
-    LOG_WARN("get next row from operator failed", K(ret));
+  }
+  // switch bind array iterator in DML returning plan
+  while (OB_SUCC(ret) && !got_row) {
+    if (OB_FAIL(static_engine_root_->get_next_row())) {
+      if (OB_ITER_END == ret) {
+        ObPhysicalPlanCtx *plan_ctx = static_engine_root_->get_exec_ctx().get_physical_plan_ctx();
+        if (plan_ctx->get_bind_array_count() <= 0
+            || plan_ctx->get_bind_array_idx() >= plan_ctx->get_bind_array_count()) {
+          // no bind array or reach binding array end, do nothing
+        } else {
+          plan_ctx->inc_bind_array_idx();
+          if (OB_FAIL(static_engine_root_->switch_iterator())) {
+            if (OB_ITER_END != ret) {
+              LOG_WARN("switch op iterator failed",
+                       K(ret), "op_type", static_engine_root_->op_name());
+            }
+          }
+        }
+      } else if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
+        LOG_WARN("get next row from operator failed", K(ret));
+      }
+    } else {
+      got_row = true;
+    }
   }
   return ret;
 }

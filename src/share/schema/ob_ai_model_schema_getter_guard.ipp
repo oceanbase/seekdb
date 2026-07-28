@@ -39,7 +39,7 @@ int ObSchemaGetterGuard::get_ai_model_schema(
   int ret = OB_SUCCESS;
   
   const ObSchemaMgr *mgr = nullptr;
-  const ObNameCaseMode mode = OB_LOWERCASE_AND_INSENSITIVE;
+  ObNameCaseMode mode = OB_NAME_CASE_INVALID;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
@@ -49,6 +49,11 @@ int ObSchemaGetterGuard::get_ai_model_schema(
              K(ai_model_name), KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
     LOG_WARN("fail to check lazy guard", KR(ret));
+  } else if (OB_FAIL(get_runtime_name_case_mode(mode))) {
+    LOG_WARN("fail to get_runtime_name_case_mode", K(ret));
+  } else if (OB_NAME_CASE_INVALID == mode) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid case mode", K(ret), K(mode));
   } else if (OB_FAIL(mgr->get_ai_model_schema( ai_model_name, mode, ai_model_schema))){
     LOG_WARN("fail to get ai model schema", K(ret), K(ai_model_name));
   }

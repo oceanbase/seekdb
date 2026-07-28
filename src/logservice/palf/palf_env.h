@@ -40,6 +40,7 @@ class ILogBlockPool;
 
 class PalfEnv
 {
+  friend class LogRequestHandler;
 public:
   // static interface
   // create the palf env with the specified "base_dir".

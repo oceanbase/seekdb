@@ -34,20 +34,23 @@ ObDASTextRetrievalIter::ObDASTextRetrievalIter()
     tx_desc_(nullptr),
     snapshot_(nullptr),
     inv_idx_tablet_id_(),
+    fwd_idx_tablet_id_(),
     inv_idx_scan_param_(),
     inv_idx_agg_param_(),
+    fwd_idx_scan_param_(),
     calc_exprs_(),
     inverted_idx_scan_iter_(nullptr),
     inverted_idx_agg_iter_(nullptr),
     forward_idx_iter_(nullptr),
     fwd_range_objs_(nullptr),
-    token_weight_expr_(nullptr),
     skip_(nullptr),
     token_doc_cnt_(0),
     max_batch_size_(0),
+    need_fwd_idx_agg_(false),
     need_inv_idx_agg_(false),
     inv_idx_agg_evaluated_(false),
     need_inv_idx_agg_reset_(false),
+    not_first_fwd_agg_(false),
     is_inited_(false)
 {
 }
@@ -121,6 +124,10 @@ int ObDASTextRetrievalIter::check_inv_idx_scan_and_agg_param()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("text retrieval iter not inited", K(ret));
+  } else if (OB_UNLIKELY(!need_inv_idx_agg_reset_ && need_fwd_idx_agg_)) {
+    // TODO: try to support the case @zyx439997
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected empty query range", K(ret), K(inv_idx_scan_param_.key_ranges_));
   } else if (OB_UNLIKELY(!inv_idx_scan_param_.key_ranges_.empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected empty query range", K(ret), K(inv_idx_scan_param_.key_ranges_));
@@ -170,12 +177,17 @@ int ObDASTextRetrievalIter::inner_init(ObDASIterParam &param)
     ir_rtdef_ = retrieval_param.ir_rtdef_;
     tx_desc_ = retrieval_param.tx_desc_;
     snapshot_ = retrieval_param.snapshot_;
+    need_fwd_idx_agg_ = ir_ctdef_->need_fwd_idx_agg();
     need_inv_idx_agg_ = ir_ctdef_->need_inv_idx_agg();
     need_inv_idx_agg_reset_ = retrieval_param.need_inv_idx_agg_reset_;
     max_batch_size_ = ir_rtdef_->eval_ctx_->max_batch_size_;
   
     if (need_inv_idx_agg_) {
       inverted_idx_agg_iter_ = static_cast<ObDASScanIter *>(retrieval_param.inv_idx_agg_iter_);
+    }
+
+    if (need_fwd_idx_agg_) {
+      forward_idx_iter_ = static_cast<ObDASScanIter *>(retrieval_param.fwd_idx_iter_);
     }
 
     if (OB_ISNULL(mem_context_)) {
@@ -257,6 +269,15 @@ int ObDASTextRetrievalIter::inner_reuse()
       token_doc_cnt_ = 0;
     }
 
+    if (OB_SUCC(ret) && need_fwd_idx_agg_) {
+      const ObTabletID &old_fwd_agg_id = fwd_idx_scan_param_.tablet_id_;
+      forward_idx_iter_->set_scan_param(fwd_idx_scan_param_);
+      fwd_idx_scan_param_.need_switch_param_ = fwd_idx_scan_param_.need_switch_param_ ||
+        ((old_fwd_agg_id.is_valid() && old_fwd_agg_id != fwd_idx_tablet_id_) ? true : false);
+      if (OB_FAIL(forward_idx_iter_->reuse())) {
+        LOG_WARN("failed to reuse forward index iter", K(ret));
+      }
+    }
   }
   return ret;
 }
@@ -271,6 +292,9 @@ int ObDASTextRetrievalIter::inner_release()
   inv_idx_agg_param_.destroy_schema_guard();
   inv_idx_agg_param_.snapshot_.reset();
   inv_idx_agg_param_.destroy();
+  fwd_idx_scan_param_.destroy_schema_guard();
+  fwd_idx_scan_param_.snapshot_.reset();
+  fwd_idx_scan_param_.destroy();
   calc_exprs_.reset();
   if (nullptr != mem_context_)  {
     mem_context_->reset_remain_one_page();
@@ -289,9 +313,11 @@ int ObDASTextRetrievalIter::inner_release()
   snapshot_ = nullptr;
   token_doc_cnt_ = 0;
   max_batch_size_ = 0;
+  need_fwd_idx_agg_ = false;
   need_inv_idx_agg_ = false;
   inv_idx_agg_evaluated_ = false;
   need_inv_idx_agg_reset_ = false;
+  not_first_fwd_agg_ = false;
   is_inited_ = false;
   return ret;
 }
@@ -365,10 +391,10 @@ int ObDASTextRetrievalIter::inner_get_next_row()
         *inv_idx_scan_param_.output_exprs_));
     if (ir_ctdef_->need_calc_relevance()) {
       clear_row_wise_evaluated_flag();
-      if (OB_FAIL(fill_token_doc_cnt())) {
+      if (OB_FAIL(get_next_doc_token_cnt(need_fwd_idx_agg_))) {
+        LOG_WARN("failed to get next doc token count", K(ret));
+      } else if (OB_FAIL(fill_token_doc_cnt())) {
         LOG_WARN("failed to get token doc cnt", K(ret));
-      } else if (OB_FAIL(fill_token_weight())) {
-        LOG_WARN("failed to fill token weight", K(ret));
       } else if (OB_FAIL(project_relevance_expr())) {
         LOG_WARN("failed to evaluate simarity expr", K(ret));
       }
@@ -416,8 +442,6 @@ int ObDASTextRetrievalIter::inner_get_next_rows(int64_t &count, int64_t capacity
       clear_batch_wise_evaluated_flag(count);
       if (OB_FAIL(fill_token_doc_cnt())) {
         LOG_WARN("failed to get token doc cnt", K(ret));
-      } else if (OB_FAIL(fill_token_weight())) {
-        LOG_WARN("failed to fill token weight", K(ret));
       } else if (OB_FAIL(batch_project_relevance_expr(count))) {
         LOG_WARN("failed to evaluate simarity expr", K(ret));
       }
@@ -458,6 +482,23 @@ int ObDASTextRetrievalIter::init_inv_idx_scan_param()
     }
   }
 
+  return ret;
+}
+
+int ObDASTextRetrievalIter::init_fwd_idx_scan_param()
+{
+  int ret = OB_SUCCESS;
+
+  if (!ir_ctdef_->need_calc_relevance()) {
+  } else if (OB_FAIL(init_base_idx_scan_param(
+      fwd_idx_tablet_id_,
+      ir_ctdef_->get_fwd_idx_agg_ctdef(),
+      ir_rtdef_->get_fwd_idx_agg_rtdef(),
+      tx_desc_,
+      snapshot_,
+      fwd_idx_scan_param_))) {
+    LOG_WARN("Fail to init foward index scan param", K(ret), KPC_(ir_ctdef));
+  }
   return ret;
 }
 
@@ -552,6 +593,100 @@ int ObDASTextRetrievalIter::do_doc_cnt_agg()
   return ret;
 }
 
+int ObDASTextRetrievalIter::get_next_doc_token_cnt(const bool use_fwd_idx_agg)
+{
+  int ret = OB_SUCCESS;
+  if (use_fwd_idx_agg) {
+    ObDocIdExt cur_doc_id;
+    int64_t token_cnt = 0;
+    if (OB_FAIL(get_inv_idx_scan_doc_id(cur_doc_id))) {
+      LOG_WARN("failed to get current doc id", K(ret));
+    } else if (OB_FAIL(do_token_cnt_agg(cur_doc_id, token_cnt))) {
+      LOG_WARN("failed to do token count agg on fwd index", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObDASTextRetrievalIter::get_inv_idx_scan_doc_id(ObDocIdExt &doc_id)
+{
+  int ret = OB_SUCCESS;
+  sql::ObExpr *doc_id_expr = ir_ctdef_->inv_scan_domain_id_col_;
+  sql::ObEvalCtx *eval_ctx = ir_rtdef_->get_inv_idx_scan_rtdef()->eval_ctx_;
+  ObDatum &doc_id_datum = doc_id_expr->locate_expr_datum(*eval_ctx);
+  if (OB_FAIL(doc_id.from_datum(doc_id_datum))) {
+    LOG_WARN("failed to get doc id", K(ret), K(doc_id_datum));
+  }
+
+  return ret;
+}
+
+int ObDASTextRetrievalIter::do_token_cnt_agg(const ObDocIdExt &doc_id, int64_t &token_count)
+{
+  int ret = OB_SUCCESS;
+
+  token_count = 0;
+  ObNewRange scan_range;
+  if (OB_FAIL(gen_fwd_idx_scan_range(doc_id, scan_range))) {
+    LOG_WARN("failed to generate forward index scan range", K(ret));
+  }
+
+  if (OB_SUCC(ret)) {
+    if (not_first_fwd_agg_) {
+      fwd_idx_scan_param_.tablet_id_ = fwd_idx_tablet_id_;
+      if (OB_FAIL(reuse_fwd_idx_iter())) {
+        LOG_WARN("failed to reuse forward index iterator", K(ret));
+      } else if (OB_FAIL(fwd_idx_scan_param_.key_ranges_.push_back(scan_range))) {
+        LOG_WARN("failed to add forward index scan range", K(ret), K(scan_range));
+      } else if (OB_FAIL(forward_idx_iter_->rescan())) {
+        LOG_WARN("failed to rescan forward index", K(ret));
+      }
+    } else {
+      if (OB_FAIL(init_fwd_idx_scan_param())) {
+        LOG_WARN("failed to init forward index scan param", K(ret));
+      } else if (OB_FAIL(fwd_idx_scan_param_.key_ranges_.push_back(scan_range))) {
+        LOG_WARN("failed to add forward index scan range", K(ret), K(scan_range));
+      } else if (FALSE_IT(forward_idx_iter_->set_scan_param(fwd_idx_scan_param_))) {
+      } else if (OB_FAIL(forward_idx_iter_->do_table_scan())) {
+        LOG_WARN("failed to do forward index scan", K(ret));
+      } else {
+        not_first_fwd_agg_ = true;
+      }
+    }
+
+    if (OB_SUCC(ret)) {
+      if (!static_cast<sql::ObStoragePushdownFlag>(
+          ir_ctdef_->get_fwd_idx_agg_ctdef()->pd_expr_spec_.pd_storage_flag_).is_aggregate_pushdown()) {
+        ret = OB_NOT_IMPLEMENT;
+        LOG_ERROR("aggregate without pushdown not implemented", K(ret));
+      } else {
+        if (OB_FAIL(forward_idx_iter_->get_next_row())) {
+          LOG_WARN("failed to get next row from forward index iterator", K(ret));
+        } else {
+          const sql::ObExpr *agg_expr = ir_ctdef_->get_fwd_idx_agg_ctdef()->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
+          sql::ObEvalCtx *eval_ctx = ir_rtdef_->get_fwd_idx_agg_rtdef()->eval_ctx_;
+          const ObDatum &word_cnt_datum = agg_expr->locate_expr_datum(*eval_ctx);
+          token_count = word_cnt_datum.get_int();
+          LOG_DEBUG("retrieval iterator get token cnt for doc", K(ret), K(doc_id), K(token_count));
+        }
+      }
+    }
+  }
+
+  return ret;
+}
+
+int ObDASTextRetrievalIter::reuse_fwd_idx_iter()
+{
+  int ret = OB_SUCCESS;
+  if (nullptr != forward_idx_iter_) {
+    if (OB_FAIL(forward_idx_iter_->reuse())) {
+      LOG_WARN("failed to reuse forward index iter", K(ret));
+    }
+  }
+  return ret;
+}
+
 int ObDASTextRetrievalIter::gen_default_inv_idx_scan_range(const ObString &query_token, ObNewRange &scan_range)
 {
   int ret = OB_SUCCESS;
@@ -621,6 +756,38 @@ int ObDASTextRetrievalIter::gen_inv_idx_scan_range(const ObString &query_token, 
   return ret;
 }
 
+int ObDASTextRetrievalIter::gen_fwd_idx_scan_range(const ObDocIdExt &doc_id, ObNewRange &scan_range)
+{
+  int ret = OB_SUCCESS;
+  if (nullptr == fwd_range_objs_) {
+    void *buf = nullptr;
+    common::ObArenaAllocator &ctx_alloc = mem_context_->get_arena_allocator();
+    constexpr int64_t obj_cnt = FWD_IDX_ROWKEY_COL_CNT * 2;
+    if (OB_ISNULL(buf = ctx_alloc.alloc(sizeof(ObObj) * obj_cnt))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate memory for rowkey obj", K(ret));
+    } else if (OB_ISNULL(fwd_range_objs_ = new (buf) ObObj[obj_cnt])) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate memory failed", K(ret));
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(doc_id.get_datum().to_obj(fwd_range_objs_[0], ir_ctdef_->inv_scan_domain_id_col_->obj_meta_))) {
+    LOG_WARN("failed to set obj", K(ret));
+  } else if (OB_FAIL(doc_id.get_datum().to_obj(fwd_range_objs_[2], ir_ctdef_->inv_scan_domain_id_col_->obj_meta_))) {
+    LOG_WARN("failed to set obj", K(ret));
+  } else {
+    fwd_range_objs_[1].set_min_value();
+    fwd_range_objs_[3].set_max_value();
+    scan_range.table_id_ = ir_ctdef_->get_fwd_idx_agg_ctdef()->ref_table_id_;
+    scan_range.start_key_.assign(fwd_range_objs_, FWD_IDX_ROWKEY_COL_CNT);
+    scan_range.end_key_.assign(&fwd_range_objs_[2], FWD_IDX_ROWKEY_COL_CNT);
+    scan_range.border_flag_.set_inclusive_start();
+    scan_range.border_flag_.set_inclusive_end();
+  }
+  return ret;
+}
+
 int ObDASTextRetrievalIter::init_calc_exprs()
 {
   int ret = OB_SUCCESS;
@@ -653,15 +820,6 @@ int ObDASTextRetrievalIter::init_calc_exprs()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected document length expression", K(ret), KP(doc_length_param_expr), KPC(doc_length_param_expr),
                  KP(ir_ctdef_->inv_scan_doc_length_col_));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      sql::ObExpr *token_weight_param_expr = relevance_expr->args_[sql::ObExprBM25::TOKEN_WEIGHT_PARAM_IDX];
-      if (OB_UNLIKELY(nullptr == token_weight_param_expr || token_weight_param_expr->type_ != T_PSEUDO_COLUMN)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected token weight expr type", K(ret), KPC(token_weight_param_expr));
-      } else {
-        token_weight_expr_ = token_weight_param_expr;
       }
     }
   }
@@ -705,28 +863,6 @@ int ObDASTextRetrievalIter::fill_token_doc_cnt()
     guard.set_batch_idx(0);
     ObDatum &doc_cnt_datum = inv_idx_agg_expr->locate_datum_for_write(*eval_ctx);
     doc_cnt_datum.set_int(token_doc_cnt_);
-  }
-  return ret;
-}
-
-int ObDASTextRetrievalIter::fill_token_weight()
-{
-  int ret = OB_SUCCESS;
-  sql::ObExpr *total_doc_cnt_expr =
-      ir_ctdef_->relevance_expr_->args_[sql::ObExprBM25::TOTAL_DOC_CNT_PARAM_IDX];
-  if (OB_ISNULL(token_weight_expr_) || OB_ISNULL(total_doc_cnt_expr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null BM25 weight expr", K(ret),
-             KPC_(token_weight_expr), KPC(total_doc_cnt_expr));
-  } else {
-    const int64_t total_doc_cnt =
-        total_doc_cnt_expr->locate_expr_datum(*ir_rtdef_->eval_ctx_, 0).get_int();
-    ObEvalCtx::BatchInfoScopeGuard guard(*ir_rtdef_->eval_ctx_);
-    guard.set_batch_idx(0);
-    ObDatum &token_weight_datum =
-        token_weight_expr_->locate_datum_for_write(*ir_rtdef_->eval_ctx_);
-    token_weight_datum.set_double(
-        sql::ObExprBM25::query_token_weight(token_doc_cnt_, total_doc_cnt));
   }
   return ret;
 }
@@ -897,8 +1033,6 @@ int ObDASTRCacheIter::get_next_batch_inner()
       clear_batch_wise_evaluated_flag(count_);
       if (OB_FAIL(fill_token_doc_cnt())) {
         LOG_WARN("failed to get token doc cnt", K(ret));
-      } else if (OB_FAIL(fill_token_weight())) {
-        LOG_WARN("failed to fill token weight", K(ret));
       } else if (OB_FAIL(save_relevances_and_docids())) {
         LOG_WARN("failed to evaluate simarity expr", K(ret));
       }

@@ -210,6 +210,7 @@ DEFINE_LOG_SUB_MOD(CG)                 // code generator
 DEFINE_LOG_SUB_MOD(SPI)                // service program interface
 DEFINE_LOG_SUB_MOD(PACK)               // package
 DEFINE_LOG_SUB_MOD(TYPE)               // type
+DEFINE_LOG_SUB_MOD(DEBUG)              // debug
 DEFINE_LOG_SUB_MOD(CACHE)              // cache
 DEFINE_LOG_SUB_MOD(STORAGEROUTINE)     // storage routine
 DEFINE_LOG_SUB_MOD(DEPENDENCY)     // collect dependency info

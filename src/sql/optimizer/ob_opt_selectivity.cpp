@@ -4048,10 +4048,15 @@ int ObOptSelectivity::remove_ignorable_func_for_est_sel(const ObRawExpr *&expr)
   while(OB_SUCC(ret) && is_ignorable) {
     if (T_FUN_SYS_CAST == expr->get_expr_type() ||
         T_FUN_SYS_CONVERT == expr->get_expr_type() ||
+        T_FUN_SYS_TO_DATE == expr->get_expr_type() ||
+        T_FUN_SYS_TO_CHAR == expr->get_expr_type() ||
         T_FUN_SYS_TO_NCHAR == expr->get_expr_type() ||
+        T_FUN_SYS_TO_NUMBER == expr->get_expr_type() ||
         T_FUN_SYS_TO_BINARY_FLOAT == expr->get_expr_type() ||
         T_FUN_SYS_TO_BINARY_DOUBLE == expr->get_expr_type() ||
         T_FUN_SYS_SET_COLLATION == expr->get_expr_type() ||
+        T_FUN_SYS_TO_TIMESTAMP == expr->get_expr_type() ||
+        T_FUN_SYS_TO_TIMESTAMP_TZ  == expr->get_expr_type() ||
         T_FUN_SYS_ALIGN_DATE4CMP == expr->get_expr_type()) {
       const ObRawExpr *child_expr = NULL;
       if (OB_UNLIKELY(1 > expr->get_param_count()) ||

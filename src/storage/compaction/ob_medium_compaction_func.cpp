@@ -151,6 +151,7 @@ int ObMediumCompactionScheduleFunc::find_valid_freeze_info(
     } else if (OB_FAIL(get_table_schema_to_merge(*schema_service,
                                                  tablet,
                                                  freeze_info.schema_version_,
+                                                 medium_info.data_version_,
                                                  allocator_,
                                                  medium_info.storage_schema_,
                                                  unused_is_skip_merge_index))) {
@@ -687,7 +688,7 @@ int ObMediumCompactionScheduleFunc::check_if_schema_changed(ObMediumCompactionIn
 {
   int ret = OB_SUCCESS;
   bool is_schema_changed = false;
-  if (OB_FAIL(check_if_schema_changed(*tablet_handle_.get_obj(), medium_info.storage_schema_, is_schema_changed))) {
+  if (OB_FAIL(check_if_schema_changed(*tablet_handle_.get_obj(), medium_info.storage_schema_, medium_info.data_version_, is_schema_changed))) {
     LOG_WARN("failed to get check if schema changed", K(ret), K(medium_info));
 #ifdef ERRSIM
   } else if (OB_UNLIKELY(EN_COMPACTION_SKIP_INIT_SCHEMA_CHANGED)) {
@@ -706,6 +707,7 @@ int ObMediumCompactionScheduleFunc::check_if_schema_changed(ObMediumCompactionIn
 int ObMediumCompactionScheduleFunc::check_if_schema_changed(
     const ObTablet &tablet,
     const ObStorageSchema &schema,
+    const uint64_t data_version,
     bool &is_schema_changed)
 {
   int ret = OB_SUCCESS;
@@ -921,6 +923,7 @@ int ObMediumCompactionScheduleFunc::prepare_medium_info(
     } else if (OB_FAIL(get_table_schema_to_merge(*schema_service,
                                                  *tablet,
                                                  schema_version,
+                                                 medium_info.data_version_,
                                                  allocator_,
                                                  medium_info.storage_schema_,
                                                  is_skip_merge_index))) {
@@ -982,6 +985,7 @@ int ObMediumCompactionScheduleFunc::get_table_schema_to_merge(
     ObMultiVersionSchemaService &schema_service,
     const ObTablet &tablet,
     const int64_t schema_version,
+    const int64_t data_version,
     ObIAllocator &allocator,
     ObStorageSchema &storage_schema,
     bool &is_skip_merge_index)
@@ -1039,7 +1043,7 @@ int ObMediumCompactionScheduleFunc::get_table_schema_to_merge(
   }
 #endif
   // Build the storage schema used by the scheduled merge.
-  if (FAILEDx(storage_schema.init(allocator, *table_schema, false/*skip_column_info*/))) {
+  if (FAILEDx(storage_schema.init(allocator, *table_schema, false/*skip_column_info*/, data_version))) {
     LOG_WARN("failed to init storage schema", K(ret), K(schema_version), K(tablet), KPC(table_schema));
   } else {
     LOG_INFO("get schema to merge", K(tablet_id), K(table_id), K(schema_version), K(save_schema_version),
@@ -1132,7 +1136,7 @@ int ObMediumCompactionScheduleFunc::check_medium_meta_table(
     LOG_WARN("invalid argument", K(ret), K(check_medium_snapshot), K(tablet_info));
   } else if (OB_UNLIKELY(!tablet_info.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet_id is invalid", K(ret), K(tablet_info));
+    LOG_WARN("tabled_id is invalid", K(ret), K(tablet_info));
   } else {
     merge_finish = tablet_info.get_snapshot_version() >= check_medium_snapshot;
     LOG_INFO("check_medium_compaction_finish", K(ret), K(tablet_info),

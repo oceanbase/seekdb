@@ -83,6 +83,9 @@ OB_SERIALIZE_MEMBER(ObSqcTableLocationKey,
                     tablet_id_,
                     is_dml_,
                     is_loc_uncertain_);
+OB_SERIALIZE_MEMBER(ObPxCleanDtlIntermResInfo, ch_total_info_, sqc_id_, task_count_);
+OB_SERIALIZE_MEMBER(ObPxCleanDtlIntermResArgs, info_, batch_size_);
+
 int ObQCMonitoringInfo::init(const ObDfo &dfo) {
   int ret = OB_SUCCESS;
   qc_tid_ = GETTID();
@@ -107,7 +110,8 @@ void ObQCMonitoringInfo::reset() {
 int ObPxSqcMeta::assign(const ObPxSqcMeta &other)
 {
   int ret = OB_SUCCESS;
-  // Note: Non-generic function, cannot be used to save an initialized ObPxSqcMeta.
+  // Note: Non-generic function, cannot be used to save already initialized ObPxSqcMeta
+  //       Only used for assign execution address
   if (NULL != qc_channel_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("should only add a new sqc. you are adding an inited one", K(ret));
@@ -586,11 +590,11 @@ int ObPxInitSqcArgs::do_deserialize(int64_t &pos, const char *net_buf, int64_t d
             for (int64_t j = 0; j < datum_frame.count() && OB_SUCC(ret); j++) {
               const ObFrameInfo &frame_info = datum_frame.at(j);
               if (expr.frame_idx_ == frame_info.frame_idx_) {
-                int64_t max_offset = ObStaticEngineExprCG::frame_max_offset(expr, batch_size);
+                int64_t max_offset = ObStaticEngineExprCG::frame_max_offset(expr, batch_size, frame_info.use_rich_format_);
                 if (OB_UNLIKELY(max_offset > frame_info.frame_size_)) {
                   ret = OB_SIZE_OVERFLOW;
                   LOG_WARN("unexpected frame size", K(ret), K(frame_info), K(batch_size),
-                           K(max_offset), K(expr), K(expr.batch_result_));
+                           K(max_offset), K(expr), K(expr.batch_result_), K(expr.offset_off_), K(expr.cont_buf_off_), K(expr.null_bitmap_off_));
                 }
               }
             }

@@ -68,6 +68,8 @@ int ObDDLSqlGenerator::get_priv_name(const int64_t priv, const char *&name)
       name = "PROCESS"; break;
     case OB_PRIV_BOOTSTRAP:
       name = "BOOSTRAP"; break;
+    case OB_PRIV_CREATE_SYNONYM:
+      name = "CREATE SYNONYM"; break;
     case OB_PRIV_AUDIT:
       name = "AUDIT"; break;
     case OB_PRIV_COMMENT:
@@ -1018,11 +1020,10 @@ int ObDDLSqlGenerator::gen_user_priv_sql(const obcall::ObAccountArg &account,
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_object_priv_sql(
-    const obcall::ObAccountArg &account,
-    const ObNeedPriv &need_priv,
-    const bool is_grant,
-    ObSqlString &sql_string)
+int ObDDLSqlGenerator::gen_object_priv_sql(const obcall::ObAccountArg &account,
+  const ObNeedPriv &need_priv,
+  const bool is_grant,
+  ObSqlString &sql_string)
 {
   int ret = OB_SUCCESS;
   char GRANT_OBJECT_SQL[] = "GRANT %s ON %s `%.*s`.* TO `%.*s`";
@@ -1032,51 +1033,54 @@ int ObDDLSqlGenerator::gen_object_priv_sql(
   ObSqlString priv_string;
   if (OB_UNLIKELY(need_priv.table_.empty()) || OB_UNLIKELY(!account.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("object name or user name is empty", K(ret), K(need_priv), K(account));
+    LOG_WARN(" or user_name is empty", K(ret), K(need_priv), K(account));
   } else if (need_priv.priv_level_ != OB_PRIV_OBJECT_LEVEL) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("priv level is invalid", K(need_priv), K(ret));
   } else if (need_priv.priv_set_ & (~(OB_PRIV_OBJECT_ACC | OB_PRIV_GRANT))) {
     ret = OB_ILLEGAL_GRANT_FOR_TABLE;
-    LOG_WARN("object privilege cannot be granted or revoked",
-             "priv_type", ObPrintPrivSet(need_priv.priv_set_), K(ret));
+    LOG_WARN("Grant/Revoke privilege than can not be used", "priv_type", ObPrintPrivSet(need_priv.priv_set_), K(ret));
   } else if (OB_FAIL(priv_to_name(need_priv.priv_set_, priv_string))) {
     LOG_WARN("get priv to name failed", K(ret));
   }
 
   if (OB_SUCC(ret)) {
     if (0 == account.host_name_.compare(OB_DEFAULT_HOST_NAME)) {
-      if (OB_FAIL(sql_string.append_fmt(
-              adjust_ddl_format_str(is_grant ? GRANT_OBJECT_SQL : REVOKE_OBJECT_SQL),
-              priv_string.string().ptr(),
-              ob_object_type_str(need_priv.obj_type_),
-              need_priv.table_.length(),
-              need_priv.table_.ptr(),
-              account.user_name_.length(),
-              account.user_name_.ptr()))) {
+      if (OB_FAIL(sql_string.append_fmt(adjust_ddl_format_str(is_grant ? GRANT_OBJECT_SQL : REVOKE_OBJECT_SQL),
+                                                              priv_string.string().ptr(),
+                                                              ob_object_type_str(need_priv.obj_type_),
+                                                              need_priv.table_.length(),
+                                                              need_priv.table_.ptr(),
+                                                              account.user_name_.length(),
+                                                              account.user_name_.ptr()))) {
         LOG_WARN("append sql failed", K(ret));
       }
-    } else if (OB_FAIL(sql_string.append_fmt(
-                   adjust_ddl_format_str(
-                       is_grant ? NEW_GRANT_OBJECT_SQL : NEW_REVOKE_OBJECT_SQL),
-                   priv_string.string().ptr(),
-                   ob_object_type_str(need_priv.obj_type_),
-                   need_priv.table_.length(),
-                   need_priv.table_.ptr(),
-                   account.user_name_.length(),
-                   account.user_name_.ptr(),
-                   account.host_name_.length(),
-                   account.host_name_.ptr()))) {
-      LOG_WARN("append sql failed", K(ret));
+    } else {
+      if (OB_FAIL(sql_string.append_fmt(adjust_ddl_format_str(is_grant ? NEW_GRANT_OBJECT_SQL : NEW_REVOKE_OBJECT_SQL),
+                                                              priv_string.string().ptr(),
+                                                              ob_object_type_str(need_priv.obj_type_),
+                                                              need_priv.table_.length(),
+                                                              need_priv.table_.ptr(),
+                                                              account.user_name_.length(),
+                                                              account.user_name_.ptr(),
+                                                              account.host_name_.length(),
+                                                              account.host_name_.ptr()))) {
+        LOG_WARN("append sql failed", K(ret));
+      }
     }
   }
-  if (OB_SUCC(ret) && is_grant && (need_priv.priv_set_ & OB_PRIV_GRANT)
-      && OB_FAIL(sql_string.append(" WITH GRANT OPTION"))) {
-    LOG_WARN("append sql failed", K(ret));
+
+  if (OB_SUCC(ret) && is_grant) {
+    if (need_priv.priv_set_ & OB_PRIV_GRANT) {
+      if (OB_FAIL(sql_string.append(" WITH GRANT OPTION"))) {
+        LOG_WARN("append sql failed", K(ret));
+      }
+    }
   }
-  LOG_DEBUG("gen object priv sql", K(sql_string.string()), K(is_grant), K(need_priv));
+  LOG_INFO("mingyin gen db priv sql", K(sql_string.string()), K(is_grant), K(need_priv));
   return ret;
 }
+
 
 char *ObDDLSqlGenerator::adjust_ddl_format_str(char *ori_format_str)
 {

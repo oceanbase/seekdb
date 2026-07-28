@@ -1031,6 +1031,7 @@ all_user_def = dict(
       ('priv_super', 'int', 'false', '0'),
       ('is_locked', 'int'),
       ('priv_process', 'int', 'false', '0'),
+      ('priv_create_synonym', 'int', 'false', '0'),
       ('ssl_type', 'int', 'false', '0'),
       ('ssl_cipher', 'varchar:1024', 'false', ''),
       ('x509_issuer', 'varchar:1024', 'false', ''),
@@ -2172,7 +2173,7 @@ def_table_schema(
   is_cluster_private = False,
 
   normal_columns = [
-      ('data_version', 'int'),
+      ('cluster_version', 'int'),
       ('schema_version', 'int')
   ]
   )
@@ -3051,6 +3052,7 @@ def_table_schema(
       ('is_in_pc', 'bool'),
       ('erase_time', 'timestamp'),
       ('compile_time', 'uint'),
+      ('pl_cg_mem_hold', 'int'),
       ('pl_evict_version', 'int'),
       ('first_get_plan_time', 'int'),
       ('first_exe_usec', 'int')
@@ -3526,6 +3528,7 @@ def_table_schema(
   ('tmp_file_count', 'int'),
   ('data_block_count', 'int'),
   ('disk_block_count', 'int'),
+  ('bloomfilter_count', 'int'),
   ('hold_count', 'int'),
   ('pending_free_count', 'int'),
   ('free_count', 'int'),
@@ -8349,7 +8352,7 @@ def_table_schema(
 # TODO:(yanmu.ztl)
 # 1. sys package is not visible in user tenant.
 # 2. tablespace/constraint are not supported yet.
-# 3. sequence/context objects are not exposed.
+# 3. sequence_object/synonym/context objects are not exposed.
 def_table_schema(
   owner           = 'yanmu.ztl',
   table_name      = 'DBA_OBJECTS',
@@ -10764,7 +10767,7 @@ def_table_schema(
   view_definition =
   """
   SELECT FROZEN_SCN,
-         DATA_VERSION,
+         CLUSTER_VERSION,
          SCHEMA_VERSION,
          GMT_CREATE,
          GMT_MODIFIED
@@ -10861,6 +10864,7 @@ def_table_schema(
             (CASE WHEN PRIV_SUPER = 0 THEN 'NO' ELSE 'YES' END) AS PRIV_SUPER,
             (CASE WHEN IS_LOCKED = 0 THEN 'NO' ELSE 'YES' END) AS IS_LOCKED,
             (CASE WHEN PRIV_PROCESS = 0 THEN 'NO' ELSE 'YES' END) AS PRIV_PROCESS,
+            (CASE WHEN PRIV_CREATE_SYNONYM = 0 THEN 'NO' ELSE 'YES' END) AS PRIV_CREATE_SYNONYM,
             SSL_TYPE,
             SSL_CIPHER,
             X509_ISSUER,
@@ -11293,6 +11297,8 @@ def_table_schema(
                      AND U.PRIV_SUPER = 1 THEN 'SUPER'
                 WHEN V1.C1 = 14
                      AND U.PRIV_PROCESS = 1 THEN 'PROCESS'
+                WHEN V1.C1 = 15
+                     AND U.PRIV_CREATE_SYNONYM = 1 THEN 'CREATE SYNONYM'
                 WHEN V1.C1 = 16
                      AND (U.PRIV_OTHERS & (1 << 6)) != 0 THEN 'REFERENCES'
                 WHEN V1.C1 = 17
@@ -11346,6 +11352,7 @@ def_table_schema(
                      AND U.PRIV_SHOW_DB = 0
                      AND U.PRIV_SUPER = 0
                      AND U.PRIV_PROCESS = 0
+                     AND U.PRIV_CREATE_SYNONYM = 0
                      AND U.PRIV_FILE = 0
                      AND U.PRIV_ALTER_SYSTEM = 0
                      AND U.PRIV_REPL_SLAVE = 0
@@ -11368,6 +11375,7 @@ def_table_schema(
                      AND U.PRIV_SHOW_DB = 0
                      AND U.PRIV_SUPER = 0
                      AND U.PRIV_PROCESS = 0
+                     AND U.PRIV_CREATE_SYNONYM = 0
                      AND U.PRIV_FILE = 0
                      AND U.PRIV_ALTER_SYSTEM = 0
                      AND U.PRIV_REPL_SLAVE = 0
@@ -11391,6 +11399,7 @@ def_table_schema(
         UNION ALL SELECT 12 AS C1
         UNION ALL SELECT 13 AS C1
         UNION ALL SELECT 14 AS C1
+        UNION ALL SELECT 15 AS C1
         UNION ALL SELECT 16 AS C1
         UNION ALL SELECT 17 AS C1
         UNION ALL SELECT 18 AS C1
@@ -12481,13 +12490,14 @@ def_table_schema(
            PL_EVICT_VERSION,
            PS_STMT_ID,
            DB_ID,
+           PL_CG_MEM_HOLD,
            SYS_VARS,
            PARAM_INFOS,
            SQL_ID,
            OUTLINE_VERSION,
            OUTLINE_ID,
            OUTLINE_DATA AS CONCURRENT_DATA
-    FROM oceanbase.__all_virtual_plan_stat WHERE OBJECT_STATUS = 0 AND TYPE >= 5 AND TYPE < 10 AND is_in_pc=true
+    FROM oceanbase.__all_virtual_plan_stat WHERE OBJECT_STATUS = 0 AND TYPE > 5 AND TYPE < 11 AND is_in_pc=true
 """.replace("\n", " "),
 
 

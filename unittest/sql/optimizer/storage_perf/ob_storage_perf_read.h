@@ -29,6 +29,7 @@
 #include "storage/ob_partition_meta.h"
 #include "storage/ob_partition_storage.h"
 #include "storage/ob_base_storage.h"
+#include "lib/stat/ob_diagnose_info.h"
 #include "lib/allocator/page_arena.h"
 #include "storage/memtable/ob_memtable.h"
 #include "ob_storage_perf_data.h"
@@ -64,6 +65,67 @@ private:
   static const int64_t DEFAULT_PARTITION_META_SIZE = 256 * 1024LL;
   DISALLOW_COPY_AND_ASSIGN(FakePartitionMeta);
   ObArray<int64_t> blocks_;
+};
+
+struct ObStoragePerfWaitEvent
+{
+  uint64_t total_waits_;
+  uint64_t total_timeouts_;
+  uint64_t time_waited_micro_;
+  uint64_t max_wait_;
+  double average_wait_;
+  char name_[MAX_PATH_SIZE];
+
+  ObStoragePerfWaitEvent(const char *name);
+  ObStoragePerfWaitEvent operator - (const ObStoragePerfWaitEvent &event);
+  int64_t to_string(char *buf, const int64_t buf_len) const;
+  void reset();
+};
+//TOTO:distinguish index micro read or normal micro read
+struct ObStoragePerfStatistics
+{
+  uint64_t index_cache_hit_;
+  uint64_t index_cache_miss_;
+  uint64_t row_cache_hit_;
+  uint64_t row_cache_miss_;
+  uint64_t block_cache_hit_;
+  uint64_t block_cache_miss_;
+  uint64_t bf_cache_hit_;
+  uint64_t bf_cache_miss_;
+  uint64_t io_read_count_;
+  uint64_t io_read_size_;
+  uint64_t io_read_delay_;
+  uint64_t io_read_queue_delay_;
+  uint64_t io_read_cb_alloc_delay_;
+  uint64_t io_read_cb_process_delay_;
+  uint64_t io_read_prefetch_micro_cnt_;
+  uint64_t io_read_prefetch_micro_size_;
+  uint64_t io_read_uncomp_micro_cnt_;
+  uint64_t io_read_uncomp_micro_size_;
+
+
+  ObStoragePerfWaitEvent db_file_data_read_;
+  ObStoragePerfWaitEvent db_file_data_index_read_;
+  ObStoragePerfWaitEvent kv_cache_bucket_lock_wait_;
+  ObStoragePerfWaitEvent io_queue_lock_wait_;
+  ObStoragePerfWaitEvent io_controller_cond_wait_;
+  ObStoragePerfWaitEvent io_processor_cond_wait_;
+
+
+  ObStoragePerfStatistics();
+  ObStoragePerfStatistics operator - (const ObStoragePerfStatistics &statics);
+  int64_t to_string(char *buf, const int64_t buf_len) const;
+  void reset();
+};
+
+struct ObSingleRowSpeed
+{
+  uint64_t sum_duation_;
+  uint64_t count_;
+
+  ObSingleRowSpeed();
+  int64_t to_string(char *buf, const int64_t buf_len) const;
+  int64_t get_avg();
 };
 
 class ObUpdateRowIter : public ObNewRowIterator
@@ -132,11 +194,23 @@ public:
     return read_cols_.assign(read_cols);
   }
 private:
+  enum QueryType {
+    SINGLE_GET = 0,
+    MULTI_GET = 1,
+    SCAN = 2,
+  };
+private:
   int init_data_file();
   int init_partition_storage();
   int backup_sstable_meta(blocksstable::ObSSTable &sstable);
   int set_trans_desc(oceanbase::transaction::ObTransDesc &trans_desc);
   int destroy(void);
+  void set_statistics(ObStoragePerfStatistics &statics);
+  int set_global_stat(ObStoragePerfStatistics &statics);
+  bool is_row_cache_hit(const ObStoragePerfStatistics &statics, const QueryType type);
+  bool is_block_cache_hit(const ObStoragePerfStatistics &statics, const QueryType type);
+  bool is_read_one_micro_block(const ObStoragePerfStatistics &statics, const QueryType type);
+  bool is_read_two_micro_block(const ObStoragePerfStatistics &statics, const QueryType type);
   int get_ret() { return ret_; }
   void set_ret(int ret) { ret_ = ret; }
 
@@ -145,6 +219,8 @@ private:
   char log_dir_path_[MAX_PATH_SIZE];
   char sstable_meta_path_[MAX_PATH_SIZE];
   char perf_stat_path_[MAX_PATH_SIZE];
+  char *string_buf_;
+  static const int64_t MAX_BUF_LENGTH = 8192;
 
   FILE *pfile_;
   storage::ObSSStore ssstore_;
@@ -166,6 +242,7 @@ private:
 
   pthread_barrier_t *barrier_;
   common::ObArenaAllocator allocator_;
+  common::ObDiagnoseRuntimeInfo runtime_info_;
 
   int64_t thread_no_;
   bool is_inited_;

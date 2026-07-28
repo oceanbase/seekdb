@@ -16,8 +16,8 @@
 // this file was  share/ob_ddl_common.cpp created by function-level splitting from:these ObDDLUtil static methods
 // implementation depends on this module,callers are all in upper layers;declaration remains in share/ob_ddl_common.h。
 #define USING_LOG_PREFIX SHARE
-#include "share/rc/ob_module_provider.h"
 
+#include "share/ob_ex_rpc.h"
 #include "observer/ob_service.h"
 #include "share/ob_ddl_common.h"
 #include "storage/ob_storage_rpc_arg.h"
@@ -47,6 +47,7 @@
 using namespace oceanbase::share;
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
+using namespace oceanbase::obcall;
 using namespace oceanbase::sql;
 
 int ObDDLUtil::hold_snapshot(

@@ -15,6 +15,7 @@
  */
 
 #include "sql/optimizer/stat/ob_opt_system_stat_cache.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 
 namespace oceanbase {
 namespace common {
@@ -31,8 +32,10 @@ int ObOptSystemStatCache::get_value(const ObOptSystemStat::Key &key, ObOptSystem
     if (OB_ENTRY_NOT_EXIST != ret) {
       COMMON_LOG(WARN, "fail to get value from cache", K(ret), K(key));
     }
+    EVENT_INC(OPT_SYSTEM_STAT_CACHE_MISS);
   } else {
     handle.cache_ = this;
+    EVENT_INC(OPT_SYSTEM_STAT_CACHE_HIT);
   }
   return ret;
 }

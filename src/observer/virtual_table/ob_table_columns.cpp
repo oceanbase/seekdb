@@ -91,7 +91,8 @@ ObTableColumns::ObTableColumns()
     : ObVirtualTableScannerIterator(),
       type_str_(),
       column_type_str_(type_str_),
-      column_type_str_len_(OB_MAX_SYS_PARAM_NAME_LENGTH)
+      column_type_str_len_(OB_MAX_SYS_PARAM_NAME_LENGTH),
+      min_data_version_(OB_INVALID_VERSION)
 {
   MEMSET(type_str_, 0, OB_MAX_SYS_PARAM_NAME_LENGTH);
 }
@@ -104,10 +105,13 @@ void ObTableColumns::reset()
 {
   MEMSET(type_str_, 0, OB_MAX_SYS_PARAM_NAME_LENGTH);
   ObVirtualTableScannerIterator::reset();
+  min_data_version_ = OB_INVALID_VERSION;
 }
 
 int ObTableColumns::init() {
-  return OB_SUCCESS;
+  int ret = OB_SUCCESS;
+  min_data_version_ = DATA_CURRENT_VERSION;
+  return ret;
 }
 
 int ObTableColumns::inner_get_next_row(ObNewRow *&row)
@@ -1009,74 +1013,76 @@ int ObTableColumns::deduce_column_attributes(
   }
 
   if (OB_SUCC(ret)) {
-    ObSessionPrivInfo session_priv;
-    const common::ObIArray<uint64_t> &enable_role_id_array = session->get_enable_role_array();
-    session->get_session_priv_info(session_priv);
-    const ObSimpleDatabaseSchema *db_schema = NULL;
-    const ObColumnPriv *column_priv = NULL;
-    if (OB_UNLIKELY(!session_priv.is_valid())) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Session priv is invalid",
-               "user_id", session_priv.user_id_, K(ret));
-    } else if (table_schema.get_database_id() == OB_INVALID_ID) {
-      ret = OB_ERR_BAD_DATABASE;
-      LOG_WARN("db name not found", K(ret));
-    } else if (OB_FAIL(schema_guard->get_database_schema(
-                                                         table_schema.get_database_id(),
-                                                         db_schema))) {
-      LOG_WARN("get database schema failed", K(ret));
-    } else if (OB_ISNULL(db_schema)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("db schema is null", K(ret));
-    } else if (OB_FAIL(schema_guard->get_column_priv(ObColumnPrivSortKey(session_priv.user_id_,
-                                                                         db_schema->get_database_name_str(),
-                                                                         table_schema.get_table_name_str(),
-                                                                         select_item.alias_name_),
-                                                   column_priv))) {
-      LOG_WARN("get column priv failed", K(ret));
-    } else {
-      ObNeedPriv need_priv(db_schema->get_database_name(),
-                          table_schema.get_table_name(),
-                          OB_PRIV_TABLE_LEVEL, OB_PRIV_SELECT, false);
-      ObPrivSet col_priv_set = 0;
-      if (column_priv != NULL) {
-        col_priv_set = column_priv->get_priv_set();
-      }
-      if (0 != (col_priv_set & OB_PRIV_SELECT)
-          || OB_SUCCESS == schema_guard->check_single_table_priv(session_priv, enable_role_id_array, need_priv)) {
-        if (OB_FAIL(priv.append("SELECT,"))) {
-          LOG_WARN("append failed", K(ret));
+    if (true /* MySQL-only mode */) {
+      ObSessionPrivInfo session_priv;
+      const common::ObIArray<uint64_t> &enable_role_id_array = session->get_enable_role_array();
+      session->get_session_priv_info(session_priv);
+      const ObSimpleDatabaseSchema *db_schema = NULL;
+      const ObColumnPriv *column_priv = NULL;
+      if (OB_UNLIKELY(!session_priv.is_valid())) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("Session priv is invalid", 
+                  "user_id", session_priv.user_id_, K(ret));
+      } else if (table_schema.get_database_id() == OB_INVALID_ID) {
+        ret = OB_ERR_BAD_DATABASE;
+        LOG_WARN("db name not found", K(ret));
+      } else if (OB_FAIL(schema_guard->get_database_schema( 
+                                                           table_schema.get_database_id(), 
+                                                           db_schema))) {
+        LOG_WARN("get database schema failed", K(ret));
+      } else if (OB_ISNULL(db_schema)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("db schema is null", K(ret));
+      } else if (OB_FAIL(schema_guard->get_column_priv(ObColumnPrivSortKey(session_priv.user_id_, 
+                                                                           db_schema->get_database_name_str(), 
+                                                                           table_schema.get_table_name_str(), 
+                                                                           select_item.alias_name_), 
+                                                     column_priv))) {
+        LOG_WARN("get column priv failed", K(ret));
+      } else {
+        ObNeedPriv need_priv(db_schema->get_database_name(), 
+                    table_schema.get_table_name(),
+                    OB_PRIV_TABLE_LEVEL, OB_PRIV_SELECT, false);
+        ObPrivSet col_priv_set = 0;
+        if (column_priv != NULL) {
+          col_priv_set = column_priv->get_priv_set();
         }
-      }
-      need_priv.priv_set_ = OB_PRIV_INSERT;
-      if (OB_SUCC(ret)) {
-        if (0 != (col_priv_set & OB_PRIV_INSERT)
+        if (0 != (col_priv_set & OB_PRIV_SELECT)
             || OB_SUCCESS == schema_guard->check_single_table_priv(session_priv, enable_role_id_array, need_priv)) {
-          if (OB_FAIL(priv.append("INSERT,"))) {
+          if (OB_FAIL(priv.append("SELECT,"))) {
             LOG_WARN("append failed", K(ret));
           }
         }
-      }
-      need_priv.priv_set_ = OB_PRIV_UPDATE;
-      if (OB_SUCC(ret)) {
-        if (0 != (col_priv_set & OB_PRIV_UPDATE)
-            || OB_SUCCESS == schema_guard->check_single_table_priv(session_priv, enable_role_id_array, need_priv)) {
-          if (OB_FAIL(priv.append("UPDATE,"))) {
-            LOG_WARN("append failed", K(ret));
+        need_priv.priv_set_ = OB_PRIV_INSERT;
+        if (OB_SUCC(ret)) {
+          if (0 != (col_priv_set & OB_PRIV_INSERT)
+              || OB_SUCCESS == schema_guard->check_single_table_priv(session_priv, enable_role_id_array, need_priv)) {
+            if (OB_FAIL(priv.append("INSERT,"))) {
+              LOG_WARN("append failed", K(ret));
+            }
           }
         }
-      }
-      need_priv.priv_set_ = OB_PRIV_REFERENCES;
-      if (OB_SUCC(ret)) {
-        if (0 != (col_priv_set & OB_PRIV_REFERENCES)
-            || OB_SUCCESS == schema_guard->check_single_table_priv(session_priv, enable_role_id_array, need_priv)) {
-          if (OB_FAIL(priv.append("REFERENCES,"))) {
-            LOG_WARN("append failed", K(ret));
+        need_priv.priv_set_ = OB_PRIV_UPDATE;
+        if (OB_SUCC(ret)) {
+          if (0 != (col_priv_set & OB_PRIV_UPDATE)
+              || OB_SUCCESS == schema_guard->check_single_table_priv(session_priv, enable_role_id_array, need_priv)) {
+            if (OB_FAIL(priv.append("UPDATE,"))) {
+              LOG_WARN("append failed", K(ret));
+            }
           }
         }
-      }
-      if (OB_SUCC(ret) && !priv.empty()) {
-        priv.set_length(priv.length() - 1);
+        need_priv.priv_set_ = OB_PRIV_REFERENCES;
+        if (OB_SUCC(ret)) {
+          if (0 != (col_priv_set & OB_PRIV_REFERENCES)
+              || OB_SUCCESS == schema_guard->check_single_table_priv(session_priv, enable_role_id_array, need_priv)) {
+            if (OB_FAIL(priv.append("REFERENCES,"))) {
+              LOG_WARN("append failed", K(ret));
+            }
+          }
+        }
+        if (OB_SUCC(ret) && !priv.empty()) {
+          priv.set_length(priv.length() - 1);
+        }
       }
     }
   }

@@ -26,7 +26,6 @@
 
 namespace oceanbase
 {
-using namespace common;
 using namespace share;
 namespace rootserver
 {
@@ -205,53 +204,64 @@ int ObMajorFreezeHelper::do_admin_merge(const AdminMergeType admin_type)
 }
 
 int ObMajorFreezeHelper::get_frozen_status(
-    const SCN &frozen_scn,
-    ObFreezeInfo &frozen_status)
+    const share::SCN &frozen_scn,
+    share::ObFreezeInfo &frozen_status)
 {
   return get_frozen_status(frozen_scn, frozen_status, GCTX.sql_proxy_);
 }
 
 int ObMajorFreezeHelper::get_frozen_status(
-    const SCN &frozen_scn,
-    ObFreezeInfo &frozen_status,
+    const SCN &frozen_scn, 
+    share::ObFreezeInfo &frozen_status,
     ObISQLClient *proxy)
 {
   int ret = OB_SUCCESS;
-  ObFreezeInfoProxy freeze_info_proxy;
+  share::ObFreezeInfoProxy freeze_info_proxy{};
+
   if (OB_ISNULL(proxy)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("SQL proxy is null", KR(ret));
+    LOG_WARN("invalid GCTX", KR(ret));
   } else if (OB_FAIL(freeze_info_proxy.get_freeze_info(*proxy, frozen_scn, frozen_status))) {
     if (OB_ITER_END != ret && OB_TABLE_NOT_EXIST != ret) {
-      LOG_WARN("get freeze info failed", KR(ret), K(frozen_scn));
+      LOG_WARN("fail to get freeze info", KR(ret), K(frozen_scn));
     }
   }
+
   return ret;
 }
 
-int ObMajorFreezeHelper::get_frozen_scn(SCN &frozen_scn, ObISQLClient *proxy)
+int ObMajorFreezeHelper::get_frozen_scn(
+    SCN &frozen_scn,
+    ObISQLClient *proxy)
 {
   int ret = OB_SUCCESS;
-  ObFreezeInfo frozen_status;
+  share::ObFreezeInfo frozen_status;
+
+  // use min_scn to get frozen_status, means get one with biggest frozen_scn
   if (OB_FAIL(get_frozen_status(SCN::min_scn(), frozen_status, proxy))) {
-    LOG_WARN("get latest freeze info failed", KR(ret));
+    LOG_WARN("fail to get frozen info", KR(ret));
   } else {
     frozen_scn = frozen_status.frozen_scn_;
   }
+
   return ret;
 }
 
-int ObMajorFreezeHelper::get_frozen_scn(SCN &frozen_scn)
+int ObMajorFreezeHelper::get_frozen_scn(
+    SCN &frozen_scn)
 {
   int ret = OB_SUCCESS;
-  ObFreezeInfo frozen_status;
+  share::ObFreezeInfo frozen_status;
+
+  // use min_scn to get frozen_status, means get one with biggest frozen_scn
   if (OB_FAIL(get_frozen_status(SCN::min_scn(), frozen_status))) {
     if (OB_ITER_END != ret && OB_TABLE_NOT_EXIST != ret) {
-      LOG_WARN("get latest freeze info failed", KR(ret));
+      LOG_WARN("fail to get frozen info", KR(ret));
     }
   } else {
     frozen_scn = frozen_status.frozen_scn_;
   }
+
   return ret;
 }
 

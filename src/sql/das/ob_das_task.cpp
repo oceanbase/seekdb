@@ -59,6 +59,7 @@ int ObIDASTaskOp::start_das_task()
       dump_data();
     }
   }
+  // The caller advances the aggregated-task state after execution.
   if (OB_FAIL(ret)) {
     set_task_status(ObDasTaskStatus::FAILED);
   } else {

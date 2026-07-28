@@ -172,6 +172,13 @@ int vector_accuracy_check(const ObExpr &expr,
                          const ObIVector &in_vec,
                          ObIVector &out_vec,
                          int &warning);
+// According to in_type, force_use_standard_format information, get format_str, prioritize obtaining from the local session variable list saved by rt_expr, if it does not exist then get from session
+int common_get_nls_format(const ObBasicSessionInfo *session,
+                          ObEvalCtx &ctx,
+                          const ObExpr *rt_expr,
+                          const ObObjType in_type,
+                          const bool force_use_standard_format,
+                          ObString &format_str);
 // Check if str is valid with check_cs_type as the character set
 // strict_modeunder, if the above checks fail, return error code
 // Otherwise return the longest valid string with check_cs_type as the character set
@@ -424,6 +431,7 @@ int common_datetime_string(const ObExpr &expr,
                            const common::ObObjType in_type,
                            const common::ObObjType out_type,
                            const common::ObScale in_scale,
+                           bool force_use_std_nls_format,
                            const int64_t in_val, ObEvalCtx &ctx, char *buf,
                            int64_t buf_len, int64_t &out_len);
 int padding_char_for_cast(int64_t padding_cnt, 

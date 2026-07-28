@@ -36,7 +36,7 @@ int ObKillExecutor::execute(ObExecContext &ctx, ObKillStmt &stmt)
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_UNKNOWN_CONNECTION;
     } else {
-      LOG_WARN("fail to kill local session", K(ret), K(arg));
+      LOG_WARN("fail to kill session", K(ret), K(arg));
     }
   }
 
@@ -68,12 +68,16 @@ int ObKillSession::kill_session(const ObKillSessionArg &arg, ObSQLSessionMgr &se
   } else if (OB_FAIL(arg.check_auth_for_kill(1UL, sess_info->get_user_id()))) {
     ret = OB_ERR_KILL_DENIED;
     LOG_WARN("no permissions for kill", K(ret), K(arg.sess_id_));
-  } else if (arg.is_query_) {
-    if (OB_FAIL(sess_mgr.kill_query(*sess_info))) {
-      LOG_WARN("fail to kill query", K(ret), K(arg));
+  } else {
+    if (arg.is_query_) {
+      if (OB_FAIL(sess_mgr.kill_query(*sess_info))) {
+        LOG_WARN("fail to kill query", K(ret), K(arg));
+      }
+    } else {
+      if (OB_FAIL(sess_mgr.kill_session(*sess_info))) {
+        LOG_WARN("fail to kill session", K(ret), K(arg));
+      }
     }
-  } else if (OB_FAIL(sess_mgr.kill_session(*sess_info))) {
-    LOG_WARN("fail to kill session", K(ret), K(arg));
   }
   return ret;
 }

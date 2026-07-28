@@ -85,7 +85,9 @@ int ObInfoSchemaSchemaPrivilegesTable::inner_get_next_row(common::ObNewRow *&row
             LOG_WARN("db_priv is null", K(ret), K(dp_id));
           } else if (ObString(OB_RECYCLEBIN_SCHEMA_NAME) == db_priv->get_database_name_str()
                      || ObString(OB_PUBLIC_SCHEMA_NAME) == db_priv->get_database_name_str()
-                     || ObString(OB_EXTENDED_SYS_SCHEMA_NAME) == db_priv->get_database_name_str()) {
+                     || ObString(OB_EXTENDED_SYS_SCHEMA_NAME) == db_priv->get_database_name_str()
+                     || ObString(OB_LBACSYS_SCHEMA_NAME) == db_priv->get_database_name_str()
+                     || ObString(OB_AUDITOR_SCHEMA_NAME) == db_priv->get_database_name_str()) {
             continue;
           } else if (OB_FAIL(fill_row_with_db_priv(db_priv))) {
             SERVER_LOG(WARN, "failed to fill row", K(ret));

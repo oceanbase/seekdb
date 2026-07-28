@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/mysql/obmp_stmt_send_long_data.h"
 
 #include "sql/ob_sql.h"
@@ -119,6 +120,7 @@ int ObMPStmtSendLongData::process()
     THIS_WORKER.set_session(sess);
     ObSQLSessionInfo::LockGuard lock_guard(session.get_query_lock());
     session.set_current_trace_id(ObCurTraceId::get_trace_id());
+    session.init_use_rich_format();
     session.get_raw_audit_record().request_memory_used_ = 0;
     observer::ObProcessMallocCallback pmcb(0,
           session.get_raw_audit_record().request_memory_used_);
@@ -138,7 +140,7 @@ int ObMPStmtSendLongData::process()
       LOG_WARN("packet too large than allowd for the session", K_(stmt_id), K_(param_id), K(ret));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
       LOG_WARN("fail to get query timeout", K_(stmt_id), K_(param_id), K(ret));
-    } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(
+    } else if (OB_FAIL(gctx_.schema_service_->get_runtime_received_broadcast_version(
                 runtime_version))) {
       LOG_WARN("fail to get runtime broadcast version", K(ret));
     } else {
@@ -193,7 +195,7 @@ int ObMPStmtSendLongData::process_send_long_data_stmt(ObSQLSessionInfo &session)
   //For the handling of tracelog, it does not affect the normal logic, and the error code does not need to be assigned to ret
   int tmp_ret = OB_SUCCESS;
   //Clear WARNING BUFFER
-  tmp_ret = do_after_process(session, false, ret);
+  tmp_ret = do_after_process(session, false);
   UNUSED(tmp_ret);
   return ret;
 }
@@ -245,6 +247,8 @@ int ObMPStmtSendLongData::do_process(ObSQLSessionInfo &session)
     audit_record.exec_record_.record_end();
     audit_record.update_event_stage_state();
     const int64_t time_cost = exec_end_timestamp_ - get_receive_timestamp();
+    EVENT_INC(SQL_PS_PREPARE_COUNT);
+    EVENT_ADD(SQL_PS_PREPARE_TIME, time_cost);
   }
   if (enable_sqlstat) {
     sqlstat_record.record_sqlstat_end_value();

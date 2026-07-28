@@ -17,7 +17,11 @@
 #ifndef OCEANBASE_SRC_SQL_PARSER_OB_SQL_PARSER_H_
 #define OCEANBASE_SRC_SQL_PARSER_OB_SQL_PARSER_H_
 
+#ifdef SQL_PARSER_COMPILATION
+#include "parse_node.h"
+#else
 #include "sql/parser/parse_node.h"
+#endif
 namespace oceanbase
 {
 namespace common

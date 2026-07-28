@@ -476,7 +476,6 @@ int ObInListResolver::resolve_access_obj_values_table(const ParseNode &in_list,
   ObCollationType nchar_collation = CS_TYPE_INVALID;
   const ParseNode *row_node = NULL;
   bool enable_decimal_int = false;
-  share::ObCompatType compat_type = share::COMPAT_MYSQL57;
   bool enable_mysql_compatible_dates = false;
   if (OB_ISNULL(allocator) || OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
@@ -512,7 +511,6 @@ int ObInListResolver::resolve_access_obj_values_table(const ParseNode &in_list,
                                                  &parents_expr_info,
                                                  session_info->get_sql_mode(),
                                                  enable_decimal_int,
-                                                 compat_type,
                                                  enable_mysql_compatible_dates,
                                                  session_info->get_min_const_integer_precision(),
                                                  is_from_pl))) {
@@ -854,7 +852,8 @@ int ObInListResolver::try_merge_inlists(ObExprResolveContext &resolve_ctx,
     } else if (NULL != stmt) {
       is_prepare_stmt = stmt->get_query_ctx()->is_prepare_stmt();
     }
-    if (OB_SUCC(ret)) {
+    if (OB_FAIL(ret)) {
+    } else {
       is_enable = true;
     }
   }

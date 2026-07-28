@@ -24,8 +24,12 @@
 #include "sql/ob_phy_table_location.h"
 
 #define DAS_SCAN_OP(_task_op) \
-    (::oceanbase::sql::DAS_OP_TABLE_SCAN != (_task_op)->get_type() ? \
+    (::oceanbase::sql::DAS_OP_TABLE_SCAN != (_task_op)->get_type() && \
+        ::oceanbase::sql::DAS_OP_TABLE_BATCH_SCAN != (_task_op)->get_type() ? \
         nullptr : static_cast<::oceanbase::sql::ObDASScanOp*>(_task_op))
+#define DAS_GROUP_SCAN_OP(_task_op) \
+    (::oceanbase::sql::DAS_OP_TABLE_BATCH_SCAN != (_task_op)->get_type() ? \
+        nullptr : static_cast<::oceanbase::sql::ObDASGroupScanOp*>(_task_op))
 
 #define IS_DAS_DML_OP(_task_op)                         \
   ({                                                    \
@@ -39,8 +43,6 @@ namespace oceanbase
 {
 namespace sql
 {
-static constexpr uint64_t EMPTY_VIRTUAL_TABLE_TABLET_ID = (1ULL << 55);
-
 class ObIDASTaskOp;
 class ObExecContext;
 class ObPhysicalPlan;
@@ -72,7 +74,7 @@ enum ObDASOpType
   DAS_OP_TABLE_UPDATE,
   DAS_OP_TABLE_DELETE,
   DAS_OP_TABLE_LOCK,
-  DAS_OP_RESERVED_6,
+  DAS_OP_TABLE_BATCH_SCAN,
   DAS_OP_SPLIT_MULTI_RANGES,
   DAS_OP_GET_RANGES_COST,
   DAS_OP_TABLE_LOOKUP,
@@ -157,6 +159,7 @@ struct ObDASTabletLoc
 public:
   ObDASTabletLoc()
     : tablet_id_(),
+      server_(),
       loc_meta_(nullptr),
       next_(this),
       flags_(0),
@@ -166,6 +169,7 @@ public:
   ~ObDASTabletLoc() = default;
 
   TO_STRING_KV(K_(tablet_id),
+               K_(server),
                K_(loc_meta),
                K_(in_retry),
                K_(partition_id),
@@ -178,6 +182,7 @@ public:
    * because ObDASTabletLoc will not be released
    */
   common::ObTabletID tablet_id_; //the data_object_id corresponding to partition_id
+  common::ObAddr server_;
   const ObDASTableLocMeta *loc_meta_; //reference the table location meta, not serialize it
   ObDASTabletLoc *next_; //to bind all data table and local index tablet location
   union {
@@ -193,6 +198,7 @@ public:
   uint64_t first_level_part_id_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDASTabletLoc);
+  int assign(const ObDASTabletLoc &other);
 };
 
 static const int64_t DAS_TABLET_LOC_LOOKUP_THRESHOLD = 1000;
@@ -381,8 +387,8 @@ enum ObTSCIRScanType : uint16_t
   OB_IR_DOC_ID_IDX_AGG,
   OB_IR_INV_IDX_AGG,
   OB_IR_INV_IDX_SCAN,
-  // Value 4 remains intentionally unassigned.
-  OB_VEC_DELTA_BUF_SCAN = 5,
+  OB_IR_FWD_IDX_AGG,
+  OB_VEC_DELTA_BUF_SCAN,
   OB_VEC_IDX_ID_SCAN,
   OB_VEC_SNAPSHOT_SCAN,
   OB_VEC_COM_AUX_SCAN,

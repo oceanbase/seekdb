@@ -99,6 +99,7 @@ inline void TestTabletHelper::prepare_sstable_param(
   param.tx_data_recycle_scn_.set_min();
   param.original_size_ = 0;
   param.compressor_type_ = ObCompressorType::NONE_COMPRESSOR;
+  param.table_backup_flag_.reset();
   param.recycle_version_ = 0;
   param.root_macro_seq_ = 0;
   param.row_count_ = 0;
@@ -126,7 +127,7 @@ inline int TestTabletHelper::create_tablet(
   prepare_sstable_param(tablet_id, table_schema, param);
   void *buff = nullptr;
   if (OB_FAIL(create_tablet_schema.init(schema_allocator, table_schema,
-      false/*skip_column_info*/))) {
+      false/*skip_column_info*/, cal_version(1, 0, 0, 0)))) {
     STORAGE_LOG(WARN, "failed to init storage schema", KR(ret), K(table_schema));
   } else if (OB_FAIL(ObSSTableMergeRes::fill_column_checksum_for_empty_major(param.column_cnt_, param.column_checksums_))) {
     STORAGE_LOG(WARN, "fill column checksum failed", K(ret), K(param));

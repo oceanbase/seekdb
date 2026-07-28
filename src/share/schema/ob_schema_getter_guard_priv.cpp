@@ -936,7 +936,7 @@ int ObSchemaGetterGuard::check_db_priv(const ObSessionPrivInfo &session_priv,
   return ret;
 }
 
-
+// moved definition to sql/resolver/ob_schema_checker.cpp(real upper-layer symbol user, previously hidden by a unity-build dependency)
 
 int ObSchemaGetterGuard::check_priv_db_or_(const ObSessionPrivInfo &session_priv,
                                            const common::ObIArray<uint64_t> &enable_role_id_array,
@@ -1197,6 +1197,86 @@ int ObSchemaGetterGuard::check_priv_or(const ObSessionPrivInfo &session_priv,
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
+  }
+  return ret;
+}
+
+int ObSchemaGetterGuard::check_obj_mysql_priv(const ObSessionPrivInfo &session_priv,
+                        const common::ObIArray<uint64_t> &enable_role_id_array,
+                        const ObNeedPriv &obj_mysql_need_priv) 
+{
+  int ret = OB_SUCCESS;
+  
+  const ObSchemaMgr *mgr = NULL;
+  if (OB_INVALID_ID == session_priv.user_id_) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid arguments", 
+        "user_id", session_priv.user_id_,
+        KR(ret));
+  } else if (OB_FAIL(check_lazy_guard( mgr))) {
+    LOG_WARN("fail to check lazy guard", KR(ret));
+  } else if (!is_root_user(session_priv.user_id_)) {
+    const ObPrivMgr &priv_mgr = mgr->priv_mgr_;
+    //1. fetch obj priv
+    const ObObjMysqlPriv *obj_mysql_priv = NULL;
+    ObPrivSet obj_mysql_priv_set = 0;
+    bool is_obj_mysql_priv_empty = true;
+    ObObjMysqlPrivSortKey obj_mysql_priv_key(session_priv.user_id_,
+                                      obj_mysql_need_priv.table_,
+                                      static_cast<uint64_t>(obj_mysql_need_priv.obj_type_));
+    if (OB_FAIL(priv_mgr.get_obj_mysql_priv(obj_mysql_priv_key, obj_mysql_priv))) {
+      LOG_WARN("get obj mysql priv failed", KR(ret), K(obj_mysql_priv_key) );
+    } else if (NULL != obj_mysql_priv) {
+      obj_mysql_priv_set = obj_mysql_priv->get_priv_set();
+      is_obj_mysql_priv_empty = false;
+    }
+
+    if (OB_SUCC(ret)) {
+      //2. fetch roles privs
+      const ObUserInfo *user_info = NULL;
+      if (OB_FAIL(get_user_info(session_priv.user_id_, user_info))) {
+        LOG_WARN("failed to get user info", KR(ret), K(session_priv.user_id_));
+      } else if (NULL == user_info) {
+        ret = OB_USER_NOT_EXIST;
+        LOG_WARN("user info is null", KR(ret), K(session_priv.user_id_));
+      } else {
+        const ObSEArray<uint64_t, 8> &role_id_array = user_info->get_role_id_array();
+        for (int i = 0; OB_SUCC(ret) && i < role_id_array.count(); ++i) {
+          const ObUserInfo *role_info = NULL;
+          const ObObjMysqlPriv *role_obj_mysql_priv = NULL;
+          if (OB_FAIL(get_user_info(role_id_array.at(i), role_info))) {
+            LOG_WARN("failed to get role ids", KR(ret), K(role_id_array.at(i)));
+          } else if (NULL == role_info) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("role info is null", KR(ret), K(role_id_array.at(i)));
+          } else {
+            ObObjMysqlPrivSortKey role_obj_mysql_priv_key(role_info->get_user_id(),
+                                                      obj_mysql_need_priv.table_,
+                                                      static_cast<uint64_t>(obj_mysql_need_priv.obj_type_));
+            if (OB_FAIL(priv_mgr.get_obj_mysql_priv(role_obj_mysql_priv_key, role_obj_mysql_priv))) {
+              LOG_WARN("get obj mysql priv failed", KR(ret), K(role_obj_mysql_priv_key) );
+            } else if (NULL != role_obj_mysql_priv) {
+              is_obj_mysql_priv_empty = false;
+              // append additional role
+              obj_mysql_priv_set |= role_obj_mysql_priv->get_priv_set();
+            }
+          }
+        }
+      }
+    }
+
+    //3. check privs
+    if (OB_SUCC(ret)) {
+      if (is_obj_mysql_priv_empty) {
+        LOG_WARN("No object privilege info",
+                 "user_id", session_priv.user_id_, K(obj_mysql_need_priv));
+      } else if (!OB_TEST_PRIVS(obj_mysql_priv_set, obj_mysql_need_priv.priv_set_)) {
+        LOG_WARN("No object privilege",
+            "user_id", session_priv.user_id_,
+            K(obj_mysql_need_priv),
+            K(obj_mysql_priv_set));
+      }
+    }
   }
   return ret;
 }

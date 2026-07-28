@@ -189,6 +189,8 @@ static const NonReservedKeyword Mysql_pl_none_reserved_keywords[] =
   {"pragma", PRAGMA},
   {"interface", INTERFACE},
   {"c", C},
+  {"job", JOB},
+  {"cancel", CANCEL},
   {"recover", RECOVER},
   {"polygon", POLYGON},
   {"multipoint", MULTIPOINT},

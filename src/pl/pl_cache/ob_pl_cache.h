@@ -118,6 +118,7 @@ struct PCVPlSchemaObj
   uint64_t database_id_;
   int64_t schema_id_;
   int64_t schema_version_;
+  int64_t invoker_db_id_;
   share::schema::ObSchemaType schema_type_;
   share::schema::ObTableType table_type_;
   common::ObString table_name_;
@@ -131,6 +132,7 @@ struct PCVPlSchemaObj
   database_id_(common::OB_INVALID_ID),
   schema_id_(common::OB_INVALID_ID),
   schema_version_(0),
+  invoker_db_id_(common::OB_INVALID_ID),
   schema_type_(share::schema::OB_MAX_SCHEMA),
   table_type_(share::schema::MAX_TABLE_TYPE),
   table_name_(),
@@ -144,6 +146,7 @@ struct PCVPlSchemaObj
     database_id_(common::OB_INVALID_ID),
     schema_id_(common::OB_INVALID_ID),
     schema_version_(0),
+    invoker_db_id_(common::OB_INVALID_ID),
     schema_type_(share::schema::OB_MAX_SCHEMA),
     table_type_(share::schema::MAX_TABLE_TYPE),
     table_name_(),
@@ -197,6 +200,7 @@ struct PCVPlSchemaObj
   TO_STRING_KV(K_(database_id),
                K_(schema_id),
                K_(schema_version),
+               K_(invoker_db_id),
                K_(schema_type),
                K_(table_type),
                K_(table_name),
@@ -212,12 +216,14 @@ struct ObPLObjectKey : public ObILibCacheKey
     db_id_(common::OB_INVALID_ID),
     key_id_(common::OB_INVALID_ID),
     name_(),
+    mode_(ObjectMode::NORMAL),
     sys_vars_str_() {}
   ObPLObjectKey(uint64_t db_id, uint64_t key_id)
   : ObILibCacheKey(ObLibCacheNameSpace::NS_INVALID),
     db_id_(db_id),
     key_id_(key_id),
     name_(),
+    mode_(ObjectMode::NORMAL),
     sys_vars_str_() {}
 
   void reset();
@@ -231,9 +237,16 @@ struct ObPLObjectKey : public ObILibCacheKey
                K_(namespace),
                K_(name));
 
+  enum class ObjectMode
+  {
+    NORMAL,
+    PROFILE,
+  };
+
   uint64_t  db_id_;
   uint64_t  key_id_; // routine id or package id
   common::ObString name_;
+  ObjectMode mode_;
   common::ObString sys_vars_str_;
 };
 

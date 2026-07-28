@@ -136,7 +136,7 @@ public:
                                    EqualSets &input_esets,
                                    ObShardingInfo *&out_sharding);
 
-  virtual int compute_op_parallel_info() override;
+  virtual int compute_op_parallel_and_server_info() override;
   virtual int print_outline_data(PlanText &plan_text) override;
   virtual int print_used_hint(PlanText &plan_text) override;
   virtual int open_px_resource_analyze(OPEN_PX_RESOURCE_ANALYZE_DECLARE_ARG) override;

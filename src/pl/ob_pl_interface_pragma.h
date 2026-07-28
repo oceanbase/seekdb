@@ -22,6 +22,8 @@
 #include "pl/sys_package/ob_dbms_application.h"
 #include "pl/sys_package/ob_dbms_session.h"
 #include "pl/sys_package/ob_dbms_monitor.h"
+#include "pl/sys_package/ob_dbms_sql.h"
+#include "pl/sys_package/ob_dbms_xplan.h"
 #include "pl/sys_package/ob_dbms_session.h"
 #include "pl/sys_package/ob_dbms_space.h"
 #include "pl/sys_package/ob_dbms_limit_calculator_mysql.h"
@@ -102,6 +104,14 @@
   INTERFACE_DEF(INTERFACE_DBMS_STATS_ASYNC_GATHER_STATS_JOB_PROC, "ASYNC_GATHER_STATS_JOB_PROC", (ObDbmsStats::async_gather_stats_job_proc))
   //end of dbms_stat
 
+  //start of dbms xplan
+  INTERFACE_DEF(INTERFACE_DBMS_XPLAN_ENABLE_OPT_TRACE, "ENABLE_OPT_TRACE", (ObDbmsXplan::enable_opt_trace))
+  INTERFACE_DEF(INTERFACE_DBMS_XPLAN_DISABLE_OPT_TRACE, "DISABLE_OPT_TRACE", (ObDbmsXplan::disable_opt_trace))
+  INTERFACE_DEF(INTERFACE_DBMS_XPLAN_SET_OPT_TRACE_PARAMETER, "SET_OPT_TRACE_PARAMETER", (ObDbmsXplan::set_opt_trace_parameter))
+  INTERFACE_DEF(INTERFACE_DBMS_XPLAN_DISPLAY, "DISPLAY", (ObDbmsXplan::display))
+  INTERFACE_DEF(INTERFACE_DBMS_XPLAN_DISPLAY_CURSOR, "DISPLAY_CURSOR", (ObDbmsXplan::display_cursor))
+  INTERFACE_DEF(INTERFACE_DBMS_XPLAN_DISPLAY_ACTIVE_SESSION_PLAN, "DISPLAY_ACTIVE_SESSION_PLAN", (ObDbmsXplan::display_active_session_plan))
+  //end of dbms xplan
 
 
   //start of dbms_scheduler_mysql

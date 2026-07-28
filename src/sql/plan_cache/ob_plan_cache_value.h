@@ -294,6 +294,12 @@ private:
   bool is_contain_tmp_tbl() const;
 
   /**
+   * @brief if there is a synonym in dependency tables
+   * @retval is_contain: true for containing synonym
+   */
+  bool is_contain_synonym() const;
+
+  /**
    * @brief if there is a sys package/type in dependency tables
    * @retval is_contain: true for containing sys package/type
    */
@@ -387,6 +393,7 @@ private:
   common::ObFixedArray<PCVSchemaObj *, common::ObIAllocator> stored_schema_objs_;
   common::ObBitSet<> must_be_positive_idx_;
   stmt::StmtType stmt_type_;
+  bool enable_rich_vector_format_;
   common::ObBitSet<> fmt_int_or_ch_decint_idx_;
   int64_t switchover_epoch_;
 

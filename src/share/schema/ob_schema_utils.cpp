@@ -800,6 +800,63 @@ int ObSchemaUtils::batch_get_table_schemas_from_inner_table_(
   return ret;
 }
 
+int ObSchemaUtils::check_whether_column_exist(const ObObjectID &table_id,
+    const ObString &column_name,
+    bool &exist)
+{
+  int ret = OB_SUCCESS;
+  exist = false;
+  if (OB_ISNULL(GCTX.sql_proxy_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("GCTX.sql_proxy_ is null", KR(ret));
+  } else if (OB_UNLIKELY(OB_INVALID_ID == table_id
+      || column_name.empty()
+      || !is_sys_table(table_id)
+      || is_core_table(table_id))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args", KR(ret), K(table_id), K(column_name));
+  } else {
+    SMART_VAR(ObISQLClient::ReadResult, result) {
+      ObSqlString sql;
+      common::sqlclient::ObMySQLResult *res = NULL;
+      // in __all_column, sys runtime id was a primary key and it's value is 0
+      if (OB_FAIL(sql.append_fmt(
+          "SELECT count(*) = 1 AS exist FROM %s WHERE table_id = %lu and column_name = '%.*s'",
+          OB_ALL_COLUMN_TNAME, table_id, column_name.length(), column_name.ptr()))) {
+        LOG_WARN("fail to assign sql", KR(ret));
+      } else if (OB_FAIL(GCTX.sql_proxy_->read(result, sql.ptr()))) {
+        LOG_WARN("execute sql failed", KR(ret), K(sql));
+      } else if (OB_ISNULL(res = result.get_result())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get mysql result failed", KR(ret), K(sql));
+      } else if (OB_FAIL(res->next())) {
+        LOG_WARN("next failed", KR(ret), K(sql));
+      } else if (OB_FAIL(res->get_bool("exist", exist))) {
+        LOG_WARN("get max task id failed", KR(ret), K(sql));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObSchemaUtils::is_drop_column_only(const AlterTableSchema &alter_table_schema, bool &is_drop_col_only)
+{
+  int ret = OB_SUCCESS;
+  is_drop_col_only = true;
+  ObTableSchema::const_column_iterator it_begin = alter_table_schema.column_begin();
+  ObTableSchema::const_column_iterator it_end = alter_table_schema.column_end();
+  for (; OB_SUCC(ret) && is_drop_col_only && it_begin != it_end; it_begin++) {
+    const AlterColumnSchema *alter_col = static_cast<AlterColumnSchema*>(*it_begin);
+    if (OB_ISNULL(alter_col)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("alter col should not be null", K(ret), K(alter_table_schema));
+    } else if (OB_DDL_DROP_COLUMN != alter_col->alter_type_) {
+      is_drop_col_only = false;
+    }
+  }
+  return ret;
+}
+
 const char* DDLType[]
 {
   "TRUNCATE_TABLE",
@@ -807,6 +864,11 @@ const char* DDLType[]
   "CREATE_INDEX",
   "CREATE_VIEW",
   "DROP_TABLE"
+};
+
+const char* NOT_SUPPORT_DDLType[]
+{
+  "CREATE_VIEW"
 };
 
 int ObParallelDDLControlMode::string_to_ddl_type(const ObString &ddl_string, ObParallelDDLType &ddl_type)
@@ -903,6 +965,10 @@ int ObParallelDDLControlMode::is_parallel_ddl_enable(const ObParallelDDLType ddl
   }
   return ret;
 }
+
+// try_inc_ddl_count moved definition to rootserver/ob_ddl_service.cpp(omt real-user hidden dependency)
+
+// destructor moved definition to rootserver/ob_ddl_service.cpp(omt real user)
 
 } // end schema
 } // end share

@@ -1189,6 +1189,7 @@ int ObDbmsStats::create_stat_table(ObExecContext &ctx, ParamStore &params, ObObj
   UNUSED(result);
   ObTableStatParam param;
   param.allocator_ = &ctx.get_allocator();
+  ObString tblspace;
   bool is_temp_table = false;
   const share::schema::ObTableSchema *table_schema = NULL;
   ObSQLSessionInfo *session = ctx.get_my_session();

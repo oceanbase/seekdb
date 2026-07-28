@@ -16,6 +16,7 @@
 
 #ifndef OBDEV_SRC_SQL_DAS_OB_DATA_ACCESS_SERVICE_H_
 #define OBDEV_SRC_SQL_DAS_OB_DATA_ACCESS_SERVICE_H_
+#include "lib/atomic/ob_atomic.h"
 #include "share/ob_define.h"
 #include "sql/das/ob_das_id_allocator.h"
 #include "sql/das/ob_das_ref.h"
@@ -24,6 +25,7 @@ namespace oceanbase
 namespace sql
 {
 class ObDASRef;
+class ObPhyTableLocation;
 class ObDataAccessService
 {
 public:

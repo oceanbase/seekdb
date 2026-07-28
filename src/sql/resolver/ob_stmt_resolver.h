@@ -53,6 +53,9 @@ public:
   virtual int resolve(const ParseNode &parse_tree) = 0;
   inline ObStmt *get_basic_stmt() { return stmt_; }
   inline void set_basic_stmt(ObStmt *stmt) { stmt_ = stmt; }
+  int resolve_table_relation_factor(const ParseNode *node, uint64_t &database_id,
+                                    common::ObString &table_name, common::ObString &synonym_name, common::ObString &db_name);
+
   /// @param org If org is true, means get original db name.
   /// Else, when db node is NULL, get session db name.
   int resolve_table_relation_node_v2(const ParseNode *node,

@@ -31,6 +31,10 @@
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 
+#include "sql/engine/cmd/ob_timezone_importer.h"
+#include "sql/engine/cmd/ob_srs_importer.h"
+#include "share/ob_internal_table_change_notifier.h"
+
 namespace oceanbase
 {
 using namespace common;
@@ -49,7 +53,7 @@ int ObFreezeExecutor::execute(ObExecContext &ctx, ObFreezeStmt &stmt)
     LOG_WARN("get task executor context failed");
   } else {
     if (!stmt.is_major_freeze()) {
-      ObMinorFreezeArg arg;
+      ObRootMinorFreezeArg arg;
       arg.tablet_id_ = stmt.get_tablet_id();
       if (OB_FAIL(GCTX.local_management_service_->root_minor_freeze(arg))) {
         LOG_WARN("minor freeze failed", K(arg), K(ret), "dst", GCTX.self_addr());
@@ -66,9 +70,11 @@ int ObFreezeExecutor::execute(ObExecContext &ctx, ObFreezeStmt &stmt)
       if (OB_FAIL(rootserver::ObMajorFreezeHelper::major_freeze(param))) {
         if (OB_FROZEN_INFO_ALREADY_EXIST == ret
             || OB_MAJOR_FREEZE_NOT_FINISHED == ret) {
-          const char *warn_buf =
-              "larger frozen_scn already exist, prev merge may not finish";
-          LOG_USER_WARN(OB_FROZEN_INFO_ALREADY_EXIST, warn_buf);
+          if (!stmt.has_runtime_selector()) {
+            const char *warn_buf =
+                "larger frozen_scn already exist, prev merge may not finish";
+            LOG_USER_WARN(OB_FROZEN_INFO_ALREADY_EXIST, warn_buf);
+          }
           ret = OB_SUCCESS;
         } else {
           LOG_WARN("failed to launch major freeze", KR(ret), K(param));
@@ -182,6 +188,7 @@ int ObFlushCacheExecutor::execute(ObExecContext &ctx, ObFlushCacheStmt &stmt)
 
 int ObFlushKVCacheExecutor::execute(ObExecContext &ctx, ObFlushKVCacheStmt &stmt)
 {
+  UNUSED(ctx);
   int ret = OB_SUCCESS;
   if (stmt.cache_name_.is_empty()) {
     if (OB_FAIL(common::ObKVGlobalCache::get_instance().erase_cache())) {
@@ -198,12 +205,42 @@ int ObFlushKVCacheExecutor::execute(ObExecContext &ctx, ObFlushKVCacheStmt &stmt
   return ret;
 }
 
+
 int ObFlushIlogCacheExecutor::execute(ObExecContext &ctx, ObFlushIlogCacheStmt &stmt)
 {
   UNUSEDx(ctx, stmt);
-  return OB_NOT_SUPPORTED;
+  int ret = OB_NOT_SUPPORTED;
+  // ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  // ObCommonRpcProxy *common_rpc = NULL;
+  // if (OB_ISNULL(task_exec_ctx)) {
+  //   ret = OB_NOT_INIT;
+  //   LOG_WARN("get task executor context failed");
+  // } else if (OB_ISNULL(common_rpc = task_exec_ctx->get_common_rpc())) {
+  //   ret = OB_NOT_INIT;
+  //   LOG_WARN("get task exec ctx error", K(ret), KP(task_exec_ctx));
+  // } else {
+  //   int32_t file_id = stmt.file_id_;
+  //   if (file_id < 0) {
+  //     ret = OB_INVALID_ARGUMENT;
+  //     LOG_ERROR("invalid file_id when execute flush ilogcache", K(ret), K(file_id));
+  //   } else if (NULL == GCTX.par_ser_) {
+  //     ret = OB_ERR_UNEXPECTED;
+  //     LOG_ERROR("par_ser is null", K(ret), KP(GCTX.par_ser_));
+  //   } else {
+  //     // flush all file if file_id is default value 0
+  //     if (0 == file_id) {
+  //       if (OB_FAIL(GCTX.par_ser_->admin_wash_ilog_cache())) {
+  //         LOG_WARN("cursor cache wash ilog error", K(ret));
+  //       }
+  //     } else {
+  //       if (OB_FAIL(GCTX.par_ser_->admin_wash_ilog_cache(file_id))) {
+  //         LOG_WARN("cursor cache wash ilog error", K(ret), K(file_id));
+  //       }
+  //     }
+  //   }
+  // }
+  return ret;
 }
-
 
 int ObFlushDagWarningsExecutor::execute(ObExecContext &ctx, ObFlushDagWarningsStmt &stmt)
 {
@@ -330,8 +367,8 @@ int ObSetTPExecutor::execute(ObExecContext &ctx, ObSetTPStmt &stmt)
 
 int ObClearMergeErrorExecutor::execute(ObExecContext &ctx, ObClearMergeErrorStmt &stmt)
 {
-  UNUSED(stmt);
   int ret = OB_SUCCESS;
+  UNUSED(stmt);
   ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;

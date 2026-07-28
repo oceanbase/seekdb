@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX STORAGE
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "storage/truncate_info/ob_truncate_info_kv_cache.h"
 #include "storage/truncate_info/ob_truncate_info.h"
 #include "storage/truncate_info/ob_truncate_info_array.h"
@@ -173,11 +174,13 @@ int ObTruncateInfoKVCache::get_truncate_info_array(const ObTruncateInfoCacheKey 
     if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
       LOG_WARN("fail to get key from truncate info cache", K(ret));
     }
+    EVENT_INC(TRUNCATE_INFO_CACHE_MISS);
   } else if (OB_ISNULL(value)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, the value must not be NULL", K(ret));
   } else {
     handle.value_ = value;
+    EVENT_INC(TRUNCATE_INFO_CACHE_HIT);
   }
   return ret;
 }

@@ -214,6 +214,7 @@ protected:
                                            MERGE_ITER_ARRAY &minimum_iters,
                                            common::ObIArray<int64_t> &iter_idxs);
   int skip_shadow_row(MERGE_ITER_ARRAY &merge_iters);
+  int check_need_prebuild_bloomfilter();
   virtual int rewrite_macro_block(MERGE_ITER_ARRAY &minimum_iters) override;
 private:
   virtual int inner_init() override;

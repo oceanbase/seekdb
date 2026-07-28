@@ -21,6 +21,7 @@
 #include "share/ob_rpc_struct.h"
 #include "share/io/ob_io_calibration.h"
 #include "observer/scheduler/ob_sys_task_stat.h"
+
 namespace oceanbase
 {
 namespace sql
@@ -72,20 +73,26 @@ public:
   ObFreezeStmt()
     : ObSystemCmdStmt(stmt::T_FREEZE),
       major_freeze_(false),
+      has_runtime_selector_(false),
       opt_tablet_id_() {}
   ObFreezeStmt(common::ObIAllocator *name_pool)
     : ObSystemCmdStmt(name_pool, stmt::T_FREEZE),
       major_freeze_(false),
+      has_runtime_selector_(false),
       opt_tablet_id_() {}
   virtual ~ObFreezeStmt() {}
 
   bool is_major_freeze() const { return major_freeze_; }
   void set_major_freeze(bool major_freeze) { major_freeze_ = major_freeze; }
+  bool has_runtime_selector() const { return has_runtime_selector_; }
+  void set_has_runtime_selector() { has_runtime_selector_ = true; }
   inline common::ObTabletID &get_tablet_id() { return opt_tablet_id_; }
 
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(major_freeze), K(opt_tablet_id_));
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(major_freeze),
+               K_(has_runtime_selector), K(opt_tablet_id_));
 private:
   bool major_freeze_;
+  bool has_runtime_selector_;
   common::ObTabletID opt_tablet_id_;
 };
 

@@ -105,7 +105,7 @@ int ObDDLErrorMessageTableOperator::get_index_task_info(
   return ret;
 }
 
-
+// extract_index_key moved definition to storage/ddl/ob_ddl_common_storage_impl.cpp(accesses ObDatumRowkey/ObStorageDatum members)
 
 int ObDDLErrorMessageTableOperator::load_ddl_user_error(const int64_t task_id,
                                                         const uint64_t table_id,

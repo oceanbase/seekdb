@@ -212,6 +212,7 @@ int ObConfigInfoInPC::load_influence_plan_config()
   hash_rollup_policy_ = GCONF._use_hash_rollup.case_compare("auto") == 0 ?
                           0 :
                           (GCONF._use_hash_rollup.case_compare("forced") == 0 ? 1 : 2);
+  enable_nlj_spf_use_rich_format_ = GCONF._enable_nlj_spf_use_rich_format;
   enable_distributed_das_scan_ = GCONF._enable_distributed_das_scan;
   enable_das_batch_rescan_flag_ = GCONF._enable_das_batch_rescan_flag;
   enable_topn_runtime_filter_ = GCONF._enable_topn_runtime_filter;
@@ -277,6 +278,9 @@ int ObConfigInfoInPC::serialize_configs(char *buf, int buf_len, int64_t &pos)
     SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_parallel_das_dml_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%d,", hash_rollup_policy_))) {
     SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(hash_rollup_policy_));
+  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
+                               "%d,", enable_nlj_spf_use_rich_format_))) {
+    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_nlj_spf_use_rich_format_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", ndv_runtime_bloom_filter_size_))) {
     SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(ndv_runtime_bloom_filter_size_));

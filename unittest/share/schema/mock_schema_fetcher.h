@@ -31,6 +31,8 @@ public:
   MOCK_METHOD2(init, int(ObSchemaService *, common::ObISQLClient *));
   MOCK_METHOD5(fetch_schema, int(ObSchemaType, uint64_t, int64_t,
       common::ObIAllocator &, ObSchema *&));
+  MOCK_METHOD4(fetch_runtime_schema, int(uint64_t, int64_t,
+      common::ObIAllocator &, ObServerRuntimeSchema *&));
   MOCK_METHOD4(fetch_user_info, int(uint64_t, int64_t,
       common::ObIAllocator &, ObUserInfo *&));
   MOCK_METHOD4(fetch_database_schema, int(uint64_t, int64_t,

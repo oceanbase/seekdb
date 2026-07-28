@@ -36,9 +36,12 @@ struct ObTextRetrievalScanIterParam
       mem_context_(nullptr),
       inv_idx_scan_param_(nullptr),
       inv_idx_agg_param_(nullptr),
+      fwd_idx_scan_param_(nullptr),
       inv_idx_scan_iter_(nullptr),
       inv_idx_agg_iter_(nullptr),
+      fwd_idx_agg_iter_(nullptr),
       inv_idx_agg_expr_(nullptr),
+      fwd_idx_agg_expr_(nullptr),
       eval_ctx_(nullptr),
       relevance_expr_(nullptr),
       inv_scan_doc_length_col_(nullptr),
@@ -50,9 +53,12 @@ struct ObTextRetrievalScanIterParam
   lib::MemoryContext mem_context_;
   ObTableScanParam *inv_idx_scan_param_;
   ObTableScanParam *inv_idx_agg_param_;
+  ObTableScanParam *fwd_idx_scan_param_;
   sql::ObDASScanIter *inv_idx_scan_iter_;
   sql::ObDASScanIter *inv_idx_agg_iter_;
+  sql::ObDASScanIter *fwd_idx_agg_iter_;
   sql::ObExpr *inv_idx_agg_expr_;
+  sql::ObExpr *fwd_idx_agg_expr_;
   sql::ObEvalCtx *eval_ctx_;
   sql::ObExpr *relevance_expr_;
   sql::ObExpr *inv_scan_doc_length_col_;
@@ -83,23 +89,32 @@ private:
   int init_calc_exprs_in_relevance_expr();
   void clear_batch_wise_evaluated_flag(const int64_t count);
   void clear_row_wise_evaluated_flag();
+  int get_next_doc_token_cnt(const bool use_fwd_idx_agg);
+  int get_inv_idx_scan_doc_id(ObDocIdExt &doc_id);
+  int gen_fwd_idx_scan_range(const ObDocIdExt &doc_id, ObNewRange &scan_range);
+  int do_token_cnt_agg(const ObDocIdExt &doc_id);
   int fill_token_doc_cnt();
   int fill_token_weight();
   int eval_relevance_expr();
   int batch_eval_relevance_expr(const int64_t count);
   int estimate_token_doc_cnt();
   inline bool need_inv_idx_agg() { return inv_idx_agg_iter_ != nullptr; }
+  inline bool need_fwd_idx_agg() { return fwd_idx_agg_iter_ != nullptr; }
   inline bool need_calc_relevance() { return inv_idx_agg_iter_ != nullptr; }
 public:
+  static const int64_t FWD_IDX_ROWKEY_COL_CNT = 2;
   static const int64_t INV_IDX_ROWKEY_COL_CNT = 2;
 private:
   lib::MemoryContext mem_context_;
   ObArenaAllocator *allocator_;
   ObTableScanParam *inv_idx_scan_param_;
   ObTableScanParam *inv_idx_agg_param_;
+  ObTableScanParam *fwd_idx_scan_param_;
   sql::ObDASScanIter *inv_idx_scan_iter_;
   sql::ObDASScanIter *inv_idx_agg_iter_;
+  sql::ObDASScanIter *fwd_idx_agg_iter_;
   sql::ObExpr *inv_idx_agg_expr_;
+  sql::ObExpr *fwd_idx_agg_expr_;
   sql::ObEvalCtx *eval_ctx_;
   sql::ObExpr *relevance_expr_;
   sql::ObExpr *inv_scan_doc_length_col_; // read from inv_scan_table
@@ -107,6 +122,7 @@ private:
   sql::ObExpr *token_weight_expr_; // fill the expr from with max_token_relevance_
   common::ObSEArray<sql::ObExpr *, 2> relevance_calc_exprs_;
   sql::ObBitVector *skip_;
+  ObObj *fwd_range_objs_;
   int64_t max_batch_size_;
   int64_t token_doc_cnt_;
   double max_token_relevance_;

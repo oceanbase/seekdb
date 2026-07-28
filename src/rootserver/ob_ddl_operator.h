@@ -621,6 +621,11 @@ public:
                               common::ObMySQLTransaction &trans);
   //----End of functions for managing trigger----
 
+  virtual int alter_table_drop_aux_column(
+      share::schema::ObTableSchema &new_table_schema,
+      const share::schema::ObColumnSchemaV2 &new_column_schema,
+      common::ObMySQLTransaction &trans,
+      const share::schema::ObTableType table_type);
   int update_single_column(common::ObMySQLTransaction &trans,
                            const share::schema::ObTableSchema &origin_table_schema,
                            const share::schema::ObTableSchema &new_table_schema,

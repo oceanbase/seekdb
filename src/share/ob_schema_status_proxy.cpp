@@ -34,30 +34,27 @@ const char *ObSchemaStatusProxy::ROW_ID_CNAME = "id";
 const char *ObSchemaStatusProxy::SNAPSHOT_TIMESTAMP_CNAME = "snapshot_timestamp";
 const char *ObSchemaStatusProxy::READABLE_SCHEMA_VERSION_CNAME = "readable_schema_version";
 
-namespace
-{
-void update_schema_status(const ObRefreshSchemaStatus &new_status,
-                          ObRefreshSchemaStatus &current_status)
-{
-  if (OB_INVALID_TIMESTAMP == new_status.snapshot_timestamp_) {
-    if (new_status.snapshot_timestamp_ != current_status.snapshot_timestamp_) {
-      LOG_INFO("[SCHEMA_STATUS], reset schema status", "old_schema_status", current_status,
-               "new_schema_status", new_status);
+//created_schema_version is no use in memory, so ignore created_schema_version_ change
+int ObSchemaStatusUpdater::operator() (common::hash::HashMapPair<uint64_t, share::schema::ObRefreshSchemaStatus> &entry) {
+  int ret = OB_SUCCESS;
+  if (OB_INVALID_TIMESTAMP == schema_status_.snapshot_timestamp_) {
+    if (schema_status_.snapshot_timestamp_ != entry.second.snapshot_timestamp_) {
+      LOG_INFO("[SCHEMA_STATUS], reset schema status", "old_schema_status", entry.second,
+               "new_schema_status", schema_status_);
     }
-    current_status = new_status;
-  } else if (new_status.snapshot_timestamp_ >= current_status.snapshot_timestamp_) {
-    if (new_status.snapshot_timestamp_ != current_status.snapshot_timestamp_) {
+    entry.second = schema_status_;
+  } else if (schema_status_.snapshot_timestamp_ >= entry.second.snapshot_timestamp_) {
+    if (schema_status_.snapshot_timestamp_ != entry.second.snapshot_timestamp_) {
       LOG_INFO("[SCHEMA_STATUS] update schema status",
-               "old_schema_status", current_status,
-               "new_schema_status", new_status);
+               "old_schema_status", entry.second,
+               "new_schema_status", schema_status_);
     }
-    current_status = new_status;
+    entry.second = schema_status_;
   } else {
-    LOG_INFO("[SCHEMA_STATUS] schema status is older than the current value, ignore it",
-             K(current_status), K(new_status));
+    LOG_INFO("[SCHEMA_STATUS] schema_status less than the old value, just ignore", K(entry), K(schema_status_));
   }
+  return ret;
 }
-} // namespace
 
 int ObSchemaStatusProxy::init()
 {
@@ -149,9 +146,18 @@ int ObSchemaStatusProxy::load_refresh_schema_status()
           
           schema_status.snapshot_timestamp_ = snapshot_timestamp;
           schema_status.readable_schema_version_ = readable_schema_version;
+          // The current server owns one schema-status row.
           (void)(row_id);
+          ObSchemaStatusUpdater updater(schema_status);
           common::SpinWLockGuard guard(schema_status_cache_lock_);
-          update_schema_status(schema_status, schema_status_cache_);
+          common::hash::HashMapPair<uint64_t, ObRefreshSchemaStatus> entry;
+          entry.first = 1UL;
+          entry.second = schema_status_cache_;
+          if (OB_FAIL(updater(entry))) {
+            LOG_WARN("fail to update schema_status", K(ret), K(schema_status));
+          } else {
+            schema_status_cache_ = entry.second;
+          }
         }
       }
     }
@@ -205,11 +211,19 @@ int ObSchemaStatusProxy::set_runtime_schema_status(
     }
   }
   
+  ObSchemaStatusUpdater updater(refresh_schema_status);
   if (OB_FAIL(ret)) {
   } else {
     common::SpinWLockGuard guard(schema_status_cache_lock_);
-    update_schema_status(refresh_schema_status, schema_status_cache_);
-    LOG_INFO("[SCHEMA_STATUS] set create status", K(refresh_schema_status));
+    common::hash::HashMapPair<uint64_t, ObRefreshSchemaStatus> entry;
+    entry.first = 1UL;
+    entry.second = schema_status_cache_;
+    if (OB_FAIL(updater(entry))) {
+      LOG_WARN("fail to set schema_status", K(ret), K(refresh_schema_status));
+    } else {
+      schema_status_cache_ = entry.second;
+      LOG_INFO("[SCHEMA_STATUS] set create status", K(refresh_schema_status));
+    }
   }
   return ret;
 }

@@ -1265,12 +1265,20 @@ int ObTransformSimplifyGroupby::check_aggr_win_can_be_removed(const ObDMLStmt *s
     case T_FUN_SUM:
       //case T_FUN_APPROX_COUNT_DISTINCT: // return 1 or 0 //do not rewrite
       //case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS://do not rewrite
+      // case T_FUN_GROUP_RANK:// return 1 or 2    need to consider order desc, nulls first, multi-column conditions, do not rewrite for now
+      // case T_FUN_GROUP_DENSE_RANK:
+      // case T_FUN_GROUP_PERCENT_RANK:// return 1 or 0
+      // case T_FUN_GROUP_CUME_DIST:// return 1 or 0.5
     case T_FUN_MEDIAN: // return expr
     case T_FUN_SYS_BIT_AND: // return expr or UINT_MAX_VAL[ObUInt64Type]
     case T_FUN_SYS_BIT_OR:  // return expr or 0
     case T_FUN_SYS_BIT_XOR: // return expr or 0
     case T_FUN_GROUP_PERCENTILE_CONT:
     case T_FUN_GROUP_PERCENTILE_DISC:
+    case T_FUN_KEEP_MAX:
+    case T_FUN_KEEP_MIN:
+    case T_FUN_KEEP_COUNT: // return 1 or 0
+    case T_FUN_KEEP_SUM: // return expr
       // Some mathematical analysis functions will be expanded during the rewrite phase:
       // ObExpandAggregateUtils::expand_aggr_expr
       // ObExpandAggregateUtils::expand_window_aggr_expr
@@ -1425,6 +1433,9 @@ int ObTransformSimplifyGroupby::transform_aggr_win_to_common_expr(ObSelectStmt *
     case T_FUN_SUM:
     case T_FUN_GROUP_CONCAT:
     case T_FUN_MEDIAN:
+    case T_FUN_KEEP_MAX:
+    case T_FUN_KEEP_MIN:
+    case T_FUN_KEEP_SUM:
     case T_FUN_COUNT_SUM: {
       if (OB_ISNULL(aggr) || OB_ISNULL(param_expr = aggr->get_param_expr(0))) {
         ret = OB_ERR_UNEXPECTED;
@@ -1441,7 +1452,8 @@ int ObTransformSimplifyGroupby::transform_aggr_win_to_common_expr(ObSelectStmt *
       }
       break;
     }
-    case T_FUN_COUNT: { // return 1 or 0
+    case T_FUN_COUNT:
+    case T_FUN_KEEP_COUNT: { // return 1 or 0
       ObConstRawExpr *const_one = NULL;
       ObConstRawExpr *const_zero = NULL;
       if (OB_ISNULL(aggr)) {

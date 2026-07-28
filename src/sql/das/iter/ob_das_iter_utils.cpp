@@ -1670,6 +1670,17 @@ int ObDASIterUtils::create_text_retrieval_sub_tree(
     }
   }
 
+  for (int64_t i = 0; ir_scan_ctdef->need_fwd_idx_agg() && OB_SUCC(ret) && i < size; ++i) {
+    ObDASScanIterParam fwd_idx_iter_param;
+    ObDASScanIter *fwd_idx_iter = nullptr;
+    init_scan_iter_param(fwd_idx_iter_param, ir_scan_ctdef->get_fwd_idx_agg_ctdef(), ir_scan_rtdef);
+    if (OB_FAIL(create_das_iter(alloc, fwd_idx_iter_param, fwd_idx_iter))) {
+      LOG_WARN("failed to create fwd idx iter", K(ret));
+    } else {
+      iters.push_back(fwd_idx_iter);
+    }
+  }
+
   if (OB_FAIL(ret)) {
   } else if (size > 0 && !ir_scan_ctdef->need_estimate_total_doc_cnt()) {
     ObDASScanIterParam doc_cnt_agg_param;
@@ -1968,17 +1979,13 @@ int ObDASIterUtils::create_domain_lookup_sub_tree(ObTableScanParam &scan_param,
                                                   ObDASIter *&domain_lookup_result)
 {
   int ret = OB_SUCCESS;
-  ObDASLocalLookupIter *doc_id_lookup_iter = nullptr;
 
-  if (OB_ISNULL(table_lookup_ctdef) || OB_ISNULL(table_lookup_rtdef)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid domain lookup definition", K(ret), KP(table_lookup_ctdef), KP(table_lookup_rtdef));
-  } else if (OB_UNLIKELY(table_lookup_ctdef->op_type_ != ObDASOpType::DAS_OP_INDEX_PROJ_LOOKUP ||
-                         table_lookup_rtdef->op_type_ != ObDASOpType::DAS_OP_INDEX_PROJ_LOOKUP)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected domain lookup type", K(ret), K(table_lookup_ctdef->op_type_),
-             K(table_lookup_rtdef->op_type_));
-  } else if (OB_UNLIKELY(table_lookup_ctdef->get_rowkey_scan_ctdef()->op_type_ != ObDASOpType::DAS_OP_IR_AUX_LOOKUP)) {
+  const ObDASIRAuxLookupCtDef *aux_lookup_ctdef = nullptr;
+  ObDASIRAuxLookupRtDef *aux_lookup_rtdef = nullptr;
+  ObDASLocalLookupIter *doc_id_lookup_iter = nullptr;
+  ObDASLocalLookupIterParam doc_id_lookup_param;
+
+  if (OB_UNLIKELY(table_lookup_ctdef->get_rowkey_scan_ctdef()->op_type_ != ObDASOpType::DAS_OP_IR_AUX_LOOKUP)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected rowkey scan is not an aux lookup", K(ret));
   } else {
@@ -2007,14 +2014,12 @@ int ObDASIterUtils::create_domain_lookup_sub_tree(ObTableScanParam &scan_param,
       if (OB_FAIL(create_local_lookup_sub_tree(scan_param, alloc, table_lookup_ctdef->get_rowkey_scan_ctdef(), table_lookup_rtdef->get_rowkey_scan_rtdef(),
                                                table_lookup_ctdef->get_lookup_scan_ctdef(), table_lookup_rtdef->get_lookup_scan_rtdef(), table_lookup_ctdef,
                                                table_lookup_rtdef, related_tablet_ids, trans_desc, snapshot, related_tablet_ids.lookup_tablet_id_, doc_id_lookup_iter,
-                                               domain_lookup_result, batch_row_count))) {
+                                              domain_lookup_result, batch_row_count))) {
         LOG_WARN("failed to create local lookup sub tree", K(ret));
       }
     } else {
       ObDASCacheLookupIter *lookup_iter = nullptr;
-      if (OB_FAIL(create_cache_lookup_sub_tree(scan_param, alloc, table_lookup_ctdef,
-                                               table_lookup_rtdef, trans_desc, snapshot,
-                                               doc_id_lookup_iter, related_tablet_ids,
+      if (OB_FAIL(create_cache_lookup_sub_tree(scan_param, alloc, table_lookup_ctdef, table_lookup_rtdef, trans_desc, snapshot, doc_id_lookup_iter, related_tablet_ids,
                                                lookup_iter, main_lookup_keep_order))) {
         LOG_WARN("failed to create cache lookup sub tree", K(ret));
       } else {

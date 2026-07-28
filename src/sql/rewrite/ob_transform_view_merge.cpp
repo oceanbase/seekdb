@@ -106,7 +106,7 @@ int ObTransformViewMerge::need_transform(const common::ObIArray<ObParentDMLStmt>
   } else if (bypass) {
     need_trans = false;
     OPT_TRACE("transform rule bypassed");
-  } else if (!stmt.is_sel_del_upd()) {
+  } else if (!stmt.is_sel_del_upd() || stmt.has_instead_of_trigger()) {
     need_trans = false;
   } else if (OB_ISNULL(ctx_) || OB_ISNULL(query_hint = stmt.get_stmt_hint().query_hint_)) {
     ret = OB_ERR_UNEXPECTED;

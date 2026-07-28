@@ -1045,6 +1045,8 @@ int ObCreateViewResolver::fill_column_meta_infos(const ObRawExpr &expr,
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(fill_column_with_subschema(expr, session_info, column))) {
     LOG_WARN("fail to adjust enum set colum meta info", K(ret), K(expr));
+  } else if (OB_FAIL(adjust_string_column_length_within_max(column))) {
+    LOG_WARN("failed to adjust string column length within max", K(ret), K(expr));
   } else if (OB_FAIL(adjust_number_decimal_column_accuracy_within_max(column))) {
     LOG_WARN("failed to adjust number decimal column accuracy within max", K(ret), K(expr));
   } else if ((column.is_string_type() || column.is_json())

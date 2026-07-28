@@ -20,7 +20,6 @@
 #include "storage/tmp_file/ob_tmp_file_io_info.h"
 #include "storage/tmp_file/ob_tmp_file_io_handle.h"
 #include "storage/tmp_file/ob_sn_tmp_file_manager.h"
-#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -41,9 +40,7 @@ public:
   void destroy();
 
   int alloc_dir(int64_t &dir_id);
-  virtual int open(int64_t &fd,
-                   const int64_t &dir_id,
-                   const char *const label = "TmpFile");
+  virtual int open(int64_t &fd, const int64_t &dir_id, const char* const label);
   int remove(const int64_t fd);
 
 public:
@@ -74,6 +71,35 @@ private:
   ObSNTmpFileManager sn_file_manager_;
 
 };
+
+class ObServerTmpFileManagerProxy final
+{
+public:
+  static ObServerTmpFileManagerProxy &get_instance();
+  int alloc_dir(int64_t &dir_id);
+  int open(int64_t &fd,
+           const int64_t &dir_id,
+           const char* const label = nullptr);
+  int remove(const int64_t fd);
+
+public:
+  int aio_read(const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
+  int aio_pread(const ObTmpFileIOInfo &io_info, const int64_t offset, ObTmpFileIOHandle &io_handle);
+  int pread(const ObTmpFileIOInfo &io_info, const int64_t offset, ObTmpFileIOHandle &io_handle);
+  // NOTE:
+  //   only support append write.
+  int aio_write(const ObTmpFileIOInfo &io_info, ObTmpFileIOHandle &io_handle);
+  // NOTE:
+  //   only support append write.
+  int write(const ObTmpFileIOInfo &io_info);
+  int truncate(const int64_t fd, const int64_t offset);
+  int seal(const int64_t fd);
+  int get_tmp_file_size(const int64_t fd, int64_t &file_size);
+  int get_tmp_file_fds(ObIArray<int64_t> &fd_arr);
+  int get_tmp_file_info(const int64_t fd, ObTmpFileInfo *tmp_file_info);
+};
+
+#define SERVER_TMP_FILE_MANAGER (::oceanbase::tmp_file::ObServerTmpFileManagerProxy::get_instance())
 }  // end namespace tmp_file
 }  // end namespace oceanbase
 

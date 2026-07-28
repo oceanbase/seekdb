@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_lob_locator.h"
 #include "share/rc/ob_module_provider.h"
+#include "observer/ob_server.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 
@@ -291,6 +292,8 @@ int ObLobLocatorHelper::fuse_mem_lob_header(ObObj &def_obj, uint64_t col_id, boo
           ObMemLobLocationInfo location_info(tablet_id_, def_obj.get_collation_type());
           if (OB_FAIL(locator.set_table_info(table_id_, col_id))) { // ToDo: @gehao should be column idx
             STORAGE_LOG(WARN, "Lob: set table info failed", K(ret), K(table_id_), K(col_id));
+          } else if (extern_flags.has_tx_info_ && OB_FAIL(locator.set_tx_info(tx_info))) {
+            STORAGE_LOG(WARN, "Lob: set transaction info failed", K(ret), K(tx_info));
           } else if (extern_flags.has_location_info_ && OB_FAIL(locator.set_location_info(location_info))) {
             STORAGE_LOG(WARN, "Lob: set location info failed", K(ret), K(location_info));
           }
@@ -424,7 +427,11 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
           STORAGE_LOG(WARN, "Lob: fill payload failed", K(ret), K(column_id));
         }
       } else if (has_extern) {
+        ObMemLobTxInfo tx_info(tx_read_snapshot_.version().get_val_for_tx(),
+                               tx_read_snapshot_.tx_id().get_id(),
+                               tx_read_snapshot_.tx_seq().cast_to_int());
         ObMemLobRetryInfo retry_info;
+        retry_info.addr_ = MYADDR;
         retry_info.is_select_leader_ = !scan_flag_.is_select_follower_;
         retry_info.read_latest_ = scan_flag_.read_latest_;
         retry_info.timeout_ = access_ctx.timeout_;
@@ -445,6 +452,8 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
         if (OB_FAIL(ret)) {
         } else if (has_extern && OB_FAIL(locator.set_table_info(table_id_, column_id))) { // should be column idx
           STORAGE_LOG(WARN, "Lob: set table info failed", K(ret), K(table_id_), K(column_id));
+        } else if (extern_flags.has_tx_info_ && OB_FAIL(locator.set_tx_info(tx_info))) {
+          STORAGE_LOG(WARN, "Lob: set transaction info failed", K(ret), K(tx_info));
         } else if (extern_flags.has_location_info_ && OB_FAIL(locator.set_location_info(location_info))) {
           STORAGE_LOG(WARN, "Lob: set location info failed", K(ret), K(location_info));
         } else if (extern_flags.has_retry_info_ && OB_FAIL(locator.set_retry_info(retry_info))) {

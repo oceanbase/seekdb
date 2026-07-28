@@ -49,8 +49,7 @@ void ObStorageRowkeyColumnSchema::reset()
 
 bool ObStorageRowkeyColumnSchema::is_valid() const
 {
-  return 0 == reserved_
-      && 0 != column_idx_
+  return 0 != column_idx_
       && common::ob_is_valid_obj_type(static_cast<ObObjType>(meta_type_.get_type()));
 }
 
@@ -95,8 +94,39 @@ void ObStorageColumnSchema::destroy(ObIAllocator &allocator)
 
 bool ObStorageColumnSchema::is_valid() const
 {
-  return 0 == reserved_
-      && common::ob_is_valid_obj_type(static_cast<ObObjType>(meta_type_.get_type()));
+  return common::ob_is_valid_obj_type(static_cast<ObObjType>(meta_type_.get_type()));
+}
+
+int ObStorageColumnSchema::construct_column_param(
+    const uint64_t data_version,
+    share::schema::ObColumnParam &column_param) const
+{
+  int ret = OB_SUCCESS;
+  column_param.set_meta_type(meta_type_);
+  if (meta_type_.is_decimal_int()) {
+    ObAccuracy accuracy;
+    accuracy.set_precision(meta_type_.get_stored_precision());
+    accuracy.set_scale(meta_type_.get_scale());
+    column_param.set_accuracy(accuracy);
+  }
+  if (orig_default_value_.is_fixed_len_char_type()) {
+    blocksstable::ObStorageDatum datum;
+    ObObj obj;
+    if (OB_FAIL(datum.from_obj(orig_default_value_))) {
+      STORAGE_LOG(WARN, "fail to covent datum from obj", K(ret), K(orig_default_value_));
+    } else {
+      if (OB_FAIL(ObStorageSchema::trim(orig_default_value_.get_collation_type(), datum))) {
+        STORAGE_LOG(WARN, "failed to trim datum", K(ret), K_(orig_default_value), K(datum));
+      } else if (OB_FAIL(datum.to_obj_enhance(obj, orig_default_value_.get_meta()))) {
+        STORAGE_LOG(WARN, "failed to transfer datum to obj", K(ret), K(datum));
+      } else if (OB_FAIL(column_param.set_orig_default_value(obj))) {
+        STORAGE_LOG(WARN, "fail to set orig default value", K(ret));
+      }
+    }
+  } else if (OB_FAIL(column_param.set_orig_default_value(orig_default_value_))) {
+     STORAGE_LOG(WARN, "fail to set orig default value", K(ret));
+  }
+  return ret;
 }
 
 int ObStorageColumnSchema::deep_copy_default_val(ObIAllocator &allocator, const ObObj &default_val)
@@ -134,7 +164,7 @@ OB_SERIALIZE_MEMBER(
 
 ObStorageSchema::ObStorageSchema()
   : allocator_(nullptr),
-    format_version_(STORAGE_SCHEMA_FORMAT_VERSION),
+    storage_schema_version_(0),
     info_(0),
     table_type_(ObTableType::MAX_TABLE_TYPE),
     table_mode_(),
@@ -162,10 +192,20 @@ ObStorageSchema::~ObStorageSchema()
   reset();
 }
 
+// move storage_schema_version calculation here
+int ObStorageSchema::set_storage_schema_version(const uint64_t data_format_version)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(data_format_version);
+  storage_schema_version_ = STORAGE_SCHEMA_VERSION_LATEST;
+  return ret;
+}
+
 int ObStorageSchema::init(
     common::ObIAllocator &allocator,
     const ObTableSchema &input_schema,
-    const bool skip_column_info/* = false*/)
+    const bool skip_column_info/* = false*/,
+    const uint64_t data_format_version/* = DATA_CURRENT_VERSION */)
 {
   int ret = OB_SUCCESS;
 
@@ -183,11 +223,14 @@ int ObStorageSchema::init(
     rowkey_array_.set_allocator(&allocator);
     column_array_.set_allocator(&allocator);
     skip_idx_attr_array_.set_allocator(&allocator);
+    if (OB_FAIL(set_storage_schema_version(data_format_version))) {
+      STORAGE_LOG(WARN, "failed to calculate storage schema version; unsupported data format version", K(ret), K(data_format_version));
+    }
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(generate_column_array(input_schema))) {
-    STORAGE_LOG(WARN, "failed to generate column array", K(ret), K(input_schema));
+    STORAGE_LOG(WARN, "failed to generate column array", K(ret), K(input_schema), K(data_format_version));
   }
 
   if (OB_FAIL(ret)) {
@@ -235,7 +278,7 @@ int ObStorageSchema::init(
     column_array_.set_allocator(&allocator);
     skip_idx_attr_array_.set_allocator(&allocator);
 
-    format_version_ = STORAGE_SCHEMA_FORMAT_VERSION;
+    storage_schema_version_ = old_schema.storage_schema_version_;
     compressor_type_ = old_schema.compressor_type_;
     column_cnt_ = old_schema.column_cnt_;
     store_column_cnt_ = old_schema.store_column_cnt_;
@@ -335,7 +378,7 @@ int ObStorageSchema::truncate_column_array(const int64_t stored_column_count)
 
 void ObStorageSchema::reset()
 {
-  format_version_ = STORAGE_SCHEMA_FORMAT_VERSION;
+  storage_schema_version_ = 0;
   info_ = 0;
   table_type_ = MAX_TABLE_TYPE;
   table_mode_.reset();
@@ -366,10 +409,7 @@ void ObStorageSchema::reset()
 bool ObStorageSchema::is_valid() const
 {
   bool valid_ret = true;
-  if (STORAGE_SCHEMA_FORMAT_VERSION != format_version_
-      || 0 != reserved1_
-      || 0 != reserved2_
-      || nullptr == allocator_
+  if (nullptr == allocator_
       || schema_version_ < 0
       || column_cnt_ <= 0
       || tablet_size_ < 0
@@ -381,7 +421,7 @@ bool ObStorageSchema::is_valid() const
       || !check_column_array_valid(column_array_)
       || !check_column_array_valid(skip_idx_attr_array_)) {
     valid_ret = false;
-    STORAGE_LOG_RET(WARN, OB_INVALID_ERROR, "invalid", K_(is_inited), K_(format_version), KP_(allocator), K_(schema_version), K_(column_cnt),
+    STORAGE_LOG_RET(WARN, OB_INVALID_ERROR, "invalid", K_(is_inited), KP_(allocator), K_(schema_version), K_(column_cnt),
         K_(tablet_size), K_(pctfree), K_(table_type), K_(table_mode), K_(index_type));
   } else if (!column_info_simplified_ && column_cnt_ != column_array_.count()) {
     valid_ret = false;
@@ -416,12 +456,9 @@ int ObStorageSchema::serialize(char *buf, const int64_t buf_len, int64_t &pos) c
       || OB_UNLIKELY(pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid args", K(ret), K(buf), K(buf_len), K(pos));
-  } else if (OB_UNLIKELY(!is_valid())) {
-    ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "invalid storage schema", K(ret), KPC(this));
-  } else {
+  } else if (STORAGE_SCHEMA_VERSION_LATEST == storage_schema_version_) {
     LST_DO_CODE(OB_UNIS_ENCODE,
-        format_version_,
+        storage_schema_version_,
         info_,
         table_type_,
         table_mode_,
@@ -447,6 +484,9 @@ int ObStorageSchema::serialize(char *buf, const int64_t buf_len, int64_t &pos) c
     } else {
       OB_UNIS_ENCODE(semistruct_encoding_type_);
     }
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_LOG(WARN, "invalid storage schema version", K(ret), K_(storage_schema_version));
   }
 
   return ret;
@@ -492,9 +532,9 @@ int ObStorageSchema::deserialize(
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(serialization::decode(buf, data_len, pos, format_version_))) {
-    STORAGE_LOG(WARN, "failed to deserialize format version", K(ret), K(data_len), K(pos));
-  } else if (STORAGE_SCHEMA_FORMAT_VERSION == format_version_) {
+  } else if (OB_FAIL(serialization::decode(buf, data_len, pos, storage_schema_version_))) {
+    STORAGE_LOG(WARN, "failed to deserialize version", K(ret), K(data_len), K(pos));
+  } else if (STORAGE_SCHEMA_VERSION_LATEST == storage_schema_version_) {
     LST_DO_CODE(OB_UNIS_DECODE,
         info_,
         table_type_,
@@ -522,15 +562,12 @@ int ObStorageSchema::deserialize(
       OB_UNIS_DECODE(semistruct_encoding_type_);
     }
 
-    if (OB_SUCC(ret) && OB_UNLIKELY(!ObStorageSchema::is_valid())) {
-      ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "deserialized storage schema is invalid", K(ret), KPC(this));
-    } else if (OB_SUCC(ret)) {
+    if (OB_SUCC(ret)) {
       is_inited_ = true;
     }
   } else {
-    ret = OB_NOT_SUPPORTED;
-    STORAGE_LOG(WARN, "storage schema format mismatch", K(ret), K_(format_version));
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_LOG(WARN, "invalid version", K(ret), K_(storage_schema_version));
   }
 
   if (OB_UNLIKELY(!is_inited_)) {
@@ -657,7 +694,7 @@ int64_t ObStorageSchema::get_serialize_size() const
   int64_t len = 0;
 
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-      format_version_,
+      storage_schema_version_,
       info_,
       table_type_,
       table_mode_,
@@ -1195,10 +1232,11 @@ int64_t ObCreateTabletSchema::get_serialize_size() const
 int ObCreateTabletSchema::init(
     common::ObIAllocator &allocator,
     const share::schema::ObTableSchema &input_schema,
-    const bool skip_column_info)
+    const bool skip_column_info,
+    const uint64_t data_format_version)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObStorageSchema::init(allocator, input_schema, skip_column_info))) {
+  if (OB_FAIL(ObStorageSchema::init(allocator, input_schema, skip_column_info, data_format_version))) {
     STORAGE_LOG(WARN, "failed to init", K(ret), KPC(this));
   } else {
     table_id_ = input_schema.get_table_id();

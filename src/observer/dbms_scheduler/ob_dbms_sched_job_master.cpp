@@ -242,6 +242,7 @@ int ObDBMSSchedJobMaster::scheduler_job(ObDBMSSchedJobKey *job_key)
     ObArenaAllocator allocator("DBMSSchedTmp");
     OZ (table_operator_.get_dbms_sched_job_info(
       job_key->get_job_id(), job_key->get_job_name(), allocator, job_info));
+    ObDIActionGuard ag(job_info.get_job_class());
     const int64_t now = ObTimeUtility::current_time();
     int64_t next_check_date = now + MIN_SCHEDULER_INTERVAL;
     if (OB_FAIL(ret) || !job_info.valid()) {
@@ -367,12 +368,19 @@ void ObDBMSSchedJobMaster::free_job_key(ObDBMSSchedJobKey *&job_key)
 int ObDBMSSchedJobMaster::check_runtime_jobs()
 {
   int ret = OB_SUCCESS;
+  ObSchemaGetterGuard schema_guard;
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("dbms sched job not init yet", K(ret), K(inited_));
+  } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("fail get schema guard", K(ret));
   } else {
+    const ObServerRuntimeSchema *runtime_schema = NULL;
+    OZ (schema_guard.get_server_runtime_info(runtime_schema));
+    CK (OB_NOT_NULL(runtime_schema));
     bool is_primary_server = true;
-    if (OB_FAIL(ObShareUtil::is_primary_server(is_primary_server))) {
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(ObShareUtil::is_primary_server(is_primary_server))) {
       LOG_WARN("fail to check whether is primary server", KR(ret), K(is_primary_server));
     } else if (!is_primary_server) {
       clear_wait_vector();

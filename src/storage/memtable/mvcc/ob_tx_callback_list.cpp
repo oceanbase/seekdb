@@ -853,9 +853,8 @@ void ObTxCallbackList::get_checksum_and_scn(uint64_t &checksum, SCN &checksum_sc
   TRANS_LOG(INFO, "get checksum and checksum_scn", KPC(this), K(checksum), K(checksum_scn));
 }
 
-int ObTxCallbackList::update_checksum(const uint64_t checksum, const SCN checksum_scn)
+void ObTxCallbackList::update_checksum(const uint64_t checksum, const SCN checksum_scn)
 {
-  int ret = OB_SUCCESS;
   LockGuard guard(*this, LOCK_MODE::LOCK_ITERATE);
   if (checksum_scn.is_max()) {
     if (checksum == 0) {
@@ -863,7 +862,9 @@ int ObTxCallbackList::update_checksum(const uint64_t checksum, const SCN checksu
     }
     checksum_ = checksum;
   }
-  return ret;
+  batch_checksum_.set_base(checksum);
+  checksum_scn_.atomic_set(checksum_scn);
+  TRANS_LOG(INFO, "update checksum and checksum_scn", KPC(this), K(checksum), K(checksum_scn));
 }
 
 void ObTxCallbackList::ensure_checksum_(const SCN scn)

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_tablet_pointer_map.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/meta_store/ob_storage_meta_io_util.h"
@@ -272,8 +273,10 @@ int ObTabletPointerMap::get_meta_obj(
     if (OB_FAIL(load_and_hook_meta_obj(key, ptr_hdl, guard))) {
       STORAGE_LOG(WARN, "fail to load and hook meta obj", K(ret), K(key));
     } else {
+      EVENT_INC(TABLET_CACHE_MISS);
     }
   } else {
+    EVENT_INC(TABLET_CACHE_HIT);
   }
   return ret;
 }
@@ -302,8 +305,10 @@ int ObTabletPointerMap::get_meta_obj_with_filter(
     if (OB_FAIL(load_and_hook_meta_obj(key, ptr_hdl, guard))) {
       STORAGE_LOG(WARN, "fail to load and hook meta obj", K(ret), K(key));
     } else {
+      EVENT_INC(TABLET_CACHE_MISS);
     }
   } else {
+    EVENT_INC(TABLET_CACHE_HIT);
   }
   return ret;
 }
@@ -548,6 +553,7 @@ int ObTabletPointerMap::get_meta_obj_with_external_memory(
       STORAGE_LOG(WARN, "fail to try get in memory meta obj", K(ret), K(key));
     }
   } else if (is_in_memory) {
+    EVENT_INC(TABLET_CACHE_HIT);
   }
   if (OB_SUCC(ret) && !is_in_memory) {
     t_ptr = ptr_hdl.get_resource_ptr();

@@ -48,6 +48,7 @@ namespace share
 {
 namespace schema
 {
+class ObServerRuntimeSchema;
 class ObDatabaseSchema;
 class ObTableSchema;
 class ObRoutineInfo;
@@ -236,6 +237,11 @@ public:
                                            bool is_for_table_status,
                                            bool agent_mode = false,
                                            ObSQLMode sql_mode = SMO_DEFAULT) const;
+  int print_interval_if_ness(const ObTableSchema &table_schema,
+                             char* buf,
+                             const int64_t& buf_len,
+                             int64_t& pos,
+                             const ObTimeZoneInfo *tz_info) const;
   int print_table_definition_partition_options(const ObTableSchema &table_schema,
                                                char* buf,
                                                const int64_t& buf_len,
@@ -326,6 +332,20 @@ public:
   int print_trigger_definition(const share::schema::ObTriggerInfo &trigger_info,
                                char *buf, int64_t buf_len, int64_t &pos,
                                bool get_ddl = false) const;
+  int print_simple_trigger_definition(const ObTriggerInfo &trigger_info,
+                                      char *buf, int64_t buf_len, int64_t &pos,
+                                      bool get_ddl = false) const;
+  int print_compound_instead_trigger_definition(const ObTriggerInfo &trigger_info,
+                                                char *buf, int64_t buf_len, int64_t &pos,
+                                                bool get_ddl) const;
+  int print_system_trigger_definition(const ObTriggerInfo &trigger_info,
+                                      char *buf, int64_t buf_len, int64_t &pos,
+                                      bool get_ddl) const;
+  int print_trigger_status(const ObTriggerInfo &trigger_info, char *buf, int64_t buf_len, int64_t &pos) const;
+  int print_trigger_base_object(const ObTriggerInfo &trigger_info,
+                                char *buf, int64_t buf_len, int64_t &pos) const;
+  int print_trigger_referencing(const ObTriggerInfo &trigger_info,
+                                char *buf, int64_t buf_len, int64_t &pos) const;
   int print_table_definition_on_commit_options(const ObTableSchema &table_schema,
                                                char* buf,
                                                const int64_t& buf_len,

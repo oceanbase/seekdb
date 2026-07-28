@@ -266,7 +266,7 @@ int ObPLCacheMgr::flush_pl_cache_by_sql(
   if (OB_FAIL(schema_service.get_runtime_schema_guard(runtime_schema_guard))) {
     LOG_WARN("failed to get runtime schema guard", KR(ret));
   }
-
+  //get db name
   const ObSimpleDatabaseSchema *database_schema = NULL;
   if (OB_FAIL(ret)) {
     // do nothing
@@ -276,7 +276,7 @@ int ObPLCacheMgr::flush_pl_cache_by_sql(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("database schema is null", K(ret));
   } else {
-    db_name = database_schema->get_database_name();
+     db_name = database_schema->get_database_name();
   }
 
   ObMySQLProxy *sql_proxy = nullptr;

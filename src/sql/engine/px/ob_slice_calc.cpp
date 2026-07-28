@@ -27,8 +27,11 @@ using namespace oceanbase::share::schema;
 using namespace oceanbase::storage;
 
 #define DEFINE_GET_SLICE_FUNCTION(type) \
-template int ObSliceIdxCalc::get_slice_indexes<ObSliceIdxCalc::type>(const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx, SliceIdxArray &slice_idx_array, ObBitVector *skip); \
-template int ObSliceIdxCalc::get_slice_idx_batch<ObSliceIdxCalc::type>(const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx, ObBitVector &skip, const int64_t batch_size, int64_t *&indexes);
+template int ObSliceIdxCalc::get_slice_indexes<ObSliceIdxCalc::type, true>(const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx, SliceIdxArray &slice_idx_array, ObBitVector *skip);  \
+template int ObSliceIdxCalc::get_slice_indexes<ObSliceIdxCalc::type, false>(const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx, SliceIdxArray &slice_idx_array, ObBitVector *skip); \
+template int ObSliceIdxCalc::get_slice_idx_batch<ObSliceIdxCalc::type, true>(const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx, ObBitVector &skip, const int64_t batch_size, int64_t *&indexes); \
+template int ObSliceIdxCalc::get_slice_idx_batch<ObSliceIdxCalc::type, false>(const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx, ObBitVector &skip, const int64_t batch_size, int64_t *&indexes); \
+template int ObSliceIdxCalc::get_multi_slice_idx_vector<ObSliceIdxCalc::type>(const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx, ObBitVector &skip, const int64_t batch_size, SliceIdxFlattenArray &slice_flatten_indexes, EndIdxArray &end_indexes);
 
 
 DEFINE_GET_SLICE_FUNCTION(ALL_TO_ONE);
@@ -50,11 +53,17 @@ DEFINE_GET_SLICE_FUNCTION(WF_HYBRID);
 
 #define CALL_GET_SLICE_INNER(TYPE, CALC, FUNC, args...) \
   case TYPE : { \
+    ret = static_cast<CALC *>(this)->FUNC<USE_VEC>(args); \
+    break;  \
+  }
+
+#define CALL_GET_MULTI_SLICE_VECTOR_INNER(TYPE, CALC, FUNC, args...) \
+  case TYPE : { \
     ret = static_cast<CALC *>(this)->FUNC(args); \
     break;  \
   }
 
-template <ObSliceIdxCalc::SliceCalcType CALC_TYPE>
+template <ObSliceIdxCalc::SliceCalcType CALC_TYPE, bool USE_VEC>
 int ObSliceIdxCalc::get_slice_indexes(
   const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx, SliceIdxArray &slice_idx_array, ObBitVector *skip)
 {
@@ -84,7 +93,7 @@ int ObSliceIdxCalc::get_slice_indexes(
   return ret;
 }
 
-template <ObSliceIdxCalc::SliceCalcType CALC_TYPE>
+template <ObSliceIdxCalc::SliceCalcType CALC_TYPE, bool USE_VEC>
 int ObSliceIdxCalc::get_slice_idx_batch(const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx,
                               ObBitVector &skip, const int64_t batch_size,
                               int64_t *&indexes)
@@ -98,6 +107,27 @@ int ObSliceIdxCalc::get_slice_idx_batch(const ObIArray<ObExpr*> &exprs, ObEvalCt
     CALL_GET_SLICE_INNER(HASH, ObHashSliceIdCalc, get_slice_idx_batch_inner, exprs, eval_ctx, skip, batch_size, indexes)
     CALL_GET_SLICE_INNER(HYBRID_HASH_RANDOM, ObHybridHashRandomSliceIdCalc, get_slice_idx_batch_inner, exprs, eval_ctx, skip, batch_size, indexes)
     CALL_GET_SLICE_INNER(SM_REPART_RANDOM, ObSlaveMapPkeyRandomIdxCalc, get_slice_idx_batch_inner, exprs, eval_ctx, skip, batch_size, indexes)
+    default : {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected slice calc type", K(CALC_TYPE));
+    }
+  }
+  return ret;
+}
+
+template <ObSliceIdxCalc::SliceCalcType CALC_TYPE>
+int ObSliceIdxCalc::get_multi_slice_idx_vector(const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx,
+                              ObBitVector &skip, const int64_t batch_size,
+                              SliceIdxFlattenArray &slice_flatten_indexes, EndIdxArray &end_indexes)
+{
+  int ret = OB_SUCCESS;
+  switch(CALC_TYPE) {
+    CALL_GET_MULTI_SLICE_VECTOR_INNER(BROADCAST, ObBroadcastSliceIdCalc, get_multi_slice_idx_vector_inner, exprs, eval_ctx, skip, batch_size, slice_flatten_indexes, end_indexes)
+    CALL_GET_MULTI_SLICE_VECTOR_INNER(BC2HOST, ObBc2HostSliceIdCalc, get_multi_slice_idx_vector_inner, exprs, eval_ctx, skip, batch_size, slice_flatten_indexes, end_indexes)
+    CALL_GET_MULTI_SLICE_VECTOR_INNER(HYBRID_HASH_BROADCAST, ObHybridHashBroadcastSliceIdCalc, get_multi_slice_idx_vector_inner, exprs, eval_ctx, skip, batch_size, slice_flatten_indexes, end_indexes)
+    CALL_GET_MULTI_SLICE_VECTOR_INNER(NULL_AWARE_AFFINITY_REPART, ObNullAwareAffinitizedRepartSliceIdxCalc, get_multi_slice_idx_vector_inner, exprs, eval_ctx, skip, batch_size, slice_flatten_indexes, end_indexes)
+    CALL_GET_MULTI_SLICE_VECTOR_INNER(NULL_AWARE_HASH, ObNullAwareHashSliceIdCalc, get_multi_slice_idx_vector_inner, exprs, eval_ctx, skip, batch_size, slice_flatten_indexes, end_indexes)
+    CALL_GET_MULTI_SLICE_VECTOR_INNER(WF_HYBRID, ObWfHybridDistSliceIdCalc, get_multi_slice_idx_vector_inner, exprs, eval_ctx, skip, batch_size, slice_flatten_indexes, end_indexes)
     default : {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected slice calc type", K(CALC_TYPE));
@@ -155,7 +185,8 @@ int ObSliceIdxCalc::setup_tablet_ids(ObEvalCtx &ctx)
   return ret;
 }
 
-int ObSliceIdxCalc::calc_for_null_aware(const ObExpr &expr, const int64_t task_cnt,
+template <>
+int ObSliceIdxCalc::calc_for_null_aware<false>(const ObExpr &expr, const int64_t task_cnt,
                                         ObEvalCtx &eval_ctx, SliceIdxArray &slice_idx_array,
                                         bool &processed, ObBitVector *skip)
 {
@@ -179,6 +210,46 @@ int ObSliceIdxCalc::calc_for_null_aware(const ObExpr &expr, const int64_t task_c
       }
     }
     processed = true;
+  }
+  return ret;
+}
+
+template <>
+int ObSliceIdxCalc::calc_for_null_aware<true>(const ObExpr &expr, const int64_t task_cnt,
+                                        ObEvalCtx &eval_ctx, SliceIdxArray &slice_idx_array,
+                                        bool &processed, ObBitVector *skip)
+{
+  int ret = OB_SUCCESS;
+  processed = false;
+  ObDatum *dis_key = nullptr;
+  if (is_first_row_) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < task_cnt; ++i) {
+      if (OB_FAIL(slice_idx_array.push_back(i))) {
+        LOG_WARN("failed to push back i", K(ret));
+      }
+    }
+    is_first_row_ = false;
+    processed = true;
+  } else if (OB_ISNULL(skip)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("skip is null", K(ret));
+  } else {
+    const bool all_rows_active = false;
+    const int64_t batch_idx = eval_ctx.get_batch_idx();
+    EvalBound eval_bound(eval_ctx.get_batch_size(), batch_idx, batch_idx + 1, all_rows_active);
+    if (OB_FAIL(expr.eval_vector(eval_ctx, *skip, eval_bound))) {
+      LOG_WARN("eval batch failed", K(ret));
+    } else {
+      ObIVector *vec = expr.get_vector(eval_ctx);
+      if (vec->is_null(batch_idx)) {
+        for (int64_t i = 0; OB_SUCC(ret) && i < task_cnt; ++i) {
+          if (OB_FAIL(slice_idx_array.push_back(i))) {
+            LOG_WARN("failed to push back i", K(ret));
+          }
+        }
+        processed = true;
+      }
+    }
   }
   return ret;
 }
@@ -220,7 +291,8 @@ int ObRepartSliceIdxCalc::get_sub_part_id_by_one_level_first_ch_map(
   return ret;
 }
 
-int ObRepartSliceIdxCalc::get_tablet_id(ObEvalCtx &eval_ctx, int64_t &tablet_id, ObBitVector *skip)
+template <>
+int ObRepartSliceIdxCalc::get_tablet_id<false>(ObEvalCtx &eval_ctx, int64_t &tablet_id, ObBitVector *skip)
 {
   int ret = OB_SUCCESS;
   ObDatum *tablet_id_datum = NULL;
@@ -248,7 +320,46 @@ int ObRepartSliceIdxCalc::get_tablet_id(ObEvalCtx &eval_ctx, int64_t &tablet_id,
   return ret;
 }
 
-int ObRepartSliceIdxCalc::get_tablet_ids(ObEvalCtx &eval_ctx, ObBitVector &skip,
+template <>
+int ObRepartSliceIdxCalc::get_tablet_id<true>(ObEvalCtx &eval_ctx, int64_t &tablet_id, ObBitVector *skip)
+{
+  int ret = OB_SUCCESS;
+  bool all_rows_active = false;
+  int64_t batch_idx = eval_ctx.get_batch_idx();
+  int64_t batch_size = eval_ctx.get_batch_size();
+  EvalBound eval_bound(batch_size, batch_idx, batch_idx + 1, all_rows_active);
+  if (OB_ISNULL(calc_part_id_expr_) || OB_ISNULL(skip)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret), K(calc_part_id_expr_));
+  } else if (OB_FAIL(calc_part_id_expr_->eval_vector(eval_ctx, *skip, eval_bound))) {
+    LOG_WARN("eval failed", K(ret));
+  } else {
+    ObIVector *vec = calc_part_id_expr_->get_vector(eval_ctx);
+    tablet_id = vec->get_int(batch_idx);
+  }
+  if (OB_FAIL(ret)) {
+  } else if (ObExprCalcPartitionId::NONE_PARTITION_ID == tablet_id) {
+    // Usually, calc_part_id_expr_ returns tablet_id and set tablet_id_datum = 0
+    // if no partition match(refer to ObExprCalcPartitionBase::calc_partition_id).
+    // In this condition, it will not go to this branch because NONE_PARTITION_ID equals to -1.
+    // But when repart_type_ equals to OB_REPARTITION_ONE_SIDE_ONE_LEVEL_FIRST(means value of sub part key is fixed),
+    // calc_part_id_expr_ returns partition_id of first part and set tablet_id_datum = -1.
+  } else if (OB_REPARTITION_ONE_SIDE_ONE_LEVEL_FIRST == repart_type_) {
+    int64_t part_id = tablet_id;
+    if (OB_FAIL(get_sub_part_id_by_one_level_first_ch_map(part_id, tablet_id))) {
+      LOG_WARN("fail to get part id by ch map", K(ret));
+    }
+  }
+  if (OB_SUCC(ret)) {
+    tablet_id_ = tablet_id;
+  }
+  LOG_DEBUG("repart partition id", K(tablet_id));
+
+  return ret;
+}
+
+template <>
+int ObRepartSliceIdxCalc::get_tablet_ids<false>(ObEvalCtx &eval_ctx, ObBitVector &skip,
                                          const int64_t batch_size, int64_t *&tablet_ids)
 {
   int ret = OB_SUCCESS;
@@ -277,6 +388,48 @@ int ObRepartSliceIdxCalc::get_tablet_ids(ObEvalCtx &eval_ctx, ObBitVector &skip,
       }
       if (OB_SUCC(ret)) {
         tablet_id_ = tablet_ids[i];
+      }
+    }
+    if (OB_SUCC(ret)) {
+      tablet_ids = ObSliceIdxCalc::tablet_ids_;
+    }
+  }
+  return ret;
+}
+
+template <>
+int ObRepartSliceIdxCalc::get_tablet_ids<true>(ObEvalCtx &eval_ctx, ObBitVector &skip,
+                                         const int64_t batch_size, int64_t *&tablet_ids)
+{
+  int ret = OB_SUCCESS;
+  const bool all_rows_active = false;
+  EvalBound eval_bound(batch_size, all_rows_active);
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(calc_part_id_expr_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid calc part id expr", K(ret));
+  } else if (OB_FAIL(calc_part_id_expr_->eval_vector(eval_ctx, skip, eval_bound))) {
+    LOG_WARN("failed to eval batch", K(ret));
+  } else if (OB_FAIL(ObSliceIdxCalc::setup_tablet_ids(eval_ctx))) {
+    LOG_WARN("failed to setup partition id", K(ret));
+  } else {
+    ObIVector *vec = calc_part_id_expr_->get_vector(eval_ctx);
+    for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; ++i) {
+      if (skip.at(i)) {
+        continue;
+      }
+      //todo shanting. opt. avoid virtual func cost
+      if (ObExprCalcPartitionId::NONE_PARTITION_ID ==
+          (ObSliceIdxCalc::tablet_ids_[i] = vec->get_int(i))) {
+        // do nothing
+      } else if (OB_REPARTITION_ONE_SIDE_ONE_LEVEL_FIRST == repart_type_) {
+        int64_t part_id = ObSliceIdxCalc::tablet_ids_[i];
+        if (OB_FAIL(get_sub_part_id_by_one_level_first_ch_map(part_id, ObSliceIdxCalc::tablet_ids_[i]))) {
+          LOG_WARN("fail to get part id by ch map", K(ret));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        tablet_id_ = tablet_ids_[i];
       }
     }
     if (OB_SUCC(ret)) {
@@ -370,6 +523,7 @@ int ObSlaveMapPkeyRandomIdxCalc::destroy()
   return ObSlaveMapRepartIdxCalcBase::destroy();
 }
 
+template <bool USE_VEC>
 int ObSlaveMapPkeyRandomIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs,
                                                   ObEvalCtx &eval_ctx,
                                                   SliceIdxArray &slice_idx_array,
@@ -388,7 +542,7 @@ int ObSlaveMapPkeyRandomIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*>
     // Indicates there is no mapping from partition to task idx
     ret = OB_NOT_INIT;
     LOG_WARN("the size of part task channel map is zero", K(ret));
-  } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_id(eval_ctx, tablet_id, skip))) {
+  } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_id<USE_VEC>(eval_ctx, tablet_id, skip))) {
     LOG_WARN("failed to get partition id", K(ret));
   } else if (OB_FAIL(get_task_idx_by_tablet_id(tablet_id, slice_idx_array.at(0)))) {
     if (OB_HASH_NOT_EXIST == ret) {
@@ -412,6 +566,7 @@ int ObSlaveMapPkeyRandomIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*>
   return ret;
 }
 
+template <bool USE_VEC>
 int ObSlaveMapPkeyRandomIdxCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr*> &, ObEvalCtx &eval_ctx,
                                                            ObBitVector &skip, const int64_t batch_size,
                                                            int64_t *&indexes)
@@ -423,7 +578,7 @@ int ObSlaveMapPkeyRandomIdxCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr
     // Indicates there is no mapping from partition to task idx
     ret = OB_NOT_INIT;
     LOG_WARN("the size of part task channel map is zero", K(ret));
-  } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_ids(eval_ctx, skip,
+  } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_ids<USE_VEC>(eval_ctx, skip,
                                                                    batch_size, tablet_ids_))) {
     LOG_WARN("get tablet ids failed", K(ret));
   } else {
@@ -474,6 +629,7 @@ int ObSlaveMapPkeyRandomIdxCalc::get_task_idx_by_tablet_id(int64_t tablet_id,
   return ret;
 }
 
+template <bool USE_VEC>
 int ObAffinitizedRepartSliceIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs,
                                                        ObEvalCtx &eval_ctx,
                                                        SliceIdxArray &slice_idx_array,
@@ -490,7 +646,7 @@ int ObAffinitizedRepartSliceIdxCalc::get_slice_indexes_inner(const ObIArray<ObEx
   } else if (px_repart_ch_map_.size() <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid map size, affinity map should not be empty!", K_(task_count), K(ret));
-  } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_id(eval_ctx, tablet_id, skip))) {
+  } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_id<USE_VEC>(eval_ctx, tablet_id, skip))) {
     LOG_WARN("fail to get partition id", K(ret));
   } else if (OB_FAIL(px_repart_ch_map_.get_refactored(tablet_id, slice_idx_array.at(0)))) {
     if (OB_HASH_NOT_EXIST == ret && unmatch_row_dist_method_ == ObPQDistributeMethod::DROP) {
@@ -509,7 +665,7 @@ int ObAffinitizedRepartSliceIdxCalc::get_slice_indexes_inner(const ObIArray<ObEx
       if (OB_ISNULL(hash_dist_exprs_) || OB_UNLIKELY(0 == hash_dist_exprs_->count())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("hash dist exprs is null", K(ret));
-      } else if (OB_FAIL(slice_id_calc.get_slice_indexes_inner(*hash_dist_exprs_,
+      } else if (OB_FAIL(slice_id_calc.get_slice_indexes_inner<USE_VEC>(*hash_dist_exprs_,
                                                                       eval_ctx, slice_idx_array,
                                                                       skip))) {
         LOG_WARN("hash slice calc get slice idx failed", K(ret));
@@ -523,6 +679,7 @@ int ObAffinitizedRepartSliceIdxCalc::get_slice_indexes_inner(const ObIArray<ObEx
   return ret;
 }
 
+template <bool USE_VEC>
 int ObAffinitizedRepartSliceIdxCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr*> &exprs,
                                                        ObEvalCtx &eval_ctx,
                                                        ObBitVector &skip,
@@ -541,7 +698,7 @@ int ObAffinitizedRepartSliceIdxCalc::get_slice_idx_batch_inner(const ObIArray<Ob
     LOG_WARN("failed to set up slice indexes", K(ret));
   } else if (OB_FAIL(setup_tablet_ids(eval_ctx))) {
     LOG_WARN("failed to setup partition ids", K(ret));
-  } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_ids(eval_ctx, skip,
+  } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_ids<USE_VEC>(eval_ctx, skip,
                                                              batch_size, tablet_ids_))) {
     LOG_WARN("fail to get partition id", K(ret));
   } else {
@@ -571,7 +728,7 @@ int ObAffinitizedRepartSliceIdxCalc::get_slice_idx_batch_inner(const ObIArray<Ob
           if (OB_ISNULL(hash_dist_exprs_)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("hash dist exprs is null", K(ret));
-          } else if (OB_FAIL(slice_id_calc.calc_slice_idx(eval_ctx, task_count_,
+          } else if (OB_FAIL(slice_id_calc.calc_slice_idx<USE_VEC>(eval_ctx, task_count_,
                                                           slice_indexes_[i], &skip))) {
             LOG_WARN("hash slice calc get slice idx failed", K(ret));
           }
@@ -678,6 +835,7 @@ int ObRepartSliceIdxCalc::build_part2tablet_id_map()
   return ret;
 }
 
+template <bool USE_VEC>
 int ObSlaveMapBcastIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs,
     ObEvalCtx &eval_ctx, SliceIdxArray &slice_idx_array, ObBitVector *skip)
 {
@@ -685,7 +843,7 @@ int ObSlaveMapBcastIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exp
   int ret = OB_SUCCESS;
   int64_t tablet_id = common::OB_INVALID_INDEX;
   slice_idx_array.reuse();
-  if (OB_FAIL(get_tablet_id(eval_ctx, tablet_id, skip))) {
+  if (OB_FAIL(get_tablet_id<USE_VEC>(eval_ctx, tablet_id, skip))) {
     LOG_WARN("failed to get_tablet_id", K(ret));
   } else if (OB_INVALID_INDEX == tablet_id) {
     int64_t drop_idx = ObSliceIdxCalc::DEFAULT_CHANNEL_IDX_TO_DROP_ROW;
@@ -706,6 +864,7 @@ int ObSlaveMapBcastIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exp
   return ret;
 }
 
+template <bool USE_VEC>
 int ObAllToOneSliceIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs,
                                                   ObEvalCtx &eval_ctx,
                                                   SliceIdxArray &slice_idx_array,
@@ -723,6 +882,7 @@ int ObAllToOneSliceIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exp
   return ret;
 }
 
+template <bool USE_VEC>
 int ObAllToOneSliceIdxCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr*> &,
                                               ObEvalCtx &eval_ctx,
                                               ObBitVector &,
@@ -743,6 +903,7 @@ int ObAllToOneSliceIdxCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr*> &,
   return ret;
 }
 
+template <bool USE_VEC>
 int ObBc2HostSliceIdCalc::get_slice_indexes_inner(
   const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx, SliceIdxArray &slice_idx_array,
   ObBitVector *skip)
@@ -770,6 +931,35 @@ int ObBc2HostSliceIdCalc::get_slice_indexes_inner(
   return ret;
 }
 
+int ObBc2HostSliceIdCalc::get_multi_slice_idx_vector_inner(const ObIArray<ObExpr*> &exprs,
+                          ObEvalCtx &eval_ctx,
+                          ObBitVector &skip, const int64_t batch_size,
+                          SliceIdxFlattenArray &slice_flatten_indexes, EndIdxArray &end_indexes)
+{
+  UNUSED(exprs);
+  UNUSED(eval_ctx);
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(slice_flatten_indexes.count() != host_idx_.count())) {
+    slice_flatten_indexes.reuse();
+    FOREACH_CNT_X(it, host_idx_, OB_SUCC(ret)) {
+      UNUSED(it);
+      if (OB_FAIL(slice_flatten_indexes.push_back(0))) {
+        LOG_WARN("array push back failed", K(ret));
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    for (int64_t i = 0; i < host_idx_.count(); i++) {
+      const HostIndex &hi = host_idx_.at(i);
+      int64_t idx = hi.begin_ + hi.idx_ % (hi.end_ - hi.begin_);
+      slice_flatten_indexes.at(i) = channel_idx_.at(idx);
+      hi.idx_++;
+    }
+  }
+  return ret;
+}
+
+template <bool USE_VEC>
 int ObRandomSliceIdCalc::get_slice_indexes_inner(
   const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx, SliceIdxArray &slice_idx_array,
   ObBitVector *skip)
@@ -789,6 +979,7 @@ int ObRandomSliceIdCalc::get_slice_indexes_inner(
   return ret;
 }
 
+template <bool USE_VEC>
 int ObRandomSliceIdCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr*> &,
                                               ObEvalCtx &eval_ctx,
                                               ObBitVector &skip,
@@ -811,6 +1002,7 @@ int ObRandomSliceIdCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr*> &,
   return ret;
 }
 
+template <bool USE_VEC>
 int ObBroadcastSliceIdCalc::get_slice_indexes_inner(
   const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx, SliceIdxArray &slice_idx_array,
   ObBitVector *skip)
@@ -827,7 +1019,26 @@ int ObBroadcastSliceIdCalc::get_slice_indexes_inner(
   return ret;
 }
 
-int ObHashSliceIdCalc::calc_slice_idx(ObEvalCtx &eval_ctx, int64_t slice_size,
+int ObBroadcastSliceIdCalc::get_multi_slice_idx_vector_inner(const ObIArray<ObExpr*> &exprs,
+                                ObEvalCtx &eval_ctx,
+                                ObBitVector &skip, const int64_t batch_size,
+                                SliceIdxFlattenArray &slice_flatten_indexes, EndIdxArray &end_indexes)
+{
+  UNUSED(exprs);
+  UNUSED(eval_ctx);
+  int ret = OB_SUCCESS;
+  slice_flatten_indexes.reuse();
+  end_indexes.reuse();
+  for (int64_t j = 0; OB_SUCC(ret) && j < slice_cnt_; ++j) {
+    if (OB_FAIL(slice_flatten_indexes.push_back(j))) {
+      LOG_WARN("failed to push back j into slice_flatten_indexes", K(ret), K(j));
+    }
+  }
+  return ret;
+}
+
+template<>
+int ObHashSliceIdCalc::calc_slice_idx<false>(ObEvalCtx &eval_ctx, int64_t slice_size,
                                           int64_t &slice_idx, ObBitVector *skip)
 {
   int ret = OB_SUCCESS;
@@ -870,7 +1081,64 @@ int ObHashSliceIdCalc::calc_slice_idx(ObEvalCtx &eval_ctx, int64_t slice_size,
   return ret;
 }
 
-int ObHashSliceIdCalc::calc_hash_value(ObEvalCtx &eval_ctx, uint64_t &hash_val,
+template<>
+int ObHashSliceIdCalc::calc_slice_idx<true>(ObEvalCtx &eval_ctx, int64_t slice_size,
+                                          int64_t &slice_idx, ObBitVector *skip)
+{
+  int ret = OB_SUCCESS;
+  uint64_t hash_val = SLICE_CALC_HASH_SEED;
+  ObDatum *datum = nullptr;
+  bool found_null = false;
+  if (OB_ISNULL(hash_dist_exprs_) || OB_ISNULL(hash_funcs_) || OB_ISNULL(skip)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("hash func and expr not init", K(ret), K(hash_dist_exprs_), K(hash_funcs_));
+  } else if (n_keys_ > hash_dist_exprs_->count()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected status: n_keys is invalid", K(ret),
+             K(n_keys_), K(hash_dist_exprs_->count()));
+  }
+  bool all_rows_active = false;
+  int64_t batch_idx = eval_ctx.get_batch_idx();
+  int64_t batch_size = eval_ctx.get_batch_size();
+  EvalBound eval_bound(batch_size, batch_idx, batch_idx + 1, all_rows_active);
+  for (int64_t i = 0; OB_SUCC(ret) && i < n_keys_; ++i) {
+    const ObExpr* dist_expr = hash_dist_exprs_->at(i);
+    LOG_DEBUG("[VEC2.0 PX]calc hash slice idx", KPC(dist_expr));
+    if (OB_FAIL(dist_expr->eval_vector(eval_ctx, *skip, eval_bound))) {
+      LOG_WARN("eval vector failed", K(ret));
+    } else {
+      ObIVector *vec = dist_expr->get_vector(eval_ctx);
+      bool is_null = vec->is_null(batch_idx);
+      if (is_null && ObNullDistributeMethod::DROP == null_row_dist_method_) {
+        slice_idx = ObSliceIdxCalc::DEFAULT_CHANNEL_IDX_TO_DROP_ROW;
+        found_null = true;
+        break;
+      } else if (is_null && ObNullDistributeMethod::RANDOM == null_row_dist_method_) {
+        slice_idx = round_robin_idx_ % slice_size;
+        round_robin_idx_++;
+        found_null = true;
+        break;
+      } else if (OB_FAIL(vec->murmur_hash_v3_for_one_row(*dist_expr, hash_val, batch_idx,
+                                                         batch_size, hash_val))) {
+        LOG_WARN("failed to cal hash");
+      } else {
+        LOG_DEBUG("[VEC2.0 PX] calc hash slice value", K(i), K(ret), K(null_row_dist_method_),
+                  K(hash_val), K(hash_funcs_->at(i)).hash_func_);
+      }
+    }
+  }
+  if (OB_SUCC(ret) && !found_null) {
+    if (fast_calc_hash_slice_) {
+      fast_calc_slice_idx(slice_idx, hash_val, slice_size);
+    } else {
+      slice_idx = hash_val % slice_size;
+    }
+  }
+  return ret;
+}
+
+template <>
+int ObHashSliceIdCalc::calc_hash_value<false>(ObEvalCtx &eval_ctx, uint64_t &hash_val,
                                               ObBitVector *skip)
 {
   int ret = OB_SUCCESS;
@@ -894,6 +1162,39 @@ int ObHashSliceIdCalc::calc_hash_value(ObEvalCtx &eval_ctx, uint64_t &hash_val,
   return ret;
 }
 
+template <>
+int ObHashSliceIdCalc::calc_hash_value<true>(ObEvalCtx &eval_ctx, uint64_t &hash_val,
+                                            ObBitVector *skip)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(hash_dist_exprs_) || OB_ISNULL(hash_funcs_) || OB_ISNULL(skip)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("hash func and expr not init", K(ret), K(hash_dist_exprs_), K(hash_funcs_));
+  } else if (n_keys_ > hash_dist_exprs_->count()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected status: n_keys is invalid", K(ret),
+      K(n_keys_), K(hash_dist_exprs_->count()));
+  } else {
+    const int64_t batch_idx = eval_ctx.get_batch_idx();
+    const int64_t batch_size = eval_ctx.get_batch_size();
+    EvalBound bound(batch_size, batch_idx, batch_idx + 1, false);
+    for (int64_t i = 0; OB_SUCC(ret) && i < n_keys_; ++i) {
+      const ObExpr* dist_expr = hash_dist_exprs_->at(i);
+      if (OB_FAIL(dist_expr->eval_vector(eval_ctx, *skip, bound))) {
+        LOG_WARN("eval vector failed", K(ret));
+      } else {
+        ObIVector *vec = dist_expr->get_vector(eval_ctx);
+        if (OB_FAIL(vec->murmur_hash_v3_for_one_row(*dist_expr, hash_val, batch_idx, batch_size,
+                                                    hash_val))) {
+          LOG_WARN("failed to cal hash");
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+template <bool USE_VEC>
 int ObHashSliceIdCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs,
                                          ObEvalCtx &eval_ctx,
                                          SliceIdxArray &slice_idx_array,
@@ -903,7 +1204,7 @@ int ObHashSliceIdCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs,
   int64_t slice_idx = 0;
   if (OB_FAIL(setup_slice_index(slice_idx_array))) {
     LOG_WARN("set slice index failed", K(ret));
-  } else if (OB_FAIL(calc_slice_idx(eval_ctx, task_cnt_, slice_idx, skip))) {
+  } else if (OB_FAIL(calc_slice_idx<USE_VEC>(eval_ctx, task_cnt_, slice_idx, skip))) {
     LOG_WARN("calc slice idx failed", K(ret));
   } else {
     slice_idx_array.at(0) = slice_idx;
@@ -911,7 +1212,8 @@ int ObHashSliceIdCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs,
   return ret;
 }
 
-int ObHashSliceIdCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr*> &, ObEvalCtx &eval_ctx,
+template <>
+int ObHashSliceIdCalc::get_slice_idx_batch_inner<false>(const ObIArray<ObExpr*> &, ObEvalCtx &eval_ctx,
                                          ObBitVector &skip, const int64_t batch_size,
                                          int64_t *&indexes)
 {
@@ -991,6 +1293,108 @@ int ObHashSliceIdCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr*> &, ObEv
         }
       }
       indexes = slice_indexes_;
+    }
+  }
+  return ret;
+}
+
+template <>
+int ObHashSliceIdCalc::get_slice_idx_batch_inner<true>(const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx,
+                                            ObBitVector &skip, const int64_t batch_size,
+                                            int64_t *&indexes)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(n_keys_ > hash_dist_exprs_->count())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected status: n_keys is invalid", K(ret),
+      K(n_keys_), K(hash_dist_exprs_->count()));
+  } else if (OB_FAIL(setup_slice_indexes(eval_ctx))) {
+    LOG_WARN("setup slice indexes failed", K(ret));
+  } else {
+    uint64_t *hash_val = reinterpret_cast<uint64_t *>(slice_indexes_);
+    uint64_t default_seed = SLICE_CALC_HASH_SEED;
+    ObIVector *vec = NULL;
+    const bool all_rows_active = false;
+    EvalBound eval_bound(batch_size, all_rows_active);
+    bool has_null = false;
+    if (use_special_null_dist()) {
+      if (nullptr == malloc_alloc_ && OB_FAIL(eval_ctx.exec_ctx_.get_malloc_allocator(malloc_alloc_))) {
+        LOG_WARN("failed to get alloc", K(ret));
+      } else if (nullptr == null_bitmap_) {
+        void *mem = nullptr;
+        if (OB_ISNULL(mem = malloc_alloc_->alloc(ObBitVector::memory_size(eval_ctx.max_batch_size_)))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to alloc bitmap", K(ret), K(eval_ctx.max_batch_size_));
+        } else {
+          null_bitmap_ = to_bit_vector(mem);
+          null_bitmap_->reset(batch_size);
+        }
+      } else {
+        null_bitmap_->reset(batch_size);
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < n_keys_; i++) {
+      ObExpr *e = hash_dist_exprs_->at(i);
+      const bool is_batch_seed = i > 0;
+      if (OB_FAIL(e->eval_vector(eval_ctx, skip, eval_bound))) {
+        LOG_WARN("eval batch failed", K(ret));
+      } else if (FALSE_IT(vec = e->get_vector(eval_ctx))) {
+      } else if (OB_FAIL(vec->murmur_hash_v3(*e, hash_val, skip, eval_bound,
+                                             is_batch_seed ? hash_val : &default_seed,
+                                             is_batch_seed))) {
+        LOG_WARN("calc murmur hash failed", K(ret));
+      } else if (use_special_null_dist()) {
+        if (vec->has_null()) {
+          if (vec->get_format() == VEC_UNIFORM_CONST) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("get invalid foramt", K(ret));
+          } else if (vec->get_format() == VEC_UNIFORM) {
+            ObUniformBase *vec_base = static_cast<ObUniformBase *> (vec);
+            ObDatum *datums = vec_base->get_datums();
+            for (int64_t i = 0; i < batch_size; ++i) {
+              if (datums[i].is_null()) {
+                has_null = true;
+                null_bitmap_->set(i);
+              }
+            }
+          } else {
+            has_null = true;
+            ObBitmapNullVectorBase *vec_base = static_cast<ObBitmapNullVectorBase *> (vec);
+            null_bitmap_->bit_or(*vec_base->get_nulls(), 0, batch_size);
+          }
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (!use_special_null_dist() || !has_null) {
+        if (fast_calc_hash_slice_) {
+          fast_calc_slice_idx_batch(slice_indexes_, hash_val, batch_size, task_cnt_);
+        } else {
+          for (int64_t i = 0; i < batch_size; i++) {
+            if (!skip.at(i)) {
+              slice_indexes_[i] = hash_val[i] % task_cnt_;
+            }
+          }
+        }
+      } else {
+        for (int64_t i = 0; i < batch_size; i++) {
+          if (!skip.at(i)) {
+            if (!null_bitmap_->at(i)) {
+              if (fast_calc_hash_slice_) {
+                fast_calc_slice_idx(slice_indexes_[i], hash_val[i], task_cnt_);
+              } else {
+                slice_indexes_[i] = hash_val[i] % task_cnt_;
+              }
+            } else {
+              slice_indexes_[i] = ObNullDistributeMethod::DROP == null_row_dist_method_
+                                  ? ObSliceIdxCalc::DEFAULT_CHANNEL_IDX_TO_DROP_ROW
+                                    : (round_robin_idx_++ % task_cnt_);
+            }
+          }
+        }
+      }
+      indexes = slice_indexes_;
+      LOG_TRACE("[VEC2.0] hash slice calc", K(ObArrayWrap<int64_t>(indexes, batch_size)));
     }
   }
   return ret;
@@ -1220,6 +1624,7 @@ int ObSlaveMapPkeyRangeIdxCalc::get_task_idx(
   return ret;
 }
 
+template <bool USE_VEC>
 int ObSlaveMapPkeyRangeIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs,
                                                   ObEvalCtx &eval_ctx,
                                                   SliceIdxArray &slice_idx_array,
@@ -1236,7 +1641,7 @@ int ObSlaveMapPkeyRangeIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> 
   } else if (OB_UNLIKELY(exprs.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(exprs.count()));
-  } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_id(eval_ctx, tablet_id, skip))) {
+  } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_id<USE_VEC>(eval_ctx, tablet_id, skip))) {
     LOG_WARN("failed to get partition id", K(ret));
   } else {
     sort_key_.reuse();
@@ -1263,7 +1668,7 @@ int ObSlaveMapPkeyRangeIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> 
   }
   return ret;
 }
-// TODO: implement the pkey range vectorization 1.0 interface.
+//TODO:shanting2.0 implement pkey range vectorization 1.0 and 2.0 interfaces
 
 /*******************                 ObSlaveMapPkeyHashIdxCalc                 ********************/
 int ObSlaveMapPkeyHashIdxCalc::init()
@@ -1291,6 +1696,7 @@ int ObSlaveMapPkeyHashIdxCalc::destroy()
   return ret;
 }
 
+template <bool USE_VEC>
 int ObSlaveMapPkeyHashIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs,
                                                  ObEvalCtx &eval_ctx,
                                                  SliceIdxArray &slice_idx_array,
@@ -1308,9 +1714,9 @@ int ObSlaveMapPkeyHashIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &
     // Indicates there is no mapping from partition to task idx
     ret = OB_NOT_INIT;
     LOG_WARN("the size of part task channel map is zero", K(ret));
-  } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_id(eval_ctx, tablet_id, skip))) {
+  } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_id<USE_VEC>(eval_ctx, tablet_id, skip))) {
     LOG_WARN("failed to get partition id", K(ret));
-  } else if (OB_FAIL(get_task_idx_by_tablet_id(eval_ctx, tablet_id, slice_idx_array.at(0), skip))) {
+  } else if (OB_FAIL(get_task_idx_by_tablet_id<USE_VEC>(eval_ctx, tablet_id, slice_idx_array.at(0), skip))) {
     if (OB_HASH_NOT_EXIST == ret) {
       if (unmatch_row_dist_method_ == ObPQDistributeMethod::DROP) {
         slice_idx_array.at(0) = ObSliceIdxCalc::DEFAULT_CHANNEL_IDX_TO_DROP_ROW;
@@ -1324,7 +1730,7 @@ int ObSlaveMapPkeyHashIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &
       } else if (unmatch_row_dist_method_ == ObPQDistributeMethod::HASH) {
         const ObPxPartChMapTMArray &part_ch_array = part_ch_info_.part_ch_array_;
         int64_t hash_idx = 0;
-        if (OB_FAIL(hash_calc_.calc_slice_idx(eval_ctx, part_ch_array.count(), hash_idx))) {
+        if (OB_FAIL(hash_calc_.calc_slice_idx<USE_VEC>(eval_ctx, part_ch_array.count(), hash_idx))) {
           LOG_WARN("fail calc hash value", K(ret));
         } else if (ObSliceIdxCalc::DEFAULT_CHANNEL_IDX_TO_DROP_ROW == hash_idx) {
           slice_idx_array.at(0) = ObSliceIdxCalc::DEFAULT_CHANNEL_IDX_TO_DROP_ROW;
@@ -1341,7 +1747,8 @@ int ObSlaveMapPkeyHashIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &
   }
   return ret;
 }
-// TODO: implement the pkey hash vectorization 1.0 interface.
+//TODO:shanting2.0 implement pkey hash vectorization 1.0 and 2.0 interfaces
+template <bool USE_VEC>
 int ObSlaveMapPkeyHashIdxCalc::get_task_idx_by_tablet_id(ObEvalCtx &eval_ctx,
                                                          int64_t tablet_id,
                                                          int64_t &task_idx,
@@ -1360,7 +1767,7 @@ int ObSlaveMapPkeyHashIdxCalc::get_task_idx_by_tablet_id(ObEvalCtx &eval_ctx,
     } else if (task_idx_array->count() <= 0){
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("the size of task idx array is zero", K(ret));
-    } else if (OB_FAIL(hash_calc_.calc_slice_idx(eval_ctx,
+    } else if (OB_FAIL(hash_calc_.calc_slice_idx<USE_VEC>(eval_ctx, 
                                                           task_idx_array->count(), 
                                                           hash_idx, 
                                                           skip))) {
@@ -1408,13 +1815,17 @@ int ObSlaveMapPkeyHashIdxCalc::build_affi_hash_map(hash::ObHashMap<int64_t, ObPx
   return ret;
 }
 
+template <bool USE_VEC>
 int ObRangeSliceIdCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs,
                                           ObEvalCtx &eval_ctx,
                                           SliceIdxArray &slice_idx_array,
                                           ObBitVector *skip)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(setup_slice_index(slice_idx_array))) {
+  if (USE_VEC) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("should not call this function when use vectorize 2.0", K(ret));
+  } else if (OB_FAIL(setup_slice_index(slice_idx_array))) {
     LOG_WARN("set slice index failed", K(ret));
   } else if (OB_ISNULL(dist_exprs_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1454,7 +1865,8 @@ int ObRangeSliceIdCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs,
   return ret;
 }
 
-int ObRangeSliceIdCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr*> &,
+template <>
+int ObRangeSliceIdCalc::get_slice_idx_batch_inner<false>(const ObIArray<ObExpr*> &,
                                               ObEvalCtx &eval_ctx,
                                               ObBitVector &skip,
                                               const int64_t batch_size,
@@ -1522,6 +1934,81 @@ int ObRangeSliceIdCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr*> &,
   return ret;
 }
 
+template <>
+int ObRangeSliceIdCalc::get_slice_idx_batch_inner<true>(const ObIArray<ObExpr*> &,
+                                              ObEvalCtx &eval_ctx,
+                                              ObBitVector &skip,
+                                              const int64_t batch_size,
+                                              int64_t *&indexes)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(dist_exprs_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected dist exprs", K(ret));
+  } else if (OB_FAIL(setup_slice_indexes(eval_ctx))) {
+    LOG_WARN("setup slice indexes failed", K(ret));
+  } else if (OB_ISNULL(range_) || range_->range_cut_.empty()) {
+    for (int64_t idx = 0; idx < batch_size; ++idx) {
+      slice_indexes_[idx] = 0;
+    }
+    indexes = slice_indexes_;
+    if (nullptr != ddl_slice_id_expr_) {
+      ObDatum *ddl_slice_id_datums = ddl_slice_id_expr_->locate_datums_for_update(eval_ctx, batch_size);
+      ObTabletSliceParam slice_param(1, 0);
+      for (int64_t idx = 0; idx < batch_size; ++idx) {
+        ddl_slice_id_datums[idx].set_int(slice_param.slice_id_);
+      }
+    }
+  } else {
+    Compare sort_cmp(&sort_cmp_funs_, &sort_collations_);
+    ObPxTabletRange::DatumKey sort_key;
+    const bool all_rows_active = false;
+    EvalBound eval_bound(batch_size, all_rows_active);
+    for (int64_t i = 0; i < dist_exprs_->count() && OB_SUCC(ret); ++i) {
+      if (OB_ISNULL(dist_exprs_->at(i))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("null expr", K(ret));
+      } else if (OB_FAIL(dist_exprs_->at(i)->eval_vector(eval_ctx, skip, eval_bound))) {
+        LOG_WARN("eval vector failed", K(ret));
+      }
+    }
+    for (int64_t idx = 0; OB_SUCC(ret) && idx < batch_size; ++idx) {
+      if (skip.at(idx)) {
+        continue;
+      } else {
+        ObDatum *ddl_slice_id_datum = nullptr;
+        if (nullptr != ddl_slice_id_expr_) {
+          ddl_slice_id_datum = &ddl_slice_id_expr_->locate_datums_for_update(eval_ctx, batch_size)[idx];
+        }
+        for (int64_t i = 0; i < dist_exprs_->count() && OB_SUCC(ret); ++i) {
+          ObIVector *vec = dist_exprs_->at(i)->get_vector(eval_ctx);
+          const char *payload = NULL;
+          ObLength len = 0;
+          vec->get_payload(idx, payload, len);
+          ObDatum datum(payload, len, vec->is_null(idx));
+          if (OB_FAIL(sort_key.push_back(datum))) {
+            LOG_WARN("fail to push back sort key", K(ret));
+          }
+        }
+        if (OB_SUCC(ret)) {
+          ObPxTabletRange::RangeCut &range_cut = const_cast<ObPxTabletRange::RangeCut &>(range_->range_cut_);
+          ObPxTabletRange::RangeCut::iterator found_it = std::lower_bound(
+            range_cut.begin(), range_cut.end(), sort_key, sort_cmp);
+          int64_t range_idx = found_it - range_cut.begin();
+          slice_indexes_[idx] = range_idx % task_cnt_;
+          if (nullptr != ddl_slice_id_datum) {
+            ObTabletSliceParam slice_param(range_->range_cut_.count() + 1, range_idx);
+            ddl_slice_id_datum->set_int(slice_param.slice_id_);
+          }
+        }
+        sort_key.reuse();
+      }
+    }
+    indexes = slice_indexes_;
+  }
+  return ret;
+}
+
 bool ObRangeSliceIdCalc::Compare::operator()(
     const ObPxTabletRange::DatumKey &l,
     const ObPxTabletRange::DatumKey &r)
@@ -1549,6 +2036,7 @@ bool ObRangeSliceIdCalc::Compare::operator()(
   return less;
 }
 
+template <bool USE_VEC>
 int ObWfHybridDistSliceIdCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs,
                                                  ObEvalCtx &eval_ctx,
                                                  SliceIdxArray &slice_idx_array,
@@ -1561,15 +2049,15 @@ int ObWfHybridDistSliceIdCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("slice_id_calc_type_ is invalid", K(ret), K(slice_id_calc_type_));
   } else if (SliceIdCalcType::BROADCAST == slice_id_calc_type_
-             && OB_FAIL(broadcast_slice_id_calc_.get_slice_indexes_inner(
+             && OB_FAIL(broadcast_slice_id_calc_.get_slice_indexes_inner<USE_VEC>(
                         exprs, eval_ctx, slice_idx_array, skip))) {
     LOG_WARN("get_slice_indexes_inner failed", K(ret), K(slice_id_calc_type_));
   } else if (SliceIdCalcType::RANDOM == slice_id_calc_type_
-             && OB_FAIL(random_slice_id_calc_.get_slice_indexes_inner(
+             && OB_FAIL(random_slice_id_calc_.get_slice_indexes_inner<USE_VEC>(
                         exprs, eval_ctx, slice_idx_array, skip))) {
     LOG_WARN("get_slice_indexes_inner failed", K(ret), K(slice_id_calc_type_));
   } else if (SliceIdCalcType::HASH == slice_id_calc_type_
-             && OB_FAIL(hash_slice_id_calc_.get_slice_indexes_inner(exprs, eval_ctx,
+             && OB_FAIL(hash_slice_id_calc_.get_slice_indexes_inner<USE_VEC>(exprs, eval_ctx,
                         slice_idx_array, skip))) {
     LOG_WARN("get_slice_indexes_inner failed", K(ret), K(slice_id_calc_type_));
   }
@@ -1577,6 +2065,79 @@ int ObWfHybridDistSliceIdCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &
   return ret;
 }
 
+int ObWfHybridDistSliceIdCalc::get_multi_slice_idx_vector_inner(const ObIArray<ObExpr*> &exprs,
+                  ObEvalCtx &eval_ctx, ObBitVector &skip, const int64_t batch_size,
+                  SliceIdxFlattenArray &slice_flatten_indexes, EndIdxArray &end_indexes)
+{
+  int ret = OB_SUCCESS;
+  ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx);
+  slice_flatten_indexes.reuse();
+  end_indexes.reuse();
+  VectorFormat fmt = wf_hybrid_aggr_status_expr_->get_format(eval_ctx);
+  if (OB_UNLIKELY(VEC_FIXED != fmt && fmt != VEC_UNIFORM)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected format", K(ret), K(fmt));
+  } else {
+    int64_t aggr_status = INT64_MIN;
+    for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
+      if (!skip.at(i)) {
+        batch_info_guard.set_batch_idx(i);
+        // get aggr_status
+        ObIVector *data = wf_hybrid_aggr_status_expr_->get_vector(eval_ctx);
+        aggr_status = *reinterpret_cast<const int64_t *>((data)->get_payload(i));
+        // distribute method is calculate by aggr_status
+        if (aggr_status > 0 && aggr_status > wf_hybrid_pby_exprs_cnt_array_->count()) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("aggr_status > wf_hybrid_pby_exprs_cnt_array_.count()"
+              , K(ret), K(aggr_status), K(wf_hybrid_pby_exprs_cnt_array_->count()));
+        } else {
+          if (0 > aggr_status) {
+            slice_id_calc_type_ = ObWfHybridDistSliceIdCalc::SliceIdCalcType::BROADCAST;
+          } else if (0 == aggr_status) {
+            slice_id_calc_type_ = ObWfHybridDistSliceIdCalc::SliceIdCalcType::RANDOM;
+          } else {
+            // n_keys is calculate by aggr_status
+            slice_id_calc_type_ = ObWfHybridDistSliceIdCalc::SliceIdCalcType::HASH;
+            set_calc_hash_keys(wf_hybrid_pby_exprs_cnt_array_->at(aggr_status - 1));
+          }
+
+          slice_calc_array_one_row_.reuse();
+          if (slice_id_calc_type_ <= SliceIdCalcType::INVALID
+              || slice_id_calc_type_ >= SliceIdCalcType::MAX) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("slice_id_calc_type_ is invalid", K(ret), K(slice_id_calc_type_));
+          } else if (SliceIdCalcType::BROADCAST == slice_id_calc_type_
+                    && OB_FAIL(broadcast_slice_id_calc_.get_slice_indexes_inner<true>(
+                                exprs, eval_ctx, slice_calc_array_one_row_, &skip))) {
+            LOG_WARN("get_slice_indexes_inner failed", K(ret), K(slice_id_calc_type_));
+          } else if (SliceIdCalcType::RANDOM == slice_id_calc_type_
+                    && OB_FAIL(random_slice_id_calc_.get_slice_indexes_inner<true>(
+                                exprs, eval_ctx, slice_calc_array_one_row_, &skip))) {
+            LOG_WARN("get_slice_indexes_inner failed", K(ret), K(slice_id_calc_type_));
+          } else if (SliceIdCalcType::HASH == slice_id_calc_type_
+                    && OB_FAIL(hash_slice_id_calc_.get_slice_indexes_inner<true>(exprs, eval_ctx,
+                                slice_calc_array_one_row_, &skip))) {
+            LOG_WARN("get_slice_indexes_inner failed", K(ret), K(slice_id_calc_type_));
+          }
+          for(int j = 0; j < slice_calc_array_one_row_.count() && OB_SUCC(ret); j++) {
+            if (OB_FAIL(slice_flatten_indexes.push_back(slice_calc_array_one_row_[j]))) {
+              LOG_WARN("failed to push back slice_flatten_indexes", K(ret), K(i), K(j));
+            }
+          }
+        }
+      }
+      if (OB_FAIL(ret)){
+      } else if (OB_FAIL(end_indexes.push_back(slice_flatten_indexes.count()))) {
+        LOG_WARN("put the i_th row end_idx failed", K(ret), K(i), 
+          K(slice_flatten_indexes.count()), K(end_indexes.count()));
+      }
+    }
+  }
+  return ret;
+}
+//TODO:shanting2.0 Implement wf hybrid vectorization 1.0 and 2.0 interfaces. Otherwise, calling get_slice_indexes_inner from other slice_calc directly will cause issues.
+
+template <bool USE_VEC>
 int ObNullAwareHashSliceIdCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs,
                                                   ObEvalCtx &eval_ctx,
                                                   SliceIdxArray &slice_idx_array,
@@ -1590,17 +2151,84 @@ int ObNullAwareHashSliceIdCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> 
   if (OB_ISNULL(hash_dist_exprs_) || OB_UNLIKELY(hash_dist_exprs_->empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null aware hash join shuffle keys should not be empty", K(ret), K(hash_dist_exprs_));
-  } else if (OB_FAIL(calc_for_null_aware(*hash_dist_exprs_->at(0), task_cnt_, eval_ctx,
+  } else if (OB_FAIL(calc_for_null_aware<USE_VEC>(*hash_dist_exprs_->at(0), task_cnt_, eval_ctx,
                                          slice_idx_array, processed, skip))) {
     LOG_WARN("failed to calc for null aware", K(ret));
   } else if (processed) {
     // do nothing
   } else {
-    if (OB_FAIL(ObHashSliceIdCalc::calc_hash_value(eval_ctx, hash_val, skip))) {
+    if (OB_FAIL(ObHashSliceIdCalc::calc_hash_value<USE_VEC>(eval_ctx, hash_val, skip))) {
       LOG_WARN("fail calc hash value null aware",  K(ret));
     } else {
       OZ (slice_idx_array.push_back(fast_calc_hash_slice_ ? (((uint32_t)(hash_val) * task_cnt_) >> 32)
                                                             : (hash_val % task_cnt_)));
+    }
+  }
+  return ret;
+}
+
+int ObNullAwareHashSliceIdCalc::get_multi_slice_idx_vector_inner(const ObIArray<ObExpr*> &exprs,
+                    ObEvalCtx &eval_ctx, ObBitVector &skip, const int64_t batch_size,
+                    SliceIdxFlattenArray &slice_flatten_indexes, EndIdxArray &end_indexes)
+{
+  int ret = OB_SUCCESS;
+  uint64_t hash_val = SLICE_CALC_HASH_SEED;
+  UNUSED(exprs);
+  bool processed = false;
+  slice_flatten_indexes.reuse();
+  end_indexes.reuse();
+  if (OB_ISNULL(hash_dist_exprs_) || OB_UNLIKELY(hash_dist_exprs_->empty())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("null aware hash join shuffle keys should not be empty", K(ret), K(hash_dist_exprs_));
+  } else {
+    bool all_rows_active = false;
+    const ObExpr *expr = hash_dist_exprs_->at(0);
+    ObIVector *vec = expr->get_vector(eval_ctx);
+    EvalBound eval_bound(batch_size, all_rows_active);
+    SliceIdxArray hash_slice_idx_array;
+    ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx);
+    uint64_t hash_val = SLICE_CALC_HASH_SEED;
+    if (OB_FAIL(hash_slice_idx_array.push_back(0))) {
+      LOG_WARN("affini_slice_idx_array push_back failed", K(ret));
+    } else if (OB_FAIL(expr->eval_vector(eval_ctx, skip, eval_bound))) {
+      LOG_WARN("eval batch failed", K(ret));
+    }
+    for (int i = 0; i < batch_size && OB_SUCC(ret); i++) {
+      if (!skip.at(i)) {
+        if (is_first_row_) {
+          for (int64_t j = 0; OB_SUCC(ret) && j < task_cnt_; ++j) {
+            if (OB_FAIL(slice_flatten_indexes.push_back(j))) {
+              LOG_WARN("failed to push back slice_flatten_indexes", K(ret), K(j));
+            }
+          }
+          is_first_row_ = false;
+        } else {
+          if (vec->is_null(i)) {
+            for (int64_t j = 0; OB_SUCC(ret) && j < task_cnt_; ++j) {
+              if (OB_FAIL(slice_flatten_indexes.push_back(j))) {
+                LOG_WARN("failed to push back slice_flatten_indexes", K(ret), K(j));
+              }
+            }
+          } else {
+            batch_info_guard.set_batch_idx(i);
+            hash_val = SLICE_CALC_HASH_SEED;
+            if (OB_FAIL(ObHashSliceIdCalc::calc_hash_value<true>(eval_ctx, hash_val, &skip))) {
+              LOG_WARN("failed to get slice idx", K(ret));
+            } else {
+              if (OB_FAIL(slice_flatten_indexes.push_back(fast_calc_hash_slice_ ?
+                  (((uint32_t)(hash_val) * task_cnt_) >> 32) : (hash_val % task_cnt_)))) {
+                LOG_WARN("failed to push back slice_flatten_indexes from affini_slice_idx_array",
+                  K(ret));
+              }
+            }
+          }
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(end_indexes.push_back(slice_flatten_indexes.count()))) {
+        LOG_WARN("put the i_th row end_idx failed", K(ret), K(i), K(slice_flatten_indexes.count()),
+          K(end_indexes.count()));
+      }
     }
   }
   return ret;
@@ -1613,6 +2241,7 @@ int ObNullAwareAffinitizedRepartSliceIdxCalc::init()
   return ret;
 }
 
+template <bool USE_VEC>
 int ObNullAwareAffinitizedRepartSliceIdxCalc::get_slice_indexes_inner(
     const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx, SliceIdxArray &slice_idx_array,
     ObBitVector *skip)
@@ -1632,19 +2261,88 @@ int ObNullAwareAffinitizedRepartSliceIdxCalc::get_slice_indexes_inner(
   } else if (px_repart_ch_map_.size() <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid map size, affinity map should not be empty!", K_(task_count), K(ret));
-  } else if (OB_FAIL(calc_for_null_aware(*repartition_exprs_->at(0), task_count_, eval_ctx,
+  } else if (OB_FAIL(calc_for_null_aware<USE_VEC>(*repartition_exprs_->at(0), task_count_, eval_ctx,
                                          slice_idx_array, processed, skip))) {
     LOG_WARN("failed to calc for null aware", K(ret));
   } else if (processed) {
     // is null, has been processed
     // do nothing
-  } else if (OB_FAIL(ObAffinitizedRepartSliceIdxCalc::get_slice_indexes_inner(exprs, eval_ctx, slice_idx_array, skip))) {
+  } else if (OB_FAIL(ObAffinitizedRepartSliceIdxCalc::get_slice_indexes_inner<USE_VEC>(exprs, eval_ctx, slice_idx_array, skip))) {
     LOG_WARN("failed to get slice idx", K(ret));
   }
 
   return ret;
 }
 
+int ObNullAwareAffinitizedRepartSliceIdxCalc::get_multi_slice_idx_vector_inner(const ObIArray<ObExpr*> &exprs,
+                    ObEvalCtx &eval_ctx, ObBitVector &skip, const int64_t batch_size,
+                    SliceIdxFlattenArray &slice_flatten_indexes, EndIdxArray &end_indexes)
+{
+  int ret = OB_SUCCESS;
+  slice_flatten_indexes.reuse();
+  end_indexes.reuse();
+  if (task_count_ <= 0) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("task_count not inited", K_(task_count), K(ret));
+  } else if (OB_ISNULL(repartition_exprs_) || OB_UNLIKELY(repartition_exprs_->empty())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("null aware hash join repartition exprs should not be empty", KP(repartition_exprs_));
+  } else if (px_repart_ch_map_.size() <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid map size, affinity map should not be empty!", K_(task_count), K(ret));
+  } else {
+    bool all_rows_active = false;
+    const ObExpr *expr = repartition_exprs_->at(0);
+    ObIVector *vec = expr->get_vector(eval_ctx);
+    EvalBound eval_bound(batch_size, all_rows_active);
+    SliceIdxArray affini_slice_idx_array;
+    ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx);
+    if (OB_FAIL(affini_slice_idx_array.push_back(0))) {
+      LOG_WARN("affini_slice_idx_array push_back failed", K(ret));
+    } else if (OB_FAIL(expr->eval_vector(eval_ctx, skip, eval_bound))) {
+      LOG_WARN("eval batch failed", K(ret));
+    }
+    for (int i = 0; i < batch_size && OB_SUCC(ret); i++) {
+      if (!skip.at(i)) {
+        if (is_first_row_) {
+          for (int64_t j = 0; OB_SUCC(ret) && j < task_count_; ++j) {
+            if (OB_FAIL(slice_flatten_indexes.push_back(j))) {
+              LOG_WARN("failed to push back slice_flatten_indexes", K(ret), K(j));
+            }
+          }
+          is_first_row_ = false;
+        } else {
+          if (vec->is_null(i)) {
+            for (int64_t j = 0; OB_SUCC(ret) && j < task_count_; ++j) {
+              if (OB_FAIL(slice_flatten_indexes.push_back(j))) {
+                LOG_WARN("failed to push back slice_flatten_indexes", K(ret), K(j));
+              }
+            }
+          } else {
+            batch_info_guard.set_batch_idx(i);
+            if (OB_FAIL(ObAffinitizedRepartSliceIdxCalc::get_slice_indexes_inner<true>(exprs, eval_ctx,
+                affini_slice_idx_array, &skip))) {
+              LOG_WARN("failed to get slice idx", K(ret));
+            } else {
+              if (OB_FAIL(slice_flatten_indexes.push_back(affini_slice_idx_array.at(0)))) {
+                LOG_WARN("failed to push back slice_flatten_indexes from affini_slice_idx_array",
+                  K(ret));
+              }
+            }
+          }
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(end_indexes.push_back(slice_flatten_indexes.count()))) {
+        LOG_WARN("put the i_th row end_idx failed", K(ret), K(i), K(slice_flatten_indexes.count()),
+          K(end_indexes.count()));
+      }
+    }
+  }
+  return ret;
+}
+
+template <bool USE_VEC>
 int ObHybridHashSliceIdCalcBase::check_if_popular_value(ObEvalCtx &eval_ctx, bool &is_popular, ObBitVector *skip)
 {
   int ret = OB_SUCCESS;
@@ -1656,7 +2354,7 @@ int ObHybridHashSliceIdCalcBase::check_if_popular_value(ObEvalCtx &eval_ctx, boo
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("only support 1 condition for hybrid hash for now. this may change later",
              K(ret), K(hash_calc_.hash_funcs_->count()));
-  } else if (OB_FAIL(hash_calc_.calc_hash_value(eval_ctx, hash_val, skip))) {
+  } else if (OB_FAIL(hash_calc_.calc_hash_value<USE_VEC>(eval_ctx, hash_val, skip))) {
     LOG_WARN("fail get hash value", K(ret));
   } else {
     //  build a small hash table to accelerate the lookup.
@@ -1682,6 +2380,7 @@ int ObHybridHashSliceIdCalcBase::check_if_popular_value(ObEvalCtx &eval_ctx, boo
   return ret;
 }
 
+template <bool USE_VEC>
 int ObHybridHashRandomSliceIdCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs,
                                                      ObEvalCtx &eval_ctx,
                                                      SliceIdxArray &slice_idx_array,
@@ -1689,16 +2388,17 @@ int ObHybridHashRandomSliceIdCalc::get_slice_indexes_inner(const ObIArray<ObExpr
 {
   int ret = OB_SUCCESS;
   bool is_popular = false;
-  if (OB_FAIL(check_if_popular_value(eval_ctx, is_popular, skip))) {
+  if (OB_FAIL(check_if_popular_value<USE_VEC>(eval_ctx, is_popular, skip))) {
     LOG_WARN("fail check if value popular", K(ret));
   } else if (is_popular) {
-    ret = random_calc_.get_slice_indexes_inner(exprs, eval_ctx, slice_idx_array, skip);
+    ret = random_calc_.get_slice_indexes_inner<USE_VEC>(exprs, eval_ctx, slice_idx_array, skip);
   } else {
-    ret = hash_calc_.get_slice_indexes_inner(exprs, eval_ctx, slice_idx_array, skip);
+    ret = hash_calc_.get_slice_indexes_inner<USE_VEC>(exprs, eval_ctx, slice_idx_array, skip);
   }
   return ret;
 }
 
+template <bool USE_VEC>
 int ObHybridHashRandomSliceIdCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr*> &exprs,
     ObEvalCtx &eval_ctx, ObBitVector &skip,
     const int64_t batch_size, int64_t *&indexes)
@@ -1706,7 +2406,7 @@ int ObHybridHashRandomSliceIdCalc::get_slice_idx_batch_inner(const ObIArray<ObEx
   int ret = OB_SUCCESS;
   if (OB_FAIL(setup_slice_indexes(eval_ctx))) {
     LOG_WARN("setup slice indexes failed", K(ret));
-  } else if (OB_FAIL(hash_calc_.get_slice_idx_batch_inner(exprs, eval_ctx, skip, batch_size, slice_indexes_))) {
+  } else if (OB_FAIL(hash_calc_.get_slice_idx_batch_inner<USE_VEC>(exprs, eval_ctx, skip, batch_size, slice_indexes_))) {
     LOG_WARN("get hash slice idx batch failed", K(ret));
   } else {
     ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx);
@@ -1720,10 +2420,10 @@ int ObHybridHashRandomSliceIdCalc::get_slice_idx_batch_inner(const ObIArray<ObEx
         continue;
       }
       batch_info_guard.set_batch_idx(i);
-      if (OB_FAIL(check_if_popular_value(eval_ctx, is_popular, &skip))) {
+      if (OB_FAIL(check_if_popular_value<USE_VEC>(eval_ctx, is_popular, &skip))) {
         LOG_WARN("check if popular value failed", K(ret));
       } else if (is_popular) {
-        if (OB_FAIL(random_calc_.get_slice_indexes_inner(exprs, eval_ctx, slice_idx_array,
+        if (OB_FAIL(random_calc_.get_slice_indexes_inner<USE_VEC>(exprs, eval_ctx, slice_idx_array,
                                                                   &skip))) {
           LOG_WARN("get random slice indexes failed", K(ret));
         } else {
@@ -1738,18 +2438,67 @@ int ObHybridHashRandomSliceIdCalc::get_slice_idx_batch_inner(const ObIArray<ObEx
   return ret;
 }
 
+template <bool USE_VEC>
 int ObHybridHashBroadcastSliceIdCalc::get_slice_indexes_inner(
     const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx, SliceIdxArray &slice_idx_array,
     ObBitVector *skip)
 {
   int ret = OB_SUCCESS;
   bool is_popular = false;
-  if (OB_FAIL(check_if_popular_value(eval_ctx, is_popular, skip))) {
+  if (OB_FAIL(check_if_popular_value<USE_VEC>(eval_ctx, is_popular, skip))) {
     LOG_WARN("fail check if value popular", K(ret));
   } else if (is_popular) {
-    ret = broadcast_calc_.get_slice_indexes_inner(exprs, eval_ctx, slice_idx_array, skip);
+    ret = broadcast_calc_.get_slice_indexes_inner<USE_VEC>(exprs, eval_ctx, slice_idx_array, skip);
   } else {
-    ret = hash_calc_.get_slice_indexes_inner(exprs, eval_ctx, slice_idx_array, skip);
+    ret = hash_calc_.get_slice_indexes_inner<USE_VEC>(exprs, eval_ctx, slice_idx_array, skip);
+  }
+  return ret;
+}
+
+int ObHybridHashBroadcastSliceIdCalc::get_multi_slice_idx_vector_inner(
+    const ObIArray<ObExpr*> &exprs,
+    ObEvalCtx &eval_ctx,
+    ObBitVector &skip, const int64_t batch_size,
+    SliceIdxFlattenArray &slice_flatten_indexes, EndIdxArray &end_indexes)
+{
+  int ret = OB_SUCCESS;
+  slice_flatten_indexes.reuse();
+  end_indexes.reuse();
+  if (OB_FAIL(hash_calc_.get_slice_idx_batch_inner<true>(exprs, eval_ctx, skip, batch_size, slice_indexes_))) {
+    LOG_WARN("get hash slice idx batch failed", K(ret));
+  } else {
+    ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx);
+    bool is_popular = false;
+    SliceIdxArray slice_idx_array;
+    for (int64_t i = 0; i < batch_size && OB_SUCC(ret); i++) {
+      if (!skip.at(i)) {
+        batch_info_guard.set_batch_idx(i);
+        if (OB_FAIL(check_if_popular_value<true>(eval_ctx, is_popular, &skip))) {
+          LOG_WARN("check if popular value failed", K(ret));
+        } else if (is_popular) {
+          if (OB_FAIL(broadcast_calc_.get_slice_indexes_inner<true>(exprs, eval_ctx, slice_idx_array,
+                                                                    &skip))) {
+            LOG_WARN("get random slice indexes failed", K(ret));
+          } else {
+            for(int j = 0; OB_SUCC(ret) && j < slice_idx_array.count(); j++) {
+              if (OB_FAIL(slice_flatten_indexes.push_back(slice_idx_array.at(j)))) {
+                LOG_WARN("failed to push back slice_flatten_indexes", K(ret), K(j));
+              }
+            }
+          }
+        } else {
+          // is not popular
+          if (OB_FAIL(slice_flatten_indexes.push_back(slice_indexes_[i]))) {
+            LOG_WARN("failed to push back slice_flatten_indexes", K(ret), K(i));
+          }
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(end_indexes.push_back(slice_flatten_indexes.count()))) {
+        LOG_WARN("put the i_th row end_idx failed", K(ret), K(i), K(slice_flatten_indexes.count()),
+          K(end_indexes.count()));
+      }
+    }
   }
   return ret;
 }

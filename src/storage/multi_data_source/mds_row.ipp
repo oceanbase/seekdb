@@ -211,7 +211,7 @@ struct CheckNodeInSameWriterSeqIncLogicOp {
       ret = OB_ITER_END;
     } else if (!node.seq_no_.is_valid()) {
       ret = OB_ITER_END;
-      MDS_LOG(WARN, "node's seq_no in row is invalid", K(node), K_(ctx));
+      MDS_LOG(WARN, "node's seq_no in row is invalid, maybe in compat scenario?", K(node), K_(ctx));
     } else if (node.seq_no_ >= ctx_.get_seq_no()) {
       ret = OB_ERR_UNEXPECTED;
       MDS_LOG(ERROR, "node's seq_no in row is not less than mds ctx", K(node), K_(ctx));

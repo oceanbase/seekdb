@@ -263,6 +263,7 @@ int ObDeleteLobMetaRowTask::init(ObDeleteLobMetaRowParam &param)
 int ObDeleteLobMetaRowTask::init_scan_param(ObTableScanParam& scan_param)
 {
   int ret = OB_SUCCESS;
+  const ObServerRuntimeSchema *runtime_schema = nullptr;
   const ObTableSchema *table_schema = nullptr;
   ObSchemaGetterGuard schema_guard;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -291,6 +292,7 @@ int ObDeleteLobMetaRowTask::init_scan_param(ObTableScanParam& scan_param)
                             true, // full_row
                             false, // index_back
                             false, // query_stat
+                            ObQueryFlag::MysqlMode, // sql_mode
                             false // read_latest
                           );
       scan_param.scan_flag_.flag_ = query_flag.flag_;

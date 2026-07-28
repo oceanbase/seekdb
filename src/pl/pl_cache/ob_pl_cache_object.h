@@ -66,7 +66,7 @@ struct ObPlParamInfo : public sql::ObParamInfo
 
 enum ObPLCacheObjectType
 {
-  INVALID_PL_OBJECT_TYPE = 4, // starts after ObPhyPlanType
+  INVALID_PL_OBJECT_TYPE = 5, // start with OB_PHY_PLAN_UNCERTAIN, distict ObPhyPlanType
   STANDALONE_ROUTINE_TYPE,
   PACKAGE_TYPE,
   PACKAGE_BODY_TYPE,
@@ -95,6 +95,7 @@ struct PLCacheObjStat
   int64_t pl_evict_version_;
   int64_t schema_version_;
   int64_t ps_stmt_id_;//prepare stmt id
+  int64_t pl_cg_mem_hold_;
   common::ObString sys_vars_str_;
   common::ObString param_infos_;
   ObSchemaObjVersion out_of_date_dependcy_version_; // out_of_date dependcy version
@@ -118,6 +119,7 @@ struct PLCacheObjStat
       pl_evict_version_(OB_INVALID_ID),
       schema_version_(OB_INVALID_ID),
       ps_stmt_id_(OB_INVALID_ID),
+      pl_cg_mem_hold_(0),
       sys_vars_str_(),
       param_infos_(),
       out_of_date_dependcy_version_(),
@@ -150,6 +152,7 @@ struct PLCacheObjStat
     pl_evict_version_ = OB_INVALID_ID;
     schema_version_ = OB_INVALID_ID;
     ps_stmt_id_ = OB_INVALID_ID;
+    pl_cg_mem_hold_ = 0;
     sys_vars_str_.reset();
     param_infos_.reset();
     out_of_date_dependcy_version_.reset();
@@ -167,6 +170,7 @@ struct PLCacheObjStat
                K_(type),
                K_(pl_evict_version),
                K_(schema_version),
+               K_(pl_cg_mem_hold),
                K_(sys_vars_str),
                K_(param_infos),
                K_(out_of_date_dependcy_version),

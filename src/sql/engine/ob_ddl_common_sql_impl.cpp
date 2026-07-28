@@ -29,6 +29,7 @@
 using namespace oceanbase::share;
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
+using namespace oceanbase::obcall;
 using namespace oceanbase::sql;
 
 int ObDDLUtil::clear_ddl_checksum(ObPhysicalPlan *phy_plan)

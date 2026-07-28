@@ -34,6 +34,7 @@ struct ObTableAccessContext;
 struct ObRowSampleFilter;
 class ObBlockRowStore;
 class ObTableScanStoreStat;
+class ObAggGroupBase;
 }
 namespace blocksstable
 {
@@ -74,6 +75,17 @@ public:
       sql::PushdownFilterInfo &filter_info,
       const bool can_use_vectorize,
       common::ObBitmap &bitmap);
+  virtual int get_next_rows(
+      const common::ObIArray<int32_t> &cols_projector,
+      const common::ObIArray<const share::schema::ObColumnParam *> &col_params,
+      const int32_t *row_ids,
+      const char **cell_datas,
+      const int64_t row_cap,
+      common::ObIArray<ObSqlDatumInfo> &datums,
+      const int64_t datum_offset,
+      uint32_t *len_array,
+      const bool is_padding_mode,
+      const bool init_vector_header = true);
   int advance_to_border(
       const ObDatumRowkey &rowkey,
       int64_t &start_offset,
@@ -112,6 +124,18 @@ public:
       common::ObIArray<ObSqlDatumInfo> &datum_infos,
       const common::ObIArray<blocksstable::ObStorageDatum> *default_datums,
       const bool is_padding_mode);
+  int get_rows_for_rich_format(
+      const common::ObIArray<int32_t> &col_offsets,
+      const common::ObIArray<const share::schema::ObColumnParam *> &col_params,
+      const int32_t *row_ids,
+      const int64_t row_cap,
+      const int64_t vector_offset,
+      const char **cell_datas,
+      uint32_t *len_array,
+      sql::ObExprPtrIArray &exprs,
+      const common::ObIArray<blocksstable::ObStorageDatum> *default_datums,
+      const bool is_padding_mode,
+      const bool need_init_vector = true);
   int64_t get_current_pos() const
   { return current_; }
   OB_INLINE int64_t get_last_pos() const

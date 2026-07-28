@@ -19,7 +19,6 @@
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/meta_store/ob_storage_meta_io_util.h"
 #include "storage/slog/ob_storage_log.h"
-#include "storage/slog/ob_storage_log_replayer.h"
 #include "storage/ob_file_system_router.h"
 
 namespace oceanbase
@@ -42,6 +41,7 @@ int ObServerStorageMetaPersister::init(ObStorageLogger *server_slogger)
     LOG_WARN("fail to init fifo allocator", K(ret));
   } else {
     server_slogger_ = server_slogger;
+    
     is_inited_ = true;
   }
   return ret;
@@ -60,8 +60,11 @@ int ObServerStorageMetaPersister::prepare_create_runtime(const ObServerRuntimeMe
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(write_prepare_create_runtime_slog_(meta))) {
-    LOG_WARN("fail to write prepare create runtime slog", K(ret), K(meta));
+  } else  {
+    if (OB_FAIL(write_prepare_create_runtime_slog_(meta))) {
+      LOG_WARN("fail to write prepare create runtime slog", K(ret), K(meta));
+    }
+
   }
   return ret;
 }
@@ -91,28 +94,32 @@ int ObServerStorageMetaPersister::abort_create_runtime()
 }
 
 // ObServerRuntimeController serializes updates, so this path needs no extra lock.
-int ObServerStorageMetaPersister::update_runtime_super_block(
-    const ObServerRuntimeSuperBlock &super_block)
+int ObServerStorageMetaPersister::update_runtime_super_block(const ObServerRuntimeSuperBlock &super_block)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(write_update_runtime_super_block_slog_(super_block))) {
-    LOG_WARN("fail to write runtime super block slog", K(ret), K(super_block));
+  } else  {
+    if (OB_FAIL(write_update_runtime_super_block_slog_(super_block))) {
+      LOG_WARN("fail to write runtime super block slog", K(ret), K(super_block));
+    }
+
   }
   return ret;
 }
 
-int ObServerStorageMetaPersister::update_server_resources(
-    const ObServerRuntimeConfig &runtime_config)
+int ObServerStorageMetaPersister::update_server_resources(const ObServerRuntimeConfig &runtime_config)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(write_update_server_resources_slog_(runtime_config))) {
-    LOG_WARN("fail to write update server resources slog", K(ret), K(runtime_config));
+  } else  {
+    if (OB_FAIL(write_update_server_resources_slog_(runtime_config))) {
+      LOG_WARN("fail to write update server resources slog", K(ret), K(runtime_config));
+    }
+
   }
   return ret;
 }
@@ -135,8 +142,7 @@ int ObServerStorageMetaPersister::clear_runtime_log_dirs()
       LOG_WARN("fail to check directory whether is empty", KR(tmp_ret), K(clog_dir));
     }
     if (!directory_empty) {
-      LOG_DBA_ERROR(OB_ERR_UNEXPECTED, "msg",
-          "clog directory must be empty before rollback cleanup", K(clog_dir));
+      LOG_DBA_ERROR(OB_ERR_UNEXPECTED, "msg", "clog directory must be empty before rollback cleanup", K(clog_dir));
     }
     if (OB_FAIL(FileDirectoryUtils::delete_directory_rec(clog_dir))) {
       LOG_WARN("fail to delete clog dir", K(ret), K(clog_dir));
@@ -144,22 +150,22 @@ int ObServerStorageMetaPersister::clear_runtime_log_dirs()
   }
 
   if (OB_SUCC(ret)) {
-    const int pret = snprintf(slog_dir, MAX_PATH_SIZE, "%s/sys",
-        OB_FILE_SYSTEM_ROUTER.get_slog_dir());
+    const int pret = snprintf(slog_dir, MAX_PATH_SIZE, "%s/sys", OB_FILE_SYSTEM_ROUTER.get_slog_dir());
     if (pret < 0 || pret >= MAX_PATH_SIZE) {
       ret = OB_BUF_NOT_ENOUGH;
       LOG_WARN("failed to construct server slog path", K(ret));
     } else if (OB_FAIL(FileDirectoryUtils::is_exists(slog_dir, exist))) {
       LOG_WARN("fail to check exist", K(ret));
-    } else if (exist && OB_FAIL(FileDirectoryUtils::delete_directory_rec(slog_dir))) {
-      LOG_WARN("fail to delete slog dir", K(ret), K(slog_dir));
+    } else if (exist) {
+      if (OB_FAIL(FileDirectoryUtils::delete_directory_rec(slog_dir))) {
+        LOG_WARN("fail to delete slog dir", K(ret), K(slog_dir));
+      }
     }
   }
   return ret;
 }
 
-int ObServerStorageMetaPersister::write_prepare_create_runtime_slog_(
-    const ObServerRuntimeMeta &meta)
+int ObServerStorageMetaPersister::write_prepare_create_runtime_slog_(const ObServerRuntimeMeta &meta)
 {
   int ret = OB_SUCCESS;
   ObStorageLogParam log_param;
@@ -171,6 +177,7 @@ int ObServerStorageMetaPersister::write_prepare_create_runtime_slog_(
   if (OB_FAIL(server_slogger_->write_log(log_param))) {
     LOG_WARN("failed to write create runtime prepare slog", K(ret), K(log_param));
   }
+
   return ret;
 }
 
@@ -186,9 +193,9 @@ int ObServerStorageMetaPersister::write_commit_create_runtime_slog_()
   if (OB_FAIL(server_slogger_->write_log(log_param))) {
     LOG_WARN("failed to write slog", K(ret), K(log_param));
   }
+
   return ret;
 }
-
 int ObServerStorageMetaPersister::write_abort_create_runtime_slog_()
 {
   int ret = OB_SUCCESS;
@@ -201,6 +208,7 @@ int ObServerStorageMetaPersister::write_abort_create_runtime_slog_()
   if (OB_FAIL(server_slogger_->write_log(log_param))) {
     LOG_WARN("failed to write slog", K(ret), K(log_param));
   }
+
   return ret;
 }
 
@@ -215,13 +223,11 @@ int ObServerStorageMetaPersister::write_update_runtime_super_block_slog_(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(super_block));
   } else {
-    ObUpdateRuntimeSuperBlockLog slog_entry(
-        *const_cast<ObServerRuntimeSuperBlock*>(&super_block));
+    ObUpdateRuntimeSuperBlockLog slog_entry(*const_cast<ObServerRuntimeSuperBlock*>(&super_block));
     ObStorageLogParam log_param;
     log_param.data_ = &slog_entry;
-    log_param.cmd_ = ObIRedoModule::gen_cmd(
-        ObRedoLogMainType::OB_REDO_LOG_SERVER_RUNTIME,
-        ObRedoLogSubType::OB_REDO_LOG_UPDATE_RUNTIME_SUPER_BLOCK);
+    log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_SERVER_RUNTIME,
+      ObRedoLogSubType::OB_REDO_LOG_UPDATE_RUNTIME_SUPER_BLOCK);
     if (OB_FAIL(server_slogger_->write_log(log_param))) {
       LOG_WARN("fail to write runtime super block slog", K(ret), K(log_param));
     }
@@ -229,22 +235,22 @@ int ObServerStorageMetaPersister::write_update_runtime_super_block_slog_(
   return ret;
 }
 
-int ObServerStorageMetaPersister::write_update_server_resources_slog_(
-    const ObServerRuntimeConfig &runtime_config)
+int ObServerStorageMetaPersister::write_update_server_resources_slog_(const ObServerRuntimeConfig &runtime_config)
 {
   int ret = OB_SUCCESS;
   ObStorageLogParam log_param;
   int32_t cmd = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_SERVER_RUNTIME,
       ObRedoLogSubType::OB_REDO_LOG_UPDATE_SERVER_RESOURCES);
-  ObUpdateServerResourcesLog log_entry(
-      *const_cast<ObServerRuntimeConfig*>(&runtime_config));
+  ObUpdateServerResourcesLog log_entry(*const_cast<ObServerRuntimeConfig*>(&runtime_config));
   log_param.data_ = &log_entry;
   log_param.cmd_ = cmd;
   if (OB_FAIL(server_slogger_->write_log(log_param))) {
     LOG_WARN("failed to write server resources slog", K(ret), K(log_param));
   }
+
   return ret;
 }
+
 
 } // namespace storage
 } // namespace oceanbase

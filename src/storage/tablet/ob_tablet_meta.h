@@ -34,10 +34,12 @@
 #include "storage/ddl/ob_tablet_barrier_log.h"
 #include "storage/tablet/ob_tablet_binding_helper.h"
 #include "storage/tablet/ob_tablet_multi_source_data.h"
+#include "storage/tablet/ob_tablet_mds_data.h"
 #include "storage/tx/ob_trans_define.h"
 #include "storage/ob_tablet_local_status.h"
 #include "storage/tablet/ob_tablet_table_store_flag.h"
 #include "share/scn.h"
+#include "storage/tablet/ob_tablet_mds_data.h"
 #include "storage/tablet/ob_tablet_create_delete_mds_user_data.h"
 #include "storage/tablet/ob_tablet_space_usage.h"
 namespace oceanbase
@@ -174,6 +176,7 @@ public:
   int64_t max_serialized_medium_scn_; // abandon after 4.2 // alignment: 8B, size: 8B
   share::SCN ddl_commit_scn_; // alignment: 8B, size: 8B
   share::SCN mds_checkpoint_scn_; // alignment: 8B, size: 8B
+  share::SCN min_ss_tablet_version_; // alignment: 8B, size: 8B
   compaction::ObExtraMediumInfo extra_medium_info_;
   ObTabletCreateDeleteMdsUserData last_persisted_committed_tablet_status_; // quick access for tablet status in sstables
   ObTabletSpaceUsage space_usage_; // alignment: 8B, size: 48B

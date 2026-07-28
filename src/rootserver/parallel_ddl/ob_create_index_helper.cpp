@@ -233,12 +233,15 @@ int ObCreateIndexHelper::check_table_legitimacy_()
 {
   int ret = OB_SUCCESS;
   uint64_t table_id = OB_INVALID_ID;
+  bool in_runtime_space = true;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_ISNULL(orig_data_table_schema_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("data table schea is null", KR(ret), KP(orig_data_table_schema_));
   } else if (FALSE_IT(table_id = orig_data_table_schema_->get_table_id())) {
+  } else if (OB_FAIL(ObSysTableChecker::is_runtime_space_table_id(table_id, in_runtime_space))) {
+    LOG_WARN("fail to check table in runtime space", KR(ret), K(table_id));
   } else if (OB_UNLIKELY(is_inner_table(table_id))) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("create index on inner table not support", KR(ret), K(table_id));

@@ -48,8 +48,11 @@ int ObAllVirtualTabletCompactionInfo::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObTablet *tablet = nullptr;
+  ObITable *table = nullptr;
   ObArenaAllocator allocator;
   const compaction::ObMediumCompactionInfoList *medium_info_list = nullptr;
+  ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper;
+  const ObTabletTableStore *table_store = nullptr;
   if (OB_UNLIKELY(!start_to_read_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "not inited", K(start_to_read_), K(ret));
@@ -73,6 +76,10 @@ int ObAllVirtualTabletCompactionInfo::inner_get_next_row(common::ObNewRow *&row)
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(tablet->read_medium_info_list(allocator, medium_info_list))) {
     SERVER_LOG(WARN, "tablet read medium info list failed", K(ret), K(tablet_handle_), KPC(tablet_handle_.get_obj()));
+  } else if (OB_FAIL(tablet->fetch_table_store(table_store_wrapper))) {
+    SERVER_LOG(WARN,"fail to fetch table store", K(ret));
+  } else if (OB_FAIL(table_store_wrapper.get_member(table_store))) {
+    SERVER_LOG(WARN,"fail to get table store", K(ret), K(table_store_wrapper));
   } else {
     const int64_t col_count = output_column_ids_.count();
     int64_t max_sync_medium_scn = 0;

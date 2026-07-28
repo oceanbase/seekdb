@@ -206,6 +206,8 @@ public:
       const ObObjectID &table_id,
       bool &exist);
 
+  static int is_drop_column_only(const schema::AlterTableSchema &alter_table_schema, bool &is_drop_col_only);
+
 private:
   static int get_runtime_variable(schema::ObSchemaGetterGuard &schema_guard,
                                  share::ObSysVarClassType var_id,

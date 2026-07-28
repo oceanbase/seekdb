@@ -69,6 +69,8 @@ class ObSchemaMemMgr
 public:
   ObSchemaMemMgr();
   virtual ~ObSchemaMemMgr();
+  // Schema-manager memory belongs to the single server runtime.
+  //       
   int init(const char *label);
   int check_can_switch_allocator(const int64_t &switch_cnt, bool &can_switch) const;
   int switch_allocator();

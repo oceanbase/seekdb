@@ -48,6 +48,7 @@ int ObInsertResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
   ObInsertStmt *insert_stmt = NULL;
+  bool has_tg = false;
   if (OB_UNLIKELY(T_INSERT != parse_tree.type_)
       || OB_UNLIKELY(4 > parse_tree.num_child_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -83,12 +84,17 @@ int ObInsertResolver::resolve(const ParseNode &parse_tree)
     NG_TRACE(resolve_ins_tbl_begin);
     if (OB_FAIL(resolve_insert_clause(*parse_tree.children_[INSERT_NODE]))) {
       LOG_WARN("resolve single table insert failed", K(ret));
+    } else {
+      has_tg = insert_stmt->has_instead_of_trigger();
     }
     NG_TRACE(resolve_ins_tbl_end);
   }
 
   if (OB_SUCC(ret)) {
-    if (insert_stmt->is_ignore() && insert_stmt->has_global_index()) {
+    if (insert_stmt->is_replace() && insert_stmt->is_ignore()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "replace statement with ignore");
+    } else if (insert_stmt->is_ignore() && insert_stmt->has_global_index()) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "ignore with global index");
     } else { /*do nothing*/ }
@@ -102,7 +108,7 @@ int ObInsertResolver::resolve(const ParseNode &parse_tree)
     }
   }
 
-  if (OB_SUCC(ret)) {
+  if (OB_SUCC(ret) && !has_tg) {
     if (OB_FAIL(check_view_insertable())) {
       LOG_WARN("view not insertable", K(ret));
     }
@@ -121,6 +127,7 @@ int ObInsertResolver::resolve_insert_clause(const ParseNode &node)
   const ParseNode *values_node = NULL;
   TableItem* table_item = NULL;
   ObInsertStmt *insert_stmt = get_insert_stmt();
+  bool has_tg = false;
   if (OB_ISNULL(session_info_) || OB_ISNULL(insert_stmt) ||
       OB_ISNULL(insert_into = node.children_[INTO_NODE]) ||
       OB_ISNULL(values_node = node.children_[VALUE_NODE])) {
@@ -134,15 +141,16 @@ int ObInsertResolver::resolve_insert_clause(const ParseNode &node)
                                     table_item, node.children_[DUPLICATE_NODE]))) {
     LOG_WARN("failed to resolve values", K(ret));
   } else {
+    has_tg = insert_stmt->has_instead_of_trigger();
     if (!insert_stmt->get_table_items().empty() &&
         NULL != insert_stmt->get_table_item(0) &&
         (insert_stmt->get_table_item(0)->is_generated_table() ||
          insert_stmt->get_table_item(0)->is_temp_table())) {
-      if (OB_FAIL(add_all_column_to_updatable_view(*insert_stmt, *insert_stmt->get_table_item(0)))) {
+      if (OB_FAIL(add_all_column_to_updatable_view(*insert_stmt, *insert_stmt->get_table_item(0), has_tg))) {
         LOG_WARN("failed to add column to updatable view", K(ret));
       } else if (OB_FAIL(view_pullup_special_column_exprs())) {
         LOG_WARN("failed to pullup special column exprs", K(ret));
-      } else if (OB_FAIL(view_pullup_part_exprs())) {
+      } else if (!has_tg && OB_FAIL(view_pullup_part_exprs())) {
         LOG_WARN("pullup part exprs for view failed", K(ret));
       } else { /*do nothing*/ }
     }
@@ -154,7 +162,7 @@ int ObInsertResolver::resolve_insert_clause(const ParseNode &node)
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(generate_autoinc_params(insert_stmt->get_insert_table_info()))) {
+  } else if (!has_tg && OB_FAIL(generate_autoinc_params(insert_stmt->get_insert_table_info()))) {
     LOG_WARN("failed to save autoinc params", K(ret));
   } else if (OB_FAIL(generate_column_conv_function(insert_stmt->get_insert_table_info()))) {
     LOG_WARN("failed to generate column conv function", K(ret));
@@ -1163,7 +1171,8 @@ int ObInsertResolver::resolve_insert_constraint()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(insert_stmt), K(session_info_), K(ret));
   } else if (session_info_->get_ddl_info().is_ddl() ||
-             session_info_->get_ddl_info().is_dummy_ddl_for_inner_visibility()) {
+             session_info_->get_ddl_info().is_dummy_ddl_for_inner_visibility() ||
+             insert_stmt->has_instead_of_trigger()) {
     /*do nothing*/
   } else if (OB_ISNULL(table_item = insert_stmt->get_table_item_by_id(
                        insert_stmt->get_insert_table_info().table_id_))) {

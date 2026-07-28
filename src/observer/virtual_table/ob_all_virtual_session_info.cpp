@@ -82,6 +82,7 @@ bool ObAllVirtualSessionInfo::FillScanner::operator()(
               sql::ObSQLSessionMgr::Key key, ObSQLSessionInfo *sess_info)
 {
   int ret = OB_SUCCESS;
+  UNUSED(key);
   if (OB_UNLIKELY(NULL == scanner_
                   || NULL == allocator_
                   || NULL == cur_row_

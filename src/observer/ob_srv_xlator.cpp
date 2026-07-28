@@ -82,7 +82,7 @@ thread_local bool oceanbase::observer::g_in_sync_dispatch = false;
 
 ObIAllocator &oceanbase::observer::get_sql_arena_allocator() {
   if (g_in_sync_dispatch) {
-    static thread_local common::ObArenaAllocator sync_arena(common::ObModIds::OB_SQL_REQUEST);
+    static thread_local common::ObArenaAllocator sync_arena(common::ObModIds::OB_RPC);
     return sync_arena;
   }
   return THIS_WORKER.get_sql_arena_allocator();

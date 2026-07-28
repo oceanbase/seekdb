@@ -275,6 +275,8 @@ public:
   int get_routine_schemas_in_database(
               uint64_t database_id,
               common::ObIArray<const ObSimpleRoutineSchema *> &routine_schemas) const;
+  int get_routine_schemas_in_udt(uint64_t udt_id,
+                                 common::ObIArray<const ObSimpleRoutineSchema *> &routine_schemas) const;
   int get_routine_schemas_in_package(uint64_t package_id,
                                      common::ObIArray<const ObSimpleRoutineSchema *> &routine_schemas) const;
   int get_routine_schema_count(int64_t &routine_schema_count) const;

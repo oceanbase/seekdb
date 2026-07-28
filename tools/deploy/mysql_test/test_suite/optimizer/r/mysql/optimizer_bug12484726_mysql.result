@@ -30,6 +30,54 @@ Outputs & filters:
        [o.format_outline]), partitions(p0)
       is_index_back=false, is_global_index=false, 
       range_key([o.outline_id]), range(MIN ; MAX)always true
+explain basic select /*+use_hash(t,mt),leading(t,mt)*/ * from oceanbase.__all_table as t, oceanbase.__all_database as mt;
+Query Plan
+=====================================
+|ID|OPERATOR                   |NAME|
+-------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN |    |
+|1 |├─TABLE FULL SCAN          |t   |
+|2 |└─MATERIAL                 |    |
+|3 |  └─TABLE FULL SCAN        |mt  |
+=====================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.gmt_create], [t.gmt_modified], [t.table_id], [t.table_name], [t.database_id], [t.table_type], [t.load_type], [t.def_type], [t.rowkey_column_num],
+       [t.index_column_num], [t.max_used_column_id], [t.autoinc_column_id], [t.auto_increment], [t.read_only], [t.rowkey_split_pos], [t.compress_func_name], [t.comment],
+       [t.block_size], [t.collation_type], [t.data_table_id], [t.index_status], [t.progressive_merge_num], [t.index_type], [t.part_level], [t.part_func_type],
+       [t.part_func_expr], [t.part_num], [t.sub_part_func_type], [t.sub_part_func_expr], [t.sub_part_num], [t.schema_version], [t.view_definition], [t.view_check_option],
+       [t.view_is_updatable], [t.index_using_type], [t.parser_name], [t.index_attributes_set], [t.tablet_size], [t.pctfree], [t.partition_status], [t.partition_schema_version],
+       [t.session_id], [t.pk_comment], [t.row_store_type], [t.store_format], [t.progressive_merge_round], [t.table_mode], [t.tablespace_id], [t.sub_part_template_flags],
+       [t.dop], [t.character_set_client], [t.collation_connection], [t.association_table_id], [t.tablet_id], [t.max_dependency_version], [t.define_user_id], [t.transition_point],
+       [t.b_transition_point], [t.interval_range], [t.b_interval_range], [t.object_status], [t.table_flags], [t.truncate_version], [t.name_generated_type], [t.lob_inrow_threshold],
+       [t.auto_increment_cache_size], [t.index_params], [t.micro_index_clustered], [t.parser_properties], [t.semistruct_encoding_type], [mt.gmt_create], [mt.gmt_modified],
+       [mt.database_id], [mt.database_name], [mt.collation_type], [mt.comment], [mt.read_only], [mt.in_recyclebin]), filter(nil), rowset=256
+      conds(nil), nl_params_(nil), use_batch=false
+  1 - output([t.table_id], [t.gmt_create], [t.gmt_modified], [t.table_name], [t.database_id], [t.table_type], [t.load_type], [t.def_type], [t.rowkey_column_num],
+       [t.index_column_num], [t.max_used_column_id], [t.autoinc_column_id], [t.auto_increment], [t.read_only], [t.rowkey_split_pos], [t.compress_func_name], [t.comment],
+       [t.block_size], [t.collation_type], [t.data_table_id], [t.index_status], [t.progressive_merge_num], [t.index_type], [t.part_level], [t.part_func_type],
+       [t.part_func_expr], [t.part_num], [t.sub_part_func_type], [t.sub_part_func_expr], [t.sub_part_num], [t.schema_version], [t.view_definition], [t.view_check_option],
+       [t.view_is_updatable], [t.index_using_type], [t.parser_name], [t.index_attributes_set], [t.tablet_size], [t.pctfree], [t.partition_status], [t.partition_schema_version],
+       [t.session_id], [t.pk_comment], [t.row_store_type], [t.store_format], [t.progressive_merge_round], [t.table_mode], [t.tablespace_id], [t.sub_part_template_flags],
+       [t.dop], [t.character_set_client], [t.collation_connection], [t.association_table_id], [t.tablet_id], [t.max_dependency_version], [t.define_user_id], [t.transition_point],
+       [t.b_transition_point], [t.interval_range], [t.b_interval_range], [t.object_status], [t.table_flags], [t.truncate_version], [t.name_generated_type], [t.lob_inrow_threshold],
+       [t.auto_increment_cache_size], [t.index_params], [t.micro_index_clustered], [t.parser_properties], [t.semistruct_encoding_type]), filter(nil), rowset=256
+      access([t.table_id], [t.gmt_create], [t.gmt_modified], [t.table_name], [t.database_id], [t.table_type], [t.load_type], [t.def_type], [t.rowkey_column_num],
+       [t.index_column_num], [t.max_used_column_id], [t.autoinc_column_id], [t.auto_increment], [t.read_only], [t.rowkey_split_pos], [t.compress_func_name], [t.comment],
+       [t.block_size], [t.collation_type], [t.data_table_id], [t.index_status], [t.progressive_merge_num], [t.index_type], [t.part_level], [t.part_func_type],
+       [t.part_func_expr], [t.part_num], [t.sub_part_func_type], [t.sub_part_func_expr], [t.sub_part_num], [t.schema_version], [t.view_definition], [t.view_check_option],
+       [t.view_is_updatable], [t.index_using_type], [t.parser_name], [t.index_attributes_set], [t.tablet_size], [t.pctfree], [t.partition_status], [t.partition_schema_version],
+       [t.session_id], [t.pk_comment], [t.row_store_type], [t.store_format], [t.progressive_merge_round], [t.table_mode], [t.tablespace_id], [t.sub_part_template_flags],
+       [t.dop], [t.character_set_client], [t.collation_connection], [t.association_table_id], [t.tablet_id], [t.max_dependency_version], [t.define_user_id], [t.transition_point],
+       [t.b_transition_point], [t.interval_range], [t.b_interval_range], [t.object_status], [t.table_flags], [t.truncate_version], [t.name_generated_type], [t.lob_inrow_threshold],
+       [t.auto_increment_cache_size], [t.index_params], [t.micro_index_clustered], [t.parser_properties], [t.semistruct_encoding_type]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([t.table_id]), range(MIN ; MAX)always true
+  2 - output([mt.gmt_create], [mt.gmt_modified], [mt.database_id], [mt.database_name], [mt.collation_type], [mt.comment], [mt.read_only], [mt.in_recyclebin]), filter(nil), rowset=256
+  3 - output([mt.database_id], [mt.gmt_create], [mt.gmt_modified], [mt.database_name], [mt.collation_type], [mt.comment], [mt.read_only], [mt.in_recyclebin]), filter(nil), rowset=256
+      access([mt.database_id], [mt.gmt_create], [mt.gmt_modified], [mt.database_name], [mt.collation_type], [mt.comment], [mt.read_only], [mt.in_recyclebin]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([mt.database_id]), range(MIN ; MAX)always true
 explain basic select /*+use_hash(o,os),leading(o,os)*/ * from oceanbase.__all_outline as o, oceanbase.__all_outline_history as os;
 Query Plan
 =====================================

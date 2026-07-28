@@ -32,6 +32,8 @@
 #include "ob_tx_timestamp_waiter.h"
 #include "ob_trans_ctx_mgr.h"
 #include "ob_trans_memory_stat.h"
+#include "ob_trans_event.h"
+#include "ob_gti_source.h"
 #include "ob_tx_version_mgr.h"
 #include "lib/utility/ob_tracepoint.h"
 #include "lib/container/ob_iarray.h"
@@ -64,7 +66,6 @@ namespace transaction
 {
 class ObTsMgr;
 class ObTimestampService;
-class ObTransIDService;
 class ObITxLogParam;
 
 // iterate transaction module memory usage status
@@ -114,7 +115,7 @@ public:
   virtual ~ObTransService() { destroy(); }
   static int server_module_init(ObTransService* &trans_service);
   int init(const ObAddr &self,
-           ObTransIDService *trans_id_service,
+           ObIGtiSource *gti_source,
            ObTsMgr *ts_mgr,
            share::schema::ObMultiVersionSchemaService *schema_service);
   int start();
@@ -175,6 +176,9 @@ private:
   // max time bias between any two machine
   static const int64_t MAX_TIME_INTERVAL_BETWEEN_MACHINE_US = 200 * 1000;
   static const int64_t CHANGING_LEADER_TXN_PER_ROUND = 200;
+public:
+  ObIGtiSource *gti_source_;
+  ObGtiSource gti_source_def_;
 protected:
   bool is_inited_;
   bool is_running_;
@@ -189,7 +193,6 @@ protected:
   // the adapter between transaction and clog
   share::schema::ObMultiVersionSchemaService *schema_service_;
 private:
-  ObTransIDService *trans_id_service_;
   ObTsMgr *ts_mgr_;
   // account task qeuue's inqueue and dequeue
   uint32_t input_queue_count_;

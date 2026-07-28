@@ -32,6 +32,7 @@ class ObStartupAccelTaskHandler;
 }
 namespace share
 {
+class ObServerRuntimeState;
 class SCN;
 }
 

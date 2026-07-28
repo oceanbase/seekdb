@@ -25,6 +25,24 @@
 
 namespace oceanbase
 {
+// MTL(T*) compatibility shim routed through share::g_mp.
+template <class T> T mtl_get_module();
+template <> inline share::ObDagScheduler *mtl_get_module<share::ObDagScheduler*>()
+{ return ::oceanbase::share::g_mp->dag_scheduler(); }
+template <> inline share::ObDagWarningHistoryManager *mtl_get_module<share::ObDagWarningHistoryManager*>()
+{ return ::oceanbase::share::g_mp->dag_warning_history_manager(); }
+template <> inline compaction::ObTabletScheduler *mtl_get_module<compaction::ObTabletScheduler*>()
+{ return ::oceanbase::share::g_mp->tablet_scheduler(); }
+} // namespace oceanbase
+
+#ifndef MTL
+#define MTL(TYPE) (::oceanbase::mtl_get_module<TYPE>())
+#endif
+
+// Single-tenant seekdb: the deleted MTL slot mechanism is replaced by a file-level
+// ObIModuleProvider published through share::g_mp. MTL(T*) resolves to g_mp->getter().
+namespace oceanbase
+{
 namespace unittest{
 
 // Test-local module provider: serves the dag scheduler / warning history / tablet
@@ -225,7 +243,7 @@ int alloc_task(ObIDag &dag, T *&task) {
 }
 
 void wait_scheduler() {
-  ObDagScheduler *scheduler = share::g_mp->dag_scheduler();
+  ObDagScheduler *scheduler = MTL(ObDagScheduler*);
   ASSERT_TRUE(nullptr != scheduler);
   while (!scheduler->is_empty()) {
     ::usleep(100000);
@@ -308,6 +326,7 @@ public:
     UNUSEDx(buf, buf_len);
     return OB_SUCCESS;
   }
+  virtual bool uses_reserved_allocator() const override { return false; }
   INHERIT_TO_STRING_KV("ObIDag", ObIDag, K_(is_inited), K_(type), K_(id), K(task_list_.get_size()));
 protected:
   int64_t id_;
@@ -494,7 +513,8 @@ class TestDagScheduler : public ::testing::Test
 {
 public:
   TestDagScheduler()
-    : tablet_scheduler_(nullptr),
+    : tenant_id_(1001),
+      tablet_scheduler_(nullptr),
       scheduler_(nullptr),
       dag_history_mgr_(nullptr),
       old_mp_(nullptr),
@@ -527,6 +547,7 @@ public:
     share::g_mp = old_mp_;
   }
 private:
+  const uint64_t tenant_id_;
   compaction::ObTabletScheduler *tablet_scheduler_;
   ObDagScheduler *scheduler_;
   ObDagWarningHistoryManager *dag_history_mgr_;

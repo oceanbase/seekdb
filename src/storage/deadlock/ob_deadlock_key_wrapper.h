@@ -22,6 +22,7 @@
 #include "lib/utility/utility.h"
 #include "lib/oblog/ob_log_module.h"
 #include "share/ob_errno.h"
+#include "lib/allocator/ob_malloc.h"
 #define NEED_DECLARATION
 #include "ob_deadlock_key_register.h"
 #undef NEED_DECLARATION
@@ -60,6 +61,8 @@ public:\
 #undef NEED_REGISTER
 #undef USER_REGISTER
 #undef REGISTE_TYPE_ID
+
+class ObDetectorLabelRequest;
 
 class UserBinaryKey
 {

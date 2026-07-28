@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef OB_DTL_CHANNEL_MEM_MANAGER_H
-#define OB_DTL_CHANNEL_MEM_MANAGER_H
+#ifndef OB_DTL_CHANNEL_MEM_MANEGER_H
+#define OB_DTL_CHANNEL_MEM_MANEGER_H
 
 #include "lib/queue/ob_lighty_queue.h"
 #include "lib/utility/ob_print_utils.h"
@@ -128,4 +128,4 @@ OB_INLINE void ObDtlChannelMemManager::update_max_memory_percent()
 } // sql
 } // oceanbase
 
-#endif /* OB_DTL_CHANNEL_MEM_MANAGER_H */
+#endif /* OB_DTL_CHANNEL_MEM_MANEGER_H */

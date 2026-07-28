@@ -20,7 +20,6 @@
 
 #include "storage/blocksstable/ob_data_file_prepare.h"
 #include "storage/slog/simple_ob_storage_log.h"
-#include "storage/slog/ob_storage_log_replayer.h"
 
 
 #define private public
@@ -61,7 +60,8 @@ public:
   }
 
 public:
-  const int64_t MAX_CONCURRENT_ITEM_CNT = MAX(128, sysconf(_SC_NPROCESSORS_ONLN) * 2);
+  const int64_t MAX_CONCURRENT_ITEM_CNT = !lib::is_mini_mode() ?
+      MAX(128, sysconf(_SC_NPROCESSORS_ONLN) * 2) : 64;
 
 public:
   ObLogCursor start_cursor_;

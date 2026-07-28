@@ -478,6 +478,7 @@ public:
   bool is_mock_prepare_;
   bool is_prepare_stage_;
   bool is_dynamic_sql_;
+  bool is_dbms_sql_;
   bool is_cursor_;
   uint64_t statement_id_;
   common::ObString cur_sql_;
@@ -525,6 +526,7 @@ public:
   int64_t first_equal_param_cons_cnt_;
   int64_t first_const_param_cons_cnt_;
   int64_t first_expr_cons_cnt_;
+  bool is_bulk_;
   ObInsertRewriteOptCtx ins_opt_ctx_;
   union
   {

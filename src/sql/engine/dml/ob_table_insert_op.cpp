@@ -151,7 +151,15 @@ OB_INLINE int ObTableInsertOp::open_table_for_each()
     if (OB_SUCC(ret) && !rtdefs.empty()) {
       const ObInsCtDef &primary_ins_ctdef = *ctdefs.at(0);
       ObInsRtDef &primary_ins_rtdef = rtdefs.at(0);
-      if (OB_SUCC(ret)) {
+      if (primary_ins_ctdef.error_logging_ctdef_.is_error_logging_) {
+        is_error_logging_ = true;
+      }
+      if (OB_FAIL(ObDMLService::process_before_stmt_trigger(primary_ins_ctdef,
+                                                            primary_ins_rtdef,
+                                                            dml_rtctx_,
+                                                            ObDmlEventType::DE_INSERTING))) {
+        LOG_WARN("process before stmt trigger failed", K(ret));
+      } else {
         // This table is being accessed by DML operator, mark its table location as writing.
         // For single value insert, nested SQL may modify its insert table, so
         // clear the writing flag in table location before the trigger execution.
@@ -213,9 +221,14 @@ void ObTableInsertOp::record_err_for_load_data(int err_ret, int row_num)
 OB_INLINE int ObTableInsertOp::insert_row_to_das()
 {
   int ret = OB_SUCCESS;
+  transaction::ObTxSEQ savepoint_no;
   // first get next row from child operator
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
   bool is_skipped = false;
+  if (is_error_logging_) {
+    OZ(ObSqlTransControl::create_anonymous_savepoint(ctx_, savepoint_no));
+  }
+
   for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.ins_ctdefs_.count(); ++i) {
     const ObTableInsertSpec::InsCtDefArray &ctdefs = MY_SPEC.ins_ctdefs_.at(i);
     InsRtDefArray &rtdefs = ins_rtdefs_.at(i);
@@ -226,11 +239,17 @@ OB_INLINE int ObTableInsertOp::insert_row_to_das()
       ObInsRtDef &ins_rtdef = rtdefs.at(j);
       ObDASTabletLoc *tablet_loc = nullptr;
       ObDMLModifyRowNode modify_row(this, &ins_ctdef, &ins_rtdef, ObDmlEventType::DE_INSERTING);
-      ++ins_rtdef.cur_row_num_;
+      if (!MY_SPEC.ins_ctdefs_.at(0).at(0)->has_instead_of_trigger_) {
+        ++ins_rtdef.cur_row_num_;
+      }
       if (OB_FAIL(ObDMLService::init_heap_table_pk_for_ins(ins_ctdef, eval_ctx_))) {
         LOG_WARN("fail to init heap table pk to null", K(ret));
       } else if (OB_FAIL(ObDMLService::process_insert_row(ins_ctdef, ins_rtdef, *this, is_skipped))) {
-        LOG_WARN("process insert row failed", K(ret));
+        if (is_error_logging_ && err_log_rt_def_.first_err_ret_ != OB_SUCCESS) {
+          // It means that error logging has caught the error, and the log will not be printed temporarily
+        } else {
+          LOG_WARN("process insert row failed", K(ret));
+        }
       } else if (OB_UNLIKELY(is_skipped)) {
         break;
       } else if (OB_FAIL(calc_tablet_loc(ins_ctdef, ins_rtdef, tablet_loc))) {
@@ -257,6 +276,19 @@ OB_INLINE int ObTableInsertOp::insert_row_to_das()
     }
 
   } // end for table ctdef loop
+
+  if (is_error_logging_) {
+    int err_ret = ret;
+    if (OB_FAIL(ObDMLService::catch_violate_error(err_ret,
+                                                  savepoint_no,
+                                                  dml_rtctx_,
+                                                  err_log_rt_def_,
+                                                  MY_SPEC.ins_ctdefs_.at(0).at(0)->error_logging_ctdef_,
+                                                  err_log_service_,
+                                                  ObDASOpType::DAS_OP_TABLE_INSERT))) {
+      LOG_WARN("fail to catch violate error", K(err_ret), K(ret));
+    }
+  }
 
   if (OB_SUCC(ret)) {
     bool is_ins_val_opt = ctx_.get_sql_ctx()->is_do_insert_batch_opt();
@@ -298,7 +330,7 @@ int ObTableInsertOp::write_rows_post_proc(int last_errno)
     if (OB_SUCC(ret)) {
       ret = sync_ret;
     }
-    if (OB_SUCC(ret) && GCONF.enable_defensive_check()) {
+    if (OB_SUCC(ret) && GCONF.enable_defensive_check() && !is_error_logging_) {
       if (OB_FAIL(check_insert_affected_row())) {
         LOG_WARN("check index insert consistency failed", K(ret));
       }
@@ -406,9 +438,16 @@ OB_INLINE int ObTableInsertOp::close_table_for_each()
   if (OB_SUCCESS == ctx_.get_errcode()) {
     for (int64_t i = 0; OB_SUCC(ret) && i < ins_rtdefs_.count(); ++i) {
       if (!ins_rtdefs_.at(i).empty()) {
+        const ObInsCtDef &primary_ins_ctdef = *MY_SPEC.ins_ctdefs_.at(i).at(0);
         ObInsRtDef &primary_ins_rtdef = ins_rtdefs_.at(i).at(0);
         if (OB_NOT_NULL(primary_ins_rtdef.das_rtdef_.table_loc_)) {
           primary_ins_rtdef.das_rtdef_.table_loc_->is_writing_ = false;
+        }
+        if (OB_FAIL(ObDMLService::process_after_stmt_trigger(primary_ins_ctdef,
+                                                             primary_ins_rtdef,
+                                                             dml_rtctx_,
+                                                             ObDmlEventType::DE_INSERTING))) {
+          LOG_WARN("process after stmt trigger failed", K(ret));
         }
       }
     }

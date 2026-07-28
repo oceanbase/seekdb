@@ -23,11 +23,13 @@
 #include "sql/engine/px/exchange/ob_px_transmit_op.h"
 #include "sql/engine/join/ob_join_filter_op.h"
 #include "sql/engine/join/ob_hash_join_op.h"
+#include "sql/engine/join/hash_join/ob_hash_join_vec_op.h"
 #include "sql/engine/basic/ob_temp_table_access_op.h"
+#include "sql/engine/basic/ob_temp_table_access_vec_op.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
 #include "sql/executor/ob_task_spliter.h"
 #include "storage/ddl/ob_direct_insert_sstable_ctx.h"
-#include "sql/engine/window_function/ob_window_function_op.h"
+#include "sql/engine/window_function/ob_window_function_vec_op.h"
 #include "sql/engine/basic/ob_select_into_op.h"
 #include "storage/ddl/ob_direct_load_mgr_v3.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
@@ -297,6 +299,7 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
                                  const ObIArray<ObSqcTableLocationKey> &tsc_location_keys)
 {
   int ret = OB_SUCCESS;
+  ASH_ITEM_ATTACH_GUARD(plan_line_id, root.id_);
   if (IS_PX_RECEIVE(root.get_type())) {
     ObPxReceiveSpec *receive_op = reinterpret_cast<ObPxReceiveSpec *>(&root);
     ObOperatorKit *kit = ctx.get_operator_kit(receive_op->id_);
@@ -419,11 +422,56 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
           for (int64_t j = 0; OB_SUCC(ret) && j < temp_table_ctx.interm_result_infos_.count(); ++j) {
               ObTempTableResultInfo &info = temp_table_ctx.interm_result_infos_.at(j);
 #if defined(__APPLE__) || defined(_WIN32) || defined(__ANDROID__)
-            std::random_device rd;
-            std::mt19937 g(rd());
-            std::shuffle(access_input->interm_result_ids_.begin(), access_input->interm_result_ids_.end(), g);
+                std::random_device rd;
+                std::mt19937 g(rd());
+                std::shuffle(info.interm_result_ids_.begin(), info.interm_result_ids_.end(), g);
 #else
-            std::random_shuffle(access_input->interm_result_ids_.begin(), access_input->interm_result_ids_.end());
+                std::random_shuffle(info.interm_result_ids_.begin(), info.interm_result_ids_.end());
+#endif
+              if (OB_FAIL(append(access_input->interm_result_ids_, info.interm_result_ids_))) {
+                LOG_WARN("failed to append local result ids", K(ret));
+              } else {
+                find = true;
+              }
+          }
+        }
+      }
+      if (OB_FAIL(ret)) {
+        //do nothing
+      } else if (!find) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("temp table not found", K(access_op.temp_table_id_), K(ret));
+      } else {
+        *access_count_ptr = access_input->interm_result_ids_.count();
+        access_input->unfinished_count_ptr_ = reinterpret_cast<uint64_t>(access_count_ptr);
+      }
+    }
+  }  else if (root.get_type() == PHY_VEC_TEMP_TABLE_ACCESS) {
+    ObPxSqcMeta &sqc = sqc_arg_.sqc_;
+    ObTempTableAccessVecOpInput *access_input = NULL;
+    uint64_t *access_count_ptr = NULL;
+    ObOperatorKit *kit = ctx.get_operator_kit(root.id_);
+    if (OB_ISNULL(kit) || OB_ISNULL(kit->input_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("operator is NULL", K(ret), KP(kit));
+    } else if (OB_ISNULL(access_count_ptr = (uint64_t *)ctx.get_allocator().alloc(sizeof(uint64_t)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to alloc count_ptr", K(ret));
+    } else {
+      access_input = static_cast<ObTempTableAccessVecOpInput*>(kit->input_);
+      ObTempTableAccessVecOpSpec &access_op = static_cast<ObTempTableAccessVecOpSpec&>(root);
+      bool find = false;
+      for (int64_t i = 0; OB_SUCC(ret) && !find && i < sqc.get_temp_table_ctx().count(); ++i) {
+        ObSqlTempTableCtx &temp_table_ctx = sqc.get_temp_table_ctx().at(i);
+        if (access_op.temp_table_id_ == temp_table_ctx.temp_table_id_) {
+          for (int64_t j = 0; OB_SUCC(ret) && j < temp_table_ctx.interm_result_infos_.count(); ++j) {
+              ObTempTableResultInfo &info = temp_table_ctx.interm_result_infos_.at(j);
+#if defined(__APPLE__) || defined(_WIN32) || defined(__ANDROID__)
+                std::random_device rd;
+                std::mt19937 g(rd());
+                std::shuffle(info.interm_result_ids_.begin(), info.interm_result_ids_.end(), g);
+#else
+                std::random_shuffle(info.interm_result_ids_.begin(), info.interm_result_ids_.end());
 #endif
               if (OB_FAIL(append(access_input->interm_result_ids_, info.interm_result_ids_))) {
                 LOG_WARN("failed to append local result ids", K(ret));
@@ -457,6 +505,23 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
     } else {
       LOG_TRACE("debug hj input", K(hj_spec->is_shared_ht_));
     }
+  } else if (root.get_type() == PHY_VEC_HASH_JOIN) {
+    ObPxSqcMeta &sqc = sqc_arg_.sqc_;
+    ObHashJoinVecInput *hj_input = NULL;
+    ObOperatorKit *kit = ctx.get_operator_kit(root.id_);
+    ObHashJoinVecSpec *hj_spec = reinterpret_cast<ObHashJoinVecSpec *>(&root);
+    if (OB_ISNULL(kit) || OB_ISNULL(kit->input_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("operator is NULL", K(ret), KP(kit));
+    } else if (FALSE_IT(hj_input = static_cast<ObHashJoinVecInput*>(kit->input_))) {
+    } else if (hj_spec->is_shared_ht_
+               && OB_FAIL(hj_input->init_shared_hj_info(ctx.get_allocator(),
+                                                        sqc.get_task_count()))) {
+      LOG_WARN("failed to init shared hash join info", K(ret));
+    } else {
+      LOG_TRACE("debug hj input", K(hj_spec->is_shared_ht_));
+    }
+
   } else if (root.get_type() == PHY_WINDOW_FUNCTION) {
     // set task_count to ObWindowFunctionOpInput for wf pushdown
     ObPxSqcMeta &sqc = sqc_arg_.sqc_;
@@ -473,6 +538,27 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
       if (OB_FAIL(wf_input->init_wf_participator_shared_info(
           ctx.get_allocator(), sqc.get_task_count()))) {
         LOG_WARN("failed to init_wf_participator_shared_info", K(ret), K(sqc.get_task_count()));
+      }
+      LOG_DEBUG("debug wf input", K(wf_spec->role_type_), K(sqc.get_task_count()),
+                K(sqc.get_total_task_count()));
+    }
+  } else if (root.get_type() == PHY_VEC_SORT) {
+    // TODO XUNSI: if shared topn filter, init the shared topn msg here
+  } else if (root.get_type() == PHY_VEC_WINDOW_FUNCTION) {
+    ObPxSqcMeta &sqc = sqc_arg_.sqc_;
+    ObWindowFunctionVecOpInput *wf_input = NULL;
+    ObOperatorKit *kit = ctx.get_operator_kit(root.id_);
+    ObWindowFunctionVecSpec *wf_spec = reinterpret_cast<ObWindowFunctionVecSpec *>(&root);
+    if (OB_ISNULL(kit) || OB_ISNULL(kit->input_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("operator is null", K(ret), K(kit));
+    } else if (FALSE_IT(wf_input = static_cast<ObWindowFunctionVecOpInput *>(kit->input_))) {
+    } else if (wf_spec->is_participator()) {
+      wf_input->set_local_task_count(sqc.get_task_count());
+      wf_input->set_total_task_count(sqc.get_total_task_count());
+      if (OB_FAIL(wf_input->init_wf_participator_shared_info(ctx.get_allocator(),
+                                                             sqc.get_task_count()))) {
+        LOG_WARN("init wf participator shared info failed", K(ret));
       }
       LOG_DEBUG("debug wf input", K(wf_spec->role_type_), K(sqc.get_task_count()),
                 K(sqc.get_total_task_count()));
@@ -902,7 +988,8 @@ int ObPxSubCoord::rebuild_sqc_access_table_locations()
     for (int i = 0; i < location_keys.count() && OB_SUCC(ret); ++i) {
       // dml location always at first
       if (OB_ISNULL(table_loc) && location_keys.at(i).is_loc_uncertain_) {
-        OZ(ObTableLocation::build_full_local_table_loc(das_ctx,
+        ObDASLocationRouter &loc_router = DAS_CTX(*sqc_arg_.exec_ctx_).get_location_router();
+        OZ(ObTableLocation::get_full_local_table_loc(loc_router,
            sqc_arg_.exec_ctx_->get_allocator(),
            location_keys.at(i).table_location_key_,
            location_keys.at(i).ref_table_id_,

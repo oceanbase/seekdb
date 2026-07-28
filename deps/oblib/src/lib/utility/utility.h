@@ -19,7 +19,6 @@
 
 #ifndef _WIN32
 #include <arpa/inet.h>
-#include <unistd.h>
 #else
 // Windows: use winsock2 instead of arpa/inet
 #include <winsock2.h>
@@ -39,6 +38,7 @@ inline int usleep(useconds_t usec) {
 #include "easy_define.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/lock/ob_spin_lock.h"
+#include "lib/stat/ob_diagnose_info.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/utility/ob_utility.h"
 #include "lib/utility/ob_backtrace.h"
@@ -53,14 +53,6 @@ using uint = unsigned int;
 #endif
 #define FALSE_IT(stmt) ({ (stmt); false; })
 #define OB_FALSE_IT(stmt) ({ (stmt); false; })
-
-#ifdef _WIN32
-#define SLEEP(time) ::Sleep((DWORD)(time) * 1000)
-#define USLEEP(time) ::Sleep((DWORD)(((time) + 999) / 1000))
-#else
-#define SLEEP(time) ::sleep(time)
-#define USLEEP(time) ::usleep(time)
-#endif
 
 #define CPUID_STD_SSE4_2 0x00100000
 
@@ -1423,6 +1415,7 @@ void get_glibc_version(int &major, int &minor);
 
 bool glibc_prereq(int major, int minor);
 
+const char *get_transparent_hugepage_status();
 int read_one_int(const char *file_name, int64_t &value);
 
 int64_t calculate_scaled_value_by_memory(int64_t min_value, int64_t max_value);

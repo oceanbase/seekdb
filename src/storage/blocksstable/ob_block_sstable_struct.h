@@ -412,6 +412,7 @@ struct ObMicroBlockEncodingCtx
   mutable common::ObArray<ObPreviousEncodingArray<MAX_PREV_ENCODING_COUNT> > previous_encodings_;
 
   int64_t *column_encodings_;
+  int64_t data_format_version_;
   common::ObRowStoreType row_store_type_;
   bool need_calc_column_chksum_;
   ObCompressorType compressor_type_;
@@ -424,7 +425,7 @@ struct ObMicroBlockEncodingCtx
     encoder_opt_(), estimate_block_size_(0),
     real_block_size_(0), micro_block_cnt_(0),
     previous_encodings_(),
-    column_encodings_(nullptr),
+    column_encodings_(nullptr), data_format_version_(0),
     row_store_type_(ENCODING_ROW_STORE), need_calc_column_chksum_(false),
     compressor_type_(INVALID_COMPRESSOR), encoding_granularity_(UINT64_MAX),
     minimum_rows_(1),
@@ -437,7 +438,7 @@ struct ObMicroBlockEncodingCtx
   TO_STRING_KV(K_(macro_block_size), K_(micro_block_size), K_(rowkey_column_cnt),
       K_(column_cnt), KP_(col_descs), K_(estimate_block_size), K_(real_block_size),
       K_(micro_block_cnt), K_(encoder_opt), K_(previous_encodings), KP_(column_encodings),
-      K_(row_store_type), K_(need_calc_column_chksum),
+      K_(data_format_version), K_(row_store_type), K_(need_calc_column_chksum),
       K_(compressor_type), K_(encoding_granularity), K_(minimum_rows), K_(semistruct_encoding_type));
 };
 
@@ -852,6 +853,7 @@ public:
                K_(index_block_count),
                K_(ids_block_count),
                K_(disk_block_count),
+               K_(bloomfiter_count),
                K_(hold_count),
                K_(pending_free_count),
                K_(free_count),
@@ -870,6 +872,7 @@ public:
   int64_t index_block_count_;
   int64_t ids_block_count_;
   int64_t disk_block_count_;
+  int64_t bloomfiter_count_;
   int64_t hold_count_;
   int64_t pending_free_count_;
   int64_t free_count_;
@@ -884,6 +887,7 @@ public:
 /****************************** following codes are inline functions ****************************/
 enum ObRecordHeaderVersion
 {
+  RECORD_HEADER_VERSION_V2 = 2,
   RECORD_HEADER_VERSION_V3 = 3
 };
 
@@ -896,6 +900,10 @@ public:
       const int16_t magic, const char *&payload_ptr, int64_t &payload_size);
   static int deserialize_and_check_record(const char *ptr, const int64_t size, const int16_t magic);
   int check_and_get_record(const char *ptr, const int64_t size, const int16_t magic, const char *&payload_ptr, int64_t &payload_size) const;
+  static int64_t get_serialize_size(const int64_t header_version, const int64_t column_cnt) {
+    return RECORD_HEADER_VERSION_V2 == header_version ? sizeof(ObRecordCommonHeader)
+        : sizeof(ObRecordCommonHeader) + column_cnt * sizeof(column_checksums_[0]);
+  }
   void set_header_checksum();
   int check_header_checksum() const;
   inline bool is_compressed_data() const { return data_length_ != data_zlength_; }

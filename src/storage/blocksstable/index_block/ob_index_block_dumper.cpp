@@ -283,8 +283,9 @@ int ObBaseIndexBlockDumper::new_macro_writer()
   } else if (OB_ISNULL(meta_macro_writer_ = OB_NEWx(ObMacroBlockWriter, task_allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_LOG(WARN, "failed to alloc macro writer", K(ret));
-  // Callback is only used for data macro blocks. The dumper builds macro meta
-  // blocks, so it does not need one.
+  // callback only can be ddl callback.
+  // in sn: callback only be used for data macro blocks, dumper build macro meta block which not use callback.
+  // in ss: dumper shouldn't new macro writer for dump disk.
   } else if (OB_FAIL(meta_macro_writer_->open(*container_store_desc_, 0 /*parallel_idx*/,
       macro_seq_param, pre_warm_param, nullptr, nullptr, device_handle_))) {
     STORAGE_LOG(WARN, "fail to open index macro writer", K(ret),
@@ -654,7 +655,7 @@ int ObIndexBlockLoader::init(common::ObIAllocator &allocator, const uint64_t dat
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "Init twice", K(ret));
-  } else if (OB_UNLIKELY(DATA_CURRENT_VERSION != data_version)) {
+  } else if (OB_UNLIKELY(data_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to init index block loader, invalid data format version",
              K(ret), K(data_version));

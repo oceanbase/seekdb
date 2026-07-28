@@ -69,6 +69,7 @@ private:
   int calculate_tsc_auto_dop(const ObIArray<ObBatchEstTasks *> &tasks,
                              const ObCostTableScanSimpleInfo &cost_tsc_info, int64_t part_cnt,
                              int64_t &table_dop);
+  int get_task(ObIArray<ObBatchEstTasks *> &tasks, ObBatchEstTasks *&task);
   int choose_storage_estimation_partitions(const int64_t partition_limit,
                                            const DASTabletLocSEArray &tablet_locs,
                                            DASTabletLocSEArray &chosen_tablet_locs);

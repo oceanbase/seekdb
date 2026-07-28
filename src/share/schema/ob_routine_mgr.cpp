@@ -474,6 +474,33 @@ int ObRoutineMgr::get_routine_schemas_in_database(uint64_t database_id,
   return ret;
 }
 
+int ObRoutineMgr::get_routine_schemas_in_udt(
+  uint64_t udt_id,
+  ObIArray<const ObSimpleRoutineSchema *> &routine_schemas) const
+{
+  int ret = OB_SUCCESS;
+  routine_schemas.reset();
+
+  ObRoutineId routine_id_lower(OB_MIN_ID);
+  ConstRoutineIter routine_begin =
+      routine_infos_.lower_bound(routine_id_lower, compare_with_routine_id);
+  for (ConstRoutineIter iter = routine_begin;
+      OB_SUCC(ret) && iter != routine_infos_.end(); ++iter) {
+    const ObSimpleRoutineSchema *routine = NULL;
+    if (OB_ISNULL(routine = *iter)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("NULL ptr", K(ret), K(routine));
+    } else if (routine->get_package_id() != udt_id
+               || routine->get_routine_type() != ROUTINE_UDT_TYPE) {
+      // do nothing
+    } else if (OB_FAIL(routine_schemas.push_back(routine))) {
+      LOG_WARN("push back procedure failed", K(ret));
+    }
+  }
+
+  return ret;
+}
+
 int ObRoutineMgr::get_routine_schemas_in_package(uint64_t package_id,
                                                  ObIArray<const ObSimpleRoutineSchema *> &routine_schemas) const
 {

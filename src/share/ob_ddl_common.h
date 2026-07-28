@@ -149,7 +149,10 @@ enum ObDDLType
   DDL_ADD_COLUMN_OFFLINE = 1008, // only add columns
   DDL_COLUMN_REDEFINITION = 1009, // only add/drop columns
   DDL_TABLE_REDEFINITION = 1010,
-  // 1011-1015 were used by removed DDL types. Do not reuse.
+  DDL_DIRECT_LOAD = 1011, // load data
+  DDL_DIRECT_LOAD_INSERT = 1012, // insert into select
+  DDL_MVIEW_COMPLETE_REFRESH = 1014,
+  DDL_CREATE_MVIEW = 1015,
   // 1016 is reserved. Do not reuse.
   DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION = 1017,
 

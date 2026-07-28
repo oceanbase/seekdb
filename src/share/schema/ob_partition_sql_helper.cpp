@@ -126,6 +126,17 @@ int ObPartDMLGenerator::gen_list_val_str(
   return ret;
 }
 
+int ObPartDMLGenerator::gen_interval_part_name(int64_t part_id, ObString &part_name)
+{
+  int ret = OB_SUCCESS;
+  int64_t str_size = common::OB_MAX_PARTITION_NAME_LENGTH;
+  int32_t str_len = 0;
+  memset(&interval_part_name_, 0, str_size);
+  str_len += snprintf(interval_part_name_, str_size, "SYS_P%ld", part_id);
+  part_name.assign_ptr(interval_part_name_, str_len);
+  return ret;
+}
+
 int ObPartSqlHelper::init(const ObPartitionSchema *table)
 {
   int ret = OB_SUCCESS;
@@ -971,7 +982,12 @@ int ObAddIncPartDMLGenerator::extract_part_info(PartInfo &part_info)
     part_info.part_idx_ = part_.get_part_idx();
     part_info.partition_type_ = part_.get_partition_type();
     part_info.tablet_id_ = part_.get_tablet_id();
-    part_info.part_name_ = part_.get_part_name();
+    if (OB_FAIL(ret)) {
+    } else if (!ori_table_->is_interval_part() || !part_.get_part_name().empty()) {
+      part_info.part_name_ = part_.get_part_name();
+    } else if (OB_FAIL(gen_interval_part_name(part_info.part_id_, part_info.part_name_))) {
+      LOG_WARN("fail to gen_interval_part_name", K(ret));
+    }
 
     if (OB_FAIL(ret)) {
     } else if (ori_table_->is_range_part()) {

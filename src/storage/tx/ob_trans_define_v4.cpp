@@ -126,6 +126,7 @@ DEF_TO_STRING(ObTxSavePoint)
   return pos;
 }
 OB_SERIALIZE_MEMBER(ObTxExecResult, incomplete_, has_write_state_, write_state_,
+                    conflict_txs_, // FARM COMPAT WHITELIST for conflict_txs_
                     conflict_info_array_,
                     touched_storage_);
 OB_SERIALIZE_MEMBER(ObTxSnapshot, tx_id_, version_, scn_, elr_);
@@ -199,6 +200,13 @@ int ObTxReadSnapshot::refresh_seq_no(const int64_t tx_seq_base)
   return ret;
 }
 
+void ObTxReadSnapshot::convert_to_out_tx()
+{
+  has_write_state_ = false;
+  core_.tx_id_.reset();
+  core_.scn_.reset();
+}
+
 OB_SERIALIZE_MEMBER(ObTxWriteState, first_scn_, last_scn_, flag_.flag_val_);
 
 DEFINE_SERIALIZE(ObTxDesc::FLAG)
@@ -217,7 +225,6 @@ DEFINE_GET_SERIALIZE_SIZE(ObTxDesc::FLAG)
 }
 
 OB_SERIALIZE_MEMBER(ObTxDesc,
-                    data_version_,
                     sess_id_,
                     addr_,
                     tx_id_,
@@ -241,7 +248,6 @@ OB_SERIALIZE_MEMBER(ObTxParam,
                     isolation_);
 ObTxDesc::ObTxDesc()
   : trace_info_(),
-    data_version_(0),
     seq_base_(0),
     tx_consistency_type_(ObTxConsistencyType::INVALID),
     addr_(),
@@ -270,6 +276,7 @@ ObTxDesc::ObTxDesc()
     has_write_state_(false),
 	    write_state_(),
 	    savepoints_(),
+	    conflict_txs_(),
 	    commit_expire_ts_(0),
     commit_version_(),
     commit_out_(-1),
@@ -313,6 +320,7 @@ int ObTxDesc::switch_to_idle()
   active_scn_.reset();
   has_write_state_ = false;
 	  write_state_ = ObTxWriteState();
+	  conflict_txs_.reset();
   commit_version_.reset();
   commit_out_ = 0;
   commit_times_ = 0;
@@ -356,7 +364,6 @@ void ObTxDesc::reset()
 #endif
 
   trace_info_.reset();
-  data_version_ = 0;
   seq_base_ = 0;
   tx_consistency_type_ = ObTxConsistencyType::INVALID;
 
@@ -389,7 +396,7 @@ void ObTxDesc::reset()
   min_implicit_savepoint_.reset();
   last_branch_id_ = 0;
   has_write_state_ = false;
-	  write_state_ = ObTxWriteState();
+  write_state_ = ObTxWriteState();
 	  savepoints_.reset();
 	  conflict_txs_.reset();
 
@@ -620,6 +627,7 @@ void ObTxDesc::implicit_start_tx_()
     expire_ts_ = get_expire_ts();
     active_scn_ = get_tx_seq();
     state_change_flags_.mark_all();
+    TX_STAT_START_INC;
   }
 }
 
@@ -863,24 +871,20 @@ int ObTxDesc::fetch_conflict_txs(ObIArray<ObTransID> &array)
   return ret;
 }
 
-int ObTxDesc::add_conflict_tx(const ObTransID &conflict_tx)
-{
+int ObTxDesc::add_conflict_tx(const ObTransID &conflict_tx) {
   ObSpinLockGuard guard(lock_);
   return add_conflict_tx_(conflict_tx);
 }
 
-int ObTxDesc::add_conflict_tx_(const ObTransID &conflict_tx)
-{
+int ObTxDesc::add_conflict_tx_(const ObTransID &conflict_tx) {
   int ret = OB_SUCCESS;
   if (conflict_txs_.count() >= MAX_RESERVED_CONFLICT_TX_NUM) {
     ret = OB_SIZE_OVERFLOW;
     int64_t max_reserved_conflict_tx_num = MAX_RESERVED_CONFLICT_TX_NUM;
-    DETECT_LOG(WARN, "too many conflict trans id", K(max_reserved_conflict_tx_num),
-               K(conflict_txs_), K(conflict_tx));
+    DETECT_LOG(WARN, "too many conflict trans id", K(max_reserved_conflict_tx_num), K(conflict_txs_), K(conflict_tx));
   } else if (!is_contain(conflict_txs_, conflict_tx)) {
     if (OB_FAIL(conflict_txs_.push_back(conflict_tx))) {
-      DETECT_LOG(WARN, "fail to push conflict tx to conflict_txs_",
-                 K(ret), K(conflict_txs_), K(conflict_tx));
+      DETECT_LOG(WARN, "fail to push conflict tx to conflict_txs_", K(ret), K(conflict_txs_), K(conflict_tx));
     }
   }
   return ret;
@@ -897,10 +901,12 @@ int ObTxDesc::merge_conflict_txs_(const ObIArray<ObTransID> &conflict_txs)
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   for (int64_t idx = 0; idx < conflict_txs.count() && OB_SUCC(tmp_ret); ++idx) {
-    // Conflict tracking is diagnostic/deadlock metadata and must not fail normal execution.
+    // This function should try its best to push the conflict_tx into the array.
+    // However, whether the insertion is successful or not
+    // should not affect the normal execution process.
+    // So we just use tmp_ret to catch the error code here.
     if (OB_TMP_FAIL(add_conflict_tx_(conflict_txs.at(idx)))) {
-      DETECT_LOG(WARN, "fail to add conflict tx to conflict_txs_",
-                 K(tmp_ret), K(conflict_txs), K(conflict_txs.at(idx)));
+      DETECT_LOG(WARN, "fail to add conflict tx to conflict_txs_", K(tmp_ret), K(conflict_txs_), K(conflict_txs.at(idx)));
     }
   }
   return ret;
@@ -1111,7 +1117,8 @@ ObTxExecResult::ObTxExecResult()
     incomplete_(false),
     touched_storage_(false),
     has_write_state_(false),
-    write_state_()
+    write_state_(),
+    conflict_txs_(OB_MALLOC_NORMAL_BLOCK_SIZE, allocator_)
 {}
 
 ObTxExecResult::~ObTxExecResult()
@@ -1152,9 +1159,7 @@ static int append_dedup(ObIArray<T> &a, const ObIArray<T> &b)
 {
   int ret = OB_SUCCESS;
   ARRAY_FOREACH(b, i) {
-    if (!is_contain(a, b.at(i))) {
-      ret = a.push_back(b.at(i));
-    }
+    if (!is_contain(a, b.at(i))) { ret = a.push_back(b.at(i)); }
   }
   return ret;
 }
@@ -1180,8 +1185,7 @@ int ObTxExecResult::merge_result(const ObTxExecResult &r)
   return ret;
 }
 
-int ObTxExecResult::merge_cflict_txs(
-    const common::ObIArray<transaction::ObTransID> &txs)
+int ObTxExecResult::merge_cflict_txs(const common::ObIArray<transaction::ObTransID> &txs)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(append_dedup(conflict_txs_, txs))) {

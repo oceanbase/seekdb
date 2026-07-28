@@ -73,6 +73,7 @@ int ObCreateTableLikeHelper::check_schema_valid_(const ObTableSchema *&orig_tabl
   int64_t new_schema_version = OB_INVALID_VERSION;
   uint64_t new_table_id = OB_INVALID_ID;
   uint64_t orig_database_id = OB_INVALID_ID;
+  uint64_t synonym_id = OB_INVALID_ID;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(check_database_legitimacy_(arg_.origin_db_name_, orig_database_id))) {
@@ -100,6 +101,8 @@ int ObCreateTableLikeHelper::check_schema_valid_(const ObTableSchema *&orig_tabl
                                         helper.convert(arg_.origin_table_name_),
                    "BASE TABLE");
   } else if (is_inner_table(orig_table_schema->get_table_id())) {
+    // Creating user tables from system tables may cause unexpected problems.
+    // https://work.aone.alibaba-inc.com/issue/22213436
     ret = OB_ERR_WRONG_OBJECT;
     ObCStringHelper helper;
     LOG_USER_ERROR(OB_ERR_WRONG_OBJECT, helper.convert(arg_.origin_db_name_),
@@ -198,6 +201,9 @@ int ObCreateTableLikeHelper::generate_table_schema_()
         && TMP_TABLE == arg_.table_type_) {
       new_table_schema.set_table_type(arg_.table_type_);
       new_table_schema.set_session_id(arg_.session_id_);
+    }
+    if (orig_table_schema->is_primary_vp_table()) {
+      new_table_schema.set_data_table_id(0); // VP not support
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(new_tables_.push_back(new_table_schema))) {

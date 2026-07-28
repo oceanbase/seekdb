@@ -57,6 +57,8 @@ DEF_SIMPLE_CMD_RESOLVER(ObFlushIlogCacheResolver);
 
 DEF_SIMPLE_CMD_RESOLVER(ObFlushDagWarningsResolver);
 
+DEF_SIMPLE_CMD_RESOLVER(ObAdminZoneResolver);
+
 DEF_SIMPLE_CMD_RESOLVER(ObAdminMergeResolver);
 
 DEF_SIMPLE_CMD_RESOLVER(ObRefreshMemStatResolver);
@@ -64,6 +66,7 @@ DEF_SIMPLE_CMD_RESOLVER(ObRefreshMemStatResolver);
 DEF_SIMPLE_CMD_RESOLVER(ObRefreshIOCalibrationResolver);
 
 DEF_SIMPLE_CMD_RESOLVER(ObSetTPResolver);
+
 
 DEF_SIMPLE_CMD_RESOLVER(ObClearMergeErrorResolver);
 
@@ -98,7 +101,8 @@ public:
   virtual ~ObFreezeResolver() {}
   virtual int resolve(const ParseNode &parse_tree);
 private:
-  int resolve_target_(ObFreezeStmt *freeze_stmt, const ParseNode *tablet_node);
+  int resolve_major_freeze_(ObFreezeStmt *freeze_stmt, ParseNode *opt_target);
+  int resolve_minor_freeze_(ObFreezeStmt *freeze_stmt, ParseNode *opt_target);
 
 };
 
@@ -116,6 +120,9 @@ public:
   virtual ~ObAlterSystemResetResolver() {}
   virtual int resolve(const ParseNode &parse_tree);
 };
+
+DEF_SIMPLE_CMD_RESOLVER(ObChangeExternalStorageDestResolver);
+
 
 #undef DEF_SIMPLE_CMD_RESOLVER
 

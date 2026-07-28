@@ -38,6 +38,7 @@ void ObErrsimBackfillPointType::reset()
 {
   type_ = ObErrsimBackfillPointType::ERRSIM_POINT_NONE;
 }
+
 bool ObErrsimBackfillPointType::is_valid() const
 {
   return true;
@@ -297,7 +298,9 @@ ObDDLTableStoreParam::ObDDLTableStoreParam()
     ddl_checkpoint_scn_(SCN::min_scn()),
     ddl_snapshot_version_(0),
     ddl_execution_id_(-1),
-    data_format_version_(0)
+    data_format_version_(0),
+    ddl_redo_callback_(nullptr),
+    ddl_finish_callback_(nullptr)
 {
 
 }

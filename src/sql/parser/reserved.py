@@ -16,7 +16,7 @@ class SqlKeywords:
           FALSE  FETCH  FIRST  FLOAT  FOR  FOREIGN  FOUND  FROM  FULL
           GET  GLOBAL  GO  GOTO  GRANT  GROUP
           HAVING  HOUR
-          IMMEDIATE  IN  INDICATOR  INITIALLY  INNER  INPUT  INSENSITIVE
+          IDENTITY  IMMEDIATE  IN  INDICATOR  INITIALLY  INNER  INPUT  INSENSITIVE
           INSERT  INT  INTEGER  INTERSECT  INTERVAL  INTO  IS  ISOLATION
           JOIN
           KEY
@@ -34,7 +34,7 @@ class SqlKeywords:
           VALUE  VALUES  VARCHAR  VARYING  VIEW
           WHEN  WHENEVER  WHERE  WITH  WORK  WRITE
           YEAR
-          '''
+          ZONE'''
     non_reserved_92 = '''
          ADA
           C  CATALOG_NAME  CHARACTER_SET_CATALOG  CHARACTER_SET_NAME  CHARACTER_SET_SCHEMA
@@ -74,7 +74,7 @@ class SqlKeywords:
           FULL  FUNCTION
           GENERAL  GET  GLOBAL  GO  GOTO  GRANT  GROUP  GROUPING
           HANDLE  HAVING  HOLD  HOUR
-          IF  IMMEDIATE  IN  INDICATOR
+          IDENTITY  IF  IMMEDIATE  IN  INDICATOR
           INITIALLY  INNER  INOUT  INPUT  INSERT  INT  INTEGER
           INTERSECT  INTERVAL  INTO  IS  ISOLATION
           JOIN
@@ -104,7 +104,7 @@ class SqlKeywords:
           VALUE  VALUES  VARCHAR  VARYING  VIEW
           WHEN  WHENEVER  WHERE  WHILE  WITH  WITHOUT  WORK  WRITE
           YEAR
-          '''
+          ZONE'''
     non_reserved_99 = '''
          ABS  ADA  ADMIN  ASENSITIVE  ASSIGNMENT  ASYMMETRIC  ATOMIC
           ATTRIBUTE  AVG
@@ -398,7 +398,7 @@ class SqlKeywords:
           VIEW
           WORK
           WRITE
-          '''
+          ZONE '''
     reserved_03 = '''
          ADD
           ALL
@@ -498,6 +498,7 @@ class SqlKeywords:
           HAVING
           HOLD
           HOUR
+          IDENTITY
           IMMEDIATE
           IN
           INDICATOR
@@ -531,6 +532,7 @@ class SqlKeywords:
           MODIFIES
           MODULE
           MONTH
+          MULTISET
           NATIONAL
           NATURAL
           NCHAR
@@ -604,6 +606,7 @@ class SqlKeywords:
           SQLWARNING
           START
           STATIC
+          SUBMULTISET
           SYMMETRIC
           SYSTEM
           SYSTEM_USER
@@ -964,6 +967,8 @@ class SqlKeywords:
          ERROR
          ERRORS
          ESCAPE
+         EVENT
+         EVENTS
          EVERY
          EXCHANGE
          EXECUTE
@@ -1582,6 +1587,8 @@ class SqlKeywords:
          ERROR_P
          ERRORS
          ESCAPE
+         EVENT
+         EVENTS
          EVERY
          EXCEPT
          EXCHANGE
@@ -1904,6 +1911,7 @@ class SqlKeywords:
          UNDOFILE
          UNICODE
          UNINSTALL
+         UNIT
          UNLOCKED
          UNKNOWN
          UNTIL
@@ -1926,6 +1934,7 @@ class SqlKeywords:
          X509_
          XML
          YEAR
+         ZONE
          LOCATION
          API_MODE
                   '''

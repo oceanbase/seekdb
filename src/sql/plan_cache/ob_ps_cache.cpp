@@ -18,6 +18,7 @@
 #include "ob_ps_cache.h"
 #include "sql/plan_cache/ob_ps_sql_utils.h"
 #include "sql/plan_cache/ob_ps_cache_callback.h"
+#include "lib/rc/ob_rc.h"
 
 namespace oceanbase
 {
@@ -386,7 +387,7 @@ int ObPsCache::get_or_add_stmt_info(const PsCacheInfoCtx &info_ctx,
                                                                *info_ctx.raw_params_))) {
         LOG_WARN("fail to assign raw params failed", KPC(info_ctx.fixed_param_idx_), K(ret));
       } else if (OB_FAIL(fill_ps_stmt_info(result, info_ctx.param_cnt_,
-                                           tmp_stmt_info))) {
+                                           tmp_stmt_info, info_ctx.num_of_returning_into_))) {
         LOG_WARN("fill ps stmt info failed", K(ret));
       } else if (OB_FAIL(add_stmt_info(*ps_item, tmp_stmt_info, ref_ps_info))) {
         LOG_WARN("add stmt info failed", K(ret), K(*ps_item), K(tmp_stmt_info));
@@ -465,7 +466,8 @@ int ObPsCache::get_all_stmt_id(ObIArray<ObPsStmtId> *id_array)
 
 int ObPsCache::fill_ps_stmt_info(const ObResultSet &result,
                                  int64_t param_cnt,
-                                 ObPsStmtInfo &ps_stmt_info) const
+                                 ObPsStmtInfo &ps_stmt_info,
+                                 int32_t returning_into_parm_num) const
 {
   int ret = OB_SUCCESS;
   const ParamsFieldIArray *params = result.get_param_fields();
@@ -506,6 +508,8 @@ int ObPsCache::fill_ps_stmt_info(const ObResultSet &result,
   }
   if (OB_SUCC(ret)) {
     ps_stmt_info.set_question_mark_count(param_cnt);
+    // only used when returning into
+    ps_stmt_info.set_num_of_returning_into(returning_into_parm_num);
   }
 
   if (OB_SUCC(ret)) {

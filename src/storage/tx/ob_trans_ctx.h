@@ -193,6 +193,7 @@ protected:
   void generate_request_id_();
   void update_commit_retry_timeout_();
   static int64_t get_commit_retry_interval_us_();
+  int set_app_trace_info_(const ObString &app_trace_info);
   int set_app_trace_id_(const ObString &app_trace_id);
 public:
   // for resource pool

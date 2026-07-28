@@ -160,6 +160,8 @@ struct TableItem
   virtual TO_STRING_KV(N_TID, table_id_,
                N_TABLE_NAME, table_name_,
                N_ALIAS_NAME, alias_name_,
+               N_SYNONYM_NAME, synonym_name_,
+               "synonym_db_name", synonym_db_name_,
                N_QB_NAME, qb_name_,
                N_TABLE_TYPE, static_cast<int32_t>(type_),
                //"recursive union fake table", is_recursive_union_fake_table_,
@@ -225,6 +227,7 @@ struct TableItem
   bool is_values_table() const { return VALUES_TABLE == type_; }//used to mark values statement: values row(1,2), row(3,4);
 
   bool is_lateral_table() const { return LATERAL_TABLE == type_; }
+  bool is_synonym() const { return !synonym_name_.empty(); }
   bool is_extended_all_or_user_sys_view() const
   {
     return (is_extended_sys_view_table(ref_id_) && (table_name_.prefix_match("USER_") || table_name_.prefix_match("ALL_")));
@@ -244,11 +247,11 @@ struct TableItem
   const common::ObString &get_table_name() const { return alias_name_.empty() ? table_name_ : alias_name_; }
   const common::ObString &get_object_name() const
   {
-    return alias_name_.empty() ? table_name_ : alias_name_;
+    return alias_name_.empty() ? (synonym_name_.empty() ? table_name_ : synonym_name_) : alias_name_;
   }
   const common::ObString &get_object_db_name() const
   {
-    return database_name_;
+    return synonym_name_.empty() ? database_name_ : synonym_db_name_;
   }
   // only can be used in resolve phase
   const TableItem &get_base_table_item() const
@@ -268,6 +271,8 @@ struct TableItem
   uint64_t    table_id_;
   common::ObString    table_name_;
   common::ObString    alias_name_;
+  common::ObString    synonym_name_;
+  common::ObString    synonym_db_name_;
   common::ObString    qb_name_; // used for hint
   TableType   type_;
   // type == BASE_TABLE? ref_id_ is the real Id of the schema
@@ -1010,6 +1015,8 @@ public:
   static int extract_equal_condition_from_joined_table(const TableItem *table,
                                                        ObIArray<ObRawExpr *> &equal_set_conditions,
                                                        const bool is_strict);
+  virtual bool is_returning() const { return false; }
+  virtual bool has_instead_of_trigger() const { return false; }
   int has_lob_column(int64_t table_id, bool &has_lob)const;
   int has_virtual_generated_column(int64_t table_id, 
                                    bool &has_virtual_col, 
@@ -1046,6 +1053,7 @@ public:
   int formalize_query_ref_exec_params(ObStmtExecParamFormatter &formatter,
                                       bool need_replace);
 
+  int check_has_cursor_expression(bool &has_cursor_expr) const;
   bool is_values_table_query() const;
   bool is_const_values_table_query() const;
 

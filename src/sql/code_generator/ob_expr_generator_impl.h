@@ -49,6 +49,7 @@ class ObExprCollectionConstruct;
 class ObExprObjectConstruct;
 class ObExprCalcPartitionId;
 class ObExprOpSubQueryInPl;
+class ObExprUdtConstruct;
 typedef common::ObSEArray<ObIterExprOperator*, 2> PhyIterExprDesc;
 
 class ObExprGeneratorImpl: public ObExprGenerator, public ObRawExprVisitor

@@ -210,6 +210,16 @@ int ObGrantResolver::resolve_priv_set(
           } else {
             priv_set |= priv_type;
           }
+        } else if (OB_PRIV_OBJECT_LEVEL == grant_level) {
+          if (OB_PRIV_ALL == priv_type) {
+            priv_set |= OB_PRIV_OBJECT_ACC;
+          } else if (priv_type & (~(OB_PRIV_OBJECT_ACC | OB_PRIV_GRANT))) {
+            ret = OB_ILLEGAL_GRANT_FOR_TABLE;
+            SQL_RESV_LOG(WARN, "Grant/Revoke privilege than can not be used",
+                      "priv_type", ObPrintPrivSet(priv_type), K(ret));
+          } else {
+            priv_set |= priv_type;
+          }
         } else {
           //do nothing
         }

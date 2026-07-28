@@ -19,7 +19,6 @@
 #include "share/ob_version.h"
 #include "share/ob_device_manager.h"
 #include "lib/file/file_directory_utils.h"
-#include "lib/resource/ob_resource_mgr.h"
 #include "ob_storage_perf_thread.h"
 #include "lib/stat/ob_diagnose_info.h"
 #include "share/ob_srv_rpc_proxy.h"
@@ -37,7 +36,6 @@ using namespace oceanbase::obsys;
 #define MPRINTx(format, ...) MPRINT(format, ##__VA_ARGS__); exit(1)
 
 ObArray<int64_t> read_cols;
-static ObSimpleMemLimitGetter cache_mem_limit_getter;
 const char *schema_file = "./storage_perf_cost.schema";
 const char *u_schema = "./storage_perf_update.schema";
 ObStoragePerfConfig config;
@@ -397,20 +395,28 @@ int run_test() {
   }
 
   if(OB_SUCC(ret)) {
-    const int64_t cache_size = config.get_cache_size() * 1024L * 1024L;
-    lib::set_memory_limit(10LL * 1024 * 1024 * 1024);
-    lib::ob_set_reserved_memory(1024L * 1024L * 1024L);
-    if (OB_FAIL(cache_mem_limit_getter.set_memory_limit(cache_size / 2, cache_size))) {
-      STORAGE_LOG(WARN, "fail to set cache memory limit", K(ret), K(cache_size));
+    ObAddr self;
+    if(!self.set_ip_addr("127.0.0.1", 8086)){
+      ret = OB_ERR_UNEXPECTED;
+      STORAGE_LOG(WARN, "fail to set ipv4");
     } else if (OB_FAIL(ObDeviceManager::get_instance().init_devices_env())) {
       STORAGE_LOG(WARN, "fail to init device manager", K(ret));
+    } else if (OB_SUCCESS != (ret = ObTenantManager::get_instance().init(self, rpc_proxy,
+                                      &req_transport, &ObServerConfig::get_instance()))){
+      STORAGE_LOG(WARN, "fail to init tenant manager", K(ret));
+    } else if (OB_SUCCESS != (ret = ObTenantManager::get_instance().add_tenant(tenant_id))){
+      STORAGE_LOG(WARN, "fail to add tenant_id", K(ret), K(tenant_id));
+    } else if (OB_SUCCESS != (ret =  ObTenantManager::get_instance().set_tenant_mem_limit(tenant_id,
+        config.get_tenant_cache_size() * 1024L * 1024L/2,
+        config.get_tenant_cache_size() * 1024L * 1024L))) {
+      STORAGE_LOG(WARN, "fail to set tenant memory", K(ret));
     } else  if(OB_FAIL(ObIOManager::get_instance().init(1LL * 1024 * 1024 * 1024))) {
       STORAGE_LOG(WARN, "fail to init ObIOMananger", K(ret));
-    } else if(OB_FAIL(ObKVGlobalCache::get_instance().init(&cache_mem_limit_getter))){
+    } else if(OB_SUCCESS != (ret = ObKVGlobalCache::get_instance().init())){
       STORAGE_LOG(WARN, "fail to init global kv cache", K(ret));
-    } else if (OB_FAIL(lib::ObResourceMgr::get_instance().set_cache_washer(
-                   ObKVGlobalCache::get_instance()))) {
-      STORAGE_LOG(WARN, "fail to register global kv cache washer", K(ret));
+    } else {
+      lib::set_memory_limit(10LL * 1024 * 1024 * 1024);//40GB
+      lib::ob_set_reserved_memory(1024L * 1024L * 1024L);//1GB
     }
   }
 
@@ -555,6 +561,7 @@ int run_test() {
   //global destory
   ObIOManager::get_instance().destroy();
   ObKVGlobalCache::get_instance().destroy();
+  ObTenantManager::get_instance().destroy();
   return ret;
 }
 

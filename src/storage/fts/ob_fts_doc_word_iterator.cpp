@@ -165,6 +165,7 @@ int ObFTDocWordScanIterator::init_scan_param(
                          false, // full_row
                          false, // index_back
                          false, // query_stat
+                         ObQueryFlag::MysqlMode, // sql_mode
                          false // read_latest
                         );
   if (OB_UNLIKELY(OB_INVALID_ID == table_id

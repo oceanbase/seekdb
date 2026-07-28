@@ -297,6 +297,28 @@ int ObConnectResourceMgr::on_user_disconnect(ObSQLSessionInfo &session)
   return ret;
 }
 
+int ObConnectResourceMgr::erase_connection_resources()
+{
+  int ret = OB_SUCCESS;
+  EraseUserResourceFunc func{};
+  int64_t erase_user_cnt = 0;
+  bool reset_server_resource = false;
+  if (OB_FAIL(user_res_map_.remove_if(func))) {
+    LOG_WARN("remove_if failed", K(ret));
+  } else {
+    erase_user_cnt = func.erase_cnt_;
+    user_res_map_.purge();
+    ObLatchWGuard wr_guard(server_res_.rwlock_, ObLatchIds::DEFAULT_MUTEX);
+    if (server_res_inited_) {
+      server_res_inited_ = false;
+      server_res_.cur_connections_ = 0;
+      reset_server_resource = true;
+    }
+  }
+  LOG_INFO("erase connection resources", K(reset_server_resource), K(erase_user_cnt));
+  return ret;
+}
+
 bool ObConnectResourceMgr::CleanUpConnResourceFunc::operator() (
     ObUserKey key, ObConnectResource *conn_res)
 {

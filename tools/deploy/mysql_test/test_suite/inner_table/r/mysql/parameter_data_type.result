@@ -55,6 +55,9 @@ open_cursors	INT
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'cpu_quota_concurrency';
 name	data_type
 cpu_quota_concurrency	DOUBLE
+select name, data_type from __all_virtual_sys_parameter_stat where name = 'default_row_format';
+name	data_type
+default_row_format	STRING
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'range_optimizer_max_mem_size';
 name	data_type
 range_optimizer_max_mem_size	CAPACITY
@@ -89,6 +92,9 @@ open_cursors	INT
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'cpu_quota_concurrency';
 name	data_type
 cpu_quota_concurrency	DOUBLE
+select name, data_type from __all_virtual_sys_parameter_stat where name = 'default_row_format';
+name	data_type
+default_row_format	STRING
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'range_optimizer_max_mem_size';
 name	data_type
 range_optimizer_max_mem_size	CAPACITY
@@ -108,6 +114,9 @@ open_cursors	INT
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'cpu_quota_concurrency';
 name	data_type
 cpu_quota_concurrency	DOUBLE
+select name, data_type from __all_virtual_sys_parameter_stat where name = 'default_row_format';
+name	data_type
+default_row_format	STRING
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'range_optimizer_max_mem_size';
 name	data_type
 range_optimizer_max_mem_size	CAPACITY
@@ -142,6 +151,9 @@ open_cursors	INT
 select name, data_type from V$OB_PARAMETERS where name = 'cpu_quota_concurrency';
 name	data_type
 cpu_quota_concurrency	DOUBLE
+select name, data_type from V$OB_PARAMETERS where name = 'default_row_format';
+name	data_type
+default_row_format	STRING
 select name, data_type from V$OB_PARAMETERS where name = 'range_optimizer_max_mem_size';
 name	data_type
 range_optimizer_max_mem_size	CAPACITY
@@ -176,6 +188,9 @@ open_cursors	INT
 select name, data_type from V$OB_PARAMETERS where name = 'cpu_quota_concurrency';
 name	data_type
 cpu_quota_concurrency	DOUBLE
+select name, data_type from V$OB_PARAMETERS where name = 'default_row_format';
+name	data_type
+default_row_format	STRING
 select name, data_type from V$OB_PARAMETERS where name = 'range_optimizer_max_mem_size';
 name	data_type
 range_optimizer_max_mem_size	CAPACITY
@@ -257,6 +272,9 @@ open_cursors	INT
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'cpu_quota_concurrency';
 name	data_type
 cpu_quota_concurrency	DOUBLE
+select name, data_type from __all_virtual_sys_parameter_stat where name = 'default_row_format';
+name	data_type
+default_row_format	STRING
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'range_optimizer_max_mem_size';
 name	data_type
 range_optimizer_max_mem_size	CAPACITY
@@ -291,6 +309,9 @@ open_cursors	INT
 select name, data_type from V$OB_PARAMETERS where name = 'cpu_quota_concurrency';
 name	data_type
 cpu_quota_concurrency	DOUBLE
+select name, data_type from V$OB_PARAMETERS where name = 'default_row_format';
+name	data_type
+default_row_format	STRING
 select name, data_type from V$OB_PARAMETERS where name = 'range_optimizer_max_mem_size';
 name	data_type
 range_optimizer_max_mem_size	CAPACITY
@@ -325,6 +346,9 @@ open_cursors	INT
 select name, data_type from V$OB_PARAMETERS where name = 'cpu_quota_concurrency';
 name	data_type
 cpu_quota_concurrency	DOUBLE
+select name, data_type from V$OB_PARAMETERS where name = 'default_row_format';
+name	data_type
+default_row_format	STRING
 select name, data_type from V$OB_PARAMETERS where name = 'range_optimizer_max_mem_size';
 name	data_type
 range_optimizer_max_mem_size	CAPACITY

@@ -250,7 +250,7 @@ private:
       ObIArray<ObITable *> &major_tables) const;
   int check_continuous() const;
   template <class T>
-  int check_minor_tables_(T &minor_tables) const;
+  int check_minor_tables_(T &minor_tables, bool no_remote_table = false) const;
   int check_new_sstable_can_be_accepted_(
       const ObSSTableArray &old_tables,
       ObITable *new_table);

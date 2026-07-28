@@ -27,6 +27,7 @@
 #include "sql/privilege_check/ob_ai_model_priv_util.h"
 
 using namespace oceanbase::share;
+using namespace oceanbase::obcall;
 
 namespace oceanbase
 {

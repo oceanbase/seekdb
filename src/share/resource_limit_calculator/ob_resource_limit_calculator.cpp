@@ -205,7 +205,7 @@ int ObResourceLimitCalculator::server_module_init(ObResourceLimitCalculator *&ca
   return calculator->init();
 }
 
-
+// moved definition to storage/tx_storage/ob_ls_service.cpp(X-macro inventory)
 
 int ObResourceLimitCalculator::get_logic_resource_stat(
     const int64_t type,
@@ -251,9 +251,9 @@ int ObResourceLimitCalculator::get_logic_resource_constraint_value(
   return ret;
 }
 
+// moved definition to storage/tx_storage/ob_ls_service.cpp(X-macro inventory)
 
-
-
+// moved definition to storage/tx_storage/ob_ls_service.cpp(X-macro inventory, second overload)
 
 int ObResourceLimitCalculator::get_runtime_logical_resource(ObUserResourceCalculateArg &arg)
 {

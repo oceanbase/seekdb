@@ -33,7 +33,6 @@
 #include "share/schema/ob_error_info.h"
 #include "share/schema/ob_constraint.h"
 #include "share/schema/ob_schema_service.h"
-#include "share/schema/ob_objpriv_mysql_schema_struct.h"
 #include "share/schema/ob_dependency_info.h"
 #include "share/schema/ob_trigger_info.h"
 #include "share/io/ob_io_calibration.h"
@@ -52,6 +51,7 @@
 #include "ob_ddl_args.h"
 #include "share/inner_table/ob_load_inner_table_schema.h"
 #include "share/ai_service/ob_ai_model_info.h"
+#include "share/schema/ob_objpriv_mysql_schema_struct.h"
 
 namespace oceanbase
 {
@@ -254,6 +254,28 @@ public:
   bool to_recyclebin_;
   bool is_add_to_scheduler_;
 };
+
+struct ObCreateVertialPartitionArg : ObDDLArg
+{
+  OB_UNIS_VERSION(1);
+
+public:
+  ObCreateVertialPartitionArg() :
+      ObDDLArg(),
+      vertical_partition_columns_()
+  {}
+  virtual ~ObCreateVertialPartitionArg()
+  {}
+  void reset()
+  {
+    vertical_partition_columns_.reset();
+  }
+  DECLARE_TO_STRING;
+
+public:
+  common::ObSEArray<common::ObString, 8> vertical_partition_columns_;
+};
+
 
 struct ObCheckFrozenScnArg
 {
@@ -795,6 +817,7 @@ public:
                K_(trace_id),
                K_(sql_mode),
                K_(tz_info_wrap),
+               "nls_formats", common::ObArrayWrap<common::ObString>(nls_formats_, common::ObNLSFormatEnum::NLS_MAX),
                K_(foreign_key_checks));
   ObStartRedefTableArg():
     orig_table_id_(common::OB_INVALID_ID),
@@ -805,6 +828,7 @@ public:
     trace_id_(),
     sql_mode_(0),
     tz_info_wrap_(),
+    nls_formats_{},
     foreign_key_checks_(true)
   {}
 
@@ -830,6 +854,15 @@ public:
   {
     tz_info_wrap_.set_tz_info_map(tz_info_map);
   }
+  int set_nls_formats(const common::ObString *nls_formats);
+  int set_nls_formats(const common::ObString &nls_date_format,
+                      const common::ObString &nls_timestamp_format,
+                      const common::ObString &nls_timestamp_tz_format)
+  {
+    ObString tmp_str[ObNLSFormatEnum::NLS_MAX] = {nls_date_format, nls_timestamp_format,
+                                                  nls_timestamp_tz_format};
+    return set_nls_formats(tmp_str);
+  }
   bool is_valid() const;
 public:
 
@@ -844,6 +877,7 @@ public:
   ObSQLMode sql_mode_;
   common::ObArenaAllocator allocator_;
   common::ObTimeZoneInfoWrap tz_info_wrap_;
+  common::ObString nls_formats_[common::ObNLSFormatEnum::NLS_MAX];
   bool foreign_key_checks_;
 };
 
@@ -1156,8 +1190,11 @@ public:
     DROP_SUB_PARTITION,
     TRUNCATE_SUB_PARTITION,
     REPARTITION_TABLE,
-    RESERVED_ALTER_PARTITION_10,
-    RESERVED_ALTER_PARTITION_11,
+    // 1. convert range to interval in range part table
+    // 2. modify interval range in interval part table
+    SET_INTERVAL,
+    // cnovert interval to range
+    INTERVAL_TO_RANGE,
     RENAME_PARTITION,
     RENAME_SUB_PARTITION,
     EXCHANGE_PARTITION,
@@ -1187,6 +1224,7 @@ public:
       allocator_(),
       alter_table_schema_(&allocator_),
       tz_info_wrap_(),
+      nls_formats_{},
       sql_mode_(0),
       ddl_task_type_(share::INVALID_TASK),
       table_id_(common::OB_INVALID_ID),
@@ -1245,6 +1283,16 @@ public:
     tz_info_wrap_.set_tz_info_map(tz_info_map);
   }
   int is_alter_comment(bool &is_alter_comment) const;
+  int set_nls_formats(const common::ObString *nls_formats);
+  int set_nls_formats(const common::ObString &nls_date_format,
+                      const common::ObString &nls_timestamp_format,
+                      const common::ObString &nls_timestamp_tz_format)
+  {
+    ObString tmp_str[ObNLSFormatEnum::NLS_MAX] = {nls_date_format, nls_timestamp_format,
+                                                  nls_timestamp_tz_format};
+    return set_nls_formats(tmp_str);
+  }
+
   inline bool is_only_alter_index() const
   {
     return is_alter_indexs_
@@ -1261,6 +1309,7 @@ public:
                K_(foreign_key_arg_list),
                K_(alter_table_schema),
                K_(alter_constraint_type),
+               "nls_formats", common::ObArrayWrap<common::ObString>(nls_formats_, common::ObNLSFormatEnum::NLS_MAX),
                K_(ddl_task_type),
                K_(is_alter_columns),
                K_(is_alter_indexs),
@@ -1293,6 +1342,7 @@ public:
   common::ObArenaAllocator allocator_;
   share::schema::AlterTableSchema alter_table_schema_;
   common::ObTimeZoneInfoWrap tz_info_wrap_;
+  common::ObString nls_formats_[common::ObNLSFormatEnum::NLS_MAX];
   ObSQLMode sql_mode_;
   share::ObDDLTaskType ddl_task_type_;
   int64_t table_id_; // to check if the table we get is correct
@@ -1609,6 +1659,9 @@ public:
         with_rowid_(false),
         index_schema_(&allocator_),
         is_inner_(false),
+        nls_date_format_(),
+        nls_timestamp_format_(),
+        nls_timestamp_tz_format_(),
         sql_mode_(0),
         allocator_(),
         local_session_var_(&allocator_),
@@ -1639,6 +1692,9 @@ public:
     with_rowid_ = false;
     index_schema_.reset();
     is_inner_ = false;
+    nls_date_format_.reset();
+    nls_timestamp_format_.reset();
+    nls_timestamp_tz_format_.reset();
     sql_mode_ = 0;
     local_session_var_.reset();
     allocator_.reset();
@@ -1674,6 +1730,9 @@ public:
       if_not_exist_ = other.if_not_exist_;
       with_rowid_ = other.with_rowid_;
       is_inner_ = other.is_inner_;
+      nls_date_format_ = other.nls_date_format_;
+      nls_timestamp_format_ = other.nls_timestamp_format_;
+      nls_timestamp_tz_format_ = other.nls_timestamp_tz_format_;
       sql_mode_ = other.sql_mode_;
       vidx_refresh_info_ = other.vidx_refresh_info_;
       is_rebuild_index_ = other.is_rebuild_index_;
@@ -1707,6 +1766,10 @@ public:
   bool with_rowid_;
   share::schema::ObTableSchema index_schema_; // Index table schema
   bool is_inner_;
+  //Nls_xx_format is required when creating a functional index
+  common::ObString nls_date_format_;
+  common::ObString nls_timestamp_format_;
+  common::ObString nls_timestamp_tz_format_;
   ObSQLMode sql_mode_;
   common::ObArenaAllocator allocator_;
   share::ObLocalSessionVar local_session_var_;
@@ -1740,7 +1803,7 @@ public:
     create_index_arg_.reset();
     snapshot_version_ = 0;
   }
-  TO_STRING_KV(K(data_table_id_), K(create_index_arg_), K(snapshot_version_));
+  TO_STRING_KV(K(1UL), K(data_table_id_), K(create_index_arg_), K(snapshot_version_));
 
 public:
 
@@ -1964,6 +2027,7 @@ public:
   common::ObString db_name_;
   uint64_t last_replay_log_id_;
   bool is_inner_;
+  common::ObSArray<ObCreateVertialPartitionArg> vertical_partition_arg_list_;
   share::schema::ObErrorInfo error_info_;
   bool is_alter_view_;
   common::ObSArray<oceanbase::share::schema::ObDependencyInfo> dep_infos_;

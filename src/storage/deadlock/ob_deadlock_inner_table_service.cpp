@@ -72,6 +72,7 @@ int ObDeadLockInnerTableService::insert(const ObDetectorInnerReportInfo &inner_i
     ObDeadlockEventHistoryEntry entry;
     
     entry.event_id_ = inner_info.get_event_id();
+    entry.svr_addr_ = GCTX.self_addr();
     entry.detector_id_ = inner_info.get_detector_id();
     entry.report_time_ = current_ts;
     entry.cycle_idx_ = idx;
@@ -135,6 +136,7 @@ int ObDeadLockInnerTableService::insert_all(const ObIArray<ObDetectorInnerReport
       ObDeadlockEventHistoryEntry entry;
       
       entry.event_id_ = info.get_event_id();
+      entry.svr_addr_ = GCTX.self_addr();
       entry.detector_id_ = info.get_detector_id();
       entry.report_time_ = current_ts;
       entry.cycle_idx_ = i + 1;

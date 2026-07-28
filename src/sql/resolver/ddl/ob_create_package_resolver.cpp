@@ -367,6 +367,25 @@ int ObCreatePackageResolver::resolve_functions_spec(const ObPackageInfo &package
       } else if (pl_routine_info->is_contains_sql()) {
         routine_info.set_contains_sql();
       }
+      // udt type related information setting
+      if (pl_routine_info->is_udt_routine()) {
+        routine_info.set_is_udt_udf();
+        if (pl_routine_info->is_udt_static_routine()) {
+          routine_info.set_is_static();
+        }
+        if (pl_routine_info->is_function()) {
+          routine_info.set_is_udt_function();
+        }
+        if (pl_routine_info->is_udt_cons()) {
+          routine_info.set_is_udt_cons();
+        }
+        if (pl_routine_info->is_udt_map()) {
+          routine_info.set_is_udt_map();
+        }
+        if (pl_routine_info->is_udt_order()) {
+          routine_info.set_is_udt_order();
+        }
+      }
       if (package_info.is_invoker_right()) {
         routine_info.set_invoker_right();
       }
@@ -537,9 +556,8 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
                                                 share::schema::PACKAGE_TYPE,
                                                 package_spec_info));
           if (OB_ERR_PACKAGE_DOSE_NOT_EXIST == ret) {
-            LOG_USER_ERROR(OB_ERR_PACKAGE_DOSE_NOT_EXIST, "PACKAGE",
-                           db_name.length(), db_name.ptr(),
-                           package_name.length(), package_name.ptr());
+            ret = OB_ERR_SPEC_NOT_EXIST;
+            LOG_USER_ERROR(OB_ERR_SPEC_NOT_EXIST, package_name.length(), package_name.ptr());
           }
 
           CK (OB_NOT_NULL(package_spec_info));

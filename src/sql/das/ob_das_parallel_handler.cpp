@@ -158,7 +158,7 @@ int ObDASParallelHandler::run()
         ObDASCopyContext copy_context;
         ObArenaAllocator tmp_alloc;
         ObDASTaskFactory das_factory(mem_context->get_arena_allocator());
-        ObDasAggregatedTask das_task_wrapper;
+        ObDasAggregatedTask das_task_wrapper(tmp_alloc);
         if (OB_FAIL(task->get_agg_task()->get_aggregated_tasks(src_task_list))) {
           LOG_WARN("fail to get all das tasks", K(ret), KPC(task));
         } else {

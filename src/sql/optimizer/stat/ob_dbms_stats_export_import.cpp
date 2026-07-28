@@ -18,7 +18,6 @@
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/stat/ob_dbms_stats_export_import.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
-#include "share/ob_lob_access_utils.h"
 #include "share/ob_sql_client_decorator.h"
 #include "sql/optimizer/stat/ob_dbms_stats_history_manager.h"
 

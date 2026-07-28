@@ -36,7 +36,7 @@ public:
   uint64_t hash() const
   {
     return common::murmurhash(&user_id_, sizeof(user_id_), 0);
-  }
+  };
   int hash(uint64_t &hash_val) const
   {
     hash_val = hash();
@@ -45,10 +45,14 @@ public:
   int compare(const ObUserKey& r) const
   {
     int cmp = 0;
-    if (user_id_ < r.user_id_) {
-      cmp = -1;
-    } else if (user_id_ > r.user_id_) {
-      cmp = 1;
+    {
+      if (user_id_ < r.user_id_) {
+        cmp = -1;
+      } else if (user_id_ == r.user_id_) {
+        cmp = 0;
+      } else {
+        cmp = 1;
+      }
     }
     return cmp;
   }
@@ -131,10 +135,24 @@ public:
                       const ObString &user_name,
                       const uint64_t max_connections_per_hour,
                       const uint64_t max_user_connections,
-                      const uint64_t max_database_connections,
+                      const uint64_t max_global_connections,
                       ObSQLSessionInfo& session);
   int on_user_disconnect(ObSQLSessionInfo &session);
+  int erase_connection_resources();
 private:
+  struct EraseUserResourceFunc
+  {
+    EraseUserResourceFunc()
+      : erase_cnt_(0) {}
+    ~EraseUserResourceFunc() {}
+    bool operator()(const ObUserKey &key, const ObConnectResource *value) {
+      bool res = true;
+      erase_cnt_ += res ? 1 : 0;
+      return res;
+    }
+    
+    int64_t erase_cnt_;
+  };
   class CleanUpConnResourceFunc
   {
   public:

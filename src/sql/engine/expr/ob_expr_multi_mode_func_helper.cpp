@@ -15,7 +15,11 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "lib/ob_errno.h"
 #include "ob_expr_multi_mode_func_helper.h"
+
+using namespace oceanbase::common;
+using namespace oceanbase::sql;
 
 namespace oceanbase
 {

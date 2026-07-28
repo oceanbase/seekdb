@@ -67,16 +67,14 @@ int ObDropVecIndexTask::init(
 {
   int ret = OB_SUCCESS;
 
+  uint64_t runtime_data_format_version =
+      data_format_version > 0 ? data_format_version : DATA_CURRENT_VERSION;
   if (OB_UNLIKELY(task_id <= 0
                || OB_INVALID_ID == data_table_id
                || schema_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_id), K(data_table_id), K(rowkey_vid),
         K(vid_rowkey), K(domain_index), K(vec_delta_buffer), K(vec_index_snapshot_data), K(hybrid_embedded_vec), K(schema_version));
-  } else if (OB_UNLIKELY(DATA_CURRENT_VERSION != data_format_version)) {
-    ret = OB_VERSION_NOT_MATCH;
-    LOG_WARN("drop vector index task requires the current data format",
-             K(ret), K(data_format_version), LITERAL_K(DATA_CURRENT_VERSION));
   } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, local management service is null", K(ret));
@@ -125,7 +123,7 @@ int ObDropVecIndexTask::init(
       
       dst_schema_version_ = schema_version;
       is_inited_ = true;
-      data_format_version_ = data_format_version;
+      data_format_version_ = runtime_data_format_version;
       execution_id_ = 1L;
     }
   }
@@ -163,10 +161,6 @@ int ObDropVecIndexTask::init(const ObDDLTaskRecord &task_record)
     } else if (OB_FAIL(deserialize_params_from_message(task_record.message_.ptr(),
             task_record.message_.length(), pos))) {
       LOG_WARN("deserialize params from message failed", K(ret));
-    } else if (OB_UNLIKELY(DATA_CURRENT_VERSION != data_format_version_)) {
-      ret = OB_VERSION_NOT_MATCH;
-      LOG_WARN("persisted drop vector index task has a non-current data format", K(ret),
-               K_(data_format_version), LITERAL_K(DATA_CURRENT_VERSION));
     } else {
       is_inited_ = true;
     }
@@ -1068,7 +1062,7 @@ int ObDropVecIndexTask::check_local_build(bool &is_end)
   return ret;
 }
 
-// Check whether the local snapshot-table check has completed.
+// check whether all leaders have completed the task
 int ObDropVecIndexTask::check_snapshot_table_exist(bool &is_exist)
 {
   int ret = OB_SUCCESS;
@@ -1091,12 +1085,14 @@ int ObDropVecIndexTask::check_snapshot_table_exist(bool &is_exist)
 
 // Update the local SSTable complement status.
 int ObDropVecIndexTask::update_drop_lob_meta_row_job_status(const common::ObTabletID &tablet_id,
+                                                            const ObAddr &addr,
                                                             const int64_t snapshot_version,
                                                             const int64_t execution_id,
                                                             const int ret_code,
                                                             const ObDDLTaskInfo &addition_info)
 {
   int ret = OB_SUCCESS;
+  UNUSED(addr);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObDropVecIndexTask has not been inited", K(ret));

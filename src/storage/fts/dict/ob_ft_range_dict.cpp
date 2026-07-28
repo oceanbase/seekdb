@@ -15,7 +15,6 @@
  */
 
 #include "storage/fts/dict/ob_ft_range_dict.h"
-#include "share/rc/ob_module_provider.h"
 
 #include "storage/fts/dict/ob_ik_dic.h"
 #include "lib/allocator/page_arena.h"

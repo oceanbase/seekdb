@@ -42,7 +42,10 @@ EVENT_INFO(NETWORK_WAIT_TIME, network_wait_time)
 
 #ifndef OCEANBASE_SQL_OB_EXEC_STAT_H
 #define OCEANBASE_SQL_OB_EXEC_STAT_H
+#include "lib/stat/ob_diagnose_info.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"  // ObLocalDiagnosticInfo(previously hidden behind a transitive include)
 #include "lib/wait_event/ob_wait_event.h"
+#include "lib/statistic_event/ob_stat_event.h"
 #include "lib/net/ob_addr.h"
 #include "sql/ob_sql_define.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
@@ -72,6 +75,16 @@ struct ObExecRecord
 #include "ob_exec_stat.h"
 #undef EVENT_INFO
 
+
+#define EVENT_STAT_GET(event_stats_array, stat_no)              \
+ ({                                                            \
+   int64_t ret = 0;                                            \
+   oceanbase::common::ObStatEventAddStat *stat = NULL;         \
+   if (NULL != (stat = event_stats_array.get(::oceanbase::common::stat_no))) { \
+     ret = stat->get_stat_value();                             \
+   }                                                           \
+   ret;                                                        \
+ })
 
 #define RECORD(se) \
   do { \

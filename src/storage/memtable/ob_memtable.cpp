@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_memtable.h"
 #include "share/rc/ob_module_provider.h"
 #include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
@@ -1014,6 +1015,7 @@ int ObMemtable::check_row_locked_on_frozen_stores_(
     ObMvccWriteResult &res)
 {
   // For performance, does not set this diagnostic information
+  //ACTIVE_SESSION_FLAG_SETTER_GUARD(in_check_row_confliction);
   int ret = OB_SUCCESS;
   ObStoreRowLockState &lock_state = res.lock_state_;
   ObStoreCtx &ctx = *(context.store_ctx_);
@@ -1260,6 +1262,7 @@ int ObMemtable::check_rows_locked_on_frozen_stores_(
     ObMvccWriteResults &mvcc_results,
     ObRowsInfo &rows_info)
 {
+  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_check_row_confliction);
   int ret = OB_SUCCESS;
   ObStoreCtx &ctx = *(context.store_ctx_);
   share::SCN max_trans_version = SCN::min_scn();
@@ -1750,7 +1753,7 @@ int ObMemtable::flush()
     param.tablet_id_ = key_.tablet_id_;
     param.merge_type_ = MINI_MERGE;
     param.merge_version_ = ObVersion::MIN_VERSION;
-    fill_merge_dag_param_(param);
+    fill_compaction_param_(param);
 
     if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_tablet_merge_dag(param))) {
       if (OB_EAGAIN != ret && OB_SIZE_OVERFLOW != ret) {
@@ -1780,9 +1783,11 @@ int ObMemtable::flush()
   return ret;
 }
 
-void ObMemtable::fill_merge_dag_param_(ObTabletMergeDagParam &param)
+void ObMemtable::fill_compaction_param_(ObTabletMergeDagParam &param)
 {
-  param.data_size_ = get_occupied_size();
+  ObCompactionParam &compaction_param = param.compaction_param_;
+  compaction_param.occupy_size_ = get_occupied_size();
+  compaction_param.last_end_scn_ = get_end_scn();
 }
 
 int ObMemtable::estimate_phy_size(const ObStoreRowkey* start_key, const ObStoreRowkey* end_key, int64_t& total_bytes, int64_t& total_rows)
@@ -2821,6 +2826,7 @@ int ObMemtable::post_row_write_conflict_(ObMvccAccessCtx &acc_ctx,
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(WARN, "can not get server lock_wait_mgr");
   } else {
+    mem_ctx->add_conflict_trans_id(conflict_tx_id);
     mem_ctx->on_wlock_retry(row_key, conflict_tx_id);
     int tmp_ret = OB_SUCCESS;
     transaction::ObTransID tx_id = acc_ctx.get_tx_id();
@@ -3196,6 +3202,9 @@ void ObMemtable::mvcc_write_statistic_(const ObMvccWriteResult &res)
       ++mt_stat_.delete_row_count_;
     }
 
+    EVENT_ADD(MEMSTORE_WRITE_BYTES,
+              res.mtk_.get_rowkey()->get_deep_copy_size() +
+              res.tx_node_->get_data_size());
   }
 }
 void ObMemtable::mvcc_write_statistic_(const ObMvccWriteResults &mvcc_results)

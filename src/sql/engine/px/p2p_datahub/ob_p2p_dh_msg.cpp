@@ -67,6 +67,51 @@ int ObP2PDatahubMsgBase::assign(const ObP2PDatahubMsgBase &msg)
   return ret;
 }
 
+template <>
+int ObP2PDatahubMsgBase::proc_filter_empty<IntegerFixedVec>(IntegerFixedVec *res_vec,
+                                                            const ObBitVector &skip,
+                                                            const EvalBound &bound,
+                                                            int64_t &total_count,
+                                                            int64_t &filter_count)
+{
+  int ret = OB_SUCCESS;
+  uint64_t *data = reinterpret_cast<uint64_t *>(res_vec->get_data());
+  MEMSET(data + bound.start(), 0, (bound.range_size() * res_vec->get_length(0)));
+
+  int64_t valid_cnt = bound.range_size() - skip.accumulate_bit_cnt(bound);
+  total_count += valid_cnt;
+  filter_count += valid_cnt;
+  return ret;
+}
+
+template <>
+int ObP2PDatahubMsgBase::proc_filter_empty<IntegerUniVec>(IntegerUniVec *res_vec,
+                                                          const ObBitVector &skip,
+                                                          const EvalBound &bound,
+                                                          int64_t &total_count,
+                                                          int64_t &filter_count)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ObBitVector::flip_foreach(
+          skip, bound, [&](int64_t idx) __attribute__((always_inline)) {
+            res_vec->set_int(idx, 0);
+            ++filter_count;
+            ++total_count;
+            return OB_SUCCESS;
+          }))) {
+    LOG_WARN("fail to do for each operation", K(ret));
+  }
+  return ret;
+}
+
+int ObP2PDatahubMsgBase::preset_not_match(IntegerFixedVec *res_vec, const EvalBound &bound)
+{
+  int ret = OB_SUCCESS;
+  uint64_t *data = reinterpret_cast<uint64_t *>(res_vec->get_data());
+  MEMSET(data + bound.start(), 0, (bound.range_size() * res_vec->get_length(0)));
+  return ret;
+}
+
 int ObP2PDatahubMsgBase::fill_empty_query_range(const ObPxQueryRangeInfo &query_range_info,
                              common::ObIAllocator &allocator, ObNewRange &query_range)
 {

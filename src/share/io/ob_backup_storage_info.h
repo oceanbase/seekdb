@@ -18,6 +18,7 @@
 #define OCEANBASE_SHARE_IO_OB_BACKUP_STORAGE_INFO_H_
 
 #include "lib/string/ob_fixed_length_string.h"
+#include "lib/allocator/page_arena.h"
 #include "lib/utility/ob_print_utils.h"
 
 namespace oceanbase
@@ -31,34 +32,34 @@ const char *const OB_STR_LS = "logstream";
 const int64_t OB_MAX_BACKUP_DEST_LENGTH = 2048;
 typedef common::ObFixedLengthString<OB_MAX_BACKUP_DEST_LENGTH> ObBackupPathString;
 typedef ObBackupPathString ObBackupSetPath;
+typedef ObBackupPathString ObBackupPiecePath;
 
 class ObBackupDest final
 {
 public:
-  ObBackupDest() = default;
-  ~ObBackupDest() = default;
-
+  ObBackupDest();
+  ~ObBackupDest();
   int set(const char *backup_dest);
   int set(const common::ObString &backup_dest);
   int set(const ObBackupPathString &backup_dest);
-  void reset() { root_path_.reset(); }
-  bool is_valid() const { return !root_path_.is_empty(); }
-  bool is_root_path_equal(const ObBackupDest &other) const { return root_path_ == other.root_path_; }
-  int is_backup_path_equal(const ObBackupDest &other, bool &is_equal) const;
-  bool is_storage_type_file() const { return is_valid(); }
+  void reset();
+  bool is_valid() const;
   int get_backup_dest_str(char *buf, const int64_t buf_size) const;
-  int get_backup_path_str(char *buf, const int64_t buf_size) const;
-  common::ObString get_root_path() const { return root_path_.str(); }
-  bool operator ==(const ObBackupDest &other) const { return root_path_ == other.root_path_; }
-  bool operator !=(const ObBackupDest &other) const { return !(*this == other); }
-  int deep_copy(const ObBackupDest &other) { return root_path_.assign(other.root_path_); }
-  int64_t hash() const { return static_cast<int64_t>(root_path_.hash()); }
+  common::ObString get_root_path() const { return root_path_;}
+  bool operator ==(const ObBackupDest &backup_dest) const;
+  bool operator !=(const ObBackupDest &backup_dest) const;
+  int deep_copy(const ObBackupDest &backup_dest);
+  int64_t hash() const;
   DECLARE_TO_STRING;
 
 private:
-  void trim_trailing_slashes_();
+  int alloc_and_init();
+  int parse_backup_dest_str_(const char *backup_dest);
+  bool is_root_path_equal(const ObBackupDest &backup_dest) const;
+  void root_path_trim_();
 
-  ObBackupPathString root_path_;
+  char *root_path_;
+  common::ObArenaAllocator allocator_;
   DISALLOW_COPY_AND_ASSIGN(ObBackupDest);
 };
 

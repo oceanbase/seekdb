@@ -146,12 +146,14 @@ int ObColumnRedefinitionTask::init(const ObDDLTaskRecord &task_record)
 
 // Update the local SSTable complement status.
 int ObColumnRedefinitionTask::update_complete_sstable_job_status(const common::ObTabletID &tablet_id,
+                                                                 const ObAddr &addr,
                                                                  const int64_t snapshot_version,
                                                                  const int64_t execution_id,
                                                                  const int ret_code,
                                                                  const ObDDLTaskInfo &addition_info)
 {
   int ret = OB_SUCCESS;
+  UNUSED(addr);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObColumnRedefinitionTask has not been inited", K(ret));
@@ -260,6 +262,10 @@ int ObColumnRedefinitionTask::copy_table_indexes()
             ObTraceIdGuard trace_id_guard(get_trace_id());
             ATOMIC_INC(&sub_task_trace_id_);
             ObDDLEventInfo ddl_event_info(sub_task_trace_id_);
+            // this create index arg is not valid, only has nls format(but domain index need valid create index arg)
+            create_index_arg.nls_date_format_ = alter_table_arg_.nls_formats_[0];
+            create_index_arg.nls_timestamp_format_ = alter_table_arg_.nls_formats_[1];
+            create_index_arg.nls_timestamp_tz_format_ = alter_table_arg_.nls_formats_[2];
             if (OB_FAIL(new_schema_guard.get_table_schema( index_ids.at(i), index_schema))) {
               LOG_WARN("get table schema failed", K(ret));
             } else if (OB_ISNULL(index_schema)) {

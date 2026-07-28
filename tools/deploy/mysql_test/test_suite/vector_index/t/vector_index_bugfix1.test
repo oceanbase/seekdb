@@ -414,7 +414,7 @@ drop table t1;
 
 #bug vetor index query hit plan
 set ob_enable_plan_cache=1;
-ALTER SYSTEM FLUSH PLAN CACHE;
+ALTER SYSTEM FLUSH PLAN CACHE GLOBAL;
 sleep 3;
 --disable_warnings
 drop table if exists t_vector_index_query_plan;

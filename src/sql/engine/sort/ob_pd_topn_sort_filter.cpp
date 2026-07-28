@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_pd_topn_sort_filter.h"
+#include "sql/engine/sort/ob_sort_vec_op.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
 #include "sql/engine/expr/ob_expr_topn_filter.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
@@ -49,6 +50,13 @@ void ObPushDownTopNFilter::destroy()
   msg_set_ = false;
   pd_topn_filter_info_ = nullptr;
   topn_filter_ctx_ = nullptr;
+}
+
+int ObPushDownTopNFilter::init(const ObSortVecOpContext &ctx,
+                                      lib::MemoryContext &mem_context)
+{
+  return init(ctx.is_fetch_with_ties_, ctx.pd_topn_filter_info_, ctx.sk_collations_,
+              ctx.exec_ctx_, mem_context);
 }
 
 int ObPushDownTopNFilter::init(bool is_fetch_with_ties,
@@ -107,6 +115,19 @@ int ObPushDownTopNFilter::init(bool is_fetch_with_ties,
   return ret;
 }
 
+int ObPushDownTopNFilter::update_filter_data(ObCompactRow *compact_row, const RowMeta *row_meta_)
+{
+  int ret = OB_SUCCESS;
+  bool is_updated = false;
+  if (OB_FAIL(pd_topn_filter_msg_->update_filter_data(compact_row, row_meta_, is_updated))) {
+    LOG_WARN("failed to update filter data", K(ret));
+  } else if (FALSE_IT(set_need_update(false))) {
+  } else if (is_updated && OB_FAIL(publish_topn_msg())) {
+    LOG_WARN("failed to publish topn msg");
+  }
+  return ret;
+}
+
 int ObPushDownTopNFilter::update_filter_data(ObChunkDatumStore::StoredRow *store_row)
 {
   int ret = OB_SUCCESS;
@@ -146,6 +167,14 @@ int ObPushDownTopNFilter::create_pd_topn_filter_ctx(
       topn_filter_ctx->topn_filter_key_ = dh_key;
       topn_filter_ctx->slide_window_.set_adptive_ratio_thresheld(
           pd_topn_filter_info->adaptive_filter_ratio_);
+      int64_t max_batch_size = max(pd_topn_filter_info->max_batch_size_, 1);
+      void *buf = nullptr;
+      if (OB_ISNULL(buf = exec_ctx->get_allocator().alloc((sizeof(uint16_t) * max_batch_size)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to allocate selector_", K(max_batch_size));
+      } else {
+        topn_filter_ctx->row_selector_ = static_cast<uint16_t *>(buf);
+      }
     }
   } else {
     // topn_filter_ctx already exists means it is in rescan process

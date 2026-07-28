@@ -285,7 +285,7 @@ public:
     tm_ = tm;
     trans_ctx_.trans_id_ = ObTransID(trans_id);
     mem_ctx_.set_trans_ctx(&trans_ctx_);
-    return mem_ctx_.init();
+    return mem_ctx_.init(MTL_ID());
   }
 
   int write(int64_t key, int64_t val, ObMemtable &mt, ObDatumRowkey &row_key, int64_t snapshot_version = 1000) {

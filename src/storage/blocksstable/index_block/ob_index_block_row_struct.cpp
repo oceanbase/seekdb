@@ -31,6 +31,7 @@ ObIndexBlockRowDesc::ObIndexBlockRowDesc()
   : compressor_type_(common::ObCompressorType::INVALID_COMPRESSOR),
     row_store_type_(common::ObRowStoreType::MAX_ROW_STORE),
     schema_version_(0),
+    data_format_version_(0),
     end_scn_(),
     merge_type_(compaction::ObMergeType::INVALID_MERGE_TYPE),
     aggregated_row_(nullptr),
@@ -63,6 +64,7 @@ ObIndexBlockRowDesc::ObIndexBlockRowDesc(const ObDataStoreDesc &data_store_desc)
   : compressor_type_(common::ObCompressorType::INVALID_COMPRESSOR),
     row_store_type_(common::ObRowStoreType::MAX_ROW_STORE),
     schema_version_(0),
+    data_format_version_(0),
     end_scn_(),
     merge_type_(compaction::ObMergeType::INVALID_MERGE_TYPE),
     aggregated_row_(nullptr),
@@ -94,6 +96,7 @@ ObIndexBlockRowDesc::ObIndexBlockRowDesc(const ObDataStoreDesc &data_store_desc)
   schema_version_ = data_store_desc.get_schema_version();
   end_scn_ = data_store_desc.get_end_scn();
   merge_type_ = data_store_desc.get_merge_type();
+  data_format_version_ = data_store_desc.get_data_format_version();
 }
 
 int ObIndexBlockRowDesc::set_end_scn_by_snapshot_version(const int64_t snapshot_version)
@@ -135,6 +138,7 @@ int ObIndexBlockRowDesc::init(const ObDataStoreDesc &data_store_desc,
   } else {
     set_merge_type(data_store_desc.get_merge_type());
     set_end_scn(data_store_desc.get_end_scn());
+    set_data_format_version(data_store_desc.get_data_format_version());
     set_row_store_type(index_row_header->get_row_store_type());
     set_compressor_type(index_row_header->get_compressor_type());
     set_schema_version(index_row_header->get_schema_version());
@@ -296,6 +300,7 @@ int ObIndexBlockRowBuilder::build_row(const ObIndexBlockRowDesc &desc, const ObD
   } else if (nullptr != desc.aggregated_row_ && !desc.is_serialized_agg_row_
       && OB_FAIL(agg_writer.init(data_desc_->get_agg_meta_array(),
                                  *desc.aggregated_row_,
+                                 data_desc_->get_data_format_version(),
                                  index_data_allocator_))) {
     LOG_WARN("Fail to init aggregate row writer", K(ret), K(desc), KPC(row));
   } else if (OB_FAIL(calc_data_size(desc, agg_writer, data_size))) {

@@ -397,17 +397,18 @@ class ObTxCommitInfoLog
 public:
   ObTxCommitInfoLog(ObTxCommitInfoLogTempRef &temp_ref)
       : can_elr_(false),
-        app_trace_id_str_(temp_ref.app_trace_id_str_),
-        obsolete_trace_payload_(temp_ref.app_trace_info_),
+        app_trace_id_str_(temp_ref.app_trace_id_str_), app_trace_info_(temp_ref.app_trace_info_),
         prev_record_lsn_(temp_ref.prev_record_lsn_), redo_lsns_(temp_ref.redo_lsns_)
   {}
   ObTxCommitInfoLog(bool is_elr,
                     common::ObString &app_trace_id,
+                    const common::ObString &app_trace_info,
                     const LogOffSet &prev_record_lsn,
                     ObRedoLSNArray &redo_lsns);
 
   bool is_elr() const { return can_elr_; }
   const common::ObString &get_app_trace_id() const { return app_trace_id_str_; }
+  const common::ObString &get_app_trace_info() const { return app_trace_info_; }
   const ObRedoLSNArray &get_redo_lsns() const { return redo_lsns_; }
   const LogOffSet &get_prev_record_lsn() const { return prev_record_lsn_; }
   int ob_admin_dump(share::ObAdminMutatorStringArg &arg);
@@ -416,6 +417,7 @@ public:
   TO_STRING_KV(K(LOG_TYPE),
                K(can_elr_),
                K(app_trace_id_str_),
+               K(app_trace_info_),
                K(prev_record_lsn_),
                K(redo_lsns_))
 
@@ -424,8 +426,7 @@ private:
 
   // Transaction tracing and redo-chain metadata.
   common::ObString &app_trace_id_str_;
-  // Historical field 8 is deserialized into this buffer and intentionally ignored.
-  common::ObString obsolete_trace_payload_;
+  common::ObString app_trace_info_;
   LogOffSet prev_record_lsn_;
   ObRedoLSNArray &redo_lsns_;
 };
@@ -934,32 +935,27 @@ int ObTxLogBlock::add_new_log(T &tx_log_body, ObTxBigSegmentBuf *big_segment_buf
     // ret = OB_EAGAIN;
     TRANS_LOG(DEBUG, "insert redo_log type into cb_arg_array_", K(tx_log_body), KPC(this));
   } else {
-    if constexpr (requires(T &log) { log.before_serialize(); }) {
-      if (OB_FAIL(tx_log_body.before_serialize())) {
-        TRANS_LOG(WARN, "before serialize failed", K(ret), K(tx_log_body), K(*this));
+    const int64_t serialize_size = header.get_serialize_size() + tx_log_body.get_serialize_size();
+    if (ObTxLogTypeChecker::can_be_spilt(T::LOG_TYPE) && BIG_SEGMENT_SPILT_SIZE < serialize_size + tmp_pos) {
+      ret = OB_BUF_NOT_ENOUGH;
+    } else {
+      while (OB_SUCC(ret) && len_ < serialize_size + tmp_pos) {
+        if (OB_FAIL(extend_log_buf())) {
+          // ret = OB_BUF_NOT_ENOUGH;
+          TRANS_LOG(WARN, "extend a log buf failed", K(ret), K(len_), K(tmp_pos), K(serialize_size),
+                    K(fill_buf_), KPC(this));
+        }
       }
     }
     if (OB_SUCC(ret)) {
-      const int64_t serialize_size = header.get_serialize_size() + tx_log_body.get_serialize_size();
-      if (ObTxLogTypeChecker::can_be_spilt(T::LOG_TYPE) && BIG_SEGMENT_SPILT_SIZE < serialize_size + tmp_pos) {
+      if (len_ < serialize_size + tmp_pos) {
         ret = OB_BUF_NOT_ENOUGH;
+      } else if (OB_FAIL(header.serialize(fill_buf_.get_buf(), len_, tmp_pos))) {
+        TRANS_LOG(WARN, "serialize log header error", K(ret), K(header), K(*this));
+      } else if (OB_FAIL(tx_log_body.serialize(fill_buf_.get_buf(), len_, tmp_pos))) {
+        TRANS_LOG(WARN, "serialize tx_log_body error", K(ret), K(tx_log_body), K(*this));
       } else {
-        while (OB_SUCC(ret) && len_ < serialize_size + tmp_pos) {
-          if (OB_FAIL(extend_log_buf())) {
-            // ret = OB_BUF_NOT_ENOUGH;
-            TRANS_LOG(WARN, "extend a log buf failed", K(ret), K(len_), K(tmp_pos), K(serialize_size),
-                      K(fill_buf_), KPC(this));
-          }
-        }
-      }
-      if (OB_SUCC(ret)) {
-        if (len_ < serialize_size + tmp_pos) {
-          ret = OB_BUF_NOT_ENOUGH;
-        } else if (OB_FAIL(header.serialize(fill_buf_.get_buf(), len_, tmp_pos))) {
-          TRANS_LOG(WARN, "serialize log header error", K(ret), K(header), K(*this));
-        } else if (OB_FAIL(tx_log_body.serialize(fill_buf_.get_buf(), len_, tmp_pos))) {
-          TRANS_LOG(WARN, "serialize tx_log_body error", K(ret), K(tx_log_body), K(*this));
-        }
+        // do nothing
       }
     }
   }

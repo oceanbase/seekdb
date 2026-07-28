@@ -132,8 +132,6 @@ protected:
   // Log commit
   int submit_log_(const int64_t last_id, const int64_t limited_id);
   int submit_log_with_lock_(const int64_t last_id, const int64_t limited_id);
-  int allocate_number_(const int64_t range, const int64_t base_id,
-                       int64_t &start_id, int64_t &end_id);
   int64_t max_pre_allocated_id_(const int64_t base_id);
 protected:
   ServiceType service_type_;

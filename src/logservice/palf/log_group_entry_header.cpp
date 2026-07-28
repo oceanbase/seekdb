@@ -290,9 +290,6 @@ DEFINE_SERIALIZE(LogGroupEntryHeader)
   int64_t new_pos = pos;
   if (OB_UNLIKELY(NULL == buf || buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(LOG_GROUP_ENTRY_HEADER_VERSION != version_)) {
-    ret = OB_VERSION_NOT_MATCH;
-    PALF_LOG(WARN, "unsupported log group entry header version", K(ret), K_(version));
   } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, new_pos, magic_))
              || OB_FAIL(serialization::encode_i16(buf, buf_len, new_pos, version_))
              || OB_FAIL(serialization::encode_i32(buf, buf_len, new_pos, group_size_))

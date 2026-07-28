@@ -21,6 +21,7 @@
 #include "lib/ob_define.h"
 #include "lib/rc/context.h"
 #include "lib/runtime.h"
+#include "lib/errsim_module/ob_errsim_module_type.h"
 
 namespace oceanbase
 {
@@ -109,6 +110,10 @@ public:
   static Worker& self();
   static void set_worker_to_thread_local(Worker *worker);
 
+#ifdef ERRSIM
+  static void set_module_type(const ObErrsimModuleType &module_type);
+  static ObErrsimModuleType get_module_type();
+#endif
 protected:
   OB_INLINE void set_is_th_worker(bool is_th_worker) { is_th_worker_ = is_th_worker; }
 public:
@@ -247,6 +252,7 @@ public:
   ObErrsimModuleType module_type_;
 #endif
   LogReductionMode log_reduction_mode_;
+  ObExtraRpcHeader extra_rpc_header_;
 };
 
 inline ObRuntimeContext &get_ob_runtime_context()
@@ -270,6 +276,24 @@ OB_INLINE void Worker::set_log_reduction_mode(const LogReductionMode log_reducti
 {
   set_log_reduction(log_reduction_mode);
 }
+
+
+OB_INLINE ObAddr &get_rpc_src_addr()
+{
+  return get_ob_runtime_context().extra_rpc_header_.src_addr_;
+}
+
+#ifdef ERRSIM
+OB_INLINE void Worker::set_module_type(const ObErrsimModuleType &module_type)
+{
+  get_ob_runtime_context().module_type_ = module_type;
+}
+
+OB_INLINE ObErrsimModuleType Worker::get_module_type()
+{
+  return get_ob_runtime_context().module_type_;
+}
+#endif
 
 
 } // end of namespace lib

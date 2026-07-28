@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_executor.h"
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -85,6 +86,11 @@ int ObExecutor::execute_plan(ObExecContext &ctx)
 
     switch (execute_type) {
       case OB_PHY_PLAN_LOCAL: {
+        if (session_info->is_inner()) {
+          EVENT_INC(SQL_INNER_LOCAL_COUNT);
+        } else {
+          EVENT_INC(SQL_LOCAL_COUNT);
+        }
         ObOperator *op = NULL;
         if (OB_FAIL(phy_plan_->get_root_op_spec()->create_operator(ctx, op))) {
           LOG_WARN("create operator from spec failed", K(ret));
@@ -97,6 +103,11 @@ int ObExecutor::execute_plan(ObExecContext &ctx)
         break;
       }
       case OB_PHY_PLAN_DISTRIBUTED:
+        if (session_info->is_inner()) {
+          EVENT_INC(SQL_INNER_DISTRIBUTED_COUNT);
+        } else {
+          EVENT_INC(SQL_DISTRIBUTED_COUNT);
+        }
         // PX special path
         // PX mode, scheduling work is handled by the ObPxCoord operator
         ret = execute_static_cg_px_plan(ctx);

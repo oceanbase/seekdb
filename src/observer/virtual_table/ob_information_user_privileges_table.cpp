@@ -47,6 +47,7 @@ ObInfoSchemaUserPrivilegesTable::StaticInit::StaticInit()
   ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_SHOW_DB_SHIFT] = "SHOW DATABASES";
   ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_SUPER_SHIFT] = "SUPER";
   ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_PROCESS_SHIFT] = "PROCESS";
+  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_CREATE_SYNONYM_SHIFT] = "CREATE SYNONYM";
   ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_FILE_SHIFT] = "FILE";
   ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_ALTER_SYSTEM_SHIFT] = "ALTER SYSTEM";
   ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_REPL_SLAVE_SHIFT] =

@@ -237,7 +237,7 @@ void ObRARowStore::reset()
   inner_reader_.reset();
 
   if (is_file_open()) {
-    if (OB_FAIL(share::g_mp->tmp_file_manager()->remove(fd_))) {
+    if (OB_FAIL(SERVER_TMP_FILE_MANAGER.remove(fd_))) {
       LOG_WARN("remove file failed", K(ret), K_(fd));
     } else {
       LOG_INFO("close file success", K(ret), K_(fd));
@@ -916,9 +916,9 @@ int ObRARowStore::write_file(BlockIndex &bi, void *buf, int64_t size)
     LOG_WARN("get timeout failed", K(ret));
   } else {
     if (!is_file_open()) {
-      if (OB_FAIL(share::g_mp->tmp_file_manager()->alloc_dir(dir_id_))) {
+      if (OB_FAIL(SERVER_TMP_FILE_MANAGER.alloc_dir(dir_id_))) {
         LOG_WARN("alloc file directory failed", K(ret));
-      } else if (OB_FAIL(share::g_mp->tmp_file_manager()->open(fd_, dir_id_))) {
+      } else if (OB_FAIL(SERVER_TMP_FILE_MANAGER.open(fd_, dir_id_))) {
         LOG_WARN("open file failed", K(ret));
       } else {
         file_size_ = 0;
@@ -934,7 +934,7 @@ int ObRARowStore::write_file(BlockIndex &bi, void *buf, int64_t size)
     io.size_ = size;
     io.io_desc_.set_wait_event(ObWaitEventIds::ROW_STORE_DISK_WRITE);
     io.io_timeout_ms_ = timeout_ms;
-    if (OB_FAIL(share::g_mp->tmp_file_manager()->write(io))) {
+    if (OB_FAIL(SERVER_TMP_FILE_MANAGER.write(io))) {
       LOG_WARN("write to file failed", K(ret), K(io), K(timeout_ms));
     }
   }
@@ -969,7 +969,7 @@ int ObRARowStore::read_file(void *buf, const int64_t size, const int64_t offset)
     io.io_desc_.set_wait_event(ObWaitEventIds::ROW_STORE_DISK_READ);
     io.io_timeout_ms_ = timeout_ms;
     tmp_file::ObTmpFileIOHandle handle;
-    if (OB_FAIL(share::g_mp->tmp_file_manager()->pread(io, offset, handle))) {
+    if (OB_FAIL(SERVER_TMP_FILE_MANAGER.pread(io, offset, handle))) {
       LOG_WARN("read form file failed", K(ret), K(io), K(offset), K(timeout_ms));
     } else if (handle.get_done_size() != size) {
       ret = OB_INNER_STAT_ERROR;

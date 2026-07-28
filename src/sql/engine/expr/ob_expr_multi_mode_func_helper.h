@@ -20,6 +20,8 @@
 #include "sql/session/ob_sql_session_info.h"
 #include "lib/allocator/page_arena.h"
 
+using namespace oceanbase::common;
+
 namespace oceanbase
 {
 namespace sql
@@ -39,12 +41,19 @@ public:
   int64_t used() const { return arena_.used(); }
   int64_t total() const { return arena_.total(); }
   void reset() { arena_.reset(); }
+  void reuse() override { arena_.reuse(); }
+  void set_attr(const ObMemAttr &attr) override
+  {
+    arena_.set_attr(attr);
+  }
+
   int eval_arg(const ObExpr *arg, ObEvalCtx &ctx, common::ObDatum *&datum);
 private:
   ObIAllocator &arena_;
 };
 
-} // namespace sql
-} // namespace oceanbase
+
+};
+};
 
 #endif // OCEANBASE_SQL_OB_EXPR_MULTI_MODE_FUNC_HELPER_H_

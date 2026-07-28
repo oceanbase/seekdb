@@ -59,13 +59,17 @@ int ObCreateRoutineResolver::create_routine_arg(obcall::ObCreateRoutineArg *&crt
 }
 
 int ObCreateRoutineResolver::set_routine_info(const ObRoutineType &type,
-                                              ObRoutineInfo &routine_info)
+                                              ObRoutineInfo &routine_info,
+                                              bool is_udt_udf)
 {
   int ret = OB_SUCCESS;
   uint64_t user_id;
   CK(OB_NOT_NULL(session_info_));
   OZ (schema_checker_->get_user_id(session_info_->get_user_name(),  session_info_->get_host_name(), user_id));
   if (OB_SUCC(ret)) {
+    if (is_udt_udf) {
+      routine_info.set_is_udt_udf();
+    }
     routine_info.set_routine_type(type);
     
     routine_info.set_owner_id(user_id);
@@ -254,7 +258,8 @@ int ObCreateRoutineResolver::set_routine_param(const ObIArray<ObObjAccessIdx> &a
   CK (ObObjAccessIdx::is_table_column(access_idxs)
       || ObObjAccessIdx::is_package_variable(access_idxs)
       || ObObjAccessIdx::is_table(access_idxs)
-      || ObObjAccessIdx::is_pkg_type(access_idxs));
+      || ObObjAccessIdx::is_pkg_type(access_idxs)
+      || ObObjAccessIdx::is_udt_type(access_idxs));
   CK (OB_NOT_NULL(params_.session_info_));
   if (ObObjAccessIdx::is_table_column(access_idxs)) {
     const ObTableSchema *table = nullptr;
@@ -364,6 +369,21 @@ int ObCreateRoutineResolver::set_routine_param(const ObIArray<ObObjAccessIdx> &a
         OZ (collect_ref_obj_info(package_id, package_info->get_schema_version(),
                                  ObDependencyTableType::DEPENDENCY_PACKAGE));
       }
+    }
+  } else if (ObObjAccessIdx::is_udt_type(access_idxs)) {
+    CK (access_idxs.count() >= 1 && access_idxs.count() <= 2);
+    OX (routine_param.set_param_type(ObExtendType));
+    OX (routine_param.set_udt_type());
+    OX (routine_param.set_type_name(access_idxs.at(access_idxs.count()-1).var_name_));
+    if (OB_FAIL(ret)) {
+    } else if (2 == access_idxs.count()) {
+      {
+        // system type, set owner is oceanbase
+        routine_param.set_type_owner(OB_SYS_DATABASE_ID);
+      }
+    } else {
+      // system type, set owner is oceanbase
+      routine_param.set_type_owner(OB_SYS_DATABASE_ID);
     }
   }
   return ret;
@@ -488,9 +508,14 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
                                                       obj_access_idents,
                                                       session_info));
           if (OB_FAIL(ret)) {
-          } else if (1 == obj_access_idents.count()) {
-            ret = OB_ERR_SP_UNDECLARED_TYPE;
-            LOG_WARN("unresolved routine parameter type", K(ret), K(obj_access_idents));
+          } else if (1 == obj_access_idents.count()
+                     && 0 == obj_access_idents.at(0).access_name_.case_compare("SYS_REFCURSOR")) {
+            routine_param.set_type_name(obj_access_idents.at(0).access_name_);
+            routine_param.set_sys_refcursor_type();
+          } else if (1 == obj_access_idents.count()) { //udt
+            routine_param.set_type_name(obj_access_idents.at(0).access_name_);
+            routine_param.set_type_owner(current_db_id);
+            routine_param.set_udt_type();
           } else if (3 == obj_access_idents.count()) { //db.pkg.type
             uint64_t owner_id = OB_INVALID_ID;
             OZ (schema_checker_->get_database_id(obj_access_idents.at(0).access_name_,
@@ -507,8 +532,9 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
               &owner_id));
             if (OB_FAIL(ret)) {
             } else if (exist) {
-              ret = OB_ERR_SP_UNDECLARED_TYPE;
-              LOG_WARN("schema-level object types are not supported", K(ret), K(obj_access_idents));
+              routine_param.set_type_name(obj_access_idents.at(1).access_name_);
+              routine_param.set_type_owner(owner_id);
+              routine_param.set_udt_type();
             } else {
               routine_param.set_type_name(obj_access_idents.at(1).access_name_);
               routine_param.set_type_owner(current_db_id);
@@ -516,12 +542,10 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
               routine_param.set_pkg_type();
             }
           }
-          if (OB_SUCC(ret)) {
-            OX (routine_param.set_param_type(ObExtendType));
-          }
+          OX (routine_param.set_param_type(ObExtendType));
         }
       } else {
-        CK (ObObjAccessIdx::is_pkg_type(access_idxs));
+        CK (ObObjAccessIdx::is_pkg_type(access_idxs) || ObObjAccessIdx::is_udt_type(access_idxs));
         OZ (set_routine_param(access_idxs, routine_param));
         if (OB_SUCC(ret)
             && routine_param.is_extern_type()
@@ -652,6 +676,9 @@ int ObCreateRoutineResolver::resolve_param_list(const ParseNode *param_list, obc
           break;
         }
       }
+      if (OB_SUCC(ret) && 1 == param_node->int32_values_[1]) {
+        routine_param.set_nocopy_param();
+      }
       // set default value expr str
       if (OB_SUCC(ret)
           && 3 == param_node->num_child_ // default node
@@ -736,7 +763,8 @@ int ObCreateRoutineResolver::resolve_impl(ObRoutineType routine_type,
                                      const ParseNode *ret_node,
                                      const ParseNode *param_node,
                                      const ParseNode *clause_list,
-                                     obcall::ObCreateRoutineArg *crt_routine_arg)
+                                     obcall::ObCreateRoutineArg *crt_routine_arg,
+                                     bool is_udt_udf)
 {
   int ret = OB_SUCCESS;
   bool need_reset_default_database = false;
@@ -747,7 +775,7 @@ int ObCreateRoutineResolver::resolve_impl(ObRoutineType routine_type,
 
   OZ(resolve_sp_definer(sp_definer_node, crt_routine_arg->routine_info_));
   OZ (resolve_sp_name(name_node, crt_routine_arg));
-  OZ (set_routine_info(routine_type, crt_routine_arg->routine_info_));
+  OZ (set_routine_info(routine_type, crt_routine_arg->routine_info_, is_udt_udf));
 
   if (OB_SUCC(ret)) {
     uint64_t database_id = OB_INVALID_ID;

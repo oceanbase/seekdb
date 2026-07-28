@@ -21,7 +21,6 @@
 #include "sql/optimizer/ob_select_log_plan.h"
 #include "sql/optimizer/ob_opt_cost_model_parameter.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 
 using namespace oceanbase;
 using namespace sql;
@@ -720,6 +719,7 @@ int ObOptimizer::extract_opt_ctx_basic_flags(const ObDMLStmt &stmt, ObSQLSession
   bool has_subquery_in_function_table = false;
   bool force_serial_set_order = false;
   bool storage_estimation_enabled = false;
+  bool has_cursor_expr = false;
   ObQueryCtx* query_ctx = ctx_.get_query_ctx();
   bool push_join_pred_into_view_enabled = true;
   bool partition_wise_plan_enabled = true;
@@ -737,6 +737,7 @@ int ObOptimizer::extract_opt_ctx_basic_flags(const ObDMLStmt &stmt, ObSQLSession
   bool enable_spf_batch_rescan = session.is_spf_mlj_group_rescan_enabled();
   bool enable_px_ordered_coord = GCONF._enable_px_ordered_coord;
   int64_t das_batch_rescan_flag = true ? GCONF._enable_das_batch_rescan_flag : 0;
+  bool enable_distributed_das_scan = true ? GCONF._enable_distributed_das_scan : true;
   const ObOptParamHint &opt_params = ctx_.get_global_hint().opt_params_;
   if (OB_ISNULL(query_ctx)) {
     ret = OB_ERR_UNEXPECTED;
@@ -755,6 +756,8 @@ int ObOptimizer::extract_opt_ctx_basic_flags(const ObDMLStmt &stmt, ObSQLSession
     LOG_WARN("failed to init system stat", K(ret));
   } else if (OB_FAIL(opt_params.get_bool_opt_param(ObOptParamHint::ROWSETS_ENABLED, rowsets_enabled))) {
     LOG_WARN("fail to check rowsets enabled", K(ret));
+  } else if (OB_FAIL(stmt.check_has_cursor_expression(has_cursor_expr))) {
+    LOG_WARN("fail to check cursor expression info", K(ret));
   } else if (OB_FAIL(session.is_storage_estimation_enabled(storage_estimation_enabled))) {
     LOG_WARN("fail to get storage_estimation_enabled", K(ret));
   } else if (OB_FAIL(opt_params.get_bool_opt_param(ObOptParamHint::ENABLE_DAS_KEEP_ORDER, das_keep_order_enabled))) {
@@ -776,7 +779,7 @@ int ObOptimizer::extract_opt_ctx_basic_flags(const ObDMLStmt &stmt, ObSQLSession
   } else if (OB_FAIL(opt_params.get_bool_opt_param(ObOptParamHint::OPTIMIZER_BETTER_INLIST_COSTING, better_inlist_costing))) {
     LOG_WARN("failed to get opt param better inlist costing", K(ret));
   } else if (OB_FAIL(session.get_nlj_batching_enabled(enable_use_batch_nlj))) {
-    LOG_WARN("failed to get NLJ batching variable", K(ret));
+    LOG_WARN("failed to get join cache size variable", K(ret));
   } else if (OB_FAIL(opt_params.get_bool_opt_param(ObOptParamHint::NLJ_BATCHING_ENABLED, enable_use_batch_nlj))) {
     LOG_WARN("failed to get opt param nlj batching enable", K(ret));
   } else if (OB_FAIL(opt_params.get_bool_opt_param(ObOptParamHint::ENABLE_SPF_BATCH_RESCAN, enable_spf_batch_rescan))) {
@@ -802,6 +805,7 @@ int ObOptimizer::extract_opt_ctx_basic_flags(const ObDMLStmt &stmt, ObSQLSession
     ctx_.set_is_var_assign_only_in_root_stmt(is_var_assign_only_in_root_stmt);
     ctx_.set_has_subquery_in_function_table(has_subquery_in_function_table);
     ctx_.set_cost_model_type(rowsets_enabled ? ObOptEstCost::VECTOR_MODEL : ObOptEstCost::NORMAL_MODEL);
+    ctx_.set_has_cursor_expression(has_cursor_expr);
     ctx_.set_das_keep_order_enabled(das_keep_order_enabled);
     ctx_.set_optimizer_index_cost_adj(optimizer_index_cost_adj);
     ctx_.set_enable_better_inlist_costing(better_inlist_costing);
@@ -811,6 +815,7 @@ int ObOptimizer::extract_opt_ctx_basic_flags(const ObDMLStmt &stmt, ObSQLSession
       ctx_.set_push_join_pred_into_view_enabled(push_join_pred_into_view_enabled);
     }
     ctx_.set_enable_px_ordered_coord(enable_px_ordered_coord);
+    ctx_.set_enable_distributed_das_scan(enable_distributed_das_scan);
     if (!hash_join_enabled
         && !optimizer_sortmerge_join_enabled
         && !nested_loop_join_enabled) {
@@ -867,6 +872,9 @@ int ObOptimizer::init_parallel_policy(ObDMLStmt &stmt, const ObSQLSessionInfo &s
      ctx_.set_parallel_rule(PXParallelRule::PL_UDF_DAS_FORCE_SERIALIZE);
   } else if (ctx_.has_pl_udf()) {
     //following above rule, but if stmt contain pl_udf, force das, parallel should be 1
+    ctx_.set_parallel_rule(PXParallelRule::PL_UDF_DAS_FORCE_SERIALIZE);
+  } else if (ctx_.has_cursor_expression()) {
+    // Cursor expressions require serial DAS execution.
     ctx_.set_parallel_rule(PXParallelRule::PL_UDF_DAS_FORCE_SERIALIZE);
   } else if (ctx_.get_global_hint().has_parallel_degree()) {
     ctx_.set_parallel_rule(PXParallelRule::MANUAL_HINT);

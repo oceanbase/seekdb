@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SQL_DAS
 #include "ob_das_context.h"
 #include "sql/das/ob_das_utils.h"
-#include "sql/ob_sql_context.h"
 #include "observer/ob_server.h"
 namespace oceanbase
 {
@@ -25,60 +24,6 @@ using namespace common;
 using namespace share;
 namespace sql
 {
-
-int ObDASCtx::build_local_tablet_loc(uint64_t ref_table_id,
-                                    const ObTabletID &tablet_id,
-                                    ObDASTabletLoc &tablet_loc)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(is_virtual_table(ref_table_id))
-      && OB_UNLIKELY(tablet_id.id() != 1
-                     && tablet_id.id() != EMPTY_VIRTUAL_TABLE_TABLET_ID)) {
-    ret = OB_LOCATION_NOT_EXIST;
-    LOG_WARN("virtual tablet location does not exist", K(ret), K(ref_table_id), K(tablet_id));
-  } else {
-    tablet_loc.tablet_id_ = tablet_id;
-  }
-  save_cur_exec_status(ret);
-  return ret;
-}
-
-bool ObDASCtx::is_refresh_location_error(int err_no) const
-{
-  return is_master_changed_error(err_no)
-      || is_partition_change_error(err_no)
-      || is_get_location_timeout_error(err_no);
-}
-
-void ObDASCtx::refresh_location_cache_by_errno(bool is_nonblock, int err_no)
-{
-  NG_TRACE_TIMES(1, get_location_cache_begin);
-  if (is_refresh_location_error(err_no)) {
-    force_refresh_location_cache(is_nonblock, err_no);
-  }
-  NG_TRACE_TIMES(1, get_location_cache_end);
-}
-
-void ObDASCtx::force_refresh_location_cache(bool is_nonblock, int err_no)
-{
-  UNUSED(is_nonblock);
-  last_location_errno_ = err_no;
-}
-
-void ObDASCtx::set_retry_info(const ObQueryRetryInfo *retry_info)
-{
-  if (OB_NOT_NULL(retry_info)) {
-    last_location_errno_ = retry_info->get_last_query_retry_err();
-    history_retry_cnt_ = retry_info->get_retry_cnt();
-  }
-}
-
-void ObDASCtx::save_cur_exec_status(int err_no)
-{
-  if (is_refresh_location_error(err_no)) {
-    last_location_errno_ = err_no;
-  }
-}
 
 
 int ObDASCtx::init(const ObPhysicalPlan &plan, ObExecContext &ctx)
@@ -91,8 +36,8 @@ int ObDASCtx::init(const ObPhysicalPlan &plan, ObExecContext &ctx)
   ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(ctx.get_my_session());
   const ObIArray<ObTableLocation> &normal_locations = plan.get_table_locations();
   const ObIArray<ObTableLocation> &das_locations = plan.get_das_table_locations();
-  set_last_errno(ctx.get_my_session()->get_retry_info().get_last_query_retry_err());
-  set_history_retry_cnt(ctx.get_my_session()->get_retry_info().get_retry_cnt());
+  location_router_.set_last_errno(ctx.get_my_session()->get_retry_info().get_last_query_retry_err());
+  location_router_.set_history_retry_cnt(ctx.get_my_session()->get_retry_info().get_retry_cnt());
   for (int64_t i = 0; OB_SUCC(ret) && i < das_locations.count(); ++i) {
     const ObTableLocation &das_location = das_locations.at(i);
     ObDASTableLoc *table_loc = nullptr;
@@ -153,7 +98,10 @@ int ObDASCtx::get_das_tablet_mapper(const uint64_t ref_table_id,
       tablet_mapper.related_info_.guard_ = schema_guard;
     }
   } else {
-    tablet_mapper.virtual_table_id_ = real_table_id;
+    // Record the local virtual-table location in the tablet mapper.
+    if (OB_FAIL(location_router_.get_vt_svr_pair(real_table_id, tablet_mapper.vt_svr_pair_))) {
+      LOG_WARN("get virtual table server pair failed", K(ret), K(real_table_id));
+    }
   }
   return ret;
 }
@@ -189,9 +137,9 @@ int ObDASCtx::extended_tablet_loc(ObDASTableLoc &table_loc,
       LOG_WARN("allocate tablet loc failed", K(ret));
     } else if (OB_ISNULL(tablet_loc = new(loc_buf) ObDASTabletLoc())) {
       //do nothing
-    } else if (OB_FAIL(build_local_tablet_loc(table_loc.loc_meta_->ref_table_id_,
-                                              tablet_id,
-                                              *tablet_loc))) {
+    } else if (OB_FAIL(location_router_.get_tablet_loc(*table_loc.loc_meta_,
+                                                       tablet_id,
+                                                       *tablet_loc))) {
       LOG_WARN("nonblock get tablet location failed", K(ret), KPC(table_loc.loc_meta_), K(tablet_id));
     } else if (OB_FAIL(table_loc.add_tablet_loc(tablet_loc))) {
       LOG_WARN("store tablet location info failed", K(ret));
@@ -218,12 +166,17 @@ int ObDASCtx::extended_tablet_loc(ObDASTableLoc &table_loc,
     LOG_WARN("get tablet loc failed", KR(ret), K(opt_tablet_loc.get_tablet_id()));
   }
   if (OB_SUCC(ret) && tablet_loc == nullptr) {
+    const ObAddr &server = opt_tablet_loc.get_server();
     void *tablet_buf = allocator_.alloc(sizeof(ObDASTabletLoc));
     if (OB_ISNULL(tablet_buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate tablet loc buf failed", K(ret), K(sizeof(ObDASTabletLoc)));
+    } else if (OB_UNLIKELY(!server.is_valid())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("local tablet location is invalid", K(ret), K(candi_tablet_loc));
     } else {
       tablet_loc = new(tablet_buf) ObDASTabletLoc();
+      tablet_loc->server_ = server;
       tablet_loc->tablet_id_ = opt_tablet_loc.get_tablet_id();
       tablet_loc->partition_id_ = opt_tablet_loc.get_partition_id();
       tablet_loc->first_level_part_id_ = opt_tablet_loc.get_first_level_part_id();
@@ -278,12 +231,15 @@ OB_INLINE int ObDASCtx::build_related_tablet_loc(ObDASTabletLoc &tablet_loc)
     if (OB_SUCC(ret)) {
       related_tablet_loc = new(related_loc_buf) ObDASTabletLoc();
       related_tablet_loc->tablet_id_ = rv->tablet_id_;
+      related_tablet_loc->server_ = tablet_loc.server_;
       related_tablet_loc->loc_meta_ = related_table_loc->loc_meta_;
       related_tablet_loc->next_ = tablet_loc.next_;
       related_tablet_loc->partition_id_ = rv->part_id_;
       related_tablet_loc->first_level_part_id_ = rv->first_level_part_id_;
       tablet_loc.next_ = related_tablet_loc;
-      if (OB_FAIL(related_table_loc->add_tablet_loc(related_tablet_loc))) {
+      if (OB_FAIL(location_router_.save_touched_tablet_id(related_tablet_loc->tablet_id_))) {
+        LOG_WARN("save touched tablet id failed", K(ret), KPC(related_tablet_loc));
+      } else if (OB_FAIL(related_table_loc->add_tablet_loc(related_tablet_loc))) {
         LOG_WARN("add related tablet location failed", K(ret));
       }
     }
@@ -513,6 +469,7 @@ OB_DEF_SERIALIZE(ObDASCtx)
   }
   OB_UNIS_ENCODE(flags_);
   OB_UNIS_ENCODE(snapshot_);
+  OB_UNIS_ENCODE(location_router_);
   OB_UNIS_ENCODE(write_branch_id_);
   return ret;
 }
@@ -543,6 +500,7 @@ OB_DEF_DESERIALIZE(ObDASCtx)
   if (OB_SUCC(ret) && OB_FAIL(rebuild_tablet_loc_reference())) {
     LOG_WARN("rebuild tablet loc reference failed", K(ret));
   }
+  OB_UNIS_DECODE(location_router_);
   OB_UNIS_DECODE(write_branch_id_);
   return ret;
 }
@@ -557,6 +515,7 @@ OB_DEF_SERIALIZE_SIZE(ObDASCtx)
   }
   OB_UNIS_ADD_LEN(flags_);
   OB_UNIS_ADD_LEN(snapshot_);
+  OB_UNIS_ADD_LEN(location_router_);
   OB_UNIS_ADD_LEN(write_branch_id_);
   return len;
 }

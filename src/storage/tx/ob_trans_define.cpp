@@ -90,7 +90,48 @@ int64_t ObStartTransParam::to_string(char *buf, const int64_t buf_len) const
 
 void ObTraceInfo::reset()
 {
+  if (app_trace_info_.length() >= MAX_TRACE_INFO_BUFFER) {
+    void *buf = app_trace_info_.ptr();
+    if (NULL != buf &&
+        buf != &app_trace_info_) {
+      ob_free(buf);
+      buf = NULL;
+    }
+    app_trace_info_.assign_buffer(app_trace_info_buffer_, sizeof(app_trace_info_buffer_));
+  } else {
+    app_trace_info_.set_length(0);
+  }
   app_trace_id_.set_length(0);
+}
+
+int ObTraceInfo::set_app_trace_info(const ObString &app_trace_info)
+{
+  const int64_t len = app_trace_info.length();
+  int ret = OB_SUCCESS;
+
+  if (len < 0 || len > OB_MAX_TRACE_INFO_BUFFER_SIZE) {
+    TRANS_LOG(WARN, "unexpected trace info str", K(app_trace_info));
+    ret = OB_INVALID_ARGUMENT;
+  } else if (0 != app_trace_info_.length()) {
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(ERROR, "different app trace info", K(ret), K(app_trace_info_), K(app_trace_info));
+  } else if (len < MAX_TRACE_INFO_BUFFER) {
+    (void)app_trace_info_.write(app_trace_info.ptr(), len);
+    app_trace_info_buffer_[len] = '\0';
+  } else {
+    char *buf = NULL;
+    if (NULL == (buf = (char *)ob_malloc(len+1, "AppTraceInfo"))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      TRANS_LOG(WARN, "allocate memory for app trace info failed", K(ret), K(app_trace_info));
+    } else {
+      app_trace_info_.reset();
+      (void)app_trace_info_.assign_buffer(buf, len+1);
+      (void)app_trace_info_.write(app_trace_info.ptr(), len);
+      buf[len] = '\0';
+    }
+  }
+
+  return ret;
 }
 
 int ObTraceInfo::set_app_trace_id(const ObString &app_trace_id)

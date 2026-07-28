@@ -90,6 +90,7 @@ int ObSkipIndexAggResult::deep_copy(const ObSkipIndexAggResult &src, ObIAllocato
 int ObIColAggregator::init(
     const bool is_major,
     const ObColDesc &col_desc,
+    const int64_t data_format_version,
     ObStorageDatum &result,
     ObSkipIndexDatumAttr &result_attr)
 {
@@ -99,6 +100,7 @@ int ObIColAggregator::init(
     LOG_WARN("Init twice", K(ret));
   } else {
     col_desc_ = col_desc;
+    data_format_version_ = data_format_version;
     result_ = &result;
     result_->set_null();
     result_attr_ = &result_attr;
@@ -221,6 +223,7 @@ void ObIColAggregator::process_nop_for_loose_agg(const bool is_major)
 int ObColNullCountAggregator::init(
     const bool is_major,
     const ObColDesc &col_desc,
+    const int64_t data_format_version,
     ObStorageDatum &result,
     ObSkipIndexDatumAttr &result_attr)
 {
@@ -228,7 +231,7 @@ int ObColNullCountAggregator::init(
   if (OB_UNLIKELY(!is_major)) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("null count aggregator for non-major data not supported yet", K(ret));
-  } else if (OB_FAIL(ObIColAggregator::init(is_major, col_desc, result, result_attr))) {
+  } else if (OB_FAIL(ObIColAggregator::init(is_major, col_desc, data_format_version, result, result_attr))) {
     LOG_WARN("fail to init ObIColAggregator", K(ret));
   } else {
     null_count_ = 0;
@@ -290,11 +293,12 @@ int ObColNullCountAggregator::eval(ObIDatumIter &datum_iter)
 int ObColMaxAggregator::init(
     const bool is_major,
     const ObColDesc &col_desc,
+    const int64_t data_format_version,
     ObStorageDatum &result,
     ObSkipIndexDatumAttr &result_attr)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIColAggregator::init(is_major, col_desc, result, result_attr))) {
+  if (OB_FAIL(ObIColAggregator::init(is_major, col_desc, data_format_version, result, result_attr))) {
     LOG_WARN("fail to init ObIColAggregator", K(ret));
   } else {
     sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
@@ -472,11 +476,12 @@ int ObColMaxAggregator::cmp_with_prefix(
 int ObColMinAggregator::init(
     const bool is_major,
     const ObColDesc &col_desc,
+    const int64_t data_format_version,
     ObStorageDatum &result,
     ObSkipIndexDatumAttr &result_attr)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIColAggregator::init(is_major, col_desc, result, result_attr))) {
+  if (OB_FAIL(ObIColAggregator::init(is_major, col_desc, data_format_version, result, result_attr))) {
     LOG_WARN("fail to init ObIColAggregator", K(ret));
   } else {
     sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
@@ -605,6 +610,7 @@ int ObColMinAggregator::cmp_with_prefix(
 int ObColSumAggregator::init(
     const bool is_major,
     const ObColDesc &col_desc,
+    const int64_t data_format_version,
     ObStorageDatum &result,
     ObSkipIndexDatumAttr &result_attr)
 {
@@ -612,7 +618,7 @@ int ObColSumAggregator::init(
   if (OB_UNLIKELY(!is_major)) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("skip index sum column aggregator on non-major data not supported", K(ret));
-  } else if (OB_FAIL(ObIColAggregator::init(is_major, col_desc, result, result_attr))) {
+  } else if (OB_FAIL(ObIColAggregator::init(is_major, col_desc, data_format_version, result, result_attr))) {
     LOG_WARN("fail to init ObIColAggregator", K(ret));
   } else if (!can_agg_sum(col_desc.col_type_.get_type())) {
     set_not_aggregate();
@@ -1163,6 +1169,7 @@ ObISkipIndexAggregator::ObISkipIndexAggregator()
     full_agg_metas_(nullptr),
     full_col_descs_(nullptr),
     max_agg_size_(0),
+    data_format_version_(0),
     need_aggregate_(false),
     evaluated_(false),
     is_inited_(false) {}
@@ -1192,6 +1199,7 @@ void ObISkipIndexAggregator::reset()
   full_col_descs_ = nullptr;
   allocator_ = nullptr;
   max_agg_size_ = 0;
+  data_format_version_ = 0;
   need_aggregate_ = false;
   evaluated_ = false;
   is_inited_ = false;
@@ -1214,6 +1222,7 @@ int ObISkipIndexAggregator::init(
     const bool is_major,
     const ObIArray<ObSkipIndexColMeta> &full_agg_metas,
     const ObIArray<ObColDesc> &full_col_descs,
+    const int64_t data_format_version,
     ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
@@ -1226,8 +1235,9 @@ int ObISkipIndexAggregator::init(
   } else if (OB_FAIL(agg_result_.init(full_agg_metas.count(), allocator))) {
     LOG_WARN("Fail to init aggregate result datum row", K(ret), K(full_agg_metas));
   } else if (OB_FAIL(init_col_aggregators(
-      is_major, full_agg_metas, full_col_descs, allocator))) {
+      is_major, full_agg_metas, full_col_descs, data_format_version, allocator))) {
     LOG_WARN("Fail to init column aggregators", K(ret), K(full_agg_metas), K(full_col_descs));
+  } else if (FALSE_IT(data_format_version_ = data_format_version)) {
   } else if(OB_FAIL(calc_max_agg_size(full_agg_metas, full_col_descs))){
     LOG_WARN("Fail to calculate max aggregate data size",
         K(ret), K(full_agg_metas), K(full_col_descs));
@@ -1426,6 +1436,7 @@ int ObISkipIndexAggregator::init_col_aggregators(
     const bool is_major,
     const ObIArray<ObSkipIndexColMeta> &full_agg_metas,
     const ObIArray<ObColDesc> &full_col_descs,
+    const int64_t data_format_version,
     ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
@@ -1476,28 +1487,28 @@ int ObISkipIndexAggregator::init_col_aggregators(
       switch (idx_type) {
       case ObSkipIndexColType::SK_IDX_MIN: {
         if (OB_FAIL(init_col_aggregator<ObColMinAggregator>(
-            is_major, full_col_descs.at(col_idx), agg_res_datum, agg_datum_attr, allocator))) {
+            is_major, full_col_descs.at(col_idx), data_format_version, agg_res_datum, agg_datum_attr, allocator))) {
           LOG_WARN("Fail to allocate column aggregator", K(ret));
         }
         break;
       }
       case ObSkipIndexColType::SK_IDX_MAX: {
         if (OB_FAIL(init_col_aggregator<ObColMaxAggregator>(
-            is_major, full_col_descs.at(col_idx), agg_res_datum, agg_datum_attr, allocator))) {
+            is_major, full_col_descs.at(col_idx), data_format_version, agg_res_datum, agg_datum_attr, allocator))) {
           LOG_WARN("Fail to allocate column aggregator", K(ret));
         }
         break;
       }
       case ObSkipIndexColType::SK_IDX_NULL_COUNT: {
         if (OB_FAIL(init_col_aggregator<ObColNullCountAggregator>(
-            is_major, full_col_descs.at(col_idx), agg_res_datum, agg_datum_attr, allocator))) {
+            is_major, full_col_descs.at(col_idx), data_format_version, agg_res_datum, agg_datum_attr, allocator))) {
           LOG_WARN("Fail to allocate column aggregator", K(ret));
         }
         break;
       }
       case ObSkipIndexColType::SK_IDX_SUM: {
         if (OB_FAIL(init_col_aggregator<ObColSumAggregator>(
-            is_major, full_col_descs.at(col_idx), agg_res_datum, agg_datum_attr, allocator))) {
+            is_major, full_col_descs.at(col_idx), data_format_version, agg_res_datum, agg_datum_attr, allocator))) {
           LOG_WARN("Fail to allocate column aggregator", K(ret));
         }
         break;
@@ -1560,6 +1571,7 @@ template <typename T>
 int ObISkipIndexAggregator::init_col_aggregator(
     const bool is_major,
     const ObColDesc &col_desc,
+    const int64_t data_format_version,
     ObStorageDatum &result_datum,
     ObSkipIndexDatumAttr &result_attr,
     ObIAllocator &allocator)
@@ -1576,7 +1588,7 @@ int ObISkipIndexAggregator::init_col_aggregator(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Fail to alloc memory for column aggregator", K(ret));
   } else if (FALSE_IT(col_aggregator = new (buf) T())) {
-  } else if (OB_FAIL(col_aggregator->init(is_major, col_desc, result_datum, result_attr))) {
+  } else if (OB_FAIL(col_aggregator->init(is_major, col_desc, data_format_version, result_datum, result_attr))) {
     LOG_WARN("Fail to init column aggregator", K(ret), K(col_desc));
   } else if (OB_FAIL(col_aggs_.push_back(col_aggregator))) {
     LOG_WARN("Fail to append col aggregator to array", K(ret), K(col_desc));
@@ -1948,6 +1960,7 @@ int ObIndexBlockAggregator::init(const ObDataStoreDesc &store_desc, ObIAllocator
         store_desc.is_major_or_meta_merge_type(),
         store_desc.get_agg_meta_array(),
         store_desc.get_full_stored_col_descs(),
+        store_desc.get_data_format_version(),
         allocator))) {
       LOG_WARN("Fail to init skip index aggregator", K(ret));
     }

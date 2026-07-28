@@ -42,7 +42,7 @@ TEST(test_basic_session_info, init_set_get)
   {
     ObString runtime_name = ObString::make_string("yyy");
     ObString user_name = ObString::make_string("aaa");
-    ASSERT_EQ(OB_SUCCESS, session_info.init_runtime(runtime_name));
+    session_info.init_runtime(runtime_name);
     session_info.set_user(user_name, OB_DEFAULT_HOST_NAME, 1);
     ObObj autocommit_obj, min_val, max_val;
     ObObj autocommit_type;

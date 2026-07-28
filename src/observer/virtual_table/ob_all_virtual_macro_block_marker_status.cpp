@@ -102,46 +102,51 @@ int ObAllVirtualMacroBlockMarkerStatus::inner_get_next_row(common::ObNewRow *&ro
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 6: {
+        // bloomfilter_count_
+        cur_row_.cells_[i].set_int(marker_status_.bloomfiter_count_);
+        break;
+      }
+      case OB_APP_MIN_COLUMN_ID + 7: {
         // hold_count_
         cur_row_.cells_[i].set_int(marker_status_.hold_count_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 7: {
+      case OB_APP_MIN_COLUMN_ID + 8: {
         // pending_free_count_
         cur_row_.cells_[i].set_int(marker_status_.pending_free_count_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 8: {
+      case OB_APP_MIN_COLUMN_ID + 9: {
         // free_count_
         cur_row_.cells_[i].set_int(marker_status_.free_count_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 9: {
+      case OB_APP_MIN_COLUMN_ID + 10: {
         // mark_cost_time
         cur_row_.cells_[i].set_int(marker_status_.mark_cost_time_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 10: {
+      case OB_APP_MIN_COLUMN_ID + 11: {
         // sweep_cost_time
         cur_row_.cells_[i].set_int(marker_status_.sweep_cost_time_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 11: {
+      case OB_APP_MIN_COLUMN_ID + 12: {
         // start_marker_time
         cur_row_.cells_[i].set_timestamp(marker_status_.start_time_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 12: {
+      case OB_APP_MIN_COLUMN_ID + 13: {
         // last_marker_end_time
         cur_row_.cells_[i].set_timestamp(marker_status_.last_end_time_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 13: {
+      case OB_APP_MIN_COLUMN_ID + 14: {
         // whether finished marking
         cur_row_.cells_[i].set_bool(marker_status_.mark_finished_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 14: {
+      case OB_APP_MIN_COLUMN_ID + 15: {
         // comment
         cur_row_.cells_[i].set_varchar(comment_);
         cur_row_.cells_[i].set_collation_type(collcation_type);

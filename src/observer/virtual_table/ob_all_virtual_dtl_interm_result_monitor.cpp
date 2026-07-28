@@ -63,7 +63,11 @@ int ObDTLIntermResultMonitorInfoGetter::operator() (common::hash::HashMapPair<Ob
     const char *owner = NULL;
     ObObj *cells = cur_row_.cells_;
     if (info.is_store_valid()) {
-      GET_CHUNK_STORE_INFO(info.datum_store_);
+      if (info.is_rich_format()) {
+        GET_CHUNK_STORE_INFO(info.block_store_);
+      } else {
+        GET_CHUNK_STORE_INFO(info.datum_store_);
+      }
     }
     for (int64_t cell_idx = 0;
         OB_SUCC(ret) && cell_idx < output_column_ids_.count();

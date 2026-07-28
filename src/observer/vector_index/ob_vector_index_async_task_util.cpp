@@ -40,96 +40,6 @@ using namespace sql;
 using namespace common;
 namespace share
 {
-namespace
-{
-struct VecDutyTime
-{
-  int32_t hour_ = 0;
-  int32_t minute_ = 0;
-  int32_t second_ = 0;
-
-  bool is_valid() const
-  {
-    return hour_ >= 0 && hour_ <= 24
-        && minute_ >= 0 && minute_ <= 60
-        && second_ >= 0 && second_ <= 60;
-  }
-};
-
-bool extract_time_value(const char *ptr, const int64_t len, int32_t &value)
-{
-  bool found = false;
-  value = 0;
-  for (int64_t i = 0; i < len; ++i) {
-    if (' ' == ptr[i]) {
-      continue;
-    } else if (ptr[i] >= '0' && ptr[i] <= '9') {
-      found = true;
-      for (; i < len && ptr[i] >= '0' && ptr[i] <= '9'; ++i) {
-        value = value * 10 + ptr[i] - '0';
-      }
-      break;
-    } else {
-      break;
-    }
-  }
-  return found;
-}
-
-int parse_duty_time(const ObString &input, VecDutyTime &time)
-{
-  int ret = OB_SUCCESS;
-  const char *first_colon = input.find(':');
-  const char *last_colon = input.reverse_find(':');
-  if (OB_ISNULL(first_colon) || OB_ISNULL(last_colon) || first_colon >= last_colon
-      || !extract_time_value(input.ptr(), first_colon - input.ptr(), time.hour_)
-      || !extract_time_value(first_colon + 1, last_colon - first_colon - 1, time.minute_)
-      || !extract_time_value(last_colon + 1, input.ptr() + input.length() - last_colon - 1, time.second_)
-      || !time.is_valid()) {
-    ret = OB_INVALID_CONFIG;
-    LOG_WARN("invalid vector index duty time", K(ret), K(input));
-  }
-  return ret;
-}
-
-int parse_duty_window(const char *str, VecDutyTime &begin, VecDutyTime &end, bool &not_set)
-{
-  int ret = OB_SUCCESS;
-  not_set = OB_ISNULL(str) || '\0' == str[0];
-  if (!not_set) {
-    const ObString input(str);
-    const char *left = input.find('[');
-    const char *comma = input.find(',');
-    const char *right = input.reverse_find(']');
-    if (OB_ISNULL(left) || OB_ISNULL(comma) || OB_ISNULL(right)
-        || left >= comma || comma >= right) {
-      ret = OB_INVALID_CONFIG;
-      LOG_WARN("invalid vector index duty window", K(ret), K(input));
-    } else {
-      ObString begin_str(static_cast<int32_t>(comma - left - 1), left + 1);
-      ObString end_str(static_cast<int32_t>(right - comma - 1), comma + 1);
-      if (OB_FAIL(parse_duty_time(begin_str, begin))) {
-        LOG_WARN("failed to parse vector index duty begin time", K(ret));
-      } else if (OB_FAIL(parse_duty_time(end_str, end))) {
-        LOG_WARN("failed to parse vector index duty end time", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-bool current_in_duty_window(const VecDutyTime &begin, const VecDutyTime &end)
-{
-  time_t now = 0;
-  time(&now);
-  const struct tm *local = localtime(&now);
-  const int32_t begin_second = begin.second_ + 60 * (begin.minute_ + 60 * begin.hour_);
-  const int32_t end_second = end.second_ + 60 * (end.minute_ + 60 * end.hour_);
-  const int32_t current_second = local->tm_sec + 60 * (local->tm_min + 60 * local->tm_hour);
-  return begin_second <= current_second && current_second <= end_second;
-}
-} // namespace
-
 ObVecIndexAsyncTaskCtx::~ObVecIndexAsyncTaskCtx()
 {
   if (OB_NOT_NULL(extra_data_)) {
@@ -712,14 +622,12 @@ int ObVecIndexAsyncTaskUtil::construct_read_task_sql(const char *tname,
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s", tname))) {
+  if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s where ", tname))) {
     LOG_WARN("sql assign fmt failed", K(ret));
   }
   for (size_t i = 0; OB_SUCC(ret) && i < filters.count(); ++i) {
     const ObVecIndexTaskStatusField &field = filters.at(i);
-    if (OB_FAIL(sql.append_fmt("%s%s = ",
-                               0 == i ? " WHERE " : " AND ",
-                               field.field_name_.ptr()))) {
+    if (OB_FAIL(sql.append_fmt("%s = ", field.field_name_.ptr()))) {
       LOG_WARN("sql assign fmt failed", K(ret));
     } else if (field.type_ == ObVecIndexTaskStatusField::INT_TYPE) {
       if (OB_FAIL(sql.append_fmt("%ld", field.data_.int_))) {
@@ -737,17 +645,21 @@ int ObVecIndexAsyncTaskUtil::construct_read_task_sql(const char *tname,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("sql append fmt failed", K(ret));
     }
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(sql.append_fmt("%s", i == filters.count() - 1 ? "" : " AND "))) {
+        LOG_WARN("sql append fmt failed", K(ret));
+      }
+    }
   }
   if (OB_SUCC(ret)) {
     // 1. Global async task: tablet_id == -1;
     // 2. LS async task: tablet_id != -1;
-    const char *predicate_prefix = filters.empty() ? " WHERE " : " AND ";
     if (is_read_global_task) {
-      if (OB_FAIL(sql.append_fmt("%stablet_id == -1 ", predicate_prefix))) {
+      if (OB_FAIL(sql.append_fmt(" AND tablet_id == -1 "))) {
         LOG_WARN("sql append fmt failed", K(ret));
       }
     } else {
-      if (OB_FAIL(sql.append_fmt("%stablet_id != -1 ", predicate_prefix))) {
+      if (OB_FAIL(sql.append_fmt(" AND tablet_id != -1 "))) {
         LOG_WARN("sql append fmt failed", K(ret));
       }
     }

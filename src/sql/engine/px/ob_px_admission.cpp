@@ -55,7 +55,7 @@ int ObPxAdmission::get_parallel_session_target(ObSQLSessionInfo &session,
 // If the current remaining number of threads can meet req_cnt, then allocate threads to the request
 // But considering that the system should allow the first request to execute when idle, need to handle the following special cases:
 //   If the number of request threads req_cnt is greater than limit, and there are no other px requests currently (used = 0)
-//   Then assign up to the limit to this request (admit_cnt = used = limit)
+//   Then assign all threads to this request (admit_cnt = req_cnt, used = limit)
 //
 //   Inference: A request that requires **excess** threads will only be scheduled after the system becomes idle
 int64_t ObPxAdmission::admit(ObSQLSessionInfo &session, ObExecContext &exec_ctx,
@@ -135,6 +135,9 @@ int ObPxAdmission::enter_query_admission(ObSQLSessionInfo &session,
       } else if (admit_worker_count <= 0) {
         plan.inc_delayed_px_querys();
         ret = OB_ERR_INSUFFICIENT_PX_WORKER;
+        ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(dop_, plan.get_px_dop());
+        ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(required_px_workers_number_, req_worker_count);
+        ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(admitted_px_workers_number_, admit_worker_count);
         LOG_INFO("This query is out of px worker resources and needs to be delayed; "
                 "disconnection is unnecessary.",
                 K(admit_worker_count),
@@ -142,8 +145,9 @@ int ObPxAdmission::enter_query_admission(ObSQLSessionInfo &session,
                 K(plan.get_plan_id()),
                 K(ret));
       } else {
+        ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(exec_ctx);
         ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(exec_ctx);
-        if (OB_ISNULL(task_exec_ctx)) {
+        if (OB_ISNULL(plan_ctx) || OB_ISNULL(task_exec_ctx)) {
           ret = OB_ERR_UNEXPECTED;
         } else {
           // indicates the number calculated by optimizer
@@ -157,6 +161,7 @@ int ObPxAdmission::enter_query_admission(ObSQLSessionInfo &session,
     }
   }
   if (stmt::T_EXPLAIN != stmt_type && plan.get_das_dop() > 0) {
+    int64_t minimal_px_worker_count = plan.get_minimal_worker_count();
     int64_t parallel_servers_target = OB_PX_TARGET_MONITOR.get_parallel_servers_target();
     int64_t real_das_dop = std::min(parallel_servers_target, plan.get_das_dop());
     exec_ctx.get_das_ctx().set_real_das_dop(real_das_dop);
@@ -182,8 +187,6 @@ void ObPxAdmission::exit_query_admission(ObSQLSessionInfo &session,
     } else if (OB_FAIL(OB_PX_TARGET_MONITOR.release_target(
                    task_exec_ctx->get_admited_worker_cnt()))) {
       LOG_WARN("release target failed", K(ret));
-    } else {
-      exec_ctx.set_admission_acquired(false);
     }
     LOG_DEBUG("release resource, notify wait threads");
   }

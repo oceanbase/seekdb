@@ -17,9 +17,9 @@
 
 #include "storage/tablet/ob_i_tablet_mds_interface.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 #include "storage/tablet/ob_mds_scan_param_helper.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
+#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 
 namespace oceanbase
 {

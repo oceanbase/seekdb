@@ -33,99 +33,121 @@ void has_unfree_callback(char *)
 {
   has_unfree = true;
 }
-
 class TestAllocator : public ::testing::Test
 {
 public:
-  void SetUp() override
+  virtual void SetUp()
   {
     ObMallocAllocator *ma = ObMallocAllocator::get_instance();
     ASSERT_EQ(OB_SUCCESS, ma->set_allocator_limit(limit));
     auto ta = ma->get_ctx_allocator(ctx_id);
     ASSERT_TRUE(NULL != ta);
   }
+  //virtual void TearDown();
 };
 
-// ObAllocator has no state and no logic, only basic functions are tested here.
+// ObAllocator has no state and no logic, only basic functions are tested here
 TEST_F(TestAllocator, basic)
 {
+  ObMallocAllocator *ma = ObMallocAllocator::get_instance();
+  auto ta = ma->get_ctx_allocator(ctx_id);
   ObMemAttr attr(label, ctx_id);
-  ObAllocator allocator(nullptr, attr);
-  int64_t size = 1L << 4;
+  ObAllocator a(nullptr, attr);
+  int64_t sz = 100;
 
-  void *ptrs[128] = {};
-  int64_t count = 1L << 18;
-  while (count--) {
+  void *p[128] = {};
+  int64_t cnt = 1L << 18;
+  sz = 1L << 4;
+
+  while (cnt--) {
     int i = 0;
-    for (int j = 0; j < 16; ++j) {
-      ptrs[i++] = allocator.alloc(size);
-    }
-    ASSERT_GT(allocator.used(), 0);
+    p[i++] = a.alloc(sz);
+    p[i++] = a.alloc(sz);
+    p[i++] = a.alloc(sz);
+    p[i++] = a.alloc(sz);
+    p[i++] = a.alloc(sz);
+    p[i++] = a.alloc(sz);
+    p[i++] = a.alloc(sz);
+    p[i++] = a.alloc(sz);
+    p[i++] = a.alloc(sz);
+    p[i++] = a.alloc(sz);
+    p[i++] = a.alloc(sz);
+    p[i++] = a.alloc(sz);
+    p[i++] = a.alloc(sz);
+    p[i++] = a.alloc(sz);
+    p[i++] = a.alloc(sz);
+    p[i++] = a.alloc(sz);
+    int64_t hold = a.used();
+    ASSERT_GT(hold, 0);
     while (i--) {
-      allocator.free(ptrs[i]);
+      a.free(p[i]);
     }
-    size = ((size | reinterpret_cast<size_t>(ptrs[0])) & ((1 << 13) - 1));
+    sz = ((sz | reinterpret_cast<size_t>(p[0])) & ((1<<13) - 1));
   }
 
-  // Test alloc_align/free_align.
+  // test alloc_align/free_align
   for (int i = 0; i < 10; ++i) {
-    const int64_t align = 8 << i;
-    void *ptr = allocator.alloc_align(100, align);
-    ASSERT_EQ(0, reinterpret_cast<int64_t>(ptr) & (align - 1));
-    ASSERT_GT(allocator.used(), 0);
-    allocator.free_align(ptr);
-    ASSERT_EQ(allocator.used(), 0);
+    int64_t align = 8<<i;
+    void *ptr = a.alloc_align(100, align);
+    ASSERT_EQ(0, (int64_t)ptr & (align - 1));
+    ASSERT_GT(a.used(), 0);
+    a.free_align(ptr);
+    ASSERT_EQ(a.used(), 0);
   }
+  cout << "done" << endl;
 }
 
 TEST_F(TestAllocator, reveal_unfree)
 {
+  ObMallocAllocator *ma = ObMallocAllocator::get_instance();
+  auto ta = ma->get_ctx_allocator(ctx_id);
   ObMemAttr attr(label, ctx_id);
   has_unfree = false;
-
-  // No unfreed allocation.
+  // no unfree
   {
-    ObAllocator allocator(nullptr, attr);
-    const int64_t hold = allocator.used();
-    void *ptr = allocator.alloc(100);
+    ObAllocator a(nullptr, attr);
+    const int64_t hold = a.used();
+    void *ptr = a.alloc(100);
     ASSERT_NE(ptr, nullptr);
-    ASSERT_GT(allocator.used(), hold);
-    allocator.free(ptr);
-    allocator.~ObAllocator();
+    ASSERT_GT(a.used(), hold);
+    a.free(ptr);
+    a.~ObAllocator();
     ASSERT_FALSE(has_unfree);
-    ASSERT_EQ(allocator.used(), hold);
+    ASSERT_EQ(a.used(), hold);
   }
-
-  // One unfreed allocation.
+  // has unfree
   {
-    ObAllocator allocator(nullptr, attr);
-    const int64_t hold = allocator.used();
-    void *ptr = allocator.alloc(100);
+    ObAllocator a(nullptr, attr);
+    const int64_t hold = a.used();
+    void *ptr = a.alloc(100);
     ASSERT_NE(ptr, nullptr);
-    ASSERT_GT(allocator.used(), hold);
-    allocator.~ObAllocator();
+    ASSERT_GT(a.used(), hold);
+    //a.free(ptr);
+    a.~ObAllocator();
     ASSERT_TRUE(has_unfree);
-    ASSERT_EQ(allocator.used(), hold);
+    ASSERT_EQ(a.used(), hold);
   }
 }
 
 TEST_F(TestAllocator, reset)
 {
+  ObMallocAllocator *ma = ObMallocAllocator::get_instance();
+  auto ta = ma->get_ctx_allocator(ctx_id);
   ObMemAttr attr(label, ctx_id);
   const int64_t hold = 0;
-  ObAllocator allocator(nullptr, attr);
-  void *ptr = allocator.alloc(100);
+  ObAllocator a(nullptr, attr);
+  void *ptr = a.alloc(100);
   ASSERT_NE(ptr, nullptr);
-  ASSERT_GT(allocator.used(), hold);
+  ASSERT_GT(a.used(), hold);
   // reset
-  allocator.reset();
-  ASSERT_EQ(allocator.used(), hold);
+  a.reset();
+  ASSERT_EQ(a.used(), hold);
   // alloc after reset
-  ptr = allocator.alloc(100);
+  ptr = a.alloc(100);
   ASSERT_NE(ptr, nullptr);
-  ASSERT_GT(allocator.used(), hold);
-  allocator.~ObAllocator();
-  ASSERT_EQ(allocator.used(), hold);
+  ASSERT_GT(a.used(), hold);
+  a.~ObAllocator();
+  ASSERT_EQ(a.used(), hold);
 }
 
 int main(int argc, char **argv)

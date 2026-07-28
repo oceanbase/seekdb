@@ -140,7 +140,7 @@ enum ObTableModeFlag
 {
   TABLE_MODE_NORMAL = 0,
   TABLE_MODE_QUEUING = 1,
-  TABLE_MODE_RESERVED_2 = 2,
+  TABLE_MODE_PRIMARY_AUX_VP = 2,
   TABLE_MODE_QUEUING_MODERATE = 3,
   TABLE_MODE_QUEUING_SUPER = 4,
   TABLE_MODE_QUEUING_EXTREME = 5,
@@ -450,6 +450,9 @@ public:
   virtual inline int64_t get_column_count() const { return INVAID_RET; }
   virtual inline int64_t get_schema_version() const { return INVAID_RET; }
   virtual inline int64_t get_pctfree() const { return INVAID_RET; }
+  virtual inline bool is_primary_aux_vp_table() const { return false; }
+  virtual inline bool is_primary_vp_table() const { return false; }
+  virtual inline bool is_aux_vp_table() const { return false; }
   virtual inline bool is_column_info_simplified() const { return false; }
   virtual inline bool is_storage_index_table() const = 0;
   virtual inline int64_t get_block_size() const { return INVAID_RET;}
@@ -470,6 +473,11 @@ public:
   {
     UNUSED(column_ids);
     UNUSED(full_col);
+    return common::OB_NOT_SUPPORTED;
+  }
+  virtual int get_aux_vp_tid_array(common::ObIArray<uint64_t> &aux_vp_tid_array) const
+  {
+    UNUSED(aux_vp_tid_array);
     return common::OB_NOT_SUPPORTED;
   }
   virtual int has_lob_column(bool &has_lob, const bool check_large = false) const
@@ -766,10 +774,14 @@ public:
   inline bool is_tmp_table() const { return is_mysql_tmp_table(); }
   inline bool is_ctas_tmp_table() const { return 0 != session_id_ && !is_tmp_table(); }
   inline bool is_mysql_tmp_table() const { return share::schema::is_mysql_tmp_table(table_type_); }
+  virtual inline bool is_aux_vp_table() const override { return share::schema::ObTableType::AUX_VERTIAL_PARTITION_TABLE == table_type_; }
   inline bool is_aux_lob_piece_table() const { return share::schema::is_aux_lob_piece_table(table_type_); }
   inline bool is_aux_lob_meta_table() const { return share::schema::is_aux_lob_meta_table(table_type_); }
   inline bool is_aux_lob_table() const { return is_aux_lob_meta_table() || is_aux_lob_piece_table(); }
-  inline bool is_aux_table() const { return share::schema::ObTableType::USER_INDEX == table_type_ || share::schema::ObTableType::AUX_LOB_PIECE == table_type_ || share::schema::ObTableType::AUX_LOB_META == table_type_; }
+  inline bool is_aux_table() const { return share::schema::ObTableType::USER_INDEX == table_type_ || share::schema::ObTableType::AUX_VERTIAL_PARTITION_TABLE == table_type_ || share::schema::ObTableType::AUX_LOB_PIECE == table_type_ || share::schema::ObTableType::AUX_LOB_META == table_type_; }
+  // Primary partition table judgment: still USER_TABLE, but data_table_id_ is the same as itself,
+  // the default data_table_id_ is 0
+  virtual inline bool is_primary_vp_table() const override { return (share::schema::ObTableType::USER_TABLE == table_type_) && (table_id_ == data_table_id_); }
   // when support global index, do not modify this local index interface
   inline static bool is_user_data_table(share::schema::ObTableType table_type)
   { return USER_TABLE == table_type; }
@@ -841,7 +853,7 @@ public:
   inline bool is_index_local_storage() const;
   virtual bool has_tablet() const override;
   inline bool has_partition() const
-  { return !(is_vir_table() || is_view_table() || is_index_local_storage() || is_aux_lob_table()); }
+  { return !(is_vir_table() || is_view_table() || is_index_local_storage() || is_aux_vp_table() || is_aux_lob_table()); }
   // Introduced by pg, the stand alone table has its own physical partition
   virtual bool has_self_partition() const override { return has_partition(); }
   inline bool is_unavailable_index() const { return INDEX_STATUS_UNAVAILABLE == index_status_; }
@@ -1048,6 +1060,7 @@ public:
     common::ObIArray<common::ObString> &orig_names,
     ObColumnCheckMode check_mode);
   int reorder_column(const ObString &column_name, const bool is_first, const ObString &prev_column_name, const ObString &next_column_name);
+  int add_aux_vp_tid(const uint64_t aux_vp_tid);
   int add_partition_key(const common::ObString &column_name);
   int add_partition_key(const uint64_t column_id);
   int add_subpartition_key(const common::ObString &column_name);
@@ -1060,6 +1073,7 @@ public:
   void clear_foreign_key_infos();
   int set_trigger_list(const common::ObIArray<uint64_t> &trigger_list);
   int set_simple_index_infos(const common::ObIArray<ObAuxTableMetaInfo> &simple_index_infos);
+  int set_aux_vp_tid_array(const common::ObIArray<uint64_t> &aux_vp_tid_array);
   // constraint related
   int add_constraint(const ObConstraint &constraint);
   int delete_constraint(const common::ObString &constraint_name);
@@ -1079,6 +1093,7 @@ public:
   int get_generated_column_by_define(const common::ObString &col_def,
                                      const bool only_hidden_column,
                                      share::schema::ObColumnSchemaV2 *&gen_col);
+  int get_aux_vp_tid_array(common::ObIArray<uint64_t> &aux_vp_tid_array) const;
   void get_column_name_by_column_id(const uint64_t column_id, common::ObString &column_name, bool &is_column_exist) const;
   const ObColumnSchemaV2 *get_column_schema(const uint64_t column_id) const;
   const ObColumnSchemaV2 *get_column_schema(const char *column_name) const;
@@ -1102,6 +1117,8 @@ public:
   int64_t get_tablet_size() const { return tablet_size_; }
   int64_t get_pctfree() const { return pctfree_; }
   inline int64_t get_index_tid_count() const { return simple_index_infos_.count(); }
+  inline int64_t get_aux_vp_tid_count() const { return aux_vp_tid_array_.count(); }
+  virtual inline bool is_primary_aux_vp_table() const override { return aux_vp_tid_array_.count() > 0 && is_primary_vp_table(); }
   inline int64_t get_index_column_number() const { return index_column_num_; }
   inline uint64_t get_max_used_column_id() const { return max_used_column_id_; }
   inline int64_t get_rowkey_split_pos() const { return rowkey_split_pos_; }
@@ -1229,6 +1246,14 @@ public:
   inline void set_define_user_id(const uint64_t user_id) { define_user_id_ = user_id; }
   inline uint64_t get_define_user_id() const { return define_user_id_; }
 
+  // Return all vertical partition columns, including the vertical partition column that is the primary key
+  int get_vp_column_ids(common::ObIArray<share::schema::ObColDesc> &column_ids) const;
+  // Return all vertical partition columns, including primary key + vertical partition column
+  int get_vp_store_column_ids(common::ObIArray<share::schema::ObColDesc> &column_ids) const;
+  // Only used for the primary partition table, returns all vertical partition columns,
+  // including the primary key + vertical partition column
+  int get_vp_column_ids_with_rowkey(common::ObIArray<share::schema::ObColDesc> &column_ids,
+      const bool no_virtual = false) const;
   int get_spatial_geo_column_id(uint64_t &geo_column_id) const;
   int get_spatial_index_column_ids(common::ObIArray<uint64_t> &column_ids) const;
   int get_fulltext_column_ids(uint64_t &doc_id_col_id, uint64_t &ft_col_id) const
@@ -1247,7 +1272,12 @@ public:
   // only used by storage layer, return all columns that need to be stored in sstable
   // 1. for storage_index_table (user_index):
   //    return all index columns plus rowkey (including virtual columns)
-  // 2. for user table:
+  // 2. for primary vp(vertical partition)
+  //    2.1. is_minor = true,  return all not virtual columns for all table columns
+  //    2.2. is_minor = false, return all not virtual columns for primary vp columns only
+  // 3. for aux vp(vertical partition)
+  //    return all not virtual columns defined in the current vertical partition plus rowkey
+  // 4. for user table:
   //    return all not virtual columns of the current table
   // PLUS: filter is_not_included_in_minor_column from column ids when doing minor freeze(is_minor = true)
 
@@ -1591,8 +1621,8 @@ protected:
 
   common::ObSArray<ObAuxTableMetaInfo> simple_index_infos_;
 
-  // Serialized compatibility slot for the removed table-type 11 metadata.
-  common::ObSArray<uint64_t> reserved_table_ids_;
+  // aux_vp_tid_array_ also contains the primary partition id, which is the primary table itself
+  common::ObSArray<uint64_t> aux_vp_tid_array_;
 
   // Should encapsulate an Array structure, push calls T (allocator) construction
   int64_t column_cnt_;

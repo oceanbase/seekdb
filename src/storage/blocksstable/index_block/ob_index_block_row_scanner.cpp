@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_index_block_row_scanner.h"
 #include "storage/access/ob_rows_info.h"
+#include "storage/access/ob_advance_scan_helper.h"
 #include "storage/tablet/ob_tablet.h"
 
 namespace oceanbase

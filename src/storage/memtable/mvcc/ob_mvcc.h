@@ -142,7 +142,7 @@ public:
   // NB: You need notice the data should be checkpointed so all information
   // should be stored somewhere to satisfy the STEAL policy. So the checksum and
   // data should all be saved. What's more, the log itself must be stored. In
-  // our implementation, the callbacks being checkpointed must be durably committed
+  // our implementation, the callbacks be checkpointed must be paxos committed
   // and applied successfully.
   virtual int checkpoint_callback() { return OB_SUCCESS; }
 
@@ -153,10 +153,10 @@ public:
   //
   // NB: You need notice the data should be rollbacked so all information should
   // never be readable according to the ATOMICITY policy. While the data may
-  // already be saved and the log has been durably committed, so we need calculate
+  // already be saved and the log has been paxos committed, so we need calculate
   // the checksum for these and push them into UNDO_STATUS for our correctness
   // and visibility. In our implementation, the callbacks be rollbacked can be
-  // both durably committed and not yet committed.
+  // both paxos committed and or not.
   virtual int rollback_callback() { return OB_SUCCESS; }
 
 

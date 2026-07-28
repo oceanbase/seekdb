@@ -100,6 +100,15 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
       }
     }
     if (OB_SUCC(ret)) {
+      if (OB_FAIL(transform_cast_multiset_for_stmt(stmt, is_happened))) {
+        LOG_WARN("failed to transform for transform for cast multiset", K(ret));
+      } else {
+        trans_happened |= is_happened;
+        OPT_TRACE("transform for cast multiset", is_happened);
+        LOG_TRACE("succeed to transform for cast multiset", K(is_happened), K(ret));
+      }
+    }
+    if (OB_SUCC(ret)) {
       if (OB_FAIL(add_all_rowkey_columns_to_stmt(stmt, is_happened))) {
         LOG_WARN("faield to add all rowkey columns", K(ret));
       } else {
@@ -3720,6 +3729,143 @@ int ObTransformPreProcess::replace_remove_const_exprs(ObSelectStmt *stmt,
   return ret;
 }
 
+int ObTransformPreProcess::transform_cast_multiset_for_stmt(ObDMLStmt *&stmt,
+                                                            bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)
+      || OB_ISNULL(ctx_->expr_factory_) || OB_ISNULL(ctx_->session_info_)
+      || OB_ISNULL(ctx_->allocator_) || OB_ISNULL(ctx_->schema_checker_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("stmt or context is null", K(ret));
+  } else if (stmt->get_subquery_exprs().empty()) {
+    // do nothing
+  } else {
+    ObArray<ObRawExprPointer> relation_exprs;
+    ObStmtExprGetter getter;
+    if (OB_FAIL(stmt->get_relation_exprs(relation_exprs, getter))) {
+      LOG_WARN("failed to get all relation exprs", K(ret));
+    } else {
+      for (int i = 0; OB_SUCC(ret) && i < relation_exprs.count(); i++) {
+        bool is_happened = false;
+        ObRawExpr *expr = NULL;
+        if (OB_FAIL(relation_exprs.at(i).get(expr))) {
+          LOG_WARN("failed to get expr", K(ret));
+        } else if (OB_ISNULL(expr)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("expr is NULL", K(ret));
+        } else if (OB_FAIL(transform_cast_multiset_for_expr(*stmt,
+                                                            expr,
+                                                            is_happened))) {
+          LOG_WARN("transform expr failed", K(ret));
+        } else if (OB_FAIL(relation_exprs.at(i).set(expr))) {
+          LOG_WARN("failed to set expr", K(ret));
+        } else {
+          trans_happened |= is_happened;
+        }
+      }
+    }
+    if (OB_SUCC(ret) && trans_happened &&
+        OB_FAIL(stmt->formalize_stmt(ctx_->session_info_))) {
+      LOG_WARN("failed to formalize", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObTransformPreProcess::transform_cast_multiset_for_expr(ObDMLStmt &stmt,
+                                                            ObRawExpr *&expr,
+                                                            bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(expr) || 
+      OB_UNLIKELY(T_FUN_SYS_CAST == expr->get_expr_type() &&
+                  (expr->get_param_count() != 2 ||
+                   expr->get_param_expr(0) == NULL))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected param", K(ret), KPC(expr));
+  } else if (T_FUN_SYS_CAST == expr->get_expr_type() &&
+             expr->get_param_expr(0)->is_multiset_expr()) {
+    ObQueryRefRawExpr *subquery_expr = static_cast<ObQueryRefRawExpr *>(expr->get_param_expr(0));
+    ObConstRawExpr *const_expr = static_cast<ObConstRawExpr *>(expr->get_param_expr(1));
+    uint64_t udt_id = OB_INVALID_ID;
+    if (OB_ISNULL(const_expr) || OB_ISNULL(subquery_expr->get_ref_stmt()) || 
+       OB_UNLIKELY(!const_expr->is_const_raw_expr()) ||
+       OB_UNLIKELY(OB_INVALID_ID == (udt_id = const_expr->get_udt_id()))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected params", K(ret), KPC(expr));
+    }
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
+      OZ (SMART_CALL(transform_cast_multiset_for_expr(stmt,
+                                                      expr->get_param_expr(i),
+                                                      trans_happened)));
+    }
+  }
+  return ret;
+}
+
+int ObTransformPreProcess::add_constructor_to_multiset(ObDMLStmt &stmt,
+                                                       ObQueryRefRawExpr *multiset_expr,
+                                                       const pl::ObPLDataType &elem_type,
+                                                       bool& trans_happened)
+{
+  int ret = OB_SUCCESS;
+  return ret;
+}
+
+int ObTransformPreProcess::add_column_conv_to_multiset(ObQueryRefRawExpr *multiset_expr,
+                                                       const pl::ObPLDataType &elem_type,
+                                                       bool& trans_happened)
+{
+  int ret = OB_SUCCESS;
+  const ObDataType *data_type = NULL;
+  ObSelectStmt *multiset_stmt = multiset_expr->get_ref_stmt();
+  ObSelectStmt *new_stmt = NULL;
+  if (OB_ISNULL(data_type = elem_type.get_data_type())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get null element data type", K(ret), K(elem_type));
+  } else if (OB_UNLIKELY(multiset_stmt->get_select_item_size() != 1) ||
+            OB_UNLIKELY(multiset_expr->get_column_types().count() != 1)) {
+    ret = OB_ERR_INVALID_TYPE_FOR_OP;
+    LOG_WARN("unexpected column count", K(ret), KPC(multiset_stmt), KPC(multiset_expr));
+  } else {
+    if (!multiset_stmt->is_set_stmt() && !multiset_stmt->is_distinct()) {
+      // do nothing
+      // if multiset stmt is set stmt, create a view for it.
+    } else if (OB_FAIL(ObTransformUtils::create_stmt_with_generated_table(ctx_, multiset_stmt, new_stmt))) {
+      LOG_WARN("failed to create dummy view", K(ret));
+    } else if (OB_ISNULL(new_stmt)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", K(ret));
+    } else {
+      multiset_stmt = new_stmt;
+      multiset_expr->set_ref_stmt(multiset_stmt);
+    }
+    if (OB_SUCC(ret)) {
+      SelectItem &select_item = multiset_stmt->get_select_item(0);
+      ObRawExpr *child = select_item.expr_;
+      if (OB_FAIL(ObRawExprUtils::build_column_conv_expr(ctx_->session_info_,
+                                                         *ctx_->expr_factory_,
+                                                         data_type->get_obj_type(),
+                                                         data_type->get_collation_type(),
+                                                         data_type->get_accuracy_value(),
+                                                         true,
+                                                         NULL,
+                                                         NULL,
+                                                         child,
+                                                         true))) {
+        LOG_WARN("failed to build column conv expr", K(ret));
+      } else {
+        select_item.expr_ = child;
+        multiset_expr->get_column_types().at(0) = child->get_result_type();
+        trans_happened = true;
+      }
+    }
+  } 
+  return ret;
+}
+
 int ObTransformPreProcess::transform_outerjoin_exprs(ObDMLStmt *stmt, bool &is_happened)
 {
   int ret = OB_SUCCESS;
@@ -4883,7 +5029,7 @@ int ObTransformPreProcess::try_gen_straight_join_leading(ObDMLStmt *stmt, bool &
     LOG_WARN("unexpected null", K(ret), K(query_hint));
   } else {
     ObHint *leading_hint = stmt->get_stmt_hint().get_normal_hint(T_LEADING);
-    bool exist_leading_hint = query_hint->has_outline_data() ||
+    bool exist_leading_hint = query_hint->has_outline_data() || 
                               query_hint->has_user_def_outline() ||
                               OB_NOT_NULL(leading_hint);
     ObSEArray<TableItem*, 4> flattened_tables;

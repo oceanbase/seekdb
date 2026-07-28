@@ -63,6 +63,7 @@ ObSSTableBasicMeta::ObSSTableBasicMeta()
     compressor_type_(ObCompressorType::INVALID_COMPRESSOR),
     sstable_logic_seq_(0),
     latest_row_store_type_(ObRowStoreType::MAX_ROW_STORE),
+    table_backup_flag_(),
     root_macro_seq_(0),
     tx_data_recycle_scn_(SCN::min_scn())
 {}
@@ -77,7 +78,7 @@ bool ObSSTableBasicMeta::operator==(const ObSSTableBasicMeta &other) const
 
 bool ObSSTableBasicMeta::check_basic_meta_equality(const ObSSTableBasicMeta &other) const
 {
-  // Don't compare upper_trans_version, use_old_macro_block_count_, or length_.
+  // don't need to compare upper_trans_version and use_old_macro_block_count_
   // 1. meta's upper_trans_version may be different from sstable shell's
   // 2. defragmentation changes use_old_macro_block_count_
   // 3. length_ and version_ describe the serialization envelope, not the SSTable contents
@@ -108,6 +109,7 @@ bool ObSSTableBasicMeta::check_basic_meta_equality(const ObSSTableBasicMeta &oth
       && root_row_store_type_ == other.root_row_store_type_
       && compressor_type_ == other.compressor_type_
       && latest_row_store_type_ == other.latest_row_store_type_
+      && table_backup_flag_ == other.table_backup_flag_
       && root_macro_seq_ == other.root_macro_seq_
       && tx_data_recycle_scn_ == other.tx_data_recycle_scn_;
 }
@@ -137,6 +139,7 @@ bool ObSSTableBasicMeta::is_valid() const
            && sstable_logic_seq_ >= 0
            && root_row_store_type_ < ObRowStoreType::MAX_ROW_STORE
            && is_latest_row_store_type_valid()
+           && table_backup_flag_.is_valid()
            && root_macro_seq_ >= 0
            && tx_data_recycle_scn_.is_valid();
   return ret;
@@ -175,6 +178,7 @@ void ObSSTableBasicMeta::reset()
   compressor_type_ = ObCompressorType::INVALID_COMPRESSOR;
   sstable_logic_seq_ = 0;
   latest_row_store_type_ = ObRowStoreType::MAX_ROW_STORE;
+  table_backup_flag_.reset();
   root_macro_seq_ = 0;
   tx_data_recycle_scn_.set_min();
 }
@@ -226,6 +230,7 @@ DEFINE_SERIALIZE(ObSSTableBasicMeta)
                   compressor_type_,
                   sstable_logic_seq_,
                   latest_row_store_type_,
+                  table_backup_flag_,
                   root_macro_seq_,
                   tx_data_recycle_scn_);
       if (OB_FAIL(ret)) {
@@ -301,6 +306,7 @@ int ObSSTableBasicMeta::decode_fields(const char *buf, const int64_t data_len, i
               compressor_type_,
               sstable_logic_seq_,
               latest_row_store_type_,
+              table_backup_flag_,
               root_macro_seq_,
               tx_data_recycle_scn_);
   return ret;
@@ -341,6 +347,7 @@ DEFINE_GET_SERIALIZE_SIZE(ObSSTableBasicMeta)
               compressor_type_,
               sstable_logic_seq_,
               latest_row_store_type_,
+              table_backup_flag_,
               root_macro_seq_,
               tx_data_recycle_scn_);
   return len;
@@ -616,6 +623,7 @@ int ObSSTableMeta::init_base_meta(
     basic_meta_.root_row_store_type_ = param.root_row_store_type_;
     basic_meta_.latest_row_store_type_ = param.latest_row_store_type_;
     basic_meta_.compressor_type_ = param.compressor_type_;
+    basic_meta_.table_backup_flag_ = param.table_backup_flag_;
     basic_meta_.root_macro_seq_ = param.root_macro_seq_;
     basic_meta_.tx_data_recycle_scn_ = param.tx_data_recycle_scn_;
     basic_meta_.length_ = basic_meta_.get_serialize_size();

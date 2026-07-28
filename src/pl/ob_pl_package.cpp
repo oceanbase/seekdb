@@ -84,6 +84,10 @@ int ObPLPackageAST::init(const ObString &db_name,
     if (ObTriggerInfo::is_trigger_package_id(package_id)) {
       obj_version.object_id_ = ObTriggerInfo::get_package_trigger_id(package_id);
       obj_version.object_type_ = DEPENDENCY_TRIGGER;
+    } else if (PL_UDT_OBJECT_SPEC == package_type || PL_UDT_OBJECT_BODY == package_type) {
+      obj_version.object_id_ = package_id;
+      obj_version.object_type_
+        = PL_UDT_OBJECT_SPEC  == package_type ? DEPENDENCY_TYPE : DEPENDENCY_TYPE_BODY;
     } else {
       obj_version.object_id_ = package_id;
       obj_version.object_type_ = (PL_PACKAGE_SPEC == package_type) ? DEPENDENCY_PACKAGE : DEPENDENCY_PACKAGE_BODY;
@@ -112,7 +116,7 @@ int ObPLPackageAST::process_generic_type()
     "<V2_TABLE_1>",
     "<TABLE_1>",
     "<COLLECTION_1>",
-    "", // retired Oracle cursor-type slot
+    "<REF_CURSOR_1>",
 
     "<TYPED_TABLE>",
     "<ADT_WITH_OID>",
@@ -214,7 +218,9 @@ int ObPLPackage::instantiate_package_state(const ObPLResolveCtx &resolve_ctx,
         resolve_ctx.session_info_.set_pl_can_retry(false);
       }
     }
-    if (OB_FAIL(ret)) {
+    if (OB_NOT_NULL(var) && var->get_type().is_cursor_type() && !var->get_type().is_cursor_var()) {
+      // package ref cursor variable, refrence outside, do not destruct it.
+    } else if (OB_FAIL(ret)) {
       ObUserDefinedType::destruct_objparam(package_state.get_pkg_allocator(), value, &(resolve_ctx.session_info_));
     }
   }
@@ -238,6 +244,7 @@ int ObPLPackage::execute_init_routine(ObIAllocator &allocator, ObExecContext &ex
 
     if (OB_SUCC(ret)) {
       ParamStore params;
+      ObSEArray<int64_t, 2> nocopy_param;
       ObObj result;
       int status;
       ObSEArray<int64_t, 2> subp_path;
@@ -247,6 +254,7 @@ int ObPLPackage::execute_init_routine(ObIAllocator &allocator, ObExecContext &ex
                              init_routine->get_routine_id(),
                              subp_path,
                              params,
+                             nocopy_param,
                              result,
                              &status,
                              false,
@@ -405,3 +413,5 @@ int ObPLPackage::get_type(uint64_t type_id, const ObUserDefinedType *&type) cons
 }
 } // end namespace pl
 } // end namespace oceanbase
+
+

@@ -203,7 +203,8 @@ void ObMajorMergeInfoDetector::resume()
 int ObMajorMergeInfoDetector::try_minor_freeze()
 {
   int ret = OB_SUCCESS;
-  obcall::ObMinorFreezeArg arg;
+  ObAddr rs_addr = GCTX.self_addr();
+  obcall::ObRootMinorFreezeArg arg;
   if (OB_FAIL(GCTX.local_management_service_->root_minor_freeze(arg))) {
     LOG_WARN("fail to execute root_minor_freeze rpc", KR(ret), K(arg));
   } else {
@@ -228,9 +229,23 @@ int ObMajorMergeInfoDetector::can_start_work(bool &can_work)
 {
   int ret = OB_SUCCESS;
   can_work = true;
+  share::schema::ObSchemaGetterGuard schema_guard;
+  const ObSimpleServerRuntimeSchema *runtime_schema = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
+  } else if (OB_ISNULL(GCTX.schema_service_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("schema service is nullptr", KR(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get schema guard", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_server_runtime_info(runtime_schema))) {
+    LOG_WARN("fail to get runtime schema", KR(ret));
+
+  // Freeze information is refreshed only while the runtime schema is normal.
+  } else if ((nullptr == runtime_schema) || !runtime_schema->is_normal()) {
+    LOG_INFO("runtime is in abnormal status, no need to detect now", KPC(runtime_schema));
+    can_work = false;
   } else {
     // Bootstrap initializes the global snapshot GC SCN after the runtime becomes normal.
     // Wait for that initialization to avoid racing it.

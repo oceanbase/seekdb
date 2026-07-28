@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_storage_meta_cache.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/blocksstable/ob_storage_cache_suite.h"
@@ -454,6 +455,7 @@ int ObStorageMetaCache::ObStorageMetaIOCallback::do_process(const char *buf, con
   // TODO: callback need to deal with block-crossed shared blocks,
   // in which scene we only store the first blocks' addr
   int ret = OB_SUCCESS;
+  ObDIActionGuard action_guard("ObStorageMetaIOCallback");
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid storage meta cache callback", K(ret), K_(handle));
@@ -501,9 +503,11 @@ int ObStorageMetaCache::get_meta(
     } else if (OB_FAIL(prefetch(type, key, meta_handle, tablet))) {
       LOG_WARN("fail to prefetch", K(ret), K(type), K(key));
     } else {
+      EVENT_INC(STORAGE_META_CACHE_MISS);
     }
   } else {
     meta_handle.phy_addr_ = key.get_meta_addr();
+    EVENT_INC(STORAGE_META_CACHE_HIT);
   }
   return ret;
 }

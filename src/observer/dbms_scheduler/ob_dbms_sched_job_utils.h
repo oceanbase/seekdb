@@ -144,6 +144,7 @@ public:
     max_failures_(0),
     func_type_(ObDBMSSchedFuncType::FUNCTION_TYPE_MAXNUM),
     this_exec_date_(0),
+    this_exec_addr_(),
     this_exec_trace_id_() {}
 
   TO_STRING_KV(K(user_id_),
@@ -178,6 +179,7 @@ public:
                K(state_),
                K(func_type_),
                K(this_exec_date_),
+               K(this_exec_addr_),
                K(this_exec_trace_id_));
 
   bool valid()
@@ -221,6 +223,7 @@ public:
   common::ObString &get_job_name() { return job_name_; }
   common::ObString &get_job_class() { return job_class_; }
   common::ObString &get_job_action() { return job_action_; }
+  common::ObString &get_this_exec_addr() { return this_exec_addr_; }
   common::ObString &get_this_exec_trace_id() { return this_exec_trace_id_; }
 
   bool is_default_job_class() const { return (0 == job_class_.case_compare("DEFAULT_JOB_CLASS")); }
@@ -274,6 +277,7 @@ public:
   int64_t max_failures_;
   ObDBMSSchedFuncType func_type_;
   int64_t this_exec_date_;
+  common::ObString this_exec_addr_;
   common::ObString this_exec_trace_id_;
 
 public:

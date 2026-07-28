@@ -445,7 +445,7 @@ int ObVariableSetExecutor::set_user_variable(const ObObj &val,
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(switch_to_session_variable(expr_ctx, val, sess_var))) {
     LOG_WARN("fail to switch to session variable", K(ret), K(val));
-  } else if (OB_FAIL(session->replace_user_variable(variable_name, sess_var))) {
+  } else if (OB_FAIL(session->replace_user_variable(*ctx, variable_name, sess_var))) {
     LOG_WARN("set variable to session plan failed", K(ret), K(variable_name));
   } else {
   }

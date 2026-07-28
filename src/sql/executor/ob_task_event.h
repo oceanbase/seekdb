@@ -25,11 +25,16 @@
 #include "common/object/ob_object.h"
 #include "sql/executor/ob_slice_id.h"
 #include "share/schema/ob_table_schema.h"
+#include "sql/ob_scanner.h"
+#include "sql/ob_sql_trans_util.h"
+#include "storage/tx/ob_trans_define.h"
 
 namespace oceanbase
 {
 namespace sql
 {
+struct ObEvalCtx;
+
 // Due to calling the rpc asynchronous callback interface, this interface does not call the destructor of the parameters,
 // Therefore the following classes should be designed not to rely on the destructor for memory release
 
@@ -157,6 +162,147 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObTaskEvent);
 };
 
+class ObMiniTaskResult
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObMiniTaskResult(bool use_compact_row = true)
+      : task_result_(common::ObModIds::OB_NEW_SCANNER,
+                     nullptr,
+                     common::ObScanner::DEFAULT_MAX_SERIALIZE_SIZE,
+                     use_compact_row),
+      extend_result_(common::ObModIds::OB_NEW_SCANNER,
+                       nullptr,
+                       common::ObScanner::DEFAULT_MAX_SERIALIZE_SIZE,
+                       use_compact_row)
+  {
+  }
+  ObMiniTaskResult(common::ObIAllocator &allocator, bool use_compact_row = true)
+      : task_result_(allocator,
+                     common::ObModIds::OB_NEW_SCANNER,
+                     common::ObScanner::DEFAULT_MAX_SERIALIZE_SIZE,
+                     use_compact_row),
+        extend_result_(allocator,
+                       common::ObModIds::OB_NEW_SCANNER,
+                       common::ObScanner::DEFAULT_MAX_SERIALIZE_SIZE,
+                       use_compact_row)
+  {
+  }
+  ~ObMiniTaskResult()
+  {
+  }
+  
+  int init()
+  {
+    int ret = common::OB_SUCCESS;
+    ret = task_result_.init();
+    if (OB_SUCC(ret)) {
+      ret = extend_result_.init();
+    }
+    return ret;
+  }
+  inline void reset()
+  {
+    task_result_.reset();
+    extend_result_.reset();
+  }
+  inline void reuse()
+  {
+    task_result_.reuse();
+    extend_result_.reuse();
+  }
+  //only merge row store from mini task result
+  int assign(const ObMiniTaskResult &other);
+  inline common::ObScanner &get_task_result() { return task_result_; }
+  inline const common::ObScanner &get_task_result() const { return task_result_; }
+  inline common::ObScanner &get_extend_result() { return extend_result_; }
+  inline const common::ObScanner &get_extend_result() const { return extend_result_; }
+  TO_STRING_KV(K_(task_result), K_(extend_result));
+private:
+  common::ObScanner task_result_;
+  // For mini task, allow executing an extension plan along with the main plan,
+  // This mainly used when conflict checking, to get the unique index conflict row primary key when,
+  // You can also bring back the other column information of the conflicting rowkey for the primary key and local unique index, optimizing the number of RPC calls
+  common::ObScanner extend_result_;
+};
+
+class ObMiniTaskEvent
+{
+public:
+  ObMiniTaskEvent(const common::ObAddr &task_addr, int64_t task_id, int32_t ret_code)
+      : task_addr_(task_addr),
+        task_id_(task_id),
+        ret_code_(ret_code),
+        task_result_(false)
+  {
+  }
+  ~ObMiniTaskEvent() {}
+  // Used to release resources occupied by task event
+  inline void close_event() { reset(); }
+  void reset() { task_result_.reset(); }
+  int init() { return task_result_.init(); }
+  int set_mini_task_result(const ObMiniTaskResult &mini_task_result) { return task_result_.assign(mini_task_result); }
+  inline const ObMiniTaskResult &get_task_result() const { return task_result_; }
+  inline int32_t get_errcode() const { return ret_code_; }
+  inline int64_t get_task_id() const { return task_id_; }
+  TO_STRING_KV(K_(task_addr), K_(task_id), K_(ret_code));
+private:
+  const ObAddr task_addr_; // debug purpose when minitask async call fail
+  int64_t task_id_;
+  int32_t ret_code_;
+  ObMiniTaskResult task_result_;
+};
+
+class ObMiniTaskRetryInfo
+{
+public:
+  ObMiniTaskRetryInfo() : need_retry_(true), failed_task_lists_(), retry_ret_(common::OB_SUCCESS),
+  retry_times_(0), retry_execution_(false), retry_by_single_range_(false), not_master_tasks_() {}
+  virtual ~ObMiniTaskRetryInfo() = default;
+  inline bool need_retry() const { return need_retry_ && !failed_task_lists_.empty(); };
+  void never_retry() { need_retry_ = false; }
+  void add_retry_times() { ++retry_times_; }
+  inline int64_t get_retry_times() { return retry_times_; }
+  const common::ObIArray<std::pair<int64_t, int64_t> > &get_task_list() const {
+    return failed_task_lists_;
+  }
+  common::ObIArray<int64_t> &get_not_master_task_id() {
+    return not_master_tasks_;
+  }
+  inline void reuse_task_list() {
+    failed_task_lists_.reuse();
+  }
+  inline void reuse() {
+    reuse_task_list();
+    need_retry_ = true;
+    retry_ret_ = OB_SUCCESS;
+    not_master_tasks_.reuse();
+  }
+  int add_not_master_task_id(int64_t task_id) {
+    return not_master_tasks_.push_back(task_id);
+  }
+  inline void do_retry_execution() { retry_execution_ = true; }
+  inline bool is_retry_execution() { return retry_execution_; }
+  inline void set_retry_by_single_range() { retry_by_single_range_ = true; }
+  inline bool retry_by_single_range() const { return retry_by_single_range_; }
+  TO_STRING_KV(K_(need_retry),
+               K_(failed_task_lists),
+               K_(retry_ret),
+               K_(retry_times),
+               K_(retry_execution),
+               K_(retry_by_single_range));
+private:
+  bool need_retry_;
+  // pair<task id : got rows count>
+  common::ObSEArray<std::pair<int64_t, int64_t>, 16> failed_task_lists_;
+  int retry_ret_;
+  int64_t retry_times_;
+  bool retry_execution_;
+  bool retry_by_single_range_;
+  common::ObSEArray<int64_t, 2> not_master_tasks_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObMiniTaskRetryInfo);
+};
 
 }
 }

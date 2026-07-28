@@ -196,7 +196,7 @@ public:
   virtual int get_runtime_refreshed_schema_version(
               int64_t &schema_version,
               const bool core_schema_version = false) const;
-  virtual int get_published_schema_version(int64_t &schema_version, const bool core_schema_version = false) const;
+  virtual int get_runtime_received_broadcast_version(int64_t &schema_version, const bool core_schema_version = false) const;
   virtual int get_last_refreshed_schema_info(ObRefreshSchemaInfo &schema_info);
   int get_baseline_schema_version(
       const bool auto_update,
@@ -206,7 +206,7 @@ public:
   int get_runtime_slot_info(common::ObIAllocator &allocator, const uint64_t &req_id,
                             common::ObIArray<ObSchemaSlot> &runtime_slot_infos);
 
-  virtual int set_published_schema_version(const int64_t version);
+  virtual int set_runtime_received_broadcast_version(const int64_t version);
   virtual int set_last_refreshed_schema_info(const ObRefreshSchemaInfo &schema_info);
   int update_baseline_schema_version(const int64_t baseline_schema_version);
   int gen_new_schema_version(int64_t &schema_version);

@@ -1031,12 +1031,19 @@ private:
                          int64_t cur_rollup_group_idx,
                          const int64_t max_group_cnt = INT64_MIN);
   int rollup_distinct(const ObAggrInfo &aggr_info, AggrCell &aggr_cell, AggrCell &rollup_cell);
+  int compare_calc(const ObDatum &left_value,
+                   const ObDatum &right_value,
+                   const ObAggrInfo &aggr_info,
+                   int64_t index,
+                   int &compare_result,
+                   bool &is_asc);
   int check_rows_equal(const ObChunkDatumStore::LastStoredRow &prev_row,
                        const ObChunkDatumStore::StoredRow &cur_row,
                        const ObAggrInfo &aggr_info,
                        bool &is_equal);
   int get_wm_concat_result(const ObAggrInfo &aggr_info,
                            GroupConcatExtraResult *&extra,
+                           bool is_keep_group_concat,
                            ObDatum &concat_result);
   int get_pl_agg_udf_result(const ObAggrInfo &aggr_info,
                             GroupConcatExtraResult *&extra,
@@ -1186,9 +1193,18 @@ public:
     bool need_id = false;
     switch (type) {
       case T_FUN_GROUP_CONCAT:
+      case T_FUN_GROUP_RANK:
+      case T_FUN_GROUP_DENSE_RANK:
+      case T_FUN_GROUP_PERCENT_RANK:
+      case T_FUN_GROUP_CUME_DIST:
       case T_FUN_MEDIAN:
       case T_FUN_GROUP_PERCENTILE_CONT:
       case T_FUN_GROUP_PERCENTILE_DISC:
+      case T_FUN_KEEP_MAX:
+      case T_FUN_KEEP_MIN:
+      case T_FUN_KEEP_SUM:
+      case T_FUN_KEEP_COUNT:
+      case T_FUN_KEEP_WM_CONCAT:
       case T_FUN_WM_CONCAT:
       case T_FUN_PL_AGG_UDF:
       case T_FUN_JSON_ARRAYAGG:
@@ -1321,9 +1337,18 @@ OB_INLINE bool ObAggregateProcessor::need_extra_info(const ObExprOperatorType ex
   bool need_extra = false;
   switch (expr_type) {
     case T_FUN_GROUP_CONCAT:
+    case T_FUN_GROUP_RANK:
+    case T_FUN_GROUP_DENSE_RANK:
+    case T_FUN_GROUP_PERCENT_RANK:
+    case T_FUN_GROUP_CUME_DIST:
     case T_FUN_GROUP_PERCENTILE_CONT:
     case T_FUN_GROUP_PERCENTILE_DISC:
     case T_FUN_MEDIAN:
+    case T_FUN_KEEP_MAX:
+    case T_FUN_KEEP_MIN:
+    case T_FUN_KEEP_SUM:
+    case T_FUN_KEEP_COUNT:
+    case T_FUN_KEEP_WM_CONCAT:
     case T_FUN_WM_CONCAT:
     case T_FUN_PL_AGG_UDF:
     case T_FUN_HYBRID_HIST:

@@ -38,9 +38,11 @@
 #include "sql/engine/expr/ob_expr_pl_associative_index.h"
 #include "sql/engine/expr/ob_expr_collection_construct.h"
 #include "sql/engine/expr/ob_expr_object_construct.h"
+#include "sql/engine/expr/ob_expr_coll_pred.h"
 #include "sql/engine/expr/ob_expr_nullif.h"
 #include "sql/engine/expr/ob_expr_cast.h"
 #include "sql/engine/expr/ob_pl_expr_subquery.h"
+#include "sql/engine/expr/ob_expr_sql_udt_construct.h"
 
 namespace oceanbase
 {
@@ -393,6 +395,14 @@ int ObExprGeneratorImpl::visit(ObQueryRefRawExpr &expr)
       subquery_op->set_result_type(expr.get_result_type());
       if (result_is_scalar) {
         subquery_op->set_scalar_result_type(expr.get_result_type());
+      }
+      subquery_op->set_cursor(expr.is_cursor());
+      OZ (subquery_op->init_row_desc(expr.get_column_types().count()));
+      for (int64_t i = 0; OB_SUCC(ret) && i < expr.get_column_types().count(); ++i) {
+        ObDataType type;
+        type.set_meta_type(expr.get_column_types().at(i));
+        type.set_accuracy(expr.get_column_types().at(i).get_accuracy());
+        OZ (subquery_op->get_row_desc().push_back(type));
       }
       //ref_id in expr refers to which child of ObSubPlanFilter the referenced subquery is located at
       //Since child0 is the scan result of the main table, the numbering of the subqueries starts from 1,
@@ -1184,10 +1194,13 @@ int ObExprGeneratorImpl::visit_udf_expr(ObOpRawExpr &expr, ObExprUDF *udf)
 	  udf->set_result_type(udf_expr.get_result_type());
     udf->set_real_param_num(static_cast<int32_t>(expr.get_param_count()));
     udf->set_row_dimension(ObExprOperator::NOT_ROW_DIMENSION);
+    udf->set_is_udt_udf(udf_expr.get_is_udt_udf());
     udf->set_loc(udf_expr.get_loc());
+    udf->set_is_udt_cons(udf_expr.get_is_udt_cons());
     OZ (udf->set_subprogram_path(udf_expr.get_subprogram_path()));
     OZ (udf->set_params_type(udf_expr.get_params_type()));
     OZ (udf->set_params_desc(udf_expr.get_params_desc()));
+    OZ (udf->set_nocopy_params(udf_expr.get_nocopy_params()));
   }
   return ret;
 }
@@ -1349,6 +1362,16 @@ int ObExprGeneratorImpl::visit(ObOpRawExpr &expr)
         const ObObjAccessRawExpr &obj_access_expr = static_cast<ObObjAccessRawExpr &>(expr);
         obj_access_op->set_real_param_num(static_cast<int32_t>(obj_access_expr.get_param_count()));
         OZ(obj_access_op->get_info().from_raw_expr(obj_access_expr));
+      } else if (T_OP_MULTISET == expr.get_expr_type()) {
+        ObExprMultiSet *ms_op = static_cast<ObExprMultiSet *>(op);
+        const ObMultiSetRawExpr &ms_expr = static_cast<ObMultiSetRawExpr &>(expr);
+        ms_op->set_ms_type(ms_expr.get_multiset_type());
+        ms_op->set_ms_modifier(ms_expr.get_multiset_modifier());
+      } else if (T_OP_COLL_PRED == expr.get_expr_type()) {
+        ObExprCollPred *ms_op = static_cast<ObExprCollPred *>(op);
+        const ObCollPredRawExpr &ms_expr = static_cast<ObCollPredRawExpr &>(expr);
+        ms_op->set_ms_type(ms_expr.get_multiset_type());
+        ms_op->set_ms_modifier(ms_expr.get_multiset_modifier());
       } else if (T_OP_IN == expr.get_expr_type() || T_OP_NOT_IN == expr.get_expr_type()) {
         ObExprInOrNotIn *in_op = static_cast<ObExprInOrNotIn*>(op);
         ret = visit_in_expr(expr, in_op);
@@ -1528,9 +1551,18 @@ int ObExprGeneratorImpl::visit(ObAggFunRawExpr &expr)
         || (T_FUN_APPROX_COUNT_DISTINCT == expr.get_expr_type() && expr.get_real_param_count() > 1)
         || (T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS == expr.get_expr_type() && expr.get_real_param_count() > 1)
         || T_FUN_GROUP_CONCAT == expr.get_expr_type()
+        || T_FUN_GROUP_RANK == expr.get_expr_type()
+        || T_FUN_GROUP_DENSE_RANK == expr.get_expr_type()
+        || T_FUN_GROUP_PERCENT_RANK == expr.get_expr_type()
+        || T_FUN_GROUP_CUME_DIST == expr.get_expr_type()
         || T_FUN_GROUP_PERCENTILE_CONT == expr.get_expr_type()
         || T_FUN_GROUP_PERCENTILE_DISC == expr.get_expr_type()
         || T_FUN_MEDIAN == expr.get_expr_type()
+        || T_FUN_KEEP_SUM == expr.get_expr_type()
+        || T_FUN_KEEP_MAX == expr.get_expr_type()
+        || T_FUN_KEEP_MIN == expr.get_expr_type()
+        || T_FUN_KEEP_COUNT == expr.get_expr_type()
+        || T_FUN_KEEP_WM_CONCAT == expr.get_expr_type()
         || T_FUN_PL_AGG_UDF == expr.get_expr_type()
         || T_FUN_HYBRID_HIST == expr.get_expr_type()
         || T_FUNC_SYS_ARRAY_AGG == expr.get_expr_type()
@@ -1557,9 +1589,18 @@ int ObExprGeneratorImpl::visit(ObAggFunRawExpr &expr)
           aggr_expr->set_all_param_col_count(expr.get_param_count());
           if (OB_SUCC(ret) &&
               (T_FUN_GROUP_CONCAT == expr.get_expr_type() ||
+               T_FUN_GROUP_RANK == expr.get_expr_type() ||
+               T_FUN_GROUP_DENSE_RANK == expr.get_expr_type() ||
+               T_FUN_GROUP_PERCENT_RANK == expr.get_expr_type() ||
+               T_FUN_GROUP_CUME_DIST == expr.get_expr_type() ||
                T_FUN_GROUP_PERCENTILE_CONT == expr.get_expr_type() ||
                T_FUN_GROUP_PERCENTILE_DISC == expr.get_expr_type() ||
                T_FUN_MEDIAN == expr.get_expr_type() ||
+               T_FUN_KEEP_MAX == expr.get_expr_type() ||
+               T_FUN_KEEP_MIN == expr.get_expr_type() ||
+               T_FUN_KEEP_SUM == expr.get_expr_type() ||
+               T_FUN_KEEP_COUNT == expr.get_expr_type() ||
+               T_FUN_KEEP_WM_CONCAT == expr.get_expr_type() ||
                T_FUN_HYBRID_HIST == expr.get_expr_type() ||
                T_FUNC_SYS_ARRAY_AGG == expr.get_expr_type())) {
             ObConstRawExpr *sep_expr = static_cast<ObConstRawExpr *>(expr.get_separator_param_expr());

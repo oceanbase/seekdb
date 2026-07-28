@@ -95,7 +95,8 @@ protected:
                             const bool log_error = true);
   // for update view, add all columns to select item.
   int add_all_column_to_updatable_view(ObDMLStmt &stmt,
-                                       const TableItem &table_item);
+                                       const TableItem &table_item,
+                                       const bool &has_need_fired_tg_on_view = false);
 
   virtual int mock_values_column_ref(const ObColumnRefRawExpr *column_ref)
   {
@@ -111,6 +112,12 @@ protected:
     return common::OB_SUCCESS;
   }
 
+  // add for error logging
+  int resolve_err_log_table(const ParseNode *node);
+  int check_err_log_table(ObString &table_name, ObString &database_name);
+  int resolve_err_log_reject(const ParseNode *node);
+  int check_err_log_support_type(ObObjType column_o_type);
+
   virtual int process_values_function(ObRawExpr *&expr);
   virtual int recursive_values_expr(ObRawExpr *&expr);
 
@@ -119,6 +126,8 @@ protected:
 
   int add_all_columns_to_stmt(const TableItem &table_item,
                               common::ObIArray<ObColumnRefRawExpr*> &column_exprs);
+  int add_all_columns_to_stmt_for_trigger(const TableItem &table_item,
+                                          common::ObIArray<ObColumnRefRawExpr*> &column_exprs);
   int add_all_rowkey_columns_to_stmt(const TableItem &table_item,
                                      common::ObIArray<ObColumnRefRawExpr*> &column_exprs);
   int add_index_related_columns_to_stmt(const TableItem &table_item,

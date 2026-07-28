@@ -30,6 +30,7 @@
 #include "sql/engine/expr/ob_expr_plsql_variable.h"
 #include "sql/engine/expr/ob_expr_collection_construct.h"
 #include "sql/engine/expr/ob_expr_object_construct.h"
+#include "sql/engine/expr/ob_expr_sql_udt_construct.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -66,6 +67,7 @@ int ObRawExprFactory::create_raw_expr<ObSysFunRawExpr>(ObItemType expr_type, ObS
     GENERATE_CASE(T_FUN_PL_OBJECT_CONSTRUCT, ObObjectConstructRawExpr);
     GENERATE_CASE(T_FUN_PL_GET_CURSOR_ATTR, ObPLGetCursorAttrRawExpr);
     GENERATE_CASE(T_FUN_PL_SQLCODE_SQLERRM, ObPLSQLCodeSQLErrmRawExpr);
+    GENERATE_CASE(T_FUN_SYS_PRIV_SQL_UDT_CONSTRUCT, ObUDTConstructorRawExpr);
     GENERATE_DEFAULT();
   }
   return ret;
@@ -79,6 +81,8 @@ int ObRawExprFactory::create_raw_expr<ObOpRawExpr>(ObItemType expr_type, ObOpRaw
     GENERATE_CASE(T_SP_CPARAM, ObCallParamRawExpr);
     GENERATE_CASE(T_FUN_PL_ASSOCIATIVE_INDEX, ObPLAssocIndexRawExpr);
     GENERATE_CASE(T_OBJ_ACCESS_REF, ObObjAccessRawExpr);
+    GENERATE_CASE(T_OP_MULTISET, ObMultiSetRawExpr);
+    GENERATE_CASE(T_OP_COLL_PRED, ObCollPredRawExpr);
     GENERATE_DEFAULT();
   }
   return ret;
@@ -888,6 +892,11 @@ bool ObRawExpr::is_json_expr() const
   return (T_FUN_SYS_JSON_OBJECT <= get_expr_type() && get_expr_type() <= T_FUN_JSON_OBJECTAGG) ? true : false;
 }
 
+bool ObRawExpr::is_multiset_expr() const
+{
+  return is_query_ref_expr() && static_cast<const ObQueryRefRawExpr *>(this)->is_multiset();
+}
+
 bool ObRawExpr::is_not_calculable_expr() const
 {
   return is_generalized_column()
@@ -966,10 +975,13 @@ int ObRawExpr::is_const_inherit_expr(bool &is_const_inherit,
       || T_FUN_SYS_JSON_EQUAL == type_
       || T_FUN_SYS_IS_JSON == type_
       || T_FUN_SYS_JSON_OBJECT == type_
+      || IS_LABEL_SE_POLICY_FUNC(type_)
       || (T_FUN_SYS_LAST_INSERT_ID == type_ && get_param_count() > 0)
       || T_FUN_SYS_TO_BLOB == type_
       || T_FUN_SYS_SYSDATE == type_
       || (param_need_replace ? is_not_calculable_expr() : cnt_not_calculable_expr())
+      || T_FUN_LABEL_SE_SESSION_LABEL == type_
+      || T_FUN_LABEL_SE_SESSION_ROW_LABEL == type_
       || (T_FUN_UDF == type_
           && !static_cast<const ObUDFRawExpr*>(this)->is_deterministic())
       || T_FUN_SYS_GET_LOCK == type_
@@ -1005,7 +1017,10 @@ bool ObRawExpr::check_is_deterministic_expr() const
       || has_flag(CNT_STATE_FUNC)
       || has_flag(CNT_DYNAMIC_USER_VARIABLE)
       // unclear performance expr type
-      || T_FUN_SYS_STMT_ID == type_) {
+      || T_FUN_SYS_STMT_ID == type_
+      || T_FUN_LABEL_SE_SESSION_LABEL == type_
+      || T_FUN_LABEL_SE_SESSION_ROW_LABEL == type_
+      || IS_LABEL_SE_POLICY_FUNC(type_)) {
     ret = false; // lost expr deterministic
   }
   return ret;
@@ -1621,7 +1636,9 @@ int ObQueryRefRawExpr::assign(const ObRawExpr &other)
         ref_stmt_ = tmp.ref_stmt_;
         output_column_ = tmp.output_column_;
         is_set_ = tmp.is_set_;
+        is_cursor_ = tmp.is_cursor_;
         has_nl_param_ = tmp.has_nl_param_;
+        is_multiset_ = tmp.is_multiset_;
         column_types_ = tmp.column_types_;
       }
     }
@@ -1745,7 +1762,7 @@ bool ObQueryRefRawExpr::inner_same_as(
   bool bool_ret = false;
   if (get_expr_type() == expr.get_expr_type()) {
     const ObQueryRefRawExpr &u_expr = static_cast<const ObQueryRefRawExpr &>(expr);
-    if (is_set_ != u_expr.is_set_) {
+    if (is_set_ != u_expr.is_set_ || is_multiset_ != u_expr.is_multiset_) {
       /* bool bool_ret = false; */
     } else if (check_context != NULL && check_context->override_query_compare_) {
       bool_ret = check_context->compare_query(*this, u_expr);
@@ -1763,6 +1780,7 @@ void ObQueryRefRawExpr::inner_calc_hash()
 {
   expr_hash_ = common::do_hash(get_expr_type(), expr_hash_);
   expr_hash_ = common::do_hash(is_set_, expr_hash_);
+  expr_hash_ = common::do_hash(is_multiset_, expr_hash_);
   expr_hash_ = common::do_hash(get_ref_id(), expr_hash_);
   expr_hash_ = common::do_hash(ref_stmt_, expr_hash_);
 }
@@ -1772,7 +1790,8 @@ bool ObExprEqualCheckContext::compare_query(const ObQueryRefRawExpr &left,
 {
   return left.get_ref_id() == right.get_ref_id() &&
       left.get_ref_stmt() == right.get_ref_stmt() &&
-      left.is_set() == right.is_set();
+      left.is_set() == right.is_set() &&
+      left.is_multiset() == right.is_multiset();
 }
 
 int ObQueryRefRawExpr::do_visit(ObRawExprVisitor &visitor)
@@ -1794,7 +1813,11 @@ int ObQueryRefRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64
     } else if (OB_FAIL(BUF_PRINTF("SQ(%.*s)", qb_name.length(), qb_name.ptr()))) {
       LOG_WARN("fail to BUF_PRINTF", K(ret));
     }
+  } else if (is_multiset() && OB_FAIL(BUF_PRINTF("multiset("))) {
+    LOG_WARN("fail to BUF_PRINTF", K(ret));
   } else if (OB_FAIL(BUF_PRINTF("subquery(%lu)", ref_id_))) {
+    LOG_WARN("fail to BUF_PRINTF", K(ret));
+  } else if (is_multiset() && OB_FAIL(BUF_PRINTF(")"))) {
     LOG_WARN("fail to BUF_PRINTF", K(ret));
   } else if (EXPLAIN_EXTENDED == type) {
     if (OB_FAIL(BUF_PRINTF("("))) {
@@ -2005,6 +2028,8 @@ int ObColumnRefRawExpr::assign(const ObRawExpr &other)
       column_id_ = tmp.column_id_;
       database_name_ = tmp.database_name_;
       table_name_ = tmp.table_name_;
+      synonym_name_ = tmp.synonym_name_;
+      synonym_db_name_ = tmp.synonym_db_name_;
       column_name_ = tmp.column_name_;
       column_flags_ = tmp.column_flags_;
       dependant_expr_ = tmp.dependant_expr_;
@@ -2038,6 +2063,11 @@ int ObColumnRefRawExpr::inner_deep_copy(ObIRawExprCopier &copier)
       LOG_WARN("fail to write string", K(database_name_), K(ret));
     } else if (OB_FAIL(ob_write_string(*inner_alloc_, table_name_, table_name_))) {
       LOG_WARN("fail to write string", K(table_name_), K(ret));
+    } else if (OB_FAIL(ob_write_string(*inner_alloc_, synonym_name_, synonym_name_))) {
+      LOG_WARN("fail to write string", K(synonym_name_), K(ret));
+    } else if (OB_FAIL(ob_write_string(*inner_alloc_, synonym_db_name_,
+                                       synonym_db_name_))) {
+      LOG_WARN("fail to write string", K(synonym_name_), K(ret));
     } else if (OB_FAIL(ob_write_string(*inner_alloc_, column_name_, column_name_))) {
       LOG_WARN("fail to write string", K(column_name_), K(ret));
     } else { /*do nothing*/ }
@@ -2786,6 +2816,12 @@ int ObOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &po
     case T_OP_XOR:
       symbol = "XOR";
       break;
+    case T_OP_MULTISET:
+      symbol = "MULTISET";
+      break;
+    case T_OP_COLL_PRED:
+      symbol = "COLL_PRED";
+      break;
     case T_OP_IS:
       symbol = "IS";
       break;
@@ -3142,6 +3178,7 @@ int ObObjAccessRawExpr::assign(const ObRawExpr &other)
       } else if (OB_FAIL(append(orig_access_indexs_, tmp.orig_access_indexs_))) {
         LOG_WARN("append error", K(ret));
       } else {
+        get_attr_func_ = tmp.get_attr_func_;
         func_name_ = tmp.func_name_;
         for_write_ = tmp.for_write_;
         property_type_ = tmp.property_type_;
@@ -3202,7 +3239,8 @@ bool ObObjAccessRawExpr::inner_same_as(const ObRawExpr &expr,
   if (get_expr_type() != expr.get_expr_type()) {
   } else if (ObOpRawExpr::inner_same_as(expr, check_context)) {
     const ObObjAccessRawExpr &obj_access_expr = static_cast<const ObObjAccessRawExpr &>(expr);
-    bool_ret = 0 == func_name_.case_compare(obj_access_expr.func_name_)
+    bool_ret = get_attr_func_ == obj_access_expr.get_attr_func_
+        && 0 == func_name_.case_compare(obj_access_expr.func_name_)
         && is_array_equal(access_indexs_, obj_access_expr.access_indexs_)
         && is_array_equal(var_indexs_, obj_access_expr.var_indexs_)
         && for_write_ == obj_access_expr.for_write_
@@ -3215,6 +3253,7 @@ bool ObObjAccessRawExpr::inner_same_as(const ObRawExpr &expr,
 void ObObjAccessRawExpr::inner_calc_hash()
 {
   expr_hash_ = common::do_hash(get_expr_type(), expr_hash_);
+  expr_hash_ = common::do_hash(get_attr_func_, expr_hash_);
   expr_hash_ = common::do_hash(for_write_, expr_hash_);
   expr_hash_ = common::do_hash(property_type_, expr_hash_);
 }
@@ -3255,7 +3294,8 @@ int ObObjAccessRawExpr::add_access_indexs(const ObIArray<pl::ObObjAccessIdx> &ac
       //do nothing
     }
     break;
-    case pl::ObObjAccessIdx::IS_UDF_NS: {
+    case pl::ObObjAccessIdx::IS_UDF_NS:
+    case pl::ObObjAccessIdx::IS_UDT_NS: {
       //do nothing
     }
     break;
@@ -3781,6 +3821,11 @@ int ObAggFunRawExpr::inner_deep_copy(ObIRawExprCopier &copier)
     LOG_WARN("failed to copy expr attribute", K(ret));
   } else if (OB_FAIL(copier.copy(pl_agg_udf_expr_))) {
     LOG_WARN("failed to copy pl agg udf expr", K(ret));
+  } else if (copier.deep_copy_attributes()) {
+    if (OB_ISNULL(inner_alloc_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("inner alloc is null", K(ret));
+    }
   }
   return ret;
 }
@@ -4027,8 +4072,17 @@ int ObAggFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
     }
     if (OB_SUCCESS == ret &&
         (T_FUN_GROUP_CONCAT == get_expr_type() ||
+         T_FUN_GROUP_RANK == get_expr_type() ||
+         T_FUN_GROUP_DENSE_RANK == get_expr_type() ||
+         T_FUN_GROUP_PERCENT_RANK == get_expr_type() ||
+         T_FUN_GROUP_CUME_DIST == get_expr_type() ||
          T_FUN_GROUP_PERCENTILE_CONT == get_expr_type() ||
-         T_FUN_GROUP_PERCENTILE_DISC == get_expr_type())) {
+         T_FUN_GROUP_PERCENTILE_DISC == get_expr_type() ||
+         T_FUN_KEEP_MAX == get_expr_type() ||
+         T_FUN_KEEP_MIN == get_expr_type() ||
+         T_FUN_KEEP_SUM == get_expr_type() ||
+         T_FUN_KEEP_COUNT == get_expr_type() ||
+         T_FUN_KEEP_WM_CONCAT == get_expr_type())) {
       if (order_items_.count() > 0) {
         if (OB_FAIL(BUF_PRINTF(" order_items("))) {
           LOG_WARN("fail to BUF_PRINTF", K(ret));
@@ -4490,6 +4544,8 @@ int ObSysFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
       if (OB_FAIL(get_column_conv_name(buf, buf_len, pos, type))) {
         LOG_WARN("fail to get_column_conv_name", K(ret));
       }
+    } else if (T_FUN_SYS_PART_ID == get_expr_type()) {
+      //ignore the print of T_FUN_SYS_PART_ID expr
     } else if (T_FUN_SYS_INNER_ROW_CMP_VALUE == get_expr_type()) {
       CK(3 == get_param_count());
       OZ(get_param_expr(2)->get_name(buf, buf_len, pos, type));
@@ -4686,6 +4742,18 @@ int ObSysFunRawExpr::get_type_demotion_name(char *buf, int64_t buf_len, int64_t 
 }
 
 
+int ObCollectionConstructRawExpr::get_schema_object_version(share::schema::ObSchemaObjVersion &obj_version)
+{
+  int ret = OB_SUCCESS;
+  CK (coll_schema_version_ != OB_INVALID_VERSION);
+  CK (udt_id_ != common::OB_INVALID_ID);
+  OX (obj_version.object_id_ = udt_id_);
+  OX (obj_version.object_type_ = share::schema::DEPENDENCY_TYPE);
+  OX (obj_version.version_ = coll_schema_version_);
+
+  return ret;
+}
+
 int ObCollectionConstructRawExpr::assign(const ObRawExpr &other)
 {
   int ret = OB_SUCCESS;
@@ -4703,6 +4771,7 @@ int ObCollectionConstructRawExpr::assign(const ObRawExpr &other)
       capacity_ = tmp.capacity_;
       udt_id_ = tmp.udt_id_;
       elem_type_ = tmp.elem_type_;
+      coll_schema_version_ = tmp.coll_schema_version_;
       if (OB_FAIL(access_names_.assign(tmp.access_names_))) {
         LOG_WARN("failed to assign access names", K(ret));
       }
@@ -4766,6 +4835,19 @@ ObExprOperator *ObCollectionConstructRawExpr::get_op()
   return OB_SUCCESS == ret ? expr_op : NULL;
 }
 
+int ObObjectConstructRawExpr::get_schema_object_version(share::schema::ObSchemaObjVersion &obj_version)
+{
+  int ret = OB_SUCCESS;
+  CK (object_schema_version_ != OB_INVALID_VERSION);
+  CK (udt_id_ != common::OB_INVALID_ID);
+  OX (obj_version.object_id_ = udt_id_);
+  OX (obj_version.object_type_ = share::schema::DEPENDENCY_TYPE);
+  OX (obj_version.version_ = object_schema_version_);
+
+  return ret;
+}
+
+
 int ObObjectConstructRawExpr::set_access_names(
   const common::ObIArray<ObObjAccessIdent> &access_idents)
 {
@@ -4791,6 +4873,7 @@ int ObObjectConstructRawExpr::assign(const ObRawExpr &other)
           static_cast<const ObObjectConstructRawExpr &>(other);
       rowsize_ = tmp.rowsize_;
       udt_id_ = tmp.udt_id_;
+      object_schema_version_ = tmp.object_schema_version_;
       if (OB_FAIL(elem_types_.assign(tmp.elem_types_))) {
         LOG_WARN("failed to assign elem types", K(ret));
       } else if (OB_FAIL(access_names_.assign(tmp.access_names_))) {
@@ -4922,10 +5005,14 @@ int ObUDFRawExpr::assign(const ObRawExpr &other)
       database_name_ = tmp.database_name_;
       package_name_ = tmp.package_name_;
       is_parallel_enable_ = tmp.is_parallel_enable_;
+      is_udt_udf_ = tmp.is_udt_udf_;
       is_pkg_body_udf_ = tmp.is_pkg_body_udf_;
+      is_return_sys_cursor_ = tmp.is_return_sys_cursor_;
       is_aggregate_udf_ = tmp.is_aggregate_udf_;
       is_aggr_udf_distinct_ = tmp.is_aggr_udf_distinct_;
+      nocopy_params_ = tmp.nocopy_params_;
       loc_ = tmp.loc_;
+      is_udt_cons_ = tmp.is_udt_cons_;
       params_name_ = tmp.params_name_;
       params_desc_v2_ = tmp.params_desc_v2_;
     }
@@ -4970,6 +5057,7 @@ ObExprOperator *ObUDFRawExpr::get_op()
       OZ (udf_op->set_subprogram_path(subprogram_path_));
       OZ (udf_op->set_params_type(params_type_));
       OZ (udf_op->set_params_desc(params_desc_v2_));
+      OZ (udf_op->set_nocopy_params(nocopy_params_));
     }
   }
   return OB_SUCCESS == ret ? expr_op : NULL;
@@ -5011,12 +5099,16 @@ bool ObUDFRawExpr::inner_same_as(const ObRawExpr &expr,
                 package_name_.compare(other->get_package_name()) == 0 &&
                 is_deterministic() == other->is_deterministic() &&
                 is_parallel_enable_ == other->is_parallel_enable() &&
+                is_udt_udf_ == other->get_is_udt_udf() &&
                 is_pkg_body_udf_ == other->is_pkg_body_udf() &&
+                is_return_sys_cursor_ == other->get_is_return_sys_cursor() &&
                 is_aggregate_udf_ == other->get_is_aggregate_udf() &&
                 is_aggr_udf_distinct_ == other->get_is_aggr_udf_distinct() &&
                 loc_ == other->get_loc() &&
+                is_udt_cons_ == other->get_is_udt_cons() &&
                 subprogram_path_.count() == other->get_subprogram_path().count() &&
                 params_type_.count() == other->get_params_type().count() &&
+                nocopy_params_.count() == other->get_nocopy_params().count() &&
                 params_name_.count() == other->get_params_name().count() &&
                 params_desc_v2_.count() == other->get_params_desc().count();
     for (int64_t i = 0; bool_ret && i < subprogram_path_.count(); ++i) {
@@ -5024,6 +5116,9 @@ bool ObUDFRawExpr::inner_same_as(const ObRawExpr &expr,
     }
     for (int64_t i = 0; bool_ret && i < params_type_.count(); ++i) {
       bool_ret = params_type_.at(i) == other->get_params_type().at(i);
+    }
+    for (int64_t i = 0; bool_ret && i < nocopy_params_.count(); ++i) {
+      bool_ret = nocopy_params_.at(i) == other->get_nocopy_params().at(i);
     }
     for (int64_t i = 0; bool_ret && i < params_name_.count(); ++i) {
       bool_ret = params_name_.at(i).compare(other->get_params_name().at(i)) == 0;
@@ -5046,15 +5141,21 @@ void ObUDFRawExpr::inner_calc_hash()
   expr_hash_ = common::do_hash(package_name_, expr_hash_);
   expr_hash_ = common::do_hash(is_deterministic(), expr_hash_);
   expr_hash_ = common::do_hash(is_parallel_enable_, expr_hash_);
+  expr_hash_ = common::do_hash(is_udt_udf_, expr_hash_);
   expr_hash_ = common::do_hash(is_pkg_body_udf_, expr_hash_);
+  expr_hash_ = common::do_hash(is_return_sys_cursor_, expr_hash_);
   expr_hash_ = common::do_hash(is_aggregate_udf_, expr_hash_);
   expr_hash_ = common::do_hash(is_aggr_udf_distinct_, expr_hash_);
   expr_hash_ = common::do_hash(loc_, expr_hash_);
+  expr_hash_ = common::do_hash(is_udt_cons_, expr_hash_);
   for (int64_t i = 0; i < subprogram_path_.count(); ++i) {
     expr_hash_ = common::do_hash(subprogram_path_.at(i), expr_hash_);
   }
   for (int64_t i = 0; i < params_type_.count(); ++i) {
     expr_hash_ = common::do_hash(params_type_.at(i), expr_hash_);
+  }
+  for (int64_t i = 0; i < nocopy_params_.count(); ++i) {
+    expr_hash_ = common::do_hash(nocopy_params_.at(i), expr_hash_);
   }
   for (int64_t i = 0; i < params_name_.count(); ++i) {
     expr_hash_ = common::do_hash(params_name_.at(i), expr_hash_);
@@ -5086,16 +5187,22 @@ int ObUDFRawExpr::get_schema_object_version(share::schema::ObSchemaGetterGuard &
   } else if (pkg_schema_version_ != common::OB_INVALID_VERSION) {
     CK (pkg_id_ != common::OB_INVALID_ID);
     OX (obj_version.object_id_ = pkg_id_);
-    OX (obj_version.object_type_ =
-        is_pkg_body_udf_ ? share::schema::DEPENDENCY_PACKAGE_BODY
+    if (!is_udt_udf_) {
+      OX (obj_version.object_type_ =
+      is_pkg_body_udf_ ? share::schema::DEPENDENCY_PACKAGE_BODY
                          : share::schema::DEPENDENCY_PACKAGE);
+    } else {
+      OX (obj_version.object_type_ =
+      is_pkg_body_udf_ ? share::schema::DEPENDENCY_TYPE_BODY
+                         : share::schema::DEPENDENCY_TYPE);
+    }
     OX (obj_version.version_ = pkg_schema_version_);
   } else {
     CK (udf_schema_version_ == OB_INVALID_VERSION && pkg_schema_version_ == OB_INVALID_VERSION);
     // do nothing ...
   }
   if (OB_FAIL(ret)) {
-  } else if (common::OB_INVALID_ID != pkg_id_) {
+  } else if (common::OB_INVALID_ID != pkg_id_ && !is_udt_udf_) {
     const ObPackageInfo *spec_info = NULL;
     const ObPackageInfo *body_info = NULL;
     ObSchemaObjVersion ver;
@@ -6152,6 +6259,48 @@ int ObRawExprPointer::assign(const ObRawExprPointer &other)
   return expr_group_.assign(other.expr_group_);
 }
 
+int ObMultiSetRawExpr::assign(const ObRawExpr &other)
+{
+  int ret = OB_SUCCESS;
+  if (OB_LIKELY(this != &other)) {
+    if (OB_UNLIKELY(get_expr_class() != other.get_expr_class() ||
+                    get_expr_type() != other.get_expr_type())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid input expr", K(ret), K(other.get_expr_type()));
+    } else if (OB_FAIL(ObOpRawExpr::assign(other))) {
+      LOG_WARN("failed to assign multiset expr", K(ret));
+    } else {
+      const ObMultiSetRawExpr &tmp =
+          static_cast<const ObMultiSetRawExpr &>(other);
+      ms_type_ = tmp.ms_type_;
+      ms_modifier_ = tmp.ms_modifier_;
+    }
+  }
+  return ret;
+}
+
+bool ObMultiSetRawExpr::inner_same_as(const ObRawExpr &expr,
+                                      ObExprEqualCheckContext *check_context) const
+{
+  return ObOpRawExpr::inner_same_as(expr, check_context);
+}
+
+void ObMultiSetRawExpr::inner_calc_hash()
+{
+  ObOpRawExpr::inner_calc_hash();
+}
+
+bool ObCollPredRawExpr::inner_same_as(const ObRawExpr &expr,
+                                      ObExprEqualCheckContext *check_context) const
+{
+  return ObMultiSetRawExpr::inner_same_as(expr, check_context);
+}
+
+void ObCollPredRawExpr::inner_calc_hash()
+{
+  ObMultiSetRawExpr::inner_calc_hash();
+}
+
 void ObExprParamCheckContext::init(const ObIArray<ObHiddenColumnItem> *calculable_items,
                                    const ObIArray<ObPCParamEqualInfo> *equal_param_constraints,
                                    EqualSets *equal_sets)
@@ -6514,6 +6663,16 @@ int ObRawExprFactory::create_raw_expr(ObRawExpr::ExprClass expr_class,
         LOG_WARN("expr is NULL", K(dest_scse), K(ret));
       } else {
         dest = dest_scse;
+      }
+    } else if (T_FUN_SYS_PRIV_SQL_UDT_CONSTRUCT == expr_type) {
+      ObUDTConstructorRawExpr *dest_udt_expr = nullptr;
+      if (OB_FAIL(create_raw_expr(expr_type, dest_udt_expr))) {
+        LOG_WARN("failed to allocate raw expr", K(dest_udt_expr), K(ret));
+      } else if (OB_ISNULL(dest_udt_expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("expr is NULL", K(dest_udt_expr), K(ret));
+      } else {
+        dest = dest_udt_expr;
       }
     } else {
       ObSysFunRawExpr *dest_sys = NULL;
@@ -7009,6 +7168,77 @@ int ObMatchFunRawExpr::replace_param_expr(int64_t index, ObRawExpr *expr)
     target_expr = expr;
   }
   return ret;
+}
+
+int ObUDTConstructorRawExpr::get_schema_object_version(share::schema::ObSchemaObjVersion &obj_version)
+{
+  int ret = OB_SUCCESS;
+  CK (object_schema_version_ != OB_INVALID_VERSION);
+  CK (udt_id_ != common::OB_INVALID_ID);
+  OX (obj_version.object_id_ = udt_id_);
+  OX (obj_version.object_type_ = share::schema::DEPENDENCY_TYPE);
+  OX (obj_version.version_ = object_schema_version_);
+
+  return ret;
+}
+
+
+int ObUDTConstructorRawExpr::assign(const ObRawExpr &other)
+{
+  int ret = OB_SUCCESS;
+  if (OB_LIKELY(this != &other)) {
+    if (OB_UNLIKELY(get_expr_class() != other.get_expr_class() ||
+                    get_expr_type() != other.get_expr_type())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid input expr", K(ret), K(other.get_expr_type()));
+    } else if (OB_FAIL(ObSysFunRawExpr::assign(other))) {
+      LOG_WARN("failed to assign expr", K(ret));
+    } else {
+      const ObUDTConstructorRawExpr &tmp =
+          static_cast<const ObUDTConstructorRawExpr &>(other);
+      udt_id_ = tmp.udt_id_;
+      root_udt_id_ = tmp.root_udt_id_;
+      attr_pos_ = tmp.attr_pos_;
+      object_schema_version_ = tmp.object_schema_version_;
+      if (OB_FAIL(access_names_.assign(tmp.access_names_))) {
+        LOG_WARN("failed to assgin access names", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObUDTConstructorRawExpr::inner_deep_copy(ObIRawExprCopier &copier)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ObSysFunRawExpr::inner_deep_copy(copier))) {
+    LOG_WARN("failed to copy expr attributes", K(ret));
+  } else if (copier.deep_copy_attributes()) {
+    CK (OB_NOT_NULL(inner_alloc_));
+    for (int64_t i = 0; OB_SUCC(ret) && i < access_names_.count(); ++i) {
+      OZ (ob_write_string(*inner_alloc_, access_names_.at(i), access_names_.at(i)));
+    }
+  }
+  return ret;
+}
+
+ObExprOperator *ObUDTConstructorRawExpr::get_op()
+{
+  int ret = OB_SUCCESS;
+  ObExprOperator *expr_op = NULL;
+  ObExprUdtConstruct *object_op = NULL;
+  if (T_FUN_SYS_PRIV_SQL_UDT_CONSTRUCT == get_expr_type()) {
+    free_op();
+    if (OB_ISNULL(expr_op = ObOpRawExpr::get_op())) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("make object construct operator failed", K(ret));
+    }
+    CK (OB_NOT_NULL(object_op = static_cast<ObExprUdtConstruct *>(expr_op)));
+    OX (object_op->set_udt_id(udt_id_));
+    OX (object_op->set_root_udt_id(root_udt_id_));
+    OX (object_op->set_attribute_pos(attr_pos_));
+  }
+  return OB_SUCCESS == ret ? expr_op : NULL;
 }
 
 }//namespace sql

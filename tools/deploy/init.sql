@@ -11,6 +11,24 @@ set @@session.ob_query_timeout = 200000000;
 
 set @mysqltest_mode = 'mysql';
 
+delimiter /
+drop procedure if exists exec_sql;/
+create procedure exec_sql(v varchar(4000))
+begin
+  declare continue handler for sqlexception
+  begin
+    GET DIAGNOSTICS CONDITION 1 @p1 = RETURNED_SQLSTATE, @p2 = MESSAGE_TEXT;
+    select v;
+  end;
+  set @sql_text = v;
+  prepare stmt from @sql_text;
+  execute stmt;
+  deallocate prepare stmt;
+end;
+/
+
+delimiter ;
+
 set @@session.ob_query_timeout = 10000000;
 system sleep 5;
 set global recyclebin = 'on';

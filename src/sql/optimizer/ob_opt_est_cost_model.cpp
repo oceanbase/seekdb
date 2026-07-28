@@ -78,6 +78,8 @@ int ObCostTableScanInfo::assign(const ObCostTableScanInfo &est_cost_info)
     batch_type_ = est_cost_info.batch_type_;
     sample_info_ = est_cost_info.sample_info_;
     at_most_one_range_ = est_cost_info.at_most_one_range_;
+    rescan_left_server_list_ = est_cost_info.rescan_left_server_list_;
+    rescan_server_list_ = est_cost_info.rescan_server_list_;
     limit_rows_ = est_cost_info.limit_rows_;
     total_range_cnt_ = est_cost_info.total_range_cnt_;
     // no need to copy table scan param
@@ -374,19 +376,20 @@ int ObOptEstCostModel::cost_hashjoin(const ObCostHashJoinInfo &est_cost_info,
 }
 
 int ObOptEstCostModel::cost_sort_and_exchange(OptTableMetas *table_metas,
-                                               OptSelectivityCtx *sel_ctx,
-                                               const ObPQDistributeMethod::Type dist_method,
-                                               const bool is_distributed,
-                                               const bool is_local_order,
-                                               const double input_card,
-                                               const double input_width,
-                                               const double input_cost,
-                                               const int64_t out_parallel,
-                                               const int64_t in_parallel,
-                                               const ObIArray<OrderItem> &expected_ordering,
-                                               const bool need_sort,
-                                               const int64_t prefix_pos,
-                                               double &cost)
+																							OptSelectivityCtx *sel_ctx,
+																							const ObPQDistributeMethod::Type dist_method,
+																							const bool is_distributed,
+																							const bool is_local_order,
+																							const double input_card,
+																							const double input_width,
+																							const double input_cost,
+																							const int64_t out_parallel,
+																							const int64_t in_server_cnt,
+																							const int64_t in_parallel,
+																							const ObIArray<OrderItem> &expected_ordering,
+																							const bool need_sort,
+																							const int64_t prefix_pos,
+																							double &cost)
 {
   int ret = OB_SUCCESS;
   double exch_cost = 0.0;
@@ -412,7 +415,8 @@ int ObOptEstCostModel::cost_sort_and_exchange(OptTableMetas *table_metas,
                                out_parallel,
                                in_parallel,
                                exchange_sort_local_order,
-                               exchange_sort_keys);
+                               exchange_sort_keys,
+                               in_server_cnt);
       if (OB_FAIL(ObOptEstCostModel::cost_exchange(exch_info, exch_cost))) {
         LOG_WARN("failed to cost exchange", K(ret));
       } else { /*do nothing*/ }
@@ -939,11 +943,13 @@ int ObOptEstCostModel::cost_exchange(const ObExchCostInfo &cost_info,
   ObExchOutCostInfo out_est_cost_info(cost_info.rows_,
                                       cost_info.width_,
                                       cost_info.dist_method_,
-                                      cost_info.out_parallel_);
+                                      cost_info.out_parallel_,
+                                      cost_info.in_server_cnt_);
   ObExchInCostInfo in_est_cost_info(cost_info.rows_,
                                     cost_info.width_,
                                     cost_info.dist_method_,
                                     cost_info.in_parallel_,
+                                    cost_info.in_server_cnt_,
                                     cost_info.is_local_order_,
                                     cost_info.sort_keys_);
   if (OB_FAIL(ObOptEstCostModel::cost_exchange_out(out_est_cost_info, ex_out_cost))) {
@@ -971,6 +977,8 @@ int ObOptEstCostModel::cost_exchange_in(const ObExchInCostInfo &cost_info,
                                                          order_exprs,
                                                          order_types))) {
     LOG_WARN("failed to get order expr and order types", K(ret));
+  } else if (ObPQDistributeMethod::BC2HOST == cost_info.dist_method_) {
+    per_dop_rows = cost_info.rows_ * cost_info.server_cnt_ / cost_info.parallel_;
   } else if (ObPQDistributeMethod::BROADCAST == cost_info.dist_method_) {
     per_dop_rows = cost_info.rows_;
   } else {
@@ -1017,6 +1025,10 @@ int ObOptEstCostModel::cost_exchange_out(const ObExchOutCostInfo &cost_info,
   if (OB_UNLIKELY(cost_info.parallel_ < 1)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected parallel degree", K(cost_info.parallel_), K(ret));
+  } else if (ObPQDistributeMethod::BC2HOST == cost_info.dist_method_ ||
+             ObPQDistributeMethod::BROADCAST == cost_info.dist_method_) {
+    per_dop_ser_rows = cost_info.rows_ / cost_info.parallel_;
+    per_dop_trans_rows = cost_info.rows_ * cost_info.server_cnt_ / cost_info.parallel_;
   } else {
     per_dop_ser_rows = cost_info.rows_ / cost_info.parallel_;
     per_dop_trans_rows = per_dop_ser_rows;

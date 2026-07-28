@@ -1620,6 +1620,7 @@ int ObJsonExprHelper::set_dest_type(ObExprResType &type1,
     }
     if (OB_SUCC(ret)) {
       ObCollationType collation_connection = type_ctx.get_coll_type();
+      ObCollationType collation_nation = session->get_nls_collation_nation();
       int32_t length = 0;
       if (ob_is_string_type(dst_type.get_type()) || ob_is_json(dst_type.get_type())) {
         type.set_collation_level(CS_LEVEL_IMPLICIT);

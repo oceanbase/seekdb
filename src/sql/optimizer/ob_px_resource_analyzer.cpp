@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX SQL_OPT
 #include "ob_px_resource_analyzer.h"
 #include "sql/optimizer/ob_log_exchange.h"
+#include "sql/optimizer/ob_log_table_scan.h"
+#include "sql/optimizer/ob_log_del_upd.h"
 #include "sql/optimizer/ob_log_join_filter.h"
 
 using namespace oceanbase::common;
@@ -152,7 +154,9 @@ ObPxResourceAnalyzer::ObPxResourceAnalyzer()
 int ObPxResourceAnalyzer::analyze(
     ObLogicalOperator &root_op,
     int64_t &max_parallel_thread_count,
-    int64_t &max_parallel_group_count)
+    int64_t &max_parallel_group_count,
+    ObHashMap<ObAddr, int64_t> &max_parallel_thread_map,
+    ObHashMap<ObAddr, int64_t> &max_parallel_group_map)
 {
   int ret = OB_SUCCESS;
   // This function is used to analyze how many groups of threads at least need to be reserved for a PX plan to be scheduled successfully
@@ -171,7 +175,9 @@ int ObPxResourceAnalyzer::analyze(
   if (OB_FAIL(convert_log_plan_to_nested_px_tree(root_op))) {
     LOG_WARN("fail convert log plan to nested px tree", K(ret));
   } else if (OB_FAIL(walk_through_logical_plan(root_op, max_parallel_thread_count,
-                                                max_parallel_group_count))) {
+                                                max_parallel_group_count,
+                                                max_parallel_thread_map,
+                                                max_parallel_group_map))) {
     LOG_WARN("walk through logical plan failed", K(ret));
   }
   for (int64_t i = 0; i < px_trees_.count(); ++i) {
@@ -187,12 +193,27 @@ int ObPxResourceAnalyzer::analyze(
 int ObPxResourceAnalyzer::append_px(OPEN_PX_RESOURCE_ANALYZE_DECLARE_ARG, PxInfo &px_info)
 {
   int ret = OB_SUCCESS;
-  UNUSED(px_res_analyzer);
   cur_parallel_thread_count += px_info.threads_cnt_;
   cur_parallel_group_count += px_info.group_cnt_;
-  if (update_max) {
+  if (!append_map) {
+    // only increase current parallel count.
+  } else if (OB_FAIL(px_tree_append<true>(cur_parallel_thread_map, px_info.thread_map_))) {
+    LOG_WARN("px tree append failed", K(ret));
+  } else if (OB_FAIL(px_tree_append<true>(cur_parallel_group_map, px_info.group_map_))) {
+    LOG_WARN("px tree append failed", K(ret));
+  } else {
     max_parallel_thread_count = max(max_parallel_thread_count, cur_parallel_thread_count);
     max_parallel_group_count = max(max_parallel_group_count, cur_parallel_group_count);
+    FOREACH_X(iter, cur_parallel_thread_map, OB_SUCC(ret)) {
+      if (OB_FAIL(update_parallel_map_one_addr(max_parallel_thread_map, iter->first, iter->second, false /*append*/))) {
+        LOG_WARN("update parallel map one addr failed", K(ret));
+      }
+    }
+    FOREACH_X(iter, cur_parallel_group_map, OB_SUCC(ret)) {
+      if (OB_FAIL(update_parallel_map_one_addr(max_parallel_group_map, iter->first, iter->second, false /*append*/))) {
+        LOG_WARN("update parallel map one addr failed", K(ret));
+      }
+    }
   }
   return ret;
 }
@@ -200,10 +221,15 @@ int ObPxResourceAnalyzer::append_px(OPEN_PX_RESOURCE_ANALYZE_DECLARE_ARG, PxInfo
 int ObPxResourceAnalyzer::remove_px(CLOSE_PX_RESOURCE_ANALYZE_DECLARE_ARG, PxInfo &px_info)
 {
   int ret = OB_SUCCESS;
-  UNUSED(px_res_analyzer);
-  UNUSED(update_max);
   cur_parallel_thread_count -= px_info.threads_cnt_;
   cur_parallel_group_count -= px_info.group_cnt_;
+  if (!append_map) {
+    // only decrease current parallel count.
+  } else if (OB_FAIL(px_tree_append<false>(cur_parallel_thread_map, px_info.thread_map_))) {
+    LOG_WARN("px tree append failed", K(ret));
+  } else if (OB_FAIL(px_tree_append<false>(cur_parallel_group_map, px_info.group_map_))) {
+    LOG_WARN("px tree append failed", K(ret));
+  }
   return ret;
 
 }
@@ -326,13 +352,20 @@ int ObPxResourceAnalyzer::do_split(
       if (OB_FAIL(create_dfo(dfo, root_op))) {
         LOG_WARN("fail create dfo", K(ret));
       } else {
-        if (nullptr == parent_dfo) {
-          px_info.root_dfo_ = dfo;
+        if (OB_FAIL(dfo->location_addr_.create(hash::cal_next_prime(10), "PxResourceBucket", "PxResourceNode"))) {
+          LOG_WARN("fail to create hash set", K(ret));
+        } else if (OB_FAIL(get_dfo_addr_set(root_op, dfo->location_addr_))) {
+          LOG_WARN("get addr_set failed", K(ret));
+          dfo->destroy();
         } else {
-          parent_dfo->add_child(dfo);
+          if (nullptr == parent_dfo) {
+            px_info.root_dfo_ = dfo;
+          } else {
+            parent_dfo->add_child(dfo);
+          }
+          dfo->set_parent(parent_dfo);
+          parent_dfo = dfo;
         }
-        dfo->set_parent(parent_dfo);
-        parent_dfo = dfo;
       }
     }
 
@@ -347,6 +380,23 @@ int ObPxResourceAnalyzer::do_split(
                     *root_op.get_child(child_idx),
                     parent_dfo)))) {
           LOG_WARN("fail split px tree", K(child_idx), K(num), K(ret));
+        }
+      }
+      if (parent_dfo->location_addr_.size() == 0) {
+        if (parent_dfo->has_child()) {
+          DfoInfo *child_dfo = nullptr;
+          if (OB_FAIL(parent_dfo->get_child(0, child_dfo))) {
+            LOG_WARN("get child dfo failed", K(ret));
+          } else {
+            for (ObHashSet<ObAddr>::const_iterator it = child_dfo->location_addr_.begin();
+                OB_SUCC(ret) && it != child_dfo->location_addr_.end(); ++it) {
+              if (OB_FAIL(parent_dfo->location_addr_.set_refactored(it->first))){
+                LOG_WARN("set refactored failed", K(ret), K(it->first));
+              }
+            }
+          }
+        } else if (OB_FAIL(parent_dfo->location_addr_.set_refactored(GCTX.self_addr()))){
+          LOG_WARN("set refactored failed", K(ret), K(GCTX.self_addr()));
         }
       }
     }
@@ -372,21 +422,99 @@ int ObPxResourceAnalyzer::create_dfo(DfoInfo *&dfo, ObLogicalOperator &root_op)
   return ret;
 }
 
+int ObPxResourceAnalyzer::get_dfo_addr_set(const ObLogicalOperator &root_op, ObHashSet<ObAddr> &addr_set)
+{
+  int ret = OB_SUCCESS;
+  if ((root_op.is_table_scan() && !root_op.get_contains_fake_cte()) ||
+      (root_op.is_dml_operator() && (static_cast<const ObLogDelUpd&>(root_op)).is_pdml())) {
+    const ObTablePartitionInfo *tbl_part_info = nullptr;
+    if (root_op.is_table_scan()) {
+      const ObLogTableScan &tsc = static_cast<const ObLogTableScan&>(root_op);
+      tbl_part_info = tsc.get_table_partition_info();
+    } else {
+      const ObLogDelUpd &dml_op = static_cast<const ObLogDelUpd&>(root_op);
+      tbl_part_info = dml_op.get_table_partition_info();
+    }
+    if (OB_ISNULL(tbl_part_info)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get table partition info failed", K(ret),
+                                                  K(root_op.get_type()),
+                                                  K(root_op.get_operator_id()));
+    } else {
+      const ObCandiTableLoc &phy_tbl_loc_info = tbl_part_info->get_phy_tbl_location_info();
+      const ObCandiTabletLocIArray &phy_part_loc_info_arr = phy_tbl_loc_info.get_phy_part_loc_info_list();
+      for (int64_t i = 0; i < phy_part_loc_info_arr.count() && OB_SUCC(ret); ++i) {
+        const ObAddr &server =
+            phy_part_loc_info_arr.at(i).get_partition_location().get_server();
+        if (OB_UNLIKELY(!server.is_valid())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("local tablet server is invalid", K(ret), K(server));
+        } else if (OB_FAIL(addr_set.set_refactored(server, 1))) {
+          LOG_WARN("addr set refactored failed");
+        } else {
+          LOG_DEBUG("resource analyzer", K(root_op.get_type()),
+                                         K(root_op.get_operator_id()),
+                                         K(server));
+        }
+      }
+    }
+  } else {
+    int64_t num = root_op.get_num_of_child();
+    for (int64_t child_idx = 0; OB_SUCC(ret) && child_idx < num; ++child_idx) {
+      ObLogicalOperator *child_op = nullptr;
+      if (OB_ISNULL(child_op = root_op.get_child(child_idx))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null ptr", K(child_idx), K(num), K(ret));
+      } else if (log_op_def::LOG_EXCHANGE == child_op->get_type() &&
+                 static_cast<const ObLogExchange*>(child_op)->is_px_consumer()) {
+        // do nothing
+      } else if (OB_FAIL(SMART_CALL(get_dfo_addr_set(*child_op, addr_set)))) {
+        LOG_WARN("get addr_set failed", K(ret));
+      }
+    }
+  }
+
+  return ret;
+}
+
 // root_op is the root operator of the plan or a dfo with nested px coord.
 // This function calculates the px usage of the plan or the dfo.
 int ObPxResourceAnalyzer::walk_through_logical_plan(
     ObLogicalOperator &root_op,
     int64_t &max_parallel_thread_count,
-    int64_t &max_parallel_group_count)
+    int64_t &max_parallel_group_count,
+    ObHashMap<ObAddr, int64_t> &max_parallel_thread_map,
+    ObHashMap<ObAddr, int64_t> &max_parallel_group_map)
 {
   int ret = OB_SUCCESS;
+  int64_t bucket_size = cal_next_prime(10);
   max_parallel_thread_count = 0;
   max_parallel_group_count = 0;
   int64_t cur_parallel_thread_count = 0;
   int64_t cur_parallel_group_count = 0;
+  ObHashMap<ObAddr, int64_t> cur_parallel_thread_map;
+  ObHashMap<ObAddr, int64_t> cur_parallel_group_map;
+  if (OB_FAIL(cur_parallel_thread_map.create(bucket_size, ObModIds::OB_SQL_PX,
+                                              ObModIds::OB_SQL_PX))){
+    LOG_WARN("create hash map failed", K(ret));
+  } else if (OB_FAIL(cur_parallel_group_map.create(bucket_size, ObModIds::OB_SQL_PX,
+                                                    ObModIds::OB_SQL_PX))){
+    LOG_WARN("create hash map failed", K(ret));
+  } else if (max_parallel_thread_map.created()) {
+    max_parallel_thread_map.clear();
+    max_parallel_group_map.clear();
+  } else if (OB_FAIL(max_parallel_thread_map.create(bucket_size,
+                                                    ObModIds::OB_SQL_PX,
+                                                    ObModIds::OB_SQL_PX))){
+    LOG_WARN("create hash map failed", K(ret));
+  } else if (OB_FAIL(max_parallel_group_map.create(bucket_size,
+                                                   ObModIds::OB_SQL_PX,
+                                                   ObModIds::OB_SQL_PX))){
+    LOG_WARN("create hash map failed", K(ret));
+  }
   ObPxResourceAnalyzer &px_res_analyzer = *this;
-  bool update_max = true;
-  if (OB_FAIL(root_op.open_px_resource_analyze(OPEN_PX_RESOURCE_ANALYZE_ARG))) {
+  bool append_map = true;
+  if (OB_SUCC(ret) && OB_FAIL(root_op.open_px_resource_analyze(OPEN_PX_RESOURCE_ANALYZE_ARG))) {
     LOG_WARN("open px resource analyze failed", K(ret));
   }
   return ret;
@@ -399,9 +527,15 @@ int ObPxResourceAnalyzer::recursive_walk_through_px_tree(PxInfo &px_tree)
   if (!px_tree.inited_) {
     px_tree.threads_cnt_ = 0;
     px_tree.group_cnt_ = 0;
-    if (OB_FAIL(px_tree.rf_dpd_info_.describe_dependency(px_tree.root_dfo_))) {
+    int64_t bucket_size = cal_next_prime(10);
+    if (OB_FAIL(px_tree.thread_map_.create(bucket_size, ObModIds::OB_SQL_PX, ObModIds::OB_SQL_PX))){
+      LOG_WARN("create hash map failed", K(ret));
+    } else if (OB_FAIL(px_tree.group_map_.create(bucket_size, ObModIds::OB_SQL_PX, ObModIds::OB_SQL_PX))){
+      LOG_WARN("create hash map failed", K(ret));
+    } else if (OB_FAIL(px_tree.rf_dpd_info_.describe_dependency(px_tree.root_dfo_))) {
       LOG_WARN("failed to describe dependency");
-    } else if (OB_FAIL(walk_through_dfo_tree(px_tree, px_tree.threads_cnt_, px_tree.group_cnt_))) {
+    } else if (OB_FAIL(walk_through_dfo_tree(px_tree, px_tree.threads_cnt_, px_tree.group_cnt_,
+                                            px_tree.thread_map_, px_tree.group_map_))) {
       LOG_WARN("fail calc px thread group count", K(ret));
     } else {
       int64_t op_id = OB_ISNULL(px_tree.root_op_) ? OB_INVALID_ID : px_tree.root_op_->get_op_id();
@@ -429,16 +563,26 @@ int ObPxResourceAnalyzer::recursive_walk_through_px_tree(PxInfo &px_tree)
  * 4. Finish this edge if it is a leaf node or all children are finished.
 */
 
-// Simulate local DFO scheduling and retain the peak worker and group counts.
+/* This function also generate a ObHashMap<ObAddr, int64_t> max_parallel_thread_map.
+ * Key is observer. Value is max sum of dops of dfos that are scheduled at same time on this observer.
+ * Value means expected thread number on this server.
+ * Once a dfo is scheduled or finished, we update(increase or decrease) the current_thread_map.
+ * Then compare current thead count with max thread count, and update max_parallel_thread_map if necessary.
+*/
 int ObPxResourceAnalyzer::walk_through_dfo_tree(
     PxInfo &px_root,
     int64_t &max_parallel_thread_count,
-    int64_t &max_parallel_group_count)
+    int64_t &max_parallel_group_count,
+    ObHashMap<ObAddr, int64_t> &max_parallel_thread_map,
+    ObHashMap<ObAddr, int64_t> &max_parallel_group_map)
 {
   int ret = OB_SUCCESS;
   // Simulate scheduling process
   ObArray<DfoInfo *> edges;
   SchedOrderGenerator sched_order_gen;
+  int64_t bucket_size = cal_next_prime(10);
+  ObHashMap<ObAddr, int64_t> current_thread_map;
+  ObHashMap<ObAddr, int64_t> current_group_map;
 
   if (OB_ISNULL(px_root.root_dfo_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -447,6 +591,13 @@ int ObPxResourceAnalyzer::walk_through_dfo_tree(
     LOG_WARN("fail normalize px tree", K(ret));
   } else if (OB_FAIL(sched_order_gen.generate(*px_root.root_dfo_, edges))) {
     LOG_WARN("fail generate sched order", K(ret));
+  } else if (OB_FAIL(current_thread_map.create(bucket_size,
+                                               ObModIds::OB_SQL_PX,
+                                               ObModIds::OB_SQL_PX))){
+    LOG_WARN("create hash map failed", K(ret));
+  } else if (OB_FAIL(current_group_map.create(bucket_size,
+                                              ObModIds::OB_SQL_PX,
+                                              ObModIds::OB_SQL_PX))){
   }
 #ifndef NDEBUG
   for (int x = 0; x < edges.count(); ++x) {
@@ -461,9 +612,10 @@ int ObPxResourceAnalyzer::walk_through_dfo_tree(
   for (int64_t i = 0; OB_SUCC(ret) && i < edges.count(); ++i) {
     DfoInfo &child = *edges.at(i);
     // schedule child if not scheduled.
-    if (OB_FAIL(schedule_dfo(child, threads, groups))) {
+    if (OB_FAIL(schedule_dfo(child, threads, groups, current_thread_map, current_group_map))) {
       LOG_WARN("schedule dfo failed", K(ret));
-    } else if (child.has_parent() && OB_FAIL(schedule_dfo(*child.parent_, threads, groups))) {
+    } else if (child.has_parent() && OB_FAIL(schedule_dfo(*child.parent_, threads, groups,
+                                                          current_thread_map, current_group_map))) {
       LOG_WARN("schedule parent dfo failed", K(ret));
     } else if (child.has_sibling() && child.depend_sibling_->not_scheduled()) {
       DfoInfo *sibling = child.depend_sibling_;
@@ -471,24 +623,32 @@ int ObPxResourceAnalyzer::walk_through_dfo_tree(
         if (OB_UNLIKELY(!sibling->is_leaf_node())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("sibling must be leaf node", K(ret));
-        } else if (OB_FAIL(schedule_dfo(*sibling, threads, groups))) {
+        } else if (OB_FAIL(schedule_dfo(*sibling, threads, groups, current_thread_map,
+                                        current_group_map))) {
           LOG_WARN("schedule sibling failed", K(ret));
+        } else if (OB_FAIL(update_max_thead_group_info(threads, groups,
+                    current_thread_map, current_group_map,
+                    max_threads, max_groups,
+                    max_parallel_thread_map, max_parallel_group_map))) {
+          LOG_WARN("update max_thead group info failed", K(ret));
+        } else if (OB_FAIL(finish_dfo(*sibling, threads, groups, current_thread_map,
+                                        current_group_map))) {
+          LOG_WARN("finish sibling failed", K(ret));
         } else {
-          max_threads = max(threads, max_threads);
-          max_groups = max(groups, max_groups);
-          if (OB_FAIL(finish_dfo(*sibling, threads, groups))) {
-            LOG_WARN("finish sibling failed", K(ret));
-          } else {
-            sibling = sibling->depend_sibling_;
-          }
+          sibling = sibling->depend_sibling_;
         }
       }
     } else {
-      max_threads = max(threads, max_threads);
-      max_groups = max(groups, max_groups);
+      if (OB_FAIL(update_max_thead_group_info(threads, groups,
+                    current_thread_map, current_group_map,
+                    max_threads, max_groups,
+                    max_parallel_thread_map, max_parallel_group_map))) {
+        LOG_WARN("update max_thead group info failed", K(ret));
+      }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(finish_dfo(child, threads, groups))) {
+      if (OB_FAIL(finish_dfo(child, threads, groups, current_thread_map,
+                                        current_group_map))) {
         LOG_WARN("finish sibling failed", K(ret));
       }
     }
@@ -506,10 +666,41 @@ int ObPxResourceAnalyzer::walk_through_dfo_tree(
   return ret;
 }
 
+template <bool append>
+int ObPxResourceAnalyzer::px_tree_append(ObHashMap<ObAddr, int64_t> &max_parallel_count,
+                                         ObHashMap<ObAddr, int64_t> &parallel_count)
+{
+  int ret = OB_SUCCESS;
+  for (ObHashMap<ObAddr, int64_t>::const_iterator it = parallel_count.begin();
+      OB_SUCC(ret) && it != parallel_count.end(); ++it) {
+    bool is_exist = true;
+    int64_t dop = 0;
+    if (OB_FAIL(max_parallel_count.get_refactored(it->first, dop))) {
+      if (ret != OB_HASH_NOT_EXIST) {
+        LOG_WARN("get refactored failed", K(ret), K(it->first));
+      } else {
+        is_exist = false;
+        if (append) {
+          ret = OB_SUCCESS;
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      dop += append ? it->second : -(it->second);
+      if (OB_FAIL(max_parallel_count.set_refactored(it->first, dop, is_exist))){
+        LOG_WARN("set refactored failed", K(ret), K(it->first), K(dop), K(is_exist));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObPxResourceAnalyzer::schedule_dfo(
     DfoInfo &dfo,
     int64_t &threads,
-    int64_t &groups)
+    int64_t &groups,
+    ObHashMap<ObAddr, int64_t> &current_thread_map,
+    ObHashMap<ObAddr, int64_t> &current_group_map)
 {
   int ret = OB_SUCCESS;
   if (dfo.not_scheduled()) {
@@ -517,7 +708,15 @@ int ObPxResourceAnalyzer::schedule_dfo(
     threads += dfo.get_dop();
     const int64_t group = 1;
     groups += group;
-    if (dfo.has_nested_px_) {
+    ObHashSet<ObAddr> &addr_set = dfo.location_addr_;
+    // we assume that should allocate same thread count for each sqc in the dfo.
+    // this may not true. but we can't decide the real count for each sqc. just let it be for now
+    const int64_t dop_per_addr = 0 == addr_set.size() ? dfo.get_dop() : (dfo.get_dop() + addr_set.size() - 1) / addr_set.size();
+    if (OB_FAIL(update_parallel_map(current_thread_map, addr_set, dop_per_addr))) {
+      LOG_WARN("increase current thread map failed", K(ret));
+    } else if (OB_FAIL(update_parallel_map(current_group_map, addr_set, group))) {
+      LOG_WARN("increase current group map failed", K(ret));
+    } else if (dfo.has_nested_px_) {
       ObLogicalOperator *root_op = NULL;
       ObLogicalOperator *child = NULL;
       if (OB_ISNULL(root_op = dfo.get_root_op()) || log_op_def::LOG_EXCHANGE != root_op->get_type()
@@ -526,13 +725,18 @@ int ObPxResourceAnalyzer::schedule_dfo(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected root op", K(ret), K(root_op));
       // calculate px usage of nested px coord.
-      } else if (OB_FAIL(walk_through_logical_plan(*child, dfo.nested_px_thread_cnt_,
-                                                   dfo.nested_px_group_cnt_))) {
+      } else if (OB_FAIL(walk_through_logical_plan(*child, dfo.nested_px_thread_cnt_, dfo.nested_px_group_cnt_,
+                                                  dfo.nested_px_thread_map_, dfo.nested_px_group_map_))) {
         LOG_WARN("walk through logical plan", K(ret));
       } else {
         // append px usage of nested px coord to the dfo.
         threads += dfo.nested_px_thread_cnt_;
         groups += dfo.nested_px_group_cnt_;
+        if (OB_FAIL(px_tree_append<true>(current_thread_map, dfo.nested_px_thread_map_))) {
+          LOG_WARN("px tree append failed", K(ret));
+        } else if (OB_FAIL(px_tree_append<true>(current_group_map, dfo.nested_px_group_map_))) {
+          LOG_WARN("px tree append failed", K(ret));
+        }
       }
     }
     LOG_TRACE("[PxResAnaly] schedule dfo", K(dfo.dop_), K(dfo.has_nested_px_),
@@ -545,7 +749,9 @@ int ObPxResourceAnalyzer::schedule_dfo(
 int ObPxResourceAnalyzer::finish_dfo(
     DfoInfo &dfo,
     int64_t &threads,
-    int64_t &groups)
+    int64_t &groups,
+    ObHashMap<ObAddr, int64_t> &current_thread_map,
+    ObHashMap<ObAddr, int64_t> &current_group_map)
 {
   int ret = OB_SUCCESS;
   if (dfo.is_scheduling() && (dfo.is_leaf_node() || dfo.is_all_child_finish())) {
@@ -553,13 +759,100 @@ int ObPxResourceAnalyzer::finish_dfo(
     threads -= dfo.get_dop();
     const int64_t group = 1;
     groups -= group;
-    if (dfo.has_nested_px_) {
+    ObHashSet<ObAddr> &addr_set = dfo.location_addr_;
+    const int64_t dop_per_addr = 0 == addr_set.size() ? dfo.get_dop() : (dfo.get_dop() + addr_set.size() - 1) / addr_set.size();
+    if (OB_FAIL(update_parallel_map(current_thread_map, addr_set, -dop_per_addr))) {
+      LOG_WARN("decrease current thread map failed", K(ret));
+    } else if (OB_FAIL(update_parallel_map(current_group_map, addr_set, -group))) {
+      LOG_WARN("decrease current group map failed", K(ret));
+    } else if (dfo.has_nested_px_) {
       threads -= dfo.nested_px_thread_cnt_;
       groups -= dfo.nested_px_group_cnt_;
+      if (OB_FAIL(px_tree_append<false>(current_thread_map, dfo.nested_px_thread_map_))) {
+        LOG_WARN("px tree append failed", K(ret));
+      } else if (OB_FAIL(px_tree_append<false>(current_group_map, dfo.nested_px_group_map_))) {
+        LOG_WARN("px tree append failed", K(ret));
+      }
     }
     LOG_TRACE("[PxResAnaly] finish dfo", K(dfo.dop_), K(dfo.has_nested_px_),
               K(dfo.nested_px_thread_cnt_), K(dfo.nested_px_group_cnt_), K(threads), K(groups),
               K(OB_ISNULL(dfo.root_op_) ? OB_INVALID_ID : dfo.root_op_->get_op_id()));
+  }
+  return ret;
+}
+
+int ObPxResourceAnalyzer::update_parallel_map(
+    ObHashMap<ObAddr, int64_t> &parallel_map,
+    const ObHashSet<ObAddr> &addr_set,
+    int64_t count)
+{
+  int ret = OB_SUCCESS;
+  for (hash::ObHashSet<ObAddr>::const_iterator it = addr_set.begin();
+        OB_SUCC(ret) && it != addr_set.end(); it++) {
+    if (OB_FAIL(update_parallel_map_one_addr(parallel_map, it->first, count, true))) {
+      LOG_WARN("update parallel map one addr failed", K(ret));
+    }
+  }
+  return ret;
+}
+
+// Update current_parallel_map or max_parallel_map.
+// When update current_parallel_map, append is true, because we are increasing or decreasing count.
+// When update max_parallel_map, append is false.
+int ObPxResourceAnalyzer::update_parallel_map_one_addr(
+    ObHashMap<ObAddr, int64_t> &parallel_map,
+    const ObAddr &addr,
+    int64_t count,
+    bool append)
+{
+  int ret = OB_SUCCESS;
+  bool is_exist = true;
+  int64_t origin_count = 0;
+  if (OB_FAIL(parallel_map.get_refactored(addr, origin_count))) {
+    if (ret != OB_HASH_NOT_EXIST) {
+      LOG_WARN("get refactored failed", K(ret), K(addr));
+    } else {
+      is_exist = false;
+      ret = OB_SUCCESS;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (append) {
+      origin_count += count;
+    } else {
+      origin_count = max(origin_count, count);
+    }
+    if (OB_FAIL(parallel_map.set_refactored(addr, origin_count, is_exist))){
+      LOG_WARN("set refactored failed", K(ret), K(addr), K(origin_count), K(is_exist));
+    }
+  }
+  return ret;
+}
+
+int ObPxResourceAnalyzer::update_max_thead_group_info(
+    const int64_t threads,
+    const int64_t groups,
+    const ObHashMap<ObAddr, int64_t> &current_thread_map,
+    const ObHashMap<ObAddr, int64_t> &current_group_map,
+    int64_t &max_threads,
+    int64_t &max_groups,
+    ObHashMap<ObAddr, int64_t> &max_parallel_thread_map,
+    ObHashMap<ObAddr, int64_t> &max_parallel_group_map)
+{
+  int ret = OB_SUCCESS;
+  max_threads = max(threads, max_threads);
+  max_groups = max(groups, max_groups);
+  for (ObHashMap<ObAddr, int64_t>::const_iterator it = current_thread_map.begin();
+      OB_SUCC(ret) && it != current_thread_map.end(); ++it) {
+    if (OB_FAIL(update_parallel_map_one_addr(max_parallel_thread_map, it->first, it->second, false))) {
+      LOG_WARN("update parallel map one addr failed", K(ret));
+    }
+  }
+  for (ObHashMap<ObAddr, int64_t>::const_iterator it = current_group_map.begin();
+      OB_SUCC(ret) && it != current_group_map.end(); ++it) {
+    if (OB_FAIL(update_parallel_map_one_addr(max_parallel_group_map, it->first, it->second, false))) {
+      LOG_WARN("update parallel map one addr failed", K(ret));
+    }
   }
   return ret;
 }

@@ -19,9 +19,15 @@
 
 #include "common/object/ob_obj_type.h"
 #include "sql/engine/expr/ob_expr_operator.h"
+#include "pl/ob_pl_type.h"
 
 namespace oceanbase
 {
+namespace pl
+{
+class ObPLCollection;
+class ObCollectionType;
+}
 namespace sql
 {
 
@@ -85,6 +91,31 @@ public:
   explicit  ObExprCast(common::ObIAllocator &alloc);
   virtual ~ObExprCast() {};
 
+  struct CastMultisetExtraInfo : public ObIExprExtraInfo
+  {
+    OB_UNIS_VERSION(1);
+  public:
+    CastMultisetExtraInfo(common::ObIAllocator &alloc, ObExprOperatorType type)
+        : ObIExprExtraInfo(alloc, type),
+        pl_type_(pl::ObPLType::PL_INVALID_TYPE),
+        not_null_(false),
+        elem_type_(),
+        capacity_(common::OB_INVALID_SIZE),
+        udt_id_(common::OB_INVALID_ID)
+    {
+    }
+    virtual ~CastMultisetExtraInfo() { }
+    virtual int deep_copy(common::ObIAllocator &allocator,
+                        const ObExprOperatorType type,
+                        ObIExprExtraInfo *&copied_info) const override;
+
+    pl::ObPLType pl_type_;
+    bool not_null_;
+    common::ObDataType elem_type_;
+    int64_t capacity_;
+    uint64_t udt_id_;
+  };
+
   virtual int calc_result_type2(ObExprResType &type,
                                 ObExprResType &type1,
                                 ObExprResType &type2,
@@ -96,6 +127,9 @@ public:
 
   virtual bool need_rt_ctx() const override { return true; }
 
+  static int eval_cast_multiset(const sql::ObExpr &expr,
+                                sql::ObEvalCtx &ctx,
+                                sql::ObDatum &res_datum);
   static int get_cast_type(const bool enable_decimal_int,
                            const ObExprResType &param_type2,
                            const ObCastMode cast_mode,
@@ -114,6 +148,10 @@ private:
                           const common::ObObjType expect_type,
                           const common::ObCollationType expect_cs_type,
                           const bool is_explicit_cast) const;
+
+  int cg_cast_multiset(ObExprCGCtx &op_cg_ctx,
+                       const ObRawExpr &raw_expr,
+                       ObExpr &rt_expr) const;
 
 private:
   int get_cast_string_len(ObExprResType &type1,

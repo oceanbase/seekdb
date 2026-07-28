@@ -127,6 +127,11 @@ int ObServerLogBlockMgr::init(const char *log_disk_base_path)
   } else if (OB_FAIL(do_load_(log_disk_base_path))) {
     CLOG_LOG(ERROR, "do_load_ failed", K(ret), KPC(this), K(log_disk_base_path));
   } else {
+    get_runtime_log_disk_size_func_ = [this](int64_t &log_disk_size) -> int
+    { 
+      log_disk_size = 0;
+      return get_runtime_log_disk_size_(log_disk_size);
+    };
     is_inited_ = true;
     CLOG_LOG(INFO, "ObServerLogBlockMgr init success", KPC(this));
   }
@@ -180,8 +185,8 @@ int64_t ObServerLogBlockMgr::get_log_disk_size()
   int64_t expected_log_disk_size = 0;
   int64_t unused_log_disk_percentage = 0;
   int64_t total_log_disk_size = 0;
-  if (OB_FAIL(get_runtime_log_disk_size_(log_disk_size))) {
-    CLOG_LOG(WARN, "get_runtime_log_disk_size failed", K(ret), K(log_disk_size));
+  if (OB_FAIL(get_runtime_log_disk_size_func_(log_disk_size))) {
+    CLOG_LOG(WARN, "get_runtime_log_disk_size_func_ failed", K(ret), K(log_disk_size));
   } else if (OB_FAIL(observer::ObServerUtils::get_log_disk_info_in_config(expected_log_disk_size,
              unused_log_disk_percentage,
              total_log_disk_size))) {
@@ -313,8 +318,8 @@ bool ObServerLogBlockMgr::check_space_is_enough_(const int64_t log_disk_size) co
   bool bool_ret = false;
   int64_t runtime_log_disk_size = 0;
   int ret = OB_SUCCESS;
-  if (OB_FAIL(get_runtime_log_disk_size_(runtime_log_disk_size))) {
-    CLOG_LOG(WARN, "get_runtime_log_disk_size failed", K(ret), K(runtime_log_disk_size));
+  if (OB_FAIL(get_runtime_log_disk_size_func_(runtime_log_disk_size))) {
+    CLOG_LOG(WARN, "get_runtime_log_disk_size_func_ failed", K(ret), K(runtime_log_disk_size));
   } else {
     bool_ret = runtime_log_disk_size <= log_disk_size;
     CLOG_LOG(INFO, "check_space_is_enough_ finished", K(runtime_log_disk_size), K(log_disk_size));
@@ -325,7 +330,6 @@ bool ObServerLogBlockMgr::check_space_is_enough_(const int64_t log_disk_size) co
 int ObServerLogBlockMgr::get_runtime_log_disk_size_(int64_t &runtime_log_disk_size) const
 {
   int ret = OB_SUCCESS;
-  runtime_log_disk_size = 0;
   // Called during boot before the server modules are constructed, so a missing
   // log_service contributes zero until the module set becomes ready.
   ObLogService *log_service = share::g_mp->log_service();

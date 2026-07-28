@@ -214,7 +214,7 @@ int ObCSDispatcher::push(ObCSTxInfo *tx)
 //   3) check visibility (seq_no vs rollback_list)
 //   4) slice by heap_pk range, keeping adjacent rows in the same subtask
 //
-// Non-data entries (table locks, etc.) are skipped by reading their entry length
+// Non-data entries (table locks, etc.) are skipped by reading encrypted_len
 // and advancing pos.
 // ---------------------------------------------------------------------------
 static int parse_redo_record(ObCSRedoRecord &redo,
@@ -248,7 +248,7 @@ static int parse_redo_record(ObCSRedoRecord &redo,
       break;
     }
 
-    // Record payload start (entry length is the first field of all entry types).
+    // Record payload start (encrypted_len is the first field of all entry types).
     const int64_t row_payload_start = pos;
 
     // 2a. Inner-table filter: skip rows with tablet_id < OB_MAX_INNER_TABLE_ID.
@@ -268,7 +268,7 @@ static int parse_redo_record(ObCSRedoRecord &redo,
       continue;
     }
 
-    // 2b. For non-data entries, skip by reading the entry length.
+    // 2b. For non-data entries, skip by reading encrypted_len.
     if (row_header.mutator_type_ != memtable::MutatorType::MUTATOR_ROW &&
         row_header.mutator_type_ != memtable::MutatorType::MUTATOR_ROW_EXT_INFO) {
       int32_t entry_len = 0;
@@ -290,7 +290,7 @@ static int parse_redo_record(ObCSRedoRecord &redo,
       LOG_WARN("parse_redo_record: deserialize mut_row failed", K(ret));
       break;
     }
-    if (row_header.tablet_id_.id() > ObTabletID::MAX_USER_TABLET_ID) {
+    if (row_header.tablet_id_.id() > ObTabletID::MAX_USER_NORMAL_ROWID_TABLE_TABLET_ID) {
       continue;
     }
     // 4. Visibility check: skip rows rolled back within this transaction.

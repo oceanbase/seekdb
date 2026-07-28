@@ -31,14 +31,11 @@ using namespace oceanbase::storage;
 using namespace oceanbase::share;
 using namespace oceanbase::lib;
 
-static_assert(SNAPSHOT_TYPE_RESERVED_3 == 3, "reserved snapshot type must keep its persisted value");
-static_assert(SNAPSHOT_FOR_BACKUP_POINT == 4, "backup point snapshot type must keep its persisted value");
-
 const char *ObSnapshotInfo::ObSnapShotTypeStr[] = {
     "SNAPSHOT_FOR_MAJOR",
     "SNAPSHOT_FOR_DDL",
     "SNAPSHOT_FOR_MULTI_VERSION",
-    nullptr,
+    "SNAPSHOT_FOR_RESTORE_POINT",
     "SNAPSHOT_FOR_BACKUP_POINT" };
 
 ObSnapshotInfo::ObSnapshotInfo()
@@ -55,16 +52,11 @@ int ObSnapshotInfo::init(
     const char* comment)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_valid_snapshot_type(snapshot_type) || !snapshot_scn.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid snapshot", KR(ret), K(snapshot_type), K(snapshot_scn));
-  } else {
-    snapshot_type_ = snapshot_type;
-    schema_version_ = schema_version;
-    tablet_id_ = tablet_id;
-    comment_ = comment;
-    snapshot_scn_ = snapshot_scn;
-  }
+  snapshot_type_ = snapshot_type;
+  schema_version_ = schema_version;
+  tablet_id_ = tablet_id;
+  comment_ = comment;
+  snapshot_scn_ = snapshot_scn;
   return ret;
 }
 
@@ -80,24 +72,19 @@ void ObSnapshotInfo::reset()
 bool ObSnapshotInfo::is_valid() const
 {
   bool bret = true;
-  if (!is_valid_snapshot_type(snapshot_type_) || !snapshot_scn_.is_valid()) {
+  if (snapshot_type_ < share::SNAPSHOT_FOR_MAJOR
+      || snapshot_type_ > MAX_SNAPSHOT_TYPE
+      || !snapshot_scn_.is_valid()) {
     bret = false;
     LOG_WARN_RET(OB_INVALID_ARGUMENT, "invalid snapshot", K(bret), K(*this));
   }
   return bret;
 }
 
-bool ObSnapshotInfo::is_valid_snapshot_type(const ObSnapShotType snapshot_type)
-{
-  return snapshot_type >= SNAPSHOT_FOR_MAJOR
-      && snapshot_type < MAX_SNAPSHOT_TYPE
-      && snapshot_type != SNAPSHOT_TYPE_RESERVED_3;
-}
-
 const char * ObSnapshotInfo::get_snapshot_type_str(const ObSnapShotType &snapshot_type)
 {
   const char * str = nullptr;
-  if (OB_UNLIKELY(!is_valid_snapshot_type(snapshot_type))) {
+  if (OB_UNLIKELY(snapshot_type < SNAPSHOT_FOR_MAJOR || snapshot_type >= MAX_SNAPSHOT_TYPE)) {
     str = "invalid_snapshot_type";
   } else {
     str = ObSnapShotTypeStr[snapshot_type];
@@ -178,11 +165,10 @@ int ObSnapshotTableProxy::batch_add_snapshot(
   ObSqlString values;
   ObDMLSqlSplicer dml;
   const int64_t BATCH_CNT = 500;
-  if (OB_UNLIKELY(!ObSnapshotInfo::is_valid_snapshot_type(snapshot_type)
-      || schema_version < 0
+  if (OB_UNLIKELY(schema_version < 0 
       || !snapshot_scn.is_valid() || tablet_id_array.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(snapshot_type), K(schema_version), K(snapshot_scn), K(tablet_id_array));
+    LOG_WARN("invalid arguments", K(ret), K(schema_version), K(snapshot_scn), K(tablet_id_array));
   } else {
     SCN snapshot_gc_scn = SCN::min_scn();
     int64_t report_idx = 0;
@@ -261,7 +247,8 @@ int ObSnapshotTableProxy::remove_snapshot(
   ObDMLSqlSplicer dml;
   ObDMLExecHelper exec(proxy);
 
-  if (!ObSnapshotInfo::is_valid_snapshot_type(info.snapshot_type_)) {
+  if ((MAX_SNAPSHOT_TYPE <= info.snapshot_type_) ||
+      (SNAPSHOT_FOR_MAJOR > info.snapshot_type_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(info));
   } else if (OB_FAIL(dml.add_pk_column("snapshot_type", info.snapshot_type_))
@@ -288,7 +275,8 @@ int ObSnapshotTableProxy::batch_remove_snapshots(
   
   const int64_t BATCH_CNT = 256;
 
-  if (!ObSnapshotInfo::is_valid_snapshot_type(snapshot_type)) {
+  if ((MAX_SNAPSHOT_TYPE <= snapshot_type) ||
+      (SNAPSHOT_FOR_MAJOR > snapshot_type)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(snapshot_type));
   } else {
@@ -406,10 +394,7 @@ int ObSnapshotTableProxy::get_all_snapshots(
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-  if (OB_UNLIKELY(!ObSnapshotInfo::is_valid_snapshot_type(snapshot_type))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid snapshot type", KR(ret), K(snapshot_type));
-  } else {
+  {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObMySQLResult *result = NULL;
 
@@ -518,7 +503,8 @@ int ObSnapshotTableProxy::get_snapshot(
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-  if (!ObSnapshotInfo::is_valid_snapshot_type(snapshot_type) || !snapshot_scn.is_valid()) {
+  if ((snapshot_type < SNAPSHOT_FOR_MAJOR) ||
+      (snapshot_type >= MAX_SNAPSHOT_TYPE) || (!snapshot_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(snapshot_type), K(snapshot_scn));
   } else {
@@ -573,10 +559,7 @@ int ObSnapshotTableProxy::check_snapshot_exist(
   is_exist = false;
   ObTimeoutCtx ctx;
 
-  if (OB_UNLIKELY(!ObSnapshotInfo::is_valid_snapshot_type(snapshot_type))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid snapshot type", KR(ret), K(snapshot_type));
-  } else if (OB_FAIL(share::ObShareUtil::get_rs_default_timeout_ctx(ctx))) {
+  if (OB_FAIL(share::ObShareUtil::get_rs_default_timeout_ctx(ctx))) {
     LOG_WARN("fail to get timeout ctx", KR(ret), K(ctx));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {

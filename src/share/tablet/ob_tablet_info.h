@@ -26,13 +26,13 @@ namespace share
 enum class ObDataChecksumType : uint8_t
 {
   DATA_CHECKSUM_NORMAL = 0,
-  DATA_CHECKSUM_NORMAL_WITH_NORMAL_COLUMN = 1,
+  DATA_CHECKSUM_NORMAL_WITH_NORMAL_COLUMN = 1, // with hex column checksums
   DATA_CHECKSUM_MAX
 };
 
 inline bool is_valid_data_checksum_type(const ObDataChecksumType &type)
 {
-  return type >= ObDataChecksumType::DATA_CHECKSUM_NORMAL
+  return type >= ObDataChecksumType::DATA_CHECKSUM_NORMAL 
       && type < ObDataChecksumType::DATA_CHECKSUM_MAX;
 }
 
@@ -55,7 +55,7 @@ public:
   ObTabletRuntimeInfo();
   virtual ~ObTabletRuntimeInfo();
   void reset();
-  bool is_valid() const
+  inline bool is_valid() const
   {
     return tablet_id_.is_valid()
         && snapshot_version_ >= 0
@@ -95,7 +95,6 @@ public:
       K_(required_size),
       K_(report_scn),
       K_(status));
-
 private:
   common::ObTabletID tablet_id_;
   int64_t snapshot_version_;
@@ -113,13 +112,12 @@ public:
   ~ObTabletTablePair();
 
   void reset();
-  int init(const common::ObTabletID &tablet_id, const uint64_t table_id);
+  int init(const ObTabletID &tablet_id, const uint64_t table_id);
   int assign(const ObTabletTablePair &other);
   bool is_valid() const;
-  const common::ObTabletID &get_tablet_id() const { return tablet_id_; }
+  const ObTabletID &get_tablet_id() const { return tablet_id_; }
   uint64_t get_table_id() const { return table_id_; }
   TO_STRING_KV(K_(tablet_id), K_(table_id));
-
 private:
   common::ObTabletID tablet_id_;
   uint64_t table_id_;

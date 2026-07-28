@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX SERVER
-#include "share/rc/ob_module_provider.h"
 #include "observer/ob_startup_accel_task_handler.h"
 
 namespace oceanbase

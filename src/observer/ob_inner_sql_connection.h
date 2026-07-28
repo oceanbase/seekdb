@@ -26,6 +26,7 @@
 #include "sql/monitor/ob_exec_stat.h"
 #include "observer/ob_restore_sql_modifier.h"
 #include "observer/mysql/ob_query_retry_ctrl.h"
+#include "observer/ob_inner_sql_transmit_struct.h"
 #include "common/mysqlclient/ob_isql_client.h"
 #include "storage/tablelock/ob_table_lock_common.h"   //ObTableLockMode
 #include "sql/session/ob_sql_session_mgr.h"
@@ -144,7 +145,9 @@ public:
            sql::ObSQLSessionInfo *extern_session = NULL,
            ObISQLClient *client_addr = NULL,
            ObRestoreSQLModifier *sql_modifer = NULL,
-           const bool use_static_engine = false);
+           const bool use_static_engine = false,
+           const int32_t group_id = 0,
+           const bool is_resource_conn = false);
   int destroy(void);
   inline void reset() { destroy(); }
   virtual int execute_read(const ObString &sql,
@@ -176,7 +179,9 @@ public:
 
   virtual int set_ddl_info(const void *ddl_info);
   virtual int set_tz_info_wrap(const ObTimeZoneInfoWrap &tz_info_wrap);
+  virtual void set_nls_formats(const ObString *nls_formats);
   virtual void set_is_load_data_exec(bool v);
+  virtual void set_use_external_session(bool v) { use_external_session_ = v; }
   virtual void set_ob_enable_pl_cache(bool v) override;
   bool is_nested_conn();
   virtual void set_user_timeout(int64_t timeout) { user_timeout_ = timeout; }
@@ -219,6 +224,21 @@ public:
   common::ObISQLClient *get_associated_client() const { return associated_client_; }
   bool is_in_trans() const { return is_in_trans_; }
   void set_is_in_trans(const bool is_in_trans) { is_in_trans_ = is_in_trans; }
+  bool is_resource_conn() const { return is_resource_conn_; }
+  void set_resource_conn_id(uint64_t resource_conn_id) { resource_conn_id_ = resource_conn_id; }
+  uint64_t get_resource_conn_id() const { return resource_conn_id_; }
+  const common::ObAddr &get_resource_svr() const { return resource_svr_; }
+  void set_resource_svr(const common::ObAddr &resource_svr) { resource_svr_ = resource_svr; }
+  void set_is_idle(bool is_idle) { is_idle_ = is_idle; }
+  bool is_idle() const { return is_idle_; }
+  void set_force_no_reuse(bool force_no_reuse) { force_no_reuse_ = force_no_reuse; }
+  bool is_force_no_reuse() const { return force_no_reuse_; }
+
+  void set_last_query_timestamp(int64_t last_query_timestamp)
+  { last_query_timestamp_ = last_query_timestamp; }
+  int64_t get_last_query_timestamp() const { return last_query_timestamp_; }
+  void reset_resource_conn_info()
+  { resource_conn_id_ = OB_INVALID_ID; last_query_timestamp_ = 0; resource_svr_.reset(); }
 
 public:
 
@@ -295,6 +315,7 @@ private:
                   bool is_prepare_protocol = false,
                   bool is_prepare_stage = false,
                   bool is_dynamic_sql = false,
+                  bool is_dbms_sql = false,
                   bool is_cursor = false);
   int process_retry(ObInnerSQLResult &res,
                     int do_ret,
@@ -320,7 +341,7 @@ private:
       bool is_user_sql = false);
   int start_transaction_inner(bool with_snap_shot = false);
   template <typename T>
-  int execute_with_timeout(T function);
+  int retry_while_runtime_unavailable(T function);
 
   int create_session_by_mgr();
   int create_default_session();
@@ -350,6 +371,17 @@ private:
 
   // The inner SQL connection always executes in the local server runtime.
   bool is_in_trans_;
+  bool is_resource_conn_;
+  bool is_idle_; // for resource_conn_
+  common::ObAddr resource_svr_; // server of destination in local rpc call
+  uint64_t resource_conn_id_; // resource conn_id of dst srv
+  int64_t last_query_timestamp_;
+  bool force_no_reuse_;
+
+  // ask the inner sql connection to use external session instead of internal one
+  // this enables show session / kill session using sql query command
+  bool use_external_session_; 
+  int32_t group_id_;
   //support set user timeout of stream rpc but not depend on internal_sql_execute_timeout
   int64_t user_timeout_;
   sql::ObFreeSessionCtx free_session_ctx_;

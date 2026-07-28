@@ -406,12 +406,14 @@ public:
   int64_t get_generic_log_write_count() const { return written_count_[0]; }
   int64_t get_user_request_log_write_count() const { return written_count_[1]; }
   int64_t get_data_maintain_log_write_count() const { return written_count_[2]; }
+  int64_t get_root_service_log_write_count() const { return written_count_[3]; }
   int64_t get_schema_log_write_count() const { return written_count_[4]; }
   int64_t get_force_allow_log_write_count() const { return written_count_[5]; }
 
   int64_t get_generic_log_dropped_count() const { return dropped_count_[0]; }
   int64_t get_user_request_log_dropped_count() const { return dropped_count_[1]; }
   int64_t get_data_maintain_log_dropped_count() const { return dropped_count_[2]; }
+  int64_t get_root_service_log_dropped_count() const { return dropped_count_[3]; }
   int64_t get_schema_log_dropped_count() const { return dropped_count_[4]; }
   int64_t get_force_allow_log_dropped_count() const { return dropped_count_[5]; }
 

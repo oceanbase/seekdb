@@ -69,7 +69,6 @@ inline int ObTransService::init_tx_(ObTxDesc &tx,
   tx.expire_ts_ = INT64_MAX;
   tx.op_sn_     = 1;
   tx.state_     = ObTxDesc::State::IDLE;
-  tx.data_version_ = DATA_CURRENT_VERSION;
   tx.seq_base_ = common::ObSequence::get_max_seq_no() - 1;
   return ret;
 }
@@ -254,6 +253,7 @@ int ObTransService::start_tx(ObTxDesc &tx, const ObTxParam &tx_param)
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid tx param", K(ret), KR(ret), K(tx_param));
   } else {
+    TX_STAT_START_INC;
     ObSpinLockGuard guard(tx.lock_);
     tx.inc_op_sn();
     ret = tx_desc_mgr_.add(tx);
@@ -299,6 +299,7 @@ int ObTransService::rollback_tx(ObTxDesc &tx)
   tx.inc_op_sn();
   switch(tx.state_) {
   case ObTxDesc::State::ABORTED:
+    if (tx.active_ts_ > 0) { TX_STAT_ROLLBACK_INC }
     tx.state_ = ObTxDesc::State::ROLLED_BACK;
     break;
   case ObTxDesc::State::ROLLED_BACK:
@@ -370,12 +371,12 @@ namespace {
   };
 }
 
-int ObTransService::commit_tx(ObTxDesc &tx, const int64_t expire_ts)
+int ObTransService::commit_tx(ObTxDesc &tx, const int64_t expire_ts, const ObString *trace_info)
 {
   int ret = OB_SUCCESS;
   int64_t start_ts = ObTimeUtility::current_time();
   SyncTxCommitCb cb;
-  if (OB_SUCC(submit_commit_tx(tx, expire_ts, cb))) {
+  if (OB_SUCC(submit_commit_tx(tx, expire_ts, cb, trace_info))) {
     int result = 0;
     // plus 10s to wait callback, if callback leaky, wakeup self
     int64_t wait_us = MAX(expire_ts - ObTimeUtility::current_time(), 0) + 10 * 1000 * 1000L;
@@ -429,7 +430,8 @@ int ObTransService::commit_tx(ObTxDesc &tx, const int64_t expire_ts)
 //   1. invalid registered snapshot
 int ObTransService::submit_commit_tx(ObTxDesc &tx,
                                      const int64_t expire_ts,
-                                     ObITxCallback &cb)
+                                     ObITxCallback &cb,
+                                     const ObString *trace_info)
 {
   TXN_API_SANITY_CHECK_FOR_TXN_FREE_ROUTE(true)
   int ret = OB_SUCCESS;
@@ -468,6 +470,7 @@ int ObTransService::submit_commit_tx(ObTxDesc &tx,
     case ObTxDesc::State::ACTIVE:
     case ObTxDesc::State::IMPLICIT_ACTIVE:
       if (tx.expire_ts_ <= ObClockGenerator::getClock()) {
+        TX_STAT_TIMEOUT_INC
         TRANS_LOG(WARN, "tx has timeout, it has rollbacked internally", K_(tx.expire_ts), K(tx));
         tx.print_trace_();
         ret = OB_TRANS_ROLLBACKED;
@@ -502,6 +505,11 @@ int ObTransService::submit_commit_tx(ObTxDesc &tx,
         tx.state_ == ObTxDesc::State::IMPLICIT_ACTIVE)) {
       ObTxDesc::State state0 = tx.state_;
       tx.state_ = ObTxDesc::State::IN_TERMINATE;
+      // record trace_info
+      if (OB_NOT_NULL(trace_info) &&
+          OB_FAIL(tx.trace_info_.set_app_trace_info(*trace_info))) {
+        TRANS_LOG(WARN, "set trace_info failed", K(ret), KPC(trace_info));
+      }
       SCN commit_version;
       if (OB_SUCC(ret) &&
           OB_FAIL(do_commit_tx_(tx, expire_ts, cb, commit_version))) {
@@ -541,10 +549,12 @@ int ObTransService::submit_commit_tx(ObTxDesc &tx,
       TRANS_LOG(INFO, "submit commit tx fail", K(ret),
                 K(committed), KPC(this), K(tx), K(expire_ts), KP(&cb));
     }
-    #endif
+  #endif
     ObTransTraceLog &tlog = tx.get_tlog();
+    const char *trace_info_str = (trace_info == NULL ? NULL : trace_info->ptr());
     REC_TRANS_TRACE_EXT(&tlog, submit_commit_tx, OB_Y(ret), OB_Y(expire_ts),
                         OB_ID(tag1), committed,
+                        OB_ID(tag2), trace_info_str,
                         OB_ID(ref), tx.get_ref(),
                         OB_ID(thread_id), GETTID());
   }
@@ -1494,6 +1504,36 @@ void ObTransService::tx_post_terminate_(ObTxDesc &tx)
   } else if (tx.state_ == ObTxDesc::State::COMMITTED) {
     process_registered_snapshot_on_commit_(tx);
   }
+  // statistic
+  if (tx.is_tx_end()) {
+    int64_t trans_used_time_us = 0;
+    if (tx.active_ts_ > 0) { // skip txn has not active
+      if (tx.finish_ts_ <= 0) {
+        TRANS_LOG_RET(WARN, OB_ERR_UNEXPECTED, "tx finish ts is unset", K(tx));
+      } else if (tx.finish_ts_ > tx.active_ts_) {
+        trans_used_time_us = tx.finish_ts_ - tx.active_ts_;
+        TX_STAT_TIME_USED(trans_used_time_us);
+      }
+      if (tx.is_committed()) {
+        TX_STAT_COMMIT_INC;
+        TX_STAT_COMMIT_TIME_USED(tx.finish_ts_ - tx.commit_ts_);
+      } else if (tx.is_rollbacked()) {
+        TX_STAT_ROLLBACK_INC;
+        if (tx.commit_ts_ > 0) {
+          TX_STAT_ROLLBACK_TIME_USED(MAX(0, tx.finish_ts_ - tx.commit_ts_));
+        }
+      }
+      else {
+        // TODO: COMMIT_UNKNOWN, COMMIT_TIMEOUT
+      }
+    }
+    if (!tx.has_write_state()) {
+      TX_STAT_READONLY_INC;
+    } else {
+      TX_STAT_LOCAL_INC;
+      TX_STAT_LOCAL_TOTAL_TIME_USED(trans_used_time_us);
+    }
+  }
   // release all savepoints
   tx.min_implicit_savepoint_.reset();
   tx.savepoints_.reset();
@@ -1545,6 +1585,7 @@ OB_INLINE int ObTransService::tx_sanity_check_(ObTxDesc &tx)
 {
   int ret = OB_SUCCESS;
   if (tx.expire_ts_ <= ObClockGenerator::getClock()) {
+    TX_STAT_TIMEOUT_INC
     ret = OB_TRANS_TIMEOUT;
   } else if (tx.flags_.BLOCK_) {
     ret = OB_NOT_SUPPORTED;

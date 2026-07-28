@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_MULTIPLE_MERGE_
 #define OCEANBASE_STORAGE_OB_MULTIPLE_MERGE_
 
+#include "lib/statistic_event/ob_stat_event.h"
 #include "lib/utility/ob_tracepoint.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/container/ob_se_array.h"

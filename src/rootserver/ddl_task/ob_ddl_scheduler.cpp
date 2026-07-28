@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_ddl_scheduler.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_drop_fts_index_task.h"
@@ -31,6 +32,7 @@
 #include "share/longops_mgr/ob_longops_mgr.h"
 #include "share/ob_ddl_sim_point.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
+#include "storage/fts/dict/ob_gen_dic_loader.h"
 #include "rootserver/ddl_task/ob_vec_ivf_index_build_task.h"
 
 namespace oceanbase
@@ -351,11 +353,12 @@ int ObDDLTaskQueue::update_task_ret_code(const ObDDLTaskID &task_id, const int r
     LOG_WARN("ddl_task is null", K(ret));
   } else {
     const ObTabletID unused_tablet_id;
+    const ObAddr unused_addr;
     const int64_t unused_snapshot_version = 0;
     const int64_t unused_execution_id = 0;
     const ObDDLTaskInfo unused_task_info;
     ret = table_redefinition_task->update_complete_sstable_job_status(
-        unused_tablet_id, unused_snapshot_version,
+        unused_tablet_id, unused_addr, unused_snapshot_version,
         unused_execution_id, ret_code, unused_task_info);
   }
   return ret;
@@ -666,11 +669,12 @@ int ObUpdateSSTableCompleteStatusCallback::update_redef_task_info(ObTableRedefin
 {
   int ret = OB_SUCCESS;
   const ObTabletID unused_tablet_id;
+  const ObAddr unused_addr;
   const int64_t unused_snapshot_version = 0;
   const int64_t unused_execution_id = 0;
   const ObDDLTaskInfo unused_task_info;
   ret = redef_task.update_complete_sstable_job_status(
-      unused_tablet_id, unused_snapshot_version,
+      unused_tablet_id, unused_addr, unused_snapshot_version,
       unused_execution_id, ret_code_, unused_task_info);
   return ret;
 }
@@ -692,6 +696,7 @@ int ObPrepareAlterTableArgParam::init(const uint64_t session_id,
                                       const ObString &orig_database_name,
                                       const ObString &target_database_name,
                                       const ObTimeZoneInfoWrap &tz_info_wrap,
+                                      const ObString *nls_formats,
                                       const bool foreign_key_checks)
 {
   int ret = OB_SUCCESS;
@@ -709,11 +714,39 @@ int ObPrepareAlterTableArgParam::init(const uint64_t session_id,
     // do nothinh
   } else if (OB_FAIL(tz_info_wrap_.deep_copy(tz_info_wrap))) {
     LOG_WARN("failed to deep_copy tz info wrap", K(ret), "tz_info_wrap", tz_info_wrap);
+  } else if (OB_FAIL(set_nls_formats(nls_formats))) {
+    LOG_WARN("failed to set nls formats", K(ret));
   } else {
     foreign_key_checks_ = foreign_key_checks;
   }
   return ret;
 }
+int ObPrepareAlterTableArgParam::set_nls_formats(const common::ObString *nls_formats)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(nls_formats)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("nls_formats is nullptr", K(ret));
+  } else {
+    char *tmp_ptr[ObNLSFormatEnum::NLS_MAX] = {};
+    for (int64_t i = 0; OB_SUCC(ret) && i < ObNLSFormatEnum::NLS_MAX; ++i) {
+      if (OB_ISNULL(tmp_ptr[i] = (char *)allocator_.alloc(nls_formats[i].length()))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        SHARE_LOG(ERROR, "failed to alloc memory!", "size", nls_formats[i].length(), K(ret));
+      } else {
+        MEMCPY(tmp_ptr[i], nls_formats[i].ptr(), nls_formats[i].length());
+        nls_formats_[i].assign_ptr(tmp_ptr[i], nls_formats[i].length());
+      }
+    }
+    if (OB_FAIL(ret)) {
+      for (int64_t i = 0; i < ObNLSFormatEnum::NLS_MAX; ++i) {
+        allocator_.free(tmp_ptr[i]);
+      }
+    }
+  }
+  return ret;
+}
+
 int ObDDLScheduler::DDLScanTask::init()
 {
   int ret = OB_SUCCESS;
@@ -1046,6 +1079,7 @@ void ObDDLScheduler::do_work()
     int ret = OB_SUCCESS;
     ObDDLTask *task = nullptr;
     ObDDLTask *first_retry_task = nullptr;
+    ObDIActionGuard ag("DDLService", "DDLTaskScheduler", "detect task");
     lib::set_thread_name("DDLTaskExecutor");
     THIS_WORKER.set_worker_level(1);
     THIS_WORKER.set_curr_request_level(1);
@@ -1082,6 +1116,7 @@ void ObDDLScheduler::do_work()
         }
         idle_time = ObDDLTask::DEFAULT_TASK_IDLE_TIME_US;
       } else {
+        ObDIActionGuard ag(get_ddl_type(task->get_task_type()));
         ObCurTraceId::set(task->get_trace_id());
         int task_ret = task->process();
         task->calc_next_schedule_ts(task_ret, task_queue_.get_task_cnt() + thread_cnt);
@@ -1498,6 +1533,8 @@ int ObDDLScheduler::prepare_alter_table_arg(const ObPrepareAlterTableArgParam &p
     // do nothing
   } else if (OB_FAIL(alter_table_arg.tz_info_wrap_.deep_copy(param.tz_info_wrap_))) {
     LOG_WARN("failed to deep_copy tz info wrap", K(ret), "tz_info_wrap", param.tz_info_wrap_);
+  } else if (OB_FAIL(alter_table_arg.set_nls_formats(param.nls_formats_))) {
+    LOG_WARN("failed to set_nls_formats", K(ret));
   } else if (OB_FAIL(alter_table_schema->assign(*target_table_schema))) {
     LOG_WARN("failed to assign alter table schema", K(ret));
   } else if (OB_FAIL(alter_table_schema->set_origin_table_name(param.orig_table_name_))) {
@@ -1729,6 +1766,7 @@ int ObDDLScheduler::start_redef_table(const obcall::ObStartRedefTableArg &arg, o
                              orig_database_schema->get_database_name_str(),
                              orig_database_schema->get_database_name_str(),
                              arg.tz_info_wrap_,
+                             arg.nls_formats_,
                              arg.foreign_key_checks_))) {
         LOG_WARN("param init failed", K(ret));
       } else if (OB_FAIL(prepare_alter_table_arg(param, target_table_schema, alter_table_arg))) {
@@ -3539,6 +3577,7 @@ int ObDDLScheduler::on_column_checksum_calc_reply(
 
 int ObDDLScheduler::on_sstable_complement_job_reply(
     const common::ObTabletID &tablet_id,
+    const ObAddr &svr,
     const ObDDLTaskKey &task_key,
     const int64_t snapshot_version,
     const int64_t execution_id,
@@ -3552,18 +3591,18 @@ int ObDDLScheduler::on_sstable_complement_job_reply(
   } else if (OB_UNLIKELY(!(task_key.is_valid() && snapshot_version > 0 && execution_id >= 0))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(task_key), K(snapshot_version), K(execution_id), K(ret_code));
-  } else if (OB_FAIL(task_queue_.modify_task(task_key, [&tablet_id, &snapshot_version, &execution_id, &ret_code, &addition_info](ObDDLTask &task) -> int {
+  } else if (OB_FAIL(task_queue_.modify_task(task_key, [&tablet_id, &svr, &snapshot_version, &execution_id, &ret_code, &addition_info](ObDDLTask &task) -> int {
         int ret = OB_SUCCESS;
         const int64_t task_type = task.get_task_type();
         switch (task_type) {
           case ObDDLType::DDL_CREATE_INDEX:
           case ObDDLType::DDL_CREATE_PARTITIONED_LOCAL_INDEX:
-            if (OB_FAIL(static_cast<ObIndexBuildTask *>(&task)->update_complete_sstable_job_status(tablet_id, snapshot_version, execution_id, ret_code, addition_info))) {
+            if (OB_FAIL(static_cast<ObIndexBuildTask *>(&task)->update_complete_sstable_job_status(tablet_id, svr, snapshot_version, execution_id, ret_code, addition_info))) {
               LOG_WARN("update complete sstable job status failed", K(ret));
             }
             break;
           case ObDDLType::DDL_DROP_PRIMARY_KEY:
-            if (OB_FAIL(static_cast<ObDropPrimaryKeyTask *>(&task)->update_complete_sstable_job_status(tablet_id, snapshot_version, execution_id, ret_code, addition_info))) {
+            if (OB_FAIL(static_cast<ObDropPrimaryKeyTask *>(&task)->update_complete_sstable_job_status(tablet_id, svr, snapshot_version, execution_id, ret_code, addition_info))) {
               LOG_WARN("update complete sstable job status", K(ret));
             }
             break;
@@ -3574,7 +3613,7 @@ int ObDDLScheduler::on_sstable_complement_job_reply(
           case ObDDLType::DDL_CONVERT_TO_CHARACTER:
           case ObDDLType::DDL_TABLE_REDEFINITION:
           case ObDDLType::DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION:
-            if (OB_FAIL(static_cast<ObTableRedefinitionTask *>(&task)->update_complete_sstable_job_status(tablet_id, snapshot_version, execution_id, ret_code, addition_info))) {
+            if (OB_FAIL(static_cast<ObTableRedefinitionTask *>(&task)->update_complete_sstable_job_status(tablet_id, svr, snapshot_version, execution_id, ret_code, addition_info))) {
               LOG_WARN("update complete sstable job status", K(ret));
             }
             break;
@@ -3588,12 +3627,12 @@ int ObDDLScheduler::on_sstable_complement_job_reply(
           case ObDDLType::DDL_DROP_COLUMN:
           case ObDDLType::DDL_ADD_COLUMN_OFFLINE:
           case ObDDLType::DDL_COLUMN_REDEFINITION:
-            if (OB_FAIL(static_cast<ObColumnRedefinitionTask *>(&task)->update_complete_sstable_job_status(tablet_id, snapshot_version, execution_id, ret_code, addition_info))) {
+            if (OB_FAIL(static_cast<ObColumnRedefinitionTask *>(&task)->update_complete_sstable_job_status(tablet_id, svr, snapshot_version, execution_id, ret_code, addition_info))) {
               LOG_WARN("update complete sstable job status", K(ret), K(tablet_id), K(snapshot_version), K(ret_code));
             }
             break;
           case ObDDLType::DDL_DROP_VEC_INDEX:
-           if (OB_FAIL(static_cast<ObDropVecIndexTask *>(&task)->update_drop_lob_meta_row_job_status(tablet_id, snapshot_version, execution_id, ret_code, addition_info))) {
+           if (OB_FAIL(static_cast<ObDropVecIndexTask *>(&task)->update_drop_lob_meta_row_job_status(tablet_id, svr, snapshot_version, execution_id, ret_code, addition_info))) {
               LOG_WARN("update complete sstable job status", K(ret), K(tablet_id), K(snapshot_version), K(ret_code));
             }
             break;

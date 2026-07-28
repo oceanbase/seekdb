@@ -39,7 +39,7 @@ int ObAllVirtualSessionPsInfo::inner_get_next_row()
         }
       }
     } else {
-      // Database modules are not ready.
+      // failed to switch
       ret = OB_ITER_END;
     }
   }

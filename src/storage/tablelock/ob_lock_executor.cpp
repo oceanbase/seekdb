@@ -80,11 +80,11 @@ int ObLockContext::init(ObExecContext &ctx,
 
       ObTransID parent_tx_id;
       parent_tx_id = session_info->get_tx_id();
-      OZ (session_info->begin_inner_tx_session(saved_session_));
+      OZ (session_info->begin_autonomous_session(saved_session_));
       OX (have_saved_session_ = true);
       OZ (ObSqlTransControl::explicit_start_trans(ctx, false));
       if (OB_SUCC(ret)) {
-        has_inner_tx_ = true;
+        has_autonomous_tx_ = true;
       }
       if (OB_SUCC(ret) && parent_tx_id.is_valid()) {
         (void) register_for_deadlock_(*session_info, parent_tx_id);
@@ -107,7 +107,7 @@ int ObLockContext::destroy(ObExecContext &ctx,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session_info is null in ObExecContext", K(ret));
   } else {
-    if (has_inner_tx_) {
+    if (has_autonomous_tx_) {
       if (OB_TMP_FAIL(implicit_end_trans_(*session_info, ctx, is_rollback))) {
         LOG_ERROR("failed to rollback trans", K(tmp_ret));
         ret = COVER_SUCC(tmp_ret);
@@ -118,7 +118,7 @@ int ObLockContext::destroy(ObExecContext &ctx,
       ret = COVER_SUCC(tmp_ret);
     }
     if (have_saved_session_) {
-      if (OB_TMP_FAIL(session_info->end_inner_tx_session(saved_session_))) {
+      if (OB_TMP_FAIL(session_info->end_autonomous_session(saved_session_))) {
         LOG_ERROR("failed to switch trans", K(tmp_ret));
         ret = COVER_SUCC(tmp_ret);
       }
@@ -207,10 +207,10 @@ void ObLockContext::register_for_deadlock_(ObSQLSessionInfo &session_info,
       LOG_WARN("get query timeout failed", K(parent_tx_id), K(child_tx_id), KR(ret));
     } else {
       if (OB_FAIL(ObTransDeadlockDetectorAdapter::
-                  inner_tx_register_to_deadlock(parent_tx_id,
-                                                child_tx_id,
-                                                query_timeout))) {
-        LOG_WARN("inner transaction register to deadlock failed", K(parent_tx_id),
+                  autonomous_register_to_deadlock(parent_tx_id,
+                                                  child_tx_id,
+                                                  query_timeout))) {
+        LOG_WARN("autonomous register to deadlock failed", K(parent_tx_id),
                  K(child_tx_id), KR(ret));
       }
     }
@@ -482,8 +482,8 @@ int ObUnLockExecutor::execute(const ObTableLockOwnerID &owner_id)
     SMART_VAR(sql::ObExecContext, exec_ctx, allocator) {
       ObSqlCtx sql_ctx;
       
+      const ObServerRuntimeSchema *runtime_schema = NULL;
       ObSchemaGetterGuard guard;
-      const ObServerRuntimeSchema *runtime_schema = nullptr;
       LinkExecCtxGuard link_guard(session, exec_ctx);
       sql::ObPhysicalPlanCtx phy_plan_ctx(allocator);
       OZ (session.init(0 /*default session id*/, &allocator));

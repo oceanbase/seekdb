@@ -186,6 +186,7 @@ namespace share
   static const char* const OB_SV__ENABLE_STORAGE_CARDINALITY_ESTIMATION = "_enable_storage_cardinality_estimation";
   static const char* const OB_SV_LC_TIME_NAMES = "lc_time_names";
   static const char* const OB_SV_ACTIVATE_ALL_ROLES_ON_LOGIN = "activate_all_roles_on_login";
+  static const char* const OB_SV__ENABLE_RICH_VECTOR_FORMAT = "_enable_rich_vector_format";
   static const char* const OB_SV_INNODB_STATS_PERSISTENT = "innodb_stats_persistent";
   static const char* const OB_SV_DEBUG = "debug";
   static const char* const OB_SV_INNODB_CHANGE_BUFFERING_DEBUG = "innodb_change_buffering_debug";
@@ -595,6 +596,7 @@ namespace share
   static const char* const OB_SV_HAVE_COMPRESS = "have_compress";
   static const char* const OB_SV_IGNORE_DB_DIRS = "ignore_db_dirs";
   static const char* const OB_SV_INIT_FILE = "init_file";
+  static const char* const OB_SV_INNODB_NUMA_INTERLEAVE = "innodb_numa_interleave";
   static const char* const OB_SV_INNODB_OPEN_FILES = "innodb_open_files";
   static const char* const OB_SV_INNODB_PAGE_CLEANERS = "innodb_page_cleaners";
   static const char* const OB_SV_INNODB_PURGE_THREADS = "innodb_purge_threads";
@@ -603,6 +605,8 @@ namespace share
   static const char* const OB_SV_INNODB_USE_NATIVE_AIO = "innodb_use_native_aio";
   static const char* const OB_SV_INNODB_WRITE_IO_THREADS = "innodb_write_io_threads";
   static const char* const OB_SV_LARGE_FILES_SUPPORT = "large_files_support";
+  static const char* const OB_SV_LARGE_PAGES = "large_pages";
+  static const char* const OB_SV_LARGE_PAGE_SIZE = "large_page_size";
   static const char* const OB_SV_LOCKED_IN_MEMORY = "locked_in_memory";
   static const char* const OB_SV_LOG_ERROR = "log_error";
   static const char* const OB_SV_NAMED_PIPE = "named_pipe";

@@ -65,6 +65,7 @@ private:
    */
   int cmp_table_types(
       const ObIArray<LocationConstraint> &loc_cons,
+      const common::ObAddr &server,
       const common::ObIArray<ObTableLocation> &tbl_locs,
       const common::ObIArray<ObCandiTableLoc> &phy_tbl_infos,
       bool &is_same) const;
@@ -99,6 +100,14 @@ private:
                             ObStrictPwjComparer &pwj_comparer,
                             PWJTabletIdMap &pwj_map,
                             bool &is_same) const;
+  /**
+   * @brief Check if non-strict pwj constraints are satisfied
+   *
+   */
+  int check_non_strict_pwj_cons(const ObPlanPwjConstraint &pwj_cons,
+                                const ObIArray<ObCandiTableLoc> &phy_tbl_infos,
+                                ObNonStrictPwjComparer &pwj_comparer,
+                                bool &is_same) const;                              
   /**
    * @brief Check table partition location
    *

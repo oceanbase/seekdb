@@ -20,6 +20,7 @@
 #include "sql/das/iter/ob_das_iter.h"
 #include "sql/das/ob_das_ref.h"
 #include "sql/das/ob_das_scan_op.h"
+#include "share/schema/ob_schema_struct.h"
 #include "sql/engine/ob_exec_context.h"
 
 namespace oceanbase

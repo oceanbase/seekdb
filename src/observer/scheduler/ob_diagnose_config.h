@@ -40,6 +40,8 @@ SUSPECT_INFO_TYPE_DEF(SUSPECT_MEMTABLE_CANT_CREATE_DAG, ObDiagnoseInfoPrio::DIAG
     3, {"error_code", "has been ready for flush time", "ready for flush time"})
 SUSPECT_INFO_TYPE_DEF(SUSPECT_SUSPEND_MERGE, ObDiagnoseInfoPrio::DIAGNOSE_PRIORITY_LOW, false, "merge has been paused",
     1, {"schedule_scn"})
+SUSPECT_INFO_TYPE_DEF(SUSPECT_INVALID_DATA_VERSION, ObDiagnoseInfoPrio::DIAGNOSE_PRIORITY_LOW, false, "invalid data version to schedule medium merge",
+    2, {"curr_data_version", "target_data_version"})
 SUSPECT_INFO_TYPE_DEF(SUSPECT_RS_SCHEDULE_ERROR, ObDiagnoseInfoPrio::DIAGNOSE_PRIORITY_MID, false, "rs check progress failed",
     3, {"compaction_scn", "errno", "unfinish_table_cnt"})
 SUSPECT_INFO_TYPE_DEF(SUSPECT_RUNTIME_META_UPDATE_ADD_FAILED, ObDiagnoseInfoPrio::DIAGNOSE_PRIORITY_HIGH, false, "tablet runtime metadata update task add failed",

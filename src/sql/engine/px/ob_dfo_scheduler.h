@@ -75,7 +75,8 @@ private:
   int init_data_xchg_ch(ObExecContext &ctx, ObDfo *dfo) const;
   int dispatch_sqcs(ObExecContext &exec_ctx, ObDfo &dfo, ObIArray<ObPxSqcMeta> &sqcs) const;
   int do_schedule_dfo(ObExecContext &ctx, ObDfo &dfo) const;
-  static int erase_dtl_interm_results(ObPxDtlIntermResBatch &batch);
+  // in-process DTL interm result cleanup (single-replica, self target)
+  static int clean_dtl_interm_result_local(ObPxCleanDtlIntermResArgs &arg);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSerialDfoScheduler);
 };

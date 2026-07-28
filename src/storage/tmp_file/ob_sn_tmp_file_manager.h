@@ -36,9 +36,7 @@ public:
 
 public:
   virtual int alloc_dir(int64_t &dir_id) override;
-  virtual int open(int64_t &fd,
-                   const int64_t &dir_id,
-                   const char *const label = "TmpFile") override;
+  virtual int open(int64_t &fd, const int64_t &dir_id, const char* const label) override;
   int get_tmp_file(const int64_t fd, ObSNTmpFileHandle &file_handle) const;
   int get_macro_block_list(common::ObIArray<blocksstable::MacroBlockId> &macro_id_list);
   virtual int get_tmp_file_disk_usage(int64_t &disk_data_size, int64_t &occupied_disk_size) override;

@@ -23,6 +23,7 @@
 #include "lib/string/ob_sql_string.h"
 #include "share/storage/ob_sqlite_connection_pool.h"
 #include "share/storage/ob_sqlite_table_schema.h"
+#include <string.h>
 
 namespace oceanbase
 {

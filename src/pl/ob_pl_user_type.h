@@ -130,15 +130,19 @@ protected:
 };
 
 
-//---------- for ObPLCursorType ----------
+//---------- for ObRefCursorType ----------
 
-class ObPLCursorType : public ObUserDefinedType
+class ObRefCursorType : public ObUserDefinedType
 {
 public:
-  ObPLCursorType()
-    : ObUserDefinedType(PL_CURSOR_TYPE)
+  ObRefCursorType()
+    : ObUserDefinedType(PL_REF_CURSOR_TYPE),
+      return_type_id_(OB_INVALID_ID)
     {}
-  virtual ~ObPLCursorType() {}
+  virtual ~ObRefCursorType() {}
+
+  inline void set_return_type_id(uint64_t type_id) { return_type_id_ = type_id; }
+  inline uint64_t get_return_type_id() const { return return_type_id_; }
 
   virtual int64_t get_member_count() const { return 0; }
   virtual const ObPLDataType *get_member(int64_t i) const { UNUSED(i); return NULL; }
@@ -147,7 +151,7 @@ public:
                      int64_t &ptr) const;
 
 public:
-  int deep_copy(common::ObIAllocator &alloc, const ObPLCursorType &other);
+  int deep_copy(common::ObIAllocator &alloc, const ObRefCursorType &other);
 
   virtual int get_size(ObPLTypeSize type, int64_t &size) const;
 
@@ -171,7 +175,12 @@ public:
   static int deep_copy_cursor(
     common::ObIAllocator &allocator, const ObObj &src, ObObj &dest);
 
-  TO_STRING_KV(K_(type), K_(user_type_id));
+  TO_STRING_KV(K_(type),
+               K_(user_type_id),
+               K_(return_type_id));
+
+private:
+  uint64_t return_type_id_;
 };
 
 //---------- for ObRecordType ----------

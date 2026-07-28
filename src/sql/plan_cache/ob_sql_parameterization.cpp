@@ -534,7 +534,6 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
                               static_cast<ObCollationType>(server_collation),
                               NULL, session_info.get_sql_mode(),
                               enable_decimal_int,
-                              share::COMPAT_MYSQL57,
                               enable_mysql_compatible_dates,
                               session_info.get_min_const_integer_precision(),
                               ctx.is_from_pl_,
@@ -2288,7 +2287,6 @@ int ObSqlParameterization::get_select_item_param_info(const common::ObIArray<ObP
                                                       const ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
-  UNUSED(session);
   SelectItemParamInfo param_info;
   ObString org_field_name;
   int64_t expr_pos = tree->raw_sql_offset_;

@@ -113,6 +113,7 @@ TEST_F(TestObTxLog, tx_log_body_except_redo)
 
   ObTxCommitInfoLog fill_commit_state(TEST_CAN_ELR,
                                        TEST_TRACE_ID_STR,
+                                       TEST_TRCE_INFO,
                                        TEST_LOG_OFFSET,
                                        TEST_LOG_OFFSET_ARRY);
   ObTxCommitLog fill_commit(share::SCN::base_scn(),
@@ -182,6 +183,7 @@ TEST_F(TestObTxLog, tx_log_body_redo)
 
   ObTxCommitInfoLog fill_commit_state(TEST_CAN_ELR,
                                        TEST_TRACE_ID_STR,
+                                       TEST_TRCE_INFO,
                                        TEST_LOG_OFFSET,
                                        TEST_LOG_OFFSET_ARRY);
   ObTxCommitLog fill_commit(share::SCN::base_scn(),
@@ -211,7 +213,8 @@ TEST_F(TestObTxLog, tx_log_body_redo)
   TxID id = 0;
   ObTxLogHeader log_header;
   ObString replay_mutator_buf;
-  ObTxRedoLog replay_redo;
+  ObTxRedoLogTempRef redo_temp_ref;
+  ObTxRedoLog replay_redo(redo_temp_ref);
 
   ObTxLogBlockHeader &replay_block_header = replay_block.get_header();
   ASSERT_EQ(OB_SUCCESS, replay_block.init_for_replay(fill_block.get_buf(), fill_block.get_size()));

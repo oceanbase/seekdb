@@ -1070,6 +1070,10 @@ int ObTabletTableStore::build_major_tables(
 
   if (nullptr != new_table && ObITable::is_major_sstable(new_table->get_table_type()) && OB_FAIL(major_tables.push_back(new_table))) {
     LOG_WARN("failed to add table into tables handle", K(ret), K(param));
+  } else if (!major_tables.empty()
+          && !old_store.ddl_sstables_.empty()
+          && OB_FAIL(check_new_sstable_can_be_accepted_(old_store.ddl_sstables_, new_table))) {
+    LOG_WARN("failed to check can accept the new major sstable", K(ret), K(param));
   } else if (OB_FAIL(inner_build_major_tables_(allocator,
                                                old_store,
                                                major_tables,
@@ -1115,6 +1119,13 @@ int ObTabletTableStore::check_and_build_new_major_tables(
                 new_sst_meta_hdl.get_sstable_meta(), old_sst_meta_hdl.get_sstable_meta()))) {
               LOG_WARN("failed to check sstable meta", K(ret), KPC(new_sstable), KPC(old_sstable));
             } else {
+              if (new_sst_meta_hdl.get_sstable_meta().get_basic_meta().table_backup_flag_.has_no_backup()
+                && old_sst_meta_hdl.get_sstable_meta().get_basic_meta().table_backup_flag_.has_backup()) {
+                // if new sstable has no backup macro block and old sstable has backup macro block
+                // replace the old sstable with the new one
+                FLOG_INFO("replace major sstable with new one", KPC(new_sstable), KPC(old_sstable));
+                major_tables.at(j) = new_table;
+              }
               need_add = false;
             }
           }
@@ -1332,7 +1343,9 @@ int ObTabletTableStore::inner_process_minor_tables(
   }
 
   if (OB_SUCC(ret) && !ignore_new_table) {
-    if (OB_FAIL(sstables.push_back(const_cast<ObITable *>(new_table)))) {
+    if (OB_FAIL(check_new_sstable_can_be_accepted_(old_tables, const_cast<ObITable *>(new_table)))) {
+      LOG_WARN("failed to check accept the compacted sstable", K(ret));
+    } else if (OB_FAIL(sstables.push_back(const_cast<ObITable *>(new_table)))) {
       LOG_WARN("failed to add new table", K(ret), KPC(new_table));
     }
   }
@@ -1731,7 +1744,9 @@ int ObTabletTableStore::build_sorted_ddl_sstables(
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(ddl_sstables.push_back(new_table))) {
+    if (OB_FAIL(check_new_sstable_can_be_accepted_(old_ddl_tables, new_table))) {
+      LOG_WARN("failed to check accept the compacted sstable", K(ret));
+    } else if (OB_FAIL(ddl_sstables.push_back(new_table))) {
       LOG_WARN("push back new ddl sstable failed", K(ret), KPC(new_table));
     } else {
       lib::ob_sort(ddl_sstables.begin(), ddl_sstables.end(), [](ObITable *left, ObITable *right) {
@@ -1804,7 +1819,9 @@ int ObTabletTableStore::build_replace_ddl_sstables(
     }
   }
   if (OB_SUCC(ret) && is_new_table_valid_ddl_sstable) {
-    if (OB_FAIL(ddl_dump_sstables.push_back(new_table))) {
+    if (OB_FAIL(check_new_sstable_can_be_accepted_(old_ddl_tables, new_table))) {
+      LOG_WARN("failed to check accept the compacted sstable", K(ret));
+    } else if (OB_FAIL(ddl_dump_sstables.push_back(new_table))) {
       LOG_WARN("push back ddl dump table failed", K(ret), KPC(new_table));
     } else {
       FLOG_INFO("push back ddl dump sstable success after clean up", KPC(new_table));
@@ -1913,7 +1930,7 @@ int ObTabletTableStore::check_continuous() const
 }
 
 template <class T>
-int ObTabletTableStore::check_minor_tables_(T &minor_tables) const
+int ObTabletTableStore::check_minor_tables_(T &minor_tables, const bool no_remote_table) const
 {
   int ret = OB_SUCCESS;
   ObITable *prev_table = nullptr;
@@ -1923,6 +1940,9 @@ int ObTabletTableStore::check_minor_tables_(T &minor_tables) const
     if (OB_UNLIKELY(nullptr == table || !table->is_multi_version_minor_sstable())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table must be multi version minor table", K(ret), KPC(table));
+    } else if (no_remote_table && table->is_remote_logical_minor_sstable()) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected remote sstable", K(ret), KPC(table));
     } else if (nullptr == prev_table) {
       //do nothing
     } else if (table->get_start_scn() > prev_table->get_end_scn()
@@ -1962,19 +1982,38 @@ int ObTabletTableStore::need_remove_old_table(
   return ret;
 }
 
+int ObTabletTableStore::check_new_sstable_can_be_accepted_(
+    const ObSSTableArray &old_tables,
+    ObITable *new_table)
+{
+  int ret = OB_SUCCESS;
+  ObITable *old_table = nullptr;
+  ObSSTableMetaHandle new_sst_meta_hdl;
+  ObSSTableMetaHandle old_sst_meta_hdl;
+  if (OB_FAIL(static_cast<ObSSTable *>(new_table)->get_meta(new_sst_meta_hdl))) {
+    LOG_WARN("failed to get new sstable meta handle", K(ret), KPC(new_table));
+  } else if (new_sst_meta_hdl.get_sstable_meta().get_basic_meta().table_backup_flag_.has_backup()) {
+    // compaction during restore, and backup macro block is reused by the new table.
+    bool has_remote_sstable = false;
+    for (int64_t i = 0; OB_SUCC(ret) && i < old_tables.count(); ++i) {
+      old_table = old_tables.at(i);
+      if (OB_FAIL(static_cast<ObSSTable *>(old_table)->get_meta(old_sst_meta_hdl))) {
+        LOG_WARN("failed to get old sstable meta handle", K(ret), KPC(old_table));
+      } else if (old_sst_meta_hdl.get_sstable_meta().get_basic_meta().table_backup_flag_.has_backup()) {
+        has_remote_sstable = true;
+        break;
+      }
+    }
 
-
-
-
-
-
-
-
-
-
-
-
-
+    if (!has_remote_sstable) {
+      ret = OB_NO_NEED_MERGE;
+      LOG_WARN("no remote sstable exist in old table store, but new table has backup macro block",
+          K(ret), KPC(new_table), K(old_tables));
+    }
+  }
+  
+  return ret;
+}
 
 int ObTabletTableStore::get_mini_minor_sstables_(ObTableStoreIterator &iter) const
 {
@@ -2144,7 +2183,7 @@ int ObTabletTableStore::build_fork_minor_tables_(
   } else if (OB_FAIL(dst_store.minor_tables_.get_all_tables(dst_minor_tables))) {
     LOG_WARN("failed to get dst minor tables for fork", KR(ret),
         "tablet_id", tablet.get_tablet_id(), "dst_minor_cnt", dst_minor_tables.count(), K(fork_snapshot_version));
-  } else if (OB_FAIL(check_minor_tables_(dst_minor_tables))) {
+  } else if (OB_FAIL(check_minor_tables_(dst_minor_tables, true/*no remote table*/))) {
     LOG_WARN("failed to check dst store minor sstables for fork", KR(ret),
         "tablet_id", tablet.get_tablet_id(), "dst_minor_cnt", dst_minor_tables.count(), K(fork_snapshot_version));
   }

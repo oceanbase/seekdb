@@ -305,9 +305,6 @@ int ObLocalDevice::init(const common::ObIODOpts &opts)
   } else if (OB_FAIL(iocb_pool_.init(allocator_))) {
     SHARE_LOG(WARN, "Fail to init iocb pool", K(ret));
   } else if (0 == opts.opt_cnt_) {
-    // Log devices share the local-device implementation but do not own the
-    // data block file, so LogIODeviceWrapper intentionally supplies no
-    // block-file options.
     SHARE_LOG(INFO, "No block-file options supplied, skip initializing block_file");
   } else {
     const char *store_dir = nullptr;
@@ -1384,7 +1381,7 @@ int ObLocalDevice::check_write_limited() const
   return ret;
 }
 
-
+// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state)
 
 int ObLocalDevice::resize_block_file(const int64_t new_size)
 {

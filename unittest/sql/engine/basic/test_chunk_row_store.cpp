@@ -233,6 +233,7 @@ protected:
   ObChunkRowStore rs_;
   ObChunkRowStore::Iterator it_;
 
+  int64_t tenant_id_ = OB_SERVER_RUNTIME_ID;
   int64_t ctx_id_ = ObCtxIds::WORK_AREA;
   const char *label_ = ObModIds::OB_SQL_ROW_STORE;
 
@@ -865,6 +866,93 @@ TEST_F(TestChunkRowStore, disk_with_chunk)
 
   rs.reset();
 }
+// test chunk row store dump according to memory ratio, removed this layer of logic, whether to dump is driven by the upper layer
+//case from oarowstore
+// TEST_F(TestChunkRowStore, start_dump_by_total_mem_used)
+// {
+//   LOG_INFO("starting dump mem test: append rows", K(500000));
+//   int ret = OB_SUCCESS;
+//   ObChunkRowStore rs;
+//   ObChunkRowStore::Iterator it;
+//   ret = rs.init(0, ctx_id_, mod_id_);
+//   ASSERT_EQ(OB_SUCCESS, rs.alloc_dir_id());
+//   CALL(append_rows, rs, 500000);
+//   int64_t avg_row_size = rs.get_mem_hold() / rs.get_row_cnt();
+//   LOG_WARN("average row size", K(avg_row_size));
+
+//   lib::ObMallocAllocator *malloc_allocator = lib::ObMallocAllocator::get_instance();
+//   malloc_allocator->set_allocator_limit(OB_SERVER_RUNTIME_ID, 1L << 30);
+//   ASSERT_EQ(OB_SUCCESS, ret);
+//   // 50MB for work area
+//   ret = lib::set_wa_limit(OB_SERVER_RUNTIME_ID, 5);
+//   ASSERT_EQ(OB_SUCCESS, ret);
+
+//   rs.reset();
+
+//   ret = rs.init(0, ctx_id_, mod_id_);
+//   ASSERT_EQ(OB_SUCCESS, ret);
+
+
+//   // case1: trigger dump by memory mod usage (60% of limit, 30MB)
+//   // write 28MB, all in memory
+//   CALL(append_rows, rs, (28L << 20) / avg_row_size);
+//   ASSERT_EQ(rs.get_file_size(), 0);
+
+//   // append 10MB, need dump
+//   CALL(append_rows, rs, (10L << 20) / avg_row_size);
+//   ASSERT_GT(rs.get_file_size(), 0);
+
+//   rs.reset();
+//   ret = rs.init(0, ctx_id_, mod_id_);
+//   ASSERT_EQ(OB_SUCCESS, ret);
+
+//   // case2: trigger dump by memory ctx usage (80% of limit, 40MB)
+//   ObMemAttr attr = default_memattr;
+//   attr.tenant_id_ = tenant_id_;
+//   attr.ctx_id_ = ctx_id_;
+//   // memory ctx hold 20MB
+//   void *mem = ob_malloc(20L << 20, attr);
+
+//   // write 15MB, in memory
+//   CALL(append_rows, rs, (15L << 20) / avg_row_size);
+//   ASSERT_EQ(rs.get_file_size(), 0);
+
+//   // append 10MB, need dump
+//   CALL(append_rows, rs, (10L << 20) / avg_row_size);
+//   ASSERT_GT(rs.get_file_size(), 0);
+
+//   ob_free(mem);
+
+//   // case3: write to disk disabled
+//   // write 40MB, all in memmory
+//   GCONF.enable_sql_operator_dump.set_value("False");
+//   rs.reset();
+
+//   ret = rs.init(0, ctx_id_, mod_id_);
+//   ASSERT_EQ(OB_SUCCESS, ret);
+
+//   CALL(append_rows, rs, (40L << 20) / avg_row_size);
+//   ASSERT_EQ(rs.get_file_size(), 0);
+
+//   // append 20MB, exceed work area
+//   int64_t rows = (100L << 20) / avg_row_size;
+//   int64_t idx = 0;
+//   int64_t base = rs.get_row_cnt();
+//   for (; idx < rows; idx++) {
+//     if (OB_SUCCESS != rs.add_row(gen_row(base + idx))) {
+//       break;
+//     }
+//   }
+//   ASSERT_LT(idx, rows);
+
+//   lib::ObMallocAllocator::get_instance()->print_ctx_memory_usage(tenant_id_);
+//   lib::ObMallocAllocator::get_instance()->print_memory_usage(tenant_id_);
+
+//   ASSERT_EQ(rs.get_file_size(), 0);
+//   rs.reset();
+
+// }
+
 TEST_F(TestChunkRowStore, test_add_block)
 {
   int ret = OB_SUCCESS;

@@ -78,7 +78,7 @@ public:
   OB_UNIS_VERSION_V(1);
 
 private:
-  share::ObServerRuntimeConfig &runtime_config_;
+  share::ObServerRuntimeConfig  &runtime_config_;
 };
 
 struct ObUpdateRuntimeSuperBlockLog : public ObIBaseStorageLogEntry

@@ -231,6 +231,7 @@ int ObResultSet::start_stmt()
 {
   NG_TRACE(sql_start_stmt_begin);
   int ret = OB_SUCCESS;
+  bool ac = true;
   ObPhysicalPlan* phy_plan = static_cast<ObPhysicalPlan*>(cache_obj_guard_.get_cache_obj());
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(get_exec_context());
   if (OB_ISNULL(phy_plan) || OB_ISNULL(plan_ctx)) {
@@ -239,6 +240,8 @@ int ObResultSet::start_stmt()
   } else if (OB_ISNULL(phy_plan->get_root_op_spec())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("root_op_spec of phy_plan is NULL", K(phy_plan), K(ret));
+  } else if (OB_FAIL(my_session_.get_autocommit(ac))) {
+    LOG_WARN("fail to get autocommit", K(ret));
   } else {
     if (OB_FAIL(ret)) {
       // do nothing
@@ -335,7 +338,7 @@ OB_INLINE int ObResultSet::inner_get_next_row(const common::ObNewRow *&row)
   }
   //Save the current execution state to determine whether to refresh location
   //and perform other necessary cleanup operations when the statement exits.
-  DAS_CTX(get_exec_context()).save_cur_exec_status(ret);
+  DAS_CTX(get_exec_context()).get_location_router().save_cur_exec_status(ret);
 
   return ret;
 }
@@ -769,6 +772,11 @@ int ObResultSet::do_close(int *client_ret)
       ret = OB_NOT_INIT;
       LOG_WARN("result set isn't init", K(ret));
     } else {
+      if (OB_NOT_NULL(get_physical_plan()) && get_physical_plan()->is_returning()) {
+        // In the returning scenario, affected_rows_ can only be determined after returning the data,
+        // so fill in affected_rows when closing.
+        affected_rows_ = plan_ctx->get_affected_rows();
+      }
       store_affected_rows(*plan_ctx);
       store_found_rows(*plan_ctx);
     }
@@ -831,7 +839,7 @@ int ObResultSet::do_close(int *client_ret)
   }
   //Save the current execution state to determine whether to refresh location
   //and perform other necessary cleanup operations when the statement exits.
-  DAS_CTX(get_exec_context()).save_cur_exec_status(ret);
+  DAS_CTX(get_exec_context()).get_location_router().save_cur_exec_status(ret);
   //NG_TRACE_EXT(result_set_close, OB_ID(ret), ret, OB_ID(arg1), prev_ret,
                //OB_ID(arg2), ins_ret, OB_ID(arg3), errcode_, OB_ID(async), async);
   return ret;  // All subsequent operations are completed through callback
@@ -882,6 +890,11 @@ OB_INLINE int ObResultSet::auto_end_plan_trans(ObPhysicalPlan& plan,
     } else {
       //bool is_rollback = (OB_FAIL(ret) || plan_ctx->is_force_rollback());
       is_rollback = need_rollback(OB_SUCCESS, ret, plan_ctx->is_error_ignored());
+      // if txn will be rollbacked and it may has been rollbacked in end-stmt phase
+      // we need account this for stat
+      if (is_rollback && !is_will_retry_() && is_tx_active && !in_trans) {
+        ObTransStatistic::get_instance().add_rollback_trans_count( 1);
+      }
       bool lock_conflict_skip_end_trans = false;
       // if err is lock conflict retry, do not rollback transaction, but cleanup transaction
       // state, keep transaction id unchanged, easy for deadlock detection and $OB_LOCKS view
@@ -960,8 +973,10 @@ int ObResultSet::from_plan(const ObPhysicalPlan &phy_plan, const ObIArray<ObPCPa
     p_field_columns_ = phy_plan.contain_paramed_column_field()
                                   ? &field_columns_
                                   : &phy_plan.get_field_columns();
+    p_returning_param_columns_ = &phy_plan.get_returning_param_fields();
     stmt_type_ = phy_plan.get_stmt_type();
     literal_stmt_type_ = phy_plan.get_literal_stmt_type();
+    is_returning_ = phy_plan.is_returning();
     plan_ctx->set_is_affect_found_row(phy_plan.is_affect_found_row());
     if (is_ps_protocol() && ps_param_count != phy_plan.get_param_fields().count()) {
       if (OB_FAIL(reserve_param_columns(ps_param_count))) {
@@ -974,7 +989,7 @@ int ObResultSet::from_plan(const ObPhysicalPlan &phy_plan, const ObIArray<ObPCPa
         OZ (add_param_column(param_field), K(param_field), K(i), K(ps_param_count));
       }
       LOG_DEBUG("reset param count ", K(ps_param_count), K(plan_ctx->get_orig_question_mark_cnt()),
-        K(phy_plan.get_param_fields().count()));
+        K(phy_plan.get_returning_param_fields().count()), K(phy_plan.get_param_fields().count()));
     } else {
       p_param_columns_ = &phy_plan.get_param_fields();
     }
@@ -995,6 +1010,10 @@ int ObResultSet::to_plan(const PlanCacheMode mode, ObPhysicalPlan *phy_plan)
                && OB_FAIL(phy_plan->set_param_fields(param_columns_))) {
       // param fields is only needed ps mode
       LOG_WARN("failed to copy param field to plan", K(ret));
+    } else if ((PC_PS_MODE == mode || PC_PL_MODE == mode)
+               && OB_FAIL(phy_plan->set_returning_param_fields(returning_param_columns_))) {
+      // returning param fields is only needed ps mode
+      LOG_WARN("failed to copy returning param field to plan", K(ret));
     }
   }
 
@@ -1055,12 +1074,12 @@ int ObResultSet::init_cmd_exec_context(ObExecContext &exec_ctx)
 // obmp_query before retrying the entire SQL, it may be necessary to call this interface to refresh Location, to avoid always sending to the wrong server
 void ObResultSet::refresh_location_cache_by_errno(bool is_nonblock, int err)
 {
-  DAS_CTX(get_exec_context()).refresh_location_cache_by_errno(is_nonblock, err);
+  DAS_CTX(get_exec_context()).get_location_router().refresh_location_cache_by_errno(is_nonblock, err);
 }
 
 void ObResultSet::force_refresh_location_cache(bool is_nonblock, int err)
 {
-  DAS_CTX(get_exec_context()).force_refresh_location_cache(is_nonblock, err);
+  DAS_CTX(get_exec_context()).get_location_router().force_refresh_location_cache(is_nonblock, err);
 }
 // Tell mysql whether to pass an EndTransCallback
 bool ObResultSet::need_end_trans_callback() const
@@ -1070,6 +1089,8 @@ bool ObResultSet::need_end_trans_callback() const
   ObPhysicalPlan* physical_plan_ = static_cast<ObPhysicalPlan*>(cache_obj_guard_.get_cache_obj());
   if (stmt::T_SELECT == get_stmt_type()) {
     // For the select statement, the callback is never taken, regardless of the transaction status
+    need = false;
+  } else if (is_returning_) {
     need = false;
   } else if (stmt::T_END_TRANS == get_stmt_type()) {
     need = true;
@@ -1099,6 +1120,9 @@ int ObResultSet::ExternalRetrieveInfo::build_into_exprs(
     is_select_for_update_ = (static_cast<ObSelectStmt&>(stmt)).has_for_update();
     has_hidden_rowid_ = (static_cast<ObSelectStmt&>(stmt)).has_hidden_rowid();
     is_skip_locked_ = (static_cast<ObSelectStmt&>(stmt)).is_skip_locked();
+  } else if (stmt.is_insert_stmt() || stmt.is_update_stmt() || stmt.is_delete_stmt()) {
+    ObDelUpdStmt &dml_stmt = static_cast<ObDelUpdStmt&>(stmt);
+    OZ (into_exprs_.assign(dml_stmt.get_returning_into_exprs()));
   }
 
   return ret;
@@ -1156,6 +1180,8 @@ int ObResultSet::ExternalRetrieveInfo::build(
   OZ (build_into_exprs(stmt, ns, is_dynamic_sql));
   CK (OB_NOT_NULL(session_info.get_cur_exec_ctx()));
   CK (OB_NOT_NULL(session_info.get_cur_exec_ctx()->get_sql_ctx()));
+  OX (is_bulk_ = session_info.get_cur_exec_ctx()->get_sql_ctx()->is_bulk_);
+  OX (session_info.get_cur_exec_ctx()->get_sql_ctx()->is_bulk_ = false);
   if (stmt.is_dml_stmt()) {
   }
   if (OB_SUCC(ret)) {
@@ -1225,10 +1251,15 @@ int ObResultSet::ExternalRetrieveInfo::build(
 
 int ObResultSet::drive_dml_query()
 {
-  // DML using PX may need to be driven proactively through get_next_row().
+  // DML uses PX execution framework, in non-returning cases, it needs to be done proactively
+  // Call get_next_row to drive the entire framework execution
   int ret = OB_SUCCESS;
-  if (get_physical_plan()->is_local_plan() && !get_physical_plan()->need_drive_dml_query_) {
-    // Partial local DML may be driven while opening the operator.
+  if (get_physical_plan()->is_returning()
+      || (get_physical_plan()->is_local_plan() && !get_physical_plan()->need_drive_dml_query_)) {
+    //1. dml returning will drive dml write through result.get_next_row()
+    //2. partial dml query will drive dml write through operator open
+    //3. partial dml query need to drive dml write through result.drive_dml_query,
+    //use the flag result.drive_dml_query to distinguish situation 2,3
   } else if (get_physical_plan()->need_drive_dml_query_) {
     const ObNewRow *row = nullptr;
     if (OB_LIKELY(OB_ITER_END == (ret = inner_get_next_row(row)))) {

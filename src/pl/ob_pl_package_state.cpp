@@ -39,8 +39,8 @@ ObPackageStateVersion &ObPackageStateVersion::operator =(const ObPackageStateVer
     package_body_version_ = other.package_body_version_;
     header_merge_version_ = other.header_merge_version_;
     body_merge_version_ = other.body_merge_version_;
-    reserved_header_count_ = other.reserved_header_count_;
-    reserved_body_count_ = other.reserved_body_count_;
+    header_public_syn_count_ = other.header_public_syn_count_;
+    body_public_syn_count_ = other.body_public_syn_count_;
   }
   return *this;
 }
@@ -56,16 +56,19 @@ bool ObPackageStateVersion::operator ==(const ObPackageStateVersion &other) cons
   return package_version_ == other.package_version_
       && package_body_version_ == other.package_body_version_
       && header_merge_version_ == other.header_merge_version_
-      && body_merge_version_ == other.body_merge_version_;
+      && body_merge_version_ == other.body_merge_version_
+      && header_public_syn_count_ == other.header_public_syn_count_
+      && body_public_syn_count_ == other.body_public_syn_count_;
 }
 
-void ObPackageStateVersion::set_merge_versions(const ObPLPackage &head, const ObPLPackage *body)
+void ObPackageStateVersion::set_merge_version_and_public_syn_cnt(
+    const ObPLPackage &head, const ObPLPackage *body)
 {
   header_merge_version_ = head.get_sys_schema_version();
-  reserved_header_count_ = 0;
+  header_public_syn_count_ = head.get_public_syn_count();
   if (OB_NOT_NULL(body)) {
     body_merge_version_ = body->get_sys_schema_version();
-    reserved_body_count_ = 0;
+    body_public_syn_count_ = body->get_public_syn_count();
   }
 }
 
@@ -135,13 +138,15 @@ int ObPLPackageState::set_package_var_val(const int64_t var_idx,
     OZ (vars_.at(var_idx).deep_copy(value, buf, value.get_deep_copy_size(), pos));
   } else if (value.is_pl_extend()
              && value.get_meta().get_extend_type() != PL_CURSOR_TYPE
+             && value.get_meta().get_extend_type() != PL_REF_CURSOR_TYPE
              && deep_copy_complex) {
     ObObj copy;
     OZ (ObUserDefinedType::deep_copy_obj(inner_allocator_, value, copy));
     OX (vars_.at(var_idx) = copy);
   } else if (value.is_null()
              && vars_.at(var_idx).is_pl_extend()
-             && types_.at(var_idx) != PL_CURSOR_TYPE) {
+             && types_.at(var_idx) != PL_CURSOR_TYPE
+             && types_.at(var_idx) != PL_REF_CURSOR_TYPE) {
     CK (vars_.at(var_idx).get_ext() != 0);
     OZ (ObUserDefinedType::reset_composite(vars_.at(var_idx), NULL));
   } else {
@@ -174,6 +179,9 @@ int ObPLPackageState::check_version(const ObPackageStateVersion &state_version,
 
   if (cur_state_version == state_version) {
     match = true;
+  } else if (cur_state_version.header_public_syn_count_ != state_version.header_public_syn_count_
+             || cur_state_version.body_public_syn_count_ != state_version.body_public_syn_count_) {
+    match = false;
   } else {
     if (cur_state_version.header_merge_version_ != state_version.header_merge_version_) {
       if (OB_FAIL(ObPLDependencyUtil::check_dep_schema(schema_guard,

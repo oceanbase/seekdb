@@ -26,7 +26,7 @@ using namespace ::testing;
 using namespace transaction;
 using namespace share;
 
-static ObSharedMemAllocMgr SHARED_MEM_ALLOC_MGR;
+static ObSharedMemAllocMgr MTL_MEM_ALLOC_MGR;
 static FakeModuleProvider G_TEST_MODULE_PROVIDER;
 
 namespace share {
@@ -34,7 +34,7 @@ int ObTxDataAllocator::init(const char *label)
 {
   int ret = OB_SUCCESS;
   ObMemAttr mem_attr;
-  throttle_tool_ = &(SHARED_MEM_ALLOC_MGR.share_resource_throttle_tool());
+  throttle_tool_ = &(MTL_MEM_ALLOC_MGR.share_resource_throttle_tool());
   if (OB_FAIL(slice_allocator_.init(
                  storage::TX_DATA_SLICE_SIZE, OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_, mem_attr))) {
     SHARE_LOG(WARN, "init slice allocator failed", KR(ret));
@@ -46,13 +46,13 @@ int ObTxDataAllocator::init(const char *label)
 }
 int ObMemstoreAllocator::init()
 {
-  throttle_tool_ = &SHARED_MEM_ALLOC_MGR.share_resource_throttle_tool();
+  throttle_tool_ = &MTL_MEM_ALLOC_MGR.share_resource_throttle_tool();
   return arena_.init();
 }
 int ObMemstoreAllocator::AllocHandle::init()
 {
   int ret = OB_SUCCESS;
-  ObSharedMemAllocMgr *mtl_alloc_mgr = &SHARED_MEM_ALLOC_MGR;
+  ObSharedMemAllocMgr *mtl_alloc_mgr = &MTL_MEM_ALLOC_MGR;
   ObMemstoreAllocator &host = mtl_alloc_mgr->memstore_allocator();
   (void)host.init_handle(*this);
   return ret;
@@ -85,7 +85,7 @@ public:
     const testing::TestInfo *const test_info =
         testing::UnitTest::GetInstance()->current_test_info();
     // publish the fake module set as the process-global provider (see tx_node.h).
-    publish_test_module_provider(G_TEST_MODULE_PROVIDER, SHARED_MEM_ALLOC_MGR);
+    publish_test_module_provider(G_TEST_MODULE_PROVIDER, MTL_MEM_ALLOC_MGR);
     auto test_name = test_info->name();
     _TRANS_LOG(INFO, ">>>> starting test : %s", test_name);
   }

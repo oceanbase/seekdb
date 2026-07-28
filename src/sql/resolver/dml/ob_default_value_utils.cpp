@@ -24,7 +24,9 @@ using namespace common;
 using namespace share::schema;
 namespace sql
 {
-int ObDefaultValueUtils::generate_insert_value(const ColumnItem *column, ObRawExpr* &expr)
+int ObDefaultValueUtils::generate_insert_value(const ColumnItem *column,
+                                               ObRawExpr* &expr,
+                                               bool has_instead_of_trigger)
 {
   int ret = OB_SUCCESS;
   ObDMLDefaultOp op = OB_INVALID_DEFAULT_OP;
@@ -35,6 +37,12 @@ int ObDefaultValueUtils::generate_insert_value(const ColumnItem *column, ObRawEx
     LOG_WARN("invalid argument", K(column), K(params_), K(params_->expr_factory_), K(params_->session_info_));
   } else if (OB_FAIL(get_default_type_for_insert(column, op))) {
     LOG_WARN("fail to check column default value", K(column), K(ret));
+  } else if (has_instead_of_trigger
+             && op > OB_INVALID_DEFAULT_OP) {
+    // default expr in insert values is alway replaced to null if has instead of trigger
+    if (OB_FAIL(build_default_expr_for_gc_column_ref(*column, expr))) {
+      LOG_WARN("fail to build default expr for generate column", K(ret));
+    }
   } else {
     if (OB_NORMAL_DEFAULT_OP == op) {
       if (OB_FAIL(build_default_expr_strict(column, expr))) {

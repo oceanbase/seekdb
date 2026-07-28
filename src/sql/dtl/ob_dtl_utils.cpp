@@ -16,10 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_DTL
 
-#include <algorithm>
 #include "ob_dtl_utils.h"
 #include "ob_dtl_flow_control.h"
-#include "share/config/ob_server_config.h"
 
 using namespace oceanbase::common;
 
@@ -30,17 +28,50 @@ namespace dtl {
 int ObDtlAsynSender::calc_batch_buffer_cnt(int64_t &max_batch_size, int64_t &max_loop_cnt)
 {
   int ret = OB_SUCCESS;
-  if (channels_.empty()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cannot batch an empty local channel set", K(ret));
+  int64_t dop = 0;
+  int64_t task_group_cnt = 0;
+  int64_t total_task_cnt = 0;
+  ObIArray<int64_t> *prefix_task_counts = nullptr;
+  if (is_transmit_) {
+    dop = ch_info_->transmit_task_layout_.total_task_cnt_;
+    prefix_task_counts = &ch_info_->receive_task_layout_.prefix_task_counts_;
+    task_group_cnt = ch_info_->receive_task_layout_.prefix_task_counts_.count();
+    total_task_cnt = ch_info_->receive_task_layout_.total_task_cnt_;
   } else {
-    const int64_t queue_size =
-        common::ObServerConfig::get_instance().server_task_queue_size;
-    const int64_t max_buffer_cnt = std::max<int64_t>(1, (queue_size + 1) / 4);
-    max_loop_cnt = channels_.count();
-    max_batch_size = std::min(max_loop_cnt, max_buffer_cnt);
-    LOG_DEBUG("calc local channel batch size", K(max_batch_size), K(max_loop_cnt),
-              K(max_buffer_cnt), K(lbt()));
+    dop = ch_info_->receive_task_layout_.total_task_cnt_;
+    prefix_task_counts = &ch_info_->transmit_task_layout_.prefix_task_counts_;
+    task_group_cnt = ch_info_->transmit_task_layout_.prefix_task_counts_.count();
+    total_task_cnt = ch_info_->transmit_task_layout_.total_task_cnt_;
+  }
+  if (task_group_cnt == 0) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected status: ", K(task_group_cnt), K(total_task_cnt), K(prefix_task_counts), K(ret));
+  } else {
+    int64_t queue_size = common::ObServerConfig::get_instance().server_task_queue_size;
+    int64_t max_buffer_cnt = (queue_size + 1) / 4;
+    int64_t dop_per_group = dop / task_group_cnt + 1;
+    max_batch_size = 1;
+    int64_t buffer_cnt = dop_per_group * task_group_cnt;
+    while (buffer_cnt * (max_batch_size + 1) < max_buffer_cnt) {
+      ++max_batch_size;
+    }
+    max_loop_cnt = 0;
+    for (int64_t i = 0; i < prefix_task_counts->count() && OB_SUCC(ret); ++i) {
+      int64_t count = 0;
+      if (i == prefix_task_counts->count() - 1) {
+        count = total_task_cnt - prefix_task_counts->at(i);
+      } else {
+        count = prefix_task_counts->at(i + 1) - prefix_task_counts->at(i);
+      }
+      if (max_loop_cnt < count) {
+        max_loop_cnt = count;
+      }
+    }
+    max_batch_size = min(max_batch_size, max_loop_cnt);
+    LOG_DEBUG("calc batch size", K_(is_transmit), K(prefix_task_counts),
+              K(task_group_cnt), K(total_task_cnt), K(prefix_task_counts->count()),
+              K(max_batch_size), K(dop), K(task_group_cnt),
+              K(max_loop_cnt), K(max_buffer_cnt), K(dop_per_group), K(lbt()));
   }
   return ret;
 }
@@ -68,8 +99,17 @@ int ObDtlAsynSender::asyn_send()
   int64_t max_batch_size = 0;
   int64_t max_loop_times = 0;
   LOG_TRACE("Send eof/drain row", "ch_cnt", channels_.count(), K(ret));
-  if (0 == channels_.count()
-      || OB_FAIL(calc_batch_buffer_cnt(max_batch_size, max_loop_times))) {
+  if (OB_ISNULL(ch_info_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected status: ch info is null", K(ret));
+  } else if (0 == channels_.count() || OB_FAIL(calc_batch_buffer_cnt(max_batch_size, max_loop_times))) {
+    // px coord rescan, channels is cleared and it's empty
+    // max_loop_times indicates how many rounds are needed to send all channels, this value equals the maximum number of threads per sqc on the receiving end
+    // max_batch_size indicates the number of channels sent in each batch
+    // For example assume the receiver has 2 task groups, sqc0: 10 tasks sqc1: 12 tasks, i.e., channel has 22 (10+12)
+    //    then max_loop_times = 22, if max_batch_size=5, then it indicates that 3 rounds are needed (12/5+1)
+    //    If max_batch_size equals (will not be greater than max_loop_times) max_loop_times, it indicates that all channel data will be sent in one go
+    // Fallback to synchronous send
     if (OB_FAIL(syn_send())) {
       LOG_WARN("failed to syn send message", K(ret));
     }
@@ -78,26 +118,45 @@ int ObDtlAsynSender::asyn_send()
     dtl::ObDtlChannel *ch = NULL;
     int tmp_ret = OB_SUCCESS;
     ObArray<ObDtlChannel*> wait_channels;
-    if (OB_FAIL(wait_channels.prepare_allocate(max_batch_size))) {
-      LOG_WARN("fail alloc memory", K(max_batch_size), K(ret));
+    ObIArray<int64_t> *prefix_task_counts = nullptr;
+    int64_t total_task_cnt = 0;
+    if (is_transmit_) {
+      prefix_task_counts = &ch_info_->receive_task_layout_.prefix_task_counts_;
+      total_task_cnt = ch_info_->receive_task_layout_.total_task_cnt_;
+    } else {
+      prefix_task_counts = &ch_info_->transmit_task_layout_.prefix_task_counts_;
+      total_task_cnt = ch_info_->transmit_task_layout_.total_task_cnt_;
+    }
+    if (OB_FAIL(wait_channels.prepare_allocate(prefix_task_counts->count() * max_batch_size))) {
+      LOG_WARN("fail alloc memory", K(max_batch_size), K(prefix_task_counts->count()), K(ret));
     }
     int64_t send_eof_cnt = 0;
     for (int64_t loop = 0; loop < max_loop_times && OB_SUCC(ret); loop += max_batch_size) {
       ch = nullptr;
       int64_t nth_ch = 0;
-      for (int64_t batch_idx = 0;
-           batch_idx < max_batch_size && loop + batch_idx < channels_.count() && OB_SUCC(ret);
-           ++batch_idx) {
-        if (NULL == (ch = channels_.at(loop + batch_idx))) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected NULL ptr", K(ret));
+      for (int64_t i = 0; i < prefix_task_counts->count() && OB_SUCC(ret); ++i) {
+        int64_t count = 0;
+        if (i == prefix_task_counts->count() - 1) {
+          count = total_task_cnt - prefix_task_counts->at(i);
         } else {
-          wait_channels.at(nth_ch++) = ch;
-          ++send_eof_cnt;
-          if (OB_FAIL(action(ch))) {
-            tmp_ret = ret;
-            ret = OB_SUCCESS;
-            LOG_WARN("failed to send", K(ret));
+          count = prefix_task_counts->at(i + 1) - prefix_task_counts->at(i);
+        }
+        for (int64_t batch_idx = 0; batch_idx < max_batch_size && OB_SUCC(ret); ++batch_idx) {
+          if (loop + batch_idx < count) {
+            int64_t slice_idx = prefix_task_counts->at(i) + loop + batch_idx;
+            if (NULL == (ch = channels_.at(slice_idx))) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("unexpected NULL ptr", K(ret));
+            } else {
+              wait_channels.at(nth_ch) = ch;
+              ++nth_ch;
+              ++send_eof_cnt;
+              if (OB_FAIL(action(ch))) {
+                tmp_ret = ret;
+                ret = OB_SUCCESS;
+                LOG_WARN("failed to send", K(ret));
+              }
+            }
           }
         }
       }

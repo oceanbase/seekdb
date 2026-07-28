@@ -143,7 +143,7 @@ bool ObAllVirtualSqlStatIter::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSes
     {
       if (!key.is_valid()) {
         // do nothing
-      } else if (OB_FAIL(executing_sql_stat_record.record_sqlstat_end_value())) {
+      } else if (OB_FAIL(executing_sql_stat_record.record_sqlstat_end_value(nullptr))) {
         LOG_WARN("failed to record sqlstat end value in query virtual table", K(ret));
       } else if (OB_SUCC(tmp_sql_stat_map_.get_refactored(key, value))) {
         if (OB_FAIL(value->sum_stat_value(executing_sql_stat_record))) {

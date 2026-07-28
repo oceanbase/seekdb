@@ -130,6 +130,7 @@ void PxWorkerFunctor::operator ()(bool need_exec)
     PXParallelRule px_parallel_rule = task_arg_.op_spec_root_->plan_->get_px_parallel_rule();
     px_parallel_rule_str = ob_px_parallel_rule_str(px_parallel_rule);
   }
+  ObDIActionGuard action_guard(px_parallel_rule_str);
   ObCurTraceId::set(env_arg_.get_trace_id());
   /**
    * The interrupt must cover the release handler, because its process involves sqc sending messages to qc,
@@ -309,6 +310,7 @@ int ObPxThreadWorker::exit()
 int ObPxLocalWorker::run(ObPxInitTaskArgs &task_arg)
 {
   int ret = OB_SUCCESS;
+  ObDIActionGuard action_guard("FastDFO");
 
   {
     ObPxTaskProcess task_proc(gctx_, task_arg);

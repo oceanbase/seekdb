@@ -183,5 +183,19 @@ OB_DEF_SERIALIZE_SIZE(ObTaskSmallResult)
 OB_SERIALIZE_MEMBER(ObSliceEvent, ob_slice_id_, small_result_);
 OB_SERIALIZE_MEMBER(ObTaskEvent, task_loc_, err_code_, inited_, ts_task_recv_done_, ts_result_send_begin_);
 
+int ObMiniTaskResult::assign(const ObMiniTaskResult &other)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(task_result_.assign(other.task_result_))) {
+    LOG_WARN("assign task result failed", K(ret), K(other));
+  } else if (OB_FAIL(extend_result_.assign(other.extend_result_))) {
+    LOG_WARN("assign extend result failed", K(ret), K(other));
+  }
+  return ret;
+}
+
+
+
+OB_SERIALIZE_MEMBER(ObMiniTaskResult, task_result_, extend_result_);
 }/* ns sql*/
 }/* ns oceanbase */

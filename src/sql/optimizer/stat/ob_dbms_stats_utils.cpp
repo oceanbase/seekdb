@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
-#include "share/rc/ob_module_provider.h"
 #include "ob_dbms_stats_utils.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
@@ -23,7 +22,6 @@
 #include "sql/optimizer/ob_opt_selectivity.h"
 #include "share/ob_sql_client_decorator.h"
 #include "sql/optimizer/stat/ob_dbms_stats_executor.h"
-#include "sql/optimizer/stat/ob_opt_stat_gather_stat.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "observer/omt/ob_server_runtime.h"
 
@@ -241,8 +239,8 @@ int ObDbmsStatsUtils::check_is_sys_table(share::schema::ObSchemaGetterGuard &sch
                                          const int64_t table_id,
                                          bool &is_valid)
 {
-  UNUSED(schema_guard);
   bool ret = OB_SUCCESS;
+  const ObSimpleServerRuntimeSchema *runtime_schema = NULL;
   is_valid = false;
   if (!is_sys_table(table_id) ||
       ObSysTableChecker::is_sys_table_index_tid(table_id) ||
@@ -260,6 +258,11 @@ int ObDbmsStatsUtils::check_is_sys_table(share::schema::ObSchemaGetterGuard &sch
       table_id == share::OB_ALL_SYS_VARIABLE_TID ||//circular dependency
       table_id == share::OB_ALL_SYS_VARIABLE_HISTORY_TID ||//circular dependency
       table_id == share::OB_ALL_MONITOR_MODIFIED_TID) {
+    is_valid = false;
+  } else if (OB_FAIL(schema_guard.get_server_runtime_info(runtime_schema))) {
+    LOG_WARN("fail to get runtime schema", KR(ret));
+  //system table statistics are gathered only while the runtime is normal
+  } else if (OB_ISNULL(runtime_schema) || !runtime_schema->is_normal()) {
     is_valid = false;
   } else {
     is_valid = true;
@@ -1638,7 +1641,7 @@ int ObDbmsStatsUtils::cancel_async_gather_stats(sql::ObExecContext &ctx)
       LOG_WARN("failed to fetch need cancel async gather stats task", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < task_ids.count(); ++i) {
-        if (OB_FAIL(ObOptStatGatherStatList::instance().cancel_gather_stats(task_ids.at(i)))) {
+        if (OB_FAIL(ObDbmsStatsExecutor::cancel_gather_stats(ctx, task_ids.at(i)))) {
           if (ret != OB_ERR_DBMS_STATS_PL) {
             LOG_WARN("failed to cancel gather stats", K(ret));
           } else {

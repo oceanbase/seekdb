@@ -18,7 +18,7 @@
 
 #include "ob_tablet_autoincrement_service.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/ob_tablet_autoinc_seq_service.h"
+#include "storage/ob_tablet_autoinc_seq_rpc_handler.h"
 
 namespace oceanbase
 {
@@ -128,15 +128,39 @@ int ObTabletAutoincMgr::fetch_new_range(const ObTabletAutoincParam &param,
     ret = OB_NOT_INIT;
     LOG_WARN("tablet auto increment service is not inited", K(ret), K(param), K(tablet_id));
   } else {
-    ObTabletAutoincInterval interval;
-    const uint64_t range_size = MAX(cache_size_, param.auto_increment_cache_size_);
-    if (OB_FAIL(storage::ObTabletAutoincSeqService::get_instance().fetch_tablet_autoinc_seq_cache(
-        tablet_id, range_size, interval))) {
-      LOG_WARN("fail to fetch local autoinc cache for tablet",
-          K(ret), K(tablet_id), K(range_size));
-    } else {
-      node.cache_start_ = interval.start_;
-      node.cache_end_ = interval.end_;
+    obcall::ObFetchTabletSeqArg arg;
+    obcall::ObFetchTabletSeqRes res;
+    arg.cache_size_ = MAX(cache_size_, param.auto_increment_cache_size_); // TODO(shuangcan): confirm this
+    arg.tablet_id_ = tablet_id;
+
+    bool finish = false;
+    for (int64_t retry_times = 0; OB_SUCC(ret) && !finish; retry_times++) {
+      const int64_t rpc_timeout = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_remain() : OB_DEFAULT_RPC_TIMEOUT;
+      if (OB_FAIL(ObTabletAutoincSeqRpcHandler::get_instance().fetch_tablet_autoinc_seq_cache(arg, res))) {
+        LOG_WARN("fail to fetch autoinc cache for tablets", K(ret), K(retry_times), K(arg), K(rpc_timeout));
+      }
+      if (OB_SUCC(ret)) {
+        finish = true;
+      }
+      if (OB_FAIL(ret)) {
+        if (is_retryable(ret)) {
+          // overwrite ret
+          if (OB_UNLIKELY(rpc_timeout <= 0)) {
+            ret = OB_TIMEOUT;
+            LOG_WARN("timeout", K(ret), K(rpc_timeout));
+          } else if (OB_FAIL(THIS_WORKER.check_status())) {
+            LOG_WARN("failed to check status", K(ret));
+          } else {
+            res.reset();
+            ob_usleep<common::ObWaitEventIds::STORAGE_AUTOINC_FETCH_RETRY_SLEEP>(RETRY_INTERVAL);
+          }
+        }
+      }
+    }
+
+    if (OB_SUCC(ret)) {
+      node.cache_start_ = res.cache_interval_.start_;
+      node.cache_end_ = res.cache_interval_.end_;
       if (node.cache_end_ == 0) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get autoinc cache", K(ret));
@@ -145,6 +169,8 @@ int ObTabletAutoincMgr::fetch_new_range(const ObTabletAutoincParam &param,
       }
     }
   }
+
+
   return ret;
 }
 
@@ -203,6 +229,7 @@ void ObTabletAutoincrementService::release_mgr(ObTabletAutoincMgr *autoinc_mgr)
 
 int ObTabletAutoincrementService::get_autoinc_seq(const common::ObTabletID &tablet_id, uint64_t &autoinc_seq, const int64_t auto_increment_cache_size)
 {
+  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_sequence_load);
   int ret = OB_SUCCESS;
   ObTabletAutoincParam param;
   
@@ -239,34 +266,23 @@ int ObTabletAutoincrementService::init()
 {
   int ret = OB_SUCCESS;
   lib::ObMemAttr attr("AutoincMgr");
-  if (OB_UNLIKELY(is_inited_)) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("tablet autoincrement service init twice", K(ret));
-  } else if (OB_FAIL(node_allocator_.init(sizeof(ObTabletAutoincMgr), ObModIds::OB_AUTOINCREMENT))) {
+  if (OB_FAIL(node_allocator_.init(sizeof(ObTabletAutoincMgr), ObModIds::OB_AUTOINCREMENT))) {
     LOG_WARN("failed to init table node allocator", K(ret));
   } else if (OB_FAIL(tablet_autoinc_mgr_map_.init(attr))) {
     LOG_WARN("failed to init table node map", K(ret));
-  } else if (OB_FAIL(storage::ObTabletAutoincSeqService::get_instance().init())) {
-    LOG_WARN("failed to init local tablet autoinc sequence service", K(ret));
   } else {
     for (int64_t i = 0; i < INIT_NODE_MUTEX_NUM; ++i) {
       init_node_mutexs_[i].set_latch_id(common::ObLatchIds::TABLET_AUTO_INCREMENT_SERVICE_LOCK);
     }
     is_inited_ = true;
   }
-  if (OB_FAIL(ret)) {
-    tablet_autoinc_mgr_map_.destroy();
-    node_allocator_.destroy();
-  }
   return ret;
 }
 
 void ObTabletAutoincrementService::destroy()
 {
-  storage::ObTabletAutoincSeqService::get_instance().destroy();
   tablet_autoinc_mgr_map_.destroy();
   node_allocator_.destroy();
-  is_inited_ = false;
 }
 
 int ObTabletAutoincrementService::get_tablet_cache_interval(ObTabletCacheInterval &interval)

@@ -181,10 +181,15 @@ int ObVectorIndexSchedJobUtils::get_vector_index_job_info(common::ObISQLClient &
                                                           share::schema::ObSchemaGetterGuard &schema_guard,
                                                           dbms_scheduler::ObDBMSSchedJobInfo &job_info)
 {
-  UNUSED(schema_guard);
   int ret = OB_SUCCESS;
+  const share::schema::ObServerRuntimeSchema *runtime_schema = NULL;
   ObSqlString refresh_job_name;
-  if (OB_FAIL(refresh_job_name.assign_fmt("%lu_refresh", vidx_table_id))) {
+  if (OB_FAIL(schema_guard.get_server_runtime_info(runtime_schema))) {
+    LOG_WARN("fail to get server runtime info", KR(ret));
+  } else if (OB_ISNULL(runtime_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("server runtime schema is null"); // skip
+  } else if (OB_FAIL(refresh_job_name.assign_fmt("%lu_refresh", vidx_table_id))) {
     LOG_WARN("failed to generate refresh job name", K(ret));
   } else if (OB_FAIL(ObDBMSSchedJobUtils::get_dbms_sched_job_info(sql_client,
                                                                   refresh_job_name.string(), 

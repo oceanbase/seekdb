@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_macro_block_writer.h"
-#include "ob_imacro_block_flush_callback.h"
 #include "share/rc/ob_module_provider.h"
 #include "src/storage/blocksstable/index_block/ob_sstable_sec_meta_iterator.h"
 #include "src/storage/ddl/ob_ddl_clog.h"
@@ -1308,8 +1307,9 @@ int ObMacroBlockWriter::update_micro_commit_info(const ObBatchDatumRows &datum_r
     for (int64_t i = 0; OB_SUCC(ret) && i < write_row_count; i ++) {
       vec->get_payload(i + start, is_null, pay_load, length);
       const int64_t cur_row_version = ObDatum(pay_load, length, is_null).get_int();
+      // data_store_desc_->get_data_format_version() only set in major merge. it is 0 for mini/minor
       // see ObMicroBlockWriter::build_block, column_checksums_ and min_merged_trans_version_ share the same memory space.
-      // Only major merge sets column_checksums_, so mini/minor can update the transaction-version slot directly.
+      // Only major merge set column_checksums_, so we can set min_merged_trans_version_ regardless of data version.
       micro_writer_->update_merged_trans_version(-cur_row_version);
     }
   }
@@ -1329,8 +1329,9 @@ int ObMacroBlockWriter::update_micro_commit_info(const ObDatumRow &row)
   } else {
     const int64_t trans_version_col_idx = data_store_desc_->get_schema_rowkey_col_cnt();
     const int64_t cur_row_version = row.storage_datums_[trans_version_col_idx].get_int();
+    // data_store_desc_->get_data_format_version() only set in major merge. it is 0 for mini/minor
     // see ObMicroBlockWriter::build_block, column_checksums_ and min_merged_trans_version_ share the same memory space.
-    // Only major merge sets column_checksums_, so mini/minor can update the transaction-version slot directly.
+    // Only major merge set column_checksums_, so we can set min_merged_trans_version_ regardless of data version.
     micro_writer_->update_merged_trans_version(-cur_row_version);
   }
   return ret;
@@ -2414,6 +2415,7 @@ int ObMacroBlockWriter::build_micro_writer(const ObDataStoreDesc *data_store_des
     encoding_ctx.col_descs_ = &data_store_desc->get_full_stored_col_descs();
     encoding_ctx.encoder_opt_ = data_store_desc->encoder_opt_;
     encoding_ctx.column_encodings_ = nullptr;
+    encoding_ctx.data_format_version_ = data_store_desc->get_data_format_version();
     encoding_ctx.row_store_type_ = data_store_desc->get_row_store_type();
     encoding_ctx.need_calc_column_chksum_ = data_store_desc->is_major_merge_type();
     encoding_ctx.compressor_type_ = data_store_desc->get_compressor_type();
@@ -2576,6 +2578,7 @@ int ObMacroBlockWriter::init_pre_agg_util(const ObDataStoreDesc &data_store_desc
           data_store_desc.is_major_or_meta_merge_type(),
           full_agg_metas,
           data_store_desc.get_col_desc_array(),
+          data_store_desc.get_data_format_version(),
           allocator_))) {
         LOG_WARN("Fail to init aggregator", K(ret), K(data_store_desc));
       }
@@ -2630,9 +2633,11 @@ int ObMacroBlockWriter::init_pre_warmer(const share::ObPreWarmerParam &pre_warm_
   } else if (PRE_WARM_TYPE_NONE == tmp_type) {
     // do nothing
   } else if (MEM_PRE_WARM == tmp_type) {
-    if (OB_FAIL(create_mem_pre_warmer(pre_warm_param))) {
+    if (OB_FAIL(create_pre_warmer(MEM_PRE_WARM, pre_warm_param))) {
       LOG_WARN("fail to create pre warmer", KR(tmp_ret), K(pre_warm_param));
     }
+  } else if (MEM_AND_FILE_PRE_WARM == tmp_type) {
+    ret = OB_NOT_SUPPORTED;
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(pre_warmer_) && OB_FAIL(pre_warmer_->init(nullptr))) {
     LOG_WARN("fail to init pre warmer", KR(ret));
@@ -2640,16 +2645,20 @@ int ObMacroBlockWriter::init_pre_warmer(const share::ObPreWarmerParam &pre_warm_
   return ret;
 }
 
-int ObMacroBlockWriter::create_mem_pre_warmer(const ObPreWarmerParam &pre_warm_param)
+int ObMacroBlockWriter::create_pre_warmer(
+    const ObPreWarmerType pre_warmer_type,
+    const ObPreWarmerParam &pre_warm_param)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!pre_warm_param.is_valid())) {
+  if (OB_UNLIKELY(((ObPreWarmerType::MEM_PRE_WARM != pre_warmer_type) &&
+                   (ObPreWarmerType::MEM_AND_FILE_PRE_WARM != pre_warmer_type)) ||
+                  !pre_warm_param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", KR(ret), K(pre_warm_param));
+    LOG_WARN("invalid arguments", KR(ret), K(pre_warmer_type), K(pre_warm_param));
   } else if (OB_ISNULL(data_store_desc_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("data store desc should not be null", K(ret));
-  } else {
+  } else if (ObPreWarmerType::MEM_PRE_WARM == pre_warmer_type) {
     if (data_store_desc_->is_for_index()) {
       if (OB_ISNULL(pre_warmer_ = OB_NEWx(ObIndexBlockCachePreWarmer, &allocator_, pre_warm_param.fixed_percentage_))) {
         int tmp_ret = OB_ALLOCATE_MEMORY_FAILED; // use tmp_ret, allow not pre warm mem block cache
@@ -2661,6 +2670,9 @@ int ObMacroBlockWriter::create_mem_pre_warmer(const ObPreWarmerParam &pre_warm_p
         LOG_WARN("fail to new mem pre warmer", KR(tmp_ret));
       }
     }
+  } else if (ObPreWarmerType::MEM_AND_FILE_PRE_WARM == pre_warmer_type) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("do not support create mem and file pre warmer", KR(ret));
   }
   return ret;
 }

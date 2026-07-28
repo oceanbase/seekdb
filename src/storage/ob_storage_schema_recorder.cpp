@@ -289,7 +289,7 @@ int ObStorageSchemaRecorder::get_schema(
     }
   } else {
     table_version = t_schema->get_schema_version();
-    if (OB_FAIL(storage_schema_->init(*allocator_, *t_schema, false/*skip_column_info*/))) {
+    if (OB_FAIL(storage_schema_->init(*allocator_, *t_schema, false/*skip_column_info*/, ObStorageSchema::STORAGE_SCHEMA_VERSION))) {
       LOG_WARN("failed to init storage schema", K(ret), K(t_schema));
     }
   }

@@ -45,6 +45,8 @@ class ObPartitionExecutorUtils
 public:
   const static int OB_DEFAULT_ARRAY_SIZE = 16;
   // demoted from share::schema::ObPartitionUtils(pure sql:builds a temporary expr context to evaluate interval)
+  static int check_interval_partition_table(const common::ObRowkey &transition_point,
+                                            const common::ObRowkey &interval_range);
   static int calc_values_exprs(ObExecContext &ctx, ObCreateTableStmt &stmt);
   static int calc_values_exprs(ObExecContext &ctx, ObCreateIndexStmt &stmt);
   static int calc_values_exprs_for_alter_table(ObExecContext &ctx, 
@@ -73,6 +75,16 @@ public:
                                        ObPartitionedStmt &stmt,
                                        bool is_subpart);
                                        
+  static int check_transition_interval_valid(const stmt::StmtType stmt_type,
+                                             ObExecContext &ctx,
+                                             ObRawExpr *transition_expr,
+                                             ObRawExpr *interval_expr);
+
+  static int set_interval_value(ObExecContext &ctx,
+                                const stmt::StmtType stmt_type,
+                                share::schema::ObTableSchema &table_schema,
+                                ObRawExpr *interval_expr);
+
   static int calc_range_values_exprs(ObExecContext &ctx, ObCreateIndexStmt &stmt);
 
   template<typename T>

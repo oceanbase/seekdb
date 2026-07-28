@@ -201,13 +201,13 @@ int ObMPBase::load_system_variables(const ObSysVariableSchema &sys_variable_sche
   }
   if (OB_SUCC(ret)) {
     //Set the maximum version number of the system variable
+    session.set_global_vars_version(sys_variable_schema.get_schema_version());
     //Serialize and cache the system variable sequence that affects the plan
     if (OB_FAIL(session.gen_sys_var_in_pc_str())) {
       LOG_WARN("fail to gen sys var in pc str", K(ret));
     } else if (OB_FAIL(session.gen_configs_in_pc_str())) {
       LOG_WARN("fail to gen configs in pc string", K(ret));
     } else {
-      session.set_global_vars_version(sys_variable_schema.get_schema_version());
       session.set_enable_mysql_compatible_dates(
         session.get_enable_mysql_compatible_dates_from_config());
     }
@@ -317,15 +317,9 @@ int ObMPBase::init_process_var(sql::ObSqlCtx &ctx,
 //The outer call will ignore the error code of do_after_process, therefore returning the error code of set_session_state here is also meaningless.
 //Therefore, here the set_session_state error code is ignored, and the reset of the warning buffer and the trace log recording process are not affected.
 int ObMPBase::do_after_process(sql::ObSQLSessionInfo &session,
-                               bool async_resp_used,
-                               int process_ret) const
+                               bool async_resp_used) const
 {
   int ret = OB_SUCCESS;
-  if (!async_resp_used && OB_SUCCESS == process_ret && session.get_in_transaction()) {
-    session.set_curr_trans_last_stmt_end_time(ObClockGenerator::getClock());
-  } else if (!session.get_in_transaction()) {
-    session.set_curr_trans_last_stmt_end_time(0);
-  }
   if (session.get_is_in_retry()) {
     // do nothing.
   } else {

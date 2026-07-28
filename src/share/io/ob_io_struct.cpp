@@ -687,7 +687,7 @@ int ObIOTuner::init()
   return ret;
 }
 
-
+// send_detect_task moved definition to storage/blocksstable/ob_block_manager.cpp(SERVER_BLOCK_MGR real user)
 
 void ObIOTuner::stop()
 {
@@ -926,6 +926,8 @@ void ObAsyncIOChannel::run1()
   } else {
     char device_name[32] = "";
     (void)device_handle_->get_device_name(device_name, sizeof(device_name));
+    ObDIActionGuard program("IOManager", nullptr, nullptr);
+    ObDIActionGuard module(ObDIActionGuard::NS_MODULE, "AsyncIO_Device:%s", device_name);
     set_thread_name("IO_GETEVENT", thread_id);
     LOG_INFO("io get_events thread started", K(thread_id));
     while (!has_set_stop()) {
@@ -1044,6 +1046,7 @@ void ObAsyncIOChannel::get_events()
         const int system_errno = io_events_->get_ith_ret_code(i);
         const int complete_size = io_events_->get_ith_ret_bytes(i);
         if (OB_LIKELY(0 == system_errno)) { // io succ
+          ObDIActionGuard("IO success");
           if (complete_size == io_size) { // full complete
             LOG_DEBUG("Success to get io event", K(*req), K(complete_size));
             if (OB_FAIL(on_full_return(*req, io_size))) {
@@ -1073,6 +1076,7 @@ void ObAsyncIOChannel::get_events()
             }
           }
         } else { // io failed
+          ObDIActionGuard("IO failed");
           LOG_ERROR("io request failed", K(system_errno), K(complete_size), K(*req));
           if (-EAGAIN == system_errno) { //retry
             if (OB_FAIL(on_full_retry(*req))) {
@@ -1301,6 +1305,8 @@ void ObSyncIOChannel::handle(void *task)
   } else {
     char device_name[32] = "";
     (void)device_handle_->get_device_name(device_name, sizeof(device_name));
+    ObDIActionGuard program("IOManager", nullptr, nullptr);
+    ObDIActionGuard module(ObDIActionGuard::NS_MODULE, "SyncIO_Device:%s", device_name);
     ObIORequest *req = static_cast<ObIORequest *>(task);
     RequestHolder holder(req);
     ObTraceIdGuard trace_id_guard(req->trace_id_);
@@ -1754,6 +1760,7 @@ void ObIOCallbackManager::handle(LinkTask *task)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(req));
   } else {
+    ObDIActionGuard ag("IOManager", "DiskCB", "handle io callback");
     const int64_t begin_time = ObTimeUtility::fast_current_time();
     req->dec_ref(); // ref for callback queue
     if (OB_NOT_NULL(req->io_result_)) {

@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_micro_block_row_scanner.h"
 #include "storage/access/ob_aggregate_base.h"
 #include "storage/access/ob_block_batched_row_store.h"
@@ -326,6 +327,7 @@ int ObIMicroBlockRowScanner::apply_filter(const bool can_blockscan)
   } else if (OB_FAIL(block_row_store_->reorder_filter())) {
     LOG_WARN("Fail to reorder filter", K(ret));
   } else {
+    ACTIVE_SESSION_FLAG_SETTER_GUARD(in_filter_rows);
     if (param_->has_lob_column_out()) {
       context_->reuse_lob_locator_helper();
     }
@@ -536,6 +538,19 @@ int ObIMicroBlockRowScanner::apply_black_filter_batch(
         row_ids[i] = cur_row_index + i;
       }
       if (0 == filter.get_col_count()) {
+      } else if (param_->use_new_format()) {
+        if (OB_FAIL(get_rows_for_rich_format(col_offsets,
+                                             filter.get_col_params(),
+                                             row_ids,
+                                             row_cap,
+                                             0,
+                                             pd_filter_info.cell_data_ptrs_,
+                                             pd_filter_info.len_array_,
+                                             filter.get_filter_node().column_exprs_,
+                                             &filter.get_default_datums(),
+                                             filter.is_padding_mode()))) {
+          LOG_WARN("Failed to get rows for rich format", K(ret), K(cur_row_index));
+        }
       } else if (OB_FAIL(get_rows_for_old_format(col_offsets,
                                                  filter.get_col_params(),
                                                  row_ids,
@@ -629,6 +644,76 @@ int ObIMicroBlockRowScanner::get_rows_for_old_format(
   return ret;
 }
 
+int ObIMicroBlockRowScanner::get_rows_for_rich_format(
+    const common::ObIArray<int32_t> &col_offsets,
+    const common::ObIArray<const share::schema::ObColumnParam *> &col_params,
+    const int32_t *row_ids,
+    const int64_t row_cap,
+    const int64_t vector_offset,
+    const char **cell_datas,
+    uint32_t *len_array,
+    sql::ObExprPtrIArray &exprs,
+    const common::ObIArray<blocksstable::ObStorageDatum> *default_datums,
+    const bool is_padding_mode,
+    const bool need_init_vector)
+{
+  int ret = OB_SUCCESS;
+  sql::ObEvalCtx &eval_ctx = param_->op_->get_eval_ctx();
+  if (ObIMicroBlockReader::Reader == reader_->get_type()) {
+    ObMicroBlockReader *flat_reader = static_cast<ObMicroBlockReader *>(reader_);
+    if (OB_FAIL(flat_reader->get_rows(col_offsets,
+                                      col_params,
+                                      default_datums,
+                                      is_padding_mode,
+                                      row_ids,
+                                      vector_offset,
+                                      row_cap,
+                                      row_,
+                                      exprs,
+                                      eval_ctx,
+                                      need_init_vector))) {
+      LOG_WARN("Failed to copy rows", K(ret), K(row_cap),
+               "row_ids", common::ObArrayWrap<const int32_t>(row_ids, row_cap));
+    }
+  } else if (ObIMicroBlockReader::Decoder == reader_->get_type() ||
+             ObIMicroBlockReader::CSDecoder == reader_->get_type()) {
+    ObIMicroBlockDecoder *decoder = static_cast<ObIMicroBlockDecoder *>(reader_);
+    if (OB_FAIL(decoder->get_rows(col_offsets,
+                                  col_params,
+                                  default_datums,
+                                  is_padding_mode,
+                                  row_ids,
+                                  row_cap,
+                                  cell_datas,
+                                  vector_offset,
+                                  len_array,
+                                  eval_ctx,
+                                  exprs,
+                                  need_init_vector))) {
+      LOG_WARN("Failed to get rows", K(ret), K(row_cap));
+    }
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Unexpected micro block reader", K(ret), K(reader_->get_type()));
+  }
+
+  if (OB_SUCC(ret) && param_->has_lob_column_out() && reader_->has_lob_out_row()) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < col_offsets.count(); i++) {
+      if (nullptr != col_params.at(i) && col_params.at(i)->get_meta_type().is_lob_storage() &&
+          OB_FAIL(fill_exprs_lob_locator(*param_,
+                                         *context_,
+                                         *col_params.at(i),
+                                         *(exprs.at(i)),
+                                         eval_ctx,
+                                         vector_offset,
+                                         row_cap))) {
+        LOG_WARN("Fail to fill lob locator", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObIMicroBlockRowScanner::filter_pushdown_filter(
     sql::ObPushdownFilterExecutor *parent,
     sql::ObPushdownFilterExecutor *filter,
@@ -656,6 +741,14 @@ int ObIMicroBlockRowScanner::filter_pushdown_filter(
                 bitmap))) {
       LOG_WARN("Failed to execute sample pushdown filter", K(ret));
     }
+  // use uniform base currently, support new format later
+  // TODO(hanling): If the new vectorization format does not start counting from the 0th row, it can be computed in batches.
+  } else if (can_use_vectorize &&
+             filter->get_op().enable_rich_format_ &&
+             OB_FAIL(init_exprs_uniform_header(filter->get_column_exprs(),
+                                               filter->get_op().get_eval_ctx(),
+                                               filter->get_op().get_eval_ctx().max_batch_size_))) {
+    LOG_WARN("Failed to init exprs vector header", K(ret));
   } else if (ObIMicroBlockReader::Decoder == reader_->get_type() ||
              ObIMicroBlockReader::CSDecoder == reader_->get_type()) {
     // change to black filter in below situation
@@ -768,6 +861,7 @@ int ObIMicroBlockRowScanner::filter_micro_block_in_blockscan(sql::PushdownFilter
     if (OB_SUCC(ret)) {
       int64_t bitmap_cnt = pd_filter_info.filter_->get_result()->size();
       int64_t select_cnt = pd_filter_info.filter_->get_result()->popcnt();
+      EVENT_ADD(PUSHDOWN_STORAGE_FILTER_ROW_CNT, bitmap_cnt - select_cnt);
     }
   }
   return ret;
@@ -788,6 +882,56 @@ int ObMicroBlockRowDirectScanner::open(
   return ret;
 }
 
+
+// ATTENTION only called in cg scanner
+// TODO remove useless code
+int ObIMicroBlockRowScanner::get_next_rows(
+    const common::ObIArray<int32_t> &cols_projector,
+    const common::ObIArray<const share::schema::ObColumnParam *> &col_params,
+    const int32_t *row_ids,
+    const char **cell_datas,
+    const int64_t row_cap,
+    common::ObIArray<ObSqlDatumInfo> &datum_infos,
+    const int64_t datum_offset,
+    uint32_t *len_array,
+    const bool is_padding_mode,
+    const bool need_init_vector)
+{
+  int ret = OB_SUCCESS;
+  sql::ObExprPtrIArray &exprs = *(const_cast<sql::ObExprPtrIArray *>(param_->output_exprs_));
+  if (OB_UNLIKELY(nullptr == row_ids || nullptr == cell_datas || 0 == row_cap)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(row_ids), KP(cell_datas),
+             K(row_cap), K(cols_projector.count()), K(datum_infos.count()));
+  } else if (param_->use_new_format()) {
+    if (OB_FAIL(get_rows_for_rich_format(cols_projector,
+                                         col_params,
+                                         row_ids,
+                                         row_cap,
+                                         datum_offset,
+                                         cell_datas,
+                                         len_array,
+                                         exprs,
+                                         nullptr,
+                                         is_padding_mode,
+                                         need_init_vector))) {
+      LOG_WARN("Failed to get rows for rich format", K(ret));
+    }
+  // cg scanner use major sstable only, no need default row
+  } else if (OB_FAIL(get_rows_for_old_format(cols_projector,
+                                             col_params,
+                                             row_ids,
+                                             row_cap,
+                                             datum_offset,
+                                             cell_datas,
+                                             exprs,
+                                             datum_infos,
+                                             nullptr,
+                                             is_padding_mode))) {
+    LOG_WARN("Failed to get rows for old format", K(ret));
+  }
+  return ret;
+}
 
 // start_offset is inclusive, end_offset is exclusive.
 int ObIMicroBlockRowScanner::advance_to_border(

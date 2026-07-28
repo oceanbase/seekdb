@@ -31,6 +31,7 @@
 #include "storage/meta_mem/ob_storage_meta_cache.h"
 #include "share/ob_table_range.h"
 #include "share/scn.h"
+#include "storage/blocksstable/ob_table_flag.h"
 
 namespace oceanbase
 {
@@ -98,14 +99,15 @@ public:
     MINI_SSTABLE = 12,
     META_MAJOR_SSTABLE = 13,
     DDL_DUMP_SSTABLE = 14,
-    DDL_MEM_SSTABLE = 15,
-    DDL_MEM_MINI_SSTABLE = 16,
-    MDS_MINI_SSTABLE = 17,
-    MDS_MINOR_SSTABLE = 18,
-    MICRO_MINI_SSTABLE = 19,
-    INC_MAJOR_SSTABLE = 20,
-    INC_MAJOR_DDL_DUMP_SSTABLE = 21,
-    INC_MAJOR_DDL_MEM_SSTABLE = 22,
+    REMOTE_LOGICAL_MINOR_SSTABLE = 15,
+    DDL_MEM_SSTABLE = 16,
+    DDL_MEM_MINI_SSTABLE = 17,
+    MDS_MINI_SSTABLE = 18,
+    MDS_MINOR_SSTABLE = 19,
+    MICRO_MINI_SSTABLE = 20,
+    INC_MAJOR_SSTABLE = 21,
+    INC_MAJOR_DDL_DUMP_SSTABLE = 22,
+    INC_MAJOR_DDL_MEM_SSTABLE = 23,
     // < add new sstable before here, See is_sstable()
 
     MAX_TABLE_TYPE
@@ -162,6 +164,7 @@ public:
     OB_INLINE bool is_ddl_dump_sstable() const { return ObITable::is_ddl_dump_sstable(table_type_); }
     OB_INLINE bool is_ddl_mem_sstable() const { return ObITable::is_ddl_mem_sstable(table_type_); }
     OB_INLINE bool is_table_with_scn_range() const { return ObITable::is_table_with_scn_range(table_type_); }
+    OB_INLINE bool is_remote_logical_minor_sstable() const { return ObITable::is_remote_logical_minor_sstable(table_type_); }
     OB_INLINE bool is_row_store_major_sstable() const { return ObITable::is_row_store_major_sstable(table_type_); }
     OB_INLINE bool is_true_major_sstable() const { return is_row_store_major_sstable(); }
 
@@ -273,6 +276,7 @@ public:
   virtual bool is_ddl_type_sstable() const { return is_ddl_type_sstable(key_.table_type_); }
   virtual bool is_ddl_dump_sstable() const { return is_ddl_dump_sstable(key_.table_type_); }
   virtual bool is_ddl_mem_sstable() const { return is_ddl_mem_sstable(key_.table_type_); }
+  virtual bool is_remote_logical_minor_sstable() const { return is_remote_logical_minor_sstable(key_.table_type_); }
   virtual bool is_empty() const = 0;
   virtual bool no_data_to_read() const { return is_empty(); }
   DECLARE_VIRTUAL_TO_STRING;
@@ -288,7 +292,8 @@ public:
   static bool is_minor_sstable(const TableType table_type)
   {
     return ObITable::TableType::MINOR_SSTABLE == table_type
-      || ObITable::TableType::MINI_SSTABLE == table_type;
+      || ObITable::TableType::MINI_SSTABLE == table_type
+      || ObITable::TableType::REMOTE_LOGICAL_MINOR_SSTABLE == table_type;
   }
   static bool is_multi_version_minor_sstable(const TableType table_type)
   {
@@ -296,7 +301,8 @@ public:
         || ObITable::TableType::MINI_SSTABLE == table_type
         || ObITable::TableType::DDL_MEM_MINI_SSTABLE == table_type
         || ObITable::TableType::MDS_MINOR_SSTABLE == table_type
-        || ObITable::TableType::MDS_MINI_SSTABLE == table_type;
+        || ObITable::TableType::MDS_MINI_SSTABLE == table_type
+        || ObITable::TableType::REMOTE_LOGICAL_MINOR_SSTABLE == table_type;
   }
 
   static bool is_multi_version_table(const TableType table_type)
@@ -313,6 +319,11 @@ public:
   {
     return ObITable::TableType::MINI_SSTABLE == table_type
         || ObITable::TableType::MDS_MINI_SSTABLE == table_type;
+  }
+
+  static bool is_remote_logical_minor_sstable(const TableType table_type)
+  {
+    return ObITable::TableType::REMOTE_LOGICAL_MINOR_SSTABLE == table_type;
   }
 
   static bool is_memtable(const TableType table_type)

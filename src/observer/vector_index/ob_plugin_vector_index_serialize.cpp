@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "ob_plugin_vector_index_serialize.h"
-#include "share/ob_lob_access_utils.h"
 #include "share/rc/ob_module_provider.h"
 #include "observer/vector_index/ob_vector_index_util.h"
 #include "storage/access/ob_table_scan_iterator.h"

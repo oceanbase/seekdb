@@ -259,6 +259,44 @@ int get_lock_id(const ObIArray<ObTabletID> &tablets,
   return ret;
 }
 
+int ObOldLockOwner::convert_from_value(const int64_t packed_id)
+{
+  int ret = OB_SUCCESS;
+  pack_ = packed_id;
+  return ret;
+}
+
+int ObOldLockOwner::serialize(char* buf, const int64_t buf_len, int64_t& pos) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args", KR(ret), KP(buf), K(buf_len));
+  } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, pack_))) {
+    LOG_WARN("serialize ID failed", KR(ret), KP(buf), K(buf_len), K(pos));
+  }
+  return ret;
+}
+
+int ObOldLockOwner::deserialize(const char* buf, const int64_t data_len, int64_t& pos)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(buf) || OB_UNLIKELY(data_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args", KR(ret), KP(buf), K(data_len));
+  } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &pack_))) {
+    LOG_WARN("deserialize ID failed", KR(ret), KP(buf), K(data_len), K(pos));
+  }
+  return ret;
+}
+
+int64_t ObOldLockOwner::get_serialize_size() const
+{
+  int64_t size = 0;
+  size += serialization::encoded_length_vi64(pack_);
+  return size;
+}
+
 ObTableLockOwnerID ObTableLockOwnerID::default_owner()
 {
   ObTableLockOwnerID owner;
@@ -277,8 +315,17 @@ ObTableLockOwnerID ObTableLockOwnerID::get_owner(const unsigned char type,
 void ObTableLockOwnerID::convert_from_value_ignore_ret(const unsigned char owner_type,
                                                        const int64_t id)
 {
-  type_ = owner_type;
-  id_ = id;
+  if (ObLockOwnerType::INVALID_OWNER_TYPE == static_cast<ObLockOwnerType>(owner_type)) {
+    // convert from old version
+    ObOldLockOwner old_id;
+    old_id.convert_from_value(id);
+    type_ = old_id.type_;
+    id_ = old_id.id_;
+  } else {
+    type_ = owner_type;
+    id_ = id;
+  }
+
   hash_value_ = inner_hash();
 }
 
@@ -286,8 +333,16 @@ int ObTableLockOwnerID::convert_from_value(const ObLockOwnerType owner_type,
                                            const int64_t id)
 {
   int ret = OB_SUCCESS;
-  type_ = static_cast<unsigned char>(owner_type);
-  id_ = id;
+  if (ObLockOwnerType::INVALID_OWNER_TYPE == owner_type) {
+    // convert from old version
+    ObOldLockOwner old_id;
+    old_id.convert_from_value(id);
+    type_ = old_id.type_;
+    id_ = old_id.id_;
+  } else {
+    type_ = static_cast<unsigned char>(owner_type);
+    id_ = id;
+  }
   if (!is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(owner_type), K(id), K(type_), K(id_));
@@ -328,6 +383,7 @@ int ObTableLockOwnerID::convert_to_sessid(uint32_t &sessid) const
 int ObTableLockOwnerID::serialize(char* buf, const int64_t buf_len, int64_t& pos) const
 {
   int ret = OB_SUCCESS;
+  uint64_t data_version = 0;
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KP(buf), K(buf_len));
@@ -343,20 +399,32 @@ int ObTableLockOwnerID::serialize(char* buf, const int64_t buf_len, int64_t& pos
 int ObTableLockOwnerID::deserialize(const char* buf, const int64_t data_len, int64_t& pos)
 {
   int ret = OB_SUCCESS;
+  const int64_t origin_pos = pos;
   int64_t magic_num = 0;
   if (OB_ISNULL(buf) || OB_UNLIKELY(data_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KP(buf), K(data_len));
   } else if (OB_FAIL(serialization::decode(buf, data_len, pos, magic_num))) {
     LOG_WARN("deserialize magic num failed", KR(ret), KP(buf), K(data_len), K(pos));
-  } else if (OB_UNLIKELY(magic_num != MAGIC_NUM)) {
-    ret = OB_VERSION_NOT_MATCH;
-    LOG_WARN("table lock owner format mismatch", KR(ret), K(magic_num), K(MAGIC_NUM));
   } else {
-    LST_DO_CODE(OB_UNIS_DECODE, type_, id_);
-    if (OB_SUCC(ret)) {
-      hash_value_ = inner_hash();
+    pos = origin_pos;
+    if (OB_UNLIKELY(magic_num != MAGIC_NUM)) {
+      // this is an old version data.
+      ObOldLockOwner old_id;
+      if (OB_FAIL(old_id.deserialize(buf, data_len, pos))) {
+        LOG_WARN("deserialize owner id failed", KR(ret), KP(buf), K(data_len), K(pos));
+      } else {
+        type_ = old_id.type_;
+        id_ = old_id.id_;
+      }
+    } else {
+      // new version.
+      LST_DO_CODE(OB_UNIS_DECODE,
+                  magic_num,
+                  type_,
+                  id_);
     }
+    hash_value_ = inner_hash();
   }
   return ret;
 }

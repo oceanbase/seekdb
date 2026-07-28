@@ -23,6 +23,7 @@
 namespace oceanbase
 {
 using namespace common;
+using namespace obcall;
 using namespace share;
 
 namespace rootserver
@@ -34,7 +35,10 @@ ObRootMinorFreeze::ObRootMinorFreeze()
 
 ObRootMinorFreeze::~ObRootMinorFreeze()
 {
-  destroy();
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(destroy())) {
+    LOG_WARN("destroy failed", K(ret));
+  }
 }
 
 int ObRootMinorFreeze::init()
@@ -42,10 +46,10 @@ int ObRootMinorFreeze::init()
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("minor freeze service is already initialized", KR(ret));
+    LOG_WARN("init twice", K(ret));
   } else {
-    inited_ = true;
     stopped_ = false;
+    inited_ = true;
   }
   return ret;
 }
@@ -71,7 +75,7 @@ int ObRootMinorFreeze::check_cancel() const
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("minor freeze service is not initialized", KR(ret));
+    LOG_WARN("not init", K(ret));
   } else if (ATOMIC_LOAD(&stopped_)) {
     ret = OB_CANCELED;
     LOG_WARN("rs is stopped", K(ret));
@@ -79,21 +83,21 @@ int ObRootMinorFreeze::check_cancel() const
   return ret;
 }
 
-int ObRootMinorFreeze::try_minor_freeze(const obcall::ObMinorFreezeArg &arg) const
+int ObRootMinorFreeze::try_minor_freeze(const obcall::ObRootMinorFreezeArg &arg) const
 {
   int ret = OB_SUCCESS;
+  ObMinorFreezeArg freeze_arg;
+  Int64 result;
   if (OB_FAIL(check_cancel())) {
     LOG_WARN("minor freeze canceled", K(ret));
-  } else if (OB_ISNULL(GCTX.ob_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("local observer service is null", KR(ret));
   } else {
-    Int64 result;
-    if (OB_FAIL(GCTX.ob_service_->minor_freeze(arg, result))) {
-      LOG_WARN("local minor freeze failed", KR(ret), K(arg));
-    } else if (OB_SUCCESS != static_cast<int>(result)) {
-      ret = static_cast<int>(result);
-      LOG_WARN("local minor freeze returned error", KR(ret), K(arg));
+    if (arg.tablet_id_.is_valid()) {
+      freeze_arg.tablet_id_ = arg.tablet_id_;
+    }
+    if (OB_FAIL(GCTX.ob_service_->minor_freeze(freeze_arg, result))) {
+      LOG_WARN("local minor freeze failed", K(ret), K(freeze_arg));
+    } else if (OB_FAIL(static_cast<int>(result))) {
+      LOG_WARN("local minor freeze returned error", K(ret), K(freeze_arg));
     }
   }
 

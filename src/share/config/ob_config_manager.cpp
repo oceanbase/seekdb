@@ -130,6 +130,32 @@ int ObConfigManager::got_version()
   return ret;
 }
 
+int ObConfigManager::add_extra_config(const obcall::ObRuntimeConfigArg &arg)
+{
+  int ret = OB_SUCCESS;
+  if (!arg.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_ERROR("invalid arg", K(ret), K(arg));
+  } else {
+    ret = server_config_.add_extra_config(arg.config_str_.ptr());
+  }
+  LOG_INFO("add extra runtime config", K(arg));
+  return ret;
+}
+
+int ObConfigManager::init_runtime_config(const obcall::ObRuntimeConfigArg &arg)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(add_extra_config(arg))) {
+    LOG_WARN("fail to add extra config", KR(ret), K(arg));
+  } else {
+    if (OB_FAIL(server_config_.publish_special_config_after_dump())) {
+      LOG_WARN("publish special config after dump failed", K(ret));
+    }
+  }
+  return ret;
+}
+
 int ObConfigManager::save_config(
     const char *config_name,
     const char *value)

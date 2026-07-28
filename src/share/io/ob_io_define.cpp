@@ -1550,6 +1550,15 @@ void ObIOHandle::estimate()
 {
   if (OB_NOT_NULL(result_) && result_->is_finished_ && !ATOMIC_CAS(&result_->has_estimated_, false, true)) {
     const int64_t result_delay = get_io_interval(result_->time_log_.end_ts_, result_->time_log_.begin_ts_);
+    if (result_->flag_.is_read()) {
+      EVENT_INC(IO_READ_COUNT);
+      EVENT_ADD(IO_READ_BYTES, result_->size_);
+      EVENT_ADD(IO_READ_DELAY, result_delay);
+    } else {
+      EVENT_INC(IO_WRITE_COUNT);
+      EVENT_ADD(IO_WRITE_BYTES, result_->size_);
+      EVENT_ADD(IO_WRITE_DELAY, result_delay);
+    }
     static const int64_t LONG_IO_PRINT_TRIGGER_US = 1000L * 1000L * 3L; // 3s
     if (result_delay > LONG_IO_PRINT_TRIGGER_US) {
       LOG_WARN_RET(OB_ERR_TOO_MUCH_TIME, "io result wait too long", KPC(result_), K(result_delay));

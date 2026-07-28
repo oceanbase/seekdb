@@ -40,8 +40,10 @@ class ObPLDDLService
 public:
   //----Functions for managing routine----
   static int create_routine(const obcall::ObCreateRoutineArg &arg,
+                            obcall::ObRoutineDDLRes* res,
                             rootserver::ObDDLService &ddl_service);
   static int alter_routine(const obcall::ObCreateRoutineArg &arg,
+                           obcall::ObRoutineDDLRes* res,
                            rootserver::ObDDLService &ddl_service);
   static int drop_routine(const ObDropRoutineArg &arg,
                           rootserver::ObDDLService &ddl_service);
@@ -50,6 +52,7 @@ public:
 
   //----Functions for managing package----
   static int create_package(const obcall::ObCreatePackageArg &arg,
+                            obcall::ObRoutineDDLRes *res,
                             rootserver::ObDDLService &ddl_service);
   static int drop_package(const obcall::ObDropPackageArg &arg,
                           rootserver::ObDDLService &ddl_service);
@@ -60,6 +63,7 @@ public:
                             obcall::ObCreateTriggerRes *res,
                             rootserver::ObDDLService &ddl_service);
   static int alter_trigger(const obcall::ObAlterTriggerArg &arg,
+                           obcall::ObRoutineDDLRes *res,
                            rootserver::ObDDLService &ddl_service);
   static int drop_trigger(const obcall::ObDropTriggerArg &arg,
                           rootserver::ObDDLService &ddl_service);

@@ -623,9 +623,7 @@ int ObUserSqlService::grant_revoke_user(
     // insert into __all_user
     if (FAILEDx(exec.exec_update(OB_ALL_USER_TNAME, dml, affected_rows))) {
       LOG_WARN("execute insert failed", K(ret));
-    // An idempotent role grant may only refresh gmt_modified. Within the same time tick,
-    // the row remains unchanged and MySQL reports zero affected rows.
-    } else if (!is_zero_row(affected_rows) && !is_single_row(affected_rows)) {
+    } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("affected_rows unexpected", K(affected_rows), K(ret));
     }
@@ -767,6 +765,7 @@ int ObUserSqlService::gen_user_dml(
       || OB_FAIL(dml.add_column("PRIV_SUPER", user.get_priv(OB_PRIV_SUPER) ? 1 : 0))
       || OB_FAIL(dml.add_column("PRIV_PROCESS", user.get_priv(OB_PRIV_PROCESS) ? 1 : 0))
       || OB_FAIL(dml.add_column("IS_LOCKED", user.get_is_locked() ? 1 : 0))
+      || OB_FAIL(dml.add_column("PRIV_CREATE_SYNONYM", user.get_priv(OB_PRIV_CREATE_SYNONYM) ? 1 : 0))
       || OB_FAIL(dml.add_column("PRIV_FILE", user.get_priv(OB_PRIV_FILE) ? 1 : 0))
       || OB_FAIL(dml.add_column("PRIV_ALTER_SYSTEM", user.get_priv(OB_PRIV_ALTER_SYSTEM) ? 1 : 0))
       || OB_FAIL(dml.add_column("max_connections", user.get_max_connections()))

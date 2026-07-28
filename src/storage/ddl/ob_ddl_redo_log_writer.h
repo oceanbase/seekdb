@@ -307,9 +307,7 @@ public:
   int wait();
   void set_merge_slice_idx(const int64_t slice_idx) { param_.merge_slice_idx_ = slice_idx; }
 private:
-  int inner_write(
-      const ObDDLMacroBlockRedoInfo &redo_info,
-      const blocksstable::MacroBlockId &macro_block_id);
+  int inner_write(const ObDDLMacroBlockRedoInfo &redo_info);
   int write_redo_info_array();
 private:
   bool is_inited_;
@@ -318,7 +316,6 @@ private:
   ObDDLKvMgrHandle kv_mgr_handle_;
   ObArenaAllocator allocator_;
   ObSEArray<ObDDLMacroBlockRedoInfo, 2> redo_info_array_;
-  ObSEArray<blocksstable::MacroBlockId, 2> macro_block_id_array_;
 };
 
 }  // end namespace storage

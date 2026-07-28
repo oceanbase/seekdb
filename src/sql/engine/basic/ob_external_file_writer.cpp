@@ -18,7 +18,6 @@
 
 #include "ob_external_file_writer.h"
 #include "ob_select_into_basic.h"
-#include "lib/alloc/alloc_struct.h"
 
 namespace oceanbase
 {
@@ -210,6 +209,7 @@ int64_t ObCsvFileWriter::get_curr_bytes_exclude_curr_line()
       // so the size of the internal buffer needs to be taken into account
       // when enforcing the configured file size limit.
       // zstd: 128 KB, gzip: 64KB. use the maximum buffer size here.
+      const int64_t COMPRESSION_INTERNAL_BUFFER_SIZE = 128 * 1024; // 128KB
       curr_bytes_exclude_curr_line = get_compress_stream_writer()->get_write_bytes();
     }
   } else {
@@ -217,7 +217,6 @@ int64_t ObCsvFileWriter::get_curr_bytes_exclude_curr_line()
   }
   return curr_bytes_exclude_curr_line;
 }
-
 
 
 }

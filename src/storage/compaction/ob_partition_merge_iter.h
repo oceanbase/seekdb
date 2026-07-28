@@ -285,6 +285,7 @@ protected:
   bool need_recycle_mv_row()
   {
     bool need_recycle = false;
+    const int64_t base_version = access_context_.trans_version_range_.base_version_;
     const int64_t multi_version_start = access_context_.trans_version_range_.multi_version_start_;
     if (nullptr != curr_row_ && !curr_row_->is_uncommitted_row() && !curr_row_->is_last_multi_version_row()) {
       const int64_t commit_version = -curr_row_->storage_datums_[schema_rowkey_column_cnt_].get_int();

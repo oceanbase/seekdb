@@ -76,6 +76,7 @@ int ObCommonSqlProxy::read(ReadResult &result, const char *sql, const ObSessionP
     LOG_WARN("acquire connection failed", K(ret), K(conn));
   } else if (nullptr != session_param) {
     conn->set_ddl_info(&session_param->ddl_info_);
+    conn->set_use_external_session(session_param->use_external_session_);
     if (nullptr != session_param->sql_mode_) {
       if (OB_FAIL(conn->set_session_variable("sql_mode", *session_param->sql_mode_))) {
         LOG_WARN("set inner connection sql mode failed", K(ret));
@@ -166,6 +167,7 @@ int ObCommonSqlProxy::write(const ObString sql,
   }
   if (OB_SUCC(ret) && nullptr != param) {
     conn->set_is_load_data_exec(param->is_load_data_exec_);
+    conn->set_use_external_session(param->use_external_session_);
     conn->set_ob_enable_pl_cache(param->enable_pl_cache_);
     if (param->is_load_data_exec_) {
       is_user_sql = true;
@@ -174,6 +176,7 @@ int ObCommonSqlProxy::write(const ObString sql,
       LOG_WARN("fail to set ddl info", K(ret));
     }
     if (param->ddl_info_.is_ddl()) {
+      conn->set_nls_formats(param->nls_formats_);
     }
     if (!param->secure_file_priv_.empty()) {
       conn->set_session_variable("secure_file_priv", param->secure_file_priv_);

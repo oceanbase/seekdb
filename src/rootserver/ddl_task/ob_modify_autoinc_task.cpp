@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_modify_autoinc_task.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil

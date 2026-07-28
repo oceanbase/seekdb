@@ -46,7 +46,9 @@ public:
   }
   ~ObDefaultValueUtils() {}
   // Generate default values for columns that do not exist in insert values()
-  int generate_insert_value(const ColumnItem *column, ObRawExpr* &expr);
+  int generate_insert_value(const ColumnItem *column,
+                            ObRawExpr* &expr,
+                            bool has_instead_of_trigger = false);
   //resolve default()
   int resolve_default_function(ObRawExpr *&expr, ObStmtScope scope);
   static int resolve_default_function_static(const ObTableSchema *table_schema,

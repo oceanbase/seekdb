@@ -108,6 +108,9 @@ public:
                                   const ObIArray<ObObjectID> &partition_ids,
                                   ObCandiTabletLocIArray &candi_tablet_locs);
 
+  static int stroage_estimate_block_count_and_row_count(const obcall::ObEstBlockArg &arg,
+                                                        obcall::ObEstBlockRes &result);
+
   static int get_all_tablet_id_and_object_id(const ObTableStatParam &param,
                                              ObIArray<ObTabletID> &tablet_ids,
                                              ObIArray<ObObjectID> &partition_ids);

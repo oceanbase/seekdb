@@ -94,7 +94,6 @@ ObDataBlockMetaVal::~ObDataBlockMetaVal()
 
 void ObDataBlockMetaVal::reset()
 {
-  version_ = DATA_BLOCK_META_VAL_VERSION;
   length_ = 0;
   data_checksum_ = 0;
   rowkey_count_ = 0;
@@ -204,7 +203,7 @@ int ObDataBlockMetaVal::build_value(ObStorageDatum &datum,
   if (OB_UNLIKELY(size > estimate_size)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected size", K(ret), K(size), K(estimate_size), KPC(this));
-  } else if (OB_UNLIKELY(DATA_CURRENT_VERSION != data_version)) {
+  } else if (OB_UNLIKELY(data_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to build value, invalid data format version",
              K(ret), K(data_version), KPC(this));
@@ -226,8 +225,7 @@ int ObDataBlockMetaVal::serialize(char *buf,
                                   const int64_t data_version) const
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0 || pos < 0
-                                    || DATA_CURRENT_VERSION != data_version)) {
+  if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0 || pos < 0 || data_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len), K(pos), K(data_version));
   } else if (OB_UNLIKELY(!is_valid())) {
@@ -343,7 +341,7 @@ int ObDataBlockMetaVal::deserialize(const char *buf, const int64_t data_len, int
   return ret;
 }
 
-int64_t ObDataBlockMetaVal::get_max_serialize_size(const int64_t) const
+int64_t ObDataBlockMetaVal::get_max_serialize_size(const int64_t data_version) const
 {
   int64_t len = sizeof(*this);
   len -= (sizeof(column_checksums_) + sizeof(agg_row_buf_));
@@ -354,7 +352,7 @@ int64_t ObDataBlockMetaVal::get_max_serialize_size(const int64_t) const
   return len;
 }
 
-int64_t ObDataBlockMetaVal::get_serialize_size(const int64_t) const
+int64_t ObDataBlockMetaVal::get_serialize_size(const int64_t data_version) const
 {
   int64_t len = 0;
   len += serialization::encoded_length_i32(version_);
@@ -493,10 +491,9 @@ int ObDataMacroBlockMeta::build_estimate_row(ObDatumRow &row,
                                              const uint64_t data_version) const
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_valid() || !row.is_valid()
-                  || DATA_CURRENT_VERSION != data_version)) {
+  if (OB_UNLIKELY(!is_valid() || !row.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(row), K(data_version), KPC(this));
+    LOG_WARN("invalid args", K(ret), K(row), KPC(this));
   } else if (OB_UNLIKELY(val_.rowkey_count_ + 1 != row.get_column_count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Rowkey column count mismatch", K(ret), K(val_.rowkey_count_), K(row));
@@ -526,7 +523,7 @@ int ObDataMacroBlockMeta::build_estimate_row(ObDatumRow &row,
 int ObDataMacroBlockMeta::build_row(ObDatumRow &row, ObIAllocator &allocator, const uint64_t data_version) const
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_valid() || !row.is_valid() || DATA_CURRENT_VERSION != data_version)) {
+  if (OB_UNLIKELY(!is_valid() || !row.is_valid() || data_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(row), K(data_version), KPC(this));
   } else if (OB_UNLIKELY(val_.rowkey_count_ + 1 != row.get_column_count())) {
@@ -576,8 +573,7 @@ int ObDataMacroBlockMeta::serialize(char *buf, const int64_t buf_len, int64_t &p
   int ret = OB_SUCCESS;
   int64_t serialize_size = 0;
   const int64_t initial_pos = pos;
-  if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0 || pos < 0
-                                    || DATA_CURRENT_VERSION != data_version)) {
+  if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0 || pos < 0 || data_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len), K(pos), K(data_version));
   } else if (OB_UNLIKELY(!is_valid())) {

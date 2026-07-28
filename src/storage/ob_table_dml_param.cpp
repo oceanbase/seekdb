@@ -593,25 +593,52 @@ OB_DEF_DESERIALIZE(ObTableSchemaParam)
   if (OB_SUCC(ret) && OB_FAIL(read_info_.deserialize(allocator_, buf, data_len, pos))) {
     LOG_WARN("Fail to deserialize read_info", K(ret));
   }
-  if (OB_SUCC(ret)) {
-    ObString tmp_name;
-    if (OB_FAIL(tmp_name.deserialize(buf, data_len, pos))) {
-      LOG_WARN("failed to deserialize pk name", K(ret), K(data_len), K(pos));
-    } else if (OB_FAIL(ob_write_string(allocator_, tmp_name, pk_name_))) {
-      LOG_WARN("failed to copy pk name", K(ret), K(tmp_name));
-    }
+  // for compatibility: at least need two bytes to deserialize an ObString
+  const int64_t MINIMAL_NEEDED_SIZE = 2;
+  if (OB_SUCC(ret) && (data_len - pos) > MINIMAL_NEEDED_SIZE) {
+     ObString tmp_name;
+     if (OB_FAIL(tmp_name.deserialize(buf, data_len, pos))) {
+       LOG_WARN("failed to deserialize pk name", K(ret), K(data_len), K(pos));
+     } else if (OB_FAIL(ob_write_string(allocator_, tmp_name, pk_name_))) {
+       LOG_WARN("failed to copy pk name", K(ret), K(tmp_name));
+     }
   }
   OB_UNIS_DECODE(spatial_geo_col_id_);
   OB_UNIS_DECODE(spatial_cellid_col_id_);
   OB_UNIS_DECODE(spatial_mbr_col_id_);
   OB_UNIS_DECODE(lob_inrow_threshold_);
 
+  if (OB_SUCC(ret) && pos == data_len) {
+    // Here is to solve the compatibility problem and correct the `index_type_` and `index_status_`.
+    //
+    // Before version 4.3.1.0, the default value of `index_type_` and `index_sattus_` was max. In
+    // version 4.3.1.0, the full-text search and json multi-value indexes were introduced. If the
+    // RPC request from older version observer is received, the `index_type_` will be mistaken for
+    // a valid json multi-valued index.
+    //
+    // Therefore, if there are still unresolved fields here, it means that it is a new version
+    // observer. It is necessary to re-assign the initial values to the `index_type_` and
+    // `index_status_` to avoid misjudgment as a valid index.
+
+
+    // ATTENTION!!!
+    // The front-end version is currently only 4.3.0.x, and its value of max index type is 23.
+    if (23 == index_type_) {
+      index_type_ = INDEX_TYPE_IS_NOT;
+    }
+    // ATTENTION!!!
+    // The front-end version is currently only 4.3.0.x, and its value of max index status is 8.
+    if (8 == index_status_) {
+      index_status_ = INDEX_STATUS_NOT_FOUND;
+    }
+  }
+
   OB_UNIS_DECODE(multivalue_col_id_);
   OB_UNIS_DECODE(multivalue_arr_col_id_);
   OB_UNIS_DECODE(data_table_rowkey_column_num_);
-  OB_UNIS_DECODE(doc_id_col_id_);
+  OB_UNIS_DECODE(doc_id_col_id_)
 
-  if (OB_SUCC(ret)) {
+  if (OB_SUCC(ret) && pos < data_len) {
     ObString tmp_name;
     if (OB_FAIL(tmp_name.deserialize(buf, data_len, pos))) {
       LOG_WARN("fail to deserialize fts parser name", K(ret));
@@ -620,7 +647,7 @@ OB_DEF_DESERIALIZE(ObTableSchemaParam)
     }
   }
   OB_UNIS_DECODE(vec_id_col_id_);
-  if (OB_SUCC(ret)) {
+  if (OB_SUCC(ret) && pos < data_len) {
     ObString tmp_vec_index_param;
     if (OB_FAIL(tmp_vec_index_param.deserialize(buf, data_len, pos))) {
       LOG_WARN("fail to deserialize vec index param", K(ret));
@@ -630,7 +657,7 @@ OB_DEF_DESERIALIZE(ObTableSchemaParam)
   }
   OB_UNIS_DECODE(vec_dim_);
   OB_UNIS_DECODE(vec_vector_col_id_);
-  if (OB_SUCC(ret)) {
+  if (OB_SUCC(ret) && pos < data_len) {
     ObString tmp_properties;
     if (OB_FAIL(tmp_properties.deserialize(buf, data_len, pos))) {
       LOG_WARN("fail to deserialize fts parser properties", K(ret));
@@ -641,11 +668,8 @@ OB_DEF_DESERIALIZE(ObTableSchemaParam)
   OB_UNIS_DECODE(inc_pk_doc_id_col_id_);
   OB_UNIS_DECODE(vec_chunk_col_id_);
   OB_UNIS_DECODE(vec_embedded_col_id_);
-  if (OB_SUCC(ret) && OB_FAIL(serialization::decode_bool(buf, data_len, pos, &has_async_index_))) {
-    LOG_WARN("fail to deserialize async index flag", K(ret), K(data_len), K(pos));
-  } else if (OB_SUCC(ret) && OB_UNLIKELY(pos != data_len)) {
-    ret = OB_VERSION_NOT_MATCH;
-    LOG_WARN("table schema param format mismatch", K(ret), K(data_len), K(pos));
+  if (OB_SUCC(ret) && pos < data_len) {
+    OB_UNIS_DECODE(has_async_index_);
   }
   return ret;
 }

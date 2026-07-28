@@ -26,6 +26,7 @@
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 
 using namespace oceanbase::rootserver;
+using namespace oceanbase::obcall;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::transaction::tablelock;
 using namespace oceanbase::common;
@@ -1031,11 +1032,13 @@ int ObDropTableHelper::collect_aux_table_schemas_(
       }
     }
 
-    // lob meta & lob piece
+    // aux vp & lob meta & lob piece
     ObArray<uint64_t> aux_table_ids;
     const uint64_t aux_lob_piece_table_id = table_schema.get_aux_lob_piece_tid();
     const uint64_t aux_lob_meta_table_id = table_schema.get_aux_lob_meta_tid();
-    if (OB_INVALID_ID != aux_lob_piece_table_id && OB_FAIL(aux_table_ids.push_back(aux_lob_piece_table_id))) {
+    if (FAILEDx(table_schema.get_aux_vp_tid_array(aux_table_ids))) {
+      LOG_WARN("get_aux_vp_tid_array failed", KR(ret));
+    } else if (OB_INVALID_ID != aux_lob_piece_table_id && OB_FAIL(aux_table_ids.push_back(aux_lob_piece_table_id))) {
       LOG_WARN("push back aux_lob_piece_table_id failed", KR(ret));
     } else if (OB_INVALID_ID != aux_lob_meta_table_id && OB_FAIL(aux_table_ids.push_back(aux_lob_meta_table_id))) {
       LOG_WARN("push back aux_lob_meta_table_id failed", KR(ret));
@@ -1187,11 +1190,13 @@ int ObDropTableHelper::lock_aux_tables_by_id_(const ObTableSchema &table_schema)
       }
     }
 
-    // aux lob piece and lob meta
+    // aux (vertical partition, lob piece, lob meta)
     ObArray<uint64_t> aux_table_ids;
     const uint64_t aux_lob_piece_table_id = table_schema.get_aux_lob_piece_tid();
     const uint64_t aux_lob_meta_table_id = table_schema.get_aux_lob_meta_tid();
-    if (OB_INVALID_ID != aux_lob_piece_table_id && OB_FAIL(aux_table_ids.push_back(aux_lob_piece_table_id))) {
+    if (FAILEDx(table_schema.get_aux_vp_tid_array(aux_table_ids))) {
+      LOG_WARN("get_aux_vp_tid_array failed", KR(ret));
+    } else if (OB_INVALID_ID != aux_lob_piece_table_id && OB_FAIL(aux_table_ids.push_back(aux_lob_piece_table_id))) {
       LOG_WARN("push back aux_lob_piece_table_id failed", KR(ret));
     } else if (OB_INVALID_ID != aux_lob_meta_table_id && OB_FAIL(aux_table_ids.push_back(aux_lob_meta_table_id))) {
       LOG_WARN("push back aux_lob_meta_table_id failed", KR(ret));

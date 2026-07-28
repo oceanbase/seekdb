@@ -1146,7 +1146,7 @@ int ObTransformGroupByPullup::need_transform(const common::ObIArray<ObParentDMLS
   } else if (bypass) {
     need_trans = false;
     OPT_TRACE("transform rule bypassed");
-  } else if (!stmt.is_sel_del_upd() || stmt.is_set_stmt()) {
+  } else if (!stmt.is_sel_del_upd() || stmt.has_instead_of_trigger() || stmt.is_set_stmt()) {
     need_trans = false;
   } else if (stmt.get_from_item_size() == 0) {
     need_trans = false;

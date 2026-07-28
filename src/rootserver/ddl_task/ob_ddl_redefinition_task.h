@@ -90,8 +90,7 @@ private:
   bool is_error_need_retry(const int ret_code) const
   {
     return common::OB_TIMEOUT == ret_code || common::OB_TABLET_NOT_EXIST == ret_code || common::OB_NOT_MASTER == ret_code ||
-           common::OB_EAGAIN == ret_code || common::OB_LS_NOT_EXIST == ret_code ||
-           common::OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST == ret_code;
+           common::OB_EAGAIN == ret_code;
   }
 private:
   bool is_inited_;
@@ -118,6 +117,7 @@ public:
   virtual int process() = 0;
   virtual int update_complete_sstable_job_status(
       const common::ObTabletID &tablet_id,
+      const ObAddr &addr,
       const int64_t snapshot_version,
       const int64_t execution_id,
       const int ret_code,

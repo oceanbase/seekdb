@@ -65,7 +65,8 @@ private:
   int response_result(ObMySQLResultSet &result, bool force_sync_resp, bool &async_resp_used);
   int get_schema_info_(ObCachedSchemaGuardInfo *cache_info,
                       share::schema::ObSchemaGetterGuard *&schema_guard,
-                      int64_t &database_schema_version);
+                      int64_t &runtime_schema_version,
+                      int64_t &sys_version);
   int do_process(sql::ObSQLSessionInfo &session,
                  bool has_more_result,
                  bool force_sync_resp,
@@ -99,6 +100,11 @@ private:
                                bool &is_trans_ctrl_cmd,
                                stmt::StmtType &stmt_type);
 
+  void record_stat(const sql::stmt::StmtType type, const int64_t end_time,
+                   const sql::ObSQLSessionInfo& session,
+                   const int64_t ret,
+                   const bool is_commit_cmd,
+                   const bool is_rollback_cmd) const;
   void update_audit_info(const ObWaitEventStat &total_wait_desc,
                          ObAuditRecordData &record);
   int try_batched_multi_stmt_optimization(sql::ObSQLSessionInfo &session,

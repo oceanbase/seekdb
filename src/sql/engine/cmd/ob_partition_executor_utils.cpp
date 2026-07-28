@@ -88,6 +88,28 @@ int ObPartitionExecutorUtils::calc_values_exprs_for_alter_table(ObExecContext &c
   return ret;
 }
 
+int ObPartitionExecutorUtils::check_transition_interval_valid(const stmt::StmtType stmt_type,
+                                                              ObExecContext &ctx,
+                                                              ObRawExpr *transition_expr,
+                                                              ObRawExpr *interval_expr)
+{
+  int ret = OB_SUCCESS;
+  ParamStore dummy_params;
+  ObObj temp_obj;
+  ObRawExprFactory raw_expr_factory(ctx.get_allocator());
+
+  CK (transition_expr != NULL);
+  CK (interval_expr != NULL);
+  CK (interval_expr->is_const_expr());
+  OZ (ObSQLUtils::calc_simple_expr_without_row(ctx.get_my_session(),
+                                   interval_expr, temp_obj, &dummy_params, ctx.get_allocator()));
+  if (OB_SUCC(ret) && temp_obj.is_zero()) {
+    ret = OB_ERR_INTERVAL_CANNOT_BE_ZERO;
+    LOG_WARN("interval can not be zero"); 
+  }
+  return ret;
+}
+
 int ObPartitionExecutorUtils::calc_values_exprs(ObExecContext &ctx,
                                                 const stmt::StmtType stmt_type,
                                                 ObTableSchema &table_schema,
@@ -138,6 +160,14 @@ int ObPartitionExecutorUtils::calc_values_exprs(ObExecContext &ctx,
                                                       table_schema.get_first_part_num(),
                                                       stmt_type))) {
         LOG_WARN("failed to check range value exprs", K(ret));
+      } else if (stmt.get_interval_expr() != NULL) {
+        int64_t part_num = stmt.get_part_values_exprs().count();
+        CK (part_num >= 1);
+        OZ (check_transition_interval_valid(stmt_type,
+                                            ctx, 
+                                            stmt.get_part_values_exprs().at(part_num - 1), 
+                                            stmt.get_interval_expr()));
+        OZ (set_interval_value(ctx, stmt_type, table_schema, stmt.get_interval_expr()));
       }
     } 
   }
@@ -459,6 +489,29 @@ int ObPartitionExecutorUtils::set_range_part_high_bound(ObExecContext &ctx,
   return ret;
 }
 
+int ObPartitionExecutorUtils::set_interval_value(ObExecContext &ctx,
+                                                 const stmt::StmtType stmt_type,
+                                                 ObTableSchema &table_schema,
+                                                 ObRawExpr *interval_expr)
+{
+  ObObj value_obj;
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(expr_cal_and_cast_with_check_varchar_len(stmt_type, false /*is_list_part*/, 
+                                                       ctx,
+                                                       interval_expr->get_result_type(),
+                                                       interval_expr,
+                                                       value_obj))) {
+    LOG_WARN("fail to cast_expr_to_obj", K(ret));
+  } else {
+    ObRowkey interval_rowkey;
+    interval_rowkey.assign(&value_obj, 1);
+    
+    OX (table_schema.get_part_option().set_part_func_type(PARTITION_FUNC_TYPE_INTERVAL));
+    OZ (table_schema.set_interval_range(interval_rowkey));
+  }
+  return ret;
+}
+
 template<typename T>
 int ObPartitionExecutorUtils::check_increasing_range_value(T **array,
                                                            int64_t part_num,
@@ -564,6 +617,7 @@ int ObPartitionExecutorUtils::expr_cal_and_cast(
     // TO_DAYS('abc') is compatible with MySQL, regardless of what cast_mode is set to in the session, WARN_ON_FAIL is required here
     // Because abc is an invalid parameter, let to_days return NULL
     expr_ctx.cast_mode_ = CM_WARN_ON_FAIL; //always set to WARN_ON_FAIL to allow calculate
+    EXPR_SET_CAST_CTX_MODE(expr_ctx);
     ObNewRow tmp_row;
     RowDesc row_desc;
     ObTempExpr *temp_expr = NULL;
@@ -659,6 +713,7 @@ int ObPartitionExecutorUtils::expr_cal_and_cast_with_check_varchar_len(
     // TO_DAYS('abc') compatible with mysql, regardless of what cast_mode is set in the session, WARN_ON_FAIL is required here
     // Because abc is an invalid parameter, let to_days return NULL
     expr_ctx.cast_mode_ |= CM_WARN_ON_FAIL; //always set to WARN_ON_FAIL to allow calculate
+    EXPR_SET_CAST_CTX_MODE(expr_ctx);
     ObNewRow tmp_row;
     RowDesc row_desc;
     ObTempExpr *temp_expr = NULL;
@@ -901,6 +956,55 @@ int ObPartitionExecutorUtils::sort_list_paritition_if_need(ObTableSchema &table_
       lib::ob_sort(partition_array,
                 partition_array + array_count,
                 ObBasePartition::list_part_func_layout);
+    }
+  }
+  return ret;
+}
+
+int ObPartitionExecutorUtils::check_interval_partition_table(
+    const ObRowkey &transition_point,
+    const ObRowkey &interval_range)
+{
+  int ret = OB_SUCCESS;
+
+  const stmt::StmtType stmt_type = stmt::T_NONE;
+  SMART_VARS_4((ObExprCtx, expr_ctx),
+               (ObArenaAllocator, local_allocator),
+               (ObExecContext, exec_ctx, local_allocator),
+               (ObSQLSessionInfo, session_info)) {
+
+    OZ (session_info.init(0, &local_allocator, NULL));
+    OX (session_info.set_time_zone(ObString("+8:00"), true, true));
+    OZ (session_info.load_default_sys_variable(false, false));
+    OZ (session_info.load_default_configs_in_pc());
+    OX (exec_ctx.set_my_session(&session_info));
+
+    if (OB_SUCC(ret)) {
+      ObNewRow tmp_row;
+      RowDesc row_desc;
+      ObObj temp_obj;
+      ParamStore dummy_params;
+
+      OZ (ObSQLUtils::wrap_expr_ctx(stmt_type, exec_ctx, exec_ctx.get_allocator(), expr_ctx));
+      ObExprOperatorFactory expr_op_factory(exec_ctx.get_allocator());
+      ObRawExprFactory raw_expr_factory(exec_ctx.get_allocator());
+      ObExprGeneratorImpl expr_gen(expr_op_factory, 0, 0, NULL, row_desc);
+      ObSqlExpression sql_expr(exec_ctx.get_allocator());
+      expr_ctx.cast_mode_ = CM_WARN_ON_FAIL; //always set to WARN_ON_FAIL to allow calculate
+
+      ObConstRawExpr *transition_expr = NULL;
+      ObConstRawExpr *interval_expr = NULL;
+
+      OZ (ObRawExprUtils::build_const_obj_expr(raw_expr_factory, transition_point.get_obj_ptr()[0], transition_expr));
+      OZ (ObRawExprUtils::build_const_obj_expr(raw_expr_factory, interval_range.get_obj_ptr()[0], interval_expr));
+
+      OZ (interval_expr->formalize(exec_ctx.get_my_session()));
+      CK (interval_expr->is_const_expr());
+
+      OZ (sql::ObPartitionExecutorUtils::check_transition_interval_valid(stmt::StmtType::T_NONE,
+                                                          exec_ctx,
+                                                          transition_expr,
+                                                          interval_expr));
     }
   }
   return ret;

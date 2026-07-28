@@ -35,6 +35,7 @@ namespace rootserver
 {
 
 int ObPLDDLService::create_routine(const obcall::ObCreateRoutineArg &arg,
+                                   obcall::ObRoutineDDLRes *res,
                                    rootserver::ObDDLService &ddl_service)
 {
   int ret = OB_SUCCESS;
@@ -114,6 +115,9 @@ int ObPLDDLService::create_routine(const obcall::ObCreateRoutineArg &arg,
           LOG_WARN("failed to replace routine", K(routine_info), K(ret));
         }
       }
+    }
+    if (OB_SUCC(ret) && OB_NOT_NULL(res)) {
+      res->store_routine_schema_version_ = routine_info.get_schema_version();
     }
   }
   return ret;
@@ -230,6 +234,7 @@ int ObPLDDLService::create_routine(ObRoutineInfo &routine_info,
 }
 
 int ObPLDDLService::alter_routine(const obcall::ObCreateRoutineArg &arg,
+                                  obcall::ObRoutineDDLRes* res,
                                   rootserver::ObDDLService &ddl_service)
 {
   int ret = OB_SUCCESS;
@@ -248,12 +253,14 @@ int ObPLDDLService::alter_routine(const obcall::ObCreateRoutineArg &arg,
     }
     if (OB_FAIL(ret)) {
     } else if (arg.is_need_alter_) {
-      if (OB_FAIL(create_routine(arg, ddl_service))) {
+      if (OB_FAIL(create_routine(arg, res, ddl_service))) {
         LOG_WARN("failed to alter routine with create", K(ret));
       }
     } else {
       if (OB_FAIL(alter_routine(*routine_info, error_info, &arg.ddl_stmt_str_, schema_guard, ddl_service))) {
         LOG_WARN("alter routine failed", K(ret), K(arg.routine_info_), K(error_info));
+      } else if (OB_NOT_NULL(res)) {
+        res->store_routine_schema_version_ = routine_info->get_schema_version();
       }
     }
   }
@@ -436,50 +443,46 @@ int ObPLDDLService::drop_routine(const ObRoutineInfo &routine_info,
     } else if (OB_FAIL(pl_operator.drop_routine(routine_info, trans, error_info, ddl_stmt_str))) {
       LOG_WARN("drop procedure failed", K(ret), K(routine_info));
     } else {
-      const ObSysVarSchema *sys_var = NULL;
-      ObMalloc alloc(ObModIds::OB_TEMP_VARIABLES);
-      ObObj val;
-      if (OB_FAIL(schema_guard.get_system_variable(SYS_VAR_AUTOMATIC_SP_PRIVILEGES, sys_var))) {
-        LOG_WARN("fail to get system variable schema", K(ret));
-      } else if (OB_ISNULL(sys_var)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("sys variable schema is null", KR(ret));
-      } else if (OB_FAIL(sys_var->get_value(&alloc, NULL, val))) {
-        LOG_WARN("fail to get automatic_sp_privileges value", K(ret));
-      } else if (val.get_bool()) {
-        const int64_t db_id = routine_info.get_database_id();
-        const ObDatabaseSchema *database_schema = NULL;
-        ObSEArray<const ObUserInfo *, 10> user_infos;
-        if (OB_FAIL(schema_guard.get_database_schema(db_id, database_schema))) {
-          LOG_WARN("get database schema failed", K(ret));
-        } else if (OB_ISNULL(database_schema)) {
+        const ObSysVarSchema *sys_var = NULL;
+        ObMalloc alloc(ObModIds::OB_TEMP_VARIABLES);
+        ObObj val;
+        if (OB_FAIL(schema_guard.get_system_variable(SYS_VAR_AUTOMATIC_SP_PRIVILEGES, sys_var))) {
+          LOG_WARN("fail to get system variable schema", K(ret));
+        } else if (OB_ISNULL(sys_var)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("database schema is null", K(ret));
-        } else if (OB_FAIL(schema_guard.get_user_infos_by_id(user_infos))) {
-          LOG_WARN("fail to get all users", K(ret));
-        }
-        for (int64_t i = 0; OB_SUCC(ret) && i < user_infos.count(); ++i) {
-          const ObUserInfo *user_info = user_infos.at(i);
-          if (OB_ISNULL(user_info)) {
+          LOG_WARN("sys variable schema is null", KR(ret));
+        } else if (OB_FAIL(sys_var->get_value(&alloc, NULL, val))) {
+          LOG_WARN("fail to get charset var value", K(ret));
+        } else if (val.get_bool()) {
+          int64_t db_id = routine_info.get_database_id();
+          const ObDatabaseSchema* database_schema = NULL;
+          ObSEArray<const ObUserInfo*, 10> user_infos;
+          if (OB_FAIL(schema_guard.get_database_schema( db_id, database_schema))) {
+            LOG_WARN("get database schema failed", K(ret));
+          } else if (OB_ISNULL(database_schema)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected null user info", K(ret));
-          } else {
-            ObRoutinePrivSortKey routine_key(
-                user_info->get_user_id(),
-                database_schema->get_database_name_str(),
-                routine_info.get_routine_name(),
-                routine_info.is_procedure()
-                    ? ObRoutineType::ROUTINE_PROCEDURE_TYPE
-                    : ObRoutineType::ROUTINE_FUNCTION_TYPE);
-            const ObPrivSet priv_set = OB_PRIV_EXECUTE | OB_PRIV_ALTER_ROUTINE;
-            bool gen_ddl_stmt = false;
-            if (OB_FAIL(pl_operator.revoke_routine(
-                    routine_key, priv_set, trans, false, gen_ddl_stmt))) {
-              LOG_WARN("fail to revoke routine privileges", K(ret), K(routine_key), K(priv_set));
+            LOG_WARN("database schema is null", K(ret));
+          } else if (OB_FAIL(schema_guard.get_user_infos_by_id(user_infos))) {
+            LOG_WARN("fail to get all users", K(ret));
+          }
+          for (int64_t i = 0; OB_SUCC(ret) && i < user_infos.count(); ++i) {
+            const ObUserInfo *user_info = user_infos.at(i);
+            if (OB_ISNULL(user_info)) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("unexpected null", K(ret));
+            } else {
+              ObRoutinePrivSortKey routine_key(user_info->get_user_id(), 
+                                            database_schema->get_database_name_str(), 
+                                            routine_info.get_routine_name(), routine_info.is_procedure() ? 
+                                            ObRoutineType::ROUTINE_PROCEDURE_TYPE : ObRoutineType::ROUTINE_FUNCTION_TYPE);
+              ObPrivSet priv_set = (OB_PRIV_EXECUTE | OB_PRIV_ALTER_ROUTINE);
+              bool gen_ddl_stmt = false;
+              if (OB_FAIL(pl_operator.revoke_routine(routine_key, priv_set, trans, false, gen_ddl_stmt))) {
+                LOG_WARN("fail to grant routine", K(ret), K(routine_key), K(priv_set));
+              }
             }
           }
         }
-      }
     }
     if (trans.is_started()) {
       int temp_ret = OB_SUCCESS;
@@ -500,6 +503,7 @@ int ObPLDDLService::drop_routine(const ObRoutineInfo &routine_info,
 
 //----Functions for managing package----
 int ObPLDDLService::create_package(const obcall::ObCreatePackageArg &arg,
+                                    obcall::ObRoutineDDLRes *res,
                                     rootserver::ObDDLService &ddl_service)
 {
   int ret = OB_SUCCESS;
@@ -577,6 +581,9 @@ int ObPLDDLService::create_package(const obcall::ObCreatePackageArg &arg,
                        database_name.length(), database_name.ptr(),
                        new_package_info.get_package_name().length(), new_package_info.get_package_name().ptr());
       }
+    }
+    if (OB_SUCC(ret) && OB_NOT_NULL(res)) {
+      res->store_routine_schema_version_ = new_package_info.get_schema_version();
     }
   }
   return ret;
@@ -745,6 +752,7 @@ int ObPLDDLService::create_trigger(const obcall::ObCreateTriggerArg &arg,
 }
 
 int ObPLDDLService::alter_trigger(const obcall::ObAlterTriggerArg &arg,
+                                  obcall::ObRoutineDDLRes *res,
                                   rootserver::ObDDLService &ddl_service)
 {
   int ret = OB_SUCCESS;
@@ -783,6 +791,10 @@ int ObPLDDLService::alter_trigger(const obcall::ObAlterTriggerArg &arg,
           OX (new_tg_info.set_is_enable(is_enable));
         }
         OZ (pl_operator.alter_trigger(new_tg_info, trans, &arg.ddl_stmt_str_));
+      }
+      // alter trigger scenes
+      if (OB_SUCC(ret) && 1 == arg.trigger_infos_.count() && OB_NOT_NULL(res)) {
+        res->store_routine_schema_version_ = new_tg_info.get_schema_version();
       }
     }
     if (trans.is_started()) {
@@ -1117,10 +1129,17 @@ int ObPLDDLService::adjust_trigger_action_order(share::schema::ObSchemaGetterGua
 
   common::ObSArray<uint64_t> trg_list;
   if (OB_SUCC(ret)) {
-    const ObTableSchema *table_schema = NULL;
-    OZ (schema_guard.get_table_schema( trigger_info.get_base_object_id(), table_schema));
-    OV (OB_NOT_NULL(table_schema));
-    OZ (trg_list.assign(table_schema->get_trigger_list()));
+    if (trigger_info.is_dml_type()) {
+      const ObTableSchema *table_schema = NULL;
+      OZ (schema_guard.get_table_schema( trigger_info.get_base_object_id(), table_schema));
+      OV (OB_NOT_NULL(table_schema));
+      OZ (trg_list.assign(table_schema->get_trigger_list()));
+    } else if (trigger_info.is_system_type()) {
+      const ObUserInfo *user_info = NULL;
+      OZ (schema_guard.get_user_info(trigger_info.get_base_object_id(), user_info));
+      OV (OB_NOT_NULL(user_info));
+      OZ (trg_list.assign(user_info->get_trigger_list()));
+    }
   }
   if (OB_SUCC(ret)) {
     const ObTriggerInfo *old_trg_info = NULL;
@@ -1376,9 +1395,11 @@ int ObPLDDLService::rebuild_triggers_on_hidden_table(
     OX (new_trigger_info.set_trigger_id(OB_INVALID_ID));
     // Preserve the original trigger database id when rebuilding on the hidden table.
     OX (new_trigger_info.set_database_id(trigger_info->get_database_id()));
-    // Offline DDL drops the original trigger before creating it on the hidden table.
-    OZ (pl_operator.drop_trigger(*trigger_info, trans,
-      nullptr, false/*is_update_table_schema_version*/));
+    if (OB_SUCC(ret)) {
+      // Offline DDL drops the original trigger before creating its replacement.
+      OZ (pl_operator.drop_trigger(*trigger_info, trans,
+        nullptr, false/*is_update_table_schema_version*/));
+    }
     if (OB_SUCC(ret)) {
       ObSEArray<ObDependencyInfo, 1> dep_infos;
       int64_t table_schema_version = OB_INVALID_VERSION;

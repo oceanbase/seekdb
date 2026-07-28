@@ -25,6 +25,7 @@ namespace oceanbase
 {
 using namespace common;
 using namespace share;
+using namespace transaction;
 namespace sql
 {
 // implement of subschema mapping

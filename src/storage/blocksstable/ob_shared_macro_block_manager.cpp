@@ -97,7 +97,7 @@ void ObSharedMacroBlockMgr::destroy()
   is_inited_ = false;
 }
 
-int ObSharedMacroBlockMgr::module_init(ObSharedMacroBlockMgr* &shared_block_mgr)
+int ObSharedMacroBlockMgr::mtl_init(ObSharedMacroBlockMgr* &shared_block_mgr)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == shared_block_mgr)) {
@@ -743,7 +743,7 @@ int ObSharedMacroBlockMgr::prepare_data_desc(
     const ObSSTableBasicMeta &basic_meta,
     const ObMergeType &merge_type,
     const int64_t snapshot_version,
-    const int64_t major_data_version,
+    const int64_t cluster_version,
     const share::SCN &end_scn,
     ObWholeDataStoreDesc &data_desc) const
 {
@@ -763,13 +763,12 @@ int ObSharedMacroBlockMgr::prepare_data_desc(
           tablet.get_tablet_meta().tablet_id_,
           merge_type,
           snapshot_version,
-          major_data_version,
+          cluster_version,
           tablet.get_tablet_meta().micro_index_clustered_,
           0/*concurrent_cnt*/,
           end_scn))) {
       LOG_WARN("failed to init static desc", K(ret), KPC(storage_schema),
-        K(tablet), "merge_type", merge_type_to_str(merge_type), K(snapshot_version),
-        "major_data_version", DVP(major_data_version));
+        K(tablet), "merge_type", merge_type_to_str(merge_type), K(snapshot_version), K(cluster_version));
     }
   } else {
     ObArenaAllocator tmp_arena("ShrBlkMgrTmp");
@@ -784,15 +783,15 @@ int ObSharedMacroBlockMgr::prepare_data_desc(
           tablet.get_tablet_meta().tablet_id_,
           merge_type,
           snapshot_version,
-          major_data_version,
+          cluster_version,
           tablet.get_tablet_meta().micro_index_clustered_,
           0/*concurrent_cnt*/,
           end_scn))) {
       LOG_WARN("failed to init static desc", K(ret), KPC(storage_schema),
-        K(tablet), "merge_type", merge_type_to_str(merge_type), K(snapshot_version),
-        "major_data_version", DVP(major_data_version));
+        K(tablet), "merge_type", merge_type_to_str(merge_type), K(snapshot_version), K(cluster_version));
     } else if (OB_FAIL(data_desc.get_desc().update_basic_info_from_macro_meta(basic_meta))) {
-      // Keep the new sstable's basic storage layout aligned with the source sstable.
+      // overwrite the encryption related memberships, otherwise these memberships of new sstable may differ
+      // from that of old sstable, since the encryption method of one tablet may change before defragmentation
       LOG_WARN("failed to update basic info from macro_meta", KR(ret), K(basic_meta));
     } else if (OB_FAIL(data_desc.get_col_desc().mock_valid_col_default_checksum_array(basic_meta.column_cnt_))) {
       LOG_WARN("fail to mock valid col default checksum array", K(ret), K(basic_meta.column_cnt_));

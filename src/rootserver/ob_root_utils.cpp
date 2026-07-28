@@ -16,10 +16,11 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_root_utils.h"
 #include "logservice/ob_log_service.h"
-#include "share/ob_max_id_cache.h"
-#include "share/ob_max_id_fetcher.h"
+#include "share/ob_max_id_cache.h"  // relocated-definition owner
+#include "share/ob_max_id_fetcher.h"  // relocated-definition owner
 
 using namespace oceanbase::rootserver;
 using namespace oceanbase::share;
@@ -27,6 +28,7 @@ using namespace oceanbase::share::schema;
 using namespace oceanbase::common;
 using namespace oceanbase::common::hash;
 using namespace oceanbase::common::sqlclient;
+using namespace oceanbase::obcall;
 
 ///////////////////////////////
 

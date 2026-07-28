@@ -171,8 +171,10 @@ struct ObPlanCacheKey : public ObILibCacheKey
     uint16_t flag_;
     struct
     {
+      uint16_t use_rich_vector_format_ : 1; // FARM COMPAT WHITELIST
+      uint16_t config_use_rich_format_ : 1;
       uint16_t enable_mysql_compatible_dates_ : 1;
-      uint16_t reserved_ : 15; // reserved
+      uint16_t reserved_ : 13; // reserved
     };
   };
   uint64_t sys_var_config_hash_val_;

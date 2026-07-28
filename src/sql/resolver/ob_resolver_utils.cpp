@@ -298,9 +298,29 @@ int ObResolverUtils::collect_schema_version(share::schema::ObSchemaGetterGuard &
       }
     }
     OX (expr->set_is_called_in_sql(is_called_in_sql));
-  } else if (T_FUN_PL_OBJECT_CONSTRUCT == expr->get_expr_type()
-             || T_FUN_PL_COLLECTION_CONSTRUCT == expr->get_expr_type()
-             || T_OBJ_ACCESS_REF == expr->get_expr_type()) {
+  } else if (T_FUN_PL_OBJECT_CONSTRUCT == expr->get_expr_type()) {
+    ObObjectConstructRawExpr *object_expr = static_cast<ObObjectConstructRawExpr*>(expr);
+    ObSchemaObjVersion ver;
+    CK (OB_NOT_NULL(object_expr));
+    if (OB_SUCC(ret) && object_expr->need_add_dependency()) {
+      OZ (object_expr->get_schema_object_version(ver));
+      OZ (dependency_objects.push_back(ver));
+      if (OB_NOT_NULL(dep_db_array)) {
+        OZ (dep_db_array->push_back(object_expr->get_database_id()));
+      }
+    }
+  } else if (T_FUN_PL_COLLECTION_CONSTRUCT == expr->get_expr_type()) {
+    ObCollectionConstructRawExpr *coll_expr = static_cast<ObCollectionConstructRawExpr*>(expr);
+    ObSchemaObjVersion ver;
+    CK (OB_NOT_NULL(coll_expr));
+    if (OB_SUCC(ret) && coll_expr->need_add_dependency()) {
+      OZ (coll_expr->get_schema_object_version(ver));
+      OZ (dependency_objects.push_back(ver));
+      if (OB_NOT_NULL(dep_db_array)) {
+        OZ (dep_db_array->push_back(coll_expr->get_database_id()));
+      }
+    }
+  } else if (T_OBJ_ACCESS_REF == expr->get_expr_type()) {
     for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
       OZ (collect_schema_version(schema_guard,
                                  session_info,
@@ -672,17 +692,18 @@ int ObResolverUtils::check_routine_exists(const ObSQLSessionInfo *session_info,
                                           const ObString &routine_name,
                                           const share::schema::ObRoutineType routine_type,
                                           bool &exists,
-                                          pl::ObProcType &proc_type)
+                                          pl::ObProcType &proc_type,
+                                          uint64_t udt_id)
 {
   int ret = OB_SUCCESS;
   exists = false;
   proc_type = pl::INVALID_PROC_TYPE;
   if (NULL != secondary_namespace) {
     if (OB_FAIL(secondary_namespace->check_routine_exists(db_name, package_name, routine_name,
-                                       routine_type, exists, proc_type))) {
+                                       routine_type, exists, proc_type, udt_id))) {
       LOG_WARN("failed to check routine exists",
                K(ret), K(db_name), K(package_name),
-               K(routine_name), K(routine_type), K(exists), K(proc_type));
+               K(routine_name), K(udt_id), K(routine_type), K(exists), K(proc_type));
     }
   }
   if (OB_SUCC(ret) && !exists) {
@@ -695,10 +716,11 @@ int ObResolverUtils::check_routine_exists(const ObSQLSessionInfo *session_info,
                                        package_name,
                                        routine_name,
                                        routine_type,
-                                       exists))) {
+                                       exists,
+                                       udt_id))) {
        LOG_WARN("failed to check_routine_exists",
                 K(ret), K(db_name), K(package_name),
-                K(routine_name), K(routine_type), K(exists), K(proc_type));
+                K(routine_name), K(udt_id), K(routine_type), K(exists), K(proc_type));
      } else if (exists) {
        proc_type = ROUTINE_PROCEDURE_TYPE == routine_type ? pl::STANDALONE_PROCEDURE : pl::STANDALONE_FUNCTION;
      } else { /*do nothing*/ }
@@ -713,7 +735,8 @@ int ObResolverUtils::check_routine_exists(ObSchemaChecker &schema_checker,
                                             const ObString &package_name,
                                             const ObString &routine_name,
                                             const share::schema::ObRoutineType routine_type,
-                                            bool &exists)
+                                            bool &exists,
+                                            uint64_t udt_id)
 {
   int ret = OB_SUCCESS;
   exists = false;
@@ -724,10 +747,11 @@ int ObResolverUtils::check_routine_exists(ObSchemaChecker &schema_checker,
                                      package_name,
                                      routine_name,
                                      routine_type,
-                                     routines))) {
+                                     routines,
+                                     udt_id))) {
     LOG_WARN("failed to get candidate routines",
              K(ret),
-             K(db_name), K(package_name), K(routine_name), K(routine_type), K(exists));
+             K(db_name), K(package_name), K(routine_name), K(udt_id), K(routine_type), K(exists));
   } else {
     exists = !routines.empty();
   }
@@ -738,7 +762,7 @@ int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker, con
   const ObString &package_name, const ObString &routine_name,
   const share::schema::ObRoutineType routine_type,
   common::ObIArray<const share::schema::ObIRoutineInfo *> &routines,
-  const pl::ObPLResolveCtx *resolve_ctx)
+  uint64_t udt_id, const pl::ObPLResolveCtx *resolve_ctx)
 {
   int ret = OB_SUCCESS;
 
@@ -747,6 +771,8 @@ int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker, con
   uint64_t object_db_id = OB_INVALID_ID;
   ObString object_name;
   ObString real_db_name;
+  UNUSED(udt_id);
+
   OV (!routine_name.empty(), OB_INVALID_ARGUMENT, K(routine_name));
   OV (OB_LIKELY(ROUTINE_PROCEDURE_TYPE == routine_type || ROUTINE_FUNCTION_TYPE == routine_type),
     OB_INVALID_ARGUMENT, K(routine_type));
@@ -790,10 +816,14 @@ int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker, con
     // do nothing ...
   } else if (package_name.empty()) { // must be standalone procedure/function.
     const share::schema::ObRoutineInfo *routine_info = NULL;
+    bool need_try_synonym = false;
     OZ (schema_checker.get_database_id(real_db_name, database_id));
     OX (object_db_id = database_id);
     OX (object_name = routine_name);
     if (OB_SUCC(ret)) {
+      GET_STANDALONE_ROUTINE();
+    }
+    if (OB_SUCC(ret) && need_try_synonym) {
       GET_STANDALONE_ROUTINE();
     }
   } else { // try package routines
@@ -833,6 +863,7 @@ int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker, con
       }
     }
   }
+#undef TRY_SYNONYM
   return ret;
 }
 
@@ -907,7 +938,8 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
     ObCollationType src_coll_type = expr->get_result_type().get_collation_type();
     if (OB_SUCC(ret)
         && dst_pl_type.is_cursor_type()
-        && expr->get_result_type().get_extend_type() != ObPLType::PL_CURSOR_TYPE) {
+        && expr->get_result_type().get_extend_type() != ObPLType::PL_REF_CURSOR_TYPE
+        && expr->get_expr_type() != T_REF_QUERY) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
       LOG_WARN("expression is of wrong type",
                K(ret), K(src_type_id), K(dst_pl_type), K(src_type),
@@ -1158,6 +1190,58 @@ int ObResolverUtils::check_match(const pl::ObPLResolveCtx &resolve_ctx,
   OX (is_sys_package = (true));
 
   int64_t offset = 0;
+  if (OB_FAIL(ret)) {
+  } else if (0 == expr_params.count() && routine_info->is_udt_routine() && !routine_info->is_udt_static_routine()) {
+    // set first param matched
+    OX (match_info.match_info_.at(0) = (ObRoutineMatchInfo::MatchInfo(false, ObExtendType, ObExtendType)));
+    OX (offset = 1);
+  } else if(expr_params.count() > 0 && OB_NOT_NULL(expr_params.at(0))) {
+    ObRawExpr *first_arg = expr_params.at(0);
+    if (first_arg->has_flag(IS_UDT_UDF_SELF_PARAM)) {
+      // do nothing, may be we can check if routine is static or not
+    } else if (routine_info->is_udt_cons()) {
+      if (expr_params.count() > 0 && 1 == routine_info->get_param_count()) {
+        ret = OB_ERR_SP_WRONG_ARG_NUM;
+        LOG_WARN("argument count not match",
+                  K(ret), K(expr_params.count()), K(routine_info->get_param_count()));
+      } else {
+        // construct function & no self real paremeter
+        OX (match_info.match_info_.at(0) = (ObRoutineMatchInfo::MatchInfo(false, ObExtendType, ObExtendType)));
+        OX (offset = 1);
+      }
+    } else if (routine_info->is_udt_routine()
+               && !routine_info->is_udt_static_routine()) {
+      uint64_t src_type_id = OB_INVALID_ID;
+      ObObjType src_type;
+      if (T_SP_CPARAM == first_arg->get_expr_type()) {
+        ObCallParamRawExpr *call_expr = static_cast<ObCallParamRawExpr*>(first_arg);
+        OZ (call_expr->get_expr()->extract_info());
+        OZ (call_expr->get_expr()->deduce_type(&resolve_ctx.session_info_));
+        OZ (get_type_and_type_id(call_expr->get_expr(), src_type, src_type_id));
+      } else {
+        OZ (first_arg->extract_info());
+        OZ (first_arg->deduce_type(&resolve_ctx.session_info_));
+        OZ (get_type_and_type_id(first_arg, src_type, src_type_id));
+      }
+      if (OB_SUCC(ret)
+          && (src_type_id != routine_info->get_package_id())) {
+        // set first param matched
+        OX (match_info.match_info_.at(0) = (ObRoutineMatchInfo::MatchInfo(false, src_type, src_type)));
+        if ((expr_params.count() + 1) > routine_info->get_param_count()) {
+          ret = OB_ERR_SP_WRONG_ARG_NUM;
+          LOG_WARN("argument count not match",
+             K(ret),
+             K(expr_params.count()),
+             K(src_type_id),
+             KPC(first_arg),
+             K(routine_info->get_param_count()),
+             K(routine_info->get_routine_name()));
+        } else {
+          OX (offset = 1);
+        }
+      }
+    }
+  }
   // Parse parameter expression array
   bool has_assign_param = false;
   int arg_cnt = routine_info->get_param_count();
@@ -1495,6 +1579,7 @@ int ObResolverUtils::get_routine(const pl::ObPLResolveCtx &resolve_ctx,
   common::ObSEArray<const share::schema::ObIRoutineInfo *, 4> candidate_routine_infos;
   ObSchemaChecker schema_checker;
   routine = NULL;
+  uint64_t udt_id = OB_INVALID_ID;
   OZ (schema_checker.init(resolve_ctx.schema_guard_, resolve_ctx.session_info_.get_server_sid()));
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(get_candidate_routines(schema_checker,
@@ -1504,6 +1589,7 @@ int ObResolverUtils::get_routine(const pl::ObPLResolveCtx &resolve_ctx,
                                      routine_name,
                                      routine_type,
                                      candidate_routine_infos,
+                                     udt_id,
                                      &resolve_ctx))) {
     LOG_WARN("failed to get candidate routine infos",
              K(db_name), K(package_name), K(routine_name), K(ret));
@@ -1896,9 +1982,22 @@ stmt::StmtType ObResolverUtils::get_stmt_type_by_item_type(const ObItemType item
         type = stmt::T_KILL;
       }
       break;
+      case T_SP_CREATE_TYPE:
+      case T_SP_CREATE_TYPE_BODY:
+      case T_CREATE_WRAPPED_TYPE:
+      case T_CREATE_WRAPPED_TYPE_BODY: {
+        type = stmt::T_CREATE_TYPE;
+      }
+      break;
+      case T_SP_DROP_TYPE: {
+        type = stmt::T_DROP_TYPE;
+      }
+      break;
       // stored procedure
       case T_SP_CREATE:
-      case T_SF_CREATE: {
+      case T_SF_CREATE:
+      case T_CREATE_WRAPPED_PROCEDURE:
+      case T_CREATE_WRAPPED_FUNCTION: {
         type = stmt::T_CREATE_ROUTINE;
       }
       break;
@@ -1913,11 +2012,13 @@ stmt::StmtType ObResolverUtils::get_stmt_type_by_item_type(const ObItemType item
       }
       break;
       // package
-      case T_PACKAGE_CREATE: {
+      case T_PACKAGE_CREATE:
+      case T_CREATE_WRAPPED_PACKAGE: {
         type = stmt::T_CREATE_PACKAGE;
       }
       break;
-      case T_PACKAGE_CREATE_BODY: {
+      case T_PACKAGE_CREATE_BODY:
+      case T_CREATE_WRAPPED_PACKAGE_BODY: {
         type = stmt::T_CREATE_PACKAGE_BODY;
       }
       break;
@@ -2038,7 +2139,6 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
                                    ObExprInfo *parents_expr_info,
                                    const ObSQLMode sql_mode,
                                    bool enable_decimal_int_type,
-                                   const share::ObCompatType compat_type,
                                    const bool enable_mysql_compatible_dates,
                                    int8_t min_const_integer_precision,
                                    bool is_from_pl /* false */,
@@ -2427,16 +2527,10 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
       break;
     };
     case T_NULL: {
-      if (OB_UNLIKELY(share::COMPAT_MYSQL8 == compat_type && node->value_ == 1)) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "\\N in MySQL8");
-        LOG_WARN("\\N is not supported in MySQL8", K(ret));
-      } else {
-        val.set_null();
-        val.unset_result_flag(NOT_NULL_FLAG);
-        val.set_length(0);
-        val.set_param_meta(val.get_meta());
-      }
+      val.set_null();
+      val.unset_result_flag(NOT_NULL_FLAG);
+      val.set_length(0);
+      val.set_param_meta(val.get_meta());
       break;
     }
     default: {
@@ -2700,6 +2794,35 @@ int ObResolverUtils::name_case_cmp(const ObSQLSessionInfo *session_info,
   return ret;
 }
 
+bool ObResolverUtils::is_valid_interval_data_type(
+    const ObObjType data_type,
+    ObItemType &item_type)
+{
+  bool bret = false;
+  switch (data_type) {
+    case ObIntType:
+      bret = true;
+      item_type = T_INT;
+      break;
+    // case ObFloatType:
+    // case ObDoubleType:
+    //   bret = true;
+    //   item_type = T_DOUBLE;
+    //   break;
+    case ObNumberType:
+      bret = true;
+      item_type = T_NUMBER;
+      break;
+    case ObDateTimeType:
+      bret = true;
+      item_type = T_DATETIME;
+      break;
+    default:
+      bret = false;
+  }
+  return bret;
+}
+
 
 bool ObResolverUtils::is_partition_range_column_type(const ObObjType type)
 {
@@ -2729,6 +2852,7 @@ bool ObResolverUtils::is_valid_partition_column_type(const ObObjType type,
     }
   } else if (PARTITION_FUNC_TYPE_HASH == part_type ||
       PARTITION_FUNC_TYPE_RANGE == part_type ||
+      PARTITION_FUNC_TYPE_INTERVAL == part_type ||
       PARTITION_FUNC_TYPE_LIST == part_type) {
     // Check the type of the column in partition by hash(c1)
     // Check the type of the column in partition by range(c1)
@@ -2755,6 +2879,11 @@ bool ObResolverUtils::is_valid_partition_column_type(const ObObjType type,
       bret = true;
     } else if (PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_type &&
                 is_partition_range_column_type(type)) {
+      /*
+        if the server version is greater than 4_3_0_1, we then make
+        other columns types such as timestamp, float, double, decimal available to range columns
+        not compatible with MySql, relaied by size partition
+      */
       bret = true;
     }
   }
@@ -3053,7 +3182,8 @@ int ObResolverUtils::check_partition_value_expr_for_range(const ObString &part_n
   }
 
   if (OB_SUCC(ret)) {
-    if (PARTITION_FUNC_TYPE_RANGE == part_type || PARTITION_FUNC_TYPE_LIST == part_type) {
+    if (PARTITION_FUNC_TYPE_RANGE == part_type || PARTITION_FUNC_TYPE_LIST == part_type
+        || PARTITION_FUNC_TYPE_INTERVAL == part_type) {
       ObObjType value_type = part_value_expr.get_data_type();
       if (ob_is_integer_type(value_type)) {
         // partition by range(xx) partition p0 values less than (expr) expr only allows integer type
@@ -3088,21 +3218,22 @@ int ObResolverUtils::check_partition_value_expr_for_range(const ObString &part_n
 int ObResolverUtils::check_partition_value_expr_for_range(const ObString &part_name,
                                                           ObRawExpr &part_value_expr,
                                                           const ObPartitionFuncType part_type,
-                                                          const bool &in_tablegroup)
+                                                          const bool interval_check)
 {
   int ret = OB_SUCCESS;
   // Check the type of expr for value less than (xxx), specific details can refer to MySQL's whitelist
   if (OB_SUCC(ret)) {
     bool gen_col_check = false;
     bool accept_charset_function = false;
-    ObRawExprPartFuncChecker part_func_checker(gen_col_check, accept_charset_function);
+    ObRawExprPartFuncChecker part_func_checker(gen_col_check, accept_charset_function, interval_check);
     if (OB_FAIL(part_value_expr.preorder_accept(part_func_checker))) {
       LOG_WARN("check partition function failed", K(ret));
     }
   }
 
   if (OB_SUCC(ret)) {
-    if (PARTITION_FUNC_TYPE_RANGE == part_type || PARTITION_FUNC_TYPE_LIST == part_type) {
+    if (PARTITION_FUNC_TYPE_RANGE == part_type || PARTITION_FUNC_TYPE_LIST == part_type
+        || PARTITION_FUNC_TYPE_INTERVAL == part_type) {
       //partition by range(xx) partition p0 values less than (expr) expr only allows integer type
       if (!ob_is_integer_type(part_value_expr.get_data_type())) {
         ret = OB_ERR_VALUES_IS_NOT_INT_TYPE_ERROR;
@@ -3469,7 +3600,7 @@ int ObResolverUtils::resolve_partition_range_value_expr(ObResolverParams &params
                                                         const ObString &part_name,
                                                         const ObPartitionFuncType part_type,
                                                         ObRawExpr *&part_value_expr,
-                                                        const bool &in_tablegroup)
+                                                        const bool interval_check)
 {
   int ret = OB_SUCCESS;
   ObCollationType collation_connection = CS_TYPE_INVALID;
@@ -3545,7 +3676,7 @@ int ObResolverUtils::resolve_partition_range_value_expr(ObResolverParams &params
       } else if (OB_FAIL(check_partition_value_expr_for_range(part_name,
                                                               *part_value_expr,
                                                               part_type,
-                                                              in_tablegroup))) {
+                                                              interval_check))) {
         LOG_WARN("check_valid_column_for_hash or range func failed",
                  K(part_type), K(part_name), K(ret));
       }
@@ -4459,7 +4590,8 @@ int ObResolverUtils::check_column_name(const ObSQLSessionInfo *session_info,
     }
   }
   if (OB_SUCC(ret) && !q_name.tbl_name_.empty() && is_hit) {
-    if (OB_FAIL(name_case_cmp(session_info, q_name.tbl_name_, col_ref.get_table_name(),
+    ObString table_name = col_ref.get_synonym_name().empty() ? col_ref.get_table_name() : col_ref.get_synonym_name();
+    if (OB_FAIL(name_case_cmp(session_info, q_name.tbl_name_, table_name,
                               OB_TABLE_NAME_CLASS, is_hit))) {
       LOG_WARN("compare table name failed", K(q_name), K(q_name), K(col_ref));
     }
@@ -4580,7 +4712,7 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
         data_type.set_obj_type(ObUNumberType);
       }
   }
-  const ObAccuracy &default_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY[data_type.get_obj_type()];
+  const ObAccuracy &default_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][data_type.get_obj_type()];
 
   LOG_DEBUG("resolve_data_type", K(ret), K(has_specify_scale), K(type_node.type_), K(type_node.param_num_), K(number_type), K(scale), K(precision), K(length));
   switch (data_type.get_type_class()) {
@@ -5169,7 +5301,8 @@ int ObResolverUtils::check_self_reference_fk_columns_satisfy(
 
 int ObResolverUtils::check_foreign_key_set_null_satisfy(
     const obcall::ObCreateForeignKeyArg &arg,
-    const share::schema::ObTableSchema &child_table_schema)
+    const share::schema::ObTableSchema &child_table_schema,
+    const bool is_mysql_compat_mode)
 {
   int ret = OB_SUCCESS;
   if (arg.delete_action_ == ACTION_SET_NULL || arg.update_action_ == ACTION_SET_NULL) {
@@ -5183,11 +5316,11 @@ int ObResolverUtils::check_foreign_key_set_null_satisfy(
       } else if (fk_col_schema->is_generated_column()) {
         ret = OB_ERR_UNSUPPORTED_FK_SET_NULL_ON_GENERATED_COLUMN;
         LOG_WARN("foreign key column is generated column", K(ret), K(i), K(fk_col_name));
-      } else if (!fk_col_schema->is_nullable()) {
+      } else if (!fk_col_schema->is_nullable() && is_mysql_compat_mode) {
         ret = OB_ERR_FK_COLUMN_NOT_NULL;
         ObCStringHelper helper;
         LOG_USER_ERROR(OB_ERR_FK_COLUMN_NOT_NULL, helper.convert(fk_col_name), helper.convert(arg.foreign_key_name_));
-      } else {
+      } else if (is_mysql_compat_mode) {
         // check if fk column is base column of virtual generated column in MySQL mode
         const uint64_t fk_col_id = fk_col_schema->get_column_id();
         bool is_stored_base_col = false;
@@ -5452,7 +5585,8 @@ int ObResolverUtils::check_match_columns_strict_with_order(const ObTableSchema *
 // @param [in] parent_columns       foreign key column names of the parent table
 
 // @return oceanbase error code defined in lib/ob_errno.def
-int ObResolverUtils::check_foreign_key_columns_type(const ObTableSchema &child_table_schema,
+int ObResolverUtils::check_foreign_key_columns_type(const bool is_mysql_compat_mode,
+                                                    const ObTableSchema &child_table_schema,
                                                     const ObTableSchema &parent_table_schema,
                                                     const ObIArray<ObString> &child_columns,
                                                     const ObIArray<ObString> &parent_columns,
@@ -5504,7 +5638,8 @@ int ObResolverUtils::check_foreign_key_columns_type(const ObTableSchema &child_t
             LOG_WARN("The collation types are different", K(ret),
                 K(child_col->get_collation_type()),
                 K(parent_col->get_collation_type()));
-          } else if (child_col->get_data_length() < parent_col->get_data_length()) {
+          } else if (is_mysql_compat_mode &&
+                    (child_col->get_data_length() < parent_col->get_data_length())) {
             ret = OB_ERR_INVALID_CHILD_COLUMN_LENGTH_FK;
             LOG_USER_ERROR(OB_ERR_INVALID_CHILD_COLUMN_LENGTH_FK,
                 child_col->get_column_name_str().length(),
@@ -5656,7 +5791,9 @@ int ObResolverUtils::set_parallel_info(sql::ObSQLSessionInfo &session_info,
   } else {
     
     bool enable_parallel = true;
-    if (udf_raw_expr.get_pkg_id() != OB_INVALID_ID) {
+    if (udf_raw_expr.get_is_udt_udf()) {
+      OZ (schema_guard.get_routine_info_in_udt( udf_raw_expr.get_pkg_id(), udf_raw_expr.get_udf_id(), routine_info));
+    } else if (udf_raw_expr.get_pkg_id() != OB_INVALID_ID) {
       OZ (schema_guard.get_routine_info_in_package( udf_raw_expr.get_pkg_id(), udf_raw_expr.get_udf_id(), routine_info));
     } else {
       OZ (schema_guard.get_routine_info(
@@ -6796,12 +6933,20 @@ ColumnItem *ObResolverUtils::find_col_by_base_col_id(ObDMLStmt &stmt,
     const TableItem &table_item, const uint64_t base_column_id, const uint64_t base_table_id)
 {
   ColumnItem *item = NULL;
-  UNUSED(base_table_id);
+  bool has_tg = stmt.has_instead_of_trigger();
   FOREACH_CNT_X(col, stmt.get_column_items(), NULL == item) {
-    if (col->table_id_ == table_item.table_id_
-        && col->base_cid_ == base_column_id
-        && in_updatable_view_path(table_item, *col->expr_)) {
-      item = &(*col);
+    if (!has_tg) {
+      if (col->table_id_ == table_item.table_id_
+          && col->base_cid_ == base_column_id
+          && in_updatable_view_path(table_item, *col->expr_)) {
+        item = &(*col);
+      }
+    } else {
+      if (col->table_id_ == table_item.table_id_
+          && col->base_cid_ == base_column_id
+          && col->base_tid_ == base_table_id) {
+        item = &(*col);
+      }
     }
   }
   return item;
@@ -6826,12 +6971,20 @@ const ColumnItem *ObResolverUtils::find_col_by_base_col_id(const ObDMLStmt &stmt
     bool ignore_updatable_check)
 {
   const ColumnItem *item = NULL;
-  UNUSED(base_table_id);
+  bool has_tg = stmt.has_instead_of_trigger();
   FOREACH_CNT_X(col, stmt.get_column_items(), NULL == item) {
-    if (col->table_id_ == table_item.table_id_
-        && col->base_cid_ == base_column_id
-        && (ignore_updatable_check || in_updatable_view_path(table_item, *col->expr_))) {
-      item = &(*col);
+    if (!has_tg) {
+      if (col->table_id_ == table_item.table_id_
+          && col->base_cid_ == base_column_id
+          && (ignore_updatable_check || in_updatable_view_path(table_item, *col->expr_))) {
+        item = &(*col);
+      }
+    } else {
+      if (col->table_id_ == table_item.table_id_
+          && col->base_cid_ == base_column_id
+          && col->base_tid_ == base_table_id) {
+        item = &(*col);
+      }
     }
   }
   return item;
@@ -7356,7 +7509,6 @@ int ObResolverUtils::resolver_param(ObPlanCacheCtx &pc_ctx,
   ObString literal_prefix;
   const bool is_paramlize = false;
   int64_t server_collation = CS_TYPE_INVALID;
-  share::ObCompatType compat_type = share::COMPAT_MYSQL57;
   obj_param.reset();
   if (OB_ISNULL(pc_param) || OB_ISNULL(raw_param = pc_param->node_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -7390,7 +7542,6 @@ int ObResolverUtils::resolver_param(ObPlanCacheCtx &pc_ctx,
                        static_cast<ObCollationType>(server_collation), NULL,
                        session.get_sql_mode(),
                        enable_decimal_int,
-                       compat_type,
                        enable_mysql_compatible_dates,
                        session.get_min_const_integer_precision(),
                        false, /* is_from_pl */

@@ -34,6 +34,7 @@
 #include "observer/ob_server.h"
 
 using namespace oceanbase::share;
+using namespace oceanbase::omt;
 class TestAggregateFactory
 {
 public:

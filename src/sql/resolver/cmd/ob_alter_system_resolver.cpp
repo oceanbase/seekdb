@@ -115,7 +115,7 @@ int ObFreezeResolver::resolve(const ParseNode &parse_tree)
   int ret = OB_SUCCESS;
   ObFreezeStmt *freeze_stmt = NULL;
   if (OB_UNLIKELY(NULL == parse_tree.children_)
-      || OB_UNLIKELY(3 != parse_tree.num_child_)) {
+      || OB_UNLIKELY(parse_tree.num_child_ < 2)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("wrong freeze parse tree", KP(parse_tree.children_),
              K(parse_tree.num_child_));
@@ -135,19 +135,25 @@ int ObFreezeResolver::resolve(const ParseNode &parse_tree)
     stmt_ = freeze_stmt;
     if (1 == parse_tree.children_[0]->value_) { // MAJOR FREEZE
       freeze_stmt->set_major_freeze(true);
-      if (OB_NOT_NULL(parse_tree.children_[1])) {
+      if (OB_UNLIKELY(2 != parse_tree.num_child_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("major freeze has an unexpected target", KR(ret));
-      } else if (OB_FAIL(resolve_target_(freeze_stmt, parse_tree.children_[2]))) {
-        LOG_WARN("resolve major freeze target failed", KR(ret));
+        LOG_WARN("wrong freeze parse tree", K(parse_tree.num_child_));
+      } else {
+        ParseNode *opt_target = parse_tree.children_[1];
+        if (OB_FAIL(resolve_major_freeze_(freeze_stmt, opt_target))) {
+          LOG_WARN("resolve major freeze failed", KR(ret), KP(opt_target));
+        }
       }
     } else if (2 == parse_tree.children_[0]->value_) {  // MINOR FREEZE
       freeze_stmt->set_major_freeze(false);
-      if (OB_NOT_NULL(parse_tree.children_[1])) {
+      if (OB_UNLIKELY(2 != parse_tree.num_child_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("minor freeze has an unexpected target", KR(ret));
-      } else if (OB_FAIL(resolve_target_(freeze_stmt, parse_tree.children_[2]))) {
-        LOG_WARN("resolve minor freeze target failed", KR(ret));
+        LOG_WARN("wrong freeze parse tree", K(parse_tree.num_child_));
+      } else {
+        ParseNode *opt_target = parse_tree.children_[1];
+        if (OB_FAIL(resolve_minor_freeze_(freeze_stmt, opt_target))) {
+          LOG_WARN("resolve minor freeze failed", KR(ret), KP(opt_target));
+        }
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -158,17 +164,48 @@ int ObFreezeResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
-int ObFreezeResolver::resolve_target_(ObFreezeStmt *freeze_stmt,
-                                      const ParseNode *tablet_node)
+int ObFreezeResolver::resolve_major_freeze_(ObFreezeStmt *freeze_stmt, ParseNode *opt_target)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(freeze_stmt)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("freeze statement is null", KR(ret));
-  } else if (OB_NOT_NULL(tablet_node)
-             && OB_FAIL(Util::resolve_tablet_id(tablet_node, freeze_stmt->get_tablet_id()))) {
+  if (OB_ISNULL(opt_target)) {
+  } else if (T_TABLET_ID == opt_target->type_) {
+    if (OB_FAIL(Util::resolve_tablet_id(opt_target, freeze_stmt->get_tablet_id()))) {
       LOG_WARN("fail to resolve tablet id", KR(ret));
+    }
+  } else if (T_INVALID == opt_target->type_) {
+    if (OB_FAIL(ObResolverUtils::resolve_local_runtime_selector(opt_target))) {
+      LOG_WARN("fail to resolve major freeze runtime selector", KR(ret));
+    } else {
+      freeze_stmt->set_has_runtime_selector();
+    }
+  } else {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("unsupported major freeze target", KR(ret), K(opt_target->type_));
   }
+
+  return ret;
+}
+
+int ObFreezeResolver::resolve_minor_freeze_(ObFreezeStmt *freeze_stmt,
+                                            ParseNode *opt_target)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(opt_target)) {
+  } else if (T_TABLET_ID == opt_target->type_) {
+    if (OB_FAIL(Util::resolve_tablet_id(opt_target, freeze_stmt->get_tablet_id()))) {
+      LOG_WARN("fail to resolve tablet id", KR(ret));
+    }
+  } else if (T_INVALID == opt_target->type_) {
+    if (OB_FAIL(ObResolverUtils::resolve_local_runtime_selector(opt_target))) {
+      LOG_WARN("fail to resolve minor freeze runtime selector", KR(ret));
+    } else {
+      freeze_stmt->set_has_runtime_selector();
+    }
+  } else {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("log-stream freeze target is not supported", KR(ret), K(opt_target->type_));
+  }
+
   return ret;
 }
 
@@ -194,13 +231,26 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
   } else {
     ObSchemaGetterGuard schema_guard;
 
+    // first child: resolve cache type
     ParseNode *cache_type_node = parse_tree.children_[0];
-    stmt->flush_cache_arg_.cache_type_ = static_cast<ObCacheType>(cache_type_node->value_);
+    if(T_IDENT == cache_type_node->type_) {
+      common::ObString pltmp,plself("pl");
+      pltmp.assign_ptr(cache_type_node->str_value_, static_cast<ObString::obstr_size_t>(cache_type_node->str_len_));
+      if (0 == pltmp.case_compare(plself)) {
+        stmt->flush_cache_arg_.cache_type_ = CACHE_TYPE_PL_OBJ;
+      } else {
+        ret = OB_NOT_SUPPORTED;
+        LOG_WARN("only support pl cache's cache evict by identify as T_IDENT", K(ret));
+      }
+    } else {
+      stmt->flush_cache_arg_.cache_type_ = (ObCacheType)cache_type_node->value_;
+    }
     // second child: resolve namespace
     ParseNode *namespace_node = parse_tree.children_[1];
     // third child: resolve sql_id
     ParseNode *sql_id_node = parse_tree.children_[2];
-    // fourth child: resolve database list
+    // for adds database id
+    // fourth child: resolve db_list
     ParseNode *db_node = parse_tree.children_[3];
     ObSEArray<common::ObString, 8> db_name_list;
 
@@ -272,6 +322,7 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
       LOG_WARN("invalid argument", K(ret));
     }
 
+    // retrive schema guard
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(GCTX.schema_service_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -306,6 +357,7 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret));
     } else {
+      uint64_t db_id = 0;
       ObString db_names;
       ObString db_name;
       db_names.assign_ptr(db_node->children_[0]->str_value_,
@@ -390,6 +442,7 @@ int ObFlushKVCacheResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
+
 int ObFlushIlogCacheResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
@@ -399,7 +452,7 @@ int ObFlushIlogCacheResolver::resolve(const ParseNode &parse_tree)
     LOG_WARN("type not match T_FLUSH_ILOGCACHE", "type", get_type_name(parse_tree.type_));
   } else if (OB_ISNULL(stmt = create_stmt<ObFlushIlogCacheStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("create ObFlushIlogCacheStmt error", K(ret));
+    LOG_WARN("create ObFlushCacheStmt error", K(ret));
   } else if (OB_ISNULL(parse_tree.children_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("children of parse tree is null", K(ret));
@@ -408,7 +461,6 @@ int ObFlushIlogCacheResolver::resolve(const ParseNode &parse_tree)
     ParseNode *file_id_val_node = NULL;
     if (OB_ISNULL(opt_file_id_node)) {
       stmt->file_id_ = 0;
-      stmt_ = stmt;
     } else if (OB_ISNULL(opt_file_id_node->children_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("opt_file_id_node.children is null", K(ret));
@@ -416,12 +468,12 @@ int ObFlushIlogCacheResolver::resolve(const ParseNode &parse_tree)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("file_id_val_node is null", K(ret));
     } else {
-      const int64_t file_id_val = file_id_val_node->value_;
+      int64_t file_id_val = file_id_val_node->value_; // type of value_ is int64_t
       if (file_id_val <= 0 || file_id_val >= INT32_MAX) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid file_id when flush ilogcache", K(ret), K(file_id_val));
       } else {
-        stmt->file_id_ = static_cast<int32_t>(file_id_val);
+        stmt->file_id_ = (int32_t)file_id_val;
         stmt_ = stmt;
         LOG_INFO("flush ilogcache resolve succ", K(file_id_val));
       }
@@ -429,7 +481,6 @@ int ObFlushIlogCacheResolver::resolve(const ParseNode &parse_tree)
   }
   return ret;
 }
-
 
 int ObFlushDagWarningsResolver::resolve(const ParseNode &parse_tree)
 {
@@ -452,21 +503,44 @@ int ObAdminMergeResolver::resolve(const ParseNode &parse_tree)
   if (OB_UNLIKELY(T_MERGE_CONTROL != parse_tree.type_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("type is not T_MERGE_CONTROL", "type", get_type_name(parse_tree.type_));
-  } else if (OB_UNLIKELY(1 != parse_tree.num_child_ || nullptr == parse_tree.children_
-                         || nullptr == parse_tree.children_[0]
-                         || T_INT != parse_tree.children_[0]->type_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid merge control parse tree", KR(ret), K(parse_tree.num_child_));
-  } else if (OB_ISNULL(stmt_ = create_stmt<ObAdminMergeStmt>())) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("create ObAdminMergeStmt failed", KR(ret));
-  } else if (2 == parse_tree.children_[0]->value_) {
-    static_cast<ObAdminMergeStmt *>(stmt_)->set_merge_type(ObAdminMergeStmt::MergeType::SUSPEND);
-  } else if (3 == parse_tree.children_[0]->value_) {
-    static_cast<ObAdminMergeStmt *>(stmt_)->set_merge_type(ObAdminMergeStmt::MergeType::RESUME);
   } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected merge control type", KR(ret), "value", parse_tree.children_[0]->value_);
+    ObAdminMergeStmt *stmt = create_stmt<ObAdminMergeStmt>();
+    if (NULL == stmt) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("create ObAdminMergeStmt failed");
+    } else {
+      stmt_ = stmt;
+      if (OB_UNLIKELY(NULL == parse_tree.children_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("children should not be null");
+      } else {
+        ParseNode *node = parse_tree.children_[0];
+        if (OB_UNLIKELY(NULL == node)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("node should not be null");
+        } else if (OB_UNLIKELY(T_INT != node->type_)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("type is not T_INT", "type", get_type_name(node->type_));
+        } else {
+          switch (node->value_) {
+            case 2: {
+              stmt->set_merge_type(ObAdminMergeStmt::MergeType::SUSPEND);
+              break;
+            }
+            case 3: {
+              stmt->set_merge_type(ObAdminMergeStmt::MergeType::RESUME);
+              break;
+            }
+            default: {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("unexpected merge admin type", "value", node->value_);
+              break;
+            }
+          }
+        }
+      }
+
+    }
   }
   return ret;
 }

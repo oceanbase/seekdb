@@ -382,6 +382,7 @@ int ObMinorPartitionMergeFuser::preprocess_fuse_row(const blocksstable::ObDatumR
 }
 
 int ObMergeFuserBuilder::build(const ObMergeParameter &merge_param,
+                               const int64_t data_format_version,
                                ObIAllocator &allocator,
                                ObIPartitionMergeFuser *&partition_fuser)
 {
@@ -395,7 +396,7 @@ int ObMergeFuserBuilder::build(const ObMergeParameter &merge_param,
     const ObMergeType merge_type = merge_param.static_param_.get_merge_type();
     if (is_major_or_meta_merge_type(merge_type)) {
       is_fuse_row_flag = false;
-      partition_fuser = alloc_helper<ObMajorPartitionMergeFuser>(allocator, allocator);
+      partition_fuser = alloc_helper<ObMajorPartitionMergeFuser>(allocator, allocator, data_format_version);
     } else {
       partition_fuser = alloc_helper<ObMinorPartitionMergeFuser>(allocator, allocator);
     }

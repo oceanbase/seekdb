@@ -389,6 +389,10 @@ private:
       const uint64_t column_id,
       const uint64_t auto_increment,
       const int64_t truncate_version);
+  static int add_transition_point_val(share::ObDMLSqlSplicer &dml,
+                               const ObTableSchema &table);
+  static int add_interval_range_val(share::ObDMLSqlSplicer &dml,
+                               const ObTableSchema &table);
   static int gen_table_dml(const ObTableSchema &table,
                     const bool update_object_status_ignore_version,
                     share::ObDMLSqlSplicer &dml,

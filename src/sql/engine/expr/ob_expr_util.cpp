@@ -851,6 +851,18 @@ int ObSolidifiedVarsGetter::get_sql_mode(ObSQLMode &sql_mode)
   return ret;
 }
 
+int ObSolidifiedVarsGetter::get_local_nls_date_format(ObString &format)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(session_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret));
+  } else {
+    format = session_->get_local_nls_date_format();
+  }
+  return ret;
+}
+
 int ObSolidifiedVarsGetter::get_local_var(ObSysVarClassType var_type, ObSessionSysVar *&sys_var)
 {
   int ret = OB_SUCCESS;

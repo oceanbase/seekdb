@@ -182,6 +182,11 @@ int TestServerLogBlockMgr::remove_log_stream_dir(const char *tenant_dir)
 void TestServerLogBlockMgr::SetUp()
 {
   ASSERT_EQ(OB_SUCCESS, log_block_mgr_.init(log_disk_base_path_));
+  log_block_mgr_.get_runtime_log_disk_size_func_ = [](int64_t &out) -> int
+  {
+    out = 0;
+    return OB_SUCCESS;
+  };
 }
 
 void TestServerLogBlockMgr::TearDown()

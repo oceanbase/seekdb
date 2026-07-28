@@ -67,10 +67,13 @@ public:
   void set_end_scn(const share::SCN end_scn) { end_scn_ = end_scn; }
   bool is_major_or_meta_merge_type() const { return compaction::is_major_or_meta_merge_type(merge_type_); }
   void set_merge_type(const compaction::ObMergeType merge_type) { merge_type_ = merge_type; }
+  void set_data_format_version(const int64_t data_format_version) { data_format_version_ = data_format_version; }
+  int64_t get_data_format_version() const { return data_format_version_; }
 private:
   ObCompressorType compressor_type_;
   ObRowStoreType row_store_type_;
   int64_t schema_version_;
+  int64_t data_format_version_;
   share::SCN end_scn_;
   compaction::ObMergeType merge_type_;
 
@@ -105,6 +108,7 @@ public:
   TO_STRING_KV(K_(compressor_type),
                K_(row_store_type),
                K_(schema_version),
+               K_(data_format_version),
                K_(end_scn),
                K_(merge_type),
                KP_(aggregated_row),

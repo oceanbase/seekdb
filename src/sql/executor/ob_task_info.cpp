@@ -58,6 +58,8 @@ int ObTaskInfo::ObRangeLocation::assign(const ObTaskInfo::ObRangeLocation &range
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(part_locs_.assign(range_loc.part_locs_))) {
     SQL_EXE_LOG(WARN, "copy part locs failed", K(ret), K(range_loc));
+  } else {
+    server_ = range_loc.server_;
   }
   return ret;
 }

@@ -31,7 +31,7 @@ ObSchemaGuardWrapper::ObSchemaGuardWrapper(share::schema::ObMultiVersionSchemaSe
 
 ObSchemaGuardWrapper::~ObSchemaGuardWrapper() {}
 
-
+// init(ObDDLService*) moved definition to rootserver/ob_ddl_service.cpp(real user ObDDLService complete type, previously hidden behind unity-neighbor table_param.cpp; declaration remains in this class header)
 
 int ObSchemaGuardWrapper::check_inner_stat_() const
 {
@@ -227,6 +227,22 @@ int ObSchemaGuardWrapper::get_table_id(const uint64_t database_id,
   return ret;
 }
 
+int ObSchemaGuardWrapper::get_server_runtime_schema(
+                                            const ObServerRuntimeSchema *&runtime_schema)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(check_inner_stat_())) {
+    LOG_WARN("not init", KR(ret));
+  } else if (is_local_guard_) {
+    if (OB_FAIL(local_schema_guard_.get_server_runtime_info(runtime_schema))) {
+      LOG_WARN("fail to get runtime schema", KR(ret));
+    }
+  } else if (OB_FAIL(latest_schema_guard_.get_server_runtime_schema( runtime_schema))) {
+    LOG_WARN("fail to get runtime schema", KR(ret));
+  }
+  return ret;
+}
+
 #ifndef GET_OBJ_SCHEMA_VERSIONS
 #define GET_OBJ_SCHEMA_VERSIONS(OBJECT_NAME, SCHEMA_TYPE) \
   int ObSchemaGuardWrapper::get_##OBJECT_NAME##_schema_versions(const common::ObIArray<uint64_t> &obj_ids, \
@@ -365,6 +381,7 @@ int ObSchemaGuardWrapper::get_coded_index_name_info_mysql(common::ObIAllocator &
   return ret;
 }
 
+// TODO: impelete local guard way later
 int ObSchemaGuardWrapper::get_sys_variable_schema(const ObSysVariableSchema *&sys_var_schema)
 {
   int ret = OB_SUCCESS;

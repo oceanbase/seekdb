@@ -167,7 +167,7 @@ BEGIN_OUTLINE_DATA END_OUTLINE_DATA QB_NAME
 // global hint
 FROZEN_VERSION TOPK QUERY_TIMEOUT READ_CONSISTENCY LOG_LEVEL USE_PLAN_CACHE
 TRACE_LOG LOAD_BATCH_SIZE TRANS_PARAM OPT_PARAM OB_DDL_SCHEMA_VERSION ENABLE_PARALLEL_DAS_DML DISABLE_PARALLEL_DAS_DML DISABLE_PARALLEL_DML ENABLE_PARALLEL_DML NO_PARALLEL
-CURSOR_SHARING_EXACT DOP TRACING NO_QUERY_TRANSFORMATION NO_COST_BASED_QUERY_TRANSFORMATION BLOCKING DML_PARALLEL
+CURSOR_SHARING_EXACT DOP TRACING NO_QUERY_TRANSFORMATION NO_COST_BASED_QUERY_TRANSFORMATION BLOCKING DML_PARALLEL DISABLE_OP_RICH_FORMAT
 // transform hint
 NO_REWRITE MERGE_HINT NO_MERGE_HINT NO_EXPAND USE_CONCAT NO_UNNEST
 PLACE_GROUP_BY NO_PLACE_GROUP_BY INLINE MATERIALIZE SEMI_TO_INNER NO_SEMI_TO_INNER
@@ -456,9 +456,9 @@ END_P SET_VAR DELIMITER
 %type <node> set_type
 %type <node> drop_index_stmt hint_options opt_expr_as_list expr_as_list expr_with_opt_alias substr_params opt_comma substr_or_substring
 %type <node> /*frozen_type*/ opt_binary
-%type <node> create_view_stmt view_name opt_column_list opt_tablet_id view_select_stmt opt_check_option opt_algorithm view_algorithm opt_definer opt_sql_security
+%type <node> create_view_stmt view_name opt_column_list opt_tablet_id view_select_stmt opt_check_option opt_tablet_id_no_empty opt_algorithm view_algorithm opt_definer opt_sql_security
 %type <node> name_list
-%type <node> opt_subpartitions runtime_selector opt_runtime_selector runtime_selector_target opt_flush_scope suspend_or_resume cache_name opt_cache_name file_id opt_file_id
+%type <node> opt_subpartitions ls opt_ls_or_tablet_id opt_major_freeze_target runtime_selector opt_runtime_selector runtime_selector_target opt_flush_scope suspend_or_resume cache_name opt_cache_name file_id opt_file_id
 %type <node> sql_id_or_schema_id_expr opt_sql_id_or_schema_id outline_type
 %type <node> namespace_expr opt_namespace
 %type <node> opt_index_name opt_key_or_index opt_index_options opt_fulltext_index_options fulltext_parser_properties_list fulltext_parser_properties opt_primary  opt_all
@@ -510,6 +510,7 @@ END_P SET_VAR DELIMITER
 %type <node> sys_view_cast_opt
 %type <node> column_list_with_boost with_param_column_ref
 %type <node> es_sql_opt
+%type <node> operator_list
 %type <node> hybrid_search_expr hybrid_search_param
 %type <node> vector_similarity_expr vector_similarity_metric
 %type <node> algorithm_opt lock_opt
@@ -7511,6 +7512,12 @@ TABLET_ID COMP_EQ INTNUM
 | /*EMPTY*/ { $$ = NULL; }
 ;
 
+opt_tablet_id_no_empty:
+TABLET_ID COMP_EQ INTNUM
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_TABLET_ID, 1, $3);
+}
+;
 /*****************************************************************************
  *
  *	create index
@@ -9341,6 +9348,23 @@ READ_CONSISTENCY '(' consistency_level ')'
 | DBMS_STATS
 {
   malloc_terminal_node($$, result->malloc_pool_, T_DBMS_STATS);
+}
+| DISABLE_OP_RICH_FORMAT '(' operator_list ')'
+{
+  ParseNode *op_list = NULL;
+  merge_nodes(op_list, result, T_DISABLE_OP_RICH_FORMAT, $3);
+  $$=op_list;
+}
+;
+
+operator_list:
+STRING_VALUE
+{
+  $$ = $1;
+}
+| operator_list ',' STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
 }
 ;
 
@@ -15452,13 +15476,13 @@ alter_with_opt_hint SYSTEM CANCEL TASK STRING_VALUE
   malloc_non_terminal_node($$, result->malloc_pool_, T_CANCEL_TASK, 1, $5);
 }
 |
-alter_with_opt_hint SYSTEM MAJOR FREEZE opt_tablet_id
+alter_with_opt_hint SYSTEM MAJOR FREEZE opt_major_freeze_target
 {
   (void)($1);
   ParseNode *type = NULL;
   malloc_terminal_node(type, result->malloc_pool_, T_INT);
   type->value_ = 1;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_FREEZE, 3, type, NULL, $5);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FREEZE, 2, type, $5);
 }
 |
 alter_with_opt_hint SYSTEM CHECKPOINT
@@ -15467,16 +15491,16 @@ alter_with_opt_hint SYSTEM CHECKPOINT
   ParseNode *type = NULL;
   malloc_terminal_node(type, result->malloc_pool_, T_INT);
   type->value_ = 1;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_FREEZE, 3, type, NULL, NULL);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FREEZE, 2, type, NULL);
 }
 |
-alter_with_opt_hint SYSTEM MINOR FREEZE opt_tablet_id
+alter_with_opt_hint SYSTEM MINOR FREEZE opt_ls_or_tablet_id
 {
   (void)($1);
   ParseNode *type = NULL;
   malloc_terminal_node(type, result->malloc_pool_, T_INT);
   type->value_ = 2;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_FREEZE, 3, type, NULL, $5);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FREEZE, 2, type, $5);
 }
 |
 alter_with_opt_hint SYSTEM REFRESH MEMORY STAT
@@ -15554,6 +15578,48 @@ PLAN
 
 
 
+
+ls:
+LS opt_equal_mark INTNUM
+{
+  (void)($2);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LS, 1, $3);
+}
+;
+
+opt_ls_or_tablet_id:
+ls opt_tablet_id
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LS_TABLET, 2, $1, $2);
+}
+| opt_tablet_id_no_empty
+{
+  $$ = $1;
+}
+| runtime_selector
+{
+  $$ = $1;
+}
+| /*EMPTY*/
+{
+  $$ = NULL;
+}
+;
+
+opt_major_freeze_target:
+opt_tablet_id_no_empty
+{
+  $$ = $1;
+}
+| runtime_selector
+{
+  $$ = $1;
+}
+| /*EMPTY*/
+{
+  $$ = NULL;
+}
+;
 
 runtime_selector:
 NAME_OB opt_equal_mark runtime_selector_target

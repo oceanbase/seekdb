@@ -17,10 +17,10 @@
 #define USING_LOG_PREFIX COMMON
 #include "observer/virtual_table/ob_virtual_table_iterator.h"
 #include "observer/virtual_table/ob_virtual_table_iterator.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 
 #include "sql/engine/expr/ob_expr_column_conv.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include "sql/das/ob_das_define.h"
 #include "sql/session/ob_sql_session_info.h"
 
 using namespace oceanbase::common;
@@ -353,6 +353,9 @@ int ObVirtualTableIterator::convert_output_row(ObNewRow *&cur_row)
 
 int ObVirtualTableIterator::get_next_row(ObNewRow *&row)
 {
+  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_storage_read);
+  common::ObASHTabletIdSetterGuard ash_tablet_id_guard(scan_param_ != nullptr? scan_param_->index_id_ : 0);
+  ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(tablet_id_, scan_param_ != nullptr? scan_param_->index_id_ : 0);
   int ret = OB_SUCCESS;
   ObNewRow *cur_row = NULL;
   row_calc_buf_.reuse();
@@ -463,6 +466,9 @@ int ObVirtualTableIterator::get_next_rows(int64_t &count, int64_t capacity)
 }
 int ObVirtualTableIterator::get_next_row()
 {
+  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_storage_read);
+  common::ObASHTabletIdSetterGuard ash_tablet_id_guard(scan_param_ != nullptr? scan_param_->index_id_ : 0);
+  ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(tablet_id_, scan_param_ != nullptr? scan_param_->index_id_ : 0);
   int ret = OB_SUCCESS;
   ObNewRow *row = NULL;
   if (OB_ISNULL(scan_param_)
@@ -470,7 +476,7 @@ int ObVirtualTableIterator::get_next_row()
       || OB_ISNULL(scan_param_->op_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
-  } else if (EMPTY_VIRTUAL_TABLE_TABLET_ID == scan_param_->tablet_id_.id()) {
+  } else if (VirtualSvrPair::EMPTY_VIRTUAL_TABLE_TABLET_ID == scan_param_->tablet_id_.id()) {
     row = NULL;
     ret = OB_ITER_END;
   } else if (OB_FAIL(get_next_row(row))) {

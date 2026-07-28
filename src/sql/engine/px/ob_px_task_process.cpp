@@ -22,12 +22,14 @@
 #include "sql/engine/px/ob_px_sqc_handler.h"
 #include "sql/engine/px/exchange/ob_px_transmit_op.h"
 #include "sql/engine/basic/ob_temp_table_insert_op.h"
+#include "sql/engine/basic/ob_temp_table_insert_vec_op.h"
 #include "sql/engine/join/ob_hash_join_op.h"
 #include "sql/engine/pdml/static/ob_px_multi_part_insert_op.h"
 #include "sql/engine/join/ob_join_filter_op.h"
+#include "sql/engine/join/hash_join/ob_hash_join_vec_op.h"
 #include "sql/engine/basic/ob_select_into_op.h"
 #include "observer/mysql/obmp_base.h"
-#include "sql/engine/window_function/ob_window_function_op.h"
+#include "sql/engine/window_function/ob_window_function_vec_op.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -465,7 +467,7 @@ int ObPxTaskProcess::do_process()
   if (NULL != arg_.sqc_task_ptr_) {
     arg_.sqc_task_ptr_->set_result(ret);
     if (OB_NOT_NULL(arg_.exec_ctx_)) {
-      int das_retry_rc = DAS_CTX(*arg_.exec_ctx_).get_last_errno();
+      int das_retry_rc = DAS_CTX(*arg_.exec_ctx_).get_location_router().get_last_errno();
       arg_.sqc_task_ptr_->set_das_retry_rc(das_retry_rc);
     }
     if (OB_SUCC(ret)) {
@@ -675,6 +677,23 @@ int ObPxTaskProcess::OpPreparation::apply(ObExecContext &ctx,
       input->sqc_id_ = sqc_id_;
       input->dfo_id_ = dfo_id_;
     }
+  } else if (PHY_VEC_TEMP_TABLE_INSERT == op.type_) {
+    ObOperatorKit *kit = ctx.get_operator_kit(op.id_);
+    if (OB_ISNULL(kit) || OB_ISNULL(kit->op_) || OB_ISNULL(kit->input_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("operator is NULL", K(ret), KP(kit));
+    } else if (PHY_VEC_TEMP_TABLE_INSERT != kit->spec_->type_) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("is not temp table insert operator", K(ret),
+               "spec", kit->spec_);
+    } else {
+      ObTempTableInsertVecOp *insert_op = static_cast<ObTempTableInsertVecOp*>(kit->op_);
+      insert_op->set_px_task(task_);
+      ObTempTableInsertVecOpInput *input = static_cast<ObTempTableInsertVecOpInput *>(kit->input_);
+      input->qc_id_ = NULL == task_ ? OB_INVALID_ID : task_->qc_id_;
+      input->sqc_id_ = sqc_id_;
+      input->dfo_id_ = dfo_id_;
+    }
   } else if (PHY_HASH_JOIN == op.type_) {
     if (OB_ISNULL(kit->input_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -682,6 +701,21 @@ int ObPxTaskProcess::OpPreparation::apply(ObExecContext &ctx,
     } else {
       const ObHashJoinSpec &hj_spec = static_cast<const ObHashJoinSpec&>(op);
       ObHashJoinInput *input = static_cast<ObHashJoinInput*>(kit->input_);
+      if (OB_ISNULL(input)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("input not found for op", "op_id", op.id_, K(ret));
+      } else if (hj_spec.is_shared_ht_) {
+        input->set_task_id(task_id_);
+        LOG_TRACE("debug pre apply info", K(task_id_), K(op.id_));
+      }
+    }
+  } else if (PHY_VEC_HASH_JOIN == op.type_) {
+    if (OB_ISNULL(kit->input_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("operator is NULL", K(ret), KP(kit));
+    } else {
+      const ObHashJoinVecSpec &hj_spec = static_cast<const ObHashJoinVecSpec&>(op);
+      ObHashJoinVecInput *input = static_cast<ObHashJoinVecInput*>(kit->input_);
       if (OB_ISNULL(input)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("input not found for op", "op_id", op.id_, K(ret));
@@ -758,6 +792,23 @@ int ObPxTaskProcess::OpPostparation::apply(ObExecContext &ctx, const ObOpSpec &o
         LOG_TRACE("debug post apply info", K(ret_));
       }
     }
+  } else if (PHY_VEC_HASH_JOIN == op.type_) {
+    if (OB_ISNULL(kit->input_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("operator is NULL", K(ret), KP(kit));
+    } else {
+      const ObHashJoinVecSpec &hj_spec = static_cast<const ObHashJoinVecSpec&>(op);
+      ObHashJoinVecInput *input = static_cast<ObHashJoinVecInput*>(kit->input_);
+      if (OB_ISNULL(input)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("input not found for op", "op_id", op.id_, K(ret));
+      } else if (hj_spec.is_shared_ht_ && OB_SUCCESS != ret_) {
+        input->set_error_code(OB_GOT_SIGNAL_ABORTING);
+        LOG_TRACE("debug post apply info", K(ret_));
+      } else {
+        LOG_TRACE("debug post apply info", K(ret_));
+      }
+    }
   } else if (PHY_WINDOW_FUNCTION == op.type_) {
     if (OB_ISNULL(kit->input_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -768,6 +819,23 @@ int ObPxTaskProcess::OpPostparation::apply(ObExecContext &ctx, const ObOpSpec &o
       if (OB_ISNULL(input)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("input not found for op", "op_id", op.id_, K(ret));
+      } else if (wf_spec.is_participator() && OB_SUCCESS != ret_) {
+        input->set_error_code(OB_GOT_SIGNAL_ABORTING);
+        LOG_TRACE("debug post apply info", K(ret_));
+      } else {
+        LOG_TRACE("debug post apply info", K(ret_));
+      }
+    }
+  } else if (PHY_VEC_WINDOW_FUNCTION == op.type_) {
+    if (OB_ISNULL(kit->input_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("operator is null", K(ret), K(kit));
+    } else {
+      const ObWindowFunctionVecSpec &wf_spec = static_cast<const ObWindowFunctionVecSpec &>(op);
+      ObWindowFunctionOpInput *input = static_cast<ObWindowFunctionOpInput *>(kit->input_);
+      if (OB_ISNULL(input)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("input is null", K(ret));
       } else if (wf_spec.is_participator() && OB_SUCCESS != ret_) {
         input->set_error_code(OB_GOT_SIGNAL_ABORTING);
         LOG_TRACE("debug post apply info", K(ret_));

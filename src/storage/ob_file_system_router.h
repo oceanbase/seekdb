@@ -44,6 +44,8 @@ public:
   OB_INLINE int64_t get_svr_seq() const { return svr_seq_; }
   OB_INLINE void set_svr_seq(const int64_t svr_seq) { svr_seq_ = svr_seq; }
 
+  OB_INLINE bool is_single_zone_deployment_on() const { return false; }
+
   OB_INLINE const blocksstable::ObLogFileSpec &get_clog_file_spec() const { return clog_file_spec_; }
   OB_INLINE const blocksstable::ObLogFileSpec &get_slog_file_spec() const { return slog_file_spec_; }
 

@@ -97,7 +97,6 @@ int ObDtlChTotalInfo::assign(const ObDtlChTotalInfo &other)
   return ret;
 }
 
-
 }  // dtl
 }  // sql
 }  // oceanbase

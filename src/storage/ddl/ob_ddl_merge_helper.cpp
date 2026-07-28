@@ -53,7 +53,7 @@ int ObIDDLMergeHelper::get_merge_helper(ObIAllocator &allocator,
 
   char *buf = nullptr;
   switch(direct_load_type) {
-    case ObDirectLoadType::IDEM_DIRECT_LOAD_DDL:
+    case ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DDL:
       BUILD_MERGE_HELPER(ObSNDDLMergeHelperV2);
       break;
     default:
@@ -651,7 +651,7 @@ int ObSNDDLMergeHelperV2::assemble_sstable(ObDDLTabletMergeDagParamV2 &merge_par
 
 bool ObSNDDLMergeHelperV2::is_supported_direct_load_type(const ObDirectLoadType direct_load_type)
 {
-  return ObDirectLoadType::IDEM_DIRECT_LOAD_DDL == direct_load_type;
+  return ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DDL == direct_load_type;
 }
 
 

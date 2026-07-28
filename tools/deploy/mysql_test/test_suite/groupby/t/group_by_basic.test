@@ -15,6 +15,7 @@ set @@session.explicit_defaults_for_timestamp=off;
 
 --disable_warnings
 drop table if exists t1, t2, t3, t4, t5;
+SET @test_counter_s1 = NULL;
 --enable_warnings
 
 ## create tables

@@ -43,6 +43,7 @@ class ObDumpTaskGenerator
     CONTEXT_ALL          = 0,
     CONTEXT              = 1,
     CHUNK_ALL           = 2,
+    CHUNK_OF_CTX        = 3,
     CHUNK               = 4,
   };
 #ifdef _WIN32

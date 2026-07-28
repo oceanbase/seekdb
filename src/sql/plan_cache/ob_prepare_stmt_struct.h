@@ -163,6 +163,9 @@ public:
   inline void set_ps_stmt_checksum(uint64_t ps_checksum) { ps_stmt_checksum_ = ps_checksum; }
   inline uint64_t get_ps_stmt_checksum() const { return ps_stmt_checksum_; }
 
+  inline void set_num_of_returning_into(int32_t num_of_returning_into)
+  { num_of_returning_into_ = num_of_returning_into; }
+  inline int32_t get_num_of_returning_into() const { return num_of_returning_into_; }
   inline void set_is_sensitive_sql(const bool is_sensitive_sql) { is_sensitive_sql_ = is_sensitive_sql; }
   inline bool get_is_sensitive_sql() const { return is_sensitive_sql_; }
   inline const common::ObString &get_raw_sql() const { return raw_sql_; }
@@ -244,6 +247,7 @@ private:
   common::ObIAllocator *allocator_;
   // Point to inner_allocator_ in ObPsPlancache, used for releasing the memory of the entire ObPsStmtItem
   common::ObIAllocator *external_allocator_;
+  int32_t num_of_returning_into_;
   common::ObString no_param_sql_;
   bool is_sensitive_sql_;
   common::ObString raw_sql_;
@@ -316,7 +320,8 @@ public:
     num_of_params_(num_of_params),
     ps_stmt_checksum_(0),
     ref_cnt_(0),
-    inner_stmt_id_(0)
+    inner_stmt_id_(0),
+    num_of_returning_into_(common::OB_INVALID_STMT_ID) // num_of_returning_into_ init as -1
   {
     param_types_.set_attr(ObMemAttr("ParamTypes"));
     param_type_infos_.set_attr(ObMemAttr("ParamTypesInfo"));
@@ -338,6 +343,10 @@ public:
   int64_t get_param_count() const { return num_of_params_; }
   void set_param_count(const int64_t num_of_params) { num_of_params_ = num_of_params; }
 
+  int32_t get_num_of_returning_into() const { return num_of_returning_into_; }
+  void set_num_of_returning_into(const int32_t num_of_returning_into)
+  { num_of_returning_into_ = num_of_returning_into; }
+
   uint64_t get_ps_stmt_checksum() const { return ps_stmt_checksum_; }
   void set_ps_stmt_checksum(uint64_t ps_checksum) { ps_stmt_checksum_ = ps_checksum; }
 
@@ -356,7 +365,8 @@ public:
                K_(num_of_params),
                K_(ref_cnt),
                K_(ps_stmt_checksum),
-               K_(inner_stmt_id));
+               K_(inner_stmt_id),
+               K_(num_of_returning_into));
 
 private:
   ObPsStmtId stmt_id_;
@@ -367,6 +377,7 @@ private:
   ParamTypeInfoArray param_type_infos_;
   int64_t ref_cnt_;
   ObPsStmtId inner_stmt_id_;
+  int32_t num_of_returning_into_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPsSessionInfo);
@@ -398,6 +409,7 @@ struct PsCacheInfoCtx
 {
   PsCacheInfoCtx()
   : param_cnt_(0),
+    num_of_returning_into_(-1),
     is_inner_sql_(false),
     is_sensitive_sql_(false),
     normalized_sql_(),
@@ -409,6 +421,7 @@ struct PsCacheInfoCtx
 
 
   TO_STRING_KV(K_(param_cnt),
+               K_(num_of_returning_into),
                K_(is_inner_sql),
                K_(is_sensitive_sql),
                K_(normalized_sql),
@@ -417,6 +430,7 @@ struct PsCacheInfoCtx
                K_(stmt_type));
 
   int64_t param_cnt_;
+  int32_t num_of_returning_into_;
   bool is_inner_sql_;
   bool is_sensitive_sql_;
   common::ObString normalized_sql_;

@@ -64,6 +64,8 @@ public:
   { return create_table_arg_.foreign_key_arg_list_; }
   const common::ObSArray<obcall::ObCreateForeignKeyArg> &get_read_only_foreign_key_arg_list() const
   { return create_table_arg_.foreign_key_arg_list_; }
+  common::ObSArray<obcall::ObCreateVertialPartitionArg> &get_vertical_partition_arg_list()
+  { return create_table_arg_.vertical_partition_arg_list_; }
   virtual obcall::ObDDLArg &get_ddl_arg() { return create_table_arg_; }
   void set_sub_select(ObSelectStmt *select_stmt);
   void set_view_define(ObSelectStmt *select_stmt);

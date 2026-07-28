@@ -6,6 +6,16 @@ ob_set_subtarget(oblib_lib downsink_qt
   thread/ob_balance_filter.cpp
 )
 
+ob_set_subtarget(oblib_lib errsim_module_type
+  errsim_module/ob_errsim_module_type.cpp
+)
+
+if (OB_ERRSIM)
+  ob_set_subtarget(oblib_lib errsim_module_interface
+    errsim_module/ob_errsim_module_interface.cpp
+  )
+endif()
+
 ob_set_subtarget(oblib_lib downsink
   time/ob_clock_generator.cpp
   utility/ob_smart_call.cpp

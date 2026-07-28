@@ -40,6 +40,7 @@ struct ObSSTableReadHandle
 public:
   ObSSTableReadHandle() :
       is_get_(false),
+      is_bf_contain_(false),
       is_sorted_multi_get_(false),
       row_state_(0),
       range_idx_(-1),
@@ -55,6 +56,7 @@ public:
   void reuse()
   {
     is_get_ = false;
+    is_bf_contain_ = false;
     is_sorted_multi_get_ = false;
     row_state_ = 0;
     range_idx_ = -1;
@@ -67,6 +69,7 @@ public:
   void reset()
   {
     is_get_ = false;
+    is_bf_contain_ = false;
     is_sorted_multi_get_ = false;
     row_state_ = 0;
     range_idx_ = -1;
@@ -80,6 +83,7 @@ public:
   void move_from(ObSSTableReadHandle& other)
   {
     this->is_get_ = other.is_get_;
+    this->is_bf_contain_ = other.is_bf_contain_;
     this->is_sorted_multi_get_ = other.is_sorted_multi_get_;
     this->row_state_ = other.row_state_;
     this->range_idx_ = other.range_idx_;
@@ -99,6 +103,7 @@ public:
       this->reset();
     } else {
       this->is_get_ = other.is_get_;
+      this->is_bf_contain_ = other.is_bf_contain_;
       this->is_sorted_multi_get_ = other.is_sorted_multi_get_;
       this->row_state_ = other.row_state_;
       this->range_idx_ = other.range_idx_;
@@ -135,11 +140,12 @@ public:
     }
     return ret;
   }
-  TO_STRING_KV(K_(is_get), K_(is_sorted_multi_get), K_(row_state), K_(range_idx), K_(index_block_info),
+  TO_STRING_KV(K_(is_get), K_(is_bf_contain), K_(is_sorted_multi_get), K_(row_state), K_(range_idx), K_(index_block_info),
                K_(micro_begin_idx), K_(micro_end_idx), KP_(query_range), KPC_(micro_handle));
 
 public:
   bool is_get_;
+  bool is_bf_contain_;
   bool is_sorted_multi_get_;
   int8_t row_state_;    // possible states: NOT_EXIST, IN_ROW_CACHE, IN_BLOCK
   int64_t range_idx_;

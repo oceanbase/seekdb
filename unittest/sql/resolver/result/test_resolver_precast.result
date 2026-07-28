@@ -7,6 +7,7 @@ select * from t3 where c3='2';
       "table_id":1099511677779,
       "table_name":"t3",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677779,
       "database_name":"rongxuan",
@@ -62,6 +63,7 @@ select * from t3 where c3='2';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -116,6 +118,7 @@ select * from t3 where c3='2';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -163,6 +166,7 @@ select * from t3 where c3='2';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -214,6 +218,7 @@ select * from t3 where c3='2';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -312,6 +317,7 @@ select * from t3 where c3='2';
           "column_id":16,
           "database_name":"rongxuan",
           "table_name":"t3",
+          "synonym_name":"",
           "column_name":"c3",
           "expr_level":0,
           "expr_levels": [
@@ -516,6 +522,7 @@ select * from t3 where c3>'2';
       "table_id":1099511677779,
       "table_name":"t3",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677779,
       "database_name":"rongxuan",
@@ -571,6 +578,7 @@ select * from t3 where c3>'2';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -625,6 +633,7 @@ select * from t3 where c3>'2';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -672,6 +681,7 @@ select * from t3 where c3>'2';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -723,6 +733,7 @@ select * from t3 where c3>'2';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -821,6 +832,7 @@ select * from t3 where c3>'2';
           "column_id":16,
           "database_name":"rongxuan",
           "table_name":"t3",
+          "synonym_name":"",
           "column_name":"c3",
           "expr_level":0,
           "expr_levels": [
@@ -1025,6 +1037,7 @@ select * from t3 where c3<'2';
       "table_id":1099511677779,
       "table_name":"t3",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677779,
       "database_name":"rongxuan",
@@ -1080,6 +1093,7 @@ select * from t3 where c3<'2';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -1134,6 +1148,7 @@ select * from t3 where c3<'2';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -1181,6 +1196,7 @@ select * from t3 where c3<'2';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -1232,6 +1248,7 @@ select * from t3 where c3<'2';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -1330,6 +1347,7 @@ select * from t3 where c3<'2';
           "column_id":16,
           "database_name":"rongxuan",
           "table_name":"t3",
+          "synonym_name":"",
           "column_name":"c3",
           "expr_level":0,
           "expr_levels": [
@@ -1534,6 +1552,7 @@ select * from t3 where c3>='2';
       "table_id":1099511677779,
       "table_name":"t3",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677779,
       "database_name":"rongxuan",
@@ -1589,6 +1608,7 @@ select * from t3 where c3>='2';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -1643,6 +1663,7 @@ select * from t3 where c3>='2';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -1690,6 +1711,7 @@ select * from t3 where c3>='2';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -1741,6 +1763,7 @@ select * from t3 where c3>='2';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -1839,6 +1862,7 @@ select * from t3 where c3>='2';
           "column_id":16,
           "database_name":"rongxuan",
           "table_name":"t3",
+          "synonym_name":"",
           "column_name":"c3",
           "expr_level":0,
           "expr_levels": [
@@ -2043,6 +2067,7 @@ select * from t3 where c3<='2';
       "table_id":1099511677779,
       "table_name":"t3",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677779,
       "database_name":"rongxuan",
@@ -2098,6 +2123,7 @@ select * from t3 where c3<='2';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -2152,6 +2178,7 @@ select * from t3 where c3<='2';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -2199,6 +2226,7 @@ select * from t3 where c3<='2';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -2250,6 +2278,7 @@ select * from t3 where c3<='2';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -2348,6 +2377,7 @@ select * from t3 where c3<='2';
           "column_id":16,
           "database_name":"rongxuan",
           "table_name":"t3",
+          "synonym_name":"",
           "column_name":"c3",
           "expr_level":0,
           "expr_levels": [
@@ -2552,6 +2582,7 @@ select * from t3 where c3!='2';
       "table_id":1099511677779,
       "table_name":"t3",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677779,
       "database_name":"rongxuan",
@@ -2607,6 +2638,7 @@ select * from t3 where c3!='2';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -2661,6 +2693,7 @@ select * from t3 where c3!='2';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -2708,6 +2741,7 @@ select * from t3 where c3!='2';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -2759,6 +2793,7 @@ select * from t3 where c3!='2';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -2856,6 +2891,7 @@ select * from t3 where c3!='2';
           "column_id":16,
           "database_name":"rongxuan",
           "table_name":"t3",
+          "synonym_name":"",
           "column_name":"c3",
           "expr_level":0,
           "expr_levels": [
@@ -3060,6 +3096,7 @@ select * from t3 where c3<=>'2';
       "table_id":1099511677779,
       "table_name":"t3",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677779,
       "database_name":"rongxuan",
@@ -3115,6 +3152,7 @@ select * from t3 where c3<=>'2';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -3169,6 +3207,7 @@ select * from t3 where c3<=>'2';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -3216,6 +3255,7 @@ select * from t3 where c3<=>'2';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -3267,6 +3307,7 @@ select * from t3 where c3<=>'2';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -3365,6 +3406,7 @@ select * from t3 where c3<=>'2';
           "column_id":16,
           "database_name":"rongxuan",
           "table_name":"t3",
+          "synonym_name":"",
           "column_name":"c3",
           "expr_level":0,
           "expr_levels": [
@@ -3569,6 +3611,7 @@ select * from t3 where c3 is null;
       "table_id":1099511677779,
       "table_name":"t3",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677779,
       "database_name":"rongxuan",
@@ -3624,6 +3667,7 @@ select * from t3 where c3 is null;
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -3678,6 +3722,7 @@ select * from t3 where c3 is null;
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -3725,6 +3770,7 @@ select * from t3 where c3 is null;
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -3776,6 +3822,7 @@ select * from t3 where c3 is null;
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -3874,6 +3921,7 @@ select * from t3 where c3 is null;
           "column_id":16,
           "database_name":"rongxuan",
           "table_name":"t3",
+          "synonym_name":"",
           "column_name":"c3",
           "expr_level":0,
           "expr_levels": [
@@ -4030,6 +4078,7 @@ select * from t3 where c3 is false;
       "table_id":1099511677779,
       "table_name":"t3",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677779,
       "database_name":"rongxuan",
@@ -4085,6 +4134,7 @@ select * from t3 where c3 is false;
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -4139,6 +4189,7 @@ select * from t3 where c3 is false;
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -4186,6 +4237,7 @@ select * from t3 where c3 is false;
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -4237,6 +4289,7 @@ select * from t3 where c3 is false;
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -4335,6 +4388,7 @@ select * from t3 where c3 is false;
           "column_id":16,
           "database_name":"rongxuan",
           "table_name":"t3",
+          "synonym_name":"",
           "column_name":"c3",
           "expr_level":0,
           "expr_levels": [
@@ -4491,6 +4545,7 @@ select * from t3 where c3 is true;
       "table_id":1099511677779,
       "table_name":"t3",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677779,
       "database_name":"rongxuan",
@@ -4546,6 +4601,7 @@ select * from t3 where c3 is true;
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -4600,6 +4656,7 @@ select * from t3 where c3 is true;
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -4647,6 +4704,7 @@ select * from t3 where c3 is true;
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -4698,6 +4756,7 @@ select * from t3 where c3 is true;
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -4796,6 +4855,7 @@ select * from t3 where c3 is true;
           "column_id":16,
           "database_name":"rongxuan",
           "table_name":"t3",
+          "synonym_name":"",
           "column_name":"c3",
           "expr_level":0,
           "expr_levels": [
@@ -4952,6 +5012,7 @@ select * from t3 where c3+'2'>'1';
       "table_id":1099511677779,
       "table_name":"t3",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677779,
       "database_name":"rongxuan",
@@ -5007,6 +5068,7 @@ select * from t3 where c3+'2'>'1';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -5061,6 +5123,7 @@ select * from t3 where c3+'2'>'1';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -5108,6 +5171,7 @@ select * from t3 where c3+'2'>'1';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -5159,6 +5223,7 @@ select * from t3 where c3+'2'>'1';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -5288,6 +5353,7 @@ select * from t3 where c3+'2'>'1';
               "column_id":16,
               "database_name":"rongxuan",
               "table_name":"t3",
+              "synonym_name":"",
               "column_name":"c3",
               "expr_level":0,
               "expr_levels": [
@@ -5602,6 +5668,7 @@ select * from t3 where c3-'2'>'1';
       "table_id":1099511677779,
       "table_name":"t3",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677779,
       "database_name":"rongxuan",
@@ -5657,6 +5724,7 @@ select * from t3 where c3-'2'>'1';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -5711,6 +5779,7 @@ select * from t3 where c3-'2'>'1';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -5758,6 +5827,7 @@ select * from t3 where c3-'2'>'1';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -5809,6 +5879,7 @@ select * from t3 where c3-'2'>'1';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -5938,6 +6009,7 @@ select * from t3 where c3-'2'>'1';
               "column_id":16,
               "database_name":"rongxuan",
               "table_name":"t3",
+              "synonym_name":"",
               "column_name":"c3",
               "expr_level":0,
               "expr_levels": [
@@ -6252,6 +6324,7 @@ select * from t3 where c3*'2'>'1';
       "table_id":1099511677779,
       "table_name":"t3",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677779,
       "database_name":"rongxuan",
@@ -6307,6 +6380,7 @@ select * from t3 where c3*'2'>'1';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -6361,6 +6435,7 @@ select * from t3 where c3*'2'>'1';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -6408,6 +6483,7 @@ select * from t3 where c3*'2'>'1';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -6459,6 +6535,7 @@ select * from t3 where c3*'2'>'1';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -6588,6 +6665,7 @@ select * from t3 where c3*'2'>'1';
               "column_id":16,
               "database_name":"rongxuan",
               "table_name":"t3",
+              "synonym_name":"",
               "column_name":"c3",
               "expr_level":0,
               "expr_levels": [
@@ -6902,6 +6980,7 @@ select * from t3 where c3/'2'>'1';
       "table_id":1099511677779,
       "table_name":"t3",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677779,
       "database_name":"rongxuan",
@@ -6957,6 +7036,7 @@ select * from t3 where c3/'2'>'1';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -7011,6 +7091,7 @@ select * from t3 where c3/'2'>'1';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -7058,6 +7139,7 @@ select * from t3 where c3/'2'>'1';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -7109,6 +7191,7 @@ select * from t3 where c3/'2'>'1';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -7238,6 +7321,7 @@ select * from t3 where c3/'2'>'1';
               "column_id":16,
               "database_name":"rongxuan",
               "table_name":"t3",
+              "synonym_name":"",
               "column_name":"c3",
               "expr_level":0,
               "expr_levels": [
@@ -7552,6 +7636,7 @@ select * from t3 where length(concat(c3, '2'))>'1';
       "table_id":1099511677779,
       "table_name":"t3",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677779,
       "database_name":"rongxuan",
@@ -7607,6 +7692,7 @@ select * from t3 where length(concat(c3, '2'))>'1';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -7661,6 +7747,7 @@ select * from t3 where length(concat(c3, '2'))>'1';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -7708,6 +7795,7 @@ select * from t3 where length(concat(c3, '2'))>'1';
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -7759,6 +7847,7 @@ select * from t3 where length(concat(c3, '2'))>'1';
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t3",
+        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -7927,6 +8016,7 @@ select * from t3 where length(concat(c3, '2'))>'1';
                   "column_id":16,
                   "database_name":"rongxuan",
                   "table_name":"t3",
+                  "synonym_name":"",
                   "column_name":"c3",
                   "expr_level":0,
                   "expr_levels": [

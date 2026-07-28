@@ -20,15 +20,16 @@
 #include "lib/hash/ob_pointer_hashmap.h"
 #include "sql/rewrite/ob_query_range_define.h"
 #include "sql/das/ob_das_define.h"
-#include "sql/das/ob_das_tablet_mapper.h"
 #include "sql/engine/expr/ob_sql_expression.h"
 #include "sql/engine/expr/ob_sql_expression_factory.h"
 #include "sql/engine/expr/ob_expr_operator_factory.h"
+#include "sql/ob_phy_table_location.h"
 #include "sql/code_generator/ob_column_index_provider.h"
 #include "sql/optimizer/ob_phy_table_location_info.h"
 #include "sql/engine/px/ob_granule_util.h"
 #include "sql/resolver/dml/ob_dml_stmt.h"
 #include "lib/hash/ob_pointer_hashmap.h"
+#include "sql/das/ob_das_location_router.h"
 //#include "sql/resolver/ddl/ob_alter_table_stmt.h"
 
 namespace oceanbase
@@ -41,6 +42,7 @@ class ObColumnRefRawExpr;
 class ObExprEqualCheckContext;
 class ObDASTabletMapper;
 class ObDASCtx;
+class DASRelatedTabletMap;
 typedef common::ObSEArray<int64_t, 1> RowkeyArray;
 class ObPartIdRowMapManager
 {
@@ -469,8 +471,10 @@ public:
     common::ObIAllocator &allocator_;
   };
 
-  ObTableLocationType get_location_type(
-      const ObCandiTabletLocIArray &phy_part_loc_info_list) const;
+  int get_location_type(
+      const common::ObAddr &server,
+      const ObCandiTabletLocIArray &phy_part_loc_info_list,
+      ObTableLocationType &location_type) const;
 
   //get virtual talbe partition ids or fake id. ref_table_id should be partitioned virtual table
   //@param [in] ref_table_id partitioned virtual table
@@ -624,6 +628,10 @@ public:
                               const ObSqlCtx *sql_ctx,
                               bool &is_weak_read);
 
+  int send_add_interval_partition_rpc(ObExecContext &exec_ctx,
+                                      share::schema::ObSchemaGetterGuard *schema_guard,
+                                      ObNewRow &row) const;
+
   /**
    * Calculate the table's partition location list from the input parameters.
    *
@@ -701,6 +709,12 @@ public:
                                  const ObIArray<ObObjectID> &partition_ids,
                                  const ObIArray<ObObjectID> &first_level_part_ids) const;
 
+  static int send_add_interval_partition_rpc_new_engine(ObIAllocator &allocator,
+                                                        ObSQLSessionInfo *session,
+                                                        ObSchemaGetterGuard *schema_guard,
+                                                        const ObTableSchema *table_schema,
+                                                        ObNewRow &row);
+
   inline void set_table_id(uint64_t table_id) { loc_meta_.table_loc_id_ = table_id; }
 
   inline uint64_t get_table_id() const { return loc_meta_.table_loc_id_; }
@@ -727,11 +741,11 @@ public:
                                         common::ObIArray<ObRawExpr *> *sort_exprs) const;
   bool has_generated_column() const { return NULL != se_gen_col_expr_ || NULL != se_sub_gen_col_expr_ ||
                                              NULL != gen_col_node_ || NULL != sub_gen_col_node_; }
-  static int build_full_local_table_loc(ObDASCtx &das_ctx,
-                                        ObIAllocator &allocator,
-                                        uint64_t table_id,
-                                        uint64_t ref_table_id,
-                                        ObDASTableLoc *&table_loc);
+  static int get_full_local_table_loc(ObDASLocationRouter &loc_router,
+                                      ObIAllocator &allocator,
+                                      uint64_t table_id,
+                                      uint64_t ref_table_id,
+                                      ObDASTableLoc *&table_loc);
   int add_part_hint_ids(const ObIArray<ObObjectID> &part_ids) {
     return append_array_no_dup(part_hint_ids_, part_ids);
   }

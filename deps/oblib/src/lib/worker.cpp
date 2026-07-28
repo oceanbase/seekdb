@@ -16,14 +16,34 @@
 
 #define USING_LOG_PREFIX LIB
 #include "worker.h"
+namespace oceanbase { namespace rpc { extern common::ObAddr g_server_self_addr; } }
 
 using namespace oceanbase::common;
 using namespace oceanbase::lib;
 
+OB_DEF_SERIALIZE(ObExtraRpcHeader)
+{
+  int ret = OB_SUCCESS;
+  LST_DO_CODE(OB_UNIS_ENCODE, rpc::g_server_self_addr);
+  return ret;
+}
+OB_DEF_DESERIALIZE(ObExtraRpcHeader)
+{
+  int ret = OB_SUCCESS;
+  LST_DO_CODE(OB_UNIS_DECODE, src_addr_);
+  return ret;
+}
+OB_DEF_SERIALIZE_SIZE(ObExtraRpcHeader)
+{
+  int64_t len = 0;
+  LST_DO_CODE(OB_UNIS_ADD_LEN, rpc::g_server_self_addr);
+  return len;
+}
+
 #ifdef ERRSIM
-  OB_SERIALIZE_MEMBER(ObRuntimeContext, module_type_, log_reduction_mode_);
+  OB_SERIALIZE_MEMBER(ObRuntimeContext, module_type_, log_reduction_mode_, extra_rpc_header_);
 #else
-  OB_SERIALIZE_MEMBER(ObRuntimeContext, log_reduction_mode_);
+  OB_SERIALIZE_MEMBER(ObRuntimeContext, log_reduction_mode_, extra_rpc_header_);
 #endif
 
 

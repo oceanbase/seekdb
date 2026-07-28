@@ -26,7 +26,7 @@ using namespace storage;
 using namespace share;
 namespace compaction
 {
-bool ObCompactionProgressBase::is_valid() const
+bool ObCompactionProgress::is_valid() const
 {
   bool bret = true;
   if (OB_UNLIKELY(merge_type_ <= INVALID_MERGE_TYPE || merge_type_ >= MERGE_TYPE_MAX
@@ -37,7 +37,7 @@ bool ObCompactionProgressBase::is_valid() const
   return bret;
 }
 
-void ObCompactionProgressBase::reset()
+void ObCompactionProgress::reset()
 {
 
   merge_type_ = INVALID_MERGE_TYPE;
@@ -52,7 +52,7 @@ void ObCompactionProgressBase::reset()
 }
 
 
-ObCompactionProgress &ObCompactionProgress::operator=(const ObCompactionProgress &other)
+ObMajorCompactionProgress & ObMajorCompactionProgress::operator=(const ObMajorCompactionProgress &other)
 {
   is_inited_ = other.is_inited_;
 
@@ -77,7 +77,7 @@ ObCompactionProgress &ObCompactionProgress::operator=(const ObCompactionProgress
 bool ObDiagnoseTabletCompProgress::is_valid() const
 {
   bool bret = true;
-  if (OB_UNLIKELY(!ObCompactionProgressBase::is_valid()
+  if (OB_UNLIKELY(!ObCompactionProgress::is_valid()
     || create_time_ <= 0
     || (share::ObIDag::DAG_STATUS_NODE_RUNNING == status_
         && (start_time_ <= 0 || snapshot_version_ <= 0)))) {
@@ -171,7 +171,7 @@ int ObCompactionProgressMgr::init_progress(const int64_t major_snapshot_version)
         (void)finish_progress_(array_[i]);
       }
 
-      ObCompactionProgress progress;
+      ObMajorCompactionProgress progress;
       progress.merge_version_ = major_snapshot_version;
 
       progress.merge_type_ = MAJOR_MERGE;
@@ -210,7 +210,7 @@ int ObCompactionProgressMgr::init_progress(const int64_t major_snapshot_version)
   return ret;
 }
 
-int ObCompactionProgressMgr::finish_progress_(ObCompactionProgress &progress)
+int ObCompactionProgressMgr::finish_progress_(ObMajorCompactionProgress &progress)
 {
   int ret = OB_SUCCESS;
   if (share::ObIDag::DAG_STATUS_FINISH != progress.status_) {
@@ -421,7 +421,7 @@ void ObCompactionProgressIterator::reset()
   is_opened_ = false;
 }
 
-int ObCompactionProgressIterator::get_next_info(ObCompactionProgress &info)
+int ObCompactionProgressIterator::get_next_info(ObMajorCompactionProgress &info)
 {
   int ret = OB_SUCCESS;
   if (!is_opened_) {

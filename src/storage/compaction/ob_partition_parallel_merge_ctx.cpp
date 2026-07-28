@@ -257,8 +257,9 @@ int ObParallelMergeCtx::init_parallel_major_merge(compaction::ObBasicTabletMerge
 #ifdef ERRSIM
 void errsim_set_prallel_cnt(const int64_t parallel_merge_cnt, int64_t &concurrent_cnt)
 {
-  // The negative value injected at EN_FORCE_PARALLEL_MINI_MERGE selects the
-  // parallel degree of mini merge.
+  /* alter system set_tp tp_no = 801, error_code = 3, frequency = 1;
+   * error_code = 3, then the parallel degree of mini merge will be 3
+  */
   int ret = OB_SUCCESS;
   ret = OB_E(EventTable::EN_FORCE_PARALLEL_MINI_MERGE) ret;
   if (OB_FAIL(ret)) {

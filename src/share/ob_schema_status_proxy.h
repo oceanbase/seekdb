@@ -40,6 +40,19 @@ class ObMySQLResult;
 namespace share
 {
 
+class ObSchemaStatusUpdater
+{
+public:
+  ObSchemaStatusUpdater(share::schema::ObRefreshSchemaStatus schema_status)
+    : schema_status_(schema_status) {}
+  virtual ~ObSchemaStatusUpdater() {}
+
+  int operator() (common::hash::HashMapPair<uint64_t, share::schema::ObRefreshSchemaStatus> &entry);
+private:
+  share::schema::ObRefreshSchemaStatus schema_status_;
+  DISALLOW_COPY_AND_ASSIGN(ObSchemaStatusUpdater);
+};
+
 // dodge the bug : 
 // all operation of __all_core_table must be single partition transaction
 class ObSchemaStatusProxy
@@ -77,6 +90,7 @@ private:
   int check_inner_stat();
 private:
   common::ObISQLClient &sql_proxy_;
+  // The server keeps one current refresh status protected by this lock.
   share::schema::ObRefreshSchemaStatus schema_status_cache_;
   mutable common::SpinRWLock schema_status_cache_lock_;
   bool is_inited_;

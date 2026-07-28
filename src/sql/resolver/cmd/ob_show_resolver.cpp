@@ -1747,9 +1747,13 @@ int ObShowResolver::resolve_show_from_table(const ParseNode *from_table_node,
         ret = OB_ERR_NO_DB_SELECTED;
         LOG_WARN("no database selected");
       } else {      // get from table clause in database
+        ObString synonym_name;
+        ObString synonym_db_name;
         if (OB_FAIL(resolve_table_relation_factor_normal(from_table_node,
                                                          show_database_id,
                                                          show_table_name,
+                                                         synonym_name,
+                                                         synonym_db_name,
                                                          show_database_name))) {
           if (OB_TABLE_NOT_EXIST == ret) {
             if (is_information_schema_database_id(show_database_id)) {
@@ -1988,7 +1992,7 @@ int ObShowResolver::resolve_show_from_trigger(const ParseNode *from_tg_node,
         real_id, show_database_name, show_tg_name);
     OV (OB_NOT_NULL(tg_info), OB_ERR_TRIGGER_NOT_EXIST);
     OX (show_tg_id = tg_info->get_trigger_id());
-    if (OB_SUCC(ret)) {
+    if (OB_SUCC(ret) && !tg_info->is_system_type()) {
       OZ (schema_checker_->get_table_schema( tg_info->get_base_object_id(), table));
       CK (OB_NOT_NULL(table));
       OX (show_table_name = table->get_table_name());
@@ -2944,8 +2948,8 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_TRIGGER,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_RECYCLEBIN,
                        "SELECT OBJECT_NAME, ORIGINAL_NAME, TYPE, CREATETIME",
-                       "SELECT OBJECT_NAME, ORIGINAL_NAME, case TYPE when 1 then 'TABLE' when 2 then 'INDEX' when 3 then 'VIEW' when 4 then 'DATABASE' when 5 then 'AUX_VP' when 6 then 'TRIGGER' else 'INVALID' end as TYPE, gmt_create as CREATETIME FROM %s.%s WHERE TYPE != 7 AND TYPE != 8 AND TYPE != 9",
-                       R"(SELECT "OBJECT_NAME", "ORIGINAL_NAME", CASE "TYPE" WHEN 1 THEN 'TABLE' WHEN 2 THEN 'INDEX' WHEN 3 THEN 'VIEW' WHEN 4 THEN 'DATABASE' when 5 then 'AUX_VP' when 6 then 'TRIGGER' ELSE 'INVALID' END AS "TYPE", "GMT_CREATE" AS "CREATETIME" FROM %s.%s WHERE TYPE != 7 AND TYPE != 8 AND TYPE != 9)",
+                       "SELECT OBJECT_NAME, ORIGINAL_NAME, case TYPE when 1 then 'TABLE' when 2 then 'INDEX' when 3 then 'VIEW' when 4 then 'DATABASE' when 5 then 'AUX_VP' when 6 then 'TRIGGER' when 7 then 'TENANT' else 'INVALID' end as TYPE, gmt_create as CREATETIME FROM %s.%s WHERE TYPE != 8 AND TYPE != 9",
+                       R"(SELECT "OBJECT_NAME", "ORIGINAL_NAME", CASE "TYPE" WHEN 1 THEN 'TABLE' WHEN 2 THEN 'INDEX' WHEN 3 THEN 'VIEW' WHEN 4 THEN 'DATABASE' when 5 then 'AUX_VP' when 6 then 'TRIGGER' WHEN 7 THEN 'TENANT' ELSE 'INVALID' END AS "TYPE", "GMT_CREATE" AS "CREATETIME" FROM %s.%s WHERE TYPE != 8 AND TYPE != 9)",
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_USER,
                        NULL,

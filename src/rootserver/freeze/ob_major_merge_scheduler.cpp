@@ -18,13 +18,11 @@
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "rootserver/freeze/ob_major_merge_scheduler.h"
-#include "share/ob_server_struct.h"
 #include "share/ob_structured_event_logger.h" // for ROOTSERVICE_EVENT_ADD
 #include "share/config/ob_runtime_config.h"  // RUNTIME_CONF, previously hidden behind a transitive include
 #include "share/ob_tablet_meta_table_compaction_operator.h"
 #include "share/ob_column_checksum_error_operator.h"
 #include "share/ob_global_merge_table_operator.h"
-#include "share/ob_column_checksum_error_operator.h"
 #include "rootserver/freeze/ob_major_merge_info_manager.h"
 
 namespace oceanbase

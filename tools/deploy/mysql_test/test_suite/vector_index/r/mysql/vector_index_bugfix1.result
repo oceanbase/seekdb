@@ -491,7 +491,7 @@ create index idx_1 on t1(c3) storing(c8);
 ERROR 42000: The used storage engine can't index column 'c8'
 drop table t1;
 set ob_enable_plan_cache=1;
-ALTER SYSTEM FLUSH PLAN CACHE;
+ALTER SYSTEM FLUSH PLAN CACHE GLOBAL;
 drop table if exists t_vector_index_query_plan;
 create table t_vector_index_query_plan(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw, lib=vsag));
 select * from t_vector_index_query_plan order by l2_distance(c2, [1,2,3]) APPROX limit 10;

@@ -16,18 +16,14 @@
 
 #ifndef OCEANBASE_ROOTSERVER_FREEZE_OB_MAJOR_FREEZE_HELPER_H_
 #define OCEANBASE_ROOTSERVER_FREEZE_OB_MAJOR_FREEZE_HELPER_H_
-#include "rootserver/freeze/ob_major_freeze_util.h"
 #include "share/scn.h"
-#include "common/ob_tablet_id.h"
+#include "rootserver/freeze/ob_major_freeze_util.h"
 
 namespace oceanbase
 {
-namespace common
-{
-class ObISQLClient;
-}
 namespace share
 {
+class SCN;
 class ObFreezeInfo;
 }
 namespace rootserver
@@ -87,12 +83,11 @@ public:
 
   static int get_frozen_status(const share::SCN &frozen_scn, 
                                share::ObFreezeInfo &frozen_status);
-  static int get_frozen_status(const share::SCN &frozen_scn,
+  static int get_frozen_status(const share::SCN &frozen_scn, 
                                share::ObFreezeInfo &frozen_status,
-                               common::ObISQLClient *proxy);
+                               ObISQLClient *proxy);
   static int get_frozen_scn(share::SCN &frozen_scn);
-  static int get_frozen_scn(share::SCN &frozen_scn,
-                            common::ObISQLClient *proxy);
+  static int get_frozen_scn(share::SCN &frozen_scn, ObISQLClient *proxy);
 
 private:
   enum class AdminMergeType

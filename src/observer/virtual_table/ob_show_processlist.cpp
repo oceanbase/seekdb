@@ -78,6 +78,16 @@ int ObShowProcesslist::inner_get_next_row(ObNewRow *&row)
   return ret;
 }
 
+bool ObShowProcesslist::FillScanner::has_process_privilege()
+{
+  int ret = OB_SUCCESS;
+  bool has_priv = false;
+  if (my_session_ != NULL) {
+    has_priv = my_session_->has_user_process_privilege();
+  }
+  return has_priv;
+}
+
 bool ObShowProcesslist::FillScanner::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSessionInfo *sess_info)
 {
   int ret = OB_SUCCESS;

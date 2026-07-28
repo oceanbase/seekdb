@@ -75,21 +75,21 @@ public:
     } else if (mgr_.init()) {
       SHARE_SCHEMA_LOG(WARN, "init mgr failed", K(ret));
     } else {
-      ObSimpleServerRuntimeSchema simple_runtime_schema;
-      ObServerRuntimeSchema runtime_schema;
-      runtime_schema.set_schema_version(OB_CORE_SCHEMA_VERSION);
+      ObSimpleServerRuntimeSchema simple_schema;
+      ObServerRuntimeSchema sys_tenant;
+      sys_tenant.set_schema_version(OB_CORE_SCHEMA_VERSION);
       ObSysVariableSchema sys_variable;
       sys_variable.set_name_case_mode(OB_ORIGIN_AND_INSENSITIVE);
       sys_variable.set_schema_version(OB_CORE_SCHEMA_VERSION);
-      if (OB_FAIL(runtime_schema.set_runtime_name(OB_SERVER_RUNTIME_NAME))) {
-        SHARE_SCHEMA_LOG(WARN, "set runtime name failed", K(ret));
-      } else if (OB_FAIL(convert_to_simple_schema(runtime_schema, simple_runtime_schema))) {
-        SHARE_SCHEMA_LOG(WARN, "convert to simple runtime schema failed", K(ret));
-      } else if (OB_FAIL(mgr_.add_runtime_schema(simple_runtime_schema))) {
-        SHARE_SCHEMA_LOG(WARN, "add runtime schema failed", K(ret));
+      if (OB_FAIL(sys_tenant.set_runtime_name(OB_SERVER_RUNTIME_NAME))) {
+        SHARE_SCHEMA_LOG(WARN, "Set tenant name error", K(ret));
+      } else if (OB_FAIL(convert_to_simple_schema(sys_tenant, simple_schema))) {
+        SHARE_SCHEMA_LOG(WARN, "convert_to_simple_schema failed", K(ret));
+      } else if (OB_FAIL(mgr_.add_runtime_schema(simple_schema))) {
+        SHARE_SCHEMA_LOG(WARN, "add tenant failed", K(ret));
       } else if (OB_FAIL(add_schema_to_cache(SERVER_RUNTIME_SCHEMA, OB_SERVER_RUNTIME_ID,
-                                             runtime_schema.get_schema_version(), runtime_schema))) {
-        SHARE_SCHEMA_LOG(WARN, "add runtime schema to cache failed", K(ret));
+                                             sys_tenant.get_schema_version(), sys_tenant))) {
+        SHARE_SCHEMA_LOG(WARN, "add schema to cache failed", K(ret));
       } else if (OB_FAIL(add_sys_variable_schema(sys_variable, sys_variable.get_schema_version()))) {
         SHARE_SCHEMA_LOG(WARN, "add schema to cache failed", K(ret));
       }
@@ -103,32 +103,55 @@ public:
 //  MOCK_METHOD2(check_table_exist,
 //      int(const uint64_t table_id, bool &exist));
 
-  virtual int get_runtime_schema_guard(
-      ObSchemaGetterGuard &guard,
-      int64_t schema_version = common::OB_INVALID_VERSION,
-      const RefreshSchemaMode refresh_schema_mode = RefreshSchemaMode::NORMAL) override
+  virtual int get_schema_guard(ObSchemaGetterGuard &guard,
+                       int64_t schema_version = common::OB_INVALID_VERSION,
+                        const bool force_fallback = false)
   {
     int ret = OB_SUCCESS;
 
-    UNUSED(refresh_schema_mode);
+    UNUSED(force_fallback);
     if (OB_FAIL(guard.reset())) {
       SHARE_SCHEMA_LOG(WARN, "fail to reset guard", K(ret));
     } else if (OB_FAIL(guard.init())) {
       SHARE_SCHEMA_LOG(WARN, "fail to init guard", K(ret));
     } else {
+      ObArray<const ObSimpleServerRuntimeSchema *> runtime_schemas;
       ObSchemaMgrHandle handle(guard.mod_);
       const int64_t snapshot_version = common::OB_INVALID_VERSION == schema_version ? INT64_MAX : schema_version;
       const ObSchemaMgr *mgr = &mgr_;
-      ObRefreshSchemaStatus schema_status;
-      ObSchemaMgrInfo schema_mgr_info(snapshot_version,
-                                      mgr,
-                                      handle,
-                                      schema_status);
-      if (OB_FAIL(guard.schema_mgr_infos_.push_back(schema_mgr_info))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to push back schema mgr info", KR(ret), K(schema_mgr_info));
+      if (OB_FAIL(mgr_.get_runtime_schemas(runtime_schemas))) {
+        SHARE_SCHEMA_LOG(WARN, "fail to get tenant schemas", KR(ret));
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < runtime_schemas.count(); i++) {
+        const ObSimpleServerRuntimeSchema *&tenant = runtime_schemas.at(i);
+        if (OB_NOT_NULL(tenant)) {
+          ObRefreshSchemaStatus schema_status;
+          ObSchemaMgrInfo schema_mgr_info(snapshot_version,
+                                          mgr,
+                                          handle,
+                                          schema_status);
+          if (OB_FAIL(guard.schema_mgr_infos_.push_back(schema_mgr_info))) {
+            SHARE_SCHEMA_LOG(WARN, "fail to push back schema mgr info", KR(ret), K(schema_mgr_info));
+          }
+        }
       }
       guard.schema_service_ = this;
       guard.schema_guard_type_ = ObSchemaGetterGuard::RUNTIME_SCHEMA_GUARD;
+    }
+    return ret;
+  }
+
+  int add_tenant_schema(const ObServerRuntimeSchema &runtime_schema, int64_t schema_version)
+  {
+    int ret = OB_SUCCESS;
+    ObSimpleServerRuntimeSchema simple_schema;
+    if (OB_FAIL(convert_to_simple_schema(runtime_schema, simple_schema))) {
+      SHARE_SCHEMA_LOG(WARN, "convert_to_simple_schema failed", K(ret));
+    } else if (OB_FAIL(mgr_.add_runtime_schema(simple_schema))) {
+      SHARE_SCHEMA_LOG(WARN, "add user failed", K(ret));
+    } else if (OB_FAIL(add_schema_to_cache(SERVER_RUNTIME_SCHEMA, OB_SERVER_RUNTIME_ID,
+                                           schema_version, runtime_schema))) {
+      SHARE_SCHEMA_LOG(WARN, "add schema to cache failed, ret", K(ret));
     }
     return ret;
   }
@@ -303,7 +326,7 @@ private:
       const ObServerRuntimeSchema &schema,
       ObSimpleServerRuntimeSchema &simple_schema)
   {
-    int ret = OB_SUCCESS;
+    int ret= OB_SUCCESS;
 
     simple_schema.set_runtime_name(schema.get_runtime_name_str());
     simple_schema.set_schema_version(schema.get_schema_version());

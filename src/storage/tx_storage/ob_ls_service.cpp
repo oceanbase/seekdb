@@ -26,9 +26,9 @@
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
 #include "storage/tx/ob_trans_service.h"
-#include "share/ob_share_util.h"
-#include "storage/allocator/ob_mds_allocator.h"
-#include "storage/allocator/ob_tx_data_allocator.h"
+#include "share/ob_share_util.h"  // relocated-definition owner
+#include "storage/allocator/ob_mds_allocator.h"  // relocated-definition owner
+#include "storage/allocator/ob_tx_data_allocator.h"  // relocated-definition owner
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"  // needed by relocated destructor logic in the throttle helper
 #include "share/resource_limit_calculator/ob_resource_limit_calculator.h"  // relocated-definition owner
 
@@ -797,7 +797,7 @@ void ObLSService::del_ls_after_create_ls_failed_(ObLSCreateState& in_ls_create_s
 
 
 // ===== definition moved from share/ob_share_util.cpp =====
-
+// real user ObLSService/ObLS complete type(previously hidden behind share_util's removed include chain); declaration remains in share/ob_share_util.h(transitional state)
 namespace oceanbase
 {
 namespace share

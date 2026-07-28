@@ -26,6 +26,7 @@ using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::rootserver;
+using namespace oceanbase::obcall;
 
 ObDDLRetryTask::ObDDLRetryTask()
   : ObDDLTask(share::DDL_INVALID), ddl_arg_(nullptr), local_management_service_(nullptr), affected_rows_(0),

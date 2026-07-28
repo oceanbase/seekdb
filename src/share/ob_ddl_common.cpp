@@ -32,6 +32,7 @@
 using namespace oceanbase::share;
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
+using namespace oceanbase::obcall;
 using namespace oceanbase::sql;
 using namespace oceanbase::storage;
 using namespace oceanbase::blocksstable;
@@ -342,7 +343,7 @@ int ObColumnNameMap::get_changed_names(ObIArray<std::pair<ObString, ObString>> &
 
 
 /******************           ObDDLUtil         *************/
-
+// moved definition to the upper-layer owner cpp(transitional state)
 
 
 int ObDDLUtil::get_tablets(
@@ -745,18 +746,18 @@ bool ObDDLUtil::need_reshape(const ObObjMeta &col_type)
   return col_type.is_binary() || col_type.is_fixed_len_char_type();
 }
 
+// int ObDDLUtil::check_null_and_length moved definition to storage/ddl/ob_ddl_common_storage_impl.cpp(accesses blocksstable members)
+
+
+
+// int ObDDLUtil::init_datum_row_with_snapshot moved definition to storage/ddl/ob_ddl_common_storage_impl.cpp(accesses blocksstable members)
 
 
 
 
 
 
-
-
-
-
-
-
+// moved definition to the upper-layer owner cpp(transitional state)
 
 
 
@@ -765,8 +766,7 @@ bool ObDDLUtil::need_reshape(const ObObjMeta &col_type)
 // moved definition to sql/resolver/ddl/ob_ddl_resolver.cpp(vector vocabulary)
 
 
-
-
+// moved definition to sql/resolver/ddl/ob_ddl_resolver.cpp(vector vocabulary)
 
 
 
@@ -1350,9 +1350,9 @@ bool ObDDLUtil::use_idempotent_mode()
   return true;
 }
 
+// int ObDDLUtil::init_macro_block_seq moved definition to storage/ddl/ob_ddl_common_storage_impl.cpp(accesses blocksstable members)
 
-
-
+// int64_t ObDDLUtil::get_parallel_idx moved definition to storage/ddl/ob_ddl_common_storage_impl.cpp(accesses blocksstable members)
 
 
 int ObDDLUtil::get_global_index_table_ids(const schema::ObTableSchema &table_schema, ObIArray<uint64_t> &global_index_table_ids, ObSchemaGetterGuard &schema_guard)

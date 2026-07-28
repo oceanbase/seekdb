@@ -61,6 +61,7 @@ int rollback_tx(ObTxDesc &tx);
  *
  * @tx:         the target transaction's descriptor
  * @expire_ts:  microseconds after which timeouted
+ * @trace_info: trace info need to persistent in CommitLog
  *
  * Return:
  * OB_SUCCESS          - commit succeed
@@ -68,7 +69,7 @@ int rollback_tx(ObTxDesc &tx);
  * OB_TRANS_TIMEOUT    - transaction timeout and aborted internally
  * OB_TIME_OUT         - commit operation blocking wait timeouted
  */
-int commit_tx(ObTxDesc &tx, const int64_t expire_ts);
+int commit_tx(ObTxDesc &tx, const int64_t expire_ts, const ObString *trace_info = NULL);
 
 /**
  * submit_commit_tx - start transaction commit
@@ -80,6 +81,7 @@ int commit_tx(ObTxDesc &tx, const int64_t expire_ts);
  * @tx:               the target transaction's descriptor
  * @expire_ts:        microseconds after which timeouted
  * @callback:         callback object
+ * @trace_info:       trace info need to persistent in CommitLog
  *
  * Return:
  * OB_SUCCESS            - the commit successfully submitted,
@@ -91,7 +93,8 @@ int commit_tx(ObTxDesc &tx, const int64_t expire_ts);
  */
 int submit_commit_tx(ObTxDesc &tx,
                      const int64_t expire_ts,
-                     ObITxCallback &callback);
+                     ObITxCallback &callback,
+                     const ObString *trace_info = NULL);
 
 /**
  * release_tx - release transaction descriptor

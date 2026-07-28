@@ -248,6 +248,7 @@ int ObDBMSSchedJobInfo::deep_copy(ObIAllocator &allocator, const ObDBMSSchedJobI
   OZ (ob_write_string(allocator, other.state_, state_));
   OZ (ob_write_string(allocator, other.job_action_, job_action_));
   OZ (ob_write_string(allocator, other.job_type_, job_type_));
+  OZ (ob_write_string(allocator, other.this_exec_addr_, this_exec_addr_));
   OZ (ob_write_string(allocator, other.this_exec_trace_id_, this_exec_trace_id_));
   //Handle columns with compatibility issues
   //job style 
@@ -301,7 +302,7 @@ int ObDBMSSchedJobUtils::stop_dbms_sched_job(
       }
     }
     if (OB_SUCC(ret)) {
-      // The virtual table reports jobs running in this process.
+      // vtable_route_policy = 'local', so the query only returns jobs running on the local server
       if (OB_FAIL(sql.append_fmt("select session_id from %s where job_name = \'%.*s\'",
         OB_ALL_VIRTUAL_SCHEDULER_RUNNING_JOB_TNAME, job_info.job_name_.length(),job_info.job_name_.ptr()))) {
         LOG_WARN("append sql failed", KR(ret)); 
@@ -710,7 +711,7 @@ int ObDBMSSchedJobUtils::check_dbms_sched_job_priv(const ObUserInfo *user_info,
   if (OB_ISNULL(user_info)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("user info is NULL", KR(ret));
-  } else if (is_root_user(user_info->get_user_id())) {
+  } else if (is_extended_sys_user(user_info->get_user_id()) || is_root_user(user_info->get_user_id())) {
     // do nothing
   } else if (job_info.user_id_ != OB_INVALID_ID) { // If the job has a user_id, prioritize its use
     if (job_info.user_id_ != user_info->get_user_id()) {

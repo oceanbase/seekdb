@@ -101,19 +101,19 @@ int ObDeadLockLocalTaskQueue::init(ObDeadLockDetectorMgr *mgr)
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(mgr)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(common::ObLinkQueueThreadPool::init(
+  } else if (OB_FAIL(common::ObSimpleThreadPool::init(
                  1, DEADLOCK_LOCAL_TASK_QUEUE_LIMIT, "DeadLockLocal"))) {
     DETECT_LOG(WARN, "init local deadlock task queue failed", KR(ret));
   } else if (FALSE_IT(thread_pool_inited = true)) {
-  } else if (OB_FAIL(common::ObLinkQueueThreadPool::set_adaptive_thread(1, 1))) {
+  } else if (OB_FAIL(common::ObSimpleThreadPool::set_adaptive_thread(1, 1))) {
     DETECT_LOG(WARN, "fix local deadlock task queue worker count failed", KR(ret));
   } else {
-    common::ObLinkQueueThreadPool::set_run_wrapper(share::server_runtime());
+    common::ObSimpleThreadPool::set_run_wrapper(share::server_runtime());
     mgr_ = mgr;
     is_inited_ = true;
   }
   if (OB_FAIL(ret) && thread_pool_inited) {
-    common::ObLinkQueueThreadPool::destroy();
+    common::ObSimpleThreadPool::destroy();
   }
   return ret;
 }
@@ -123,8 +123,8 @@ int ObDeadLockLocalTaskQueue::start()
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-  } else if (common::ObLinkQueueThreadPool::get_thread_count() <= 0 &&
-             !common::ObLinkQueueThreadPool::try_expand_one(1)) {
+  } else if (common::ObSimpleThreadPool::get_thread_count() <= 0 &&
+             !common::ObSimpleThreadPool::try_expand_one(1)) {
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(WARN, "start local deadlock task queue failed", KR(ret));
   } else {
@@ -137,23 +137,23 @@ void ObDeadLockLocalTaskQueue::stop()
 {
   if (is_inited_) {
     ATOMIC_STORE(&is_running_, false);
-    common::ObLinkQueueThreadPool::stop();
+    common::ObSimpleThreadPool::stop();
   }
 }
 
 void ObDeadLockLocalTaskQueue::wait()
 {
   if (is_inited_) {
-    common::ObLinkQueueThreadPool::wait();
+    common::ObSimpleThreadPool::wait();
   }
 }
 
 void ObDeadLockLocalTaskQueue::destroy()
 {
   if (is_inited_) {
-    common::ObLinkQueueThreadPool::stop();
-    common::ObLinkQueueThreadPool::wait();
-    common::ObLinkQueueThreadPool::destroy();
+    common::ObSimpleThreadPool::stop();
+    common::ObSimpleThreadPool::wait();
+    common::ObSimpleThreadPool::destroy();
     ATOMIC_STORE(&is_running_, false);
     mgr_ = nullptr;
     is_inited_ = false;
@@ -169,7 +169,7 @@ int ObDeadLockLocalTaskQueue::push_task_(Task *task)
     ret = OB_NOT_INIT;
   } else if (!ATOMIC_LOAD(&is_running_)) {
     ret = OB_NOT_RUNNING;
-  } else if (OB_FAIL(common::ObLinkQueueThreadPool::push(task))) {
+  } else if (OB_FAIL(common::ObSimpleThreadPool::push(task))) {
     DETECT_LOG(WARN, "push local deadlock task failed", KR(ret), K(task->type_));
   }
   if (OB_FAIL(ret) && OB_NOT_NULL(task)) {
@@ -224,7 +224,7 @@ int ObDeadLockLocalTaskQueue::push_parent_notification(const UserBinaryKey &pare
   return ret;
 }
 
-void ObDeadLockLocalTaskQueue::handle(common::LinkTask *task)
+void ObDeadLockLocalTaskQueue::handle(void *task)
 {
   int ret = OB_SUCCESS;
   Task *local_task = static_cast<Task *>(task);
@@ -259,7 +259,7 @@ void ObDeadLockLocalTaskQueue::handle(common::LinkTask *task)
   }
 }
 
-void ObDeadLockLocalTaskQueue::handle_drop(common::LinkTask *task)
+void ObDeadLockLocalTaskQueue::handle_drop(void *task)
 {
   destroy_task_(static_cast<Task *>(task));
 }
@@ -407,6 +407,7 @@ int ObDeadLockDetectorMgr::init()
                                  TIMER_THREAD_COUNT,
                                  DETECTOR_TIMER_NAME))) {
       DETECT_LOG(WARN, "time_wheel_ init failed", PRINT_WRAPPER);
+    } else if (FALSE_IT(time_wheel_inited = true)) {
     } else if (OB_FAIL(detector_map_.init(attr))) {
       DETECT_LOG(WARN, "detector_map_ init failed", PRINT_WRAPPER);
     } else if (FALSE_IT(detector_map_inited = true)) {
@@ -418,6 +419,16 @@ int ObDeadLockDetectorMgr::init()
       DETECT_LOG(INFO, "ObDeadLockDetectorMgr init success", PRINT_WRAPPER);
     }
     DETECT_LOG(INFO, "ObDeadLockDetectorMgr init called", PRINT_WRAPPER, K(lbt()));
+  }
+
+  if (OB_FAIL(ret)) {
+    local_task_queue_.destroy();
+    if (detector_map_inited) {
+      detector_map_.destroy();
+    }
+    if (time_wheel_inited) {
+      time_wheel_.destroy();
+    }
   }
 
   return ret;
@@ -622,18 +633,10 @@ int ObDeadLockDetectorMgr::process_parent_notification_(const UserBinaryKey &par
   ObIDeadLockDetector *p_detector = nullptr;
 
   const UserBinaryKey &binary_key = parent_key;
-  ObDependencyResource resource(child_key);
   if (common::OB_SUCCESS == (ret = detector_map_.get(binary_key, p_detector))) {
-    if (OB_FAIL(p_detector->block(resource))) {
-      if (OB_ENTRY_EXIST == ret) {
-        ret = OB_SUCCESS;
-      } else {
-        DETECT_LOG(WARN, "block child on existing parent failed", PRINT_WRAPPER);
-      }
-    }
+    ret = common::OB_ENTRY_EXIST;
     detector_map_.revert(p_detector);
-  } else if (OB_ENTRY_NOT_EXIST == ret) {
-    ret = OB_SUCCESS;
+  } else {
     ObMemAttr attr(MEMORY_LABEL);
     ObDeadLockDetectorMgr *p_deadlock_detector_mgr = share::g_mp->dead_lock_detector_mgr();
     if (OB_ISNULL(p_deadlock_detector_mgr)) {
@@ -681,6 +684,7 @@ int ObDeadLockDetectorMgr::process_parent_notification_(const UserBinaryKey &par
       (void)detector_map_.del(binary_key);
       detector_map_.revert(p_detector);
     } else {
+      ObDependencyResource resource(child_key);
       if (OB_FAIL(p_detector->block(resource))) {
         DETECT_LOG(WARN, "block child failed", PRINT_WRAPPER);
         p_detector->unregister_timer_task();
@@ -690,8 +694,6 @@ int ObDeadLockDetectorMgr::process_parent_notification_(const UserBinaryKey &par
       }
       detector_map_.revert(p_detector);
     }
-  } else {
-    DETECT_LOG(WARN, "get parent detector failed", PRINT_WRAPPER);
   }
 
   return ret;
@@ -730,7 +732,9 @@ uint64_t ObDeadLockDetectorMgr::calculate_cycle_hash_(
   uint64_t hash = 0;
   const ObArray<ObDetectorInnerReportInfo> &collected_info = cycle_info.get_collected_info();
   for (int64_t idx = 0; idx < collected_info.count(); ++idx) {
+    const uint64_t key_hash = collected_info.at(idx).get_user_key().hash();
     const uint64_t id = collected_info.at(idx).get_detector_id();
+    hash = murmurhash(&key_hash, sizeof(key_hash), hash);
     hash = murmurhash(&id, sizeof(id), hash);
   }
   return hash;

@@ -18,12 +18,14 @@
 
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
 #include "sql/engine/px/p2p_datahub/ob_runtime_filter_msg.h"
+#include "sql/engine/px/p2p_datahub/ob_runtime_filter_vec_msg.h"
 #include "sql/engine/px/p2p_datahub/ob_pushdown_topn_filter_msg.h"
 
 using namespace oceanbase;
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::sql;
+using namespace oceanbase::obcall;
 
 ObP2PDatahubManager &ObP2PDatahubManager::instance()
 {
@@ -90,8 +92,11 @@ int ObP2PDatahubManager::alloc_msg(
   int ret = OB_SUCCESS;
   switch(type) {
     ALLOC_MSG_HELPER(BLOOM_FILTER_MSG, ObRFBloomFilterMsg, "PxBfMsg")
+    ALLOC_MSG_HELPER(BLOOM_FILTER_VEC_MSG, ObRFBloomFilterMsg, "PxBfVecMsg")
     ALLOC_MSG_HELPER(RANGE_FILTER_MSG, ObRFRangeFilterMsg, "PxRangeMsg")
+    ALLOC_MSG_HELPER(RANGE_FILTER_VEC_MSG, ObRFRangeFilterVecMsg, "PxRangeVecMsg")
     ALLOC_MSG_HELPER(IN_FILTER_MSG, ObRFInFilterMsg, "PxInMsg")
+    ALLOC_MSG_HELPER(IN_FILTER_VEC_MSG, ObRFInFilterVecMsg,  "PxInVecMsg")
     ALLOC_MSG_HELPER(PD_TOPN_FILTER_MSG, ObPushDownTopNFilterMsg,  "PxTopNMsg")
     default: {
       ret = OB_ERR_UNEXPECTED;

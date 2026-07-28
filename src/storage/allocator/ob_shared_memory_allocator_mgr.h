@@ -19,6 +19,8 @@
 
 #include "storage/allocator/ob_memstore_allocator.h"
 #include "share/rc/ob_module_provider.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"  // EVENT_ADD owner
+#include "lib/stat/ob_diagnose_info.h"  // previously hidden behind a transitive include(free within lib)
 #include "storage/allocator/ob_tx_data_allocator.h"
 #include "storage/allocator/ob_mds_allocator.h"
 #include "storage/allocator/ob_vector_allocator.h"
@@ -161,6 +163,7 @@ public:
                                              has_printed_lbt);
     }
     PrintThrottleUtil::print_throttle_statistic(ret, ALLOCATOR::throttle_unit_name(), sleep_time, throttle_memory_size);
+    EVENT_ADD(STORAGE_WRITING_THROTTLE_TIME, sleep_time);
 
     if (for_replay && sleep_time > 0) {
       // avoid print replay_timeout

@@ -7,6 +7,7 @@ ob_set_subtarget(oblib_common common
   ob_range.cpp
   ob_record_header.cpp
   ob_role.cpp
+  ob_server_ext.cpp
   ob_store_format.cpp
   ob_store_range.cpp
   ob_string_buf.ipp
@@ -108,6 +109,7 @@ ob_set_subtarget(oblib_common reloc_datum
 )
 
 ob_set_subtarget(oblib_common reloc_timezone
+  timezone/ob_datetime_format_models.cpp
   timezone/ob_time_convert.cpp
   timezone/ob_timezone_info.cpp
 )

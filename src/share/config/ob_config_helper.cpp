@@ -18,8 +18,6 @@
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_schema_utils.h"
 #include "ob_config_helper.h"
-#include "share/ob_ddl_common.h"
-#include "share/ob_rpc_struct.h"
 #include "share/io/ob_backup_storage_info.h"
 
 namespace oceanbase

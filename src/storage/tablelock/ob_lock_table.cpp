@@ -351,7 +351,7 @@ int ObLockTable::create_tablet(const SCN &create_scn)
   } else if (OB_FAIL(get_table_schema_(table_schema))) {
     LOG_WARN("get lock table schema failed", K(ret));
   } else if (OB_FAIL(create_tablet_schema.init(arena_allocator, table_schema,
-        false/*skip_column_info*/))) {
+        false/*skip_column_info*/, DATA_CURRENT_VERSION))) {
     LOG_WARN("failed to init storage schema", KR(ret), K(table_schema));
   } else if (OB_FAIL(parent_->create_ls_inner_tablet(LS_LOCK_TABLET,
                                                      ObLS::LS_INNER_TABLET_FROZEN_SCN,
@@ -730,6 +730,7 @@ int ObLockTable::check_and_clear_obj_lock(const bool force_compact)
   int ret = OB_SUCCESS;
   ObTableHandleV2 handle;
   ObLockMemtable *lock_memtable = nullptr;
+  common::ObDIActionGuard ag("TableLockService", "OBJLockGC", "SwitchLeader");
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObLockTable is not inited", K(ret));

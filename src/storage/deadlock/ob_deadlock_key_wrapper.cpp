@@ -26,6 +26,8 @@ namespace share
 namespace detector
 {
 
+extern const char * MEMORY_LABEL;
+
 using namespace common;
 
 void UserBinaryKey::reset()

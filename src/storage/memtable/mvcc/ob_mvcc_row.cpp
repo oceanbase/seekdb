@@ -992,6 +992,12 @@ int ObMvccRow::mvcc_write_(ObStoreCtx &ctx,
         total_trans_node_cnt_++;
       }
 
+      if (NULL != writer_node.prev_
+          && writer_node.prev_->is_elr()) {
+        if (NULL != ctx.mvcc_acc_ctx_.tx_ctx_) {
+          TX_STAT_READ_ELR_ROW_COUNT_INC;
+        }
+      }
     }
   }
 

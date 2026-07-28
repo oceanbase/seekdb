@@ -17,7 +17,7 @@
 
 #include "observer/ob_system_package_load_task.h"
 #include "pl/ob_pl_package_manager.h"
-#include "rootserver/ob_admin_job_table_operator.h"
+#include "rootserver/ob_rs_job_table_operator.h"
 #include "share/ob_server_struct.h"
 #include "share/rc/ob_server_runtime.h"
 
@@ -86,6 +86,7 @@ void ObSystemPackageLoadTask::destroy()
   fail_count_ = 0;
 }
 
+ERRSIM_POINT_DEF(ERRSIM_LOAD_PACKAGE_ERROR);
 int ObSystemPackageLoadTask::load_system_package_()
 {
   int ret = OB_SUCCESS;
@@ -95,14 +96,14 @@ int ObSystemPackageLoadTask::load_system_package_()
   if (OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", KR(ret), KP(sql_proxy));
-  } else if (OB_FAIL(GET_ADMIN_JOB_COUNT(LOAD_MYSQL_SYS_PACKAGE, job_count))) {
+  } else if (OB_FAIL(THE_RS_JOB_TABLE.get_system_package_load_job_count(job_count))) {
     LOG_WARN("fail to get rs job count", KR(ret), K(job_count));
   } else if (0 == job_count) {
     // job not exists, try insert inprogress job
-    if (OB_FAIL(ADMIN_JOB_CREATE_WITH_RET(job_id, JOB_TYPE_LOAD_MYSQL_SYS_PACKAGE))) {
+    if (OB_FAIL(THE_RS_JOB_TABLE.create_system_package_load_job(job_id))) {
       LOG_WARN("failed to create system package load job", KR(ret));
     }
-  } else if (OB_FAIL(ADMIN_JOB_FIND(LOAD_MYSQL_SYS_PACKAGE, job_id))) {
+  } else if (OB_FAIL(THE_RS_JOB_TABLE.find_system_package_load_job(job_id))) {
     if (ret == OB_ENTRY_NOT_EXIST) {
       ret = OB_SUCCESS;
       GCTX.sys_package_ready_ = true;
@@ -114,7 +115,9 @@ int ObSystemPackageLoadTask::load_system_package_()
                          *sql_proxy,
                          false/*from_file*/))) {
     LOG_WARN("failed to load package", KR(ret));
-  } else if (OB_FAIL(ADMIN_JOB_COMPLETE(job_id, 0/*result_code*/))) {
+  } else if (OB_FAIL(ERRSIM_LOAD_PACKAGE_ERROR)) {
+    LOG_WARN("ERRSIM_LOAD_PACKAGE_ERROR", KR(ret));
+  } else if (OB_FAIL(THE_RS_JOB_TABLE.complete_system_package_load_job(job_id, 0/*result_code*/))) {
     LOG_WARN("failed to complete rs job", KR(ret), K(job_id));
   } else {
     GCTX.sys_package_ready_ = true;
@@ -159,7 +162,7 @@ int ObSystemPackageLoadTask::wait_system_package_ready(const common::ObTimeoutCt
       LOG_WARN("wait sys package ready failed", KR(ret));
     } else {
       inprogress_job_count = 0;
-      if (OB_ENTRY_NOT_EXIST != (tmp_ret = ADMIN_JOB_FIND(LOAD_MYSQL_SYS_PACKAGE, job_id))) {
+      if (OB_ENTRY_NOT_EXIST != (tmp_ret = THE_RS_JOB_TABLE.find_system_package_load_job(job_id))) {
         inprogress_job_count++;
       }
       if (inprogress_job_count == 0) {

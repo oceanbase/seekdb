@@ -24,6 +24,7 @@
 #include "ob_scan_merge_loser_tree.h"
 #include "ob_simple_rows_merger.h"
 #include "storage/ob_i_store.h"
+#include "lib/statistic_event/ob_stat_event.h"
 
 namespace oceanbase
 {

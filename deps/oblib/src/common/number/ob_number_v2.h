@@ -102,6 +102,23 @@ int poly_poly_mul(
 //    T &quotient,
 //    T &remainder);
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+#define MAX_FMT_STR_LEN 64
+struct ObNumberFmtModel
+{
+  bool has_x_ = false;
+  bool has_d_ = false;               //has D/d/. format element:decimal point
+  bool has_sign_ = false;            //has S/s format element: sign
+  bool has_currency_ = false;        //has currency element: only support dollar for now
+  bool has_b_ = false;               //has B/b format element:Returns blanks for the integer part
+                                     //of a fixed-point number when the integer part is zero
+  bool has_comma_ = false;
+  int16_t dc_position_ = -1;         //dot character
+  int16_t sign_position_ = -1;       //position of sign: 1 first; 2 last
+  int16_t fmt_len_ = 0;
+  char *fmt_str_;
+};
+
 // Compact number
 struct ObCompactNumber
 {
@@ -237,6 +254,8 @@ public:
   template <class T>
   int from(const char *str, const int64_t length, T &allocator, const lib::ObMemAttr &attr, int16_t *precision = NULL, int16_t *scale = NULL);
   template <class T>
+  int from(const char *str, const int64_t length, T &allocator, number::ObNumberFmtModel *fmt, int16_t *precision = NULL, int16_t *scale = NULL);
+  template <class T>
   int from(const int16_t precision, const int16_t scale, const char *str, const int64_t length,
            T &allocator);
   template <class T>
@@ -253,10 +272,10 @@ public:
   inline int decode(const char *buf, const int64_t buf_size, int64_t &pos);
 
   OB_INLINE void assign(const uint32_t desc, uint32_t *digits);
-  inline int round_v2(const int64_t scale);
-  inline int round(const int64_t scale)
+  inline int round_v2(const int64_t scale, const bool for_to_char = false);
+  inline int round(const int64_t scale, const bool for_to_char = false)
   {
-    return round_v3(scale);
+    return round_v3(scale, for_to_char);
   }
 
   template <class T>
@@ -264,7 +283,9 @@ public:
                    int16_t *precision = NULL, int16_t *scale = NULL,
                    const bool do_rounding = true,
                    const bool catch_trunc_err = false);
-  inline int round_v3(const int64_t scale);
+  inline int round_v3(const int64_t scale, const bool for_to_char = false);
+  // Used when casting number to scientific string format.
+  inline int round_for_sci(const int64_t scale, const bool for_to_char = false);
   int round_precision(const int64_t precision);
   int floor(const int64_t scale);
   int ceil(const int64_t scale);
@@ -554,19 +575,21 @@ protected:
             int16_t *scale = NULL,
             const bool do_rounding = true);
   int from_v1_(const char *str, const int64_t length, IAllocator &allocator, int &warning,
-            int16_t *precision = NULL, int16_t *scale = NULL,
+            ObNumberFmtModel *fmt, int16_t *precision = NULL, int16_t *scale = NULL,
             const lib::ObMemAttr *attr = NULL);
   int from_v2_(const char *str, const int64_t length, IAllocator &allocator, int &warning,
-               int16_t *precision = NULL, int16_t *scale = NULL,
+               ObNumberFmtModel *fmt, int16_t *precision = NULL, int16_t *scale = NULL,
                const lib::ObMemAttr *attr = NULL, const bool do_rounding = true);
   int from_v3_(const char *str, const int64_t length, IAllocator &allocator, int &warning,
-               int16_t *precision = NULL, int16_t *scale = NULL,
+               ObNumberFmtModel *fmt, int16_t *precision = NULL, int16_t *scale = NULL,
                const lib::ObMemAttr *attr = NULL, const bool do_rounding = true);
   inline int from_(const char *str, const int64_t length, IAllocator &allocator, int &warning,
-            int16_t *precision = NULL, int16_t *scale = NULL,
+            ObNumberFmtModel *fmt, int16_t *precision = NULL, int16_t *scale = NULL,
             const lib::ObMemAttr *attr = NULL, const bool do_rounding = true)
   {
-    return from_v3_(str, length, allocator, warning, precision, scale, attr, do_rounding);
+//      return from_old_(str, length, allocator, warning, fmt, precision, scale, attr);
+    return (NULL == fmt ? from_v3_(str, length, allocator, warning, fmt, precision, scale, attr, do_rounding)
+            : from_v2_(str, length, allocator, warning, fmt, precision, scale, attr, do_rounding));
   }
   int from_v2_(const uint32_t desc, const ObCalcVector &vector, IAllocator &allocator);
   int from_(const ObNumber &other, IAllocator &allocator);
@@ -617,8 +640,10 @@ protected:
   int check_precision_(const int64_t precision, const int64_t scale);
   int round_scale_(const int64_t scale, const bool using_floating_scale);
   int round_scale_v2_(const int64_t scale, const bool using_floating_scale,
+      const bool for_to_char,
       int16_t *res_precision = NULL, int16_t *res_scale = NULL);
   int round_scale_v3_(const int64_t scale, const bool using_floating_scale,
+      const bool for_to_char,
       int16_t *res_precision = NULL, int16_t *res_scale = NULL);
   inline bool need_round_after_arithmetic() const
   { return d_.len_ >= MIN_ROUND_DIGIT_COUNT[0]; }
@@ -738,6 +763,12 @@ private:
   uint32_t digits_[ObNumber::MAX_CALC_LEN];
 };
 
+enum FmtPosition
+{
+  FmtFirst = 1,
+  FmtLast = 2,
+};
+
 class ObNumberBuilder
 {
 public:
@@ -748,11 +779,13 @@ public:
   int build(const char *str,
             int64_t length,
             int &warning,
+            ObNumberFmtModel *fmt = NULL,
             int16_t *precision = NULL,
             int16_t *scale = NULL);
   int build_v2(const char *str,
             int64_t length,
             int &warning,
+            ObNumberFmtModel *fmt = NULL,
             int16_t *precision = NULL,
             int16_t *scale = NULL);
   void reset();
@@ -777,14 +810,57 @@ private:
       bool &integer_zero,
       bool &decimal_zero,
       int &warning);
+  //with format string
+  int find_point_(
+      const char *str,
+      ObNumberFmtModel *fmt,
+      char* new_str,
+      int64_t &length,
+      int64_t &integer_start,
+      int64_t &integer_end,
+      int64_t &decimal_start,
+      bool &negative,
+      bool &integer_zero,
+      bool &decimal_zero,
+      int64_t &comma_cnt);
   int build_integer_(const char *str, const int64_t integer_start, const int64_t integer_end,
                      const bool reduce_zero);
+  int build_integer_(const char *str, const int64_t integer_start, const int64_t integer_end,
+                     const bool reduce_zero, ObNumberFmtModel* fmt);
+  int build_hex_integer_(const char *str, const int64_t integer_start, const int64_t integer_end,
+                         const bool reduce_zero, ObNumberFmtModel* fmt);
   int build_decimal_(const char *str, const int64_t length, const int64_t decimal_start,
                      const bool reduce_zero);
   int build_integer_v2_(const char *str, const int64_t integer_start, const int64_t integer_end,
                      const bool reduce_zero, const bool integer_zero, int &warning);
+  int build_integer_v2_(const char *str, const int64_t integer_start, const int64_t integer_end,
+                     const bool reduce_zero, const bool integer_zero, int &warning, ObNumberFmtModel *fmt);
   int build_decimal_v2_(const char *str, const int64_t length, const int64_t decimal_start,
                      const bool reduce_zero, const bool decimal_zero, int &warning);
+  // converts hexadecimal characters to decimal digits
+  int hex_to_num_(char c, int32_t &val) const;
+  // multiply hex string and the result is stored in the str
+  // @param [in] multiplier
+  // @param [out] str hex string multiplicand
+  // @param [out] len str length
+  // @return OB_SUCCESS if succeed, other error code if error occurs.
+  int multiply_(int32_t multiplier, char *str, int32_t &len) const;
+  // adding two hex strings and the result is stored in the second string
+  // @param [in] str1 first hex string
+  // @param [in] str1_len str1 length
+  // @param [out] str2 second hex string
+  // @param [out] str2_len str2 length
+  // @return OB_SUCCESS if succeed, other error code if error occurs.
+  int add_hex_str_(const char *str1, int32_t str1_len,
+                   char *str2, int32_t &str2_len) const;
+  // convert hexadecimal string to decimal string
+  // @param [in] hex_str hex string
+  // @param [in] hex_len hex_str length
+  // @param [out] dec_str decimal string
+  // @param [out] dec_len dec_str length
+  // @return OB_SUCCESS if succeed, other error code if error occurs.
+  int hex_to_dec_(const char *hex_str, int32_t hex_len,
+                  char *dec_str, int32_t &dec_len) const;
 public:
   ObNumber number_;
 private:
@@ -1457,7 +1533,7 @@ int ObNumber::from(const char *str,
   int ret = OB_SUCCESS;
   int warning = OB_SUCCESS;
   TAllocator<T> ta(allocator);
-  ret = from_(str, length, ta, warning, precision, scale, NULL, do_rounding);
+  ret = from_(str, length, ta, warning, NULL, precision, scale, NULL, do_rounding);
   if (OB_SUCCESS == ret && OB_SUCCESS != warning) {
     ret = warning;
   }
@@ -1474,7 +1550,7 @@ int ObNumber::from_v1(const char *str,
   int ret = OB_SUCCESS;
   int warning = OB_SUCCESS;
   TAllocator<T> ta(allocator);
-  ret = from_v1_(str, length, ta, warning, precision, scale, NULL);
+  ret = from_v1_(str, length, ta, warning, NULL, precision, scale, NULL);
   if (OB_SUCCESS == ret && OB_SUCCESS != warning) {
     ret = warning;
   }
@@ -1491,7 +1567,7 @@ int ObNumber::from_v2(const char *str,
   int ret = OB_SUCCESS;
   int warning = OB_SUCCESS;
   TAllocator<T> ta(allocator);
-  ret = from_v2_(str, length, ta, warning, precision, scale, NULL);
+  ret = from_v2_(str, length, ta, warning, NULL, precision, scale, NULL);
   if (OB_SUCCESS == ret && OB_SUCCESS != warning) {
     ret = warning;
   }
@@ -1508,7 +1584,7 @@ int ObNumber::from_v3(const char *str,
   int ret = OB_SUCCESS;
   int warning = OB_SUCCESS;
   TAllocator<T> ta(allocator);
-  ret = from_v3_(str, length, ta, warning, precision, scale, NULL);
+  ret = from_v3_(str, length, ta, warning, NULL, precision, scale, NULL);
   if (OB_SUCCESS == ret && OB_SUCCESS != warning) {
     ret = warning;
   }
@@ -1564,13 +1640,31 @@ int ObNumber::from(const char *str,
   int ret = OB_SUCCESS;
   int warning = OB_SUCCESS;
   TAllocator<T> ta(allocator);
-  ret = from_(str, length, ta, warning, precision, scale, &attr);
+  ret = from_(str, length, ta, warning, NULL, precision, scale, &attr);
   if (OB_SUCCESS == ret && OB_SUCCESS != warning) {
     ret = warning;
   }
   return ret;
 }
 
+
+template <class T>
+int ObNumber::from(const char *str,
+                   const int64_t length,
+                   T &allocator,
+                   ObNumberFmtModel *fmt,
+                   int16_t *precision,
+                   int16_t *scale)
+{
+  int ret = OB_SUCCESS;
+  int warning = OB_SUCCESS;
+  TAllocator<T> ta(allocator);
+  ret = from_(str, length, ta, warning, fmt, precision, scale);
+  if (OB_SUCCESS == ret && OB_SUCCESS != warning) {
+    ret = warning;
+  }
+  return ret;
+}
 
 template <class T>
 int ObNumber::from(const int16_t precision, const int16_t scale, const char *str,
@@ -2206,7 +2300,7 @@ inline int ObNumber::decode(const char *buf, const int64_t buf_size, int64_t &po
   return ret;
 }
 
-inline int ObNumber::round_v2(const int64_t scale)
+inline int ObNumber::round_v2(const int64_t scale, const bool for_to_char/*false*/)
 {
   int ret = OB_SUCCESS;
   if (is_zero()) {
@@ -2216,13 +2310,13 @@ inline int ObNumber::round_v2(const int64_t scale)
   } else if (OB_UNLIKELY(scale < MIN_SCALE) || OB_UNLIKELY(scale > MAX_SCALE)) {
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid param", K(scale), K(ret));
-  } else if (OB_FAIL(round_scale_v2_(scale, false))) {
+  } else if (OB_FAIL(round_scale_v2_(scale, false, for_to_char))) {
     LIB_LOG(WARN, "fail to round_scale_v2_", KPC(this), K(ret));
   }
   return ret;
 }
 
-inline int ObNumber::round_v3(const int64_t scale)
+inline int ObNumber::round_v3(const int64_t scale, const bool for_to_char/*false*/)
 {
   int ret = OB_SUCCESS;
   if (is_zero()) {
@@ -2232,9 +2326,16 @@ inline int ObNumber::round_v3(const int64_t scale)
   } else if (OB_UNLIKELY(scale < MIN_SCALE) || OB_UNLIKELY(scale > MAX_SCALE)) {
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid param", K(scale), K(ret));
-  } else if (OB_FAIL(round_scale_v3_(scale, false))) {
+  } else if (OB_FAIL(round_scale_v3_(scale, false, for_to_char))) {
     LIB_LOG(WARN, "fail to round_scale_v3_", KPC(this), K(ret));
   }
+  return ret;
+}
+
+inline int ObNumber::round_for_sci(const int64_t scale, const bool for_to_char/*false*/)
+{
+  int ret = OB_ERR_UNEXPECTED;
+  LIB_LOG(WARN, "unsupported scientific rounding path", K(ret));
   return ret;
 }
 

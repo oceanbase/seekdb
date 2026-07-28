@@ -419,6 +419,7 @@ private:
                   ObOutlineState &outline_state,
                   ObPlanCache *plan_cache,
                   bool& plan_added);
+  // Check if the parameterized template SQL can be prepared
   int execute_get_plan(ObPlanCache &plan_cache,
                        ObPlanCacheCtx &pc_ctx,
                        ObCacheObjGuard& guard);

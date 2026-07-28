@@ -65,8 +65,8 @@ public:
   virtual void reset();
   bool is_valid() const;
   inline int64_t get_convert_size() const;
-
-
+  
+  
   inline void set_schema_version(const int64_t schema_version) { schema_version_ = schema_version; }
   inline int64_t get_schema_version() const { return schema_version_; }
   inline int set_runtime_name(const common::ObString &runtime_name)
@@ -92,7 +92,7 @@ public:
   inline ObServerRuntimeStatus get_status() const { return status_; }
   inline void set_in_recyclebin(const bool in_recyclebin) { in_recyclebin_ = in_recyclebin; }
 private:
-
+  
   int64_t schema_version_;
   common::ObString runtime_name_;
   common::ObNameCaseMode name_case_mode_; //deprecated
@@ -272,6 +272,23 @@ struct GetTableKeyV2<ObIndexSchemaHashWrapper, ObSimpleTableSchemaV2 *>
 };
 
 template<>
+struct GetTableKeyV2<ObAuxVPSchemaHashWrapper, ObSimpleTableSchemaV2 *>
+{
+  ObAuxVPSchemaHashWrapper operator()(const ObSimpleTableSchemaV2 *aux_vp_schema) const
+  {
+    if (!OB_ISNULL(aux_vp_schema)) {
+      ObAuxVPSchemaHashWrapper aux_vp_schema_hash_wrapper(
+          aux_vp_schema->get_database_id(),
+          aux_vp_schema->get_table_name_str());
+      return aux_vp_schema_hash_wrapper;
+    } else {
+      ObAuxVPSchemaHashWrapper null_wrap;
+      return null_wrap;
+    }
+  }
+};
+
+template<>
 struct GetTableKeyV2<ObForeignKeyInfoHashWrapper, ObSimpleForeignKeyInfo *>
 {
   ObForeignKeyInfoHashWrapper operator()(const ObSimpleForeignKeyInfo *simple_foreign_key_info) const
@@ -323,6 +340,9 @@ typedef common::hash::ObPointerHashMap<uint64_t, ObSimpleTableSchemaV2 *, GetTab
 typedef common::hash::ObPointerHashMap<uint64_t, ObSimpleDatabaseSchema *, GetTableKeyV2, 128> DatabaseIdMap;
 typedef common::hash::ObPointerHashMap<ObTableSchemaHashWrapper, ObSimpleTableSchemaV2 *, GetTableKeyV2, 1024> TableNameMap;
 typedef common::hash::ObPointerHashMap<ObIndexSchemaHashWrapper, ObSimpleTableSchemaV2 *, GetTableKeyV2, 1024> IndexNameMap;
+typedef common::hash::ObPointerHashMap<ObAuxVPSchemaHashWrapper, ObSimpleTableSchemaV2 *, GetTableKeyV2, 128> AuxVPNameMap;
+typedef common::hash::ObPointerHashMap<ObAuxVPSchemaHashWrapper, ObSimpleTableSchemaV2 *, GetTableKeyV2, 128> LobMetaNameMap;
+typedef common::hash::ObPointerHashMap<ObAuxVPSchemaHashWrapper, ObSimpleTableSchemaV2 *, GetTableKeyV2, 128> LobPieceNameMap;
 typedef common::hash::ObPointerHashMap<ObForeignKeyInfoHashWrapper, ObSimpleForeignKeyInfo *, GetTableKeyV2, 128> ForeignKeyNameMap;
 typedef common::hash::ObPointerHashMap<ObConstraintInfoHashWrapper, ObSimpleConstraintInfo *, GetTableKeyV2, 128> ConstraintNameMap;
 public:
@@ -464,7 +484,7 @@ public:
       common::ObIArray<const ObSimpleTableSchemaV2 *> &schema_array) const;
   int get_aux_schemas(
                       const uint64_t data_table_id,
-                      common::ObIArray<const ObSimpleTableSchemaV2 *> &aux_schemas,
+                      common::ObIArray<const ObSimpleTableSchemaV2 *> &aux_vp_schemas,
                       const share::schema::ObTableType table_type) const;
 
   
@@ -489,6 +509,8 @@ public:
       ObIndexNameMap &index_name_cache);
 private:
   inline bool check_inner_stat() const;
+
+  int remove_aux_table(const ObSimpleTableSchemaV2 &schema_to_del, const bool is_aux_vp);
 
   int add_foreign_keys_in_table(const common::ObIArray<ObSimpleForeignKeyInfo> &fk_info_array,
                                 const int over_write);
@@ -579,11 +601,13 @@ private:
   DatabaseNameMap database_name_map_;
   TableInfos table_infos_;
   TableInfos index_infos_;
+  TableInfos aux_vp_infos_;
   TableInfos lob_meta_infos_;
   TableInfos lob_piece_infos_;
   TableIdMap table_id_map_;
   TableNameMap table_name_map_;
   IndexNameMap normal_index_name_map_;
+  AuxVPNameMap aux_vp_name_map_;
   ObOutlineMgr outline_mgr_;
   ObRoutineMgr routine_mgr_;
   ObPrivMgr priv_mgr_;

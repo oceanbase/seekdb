@@ -1302,7 +1302,6 @@ int ObIndexBuilder::submit_drop_index_task(ObMySQLTransaction &trans,
       param.vec_sq_meta_schema_ = vec_sq_meta_ith == -1 ? nullptr : &(index_schemas.at(vec_sq_meta_ith));
       param.vec_pq_centroid_schema_ = vec_pq_centroid_ith == -1 ? nullptr : &(index_schemas.at(vec_pq_centroid_ith));
       param.vec_pq_code_schema_ = vec_pq_code_ith == -1 ? nullptr : &(index_schemas.at(vec_pq_code_ith));
-      param.data_format_version_ = DATA_CURRENT_VERSION;
 
       if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param, trans, task_record))) {
         if (OB_HASH_EXIST == ret) {
@@ -1584,6 +1583,7 @@ int ObIndexBuilder::do_create_index(
   const bool is_index = false;
   const ObTableSchema *table_schema = NULL;
   uint64_t table_id = OB_INVALID_ID;
+  bool in_runtime_space = true;
   schema_guard.set_session_id(arg.session_id_);
   
   if (!ddl_service_.is_inited()) {
@@ -1613,6 +1613,8 @@ int ObIndexBuilder::do_create_index(
     if (OB_EAGAIN != ret) {
       LOG_WARN("failed to check vec index ", K(ret), K(arg));
     }
+  } else if (OB_FAIL(ObSysTableChecker::is_runtime_space_table_id(table_id, in_runtime_space))) {
+    LOG_WARN("fail to check table in runtime space", K(ret), K(table_id));
   } else if (is_inner_table(table_id)) {
     // FIXME: create index for inner table is not supported yet.
     ret = OB_NOT_SUPPORTED;

@@ -180,6 +180,8 @@ public:
   int on_piece_msg(ObExecContext &ctx, const ObInitChannelPieceMsg &pkt) { UNUSED(ctx); UNUSED(pkt); return common::OB_NOT_SUPPORTED; }
   int on_piece_msg(ObExecContext &ctx, const ObReportingWFPieceMsg &pkt) { UNUSED(ctx); UNUSED(pkt); return common::OB_NOT_SUPPORTED; }
   int on_piece_msg(ObExecContext &ctx, const ObOptStatsGatherPieceMsg &pkt) { UNUSED(ctx); UNUSED(pkt); return common::OB_NOT_SUPPORTED; }
+  int on_piece_msg(ObExecContext &ctx, const SPWinFuncPXPieceMsg &pkt) { UNUSED(ctx); UNUSED(pkt); return common::OB_NOT_SUPPORTED; }
+  int on_piece_msg(ObExecContext &ctx, const RDWinFuncPXPieceMsg &pkt) { UNUSED(ctx); UNUSED(pkt); return common::OB_NOT_SUPPORTED; }
   int on_piece_msg(ObExecContext &ctx, const ObJoinFilterCountRowPieceMsg &pkt) { UNUSED(ctx); UNUSED(pkt); return common::OB_NOT_SUPPORTED; }
   // End Datahub processing
   ObPxCoordInfo &coord_info_;
@@ -214,6 +216,8 @@ public:
   int on_piece_msg(ObExecContext &ctx, const ObInitChannelPieceMsg &pkt);
   int on_piece_msg(ObExecContext &ctx, const ObReportingWFPieceMsg &pkt);
   int on_piece_msg(ObExecContext &ctx, const ObOptStatsGatherPieceMsg &pkt);
+  int on_piece_msg(ObExecContext &ctx, const SPWinFuncPXPieceMsg &pkt);
+  int on_piece_msg(ObExecContext &ctx, const RDWinFuncPXPieceMsg &pkt);
   int on_piece_msg(ObExecContext &ctx, const ObJoinFilterCountRowPieceMsg &pkt);
   void clean_dtl_interm_result(ObExecContext &ctx);
   // end DATAHUB msg processing

@@ -96,7 +96,7 @@ public:
 template<typename Res, typename Work>
 auto async_call_impl(Work &&work) -> HandleRef<Res> {
     auto h = std::make_shared<AsyncHandle<Res>>();
-    int dispatch_ret = async_call_internal([h, work = std::forward<Work>(work)]() mutable {
+    async_call_internal([h, work = std::forward<Work>(work)]() mutable {
         if constexpr (std::is_void_v<Res>) {
             int ret = work();
             h->mark_done(ret);
@@ -105,11 +105,6 @@ auto async_call_impl(Work &&work) -> HandleRef<Res> {
             h->mark_done(ret);
         }
     });
-    // A rejected dispatch never reaches the worker callback. Complete the
-    // handle here so callers waiting for an in-process RPC cannot hang.
-    if (oceanbase::common::OB_SUCCESS != dispatch_ret) {
-        h->mark_done(dispatch_ret);
-    }
     return HandleRef<Res>(std::move(h));
 }
 
@@ -167,7 +162,7 @@ auto async_call(const Arg &arg, Fn &&fn) -> HandleRef<Res> {
 int async_call_internal(std::function<void()> fn);
 
 // Backward compat.
-inline int async_call(std::function<void()> fn) { return async_call_internal(std::move(fn)); }
+inline int async_call(std::function<void()> fn) { async_call_internal(std::move(fn)); return 0; }
 
 } // namespace ex_rpc
 } // namespace oceanbase

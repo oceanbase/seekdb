@@ -1345,7 +1345,8 @@ class ObPushdownOperator
 public:
   ObPushdownOperator(
       ObEvalCtx &eval_ctx,
-      const ObPushdownExprSpec &expr_spec);
+      const ObPushdownExprSpec &expr_spec,
+      const bool use_rich_format = false);
   ~ObPushdownOperator() = default;
 
   int init_pushdown_storage_filter();
@@ -1368,14 +1369,19 @@ public:
   ObPushdownFilterExecutor *pd_storage_filters_;
   ObEvalCtx &eval_ctx_;
   const ObPushdownExprSpec &expr_spec_;
+  // enable new vec2.0 format
+  const bool enable_rich_format_;
 };
 
 // filter row for storage callback.
 OB_INLINE int ObPushdownOperator::filter_row_outside(const ObExprPtrIArray &exprs, const sql::ObBitVector &skip_bit, bool &filtered)
 {
   int ret = common::OB_SUCCESS;
-  UNUSED(skip_bit);
-  ret = ObOperator::filter_row(eval_ctx_, exprs, filtered);
+  if (!enable_rich_format_) {
+    ret = ObOperator::filter_row(eval_ctx_, exprs, filtered);
+  } else {
+    ret = ObOperator::filter_row_vector(eval_ctx_, exprs, skip_bit, filtered);
+  }
   // always clear evaluated flag, because filter expr and table scan output expr may have
   // common expr, when eval filter expr, memory of dependence column may from storage,
   // if not filter and we don't clear eval flag, output expr will used the result datum

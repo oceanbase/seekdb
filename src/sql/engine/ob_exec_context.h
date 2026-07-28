@@ -405,6 +405,7 @@ public:
   inline TransState &get_trans_state() {return trans_state_;}
   inline const TransState &get_trans_state() const {return trans_state_;}
   int add_temp_table_interm_result_ids(uint64_t temp_table_id,
+                                       const common::ObAddr &sqc_addr,
                                        const ObIArray<uint64_t> &interm_result_ids);
   // for granule iterator
   int get_gi_task_map(GIPrepareTaskMap *&gi_prepare_task_map);
@@ -559,7 +560,7 @@ public:
   AutoDopHashMap& get_auto_dop_map() { return auto_dop_map_; }
   void set_force_gen_local_plan() { force_local_plan_ = true; }
   bool is_force_gen_local_plan() const { return force_local_plan_; }
-  void set_retry_info(const ObQueryRetryInfo *retry_info) { das_ctx_.set_retry_info(retry_info); }
+  void set_retry_info(const ObQueryRetryInfo *retry_info) { das_ctx_.get_location_router().set_retry_info(retry_info); }
   bool is_use_adaptive_px_dop() const { return auto_dop_map_.size() > 0; }
   ObQueryCtx *get_query_ctx()
   {

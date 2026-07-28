@@ -49,6 +49,7 @@ merge into targetTable using sourceTable on (targetTable.id = sourceTable.id) wh
       "table_id":1099511677879,
       "table_name":"targetTable",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677879,
       "database_name":"merge_db",
@@ -60,6 +61,7 @@ merge into targetTable using sourceTable on (targetTable.id = sourceTable.id) wh
       "table_id":1099511677877,
       "table_name":"sourceTable",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677877,
       "database_name":"merge_db",
@@ -132,6 +134,7 @@ merge into targetTable using sourceTable on (targetTable.id = sourceTable.id) wh
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"targetTable",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -175,6 +178,7 @@ merge into targetTable using sourceTable on (targetTable.id = sourceTable.id) wh
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"sourceTable",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -228,6 +232,7 @@ merge into targetTable using sourceTable on (targetTable.id = sourceTable.id) wh
       "column_id":16,
       "database_name":"merge_db",
       "table_name":"targetTable",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -251,6 +256,7 @@ merge into targetTable using sourceTable on (targetTable.id = sourceTable.id) wh
         "table_id":1099511677879,
         "table_name":"targetTable",
         "alias_name":"",
+        "synonym_name":"",
         "table_type":0,
         "ref_id":1099511677879,
         "database_name":"merge_db",
@@ -291,6 +297,7 @@ merge into targetTable using sourceTable on (targetTable.id = sourceTable.id) wh
             "column_id":17,
             "database_name":"merge_db",
             "table_name":"targetTable",
+            "synonym_name":"",
             "column_name":"sales",
             "expr_level":0,
             "expr_levels": [
@@ -488,6 +495,7 @@ merge into targetTable using sourceTable on (targetTable.id = sourceTable.id) wh
                 "column_id":17,
                 "database_name":"merge_db",
                 "table_name":"sourceTable",
+                "synonym_name":"",
                 "column_name":"sales",
                 "expr_level":0,
                 "expr_levels": [
@@ -522,6 +530,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
       "table_id":-2,
       "table_name":"targetTable",
       "alias_name":"t1",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677879,
       "database_name":"merge_db",
@@ -533,6 +542,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
       "table_id":-3,
       "table_name":"sourceTable",
       "alias_name":"t2",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677877,
       "database_name":"merge_db",
@@ -605,6 +615,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -648,6 +659,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -701,6 +713,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
       "column_id":16,
       "database_name":"merge_db",
       "table_name":"t1",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -724,6 +737,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
         "table_id":-2,
         "table_name":"targetTable",
         "alias_name":"t1",
+        "synonym_name":"",
         "table_type":1,
         "ref_id":1099511677879,
         "database_name":"merge_db",
@@ -764,6 +778,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
             "column_id":17,
             "database_name":"merge_db",
             "table_name":"t1",
+            "synonym_name":"",
             "column_name":"sales",
             "expr_level":0,
             "expr_levels": [
@@ -961,6 +976,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
                 "column_id":17,
                 "database_name":"merge_db",
                 "table_name":"t2",
+                "synonym_name":"",
                 "column_name":"sales",
                 "expr_level":0,
                 "expr_levels": [
@@ -995,6 +1011,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
       "table_id":-2,
       "table_name":"targetTable",
       "alias_name":"t1",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677879,
       "database_name":"merge_db",
@@ -1006,6 +1023,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
       "table_id":-3,
       "table_name":"sourceTable",
       "alias_name":"t2",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677877,
       "database_name":"merge_db",
@@ -1078,6 +1096,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -1121,6 +1140,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -1197,6 +1217,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -1240,6 +1261,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":17,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"sales",
           "expr_level":0,
           "expr_levels": [
@@ -1293,6 +1315,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
       "column_id":16,
       "database_name":"merge_db",
       "table_name":"t1",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -1316,6 +1339,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
         "table_id":-2,
         "table_name":"targetTable",
         "alias_name":"t1",
+        "synonym_name":"",
         "table_type":1,
         "ref_id":1099511677879,
         "database_name":"merge_db",
@@ -1356,6 +1380,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
             "column_id":17,
             "database_name":"merge_db",
             "table_name":"t1",
+            "synonym_name":"",
             "column_name":"sales",
             "expr_level":0,
             "expr_levels": [
@@ -1553,6 +1578,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
                 "column_id":17,
                 "database_name":"merge_db",
                 "table_name":"t2",
+                "synonym_name":"",
                 "column_name":"sales",
                 "expr_level":0,
                 "expr_levels": [
@@ -1587,6 +1613,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id or t1.id != abs
       "table_id":-2,
       "table_name":"targetTable",
       "alias_name":"t1",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677879,
       "database_name":"merge_db",
@@ -1598,6 +1625,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id or t1.id != abs
       "table_id":-3,
       "table_name":"sourceTable",
       "alias_name":"t2",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677877,
       "database_name":"merge_db",
@@ -1704,6 +1732,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id or t1.id != abs
               "column_id":16,
               "database_name":"merge_db",
               "table_name":"t1",
+              "synonym_name":"",
               "column_name":"id",
               "expr_level":0,
               "expr_levels": [
@@ -1747,6 +1776,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id or t1.id != abs
               "column_id":16,
               "database_name":"merge_db",
               "table_name":"t2",
+              "synonym_name":"",
               "column_name":"id",
               "expr_level":0,
               "expr_levels": [
@@ -1824,6 +1854,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id or t1.id != abs
               "column_id":16,
               "database_name":"merge_db",
               "table_name":"t1",
+              "synonym_name":"",
               "column_name":"id",
               "expr_level":0,
               "expr_levels": [
@@ -1900,6 +1931,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id or t1.id != abs
                   "column_id":17,
                   "database_name":"merge_db",
                   "table_name":"t2",
+                  "synonym_name":"",
                   "column_name":"sales",
                   "expr_level":0,
                   "expr_levels": [
@@ -1959,6 +1991,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id or t1.id != abs
       "column_id":16,
       "database_name":"merge_db",
       "table_name":"t1",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -1982,6 +2015,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id or t1.id != abs
         "table_id":-2,
         "table_name":"targetTable",
         "alias_name":"t1",
+        "synonym_name":"",
         "table_type":1,
         "ref_id":1099511677879,
         "database_name":"merge_db",
@@ -2022,6 +2056,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id or t1.id != abs
             "column_id":17,
             "database_name":"merge_db",
             "table_name":"t1",
+            "synonym_name":"",
             "column_name":"sales",
             "expr_level":0,
             "expr_levels": [
@@ -2219,6 +2254,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id or t1.id != abs
                 "column_id":17,
                 "database_name":"merge_db",
                 "table_name":"t2",
+                "synonym_name":"",
                 "column_name":"sales",
                 "expr_level":0,
                 "expr_levels": [
@@ -2253,6 +2289,7 @@ merge into targetTable using sourceTable_2 on (id = id2 or id != abs(sales2)) wh
       "table_id":1099511677879,
       "table_name":"targetTable",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677879,
       "database_name":"merge_db",
@@ -2264,6 +2301,7 @@ merge into targetTable using sourceTable_2 on (id = id2 or id != abs(sales2)) wh
       "table_id":1099511677878,
       "table_name":"sourceTable_2",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677878,
       "database_name":"merge_db",
@@ -2370,6 +2408,7 @@ merge into targetTable using sourceTable_2 on (id = id2 or id != abs(sales2)) wh
               "column_id":16,
               "database_name":"merge_db",
               "table_name":"targetTable",
+              "synonym_name":"",
               "column_name":"id",
               "expr_level":0,
               "expr_levels": [
@@ -2413,6 +2452,7 @@ merge into targetTable using sourceTable_2 on (id = id2 or id != abs(sales2)) wh
               "column_id":16,
               "database_name":"merge_db",
               "table_name":"sourceTable_2",
+              "synonym_name":"",
               "column_name":"id2",
               "expr_level":0,
               "expr_levels": [
@@ -2490,6 +2530,7 @@ merge into targetTable using sourceTable_2 on (id = id2 or id != abs(sales2)) wh
               "column_id":16,
               "database_name":"merge_db",
               "table_name":"targetTable",
+              "synonym_name":"",
               "column_name":"id",
               "expr_level":0,
               "expr_levels": [
@@ -2566,6 +2607,7 @@ merge into targetTable using sourceTable_2 on (id = id2 or id != abs(sales2)) wh
                   "column_id":17,
                   "database_name":"merge_db",
                   "table_name":"sourceTable_2",
+                  "synonym_name":"",
                   "column_name":"sales2",
                   "expr_level":0,
                   "expr_levels": [
@@ -2625,6 +2667,7 @@ merge into targetTable using sourceTable_2 on (id = id2 or id != abs(sales2)) wh
       "column_id":16,
       "database_name":"merge_db",
       "table_name":"targetTable",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -2648,6 +2691,7 @@ merge into targetTable using sourceTable_2 on (id = id2 or id != abs(sales2)) wh
         "table_id":1099511677879,
         "table_name":"targetTable",
         "alias_name":"",
+        "synonym_name":"",
         "table_type":0,
         "ref_id":1099511677879,
         "database_name":"merge_db",
@@ -2688,6 +2732,7 @@ merge into targetTable using sourceTable_2 on (id = id2 or id != abs(sales2)) wh
             "column_id":17,
             "database_name":"merge_db",
             "table_name":"targetTable",
+            "synonym_name":"",
             "column_name":"sales",
             "expr_level":0,
             "expr_levels": [
@@ -2885,6 +2930,7 @@ merge into targetTable using sourceTable_2 on (id = id2 or id != abs(sales2)) wh
                 "column_id":17,
                 "database_name":"merge_db",
                 "table_name":"sourceTable_2",
+                "synonym_name":"",
                 "column_name":"sales2",
                 "expr_level":0,
                 "expr_levels": [
@@ -2919,6 +2965,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
       "table_id":-2,
       "table_name":"targetTable",
       "alias_name":"t1",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677879,
       "database_name":"merge_db",
@@ -2930,6 +2977,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
       "table_id":-3,
       "table_name":"sourceTable",
       "alias_name":"t2",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677877,
       "database_name":"merge_db",
@@ -3002,6 +3050,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -3045,6 +3094,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -3121,6 +3171,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -3164,6 +3215,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":17,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"sales",
           "expr_level":0,
           "expr_levels": [
@@ -3217,6 +3269,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
       "column_id":16,
       "database_name":"merge_db",
       "table_name":"t1",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -3240,6 +3293,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
         "table_id":-2,
         "table_name":"targetTable",
         "alias_name":"t1",
+        "synonym_name":"",
         "table_type":1,
         "ref_id":1099511677879,
         "database_name":"merge_db",
@@ -3280,6 +3334,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
             "column_id":17,
             "database_name":"merge_db",
             "table_name":"t1",
+            "synonym_name":"",
             "column_name":"sales",
             "expr_level":0,
             "expr_levels": [
@@ -3477,6 +3532,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
                 "column_id":17,
                 "database_name":"merge_db",
                 "table_name":"t2",
+                "synonym_name":"",
                 "column_name":"sales",
                 "expr_level":0,
                 "expr_levels": [
@@ -3511,6 +3567,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
       "table_id":-2,
       "table_name":"targetTable",
       "alias_name":"t1",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677879,
       "database_name":"merge_db",
@@ -3522,6 +3579,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
       "table_id":-3,
       "table_name":"sourceTable",
       "alias_name":"t2",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677877,
       "database_name":"merge_db",
@@ -3594,6 +3652,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -3637,6 +3696,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -3713,6 +3773,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -3756,6 +3817,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":17,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"sales",
           "expr_level":0,
           "expr_levels": [
@@ -3835,6 +3897,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":17,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"sales",
           "expr_level":0,
           "expr_levels": [
@@ -3916,6 +3979,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
       "column_id":16,
       "database_name":"merge_db",
       "table_name":"t1",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -3939,6 +4003,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
         "table_id":-2,
         "table_name":"targetTable",
         "alias_name":"t1",
+        "synonym_name":"",
         "table_type":1,
         "ref_id":1099511677879,
         "database_name":"merge_db",
@@ -3979,6 +4044,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
             "column_id":17,
             "database_name":"merge_db",
             "table_name":"t1",
+            "synonym_name":"",
             "column_name":"sales",
             "expr_level":0,
             "expr_levels": [
@@ -4176,6 +4242,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
                 "column_id":17,
                 "database_name":"merge_db",
                 "table_name":"t2",
+                "synonym_name":"",
                 "column_name":"sales",
                 "expr_level":0,
                 "expr_levels": [
@@ -4210,6 +4277,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
       "table_id":-2,
       "table_name":"targetTable",
       "alias_name":"t1",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677879,
       "database_name":"merge_db",
@@ -4221,6 +4289,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
       "table_id":-3,
       "table_name":"sourceTable",
       "alias_name":"t2",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677877,
       "database_name":"merge_db",
@@ -4293,6 +4362,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -4336,6 +4406,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -4412,6 +4483,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -4455,6 +4527,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":17,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"sales",
           "expr_level":0,
           "expr_levels": [
@@ -4534,6 +4607,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":17,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"sales",
           "expr_level":0,
           "expr_levels": [
@@ -4645,6 +4719,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -4722,6 +4797,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
       "column_id":16,
       "database_name":"merge_db",
       "table_name":"t1",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -4745,6 +4821,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
         "table_id":-2,
         "table_name":"targetTable",
         "alias_name":"t1",
+        "synonym_name":"",
         "table_type":1,
         "ref_id":1099511677879,
         "database_name":"merge_db",
@@ -4785,6 +4862,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
             "column_id":17,
             "database_name":"merge_db",
             "table_name":"t1",
+            "synonym_name":"",
             "column_name":"sales",
             "expr_level":0,
             "expr_levels": [
@@ -4982,6 +5060,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
                 "column_id":17,
                 "database_name":"merge_db",
                 "table_name":"t2",
+                "synonym_name":"",
                 "column_name":"sales",
                 "expr_level":0,
                 "expr_levels": [
@@ -5016,6 +5095,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
       "table_id":-2,
       "table_name":"targetTable",
       "alias_name":"t1",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677879,
       "database_name":"merge_db",
@@ -5027,6 +5107,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
       "table_id":-3,
       "table_name":"sourceTable",
       "alias_name":"t2",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677877,
       "database_name":"merge_db",
@@ -5099,6 +5180,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -5142,6 +5224,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -5223,6 +5306,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -5302,6 +5386,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
       "column_id":16,
       "database_name":"merge_db",
       "table_name":"t1",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -5347,6 +5432,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
       "column_id":16,
       "database_name":"merge_db",
       "table_name":"t2",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -5390,6 +5476,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
       "column_id":17,
       "database_name":"merge_db",
       "table_name":"t2",
+      "synonym_name":"",
       "column_name":"sales",
       "expr_level":0,
       "expr_levels": [
@@ -5589,6 +5676,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -5790,6 +5878,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
           "column_id":17,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"sales",
           "expr_level":0,
           "expr_levels": [
@@ -5821,6 +5910,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
       "table_id":-2,
       "table_name":"targetTable",
       "alias_name":"t1",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677879,
       "database_name":"merge_db",
@@ -5832,6 +5922,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
       "table_id":-3,
       "table_name":"sourceTable",
       "alias_name":"t2",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677877,
       "database_name":"merge_db",
@@ -5904,6 +5995,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -5947,6 +6039,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -6000,6 +6093,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
       "column_id":16,
       "database_name":"merge_db",
       "table_name":"t1",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -6045,6 +6139,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
       "column_id":16,
       "database_name":"merge_db",
       "table_name":"t2",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -6088,6 +6183,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
       "column_id":17,
       "database_name":"merge_db",
       "table_name":"t2",
+      "synonym_name":"",
       "column_name":"sales",
       "expr_level":0,
       "expr_levels": [
@@ -6287,6 +6383,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -6488,6 +6585,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
           "column_id":17,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"sales",
           "expr_level":0,
           "expr_levels": [
@@ -6519,6 +6617,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
       "table_id":-2,
       "table_name":"targetTable",
       "alias_name":"t1",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677879,
       "database_name":"merge_db",
@@ -6530,6 +6629,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
       "table_id":-3,
       "table_name":"sourceTable",
       "alias_name":"t2",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677877,
       "database_name":"merge_db",
@@ -6602,6 +6702,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -6645,6 +6746,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -6724,6 +6826,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -6833,6 +6936,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -6942,6 +7046,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
           "column_id":17,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"sales",
           "expr_level":0,
           "expr_levels": [
@@ -7019,6 +7124,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
       "column_id":16,
       "database_name":"merge_db",
       "table_name":"t1",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -7064,6 +7170,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
       "column_id":16,
       "database_name":"merge_db",
       "table_name":"t2",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -7107,6 +7214,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
       "column_id":17,
       "database_name":"merge_db",
       "table_name":"t2",
+      "synonym_name":"",
       "column_name":"sales",
       "expr_level":0,
       "expr_levels": [
@@ -7306,6 +7414,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -7507,6 +7616,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
           "column_id":17,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"sales",
           "expr_level":0,
           "expr_levels": [
@@ -7530,6 +7640,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
         "table_id":-2,
         "table_name":"targetTable",
         "alias_name":"t1",
+        "synonym_name":"",
         "table_type":1,
         "ref_id":1099511677879,
         "database_name":"merge_db",
@@ -7570,6 +7681,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
             "column_id":17,
             "database_name":"merge_db",
             "table_name":"t1",
+            "synonym_name":"",
             "column_name":"sales",
             "expr_level":0,
             "expr_levels": [
@@ -7767,6 +7879,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched t
                 "column_id":17,
                 "database_name":"merge_db",
                 "table_name":"t2",
+                "synonym_name":"",
                 "column_name":"sales",
                 "expr_level":0,
                 "expr_levels": [
@@ -7801,6 +7914,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
       "table_id":-2,
       "table_name":"targetTable",
       "alias_name":"t1",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677879,
       "database_name":"merge_db",
@@ -7812,6 +7926,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
       "table_id":-3,
       "table_name":"sourceTable",
       "alias_name":"t2",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677877,
       "database_name":"merge_db",
@@ -7884,6 +7999,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -7927,6 +8043,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -7980,6 +8097,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
       "column_id":16,
       "database_name":"merge_db",
       "table_name":"t1",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -8137,6 +8255,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
       "table_id":-2,
       "table_name":"targetTable",
       "alias_name":"t1",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677879,
       "database_name":"merge_db",
@@ -8148,6 +8267,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
       "table_id":-3,
       "table_name":"sourceTable",
       "alias_name":"t2",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677877,
       "database_name":"merge_db",
@@ -8220,6 +8340,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -8263,6 +8384,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -8339,6 +8461,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -8382,6 +8505,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
           "column_id":17,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"sales",
           "expr_level":0,
           "expr_levels": [
@@ -8435,6 +8559,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
       "column_id":16,
       "database_name":"merge_db",
       "table_name":"t1",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -8458,6 +8583,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
         "table_id":-2,
         "table_name":"targetTable",
         "alias_name":"t1",
+        "synonym_name":"",
         "table_type":1,
         "ref_id":1099511677879,
         "database_name":"merge_db",
@@ -8498,6 +8624,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id and t1.id != t2
             "column_id":17,
             "database_name":"merge_db",
             "table_name":"t1",
+            "synonym_name":"",
             "column_name":"sales",
             "expr_level":0,
             "expr_levels": [
@@ -8561,6 +8688,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
       "table_id":-2,
       "table_name":"targetTable",
       "alias_name":"t1",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677879,
       "database_name":"merge_db",
@@ -8572,6 +8700,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
       "table_id":-3,
       "table_name":"sourceTable",
       "alias_name":"t2",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677877,
       "database_name":"merge_db",
@@ -8644,6 +8773,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -8687,6 +8817,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -8740,6 +8871,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
       "column_id":16,
       "database_name":"merge_db",
       "table_name":"t1",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -8867,6 +8999,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
       "table_id":-2,
       "table_name":"targetTable",
       "alias_name":"t1",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677879,
       "database_name":"merge_db",
@@ -8878,6 +9011,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
       "table_id":-3,
       "table_name":"sourceTable",
       "alias_name":"t2",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677877,
       "database_name":"merge_db",
@@ -8950,6 +9084,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -8993,6 +9128,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -9046,6 +9182,7 @@ merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when not match
       "column_id":16,
       "database_name":"merge_db",
       "table_name":"t1",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -9209,6 +9346,7 @@ merge into target1 using sourceTable on (target1.id = sourceTable.id) when match
       "table_id":1099511677880,
       "table_name":"target1",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677880,
       "database_name":"merge_db",
@@ -9220,6 +9358,7 @@ merge into target1 using sourceTable on (target1.id = sourceTable.id) when match
       "table_id":1099511677877,
       "table_name":"sourceTable",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677877,
       "database_name":"merge_db",
@@ -9292,6 +9431,7 @@ merge into target1 using sourceTable on (target1.id = sourceTable.id) when match
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"target1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -9335,6 +9475,7 @@ merge into target1 using sourceTable on (target1.id = sourceTable.id) when match
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"sourceTable",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -9388,6 +9529,7 @@ merge into target1 using sourceTable on (target1.id = sourceTable.id) when match
       "column_id":16,
       "database_name":"merge_db",
       "table_name":"target1",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -9431,6 +9573,7 @@ merge into target1 using sourceTable on (target1.id = sourceTable.id) when match
       "column_id":17,
       "database_name":"merge_db",
       "table_name":"target1",
+      "synonym_name":"",
       "column_name":"c2",
       "expr_level":0,
       "expr_levels": [
@@ -9454,6 +9597,7 @@ merge into target1 using sourceTable on (target1.id = sourceTable.id) when match
         "table_id":1099511677880,
         "table_name":"target1",
         "alias_name":"",
+        "synonym_name":"",
         "table_type":0,
         "ref_id":1099511677880,
         "database_name":"merge_db",
@@ -9494,6 +9638,7 @@ merge into target1 using sourceTable on (target1.id = sourceTable.id) when match
             "column_id":17,
             "database_name":"merge_db",
             "table_name":"target1",
+            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -9691,6 +9836,7 @@ merge into target1 using sourceTable on (target1.id = sourceTable.id) when match
                 "column_id":17,
                 "database_name":"merge_db",
                 "table_name":"sourceTable",
+                "synonym_name":"",
                 "column_name":"sales",
                 "expr_level":0,
                 "expr_levels": [
@@ -9725,6 +9871,7 @@ merge into target2 using sourceTable on (target2.id = sourceTable.id) when match
       "table_id":1099511677881,
       "table_name":"target2",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677881,
       "database_name":"merge_db",
@@ -9736,6 +9883,7 @@ merge into target2 using sourceTable on (target2.id = sourceTable.id) when match
       "table_id":1099511677877,
       "table_name":"sourceTable",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677877,
       "database_name":"merge_db",
@@ -9808,6 +9956,7 @@ merge into target2 using sourceTable on (target2.id = sourceTable.id) when match
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"target2",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -9851,6 +10000,7 @@ merge into target2 using sourceTable on (target2.id = sourceTable.id) when match
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"sourceTable",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -9904,6 +10054,7 @@ merge into target2 using sourceTable on (target2.id = sourceTable.id) when match
       "column_id":1,
       "database_name":"merge_db",
       "table_name":"target2",
+      "synonym_name":"",
       "column_name":"__pk_increment",
       "expr_level":0,
       "expr_levels": [
@@ -9947,6 +10098,7 @@ merge into target2 using sourceTable on (target2.id = sourceTable.id) when match
       "column_id":4,
       "database_name":"merge_db",
       "table_name":"target2",
+      "synonym_name":"",
       "column_name":"__pk_cluster_id",
       "expr_level":0,
       "expr_levels": [
@@ -9990,6 +10142,7 @@ merge into target2 using sourceTable on (target2.id = sourceTable.id) when match
       "column_id":5,
       "database_name":"merge_db",
       "table_name":"target2",
+      "synonym_name":"",
       "column_name":"__pk_partition_id",
       "expr_level":0,
       "expr_levels": [
@@ -10013,6 +10166,7 @@ merge into target2 using sourceTable on (target2.id = sourceTable.id) when match
         "table_id":1099511677881,
         "table_name":"target2",
         "alias_name":"",
+        "synonym_name":"",
         "table_type":0,
         "ref_id":1099511677881,
         "database_name":"merge_db",
@@ -10053,6 +10207,7 @@ merge into target2 using sourceTable on (target2.id = sourceTable.id) when match
             "column_id":17,
             "database_name":"merge_db",
             "table_name":"target2",
+            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -10250,6 +10405,7 @@ merge into target2 using sourceTable on (target2.id = sourceTable.id) when match
                 "column_id":17,
                 "database_name":"merge_db",
                 "table_name":"sourceTable",
+                "synonym_name":"",
                 "column_name":"sales",
                 "expr_level":0,
                 "expr_levels": [
@@ -10284,6 +10440,7 @@ merge into targetTable using (select * from target1 ) sourceTable on (targetTabl
       "table_id":1099511677879,
       "table_name":"targetTable",
       "alias_name":"",
+      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677879,
       "database_name":"merge_db",
@@ -10295,6 +10452,7 @@ merge into targetTable using (select * from target1 ) sourceTable on (targetTabl
       "table_id":-2,
       "table_name":"sourceTable",
       "alias_name":"sourceTable",
+      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -10367,6 +10525,7 @@ merge into targetTable using (select * from target1 ) sourceTable on (targetTabl
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"targetTable",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -10410,6 +10569,7 @@ merge into targetTable using (select * from target1 ) sourceTable on (targetTabl
           "column_id":16,
           "database_name":"",
           "table_name":"sourceTable",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -10463,6 +10623,7 @@ merge into targetTable using (select * from target1 ) sourceTable on (targetTabl
       "column_id":16,
       "database_name":"merge_db",
       "table_name":"targetTable",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -10486,6 +10647,7 @@ merge into targetTable using (select * from target1 ) sourceTable on (targetTabl
         "table_id":1099511677879,
         "table_name":"targetTable",
         "alias_name":"",
+        "synonym_name":"",
         "table_type":0,
         "ref_id":1099511677879,
         "database_name":"merge_db",
@@ -10526,6 +10688,7 @@ merge into targetTable using (select * from target1 ) sourceTable on (targetTabl
             "column_id":17,
             "database_name":"merge_db",
             "table_name":"targetTable",
+            "synonym_name":"",
             "column_name":"sales",
             "expr_level":0,
             "expr_levels": [
@@ -10723,6 +10886,7 @@ merge into targetTable using (select * from target1 ) sourceTable on (targetTabl
                 "column_id":18,
                 "database_name":"",
                 "table_name":"sourceTable",
+                "synonym_name":"",
                 "column_name":"c3",
                 "expr_level":0,
                 "expr_levels": [
@@ -10757,6 +10921,7 @@ merge into targetTable t1 using (select * from sourceTable) t2 on (t1.id = t2.id
       "table_id":-2,
       "table_name":"targetTable",
       "alias_name":"t1",
+      "synonym_name":"",
       "table_type":1,
       "ref_id":1099511677879,
       "database_name":"merge_db",
@@ -10768,6 +10933,7 @@ merge into targetTable t1 using (select * from sourceTable) t2 on (t1.id = t2.id
       "table_id":-3,
       "table_name":"t2",
       "alias_name":"t2",
+      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -10840,6 +11006,7 @@ merge into targetTable t1 using (select * from sourceTable) t2 on (t1.id = t2.id
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -10883,6 +11050,7 @@ merge into targetTable t1 using (select * from sourceTable) t2 on (t1.id = t2.id
           "column_id":16,
           "database_name":"",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -10962,6 +11130,7 @@ merge into targetTable t1 using (select * from sourceTable) t2 on (t1.id = t2.id
           "column_id":16,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -11071,6 +11240,7 @@ merge into targetTable t1 using (select * from sourceTable) t2 on (t1.id = t2.id
           "column_id":16,
           "database_name":"",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -11180,6 +11350,7 @@ merge into targetTable t1 using (select * from sourceTable) t2 on (t1.id = t2.id
           "column_id":17,
           "database_name":"merge_db",
           "table_name":"t1",
+          "synonym_name":"",
           "column_name":"sales",
           "expr_level":0,
           "expr_levels": [
@@ -11257,6 +11428,7 @@ merge into targetTable t1 using (select * from sourceTable) t2 on (t1.id = t2.id
       "column_id":16,
       "database_name":"merge_db",
       "table_name":"t1",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -11302,6 +11474,7 @@ merge into targetTable t1 using (select * from sourceTable) t2 on (t1.id = t2.id
       "column_id":16,
       "database_name":"",
       "table_name":"t2",
+      "synonym_name":"",
       "column_name":"id",
       "expr_level":0,
       "expr_levels": [
@@ -11345,6 +11518,7 @@ merge into targetTable t1 using (select * from sourceTable) t2 on (t1.id = t2.id
       "column_id":17,
       "database_name":"",
       "table_name":"t2",
+      "synonym_name":"",
       "column_name":"sales",
       "expr_level":0,
       "expr_levels": [
@@ -11544,6 +11718,7 @@ merge into targetTable t1 using (select * from sourceTable) t2 on (t1.id = t2.id
           "column_id":16,
           "database_name":"",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"id",
           "expr_level":0,
           "expr_levels": [
@@ -11745,6 +11920,7 @@ merge into targetTable t1 using (select * from sourceTable) t2 on (t1.id = t2.id
           "column_id":17,
           "database_name":"",
           "table_name":"t2",
+          "synonym_name":"",
           "column_name":"sales",
           "expr_level":0,
           "expr_levels": [
@@ -11768,6 +11944,7 @@ merge into targetTable t1 using (select * from sourceTable) t2 on (t1.id = t2.id
         "table_id":-2,
         "table_name":"targetTable",
         "alias_name":"t1",
+        "synonym_name":"",
         "table_type":1,
         "ref_id":1099511677879,
         "database_name":"merge_db",
@@ -11808,6 +11985,7 @@ merge into targetTable t1 using (select * from sourceTable) t2 on (t1.id = t2.id
             "column_id":17,
             "database_name":"merge_db",
             "table_name":"t1",
+            "synonym_name":"",
             "column_name":"sales",
             "expr_level":0,
             "expr_levels": [
@@ -12005,6 +12183,7 @@ merge into targetTable t1 using (select * from sourceTable) t2 on (t1.id = t2.id
                 "column_id":17,
                 "database_name":"",
                 "table_name":"t2",
+                "synonym_name":"",
                 "column_name":"sales",
                 "expr_level":0,
                 "expr_levels": [

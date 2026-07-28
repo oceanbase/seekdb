@@ -122,7 +122,7 @@ public:
   int process_lcl_state(const int64_t lclv,
                         const ObLCLLabel &label,
                         const int64_t send_ts) override;
-  TO_STRING_KV(KP(this), K_(self_key), KTIME_(timeout_ts), K_(lclv), K_(private_label),
+  TO_STRING_KV(KP(this), K_(self_key), K_(parent_key), KTIME_(timeout_ts), K_(lclv), K_(private_label),
                K_(public_label), K_(detect_callback),
                K_(auto_activate_when_detected), KTIME_(created_time), KTIME_(allow_detect_time),
                K_(is_timer_task_canceled), K_(is_timer_task_running), K_(block_list), K_(parent_list),
@@ -170,6 +170,7 @@ private:
   DetectCallBack &get_detect_callback_() { return detect_callback_; }
 private:
   const UserBinaryKey self_key_;
+  UserBinaryKey parent_key_;
   uint64_t timeout_ts_;
   int64_t lclv_;
   ObLCLLabel private_label_;

@@ -16,7 +16,7 @@
 
 
 #include "ob_trans_service.h"
-#include "ob_ts_mgr.h"
+#include "storage/ob_storage_rpc_arg.h"
 #include "share/rc/ob_module_provider.h"
 #include "ob_trans_functor.h"
 #include "storage/tx/ob_ts_mgr.h"
@@ -41,7 +41,6 @@ ObTransService::ObTransService()
     : is_inited_(false),
       is_running_(false),
       schema_service_(NULL),
-      trans_id_service_(NULL),
       ts_mgr_(NULL),
       input_queue_count_(0),
       output_queue_count_(0),
@@ -60,8 +59,10 @@ int ObTransService::server_module_init(ObTransService *&it)
   int ret = OB_SUCCESS;
   const ObAddr &self = GCTX.self_addr();
   share::schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
-  if (OB_FAIL(it->init(self,
-                              share::g_mp->trans_id_service(),
+  if (OB_FAIL(it->gti_source_def_.init())) {
+    TRANS_LOG(ERROR, "gti source init error", KR(ret));
+  } else if (OB_FAIL(it->init(self,
+                              &it->gti_source_def_,
                               &OB_TS_MGR,
                               schema_service))) {
     TRANS_LOG(ERROR, "trans-service init error", KR(ret), KPC(it));
@@ -70,7 +71,7 @@ int ObTransService::server_module_init(ObTransService *&it)
 }
 
 int ObTransService::init(const ObAddr &self,
-                         ObTransIDService *trans_id_service,
+                         ObIGtiSource *gti_source,
                          ObTsMgr *ts_mgr,
                          share::schema::ObMultiVersionSchemaService *schema_service)
 {
@@ -89,11 +90,11 @@ int ObTransService::init(const ObAddr &self,
     TRANS_LOG(WARN, "ObTransService inited twice", KPC(this));
     ret = OB_INIT_TWICE;
   } else if (OB_UNLIKELY(!self.is_valid())
-             || OB_ISNULL(trans_id_service)
+             || OB_ISNULL(gti_source)
              || OB_ISNULL(ts_mgr)
              || OB_ISNULL(schema_service)) {
     TRANS_LOG(WARN, "invalid argument", K(self),
-              KP(trans_id_service), KP(ts_mgr),
+              KP(gti_source), KP(ts_mgr),
               KP(schema_service));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(timer_.init("TransTimeWheel"))) {
@@ -113,7 +114,7 @@ int ObTransService::init(const ObAddr &self,
   } else {
     self_ = self;
     
-    trans_id_service_ = trans_id_service;
+    gti_source_ = gti_source;
     schema_service_ = schema_service;
     ts_mgr_ = ts_mgr;
     is_inited_ = true;
@@ -158,6 +159,8 @@ int ObTransService::start()
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(timer_.start())) {
     TRANS_LOG(WARN, "ObTransTimer start error", K(ret));
+  } else if (OB_FAIL(gti_source_->start())) {
+    TRANS_LOG(WARN, "ObGtiSource start error", KR(ret));
   } else if (OB_FAIL(tx_ctx_mgr_.start())) {
     TRANS_LOG(WARN, "tx_ctx_mgr_ start error", KR(ret));
   } else if (OB_FAIL(tx_timestamp_waiter_.start())) {
@@ -191,6 +194,7 @@ void ObTransService::stop()
     TRANS_LOG(WARN, "ObTransTimer stop error", K(ret));
   } else {
     tx_timestamp_waiter_.stop();
+    gti_source_->stop();
     ObLinkQueueThreadPool::stop();
     is_running_ = false;
     TRANS_LOG(INFO, "transaction service stop success", KPC(this));
@@ -216,6 +220,7 @@ int ObTransService::wait_()
     } else if (OB_FAIL(timer_.wait())) {
       TRANS_LOG(WARN, "ObTransTimer wait error", K(ret));
     } else {
+      gti_source_->wait();
       TRANS_LOG(INFO, "transaction service wait success", KPC(this));
     }
   }
@@ -230,6 +235,7 @@ void ObTransService::destroy()
       wait();
     }
     timer_.destroy();
+    gti_source_->destroy();
     tx_timestamp_waiter_.destroy();
     tx_ctx_mgr_.destroy();
     tx_desc_mgr_.destroy();

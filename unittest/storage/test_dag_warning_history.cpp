@@ -40,6 +40,7 @@ public:
   share::ObDagWarningHistoryManager *mgr_ = nullptr;
   share::ObDagWarningHistoryManager * dag_warning_history_manager() override { return mgr_; }
 };
+#define MTL(TYPE) (static_cast<TYPE>(::oceanbase::share::g_mp->dag_warning_history_manager()))
 static const int64_t INFO_PAGE_SIZE = (1 << 13); // 8KB
 class TestDagWarningHistory : public ::testing::Test
 {
@@ -127,6 +128,7 @@ public:
     return ret;
   }
   virtual int fill_dag_key(char *buf,const int64_t size) const override { UNUSEDx(buf, size); return OB_SUCCESS; }
+  virtual bool uses_reserved_allocator() const override { return false; }
   INHERIT_TO_STRING_KV("ObIDag", ObIDag, K_(is_inited), K_(type), K(task_list_.get_size()), K_(dag_ret));
 
 private:
@@ -166,7 +168,7 @@ public:
 TEST_F(TestDagWarningHistory, simple_add)
 {
   int ret = OB_SUCCESS;
-  ObDagWarningHistoryManager* manager = share::g_mp->dag_warning_history_manager();
+  ObDagWarningHistoryManager* manager = MTL(ObDagWarningHistoryManager *);
   ASSERT_TRUE(nullptr != manager);
 
   ObBasicDag dag;
@@ -176,20 +178,20 @@ TEST_F(TestDagWarningHistory, simple_add)
   STORAGE_LOG(DEBUG, "hash print", K(dag.hash()));
 
   //not init
-  ret = share::g_mp->dag_warning_history_manager()->add_dag_warning_info(&dag);
+  ret = MTL(ObDagWarningHistoryManager *)->add_dag_warning_info(&dag);
   ASSERT_NE(OB_SUCCESS, ret);
-  ret = share::g_mp->dag_warning_history_manager()->init(true, "DagWarnHis", INFO_PAGE_SIZE);
+  ret = MTL(ObDagWarningHistoryManager *)->init(true, "DagWarnHis", INFO_PAGE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ret = share::g_mp->dag_warning_history_manager()->add_dag_warning_info(&dag);
+  ret = MTL(ObDagWarningHistoryManager *)->add_dag_warning_info(&dag);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   compaction::ObInfoParamBuffer allocator;
   ObDagWarningInfo ret_info;
-  ret = share::g_mp->dag_warning_history_manager()->get_with_param(ObBasicDag::KEY_START+1, ret_info, allocator);
+  ret = MTL(ObDagWarningHistoryManager *)->get_with_param(ObBasicDag::KEY_START+1, ret_info, allocator);
   ASSERT_EQ(OB_HASH_NOT_EXIST, ret);
 
   allocator.reuse();
-  ret = share::g_mp->dag_warning_history_manager()->get_with_param(ObBasicDag::KEY_START, ret_info, allocator);
+  ret = MTL(ObDagWarningHistoryManager *)->get_with_param(ObBasicDag::KEY_START, ret_info, allocator);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(TRUE, ret_info.dag_ret_ == ObBasicDag::DAG_RET_START);
   STORAGE_LOG(DEBUG, "", K(ret_info));
@@ -197,7 +199,7 @@ TEST_F(TestDagWarningHistory, simple_add)
   char comment[common::OB_DAG_WARNING_INFO_LENGTH];
   memset(comment, '\0', sizeof(comment));
   allocator.reuse();
-  ret = share::g_mp->dag_warning_history_manager()->get_with_param(ObBasicDag::KEY_START, ret_info, allocator);
+  ret = MTL(ObDagWarningHistoryManager *)->get_with_param(ObBasicDag::KEY_START, ret_info, allocator);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ (TRUE, ret_info.dag_ret_ == ObBasicDag::DAG_RET_START);
   memset(comment, '\0', sizeof(comment));
@@ -209,36 +211,36 @@ TEST_F(TestDagWarningHistory, simple_del)
 {
   int ret = OB_SUCCESS;
 
-  ObDagWarningHistoryManager* manager = share::g_mp->dag_warning_history_manager();
+  ObDagWarningHistoryManager* manager = MTL(ObDagWarningHistoryManager *);
   ASSERT_TRUE(nullptr != manager);
-  ret = share::g_mp->dag_warning_history_manager()->init(true, "DagWarnHis", INFO_PAGE_SIZE);
+  ret = MTL(ObDagWarningHistoryManager *)->init(true, "DagWarnHis", INFO_PAGE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   ObBasicDag dag;
   dag.init();
   dag.set_dag_ret(ObBasicDag::DAG_RET_START);
   dag.set_dag_status(ObBasicDag::ObDagStatus::DAG_STATUS_ABORT);
-  ASSERT_EQ(OB_SUCCESS, share::g_mp->dag_warning_history_manager()->add_dag_warning_info(&dag));
-  ASSERT_EQ(OB_HASH_NOT_EXIST, share::g_mp->dag_warning_history_manager()->delete_info(ObBasicDag::KEY_START + 1));
-  ASSERT_EQ(OB_SUCCESS, share::g_mp->dag_warning_history_manager()->delete_info(ObBasicDag::KEY_START));
-  ASSERT_EQ(1, share::g_mp->dag_warning_history_manager()->size());
+  ASSERT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->add_dag_warning_info(&dag));
+  ASSERT_EQ(OB_HASH_NOT_EXIST, MTL(ObDagWarningHistoryManager *)->delete_info(ObBasicDag::KEY_START + 1));
+  ASSERT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->delete_info(ObBasicDag::KEY_START));
+  ASSERT_EQ(1, MTL(ObDagWarningHistoryManager *)->size());
 
   compaction::ObInfoParamBuffer allocator;
   ObDagWarningInfo ret_info;
-  ret = share::g_mp->dag_warning_history_manager()->get_with_param(ObBasicDag::KEY_START, ret_info, allocator);
+  ret = MTL(ObDagWarningHistoryManager *)->get_with_param(ObBasicDag::KEY_START, ret_info, allocator);
   ASSERT_EQ(OB_HASH_NOT_EXIST, ret);
 
-  ASSERT_EQ(OB_SUCCESS, share::g_mp->dag_warning_history_manager()->add_dag_warning_info(&dag));
+  ASSERT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->add_dag_warning_info(&dag));
   compaction::ObIDiagnoseInfoMgr::Iterator iterator;
-  ret = share::g_mp->dag_warning_history_manager()->open_iter(iterator);
+  ret = MTL(ObDagWarningHistoryManager *)->open_iter(iterator);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_EQ(OB_SUCCESS, share::g_mp->dag_warning_history_manager()->delete_info(ObBasicDag::KEY_START));
+  ASSERT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->delete_info(ObBasicDag::KEY_START));
   // delete_info only delete info from map, there is still 2 info in list
-  ASSERT_EQ(2, share::g_mp->dag_warning_history_manager()->size());
+  ASSERT_EQ(2, MTL(ObDagWarningHistoryManager *)->size());
   ASSERT_EQ(OB_ITER_END, iterator.get_next(&ret_info, nullptr, 0));
   
   allocator.reuse();
-  ret = share::g_mp->dag_warning_history_manager()->get_with_param(ObBasicDag::KEY_START, ret_info, allocator);
+  ret = MTL(ObDagWarningHistoryManager *)->get_with_param(ObBasicDag::KEY_START, ret_info, allocator);
   ASSERT_EQ(OB_HASH_NOT_EXIST, ret);
 }
 
@@ -246,9 +248,9 @@ TEST_F(TestDagWarningHistory, simple_loop_get)
 {
   int ret = OB_SUCCESS;
 
-  ObDagWarningHistoryManager* manager = share::g_mp->dag_warning_history_manager();
+  ObDagWarningHistoryManager* manager = MTL(ObDagWarningHistoryManager *);
   ASSERT_TRUE(nullptr != manager);
-  ret = share::g_mp->dag_warning_history_manager()->init(true, "DagWarnHis", INFO_PAGE_SIZE);
+  ret = MTL(ObDagWarningHistoryManager *)->init(true, "DagWarnHis", INFO_PAGE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   const int64_t max_cnt = 4000;
@@ -257,13 +259,13 @@ TEST_F(TestDagWarningHistory, simple_loop_get)
     dag.init();
     dag.set_dag_status(ObBasicDag::ObDagStatus::DAG_STATUS_ABORT);
     dag.set_dag_ret(ObBasicDag::DAG_RET_START + i);
-    ASSERT_EQ(OB_SUCCESS, share::g_mp->dag_warning_history_manager()->add_dag_warning_info(&dag));
+    ASSERT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->add_dag_warning_info(&dag));
   }
 
-  ASSERT_EQ(max_cnt, share::g_mp->dag_warning_history_manager()->size());
+  ASSERT_EQ(max_cnt, MTL(ObDagWarningHistoryManager *)->size());
   
   compaction::ObIDiagnoseInfoMgr::Iterator iterator;
-  ret = share::g_mp->dag_warning_history_manager()->open_iter(iterator);
+  ret = MTL(ObDagWarningHistoryManager *)->open_iter(iterator);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   ObDagWarningInfo read_info;
@@ -282,11 +284,11 @@ TEST_F(TestDagWarningHistory, simple_loop_get)
   const int64_t del_cnt = 3000;
   for (int i = 0; i < del_cnt; i += 1) {
     key = ObBasicDag::KEY_START + i;
-    ASSERT_EQ(OB_SUCCESS, share::g_mp->dag_warning_history_manager()->delete_info(key));
+    ASSERT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->delete_info(key));
   }
 
   iterator.reset();
-  ret = share::g_mp->dag_warning_history_manager()->open_iter(iterator);
+  ret = MTL(ObDagWarningHistoryManager *)->open_iter(iterator);
   ASSERT_EQ(OB_SUCCESS, ret);
   i = del_cnt;
   while (OB_SUCC(ret)) {
@@ -296,17 +298,17 @@ TEST_F(TestDagWarningHistory, simple_loop_get)
     }
   }
 
-  share::g_mp->dag_warning_history_manager()->clear();
-  ASSERT_EQ(0, share::g_mp->dag_warning_history_manager()->size());
+  MTL(ObDagWarningHistoryManager *)->clear();
+  ASSERT_EQ(0, MTL(ObDagWarningHistoryManager *)->size());
 }
 
 TEST_F(TestDagWarningHistory, resize)
 {
   int ret = OB_SUCCESS;
 
-  ObDagWarningHistoryManager* manager = share::g_mp->dag_warning_history_manager();
+  ObDagWarningHistoryManager* manager = MTL(ObDagWarningHistoryManager *);
   ASSERT_TRUE(nullptr != manager);
-  ret = share::g_mp->dag_warning_history_manager()->init(true, "DagWarnHis", INFO_PAGE_SIZE);
+  ret = MTL(ObDagWarningHistoryManager *)->init(true, "DagWarnHis", INFO_PAGE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   int64_t info_cnt_per_page = 0;
@@ -324,25 +326,25 @@ TEST_F(TestDagWarningHistory, resize)
     dag.init();
     dag.set_dag_status(ObBasicDag::ObDagStatus::DAG_STATUS_ABORT);
     dag.set_dag_ret(ObBasicDag::DAG_RET_START + i);
-    ASSERT_EQ(OB_SUCCESS, share::g_mp->dag_warning_history_manager()->add_dag_warning_info(&dag));
+    ASSERT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->add_dag_warning_info(&dag));
   }
-  ASSERT_EQ(max_cnt, share::g_mp->dag_warning_history_manager()->size());
+  ASSERT_EQ(max_cnt, MTL(ObDagWarningHistoryManager *)->size());
 
   // after set_max, mgr will gc info util memory usage below GC_LOW_PERCENTAGE * mem_max
   const int64_t new_mem_max = 2 * INFO_PAGE_SIZE;
-  ret = share::g_mp->dag_warning_history_manager()->set_max(new_mem_max);
+  ret = MTL(ObDagWarningHistoryManager *)->set_max(new_mem_max);
   ASSERT_EQ(OB_SUCCESS, ret);
-  const int64_t new_size = share::g_mp->dag_warning_history_manager()->size();
+  const int64_t new_size = MTL(ObDagWarningHistoryManager *)->size();
   const int64_t gc_cnt = max_cnt - new_size;
   STORAGE_LOG(INFO, "new size", K(new_size));
   ASSERT_TRUE(new_size * info_mem_size  < ObIDiagnoseInfoMgr::GC_LOW_PERCENTAGE * new_mem_max / 100.0);
 
-  ret = share::g_mp->dag_warning_history_manager()->set_max(3 * INFO_PAGE_SIZE);
+  ret = MTL(ObDagWarningHistoryManager *)->set_max(3 * INFO_PAGE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_EQ(new_size, share::g_mp->dag_warning_history_manager()->size());
+  ASSERT_EQ(new_size, MTL(ObDagWarningHistoryManager *)->size());
 
   compaction::ObIDiagnoseInfoMgr::Iterator iterator;
-  ret = share::g_mp->dag_warning_history_manager()->open_iter(iterator);
+  ret = MTL(ObDagWarningHistoryManager *)->open_iter(iterator);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   ObDagWarningInfo read_info;
@@ -361,12 +363,12 @@ TEST_F(TestDagWarningHistory, resize)
 TEST_F(TestDagWarningHistory, gc_info)
 {
   int ret = OB_SUCCESS;
-  ObDagWarningHistoryManager* manager = share::g_mp->dag_warning_history_manager();
+  ObDagWarningHistoryManager* manager = MTL(ObDagWarningHistoryManager *);
   ASSERT_TRUE(nullptr != manager);
-  ret = share::g_mp->dag_warning_history_manager()->init(true, "DagWarnHis", INFO_PAGE_SIZE);
+  ret = MTL(ObDagWarningHistoryManager *)->init(true, "DagWarnHis", INFO_PAGE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
   const int64_t page_cnt = 10;
-  ret = share::g_mp->dag_warning_history_manager()->set_max(page_cnt * INFO_PAGE_SIZE);
+  ret = MTL(ObDagWarningHistoryManager *)->set_max(page_cnt * INFO_PAGE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   int64_t hash_value = ObBasicDag::KEY_START;
@@ -385,18 +387,18 @@ TEST_F(TestDagWarningHistory, gc_info)
     dag.init();
     dag.set_dag_status(ObBasicDag::ObDagStatus::DAG_STATUS_ABORT);
     dag.set_dag_ret(ObBasicDag::DAG_RET_START + i);
-    ASSERT_EQ(OB_SUCCESS, share::g_mp->dag_warning_history_manager()->add_dag_warning_info(&dag));
+    ASSERT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->add_dag_warning_info(&dag));
   }
   ASSERT_TRUE(info_cnt_per_page > 0);
   // 9 page full, 1 page remain one empty space
-  ASSERT_EQ(max_cnt, share::g_mp->dag_warning_history_manager()->size());
+  ASSERT_EQ(max_cnt, MTL(ObDagWarningHistoryManager *)->size());
 
   const int64_t delete_cnt = 30;
   for (int i = 0; i < delete_cnt; ++i) {
-    ASSERT_EQ(OB_SUCCESS, share::g_mp->dag_warning_history_manager()->delete_info(ObBasicDag::KEY_START + i));
+    ASSERT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->delete_info(ObBasicDag::KEY_START + i));
   }
-  ASSERT_EQ(OB_SUCCESS, share::g_mp->dag_warning_history_manager()->gc_info());
-  const int64_t cnt_after_gc = share::g_mp->dag_warning_history_manager()->size();
+  ASSERT_EQ(OB_SUCCESS, MTL(ObDagWarningHistoryManager *)->gc_info());
+  const int64_t cnt_after_gc = MTL(ObDagWarningHistoryManager *)->size();
   ASSERT_TRUE(cnt_after_gc * sizeof(ObDagWarningInfo) <
               page_cnt * INFO_PAGE_SIZE * ObIDiagnoseInfoMgr::GC_HIGH_PERCENTAGE * 1.0);
 }

@@ -95,7 +95,8 @@ public:
       uint64_t is_update_pk_                    : 1;
       uint64_t is_vec_hnsw_index_vid_opt_       : 1;  // hnsw index vid opt for tables without pk
       uint64_t skip_check_schema_version_       : 1;  // skip storage schema_version validation for special internal writes
-      uint64_t reserved_                        : 51; //add new flag before reserved_
+      uint64_t reserved_                        : 46; //add new flag before reserved_
+      uint64_t compat_version_                  : 4; //prohibited to insert new flags between compat_version_ and reserved_
     };
   };
 protected:
@@ -114,7 +115,9 @@ protected:
       tz_info_(),
       table_param_(alloc),
       flags_(0)
-  {}
+  {
+    compat_version_ = 1; //notify observer to use new flags after 4.2.5.2
+  }
 };
 
 typedef common::ObFixedArray<ObDASDMLBaseCtDef*, common::ObIAllocator> DASDMLCtDefArray;

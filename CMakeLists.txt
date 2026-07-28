@@ -97,6 +97,12 @@ cmake_dependent_option(
   "NOT OB_BUILD_PACKAGE" OFF)
 option(OB_BUILD_TEST "" OFF)
 
+# OB_BUILD_PACKAGE => build sql proxy parser
+cmake_dependent_option(
+  OB_BUILD_LIBOB_SQL_PROXY_PARSER "Build lib_sql_proxy_parser" OFF
+  "NOT OB_BUILD_PACKAGE" ON
+)
+
 include(CTest)
 if (OB_BUILD_UNITTEST)
   add_subdirectory(unittest)

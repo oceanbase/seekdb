@@ -82,7 +82,7 @@ public:
   void reset();
   int init(const blocksstable::ObSSTableMeta *meta, const bool has_multi_version_row = false);
   void set_upper_trans_version(const int64_t upper_trans_version);
-  bool is_valid() const { return version_ == SSTABLE_META_CACHE_VERSION; }
+  bool is_valid() const { return version_ >= SSTABLE_META_CACHE_VERSION; }
   int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
   int deserialize(const char *buf, const int64_t data_len, int64_t &pos);
   int64_t get_serialize_size() const;
@@ -276,6 +276,10 @@ public:
   OB_INLINE bool is_loaded() const { return nullptr != meta_; }
   int persist_linked_block_if_need(
       ObArenaAllocator &allocator,
+      const ObTabletID &tablet_id,
+      const int64_t snapshot_version,
+      blocksstable::ObIMacroBlockFlushCallback *ddl_redo_cb,
+      int64_t &macro_start_seq,
       ObObjectsWriteCtx &linked_block_write_ctx);
   int get_meta(ObSSTableMetaHandle &meta_handle, common::ObSafeArenaAllocator *allocator = nullptr) const;
   // load sstable meta bypass. Lifetime is guaranteed by allocator, which should cover this sstable

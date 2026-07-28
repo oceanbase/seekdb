@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX SHARE
-#include "share/rc/ob_module_provider.h"
 
 #include "observer/vector_index/ob_vector_embedding_handler.h"
 #include "observer/vector_index/ob_json_helper.h"

@@ -64,7 +64,7 @@ void ObInternalTableChangeNotifier::destroy()
 }
 
 int ObInternalTableChangeNotifier::register_module(
-    Module module,
+    table::ObModuleDataArg::ObExecModule module,
     ModuleCallback callback)
 {
   int ret = OB_SUCCESS;
@@ -84,7 +84,7 @@ int ObInternalTableChangeNotifier::register_module(
 }
 
 int ObInternalTableChangeNotifier::notify(
-    Module module)
+    table::ObModuleDataArg::ObExecModule module)
 {
   int ret = OB_SUCCESS;
   int idx = static_cast<int>(module);
@@ -113,7 +113,7 @@ int ObInternalTableChangeNotifier::activate()
   LOG_INFO("[NOTIFIER] LS promoted to leader, notifying all modules");
   for (int mod = 0; mod < MAX_MODULE; mod++) {
     if (entries_[mod].callback_.is_valid()) {
-      int tmp_ret = notify(static_cast<Module>(mod));
+      int tmp_ret = notify(static_cast<table::ObModuleDataArg::ObExecModule>(mod));
       if (OB_SUCCESS != tmp_ret) {
         LOG_WARN("module notify failed on leader promotion", K(tmp_ret), K(mod));
         if (OB_SUCCESS == ret) { ret = tmp_ret; }

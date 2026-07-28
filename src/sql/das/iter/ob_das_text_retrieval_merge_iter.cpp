@@ -143,7 +143,9 @@ int ObDASTextRetrievalMergeIter::set_related_tablet_ids(
   int ret = OB_SUCCESS;
   domain_id_idx_tablet_id_ = related_tablet_ids.domain_id_idx_tablet_id_;
   for (int64_t i = 0; i < token_iters_.count(); ++i) {
-    token_iters_.at(i)->set_tablet_ids(related_tablet_ids.inv_idx_tablet_id_);
+    token_iters_.at(i)->set_tablet_ids(
+        related_tablet_ids.inv_idx_tablet_id_,
+        related_tablet_ids.fwd_idx_tablet_id_);
   }
   return ret;
 }

@@ -91,14 +91,14 @@ enum ObProcType
   NESTED_PROCEDURE, /* A subprogram created inside a PL/SQL block is a nested subprogram */
   NESTED_FUNCTION,
   STANDALONE_ANONYMOUS,
-  RESERVED_PROC_TYPE_8,
-  RESERVED_PROC_TYPE_9,
+  UDT_PROCEDURE,
+  UDT_FUNCTION,
 };
 
 enum ObPLType
 {
   PL_INVALID_TYPE = -1,
-  PL_OBJ_TYPE, // scalar SQL object type
+  PL_OBJ_TYPE, //pl type scope from object type
   PL_RECORD_TYPE, //pl typoe scope from user defined
   PL_NESTED_TABLE_TYPE,
   PL_ASSOCIATIVE_ARRAY_TYPE,
@@ -107,7 +107,8 @@ enum ObPLType
   PL_SUBTYPE,
   // pls_integer, binary_integer, natural, naturaln, positive, positiven, signtype, simple_integer
   PL_INTEGER_TYPE,
-  PL_OPAQUE_TYPE = 9,
+  PL_REF_CURSOR_TYPE,
+  PL_OPAQUE_TYPE,
 };
 
 enum ObPLOpaqueType
@@ -130,8 +131,9 @@ enum ObPLGenericType
   PL_V2_TABLE_1,
   PL_TABLE_1,
   PL_COLLECTION_1,
+  PL_REF_CURSOR_1,
 
-  PL_TYPED_TABLE = 9,
+  PL_TYPED_TABLE,
   PL_ADT_WITH_OID,
   PL_SYS_INT_V2TABLE,
   PL_SYS_BULK_ERROR_RECORD,
@@ -182,6 +184,7 @@ enum ObPLTypeFrom
   PL_TYPE_UDT,
   PL_TYPE_ATTR_ROWTYPE,
   PL_TYPE_ATTR_TYPE,
+  PL_TYPE_SYS_REFCURSOR,
 };
 
 enum ObPLTypeSize
@@ -331,6 +334,8 @@ public:
   common::ObObjType get_obj_type() const;
   ObPLIntegerType get_pl_integer_type() const { return pls_type_; }
   inline void set_pl_integer_type(ObPLIntegerType integer_type, const common::ObDataType &obj_type);
+  inline void set_sys_refcursor_type();
+
   uint64_t get_user_type_id() const;
   inline void set_user_type_id(ObPLType type, uint64_t user_type_id);
 
@@ -371,8 +376,18 @@ public:
   inline bool is_nested_table_type() const { return PL_NESTED_TABLE_TYPE == type_; }
   inline bool is_associative_array_type() const { return PL_ASSOCIATIVE_ARRAY_TYPE == type_; }
   inline bool is_varray_type() const { return PL_VARRAY_TYPE == type_; }
-  inline bool is_cursor_type() const { return PL_CURSOR_TYPE == type_; }
+  inline bool is_cursor_type() const { return PL_CURSOR_TYPE == type_ || PL_REF_CURSOR_TYPE == type_; }
   inline bool is_opaque_type() const { return PL_OPAQUE_TYPE == type_; }
+  inline bool is_sys_refcursor_type() const
+  {
+    return is_ref_cursor_type() && PL_TYPE_SYS_REFCURSOR == type_from_;
+  }
+  inline bool is_ref_cursor_type() const {
+    return PL_REF_CURSOR_TYPE == type_;
+  }
+  inline bool is_cursor_var() const {
+    return PL_CURSOR_TYPE == type_;
+  }
   inline bool is_pl_integer_type() const { return PL_INTEGER_TYPE == type_; }
   inline bool is_subtype() const { return PL_SUBTYPE == type_; }
 
@@ -440,6 +455,7 @@ public:
   inline bool is_generic_v2_table_type() const { return PL_V2_TABLE_1 == generic_type_; }
   inline bool is_generic_table_type() const { return PL_TABLE_1 == generic_type_; }
   inline bool is_generic_collection_type() const { return PL_COLLECTION_1 == generic_type_; }
+  inline bool is_generic_ref_cursor_type() const { return PL_REF_CURSOR_1 == generic_type_; }
   inline bool is_enum_or_set_type() const { return (is_obj_type() && ob_is_enum_or_set_type(obj_type_.get_obj_type())); }
   // Type stored in SQL.
   virtual int newx(common::ObIAllocator &allocator, const ObPLINS *ns, int64_t &ptr) const;
@@ -522,6 +538,12 @@ inline void ObPLDataType::set_pl_integer_type(ObPLIntegerType integer_type, cons
   set_data_type(obj_type);
   type_ = PL_INTEGER_TYPE;
   pls_type_ = integer_type;
+}
+
+inline void ObPLDataType::set_sys_refcursor_type()
+{
+  type_from_ = PL_TYPE_SYS_REFCURSOR;
+  set_user_type_id(PL_REF_CURSOR_TYPE, common::combine_pl_type_id(OB_INVALID_ID, 0));
 }
 
 inline void ObPLDataType::set_user_type_id(ObPLType type, uint64_t user_type_id)
@@ -644,12 +666,12 @@ public:
     IS_NESTED_PROC        = 16,//
     IS_TYPE_METHOD        = 17,//custom type method
     IS_SYSTEM_PROC        = 18,//System predefined Procedure (e.g.: RAISE_APPLICATION_ERROR)
-    IS_RESERVED_19        = 19,
+    IS_UDT_NS             = 19,
     IS_UDF_NS             = 20,
     IS_LOCAL_TYPE         = 21,// local custom type
     IS_PKG_TYPE           = 22,// custom type in the package
-    IS_RESERVED_23        = 23,
-    IS_RESERVED_24        = 24,
+    IS_SELF_ATTRIBUTE     = 23,// self attribute for udt
+    IS_UDT_MEMBER_ROUTINE = 24,// UDT member routine
     IS_TRIGGER            = 25,// Trigger
   };
 
@@ -687,7 +709,7 @@ public:
   bool is_subprogram_var() const { return IS_SUBPROGRAM_VAR == access_type_; }
   bool is_user_var() const { return IS_USER == access_type_; }
   bool is_session_var() const { return IS_SESSION == access_type_ || IS_GLOBAL == access_type_; }
-  bool is_ns() const { return IS_DB_NS == access_type_ || IS_PKG_NS == access_type_; }
+  bool is_ns() const { return IS_DB_NS == access_type_ || IS_PKG_NS == access_type_ || IS_UDT_NS == access_type_; }
   bool is_const() const { return IS_CONST == access_type_; }
   bool is_property() const { return IS_PROPERTY == access_type_; }
   bool is_external() const
@@ -711,6 +733,7 @@ public:
   bool is_label() const { return IS_LABEL_NS == access_type_; }
   bool is_local_type() const { return IS_LOCAL_TYPE == access_type_; }
   bool is_pkg_type() const { return IS_PKG_TYPE == access_type_; }
+  bool is_udt_type() const { return IS_UDT_NS == access_type_; }
   bool is_udf_type() const { return IS_UDF_NS == access_type_; }
   bool is_pkg_ns() const { return IS_PKG_NS == access_type_; }
   bool is_database() const { return IS_DB_NS == access_type_; }
@@ -723,6 +746,7 @@ public:
   static bool is_subprogram_variable(const common::ObIArray<ObObjAccessIdx> &access_idxs);
   static bool is_package_variable(const common::ObIArray<ObObjAccessIdx> &access_idxs);
   static bool is_local_baisc_variable(const common::ObIArray<ObObjAccessIdx> &access_idxs);
+  static bool is_local_refcursor_variable(const common::ObIArray<ObObjAccessIdx> &access_idxs);
   static bool is_local_cursor_variable(const common::ObIArray<ObObjAccessIdx> &access_idxs);
   static bool is_package_cursor_variable(const common::ObIArray<ObObjAccessIdx> &access_idxs);
   static bool is_subprogram_basic_variable(const common::ObIArray<ObObjAccessIdx> &access_idxs);
@@ -733,6 +757,7 @@ public:
   static bool is_type(const common::ObIArray<ObObjAccessIdx> &access_idxs);
   static bool is_local_type(const common::ObIArray<ObObjAccessIdx> &access_idxs);
   static bool is_pkg_type(const common::ObIArray<ObObjAccessIdx> &access_idxs);
+  static bool is_udt_type(const common::ObIArray<ObObjAccessIdx> &access_idxs);
   static bool is_external_type(const common::ObIArray<ObObjAccessIdx> &access_idxs);
   static const ObPLDataType &get_final_type(const common::ObIArray<ObObjAccessIdx> &access_idxs);
   static int get_package_id(const ObIArray<ObObjAccessIdx> &access_idxs,
@@ -764,6 +789,11 @@ public:
 
 enum ObPLCursorFlag {
   CURSOR_FLAG_UNDEF = 0,
+  REF_BY_REFCURSOR = 1, // this a ref cursor
+  SESSION_CURSOR = 2, // this cursor is alloc in session memory
+  TRANSFERING_RESOURCE = 4, // this cursor is returned by a udf
+  INVALID_CURSOR = 16, // this cursor is convert to a dbms cursor, invalid for dynamic cursor op.
+  DBMS_SQL_CURSOR = 32, // this is a dbms_sql cursor
 };
 class ObPLCursorInfo
 {
@@ -773,9 +803,12 @@ public:
     entity_(nullptr), 
     is_explicit_(is_explicit),
     current_position_(OB_INVALID_ID),
+    bulk_rowcount_(),
+    bulk_exceptions_(),
     spi_cursor_(NULL),
     allocator_(NULL),
     cursor_flag_(CURSOR_FLAG_UNDEF),
+    ref_count_(0),
     is_scrollable_(false),
     last_execute_time_(0),
     last_stream_cursor_(false),
@@ -788,9 +821,12 @@ public:
     entity_(nullptr),
     is_explicit_(true),
     current_position_(OB_INVALID_ID),
+    bulk_rowcount_(),
+    bulk_exceptions_(),
     spi_cursor_(NULL),
     allocator_(allocator),
     cursor_flag_(CURSOR_FLAG_UNDEF),
+    ref_count_(0),
     is_scrollable_(false),
     snapshot_(),
     is_need_check_snapshot_(false),
@@ -801,6 +837,17 @@ public:
     reset();
   }
   virtual ~ObPLCursorInfo() { reset(); };
+  struct ObCursorBulkException
+  {
+    ObCursorBulkException() :
+      index_(-1), error_code_(-1) {}
+    ObCursorBulkException(int64_t index, int64_t code_) :
+      index_(index), error_code_(code_) {}
+    TO_STRING_KV(K_(index), K_(error_code));
+    int64_t index_;
+    int64_t error_code_;
+  };
+
   void reuse()
   {
     // reuse interface does not recharge id
@@ -818,10 +865,22 @@ public:
     fetched_with_row_ = false;
     rowcount_ = 0;
     current_position_ = OB_INVALID_ID;
-    cursor_flag_ = CURSOR_FLAG_UNDEF;
+    in_forall_ = false;
+    save_exception_ = false;
+    forall_rollback_ = false;
+    if (is_session_cursor()) {
+      cursor_flag_ = SESSION_CURSOR;
+    } else if (is_dbms_sql_cursor()) {
+      cursor_flag_ = DBMS_SQL_CURSOR;
+    }else {
+      cursor_flag_ = CURSOR_FLAG_UNDEF;
+    }
+    // ref_count_ = 0; // Keep ref count after close.
     is_scrollable_ = false;
     last_execute_time_ = 0;
     trans_id_.reset();
+    bulk_rowcount_.reset();
+    bulk_exceptions_.reset();
     current_row_.reset();
     first_row_.reset();
     last_row_.reset();
@@ -865,9 +924,21 @@ public:
   inline bool get_fetched() const { return fetched_; }
   inline bool get_fetched_with_row() const { return fetched_with_row_; }
 
+  inline void set_in_forall(bool save_exception)
+  {
+    reset();
+    in_forall_ = true;
+    save_exception_ = save_exception;
+  }
+  inline void unset_in_forall()
+  {
+    // Clear the in_forall flag, do not clear other information, subsequent SQL%BULK_ROWCOUNT needs this information, to be cleared when the next DML statement arrives
+    in_forall_ = false;
+  }
   inline int64_t get_id() const { return id_; }
   inline lib::MemoryContext &get_cursor_entity() { return entity_; }
   inline const lib::MemoryContext get_cursor_entity() const { return entity_; }
+  inline bool get_in_forall() const { return in_forall_; }
   inline bool is_for_update() const { return for_update_; }
   inline bool has_hidden_rowid() const { return has_hidden_rowid_; }
   inline bool is_streaming() const { return is_streaming_; }
@@ -887,6 +958,7 @@ public:
   inline sql::ObSPICursor* get_spi_cursor() const { return reinterpret_cast<sql::ObSPICursor*>(spi_cursor_); }
 
   inline bool get_isopen() const { return is_explicit_ ? isopen_ : false; }
+  inline bool get_save_exception() const { return save_exception_; }
 
   inline void set_last_execute_time(int64_t last_execute_time) { last_execute_time_ = last_execute_time; }
   inline int64_t get_last_execute_time() const { return last_execute_time_; }
@@ -901,19 +973,58 @@ public:
   int set_current_position(int64_t position);
   int set_rowcount(int64_t rowcount);
   int set_rowid(ObString &rowid);
+  int set_bulk_exception(int64_t error);
 
   int get_found(bool &found, bool &isnull) const ;
   int get_notfound(bool &notfound, bool &isnull) const ;
   int get_rowcount(int64_t &rowcount, bool &isnull) const;
   int get_rowid(ObString &rowid) const;
 
+  int get_bulk_rowcount(int64_t index, int64_t &rowcount) const;
+  int get_bulk_exception(int64_t index, bool need_code, int64_t &result) const;
+  int64_t get_bulk_exception_count() const { return bulk_exceptions_.count(); }
+  int64_t get_bulk_rowcount_count() const { return bulk_rowcount_.count(); }
   ObString &get_sql_text() { return sql_text_; }
   char* get_sql_id() { return sql_id_; }
   ObString get_non_session_sql_text();
+  inline void reset_bulk_rowcount()
+  {
+    if (bulk_rowcount_.count() != 0) {
+      bulk_rowcount_.reset();
+    }
+  }
+  inline void clear_row_count() { rowcount_ = 0; }
+  inline int add_bulk_row_count(int64_t row_count) { return bulk_rowcount_.push_back(row_count); }
+  inline int add_bulk_exception(int64_t index, int64_t code) { return bulk_exceptions_.push_back(ObCursorBulkException(index, code)); }
+
+  inline void set_forall_rollback() { forall_rollback_ = true; }
+  inline bool is_forall_rollback() const { return forall_rollback_; }
+
   inline void set_trans_id(const transaction::ObTransID &trans_id) { trans_id_ = trans_id; }
   inline const transaction::ObTransID& get_trans_id() const { return trans_id_; }
 
   inline ObIAllocator *get_allocator() { return NULL == entity_ ? allocator_ : &entity_->get_arena_allocator(); }
+
+  inline void set_ref_by_refcursor() { 
+    set_flag_bit(REF_BY_REFCURSOR);
+    clear_flag_bit(DBMS_SQL_CURSOR);
+  }
+  inline bool is_ref_by_refcursor() const { return test_flag_bit(REF_BY_REFCURSOR); }
+  inline void set_dbms_sql_cursor() { 
+    set_flag_bit(DBMS_SQL_CURSOR);
+    clear_flag_bit(REF_BY_REFCURSOR);
+  }
+  inline bool is_dbms_sql_cursor() const { return test_flag_bit(DBMS_SQL_CURSOR); }
+
+  inline void set_is_session_cursor() { set_flag_bit(SESSION_CURSOR); }
+  inline bool is_session_cursor() const { return test_flag_bit(SESSION_CURSOR); }
+  inline void inc_ref_count() { ref_count_ += 1; }
+  inline void dec_ref_count() { ref_count_ -= 1; }
+  inline int64_t get_ref_count() const { return ref_count_; }
+  inline void set_ref_count(int64_t ref_cnt) { ref_count_ = ref_cnt; }
+  inline void set_is_returning(bool flag) { flag ? set_flag_bit(TRANSFERING_RESOURCE)
+                                                 : clear_flag_bit(TRANSFERING_RESOURCE); }
+  inline bool get_is_returning() const { return test_flag_bit(TRANSFERING_RESOURCE); }
 
   inline void set_flag_bit(const ObPLCursorFlag &flag) { cursor_flag_ =
      static_cast<ObPLCursorFlag>(static_cast<uint64_t>(cursor_flag_) | static_cast<uint64_t>(flag)); }
@@ -922,6 +1033,8 @@ public:
   inline bool test_flag_bit(const ObPLCursorFlag &flag) const { return
      !!(static_cast<uint64_t>(cursor_flag_) & static_cast<uint64_t>(flag)); }
 
+  inline void set_invalid_cursor() { set_flag_bit(INVALID_CURSOR); }
+  inline bool is_invalid_cursor() { return test_flag_bit(INVALID_CURSOR); }
 
   static int prepare_entity(sql::ObSQLSessionInfo &session, 
                             lib::MemoryContext &entity);
@@ -948,9 +1061,15 @@ public:
                K_(current_position),
                K_(first_row),
                K_(last_row),
+               K_(in_forall),
+               K_(save_exception),
+               K_(forall_rollback),
                K_(trans_id),
+               K_(bulk_rowcount),
+               K_(bulk_exceptions),
                KP_(spi_cursor),
                K_(cursor_flag),
+               K_(ref_count),
                K_(is_scrollable),
                K_(snapshot),
                K_(is_need_check_snapshot),
@@ -973,10 +1092,16 @@ protected:
   ObNewRow current_row_;    //current row
   ObNewRow first_row_;    // First row
   ObNewRow last_row_;     // last row
+  bool in_forall_;        // whether it is an implicit cursor in forall
+  bool save_exception_;   // Whether to continue execution upon encountering an error in forall
+  bool forall_rollback_;  // Whether the Forall statement has rolled back to Single Sql mode
   transaction::ObTransID trans_id_; // used to check txn liveness when cursor is a 'for update cursor'
+  common::ObArray<int64_t> bulk_rowcount_;
+  common::ObArray<ObCursorBulkException> bulk_exceptions_;
   void *spi_cursor_; // Handler for reading cached SQL result data.
   ObIAllocator *allocator_;
   ObPLCursorFlag cursor_flag_; // OBPLCURSORFLAG;
+  int64_t ref_count_; // a ref cursor may referenced by many ref cursor
   bool is_scrollable_; // whether it is a scrollable cursor
   transaction::ObTxReadSnapshot snapshot_;
   // If cursor has valid snapshot
@@ -996,6 +1121,9 @@ class ObPLGetCursorAttrInfo
 public:
   ObPLGetCursorAttrInfo() :
     type_(PL_CURSOR_INVALID),
+    bulk_rowcount_idx_(0),
+    bulk_exceptions_idx_(0),
+    bulk_exceptions_need_code_(false),
     is_explicit_(false) {}
   inline void set_type(int64_t type)
   {
@@ -1011,6 +1139,9 @@ public:
       SET_TYPE(NOTFOUND);
       SET_TYPE(ROWCOUNT);
       SET_TYPE(ROWID);
+      SET_TYPE(BULK_ROWCOUNT);
+      SET_TYPE(BULK_EXCEPTIONS);
+      SET_TYPE(BULK_EXCEPTIONS_COUNT);
       default: {
         type_ = PL_CURSOR_INVALID;
       }
@@ -1019,13 +1150,25 @@ public:
   }
   inline bool is_valid() const { return type_ != PL_CURSOR_INVALID; }
   inline void set_is_explicit(bool is_explicit) { is_explicit_ = is_explicit; }
+  inline void set_bulk_rowcount_idx(int64_t idx) { bulk_rowcount_idx_ = idx; }
+  inline void set_bulk_exceptions_idx(int64_t idx) { bulk_exceptions_idx_ = idx; }
+  inline void set_bulk_exceptions_code_or_idx(bool need_code) { bulk_exceptions_need_code_ = need_code; }
+
   inline bool is_explicit_cursor() const { return is_explicit_; }
   inline bool is_isopen() const { return PL_CURSOR_ISOPEN == type_; }
   inline bool is_found() const { return  PL_CURSOR_FOUND == type_; }
   inline bool is_notfound() const { return PL_CURSOR_NOTFOUND == type_; }
   inline bool is_rowcount() const { return PL_CURSOR_ROWCOUNT == type_; }
   inline bool is_rowid() const { return PL_CURSOR_ROWID == type_; }
+  inline bool is_bulk_rowcount() const { return PL_CURSOR_BULK_ROWCOUNT == type_; }
+  inline bool is_bulk_exceptions() const { return PL_CURSOR_BULK_EXCEPTIONS == type_; }
+  inline bool is_bulk_exceptions_count() const { return PL_CURSOR_BULK_EXCEPTIONS_COUNT == type_; }
+
   inline int64_t get_type() const { return type_; }
+  inline int64_t get_bulk_rowcount_idx() const { return bulk_rowcount_idx_; }
+  inline int64_t get_bulk_exceptions_idx() const { return bulk_exceptions_idx_; }
+  inline bool need_get_exception_code() const { return bulk_exceptions_need_code_; }
+  inline bool need_get_exception_idx() const { return !bulk_exceptions_need_code_; }
 
   enum Type
   {
@@ -1035,12 +1178,20 @@ public:
     PL_CURSOR_NOTFOUND,
     PL_CURSOR_ROWCOUNT,
     PL_CURSOR_ROWID,
+    PL_CURSOR_BULK_ROWCOUNT,
+    PL_CURSOR_BULK_EXCEPTIONS,
+    PL_CURSOR_BULK_EXCEPTIONS_COUNT,
   };
 
   int64_t type_; // The type of the attribute obtained
+  int64_t bulk_rowcount_idx_;
+  int64_t bulk_exceptions_idx_;
+  bool bulk_exceptions_need_code_;
   bool is_explicit_; // whether it is an explicit cursor
 
-  TO_STRING_KV(K_(type), K_(is_explicit));
+  TO_STRING_KV(K_(type),
+               K_(bulk_rowcount_idx), K_(bulk_exceptions_idx),
+               K_(bulk_exceptions_need_code), K_(is_explicit));
 };
 
 }

@@ -24,7 +24,6 @@
 #include "sql/executor/ob_task_event.h"
 #include "sql/engine/px/ob_granule_util.h"
 #include "common/ob_range.h"
-#include "common/row/ob_row_store.h"
 
 namespace oceanbase
 {
@@ -169,7 +168,7 @@ public:
     uint64_t part_key_ref_id_; // used to identify which physical operator the partition info in range location belongs to in the plan
     uint64_t value_ref_id_;
     int64_t renew_time_;
-    common::ObRowStore *row_store_; // the row cache corresponding to this partition, used for dml statements
+    ObRowStore *row_store_; // the row cache corresponding to this partition, used for dml statements
     ObChunkDatumStore *datum_store_;
   };
   class ObRangeLocation
@@ -181,18 +180,20 @@ public:
     {
     }
     explicit ObRangeLocation(common::ObIAllocator &allocator)
-      : part_locs_(allocator)
+      : part_locs_(allocator),
+        server_()
     {
     }
     virtual ~ObRangeLocation() {}
     inline void reset()
     {
       part_locs_.reset();
+      server_.reset();
     }
     inline bool is_valid() const
     {
       bool bool_ret = true;
-      if (part_locs_.count() <= 0) {
+      if (!server_.is_valid() || part_locs_.count() <= 0) {
         bool_ret = false;
       }
       for (int64_t i = 0; true == bool_ret && i < part_locs_.count(); ++i) {
@@ -203,11 +204,12 @@ public:
       return bool_ret;
     }
     int assign(const ObRangeLocation &location);
-    TO_STRING_KV(K_(part_locs));
+    TO_STRING_KV(K_(part_locs), K_(server));
     // Because a task may contain multiple scan operators, each scan operator corresponds to one ObPartLoc
     // So part_locs_ is an array
     common::ModulePageAllocator inner_alloc_;
     common::ObFixedArray<ObTaskInfo::ObPartLoc, common::ObIAllocator> part_locs_;
+    common::ObAddr server_;
   };
 
 public:
@@ -293,10 +295,11 @@ private:
    */
 
   /*** Scan physical table Task required data structure ****/
-  // Record which partitions and query ranges this task maps to.
+  // Record which Partitions this Task maps to, as well as the server corresponding to these partition & query range
   ObRangeLocation range_location_;
   int64_t task_split_type_;
-  // Record the local identity of this task's intermediate results.
+  // Record the position of intermediate results in this Task (The server in ObTaskLocation also indicates which machine this task should be sent to for execution)
+  // Report and provide to upper layer Task for reading
   ObTaskLocation task_location_;
 
   /*** Read the necessary data structure for Task processing ***/

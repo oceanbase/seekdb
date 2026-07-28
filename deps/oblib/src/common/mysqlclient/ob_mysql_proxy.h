@@ -18,7 +18,7 @@
 #define OCEANBASE_MYSQL_PROXY_H_
 
 #include "common/mysqlclient/ob_isql_client.h"
-#include "common/timezone/ob_time_convert.h"  // ObTimeZoneInfoWrap (self-contained include)
+#include "common/timezone/ob_time_convert.h"  // ObNLSFormatEnum (self-contained include)
 #include "common/mysqlclient/ob_mysql_result.h"
 
 namespace oceanbase
@@ -144,7 +144,7 @@ struct ObSessionParam final
 public:
   ObSessionParam()
       : sql_mode_(nullptr), tz_info_wrap_(nullptr), ddl_info_(), is_load_data_exec_(false),
-        enable_pl_cache_(true),
+        use_external_session_(false), nls_formats_{}, enable_pl_cache_(true),
         secure_file_priv_() {}
   ~ObSessionParam() = default;
 public:
@@ -152,6 +152,8 @@ public:
   ObTimeZoneInfoWrap *tz_info_wrap_;
   ObSessionDDLInfo ddl_info_;
   bool is_load_data_exec_;
+  bool use_external_session_; // need init remote inner sql conn with sess getting from sess mgr
+  common::ObString nls_formats_[common::ObNLSFormatEnum::NLS_MAX];
   bool enable_pl_cache_;
   common::ObString secure_file_priv_;
 };

@@ -237,6 +237,7 @@ public:
     dst_data.buf_ = src_block_desc.buf_;
     dst_data.size_ = src_block_desc.addr_.size();
   }
+  void set_table_flag_with_macro_id_array();
   TO_STRING_KV(K_(root_desc), K_(data_root_desc), K(data_block_ids_.count()),
                K(other_block_ids_.count()), K_(index_blocks_cnt),
                K_(data_blocks_cnt), K_(micro_block_cnt), K_(data_column_cnt),
@@ -245,7 +246,7 @@ public:
                K_(occupy_size), K_(original_size), K_(data_checksum),
                K_(use_old_macro_block_count), K_(compressor_type),
                K_(root_row_store_type), K_(nested_offset), K_(nested_size),
-               K_(root_macro_seq));
+               K_(table_backup_flag), K_(root_macro_seq));
 
 public:
   ObIndexTreeRootBlockDesc root_desc_;
@@ -267,6 +268,7 @@ public:
   common::ObCompressorType compressor_type_;
   int64_t nested_offset_;
   int64_t nested_size_;
+  ObTableBackupFlag table_backup_flag_;
   ObRowStoreType root_row_store_type_;
   int64_t root_macro_seq_;
   DISALLOW_COPY_AND_ASSIGN(ObSSTableMergeRes);

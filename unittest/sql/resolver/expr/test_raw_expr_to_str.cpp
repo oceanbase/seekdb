@@ -19,6 +19,7 @@
 #include <gtest/gtest.h>
 #define private public
 #include "sql/resolver/expr/ob_raw_expr_util.h"
+#include "observer/ob_server.h"
 #undef private
 
 #define USING_LOG_PREFIX SQL_OPTIMIZER

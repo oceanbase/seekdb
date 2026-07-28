@@ -158,6 +158,11 @@ int ObAllVirtualDag::fill_cells(share::ObDagInfo &dag_info)
       cells[i].set_varchar(dag_info.dag_key_);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
+    case DAG_NET_KEY:
+      //dag_net key
+      cells[i].set_varchar(dag_info.dag_net_key_);
+      cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+      break;
     case DAG_ID:
       //dag_id
       n = dag_info.dag_id_.to_string(dag_id_buf_, sizeof(dag_id_buf_));

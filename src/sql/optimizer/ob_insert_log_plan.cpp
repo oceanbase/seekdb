@@ -122,6 +122,15 @@ int ObInsertLogPlan::generate_normal_raw_plan()
         LOG_TRACE("succeed to allocate insert operator", K(candidates_.candidate_plans_.count()));
       }
     }
+    if (OB_SUCC(ret) && insert_stmt->get_returning_aggr_item_size() > 0) {
+      if (OB_FAIL(candi_allocate_scala_group_by(insert_stmt->get_returning_aggr_items()))) {
+        LOG_WARN("failed to allocate scalar group by", K(ret));
+      } else {
+        LOG_TRACE("succeed to allocate group by operator",
+            K(candidates_.candidate_plans_.count()));
+      }
+    }
+
     /* if the plan is pdml or parallel select, should allocate a OSG above insert. This OSG is used to merge
      * all information collection by other OSG.
     */
@@ -415,6 +424,8 @@ int ObInsertLogPlan::allocate_insert_values_as_top(ObLogicalOperator *&top)
                                    allocate(*this, LOG_EXPR_VALUES)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate values op", K(ret));
+  } else if (insert_stmt->is_error_logging() && OB_FAIL(values_op->extract_err_log_info())) {
+    LOG_WARN("failed to extract error log exprs", K(ret));
   } else if (OB_FAIL(values_op->compute_property())) {
     LOG_WARN("failed to compute property", K(ret));
   } else {
@@ -517,6 +528,24 @@ int ObInsertLogPlan::build_lock_row_flag_expr(ObConstRawExpr *&lock_row_flag_exp
   return ret;
 }
 
+int ObInsertLogPlan::get_osg_type(bool is_multi_part_dml,
+                                  int64_t distributed_method,
+                                  OSG_TYPE &type)
+{
+  int ret = OB_SUCCESS;
+  type = OSG_TYPE::NORMAL_OSG;
+  if (DIST_PARTITION_WISE == distributed_method ||
+      DIST_PULL_TO_LOCAL == distributed_method) {
+    //need merge stats
+    type = OSG_TYPE::GATHER_OSG;
+  } else if (DIST_BASIC_METHOD == distributed_method) {
+    if (is_multi_part_dml) {
+      type = OSG_TYPE::NORMAL_OSG;
+    }
+  }
+  return ret;
+}
+
 int ObInsertLogPlan::create_insert_plans(ObIArray<CandidatePlan> &candi_plans,
                                          ObTablePartitionInfo *insert_table_part,
                                          ObShardingInfo *insert_table_sharding,
@@ -554,10 +583,10 @@ int ObInsertLogPlan::create_insert_plans(ObIArray<CandidatePlan> &candi_plans,
     } else if (0 == distributed_methods) {
       /*do nothing*/
     } else if (osg_info != NULL &&
-               FALSE_IT(osg_type = (DIST_PARTITION_WISE == distributed_methods ||
-                                    DIST_PULL_TO_LOCAL == distributed_methods)
-                                   ? OSG_TYPE::GATHER_OSG
-                                   : OSG_TYPE::NORMAL_OSG)) {
+               OB_FAIL(get_osg_type(is_multi_part_dml,
+                                    distributed_methods,
+                                    osg_type))) {
+      LOG_WARN("failed to get osg type", K(ret));
     } else if (osg_info != NULL &&
                OB_FAIL(allocate_optimizer_stats_gathering_as_top(candi_plan.plan_tree_,
                                                                  *osg_info,
@@ -579,7 +608,7 @@ int ObInsertLogPlan::create_insert_plans(ObIArray<CandidatePlan> &candi_plans,
       } else if (OB_FAIL(ObOptimizerUtil::compute_basic_sharding_info(
                                                 get_optimizer_context().get_local_server_addr(),
                                                 input_shardings,
-                                                get_allocator(),
+                                                get_optimizer_context().get_allocator(),
                                                 insert_op_sharding,
                                                 inherit_sharding_index))) {
         LOG_WARN("failed to compute basic sharding info", K(ret));
@@ -632,11 +661,13 @@ int ObInsertLogPlan::allocate_insert_as_top(ObLogicalOperator *&top,
   } else {
     insert_op->set_child(ObLogicalOperator::first_child, top);
     insert_op->set_is_insert_select(insert_stmt->value_from_select());
+    insert_op->set_is_returning(insert_stmt->is_returning());
     insert_op->set_replace(insert_stmt->is_replace());
     insert_op->set_ignore(insert_stmt->is_ignore());
     insert_op->set_is_multi_part_dml(is_multi_part_dml);
     insert_op->set_table_partition_info(table_partition_info);
     insert_op->set_lock_row_flag_expr(lock_row_flag_expr);
+    insert_op->set_has_instead_of_trigger(insert_stmt->has_instead_of_trigger());
     if (get_can_use_parallel_das_dml()) {
       insert_op->set_das_dop(max_dml_parallel_);
       LOG_TRACE("insert das dop", K(max_dml_parallel_));
@@ -649,7 +680,9 @@ int ObInsertLogPlan::allocate_insert_as_top(ObLogicalOperator *&top,
     if (insert_stmt->is_insert_up() || insert_stmt->is_replace()) {
       insert_op->set_constraint_infos(&uk_constraint_infos_);
     }
-    if (OB_FAIL(insert_stmt->get_view_check_exprs(insert_op->get_view_check_exprs()))) {
+    if (insert_stmt->is_error_logging() && OB_FAIL(insert_op->extract_err_log_info())) {
+      LOG_WARN("failed to extract error log info", K(ret));
+    } else if (OB_FAIL(insert_stmt->get_view_check_exprs(insert_op->get_view_check_exprs()))) {
       LOG_WARN("failed to get view check exprs", K(ret));
     } else if (OB_FAIL(insert_op->compute_property())) {
       LOG_WARN("failed to compute equal set", K(ret));
@@ -790,7 +823,8 @@ int ObInsertLogPlan::check_insert_plan_need_multi_partition_dml(ObTablePartition
   } else if (use_parallel_das_dml_) {
     is_multi_part_dml = true;
     OPT_TRACE("insert table use parallel das dml, force use multi part dml");
-  } else if (index_dml_infos_.count() > 1 ||
+  } else if (insert_stmt->has_instead_of_trigger() ||
+             index_dml_infos_.count() > 1 ||
              get_optimizer_context().is_batched_multi_stmt() ||
              //ddl sql can produce a PDML plan with PL UDF,
              //some PL UDF that cannot be executed in a PDML plan
@@ -898,7 +932,8 @@ int ObInsertLogPlan::prepare_dml_infos()
     const ObInsertTableInfo& table_info = stmt->get_insert_table_info();
     IndexDMLInfo* table_dml_info = nullptr;
     ObSEArray<IndexDMLInfo*, 8> index_dml_infos;
-    if (OB_FAIL(prepare_table_dml_info_basic(table_info, table_dml_info, index_dml_infos))) {
+    bool has_tg = stmt->has_instead_of_trigger();
+    if (OB_FAIL(prepare_table_dml_info_basic(table_info, table_dml_info, index_dml_infos, has_tg))) {
       LOG_WARN("failed to prepare table dml info basic", K(ret));
     } else if (OB_FAIL(prepare_table_dml_info_special(table_info, table_dml_info, index_dml_infos, index_dml_infos_))) {
       LOG_WARN("failed to prepare table dml info special", K(ret));

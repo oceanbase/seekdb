@@ -17,10 +17,10 @@
 #define USING_LOG_PREFIX SHARE
 #include "share/rc/ob_module_provider.h" // for share::g_mp
 #include "share/inner_table/ob_inner_table_schema_constants.h"
-#include "share/ob_global_stat_proxy.h"
-#include "share/schema/ob_schema_struct.h"
+#include "share/ob_global_stat_proxy.h" // for ObGlobalStatProxy
+#include "share/schema/ob_schema_struct.h" // for ObServerRuntimeSchema
 #include "share/ob_server_struct.h"
-#include "share/io/ob_io_manager.h"
+#include "share/io/ob_io_manager.h"  // OB_IO_MANAGER, previously hidden behind a removed include chain, make the dependency explicit
 #include "share/config/ob_server_config.h" // GCONF (get_rs_default_timeout_ctx)
 
 namespace oceanbase
@@ -312,7 +312,6 @@ int ObShareUtil::check_if_server_role_state_is_standby(bool &is_standby)
   }
   return ret;
 }
-
 int ObShareUtil::gen_default_server_runtime_schema(schema::ObServerRuntimeSchema &runtime_schema)
 {
   int ret = OB_SUCCESS;

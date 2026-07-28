@@ -57,12 +57,12 @@
 #include "observer/dbms_scheduler/ob_dbms_sched_service.h" // ObDBMSSchedService
 #include "sql/plan_cache/ob_ps_cache.h"
 #include "storage/access/ob_empty_read_bucket.h"
+#include "share/errsim_module/ob_errsim_module_mgr.h"
 #include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
 #include "sql/dtl/ob_dtl_interm_result_manager.h"
-#include "sql/session/ob_sql_session_mgr.h"
 #include "observer/omt/ob_ai_service.h"
 #include "storage/allocator/ob_memstore_allocator.h"  // relocated-definition owner
 #include "share/io/ob_io_manager.h"  // relocated-definition owner
@@ -113,8 +113,8 @@ template<typename T>
 static int server_obj_pool_create(common::ObServerObjectPool<T> *&pool)
 {
   int ret = common::OB_SUCCESS;
-  pool = SERVER_NEW(common::ObServerObjectPool<T>, "TntSrvObjPool",
-                    share::server_cpu_count());
+  pool = SERVER_NEW(common::ObServerObjectPool<T>, "TntSrvObjPool", false/*regist*/,
+                 share::server_is_mini_mode(), share::server_cpu_count());
   if (OB_ISNULL(pool)) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
   } else {
@@ -235,6 +235,12 @@ void ObServerRuntimeController::destroy()
     tmp_ret = GCTX.disk_reporter_->delete_usage_stat();
     if (OB_SUCCESS != tmp_ret) {
       LOG_WARN_RET(tmp_ret, "fail to delete runtime disk usage during shutdown", K(tmp_ret));
+    }
+  }
+  if (OB_NOT_NULL(GCTX.conn_res_mgr_)) {
+    tmp_ret = GCTX.conn_res_mgr_->erase_connection_resources();
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN_RET(tmp_ret, "fail to erase runtime connection resource during shutdown", K(tmp_ret));
     }
   }
   timer_.destroy();
@@ -1076,6 +1082,35 @@ void ObServerRuntimeController::reload_request_queue_size()
   }
 }
 
+int ObSrvNetworkFrame::reload_sql_thread_config()
+{
+  int ret = OB_SUCCESS;
+
+  int sql_net_thread_count = (int)GCONF.sql_net_thread_count;
+  if (sql_net_thread_count == 0) {
+    if (GCONF.net_thread_count == 0) {
+      sql_net_thread_count = get_default_net_thread_count();
+    } else {
+      sql_net_thread_count = GCONF.net_thread_count;
+    }
+  }
+
+  if (OB_NOT_NULL(obmysql::global_sql_nio_server)) {
+    int cur_sql_net_thread_count =
+        obmysql::global_sql_nio_server->get_nio()->get_thread_count();
+    if (sql_net_thread_count < cur_sql_net_thread_count) {
+      LOG_WARN("decrease sql_net_thread_count not allowed", K(ret),
+               K(sql_net_thread_count), K(cur_sql_net_thread_count));
+      GCONF.sql_net_thread_count = cur_sql_net_thread_count;
+    } else if (OB_FAIL(obmysql::global_sql_nio_server->set_thread_count(
+                   sql_net_thread_count))) {
+      LOG_WARN("update sql_net_thread_count error", K(ret));
+    }
+  }
+
+  return ret;
+}
+
 int ObSharedTimer::server_module_init(ObSharedTimer *&st)
 {
   int ret = common::OB_SUCCESS;
@@ -1279,11 +1314,13 @@ int ObServer::obs_construct_modules()
   int ret = OB_SUCCESS;
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_shared_timer_))) { SERVER_LOG(WARN, "mods_shared_timer_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_shared_macro_block_mgr_))) { SERVER_LOG(WARN, "mods_shared_macro_block_mgr_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(ObSQLSessionPool::server_module_new(mods_sql_session_pool_))) { SERVER_LOG(WARN, "mods_sql_session_pool_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObStorageMetaMemMgr::server_module_new(mods_storage_meta_mem_mgr_))) { SERVER_LOG(WARN, "mods_storage_meta_mem_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_obj_pool_create<ObTableScanIterator>(mods_table_scan_iterator_obj_pool_))) { SERVER_LOG(WARN, "mods_table_scan_iterator_obj_pool_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObIOService::server_module_new(mods_io_service_))) { SERVER_LOG(WARN, "mods_io_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_mds_service_))) { SERVER_LOG(WARN, "mods_mds_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_shared_mem_alloc_mgr_))) { SERVER_LOG(WARN, "mods_shared_mem_alloc_mgr_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_errsim_module_mgr_))) { SERVER_LOG(WARN, "mods_errsim_module_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_trans_service_))) { SERVER_LOG(WARN, "mods_trans_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_log_service_))) { SERVER_LOG(WARN, "mods_log_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_ls_service_))) { SERVER_LOG(WARN, "mods_ls_service_ fail", KR(ret)); }
@@ -1350,10 +1387,12 @@ int ObServer::obs_init_modules()
   int ret = OB_SUCCESS;
   if (OB_SUCC(ret) && OB_FAIL(ObSharedTimer::server_module_init(mods_shared_timer_))) { SERVER_LOG(WARN, "mods_shared_timer_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_init_default(mods_shared_macro_block_mgr_))) { SERVER_LOG(WARN, "mods_shared_macro_block_mgr_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(ObSQLSessionPool::server_module_init(mods_sql_session_pool_))) { SERVER_LOG(WARN, "mods_sql_session_pool_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_init_default(mods_storage_meta_mem_mgr_))) { SERVER_LOG(WARN, "mods_storage_meta_mem_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObIOService::server_module_init(mods_io_service_))) { SERVER_LOG(WARN, "mods_io_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(storage::mds::ObMdsService::server_module_init(mods_mds_service_))) { SERVER_LOG(WARN, "mods_mds_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(share::ObSharedMemAllocMgr::server_module_init(mods_shared_mem_alloc_mgr_))) { SERVER_LOG(WARN, "mods_shared_mem_alloc_mgr_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(share::ObErrsimModuleMgr::server_module_init(mods_errsim_module_mgr_))) { SERVER_LOG(WARN, "mods_errsim_module_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObTransService::server_module_init(mods_trans_service_))) { SERVER_LOG(WARN, "mods_trans_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObLogService::server_module_init(mods_log_service_))) { SERVER_LOG(WARN, "mods_log_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObLSService::server_module_init(mods_ls_service_))) { SERVER_LOG(WARN, "mods_ls_service_ fail", KR(ret)); }
@@ -1532,9 +1571,7 @@ void ObServer::obs_wait_modules()
   server_module_wait_default(mods_shared_mem_alloc_mgr_);
   storage::mds::ObMdsService::server_module_wait(mods_mds_service_);
   server_module_wait_default(mods_storage_meta_mem_mgr_);
-  if (OB_NOT_NULL(GCTX.session_mgr_)) {
-    GCTX.session_mgr_->wait_sessions_drained();
-  }
+  ObSQLSessionPool::server_module_wait(mods_sql_session_pool_);
   ObSharedTimer::server_module_wait(mods_shared_timer_);
 }
 
@@ -1599,11 +1636,13 @@ void ObServer::obs_destroy_modules()
   server_module_destroy_default(mods_ls_service_);
   ObLogService::server_module_destroy(mods_log_service_);
   server_module_destroy_default(mods_trans_service_);
+  server_module_destroy_default(mods_errsim_module_mgr_);
   server_module_destroy_default(mods_shared_mem_alloc_mgr_);
   server_module_destroy_default(mods_mds_service_);
   ObIOService::server_module_destroy(mods_io_service_);
   server_obj_pool_destroy<ObTableScanIterator>(mods_table_scan_iterator_obj_pool_);
   server_module_destroy_default(mods_storage_meta_mem_mgr_);
+  ObSQLSessionPool::server_module_destroy(mods_sql_session_pool_);
   server_module_destroy_default(mods_shared_timer_);
 }
 

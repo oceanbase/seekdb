@@ -1629,6 +1629,28 @@ int ObDMLStmtPrinter::print_fetch()
   return ret;
 }
 
+int ObDMLStmtPrinter::print_returning()
+{
+  int ret = OB_SUCCESS;
+  CK (OB_NOT_NULL(stmt_),
+      OB_NOT_NULL(buf_),
+      OB_NOT_NULL(pos_));
+  CK (stmt_->is_insert_stmt() || stmt_->is_update_stmt() || stmt_->is_delete_stmt());
+  if (OB_SUCC(ret)) {
+    const ObDelUpdStmt &dml_stmt = static_cast<const ObDelUpdStmt&>(*stmt_);
+    const ObIArray<ObRawExpr*> &returning_exprs = dml_stmt.get_returning_exprs();
+    if (returning_exprs.count() > 0) {
+      DATA_PRINTF(" returning ");
+      OZ (expr_printer_.do_print(returning_exprs.at(0), T_NONE_SCOPE));
+      for (uint64_t i = 1; OB_SUCC(ret) && i < returning_exprs.count(); ++i) {
+        DATA_PRINTF(",");
+        OZ (expr_printer_.do_print(returning_exprs.at(i), T_NONE_SCOPE));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObDMLStmtPrinter::print_subquery(const ObSelectStmt *subselect_stmt,
                                      uint64_t subquery_print_params)
 {

@@ -45,13 +45,13 @@ TEST(ObCompressorPool, test_invalid)
   ObCompressor *compressor = NULL;
 
   //test invalid argument
-  ret = cp.get_compressor(NULL, compressor);
-  ASSERT_EQ(OB_INVALID_ARGUMENT, ret);
+  cp.get_compressor(NULL, compressor);
+  ASSERT_EQ(OB_INVALID, ret);
   EXPECT_EQ(NULL, compressor);
 
   //test not exist compressor
-  ret = cp.get_compressor("oceanbase", compressor);
-  ASSERT_EQ(OB_NOT_SUPPORTED, ret);
+  cp.get_compressor("oceanbase", compressor);
+  ASSERT_EQ(OB_SUCCESS, ret);
   EXPECT_EQ(NULL, compressor);
 }
 

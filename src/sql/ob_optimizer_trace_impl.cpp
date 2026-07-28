@@ -574,6 +574,7 @@ int ObOptimizerTraceImpl::append(const Path *path)
           ",width:", path->parent_->get_output_row_size());
     new_line();
     append("parallel:", path->parallel_, ", parallel rule:", path->op_parallel_rule_);
+    append(", server count:", path->server_cnt_);
     new_line();
     append(path->get_sharding());
     decrease_section();
@@ -617,7 +618,7 @@ int ObOptimizerTraceImpl::append(const JoinPath* join_path)
       append("cost:", join_path->left_path_->cost_, ",card:", join_path->left_path_->parent_->get_output_rows(), 
             ",width:", join_path->left_path_->parent_->get_output_row_size());
       new_line();
-      append("parallel:", join_path->left_path_->parallel_);
+      append("parallel:", join_path->left_path_->parallel_, ",server count:", join_path->left_path_->server_cnt_);
       if (NULL != join_path->left_path_->get_sharding()) {
         append(",part count:", join_path->left_path_->get_sharding()->get_part_cnt());
       }
@@ -640,7 +641,7 @@ int ObOptimizerTraceImpl::append(const JoinPath* join_path)
         append("cost:", join_path->right_path_->cost_, ",card:", join_path->right_path_->parent_->get_output_rows(), 
               ",width:", join_path->right_path_->parent_->get_output_row_size());
         new_line();
-        append("parallel:", join_path->right_path_->parallel_);
+        append("parallel:", join_path->right_path_->parallel_, ",server count:", join_path->right_path_->server_cnt_);
         if (NULL != join_path->right_path_->get_sharding()) {
           append(",part count:", join_path->right_path_->get_sharding()->get_part_cnt());
         }
@@ -718,6 +719,7 @@ int ObOptimizerTraceImpl::append(const CandidatePlan &plan)
     ", location type:", plan.plan_tree_->get_location_type());
     new_line();
     append("parallel:", plan.plan_tree_->get_parallel(), ", parallel rule:", plan.plan_tree_->get_op_parallel_rule());
+    append(", server count:", plan.plan_tree_->get_server_cnt());
     new_line();
     append(plan.plan_tree_->get_sharding());
     decrease_section();
@@ -1025,6 +1027,10 @@ int ObOptimizerTraceImpl::trace_session_info()
     } else if (OB_FAIL(client_addr.addr_to_buffer(buf, len, buf_len))) {
       LOG_WARN("failed to print addr", K(ret));
     } else if (OB_FAIL(append_key_value("Client Address", ObString(buf_len,buf)))) {
+      LOG_WARN("failed to append msg", K(ret));
+    } else if (OB_FAIL(new_line())) {
+      LOG_WARN("failed to append msg", K(ret));
+    } else if (OB_FAIL(append_key_value("Runtime Name", session->get_runtime_name()))) {
       LOG_WARN("failed to append msg", K(ret));
     } else if (OB_FAIL(new_line())) {
       LOG_WARN("failed to append msg", K(ret));

@@ -86,6 +86,8 @@ struct ObStorageIdMod
     storage_used_mod_ = ObStorageUsedMod::STORAGE_USED_MAX;
   }
 
+  ObStorageInfoType get_category() const { return ALL_ZONE_STORAGE; }
+
   TO_STRING_KV(K_(storage_id), K_(storage_used_mod));
 
   uint64_t storage_id_;

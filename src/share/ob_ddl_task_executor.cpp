@@ -15,6 +15,7 @@
  */
 
 #include "ob_ddl_task_executor.h"
+#include "lib/ob_running_mode.h"
 #include "lib/thread/ob_thread_name.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/rc/ob_server_runtime.h"
@@ -200,6 +201,7 @@ void ObDDLTaskExecutor::run1()
   int64_t executed_task_count = 0;
   ObIDDLTask *task = NULL;
   ObIDDLTask *first_retry_task = NULL;
+  ObDIActionGuard ag("DDLService", "DDLTaskExecutor", "detect task");
   lib::set_thread_name("DDLTaskExecutor");
   while (!has_set_stop()) {
     while (!has_set_stop() && executed_task_count < BATCH_EXECUTE_COUNT) {
@@ -220,6 +222,7 @@ void ObDDLTaskExecutor::run1()
         }
         break;
       } else {
+        ObDIActionGuard(ObDIActionGuard::NS_ACTION, "TaskType:%d", task->get_type());
         task->process();
         ++executed_task_count;
         if (task->need_retry()) {
@@ -362,7 +365,7 @@ int ObDDLLocalBuilder::push_task(ObAsyncTask &task)
 
 int64_t ObDDLLocalBuilder::get_thread_cnt_() const
 {
-  return 16;
+  return lib::is_mini_mode() ? 1 : 16;
 }
 
 }  // end namespace share

@@ -4656,14 +4656,18 @@ int ObSelectResolver::check_ntile_validity(const ObSelectStmt *stmt,
 
 /**
  * Subqueries may return multiple columns in select items only when the
- * subquery is a parameter for EXISTS or NOT EXISTS.
+ * subquery is a parameter for EXISTS or NOT EXISTS, or when it is wrapped
+ * as a cursor parameter.
  */
 int ObSelectResolver::check_subquery_return_one_column(const ObRawExpr &expr, bool is_exists_param)
 {
   int ret = OB_SUCCESS;
-  if (expr.has_flag(IS_SUB_QUERY)) {
+  if (T_FUN_UDF == expr.get_expr_type()) {
+    // select ff(cursor(select * from tbl)) from dual;
+    // do nothing
+  } else if (expr.has_flag(IS_SUB_QUERY)) {
     const ObQueryRefRawExpr &query_expr = static_cast<const ObQueryRefRawExpr&>(expr);
-    if (1 != query_expr.get_output_column() && !is_exists_param) {
+    if (1 != query_expr.get_output_column() && !is_exists_param && !query_expr.is_cursor()) {
       ret = OB_ERR_TOO_MANY_VALUES;
       LOG_WARN("subquery return too many columns", K(query_expr.get_output_column()));
     }

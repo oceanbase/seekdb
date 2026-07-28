@@ -1,0 +1,163 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+ 
+#ifndef OB_DBMS_XPLAN_H
+#define OB_DBMS_XPLAN_H
+
+#include "sql/optimizer/stat/ob_dbms_stats_preferences.h"
+#include "sql/monitor/ob_plan_info_manager.h"
+#include "share/schema/ob_schema_struct.h"
+#include "sql/engine/ob_exec_context.h"
+#include "sql/optimizer/stat/ob_stat_define.h"
+#include "lib/string/ob_sql_string.h"
+#include "sql/monitor/ob_sql_plan.h"
+#include "pl/ob_pl_type.h"
+
+namespace oceanbase
+{
+namespace sql {
+  struct ObExplainDisplayOpt;
+}
+using namespace sql;
+using namespace common;
+namespace pl
+{
+
+class ObDbmsXplan
+{
+public:
+  static int enable_opt_trace(sql::ObExecContext &ctx,
+                              sql::ParamStore &params,
+                              common::ObObj &result);
+  
+  static int disable_opt_trace(sql::ObExecContext &ctx,
+                              sql::ParamStore &params,
+                              common::ObObj &result);
+  
+  static int set_opt_trace_parameter(sql::ObExecContext &ctx,
+                                    sql::ParamStore &params,
+                                    common::ObObj &result);
+
+  static int display(sql::ObExecContext &ctx,
+                    sql::ParamStore &params,
+                    common::ObObj &result);
+
+  static int display_cursor(sql::ObExecContext &ctx,
+                            sql::ParamStore &params,
+                            common::ObObj &result);
+
+  static int display_active_session_plan(sql::ObExecContext &ctx,
+                                        sql::ParamStore &params,
+                                        common::ObObj &result);
+
+private:
+
+  static int get_server_ip_port(sql::ObExecContext &ctx,
+                                ObString &svr_ip,
+                                int64_t &svr_port);
+
+  static int set_display_result(sql::ObExecContext &ctx,
+                                PlanText &plan_text,
+                                common::ObObj &result);
+
+  static int set_display_result_for_mysql(sql::ObExecContext &ctx,
+                                          PlanText &plan_text,
+                                          common::ObObj &result);
+
+  static int get_plan_format(const ObString &format,
+                             ExplainType &type, 
+                             ObExplainDisplayOpt& option);
+
+  static int get_plan_info_by_plan_table(sql::ObExecContext &ctx,
+                                         ObString table_name,
+                                         ObString statement_id,
+                                         ObString filter_preds,
+                                         ObIArray<ObSqlPlanItem*> &plan_infos);
+
+  static int get_plan_info_by_id(sql::ObExecContext &ctx,
+                                  const ObString &svr_ip,
+                                  int64_t svr_port,
+                                  uint64_t plan_id,
+                                  const ObString &sql_handle,
+                                  uint64_t plan_hash, 
+                                  ObIArray<ObSqlPlanItem*> &plan_infos);
+
+  static int get_plan_info_by_session_id(sql::ObExecContext &ctx,
+                                        int64_t session_id,
+                                        const ObString &svr_ip,
+                                        int64_t svr_port,
+                                        ObIArray<ObSqlPlanItem*> &plan_infos);
+
+  static int inner_get_plan_info(sql::ObExecContext &ctx, 
+                                const ObSqlString& sql, 
+                                ObIArray<ObSqlPlanItem*> &plan_infos);
+
+  static int inner_get_plan_info_use_current_session(sql::ObExecContext &ctx, 
+                                                    const ObSqlString& sql, 
+                                                    ObIArray<ObSqlPlanItem*> &plan_infos);
+
+  static int read_plan_info_from_result(sql::ObExecContext &ctx,
+                                        sqlclient::ObMySQLResult& mysql_result, 
+                                        ObSqlPlanItem &plan_info);
+
+  enum WAIT_COLUMN
+  {
+    OPERATOR = 0,
+    OPTIONS,
+    OBJECT_NODE,
+    OBJECT_ID,
+    OBJECT_OWNER,
+    OBJECT_NAME,
+    OBJECT_ALIAS,
+    OBJECT_TYPE,
+    OPTIMIZER,
+    ID,
+    PARENT_ID,
+    DEPTH,
+    POSITION,
+    SEARCH_COLUMNS,
+    IS_LAST_CHILD,
+    COST,
+    REAL_COST,
+    CARDINALITY,
+    REAL_CARDINALITY,
+    BYTES,
+    ROWSET,
+    OTHER_TAG,
+    PARTITION_START,
+    PARTITION_STOP,
+    PARTITION_ID,
+    OTHER,
+    DISTRIBUTION,
+    CPU_COST,
+    IO_COST,
+    TEMP_SPACE,
+    ACCESS_PREDICATES,
+    FILTER_PREDICATES,
+    STARTUP_PREDICATES,
+    PROJECTION,
+    SPECIAL_PREDICATES,
+    TIME,
+    QBLOCK_NAME,
+    REMARKS,
+    OTHER_XML
+  };
+};
+
+}
+}
+
+#endif // OB_DBMS_XPLAN_H

@@ -17,6 +17,7 @@
 #ifndef _OB_SQL_CLIENT_DECORATOR_H
 #define _OB_SQL_CLIENT_DECORATOR_H 1
 #include "common/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_single_connection_proxy.h"
 namespace oceanbase
 {
 namespace common

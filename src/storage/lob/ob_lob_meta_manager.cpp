@@ -26,7 +26,10 @@ namespace storage
 int ObLobMetaManager::write(ObLobAccessParam& param, ObLobMetaInfo& in_row)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(persistent_lob_adapter_.write_lob_meta(param, in_row))) {
+  if (param.is_remote()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("remote write not support", K(ret), K(param));
+  } else if (OB_FAIL(persistent_lob_adapter_.write_lob_meta(param, in_row))) {
     LOG_WARN("write lob meta failed.", K(ret), K(param));
   }
   return ret;
@@ -35,7 +38,10 @@ int ObLobMetaManager::write(ObLobAccessParam& param, ObLobMetaInfo& in_row)
 int ObLobMetaManager::batch_insert(ObLobAccessParam& param, blocksstable::ObDatumRowIterator &iter)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(persistent_lob_adapter_.write_lob_meta(param, iter))) {
+  if (param.is_remote()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("remote write not support", K(ret), K(param));
+  } else if (OB_FAIL(persistent_lob_adapter_.write_lob_meta(param, iter))) {
     LOG_WARN("batch write lob meta failed.", K(ret), K(param));
   }
   return ret;
@@ -44,7 +50,10 @@ int ObLobMetaManager::batch_insert(ObLobAccessParam& param, blocksstable::ObDatu
 int ObLobMetaManager::batch_delete(ObLobAccessParam& param, blocksstable::ObDatumRowIterator &iter)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(persistent_lob_adapter_.erase_lob_meta(param, iter))) {
+  if (param.is_remote()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("remote delete not support", K(ret), K(param));
+  } else if (OB_FAIL(persistent_lob_adapter_.erase_lob_meta(param, iter))) {
     LOG_WARN("batch write lob meta failed.", K(ret), K(param));
   }
   return ret;
@@ -65,8 +74,33 @@ int ObLobMetaManager::append(ObLobAccessParam& param, ObLobMetaWriteIter& iter)
 int ObLobMetaManager::scan(ObLobAccessParam& param, ObLobMetaScanIter &iter)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(iter.open(param, &persistent_lob_adapter_))) {
+  if (param.is_remote()) {
+    if (OB_FAIL(remote_scan(param, iter))) {
+      LOG_WARN("open remote lob scan iter failed.", K(ret), K(param));
+    }
+  } else if (OB_FAIL(local_scan(param, iter))) {
+    LOG_WARN("open local lob scan iter failed.", K(ret), K(param));
+  }
+  return ret;
+}
+
+
+int ObLobMetaManager::local_scan(ObLobAccessParam& param, ObLobMetaScanIter &iter)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(iter.open_local(param, &persistent_lob_adapter_))) {
     LOG_WARN("open lob scan iter failed.", K(ret), K(param));
+  }
+  return ret;
+}
+
+int ObLobMetaManager::remote_scan(ObLobAccessParam& param, ObLobMetaScanIter &iter)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(iter.open_remote(param))) {
+    LOG_WARN("open remote fail", K(ret), K(param));
+    // reset iter for maybe has done alloc for iter
+    iter.reset();
   }
   return ret;
 }
@@ -74,7 +108,10 @@ int ObLobMetaManager::scan(ObLobAccessParam& param, ObLobMetaScanIter &iter)
 int ObLobMetaManager::open(ObLobAccessParam &param, ObLobMetaSingleGetter* getter)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(getter->open(param, &persistent_lob_adapter_))) {
+  if (param.is_remote()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("remote not support", K(ret), K(param));
+  } else if (OB_FAIL(getter->open(param, &persistent_lob_adapter_))) {
     LOG_WARN("open lob scan iter failed.", K(ret), K(param));
   }
   return ret;
@@ -84,7 +121,10 @@ int ObLobMetaManager::open(ObLobAccessParam &param, ObLobMetaSingleGetter* gette
 int ObLobMetaManager::erase(ObLobAccessParam& param, ObLobMetaInfo& in_row)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(persistent_lob_adapter_.erase_lob_meta(param, in_row))) {
+  if (param.is_remote()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("remote erase not support", K(ret), K(param));
+  } else if (OB_FAIL(persistent_lob_adapter_.erase_lob_meta(param, in_row))) {
     LOG_WARN("erase lob meta failed.", K(ret), K(param));
   }
   return ret;
@@ -94,7 +134,10 @@ int ObLobMetaManager::erase(ObLobAccessParam& param, ObLobMetaInfo& in_row)
 int ObLobMetaManager::update(ObLobAccessParam& param, ObLobMetaInfo& old_row, ObLobMetaInfo& new_row)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(persistent_lob_adapter_.update_lob_meta(param, old_row, new_row))) {
+  if (param.is_remote()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("remote erase not support", K(ret), K(param));
+  } else if (OB_FAIL(persistent_lob_adapter_.update_lob_meta(param, old_row, new_row))) {
     LOG_WARN("update lob meta failed.");
   }
   return ret;
@@ -116,10 +159,23 @@ int ObLobMetaManager::fetch_lob_id(ObLobAccessParam& param, uint64_t &lob_id)
 int ObLobMetaManager::getlength(ObLobAccessParam &param, uint64_t &char_len)
 {
   int ret = OB_SUCCESS;
+  if (param.is_remote()) {
+    if (OB_FAIL(getlength_remote(param, char_len))) {
+      LOG_WARN("get length remote fail", K(ret), K(param));
+    }
+  } else if (OB_FAIL(getlength_local(param, char_len))) {
+    LOG_WARN("get length local fail", K(ret), K(param));
+  }
+  return ret;
+}
+
+int ObLobMetaManager::getlength_local(ObLobAccessParam &param, uint64_t &char_len)
+{
+  int ret = OB_SUCCESS;
   ObLobMetaScanIter meta_iter;
   ObLobMetaScanResult result;
-  if (OB_FAIL(scan(param, meta_iter))) {
-    LOG_WARN("open lob scan iter failed.", K(ret), K(param));
+  if (OB_FAIL(local_scan(param, meta_iter))) {
+    LOG_WARN("open local lob scan iter failed.", K(ret), K(param));
   }
   while (OB_SUCC(ret)) {
     if (OB_FAIL(meta_iter.get_next_row(result))) {
@@ -134,6 +190,25 @@ int ObLobMetaManager::getlength(ObLobAccessParam &param, uint64_t &char_len)
   }
   if (ret == OB_ITER_END) {
     ret = OB_SUCCESS;
+  }
+  return ret;
+}
+
+int ObLobMetaManager::getlength_remote(ObLobAccessParam &param, uint64_t &char_len)
+{
+  int ret = OB_SUCCESS;
+  ObLobRemoteQueryCtx *remote_ctx = nullptr;
+  // GET_LENGTH is computed in process (single bounded
+  // value) by ObLobRemoteUtil::query, so just read the cached length here.
+  if (OB_FAIL(ObLobRemoteUtil::query(param, obcall::ObLobQueryArg::QueryType::GET_LENGTH, param.addr_, remote_ctx))) {
+    LOG_WARN("fail to init remote query ctx", K(ret));
+  } else {
+    char_len = remote_ctx->length_;
+  }
+
+  if (OB_NOT_NULL(remote_ctx)) {
+    remote_ctx->~ObLobRemoteQueryCtx();
+    remote_ctx = nullptr;
   }
   return ret;
 }

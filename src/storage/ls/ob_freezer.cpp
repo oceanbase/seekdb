@@ -620,10 +620,14 @@ struct AsyncFreezeFunctor {
   int operator()()
   {
     int ret = OB_SUCCESS;
+    common::ObDIActionGuard ag1("OccamThreadPool", "AsyncFreezer", "detect task");
+    // freezer_ belongs to the tenant LS, which outlives the tenant freezer task pool.
     STORAGE_LOG(INFO, "[Freezer] An Async Freeze Task Start", K(is_ls_freeze_), KP(freezer_));
     if (is_ls_freeze_) {
+      common::ObDIActionGuard(common::ObDIActionGuard::NS_ACTION, "LSFreeze");
       (void)freezer_->async_ls_freeze_consumer();
     } else {
+      common::ObDIActionGuard(common::ObDIActionGuard::NS_ACTION, "TabletFreeze");
       (void)freezer_->async_tablet_freeze_consumer();
     }
     return ret;

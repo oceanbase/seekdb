@@ -15,7 +15,9 @@
  */
 
 #include "storage/tmp_file/ob_tmp_file_cache.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"  // EVENT_INC(previously hidden behind a transitive include)
 #include "share/rc/ob_module_provider.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "storage/tmp_file/ob_tmp_file_global.h"
 #include "storage/tmp_file/ob_tmp_file_manager.h"
 #include "storage/blocksstable/ob_storage_object_handle.h"
@@ -149,6 +151,7 @@ int ObTmpBlockCache::get_block(const ObTmpBlockCacheKey &key, ObTmpBlockValueHan
     if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
       STORAGE_LOG(WARN, "fail to get key from block cache", KR(ret), K(key));
     } else {
+      EVENT_INC(TMP_BLOCK_CACHE_MISS);
     }
   } else {
     if (OB_ISNULL(value)) {
@@ -156,6 +159,7 @@ int ObTmpBlockCache::get_block(const ObTmpBlockCacheKey &key, ObTmpBlockValueHan
       STORAGE_LOG(WARN, "unexpected error, the value must not be NULL", KR(ret));
     } else {
       handle.value_ = const_cast<ObTmpBlockCacheValue *>(value);
+      EVENT_INC(TMP_BLOCK_CACHE_HIT);
     }
   }
   return ret;
@@ -234,6 +238,8 @@ bool ObTmpPageCacheKey::operator ==(const ObIKVCacheKey &other) const
   return block_id_ == other_key.block_id_
          && page_id_ == other_key.page_id_;
 }
+
+
 
 uint64_t ObTmpPageCacheKey::hash() const
 {
@@ -424,6 +430,7 @@ int ObTmpPageCache::get_page(const ObTmpPageCacheKey &key, ObTmpPageValueHandle 
     STORAGE_LOG(WARN, "invalid arguments", KR(ret), K(key));
   } else if (OB_FAIL(get(key, value, handle.handle_))) {
     if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST == ret)) {
+      EVENT_INC(TMP_PAGE_CACHE_MISS);
     } else {
       STORAGE_LOG(WARN, "fail to get key from page cache", KR(ret), K(key));
     }
@@ -433,6 +440,7 @@ int ObTmpPageCache::get_page(const ObTmpPageCacheKey &key, ObTmpPageValueHandle 
       STORAGE_LOG(WARN, "unexpected error, the value must not be NULL", KR(ret));
     } else {
       handle.value_ = const_cast<ObTmpPageCacheValue *>(value);
+      EVENT_INC(TMP_PAGE_CACHE_HIT);
     }
   }
   return ret;
@@ -704,6 +712,7 @@ ObTmpPageCache::ObTmpCachedReadPageIOCallback::~ObTmpCachedReadPageIOCallback()
 int ObTmpPageCache::ObTmpCachedReadPageIOCallback::inner_process(const char *data_buffer, const int64_t size)
 {
   int ret = OB_SUCCESS;
+  ObDIActionGuard action_guard("ObTmpCachedReadPageIOCallback");
   ObTimeGuard time_guard("TmpCachedReadPage_Callback_Process", 100000); //100ms
   
   if (OB_ISNULL(cache_) || OB_ISNULL(allocator_)) {
@@ -751,6 +760,7 @@ ObTmpPageCache::ObTmpAggregatePageIOCallback::~ObTmpAggregatePageIOCallback()
 int ObTmpPageCache::ObTmpAggregatePageIOCallback::inner_process(const char *data_buffer, const int64_t size)
 {
   int ret = OB_SUCCESS;
+  ObDIActionGuard action_guard("ObTmpAggregatePageIOCallback");
   ObTimeGuard time_guard("TmpPrefetchPage_Callback_Process", 100000); //100ms
   if (OB_ISNULL(cache_) || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -783,6 +793,7 @@ int ObTmpPageCache::ObTmpAggregatePageIOCallback::inner_process(const char *data
 int ObTmpPageCache::ObTmpDirectReadPageIOCallback::inner_process(const char *data_buffer, const int64_t size)
 {
   int ret = OB_SUCCESS;
+  ObDIActionGuard action_guard("ObTmpDirectReadPageIOCallback");
   ObTimeGuard time_guard("ObTmpDirectReadPageIOCallback", 100000); //100ms
   if (OB_ISNULL(cache_) || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;

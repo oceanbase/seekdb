@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_PC
 #include "ob_i_lib_cache_object.h"
+#include "share/rc/ob_module_provider.h"
+#include "sql/plan_cache/ob_plan_cache.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;

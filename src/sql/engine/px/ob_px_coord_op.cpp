@@ -24,6 +24,7 @@
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
 #include "sql/dtl/ob_dtl_utils.h"
 #include "sql/engine/px/exchange/ob_px_ms_coord_op.h"
+#include "sql/engine/px/exchange/ob_px_ms_coord_vec_op.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
 
 namespace oceanbase
@@ -625,6 +626,8 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
     dtl::ObDtlPacketEmptyProc<ObInitChannelPieceMsg> init_channel_piece_msg_proc;
     dtl::ObDtlPacketEmptyProc<ObReportingWFPieceMsg> reporting_wf_piece_msg_proc;
     dtl::ObDtlPacketEmptyProc<ObOptStatsGatherPieceMsg> opt_stats_gather_piece_msg_proc;
+    dtl::ObDtlPacketEmptyProc<SPWinFuncPXPieceMsg> sp_winfunc_px_piece_msg_proc;
+    dtl::ObDtlPacketEmptyProc<RDWinFuncPXPieceMsg> rd_winfunc_px_piece_msg_proc;
     dtl::ObDtlPacketEmptyProc<ObJoinFilterCountRowPieceMsg> join_filter_count_row_piece_msg_proc;
     // This registration will replace the old proc.
     (void)msg_loop_.clear_all_proc();
@@ -640,6 +643,8 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
       .register_processor(init_channel_piece_msg_proc)
       .register_processor(reporting_wf_piece_msg_proc)
       .register_processor(opt_stats_gather_piece_msg_proc)
+      .register_processor(sp_winfunc_px_piece_msg_proc)
+      .register_processor(rd_winfunc_px_piece_msg_proc)
       .register_processor(join_filter_count_row_piece_msg_proc);
     loop.ignore_interrupt();
 
@@ -952,6 +957,10 @@ int ObPxCoordOp::batch_rescan()
       reinterpret_cast<ObPxMSCoordOp *>(this)->reset_finish_ch_cnt();
       reinterpret_cast<ObPxMSCoordOp *>(this)->reset_readers();
       reinterpret_cast<ObPxMSCoordOp *>(this)->reuse_heap();
+    } else if (PHY_VEC_PX_MERGE_SORT_COORD == get_spec().get_type()) {
+      reinterpret_cast<ObPxMSCoordVecOp *>(this)->reset_finish_ch_cnt();
+      reinterpret_cast<ObPxMSCoordVecOp *>(this)->reset_readers();
+      reinterpret_cast<ObPxMSCoordVecOp *>(this)->reuse_heap();
     }
   }
   return ret;

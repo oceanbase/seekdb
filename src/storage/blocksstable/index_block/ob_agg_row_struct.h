@@ -80,6 +80,7 @@ public:
   ~ObAggRowWriter();
   int init(const ObIArray<ObSkipIndexColMeta> &agg_col_arr,
            const ObSkipIndexAggResult &agg_data,
+           const int64_t data_format_version,
            ObIAllocator &allocator);
   OB_INLINE int64_t get_serialize_data_size() const { return header_.length_; }
   int write_agg_data(char *buf, const int64_t buf_size, int64_t &pos);
@@ -106,6 +107,7 @@ private:
   ColMetaList col_meta_list_;
   ObAggRowHeader header_;
   ObAggRowHelper row_helper_;
+  int64_t data_format_version_;
   DISALLOW_COPY_AND_ASSIGN(ObAggRowWriter);
 };
 

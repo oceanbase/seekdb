@@ -80,7 +80,6 @@ ObString ObTxNode::get_identifer_str()
 }
 ObTxNode::ObTxNode(const ObAddr &addr,
                    MsgBus &msg_bus) :
-  provider_(),
   name_(name_buf_),
   addr_(addr),
   runtime_state_(),
@@ -88,8 +87,7 @@ ObTxNode::ObTxNode(const ObAddr &addr,
   msg_consumer_(get_identifer_str(),
                 &msg_queue_,
                 std::bind(&ObTxNode::handle_msg_,
-                          this, std::placeholders::_1),
-                provider_.run_wrapper()),
+                          this, std::placeholders::_1)),
   t3m_(),
   lock_memtable_(),
   fake_tx_log_adapter_(nullptr),
@@ -100,7 +98,6 @@ ObTxNode::ObTxNode(const ObAddr &addr,
   provider_.memstore_freezer_ = &fake_memstore_freezer_;
   fake_shared_mem_alloc_mgr_.init();
   provider_.shared_mem_alloc_mgr_ = &fake_shared_mem_alloc_mgr_;
-  provider_.trans_id_service_ = &get_trans_id_service_();
   share::g_mp = &provider_;
   runtime_state_.init();
   share::g_server_runtime = &runtime_state_;
@@ -121,7 +118,7 @@ ObTxNode::ObTxNode(const ObAddr &addr,
   // txn service
   int ret = OB_SUCCESS;
   OZ(txs_.init(addr,
-               &get_trans_id_service_(),
+               &get_gti_source_(),
                &get_ts_mgr_(),
                &schema_service_));
   provider_.trans_service_ = &txs_;
@@ -153,10 +150,11 @@ ObTxDescGuard ObTxNode::get_tx_guard() {
 }
 int ObTxNode::start() {
   int ret = OB_SUCCESS;
+  share::g_server_runtime = &runtime_state_;
   share::g_mp = &provider_;
 
   if (nullptr == fake_tx_log_adapter_) {
-    fake_tx_log_adapter_ = new ObFakeTxLogAdapter(provider_.run_wrapper());
+    fake_tx_log_adapter_ = new ObFakeTxLogAdapter();
     owns_log_adapter_ = true;
     OZ(fake_tx_log_adapter_->start());
   }
@@ -223,6 +221,7 @@ void ObTxNode::wait_tx_log_synced()
 ObTxNode::~ObTxNode() __attribute__((optnone)) {
   int ret = OB_SUCCESS;
   TRANS_LOG(INFO, "destroy TxNode", KPC(this));
+  share::g_server_runtime = &runtime_state_;
   share::g_mp = &provider_;
   fake_tx_table_.tx_ctx_table_.ls_tx_ctx_mgr_ = nullptr;
   bool is_tx_clean = false;
@@ -253,6 +252,7 @@ ObTxNode::~ObTxNode() __attribute__((optnone)) {
     delete fake_tx_log_adapter_;
   }
   FAST_FAIL();
+  share::g_server_runtime = &share::g_bootstrap_server_runtime;
 }
 
 int ObTxNode::create_memtable_(const int64_t tablet_id, memtable::ObMemtable *&mt) {
@@ -327,6 +327,7 @@ int ObTxNode::sync_recv_msg(const ObAddr &sender, ObString &m, ObString &resp)
 
 int ObTxNode::handle_msg_(MsgPack *pkt)
 {
+  share::g_server_runtime = &runtime_state_;
   share::g_mp = &provider_;
   TRANS_LOG(INFO, "begin to handle_msg", "msg_ptr", OB_P(pkt->body_.ptr()), KPC(this));
   int ret = OB_NOT_SUPPORTED;
@@ -358,6 +359,7 @@ int ObTxNode::read(const ObTxReadSnapshot &snapshot,
 {
   TRANS_LOG(INFO, "read", K(key), K(snapshot), KPC(this));
   int ret = OB_SUCCESS;
+  share::g_server_runtime = &runtime_state_;
   share::g_mp = &provider_;
   ObStoreCtx read_store_ctx;
   read_store_ctx.ls_ = &fake_ls_;
@@ -452,6 +454,7 @@ int ObTxNode::write(ObTxDesc &tx,
 {
   TRANS_LOG(INFO, "write", K(key), K(value), K(snapshot), K(tx), KPC(this));
   int ret = OB_SUCCESS;
+  share::g_server_runtime = &runtime_state_;
   share::g_mp = &provider_;
   ObStoreCtx write_store_ctx;
   auto iter = new ObTableStoreIterator();
@@ -518,6 +521,7 @@ int ObTxNode::write_begin(ObTxDesc &tx,
                           ObStoreCtx& write_store_ctx)
 {
   int ret = OB_SUCCESS;
+  share::g_server_runtime = &runtime_state_;
   share::g_mp = &provider_;
   auto iter = new ObTableStoreIterator();
   iter->reset();
@@ -536,6 +540,7 @@ int ObTxNode::write_begin(ObTxDesc &tx,
 int ObTxNode::write_one_row(ObStoreCtx& write_store_ctx, const int64_t key, const int64_t value)
 {
   int ret = OB_SUCCESS;
+  share::g_server_runtime = &runtime_state_;
   share::g_mp = &provider_;
 
   ObArenaAllocator allocator;
@@ -584,6 +589,7 @@ int ObTxNode::write_one_row(ObStoreCtx& write_store_ctx, const int64_t key, cons
 int ObTxNode::write_end(ObStoreCtx& write_store_ctx)
 {
   int ret = OB_SUCCESS;
+  share::g_server_runtime = &runtime_state_;
   share::g_mp = &provider_;
 
   delete write_store_ctx.table_iter_;
@@ -598,6 +604,7 @@ int ObTxNode::replay(const void *buffer,
                      const palf::LSN &lsn,
                      const int64_t ts_ns)
 {
+  share::g_server_runtime = &runtime_state_;
   share::g_mp = &provider_;
   int ret = OB_SUCCESS;
   logservice::ObLogBaseHeader base_header;

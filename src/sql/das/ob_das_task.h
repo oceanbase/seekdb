@@ -184,7 +184,7 @@ public:
   transaction::ObTxReadSnapshot *get_snapshot() { return snapshot_; }
   int16_t get_write_branch_id() const { return write_branch_id_; }
   void set_write_branch_id(const int16_t branch_id) { write_branch_id_ = branch_id; }
-  bool is_local_task() const { return true; }
+  bool is_local_task() const { return task_started_; }
   void set_can_part_retry(const bool flag) { can_part_retry_ = flag; }
   bool can_part_retry() const { return can_part_retry_; }
   bool is_in_retry() const { return in_part_retry_ || in_stmt_retry_; }

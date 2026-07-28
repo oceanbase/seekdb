@@ -136,7 +136,7 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
         LOG_WARN("append failed", K(ret));
     } else if (arg.object_type_ == ObObjectType::TABLE
                 && arg.column_names_priv_.count() > 0) {
-      if (arg.object_id_ == OB_INVALID_ID) {
+      if (arg.object_id_ == OB_INVALID) {
         // No schema dependency can be recorded without an object id.
       } else if (stmt.get_table_schema_version() != 0 
                   && OB_FAIL(arg.based_schema_object_infos_.push_back(ObBasedSchemaObjectInfo(arg.object_id_,
@@ -207,6 +207,12 @@ int ObRevokeExecutor::execute(ObExecContext &ctx, ObRevokeStmt &stmt)
       case OB_PRIV_ROUTINE_LEVEL: {
         if (OB_FAIL(revoke_routine(stmt, ctx))) {
           LOG_WARN("grant_revoke_routine error", K(ret));
+        }
+        break;
+      }
+      case OB_PRIV_OBJECT_LEVEL: {
+        if (OB_FAIL(revoke_object(stmt, ctx))) {
+          LOG_WARN("grant_revoke_object error", K(ret));
         }
         break;
       }
@@ -301,7 +307,7 @@ int ObRevokeExecutor::revoke_table(ObRevokeStmt &stmt,
       LOG_WARN("append failed", K(ret));
     } else if (stmt.get_object_type() == ObObjectType::TABLE
             && (arg.column_names_priv_.count() > 0)) {
-      if (arg.obj_id_ == OB_INVALID_ID) {
+      if (arg.obj_id_ == OB_INVALID) {
         // No schema dependency can be recorded without an object id.
       } else if (stmt.get_table_schema_version()!= 0 &&
                 OB_FAIL(arg.based_schema_object_infos_.push_back(ObBasedSchemaObjectInfo(arg.obj_id_,
@@ -407,6 +413,61 @@ int ObRevokeExecutor::revoke_routine(ObRevokeStmt &stmt,
   }
   return ret;
 }
+
+int ObRevokeExecutor::revoke_object(ObRevokeStmt &stmt,
+                                    ObExecContext &ctx)
+{
+  int ret = OB_SUCCESS;
+  ObSQLSessionInfo *session_info = NULL;
+  ObSchemaGetterGuard schema_guard;
+  const ObUserInfo *user_info = NULL;
+  if (OB_ISNULL(session_info = ctx.get_my_session())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("Get my session error");
+  } else {
+    obcall::ObRevokeObjMysqlArg &arg = static_cast<obcall::ObRevokeObjMysqlArg &>(stmt.get_ddl_arg());
+    
+    arg.priv_set_ = stmt.get_priv_set();
+    arg.obj_name_ = stmt.get_table_name();
+    arg.obj_type_ = static_cast<uint64_t>(stmt.get_object_type());
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+      LOG_WARN("failed to get runtime schema guard", K(ret));
+    } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
+                  user_info))) {
+      LOG_WARN("failed to get user info", K(ret));
+    } else if (OB_ISNULL(user_info)) {
+      // ignore ret
+      LOG_WARN("user info is unexpected null", K(ret));
+    } else if (OB_FAIL(ob_write_string(ctx.get_allocator(), user_info->get_user_name_str(), arg.grantor_))) {
+      LOG_WARN("failed to write string", K(ret));
+    } else if (OB_FAIL(ob_write_string(ctx.get_allocator(), user_info->get_host_name_str(), arg.grantor_host_))) {
+      LOG_WARN("failed to write string", K(ret));
+    }
+    int tmp_ret = OB_SUCCESS;
+    if (OB_TMP_FAIL(schema_guard.reset())) {
+      LOG_WARN("failed to reset schema guard", K(tmp_ret));
+    if (OB_SUCC(ret)) {
+      ret = tmp_ret;
+    }
+    }
+    const ObIArray<uint64_t> &user_ids = stmt.get_users();
+    if (OB_FAIL(ret)) {
+    } else if (0 == user_ids.count()) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("User ids is empty, resolver may be error", K(ret));
+    } else {
+      for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
+        arg.user_id_ = user_ids.at(i);
+        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->revoke_object(arg); }))) {
+          LOG_WARN("revoke user error", K(arg), K(ret));
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 
 }// ns sql
 }// ns oceanbase

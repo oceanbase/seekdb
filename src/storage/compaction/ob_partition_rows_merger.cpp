@@ -589,6 +589,9 @@ int ObPartitionMergeHelper::init_merge_iters(const ObMergeParameter &merge_param
       if (OB_ISNULL(table = tables_handle.get_table(i))) {
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "unexpected null iter", K(ret), K(i), K(merge_param));
+      } else if (OB_UNLIKELY(table->is_remote_logical_minor_sstable())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected remote minor sstable", K(ret), KP(sstable));
       } else if (FALSE_IT(sstable = static_cast<ObSSTable *>(table))) {
       } else if (table->is_sstable() && sstable->get_data_macro_block_count() <= 0) {
         // do nothing. don't need to construct iter for empty sstable

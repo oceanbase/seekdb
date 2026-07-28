@@ -56,6 +56,7 @@ public:
   virtual int64_t get_serialize_param_size() const override;
   virtual int on_child_task_finish(const uint64_t child_task_key, const int ret_code) override { return OB_SUCCESS; }
   int update_drop_lob_meta_row_job_status(const common::ObTabletID &tablet_id,
+                                        const ObAddr &addr,
                                         const int64_t snapshot_version,
                                         const int64_t execution_id,
                                         const int ret_code,

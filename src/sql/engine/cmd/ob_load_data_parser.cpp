@@ -557,7 +557,9 @@ int ObExternalFileFormat::to_string_with_alloc(ObString &str, ObIAllocator &allo
 int ObExternalFileFormat::to_string(char *buf, const int64_t buf_len, int64_t &pos, bool into_outfile) const
 {
   int ret = OB_SUCCESS;
-  bool is_valid_format = format_type_ > INVALID_FORMAT && format_type_ < MAX_FORMAT;
+  bool is_valid_format = format_type_ > INVALID_FORMAT
+                         && format_type_ < MAX_FORMAT
+                         && OB_NOT_NULL(ObExternalFileFormat::FORMAT_TYPE_STR[format_type_]);
   OZ(J_OBJ_START());
   OZ(databuff_print_kv(buf, buf_len, pos, "\"TYPE\"", is_valid_format ? ObExternalFileFormat::FORMAT_TYPE_STR[format_type_] : "INVALID"));
   switch (format_type_) {
@@ -605,7 +607,8 @@ int ObExternalFileFormat::load_from_string(const ObString &str, ObIAllocator &al
     } else {
       ObString format_type_str = format_type_node->value_->get_string();
       for (int i = 0; i < array_elements(ObExternalFileFormat::FORMAT_TYPE_STR); ++i) {
-        if (format_type_str.case_compare(ObExternalFileFormat::FORMAT_TYPE_STR[i]) == 0) {
+        if (OB_NOT_NULL(ObExternalFileFormat::FORMAT_TYPE_STR[i])
+            && format_type_str.case_compare(ObExternalFileFormat::FORMAT_TYPE_STR[i]) == 0) {
           format_type_ = static_cast<FormatType>(i);
           break;
         }
@@ -617,8 +620,8 @@ int ObExternalFileFormat::load_from_string(const ObString &str, ObIAllocator &al
           OZ (origin_file_format_str_.load_from_json_data(format_type_node, allocator));
           break;
         default:
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid format type", K(ret), K(format_type_str));
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("unsupported format type", K(ret), K(format_type_str));
           break;
       }
     }

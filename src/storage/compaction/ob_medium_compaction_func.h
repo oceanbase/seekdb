@@ -63,6 +63,7 @@ public:
     ObMultiVersionSchemaService &schema_service,
     const ObTablet &tablet,
     const int64_t schema_version,
+    const int64_t data_version,
     ObIAllocator &allocator,
     storage::ObStorageSchema &storage_schema,
     bool &is_skip_merge_index);
@@ -83,6 +84,7 @@ public:
   static int check_if_schema_changed(
     const ObTablet &tablet,
     const ObStorageSchema &storage_schema,
+    const uint64_t data_version,
     bool &is_schema_changed);
   int64_t to_string(char* buf, const int64_t buf_len) const;
 protected:

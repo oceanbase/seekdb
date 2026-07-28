@@ -1868,6 +1868,7 @@ int ObSharedNothingTmpFile::collect_flush_data_page_id_(
       LOG_ERROR("fail to push back flush page id", KR(ret), K(fd_), K(cur_page_id), KPC(this));
     } else {
       // ObTmpPageCacheKey cache_key(flush_task.get_block_index(),
+      //                             write_offset / ObTmpFileGlobal::ALLOC_PAGE_SIZE);
       // ObTmpPageCacheValue cache_value(page_buf);
       // ObTmpPageCache::get_instance().try_put_page_to_cache(cache_key, cache_value);
 

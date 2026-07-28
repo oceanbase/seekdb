@@ -15,7 +15,6 @@
  */
 
 #include "ob_version_parser.h"
-#include "lib/ob_define.h"
 namespace oceanbase
 {
 namespace common

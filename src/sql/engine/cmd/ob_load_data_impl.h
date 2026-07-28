@@ -28,7 +28,8 @@
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 #include "sql/printer/ob_raw_expr_printer.h"
 #include "sql/optimizer/ob_table_location.h"
-#include "sql/engine/cmd/ob_load_data_utils.h"
+#include "sql/engine/cmd/ob_load_data_rpc.h"
+#include "sql/engine/ob_des_exec_context.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "sql/engine/cmd/ob_load_data_file_reader.h"
 
@@ -39,10 +40,16 @@ namespace sql
 
 class ObLoadDataStmt;
 class ObSqlExpressionFactory;
+struct ObPartBufMgrHashInfo;
+enum class ObLoadTaskResultFlag;
 class ObLoadFileBuffer;
 class ObCSVParser;
+class ObLoadEscapeSM;
 class ObCSVGeneralParser;
-class ObDataFragMgr;
+
+typedef common::hash::ObHashMap<common::ObString, int64_t> FileFieldIdxHashMap;
+typedef common::hash::ObHashMap<common::ObAddr, int64_t> ServerTimestampHashMap;
+typedef common::hash::ObBuildInHashMap<ObPartBufMgrHashInfo, 100> PartitionBufferHashMap;
 
 struct ObLoadDataReplacedExprInfo
 {
@@ -128,82 +135,6 @@ struct ObDataFrag : common::ObLink
   TO_STRING_KV(K(shuffle_task_id), K(frag_size), K(frag_pos), K(row_cnt));
 };
 
-struct ObInsertResult
-{
-  ObInsertResult()
-    : exec_ret_(common::OB_SUCCESS), err_line_no_(0), need_wait_minor_freeze_(false),
-      allocator_("LoadDataResult")
-  {}
-  void reset()
-  {
-    exec_ret_ = common::OB_SUCCESS;
-    err_line_no_ = 0;
-    need_wait_minor_freeze_ = false;
-    err_msg_.reset();
-    allocator_.reset();
-  }
-  int exec_ret_;
-  int64_t err_line_no_;
-  bool need_wait_minor_freeze_;
-  common::ObString err_msg_;
-  common::ObArenaAllocator allocator_;
-  TO_STRING_KV(K(exec_ret_), K(err_line_no_), K(need_wait_minor_freeze_), K(err_msg_));
-};
-
-struct ObInsertTask
-{
-  static constexpr int64_t COMMON_SIZE = 10;
-
-  ObInsertTask() { reset(); }
-  void reuse()
-  {
-    task_id_ = common::OB_INVALID_ID;
-    row_count_ = 0;
-    insert_value_data_.reuse();
-    source_frag_.reuse();
-    part_mgr = NULL;
-    result_.reset();
-    process_us_ = 0;
-    data_size_ = 0;
-  }
-  void reset()
-  {
-    column_count_ = 0;
-    insert_stmt_head_.reset();
-    timezone_.reset();
-    sql_mode_ = 0;
-    reuse();
-  }
-  TO_STRING_KV(K(task_id_), K(row_count_), K(column_count_), K(insert_value_data_.count()));
-
-  int64_t task_id_;
-  int64_t row_count_;
-  int64_t column_count_;
-  common::ObString insert_stmt_head_;
-  common::ObSEArray<common::ObString, COMMON_SIZE> insert_value_data_;
-  common::ObSEArray<void *, COMMON_SIZE> source_frag_;
-  class ObPartDataFragMgr *part_mgr;
-  ObInsertResult result_;
-  int64_t process_us_;
-  int64_t data_size_;
-  ObTimeZoneInfoWrap timezone_;
-  int64_t sql_mode_;
-};
-
-struct ObShuffleResult
-{
-  ObShuffleResult()
-    : task_id_(common::OB_INVALID_INDEX_INT64), process_us_(0)
-  {}
-  void reset()
-  {
-    task_id_ = common::OB_INVALID_INDEX_INT64;
-    process_us_ = 0;
-  }
-  int64_t task_id_;
-  int64_t process_us_;
-};
-
 class ObPartDataFragMgr
 {
 public:
@@ -214,6 +145,9 @@ public:
       total_row_proceduced_(0) {}
   ~ObPartDataFragMgr() {}
   LINK(ObPartDataFragMgr, part_datafrag_hash_link_);
+
+  //common::ObTabletID &get_part_key() { return tablet_id_; }
+  common::ObAddr &get_leader_addr() { return leader_addr_; }
 
   int add_datafrag(ObDataFrag *frag) { return queue_.push(frag); }
   inline bool has_data(int64_t batch_row_count) {
@@ -228,11 +162,15 @@ public:
   }
   int clear();
 
+  int update_part_location(ObExecContext &ctx);
+
   ObDataFragMgr &data_frag_mgr_;
 
   ObTabletID tablet_id_;
 
   int64_t total_row_consumed_;
+
+  common::ObAddr leader_addr_;
 
   //multi-thread accessed:
   volatile int64_t total_row_proceduced_;
@@ -303,6 +241,90 @@ private:
 
   //ObTabletID-> ObPartDataFragMgr
   common::hash::ObBuildInHashMap<ObPartDataFragHash, 100> part_datafrag_map_;
+};
+
+//one buffer info for one partition
+class ObPartitionBufferCtrl
+{
+public:
+  explicit ObPartitionBufferCtrl(ObTabletID tablet_id): tablet_id_(tablet_id), buffer_(NULL) {}
+  ~ObPartitionBufferCtrl() {}
+
+  LINK(ObPartitionBufferCtrl, buffer_hash_link_); //hash link list
+
+  template <typename T>
+  OB_INLINE void set_buffer(T *buffer) { buffer_ = reinterpret_cast<void *>(buffer); }
+  template<typename T>
+  OB_INLINE T* get_buffer() { return reinterpret_cast<T *>(buffer_); }
+
+  TO_STRING_KV(K_(tablet_id), KP_(buffer));
+public:
+  ObTabletID tablet_id_; //hash key
+private:
+  void* buffer_;
+} CACHE_ALIGNED;
+
+struct ObPartBufMgrHashInfo
+{
+  typedef const ObTabletID &Key;
+  typedef ObPartitionBufferCtrl Value;
+  typedef ObDLList(ObPartitionBufferCtrl, buffer_hash_link_) ListHead;
+  static uint64_t hash(Key key) { return common::murmurhash(&key, sizeof(ObTabletID), 0); }
+  static Key key(Value const *value) { return value->tablet_id_; }
+  static bool equal(Key lhs, Key rhs) { return lhs == rhs; }
+};
+
+//========================
+/*Solve the memory release issue for table location calculation*/
+class ObAllocatorSwitch : public common::ObIAllocator
+{
+public:
+  ObAllocatorSwitch() : cur_alloc_(&permanent_alloc_) {}
+  void switch_permanent() { cur_alloc_ = &permanent_alloc_; }
+  void switch_temporary() { cur_alloc_ = &temporary_alloc_; }
+  inline
+  virtual void *alloc(const int64_t size)
+  { return cur_alloc_->alloc(size); }
+
+  inline
+  virtual void* alloc(const int64_t size, const ObMemAttr &attr)
+  { return cur_alloc_->alloc(size, attr); }
+
+  inline
+  virtual void* realloc(const void *ptr, const int64_t size, const ObMemAttr &attr)
+  { return cur_alloc_->realloc(ptr, size, attr); }
+
+  inline
+  virtual void *realloc(void *ptr, const int64_t oldsz, const int64_t newsz)
+  { return cur_alloc_->realloc(ptr, oldsz, newsz); }
+
+  inline
+  virtual void free(void *ptr)
+  { return cur_alloc_->free(ptr); }
+
+  inline
+  virtual int64_t total() const
+  { return cur_alloc_->total(); }
+
+  inline
+  virtual int64_t used() const
+  { return cur_alloc_->used(); }
+
+  inline
+  virtual void reset() { return cur_alloc_->reset(); }
+
+  inline
+  virtual void reuse() { return cur_alloc_->reuse(); }
+
+  inline
+  virtual void set_attr(const ObMemAttr &attr) { cur_alloc_->set_attr(attr); }
+
+  TO_STRING_KV("cur_alloc_", (cur_alloc_ == &permanent_alloc_) ? "permanent" : "temporary");
+
+private:
+  common::ObIAllocator *cur_alloc_;
+  ObArenaAllocator permanent_alloc_;
+  ObArenaAllocator temporary_alloc_;
 };
 
 class ObLoadFileBuffer
@@ -453,6 +475,7 @@ private:
   bool in_enclose_flag_;
   bool is_escaped_flag_;
   int64_t total_field_nums_;
+  //ObLoadEscapeSM escape_sm_;
   //parsing result: the pointers of each value in one line
   common::ObSEArray<ObString, 1> values_in_line_;
 };
@@ -464,15 +487,14 @@ struct ObParserErrRec {
 };
 
 struct ObShuffleTaskHandle {
-  ObShuffleTaskHandle(ObExecContext &main_exec_ctx,
-                      ObDataFragMgr &main_datafrag_mgr,
+  ObShuffleTaskHandle(ObDataFragMgr &main_datafrag_mgr,
                       common::ObBitSet<> &main_string_values);
   ~ObShuffleTaskHandle();
 
   int expand_buf(const int64_t max_size, const int64_t to_buffer_size);
 
   ObArenaAllocator allocator;
-  ObExecContext &exec_ctx;
+  ObDesExecContext exec_ctx;
   ObLoadFileBuffer *data_buffer;
   ObLoadFileBuffer *escape_buffer;
   ObCSVGeneralParser parser;
@@ -486,6 +508,7 @@ struct ObShuffleTaskHandle {
   ObShuffleResult result;
   ObSEArray<ObParserErrRec, 16> err_records;
   common::ObMemAttr attr;
+  share::schema::ObSchemaGetterGuard schema_guard;
   TO_STRING_KV("task_id", result.task_id_);
 };
 
@@ -558,13 +581,23 @@ public:
   ObLoadDataBase() {}
   virtual ~ObLoadDataBase() {}
   //utils
+  static constexpr double MEMORY_LIMIT_THRESHOLD = 1.02;
+  static const char *SERVER_MEMORY_EXAMINE_SQL;
+
+  static void set_one_field_objparam(common::ObObjParam &dest_param,
+                                     const common::ObString &field_str);
+
   static int make_parameterize_stmt(ObExecContext &ctx,
                                     common::ObSqlString &insertsql,
                                     ParamStore &param_store,
                                     ObInsertStmt *&insert_stmt);
 
   static int memory_check_worker(bool &need_wait_minor_freeze);
-  static int wait_local_memory(ObExecContext &ctx, int64_t &total_wait_secs);
+  static int memory_wait_local(ObExecContext &ctx,
+                               const ObTabletID &tablet_id,
+                               ObAddr &server_addr,
+                               int64_t &total_wait_secs,
+                               bool &is_leader_changed);
 
   static int pre_parse_lines(ObLoadFileBuffer &buffer,
                              ObCSVGeneralParser &parser,
@@ -607,7 +640,25 @@ struct ObFileReadCursor {
   bool is_end_file_;
 };
 
-/** Local buffered LOAD DATA implementation. */
+/**
+ * @brief The ObLoadServerMgr struct
+ *        manage server status
+ */
+struct ObLoadServerInfo
+{
+  ObLoadServerInfo()
+    : last_memory_limit_response(0)
+  {}
+
+  ObAddr addr;
+  ObSEArray<ObPartDataFragMgr*, 64> part_datafrag_group;
+  int64_t last_memory_limit_response;
+  TO_STRING_KV(K(addr));
+};
+
+/**
+ * @brief load data shuffle parallel implementation
+ */
 class ObLoadDataSPImpl : public ObLoadDataBase
 {
 public:
@@ -617,7 +668,7 @@ public:
     InsertTask,
   };
   struct ToolBox {
-    ToolBox() : file_reader(nullptr), job_status(nullptr), expr_buffer(nullptr), shuffle_handle(nullptr) {}
+    ToolBox() : file_reader(nullptr), job_status(nullptr), expr_buffer(nullptr), temp_handle(nullptr) {}
     int init(ObExecContext &ctx, ObLoadDataStmt &load_stmt);
     int build_calc_partid_expr(ObExecContext &ctx,
                                ObLoadDataStmt &load_stmt,
@@ -632,57 +683,85 @@ public:
     ObFileReadCursor read_cursor;
     ObLoadFileIterator file_iter;
     ObLoadFileDataTrimer data_trimer;
+    ObInsertValueGenerator generator;
     ObDataFragMgr data_frag_mgr;
     ObFileReadParam file_read_param;
 
+    //running control
+    ObParallelTaskController shuffle_task_controller;
+    ObParallelTaskController insert_task_controller;
+    ObConcurrentFixedCircularArray<ObShuffleTaskHandle *> shuffle_task_reserve_queue;
+    ObConcurrentFixedCircularArray<ObInsertTask *> insert_task_reserve_queue;
+    common::ObArrayHashMap<ObAddr, int64_t> server_last_available_ts;
+    common::ObArrayHashMap<ObAddr, ObLoadServerInfo*> server_info_map;
+    common::ObSEArray<ObLoadServerInfo*, 16> server_infos;
+
     //exec params
+    int64_t max_cpus; // Available CPU count in the server runtime.
     int64_t num_of_file_column;
     int64_t num_of_table_column;
+    int64_t parallel;
     int64_t batch_row_count;
     int64_t batch_buffer_size;
-    int64_t data_frag_buffer_count_limit;
+    int64_t data_frag_mem_usage_limit; //limit = data_frag_mem_usage_limit * MAX_BUFFER_SIZE
     int64_t file_size;
     int64_t ignore_rows;
     ObCSVFormats formats;
     ObCSVGeneralParser parser;
     common::ObBitSet<> string_type_column_bitset;
+    common::ObAddr self_addr;
     ObLoadDupActionType insert_mode;
     ObLoadFileLocation load_file_storage;
     ObLoadDataGID gid;
+    int64_t txn_timeout;
     ObLoadDataStat *job_status;
 
 
     //temp data
     ObLoadFileBuffer *expr_buffer;
+    common::ObSEArray<ObString, 1> insert_values;
+    common::ObSEArray<ObString, 1> field_values_in_file;
     ObPhysicalPlan plan;
     int64_t wait_secs_for_mem_release;
     int64_t affected_rows;
     int64_t insert_rt_sum;
     int64_t suffle_rt_sum;
     common::ObSEArray<int64_t, 1> file_buf_row_num;
+    int64_t last_session_check_ts;
     common::ObSEArray<ObLoadTableColumnDesc, 16> insert_infos;
-    ObShuffleTaskHandle *shuffle_handle;
+    ObShuffleTaskHandle *temp_handle;
 
-    int64_t shuffle_task_count;
+    //debug values
+    int64_t insert_dispatch_rows;
     int64_t insert_task_count;
+    int64_t handle_returned_insert_task_count;
 
     //prepared data
     common::ObString insert_stmt_head_buff;
+    common::ObString exec_ctx_serialized_data;
     common::ObString log_file_name;
     common::ObString load_info;
+    common::ObSEArray<ObShuffleTaskHandle *, 64> shuffle_resource;
+    common::ObSEArray<ObInsertTask *, 64> insert_resource;
+    common::ObSEArray<ObAllocatorSwitch *, 64> ctx_allocators;
+
   };
 public:
   ObLoadDataSPImpl() {}
   ~ObLoadDataSPImpl() {}
   int execute(ObExecContext &ctx, ObLoadDataStmt &load_stmt);
 
-  int process_shuffle_tasks(ObExecContext &ctx, ToolBox &box);
+  int shuffle_task_gen_and_dispatch(ObExecContext &ctx, ToolBox &box);
   int next_file_buffer(ObExecContext &ctx, ToolBox &box, ObShuffleTaskHandle *handle, int64_t limit = INT64_MAX);
   int handle_returned_shuffle_task(ToolBox &box, ObShuffleTaskHandle &handle);
+  int wait_shuffle_task_return(ToolBox &box);
 
-  int process_insert_tasks(ObExecContext &ctx, ToolBox &box);
-  int execute_insert_task(ObExecContext &ctx, ToolBox &box, ObInsertTask &insert_task);
-  int handle_insert_result(ObExecContext &ctx, ToolBox &box, ObInsertTask &insert_task);
+  int insert_task_gen_and_dispatch(ObExecContext &ctx, ToolBox &box);
+  int insert_task_send(ObInsertTask *insert_task, ToolBox &box);
+  int handle_returned_insert_task(ObExecContext &ctx,
+                                  ToolBox &box,
+                                  ObInsertTask &insert_task,
+                                  bool &need_retry);
   int log_failed_insert_task(ToolBox &box, ObInsertTask &task);
 
   int create_log_file(ToolBox &box);
@@ -694,7 +773,7 @@ public:
                       ObString err_msg);
 
   static int exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle);
-  static int exec_insert(ObInsertTask &task);
+  static int exec_insert(ObInsertTask &task, ObInsertResult &result);
 
 private:
   static int gen_load_table_column_desc(ObExecContext &ctx,
@@ -711,6 +790,7 @@ private:
                                            common::ObIArray<ObLoadTableColumnDesc> &insert_infos,
                                            common::ObString &data_buff,
                                            bool need_online_osg = false);
+  bool is_schema_error_need_retry_for_load_data(const int ret_code);
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObLoadDataSPImpl);
   // function members
@@ -959,6 +1039,16 @@ OB_INLINE void ObLoadDataImpl::deal_with_empty_field(ObString &field_str, int64_
   }
 }
 */
+
+OB_INLINE void ObLoadDataBase::set_one_field_objparam(ObObjParam &dest_param,
+                                                      const ObString &field_str) {
+  if (ObLoadDataUtils::is_null_field(field_str)) {
+    dest_param.set_null();
+  } else {
+    dest_param.set_varchar(field_str);
+  }
+  dest_param.set_param_meta();
+}
 
 /*
 OB_INLINE void ObLoadDataImpl::handle_one_field(char *field_end_pos)

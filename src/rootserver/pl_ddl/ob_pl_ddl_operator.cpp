@@ -430,7 +430,7 @@ int ObPLDDLOperator::create_trigger(share::schema::ObTriggerInfo &trigger_info,
                                                                trans,
                                                                ddl_stmt_str),
       trigger_info.get_trigger_name(), is_replace);
-  if (OB_SUCC(ret) && is_update_table_schema_version) {
+  if (OB_SUCC(ret) && !trigger_info.is_system_type() && is_update_table_schema_version) {
     uint64_t base_table_id = trigger_info.get_base_object_id();
     OZ (schema_service_.gen_new_schema_version(new_schema_version));
     OX (table_schema_version = new_schema_version);
@@ -444,9 +444,25 @@ int ObPLDDLOperator::create_trigger(share::schema::ObTriggerInfo &trigger_info,
     uint64_t base_table_id = trigger_info.get_base_object_id();
     OZ (schema_service_.gen_new_schema_version(new_schema_version));
     OX (table_schema_version = new_schema_version);
-    OZ (schema_service->get_table_sql_service().update_data_table_schema_version(
-        trans, base_table_id, false/*in offline ddl white list*/, new_schema_version),
-        base_table_id, trigger_info.get_trigger_name());
+    if (OB_FAIL(ret)) {
+    } else if (trigger_info.is_dml_type()) {
+      OZ (schema_service->get_table_sql_service().update_data_table_schema_version(
+          trans, base_table_id, false/*in offline ddl white list*/, new_schema_version),
+          base_table_id, trigger_info.get_trigger_name());
+    } else if (trigger_info.is_system_type()) {
+      const ObUserInfo *user_info = NULL;
+      ObSchemaGetterGuard schema_guard;
+      OZ (schema_service_.get_runtime_schema_guard(schema_guard));
+      OZ (schema_guard.get_user_info(base_table_id, user_info));
+      OV (OB_NOT_NULL(user_info));
+      if (OB_SUCC(ret)) {
+        common::ObArray<ObUserInfo> user_array;
+        OZ (user_array.push_back(*user_info));
+        OZ (schema_service->get_user_sql_service().update_user_schema_version(user_array,
+                                                                              ddl_stmt_str,
+                                                                              trans));
+      }
+    }
   }
   if (OB_FAIL(ret)) {
   } else if (0 == dep_infos.count()) {
@@ -506,9 +522,21 @@ int ObPLDDLOperator::drop_trigger(const share::schema::ObTriggerInfo &trigger_in
   } else if (!is_update_table_schema_version) {
   } else {
     uint64_t base_table_id = trigger_info.get_base_object_id();
-    OZ (schema_service->get_table_sql_service().update_data_table_schema_version(
-        trans, base_table_id, in_offline_ddl_white_list),
-        base_table_id, trigger_info.get_trigger_name());
+    if (trigger_info.is_dml_type()) {
+      OZ (schema_service->get_table_sql_service().update_data_table_schema_version(trans, base_table_id, in_offline_ddl_white_list),
+          base_table_id, trigger_info.get_trigger_name());
+    } else if (trigger_info.is_system_type()) {
+      const ObUserInfo *user_info = NULL;
+      ObSchemaGetterGuard schema_guard;
+      common::ObArray<ObUserInfo> user_array;
+      OZ (schema_service_.get_runtime_schema_guard(schema_guard));
+      OZ (schema_guard.get_user_info(base_table_id, user_info));
+      OV (OB_NOT_NULL(user_info));
+      OZ (user_array.push_back(*user_info));
+      OZ (schema_service->get_user_sql_service().update_user_schema_version(user_array,
+                                                                            ddl_stmt_str,
+                                                                            trans));
+    }
   }
   if (OB_SUCC(ret)) {
     ObErrorInfo error_info;
@@ -576,9 +604,22 @@ int ObPLDDLOperator::alter_trigger(share::schema::ObTriggerInfo &trigger_info,
       trigger_info.get_trigger_name());
   if (OB_SUCC(ret) && is_update_table_schema_version) {
       uint64_t base_table_id = trigger_info.get_base_object_id();
-      OZ (schema_service->get_table_sql_service().update_data_table_schema_version(
-          trans, base_table_id, false/*in offline ddl white list*/),
-          base_table_id, trigger_info.get_trigger_name());
+      if (trigger_info.is_dml_type()) {
+        OZ (schema_service->get_table_sql_service().update_data_table_schema_version(
+            trans, base_table_id, false/*in offline ddl white list*/),
+            base_table_id, trigger_info.get_trigger_name());
+      } else if (trigger_info.is_system_type()) {
+        const ObUserInfo *user_info = NULL;
+        ObSchemaGetterGuard schema_guard;
+        common::ObArray<ObUserInfo> user_array;
+        OZ (schema_service_.get_runtime_schema_guard(schema_guard));
+        OZ (schema_guard.get_user_info(base_table_id, user_info));
+        OV (OB_NOT_NULL(user_info));
+        OZ (user_array.push_back(*user_info));
+        OZ (schema_service->get_user_sql_service().update_user_schema_version(user_array,
+                                                                              ddl_stmt_str,
+                                                                              trans));
+      }
   }
   ObErrorInfo error_info;
   OZ (error_info.handle_error_info(trans, &trigger_info), error_info);
@@ -725,6 +766,15 @@ int ObPLDDLOperator::drop_trigger_in_drop_database(const ObDatabaseSchema &db_sc
       } else if (OB_ISNULL(tg_info)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("trigger info is NULL", K(ret));
+      } else if (tg_info->is_system_type()) {
+        ObArray<const ObUserInfo *> user_array;
+        CK (false);
+        OZ (schema_guard.get_user_info(db_schema.get_database_name_str(), user_array));
+        OV (1 == user_array.count(), OB_ERR_UNEXPECTED, user_array.count());
+        CK (OB_NOT_NULL(user_array.at(0)));
+        if (OB_SUCC(ret) && user_array.at(0)->get_user_id() != tg_info->get_base_object_id()) {
+          OZ (pl_operator.drop_trigger(*tg_info, trans, NULL));
+        }
       } else {
         const ObSimpleTableSchemaV2 * tbl_schema = NULL;
         OZ (schema_guard.get_simple_table_schema( tg_info->get_base_object_id(), tbl_schema));

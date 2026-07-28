@@ -137,7 +137,8 @@ private:
   int inner_cache_evict(bool is_evict_all);
   int fill_ps_stmt_info(const ObResultSet &result,
                         int64_t param_cnt,
-                        ObPsStmtInfo &ps_stmt_info) const;
+                        ObPsStmtInfo &ps_stmt_info,
+                        int32_t returning_into_parm_num) const;
   int add_stmt_info(const ObPsStmtItem &ps_item,
                     const ObPsStmtInfo &ps_info,
                     ObPsStmtInfo *&ref_ps_info);

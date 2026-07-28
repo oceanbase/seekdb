@@ -1926,7 +1926,7 @@ int ObSysVarOnCheckFuncs::check_log_row_value_option_is_valid(sql::ObExecContext
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "partial_lob");
     } else if (val.case_compare(OB_LOG_ROW_VALUE_PARTIAL_JSON) == 0
         || val.case_compare(OB_LOG_ROW_VALUE_PARTIAL_ALL) == 0) {
-      out_val = in_val;
+        out_val = in_val;
     } else {
       ret = OB_ERR_PARAM_VALUE_INVALID;
       LOG_USER_ERROR(OB_ERR_PARAM_VALUE_INVALID);

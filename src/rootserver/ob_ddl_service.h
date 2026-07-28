@@ -25,6 +25,7 @@
 #include "lib/container/ob_array.h"
 #include "lib/hash/ob_placement_hashset.h"
 #include "share/ob_rpc_struct.h"
+#include "lib/worker.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "rootserver/ob_ddl_operator.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
@@ -60,6 +61,7 @@ class SCN;
 class ObAutoincrementService;
 namespace schema
 {
+class ObServerRuntimeSchema;
 class ObDatabaseSchema;
 class ObTableSchema;
 class ObMultiVersionSchemaService;
@@ -151,6 +153,7 @@ public:
       const common::ObString &ddl_stmt_str,
       const share::schema::ObErrorInfo &error_info,
       common::ObIArray<share::schema::ObTableSchema> &table_schemas,
+      share::schema::ObSchemaGetterGuard &schema_guard,
       const uint64_t last_replay_log_id,
       const common::ObIArray<share::schema::ObDependencyInfo> *dependency_infos,
       ObIArray<ObMockFKParentTableSchema> &mock_fk_parent_table_schema_array,
@@ -227,6 +230,7 @@ public:
       const share::schema::ObTableSchema &origin_table_schema,
       const share::schema::AlterTableSchema &alter_table_schema,
       const common::ObTimeZoneInfoWrap &tz_info_wrap,
+      const common::ObString &nls_formats,
       share::ObLocalSessionVar &local_session_var,
       common::ObIAllocator &allocator,
       share::schema::ObTableSchema &new_table_schema,
@@ -831,6 +835,13 @@ static int get_runtime_schema_guard_with_version_in_inner_table(share::schema::O
     const bool need_redistribute_column_id,
     share::schema::ObTableSchema &new_table_schema);
 private:
+  enum PartitionBornMethod : int64_t
+  {
+    PBM_INVALID = 0,
+    PBM_DIRECTLY_CREATE,
+    PBM_BINDING,
+    PBM_MAX,
+  };
   static const int64_t WAIT_ELECT_LEADER_TIMEOUT_US = 120 * 1000 * 1000;  // 120s
   static const int64_t REFRESH_SCHEMA_INTERVAL_US = 500 * 1000;              //500ms
 
@@ -949,6 +960,12 @@ int check_will_be_having_domain_index_operation(
                                                   bool &has_index_task,
                                                   ObIArray<ObDDLTaskRecord> &ddl_tasks,
                                                   ObIArray<obcall::ObDDLRes> &ddl_res_array);
+  int fill_interval_info_for_set_interval(const ObTableSchema &orig_table_schema,
+      ObTableSchema &new_table_schema,
+      AlterTableSchema &inc_table_schema);
+  int fill_interval_info_for_offline(const ObTableSchema &orig_table_schema,
+                                     ObTableSchema &new_table_schema);
+  int reset_interval_info_for_interval_to_range(ObTableSchema &new_table_schema);
   int check_inner_stat() const;
   int get_valid_index_schema_by_id_for_drop_index_(
       const uint64_t data_table_id,
@@ -1260,6 +1277,8 @@ int check_will_be_having_domain_index_operation(
   int get_orig_and_hidden_table_schema(
       const obcall::ObAlterTableArg &alter_table_arg,
       share::schema::ObSchemaGetterGuard &schema_guard,
+      share::schema::ObSchemaGetterGuard &dest_schema_guard,
+      const share::schema::AlterTableSchema &alter_table_schema,
       const share::schema::ObTableSchema *&orig_table_schema,
       const share::schema::ObTableSchema *&hidden_table_schema);
   int build_hidden_index_table_map(
@@ -1268,6 +1287,8 @@ int check_will_be_having_domain_index_operation(
       common::hash::ObHashMap<common::ObString, uint64_t> &new_index_table_map);
   int get_rebuild_foreign_key_infos(
       const obcall::ObAlterTableArg &alter_table_arg,
+      share::schema::ObSchemaGetterGuard &src_runtime_schema_guard,
+      share::schema::ObSchemaGetterGuard &dst_runtime_schema_guard,
       const ObTableSchema &orig_table_schema,
       const ObTableSchema &hidden_table_schema,
       const bool rebuild_child_table_fk,
@@ -1278,7 +1299,8 @@ int check_will_be_having_domain_index_operation(
       const share::schema::ObTableSchema &orig_table_schema,
       const share::schema::ObTableSchema &hidden_table_schema,
       const bool rebuild_child_table_fk,
-      share::schema::ObSchemaGetterGuard &schema_guard,
+      share::schema::ObSchemaGetterGuard &src_runtime_schema_guard,
+      share::schema::ObSchemaGetterGuard &dst_runtime_schema_guard,
       common::ObMySQLTransaction &trans,
       common::ObSArray<uint64_t> &cst_ids);
   int get_hidden_table_column_id_by_orig_column_id(
@@ -1318,6 +1340,7 @@ int check_will_be_having_domain_index_operation(
       const share::schema::ObTableSchema &orig_table_schema,
       const ObTableSchema &hidden_table_schema,
       ObSchemaGetterGuard &schema_guard,
+      ObSchemaGetterGuard &dest_schema_guard,
       ObDDLOperator &ddl_operator,
       common::ObMySQLTransaction &trans,
       ObSArray<ObTableSchema> &new_table_schemas,
@@ -1331,6 +1354,7 @@ int check_will_be_having_domain_index_operation(
       const share::schema::ObTableSchema &orig_table_schema,
       const share::schema::ObTableSchema &hidden_table_schema,
       share::schema::ObSchemaGetterGuard &schema_guard,
+      share::schema::ObSchemaGetterGuard &dest_schema_guard,
       const common::ObIArray<uint64_t> &drop_cols_id_arr,
       const share::ObColumnNameMap &col_name_map,
       const common::ObTimeZoneInfo &tz_info,
@@ -1386,11 +1410,13 @@ int check_will_be_having_domain_index_operation(
       share::schema::ObColumnSchemaV2 &alter_column_schema);
   int resolve_orig_default_value(share::schema::ObColumnSchemaV2 &column_schema,
                                  const common::ObTimeZoneInfoWrap &tz_info_wrap,
+                                 const common::ObString *nls_formats,
                                  common::ObIAllocator &allocator);
   int resolve_timestamp_column(share::schema::AlterColumnSchema *alter_column_schema,
                                share::schema::ObTableSchema &new_table_schema,
                                share::schema::ObColumnSchemaV2 &new_column_schema,
                                const common::ObTimeZoneInfoWrap &tz_info_wrap,
+                               const common::ObString *nls_formats,
                                common::ObIAllocator &allocator);
   int deal_default_value_padding(share::schema::ObColumnSchemaV2 &column_schema,
                                  common::ObIAllocator &allocator);
@@ -1531,6 +1557,7 @@ int check_will_be_having_domain_index_operation(
       const share::schema::ObColumnSchemaV2 &new_column_schema,
       ObDDLOperator &ddl_operator,
       common::ObMySQLTransaction &trans,
+      const share::schema::ObTableType table_type,
       const common::ObIArray<share::schema::ObTableSchema> *global_idx_schema_array = NULL);
   int update_prev_id_for_add_column(const share::schema::ObTableSchema &origin_table_schema,
       share::schema::ObTableSchema &new_table_schema,
@@ -1687,6 +1714,7 @@ private:
 public:
   // used only by create normal runtime
   const char* ddl_type_str(const share::ObDDLType ddl_type);
+public:
   int ddl_rlock();
   int ddl_wlock();
   int ddl_unlock() { return ddl_lock_.unlock(); }
@@ -1829,8 +1857,12 @@ private:
       const obcall::ObAlterTableArg &alter_table_arg);
   int check_alter_add_partitions(const share::schema::ObTableSchema &orig_table_schema,
                                  obcall::ObAlterTableArg &alter_table_arg);
+  int filter_out_duplicate_interval_part(const share::schema::ObTableSchema &orig_table_schema,
+                                         share::schema::ObTableSchema &alter_table_schema);
   int check_alter_add_subpartitions(const share::schema::ObTableSchema &orig_table_schema,
                                  const obcall::ObAlterTableArg &alter_table_arg);
+  int check_alter_set_interval(const share::schema::ObTableSchema &orig_table_schema,
+                               const obcall::ObAlterTableArg &alter_table_arg);
   int check_add_list_partition(const share::schema::ObPartitionSchema &orig_part,
                                const share::schema::ObPartitionSchema &new_part);
   int check_add_list_subpartition(const share::schema::ObPartition &orig_part,

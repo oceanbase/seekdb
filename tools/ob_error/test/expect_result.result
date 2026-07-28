@@ -78,6 +78,7 @@ MySQL:
 $ob_error 5794
 
 OceanBase:
+	OceanBase Error Code: OB_AUTOINC_SERVICE_BUSY(-5794)
 	Message: auto increment service busy
 	Cause: Internal Error
 	Solution: Contact OceanBase Support

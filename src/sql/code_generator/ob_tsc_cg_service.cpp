@@ -381,7 +381,7 @@ int ObTscCgService::generate_table_param(const ObLogTableScan &op,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), K(pd_agg), K(scan_ctdef.aggregate_column_ids_.count()),
         K(pd_group_by), K(scan_ctdef.group_by_column_ids_.count()));
-  } else if (OB_INVALID_ID == index_id) {
+  } else if (OB_INVALID == index_id) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid id", K(index_id), K(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema(op.get_table_id(), index_id, op.get_stmt(), table_schema))) {
@@ -689,6 +689,7 @@ int ObTscCgService::extract_fts_das_access_exprs(const ObLogTableScan &op,
                                           (scan_ctdef.ir_scan_type_ == OB_IR_DOC_ID_IDX_AGG ||
                                            scan_ctdef.ir_scan_type_ == OB_IR_INV_IDX_SCAN ||
                                            scan_ctdef.ir_scan_type_ == OB_IR_INV_IDX_AGG ||
+                                           scan_ctdef.ir_scan_type_ == OB_IR_FWD_IDX_AGG ||
                                            scan_ctdef.ir_scan_type_ == OB_IR_BLOCK_MAX_SCAN);
   const bool is_doc_id_index_back = (!op.is_vec_idx_scan() || !op.get_vector_index_info().is_vec_aux_table_id(scan_table_id)) && op.need_doc_id_index_back() && scan_table_id == op.get_doc_id_index_table_id();
   if (cg_ctx.is_func_lookup_ && scan_table_id != op.get_rowkey_doc_table_id()) {
@@ -745,6 +746,7 @@ int ObTscCgService::extract_das_access_exprs(const ObLogTableScan &op,
                                           (scan_ctdef.ir_scan_type_ == OB_IR_DOC_ID_IDX_AGG ||
                                            scan_ctdef.ir_scan_type_ == OB_IR_INV_IDX_SCAN ||
                                            scan_ctdef.ir_scan_type_ == OB_IR_INV_IDX_AGG ||
+                                           scan_ctdef.ir_scan_type_ == OB_IR_FWD_IDX_AGG ||
                                            scan_ctdef.ir_scan_type_ == OB_IR_BLOCK_MAX_SCAN);
   const bool is_doc_id_index_back = (!op.is_vec_idx_scan() || !op.get_vector_index_info().is_vec_aux_table_id(scan_table_id)) && op.need_doc_id_index_back() && scan_table_id == op.get_doc_id_index_table_id();
   ObSqlSchemaGuard *schema_guard = nullptr;
@@ -2069,10 +2071,12 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
   ObDASScanCtDef *inv_idx_scan_ctdef = nullptr;
   ObExpr *index_back_doc_id_column = nullptr;
   bool has_rowscn = false;
+  const bool use_approx_pre_agg = true; // TODO: support differentiate use approx agg or not
   if (OB_ISNULL(match_against) || OB_ISNULL(schema_guard)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null pointer", K(ret), KP(match_against), KP(schema_guard));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tr_info.inv_idx_tid_)) {
+  } else if (OB_UNLIKELY(OB_INVALID_ID == tr_info.inv_idx_tid_
+      || (tr_info.need_calc_relevance_ && OB_INVALID_ID == tr_info.fwd_idx_tid_))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid fulltext index table id", K(ret), KPC(match_against));
   } else if (OB_FAIL(ObDASTaskFactory::alloc_das_ctdef(DAS_OP_IR_SCAN, ctdef_alloc, ir_scan_ctdef))) {
@@ -2098,6 +2102,7 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
   } else if (tr_info.need_calc_relevance_) {
     ObDASScanCtDef *inv_idx_agg_ctdef = nullptr;
     ObDASScanCtDef *doc_agg_ctdef = nullptr;
+    ObDASScanCtDef *fwd_idx_agg_ctdef = nullptr;
     ObDASScanCtDef *block_max_scan_ctdef = nullptr;
     if (OB_FAIL(ObDASTaskFactory::alloc_das_ctdef(DAS_OP_TABLE_SCAN, ctdef_alloc, inv_idx_agg_ctdef))) {
       LOG_WARN("allocate inv idx agg ctdef failed", K(ret));
@@ -2123,6 +2128,19 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
       }
     }
 
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(ObDASTaskFactory::alloc_das_ctdef(DAS_OP_TABLE_SCAN, ctdef_alloc, fwd_idx_agg_ctdef))) {
+        LOG_WARN("allocate fwd idx agg ctdef failed", K(ret));
+      } else {
+        fwd_idx_agg_ctdef->ref_table_id_ = tr_info.fwd_idx_tid_;
+        fwd_idx_agg_ctdef->pd_expr_spec_.pd_storage_flag_.set_aggregate_pushdown(true);
+        fwd_idx_agg_ctdef->ir_scan_type_ = ObTSCIRScanType::OB_IR_FWD_IDX_AGG;
+        if (OB_FAIL(generate_das_scan_ctdef(op, cg_ctx, *fwd_idx_agg_ctdef, has_rowscn))) {
+          LOG_WARN("generate das scan ctdef failed", K(ret));
+        }
+      }
+    }
+
     if (OB_SUCC(ret) && tr_info.need_block_max_scan()) {
       if (OB_FAIL(ObDASTaskFactory::alloc_das_ctdef(DAS_OP_TABLE_SCAN, ctdef_alloc, block_max_scan_ctdef))) {
         LOG_WARN("allocate block max scan ctdef failed", K(ret));
@@ -2136,7 +2154,7 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
     }
 
     if (OB_SUCC(ret)) {
-      int64_t ir_scan_children_cnt = 3;
+      int64_t ir_scan_children_cnt = use_approx_pre_agg ? 3 : 4;
       if (tr_info.need_block_max_scan()) {
         ir_scan_children_cnt += 1;
       }
@@ -2145,15 +2163,30 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
         LOG_WARN("allocate ir scan ctdef children failed", K(ret));
       } else {
         ir_scan_ctdef->children_cnt_ = ir_scan_children_cnt;
-        ir_scan_ctdef->children_[0] = inv_idx_scan_ctdef;
-        ir_scan_ctdef->children_[1] = inv_idx_agg_ctdef;
-        ir_scan_ctdef->children_[2] = doc_agg_ctdef;
-        if (tr_info.need_block_max_scan()) {
-          ir_scan_ctdef->children_[3] = block_max_scan_ctdef;
+        if (use_approx_pre_agg) {
+          // TODO: reduce more scan with approx
+          ir_scan_ctdef->children_[0] = inv_idx_scan_ctdef;
+          ir_scan_ctdef->children_[1] = inv_idx_agg_ctdef;
+          ir_scan_ctdef->children_[2] = doc_agg_ctdef;
+          if (tr_info.need_block_max_scan()) {
+            ir_scan_ctdef->children_[3] = block_max_scan_ctdef;
+          }
+          ir_scan_ctdef->has_inv_agg_ = true;
+          ir_scan_ctdef->has_doc_id_agg_ = true;
+          ir_scan_ctdef->has_block_max_scan_ = tr_info.need_block_max_scan();
+        } else {
+          ir_scan_ctdef->children_[0] = inv_idx_scan_ctdef;
+          ir_scan_ctdef->children_[1] = inv_idx_agg_ctdef;
+          ir_scan_ctdef->children_[2] = doc_agg_ctdef;
+          ir_scan_ctdef->children_[3] = fwd_idx_agg_ctdef;
+          if (tr_info.need_block_max_scan()) {
+            ir_scan_ctdef->children_[4] = block_max_scan_ctdef;
+          }
+          ir_scan_ctdef->has_inv_agg_ = true;
+          ir_scan_ctdef->has_doc_id_agg_ = true;
+          ir_scan_ctdef->has_fwd_agg_ = true;
+          ir_scan_ctdef->has_block_max_scan_ = tr_info.need_block_max_scan();
         }
-        ir_scan_ctdef->has_inv_agg_ = true;
-        ir_scan_ctdef->has_doc_id_agg_ = true;
-        ir_scan_ctdef->has_block_max_scan_ = tr_info.need_block_max_scan();
       }
     }
   } else {
@@ -2173,10 +2206,11 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
     } else {
       const ObCostTableScanInfo *est_cost_info = op.get_est_cost_info();
       int partition_row_cnt = 0;
-      if (nullptr == est_cost_info
+      if (!use_approx_pre_agg
+          || nullptr == est_cost_info
           || nullptr == est_cost_info->table_meta_info_
           || 0 == est_cost_info->table_meta_info_->part_count_) {
-        // No estimated info, do total document count on execution.
+        // No estimated info or approx agg not allowed, do total document count on execution;
       } else {
         partition_row_cnt = est_cost_info->table_meta_info_->table_row_count_ / est_cost_info->table_meta_info_->part_count_;
       }
@@ -2706,6 +2740,11 @@ int ObTscCgService::extract_text_ir_access_columns(
         LOG_WARN("failed to push token cnt column to access exprs", K(ret));
       }
       break;
+    case ObTSCIRScanType::OB_IR_FWD_IDX_AGG:
+      if (OB_FAIL(add_var_to_array_no_dup(access_exprs, tr_info.doc_token_cnt_->get_param_expr(0)))) {
+        LOG_WARN("failed to push token cnt column to access exprs", K(ret));
+      }
+      break;
     case ObTSCIRScanType::OB_IR_BLOCK_MAX_SCAN:
       // add all rowkey column here to make sure memtable scan column index is same with access column id index
       if (OB_FAIL(add_var_to_array_no_dup(access_exprs, static_cast<ObRawExpr*>(tr_info.token_column_)))) {
@@ -3170,6 +3209,11 @@ int ObTscCgService::generate_text_ir_pushdown_expr_ctdef(
       break;
     case ObTSCIRScanType::OB_IR_INV_IDX_AGG:
       if (OB_FAIL(add_var_to_array_no_dup(agg_expr_arr, tr_info.related_doc_cnt_))) {
+        LOG_WARN("failed to push document id column to access exprs", K(ret));
+      }
+      break;
+    case ObTSCIRScanType::OB_IR_FWD_IDX_AGG:
+      if (OB_FAIL(add_var_to_array_no_dup(agg_expr_arr, tr_info.doc_token_cnt_))) {
         LOG_WARN("failed to push document id column to access exprs", K(ret));
       }
       break;

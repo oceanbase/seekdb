@@ -330,6 +330,7 @@ int ObColDataStoreDesc::generate_skip_index_meta(
     const share::schema::ObMergeSchema &schema,
     const int64_t data_format_version)
 {
+  UNUSED(data_format_version);
   int ret = OB_SUCCESS;
   ObArray<ObSkipIndexColumnAttr> skip_idx_attrs;
   if (OB_UNLIKELY(!schema.is_valid())) {

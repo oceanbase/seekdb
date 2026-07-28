@@ -194,7 +194,7 @@ void ObSMConnectionCallback::destroy(ObSMConnection& conn)
 
       //free session in task
       ObSrvTask *task = OB_NEW(ObDisconnectTask,
-                                ObModIds::OB_SQL_REQUEST,
+                                ObModIds::OB_RPC,
                                 ctx);
       if (OB_UNLIKELY(NULL == task)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -226,6 +226,7 @@ void ObSMConnectionCallback::destroy(ObSMConnection& conn)
            "is_sess_alloc_", conn.is_sess_alloc_,
            K(ret),
            K(trace_id),
+           K(conn.pkt_rec_wrapper_),
            K(disconnect_state));
   conn.~ObSMConnection();
 }

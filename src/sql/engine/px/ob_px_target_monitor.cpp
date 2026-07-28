@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX  SQL_ENG
 #include "ob_px_target_monitor.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -32,13 +33,17 @@ ObPxTargetMonitor &ObPxTargetMonitor::get_instance()
   return instance;
 }
 
-int ObPxTargetMonitor::init()
+int ObPxTargetMonitor::init(const ObAddr &server)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_init_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
+  } else if (OB_UNLIKELY(!server.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(server));
   } else {
+    server_ = server;
     parallel_servers_target_ = INT64_MAX;
     px_target_used_ = 0;
     is_init_ = true;
@@ -50,6 +55,7 @@ int ObPxTargetMonitor::init()
 void ObPxTargetMonitor::reset()
 {
   is_init_ = false;
+  server_.reset();
   parallel_servers_target_ = INT64_MAX;
   px_target_used_ = 0;
   parallel_session_count_ = 0;
@@ -108,12 +114,22 @@ int ObPxTargetMonitor::release_target(int64_t worker_count)
   return ret;
 }
 
-void ObPxTargetMonitor::get_target_info(ObPxTargetInfo &target_info)
+int ObPxTargetMonitor::get_all_target_info(common::ObIArray<ObPxTargetInfo> &target_info_array)
 {
-  SpinRLockGuard guard(spin_lock_);
-  target_info.local_target_ = parallel_servers_target_;
-  target_info.target_used_ = px_target_used_;
-  target_info.local_parallel_session_count_ = parallel_session_count_;
+  int ret = OB_SUCCESS;
+  target_info_array.reset();
+  ObPxTargetInfo monitor_info;
+  monitor_info.server_ = server_;
+  monitor_info.is_leader_ = true;
+  monitor_info.parallel_servers_target_ = parallel_servers_target_;
+  monitor_info.peer_server_ = server_;
+  monitor_info.peer_target_used_ = px_target_used_;
+  monitor_info.local_target_used_ = px_target_used_;
+  monitor_info.local_parallel_session_count_ = parallel_session_count_;
+  if (OB_FAIL(target_info_array.push_back(monitor_info))) {
+    LOG_WARN("target_info_array push_back failed", K(ret), K(monitor_info));
+  }
+  return ret;
 }
 
 int ObPxTargetCond::wait(const int64_t wait_time_us)

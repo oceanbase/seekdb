@@ -721,7 +721,7 @@ int ObTabletScheduler::fill_minor_compaction_param(
     ObTabletMergeDagParam &param)
 {
   int ret = OB_SUCCESS;
-  param.data_size_ = 0;
+  ObCompactionParam &compaction_param = param.compaction_param_;
   ObProtectedMemtableMgrHandle *protected_handle = NULL;
 
   ObITable *table = nullptr;
@@ -734,7 +734,7 @@ int ObTabletScheduler::fill_minor_compaction_param(
       LOG_WARN("get unexpected table", K(ret), KPC(table), K(result));
     } else {
       ObSSTable *sstable = static_cast<ObSSTable *>(table);
-      param.data_size_ += sstable->get_occupy_size();
+      compaction_param.occupy_size_ += sstable->get_occupy_size();
       row_count += sstable->get_row_count();
       macro_count += sstable->get_data_macro_block_count();
     }

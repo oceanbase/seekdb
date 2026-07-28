@@ -21,6 +21,7 @@
 #include "rpc/obmysql/ob_mysql_request_utils.h"
 #include "rpc/ob_packet.h"
 #include "lib/lock/ob_latch.h"
+#include "rpc/obmysql/ob_packet_record.h"
 
 namespace oceanbase
 {
@@ -58,6 +59,7 @@ public:
     scramble_buf_[SCRAMBLE_BUF_SIZE] = '\0';
     group_id_ = 0;
     client_cs_type_ = 0;
+    pkt_rec_wrapper_.init();
     client_version_ = 0;
     logined_ = false;
   }
@@ -113,7 +115,6 @@ public:
   rpc::ConnectionPhaseEnum connection_phase_;
   uint32_t sessid_;
   uint32_t version_;
-  int64_t sess_create_time_; // client connection creation time
 
   // Errors may occur during the ObSMHandler::on_connect stage, and these error messages need to be returned to the client;
   // And in on_connect, accurate error information cannot be returned to the client, therefore it is recorded here, and processed in ObMPConnect::Process
@@ -125,6 +126,7 @@ public:
   char scramble_buf_[SCRAMBLE_BUF_SIZE + 1];
   int32_t group_id_;
   int32_t client_cs_type_;
+  obmysql::ObPacketRecordWrapper pkt_rec_wrapper_;
   uint64_t client_version_;
 private:
   bool logined_;

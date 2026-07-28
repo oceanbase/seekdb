@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_plugin_vector_index_adaptor.h"
-#include "storage/tx/ob_ts_mgr.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/access/ob_table_scan_iterator.h"
 #include "observer/vector_index/ob_vector_index_util.h"

@@ -23,7 +23,6 @@
 #include "ob_obj_cast.h"
 #include "common/json_type/ob_json_parse.h"  // ObJsonParser, previously hidden behind the exec_ctx include chain(free within lib)
 #include "share/object/ob_obj_cast_util.h"
-#include "share/ob_lob_access_utils.h"
 #include "share/ob_json_access_utils.h"
 #include "share/object/ob_obj_cast_hooks.h"
 #include "share/object/ob_array_cast.h"
@@ -3708,11 +3707,12 @@ static int datetime_number(const ObObjType expect_type, ObObjCastParams &params,
         K(ret), K(in), K(expect_type));
   } else {
     const ObTimeZoneInfo *tz_info = (ObTimestampType == in.get_type()) ? params.dtc_params_.tz_info_ : NULL;
+    ObString nls_format;
     char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
     int64_t len = 0;
     number::ObNumber value;
     if (OB_FAIL(ObTimeConverter::datetime_to_str(in.get_datetime(), tz_info,
-        in.get_scale(), buf, sizeof(buf), len, false))) {
+        nls_format, in.get_scale(), buf, sizeof(buf), len, false))) {
       LOG_WARN("failed to convert datetime to string", K(ret));
     } else if (CAST_FAIL(value.from(buf, len, params, &res_precision, &res_scale))) {
       LOG_WARN("failed to convert string to number", K(ret));
@@ -3736,10 +3736,11 @@ static int mdatetime_number(const ObObjType expect_type, ObObjCastParams &params
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
   } else {
+    ObString nls_format;
     char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
     int64_t len = 0;
     number::ObNumber value;
-    if (OB_FAIL(ObTimeConverter::mdatetime_to_str(in.get_mysql_datetime(), NULL,
+    if (OB_FAIL(ObTimeConverter::mdatetime_to_str(in.get_mysql_datetime(), NULL, nls_format,
                                                   in.get_scale(), buf, sizeof(buf), len, false))) {
       LOG_WARN("failed to convert datetime to string", K(ret));
     } else if (CAST_FAIL(value.from(buf, len, params, &res_precision, &res_scale))) {
@@ -4038,12 +4039,13 @@ static int datetime_string(const ObObjType expect_type, ObObjCastParams &params,
         K(ret), K(in), K(expect_type));
   } else {
     const ObTimeZoneInfo *tz_info = (ObTimestampType == in.get_type()) ? params.dtc_params_.tz_info_ : NULL;
+    ObString nls_format;
     char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
     int64_t len = 0;
     ret = in.is_mysql_datetime() ?
-                  ObTimeConverter::mdatetime_to_str(in.get_mysql_datetime(), tz_info,
+                  ObTimeConverter::mdatetime_to_str(in.get_mysql_datetime(), tz_info, nls_format,
                                                    in.get_scale(), buf, sizeof(buf), len) :
-                  ObTimeConverter::datetime_to_str(in.get_datetime(), tz_info,
+                  ObTimeConverter::datetime_to_str(in.get_datetime(), tz_info, nls_format,
                                                    in.get_scale(), buf, sizeof(buf), len);
     if (OB_FAIL(ret)) {
       LOG_WARN("failed to convert datetime to string", K(ret));
@@ -4250,12 +4252,13 @@ static int datetime_geometry(const ObObjType expect_type, ObObjCastParams &param
     ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
     const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
     const ObTimeZoneInfo *tz_info = (ObTimestampType == in.get_type()) ? params.dtc_params_.tz_info_ : NULL;
+    ObString nls_format;
     char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
     int64_t len = 0;
     ret = in.is_mysql_datetime() ?
-                ObTimeConverter::mdatetime_to_str(in.get_mysql_datetime(), tz_info,
+                ObTimeConverter::mdatetime_to_str(in.get_mysql_datetime(), tz_info, nls_format,
                                                  in.get_scale(), buf, sizeof(buf), len) :
-                ObTimeConverter::datetime_to_str(in.get_datetime(), tz_info,
+                ObTimeConverter::datetime_to_str(in.get_datetime(), tz_info, nls_format,
                                                  in.get_scale(), buf, sizeof(buf), len);
     if (OB_FAIL(ret)) {
       LOG_WARN("failed to convert datetime to string", K(ret));
@@ -6009,7 +6012,7 @@ static int string_number(const ObObjType expect_type, ObObjCastParams &params,
         }
         bool is_neg = (str[i] == '-');
         int tmp_ret = OB_SUCCESS;
-        const ObAccuracy &def_acc = ObAccuracy::DDL_DEFAULT_ACCURACY[expect_type];
+        const ObAccuracy &def_acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][expect_type];
         const ObPrecision prec = def_acc.get_precision();
         const ObScale scale = def_acc.get_scale();
         const ObNumber *bound_num = NULL;
@@ -7435,9 +7438,9 @@ static int bit_geometry(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-bool ob_objcast_is_enum_set_with_subschema(const ObObj &in);
+bool ob_objcast_is_enum_set_with_subschema(const ObObj &in);  // moved definition to datum_cast.cpp(remove static, rename, and export)
 
-int ob_objcast_common_enumset_string(const ObObj &in, ObObjCastParams &params, ObTextStringResult &text_result);
+int ob_objcast_common_enumset_string(const ObObj &in, ObObjCastParams &params, ObTextStringResult &text_result);  // moved definition to datum_cast.cpp(remove static, rename, and export, real exec_ctx hidden dependency)
 
 static int enumset_enumset(const ObExpectType &expect_type, ObObjCastParams &params,
                            const ObObj &in, ObObj &out)
@@ -9537,7 +9540,7 @@ static int pl_extend_sql_udt(const ObObjType expect_type, ObObjCastParams &param
   return ret;
 }
 
-int ob_objcast_string_collection(const ObObjType expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out, const ObCastMode cast_mode);
+int ob_objcast_string_collection(const ObObjType expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out, const ObCastMode cast_mode);  // moved definition to datum_cast.cpp(remove static, rename, and export)
 
 static int pl_extend_geometry(const ObObjType expect_type, ObObjCastParams &params,
                               const ObObj &in, ObObj &out, const ObCastMode cast_mode)
@@ -10169,9 +10172,10 @@ static int datetime_decimalint(const ObObjType expected_type, ObObjCastParams &p
   } else {
     const ObTimeZoneInfo *tz_info =
       (ObTimestampType == in.get_type()) ? params.dtc_params_.tz_info_ : NULL;
+    ObString nls_format;
     char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
     int64_t len = 0;
-    if (OB_FAIL(ObTimeConverter::datetime_to_str(in.get_datetime(), tz_info,
+    if (OB_FAIL(ObTimeConverter::datetime_to_str(in.get_datetime(), tz_info, nls_format,
                                                  in.get_scale(), buf, sizeof(buf), len, false))) {
       LOG_WARN("failed to convert datetime to string", K(ret));
     } else if (CAST_FAIL(wide::from_string(buf, len, *params.allocator_v2_, scale, precision,
@@ -10205,9 +10209,10 @@ static int mdatetime_decimalint(const ObObjType expected_type, ObObjCastParams &
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid null params", K(ret), K(params.allocator_v2_), K(params.res_accuracy_));
   } else {
+    ObString nls_format;
     char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
     int64_t len = 0;
-    if (OB_FAIL(ObTimeConverter::mdatetime_to_str(in.get_datetime(), NULL,
+    if (OB_FAIL(ObTimeConverter::mdatetime_to_str(in.get_datetime(), NULL, nls_format,
                                                  in.get_scale(), buf, sizeof(buf), len, false))) {
       LOG_WARN("failed to convert datetime to string", K(ret));
     } else if (CAST_FAIL(wide::from_string(buf, len, *params.allocator_v2_, scale, precision,
@@ -12398,6 +12403,8 @@ int ob_obj_accuracy_check_only(const ObAccuracy &accuracy, const ObCollationType
   return ret;
 }
 
+// ob_obj_to_ob_time_with_date moved definition to sql/engine/expr/ob_datum_cast.cpp(transitional state)
+// ob_obj_to_ob_time_without_date moved definition to sql/engine/expr/ob_datum_cast.cpp(transitional state)
 
 int ObObjCaster::to_type(const ObObjType expect_type, ObCastCtx &cast_ctx,
                          const ObObj &in_obj, ObObj &buf_obj, const ObObj *&res_obj)
@@ -12651,7 +12658,7 @@ int ObObjCaster::to_type(const ObExpectType &expect_type,
 
 const ObJsonZeroVal OB_JSON_ZERO = ObJsonZeroVal(); // binary json null
 
-
+// moved definition to sql/engine/expr/ob_datum_cast.cpp(transitional state)
 
 /**
  * Monotonic means that:
@@ -12722,7 +12729,7 @@ int ObObjCaster::is_const_consistent(const ObObjMeta &const_mt,
  * doc:  
  */
 
-
+// moved definition to sql/engine/expr/ob_datum_cast.cpp(transitional state)
 
 /**
  * @brief ObObjCaster::get_obj_param_text

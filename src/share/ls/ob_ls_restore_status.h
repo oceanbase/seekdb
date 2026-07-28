@@ -49,12 +49,18 @@ public:
     RESTORE_TO_CONSISTENT_SCN = 6,
     // wait followers to replay log to consistent_scn
     WAIT_RESTORE_TO_CONSISTENT_SCN = 7,
+    // restore major sst meta, minor sst and clog
+    QUICK_RESTORE = 8,
+    // wait followers to do quick restore
+    WAIT_QUICK_RESTORE = 9,
+    // finish quick restore, major macro blocks are in remote reference state
+    QUICK_RESTORE_FINISH = 10,
     // restore major macro blocks
-    RESTORE_MAJOR_DATA = 8,
+    RESTORE_MAJOR_DATA = 11,
     // wait followers to restore major macro blocks
-    WAIT_RESTORE_MAJOR_DATA = 9,
+    WAIT_RESTORE_MAJOR_DATA = 12,
     // restore failed
-    RESTORE_FAILED = 10,
+    RESTORE_FAILED = 13,
 
     LS_RESTORE_STATUS_MAX = 255
   };
@@ -73,6 +79,7 @@ public:
 
   
   bool is_restore_start() const { return Status::RESTORE_START == status_; }
+  bool is_quick_restore() const { return Status::QUICK_RESTORE == status_; }
   bool is_restore_major_data() const { return Status::RESTORE_MAJOR_DATA == status_; }
   bool is_none() const { return Status::NONE == status_; }
   bool is_failed() const { return Status::RESTORE_FAILED == status_; }
@@ -82,12 +89,15 @@ public:
   bool is_wait_restore_consistent_scn() const { return Status::WAIT_RESTORE_TO_CONSISTENT_SCN == status_; }
   bool is_wait_restore_sys_tablets() const { return Status::WAIT_RESTORE_SYS_TABLETS == status_; }
   bool is_wait_restore_tablets_meta() const { return Status::WAIT_RESTORE_TABLETS_META == status_; }
+  bool is_wait_quick_restore() const { return Status::WAIT_QUICK_RESTORE == status_; }
   bool is_wait_restore_major_data() const { return Status::WAIT_RESTORE_MAJOR_DATA == status_; }
+  bool is_quick_restore_finish() const { return Status::QUICK_RESTORE_FINISH == status_;}
 
 
   bool is_in_restoring() const 
   { 
-    return status_ >= Status::RESTORE_START && status_ < Status::RESTORE_FAILED;
+    return (status_ >= Status::RESTORE_START && status_ < QUICK_RESTORE_FINISH)
+           || (status_ > QUICK_RESTORE_FINISH && status_ < Status::RESTORE_FAILED); 
   }
   bool is_in_restoring_or_failed() const 
   { 
@@ -106,6 +116,7 @@ public:
     return is_wait_restore_sys_tablets()
            || is_wait_restore_consistent_scn()
            || is_wait_restore_tablets_meta()
+           || is_wait_quick_restore()
            || is_wait_restore_major_data();
   }
 
@@ -138,7 +149,14 @@ public:
   {
     return status_ >= RESTORE_START && status_ < RESTORE_MAJOR_DATA; 
   }
-  bool check_allow_read() const { return NONE == status_; }
+  bool check_allow_read() const
+  {
+    return NONE == status_ || QUICK_RESTORE_FINISH == status_;
+  }
+  bool is_in_restore_and_before_quick_restore_finish() const
+  {
+    return status_ >= RESTORE_START && status_ < QUICK_RESTORE_FINISH;
+  }
 
   Status get_status() const { return status_; }
   int set_status(int32_t status);

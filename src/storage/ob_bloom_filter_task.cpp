@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
-#include <algorithm>
 #include "storage/ob_bloom_filter_task.h"
 #include "storage/blocksstable/ob_macro_block_bare_iterator.h"
 #include "storage/blocksstable/ob_storage_cache_suite.h"
@@ -148,6 +147,8 @@ int ObBloomFilterBuildTask::build_bloom_filter()
       read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
       read_info.io_desc_.set_sys_module_id(ObIOModule::BLOOM_FILTER_IO);
       read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
+      
+
 
       if (OB_ISNULL(io_buf_) && OB_ISNULL(io_buf_ =
           reinterpret_cast<char*>(allocator_.alloc(OB_DEFAULT_MACRO_BLOCK_SIZE)))) {
@@ -189,7 +190,7 @@ int ObBloomFilterBuildTask::build_bloom_filter()
         }
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           LOG_WARN("Fail to iterate macro block", K(ret));
-        } else if (OB_FAIL(ObStorageCacheSuite::get_instance().get_bf_cache().put_bloom_filter(macro_id_, bfcache_value))) {
+        } else if (OB_FAIL(ObStorageCacheSuite::get_instance().get_bf_cache().put_bloom_filter(macro_id_, bfcache_value, true/* adaptive */))) {
           LOG_WARN("Fail to put value to bloom filter cache", K(ret), K_(macro_id));
         }
       }

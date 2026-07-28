@@ -171,8 +171,7 @@ private:
   void reset_list();
   OB_INLINE bool inner_is_valid() const
   {
-    return extra_info_.is_valid()
-        && extra_info_.last_compaction_type_ < ObMediumCompactionInfo::COMPACTION_TYPE_MAX
+    return extra_info_.last_compaction_type_ < ObMediumCompactionInfo::COMPACTION_TYPE_MAX
         && extra_info_.last_medium_scn_ >= 0 && size() >= 0;
   }
 

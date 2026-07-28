@@ -89,9 +89,7 @@ int ObServerCheckpointWriter::write_runtime_meta_checkpoint(MacroBlockId &block_
   if (OB_FAIL(GCTX.server_runtime_controller_->get_runtime_meta_for_ckpt(meta, exist))) {
     LOG_WARN("fail to get_runtime_meta_for_ckpt", K(ret));
   } else if (exist) {
-    // The project keeps one local OMT runtime. Persist the current mainline
-    // runtime metadata directly; the removed database-runtime bootstrap format
-    // must not be mixed into this checkpoint.
+    // Write 0 or 1 item (disk bytes unchanged)
     buf_len = meta.get_serialize_size();
     pos = 0;
     if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(buf_len)))) {

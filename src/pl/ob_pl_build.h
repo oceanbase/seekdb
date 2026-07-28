@@ -129,6 +129,8 @@ private:
 public:
   // Bind a resolved raw expr's runtime ObExpr into the PL ObSqlExpression.
   static int link_sql_expr_rt(sql::ObRawExpr &raw_expr, sql::ObSqlExpression &sql_expr);
+  // Propagate a unit's profiler info to all nested routines.
+  static int set_profiler_unit_info_recursive(const ObPLExecutableUnit &unit);
 private:
   common::ObIAllocator &allocator_;
   sql::ObSQLSessionInfo &session_info_;

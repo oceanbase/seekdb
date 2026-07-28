@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_access_service.h"
-#include "storage/tablelock/ob_table_lock_rpc_struct.h"
+#include "storage/tablelock/ob_table_lock_rpc_struct.h"  // ObLockParam(previously hidden behind a transitive include)
 #include "share/rc/ob_module_provider.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include "share/ob_io_device_helper.h" // LOCAL_DEVICE_INSTANCE
@@ -292,6 +292,8 @@ int ObAccessService::table_scan(
 {
   int ret = OB_SUCCESS;
   const common::ObTabletID &data_tablet_id = vparam.tablet_id_;
+  ObASHTabletIdSetterGuard ash_tablet_id_guard(data_tablet_id.id());
+  ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(tablet_id_, data_tablet_id.id());
   ObTableScanIterator *iter = nullptr;
   ObTabletHandle tablet_handle;
   ObTableScanParam &param = static_cast<ObTableScanParam &>(vparam);
@@ -343,6 +345,8 @@ int ObAccessService::table_rescan(
     ObVTableScanParam &vparam,
     ObNewRowIterator *result)
 {
+  ObASHTabletIdSetterGuard ash_tablet_id_guard(vparam.tablet_id_.id());
+  ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(tablet_id_, vparam.tablet_id_.id());
   int ret = OB_SUCCESS;
   ObTableScanParam &param = static_cast<ObTableScanParam &>(vparam);
   ObTabletHandle tablet_handle;
@@ -675,6 +679,8 @@ int ObAccessService::delete_rows(
     blocksstable::ObDatumRowIterator *row_iter,
     int64_t &affected_rows)
 {
+  ObASHTabletIdSetterGuard ash_tablet_id_guard(tablet_id.id());
+  ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(tablet_id_, tablet_id.id());
   int ret = OB_SUCCESS;
   ObLSTabletService *tablet_service = nullptr;
   // Attention!!! This handle is only used for ObLSTabletService, will be reset inside ObLSTabletService.
@@ -720,6 +726,8 @@ int ObAccessService::put_rows(
     blocksstable::ObDatumRowIterator *row_iter,
     int64_t &affected_rows)
 {
+  ObASHTabletIdSetterGuard ash_tablet_id_guard(tablet_id.id());
+  ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(tablet_id_, tablet_id.id());
   int ret = OB_SUCCESS;
   ObLSTabletService *tablet_service = nullptr;
   // Attention!!! This handle is only used for ObLSTabletService, will be reset inside ObLSTabletService.
@@ -765,6 +773,8 @@ int ObAccessService::insert_rows(
     blocksstable::ObDatumRowIterator *row_iter,
     int64_t &affected_rows)
 {
+  ObASHTabletIdSetterGuard ash_tablet_id_guard(tablet_id.id());
+  ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(tablet_id_, tablet_id.id());
   int ret = OB_SUCCESS;
   ObLSTabletService *tablet_service = nullptr;
   // Attention!!! This handle is only used for ObLSTabletService, will be reset inside ObLSTabletService.
@@ -812,6 +822,8 @@ int ObAccessService::insert_rows_with_fetch_dup(const common::ObTabletID &tablet
                                                 int64_t &affected_rows,
                                                 blocksstable::ObDatumRowIterator *&duplicated_rows)
 {
+  ObASHTabletIdSetterGuard ash_tablet_id_guard(tablet_id.id());
+  ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(tablet_id_, tablet_id.id());
   int ret = OB_SUCCESS;
   ObLSTabletService *tablet_service = nullptr;
   // Attention!!! This handle is only used for ObLSTabletService, will be reset inside ObLSTabletService.
@@ -862,6 +874,8 @@ int ObAccessService::update_rows(
     blocksstable::ObDatumRowIterator *row_iter,
     int64_t &affected_rows)
 {
+  ObASHTabletIdSetterGuard ash_tablet_id_guard(tablet_id.id());
+  ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(tablet_id_, tablet_id.id());
   int ret = OB_SUCCESS;
   ObLSTabletService *tablet_service = nullptr;
   // Attention!!! This handle is only used for ObLSTabletService, will be reset inside ObLSTabletService.
@@ -909,6 +923,8 @@ int ObAccessService::lock_rows(
     blocksstable::ObDatumRowIterator *row_iter,
     int64_t &affected_rows)
 {
+  ObASHTabletIdSetterGuard ash_tablet_id_guard(tablet_id.id());
+  ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(tablet_id_, tablet_id.id());
   int ret = OB_SUCCESS;
   ObLSTabletService *tablet_service = nullptr;
   // Attention!!! This handle is only used for ObLSTabletService, will be reset inside ObLSTabletService.
@@ -1110,6 +1126,7 @@ int ObAccessService::inner_tablet_scan(
     ObNewRowIterator *&result)
 {
   int ret = OB_SUCCESS;
+  ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(tablet_id_, tablet_id.id());
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ob access service is not running.", K(ret));

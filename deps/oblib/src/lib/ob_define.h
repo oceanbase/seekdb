@@ -189,7 +189,9 @@ const int64_t OB_MAX_UUID_LENGTH = 16;
 const int64_t OB_MAX_UUID_STR_LENGTH = 36;
 const int64_t OB_MAX_CON_INFO_STR_LENGTH = 512;
 const int64_t MAX_LOAD_DATA_MESSAGE_LENGTH = 4096;
-const int64_t MAX_GTS_NAME_LENGTH = 128;
+const int64_t MAX_ZONE_LENGTH = 128;
+const int32_t MAX_ZONE_NUM = 64;
+const int32_t DEFAULT_ZONE_COUNT = 5;
 const int64_t MAX_OPERATOR_NAME_LENGTH = 32;
 const int64_t MAX_LONG_OPS_NAME_LENGTH = 128;
 const int64_t MAX_LONG_OPS_TARGET_LENGTH = 128;
@@ -447,6 +449,9 @@ const int32_t OB_TMP_BUF_SIZE_256 = 256;
 const int64_t OB_SCHEMA_MGR_MAX_USED_TID_MAP_BUCKET_NUM = 64;
 const int64_t OB_MAX_SLAVE_READ_DELAY_TS = 5 * 1000 * 1000;
 
+const int64_t OB_MAX_DIRECTORY_NAME_LENGTH = 128;
+const int64_t OB_MAX_DIRECTORY_PATH_LENGTH = 4000;
+const uint64_t OB_MAX_INTERVAL_PARTITIONS = 1048575; // interval parted table max partitions
 const int64_t OB_SERVICE_NAME_LENGTH = 64;
 
 //plan cache
@@ -593,6 +598,17 @@ const int64_t OB_MAX_TABLE_ID_LIST_SIZE = 10L * 1024L * 1024L;//10MB
 
 const int64_t OB_MAX_SCHEDULER_JOB_NAME_LENGTH = 128;
 
+enum ObServerRole
+{
+  OB_INVALID = 0,
+  OB_ROOTSERVER = 1,  // rs
+  OB_CHUNKSERVER = 2, // cs
+  OB_MERGESERVER = 3, // ms
+  OB_UPDATESERVER = 4, // ups
+  OB_SERVER = 6,
+  OB_OBLOG = 8, // liboblog
+};
+
 const int OB_FAKE_MS_PORT = 2828;
 const uint64_t OB_MAX_PS_PARAM_COUNT = 65535;
 const uint64_t OB_MAX_PS_FIELD_COUNT = 65535;
@@ -731,6 +747,8 @@ const char *const OB_DROPPED_TABLE_ID_LIST = "dropped_table_ids_list";
 const char *const OB_STRING_PARTITION_GROUP_META = "partition_group_meta";
 const char *const OB_SECURITY_AUDIT_IDS_LIST = "security_audit_ids_list";
 const char *const OB_SECURITY_AUDIT_DEFINITION = "security_audit_definition";
+const char *const OB_SYNONYM_IDS_LIST = "synonym_ids_list";
+const char *const OB_CREATE_SYNONYM_DEFINITION = "create_synonym_definition";
 const char *const OB_TIMEZONE_INFO_DEFINITION = "timezone_info_definition";
 const char *const OB_MASKED_STR = "***";
 
@@ -1360,7 +1378,7 @@ const int64_t OB_MAX_UNUSED_COLUMNS_COUNT = 128; // drop column online.
 const int64_t OB_DEFAULT_COL_DEC_NUM = common::OB_ROW_MAX_COLUMNS_COUNT / 80;
 const int64_t OB_DEFAULT_MULTI_GET_ROWKEY_NUM = 8;
 const int64_t OB_MAX_TIMESTAMP_LENGTH = 32;
-// Standard timestamp text with region name: max length of TZR is 38, max length of TZD is 6.
+// nls_date_format = 'yyyy-mm-dd hh24:mi:ss.ff TZR TZD' max length of TZR is 38, max length of TZD is 6
 // 27 + 38 + 1 + 6 = 72; set OB_MAX_TIMESTAMP_TZ_LENGTH = 128 in case add new time zone with a long name
 const int64_t OB_MAX_TIMESTAMP_TZ_LENGTH = 128;
 const int64_t OB_COMMON_MEM_BLOCK_SIZE = 64 * 1024;

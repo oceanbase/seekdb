@@ -84,7 +84,11 @@ public:
   double get_server_default_max_cpu();
 
   virtual int64_t update_version() { return ATOMIC_AAF(&global_version_, 1); }
+  virtual ObServerRole get_server_type() const { return common::OB_SERVER; }
   virtual bool is_debug_sync_enabled() const { return static_cast<int64_t>(debug_sync_timeout) > 0; }
+
+  virtual double root_location_cpu_quota() const { return 1.; }
+  virtual double core_location_cpu_quota() const { return 1.; }
 
   bool is_sql_operator_dump_enabled() const { return enable_sql_operator_dump; }
 
@@ -100,6 +104,7 @@ public:
     return v == 2;
   }
 
+  bool enable_new_major() const {  return true; }
   bool is_valid() const { return  system_config_!= NULL; };
   int publish_special_config_after_dump();
 
@@ -107,6 +112,7 @@ public:
   int64_t disk_actual_space_;
   ObAddr self_addr_;
   mutable common::DRWLock rwlock_;
+  static const int64_t INITIAL_RUNTIME_CONFIG_VERSION = 1;
 public:
 ///////////////////////////////////////////////////////////////////////////////
 // use MACRO 'OB_CLUSTER_PARAMETER' to define new cluster parameters

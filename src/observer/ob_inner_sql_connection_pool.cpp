@@ -35,7 +35,7 @@ ObInnerSQLConnectionPool::ObInnerSQLConnectionPool()
       ob_sql_(NULL),
       vt_iter_creator_(NULL),
       config_(NULL),
-      is_ddl_(false)
+      is_resource_conn_pool_(false)
 {
 }
 
@@ -67,7 +67,8 @@ int ObInnerSQLConnectionPool::init(ObMultiVersionSchemaService *schema_service,
                                    ObSql *ob_sql,
                                    ObVTIterCreator *vt_iter_creator,
                                    common::ObServerConfig *config,
-                                   const bool is_ddl)
+                                   const bool is_ddl,
+                                   const bool is_resource_conn_pool/* =false */)
 {
   int ret = OB_SUCCESS;
   if (inited_) {
@@ -87,6 +88,7 @@ int ObInnerSQLConnectionPool::init(ObMultiVersionSchemaService *schema_service,
     vt_iter_creator_ = vt_iter_creator;
     config_ = config;
     is_ddl_ = is_ddl;
+    is_resource_conn_pool_ = is_resource_conn_pool;
     inited_ = true;
   }
   return ret;
@@ -95,7 +97,6 @@ int ObInnerSQLConnectionPool::init(ObMultiVersionSchemaService *schema_service,
 int ObInnerSQLConnectionPool::acquire(common::sqlclient::ObISQLConnection *&conn, ObISQLClient *client_addr, const int32_t group_id)
 {
   int ret = OB_SUCCESS;
-  UNUSED(group_id);
   ObInnerSQLConnection *inner_sql_conn = NULL;
   if (!inited_) {
     ret = OB_NOT_INIT;
@@ -103,8 +104,8 @@ int ObInnerSQLConnectionPool::acquire(common::sqlclient::ObISQLConnection *&conn
   } else if (OB_FAIL(alloc_conn(inner_sql_conn))) {
     LOG_WARN("alloc connection from pool failed", K(ret));
   } else if (OB_FAIL(inner_sql_conn->init(this, schema_service_, ob_sql_, vt_iter_creator_,
-                                          config_, nullptr /* session_info */, client_addr,
-                                          nullptr/*sql modifer*/, is_ddl_))) {
+                                          config_, nullptr /* session_info */, client_addr, nullptr/*sql modifer*/, is_ddl_,
+                                          group_id, is_resource_conn_pool_))) {
     LOG_WARN("init connection failed", K(ret));
   } else if (OB_FAIL(add_to_used_conn_list(inner_sql_conn))) {
     LOG_WARN("add_to_used_conn_list failed", K(ret));
@@ -177,7 +178,7 @@ int ObInnerSQLConnectionPool::acquire(
   } else if (OB_FAIL(alloc_conn(inner_sql_conn))) {
     LOG_WARN("alloc connection from pool failed", K(ret));
   } else if (OB_FAIL(inner_sql_conn->init(this, schema_service_, ob_sql_, vt_iter_creator_, config_,
-                     session_info, NULL, NULL, false))) {
+                     session_info, NULL, NULL, false, 0/*group_id*/ , is_resource_conn_pool_))) {
     LOG_WARN("init connection failed", K(ret));
   } else if (OB_FAIL(add_to_used_conn_list(inner_sql_conn))) {
     LOG_WARN("add_to_used_conn_list failed", K(ret));

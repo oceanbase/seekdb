@@ -48,6 +48,7 @@ inline const char *log_io_user_str(const LogIOUser user_type)
     USER_TYPE_STR(RESTORE);
     USER_TYPE_STR(CDC);
     USER_TYPE_STR(STANDBY);
+    USER_TYPE_STR(SHARED_UPLOAD);
     USER_TYPE_STR(META_INFO);
     USER_TYPE_STR(RESTART);
     USER_TYPE_STR(OTHER);

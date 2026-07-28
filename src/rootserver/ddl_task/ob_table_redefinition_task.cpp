@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_table_redefinition_task.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_error_message_table_operator.h"
@@ -27,6 +28,7 @@ using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::rootserver;
+using namespace oceanbase::obcall;
 
 ObTableRedefinitionTask::ObTableRedefinitionTask()
   : ObDDLRedefinitionTask(ObDDLType::DDL_TABLE_REDEFINITION),
@@ -165,6 +167,7 @@ int ObTableRedefinitionTask::init(const ObDDLTaskRecord &task_record)
 }
 
 int ObTableRedefinitionTask::update_complete_sstable_job_status(const common::ObTabletID &tablet_id,
+                                                                const ObAddr &addr,
                                                                 const int64_t snapshot_version,
                                                                 const int64_t execution_id,
                                                                 const int ret_code,
@@ -184,14 +187,14 @@ int ObTableRedefinitionTask::update_complete_sstable_job_status(const common::Ob
   } else {
     if (OB_UNLIKELY(snapshot_version_ != snapshot_version)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("error unexpected, snapshot version is not equal", K(ret), K(snapshot_version_), K(snapshot_version));
+      LOG_WARN("error unexpected, snapshot version is not equal", K(addr), K(ret), K(snapshot_version_), K(snapshot_version));
     } else if (execution_id < execution_id_) {
       ret = OB_TASK_EXPIRED;
-      LOG_WARN("receive a mismatch execution result, ignore", K(ret_code), K(execution_id), K(execution_id_));
+      LOG_WARN("receive a mismatch execution result, ignore", K(addr), K(ret_code), K(execution_id), K(execution_id_));
     } else {
       complete_sstable_job_ret_code_ = ret_code;
       execution_id_ = execution_id; // update ObTableRedefinitionTask::execution_id_ from ObDDLRedefinitionSSTableBuildTask::execution_id_
-      LOG_INFO("table redefinition task callback", K(complete_sstable_job_ret_code_), K(execution_id_));
+      LOG_INFO("table redefinition task callback", K(addr), K(complete_sstable_job_ret_code_), K(execution_id_));
     }
   }
   return ret;
@@ -201,6 +204,11 @@ int ObTableRedefinitionTask::send_build_replica_request()
 {
   int ret = OB_SUCCESS;
   switch (task_type_) {
+    case DDL_DIRECT_LOAD:
+    case DDL_DIRECT_LOAD_INSERT: {
+      // do nothing
+      break;
+    }
     default: {
       if (OB_FAIL(send_build_replica_request_by_sql())) {
         LOG_WARN("failed to send local build request", K(ret));
@@ -485,6 +493,10 @@ int ObTableRedefinitionTask::copy_table_indexes()
             ObTraceIdGuard trace_id_guard(get_trace_id());
             ATOMIC_INC(&sub_task_trace_id_);
             ObDDLEventInfo ddl_event_info(sub_task_trace_id_);
+            // this create index arg is not valid, only has nls format(but domain index need valid create index arg)
+            create_index_arg.nls_date_format_ = alter_table_arg_.nls_formats_[0];
+            create_index_arg.nls_timestamp_format_ = alter_table_arg_.nls_formats_[1];
+            create_index_arg.nls_timestamp_tz_format_ = alter_table_arg_.nls_formats_[2];
             if (OB_FAIL(new_schema_guard.get_table_schema( index_ids.at(i), index_schema))) {
               LOG_WARN("get table schema failed", K(ret), K(index_ids.at(i)));
             } else if (OB_ISNULL(index_schema)) {

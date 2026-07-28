@@ -22,7 +22,6 @@
 #include "lib/objectpool/ob_server_object_pool.h"
 #include "storage/tx/ob_trans_define.h"
 #include "storage/tx/ob_trans_service.h"
-#include "storage/tx/ob_trans_id_service.h"
 #include "storage/tx/ob_tx_ctx.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tablelock/ob_lock_memtable.h"
@@ -55,14 +54,11 @@ class QueueConsumer : public share::ObThreadPool
 public:
   QueueConsumer(ObString name,
                 ObLinkQueue *q,
-                std::function<int(T*)> func,
-                lib::IRunWrapper *run_wrapper):
-    name_(name), stop_(true), queue_(q), func_(func), cond_()
-  {
-    ObThreadPool::set_run_wrapper(run_wrapper);
-  }
+                std::function<int(T*)> func):
+    name_(name), queue_(q), func_(func), cond_() {}
   virtual int start() {
     int ret = OB_SUCCESS;
+    ObThreadPool::set_run_wrapper(share::server_runtime());
     stop_ = false;
     ret = ObThreadPool::start();
     TRANS_LOG(INFO, "start.QeueueConsumer", K(ret), KPC(this));
@@ -133,41 +129,19 @@ private:
 // Modules route through share::g_mp (ObIModuleProvider). This test injects
 // its fakes by overriding the relevant getters and pointing g_mp at this node.
 class ObTxNode;
-class ObTestTransIDService : public ObTransIDService
-{
-public:
-  ObTestTransIDService()
-  {
-    const int ret = init();
-    OB_ASSERT(OB_SUCCESS == ret);
-    last_id_ = 66;
-    limited_id_ = INT64_MAX;
-  }
-};
-
-class FakeRunWrapper final : public lib::IRunWrapper
-{
-public:
-  uint64_t id() const override { return common::OB_SERVER_RUNTIME_ID; }
-};
-
 class FakeModuleProvider : public share::ObIModuleProvider
 {
 public:
   storage::ObMemstoreFreezer *memstore_freezer() override { return memstore_freezer_; }
   share::ObSharedMemAllocMgr *shared_mem_alloc_mgr() override { return shared_mem_alloc_mgr_; }
   transaction::ObTransService *trans_service() override { return trans_service_; }
-  transaction::ObTransIDService *trans_id_service() override { return trans_id_service_; }
   common::ObOptStatMonitorManager *opt_stat_monitor_manager() override { return opt_stat_monitor_manager_; }
   memtable::ObLockWaitMgr *lock_wait_mgr() override { return lock_wait_mgr_; }
   storage::ObLSService *ls_service() override { return ls_service_; }
-  lib::IRunWrapper *run_wrapper() { return &run_wrapper_; }
 
-  FakeRunWrapper run_wrapper_;
   storage::ObMemstoreFreezer *memstore_freezer_ = nullptr;
   share::ObSharedMemAllocMgr *shared_mem_alloc_mgr_ = nullptr;
   transaction::ObTransService *trans_service_ = nullptr;
-  transaction::ObTransIDService *trans_id_service_ = nullptr;
   common::ObOptStatMonitorManager *opt_stat_monitor_manager_ = nullptr;
   memtable::ObLockWaitMgr *lock_wait_mgr_ = nullptr;
   storage::ObLSService *ls_service_ = nullptr;
@@ -227,6 +201,7 @@ public:
 #define DELEGATE_RUNTIME_WITH_RET(delegate_obj, func_name, ret)  \
   template <typename ...Args>                                   \
   ret func_name(Args &&...args) __attribute__((optnone)) {      \
+    share::g_server_runtime = &runtime_state_;                  \
     share::g_mp = &provider_;                                   \
     TRANS_LOG(INFO, "[call_tx_api]", KPC(this));                \
     return delegate_obj.func_name(std::forward<Args>(args)...); \
@@ -294,9 +269,9 @@ private:
   }
   void dump_msg_queue_();
 public:
-  static ObTestTransIDService &get_trans_id_service_() {
-    static ObTestTransIDService trans_id_service;
-    return trans_id_service;
+  static ObFakeGtiSource &get_gti_source_() {
+    static ObFakeGtiSource txIdGenerator;
+    return txIdGenerator;
   }
   static ObFakeTsMgr &get_ts_mgr_() {
     static ObFakeTsMgr gts;
@@ -325,6 +300,7 @@ public:
   QueueConsumer<MsgPack> msg_consumer_;
   // fake objects
   storage::ObStorageMetaMemMgr t3m_;
+  ObFakeGtiSource fake_gti_source_;
   ObFakeTsMgr fake_ts_mgr_;
   share::schema::ObMultiVersionSchemaService schema_service_;
   tablelock::ObLockMemtable lock_memtable_;

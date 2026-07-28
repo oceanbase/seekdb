@@ -293,7 +293,7 @@ int ObTableReplaceOp::inner_get_next_row()
     } else if (OB_FAIL(do_replace_into())) {
       LOG_WARN("fail to do replace into", K(ret));
     } else if (OB_FAIL(plan_ctx->sync_last_value_local())) {
-      LOG_WARN("failed to sync auto-increment cache locally", K(ret));
+      LOG_WARN("failed to sync value globally", K(ret));
     } else {
       plan_ctx->set_row_matched_count(insert_rows_);
       plan_ctx->set_affected_rows(insert_rows_ + delete_rows_);
@@ -903,7 +903,6 @@ int ObTableReplaceOp::check_replace_ctdefs_valid() const
 {
   int ret = OB_SUCCESS;
   CK(MY_SPEC.replace_ctdefs_.count() > 0);
-  CK(!MY_SPEC.all_saved_exprs_.empty());
   for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.replace_ctdefs_.count(); ++i) {
     const ObReplaceCtDef *replace_ctdef = NULL;
     const ObInsCtDef *insert_ctdef = NULL;

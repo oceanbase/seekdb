@@ -171,6 +171,7 @@
 #include "sql/engine/expr/ob_expr_char.h"
 #include "sql/engine/expr/ob_expr_get_sys_var.h"
 #include "sql/engine/expr/ob_expr_elt.h"
+#include "sql/engine/expr/ob_expr_part_id.h"
 #include "sql/engine/expr/ob_expr_timestamp_add.h"
 #include "sql/engine/expr/ob_expr_des_hex_str.h"
 #include "sql/engine/expr/ob_expr_doc_id.h"
@@ -220,6 +221,7 @@
 #include "sql/engine/expr/ob_expr_obversion.h"
 #include "sql/engine/expr/ob_expr_remove_const.h"
 #include "sql/engine/expr/ob_expr_wrapper_inner.h"
+#include "sql/engine/expr/ob_expr_coll_pred.h"
 #include "sql/engine/expr/ob_expr_radians.h"
 #include "sql/engine/expr/ob_expr_pi.h"
 #include "sql/engine/expr/ob_expr_to_outfile_row.h"
@@ -316,6 +318,7 @@
 #include "sql/engine/expr/ob_expr_prefix_pattern.h"
 #include "sql/engine/expr/ob_expr_extract_value.h"
 #include "sql/engine/expr/ob_expr_update_xml.h"
+#include "sql/engine/expr/ob_expr_sql_udt_construct.h"
 #include "sql/engine/expr/ob_expr_priv_st_numinteriorrings.h"
 #include "sql/engine/expr/ob_expr_priv_st_iscollection.h"
 #include "sql/engine/expr/ob_expr_priv_st_equals.h"
@@ -731,6 +734,7 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprRpcPort);
     REG_OP(ObExprMySQLPort);
     REG_OP(ObExprGetSysVar);
+    REG_OP(ObExprPartId);
     REG_OP(ObExprLastTraceId);
     REG_OP(ObExprLastExecId);
     REG_OP(ObExprDocID);

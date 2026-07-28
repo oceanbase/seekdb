@@ -16,9 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include <cmath>
-#include <memory>
-
 #include "ob_select_into_op.h"
 #include "sql/engine/cmd/ob_variable_set_executor.h"
 #include "lib/charset/ob_charset_string_helper.h"
@@ -26,7 +23,6 @@
 #include "sql/engine/expr/ob_expr_json_func_helper.h"
 #include "common/udt/ob_collection_type.h"
 #include "share/config/ob_server_config.h"
-#include "share/ob_lob_access_utils.h"
 
 namespace oceanbase
 {
@@ -202,6 +198,7 @@ int ObSelectIntoOp::calc_outfile_path()
   }
   return ret;
 }
+// CSV supports batch and non-batch interfaces; the non-batch interface will be discontinued later.
 int ObSelectIntoOp::inner_get_next_row()
 {
   int ret = 0 == top_limit_cnt_ ? OB_ITER_END : OB_SUCCESS;
@@ -209,7 +206,11 @@ int ObSelectIntoOp::inner_get_next_row()
   const ObItemType into_type = MY_SPEC.into_type_;
   ObPhysicalPlanCtx *phy_plan_ctx = NULL;
   ObExternalFileWriter *data_writer = NULL;
-  if (OB_ISNULL(phy_plan_ctx = ctx_.get_physical_plan_ctx())) {
+  if (ObExternalFileFormat::FormatType::CSV_FORMAT != format_type_) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("this type not supported in not batch interface", K(ret), K(format_type_));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "this upload type");
+  } else if (OB_ISNULL(phy_plan_ctx = ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get phy_plan_ctx failed", K(ret));
   }
@@ -242,7 +243,8 @@ int ObSelectIntoOp::inner_get_next_row()
       }
     }
     if (OB_SUCC(ret) || OB_ITER_END == ret) { // if into user variables or into dumpfile, must be one row
-      if ((T_INTO_VARIABLES == into_type || T_INTO_DUMPFILE == into_type) && row_count > 1) {
+      if (ObExternalFileFormat::FormatType::CSV_FORMAT == format_type_
+          && (T_INTO_VARIABLES == into_type || T_INTO_DUMPFILE == into_type) && row_count > 1) {
         ret = OB_ERR_TOO_MANY_ROWS;
         LOG_WARN("more than one row for into variables or into dumpfile", K(ret), K(row_count));
       }
@@ -1145,7 +1147,6 @@ bool ObSelectIntoOp::file_need_split(int64_t file_size)
 {
   return !MY_SPEC.is_single_ && file_size > MY_SPEC.max_file_size_;
 }
-
 
 int ObSelectIntoOp::into_dumpfile(ObExternalFileWriter *data_writer)
 {

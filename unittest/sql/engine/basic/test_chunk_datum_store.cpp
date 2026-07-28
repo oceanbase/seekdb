@@ -79,7 +79,7 @@ struct MyAllocator : public DefaultPageAllocator
 // TearDownTestCase. Do NOT inherit blocksstable::TestDataFilePrepare: its member
 // util_ destructor tears the env down per fixture (i.e. per test case), so the
 // first test would destroy the env shared by the rest of the suite. (Before the
-// runtime refactor this fixture built AND destroyed its own env in
+// single-tenant refactor this fixture built AND destroyed its own env in
 // SetUp/TearDown, so the per-test teardown was balanced; the refactor moved env
 // setup to SetUpTestCase but left the per-test teardown, breaking the balance.)
 class TestChunkDatumStore : public ::testing::Test
@@ -170,7 +170,7 @@ public:
   virtual void SetUp() override
   {
     int ret = OB_SUCCESS;
-    ASSERT_EQ(OB_SUCCESS, init_memory_limits());
+    ASSERT_EQ(OB_SUCCESS, init_tenant_mgr());
     // Single-runtime seekdb: MockServerRuntimeEnv (installed in SetUpTestCase)
     // owns the storage env / data dir, the tmp block/page caches and the
     // ObTmpFileManager / ObIOService module set, and switches the
@@ -200,7 +200,7 @@ public:
     LOG_INFO("setup finished");
   }
 
-  int init_memory_limits();
+  int init_tenant_mgr();
 
   virtual void TearDown() override
   {
@@ -390,6 +390,7 @@ protected:
   int64_t batch_size_ = (64L << 10) * 5 / 256;
   ObBitVector *skip_;
 
+  int64_t tenant_id_ = OB_SERVER_RUNTIME_ID;
   int64_t ctx_id_ = ObCtxIds::WORK_AREA;
   const char *label_ = ObModIds::OB_SQL_ROW_STORE;
 
@@ -404,7 +405,7 @@ protected:
   ObEvalCtx eval_ctx_;
 };
 
-int TestChunkDatumStore::init_memory_limits()
+int TestChunkDatumStore::init_tenant_mgr()
 {
   int ret = OB_SUCCESS;
   ObAddr self;

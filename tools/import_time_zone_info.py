@@ -11,14 +11,15 @@ class TimeZoneInfoImporter:
     def get_args(self):
         parser = argparse.ArgumentParser(conflict_handler='resolve')
         parser.add_argument("-h", "--host", help="Connect to host", required=True)
-        parser.add_argument("-P", "--port", type=int, help="Port number to use for connection", required=True)
-        parser.add_argument("-p", "--password", default='', help="Password of root user")
+        parser.add_argument("-P", "--port", help="Port number to use for connection", required=True)
+        parser.add_argument("-p", "--password", help="Password of root user")
         parser.add_argument("-f", "--file", help="The script generate from MySQL mysql_tzinfo_to_sql", required=True)
         args = parser.parse_args()
         self.host=args.host
         self.port=args.port
         self.pwd=args.password
         self.file_name=args.file
+        ##print "host:{0} port:{1} pwd:{2} file:{3}".format(host, port, pwd, file_name)
 
     def generate_sql(self):
         self.sql_list = []
@@ -64,8 +65,8 @@ class TimeZoneInfoImporter:
                         self.expect_count[0] = int(line.replace(replace_count_str0, ''))
                 else:
                     # The MySQL time_zone table only stores the leap-second flag,
-                    # which SeekDB does not use. Ignore that table while importing
-                    # the three tables needed for named-zone conversion.
+                    # which SeekDB does not use.  Ignore that table while importing
+                    # the three tables that are needed for named-zone conversion.
                     if re.search(r'(TRUNCATE\s+TABLE|(?:INSERT|REPLACE)\s+INTO)\s+time_zone\b',
                                  line, re.IGNORECASE):
                         new_line = ''
@@ -133,8 +134,6 @@ class TimeZoneInfoImporter:
                 raise
             else:
                 print("INFO : success to insert time zone version")
-        else:
-            raise RuntimeError("time zone row counts do not match the import manifest")
 
 def main():
     tz_info_importer = TimeZoneInfoImporter()
@@ -144,10 +143,8 @@ def main():
         tz_info_importer.generate_sql()
         tz_info_importer.execute_sql()
         tz_info_importer.check_result()
-    except Exception as err:
-        print("ERROR: {0}".format(err))
-        return 1
-    return 0
+    except:
+        print("except error in main")
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

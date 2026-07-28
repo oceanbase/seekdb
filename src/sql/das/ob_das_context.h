@@ -17,7 +17,7 @@
 #ifndef DEV_SRC_SQL_DAS_OB_DAS_CONTEXT_H_
 #define DEV_SRC_SQL_DAS_OB_DAS_CONTEXT_H_
 #include "sql/das/ob_das_define.h"
-#include "sql/das/ob_das_tablet_mapper.h"
+#include "sql/das/ob_das_location_router.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "sql/das/ob_das_factory.h"
 #include "storage/tx/ob_trans_define.h"
@@ -27,7 +27,6 @@ namespace oceanbase
 namespace sql
 {
 class ObDASTabletMapper;
-class ObQueryRetryInfo;
 
 struct DmlRowkeyDistCtx
 {
@@ -67,9 +66,7 @@ public:
   ObDASCtx(common::ObIAllocator &allocator)
     : table_locs_(allocator),
       sql_ctx_(nullptr),
-      last_location_errno_(OB_SUCCESS),
-      history_retry_cnt_(0),
-      cur_retry_cnt_(0),
+      location_router_(allocator),
       das_factory_(allocator),
       related_tablet_map_(allocator),
       allocator_(allocator),
@@ -135,26 +132,7 @@ public:
   void set_savepoint(const transaction::ObTxSEQ savepoint) { savepoint_ = savepoint; }
   void set_write_branch_id(const int16_t branch_id) { write_branch_id_ = branch_id; }
   int16_t get_write_branch_id() const { return write_branch_id_; }
-  int build_local_tablet_loc(uint64_t ref_table_id,
-                             const common::ObTabletID &tablet_id,
-                             ObDASTabletLoc &tablet_loc);
-  void refresh_location_cache_by_errno(bool is_nonblock, int err_no);
-  void force_refresh_location_cache(bool is_nonblock, int err_no);
-  bool is_refresh_location_error(int err_no) const;
-  void set_last_errno(int err_no) { last_location_errno_ = err_no; }
-  int get_last_errno() const { return last_location_errno_; }
-  void set_history_retry_cnt(int64_t history_retry_cnt) { history_retry_cnt_ = history_retry_cnt; }
-  void accumulate_retry_count()
-  {
-    history_retry_cnt_ += cur_retry_cnt_;
-    cur_retry_cnt_ = 0;
-  }
-  int64_t get_total_retry_cnt() const { return history_retry_cnt_ + cur_retry_cnt_; }
-  int64_t get_cur_retry_cnt() const { return cur_retry_cnt_; }
-  void reset_cur_retry_cnt() { cur_retry_cnt_ = 0; }
-  void inc_cur_retry_cnt() { ++cur_retry_cnt_; }
-  void set_retry_info(const ObQueryRetryInfo *retry_info);
-  void save_cur_exec_status(int err_no);
+  ObDASLocationRouter &get_location_router() { return location_router_; }
   int build_related_tablet_loc(ObDASTabletLoc &tablet_loc);
   int build_related_table_loc(ObDASTableLoc &table_loc);
   int rebuild_tablet_loc_reference();
@@ -170,6 +148,7 @@ public:
   void set_sql_ctx(ObSqlCtx *sql_ctx) { sql_ctx_ = sql_ctx; }
   DASRelatedTabletMap &get_related_tablet_map() { return related_tablet_map_; }
   int build_related_tablet_map(const ObDASTableLocMeta &loc_meta);
+  const common::ObAddr &same_tablet_addr() const { return GCTX.self_addr(); }
 
   int find_group_param_by_param_idx(int64_t param_idx,
                                     bool &exist, uint64_t &array_idx);
@@ -179,9 +158,6 @@ public:
   bool get_use_snapshot_opt() { return use_snapshot_opt_; }
 
   TO_STRING_KV(K_(table_locs),
-               K_(last_location_errno),
-               K_(history_retry_cnt),
-               K_(cur_retry_cnt),
                K_(is_fk_cascading),
                K_(snapshot),
                K_(savepoint),
@@ -190,9 +166,7 @@ public:
 private:
   DASTableLocList table_locs_;
   ObSqlCtx *sql_ctx_;
-  int last_location_errno_;
-  int64_t history_retry_cnt_; // Total retries before the current retry round.
-  int64_t cur_retry_cnt_; // Continuous retries in the current round.
+  ObDASLocationRouter location_router_;
   ObDASTaskFactory das_factory_;
   DASRelatedTabletMap related_tablet_map_;
   common::ObIAllocator &allocator_;

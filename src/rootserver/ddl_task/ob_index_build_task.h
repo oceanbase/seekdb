@@ -48,6 +48,9 @@ public:
   }
 
   int send_local_build_sql() const;
+  int set_nls_format(const ObString &nls_date_format,
+                     const ObString &nls_timestamp_format,
+                     const ObString &nls_timestamp_tz_format);
   int set_addition_info(const ObIArray<ObTabletID> &index_partition_ids);
   ObDDLTaskID get_ddl_task_id() { return ObDDLTaskID(task_id_); }
   virtual int process() override;
@@ -56,7 +59,7 @@ public:
   void add_event_info(const int ret, const ObString &ddl_event_stmt);
   TO_STRING_KV(K_(data_table_id), K_(dest_table_id), K_(schema_version), K_(snapshot_version),
                K_(execution_id), K_(trace_id), K_(parallelism), K_(is_partitioned_local_index_task),
-               K_(addition_info), K_(is_retryable_ddl));
+               K_(addition_info), K_(nls_date_format), K_(nls_timestamp_format), K_(nls_timestamp_tz_format), K_(is_retryable_ddl));
 private:
   inline bool is_partitioned_local_index_task() const { return is_partitioned_local_index_task_ == true; }
 private:
@@ -70,6 +73,9 @@ private:
   int64_t parallelism_;
   bool is_partitioned_local_index_task_;
   common::ObArenaAllocator allocator_;
+  ObString nls_date_format_;
+  ObString nls_timestamp_format_;
+  ObString nls_timestamp_tz_format_;
   ObDDLTaskInfo addition_info_;
   bool is_retryable_ddl_;
 
@@ -102,6 +108,7 @@ public:
       const int ret_code);
   int update_complete_sstable_job_status(
       const common::ObTabletID &tablet_id,
+      const ObAddr &addr,
       const int64_t snapshot_version,
       const int64_t execution_id,
       const int ret_code,

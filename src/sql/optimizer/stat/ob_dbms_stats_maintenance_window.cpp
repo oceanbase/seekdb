@@ -431,6 +431,72 @@ int ObDbmsStatsMaintenanceWindow::check_date_validate(const ObString &job_name,
   return ret;
 }
 
+int ObDbmsStatsMaintenanceWindow::get_next_job_id_and_exec_env(common::ObMySQLProxy *sql_proxy,
+                                                               ObIAllocator &allocator,
+                                                               int64_t &job_id,
+                                                               ObString &exec_env)
+{
+  int ret = OB_SUCCESS;
+  ObSqlString select_sql;
+  if (OB_FAIL(select_sql.append_fmt("SELECT tt.job, t.exec_env FROM"\
+                                    " %s t, (SELECT max(job) + 1 AS job FROM %s"\
+                                             " WHERE job <= %ld AND job > 0) tt"\
+                                    " WHERE t.job_name = '%s' AND t.job = %ld;",
+                                    share::OB_ALL_SCHEDULER_JOB_TNAME,
+                                    share::OB_ALL_SCHEDULER_JOB_TNAME,
+                                    dbms_scheduler::ObDBMSSchedTableOperator::JOB_ID_OFFSET,
+                                    opt_stats_history_manager,
+                                    OPT_STATS_HISTORY_MANAGER_JOB_ID))) {
+    LOG_WARN("failed to append fmt", K(ret));
+  } else {
+    SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
+      sqlclient::ObMySQLResult *client_result = NULL;
+      auto &sql_client_retry_weak = *sql_proxy;
+      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
+        LOG_WARN("failed to execute sql", K(ret), K(select_sql));
+      } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to execute sql", K(ret));
+      } else {
+        int64_t get_rows = 0;
+        //expected only get one row.
+        while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
+          int64_t fisrt_col = 0;
+          int64_t second_col = 1;
+          ObObj obj;
+          ObString tmp_exec_env;
+          if (get_rows > 0) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("get unexpected error, expected only one row", K(ret));
+          } else if (OB_FAIL(client_result->get_obj(fisrt_col, obj))) {
+            LOG_WARN("failed to get object", K(ret));
+          } else if (OB_FAIL(obj.get_int(job_id))) {
+            LOG_WARN("failed to get int", K(ret), K(obj));
+          } else if (OB_FAIL(client_result->get_obj(second_col, obj))) {
+            LOG_WARN("failed to get object", K(ret));
+          } else if (OB_FAIL(obj.get_varchar(tmp_exec_env))) {
+            LOG_WARN("failed to get int", K(ret), K(obj));
+          } else if (OB_FAIL(ob_write_string(allocator, tmp_exec_env, exec_env))) {
+            LOG_WARN("failed to ob write string", K(ret));
+          } else {
+            ++ get_rows;
+          }
+        }
+        ret = OB_ITER_END == ret ? OB_SUCCESS : ret;
+      }
+      int tmp_ret = OB_SUCCESS;
+      if (NULL != client_result) {
+        if (OB_SUCCESS != (tmp_ret = client_result->close())) {
+          LOG_WARN("close result set failed", K(ret), K(tmp_ret));
+          ret = COVER_SUCC(tmp_ret);
+        }
+      }
+    }
+    LOG_INFO("succeed to get next job id and exec env", K(ret), K(select_sql), K(job_id), K(exec_env));
+  }
+  return ret;
+}
+
 int ObDbmsStatsMaintenanceWindow::check_job_exists(common::ObMySQLProxy *sql_proxy,
                                                    const char* job_name,
                                                    bool &is_join_exists)

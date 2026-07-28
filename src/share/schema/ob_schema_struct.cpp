@@ -449,10 +449,13 @@ int ObSysTableChecker::check_inner_table_exist(
     // System-only inner tables always exist in a system database.
     exist = true;
   } else {
+    // Runtime-space inner tables are exposed through the runtime's system databases.
     if (is_oceanbase_sys_database_id(database_id)) {
+      // The oceanbase system database contains every runtime inner table.
       exist = true;
     } else {
       // information_schema, mysql, sys
+      // Compatibility databases use the MySQL system database list.
       exist = is_mysql_sys_database_id(database_id);
     }
   }
@@ -595,6 +598,26 @@ int ObSysTableChecker::add_sys_table_index_ids(
 
 /* ------------------------------------------ */
 
+bool ObSysTableChecker::is_cluster_private_runtime_table(const uint64_t table_id)
+{
+  bool bret = false;
+  uint64_t pure_id = table_id;
+  switch (pure_id) {
+#define CLUSTER_PRIVATE_TABLE_SWITCH
+#include "share/inner_table/ob_inner_table_schema_misc.ipp"
+#undef CLUSTER_PRIVATE_TABLE_SWITCH
+    {
+      bret = true;
+      break;
+    }
+    default : {
+      bret = false;
+      break;
+    }
+  }
+  return bret;
+}
+
 int ObSysTableChecker::ob_write_string(const ObString &src, ObString &dst)
 {
   int ret = OB_SUCCESS;
@@ -616,12 +639,14 @@ int ObDDLSequenceID::assign(const ObDDLSequenceID &other)
 {
   int ret = OB_SUCCESS;
   seq_id_ = other.seq_id_;
+  sys_leader_epoch_ = other.sys_leader_epoch_;
   return ret;
 }
 
 void ObDDLSequenceID::reset()
 {
   seq_id_ = common::OB_INVALID_ID;
+  sys_leader_epoch_ = common::OB_INVALID_ID;
 }
 
 bool ObDDLSequenceID::is_valid() const
@@ -668,6 +693,10 @@ ObDDLSequenceID::CompareResult ObDDLSequenceID::compare_to_other_id(const ObDDLS
   if (OB_UNLIKELY(!is_valid())
       || OB_UNLIKELY(!other.is_valid())) {
     result = CompareResult::NOT_COMPARABLE;
+  } else if (sys_leader_epoch_ < other.sys_leader_epoch_) {
+    result = CompareResult::LESS_THAN;
+  } else if (sys_leader_epoch_ > other.sys_leader_epoch_) {
+    result = CompareResult::MORE_OVER;
   } else if (seq_id_ < other.seq_id_) {
     result = CompareResult::LESS_THAN;
   } else if (seq_id_ == other.seq_id_) {
@@ -1071,6 +1100,9 @@ const ObSysVarSchema *ObSysVariableSchema::get_sysvar_schema(int64_t idx) const
   return ret;
 }
 
+/*-------------------------------------------------------------------------------------------------
+ * ------------------------------ObServerRuntimeSchema-------------------------------------------
+ ----------------------------------------------------------------------------------------------------*/
 ObSchema::ObSchema()
     : buffer_(this), error_ret_(OB_SUCCESS), is_inner_allocator_(false), allocator_(NULL)
 {
@@ -1632,7 +1664,7 @@ int ObServerRuntimeSchema::assign(const ObServerRuntimeSchema &src_schema)
 {
   int ret = OB_SUCCESS;
   *this = src_schema;
-  ret = get_err_ret();
+   ret = get_err_ret();
   return ret;
 }
 
@@ -1643,6 +1675,7 @@ bool ObServerRuntimeSchema::is_valid() const
 
 void ObServerRuntimeSchema::reset()
 {
+  
   schema_version_ = OB_INVALID_VERSION;
   reset_string(runtime_name_);
   locked_ = false;
@@ -2037,6 +2070,8 @@ void ObPartitionSchema::reuse_partition_schema()
   hidden_partition_array_ = NULL;
   hidden_partition_array_capacity_ = 0;
   hidden_partition_num_ = 0;
+  transition_point_.reset();
+  interval_range_.reset();
 }
 
 int ObPartitionSchema::assign_partition_schema(const ObPartitionSchema &src_schema)
@@ -2113,6 +2148,11 @@ int ObPartitionSchema::assign_partition_schema(const ObPartitionSchema &src_sche
       }
     }
 
+    if (FAILEDx(set_transition_point(src_schema.get_transition_point()))) {
+      LOG_WARN("fail to set transition point", K(ret));
+    } else if (OB_FAIL(set_interval_range(src_schema.get_interval_range()))) {
+      LOG_WARN("fail to set interval range", K(ret));
+    }
   }
 
   return ret;
@@ -2748,6 +2788,125 @@ int ObPartitionSchema::deserialize_def_subpartitions(const char *buf,
   return ret;
 }
 
+int ObPartitionSchema::set_transition_point(const ObRowkey &transition_point)
+{
+  int ret = OB_SUCCESS;
+  ObIAllocator *allocator = get_allocator();
+  if (OB_ISNULL(allocator)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Allocator is NULL", K(ret));
+  } else if (transition_point.get_obj_cnt() > 1) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("transition_point cannot have more than one obj", KR(ret), K(transition_point));
+  } else if (OB_FAIL(transition_point.deep_copy(transition_point_, *allocator))) {
+    LOG_WARN("Fail to deep copy transition_point_", K(ret));
+  } else { }
+  return ret;
+}
+
+
+int ObPartitionSchema::set_transition_point_with_hex_str(
+    const common::ObString &transition_point_hex)
+{
+  int ret = OB_SUCCESS;
+  ObIAllocator *allocator = get_allocator();
+  char *serialize_buf = NULL;
+  int64_t pos = 0;
+  const int64_t hex_length = transition_point_hex.length();
+  int64_t serialize_len = hex_length / 2;
+  if (OB_ISNULL(allocator)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Allocator is NULL", K(ret));
+  } else if ((hex_length % 2) != 0) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Hex str length should be even", K(ret));
+  } else if (OB_UNLIKELY(NULL == (serialize_buf = static_cast<char *>(allocator->alloc(
+                         serialize_len))))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate memory for default value buffer failed", K(ret), K(serialize_len));
+  } else if (OB_UNLIKELY(hex_length != str_to_hex(
+       transition_point_hex.ptr(), static_cast<int32_t>(hex_length),
+       serialize_buf, static_cast<int32_t>(serialize_len)))) {
+    ret = OB_BUF_NOT_ENOUGH;
+    LOG_WARN("Failed to get hex_str buf", K(ret));
+  } else if (OB_FAIL(transition_point_.deserialize(*allocator, serialize_buf, serialize_len, pos))) {
+    LOG_WARN("Failed to deserialize transition point", K(ret));
+  } else { }//do nothing
+  return ret;
+}
+
+int ObPartitionSchema::set_interval_range(const ObRowkey &interval_range)
+{
+  int ret = OB_SUCCESS;
+  ObIAllocator *allocator = get_allocator();
+  if (OB_ISNULL(allocator)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Allocator is NULL", K(ret));
+  } else if (interval_range.get_obj_cnt() > 1) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("interval_range cannot have more than one obj", KR(ret), K(interval_range));
+  } else if (OB_FAIL(interval_range.deep_copy(interval_range_, *allocator))) {
+    LOG_WARN("Fail to deep copy interval_range_", K(ret));
+  } else { }
+  return ret;
+}
+
+
+int ObPartitionSchema::set_interval_range_with_hex_str(
+    const common::ObString &interval_range_hex)
+{
+  int ret = OB_SUCCESS;
+  char *serialize_buf = NULL;
+  ObIAllocator *allocator = get_allocator();
+  int64_t pos = 0;
+  const int64_t hex_length = interval_range_hex.length();
+  int64_t serialize_len = hex_length / 2;
+  if (OB_ISNULL(allocator)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Allocator is NULL", K(ret));
+  } else if ((hex_length % 2) != 0) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Hex str length should be even", K(ret));
+  } else if (OB_UNLIKELY(NULL == (serialize_buf = static_cast<char *>(allocator->alloc(
+                         serialize_len))))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate memory for default value buffer failed", K(ret), K(serialize_len));
+  } else if (OB_UNLIKELY(hex_length != str_to_hex(
+       interval_range_hex.ptr(), static_cast<int32_t>(hex_length),
+       serialize_buf, static_cast<int32_t>(serialize_len)))) {
+    ret = OB_BUF_NOT_ENOUGH;
+    LOG_WARN("Failed to get hex_str buf", K(ret));
+  } else if (OB_FAIL(interval_range_.deserialize(*allocator, serialize_buf, serialize_len, pos))) {
+    LOG_WARN("Failed to deserialize interval range", K(ret));
+  } else { }//do nothing
+  return ret;
+}
+
+int ObPartitionSchema::get_interval_parted_range_part_num(uint64_t &part_num) const
+{
+  int ret = OB_SUCCESS;
+  const ObPartition *p = NULL;
+  part_num = 0;
+  if (is_interval_part()) {
+    for (int64_t i = 0; i < partition_num_ && OB_SUCC(ret); ++i) {
+      if (OB_ISNULL(p = partition_array_[i])) {
+        ret = common::OB_ERR_UNEXPECTED;
+        LOG_WARN("Do not access the null partition object", K(ret), K(i), K(partition_num_));
+      } else {
+        const ObRowkey &transition_point = get_transition_point();
+        const ObRowkey &high_bound_val = p->get_high_bound_val();
+        if (high_bound_val <= transition_point) {
+          part_num++;
+        }
+      }
+    }
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("expect interval partition table", K(ret));
+  }
+  return ret;
+}
+
 int64_t ObPartitionSchema::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
@@ -2763,7 +2922,9 @@ int64_t ObPartitionSchema::to_string(char *buf, const int64_t buf_len) const
        "def_subpartition_array", ObArrayWrap<ObSubPartition *>(def_subpartition_array_, def_subpartition_num_),
        "hidden_partition_array",
        ObArrayWrap<ObPartition *>(hidden_partition_array_, hidden_partition_num_),
-       K_(sub_part_template_flags));
+       K_(sub_part_template_flags),
+       K_(transition_point),
+       K_(interval_range));
   J_OBJ_END();
   return pos;
 }
@@ -3471,6 +3632,8 @@ void ObPartitionOption::reset()
   part_func_type_ = PARTITION_FUNC_TYPE_HASH;
   part_num_ = 1;
   reset_string(part_func_expr_);
+  reset_string(interval_start_);
+  reset_string(part_interval_);
   ObSchema::reset();
 }
 
@@ -3479,6 +3642,8 @@ void ObPartitionOption::reuse()
   part_func_type_ = PARTITION_FUNC_TYPE_HASH;
   part_num_ = 1;
   reset_string(part_func_expr_);
+  reset_string(interval_start_);
+  reset_string(part_interval_);
   ObSchema::reset();
 }
 
@@ -5975,6 +6140,93 @@ int ObPartitionUtils::convert_rowkey_to_hex(
   return ret;
 }
 
+int ObPartitionUtils::set_low_bound_val_by_interval_range_by_innersql(
+    ObPartition &p,
+    const ObRowkey &interval_range_val)
+{
+  int ret = OB_SUCCESS;
+  ObArenaAllocator allocator("SetLowBV");
+  char *high_bound_val_str = static_cast<char *>(allocator.alloc(OB_MAX_B_HIGH_BOUND_VAL_LENGTH));
+  char *interval_range_str = static_cast<char *>(allocator.alloc(OB_MAX_B_HIGH_BOUND_VAL_LENGTH));
+  int64_t high_bound_val_len = 0;
+  int64_t interval_range_len = 0;
+  ObMySQLProxy *sql_proxy = GCTX.ddl_sql_proxy_;
+  ObSqlString sql_string;
+  if (OB_ISNULL(high_bound_val_str) || OB_ISNULL(interval_range_str)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("high_bound_val_str is null", KR(ret), K(high_bound_val_str), K(interval_range_str));
+  } else {
+    MEMSET(high_bound_val_str, 0, OB_MAX_B_HIGH_BOUND_VAL_LENGTH);
+    MEMSET(interval_range_str, 0, OB_MAX_B_HIGH_BOUND_VAL_LENGTH);
+    ObTimeZoneInfo tz_info;
+    tz_info.set_offset(0);
+    const ObObj *high_bound_objs = p.get_high_bound_val().get_obj_ptr();
+    if (p.get_high_bound_val().get_obj_cnt() < 1) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("rowkey is invalid", KR(ret), K(p), K(interval_range_val));
+    } else if (OB_ISNULL(high_bound_objs)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ptr NULL", KR(ret), K(p), K(interval_range_val));
+    } else if (OB_FAIL(OTTZ_MGR.get_timezone_map(tz_info.get_tz_map_wrap()))) {
+      LOG_WARN("get time zone map failed", KR(ret));
+    } else if (OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(
+               p.get_high_bound_val(), high_bound_val_str,
+               OB_MAX_B_HIGH_BOUND_VAL_LENGTH,
+               high_bound_val_len, false, &tz_info))) {
+      LOG_WARN("Failed to convert rowkey to sql text", K(tz_info), KR(ret));
+    } else if (OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(
+               interval_range_val, interval_range_str,
+               OB_MAX_B_HIGH_BOUND_VAL_LENGTH,
+               interval_range_len, false, &tz_info))) {
+      LOG_WARN("Failed to convert rowkey to sql text", K(tz_info), KR(ret));
+    } else if (ObDateTimeType == high_bound_objs[0].get_type()) {
+      if (OB_FAIL(sql_string.append_fmt("SELECT TO_DATE(%.*s) - %.*s FROM DUAL",
+                                                static_cast<int>(high_bound_val_len),
+                                                high_bound_val_str,
+                                                static_cast<int>(interval_range_len),
+                                                interval_range_str))) {
+        LOG_WARN("fail to append format", KR(ret));
+      }
+    } else if (OB_FAIL(sql_string.append_fmt("SELECT %.*s - %.*s FROM DUAL",
+                                             static_cast<int>(high_bound_val_len),
+                                             high_bound_val_str,
+                                             static_cast<int>(interval_range_len),
+                                             interval_range_str))) {
+      LOG_WARN("fail to append format", KR(ret));
+    }
+    if (OB_SUCC(ret)) {
+      SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+        static int64_t ROW_KEY_CNT = 1;
+        ObObj obj_array[ROW_KEY_CNT];
+        obj_array[0].reset();
+        ObObj &low_bound = obj_array[0];
+        common::sqlclient::ObMySQLResult *result = NULL;
+        if (OB_FAIL(sql_proxy->read(res, sql_string.ptr()))) {
+          LOG_WARN("execute sql failed", KR(ret), K(sql_string.ptr()), K(p), K(interval_range_val),
+                   K(high_bound_objs[0].get_type()));
+        } else if (OB_ISNULL(result = res.get_result())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("execute sql failed", KR(ret), K(sql_string));
+        } else if (OB_FAIL(result->next())) {
+          LOG_WARN("iterate next result fail", KR(ret), K(sql_string));
+        } else if (OB_FAIL(result->get_obj((int64_t)0, low_bound))) {
+          LOG_WARN("failed to get obj", KR(ret));
+        } else {
+          ObRowkey low_bound_val;
+          low_bound_val.reset();
+          low_bound_val.assign(obj_array, ROW_KEY_CNT);
+          if (OB_FAIL(p.set_low_bound_val(low_bound_val))) {
+            LOG_WARN("fail to set low bound val", K(p), KR(ret));
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+// ObPartitionUtils::check_interval_partition_table moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in this class header, transitional state)
+
 OB_SERIALIZE_MEMBER(ObVectorIndexRefreshInfo,
                     exec_env_,
                     index_params_);
@@ -6223,6 +6475,9 @@ DEF_TO_STRING(ObPrintPrivSet)
   if ((priv_set_ & OB_PRIV_BOOTSTRAP) && OB_SUCCESS == ret) {
     ret = BUF_PRINTF("PRIV_BOOTSTRAP,");
   }
+  if ((priv_set_ & OB_PRIV_CREATE_SYNONYM) && OB_SUCCESS == ret) {
+    ret = BUF_PRINTF("CREATE_SYNONYM,");
+  }
   if ((priv_set_ & OB_PRIV_AUDIT) && OB_SUCCESS == ret) {
     ret = BUF_PRINTF("PRIV_AUDIT,");
   }
@@ -6251,7 +6506,7 @@ DEF_TO_STRING(ObPrintPrivSet)
     ret = BUF_PRINTF("PRIV_ALTER_SYSTEM,");
   }
   if ((priv_set_ & OB_PRIV_REPL_SLAVE) && OB_SUCCESS == ret) {
-    ret = BUF_PRINTF("PRIV_REPL_SLAVE,");
+    ret = BUF_PRINTF(" REPLICATION SLAVE,");
   }
   if ((priv_set_ & OB_PRIV_REPL_CLIENT) && OB_SUCCESS == ret) {
     ret = BUF_PRINTF(" REPLICATION CLIENT,");
@@ -7174,7 +7429,7 @@ const char *PART_TYPE_STR[PARTITION_FUNC_TYPE_MAX + 1] =
   "range columns",
   "list",
   "list columns",
-  "reserved",
+  "range",
   "unknown"
 };
 
@@ -7182,7 +7437,7 @@ int get_part_type_str(ObPartitionFuncType type,
                       common::ObString &str)
 {
   int ret = common::OB_SUCCESS;
-  if (type >= PARTITION_FUNC_TYPE_MAX || RESERVED_PARTITION_FUNC_TYPE_7 == type) {
+  if (type >= PARTITION_FUNC_TYPE_MAX) {
     ret = common::OB_INVALID_ARGUMENT;
     SHARE_SCHEMA_LOG(WARN, "invalid partition function type", K(type));
   } else {
@@ -7197,8 +7452,7 @@ const char *OB_PRIV_LEVEL_STR[OB_PRIV_MAX_LEVEL] =
   "USER_LEVEL",
   "DB_LEVEL",
   "TABLE_LEVEL",
-  "DB_ACCESS_LEVEL",
-  "ROUTINE_LEVEL"
+  "DB_ACCESS_LEVEL"
 };
 
 const char *ob_priv_level_str(const ObPrivLevel grant_level)
@@ -7247,8 +7501,8 @@ const char *ob_table_type_str(ObTableType type)
       type_ptr = "TMP TABLE ALL";
       break;
     }
-  case RESERVED_TABLE_TYPE_11: {
-      type_ptr = "RESERVED";
+  case AUX_VERTIAL_PARTITION_TABLE: {
+      type_ptr = "AUX VERTIAL PARTITION TABLE";
       break;
     }
   case AUX_LOB_PIECE: {
@@ -7365,6 +7619,8 @@ const char *schema_type_str(const ObSchemaType schema_type)
     str = "routine_priv";
   } else if (OUTLINE_SCHEMA == schema_type) {
     str = "outline_schema";
+  } else if (UDT_SCHEMA == schema_type) {
+    str = "udt_schema";
   } else if (FK_SCHEMA == schema_type) {
     str = "fk_schema";
   }
@@ -7381,6 +7637,7 @@ bool is_normal_schema(const ObSchemaType schema_type)
       schema_type == ROUTINE_SCHEMA ||
       schema_type == PACKAGE_SCHEMA ||
       schema_type == TRIGGER_SCHEMA ||
+      schema_type == UDT_SCHEMA ||
       schema_type == SYS_VARIABLE_SCHEMA ||
       schema_type == TABLE_SIMPLE_SCHEMA ||
       schema_type == MOCK_FK_PARENT_TABLE_SCHEMA ||
@@ -7742,6 +7999,8 @@ ObRecycleObject::RecycleObjType ObRecycleObject::get_type_by_table_schema(
     type = VIEW;
   } else if (table_schema.is_table() || table_schema.is_tmp_table()) {
     type = TABLE;
+  } else if (table_schema.is_aux_vp_table()) {
+    type = AUX_VP;
   } else if (table_schema.is_aux_lob_meta_table()) {
     type = AUX_LOB_META;
   } else if (table_schema.is_aux_lob_piece_table()) {
@@ -7968,16 +8227,16 @@ const char *OB_OBJECT_TYPE_STR[] =
   "TABLE",
   "UNSUPPORTED",
   "PACKAGE",
-  "RESERVED",
+  "TYPE",
   "PACKAGE_BODY",
-  "RESERVED",
+  "TYPE_BODY",
   "TRIGGER",
   "VIEW",
   "FUNCTION",
-  "RESERVED",
+  "UNSUPPORTED",
   "INDEX",
   "PROCEDURE",
-  "RESERVED",
+  "SYNONYM",
   "SYS_PACKAGE",
   "SYS_PACKAGE_ONLY_OBJ_PRIV",
   "UNSUPPORTED",

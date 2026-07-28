@@ -15,7 +15,6 @@
  */
 
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
-#include "storage/tx/ob_ts_mgr.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx/ob_ts_mgr.h"

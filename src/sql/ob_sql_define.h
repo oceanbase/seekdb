@@ -173,7 +173,8 @@ enum ObMatchFiledsType {
 #define IS_JOIN(type) \
 (((type) == PHY_MERGE_JOIN) || \
  ((type) == PHY_NESTED_LOOP_JOIN) || \
- ((type) == PHY_HASH_JOIN))
+ ((type) == PHY_HASH_JOIN) || \
+ ((type) == PHY_BLOCK_BASED_NESTED_LOOP_JOIN))
 
 #define IS_OUTER_JOIN(join_type) \
   ((join_type) == LEFT_OUTER_JOIN || \
@@ -551,6 +552,12 @@ enum OpParallelRule
 };
 
 typedef common::ObDmlEventType ObDmlEventType;
+
+enum MayAddIntervalPart {
+  NO, // do nothing, just set part id to 0
+  YES, // add an interval partition, and set err code to force retry
+  PART_CHANGE_ERR, // set err code, make query stop and report and error msg to client
+};
 
 enum ObIDPAbortType
 {
