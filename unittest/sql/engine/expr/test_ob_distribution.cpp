@@ -45,7 +45,7 @@ uint64_t int_bits(int64_t value)
 
 } // namespace
 
-TEST(ObDeterministicDistribution, uniform_int_matches_gcc12)
+TEST(ObDistribution, uniform_int_matches_gcc12)
 {
   std::mt19937_64 gen(3);
   EXPECT_EQ(-3, ObDistribution::uniform_int(gen, -10, 2));
@@ -60,7 +60,7 @@ TEST(ObDeterministicDistribution, uniform_int_matches_gcc12)
   EXPECT_EQ(10, ObDistribution::uniform_int(gen, 10, 10));
 }
 
-TEST(ObDeterministicDistribution, uniform_int_handles_full_int64_range)
+TEST(ObDistribution, uniform_int_handles_full_int64_range)
 {
   std::mt19937_64 actual_gen(42);
   std::mt19937_64 expected_gen(42);
@@ -71,14 +71,14 @@ TEST(ObDeterministicDistribution, uniform_int_handles_full_int64_range)
   EXPECT_EQ(expected_bits, int_bits(value));
 }
 
-TEST(ObDeterministicDistribution, uniform_real_matches_gcc12)
+TEST(ObDistribution, uniform_real_matches_gcc12)
 {
   std::mt19937_64 gen(3);
   const double value = ObDistribution::uniform_real(gen, 3.1415, 20.0);
   EXPECT_EQ(UINT64_C(0x40291f7737ce087c), double_bits(value));
 }
 
-TEST(ObDeterministicDistribution, normal_matches_gcc12)
+TEST(ObDistribution, normal_matches_gcc12)
 {
   std::mt19937_64 gen(3);
   const double value = ObDistribution::normal(gen, 3.1415, 2.0);
