@@ -17,22 +17,17 @@
 #ifndef SRC_SHARE_SCHEDULER_STAT_OB_SYS_TASK_STATUS_H_
 #define SRC_SHARE_SCHEDULER_STAT_OB_SYS_TASK_STATUS_H_
 
-#include "common/ob_simple_iterator.h"
+#include "lib/allocator/page_arena.h"
+#include "lib/container/ob_se_array.h"
+#include "lib/list/ob_dlist.h"
 #include "lib/profile/ob_trace_id.h"
+#include "lib/string/ob_string.h"
 #include "share/ob_define.h"
 
 namespace oceanbase
 {
 namespace share
 {
-static const int64_t DEFAULT_SYS_TASK_STATUS_COUNT = 1024;
-
-struct ObSysTaskStat;
-
-typedef common::ObSimpleIterator<ObSysTaskStat,
-    common::ObModIds::OB_SYS_TASK_STATUS,
-    DEFAULT_SYS_TASK_STATUS_COUNT> ObSysStatMgrIter;
-
 enum ObSysTaskType
 {
   DDL_TASK = 0,
@@ -61,11 +56,30 @@ struct ObSysTaskStat
   ObTaskId task_id_;
   ObSysTaskType task_type_;
   common::ObAddr svr_ip_;
-  
-  char comment_[common::OB_MAX_TASK_COMMENT_LENGTH];
+  common::ObString comment_;
   bool is_cancel_;
 
   TO_STRING_KV(K_(start_time), K_(task_id), K_(task_type), K_(svr_ip), K_(is_cancel), K_(comment));
+};
+
+class ObSysStatMgrIter
+{
+public:
+  ObSysStatMgrIter();
+  ~ObSysStatMgrIter();
+
+  void reset();
+  int push(const ObSysTaskStat &item);
+  int set_ready();
+  bool is_ready() const { return is_ready_; }
+  int get_next(ObSysTaskStat &item);
+
+private:
+  bool is_ready_;
+  common::ObArenaAllocator allocator_;
+  common::ObSEArray<ObSysTaskStat, 0> item_arr_;
+  common::ObSEArray<ObSysTaskStat, 0>::iterator it_;
+  DISALLOW_COPY_AND_ASSIGN(ObSysStatMgrIter);
 };
 
 class ObSysTaskStatMgr
@@ -85,8 +99,23 @@ public:
   int is_task_cancel(const ObTaskId &task_id, bool &is_cancel);
   int generate_task_id(ObTaskId &task_id);
 private:
+  struct ObSysTaskStatNode : public common::ObDLinkBase<ObSysTaskStatNode>
+  {
+    explicit ObSysTaskStatNode(const ObSysTaskStat &task)
+      : common::ObDLinkBase<ObSysTaskStatNode>(), task_(task)
+    {
+    }
+
+    ObSysTaskStat task_;
+  };
+
+  int alloc_task_node_(const ObSysTaskStat &task, ObSysTaskStatNode *&node);
+  void free_task_node_(ObSysTaskStatNode *node);
+  void clear_task_list_();
+
+private:
   common::SpinRWLock lock_;
-  common::ObArray<ObSysTaskStat> task_array_;
+  common::ObDList<ObSysTaskStatNode> task_list_;
   common::ObAddr self_addr_;
   DISALLOW_COPY_AND_ASSIGN(ObSysTaskStatMgr);
 };

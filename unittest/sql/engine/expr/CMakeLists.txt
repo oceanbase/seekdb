@@ -9,6 +9,7 @@ sql_unittest(test_gis_dispatcher test_gis_dispatcher.cpp ob_geo_func_testx.cpp o
 sql_unittest(test_expr_relation_map)
 sql_unittest(test_ob_batch_eval_util)
 sql_unittest(test_ob_expr_datum_descriptor)
+sql_unittest(test_ob_distribution)
 ob_unittest(test_ob_openai_utils)
 ob_unittest(test_ob_dashscope_utils)
 ob_unittest(test_ob_siliconflow_utils)
