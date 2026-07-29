@@ -3771,7 +3771,6 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
   sql_scope_flags_.set_flags(sql_scope_flags);
   is_deserialized_ = true;
   tz_info_wrap_.set_tz_info_map(tz_info_map);
-  force_rich_vector_format_ = ForceRichFormatStatus::Disable;
   }();
   uint32_t unused_uint32_field = INVALID_SESSID;
   ObString sql_id;
