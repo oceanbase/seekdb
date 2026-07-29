@@ -336,6 +336,36 @@ TEST(ObDatumHash, batch_shapes_match_scalar_hash)
   verify_batch_hash_shapes(*utf8_bin_funcs, string_datums, BATCH_SIZE);
 }
 
+TEST(ObDatumHash, fixed_double_batch_scales_match_scalar_hash)
+{
+  static constexpr int64_t BATCH_SIZE = 129;
+  const double sample_values[] = {
+      0.0,
+      -0.0,
+      1.234567890123456,
+      -9.876543210987654,
+      0.000000123456789,
+      999999999999.125,
+      -0.5,
+  };
+  double double_values[BATCH_SIZE];
+  common::ObDatum datums[BATCH_SIZE];
+  for (int64_t i = 0; i < BATCH_SIZE; ++i) {
+    double_values[i] = sample_values[i % ARRAYSIZEOF(sample_values)];
+    datums[i].ptr_ = reinterpret_cast<const char *>(&double_values[i]);
+    datums[i].set_double(double_values[i]);
+  }
+  datums[65].set_null();
+
+  for (int64_t scale = 0; scale < common::OB_NOT_FIXED_SCALE; ++scale) {
+    SCOPED_TRACE(scale);
+    ObExprBasicFuncs *basic_funcs = common::ObDatumFuncs::get_basic_func(
+        common::ObDoubleType, common::CS_TYPE_BINARY, static_cast<common::ObScale>(scale));
+    ASSERT_NE(nullptr, basic_funcs);
+    verify_batch_hash_shapes(*basic_funcs, datums, BATCH_SIZE);
+  }
+}
+
 TEST(ObExprCmpFunc, string_initializer_shards_cover_supported_collations)
 {
   const common::ObCollationType collations[] = {

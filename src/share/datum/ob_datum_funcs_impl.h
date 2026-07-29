@@ -1159,22 +1159,31 @@ struct InitGeoCmpArray
 };
 
 
+template <typename T>
+OB_INLINE int calc_fixed_double_hash(const ObDatum &datum,
+                                     const ObScale scale,
+                                     const uint64_t seed,
+                                     uint64_t &res)
+{
+  // format fixed double to string first, then calc hash value of the string
+  double d_val = datum.get_double();
+  char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
+  // zero distinguishes positive and negative zeros, formatted as positive zero to calculate
+  // hash value
+  if (d_val == 0.0) {
+    d_val = 0.0;
+  }
+  int64_t length = ob_fcvt(d_val, static_cast<int>(scale), sizeof(buf) - 1, buf, NULL);
+  res = T::hash(buf, static_cast<int32_t>(length), seed);
+  return OB_SUCCESS;
+}
+
 template <ObScale SCALE, typename T>
 struct DatumFixedDoubleHashCalculator : public DefHashMethod<T>
 {
   static int calc_datum_hash(const ObDatum &datum, const uint64_t seed, uint64_t &res)
   {
-    // format fixed double to string first, then calc hash value of the string
-    double d_val = datum.get_double();
-    char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
-    // zero distinguishes positive and negative zeros, formatted as positive zero to calculate
-    // hash value
-    if (d_val == 0.0) {
-      d_val = 0.0;
-    }
-    int64_t length = ob_fcvt(d_val, static_cast<int>(SCALE), sizeof(buf) - 1, buf, NULL);
-    res = T::hash(buf, static_cast<int32_t>(length), seed);
-    return OB_SUCCESS;
+    return calc_fixed_double_hash<T>(datum, SCALE, seed, res);
   }
 
   static int calc_datum_hash_v2(const ObDatum &datum, const uint64_t seed, uint64_t &res)
@@ -1189,26 +1198,115 @@ struct DatumFixedDoubleHashCalculator : public DefHashMethod<T>
   }
 };
 
+template <typename T>
+struct FixedDoubleHashBatchImpl
+{
+  static void OB_NOINLINE hash_batch(uint64_t *hash_values,
+                                     ObDatum *datums,
+                                     const bool is_batch_datum,
+                                     const ObBitVector &skip,
+                                     const int64_t size,
+                                     const uint64_t *seeds,
+                                     const bool is_batch_seed,
+                                     const ObScale scale)
+  {
+    const uint64_t datum_idx_mask = is_batch_datum ? UINT64_MAX : 0;
+    const uint64_t seed_idx_mask = is_batch_seed ? UINT64_MAX : 0;
+    ObBitVector::flip_foreach(skip, size,
+      [&](int64_t idx) __attribute__((always_inline)) {
+        int ret = OB_SUCCESS;
+        const uint64_t datum_idx = static_cast<uint64_t>(idx) & datum_idx_mask;
+        const uint64_t seed_idx = static_cast<uint64_t>(idx) & seed_idx_mask;
+        if (datums[datum_idx].is_null()) {
+          const int null_type = ObNullType;
+          hash_values[idx] = T::hash(&null_type, sizeof(null_type), seeds[seed_idx]);
+        } else {
+          ret = calc_fixed_double_hash<T>(
+              datums[datum_idx], scale, seeds[seed_idx], hash_values[idx]);
+        }
+        return ret;
+      }
+    );
+  }
+
+  static void OB_NOINLINE hash_v2_batch(uint64_t *hash_values,
+                                        ObDatum *datums,
+                                        const bool is_batch_datum,
+                                        const ObBitVector &skip,
+                                        const int64_t size,
+                                        const uint64_t *seeds,
+                                        const bool is_batch_seed,
+                                        const ObScale scale)
+  {
+    const uint64_t datum_idx_mask = is_batch_datum ? UINT64_MAX : 0;
+    const uint64_t seed_idx_mask = is_batch_seed ? UINT64_MAX : 0;
+    ObBitVector::flip_foreach(skip, size,
+      [&](int64_t idx) __attribute__((always_inline)) {
+        int ret = OB_SUCCESS;
+        const uint64_t datum_idx = static_cast<uint64_t>(idx) & datum_idx_mask;
+        const uint64_t seed_idx = static_cast<uint64_t>(idx) & seed_idx_mask;
+        if (datums[datum_idx].is_null()) {
+          hash_values[idx] = seeds[seed_idx];
+        } else {
+          ret = calc_fixed_double_hash<T>(
+              datums[datum_idx], scale, seeds[seed_idx], hash_values[idx]);
+        }
+        return ret;
+      }
+    );
+  }
+};
+
+template <ObScale SCALE, typename T>
+struct FixedDoubleHashBatch
+{
+  static void hash_batch(uint64_t *hash_values,
+                         ObDatum *datums,
+                         const bool is_batch_datum,
+                         const ObBitVector &skip,
+                         const int64_t size,
+                         const uint64_t *seeds,
+                         const bool is_batch_seed)
+  {
+    FixedDoubleHashBatchImpl<T>::hash_batch(
+        hash_values, datums, is_batch_datum, skip, size, seeds, is_batch_seed, SCALE);
+  }
+
+  static void hash_v2_batch(uint64_t *hash_values,
+                            ObDatum *datums,
+                            const bool is_batch_datum,
+                            const ObBitVector &skip,
+                            const int64_t size,
+                            const uint64_t *seeds,
+                            const bool is_batch_seed)
+  {
+    FixedDoubleHashBatchImpl<T>::hash_v2_batch(
+        hash_values, datums, is_batch_datum, skip, size, seeds, is_batch_seed, SCALE);
+  }
+};
+
 template <int X>
 struct InitFixedDoubleBasicFuncArray
 {
   template <typename T>
   using Hash = DefHashFunc<DatumFixedDoubleHashCalculator<static_cast<ObScale>(X), T>>;
+  template <typename T>
+  using HashBatch = FixedDoubleHashBatch<static_cast<ObScale>(X), T>;
   static void init_array()
   {
     auto &basic_funcs = FIXED_DOUBLE_BASIC_FUNCS;
     basic_funcs[X].default_hash_ = Hash<ObDefaultHash>::hash;
-    basic_funcs[X].default_hash_batch_= Hash<ObDefaultHash>::hash_batch;
+    basic_funcs[X].default_hash_batch_= HashBatch<ObDefaultHash>::hash_batch;
     basic_funcs[X].murmur_hash_ = Hash<ObMurmurHash>::hash;
-    basic_funcs[X].murmur_hash_batch_ = Hash<ObMurmurHash>::hash_batch;
+    basic_funcs[X].murmur_hash_batch_ = HashBatch<ObMurmurHash>::hash_batch;
     basic_funcs[X].xx_hash_ = Hash<ObXxHash>::hash;
-    basic_funcs[X].xx_hash_batch_ = Hash<ObXxHash>::hash_batch;
+    basic_funcs[X].xx_hash_batch_ = HashBatch<ObXxHash>::hash_batch;
     basic_funcs[X].wy_hash_ = Hash<ObWyHash>::hash;
-    basic_funcs[X].wy_hash_batch_ = Hash<ObWyHash>::hash_batch;
+    basic_funcs[X].wy_hash_batch_ = HashBatch<ObWyHash>::hash_batch;
     basic_funcs[X].null_first_cmp_ = ObNullSafeFixedDoubleCmp<static_cast<ObScale>(X), true>::cmp;
     basic_funcs[X].null_last_cmp_ = ObNullSafeFixedDoubleCmp<static_cast<ObScale>(X), false>::cmp;
     basic_funcs[X].murmur_hash_v2_ = Hash<ObMurmurHash>::hash_v2;
-    basic_funcs[X].murmur_hash_v2_batch_ = Hash<ObMurmurHash>::hash_v2_batch;
+    basic_funcs[X].murmur_hash_v2_batch_ = HashBatch<ObMurmurHash>::hash_v2_batch;
   }
 };
 
