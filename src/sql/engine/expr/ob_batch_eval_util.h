@@ -37,77 +37,17 @@ int binary_operand_batch_eval(const ObExpr &expr,
                               const int64_t size,
                               const bool null_short_circuit);
 
-// Iterate datums of batch result argument
-struct ObArgBatchDatumIter
-{
-  explicit ObArgBatchDatumIter(const ObDatum *datums) : datums_(datums) {}
-  const ObDatum &datum(const int64_t idx) const { return datums_[idx]; }
-
-  const ObDatum *datums_;
-};
-
-// Iterate datum of scalar result argument
-struct ObArgScalarDatumIter
-{
-  explicit ObArgScalarDatumIter(const ObDatum *datum) : datum_(datum) {}
-  const ObDatum &datum(const int64_t) const { return *datum_; }
-
-  const ObDatum *datum_;
-};
-
-// Iterate datums of result
-struct ObResBatchDatumIter
-{
-  explicit ObResBatchDatumIter(ObDatum *datums) : datums_(datums) {}
-  ObDatum &datum(const int64_t idx) const { return datums_[idx]; }
-
-  ObDatum *datums_;
-};
-
-// Iterate raw data of batch result argument
-template <typename RawType>
-struct ObArgBatchRawIter : public ObArgBatchDatumIter
-{
-  explicit ObArgBatchRawIter(const ObDatum *datums, const char *rev_buf)
-      : ObArgBatchDatumIter(datums), rev_(reinterpret_cast<const RawType *>(rev_buf)) {}
-  const RawType &raw(const int64_t i) const { return rev_[i]; }
-
-  const RawType *rev_;
-};
-
-// Iterate raw data of scalar result argument
-template <typename RawType>
-struct ObArgScalarRawIter : public ObArgScalarDatumIter
-{
-  using ObArgScalarDatumIter::ObArgScalarDatumIter;
-  const RawType &raw(const int64_t) const
-  {
-    return *reinterpret_cast<const RawType *>(datum_->ptr_);
-  }
-};
-
-// Iterate raw data of result
-template <typename RawType>
-struct ObResBatchRawIter : public ObResBatchDatumIter
-{
-  explicit ObResBatchRawIter(ObDatum *datums, char *rev_buf)
-      : ObResBatchDatumIter(datums), rev_(reinterpret_cast<RawType *>(rev_buf)) {}
-  RawType &raw(int64_t i) const { return rev_[i]; }
-  RawType *rev_;
-};
-
 template <typename ArithOp>
 struct ObDoArithBatchEval
 {
-  template <typename ResIter, typename LeftIter, typename RightIter, typename... Args>
+  template <typename... Args>
   inline int operator()(const ObExpr &expr,
                         ObEvalCtx &ctx,
                         const ObBitVector &skip,
                         const int64_t size,
-                        const ResIter &iter,
-                        const LeftIter &l_it,
-                        const RightIter &r_it,
-                        const bool in_frame_notnull,
+                        const ObDatumVector &res,
+                        const ObDatumVector &left,
+                        const ObDatumVector &right,
                         Args &...args) const
   {
     int ret = OB_SUCCESS;
@@ -121,21 +61,10 @@ struct ObDoArithBatchEval
       const uint16_t skip_v = skip.reinterpret_data<uint16_t>()[bit_vec_off];
       uint16_t &eval_v = eval_flags.reinterpret_data<uint16_t>()[bit_vec_off];
       if (i + step_size < size && (0 == (skip_v | eval_v))) {
-        if (ArithOp::is_raw_op_supported() && in_frame_notnull) {
-          for (int64_t j = 0; j < step_size; i++, j++) {
-            ArithOp::raw_op(iter.raw(i), l_it.raw(i), r_it.raw(i), args...);
-          }
-          i -= step_size;
-          for (int64_t j = 0; OB_SUCC(ret) && j < step_size; i++, j++) {
-            iter.datum(i).pack_ = sizeof(typename ArithOp::RES_RAW_TYPE);
-            ret = ArithOp::raw_check(iter.raw(i), l_it.raw(i), r_it.raw(i));
-          }
-        } else {
-          for (int64_t j = 0; OB_SUCC(ret) && j < step_size; i++, j++) {
-            batch_info_guard.set_batch_idx(i);
-            ret = ArithOp::datum_op(iter.datum(i), l_it.datum(i), r_it.datum(i), args...);
-            desc.pack_ |= iter.datum(i).pack_;
-          }
+        for (int64_t j = 0; OB_SUCC(ret) && j < step_size; i++, j++) {
+          batch_info_guard.set_batch_idx(i);
+          ret = ArithOp::datum_op(*res.at(i), *left.at(i), *right.at(i), args...);
+          desc.pack_ |= res.at(i)->pack_;
         }
         if (OB_SUCC(ret)) {
           eval_v = 0xFFFF;
@@ -147,9 +76,9 @@ struct ObDoArithBatchEval
         for (; i < new_size && OB_SUCC(ret); i++) {
           if (!(skip.at(i) || eval_flags.at(i))) {
             batch_info_guard.set_batch_idx(i);
-            ret = ArithOp::datum_op(iter.datum(i), l_it.datum(i), r_it.datum(i), args...);
+            ret = ArithOp::datum_op(*res.at(i), *left.at(i), *right.at(i), args...);
             eval_flags.bit_or_assign(i, OB_SUCCESS == ret);
-            desc.pack_ |= iter.datum(i).pack_;
+            desc.pack_ |= res.at(i)->pack_;
           }
         }
       }
@@ -162,7 +91,7 @@ struct ObDoArithBatchEval
 };
 
 
-template <typename ArithOp, template <class> class Functor, typename... Args>
+template <typename ArithOp, typename... Args>
 inline int call_functor_with_arg_iter(const ObExpr &expr,
                                      ObEvalCtx &ctx,
                                      const ObBitVector &skip,
@@ -172,28 +101,19 @@ inline int call_functor_with_arg_iter(const ObExpr &expr,
   int ret = OB_SUCCESS;
   const ObExpr &left = *expr.args_[0];
   const ObExpr &right = *expr.args_[1];
-  ObResBatchRawIter<typename ArithOp::RES_RAW_TYPE> res(
-      expr.locate_batch_datums(ctx), expr.get_rev_buf(ctx));
-  if (left.is_batch_result() && !right.is_batch_result()) {
-    ObArgBatchRawIter<typename ArithOp::L_RAW_TYPE> l(
-        left.locate_batch_datums(ctx), left.get_rev_buf(ctx));
-    ObArgScalarRawIter<typename ArithOp::R_RAW_TYPE> r(&right.locate_expr_datum(ctx));
-    ret = Functor<ArithOp>()(expr, ctx, skip, size, res, l, r, false, args...);
-  } else if (!left.is_batch_result() && right.is_batch_result()) {
-    ObArgScalarRawIter<typename ArithOp::L_RAW_TYPE> l(&left.locate_expr_datum(ctx));
-    ObArgBatchRawIter<typename ArithOp::R_RAW_TYPE> r(
-        right.locate_batch_datums(ctx), right.get_rev_buf(ctx));
-    ret = Functor<ArithOp>()(expr, ctx, skip, size, res, l, r, false, args...);
-  } else if (left.is_batch_result() && right.is_batch_result()) {
-    ObArgBatchRawIter<typename ArithOp::L_RAW_TYPE> l(
-        left.locate_batch_datums(ctx), left.get_rev_buf(ctx));
-    ObArgBatchRawIter<typename ArithOp::R_RAW_TYPE> r(
-        right.locate_batch_datums(ctx), right.get_rev_buf(ctx));
-    ret = Functor<ArithOp>()(expr, ctx, skip, size, res, l, r, false, args...);
-  } else {
+  if (!left.is_batch_result() && !right.is_batch_result()) {
     ret = common::OB_ERR_UNEXPECTED;
     SQL_LOG(WARN, "one argument must be batch result in arith batch evaluate",
             K(ret), K(expr), K(left), K(right));
+  } else {
+    ObDatumVector res = expr.locate_expr_datumvector(ctx);
+    // A binary expression with at least one batch operand always produces a
+    // batch.  Keep the old driver's unconditional result indexing explicit.
+    res.set_batch(true);
+    const ObDatumVector left_datums = left.locate_expr_datumvector(ctx);
+    const ObDatumVector right_datums = right.locate_expr_datumvector(ctx);
+    ret = ObDoArithBatchEval<ArithOp>()(
+        expr, ctx, skip, size, res, left_datums, right_datums, args...);
   }
   return ret;
 };
@@ -212,7 +132,7 @@ int def_batch_arith_op(const ObExpr &expr,
   if (OB_FAIL(binary_operand_batch_eval(expr, ctx, skip, size, false))) {
     SQL_LOG(WARN, "bianry operand batch evaluate failed", K(ret), K(expr));
   } else {
-    ret = call_functor_with_arg_iter<ArithOp, ObDoArithBatchEval>(expr, ctx, skip, size, args...);
+    ret = call_functor_with_arg_iter<ArithOp>(expr, ctx, skip, size, args...);
   }
   return ret;
 }

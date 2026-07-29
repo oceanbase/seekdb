@@ -34,6 +34,11 @@ typedef int (*DatumCmpFunc)(const common::ObDatum &datum1, const common::ObDatum
 class ObExprCmpFuncsHelper
 {
 public:
+  // Keep the comparison operation as runtime metadata.  The expression type is
+  // already carried by ObExpr, so making it a template argument only multiplies
+  // every type-specific scalar and batch evaluator by CO_MAX.
+  static common::ObCmpOp get_cmp_op(const ObExprOperatorType type);
+
   static sql::ObExpr::EvalFunc get_eval_expr_cmp_func(
       const common::ObObjType type1,
       const common::ObObjType type2,

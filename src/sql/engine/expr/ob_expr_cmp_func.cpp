@@ -68,16 +68,46 @@ ObDatumCmpFuncType DATUM_DECINT_CMP_FUNCS[DECIMAL_INT_MAX][DECIMAL_INT_MAX];
 ObExpr::EvalFunc EVAL_VEC_CMP_FUNCS[CO_MAX];
 ObExpr::EvalBatchFunc EVAL_BATCH_VEC_CMP_FUNCS[CO_MAX];
 
-// int g_init_type_ret = Ob2DArrayConstIniter<ObMaxType, ObMaxType, TypeExprCmpFuncIniter>::init();
-// int g_init_tc_ret = Ob2DArrayConstIniter<ObMaxTC, ObMaxTC, TCExprCmpFuncIniter>::init();
-// int g_init_str_ret = Ob2DArrayConstIniter<CS_TYPE_MAX, CO_MAX, StrExprFuncIniter>::init();
-// int g_init_datum_str_ret = ObArrayConstIniter<CS_TYPE_MAX, DatumStrExprCmpIniter>::init();
-// int g_init_text_ret = Ob2DArrayConstIniter<CS_TYPE_MAX, CO_MAX, TextExprFuncIniter>::init();
-// int g_init_datum_text_ret = ObArrayConstIniter<CS_TYPE_MAX, DatumTextExprCmpIniter>::init();
-// int g_init_text_str_ret = Ob2DArrayConstIniter<CS_TYPE_MAX, CO_MAX, TextStrExprFuncIniter>::init();
-// int g_init_datum_text_str_ret = ObArrayConstIniter<CS_TYPE_MAX, DatumTextStrExprCmpIniter>::init();
-// int g_init_str_text_ret = Ob2DArrayConstIniter<CS_TYPE_MAX, CO_MAX, StrTextExprFuncIniter>::init();
-// int g_init_str_datum_text_ret = ObArrayConstIniter<CS_TYPE_MAX, DatumStrTextExprCmpIniter>::init();
+OB_NOINLINE void init_expr_cmp_func_array(ObExpr::EvalFunc *eval_funcs,
+                              ObExpr::EvalBatchFunc *batch_eval_funcs,
+                              ObDatumCmpFuncType &datum_cmp_func,
+                              ObExpr::EvalFunc eval_func,
+                              ObExpr::EvalBatchFunc batch_eval_func,
+                              ObDatumCmpFuncType datum_func,
+                              const ObExpr::EvalBatchFunc *batch_eval_overrides)
+{
+  static_assert(CO_EQ == 0 && CO_CMP + 1 == CO_MAX, "comparison operators must be contiguous");
+  for (int64_t cmp_op = CO_EQ; cmp_op < CO_MAX; ++cmp_op) {
+    eval_funcs[cmp_op] = eval_func;
+    batch_eval_funcs[cmp_op] = NULL != batch_eval_overrides
+        ? batch_eval_overrides[cmp_op]
+        : (CO_CMP == cmp_op ? NULL : batch_eval_func);
+  }
+  datum_cmp_func = datum_func;
+}
+
+OB_NOINLINE void init_str_cmp_func_array(const ObCollationType cs_type)
+{
+  OB_ASSERT(cs_type > CS_TYPE_INVALID && cs_type < CS_TYPE_MAX);
+  for (int64_t cmp_op = CO_EQ; cmp_op < CO_MAX; ++cmp_op) {
+    EVAL_STR_CMP_FUNCS[cs_type][cmp_op][0] = &ObStrRelationEvalWrap<false>::eval;
+    EVAL_STR_CMP_FUNCS[cs_type][cmp_op][1] = &ObStrRelationEvalWrap<true>::eval;
+    EVAL_TEXT_CMP_FUNCS[cs_type][cmp_op][0] = &ObTextRelationEvalWrap<false>::eval;
+    EVAL_TEXT_CMP_FUNCS[cs_type][cmp_op][1] = &ObTextRelationEvalWrap<true>::eval;
+    EVAL_TEXT_STR_CMP_FUNCS[cs_type][cmp_op][0] = &ObTextStrRelationEvalWrap<false>::eval;
+    EVAL_TEXT_STR_CMP_FUNCS[cs_type][cmp_op][1] = &ObTextStrRelationEvalWrap<true>::eval;
+    EVAL_STR_TEXT_CMP_FUNCS[cs_type][cmp_op][0] = &ObStrTextRelationEvalWrap<false>::eval;
+    EVAL_STR_TEXT_CMP_FUNCS[cs_type][cmp_op][1] = &ObStrTextRelationEvalWrap<true>::eval;
+  }
+  DATUM_STR_CMP_FUNCS[cs_type][0] = NULL;
+  DATUM_STR_CMP_FUNCS[cs_type][1] = NULL;
+  DATUM_TEXT_CMP_FUNCS[cs_type][0] = NULL;
+  DATUM_TEXT_CMP_FUNCS[cs_type][1] = NULL;
+  DATUM_TEXT_STR_CMP_FUNCS[cs_type][0] = NULL;
+  DATUM_TEXT_STR_CMP_FUNCS[cs_type][1] = NULL;
+  DATUM_STR_TEXT_CMP_FUNCS[cs_type][0] = NULL;
+  DATUM_STR_TEXT_CMP_FUNCS[cs_type][1] = NULL;
+}
 
 static int64_t fill_type_with_tc_eval_func(void)
 {
@@ -130,6 +160,16 @@ static int64_t init_all_funcs()
 }
 
 int64_t g_init_all_funcs = init_all_funcs();
+
+ObCmpOp ObExprCmpFuncsHelper::get_cmp_op(const ObExprOperatorType type)
+{
+  const ObCmpOp cmp_op = ObRelationalExprOperator::get_cmp_op(type);
+  // Comparison evaluators are installed only for relational expressions (and
+  // STRCMP).  Fail fast in debug builds if a future caller reuses one with an
+  // unrelated expression type instead of silently producing false.
+  OB_ASSERT(ob_is_valid_cmp_op(cmp_op));
+  return cmp_op;
+}
 
 ObExpr::EvalFunc ObExprCmpFuncsHelper::get_eval_expr_cmp_func(const ObObjType type1,
                                                               const ObObjType type2,
