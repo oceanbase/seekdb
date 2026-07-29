@@ -1031,7 +1031,6 @@ all_user_def = dict(
       ('priv_super', 'int', 'false', '0'),
       ('is_locked', 'int'),
       ('priv_process', 'int', 'false', '0'),
-      ('priv_create_synonym', 'int', 'false', '0'),
       ('ssl_type', 'int', 'false', '0'),
       ('ssl_cipher', 'varchar:1024', 'false', ''),
       ('x509_issuer', 'varchar:1024', 'false', ''),
@@ -10862,7 +10861,6 @@ def_table_schema(
             (CASE WHEN PRIV_SUPER = 0 THEN 'NO' ELSE 'YES' END) AS PRIV_SUPER,
             (CASE WHEN IS_LOCKED = 0 THEN 'NO' ELSE 'YES' END) AS IS_LOCKED,
             (CASE WHEN PRIV_PROCESS = 0 THEN 'NO' ELSE 'YES' END) AS PRIV_PROCESS,
-            (CASE WHEN PRIV_CREATE_SYNONYM = 0 THEN 'NO' ELSE 'YES' END) AS PRIV_CREATE_SYNONYM,
             SSL_TYPE,
             SSL_CIPHER,
             X509_ISSUER,
@@ -11295,8 +11293,6 @@ def_table_schema(
                      AND U.PRIV_SUPER = 1 THEN 'SUPER'
                 WHEN V1.C1 = 14
                      AND U.PRIV_PROCESS = 1 THEN 'PROCESS'
-                WHEN V1.C1 = 15
-                     AND U.PRIV_CREATE_SYNONYM = 1 THEN 'CREATE SYNONYM'
                 WHEN V1.C1 = 16
                      AND (U.PRIV_OTHERS & (1 << 6)) != 0 THEN 'REFERENCES'
                 WHEN V1.C1 = 17
@@ -11395,7 +11391,12 @@ def_table_schema(
         UNION ALL SELECT 12 AS C1
         UNION ALL SELECT 13 AS C1
         UNION ALL SELECT 14 AS C1
-        UNION ALL SELECT 15 AS C1
+        UNION ALL SELECT 16 AS C1
+        UNION ALL SELECT 17 AS C1
+        UNION ALL SELECT 18 AS C1
+        UNION ALL SELECT 19 AS C1
+        UNION ALL SELECT 20 AS C1
+        UNION ALL SELECT 21 AS C1
         UNION ALL SELECT 22 AS C1
         UNION ALL SELECT 23 AS C1
         UNION ALL SELECT 24 AS C1
