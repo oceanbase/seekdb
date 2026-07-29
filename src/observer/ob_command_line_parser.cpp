@@ -92,19 +92,6 @@ static int getopt_long(int argc, char *const argv[], const char *short_opts,
 #include <cstring>
 #include <cstdio>
 
-#ifdef __APPLE__
-// macOS: use _exit instead of exit to skip static destructors
-// This is to work around memory deallocation issues during LLVM PassRegistry static destruction
-// LLVM is statically linked, its internal malloc/free calls do not go through DYLD_INTERPOSE,
-// but some memory is allocated via OceanBase's hooked_malloc (with Header),
-// when LLVM calls system free() to release this memory during destruction, it causes a crash
-// Note: _exit() is preferred over quick_exit() for better macOS compatibility (quick_exit may
-// not be available in libSystem.B.dylib on some macOS versions)
-#define OB_EXIT(code) _exit(code)
-#else
-#define OB_EXIT(code) exit(code)
-#endif
-
 #include "lib/oblog/ob_log.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/string/ob_sql_string.h"
@@ -421,17 +408,17 @@ int ObCommandLineParser::parse_args(int argc, char* argv[], ObServerOptions& opt
     ret = OB_INVALID_ARGUMENT;
     MPRINT("Invalid argument, unexpected non-option parameter: %s", argv[optind]);
     print_help();
-    OB_EXIT(1);
+    exit(1);
   }
 
   // Handle help and version requests
   if (OB_FAIL(ret)) {
   } else if (help_requested_) {
     print_help();
-    OB_EXIT(0);
+    exit(0);
   } else if (version_requested_) {
     print_version();
-    OB_EXIT(0);
+    exit(0);
   }
 
   // Set default values

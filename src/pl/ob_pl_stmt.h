@@ -177,7 +177,8 @@ private:
 class ObPLSymbolTable
 {
 public:
-  ObPLSymbolTable(ObIAllocator &allocator) : variables_(allocator) {}
+  ObPLSymbolTable(ObIAllocator &allocator) : variables_(allocator),
+                                             self_param_idx_(OB_INVALID_INDEX) {}
   virtual ~ObPLSymbolTable() {}
 
   inline int64_t get_count() const  { return variables_.count(); }
@@ -193,11 +194,27 @@ public:
                  const bool has_access_external_state = false);
   int delete_symbol(int64_t symbol_idx);
 
-  TO_STRING_KV(K_(variables));
+  inline void set_self_param_idx() { self_param_idx_ = variables_.count() - 1; }
+  inline int64_t get_self_param_idx() const { return self_param_idx_; }
+  inline const ObPLVar *get_self_param() const
+  {
+    const ObPLVar *val = NULL;
+    if (OB_INVALID_INDEX == self_param_idx_
+      || self_param_idx_ < 0
+      || self_param_idx_ >= variables_.count()) {
+      val = NULL;
+    } else {
+      val = &variables_[self_param_idx_];
+    }
+    return val;
+  }
+
+  TO_STRING_KV(K_(variables), K_(self_param_idx));
 
 private:
   //All input and output parameters, and all variables used within the PL body (including cursors, but not including condition, nor function return values and hidden ctx parameters), correspond one-to-one with the symbol table in ObPLFunction
   ObPLSEArray<ObPLVar> variables_;
+  int64_t self_param_idx_; // index of self_param
 };
 
 class ObPLStmt;
@@ -394,6 +411,7 @@ class ObPLSql
 {
 public:
   ObPLSql(common::ObIAllocator &allocator) :
+    forall_sql_(false),
     for_update_(false),
     has_hidden_rowid_(false),
     sql_(),
@@ -413,6 +431,8 @@ public:
   inline int64_t get_param(int64_t i) const { return params_.at(i); }
   inline int set_params(const common::ObIArray<int64_t> &params) { return append(params_, params); }
   inline int add_param(int64_t expr) { return params_.push_back(expr); }
+  inline void set_forall_sql(bool forall_sql) { forall_sql_ = forall_sql; }
+  inline bool is_forall_sql() const { return forall_sql_; }
   inline void set_for_update(bool for_update) { for_update_ = for_update; }
   inline bool is_for_update() const { return for_update_; }
   inline void set_hidden_rowid(bool has_hidden_rowid) { has_hidden_rowid_ = has_hidden_rowid; }
@@ -437,6 +457,7 @@ public:
   TO_STRING_KV(K_(sql), K_(params), K_(ps_sql), K_(stmt_type), K_(ref_objects), K_(rowid_table_id), K_(is_skip_locked));
 
 protected:
+  bool forall_sql_;
   bool for_update_;
   bool has_hidden_rowid_;
   common::ObString sql_;
@@ -598,13 +619,15 @@ public:
     : name_(),
       type_(),
       mode_(PL_PARAM_INVALID),
+      is_nocopy_(false),
       default_value_(),
       default_cast_(false),
       extern_type_(SP_EXTERN_INVALID),
       type_owner_(OB_INVALID_ID),
       type_name_(),
       type_subname_(),
-      obj_version_() {}
+      obj_version_(),
+      is_self_param_(false) {}
   virtual ~ObPLRoutineParam() {}
 
   inline const ObString &get_name() const { return name_; }
@@ -617,6 +640,8 @@ public:
   inline bool is_inout_param() const { return mode_ == PL_PARAM_INOUT; }
   inline void set_param_mode(ObPLRoutineParamMode mode) { mode_ = mode; }
   inline int64_t get_mode() const { return static_cast<int64_t>(mode_); }
+  inline void set_is_nocopy(bool is_nocopy) { is_nocopy_ = is_nocopy; }
+  inline bool get_is_nocopy() { return is_nocopy_; }
   inline void set_default_value(ObString &default_value) { default_value_ = default_value; }
   inline ObString &get_default_value() { return default_value_; }
   inline const ObString &get_default_value() const { return default_value_; }
@@ -638,15 +663,22 @@ public:
   {
     obj_version_ = obj_version;
   }
+  virtual bool is_nocopy_param() const { return is_nocopy_; }
   virtual bool is_default_cast() const { return default_cast_; }
 
-  TO_STRING_KV(K_(name), K_(type), K_(mode), K_(default_value),
+  inline void set_is_self_param(bool sp) { is_self_param_ = sp; }
+  inline bool get_is_self_param() const { return is_self_param_; }
+
+  bool is_self_param() const { return get_is_self_param(); }
+
+  TO_STRING_KV(K_(name), K_(type), K_(mode), K_(is_nocopy), K_(default_value),
                K_(extern_type), K_(type_owner), K_(type_name), K_(type_subname),
-               K_(obj_version));
+               K_(obj_version), K_(is_self_param));
 private:
   common::ObString name_;
   ObPLDataType type_;
   ObPLRoutineParamMode mode_;
+  bool is_nocopy_;
   common::ObString default_value_;
   bool default_cast_;
   int64_t extern_type_;
@@ -654,6 +686,7 @@ private:
   common::ObString type_name_;
   common::ObString type_subname_;
   share::schema::ObSchemaObjVersion obj_version_;
+  bool is_self_param_;
 };
 
 struct ObPLCompileFlag
@@ -661,14 +694,15 @@ struct ObPLCompileFlag
 public:
   ObPLCompileFlag() : flags_() {}
 
-  enum { TRUST, RNDS, WNDS, RNPS, WNPS, INVOKER_RIGHT = 6,
-         INTF, RESERVED_8, RESERVED_9, RESERVED_10, RESERVED_11, RESERVED_12 };
+  enum { TRUST, RNDS, WNDS, RNPS, WNPS, UDF, INVOKER_RIGHT,
+         INTF, UDT_STATIC, UDT_FINAL, UDT_MAP, UDT_ORDER, UDT_CONS };
 
   inline int add_trust() { return flags_.add_member(TRUST); }
   inline int add_rnds()  { return flags_.add_member(RNDS); }
   inline int add_wnds()  { return flags_.add_member(WNDS); }
   inline int add_rnps()  { return flags_.add_member(RNPS); }
   inline int add_wnps()  { return flags_.add_member(WNPS); }
+  inline int add_udf()   { return flags_.add_member(UDF); }
   inline int add_invoker_right() { return flags_.add_member(INVOKER_RIGHT); }
   inline int add_intf()   { return flags_.add_member(INTF); }
 
@@ -681,6 +715,10 @@ public:
   }
 
   inline bool has_flag() const { return flags_.num_members() != 0; }
+
+  inline int add_static() { return flags_.add_member(UDT_STATIC); }
+  inline int add_map() { return flags_.add_member(UDT_MAP); }
+  inline int add_order() { return flags_.add_member(UDT_ORDER); }
 
   inline bool compile_with_trust() const
   {
@@ -702,6 +740,10 @@ public:
   {
     return flags_.has_member(WNPS) && !flags_.has_member(TRUST);
   }
+  inline bool compile_with_udf() const
+  {
+    return flags_.has_member(UDF);
+  }
   inline bool compile_with_invoker_right() const
   {
     return flags_.has_member(INVOKER_RIGHT);
@@ -709,6 +751,24 @@ public:
   inline bool compile_with_intf() const
   {
     return flags_.has_member(INTF);
+  }
+
+  inline bool compile_with_static() const
+  {
+    return flags_.has_member(UDT_STATIC);
+  }
+  inline bool compile_with_order() const {
+    return flags_.has_member(UDT_ORDER);
+  }
+  inline bool compile_with_map() const {
+    return flags_.has_member(UDT_MAP);
+  }
+
+  inline int add_cons() { return flags_.add_member(UDT_CONS); }
+
+  inline bool compile_with_cons() const
+  {
+    return flags_.has_member(UDT_CONS);
   }
 
   inline ObPLCompileFlag &operator=(const ObPLCompileFlag &other)
@@ -745,6 +805,7 @@ public:
         is_deterministic_(false),
         is_parallel_enable_(false),
         has_accessible_by_clause_(false),
+        is_udt_routine_(false),
         is_private_routine_(false),
         accessors_(allocator),
         priv_user_(),
@@ -757,15 +818,18 @@ public:
                          const ObString &param_name,
                          const ObPLDataType &param_type,
                          ObPLRoutineParamMode param_mode,
+                         bool is_nocopy,
                          const ObString &default_value,
                          bool default_cast,
                          const ObPLExternTypeInfo &extern_type_info,
                          ObPLRoutineParam *&param);
   bool is_equal(const ObPLRoutineInfo &other) const { return md5_ == other.md5_; }
   inline bool is_procedure() const { return type_ == STANDALONE_PROCEDURE
-                                         || type_ == PACKAGE_PROCEDURE; }
+                                         || type_ == PACKAGE_PROCEDURE
+                                         || UDT_PROCEDURE == type_; }
   inline bool is_function() const { return type_ == STANDALONE_FUNCTION
-                                        || type_ == PACKAGE_FUNCTION; }
+                                        || type_ == PACKAGE_FUNCTION
+                                        || UDT_FUNCTION == type_; }
   
   inline uint64_t get_db_id() const { return db_id_; }
 
@@ -864,8 +928,17 @@ public:
   virtual void set_accessible_by_clause() { has_accessible_by_clause_ = true; }
   virtual bool has_accessible_by_clause() const { return has_accessible_by_clause_; }
 
+  virtual void set_is_udt_routine() { is_udt_routine_ = true; }
+  virtual bool is_udt_routine() const { return is_udt_routine_; }
+  virtual bool is_udt_static_routine() const { return compile_flag_.compile_with_static(); }
+
   virtual void set_is_private_routine() { is_private_routine_ = true; }
   virtual bool is_private_routine() const { return is_private_routine_; }
+
+  virtual void set_is_udt_cons() { compile_flag_.add_cons(); }
+  virtual bool is_udt_cons() const { return compile_flag_.compile_with_cons(); }
+  virtual bool is_udt_map() const { return compile_flag_.compile_with_map(); }
+  virtual bool is_udt_order() const { return compile_flag_.compile_with_order(); }
 
   virtual const ObString& get_routine_name() const { return get_name(); }
 
@@ -886,6 +959,7 @@ public:
                K_(compile_flag),
                K_(is_deterministic),
                K_(is_parallel_enable),
+               K_(is_udt_routine),
                K_(accessors),
                K_(loc),
                K_(analyze_flag));
@@ -908,6 +982,7 @@ private:
   bool is_deterministic_;
   bool is_parallel_enable_;
   bool has_accessible_by_clause_;
+  bool is_udt_routine_;
   bool is_private_routine_;
   ObPLSEArray<AccessorItem> accessors_;
   common::ObString priv_user_;
@@ -1006,12 +1081,12 @@ public:
     NESTED_PROC,
     TYPE_METHOD_TYPE,   //custom type method
     SYSTEM_PROC,        //System predefined Procedure (e.g.: RAISE_APPLICATION_ERROR)
-    RESERVED_UDT_NS,
+    UDT_NS,
     UDF_NS,
     LOCAL_TYPE,         // local custom type
     PKG_TYPE,           // custom type in the package
-    RESERVED_SELF_ATTRIBUTE,
-    RESERVED_UDT_MEMBER_ROUTINE,
+    SELF_ATTRIBUTE,
+    UDT_MEMBER_ROUTINE, //
     TRIGGER             // Trigger
   };
 
@@ -1029,7 +1104,8 @@ public:
   int resolve_external_type_by_name(const ObString &db_name,
                                     const ObString &package_name,
                                     const ObString &type_name,
-                                    const ObUserDefinedType *&user_type);
+                                    const ObUserDefinedType *&user_type,
+                                    bool try_synonym);
   int resolve_external_type_by_id(uint64_t type_id, const ObUserDefinedType *&user_type);
   int resolve_external_routine(const ObString &db_name,
                                const ObString &package_name,
@@ -1042,7 +1118,8 @@ public:
                            const ObString &routine_name,
                            const share::schema::ObRoutineType routine_type,
                            bool &exists,
-                           pl::ObProcType &proc_type) const;
+                           pl::ObProcType &proc_type,
+                           uint64_t udt_id) const;
   inline const ObPLBlockNS *get_parent_ns() const { return parent_ns_; }
   inline const ObPLResolveCtx &get_resolve_ctx() { return resolve_ctx_; }
   inline ObPLDependencyTable *get_dependency_table() const { return dependency_table_; }
@@ -1061,7 +1138,9 @@ public:
   enum BlockType {
     BLOCK_ROUTINE,
     BLOCK_PACKAGE_SPEC,
-    BLOCK_PACKAGE_BODY
+    BLOCK_PACKAGE_BODY,
+    BLOCK_OBJECT_SPEC,
+    BLOCK_OBJECT_BODY,
   };
   ObPLBlockNS(common::ObIAllocator &allocator,
               ObPLBlockNS *pre_ns,
@@ -1085,6 +1164,7 @@ public:
       stop_search_label_(false),
       explicit_block_(false),
       function_block_(false),
+      udt_routine_(false),
       types_(allocator),
       symbols_(allocator),
       labels_(allocator),
@@ -1186,6 +1266,7 @@ public:
                  bool has_dup_column_name,
                  int64_t &index,
                  bool skip_locked = false);
+  int add_questionmark_cursor(const int64_t symbol_idx);
   inline const common::ObIArray<sql::ObRawExpr*> *get_exprs() const { return exprs_; }
   inline void set_exprs(common::ObIArray<sql::ObRawExpr*> *exprs) { exprs_ = exprs; }
   inline void set_obj_access_exprs(common::ObIArray<sql::ObRawExpr*> *obj_access_exprs)
@@ -1273,7 +1354,8 @@ public:
                                             const ObString &routine_name,
                                             const share::schema::ObRoutineType routine_type,
                                             bool &exists,
-                                            pl::ObProcType &proc_type) const;
+                                            pl::ObProcType &proc_type,
+                                            uint64_t udt_id) const;
   int find_sub_attr_by_name(const ObUserDefinedType &user_type,
                             const sql::ObObjAccessIdent &access_ident,
                             ObSQLSessionInfo &session_info,
@@ -1295,19 +1377,26 @@ public:
   {
     return STANDALONE_PROCEDURE == routine_type
         || PACKAGE_PROCEDURE == routine_type
-        || NESTED_PROCEDURE == routine_type;
+        || NESTED_PROCEDURE == routine_type
+        || UDT_PROCEDURE == routine_type;
   }
   inline bool is_function(ObProcType routine_type) const
   {
     return STANDALONE_FUNCTION == routine_type
         || PACKAGE_FUNCTION == routine_type
-        || NESTED_FUNCTION == routine_type;
+        || NESTED_FUNCTION == routine_type
+        || UDT_FUNCTION == routine_type;
   }
   inline void set_compile_flag(const ObPLCompileFlag &compile_flag)
   {
     compile_flag_ = compile_flag;
   }
   inline const ObPLCompileFlag &get_compile_flag() const { return compile_flag_; }
+
+  inline void set_is_udt_routine() { udt_routine_ = true; }
+  inline bool is_udt_routine() const { return udt_routine_; }
+
+  const ObPLBlockNS* get_udt_routine_ns() const;
 
   int extract_external_record_default_expr(ObRawExpr &expr) const;
 
@@ -1326,6 +1415,7 @@ private:
   bool stop_search_label_; // set the top-level block of handler's body to true, because handler's body cannot see outer labels
   bool explicit_block_; //User explicitly declared BLOCK through BEGIN END, corresponding to Parser's T_SP_BLOCK_CONTENT
   bool function_block_; //whether it is a Function's Block
+  bool udt_routine_; // function whether the function is inside udt, this function requires special handling because it can access udt's attributes
   ObPLSEArray<int64_t> types_; // index in the type table
   ObPLSEArray<int64_t> symbols_; //index in the symbol table
   ObPLSEArray<int64_t> labels_; // index in the label table
@@ -1344,6 +1434,7 @@ private:
   ObPLCompileFlag compile_flag_;
 };
 
+class ObPLStmtVisitor;
 class ObPLStmtBlock;
 class ObPLSqlStmt;
 
@@ -1354,6 +1445,7 @@ public:
     INVALID_TYPE = -1,
     ROUTINE_TYPE,
     PACKAGE_TYPE,
+    OBJECT_TYPE,
   };
 
   ObPLAstUnit(common::ObIAllocator &allocator, UnitType type)
@@ -1362,6 +1454,8 @@ public:
        obj_access_exprs_(allocator),
        exprs_(allocator),
        continue_handler_desc_bodys_(allocator),
+       simple_calc_bitset_(),
+       sql_stmts_(allocator),
        expr_factory_(allocator),
        symbol_table_(allocator),
        user_type_table_(),
@@ -1386,6 +1480,7 @@ public:
   inline void set_type(UnitType type) { type_ = type; }
   inline bool is_routine() const { return ROUTINE_TYPE == type_; }
   inline bool is_package() const { return PACKAGE_TYPE == type_; }
+  inline bool is_object() const { return OBJECT_TYPE == type_; }
   inline const ObPLStmtBlock *get_body() const { return body_; }
   inline ObPLStmtBlock *get_body() { return body_; }
   inline void set_body(ObPLStmtBlock *body) { body_ = body; }
@@ -1406,6 +1501,10 @@ public:
   inline void set_expr(sql::ObRawExpr* expr, int64_t i) { exprs_.at(i) = expr; }
   inline int64_t get_expr_count() const { return exprs_.count(); }
   inline common::ObIArray<ObPLStmtBlock*> &get_continue_handler_desc_bodys() { return continue_handler_desc_bodys_; }
+  inline int add_simple_calc(int64_t i) { return simple_calc_bitset_.add_member(i); }
+  inline int add_simple_calcs(const ObBitSet<> &simple_calc) { return simple_calc_bitset_.add_members(simple_calc); }
+  inline const ObBitSet<> & get_simple_calcs() const { return simple_calc_bitset_; }
+  inline bool is_simple_calc(int64_t i) const { return simple_calc_bitset_.has_member(i); }
   inline sql::ObRawExprFactory &get_expr_factory() { return expr_factory_; }
   inline const ObPLSymbolTable &get_symbol_table() const { return symbol_table_; }
   inline ObPLSymbolTable &get_symbol_table() { return symbol_table_; }
@@ -1448,6 +1547,8 @@ public:
     priv_user_ = priv_user;
   }
 
+  inline ObIArray<ObPLSqlStmt *>& get_sql_stmts() { return sql_stmts_; }
+
   void process_default_compile_flag();
 
   virtual const common::ObString &get_db_name() const = 0;
@@ -1488,6 +1589,8 @@ protected:
   ObPLSEArray<sql::ObRawExpr*> obj_access_exprs_; // Used ObjAccessRawExpr
   ObPLSEArray<sql::ObRawExpr*> exprs_; // the expressions used, in AST it is ObRawExpr, in ObPLFunction it is ObISqlExpression
   ObPLSEArray<ObPLStmtBlock*> continue_handler_desc_bodys_;
+  ObBitSet<> simple_calc_bitset_; // Indices of expressions eligible for static-engine precomputation
+  ObPLSEArray<ObPLSqlStmt*> sql_stmts_;
   sql::ObRawExprFactory expr_factory_;
   ObPLSymbolTable symbol_table_;
   ObPLUserTypeTable user_type_table_;
@@ -1553,7 +1656,8 @@ public:
   int add_argument(const common::ObString &name, const ObPLDataType &type,
                    const sql::ObRawExpr *expr = NULL,
                    const common::ObIArray<common::ObString> *type_info = NULL,
-                   const bool read_only = false);
+                   const bool read_only = false,
+                   const bool is_udt_self_param = false);
   int get_argument(int64_t idx, common::ObString &name, ObPLDataType &type) const;
 
   virtual const common::ObString &get_db_name() const { return db_name_; }
@@ -1597,6 +1701,7 @@ enum ObPLStmtType
   PL_WHILE,
   PL_FOR_LOOP,
   PL_CURSOR_FOR_LOOP,
+  PL_FORALL,
   PL_REPEAT,
   PL_LOOP,
   PL_RETURN,
@@ -1611,6 +1716,7 @@ enum ObPLStmtType
   PL_INNER_CALL,
   PL_CURSOR,
   PL_OPEN,
+  PL_OPEN_FOR,
   PL_FETCH,
   PL_CLOSE,
   PL_NULL,
@@ -1636,6 +1742,7 @@ public:
     level_(OB_INVALID_INDEX), label_cnt_(0), parent_(parent) {}
   virtual ~ObPLStmt() {}
 
+  virtual int accept(ObPLStmtVisitor &visitor) const = 0;
   virtual int64_t get_child_size() const { return 0; }
   virtual const ObPLStmt *get_child_stmt(int64_t i) const { UNUSED(i); return NULL; }
 
@@ -1757,6 +1864,8 @@ public:
     }
     stmts_.reset();
   }
+
+  int accept(ObPLStmtVisitor &visitor) const;
   virtual int64_t get_child_size() const { return stmts_.count(); }
   virtual const ObPLStmt *get_child_stmt(int64_t i) const { return i < 0 || i >= stmts_.count() ? NULL : stmts_.at(i); }
 
@@ -1804,6 +1913,8 @@ public:
       default_(OB_INVALID_INDEX) {}
   virtual ~ObPLDeclareVarStmt() {}
 
+  int accept(ObPLStmtVisitor &visitor) const;
+
   inline const common::ObIArray<int64_t> &get_index() const { return idx_; }
   inline int64_t get_index(int64_t i) const { return idx_.at(i); }
   inline int add_index(int64_t var) { return idx_.push_back(var); }
@@ -1825,6 +1936,8 @@ public:
   ObPLDeclareUserTypeStmt()
     : ObPLStmt(PL_USER_TYPE),
       user_type_(NULL) {}
+
+  int accept(ObPLStmtVisitor &visitor) const;
   void set_user_type(ObUserDefinedType *user_type) { user_type_ = user_type; }
   ObUserDefinedType *get_user_type() { return user_type_; }
   const ObUserDefinedType *get_user_type() const { return user_type_; }
@@ -1838,6 +1951,8 @@ public:
   ObPLAssignStmt(common::ObIAllocator &allocator)
     : ObPLStmt(PL_ASSIGN), into_(allocator), value_(allocator) {}
   virtual ~ObPLAssignStmt() {}
+
+  int accept(ObPLStmtVisitor &visitor) const;
 
   inline const common::ObIArray<int64_t> &get_into() const { return into_;}
   inline int64_t get_into_index(int64_t i) const { return into_.at(i);}
@@ -1870,6 +1985,8 @@ public:
       else_ = NULL;
     }
   }
+
+  int accept(ObPLStmtVisitor &visitor) const;
   virtual int64_t get_child_size() const { return NULL == else_ ? 1 : 2; }
   virtual const ObPLStmt *get_child_stmt(int64_t i) const { return i < 0 || i >= 2 ? NULL : (0 == i ? then_ : else_); }
 
@@ -1923,6 +2040,8 @@ public:
     return ret;
   }
 
+  virtual int accept(ObPLStmtVisitor &visitor) const override;
+
   struct WhenClause {
     int64_t expr_;
     ObPLStmtBlock *body_;
@@ -1962,6 +2081,7 @@ public:
       data_type_(allocator),
       into_data_type_(allocator),
       into_name_(allocator),
+      bulk_(false),
       is_type_record_(false) {}
   virtual ~ObPLInto() {}
                            
@@ -1985,6 +2105,9 @@ public:
   inline const common::ObString&  get_into_name(int64_t i) const { return into_name_.at(i); }
   inline common::ObIArray<common::ObString> &get_into_name() { return into_name_; }
   inline bool is_type_record() const { return is_type_record_; }
+  inline bool is_bulk() const { return bulk_; }
+  inline void set_bulk() { bulk_ = true; }
+  int check_into(ObPLFunctionAST &func, ObPLBlockNS &ns, bool is_bulk);
   inline const common::ObIArray<bool> &get_not_null_flags() const { return not_null_flags_; }
   inline const bool &get_not_null_flag(int64_t i) const { return not_null_flags_.at(i); }
   inline const common::ObIArray<int64_t> &get_pl_integer_ranges() const
@@ -1996,7 +2119,14 @@ public:
                            const ObPLBlockNS &ns,
                            bool &flag,
                            ObPLIntegerRange &pl_integer_range) const;
-  TO_STRING_KV(K_(into), K_(not_null_flags), K_(pl_integer_ranges), K_(data_type));
+  virtual int replace_questionmark_variable_type(ObPLFunctionAST &func,
+                                  ObPLStmtBlock *&current_block,
+                                  common::ObIAllocator* allocator,
+                                  int64_t questionmark_idx,
+                                  int32_t into_nums,
+                                  int64_t cur_idx) const { return OB_SUCCESS; } 
+
+  TO_STRING_KV(K_(into), K_(not_null_flags), K_(pl_integer_ranges), K_(data_type), K_(bulk));
 
 protected:
   ObPLSEArray<int64_t> into_;
@@ -2005,6 +2135,7 @@ protected:
   ObPLSEArray<ObDataType> data_type_;
   ObPLSEArray<ObPLDataType> into_data_type_;
   ObPLSEArray<common::ObString> into_name_;
+  bool bulk_;
   bool is_type_record_; // indicates whether there is only one type-defined record type (not object-defined) after into
 };
 
@@ -2031,6 +2162,8 @@ public:
   ObPLLeaveStmt() : ObPLLoopControl(PL_LEAVE) {}
   virtual ~ObPLLeaveStmt() {}
 
+  int accept(ObPLStmtVisitor &visitor) const;
+
 private:
 
 };
@@ -2040,6 +2173,8 @@ class ObPLIterateStmt : public ObPLLoopControl
 public:
   ObPLIterateStmt() : ObPLLoopControl(PL_ITERATE) {}
   virtual ~ObPLIterateStmt() {}
+
+  int accept(ObPLStmtVisitor &visitor) const;
 
 private:
 
@@ -2086,6 +2221,8 @@ public:
   ObPLWhileStmt() : ObPLCondLoop(PL_WHILE) {}
   virtual ~ObPLWhileStmt() {}
 
+  int accept(ObPLStmtVisitor &visitor) const;
+
 private:
 
 };
@@ -2098,6 +2235,8 @@ public:
   ObPLRepeatStmt() : ObPLCondLoop(PL_REPEAT) {}
   virtual ~ObPLRepeatStmt() {}
 
+  int accept(ObPLStmtVisitor &visitor) const;
+
 private:
 
 };
@@ -2108,6 +2247,8 @@ public:
   ObPLLoopStmt() : ObPLLoop(PL_LOOP) {}
   virtual ~ObPLLoopStmt() {}
 
+  int accept(ObPLStmtVisitor &visitor) const;
+
 private:
 
 };
@@ -2115,16 +2256,22 @@ private:
 class ObPLReturnStmt : public ObPLStmt
 {
 public:
-  ObPLReturnStmt() : ObPLStmt(PL_RETURN), ret_(OB_INVALID_INDEX) {}
+  ObPLReturnStmt() : ObPLStmt(PL_RETURN), ret_(OB_INVALID_INDEX), ref_cursor_type_(false) {}
   virtual ~ObPLReturnStmt() {}
+
+  int accept(ObPLStmtVisitor &visitor) const;
 
   inline int64_t get_ret() const { return ret_;}
   inline const sql::ObRawExpr *get_ret_expr() const { return get_expr(ret_);}
   inline void set_ret(int64_t idx) { ret_ = idx; }
-  TO_STRING_KV(K_(type), K_(label), K_(ret));
+  inline void set_is_ref_cursor_type(bool is_ref_cursor_type) { ref_cursor_type_ = is_ref_cursor_type; }
+  inline bool is_return_ref_cursor_type() const { return ref_cursor_type_; }
+
+  TO_STRING_KV(K_(type), K_(label), K_(ret), K_(ref_cursor_type));
 
 private:
   int64_t ret_;
+  bool ref_cursor_type_;
 };
 
 class ObPLSqlStmt : public ObPLStmt, public ObPLSql, public ObPLInto
@@ -2134,7 +2281,9 @@ public:
     : ObPLStmt(PL_SQL), ObPLSql(allocator), ObPLInto(allocator) {}
   virtual ~ObPLSqlStmt() {}
 
-  TO_STRING_KV(K_(type), K_(label), K_(sql), K_(params), K_(ps_sql), K_(stmt_type), K_(into), K_(data_type));
+  int accept(ObPLStmtVisitor &visitor) const;
+
+  TO_STRING_KV(K_(type), K_(label), K_(sql), K_(params), K_(ps_sql), K_(stmt_type), K_(into), K_(data_type), K_(bulk));
 private:
 
 };
@@ -2200,16 +2349,21 @@ public:
     : ObPLStmt(PL_EXECUTE),
       ObPLInto(allocator),
       ObPLUsing(allocator),
-      sql_(OB_INVALID_INDEX) {}
+      sql_(OB_INVALID_INDEX), is_returning_(false) {}
   virtual ~ObPLExecuteStmt() {}
+
+  int accept(ObPLStmtVisitor &visitor) const;
 
   inline int64_t get_sql() const { return sql_; }
   inline const sql::ObRawExpr *get_sql_expr() const { return get_expr(sql_); }
   inline void set_sql(int64_t idx) { sql_ = idx; }
+  inline void set_is_returning(bool is_returning) { is_returning_ = is_returning; }
+  inline bool get_is_returning() const { return is_returning_; }
   const sql::ObRawExpr *get_using_expr(int64_t i) const { return get_expr(using_.at(i).param_); }
-  TO_STRING_KV(K_(type), K_(label), K_(sql), K_(into), K_(using));
+  TO_STRING_KV(K_(type), K_(label), K_(sql), K_(into), K_(bulk), K_(using), K_(is_returning));
 private:
   int64_t sql_;
+  bool is_returning_;
 };
 
 class ObPLDeclareCondStmt : public ObPLStmt
@@ -2217,6 +2371,8 @@ class ObPLDeclareCondStmt : public ObPLStmt
 public:
   ObPLDeclareCondStmt() : ObPLStmt(PL_COND) {}
   virtual ~ObPLDeclareCondStmt() {}
+
+  int accept(ObPLStmtVisitor &visitor) const;
 
   TO_STRING_KV(K_(type), K_(label));
 
@@ -2297,6 +2453,8 @@ public:
       }
     }
   }
+
+  int accept(ObPLStmtVisitor &visitor) const;
   virtual int64_t get_child_size() const { return handlers_.count(); }
   virtual const ObPLStmt *get_child_stmt(int64_t i) const { return i < 0 || i >= handlers_.count() ? NULL : (NULL == handlers_.at(i).get_desc() ? NULL : handlers_.at(i).get_desc()->get_body()); }
 
@@ -2348,6 +2506,8 @@ public:
       is_resignal_stmt_(false) {}
   virtual ~ObPLSignalStmt() { item_to_expr_idx_.destroy(); }
 
+  int accept(ObPLStmtVisitor &visitor) const;
+
   inline const ObPLConditionValue &get_value() const { return value_; }
   inline void set_value(const ObPLConditionValue &value) { value_ = value; }
   inline ObPLConditionType get_cond_type() const { return value_.type_; }
@@ -2394,8 +2554,11 @@ public:
         is_object_udf_(0),
         subprogram_path_(allocator),
         params_(allocator),
+        nocopy_params_(allocator),
         route_sql_() {}
   virtual ~ObPLCallStmt() {}
+
+  int accept(ObPLStmtVisitor &visitor) const;
 
   inline uint64_t get_invoker_id() const { return invoker_id_; }
   inline void set_invoker_id(const uint64_t invoker_id) { invoker_id_ = invoker_id; }
@@ -2412,6 +2575,8 @@ public:
   inline bool is_out(int64_t i) const { return PL_PARAM_OUT == params_.at(i).mode_ || PL_PARAM_INOUT == params_.at(i).mode_; }
   inline bool is_pure_out(int64_t i) const { return PL_PARAM_OUT == params_.at(i).mode_; }
   inline int add_param(int64_t param, ObPLRoutineParamMode mode, int64_t idx) { return params_.push_back(InOutParam(param, mode, idx)); }
+  inline common::ObIArray<int64_t> &get_nocopy_params() { return nocopy_params_; }
+  inline const common::ObIArray<int64_t> &get_nocopy_params() const { return nocopy_params_; }
   inline void set_is_object_udf() { is_object_udf_ = 1; }
   inline uint64_t get_is_object_udf() const { return is_object_udf_; }
   inline const common::ObString &get_route_sql() const { return route_sql_; }
@@ -2423,15 +2588,17 @@ public:
                K_(proc_id),
                K_(is_object_udf),
                K_(params),
+               K_(nocopy_params),
                K_(route_sql));
 
 private:
   uint64_t invoker_id_;
   uint64_t package_id_;
   uint64_t proc_id_;
-  uint64_t is_object_udf_; // 1: true, why use uint64_t but not bool, for the convenience with llvm cg
+  uint64_t is_object_udf_; // 1: true
   ObPLSEArray<int64_t> subprogram_path_;
   ObPLSEArray<InOutParam> params_;
+  ObPLSEArray<int64_t> nocopy_params_;
   common::ObString route_sql_;
 };
 
@@ -2444,6 +2611,8 @@ public:
         proc_id_(common::OB_INVALID_ID),
         params_(allocator) {}
   virtual ~ObPLInnerCallStmt() {}
+
+  int accept(ObPLStmtVisitor &visitor) const;
 
   inline uint64_t get_package_id() const { return package_id_; }
   inline void set_package_id(const uint64_t package_id) { package_id_ = package_id; }
@@ -2471,6 +2640,8 @@ public:
   ObPLDeclareCursorStmt() : ObPLStmt(PL_CURSOR), cur_idx_(common::OB_INVALID_INDEX) {}
   virtual ~ObPLDeclareCursorStmt() {}
 
+  int accept(ObPLStmtVisitor &visitor) const;
+
   inline int64_t get_cursor_index() const { return cur_idx_; }
   inline void set_cursor_index(int64_t idx) { cur_idx_ = idx; }
   inline const ObPLCursor *get_cursor() const { return ObPLStmt::get_cursor(cur_idx_); }
@@ -2491,6 +2662,8 @@ public:
         cur_idx_(common::OB_INVALID_INDEX),
         params_(allocator) {}
   virtual ~ObPLOpenStmt() {}
+
+  int accept(ObPLStmtVisitor &visitor) const;
 
   inline int64_t get_cursor_index() const { return cur_idx_; }
   inline void set_cursor_index(int64_t idx) { cur_idx_ = idx; }
@@ -2543,8 +2716,17 @@ public:
       pkg_id_(OB_INVALID_ID),
       routine_id_(OB_INVALID_ID),
       idx_(common::OB_INVALID_INDEX),
+      limit_(INT64_MAX),
       user_type_(NULL) {}
   virtual ~ObPLFetchStmt() {}
+
+  int accept(ObPLStmtVisitor &visitor) const;
+  int replace_questionmark_variable_type(ObPLFunctionAST &func,
+                                    ObPLStmtBlock *&current_block,
+                                    common::ObIAllocator* allocator,
+                                    int64_t questionmark_idx,
+                                    int32_t into_nums,
+                                    int64_t cur_idx) const override;
   inline uint64_t get_package_id() const { return pkg_id_; }
   inline uint64_t get_routine_id() const { return routine_id_; }
   inline int64_t get_index() const { return idx_; }
@@ -2563,12 +2745,16 @@ public:
   {
     user_type_ = user_type;
   }
-  TO_STRING_KV(K_(type), K_(label), K_(pkg_id), K_(routine_id), K_(idx), K_(into));
+  inline int64_t get_limit() const { return limit_; }
+  inline void set_limit(int64_t limit) { limit_ = limit; }
+
+  TO_STRING_KV(K_(type), K_(label), K_(pkg_id), K_(routine_id), K_(idx), K_(into), K_(bulk));
 
 private:
   uint64_t pkg_id_;
   uint64_t routine_id_;
   int64_t idx_; //index in the symbol table
+  int64_t limit_; //INT64_MAX: is bulk fetch but there is no limit clause
   const ObUserDefinedType *user_type_; // CURSOR return value type
 };
 
@@ -2581,6 +2767,8 @@ public:
     routine_id_(OB_INVALID_ID),
     idx_(common::OB_INVALID_INDEX) {}
   virtual ~ObPLCloseStmt() {}
+
+  int accept(ObPLStmtVisitor &visitor) const;
 
   inline uint64_t get_package_id() const { return pkg_id_; }
   inline uint64_t get_routine_id() const { return routine_id_; }
@@ -2607,6 +2795,8 @@ public:
   ObPLNullStmt() : ObPLStmt(PL_NULL) {}
   virtual ~ObPLNullStmt() {}
 
+  int accept(ObPLStmtVisitor &visitor) const;
+
   TO_STRING_KV(K_(type), K_(label));
 
 private:
@@ -2620,6 +2810,8 @@ public:
       : ObPLStmt(PL_ROUTINE_DEF), type_(INVALID_PROC_TYPE),
         idx_(common::OB_INVALID_INDEX) {}
   virtual ~ObPLRoutineDefStmt() {}
+
+  int accept(ObPLStmtVisitor &visitor) const;
 
   inline int64_t get_index() const { return idx_; }
   inline void set_index(int64_t idx) { idx_ = idx; }
@@ -2639,6 +2831,8 @@ public:
         idx_(common::OB_INVALID_INDEX) {}
   virtual ~ObPLRoutineDeclStmt() {}
 
+  int accept(ObPLStmtVisitor &visitor) const;
+
   inline int64_t get_index() const { return idx_; }
   inline void set_index(int64_t idx) { idx_ = idx; }
 
@@ -2655,6 +2849,8 @@ public:
   ObPLInterfaceStmt() : ObPLStmt(PL_INTERFACE), entry_(0) {}
   virtual ~ObPLInterfaceStmt() {}
 
+  int accept(ObPLStmtVisitor &visitor) const;
+
   inline ObString get_entry() const { return entry_; }
   inline void set_entry(const common::ObString &entry) { entry_ = entry; }
 
@@ -2670,6 +2866,8 @@ public:
   ObPLDoStmt(common::ObIAllocator &allocator)
     : ObPLStmt(PL_DO), value_(allocator) {}
   virtual ~ObPLDoStmt() {}
+
+  int accept(ObPLStmtVisitor &visitor) const;
 
   inline const common::ObIArray<int64_t> &get_value() const { return value_;}
   inline int64_t get_value_index(int64_t i) const { return value_.at(i);}
@@ -2688,6 +2886,37 @@ public:
 
 private:
   common::ObIAllocator &allocator_;
+};
+
+class ObPLStmtVisitor
+{
+public:
+  virtual ~ObPLStmtVisitor() {}
+  virtual int visit(const ObPLStmtBlock &s) = 0;
+  virtual int visit(const ObPLDeclareVarStmt &s) = 0;
+  virtual int visit(const ObPLAssignStmt &s) = 0;
+  virtual int visit(const ObPLIfStmt &s) = 0;
+  virtual int visit(const ObPLLeaveStmt &s) = 0;
+  virtual int visit(const ObPLIterateStmt &s) = 0;
+  virtual int visit(const ObPLWhileStmt &s) = 0;
+  virtual int visit(const ObPLRepeatStmt &s) = 0;
+  virtual int visit(const ObPLLoopStmt &s) = 0;
+  virtual int visit(const ObPLReturnStmt &s) = 0;
+  virtual int visit(const ObPLSqlStmt &s) = 0;
+  virtual int visit(const ObPLExecuteStmt &s) = 0;
+  virtual int visit(const ObPLDeclareCondStmt &s) = 0;
+  virtual int visit(const ObPLDeclareHandlerStmt &s) = 0;
+  virtual int visit(const ObPLSignalStmt &s) = 0;
+  virtual int visit(const ObPLCallStmt &s) = 0;
+  virtual int visit(const ObPLDeclareCursorStmt &s) = 0;
+  virtual int visit(const ObPLOpenStmt &s) = 0;
+  virtual int visit(const ObPLFetchStmt &s) = 0;
+  virtual int visit(const ObPLCloseStmt &s) = 0;
+  virtual int visit(const ObPLNullStmt &s) = 0;
+  virtual int visit(const ObPLDeclareUserTypeStmt &s) = 0;
+  virtual int visit(const ObPLInterfaceStmt &s) = 0;
+  virtual int visit(const ObPLDoStmt &s) = 0;
+  virtual int visit(const ObPLCaseStmt &s) = 0;
 };
 
 }

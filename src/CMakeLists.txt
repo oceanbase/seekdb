@@ -6,8 +6,7 @@ add_library(ob_base INTERFACE)
 target_include_directories(
   ob_base_without_pass INTERFACE
   ${CMAKE_SOURCE_DIR}
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  ${CMAKE_CURRENT_SOURCE_DIR}/objit/include)
+  ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_compile_features(ob_base_without_pass INTERFACE cxx_std_11)
 target_link_libraries(ob_base_without_pass INTERFACE oblib_base_without_pass

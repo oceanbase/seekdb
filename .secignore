@@ -466,7 +466,6 @@
 /tools/deploy/**
 /tools/obtest/**
 /tools/codestyle/**
-/src/objit/deps/googletest/**
 /.git/**
 /deps/oblib/src/lib/compress/**
 --------------------------------------------------------
