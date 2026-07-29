@@ -316,15 +316,6 @@ struct DefHashMethod
   typedef T HashMethod;
 };
 
-template <typename T, bool IS_VEC>
-struct VectorIter
-{
-  explicit VectorIter(T *vec) : vec_(vec) {}
-  T &operator[](const int64_t i) const { return IS_VEC ? vec_[i] : vec_[0]; }
-private:
-  T *vec_;
-};
-
 template <typename DatumHashFunc>
 struct DefHashFunc
 {
@@ -351,22 +342,6 @@ struct DefHashFunc
     return DatumHashFunc::calc_datum_hash_v2(datum, seed, res);
   }
 
-  template <typename DATUM_VEC, typename SEED_VEC>
-  static void do_hash_batch(uint64_t *hash_values,
-                         const DATUM_VEC &datum_vec,
-                         const ObBitVector &skip,
-                         const int64_t size,
-                         const SEED_VEC &seed_vec)
-  {
-    ObBitVector::flip_foreach(skip, size,
-      [&](int64_t idx) __attribute__((always_inline)) {
-        int ret = OB_SUCCESS;
-        ret = hash(datum_vec[idx], seed_vec[idx], hash_values[idx]);
-        return ret;
-      }
-    );
-  }
-
   static void hash_batch(uint64_t *hash_values,
                          ObDatum *datums,
                          const bool is_batch_datum,
@@ -375,58 +350,39 @@ struct DefHashFunc
                          const uint64_t *seeds,
                          const bool is_batch_seed)
   {
-    if (is_batch_datum && !is_batch_seed) {
-      do_hash_batch(hash_values, VectorIter<const ObDatum, true>(datums), skip, size,
-                    VectorIter<const uint64_t, false>(seeds));
-    } else if (is_batch_datum && is_batch_seed) {
-      do_hash_batch(hash_values, VectorIter<const ObDatum, true>(datums), skip, size,
-                    VectorIter<const uint64_t, true>(seeds));
-    } else if (!is_batch_datum && is_batch_seed) {
-      do_hash_batch(hash_values, VectorIter<const ObDatum, false>(datums), skip, size,
-                    VectorIter<const uint64_t, true>(seeds));
-    } else {
-      do_hash_batch(hash_values, VectorIter<const ObDatum, false>(datums), skip, size,
-                    VectorIter<const uint64_t, false>(seeds));
-    }
-  }
-
-  template <typename DATUM_VEC, typename SEED_VEC>
-  static void do_hash_v2_batch(uint64_t *hash_values,
-                         const DATUM_VEC &datum_vec,
-                         const ObBitVector &skip,
-                         const int64_t size,
-                         const SEED_VEC &seed_vec)
-  {
+    // Zero maps every row to the scalar element; all ones preserves the batch index.
+    const uint64_t datum_idx_mask = is_batch_datum ? UINT64_MAX : 0;
+    const uint64_t seed_idx_mask = is_batch_seed ? UINT64_MAX : 0;
     ObBitVector::flip_foreach(skip, size,
       [&](int64_t idx) __attribute__((always_inline)) {
         int ret = OB_SUCCESS;
-        ret = hash_v2(datum_vec[idx], seed_vec[idx], hash_values[idx]);
+        const uint64_t datum_idx = static_cast<uint64_t>(idx) & datum_idx_mask;
+        const uint64_t seed_idx = static_cast<uint64_t>(idx) & seed_idx_mask;
+        ret = hash(datums[datum_idx], seeds[seed_idx], hash_values[idx]);
         return ret;
       }
     );
   }
 
   static void hash_v2_batch(uint64_t *hash_values,
-                         ObDatum *datums,
-                         const bool is_batch_datum,
-                         const ObBitVector &skip,
-                         const int64_t size,
-                         const uint64_t *seeds,
-                         const bool is_batch_seed)
+                            ObDatum *datums,
+                            const bool is_batch_datum,
+                            const ObBitVector &skip,
+                            const int64_t size,
+                            const uint64_t *seeds,
+                            const bool is_batch_seed)
   {
-    if (is_batch_datum && !is_batch_seed) {
-      do_hash_v2_batch(hash_values, VectorIter<const ObDatum, true>(datums), skip, size,
-                    VectorIter<const uint64_t, false>(seeds));
-    } else if (is_batch_datum && is_batch_seed) {
-      do_hash_v2_batch(hash_values, VectorIter<const ObDatum, true>(datums), skip, size,
-                    VectorIter<const uint64_t, true>(seeds));
-    } else if (!is_batch_datum && is_batch_seed) {
-      do_hash_v2_batch(hash_values, VectorIter<const ObDatum, false>(datums), skip, size,
-                    VectorIter<const uint64_t, true>(seeds));
-    } else {
-      do_hash_v2_batch(hash_values, VectorIter<const ObDatum, false>(datums), skip, size,
-                    VectorIter<const uint64_t, false>(seeds));
-    }
+    const uint64_t datum_idx_mask = is_batch_datum ? UINT64_MAX : 0;
+    const uint64_t seed_idx_mask = is_batch_seed ? UINT64_MAX : 0;
+    ObBitVector::flip_foreach(skip, size,
+      [&](int64_t idx) __attribute__((always_inline)) {
+        int ret = OB_SUCCESS;
+        const uint64_t datum_idx = static_cast<uint64_t>(idx) & datum_idx_mask;
+        const uint64_t seed_idx = static_cast<uint64_t>(idx) & seed_idx_mask;
+        ret = hash_v2(datums[datum_idx], seeds[seed_idx], hash_values[idx]);
+        return ret;
+      }
+    );
   }
 };
 
@@ -507,25 +463,6 @@ struct DefStrHashFunc
     return ret;
   }
 
-  template <typename DATUM_VEC, typename SEED_VEC>
-      static void do_hash_batch(uint64_t *hash_values,
-                                const DATUM_VEC &datum_vec,
-                                const ObBitVector &skip,
-                                const int64_t size,
-                                const SEED_VEC &seed_vec,
-                                const ObCollationType cs,
-                                const bool calc_end_space,
-                                const hash_algo hash_al)
-  {
-    ObBitVector::flip_foreach(skip, size,
-      [&](int64_t idx) __attribute__((always_inline)) {
-        int ret = OB_SUCCESS;
-        ret = hash(datum_vec[idx], seed_vec[idx], hash_values[idx], cs, calc_end_space, hash_al);
-        return ret;
-      }
-    );
-  }
-
   static void hash_batch(uint64_t *hash_values,
                          ObDatum *datums,
                          const bool is_batch_datum,
@@ -537,64 +474,44 @@ struct DefStrHashFunc
                          const bool calc_end_space,
                          const hash_algo hash_al)
   {
-    if (is_batch_datum && !is_batch_seed) {
-      do_hash_batch(hash_values, VectorIter<const ObDatum, true>(datums), skip, size,
-                    VectorIter<const uint64_t, false>(seeds), cs, calc_end_space, hash_al);
-    } else if (is_batch_datum && is_batch_seed) {
-      do_hash_batch(hash_values, VectorIter<const ObDatum, true>(datums), skip, size,
-                    VectorIter<const uint64_t, true>(seeds), cs, calc_end_space, hash_al);
-    } else if (!is_batch_datum && is_batch_seed) {
-      do_hash_batch(hash_values, VectorIter<const ObDatum, false>(datums), skip, size,
-                    VectorIter<const uint64_t, true>(seeds), cs, calc_end_space, hash_al);
-    } else {
-      do_hash_batch(hash_values, VectorIter<const ObDatum, false>(datums), skip, size,
-                    VectorIter<const uint64_t, false>(seeds), cs, calc_end_space, hash_al);
-    }
-  }
-
-  template <typename DATUM_VEC, typename SEED_VEC>
-      static void do_hash_v2_batch(uint64_t *hash_values,
-                                   const DATUM_VEC &datum_vec,
-                                   const ObBitVector &skip,
-                                   const int64_t size,
-                                   const SEED_VEC &seed_vec,
-                                   const ObCollationType cs,
-                                   const bool calc_end_space,
-                                   const hash_algo hash_al)
-  {
+    // Zero maps every row to the scalar element; all ones preserves the batch index.
+    const uint64_t datum_idx_mask = is_batch_datum ? UINT64_MAX : 0;
+    const uint64_t seed_idx_mask = is_batch_seed ? UINT64_MAX : 0;
     ObBitVector::flip_foreach(skip, size,
       [&](int64_t idx) __attribute__((always_inline)) {
         int ret = OB_SUCCESS;
-        ret = hash_v2(datum_vec[idx], seed_vec[idx], hash_values[idx], cs, calc_end_space, hash_al);
+        const uint64_t datum_idx = static_cast<uint64_t>(idx) & datum_idx_mask;
+        const uint64_t seed_idx = static_cast<uint64_t>(idx) & seed_idx_mask;
+        ret = hash(datums[datum_idx], seeds[seed_idx], hash_values[idx],
+                   cs, calc_end_space, hash_al);
         return ret;
       }
     );
   }
 
   static void hash_v2_batch(uint64_t *hash_values,
-                         ObDatum *datums,
-                         const bool is_batch_datum,
-                         const ObBitVector &skip,
-                         const int64_t size,
-                         const uint64_t *seeds,
-                         const bool is_batch_seed,
-                         const ObCollationType cs,
-                         const bool calc_end_space,
-                         const hash_algo hash_al)
+                            ObDatum *datums,
+                            const bool is_batch_datum,
+                            const ObBitVector &skip,
+                            const int64_t size,
+                            const uint64_t *seeds,
+                            const bool is_batch_seed,
+                            const ObCollationType cs,
+                            const bool calc_end_space,
+                            const hash_algo hash_al)
   {
-    if (is_batch_datum && !is_batch_seed) {
-      do_hash_v2_batch(hash_values, VectorIter<const ObDatum, true>(datums), skip, size,
-                    VectorIter<const uint64_t, false>(seeds), cs, calc_end_space, hash_al);
-    } else if (is_batch_datum && is_batch_seed) {
-      do_hash_v2_batch(hash_values, VectorIter<const ObDatum, true>(datums), skip, size,
-                    VectorIter<const uint64_t, true>(seeds), cs, calc_end_space, hash_al);
-    } else if (!is_batch_datum && is_batch_seed) {
-      do_hash_v2_batch(hash_values, VectorIter<const ObDatum, false>(datums), skip, size,
-                    VectorIter<const uint64_t, true>(seeds), cs, calc_end_space, hash_al);
-    } else {
-      do_hash_v2_batch(hash_values, VectorIter<const ObDatum, false>(datums), skip, size,
-                    VectorIter<const uint64_t, false>(seeds), cs, calc_end_space, hash_al);
-    }
+    const uint64_t datum_idx_mask = is_batch_datum ? UINT64_MAX : 0;
+    const uint64_t seed_idx_mask = is_batch_seed ? UINT64_MAX : 0;
+    ObBitVector::flip_foreach(skip, size,
+      [&](int64_t idx) __attribute__((always_inline)) {
+        int ret = OB_SUCCESS;
+        const uint64_t datum_idx = static_cast<uint64_t>(idx) & datum_idx_mask;
+        const uint64_t seed_idx = static_cast<uint64_t>(idx) & seed_idx_mask;
+        ret = hash_v2(datums[datum_idx], seeds[seed_idx], hash_values[idx],
+                      cs, calc_end_space, hash_al);
+        return ret;
+      }
+    );
   }
 };
 
@@ -1325,8 +1242,7 @@ struct InitUDTBasicFuncArray
 {
   // only for storage use, udt types are used as null bitmap in storage
   // storage will use murmur_hash_ and null_last_cmp_ maybe, so keep the origin basic func define and others
-  // Basic functions reject unsupported operations: hashing returns OB_NOT_SUPPORTED and
-  // comparison returns OB_ERR_INVALID_TYPE_FOR_OP.
+  // basic func return error code wheh is called: hash func return OB_NOT_SUPPORTED and cmp func return OB_ERR_NO_ORDER_MAP_SQL
   template <typename T>
   using StrHash = DefHashFunc<DatumStrHashCalculator<CS_TYPE_BINARY, false, T, false>>;
   template <typename T, bool HAS_LOB_HEADER>

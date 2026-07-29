@@ -16,8 +16,12 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <vector>
+
 #include "sql/engine/expr/ob_batch_eval_util.h"
 #include "sql/engine/expr/ob_expr_cmp_func.h"
+#include "sql/engine/expr/ob_expr_basic_funcs.h"
 #include "sql/engine/ob_exec_context.h"
 
 namespace oceanbase
@@ -51,6 +55,105 @@ struct AddDatumOp : public ObArithOpBase
     return OB_SUCCESS;
   }
 };
+
+struct BatchHashFuncPair
+{
+  ObExprHashFuncType scalar_func_;
+  ObBatchDatumHashFunc batch_func_;
+};
+
+static void verify_batch_hash_shapes(const ObExprBasicFuncs &basic_funcs,
+                                     common::ObDatum *datums,
+                                     const int64_t batch_size)
+{
+  static constexpr uint64_t HASH_SENTINEL = 0xDEADBEEFDEADBEEFULL;
+  const BatchHashFuncPair hash_funcs[] = {
+      {basic_funcs.default_hash_, basic_funcs.default_hash_batch_},
+      {basic_funcs.murmur_hash_, basic_funcs.murmur_hash_batch_},
+      {basic_funcs.xx_hash_, basic_funcs.xx_hash_batch_},
+      {basic_funcs.wy_hash_, basic_funcs.wy_hash_batch_},
+      {basic_funcs.murmur_hash_v2_, basic_funcs.murmur_hash_v2_batch_},
+  };
+  const bool shapes[][2] = {
+      {false, false},
+      {false, true},
+      {true, false},
+      {true, true},
+  };
+  std::vector<uint64_t> skip_buf(ObBitVector::word_count(batch_size));
+  ObBitVector *skip = to_bit_vector(skip_buf.data());
+  std::vector<uint64_t> seeds(batch_size);
+  std::vector<uint64_t> hash_values(batch_size);
+  std::vector<uint64_t> expected(batch_size);
+  for (int64_t i = 0; i < batch_size; ++i) {
+    seeds[i] = 0x9E3779B97F4A7C15ULL + static_cast<uint64_t>(i * 17);
+  }
+
+  for (const BatchHashFuncPair &hash_func : hash_funcs) {
+    ASSERT_NE(nullptr, hash_func.scalar_func_);
+    ASSERT_NE(nullptr, hash_func.batch_func_);
+
+    skip->init(batch_size);
+    skip->set_all(batch_size);
+    hash_func.batch_func_(nullptr, nullptr, false, *skip, batch_size, nullptr, false);
+    hash_func.batch_func_(nullptr, nullptr, false, *skip, 0, nullptr, false);
+
+    skip->init(batch_size);
+    const int64_t skipped_rows[] = {0, 2, 63, 64, 127};
+    for (const int64_t idx : skipped_rows) {
+      if (idx < batch_size) {
+        skip->set(idx);
+      }
+    }
+    for (const auto &shape : shapes) {
+      std::fill(hash_values.begin(), hash_values.end(), HASH_SENTINEL);
+      hash_func.batch_func_(hash_values.data(), datums, shape[0], *skip, batch_size,
+                            seeds.data(), shape[1]);
+      for (int64_t i = 0; i < batch_size; ++i) {
+        if (skip->at(i)) {
+          EXPECT_EQ(HASH_SENTINEL, hash_values[i]);
+        } else {
+          const int64_t datum_idx = shape[0] ? i : 0;
+          const int64_t seed_idx = shape[1] ? i : 0;
+          uint64_t scalar_hash = 0;
+          ASSERT_EQ(OB_SUCCESS,
+                    hash_func.scalar_func_(datums[datum_idx], seeds[seed_idx], scalar_hash));
+          EXPECT_EQ(scalar_hash, hash_values[i]);
+        }
+      }
+    }
+
+    std::vector<uint64_t> in_place_hashes = seeds;
+    expected.assign(batch_size, HASH_SENTINEL);
+    for (int64_t i = 0; i < batch_size; ++i) {
+      if (!skip->at(i)) {
+        ASSERT_EQ(OB_SUCCESS,
+                  hash_func.scalar_func_(datums[i], in_place_hashes[i], expected[i]));
+      }
+    }
+    hash_func.batch_func_(in_place_hashes.data(), datums, true, *skip, batch_size,
+                          in_place_hashes.data(), true);
+    for (int64_t i = 0; i < batch_size; ++i) {
+      EXPECT_EQ(skip->at(i) ? seeds[i] : expected[i], in_place_hashes[i]);
+    }
+
+    skip->init(batch_size);
+    in_place_hashes = seeds;
+    expected.assign(batch_size, HASH_SENTINEL);
+    uint64_t scalar_seed = seeds[0];
+    for (int64_t i = 0; i < batch_size; ++i) {
+      ASSERT_EQ(OB_SUCCESS, hash_func.scalar_func_(datums[i], scalar_seed, expected[i]));
+      if (0 == i) {
+        scalar_seed = expected[i];
+      }
+    }
+    hash_func.batch_func_(in_place_hashes.data(), datums, true, *skip, batch_size,
+                          in_place_hashes.data(), false);
+    for (int64_t i = 0; i < batch_size; ++i) {
+      EXPECT_EQ(expected[i], in_place_hashes[i]);
+    }
+  }
+}
 
 TEST(ObBatchEvalUtil, datum_op_uses_current_batch_index)
 {
@@ -197,6 +300,40 @@ TEST(ObBatchEvalUtil, datum_vector_broadcasts_batch_and_scalar_operands)
     }
     EXPECT_TRUE(expr.get_eval_info(eval_ctx).notnull_);
   }
+}
+
+TEST(ObDatumHash, batch_shapes_match_scalar_hash)
+{
+  static constexpr int64_t BATCH_SIZE = 129;
+  int64_t int_values[BATCH_SIZE];
+  common::ObDatum int_datums[BATCH_SIZE];
+  common::ObDatum string_datums[BATCH_SIZE];
+  const char *string_values[] = {"a", "OceanBase", "hash value", "trailing spaces   "};
+  for (int64_t i = 0; i < BATCH_SIZE; ++i) {
+    int_values[i] = 1000 + i;
+    int_datums[i].ptr_ = reinterpret_cast<const char *>(&int_values[i]);
+    int_datums[i].set_int(int_values[i]);
+    string_datums[i].set_string(common::ObString::make_string(
+        string_values[i % ARRAYSIZEOF(string_values)]));
+  }
+  int_datums[65].set_null();
+
+  ObExprBasicFuncs *int_funcs = common::ObDatumFuncs::get_basic_func(
+      common::ObIntType, common::CS_TYPE_BINARY);
+  ObExprBasicFuncs *general_ci_funcs = common::ObDatumFuncs::get_basic_func(
+      common::ObVarcharType, common::CS_TYPE_UTF8MB4_GENERAL_CI,
+      common::SCALE_UNKNOWN_YET, false);
+  ObExprBasicFuncs *utf8_bin_funcs = common::ObDatumFuncs::get_basic_func(
+      common::ObVarcharType, common::CS_TYPE_UTF8MB4_BIN,
+      common::SCALE_UNKNOWN_YET, false);
+  ASSERT_NE(nullptr, int_funcs);
+  ASSERT_NE(nullptr, general_ci_funcs);
+  ASSERT_NE(nullptr, utf8_bin_funcs);
+
+  verify_batch_hash_shapes(*int_funcs, int_datums, BATCH_SIZE);
+  verify_batch_hash_shapes(*general_ci_funcs, string_datums, BATCH_SIZE);
+  string_datums[65].set_null();
+  verify_batch_hash_shapes(*utf8_bin_funcs, string_datums, BATCH_SIZE);
 }
 
 TEST(ObExprCmpFunc, string_initializer_shards_cover_supported_collations)
