@@ -57,7 +57,7 @@ int LogGroupBuffer::init(const LSN &start_lsn)
     // if (!tenant_config.is_valid()) {
     //  PALF_LOG(WARN, "get tenant config failed", K(ret));
     //  // TODO: add tenant config
-    //  // group_buffer_size = tenant_config->_log_groupgation_buffer_size;
+    //  // group_buffer_size = database_config->_log_groupgation_buffer_size;
     //}
     ObMemAttr mem_attr("LogGroupBuffer");
     if (NULL == (data_buf_ = static_cast<char *>(server_malloc(group_buffer_size, mem_attr)))) {

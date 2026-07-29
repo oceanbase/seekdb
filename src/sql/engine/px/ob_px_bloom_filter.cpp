@@ -283,6 +283,10 @@ int ObPxBloomFilter::merge_filter(ObPxBloomFilter *filter)
   if (OB_ISNULL(filter)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("filer is null", K(ret));
+  } else if (OB_UNLIKELY(bits_array_length_ != filter->bits_array_length_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("bloom filter length mismatch", K(ret), K(bits_array_length_),
+             "other_length", filter->bits_array_length_);
   } else {
     int64_t old_v = 0, new_v = 0;
     for (int i = 0; i < filter->bits_array_length_; ++i) {

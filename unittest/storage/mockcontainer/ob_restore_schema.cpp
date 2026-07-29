@@ -45,7 +45,7 @@ int ObRestoreSchema::init()
   schema_service_ = new MockSchemaService();
   if (OB_FAIL(schema_service_->init())) {
     STORAGE_LOG(WARN, "schema_service init fail", K(ret));
-  } else if (OB_FAIL(schema_service_->get_schema_guard(schema_guard_, INT64_MAX))) {
+  } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard_, INT64_MAX))) {
     STORAGE_LOG(WARN, "schema_guard init fail", K(ret));
   } else {
     table_id_ = 3001;
@@ -78,18 +78,12 @@ int ObRestoreSchema::init()
 int ObRestoreSchema::add_database_schema(ObDatabaseSchema &database_schema)
 {
   int ret = OB_SUCCESS;
-  const ObServerRuntimeSchema *runtime_schema = NULL;
   const ObSysVariableSchema *sys_variable= NULL;
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(schema_guard_.get_server_runtime_info(runtime_schema))) {
-      STORAGE_LOG(WARN, "get runtime info failed", K(database_schema), K(ret));
-    } else if (OB_ISNULL(runtime_schema)) {
-      ret = OB_RUNTIME_SCHEMA_NOT_READY;
-      STORAGE_LOG(WARN, "runtime schema is null", K(ret));
-    } else if (OB_FAIL(schema_guard_.get_sys_variable_schema(sys_variable))) {
+    if (OB_FAIL(schema_guard_.get_sys_variable_schema(sys_variable))) {
       OB_LOG(WARN, "get sys variable failed", K(sys_variable), K(ret));
     } else if (OB_ISNULL(sys_variable)) {
-      ret = OB_RUNTIME_SCHEMA_NOT_READY;
+      ret = OB_ENTRY_NOT_EXIST;
       OB_LOG(WARN, "sys variable schema is null", K(ret));
     } else {
       ObNameCaseMode local_mode = sys_variable->get_name_case_mode();
@@ -112,18 +106,12 @@ int ObRestoreSchema::add_database_schema(ObDatabaseSchema &database_schema)
 int ObRestoreSchema::add_table_schema(ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
-  const ObServerRuntimeSchema *runtime_schema = NULL;
   const ObSysVariableSchema *sys_variable= NULL;
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(schema_guard_.get_server_runtime_info(runtime_schema))) {
-      STORAGE_LOG(WARN, "get runtime info failed", K(table_schema), K(ret));
-    } else if (OB_ISNULL(runtime_schema)) {
-      ret = OB_RUNTIME_SCHEMA_NOT_READY;
-      STORAGE_LOG(WARN, "runtime schema is null", K(ret));
-    } else if (OB_FAIL(schema_guard_.get_sys_variable_schema(sys_variable))) {
+    if (OB_FAIL(schema_guard_.get_sys_variable_schema(sys_variable))) {
       OB_LOG(WARN, "get sys variable failed", K(sys_variable), K(ret));
     } else if (OB_ISNULL(sys_variable)) {
-      ret = OB_RUNTIME_SCHEMA_NOT_READY;
+      ret = OB_ENTRY_NOT_EXIST;
       OB_LOG(WARN, "sys variable schema is null", K(ret));
     } else {
       ObNameCaseMode local_mode = sys_variable->get_name_case_mode();
@@ -414,7 +402,6 @@ int ObRestoreSchema::do_parse_line(ObArenaAllocator &allocator, const char *quer
     char db_name_str[] = "default_database";
     int32_t db_name_len = static_cast<int32_t>(strlen(db_name_str));
     ObString db_name(db_name_len, db_name_len, db_name_str);
-    ObString runtime_name("storage_test");
     ObResolverParams resolver_ctx;
     uint32_t version = 0;
     ObRawExprFactory expr_factory(allocator);
@@ -425,7 +412,7 @@ int ObRestoreSchema::do_parse_line(ObArenaAllocator &allocator, const char *quer
     resolver_ctx.expr_factory_ = &expr_factory;
     resolver_ctx.stmt_factory_ = &stmt_factory;
     resolver_ctx.query_ctx_ = stmt_factory.get_query_ctx();
-    if (OB_FAIL(session_info.init_runtime(runtime_name))) {
+    if (OB_FAIL(session_info.init_runtime(OB_SERVER_RUNTIME_NAME))) {
       STORAGE_LOG(WARN, "fail to init sql session info", K(ret));
     } else if (OB_FAIL(session_info.set_default_database(db_name))) {
       STORAGE_LOG(WARN, "fail to set default database", K(ret));

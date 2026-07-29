@@ -1613,7 +1613,7 @@ id	field	type	length	precision	nullable
 16	gmt_create	18	0	25	1
 17	gmt_modified	18	0	25	1
 18	frozen_scn	10	0	20	0
-19	cluster_version	5	0	20	0
+19	data_version	5	0	20	0
 20	schema_version	5	0	20	0
 table oceanbase.__all_mock_fk_parent_table column_count 6 table_id 1081
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=1081 order by column_id;
@@ -2434,7 +2434,7 @@ id	field	type	length	precision	nullable
 18	task_id	22	200	-1	0
 19	comment	22	512	-1	0
 20	is_cancel	5	0	20	0
-table oceanbase.__all_virtual_macro_block_marker_status column_count 16 table_id 11072
+table oceanbase.__all_virtual_macro_block_marker_status column_count 15 table_id 11072
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11072 order by column_id;
 id	field	type	length	precision	nullable
 16	total_count	5	0	20	0
@@ -2443,16 +2443,15 @@ id	field	type	length	precision	nullable
 19	tmp_file_count	5	0	20	0
 20	data_block_count	5	0	20	0
 21	disk_block_count	5	0	20	0
-22	bloomfilter_count	5	0	20	0
-23	hold_count	5	0	20	0
-24	pending_free_count	5	0	20	0
-25	free_count	5	0	20	0
-26	mark_cost_time	5	0	20	0
-27	sweep_cost_time	5	0	20	0
-28	start_time	18	0	25	0
-29	last_end_time	18	0	25	0
-30	mark_finished	1	0	4	0
-31	comment	22	4096	-1	0
+22	hold_count	5	0	20	0
+23	pending_free_count	5	0	20	0
+24	free_count	5	0	20	0
+25	mark_cost_time	5	0	20	0
+26	sweep_cost_time	5	0	20	0
+27	start_time	18	0	25	0
+28	last_end_time	18	0	25	0
+29	mark_finished	1	0	4	0
+30	comment	22	4096	-1	0
 table oceanbase.__all_virtual_io_stat column_count 7 table_id 11080
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11080 order by column_id;
 id	field	type	length	precision	nullable

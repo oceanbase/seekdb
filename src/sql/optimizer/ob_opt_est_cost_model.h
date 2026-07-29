@@ -213,8 +213,6 @@ struct ObCostTableScanInfo
      output_row_count_(0.0),
      batch_type_(common::ObSimpleBatch::ObBatchType::T_NONE),
      at_most_one_range_(false),
-     rescan_left_server_list_(NULL),
-     rescan_server_list_(NULL),
      limit_rows_(-1.0),
      unique_range_rowcnt_(-1)
   { }
@@ -277,8 +275,6 @@ struct ObCostTableScanInfo
   common::ObSimpleBatch::ObBatchType batch_type_;
   SampleInfo sample_info_;
   bool at_most_one_range_;
-  const common::ObIArray<common::ObAddr> *rescan_left_server_list_;
-  const common::ObIArray<common::ObAddr> *rescan_server_list_;
 
   double limit_rows_;
   int64_t unique_range_rowcnt_;
@@ -548,21 +544,19 @@ struct ObDelUpCostInfo
 struct ObExchCostInfo
 {
   ObExchCostInfo(double rows,
-                   double width,
-                   ObPQDistributeMethod::Type dist_method,
-                   int64_t out_parallel,
-                   int64_t in_parallel,
-                   bool is_local_order,
-                   const ObIArray<OrderItem> &sort_keys,
-                   int64_t in_server_cnt)
+                 double width,
+                 ObPQDistributeMethod::Type dist_method,
+                 int64_t out_parallel,
+                 int64_t in_parallel,
+                 bool is_local_order,
+                 const ObIArray<OrderItem> &sort_keys)
     : sort_keys_(sort_keys),
       rows_(rows),
       width_(width),
       dist_method_(dist_method),
       out_parallel_(out_parallel),
       in_parallel_(in_parallel),
-      is_local_order_(is_local_order),
-      in_server_cnt_(in_server_cnt)
+      is_local_order_(is_local_order)
     { }
    const ObIArray<OrderItem> &sort_keys_;
    double rows_;
@@ -571,7 +565,6 @@ struct ObExchCostInfo
    int64_t out_parallel_;
    int64_t in_parallel_;
    bool is_local_order_;
-   int64_t in_server_cnt_;
 };
 
 struct ObExchInCostInfo
@@ -580,7 +573,6 @@ struct ObExchInCostInfo
                    double width,
                    ObPQDistributeMethod::Type dist_method,
                    int64_t parallel,
-                    int64_t server_cnt,
                    bool is_local_order,
                    const ObIArray<OrderItem> &sort_keys)
   : sort_keys_(sort_keys),
@@ -588,7 +580,6 @@ struct ObExchInCostInfo
     width_(width),
     dist_method_(dist_method),
     parallel_(parallel),
-    server_cnt_(server_cnt),
     is_local_order_(is_local_order)
   {}
   const ObIArray<OrderItem> &sort_keys_;
@@ -596,7 +587,6 @@ struct ObExchInCostInfo
   double width_;
   ObPQDistributeMethod::Type dist_method_;
   int64_t parallel_;
-  int64_t server_cnt_;
   bool is_local_order_;
 };
 
@@ -605,19 +595,16 @@ struct ObExchOutCostInfo
   ObExchOutCostInfo(double rows,
                     double width,
                     ObPQDistributeMethod::Type dist_method,
-                    int64_t parallel,
-                    int64_t server_cnt)
+                    int64_t parallel)
   : rows_(rows),
     width_(width),
     dist_method_(dist_method),
-    parallel_(parallel),
-    server_cnt_(server_cnt)
+    parallel_(parallel)
   {}
   double rows_;
   double width_;
   ObPQDistributeMethod::Type dist_method_;
   int64_t parallel_;
-  int64_t server_cnt_;
 };
 
 class ObOptEstCostModel
@@ -646,20 +633,19 @@ public:
                     double &cost);
 
   int cost_sort_and_exchange(OptTableMetas *table_metas,
-														OptSelectivityCtx *sel_ctx,
-														const ObPQDistributeMethod::Type dist_method,
-														const bool is_distributed,
-														const bool input_local_order,
-														const double input_card,
-														const double input_width,
-														const double input_cost,
-														const int64_t out_parallel,
-														const int64_t in_server_cnt,
-														const int64_t in_parallel,
-														const ObIArray<OrderItem> &expected_ordering,
-														const bool need_sort,
-														const int64_t prefix_pos,
-														double &cost);
+                             OptSelectivityCtx *sel_ctx,
+                             const ObPQDistributeMethod::Type dist_method,
+                             const bool is_distributed,
+                             const bool input_local_order,
+                             const double input_card,
+                             const double input_width,
+                             const double input_cost,
+                             const int64_t out_parallel,
+                             const int64_t in_parallel,
+                             const ObIArray<OrderItem> &expected_ordering,
+                             const bool need_sort,
+                             const int64_t prefix_pos,
+                             double &cost);
   // Provide two interfaces for estimating the cost of sort operators, one using ObRawExpr to represent the sort key, another using
   // OrderItem。
   // The other parameter information is passed through cost_info, internally it should adopt which sorting based on the parameter information

@@ -26,6 +26,7 @@ namespace oceanbase
 namespace sql
 {
 
+struct ObCompactRow;
 class ObExprTopNFilterContext;
 struct ObSortFieldCollation;
 
@@ -35,7 +36,7 @@ struct ObTopNFilterCmpMeta final
 public:
   union
   {
-    common::ObDatumCmpFuncType cmp_func_;
+    NullSafeRowCmpFunc cmp_func_;
     sql::serializable_function ser_cmp_func_;
   };
   ObObjMeta obj_meta_;
@@ -47,7 +48,10 @@ struct ObTopNFilterCompare final
   OB_UNIS_VERSION_V(1);
 public:
   inline int compare_for_build(const ObDatum &l, const ObDatum &r, int &cmp_res) const {
-    int ret = build_meta_.cmp_func_(l, r, cmp_res);
+    int ret = build_meta_.cmp_func_(build_meta_.obj_meta_, build_meta_.obj_meta_,
+                                    l.ptr_, l.len_, l.is_null(),
+                                    r.ptr_, r.len_, r.is_null(),
+                                    cmp_res);
     // when compare new coming data with origin data, we always want maintain the smaller one.
     if (!is_ascending_) {
       cmp_res = -cmp_res;
@@ -55,7 +59,10 @@ public:
     return ret;
   }
   inline int compare_for_filter(const ObDatum &l, const ObDatum &r, int &cmp_res) const {
-    int ret = filter_meta_.cmp_func_(l, r, cmp_res);
+    int ret = filter_meta_.cmp_func_(filter_meta_.obj_meta_, build_meta_.obj_meta_,
+                                    l.ptr_, l.len_, l.is_null(),
+                                    r.ptr_, r.len_, r.is_null(),
+                                    cmp_res);
     if (!is_ascending_) {
       cmp_res = -cmp_res;
     }
@@ -128,6 +135,10 @@ public:
   int filter_out_data_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                           const int64_t batch_size,
                           ObExprTopNFilterContext &filter_ctx);
+  int filter_out_data_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
+                           const EvalBound &bound,
+                           ObExprTopNFilterContext &filter_ctx);
+  int update_filter_data(ObCompactRow *compact_row, const RowMeta *row_meta_, bool &is_updated);
   int update_filter_data(ObChunkDatumStore::StoredRow *store_row, bool &is_updated);
 
   int prepare_storage_white_filter_data(ObDynamicFilterExecutor &dynamic_filter,
@@ -144,12 +155,14 @@ public:
   }
 
 private:
+  bool check_has_null(ObCompactRow *compact_row);
   bool check_has_null(ObChunkDatumStore::StoredRow *store_row);
   // for merge p2p msg in consumer
   int merge_heap_top_datums(ObIArray<ObDatum> &incomming_datums);
   int copy_heap_top_datums_from(ObIArray<ObDatum> &incomming_datums);
 
   // for update from local thread in producer
+  int copy_heap_top_datums_from(ObCompactRow *compact_row, const RowMeta *row_meta_);
   int copy_heap_top_datums_from(ObChunkDatumStore::StoredRow *store_row);
 
   // for filter out data
@@ -184,6 +197,14 @@ private:
   int do_filter_out_data_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                              const int64_t batch_size,
                              ObExprTopNFilterContext &filter_ctx);
+  int do_filter_out_data_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
+                                const EvalBound &bound, ObExprTopNFilterContext &filter_ctx);
+
+  template <typename ArgVec, typename ResVec>
+  int process_multi_columns(int64_t arg_idx, const ObExpr &expr, ObEvalCtx &ctx, uint16_t *selector,
+                            int64_t old_row_selector_cnt, int64_t &new_row_selector_cnt,
+                            int64_t &filter_count);
+
 private:
   // total sort key count in topn sort operator, total_sk_cnt_ >= heap_top_datums_.count()
   int64_t total_sk_cnt_;

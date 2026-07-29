@@ -52,7 +52,6 @@ void ObVirtualChannelInfo::get_info(ObDtlChannel* dtl_ch)
   op_id_ = ch->get_op_id();
   thread_id_ = ch->get_thread_id();
   owner_mod_ = ch->get_owner_mod();
-  peer_ = GCTX.self_addr();
   eof_ = metric.get_eof();
 }
 
@@ -268,21 +267,6 @@ int ObAllVirtualDtlChannel::get_row(ObVirtualChannelInfo &chan_info, ObNewRow *&
       }
       case OWNER_MOD: {
         cells[cell_idx].set_int(chan_info.owner_mod_);
-        break;
-      }
-      case PEER_IP: {// OB_APP_MIN_COLUMN_ID + 25
-        const common::ObAddr &addr = chan_info.peer_;
-        if (!addr.ip_to_string(peer_ip_buf_, sizeof(peer_ip_buf_))) {
-          SERVER_LOG(ERROR, "ip to string failed");
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          ObString ipstr = ObString::make_string(peer_ip_buf_);
-          cells[cell_idx].set_varchar(ipstr);
-        }
-        break;
-      }
-      case PEER_PORT: {// OB_APP_MIN_COLUMN_ID + 26
-        cells[cell_idx].set_int(chan_info.peer_.get_port());
         break;
       }
       case DTL_EOF: {

@@ -273,7 +273,6 @@ int ObTableCkmItems::build_column_ckm_sum_array(
   int64_t &row_cnt)
 {
   int ret = OB_SUCCESS;
-  const int64_t items_cnt = ckm_items_.count();
   if (OB_UNLIKELY(ckm_items_.empty() || tablet_ids_.empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("checksum items or tablet ids are empty", KR(ret), K_(ckm_items), K_(tablet_ids));
@@ -351,7 +350,6 @@ int ObTableCkmItems::validate_column_ckm_sum(
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  int64_t check_cnt = 0;
   ObColumnChecksumErrorInfo ckm_error_info;
   int64_t data_row_cnt = 0;
   int64_t index_row_cnt = 0;
@@ -410,7 +408,6 @@ int ObTableCkmItems::validate_tablet_column_ckm(
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  int64_t check_cnt = 0;
   ObColumnChecksumErrorInfo ckm_error_info;
   const schema::ObTableSchema *data_table_schema = data_ckm.table_schema_;
   const schema::ObTableSchema *index_table_schema = index_ckm.table_schema_;

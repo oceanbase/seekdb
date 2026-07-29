@@ -229,7 +229,7 @@ int TestOpEngine::prepare_io(const std::string & test_data_name_suffix)
     STORAGE_LOG(WARN, "Fail to start storage object mgr", K(ret));
   } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.first_mark_device())) {
     STORAGE_LOG(WARN, "Fail to start first mark device", K(ret));
-  } else if (OB_FAIL(OB_STORE_CACHE.init(10000))) {
+  } else if (OB_FAIL(OB_STORE_CACHE.init())) {
     LOG_WARN("fail to init OB_STORE_CACHE, ", K(ret));
   } else {
   }

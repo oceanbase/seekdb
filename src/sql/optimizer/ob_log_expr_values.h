@@ -69,7 +69,7 @@ class ObLogExprValues : public ObLogicalOperator
     virtual int compute_fd_item_set() override;
     virtual int compute_one_row_info() override;
     virtual int compute_sharding_info() override;
-    virtual int compute_op_parallel_and_server_info() override;
+    virtual int compute_op_parallel_info() override;
     virtual int get_op_exprs(ObIArray<ObRawExpr*> &all_exprs) override;
     virtual int is_my_fixed_expr(const ObRawExpr *expr, bool &is_fixed) override;
     virtual int allocate_expr_post(ObAllocExprContext &ctx) override;

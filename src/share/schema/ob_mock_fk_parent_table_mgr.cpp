@@ -431,10 +431,7 @@ int ObMockFKParentTableMgr::get_mock_fk_parent_table_schemas_in_runtime(
   int ret = OB_SUCCESS;
   schemas.reset();
 
-  ObMockFKParentTableKey key_lower(OB_MIN_ID);
-  ConstMockFKParentTableIter iter_begin =mock_fk_parent_table_infos_.lower_bound(
-                                  key_lower, compare_with_mock_fk_parent_table_key);
-  for (ConstMockFKParentTableIter iter = iter_begin;
+  for (ConstMockFKParentTableIter iter = mock_fk_parent_table_infos_.begin();
        OB_SUCC(ret) && iter != mock_fk_parent_table_infos_.end();
        ++iter) {
     const ObSimpleMockFKParentTableSchema *mock_fk_parent_table = NULL;

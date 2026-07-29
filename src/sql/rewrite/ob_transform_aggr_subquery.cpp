@@ -1601,7 +1601,7 @@ int ObTransformAggrSubquery::check_limit_validity(ObSelectStmt &subquery,
     is_valid = false;
     LOG_TRACE("get limit 0 in [not] exists expr", K(is_valid));
   } else if (T_QUESTIONMARK == limit_expr->get_expr_type()) {
-    int64_t const_value = OB_INVALID;
+    int64_t const_value = 0;
     ObObj value;
     int64_t idx = static_cast<ObConstRawExpr *>(limit_expr)->get_value().get_unknown();
     const ParamStore &param_store = plan_ctx->get_param_store();

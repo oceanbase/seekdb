@@ -76,7 +76,6 @@ int ObAllVirtualNicInfo::inner_get_next_row(common::ObNewRow *&row)
         }
       }
       if (OB_SUCC(ret)) {
-        // Network speed is reported as a single aggregate row for each OBServer.
         is_end_ = true;
         row = &cur_row_;
       }

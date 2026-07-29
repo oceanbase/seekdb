@@ -136,7 +136,7 @@ public:
 struct ObDasAggregatedTask
 {
  public:
-  ObDasAggregatedTask(common::ObIAllocator &allocator)
+  ObDasAggregatedTask()
     : tasks_(),
       failed_tasks_(),
       success_tasks_(),

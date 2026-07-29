@@ -19,7 +19,6 @@
 
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_se_array.h"
-#include "lib/hash/ob_hashmap.h"
 #include "lib/hash_func/murmur_hash.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/allocator/ob_allocator.h"
@@ -496,12 +495,6 @@ enum ObPlanExpiredStat  {
 
 struct ObPlanStat
 {
-  static const int64_t DEFAULT_ADDR_NODE_NUM = 16;
-  typedef common::hash::ObHashMap<ObAddr, int64_t,
-        common::hash::LatchReadWriteDefendMode, common::hash::hash_func<ObAddr>,
-        common::hash::equal_to<ObAddr>,
-        common::hash::SimpleAllocer<typename common::hash::HashMapTypes<ObAddr, int64_t>::AllocType,
-                                    DEFAULT_ADDR_NODE_NUM>> AddrMap;
   static const int32_t STMT_MAX_LEN = 4096;
   static const int32_t MAX_SCAN_STAT_SIZE = 100;
   static const int64_t CACHE_POLICY_UPDATE_INTERVAL = 60 * 1000 * 1000; // 1 min
@@ -602,8 +595,6 @@ struct ObPlanStat
 
   // following fields will be used for plan set memory management
   PreCalcExprHandler* pre_cal_expr_handler_; //the handler that pre-calculable expression holds
-  AddrMap expected_worker_map_; // px global expected number of allocated threads
-  AddrMap minimal_worker_map_;  // global minial threads required for query
   uint64_t plan_hash_value_;
   common::ObString outline_data_;
   common::ObString hints_info_;
@@ -943,7 +934,7 @@ public:
   static int get_phy_locations(const ObIArray<ObTableLocation> &table_locations,
                                const ObPlanCacheCtx &pc_ctx,
                                ObIArray<ObCandiTableLoc> &phy_location_infos);
-  
+
   // used for adding plan
   static int get_phy_locations(const common::ObIArray<ObTablePartitionInfo *> &partition_infos,
                                //ObIArray<ObDASTableLoc> &phy_locations,
@@ -1066,7 +1057,7 @@ private:
   int64_t cluster_config_version_;
   // Current runtime configuration version.
   int64_t runtime_config_version_;
-  
+
 };
 
 }

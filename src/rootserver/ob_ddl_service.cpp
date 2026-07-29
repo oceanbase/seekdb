@@ -22,6 +22,7 @@
 #include "share/ob_sys_time_zone_util.h"
 
 #include "ob_ddl_service.h"
+#include "rootserver/ob_runtime_ddl_service.h"
 #include "observer/schema/ob_schema_service_sql_impl.h"
 #include "share/ob_ddl_common.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
@@ -68,6 +69,7 @@
 #include "share/schema/ob_schema_guard_wrapper.h"  // relocated-definition owner
 #include "share/schema/ob_ddl_trans_controller.h"  // relocated-definition owner
 #include "share/schema/ob_part_mgr_util.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 
 namespace oceanbase
 {
@@ -128,7 +130,6 @@ int ObDDLService::create_user_tables(
     const ObString &ddl_stmt_str,
     const ObErrorInfo &error_info,
     ObIArray<ObTableSchema> &table_schemas,
-    ObSchemaGetterGuard &schema_guard,
     const uint64_t last_replay_log_id,
     const ObIArray<ObDependencyInfo> *dep_infos,
     ObIArray<ObMockFKParentTableSchema> &mock_fk_parent_table_schema_array,
@@ -4722,7 +4723,6 @@ int ObDDLService::remap_index_tablets_and_take_effect(
     ObDDLSQLTransaction trans(schema_service_);
     ObSArray<ObTableSchema> table_schemas;
     ObSchemaGetterGuard schema_guard;
-    ObSchemaGetterGuard dest_schema_guard;
     const ObTableSchema *orig_table_schema = nullptr;
     const ObTableSchema *hidden_table_schema = nullptr;
     schema_guard.set_session_id(alter_table_arg.session_id_);
@@ -4730,16 +4730,12 @@ int ObDDLService::remap_index_tablets_and_take_effect(
     ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
     if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
       LOG_WARN("fail to get schema guard with version in inner table", K(ret));
-    } else if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(dest_schema_guard))) {
-      LOG_WARN("fail to get schema guard with version in inner table", K(ret));
     } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
       LOG_WARN("fail to get schema version", KR(ret));
     } else if (OB_FAIL(trans.start(sql_proxy_, refreshed_schema_version))) {
       LOG_WARN("fail to start trans, ", KR(ret), K(refreshed_schema_version));
     } else if (OB_FAIL(get_orig_and_hidden_table_schema(alter_table_arg,
                                                         schema_guard,
-                                                        dest_schema_guard,
-                                                        alter_table_schema,
                                                         orig_table_schema,
                                                         hidden_table_schema))) {
       LOG_WARN("fail to get orig and hidden table schema", K(ret));
@@ -6555,7 +6551,6 @@ int ObDDLService::check_fk_columns_type_for_replacing_mock_fk_parent_table(
           }
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(ObResolverUtils::check_foreign_key_columns_type(
-              true/*is_mysql_compat_mode*/,
               *child_table_schema,
               real_parent_table_schema,
               child_columns,
@@ -16264,7 +16259,6 @@ int ObDDLService::add_new_index_schema(obcall::ObAlterTableArg &alter_table_arg,
                                        const share::schema::ObTableSchema &orig_table_schema,
                                        const ObTableSchema &hidden_table_schema,
                                        ObSchemaGetterGuard &schema_guard,
-                                       ObSchemaGetterGuard &dest_schema_guard,
                                        ObDDLOperator &ddl_operator,
                                        common::ObMySQLTransaction &trans,
                                        ObSArray<ObTableSchema> &new_table_schemas,
@@ -16398,7 +16392,7 @@ int ObDDLService::add_new_index_schema(obcall::ObAlterTableArg &alter_table_arg,
                   } else if (OB_FAIL(check_hidden_index_exist(index_schema.get_database_id(),
                       orig_table_schema,
                       final_index_name,
-                      dest_schema_guard,
+                      schema_guard,
                       is_exist))) {
                     LOG_WARN("failed to check hidden index exist", K(ret));
                   } else if (is_exist) {
@@ -16521,7 +16515,6 @@ int ObDDLService::reconstruct_index_schema(obcall::ObAlterTableArg &alter_table_
                                            const ObTableSchema &orig_table_schema,
                                            const ObTableSchema &hidden_table_schema,
                                            ObSchemaGetterGuard &schema_guard,
-                                           ObSchemaGetterGuard &dest_schema_guard,
                                            const common::ObIArray<uint64_t> &drop_cols_id_arr,
                                            const ObColumnNameMap &col_name_map,
                                            const common::ObTimeZoneInfo &tz_info,
@@ -16700,11 +16693,11 @@ int ObDDLService::reconstruct_index_schema(obcall::ObAlterTableArg &alter_table_
               new_index_schema.set_database_id(hidden_table_schema.get_database_id());
               new_index_schema.set_table_state_flag(target_flag);
 
-              if (OB_FAIL(dest_schema_guard.check_table_exist(new_index_schema.get_database_id(),
-                                                                new_index_schema.get_table_name_str(),
-                                                                true/*is_index*/,
-                                                                check_table_type,
-                                                                is_exist))) {
+              if (OB_FAIL(schema_guard.check_table_exist(new_index_schema.get_database_id(),
+                                                         new_index_schema.get_table_name_str(),
+                                                         true/*is_index*/,
+                                                         check_table_type,
+                                                         is_exist))) {
                 LOG_WARN("failed to check table exist", K(ret));
               } else if (is_exist) {
                 LOG_INFO("index already existed, skip", K(new_index_schema.get_table_id()), K(new_index_schema.get_table_name_str()));
@@ -16805,8 +16798,6 @@ int ObDDLService::rebuild_hidden_table_index_in_trans(obcall::ObAlterTableArg &a
       LOG_WARN("failed to start trans, ", K(ret), K(refreshed_schema_version));
     } else if (OB_FAIL(get_orig_and_hidden_table_schema(alter_table_arg,
                                                         runtime_schema_guard,
-                                                        runtime_schema_guard,
-                                                        alter_table_schema,
                                                         orig_table_schema,
                                                         hidden_table_schema))) {
       LOG_WARN("failed to get orig and hidden table schema", K(ret));
@@ -16828,7 +16819,6 @@ int ObDDLService::rebuild_hidden_table_index_in_trans(obcall::ObAlterTableArg &a
                                                   *orig_table_schema,
                                                   *hidden_table_schema,
                                                   runtime_schema_guard,
-                                                  runtime_schema_guard,
                                                   drop_cols_id_arr,
                                                   col_name_map,
                                                   *tz_info_wrap.get_time_zone_info(),
@@ -16841,7 +16831,6 @@ int ObDDLService::rebuild_hidden_table_index_in_trans(obcall::ObAlterTableArg &a
       } else if (OB_FAIL(add_new_index_schema(alter_table_arg,
                                               *orig_table_schema,
                                               *hidden_table_schema,
-                                              runtime_schema_guard,
                                               runtime_schema_guard,
                                               ddl_operator,
                                               trans,
@@ -17087,8 +17076,6 @@ int ObDDLService::rebuild_hidden_table_constraints_in_trans(ObAlterTableArg &alt
       LOG_WARN("failed to start trans, ", KR(ret), K(refreshed_schema_version));
     } else if (OB_FAIL(get_orig_and_hidden_table_schema(alter_table_arg,
                                                         runtime_schema_guard,
-                                                        runtime_schema_guard,
-                                                        alter_table_schema,
                                                         orig_table_schema,
                                                         hidden_table_schema))) {
       LOG_WARN("failed to get orig and hidden table schema", K(ret));
@@ -17349,8 +17336,6 @@ int ObDDLService::convert_hidden_table_column_ids_by_orig_column_ids(
 // remove invalid foreign key, caused by drop column and drop fk.
 int ObDDLService::get_rebuild_foreign_key_infos(
     const ObAlterTableArg &alter_table_arg,
-    share::schema::ObSchemaGetterGuard &src_runtime_schema_guard,
-    share::schema::ObSchemaGetterGuard &dst_runtime_schema_guard,
     const ObTableSchema &orig_table_schema,
     const ObTableSchema &hidden_table_schema,
     const bool rebuild_child_table_fk,
@@ -17409,8 +17394,7 @@ int ObDDLService::rebuild_hidden_table_foreign_key(
                   const ObTableSchema &orig_table_schema,
                   const ObTableSchema &hidden_table_schema,
                   const bool rebuild_child_table_fk,
-                  ObSchemaGetterGuard &src_runtime_schema_guard,
-                  ObSchemaGetterGuard &dst_runtime_schema_guard,
+                  ObSchemaGetterGuard &schema_guard,
                   ObMySQLTransaction &trans,
                   ObSArray<uint64_t> &cst_ids)
 {
@@ -17434,12 +17418,10 @@ int ObDDLService::rebuild_hidden_table_foreign_key(
   } else if (OB_FAIL(new_index_table_map.create(16, "HashBucIdxTabMa"))) {
     LOG_WARN("failed to add create ObHashMap", K(ret));
   } else if (OB_FAIL(build_hidden_index_table_map(hidden_table_schema,
-                                                  dst_runtime_schema_guard,
+                                                  schema_guard,
                                                   new_index_table_map))) {
     LOG_WARN("failed to build hidden index table map", K(ret));
   } else if (OB_FAIL(get_rebuild_foreign_key_infos(alter_table_arg,
-                                                   src_runtime_schema_guard,
-                                                   dst_runtime_schema_guard,
                                                    orig_table_schema,
                                                    hidden_table_schema,
                                                    rebuild_child_table_fk,
@@ -17488,7 +17470,8 @@ int ObDDLService::rebuild_hidden_table_foreign_key(
           const ObSimpleTableSchemaV2 *orig_index_table_schema = NULL;
           ObString new_index_table_name;
           uint64_t new_ref_cst_id = OB_INVALID_ID;
-          if (OB_FAIL(dst_runtime_schema_guard.get_simple_table_schema( foreign_key_info.ref_cst_id_, orig_index_table_schema))) {
+          if (OB_FAIL(schema_guard.get_simple_table_schema(
+                  foreign_key_info.ref_cst_id_, orig_index_table_schema))) {
             LOG_WARN("get_table_schema failed", "table id", foreign_key_info.ref_cst_id_, K(ret));
           } else if (OB_ISNULL(orig_index_table_schema)) {
             ret = OB_ERR_UNEXPECTED;
@@ -17582,8 +17565,6 @@ int ObDDLService::rebuild_hidden_table_foreign_key_in_trans(ObAlterTableArg &alt
       LOG_WARN("failed to start trans, ", KR(ret), K(refreshed_schema_version));
     } else if (OB_FAIL(get_orig_and_hidden_table_schema(alter_table_arg,
                                                         runtime_schema_guard,
-                                                        runtime_schema_guard,
-                                                        alter_table_schema,
                                                         orig_table_schema,
                                                         hidden_table_schema))) {
       LOG_WARN("failed to get orig and hidden table schema", K(ret));
@@ -17593,7 +17574,6 @@ int ObDDLService::rebuild_hidden_table_foreign_key_in_trans(ObAlterTableArg &alt
                                                         *orig_table_schema,
                                                         *hidden_table_schema,
                                                         false/*rebuild_child_table_fk*/,
-                                                        runtime_schema_guard,
                                                         runtime_schema_guard,
                                                         trans,
                                                         cst_ids))) {
@@ -17621,8 +17601,6 @@ int ObDDLService::rebuild_hidden_table_foreign_key_in_trans(ObAlterTableArg &alt
 int ObDDLService::get_orig_and_hidden_table_schema(
                   const ObAlterTableArg &alter_table_arg,
                   ObSchemaGetterGuard &schema_guard,
-                  share::schema::ObSchemaGetterGuard &dest_schema_guard,
-                  const AlterTableSchema &alter_table_schema,
                   const ObTableSchema *&orig_table_schema,
                   const ObTableSchema *&hidden_table_schema)
 {
@@ -17633,7 +17611,7 @@ int ObDDLService::get_orig_and_hidden_table_schema(
   
   if (OB_FAIL(schema_guard.get_table_schema( orig_table_id, orig_table_schema))) {
     LOG_WARN("failed to get orig table schema", K(ret), K(orig_table_id));
-  } else if (OB_FAIL(dest_schema_guard.get_table_schema( hidden_table_id, hidden_table_schema))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema( hidden_table_id, hidden_table_schema))) {
     LOG_WARN("fail to get hidden table schema", K(ret), K(hidden_table_id));
   } else if (OB_ISNULL(orig_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
@@ -17771,8 +17749,6 @@ int ObDDLService::swap_orig_and_hidden_table_state(obcall::ObAlterTableArg &alte
         LOG_WARN("failed to get schema version", KR(ret));
       } else if (OB_FAIL(get_orig_and_hidden_table_schema(alter_table_arg,
                                                           schema_guard,
-                                                          schema_guard,
-                                                          alter_table_schema,
                                                           orig_table_schema,
                                                           hidden_table_schema))) {
         LOG_WARN("failed to get orig and hidden table schema", K(ret));
@@ -17795,7 +17771,7 @@ int ObDDLService::swap_orig_and_hidden_table_state(obcall::ObAlterTableArg &alte
           *hidden_table_schema, schema_guard, trans))) {
         LOG_WARN("failed to drop origin table fk", K(ret));
       } else if (OB_FAIL(rebuild_hidden_table_foreign_key(alter_table_arg,
-          *orig_table_schema, *hidden_table_schema, true/*rebuild_child_table_fk*/, schema_guard, schema_guard, trans, fk_cst_ids))) {
+          *orig_table_schema, *hidden_table_schema, true/*rebuild_child_table_fk*/, schema_guard, trans, fk_cst_ids))) {
         LOG_WARN("failed to rebuild hidden table fk", K(ret));
       } else if (OB_FAIL(check_hidden_table_constraint_exist(hidden_table_schema,
                                                             orig_table_schema,
@@ -17957,8 +17933,7 @@ int ObDDLService::check_rebuild_foreign_key_satisfy(
   } else if (is_self_reference &&
       OB_FAIL(ObResolverUtils::check_self_reference_fk_columns_satisfy(create_fk_arg))) {
     LOG_WARN("check self reference foreign key columns satisfy failed", K(ret), K(create_fk_arg));
-  } else if (OB_FAIL(ObResolverUtils::check_foreign_key_columns_type(true/*is_mysql_compat_mode*/,
-                                                                     child_table_schema,
+  } else if (OB_FAIL(ObResolverUtils::check_foreign_key_columns_type(child_table_schema,
                                                                      parent_table_schema,
                                                                      create_fk_arg.child_columns_,
                                                                      create_fk_arg.parent_columns_,
@@ -17972,7 +17947,7 @@ int ObDDLService::check_rebuild_foreign_key_satisfy(
       ret = OB_ERR_CANNOT_ADD_FOREIGN;
       LOG_ERROR("reference to pk or uk in parent table failed or cst type mismatched", K(ret),
           K(expected_cst_type), "real_cst_type", create_fk_arg.fk_ref_type_);
-  } else if (OB_FAIL(ObResolverUtils::check_foreign_key_set_null_satisfy(create_fk_arg, child_table_schema, true))) {
+  } else if (OB_FAIL(ObResolverUtils::check_foreign_key_set_null_satisfy(create_fk_arg, child_table_schema))) {
     LOG_WARN("check fk set null satisfy failed", K(ret), K(create_fk_arg));
   }
   return ret;
@@ -18229,8 +18204,6 @@ int ObDDLService::cleanup_garbage(ObAlterTableArg &alter_table_arg)
         LOG_WARN("failed to start trans, ", KR(ret), K(refreshed_schema_version));
       } else if (OB_FAIL(get_orig_and_hidden_table_schema(alter_table_arg,  /* get orig_table_schema through its name, thus the hidden_table_schema is orign table schema */
                                                           schema_guard,
-                                                          schema_guard,
-                                                          alter_table_schema,
                                                           orig_table_schema,
                                                           hidden_table_schema))) {
         LOG_WARN("failed to get orig and hidden table schema", K(ret));
@@ -18815,7 +18788,7 @@ int ObDDLService::get_index_lob_table_schema(const ObTableSchema &orig_table_sch
   common::ObArray<ObTableSchema*> tmp_table_schemas;
   
   int64_t schema_version = orig_table_schema.get_schema_version();
-  uint64_t database_id = OB_INVALID;
+  uint64_t database_id = OB_INVALID_ID;
   ObString table_name = orig_table_schema.get_table_name();
   uint64_t orig_database_id = orig_table_schema.get_database_id();
 

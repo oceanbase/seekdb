@@ -53,7 +53,7 @@ private:
 
   char ip_buf_[common::OB_IP_STR_BUFF];
   char event_buf_[common::OB_COMPACTION_EVENT_STR_LENGTH];
-  compaction::ObMajorCompactionProgress progress_;
+  compaction::ObCompactionProgress progress_;
   compaction::ObCompactionProgressIterator progress_iter_;
   bool is_inited_;
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualServerCompactionProgress);

@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_sstable_row_getter.h"
 
 namespace oceanbase
@@ -131,14 +130,6 @@ int ObSSTableRowGetter::inner_get_next_row(const ObDatumRow *&store_row)
         iter_param_->need_scn_ &&
         OB_FAIL(set_row_scn(access_ctx_->use_fuse_row_cache_, *iter_param_, store_row))) {
       LOG_WARN("failed to set row scn", K(ret));
-    }
-    EVENT_INC(SSSTORE_READ_ROW_COUNT);
-    if (OB_NOT_NULL(sstable_)) {
-      if (sstable_->is_minor_sstable()) {
-        EVENT_INC(MINOR_SSSTORE_READ_ROW_COUNT);
-      } else if (sstable_->is_major_sstable()) {
-        EVENT_INC(MAJOR_SSSTORE_READ_ROW_COUNT);
-      }
     }
     LOG_DEBUG("inner get next row", KPC(store_row), KPC(read_handle_.rowkey_));
   }

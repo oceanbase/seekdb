@@ -4611,7 +4611,7 @@ int ObAlterTableResolver::resolve_modify_column(const ParseNode &node,
                     allow_has_default))) {
           SQL_RESV_LOG(WARN, "resolve column definition failed", K(ret));
         } else if (!stat.is_primary_key_ &&
-                  OB_FAIL(resolve_alter_column_not_null(alter_column_schema, *origin_col_schema))) {
+                   OB_FAIL(resolve_alter_column_not_null(alter_column_schema, *origin_col_schema))) {
           LOG_WARN("resolve modify column not null failed", K(ret));
         }
         if (OB_SUCC(ret)) {

@@ -48,7 +48,6 @@ class ObAiService;
 }
 namespace sql
 {
-class ObSQLSessionPool;
 class ObSqlMemoryManager;
 class ObPlanBaselineMgr;
 class ObDataAccessService;
@@ -141,7 +140,6 @@ public:
   // ===== Module accessors =====
   virtual omt::ObSharedTimer * shared_timer() { return nullptr; }
   virtual blocksstable::ObSharedMacroBlockMgr * shared_macro_block_mgr() { return nullptr; }
-  virtual oceanbase::sql::ObSQLSessionPool * sql_session_pool() { return nullptr; }
   virtual storage::ObStorageMetaMemMgr * storage_meta_mem_mgr() { return nullptr; }
   virtual ObTableScanIteratorObjPool * table_scan_iterator_obj_pool() { return nullptr; }
   virtual common::ObIOService * io_service() { return nullptr; }

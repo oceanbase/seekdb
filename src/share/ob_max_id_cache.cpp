@@ -188,7 +188,6 @@ int ObMaxIdCacheMgr::remove_cache_(ObMaxIdCache *cache)
   return ret;
 }
 
-// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state) -> src/rootserver/ob_root_utils.cpp
 
 int ObMaxIdCacheMgr::add_runtime_cache_()
 {

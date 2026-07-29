@@ -1620,15 +1620,14 @@ int ObSchemaRetrieveUtils::fill_obj_priv_schema(T &result,
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_obj_mysql_priv_schema (
-                            T &result,
-                            ObObjMysqlPriv &obj_mysql_priv,
-                            bool &is_deleted)
+int ObSchemaRetrieveUtils::fill_obj_mysql_priv_schema(
+    T &result,
+    ObObjMysqlPriv &obj_mysql_priv,
+    bool &is_deleted)
 {
   int ret = common::OB_SUCCESS;
   obj_mysql_priv.reset();
   is_deleted = false;
-
 
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, user_id, obj_mysql_priv, int64_t);
   EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, obj_name, obj_mysql_priv);
@@ -1636,7 +1635,8 @@ int ObSchemaRetrieveUtils::fill_obj_mysql_priv_schema (
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
     int64_t all_priv = 0;
-    EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "all_priv", all_priv, int64_t, true, false, 0);
+    EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(
+        result, "all_priv", all_priv, int64_t, true, false, 0);
     if ((all_priv & 1) != 0) { obj_mysql_priv.set_priv(OB_PRIV_READ); }
     if ((all_priv & 2) != 0) { obj_mysql_priv.set_priv(OB_PRIV_WRITE); }
     if ((all_priv & 4) != 0) { obj_mysql_priv.set_priv(OB_PRIV_GRANT); }
@@ -1866,9 +1866,6 @@ int ObSchemaRetrieveUtils::fill_recycle_object(T &result,
   EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, object_name, recycle_obj);
   EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, original_name, recycle_obj);
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, type, recycle_obj, ObRecycleObject::RecycleObjType);
-  if (OB_SUCC(ret)) {
-
-  }
   return ret;
 }
 
@@ -1983,11 +1980,9 @@ int ObSchemaRetrieveUtils::retrieve_system_variable(T &result, SCHEMA &sys_varia
       SHARE_SCHEMA_LOG(INFO, "sysvar is is_deleted, don't add", K(sysvar_schema));
     } else if (OB_FAIL(sys_variable_schema.add_sysvar_schema(sysvar_schema))) {
       if (common::OB_ERR_SYS_VARIABLE_UNKNOWN == ret) {
-        ret = common::OB_SUCCESS;
-        SHARE_SCHEMA_LOG(INFO, "sysvar maybe come from diff version, ingore it", K(sysvar_schema));
-      } else {
-        SHARE_SCHEMA_LOG(WARN, "add sysvar schema failed", K(ret), K(sysvar_schema));
+        ret = common::OB_VERSION_NOT_MATCH;
       }
+      SHARE_SCHEMA_LOG(WARN, "add current-format sysvar schema failed", K(ret), K(sysvar_schema));
     } else if (FALSE_IT(tmp_allocator.reuse())) {
     } else if (OB_FAIL(ob_write_string(tmp_allocator, sysvar_schema.get_name(), prev_sys_name))) {
       SHARE_SCHEMA_LOG(WARN, "write sysvar name failed", K(ret), K(sysvar_schema));
@@ -2075,7 +2070,6 @@ RETRIEVE_SCHEMA_FUNC_DEFINE(database);
 RETRIEVE_SCHEMA_FUNC_DEFINE(outline);
 RETRIEVE_SCHEMA_FUNC_DEFINE(package);
 RETRIEVE_SCHEMA_FUNC_DEFINE(trigger);
-RETRIEVE_SCHEMA_FUNC_DEFINE(sequence);
 RETRIEVE_SCHEMA_FUNC_DEFINE(mock_fk_parent_table);
 
 template<typename T, typename S>
@@ -2564,7 +2558,8 @@ int ObSchemaRetrieveUtils::push_prev_obj_privs_if_has(
 }
 
 template<typename T, typename S>
-int ObSchemaRetrieveUtils::retrieve_obj_mysql_priv_schema(T &result,
+int ObSchemaRetrieveUtils::retrieve_obj_mysql_priv_schema(
+    T &result,
     ObIArray<S> &obj_mysql_priv_array)
 {
   int ret = common::OB_SUCCESS;
@@ -2579,7 +2574,6 @@ int ObSchemaRetrieveUtils::retrieve_obj_mysql_priv_schema(T &result,
     if (OB_FAIL(fill_obj_mysql_priv_schema(result, obj_mysql_priv, is_deleted))) {
       LOG_WARN("Fail to fill obj_mysql_priv", K(ret));
     } else if (obj_mysql_priv.get_sort_key() == pre_obj_mysql_sort_key) {
-      // ignore it
       ret = common::OB_SUCCESS;
     } else if (is_deleted) {
       LOG_TRACE("obj_mysql_priv is is_deleted", K(obj_mysql_priv));
@@ -2588,7 +2582,8 @@ int ObSchemaRetrieveUtils::retrieve_obj_mysql_priv_schema(T &result,
     }
     if (OB_SUCC(ret)) {
       tmp_allocator.reuse();
-      if (OB_FAIL(pre_obj_mysql_sort_key.deep_copy(obj_mysql_priv.get_sort_key(), tmp_allocator))) {
+      if (OB_FAIL(pre_obj_mysql_sort_key.deep_copy(
+              obj_mysql_priv.get_sort_key(), tmp_allocator))) {
         LOG_WARN("alloc_obj_mysql_schema failed", KR(ret));
       }
     }

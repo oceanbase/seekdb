@@ -114,7 +114,7 @@ int ObDirectLoadMgrUtil::alloc_direct_load_mgr(
   int ret = OB_SUCCESS;
   direct_load_mgr = nullptr;
   switch (direct_load_type) {
-    case ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DDL :
+    case ObDirectLoadType::IDEM_DIRECT_LOAD_DDL :
       if (OB_ISNULL(direct_load_mgr = OB_NEWx(ObSNTabletDirectLoadMgr, &allocator))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to alloc direct load mgr", K(ret), K(direct_load_type));
@@ -190,7 +190,7 @@ int ObDirectLoadMgrUtil::create_idem_tablet_direct_load_mgr(const int64_t execut
 
 ObDirectLoadType ObDirectLoadMgrUtil::ddl_get_direct_load_type()
 {
-  return ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DDL;
+  return ObDirectLoadType::IDEM_DIRECT_LOAD_DDL;
 }
 
 /*
@@ -266,7 +266,7 @@ int ObDirectLoadMgrUtil::generate_merge_param(const ObTabletDDLCompleteMdsUserDa
 {
   int ret = OB_SUCCESS;
   share::SCN mock_scn;
-  mock_scn.convert_for_tx(SS_DDL_START_SCN_VAL);
+  mock_scn.convert_for_tx(DDL_START_SCN_VAL);
 
   if (!data.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
@@ -295,7 +295,7 @@ int ObDirectLoadMgrUtil::generate_merge_param(const ObTabletDDLCompleteMdsUserDa
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get ddl kv_mgr_handle", K(ret));
     } else {
-      merge_param.direct_load_type_    = ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DDL; // mock type
+      merge_param.direct_load_type_    = ObDirectLoadType::IDEM_DIRECT_LOAD_DDL; // mock type
       merge_param.tablet_id_           = tablet.get_tablet_id();
       merge_param.data_format_version_ = ddl_kvs_handle.at(0).get_obj()->get_data_format_version();
       merge_param.snapshot_version_    = ddl_kvs_handle.at(0).get_obj()->get_snapshot_version();

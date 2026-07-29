@@ -25,8 +25,8 @@
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
 #include "storage/tablet/ob_tablet_macro_info_iterator.h"
-#include "share/io/ob_io_calibration.h"  // relocated-definition owner
-#include "share/io/ob_io_struct.h"  // relocated-definition owner
+#include "share/io/ob_io_calibration.h"
+#include "share/io/ob_io_struct.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::common::hash;
@@ -403,10 +403,6 @@ int ObBlockManager::write_super_block(const ObServerSuperBlock &super_block,
                                       ObSuperBlockBufferHolder &buf_holder) {
   int ret = OB_SUCCESS;
   int64_t write_size = 0;
-#ifdef ERRSIM
-  ErrsimModuleGuard guard(ObErrsimModuleType::ERRSIM_MODULE_NONE);
-#endif
-
   if (!super_block.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(super_block));
@@ -1119,205 +1115,11 @@ int ObBlockManager::mark_local_storage_blocks(
         } else {
           LOG_WARN("fail to get next in-memory tablet", K(ret));
         }
-      } else if (handle.get_obj()->get_version() <
-                 ObTabletBlockHeader::TABLET_VERSION_V3) {
-        if (OB_FAIL(mark_tablet_meta_blocks(mark_info, handle, macro_id_set,
-                                            tmp_status))) {
-          LOG_WARN("fail to mark tablet meta blocks", K(ret));
-        } else if (OB_FAIL(mark_sstable_blocks(mark_info, handle, macro_id_set,
-                                               tmp_status))) {
-          LOG_WARN("fail to mark tablet blocks", K(ret));
-        }
-      } else {
-        if (OB_FAIL(mark_tablet_block(mark_info, handle, macro_id_set,
-                                      tmp_status))) {
-          LOG_WARN("fail to mark tablet's macro blocks", K(ret), K(tmp_status),
-                   KPC(handle.get_obj()));
-        }
+      } else if (OB_FAIL(mark_tablet_block(mark_info, handle, macro_id_set,
+                                          tmp_status))) {
+        LOG_WARN("fail to mark tablet's macro blocks", K(ret), K(tmp_status),
+                 KPC(handle.get_obj()));
       }
-    }
-  }
-  return ret;
-}
-
-int ObBlockManager::mark_sstable_blocks(
-    MacroBlkIdMap &mark_info, ObTabletHandle &handle,
-    common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode>
-        &macro_id_set,
-    ObMacroBlockMarkerStatus &tmp_status) {
-  int ret = OB_SUCCESS;
-  ObTableStoreIterator table_store_iter(false, false);
-  ObArenaAllocator sstable_allocator("LoadSST", OB_MALLOC_NORMAL_BLOCK_SIZE);
-  ObSafeArenaAllocator safe_allocator(sstable_allocator);
-
-  if (OB_UNLIKELY(!handle.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(handle));
-  } else if (OB_FAIL(handle.get_obj()->get_all_sstables(table_store_iter))) {
-    LOG_WARN("fail to get all sstables", K(ret));
-  } else {
-    while (OB_SUCC(ret)) {
-      safe_allocator.reuse();
-      ObITable *table = nullptr;
-      ObSSTableMetaHandle sstable_meta_hdl;
-      ObSSTable *sstable = nullptr;
-      if (OB_FAIL(table_store_iter.get_next(table))) {
-        if (OB_UNLIKELY(OB_ITER_END == ret)) {
-          ret = OB_SUCCESS;
-          break;
-        } else {
-          LOG_WARN("fail to get next table from iter", K(ret),
-                   K(table_store_iter));
-        }
-      } else if (FALSE_IT(sstable = static_cast<ObSSTable *>(table))) {
-      } else if (OB_ISNULL(sstable)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, sstable is nullptr", K(ret), KP(sstable));
-      } else if (OB_FAIL(mark_sstable_meta_block(*sstable, mark_info,
-                                                 macro_id_set, tmp_status))) {
-        LOG_WARN("fail to mark sstable meta block", K(ret), KPC(sstable));
-      } else if (OB_FAIL(
-                     sstable->get_meta(sstable_meta_hdl, &safe_allocator))) {
-        LOG_WARN("fail to get sstable meta", K(ret));
-      } else {
-        const ObSSTableMeta &meta = sstable_meta_hdl.get_sstable_meta();
-        ObMacroIdIterator iterator;
-        MacroBlockId macro_id;
-        if (OB_FAIL(meta.get_macro_info().get_data_block_iter(iterator))) {
-          LOG_WARN("fail to get data block iterator", K(ret), K(meta));
-        }
-        while (OB_SUCC(ret)) {
-          if (OB_FAIL(iterator.get_next_macro_id(macro_id))) {
-            if (OB_ITER_END != ret) {
-              LOG_WARN("fail to get next macro id", K(ret), K(iterator));
-            } else {
-              ret = OB_SUCCESS;
-              break;
-            }
-          } else if (OB_FAIL(update_mark_info(macro_id, mark_info))) {
-            LOG_WARN("fail to update mark info", K(ret), K(macro_id),
-                     KPC(sstable));
-          } else if (OB_FAIL(macro_id_set.set_refactored(macro_id,
-                                                         0 /*no override*/))) {
-            if (OB_HASH_EXIST != ret) {
-              LOG_WARN("fail to put macro id into set", K(ret), K(macro_id));
-            } else {
-              ret = OB_SUCCESS;
-            }
-          } else {
-            tmp_status.data_block_count_++;
-            tmp_status.hold_count_--;
-          }
-        }
-        if (OB_SUCC(ret)) {
-          iterator.reset();
-          if (OB_FAIL(meta.get_macro_info().get_other_block_iter(iterator))) {
-            LOG_WARN("fail to get other block iterator", K(ret), K(meta));
-          }
-        }
-        while (OB_SUCC(ret)) {
-          if (OB_FAIL(iterator.get_next_macro_id(macro_id))) {
-            if (OB_ITER_END != ret) {
-              LOG_WARN("fail to get next macro id", K(ret), K(iterator));
-            } else {
-              ret = OB_SUCCESS;
-              break;
-            }
-          } else if (OB_FAIL(update_mark_info(macro_id, mark_info))) {
-            LOG_ERROR("fail to update mark info", K(ret), K(macro_id),
-                      KPC(sstable));
-          } else if (OB_FAIL(macro_id_set.set_refactored(macro_id))) {
-            LOG_WARN("fail to put macro id into set", K(ret), K(macro_id));
-          } else {
-            tmp_status.index_block_count_++;
-            tmp_status.hold_count_--;
-          }
-        }
-        if (OB_SUCC(ret)) {
-          iterator.reset();
-          if (OB_FAIL(meta.get_macro_info().get_linked_block_iter(iterator))) {
-            LOG_WARN("fail to get linked block iterator", K(ret), K(meta));
-          }
-        }
-        while (OB_SUCC(ret)) {
-          if (OB_FAIL(iterator.get_next_macro_id(macro_id))) {
-            if (OB_ITER_END != ret) {
-              LOG_WARN("fail to get next macro id", K(ret), K(iterator));
-            } else {
-              ret = OB_SUCCESS;
-              break;
-            }
-          } else if (OB_FAIL(update_mark_info(macro_id, mark_info))) {
-            LOG_ERROR("fail to update mark info", K(ret), K(macro_id),
-                      KPC(sstable));
-          } else if (OB_FAIL(macro_id_set.set_refactored(macro_id))) {
-            LOG_WARN("fail to put macro id into set", K(ret), K(macro_id));
-          } else {
-            tmp_status.ids_block_count_++;
-            tmp_status.hold_count_--;
-          }
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObBlockManager::mark_tablet_meta_blocks(
-    MacroBlkIdMap &mark_info, storage::ObTabletHandle &handle,
-    common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode>
-        &macro_id_set,
-    ObMacroBlockMarkerStatus &tmp_status) {
-  int ret = OB_SUCCESS;
-  const ObTablet *tablet = handle.get_obj();
-  ObSArray<MacroBlockId> meta_ids;
-  if (OB_FAIL(tablet->get_tablet_first_second_level_meta_ids(meta_ids))) {
-    LOG_WARN("fail to get tablet meta block ids", K(ret), KPC(tablet));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < meta_ids.count(); i++) {
-      const MacroBlockId &macro_id = meta_ids[i];
-      if (OB_FAIL(update_mark_info(macro_id, mark_info))) {
-        LOG_WARN("fail to update mark info", K(ret), K(macro_id));
-      } else if (OB_FAIL(macro_id_set.set_refactored(macro_id,
-                                                     0 /* not overwrite */))) {
-        if (OB_HASH_EXIST != ret) {
-          LOG_WARN("fail to put macro id into set", K(ret), K(macro_id));
-        } else {
-          ret = OB_SUCCESS;
-        }
-      } else {
-        tmp_status.index_block_count_++;
-        tmp_status.hold_count_--;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObBlockManager::mark_sstable_meta_block(
-    const blocksstable::ObSSTable &sstable, MacroBlkIdMap &mark_info,
-    common::hash::ObHashSet<MacroBlockId, common::hash::NoPthreadDefendMode>
-        &macro_id_set,
-    ObMacroBlockMarkerStatus &tmp_status) {
-  int ret = OB_SUCCESS;
-  const ObMetaDiskAddr &addr = sstable.get_addr();
-  MacroBlockId macro_id;
-  if (addr.is_block()) {
-    if (OB_UNLIKELY(!addr.is_valid())) {
-      LOG_WARN("sstable addr is invalid", K(ret), K(addr));
-    } else if (FALSE_IT(macro_id = addr.block_id())) {
-    } else if (OB_FAIL(update_mark_info(macro_id, mark_info))) {
-      LOG_WARN("fail to update mark info", K(ret), K(addr), K(macro_id));
-    } else if (OB_FAIL(macro_id_set.set_refactored(macro_id,
-                                                   0 /* not overwrite */))) {
-      if (OB_HASH_EXIST != ret) {
-        LOG_WARN("fail to put macro id into set", K(ret), K(macro_id));
-      } else {
-        ret = OB_SUCCESS;
-      }
-    } else {
-      tmp_status.index_block_count_++;
-      tmp_status.hold_count_--;
     }
   }
   return ret;

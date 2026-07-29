@@ -455,23 +455,15 @@ class ObTraceInfo
 {
 public:
   ObTraceInfo():
-    app_trace_info_(sizeof(app_trace_info_buffer_), 0, app_trace_info_buffer_),
     app_trace_id_(sizeof(app_trace_id_buffer_), 0, app_trace_id_buffer_) { }
   ~ObTraceInfo() {}
   void reset();
-  //app trace info
-  int set_app_trace_info(const common::ObString &app_trace_info);
-  const common::ObString &get_app_trace_info() const { return app_trace_info_; }
   //app trace id
   int set_app_trace_id(const common::ObString &app_trace_id);
   const common::ObString &get_app_trace_id() const { return app_trace_id_; }
   common::ObString &get_app_trace_id() { return app_trace_id_; }
-  TO_STRING_KV(K_(app_trace_info), K_(app_trace_id));
+  TO_STRING_KV(K_(app_trace_id));
 private:
-  static const int64_t MAX_TRACE_INFO_BUFFER = 128;
-private:
-  char app_trace_info_buffer_[MAX_TRACE_INFO_BUFFER + 1];
-  common::ObString app_trace_info_;
   char app_trace_id_buffer_[common::OB_MAX_TRACE_ID_BUFFER_SIZE + 1];
   common::ObString app_trace_id_;
 };

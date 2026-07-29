@@ -493,9 +493,6 @@ int ObPLContext::init(ObSQLSessionInfo &session_info,
 #ifdef ERRSIM
   OX (ret = OBPLCONTEXT_INIT);
 #endif // ERRSIM
-#ifdef ERRSIM
-  OX (ret = OBPLCONTEXT_INIT);
-#endif // ERRSIM
   if (OB_SUCC(ret) && is_autonomous_) {
     has_inner_dml_write_ = session_info.has_exec_inner_dml();
     session_info.set_has_exec_inner_dml(false);
@@ -1364,7 +1361,6 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
   lib::ContextParam param;
   ObPLFunction *routine = NULL;
   int64_t old_worker_timeout_ts = 0;
-  ObPLASHGuard guard(ObPLResolver::ANONYMOUS_VIRTUAL_OBJECT_ID, OB_INVALID_ID);
   /* !!!
    * PL, req_timeinfo_guard must be defined before execution
    * !!!
@@ -1463,8 +1459,6 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
           throw;
         }
       }
-      if (nullptr != ctx.get_my_session()) {
-      }
     }
   }
 
@@ -1494,7 +1488,6 @@ int ObPL::execute(ObExecContext &ctx,
   ObPLFunction *routine = NULL;
   ObCacheObjGuard cacheobj_guard;
   int64_t old_worker_timeout_ts = 0;
-  ObPLASHGuard guard(ObPLResolver::ANONYMOUS_VIRTUAL_OBJECT_ID, OB_INVALID_ID);
 
   /* !!!
    * PL, req_timeinfo_guard must be defined before execution
@@ -1592,7 +1585,6 @@ int ObPL::execute(ObExecContext &ctx,
   ObCacheObjGuard cacheobj_guard;
   int64_t old_worker_timeout_ts = 0;
   ObCurTraceId::TraceId parent_trace_id;
-  ObPLASHGuard guard(package_id, routine_id);
   /* !!!
   * PL, req_timeinfo_guard must be defined before execution
   * !!!
@@ -2618,15 +2610,7 @@ int ObPLExecState::init_complex_obj(ObIAllocator &allocator,
 int ObPLExecState::defend_stored_routine_change(const ObObjParam &actual_param, const ObPLDataType &formal_param_type)
 {
   int ret = OB_SUCCESS;
-  bool enable_defend = true;
-
-  enable_defend = GCONF._enable_routine_call_param_defend;
-
-
-  if (!enable_defend) {
-    LOG_TRACE("defend_stored_routine_change is disabled, skip check",
-              K(enable_defend), K(actual_param), K(formal_param_type));
-  } else if (actual_param.is_null() || actual_param.is_pl_mock_default_param()) {
+  if (actual_param.is_null() || actual_param.is_pl_mock_default_param()) {
     // no actual param type info(eg: out params), skip check
     LOG_TRACE("actual param is null or mock default param, skip check",
               K(actual_param), K(formal_param_type));

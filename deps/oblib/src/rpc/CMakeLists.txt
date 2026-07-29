@@ -1,6 +1,4 @@
 ob_set_subtarget(oblib_rpc common
-  ob_lib_sql_shims.cpp
-  ob_libeasy_mem_pool.cpp
   ob_lock_wait_node.cpp
   ob_request.cpp
   ob_sql_request_operator.cpp
@@ -35,7 +33,6 @@ ob_set_subtarget(oblib_rpc obmysql
   obmysql/ob_sql_sock_handler.cpp
   obmysql/ob_sql_sock_processor.cpp
   obmysql/ob_sql_sock_session.cpp
-  obmysql/ob_packet_record.cpp
 )
 
 ob_set_subtarget(oblib_rpc obmysql_packet

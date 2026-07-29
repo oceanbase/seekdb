@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_OPT
+#include "share/rc/ob_module_provider.h"
 #include "ob_table_location.h"
 #include "sql/resolver/dml/ob_delete_resolver.h"
 #include "sql/engine/expr/ob_expr_func_part_hash.h"
@@ -673,34 +674,15 @@ int ObPLGatherStatNode::add_part_calc_node(common::ObIArray<ObPartLocCalcNode*> 
 }
 
 
-int ObTableLocation::get_location_type(const common::ObAddr &server,
-                                       const ObCandiTabletLocIArray &phy_part_loc_info_list,
-                                       ObTableLocationType &location_type) const
+ObTableLocationType ObTableLocation::get_location_type(
+    const ObCandiTabletLocIArray &phy_part_loc_info_list) const
 {
-  int ret = OB_SUCCESS;
-  location_type = OB_TBL_LOCATION_UNINITIALIZED;
-  if (0 == phy_part_loc_info_list.count()) {
-    location_type = OB_TBL_LOCATION_LOCAL;
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < phy_part_loc_info_list.count(); ++i) {
-      const ObAddr &tablet_server =
-          phy_part_loc_info_list.at(i).get_partition_location().get_server();
-      if (!tablet_server.is_valid() || tablet_server != server) {
-        ret = OB_LOCATION_NOT_EXIST;
-        LOG_WARN("tablet is not at the local server", K(ret), K(server), K(tablet_server));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      // DISTRIBUTED describes a multi-tablet sharding shape here.  Even when
-      // every tablet is hosted by this standalone server, the optimizer must
-      // retain that shape so local PX can allocate partition iterators and
-      // exchanges.  It does not imply remote replica selection or transport.
-      location_type = 1 == phy_part_loc_info_list.count()
-                          ? OB_TBL_LOCATION_LOCAL
-                          : OB_TBL_LOCATION_DISTRIBUTED;
-    }
-  }
-  return ret;
+  // All tablets are routed locally in seekdb.  DISTRIBUTED only describes a
+  // multi-tablet sharding shape so local PX can retain its partition/exchange
+  // planning; it does not imply remote replica selection or transport.
+  return phy_part_loc_info_list.count() <= 1
+             ? OB_TBL_LOCATION_LOCAL
+             : OB_TBL_LOCATION_DISTRIBUTED;
 }
 
 ObTableLocation::ObTableLocation(const ObTableLocation &other) :
@@ -1861,11 +1843,40 @@ int ObTableLocation::get_tablet_locations(ObDASCtx &das_ctx,
                                           const ObIArray<ObObjectID> &first_level_part_ids,
                                           ObCandiTabletLocIArray &candi_tablet_locs) const
 {
-  return das_ctx.get_location_router().nonblock_get_candi_tablet_locations(loc_meta_,
-                                                                           tablet_ids,
-                                                                           partition_ids,
-                                                                           first_level_part_ids,
-                                                                           candi_tablet_locs);
+  int ret = OB_SUCCESS;
+  NG_TRACE(get_location_cache_begin);
+  candi_tablet_locs.reset();
+  const int64_t tablet_cnt = tablet_ids.count();
+  if (OB_UNLIKELY(partition_ids.count() != tablet_cnt
+                  || (!first_level_part_ids.empty()
+                      && first_level_part_ids.count() != tablet_cnt))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("tablet and partition counts do not match",
+             K(ret), K(tablet_ids), K(partition_ids), K(first_level_part_ids));
+  } else if (OB_FAIL(candi_tablet_locs.prepare_allocate(tablet_cnt))) {
+    LOG_WARN("failed to allocate local tablet locations", K(ret), K(tablet_cnt));
+  } else {
+    UNUSED(das_ctx);
+    ObLSLocation local_location;
+    if (OB_FAIL(local_location.init(SYS_LS, GCTX.self_addr(), 1))) {
+      LOG_WARN("failed to initialize local LS location", K(ret), K(GCTX.self_addr()));
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < tablet_cnt; ++i) {
+      const ObObjectID first_level_part_id = first_level_part_ids.empty()
+          ? OB_INVALID_ID : first_level_part_ids.at(i);
+      if (OB_FAIL(candi_tablet_locs.at(i).set_local_location(
+                     partition_ids.at(i),
+                     first_level_part_id,
+                     tablet_ids.at(i),
+                     local_location,
+                     GCTX.self_addr()))) {
+        LOG_WARN("failed to construct local tablet location",
+                 K(ret), K(i), K(tablet_ids.at(i)));
+      }
+    }
+  }
+  NG_TRACE(get_location_cache_end);
+  return ret;
 }
 
 int ObTableLocation::add_final_tablet_locations(ObDASCtx &das_ctx,
@@ -5516,11 +5527,11 @@ int ObTableLocation::try_split_integer_range(const common::ObIArray<common::ObNe
   return ret;
 }
 
-int ObTableLocation::get_full_local_table_loc(ObDASLocationRouter &loc_router,
-                                              ObIAllocator &allocator,
-                                              uint64_t table_id,
-                                              uint64_t ref_table_id,
-                                              ObDASTableLoc *&table_loc)
+int ObTableLocation::build_full_local_table_loc(ObDASCtx &das_ctx,
+                                                ObIAllocator &allocator,
+                                                uint64_t table_id,
+                                                uint64_t ref_table_id,
+                                                ObDASTableLoc *&table_loc)
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = NULL;
@@ -5564,7 +5575,7 @@ int ObTableLocation::get_full_local_table_loc(ObDASLocationRouter &loc_router,
       OX(tablet_loc->loc_meta_ = loc_meta);
       OX(tablet_loc->partition_id_ = partition_ids.at(i));
       OX(tablet_loc->first_level_part_id_ = first_level_part_ids.at(i));
-      OZ(loc_router.nonblock_get_local(tablet_ids.at(i), *tablet_loc));
+      OZ(das_ctx.build_local_tablet_loc(ref_table_id, tablet_ids.at(i), *tablet_loc));
       OZ(table_loc->add_tablet_loc(tablet_loc));
     }
   }

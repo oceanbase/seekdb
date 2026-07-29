@@ -149,6 +149,8 @@ public:
   virtual int get_session_variable(const ObString &name, int64_t &val) = 0;
   virtual int set_session_variable(const ObString &name, int64_t val) = 0;
   virtual int set_session_variable(const ObString &name, const ObString &val) = 0;
+  virtual bool is_query_sensitive_sys_var_refresh_enabled() const { return true; }
+  virtual void set_query_sensitive_sys_var_refresh_enabled(const bool enabled) { UNUSED(enabled); }
   virtual int execute(ObIExecutor &executor)
   {
     UNUSED(executor);

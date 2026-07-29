@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_row_compactor.h"
 #include "storage/memtable/ob_memtable.h"
 #include "storage/blocksstable/ob_row_writer.h"
@@ -323,7 +322,6 @@ ObMvccTransNode *ObMemtableRowCompactor::construct_compact_node_(const SCN snaps
 
   // Write compact row
   if (OB_SUCC(ret) && !giveup_compaction && compact_row_cnt > 0) {
-    EVENT_INC(MEMSTORE_ROW_COMPACTION_COUNT);
     SMART_VAR(blocksstable::ObRowWriter, row_writer) {
       char *buf = nullptr;
       int64_t len = 0;

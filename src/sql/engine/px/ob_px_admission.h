@@ -22,14 +22,11 @@
 #include "lib/lock/ob_spin_rwlock.h"
 #include "lib/lock/ob_monitor.h"
 #include "lib/lock/mutex.h"
-#include "lib/rc/ob_rc.h"
-#include "lib/hash/ob_hashset.h"
 #include "sql/resolver/ob_stmt_type.h"
 
 namespace oceanbase
 {
 using namespace oceanbase::common;
-using namespace oceanbase::common::hash;
 
 namespace sql
 {

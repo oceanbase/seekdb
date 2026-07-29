@@ -62,7 +62,7 @@ bool is_digits_only(const ObString &str)
   return ret;
 }
 
-// The session timezone map is normally fetched from the global OTTZ_MGR, which
+// The session timezone map is normally fetched from DATABASE_TZ_MGR, which
 // is not initialized in a standalone unit test. Pass an explicit (empty) tz map
 // so init() skips the OTTZ_MGR.get_timezone_map() path (would return -4016 here).
 // Same pattern as unittest/sql/optimizer/test_location_part_id.cpp.

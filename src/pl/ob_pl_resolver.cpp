@@ -2114,7 +2114,7 @@ int ObPLResolver::adjust_routine_param_type(ObPLDataType &type)
   if (type.is_obj_type() && !type.is_pl_integer_type() && OB_NOT_NULL(type.get_data_type())) {
     ObDataType data_type = *(type.get_data_type());
     const ObAccuracy &default_accuracy
-      = ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][data_type.get_obj_type()];
+      = ObAccuracy::DDL_DEFAULT_ACCURACY[data_type.get_obj_type()];
     switch (data_type.get_type_class()) {
       case ObIntTC:
       case ObUIntTC: {
@@ -8835,7 +8835,6 @@ int ObPLResolver::check_local_variable_read_only(
   int ret = OB_SUCCESS;
   const ObPLVar *var = NULL;
   const ObPLSymbolTable *symbol_table = NULL;
-  bool check_trigger_const_var_assign = true;
   CK (OB_NOT_NULL(symbol_table = ns.get_symbol_table()));
   OV (OB_NOT_NULL(var = symbol_table->get_symbol(var_idx)), OB_ERR_UNEXPECTED, K(var_idx));
   if (OB_SUCC(ret)) {

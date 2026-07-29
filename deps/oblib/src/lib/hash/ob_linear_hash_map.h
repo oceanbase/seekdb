@@ -361,7 +361,6 @@ private:
   static const double LOAD_FCT_DEF_L_LMT;
   static const uint64_t LOAD_FCT_REFR_LMT = 100; // Refresh load factor periodically. Worst case: 6400 ops trigger one update.
   /* Mod id for ob_malloc. */
-  static const int RUNTIME_ID = OB_SERVER_RUNTIME_ID;
   static constexpr const char *LABEL = ObModIds::OB_LINEAR_HASH_MAP;
 
 public:

@@ -506,17 +506,12 @@ int ObMacroBlockSliceStore::init(
     init_param.start_scn_ = start_scn;
     init_param.task_id_ = ddl_task_id;
     init_param.data_format_version_ = data_format_version;
-    if (OB_UNLIKELY(!is_full_direct_load(direct_load_type))) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("only full direct load is supported", KR(ret), K(direct_load_type));
-    } else {
-      init_param.block_type_ = DDL_MB_DATA_TYPE;
-      if (OB_ISNULL(ddl_redo_callback_ = OB_NEW(ObDDLRedoLogWriterCallback, ObMemAttr("DDL_MBSS")))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc memory", K(ret));
-      } else if (OB_FAIL(static_cast<ObDDLRedoLogWriterCallback *>(ddl_redo_callback_)->init(init_param))) {
-        LOG_WARN("fail to init full ddl_redo_callback_", K(ret), K(init_param));
-      }
+    init_param.block_type_ = DDL_MB_DATA_TYPE;
+    if (OB_ISNULL(ddl_redo_callback_ = OB_NEW(ObDDLRedoLogWriterCallback, ObMemAttr("DDL_MBSS")))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to alloc memory", K(ret));
+    } else if (OB_FAIL(static_cast<ObDDLRedoLogWriterCallback *>(ddl_redo_callback_)->init(init_param))) {
+      LOG_WARN("fail to init full ddl_redo_callback_", K(ret), K(init_param));
     }
     if (OB_SUCC(ret)) {
       ObMacroSeqParam macro_seq_param;
@@ -897,24 +892,6 @@ int ObDirectLoadSliceWriter::fill_lob_sstable_slice(
       }
     }
   } 
-  return ret;
-}
-
-int ObDirectLoadSliceWriter::fill_lob_into_memtable(
-    ObIAllocator &allocator,
-    const ObBatchSliceWriteInfo &info,
-    const common::ObObjMeta &col_type,
-    const ObLobStorageParam &lob_storage_param,
-    blocksstable::ObStorageDatum &datum)
-{
-  // to insert lob data into memtable.
-  int ret = OB_SUCCESS;
-  const int64_t timeout_ts = ObTimeUtility::fast_current_time() + ObInsertLobColumnHelper::LOB_ACCESS_TX_TIMEOUT;
-  if (OB_FAIL(ObInsertLobColumnHelper::insert_lob_column(
-    allocator, info.data_tablet_id_, col_type.get_type(), col_type.get_collation_type(),
-    lob_storage_param, datum, timeout_ts, true/*has_lob_header*/))) {
-    LOG_WARN("fail to insert_lob_col", K(ret), K(datum));
-  }
   return ret;
 }
 

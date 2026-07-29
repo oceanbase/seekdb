@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX COMMON
+#include "share/rc/ob_module_provider.h"
 
 #include "ob_lob_access_utils.h"
 #include "share/ob_i_lob_read_service.h"          // Lob-read domain port injected by the server.

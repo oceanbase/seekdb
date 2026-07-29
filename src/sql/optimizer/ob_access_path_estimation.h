@@ -27,6 +27,25 @@ namespace oceanbase {
 namespace sql {
 class AccessPath;
 
+struct EstimatedTablet
+{
+  common::ObTabletID tablet_id_;
+
+  EstimatedTablet() : tablet_id_() {}
+
+  bool is_valid() const { return tablet_id_.is_valid(); }
+  void reset()
+  {
+    tablet_id_.reset();
+  }
+  void set(const common::ObTabletID &tablet_id)
+  {
+    tablet_id_ = tablet_id;
+  }
+
+  TO_STRING_KV(K_(tablet_id));
+};
+
 struct ObBatchEstTasks
 {
   obcall::ObEstPartArg arg_;
@@ -195,12 +214,14 @@ private:
   static int process_storage_estimation(ObOptimizerContext &ctx,
                                         ObIArray<AccessPath *> &paths,
                                         bool &is_success);
+  static bool get_local_estimation_tablet(const ObCandiTabletLoc &partition,
+                                          EstimatedTablet &tablet);
   static int get_storage_estimation_task(ObOptimizerContext &ctx,
                                          ObIAllocator &arena,
                                          const ObCandiTabletLoc &partition,
                                          const ObTableMetaInfo &table_meta,
                                          ObIArray<ObBatchEstTasks *> &tasks,
-                                         EstimatedPartition &local_partition,
+                                         EstimatedTablet &local_tablet,
                                          ObBatchEstTasks *&task);
 
   static int add_storage_estimation_task(ObOptimizerContext &ctx,
@@ -265,7 +286,7 @@ private:
   static int add_index_info(ObOptimizerContext &ctx,
                             ObIAllocator &allocator,
                             ObBatchEstTasks *task,
-                            const EstimatedPartition &part,
+                            const EstimatedTablet &part,
                             AccessPath &ap,
                             const ObIArray<common::ObNewRange> &chosen_scan_ranges,
                             int64_t range_idx = -1);

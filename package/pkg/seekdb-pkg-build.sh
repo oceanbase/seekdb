@@ -282,7 +282,7 @@ fi
 
 # --- share: timezone ---
 install -d "$STAGING/opt/seekdb/share/seekdb/timezone"
-for f in timezone_V1.log; do
+for f in timezone_V1.log timezone.data timezone_name.data timezone_trans.data timezone_trans_type.data; do
   if [[ -f "$TOPDIR/tools/$f" ]]; then
     install -m 644 "$TOPDIR/tools/$f" "$STAGING/opt/seekdb/share/seekdb/timezone/"
   fi
@@ -290,7 +290,7 @@ done
 
 # --- share: srs ---
 install -d "$STAGING/opt/seekdb/share/seekdb/srs"
-for f in default_srs_data_mysql.sql; do
+for f in spatial_reference_systems.data default_srs_data_mysql.sql; do
   if [[ -f "$TOPDIR/tools/$f" ]]; then
     install -m 644 "$TOPDIR/tools/$f" "$STAGING/opt/seekdb/share/seekdb/srs/"
   fi

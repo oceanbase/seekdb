@@ -231,7 +231,6 @@ int ObResultSet::start_stmt()
 {
   NG_TRACE(sql_start_stmt_begin);
   int ret = OB_SUCCESS;
-  bool ac = true;
   ObPhysicalPlan* phy_plan = static_cast<ObPhysicalPlan*>(cache_obj_guard_.get_cache_obj());
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(get_exec_context());
   if (OB_ISNULL(phy_plan) || OB_ISNULL(plan_ctx)) {
@@ -240,8 +239,6 @@ int ObResultSet::start_stmt()
   } else if (OB_ISNULL(phy_plan->get_root_op_spec())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("root_op_spec of phy_plan is NULL", K(phy_plan), K(ret));
-  } else if (OB_FAIL(my_session_.get_autocommit(ac))) {
-    LOG_WARN("fail to get autocommit", K(ret));
   } else {
     if (OB_FAIL(ret)) {
       // do nothing
@@ -338,7 +335,7 @@ OB_INLINE int ObResultSet::inner_get_next_row(const common::ObNewRow *&row)
   }
   //Save the current execution state to determine whether to refresh location
   //and perform other necessary cleanup operations when the statement exits.
-  DAS_CTX(get_exec_context()).get_location_router().save_cur_exec_status(ret);
+  DAS_CTX(get_exec_context()).save_cur_exec_status(ret);
 
   return ret;
 }
@@ -839,7 +836,7 @@ int ObResultSet::do_close(int *client_ret)
   }
   //Save the current execution state to determine whether to refresh location
   //and perform other necessary cleanup operations when the statement exits.
-  DAS_CTX(get_exec_context()).get_location_router().save_cur_exec_status(ret);
+  DAS_CTX(get_exec_context()).save_cur_exec_status(ret);
   //NG_TRACE_EXT(result_set_close, OB_ID(ret), ret, OB_ID(arg1), prev_ret,
                //OB_ID(arg2), ins_ret, OB_ID(arg3), errcode_, OB_ID(async), async);
   return ret;  // All subsequent operations are completed through callback
@@ -890,11 +887,6 @@ OB_INLINE int ObResultSet::auto_end_plan_trans(ObPhysicalPlan& plan,
     } else {
       //bool is_rollback = (OB_FAIL(ret) || plan_ctx->is_force_rollback());
       is_rollback = need_rollback(OB_SUCCESS, ret, plan_ctx->is_error_ignored());
-      // if txn will be rollbacked and it may has been rollbacked in end-stmt phase
-      // we need account this for stat
-      if (is_rollback && !is_will_retry_() && is_tx_active && !in_trans) {
-        ObTransStatistic::get_instance().add_rollback_trans_count( 1);
-      }
       bool lock_conflict_skip_end_trans = false;
       // if err is lock conflict retry, do not rollback transaction, but cleanup transaction
       // state, keep transaction id unchanged, easy for deadlock detection and $OB_LOCKS view
@@ -1074,12 +1066,12 @@ int ObResultSet::init_cmd_exec_context(ObExecContext &exec_ctx)
 // obmp_query before retrying the entire SQL, it may be necessary to call this interface to refresh Location, to avoid always sending to the wrong server
 void ObResultSet::refresh_location_cache_by_errno(bool is_nonblock, int err)
 {
-  DAS_CTX(get_exec_context()).get_location_router().refresh_location_cache_by_errno(is_nonblock, err);
+  DAS_CTX(get_exec_context()).refresh_location_cache_by_errno(is_nonblock, err);
 }
 
 void ObResultSet::force_refresh_location_cache(bool is_nonblock, int err)
 {
-  DAS_CTX(get_exec_context()).get_location_router().force_refresh_location_cache(is_nonblock, err);
+  DAS_CTX(get_exec_context()).force_refresh_location_cache(is_nonblock, err);
 }
 // Tell mysql whether to pass an EndTransCallback
 bool ObResultSet::need_end_trans_callback() const

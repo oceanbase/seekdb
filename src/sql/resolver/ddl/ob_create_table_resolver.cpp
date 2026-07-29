@@ -173,7 +173,6 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
   bool is_temporary_table = false;
-  const bool is_mysql_mode = true;
   ParseNode *create_table_node = const_cast<ParseNode*>(&parse_tree);
   if (OB_ISNULL(create_table_node)
       || T_CREATE_TABLE != create_table_node->type_
@@ -366,7 +365,7 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
           ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
           if (OB_FAIL(resolve_partition_option(
                       create_table_node->children_[5], table_schema,
-                      (is_mysql_mode && 1 == create_table_node->reserved_) ? false : true))) {
+                      1 != create_table_node->reserved_))) {
             SQL_RESV_LOG(WARN, "resolve partition option failed", K(ret));
           }
         }
@@ -564,9 +563,7 @@ int ObCreateTableResolver::resolve_primary_key_node(const ParseNode &pk_node,
 {
   int ret = OB_SUCCESS;
 
-  const bool is_mysql_mode = true;
-  if ((is_mysql_mode ? 3 < pk_node.num_child_ : 2 < pk_node.num_child_ )
-      || OB_ISNULL(pk_node.children_)) {
+  if (3 < pk_node.num_child_ || OB_ISNULL(pk_node.children_)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "the num_child of primary_node is wrong.",
                  K(ret), K(pk_node.num_child_), K(pk_node.children_));
@@ -603,7 +600,7 @@ int ObCreateTableResolver::resolve_primary_key_node(const ParseNode &pk_node,
         }
       }
     }
-    if (OB_SUCC(ret) && is_mysql_mode && NULL != pk_node.children_[1]) {
+    if (OB_SUCC(ret) && NULL != pk_node.children_[1]) {
       ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
       if (T_USING_HASH == pk_node.children_[1]->type_) {
         create_table_stmt->set_index_using_type(share::schema::USING_HASH);
@@ -611,7 +608,7 @@ int ObCreateTableResolver::resolve_primary_key_node(const ParseNode &pk_node,
         create_table_stmt->set_index_using_type(share::schema::USING_BTREE);
       }
     }
-    if (OB_SUCC(ret) && is_mysql_mode) {
+    if (OB_SUCC(ret)) {
       if (NULL != pk_node.children_[2]) {
         ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
         ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
@@ -780,11 +777,11 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
               LOG_USER_ERROR(OB_ERR_TOO_LONG_COLUMN_LENGTH, column.get_column_name(), static_cast<int32_t>(OB_MAX_VARCHAR_LENGTH));
             } else if (is_lob_storage(column.get_data_type())) {
               ObLength max_length = 0;
-              max_length = ObAccuracy::MAX_ACCURACY2[0][column.get_data_type()].get_length();
+              max_length = ObAccuracy::MAX_ACCURACY[column.get_data_type()].get_length();
               if (length > max_length) {
                 ret = OB_ERR_TOO_LONG_COLUMN_LENGTH;
                 LOG_USER_ERROR(OB_ERR_TOO_LONG_COLUMN_LENGTH, column.get_column_name(),
-                    ObAccuracy::MAX_ACCURACY2[0][column.get_data_type()].get_length());
+                    ObAccuracy::MAX_ACCURACY[column.get_data_type()].get_length());
               } else {
                 // table lob inrow theshold has not been parsed, so use handle length check
                 // will recheck after parsing table lob inrow theshold
@@ -1283,7 +1280,6 @@ int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &p
             if (OB_SUCC(ret) && ob_is_geometry(expr->get_result_type().get_type())) {
               column.set_geo_type(static_cast<uint64_t>(expr->get_geo_expr_result_type()));
             }
-            OZ (adjust_string_column_length_within_max(column));
             LOG_DEBUG("column expr debug", K(*expr));
           }
           if (OB_FAIL(ret)) { // do nothing.
@@ -1742,6 +1738,12 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
                                                                         is_multi_value_index,
                                                                         reinterpret_cast<int*>(&index_keyname_)))) {
                 LOG_WARN("failed to resolve index type", K(ret));
+              } else if (is_multi_value_index
+                         && NULL != index_column_node->children_[2]
+                         && 1 != index_column_node->children_[2]->is_empty_) {
+                ret = OB_NOT_SUPPORTED;
+                LOG_WARN("explicit order is not supported for multivalue index", K(ret));
+                LOG_USER_ERROR(OB_NOT_SUPPORTED, "ASC/DESC for multivalue index is");
               } else if (NULL != index_column_node->children_[1]) {
                 sort_item.prefix_len_ = static_cast<int32_t>(index_column_node->children_[1]->value_);
                 if (0 == sort_item.prefix_len_) {
@@ -2349,7 +2351,6 @@ int ObCreateTableResolver::resolve_primary_key_node_in_heap_table(const ParseNod
 {
   int ret = OB_SUCCESS;
   int64_t resolved_cols_count = resolved_cols.count();
-  const bool is_mysql_mode = true;
   if ((3 < element->num_child_ )
       || OB_ISNULL(element->children_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2400,7 +2401,7 @@ int ObCreateTableResolver::resolve_primary_key_node_in_heap_table(const ParseNod
             SQL_RESV_LOG(WARN, "column does not exists", K(ret), K(column_name));
           } else if (OB_FAIL(check_add_column_as_pk_allowed(*col))) {
             LOG_WARN("the column can not be primary key", K(ret));
-          } else if (is_mysql_mode && ob_is_collection_sql_type(col->get_data_type())) {
+          } else if (ob_is_collection_sql_type(col->get_data_type())) {
             ret = OB_NOT_SUPPORTED;
             LOG_WARN("not support primary key is vector column yet", K(ret));
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "create primary key on vector column is");

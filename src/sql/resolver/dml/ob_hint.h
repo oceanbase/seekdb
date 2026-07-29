@@ -238,15 +238,6 @@ struct ObTableInHint
   common::ObString table_name_;
 };
 
-struct ObDDLSchemaVersionHint
-{
-  ObDDLSchemaVersionHint() : schema_version_(0) {}
-
-  TO_STRING_KV(K_(table), K_(schema_version));
-  ObTableInHint table_;
-  int64_t schema_version_;
-};
-
 struct ObGlobalHint {
   ObGlobalHint() { reset(); }
   void reset();
@@ -333,7 +324,6 @@ struct ObGlobalHint {
                K_(disable_transform),
                K_(disable_cost_based_transform),
                K_(opt_params),
-               K_(ob_ddl_schema_versions),
                K_(osg_hint),
                K_(has_dbms_stats_hint),
                K_(parallel_das_dml_option),
@@ -357,7 +347,6 @@ struct ObGlobalHint {
   bool disable_transform_;
   bool disable_cost_based_transform_;
   ObOptParamHint opt_params_;
-  common::ObSArray<ObDDLSchemaVersionHint> ob_ddl_schema_versions_;
   ObOptimizerStatisticsGatheringHint osg_hint_;
   bool has_dbms_stats_hint_;
   ObParallelDASOption parallel_das_dml_option_;

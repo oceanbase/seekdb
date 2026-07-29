@@ -3,8 +3,12 @@
 --echo # ----------------------------------------------------------------------
 --echo # Test of GEOMETRY ST_BESTSRID
 --echo # ----------------------------------------------------------------------
+  connect (obsys, $OBMYSQL_MS0, root@sys,,oceanbase,$OBMYSQL_PORT);
   connect (obmysql, $OBMYSQL_MS0, root@sys, , oceanbase, $OBMYSQL_PORT);
+  connection obsys;
+  alter system load module data module=gis infile = 'etc/';
   connection obmysql;
+  sleep 10;
   use test;
 
   --echo # st_transform is the same as mysql, use _st_transform instead

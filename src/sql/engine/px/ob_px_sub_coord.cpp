@@ -299,7 +299,6 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
                                  const ObIArray<ObSqcTableLocationKey> &tsc_location_keys)
 {
   int ret = OB_SUCCESS;
-  ASH_ITEM_ATTACH_GUARD(plan_line_id, root.id_);
   if (IS_PX_RECEIVE(root.get_type())) {
     ObPxReceiveSpec *receive_op = reinterpret_cast<ObPxReceiveSpec *>(&root);
     ObOperatorKit *kit = ctx.get_operator_kit(receive_op->id_);
@@ -422,11 +421,11 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
           for (int64_t j = 0; OB_SUCC(ret) && j < temp_table_ctx.interm_result_infos_.count(); ++j) {
               ObTempTableResultInfo &info = temp_table_ctx.interm_result_infos_.at(j);
 #if defined(__APPLE__) || defined(_WIN32) || defined(__ANDROID__)
-                std::random_device rd;
-                std::mt19937 g(rd());
-                std::shuffle(info.interm_result_ids_.begin(), info.interm_result_ids_.end(), g);
+            std::random_device rd;
+            std::mt19937 g(rd());
+            std::shuffle(access_input->interm_result_ids_.begin(), access_input->interm_result_ids_.end(), g);
 #else
-                std::random_shuffle(info.interm_result_ids_.begin(), info.interm_result_ids_.end());
+            std::random_shuffle(access_input->interm_result_ids_.begin(), access_input->interm_result_ids_.end());
 #endif
               if (OB_FAIL(append(access_input->interm_result_ids_, info.interm_result_ids_))) {
                 LOG_WARN("failed to append local result ids", K(ret));
@@ -467,11 +466,11 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
           for (int64_t j = 0; OB_SUCC(ret) && j < temp_table_ctx.interm_result_infos_.count(); ++j) {
               ObTempTableResultInfo &info = temp_table_ctx.interm_result_infos_.at(j);
 #if defined(__APPLE__) || defined(_WIN32) || defined(__ANDROID__)
-                std::random_device rd;
-                std::mt19937 g(rd());
-                std::shuffle(info.interm_result_ids_.begin(), info.interm_result_ids_.end(), g);
+            std::random_device rd;
+            std::mt19937 g(rd());
+            std::shuffle(access_input->interm_result_ids_.begin(), access_input->interm_result_ids_.end(), g);
 #else
-                std::random_shuffle(info.interm_result_ids_.begin(), info.interm_result_ids_.end());
+            std::random_shuffle(access_input->interm_result_ids_.begin(), access_input->interm_result_ids_.end());
 #endif
               if (OB_FAIL(append(access_input->interm_result_ids_, info.interm_result_ids_))) {
                 LOG_WARN("failed to append local result ids", K(ret));
@@ -988,8 +987,7 @@ int ObPxSubCoord::rebuild_sqc_access_table_locations()
     for (int i = 0; i < location_keys.count() && OB_SUCC(ret); ++i) {
       // dml location always at first
       if (OB_ISNULL(table_loc) && location_keys.at(i).is_loc_uncertain_) {
-        ObDASLocationRouter &loc_router = DAS_CTX(*sqc_arg_.exec_ctx_).get_location_router();
-        OZ(ObTableLocation::get_full_local_table_loc(loc_router,
+        OZ(ObTableLocation::build_full_local_table_loc(das_ctx,
            sqc_arg_.exec_ctx_->get_allocator(),
            location_keys.at(i).table_location_key_,
            location_keys.at(i).ref_table_id_,

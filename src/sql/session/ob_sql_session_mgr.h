@@ -51,12 +51,8 @@ public:
   static const uint32_t MAX_VERSION = UINT8_MAX;//255
   static const int64_t BUCKET_COUNT = 1024;
   typedef SessionInfoKey Key;
-  explicit ObSQLSessionMgr():
-      sessinfo_map_(),
-      next_sessid_(1)
-  {
-  }
-  virtual ~ObSQLSessionMgr(){}
+  explicit ObSQLSessionMgr();
+  virtual ~ObSQLSessionMgr();
 
   int init();
 
@@ -108,6 +104,7 @@ public:
 
   // Kill every active session during server shutdown.
   int kill_all_sessions(bool force_kill);
+  void wait_sessions_drained();
 
   /**
    * @brief timing clean time out session
@@ -121,11 +118,29 @@ public:
   //used for guarantee the unique sessid when observer generates sessid
   int create_sessid(uint32_t &sessid);
 private:
+  class SessionPool
+  {
+  public:
+    static const int64_t POOL_CAPACITY = 32;
+    SessionPool();
+    int init(const int64_t capacity);
+    int pop_session(ObSQLSessionInfo *&session);
+    int push_session(ObSQLSessionInfo *&session);
+    int64_t count() const;
+    TO_STRING_KV(K(session_pool_.capacity()),
+                 K(session_pool_.get_total()),
+                 K(session_pool_.get_free()));
+  private:
+    ObSQLSessionInfo *session_array_[POOL_CAPACITY];
+    common::ObFixedQueue<ObSQLSessionInfo> session_pool_;
+  };
+
   class ValueAlloc
   {
   public:
-    ValueAlloc()
-      : alloc_total_count_(0),
+    explicit ValueAlloc(ObSQLSessionMgr *session_mgr = NULL)
+      : session_mgr_(session_mgr),
+        alloc_total_count_(0),
         free_total_count_(0)
     {}
     ~ValueAlloc() {}
@@ -145,6 +160,7 @@ private:
       }
     }
   private:
+    ObSQLSessionMgr *session_mgr_;
     volatile int64_t alloc_total_count_;
     volatile int64_t free_total_count_;
     static const int64_t MAX_REUSE_COUNT = 10000;
@@ -188,13 +204,21 @@ private:
   };
 
 private:
-  // Note: Must be defined before session_map_, depends on the order of destruction.
+  ObSQLSessionInfo *alloc_session();
+  void release_session(ObSQLSessionInfo *session);
+  void clean_session_pool();
+
+  // The pool and allocator must outlive sessinfo_map_: the map returns values
+  // to them while the map is being destroyed.
+  SessionPool session_pool_;
+  volatile int64_t allocated_session_count_;
+  ObFixedClassAllocator<ObSQLSessionInfo> session_allocator_;
   // used for manage ObSQLSessionInfo
   HashMap sessinfo_map_;
   // Monotonically increasing session id allocator. Wraps around at UINT32_MAX, skips 0.
   uint32_t next_sessid_ CACHE_ALIGNED;
   DISALLOW_COPY_AND_ASSIGN(ObSQLSessionMgr);
-}; // end of class ObSQLSessionPool
+}; // end of class ObSQLSessionMgr
 
 template <typename Function>
 int ObSQLSessionMgr::for_each_session(Function &fn)
@@ -234,48 +258,6 @@ private:
   ObSQLSessionMgr &mgr_;
   ObSQLSessionInfo *session_;
 };
-
-class ObSQLSessionPool
-{
-public:
-  explicit ObSQLSessionPool();
-  ~ObSQLSessionPool();
-
-  int init();
-  void destroy();
-  static int server_module_new(ObSQLSessionPool *&session_pool);
-  static int server_module_init(ObSQLSessionPool *&session_pool);
-  static void server_module_wait(ObSQLSessionPool *&session_pool);
-  static void server_module_destroy(ObSQLSessionPool *&session_pool);
-  ObSQLSessionInfo *alloc_session();
-  void free_session(ObSQLSessionInfo *session);
-  void clean_session_pool();
-  int64_t count() const { return ATOMIC_LOAD(&count_); }
-private:
-  class SessionPool
-  {
-  public:
-    static const int64_t POOL_CAPACIPY = 32;
-  public:
-    SessionPool();
-    int init(const int64_t capacity);
-    int pop_session(ObSQLSessionInfo *&session);
-    int push_session(ObSQLSessionInfo *&session);
-    int64_t count() const;
-    TO_STRING_KV(K(session_pool_.capacity()),
-                 K(session_pool_.get_total()),
-                 K(session_pool_.get_free()));
-  private:
-    ObSQLSessionInfo *session_array_[POOL_CAPACIPY];
-    common::ObFixedQueue<ObSQLSessionInfo> session_pool_;
-  };
-private:
-  
-  SessionPool session_pool_;
-  int64_t count_;
-  ObFixedClassAllocator<ObSQLSessionInfo> session_allocator_;
-  DISALLOW_COPY_AND_ASSIGN(ObSQLSessionPool);
-}; // end of class ObSQLSessionMgr
 
 } // end of namespace sql
 } // end of namespace oceanbase

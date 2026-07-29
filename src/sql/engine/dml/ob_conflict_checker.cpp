@@ -286,11 +286,15 @@ int ObConflictChecker::build_rowkey(ObRowkey *&rowkey,
 {
   int ret = OB_SUCCESS;
   ObObj *objs = NULL;
-  int64_t rowkey_cnt = rowkey_info->rowkey_expr_.count();
+  int64_t rowkey_cnt = 0;
   ObIAllocator &alloc = das_ref_.get_das_alloc();
   ObIAllocator *tmp_string_buffer = nullptr;
 
-  if (OB_UNLIKELY(rowkey_info->rowkey_accuracys_.count() != rowkey_cnt)) {
+  if (OB_ISNULL(rowkey_info)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("rowkey info is null", K(ret));
+  } else if (FALSE_IT(rowkey_cnt = rowkey_info->rowkey_expr_.count())) {
+  } else if (OB_UNLIKELY(rowkey_info->rowkey_accuracys_.count() != rowkey_cnt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("rowkey accuracy count does not match rowkey expression count", K(ret), K(rowkey_cnt),
              "accuracy_count", rowkey_info->rowkey_accuracys_.count());
@@ -1040,7 +1044,6 @@ int ObConflictChecker::init_das_scan_rtdef()
                          false, // full_row
                          false, // index_back
                          false, // query_stat
-                         ObQueryFlag::MysqlMode, // sql_mode
                          true // read_latest
                         );
   das_scan_rtdef_.scan_flag_.flag_ = query_flag.flag_;
@@ -1111,7 +1114,7 @@ int ObConflictChecker::init_attach_scan_rtdef(const ObDASBaseCtDef *attach_ctdef
       attach_scan_rtdef->scan_allocator_.set_alloc(&das_ref_.get_das_alloc());
       ObQueryFlag query_flag(ObQueryFlag::Forward/*scan_order*/, false/*daily_merge*/, false/*optimize*/,
                             false/*sys scan*/, false/*full_row*/, false/*index_back*/, false/*query_stat*/,
-                            ObQueryFlag::MysqlMode/*sql_mode*/, true/*read_latest*/);
+                            true/*read_latest*/);
       attach_scan_rtdef->scan_flag_.flag_ = query_flag.flag_;
       attach_scan_rtdef->runtime_schema_version_ = task_exec_ctx.get_query_begin_schema_version();
       attach_scan_rtdef->eval_ctx_ = &eval_ctx_;

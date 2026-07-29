@@ -2804,9 +2804,7 @@ int ObAggregateProcessor::rollup_process(
   if (OB_FAIL(group_rows_.at(group_id, group_row))) {
     LOG_WARN("get group_row failed", K(group_id), K(ret));
   } else if (rollup_group_id < max_group_cnt) {
-    // partial rollup id is less than the count of groupby_exprs
-    // it should not calc partial rollup
-    // on before logic it redundently calculate aggregate function for last rollup row
+    // Fixed GROUP BY prefix columns do not have a rollup target.
   } else if (OB_FAIL(group_rows_.at(rollup_group_id, rollup_row))) {
     LOG_WARN("get group_row failed", "group_id", group_id - 1, K(ret));
   } else if (OB_ISNULL(group_row) || OB_ISNULL(rollup_row)) {

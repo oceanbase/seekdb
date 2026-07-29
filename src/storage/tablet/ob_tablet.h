@@ -424,7 +424,6 @@ public:
   int get_table(const ObITable::TableKey &table_key, ObTableHandleV2 &handle) const;
   int get_recycle_version(const int64_t multi_version_start, int64_t &recycle_version) const;
 
-  int check_table_store_without_backup_table_(const ObSSTableArray &sstable_array);
 public:
   // other
   const ObMetaDiskAddr &get_tablet_addr() const { return tablet_addr_; }
@@ -536,13 +535,11 @@ public:
 
   int64_t to_string(char *buf, const int64_t buf_len) const;
   int get_max_column_cnt_on_schema_recorder(int64_t &max_column_cnt);
-  static int get_tablet_version(const char *buf, const int64_t len, int32_t &version);
   int get_max_schema_version(int64_t &schema_version);
   int get_ls_epoch(int64_t &ls_epoch);
   int get_sstable_column_checksum(
     const blocksstable::ObSSTable &sstable,
     common::ObIArray<int64_t> &column_checksums) const;
-  static int get_tablet_block_header_version(const char *buf, const int64_t len, int32_t &version);
   int get_all_minor_sstables(ObTableStoreIterator &table_store_iter) const;
   int get_sstable_read_info(
       const blocksstable::ObSSTable *sstable,
@@ -675,7 +672,6 @@ private:
 
   int check_medium_list() const;
   int check_sstable_column_checksum() const;
-  int check_no_backup_data() const;
   int get_finish_medium_scn(int64_t &finish_medium_scn) const;
 
   int inner_get_mds_sstables(ObTableStoreIterator &table_store_iter) const;
@@ -696,27 +692,7 @@ private:
       const int64_t size,
       const ObMetaDiskAddr::DiskType block_type);
 
-  int load_deserialize_v1(
-      common::ObArenaAllocator &allocator,
-      const char *buf,
-      const int64_t len,
-      int64_t &pos);
-  int deserialize_meta_v1(
-      common::ObArenaAllocator &allocator,
-      const char *buf,
-      const int64_t len,
-      int64_t &pos,
-      share::ObTabletAutoincSeq &autoinc_seq,
-      ObTabletTxMultiSourceDataUnit &tx_data,
-      ObTabletBindingInfo &ddl_data);
-  int load_deserialize_v2(
-      common::ObArenaAllocator &allocator,
-      const char *buf,
-      const int64_t len,
-      int64_t &pos,
-      const bool prepare_memtable = true /* whether to prepare memtable */);
-
-  int load_deserialize_v3(
+  int load_deserialize_current(
       common::ObArenaAllocator &allocator,
       const char *buf,
       const int64_t len,
@@ -773,10 +749,7 @@ private:
       char *&buf) const;
   int start_direct_load_task_for_idem(ObLS *tenant_ls);
 public:
-  static constexpr int32_t VERSION_V1 = 1;
-  static constexpr int32_t VERSION_V2 = 2;
-  static constexpr int32_t VERSION_V3 = 3;
-  static constexpr int32_t VERSION_V4 = 4;
+  static constexpr int32_t TABLET_PAYLOAD_VERSION = 4;
 private:
   // ObTabletDDLKvMgr::MAX_DDL_KV_CNT_IN_STORAGE
   // Array size is too large, need to shrink it if possible
@@ -786,7 +759,6 @@ private:
   int32_t version_;                                          // size: 4B, alignment: 4B
   int32_t length_;                                           // size: 4B, alignment: 4B
   volatile int64_t wash_score_;                              // size: 8B, alignment: 8B
-  ObTabletMdsData *mds_data_;                                // size: 8B, alignment: 8B
   volatile int64_t ref_cnt_;                                 // size: 8B, alignment: 8B
   ObTabletHandle next_tablet_guard_;                         // size: 56B, alignment: 8B
   ObTabletMeta tablet_meta_;                                 // size: 288B, alignment: 8B
@@ -800,7 +772,7 @@ private:
   ObDDLKV **ddl_kvs_;                                        // size: 8B, alignment: 8B
   int64_t ddl_kv_count_;                                     // size: 8B, alignment: 8B
   ObTabletPointerHandle pointer_hdl_;                   // size: 24B, alignment: 8B
-  ObMetaDiskAddr tablet_addr_;                               // size: 48B, alignment: 8B 1080
+  ObMetaDiskAddr tablet_addr_;                               // size: 40B, alignment: 8B 1080
   // NOTICE: these two pointers: memtable_mgr_ and log_handler_,
   // are considered as cache for tablet.
   // we keep it on tablet because we cannot get them in ObTablet::deserialize

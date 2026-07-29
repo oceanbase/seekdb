@@ -61,7 +61,6 @@ int CalcPartitionBaseInfo::deep_copy(common::ObIAllocator &allocator,
       base_info->partition_id_calc_type_ = partition_id_calc_type_;
       base_info->may_add_interval_part_ = may_add_interval_part_;
       base_info->calc_id_type_ = calc_id_type_;
-      base_info->first_part_id_ = first_part_id_;
     }
   }
   return ret;
@@ -671,13 +670,10 @@ int ObExprCalcPartitionBase::fast_calc_partition_level_one_vector(const ObExpr &
                                                              const EvalBound &bound)
 {
   int ret = OB_SUCCESS;
-  // The value is invalid,
-  // indicating that the corresponding plan was CG by an observer with a lower version.
-  // Revert to using the non-fast path directly.
   if (expr.expr_ctx_id_ == ObExpr::INVALID_EXP_CTX_ID) {
-    if (OB_FAIL(calc_partition_level_one_vector(expr, ctx, skip, bound))) {
-      LOG_WARN("Fail to calc partition level one vector", K(ret));
-    }
+    ret = OB_VERSION_NOT_MATCH;
+    LOG_WARN("partition expression runtime context is missing from the current plan format",
+             K(ret), K(expr.expr_ctx_id_));
   } else {
     CalcPartitionBaseInfo *calc_part_info = reinterpret_cast<CalcPartitionBaseInfo *>(expr.extra_info_);
     ObDASTabletMapper tablet_mapper;

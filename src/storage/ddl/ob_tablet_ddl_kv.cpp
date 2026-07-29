@@ -1001,7 +1001,9 @@ int ObDDLKV::set_macro_block(
   }
   if (OB_SUCC(ret) && can_freeze && (get_macro_block_cnt() >= freeze_block_count || get_memory_used() >= MEMORY_LIMIT)) {
     ObDDLTableMergeDagParam param;
-    param.direct_load_type_    = ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DDL;
+    param.direct_load_type_    = data_format_version >= DDL_IDEM_DATA_FORMAT_VERSION
+                               ? ObDirectLoadType::IDEM_DIRECT_LOAD_DDL
+                               : ObDirectLoadType::DIRECT_LOAD_DDL;
     param.tablet_id_           = tablet_id_;
     param.start_scn_           = ddl_start_scn_;
     param.data_format_version_ = data_format_version;

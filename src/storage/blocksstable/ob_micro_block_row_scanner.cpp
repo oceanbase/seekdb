@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_micro_block_row_scanner.h"
 #include "storage/access/ob_aggregate_base.h"
 #include "storage/access/ob_block_batched_row_store.h"
@@ -327,7 +326,6 @@ int ObIMicroBlockRowScanner::apply_filter(const bool can_blockscan)
   } else if (OB_FAIL(block_row_store_->reorder_filter())) {
     LOG_WARN("Fail to reorder filter", K(ret));
   } else {
-    ACTIVE_SESSION_FLAG_SETTER_GUARD(in_filter_rows);
     if (param_->has_lob_column_out()) {
       context_->reuse_lob_locator_helper();
     }
@@ -861,7 +859,6 @@ int ObIMicroBlockRowScanner::filter_micro_block_in_blockscan(sql::PushdownFilter
     if (OB_SUCC(ret)) {
       int64_t bitmap_cnt = pd_filter_info.filter_->get_result()->size();
       int64_t select_cnt = pd_filter_info.filter_->get_result()->popcnt();
-      EVENT_ADD(PUSHDOWN_STORAGE_FILTER_ROW_CNT, bitmap_cnt - select_cnt);
     }
   }
   return ret;

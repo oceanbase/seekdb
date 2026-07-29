@@ -152,7 +152,7 @@ int ObDDLTableMergeDag::init_tablet_ctx()
     if (OB_FAIL(tablet_ctx_->merge_ctx_.init(ddl_param_.direct_load_type_))) {
       LOG_WARN("failed to get merge helper", K(ret));
     } else if (ddl_param_.is_commit_ &&
-               ddl_param_.direct_load_type_ == SN_IDEM_DIRECT_LOAD_DDL) {
+               ddl_param_.direct_load_type_ == IDEM_DIRECT_LOAD_DDL) {
       tablet_ctx_->tablet_param_.storage_schema_ = &ddl_param_.user_data_.storage_schema_;
     } else {
       if (OB_FAIL(tablet_handle.get_obj()->load_storage_schema(arena_, tablet_ctx_->tablet_param_.storage_schema_))) {
@@ -174,10 +174,7 @@ int ObDDLTableMergeDag::create_first_task()
   ObLS *ls = nullptr;
   ObTabletHandle tablet_handle;
   ObArray<ObDDLKVHandle> ddl_kvs_handle;
-  if (is_incremental_major_direct_load(ddl_param_.direct_load_type_)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("unsupported direct load type", K(ret), K(ddl_param_));
-  } else if (is_idem_type(ddl_param_.direct_load_type_)) {
+  if (is_idem_type(ddl_param_.direct_load_type_)) {
     // Decide whether the local tablet is ready for a full major merge.
     if (OB_FAIL(check_allow_major_merge())) {
       LOG_WARN("failed to check allow major merge", K(ret));

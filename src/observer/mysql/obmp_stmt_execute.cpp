@@ -17,9 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "obmp_stmt_execute.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/mysql/ob_mysql_result_set.h"
 #include "lib/trace/ob_trace.h"
 #include "observer/mysql/obsm_utils.h"
@@ -288,7 +286,7 @@ int ObMPStmtExecute::construct_execute_param_for_arraybinding(int64_t pos)
     }
     if (data[pos].is_numeric_type()) {
       ObAccuracy default_acc =
-        ObAccuracy::DDL_DEFAULT_ACCURACY2[0][data[pos].get_type()];
+        ObAccuracy::DDL_DEFAULT_ACCURACY[data[pos].get_type()];
       if (params_->at(i).get_scale() == NUMBER_SCALE_UNKNOWN_YET) {
         params_->at(i).set_scale(default_acc.get_scale());
       }
@@ -1255,7 +1253,6 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
       } else {
         task_ctx->schema_service_ = gctx_.schema_service_;
         task_ctx->set_query_begin_schema_version(retry_ctrl_.get_current_local_schema_version());
-        task_ctx->set_query_sys_begin_schema_version(retry_ctrl_.get_sys_local_schema_version());
         ctx_.retry_times_ = retry_ctrl_.get_retry_times();
         session.reset_plsql_exec_time();
         session.reset_plsql_compile_time();
@@ -1297,12 +1294,6 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
       ObExecStatUtils::record_exec_timestamp(*this, first_record, audit_record.exec_timestamp_);
       audit_record.exec_timestamp_.update_stage_time();
 
-      if (!THIS_THWORKER.need_retry()
-        && OB_NOT_NULL(result.get_physical_plan())) {
-        const int64_t time_cost = exec_end_timestamp_ - get_receive_timestamp();
-        ObSQLUtils::record_execute_time(result.get_physical_plan()->get_plan_type(), time_cost);
-      }
-
       if (OB_FAIL(ret)
           && !async_resp_used
           && need_response_error
@@ -1323,7 +1314,6 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
 
     {
       audit_record.exec_record_.record_end();
-      record_stat(result.get_stmt_type(), exec_end_timestamp_, session, ret, result);
       audit_record.stmt_type_ = result.get_stmt_type();
       audit_record.update_event_stage_state();
     }
@@ -1461,8 +1451,7 @@ OB_NOINLINE int ObMPStmtExecute::process_retry(ObSQLSessionInfo &session,
   lib::ContextParam param;
   param.set_mem_attr(ObModIds::OB_SQL_EXECUTOR, ObCtxIds::DEFAULT_CTX_ID)
     .set_properties(lib::USE_TL_PAGE_OPTIONAL)
-    .set_page_size(!lib::is_mini_mode() ? OB_MALLOC_BIG_BLOCK_SIZE
-        : OB_MALLOC_MIDDLE_BLOCK_SIZE)
+    .set_page_size(OB_MALLOC_BIG_BLOCK_SIZE)
     .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
   CREATE_WITH_TEMP_CONTEXT(param) {
     ret = do_process(session,
@@ -1489,15 +1478,12 @@ int ObMPStmtExecute::do_process_single(ObSQLSessionInfo &session,
     // Must always be set to OB_SUCCESS, otherwise it may cause a deadlock due to do_process() not being called
     ret = OB_SUCCESS;
     share::schema::ObSchemaGetterGuard schema_guard;
-    int64_t runtime_schema_version = 0;
-    int64_t sys_version = 0;
+    int64_t database_schema_version = 0;
     retry_ctrl_.clear_state_before_each_retry(session.get_retry_info_for_update());
     OZ (gctx_.schema_service_->get_runtime_schema_guard(schema_guard));
-    OZ (schema_guard.get_schema_version(runtime_schema_version));
-    OZ (schema_guard.get_schema_version(sys_version));
+    OZ (schema_guard.get_schema_version(database_schema_version));
     OX (ctx_.schema_guard_ = &schema_guard);
-    OX (retry_ctrl_.set_current_local_schema_version(runtime_schema_version));
-    OX (retry_ctrl_.set_sys_local_schema_version(sys_version));
+    OX (retry_ctrl_.set_current_local_schema_version(database_schema_version));
 
     if (OB_SUCC(ret) && !is_send_long_data()) {
       if (OB_LIKELY(session.get_is_in_retry())
@@ -1604,7 +1590,7 @@ int ObMPStmtExecute::process_execute_stmt(const ObMultiStmtItem &multi_stmt_item
     }
   }
   //For tracelog processing, it does not affect normal logic, error code does not need to be assigned to ret, clear WARNING BUFFER
-  do_after_process(session, async_resp_used);
+  do_after_process(session, async_resp_used, ret);
 
   if (OB_FAIL(ret) && need_response_error && is_conn_valid()) {
     send_error_packet(ret, NULL);
@@ -1643,8 +1629,7 @@ int ObMPStmtExecute::process()
     LOG_WARN("session is NULL or invalid", K_(stmt_id), K(sess), K(ret));
   } else {
     ObSQLSessionInfo &session = *sess;
-    int64_t runtime_schema_version = 0;
-    int64_t sys_version = 0;
+    int64_t database_schema_version = 0;
     THIS_WORKER.set_session(sess);
     ObSQLSessionInfo::LockGuard lock_guard(session.get_query_lock());
     SQL_INFO_GUARD(ctx_.cur_sql_, ObString(ctx_.sql_id_));
@@ -1669,12 +1654,9 @@ int ObMPStmtExecute::process()
       LOG_WARN("fail to check and init retry info", K(ret), K(*cur_trace_id), K(ctx_.cur_sql_));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
       LOG_WARN("fail to get query timeout", K(ret));
-    } else if (OB_FAIL(gctx_.schema_service_->get_runtime_received_broadcast_version(
-                runtime_schema_version))) {
-      LOG_WARN("fail to get runtime schema broadcast version", K(ret));
-    } else if (OB_FAIL(gctx_.schema_service_->get_runtime_received_broadcast_version(
-                sys_version))) {
-      LOG_WARN("fail to get system schema broadcast version", K(ret));
+    } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(
+                database_schema_version))) {
+      LOG_WARN("fail to get published database schema version", K(ret));
     } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
       //packet size check with session variable max_allowd_packet or net_buffer_length
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
@@ -1685,8 +1667,7 @@ int ObMPStmtExecute::process()
       LOG_WARN("precondition for arraybinding is not satisfied", K(ret));
     } else {
       THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
-      retry_ctrl_.set_current_global_schema_version(runtime_schema_version);
-      retry_ctrl_.set_sys_global_schema_version(sys_version);
+      retry_ctrl_.set_current_global_schema_version(database_schema_version);
       session.set_pl_can_retry(true);
       session.set_enable_mysql_compatible_dates(
         session.get_enable_mysql_compatible_dates_from_config());
@@ -2574,66 +2555,6 @@ int ObMPStmtExecute::parse_mysql_time_value(const char *&data, ObObj &param, ObP
   }
   LOG_INFO("get time", K(length), K(year), K(month), K(day), K(hour), K(min),K(second),  K(microsecond), K(value));
   return ret;
-}
-
-void ObMPStmtExecute::record_stat(const stmt::StmtType type, const int64_t end_time,
-                                  const sql::ObSQLSessionInfo& session,
-                                  const int64_t ret,
-                                  const ObMySQLResultSet &result) const
-{
-#define ADD_STMT_STAT(type)                     \
-  case stmt::T_##type:                          \
-    if (!session.get_is_in_retry()) {           \
-      EVENT_INC(SQL_##type##_COUNT);            \
-      if (OB_SUCCESS != ret) {                  \
-        EVENT_INC(SQL_FAIL_COUNT);              \
-      }                                         \
-    }                                           \
-    EVENT_ADD(SQL_##type##_TIME, time_cost);    \
-    break
-  {
-    const int64_t time_cost = end_time - get_receive_timestamp();
-    if (!THIS_THWORKER.need_retry()) {
-      EVENT_INC(SQL_PS_EXECUTE_COUNT);
-      switch (type) {
-        ADD_STMT_STAT(SELECT);
-        ADD_STMT_STAT(INSERT);
-        ADD_STMT_STAT(REPLACE);
-        ADD_STMT_STAT(UPDATE);
-        ADD_STMT_STAT(DELETE);
-        case stmt::T_END_TRANS:
-        if (result.is_commit_cmd()) {
-          EVENT_ADD(SQL_COMMIT_TIME, time_cost);
-          if (!session.get_is_in_retry()) {
-            EVENT_INC(SQL_COMMIT_COUNT);
-            if (OB_SUCCESS != ret) {
-              EVENT_INC(SQL_FAIL_COUNT);
-            }
-          }
-        } else if (result.is_rollback_cmd()) {
-          EVENT_ADD(SQL_ROLLBACK_TIME, time_cost);
-          if (!session.get_is_in_retry()) {
-            EVENT_INC(SQL_ROLLBACK_COUNT);
-            if (OB_SUCCESS != ret) {
-              EVENT_INC(SQL_FAIL_COUNT);
-            }
-          }
-        }
-        break;
-
-        default: {
-          EVENT_ADD(SQL_OTHER_TIME, time_cost);
-          if (!session.get_is_in_retry()) {
-            EVENT_INC(SQL_OTHER_COUNT);
-            if (OB_SUCCESS != ret) {
-              EVENT_INC(SQL_FAIL_COUNT);
-            }
-          }
-        }
-      }
-    }
-  }
-#undef ADD_STMT_STAT
 }
 
 int ObMPStmtExecute::response_query_header(ObSQLSessionInfo &session, pl::ObDbmsCursorInfo &cursor)

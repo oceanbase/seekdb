@@ -719,7 +719,6 @@ void ObExecContext::try_reset_convert_charset_allocator()
 
 
 int ObExecContext::add_temp_table_interm_result_ids(uint64_t temp_table_id,
-                                                    const common::ObAddr &sqc_addr,
                                                     const ObIArray<uint64_t> &ids)
 {
   int ret = OB_SUCCESS;
@@ -729,7 +728,6 @@ int ObExecContext::add_temp_table_interm_result_ids(uint64_t temp_table_id,
     ObSqlTempTableCtx &ctx = temp_ctx.at(i);
     if (temp_table_id == ctx.temp_table_id_) {
       ObTempTableResultInfo info;
-      info.addr_ = sqc_addr;
       if (OB_FAIL(info.interm_result_ids_.assign(ids))) {
         LOG_WARN("failed to assign to interm result ids.", K(ret));
       } else if (OB_FAIL(ctx.interm_result_infos_.push_back(info))) {
@@ -744,7 +742,6 @@ int ObExecContext::add_temp_table_interm_result_ids(uint64_t temp_table_id,
     ctx.is_local_interm_result_ = false;
     ctx.temp_table_id_ = temp_table_id;
     ObTempTableResultInfo info;
-    info.addr_ = sqc_addr;
     if (OB_FAIL(info.interm_result_ids_.assign(ids))) {
       LOG_WARN("failed to assign to interm result ids.", K(ret));
     } else if (OB_FAIL(ctx.interm_result_infos_.push_back(info))) {

@@ -531,10 +531,7 @@ int ObSerialDfoScheduler::do_schedule_dfo(ObExecContext &ctx, ObDfo &dfo) const
   return ret;
 }
 
-// in-process implementation of the old ObPxCleanDtlIntermResP::process().
-// Single-replica seekdb: target is always self, so erase DTL interm results
-// locally in the argument's runtime context.
-int ObSerialDfoScheduler::clean_dtl_interm_result_local(ObPxCleanDtlIntermResArgs &arg)
+int ObSerialDfoScheduler::erase_dtl_interm_results(ObPxDtlIntermResBatch &batch)
 {
   int ret = OB_SUCCESS;
   dtl::ObDTLIntermResultKey key;
@@ -545,16 +542,16 @@ int ObSerialDfoScheduler::clean_dtl_interm_result_local(ObPxCleanDtlIntermResArg
     return OB_SUCCESS;
   }
 #endif
-  int64_t batch_size = 0 == arg.batch_size_ ? 1 : arg.batch_size_;
-  for (int64_t i = 0; i < arg.info_.count(); i++) {
-    ObPxCleanDtlIntermResInfo &info = arg.info_.at(i);
+  int64_t batch_size = 0 == batch.batch_size_ ? 1 : batch.batch_size_;
+  for (int64_t i = 0; i < batch.info_.count(); i++) {
+    ObPxDtlIntermResInfo &info = batch.info_.at(i);
     for (int64_t task_id = 0; task_id < info.task_count_; task_id++) {
       ObPxTaskChSet ch_set;
       if (OB_FAIL(ObDtlChannelUtil::get_receive_dtl_channel_set(info.sqc_id_, task_id,
             info.ch_total_info_, ch_set))) {
         LOG_WARN("get receive dtl channel set failed", K(ret));
       } else {
-        LOG_TRACE("clean_dtl_interm_result_local process", K(i), K(arg.batch_size_), K(info), K(task_id), K(ch_set));
+        LOG_TRACE("erase dtl interm result", K(i), K(batch.batch_size_), K(info), K(task_id), K(ch_set));
         for (int64_t ch_idx = 0; ch_idx < ch_set.count(); ch_idx++) {
           key.channel_id_ = ch_set.get_ch_info_set().at(ch_idx).chid_;
           for (int64_t batch_id = 0; batch_id < batch_size && OB_SUCC(ret); batch_id++) {
@@ -591,8 +588,8 @@ void ObSerialDfoScheduler::clean_dtl_interm_result(ObExecContext &exec_ctx)
     // all dfo scheduled, do nothing.
     LOG_TRACE("all dfo scheduled.");
   } else {
-    ObPxCleanDtlIntermResArgs arg;
-    arg.batch_size_ = coord_info_.get_rescan_param_count();
+    ObPxDtlIntermResBatch batch;
+    batch.batch_size_ = coord_info_.get_rescan_param_count();
     for (int64_t i = 0; i < all_dfos.count(); i++) {
       ObDfo *dfo = all_dfos.at(i);
       ObDfo *parent = NULL;
@@ -609,7 +606,7 @@ void ObSerialDfoScheduler::clean_dtl_interm_result(ObExecContext &exec_ctx)
           }
           if (OB_LIKELY(msg_idx < sqc.get_serial_receive_channels().count())) {
             ObPxReceiveDataChannelMsg &msg = sqc.get_serial_receive_channels().at(msg_idx);
-            if (OB_FAIL(arg.info_.push_back(ObPxCleanDtlIntermResInfo(msg.get_ch_total_info(),
+            if (OB_FAIL(batch.info_.push_back(ObPxDtlIntermResInfo(msg.get_ch_total_info(),
                         sqc.get_sqc_id(), sqc.get_task_count())))) {
               LOG_WARN("push back failed", K(ret));
             }
@@ -617,9 +614,9 @@ void ObSerialDfoScheduler::clean_dtl_interm_result(ObExecContext &exec_ctx)
         }
       }
     }
-    if (OB_SUCC(ret) && !arg.info_.empty()
-        && OB_FAIL(clean_dtl_interm_result_local(arg))) {
-      LOG_WARN("failed to clean local DTL intermediate results", K(ret));
+    if (OB_SUCC(ret) && !batch.info_.empty()
+        && OB_FAIL(erase_dtl_interm_results(batch))) {
+      LOG_WARN("erase dtl interm results failed", KR(ret));
     }
   }
   UNUSED(exec_ctx);

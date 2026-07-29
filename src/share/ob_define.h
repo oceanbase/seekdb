@@ -82,8 +82,6 @@ inline bool is_schema_error(int err)
 {
   bool ret = false;
   switch(err) {
-    case OB_SERVER_RUNTIME_ALREADY_ACTIVE:
-    case OB_RUNTIME_SCHEMA_NOT_READY:
     case OB_ERR_BAD_DATABASE:
     case OB_DATABASE_EXIST:
     case OB_TABLE_NOT_EXIST:
@@ -96,8 +94,6 @@ inline bool is_schema_error(int err)
     case OB_ERR_NO_DB_PRIVILEGE:
     case OB_ERR_NO_TABLE_PRIVILEGE:
     case OB_SCHEMA_ERROR:
-    case OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH:
-    case OB_ERR_REMOTE_SCHEMA_NOT_FULL:
     case OB_ERR_SP_ALREADY_EXISTS:
     case OB_ERR_SP_DOES_NOT_EXIST:
     case OB_OBJECT_NAME_NOT_EXIST:

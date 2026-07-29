@@ -21,14 +21,13 @@
 #include "pl/ob_pl_stmt.h"
 #include "sql/privilege_check/ob_privilege_check.h"
 #include "sql/resolver/ob_stmt_resolver.h"
-#include "share/schema/ob_schema_getter_guard.h"  // relocated-definition owner
+#include "share/schema/ob_schema_getter_guard.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
 using oceanbase::share::schema::ObColumnSchemaV2;
 using oceanbase::share::schema::ObTableSchema;
-using oceanbase::share::schema::ObServerRuntimeSchema;
 using oceanbase::share::schema::ObDatabaseSchema;
 
 namespace oceanbase
@@ -773,27 +772,6 @@ int ObSchemaChecker::get_can_write_index_array(uint64_t table_id,
 }
 
 
-int ObSchemaChecker::get_server_runtime_info(const ObServerRuntimeSchema *&runtime_schema)
-{
-  int ret = OB_SUCCESS;
-  runtime_schema = NULL;
-
-  const ObServerRuntimeSchema *runtime = NULL;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("schema checker is not inited", K(is_inited_), K(ret));
-  } else if (OB_FAIL(schema_mgr_->get_server_runtime_info(runtime))) {
-    LOG_WARN("get server runtime schema failed", K(ret));
-  } else if (NULL == runtime) {
-    ret = OB_RUNTIME_SCHEMA_NOT_READY;
-    LOG_WARN("server runtime schema does not exist", K(ret));
-  } else {
-    runtime_schema = runtime;
-  }
-  return ret;
-}
-
-
 int ObSchemaChecker::get_database_schema(
                                          const uint64_t database_id,
                                          const ObDatabaseSchema *&database_schema)
@@ -1437,21 +1415,6 @@ int ObSchemaGetterGuard::check_priv(const ObSessionPrivInfo &session_priv,
         case OB_PRIV_DB_ACCESS_LEVEL: {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Privilege checking of database access should not use this function", KR(ret));
-          break;
-        }
-        case OB_PRIV_OBJECT_LEVEL: {
-          if (OB_ISNULL(this)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("schema guard is null", K(ret));
-          } else if (OB_FAIL(check_obj_mysql_priv(session_priv, enable_role_id_array, need_priv))) {
-            LOG_WARN("No privilege",
-                "user_id", session_priv.user_id_,
-                "need_priv", need_priv.priv_set_,
-                "table", need_priv.table_,
-                "db", need_priv.db_,
-                "user_priv", session_priv.user_priv_set_,
-                KR(ret));//need print priv
-          }
           break;
         }
         default: {

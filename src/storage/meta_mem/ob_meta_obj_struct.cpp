@@ -29,7 +29,7 @@ ObMetaDiskAddr::ObMetaDiskAddr()
     second_id_(0),
     third_id_(0),
     fourth_id_(0),
-    sixth_id_(0)
+    volatile_state_(0)
 {
   static_assert(DiskType::MAX <= MAX_TYPE, "ObMetaDiskAddr's disk type is overflow");
   type_ = DiskType::MAX;
@@ -41,7 +41,7 @@ void ObMetaDiskAddr::reset()
   second_id_ = 0;
   third_id_ = 0;
   fourth_id_ = 0;
-  sixth_id_ = 0;
+  volatile_state_ = 0;
   type_ = DiskType::MAX;
 }
 
@@ -184,16 +184,25 @@ int64_t ObMetaDiskAddr::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
   block_id().first_id_to_string(buf, buf_len, pos);
-  databuff_printf(buf, buf_len, pos,
-                  "[2nd=%ld][3rd=%ld][offset=%lu,size=%lu,type=%lu,seq=%lu][6th=%ld]}",
-                  second_id_, third_id_, offset_, size_, type_, seq_, sixth_id_);
+  switch (type_) {
+    case FILE:
+      databuff_printf(buf, buf_len, pos,
+                      "[file_id=%ld,offset=%lu,size=%lu,type=%lu,seq=%lu]}",
+                      file_id_, offset_, size_, type_, seq_);
+      break;
+    default:
+      databuff_printf(buf, buf_len, pos,
+                      "[2nd=%ld][3rd=%ld][offset=%lu,size=%lu,type=%lu,seq=%lu]}",
+                      second_id_, third_id_, offset_, size_, type_, seq_);
+      break;
+  }
 
   return pos;
 }
 
 bool ObMetaDiskAddr::operator ==(const ObMetaDiskAddr &other) const
 {
-  return is_equal_for_persistence(other) && sixth_id_ == other.sixth_id_;
+  return is_equal_for_persistence(other) && volatile_state_ == other.volatile_state_;
 }
 
 bool ObMetaDiskAddr::is_equal_for_persistence(const ObMetaDiskAddr &other) const

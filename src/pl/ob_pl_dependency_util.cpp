@@ -19,6 +19,8 @@
 #include "ob_pl_dependency_util.h"
 #include "ob_pl_resolver.h"
 #include "src/sql/resolver/ob_resolver_utils.h"
+#include "sql/resolver/ob_schema_checker.h"
+#include "sql/session/ob_sql_session_info.h"
 
 namespace oceanbase
 {

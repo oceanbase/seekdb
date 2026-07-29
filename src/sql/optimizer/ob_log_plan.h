@@ -796,12 +796,11 @@ public:
                                       int64_t &dop) const;
   int inner_compute_three_stage_groupby_dop_by_auto_dop(const ObIArray<ObRawExpr*> &group_exprs,
                                                         const GroupingOpHelper &groupby_helper,
-                                                        const int64_t server_cnt,
                                                         int64_t &dop) const;
   int get_three_stage_groupby_number_of_copies(const ObIArray<ObAggFunRawExpr*> &non_distinct_aggrs,
                                                const ObIArray<ObAggFunRawExpr*> &distinct_aggrs,
                                                int64_t &number_of_copies) const;
-  int get_parallel_info_from_candidate_plans(int64_t &server_cnt, int64_t &dop) const;
+  int get_parallel_info_from_candidate_plans(int64_t &dop) const;
   int check_candi_plan_need_calc_dop(bool &need_calc_dop) const;
   int check_op_need_calc_dop(const ObLogicalOperator *cur_op, bool &need_calc) const;
 

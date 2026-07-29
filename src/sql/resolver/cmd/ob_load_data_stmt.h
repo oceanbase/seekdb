@@ -262,8 +262,6 @@ public:
   int set_part_names(common::ObIArray<ObString> &part_names);
   const common::ObIArray<ObObjectID> &get_part_ids() const { return part_ids_; }
   common::ObIArray<ObString> &get_part_names() { return part_names_; }
-  bool is_load_data_url() const { return is_load_data_url_; }
-  void set_is_load_data_url(bool is_load_data_url) { is_load_data_url_ = is_load_data_url; }
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_),
                K_(load_args),
                K_(data_struct_in_file),
@@ -283,7 +281,6 @@ private:
   bool is_default_table_columns_;
   common::ObArray<ObObjectID> part_ids_;
   common::ObArray<ObString> part_names_;
-  bool is_load_data_url_;
   DISALLOW_COPY_AND_ASSIGN(ObLoadDataStmt);
 };
 

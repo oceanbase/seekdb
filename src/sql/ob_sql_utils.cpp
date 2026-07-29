@@ -2365,38 +2365,6 @@ int ObSQLUtils::revise_hash_part_object(common::ObObj &obj)
   return ret;
 }
 
-int ObSQLUtils::get_local_partition_for_estimation(
-                          const ObCandiTabletLoc &tablet_location,
-                          EstimatedPartition &partition)
-{
-  int ret = OB_SUCCESS;
-  partition.reset();
-  const ObOptTabletLoc &local_tablet = tablet_location.get_partition_location();
-  const ObAddr &server = local_tablet.get_server();
-  if (!server.is_valid()) {
-    ret = OB_NO_READABLE_REPLICA;
-    LOG_WARN("local tablet location is not readable", K(ret), K(local_tablet));
-  } else {
-    partition.set(server, local_tablet.get_tablet_id());
-  }
-  return ret;
-}
-
-int ObSQLUtils::get_local_partition_addr(const ObCandiTabletLoc &tablet_location,
-                                         ObAddr &local_addr)
-{
-  int ret = OB_SUCCESS;
-  local_addr.reset();
-  const ObAddr &server = tablet_location.get_partition_location().get_server();
-  if (server.is_valid()) {
-    local_addr = server;
-  } else {
-    ret = OB_NO_READABLE_REPLICA;
-    LOG_WARN("local tablet location is not readable", K(ret), K(tablet_location));
-  }
-  return ret;
-}
-
 int ObSQLUtils::wrap_column_convert_ctx(const ObExprCtx &expr_ctx, ObCastCtx &column_conv_ctx)
 {
   int ret = OB_SUCCESS;
@@ -2730,7 +2698,7 @@ int ObSQLUtils::update_session_last_schema_version(ObMultiVersionSchemaService &
   int ret = OB_SUCCESS;
   int64_t received_schema_version = OB_INVALID_VERSION;
   
-  if (OB_FAIL(schema_service.get_runtime_received_broadcast_version(received_schema_version))) {
+  if (OB_FAIL(schema_service.get_published_schema_version(received_schema_version))) {
     LOG_WARN("fail to get runtime received broadcast version", K(ret));
   } else {
     session_info.set_last_ddl_schema_version(received_schema_version);

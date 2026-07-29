@@ -133,15 +133,6 @@ int64_t ObMergeParameter::to_string(char* buf, const int64_t buf_len) const
 }
 
 /*
- *  ----------------------------------------------ObCompactionParam--------------------------------------------------
- */
-ObCompactionParam::ObCompactionParam()
-  : occupy_size_(0),
-    last_end_scn_()
-{
-}
-
-/*
  *  ----------------------------------------------ObTabletMergeDagParam--------------------------------------------------
  */
 ObTabletMergeDagParam::ObTabletMergeDagParam()
@@ -150,7 +141,8 @@ ObTabletMergeDagParam::ObTabletMergeDagParam()
      is_reserve_mode_(false),
      merge_type_(INVALID_MERGE_TYPE),
      merge_version_(0),
-     tablet_id_()
+     tablet_id_(),
+     data_size_(0)
 {
 }
 
@@ -162,7 +154,8 @@ ObTabletMergeDagParam::ObTabletMergeDagParam(
      is_reserve_mode_(false),
      merge_type_(merge_type),
      merge_version_(0),
-     tablet_id_(tablet_id)
+     tablet_id_(tablet_id),
+     data_size_(0)
 {
 }
 
@@ -366,25 +359,6 @@ int ObTabletMergeDag::fill_dag_key(char *buf, const int64_t buf_len) const
   return ret;
 }
 
-int ObTabletMergeDag::update_compaction_param(const ObTabletMergeDagParam &param)
-{
-  int ret = OB_SUCCESS;
-  const ObCompactionParam &other = param.compaction_param_;
-
-  if (OB_UNLIKELY(!param.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", K(ret), K(param));
-  } else if (!is_mini_merge(param.merge_type_)) {
-    // do nothing.
-  } else if (other.last_end_scn_ <= param_.compaction_param_.last_end_scn_) {
-    // memtable flush repeatedly by checkpoint thread
-  } else {
-    param_.compaction_param_.last_end_scn_ = other.last_end_scn_;
-    param_.compaction_param_.occupy_size_ += other.occupy_size_;
-  }
-  return ret;
-}
-
 void ObTabletMergeDag::fill_compaction_progress(
     compaction::ObTabletCompactionProgress &progress,
     ObBasicTabletMergeCtx &ctx,
@@ -400,7 +374,7 @@ void ObTabletMergeDag::fill_compaction_progress(
   progress.create_time_ = add_time_;
   progress.start_time_ = start_time_;
   progress.progressive_merge_round_ = ctx.get_progressive_merge_round();
-  progress.estimated_finish_time_ = ObTimeUtility::fast_current_time() + ObCompactionProgress::EXTRA_TIME;
+  progress.estimated_finish_time_ = ObTimeUtility::fast_current_time() + ObCompactionProgressBase::EXTRA_TIME;
 
   if (OB_NOT_NULL(input_progress)
       && OB_UNLIKELY(OB_SUCCESS != (tmp_ret = input_progress->get_progress_info(progress)))) {

@@ -677,7 +677,6 @@ int ObDbmsXplan::get_plan_info_by_session_id(sql::ObExecContext &ctx,
                         WHERE ID=%ld \
                         LIMIT 1) E\
                       ON A.PLAN_ID = E.PLAN_ID\
-                    WHERE 1 = 1\
                     ORDER BY A.ID",
                     session_id))) {
     LOG_WARN("failed to assign string", K(ret));

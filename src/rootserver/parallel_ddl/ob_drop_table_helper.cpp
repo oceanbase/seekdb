@@ -26,7 +26,6 @@
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 
 using namespace oceanbase::rootserver;
-using namespace oceanbase::obcall;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::transaction::tablelock;
 using namespace oceanbase::common;

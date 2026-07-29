@@ -20,7 +20,6 @@
 #include "ob_io_manager.h"
 #include "share/ob_share_util.h"  // ObShareUtil, previously hidden behind a transitive include(free within share)
 #include "share/ob_server_struct.h"  // GCTX, previously hidden behind a transitive include(free within share)
-#include "share/errsim_module/ob_errsim_module_interface_imp.h"
 #include "share/io/io_schedule/ob_io_schedule_v2.h"
 #include "share/ob_io_device_helper.h"
 
@@ -376,14 +375,6 @@ int ObIOManager::dispatch_aio(const ObIOInfo &info, ObIOHandle &handle)
 {
   int ret = OB_SUCCESS;
   ObRefHolder<ObIOService> service_holder;
-#ifdef ERRSIM
-  const ObErrsimModuleType type = THIS_WORKER.get_module_type();
-  if (is_errsim_module(type.type_)) {
-    ret = OB_IO_ERROR;
-    LOG_ERROR("[ERRSIM MODULE] errsim IO error", K(ret));
-    return ret;
-  }
-#endif
 
   if (OB_FAIL(get_io_service(service_holder))) {
     LOG_WARN("get io service failed", K(ret));
@@ -596,7 +587,7 @@ int ObIOService::server_module_new(ObIOService *&io_service)
 int ObIOService::server_module_init(ObIOService *&io_service)
 {
   int ret = OB_SUCCESS;
-  
+
   if (OB_ISNULL(io_service)) {
     {
       ret = OB_INVALID_ARGUMENT;

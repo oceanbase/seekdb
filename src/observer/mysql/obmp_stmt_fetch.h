@@ -22,17 +22,29 @@
 #include "observer/mysql/ob_query_retry_ctrl.h"
 namespace oceanbase
 {
-namespace pl
-{
-class ObPLServerCursorInfo;
-}
 namespace observer
 {
 #define FETCH_PACKET_SIZE_WITHOUT_OFFSET 9
+#define FETCH_PACKET_SIZE_WITH_OFFSET 15
+#define FETCH_PACKET_SIZE_WITH_OFFSET_OK 19
 
 class ObMPStmtFetch : public ObMPBase
 {
 public:
+  enum OffsetType {
+    OB_OCI_DEFAULT = 0,
+    OB_OCI_FETCH_CURRENT = 1,  
+    OB_OCI_FETCH_NEXT = 2,
+    OB_OCI_FETCH_FIRST = 4,
+    OB_OCI_FETCH_LAST = 8,
+    OB_OCI_FETCH_PRIOR = 16,
+    OB_OCI_FETCH_ABSOLUTE = 32,
+    OB_OCI_FETCH_RELATIVE = 64
+  };
+  enum ExtendFlag {
+    OB_OCI_INVALID = 0,
+    OB_OCI_GET_PIECE_INFO = 2
+  };
   static const obmysql::ObMySQLCmd COM = obmysql::COM_STMT_FETCH;
   explicit ObMPStmtFetch(const ObGlobalContext &gctx);
   virtual ~ObMPStmtFetch() {}
@@ -44,6 +56,15 @@ public:
   {
     return ObMPBase::flush_buffer(is_last);
   }
+  inline bool has_long_data() { return extend_flag_ & OB_OCI_GET_PIECE_INFO; }
+  int response_row(sql::ObSQLSessionInfo &session, 
+                   common::ObNewRow &row,
+                   const ColumnsFieldArray *fields,
+                   char *column_map,
+                   int32_t stmt_id,
+                   bool first_time,
+                   bool is_packed,
+                   ObSchemaGetterGuard *schema_guard);
   int response_row(sql::ObSQLSessionInfo &session,
                    common::ObNewRow &row,
                    const ColumnsFieldArray *fields,
@@ -63,7 +84,7 @@ private:
   int do_process(sql::ObSQLSessionInfo &session, bool &need_response_error);
   int set_session_active(sql::ObSQLSessionInfo &session) const;
   int process_fetch_stmt(sql::ObSQLSessionInfo &session, bool &need_response_error);
-  int response_result(pl::ObPLServerCursorInfo &cursor,
+  int response_result(pl::ObPLCursorInfo &cursor,
                       sql::ObSQLSessionInfo &session,
                       int64_t fetch_limit,
                       int64_t &row_num);
@@ -76,6 +97,10 @@ private:
   int64_t single_process_timestamp_;
   int64_t exec_start_timestamp_;
   int64_t exec_end_timestamp_;
+  int16_t offset_type_;
+  int32_t offset_;
+  int32_t extend_flag_;
+  char    *column_flag_;
   bool    need_close_cursor_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMPStmtFetch);

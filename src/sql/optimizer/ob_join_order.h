@@ -240,7 +240,6 @@ struct EstimateCostInfo {
     need_row_count_(-1),  //no need to refine row count
     need_parallel_(ObGlobalHint::UNSET_PARALLEL),  //no need to refine parallel
     need_batch_rescan_(false),
-    rescan_left_server_list_(NULL),
     override_(false) {}
 
   void reset() {
@@ -248,14 +247,12 @@ struct EstimateCostInfo {
     need_row_count_ = -1;
     need_parallel_ = ObGlobalHint::UNSET_PARALLEL;
     need_batch_rescan_ = false;
-    rescan_left_server_list_ = NULL;
     override_ = false;
   }
   int assign(const EstimateCostInfo& other) {
     need_row_count_ = other.need_row_count_;
     need_parallel_ = other.need_parallel_;
     need_batch_rescan_ = other.need_batch_rescan_;
-    rescan_left_server_list_ = other.rescan_left_server_list_;
     override_ = other.override_;
     return join_filter_infos_.assign(other.join_filter_infos_);
   }
@@ -263,7 +260,7 @@ struct EstimateCostInfo {
     return override_ || !join_filter_infos_.empty()
         || (ObGlobalHint::UNSET_PARALLEL != need_parallel_ && need_parallel_ != cur_parallel)
         || (need_row_count_ >= 0 && need_row_count_ < cur_row_count)
-        || (need_batch_rescan_ || NULL != rescan_left_server_list_);
+        || need_batch_rescan_;
   }
 
   TO_STRING_KV(
@@ -271,7 +268,6 @@ struct EstimateCostInfo {
     K_(need_row_count),
     K_(need_parallel),
     K_(need_batch_rescan),
-    K_(rescan_left_server_list),
     K_(override)
   );
 
@@ -279,7 +275,6 @@ struct EstimateCostInfo {
   double need_row_count_;
   int64_t need_parallel_;
   bool need_batch_rescan_;
-  const common::ObIArray<common::ObAddr> *rescan_left_server_list_;
   bool override_;
 };
 
@@ -355,12 +350,10 @@ class Path
       location_type_(ObPhyPlanType::OB_PHY_PLAN_UNINITIALIZED),
       contain_fake_cte_(false),
       contain_pw_merge_op_(false),
-      contain_match_all_fake_cte_(false),
       contain_das_op_(false),
       parallel_(ObGlobalHint::UNSET_PARALLEL),
       op_parallel_rule_(OpParallelRule::OP_DOP_RULE_MAX),
       available_parallel_(ObGlobalHint::DEFAULT_PARALLEL),
-      server_cnt_(1),
       inherit_sharding_index_(-1)
     {  }
     Path(ObJoinOrder* parent)
@@ -384,13 +377,10 @@ class Path
         location_type_(ObPhyPlanType::OB_PHY_PLAN_UNINITIALIZED),
         contain_fake_cte_(false),
         contain_pw_merge_op_(false),
-        contain_match_all_fake_cte_(false),
         contain_das_op_(false),
         parallel_(ObGlobalHint::UNSET_PARALLEL),
         op_parallel_rule_(OpParallelRule::OP_DOP_RULE_MAX),
         available_parallel_(ObGlobalHint::DEFAULT_PARALLEL),
-        server_cnt_(1),
-        server_list_(),
         is_pipelined_path_(false),
         is_nl_style_pipelined_path_(false),
         inherit_sharding_index_(-1)
@@ -408,8 +398,6 @@ class Path
     int check_is_base_table(bool &is_base_table);
     inline const common::ObIArray<OrderItem> &get_ordering() const { return ordering_; }
     inline common::ObIArray<OrderItem> &get_ordering() { return ordering_; }
-    inline const common::ObIArray<ObAddr> &get_server_list() const { return server_list_; }
-    inline common::ObIArray<ObAddr> &get_server_list() { return server_list_; }
     inline int64_t get_interesting_order_info() const { return interesting_order_info_; }
     inline void set_interesting_order_info(int64_t info) { interesting_order_info_ = info; }
     inline void add_interesting_order_flag(OrderingFlag flag) { interesting_order_info_ |= flag; }
@@ -473,7 +461,6 @@ class Path
     double get_path_output_rows() const;
     bool contain_fake_cte() const { return contain_fake_cte_; }
     bool contain_pw_merge_op() const { return contain_pw_merge_op_; }
-    bool contain_match_all_fake_cte() const { return contain_match_all_fake_cte_; }
     bool is_pipelined_path() const { return is_pipelined_path_; }
     bool is_nl_style_pipelined_path() const { return is_nl_style_pipelined_path_; }
     virtual int compute_pipeline_info();
@@ -501,7 +488,7 @@ class Path
       return NULL != sharding && parallel_ > sharding->get_part_cnt() * ratio;
     }
     int compute_path_property_from_log_op();
-    int set_parallel_and_server_info_for_match_all();
+    int set_parallel_info_for_match_all();
     ObIArray<double> &get_ambient_card() { return ambient_card_; }
     const ObIArray<double> &get_ambient_card() const { return ambient_card_; }
     TO_STRING_KV(K_(is_local_order),
@@ -551,14 +538,11 @@ class Path
     ObPhyPlanType location_type_;
     bool contain_fake_cte_;
     bool contain_pw_merge_op_;
-    bool contain_match_all_fake_cte_;
     bool contain_das_op_;
     // remember the parallel info to get this sharding
     int64_t parallel_;
     OpParallelRule op_parallel_rule_;
     int64_t available_parallel_; // parallel degree used by serial path to enable parallel again 
-    int64_t server_cnt_;
-    common::ObSEArray<common::ObAddr, 8, common::ModulePageAllocator, true> server_list_;
     bool is_pipelined_path_;
     bool is_nl_style_pipelined_path_;
     common::ObSEArray<double, 8, common::ModulePageAllocator, true> ambient_card_;
@@ -634,16 +618,12 @@ class Path
     int compute_parallel_degree(const int64_t cur_min_parallel_degree,
                                 int64_t &parallel);
     int check_and_prepare_estimate_parallel_params(const int64_t cur_min_parallel_degree,
-                                                   int64_t &px_part_gi_min_part_per_dop,
                                                    double &cost_threshold_us,
-                                                   int64_t &server_cnt,
                                                    int64_t &cur_parallel_degree_limit) const;
     int get_dop_limit_by_pushdown_limit(int64_t &dop_limit) const;
     int prepare_estimate_parallel(const int64_t pre_parallel,
                                   const int64_t parallel_degree_limit,
                                   const double cost_threshold_us,
-                                  const int64_t server_cnt,
-                                  const int64_t px_part_gi_min_part_per_dop,
                                   const double px_cost,
                                   const double cost,
                                   int64_t &cur_parallel,
@@ -1031,21 +1011,14 @@ class Path
       }
       return ret;
     }
-    static int compute_join_path_parallel_and_server_info(ObOptimizerContext *opt_ctx,
-                                                         const Path *left_path,
-                                                         const Path *right_path,
-                                                         const DistAlgo join_dist_algo,
-                                                         const JoinAlgo join_algo,
-                                                         int64_t &parallel,
-                                                         int64_t &available_parallel,
-                                                         int64_t &server_cnt,
-                                                         ObIArray<common::ObAddr> &server_list);
+    static int compute_join_path_parallel_info(const Path *left_path,
+                                               const Path *right_path,
+                                               const DistAlgo join_dist_algo,
+                                               int64_t &parallel,
+                                               int64_t &available_parallel);
     inline bool is_nlj_with_param_down() const
     { return NULL != right_path_ && right_path_->is_inner_path() && !right_path_->nl_params_.empty(); }
     int check_right_is_local_scan(int64_t &local_scan_type) const;
-    int check_contain_dist_das(const ObIArray<ObAddr> &exec_server_list,
-                               const Path *cur_path,
-                               bool &contain_dist_das) const;
     int pre_check_nlj_can_px_batch_rescan(bool &can_px_batch_rescan) const;
   private:
     int compute_hash_hash_sharding_info();
@@ -1053,7 +1026,7 @@ class Path
     int compute_join_path_info();
     int compute_join_path_sharding();
     int compute_join_path_plan_type();
-    int compute_join_path_parallel_and_server_info();
+    int compute_join_path_parallel_info();
     int re_adjust_sharding_ordering_info();
     int compute_nlj_batch_rescan();
     int check_right_has_gi_or_exchange(bool &right_has_gi_or_exchange);
@@ -1283,19 +1256,6 @@ class Path
     ObValuesTableDef *table_def_;
   private:
       DISALLOW_COPY_AND_ASSIGN(ValuesTablePath);
-  };
-
-  struct ObRowCountEstTask
-  {
-    ObRowCountEstTask() : est_arg_(NULL)
-    {}
-
-    ObAddr addr_;
-    ObBitSet<> path_id_set_;
-    obcall::ObEstPartArg *est_arg_;
-
-    TO_STRING_KV(K_(addr),
-                 K_(path_id_set));
   };
 
 struct InnerPathInfo {
@@ -2101,15 +2061,15 @@ struct NullAwareAntiJoinInfo {
                                                             ObTablePartitionInfo *&table_part_info);
     int compute_base_table_path_plan_type(AccessPath *access_path);
     int compute_base_table_path_ordering(AccessPath *access_path);
-    int compute_parallel_and_server_info_for_base_paths(ObIArray<AccessPath *> &access_paths);
+    int compute_parallel_info_for_base_paths(ObIArray<AccessPath *> &access_paths);
     int get_base_path_table_dop(uint64_t index_id, int64_t &parallel);
     int compute_access_path_parallel(ObIArray<AccessPath *> &access_paths,
                                      int64_t &parallel);
     int get_random_parallel(const int64_t parallel_degree_limit, int64_t &parallel);
     int get_parallel_from_available_access_paths(int64_t &parallel) const;
-    int compute_base_table_parallel_and_server_info(const OpParallelRule op_parallel_rule,
-                                                    const int64_t parallel,
-                                                    AccessPath *path);
+    int compute_base_table_parallel_info(const OpParallelRule op_parallel_rule,
+                                         const int64_t parallel,
+                                         AccessPath *path);
     int get_explicit_dop_for_path(const uint64_t index_id, int64_t &parallel);
     int prune_paths_due_to_parallel(ObIArray<AccessPath *> &access_paths);
     /**

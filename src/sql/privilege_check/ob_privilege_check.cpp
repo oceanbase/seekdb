@@ -720,6 +720,7 @@ int get_create_tablespace_priv(
     ObIArray<ObNeedPriv> &need_privs)
 {
   int ret = OB_SUCCESS;
+  UNUSED(session_priv);
   ObNeedPriv need_priv;
   if (OB_ISNULL(basic_stmt)) {
     ret = OB_INVALID_ARGUMENT;

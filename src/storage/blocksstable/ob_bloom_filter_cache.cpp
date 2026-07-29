@@ -16,7 +16,8 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
+#include <climits>
+#include <cmath>
 #include "ob_bloom_filter_cache.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_tablet_scheduler.h"
@@ -420,7 +421,7 @@ int ObBloomFilterCacheValue::merge_bloom_filter(const ObBloomFilterCacheValue &b
  * ----------------------------------------------------ObBloomFilterCache----------------------------------------------------
  */
 ObBloomFilterCache::ObBloomFilterCache()
-  : bf_cache_miss_count_threshold_(DEFAULT_EMPTY_READ_CNT_THRESHOLD)    
+  : bf_cache_miss_count_threshold_(DEFAULT_EMPTY_READ_CNT_THRESHOLD)
 {
 }
 
@@ -429,8 +430,7 @@ ObBloomFilterCache::~ObBloomFilterCache()
 }
 
 int ObBloomFilterCache::put_bloom_filter(const MacroBlockId& macro_block_id,
-    const ObBloomFilterCacheValue &bf_value,
-    const bool adaptive)
+    const ObBloomFilterCacheValue &bf_value)
 {
   int ret = OB_SUCCESS;
   ObBloomFilterCacheKey bf_key(macro_block_id, static_cast<int8_t>(bf_value.get_prefix_len()) );
@@ -442,7 +442,7 @@ int ObBloomFilterCache::put_bloom_filter(const MacroBlockId& macro_block_id,
     STORAGE_LOG(WARN, "Fail to put bloomfilter to cache, ", K(ret));
   }
 
-  if (OB_SUCC(ret) && adaptive) {
+  if (OB_SUCC(ret)) {
     storage::ObEmptyReadCell *cell = NULL;
     if (OB_FAIL(share::g_mp->empty_read_bucket()->get_cell(bf_key.hash(), cell))) {
       STORAGE_LOG(WARN, "get_bucket_cell fail, ", K(ret));
@@ -479,9 +479,7 @@ int ObBloomFilterCache::may_contain(
     if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
       STORAGE_LOG(WARN, "Fail to get bloom filter cache, ", K(ret));
     }
-    EVENT_INC(BLOOM_FILTER_CACHE_MISS);
   } else {
-    EVENT_INC(BLOOM_FILTER_CACHE_HIT);
     if (OB_ISNULL(bf_value)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpected error, the bf_value is NULL, ", K(ret));
@@ -491,11 +489,6 @@ int ObBloomFilterCache::may_contain(
       STORAGE_LOG(WARN, "Fail to check rowkey exist from bloom filter, ", K(ret));
     } else {
       STORAGE_LOG(DEBUG, "debug bloom_filter may contain", K(ret), KP(bf_value), K(key_hash), K(is_contain), K(rowkey));
-      if (is_contain) {
-        EVENT_INC(BLOOM_FILTER_PASSES);
-      } else {
-        EVENT_INC(BLOOM_FILTER_FILTS);
-      }
     }
   }
   return ret;
@@ -525,9 +518,7 @@ int ObBloomFilterCache::may_contain(
     if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
       STORAGE_LOG(WARN, "Fail to get bloom filter cache, ", K(ret));
     }
-    EVENT_INC(BLOOM_FILTER_CACHE_MISS);
   } else {
-    EVENT_INC(BLOOM_FILTER_CACHE_HIT);
     if (OB_ISNULL(bf_value)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpected null bf value", K(ret));
@@ -544,12 +535,10 @@ int ObBloomFilterCache::may_contain(
         } else {
           if (tmp_contain) {
             is_contain = true;
-            EVENT_INC(BLOOM_FILTER_PASSES);
           } else {
             if (!my_rows_info->is_row_bf_checked(i)) {
               my_rows_info->set_row_non_existent(i);
             }
-            EVENT_INC(BLOOM_FILTER_FILTS);
           }
           my_rows_info->set_row_bf_checked(i);
         }
@@ -583,9 +572,7 @@ int ObBloomFilterCache::may_contain(
     if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
       STORAGE_LOG(WARN, "Fail to get bloom filter cache, ", K(ret));
     }
-    EVENT_INC(BLOOM_FILTER_CACHE_MISS);
   } else {
-    EVENT_INC(BLOOM_FILTER_CACHE_HIT);
     if (OB_ISNULL(bf_value)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpected null bf value", K(ret));
@@ -601,13 +588,11 @@ int ObBloomFilterCache::may_contain(
           STORAGE_LOG(WARN, "Fail to check rowkey exist from bloom filter, ", K(ret));
         } else {
           if (tmp_contain) {
-            EVENT_INC(BLOOM_FILTER_PASSES);
             if (i == rowkey_begin_idx) {
               is_contain = true;
             }
           } else {
             my_rowkeys_info->set_rowkey_not_exist(i);
-            EVENT_INC(BLOOM_FILTER_FILTS);
           }
         }
       }
@@ -658,7 +643,7 @@ int ObBloomFilterCache::inc_empty_read(
       }
     }
   }
-  return ret; 
+  return ret;
 }
 
 int ObBloomFilterCache::check_need_build(const ObBloomFilterCacheKey &bf_key, bool &need_build)

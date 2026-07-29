@@ -227,7 +227,6 @@ int ObDDLMacroBlockClogCb::init(const storage::ObDDLMacroBlockRedoInfo &redo_inf
       LOG_WARN("failed to check idempotence", K(ret), K(ddl_macro_block_));
     } else if (OB_FAIL(kv_mgr_handle.get_obj()->check_idem_block_exist(ddl_macro_block_.block_type_,
                                                                        direct_load_type_,
-                                                                       macro_block_id_,
                                                                        ddl_macro_block_.logic_id_,
                                                                        block_checksum_,
                                                                        ddl_macro_block_.table_key_.table_type_,
@@ -305,7 +304,6 @@ int ObDDLMacroBlockClogCb::on_success()
       LOG_WARN("ddl kv mgr handle not valid", K(ret));
     } else if (OB_FAIL(kv_mgr_handle.get_obj()->set_idem_block_checksum(ddl_macro_block_.block_type_,
                                                                         direct_load_type_,
-                                                                        macro_block_id_, 
                                                                         ddl_macro_block_.logic_id_,
                                                                         block_checksum_,
                                                                         ddl_macro_block_.table_key_.table_type_))) {

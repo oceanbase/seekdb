@@ -195,8 +195,7 @@ bool ObDependencyResource::operator==(const ObDependencyResource &rhs) const
 
 /* * * * * * definition of ObDetectorUserReportInfo * * * * */
 
-ObDetectorUserReportInfo::ObDetectorUserReportInfo() :
-  valid_extra_column_size_(0)
+ObDetectorUserReportInfo::ObDetectorUserReportInfo()
 {
   // do nothing
 }
@@ -334,7 +333,6 @@ int ObDetectorUserReportInfo::assign(const ObDetectorUserReportInfo &rhs)
     module_name_ = rhs.module_name_;
     resource_visitor_ = rhs.resource_visitor_;
     required_resource_ = rhs.required_resource_;
-    valid_extra_column_size_ = rhs.valid_extra_column_size_;
     module_name_guard_ = rhs.module_name_guard_;
     resource_visitor_guard_ = rhs.resource_visitor_guard_;
     required_resource_guard_ = rhs.required_resource_guard_;
@@ -344,7 +342,6 @@ int ObDetectorUserReportInfo::assign(const ObDetectorUserReportInfo &rhs)
 
 ObDetectorInnerReportInfo::ObDetectorInnerReportInfo() :
   detector_id_(INVALID_VALUE),
-  report_time_(INVALID_VALUE),
   created_time_(INVALID_VALUE),
   event_id_(INVALID_VALUE),
   start_delay_(INVALID_VALUE),
@@ -371,7 +368,6 @@ int ObDetectorInnerReportInfo::set_args(const UserBinaryKey &binary_key,
     priority_ = priority;
     binary_key_ = binary_key;
     detector_id_ = detector_id;
-    report_time_ = report_time;
     created_time_ = created_time;
     event_id_ = event_id;
   }
@@ -432,7 +428,6 @@ int ObDetectorInnerReportInfo::assign(const ObDetectorInnerReportInfo &rhs)
   } else {
     binary_key_ = rhs.binary_key_;
     detector_id_ = rhs.detector_id_;
-    report_time_ = rhs.report_time_;
     created_time_ = rhs.created_time_;
     event_id_ = rhs.event_id_;
     role_ = rhs.role_;

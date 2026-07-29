@@ -34,7 +34,7 @@ namespace unittest
 class TestStorageSchema : public ::testing::Test
 {
 public:
-  TestStorageSchema() : allocator_(ObModIds::TEST), runtime_state_() {}
+  TestStorageSchema() : allocator_(ObModIds::TEST) {}
   virtual ~TestStorageSchema() {}
   bool judge_storage_schema_equal(ObStorageSchema &schema1, ObStorageSchema &schema2);
   virtual void SetUp() override;
@@ -42,17 +42,13 @@ public:
   static void SetUpTestCase();
   static void TearDownTestCase();
   common::ObArenaAllocator allocator_;
-  ObServerRuntimeState runtime_state_;
 };
 
 void TestStorageSchema::SetUp()
 {
-  ASSERT_EQ(OB_SUCCESS, runtime_state_.init());
-
 }
 void TestStorageSchema::TearDown()
 {
-  share::g_server_runtime = &share::g_bootstrap_server_runtime;
 }
 
 void TestStorageSchema::SetUpTestCase()
@@ -135,6 +131,62 @@ TEST_F(TestStorageSchema, serialize_and_deserialize)
   ASSERT_EQ(true, judge_storage_schema_equal(storage_schema, des_storage_schema));
 }
 
+TEST(StorageSchemaSerialization, create_tablet_schema_roundtrip)
+{
+  common::ObArenaAllocator allocator(ObModIds::TEST);
+  share::schema::ObTableSchema table_schema;
+  TestSchemaPrepare::prepare_schema(table_schema);
+
+  ObCreateTabletSchema create_tablet_schema;
+  ASSERT_EQ(OB_SUCCESS, create_tablet_schema.init(allocator, table_schema, false));
+
+  const int64_t buf_len = create_tablet_schema.get_serialize_size();
+  ASSERT_GT(buf_len, 0);
+  char *buf = static_cast<char *>(allocator.alloc(buf_len));
+  ASSERT_NE(nullptr, buf);
+
+  int64_t ser_pos = 0;
+  ASSERT_EQ(OB_SUCCESS, create_tablet_schema.serialize(buf, buf_len, ser_pos));
+  ASSERT_EQ(buf_len, ser_pos);
+
+  ObCreateTabletSchema des_create_tablet_schema;
+  int64_t des_pos = 0;
+  ASSERT_EQ(OB_SUCCESS,
+      des_create_tablet_schema.deserialize(allocator, buf, ser_pos, des_pos));
+  ASSERT_EQ(ser_pos, des_pos);
+  ASSERT_TRUE(des_create_tablet_schema.is_valid());
+  ASSERT_EQ(create_tablet_schema.get_table_id(), des_create_tablet_schema.get_table_id());
+  ASSERT_EQ(create_tablet_schema.get_schema_version(),
+      des_create_tablet_schema.get_schema_version());
+  ASSERT_EQ(create_tablet_schema.get_column_count(),
+      des_create_tablet_schema.get_column_count());
+  ASSERT_EQ(create_tablet_schema.get_store_column_schemas().count(),
+      des_create_tablet_schema.get_store_column_schemas().count());
+}
+
+TEST_F(TestStorageSchema, reject_mismatched_format_version)
+{
+  share::schema::ObTableSchema table_schema;
+  ObStorageSchema storage_schema;
+  TestSchemaPrepare::prepare_schema(table_schema);
+  ASSERT_EQ(OB_SUCCESS, storage_schema.init(allocator_, table_schema));
+
+  const int64_t buf_len = 1024 * 1024;
+  int64_t ser_pos = 0;
+  char buf[buf_len] = "\0";
+  ASSERT_EQ(OB_SUCCESS, storage_schema.serialize(buf, buf_len, ser_pos));
+
+  int64_t overwrite_pos = 0;
+  const int64_t mismatched_format_version = ObStorageSchema::STORAGE_SCHEMA_FORMAT_VERSION + 1;
+  ASSERT_EQ(OB_SUCCESS,
+      serialization::encode(buf, ser_pos, overwrite_pos, mismatched_format_version));
+
+  ObStorageSchema des_storage_schema;
+  int64_t pos = 0;
+  ASSERT_EQ(OB_NOT_SUPPORTED, des_storage_schema.deserialize(allocator_, buf, ser_pos, pos));
+  ASSERT_FALSE(des_storage_schema.is_inited());
+}
+
 TEST_F(TestStorageSchema, serialize_and_deserialize2)
 {
   share::schema::ObTableSchema table_schema;
@@ -199,29 +251,6 @@ TEST_F(TestStorageSchema, serialize_and_deserialize_with_big_schema)
   int64_t pos = 0;
   ASSERT_EQ(OB_SUCCESS, des_storage_schema.deserialize(allocator_, buf, ser_pos, pos));
 
-  ASSERT_EQ(true, judge_storage_schema_equal(storage_schema, des_storage_schema));
-}
-
-TEST_F(TestStorageSchema, compat_serialize_and_deserialize)
-{
-  share::schema::ObTableSchema table_schema;
-  ObStorageSchema storage_schema;
-  TestSchemaPrepare::prepare_schema(table_schema);
-  ASSERT_EQ(OB_SUCCESS, storage_schema.init(allocator_, table_schema));
-  storage_schema.storage_schema_version_ = ObStorageSchema::STORAGE_SCHEMA_VERSION;
-
-  const int64_t buf_len = 1024 * 1024;
-  int64_t ser_pos = 0;
-  char buf[buf_len] = "\0";
-  ASSERT_EQ(OB_SUCCESS, storage_schema.serialize(buf, buf_len, ser_pos));
-
-  ASSERT_EQ(ser_pos, storage_schema.get_serialize_size());
-
-  ObStorageSchema des_storage_schema;
-  int64_t pos = 0;
-  ASSERT_EQ(OB_SUCCESS, des_storage_schema.deserialize(allocator_, buf, ser_pos, pos));
-
-  COMMON_LOG(INFO, "test", K(storage_schema), K(des_storage_schema));
   ASSERT_EQ(true, judge_storage_schema_equal(storage_schema, des_storage_schema));
 }
 

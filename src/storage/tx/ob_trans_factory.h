@@ -25,9 +25,6 @@
 namespace oceanbase
 {
 
-namespace obcall
-{
-}
 namespace transaction
 {
 class ObTransCtx;

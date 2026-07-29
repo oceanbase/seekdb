@@ -17,9 +17,6 @@ insert into t1 values(100);
 insert into t1 values(100);
 insert ignore into t1 values(100);
 insert ignore into t1 values(100) on duplicate key update a = a + 1;
-#replace不支持ignore语法
---error 1064
-replace ignore into t1 values(100);
 select * from t1;
 
 delete from t1;

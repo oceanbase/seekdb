@@ -56,8 +56,6 @@ struct ObRetryParam
                sql::ObSQLSessionInfo &session,
                int64_t current_query_local_schema_version,
                int64_t current_query_global_schema_version,
-               int64_t curr_query_sys_local_schema_version,
-               int64_t curr_query_sys_global_schema_version,
                const bool force_local_retry,
                const bool is_inner_sql,
                const bool is_from_pl,
@@ -76,8 +74,6 @@ struct ObRetryParam
         session_(session),
         current_query_local_schema_version_(current_query_local_schema_version),
         current_query_global_schema_version_(current_query_global_schema_version),
-        curr_query_sys_local_schema_version_(curr_query_sys_local_schema_version),
-        curr_query_sys_global_schema_version_(curr_query_sys_global_schema_version),
         stmt_retry_times_(stmt_retry_times),
         local_retry_times_(local_retry_times),
         err_(err),
@@ -99,10 +95,8 @@ struct ObRetryParam
   const sql::ObSqlCtx &ctx_;
   sql::ObResultSet &result_; // for refresh location cache
   sql::ObSQLSessionInfo &session_;
-  const int64_t current_query_local_schema_version_; // Local runtime schema version before the query starts and location refreshes
-  const int64_t current_query_global_schema_version_; // Global runtime schema version at query start
-  const int64_t curr_query_sys_local_schema_version_; // Local system schema version before query start and location refresh
-  const int64_t curr_query_sys_global_schema_version_; // Global system schema version at query start
+  const int64_t current_query_local_schema_version_; // Local database schema version before query start and location refresh
+  const int64_t current_query_global_schema_version_; // Global database schema version at query start
   const int64_t stmt_retry_times_; // statement retry times, including each retry, local or packet
                                    // note: PL block don't have a stmt_retry_times_ attribute
   const int64_t local_retry_times_; // local retry times, reset to zero when packet retry
@@ -133,8 +127,7 @@ public:
   // schema, rpc
   // 1ms, schema refresh only requires one RPC round trip
   static const uint32_t WAIT_RETRY_SHORT_US = 1 * 1000;
-  // leader election
-  // 8ms, the time to elect a new leader is in seconds level (outage 14s, active switch 2s)
+  // Longer retry interval for role transitions.
   static const uint32_t WAIT_RETRY_LONG_US = 8 * 1000;
 private:
   static uint32_t linear_timeout_factor(uint64_t times, uint64_t threshold = 100)
@@ -207,7 +200,7 @@ public:
   }
   void reset_retry_times() { retry_times_ = 0; }
 
-  // runtime schema versions
+  // database schema versions
   int64_t get_current_global_schema_version() const
   {
     return current_query_global_schema_version_;
@@ -224,24 +217,6 @@ public:
   {
     current_query_local_schema_version_ = version;
   }
-  // sys version
-  int64_t get_sys_global_schema_version() const
-  {
-    return curr_query_sys_global_schema_version_;
-  }
-  void set_sys_global_schema_version(int64_t version)
-  {
-    curr_query_sys_global_schema_version_ = version;
-  }
-  int64_t get_sys_local_schema_version() const
-  {
-    return curr_query_sys_local_schema_version_;
-  }
-  void set_sys_local_schema_version(int64_t version)
-  {
-    curr_query_sys_local_schema_version_ = version;
-  }
-
   static uint32_t linear_timeout_factor(uint64_t times, uint64_t threshold = 100)
   {
     return static_cast<uint32_t>((times > threshold) ? threshold : times);
@@ -303,7 +278,6 @@ private:
 
 
   // processors for inner SQL error codes only
-  static void inner_common_schema_error_proc(ObRetryParam &v);
   static void inner_schema_error_proc(ObRetryParam &v);
   static void inner_try_lock_row_conflict_proc(ObRetryParam &v);
   static void inner_table_location_error_proc(ObRetryParam &v);
@@ -316,10 +290,8 @@ private:
   // map_ is used to fast lookup the error code retry processor
   typedef common::ObTuple<retry_func, retry_func, sql::ObDASRetryCtrl::retry_func> RetryFuncs;
   static common::hash::ObHashMap<int, RetryFuncs, common::hash::NoPthreadDefendMode> map_;
-  int64_t current_query_local_schema_version_; // Local runtime schema version before the query starts and location refreshes
-  int64_t current_query_global_schema_version_; // Global runtime schema version at query start
-  int64_t curr_query_sys_local_schema_version_; // Local system schema version before query start and location refresh
-  int64_t curr_query_sys_global_schema_version_; // Global system schema version at query start
+  int64_t current_query_local_schema_version_; // Local database schema version before query start and location refresh
+  int64_t current_query_global_schema_version_; // Global database schema version at query start
   int64_t retry_times_;
   ObQueryRetryType retry_type_;
   /* disallow copy & assign */

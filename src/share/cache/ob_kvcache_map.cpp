@@ -16,7 +16,6 @@
 
 #include "ob_kvcache_map.h"
 #include "lib/utility/ob_mod_define.h"
-#include "lib/ob_running_mode.h"
 #include "lib/time/ob_clock_generator.h"
 
 namespace oceanbase
@@ -64,10 +63,6 @@ int ObKVCacheMap::init(const int64_t bucket_num, ObKVCacheStore *store)
     COMMON_LOG(WARN, "Fail to init shared node allocator", K(ret));
   } else {
     bucket_size_ = DEFAULT_BUCKET_SIZE;
-    if (is_mini_mode()) {
-      const int64_t bucket_size_idx = lib::mini_mode_resource_ratio() * BUCKET_SIZE_ARRAY_LEN;
-      bucket_size_ = BUCKET_SIZE_ARRAY[MIN(bucket_size_idx, BUCKET_SIZE_ARRAY_LEN - 1)];
-    }
     const int64_t bucket_cnt = bucket_num % bucket_size_ == 0 ?
       bucket_num / bucket_size_ : bucket_num / bucket_size_ + 1;
     if (OB_ISNULL(buckets_ = static_cast<Bucket *>(bucket_allocator_.alloc(sizeof(Bucket) * bucket_cnt)))) {
@@ -142,7 +137,7 @@ void ObKVCacheMap::destroy()
   is_inited_ = false;
 }
 
-// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state)
+
 
 int ObKVCacheMap::put(
   ObKVCacheInst &inst,

@@ -295,7 +295,6 @@ int ObTableLockService::ObOBJLockGarbageCollector::garbage_collect_right_now()
 
 void ObTableLockService::ObOBJLockGarbageCollector::run_gc_once_()
 {
-  common::ObDIActionGuard ag("TableLockService", "OBJLockGC", "GCTimer");
   int ret = OB_SUCCESS;
   if (OB_FAIL(garbage_collect_())) {
     check_and_report_timeout_();
@@ -2001,7 +2000,6 @@ int ObTableLockService::end_tx_(ObTableLockCtx &ctx, const bool is_rollback)
                  K(ret), KPC(ctx.tx_desc_), K(stmt_timeout_ts));
       }
     } else {
-      ACTIVE_SESSION_FLAG_SETTER_GUARD(in_committing);
       if (OB_FAIL(txs->commit_tx(*ctx.tx_desc_, stmt_timeout_ts))) {
         LOG_WARN("fail end trans when session terminate",
                 K(ret), KPC(ctx.tx_desc_), K(stmt_timeout_ts));

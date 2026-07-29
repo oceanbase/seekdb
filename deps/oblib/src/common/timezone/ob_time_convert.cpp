@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX  LIB_TIME
 
 #include "ob_time_convert.h"
+#include "common/timezone/ob_datetime_format_models.h"
 #include "lib/utility/ob_fast_convert.h"
 #include "rpc/obmysql/ob_mysql_util.h"
 #include "lib/locale/ob_locale_type.h"
@@ -251,6 +252,13 @@ const int64_t USECS_PER_DAY = (USECS_PER_SEC * SECS_PER_DAY);
 const int64_t NSECS_PER_DAY = (NSECS_PER_SEC * SECS_PER_DAY);
 const int64_t USECS_PER_MIN = (USECS_PER_SEC * SECS_PER_MIN);
 
+
+const ObString ObTimeConverter::DEFAULT_NLS_DATE_FORMAT("DD-MON-RR");
+const ObString ObTimeConverter::DEFAULT_NLS_TIMESTAMP_FORMAT("DD-MON-RR HH.MI.SSXFF AM");
+const ObString ObTimeConverter::DEFAULT_NLS_TIMESTAMP_TZ_FORMAT("DD-MON-RR HH.MI.SSXFF AM TZR");
+const ObString ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT("YYYY-MM-DD HH24:MI:SS");
+const ObString ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_FORMAT("YYYY-MM-DD HH24:MI:SS.FF");
+const ObString ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT("YYYY-MM-DD HH24:MI:SS.FF TZR TZD");
 
 int ObTime::set_tz_name(const ObString &tz_name)
 {
@@ -534,6 +542,24 @@ int ObTimeConverter::validate_literal_timestamp(const ObString &str, const ObTim
  * @param out:    value     date result
  * @return
  */
+int ObTimeConverter::str_to_date_by_format_model(const ObString &str,
+                                        const ObTimeConvertCtx &cvrt_ctx,
+                                        ObDateTime &value)
+{
+  int ret = OB_SUCCESS;
+  ObTime ob_time;
+  ObDateTime result_value = 0;
+  ObScale scale = 0; //not used
+  if (OB_FAIL(str_to_ob_time_by_format_model(str, cvrt_ctx, ObDateTimeType, ob_time, scale))) {
+    LOG_WARN("failed to convert str to ob_time", K(str), K(cvrt_ctx.nls_format_));
+  } else if (OB_FAIL(ob_time_to_datetime(ob_time, cvrt_ctx, result_value))) {
+    LOG_WARN("convert ob_time to datetime failed", K(ret), K(ob_time));
+  } else {
+    value = result_value;
+  }
+  return ret;
+}
+
 /**
  * @brief cast str to nanosecond timestamp types
  * @param in:     str           input string
@@ -561,15 +587,15 @@ int ObTimeConverter::str_to_otimestamp(const ObString &str, const ObTimeConvertC
     LOG_DEBUG("succ to convert null str to otimestamp", K(target_type), K(str), K(value), K(scale), KCSTRING(lbt()));
   } else {
     ObTime ob_time;
-    if (OB_FAIL(str_to_ob_time_by_literal_format(str, cvrt_ctx, true, ob_time, scale))) {
-      LOG_WARN("failed to convert timestamp literal", K(ret));
+    if (OB_FAIL(str_to_ob_time_by_format_model(str, cvrt_ctx, target_type, ob_time, scale))) {
+      LOG_WARN("failed to convert to ob_time by dfm", "format_str", cvrt_ctx.nls_format_, K(ret));
     } else if (OB_FAIL(ob_time_to_utc(target_type, cvrt_ctx, ob_time))) {
       LOG_WARN("failed to convert ob_time to utc", K(ret));
     } else if (OB_FAIL(ob_time_to_otimestamp(ob_time, value))) {
       LOG_WARN("failed to convert obtime to timestamp_tz", K(ret));
     } else {
       LOG_DEBUG("succ to convert str to otimestamp", K(target_type), K(str), K(ob_time),
-                K(value), K(scale), KCSTRING(lbt()));
+                K(value), K(scale), "format_str", cvrt_ctx.nls_format_, KCSTRING(lbt()));
     }
   }
 
@@ -603,6 +629,7 @@ int ObTimeConverter::datetime_to_scn_value(const int64_t datetime_value,
 int ObTimeConverter::str_to_scn_value(const ObString &str,
                                       const ObTimeZoneInfo *sys_tz_info,
                                       const ObTimeZoneInfo *session_tz_info,
+                                      const ObString &nlf_format,
                                       uint64_t &scn_value)
 {
   int ret = OB_SUCCESS;
@@ -649,7 +676,14 @@ int ObTimeConverter::scn_to_str(const uint64_t scn_val,
       ot_data.time_ctx_.tail_nsec_ = value_ns;
       const int16_t MAX_NS_SCALE = 9;
       const ObObjType type = ObTimestampNanoType;
-      const ObDataTypeCastParams dtc_params(sys_tz_info);
+      ObString otimestamp_format("YYYY-MM-DD HH24:MI:SS.FF9");
+      const ObDataTypeCastParams dtc_params(sys_tz_info/*not used during otimestamp_to_str with ObTimestampNanoType*/,
+                                            DEFAULT_NLS_DATE_FORMAT,
+                                            otimestamp_format,
+                                            DEFAULT_NLS_TIMESTAMP_TZ_FORMAT,
+                                            CS_TYPE_INVALID,
+                                            CS_TYPE_INVALID,
+                                            CS_TYPE_UTF8MB4_GENERAL_CI);
       if (OB_FAIL(otimestamp_to_str(ot_data, dtc_params, MAX_NS_SCALE, type, buf, buf_len, pos))) {
         LOG_WARN("fail to cast otimestamp to str", K(utc_timestamp), K(dt_value), K(scn_val), K(sys_tz_info));
       }
@@ -954,25 +988,33 @@ int ObTimeConverter::mdatetime_to_double(ObMySQLDateTime value, double &dbl)
 
 // ObDatetimeType: tz_info = NULL. ObTimestampType: tz_info != NULL.
 int ObTimeConverter::datetime_to_str(int64_t value, const ObTimeZoneInfo *tz_info,
-    int16_t scale, char *buf, int64_t buf_len, int64_t &pos, bool with_delim)
+    const ObString &nls_format, int16_t scale, char *buf, int64_t buf_len, int64_t &pos, bool with_delim)
 {
   int ret = OB_SUCCESS;
   ObTime ob_time;
   round_datetime(scale, value);
   if (OB_FAIL(datetime_to_ob_time(value, tz_info, ob_time))) {
     LOG_WARN("failed to convert seconds to ob time", K(ret));
-  } else if (OB_FAIL(ob_time_to_str(ob_time, DT_TYPE_DATETIME, scale, buf, buf_len, pos, with_delim))) {
-    if (OB_SIZE_OVERFLOW == ret) {
-      LOG_TRACE("failed to convert ob time to string", K(ret));
+  } else if (nls_format.empty()) {
+    if (OB_FAIL(ob_time_to_str(ob_time, DT_TYPE_DATETIME, scale, buf, buf_len, pos, with_delim))) {
+      if (OB_SIZE_OVERFLOW == ret) {
+        LOG_TRACE("failed to convert ob time to string", K(ret));
+      } else {
+        LOG_WARN("failed to convert ob time to string", K(ret));
+      }
+    }
+  } else {
+    if (OB_FAIL(ob_time_to_str_by_format_model(ob_time, scale, nls_format, buf, buf_len, pos))) {
+      LOG_WARN("failed to convert ob time to string", K(ob_time), K(nls_format), K(buf_len), K(pos), K(ret), KCSTRING(lbt()));
     } else {
-      LOG_WARN("failed to convert ob time to string", K(ret));
+      LOG_DEBUG("succ to datetime_to_str", K(value), K(scale), K(ob_time), K(nls_format), KCSTRING(lbt()));
     }
   }
   return ret;
 }
 
 int ObTimeConverter::mdatetime_to_str(ObMySQLDateTime value, const ObTimeZoneInfo *tz_info,
-                                      int16_t scale, char *buf,
+                                      const ObString &nls_format, int16_t scale, char *buf,
                                       int64_t buf_len, int64_t &pos, bool with_delim)
 {
   int ret = OB_SUCCESS;
@@ -980,11 +1022,19 @@ int ObTimeConverter::mdatetime_to_str(ObMySQLDateTime value, const ObTimeZoneInf
   round_mdatetime(scale, value);
   if (OB_FAIL(mdatetime_to_ob_time(value, ob_time))) {
     LOG_WARN("failed to convert seconds to ob time", K(ret));
-  } else if (OB_FAIL(ob_time_to_str(ob_time, DT_TYPE_MYSQL_DATETIME, scale, buf, buf_len, pos, with_delim))) {
-    if (OB_SIZE_OVERFLOW == ret) {
-      LOG_TRACE("failed to convert ob time to string", K(ret));
+  } else if (nls_format.empty()) {
+    if (OB_FAIL(ob_time_to_str(ob_time, DT_TYPE_MYSQL_DATETIME, scale, buf, buf_len, pos, with_delim))) {
+      if (OB_SIZE_OVERFLOW == ret) {
+        LOG_TRACE("failed to convert ob time to string", K(ret));
+      } else {
+        LOG_WARN("failed to convert ob time to string", K(ret));
+      }
+    }
+  } else {
+    if (OB_FAIL(ob_time_to_str_by_format_model(ob_time, scale, nls_format, buf, buf_len, pos))) {
+      LOG_WARN("failed to convert ob time to string", K(ob_time), K(nls_format), K(buf_len), K(pos), K(ret), KCSTRING(lbt()));
     } else {
-      LOG_WARN("failed to convert ob time to string", K(ret));
+      LOG_DEBUG("succ to datetime_to_str", K(value), K(scale), K(ob_time), K(nls_format), KCSTRING(lbt()));
     }
   }
   return ret;
@@ -1002,14 +1052,18 @@ int ObTimeConverter::otimestamp_to_str(const ObOTimestampData &ot_data, const Ob
     const bool store_utc_time = false;
     ObTime ob_time(DT_TYPE_NANO_TIMESTAMP);
     const int64_t old_pos = pos;
+    const ObString format_str = dtc_params.get_nls_format(type);
     if (OB_FAIL(otimestamp_to_ob_time(type, tmp_ot_data, dtc_params.tz_info_, ob_time, store_utc_time))) {
       LOG_WARN("failed to convert otimestamp to ob time", K(ret), KCSTRING(lbt()));
-    } else if (OB_FAIL(ob_time_to_str(ob_time, DT_TYPE_DATETIME, scale, buf, buf_len, pos, true))) {
-      LOG_WARN("failed to convert ob time to string", K(ob_time), K(ret));
+    } else if (OB_FAIL(dtc_params.force_use_standard_format_ ?
+                       ob_time_to_str(ob_time, DT_TYPE_DATETIME, scale, buf, buf_len, pos, true)
+                     : ob_time_to_str_by_format_model(ob_time, scale, format_str,
+                                                      buf, buf_len, pos))) {
+      LOG_WARN("failed to convert ob time to string", K(format_str), K(ob_time), K(ret));
     } else {
       ObString tmp(pos - old_pos, buf + old_pos);
       LOG_DEBUG("succ to otimestamp_to_str", K(ot_data), K(type), K(scale),
-                K(tmp_ot_data), K(tmp), KCSTRING(lbt()));
+      					K(tmp_ot_data), K(tmp), K(format_str), KCSTRING(lbt()));
     }
   }
   return ret;
@@ -3234,6 +3288,25 @@ int ObTimeConverter::ob_time_to_str(const ObTime &ob_time, ObDTMode mode, int16_
   return ret;
 }
 
+int ObTimeConverter::get_day_and_month_from_year_day(const int32_t yday, const int32_t year, int32_t &month, int32_t &day)
+{
+  int ret = OB_SUCCESS;
+  int32_t leap_year = IS_LEAP_YEAR(year);
+  if (OB_UNLIKELY(yday > DAYS_UNTIL_MON[leap_year][12])) {
+    ret = OB_ERR_INVALID_DAY_OF_YEAR_VALUE;
+  } else {
+    bool stop_flag = false;
+    for (int32_t i = ObDFMLimit::MONTH.MIN; !stop_flag && i <= ObDFMLimit::MONTH.MAX; ++i) {
+      if (yday <= DAYS_UNTIL_MON[leap_year][i]) {
+        month = i;
+        day = yday - DAYS_UNTIL_MON[leap_year][i - 1];
+        stop_flag = true;
+      }
+    }
+  }
+  return ret;
+}
+
 int32_t ObTimeConverter::calc_max_name_length(const ObTimeConstStr names[], const int64_t size)
 {
   int32_t res = 0;
@@ -3364,92 +3437,6 @@ int ObTimeConverter::adjust_ob_time(ObTime &ob_time, const bool has_date)
  * @param out:  scale                scale of fractional seconds
  * @return OER
  */
-namespace
-{
-struct ObLiteralParseCtx
-{
-  ObLiteralParseCtx(const char *str, const int64_t len) : cur_(str), remain_(len) {}
-  bool is_finished() const { return 0 == remain_; }
-  void advance(const int64_t len)
-  {
-    cur_ += len;
-    remain_ -= len;
-  }
-
-  const char *cur_;
-  int64_t remain_;
-};
-
-void skip_literal_spaces(ObLiteralParseCtx &ctx)
-{
-  int64_t len = 0;
-  while (len < ctx.remain_ && isspace(ctx.cur_[len])) {
-    ++len;
-  }
-  ctx.advance(len);
-}
-
-int match_literal_uint(const ObLiteralParseCtx &ctx,
-                       const int64_t max_len,
-                       int64_t &value_len,
-                       int32_t &value)
-{
-  int ret = OB_SUCCESS;
-  int32_t parsed_value = 0;
-  int64_t parsed_len = 0;
-  if (OB_UNLIKELY(ctx.is_finished()) || OB_UNLIKELY(max_len < 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid literal parse argument", K(ret), K(ctx.remain_), K(max_len));
-  } else if (!isdigit(ctx.cur_[0])) {
-    ret = OB_ERR_NON_NUMERIC_CHARACTER_VALUE;
-  } else {
-    const int64_t end = std::min(ctx.remain_, max_len);
-    while (OB_SUCC(ret) && parsed_len < end && isdigit(ctx.cur_[parsed_len])) {
-      const int32_t digit = static_cast<int32_t>(ctx.cur_[parsed_len] - '0');
-      if (parsed_value * 10LL > INT32_MAX - digit) {
-        ret = OB_OPERATE_OVERFLOW;
-        LOG_WARN("datetime literal part is out of range", K(ret));
-      } else {
-        parsed_value = parsed_value * 10 + digit;
-        ++parsed_len;
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    value_len = parsed_len;
-    value = parsed_value;
-  }
-  return ret;
-}
-
-int match_literal_token(const ObLiteralParseCtx &ctx,
-                        const int64_t max_len,
-                        ObString &value,
-                        int64_t &value_len)
-{
-  int ret = OB_SUCCESS;
-  int64_t len = 0;
-  if (OB_UNLIKELY(ctx.is_finished()) || OB_UNLIKELY(max_len <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid literal token argument", K(ret), K(ctx.remain_), K(max_len));
-  } else {
-    while (len < ctx.remain_ && !isspace(ctx.cur_[len])) {
-      if (OB_UNLIKELY(len >= max_len)) {
-        ret = OB_SIZE_OVERFLOW;
-        LOG_WARN("datetime literal token is too long", K(ret), K(max_len));
-        break;
-      }
-      ++len;
-    }
-  }
-  if (OB_SUCC(ret)) {
-    value.assign_ptr(ctx.cur_, len);
-    value_len = len;
-  }
-  return ret;
-}
-} // namespace
-
 int ObTimeConverter::str_to_ob_time_by_literal_format(const ObString &str,
                                                   const ObTimeConvertCtx &cvrt_ctx,
                                                   const bool is_timestamp_literal,
@@ -3457,7 +3444,7 @@ int ObTimeConverter::str_to_ob_time_by_literal_format(const ObString &str,
                                                   ObScale &scale)
 {
   int ret = OB_SUCCESS;
-  ObLiteralParseCtx ctx(str.ptr(), str.length());
+  ObDFMParseCtx ctx(str.ptr(), str.length());
   const int64_t value_len_max = 20;
   int32_t value = 0;
   int64_t value_len = 0;
@@ -3471,37 +3458,37 @@ int ObTimeConverter::str_to_ob_time_by_literal_format(const ObString &str,
     part_id_max = DATETIME_NO_FRACTION_PART_CNT;
   }
 
-  skip_literal_spaces(ctx);
+  ObDFMUtil::skip_blank_chars(ctx);
 
   //1. hard code to parse the input string according to format 'YYYY-MM-DD HH24:MI:SS'
   for (int64_t part_idx = 0; OB_SUCC(ret) && part_idx < part_id_max; ++part_idx) {
-    if (OB_UNLIKELY(ctx.is_finished())) {
+    if (OB_UNLIKELY(ctx.is_parse_finish())) {
       ret = OB_INVALID_DATE_VALUE;
       LOG_WARN("invalid date value", K(ret));
     } else {
       if (DT_HOUR != part_idx && DT_YEAR != part_idx) {  //positive year only for now, we do not care '-' sign for BC years
-        if (part_seps[part_idx] != ctx.cur_[0]) {
+        if (part_seps[part_idx] != ctx.cur_ch_[0]) {
           ret = OB_INVALID_DATE_VALUE;
           LOG_WARN("invalid date value", K(ret), K(part_idx));
         } else {
-          ctx.advance(1);
-          skip_literal_spaces(ctx);
+          ctx.update(1);
+          ObDFMUtil::skip_blank_chars(ctx);
         }
       }
       if (OB_FAIL(ret)) {
         //do nothing
-      } else if (OB_UNLIKELY(ctx.is_finished())) {
+      } else if (OB_UNLIKELY(ctx.is_parse_finish())) {
         ret = get_datetime_part_out_of_range_error(part_idx);
         LOG_WARN("input finished unexpected", K(ret));
-      } else if (OB_FAIL(match_literal_uint(ctx, value_len_max, value_len, value))) {
+      } else if (OB_FAIL(ObDFMUtil::match_int_value(ctx, value_len_max, value_len, value))) {
         LOG_WARN("failed to match int value", K(ret));
       } else if (OB_UNLIKELY(DT_YEAR == part_idx ? (value_len > 5) : (value_len > 2))) {
         ret = get_datetime_part_out_of_range_error(part_idx);
         LOG_WARN("input finished unexpected", K(ret), K(part_idx), K(value_len));
       } else {
         ob_time.parts_[part_idx] = value;
-        ctx.advance(value_len);
-        skip_literal_spaces(ctx);
+        ctx.update(value_len);
+        ObDFMUtil::skip_blank_chars(ctx);
       }//end if
     }//end if
   }//end for
@@ -3509,14 +3496,14 @@ int ObTimeConverter::str_to_ob_time_by_literal_format(const ObString &str,
   //2. hard code to parse the input string according to format 'FF'
   if (OB_SUCC(ret)
       && is_timestamp_literal
-      && !ctx.is_finished()
-      && '.' == ctx.cur_[0]) {
-    ctx.advance(1);
-    skip_literal_spaces(ctx);
-    if (OB_UNLIKELY(ctx.is_finished())) {
+      && !ctx.is_parse_finish()
+      && '.' == ctx.cur_ch_[0]) {
+    ctx.update(1);
+    ObDFMUtil::skip_blank_chars(ctx);
+    if (OB_UNLIKELY(ctx.is_parse_finish())) {
       ret = OB_INVALID_DATE_VALUE;
       LOG_WARN("expecting FF failed", K(ret));
-    } else if (OB_FAIL(match_literal_uint(ctx, value_len_max, value_len, value))) {
+    } else if (OB_FAIL(ObDFMUtil::match_int_value(ctx, value_len_max, value_len, value))) {
       LOG_WARN("failed to match int value", K(ret));
     } else if (value_len > OB_MAX_TIMESTAMP_TZ_PRECISION) {
       ret = OB_ERR_THE_LEADING_PRECISION_OF_THE_INTERVAL_IS_TOO_SMALL;
@@ -3524,58 +3511,58 @@ int ObTimeConverter::str_to_ob_time_by_literal_format(const ObString &str,
     } else {
       scale = static_cast<ObScale>(value_len);
       ob_time.parts_[DT_USEC] = static_cast<int32_t>(value * power_of_10[OB_MAX_TIMESTAMP_TZ_PRECISION - scale]);
-      ctx.advance(value_len);
-      skip_literal_spaces(ctx);
+      ctx.update(value_len);
+      ObDFMUtil::skip_blank_chars(ctx);
     }//end if
   }
 
   //3. hard code to parse the input string according to format 'TZR TZD' or 'TZH:TZM'
-  if (OB_SUCC(ret) && is_timestamp_literal && !ctx.is_finished()) {
+  if (OB_SUCC(ret) && is_timestamp_literal && !ctx.is_parse_finish()) {
     ob_time.mode_ |= DT_TYPE_TIMEZONE;
-    if ('-' == ctx.cur_[0] || '+' == ctx.cur_[0]) { //'TZH:TZM'
-      int32_t factor = ('-' == ctx.cur_[0]) ? -1 : 1;
+    if ('-' == ctx.cur_ch_[0] || '+' == ctx.cur_ch_[0]) { //'TZH:TZM'
+      int32_t factor = ('-' == ctx.cur_ch_[0]) ? -1 : 1;
       int32_t time_zone_offset_min = 0;
-      ctx.advance(1);
-      skip_literal_spaces(ctx);
-      if (OB_UNLIKELY(ctx.is_finished())) {
+      ctx.update(1);
+      ObDFMUtil::skip_blank_chars(ctx);
+      if (OB_UNLIKELY(ctx.is_parse_finish())) {
         ret = OB_ERR_INVALID_TIME_ZONE_HOUR;
         LOG_WARN("parsing TZR hour failed", K(ret), K(str));
-      } else if (OB_FAIL(match_literal_uint(ctx, value_len_max, value_len, value))) {
+      } else if (OB_FAIL(ObDFMUtil::match_int_value(ctx, value_len_max, value_len, value))) {
         LOG_WARN("parsing to match int value");
       } else if (OB_UNLIKELY(value_len > 2)) {
         ret = OB_ERR_INVALID_TIME_ZONE_HOUR;
         LOG_WARN("parsing TZR hour failed", K(ret), K(str));
       } else {
         time_zone_offset_min = value * 60;
-        ctx.advance(value_len);
-        skip_literal_spaces(ctx);
+        ctx.update(value_len);
+        ObDFMUtil::skip_blank_chars(ctx);
       }//end if
 
       if (OB_FAIL(ret)) {
-      } else if (OB_UNLIKELY(ctx.is_finished())) {
+      } else if (OB_UNLIKELY(ctx.is_parse_finish())) {
         ret = OB_INVALID_DATE_VALUE;
         LOG_WARN("expecting TZR min failed", K(ret));
-      } else if (OB_UNLIKELY(':' != ctx.cur_[0])) {
+      } else if (OB_UNLIKELY(':' != ctx.cur_ch_[0])) {
         ret = OB_INVALID_DATE_VALUE;
         LOG_WARN("invalid timezone value", K(ret));
       } else {
-        ctx.advance(1);
-        skip_literal_spaces(ctx);
+        ctx.update(1);
+        ObDFMUtil::skip_blank_chars(ctx);
       }
 
       if (OB_FAIL(ret)) {
-      } else if (ctx.is_finished()) {
+      } else if (ctx.is_parse_finish()) {
         ret = OB_ERR_INVALID_TIME_ZONE_MINUTE;
         LOG_WARN("invalid timezone value", K(ret));
-      } else if (OB_FAIL(match_literal_uint(ctx, value_len_max, value_len, value))) {
+      } else if (OB_FAIL(ObDFMUtil::match_int_value(ctx, value_len_max, value_len, value))) {
         LOG_WARN("failed to match int value", K(ret));
       } else if (value_len > 2) {
         ret = OB_ERR_INVALID_TIME_ZONE_MINUTE;
         LOG_WARN("parsing TZR hour failed", K(ret), K(str));
       } else {
         time_zone_offset_min += value;
-        ctx.advance(value_len);
-        skip_literal_spaces(ctx);
+        ctx.update(value_len);
+        ObDFMUtil::skip_blank_chars(ctx);
       }
 
       if (OB_SUCC(ret)) {
@@ -3587,33 +3574,33 @@ int ObTimeConverter::str_to_ob_time_by_literal_format(const ObString &str,
       ObString tzr_str;
       ObString tzd_str;
       int64_t value_len = OB_MAX_TZ_NAME_LEN;
-      if (OB_FAIL(match_literal_token(ctx, value_len, tzr_str, value_len))) {
+      if (OB_FAIL(ObDFMUtil::match_chars_until_space(ctx, tzr_str, value_len))) {
         LOG_WARN("failed to match tzr", K(ret));
       } else {
         MEMCPY(ob_time.tz_name_, tzr_str.ptr(), tzr_str.length());
         ob_time.tz_name_[tzr_str.length()] = '\0';
-        ctx.advance(value_len);
-        skip_literal_spaces(ctx);
+        ctx.update(value_len);
+        ObDFMUtil::skip_blank_chars(ctx);
       }
 
       value_len = OB_MAX_TZ_ABBR_LEN;
-      if (OB_FAIL(ret) || ctx.is_finished()) {
+      if (OB_FAIL(ret) || ctx.is_parse_finish()) {
         //do nothing
-      } else if (OB_FAIL(match_literal_token(ctx, value_len, tzd_str, value_len))) {
+      } else if (OB_FAIL(ObDFMUtil::match_chars_until_space(ctx, tzd_str, value_len))) {
         LOG_WARN("failed to match tzd", K(ret));
       } else {
         MEMCPY(ob_time.tzd_abbr_, tzd_str.ptr(), tzd_str.length());
         ob_time.tzd_abbr_[tzd_str.length()] = '\0';
-        ctx.advance(value_len);
-        skip_literal_spaces(ctx);
+        ctx.update(value_len);
+        ObDFMUtil::skip_blank_chars(ctx);
       }
     }
   }
 
   //4. check parse end
-  if (OB_SUCC(ret) && OB_UNLIKELY(!ctx.is_finished())) {
+  if (OB_SUCC(ret) && OB_UNLIKELY(!ctx.is_parse_finish())) {
     ret = OB_INVALID_DATE_VALUE;
-    LOG_WARN("literal is more than that expected", K(ret), "remaining", ObString(ctx.remain_, ctx.cur_));
+    LOG_WARN("literal is more than that expected", K(ret), K(ctx));
   }
 
   //5. validate raw value in ob_time
@@ -3646,6 +3633,838 @@ int ObTimeConverter::str_to_ob_time_by_literal_format(const ObString &str,
   return ret;
 }
 
+
+/**
+ * @brief convert string to ob_time struct according to datetime format model
+ * @param in:   str         input string
+ * @param in:   format      format string
+ * @param in:   cvrt_ctx
+ * @param in:   target_type includes ObDateTimeType, ObOTimestampTZType, ObOTimestampLTZType, ObOTimestampType
+ * @param out:  ob_time     memory struct of datetime
+ * @param out:  scale       scale of fractional seconds
+ */
+int ObTimeConverter::str_to_ob_time_by_format_model(const ObString &str,
+                                                    const ObTimeConvertCtx &cvrt_ctx,
+                                                    const ObObjType target_type,
+                                                    ObTime &ob_time,
+                                                    ObScale &scale)
+{
+  int ret = OB_SUCCESS;
+  const ObString &format = cvrt_ctx.nls_format_;
+  ObSEArray<ObDFMElem, ObDFMUtil::COMMON_ELEMENT_NUMBER> dfm_elems;
+  ObFixedBitSet<OB_DEFAULT_BITSET_SIZE_FOR_DFM> elem_flags;
+
+  if (OB_UNLIKELY(str.empty() || format.empty()
+                  || (!ob_is_otimestamp_type(target_type) && !ob_is_datetime_tc(target_type)))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(str), K(format), K(ob_time.mode_));
+  } else {
+    ob_time.mode_ |= DT_TYPE_DATETIME;
+    if (ob_is_otimestamp_type(target_type)) {
+      ob_time.mode_ |= DT_TYPE_NANOSECOND;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(ObDFMUtil::parse_datetime_format_string(format, dfm_elems))) {
+      LOG_WARN("fail to parse datetime format string", K(ret), K(format));
+    } else if (OB_FAIL(ObDFMUtil::check_semantic(dfm_elems, elem_flags, ob_time.mode_))) {
+      LOG_WARN("check semantic of format string failed", K(ret), K(format));
+    } else if (OB_FAIL(str_to_ob_time_by_dfm_elems(str, dfm_elems, elem_flags, cvrt_ctx, target_type, ob_time, scale))) {
+      LOG_WARN("fail to str to ob time by dfm elements", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObTimeConverter::str_to_ob_time_by_dfm_elems(const ObString &str,
+                                                 const ObIArray<ObDFMElem> &format_elems,
+                                                 const ObFixedBitSet<OB_DEFAULT_BITSET_SIZE_FOR_DFM> &elem_flags,
+                                                 const ObTimeConvertCtx &cvrt_ctx,
+                                                 const ObObjType target_type,
+                                                 ObTime &ob_time,
+                                                 ObScale &scale)
+{
+  int ret = OB_SUCCESS;
+  const ObString &format = cvrt_ctx.nls_format_;
+  if (OB_UNLIKELY(str.empty() || format.empty()
+                  || (!ob_is_otimestamp_type(target_type) && !ob_is_datetime_tc(target_type)))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(str), K(format), K(ob_time.mode_));
+  } else {
+    ob_time.mode_ |= DT_TYPE_DATETIME;
+    if (ob_is_otimestamp_type(target_type)) {
+      ob_time.mode_ |= DT_TYPE_NANOSECOND;
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    auto &dfm_elems = format_elems;
+
+    int32_t temp_tzh_value = -1;   //positive value is legal
+    int32_t temp_tzm_value = -1;   //positive value is legal
+    int32_t temp_tz_factor = 0;
+    // cvrt_ctx.tz_info_ type is ObTimeZoneInfo, which means timezone is saved in offset form;
+    // cvrt_ctx.tz_info_ type is ObTimeZoneInfoPos if timezone is saved in tz_name form;
+    // Assign value to tz_hour+tz_min or tz_id+tran_type_id based on the type of cvrt_ctx.tz_info_
+    // As the flag when dfm_elems does not include timezone-related information, the default value for timezone-related variables in ob_time.
+    // TZ-related flags include TZH(hour), TZM(minute), TZR(region), TZD(daylight)
+    int32_t tz_hour = 0;  //will be negetive when time zone offset < 0
+    int32_t tz_min = 0;   //will be negetive when time zone offset < 0
+    int32_t session_tz_id = 0;
+    int32_t session_tran_type_id = 0;
+
+    int32_t session_tz_offset = 0;
+    //2. set default value for ob_time
+    if (OB_SUCC(ret)) {
+      int64_t utc_curr_time = ObTimeUtility::current_time();
+      int64_t utc_curr_time_copy = utc_curr_time;
+      int32_t cur_date = 0;
+      if (OB_ISNULL(cvrt_ctx.tz_info_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("session timezone info is null", K(ret));
+      } else if (OB_FAIL(sub_timezone_offset(*(cvrt_ctx.tz_info_), ObString(),
+                                     utc_curr_time_copy, session_tz_offset, session_tz_id, session_tran_type_id))) {
+        LOG_WARN("get session timezone offset failed", K(ret));
+      } else if (OB_FAIL(datetime_to_date(utc_curr_time, cvrt_ctx.tz_info_, cur_date))) {
+        LOG_WARN("timestamp to date failed", K(ret));
+      } else if (OB_FAIL(time_to_ob_time(0, ob_time))) {
+        LOG_WARN("time to ob_time failed", K(ret));
+      } else if (OB_FAIL(date_to_ob_time(cur_date, ob_time))) {
+        LOG_WARN("date to ob_time failed", K(ret), K(cur_date));
+      } else {
+        ob_time.parts_[DT_MDAY] = 1; // format-model default value is the first day of current month
+        ob_time.parts_[DT_DATE] = 0; //will be recalculated
+        ob_time.parts_[DT_YDAY] = 0; //doesn't matter
+        ob_time.parts_[DT_WDAY] = 0; //doesn't matter
+        tz_hour = static_cast<int32_t>(session_tz_offset / MINS_PER_HOUR);
+        tz_min = static_cast<int32_t>(session_tz_offset - MINS_PER_HOUR * tz_hour);
+        if (OB_FAIL(ObDFMLimit::TIMEZONE_HOUR_ABS.validate(abs(tz_hour)))) {
+          LOG_WARN("invalid session timezone hour", K(ret), K(tz_hour));
+        } else if (OB_FAIL(ObDFMLimit::TIMEZONE_MIN_ABS.validate(abs(tz_min)))) {
+          LOG_WARN("invali d session timezone minutes", K(ret), K(tz_min));
+        }
+      }
+    }
+
+    //3. go through each element, set and check conflict for ob_time parts: Year, Month, Day, Hour, Minute, Second
+    if (OB_SUCC(ret)) {
+      ObDFMParseCtx ctx(str.ptr(), str.length());
+      int64_t last_elem_end_pos = 0;
+      int64_t conflict_part_bitset = 0;
+      int64_t elem_idx = 0;
+      int64_t input_sep_len = 0;
+      int64_t part_blank1_len = 0;
+      int64_t part_sep_len = 0;
+      int64_t part_blank2_len = 0;
+      int64_t format_sep_len = 0;
+      static_assert((1 << TOTAL_PART_CNT) < INT64_MAX, "for time_part_conflict_bitset");
+      int32_t yday_temp_value = ZERO_DATE; //as invalid value
+      int32_t wday_temp_value = ZERO_DATE; //as invalid value
+      int32_t date_temp_value = ZERO_DATE; //as invalid value
+      int32_t hh12_temp_value = ZERO_TIME;
+      int32_t julian_year_value = ZERO_DATE;  //as invalid value
+      bool is_after_noon = false;
+      bool is_before_christ = false;
+      bool has_digit_tz_in_TZR = false;
+      int64_t first_non_space_sep_char = INT64_MAX;
+      int64_t ignore_fs_flag = false;
+
+      for (elem_idx = 0; OB_SUCC(ret) && elem_idx < dfm_elems.count(); ++elem_idx) {
+        const ObDFMElem &elem = dfm_elems.at(elem_idx);
+        if (OB_UNLIKELY(!elem.is_valid())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("element is invalid", K(ret), K(elem));
+        } else {
+          LOG_DEBUG("DFM DEBUG: start element", K(elem), K(ctx));
+        }
+
+        //1. check separate chars and skip blank chars first
+        if (OB_SUCC(ret)) {
+          //get format sep chars len
+          format_sep_len = elem.offset_ - last_elem_end_pos;
+          last_elem_end_pos = elem.offset_ + ObDFMUtil::get_element_len(elem);
+          //parse input string and skip them
+          part_blank1_len = ObDFMUtil::skip_blank_chars(ctx);
+          //The # of skipped non-blank chars is according to format_str
+          first_non_space_sep_char = ctx.is_parse_finish() ? INT64_MAX : ctx.cur_ch_[0];
+          if (ObDFMFlag::X == elem.elem_flag_) {
+            // Special case, do not consider non-whitespace delimiters before X
+            part_sep_len = 0;
+          } else {
+            part_sep_len = ObDFMUtil::skip_separate_chars(ctx, format_sep_len);
+          }
+          part_blank2_len = ObDFMUtil::skip_blank_chars(ctx);
+          input_sep_len = part_blank1_len + part_sep_len + part_blank2_len;
+          LOG_DEBUG("DFM DEBUG: skip blank and serarate chars",
+                    K(part_blank1_len), K(part_sep_len), K(part_blank2_len), K(format_sep_len), K(ctx));
+        }
+
+        if (OB_SUCC(ret) && ctx.is_parse_finish()) {
+          break;   //if all the input chars has beeen processed, break this loop
+        }
+
+        //2. next, parse the current element
+        if (OB_SUCC(ret)) {
+          int64_t parsed_elem_len = 0;
+          const int64_t expected_elem_len = ObDFMFlag::EXPECTED_MATCHING_LENGTH[elem.elem_flag_];
+          ctx.set_next_expected_elem(elem.elem_flag_,
+                                     format_sep_len > 0 && input_sep_len == 0);
+          switch (elem.elem_flag_) {
+            case ObDFMFlag::AD:
+            case ObDFMFlag::BC:
+            case ObDFMFlag::AD2:
+            case ObDFMFlag::BC2: { //TODO wjh: NLS_LANGUAGE
+              bool is_with_dot = (ObDFMFlag::AD2 == elem.elem_flag_|| ObDFMFlag::BC2 == elem.elem_flag_);
+              parsed_elem_len = is_with_dot ?
+                    ObDFMFlag::PATTERN[ObDFMFlag::AD2].len_ : ObDFMFlag::PATTERN[ObDFMFlag::AD].len_;
+              bool is_ad = ObDFMUtil::match_pattern_ignore_case(ctx, is_with_dot ?
+                             ObDFMFlag::PATTERN[ObDFMFlag::AD2] : ObDFMFlag::PATTERN[ObDFMFlag::AD]);
+              bool is_bc = ObDFMUtil::match_pattern_ignore_case(ctx, is_with_dot ?
+                             ObDFMFlag::PATTERN[ObDFMFlag::BC2] : ObDFMFlag::PATTERN[ObDFMFlag::BC]);
+              if (!is_ad && !is_bc) {
+                ret = OB_ERR_BC_OR_AD_REQUIRED;
+              } else {
+                is_before_christ = is_bc;
+              }
+              break;
+            }
+            case ObDFMFlag::D: {
+              int32_t wday = 0;
+              if (OB_FAIL(ObDFMUtil::match_int_value(ctx, expected_elem_len, parsed_elem_len, wday))) {
+                LOG_WARN("failed to match int value", K(ret));
+              } else if (OB_FAIL(ObDFMLimit::WEEK_DAY.validate(wday))) {
+                LOG_WARN("not a valid day of the week", K(ret), K(wday));
+              } else {
+                // DFM weekday numbering uses Sunday as 1 in territory of CHINA
+                //TODO wjh: hard code for now, need look up NLS_TERRITORIES
+                wday_temp_value = (wday + 5) % 7 + 1;
+              }
+              break;
+            }
+            case ObDFMFlag::DY:
+            case ObDFMFlag::DAY: {  //TODO wjh: NLS_LANGUAGE NLS_TERRITORIES
+              int32_t wday = 0;
+              for (wday = 1; wday <= DAYS_PER_WEEK; ++wday) {
+                const ObTimeConstStr &day_str = (elem.elem_flag_ == ObDFMFlag::DAY) ? WDAY_NAMES[wday] : WDAY_ABBR_NAMES[wday];
+                if (ObDFMUtil::match_pattern_ignore_case(ctx, day_str)) {
+                  parsed_elem_len = day_str.len_;
+                  break;
+                }
+              }
+              if (OB_FAIL(ObDFMLimit::WEEK_DAY.validate(wday))) {
+                LOG_WARN("validate week day failed", K(ret), K(wday));
+              } else {
+                wday_temp_value = wday;
+              }
+              break;
+            }
+            case ObDFMFlag::DD: {
+              int32_t mday = 0;
+              if (OB_FAIL(ObDFMUtil::match_int_value(ctx, expected_elem_len, parsed_elem_len, mday))) {
+                LOG_WARN("failed to match int value", K(ret));
+              } else if (OB_FAIL(ObDFMLimit::MONTH_DAY.validate(mday))) {
+                LOG_WARN("day of month must be between 1 and last day of month", K(ret), K(mday));
+              } else {
+                //may conflict with DDD
+                ret = set_ob_time_part_directly(ob_time, conflict_part_bitset, DT_MDAY, mday);
+              }
+              break;
+            }
+            case ObDFMFlag::DDD: {
+              int32_t yday = 0;
+              if (OB_FAIL(ObDFMUtil::match_int_value(ctx, expected_elem_len, parsed_elem_len, yday))) {
+                LOG_WARN("failed to match int value", K(ret));
+              } else if (OB_FAIL(ObDFMLimit::YEAR_DAY.validate(yday))) {
+                LOG_WARN("day of year must be between 1 and 365 (366 for leap year)", K(ret), K(yday));
+              } else {
+                yday_temp_value = yday;
+              }
+              break;
+            }
+            case ObDFMFlag::DS: {  //TODO wjh: impl it NEED NLS_DATE_FORMAT NLS_TERRITORY NLS_LANGUAGE
+              ret = OB_NOT_SUPPORTED;
+              LOG_WARN("DS is not supported now", K(ret));
+              break;
+            }
+            case ObDFMFlag::DL: { //TODO wjh: impl it NEED NLS_DATE_FORMAT NLS_TERRITORY NLS_LANGUAGE
+              ret = OB_NOT_SUPPORTED;
+              LOG_WARN("DL is not supported now", K(ret));
+              break;
+            }
+            case ObDFMFlag::FF:
+            case ObDFMFlag::FF1:
+            case ObDFMFlag::FF2:
+            case ObDFMFlag::FF3:
+            case ObDFMFlag::FF4:
+            case ObDFMFlag::FF5:
+            case ObDFMFlag::FF6:
+            case ObDFMFlag::FF7:
+            case ObDFMFlag::FF8:
+            case ObDFMFlag::FF9: {
+              int32_t usec = 0;
+              //format string has '.' or 'X', but input string does not contain '.'
+              //do nothing, skip element FF and revert ctx by the length of parsed chars
+              if (ignore_fs_flag) {
+                ctx.revert(part_blank1_len + part_sep_len + part_blank2_len);
+              } else if (elem.is_single_dot_before_ && '.' != first_non_space_sep_char) {
+                ctx.revert(part_sep_len + part_blank2_len);
+              } else if (OB_FAIL(ObDFMUtil::match_int_value(ctx, expected_elem_len, parsed_elem_len, usec))) {
+                LOG_WARN("failed to match usecs", K(ret), K(ctx));
+              } else {
+                scale = static_cast<ObScale>(parsed_elem_len);
+                usec = static_cast<int32_t>(usec * power_of_10[MAX_SCALE_FOR_EXTENDED_TEMPORAL - parsed_elem_len]);
+                ob_time.parts_[DT_USEC] = usec;
+              }
+              break;
+            }
+
+            case ObDFMFlag::TZH:
+            case ObDFMFlag::TZM: {
+              if (OB_UNLIKELY(elem_flags.has_member(ObDFMFlag::TZR)
+                              || elem_flags.has_member(ObDFMFlag::TZD))) {
+                ret = OB_ERR_NOT_A_VALID_TIME_ZONE;
+                LOG_WARN("tzh tzm and tzr tzd can not appear at the same time", K(ret));
+              } else {
+                // SQL> alter session set NLS_TIMESTAMP_TZ_FORMAT='DD-MON-RR HH.MI.SS AM TZH:TZM';
+                // SQL> alter session set time_zone='Asia/Shanghai';
+                // SQL> select cast('01-SEP-20 11.11.11' as timestamp with time zone) from dual;
+                // 01-SEP-20 11.11.11 AM +08:00
+                // As long as TZH is set in format, regardless of whether string actually contains TZH, the final result should display offset;
+                // If sessiontimezone is set to tz_name it needs to be converted to offset.
+                // Therefore the logic for setting is_tz_name_valid_ to false is placed here rather than after a successful match
+                ob_time.is_tz_name_valid_ = false;
+                int32_t value = 0;
+                int32_t local_tz_factor = 1;
+                if (ObDFMFlag::TZH == elem.elem_flag_) {
+                  if (ObDFMUtil::is_sign_char(ctx.cur_ch_[0])) {
+                    local_tz_factor = ('-' == ctx.cur_ch_[0] ? -1 : 1);
+                    ctx.update(1);
+                  } else {
+                    if (ctx.get_parsed_len() > 0 && input_sep_len > format_sep_len) {
+                      //if the input valid separate chars > format separate chars
+                      //the superfluous '-' will be regarded as minus sign
+                      local_tz_factor = (static_cast<int64_t>('-') == ctx.cur_ch_[-1] ? -1 : 1);
+                    }
+                  }
+                  temp_tz_factor = local_tz_factor;  //1 or -1, but never be 0
+                }
+
+                if (ctx.is_parse_finish()) {
+                  //do nothing
+                } else if (OB_FAIL(ObDFMUtil::match_int_value(ctx, expected_elem_len, parsed_elem_len, value))) {
+                  LOG_WARN("failed to match usecs", K(ret), K(ctx));
+                } else if (OB_FAIL((elem.elem_flag_ == ObDFMFlag::TZH) ?
+                                   ObDFMLimit::TIMEZONE_HOUR_ABS.validate(value) :
+                                   ObDFMLimit::TIMEZONE_MIN_ABS.validate(value))) {
+                  LOG_WARN("failed to validate timezone value", K(value), K(ret));
+                } else {
+                  if (elem.elem_flag_ == ObDFMFlag::TZH) {
+                    temp_tzh_value = value;
+                  } else {
+                    temp_tzm_value = value;
+                  }
+                }
+              }
+              break;
+            }
+
+            case ObDFMFlag::TZR: {
+              if (OB_UNLIKELY(elem_flags.has_member(ObDFMFlag::TZH)
+                              || elem_flags.has_member(ObDFMFlag::TZM))) {
+                ret = OB_ERR_NOT_A_VALID_TIME_ZONE;
+                LOG_WARN("tzh tzm and tzr tzd can not appear at the same time", K(ret));
+              } else {
+                int32_t local_tz_factor = 1;
+                if (isdigit(ctx.cur_ch_[0]) || ObDFMUtil::is_sign_char(ctx.cur_ch_[0])) {  //case1: digits
+                  int32_t tmp_tz_hour = 0;
+                  int32_t tmp_tz_min = 0;
+                  if (ObDFMUtil::is_sign_char(ctx.cur_ch_[0])) {
+                    local_tz_factor = ('-' == ctx.cur_ch_[0] ? -1 : 1);
+                    ctx.update(1);
+                  } else if (part_blank1_len + part_sep_len > format_sep_len
+                             && ObDFMUtil::is_sign_char(ctx.cur_ch_[-1])) {
+                    local_tz_factor = ('-' == ctx.cur_ch_[-1] ? -1 : 1);
+                  }
+
+                  ObString digits_timezone;
+                  parsed_elem_len = ObDFMUtil::UNKNOWN_LENGTH_OF_ELEMENT;
+                  if (OB_LIKELY(! ctx.is_parse_finish())) {
+                    // As long as tz in string is not just '+' or '-' this one character, then the conversion result should be offset, rather than tz_id/name
+                    ob_time.is_tz_name_valid_ = false;
+                  }
+                  if (OB_UNLIKELY(ctx.is_parse_finish())) {
+                    //do nothing
+                  } else if (OB_FAIL(ObDFMUtil::match_chars_until_space(ctx, digits_timezone, parsed_elem_len))) {
+                    //do nothing
+                  } else {
+                    ObDFMParseCtx local_ctx(digits_timezone.ptr(), digits_timezone.length());
+                    const char *local_sep = ObDFMUtil::find_first_separator(local_ctx);
+
+                    if (OB_ISNULL(local_sep)) {
+                      // string timezone offset can contain no separator, only the hour part
+                    } else {
+                      int64_t hour_expected_len = local_sep - digits_timezone.ptr();
+                      int64_t local_parsed_len = 0;
+                      if (OB_FAIL(ObDFMUtil::match_int_value(local_ctx,
+                                                             hour_expected_len,
+                                                             local_parsed_len,
+                                                             tmp_tz_hour,
+                                                             local_tz_factor))) {
+                        LOG_WARN("matching timezone hour failed, for 'TZR'. the error is ignored.", K(ret), K(hour_expected_len));
+                      } else if (OB_FAIL(ObDFMLimit::TIMEZONE_HOUR_ABS.validate(abs(tmp_tz_hour)))) {
+                        LOG_WARN("not valid timezone hour", K(ret), K(tmp_tz_hour));
+                      } else if (OB_UNLIKELY(hour_expected_len != local_parsed_len)) {
+                        ret = OB_INVALID_DATE_VALUE; //invalid time zone
+                      } else if (FALSE_IT(local_ctx.update(hour_expected_len + 1))) {
+                      } else if (OB_UNLIKELY(local_ctx.is_parse_finish())) {
+                        // When format is TZR, allows tz form in string as hour:, with an empty delimiter equivalent to hour:00
+                        has_digit_tz_in_TZR = true;
+                        tz_hour = tmp_tz_hour;
+                        tz_min = tmp_tz_min;
+                      } else if (OB_FAIL(ObDFMUtil::match_int_value(local_ctx,
+                                                                    parsed_elem_len - hour_expected_len - 1,
+                                                                    local_parsed_len,
+                                                                    tmp_tz_min,
+                                                                    local_tz_factor))) {
+                        LOG_WARN("matching timezone minute failed, for 'TZR'. the error is ignored.", K(ret), K(hour_expected_len));
+                      } else if (OB_FAIL(ObDFMLimit::TIMEZONE_MIN_ABS.validate(abs(tmp_tz_min)))) {
+                        LOG_WARN("not valid timezone hour", K(ret), K(tmp_tz_min));
+                      } else if (OB_UNLIKELY(parsed_elem_len != hour_expected_len + local_parsed_len + 1)) {
+                        ret = OB_INVALID_DATE_VALUE; //invalid time zone
+                      } else {
+                        has_digit_tz_in_TZR = true;
+                        tz_hour = tmp_tz_hour;
+                        tz_min = tmp_tz_min;
+                      }
+                    }
+                  }
+                } else { //case2: strings
+                  ObString tzr_str;
+                  parsed_elem_len = OB_MAX_TZ_NAME_LEN - 1;
+                  if (OB_FAIL(ObDFMUtil::match_chars_until_space(ctx, tzr_str, parsed_elem_len))) {
+                    LOG_WARN("failed to match tzr", K(ret));
+                  } else {
+                    MEMCPY(ob_time.tz_name_, tzr_str.ptr(), tzr_str.length());
+                    ob_time.tz_name_[tzr_str.length()] = '\0';
+                    ob_time.is_tz_name_valid_ = true;
+                  }
+                }
+              }
+              break;
+            }
+
+            case ObDFMFlag::TZD: {
+              if (OB_UNLIKELY(elem_flags.has_member(ObDFMFlag::TZH)
+                              || elem_flags.has_member(ObDFMFlag::TZM))) {
+                ret = OB_ERR_NOT_A_VALID_TIME_ZONE;
+                LOG_WARN("tzh tzm and tzr tzd can not appear at the same time", K(ret));
+              } else if (OB_UNLIKELY(has_digit_tz_in_TZR)) {
+                ret = OB_INVALID_DATE_FORMAT;
+                LOG_WARN("digit TZR with TZD is invalid", K(ret));
+              } else {
+                ObString tzd_str;
+                parsed_elem_len = OB_MAX_TZ_ABBR_LEN - 1;
+                if (OB_FAIL(ObDFMUtil::match_chars_until_space(ctx, tzd_str, parsed_elem_len))) {
+                  LOG_WARN("failed to match tzd", K(ret));
+                } else {
+                  MEMCPY(ob_time.tzd_abbr_, tzd_str.ptr(), tzd_str.length());
+                  ob_time.tzd_abbr_[tzd_str.length()] = '\0';
+                  //ob_time.is_tz_name_valid_ = true; Only TZR can decide whether to parse according to the timezone name, this right belongs to TZR
+                }
+              }
+              break;
+            }
+
+            case ObDFMFlag::J: {
+              const int32_t base_julian_day = 2378497;    // julian day of 1800-01-01
+              const int32_t base_date = -62091;           //ob_time.parts_[DT_DATE] of 1800-01-01
+              int32_t julian_day = 0;
+              int32_t ob_time_date = 0;
+              ObTime tmp_ob_time;
+              if (OB_FAIL(ObDFMUtil::match_int_value(ctx, expected_elem_len,
+                                                     parsed_elem_len, julian_day))) {
+                LOG_WARN("failed to match int value", K(ret));
+              } else if (OB_FAIL(ObDFMLimit::JULIAN_DATE.validate(julian_day))) {
+                LOG_WARN("julian_day must between 1 and 5373484", K(ret), K(julian_day));
+              } else if (julian_day < base_julian_day) {
+                ret = OB_NOT_SUPPORTED;
+                LOG_WARN("julian day of date before 1800-01-01 not supported", K(ret));
+              } else if (FALSE_IT(ob_time_date = julian_day - base_julian_day + base_date)) {
+              } else if (OB_FAIL(date_to_ob_time(ob_time_date, tmp_ob_time))) {
+                LOG_WARN("date to ob time failed", K(ret));
+              } else if (OB_FAIL(set_ob_time_year_may_conflict(ob_time, julian_year_value,
+                                                            tmp_ob_time.parts_[DT_YEAR],
+                                                            tmp_ob_time.parts_[DT_YEAR],
+                                                            true /* overwrite */))) {
+                // Here to be covered, to_date('2', 'YY') sets DT_YEAR to 2002, here the Julian day conversion does not conflict with it
+                // Year is 0002; format-model behavior keeps the result year as 0002.
+                LOG_WARN("set ob_time_year conflict", K(ret));
+              } else {
+                yday_temp_value = tmp_ob_time.parts_[DT_YDAY];
+              }
+              break;
+            }
+
+            case ObDFMFlag::HH:
+            case ObDFMFlag::HH12: {
+              int32_t hour = 0;
+              if (OB_FAIL(ObDFMUtil::match_int_value(ctx, expected_elem_len, parsed_elem_len, hour))) {
+                LOG_WARN("failed to match int value", K(ret));
+              } else if (OB_FAIL(ObDFMLimit::HOUR12.validate(hour))) {
+                LOG_WARN("hour must be between 1 and 12", K(ret), K(hour));
+              } else if (!ObDFMUtil::elem_has_meridian_indicator(elem_flags)) {
+                ret = set_ob_time_part_may_conflict(ob_time, conflict_part_bitset, DT_HOUR, hour);
+              } else {
+                hh12_temp_value = hour;
+              }
+              break;
+            }
+            case ObDFMFlag::HH24: {
+              int32_t hour = 0;
+              if (OB_FAIL(ObDFMUtil::match_int_value(ctx, expected_elem_len, parsed_elem_len, hour))) {
+                LOG_WARN("failed to match int value", K(ret));
+              } else if (OB_FAIL(ObDFMLimit::HOUR24.validate(hour))) {
+                LOG_WARN("hour must be between 0 and 23", K(ret), K(hour));
+              } else if (OB_UNLIKELY(ObDFMUtil::elem_has_meridian_indicator(elem_flags))) {
+                ret = OB_INVALID_MERIDIAN_INDICATOR_USE;
+                LOG_WARN("HH24 appears with meridian indicator", K(ret), K(format));
+              } else {
+                //may conflict with SSSSS
+                ret = set_ob_time_part_may_conflict(ob_time, conflict_part_bitset, DT_HOUR, hour);
+              }
+              break;
+            }
+            case ObDFMFlag::LITERAL: {
+              bool matched = false;
+              int64_t matched_len = 0;
+              if (OB_FAIL(ObDFMUtil::match_literal_ignore_case(ctx, elem, format,
+                                                               matched, matched_len))) {
+                LOG_WARN("match literal ignore case failed", K(ret));
+              } else if (OB_UNLIKELY(!matched)) {
+                ret = OB_INVALID_DATE_VALUE;
+                LOG_WARN("literal does not match format", K(ret), K(str), K(format), K(elem));
+              } else {
+                parsed_elem_len = matched_len;
+              }
+              break;
+            }
+            case ObDFMFlag::MI: {
+              int32_t min = 0;
+              if (OB_FAIL(ObDFMUtil::match_int_value(ctx, expected_elem_len, parsed_elem_len, min))) {
+                LOG_WARN("failed to match int value", K(ret));
+              } else if (OB_FAIL(ObDFMLimit::MINUTE.validate(min))) {
+                LOG_WARN("minutes must be between 0 and 59", K(ret), K(min));
+              } else {
+                //may conflict with SSSSS
+                ret = set_ob_time_part_may_conflict(ob_time, conflict_part_bitset, DT_MIN, min);
+              }
+              break;
+            }
+            case ObDFMFlag::MM: {
+              int32_t mon = 0;
+              if (OB_FAIL(ObDFMUtil::match_int_value(ctx, expected_elem_len, parsed_elem_len, mon))) {
+                LOG_WARN("failed to match int value", K(ret));
+              } else if (OB_FAIL(ObDFMLimit::MONTH_DAY.validate(mon))) {
+                LOG_WARN("not a valid month", K(ret), K(mon));
+              } else {
+                //may conflict with DDD
+                ret = set_ob_time_part_directly(ob_time, conflict_part_bitset, DT_MON, mon);
+              }
+              break;
+            }
+            case ObDFMFlag::MON:
+            case ObDFMFlag::MONTH: {
+              int32_t mon = 0;
+              for (mon = ObDFMLimit::MONTH.MIN; mon <= ObDFMLimit::MONTH.MAX; ++mon) {
+                const ObTimeConstStr &mon_str = (elem.elem_flag_ == ObDFMFlag::MONTH) ? MON_NAMES[mon] : MON_ABBR_NAMES[mon];
+                if (ObDFMUtil::match_pattern_ignore_case(ctx, mon_str)) {
+                  parsed_elem_len = mon_str.len_;
+                  break;
+                }
+              }
+              if (OB_FAIL(ObDFMLimit::MONTH.validate(mon))) {
+                LOG_WARN("not a valid month", K(ret), K(mon));
+              } else {
+                //may conflict with DDD
+                ret = set_ob_time_part_directly(ob_time, conflict_part_bitset, DT_MON, mon);
+              }
+              break;
+            }
+            case ObDFMFlag::AM:
+            case ObDFMFlag::PM:
+            case ObDFMFlag::AM2:
+            case ObDFMFlag::PM2: {
+              bool is_with_dot = (ObDFMFlag::AM2 == elem.elem_flag_|| ObDFMFlag::PM2 == elem.elem_flag_);
+              parsed_elem_len = is_with_dot ?
+                    ObDFMFlag::PATTERN[ObDFMFlag::AM2].len_ : ObDFMFlag::PATTERN[ObDFMFlag::AM].len_;
+              bool is_am = ObDFMUtil::match_pattern_ignore_case(ctx,
+                             is_with_dot ? ObDFMFlag::PATTERN[ObDFMFlag::AM2] : ObDFMFlag::PATTERN[ObDFMFlag::AM]);
+              bool is_pm = ObDFMUtil::match_pattern_ignore_case(ctx,
+                             is_with_dot ? ObDFMFlag::PATTERN[ObDFMFlag::PM2] : ObDFMFlag::PATTERN[ObDFMFlag::PM]);
+              if (OB_UNLIKELY(!is_am && !is_pm)) {
+                ret = OB_ERR_AM_OR_PM_REQUIRED;
+                LOG_WARN("AM/A.M. or PM/P.M. required", K(ret));
+              } else {
+                is_after_noon = is_pm;
+              }
+              break;
+            }
+            case ObDFMFlag::RR:
+            case ObDFMFlag::RRRR: {
+              int32_t round_year = 0;
+              int32_t conflict_check_year = 0;
+              if (OB_FAIL(ObDFMUtil::match_int_value(ctx, 4, parsed_elem_len, round_year))) {
+                LOG_WARN("failed to match int value", K(ret));
+              } else if (parsed_elem_len > 2) {
+                conflict_check_year = round_year;
+                //do nothing
+              } else {
+                conflict_check_year = round_year;
+                int32_t first_two_digits_of_current_year = (ob_time.parts_[DT_YEAR] / 100) % 100;
+                int32_t last_two_digits_of_current_year = ob_time.parts_[DT_YEAR] % 100;
+                if (round_year < 50) { //0~49
+                  if (last_two_digits_of_current_year < 50) {
+                    round_year += first_two_digits_of_current_year * 100;
+                  } else {
+                    round_year += (first_two_digits_of_current_year + 1) * 100;
+                  }
+                } else if (round_year < 100) { //50~99
+                  if (last_two_digits_of_current_year < 50) {
+                    round_year += (first_two_digits_of_current_year - 1) * 100;
+                  } else {
+                    round_year += first_two_digits_of_current_year * 100;
+                  }
+                }
+              }
+              if (OB_SUCC(ret)) {
+                if (OB_FAIL(ObDFMLimit::YEAR.validate(round_year))) {  //TODO wjh: negetive year number
+                  LOG_WARN("(full) year must be between -4713 and +9999, and not be 0", K(ret), K(round_year));
+                } else if (OB_FAIL(set_ob_time_year_may_conflict(ob_time, julian_year_value,
+                                                            conflict_check_year, round_year,
+                                                            false /* overwrite */))) {
+                  LOG_WARN("set ob_time_year conflict", K(ret));
+                }
+              }
+              break;
+            }
+            case ObDFMFlag::SS: {
+              int32_t sec = 0;
+              if (OB_FAIL(ObDFMUtil::match_int_value(ctx, expected_elem_len, parsed_elem_len, sec))) {
+                LOG_WARN("failed to match int value", K(ret));
+              } else if (OB_FAIL(ObDFMLimit::SECOND.validate(sec))) {
+                LOG_WARN("seconds must be between 0 and 59", K(ret), K(sec));
+              } else {
+                ret = set_ob_time_part_may_conflict(ob_time, conflict_part_bitset, DT_SEC, sec);
+              }
+              break;
+            }
+            case ObDFMFlag::SSSSS: {
+              int32_t sec_past_midnight = 0;
+              if (OB_FAIL(ObDFMUtil::match_int_value(ctx, expected_elem_len, parsed_elem_len, sec_past_midnight))) {
+                LOG_WARN("failed to match int value", K(ret));
+              } else if (OB_FAIL(ObDFMLimit::SECS_PAST_MIDNIGHT.validate(sec_past_midnight))) {
+                LOG_WARN("seconds in day must be between 0 and 86399", K(ret), K(sec_past_midnight));
+              } else {
+                int32_t secs = sec_past_midnight % static_cast<int32_t>(SECS_PER_MIN);
+                int32_t mins = (sec_past_midnight / static_cast<int32_t>(SECS_PER_MIN)) % static_cast<int32_t>(MINS_PER_HOUR);
+                int32_t hours = sec_past_midnight / static_cast<int32_t>(SECS_PER_MIN) / static_cast<int32_t>(MINS_PER_HOUR);
+                if (OB_FAIL(set_ob_time_part_may_conflict(ob_time, conflict_part_bitset, DT_SEC, secs))) {
+                  LOG_WARN("set ob time conflict", K(ret), K(secs), K(ob_time));
+                } else if (OB_FAIL(set_ob_time_part_may_conflict(ob_time, conflict_part_bitset, DT_MIN, mins))) {
+                  LOG_WARN("set ob time conflict", K(ret), K(mins), K(ob_time));
+                } else if (OB_FAIL(set_ob_time_part_may_conflict(ob_time, conflict_part_bitset, DT_HOUR, hours))) {
+                  LOG_WARN("set ob time conflict", K(ret), K(hours), K(ob_time));
+                }
+              }
+              break;
+            }
+            case ObDFMFlag::YGYYY: {
+              int32_t years = 0;
+              if (OB_FAIL(ObDFMUtil::match_int_value_with_comma(ctx, expected_elem_len, parsed_elem_len, years))) {
+                LOG_WARN("failed to match int value", K(ret));
+              } else if (OB_FAIL(ObDFMLimit::YEAR.validate(years))) {
+                LOG_WARN("(full) year must be between -4713 and +9999, and not be 0", K(ret), K(years));
+              } else if (OB_FAIL(set_ob_time_year_may_conflict(ob_time, julian_year_value,
+                                                            years, years, false /* overwrite */))) {
+                LOG_WARN("set ob_time_year conflict", K(ret));
+              }
+              break;
+            }
+            case ObDFMFlag::SYYYY:
+            case ObDFMFlag::YYYY:
+            case ObDFMFlag::YYY:
+            case ObDFMFlag::YY:
+            case ObDFMFlag::Y: {
+              int32_t years = 0;
+              int32_t conflict_check_year = 0;
+              int32_t sign = 1;
+              if (ObDFMFlag::SYYYY == elem.elem_flag_) {
+                if (ObDFMUtil::is_sign_char(ctx.cur_ch_[0])) {
+                  sign = ('-' == ctx.cur_ch_[0] ? -1 : 1);
+                  ctx.update(1);
+                } else if (part_blank1_len + part_sep_len > format_sep_len
+                           && ObDFMUtil::is_sign_char(ctx.cur_ch_[-1])) {
+                  sign = ('-' == ctx.cur_ch_[-1] ? -1 : 1);
+                }
+              }
+              if (OB_UNLIKELY(!ctx.is_valid())) {
+                //year=0 the validation will report an error later
+              } else if (OB_FAIL(ObDFMUtil::match_int_value(ctx, expected_elem_len, parsed_elem_len, years, sign))) {
+                LOG_WARN("failed to match int value", K(ret));
+              }
+              if (OB_SUCC(ret)) {
+                conflict_check_year = years;
+                if (expected_elem_len < 4) {
+                  years += (ob_time.parts_[DT_YEAR] / static_cast<int32_t>(power_of_10[parsed_elem_len]))
+                      * static_cast<int32_t>(power_of_10[parsed_elem_len]);
+                }
+                if (OB_FAIL(ObDFMLimit::YEAR.validate(years))) {
+                  LOG_WARN("(full) year must be between -4713 and +9999, and not be 0", K(ret), K(years));
+                } else if (OB_FAIL(set_ob_time_year_may_conflict(ob_time, julian_year_value,
+                                                                conflict_check_year, years,
+                                                                false /* overwrite */))) {
+                  LOG_WARN("set ob_time_year conflict", K(ret));
+                }
+              }
+              break;
+            }
+            case ObDFMFlag::X: {
+              if (OB_UNLIKELY('.' != ctx.cur_ch_[0])) {
+                ignore_fs_flag = true;
+                //revert treat X as if it never appeared
+                ctx.revert(part_blank1_len + part_sep_len + part_blank2_len);
+              } else {
+                parsed_elem_len = 1;
+              }
+              break;
+            }
+
+            case ObDFMFlag::CC:
+            case ObDFMFlag::SCC:
+            case ObDFMFlag::IW:
+            case ObDFMFlag::W:
+            case ObDFMFlag::WW:
+            case ObDFMFlag::YEAR:
+            case ObDFMFlag::SYEAR:
+            case ObDFMFlag::Q:
+            case ObDFMFlag::I:
+            case ObDFMFlag::IY:
+            case ObDFMFlag::IYY:
+            case ObDFMFlag::IYYY: {
+              ret = OB_ERR_FORMAT_CODE_CANNOT_APPEAR;
+              LOG_WARN("element can not appear", K(ret), K(elem));
+              break;
+            }
+            default: {
+              ret = OB_INVALID_DATE_FORMAT;
+              LOG_WARN("unsupport element", K(ret), K(elem));
+              break;
+            }
+          } //end switch
+
+          if (OB_SUCC(ret)) {
+            ctx.update(parsed_elem_len);
+          }
+        }//end if
+
+        if (OB_FAIL(ret)) {
+          LOG_WARN("failed to convert string to ob time by dfm", K(ret), K(elem), K(ctx));
+        } else {
+          LOG_DEBUG("DFM DEBUG: finish element", K(elem), K(ctx));
+        }
+      } //end for
+
+      //check if the unprocessed elems has permission to be omitted
+      if (OB_SUCC(ret)) {
+        for (; elem_idx < dfm_elems.count(); ++elem_idx) {
+          if (OB_UNLIKELY(!ObDFMUtil::is_element_can_omit(dfm_elems.at(elem_idx)))) {
+            ret = OB_ERR_INPUT_VALUE_NOT_LONG_ENOUGH;
+            LOG_WARN("input value not long enough for date format", K(ret));
+          }
+        }
+      }
+
+      if (OB_SUCC(ret)) {
+        //all elems has finished, is there anything else in str? the rest must be space, do check.
+        int64_t str_remain_sep_len = 0;
+        while (str_remain_sep_len < ctx.remain_len_
+               && ObDFMUtil::is_valid_ending_char(ctx.cur_ch_[str_remain_sep_len])) {
+          str_remain_sep_len++;
+        }
+        ctx.update(str_remain_sep_len);
+        if (ctx.remain_len_ > 0) {
+          ret = OB_INVALID_DATE_FORMAT_END;
+          LOG_WARN("input value has not finished yet", K(ctx.remain_len_), K(format), K(str), K(ret));
+        }
+      }
+
+      //after noon conflict: AM PM vs HH12 HH
+      if (OB_SUCC(ret)) {
+        if (hh12_temp_value != ZERO_TIME) {
+          //when  hour value, varied by meridian indicators
+          //if HH12 = 12, when meridian indicator 'AM' exists, the real time is hour = 0
+          //if HH12 = 12, when meridian indicator 'PM' exists, the real time is hour = 12
+          if (is_after_noon) {
+            ret = set_ob_time_part_may_conflict(ob_time, conflict_part_bitset, DT_HOUR, hh12_temp_value % 12 + 12);
+          } else {
+            ret = set_ob_time_part_may_conflict(ob_time, conflict_part_bitset, DT_HOUR, hh12_temp_value % 12);
+          }
+        }
+      }
+
+      //before christ conflict: BC AD vs YEAR   //TODO wjh: change this when ob_time support negetive years
+      if (OB_SUCC(ret)) {
+        if (is_before_christ) {
+          ret = OB_ERR_INVALID_YEAR_VALUE;
+          LOG_WARN("before christ is not supported now!", K(ret));
+        }
+      }
+
+      //year cannot changed after this line
+      //feed/validate yday + YEAR to MON and DAY
+      if (OB_SUCC(ret)) {
+        if (yday_temp_value != ZERO_DATE) {
+          int32_t month = 0;
+          int32_t day = 0;
+          if (OB_FAIL(get_day_and_month_from_year_day(yday_temp_value, ob_time.parts_[DT_YEAR], month, day))) {
+            LOG_WARN("failed to get day and month from year day", K(ret), K(yday_temp_value), K(ob_time));
+          } else if (OB_FAIL(set_ob_time_part_may_conflict(ob_time, conflict_part_bitset, DT_MON, month))) {
+            LOG_WARN("failed to set ob time part with conflict", K(ret), K(month), K(ob_time));
+          } else if (OB_FAIL(set_ob_time_part_may_conflict(ob_time, conflict_part_bitset, DT_MDAY, day))) {
+            LOG_WARN("failed to set ob time part with conflict", K(ret), K(day), K(ob_time));
+          }
+        }
+      }
+
+      //calc and validate: YDAY WDAY vs YEAR MON DAY
+      if (OB_SUCC(ret)) {
+        if (OB_FAIL(validate_datetime_parts(ob_time))) {
+          LOG_WARN("date is invalid or out of range", K(ret), K(str));
+        } else {
+          //ob_time_to_date func is to calc YDAY and WDAY and return DATE
+          date_temp_value = ob_time_to_date(ob_time);   //TODO: shanting
+          if (yday_temp_value != ZERO_DATE && OB_UNLIKELY(ob_time.parts_[DT_YDAY] != yday_temp_value)) {
+            ret = OB_ERR_DAY_OF_YEAR_CONFLICTS_WITH_JULIAN_DATE;
+          } else if (wday_temp_value != ZERO_DATE && OB_UNLIKELY(ob_time.parts_[DT_WDAY] != wday_temp_value)) {
+            ret = OB_ERR_DAY_OF_WEEK_CONFLICTS_WITH_JULIAN_DATE;
+          } else {
+            ob_time.parts_[DT_DATE] = date_temp_value;
+          }
+        }
+      }
+
+      if (OB_FAIL(ret)) {
+        LOG_WARN("failed to convert string to ob_time", K(format), K(ob_time), K(conflict_part_bitset), K(yday_temp_value),
+                 K(wday_temp_value), K(date_temp_value), K(hh12_temp_value), K(tz_hour), K(tz_min), K(is_after_noon), K(is_before_christ));
+      } else {
+        LOG_DEBUG("convert from string to ob_time", K(format), K(ob_time), K(conflict_part_bitset), K(yday_temp_value),
+                  K(wday_temp_value), K(date_temp_value), K(hh12_temp_value), K(tz_hour), K(tz_min), K(is_after_noon), K(is_before_christ));
+      }
+    }//end if
+  }
+
+  return ret;
+}
 // Timestamp encoding checks ob_time year range first.
 bool ObTimeConverter::valid_timestamp_year_range(const ObTime &ob_time)
 {
@@ -3653,6 +4472,501 @@ bool ObTimeConverter::valid_timestamp_year_range(const ObTime &ob_time)
   if (ob_time.parts_[DT_YEAR] < 0 || ob_time.parts_[DT_YEAR] > 9999) {
     ret = false;
   }
+  return ret;
+}
+
+int ObTimeConverter::ob_time_to_str_by_format_model(const ObTime &ob_time,
+                                                    ObScale scale,
+                                                    const ObString &format,
+                                                    char *buf,
+                                                    int64_t buf_len,
+                                                    int64_t &pos)
+{
+  int ret = OB_SUCCESS;
+
+  ObSEArray<ObDFMElem, ObDFMUtil::COMMON_ELEMENT_NUMBER> dfm_elems;
+
+  if (OB_FAIL(ObDFMUtil::parse_datetime_format_string(format, dfm_elems))) {
+    LOG_WARN("fail to parse datetime format string", K(ret), K(format));
+  } else if (OB_FAIL(ob_time_to_str_by_dfm_elems(ob_time, scale, dfm_elems, format, buf, buf_len, pos))) {
+    LOG_WARN("fail to print ob time to str by dfm elems", K(ret));
+  }
+
+  return ret;
+}
+
+inline int str_write_buf(char *buf, const int64_t buf_len, int64_t &pos,
+                         const char*str, const int64_t str_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(pos + str_len > buf_len)) {
+    ret = OB_SIZE_OVERFLOW;
+  } else {
+    MEMCPY(buf + pos, str, str_len);
+    pos += str_len;
+  }
+  return ret;
+}
+
+int ObTimeConverter::ob_time_to_str_by_dfm_elems(const ObTime &ob_time,
+                                                 ObScale scale,
+                                                 const ObIArray<ObDFMElem> &format_elems,
+                                                 const ObString &format,
+                                                 char *buf,
+                                                 int64_t buf_len,
+                                                 int64_t &pos)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0)
+      || OB_UNLIKELY(scale > MAX_SCALE_FOR_EXTENDED_TEMPORAL)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_len), K(ob_time), K(scale));
+  } else {
+    if (scale < 0 ) {
+      scale = DEFAULT_SCALE_FOR_FRACTIONAL_SECONDS;
+    }
+ 
+    int32_t iso_week = 0;
+    int32_t iso_year_delta = 0;
+    bool is_iso_week_calced = false;
+    // To avoid duplicate calculation of iso week
+    auto calc_iso_week = [&iso_week, &iso_year_delta, &is_iso_week_calced, &ob_time] (void)
+    {
+      if (!is_iso_week_calced) {
+        iso_week = ob_time_to_week(ob_time, WEEK_MODE[3], iso_year_delta);
+        is_iso_week_calced = true;
+      }
+    };
+
+    const char* const format_begin_ptr = format.ptr();
+    int64_t last_elem_end_pos = 0;
+    bool fm_flag = false; // The flag of FM. If true, the date element located after fm should be set to non filled mode.
+
+    //2. print each element
+    for (int64_t i = 0; OB_SUCC(ret) && i < format_elems.count(); ++i) {
+      const ObDFMElem &elem = format_elems.at(i);
+
+      //element is valid
+      if (OB_UNLIKELY(!elem.is_valid())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("element is invalid", K(ret), K(elem));
+      }
+
+      //print separate chars between elements
+      if (OB_SUCC(ret)) {
+        int64_t separate_chars_len = elem.offset_ - last_elem_end_pos;
+        if (separate_chars_len > 0) {
+          ret = str_write_buf(buf, buf_len, pos, format_begin_ptr + last_elem_end_pos, separate_chars_len);
+        }
+        last_elem_end_pos = elem.offset_ + ObDFMUtil::get_element_len(elem);
+      }
+
+      //print current elem
+      if (OB_SUCC(ret)) {
+        switch (elem.elem_flag_) {
+          case ObDFMFlag::AD:
+          case ObDFMFlag::BC: { //TODO wjh: NLS_LANGUAGE
+            const ObTimeConstStr &target_str = ob_time.parts_[DT_YEAR] > 0 ? ObDFMFlag::PATTERN[ObDFMFlag::AD] : ObDFMFlag::PATTERN[ObDFMFlag::BC];
+            ret = ObDFMUtil::special_mode_sprintf(buf, buf_len, pos, target_str, elem.upper_case_mode_);
+            break;
+          }
+          case ObDFMFlag::AD2:
+          case ObDFMFlag::BC2: { //TODO wjh: NLS_LANGUAGE
+            const ObTimeConstStr &str = ob_time.parts_[DT_YEAR] > 0 ? ObDFMFlag::PATTERN[ObDFMFlag::AD2] : ObDFMFlag::PATTERN[ObDFMFlag::BC2];
+            ret = ObDFMUtil::special_mode_sprintf(buf, buf_len, pos, str, elem.upper_case_mode_);
+            break;
+          }
+          case ObDFMFlag::CC: {
+            ret = data_fmt_nd(buf, buf_len, pos, 2, (abs(ob_time.parts_[DT_YEAR]) + 99) / 100, fm_flag);
+            break;
+          }
+          case ObDFMFlag::SCC: {
+            char symbol = ob_time.parts_[DT_YEAR] > 0 ? ' ' : '-';
+            if (OB_FAIL(str_write_buf(buf, buf_len, pos, &symbol, 1))) {
+            } else if (OB_FAIL(data_fmt_nd(buf, buf_len, pos, 2, (abs(ob_time.parts_[DT_YEAR]) + 99) / 100, fm_flag))) {
+            }
+            break;
+          }
+          case ObDFMFlag::D: {
+            ret = data_fmt_d(buf, buf_len, pos, ob_time.parts_[DT_WDAY] % 7 + 1);
+            break;
+          }
+          case ObDFMFlag::DAY: {  //TODO wjh: NLS_LANGUAGE
+            const ObTimeConstStr &day_str = WDAY_NAMES[ob_time.parts_[DT_WDAY]];
+            ret = ObDFMUtil::special_mode_sprintf(buf, buf_len, pos, day_str, elem.upper_case_mode_, fm_flag ? -1 : MAX_WDAY_NAME_LENGTH);
+            break;
+          }
+          case ObDFMFlag::DD: {
+            ret = data_fmt_nd(buf, buf_len, pos, 2, ob_time.parts_[DT_MDAY], fm_flag);
+            break;
+          }
+          case ObDFMFlag::DDD: {
+            ret = data_fmt_nd(buf, buf_len, pos, 3, ob_time.parts_[DT_YDAY], fm_flag);
+            break;
+          }
+          case ObDFMFlag::DY: {  //TODO wjh: 1. NLS_LANGUAGE
+            const ObTimeConstStr &day_str = WDAY_ABBR_NAMES[ob_time.parts_[DT_WDAY]];
+            ret = ObDFMUtil::special_mode_sprintf(buf, buf_len, pos, day_str, elem.upper_case_mode_, fm_flag ? -1 : MAX_WDAY_ABBR_NAME_LENGTH);
+            break;
+          }
+          case ObDFMFlag::DS: {  //TODO wjh: 1. NLS_TERRITORY 2. NLS_LANGUAGE
+            char symbol = '/';
+            if (OB_FAIL(data_fmt_nd(buf, buf_len, pos, 2, ob_time.parts_[DT_MON], !fm_flag))) {
+            } else if (OB_FAIL(str_write_buf(buf, buf_len, pos, &symbol, 1))) {
+            } else if (OB_FAIL(data_fmt_nd(buf, buf_len, pos, 2, ob_time.parts_[DT_MDAY], !fm_flag))) {
+            } else if (OB_FAIL(str_write_buf(buf, buf_len, pos, &symbol, 1))) {
+            } else if (OB_FAIL(data_fmt_nd(buf, buf_len, pos, 4, ob_time.parts_[DT_YEAR], !fm_flag))) {
+            }
+            break;
+          }
+          case ObDFMFlag::DL: { //TODO wjh: 1. NLS_DATE_FORMAT 2. NLS_TERRITORY 3. NLS_LANGUAGE
+            const ObTimeConstStr &wday_str = WDAY_NAMES[ob_time.parts_[DT_WDAY]];
+            const ObTimeConstStr &mon_str = MON_NAMES[ob_time.parts_[DT_MON]];
+            if (OB_FAIL(str_write_buf(buf, buf_len, pos, wday_str.ptr_, wday_str.len_))) {
+            } else if (OB_FAIL(str_write_buf(buf, buf_len, pos, STRING_WITH_LEN(", ")))) {
+            } else if (OB_FAIL(str_write_buf(buf, buf_len, pos, mon_str.ptr_, mon_str.len_))) {
+            } else if (OB_FAIL(str_write_buf(buf, buf_len, pos, STRING_WITH_LEN(" ")))) {
+            } else if (OB_FAIL(data_fmt_nd(buf, buf_len, pos, 2, ob_time.parts_[DT_MDAY], !fm_flag))) {
+            } else if (OB_FAIL(str_write_buf(buf, buf_len, pos, STRING_WITH_LEN(", ")))){
+            } else if (OB_FAIL(data_fmt_nd(buf, buf_len, pos, 4, ob_time.parts_[DT_YEAR], !fm_flag))) {
+            }
+            break;
+          }
+          case ObDFMFlag::FF: {
+            if (0 == scale) {
+              // print nothing
+            } else {
+              // scn_to_str uses nanosecond timestamp mode.
+              int adjusted_scale_factor = (HAS_TYPE_NANOSECOND(ob_time.mode_)
+                       ? MAX_SCALE_FOR_EXTENDED_TEMPORAL : MAX_SCALE_FOR_TEMPORAL) - scale;
+              ret = data_fmt_nd(buf, buf_len, pos, scale,
+                                ob_time.parts_[DT_USEC] /
+                                    power_of_10[adjusted_scale_factor],
+                                fm_flag);
+            }
+            break;
+          }
+          case ObDFMFlag::FF1:
+          case ObDFMFlag::FF2:
+          case ObDFMFlag::FF3:
+          case ObDFMFlag::FF4:
+          case ObDFMFlag::FF5:
+          case ObDFMFlag::FF6:
+          case ObDFMFlag::FF7:
+          case ObDFMFlag::FF8:
+          case ObDFMFlag::FF9: {
+            int64_t scale = elem.elem_flag_ - ObDFMFlag::FF1 + 1;
+            if (!(HAS_TYPE_NANOSECOND(ob_time.mode_)) &&
+                elem.elem_flag_ > ObDFMFlag::FF6) {
+              ret = OB_INVALID_DATE_FORMAT;
+              LOG_WARN("max scale of timestamp in mysql mode is 6", K(elem.elem_flag_));
+            } else {
+              int adjust_max_scale =
+                  HAS_TYPE_NANOSECOND(ob_time.mode_)
+                      ? MAX_SCALE_FOR_EXTENDED_TEMPORAL
+                      : MAX_SCALE_FOR_TEMPORAL;
+              ret = data_fmt_nd(buf, buf_len, pos, scale,
+                                ob_time.parts_[DT_USEC] /
+                                    power_of_10[adjust_max_scale - scale]);
+            }
+            break;
+          }
+          case ObDFMFlag::HH:
+          case ObDFMFlag::HH12: {
+            int32_t h = ob_time.parts_[DT_HOUR] % 12;
+            if (0 == h) {
+              h = 12;
+            }
+            ret = data_fmt_nd(buf, buf_len, pos, 2, h, fm_flag);
+            break;
+          }
+          case ObDFMFlag::HH24: {
+            int32_t h = ob_time.parts_[DT_HOUR];
+            ret = data_fmt_nd(buf, buf_len, pos, 2, h, fm_flag);
+            break;
+          }
+          case ObDFMFlag::IW: {
+            calc_iso_week();
+            ret = data_fmt_nd(buf, buf_len, pos, 2, iso_week, fm_flag);
+            break;
+          }
+          case ObDFMFlag::LITERAL: {
+            ret = ObDFMUtil::print_literal(buf, buf_len, pos, elem, format);
+            break;
+          }
+          case ObDFMFlag::J: {
+            const int32_t base_julian_day = 2378497;    // julian day of 1800-01-01
+            const int32_t base_date = -62091;           //ob_time.parts_[DT_DATE] of 1800-01-01
+            if (ob_time.parts_[DT_DATE] < base_date) {
+              ret = OB_NOT_SUPPORTED;
+            } else {
+              int32_t julian_day = base_julian_day + ob_time.parts_[DT_DATE] - base_date;
+              ret = data_fmt_nd(buf, buf_len, pos, 7, julian_day, fm_flag);
+            }
+            break;
+          }
+          case ObDFMFlag::MI: {
+            ret = data_fmt_nd(buf, buf_len, pos, 2, ob_time.parts_[DT_MIN], fm_flag);
+            break;
+          }
+          case ObDFMFlag::MM: {
+            ret = data_fmt_nd(buf, buf_len, pos, 2, ob_time.parts_[DT_MON], fm_flag);
+            break;
+          }
+          case ObDFMFlag::MONTH: {
+            const ObTimeConstStr &mon_str = MON_NAMES[ob_time.parts_[DT_MON]];
+            ret = ObDFMUtil::special_mode_sprintf(buf, buf_len, pos, mon_str, elem.upper_case_mode_, fm_flag ? -1 : MAX_MON_NAME_LENGTH);
+            break;
+          }
+          case ObDFMFlag::MON: {
+            const ObTimeConstStr &mon_str = MON_ABBR_NAMES[ob_time.parts_[DT_MON]];
+            ret = ObDFMUtil::special_mode_sprintf(buf, buf_len, pos, mon_str, elem.upper_case_mode_, fm_flag ? -1 : MAX_WDAY_ABBR_NAME_LENGTH);
+            break;
+          }
+          case ObDFMFlag::AM:
+          case ObDFMFlag::PM: {
+            const ObTimeConstStr &str = ob_time.parts_[DT_HOUR] >= 12 ?
+                  ObDFMFlag::PATTERN[ObDFMFlag::PM] : ObDFMFlag::PATTERN[ObDFMFlag::AM];
+            ret = ObDFMUtil::special_mode_sprintf(buf, buf_len, pos, str, elem.upper_case_mode_);
+            break;
+          }
+          case ObDFMFlag::AM2:
+          case ObDFMFlag::PM2: {
+            const ObTimeConstStr &str = ob_time.parts_[DT_HOUR] >= 12 ?
+                  ObDFMFlag::PATTERN[ObDFMFlag::PM2] : ObDFMFlag::PATTERN[ObDFMFlag::AM2];
+            ret = ObDFMUtil::special_mode_sprintf(buf, buf_len, pos, str, elem.upper_case_mode_);
+            break;
+          }
+          case ObDFMFlag::Q: {
+            ret = data_fmt_d(buf, buf_len, pos, (ob_time.parts_[DT_MON] + 2) / 3);
+
+            break;
+          }
+          case ObDFMFlag::RR: {
+            ret = data_fmt_nd(buf, buf_len, pos, 2, (ob_time.parts_[DT_YEAR]) % 100, fm_flag);
+            break;
+          }
+          case ObDFMFlag::RRRR: {
+            ret = data_fmt_nd(buf, buf_len, pos, 4, ob_time.parts_[DT_YEAR], fm_flag);
+            break;
+          }
+          case ObDFMFlag::SS: {
+            ret = data_fmt_nd(buf, buf_len, pos, 2, ob_time.parts_[DT_SEC], fm_flag);
+            break;
+          }
+          case ObDFMFlag::SSSSS: {
+            ret = data_fmt_nd(buf, buf_len, pos, 5, ob_time.parts_[DT_HOUR] * 3600 + ob_time.parts_[DT_MIN] * 60 + ob_time.parts_[DT_SEC], fm_flag);
+            break;
+          }
+          case ObDFMFlag::WW: {  //the first complete week of a year
+            ret = data_fmt_nd(buf, buf_len, pos, 2, (ob_time.parts_[DT_YDAY] - 1) / 7 + 1, fm_flag);
+            break;
+          }
+          case ObDFMFlag::W: {  //the first complete week of a month
+            ret = data_fmt_d(buf, buf_len, pos, (ob_time.parts_[DT_MDAY] - 1) / 7 + 1);
+            break;
+          }
+          case ObDFMFlag::YGYYY: {
+            if (OB_FAIL(data_fmt_d(buf, buf_len, pos, abs(ob_time.parts_[DT_YEAR]) / 1000))) {
+            } else if (OB_FAIL(str_write_buf(buf, buf_len, pos, STRING_WITH_LEN(",")))) {
+            } else if (OB_FAIL(data_fmt_nd(buf, buf_len, pos, 3, abs(ob_time.parts_[DT_YEAR]) % 1000, fm_flag))) {
+            }
+            break;
+          }
+          case ObDFMFlag::YEAR: {
+            ret = OB_NOT_SUPPORTED;
+            break;
+          }
+          case ObDFMFlag::SYEAR: {
+            ret = OB_NOT_SUPPORTED;
+            break;
+          }
+          case ObDFMFlag::SYYYY: {
+            char sign = ob_time.parts_[DT_YEAR] < 0 ? '-' : ' ';
+            if (OB_FAIL(str_write_buf(buf, buf_len, pos, &sign, 1))) {
+            } else if (OB_FAIL(data_fmt_nd(buf, buf_len, pos, 4, abs(ob_time.parts_[DT_YEAR]), fm_flag))) {
+            }
+            break;
+          }
+          case ObDFMFlag::YYYY: {
+            ret = data_fmt_nd(buf, buf_len, pos, 4, abs(ob_time.parts_[DT_YEAR]), fm_flag);
+            break;
+          }
+          case ObDFMFlag::YYY: {
+            ret = data_fmt_nd(buf, buf_len, pos, 3, abs(ob_time.parts_[DT_YEAR] % 1000), fm_flag);
+            break;
+          }
+          case ObDFMFlag::YY: {
+            ret = data_fmt_nd(buf, buf_len, pos, 2, abs(ob_time.parts_[DT_YEAR] % 100), fm_flag);
+            break;
+          }
+          case ObDFMFlag::Y: {
+            ret = data_fmt_nd(buf, buf_len, pos, 1, abs(ob_time.parts_[DT_YEAR] % 10), fm_flag);
+            break;
+          }
+          case ObDFMFlag::IYYY: {
+            calc_iso_week();
+            ret = data_fmt_nd(buf, buf_len, pos, 4, abs(ob_time.parts_[DT_YEAR] + iso_year_delta), fm_flag);
+            break;
+          }
+          case ObDFMFlag::IYY: {
+            calc_iso_week();
+            ret = data_fmt_nd(buf, buf_len, pos, 3, abs((ob_time.parts_[DT_YEAR] + iso_year_delta) % 1000), fm_flag);
+            break;
+          }
+          case ObDFMFlag::IY: {
+            calc_iso_week();
+            ret = data_fmt_nd(buf, buf_len, pos, 2, abs((ob_time.parts_[DT_YEAR] + iso_year_delta) % 100), fm_flag);
+            break;
+          }
+          case ObDFMFlag::I: {
+            calc_iso_week();
+            ret = data_fmt_nd(buf, buf_len, pos, 1, abs((ob_time.parts_[DT_YEAR] + iso_year_delta) % 10), fm_flag);
+            break;
+          }
+          case ObDFMFlag::TZD: {
+            if (OB_UNLIKELY(!HAS_TYPE_NANOSECOND(ob_time.mode_))) {
+              ret = OB_INVALID_DATE_FORMAT;
+            } else if (OB_LIKELY(ob_time.time_zone_id_ != OB_INVALID_INDEX)) {
+              const ObString &tzd_str = ob_time.get_tzd_abbr_str();
+              ret = str_write_buf(buf, buf_len, pos, tzd_str.ptr(), tzd_str.length());
+            } else {
+              //do nothing
+            }
+            break;
+          }
+          case ObDFMFlag::TZR: {
+            if (OB_UNLIKELY(!HAS_TYPE_NANOSECOND(ob_time.mode_))) {
+              ret = OB_INVALID_DATE_FORMAT;
+            } else if (OB_LIKELY(ob_time.time_zone_id_ != OB_INVALID_INDEX)) {
+              const ObString &tzr_str = ob_time.get_tz_name_str();
+              ret = str_write_buf(buf, buf_len, pos, tzr_str.ptr(), tzr_str.length());
+            } else {
+              char sign = ob_time.parts_[DT_OFFSET_MIN] < 0 ? '-' : '+';
+              if (OB_FAIL(str_write_buf(buf, buf_len, pos, &sign, 1))) {
+              } else if (OB_FAIL(data_fmt_nd(buf, buf_len, pos, 2, abs(ob_time.parts_[DT_OFFSET_MIN]) / 60))) {
+              } else if (OB_FAIL(str_write_buf(buf, buf_len, pos, STRING_WITH_LEN(":")))) {
+              } else if (OB_FAIL(data_fmt_nd(buf, buf_len, pos, 2, abs(ob_time.parts_[DT_OFFSET_MIN]) % 60))) {
+              }
+            }
+            break;
+          }
+          case ObDFMFlag::TZH: {
+            if (OB_UNLIKELY(!HAS_TYPE_TIMEZONE(ob_time.mode_))) {
+              ret = OB_INVALID_DATE_FORMAT;
+            } else {
+              char sign = ob_time.parts_[DT_OFFSET_MIN] < 0 ? '-' : '+';
+              if (OB_FAIL(str_write_buf(buf, buf_len, pos, &sign, 1))) {
+              } else if (OB_FAIL(data_fmt_nd(buf, buf_len, pos, 2, abs(ob_time.parts_[DT_OFFSET_MIN]) / 60, fm_flag))) {
+              }
+            }
+            break;
+          }
+          case ObDFMFlag::TZM: {
+            if (OB_UNLIKELY(!HAS_TYPE_TIMEZONE(ob_time.mode_))) {
+              ret = OB_INVALID_DATE_FORMAT;
+            } else {
+              ret = data_fmt_nd(buf, buf_len, pos, 2, abs(ob_time.parts_[DT_OFFSET_MIN]) % 60, fm_flag);
+            }
+            break;
+          }
+          case ObDFMFlag::X: {
+            if (scale > 0) {
+              ret = str_write_buf(buf, buf_len, pos, STRING_WITH_LEN("."));
+            }
+            break;
+          }
+          case ObDFMFlag::FM: {
+            fm_flag = true;
+            break;
+          }
+          default: {
+            ret = OB_INVALID_DATE_FORMAT;
+            LOG_WARN("unknown elem", K(ret), K(elem));
+            break;
+          }
+        } //end switch
+        if (OB_FAIL(ret)) {
+          LOG_WARN("failed to print buf", K(elem), K(ret));
+        }
+      } //end if
+    }//end for
+
+    if (OB_SUCC(ret)) {
+      //print the rest separate chars
+      int64_t separate_chars_len = format.length() - last_elem_end_pos;
+      if (separate_chars_len > 0) {
+        if (OB_FAIL(str_write_buf(buf, buf_len, pos,
+                                  format_begin_ptr + last_elem_end_pos, separate_chars_len))) {
+          LOG_WARN("failed to print otimestamp", "buf", ObString(pos, buf), K(ret));
+        }
+      }
+      LOG_DEBUG("succ to print otimestamp", "buf", ObString(pos, buf), K(ret));
+    }
+
+    if (OB_UNLIKELY(OB_SIZE_OVERFLOW == ret)) {
+      int ori_ret = ret;
+      ret = OB_ERR_DATE_FORMAT_IS_TOO_LONG_FOR_INTERNAL_BUFFER;
+      LOG_WARN("data format is to long for internal buffer", K(ret), K(ori_ret));
+    }
+  }//end if
+  return ret;
+}
+
+int ObTimeConverter::deduce_max_len_from_datetime_format(const ObString &format,
+                                                         int64_t &max_char_len)
+{
+  int ret = OB_SUCCESS;
+  max_char_len = 0;
+  if(OB_UNLIKELY(format.empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("format is empty", K(ret));
+  }
+  if (OB_SUCC(ret)) {
+    int64_t last_elem_end_pos = 0;
+    ObSEArray<ObDFMElem, ObDFMUtil::COMMON_ELEMENT_NUMBER> dfm_elems;
+    // Parse elements from format string
+    if (OB_FAIL(ObDFMUtil::parse_datetime_format_string(format, dfm_elems))) {
+      LOG_WARN("parse_datetime_format_string failed", K(ret), K(format));
+    }
+    // accumulate max length for each element
+    for (int i = 0; OB_SUCC(ret) && i < dfm_elems.count(); ++i) {
+      ObDFMElem &elem = dfm_elems.at(i);
+      if (OB_UNLIKELY(!elem.is_valid())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("elem is invalid", K(ret), K(elem));
+      }
+      // Separate chars between elements
+      if (OB_SUCC(ret)) {
+        int64_t separate_chars_len = elem.offset_ - last_elem_end_pos;
+        if (separate_chars_len > 0) {
+          max_char_len += separate_chars_len;
+        }
+        last_elem_end_pos = elem.offset_ + ObDFMUtil::get_element_len(elem);
+      }
+      // Check every elem
+      if (OB_UNLIKELY(elem.elem_flag_ <= ObDFMFlag::INVALID_FLAG
+                      || elem.elem_flag_ >= ObDFMFlag::MAX_FLAG_NUMBER)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("elem_flag_ is invalid", K(ret), K(elem.elem_flag_));
+      } else {
+        max_char_len += ObDFMUtil::get_element_max_len(elem);
+      }
+    }
+    // Rest separate chars
+    if (OB_SUCC(ret)) {
+      int64_t separate_chars_len = format.length() - last_elem_end_pos;
+      if (separate_chars_len > 0) {
+        max_char_len += separate_chars_len;
+      }
+    }
+    if (OB_UNLIKELY(OB_SIZE_OVERFLOW == ret)) {
+      int ori_ret = ret;
+      ret = OB_ERR_DATE_FORMAT_IS_TOO_LONG_FOR_INTERNAL_BUFFER;
+      LOG_WARN("data format is to long for internal buffer", K(ret), K(ori_ret));
+    }
+  }
+  LOG_DEBUG("deduce max len from datetime format", K(format), K(max_char_len));
   return ret;
 }
 
@@ -4274,6 +5588,10 @@ OB_INLINE int ObTimeConverter::validate_year(int64_t year)
 }
 
 // Check whether a datetime format is deterministic, which means result is not effected by current time.
+// For example, 'mm-dd' is not complete, since it uses current year as default value.
+// 'yyyy-mm' is complete, since it uses first day of the month as default value.
+// If it's a format of timestamp with time zone, tzr or tzh+tzm is also necessary.
+
 int32_t ObTimeConverter::get_days_of_month(int32_t year, int32_t month)
 {
   int32_t res = DT_PART_MAX[DT_MDAY];
@@ -4282,6 +5600,68 @@ int32_t ObTimeConverter::get_days_of_month(int32_t year, int32_t month)
     res = DAYS_PER_MON[IS_LEAP_YEAR(year)][month];
   }
   return res;
+}
+
+int ObTimeConverter::set_ob_time_part_directly(ObTime &ob_time, int64_t &conflict_bitset, const int64_t part_offset, const int32_t part_value)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(part_offset >= TOTAL_PART_CNT)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    ob_time.parts_[part_offset] = part_value;
+    conflict_bitset |= (1 << part_offset);
+  }
+  return ret;
+}
+
+
+/*
+ * element group may cause conflict on parts in ob_time
+ * 1. SSSSS vs HH, HH24, HH12, MI, SS
+ * 2. DDD vs DD MM/Mon/Month
+ *
+ * while call this function, the part_value must be the final value
+ */
+int ObTimeConverter::set_ob_time_part_may_conflict(ObTime &ob_time, int64_t &conflict_bitset, const int64_t part_offset, const int32_t part_value)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(part_offset >= TOTAL_PART_CNT)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(part_offset));
+  } else {
+    if (0 != (conflict_bitset & (1 << part_offset))) {
+      //already has data in ob_time.part_[part_name], validate it
+      if (OB_UNLIKELY(part_value != ob_time.parts_[part_offset])) {
+        ret = get_datetime_part_conflict_error(part_offset);
+        LOG_WARN("set time conflict", K(ret), K(part_offset), K(part_value), K(ob_time));
+      }
+    } else {
+      conflict_bitset |= (1 << part_offset);
+      ob_time.parts_[part_offset] = part_value;
+    }
+  }
+
+  return ret;
+}
+// The assignment of DT_YEAR does not use the above interface because the conflict check for year has special characteristics.
+// Specific reason:
+int ObTimeConverter::set_ob_time_year_may_conflict(ObTime &ob_time, int32_t &julian_year_value,
+                                                  int32_t check_year, int32_t set_year,
+                                                  bool overwrite)
+{
+  int ret = OB_SUCCESS;
+  if (ZERO_DATE != julian_year_value) {
+    if (julian_year_value != check_year) {
+      ret = OB_ERR_YEAR_CONFLICTS_WITH_JULIAN_DATE;
+      LOG_WARN("year conflicts with Julian date", K(ret), K(julian_year_value), K(check_year));
+    } else if (overwrite) {
+      ob_time.parts_[DT_YEAR] = set_year;
+    }
+  } else {
+    ob_time.parts_[DT_YEAR] = set_year;
+    julian_year_value = check_year;
+  }
+  return ret;
 }
 
 int ObTimeConverter::time_overflow_trunc(int64_t &value, const ObScale &time_scale)
@@ -4710,6 +6090,32 @@ int ObTimeConverter::get_str_array_idx(const ObString &str, const ObTimeConstStr
   return ret;
 }
 
+void ObTimeConverter::get_first_day_of_isoyear(ObTime &ob_time)
+{
+  int32_t wday = ob_time.parts_[DT_WDAY];
+  int32_t week = ob_time_to_week(ob_time, WEEK_MODE[3]);
+  int32_t offset = ((week - 1) * 7 + (wday - 1));
+  ob_time.parts_[DT_DATE] -= offset;
+}
+
+int ObTimeConverter::get_round_day_of_isoyear(ObTime &ob_time)
+{
+  int ret = OB_SUCCESS;
+  int32_t wday = ob_time.parts_[DT_WDAY];
+
+  int32_t week = ob_time_to_week(ob_time, WEEK_MODE[3]);
+  int32_t offset = ((week - 1) * 7 + (wday - 1));
+  const int32_t add_day = (ob_time.parts_[DT_MON] > DT_PART_MAX[DT_MON] / 2 ? 1 : 0);
+  int32_t days = ob_time.parts_[DT_DATE] - offset + add_day * DAYS_PER_YEAR[IS_LEAP_YEAR(ob_time.parts_[DT_YEAR])];
+
+  if (OB_FAIL(date_to_ob_time(days, ob_time))) {
+    LOG_WARN("failed to convert date part to obtime", K(ret), K(days));
+  } else {
+    get_first_day_of_isoyear(ob_time);
+  }
+  return ret;
+}
+
 bool ObTimeConverter::is_valid_datetime(const int64_t usec)
 {
   bool is_valid = true;
@@ -5005,7 +6411,8 @@ DEF_TO_STRING(ObTime)
 // declaration lives in lib/trace/ob_trace_event.h, so lib/trace no longer depends on common/timezone。
 int trace_event_datetime_to_str(const int64_t ts_us, char *buf, const int64_t buf_len, int64_t &pos)
 {
-  return ObTimeConverter::datetime_to_str(ts_us, nullptr, 6, buf, buf_len, pos);
+  const ObString nls_format;
+  return ObTimeConverter::datetime_to_str(ts_us, nullptr, nls_format, 6, buf, buf_len, pos);
 }
 
 } // namesapce common

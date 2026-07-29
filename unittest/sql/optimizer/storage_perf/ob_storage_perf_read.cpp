@@ -17,48 +17,10 @@
 #include "ob_storage_perf_read.h"
 #include "storage/memtable/ob_memtable_interface.h"
 #include "storage/access/ob_table_scan_iterator.h"
-#include "lib/stat/ob_diagnose_info.h"
 #include "lib/container/ob_se_array_iterator.h"
 #include <stdio.h>
 #include <iostream>
 
-
-#define SESSION_EVENT_GET(stat_no)                                      \
-  ({                                                                    \
-    int64_t ret = 0;                                                    \
-    oceanbase::common::ObDiagnoseSessionInfo *session_info =            \
-        oceanbase::common::ObDiagnoseSessionInfo::get_local_diagnose_info(); \
-    if (NULL != session_info &&                                        \
-        (stat_no) < oceanbase::common::ObStatEventIds::STAT_EVENT_ADD_END) { \
-      oceanbase::common::ObStatEventAddStat *stat =                     \
-          session_info->get_add_stat_stats().get(stat_no);              \
-      if (NULL != stat) {                                               \
-        ret = stat->get_stat_value();                                   \
-      }                                                                 \
-    }                                                                   \
-    ret;                                                                \
-  })
-
-#define GLOBAL_EVENT_GET(stat_no)             \
-  ({                                                \
-      int64_t ret = 0;                              \
-      ObStatEventAddStat *stat = runtime_info_.get_add_stat_stats().get(stat_no); \
-      if (NULL != stat) {         \
-        ret = stat->stat_value_;   \
-      }   \
-      ret; \
-   })
-
-#define GLOBAL_WAIT_GET(stat_no, wait_event)             \
-  ({                                                \
-      ObWaitEventStat *stat = runtime_info_.get_event_stats().get(stat_no); \
-      if (NULL != stat) {         \
-        wait_event.total_waits_ = stat->total_waits_;   \
-        wait_event.total_timeouts_ = stat->total_timeouts_; \
-        wait_event.time_waited_micro_ = stat->time_waited_; \
-        wait_event.max_wait_ = stat->max_wait_;   \
-      }   \
-   })
 
 namespace oceanbase
 {
@@ -148,196 +110,6 @@ int FakePartitionMeta::mark_macro_block(ObMacroBlockMarkerHelper &helper) const
   return ret;
 }
 
-ObStoragePerfWaitEvent::ObStoragePerfWaitEvent(const char *name)
-  : total_waits_(0)
-  , total_timeouts_(0)
-  , time_waited_micro_(0)
-  , max_wait_(0)
-  , average_wait_(0.0)
-{
-  strcpy(name_, name);
-}
-
-ObStoragePerfWaitEvent ObStoragePerfWaitEvent::operator - (const ObStoragePerfWaitEvent &event)
-{
-  ObStoragePerfWaitEvent res(event.name_);
-  res.total_waits_ = total_waits_ - event.total_waits_;
-  res.total_timeouts_ = total_timeouts_ - event.total_timeouts_;
-  res.time_waited_micro_ = time_waited_micro_ - event.time_waited_micro_;
-  res.max_wait_ = max_wait_;
-  if (res.total_waits_ != 0)
-    res.average_wait_ = static_cast<double>(res.time_waited_micro_) / static_cast<double>(res.total_waits_);
-  else
-    res.average_wait_ = 0.0;
-  return res;
-}
-
-void ObStoragePerfWaitEvent::reset()
-{
-  total_waits_ = 0;
-  total_timeouts_ = 0;
-  time_waited_micro_ = 0;
-  max_wait_ = 0;
-  average_wait_ = 0.0;
-}
-
-int64_t ObStoragePerfWaitEvent::to_string(char *buf, const int64_t buf_len) const
-{
-  int64_t pos = 0;
-  databuff_printf(buf, buf_len, pos,
-                 "PerfStat: %s:\n"
-                 "PerfStat: total_waits_ = %lu, total_timeouts_ = %lu\n"
-                 "PerfStat: time_waited_micro_ = %lu, average_wait_ = %.2f, max_wait_ = %lu\n",
-                 name_,
-                 total_waits_, total_timeouts_,
-                 time_waited_micro_, average_wait_, max_wait_);
-  return pos;
-}
-
-ObStoragePerfStatistics::ObStoragePerfStatistics()
-    : index_cache_hit_(0)
-    , index_cache_miss_(0)
-    , row_cache_hit_(0)
-    , row_cache_miss_(0)
-    , block_cache_hit_(0)
-    , block_cache_miss_(0)
-    , bf_cache_hit_(0)
-    , bf_cache_miss_(0)
-    , io_read_count_(0)
-    , io_read_size_(0)
-    , io_read_delay_(0)
-    , io_read_queue_delay_(0)
-    , io_read_cb_alloc_delay_(0)
-    , io_read_cb_process_delay_(0)
-    , io_read_prefetch_micro_cnt_(0)
-    , io_read_prefetch_micro_size_(0)
-    , io_read_uncomp_micro_cnt_(0)
-    , io_read_uncomp_micro_size_(0)
-    , db_file_data_read_("db_file_data_read_")
-    , db_file_data_index_read_("db_file_data_index_read_")
-    , kv_cache_bucket_lock_wait_("kv_cache_bucket_lock_wait_")
-    , io_queue_lock_wait_("io_queue_lock_wait_")
-    , io_controller_cond_wait_("io_controller_cond_wait_")
-    , io_processor_cond_wait_("io_processor_cond_wait_")
-{
-}
-
-void ObStoragePerfStatistics::reset()
-{
-  index_cache_hit_ = 0;
-  index_cache_miss_ = 0;
-  row_cache_hit_ = 0;
-  row_cache_miss_ = 0;
-  block_cache_hit_ = 0;
-  block_cache_miss_ = 0;
-  io_read_count_ = 0;
-  io_read_size_ = 0;
-  io_read_delay_ = 0;
-  io_read_queue_delay_ = 0;
-  io_read_cb_alloc_delay_ = 0;
-  io_read_cb_process_delay_ = 0;
-  io_read_prefetch_micro_cnt_ = 0;
-  io_read_prefetch_micro_size_ = 0;
-  io_read_uncomp_micro_cnt_ = 0;
-  io_read_uncomp_micro_size_ = 0;
-  db_file_data_read_.reset();
-  db_file_data_index_read_.reset();
-  kv_cache_bucket_lock_wait_.reset();
-  io_queue_lock_wait_.reset();
-  io_controller_cond_wait_.reset();
-  io_processor_cond_wait_.reset();
-}
-
-ObStoragePerfStatistics ObStoragePerfStatistics::operator - (const ObStoragePerfStatistics &statics)
-{
-  ObStoragePerfStatistics res;
-  res.index_cache_hit_ = index_cache_hit_ - statics.index_cache_hit_;
-  res.index_cache_miss_ = index_cache_miss_ - statics.index_cache_miss_;
-  res.row_cache_hit_ = row_cache_hit_ - statics.row_cache_hit_;
-  res.row_cache_miss_ = row_cache_miss_ - statics.row_cache_miss_;
-  res.block_cache_hit_ = block_cache_hit_ - statics.block_cache_hit_;
-  res.block_cache_miss_ = block_cache_miss_ - statics.block_cache_miss_;
-  res.bf_cache_hit_ = bf_cache_hit_ - statics.bf_cache_hit_;
-  res.bf_cache_miss_ = bf_cache_miss_ - statics.bf_cache_miss_;
-  res.io_read_count_ = io_read_count_ - statics.io_read_count_;
-  res.io_read_size_ = io_read_size_ - statics.io_read_size_;
-  res.io_read_delay_ = io_read_delay_ - statics.io_read_delay_;
-  res.io_read_queue_delay_ = io_read_queue_delay_ - statics.io_read_queue_delay_;
-  res.io_read_cb_alloc_delay_ = io_read_cb_alloc_delay_ - statics.io_read_cb_alloc_delay_;
-  res.io_read_cb_process_delay_ = io_read_cb_process_delay_ - statics.io_read_cb_process_delay_;
-  res.io_read_prefetch_micro_cnt_ = io_read_prefetch_micro_cnt_ - statics.io_read_prefetch_micro_cnt_;
-  res.io_read_prefetch_micro_size_ = io_read_prefetch_micro_size_ - statics.io_read_prefetch_micro_size_;
-  res.io_read_uncomp_micro_cnt_ = io_read_uncomp_micro_cnt_ - statics.io_read_uncomp_micro_cnt_;
-  res.io_read_uncomp_micro_size_ = io_read_uncomp_micro_size_ - statics.io_read_uncomp_micro_size_;
-  res.db_file_data_read_ = db_file_data_read_ - statics.db_file_data_read_;
-  res.db_file_data_index_read_ = db_file_data_index_read_ - statics.db_file_data_index_read_;
-  res.kv_cache_bucket_lock_wait_ = kv_cache_bucket_lock_wait_ - statics.kv_cache_bucket_lock_wait_;
-  res.io_queue_lock_wait_ = io_queue_lock_wait_ - statics.io_queue_lock_wait_;
-  res.io_controller_cond_wait_ = io_controller_cond_wait_ - statics.io_controller_cond_wait_;
-  res.io_processor_cond_wait_ = io_processor_cond_wait_ - statics.io_processor_cond_wait_;
-
-  return res;
-}
-
-int64_t ObStoragePerfStatistics::to_string(char *buf, const int64_t buf_len) const
-{
-  int64_t pos = 0;
-
-  uint64_t total_deply = io_read_delay_ + io_read_queue_delay_
-        + io_read_cb_alloc_delay_ + 8 * io_read_cb_process_delay_;
-
-  uint64_t avg_deply = io_read_count_ == 0 ? total_deply : total_deply / io_read_count_;
-
-
-  databuff_printf(buf, buf_len, pos,
-                  "PerfStat: index_cache_hit_ = %lu , index_cache_miss_ = %lu ,\n"
-                  "PerfStat: row_cache_hit_ = %lu , row_cache_miss_ = %lu ,\n"
-                  "PerfStat: block_cache_hit_ = %lu , block_cache_miss_ = %lu ,\n"
-                  "PerfStat: bf_cache_hit_ = %lu , bf_cache_miss_ = %lu ,\n"
-                  "PerfStat: io_read_count_ = %lu , io_read_size_ = %lu , io_read_delay_ = %lu, io_read_queue_delay = %lu, \n"
-                  "PerfStat: io_read_cb_alloc_delay = %lu, io_read_cb_process_delay_ = %lu ,\n"
-                  "PerfStat: io_read_prefetch_micro_cnt = %lu, io_read_prefetch_micro_size_ = %lu, \n"
-                  "PerfStat: io_read_uncomp_micro_cnt_ = %lu, io_read_uncomp_micro_size_ = %lu, \n"
-                  "PerfStat: total_delay = %lu, avg_delay = %lu, \n",
-                  index_cache_hit_, index_cache_miss_,
-                  row_cache_hit_, row_cache_miss_,
-                  block_cache_hit_, block_cache_miss_,
-                  bf_cache_hit_, bf_cache_miss_,
-                  io_read_count_, io_read_size_, io_read_delay_, io_read_queue_delay_,
-                  io_read_cb_alloc_delay_, io_read_cb_process_delay_,
-                  io_read_prefetch_micro_cnt_, io_read_prefetch_micro_size_,
-                  io_read_uncomp_micro_cnt_, io_read_uncomp_micro_size_, total_deply, avg_deply);
-  pos += db_file_data_read_.to_string(buf + pos, buf_len - pos);
-  pos += db_file_data_index_read_.to_string(buf + pos, buf_len - pos);
-  pos += kv_cache_bucket_lock_wait_.to_string(buf + pos, buf_len - pos);
-  pos += io_queue_lock_wait_.to_string(buf + pos, buf_len- pos);
-  pos += io_controller_cond_wait_.to_string(buf + pos, buf_len - pos);
-  pos += io_processor_cond_wait_.to_string(buf + pos, buf_len - pos);
-  return pos;
-}
-
-ObSingleRowSpeed::ObSingleRowSpeed()
-  : sum_duation_(0)
-  , count_(0)
-{
-
-}
-
-int64_t ObSingleRowSpeed::to_string(char *buf, const int64_t buf_len) const {
-  int64_t pos = 0;
-  databuff_printf(buf, buf_len, pos, "sum_duation_ = %lu us, count_ = %lu , avg_speed = %.4Lf us/row",
-                  sum_duation_, count_, sum_duation_/static_cast<long double>(count_));
-  return pos;
-}
-
-int64_t ObSingleRowSpeed::get_avg() {
-  int64_t ret = 0;
-  if(count_ > 0) {
-    ret = sum_duation_/count_;
-  }
-  return ret;
-}
-
 ObUpdateRowIter::ObUpdateRowIter()
   : seed_(0)
   , is_inited_(false)
@@ -413,7 +185,6 @@ ObStoragePerfRead::ObStoragePerfRead()
  , cache_suite_(NULL)
  , barrier_(NULL)
  , allocator_()
- , runtime_info_()
  , thread_no_(-1)
  , is_inited_(false)
  , ret_(OB_SUCCESS)
@@ -442,8 +213,6 @@ int ObStoragePerfRead::init(ObStoragePerfConfig *config,
   } else if(NULL == config || NULL == cache_suite || NULL == schema_service){
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "argument is NULL", K(config), K(cache_suite));
-  } else if (NULL == (string_buf_ = static_cast<char*>(ob_malloc(MAX_BUF_LENGTH)))) {
-    STORAGE_LOG(WARN, "allocate string buf failed");
   } else {
     config_ = config;
     thread_no_ = thread_no;
@@ -576,16 +345,6 @@ int ObStoragePerfRead::single_get_speed()
               //get one row
               ObNewRowIterator *get_iter = NULL;
               ObNewRow *row = NULL;
-              ObStoragePerfStatistics bef_statics;
-              ObStoragePerfStatistics aft_statics;
-              ObStoragePerfStatistics res_statics;
-              ObStoragePerfStatistics out_bef_statics;
-              ObStoragePerfStatistics out_aft_statics;
-              ObStoragePerfStatistics out_res_statics;
-
-              out_bef_statics.reset();
-              out_aft_statics.reset();
-              out_res_statics.reset();
 
               ObRowkey rk;
               ObNewRange range;
@@ -606,56 +365,37 @@ int ObStoragePerfRead::single_get_speed()
 
               srand(static_cast<unsigned int>(ObTimeUtility::current_time()));
 
-              int64_t total_time = 0;
               int64_t row_count = 0;
               for(int64_t i = 0; OB_SUCC(ret) && i < config_->get_total_single_row_count(); ++i) {
-                out_bef_statics.reset();
-                out_aft_statics.reset();
-                out_res_statics.reset();
                 pthread_barrier_wait(barrier_);
-                if (OB_FAIL(set_global_stat(out_bef_statics))) {
-                  STORAGE_LOG(WARN, "fail to set global stat", K(ret));
+                int64_t single_begin = ObTimeUtility::current_time();
+                if(OB_FAIL(storage_->table_scan(scan_param, get_iter))){
+                  STORAGE_LOG(WARN, "fail to table scan", K(ret));
+                } else if(OB_FAIL(get_iter->get_next_row(row))){
+                  STORAGE_LOG(WARN, "fail to get next row", K(ret));
+                } else if(NULL == row){
+                  ret = OB_ERR_UNEXPECTED;
+                  STORAGE_LOG(WARN, "fail to get next row");
                 } else {
-                  int64_t single_begin = ObTimeUtility::current_time();
-                  if(OB_FAIL(storage_->table_scan(scan_param, get_iter))){
-                    STORAGE_LOG(WARN, "fail to table scan", K(ret));
-                  } else if(OB_FAIL(get_iter->get_next_row(row))){
-                    STORAGE_LOG(WARN, "fail to get next row", K(ret));
-                  } else if(NULL == row){
-                    ret = OB_ERR_UNEXPECTED;
-                    STORAGE_LOG(WARN, "fail to get next row");
-                  } else {
-                    if (config_->print_row_) {
-                      print_row(row, row_count);
+                  if (config_->print_row_) {
+                    print_row(row, row_count);
+                  }
+                  int64_t t = ObTimeUtility::current_time() - single_begin;
+                  pthread_barrier_wait(barrier_);
+                  std::cout << t << std::endl;
+                  if (config_->print_perf_stat_) {
+                    fprintf(stderr, "PerfStat: --- %ld iteration ---\n", i);
+                    fprintf(stderr, "PerfStat: runtime = %ld\n\n", t);
+                    fflush(stderr);
+                  }
+                  if(NULL != get_iter) {//ignore success
+                    if(OB_FAIL(storage_->revert_scan_iter(get_iter))){
+                      STORAGE_LOG(WARN,"fail to revert inter", K(ret));
                     }
-                    int64_t t = ObTimeUtility::current_time() - single_begin;
-                    pthread_barrier_wait(barrier_);
-                    if (OB_FAIL(set_global_stat(out_aft_statics))) {
-                      STORAGE_LOG(WARN, "fail to set global stat", K(ret));
-                    } else {
-                      std::cout << t << std::endl;
-                      total_time += t;
-                      if (config_->print_perf_stat_) {
-                        out_res_statics = out_aft_statics - out_bef_statics;
-                        int64_t pos = out_res_statics.to_string(string_buf_, MAX_BUF_LENGTH);
-                        if (pos < MAX_BUF_LENGTH && pos >= 0) {
-                          string_buf_[pos] = '\0';
-                          fprintf(stderr, "PerfStat: --- %ld iteration ---\n", i );
-                          fprintf(stderr, "PerfStat: runtime = %ld\n", t);
-                          fprintf(stderr, "%s\n\n", string_buf_);
-                          fflush(stderr);
-                        }
-                      }
-                      if(NULL != get_iter) {//ignore success
-                        if(OB_FAIL(storage_->revert_scan_iter(get_iter))){
-                          STORAGE_LOG(WARN,"fail to revert inter", K(ret));
-                        }
-                      }
-                      if (OB_SUCC(ret)) {
-                        if (OB_FAIL(flush_cache_or_not())) {
-                          STORAGE_LOG(WARN,"fail to flush cache", K(ret));
-                        }
-                      }
+                  }
+                  if (OB_SUCC(ret)) {
+                    if (OB_FAIL(flush_cache_or_not())) {
+                      STORAGE_LOG(WARN,"fail to flush cache", K(ret));
                     }
                   }
                 }
@@ -755,17 +495,6 @@ int ObStoragePerfRead::multi_get_speed()
             } else {
               scan_param.trans_desc_ = &trans_desc;
 
-              ObStoragePerfStatistics bef_statics;
-              ObStoragePerfStatistics aft_statics;
-              ObStoragePerfStatistics res_statics;
-              ObStoragePerfStatistics out_bef_statics;
-              ObStoragePerfStatistics out_aft_statics;
-              ObStoragePerfStatistics out_res_statics;
-              ObSingleRowSpeed row_cache_speed;
-              ObSingleRowSpeed block_cache_speed;
-              ObSingleRowSpeed read_one_micro_block_speed;
-              ObSingleRowSpeed read_two_micro_block_speed;
-              ObSingleRowSpeed other_speed;
               int64_t one_run_begin = 0;
 
               const int multi_get_run = config_->get_multi_get_run();
@@ -778,62 +507,47 @@ int ObStoragePerfRead::multi_get_speed()
                 int64_t row_count = 0;
                 int64_t real_row_count = 0;
 
-                out_bef_statics.reset();
-                out_aft_statics.reset();
-                out_res_statics.reset();
-                if (OB_FAIL(set_global_stat(out_bef_statics))) {
-                  STORAGE_LOG(WARN, "failed to get global stat", K(ret));
-                } else {
-                  one_run_begin = ObTimeUtility::current_time();
-                  if(OB_FAIL(storage_->table_scan(scan_param, get_iter))) {
-                    STORAGE_LOG(WARN, "fail to table scan", K(ret));
-                  }
-                  for(real_row_count = 0; OB_SUCCESS == ret; ++real_row_count){
-                    if(OB_FAIL(get_iter->get_next_row(row))){
-                      STORAGE_LOG(WARN, "fail to get next row", K(ret), K(real_row_count));
-                    } else if(NULL == row) {
-                      ret = OB_ERR_UNEXPECTED;
-                      STORAGE_LOG(WARN, "fail to get next row");
-                    } else {
-                      if (config_->print_row_) {
-                        print_row(row, row_count);
-                      }
+                one_run_begin = ObTimeUtility::current_time();
+                if(OB_FAIL(storage_->table_scan(scan_param, get_iter))) {
+                  STORAGE_LOG(WARN, "fail to table scan", K(ret));
+                }
+                for(real_row_count = 0; OB_SUCCESS == ret; ++real_row_count){
+                  if(OB_FAIL(get_iter->get_next_row(row))){
+                    STORAGE_LOG(WARN, "fail to get next row", K(ret), K(real_row_count));
+                  } else if(NULL == row) {
+                    ret = OB_ERR_UNEXPECTED;
+                    STORAGE_LOG(WARN, "fail to get next row");
+                  } else {
+                    if (config_->print_row_) {
+                      print_row(row, row_count);
                     }
                   }
-                  if (OB_ITER_END != ret) {
-                    STORAGE_LOG(WARN,"fail to scan", K(ret));
-                  } else {
-                    ret = OB_SUCCESS;
-                    int64_t one_run_end = ObTimeUtility::current_time();
-                    if (OB_FAIL(set_global_stat(out_aft_statics))) {
-                      STORAGE_LOG(WARN, "failed to get global stat", K(ret));
+                }
+                if (OB_ITER_END != ret) {
+                  STORAGE_LOG(WARN,"fail to scan", K(ret));
+                } else {
+                  ret = OB_SUCCESS;
+                  int64_t one_run_end = ObTimeUtility::current_time();
+                  if(NULL != get_iter) {//igonre ret
+                    if(OB_FAIL(storage_->revert_scan_iter(get_iter))){
+                      STORAGE_LOG(WARN,"fail to revert inter", K(ret));
+                    }
+                  }
+                  if (OB_SUCC(ret)) {
+                    std::cout << real_row_count - 1 << "," << one_run_end - one_run_begin << std::endl;
+                    if (config_->print_perf_stat_) {
+                      fprintf(stderr, "PerfStat: --- %ld iteration, %d run ---\n",
+                              config_->get_multi_get_times() - repeat_times, run);
+                      fprintf(stderr, "PerfStat: runtime = %ld, end = %ld, begin = %ld\n\n",
+                              one_run_end - one_run_begin, one_run_end, one_run_begin);
+                      fflush(stderr);
+                    }
+                    if (OB_FAIL(get_ctx.mem_ctx_->trans_end(true, 1))) {
+                      STORAGE_LOG(WARN,"fail to revert inter", K(ret));
                     } else {
-                      if(NULL != get_iter) {//igonre ret
-                        if(OB_FAIL(storage_->revert_scan_iter(get_iter))){
-                          STORAGE_LOG(WARN,"fail to revert inter", K(ret));
-                        }
-                      }
-                      if (OB_SUCC(ret)) {
-                        std::cout << real_row_count - 1 << "," << one_run_end - one_run_begin << std::endl;
-                        if (config_->print_perf_stat_) {
-                          out_res_statics = out_aft_statics - out_bef_statics;
-                          int64_t pos = out_res_statics.to_string(string_buf_, MAX_BUF_LENGTH);
-                          if (pos < MAX_BUF_LENGTH && pos >= 0) {
-                            string_buf_[pos] = '\0';
-                            fprintf(stderr, "PerfStat: --- %ld iteration, %d run ---\n", config_->get_multi_get_times() - repeat_times, run);
-                            fprintf(stderr, "PerfStat: runtime = %ld, end = %ld, begin = %ld\n", one_run_end - one_run_begin, one_run_end, one_run_begin);
-                            fprintf(stderr, "%s\n\n", string_buf_);
-                            fflush(stderr);
-                          }
-                        }
-                        if (OB_FAIL(get_ctx.mem_ctx_->trans_end(true, 1))) {
-                          STORAGE_LOG(WARN,"fail to revert inter", K(ret));
-                        } else {
-                          mem_ctx_fty.free(get_ctx.mem_ctx_);
-                          if (OB_FAIL(flush_cache_or_not())) {
-                            STORAGE_LOG(WARN,"fail to flush cache", K(ret));
-                          }
-                        }
+                      mem_ctx_fty.free(get_ctx.mem_ctx_);
+                      if (OB_FAIL(flush_cache_or_not())) {
+                        STORAGE_LOG(WARN,"fail to flush cache", K(ret));
                       }
                     }
                   }
@@ -864,11 +578,6 @@ int ObStoragePerfRead::flush_cache_or_not()
   }
   if (OB_SUCC(ret) && config_->flush_row_cache_) {
     if (OB_FAIL(ObKVGlobalCache::get_instance().erase_cache("user_row_cache"))) {
-      STORAGE_LOG(WARN, "failed to flush cache", K(ret));
-    }
-  }
-  if (OB_SUCC(ret) && config_->flush_bf_cache_) {
-    if (OB_FAIL(ObKVGlobalCache::get_instance().erase_cache("bf_cache"))) {
       STORAGE_LOG(WARN, "failed to flush cache", K(ret));
     }
   }
@@ -964,25 +673,7 @@ int ObStoragePerfRead::scan_speed()
                 ObNewRow *row = NULL;
                 int64_t real_count = 0;
 
-                ObStoragePerfStatistics out_bef_statics;
-                ObStoragePerfStatistics out_aft_statics;
-                ObStoragePerfStatistics out_res_statics;
-                ObSingleRowSpeed row_cache_speed;
-                ObSingleRowSpeed block_cache_speed;
-                ObSingleRowSpeed read_one_micro_block_speed;
-                ObSingleRowSpeed read_two_micro_block_speed;
-                ObSingleRowSpeed other_speed;
                 pthread_barrier_wait(barrier_);
-                if (config_->print_perf_stat_) {
-                  if (thread_no_ == 0) {
-                    out_bef_statics.reset();
-                    out_aft_statics.reset();
-                    out_res_statics.reset();
-                    if (OB_FAIL(set_global_stat(out_bef_statics))) {
-                      STORAGE_LOG(WARN, "fail to get global stat", K(ret));
-                    }
-                  }
-                }
                 if (OB_SUCC(ret)) {
                   int64_t total_scan_time = 0;
                   int64_t row_count = 1;
@@ -1011,16 +702,10 @@ int ObStoragePerfRead::scan_speed()
                     if (config_->print_perf_stat_) {
                       if (thread_no_ == 0) {
                         ObStoragePerfConfig::print_bianque_timestamp("scan_end_time", stderr);
-                        set_global_stat(out_aft_statics);
-                        out_res_statics = out_aft_statics - out_bef_statics;
-                        int64_t pos = out_res_statics.to_string(string_buf_, MAX_BUF_LENGTH);
-                        if (pos < MAX_BUF_LENGTH && pos >= 0) {
-                          string_buf_[pos] = '\0';
-                          fprintf(stderr, "PerfStat: --- scan %ld iteration %d run ---\n", config_->get_multi_get_times() - repeat_times, run);
-                          fprintf(stderr, "PerfStat: runtime = %ld\n", total_scan_time);
-                          fprintf(stderr, "%s\n\n", string_buf_);
-                          fflush(stderr);
-                        }
+                        fprintf(stderr, "PerfStat: --- scan %ld iteration %d run ---\n",
+                                config_->get_multi_get_times() - repeat_times, run);
+                        fprintf(stderr, "PerfStat: runtime = %ld\n\n", total_scan_time);
+                        fflush(stderr);
                       }
                     }
 
@@ -1197,106 +882,6 @@ int ObStoragePerfRead::set_trans_desc(ObTransDesc &trans_desc)
     STORAGE_LOG(WARN, "set trans_param error", K(ret));
   } else {
     trans_desc.inc_sql_no();
-  }
-  return ret;
-}
-
-int ObStoragePerfRead::set_global_stat(ObStoragePerfStatistics &statics)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObDIGlobalRuntimeCache::get_instance().get_runtime_info(runtime_info_))) {
-    STORAGE_LOG(WARN, "failed to get runtime diagnostic info", K(ret));
-  } else {
-    statics.row_cache_hit_ = GLOBAL_EVENT_GET(ObStatEventIds::ROW_CACHE_HIT);
-    statics.row_cache_miss_ = GLOBAL_EVENT_GET(ObStatEventIds::ROW_CACHE_MISS);
-    statics.block_cache_hit_ = GLOBAL_EVENT_GET(ObStatEventIds::BLOCK_CACHE_HIT);
-    statics.block_cache_miss_ = GLOBAL_EVENT_GET(ObStatEventIds::BLOCK_CACHE_MISS);
-    statics.bf_cache_hit_ = GLOBAL_EVENT_GET(ObStatEventIds::BLOOM_FILTER_CACHE_HIT);
-    statics.bf_cache_miss_ = GLOBAL_EVENT_GET(ObStatEventIds::BLOOM_FILTER_CACHE_MISS);
-    statics.io_read_count_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_COUNT);
-    statics.io_read_size_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_BYTES);
-    statics.io_read_delay_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_DELAY);
-    statics.io_read_queue_delay_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_QUEUE_DELAY);
-    statics.io_read_cb_alloc_delay_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_CB_ALLOC_DELAY);
-    statics.io_read_cb_process_delay_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_CB_PROCESS_DELAY);
-    statics.io_read_prefetch_micro_cnt_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_PREFETCH_MICRO_COUNT);
-    statics.io_read_prefetch_micro_size_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_PREFETCH_MICRO_BYTES);
-    statics.io_read_uncomp_micro_cnt_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_UNCOMP_MICRO_COUNT);
-    statics.io_read_uncomp_micro_size_ = GLOBAL_EVENT_GET(ObStatEventIds::IO_READ_UNCOMP_MICRO_BYTES);
-
-    // io_read_queue_delay -> cb_alloc_delay -> read_delay -> cb_process_delay
-    GLOBAL_WAIT_GET(ObWaitEventIds::DB_FILE_DATA_READ, statics.db_file_data_read_);
-    GLOBAL_WAIT_GET(ObWaitEventIds::DB_FILE_DATA_INDEX_READ, statics.db_file_data_index_read_);
-    GLOBAL_WAIT_GET(ObWaitEventIds::KV_CACHE_BUCKET_LOCK_WAIT, statics.kv_cache_bucket_lock_wait_);
-    GLOBAL_WAIT_GET(ObWaitEventIds::IO_QUEUE_LOCK_WAIT, statics.io_queue_lock_wait_);
-    GLOBAL_WAIT_GET(ObWaitEventIds::IO_CONTROLLER_COND_WAIT, statics.io_controller_cond_wait_);
-    GLOBAL_WAIT_GET(ObWaitEventIds::IO_PROCESSOR_COND_WAIT, statics.io_processor_cond_wait_);
-  }
-  return ret;
-}
-
-void ObStoragePerfRead::set_statistics(ObStoragePerfStatistics &statics)
-{
-  statics.row_cache_hit_ = SESSION_EVENT_GET(ObStatEventIds::ROW_CACHE_HIT);
-  statics.row_cache_miss_ = SESSION_EVENT_GET(ObStatEventIds::ROW_CACHE_MISS);
-  statics.block_cache_hit_ = SESSION_EVENT_GET(ObStatEventIds::BLOCK_CACHE_HIT);
-  statics.block_cache_miss_ = SESSION_EVENT_GET(ObStatEventIds::BLOCK_CACHE_MISS);
-  statics.io_read_count_ = SESSION_EVENT_GET(ObStatEventIds::IO_READ_COUNT);
-  statics.io_read_size_ = SESSION_EVENT_GET(ObStatEventIds::IO_READ_BYTES);
-  statics.io_read_delay_ = SESSION_EVENT_GET(ObStatEventIds::IO_READ_DELAY);
-  statics.io_read_queue_delay_ = EVENT_TGET(ObStatEventIds::IO_READ_QUEUE_DELAY);
-  statics.io_read_cb_alloc_delay_ = EVENT_TGET(ObStatEventIds::IO_READ_CB_ALLOC_DELAY);
-  statics.io_read_cb_process_delay_ = EVENT_TGET(ObStatEventIds::IO_READ_CB_PROCESS_DELAY);
-  statics.io_read_prefetch_micro_cnt_ = EVENT_TGET(ObStatEventIds::IO_READ_PREFETCH_MICRO_COUNT);
-  statics.io_read_prefetch_micro_size_ = EVENT_TGET(ObStatEventIds::IO_READ_PREFETCH_MICRO_BYTES);
-  statics.io_read_uncomp_micro_cnt_ = EVENT_TGET(ObStatEventIds::IO_READ_UNCOMP_MICRO_COUNT);
-  statics.io_read_uncomp_micro_size_ = EVENT_TGET(ObStatEventIds::IO_READ_UNCOMP_MICRO_BYTES);
-}
-
-bool ObStoragePerfRead::is_row_cache_hit(const ObStoragePerfStatistics &statics, const QueryType type)
-{
-  bool ret = false;
-  if(SCAN == type) {
-    ret = 0 == statics.row_cache_hit_ && 0 == statics.block_cache_miss_ && 0 == statics.block_cache_hit_;
-  } else {
-    ret = statics.row_cache_hit_ > 0;
-  }
-  return ret;
-}
-
-bool ObStoragePerfRead::is_block_cache_hit(const ObStoragePerfStatistics &statics, const QueryType type)
-{
-  bool ret = false;
-  if(SCAN == type) {
-    ret = 0 == statics.row_cache_hit_ && 0 == statics.block_cache_miss_ && 1 == statics.block_cache_hit_ && 1 == statics.io_read_count_;
-  } else if(MULTI_GET == type){
-    ret =  0 == statics.row_cache_hit_ && 1 == statics.block_cache_hit_ && 0 == statics.io_read_delay_;
-  } else {
-    ret =  0 == statics.row_cache_hit_ && statics.block_cache_hit_ > 0 && 0 == statics.io_read_count_;
-  }
-  return ret;
-}
-
-bool ObStoragePerfRead::is_read_one_micro_block(const ObStoragePerfStatistics &statics, const QueryType type) {
-  bool ret = false;
-  if(SCAN == type) {
-    ret = 0 == statics.row_cache_hit_ && 0 == statics.block_cache_hit_ && 1 == statics.io_read_count_ && 0 != statics.io_read_delay_;
-  } else if(MULTI_GET == type){
-    ret = 0 == statics.row_cache_hit_ && 1 == statics.io_read_count_ && 0 != statics.io_read_delay_;
-  } else {
-    ret = 0 == statics.row_cache_hit_ && 1 == statics.io_read_count_ && 0 != statics.io_read_delay_;
-  }
-  return ret;
-}
-
-bool ObStoragePerfRead::is_read_two_micro_block(const ObStoragePerfStatistics &statics, const QueryType type) {
-  bool ret = false;
-  if(SCAN == type) {
-    ret = 0 == statics.row_cache_hit_ && 2 == statics.io_read_count_ && 0 != statics.io_read_delay_;
-  } else if(MULTI_GET == type){
-    ret = 0 == statics.row_cache_hit_ && 2 == statics.io_read_count_ && 0 != statics.io_read_delay_;
-  } else {
-    ret = 0 == statics.row_cache_hit_ && 2 == statics.io_read_count_ && 0 != statics.io_read_delay_;
   }
   return ret;
 }

@@ -169,6 +169,12 @@ int ObCreateIndexResolver::resolve_index_column_node(
                                                                   is_multi_value_index,
                                                                   reinterpret_cast<int*>(&index_keyname_)))) {
           LOG_WARN("failed to adjust index type", K(ret));
+        } else if (is_multi_value_index
+                   && NULL != col_node->children_[2]
+                   && 1 != col_node->children_[2]->is_empty_) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("explicit order is not supported for multivalue index", K(ret));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "ASC/DESC for multivalue index is");
         } else if (is_multi_value_index) {
           ObCreateIndexArg &index_arg =crt_idx_stmt->get_create_index_arg();
           if (index_keyname_ == MULTI_KEY) {

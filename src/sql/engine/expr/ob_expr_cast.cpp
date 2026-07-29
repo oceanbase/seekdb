@@ -381,7 +381,6 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
     }
     if (OB_SUCC(ret)) {
       ObCollationType collation_connection = type_ctx.get_coll_type();
-      ObCollationType collation_nation = session->get_nls_collation_nation();
       type1.set_calc_type(get_calc_cast_type(type1.get_type(), dst_type.get_type()));
       int32_t length = 0;
       if (ob_is_string_or_lob_type(dst_type.get_type())

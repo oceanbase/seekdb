@@ -34,6 +34,11 @@ namespace blocksstable
 struct ObStorageEnv;
 }
 
+namespace share
+{
+class ObServerLocality;
+}
+
 namespace election
 {
 class ObIElectionMgr;

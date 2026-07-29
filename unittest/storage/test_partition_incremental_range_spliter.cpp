@@ -44,7 +44,6 @@ public:
   ObStorageMetaMemMgr *t3m_ = nullptr;
   ObStorageMetaMemMgr *storage_meta_mem_mgr() override { return t3m_; }
 };
-#define MTL(TYPE) (static_cast<TYPE>(::oceanbase::share::g_mp->storage_meta_mem_mgr()))
 
 void ObCompactionBufferWriter::reset()
 {
@@ -774,7 +773,7 @@ void TestPartitionIncrementalRangeSliter::TearDown()
   reset_major_sstable();
   reset_ranges();
 
-  ObStorageMetaMemMgr *t3m = MTL(ObStorageMetaMemMgr*);
+  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
   OB_DELETE(ObStorageMetaMemMgr, ObModIds::TEST, t3m);
   provider_.t3m_ = nullptr;
   // Do NOT null share::g_mp here: gtest destroys fixture members AFTER TearDown,

@@ -24,13 +24,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <setjmp.h>
-#ifdef SQL_PARSER_COMPILATION
-#include "ob_sql_mode.h"
-#include "sql/parser/ob_item_type.h"
-#else
 #include "common/sql_mode/ob_sql_mode.h"
 #include "sql/parser/ob_item_type.h"
-#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -186,11 +181,6 @@ typedef struct _ParseNode
     int64_t raw_param_idx_; // Constant node index in fp_result.raw_params_
     int64_t raw_sql_offset_; // constant node character offset in sql
   };
-
-#ifdef SQL_PARSER_COMPILATION
-  int token_off_;
-  int token_len_;
-#endif
 } ParseNode;
 
 struct _ParamList;
@@ -256,14 +246,6 @@ typedef struct _ObMinusStatuCtx
   bool is_cur_numeric_; // Is the current constant node a numeric node
 } ObMinusStatusCtx;
 
-#ifdef SQL_PARSER_COMPILATION
-// for comment_list_ in ParseResult
-typedef struct TokenPosInfo
-{
-  int token_off_;
-  int token_len_;
-} TokenPosInfo;
-#endif
 // External dependency object linked list
 typedef struct _ParenthesesOffset
 {
@@ -355,13 +337,6 @@ typedef struct
   InsMultiValuesResult *ins_multi_value_res_;
 
 
-#ifdef SQL_PARSER_COMPILATION
-  TokenPosInfo *comment_list_;
-  int comment_cnt_;
-  int comment_cap_;
-  int realloc_cnt_;
-  bool stop_add_comment_;
-#endif
 } ParseResult;
 
 typedef struct _ObFastParseCtx
@@ -455,11 +430,9 @@ typedef enum ObNumberParseType
   NPT_EMPTY,
 } ObNumberParseType;
 
-#ifndef SQL_PARSER_COMPILATION
 bool check_stack_overflow_c();
 // Find the interface for external pl variables, get the index of the variable in the external symbol table, defined in ob_pl_stmt.cpp
 int lookup_pl_symbol(const void *pl_ns, const char *symbol, size_t len, int64_t *find_idx);
-#endif
 
 typedef struct _ParserLinkNode
 {

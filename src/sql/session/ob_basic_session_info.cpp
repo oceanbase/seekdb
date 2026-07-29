@@ -55,7 +55,6 @@ ObBasicSessionInfo::SysVarsCacheData ObBasicSessionInfo::SysVarsCache::base_data
 
 ObBasicSessionInfo::ObBasicSessionInfo()
   :   
-      session_pool_(NULL),
       query_mutex_(common::ObLatchIds::SESSION_QUERY_LOCK),
       thread_data_mutex_(common::ObLatchIds::SESSION_THREAD_DATA_LOCK),
       is_valid_(true),
@@ -350,8 +349,8 @@ void ObBasicSessionInfo::reset(bool skip_sys_var)
   cached_runtime_config_version_ = 0;
   is_deserialized_ = false;
   CHAR_CARRAY_INIT(runtime_);
-  
-  
+
+
   user_id_ = OB_INVALID_ID;
   client_version_.reset();
   driver_version_.reset();
@@ -2610,9 +2609,7 @@ int ObBasicSessionInfo::fill_sys_vars_cache_base_value(
   switch (var) {
     case SYS_VAR_SQL_MODE: {
       ObSQLMode sql_mode = static_cast<ObSQLMode>(val.get_uint64());
-      ObSQLMode real_sql_mode = (sql_mode & (~ALL_SMO_COMPACT_MODE)) |
-          (sys_vars_cache.get_sql_mode() & ALL_SMO_COMPACT_MODE);
-      sys_vars_cache.set_base_sql_mode(real_sql_mode);
+      sys_vars_cache.set_base_sql_mode(sql_mode);
       break;
     }
     case SYS_VAR_AUTO_INCREMENT_INCREMENT: {

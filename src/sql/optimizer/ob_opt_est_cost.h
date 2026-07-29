@@ -62,7 +62,6 @@ public:
                                     const double input_width,
                                     const double input_cost,
                                     const int64_t out_parallel,
-                                    const int64_t in_server_cnt,
                                     const int64_t in_parallel,
                                     const ObIArray<OrderItem> &expected_ordering,
                                     const bool need_sort,

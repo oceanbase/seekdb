@@ -96,7 +96,7 @@ struct JoinFilterSqcRowInfo
   JoinFilterSqcRowInfo() {}
 
   TO_STRING_KV(K(sqc_id_), K(expected_), K(received_), K(total_rows_), K(ndv_info_));
-  int64_t sqc_id_{OB_INVALID};
+  int64_t sqc_id_{OB_INVALID_INDEX};
   int64_t expected_{0};
   int64_t received_{0};
   int64_t total_rows_{0};
@@ -220,7 +220,7 @@ public:
   INHERIT_TO_STRING_KV("meta", ObDatahubPieceMsg<dtl::ObDtlMsgType::DH_JOIN_FILTER_COUNT_ROW_PIECE_MSG>,
                         K_(op_id), K_(each_sqc_has_full_data), K_(sqc_id), K_(total_rows), K(ndv_info_));
   bool each_sqc_has_full_data_{false}; // True iff in shared hash join
-  int64_t sqc_id_{OB_INVALID}; // From which sqc
+  int64_t sqc_id_{OB_INVALID_INDEX}; // From which sqc
   int64_t total_rows_{0}; // row count of one thread
   ObJoinFilterNdvInfo ndv_info_;
 private:

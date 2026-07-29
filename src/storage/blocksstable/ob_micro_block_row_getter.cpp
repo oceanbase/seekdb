@@ -276,7 +276,6 @@ int ObMicroBlockRowGetter::get_block_row(ObSSTableReadHandle &read_handle,
                                                            read_handle.get_rowkey().get_datum_cnt());
       }
     } else {
-      EVENT_INC(GET_ROW_EFFECT_READ);
     }
   }
 

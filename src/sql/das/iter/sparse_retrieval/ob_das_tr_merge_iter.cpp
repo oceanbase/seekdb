@@ -41,7 +41,6 @@ ObDASTRMergeIter::ObDASTRMergeIter()
     total_doc_cnt_scan_param_(nullptr),
     inv_scan_params_(),
     inv_agg_params_(),
-    fwd_scan_params_(),
     boolean_compute_node_(nullptr),
     block_max_scan_params_(),
     block_max_iter_param_(),
@@ -50,7 +49,6 @@ ObDASTRMergeIter::ObDASTRMergeIter()
     topk_limit_(0),
     total_doc_cnt_tablet_id_(),
     inv_idx_tablet_id_(),
-    fwd_idx_tablet_id_(),
     flags_(0),
     check_rangekey_inited_(false),
     inv_idx_tablet_switched_(false),
@@ -93,9 +91,6 @@ int ObDASTRMergeIter::inner_init(ObDASIterParam &param)
       LOG_WARN("unexpected null pointer", K(ret), KP_(ir_ctdef), KP_(ir_rtdef));
     } else if (topk_mode_ && OB_FAIL(init_topk_limit())) {
       LOG_WARN("failed to init topk limit", K(ret));
-    } else if (OB_UNLIKELY(!ir_ctdef_->need_inv_idx_agg() && ir_ctdef_->need_fwd_idx_agg())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("inv idx agg and fwd idx agg are not both needed", K(ret));
     } else if (OB_ISNULL(mem_context_)) {
       lib::ContextParam mem_param;
       mem_param.set_mem_attr("TextMergeIter", ObCtxIds::DEFAULT_CTX_ID);
@@ -152,18 +147,6 @@ int ObDASTRMergeIter::init_das_iter_scan_params()
       LOG_WARN("failed to prepare allocate inv agg params array", K(ret));
     }
 
-    if (OB_FAIL(ret)) {
-    } else if (!ir_ctdef_->need_fwd_idx_agg()) {
-    } else if (OB_ISNULL(ir_rtdef_->eval_ctx_) || OB_UNLIKELY(ir_rtdef_->eval_ctx_->max_batch_size_ >= 1)) {
-      ret = OB_NOT_IMPLEMENT;
-      LOG_ERROR("fwd idx agg with max batch size not implemented", K(ret));
-    } else if (FALSE_IT(fwd_scan_params_.set_allocator(&myself_allocator_))) {
-    } else if (OB_FAIL(fwd_scan_params_.init(dim_iter_cnt))) {
-      LOG_WARN("failed to init fwd scan params array", K(ret));
-    } else if (OB_FAIL(fwd_scan_params_.prepare_allocate(dim_iter_cnt))) {
-      LOG_WARN("failed to prepare allocate fwd scan params array", K(ret));
-    }
-
     if (OB_SUCC(ret)) {
       void *inv_buf = nullptr;
       if (OB_ISNULL(inv_buf = myself_allocator_.alloc(sizeof(ObTableScanParam) * dim_iter_cnt))) {
@@ -209,28 +192,6 @@ int ObDASTRMergeIter::init_das_iter_scan_params()
         }
       }
 
-      if (OB_SUCC(ret) && ir_ctdef_->need_fwd_idx_agg()) {
-        void *fwd_buf = nullptr;
-        if (OB_ISNULL(fwd_buf = myself_allocator_.alloc(sizeof(ObTableScanParam) * dim_iter_cnt))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocate memory for fwd scan param", K(ret));
-        } else {
-          ObTableScanParam *fwd_params = static_cast<ObTableScanParam*>(fwd_buf);
-          for (int64_t i = 0; OB_SUCC(ret) && i < dim_iter_cnt; ++i) {
-            fwd_scan_params_[i] = new (&fwd_params[i]) ObTableScanParam();
-            if (OB_FAIL(init_das_iter_scan_param(
-                fwd_idx_tablet_id_,
-                ir_ctdef_->get_fwd_idx_agg_ctdef(),
-                ir_rtdef_->get_fwd_idx_agg_rtdef(),
-                tx_desc_, snapshot_, mem_context_->get_arena_allocator(),
-                *fwd_scan_params_[i]))) {
-              LOG_WARN("failed to init fwd scan param", K(ret));
-            } else {
-              static_cast<ObDASScanIter*>(children_[i + dim_iter_cnt * 2])->set_scan_param(*fwd_scan_params_[i]);
-            }
-          }
-        }
-      }
     }
   }
   return ret;
@@ -438,18 +399,6 @@ int ObDASTRMergeIter::init_dim_iter_param(ObTextRetrievalScanIterParam &iter_par
         LOG_WARN("unexpected inv idx agg expr count", K(ret));
       } else {
         iter_param.inv_idx_agg_expr_ = ir_ctdef_->get_inv_idx_agg_ctdef()
-            ->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
-      }
-    }
-    if (OB_SUCC(ret) && ir_ctdef_->need_fwd_idx_agg()) {
-      iter_param.fwd_idx_scan_param_ = fwd_scan_params_[idx];
-      iter_param.fwd_idx_agg_iter_ = static_cast<ObDASScanIter*>(children_[idx + dim_iter_cnt * 2]);
-      if (OB_UNLIKELY(1 != ir_ctdef_->get_fwd_idx_agg_ctdef()
-          ->pd_expr_spec_.pd_storage_aggregate_output_.count())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected fwd idx agg expr count", K(ret));
-      } else {
-        iter_param.fwd_idx_agg_expr_ = ir_ctdef_->get_fwd_idx_agg_ctdef()
             ->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
       }
     }
@@ -672,7 +621,6 @@ int ObDASTRMergeIter::init_taat_iter_param(ObTextTaaTParam &iter_param)
 int ObDASTRMergeIter::set_children_iter_rangekey()
 {
   int ret = OB_SUCCESS;
-  ObNewRange fwd_idx_agg_range;
   check_rangekey_inited_ = true;
   if (OB_UNLIKELY(function_lookup_mode_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -683,8 +631,6 @@ int ObDASTRMergeIter::set_children_iter_rangekey()
       || (ir_ctdef_->need_inv_idx_agg() && inv_agg_params_.empty()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected uninited scan params", K(ret));
-  } else if (ir_ctdef_->need_fwd_idx_agg() && OB_FAIL(gen_fwd_idx_scan_feak_range(fwd_idx_agg_range))) {
-    LOG_WARN("failed to generate fwd idx scan range", K(ret));
   } else {
     const ExprFixedArray *exprs = &(ir_ctdef_->get_inv_idx_scan_ctdef()->pd_expr_spec_.access_exprs_);
     int64 group_id = 0;
@@ -704,9 +650,6 @@ int ObDASTRMergeIter::set_children_iter_rangekey()
         LOG_WARN("failed to push back lookup range", K(ret));
       } else if (FALSE_IT(inv_idx_scan_range.group_idx_ = group_idx)) {
       } else if (OB_FAIL(inv_scan_params_[i]->key_ranges_.push_back(inv_idx_scan_range))) {
-        LOG_WARN("failed to push back lookup range", K(ret));
-      } else if (ir_ctdef_->need_fwd_idx_agg()
-          && OB_FAIL(fwd_scan_params_[i]->key_ranges_.push_back(fwd_idx_agg_range))) {
         LOG_WARN("failed to push back lookup range", K(ret));
       } else if (topk_mode_ && ir_ctdef_->need_block_max_scan()
           && OB_FAIL(block_max_scan_params_[i]->key_ranges_.push_back(inv_idx_scan_range))) {
@@ -735,8 +678,7 @@ int ObDASTRMergeIter::set_children_iter_rangekey(const common::ObIArray<std::pai
   }
   if (OB_FAIL(ret) || 0 == query_tokens_.count()) {
   } else if (OB_UNLIKELY(inv_scan_params_.empty()
-      || (ir_ctdef_->need_inv_idx_agg() && inv_agg_params_.empty())
-      || ir_ctdef_->need_fwd_idx_agg())) {
+      || (ir_ctdef_->need_inv_idx_agg() && inv_agg_params_.empty()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected uninited scan params", K(ret));
   } else {
@@ -851,13 +793,6 @@ int ObDASTRMergeIter::gen_inv_idx_scan_one_range(const ObString &query_token, co
   return ret;
 }
 
-int ObDASTRMergeIter::gen_fwd_idx_scan_feak_range(ObNewRange &scan_range)
-{
-  int ret = OB_SUCCESS;
-  scan_range.table_id_ = ir_ctdef_->get_fwd_idx_agg_ctdef()->ref_table_id_;
-  return ret;
-}
-
 int ObDASTRMergeIter::do_table_scan()
 {
   int ret = OB_SUCCESS;
@@ -934,11 +869,6 @@ int ObDASTRMergeIter::inner_reuse()
         LOG_WARN("failed to reuse block max scan param", K(ret), K(i));
       }
     }
-    for (int64_t i = 0; i < OB_SUCC(ret) && fwd_scan_params_.count(); ++i) {
-      if (OB_FAIL(reuse_das_iter_scan_param(fwd_idx_tablet_id_, *fwd_scan_params_[i]))) {
-        LOG_WARN("failed to reuse fwd scan param", K(ret), K(i));
-      }
-    }
     for (int64_t i = 0; OB_SUCC(ret) && i < children_cnt_; ++i) {
       if (OB_FAIL(children_[i]->reuse())) {
         LOG_WARN("failed to reuse child", K(ret));
@@ -1010,15 +940,6 @@ int ObDASTRMergeIter::inner_release()
     }
   }
   inv_agg_params_.reset();
-
-  for (int64_t i = 0; i < fwd_scan_params_.count(); ++i) {
-    if (OB_NOT_NULL(fwd_scan_params_[i])) {
-      fwd_scan_params_[i]->destroy_schema_guard();
-      fwd_scan_params_[i]->snapshot_.reset();
-      fwd_scan_params_[i]->destroy();
-    }
-  }
-  fwd_scan_params_.reset();
 
   for (int64_t i = 0; i < block_max_scan_params_.count(); ++i) {
     if (OB_NOT_NULL(block_max_scan_params_[i])) {

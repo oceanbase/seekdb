@@ -33,6 +33,7 @@
 #include "share/schema/ob_error_info.h"
 #include "share/schema/ob_constraint.h"
 #include "share/schema/ob_schema_service.h"
+#include "share/schema/ob_objpriv_mysql_schema_struct.h"
 #include "share/schema/ob_dependency_info.h"
 #include "share/schema/ob_trigger_info.h"
 #include "share/io/ob_io_calibration.h"
@@ -51,7 +52,6 @@
 #include "ob_ddl_args.h"
 #include "share/inner_table/ob_load_inner_table_schema.h"
 #include "share/ai_service/ob_ai_model_info.h"
-#include "share/schema/ob_objpriv_mysql_schema_struct.h"
 
 namespace oceanbase
 {
@@ -1803,7 +1803,7 @@ public:
     create_index_arg_.reset();
     snapshot_version_ = 0;
   }
-  TO_STRING_KV(K(1UL), K(data_table_id_), K(create_index_arg_), K(snapshot_version_));
+  TO_STRING_KV(K(data_table_id_), K(create_index_arg_), K(snapshot_version_));
 
 public:
 

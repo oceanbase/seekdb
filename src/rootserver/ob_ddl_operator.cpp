@@ -4316,9 +4316,6 @@ int ObDDLOperator::init_runtime_user(const ObString &user_name,
     } else if (OB_FAIL(schema_service->get_user_sql_service().create_user(
                        user, new_schema_version, &ddl_sql, trans))) {
       LOG_WARN("insert user failed", K(user), K(ret));
-    } else if ((!is_user || is_extended_sys_user(user.get_user_id()))
-               && OB_FAIL(init_inner_user_privs(user, trans))) {
-      LOG_WARN("init user privs failed", K(user), K(ret));
     }
   }
   return ret;

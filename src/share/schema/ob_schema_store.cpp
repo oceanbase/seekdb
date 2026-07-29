@@ -31,7 +31,7 @@ int ObSchemaStore::init(const int64_t init_version_count)
     LOG_WARN("init schema_mgr_cache fail", K(ret));
   } else {
     refreshed_version_ = OB_CORE_SCHEMA_VERSION;
-    received_version_ = OB_CORE_SCHEMA_VERSION;
+    published_version_ = OB_CORE_SCHEMA_VERSION;
     checked_sys_version_ = OB_INVALID_VERSION;
     baseline_schema_version_ = OB_INVALID_VERSION;
     LOG_INFO("[SCHEMA_STORE] schema store init");
@@ -42,7 +42,7 @@ int ObSchemaStore::init(const int64_t init_version_count)
 void ObSchemaStore::reset_version()
 {
   refreshed_version_ = OB_INVALID_VERSION;
-  received_version_ = OB_INVALID_VERSION;
+  published_version_ = OB_INVALID_VERSION;
   checked_sys_version_ = OB_INVALID_VERSION;
   baseline_schema_version_ = OB_INVALID_VERSION;
   LOG_INFO("[SCHEMA_STORE] schema store reset version");
@@ -50,20 +50,20 @@ void ObSchemaStore::reset_version()
 
 void ObSchemaStore::update_refreshed_version(int64_t version)
 {
-  if (version > refreshed_version_ || version > received_version_) {
+  if (version > refreshed_version_ || version > published_version_) {
     inc_update(&refreshed_version_, version);
-    inc_update(&received_version_, version);
+    inc_update(&published_version_, version);
     LOG_INFO("[SCHEMA_STORE] schema store update version",
-             K(version), K_(refreshed_version), K_(received_version));
+             K(version), K_(refreshed_version), K_(published_version));
   }
 }
 
-void ObSchemaStore::update_received_version(int64_t version)
+void ObSchemaStore::update_published_version(int64_t version)
 {
-  if (version > received_version_) {
-    inc_update(&received_version_, version);
+  if (version > published_version_) {
+    inc_update(&published_version_, version);
     LOG_INFO("[SCHEMA_STORE] schema store update version",
-             K(version), K_(received_version));
+             K(version), K_(published_version));
   }
 }
 

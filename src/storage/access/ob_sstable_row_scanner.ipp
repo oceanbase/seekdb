@@ -305,8 +305,6 @@ inline int ObSSTableRowScanner<PrefetchType>::open_cur_data_block(ObSSTableReadH
           }
         }
         ++access_ctx_->table_store_stat_.pushdown_micro_access_cnt_;
-        EVENT_INC(ObStatEventIds::BLOCKSCAN_BLOCK_CNT);
-        EVENT_ADD(ObStatEventIds::BLOCKSCAN_ROW_CNT, micro_scanner_->get_access_cnt());
         LOG_TRACE("[PUSHDOWN] pushdown for block scan", K(prefetcher_.cur_micro_data_fetch_idx_), K(micro_info), KPC(block_row_store_));
       }
       if (OB_SUCC(ret)) {
@@ -372,14 +370,6 @@ inline int ObSSTableRowScanner<PrefetchType>::inner_get_next_row(const ObDatumRo
       OB_FAIL(set_row_scn(access_ctx_->use_fuse_row_cache_, *iter_param_, store_row))) {
       LOG_WARN("failed to set row scn", K(ret), KPC(this));
     }
-    EVENT_INC(ObStatEventIds::SSSTORE_READ_ROW_COUNT);
-    if (OB_NOT_NULL(sstable_)) {
-      if (sstable_->is_minor_sstable()) {
-        EVENT_INC(ObStatEventIds::MINOR_SSSTORE_READ_ROW_COUNT);
-      } else if (sstable_->is_major_sstable()) {
-        EVENT_INC(ObStatEventIds::MAJOR_SSSTORE_READ_ROW_COUNT);
-      }
-    }
     LOG_DEBUG("[INDEX BLOCK] inner get next row", KPC(store_row), KPC(this));
   }
   LOG_DEBUG("chaser debug", K(ret), KPC(store_row), KPC(this));
@@ -428,8 +418,8 @@ inline int ObSSTableRowScanner<PrefetchType>::fetch_row(ObSSTableReadHandle &rea
           LOG_WARN("Fail to get next row", K(ret));
         } else if (prefetcher_.cur_micro_data_fetch_idx_ >= read_handle.micro_end_idx_) {
           ret = OB_ITER_END;
-          if (ObStoreRowIterator::IteratorRowLockAndDuplicationCheck == type_ ||
-              ObStoreRowIterator::IteratorRowLockCheck == type_) {
+          if (ObStoreRowIterator::IteratorRowLockAndDuplicationCheck == type_
+              || ObStoreRowIterator::IteratorRowLockCheck == type_) {
             ObMicroBlockRowLockChecker *checker = static_cast<ObMicroBlockRowLockChecker *>(micro_scanner_);
             checker->inc_empty_read(read_handle);
           }

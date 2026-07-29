@@ -131,7 +131,7 @@ public:
 
 private:
 public:
-  // the dop, the QC decide the dop before our task send to SQC server
+  // The QC decides the DOP before the task is handed to the local SQC.
   // but the dop may be change as the worker server don't has enough process.
   int64_t parallelism_;
   // In affinitize mode GI needs to know the current task id of the GI to pull the corresponding partition task

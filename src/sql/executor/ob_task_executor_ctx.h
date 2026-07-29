@@ -19,8 +19,6 @@
 
 #include "share/ob_autoincrement_service.h"
 #include "sql/executor/ob_execute_result.h"
-#include "sql/ob_phy_table_location.h"
-#include "sql/optimizer/ob_table_partition_info.h"
 #include "sql/ob_sql_context.h"
 #include "lib/worker.h"
 #include "lib/list/ob_list.h"
@@ -29,7 +27,6 @@ namespace oceanbase
 {
 namespace common
 {
-class ObAddr;
 class ObITabletScan;
 }
 
@@ -69,10 +66,6 @@ public:
   explicit ObTaskExecutorCtx(ObExecContext &exec_context);
   virtual ~ObTaskExecutorCtx();
 
-  int set_table_locations(const ObTablePartitionInfoArray &table_partition_infos);
-  int append_table_location(const ObCandiTableLoc &phy_location_info);
-
-  const ObTablePartitionInfoArray &get_partition_infos() const;
   inline ObExecuteResult &get_execute_result()
   {
     return execute_result_;
@@ -88,14 +81,6 @@ public:
   inline int64_t get_query_begin_schema_version() const
   {
     return query_begin_schema_version_;
-  }
-  inline void set_query_sys_begin_schema_version(const int64_t schema_version)
-  {
-    query_sys_begin_schema_version_ = schema_version;
-  }
-  inline int64_t get_query_sys_begin_schema_version() const
-  {
-    return query_sys_begin_schema_version_;
   }
   // init_calc_virtual_part_id_params and reset_calc_virtual_part_id_params should be used in pairs,
   // Otherwise the calc_virtual_partition_id function is prone to errors;
@@ -137,7 +122,6 @@ public:
 
 private:
   // BEGIN local local variable
-  //
   // Used to encapsulate the Op Tree of the top-level Job of executor, outputting data externally
   ObExecuteResult execute_result_;
   // Used for temporarily passing parameters when calculating the partition id of a virtual table, it's best to reset this member variable after calculation
@@ -149,28 +133,21 @@ private:
   int64_t minimal_worker_cnt_;  // minimal worker count to support execute this query
   int64_t admited_worker_cnt_; // query final used worker count admitted by admission
   // END local local variable
-  // BEGIN variables that need to be serialized
-  // This information is serialized to all machines that participated in the query.
-  // NOTE:The intermediate calculation machine needs to be judged, do not as Participant
-  ObPhyTableLocationFixedArray table_locations_;
   // The number of retries
   int64_t retry_times_;
-  //  END variables that need to be serialized
-
   int64_t sys_job_id_;
 public:
   // BEGIN global singleton variable
   //
-  int64_t query_begin_schema_version_; // Latest global runtime schema version at query start
-  int64_t query_sys_begin_schema_version_; // Query start time to get the latest global sys schema version
+  int64_t query_begin_schema_version_; // Latest global database schema version at query start
   share::schema::ObMultiVersionSchemaService *schema_service_;
   //
   // END global singleton variable
 
 
   DISALLOW_COPY_AND_ASSIGN(ObTaskExecutorCtx);
-  TO_STRING_KV(K(table_locations_), K(retry_times_), K(expected_worker_cnt_),
-      K(admited_worker_cnt_), K(query_begin_schema_version_), K(query_sys_begin_schema_version_),
+  TO_STRING_KV(K(retry_times_), K(expected_worker_cnt_),
+      K(admited_worker_cnt_), K(query_begin_schema_version_),
       K(minimal_worker_cnt_));
 };
 

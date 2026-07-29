@@ -91,17 +91,6 @@ int ObUpdateIndexStatusHelper::generate_schemas_()
   const ObTableSchema *orig_data_table_schema = nullptr;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (INDEX_STATUS_INDEX_ERROR == new_status_ && arg_.convert_status_) {
-    const ObServerRuntimeSchema *runtime_schema = nullptr;
-    if (OB_FAIL(schema_guard_wrapper_.get_server_runtime_schema( runtime_schema))) {
-      LOG_WARN("fail to get runtime schema", KR(ret));
-    } else if (OB_ISNULL(runtime_schema)) {
-      ret = OB_RUNTIME_SCHEMA_NOT_READY;
-      LOG_WARN("runtime schema does not exist", KR(ret));
-    } else if (runtime_schema->is_restore()) {
-      new_status_ = INDEX_STATUS_RESTORE_INDEX_ERROR;
-      LOG_INFO("conver error index status", KR(ret), K_(new_status));
-    }
   }
   const ObDatabaseSchema *database_schema = NULL;
   if (FAILEDx(schema_guard_wrapper_.get_table_schema(arg_.index_table_id_, orig_index_table_schema_))) {

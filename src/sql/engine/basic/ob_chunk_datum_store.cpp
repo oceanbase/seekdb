@@ -611,7 +611,7 @@ void ObChunkDatumStore::reset()
   int ret = OB_SUCCESS;
   if (is_file_open()) {
     aio_write_handle_.reset();
-    if (OB_FAIL(SERVER_TMP_FILE_MANAGER.remove(io_.fd_))) {
+    if (OB_FAIL(share::g_mp->tmp_file_manager()->remove(io_.fd_))) {
       LOG_WARN("remove file failed", K(ret), K_(io_.fd));
     } else {
       LOG_INFO("close file success", K(ret), K_(io_.fd));
@@ -2003,7 +2003,7 @@ int ObChunkDatumStore::write_file(void *buf, int64_t size)
       if (-1 == io_.dir_id_) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("temp file dir id is not init", K(ret), K(io_.dir_id_));
-      } else if (OB_FAIL(SERVER_TMP_FILE_MANAGER.open(io_.fd_, io_.dir_id_))) {
+      } else if (OB_FAIL(share::g_mp->tmp_file_manager()->open(io_.fd_, io_.dir_id_))) {
         LOG_WARN("open file failed", K(ret));
       } else {
         file_size_ = 0;
@@ -2018,7 +2018,7 @@ int ObChunkDatumStore::write_file(void *buf, int64_t size)
     set_io(size, static_cast<char *>(buf));
     if (aio_write_handle_.is_valid() && OB_FAIL(aio_write_handle_.wait())) {
       LOG_WARN("failed to wait write", K(ret));
-    } else if (OB_FAIL(SERVER_TMP_FILE_MANAGER.aio_write(io_, aio_write_handle_))) {
+    } else if (OB_FAIL(share::g_mp->tmp_file_manager()->aio_write(io_, aio_write_handle_))) {
       LOG_WARN("write to file failed", K(ret), K_(io), K(timeout_ms));
     }
   }
@@ -2051,7 +2051,7 @@ int ObChunkDatumStore::aio_read_file(
     tmp_io.io_desc_.set_wait_event(ObWaitEventIds::ROW_STORE_DISK_READ);
     if (OB_FAIL(get_timeout(tmp_io.io_timeout_ms_))) {
       LOG_WARN("get timeout failed", K(ret));
-    } else if (OB_FAIL(SERVER_TMP_FILE_MANAGER.aio_pread(tmp_io, offset, handle))) {
+    } else if (OB_FAIL(share::g_mp->tmp_file_manager()->aio_pread(tmp_io, offset, handle))) {
       if (OB_ITER_END != ret) {
         LOG_WARN("read form file failed", K(ret), K(tmp_io), K(offset));
       }

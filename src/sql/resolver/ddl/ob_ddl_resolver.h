@@ -20,7 +20,6 @@
 #include "sql/resolver/ob_resolver_utils.h"
 #include "lib/hash/ob_placement_hashset.h"
 #include "lib/string/ob_sql_string.h"
-#include "lib/worker.h"
 #include "share/schema/ob_table_schema.h"
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_schema_struct.h"
@@ -215,7 +214,6 @@ public:
       const share::schema::ObColumnSchemaV2 &column,
       const bool is_prepare_stage=false);
   static int check_default_value_length(
-      const bool is_mysql_mode,
       const share::schema::ObColumnSchemaV2 &column,
       common::ObObj &default_value);
   static int cast_default_value(
@@ -855,7 +853,6 @@ protected:
   // reset
   void reset_index();
   static int trim_space_for_default_value(
-      const bool is_mysql_mode,
       const bool is_char_type,
       const ObCollationType &collation_type,
       ObObj &default_value, ObString &str);

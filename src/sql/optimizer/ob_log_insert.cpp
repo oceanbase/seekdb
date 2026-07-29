@@ -210,20 +210,6 @@ int ObLogInsert::compute_sharding_info()
   return ret;
 }
 
-int ObLogInsert::compute_plan_type()
-{
-  int ret = OB_SUCCESS;
-  ObLogicalOperator *child = NULL;
-  if (OB_ISNULL(child = get_child(first_child)) || OB_ISNULL(get_plan())
-      || OB_ISNULL(get_plan()->get_stmt())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(child), K(get_plan()), K(ret));
-  } else if (OB_FAIL(ObLogDelUpd::compute_plan_type())) { 
-    LOG_WARN("failed to compute plan type", K(ret));
-  }
-  return ret;
-}
-
 int ObLogInsert::est_cost()
 {
   int ret = OB_SUCCESS;

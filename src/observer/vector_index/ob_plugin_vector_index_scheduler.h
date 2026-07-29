@@ -426,7 +426,6 @@ public:
   int init(ObPluginVectorIndexMgr *mgr, ObPluginVectorIndexTaskCtx *task_ctx);
   virtual int fill_dag_key(char *buf, const int64_t buf_len) const override;
   virtual int fill_info_param(compaction::ObIBasicInfoParam *&out_param, ObIAllocator &allocator) const override;
-  virtual bool uses_reserved_allocator() const { return false; }
 private:
   bool is_inited_;
   ObVectorIndexTaskParam param_;

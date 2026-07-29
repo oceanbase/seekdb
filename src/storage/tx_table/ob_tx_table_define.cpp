@@ -87,7 +87,11 @@ int ObTxCtxTableInfo::serialize(char *buf,
   int ret = OB_SUCCESS;
   const int64_t data_len = get_serialize_size_();
   ObTxCtxTableCommonHeader header(MAGIC_VERSION, data_len);
-  if (OB_ISNULL(tx_data_guard_.tx_data())) {
+  if (OB_UNLIKELY(DATA_CURRENT_VERSION != data_version_)) {
+    ret = OB_NOT_SUPPORTED;
+    TRANS_LOG(WARN, "transaction context data version mismatch", K(ret), K_(data_version),
+              "current_data_version", DATA_CURRENT_VERSION);
+  } else if (OB_ISNULL(tx_data_guard_.tx_data())) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "invalid tx data guard", KR(ret), KPC(this));
   } else if (OB_FAIL(header.serialize(buf, buf_len, pos))) {

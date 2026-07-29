@@ -238,7 +238,7 @@ private:
 };
 
 /*
- * the only scheduler for all ddl tasks executed in root service
+ * the only scheduler for all ddl tasks executed in local DDL service
  *
  * each category of ddl request has an unique task type.
  * every ddl task has its record in an inner table(__all_ddl_task_status),
@@ -302,7 +302,6 @@ public:
 
   int on_sstable_complement_job_reply(
       const common::ObTabletID &tablet_id,
-      const ObAddr &svr,
       const ObDDLTaskKey &task_key,
       const int64_t snapshot_version,
       const int64_t execution_id,

@@ -460,7 +460,7 @@ public:
   inline bool is_out_slave_mapping() { return SlaveMappingType::SM_NONE != out_slave_mapping_type_; }
 
   ObPxPartChMapArray &get_part_ch_map() { return part_ch_map_; }
-  // DFO distribution, DFO task status on each server
+  // Local DFO task status.
   int add_sqc(const ObPxSqcMeta &sqc);
   int get_sqc(int64_t idx, ObPxSqcMeta *&sqc);
   common::ObIArray<ObPxSqcMeta>  &get_sqcs() { return sqcs_; }
@@ -730,16 +730,15 @@ public:
   bool qc_order_gi_tasks_;
 };
 
-struct ObPxCleanDtlIntermResInfo
+struct ObPxDtlIntermResInfo
 {
-  OB_UNIS_VERSION(1);
 public:
-  ObPxCleanDtlIntermResInfo() : ch_total_info_(), sqc_id_(common::OB_INVALID_ID), task_count_(0) {}
-  ObPxCleanDtlIntermResInfo(dtl::ObDtlChTotalInfo &ch_info, int64_t sqc_id, int64_t task_count) :
+  ObPxDtlIntermResInfo() : ch_total_info_(), sqc_id_(common::OB_INVALID_ID), task_count_(0) {}
+  ObPxDtlIntermResInfo(dtl::ObDtlChTotalInfo &ch_info, int64_t sqc_id, int64_t task_count) :
     ch_total_info_(ch_info), sqc_id_(sqc_id), task_count_(task_count)
   {}
 
-  ~ObPxCleanDtlIntermResInfo() { }
+  ~ObPxDtlIntermResInfo() { }
   void reset()
   {
     ch_total_info_.reset();
@@ -754,12 +753,11 @@ public:
   int64_t task_count_;
 };
 
-class ObPxCleanDtlIntermResArgs
+class ObPxDtlIntermResBatch
 {
-  OB_UNIS_VERSION(1);
 public:
-  ObPxCleanDtlIntermResArgs() : info_(), batch_size_(0) {}
-  ~ObPxCleanDtlIntermResArgs() { reset(); }
+  ObPxDtlIntermResBatch() : info_(), batch_size_(0) {}
+  ~ObPxDtlIntermResBatch() { reset(); }
   void reset()
   {
     info_.reset();
@@ -768,7 +766,7 @@ public:
 
   TO_STRING_KV(K_(info), K_(batch_size));
 public:
-  ObSEArray<ObPxCleanDtlIntermResInfo, 8> info_;
+  ObSEArray<ObPxDtlIntermResInfo, 8> info_;
   uint64_t batch_size_;
 };
 

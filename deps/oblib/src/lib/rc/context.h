@@ -415,11 +415,6 @@ public:
     int ret = common::OB_SUCCESS;
     // Select the allocator for this memory context.
     ObMemAttr inner_attr = param_.attr_;
-    auto *ma = ObMallocAllocator::get_instance();
-    auto ta = ma->get_ctx_allocator(inner_attr.ctx_id_);
-    if (nullptr == ta) {
-      
-    }
     attr_ = inner_attr;
     // init allocator
     const bool thread_safe = param_.properties_ & ALLOC_THREAD_SAFE;

@@ -83,9 +83,6 @@ OB_SERIALIZE_MEMBER(ObSqcTableLocationKey,
                     tablet_id_,
                     is_dml_,
                     is_loc_uncertain_);
-OB_SERIALIZE_MEMBER(ObPxCleanDtlIntermResInfo, ch_total_info_, sqc_id_, task_count_);
-OB_SERIALIZE_MEMBER(ObPxCleanDtlIntermResArgs, info_, batch_size_);
-
 int ObQCMonitoringInfo::init(const ObDfo &dfo) {
   int ret = OB_SUCCESS;
   qc_tid_ = GETTID();
@@ -110,8 +107,7 @@ void ObQCMonitoringInfo::reset() {
 int ObPxSqcMeta::assign(const ObPxSqcMeta &other)
 {
   int ret = OB_SUCCESS;
-  // Note: Non-generic function, cannot be used to save already initialized ObPxSqcMeta
-  //       Only used for assign execution address
+  // Note: Non-generic function, cannot be used to save an initialized ObPxSqcMeta.
   if (NULL != qc_channel_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("should only add a new sqc. you are adding an inited one", K(ret));

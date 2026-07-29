@@ -38,7 +38,7 @@
 #include "rootserver/ob_ddl_sql_generator.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
 #include "rootserver/ddl_task/ob_constraint_task.h"
-#include "rootserver/ob_rs_job_table_operator.h"
+#include "rootserver/ob_admin_job_table_operator.h"
 #include "share/ob_ddl_sim_point.h"
 #include "rootserver/ob_control_event.h"
 #include "share/ob_timezone_mgr.h"
@@ -164,8 +164,8 @@ int ObLocalManagementService::init(ObServerConfig &config,
     FLOG_WARN("init runtime_ddl_service_ failed", KR(ret));
   } else if (OB_FAIL(snapshot_manager_.init(self_addr_))) {
     FLOG_WARN("init snapshot manager failed", KR(ret));
-  } else if (OB_FAIL(THE_RS_JOB_TABLE.init())) {
-    FLOG_WARN("init THE_RS_JOB_TABLE failed", KR(ret));
+  } else if (OB_FAIL(THE_ADMIN_JOB_TABLE.init())) {
+    FLOG_WARN("init THE_ADMIN_JOB_TABLE failed", KR(ret));
   } else if (OB_FAIL(dbms_job::ObDBMSJobMaster::get_instance().init(&sql_proxy_,
                                                                     schema_service_))) {
     FLOG_WARN("init ObDBMSJobMaster failed", KR(ret));
@@ -341,7 +341,7 @@ void ObLocalManagementService::wait()
   if (deadlock_event_clear_task_timer_.inited()) { deadlock_event_clear_task_timer_.wait(); }
   if (purge_recyclebin_task_timer_.inited()) { purge_recyclebin_task_timer_.wait(); }
   FLOG_INFO("task timer exit success");
-  THE_RS_JOB_TABLE.reset_max_job_id();
+  THE_ADMIN_JOB_TABLE.reset_max_job_id();
   int64_t cost = ObTimeUtility::current_time() - start_time;
   FLOG_INFO("wait local management services finished", K(start_time), K(cost));
   if (cost > 10 * 60 * 1000 * 1000L) { // 10min
@@ -1987,7 +1987,7 @@ int ObLocalManagementService::calc_column_checksum_repsonse(const obcall::ObCalc
   return ret;
 }
 
-int ObLocalManagementService::root_minor_freeze(const ObRootMinorFreezeArg &arg)
+int ObLocalManagementService::root_minor_freeze(const ObMinorFreezeArg &arg)
 {
   int ret = OB_SUCCESS;
   LOG_INFO("receive minor freeze request", K(arg));
@@ -2559,16 +2559,7 @@ int ObLocalManagementService::create_routine(const ObCreateRoutineArg &arg)
 {
   int ret = OB_SUCCESS;
   OV (inited_, OB_NOT_INIT);
-  OZ (ObPLDDLService::create_routine(arg, NULL, ddl_service_));
-  return ret;
-}
-
-int ObLocalManagementService::create_routine_with_res(const ObCreateRoutineArg &arg,
-                                           obcall::ObRoutineDDLRes &res)
-{
-  int ret = OB_SUCCESS;
-  OV (inited_, OB_NOT_INIT);
-  OZ (ObPLDDLService::create_routine(arg, &res, ddl_service_));
+  OZ (ObPLDDLService::create_routine(arg, ddl_service_));
   return ret;
 }
 
@@ -2576,16 +2567,7 @@ int ObLocalManagementService::alter_routine(const ObCreateRoutineArg &arg)
 {
   int ret = OB_SUCCESS;
   OV (inited_, OB_NOT_INIT);
-  OZ (ObPLDDLService::alter_routine(arg, NULL, ddl_service_));
-  return ret;
-}
-
-int ObLocalManagementService::alter_routine_with_res(const ObCreateRoutineArg &arg,
-                                          obcall::ObRoutineDDLRes &res)
-{
-  int ret = OB_SUCCESS;
-  OV (inited_, OB_NOT_INIT);
-  OZ (ObPLDDLService::alter_routine(arg, &res, ddl_service_));
+  OZ (ObPLDDLService::alter_routine(arg, ddl_service_));
   return ret;
 }
 
@@ -2602,16 +2584,7 @@ int ObLocalManagementService::create_package(const obcall::ObCreatePackageArg &a
 {
   int ret = OB_SUCCESS;
   OV (inited_, OB_NOT_INIT);
-  OZ (ObPLDDLService::create_package(arg, NULL, ddl_service_));
-  return ret;
-}
-
-int ObLocalManagementService::create_package_with_res(const obcall::ObCreatePackageArg &arg,
-                                           obcall::ObRoutineDDLRes &res)
-{
-  int ret = OB_SUCCESS;
-  OV (inited_, OB_NOT_INIT);
-  OZ (ObPLDDLService::create_package(arg, &res, ddl_service_));
+  OZ (ObPLDDLService::create_package(arg, ddl_service_));
   return ret;
 }
 
@@ -2644,16 +2617,7 @@ int ObLocalManagementService::alter_trigger(const obcall::ObAlterTriggerArg &arg
 {
   int ret = OB_SUCCESS;
   OV (inited_, OB_NOT_INIT);
-  OZ (ObPLDDLService::alter_trigger(arg, NULL, ddl_service_));
-  return ret;
-}
-
-int ObLocalManagementService::alter_trigger_with_res(const obcall::ObAlterTriggerArg &arg,
-                                          obcall::ObRoutineDDLRes &res)
-{
-  int ret = OB_SUCCESS;
-  OV (inited_, OB_NOT_INIT);
-  OZ (ObPLDDLService::alter_trigger(arg, &res, ddl_service_));
+  OZ (ObPLDDLService::alter_trigger(arg, ddl_service_));
   return ret;
 }
 
@@ -3188,7 +3152,7 @@ int ObLocalManagementService::handle_ddl_local_build_response(const obcall::ObDD
   } else if (OB_FAIL(DDL_SIM(arg.task_id_, PROCESS_BUILD_SSTABLE_RESPONSE_SLOW))) {
     LOG_WARN("ddl sim failure: procesc build sstable response slow", K(ret));
   } else if (OB_FAIL(ObSysDDLSchedulerUtil::on_sstable_complement_job_reply(
-          arg.tablet_id_/*source tablet id*/, arg.server_addr_,
+          arg.tablet_id_/*source tablet id*/,
           ObDDLTaskKey(arg.dest_schema_id_, arg.dest_schema_version_),
           arg.snapshot_version_, arg.execution_id_, arg.ret_code_, info))) {
     LOG_WARN("handle column checksum calc response failed", K(ret), K(arg));

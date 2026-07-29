@@ -23,6 +23,7 @@
 #include "storage/slog_ckpt/ob_local_storage_checkpoint_reader.h"
 #include "storage/ob_super_block_struct.h"
 #include "storage/slog/ob_storage_log_replayer.h"
+#include "storage/slog_ckpt/ob_linked_macro_block_struct.h"
 
 namespace oceanbase
 {
@@ -32,7 +33,6 @@ namespace storage
 struct ObMetaDiskAddr;
 
 class ObRedoModuleReplayParam;
-
 class ObStorageLogger;
 
 class ObServerCheckpointSlogHandler : public ObIRedoModule
@@ -77,11 +77,17 @@ public:
   int write_checkpoint(bool is_force);
 
 private:
-  virtual int parse(const int32_t cmd, const char *buf, const int64_t len, FILE *stream) override;
+  virtual int parse(
+      const int32_t cmd,
+      const char *buf,
+      const int64_t len,
+      FILE *stream) override;
 
   int read_checkpoint(const ObServerSuperBlock &super_block);
   int replay_and_apply_server_slog(const common::ObLogCursor &replay_start_point);
-  int replay_server_slog(const common::ObLogCursor &replay_start_point, common::ObLogCursor &replay_finish_point);
+  int replay_server_slog(
+      const common::ObLogCursor &replay_start_point,
+      common::ObLogCursor &replay_finish_point);
 
   int replay_create_runtime_prepare(const char *buf, const int64_t buf_len);
   int replay_create_runtime_commit(const char *buf, const int64_t buf_len);
@@ -92,7 +98,6 @@ private:
 
   int set_meta_block_list(common::ObIArray<blocksstable::MacroBlockId> &meta_block_list);
 
-  // The getter returns OB_HASH_NOT_EXIST until the replay slot is populated.
   int get_replay_runtime_meta_(omt::ObServerRuntimeMeta &meta) const;
   int set_replay_runtime_meta_(const omt::ObServerRuntimeMeta &meta);
 

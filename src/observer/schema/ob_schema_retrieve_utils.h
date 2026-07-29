@@ -358,9 +358,6 @@ public:
   template<typename T>
   static int retrieve_foreign_key_column_info(T &result, ObForeignKeyInfo &foreign_key_info);
 
-  template<typename T, typename S>
-  static int retrieve_simple_encrypt_info(T &result,
-                                          ObArray<S *> &table_schema_array);
   #define RETRIEVE_SCHEMA_FUNC_DECLARE(SCHEMA)                                \
     template<typename T, typename S>                                          \
     static int retrieve_##SCHEMA##_schema( \
@@ -384,7 +381,6 @@ public:
   static int retrieve_routine_param_schema(T &result, common::ObIArray<ObRoutineInfo> &routine_infos);
   RETRIEVE_SCHEMA_FUNC_DECLARE(synonym);
   RETRIEVE_SCHEMA_FUNC_DECLARE(udf);
-  RETRIEVE_SCHEMA_FUNC_DECLARE(sequence);
   RETRIEVE_SCHEMA_FUNC_DECLARE(sys_priv);
   RETRIEVE_SCHEMA_FUNC_DECLARE(obj_priv);
 
@@ -457,8 +453,8 @@ public:
                                   uint64_t &option);
 
   template<typename T>
-  static int fill_obj_mysql_priv_schema(T &result, 
-                                        ObObjMysqlPriv &obj_mysql_priv, 
+  static int fill_obj_mysql_priv_schema(T &result,
+                                        ObObjMysqlPriv &obj_mysql_priv,
                                         bool &is_deleted);
 
   template<typename T>

@@ -1,5 +1,3 @@
-# set __freeze_tenant_name__ outside
-
 --disable_query_log
 --disable_result_log
 
@@ -7,7 +5,7 @@ connect (obsys_major,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
 connection obsys_major;
 
 let $__previous_frozen_scn__ = query_get_value(select max(frozen_scn) as frozen_scn from oceanbase.__all_freeze_info, frozen_scn, 1);
-eval alter system major freeze tenant $__freeze_tenant_name__;
+eval alter system major freeze;
 let $__target_frozen_scn__ = query_get_value(select max(frozen_scn) as frozen_scn from oceanbase.__all_freeze_info, frozen_scn, 1);
 let $__freeze_advanced__ = query_get_value(select $__target_frozen_scn__ > $__previous_frozen_scn__ as advanced, advanced, 1);
 

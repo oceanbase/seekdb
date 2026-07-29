@@ -18,13 +18,9 @@
 #include "sql/ob_sql_init.h"
 #include "share/config/ob_runtime_config.h"
 #include "share/config/ob_server_config.h"
-#define private public
-#include "observer/ob_server.h"
-#undef private
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 using namespace oceanbase::lib;
-using namespace oceanbase::omt;
 using namespace oceanbase;
 
 class TestRawExprResolver: public test::TestSqlUtils, public ::testing::Test

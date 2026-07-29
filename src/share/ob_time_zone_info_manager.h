@@ -118,7 +118,6 @@ ObTimeZoneInfoManager(common::ObMySQLProxy &sql_proxy)
   //rs fetch tz_info from time_zone tables
   int fetch_time_zone_info();
   int response_time_zone_info(ObRequestTZInfoResult &tz_result);
-  int update_sys_time_zone_info_version();
   int get_time_zone();
   int find_time_zone_info(const common::ObString &tz_name, ObTimeZoneInfoPos &tz_info);
   int64_t get_version() const { return last_version_; }

@@ -57,7 +57,6 @@ static inline ssize_t ob_writev(int fd, const struct iovec *iov, int iovcnt) {
 #include "lib/allocator/ob_fifo_allocator.h"
 #include "lib/utility/ob_smart_var.h"
 #include "lib/oblog/ob_log_compressor.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/profile/ob_trace_id.h"
 
 using namespace oceanbase::lib;
@@ -124,10 +123,10 @@ ObPLogFDType get_fd_type(const char *mod_name, int32_t level, const char *dba_ev
       type = FD_SVR_FILE;
     }
   } else if (level == OB_LOG_LEVEL_DBA_INFO && OB_NOT_NULL(dba_event)) {
-    // DBA_INFO: print into alert.log or other log(observer.log, rootservice.log, election.log)
+    // DBA_INFO: print into alert.log or another configured service log.
     type = FD_ALERT_FILE;
   } else {
-    // INFO, EDIAG, WDIAG, TRACE, DEBUG: print into observer.log, rootservice.log, election.log, trace.log
+    // INFO, EDIAG, WDIAG, TRACE, DEBUG: print into configured service and trace logs.
     type = get_fd_type(mod_name);
   }
   return type;
@@ -1548,8 +1547,6 @@ void ObLogger::flush_logs_to_file(ObPLogItem **log_item, const int64_t count)
           (void)ATOMIC_AAF(&log_file_[i].write_size_, size);
           (void)ATOMIC_AAF(&log_file_[i].file_size_, size);
           (void)ATOMIC_AAF(&log_file_[i].write_count_, iovcnt[i]);
-          EVENT_ADD(IO_WRITE_COUNT, iovcnt[i]);
-          EVENT_ADD(IO_WRITE_BYTES, size);
         }
       }
 

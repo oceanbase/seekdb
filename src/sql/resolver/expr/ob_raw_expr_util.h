@@ -1157,7 +1157,6 @@ public:
                              ObRawExpr *related_doc_cnt,
                              ObRawExpr *related_token_cnt,
                              ObRawExpr *total_doc_cnt,
-                             ObRawExpr *doc_token_cnt,
                              ObRawExpr *doc_length,
                              ObRawExpr *avg_doc_token_cnt,
                              ObOpRawExpr *&bm25,
@@ -1181,13 +1180,9 @@ public:
                                            const ObSQLSessionInfo *session,
                                            ObColumnSchemaV2 &gen_col);
   static int check_contain_op_row_expr(const ObRawExpr *raw_expr, bool &contain);
-  /*
-    is_mysql_mode: ret left_expr <=> right_expr
-    otherwise: ret (left_expr = right_expr) or (left_expr is null and right_expr is null)
-  */
+  // Build a null-safe equality expression: left_expr <=> right_expr.
   static int create_null_safe_equal_expr(ObRawExprFactory &expr_factory,
                                          const ObSQLSessionInfo *session_info,
-                                         const bool is_mysql_mode,
                                          ObRawExpr *left_expr,
                                          ObRawExpr *right_expr,
                                          ObRawExpr *&expr);

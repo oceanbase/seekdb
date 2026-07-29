@@ -25,6 +25,7 @@
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
 #include "sql/engine/vector/expr_cmp_func.h"
 #include "sql/engine/expr/ob_expr_func_round.h"
+#include "sql/session/ob_sql_session_info.h"
 
 #include "common/object/ob_object.h"
 #include "rpc/obmysql/ob_mysql_util.h"
@@ -1387,7 +1388,7 @@ int ObExprOperator::aggregate_numeric_accuracy_for_merge(ObExprResType &type,
           a union c will result to 12345 and 123.33
         */
         if (ob_is_integer_type(types[i].get_type())) {
-          precision = MAX(ObAccuracy::DDL_DEFAULT_ACCURACY2[0][types[i].get_type()].precision_,
+          precision = MAX(ObAccuracy::DDL_DEFAULT_ACCURACY[types[i].get_type()].precision_,
                           types[i].get_precision());
           scale = 0;
         } else if (ob_is_number_tc(types[i].get_type())
@@ -1434,11 +1435,11 @@ int ObExprOperator::aggregate_numeric_accuracy_for_merge(ObExprResType &type,
           type.set_precision(MIN(precision, OB_MAX_DECIMAL_POSSIBLE_PRECISION));
         } else {
           type.set_precision(
-            MIN(precision, ObAccuracy::MAX_ACCURACY2[0][type.get_type()].precision_));
+            MIN(precision, ObAccuracy::MAX_ACCURACY[type.get_type()].precision_));
         }
       }
       if (max_decimal_digits >= 0) {
-        type.set_scale(MIN(max_decimal_digits, ObAccuracy::MAX_ACCURACY2[0][type.get_type()].scale_));
+        type.set_scale(MIN(max_decimal_digits, ObAccuracy::MAX_ACCURACY[type.get_type()].scale_));
       }
     }
     LOG_DEBUG("aggregate numeric accuracy", K(max_integer_digits), K(max_decimal_digits), K(type));

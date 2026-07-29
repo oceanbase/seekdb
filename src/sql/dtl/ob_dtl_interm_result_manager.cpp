@@ -283,7 +283,7 @@ int ObDTLIntermResultManager::insert_interm_result_info(ObDTLIntermResultKey &ke
     // The code here is mainly for the use of the temp_table.
     // For the px module,
     // the dir_id has already been set in the previous access_mem_profile.
-    if (OB_FAIL(SERVER_TMP_FILE_MANAGER.alloc_dir(dir_id_))) {
+    if (OB_FAIL(share::g_mp->tmp_file_manager()->alloc_dir(dir_id_))) {
       LOG_WARN("allocate file directory failed", K(ret));
     } else {
       DTL_IR_STORE_DO(*result_info, set_dir_id, dir_id_);

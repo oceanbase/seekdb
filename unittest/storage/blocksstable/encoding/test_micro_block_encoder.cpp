@@ -109,7 +109,6 @@ void TestIColumnEncoder::SetUp()
   ctx_.rowkey_column_cnt_ = rowkey_cnt_;
   ctx_.column_cnt_ = is_multi_version_row_ ? column_cnt_ + 2 : column_cnt_;
   ctx_.col_descs_ = &col_descs_;
-  ctx_.data_format_version_=cal_version(3, 1, 0, 0);
   ctx_.row_store_type_ = common::ENCODING_ROW_STORE;
   ctx_.compressor_type_ = common::ObCompressorType::NONE_COMPRESSOR;
 }
@@ -354,7 +353,6 @@ TEST_F(TestStringDiffNullLength, test_string_diff_null_length)
        ObColumnHeader::Type::STRING_DIFF};
   ctx_.column_encodings_ = column_encoding_array;
   ctx_.micro_block_size_ = 1 << 20; // 1M
-  ctx_.data_format_version_ = cal_version(1, 0, 0, 0);
   ObMicroBlockEncoder encoder;
   ASSERT_EQ(OB_SUCCESS, encoder.init(ctx_));
 

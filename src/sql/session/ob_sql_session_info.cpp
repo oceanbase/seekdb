@@ -115,7 +115,6 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
       sess_create_time_(0),
       has_temp_table_flag_(false),
       has_accessed_session_level_temp_table_(false),
-      enable_early_lock_release_(false),
       is_for_trigger_package_(false),
       trans_type_(transaction::ObTxClass::USER),
       version_provider_(NULL),
@@ -237,7 +236,6 @@ void ObSQLSessionInfo::reset(bool skip_sys_var)
     trace_recorder_ = NULL;
     inner_flag_ = false;
     is_max_availability_mode_ = false;
-    enable_early_lock_release_ = false;
     ps_session_info_map_.reuse();
     ps_name_id_map_.reuse();
     in_use_ps_stmt_id_set_.reuse();
@@ -659,6 +657,10 @@ int ObSQLSessionInfo::drop_temp_tables(const bool is_disconn,
   }
   return ret;
 }
+
+
+
+
 void ObSQLSessionInfo::set_show_warnings_buf(int error_code)
 {
   // if error message didn't insert into THREAD warning buffer,
@@ -788,7 +790,7 @@ int ObSQLSessionInfo::check_global_read_only_privilege(const bool read_only,
      *  update xxx (should fail)
      *  create (should fail)
      *  ... (all write stmt should fail)
-     */
+    */
     if (!sql_traits.is_readonly_stmt_) {
       ret = OB_ERR_OPTION_PREVENTS_STATEMENT;
       LOG_WARN("the server is running with read_only, cannot execute stmt");
@@ -1357,7 +1359,6 @@ OB_DEF_SERIALIZE(ObSQLSessionInfo)
       is_max_availability_mode_,
       session_type_,
       has_temp_table_flag_,
-      enable_early_lock_release_,
       enable_role_array_,
       in_definer_named_proc_,
       priv_user_id_,
@@ -1382,7 +1383,6 @@ OB_DEF_DESERIALIZE(ObSQLSessionInfo)
       is_max_availability_mode_,
       session_type_,
       has_temp_table_flag_,
-      enable_early_lock_release_,
       enable_role_array_,
       in_definer_named_proc_,
       priv_user_id_,
@@ -1408,7 +1408,6 @@ OB_DEF_SERIALIZE_SIZE(ObSQLSessionInfo)
       is_max_availability_mode_,
       session_type_,
       has_temp_table_flag_,
-      enable_early_lock_release_,
       enable_role_array_,
       in_definer_named_proc_,
       priv_user_id_,
@@ -1482,15 +1481,6 @@ void ObSQLSessionInfo::set_session_type_with_flag()
   if (OB_UNLIKELY(INVALID_TYPE == session_type_)) {
     LOG_WARN_RET(OB_ERR_UNEXPECTED, "session type is not init, only happen when old server send rpc to new server");
     session_type_ = inner_flag_ ? INNER_SESSION : USER_SESSION;
-  }
-}
-
-void ObSQLSessionInfo::set_early_lock_release(bool enable)
-{
-  enable_early_lock_release_ = enable;
-  if (enable) {
-    SQL_SESSION_LOG(DEBUG, "set early lock release success",
-        "sessid", get_server_sid());
   }
 }
 
@@ -1611,10 +1601,16 @@ int ObSQLSessionInfo::replace_user_variable(
 
 
 int ObSQLSessionInfo::replace_user_variables(
+  const ObSessionValMap &user_var_map)
+{
+  return ObBasicSessionInfo::replace_user_variables(user_var_map);
+}
+
+int ObSQLSessionInfo::replace_user_variables(
   ObExecContext &ctx, const ObSessionValMap &user_var_map)
 {
   UNUSED(ctx);
-  return ObBasicSessionInfo::replace_user_variables(user_var_map);
+  return replace_user_variables(user_var_map);
 }
 
 
@@ -1623,7 +1619,6 @@ int ObSQLSessionInfo::set_client_id(const common::ObString &client_identifier)
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObBasicSessionInfo::set_client_identifier(client_identifier))) {
     LOG_WARN("failed to set client id", K(ret));
-  } else {
   }
   return ret;
 }
@@ -1893,7 +1888,6 @@ int ObSQLSessionInfo::on_user_disconnect()
 void ObSQLSessionInfo::reset_tx_variable(bool reset_next_scope)
 {
   ObBasicSessionInfo::reset_tx_variable(reset_next_scope);
-  set_early_lock_release(false);
 }
 int ObSQLSessionInfo::set_module_name(const common::ObString &mod) {
   int ret = OB_SUCCESS;

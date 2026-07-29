@@ -205,6 +205,7 @@ TEST(ObTimeConvertTest, str_to_otimestamp)
 
   // NULL timezone
   cvrt_ctx.is_timestamp_ = false;
+  cvrt_ctx.nls_format_ = ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT;
   strcpy(buf, "1000-1-1 0:0:0");
   str.assign(buf, static_cast<int32_t>(strlen(buf)));
   EXPECT_EQ(OB_SUCCESS, ObTimeConverter::str_to_datetime(str, cvrt_ctx, value, nullptr, 0));
@@ -379,24 +380,27 @@ TEST(ObTimeConvertTest, datetime_to_str)
   str.set_length(static_cast<int32_t>(strlen(buf)));
   tz_info.set_offset(8 * 60 * 60);
   value = -30610252800 * USECS_PER_SEC;
-  EXPECT_EQ(OB_SUCCESS, ObTimeConverter::datetime_to_str(value, &tz_info, 0, buf, sizeof(buf), pos));
+  const ObDataTypeCastParams dtc_params(&tz_info);
+  const ObString nls_format;
+  EXPECT_EQ(OB_SUCCESS, ObTimeConverter::datetime_to_str(value, &tz_info, nls_format, 0, buf, sizeof(buf), pos));
   EXPECT_TRUE(0 == strcmp(buf, "1000-01-01 00:00:00"));
   pos = 0;
   strcpy(buf, "-8:00");
   str.set_length(static_cast<int32_t>(strlen(buf)));
   tz_info.set_offset(-8 * 60 * 60);
   value = 1435950720 * static_cast<int64_t>(USECS_PER_SEC);
-  EXPECT_EQ(OB_SUCCESS, ObTimeConverter::datetime_to_str(value, &tz_info, 0, buf, sizeof(buf), pos));
+  EXPECT_EQ(OB_SUCCESS, ObTimeConverter::datetime_to_str(value, &tz_info, nls_format, 0, buf, sizeof(buf), pos));
   EXPECT_TRUE(0 == strcmp(buf, "2015-07-03 11:12:00"));
   pos = 0;
 
+  const ObDataTypeCastParams dtc_params2(NULL);
   // NULL timezone
   value = -30610224000 * USECS_PER_SEC;
-  EXPECT_EQ(OB_SUCCESS, ObTimeConverter::datetime_to_str(value, NULL, 0, buf, sizeof(buf), pos));
+  EXPECT_EQ(OB_SUCCESS, ObTimeConverter::datetime_to_str(value, NULL, nls_format, 0, buf, sizeof(buf), pos));
   EXPECT_TRUE(0 == strcmp(buf, "1000-01-01 00:00:00"));
   pos = 0;
   value = 253402300799 * static_cast<int64_t>(USECS_PER_SEC);
-  EXPECT_EQ(OB_SUCCESS, ObTimeConverter::datetime_to_str(value, NULL, 0, buf, sizeof(buf), pos));
+  EXPECT_EQ(OB_SUCCESS, ObTimeConverter::datetime_to_str(value, NULL, nls_format, 0, buf, sizeof(buf), pos));
   EXPECT_TRUE(0 == strcmp(buf, "9999-12-31 23:59:59"));
   pos = 0;
 }

@@ -20,6 +20,7 @@
 #include "lib/ob_errno.h"
 #include "storage/ob_storage_schema.h"
 #include "lib/container/ob_array_array.h"
+#include "observer/ob_server_struct.h"
 #include "storage/compaction/ob_partition_merge_policy.h"
 #include "storage/multi_data_source/mds_key_serialize_util.h"
 #include "storage/compaction/ob_mds_filter_info.h"
@@ -36,7 +37,9 @@ struct ObParallelMergeInfo
 {
 public:
   ObParallelMergeInfo()
-   : list_size_(0),
+   : format_version_(PARALLEL_INFO_VERSION),
+     list_size_(0),
+     reserved_(0),
      parallel_datum_rowkey_list_(nullptr)
   {}
   ~ObParallelMergeInfo();
@@ -44,14 +47,17 @@ public:
   void destroy(common::ObIAllocator &allocator);
   void clear()
   {
+    format_version_ = PARALLEL_INFO_VERSION;
     list_size_ = 0;
+    reserved_ = 0;
     parallel_datum_rowkey_list_ = nullptr;
   }
   int64_t get_size() const { return list_size_; }
   bool is_valid() const
   {
-    return list_size_ == 0
-      || (list_size_ < UINT8_MAX && nullptr != parallel_datum_rowkey_list_);
+    return PARALLEL_INFO_VERSION == format_version_
+      && 0 == reserved_
+      && (list_size_ == 0 || nullptr != parallel_datum_rowkey_list_);
   }
 
   template<typename T>
@@ -77,11 +83,20 @@ public:
   int64_t to_string(char* buf, const int64_t buf_len) const;
   static const int64_t MAX_PARALLEL_RANGE_SERIALIZE_LEN = 1 * 1024 * 1024;
   static const int64_t VALID_CONCURRENT_CNT = 1;
+  static const int64_t PARALLEL_INFO_VERSION = 1;
 private:
   int generate_datum_rowkey_list(
     ObIAllocator &allocator,
     ObArrayArray<ObStoreRange> &paral_range);
-  uint32_t list_size_;
+  union {
+    uint32_t parallel_info_;
+    struct {
+      uint32_t format_version_  : 4;
+      uint32_t list_size_       : 8;
+      uint32_t reserved_        : 20;
+    };
+  };
+  // concurrent_cnt - 1
   blocksstable::ObDatumRowkey *parallel_datum_rowkey_list_;
 };
 
@@ -204,15 +219,30 @@ public:
   int64_t get_serialize_size() const;
   void gene_info(char* buf, const int64_t buf_len, int64_t &pos) const;
   int64_t to_string(char* buf, const int64_t buf_len) const;
+private:
+  bool contain_storage_schema() const;
 public:
   static const int64_t DEFAULT_ENCODING_ROWS_LIMIT = 65536;
+  static const int64_t MEDIUM_INFO_VERSION = 5;
+private:
+  static const int32_t SCS_ONE_BIT = 1;
+  static const int32_t SCS_RESERVED_BITS = 42;
+
 public:
-  uint8_t compaction_type_;
-  bool contain_parallel_range_;
-  uint8_t medium_merge_reason_;
-  bool is_schema_changed_;
-  bool is_skip_database_major_;
-  bool contain_mds_filter_info_;
+  union {
+    uint64_t info_;
+    struct {
+      uint64_t format_version_                  : 4;
+      uint64_t compaction_type_                 : 2;
+      uint64_t contain_parallel_range_          : SCS_ONE_BIT;
+      uint64_t medium_merge_reason_             : 8;
+      uint64_t is_schema_changed_               : SCS_ONE_BIT;
+      uint64_t reserved1_                       : 4;
+      uint64_t is_skip_database_major_          : SCS_ONE_BIT;
+      uint64_t contain_mds_filter_info_         : SCS_ONE_BIT;
+      uint64_t reserved2_                       : SCS_RESERVED_BITS;
+    };
+  };
 
   uint64_t data_version_;
   int64_t medium_snapshot_;

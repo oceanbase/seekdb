@@ -29,6 +29,8 @@ namespace storage
 class ObStorageMetaMemMgr;
 class ObTablet;
 
+#ifndef OCEANBASE_STORAGE_META_OBJ_POOL_COMMON_TYPES_
+#define OCEANBASE_STORAGE_META_OBJ_POOL_COMMON_TYPES_
 class RPMetaObjLabel
 {
 public:
@@ -137,6 +139,7 @@ public:
     header.in_map_ = false;
   }
 };
+#endif // OCEANBASE_STORAGE_META_OBJ_POOL_COMMON_TYPES_
 
 class TryWashTabletFunc final
 {

@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX RS
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_ddl_redefinition_task.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
@@ -24,7 +23,7 @@
 #include "share/ob_ddl_checksum.h"
 #include "share/ob_ddl_sim_point.h"
 #include "pl/sys_package/ob_dbms_stats.h"
-#include "storage/ob_tablet_autoinc_seq_rpc_handler.h"
+#include "storage/ob_tablet_autoinc_seq_service.h"
 #include "share/ob_ex_rpc.h"
 
 using namespace oceanbase::lib;
@@ -86,7 +85,6 @@ int ObDDLRedefinitionSSTableBuildTask::process()
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   ObTabletID unused_tablet_id;
-  ObAddr unused_addr;
   ObTraceIdGuard trace_id_guard(trace_id_);
   ObDDLEventInfo ddl_event_info;
   ddl_event_info.set_inner_sql_id(execution_id_);
@@ -139,8 +137,6 @@ int ObDDLRedefinitionSSTableBuildTask::process()
       session_param.ddl_info_.set_dest_table_hidden(true);
       session_param.ddl_info_.set_heap_table_ddl(use_heap_table_ddl_plan_);
       session_param.ddl_info_.set_retryable_ddl(is_retryable_ddl_);
-      session_param.use_external_session_ = true;  // means session id dispatched by session mgr
-
       const int64_t DDL_INNER_SQL_EXECUTE_TIMEOUT = ObDDLUtil::calc_inner_sql_execute_timeout();
       user_sql_proxy = GCTX.ddl_sql_proxy_;
       add_event_info(ret, "ddl redefinition sstable build task generate innersql");
@@ -163,7 +159,7 @@ int ObDDLRedefinitionSSTableBuildTask::process()
       }
     }
   }
-  if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::on_sstable_complement_job_reply(unused_tablet_id, unused_addr, task_key, snapshot_version_, execution_id_, ret, info))) {
+  if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::on_sstable_complement_job_reply(unused_tablet_id, task_key, snapshot_version_, execution_id_, ret, info))) {
     LOG_WARN("fail to finish sstable complement", KR(tmp_ret), "ddl_event_info", ObDDLEventInfo());
   }
   add_event_info(ret, "ddl redefinition sstable build task finish");
@@ -906,9 +902,8 @@ int ObDDLRedefinitionTask::sync_auto_increment_position()
       } else if (cur_column_schema->is_autoincrement()
       && nullptr != (dst_column_schema = dest_table_schema->get_column_schema(cur_column_schema->get_column_name()))
       && dst_column_schema->is_autoincrement()) {
-        // Worker timeout ts here is default value, i.e., INT64_MAX,
-        // which leads to RPC-receiver worker timeout due to overflow when select val from __ALL_AUTO_INCREMENT.
-        // More details, refer to comments in
+        // Bound the local inner-table read timeout instead of inheriting INT64_MAX,
+        // which overflows timeout arithmetic when reading __ALL_AUTO_INCREMENT.
         const int64_t save_timeout_ts = THIS_WORKER.get_timeout_ts();
         THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + max(GCONF.rpc_timeout, static_cast<int64_t>(1000 * 1000 * 20)));
         ObAutoincrementService &auto_inc_service = ObAutoincrementService::get_instance();
@@ -2010,13 +2005,9 @@ int ObSyncTabletAutoincSeqCtx::sync()
 int ObSyncTabletAutoincSeqCtx::call_and_process_all_tablet_autoinc_seqs(const bool is_get)
 {
   int ret = OB_SUCCESS;
-  int64_t rpc_timeout = 0;
-  const int64_t tablet_count = is_get ? src_tablet_ids_.count() : autoinc_params_.count();
   ObSEArray<ObTabletAutoincSeqCopyParam, 1> request_params;
 
-  if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(tablet_count, rpc_timeout))) {
-    LOG_WARN("failed to get ddl rpc timeout", K(ret));
-  } else if (is_get) {
+  if (is_get) {
     if (OB_UNLIKELY(src_tablet_ids_.count() != dest_tablet_ids_.count())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid tablet ids count", K(ret), K(src_tablet_ids_), K(dest_tablet_ids_));
@@ -2033,35 +2024,30 @@ int ObSyncTabletAutoincSeqCtx::call_and_process_all_tablet_autoinc_seqs(const bo
     LOG_WARN("failed to assign request params", K(ret), K(autoinc_params_));
   }
 
-  if (OB_SUCC(ret)) {
-    storage::ObTabletAutoincSeqRpcHandler &handler =
-        storage::ObTabletAutoincSeqRpcHandler::get_instance();
+  storage::ObTabletAutoincSeqService &service =
+      storage::ObTabletAutoincSeqService::get_instance();
+  if (OB_FAIL(ret)) {
+  } else {
     int rpc_ret_code = OB_SUCCESS;
     common::ObSArray<ObTabletAutoincSeqCopyParam> result_params;
     if (is_get) {
-      obcall::ObBatchGetTabletAutoincSeqArg arg;
-      obcall::ObBatchGetTabletAutoincSeqRes res;
-      if (OB_FAIL(arg.init(request_params))) {
-        LOG_WARN("failed to init arg", K(ret), K(request_params));
+      rpc_ret_code = service.batch_get_tablet_autoinc_seq(request_params);
+    } else {
+      rpc_ret_code = service.batch_set_tablet_autoinc_seq(request_params);
+    }
+    if (OB_SUCCESS == rpc_ret_code && OB_FAIL(result_params.assign(request_params))) {
+      LOG_WARN("failed to assign result params", K(ret), K(request_params));
+    }
+    if (is_get) {
+      if (OB_FAIL(autoinc_params_.reserve(orig_src_tablet_ids_.count()))) {
+        LOG_WARN("failed to reserve tablet autoinc parameters",
+            K(ret), K(orig_src_tablet_ids_.count()));
       } else {
-        rpc_ret_code = ex_rpc::sync_call(
-            rpc_timeout, [&]{ return handler.batch_get_tablet_autoinc_seq(arg, res); });
-        if (OB_SUCCESS == rpc_ret_code && OB_FAIL(result_params.assign(res.autoinc_params_))) {
-          LOG_WARN("failed to assign result params", K(ret));
-        }
+        src_tablet_ids_.reuse();
+        dest_tablet_ids_.reuse();
       }
     } else {
-      obcall::ObBatchSetTabletAutoincSeqArg arg;
-      obcall::ObBatchSetTabletAutoincSeqRes res;
-      if (OB_FAIL(arg.init(request_params))) {
-        LOG_WARN("failed to init arg", K(ret), K(request_params));
-      } else {
-        rpc_ret_code = ex_rpc::sync_call(
-            rpc_timeout, [&]{ return handler.batch_set_tablet_autoinc_seq(arg, res); });
-        if (OB_SUCCESS == rpc_ret_code && OB_FAIL(result_params.assign(res.autoinc_params_))) {
-          LOG_WARN("failed to assign result params", K(ret));
-        }
-      }
+      autoinc_params_.reuse();
     }
 
     int tmp_ret = OB_SUCCESS;
@@ -2081,14 +2067,11 @@ int ObSyncTabletAutoincSeqCtx::call_and_process_all_tablet_autoinc_seqs(const bo
           }
         }
       } else {
-        for (int64_t i = 0; i < request_params.count(); i++) {
+        for (int64_t i = 0; i < request_params.count(); ++i) {
           request_params.at(i).ret_code_ = rpc_ret_code;
         }
       }
-
       if (OB_FAIL(ret)) {
-      } else if (is_get && OB_FAIL(autoinc_params_.reserve(new_params_cnt))) {
-        LOG_WARN("failed to reserve new param count", K(ret), K(new_params_cnt));
       } else {
         if (is_get) {
           src_tablet_ids_.reuse();
@@ -2132,10 +2115,13 @@ int ObSyncTabletAutoincSeqCtx::call_and_process_all_tablet_autoinc_seqs(const bo
       }
     }
   }
-  if (OB_SUCC(ret) && is_get
+
+  if (OB_SUCC(ret)
+      && is_get
       && OB_UNLIKELY(orig_src_tablet_ids_.count() != autoinc_params_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid count", K(orig_src_tablet_ids_), K(autoinc_params_));
+    LOG_WARN("invalid tablet autoinc result count",
+        K(ret), K(orig_src_tablet_ids_), K(autoinc_params_));
   }
   return ret;
 }
@@ -2174,8 +2160,7 @@ int ObDDLRedefinitionTask::reap_old_local_build_task(bool &need_exec_new_inner_s
         LOG_WARN("failed to check and wait old complement task", K(ret));
       }
     } else if (!need_exec_new_inner_sql) {
-      ObAddr unused_addr;
-      if (OB_FAIL(update_complete_sstable_job_status(unused_tablet_id, unused_addr, snapshot_version_, old_execution_id, old_ret_code, unused_addition_info))) {
+      if (OB_FAIL(update_complete_sstable_job_status(unused_tablet_id, snapshot_version_, old_execution_id, old_ret_code, unused_addition_info))) {
         LOG_WARN("failed to wait and complete old task finished!", K(ret));
       }
     }

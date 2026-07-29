@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_ls_tablet_service.h"
+#include "storage/tx/ob_ts_mgr.h"
 #include "share/rc/ob_module_provider.h"
 #include "share/schema/ob_schema_runtime_service.h"
 #include "storage/blocksstable/ob_datum_row_store.h"
@@ -2078,7 +2078,6 @@ int ObLSTabletService::insert_rows(
   if (OB_SUCC(ret)) {
     LOG_DEBUG("succeeded to insert rows", K(ret), K(afct_num));
     affected_rows = afct_num;
-    EVENT_ADD(STORAGE_INSERT_ROW_COUNT, afct_num);
   }
   NG_TRACE(S_insert_rows_end);
 
@@ -2227,7 +2226,6 @@ int ObLSTabletService::insert_rows_with_fetch_dup(
         if (OB_ITER_END == ret) {
           if (has_ignore_dup_error) {
             ret = OB_ERR_PRIMARY_KEY_DUPLICATE; // recover the duplicate key error
-            EVENT_ADD(SQL_INSERT_DUPLICATE_COUNT, dup_row_count);
             if (nullptr == duplicated_rows) {
               // For primary key conflicts caused by concurrent insertions within
               // a statement, we need to return the corresponding duplicated_rows.
@@ -2259,7 +2257,6 @@ int ObLSTabletService::insert_rows_with_fetch_dup(
   if (OB_SUCC(ret)) {
     LOG_DEBUG("succeeded to insert rows with fetch dup", K(ret));
     affected_rows = afct_num;
-    EVENT_ADD(STORAGE_INSERT_ROW_COUNT, afct_num);
   }
   return ret;
 }
@@ -2525,7 +2522,6 @@ int ObLSTabletService::update_rows(
 
     if (OB_SUCC(ret)) {
       affected_rows = afct_num;
-      EVENT_ADD(STORAGE_UPDATE_ROW_COUNT, afct_num);
     }
       }
 }
@@ -2677,7 +2673,6 @@ int ObLSTabletService::put_rows(
   if (OB_SUCC(ret)) {
     LOG_DEBUG("succeeded to put rows", K(ret));
     affected_rows = afct_num;
-    EVENT_ADD(STORAGE_INSERT_ROW_COUNT, afct_num);
   }
   NG_TRACE(S_update_row_end);
 
@@ -2793,7 +2788,6 @@ int ObLSTabletService::delete_rows(
     }
     if (OB_SUCC(ret)) {
       affected_rows = afct_num;
-      EVENT_ADD(STORAGE_DELETE_ROW_COUNT, afct_num);
     }
       }
 }
@@ -3094,9 +3088,7 @@ int ObLSTabletService::check_old_row_legitimacy(
     const blocksstable::ObDatumRow &old_row)
 {
   int ret = OB_SUCCESS;
-  // usage:
-  //   alter system set_tp tp_no=9,match=3221487629,error_code=4377,frequency=1
-  // where session_id is 3221487629
+  // EN_9 may inject OB_ERR_DEFENSIVE_CHECK for the matching session id.
   const int inject_err = OB_E(EventTable::EN_9, store_ctx.mvcc_acc_ctx_.tx_desc_->get_session_id()) OB_SUCCESS;
   if (OB_ERR_DEFENSIVE_CHECK == inject_err) {
     ret = OB_ERR_DEFENSIVE_CHECK;

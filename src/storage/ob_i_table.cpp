@@ -65,7 +65,6 @@ const char* ObITable::table_type_name_[] =
   "MINI",
   "META_MAJOR",
   "DDL_DUMP",
-  "REMOTE_LOGICAL_MINOR",
   "DDL_MEM",
   "DDL_MEM_MINI_SSTABLE",
   "MDS_MINI",

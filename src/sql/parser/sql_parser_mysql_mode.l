@@ -180,7 +180,6 @@ NULL {
     STORE_PARAM_NODE();
   } else {
     node->sql_str_off_ = yylloc->first_column - 1;
-    setup_token_pos_info(node, yylloc->first_column - 1, node->text_len_);
     return token_ret;
   }
 }
@@ -354,7 +353,6 @@ FALSE {
     STORE_PARAM_NODE();
   } else {
     yylval->node->sql_str_off_ = yylloc->first_column;
-    setup_token_pos_info(yylval->node, yylloc->first_column, yylval->node->text_len_ - 2);
     return token_ret;
   }
 }
@@ -504,7 +502,6 @@ FALSE {
     STORE_PARAM_NODE();
   } else {
     yylval->node->sql_str_off_ = yylloc->first_column;
-    setup_token_pos_info(yylval->node, yylloc->first_column, yylval->node->str_len_);
     return STRING_VALUE;
   }
 }
@@ -631,7 +628,6 @@ FALSE {
     yylval->node->str_value_ = dup_value;
     yylval->node->is_input_quoted_ = 1;
     yylval->node->sql_str_off_ = yylloc->first_column;
-    setup_token_pos_info(yylval->node, yylloc->first_column, yylval->node->str_len_);
     return NAME_OB;
   }
 }
@@ -702,7 +698,6 @@ FALSE {
     yylval->node->str_value_ = dup_value;
     yylval->node->is_input_quoted_ = 1;
     yylval->node->sql_str_off_ = yylloc->first_column;
-    setup_token_pos_info(yylval->node, yylloc->first_column, yylval->node->str_len_);
     return NAME_OB;
   }
 }
@@ -1156,7 +1151,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>COALESCE_AGGR { return COALESCE_AGGR; }
 <hint>NO_COALESCE_AGGR { return NO_COALESCE_AGGR; }
 <hint>OPT_PARAM { return OPT_PARAM; }
-<hint>OB_DDL_SCHEMA_VERSION { return OB_DDL_SCHEMA_VERSION; }
 <hint>DYNAMIC_SAMPLING { return DYNAMIC_SAMPLING; }
 <hint>BLOCKING { return BLOCKING; }
 <hint>PUSHDOWN { return PUSHDOWN; }
@@ -1183,7 +1177,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
     node->str_value_ = str_tolower(dup_value, strlen(dup_value));
     node->str_len_ = out_len;
     node->sql_str_off_ = yylloc->first_column - 1;
-    setup_token_pos_info(node, yylloc->first_column - 1, yylval->node->str_len_);
   }
   return NAME_OB;
 }
@@ -1216,7 +1209,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
     STORE_PARAM_NODE();
   } else {
     yylval->node->sql_str_off_ = yylloc->first_column;
-    setup_token_pos_info(yylval->node, yylloc->first_column, yylval->node->text_len_ - 2);
     return STRING_VALUE;
   }
 }
@@ -1276,7 +1268,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
     check_malloc(dup_value);
     yylval->node->str_value_ = dup_value;
     yylval->node->sql_str_off_ = yylloc->first_column;
-    setup_token_pos_info(yylval->node, yylloc->first_column, yylval->node->str_len_);
     return NAME_OB;
   }
 }
@@ -1383,34 +1374,11 @@ Timestamp{whitespace}?\"[^\"]*\" {
 
 {c_cmt_begin} {
 BEGIN(in_c_comment);
-#ifdef SQL_PARSER_COMPILATION
-  ParseResult *p = (ParseResult *)yyextra;
-  if (false == p->stop_add_comment_) {
-    TokenPosInfo info;
-    info.token_off_ = yylloc->first_column - 1;
-    info.token_len_ = -1;
-    if (OB_UNLIKELY(OB_PARSER_SUCCESS != add_comment_list(p, &info))) {
-      YY_UNEXPECTED_ERROR("add comment to comment list failed");
-    }
-  }
-#endif
 }
 
 <in_c_comment>{c_cmt_end} {
   ((ParseResult *)yyextra)->has_encount_comment_ = true;
   BEGIN(INITIAL);
-#ifdef SQL_PARSER_COMPILATION
-  ParseResult *p = (ParseResult *)yyextra;
-  p->has_encount_comment_ = true;
-  if (false == p->stop_add_comment_) {
-    if (OB_UNLIKELY(0 >= p->comment_cnt_)) {
-      YY_UNEXPECTED_ERROR("comment_cnt_ cannot less than 0 in comment end");
-    } else {
-      TokenPosInfo *info = &(p->comment_list_[p->comment_cnt_-1]);
-      info->token_len_ = yylloc->last_column - info->token_off_;
-    }
-  }
-#endif
 }
 
 {mysql_compatible_comment_end} {
@@ -1791,7 +1759,6 @@ BEGIN(in_c_comment);
       }
       check_malloc(node->str_value_);
       node->sql_str_off_ = yylloc->first_column-1;
-      setup_token_pos_info(node, yylloc->first_column - 1, node->str_len_);
       ret = NAME_OB;
     } else {
       yylval->non_reserved_keyword = word;

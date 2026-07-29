@@ -2986,7 +2986,7 @@ int ObTransformUtils::get_parent_stmt(const ObDMLStmt *root_stmt,
 {
   int ret = OB_SUCCESS;
   parent_stmt = NULL;
-  table_id = OB_INVALID;
+  table_id = -1;
   is_valid = false;
   if (OB_ISNULL(root_stmt)) {
     ret = OB_ERR_UNEXPECTED;
@@ -3055,7 +3055,7 @@ int ObTransformUtils::get_simple_filter_column_in_parent_stmt(const ObDMLStmt *r
   int ret = OB_SUCCESS;
   const ObDMLStmt *parent_stmt = NULL;
   bool is_valid = false;
-  int64_t view_table_id = OB_INVALID;
+  int64_t view_table_id = -1;
   ObSEArray<ObColumnRefRawExpr*, 8> parent_col_exprs;
   const ObSelectStmt *sel_stmt = NULL;
   if (OB_ISNULL(stmt)) {

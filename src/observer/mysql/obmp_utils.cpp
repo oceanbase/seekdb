@@ -80,46 +80,18 @@ int ObMPUtils::add_changed_session_info(OMPKOK &ok_pkt, sql::ObSQLSessionInfo &s
         } else if (OB_FAIL(ok_pkt.add_system_var(str_kv))) {
           LOG_WARN("failed to add system variable", K(str_kv), K(ret));
         } else {
-          if (OB_FAIL(ret)) {
-          } else {
 #ifndef NDEBUG
-            LOG_INFO("success add system var to ok pack", K(str_kv), K(change_var), K(new_val),
-               K(session.get_server_sid()));
+          LOG_INFO("success add system var to ok pack", K(str_kv), K(change_var), K(new_val),
+             K(session.get_server_sid()));
 #else
-            // for autocommit change record.
-            LOG_TRACE("success add system var to ok pack", K(str_kv), K(change_var), K(new_val),
-               K(session.get_server_sid()), K(change_var.id_));
+          // for autocommit change record.
+          LOG_TRACE("success add system var to ok pack", K(str_kv), K(change_var), K(new_val),
+             K(session.get_server_sid()), K(change_var.id_));
 #endif
-          }
         }
       } else {
         LOG_TRACE("sys var not actully changed", K(changed), K(change_var), K(new_val),
                K(session.get_server_sid()));
-      }
-    }
-  }
-
-  if (session.is_user_var_changed()) {
-    const ObIArray<ObString> &user_var = session.get_changed_user_var();
-    ObSessionValMap &user_map = session.get_user_var_val_map();
-    for (int64_t i = 0; i < user_var.count() && OB_SUCCESS == ret; ++i) {
-      ObString name = user_var.at(i);
-      ObSessionVariable sess_var;
-      if (name.empty()) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid variable name", K(name), K(ret));
-      } else if (OB_FAIL(user_map.get_refactored(name, sess_var))) {
-        LOG_WARN("unknown user variable", K(name), K(ret));
-      } else {
-        ObStringKV str_kv;
-        str_kv.key_ = name;
-        if (OB_FAIL(get_user_sql_literal(allocator, sess_var.value_, str_kv.value_, session.create_obj_print_params()))) {
-          LOG_WARN("fail to get user sql literal", K(sess_var.value_), K(ret));
-        } else if (OB_FAIL(ok_pkt.add_user_var(str_kv))) {
-          LOG_WARN("fail to add user var", K(str_kv), K(ret));
-        } else {
-          LOG_DEBUG("succ to add user var", K(str_kv), K(ret));
-        }
       }
     }
   }

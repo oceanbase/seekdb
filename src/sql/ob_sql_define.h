@@ -173,8 +173,7 @@ enum ObMatchFiledsType {
 #define IS_JOIN(type) \
 (((type) == PHY_MERGE_JOIN) || \
  ((type) == PHY_NESTED_LOOP_JOIN) || \
- ((type) == PHY_HASH_JOIN) || \
- ((type) == PHY_BLOCK_BASED_NESTED_LOOP_JOIN))
+ ((type) == PHY_HASH_JOIN))
 
 #define IS_OUTER_JOIN(join_type) \
   ((join_type) == LEFT_OUTER_JOIN || \

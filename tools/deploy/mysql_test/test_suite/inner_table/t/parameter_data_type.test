@@ -45,8 +45,6 @@ let $para_name = open_cursors;                                            # INT
 --source mysql_test/include/parameter_data_type/set_tenant_parameter.inc
 let $para_name = cpu_quota_concurrency;                                   # DOUBLE
 --source mysql_test/include/parameter_data_type/set_tenant_parameter.inc
-let $para_name = default_row_format;                                    # STRING
---source mysql_test/include/parameter_data_type/set_tenant_parameter.inc
 let $para_name = range_optimizer_max_mem_size;                            # CAPACITY
 --source mysql_test/include/parameter_data_type/set_tenant_parameter.inc
 let $para_name = merger_check_interval;                                   # TIME
@@ -71,8 +69,6 @@ let $para_name = enable_perf_event;
 let $para_name = open_cursors;
 --source mysql_test/include/parameter_data_type/check_tenant_parameter_has_set.inc
 let $para_name = cpu_quota_concurrency;
---source mysql_test/include/parameter_data_type/check_tenant_parameter_has_set.inc
-let $para_name = default_row_format;
 --source mysql_test/include/parameter_data_type/check_tenant_parameter_has_set.inc
 let $para_name = range_optimizer_max_mem_size;
 --source mysql_test/include/parameter_data_type/check_tenant_parameter_has_set.inc
@@ -111,7 +107,6 @@ select name, data_type from __all_virtual_sys_parameter_stat where name = 'rpc_t
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'enable_perf_event';                   # BOOL
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'open_cursors';                  # INT
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'cpu_quota_concurrency';         # DOUBLE
-select name, data_type from __all_virtual_sys_parameter_stat where name = 'default_row_format';               # STRING
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'range_optimizer_max_mem_size';  # CAPACITY
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'merger_check_interval';         # TIME
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'major_freeze_duty_time';        # MOMENT
@@ -128,7 +123,6 @@ select name, data_type from __all_virtual_sys_parameter_stat where name = 'rpc_t
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'enable_perf_event';                   # BOOL
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'open_cursors';                  # INT
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'cpu_quota_concurrency';         # DOUBLE
-select name, data_type from __all_virtual_sys_parameter_stat where name = 'default_row_format';               # STRING
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'range_optimizer_max_mem_size';  # CAPACITY
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'merger_check_interval';         # TIME
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'major_freeze_duty_time';        # MOMENT
@@ -138,7 +132,6 @@ select name, data_type from __all_virtual_sys_parameter_stat where name = 'major
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'enable_perf_event';                   # BOOL
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'open_cursors';                  # INT
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'cpu_quota_concurrency';         # DOUBLE
-select name, data_type from __all_virtual_sys_parameter_stat where name = 'default_row_format';               # STRING
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'range_optimizer_max_mem_size';  # CAPACITY
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'merger_check_interval';         # TIME
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'major_freeze_duty_time';        # MOMENT
@@ -155,7 +148,6 @@ select name, data_type from V$OB_PARAMETERS where name = 'rpc_timeout';         
 select name, data_type from V$OB_PARAMETERS where name = 'enable_perf_event';                   # BOOL
 select name, data_type from V$OB_PARAMETERS where name = 'open_cursors';                  # INT
 select name, data_type from V$OB_PARAMETERS where name = 'cpu_quota_concurrency';         # DOUBLE
-select name, data_type from V$OB_PARAMETERS where name = 'default_row_format';               # STRING
 select name, data_type from V$OB_PARAMETERS where name = 'range_optimizer_max_mem_size';  # CAPACITY
 select name, data_type from V$OB_PARAMETERS where name = 'merger_check_interval';         # TIME
 select name, data_type from V$OB_PARAMETERS where name = 'major_freeze_duty_time';        # MOMENT
@@ -172,7 +164,6 @@ select name, data_type from V$OB_PARAMETERS where name = 'rpc_timeout';         
 select name, data_type from V$OB_PARAMETERS where name = 'enable_perf_event';                   # BOOL
 select name, data_type from V$OB_PARAMETERS where name = 'open_cursors';                  # INT
 select name, data_type from V$OB_PARAMETERS where name = 'cpu_quota_concurrency';         # DOUBLE
-select name, data_type from V$OB_PARAMETERS where name = 'default_row_format';               # STRING
 select name, data_type from V$OB_PARAMETERS where name = 'range_optimizer_max_mem_size';  # CAPACITY
 select name, data_type from V$OB_PARAMETERS where name = 'merger_check_interval';         # TIME
 select name, data_type from V$OB_PARAMETERS where name = 'major_freeze_duty_time';        # MOMENT
@@ -234,7 +225,6 @@ select name, data_type from __all_virtual_sys_parameter_stat where name = 'rpc_t
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'enable_perf_event';                   # BOOL
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'open_cursors';                  # INT
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'cpu_quota_concurrency';         # DOUBLE
-select name, data_type from __all_virtual_sys_parameter_stat where name = 'default_row_format';               # STRING
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'range_optimizer_max_mem_size';  # CAPACITY
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'merger_check_interval';         # TIME
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'major_freeze_duty_time';        # MOMENT
@@ -251,7 +241,6 @@ select name, data_type from V$OB_PARAMETERS where name = 'rpc_timeout';         
 select name, data_type from V$OB_PARAMETERS where name = 'enable_perf_event';                   # BOOL
 select name, data_type from V$OB_PARAMETERS where name = 'open_cursors';                  # INT
 select name, data_type from V$OB_PARAMETERS where name = 'cpu_quota_concurrency';         # DOUBLE
-select name, data_type from V$OB_PARAMETERS where name = 'default_row_format';               # STRING
 select name, data_type from V$OB_PARAMETERS where name = 'range_optimizer_max_mem_size';  # CAPACITY
 select name, data_type from V$OB_PARAMETERS where name = 'merger_check_interval';         # TIME
 select name, data_type from V$OB_PARAMETERS where name = 'major_freeze_duty_time';        # MOMENT
@@ -268,7 +257,6 @@ select name, data_type from V$OB_PARAMETERS where name = 'rpc_timeout';         
 select name, data_type from V$OB_PARAMETERS where name = 'enable_perf_event';                   # BOOL
 select name, data_type from V$OB_PARAMETERS where name = 'open_cursors';                  # INT
 select name, data_type from V$OB_PARAMETERS where name = 'cpu_quota_concurrency';         # DOUBLE
-select name, data_type from V$OB_PARAMETERS where name = 'default_row_format';               # STRING
 select name, data_type from V$OB_PARAMETERS where name = 'range_optimizer_max_mem_size';  # CAPACITY
 select name, data_type from V$OB_PARAMETERS where name = 'merger_check_interval';         # TIME
 select name, data_type from V$OB_PARAMETERS where name = 'major_freeze_duty_time';        # MOMENT

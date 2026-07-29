@@ -21,6 +21,7 @@
 #include "sql/dtl/ob_dtl_channel_group.h"
 #include "sql/engine/px/exchange/ob_px_ms_receive_op.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
+#include "share/config/ob_server_config.h"
 
 namespace oceanbase
 {

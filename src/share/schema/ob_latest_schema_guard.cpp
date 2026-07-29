@@ -401,22 +401,6 @@ int ObLatestSchemaGuard::get_database_schema(
   return ret;
 }
 
-int ObLatestSchemaGuard::get_server_runtime_schema(
-    const ObServerRuntimeSchema *&runtime_schema)
-{
-  int ret = OB_SUCCESS;
-  runtime_schema = NULL;
-  if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_FAIL(get_schema_(SERVER_RUNTIME_SCHEMA,
-             1, runtime_schema))) {
-    LOG_WARN("fail to get server runtime schema", KR(ret));
-  } else if (OB_ISNULL(runtime_schema)) {
-    LOG_INFO("server runtime schema does not exist", KR(ret));
-  }
-  return ret;
-}
-
 int ObLatestSchemaGuard::get_coded_index_name_info_mysql(
     common::ObIAllocator &allocator,
     const uint64_t database_id,

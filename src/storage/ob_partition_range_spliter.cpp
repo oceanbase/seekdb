@@ -2390,7 +2390,7 @@ int ObPartitionIncrementalRangeSpliter::init(compaction::ObTabletMergeCtx &merge
   } else {
     merge_ctx_ = &merge_ctx;
     allocator_ = &allocator;
-    // TODO(@DanLing) use cg table in co dag_net
+    // TODO(@DanLing) use cg table in co scheduling
     // the first table is ObSSTable in unit test
     major_sstable_ = static_cast<ObSSTable *>(tables_handle.get_table(0));
     tablet_size_ = merge_ctx.get_schema()->get_tablet_size();

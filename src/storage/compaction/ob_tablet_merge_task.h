@@ -76,18 +76,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObMergeParameter);
 };
 
-// TODO(@DanLing) optimize this struct
-struct ObCompactionParam
-{
-public:
-  ObCompactionParam();
-  ~ObCompactionParam() = default;
-  TO_STRING_KV(K_(occupy_size), K_(last_end_scn));
-public:
-  uint64_t occupy_size_;
-  share::SCN last_end_scn_;
-};
-
 struct ObTabletMergeDagParam : public share::ObIDagInitParam
 {
   ObTabletMergeDagParam();
@@ -104,7 +92,7 @@ struct ObTabletMergeDagParam : public share::ObIDagInitParam
   compaction::ObMergeType merge_type_;
   int64_t merge_version_;
   ObTabletID tablet_id_;
-  ObCompactionParam compaction_param_; // merge DAG accounting
+  uint64_t data_size_;
 };
 
 class ObTabletMergePrepareTask: public share::ObITask
@@ -182,7 +170,7 @@ public:
   {
     return can_not_retry_warning(dag_ret_);
   }
-  virtual int64_t get_data_size() const override { return param_.compaction_param_.occupy_size_; }
+  virtual int64_t get_data_size() const override { return param_.data_size_; }
   static bool can_not_retry_warning(const int dag_ret) {
     return OB_NO_NEED_MERGE == dag_ret
         || OB_TABLE_IS_DELETED == dag_ret
@@ -196,9 +184,7 @@ public:
   virtual int gene_compaction_info(compaction::ObTabletCompactionProgress &progress) override;
   virtual int diagnose_compaction_info(compaction::ObDiagnoseTabletCompProgress &progress) override;
   virtual void set_dag_error_location() override;
-  int update_compaction_param(const ObTabletMergeDagParam &param);
   int generate_merge_task(ObBasicTabletMergeCtx &ctx, share::ObITask *prepare_task);
-  virtual bool uses_reserved_allocator() const override { return false; }
   int alloc_merge_ctx();
   int get_min_sstable_end_scn(share::SCN &min_end_scn);
   int init_min_sstable_end_scn();

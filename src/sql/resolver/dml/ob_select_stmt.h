@@ -108,7 +108,7 @@ struct SelectItem
   bool need_check_dup_name_;
   // select item is implicit filled in updatable view, to pass base table's column to top view.
   bool implicit_filled_;
-  bool is_implicit_added_; //used for temporary table and label security at insert resolver
+  bool is_implicit_added_; // used for expressions implicitly added by the resolver
 
   bool is_hidden_rowid_;
 };

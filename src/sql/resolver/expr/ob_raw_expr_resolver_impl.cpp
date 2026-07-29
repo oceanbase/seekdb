@@ -1064,14 +1064,10 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
               LOG_WARN("obj access node is null", K(ret));
             } else if (OB_FAIL(process_obj_access_node(*obj_access, expr))) {
               LOG_WARN("failed to process obj access node", K(ret));
-              if (get_udf_param_syntax_err()) {
-                // do nothing ....
-              } else {
-                ObString func_name(node->children_[0]->str_len_, node->children_[0]->str_value_);
-                ret = OB_ERR_WRONG_PARAMETERS_TO_NATIVE_FCT;
-                LOG_USER_ERROR(OB_ERR_WRONG_PARAMETERS_TO_NATIVE_FCT,
-                               func_name.length(), func_name.ptr());
-              }
+              ObString func_name(node->children_[0]->str_len_, node->children_[0]->str_value_);
+              ret = OB_ERR_WRONG_PARAMETERS_TO_NATIVE_FCT;
+              LOG_USER_ERROR(OB_ERR_WRONG_PARAMETERS_TO_NATIVE_FCT,
+                             func_name.length(), func_name.ptr());
             }
           }
         }
@@ -2077,6 +2073,7 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
   int64_t server_collation = CS_TYPE_INVALID;
   ObCollationType nation_collation = OB_NOT_NULL(ctx_.session_info_) ? ctx_.session_info_->get_nls_collation_nation() : CS_TYPE_INVALID;
   bool enable_decimal_int = false;
+  share::ObCompatType compat_type = share::COMPAT_MYSQL57;
   bool enable_mysql_compatible_dates = false;
   if (OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2100,6 +2097,7 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
                                              &(ctx_.parents_expr_info_),
                                              session_info->get_sql_mode(),
                                              enable_decimal_int, // FIXME: enable decimal int
+                                             compat_type,
                                              enable_mysql_compatible_dates,
                                              session_info->get_min_const_integer_precision(),
                                              nullptr != ctx_.secondary_namespace_,

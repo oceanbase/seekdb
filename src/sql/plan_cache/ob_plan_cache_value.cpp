@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_PC
+#include "share/rc/ob_module_provider.h"
 #include "ob_plan_cache_value.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/plan_cache/ob_pcv_set.h"
