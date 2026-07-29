@@ -47,7 +47,7 @@ select * from information_schema.table_constraints where table_schema in ('ocean
 --sorted_result
 select * from information_schema.character_sets;
 --sorted_result
-select * from information_schema.statistics where table_schema in ('oceanbase', 'mysql', 'information_schema') and TABLE_NAME not like "ob_all_proxy%" order by TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME;
+select * from information_schema.statistics where table_schema in ('oceanbase', 'mysql', 'information_schema') order by TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME;
 --sorted_result
 select * from information_schema.schemata where schema_name in ('oceanbase', 'mysql', 'information_schema') order by CATALOG_NAME, SCHEMA_NAME;
 --sorted_result
@@ -85,7 +85,7 @@ use information_schema;
 --sorted_result
 select * from information_schema.table_constraints where table_schema in ('oceanbase', 'mysql', 'information_schema', 'test1') order by CONSTRAINT_CATALOG, CONSTRAINT_SCHEMA, CONSTRAINT_NAME;
 --sorted_result
-select * from information_schema.statistics where table_schema in ('oceanbase', 'mysql', 'information_schema', 'test1') and TABLE_NAME not like "ob_all_proxy%" order by TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME;
+select * from information_schema.statistics where table_schema in ('oceanbase', 'mysql', 'information_schema', 'test1') order by TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME;
 --sorted_result
 select * from information_schema.views where table_schema in ('oceanbase', 'mysql', 'information_schema', 'test1') order by TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME;
 

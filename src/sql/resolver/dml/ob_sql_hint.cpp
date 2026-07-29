@@ -250,58 +250,9 @@ int ObQueryHint::check_and_set_params_from_hint(const ObResolverParams &params, 
       LOG_USER_ERROR(OB_ERR_BAD_FIELD_ERROR, column_name.length(), column_name.ptr(),
                                             scope_name.length(), scope_name.ptr());
     }
-  } else if (OB_FAIL(check_ddl_schema_version_from_hint(stmt))) {
-    LOG_WARN("failed to check ddl schema version from hint", K(ret));
   } else {
     if (global_hint_.query_timeout_ > 0) {
       THIS_WORKER.set_timeout_ts(session_info->get_query_start_time() + global_hint_.query_timeout_);
-    }
-  }
-  return ret;
-}
-
-int ObQueryHint::check_ddl_schema_version_from_hint(
-    const ObDMLStmt &stmt,
-    const ObDDLSchemaVersionHint &ddl_schema_version_hint) const
-{
-  int ret = OB_SUCCESS;
-  TableItem *item = NULL;
-  if (OB_FAIL(get_basic_table_without_index_by_hint_table(
-          stmt, ddl_schema_version_hint.table_, item))) {
-    LOG_WARN("failed to get table item by hint table", K(ret));
-  } else if (OB_ISNULL(item)) {
-    ObSEArray<ObSelectStmt *, 8> child_stmts;
-    if (OB_FAIL(stmt.get_child_stmts(child_stmts))) {
-      LOG_WARN("failed to get child stmts", K(ret));
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < child_stmts.count(); ++i) {
-      if (OB_ISNULL(child_stmts.at(i))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("child stmt is null", K(ret), K(i));
-      } else if (OB_FAIL(SMART_CALL(check_ddl_schema_version_from_hint(
-                     *child_stmts.at(i), ddl_schema_version_hint)))) {
-        LOG_WARN("failed to check ddl schema version in child stmt", K(ret));
-      }
-    }
-  } else if (item->ddl_schema_version_ > 0
-             && ddl_schema_version_hint.schema_version_ != item->ddl_schema_version_) {
-    ret = OB_DDL_SCHEMA_VERSION_NOT_MATCH;
-    LOG_USER_ERROR(OB_DDL_SCHEMA_VERSION_NOT_MATCH);
-    LOG_WARN("ddl schema version does not match", K(ret),
-             K(item->ddl_schema_version_), K(ddl_schema_version_hint.schema_version_));
-  }
-  return ret;
-}
-
-int ObQueryHint::check_ddl_schema_version_from_hint(const ObDMLStmt &stmt) const
-{
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0;
-       OB_SUCC(ret) && i < global_hint_.ob_ddl_schema_versions_.count();
-       ++i) {
-    if (OB_FAIL(check_ddl_schema_version_from_hint(
-            stmt, global_hint_.ob_ddl_schema_versions_.at(i)))) {
-      LOG_WARN("failed to check ddl schema version from hint", K(ret));
     }
   }
   return ret;

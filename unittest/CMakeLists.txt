@@ -77,8 +77,6 @@ if(ANDROID)
     ${ANDROID_ALL_TEST_SOURCES})
   # Extra sources required by specific test macros (rs_unittest, aggr_unittest2)
   target_sources(all_tests PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/rootserver/ob_rs_test_utils.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/rootserver/fake_freeze_info_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/storage/ob_truncate_info_helper.cpp)
   # Rename each file's main() so only all_tests_main.cpp provides the real one
   target_compile_definitions(all_tests PRIVATE main=disabled_main)

@@ -16,8 +16,9 @@
 // this file was  share/ob_ddl_common.cpp created by function-level splitting from:these ObDDLUtil static methods
 // implementation depends on this module,callers are all in upper layers;declaration remains in share/ob_ddl_common.h。
 #define USING_LOG_PREFIX SHARE
+#include "share/rc/ob_module_provider.h"
 
-#include "storage/ob_tablet_autoinc_seq_rpc_handler.h"
+#include "storage/ob_tablet_autoinc_seq_service.h"
 #include "share/ob_ddl_common.h"
 #include "storage/ddl/ob_ddl_storage_util.h"
 #include "storage/ddl/ob_ddl_independent_dag.h"  // ObDDLIndependentDag complete type
@@ -45,12 +46,11 @@
 #include "storage/tablet/ob_tablet.h"
 #include "lib/worker.h"
 #include "storage/ddl/ob_ddl_write_stat_util.h"
-#include "share/ob_ddl_error_message_table_operator.h"  // extract_index_key relocated-definition owner
+#include "share/ob_ddl_error_message_table_operator.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
-using namespace oceanbase::obcall;
 using namespace oceanbase::sql;
 
 namespace
@@ -905,21 +905,21 @@ int ObDDLUtil::set_tablet_autoinc_seq(const ObTabletID &tablet_id, const int64_t
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id), K(seq_value));
   } else {
+    ObSEArray<ObTabletAutoincSeqCopyParam, 1> params;
     ObTabletAutoincSeqCopyParam tablet_autoinc_param;
-    obcall::ObBatchSetTabletAutoincSeqArg arg;
-    obcall::ObBatchSetTabletAutoincSeqRes res;
     tablet_autoinc_param.src_tablet_id_ = tablet_id;
     tablet_autoinc_param.dest_tablet_id_ = tablet_id;
     tablet_autoinc_param.autoinc_seq_ = seq_value;
-    if (OB_FAIL(arg.autoinc_params_.push_back(tablet_autoinc_param))) {
+    if (OB_FAIL(params.push_back(tablet_autoinc_param))) {
       LOG_WARN("push back tablet autoinc param failed", K(ret), K(tablet_autoinc_param));
-    } else if (OB_FAIL(ObTabletAutoincSeqRpcHandler::get_instance().batch_set_tablet_autoinc_seq(arg, res))) {
+    } else if (OB_FAIL(ObTabletAutoincSeqService::get_instance().batch_set_tablet_autoinc_seq(
+        params))) {
       LOG_WARN("set tablet auto inc seq failed", K(ret));
-    } else if (1 != res.autoinc_params_.count()) {
+    } else if (1 != params.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected sync tablet autoinc result", K(ret), K(res));
-    } else if (OB_FAIL(res.autoinc_params_.at(0).ret_code_)) {
-      LOG_WARN("sync tablet autoinc failed", K(ret), K(res.autoinc_params_.at(0)));
+      LOG_WARN("unexpected sync tablet autoinc result", K(ret), K(params));
+    } else if (OB_FAIL(params.at(0).ret_code_)) {
+      LOG_WARN("sync tablet autoinc failed", K(ret), K(params.at(0)));
     }
   }
   return ret;

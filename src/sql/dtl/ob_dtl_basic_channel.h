@@ -328,7 +328,6 @@ private:
   uint64_t ch_id_;
 };
 
-// Common in-process data channel implementation shared by PX producers and consumers.
 class ObDtlBasicChannel
     : public ObDtlChannel
 {
@@ -393,8 +392,6 @@ public:
 
   int get_processed_buffer(int64_t timeout);
   virtual int clean_recv_list ();
-  void clean_broadcast_buffer();
-
   // Only DTL use unblock logic for merge sort coord
   inline bool has_less_buffer_cnt()
   {

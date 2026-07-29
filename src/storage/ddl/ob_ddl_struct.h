@@ -35,7 +35,7 @@ struct ObDDLTabletContext;
 
 static const int64_t DDL_FLUSH_MACRO_BLOCK_TIMEOUT = 5 * 1000 * 1000;
 
-static const int64_t SS_DDL_START_SCN_VAL = 100;
+static const int64_t DDL_START_SCN_VAL = 100;
 
 enum ObDDLMacroBlockType
 {

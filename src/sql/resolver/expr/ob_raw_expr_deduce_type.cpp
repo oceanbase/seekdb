@@ -398,7 +398,7 @@ int ObRawExprDeduceType::push_back_types(const ObRawExpr *param_expr, ObIExprRes
     if (ob_is_int_uint_tc(types.at(idx).get_type())
         && (param_expr->is_column_ref_expr())) {
       ObPrecision max_prec =
-        ObAccuracy::MAX_ACCURACY2[0 /*mysql*/][types.at(idx).get_type()].get_precision();
+        ObAccuracy::MAX_ACCURACY[types.at(idx).get_type()].get_precision();
       const ObPrecision prec = MAX(types.at(idx).get_precision(), max_prec);
       types.at(idx).set_precision(prec);
       types.at(idx).set_scale(0);
@@ -1459,7 +1459,7 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
           result_type.set_calc_type(ob_is_unsigned_type(child_expr->get_data_type()) ?
             ObUInt64Type : ObIntType);
           override_calc_meta = false;
-          result_type.set_accuracy(ObAccuracy::MAX_ACCURACY2[0/*mysql*/][ObUInt64Type]);
+          result_type.set_accuracy(ObAccuracy::MAX_ACCURACY[ObUInt64Type]);
           expr.set_result_type(result_type);
           ObObjTypeClass from_tc = child_expr->get_type_class();
           need_add_cast = (ObUIntTC != from_tc && ObIntTC != from_tc && ObBitTC != from_tc);
@@ -1638,7 +1638,7 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
                 (T_FUN_SUM != real_child_expr->get_expr_type()
                   || !expr.has_flag(IS_INNER_ADDED_EXPR))) {
               if (ob_is_integer_type(obj_type)) {
-                const int16_t int_max_prec = ObAccuracy::MAX_ACCURACY2[0/*mysql mode*/][obj_type].get_precision();
+                const int16_t int_max_prec = ObAccuracy::MAX_ACCURACY[obj_type].get_precision();
                 result_precision = MAX(result_precision, int_max_prec) + OB_DECIMAL_LONGLONG_DIGITS;
                 result_precision = MIN(OB_MAX_DECIMAL_PRECISION, result_precision);
               } else {
@@ -3424,12 +3424,10 @@ int ObRawExprDeduceType::try_add_cast_expr_above_for_deduce_type(ObRawExpr &expr
   }
   if (OB_SUCC(ret)) {
     ObSQLSessionInfo *session = NULL;
-    ObExecContext *exec_ctx = NULL;
     bool need_wrap = false;
-    if (OB_ISNULL(session = const_cast<ObSQLSessionInfo *>(my_session_)) ||
-        OB_ISNULL(exec_ctx = session->get_cur_exec_ctx())) {
+    if (OB_ISNULL(session = const_cast<ObSQLSessionInfo *>(my_session_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), KP(session), KP(exec_ctx));
+      LOG_WARN("get unexpected null", K(ret), KP(session));
     } else if (OB_FAIL(ObRawExprUtils::need_wrap_to_string(expr.get_result_type(),
                                           cast_dst_type.get_type(), false, need_wrap, true))) {
       LOG_WARN("failed to check_need_wrap_to_string", K(ret));

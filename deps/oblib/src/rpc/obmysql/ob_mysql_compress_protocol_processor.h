@@ -51,8 +51,7 @@ private:
                                const uint32_t pkt_body_size);
 
   int process_compressed_packet(ObCompressedPktContext& context, ObMysqlPktContext &mysql_pkt_context,
-                                obmysql::ObPacketRecordWrapper &pkt_rec_wrapper, ObICSMemPool& pool,
-                                void *&ipacket, bool &need_decode_more);
+                                ObICSMemPool& pool, void *&ipacket, bool &need_decode_more);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMysqlCompressProtocolProcessor);

@@ -752,16 +752,13 @@ int ObSSTableMacroInfo::serialize_(char *buf, const int64_t buf_len, int64_t &po
 }
 
 int ObSSTableMacroInfo::persist_block_ids(
-    const ObTabletID &tablet_id,
-    const int64_t snapshot_version,
     common::ObArenaAllocator &allocator,
-    storage::ObSSTableLinkBlockWriteInfo * const link_write_info,
     ObObjectsWriteCtx &linked_block_write_ctx)
 {
   int ret = OB_SUCCESS;
   ObLinkedMacroBlockItemWriter block_writer;
-  if (OB_FAIL(write_block_ids(tablet_id, snapshot_version, block_writer, entry_id_, link_write_info))) {
-    LOG_WARN("fail to write other block ids", K(ret), KPC(link_write_info));
+  if (OB_FAIL(write_block_ids(block_writer, entry_id_))) {
+    LOG_WARN("fail to write other block ids", K(ret));
   } else if (OB_FAIL(save_linked_block_list(block_writer.get_meta_block_list(), allocator))) {
     LOG_WARN("fail to save linked block ids", K(ret));
   } else {
@@ -1057,23 +1054,18 @@ DEF_TO_STRING(ObSSTableMacroInfo)
 }
 
 int ObSSTableMacroInfo::write_block_ids(
-    const ObTabletID &tablet_id,
-    const int64_t snapshot_version,
     storage::ObLinkedMacroBlockItemWriter &writer,
-    MacroBlockId &entry_id,
-    storage::ObSSTableLinkBlockWriteInfo * const link_write_info) const
+    MacroBlockId &entry_id) const
 {
   int ret = OB_SUCCESS;
-  ObMemAttr mem_attr("SSTableBlockId");
   if (OB_UNLIKELY(0 == data_block_count_ && 0 == other_block_count_) || 
       OB_UNLIKELY((0 != data_block_count_ && OB_ISNULL(data_block_ids_)) ||
-      OB_UNLIKELY((0 != other_block_count_ && OB_ISNULL(other_block_ids_)))) ||
-      OB_UNLIKELY(OB_ISNULL(link_write_info))) {
+      OB_UNLIKELY((0 != other_block_count_ && OB_ISNULL(other_block_ids_))))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("data_block_count_ and other_block_count_ shouldn't be both 0", K(ret), K(data_block_count_),
         K(other_block_count_));
-  } else if (OB_FAIL(writer.init_for_object(tablet_id.id(), snapshot_version, link_write_info->start_macro_seq_, link_write_info->get_ddl_redo_callback()))) {
-    LOG_WARN("fail to initialize item writer", K(ret), KPC(link_write_info));
+  } else if (OB_FAIL(writer.init(false, ObMemAttr("SSTableBlockId")))) {
+    LOG_WARN("fail to initialize item writer", K(ret));
   } else if (OB_FAIL(flush_ids(data_block_ids_, data_block_count_, writer))) {
     LOG_WARN("fail to flush data block ids", K(ret), K(data_block_count_));
   } else if (OB_FAIL(flush_ids(other_block_ids_, other_block_count_, writer))) {
@@ -1081,9 +1073,6 @@ int ObSSTableMacroInfo::write_block_ids(
   } else if (OB_FAIL(writer.close())) {
     LOG_WARN("fail to close block id writer", K(ret));
   } else {
-    if (OB_NOT_NULL(link_write_info)) {
-      link_write_info->set_written_macro_cnt(writer.get_written_macro_cnt());
-    }
     const ObIArray<MacroBlockId> &linked_block = writer.get_meta_block_list();
     entry_id = linked_block.at(linked_block.count() - 1);
   }

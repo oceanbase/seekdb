@@ -214,7 +214,7 @@ int ObFreezeInfoProxy::set_freeze_info(
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("invalid argument", KR(ret), K(frozen_status));
   } else if (OB_FAIL(dml.add_uint64_pk_column("frozen_scn", frozen_status.frozen_scn_.get_val_for_inner_table_field()))
-            || OB_FAIL(dml.add_column("cluster_version", frozen_status.data_version_))
+            || OB_FAIL(dml.add_column("data_version", frozen_status.data_version_))
             || OB_FAIL(dml.add_column("schema_version", frozen_status.schema_version_))) {
     LOG_WARN("fail to add column", KR(ret), K(frozen_status));
   } else if (OB_FAIL(exec.exec_insert(OB_ALL_FREEZE_INFO_TNAME, dml, affected_rows))) {
@@ -385,7 +385,7 @@ int ObFreezeInfoProxy::construct_frozen_status_(
   int ret = OB_SUCCESS;
   uint64_t frozen_scn_val = OB_INVALID_SCN_VAL;
   EXTRACT_UINT_FIELD_MYSQL(result, "frozen_scn", frozen_scn_val, uint64_t);
-  EXTRACT_INT_FIELD_MYSQL(result, "cluster_version", frozen_status.data_version_, int64_t);
+  EXTRACT_INT_FIELD_MYSQL(result, "data_version", frozen_status.data_version_, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "schema_version", frozen_status.schema_version_, int64_t);
   if (FAILEDx(frozen_status.frozen_scn_.convert_for_inner_table_field(frozen_scn_val))) {
     LOG_WARN("fail to convert val to SCN", KR(ret), K(frozen_scn_val));
@@ -395,7 +395,7 @@ int ObFreezeInfoProxy::construct_frozen_status_(
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state)
+
 
 int ObFreezeInfoProxy::get_freeze_schema_info(
     ObISQLClient &sql_proxy,

@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_tx_table.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx_table/ob_tx_data_cache.h"
@@ -274,7 +273,7 @@ int ObTxTable::create_ctx_tablet_(const share::SCN &create_scn)
   if (OB_FAIL(get_ctx_table_schema_( table_schema))) {
     LOG_WARN("get ctx table schema failed", K(ret));
   } else if (OB_FAIL(create_tablet_schema.init(arena_allocator, table_schema,
-        false/*skip_column_info*/, DATA_CURRENT_VERSION))) {
+        false/*skip_column_info*/))) {
     LOG_WARN("failed to init storage schema", KR(ret), K(table_schema));
   } else if (OB_FAIL(ls_->create_ls_inner_tablet(LS_TX_CTX_TABLET,
                                                  ObLS::LS_INNER_TABLET_FROZEN_SCN,
@@ -397,7 +396,7 @@ int ObTxTable::create_data_tablet_(const share::SCN &create_scn)
   if (OB_FAIL(get_data_table_schema_( table_schema))) {
     LOG_WARN("get data table schema failed", K(ret));
   } else if (OB_FAIL(create_tablet_schema.init(arena_allocator, table_schema,
-        false/*skip_column_info*/, DATA_CURRENT_VERSION))) {
+        false/*skip_column_info*/))) {
     LOG_WARN("failed to init storage schema", KR(ret), K(table_schema));
   } else if (OB_FAIL(ls_->create_ls_inner_tablet(LS_TX_DATA_TABLET,
                                                  ObLS::LS_INNER_TABLET_FROZEN_SCN,
@@ -629,7 +628,6 @@ int ObTxTable::insert(ObTxData *&tx_data)
 int ObTxTable::check_with_tx_data(ObReadTxDataArg &read_tx_data_arg, ObITxDataCheckFunctor &fn)
 {
   int ret = OB_SUCCESS;
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_check_tx_status);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("tx table is not init.", KR(ret), K(read_tx_data_arg));
@@ -689,7 +687,6 @@ int ObTxTable::check_tx_data_in_mini_cache_(ObReadTxDataArg &read_tx_data_arg, O
       STORAGE_LOG(WARN, "check tx data in mini cache failed", KR(ret), K(read_tx_data_arg), K(tx_data));
     }
   } else {
-    EVENT_INC(TX_DATA_HIT_MINI_CACHE_COUNT);
     if (OB_FAIL(fn(tx_data))) {
       STORAGE_LOG(WARN, "check tx data in mini cache failed", KR(ret), K(read_tx_data_arg), K(tx_data));
     }
@@ -720,7 +717,6 @@ int ObTxTable::check_tx_data_in_kv_cache_(ObReadTxDataArg &read_tx_data_arg, ObI
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(ERROR, "tx data in cache value is nullptr", KR(ret), K(read_tx_data_arg), KPC(cache_val));
     } else {
-      EVENT_INC(TX_DATA_HIT_KV_CACHE_COUNT);
       ret = fn(*tx_data);
 
       if (ObTxData::RUNNING == tx_data->state_) {
@@ -741,7 +737,6 @@ int ObTxTable::check_tx_data_in_tables_(ObReadTxDataArg &read_tx_data_arg, ObITx
   int ret = OB_SUCCESS;
 
   if (OB_SUCC(tx_ctx_table_.check_with_tx_data(read_tx_data_arg.tx_id_, fn))) {
-    EVENT_INC(TX_DATA_READ_TX_CTX_COUNT);
     TRANS_LOG(DEBUG, "tx ctx table check with tx data succeed", K(read_tx_data_arg), K(fn));
   } else if (OB_TRANS_CTX_NOT_EXIST == ret) {
     ObTxDataGuard tx_data_guard;

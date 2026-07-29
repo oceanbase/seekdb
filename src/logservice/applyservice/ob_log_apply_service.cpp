@@ -18,7 +18,6 @@
 #include "logservice/ob_append_callback.h"
 #include "logservice/ob_ls_adapter.h"
 #include "logservice/palf/palf_env.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 namespace oceanbase
 {
 using namespace common;
@@ -468,7 +467,6 @@ int ObApplyStatus::try_handle_cb_queue(ObApplyServiceQueueTask *cb_queue,
         CLOG_LOG(ERROR, "cb is NULL", KPC(cb_queue), KPC(this), K(ret));
       } else if ((lsn = cb->__get_lsn()).val_ < ATOMIC_LOAD(&palf_committed_end_lsn_.val_)) {
         // callbacks with log position less than the confirmed log position can callback on_success
-        ObDIActionGuard(cb->get_cb_name());
         if (OB_FAIL(cb_queue->pop())) {
           CLOG_LOG(ERROR, "cb_queue pop failed", KPC(cb_queue), KPC(this), K(ret));
         } else {
@@ -1248,7 +1246,6 @@ void ObLogApplyService::revert_apply_status(ObApplyStatus *apply_status)
 void ObLogApplyService::handle(common::LinkTask *task)
 {
   int ret = OB_SUCCESS;
-  ObDIActionGuard ag("LogService", "LogApplyService", "ApplyTask");
   ObApplyServiceTask *task_to_handle = static_cast<ObApplyServiceTask *>(task);
   ObApplyStatus *apply_status = NULL;
   bool need_push_back = false;

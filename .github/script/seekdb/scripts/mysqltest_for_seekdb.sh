@@ -44,21 +44,11 @@ function prepare_config {
 
 
     cd $HOME/seekdb/tools/deploy
-    if [ "$WITH_PROXY" ] && [ "$WITH_PROXY" != "0" ]
+    if [[ "$CLUSTER_SPEC" == '2x1' ]] || [[ "$SLAVE" == "1" ]]
     then
-        if [ "$CLUSTER_SPEC" == '2x1' ]
-        then
-            SPEC="[$HOST,proxy@$HOST]@zone1 [$HOST]@zone2"
-        else
-            SPEC="[$HOST,proxy@$HOST]@zone1"
-        fi
+        SPEC="[$HOST]@zone1 [$HOST]@zone2"
     else
-        if [[ "$CLUSTER_SPEC" == '2x1' ]] || [[ "$SLAVE" == "1" ]]
-        then
-            SPEC="[$HOST]@zone1 [$HOST]@zone2"
-        else
-            SPEC="[$HOST]@zone1"
-        fi
+        SPEC="[$HOST]@zone1"
     fi
     # farm中由于机器变小了，需要设置下
     CPU_COUNT_CONFIG="ObCfg.init_config['cpu_count']='24'"
@@ -69,7 +59,6 @@ port_gen = itertools.count(5000 + $SLOT_ID * 100)
 $USER = OBI(
     server_spec='$SPEC',
     is_local=True,
-    proxy_cfg_key='$USER_\${local_ip}_proxy_$SLOT_ID',
     cfg_key='$USER_\${local_ip}_rslist_$SLOT_ID')
 $MINI_CONFIG_ITEM
 $CPU_COUNT_CONFIG
@@ -99,11 +88,6 @@ function prepare_bin {
 
 function prepare_obs {
     cd $HOME
-    if [ "$WITH_PROXY" ] && [ "$WITH_RPOXY" != "0" ]
-    then
-       mkdir -p $USER.proxy0/bin &&
-           ln -st $USER.proxy0/bin $DOWNLOAD_DIR/obproxy || return 1
-    fi
 
     OBS_CNT=2
     for ((i=0; i<$OBS_CNT; i++))
@@ -125,10 +109,7 @@ function run_mysqltest {
     [[ "$SLB" != "" ]] && slb="slb=$SLB,$EXECID"
     cd $HOME/seekdb/tools/deploy
     mkfifo test.fifo
-    if [ "$WITH_PROXY" ] && [ "$WITH_PROXY" != "0" ]
-    then
-        cat test.fifo | tee result.out & ./hap.py $USER.proxy0.mysqltest collect_all slices=$SLICES slice_idx=$SLICE_IDX $slb `echo $ARGV`  1> test.fifo 2>&1 
-    elif [[ "$SLAVE" == "1" ]]
+    if [[ "$SLAVE" == "1" ]]
     then
         cat test.fifo | tee result.out & ./hap.py $USER.obs1.mysqltest collect_all slices=$SLICES slice_idx=$SLICE_IDX $slb `echo $ARGV`  1> test.fifo 2>&1        
     else
@@ -286,7 +267,6 @@ EOF
     extra_conf="""$MYSQLRTEST_ARGS
     $CGROUP_CONFIG
 """
-    conf=${conf//'{{%% PROXY_CONF %%}}'/"$extra_conf"}
     conf=${conf//'{{%% DEPLOY_PATH %%}}'/"$HOME/seekdb/tools/deploy"}
     conf=${conf//'{{%% COMPONENT %%}}'/$COMPONENT}
     conf=${conf//'{{%% SERVERS %%}}'/$SERVERS}
@@ -441,10 +421,6 @@ function obd_run_mysqltest {
     else
     SERVER_ARGS=""
     fi
-    if [ "$WITH_PROXY" ] && [ "$WITH_PROXY" != "0" ]
-    then
-    CLUSTER_MODE="proxy"
-    fi
     reboot_retries=2
     if [[ "$WITH_MYSQLTEST_CONFIG_YAML" == "1" ]]
     then
@@ -488,10 +464,6 @@ function obd_run_mysqltest {
     if [[ "$disable_collect" != "1" ]]
     then
         COLLECT_ARG="--collect-all"
-        if [[ "$WITH_MYSQLTEST_CONFIG_YAML" == "0" ]] && [ "$WITH_PROXY" ] && [ "$WITH_PROXY" != "0" ] && [[ -f "$HOME/seekdb/tools/deploy/obd/.collect_proxy_log" ]]
-        then
-            COLLECT_ARG="$COLLECT_ARG --collect-components=$COMPONENT,obproxy"
-        fi
     fi
     obd_init_cluster
     if [[ "$init_seccess" != "1" ]]
@@ -501,7 +473,6 @@ function obd_run_mysqltest {
         mkdir -p $HOME/collected_log/_test_init/
         [[ -d "$DATA_PATH/observer1/log" ]] && mkdir -p $HOME/collected_log/_test_init/observer1 && mv $DATA_PATH/observer1/log/* $HOME/collected_log/_test_init/observer1
         [[ -d "$DATA_PATH/observer2/log" ]] && mkdir -p $HOME/collected_log/_test_init/observer2 && mv $DATA_PATH/observer2/log/* $HOME/collected_log/_test_init/observer2
-        [[ -d "$DATA_PATH/obproxy/log" ]] && mkdir -p $HOME/collected_log/_test_init/obproxy && mv $DATA_PATH/obproxy/log/* $HOME/collected_log/_test_init/obproxy
         exit 1
     fi 
     if [[ "$SPECIAL_RUN" == "1" ]]

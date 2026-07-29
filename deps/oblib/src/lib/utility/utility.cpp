@@ -37,7 +37,6 @@
 #include "lib/utility/ob_platform_utils.h"  // Platform compatibility layer
 #include "lib/file/file_directory_utils.h"
 #include "lib/string/ob_sql_string.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 
 namespace oceanbase
 {
@@ -1615,8 +1614,6 @@ int ObInOutBandwidthThrottle::limit_in_and_sleep(
     COMMON_LOG(WARN, "failed to limit in_throttle_", K(ret));
   }
 
-  EVENT_ADD(BANDWIDTH_IN_THROTTLE, bytes);
-  EVENT_ADD(BANDWIDTH_IN_SLEEP_US, sleep_us);
   return ret;
 }
 
@@ -1633,8 +1630,6 @@ int ObInOutBandwidthThrottle::limit_out_and_sleep(
     *need_sleep_us = sleep_us;
   }
 
-  EVENT_ADD(BANDWIDTH_OUT_THROTTLE, bytes);
-  EVENT_ADD(BANDWIDTH_OUT_SLEEP_US, sleep_us);
   return ret;
 }
 
@@ -2149,27 +2144,6 @@ const char *extract_demangled_class_name(const char *full_class_name, const char
   }
 #endif
   return sub_name;
-}
-
-const char *get_transparent_hugepage_status()
-{
-  char buf[32];
-  const char *status = "unknown";
-  FILE *file = fopen("/sys/kernel/mm/transparent_hugepage/enabled", "r");
-  if (NULL != file) {
-    if (NULL != fgets(buf, sizeof(buf), file)) {
-      if (NULL != STRSTR(buf, "[never]")) {
-        status = "never";
-      } else if (NULL != STRSTR(buf, "[always]")) {
-        status = "always";
-      } else if (NULL != STRSTR(buf, "[madvise]")) {
-        status = "madvise";
-      }
-    }
-    fclose(file);
-  }
-
-  return status;
 }
 
 int read_one_int(const char *file_name, int64_t &value)

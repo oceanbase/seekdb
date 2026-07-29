@@ -1224,7 +1224,7 @@ int ObMultiVersionSchemaService::init_system_runtime_user_schema()
   SMART_VAR(ObSysVariableSchema, sys_variable) {
     HEAP_VAR(ObUserInfo, sys_user) {
 
-      
+
       runtime_schema.set_schema_version(OB_CORE_SCHEMA_VERSION);
 
       
@@ -1830,7 +1830,7 @@ int ObMultiVersionSchemaService::refresh_runtime_schema(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("proxy is null", KR(ret));
   } else {
-    int64_t new_received_schema_version = OB_INVALID_VERSION;
+    int64_t new_published_schema_version = OB_INVALID_VERSION;
     ObRefreshSchemaStatus refresh_schema_status;
     ObISQLClient &sql_client = *sql_proxy_;
 
@@ -1848,17 +1848,16 @@ int ObMultiVersionSchemaService::refresh_runtime_schema(
       } else if (FALSE_IT(refresh_full_schema = refresh_full_schema_)) {
       } else if (!refresh_full_schema) {
         if (OB_FAIL(get_schema_version_in_inner_table(
-            sql_client, refresh_schema_status, new_received_schema_version))) {
+            sql_client, refresh_schema_status, new_published_schema_version))) {
           LOG_WARN("fail to get runtime schema version", KR(ret), K(refresh_schema_status));
         } else {
           ObSchemaStore* schema_store = &schema_store_;
           {
-            // schema_store->update_received_version(new_received_schema_version);
-            // if (schema_store->get_refreshed_version() >= schema_store->get_received_version()) {
-            if (schema_store->get_refreshed_version() >= new_received_schema_version) {
+            // The inner-table version is the version published by local DDL.
+            if (schema_store->get_refreshed_version() >= new_published_schema_version) {
               need_refresh = false;
-              LOG_TRACE("[REFRESH_SCHEMA] local refreshed schema version is greater than received schema version, just skip",
-                        KR(ret), K(schema_store->received_version_), K(schema_store->refreshed_version_));
+              LOG_TRACE("[REFRESH_SCHEMA] local refreshed schema version already covers the published version",
+                        KR(ret), K(schema_store->published_version_), K(schema_store->refreshed_version_));
             }
           }
         }
@@ -1870,9 +1869,9 @@ int ObMultiVersionSchemaService::refresh_runtime_schema(
         }
       }
       int tmp_ret = OB_SUCCESS;
-      if (OB_INVALID_SCHEMA_VERSION != new_received_schema_version) {
-        if (OB_SUCCESS != (tmp_ret = set_runtime_received_broadcast_version(new_received_schema_version))) {
-          LOG_WARN("fail to set runtime received schema version", KR(tmp_ret), K(new_received_schema_version));
+      if (OB_INVALID_SCHEMA_VERSION != new_published_schema_version) {
+        if (OB_SUCCESS != (tmp_ret = set_published_schema_version(new_published_schema_version))) {
+          LOG_WARN("fail to set published schema version", KR(tmp_ret), K(new_published_schema_version));
           ret = OB_SUCC(ret) ? tmp_ret : ret;
         }
       }
@@ -2449,28 +2448,30 @@ int ObMultiVersionSchemaService::get_runtime_refreshed_schema_version(
   return ret;
 }
 
-int ObMultiVersionSchemaService::get_runtime_received_broadcast_version(
+int ObMultiVersionSchemaService::get_published_schema_version(
     int64_t &schema_version,
     const bool core_schema_version) const
 {
   int ret = OB_SUCCESS;
-  int64_t received_broadcast_version = OB_INVALID_VERSION;
+  int64_t published_schema_version = OB_INVALID_VERSION;
   {
-    received_broadcast_version = schema_store_.get_received_version();
+    published_schema_version = schema_store_.get_published_version();
   }
   if (OB_SUCC(ret)) {
-    schema_version = (!core_schema_version || received_broadcast_version > 0) ? received_broadcast_version : OB_CORE_SCHEMA_VERSION;
+    schema_version = (!core_schema_version || published_schema_version > 0)
+        ? published_schema_version
+        : OB_CORE_SCHEMA_VERSION;
   }
   return ret;
 }
 
-int ObMultiVersionSchemaService::set_runtime_received_broadcast_version(
+int ObMultiVersionSchemaService::set_published_schema_version(
     const int64_t version)
 {
   int ret = OB_SUCCESS;
   if (version != OB_CORE_SCHEMA_VERSION) {
-    schema_store_.update_received_version(version);
-    LOG_INFO("try to set runtime received_broadcast_version", K(ret), K(version));
+    schema_store_.update_published_version(version);
+    LOG_INFO("set published schema version", K(ret), K(version));
   } else {
     ret = OB_OLD_SCHEMA_VERSION;
   }

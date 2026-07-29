@@ -36,11 +36,10 @@ struct ObConnPoolConfigParam
   ~ObConnPoolConfigParam() { }
   void reset() { memset(this,0, sizeof(ObConnPoolConfigParam)); }
 
-  int64_t sqlclient_wait_timeout_;      // s
-  int64_t connection_refresh_interval_; // us
-  int64_t connection_pool_warn_time_;   // us
-  int64_t long_query_timeout_;          // us
-  int64_t sqlclient_per_observer_conn_limit_;
+  int64_t sqlclient_wait_timeout_;     // s
+  int64_t connection_pool_warn_time_;  // us
+  int64_t long_query_timeout_;         // us
+  int64_t sqlclient_connection_limit_;
 };
 namespace sqlclient
 {

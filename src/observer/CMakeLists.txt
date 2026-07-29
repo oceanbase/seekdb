@@ -10,7 +10,6 @@ ob_set_subtarget(ob_server schema
 
 ob_set_subtarget(ob_server common
   ob_dump_task_generator.cpp
-  ob_inner_sql_transmit_struct.cpp
   ob_inner_sql_connection.cpp
   ob_inner_sql_connection_pool.cpp
   ob_inner_sql_read_context.cpp
@@ -286,6 +285,7 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_resource_limit_detail.cpp
   virtual_table/ob_all_virtual_activity_metrics.cpp
   virtual_table/ob_all_virtual_nic_info.cpp
+  virtual_table/ob_all_virtual_object_definition.cpp
   virtual_table/ob_all_virtual_sys_variable_default_value.cpp
   virtual_table/ob_all_virtual_scheduler_running_job.cpp
   virtual_table/ob_all_virtual_vector_index_info.cpp

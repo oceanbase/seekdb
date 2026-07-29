@@ -23,7 +23,6 @@
 #include "storage/lob/ob_lob_util.h"
 #include "storage/lob/ob_lob_seq.h"
 #include "storage/lob/ob_lob_persistent_adaptor.h"
-#include "storage/lob/ob_lob_remote.h"
 
 namespace oceanbase
 {
@@ -97,8 +96,7 @@ class ObLobMetaScanIter {
 public:
   ObLobMetaScanIter();
   ~ObLobMetaScanIter() { reset(); }
-  int open_local(ObLobAccessParam &param, ObPersistentLobApator* lob_adapter);
-  int open_remote(ObLobAccessParam &param);
+  int open(ObLobAccessParam &param, ObPersistentLobApator* lob_adapter);
 
   // interface for read only 
   int get_next_row(ObString &block_data);
@@ -118,17 +116,13 @@ public:
   bool not_calc_char_len() const { return not_calc_char_len_; }
   void set_not_need_last_info(bool not_need_last_info) { not_need_last_info_ = not_need_last_info;}
   bool not_need_last_info() const { return not_need_last_info_; }
-  bool is_remote() const { return is_remote_; }
 
   // the memory of cur_info may be relased by storage
   // so can not print cur_info directly
   TO_STRING_KV(K_(cur_pos), K_(cur_byte_pos), K(cur_info_.lob_id_), K_(not_calc_char_len), K_(not_need_last_info));
 private:
   bool is_in_range(const ObLobMetaInfo& info);
-  int get_next_row_remote(ObString &data);
-  int get_next_row_local(ObLobMetaInfo &row);
-  int get_next_row_local(ObString &data);
-  int get_next_row_local(ObLobMetaScanResult &result);
+  int get_next_row(ObLobMetaInfo &row);
 
   // interface for full delete
 
@@ -146,8 +140,6 @@ private:
   ObLobMetaInfo cur_info_;
   bool not_calc_char_len_;
   bool not_need_last_info_;
-  bool is_remote_;
-  ObLobRemoteQueryCtx *remote_ctx_;
 };
 
 class ObLobWriteBuffer;
@@ -320,5 +312,4 @@ private:
 } // oceanbase
 
 #endif
-
 

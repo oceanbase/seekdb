@@ -28,7 +28,7 @@ Warning	1265	Data truncated for column 'c17' at row 1
 Warning	1265	Data truncated for column '"oceanbase"."t1"."c18"' at row 1
 
 // Case1: normal test.测试各种类型组合, 跟不开新引擎开关进行对比
-alter system flush plan cache global;
+alter system flush plan cache;
 set @@ob_enable_plan_cache = 0;
 select rpad(null, null, null), rpad('a', 1, null), rpad(null, 1, 'a') from dual;
 +------------------------+--------------------+--------------------+

@@ -46,7 +46,6 @@ public:
       ir_rtdef_(nullptr),
       inv_idx_scan_iter_(nullptr),
       inv_idx_agg_iter_(nullptr),
-      fwd_idx_iter_(nullptr),
       tx_desc_(nullptr),
       snapshot_(nullptr),
       need_inv_idx_agg_reset_(true)
@@ -61,7 +60,6 @@ public:
   ObDASIRScanRtDef *ir_rtdef_;
   ObDASIter *inv_idx_scan_iter_;
   ObDASIter *inv_idx_agg_iter_;
-  ObDASIter *fwd_idx_iter_;
   transaction::ObTxDesc *tx_desc_;
   transaction::ObTxReadSnapshot *snapshot_;
   bool need_inv_idx_agg_reset_;
@@ -78,14 +76,12 @@ public:
 
   int set_query_token(const ObString &query_token);
   int set_query_token_and_rangekey(const ObString &query_token, const common::ObIArray<ObDocIdExt> &doc_id, const int64_t &batch_size);
-  void set_tablet_ids(const ObTabletID &inv_tablet_id,
-                      const ObTabletID &fwd_tablet_id)
+  void set_tablet_ids(const ObTabletID &inv_tablet_id)
   {
     inv_idx_tablet_id_ = inv_tablet_id;
-    fwd_idx_tablet_id_ = fwd_tablet_id;
   }
-  INHERIT_TO_STRING_KV("ObDASIter", ObDASIter, K_(calc_exprs), K_(need_fwd_idx_agg),
-      K_(need_inv_idx_agg), K_(inv_idx_agg_evaluated), K_(not_first_fwd_agg), K_(is_inited));
+  INHERIT_TO_STRING_KV("ObDASIter", ObDASIter, K_(calc_exprs), K_(need_inv_idx_agg),
+      K_(inv_idx_agg_evaluated), K_(is_inited));
 protected:
   virtual int inner_init(ObDASIterParam &param) override;
   virtual int inner_reuse() override;
@@ -94,7 +90,6 @@ protected:
   virtual int inner_get_next_rows(int64_t &count, int64_t capacity) override;
 protected:
   int init_inv_idx_scan_param();
-  int init_fwd_idx_scan_param();
   static int init_base_idx_scan_param(
       const common::ObTabletID &tablet_id,
       const sql::ObDASScanCtDef *ctdef,
@@ -102,19 +97,15 @@ protected:
       transaction::ObTxDesc *tx_desc,
       transaction::ObTxReadSnapshot *snapshot,
       storage::ObTableScanParam &scan_param);
-  int get_next_doc_token_cnt(const bool use_fwd_idx_agg);
   int do_doc_cnt_agg();
-  int do_token_cnt_agg(const ObDocIdExt &doc_id, int64_t &token_count);
-  int get_inv_idx_scan_doc_id(ObDocIdExt &doc_id);
   int get_next_row_inner();
   int fill_token_doc_cnt();
+  int fill_token_weight();
   int project_relevance_expr();
   int batch_project_relevance_expr(const int64_t &count);
-  int reuse_fwd_idx_iter();
   int gen_default_inv_idx_scan_range(const ObString &query_token, ObNewRange &scan_range);
   int gen_inv_idx_scan_range(const ObString &query_token, const ObDocIdExt &doc_id, ObNewRange &scan_range);
 
-  int gen_fwd_idx_scan_range(const ObDocIdExt &doc_id, ObNewRange &scan_range);
   inline bool need_calc_relevance() { return true; } // TODO: reduce tsc ops if no need to calc relevance
   int init_calc_exprs();
   void clear_row_wise_evaluated_flag();
@@ -137,7 +128,6 @@ protected:
   int check_inv_idx_scan_and_agg_param();
 
 protected:
-  static const int64_t FWD_IDX_ROWKEY_COL_CNT = 2;
   static const int64_t INV_IDX_ROWKEY_COL_CNT = 2;
 protected:
   lib::MemoryContext mem_context_;
@@ -147,23 +137,20 @@ protected:
   transaction::ObTxDesc *tx_desc_;
   transaction::ObTxReadSnapshot *snapshot_;
   common::ObTabletID inv_idx_tablet_id_;
-  common::ObTabletID fwd_idx_tablet_id_;
   storage::ObTableScanParam inv_idx_scan_param_;
   storage::ObTableScanParam inv_idx_agg_param_;
-  storage::ObTableScanParam fwd_idx_scan_param_;
   common::ObSEArray<sql::ObExpr *, 2> calc_exprs_;
   ObDASScanIter *inverted_idx_scan_iter_;
   ObDASScanIter *inverted_idx_agg_iter_;
   ObDASScanIter *forward_idx_iter_;
   ObObj *fwd_range_objs_;
+  sql::ObExpr *token_weight_expr_;
   sql::ObBitVector *skip_;
   int64_t token_doc_cnt_;
   int64_t max_batch_size_;
-  bool need_fwd_idx_agg_;
   bool need_inv_idx_agg_;
   bool inv_idx_agg_evaluated_;
   bool need_inv_idx_agg_reset_;
-  bool not_first_fwd_agg_;
   bool is_inited_;
 };
 

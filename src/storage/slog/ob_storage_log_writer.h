@@ -107,8 +107,6 @@ private:
 			const ObStorageLogItem &log_item,
 			const int64_t used_len);
 
-  static int check_server_lease();
-
 private:
   class ObSLogWriteRunner : public lib::ThreadPool
   {

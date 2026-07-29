@@ -21,10 +21,6 @@
 #include "storage/memtable/mvcc/ob_mvcc.h"
 namespace oceanbase
 {
-namespace transaction
-{
-class ObCLogEncryptInfo;
-}
 namespace memtable
 {
 class ObMutatorWriter;
@@ -313,7 +309,7 @@ public:
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "unexpected callback", KP(callback));
     } else if (callback->need_submit_log()) {
-      // Case 1: callback has not been proposed to paxos
+      // Case 1: callback has not been submitted to the local log.
       if (cond_for_remove(callback, ret)) {
         if (need_remove_data_ && OB_FAIL(callback->rollback_callback())) {
           TRANS_LOG(WARN, "rollback callback failed", K(ret), K(*callback));

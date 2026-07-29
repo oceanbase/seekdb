@@ -18,7 +18,6 @@
 #define OCEANBASE_STORAGE_OB_LOB_LOCATION_UTIL_H_
 
 #include "storage/lob/ob_lob_access_param.h"
-#include "observer/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -28,12 +27,8 @@ namespace storage
 class ObLobLocationUtil
 {
 public:
-  static int is_remote(ObLobAccessParam& param, bool& is_remote, common::ObAddr& dst_addr);
   static int lob_check_tablet_not_exist(ObLobAccessParam &param, uint64_t table_id);
-
-  static int lob_refresh_location(ObLobAccessParam &param, int last_err, int retry_cnt);
-  static int get_ls_leader(ObLobAccessParam& param);
-
+  static int refresh_local_location(ObLobAccessParam &param, int last_err, int retry_cnt);
 };
 
 }  // end namespace storage

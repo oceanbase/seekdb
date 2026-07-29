@@ -12,7 +12,7 @@
 connect (obsys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
 connection obsys;
 alter system set enable_sql_audit = true;
-alter system flush sql audit global;
+alter system flush sql audit;
 
 disconnect obsys;
 connection default;

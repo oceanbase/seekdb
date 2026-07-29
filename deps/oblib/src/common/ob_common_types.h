@@ -34,7 +34,6 @@ struct ObQueryFlag
 #define OBSF_BIT_FULL_ROW             1
 #define OBSF_BIT_INDEX_BACK           1
 #define OBSF_BIT_QUERY_STAT           1
-#define OBSF_BIT_SQL_MODE             2
 #define OBSF_BIT_READ_LATEST          1
 #define OBSF_BIT_PREWARM              1
 #define OBSF_BIT_INDEX_INVALID        1
@@ -60,7 +59,6 @@ struct ObQueryFlag
 #define OBSF_BIT_IS_BARE_ROW_SCAN     1
 #define OBSF_BIT_SNAPSHOT_OPT         1
 #define OBSF_BIT_SKIP_RUNNING_TX      1
-#define OBSF_BIT_RESERVED             25
 
   static const uint64_t OBSF_MASK_SCAN_ORDER = (0x1UL << OBSF_BIT_SCAN_ORDER) - 1;
   static const uint64_t OBSF_MASK_DAILY_MERGE =  (0x1UL << OBSF_BIT_DAILY_MERGE) - 1;
@@ -69,8 +67,6 @@ struct ObQueryFlag
   static const uint64_t OBSF_MASK_FULL_ROW = (0x1UL << OBSF_BIT_FULL_ROW) - 1;
   static const uint64_t OBSF_MASK_INDEX_BACK = (0x1UL << OBSF_BIT_INDEX_BACK) - 1;
   static const uint64_t OBSF_MASK_QUERY_STAT = (0x1UL << OBSF_BIT_QUERY_STAT) - 1;
-  static const uint64_t OBSF_MASK_RESERVED = (0x1UL << OBSF_BIT_RESERVED) - 1;
-  static const uint64_t OBSF_MASK_SQL_MODE = (0x1UL << OBSF_BIT_SQL_MODE) - 1;
   static const uint64_t OBSF_MASK_READ_LATEST = (0x1UL << OBSF_BIT_READ_LATEST) - 1;
   static const uint64_t OBSF_MASK_PREWARM = (0x1UL << OBSF_BIT_PREWARM) - 1;
   static const uint64_t OBSF_MASK_INDEX_INVALID = (0x1UL << OBSF_BIT_INDEX_INVALID) - 1;
@@ -112,13 +108,6 @@ struct ObQueryFlag
     UseFastAgg = 1
   };
 
-  enum SqlMode
-  {
-    MysqlMode = 0,
-    AnsiMode = 1,
-    ReservedMode = 2,
-  };
-
   union
   {
     uint64_t flag_;
@@ -131,7 +120,6 @@ struct ObQueryFlag
       uint64_t full_row_       : OBSF_BIT_FULL_ROW;          // 0: partial columns(default), 1: all columns
       uint64_t index_back_     : OBSF_BIT_INDEX_BACK;        // 0: access index only, 1: index can not cover result column(s), data table need to be accessed too
       uint64_t query_stat_     : OBSF_BIT_QUERY_STAT;        // 0: close ObIOStat statistics, 1: open ObIOStat statistics
-      uint64_t sql_mode_       : OBSF_BIT_SQL_MODE;          // 0: mysql mode, 1: standard mod, 2: reserved mode
       uint64_t read_latest_    : OBSF_BIT_READ_LATEST;
       uint64_t prewarm_      : OBSF_BIT_PREWARM;             //0: is not prewarm, 1: prewarm
       uint64_t index_invalid_ : OBSF_BIT_INDEX_INVALID; //0: index is valid, 1: index is invalid
@@ -157,7 +145,6 @@ struct ObQueryFlag
       uint64_t is_bare_row_scan_ : OBSF_BIT_IS_BARE_ROW_SCAN; // 1: to scan mult version row directly without compact.
       uint64_t use_snapshot_opt_ : OBSF_BIT_SNAPSHOT_OPT;
       uint64_t skip_running_tx_ : OBSF_BIT_SKIP_RUNNING_TX; // 1: skip RUNNING transactions (e.g., for fork operations)
-      uint64_t reserved_       : OBSF_BIT_RESERVED;
     };
   };
 
@@ -169,7 +156,6 @@ struct ObQueryFlag
               const bool full_row,
               const bool index_back,
               const bool query_stat,
-              const SqlMode sql_mode = MysqlMode,
               const bool read_latest = false,
               const bool prewarm = false,
               const uint64_t join_type = 0,
@@ -187,10 +173,8 @@ struct ObQueryFlag
     full_row_ = full_row & OBSF_MASK_FULL_ROW;
     index_back_ = index_back & OBSF_MASK_INDEX_BACK;
     query_stat_ = query_stat & OBSF_MASK_QUERY_STAT;
-    sql_mode_ = sql_mode & OBSF_MASK_SQL_MODE;
     read_latest_ = read_latest & OBSF_MASK_READ_LATEST;
     prewarm_ = prewarm & OBSF_MASK_PREWARM;
-    reserved_ = 0;
     join_type_ = join_type & OBSF_MASK_JOIN_TYPE;
     multi_version_minor_merge_ = multi_version_minor_merge & OBSF_MASK_MULTI_VERSION_MERGE;
     is_need_feedback_ = need_feedback & OBSF_MASK_NEED_FEEDBACK;
@@ -207,7 +191,6 @@ struct ObQueryFlag
   inline bool is_full_row() const { return full_row_; }
   inline bool is_index_back() const { return index_back_; }
   inline bool is_query_stat() const { return query_stat_; }
-  inline bool is_mysql_mode() const { return sql_mode_ == MysqlMode; }
   inline bool is_read_latest() const { return read_latest_; }
   inline bool is_lookup_for_4377() const { return is_lookup_for_4377_; }
   inline bool skip_4377_for_async_index_lookup() const { return skip_4377_for_async_index_lookup_; }
@@ -266,7 +249,6 @@ struct ObQueryFlag
                "full_row", full_row_,
                "index_back", index_back_,
                "query_stat", query_stat_,
-               "sql_mode", sql_mode_,
                "read_latest", read_latest_,
                "prewarm", prewarm_,
                "join_type", join_type_,
@@ -290,8 +272,7 @@ struct ObQueryFlag
                "enable_lob_prefetch", enable_lob_prefetch_,
                "is_bare_row_scan", is_bare_row_scan_,
                "is_snapshot_opt", use_snapshot_opt_,
-               "skip_running_tx", skip_running_tx_,
-               "reserved", reserved_);
+               "skip_running_tx", skip_running_tx_);
   OB_UNIS_VERSION(1);
 };
 static_assert(sizeof(ObQueryFlag) == sizeof(uint64_t), "ObQueryFlag should sizeof(uint64_t)");

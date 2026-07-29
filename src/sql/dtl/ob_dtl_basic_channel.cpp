@@ -882,28 +882,9 @@ void ObDtlBasicChannel::free_buf(ObDtlLinkedBuffer *buf)
   } else {
     free_buffer_count();
   }
-}
-
-void ObDtlBasicChannel::clean_broadcast_buffer()
-{
-  int ret = OB_SUCCESS;
-  bool done = false;
-  // Theoretically only 1
-  if (nullptr != process_buffer_ && process_buffer_->is_bcast()) {
-    done = true;
-    process_buffer_ = nullptr;
+  if (nullptr != buf) {
+    free_buffer_count();
   }
-  if (!done) {
-    ObLink *link = nullptr;
-    if (OB_SUCC(recv_list_.top(link))) {
-      ObDtlLinkedBuffer *linked_buffer = static_cast<ObDtlLinkedBuffer *>(link);
-      if (linked_buffer->is_bcast()) {
-        done = true;
-        recv_list_.pop(link);
-      }
-    }
-  }
-  LOG_TRACE("trace clean broadcast dtl buffer", K(done), K(*this));
 }
 
 int ObDtlBasicChannel::push_back_send_list()

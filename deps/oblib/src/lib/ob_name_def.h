@@ -594,7 +594,6 @@
 #define N_QUESTION_MARK "?"
 #define N_FIRST "first"
 #define N_SECOND "second"
-#define N_ZONE "zone"
 #define N_EXPR_INFO "expr_info"
 #define N_REL_ID "rel_id"
 #define N_BASE_COLUMN_ID "base_column_id"
@@ -784,7 +783,6 @@
 #define N_IS_IGNORE "is_ignore"
 
 #define N_PRIMARY "primary"
-#define N_PART_ID "part_id"
 #define N_INNER_GET "inner_get"
 #define N_MATCH_AGAINST "match_against"
 
@@ -878,61 +876,6 @@
 #define N_PL_OBJECT_CONSTRUCT "pl_object_construct"
 
 #define N_OUTER_JOIN_SYMBOL "(+)"
-
-//for Lable Security
-
-#define N_OLS_POLICY_CREATE               "ols_policy_create"
-#define N_OLS_POLICY_ALTER                "ols_policy_alter"
-#define N_OLS_POLICY_DROP                 "ols_policy_drop"
-#define N_OLS_POLICY_DISABLE              "ols_policy_disable"
-#define N_OLS_POLICY_ENABLE               "ols_policy_enable"
-
-#define N_OLS_LEVEL_CREATE                "ols_level_create"
-#define N_OLS_LEVEL_ALTER                 "ols_level_alter"
-#define N_OLS_LEVEL_DROP                  "ols_level_drop"
-
-#define N_OLS_COMPARMENT_CREATE           "ols_compartment_create"
-#define N_OLS_COMPARMENT_ALTER            "ols_compartment_alter"
-#define N_OLS_COMPARMENT_DROP             "ols_compartment_drop"
-
-#define N_OLS_GROUP_CREATE                "ols_group_create"
-#define N_OLS_GROUP_ALTER                 "ols_group_alter"
-#define N_OLS_GROUP_DROP                  "ols_group_drop"
-
-#define N_OLS_LABEL_CREATE                "ols_label_create"
-#define N_OLS_LABEL_ALTER                 "ols_label_alter"
-#define N_OLS_LABEL_DROP                  "ols_label_drop"
-
-#define N_OLS_TABLE_POLICY_APPLY          "ols_table_policy_apply"
-#define N_OLS_TABLE_POLICY_REMOVE         "ols_table_policy_remove"
-#define N_OLS_TABLE_POLICY_DISABLE        "ols_table_policy_disable"
-#define N_OLS_TABLE_POLICY_ENABLE         "ols_table_policy_enable"
-
-#define N_OLS_SCHEMA_POLICY_APPLY         "ols_schema_policy_apply"
-#define N_OLS_SCHEMA_POLICY_REMOVE        "ols_schema_policy_remove"
-#define N_OLS_SCHEMA_POLICY_DISABLE       "ols_schema_policy_disable"
-#define N_OLS_SCHEMA_POLICY_ENABLE        "ols_schema_policy_enable"
-
-#define N_OLS_USER_SET_LEVELS             "ols_user_set_levels"
-#define N_OLS_USER_SET_COMPARTMENTS       "ols_user_set_compartments"
-#define N_OLS_USER_SET_GROUPS             "ols_user_set_groups"
-#define N_OLS_USER_ADD_COMPARTMENTS       "ols_user_add_compartments"
-#define N_OLS_USER_ALTER_COMPARTMENTS     "ols_user_alter_compartments"
-#define N_OLS_USER_DROP_COMPARTMENTS      "ols_user_drop_compartments"
-#define N_OLS_USER_DROP_ALL_COMPARTMENTS  "ols_user_drop_all_compartments"
-
-#define N_OLS_LABEL_VALUE_CMP_LE          "ols_label_value_cmp_le"
-#define N_OLS_LABEL_VALUE_CHECK           "ols_label_value_check"
-#define N_OLS_LABEL_VALUE_TO_CHAR         "label_to_char"
-#define N_OLS_CHAR_TO_LABEL_VALUE         "char_to_label"
-
-#define N_OLS_SESSION_SET_LABEL               "ols_session_set_label"
-#define N_OLS_SESSION_SET_ROW_LABEL           "ols_session_set_row_label"
-#define N_OLS_SESSION_RESTORE_DEFAULT_LABEL   "ols_session_restore_default_label"
-#define N_OLS_SESSION_SAVE_DEFAULT_LABEL      "ols_session_savle_default_label"
-
-#define N_OLS_SESSION_LABEL                   "ols_session_label"
-#define N_OLS_SESSION_ROW_LABEL               "ols_session_row_label"
 
 #define N_VSIZE                             "vsize"
 #define N_ORAHASH                           "ora_hash"

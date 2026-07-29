@@ -944,8 +944,7 @@ void ObCSFetcher::run1()
       const transaction::ObTxLogType log_type = tx_header.get_tx_log_type();
       switch (log_type) {
         case transaction::ObTxLogType::TX_REDO_LOG: {
-          transaction::ObTxRedoLogTempRef tmp_ref;
-          transaction::ObTxRedoLog redo_log(tmp_ref);
+          transaction::ObTxRedoLog redo_log;
           if (OB_FAIL(tx_log_block.deserialize_log_body(redo_log))) {
             LOG_WARN("CSFetcher: fail to deserialize redo", KR(ret), K(lsn));
           } else {

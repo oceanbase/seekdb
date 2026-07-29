@@ -43,7 +43,6 @@ public:
   }
 
   inline void set_ob_job_id(const ObJobID &ob_job_id) { ob_job_id_ = ob_job_id; }
-  inline void set_server(const common::ObAddr &server) { ob_job_id_.set_server(server); }
   inline void set_execution_id(const uint64_t execution_id)
   {
     ob_job_id_.set_execution_id(execution_id);
@@ -54,7 +53,6 @@ public:
   inline void set_dist_task_type() { ob_job_id_.set_dist_task_type(); }
   inline void set_mini_task_type() { ob_job_id_.set_mini_task_type(); }
   inline const ObJobID &get_ob_job_id() const { return ob_job_id_; }
-  inline const common::ObAddr &get_server() const { return ob_job_id_.get_server(); }
   inline uint64_t get_execution_id() const { return ob_job_id_.get_execution_id(); }
   inline const ObExecutionID &get_ob_execution_id() const
   { return ob_job_id_.get_ob_execution_id(); }

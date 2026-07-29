@@ -16,9 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_PARSER
 #include "ob_fast_parser.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/ob_define.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/worker.h"
 #include "sql/parser/parse_malloc.h"
 
@@ -43,7 +41,6 @@ int ObFastParser::parse(const common::ObString &stmt,
                         ParamList *&param_list,
                         int64_t &param_num)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_parse);
   int ret = OB_SUCCESS;
   int64_t values_token_pos = 0;
   ObFastParserMysql fp(allocator, fp_ctx);
@@ -66,7 +63,6 @@ int ObFastParser::parse(const common::ObString &stmt,
                         ObFastParserResult &fp_result,
                         int64_t &values_token_pos)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_parse);
   int ret = OB_SUCCESS;
   ObFastParserMysql fp(allocator, fp_ctx);
   if (OB_FAIL(fp.parse(stmt, no_param_sql, no_param_sql_len, param_list, param_num, values_token_pos))) {

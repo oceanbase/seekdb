@@ -143,10 +143,8 @@ int ObPxDistTransmitOp::do_transmit()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid PX distribution method",  K(ret), K(MY_SPEC.dist_method_));
   } else if (ObPQDistributeMethod::BROADCAST == MY_SPEC.dist_method_) {
-    use_bcast_opt_ = true;
     if (OB_FAIL(chs_agent_.init(
         dfc_,
-        task_ch_set_,
         task_channels_,
         phy_plan_ctx->get_timeout_timestamp()))) {
       LOG_WARN("failed to init chs agent", K(ret));
@@ -308,14 +306,8 @@ int ObPxDistTransmitOp::do_broadcast_dist()
   ObBroadcastSliceIdCalc slice_id_calc(ctx_.get_allocator(),
                                        task_channels_.count(),
                                        MY_SPEC.null_row_dist_method_);
-  if (!use_bcast_opt_) {
-    if (OB_FAIL(send_rows<ObSliceIdxCalc::BROADCAST>(slice_id_calc))) {
-      LOG_WARN("row distribution failed", K(ret));
-    }
-  } else {
-    if (OB_FAIL(broadcast_rows(slice_id_calc))) {
-      LOG_WARN("row distribution failed", K(ret));
-    }
+  if (OB_FAIL(broadcast_rows(slice_id_calc))) {
+    LOG_WARN("row distribution failed", K(ret));
   }
   return ret;
 }

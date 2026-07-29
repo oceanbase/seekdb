@@ -156,7 +156,6 @@ private:
   char type_str_[common::OB_MAX_SYS_PARAM_NAME_LENGTH];
   char *column_type_str_;
   int64_t column_type_str_len_;
-  uint64_t min_data_version_;
   DISALLOW_COPY_AND_ASSIGN(ObTableColumns);
 };
 }//observer

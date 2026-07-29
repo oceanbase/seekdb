@@ -1,5 +1,5 @@
 result_format: 4
-alter system flush plan cache global;
+alter system flush plan cache;
 
 set ob_enable_plan_cache = 0;
 select char_length(1234);

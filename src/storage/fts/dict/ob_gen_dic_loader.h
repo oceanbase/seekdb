@@ -40,8 +40,7 @@ public:
     int assign(const ObGenDicLoaderKey &other);
     bool operator==(const ObGenDicLoaderKey &other) const
     {
-      return true 
-             && 0 == STRCMP(parser_name_, other.parser_name_)
+      return 0 == STRCMP(parser_name_, other.parser_name_)
              && charset_ == other.charset_;
     }
     bool is_valid() const

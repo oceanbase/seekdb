@@ -15,8 +15,8 @@ set @@session.explicit_defaults_for_timestamp=off;
 --enable_result_log
 
 connect (my_obsys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
-alter system flush plan cache global;
-alter system flush pl cache global;
+alter system flush plan cache;
+alter system flush pl cache;
 connection default;
 
 use test;

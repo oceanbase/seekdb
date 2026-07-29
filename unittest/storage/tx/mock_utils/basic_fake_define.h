@@ -25,7 +25,6 @@
 #include "lib/utility/ob_defer.h"
 #include "storage/tx/ob_tx_log_adapter.h"
 #include "storage/tx/ob_ts_mgr.h"
-#include "storage/tx/ob_gti_source.h"
 #include "storage/tx/ob_tx_replay_executor.h"
 #include "storage/tx/ob_tx_ctx.h"
 #include "share/rc/ob_server_runtime.h"
@@ -135,15 +134,6 @@ public:
   ObFakeTxDataTable tx_data_table_;
 };
 
-class ObFakeGtiSource : public ObIGtiSource
-{
-  int get_trans_id(int64_t &trans_id) {
-    trans_id = ATOMIC_AAF(&tx_id, 1);
-    return OB_SUCCESS;
-  }
-  int64_t tx_id = 66;
-};
-
 class ObFakeTsMgr : public ObTsMgr
 {
 private:
@@ -210,9 +200,16 @@ public:
 class ObFakeTxLogAdapter : public ObITxLogAdapter, public share::ObThreadPool
 {
 public:
+  explicit ObFakeTxLogAdapter(lib::IRunWrapper *run_wrapper)
+    : run_wrapper_(run_wrapper)
+  {}
+
   virtual int start() {
     int ret = OB_SUCCESS;
-    ObThreadPool::set_run_wrapper(share::server_runtime());
+    // The adapter may be shared with a replay node. Keep the wrapper supplied
+    // by its owning node instead of whichever test node most recently changed
+    // the process-global server runtime.
+    ObThreadPool::set_run_wrapper(run_wrapper_);
     ret = ObThreadPool::start();
     stop_ = false;
     TRANS_LOG(INFO, "start.FakeTxLogAdapter", KP(this));
@@ -436,6 +433,7 @@ public:
   int64_t unreplay_cnt_ = 0;
   bool is_sleeping_ = false;
   common::SimpleCond cond_;
+  lib::IRunWrapper *run_wrapper_;
 };
 
 class ObFakeTxReplayExecutor : public ObTxReplayExecutor

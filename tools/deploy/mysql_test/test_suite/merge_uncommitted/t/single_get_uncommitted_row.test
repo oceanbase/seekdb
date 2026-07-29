@@ -27,9 +27,7 @@ insert into test_uncommitted_trx_minor_merge value(2, 2);
 
 connection conn0;
 let $__table_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ table_id from oceanbase.__all_table where table_name= 'test_uncommitted_trx_minor_merge', table_id, 1);
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 --source mysql_test/include/wait_minor_merge.inc
 
 connection conn2;
@@ -63,9 +61,7 @@ begin;
 select * from test_uncommitted_trx_minor_merge where a = 3 for update;
 
 connection conn0;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 --source mysql_test/include/wait_minor_merge.inc
 
 connection conn1;
@@ -82,9 +78,7 @@ update test_uncommitted_trx_minor_merge set b = 30 where a = 3;
 select * from test_uncommitted_trx_minor_merge where a = 3;
 
 connection conn0;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 --source mysql_test/include/wait_minor_merge.inc
 
 connection conn2;

@@ -18,7 +18,6 @@
 #define OB_TABLE_PARTITION_RANGES_H_
 
 #include "share/schema/ob_schema_struct.h"
-#include "sql/ob_phy_table_location.h"
 
 namespace oceanbase
 {

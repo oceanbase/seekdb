@@ -622,10 +622,6 @@ protected:
       total_time_ += (rdtsc() - cpu_begin_time_);
     }
   }
-  inline void end_ash_line_id_reg(int ret)
-  {
-    UNUSED(ret);
-  }
   #ifdef ENABLE_DEBUG_LOG
   inline int init_dummy_mem_context();
   #endif

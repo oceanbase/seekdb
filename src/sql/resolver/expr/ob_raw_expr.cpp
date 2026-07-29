@@ -975,13 +975,10 @@ int ObRawExpr::is_const_inherit_expr(bool &is_const_inherit,
       || T_FUN_SYS_JSON_EQUAL == type_
       || T_FUN_SYS_IS_JSON == type_
       || T_FUN_SYS_JSON_OBJECT == type_
-      || IS_LABEL_SE_POLICY_FUNC(type_)
       || (T_FUN_SYS_LAST_INSERT_ID == type_ && get_param_count() > 0)
       || T_FUN_SYS_TO_BLOB == type_
       || T_FUN_SYS_SYSDATE == type_
       || (param_need_replace ? is_not_calculable_expr() : cnt_not_calculable_expr())
-      || T_FUN_LABEL_SE_SESSION_LABEL == type_
-      || T_FUN_LABEL_SE_SESSION_ROW_LABEL == type_
       || (T_FUN_UDF == type_
           && !static_cast<const ObUDFRawExpr*>(this)->is_deterministic())
       || T_FUN_SYS_GET_LOCK == type_
@@ -1017,10 +1014,7 @@ bool ObRawExpr::check_is_deterministic_expr() const
       || has_flag(CNT_STATE_FUNC)
       || has_flag(CNT_DYNAMIC_USER_VARIABLE)
       // unclear performance expr type
-      || T_FUN_SYS_STMT_ID == type_
-      || T_FUN_LABEL_SE_SESSION_LABEL == type_
-      || T_FUN_LABEL_SE_SESSION_ROW_LABEL == type_
-      || IS_LABEL_SE_POLICY_FUNC(type_)) {
+      || T_FUN_SYS_STMT_ID == type_) {
     ret = false; // lost expr deterministic
   }
   return ret;
@@ -3821,11 +3815,6 @@ int ObAggFunRawExpr::inner_deep_copy(ObIRawExprCopier &copier)
     LOG_WARN("failed to copy expr attribute", K(ret));
   } else if (OB_FAIL(copier.copy(pl_agg_udf_expr_))) {
     LOG_WARN("failed to copy pl agg udf expr", K(ret));
-  } else if (copier.deep_copy_attributes()) {
-    if (OB_ISNULL(inner_alloc_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("inner alloc is null", K(ret));
-    }
   }
   return ret;
 }
@@ -4544,8 +4533,6 @@ int ObSysFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
       if (OB_FAIL(get_column_conv_name(buf, buf_len, pos, type))) {
         LOG_WARN("fail to get_column_conv_name", K(ret));
       }
-    } else if (T_FUN_SYS_PART_ID == get_expr_type()) {
-      //ignore the print of T_FUN_SYS_PART_ID expr
     } else if (T_FUN_SYS_INNER_ROW_CMP_VALUE == get_expr_type()) {
       CK(3 == get_param_count());
       OZ(get_param_expr(2)->get_name(buf, buf_len, pos, type));

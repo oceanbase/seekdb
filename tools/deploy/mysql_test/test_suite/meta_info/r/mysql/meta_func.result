@@ -1,4 +1,4 @@
-alter system flush plan cache global;
+alter system flush plan cache;
 drop table if exists tt;
 create table tt(c tinyint);
 select avg(c) from tt;

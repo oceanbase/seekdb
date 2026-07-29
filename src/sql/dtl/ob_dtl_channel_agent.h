@@ -74,10 +74,9 @@ private:
 
 class ObDtlChanAgent
 {
-  typedef uint64_t (*hj_hash_fun)(const common::ObObj &obj, const uint64_t hash);
   const static int64_t BROADCAST_CH_IDX = 0;
 public:
-  ObDtlChanAgent() : init_(false), local_channels_(),
+  ObDtlChanAgent() : local_channels_(),
   bcast_channel_(nullptr), current_buffer_(nullptr), dtl_buf_encoder_(), dtl_buf_allocator_(),
   dfo_key_(), sys_dtl_buf_size_(0)
     {};
@@ -85,7 +84,6 @@ public:
   int broadcast_row(const ObDtlMsg &msg, ObEvalCtx *eval_ctx = nullptr, bool is_eof = false);
   int flush();
   int init(dtl::ObDtlFlowControl &dfc,
-           ObPxTaskChSet &task_ch_set,
            common::ObIArray<ObDtlChannel *> &channels,
            int64_t timeout_ts);
   int destroy();
@@ -94,7 +92,6 @@ private:
   int send_last_buffer(ObDtlLinkedBuffer *&last_buffer);
   int inner_broadcast_row(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, bool is_eof);
 private:
-  bool init_;
   // all local channel in this sqc.
   common::ObArray<ObDtlLocalChannel *> local_channels_;
   // the represent channel use to allocate buf from data manager.

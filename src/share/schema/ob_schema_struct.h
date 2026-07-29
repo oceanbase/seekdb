@@ -5491,8 +5491,6 @@ public:
              const share::schema::ObSimpleTableSchemaV2 &table,
              bool &exist);
 
-  static bool is_cluster_private_runtime_table(const uint64_t table_id);
-
   static bool is_sys_table_index_tid(const int64_t index_id);
   static bool is_sys_table_has_index(const int64_t table_id);
   static int fill_sys_index_infos(share::schema::ObTableSchema &table);

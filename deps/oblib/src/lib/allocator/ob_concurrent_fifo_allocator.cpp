@@ -15,7 +15,6 @@
  */
 
 #include "lib/allocator/ob_concurrent_fifo_allocator.h"
-#include "lib/ob_running_mode.h"
 
 namespace oceanbase
 {
@@ -37,7 +36,7 @@ int ObConcurrentFIFOAllocator::init(const int64_t total_limit,
 {
   UNUSED(hold_limit);
   int ret = OB_SUCCESS;
-  const int64_t cache_page_count = lib::is_mini_mode() ? 0 : get_cpu_count() * STORAGE_SIZE_TIMES;
+  const int64_t cache_page_count = get_cpu_count() * STORAGE_SIZE_TIMES;
   if (OB_FAIL(inner_allocator_.init(
           page_size,
           "ConFifoAlloc",
@@ -53,7 +52,7 @@ int ObConcurrentFIFOAllocator::init(const int64_t page_size,
                                     const int64_t total_limit)
 {
   int ret = OB_SUCCESS;
-  const int64_t cache_page_count = lib::is_mini_mode() ? 0 : get_cpu_count() * STORAGE_SIZE_TIMES;
+  const int64_t cache_page_count = get_cpu_count() * STORAGE_SIZE_TIMES;
   if (OB_FAIL(inner_allocator_.init(page_size,
                                     attr,
                                     cache_page_count,

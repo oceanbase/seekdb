@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_ls_wrs_handler.h"
+#include "storage/tx/ob_ts_mgr.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx/ob_ts_mgr.h"
 

@@ -763,112 +763,6 @@ int ObService::check_ddl_tablet_merge_status(
   return ret;
 }
 
-int ObService::batch_switch_rs_leader(const ObAddr &arg)
-{
-  UNUSEDx(arg);
-  int ret = OB_NOT_SUPPORTED;
-  // LOG_INFO("receive batch switch rs leader request", K(arg));
-
-  // int64_t start_timestamp = ObTimeUtility::current_time();
-  // if (OB_UNLIKELY(!inited_)) {
-  //   ret = OB_NOT_INIT;
-  //   LOG_WARN("not init", KR(ret));
-  // } else if (OB_ISNULL(gctx_.par_ser_)) {
-  //   ret = OB_ERR_UNEXPECTED;
-  //   LOG_WARN("gctx par_ser is NULL", K(arg));
-  // } else if (!arg.is_valid()) {
-  //   if (OB_FAIL(gctx_.par_ser_->auto_batch_change_rs_leader())) {
-  //     LOG_WARN("fail to auto batch change rs leader", KR(ret));
-  //   }
-  // } else if (OB_FAIL(gctx_.par_ser_->batch_change_rs_leader(arg))) {
-  //   LOG_WARN("fail to batch change rs leader", K(arg), KR(ret));
-  // }
-
-  // int64_t cost = ObTimeUtility::current_time() - start_timestamp;
-  // SERVER_EVENT_ADD("election", "batch_switch_rs_leader", K(ret),
-  //                  "leader", arg,
-  //                  K(cost));
-  return ret;
-}
-
-int ObService::switch_schema(
-    const obcall::ObSwitchSchemaArg &arg,
-    obcall::ObSwitchSchemaResult &result)
-{
-  int ret = OB_SUCCESS;
-  FLOG_INFO("start to switch schema", K(arg));
-  const ObRefreshSchemaInfo &schema_info = arg.schema_info_;
-  const int64_t schema_version = schema_info.get_schema_version();
-  
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
-  } else if (OB_UNLIKELY(!arg.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(arg));
-  } else if (arg.is_async_) {
-    const bool set_received_schema_version = true;
-    if (OB_FAIL(schema_updater_.try_reload_schema(
-        schema_info, set_received_schema_version))) {
-      LOG_WARN("reload schema failed", KR(ret), K(schema_info));
-    }
-  } else {
-    ObSEArray<uint64_t, 1> sys_ids;
-    ObMultiVersionSchemaService *schema_service = gctx_.schema_service_;
-    int64_t local_schema_version = OB_INVALID_VERSION;
-    int64_t abs_timeout = OB_INVALID_TIMESTAMP;
-    if (OB_FAIL(sys_ids.push_back(1UL))) {
-      LOG_WARN("fail to push back sys id", KR(ret));
-    } else if (OB_ISNULL(schema_service)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema service is null", KR(ret));
-    } else if (OB_FAIL(ObShareUtil::get_abs_timeout(GCONF.rpc_timeout, abs_timeout))) {
-      LOG_WARN("fail to get abs timeout", KR(ret), "default_timeout", static_cast<int64_t>(GCONF.rpc_timeout));
-    } else {
-      // To set the received_schema_version period in advance,
-      // let refresh_schema can execute before analyze_dependencies logic;
-      int64_t LEFT_TIME = 200 * 1000;// 200ms
-      int64_t origin_timeout_ts = THIS_WORKER.get_timeout_ts();
-      if (INT64_MAX != origin_timeout_ts
-          && origin_timeout_ts >= ObTimeUtility::current_time() + LEFT_TIME) {
-        THIS_WORKER.set_timeout_ts(origin_timeout_ts - LEFT_TIME);
-      }
-      if (OB_FAIL(schema_service->async_refresh_schema(schema_version))) {
-        LOG_WARN("fail to async schema version", KR(ret), K(schema_version));
-      }
-      THIS_WORKER.set_timeout_ts(origin_timeout_ts);
-      int64_t tmp_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (tmp_ret = schema_service->set_runtime_received_broadcast_version(schema_version))) {
-        LOG_ERROR("failt to update received schema version", KR(tmp_ret), K(schema_version));
-        ret = OB_SUCC(ret) ? tmp_ret : ret;
-      }
-      if (THIS_WORKER.is_timeout_ts_valid()
-          && !THIS_WORKER.is_timeout()
-          && OB_TIMEOUT == ret) {
-        // To set set_runtime_received_broadcast_version in advance, we reduce the abs_time,
-        // if not timeout after first async_refresh_schema, we should execute async_refresh_schema again and overwrite the ret code
-        if (OB_FAIL(schema_service->async_refresh_schema(schema_version))) {
-          LOG_WARN("fail to async schema version", KR(ret), K(schema_version));
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (schema_info.get_schema_version() <= 0) {
-        // skip
-      } else if (OB_FAIL(schema_service->get_runtime_refreshed_schema_version(
-                         local_schema_version))) {
-        LOG_WARN("fail to get local runtime schema version", KR(ret));
-      } else if (OB_UNLIKELY(schema_info.get_schema_version() > local_schema_version)) {
-        ret = OB_EAGAIN;
-        LOG_WARN("schema is not new enough", KR(ret), K(schema_info), K(local_schema_version));
-      }
-    }
-  }
-  FLOG_INFO("switch schema", KR(ret), K(schema_info));
-  //SERVER_EVENT_ADD("schema", "switch_schema", K(ret), K(schema_info));
-  result.set_ret(ret);
-  return ret;
-}
-
 int ObService::bootstrap()
 {
   int ret = OB_SUCCESS;
@@ -969,21 +863,6 @@ int ObService::get_build_version(share::ObBuildVersion &build_version)
   }
   return ret;
 }
-int ObService::get_partition_count(obcall::ObGetPartitionCountResult &result)
-{
-  UNUSEDx(result);
-  int ret = OB_NOT_SUPPORTED;
-  // result.reset();
-
-  // if (!inited_) {
-  //   ret = OB_NOT_INIT;
-  //   LOG_WARN("not inited", K(ret));
-  // } else if (OB_FAIL(gctx_.par_ser_->get_partition_count(result.partition_count_))) {
-  //   LOG_WARN("failed to get partition count", K(ret));
-  // }
-  return ret;
-}
-
 int ObService::check_server_empty(bool &is_empty)
 {
   int ret = OB_SUCCESS;
@@ -1025,33 +904,6 @@ int ObService::set_ds_action(const obcall::ObDebugSyncActionArg &arg)
 }
 
 // Get the runtime's refreshed schema version.
-int ObService::get_runtime_refreshed_schema_version(
-    const obcall::ObGetRuntimeSchemaVersionArg &arg,
-    obcall::ObGetRuntimeSchemaVersionResult &result)
-{
-  int ret = OB_SUCCESS;
-  result.schema_version_ = OB_INVALID_VERSION;
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (!arg.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret));
-  } else if (OB_ISNULL(gctx_.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_service is null", K(ret));
-  } else if (OB_FAIL(gctx_.schema_service_->get_runtime_refreshed_schema_version(
-             result.schema_version_, false/*core_version*/))) {
-    LOG_WARN("fail to get runtime refreshed schema version", K(ret), K(arg));
-  }
-  return ret;
-}
-
-int ObService::sync_partition_table(const obcall::Int64 &arg)
-{
-  return OB_NOT_SUPPORTED;
-}
-
 int ObService::set_tracepoint(const obcall::ObSetTracepointParam &param)
 {
   int ret = OB_SUCCESS;
@@ -1374,31 +1226,6 @@ int ObService::fill_tablet_runtime_info(const ObTabletID &tablet_id,
     }
   }
   return ret;
-}
-
-int ObService::init_runtime_config(
-    const obcall::ObInitRuntimeConfigArg &arg,
-    obcall::ObInitRuntimeConfigRes &result)
-{
-  int ret = OB_SUCCESS;
-  if (!inited_) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("service is not inited", K(ret));
-  } else if (!arg.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("arg is invalid", KR(ret), K(arg));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < arg.get_configs().count(); i++) {
-      const ObRuntimeConfigArg &config = arg.get_configs().at(i);
-      if (OB_FAIL(GCTX.config_mgr_->init_runtime_config(config)))  {
-        LOG_WARN("fail to initialize runtime config", KR(ret), K(config));
-      }
-    } // end for
-  }
-  (void) result.set_ret(ret);
-  FLOG_INFO("initialize runtime config", KR(ret), K(arg));
-  // use result to pass ret
-  return OB_SUCCESS;
 }
 
 }// end namespace observer

@@ -156,14 +156,14 @@ TEST(ObTimeConvertTest, str_to_datetime)
   ObTimeConvertCtx cvrt_ctx(&tz_info, true);
   strcpy(buf, "+8:00");
   str.assign(buf, static_cast<int32_t>(strlen(buf)));
-  tz_info.set_timezone(str);
+  tz_info.set_offset(8 * 60 * 60);
   strcpy(buf, "1000-1-1 0:0:0");
   str.assign(buf, static_cast<int32_t>(strlen(buf)));
   EXPECT_EQ(OB_SUCCESS, ObTimeConverter::str_to_datetime(str, cvrt_ctx, value, nullptr, 0));
   EXPECT_EQ(value / USECS_PER_SEC, -30610252800);
   strcpy(buf, "-08:00");
   str.assign(buf, static_cast<int32_t>(strlen(buf)));
-  tz_info.set_timezone(str);
+  tz_info.set_offset(-8 * 60 * 60);
   strcpy(buf, "2015-7-3 11:12:0");
   str.assign(buf, static_cast<int32_t>(strlen(buf)));
   EXPECT_EQ(OB_SUCCESS, ObTimeConverter::str_to_datetime(str, cvrt_ctx, value, nullptr, 0));
@@ -201,7 +201,7 @@ TEST(ObTimeConvertTest, str_to_otimestamp)
   ObTimeConvertCtx cvrt_ctx(&tz_info, false);
   strcpy(buf, "-8:00");
   str.assign(buf, static_cast<int32_t>(strlen(buf)));
-  tz_info.set_timezone(str);
+  tz_info.set_offset(-8 * 60 * 60);
 
   // NULL timezone
   cvrt_ctx.is_timestamp_ = false;
@@ -378,7 +378,7 @@ TEST(ObTimeConvertTest, datetime_to_str)
   // timezone with offset only.
   strcpy(buf, "+8:00");
   str.set_length(static_cast<int32_t>(strlen(buf)));
-  tz_info.set_timezone(str);
+  tz_info.set_offset(8 * 60 * 60);
   value = -30610252800 * USECS_PER_SEC;
   const ObDataTypeCastParams dtc_params(&tz_info);
   const ObString nls_format;
@@ -387,7 +387,7 @@ TEST(ObTimeConvertTest, datetime_to_str)
   pos = 0;
   strcpy(buf, "-8:00");
   str.set_length(static_cast<int32_t>(strlen(buf)));
-  tz_info.set_timezone(str);
+  tz_info.set_offset(-8 * 60 * 60);
   value = 1435950720 * static_cast<int64_t>(USECS_PER_SEC);
   EXPECT_EQ(OB_SUCCESS, ObTimeConverter::datetime_to_str(value, &tz_info, nls_format, 0, buf, sizeof(buf), pos));
   EXPECT_TRUE(0 == strcmp(buf, "2015-07-03 11:12:00"));
@@ -1491,7 +1491,7 @@ TEST(ObTimeConvertTest, scn_to_str)
   tz_str.assign_buffer(tz_buf, 50);
   strcpy(tz_buf, "+8:00");
   tz_str.set_length(static_cast<int32_t>(strlen(tz_buf)));
-  tz_info.set_timezone(tz_str);
+  tz_info.set_offset(8 * 60 * 60);
 
   const int64_t BUF_LEN = 100;
   char buf[BUF_LEN] = {0};
@@ -1515,7 +1515,7 @@ TEST(ObTimeConvertTest, scn_to_str)
 
   strcpy(tz_buf, "-08:00");
   tz_str.assign(tz_buf, static_cast<int32_t>(strlen(tz_buf)));
-  tz_info.set_timezone(tz_str);
+  tz_info.set_offset(-8 * 60 * 60);
 
   pos= 0;
   ASSERT_EQ(OB_SUCCESS, ObTimeConverter::scn_to_str(scn_val, &tz_info, buf, BUF_LEN, pos));

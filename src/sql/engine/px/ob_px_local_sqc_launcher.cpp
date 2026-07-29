@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_px_local_sqc_launcher.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/utility/serialization.h"
 #include "ob_px_sqc_handler.h"
 #include "sql/executor/ob_worker_session_guard.h"

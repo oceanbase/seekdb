@@ -111,7 +111,6 @@ private:
   bool is_rowkey_end_;
   bool is_normal_end_;
   int64_t ft_dep_col_idx_;
-  uint64_t min_data_version_;
   int64_t vec_dep_col_idx_;
   DISALLOW_COPY_AND_ASSIGN(ObTableIndex);
 };

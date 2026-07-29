@@ -1,6 +1,6 @@
 # owner: zhuoran.zzr
 # owner group: storage
-# description: test row-store DDL memory table dumping in shared storage mode
+# description: test row-store DDL memory table dumping
 
 --result_format 4
 connect (obsys,$OBMYSQL_MS0,root@sys,,oceanbase,$OBMYSQL_PORT);

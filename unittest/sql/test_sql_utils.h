@@ -52,7 +52,6 @@ using namespace oceanbase;
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
-using namespace oceanbase::obcall;
 using namespace oceanbase::sql;
 
 #define CSJ(x) (static_cast<const char *>(SJ((x))))
@@ -129,7 +128,7 @@ public:
   void generate_index_column_schema(ObCreateIndexStmt &stmt, ObTableSchema &index_schema);
   int get_hidden_column_value(ObResolverParams &resolver_ctx, ParamStore &params);
   void is_equal_content(const char* tmp_file, const char* result_file);
-  uint64_t get_next_table_id(const uint64_t user_tenant_id);
+  uint64_t get_next_table_id();
   int add_table_schema(ObTableSchema &table_schema);
   int add_database_schema(ObDatabaseSchema &database_schema);
   int drop_table_schema(const ObTableSchema &table_schema);
@@ -139,15 +138,13 @@ public:
   ObSchemaGetterGuard &get_schema_guard() { return schema_guard_; }
 public:
   //table id
-  oceanbase::common::hash::ObHashMap<uint64_t,uint64_t> next_user_table_id_map_;
+  uint64_t next_user_table_id_;
   //user_id
   uint64_t sys_user_id_;
   uint64_t next_user_id_;
   //database_id
   uint64_t sys_database_id_;
   uint64_t next_user_database_id_;
-  //tenant_id
-  uint64_t sys_tenant_id_;
   ObSEArray<ObObj, 16> sys_view_bigint_param_list_;
   int64_t schema_version_;
   char schema_file_path_[MAX_SCHEMA_FILE_PATH + 1];

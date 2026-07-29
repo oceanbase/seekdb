@@ -5925,15 +5925,6 @@ drop database dbcmd;
   "to_recyclebin":false
 }
 ***************   Case 13   ***************
-alter system bootstrap REGION 'sys_region' ZONE 'zone1' SERVER '10.101.74.122:41425';
-{"stmt_type":77, "bootstrap_arg":{"server_list":["region":"sys_region", "zone":"zone1", "server":"10.101.74.122:41425"], "cluster_role":1}}
-***************   Case 14   ***************
-alter system bootstrap CLUSTER primary REGION 'sys_region' ZONE 'zone1' SERVER '10.101.74.122:41425';
-{"stmt_type":77, "bootstrap_arg":{"server_list":["region":"sys_region", "zone":"zone1", "server":"10.101.74.122:41425"], "cluster_role":1}}
-***************   Case 15   ***************
-alter system bootstrap cluster standby REGION 'sys_region' ZONE 'zone1' SERVER '10.101.74.122:41425';
-{"stmt_type":77, "bootstrap_arg":{"server_list":["region":"sys_region", "zone":"zone1", "server":"10.101.74.122:41425"], "cluster_role":2}}
-***************   Case 16   ***************
 alter system COMMIT TO SWITCHOVER TO PRIMARY;
 {
   "stmt_type":169,
@@ -5947,15 +5938,5 @@ alter system COMMIT TO SWITCHOVER TO PHYSICAL STANDBY;
   "stmt_type":169,
   "database_arg": {
     "op_type":1
-  }
-}
-***************   Case 18   ***************
-alter system remove cluster tt cluster_id = 4;
-{
-  "stmt_type":174,
-  "database_arg": {
-    "cluster_name":"tt",
-    "cluster_id":4,
-    "alter_type":1
   }
 }

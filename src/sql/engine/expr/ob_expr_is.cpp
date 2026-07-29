@@ -64,7 +64,7 @@ int ObExprIsBase::calc_result_type2(ObExprResType &type,
         type1.set_calc_accuracy(type1.get_accuracy());
       } else {
         type1.set_calc_type(ObNumberType);
-        const ObAccuracy &calc_acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][ObNumberType];
+        const ObAccuracy &calc_acc = ObAccuracy::DDL_DEFAULT_ACCURACY[ObNumberType];
         type1.set_calc_accuracy(calc_acc);
       }
     } else {
@@ -426,7 +426,7 @@ int ObExprInnerIsTrue::calc_result_type2(ObExprResType &type,
       type1.set_calc_accuracy(type1.get_accuracy());
     } else {
       type1.set_calc_type(ObNumberType);
-      const ObAccuracy &calc_acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][ObNumberType];
+      const ObAccuracy &calc_acc = ObAccuracy::DDL_DEFAULT_ACCURACY[ObNumberType];
       type1.set_calc_accuracy(calc_acc);
     }
   }

@@ -30,7 +30,7 @@ class ObITable;
 namespace compaction
 {
 class ObTabletMergeDag;
-struct ObCompactionProgress;
+struct ObCompactionProgressBase;
 struct ObDiagnoseTabletCompProgress;
 struct ObBasicTabletMergeCtx;
 class ObCompactionTimeGuard;
@@ -46,7 +46,7 @@ public:
   virtual int update_merge_progress(const int64_t idx, const int64_t scanned_row_count);
   virtual int finish_merge_progress() { return OB_SUCCESS; }
   int update_merge_info(compaction::ObSSTableMergeHistory &merge_history);
-  int get_progress_info(ObCompactionProgress &input_progress);
+  int get_progress_info(ObCompactionProgressBase &input_progress);
   int diagnose_progress(ObDiagnoseTabletCompProgress &input_progress);
   int64_t get_estimated_finish_time() const { return estimated_finish_time_; }
   int64_t get_concurrent_count() const { return concurrent_cnt_; }

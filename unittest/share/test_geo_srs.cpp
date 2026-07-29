@@ -17,6 +17,8 @@
 #include <gtest/gtest.h>
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #define private public
+#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "observer/omt/ob_srs_service.h"
 #include "src/share/schema/ob_server_schema_service.h"
 #undef private
 namespace oceanbase {

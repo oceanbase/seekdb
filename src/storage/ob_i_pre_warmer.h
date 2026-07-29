@@ -56,7 +56,6 @@ enum ObPreWarmerType : uint8_t
 {
   PRE_WARM_TYPE_NONE = 0,
   MEM_PRE_WARM, // ObDataBlockCachePreWarmer
-  MEM_AND_FILE_PRE_WARM, // for SS
   PRE_WARM_TYPE_MAX
 };
 

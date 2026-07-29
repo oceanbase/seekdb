@@ -44,9 +44,7 @@ while($i < 3000)
 }
 --enable_query_log
 connection conn0;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 --source mysql_test/include/wait_minor_merge.inc
 connection conn2;
 --error 1205
@@ -68,9 +66,7 @@ while($i < 3000)
 }
 --enable_query_log
 connection conn0;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 --source mysql_test/include/wait_minor_merge.inc
 connection conn2;
 --error 1205
@@ -95,9 +91,7 @@ while($i < 3000)
 }
 --enable_query_log
 connection conn0;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 --source mysql_test/include/wait_minor_merge.inc
 connection conn2;
 --error 1205
@@ -113,9 +107,7 @@ connection conn2;
 --error 1205
 select * from t1 where num = 1 for update nowait;
 connection conn0;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 --source mysql_test/include/wait_minor_merge.inc
 connection conn2;
 --error 1205

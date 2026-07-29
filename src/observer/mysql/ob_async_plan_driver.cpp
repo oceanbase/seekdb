@@ -43,7 +43,6 @@ ObAsyncPlanDriver::~ObAsyncPlanDriver()
 
 int ObAsyncPlanDriver::response_result(ObMySQLResultSet &result)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_sql_execution);
   int ret = OB_SUCCESS;
   // After result.open, all required parameters such as last insert id for pkt_param have been calculated
   // For asynchronous add, delete, and modify operations, it is necessary to update the last insert id in advance to ensure the pkt_param parameter is correct in the callback

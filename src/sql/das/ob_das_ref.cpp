@@ -550,7 +550,7 @@ int ObDASRef::create_das_task(const ObDASTabletLoc *tablet_loc,
     task_op->set_snapshot(&get_exec_ctx().get_das_ctx().get_snapshot());
     task_op->set_write_branch_id(get_exec_ctx().get_das_ctx().get_write_branch_id());
     
-    task_op->set_task_id(task_id);
+    task_op->set_task_id(0);
     task_op->in_stmt_retry_ = session->get_is_in_retry();
     task_op->set_tablet_id(tablet_loc->tablet_id_);
     task_op->set_tablet_loc(tablet_loc);
@@ -597,7 +597,7 @@ int ObDASRef::create_agg_task(ObDASOpType op_type, ObDasAggregatedTask *&agg_tas
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory for aggregated tasks", KR(ret));
-  } else if (FALSE_IT(tmp_agg_task = new(buf) ObDasAggregatedTask(das_alloc_))) {
+  } else if (FALSE_IT(tmp_agg_task = new(buf) ObDasAggregatedTask())) {
   } else if (DAS_OP_TABLE_DELETE == op_type &&
       OB_FAIL(del_aggregated_tasks_.store_obj(tmp_agg_task))) {
     LOG_WARN("failed to add aggregated tasks", KR(ret));

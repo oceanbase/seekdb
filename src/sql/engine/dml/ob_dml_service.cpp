@@ -2015,8 +2015,6 @@ int ObDMLService::write_row_to_das_op(const ObDASDMLBaseCtDef &ctdef,
   OB_ASSERT(typeid(rtdef) == typeid(RtDefType));
   int64_t extend_size = is_strict_defensive_check ?
       ObDASWriteBuffer::DAS_WITH_TRANS_INFO_EXTEND_SIZE : ObDASWriteBuffer::DAS_ROW_DEFAULT_EXTEND_SIZE;
-  ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(table_id_, ctdef.table_id_);
-  ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(table_schema_version_, ctdef.schema_version_);
   // 1. find das dml op
   OpType *dml_op = nullptr;
   if (OB_UNLIKELY(!dml_rtctx.das_ref_.has_das_op(tablet_loc, dml_op))) {
@@ -2546,7 +2544,6 @@ int ObDMLService::handle_after_processing_multi_row(ObDMLModifyRowsList *dml_mod
         } else if (OB_NOT_NULL(modify_row.new_row_) && OB_FAIL(modify_row.new_row_->to_expr(dml_ctdef.new_row_, op.get_eval_ctx()))) {
           LOG_WARN("failed to covert stored new row to expr", K(ret));
         } else if (op.need_foreign_key_checks()) {
-          ACTIVE_SESSION_FLAG_SETTER_GUARD(in_foreign_key_cascading);
           if (t_update == dml_event && !reinterpret_cast<ObUpdRtDef &>(dml_rtdef).is_row_changed_) {
             LOG_DEBUG("update operation don't change any value, no need to perform foreign key check");
           } else {

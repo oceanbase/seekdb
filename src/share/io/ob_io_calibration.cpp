@@ -302,7 +302,7 @@ ObIOBenchRunner::~ObIOBenchRunner()
   destroy();
 }
 
-// moved definition to storage/blocksstable/ob_block_manager.cpp(disk benchmark, block_mgr real user)
+
 
 int ObIOBenchRunner::do_benchmark(const ObIOBenchLoad &load, const int64_t thread_count, ObIOBenchResult &result)
 {
@@ -387,7 +387,7 @@ void ObIOBenchRunner::destroy()
   rt_us_ = 0;
 }
 
-// moved definition to storage/blocksstable/ob_block_manager.cpp(disk benchmark, block_mgr real user)
+
 
 /******************             IOBenchController              **********************/
 
@@ -450,7 +450,7 @@ int ObIOBenchController::start_io_bench()
   return ret;
 }
 
-// moved definition to storage/blocksstable/ob_block_manager.cpp(disk benchmark, block_mgr real user)
+
 
 int64_t ObIOBenchController::get_start_timestamp()
 {

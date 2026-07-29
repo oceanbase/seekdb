@@ -8,7 +8,7 @@ connect (conn_admin, $OBMYSQL_MS0,admin,$OBMYSQL_PWD,oceanbase,$OBMYSQL_PORT);
 connection conn_admin;
 
 --sleep 2
-alter system flush plan cache global;
+alter system flush plan cache;
 
 connection default;
 
@@ -54,7 +54,7 @@ insert into t(t1) values (null);
 connection conn_admin;
 
 --sleep 2
-alter system flush plan cache global;
+alter system flush plan cache;
 
 connection default;
 set ob_enable_plan_cache=false;

@@ -322,7 +322,6 @@ int ObTabletDDLKvMgr::calc_idem_block_checksum(const ObDDLMacroBlockType block_t
 */
 int ObTabletDDLKvMgr::check_idem_block_exist(const ObDDLMacroBlockType block_type,
                                              const ObDirectLoadType direct_load_type,
-                                             const blocksstable::MacroBlockId &macro_block_id,
                                              const blocksstable::ObLogicMacroBlockId &logic_id,
                                              const int64_t checksum,
                                              const ObITable::TableType table_type,
@@ -331,7 +330,7 @@ int ObTabletDDLKvMgr::check_idem_block_exist(const ObDDLMacroBlockType block_typ
   int ret = OB_SUCCESS;
   if (OB_FAIL(add_idempotence_checker())) {
     LOG_WARN("failed to add idempotence checker", K(ret));
-  } else if (OB_FAIL(idem_checker_.check_block_exist(block_type, direct_load_type, macro_block_id, logic_id, checksum, table_type, is_marco_block_already_exist))) {
+  } else if (OB_FAIL(idem_checker_.check_block_exist(block_type, direct_load_type, logic_id, checksum, table_type, is_marco_block_already_exist))) {
     LOG_WARN("failed to check block exist", K(ret));
   }
   return ret;
@@ -339,12 +338,11 @@ int ObTabletDDLKvMgr::check_idem_block_exist(const ObDDLMacroBlockType block_typ
 
 int ObTabletDDLKvMgr::set_idem_block_checksum(const ObDDLMacroBlockType block_type,
                                               const ObDirectLoadType direct_load_type,
-                                              const blocksstable::MacroBlockId &block_id,
                                               const blocksstable::ObLogicMacroBlockId &logic_id,
                                               const int64_t checksum,
                                               const ObITable::TableType table_type)
 {
-  return idem_checker_.set_block_checksum(block_type, direct_load_type, block_id, logic_id, checksum, table_type);
+  return idem_checker_.set_block_checksum(block_type, direct_load_type, logic_id, checksum, table_type);
 }
 
 int ObTabletDDLKvMgr::remove_idempotence_checker()
@@ -833,7 +831,7 @@ int ObTabletDDLKvMgr::handle_ddl_kv_queue_overflow(const ObDDLKVType ddl_kv_type
 }
 
 ObDDLIdemKey::ObDDLIdemKey():
-key_(), table_type_(ObITable::TableType::MAX_TABLE_TYPE)
+logic_block_id_(), table_type_(ObITable::TableType::MAX_TABLE_TYPE)
 {}
 
 ObDDLIdemKey::~ObDDLIdemKey()
@@ -841,13 +839,12 @@ ObDDLIdemKey::~ObDDLIdemKey()
 
 ObDDLIdemKey::ObDDLIdemKey(const ObDDLIdemKey &other)
 {
-  key_.logic_block_id_ = other.key_.logic_block_id_;
+  logic_block_id_ = other.logic_block_id_;
   table_type_ = other.table_type_;
 }
 
 
-int ObDDLIdemKey::init(const MacroBlockId &macro_block_id,
-                       const ObLogicMacroBlockId &logic_block_id,
+int ObDDLIdemKey::init(const ObLogicMacroBlockId &logic_block_id,
                        const ObITable::TableType table_type)
 {
   int ret = OB_SUCCESS;
@@ -856,7 +853,7 @@ int ObDDLIdemKey::init(const MacroBlockId &macro_block_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid logic block id", K(ret), K(logic_block_id));
   } else {
-    key_.logic_block_id_ = logic_block_id;
+    logic_block_id_ = logic_block_id;
   }
   return ret;
 }
@@ -865,7 +862,7 @@ uint64_t ObDDLIdemKey::hash() const
 {
   uint64_t hash_val = 0;
   uint64_t idem_type = table_type_;
-  hash_val = key_.logic_block_id_.hash();
+  hash_val = logic_block_id_.hash();
   hash_val = murmurhash(&idem_type, sizeof(table_type_), hash_val);
   return hash_val;
 }
@@ -880,13 +877,13 @@ int ObDDLIdemKey::hash(uint64_t &hash_val) const
 bool ObDDLIdemKey::operator==(const ObDDLIdemKey &other) const
 {
   bool ret = false;
-  ret = key_.logic_block_id_ == other.key_.logic_block_id_ && table_type_ == other.table_type_;
+  ret = logic_block_id_ == other.logic_block_id_ && table_type_ == other.table_type_;
   return ret;
 }
 
 ObDDLIdemKey& ObDDLIdemKey::operator=(const ObDDLIdemKey &other)
 {
-  key_.logic_block_id_ = other.key_.logic_block_id_;
+  logic_block_id_ = other.logic_block_id_;
   table_type_ = other.table_type_;
   return *this;
 }
@@ -953,7 +950,6 @@ int ObDDLMacroIdemChecker::calc_block_checksum(const ObDDLMacroBlockType block_t
 
 int ObDDLMacroIdemChecker::check_block_exist(const ObDDLMacroBlockType block_type, 
                                              const ObDirectLoadType direct_load_type,
-                                             const blocksstable::MacroBlockId &block_id,
                                              const blocksstable::ObLogicMacroBlockId &logic_id,
                                              const int64_t checksum,
                                              ObITable::TableType table_type,
@@ -964,8 +960,8 @@ int ObDDLMacroIdemChecker::check_block_exist(const ObDDLMacroBlockType block_typ
   is_marco_block_already_exist = false;
   if (!ObDDLMacroIdemChecker::need_check_block_checksum(direct_load_type)) {
     /* skip */
-  } else if (OB_FAIL(key.init(block_id, logic_id, table_type))) {
-    LOG_WARN("failed to init key value", K(ret), K(block_id), K(logic_id), K(table_type));
+  } else if (OB_FAIL(key.init(logic_id, table_type))) {
+    LOG_WARN("failed to init key value", K(ret), K(logic_id), K(table_type));
   } else if (!checksum_map_.created())  {
     ret = OB_TASK_EXPIRED;
     LOG_ERROR("macro block checksum map not created", K(ret), K(checksum_map_.created()));
@@ -975,14 +971,14 @@ int ObDDLMacroIdemChecker::check_block_exist(const ObDDLMacroBlockType block_typ
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("failed to get refactored", K(ret), K(block_id), K(logic_id));
+        LOG_WARN("failed to get refactored", K(ret), K(logic_id));
       }
     } else if (prev_checksum == checksum) {
       is_marco_block_already_exist = true;
-      LOG_INFO("macro block already exist, skip replay it", K(block_id), K(logic_id), K(checksum));
+      LOG_INFO("macro block already exist, skip replay it", K(logic_id), K(checksum));
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("checksum not match", K(ret), K(block_id), K(logic_id), K(prev_checksum), K(checksum));
+      LOG_WARN("checksum not match", K(ret), K(logic_id), K(prev_checksum), K(checksum));
     }
   }
   return ret;
@@ -990,7 +986,6 @@ int ObDDLMacroIdemChecker::check_block_exist(const ObDDLMacroBlockType block_typ
 
 int ObDDLMacroIdemChecker::set_block_checksum(const ObDDLMacroBlockType block_type, 
                                               const ObDirectLoadType direct_load_type,
-                                              const blocksstable::MacroBlockId &block_id,
                                               const blocksstable::ObLogicMacroBlockId &logic_id,
                                               const int64_t checksum,
                                               const ObITable::TableType table_type)
@@ -1002,14 +997,14 @@ int ObDDLMacroIdemChecker::set_block_checksum(const ObDDLMacroBlockType block_ty
   /* check block exist */
   if (!ObDDLMacroIdemChecker::need_check_block_checksum(direct_load_type)) {
     /* skip */
-  } else if (OB_FAIL(check_block_exist(block_type, direct_load_type, block_id, logic_id, checksum, table_type, is_block_exist))) {
-    LOG_WARN("failed to check block exist", K(ret), K(block_id), K(logic_id), K(checksum), K(table_type));
+  } else if (OB_FAIL(check_block_exist(block_type, direct_load_type, logic_id, checksum, table_type, is_block_exist))) {
+    LOG_WARN("failed to check block exist", K(ret), K(logic_id), K(checksum), K(table_type));
   } else if (is_block_exist) {
-    LOG_INFO("block already exist, skip set checksum", K(block_id), K(logic_id), K(checksum), K(table_type));
-  } else if (OB_FAIL(key.init(block_id, logic_id, table_type))) {
-    LOG_WARN("failed to init key value", K(ret), K(block_id), K(logic_id));
+    LOG_INFO("block already exist, skip set checksum", K(logic_id), K(checksum), K(table_type));
+  } else if (OB_FAIL(key.init(logic_id, table_type))) {
+    LOG_WARN("failed to init key value", K(ret), K(logic_id));
   } else if (OB_FAIL(checksum_map_.set_refactored(key, checksum))) {
-    LOG_WARN("failed to set refactored", K(ret), K(block_id), K(logic_id), K(checksum));
+    LOG_WARN("failed to set refactored", K(ret), K(logic_id), K(checksum));
   }
   return ret;
 }

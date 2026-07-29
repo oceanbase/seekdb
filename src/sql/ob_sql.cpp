@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL
 #include "sql/ob_sql.h"
 #include "lib/json/ob_json_print_utils.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/ob_truncated_string.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 #include "sql/plan_cache/ob_pcv_set.h"
@@ -675,9 +676,6 @@ int ObSql::fill_select_result_set(ObResultSet &result_set, ObSqlCtx *context, co
                                 field_name.length() > 0 ? field_name.string() : select_item.alias_name_,
                                 field.cname_, CS_TYPE_UTF8MB4_BIN, field_names_collation))) {
           LOG_WARN("fail to alloc string", K(select_item.alias_name_), K(ret));
-        } else {
-          field.is_hidden_rowid_ = select_item.is_hidden_rowid_;
-          LOG_TRACE("is_hidden_rowid", K(select_item));
         }
       }
       if (OB_SUCC(ret)) {
@@ -1458,18 +1456,14 @@ int ObSql::handle_pl_execute(const ObString &sql,
     context.plan_key_.db_id_ = session.get_database_id();
     context.disable_privilege_check_ = PRIV_CHECK_FLAG_IN_PL;
     pctx = ectx.get_physical_plan_ctx();
-    int64_t local_runtime_schema_version = -1;
-    int64_t local_sys_schema_version = -1;
+    int64_t local_database_schema_version = -1;
     if (OB_ISNULL(context.schema_guard_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema guard is null");
-    } else if (OB_FAIL(context.schema_guard_->get_schema_version(local_runtime_schema_version))) {
-      LOG_WARN("failed to get runtime schema version", K(ret));
-    } else if (OB_FAIL(context.schema_guard_->get_schema_version(local_sys_schema_version))) {
-      LOG_WARN("failed to get system schema version", K(ret));
+    } else if (OB_FAIL(context.schema_guard_->get_schema_version(local_database_schema_version))) {
+      LOG_WARN("failed to get database schema version", K(ret));
     } else {
-      result.get_exec_context().get_task_exec_ctx().set_query_begin_schema_version(local_runtime_schema_version);
-      result.get_exec_context().get_task_exec_ctx().set_query_sys_begin_schema_version(local_sys_schema_version);
+      result.get_exec_context().get_task_exec_ctx().set_query_begin_schema_version(local_database_schema_version);
     }
   }
   if (OB_SUCC(ret) && is_prepare_protocol && !is_dynamic_sql) {
@@ -1840,9 +1834,10 @@ int ObSql::clac_fixed_param_store(const stmt::StmtType stmt_type,
                                                       static_cast<ObCollationType>(server_collation),
                                                       NULL, session.get_sql_mode(),
                                                       enable_decimal_int,
+                                                      share::COMPAT_MYSQL57,
                                                       enable_mysql_compatible_dates,
-                                                      stmt::T_ANONYMOUS_BLOCK == stmt_type,
-                                                      session.get_min_const_integer_precision()))) {
+                                                      session.get_min_const_integer_precision(),
+                                                      stmt::T_ANONYMOUS_BLOCK == stmt_type))) {
       SQL_PC_LOG(WARN, "fail to resolve const", K(ret));
     } else if (OB_FAIL(add_param_to_param_store(value, fixed_param_store))) {
       LOG_WARN("failed to add param to param store", K(ret), K(value), K(fixed_param_store));
@@ -2643,7 +2638,6 @@ int ObSql::generate_plan(ParseResult &parse_result,
     SQL_LOG(DEBUG, "stmt success", "query", SJ(*stmt));
     stmt->get_query_ctx()->root_stmt_ = stmt;
     const ObGlobalHint &global_hint = stmt->get_query_ctx()->get_global_hint();
-    sql_ctx.session_info_->set_early_lock_release(global_hint.enable_lock_early_release_);
     HEAP_VAR(ObOptimizerContext, optctx, sql_ctx.session_info_,
                               &result.get_exec_context(),
                               &result.get_exec_context().get_stmt_factory()->get_query_ctx()->sql_schema_guard_,
@@ -2675,7 +2669,6 @@ int ObSql::generate_plan(ParseResult &parse_result,
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_ERROR("Failed to alloc physical plan from tc factory", K(ret));
     } else {
-      phy_plan->stat_.enable_early_lock_release_ = sql_ctx.session_info_->get_early_lock_release();
       if (NULL != pc_ctx) {
         pc_ctx->should_add_plan_ = true;
       }

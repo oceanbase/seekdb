@@ -15,11 +15,10 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_micro_block_cache.h"
 #include "src/storage/meta_mem/ob_tablet_pointer.h"
 #include "src/storage/meta_mem/ob_tablet_pointer.h"
-#include "share/cache/ob_kvcache_map.h"  // relocated-definition owner
+#include "share/cache/ob_kvcache_map.h"
 
 namespace oceanbase
 {
@@ -579,7 +578,6 @@ int ObAsyncSingleMicroBlockIOCallback::process(
     const bool use_tl_reader)
 {
   int ret = OB_SUCCESS;
-  ObDIActionGuard action_guard("SingleMicroBlockIOCallback");
   ObTimeGuard time_guard("AsyncSingle_Callback_Process", 100000); //100ms
   if (OB_ISNULL(cache_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -653,7 +651,6 @@ int ObMultiDataBlockIOCallback::process(
     const bool use_tl_reader)
 {
   int ret = OB_SUCCESS;
-  ObDIActionGuard action_guard("MultiDataBlockIOCallback");
   ObTimeGuard time_guard("MultiData_Callback_Process", 100000); //100ms
   if (OB_ISNULL(cache_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -869,10 +866,7 @@ int ObIMicroBlockCache::get_cache_block(
       if (OB_ENTRY_NOT_EXIST != ret) {
         STORAGE_LOG(WARN, "Fail to get micro block from block cache, ", K(ret));
       }
-      EVENT_INC(BLOCK_CACHE_MISS);
-      inc_cache_miss();
     } else {
-      EVENT_INC(BLOCK_CACHE_HIT);
     }
   }
   return ret;
@@ -950,8 +944,6 @@ int ObIMicroBlockCache::prefetch(
         allocator->free(&callback);
       }
     } else {
-      EVENT_INC(IO_READ_PREFETCH_MICRO_COUNT);
-      EVENT_ADD(IO_READ_PREFETCH_MICRO_BYTES, idx_row.get_block_size());
     }
   }
   return ret;
@@ -994,8 +986,6 @@ int ObIMicroBlockCache::prefetch(
       allocator->free(&callback);
     }
   } else {
-    EVENT_ADD(IO_READ_PREFETCH_MICRO_COUNT, io_param.micro_block_count_);
-    EVENT_ADD(IO_READ_PREFETCH_MICRO_BYTES, size);
   }
   return ret;
 }
@@ -1177,8 +1167,6 @@ int ObDataMicroBlockCache::load_block(
         LOG_WARN("Fail to wait io finish", K(ret), K(macro_read_info));
       } else {
         block_data.type_ = ObMicroBlockData::DATA_BLOCK;
-        EVENT_INC(IO_READ_PREFETCH_MICRO_COUNT);
-        EVENT_ADD(IO_READ_PREFETCH_MICRO_BYTES, micro_block_id.size_);
       }
     }
   }
@@ -1374,19 +1362,16 @@ ObMicroBlockData::Type ObDataMicroBlockCache::get_type()
 
 void ObDataMicroBlockCache::cache_bypass()
 {
-  EVENT_INC(DATA_BLOCK_READ_CNT);
 }
 
 void ObDataMicroBlockCache::cache_hit(int64_t &hit_cnt)
 {
   ++hit_cnt;
-  EVENT_INC(DATA_BLOCK_CACHE_HIT);
 }
 
 void ObDataMicroBlockCache::cache_miss(int64_t &miss_cnt)
 {
   ++miss_cnt;
-  EVENT_INC(DATA_BLOCK_READ_CNT);
 }
 
 /*-------------------------------------ObIndexMicroBlockCache-------------------------------------*/
@@ -1467,8 +1452,6 @@ int ObIndexMicroBlockCache::load_block(
       if (FAILEDx(idx_transformer.transform(block_data, block_data, *allocator, transform_buf))) {
         LOG_WARN("Fail to transform index block to memory format", K(ret));
       } else {
-        EVENT_INC(IO_READ_PREFETCH_MICRO_COUNT);
-        EVENT_ADD(IO_READ_PREFETCH_MICRO_BYTES, micro_block_id.size_);
       }
       if (nullptr != raw_idx_block_buf) {
         allocator->free(raw_idx_block_buf);
@@ -1568,19 +1551,16 @@ ObMicroBlockData::Type ObIndexMicroBlockCache::get_type()
 
 void ObIndexMicroBlockCache::cache_bypass()
 {
-  EVENT_INC(INDEX_BLOCK_READ_CNT);
 }
 
 void ObIndexMicroBlockCache::cache_hit(int64_t &hit_cnt)
 {
   ++hit_cnt;
-  EVENT_INC(INDEX_BLOCK_CACHE_HIT);
 }
 
 void ObIndexMicroBlockCache::cache_miss(int64_t &miss_cnt)
 {
   ++miss_cnt;
-  EVENT_INC(INDEX_BLOCK_READ_CNT);
 }
 
 }//end namespace blocksstable

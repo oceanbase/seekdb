@@ -1,4 +1,3 @@
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/rc/ob_module_provider.h"
 /*
  * Copyright (c) 2025 OceanBase.
@@ -66,8 +65,6 @@ int ObDDLCtrlSpeedItem::refresh()
 {
   int ret = OB_SUCCESS;
   int64_t refresh_speed = 0;
-  bool ignore = false;
-  bool force_wait = false;
   int64_t total_used_space = 0; // for current tenant, used bytes.
   int64_t total_disk_space = 0; // for current tenant, limit used bytes.
   palf::PalfOptions palf_opt;
@@ -1116,9 +1113,11 @@ void ObDDLRedoLogWriterCallbackInitParam::reset()
 }
 
 ObDDLRedoLogWriterCallback::ObDDLRedoLogWriterCallback()
-  : is_inited_(false), param_(), ddl_writer_(), kv_mgr_handle_(), allocator_(), redo_info_array_()
+  : is_inited_(false), param_(), ddl_writer_(), kv_mgr_handle_(), allocator_(),
+    redo_info_array_(), macro_block_id_array_()
 {
   redo_info_array_.set_attr(lib::ObMemAttr("DdlRedoInfo"));
+  macro_block_id_array_.set_attr(lib::ObMemAttr("DdlMacroIds"));
 }
 
 ObDDLRedoLogWriterCallback::~ObDDLRedoLogWriterCallback()
@@ -1164,6 +1163,8 @@ void ObDDLRedoLogWriterCallback::reset()
   ddl_writer_.reset();
   kv_mgr_handle_.reset();
   allocator_.reuse();
+  redo_info_array_.reuse();
+  macro_block_id_array_.reuse();
 }
 
 // check the checksum of macro block
@@ -1193,7 +1194,6 @@ int ObDDLRedoLogWriterCallback::write(const ObStorageObjectHandle &macro_handle,
     redo_info.block_type_ = param_.block_type_;
     redo_info.logic_id_ = logic_id;
     redo_info.start_scn_ = param_.start_scn_;
-    redo_info.macro_block_id_ = macro_handle.get_macro_id();
     redo_info.type_ = param_.direct_load_type_;
     redo_info.data_format_version_ = param_.data_format_version_;
     redo_info.data_buffer_.assign(buf, buf_len);
@@ -1222,12 +1222,15 @@ int ObDDLRedoLogWriterCallback::write(const ObStorageObjectHandle &macro_handle,
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(redo_info_array_.push_back(redo_info))) {
         LOG_WARN("failed to push back val", K(ret));
+      } else if (OB_FAIL(macro_block_id_array_.push_back(macro_block_id))) {
+        redo_info_array_.pop_back();
+        LOG_WARN("failed to record macro block id", K(ret), K(macro_block_id));
       } else if (redo_info_array_.count() > 10) {
         /* write some warn info, since redo info array should not be too large*/
         LOG_WARN("too much element in redo log callback", K(redo_info_array_.count()), K(lbt()));
       }
     } else {
-      if (OB_FAIL(inner_write(redo_info))) {
+      if (OB_FAIL(inner_write(redo_info, macro_block_id))) {
         LOG_WARN("failed to write macro block", K(ret));
       }
     }
@@ -1235,15 +1238,18 @@ int ObDDLRedoLogWriterCallback::write(const ObStorageObjectHandle &macro_handle,
   return ret;
 }
 
-int ObDDLRedoLogWriterCallback::inner_write(const ObDDLMacroBlockRedoInfo &redo_info) 
+int ObDDLRedoLogWriterCallback::inner_write(
+    const ObDDLMacroBlockRedoInfo &redo_info,
+    const blocksstable::MacroBlockId &macro_block_id)
 {
   int ret = OB_SUCCESS;
-  if (!redo_info.is_valid()) {
+  if (!redo_info.is_valid() || !macro_block_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(redo_info));
+    LOG_WARN("invalid argument", K(ret), K(redo_info), K(macro_block_id));
   } else if (OB_FAIL(ddl_writer_.write_macro_block_log(
-      redo_info, redo_info.macro_block_id_, param_.task_id_))) {
-    LOG_ERROR("fail to write ddl redo log", K(ret), K(redo_info), K(param_.task_id_));
+      redo_info, macro_block_id, param_.task_id_))) {
+    LOG_ERROR("fail to write ddl redo log", K(ret), K(redo_info), K(macro_block_id),
+        K(param_.task_id_));
   }
   return ret;
 }
@@ -1252,14 +1258,19 @@ int ObDDLRedoLogWriterCallback::write_redo_info_array()
 {
   int ret = OB_SUCCESS;
   if (0 == redo_info_array_.count()) {
+  } else if (OB_UNLIKELY(redo_info_array_.count() != macro_block_id_array_.count())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("redo info and macro id count mismatch", K(ret),
+              K(redo_info_array_.count()), K(macro_block_id_array_.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < redo_info_array_.count(); i++) {
-      if (OB_FAIL(inner_write(redo_info_array_.at(i)))) {
+      if (OB_FAIL(inner_write(redo_info_array_.at(i), macro_block_id_array_.at(i)))) {
         LOG_WARN("failed to write redo info", K(ret));
       }
     }
     allocator_.reuse();
     redo_info_array_.reuse();
+    macro_block_id_array_.reuse();
   }
   return ret;
 }

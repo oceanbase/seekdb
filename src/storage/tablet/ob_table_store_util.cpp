@@ -1128,25 +1128,6 @@ bool ObTableStoreUtil::check_intersect_by_scn_range(const ObITable &a, const ObI
 }
 
 
-int ObTableStoreUtil::check_has_backup_macro_block(const ObITable *table, bool &has_backup_macro)
-{
-  int ret = OB_SUCCESS;
-  ObSSTableMetaHandle sst_meta_hdl;
-  has_backup_macro = false;
-  if (OB_ISNULL(table)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_ERROR("table is null", K(ret));
-  } else if (table->is_memtable()) {
-    // memtable has no backup macro block
-  } else if (OB_FAIL(static_cast<const ObSSTable *>(table)->get_meta(sst_meta_hdl))) {
-    LOG_WARN("failed to get new sstable meta handle", K(ret), KPC(table));
-  } else if (sst_meta_hdl.get_sstable_meta().get_basic_meta().table_backup_flag_.has_backup()) {
-    has_backup_macro = true;
-  }
-  return ret;
-}
-
-
 int ObCacheSSTableHelper::load_sstable(
     const ObMetaDiskAddr &addr,
     ObStorageMetaHandle &handle)
@@ -1208,8 +1189,6 @@ int ObCacheSSTableHelper::try_cache_local_sstable_meta(
         LOG_WARN("get unexpected null array sstable", K(ret));
       } else if (array_sstable->is_loaded()) {
         // sstable is already loaded to memory
-      } else if (array_sstable->is_remote_logical_minor_sstable()) {
-        // no need to cache remote logical minor sstable, here only for compatible.
       } else if (OB_FAIL(ObCacheSSTableHelper::load_sstable(array_sstable->get_addr(), sstable_handle))) {
         LOG_WARN("fail to load sstable", K(ret), KPC(array_sstable));
       } else if (OB_FAIL(sstable_handle.get_sstable(loaded_sstable))) {

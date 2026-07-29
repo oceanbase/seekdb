@@ -1,0 +1,114 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_OUTLINE_
+#define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_OUTLINE_
+
+#include "share/ob_define.h"
+#include "lib/container/ob_se_array.h"
+#include "lib/hash/ob_hashmap.h"
+#include "share/schema/ob_schema_struct.h"
+#include "observer/virtual_table/ob_virtual_table_iterator.h"
+
+using oceanbase::common::OB_APP_MIN_COLUMN_ID;
+namespace oceanbase
+{
+namespace sql
+{
+class ObSQLSessionInfo;
+}
+
+namespace common
+{
+class ObNewRow;
+}
+namespace share
+{
+namespace schema
+{
+class ObOutlineInfo;
+}
+}
+namespace observer
+{
+
+class ObAllVirtualOutlineBase: public common::ObVirtualTableIterator
+{
+protected:
+  struct DBInfo
+  {
+    DBInfo() : db_name_(), is_recycle_(false) {}
+
+    common::ObString db_name_;
+    bool is_recycle_;
+  };
+public:
+  ObAllVirtualOutlineBase():
+      outline_info_idx_(common::OB_INVALID_INDEX),
+      outline_infos_(),
+      database_infos_()
+  {}
+  ~ObAllVirtualOutlineBase() {}
+  virtual int inner_open();
+  void reset();
+
+protected:
+  int is_database_recycle(uint64_t database_id, bool &is_recycle);
+  int set_database_infos_and_get_value(uint64_t database_id, bool &is_recycle);
+protected:
+  int64_t outline_info_idx_;
+  common::ObSEArray<const share::schema::ObOutlineInfo*, 16> outline_infos_;
+  common::hash::ObHashMap<uint64_t, DBInfo> database_infos_;
+private:
+   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualOutlineBase);
+};
+
+class ObAllVirtualOutline : public ObAllVirtualOutlineBase
+{
+  enum OUTLINE_COLUMN
+  {
+    // Column ids must match inner-table schema definition generated in
+    // `src/share/inner_table/ob_inner_table_schema*.cpp` where `column_id`
+    // starts from `OB_APP_MIN_COLUMN_ID - 1` and pre-increments for the first column.
+    // For the outline virtual table, the first column is `database_id`.
+    DATABASE_ID = OB_APP_MIN_COLUMN_ID,
+    OUTLINE_ID = OB_APP_MIN_COLUMN_ID + 1,
+    DATABASE_NAME = OB_APP_MIN_COLUMN_ID + 2,
+    OUTLINE_NAME = OB_APP_MIN_COLUMN_ID + 3,
+    VISIBLE_SIGNATURE = OB_APP_MIN_COLUMN_ID + 4,
+    SQL_TEXT = OB_APP_MIN_COLUMN_ID + 5,
+    OUTLINE_TARGET = OB_APP_MIN_COLUMN_ID + 6,
+    OUTLINE_SQL = OB_APP_MIN_COLUMN_ID + 7,
+    SQL_ID = OB_APP_MIN_COLUMN_ID + 8,
+    OUTLINE_CONTENT = OB_APP_MIN_COLUMN_ID + 9,
+    FORMAT_SQL_TEXT = OB_APP_MIN_COLUMN_ID + 10,
+    FORMAT_SQL_ID = OB_APP_MIN_COLUMN_ID + 11,
+    FORMAT_OUTLINE = OB_APP_MIN_COLUMN_ID + 12,
+  };
+public:
+  ObAllVirtualOutline() : ObAllVirtualOutlineBase() {}
+  ~ObAllVirtualOutline() {}
+  void reset();
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+private:
+  int fill_cells(const share::schema::ObOutlineInfo *outline_info);
+  int is_output_outline(const share::schema::ObOutlineInfo *outline_info, bool &is_output);
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObAllVirtualOutline);
+};
+}
+}
+#endif /* OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_OUTLINE_ */

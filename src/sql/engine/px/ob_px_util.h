@@ -21,7 +21,6 @@
 #include "sql/engine/px/ob_dfo.h"
 #include "sql/dtl/ob_dtl_task.h"
 #include "sql/dtl/ob_dtl_flow_control.h"
-#include "sql/ob_phy_table_location.h"
 #include "sql/engine/px/ob_granule_iterator_op.h"
 #include "sql/engine/px/ob_px_op_size_factor.h"
 #include "sql/engine/px/ob_px_basic_info.h"
@@ -33,11 +32,6 @@ namespace oceanbase
 namespace sql
 {
 const int64_t PX_RESCAN_BATCH_ROW_COUNT = 8192;
-class ObIExtraStatusCheck;
-enum ObBcastOptimization {
-  BC_TO_WORKER,
-  BC_TO_SERVER,
-};
 // Listen to various events, such as root dfo scheduling events, etc
 class ObIPxCoordEventListener
 {
@@ -142,18 +136,6 @@ typedef common::hash::ObHashMap<uint64_t, int64_t, common::hash::NoPthreadDefend
 
 class ObPxSqcDistributionUtil
 {
-  class ObPxSqcTaskCountMeta {
-  public:
-    ObPxSqcTaskCountMeta() : partition_count_(0), thread_count_(0),
-    time_(0), idx_(0), finish_(false) {}
-    ~ObPxSqcTaskCountMeta() = default;
-    int64_t partition_count_;
-    int64_t thread_count_;
-    double time_;
-    int64_t idx_;
-    bool finish_;
-    TO_STRING_KV(K_(partition_count), K_(thread_count), K_(time), K_(idx), K_(finish));
-  };
 public:
   ObPxSqcDistributionUtil() = default;
   ~ObPxSqcDistributionUtil() = default;
@@ -177,9 +159,6 @@ public:
                                                    ObExecContext &exec_ctx,
                                                    ObDfo &parent);
   static int find_reference_child(ObDfo &parent, ObDfo *&reference_child);
-  static int split_parallel_into_task(const int64_t parallelism,
-                                      const common::ObIArray<int64_t> &sqc_partition_count,
-                                      common::ObIArray<int64_t> &results);
   static int build_tablet_idx_map(
       const share::schema::ObTableSchema *table_schema,
       ObTabletIdxMap &idx_map);
@@ -258,9 +237,6 @@ private:
     bool &asc_order);
 
 
-  static int adjust_sqc_task_count(common::ObIArray<ObPxSqcTaskCountMeta> &sqc_tasks,
-                                   int64_t parallel,
-                                   int64_t partition);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPxSqcDistributionUtil);
 };
@@ -885,9 +861,6 @@ private:
   // ----------------- for slave mapping scenes ----------------------
   // for SlaveMappingType::SM_PWJ_HASH_HASH, channel built inside each sqc
   static int build_pwj_slave_map_mn_group(ObDfo &parent, ObDfo &child);
-  static int build_mn_channel_per_sqcs(ObPxChTotalInfos *dfo_ch_total_infos, ObDfo &child,
-                                       ObDfo &parent, int64_t sqc_count);
-
   // for SlaveMappingType::SM_PPWJ_HASH_HASH
   static int build_ppwj_slave_mn_map(ObDfo &parent, ObDfo &child);
 
@@ -910,14 +883,11 @@ private:
   static int build_pkey_affinitized_ch_mn_map(ObDfo &parent, ObDfo &child);
   static int build_affinitized_partition_map_by_sqcs(common::ObIArray<ObPxSqcMeta> &sqcs,
                                                      ObDfo &child,
-                                                     ObIArray<int64_t> &prefix_task_counts,
-                                                     int64_t total_task_count,
                                                      ObPxPartChMapArray &map);
 
 private:
   static int build_partition_map_by_sqcs(common::ObIArray<ObPxSqcMeta> &sqcs,
                                          ObDfo &child,
-                                         common::ObIArray<int64_t> &prefix_task_counts,
                                          ObPxPartChMapArray &map);
 
   static int get_pkey_table_locations(int64_t table_location_key,
@@ -934,36 +904,8 @@ public:
               const int64_t sqc_id,
               const int64_t task_id,
               dtl::ObDtlChTotalInfo &ch_total_info,
-              dtl::ObDtlChSet &ch_set) {
-    return ch_total_info.is_local_shuffle_ ?
-            get_sm_receive_dtl_channel_set(sqc_id, task_id, ch_total_info, ch_set) :
-            get_mn_receive_dtl_channel_set(sqc_id, task_id, ch_total_info, ch_set);
-  }
-  static int get_mn_receive_dtl_channel_set(
-              const int64_t sqc_id,
-              const int64_t task_id,
-              dtl::ObDtlChTotalInfo &ch_total_info,
-              dtl::ObDtlChSet &ch_set);
-  static int get_sm_receive_dtl_channel_set(
-              const int64_t sqc_id,
-              const int64_t task_id,
-              dtl::ObDtlChTotalInfo &ch_total_info,
               dtl::ObDtlChSet &ch_set);
   static int get_transmit_dtl_channel_set(
-              const int64_t sqc_id,
-              const int64_t task_id,
-              dtl::ObDtlChTotalInfo &ch_total_info,
-              dtl::ObDtlChSet &ch_set) {
-    return ch_total_info.is_local_shuffle_ ?
-            get_sm_transmit_dtl_channel_set(sqc_id, task_id, ch_total_info, ch_set) :
-            get_mn_transmit_dtl_channel_set(sqc_id, task_id, ch_total_info, ch_set);
-  }
-  static int get_mn_transmit_dtl_channel_set(
-              const int64_t sqc_id,
-              const int64_t task_id,
-              dtl::ObDtlChTotalInfo &ch_total_info,
-              dtl::ObDtlChSet &ch_set);
-  static int get_sm_transmit_dtl_channel_set(
               const int64_t sqc_id,
               const int64_t task_id,
               dtl::ObDtlChTotalInfo &ch_total_info,
@@ -984,7 +926,6 @@ public:
                                            const int new_error_code,
                                            const ObPxUserErrorMsg &from)
   {
-    int ret = OB_SUCCESS;
     // **replace** error code & error msg
     if (new_error_code != ObPxTask::TASK_DEFAULT_RET_VALUE) {
       if ((OB_SUCCESS == current_error_code ||
@@ -992,7 +933,7 @@ public:
            OB_GOT_SIGNAL_ABORTING == current_error_code) &&
            OB_SUCCESS != new_error_code) {
         current_error_code = new_error_code;
-        SQL_LOG(WARN, "QC updated the local PX error code", K(new_error_code));
+        SQL_LOG_RET(WARN, new_error_code, "QC updated the local PX error code", K(new_error_code));
         FORWARD_USER_ERROR(new_error_code, from.msg_);
       }
     }

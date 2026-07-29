@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Farm compile: build observer / obproxy in workspace.
+# Farm compile: build seekdb/observer in workspace.
 # Expects: WORKSPACE, SEEKDB_TASK_DIR, PACKAGE_TYPE (debug|release), REPO=server
 set -e
 

@@ -106,8 +106,7 @@ int ObAlterTriggerExecutor::execute(ObExecContext &ctx, ObAlterTriggerStmt &stmt
     OV (OB_NOT_NULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
     if (OB_FAIL(ret)) {
     } else {
-      obcall::ObRoutineDDLRes res;
-      OZ (rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->alter_trigger_with_res(arg, res); }), GCTX.self_addr());
+      OZ (rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->alter_trigger(arg); }), GCTX.self_addr());
     }
   }
   return ret;

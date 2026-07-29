@@ -10,7 +10,7 @@
 connect (obsys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
 connection obsys;
 
-alter system flush plan cache global;
+alter system flush plan cache;
 --sleep 3
 
 connection default;
@@ -71,7 +71,7 @@ select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statemen
                                                                      statement like "select - +? from dual";
 commit;
 connection obsys;
-alter system flush plan cache global;
+alter system flush plan cache;
 --sleep 3
 
 connection default;
@@ -99,7 +99,7 @@ select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statemen
 select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ?  - ? from dual';
 
 connection obsys;
-alter system flush plan cache global;
+alter system flush plan cache;
 --sleep 3
 
 connection default;
@@ -178,7 +178,7 @@ commit;
 
 --echo // CASE#6: INT64_MIN
 connection obsys;
-alter system flush plan cache global;
+alter system flush plan cache;
 --sleep 3
 connection default;
 begin;

@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX RS
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_constraint_task.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_error_message_table_operator.h"
@@ -29,7 +28,6 @@ using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::rootserver;
-using namespace oceanbase::obcall;
 
 ObCheckConstraintValidationTask::ObCheckConstraintValidationTask(
     const int64_t data_table_id,
@@ -57,7 +55,6 @@ int ObCheckConstraintValidationTask::process()
   const ObDatabaseSchema *database_schema = nullptr;
   int tmp_ret = OB_SUCCESS;
   ObTabletID unused_tablet_id;
-  ObAddr unused_addr;
   ObDDLTaskKey task_key(target_object_id_, schema_version_);
   if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("get runtime schema guard failed", K(ret));
@@ -153,7 +150,7 @@ int ObCheckConstraintValidationTask::process()
   }
   ObDDLTaskInfo info;
   if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::on_sstable_complement_job_reply(
-                      unused_tablet_id, unused_addr, task_key, 1L/*unused snapshot version*/,
+                      unused_tablet_id, task_key, 1L/*unused snapshot version*/,
                       1L/*unused execution id*/, ret, info))) {
     LOG_WARN("fail to finish check constraint task", K(ret), K(tmp_ret));
   }
@@ -203,7 +200,6 @@ int ObForeignKeyConstraintValidationTask::process()
     LOG_WARN("ddl sim failure", K(ret), K(task_id_));
   } else {
     ObTabletID unused_tablet_id;
-    ObAddr unused_addr;
     ObDDLTaskKey task_key(foregin_key_id_, schema_version_);
     ObDDLTaskInfo info;
     int tmp_ret = OB_SUCCESS;
@@ -211,7 +207,7 @@ int ObForeignKeyConstraintValidationTask::process()
       LOG_WARN("failed to check fk", K(ret));
     }
     if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::on_sstable_complement_job_reply(
-                        unused_tablet_id, unused_addr, task_key, 1L/*unused snapshot version*/,
+                        unused_tablet_id, task_key, 1L/*unused snapshot version*/,
                         1L/*unused execution id*/, ret, info))) {
       LOG_WARN("fail to finish check constraint task", KR(tmp_ret));
     }

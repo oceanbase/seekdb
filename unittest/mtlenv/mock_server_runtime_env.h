@@ -559,16 +559,4 @@ void MockServerRuntimeEnv::destroy()
 
 } // namespace storage
 
-// just for override HOOK
-namespace transaction
-{
-int ObGtiSource::get_trans_id(int64_t &trans_id)
-{
-  static int64_t trans_id_start = 1000;
-  trans_id = ATOMIC_FAA(&trans_id_start, 1 );
-  return OB_SUCCESS;
-}
-
-} // end transaction
-
 } // namespace oceanbase

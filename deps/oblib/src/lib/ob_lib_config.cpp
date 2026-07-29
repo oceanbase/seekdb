@@ -22,7 +22,6 @@ namespace lib
 
 bool ObLibConfig::enable_diagnose_info_ = true;
 volatile bool ObLibConfig::enable_trace_log_ = true;
-bool ObLibConfig::enable_ash_ = false;
 
 bool ObPerfModeGuard::PERF_MODE_VALUE = false;
 

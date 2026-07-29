@@ -427,7 +427,7 @@ int ObSqlCollectionInfo::set_element_meta_info(const std::string &name, uint8_t 
   } else {
     ObObjType obj_type = meta_info->basic_meta_.get_obj_type();
     ObObjTypeClass tc = meta_info->basic_meta_.get_type_class();
-    const ObAccuracy &default_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][obj_type];
+    const ObAccuracy &default_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY[obj_type];
     switch (tc) {
       case ObIntTC:
       case ObUIntTC:
@@ -814,13 +814,13 @@ int ObSqlCollectionInfo::parse_sparse_vector_element_info(ObCollectionTypeBase *
   } else {
     static_cast<ObCollectionArrayType *>(key_meta_info)->element_type_ = key_basic_meta_info;
     key_basic_meta_info->basic_meta_.meta_.set_uint32();
-    const ObAccuracy &key_default_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][ObUInt32Type];
+    const ObAccuracy &key_default_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY[ObUInt32Type];
     key_basic_meta_info->basic_meta_.set_precision(key_default_accuracy.get_precision());
     key_basic_meta_info->basic_meta_.set_scale(0);
 
     static_cast<ObCollectionArrayType *>(value_meta_info)->element_type_ = value_basic_meta_info;
     value_basic_meta_info->basic_meta_.meta_.set_float();
-    const ObAccuracy &value_default_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][ObFloatType];
+    const ObAccuracy &value_default_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY[ObFloatType];
     value_basic_meta_info->basic_meta_.set_precision(value_default_accuracy.get_precision());
     value_basic_meta_info->basic_meta_.set_scale(value_default_accuracy.get_scale());
   }

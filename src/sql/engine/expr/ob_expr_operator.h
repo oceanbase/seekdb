@@ -2259,8 +2259,6 @@ private:
                        is_null_safe, \
                        expr_ctx.tz_offset_,\
                        default_null_pos())
-#define EXPR_SET_CAST_CTX_MODE(expr_ctx) \
-    ObSQLUtils::set_compatible_cast_mode((expr_ctx).my_session_, (expr_ctx).cast_mode_)
 // external variables: expr_ctx.
 #define EXPR_DEFINE_CAST_CTX(expr_ctx, cast_mode)                       \
     EXPR_DEFINE_CAST_CTX_ZF(expr_ctx, cast_mode , NULL)
@@ -2277,10 +2275,6 @@ private:
         cast_coll_type = ObCharset::get_default_collation(                 \
             ObCharset::get_default_charset());                             \
       }                                                                    \
-    }                                                                      \
-    if (common::OB_SUCCESS != ObSQLUtils::set_compatible_cast_mode(        \
-                                (expr_ctx).my_session_, cp_cast_mode_)) {  \
-      SQL_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "fail to get compatible mode for cast_mode");         \
     }                                                                      \
   } else {                                                                 \
     SQL_LOG_RET(WARN, common::OB_ERR_UNEXPECTED, "session is null");                                      \

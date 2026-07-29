@@ -61,7 +61,6 @@ int CalcPartitionBaseInfo::deep_copy(common::ObIAllocator &allocator,
       base_info->partition_id_calc_type_ = partition_id_calc_type_;
       base_info->may_add_interval_part_ = may_add_interval_part_;
       base_info->calc_id_type_ = calc_id_type_;
-      base_info->first_part_id_ = first_part_id_;
     }
   }
   return ret;

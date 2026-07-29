@@ -51,7 +51,6 @@ int ObServerCheckpointReader::read_runtime_meta_checkpoint(const MacroBlockId &e
     char *item_buf = nullptr;
     int64_t item_buf_len = 0;
     ObMetaDiskAddr addr;
-    int ret = OB_SUCCESS;
     while (OB_SUCC(ret)) {
       if (OB_FAIL(runtime_meta_item_reader_.get_next_item(item_buf, item_buf_len, addr))) {
         if (OB_ITER_END != ret) {
@@ -101,7 +100,7 @@ int ObServerCheckpointReader::get_runtime_meta(omt::ObServerRuntimeMeta &runtime
   if (is_valid) {
     runtime_meta = runtime_meta_;
   }
-  return ret;
+  return OB_SUCCESS;
 }
 
 }  // end namespace storage

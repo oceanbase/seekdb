@@ -75,7 +75,6 @@ int ObDtlBufEncoder::write_data_msg(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, bo
 }
 
 int ObDtlChanAgent::init(dtl::ObDtlFlowControl &dfc,
-                         ObPxTaskChSet &task_ch_set,
                          ObIArray<ObDtlChannel *> &channels,
                          int64_t time_ts)
 {
@@ -86,19 +85,9 @@ int ObDtlChanAgent::init(dtl::ObDtlFlowControl &dfc,
   sys_dtl_buf_size_ = GCONF.dtl_buffer_size;
   dfo_key_ = dfc.get_dfo_key();
 
-  if (init_) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("this channel agent has been initiated", K(ret));
-  }
-
   for (int64_t i = 0; i < channels.count() && OB_SUCC(ret); ++i) {
     ObDtlBasicChannel *data_ch = (ObDtlBasicChannel*)channels.at(i);
     int64_t sys_buffer_size = data_ch->get_send_buffer_size();
-
-    ObDtlChannelInfo ch_info;
-    if (OB_FAIL(task_ch_set.get_channel_info(i, ch_info))) {
-      LOG_WARN("failed to get channel info", K(ret));
-    }
     dtl_buf_allocator_.set_sys_buffer_size(sys_buffer_size);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(local_channels_.push_back((ObDtlLocalChannel *)data_ch))) {

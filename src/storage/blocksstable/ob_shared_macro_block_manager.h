@@ -71,7 +71,7 @@ public:
 
   TO_STRING_KV(K_(macro_handle), K_(offset), K_(header_size));
 
-  static int mtl_init(ObSharedMacroBlockMgr* &shared_block_mgr);
+  static int module_init(ObSharedMacroBlockMgr* &shared_block_mgr);
 
 private:
   class ObBlockDefragmentationTask : public common::ObTimerTask
@@ -152,7 +152,7 @@ private:
       const ObSSTableBasicMeta &basic_meta,
       const compaction::ObMergeType &merge_type,
       const int64_t snapshot_version,
-      const int64_t cluster_version,
+      const int64_t major_data_version,
       const share::SCN &end_scn,
       ObWholeDataStoreDesc &data_desc) const;
   int alloc_for_tools(

@@ -1266,7 +1266,10 @@ int ObTransCallbackMgr::update_checksum(const ObIArray<uint64_t> &checksum,
   }
   if (OB_SUCC(ret)) {
     CALLBACK_LISTS_FOREACH(idx, list) {
-      list->update_checksum(checksum.at(idx), checksum_scn.at(idx));
+      if (OB_SUCC(ret) && OB_FAIL(list->update_checksum(checksum.at(idx), checksum_scn.at(idx)))) {
+        TRANS_LOG(WARN, "failed to restore callback list checksum", K(ret), K(idx),
+                  K(checksum.at(idx)), K(checksum_scn.at(idx)));
+      }
     }
   }
   return ret;

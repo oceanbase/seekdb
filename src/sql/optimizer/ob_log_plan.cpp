@@ -2685,8 +2685,6 @@ int ObLogPlan::allocate_access_path(AccessPath *ap,
       LOG_WARN("failed to set query ranges", K(ret));
     } else if (OB_FAIL(scan->set_range_columns(ap->get_cost_table_scan_info().range_columns_))) {
       LOG_WARN("failed to set range column", K(ret));
-    } else if (OB_FAIL(append(scan->get_server_list(), ap->get_server_list()))) {
-      LOG_WARN("failed to assign server list", K(ret));
     } else { // set table name and index name
       scan->set_table_name(table_item->get_table_name());
       scan->set_diverse_path_count(ap->parent_->get_diverse_path_count());
@@ -3006,17 +3004,12 @@ int ObLogPlan::compute_join_exchange_info(JoinPath &join_path,
   SlaveMappingType sm_type = get_slave_mapping_type(join_path.join_dist_algo_);
   left_exch_info.dist_method_ = ObPQDistributeMethod::NONE;
   left_exch_info.parallel_ = join_path.parallel_;
-  left_exch_info.server_cnt_ = join_path.server_cnt_;
   right_exch_info.dist_method_ = ObPQDistributeMethod::NONE;
   right_exch_info.parallel_ = join_path.parallel_;
-  right_exch_info.server_cnt_ = join_path.server_cnt_;
   if (OB_ISNULL(join_path.left_path_) || OB_ISNULL(join_path.left_path_->parent_) ||
       OB_ISNULL(join_path.right_path_) || OB_ISNULL(join_path.right_path_->parent_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(join_path.left_path_), K(join_path.right_path_), K(ret));
-  } else if (OB_FAIL(left_exch_info.server_list_.assign(join_path.server_list_))
-             || OB_FAIL(right_exch_info.server_list_.assign(join_path.server_list_))) {
-    LOG_WARN("failed to assign server list", K(ret));
   } else if (OB_FAIL(append(equal_sets, join_path.left_path_->parent_->get_output_equal_sets())) ||
              OB_FAIL(append(equal_sets, join_path.right_path_->parent_->get_output_equal_sets()))) {
     LOG_WARN("failed to append equal sets", K(ret));
@@ -5049,7 +5042,7 @@ int ObLogPlan::get_distribute_group_by_method(ObLogicalOperator *top,
                                                                        is_partition_wise))) {
       LOG_WARN("failed to check if sharding compatible with distinct expr", K(ret));
     } else if (is_partition_wise &&
-               (top->is_parallel_more_than_part_cnt(2) || force_slave_mapping ||
+               (top->is_parallel_more_than_part_cnt(SLAVE_MAPPING_DOP_TO_PARTITION_RATIO) || force_slave_mapping ||
                 DistAlgo::DIST_HASH_HASH_LOCAL == group_dist_methods)) {
       group_dist_methods = DistAlgo::DIST_HASH_HASH_LOCAL;
       OPT_TRACE("group operator will use hash local method and prune other method");
@@ -5445,7 +5438,6 @@ int ObLogPlan::compute_groupby_dop_by_auto_dop(const ObIArray<ObRawExpr*> &group
   int ret = OB_SUCCESS;
   dop = ObGlobalHint::UNSET_PARALLEL;
   bool need_calc_dop = false;
-  int64_t server_cnt = 0;
   int64_t calc_dop = ObGlobalHint::UNSET_PARALLEL;
   int64_t max_child_dop = ObGlobalHint::UNSET_PARALLEL;
   if (!groupby_helper.can_three_stage_pushdown_ || !rollup_exprs.empty()) {
@@ -5460,11 +5452,10 @@ int ObLogPlan::compute_groupby_dop_by_auto_dop(const ObIArray<ObRawExpr*> &group
     LOG_WARN("failed to check candi plan need calc dop", K(ret));
   } else if (!need_calc_dop) {
     /* do nothing */
-  } else if (OB_FAIL(get_parallel_info_from_candidate_plans(server_cnt, max_child_dop))) {
+  } else if (OB_FAIL(get_parallel_info_from_candidate_plans(max_child_dop))) {
     LOG_WARN("failed to get parallel info from candidate plans", K(ret));
   } else if (OB_FAIL(inner_compute_three_stage_groupby_dop_by_auto_dop(group_exprs,
                                                                        groupby_helper,
-                                                                       server_cnt,
                                                                        calc_dop))) {
     LOG_WARN("failed to inner compute group by dop by auto dop", K(ret));
   } else if (max_child_dop < calc_dop) {
@@ -5475,7 +5466,6 @@ int ObLogPlan::compute_groupby_dop_by_auto_dop(const ObIArray<ObRawExpr*> &group
 
 int ObLogPlan::inner_compute_three_stage_groupby_dop_by_auto_dop(const ObIArray<ObRawExpr*> &group_exprs,
                                                                  const GroupingOpHelper &groupby_helper,
-                                                                 const int64_t server_cnt,
                                                                  int64_t &dop) const
 {
   int ret = OB_SUCCESS;
@@ -5496,7 +5486,7 @@ int ObLogPlan::inner_compute_three_stage_groupby_dop_by_auto_dop(const ObIArray<
   } else {
     const ObOptimizerContext &opt_ctx = get_optimizer_context();
     const double cost_threshold_us = 1000.0 * std::max(static_cast<int64_t>(10), opt_ctx.get_parallel_min_scan_time_threshold());
-    const int64_t calc_dop_limit = opt_ctx.get_parallel_degree_limit(server_cnt);
+    const int64_t calc_dop_limit = opt_ctx.get_parallel_degree_limit();
     const double op_cost = ObOptEstCost::cost_hash_group(child->get_card() * number_of_copies,
                                                          0, // do not consider grouop by result
                                                          child->get_width(),
@@ -5542,10 +5532,9 @@ int ObLogPlan::get_three_stage_groupby_number_of_copies(const ObIArray<ObAggFunR
   return ret;
 }
 
-int ObLogPlan::get_parallel_info_from_candidate_plans(int64_t &server_cnt, int64_t &dop) const
+int ObLogPlan::get_parallel_info_from_candidate_plans(int64_t &dop) const
 {
   int ret = OB_SUCCESS;
-  server_cnt = 1;
   dop = get_optimizer_context().get_parallel();
   ObLogicalOperator *op = NULL;
   int64_t child_parallel = ObGlobalHint::UNSET_PARALLEL;
@@ -5560,10 +5549,9 @@ int ObLogPlan::get_parallel_info_from_candidate_plans(int64_t &server_cnt, int64
     } else {
       child_parallel = op->is_single() ? op->get_available_parallel() : op->get_parallel();
       dop = std::max(dop, child_parallel);
-      server_cnt = std::max(server_cnt, op->get_server_cnt());
     }
   }
-  LOG_DEBUG("finish get parallel info from candidate plans", K(server_cnt), K(dop));
+  LOG_DEBUG("finish get parallel info from candidate plans", K(dop));
   return ret;
 }
 
@@ -9538,31 +9526,7 @@ int ObLogPlan::prune_and_keep_best_plans(ObIArray<CandidatePlan> &all_candidate_
 int ObLogPlan::remove_match_all_fake_cte_plan(ObIArray<CandidatePlan> &all_candidate_plans,
                                               ObIArray<CandidatePlan> &candidate_plans)
 {
-  int ret = OB_SUCCESS;
-  candidate_plans.reuse();
-  for (int64_t i = 0; OB_SUCC(ret) && i < all_candidate_plans.count(); i++) {
-    CandidatePlan &candi_plan = all_candidate_plans.at(i);
-    if (OB_ISNULL(candi_plan.plan_tree_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
-    } else if (candi_plan.plan_tree_->get_type() == LOG_SET &&
-               static_cast<ObLogSet*>(candi_plan.plan_tree_)->is_recursive_union()) {
-      ObLogicalOperator* right_child = candi_plan.plan_tree_->get_child(ObLogicalOperator::second_child);
-      if (OB_ISNULL(right_child)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
-      } else if (right_child->get_contains_match_all_fake_cte()) {
-        OPT_TRACE("contain match all fake cte, will not add plan");
-      } else if (OB_FAIL(candidate_plans.push_back(candi_plan))) {
-        LOG_WARN("failed to push back", K(ret));
-      }
-    } else if (candi_plan.plan_tree_->get_contains_match_all_fake_cte()) {
-      OPT_TRACE("contain match all fake cte, will not add plan");
-    } else if (OB_FAIL(candidate_plans.push_back(candi_plan))) {
-      LOG_WARN("failed to push back", K(ret));
-    }
-  }
-  return ret;
+  return candidate_plans.assign(all_candidate_plans);
 }
 
 int ObLogPlan::add_candidate_plan(ObIArray<CandidatePlan> &current_plans,
@@ -10318,10 +10282,7 @@ int ObLogPlan::check_location_need_multi_partition_dml(ObLogicalOperator &top,
   } else if (OB_ISNULL(source_sharding) || OB_ISNULL(source_table_part)) {
     is_multi_part_dml = true;
     is_result_local = true;
-  } else if (OB_FAIL(source_table_part->get_location_type(
-                                          get_optimizer_context().get_local_server_addr(),
-                                          source_loc_type))) {
-    LOG_WARN("failed get location type", K(ret));
+  } else if (FALSE_IT(source_loc_type = source_table_part->get_location_type())) {
   } else if (source_sharding->is_match_all() || OB_TBL_LOCATION_ALL == source_loc_type) {
     is_multi_part_dml = true;
     is_result_local = true;
@@ -11496,9 +11457,7 @@ int ObLogPlan::calc_plan_resource()
     ObPxResourceAnalyzer analyzer;
     if (OB_FAIL(analyzer.analyze(*plan_root,
                                  max_parallel_thread_count,
-                                 max_parallel_group_count,
-                                 get_optimizer_context().get_expected_worker_map(),
-                                 get_optimizer_context().get_minimal_worker_map()))) {
+                                 max_parallel_group_count))) {
       LOG_WARN("fail analyze px stmt thread group reservation count", K(ret));
     } else {
       LOG_TRACE("[PxResAnaly]max parallel thread group count",
@@ -12714,11 +12673,8 @@ int ObLogPlan::compute_subplan_filter_repartition_distribution_info(ObLogicalOpe
                                                      *right_child,
                                                      exch_info))) {
       LOG_WARN("failed to compute repartition distribution info", K(ret));
-    } else if (OB_FAIL(exch_info.server_list_.assign(max_parallel_child->get_server_list()))) {
-      LOG_WARN("failed to assign server list", K(ret));
     } else {
       exch_info.parallel_ = max_parallel_child->get_parallel();
-      exch_info.server_cnt_ = max_parallel_child->get_server_cnt();
       exch_info.unmatch_row_dist_method_ = ObPQDistributeMethod::DROP;
       LOG_TRACE("succeed to compute repartition distribution info", K(exch_info));
     }

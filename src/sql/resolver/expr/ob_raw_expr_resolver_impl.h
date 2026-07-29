@@ -205,9 +205,6 @@ private:
   int get_opposite_string(const common::ObString &orig_string, common::ObString &new_string, common::ObIAllocator &allocator);
   int reset_keep_aggr_sort_direction(ObIArray<OrderItem> &aggr_sort_item);
   int reset_aggr_sort_nulls_first(ObIArray<OrderItem> &aggr_sort_item);
-  inline void set_udf_param_syntax_err(const bool val) { is_udf_param_syntax_err_ = val; }
-  inline bool get_udf_param_syntax_err() { return is_udf_param_syntax_err_; }
-
   int resolve_left_node_of_obj_access_idents(const ParseNode &node, ObQualifiedName &q_name);
   int resolve_right_node_of_obj_access_idents(const ParseNode &node, ObQualifiedName &q_name);
   int resolve_right_branch_of_in_op(const ParseNode *node,
@@ -219,7 +216,6 @@ private:
   // data members
   ObExprResolveContext &ctx_;
   bool is_contains_assignment_;
-  bool is_udf_param_syntax_err_ = false;
 };
 template <class T>
 int ObRawExprResolverImpl::process_node_with_children(const ParseNode *node,

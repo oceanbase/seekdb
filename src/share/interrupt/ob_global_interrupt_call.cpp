@@ -94,19 +94,17 @@ ObGlobalInterruptManager *ObGlobalInterruptManager::getInstance()
   return instance_;
 }
 
-int ObGlobalInterruptManager::init(const common::ObAddr &local)
+int ObGlobalInterruptManager::init()
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-  } else if (OB_FAIL(map_.create(!lib::is_mini_mode() ? DEFAULT_HASH_MAP_BUCKETS_COUNT :
-                                 MINI_MODE_HASH_MAP_BUCKETS_COUNT,
+  } else if (OB_FAIL(map_.create(DEFAULT_HASH_MAP_BUCKETS_COUNT,
                                  ObModIds::OB_HASH_BUCKET_INTERRUPT_CHECKER,
                                  ObModIds::OB_HASH_NODE_INTERRUPT_CHECKER))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LIB_LOG(WARN, "create hash table failed", K(ret));
   } else {
-    local_ = local;
     is_inited_ = true;
   }
   return ret;
@@ -219,23 +217,20 @@ int ObGlobalInterruptManager::interrupt(const ObInterruptibleTaskID &tid, ObInte
   return ret;
 }
 
-int ObGlobalInterruptManager::interrupt(const ObAddr &dst, const ObInterruptibleTaskID &tid,
-                                        ObInterruptCode &interrupt_code)
+int ObGlobalInterruptManager::interrupt_async(const ObInterruptibleTaskID &tid,
+                                              ObInterruptCode &interrupt_code)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LIB_LOG(ERROR, "interrupt manager not inited", K(dst), K(tid), K(interrupt_code), K(ret));
+    LIB_LOG(ERROR, "interrupt manager not inited", K(tid), K(interrupt_code), K(ret));
   } else {
-    // single-replica: dst is always local; deliver async in-process (ex-RPC),
-    // restoring the original async remote_interrupt_call(msg, NULL) fire-and-forget.
-    // tid/interrupt_code are copied by value; the map update runs on a worker thread.
-    UNUSED(dst);
+    // Keep fire-and-forget ordering while delivering entirely in-process.
     const ObInterruptibleTaskID tid_copy = tid;
     ObInterruptCode code_copy = interrupt_code;
     (void)ex_rpc::async_call([this, tid_copy, code_copy]() mutable {
       ObInterruptCheckerUpdateCall updatecall(code_copy);
-      //Consider that in the remote call, the execution time of the suspend command is later than the completion time of the remote execution. At this time, it should not be handled according to the sending failure.
+      // The target task may finish before this asynchronous update runs.
       int tmp_ret = map_.atomic_refactored(tid_copy, updatecall);
       tmp_ret = tmp_ret == OB_HASH_NOT_EXIST ? OB_SUCCESS : tmp_ret;
       (void)tmp_ret;

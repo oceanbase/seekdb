@@ -18,9 +18,28 @@
 #include "parse_malloc.h"
 #include <lib/utility/alloc_assist.h>
 #include "parse_node.h"
+#include "lib/allocator/ob_allocator.h"
 #include "lib/charset/ob_ctype.h"
 #include "sql/parser/parse_define.h"
-#include "sql/parser/parser_proxy_func.h"
+
+namespace
+{
+void *alloc_parser_buffer(void *malloc_pool, const int64_t alloc_size)
+{
+  void *buffer = nullptr;
+  if (OB_NOT_NULL(malloc_pool) && alloc_size > 0) {
+    buffer = static_cast<oceanbase::common::ObIAllocator *>(malloc_pool)->alloc(alloc_size);
+  }
+  return buffer;
+}
+
+void free_parser_buffer(void *malloc_pool, void *buffer)
+{
+  if (OB_NOT_NULL(malloc_pool) && OB_NOT_NULL(buffer)) {
+    static_cast<oceanbase::common::ObIAllocator *>(malloc_pool)->free(buffer);
+  }
+}
+}
 
 char* charset_upper(const struct ObCharsetInfo* src_cs,
                     char *src_ptr, int64_t src_len,
@@ -59,7 +78,7 @@ void *malloc_parentheses_info(const size_t nbyte, void *malloc_pool)
   if (OB_ISNULL(malloc_pool)) {
   } else if (OB_UNLIKELY(nbyte <= 0)) {
   } else {
-    if (OB_UNLIKELY(NULL == (ptr = parser_alloc_buffer(malloc_pool, nbyte)))) {
+    if (OB_UNLIKELY(NULL == (ptr = alloc_parser_buffer(malloc_pool, nbyte)))) {
     } else {
       MEMSET(ptr, 0, nbyte);
     }
@@ -75,7 +94,7 @@ void *parse_malloc(const size_t nbyte, void *malloc_pool)
   if (OB_ISNULL(malloc_pool)) {
   } else if (OB_UNLIKELY(nbyte <= 0)) {
   } else {
-    if (OB_UNLIKELY(NULL == (ptr = parser_alloc_buffer(malloc_pool, headlen + nbyte)))) {
+    if (OB_UNLIKELY(NULL == (ptr = alloc_parser_buffer(malloc_pool, headlen + nbyte)))) {
     } else {
       *(static_cast<int64_t *>(ptr)) = nbyte;
       ptr = static_cast<char *>(ptr) + headlen;
@@ -90,7 +109,7 @@ void *parser_alloc(void *malloc_pool, const int64_t alloc_size)
   void *ptr = NULL;
   if (OB_ISNULL(malloc_pool)) {
   } else {
-    if (OB_UNLIKELY(NULL == (ptr = parser_alloc_buffer(malloc_pool, alloc_size)))) {
+    if (OB_UNLIKELY(NULL == (ptr = alloc_parser_buffer(malloc_pool, alloc_size)))) {
     } else {
       MEMSET(ptr, 0, alloc_size);
     }
@@ -106,16 +125,16 @@ void *parse_realloc(void *ptr, size_t nbyte, void *malloc_pool)
   if (OB_ISNULL(malloc_pool)) {
   } else {
     if (OB_UNLIKELY(NULL == ptr)) {
-      new_ptr = parser_alloc_buffer(malloc_pool, nbyte);
+      new_ptr = alloc_parser_buffer(malloc_pool, nbyte);
     } else {
       size_t headlen = sizeof(int64_t);
-      if (OB_UNLIKELY(NULL == (new_ptr = parser_alloc_buffer(malloc_pool, headlen + nbyte)))) {
+      if (OB_UNLIKELY(NULL == (new_ptr = alloc_parser_buffer(malloc_pool, headlen + nbyte)))) {
       } else {
         int64_t obyte = *(reinterpret_cast<int64_t *>(static_cast<char *>(ptr) - headlen));
         *(static_cast<int64_t *>(new_ptr)) = nbyte;
         new_ptr = static_cast<char *>(new_ptr) + headlen;
         MEMMOVE(new_ptr, ptr, static_cast<int64_t>(nbyte) > obyte ? obyte : nbyte);
-        parser_free_buffer(malloc_pool, static_cast<char *>(ptr) - headlen);
+        free_parser_buffer(malloc_pool, static_cast<char *>(ptr) - headlen);
       }
     }
   }

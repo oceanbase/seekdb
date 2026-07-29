@@ -258,7 +258,7 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
           // Integer division can produce a decimal result, so cast integers to
           // number before division.
           if (tc1 == ObIntTC && tc2 == ObIntTC && op_type == T_OP_DIV) {
-            ObAccuracy    acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][ObNumberType];
+            ObAccuracy    acc = ObAccuracy::DDL_DEFAULT_ACCURACY[ObNumberType];
             dest_type.set_precision(acc.get_precision());
             dest_type.set_scale(acc.get_scale());
             dest_type.set_collation_level(CS_LEVEL_NUMERIC);
@@ -308,8 +308,8 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
               cast_mode |= ObRelationalExprOperator::get_const_cast_mode(op_type, false);
             }
           } else {
-            acc = (ObNumberType == dst_type ? ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][dst_type] :
-                                             ObAccuracy::MAX_ACCURACY2[0/*MySQL*/][dst_type]);
+            acc = (ObNumberType == dst_type ? ObAccuracy::DDL_DEFAULT_ACCURACY[dst_type] :
+                                             ObAccuracy::MAX_ACCURACY[dst_type]);
           }
           dest_type.set_precision(acc.get_precision());
           dest_type.set_scale(acc.get_scale());
@@ -355,8 +355,8 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
               cast_mode |= ObRelationalExprOperator::get_const_cast_mode(op_type, true);
             }
           } else {
-            acc = (ObNumberType == dst_type ? ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][dst_type] :
-                                             ObAccuracy::MAX_ACCURACY2[0/*MySQL*/][dst_type]);
+            acc = (ObNumberType == dst_type ? ObAccuracy::DDL_DEFAULT_ACCURACY[dst_type] :
+                                             ObAccuracy::MAX_ACCURACY[dst_type]);
           }
           dest_type.set_precision(acc.get_precision());
           dest_type.set_scale(acc.get_scale());
@@ -382,7 +382,7 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
           break;
         }
         case ImplicitCastDirection::IC_A_TO_C: {
-          ObAccuracy acc = (ObNumberType == r_type3 ? ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][r_type3] : ObAccuracy::MAX_ACCURACY2[0/*MySQL*/][r_type3]);
+          ObAccuracy acc = (ObNumberType == r_type3 ? ObAccuracy::DDL_DEFAULT_ACCURACY[r_type3] : ObAccuracy::MAX_ACCURACY[r_type3]);
           dest_type.set_precision(acc.get_precision());
           dest_type.set_scale(acc.get_scale());
           dest_type.set_type(r_type3);
@@ -403,7 +403,7 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
           break;
         }
         case ImplicitCastDirection::IC_B_TO_C: {
-          ObAccuracy acc = (ObNumberType == r_type3 ? ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][r_type3] : ObAccuracy::MAX_ACCURACY2[0/*MySQL*/][r_type3]);
+          ObAccuracy acc = (ObNumberType == r_type3 ? ObAccuracy::DDL_DEFAULT_ACCURACY[r_type3] : ObAccuracy::MAX_ACCURACY[r_type3]);
           dest_type.set_precision(acc.get_precision());
           dest_type.set_scale(acc.get_scale());
           dest_type.set_type(r_type3);
@@ -424,7 +424,7 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
           break;
         }
         case ImplicitCastDirection::IC_TO_MIDDLE_TYPE: {
-          ObAccuracy acc = (ObNumberType == middle_type ? ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][middle_type] : ObAccuracy::MAX_ACCURACY2[0/*MySQL*/][middle_type]);
+          ObAccuracy acc = (ObNumberType == middle_type ? ObAccuracy::DDL_DEFAULT_ACCURACY[middle_type] : ObAccuracy::MAX_ACCURACY[middle_type]);
           dest_type.set_precision(acc.get_precision());
           dest_type.set_scale(acc.get_scale());
           dest_type.set_collation_level(CS_LEVEL_NUMERIC);
@@ -651,7 +651,7 @@ int ObRawExprUtils::resolve_op_exprs_for_comparison_implicit_cast(ObRawExprFacto
 {
   int ret = OB_SUCCESS;
   if (session_info == NULL){
-    LOG_WARN("can't get compatibility mode from session_info", K(session_info));
+    LOG_WARN("session info is null", K(session_info));
   } else {
     ObOpRawExpr *b_expr = NULL;
     for (int64_t i = 0; OB_SUCC(ret) && i < op_exprs.count(); i++) {
@@ -5587,7 +5587,6 @@ int ObRawExprUtils::create_equal_expr(ObRawExprFactory &expr_factory,
 
 int ObRawExprUtils::create_null_safe_equal_expr(ObRawExprFactory &expr_factory,
                                                 const ObSQLSessionInfo *session_info,
-                                                const bool is_mysql_mode,
                                                 ObRawExpr *left_expr,
                                                 ObRawExpr *right_expr,
                                                 ObRawExpr *&expr)
@@ -5596,7 +5595,7 @@ int ObRawExprUtils::create_null_safe_equal_expr(ObRawExprFactory &expr_factory,
   if (OB_ISNULL(left_expr) || OB_ISNULL(right_expr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (is_mysql_mode) {
+  } else {
     // left <=> right
     ObOpRawExpr *nseq_expr = NULL;
     if (OB_FAIL(expr_factory.create_raw_expr(T_OP_NSEQ, nseq_expr))) {
@@ -5606,34 +5605,6 @@ int ObRawExprUtils::create_null_safe_equal_expr(ObRawExprFactory &expr_factory,
       LOG_WARN("unexpected null", K(ret));
     } else if (OB_FAIL(nseq_expr->set_param_exprs(left_expr, right_expr))) {
       LOG_WARN("failed to add param expr", K(ret));
-    } else if (OB_FAIL(expr->formalize(session_info))) {
-      LOG_WARN("formalize equal expr failed", K(ret));
-    }
-  } else {
-    // (left == right) or (left is null and right is null)
-    ObOpRawExpr *or_expr = NULL;
-    ObRawExpr *left_equal_expr = NULL;
-    ObOpRawExpr *and_expr = NULL;
-    ObRawExpr *left_is_null = NULL;
-    ObRawExpr *right_is_null = NULL;
-    if (OB_FAIL(expr_factory.create_raw_expr(T_OP_OR, or_expr))) {
-      LOG_WARN("failed to create raw expr", K(ret));
-    } else if (OB_ISNULL(expr = or_expr)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret));
-    } else if (OB_FAIL(create_equal_expr(expr_factory, session_info,
-                                         left_expr, right_expr, left_equal_expr))) {
-      LOG_WARN("failed to create equal expr", K(ret));
-    } else if (OB_FAIL(build_is_not_null_expr(expr_factory, left_expr, false, left_is_null))) {
-      LOG_WARN("failed to build is not null expr", K(ret));
-    } else if (OB_FAIL(build_is_not_null_expr(expr_factory, right_expr, false, right_is_null))) {
-      LOG_WARN("failed to build is not null expr", K(ret));
-    } else if (OB_FAIL(expr_factory.create_raw_expr(T_OP_AND, and_expr))) {
-      LOG_WARN("failed to create a new expr", K(ret));
-    } else if (OB_FAIL(and_expr->set_param_exprs(left_is_null, right_is_null))) {
-      LOG_WARN("add param expr to and expr failed", K(ret));
-    } else if (OB_FAIL(or_expr->set_param_exprs(left_equal_expr, and_expr))) {
-      LOG_WARN("add param expr to or expr failed", K(ret));
     } else if (OB_FAIL(expr->formalize(session_info))) {
       LOG_WARN("formalize equal expr failed", K(ret));
     }
@@ -8202,7 +8173,6 @@ int ObRawExprUtils::build_bm25_expr(ObRawExprFactory &expr_factory,
                                     ObRawExpr *related_doc_cnt,
                                     ObRawExpr *related_token_cnt,
                                     ObRawExpr *total_doc_cnt,
-                                    ObRawExpr *doc_token_cnt,
                                     ObRawExpr *doc_length,
                                     ObRawExpr *avg_doc_token_cnt,
                                     ObOpRawExpr *&bm25,

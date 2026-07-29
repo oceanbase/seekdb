@@ -199,7 +199,6 @@ int ObTableHelper::check_fk_columns_type_for_replacing_mock_fk_parent_table_(
         }
       } // end for
       if (FAILEDx(sql::ObResolverUtils::check_foreign_key_columns_type(
-          true/*is_mysql_compat_mode*/,
           *child_table_schema,
           parent_table_schema,
           child_columns,
@@ -452,7 +451,7 @@ int ObTableHelper::calc_schema_version_cnt_()
       schema_version_cnt_++;
     }
 
-    // 4. foreign key (without mock fk parent table)
+    // 2. foreign key (without mock fk parent table)
 
     // this logic is duplicated because of add_foreign_key() will also update data table's schema_version.
     // schema_version_cnt_ += data_table.get_depend_table_ids();

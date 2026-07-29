@@ -1102,7 +1102,7 @@ static OB_INLINE int common_string_number(const ObExpr &expr,
       }
       bool is_neg = (in_str[i] == '-');
       int tmp_ret = OB_SUCCESS;
-      const ObAccuracy &def_acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][out_type];
+      const ObAccuracy &def_acc = ObAccuracy::DDL_DEFAULT_ACCURACY[out_type];
       const ObPrecision prec = def_acc.get_precision();
       const ObScale scale = def_acc.get_scale();
       const number::ObNumber *bound_num = NULL;

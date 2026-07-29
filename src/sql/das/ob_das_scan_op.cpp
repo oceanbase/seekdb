@@ -613,20 +613,6 @@ int ObDASScanOp::reuse_iter()
   return ret;
 }
 
-const ExprFixedArray &ObDASScanOp::get_result_outputs() const
-{
-  const ExprFixedArray *result_output = nullptr;
-  if (attach_ctdef_ != nullptr) {
-    OB_ASSERT(ObDASTaskFactory::is_attached(attach_ctdef_->op_type_));
-    result_output = &(static_cast<const ObDASAttachCtDef*>(attach_ctdef_)->result_output_);
-  } else if (get_lookup_ctdef() != nullptr) {
-    result_output = &get_lookup_ctdef()->result_output_;
-  } else {
-    result_output = &scan_ctdef_->result_output_;
-  }
-  return *result_output;
-}
-
 // get main table lookup ctdef
 const ObDASScanCtDef *ObDASScanOp::get_lookup_ctdef() const
 {
@@ -1092,8 +1078,6 @@ int ObDASScanOp::get_fts_tablet_ids(common::ObIArray<ObDASFTSTabletID> &fts_tabl
         fts_tablet_id.inv_idx_tablet_id_ = related_tablet_ids_.at(i);
       } else if (ir_rtdef->get_doc_agg_rtdef() == related_rtdefs_.at(i)) {
         fts_tablet_id.domain_id_idx_tablet_id_ = related_tablet_ids_.at(i);
-      } else if (ir_rtdef->get_fwd_idx_agg_rtdef() == related_rtdefs_.at(i)) {
-        fts_tablet_id.fwd_idx_tablet_id_ = related_tablet_ids_.at(i);
       }
     }
     if (OB_SUCC(ret)) {
@@ -1150,27 +1134,6 @@ OB_SERIALIZE_MEMBER((ObDASScanOp, ObIDASTaskOp),
                     scan_param_.key_ranges_,
                     scan_ctdef_,
                     scan_rtdef_);
-
-ObDASGroupScanOp::ObDASGroupScanOp(ObIAllocator &op_alloc)
-  : ObDASScanOp(op_alloc),
-    iter_(),
-    cur_group_idx_(0),
-    group_size_(0)
-{
-
-}
-
-void ObDASGroupScanOp::init_group_range(int64_t cur_group_idx, int64_t group_size)
-{
-  cur_group_idx_ = cur_group_idx;
-  group_size_ = group_size;
-}
-
-ObDASGroupScanOp::~ObDASGroupScanOp()
-{
-}
-
-OB_SERIALIZE_MEMBER((ObDASGroupScanOp, ObDASScanOp), iter_, cur_group_idx_, group_size_);
 
 ObLocalIndexLookupOp::~ObLocalIndexLookupOp()
 {

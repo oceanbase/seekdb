@@ -212,9 +212,6 @@ protected:
   inline void set_param(ParamStore *params) { params_ = params; }
   sql::ObSqlCtx &get_ctx() { return ctx_; }
   ObQueryRetryCtrl &get_retry_ctrl() { return retry_ctrl_; }
-  void record_stat(const sql::stmt::StmtType type, const int64_t end_time,
-                   const sql::ObSQLSessionInfo& session, const int64_t ret,
-                   const ObMySQLResultSet &result) const;
   int request_params(sql::ObSQLSessionInfo *session,
                      const char* &pos,
                      uint32_t ps_stmt_checksum,

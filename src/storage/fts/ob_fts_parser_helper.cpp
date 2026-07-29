@@ -15,7 +15,7 @@
  */
 
 #include "object/ob_object.h"
-#include "storage/fts/ob_fts_struct.h"  // ObFTWordMap typedef(previously hidden behind a transitive include)
+#include "storage/fts/ob_fts_struct.h"
 #define USING_LOG_PREFIX STORAGE_FTS
 
 #include "storage/fts/ob_fts_parser_helper.h"

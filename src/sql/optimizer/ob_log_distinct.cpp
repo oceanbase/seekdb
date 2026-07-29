@@ -460,11 +460,11 @@ int ObLogDistinct::compute_property()
   return ret;
 }
 
-int ObLogDistinct::compute_op_parallel_and_server_info()
+int ObLogDistinct::compute_op_parallel_info()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObLogicalOperator::compute_op_parallel_and_server_info())) {
-    LOG_WARN("failed to compute parallel and server info", K(ret));
+  if (OB_FAIL(ObLogicalOperator::compute_op_parallel_info())) {
+    LOG_WARN("failed to compute parallel info", K(ret));
   } else if (is_partition_wise() && !is_push_down()) {
     ObLogicalOperator *child = get_child(first_child);
     if (OB_ISNULL(child)) {

@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS `pb_filter_solution_common` (
                                                            KEY `idx_filter_solution_common_id` (`solutionId`,`tenant_id`),
                                                            KEY `idx_multlang_itemtitle` (`tenant_id`,`itemTitle`),
                                                            KEY `idx_ytenant_id` (`ytenant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=0   ROW_FORMAT=DYNAMIC;
+)  AUTO_INCREMENT=0   ROW_FORMAT=DYNAMIC;
 
 
 --disable_warnings
@@ -186,7 +186,7 @@ CREATE TABLE `aa_vendor` (
   PRIMARY KEY (`id`) USING BTREE,
   KEY `IX_AA_aa_vendor_code_tenant_id` (`tenant_id`,`code`) USING BTREE,
   KEY `IX_AA_tenant_id` (`tenant_id`) USING BTREE
-) ENGINE=InnoDB AUTO_INCREMENT=7032889024343724033 DEFAULT CHARSET=utf8 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
+)  AUTO_INCREMENT=7032889024343724033 DEFAULT CHARSET=utf8 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
 
 # LOCK TABLES `aa_vendor` WRITE;
 /*!40000 ALTER TABLE `aa_vendor` DISABLE KEYS */;
@@ -285,7 +285,7 @@ CREATE TABLE IF NOT EXISTS  `ucg_baseapi_api_log`  (
   `api_name` varchar(60)   NULL DEFAULT NULL COMMENT 'API名称',
   `prod_id` varchar(36)   NULL DEFAULT NULL COMMENT '产品id',
   PRIMARY KEY (`id`) USING BTREE
-) ENGINE = InnoDB  ROW_FORMAT = DYNAMIC;
+)   ROW_FORMAT = DYNAMIC;
 
 
 ALTER TABLE `ucg_baseapi_api_log`  ROW_FORMAT = DYNAMIC;
@@ -372,7 +372,7 @@ ID',
   `has_offline` int2 COMMENT '是否下线 0或者null 代表未下线；1-代表已下
 线',
   PRIMARY KEY (`id`) USING BTREE
-) ENGINE = InnoDB  ROW_FORMAT = Dynamic;
+)   ROW_FORMAT = Dynamic;
 call p_aa_updatecolumn('wb_approval_process','has_offline','ALTER TABLE wb_approval_process ADD COLUMN `has_offline` int2 COMMENT "是否下线 0或者null 代表未下线；1-代表已下线";','add');
 call p_aa_updatecolumn('wb_approval_process','ytenant_id',  'ALTER TABLE wb_approval_process ADD COLUMN ytenant_id varchar(36)  NULL DEFAULT NULL COMMENT "云平台友互通租户ID" AFTER process_type;' , 'add');
 update wb_approval_process set ytenant_id=tenant_id;
@@ -396,7 +396,7 @@ CREATE TABLE IF NOT EXISTS `ru_action_meta_variable` (
   `ytenant_id` varchar(36) DEFAULT '~',
   PRIMARY KEY (`id`),
   KEY `idx_ytenant_id` (`ytenant_id`)
-) ENGINE=InnoDB CHECKSUM=1 DELAY_KEY_WRITE=1 ROW_FORMAT=DYNAMIC;
+) ROW_FORMAT=DYNAMIC;
 
   CREATE TABLE IF NOT EXISTS `aa_billcode_candidateprop`
 (
@@ -415,7 +415,7 @@ CREATE TABLE IF NOT EXISTS `ru_action_meta_variable` (
     `display_name6`       varchar(200)       DEFAULT NULL COMMENT '显>示名称',
     `display_name_ext`    varchar(200)       DEFAULT NULL COMMENT '显>示名称',
     PRIMARY KEY (`autoid`) USING BTREE
-    ) ENGINE=InnoDB  AVG_ROW_LENGTH=1260 ROW_FORMAT=DYNAMIC COMMENT='>候选属性表';
+ ) ROW_FORMAT=DYNAMIC COMMENT='>候选属性表';
 
 
 DROP TABLE IF EXISTS `mp_img`;
@@ -466,7 +466,7 @@ CREATE TABLE `mp_img` (
   `cThumbMediaId` varchar(100) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `IX_cWXAccountID` (`cWXAccountID`) USING BTREE
-) ENGINE=InnoDB ;
+)  ;
 
 DROP TABLE IF EXISTS `mp_wxaccount`;
 CREATE TABLE `mp_wxaccount` (
@@ -508,7 +508,7 @@ CREATE TABLE `mp_wxaccount` (
   `iOpenPlatFormAccess` int(11) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `IX_cWXAccountID_cAppID_iCorpID` (`cWXAccountID`,`cAppID`,`iCorpID`) USING BTREE
-) ENGINE=InnoDB AUTO_INCREMENT=7 ;
+)  AUTO_INCREMENT=7 ;
 
 DROP TABLE IF EXISTS `mp_multiimg`;
 CREATE TABLE `mp_multiimg` (
@@ -535,7 +535,7 @@ CREATE TABLE `mp_multiimg` (
   `bPermanentMaterial` tinyint(1) DEFAULT '0' COMMENT '是否永久素材(0否, 1是)',
   PRIMARY KEY (`id`),
   KEY `IX_cWxAccountID` (`cWXAccountID`) USING BTREE
-) ENGINE=InnoDB ;
+)  ;
 
 drop VIEW if exists mp_v_masssendmaterials;
 CREATE ALGORITHM=UNDEFINED  SQL SECURITY DEFINER VIEW `mp_v_masssendmaterials` AS select `mp_wxaccount`.`cWXAccountName` AS `cWXAccountName`,`mp_wxaccount`.`iCorpID` AS `iCorpID`,`mp_wxaccount`.`cAppID` AS `cAppID`,`mp_img`.`cWXAccountID` AS `cWXAccountID`,1 AS `iType`,`mp_img`.`id` AS `id`,`mp_img`.`cTitle` AS `cTitle`,`mp_img`.`dCreateTime` AS `dCreateTime`,`mp_img`.`iPurpose` AS `iPurpose` from (`mp_img` join `mp_wxaccount` on((`mp_img`.`cWXAccountID` = `mp_wxaccount`.`cWXAccountID`))) where (ifnull(`mp_img`.`iMultiID`,0) = 0) union select `mp_wxaccount`.`cWXAccountName` AS `cWXAccountName`,`mp_wxaccount`.`iCorpID` AS `iCorpID`,`mp_wxaccount`.`cAppID` AS `cAppID`,`mp_multiimg`.`cWXAccountID` AS `cWXAccountID`,2 AS `iType`,`mp_multiimg`.`id` AS `id`,`mp_multiimg`.`cUtitle` AS `cTitle`,`mp_multiimg`.`dCreateTime` AS `dCreateTime`,`mp_multiimg`.`iPurpose` AS `iPurpose` from (`mp_multiimg` join `mp_wxaccount` on((`mp_multiimg`.`cWXAccountID` = `mp_wxaccount`.`cWXAccountID`))) ;
@@ -561,7 +561,7 @@ CREATE TABLE IF NOT EXISTS `order` (
   PRIMARY KEY (`id`),
   KEY `tenant` (`tenant_id`),
   KEY `idx_ytenant_id` (`ytenant_id`)
-) ENGINE=InnoDB  ROW_FORMAT=DYNAMIC COMMENT='新订单表';
+)   ROW_FORMAT=DYNAMIC COMMENT='新订单表';
 
 select 1 where 1=1;
 
@@ -614,7 +614,7 @@ CREATE TABLE IF NOT EXISTS `billtplgroup_base` (
   KEY `i_sys_id` (`sysid`,`tenant_id`),
   KEY `idx_multlang_text` (`tenant_id`,`cName`),
   KEY `idx_ytenant_id` (`ytenant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=0   ROW_FORMAT=DYNAMIC;
+)  AUTO_INCREMENT=0   ROW_FORMAT=DYNAMIC;
 
 set @attId = (SELECT ifnull(max(id),0)+1  from billtplgroup_base);
 
@@ -639,6 +639,6 @@ CREATE TABLE IF NOT EXISTS `rpa_language` (
      PRIMARY KEY (`id`) USING BTREE,
      UNIQUE KEY `rpa_language_corpid_langsequence` (`corpid`,`langSequence`) USING BTREE,
      UNIQUE KEY `rpa_language_corpid_langcode` (`corpid`,`langCode`) USING BTREE
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC COMMENT='多语';
+)  AUTO_INCREMENT=4 DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC COMMENT='多语';
 
 

@@ -24,6 +24,10 @@ namespace oceanbase
 namespace share
 {
 class ObLoadInnerTableSchemaInfo;
+namespace schema
+{
+class ObTableSchema;
+}
 }
 namespace rootserver
 {
@@ -40,11 +44,11 @@ private:
 public:
   ObLoadInnerTableSchemaExecutor() : inited_(false),
     args_(), next_arg_index_(0), load_rpc_timeout_(0), parallel_count_(0) {}
-  int init(ObIArray<ObTableSchema> &table_schemas,
+  int init(ObIArray<share::schema::ObTableSchema> &table_schemas,
       const int64_t max_cpu);
   int execute();
 private:
-  int init_args_(ObIArray<ObTableSchema> &table_schemas);
+  int init_args_(ObIArray<share::schema::ObTableSchema> &table_schemas);
   int append_arg(const ObIArray<int64_t> &insert_idx, const share::ObLoadInnerTableSchemaInfo &info);
 
 private:

@@ -171,7 +171,6 @@
 #include "sql/engine/expr/ob_expr_char.h"
 #include "sql/engine/expr/ob_expr_get_sys_var.h"
 #include "sql/engine/expr/ob_expr_elt.h"
-#include "sql/engine/expr/ob_expr_part_id.h"
 #include "sql/engine/expr/ob_expr_timestamp_add.h"
 #include "sql/engine/expr/ob_expr_des_hex_str.h"
 #include "sql/engine/expr/ob_expr_doc_id.h"
@@ -734,7 +733,6 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprRpcPort);
     REG_OP(ObExprMySQLPort);
     REG_OP(ObExprGetSysVar);
-    REG_OP(ObExprPartId);
     REG_OP(ObExprLastTraceId);
     REG_OP(ObExprLastExecId);
     REG_OP(ObExprDocID);

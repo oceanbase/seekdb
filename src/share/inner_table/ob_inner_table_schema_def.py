@@ -2173,7 +2173,7 @@ def_table_schema(
   is_cluster_private = False,
 
   normal_columns = [
-      ('cluster_version', 'int'),
+      ('data_version', 'int'),
       ('schema_version', 'int')
   ]
   )
@@ -3528,7 +3528,6 @@ def_table_schema(
   ('tmp_file_count', 'int'),
   ('data_block_count', 'int'),
   ('disk_block_count', 'int'),
-  ('bloomfilter_count', 'int'),
   ('hold_count', 'int'),
   ('pending_free_count', 'int'),
   ('free_count', 'int'),
@@ -10767,7 +10766,7 @@ def_table_schema(
   view_definition =
   """
   SELECT FROZEN_SCN,
-         CLUSTER_VERSION,
+         DATA_VERSION,
          SCHEMA_VERSION,
          GMT_CREATE,
          GMT_MODIFIED
@@ -12497,7 +12496,7 @@ def_table_schema(
            OUTLINE_VERSION,
            OUTLINE_ID,
            OUTLINE_DATA AS CONCURRENT_DATA
-    FROM oceanbase.__all_virtual_plan_stat WHERE OBJECT_STATUS = 0 AND TYPE > 5 AND TYPE < 11 AND is_in_pc=true
+    FROM oceanbase.__all_virtual_plan_stat WHERE OBJECT_STATUS = 0 AND TYPE >= 5 AND TYPE < 10 AND is_in_pc=true
 """.replace("\n", " "),
 
 

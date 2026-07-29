@@ -21,36 +21,30 @@ namespace oceanbase
 namespace sql
 {
 
-ObTaskLocation::ObTaskLocation(const ObAddr &server, const ObTaskID &ob_task_id) :
-    server_(server),
+ObTaskLocation::ObTaskLocation(const ObTaskID &ob_task_id) :
     ob_task_id_(ob_task_id)
 {
 }
 
-ObTaskLocation::ObTaskLocation() :
-    server_(),
-    ob_task_id_()
+ObTaskLocation::ObTaskLocation() : ob_task_id_()
 {
 }
 
 void ObTaskLocation::reset()
 {
-  server_.reset();
   ob_task_id_.reset();
 }
 
 ObTaskLocation& ObTaskLocation::operator=(const ObTaskLocation &task_location)
 {
-  server_ = task_location.server_;
   ob_task_id_ = task_location.ob_task_id_;
   return *this;
 }
 
-OB_SERIALIZE_MEMBER(ObTaskLocation, server_, ob_task_id_)
+OB_SERIALIZE_MEMBER(ObTaskLocation, ob_task_id_)
 
 }/* ns sql*/
 }/* ns oceanbase */
-
 
 
 

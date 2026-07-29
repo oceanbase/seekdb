@@ -400,7 +400,7 @@ ObSubPlanFilterSpec::ObSubPlanFilterSpec(ObIAllocator &alloc, const ObPhyOperato
     one_time_idxs_(ModulePageAllocator(alloc)),
     update_set_(alloc),
     exec_param_array_(alloc),
-    exec_param_idxs_inited_(false),
+    enable_subquery_result_cache_(false),
     enable_px_batch_rescans_(alloc),
     enable_das_group_rescan_(false),
     filter_exprs_(alloc),
@@ -417,7 +417,7 @@ OB_SERIALIZE_MEMBER((ObSubPlanFilterSpec, ObOpSpec),
                     one_time_idxs_,
                     update_set_,
                     exec_param_array_,
-                    exec_param_idxs_inited_,
+                    enable_subquery_result_cache_,
                     enable_px_batch_rescans_,
                     enable_das_group_rescan_,
                     filter_exprs_,
@@ -438,7 +438,7 @@ DEF_TO_STRING(ObSubPlanFilterSpec)
        K_(init_plan_idxs),
        K_(one_time_idxs),
        K_(update_set),
-       K_(exec_param_idxs_inited));
+       K_(enable_subquery_result_cache));
   J_OBJ_END();
   return pos;
 }
@@ -650,7 +650,7 @@ int ObSubPlanFilterOp::inner_open()
     // The result of subquery needs to participate in expression calculation, so generate a row_iterator for each subquery
     OZ(subplan_iters_.prepare_allocate(child_cnt_ - 1));
     //TODO move to the back
-    if (MY_SPEC.exec_param_idxs_inited_ && child_cnt_ - 1 != MY_SPEC.exec_param_array_.count()) {
+    if (child_cnt_ - 1 != MY_SPEC.exec_param_array_.count()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("exec param idx array is unexpected", K(ret), K(MY_SPEC.exec_param_array_.count()));
     }
@@ -673,7 +673,7 @@ int ObSubPlanFilterOp::inner_open()
             MY_SPEC.enable_px_batch_rescans_.at(i)) {
           enable_left_px_batch_ = true;
         }
-        if (!MY_SPEC.exec_param_idxs_inited_) {
+        if (!MY_SPEC.enable_subquery_result_cache_) {
           // Non-deterministic subqueries bypass the parameter-result cache.
         } else if (OB_FAIL(iter->init_mem_entity())) {
           LOG_WARN("failed to init mem_entity", K(ret));

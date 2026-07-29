@@ -34,20 +34,6 @@ public:
     sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
   static int reset_package(
     sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
-private:
-  static int check_argument(const ObObj &input_param, bool allow_null,
-                            bool need_case_up, int32_t param_idx,
-                            int64_t max_len, ObString &output_param,
-                            ObIAllocator &alloc);
-  static int check_client_id(const ObObj &input_param,
-                             int64_t max_len,
-                             ObString &output_param,
-                             ObIAllocator &alloc);
-  static int try_caseup(ObCollationType cs_type, ObString &str_val, ObIAllocator &alloc);
-  
-  static int check_privileges(ObPLContext *pl_ctx,
-                              const ObString &package_name,
-                              const ObString &schema_name);
 };
 
 } // end of pl

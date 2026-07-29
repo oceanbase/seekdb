@@ -725,7 +725,6 @@ int ObIndexBuilderUtil::adjust_ordinary_index_column_args(
       ObRawExprFactory expr_factory(allocator);
       SMART_VAR(sql::ObSQLSessionInfo, session) {
         SMART_VARS_2((sql::ObExecContext, exec_ctx, allocator), (ObPhysicalPlanCtx, phy_plan_ctx, allocator)) {
-          
           const ObServerRuntimeSchema *runtime_schema = NULL;
           ObSchemaGetterGuard guard;
           ObSchemaChecker schema_checker;

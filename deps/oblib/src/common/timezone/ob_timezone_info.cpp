@@ -39072,19 +39072,6 @@ void ObTZMapWrap::set_tz_map(const common::ObTZInfoMap *timezone_info_map)
   tz_info_map_ = non_const_tz_map;
 }
 
-//just for unittest
-int ObTimeZoneInfo::set_timezone(const ObString &str)
-{
-  int ret = OB_SUCCESS;
-  int ret_more = OB_SUCCESS;
-  if (OB_FAIL(ObTimeConverter::str_to_offset(str, offset_, ret_more, true))) {
-    LOG_WARN("invalid time zone offset", K(ret), K(str));
-  } else {
-    tz_id_ = 0;
-  }
-  return ret;
-}
-
 int ObTimeZoneInfo::assign(const ObTimeZoneInfo &src)
 {
   int ret = OB_SUCCESS;

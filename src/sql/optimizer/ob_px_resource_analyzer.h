@@ -21,39 +21,29 @@
 #include "lib/container/ob_se_array.h"
 namespace oceanbase
 {
-using namespace common::hash;
 namespace sql
 {
 
 #define OPEN_PX_RESOURCE_ANALYZE_ARG  \
         cur_parallel_thread_count, cur_parallel_group_count,              \
-        cur_parallel_thread_map, cur_parallel_group_map,                  \
         max_parallel_thread_count, max_parallel_group_count,              \
-        max_parallel_thread_map, max_parallel_group_map,                  \
-        px_res_analyzer, append_map
+        px_res_analyzer, update_max
 
 #define OPEN_PX_RESOURCE_ANALYZE_DECLARE_ARG  \
           int64_t &cur_parallel_thread_count,                             \
           int64_t &cur_parallel_group_count,                              \
-          hash::ObHashMap<ObAddr, int64_t> &cur_parallel_thread_map,      \
-          hash::ObHashMap<ObAddr, int64_t> &cur_parallel_group_map,       \
           int64_t &max_parallel_thread_count,                             \
           int64_t &max_parallel_group_count,                              \
-          hash::ObHashMap<ObAddr, int64_t> &max_parallel_thread_map,      \
-          hash::ObHashMap<ObAddr, int64_t> &max_parallel_group_map,       \
-          ObPxResourceAnalyzer &px_res_analyzer, bool append_map
+          ObPxResourceAnalyzer &px_res_analyzer, bool update_max
 
 #define CLOSE_PX_RESOURCE_ANALYZE_ARG  \
         cur_parallel_thread_count, cur_parallel_group_count,              \
-        cur_parallel_thread_map, cur_parallel_group_map,                  \
-        px_res_analyzer, append_map
+        px_res_analyzer, update_max
 
 #define CLOSE_PX_RESOURCE_ANALYZE_DECLARE_ARG  \
           int64_t &cur_parallel_thread_count,                             \
           int64_t &cur_parallel_group_count,                              \
-          hash::ObHashMap<ObAddr, int64_t> &cur_parallel_thread_map,      \
-          hash::ObHashMap<ObAddr, int64_t> &cur_parallel_group_map,       \
-          ObPxResourceAnalyzer &px_res_analyzer, bool append_map
+          ObPxResourceAnalyzer &px_res_analyzer, bool update_max
 
 enum DfoStatus {
   INIT,  // not scheduled, does not occupy thread resources
@@ -76,7 +66,6 @@ struct DfoInfo {
     child_dfos_(),
     status_(DfoStatus::INIT),
     dop_(0),
-    location_addr_(),
     force_bushy_(false),
     root_op_(nullptr),
     has_nested_px_(false),
@@ -88,14 +77,11 @@ struct DfoInfo {
   common::ObSEArray<DfoInfo *, 3> child_dfos_;
   DfoStatus status_;
   int64_t dop_;
-  ObHashSet<ObAddr> location_addr_;
   bool force_bushy_;
   ObLogicalOperator *root_op_;
   bool has_nested_px_;
   int64_t nested_px_thread_cnt_;
   int64_t nested_px_group_cnt_;
-  ObHashMap<ObAddr, int64_t> nested_px_thread_map_;
-  ObHashMap<ObAddr, int64_t> nested_px_group_map_;
 
   void destroy()
   {
@@ -103,9 +89,6 @@ struct DfoInfo {
       child_dfos_.at(i)->destroy();
     }
     child_dfos_.reset();
-    location_addr_.destroy();
-    nested_px_thread_map_.destroy();
-    nested_px_group_map_.destroy();
   }
 
   inline void set_root_op(ObLogicalOperator *root_op) { root_op_ = root_op;}
@@ -183,8 +166,6 @@ struct PxInfo {
       root_dfo_->destroy();
       root_dfo_ = NULL;
     }
-    thread_map_.destroy();
-    group_map_.destroy();
   }
   bool inited_;
   ObLogExchange *root_op_;
@@ -192,8 +173,6 @@ struct PxInfo {
   // count of required threads for scheduling this px.
   int64_t threads_cnt_;
   int64_t group_cnt_;
-  ObHashMap<ObAddr, int64_t> thread_map_;
-  ObHashMap<ObAddr, int64_t> group_map_;
   LogRuntimeFilterDependencyInfo rf_dpd_info_;
   TO_STRING_KV(K_(threads_cnt), K_(group_cnt));
 };
@@ -203,9 +182,7 @@ public:
   int analyze(
       ObLogicalOperator &root_op,
       int64_t &max_parallel_thread_count,
-      int64_t &max_parallel_group_count,
-      ObHashMap<ObAddr, int64_t> &max_parallel_thread_map,
-      ObHashMap<ObAddr, int64_t> &max_parallel_group_map);
+      int64_t &max_parallel_group_count);
   int append_px(OPEN_PX_RESOURCE_ANALYZE_DECLARE_ARG, PxInfo &px_info);
   int remove_px(CLOSE_PX_RESOURCE_ANALYZE_DECLARE_ARG, PxInfo &px_info);
   int recursive_walk_through_px_tree(PxInfo &px_tree);
@@ -220,53 +197,21 @@ private:
   int walk_through_logical_plan(
     ObLogicalOperator &root_op,
     int64_t &max_parallel_thread_count,
-    int64_t &max_parallel_group_count,
-    ObHashMap<ObAddr, int64_t> &max_parallel_thread_map,
-    ObHashMap<ObAddr, int64_t> &max_parallel_group_map);
+    int64_t &max_parallel_group_count);
   int walk_through_dfo_tree(
       PxInfo &px_root,
       int64_t &max_parallel_thread_count,
-      int64_t &max_parallel_group_count,
-      ObHashMap<ObAddr, int64_t> &max_parallel_thread_map,
-      ObHashMap<ObAddr, int64_t> &max_parallel_group_map);
+      int64_t &max_parallel_group_count);
   int create_dfo(DfoInfo *&dfo, int64_t dop);
   int create_dfo(DfoInfo *&dfo, ObLogicalOperator &root_op);
-  int get_dfo_addr_set(const ObLogicalOperator &root_op, ObHashSet<ObAddr> &addr_set);
-  template <bool append>
-  int px_tree_append(ObHashMap<ObAddr, int64_t> &max_parallel_count,
-                     ObHashMap<ObAddr, int64_t> &parallel_count);
 int schedule_dfo(
     DfoInfo &dfo,
     int64_t &threads,
-    int64_t &groups,
-    ObHashMap<ObAddr, int64_t> &current_thread_map,
-    ObHashMap<ObAddr, int64_t> &current_group_map);
+    int64_t &groups);
 int finish_dfo(
     DfoInfo &dfo,
     int64_t &threads,
-    int64_t &groups,
-    ObHashMap<ObAddr, int64_t> &current_thread_map,
-    ObHashMap<ObAddr, int64_t> &current_group_map);
-int update_parallel_map(
-    ObHashMap<ObAddr, int64_t> &parallel_map,
-    const ObHashSet<ObAddr> &addr_set,
-    int64_t count);
-int update_parallel_map_one_addr(
-    ObHashMap<ObAddr, int64_t> &parallel_map,
-    const ObAddr &addr,
-    int64_t count,
-    bool append);
-int update_max_thead_group_info(
-    const int64_t threads,
-    const int64_t groups,
-    const ObHashMap<ObAddr, int64_t> &current_thread_map,
-    const ObHashMap<ObAddr, int64_t> &current_group_map,
-    int64_t &max_threads,
-    int64_t &max_groups,
-    ObHashMap<ObAddr, int64_t> &max_parallel_thread_map,
-    ObHashMap<ObAddr, int64_t> &max_parallel_group_map);
-private:
-  void print_px_usage(const ObHashMap<ObAddr, int64_t> &max_map);
+    int64_t &groups);
 private:
   /* variables */
   common::ObArenaAllocator allocator_;

@@ -249,7 +249,7 @@ int64_t ObMultiTimeStats::to_string(char *buf, const int64_t buf_len) const
 ObTabletPersister::ObTabletPersister(
     const ObTabletPersisterParam &param, const int64_t mem_ctx_id)
   : allocator_("TblPersist", OB_MALLOC_NORMAL_BLOCK_SIZE, mem_ctx_id),
-    multi_stats_(&allocator_), param_(param), cur_macro_seq_(0)
+    multi_stats_(&allocator_), param_(param)
 {
 }
 ObTabletPersister::~ObTabletPersister()
@@ -268,21 +268,6 @@ void ObTabletPersister::print_time_stats(
   } else if (REACH_TIME_INTERVAL(print_interval)) {
     FLOG_INFO("[TABLET PERSISTER TIME STATS]\n", K_(multi_stats));
   }
-}
-
-/*static*/ int ObTabletPersister::build_tablet_meta_opt(
-    const ObTabletPersisterParam &persist_param,
-    const ObMetaDiskAddr &old_tablet_addr,
-    ObStorageObjectOpt &opt)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!persist_param.is_valid() || !old_tablet_addr.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("persist param is invalid", K(ret), K(persist_param), K(old_tablet_addr));
-  } else {
-    opt.set_meta_macro_object_opt();
-  }
-  return ret;
 }
 
 int ObTabletPersister::persist_and_transform_tablet(
@@ -594,7 +579,7 @@ int ObTabletPersister::persist_and_fill_tablet(
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(linked_writer.init_for_object(param_.tablet_id_.id(), 0, cur_macro_seq_))) {
+  } else if (OB_FAIL(linked_writer.init(false, ObMemAttr("ObjLinkWriter")))) {
     LOG_WARN("fail to init linked writer", K(ret), K(old_tablet));
   } else if (OB_FAIL(tablet_macro_info.init(allocator_, block_info_set, &linked_writer))) {
     LOG_WARN("fail to init tablet block id arrary", K(ret));
@@ -747,13 +732,9 @@ int ObTabletPersister::persist_aggregated_meta(
 
   if (OB_FAIL(fill_tablet_write_info(allocator_, new_tablet, tablet_macro_info, write_info))) {
     LOG_WARN("fail to fill write info", K(ret), KPC(new_tablet));
-  } else if (OB_FAIL(build_tablet_meta_opt(param_,
-                                           new_tablet->get_pointer_handle().get_resource_ptr()->get_addr(),
-                                           curr_opt))) {
-    LOG_WARN("fail to build tablet meta opt", K(ret), K(param_), KPC(new_tablet), K(curr_opt));
+  } else if (FALSE_IT(build_async_write_start_opt_(curr_opt))) {
   } else if (OB_FAIL(meta_service->get_object_raw_reader_writer().async_write(write_info, curr_opt, handle))) {
     LOG_WARN("fail to async write", K(ret), "write_info", write_info);
-  } else if (FALSE_IT(cur_macro_seq_++)) {
   } else if (OB_FAIL(handle.get_write_ctx(write_ctx))) {
     LOG_WARN("fail to batch get address", K(ret), K(handle));
   } else if (FALSE_IT(new_tablet->set_tablet_addr(write_ctx.addr_))) {
@@ -1011,10 +992,6 @@ int ObTabletPersister::transform(const ObTabletTransformArg &arg, char *buf, con
   }
   return ret;
 }
-void ObTabletPersister::build_async_write_start_opt_(blocksstable::ObStorageObjectOpt &start_opt) const
-{
-  start_opt.set_meta_macro_object_opt();
-}
 int ObTabletPersister::sync_write_ctx_to_total_ctx_if_failed(
   common::ObIArray<ObObjectsWriteCtx> &write_ctxs,
   common::ObIArray<ObObjectsWriteCtx> &total_write_ctxs)
@@ -1047,8 +1024,6 @@ int ObTabletPersister::batch_write_sstable_info(
     LOG_WARN("fail to batch async write", K(ret), K(write_infos));
   } else if (OB_FAIL(handle.batch_get_write_ctx(write_ctxs))) {
     LOG_WARN("fail to batch get addr", K(ret), K(handle));
-  } else if (OB_FAIL(wait_write_info_callback(write_infos))) {
-    LOG_WARN("fail to wait redo callback", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < write_ctxs.count(); ++i) {
       ObObjectsWriteCtx &write_ctx = write_ctxs.at(i);
@@ -1072,10 +1047,15 @@ int ObTabletPersister::batch_write_sstable_info(
   return ret;
 }
 
+void ObTabletPersister::build_async_write_start_opt_(
+    blocksstable::ObStorageObjectOpt &start_opt) const
+{
+  start_opt.set_meta_macro_object_opt();
+}
+
 int ObTabletPersister::persist_sstable_linked_block_if_need(
     ObArenaAllocator &allocator,
     ObITable * const table,
-    int64_t &macro_start_seq,
     common::ObIArray<ObObjectsWriteCtx> &sstable_meta_write_ctxs)
 {
   int ret = OB_SUCCESS;
@@ -1087,10 +1067,6 @@ int ObTabletPersister::persist_sstable_linked_block_if_need(
     ObSSTable * const sstable = static_cast<ObSSTable * const>(table);
     if (OB_FAIL(sstable->persist_linked_block_if_need(
         allocator,
-        param_.tablet_id_,
-        0,
-        nullptr,
-        macro_start_seq,
         sstable_linked_write_ctx))) {
       LOG_WARN("fail to try persist linked_block", K(ret), KPC(sstable));
     } else if (sstable_linked_write_ctx.block_ids_.count() > 0) {
@@ -1214,9 +1190,8 @@ int ObTabletPersister::fetch_and_persist_sstable(
         LOG_WARN("unexpected error, table is nullptr", K(ret), KPC(table));
       } else if (OB_FAIL(persist_sstable_linked_block_if_need(tmp_allocator,
                                                               table,
-                                                              cur_macro_seq_,
                                                               sstable_meta_write_ctxs))) {
-          LOG_WARN("fail to persist sstable linked_block if need", K(ret), K(param_), KPC(table), K(cur_macro_seq_));
+          LOG_WARN("fail to persist sstable linked_block if need", K(ret), K(param_), KPC(table));
       } else if (OB_FAIL(fetch_and_persist_normal_sstable(tmp_allocator, table, sstable_persist_ctx))) {
           LOG_WARN("fail to fetch and persist normal_sstable", K(ret), KPC(table), K(sstable_persist_ctx));
       }
@@ -1417,18 +1392,16 @@ int ObTabletPersister::write_and_fill_args(
                        ? ObCtxIds::MERGE_RESERVE_CTX_ID
                        : ObCtxIds::DEFAULT_CTX_ID;
   write_ctxs.set_attr(lib::ObMemAttr("WriteCtxs", ctx_id));
-
   blocksstable::ObStorageObjectOpt curr_opt;
+
   if (OB_UNLIKELY(total_addr_cnt != write_infos.count() + none_addr_cnt)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(total_addr_cnt), "write_info_count", write_infos.count(), K(none_addr_cnt));
   } else if (FALSE_IT(build_async_write_start_opt_(curr_opt))) {
-  } else if (OB_FAIL(reader_writer.async_batch_write(write_infos, handle, curr_opt/*OUTPUT*/))) {
+  } else if (OB_FAIL(reader_writer.async_batch_write(write_infos, handle, curr_opt))) {
     LOG_WARN("fail to batch async write", K(ret));
   } else if (OB_FAIL(handle.batch_get_write_ctx(write_ctxs))) {
     LOG_WARN("fail to batch get addr", K(ret), K(handle));
-  } else if (OB_FAIL(wait_write_info_callback(write_infos))) {
-    LOG_WARN("fail to wait write callback", K(ret));
   } else if (OB_UNLIKELY(write_infos.count() != write_ctxs.count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("write ctx count does not equal to write info count", K(ret),
@@ -1521,7 +1494,6 @@ int ObTabletPersister::link_write_medium_info_list(
             build_async_write_start_opt_(curr_opt);
             if (OB_FAIL(reader_writer.async_link_write(write_info, curr_opt, write_handle))) {
               LOG_WARN("failed to do async link write", K(ret), K(write_info));
-            } else if (FALSE_IT(cur_macro_seq_++)) {
             } else if (OB_UNLIKELY(!write_handle.is_valid())) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("unexpected error, write handle is invalid", K(ret), K(write_handle));
@@ -1529,10 +1501,6 @@ int ObTabletPersister::link_write_medium_info_list(
               tmp_meta_size += upper_align(size, DIO_READ_ALIGN_SIZE);
             }
 
-            if (OB_FAIL(ret) || OB_ISNULL(write_info.write_callback_)) {
-            } else if (OB_FAIL(write_info.write_callback_->wait())) {
-              LOG_WARN("failed to wait callback", K(ret));
-            }
           }
 
           if (nullptr != buffer) {
@@ -1716,28 +1684,6 @@ int ObTabletPersister::load_storage_schema_and_fill_write_info(
     LOG_WARN("fail to fill write info", K(ret), KP(storage_schema));
   }
   ObTabletObjLoadHelper::free(allocator, storage_schema);
-  return ret;
-}
-
-int ObTabletPersister::wait_write_info_callback(const common::ObIArray<ObObjectWriteInfo> &write_infos)
-{
-  int ret = OB_SUCCESS;
-  if (write_infos.count() < 1) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("write info count should not be less than 1", K(ret), K(write_infos));
-  } else {
-    ObIMacroBlockFlushCallback *callback = write_infos.at(0).write_callback_;
-    for (int64_t i = 0; OB_SUCC(ret) && i < write_infos.count(); i++) {
-      if (write_infos.at(i).write_callback_ != callback) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unequaled callback", K(ret), KP(callback), KP(write_infos.at(i).write_callback_));
-      }
-    }
-    if (OB_FAIL(ret) || OB_ISNULL(callback)) {
-    } else if (OB_FAIL(callback->wait())) {
-      LOG_WARN("failed to wait callback", K(ret));
-    }
-  }
   return ret;
 }
 

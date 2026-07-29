@@ -202,10 +202,6 @@ public:
   bool is_advance_scan_;
   sql::ObStoragePushdownFlag pd_storage_flag_;
   ObTableScanOption table_scan_opt_;
-  uint64_t auto_split_filter_type_;
-  const sql::ObExpr *auto_split_filter_;
-  sql::ExprFixedArray *auto_split_params_;
-  bool is_tablet_spliting_;
   const bool *need_update_tablet_param_;
 };
 

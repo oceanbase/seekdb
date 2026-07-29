@@ -126,7 +126,9 @@ public:
     : ObITableReadInfo(),
       is_inited_(false),
       allocator_(nullptr),
-      info_(0),
+      schema_column_count_(0),
+      format_version_(READ_INFO_FORMAT_VERSION),
+      reserved_(0),
       schema_rowkey_cnt_(0),
       rowkey_cnt_(0),
       cols_desc_(),
@@ -138,6 +140,7 @@ public:
   virtual bool is_valid() const override
   {
     return is_inited_
+        && READ_INFO_FORMAT_VERSION == format_version_
         && schema_rowkey_cnt_ <= cols_desc_.count()
         && 0 < cols_desc_.count()
         && 0 < cols_index_.count()
@@ -200,6 +203,7 @@ public:
                      const common::ObIArray<ObColDesc> &cols_desc,
                      const int64_t col_cnt);
 protected:
+  static constexpr int64_t READ_INFO_FORMAT_VERSION = 5;
   static const int32_t READ_INFO_ONE_BIT = 1;
   static const int32_t READ_INFO_RESERVED_BITS = 15;
 
@@ -210,6 +214,7 @@ protected:
     uint64_t info_;
     struct {
       uint32_t schema_column_count_;
+      uint16_t format_version_;
       uint16_t is_global_index_table_  : READ_INFO_ONE_BIT; // only used for rowkey_read_info in ObTablet
       uint16_t reserved_               : READ_INFO_RESERVED_BITS;
     };

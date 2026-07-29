@@ -3,8 +3,7 @@ function(schema_unittest case)
   target_sources(${case}
     PRIVATE
     mock_schema_service.h
-    schema_test_utils.h
-    mock_multi_version_schema_service_for_fallback.h)
+    schema_test_utils.h)
   target_link_libraries(${case} PRIVATE mockcontainer)
 endfunction()
 

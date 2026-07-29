@@ -647,7 +647,6 @@ int ObOperator::open()
   if (OB_FAIL(check_stack_overflow())) {
     LOG_WARN("failed to check stack overflow", K(ret));
   } else {
-    ASH_ITEM_ATTACH_GUARD(plan_line_id, spec_.id_);
     OperatorOpenOrder open_order = get_operator_open_order();
     if (!spec_.is_vectorized()) {
     /*
@@ -790,7 +789,6 @@ int ObOperator::rescan()
   //for the general terminal operator, function rescan() does nothing
   //you can rewrite it to complete special function
   int ret = OB_SUCCESS;
-  ASH_ITEM_ATTACH_GUARD(plan_line_id, spec_.id_);
   for (int64_t i = 0; OB_SUCC(ret) && i < child_cnt_; ++i) {
     if (OB_FAIL(children_[i]->rescan())) {
       LOG_WARN("rescan child operator failed",
@@ -891,7 +889,6 @@ int ObOperator::close()
 {
   int ret = OB_SUCCESS;
   OperatorOpenOrder open_order = get_operator_open_order();
-  ASH_ITEM_ATTACH_GUARD(plan_line_id, spec_.id_);
   if (OPEN_SELF_ONLY != open_order) {
     //first call close of children
     for (int64_t i = 0; i < child_cnt_; ++i) {
@@ -975,7 +972,6 @@ int ObOperator::get_next_row()
 {
   int ret = OB_SUCCESS;
   begin_cpu_time_counting();
-  ASH_ITEM_ATTACH_GUARD(plan_line_id, spec_.id_);
   if (OB_FAIL(check_stack_once())) {
     LOG_WARN("too deep recursive", K(ret));
   }
@@ -1066,7 +1062,6 @@ int ObOperator::get_next_row()
       }
     }
   }
-  end_ash_line_id_reg(ret);
   end_cpu_time_counting();
   return ret;
 }
@@ -1125,7 +1120,6 @@ int ObOperator::get_next_batch(const int64_t max_row_cnt, const ObBatchRows *&ba
 {
   int ret = OB_SUCCESS;
   begin_cpu_time_counting();
-  ASH_ITEM_ATTACH_GUARD(plan_line_id, spec_.id_);
 
   if (OB_FAIL(check_stack_once())) {
     LOG_WARN("too deep recursive", K(ret));
@@ -1272,14 +1266,12 @@ int ObOperator::get_next_batch(const int64_t max_row_cnt, const ObBatchRows *&ba
     brs_.set_all_rows_active(false);
   }
 
-  end_ash_line_id_reg(ret);
   end_cpu_time_counting();
   return ret;
 }
 
 int ObOperator::filter_row(ObEvalCtx &eval_ctx, const ObIArray<ObExpr *> &exprs, bool &filtered)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_filter_rows);
   ObDatum *datum = NULL;
   int ret = OB_SUCCESS;
   filtered = false;
@@ -1319,7 +1311,6 @@ int ObOperator::filter_batch_rows(const ObExprPtrIArray &exprs,
                                   bool &all_filtered,
                                   bool &all_active)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_filter_rows);
   int ret = OB_SUCCESS;
   all_filtered = false;
   bool tmp_all_active = true;

@@ -5202,7 +5202,6 @@ int ObSPIService::inner_open(ObPLExecCtx *ctx,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Argument in pl context is NULL", K(session), K(ret));
     } else {
-      ObPLASHGuard guard(ObPLASHGuard::ObPLASHStatus::IS_SQL_EXECUTION);
       bool is_inner_session = session->is_inner();
       ObSQLSessionInfo::SessionType old_session_type = session->get_session_type();
       ObInnerSQLConnection *spi_conn = NULL;
@@ -5710,9 +5709,7 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
         OZ (ObSQLUtils::get_default_cast_mode(stmt::T_NONE, exec_ctx->get_my_session(), cast_mode));
       }
       // Step4: Get the result and store it in the variable
-      ObSEArray<std::pair<uint64_t, uint64_t>, OB_DEFAULT_SE_ARRAY_COUNT> package_vars_info;
-      lib::ObMemAttr attr{};
-      OX (package_vars_info.set_attr(attr));
+      bool package_var_modified = false;
       if (OB_SUCC(ret) && !is_bulk) { // [FETCH] INTO x, y, z OR [FETCH] INTO record
         /*
          * If not multiple variables, then it is a single record. It cannot be multiple records or a mix of records and variables.
@@ -5818,7 +5815,7 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
                 std::pair<uint64_t, uint64_t> package_var_info = std::pair<uint64_t, uint64_t>(OB_INVALID_ID, OB_INVALID_ID);
                 OZ (get_package_var_info_by_expr(into_exprs[i], package_var_info.first, package_var_info.second));
                 if (OB_INVALID_ID != package_var_info.first && OB_INVALID_ID != package_var_info.second) {
-                  OZ (package_vars_info.push_back(package_var_info));
+                  OX (package_var_modified = true);
                 }
               }
             }
@@ -5864,7 +5861,7 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
           }
           OZ (get_package_var_info_by_expr(result_expr, package_var_info.first, package_var_info.second));
           if (OB_INVALID_ID != package_var_info.first && OB_INVALID_ID != package_var_info.second) {
-            OZ (package_vars_info.push_back(package_var_info));
+            OX (package_var_modified = true);
           }
           // collection may modified by sql fetch, which can be reset and allocator will change, such like stmt a:=b in trigger
           // so allocator of collection can not be used by collect_cells.
@@ -5962,7 +5959,7 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
           OX (implicit_cursor->set_rowcount(row_count)); // Set implicit cursor
         }
       }
-      if (OB_SUCC(ret) && !package_vars_info.empty()) {
+      if (OB_SUCC(ret) && package_var_modified) {
         OX (ctx->exec_ctx_->get_my_session()->set_pl_can_retry(false));
       }
 
@@ -5978,7 +5975,6 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
   } else if (!for_cursor) { // Although the result does not need to be stored, get_next still needs to be called once
     ObResultSet *ob_result_set = static_cast<ObResultSet*>(result_set);
     if (ob_result_set->is_with_rows()) { // SELECT or DML RETURNING
-      ObPLASHGuard guard(ObPLASHGuard::ObPLASHStatus::IS_SQL_EXECUTION);
       // MYSQL Mode: send query result to client.
       ObSQLSessionInfo *session_info = NULL;
       ObSyncCmdDriver  *query_sender = NULL;
@@ -6966,7 +6962,6 @@ int ObSPIService::fetch_row(void *result_set,
                             ObNewRow &cur_row)
 {
   int ret = OB_SUCCESS;
-  ObPLASHGuard guard(ObPLASHGuard::ObPLASHStatus::IS_SQL_EXECUTION);
   if (OB_ISNULL(result_set)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Argument passed in is NULL", K(result_set), K(ret));
@@ -7096,7 +7091,7 @@ int ObSPIService::force_refresh_schema(int64_t refresh_version)
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_refreshed_schema_version(
                      local_version))) {
     LOG_WARN("fail to get local version", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_received_broadcast_version(
+  } else if (OB_FAIL(GCTX.schema_service_->get_published_schema_version(
                      global_version))) {
     LOG_WARN("fail to get global version", K(ret));
   }
@@ -7496,8 +7491,6 @@ int ObSPIService::setup_cursor_snapshot_verify_(ObPLCursorInfo *cursor, ObSPIRes
   } else if (need_register_snapshot) {
     OZ (cursor->set_and_register_snapshot(snapshot));
   } else {
-    LOG_TRACE("convert to out of transaction snapshot", K(snapshot));
-    snapshot.convert_to_out_tx();
     cursor->set_snapshot(snapshot);
   }
   LOG_TRACE("cursor setup snapshot", K(cursor->is_for_update()), K(cursor->is_streaming()),
@@ -7575,8 +7568,7 @@ ObSPIRetryCtrlGuard::ObSPIRetryCtrlGuard(
   ObQueryRetryCtrl &retry_ctrl, ObSPIResultSet &spi_result, ObSQLSessionInfo &session_info, int &ret, bool for_fetch)
   : retry_ctrl_(retry_ctrl), spi_result_(spi_result), session_info_(session_info), ret_(ret), init_(false)
 {
-  int64_t runtime_schema_version = 0;
-  int64_t sys_version = 0;
+  int64_t database_schema_version = 0;
   
   if (!for_fetch) {
     spi_result_.get_out_params().reset();
@@ -7588,13 +7580,10 @@ ObSPIRetryCtrlGuard::ObSPIRetryCtrlGuard(
     LOG_WARN("already timeout!", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(spi_result_.get_scheme_guard()))) {
     LOG_WARN("get schema guard failed", K(ret));
-  } else if (OB_FAIL(spi_result_.get_scheme_guard().get_schema_version(runtime_schema_version))) {
+  } else if (OB_FAIL(spi_result_.get_scheme_guard().get_schema_version(database_schema_version))) {
     LOG_WARN("fail get schema version", K(ret));
-  } else if (OB_FAIL(spi_result_.get_scheme_guard().get_schema_version(sys_version))) {
-    LOG_WARN("fail get sys schema version", K(ret));
   } else {
-    retry_ctrl_.set_current_local_schema_version(runtime_schema_version);
-    retry_ctrl_.set_sys_local_schema_version(sys_version);
+    retry_ctrl_.set_current_local_schema_version(database_schema_version);
     spi_result_.get_sql_ctx().schema_guard_ = &spi_result.get_scheme_guard();
     init_ = true;
   }

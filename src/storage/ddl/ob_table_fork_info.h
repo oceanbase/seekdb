@@ -20,7 +20,6 @@
 #include "common/ob_tablet_id.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/utility/ob_unify_serialize.h"
-#include "lib/worker.h"
 
 namespace oceanbase
 {

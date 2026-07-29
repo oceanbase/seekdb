@@ -67,9 +67,6 @@ int ObMySQLResultSet::to_mysql_field(const ObField &field, ObMySQLField &mfield)
       ret = ObSMUtils::get_mysql_type(
         field.default_value_.get_type(), mfield.default_value_, flags, num_decimals);
     }
-    if (field.is_hidden_rowid_) {
-      mfield.inout_mode_ |= 0x04;
-    }
   }
   LOG_TRACE("to mysql field", K(ret), K(mfield), K(field));
   return ret;

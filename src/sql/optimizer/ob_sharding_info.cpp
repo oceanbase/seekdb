@@ -472,8 +472,6 @@ int ObShardingInfo::check_if_match_partition_wise(const EqualSets &equal_sets,
 }
 
 int ObShardingInfo::check_if_match_extended_partition_wise(const EqualSets &equal_sets,
-                                                           ObIArray<ObAddr> &left_server_list,
-                                                           ObIArray<ObAddr> &right_server_list,
                                                            const common::ObIArray<ObRawExpr*> &left_keys,
                                                            const common::ObIArray<ObRawExpr*> &right_keys,
                                                            ObShardingInfo *left_strong_sharding,
@@ -490,8 +488,6 @@ int ObShardingInfo::check_if_match_extended_partition_wise(const EqualSets &equa
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(check_if_match_extended_partition_wise(equal_sets,
-                                                      left_server_list,
-                                                      right_server_list,
                                                       left_keys,
                                                       right_keys,
                                                       null_safe_info,
@@ -580,8 +576,6 @@ int ObShardingInfo::check_if_match_partition_wise(const EqualSets &equal_sets,
 }
 
 int ObShardingInfo::check_if_match_extended_partition_wise(const EqualSets &equal_sets,
-                                                           ObIArray<ObAddr> &left_server_list,
-                                                           ObIArray<ObAddr> &right_server_list,
                                                            const common::ObIArray<ObRawExpr*> &left_keys,
                                                            const common::ObIArray<ObRawExpr*> &right_keys,
                                                            const common::ObIArray<bool> &null_safe_info,
@@ -626,8 +620,6 @@ int ObShardingInfo::check_if_match_extended_partition_wise(const EqualSets &equa
         LOG_WARN("failed to push back sharding info", K(ret));
       } else if (has_null_safe &&
                  OB_FAIL(check_if_match_extended_partition_wise(equal_sets,
-                                                                left_server_list,
-                                                                right_server_list,
                                                                 left_keys,
                                                                 right_keys,
                                                                 left_sharding,
@@ -640,8 +632,6 @@ int ObShardingInfo::check_if_match_extended_partition_wise(const EqualSets &equa
                  OB_FAIL(append(right_sharding, right_weak_sharding))) {
         LOG_WARN("failed to append sharding info", K(ret));
       } else if (OB_FAIL(check_if_match_extended_partition_wise(equal_sets,
-                                                                left_server_list,
-                                                                right_server_list,
                                                                 strong_left_keys,
                                                                 strong_right_keys,
                                                                 left_sharding,
@@ -715,8 +705,6 @@ int ObShardingInfo::check_if_match_partition_wise(const EqualSets &equal_sets,
 }
 
 int ObShardingInfo::check_if_match_extended_partition_wise(const EqualSets &equal_sets,
-                                                           ObIArray<ObAddr> &left_server_list,
-                                                           ObIArray<ObAddr> &right_server_list,
                                                            const common::ObIArray<ObRawExpr*> &left_keys,
                                                            const common::ObIArray<ObRawExpr*> &right_keys,
                                                            const common::ObIArray<ObShardingInfo *> &left_sharding,
@@ -749,23 +737,9 @@ int ObShardingInfo::check_if_match_extended_partition_wise(const EqualSets &equa
   } else if (!is_key_covered) {
     /*do nothing*/
   } else {
-    bool is_equal = false;
-    PwjTable l_table;
-    PwjTable r_table;
-    ObNonStrictPwjComparer pwj_comparer;
-    if (OB_FAIL(l_table.init(left_server_list))) {
-      LOG_WARN("failed to init pwj table with sharding info", K(ret));
-    } else if (OB_FAIL(r_table.init(right_server_list))) {
-      LOG_WARN("failed to init pwj table with sharding info", K(ret));
-    } else if (OB_FAIL(pwj_comparer.add_table(l_table, is_equal))) {
-      LOG_WARN("failed to add table", K(ret));
-    } else if (!is_equal) {
-      // do nothing
-    } else if (OB_FAIL(pwj_comparer.add_table(r_table, is_equal))) {
-      LOG_WARN("failed to add table", K(ret));
-    } else if (is_equal) {
-      is_ext_partition_wise = true;
-    }
+    // Both exchange streams execute in the same Observer. Once their
+    // partitioning keys match, there is no remote placement to compare.
+    is_ext_partition_wise = true;
   }
   LOG_TRACE("succeed check if match extended partition wise",
       K(left_sharding), K(right_sharding), K(is_ext_partition_wise));
@@ -820,57 +794,6 @@ int ObShardingInfo::check_if_match_repart_or_rehash(const EqualSets &equal_sets,
     }
   }
   return ret;
-}
-
-int ObShardingInfo::is_physically_equal_serverlist(ObIArray<ObAddr> &left_server_list,
-                                                   ObIArray<ObAddr> &right_server_list,
-                                                   bool &is_equal_serverlist)
-{
-  int ret = OB_SUCCESS;
-  is_equal_serverlist = false;
-  if (left_server_list.empty() || right_server_list.empty()) {
-    // do nothing
-  } else if (left_server_list.count() != right_server_list.count()) {
-    // do nothing
-  } else if (is_shuffled_server_list(left_server_list) ||
-             is_shuffled_server_list(right_server_list)) {
-    // do nothing
-  } else {
-    is_equal_serverlist = true;
-    lib::ob_sort(&left_server_list.at(0), &left_server_list.at(0) + left_server_list.count());
-    lib::ob_sort(&right_server_list.at(0), &right_server_list.at(0) + right_server_list.count());
-    for (int64_t i = 0; OB_SUCC(ret) && is_equal_serverlist && i < left_server_list.count(); i ++) {
-      if (left_server_list.at(i) != right_server_list.at(i)) {
-        is_equal_serverlist = false;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObShardingInfo::is_physically_both_shuffled_serverlist(ObIArray<ObAddr> &left_server_list,
-                                                            ObIArray<ObAddr> &right_server_list,
-                                                            bool &is_both_shuffled_serverlist)
-{
-  int ret = OB_SUCCESS;
-  is_both_shuffled_serverlist = false;
-  if (left_server_list.empty() || right_server_list.empty()) {
-    // do nothing
-  } else if (left_server_list.count() != right_server_list.count()) {
-    // do nothing
-  } else if (is_shuffled_server_list(left_server_list) &&
-             is_shuffled_server_list(right_server_list)) {
-    // mark as non-strict pw for shuffle case
-    is_both_shuffled_serverlist = true;
-  } else {
-    // do nothing
-  }
-  return ret;
-}
-
-bool ObShardingInfo::is_shuffled_server_list(const ObIArray<ObAddr> &server_list)
-{
-  return server_list.count() == 1 && is_shuffled_addr(server_list.at(0));
 }
 
 int ObShardingInfo::copy_with_part_keys(const ObShardingInfo &other)
@@ -1069,27 +992,6 @@ int ObShardingInfo::is_sharding_equal(const ObShardingInfo *left_sharding,
   }
   if (OB_SUCC(ret)) {
     LOG_TRACE("succeed to check whether sharding info is equal", K(is_equal));
-  }
-  return ret;
-}
-
-int ObShardingInfo::get_serverlist_from_sharding(const ObShardingInfo &sharding,
-                                                 ObIArray<common::ObAddr> &server_list)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(sharding.phy_table_location_info_)) {
-    // do nothing
-  } else {
-    const ObCandiTabletLocIArray &locations = sharding.phy_table_location_info_->get_phy_part_loc_info_list();
-    for (int64_t i = 0; OB_SUCC(ret) && i < locations.count(); ++i) {
-      const ObAddr &server = locations.at(i).get_partition_location().get_server();
-      if (!server.is_valid()) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("local tablet server is invalid", K(ret), K(i), K(server));
-      } else if (OB_FAIL(server_list.push_back(server))) {
-        LOG_WARN("failed to push back server addr", K(ret));
-      }
-    }
   }
   return ret;
 }

@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX PL
+#include "share/rc/ob_module_provider.h"
 
 #include "pl/ob_pl_build.h"
 #include "src/sql/resolver/ob_resolver_utils.h"
@@ -275,7 +276,6 @@ int ObPLBuilder::compile(
   int64_t compile_start = ObTimeUtility::current_time();
   uint64_t block_hash = OB_INVALID_ID;
   int64_t resolve_end = 0;
-  ObPLASHGuard plash_guard(ObPLASHGuard::ObPLASHStatus::IS_PLSQL_COMPILATION);
   //Step 1: Construct the ObPLFunctionAST for the anonymous block, on allocator_
   // (== the func's mem_context arena) and retain it on the func so the interpreter
   // can walk it after compile; never explicitly destructed (freed with the arena).
@@ -420,7 +420,6 @@ int ObPLBuilder::compile(const uint64_t id, ObPLFunction &func)
 {
   int ret = OB_SUCCESS;
 
-  ObPLASHGuard plash_guard(ObPLASHGuard::ObPLASHStatus::IS_PLSQL_COMPILATION);
   // Allocate the AST on the func's allocator (allocator_) and retain it on the func
   // (non-owning ptr) so the tree-walking interpreter can walk it after compile returns.
   ObPLFunctionAST *func_ast = OB_NEWx(ObPLFunctionAST, (&allocator_), allocator_);
@@ -814,7 +813,6 @@ int ObPLBuilder::build_package(const ObPackageInfo &package_info,
   int64_t compile_start = ObTimeUtility::current_time();
 
   ObPLBuilderEnvGuard guard(package_info, session_info_, schema_guard_, package_ast, ret, parent_ns);
-  ObPLASHGuard plash_guard(ObPLASHGuard::ObPLASHStatus::IS_PLSQL_COMPILATION);
   session_info_.set_for_trigger_package(package_info.is_for_trigger());
   if (OB_NOT_NULL(parent_ns)) {
     if (parent_ns->get_compile_flag().compile_with_invoker_right()) {
@@ -1449,7 +1447,6 @@ void ObPLBuilderEnvGuard::init(const Info &info,
     compile_unit.set_invoker_db_id(session_info_.get_database_id());
   }
   if (OB_SUCC(ret)
-      && need_set_db
       && info.get_database_id() != session_info_.get_database_id()) {
     const share::schema::ObDatabaseSchema *db_schema = NULL;
     old_db_id_ = session_info_.get_database_id();

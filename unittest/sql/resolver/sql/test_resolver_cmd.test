@@ -105,12 +105,6 @@ show variables
 #show parameters like '%sql%'
 #show parameters where value = 'off'
 
-### show create tenant
-#show create tenant sys_tenant
-
-### show tenant
-#show tenant
-
 # set names
 set names latin1;
 set names utf8 collate 'utf8_general_ci';

@@ -5,9 +5,7 @@ create table test_uncommitted_trx_minor_merge(a int primary key, b int, key ib(b
 begin;
 insert into test_uncommitted_trx_minor_merge value(1, 1);
 insert into test_uncommitted_trx_minor_merge value(2, 2);
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 select * from test_uncommitted_trx_minor_merge where a = 1;
 a	b
 select * from test_uncommitted_trx_minor_merge where a = 1;
@@ -34,9 +32,7 @@ begin;
 select * from test_uncommitted_trx_minor_merge where a = 3 for update;
 a	b
 3	3
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 set ob_query_timeout = 1000000;
 set ob_trx_timeout = 1000000;
 select * from test_uncommitted_trx_minor_merge where a = 3 for update nowait;
@@ -50,9 +46,7 @@ update test_uncommitted_trx_minor_merge set b = 30 where a = 3;
 select * from test_uncommitted_trx_minor_merge where a = 3;
 a	b
 3	30
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 rollback;
 select * from test_uncommitted_trx_minor_merge where a = 3;
 a	b

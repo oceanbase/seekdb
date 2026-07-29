@@ -867,15 +867,13 @@ int ObLogDelUpd::compute_plan_type()
 int ObLogDelUpd::get_table_location_type(ObTableLocationType &type)
 {
   int ret = OB_SUCCESS;
-  ObOptimizerContext& optimizer_context = get_plan()->get_optimizer_context();
-  ObAddr &server = optimizer_context.get_local_server_addr();
   type = OB_TBL_LOCATION_UNINITIALIZED;
   if (OB_ISNULL(table_partition_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FAIL(table_partition_info_->get_location_type(server, type))) {
-    LOG_WARN("get location type failed", K(ret));
-  } else { /*do nothing*/ }
+  } else {
+    type = table_partition_info_->get_location_type();
+  }
   return ret;
 }
 

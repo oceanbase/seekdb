@@ -4930,7 +4930,7 @@ int ObStaticEngineCG::generate_spec(
         }
       }
       if (OB_SUCC(ret) && is_all_subquery_deterministic) {
-        spec.exec_param_idxs_inited_ = true;
+        spec.enable_subquery_result_cache_ = true;
       }
     }
   }
@@ -6518,25 +6518,19 @@ int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalP
     phy_plan.set_need_consistent_snapshot(log_plan.need_consistent_read());
     phy_plan.set_is_inner_sql(my_session->is_inner());
     phy_plan.set_is_batch_params_execute(sql_ctx->is_batch_params_execute());
-    if (OB_FAIL(phy_plan.set_expected_worker_map(log_plan.get_optimizer_context().get_expected_worker_map()))) {
-      LOG_WARN("set expected worker map", K(ret));
-    } else if (OB_FAIL(phy_plan.set_minimal_worker_map(log_plan.get_optimizer_context().get_minimal_worker_map()))) {
-      LOG_WARN("set minimal worker map", K(ret));
-    } else {
-      if (log_plan.get_optimizer_context().is_online_ddl()) {
-        if (log_plan.get_stmt()->get_table_items().count() > 0) {
-          const TableItem *insert_table_item = log_plan.get_stmt()->get_table_item(0);
-          if (nullptr != insert_table_item) {
-            int64_t ddl_execution_id = -1;
-            int64_t ddl_task_id = 0;
-            const ObOptParamHint *opt_params = &log_plan.get_stmt()->get_query_ctx()->get_global_hint().opt_params_;
-            OZ(opt_params->get_integer_opt_param(ObOptParamHint::DDL_EXECUTION_ID, ddl_execution_id));
-            OZ(opt_params->get_integer_opt_param(ObOptParamHint::DDL_TASK_ID, ddl_task_id));
-            phy_plan.set_ddl_schema_version(insert_table_item->ddl_schema_version_);
-            phy_plan.set_ddl_table_id(insert_table_item->ddl_table_id_);
-            phy_plan.set_ddl_execution_id(ddl_execution_id);
-            phy_plan.set_ddl_task_id(ddl_task_id);
-          }
+    if (log_plan.get_optimizer_context().is_online_ddl()) {
+      if (log_plan.get_stmt()->get_table_items().count() > 0) {
+        const TableItem *insert_table_item = log_plan.get_stmt()->get_table_item(0);
+        if (nullptr != insert_table_item) {
+          int64_t ddl_execution_id = -1;
+          int64_t ddl_task_id = 0;
+          const ObOptParamHint *opt_params = &log_plan.get_stmt()->get_query_ctx()->get_global_hint().opt_params_;
+          OZ(opt_params->get_integer_opt_param(ObOptParamHint::DDL_EXECUTION_ID, ddl_execution_id));
+          OZ(opt_params->get_integer_opt_param(ObOptParamHint::DDL_TASK_ID, ddl_task_id));
+          phy_plan.set_ddl_schema_version(insert_table_item->ddl_schema_version_);
+          phy_plan.set_ddl_table_id(insert_table_item->ddl_table_id_);
+          phy_plan.set_ddl_execution_id(ddl_execution_id);
+          phy_plan.set_ddl_task_id(ddl_task_id);
         }
       }
     }

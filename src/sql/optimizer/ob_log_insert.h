@@ -94,7 +94,6 @@ public:
    *  Get the hash value of the INSERT operator
    */
   virtual uint64_t hash(uint64_t seed) const override;
-  virtual int compute_plan_type() override;
   virtual int compute_sharding_info() override;
   virtual int est_cost() override;
   virtual int do_re_est_cost(EstimateCostInfo &param, double &card, double &op_cost, double &cost) override;

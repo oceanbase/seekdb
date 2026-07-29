@@ -23,6 +23,7 @@
 #include "storage/compaction/ob_batch_freeze_tablets_dag.h"
 #include "storage/compaction/ob_batch_exec_dag.h"
 #include "share/ob_structured_event_logger.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 
 
 namespace oceanbase
@@ -308,54 +309,15 @@ const char *ObITask::ObITaskTypeStr[] = {
   "UNIQUE_CHECKING_MERGE",
   "DDL_PREPARE_SCAN",
   "DDL_BUILD_MAJOR_SSTABLE",
-  "DIRECT_LOAD_WRITE_CHANNEL_FLUSH",
-  "DIRECT_LOAD_WRITE_CHANNEL_FINISH",
   "DDL_WRITE_PIPELINE",
   "DDL_WRITE_USING_TMP_FILE_PIPELINE",
   "DDL_VECTOR_INDEX_APPEND_PIPELINE",
   "DDL_VECTOR_INDEX_BUILD_AND_WRITE_PIPELINE",
-  "DIRECT_LOAD_START_MERGE",
   "DDL_MERGE_PREPARE",
   "DDL_MERGE_SLICE",
   "DDL_MERGE_ASSEMBLE",
   "DDL_MERGE_GUARD",
-  "DIRECT_LOAD_WRITE_MACRO_BLOCK_PIPELINE",
-  "DIRECT_LOAD_FINISH_OP",
-  "DIRECT_LOAD_TABLE_OP_OPEN_OP",
-  "DIRECT_LOAD_TABLE_OP_CLOSE_OP",
-  "DIRECT_LOAD_DIRECT_WRITE_OP",
-  "DIRECT_LOAD_DIRECT_WRITE_OP_FINISH",
-  "DIRECT_LOAD_STORE_WRITE_OP",
-  "DIRECT_LOAD_STORE_WRITE_OP_FINISH",
-  "DIRECT_LOAD_PRE_SORT_WRITE_OP",
-  "DIRECT_LOAD_PRE_SORT_WRITE_OP_FINISH",
-  "DIRECT_LOAD_MEM_SORT_OP",
-  "DIRECT_LOAD_MEM_SORT_OP_FINISH",
-  "DIRECT_LOAD_COMPACT_TABLE_OP",
-  "DIRECT_LOAD_COMPACT_TABLE_OP_FINISH",
-  "DIRECT_LOAD_INSERT_SSTABLE_OP",
-  "DIRECT_LOAD_INSERT_SSTABLE_OP_FINISH",
-  "DIRECT_LOAD_INSERT_SSTABLE",
-  "DIRECT_LOAD_INSERT_SSTABLE_FINISH",
-  "DIRECT_LOAD_PRE_SORT_WRITE",
-  "DIRECT_LOAD_PRE_SORT_WRITE_SORT",
-  "DIRECT_LOAD_MEM_COMPACT_SAMPLE",
-  "DIRECT_LOAD_MEM_COMPACT_DUMP",
-  "DIRECT_LOAD_MEM_COMPACT_COMPACT",
-  "DIRECT_LOAD_PK_MEM_SORT",
-  "DIRECT_LOAD_PK_MEM_SORT_LOAD",
-  "DIRECT_LOAD_HEAP_MEM_SORT",
-  "DIRECT_LOAD_COMPACT_SSTABLE",
-  "DIRECT_LOAD_COMPACT_SSTABLE_SPLIT_RANGE",
-  "DIRECT_LOAD_COMPACT_SSTABLE_MERGE_RANGE",
-  "DIRECT_LOAD_COMPACT_SSTABLE_COMPACT",
-  "DIRECT_LOAD_COMPACT_HEAP_TABLE",
-  "DIRECT_LOAD_COMPACT_HEAP_TABLE_COMPACT",
-  "TABLE_LOAD_MACRO_BLOCK_WRITE_TASK",
   "DDL_SCHEDULE_ANOTHER_MERGE",
-  "DIRECT_LOAD_INSERT_SSTABLE_CLEAR",
-  "DIRECT_LOAD_COMPACT_SSTABLE_CLEAR",
-  "DIRECT_LOAD_INC_MAJOR_UPDATE_SS_INC_MAJOR",
   "DDL_FORK_PREPARE",
   "DDL_FORK_REUSE",
   "DDL_FORK_REWRITE",
@@ -2181,20 +2143,6 @@ int ObDagPrioScheduler::add_dag_into_list_and_map_(
   } else if (OB_FAIL(dag_map_.set_refactored(&dag, &dag))) {
     if (OB_HASH_EXIST == ret) {
       ret = OB_EAGAIN;
-      ObIDag *stored_dag = nullptr;
-      compaction::ObTabletMergeDag *merge_dag = nullptr;
-      // Accumulate data size for repeated mini-compaction flush requests.
-      if (is_mini_compaction_dag(dag.get_type())) {
-        if (OB_TMP_FAIL(get_stored_dag_(dag, stored_dag))) {
-          COMMON_LOG(WARN, "failed to get stored dag", K(tmp_ret));
-        } else if (OB_ISNULL(merge_dag = static_cast<compaction::ObTabletMergeDag *>(stored_dag))) {
-          tmp_ret = OB_ERR_UNEXPECTED;
-          COMMON_LOG(WARN, "get unexpected null stored dag", K(tmp_ret));
-        } else if (OB_TMP_FAIL(merge_dag->update_compaction_param(
-            static_cast<compaction::ObTabletMergeDag *>(&dag)->get_param()))) {
-          COMMON_LOG(WARN, "failed to add compaction param", K(tmp_ret));
-        }
-      }
     } else {
       COMMON_LOG(WARN, "failed to set dag_map", K(ret), K(dag));
     }

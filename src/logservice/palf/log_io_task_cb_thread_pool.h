@@ -41,7 +41,6 @@ public:
 
 public:
   static constexpr int64_t THREAD_NUM = 1;
-  static constexpr int64_t MINI_MODE_THREAD_NUM = 1;
   static constexpr int64_t MAX_LOG_IO_CB_TASK_NUM = 100 * 10000;
 
 private:

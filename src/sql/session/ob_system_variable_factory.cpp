@@ -1132,7 +1132,6 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarHaveCompress)
         + sizeof(ObSysVarIgnoreDbDirs)
         + sizeof(ObSysVarInitFile)
-        + sizeof(ObSysVarInnodbNumaInterleave)
         + sizeof(ObSysVarInnodbOpenFiles)
         + sizeof(ObSysVarInnodbPageCleaners)
         + sizeof(ObSysVarInnodbPurgeThreads)
@@ -1141,8 +1140,6 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarInnodbUseNativeAio)
         + sizeof(ObSysVarInnodbWriteIoThreads)
         + sizeof(ObSysVarLargeFilesSupport)
-        + sizeof(ObSysVarLargePages)
-        + sizeof(ObSysVarLargePageSize)
         + sizeof(ObSysVarLockedInMemory)
         + sizeof(ObSysVarLogError)
         + sizeof(ObSysVarNamedPipe)
@@ -6463,15 +6460,6 @@ int ObSysVarFactory::create_all_sys_vars_()
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarInnodbNumaInterleave())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarInnodbNumaInterleave", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_INNODB_NUMA_INTERLEAVE))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarInnodbNumaInterleave));
-      }
-    }
-    if (OB_SUCC(ret)) {
       if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarInnodbOpenFiles())) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("fail to new ObSysVarInnodbOpenFiles", K(ret));
@@ -6541,24 +6529,6 @@ int ObSysVarFactory::create_all_sys_vars_()
       } else {
         store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_LARGE_FILES_SUPPORT))] = sys_var_ptr;
         ptr = (void *)((char *)ptr + sizeof(ObSysVarLargeFilesSupport));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarLargePages())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarLargePages", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_LARGE_PAGES))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarLargePages));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarLargePageSize())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarLargePageSize", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_LARGE_PAGE_SIZE))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarLargePageSize));
       }
     }
     if (OB_SUCC(ret)) {
@@ -10110,10 +10080,6 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
       ret = create_one_sys_var<ObSysVarInitFile>(allocator_, sys_var_ptr, "ObSysVarInitFile");
       break;
     }
-    case share::SYS_VAR_INNODB_NUMA_INTERLEAVE: {
-      ret = create_one_sys_var<ObSysVarInnodbNumaInterleave>(allocator_, sys_var_ptr, "ObSysVarInnodbNumaInterleave");
-      break;
-    }
     case share::SYS_VAR_INNODB_OPEN_FILES: {
       ret = create_one_sys_var<ObSysVarInnodbOpenFiles>(allocator_, sys_var_ptr, "ObSysVarInnodbOpenFiles");
       break;
@@ -10144,14 +10110,6 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
     }
     case share::SYS_VAR_LARGE_FILES_SUPPORT: {
       ret = create_one_sys_var<ObSysVarLargeFilesSupport>(allocator_, sys_var_ptr, "ObSysVarLargeFilesSupport");
-      break;
-    }
-    case share::SYS_VAR_LARGE_PAGES: {
-      ret = create_one_sys_var<ObSysVarLargePages>(allocator_, sys_var_ptr, "ObSysVarLargePages");
-      break;
-    }
-    case share::SYS_VAR_LARGE_PAGE_SIZE: {
-      ret = create_one_sys_var<ObSysVarLargePageSize>(allocator_, sys_var_ptr, "ObSysVarLargePageSize");
       break;
     }
     case share::SYS_VAR_LOCKED_IN_MEMORY: {

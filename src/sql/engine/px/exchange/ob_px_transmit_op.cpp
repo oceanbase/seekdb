@@ -129,7 +129,6 @@ ObPxTransmitOp::ObPxTransmitOp(ObExecContext &exec_ctx, const ObOpSpec &spec, Ob
   dfc_unblock_msg_proc_(dfc_),
   loop_(op_monitor_info_),
   chs_agent_(),
-  use_bcast_opt_(false),
   part_ch_info_(),
   ch_info_(nullptr),
   sample_done_(false),
@@ -524,7 +523,8 @@ int ObPxTransmitOp::send_eof_row()
     LOG_WARN("unexpected status: ch info is null", K(ret),
       KP(ch_info_), K(task_channels_.count()));
   } else {
-    ObTransmitEofAsynSender eof_asyn_sender(task_channels_, ch_info_, true, phy_plan_ctx->get_timeout_timestamp(), &eval_ctx_, data_msg_type_);
+    ObTransmitEofAsynSender eof_asyn_sender(task_channels_,
+        phy_plan_ctx->get_timeout_timestamp(), &eval_ctx_, data_msg_type_);
     if (OB_FAIL(eof_asyn_sender.asyn_send())) {
       LOG_WARN("failed to asyn send drain", K(ret), K(lbt()));
     } else {

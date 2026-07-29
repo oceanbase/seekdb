@@ -24,6 +24,7 @@
 #define protected public
 #include "storage/blocksstable/ob_row_generate.h"
 #include "storage/blocksstable/ob_data_file_prepare.h"
+#include "sql/engine/basic/chunk_store/ob_compact_store.h"
 #include "unittest/storage/blocksstable/ob_data_file_prepare.h"
 #include "mtlenv/mock_server_runtime_env.h"
 #include "observer/omt/ob_server_module_lifecycle.h"

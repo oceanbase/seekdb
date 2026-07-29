@@ -77,7 +77,6 @@ int ObLobAccessParam::assign(const ObLobAccessParam& other)
   this->read_latest_ = other.read_latest_;
   this->scan_backward_ = other.scan_backward_;
   this->is_fill_zero_ = other.is_fill_zero_;
-  this->from_rpc_ = other.from_rpc_;
   this->inrow_read_nocopy_ = other.inrow_read_nocopy_;
   this->is_store_char_len_ = other.is_store_char_len_;
   this->need_read_latest_ = other.need_read_latest_;
@@ -87,7 +86,6 @@ int ObLobAccessParam::assign(const ObLobAccessParam& other)
 
   this->ext_info_log_ = other.ext_info_log_;
   this->access_ctx_ = other.access_ctx_;
-  this->addr_ = other.addr_;
   this->lob_id_geneator_ = other.lob_id_geneator_;
 
   if (OB_FAIL(this->snapshot_.assign(other.snapshot_))) {
@@ -206,12 +204,6 @@ bool ObLobAccessParam::has_single_chunk() const
 bool ObLobAccessParam::enable_block_cache() const
 {
   return byte_size_ <= GCONF.lob_enable_block_cache_threshold;
-}
-
-// A request received from RPC cannot be forwarded again unless retry is explicitly enabled.
-bool ObLobAccessParam::is_remote() const
-{
-  return (!from_rpc_ || enable_remote_retry_) && addr_.is_valid() && MYADDR != addr_;
 }
 
 int ObLobAccessParam::check_handle_size() const
@@ -459,7 +451,10 @@ int ObLobAccessParam::get_tx_read_snapshot(ObLobLocatorV2 &locator, transaction:
     LOG_WARN("not outrow persit lob", K(ret), K(locator));
   } else if (OB_FAIL(locator.get_extern_header(extern_header))) {
     LOG_WARN("failed to get extern header", K(ret), K(locator));
-  } else if (extern_header->flags_.has_read_snapshot_) {
+  } else if (extern_header->flags_.has_tx_info_ || !extern_header->flags_.has_read_snapshot_) {
+    ret = OB_VERSION_NOT_MATCH;
+    LOG_WARN("lob locator transaction snapshot format does not match current version", K(ret), K(locator));
+  } else {
     ObString read_snapshot_data;
     int64_t read_snapshot_data_pos = 0;
     if (OB_FAIL(locator.get_read_snapshot_data(read_snapshot_data))) {
@@ -468,23 +463,6 @@ int ObLobAccessParam::get_tx_read_snapshot(ObLobLocatorV2 &locator, transaction:
         read_snapshot_data.ptr(), read_snapshot_data.length(), read_snapshot_data_pos))) {
       LOG_WARN("failed to deserialize read_snapshot_data", K(ret), K(locator));
     }
-  // for compatibility
-  // beacuase old observer (version < 424) does not produce ObTxReadSnapshot
-  // so still use has_tx_info when upgrage observer (eg: 423 --> 424)
-  } else if (extern_header->flags_.has_tx_info_) {
-    ObMemLobTxInfo *tx_info = nullptr;
-    ObMemLobLocationInfo *location_info = nullptr;
-    if (OB_FAIL(locator.get_tx_info(tx_info))) {
-      LOG_WARN("failed to get tx info", K(ret), K(locator));
-    } else if (OB_FAIL(locator.get_location_info(location_info))) {
-      LOG_WARN("failed to get location info", K(ret), K(locator));
-    } else if (OB_FAIL(read_snapshot.build_snapshot_for_lob(
-        tx_info->snapshot_version_, tx_info->snapshot_tx_id_, tx_info->snapshot_seq_))) {
-      LOG_WARN("build_snapshot_for_lob fail", K(ret), KPC(tx_info), KPC(location_info), K(locator));
-    }
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tx info not found", K(ret), K(locator));
   }
 
   if (OB_SUCC(ret) && extern_header->flags_.has_retry_info_) {

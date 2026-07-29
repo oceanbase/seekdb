@@ -1,6 +1,3 @@
-# The legacy kv storecache test still targets the pre-refactor tenant-aware API.
-# Keep it disabled until it is rewritten for the global cache model.
-# storage_unittest(test_kv_storecache)
 #ob_unittest(test_cache_utils)
 #ob_unittest(test_working_set_mgr)
 #ob_unittest(test_cache_working_set)

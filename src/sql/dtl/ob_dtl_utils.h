@@ -18,7 +18,6 @@
 #define OB_DTL_UTILS_H
 
 #include "sql/dtl/ob_dtl_channel.h"
-#include "sql/dtl/ob_dtl_task.h"
 #include "sql/engine/expr/ob_expr.h"
 
 namespace oceanbase {
@@ -41,8 +40,8 @@ public:
 class ObDtlAsynSender
 {
 public:
-  ObDtlAsynSender(ObIArray<ObDtlChannel*> &channels, ObDtlChTotalInfo *ch_info, bool is_transmit) :
-    channels_(channels), ch_info_(ch_info), is_transmit_(is_transmit)
+  explicit ObDtlAsynSender(ObIArray<ObDtlChannel*> &channels) :
+    channels_(channels)
   {}
 
   int asyn_send();
@@ -53,20 +52,16 @@ private:
   int calc_batch_buffer_cnt(int64_t &max_batch_size, int64_t &max_loop_cnt);
 private:
   ObIArray<ObDtlChannel*> &channels_;
-  ObDtlChTotalInfo *ch_info_;
-  bool is_transmit_;
 };
 
 class ObTransmitEofAsynSender : public ObDtlAsynSender
 {
 public:
   ObTransmitEofAsynSender(ObIArray<ObDtlChannel*> &channels,
-                          ObDtlChTotalInfo *ch_info,
-                          bool is_transmit,
                           int64_t timeout_ts,
                           sql::ObEvalCtx *eval_ctx,
                           ObDtlMsgType type) :
-    ObDtlAsynSender(channels, ch_info, is_transmit),
+    ObDtlAsynSender(channels),
     timeout_ts_(timeout_ts),
     eval_ctx_(eval_ctx),
     type_(type)
@@ -85,10 +80,8 @@ class ObDfcDrainAsynSender : public ObDtlAsynSender
 {
 public:
   ObDfcDrainAsynSender(ObIArray<ObDtlChannel*> &channels,
-                      ObDtlChTotalInfo *ch_info,
-                      bool is_transmit,
                       int64_t timeout_ts) :
-    ObDtlAsynSender(channels, ch_info, is_transmit),
+    ObDtlAsynSender(channels),
     timeout_ts_(timeout_ts)
   {}
 
@@ -102,10 +95,8 @@ class ObDfcUnblockAsynSender : public ObDtlAsynSender
 {
 public:
   ObDfcUnblockAsynSender(ObIArray<ObDtlChannel*> &channels,
-                      ObDtlChTotalInfo *ch_info,
-                      bool is_transmit,
                       ObDtlFlowControl &dfc) :
-    ObDtlAsynSender(channels, ch_info, is_transmit),
+    ObDtlAsynSender(channels),
     dfc_(dfc),
     unblock_cnt_(0)
   {}

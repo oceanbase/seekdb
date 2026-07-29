@@ -153,10 +153,10 @@ int ObSchema2DDLSql::convert(
     if (OB_SUCC(ret)) {
       if (key_buf_write > 0) {
         n = snprintf(sql_buf + sql_buf_write, buf_size - sql_buf_write,
-            ", primary key(%s)) engine = innodb%s", primary_key_buf, part_def.ptr());
+            ", primary key(%s))%s", primary_key_buf, part_def.ptr());
       } else {
         n = snprintf(sql_buf + sql_buf_write, buf_size - sql_buf_write,
-            ") engine = innodb%s", part_def.ptr());
+            ")%s", part_def.ptr());
       }
       if (n < 0) {
         ret = OB_ERR_SYS;

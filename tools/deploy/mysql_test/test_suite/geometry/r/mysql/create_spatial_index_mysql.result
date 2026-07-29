@@ -7,11 +7,7 @@ c3 GEOMETRY NOT NULL SRID 0,c4 GEOMETRY NOT NULL SRID 0,c5 GEOMETRY NOT NULL SRI
 CREATE SPATIAL INDEX idx1 on tab(c2);
 CREATE SPATIAL INDEX idx2 on tab(c3 ASC) COMMENT 'wl6968';
 ERROR HY000: Incorrect usage of spatial/fulltext/hash index and explicit index order.
-CREATE SPATIAL INDEX idx2 on tab(c3 DESC) COMMENT 'wl6968';
-ERROR HY000: Incorrect usage of spatial/fulltext/hash index and explicit index order.
 CREATE SPATIAL INDEX idx3 on tab(c4);
-CREATE SPATIAL INDEX idx4 on tab(c5 DESC) COMMENT 'Spatial index on Geometry type column';
-ERROR HY000: Incorrect usage of spatial/fulltext/hash index and explicit index order.
 SHOW INDEXES FROM tab;
 Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
 tab	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL

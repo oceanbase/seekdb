@@ -33,7 +33,6 @@ public:
   virtual void SetUp() {}
   virtual void TearDown() {}
 };
-// Local report interface.
 TEST_F(TestDeadLockUtility, interface) {
   ObDetectorUserReportInfo info;
   ObSharedGuard<char> ptr;

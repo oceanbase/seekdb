@@ -146,14 +146,12 @@ int ObColumnRedefinitionTask::init(const ObDDLTaskRecord &task_record)
 
 // Update the local SSTable complement status.
 int ObColumnRedefinitionTask::update_complete_sstable_job_status(const common::ObTabletID &tablet_id,
-                                                                 const ObAddr &addr,
                                                                  const int64_t snapshot_version,
                                                                  const int64_t execution_id,
                                                                  const int ret_code,
                                                                  const ObDDLTaskInfo &addition_info)
 {
   int ret = OB_SUCCESS;
-  UNUSED(addr);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObColumnRedefinitionTask has not been inited", K(ret));

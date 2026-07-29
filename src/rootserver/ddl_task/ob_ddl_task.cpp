@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX RS
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_ddl_task.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "rootserver/ob_local_management_service.h"
@@ -151,8 +150,7 @@ ObDDLTaskSerializeField::ObDDLTaskSerializeField(const int64_t task_version,
                                                  const bool is_abort,
                                                  const int32_t sub_task_trace_id,
                                                  const bool is_unique_index,
-                                                 const bool is_global_index,
-                                                 const bool is_pre_split)
+                                                 const bool is_global_index)
 {
   task_version_ = task_version;
   parallelism_ = parallelism;
@@ -161,7 +159,6 @@ ObDDLTaskSerializeField::ObDDLTaskSerializeField(const int64_t task_version,
   sub_task_trace_id_ = sub_task_trace_id;
   is_unique_index_ = is_unique_index;
   is_global_index_ = is_global_index;
-  is_pre_split_ = is_pre_split;
 }
 
 void ObDDLTaskSerializeField::reset()
@@ -173,7 +170,6 @@ void ObDDLTaskSerializeField::reset()
   sub_task_trace_id_ = 0;
   is_unique_index_ = false;
   is_global_index_ = false;
-  is_pre_split_ = false;
 }
 
 OB_SERIALIZE_MEMBER(ObDDLTaskSerializeField,
@@ -183,8 +179,7 @@ OB_SERIALIZE_MEMBER(ObDDLTaskSerializeField,
                     is_abort_,
                     sub_task_trace_id_,
                     is_unique_index_,
-                    is_global_index_,
-                    is_pre_split_);
+                    is_global_index_);
 
 ObCreateDDLTaskParam::ObCreateDDLTaskParam()
   : sub_task_trace_id_(0), object_id_(OB_INVALID_ID), schema_version_(0), parallelism_(0),
@@ -484,7 +479,7 @@ int ObDDLTask::serialize_params_to_message(char *buf, const int64_t buf_size, in
 {
   int ret = OB_SUCCESS;
   ObDDLTaskSerializeField serialize_field(task_version_, parallelism_, data_format_version_, is_abort_,
-                                          sub_task_trace_id_, is_unique_index_, is_global_index_, is_pre_split_);
+                                          sub_task_trace_id_, is_unique_index_, is_global_index_);
   
   if (OB_UNLIKELY(nullptr == buf || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
@@ -521,7 +516,7 @@ int ObDDLTask::deserialize_params_from_message(const char *buf, const int64_t bu
 int64_t ObDDLTask::get_serialize_param_size() const
 {
   ObDDLTaskSerializeField serialize_field(task_version_, parallelism_, data_format_version_, is_abort_,
-                                          sub_task_trace_id_, is_unique_index_, is_global_index_, is_pre_split_);
+                                          sub_task_trace_id_, is_unique_index_, is_global_index_);
   return serialize_field.get_serialize_size(); 
 }
 

@@ -2764,24 +2764,6 @@ Outputs & filters:
 SQL: use oceanbase; 
 ***************   Case 60   ***************
 
-SQL: select * from __all_virtual_zone_stat where zone='zone1'; 
-
-=========================================================
-|ID|OPERATOR  |NAME                   |EST. ROWS|COST   |
----------------------------------------------------------
-|0 |TABLE SCAN|__all_virtual_zone_stat|100000   |2000000|
-=========================================================
-
-Outputs & filters: 
--------------------------------------
-  0 - output([__all_virtual_zone_stat.zone], [__all_virtual_zone_stat.is_merging], [__all_virtual_zone_stat.status], [__all_virtual_zone_stat.server_count], [__all_virtual_zone_stat.resource_pool_count], [__all_virtual_zone_stat.unit_count], [__all_virtual_zone_stat.cluster], [__all_virtual_zone_stat.region], [__all_virtual_zone_stat.spare1], [__all_virtual_zone_stat.spare2], [__all_virtual_zone_stat.spare3], [__all_virtual_zone_stat.spare4], [__all_virtual_zone_stat.spare5], [__all_virtual_zone_stat.spare6]), filter([__all_virtual_zone_stat.zone = ?]), 
-      access([__all_virtual_zone_stat.zone], [__all_virtual_zone_stat.is_merging], [__all_virtual_zone_stat.status], [__all_virtual_zone_stat.server_count], [__all_virtual_zone_stat.resource_pool_count], [__all_virtual_zone_stat.unit_count], [__all_virtual_zone_stat.cluster], [__all_virtual_zone_stat.region], [__all_virtual_zone_stat.spare1], [__all_virtual_zone_stat.spare2], [__all_virtual_zone_stat.spare3], [__all_virtual_zone_stat.spare4], [__all_virtual_zone_stat.spare5], [__all_virtual_zone_stat.spare6]), partitions(p0), 
-      is_index_back=false, filter_before_indexback[false]
-
-*************** Case 60(end)  ************** 
-
-***************   Case 61   ***************
-
 SQL: select /*+leading(t2 t1) use_nl(t1 t2)*/ t1.c1, t2.c1 from opt.t4 t1 inner join  opt.t2 as t2 on t1.c1 = t2.c1; 
 
 =====================================================
@@ -2813,9 +2795,9 @@ Outputs & filters:
       range_key([t1.c1], [t1.c2]), range(MIN ; MAX), 
       range_cond([t1.c1 = ?])
 
-*************** Case 61(end)  ************** 
+*************** Case 60(end)  **************
 
-***************   Case 62   ***************
+***************   Case 61   ***************
 
 SQL: select /*+leading(opt.t1 opt.t2) use_nl(t1 t2)*/ t1.c1, t2.c1 from  opt.t1  as t1 inner join  opt.t2 as t2 on t1.c1 = t2.c2 order by t1.c1 desc, t2.c1 desc; 
 
@@ -2858,9 +2840,9 @@ Outputs & filters:
       is_index_back=false, 
       range_key([t2.c1]), range(MIN ; MAX)always true
 
-*************** Case 62(end)  ************** 
+*************** Case 61(end)  **************
 
-***************   Case 63   ***************
+***************   Case 62   ***************
 
 SQL: select /*+use_nl(opt.t1 opt.t2 opt.t3)*/ * from opt.t1 as t1 left join opt.t2 as t2 on t1.c1 = t2.c1 and t1.c1 = 1 and t2.c1 = 1 left join opt.t3 as t3 on t2.c1 = t3.c1 and t3.c1 in (1, 2) order by t1.c1; 
 
@@ -2915,5 +2897,4 @@ Outputs & filters:
       range_key([t3.c1]), range(MIN ; MAX), 
       range_cond([t3.c1 IN (?, ?)], [? = t3.c1])
 
-*************** Case 63(end)  ************** 
-
+*************** Case 62(end)  **************

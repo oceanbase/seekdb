@@ -21,7 +21,6 @@
 #include <cctype>
 
 #include "share/ob_define.h"
-#include "lib/stat/ob_diagnose_info.h"
 #define private public
 #define protected public
 #include "lib/file/file_directory_utils.h"
@@ -217,7 +216,6 @@ int TestDataFilePrepareUtil::init(
 
     storage_env_.clog_dir_ = clog_dir_;
 
-    storage_env_.bf_cache_miss_count_threshold_ = 10000;
     storage_env_.ethernet_speed_ = 1000000;
 
     storage_env_.clog_file_spec_.retry_write_policy_ = "normal";
@@ -344,7 +342,7 @@ int TestDataFilePrepareUtil::open()
         STORAGE_LOG(WARN, "fail to set need reserved for test", K(ret));
       } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.init(storage_env_.default_block_size_))) {
         STORAGE_LOG(WARN, "init block manager fail", K(ret));
-      } else if (OB_FAIL(OB_STORE_CACHE.init(storage_env_.bf_cache_miss_count_threshold_))) {
+      } else if (OB_FAIL(OB_STORE_CACHE.init())) {
         STORAGE_LOG(WARN, "Fail to init OB_STORE_CACHE, ", K(ret), K(storage_env_.data_dir_));
       } else if (OB_FAIL(ObIOManager::get_instance().start())) {
         STORAGE_LOG(WARN, "Fail to star io mgr", K(ret));

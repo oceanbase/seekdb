@@ -100,16 +100,19 @@ void ObTabletRuntimeInfo::fake_for_diagnose(const common::ObTabletID &tablet_id)
 
 ObTabletTablePair::ObTabletTablePair()
   : tablet_id_(), table_id_(OB_INVALID_ID)
-{}
+{
+}
 
 ObTabletTablePair::ObTabletTablePair(
-  const common::ObTabletID &tablet_id,
-  const uint64_t table_id)
+    const common::ObTabletID &tablet_id,
+    const uint64_t table_id)
   : tablet_id_(tablet_id), table_id_(table_id)
-{}
+{
+}
 
 ObTabletTablePair::~ObTabletTablePair()
-{}
+{
+}
 
 void ObTabletTablePair::reset()
 {
@@ -118,8 +121,8 @@ void ObTabletTablePair::reset()
 }
 
 int ObTabletTablePair::init(
-  const common::ObTabletID &tablet_id,
-  const uint64_t table_id)
+    const common::ObTabletID &tablet_id,
+    const uint64_t table_id)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!tablet_id.is_valid() || OB_INVALID_ID == table_id)) {

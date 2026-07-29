@@ -194,8 +194,6 @@ int ObCompactionMemPool::server_module_init(ObCompactionMemPool* &mem_pool)
 {
   int ret = OB_SUCCESS;
 
-  ObMallocAllocator *malloc_allocator = nullptr;
-
   if (OB_FAIL(mem_pool->init())) {
     LOG_WARN("failed to init compaction memory pool", K(ret));
   } else {
@@ -289,9 +287,7 @@ int ObCompactionMemPool::init()
   } else {
 
 
-    max_block_num_ = share::server_is_mini_mode()
-                   ? MINI_MODE_CHUNK_MEMORY_LIMIT / ObCompactionBufferChunk::DEFAULT_BLOCK_SIZE
-                   : CHUNK_MEMORY_LIMIT / ObCompactionBufferChunk::DEFAULT_BLOCK_SIZE;
+    max_block_num_ = CHUNK_MEMORY_LIMIT / ObCompactionBufferChunk::DEFAULT_BLOCK_SIZE;
     total_block_num_ = 0;
     is_inited_ = true;
   }

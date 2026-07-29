@@ -34,10 +34,6 @@ extern "C" {
 #define SMO_ONLY_FULL_GROUP_BY (1ULL << 5) /* support */
 #define SMO_NO_UNSIGNED_SUBTRACTION (1ULL << 6) /* support */
 #define SMO_NO_DIR_IN_CREATE (1ULL << 7)      /* support but not used */
-#define SMO_POSTGRESQL (1ULL << 8) /*not support*/
-/* bit 9 was retired with compatibility-mode cleanup */
-#define SMO_MSSQL (1ULL << 10) /*not support*/
-#define SMO_DB2 (1ULL << 11) /*not support*/
 #define MODE_MAXDB (1ULL << 12) /*not support*/
 #define SMO_NO_KEY_OPTIONS (1ULL << 13)        /* not support */
 #define SMO_NO_TABLE_OPTIONS (1ULL << 14)      /* not support */
@@ -102,20 +98,16 @@ extern "C" {
 #define COMBINE_SMO_ANSI (SMO_REAL_AS_FLOAT | SMO_PIPES_AS_CONCAT | SMO_ANSI_QUOTES | SMO_IGNORE_SPACE | \
                           SMO_ANSI)
 #define COMBINE_SMO_DB2 (SMO_PIPES_AS_CONCAT | SMO_ANSI_QUOTES | SMO_IGNORE_SPACE | SMO_NO_KEY_OPTIONS | \
-                         SMO_NO_TABLE_OPTIONS | SMO_NO_FIELD_OPTIONS | SMO_DB2)
+                         SMO_NO_TABLE_OPTIONS | SMO_NO_FIELD_OPTIONS)
 #define COMBINE_SMO_MAXDB (SMO_PIPES_AS_CONCAT | SMO_ANSI_QUOTES | SMO_IGNORE_SPACE | SMO_NO_KEY_OPTIONS | \
                            SMO_NO_TABLE_OPTIONS | SMO_NO_FIELD_OPTIONS | SMO_NO_AUTO_CREATE_USER | \
                            MODE_MAXDB)
 #define COMBINE_SMO_MSSQL (SMO_PIPES_AS_CONCAT | SMO_ANSI_QUOTES | SMO_IGNORE_SPACE | SMO_NO_KEY_OPTIONS | \
-                           SMO_NO_TABLE_OPTIONS | SMO_NO_FIELD_OPTIONS | \
-                           SMO_MSSQL)
+                           SMO_NO_TABLE_OPTIONS | SMO_NO_FIELD_OPTIONS)
 #define COMBINE_SMO_POSTGRESQL (SMO_PIPES_AS_CONCAT |  SMO_ANSI_QUOTES | SMO_IGNORE_SPACE | SMO_NO_KEY_OPTIONS | \
-                                SMO_NO_TABLE_OPTIONS | SMO_NO_FIELD_OPTIONS | \
-                                SMO_POSTGRESQL)
+                                SMO_NO_TABLE_OPTIONS | SMO_NO_FIELD_OPTIONS)
 #define COMBINE_SMO_MYSQL323 (SMO_HIGH_NOT_PRECEDENCE | SMO_MYSQL323)
 #define COMBINE_SMO_MYSQL40 (SMO_HIGH_NOT_PRECEDENCE | SMO_MYSQL40)
-
-#define ALL_SMO_COMPACT_MODE (SMO_POSTGRESQL | SMO_MSSQL | SMO_DB2)
 
 #define SMO_DEFAULT (SMO_TRADITIONAL|SMO_ONLY_FULL_GROUP_BY)
 typedef uint64_t ObSQLMode;

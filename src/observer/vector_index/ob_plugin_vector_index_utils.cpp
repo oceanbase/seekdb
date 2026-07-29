@@ -1174,7 +1174,6 @@ int ObPluginVectorIndexUtils::init_common_scan_param(storage::ObTableScanParam& 
                          true, // full_row
                          false, // index_back
                          false, // query_stat
-                         ObQueryFlag::MysqlMode, // sql_mode
                          false // read_latest
                         );
   query_flag.disable_cache();

@@ -97,7 +97,6 @@ public:
   virtual int check_all() const = 0;
   virtual void print() const = 0;
   virtual void print_need_reboot_config() const {/*do nothing*/};
-  virtual ObServerRole get_server_type() const = 0;
   virtual bool is_debug_sync_enabled() const { return false; }
   
 private:

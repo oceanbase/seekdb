@@ -2790,7 +2790,7 @@ int ObDelUpdResolver::resolve_insert_values(const ParseNode *node,
     LOG_WARN("invalid arguemnt", K(del_upd_stmt), K(node), K(session_info_), K(ret));
   }
   if (FAILEDx(table_info.values_vector_.reserve(node->num_child_ * table_info.values_desc_.count()))) {
-    // works for most cases. except label security/timestamp generation needs extend memory
+    // Works for most cases; timestamp generation needs extended memory.
     LOG_WARN("reserve memory fail", K(ret));
   }
   if (OB_SUCC(ret)) {
@@ -2915,7 +2915,6 @@ int ObDelUpdResolver::resolve_insert_values(const ParseNode *node,
                 LOG_USER_ERROR(OB_NON_DEFAULT_VALUE_FOR_GENERATED_COLUMN,
                               column_name.length(), column_name.ptr(), table_name.length(), table_name.ptr());
               }
-            } else {
             }
             const ObIArray<ObColumnRefRawExpr*> &dep_cols = table_info.part_generated_col_dep_cols_;
             if (OB_SUCC(ret) && 0 != dep_cols.count()) {

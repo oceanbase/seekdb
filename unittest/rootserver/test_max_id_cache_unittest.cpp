@@ -19,7 +19,6 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 #define  private public
-#include "rootserver/ob_local_management_service.h"
 #include "share/ob_max_id_cache.h"
 #include "share/ob_max_id_fetcher.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"

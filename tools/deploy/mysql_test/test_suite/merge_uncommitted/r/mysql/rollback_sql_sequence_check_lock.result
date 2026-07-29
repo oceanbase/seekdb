@@ -8,9 +8,7 @@ create table t1(num int, str varchar(2000), tag int);
 insert into t1 values(1, repeat('Hello OceanBase', 50), 1);
 begin;
 SAVEPOINT p1;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 select * from t1 where num = 1 for update nowait;
 ERROR HY000: Lock wait timeout exceeded; try restarting transaction
 ROLLBACK TO SAVEPOINT p1;
@@ -19,9 +17,7 @@ num	str	tag
 1	Hello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBaseHello OceanBase	1
 update t1 set str = repeat('Hello OceanBase9', 50) where num = 1;
 SAVEPOINT p2;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 select * from t1 where num = 1 for update nowait;
 ERROR HY000: Lock wait timeout exceeded; try restarting transaction
 ROLLBACK TO SAVEPOINT p2;
@@ -32,9 +28,7 @@ select * from t1 where num = 1 for update nowait;
 num	str	tag
 1	Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9Hello OceanBase9	1
 begin;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 select * from t1 where num = 1 for update nowait;
 ERROR HY000: Lock wait timeout exceeded; try restarting transaction
 rollback;
@@ -45,9 +39,7 @@ begin;
 update t1 set str = repeat('Hello OceanBase0.', 50) where num = 1;
 select * from t1 where num = 1 for update nowait;
 ERROR HY000: Lock wait timeout exceeded; try restarting transaction
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 select * from t1 where num = 1 for update nowait;
 ERROR HY000: Lock wait timeout exceeded; try restarting transaction
 commit;

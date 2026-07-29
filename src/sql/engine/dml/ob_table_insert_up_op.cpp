@@ -313,7 +313,7 @@ int ObTableInsertUpOp::inner_get_next_row()
       LOG_WARN("fail to do insert_up", K(ret));
     } else {
       if (OB_FAIL(plan_ctx->sync_last_value_local())) {
-        LOG_WARN("failed to sync value globally", K(ret));
+        LOG_WARN("failed to sync auto-increment cache locally", K(ret));
       }
       ObUpdRtDef &upd_rtdef = insert_up_rtdefs_.at(0).upd_rtdef_;
       plan_ctx->set_affected_rows(my_session->get_capability().cap_flags_.OB_CLIENT_FOUND_ROWS ?

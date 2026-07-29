@@ -2059,7 +2059,6 @@ int ObDMLResolver::resolve_basic_column_item(const TableItem &table_item,
       } else if (current_scope_ == T_UPDATE_SCOPE || current_scope_ == T_INSERT_SCOPE) {
         //do nothing include is false
       } else if (ObResolverUtils::is_restore_user(*session_info_)
-                 || ObResolverUtils::is_drc_user(*session_info_)
                  || session_info_->is_inner()) {
         include_hidden = true;
       } else {
@@ -3914,6 +3913,7 @@ int ObDMLResolver::resolve_str_const(const ParseNode &parse_tree, ObString& path
   ObCollationType collation_connection = CS_TYPE_INVALID;
   ObCharsetType character_set_connection = CHARSET_INVALID;
   bool enable_decimal_int = false;
+  share::ObCompatType compat_type = share::COMPAT_MYSQL57;
   bool enable_mysql_compatible_dates = false;
   if (OB_ISNULL(params_.expr_factory_) || OB_ISNULL(params_.session_info_)) {
     ret = OB_NOT_INIT;
@@ -3938,6 +3938,7 @@ int ObDMLResolver::resolve_str_const(const ParseNode &parse_tree, ObString& path
                                              &parents_expr_info,
                                              session_info->get_sql_mode(),
                                              enable_decimal_int,
+                                             compat_type,
                                              enable_mysql_compatible_dates,
                                              session_info->get_min_const_integer_precision(),
                                              nullptr != params_.secondary_namespace_))) {
@@ -10001,18 +10002,8 @@ int ObDMLResolver::resolve_global_hint(const ParseNode &hint_node,
       break;
     }
     case T_TRANS_PARAM: {
-      CHECK_HINT_PARAM(hint_node, 2) {
-        if (child1->type_ == T_VARCHAR) {
-          ObString trans_param_str;
-          trans_param_str.assign_ptr(child0->str_value_, static_cast<int32_t>(child0->str_len_));
-          if (!trans_param_str.case_compare("ENABLE_EARLY_LOCK_RELEASE")) {
-            trans_param_str.assign_ptr(child1->str_value_, static_cast<int32_t>(child1->str_len_));
-            if (!trans_param_str.case_compare("true")) {
-              global_hint.enable_lock_early_release_ = true;
-            }
-          }
-        }
-      }
+      // TRANS_PARAM is kept as a generic hint syntax, but seekdb currently has
+      // no supported transaction parameter that can be controlled by it.
       break;
     }
     case T_OPT_PARAM_HINT: {
@@ -10029,24 +10020,6 @@ int ObDMLResolver::resolve_global_hint(const ParseNode &hint_node,
         }
         if (OB_SUCC(ret) && OB_FAIL(global_hint.opt_params_.add_opt_param_hint(param_name, val))) {
           LOG_WARN("failed to add opt param hint", K(param_name), K(val));
-        }
-      }
-      break;
-    }
-    case T_OB_DDL_SCHEMA_VERSION: {
-      CHECK_HINT_PARAM(hint_node, 2) {
-        ObDDLSchemaVersionHint ddl_schema_version_hint;
-        if (OB_FAIL(resolve_table_relation_in_hint(*child0,
-                                                   ddl_schema_version_hint.table_))) {
-          LOG_WARN("failed to resolve simple table list in hint", K(ret));
-        } else if (T_INT != child1->type_) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected value type in ddl schema version",
-                   "type", get_type_name(child1->type_));
-        } else if (OB_FALSE_IT(ddl_schema_version_hint.schema_version_ = child1->value_)) {
-        } else if (OB_FAIL(global_hint.ob_ddl_schema_versions_.push_back(
-                               ddl_schema_version_hint))) {
-          LOG_WARN("failed to add ddl schema version hint", K(ret));
         }
       }
       break;

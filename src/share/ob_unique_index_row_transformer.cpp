@@ -51,7 +51,7 @@ int ObUniqueIndexRowTransformer::check_mysql_need_shadow_columns(
     LOG_WARN("invalid arguments", K(ret), K(row), K(unique_key_cnt));
   } else {
     bool rowkey_has_null = false;
-    // mysql compatible: when at least one column of unique key is null, fill the shadow columns
+    // MySQL unique indexes use shadow columns when any unique-key column is NULL.
     for (int64_t i = 0; OB_SUCC(ret) && i < unique_key_cnt && !rowkey_has_null; ++i) {
       const int64_t idx = NULL == projector ? i : projector->at(i);
       if (idx >= row.count_) {

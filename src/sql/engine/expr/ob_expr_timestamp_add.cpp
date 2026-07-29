@@ -51,7 +51,7 @@ inline int ObExprTimeStampAdd::calc_result_type3(ObExprResType &type,
   type.set_length(common::ObAccuracy::MAX_ACCURACY2[0][common::ObDateTimeType].precision_
     + common::ObAccuracy::MAX_ACCURACY2[0][common::ObDateTimeType].scale_ + 1);
   type.set_collation_level(common::CS_LEVEL_IMPLICIT);
-  //not connection collation. compatible with mysql.
+  // MySQL uses the server default collation here rather than the connection collation.
   type.set_collation_type(common::ObCharset::get_default_collation(common::ObCharset::get_default_charset()));
   unit.set_calc_type(ObIntType);
   interval.set_calc_type(ObIntType);

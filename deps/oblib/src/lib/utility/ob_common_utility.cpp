@@ -32,31 +32,6 @@ namespace common
 _RLOCAL(char*, g_stackaddr);
 _RLOCAL(size_t, g_stacksize);
 
-const char *print_server_role(const ObServerRole server_role)
-{
-  const char *role_string = NULL;
-  switch (server_role) {
-    case OB_CHUNKSERVER:
-      role_string = "chunkserver";
-      break;
-    case OB_MERGESERVER:
-      role_string = "mergeserver";
-      break;
-    case OB_ROOTSERVER:
-      role_string = "rootserver";
-      break;
-    case OB_UPDATESERVER:
-      role_string = "updateserver";
-      break;
-    case OB_SERVER:
-      role_string = "observer";
-      break;
-    default:
-      role_string = "invalid_role";
-  }
-  return role_string;
-}
-
 constexpr static int64_t reserved_stack_size = 32L << 10;
 STATIC_ASSERT(reserved_stack_size < STACK_RESERVED_SIZE,
     "default reserved stack size should be less than stack size reserved in smart call");

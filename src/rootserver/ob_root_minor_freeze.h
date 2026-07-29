@@ -29,13 +29,13 @@ class ObRootMinorFreeze
 {
 public:
   ObRootMinorFreeze();
-  virtual ~ObRootMinorFreeze();
+  ~ObRootMinorFreeze();
 
   int init();
   void start();
   void stop();
   int destroy();
-  int try_minor_freeze(const obcall::ObRootMinorFreezeArg &arg) const;
+  int try_minor_freeze(const obcall::ObMinorFreezeArg &arg) const;
 private:
   int check_cancel() const;
 
@@ -43,7 +43,7 @@ private:
   bool stopped_;
 };
 
-}
-}
+} // namespace rootserver
+} // namespace oceanbase
 
-#endif /* OCEANBASE_ROOTSERVER_OB_ROOT_MINOR_FREEZE_H_ */
+#endif // OCEANBASE_ROOTSERVER_OB_ROOT_MINOR_FREEZE_H_

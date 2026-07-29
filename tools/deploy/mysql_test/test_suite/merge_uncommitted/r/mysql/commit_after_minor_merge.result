@@ -30,9 +30,7 @@ c1	c2
 2	2
 3	3
 4	4
-alter system major freeze tenant = sys;
-alter system major freeze tenant = all_user;
-alter system major freeze tenant = all_meta;
+alter system major freeze;
 select * from test_commit_after_minor_merge_t;
 c1	c2
 0	10
@@ -43,9 +41,7 @@ c1	c2
 insert into test_commit_after_minor_merge_t values (5,5);
 insert into test_commit_after_minor_merge_t values (6,6);
 delete from test_commit_after_minor_merge_t where c1 <= 2;
-alter system major freeze tenant = sys;
-alter system major freeze tenant = all_user;
-alter system major freeze tenant = all_meta;
+alter system major freeze;
 select * from test_commit_after_minor_merge_t;
 c1	c2
 3	3

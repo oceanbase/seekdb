@@ -22,7 +22,6 @@ namespace oceanbase
 using namespace share;
 namespace storage
 {
-
 ObCreateRuntimePrepareLog::ObCreateRuntimePrepareLog(omt::ObServerRuntimeMeta &meta)
   : meta_(meta)
 {
@@ -45,6 +44,7 @@ bool ObCreateRuntimeCommitLog::is_valid() const
 }
 
 OB_SERIALIZE_MEMBER(ObCreateRuntimeCommitLog);
+
 ObCreateRuntimeAbortLog::ObCreateRuntimeAbortLog()
 {
 }
@@ -60,6 +60,7 @@ ObUpdateServerResourcesLog::ObUpdateServerResourcesLog(share::ObServerRuntimeCon
   : runtime_config_(runtime_config)
 {
 }
+
 bool ObUpdateServerResourcesLog::is_valid() const
 {
   return runtime_config_.is_valid();
@@ -71,6 +72,7 @@ ObUpdateRuntimeSuperBlockLog::ObUpdateRuntimeSuperBlockLog(ObServerRuntimeSuperB
   : super_block_(super_block)
 {
 }
+
 bool ObUpdateRuntimeSuperBlockLog::is_valid() const
 {
   return super_block_.is_valid();

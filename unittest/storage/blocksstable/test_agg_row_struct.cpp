@@ -57,14 +57,11 @@ public:
 
 protected:
   ObArenaAllocator allocator_;
-  int64_t data_version_;
 };
 
 TestAggRow::TestAggRow()
     : allocator_()
-{
-  data_version_ = cal_version(1, 0, 0, 0);
-}
+{}
 TestAggRow::~TestAggRow()
 {
 }
@@ -418,7 +415,7 @@ TEST_F(TestAggRow, test_agg_row)
   }
 
   ObAggRowWriter row_writer;
-  OK(row_writer.init(agg_cols, agg_row, data_version_, allocator_));
+  OK(row_writer.init(agg_cols, agg_row, allocator_));
   int64_t buf_size = row_writer.get_serialize_data_size();
   char *buf = reinterpret_cast<char *>(allocator_.alloc(buf_size));
   ASSERT_NE(nullptr, buf);

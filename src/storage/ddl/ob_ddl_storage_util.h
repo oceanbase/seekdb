@@ -26,6 +26,8 @@ namespace storage
 class ObDDLStorageUtil
 {
 public:
+  static constexpr int64_t MACRO_SEQ_STEP = 1LL << 25;
+
   static int check_null_and_length(
       const bool is_index_table,
       const bool has_lob_rowkey,

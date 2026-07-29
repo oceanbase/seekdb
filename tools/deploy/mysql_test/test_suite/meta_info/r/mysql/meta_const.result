@@ -1,4 +1,4 @@
-alter system flush plan cache global;
+alter system flush plan cache;
 select 3;
 Catalog	Database	Table	Table_alias	Column	Column_alias	Type	Length	Max length	Is_null	Flags	Decimals	Charsetnr
 def					3	8	20	1	N	32897	0	63

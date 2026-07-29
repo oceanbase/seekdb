@@ -200,7 +200,6 @@ protected:
   ObPxInterruptP interrupt_proc_;
   ObOpMetric metric_;
   dtl::ObDtlChanAgent chs_agent_;
-  bool use_bcast_opt_;
   ObPxPartChInfo part_ch_info_;
   dtl::ObDtlChTotalInfo *ch_info_;
   bool sample_done_;

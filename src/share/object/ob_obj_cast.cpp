@@ -6013,7 +6013,7 @@ static int string_number(const ObObjType expect_type, ObObjCastParams &params,
         }
         bool is_neg = (str[i] == '-');
         int tmp_ret = OB_SUCCESS;
-        const ObAccuracy &def_acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][expect_type];
+        const ObAccuracy &def_acc = ObAccuracy::DDL_DEFAULT_ACCURACY[expect_type];
         const ObPrecision prec = def_acc.get_precision();
         const ObScale scale = def_acc.get_scale();
         const ObNumber *bound_num = NULL;
@@ -7439,9 +7439,9 @@ static int bit_geometry(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-bool ob_objcast_is_enum_set_with_subschema(const ObObj &in);  // moved definition to datum_cast.cpp(remove static, rename, and export)
+bool ob_objcast_is_enum_set_with_subschema(const ObObj &in);
 
-int ob_objcast_common_enumset_string(const ObObj &in, ObObjCastParams &params, ObTextStringResult &text_result);  // moved definition to datum_cast.cpp(remove static, rename, and export, real exec_ctx hidden dependency)
+int ob_objcast_common_enumset_string(const ObObj &in, ObObjCastParams &params, ObTextStringResult &text_result);
 
 static int enumset_enumset(const ObExpectType &expect_type, ObObjCastParams &params,
                            const ObObj &in, ObObj &out)
@@ -9541,7 +9541,7 @@ static int pl_extend_sql_udt(const ObObjType expect_type, ObObjCastParams &param
   return ret;
 }
 
-int ob_objcast_string_collection(const ObObjType expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out, const ObCastMode cast_mode);  // moved definition to datum_cast.cpp(remove static, rename, and export)
+int ob_objcast_string_collection(const ObObjType expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out, const ObCastMode cast_mode);
 
 static int pl_extend_geometry(const ObObjType expect_type, ObObjCastParams &params,
                               const ObObj &in, ObObj &out, const ObCastMode cast_mode)
@@ -12404,8 +12404,6 @@ int ob_obj_accuracy_check_only(const ObAccuracy &accuracy, const ObCollationType
   return ret;
 }
 
-// ob_obj_to_ob_time_with_date moved definition to sql/engine/expr/ob_datum_cast.cpp(transitional state)
-// ob_obj_to_ob_time_without_date moved definition to sql/engine/expr/ob_datum_cast.cpp(transitional state)
 
 int ObObjCaster::to_type(const ObObjType expect_type, ObCastCtx &cast_ctx,
                          const ObObj &in_obj, ObObj &buf_obj, const ObObj *&res_obj)
@@ -12659,7 +12657,7 @@ int ObObjCaster::to_type(const ObExpectType &expect_type,
 
 const ObJsonZeroVal OB_JSON_ZERO = ObJsonZeroVal(); // binary json null
 
-// moved definition to sql/engine/expr/ob_datum_cast.cpp(transitional state)
+
 
 /**
  * Monotonic means that:
@@ -12730,7 +12728,7 @@ int ObObjCaster::is_const_consistent(const ObObjMeta &const_mt,
  * doc:  
  */
 
-// moved definition to sql/engine/expr/ob_datum_cast.cpp(transitional state)
+
 
 /**
  * @brief ObObjCaster::get_obj_param_text

@@ -10,9 +10,7 @@ insert into t1_fuse values(2, 1, 1);
 insert into t1_fuse values(1, 1, 1);
 update t1_fuse set b = 2 where a = 2;
 update t1_fuse set b = 3 where a = 2;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 select * from t1_fuse where a = 2;
 a	b	c
 2	3	1

@@ -45,10 +45,10 @@ int ObExprBool::calc_result_type1(ObExprResType &type,
   } else {
     const ObObjType &calc_type = ObDoubleType;
     type1.set_calc_type(calc_type);
-    const ObAccuracy &calc_acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][calc_type];
+    const ObAccuracy &calc_acc = ObAccuracy::DDL_DEFAULT_ACCURACY[calc_type];
     type1.set_calc_accuracy(calc_acc);
   }
-  const ObAccuracy &res_acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][ObInt32Type];
+  const ObAccuracy &res_acc = ObAccuracy::DDL_DEFAULT_ACCURACY[ObInt32Type];
   type.set_type(ObInt32Type);
   type.set_accuracy(res_acc);
   ObExprOperator::calc_result_flag1(type, type1);

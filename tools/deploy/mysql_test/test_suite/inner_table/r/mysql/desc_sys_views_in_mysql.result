@@ -1480,7 +1480,7 @@ cnt
 desc oceanbase.DBA_OB_FREEZE_INFO;
 Field	Type	Null	Key	Default	Extra
 FROZEN_SCN	bigint(20) unsigned	NO		NULL	
-CLUSTER_VERSION	bigint(20)	NO		NULL	
+DATA_VERSION	bigint(20)	NO		NULL	
 SCHEMA_VERSION	bigint(20)	NO		NULL	
 GMT_CREATE	timestamp(6)	YES			
 GMT_MODIFIED	timestamp(6)	YES			

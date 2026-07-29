@@ -146,7 +146,6 @@ public:
   const LSN &get_base_lsn_used_for_block_gc() const;
   int get_min_block_info_for_gc(block_id_t &block_id, share::SCN &max_scn);
   int get_min_block_info(block_id_t &block_id, share::SCN &min_scn);
-  // ===================== NetService end ========================
   LogStorage *get_log_storage() { return &log_storage_; }
   LogStorage *get_log_meta_storage() { return &log_meta_storage_; }
   int get_total_used_disk_space(int64_t &total_used_size_byte,

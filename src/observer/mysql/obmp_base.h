@@ -91,7 +91,8 @@ protected:
                        const sql::ObMultiStmtItem &multi_stmt_item,
                        sql::ObSQLSessionInfo &session) const;
   int do_after_process(sql::ObSQLSessionInfo &session,
-                       bool async_resp_used) const;
+                       bool async_resp_used,
+                       int process_ret) const;
   // reset warning buffer err msg, for inner retry
   void setup_wb(sql::ObSQLSessionInfo &session);
   void clear_wb_content(sql::ObSQLSessionInfo &session);
@@ -149,13 +150,10 @@ public:
 
   virtual void operator()(const ObMemAttr &attr, int64_t add_size) override
   {
-    //You can use:
-    //alter system set_tp tp_no=405, error_code=label_high64, frequency=1;
-    //alter system set_tp tp_no=406, error_code=label_low64, frequency=1;
-    //to inject a monitored lib::ObLabel.
-    //When this injection takes effect,
-    //the maximum memory usage will only be counted for the specified label.
-    //tp_no=405 and tp_no=406 need to be used at the same time
+    // EN_SQL_MEMORY_LABEL_HIGH64 and EN_SQL_MEMORY_LABEL_LOW64 inject the two
+    // halves of a monitored lib::ObLabel. Both events must be set together.
+    // When the injection takes effect, the maximum memory usage is counted
+    // only for the specified label.
 
     //To obtain the label_high64 and label_low64 values of an lib::ObLabel,
     //you can use the tool './label2int64 LabelName' to easily retrieve them.

@@ -78,7 +78,6 @@ int ObDBMSSchedulerMysql::enable(
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
-  ObString zone;
   ObDMLSqlSplicer dml;
   ObSqlString sql;
   int64_t affected_rows = 0;

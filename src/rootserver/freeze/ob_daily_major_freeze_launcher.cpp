@@ -188,10 +188,10 @@ int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
           if (OB_FAIL(ObMajorFreezeHelper::major_freeze(param))) {
             if ((OB_TIMEOUT == ret)) {
               ret = OB_EAGAIN; // in order to try launch major freeze again, set ret = OB_EAGAIN here
-              LOG_WARN("may be ddl confilict, will try to launch major freeze again", KR(ret), K(param),
+              LOG_WARN("may be ddl confilict, will try to launch major freeze again", KR(ret),
                        "sleep_us", MAJOR_FREEZE_RETRY_INTERVAL_US * MAJOR_FREEZE_RETRY_LIMIT);
             } else {
-              LOG_ERROR("fail to major freeze", K(param), KR(ret));
+              LOG_ERROR("fail to major freeze", KR(ret));
             }
           } else {
             already_launch_ = true;
@@ -203,7 +203,7 @@ int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
           // maybe use a new err code is better(OB_MAJRO_FREEZE_EAGAIN)
           if (OB_EAGAIN == ret) {
             LOG_WARN("leader switch or ddl confilict, will try to launch major freeze again",
-              KR(ret), K(param), "sleep_us", MAJOR_FREEZE_RETRY_INTERVAL_US * MAJOR_FREEZE_RETRY_LIMIT);
+              KR(ret), "sleep_us", MAJOR_FREEZE_RETRY_INTERVAL_US * MAJOR_FREEZE_RETRY_LIMIT);
             int64_t usleep_cnt = 0;
             while (!stop_ && (usleep_cnt < MAJOR_FREEZE_RETRY_LIMIT)) {
               ++usleep_cnt;

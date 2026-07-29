@@ -17,7 +17,6 @@
 #include "alloc_func.h"
 #include "lib/alloc/ob_malloc_allocator.h"
 #include "lib/utility/ob_tracepoint.h"
-#include "lib/errsim_module/ob_errsim_module_interface.h"
 
 using namespace oceanbase;
 using namespace oceanbase::common;
@@ -216,13 +215,6 @@ bool errsim_alloc(const ObMemAttr &attr)
 {
   int en4_val = (int)EventTable::EN_4;
   bool bret = OB_SUCCESS != en4_val;
-#ifdef ERRSIM
-  const ObErrsimModuleType type = THIS_WORKER.get_module_type();
-  if (is_errsim_module(type.type_)) {
-    //errsim alloc memory failed.
-    bret = true;
-  }
-#endif
   if (bret) {
     AllocFailedCtx &afc = g_alloc_failed_ctx();
     afc.reason_ = AllocFailedReason::ERRSIM_INJECTION;

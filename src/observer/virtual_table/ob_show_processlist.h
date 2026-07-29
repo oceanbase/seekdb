@@ -102,8 +102,6 @@ private:
              share::schema::ObSchemaGetterGuard* schema_guard,
              const share::schema::ObTableSchema *table_schema);
     inline void reset();
-  public:
-    bool has_process_privilege();
   private:
       ObIAllocator *allocator_;
       common::ObScanner *scanner_;

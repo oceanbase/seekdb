@@ -369,11 +369,6 @@ public:
   //called before put session to freelist: unlock/set invalid
   virtual void reset(bool skip_sys_var = false);
   void reset_user_var();
-  void set_session_pool(ObSQLSessionPool *session_pool)
-  {
-    session_pool_ = session_pool;
-  }
-  ObSQLSessionPool *get_session_pool() { return session_pool_; }
   virtual void clean_status();
   //setters
   int reset_timezone();
@@ -425,7 +420,7 @@ public:
                     const bool need_check_valid /* true */);
   //getters
   const common::ObString get_runtime_name() const;
-  
+
   // Request delivery is bound to the single server runtime.
   int set_autocommit(bool autocommit);
   int get_autocommit(bool &autocommit) const
@@ -1683,7 +1678,6 @@ private:
 protected:
 private:
   static const int64_t CACHED_SYS_VAR_VERSION = 721;// a magic num
-  ObSQLSessionPool *session_pool_;
   // data structure related:
   common::ObRecursiveMutex query_mutex_;//mutex multiple query requests on the same session
   common::ObRecursiveMutex thread_data_mutex_;//mutex multiple threads for concurrent read and write to the same session member, protecting the consistency of thread_data_

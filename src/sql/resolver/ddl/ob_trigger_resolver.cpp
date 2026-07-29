@@ -1373,7 +1373,7 @@ int ObTriggerInfo::fill_package_body_source(const ObTriggerInfo &trigger_info,
 }  // namespace oceanbase
 
 // ===== definition moved from share/schema/ob_trigger_info.cpp =====
-// real user of this module's symbol(previously share->upper-layer inverted include); declaration remains in share header, resolved at link time(transitional state)
+
 namespace oceanbase
 {
 namespace share

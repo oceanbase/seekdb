@@ -218,7 +218,7 @@ public: // derived from ObITable
   // rowkey_len is the length of the row key in columns and new_row(NB: can we encapsulate it better?)
   // columns is the schema of the new_row, it both contains the row key and row value
   // update_idx is the index of the updated columns for update
-  // old_row is the old version of the row for set action and is consumed by the local Change Stream
+  // old_row is the complete old version of the row for an update.
   // new_row is the new version of the row for set action, it only contains the necessary columns for update and entire columns for insert
   virtual int set(
       const storage::ObTableIterParam &param,
@@ -299,7 +299,6 @@ public: // derived from ObITable
   // replay_row is used to replay rows in redo log for follower
   // ctx is the writer tx's context, we need the scn, tx_id for fulfilling the tx node
   // mmi is mutator iterator for replay
-  // decrypt_buf is used for decryption
   virtual int replay_row(
       storage::ObStoreCtx &ctx,
       const share::SCN &scn,
@@ -357,7 +356,7 @@ public:
     return ObITable::get_end_scn() == ObITable::get_start_scn() &&
       share::ObScnRange::MIN_SCN == get_max_end_scn();
   }
-  void fill_compaction_param_(compaction::ObTabletMergeDagParam &param);
+  void fill_merge_dag_param_(compaction::ObTabletMergeDagParam &param);
   int resolve_snapshot_version_();
   int resolve_max_end_scn_();
   // User should take response of the recommend scn. All version smaller than

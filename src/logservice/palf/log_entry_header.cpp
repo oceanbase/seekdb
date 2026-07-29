@@ -15,9 +15,7 @@
  */
 
 #include "log_entry_header.h"
-#include "lib/checksum/ob_parity_check.h"   // parity_check
 #include "lib/checksum/ob_crc64.h"          // ob_crc64
-#include "share/rc/ob_server_runtime.h"        // SERVER_ID
 #include "logservice/ob_log_base_header.h"  // ObLogBaseHeader
 
 namespace oceanbase
@@ -234,6 +232,9 @@ DEFINE_SERIALIZE(LogEntryHeader)
   int64_t new_pos = pos;
   if (OB_UNLIKELY(NULL == buf || buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_UNLIKELY(LOG_ENTRY_HEADER_VERSION != version_)) {
+    ret = OB_VERSION_NOT_MATCH;
+    PALF_LOG(WARN, "unsupported log entry header version", K(ret), K_(version));
   } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, new_pos, magic_))
              || OB_FAIL(serialization::encode_i16(buf, buf_len, new_pos, version_))
              || OB_FAIL(serialization::encode_i32(buf, buf_len, new_pos, log_size_))
@@ -253,9 +254,13 @@ DEFINE_DESERIALIZE(LogEntryHeader)
   int64_t new_pos = pos;
   if (OB_UNLIKELY(NULL == buf || data_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if ((OB_FAIL(serialization::decode_i16(buf, data_len, new_pos, &magic_)))
-              || OB_FAIL(serialization::decode_i16(buf, data_len, new_pos, &version_))
-              || OB_FAIL(serialization::decode_i32(buf, data_len, new_pos, &log_size_))
+  } else if (OB_FAIL(serialization::decode_i16(buf, data_len, new_pos, &magic_))
+             || OB_FAIL(serialization::decode_i16(buf, data_len, new_pos, &version_))) {
+    ret = OB_BUF_NOT_ENOUGH;
+  } else if (OB_UNLIKELY(LOG_ENTRY_HEADER_VERSION != version_)) {
+    ret = OB_VERSION_NOT_MATCH;
+    PALF_LOG(WARN, "unsupported log entry header version", K(ret), K_(version));
+  } else if (OB_FAIL(serialization::decode_i32(buf, data_len, new_pos, &log_size_))
               || OB_FAIL(scn_.fixed_deserialize(buf, data_len, new_pos))
               || OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &data_checksum_))
               || OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &flag_))) {

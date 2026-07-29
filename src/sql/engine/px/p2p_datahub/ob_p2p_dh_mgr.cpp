@@ -24,7 +24,6 @@ using namespace oceanbase;
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::sql;
-using namespace oceanbase::obcall;
 
 ObP2PDatahubManager &ObP2PDatahubManager::instance()
 {

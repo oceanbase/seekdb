@@ -27,7 +27,7 @@ namespace storage
 class ObLobRetryUtil
 {
 public:
-  static bool is_remote_ret_can_retry(int ret_code);
+  static bool is_retryable_error(int ret_code);
   static int check_need_retry(ObLobAccessParam &param, const int error_code, const int retry_cnt, bool &need_retry);
 
 };

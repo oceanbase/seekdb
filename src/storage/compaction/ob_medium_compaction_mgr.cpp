@@ -446,6 +446,9 @@ int ObMediumCompactionInfoList::init(
   } else if (OB_ISNULL(input_list)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(input_list));
+  } else if (OB_UNLIKELY(!input_list->is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("input medium info list is invalid", K(ret), KPC(input_list));
   } else {
     allocator_ = &allocator;
     set_basic_info(*input_list);
@@ -464,6 +467,10 @@ int ObMediumCompactionInfoList::init(
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
+  } else if (OB_UNLIKELY(!extra_medium_info.is_valid()
+                         || extra_medium_info.last_compaction_type_ >= ObMediumCompactionInfo::COMPACTION_TYPE_MAX)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid extra medium info", K(ret), K(extra_medium_info));
   } else {
     allocator_ = &allocator;
     ObMediumCompactionInfo *medium_info = nullptr;
@@ -599,6 +606,7 @@ int ObMediumCompactionInfoList::deserialize(
   } else if (OB_UNLIKELY(!inner_is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("medium info list is invalid", K(ret), KPC(this));
+    reset();
   } else {
     is_inited_ = true;
     pos = new_pos;

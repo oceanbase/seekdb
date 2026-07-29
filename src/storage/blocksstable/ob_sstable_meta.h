@@ -24,7 +24,6 @@
 #include "storage/blocksstable/index_block/ob_sstable_meta_info.h"
 #include "share/scn.h"
 #include "storage/tablet/ob_table_store_util.h"
-#include "storage/blocksstable/ob_table_flag.h"
 #include "storage/blocksstable/ob_column_checksum_struct.h"
 namespace oceanbase
 {
@@ -146,7 +145,7 @@ public:
       K(ddl_scn_), K(filled_tx_scn_),
       K(contain_uncommitted_row_), K(status_), K_(root_row_store_type), K_(compressor_type),
       K_(sstable_logic_seq),
-      K_(latest_row_store_type), K_(table_backup_flag), K_(root_macro_seq));
+      K_(latest_row_store_type), K_(root_macro_seq));
 
 public:
   int32_t version_;
@@ -182,7 +181,6 @@ public:
   common::ObCompressorType compressor_type_;
   int16_t sstable_logic_seq_;
   common::ObRowStoreType latest_row_store_type_;
-  storage::ObTableBackupFlag table_backup_flag_;  // cannot add backup flag to ObSSTableMetaChecker
   int64_t root_macro_seq_;
   share::SCN tx_data_recycle_scn_;
   //Add new variable need consider ObSSTableMetaChecker
@@ -273,7 +271,6 @@ public:
   OB_INLINE int64_t get_progressive_merge_step() const { return basic_meta_.progressive_merge_step_; }
   OB_INLINE const ObRootBlockInfo &get_root_info() const { return data_root_info_; }
   OB_INLINE const ObSSTableMacroInfo &get_macro_info() const { return macro_info_; }
-  OB_INLINE const ObTableBackupFlag &get_table_backup_flag() const { return basic_meta_.table_backup_flag_; }
   int load_root_block_data(common::ObArenaAllocator &allocator); //TODO:@jinzhu remove me after using kv cache.
   inline int transform_root_block_extra_buf(common::ObArenaAllocator &allocator)
   {

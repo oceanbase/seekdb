@@ -80,7 +80,7 @@ ObSimpleServerRuntimeSchema &ObSimpleServerRuntimeSchema::operator =(const ObSim
     reset();
     int ret = OB_SUCCESS;
     error_ret_ = other.error_ret_;
-    
+
     schema_version_ = other.schema_version_;
     name_case_mode_ = other.name_case_mode_;
     read_only_ = other.read_only_;
@@ -102,7 +102,7 @@ ObSimpleServerRuntimeSchema &ObSimpleServerRuntimeSchema::operator =(const ObSim
 void ObSimpleServerRuntimeSchema::reset()
 {
   ObSchema::reset();
-  
+
   schema_version_ = OB_INVALID_VERSION;
   runtime_name_.reset();
   name_case_mode_ = OB_NAME_CASE_INVALID;
@@ -326,7 +326,7 @@ ObSchemaMgr::ObSchemaMgr(ObIAllocator &allocator)
       allocator_(allocator),
       schema_version_(OB_INVALID_VERSION),
       is_consistent_(true),
-      user_infos_(0, NULL, lib::ObMemAttr(ObModIds::OB_SCHEMA_RUNTIME_INFO_VEC, ObCtxIds::SCHEMA_SERVICE)),
+      user_infos_(0, NULL, lib::ObMemAttr(ObModIds::OB_SCHEMA_USER_INFO_VEC, ObCtxIds::SCHEMA_SERVICE)),
       database_infos_(0, NULL, lib::ObMemAttr(ObModIds::OB_SCHEMA_DB_INFO_VEC, ObCtxIds::SCHEMA_SERVICE)),
       database_name_map_(lib::ObMemAttr(ObModIds::OB_SCHEMA_DATABASE_NAME_MAP, ObCtxIds::SCHEMA_SERVICE)),
       table_infos_(0, NULL, lib::ObMemAttr(ObModIds::OB_SCHEMA_TABLE_INFO_VEC, ObCtxIds::SCHEMA_SERVICE)),

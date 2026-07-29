@@ -144,7 +144,7 @@ struct ObSessionParam final
 public:
   ObSessionParam()
       : sql_mode_(nullptr), tz_info_wrap_(nullptr), ddl_info_(), is_load_data_exec_(false),
-        use_external_session_(false), nls_formats_{}, enable_pl_cache_(true),
+        nls_formats_{}, enable_pl_cache_(true),
         secure_file_priv_() {}
   ~ObSessionParam() = default;
 public:
@@ -152,7 +152,6 @@ public:
   ObTimeZoneInfoWrap *tz_info_wrap_;
   ObSessionDDLInfo ddl_info_;
   bool is_load_data_exec_;
-  bool use_external_session_; // need init remote inner sql conn with sess getting from sess mgr
   common::ObString nls_formats_[common::ObNLSFormatEnum::NLS_MAX];
   bool enable_pl_cache_;
   common::ObString secure_file_priv_;

@@ -17,11 +17,11 @@
 #ifndef OCEANBASE_SHARE_DEADLOCK_OB_DEADLOCK_DETECTOR_COMMON_DEFINE_H
 #define OCEANBASE_SHARE_DEADLOCK_OB_DEADLOCK_DETECTOR_COMMON_DEFINE_H
 #include "lib/container/ob_array.h"
+#include "lib/container/ob_array_serialization.h"
 #include "lib/hash/ob_link_hashmap.h"
 #include "ob_deadlock_key_wrapper.h"
 #include "ob_deadlock_parameters.h"
 #include "lib/function/ob_function.h"
-#include "lib/guard/ob_unique_guard.h"
 #include "lib/guard/ob_shared_guard.h"
 #include "lib/utility/utility.h"
 #include "lib/utility/ob_print_utils.h"
@@ -127,7 +127,7 @@ public:
   template <class ...Args>
   int set_extra_info(const Args &...rest);
   TO_STRING_KV(K_(module_name), K_(resource_visitor), K_(required_resource),
-               K_(extra_columns_names), K_(extra_columns_values), K_(valid_extra_column_size));
+               K_(extra_columns_names), K_(extra_columns_values));
 private:
   enum class ValueType
   {
@@ -181,13 +181,12 @@ public:
   const ObDetectorPriority &get_priority() const;
   const ObDetectorUserReportInfo &get_user_report_info() const;
   TO_STRING_KV(K_(binary_key), K_(detector_id),
-               K_(report_time), K_(created_time),
-               K_(event_id), K_(role), K_(start_delay), K_(priority), K_(user_report_info));
+               K_(created_time), K_(event_id), K_(role), K_(start_delay),
+               K_(priority), K_(user_report_info));
 private:
   // binary key to describe user key info and identify a detector in this process
   UserBinaryKey binary_key_;
   uint64_t detector_id_;
-  int64_t report_time_;
   int64_t created_time_;// the detector created time
   uint64_t event_id_;// hash of the local detector key, detector id and creation time
   common::ObString role_;// the role this detector plays
@@ -254,9 +253,7 @@ int ObDetectorUserReportInfo::set_extra_info_(const T1 &column_name,
   static_assert(Floor < EXTRA_INFO_COLUMNS, "number of parameters reach column size limit.");
   int ret = common::OB_SUCCESS;
 
-  // reset invalid before the first assign action, set valid after the last assgin action
   if (Floor == 0) {
-    valid_extra_column_size_ = 0;
     extra_columns_names_.reset();
     extra_columns_values_.reset();
   }
@@ -278,7 +275,6 @@ int ObDetectorUserReportInfo::set_extra_info_(const T1 &column_name,
 template <int Floor>
 int ObDetectorUserReportInfo::set_extra_info_()
 {
-  valid_extra_column_size_ = Floor;
   return common::OB_SUCCESS;
 }
 

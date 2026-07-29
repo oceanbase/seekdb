@@ -575,6 +575,7 @@ int ObMemtableMultiVersionScanIterator::init(
     if (OB_FAIL(memtable->get_mvcc_engine().scan(context.store_ctx_->mvcc_acc_ctx_,
                                                  mvcc_scan_range,
                                                  context.trans_version_range_,
+                                                 param.tablet_id_,
                                                  row_iter_))) {
       TRANS_LOG(WARN, "mvcc engine scan fail", K(ret), K(mvcc_scan_range));
     } else if (OB_FAIL(bitmap_.init(read_info_->get_request_count(), read_info_->get_rowkey_count()))) {

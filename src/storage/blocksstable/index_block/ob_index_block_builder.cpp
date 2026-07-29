@@ -227,11 +227,9 @@ ObSSTableMergeRes::ObSSTableMergeRes()
     compressor_type_(ObCompressorType::INVALID_COMPRESSOR),
     nested_offset_(0),
     nested_size_(0),
-    table_backup_flag_(),
     root_row_store_type_(ObRowStoreType::MAX_ROW_STORE),
     root_macro_seq_(0)
 {
-  table_backup_flag_.clear();
   if (share::is_reserve_mode()) {
     ObMemAttr attr("SSTMrgeResArr", ObCtxIds::MERGE_RESERVE_CTX_ID);
     data_block_ids_.set_attr(attr);
@@ -278,7 +276,6 @@ void ObSSTableMergeRes::reset()
   compressor_type_ = ObCompressorType::INVALID_COMPRESSOR;
   nested_offset_ = 0;
   nested_size_ = 0;
-  table_backup_flag_.clear();
   root_row_store_type_ = ObRowStoreType::MAX_ROW_STORE;
   root_macro_seq_ = 0;
 }
@@ -293,7 +290,6 @@ bool ObSSTableMergeRes::is_valid() const
       && data_column_cnt_ > 0
       && nested_offset_ >= 0
       && nested_size_ >= 0
-      && table_backup_flag_.is_valid()
       && root_row_store_type_ < ObRowStoreType::MAX_ROW_STORE
       && root_macro_seq_ >= 0;
 }
@@ -314,7 +310,6 @@ int ObSSTableMergeRes::assign(const ObSSTableMergeRes &src)
     row_count_ = src.row_count_;
     max_merged_trans_version_ = src.max_merged_trans_version_;
     contain_uncommitted_row_ = src.contain_uncommitted_row_;
-    table_backup_flag_ = src.table_backup_flag_;
     occupy_size_ = src.occupy_size_;
     original_size_ = src.original_size_;
     data_checksum_ = src.data_checksum_;
@@ -378,15 +373,6 @@ int ObSSTableMergeRes::fill_column_checksum_for_empty_major(
     }
   }
   return ret;
-}
-
-void ObSSTableMergeRes::set_table_flag_with_macro_id_array()
-{
-  table_backup_flag_.set_no_backup();
-  table_backup_flag_.set_no_local();
-  if (!other_block_ids_.empty() || !data_block_ids_.empty()) {
-    table_backup_flag_.set_has_local();
-  }
 }
 
 int ObSSTableMergeRes::prepare_column_checksum_array(const int64_t data_column_cnt)
@@ -1567,7 +1553,6 @@ int ObSSTableIndexBuilder::close_with_macro_seq_inner(
     const ObDataStoreDesc &desc = index_store_desc_.get_desc();
     res.root_row_store_type_ = desc.get_row_store_type();
     res.compressor_type_ = desc.get_compressor_type();
-    res.set_table_flag_with_macro_id_array();
     if (OB_FAIL(res_.assign(res))) {
       STORAGE_LOG(WARN, "fail to save merge res", K(ret), K(res));
     } else {
@@ -2397,7 +2382,6 @@ int ObBaseIndexBlockBuilder::row_desc_to_meta(
     } else if (OB_FAIL(agg_row_writer_.init(
                    data_store_desc_->get_agg_meta_array(),
                    *macro_row_desc.aggregated_row_,
-                   data_store_desc_->get_data_format_version(),
                    allocator))) {
       STORAGE_LOG(WARN, "Fail to init aggregate row writer", K(ret));
     } else if (FALSE_IT(agg_row_upper_size = agg_row_writer_.get_serialize_data_size())) {
@@ -2782,11 +2766,13 @@ int ObDataIndexBlockBuilder::cal_macro_meta_block_size(const ObDatumRowkey &rowk
     meta_row_.reuse();
     meta_row_allocator_.reuse();
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(macro_meta.build_estimate_row(meta_row_,
-                                                     meta_row_allocator_,
-                                                     leaf_store_desc_->get_data_format_version()))) {
+    } else if (OB_FAIL(macro_meta.build_estimate_row(
+                   meta_row_,
+                   meta_row_allocator_,
+                   ObBaseIndexBlockBuilder::get_data_version(*leaf_store_desc_)))) {
       STORAGE_LOG(WARN, "fail to build meta row",
-                  K(ret), K(macro_meta), K(leaf_store_desc_->get_data_format_version()));
+                  K(ret), K(macro_meta),
+                  "data_version", ObBaseIndexBlockBuilder::get_data_version(*leaf_store_desc_));
     } else {
       meta_row_.row_flag_.set_flag(ObDmlFlag::DF_INSERT);
       meta_block_writer_->reuse();
@@ -3198,7 +3184,6 @@ int ObDataIndexBlockBuilder::generate_macro_meta_row_desc(
   int ret = OB_SUCCESS;
   macro_row_desc.set_merge_type(index_store_desc_->get_merge_type());
   macro_row_desc.set_end_scn(index_store_desc_->get_end_scn());
-  macro_row_desc.set_data_format_version(index_store_desc_->get_data_format_version());
   macro_row_desc.set_row_store_type(index_store_desc_->get_row_store_type());
   macro_row_desc.set_compressor_type(index_store_desc_->get_compressor_type());
   macro_row_desc.set_schema_version(index_store_desc_->get_schema_version());

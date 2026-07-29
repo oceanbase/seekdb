@@ -58,13 +58,11 @@ public:
 struct ObTabletBlockHeader final
 {
 public:
-  static const int32_t TABLET_VERSION_V1 = 1;
-  static const int32_t TABLET_VERSION_V2 = 2;
-  static const int32_t TABLET_VERSION_V3 = 3;
+  static constexpr int32_t TABLET_FORMAT_VERSION = 3;
 
   ObTabletBlockHeader()
     : is_inited_(false), pushed_inline_meta_cnt_(0),
-      version_(TABLET_VERSION_V3), length_(0),
+      version_(TABLET_FORMAT_VERSION), length_(0),
       checksum_(0), inline_meta_count_(0)
   {
   }
@@ -72,7 +70,8 @@ public:
   int init(const int32_t secondary_meta_count);
   bool is_valid() const
   {
-    return is_inited_ && version_ == TABLET_VERSION_V3  && length_ > 0 && checksum_ > 0 && inline_meta_count_ >= 0;
+    return is_inited_ && version_ == TABLET_FORMAT_VERSION
+        && length_ > 0 && inline_meta_count_ >= 0 && inline_meta_count_ <= MAX_INLINE_META_COUNT;
   }
 
   NEED_SERIALIZE_AND_DESERIALIZE;

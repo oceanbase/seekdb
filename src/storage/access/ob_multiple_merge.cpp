@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_multiple_merge.h"
 #include "share/rc/ob_module_provider.h"
 #include "ob_aggregated_store.h"
@@ -941,7 +940,6 @@ void ObMultipleMerge::report_tablet_stat()
 int ObMultipleMerge::update_and_report_tablet_stat()
 {
   int ret = OB_SUCCESS;
-  EVENT_ADD(STORAGE_READ_ROW_COUNT, scan_cnt_);
   if (NULL != access_ctx_->table_scan_stat_) {
     access_ctx_->table_scan_stat_->access_row_cnt_ += access_ctx_->table_store_stat_.logical_read_cnt_;
     access_ctx_->table_scan_stat_->rowkey_prefix_ = access_ctx_->table_store_stat_.rowkey_prefix_;
@@ -1438,7 +1436,6 @@ int ObMultipleMerge::check_filtered(const ObDatumRow &row, bool &filtered)
   } else if (!filtered && NULL != access_param_->op_filters_ && !access_param_->op_filters_->empty()) {
     // Execute filter in sql static typing engine.
     // %row is already projected to output expressions for main table scan.
-    ACTIVE_SESSION_FLAG_SETTER_GUARD(in_filter_rows);
     if (OB_FAIL(access_param_->get_op()->filter_row_outside(*access_param_->op_filters_, *skip_bit_, filtered))) {
       LOG_WARN("filter row failed", K(ret));
     }

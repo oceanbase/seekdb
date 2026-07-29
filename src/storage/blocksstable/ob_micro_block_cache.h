@@ -24,8 +24,6 @@
 #include "storage/ob_i_table.h"
 #include "storage/blocksstable/ob_micro_block_info.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
-#include "lib/stat/ob_diagnose_info.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "storage/blocksstable/ob_block_manager.h"
 
 
@@ -453,8 +451,6 @@ protected:
       const bool use_cache,
       ObStorageObjectHandle &macro_handle,
       ObIMicroBlockIOCallback &callback);
-private:
-  OB_INLINE virtual void inc_cache_miss() = 0;
 };
 
 class ObDataMicroBlockCache
@@ -509,7 +505,6 @@ private:
       const int64_t block_size,
       char *extra_buf,
       ObMicroBlockData &micro_data);
-  OB_INLINE void inc_cache_miss() override { EVENT_INC(DATA_BLOCK_CACHE_MISS); }
 private:
   common::ObConcurrentFIFOAllocator allocator_;
   DISALLOW_COPY_AND_ASSIGN(ObDataMicroBlockCache);
@@ -553,8 +548,6 @@ public:
   virtual void cache_bypass();
   virtual void cache_hit(int64_t &hit_cnt);
   virtual void cache_miss(int64_t &miss_cnt);
-private:
-  OB_INLINE void inc_cache_miss() override { EVENT_INC(INDEX_BLOCK_CACHE_MISS); }
 };
 
 

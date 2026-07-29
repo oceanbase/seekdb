@@ -15,6 +15,7 @@
  */
 
 #include "storage/tx/ob_tx_loop_worker.h"
+#include "storage/tx/ob_ts_mgr.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx/ob_weak_read_util.h"
@@ -247,7 +248,9 @@ void ObTxLoopWorker::refresh_runtime_config_()
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "unexpected transaction service", K(ret), KP(txs));
   } else {
-    txs->get_tx_elr_util().check_and_update_tx_elr_info();
+    if (OB_FAIL(txs->get_tx_elr_util().check_and_update_tx_elr_info())) {
+      TRANS_LOG(WARN, "failed to refresh ELR configuration", K(ret));
+    }
   }
 }
 

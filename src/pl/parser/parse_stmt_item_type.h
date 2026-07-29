@@ -85,12 +85,6 @@ enum PackageComplieUnit
   PACKAGE_UNIT_BODY = 2
 };
 
-enum PackageAlterOptions
-{
-  PACKAGE_ALTER_EDITIONABLE,
-  PACKAGE_ALTER_NONEDITIONABLE
-};
-
 enum TriggerAlterOptions
 {
   TRIGGER_ALTER_IF_ENABLE,

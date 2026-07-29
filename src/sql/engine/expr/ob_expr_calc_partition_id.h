@@ -98,8 +98,7 @@ public:
       subpart_num_(common::OB_INVALID_COUNT),
       partition_id_calc_type_(CALC_NORMAL),
       may_add_interval_part_(MayAddIntervalPart::NO),
-      calc_id_type_(CALC_TABLET_ID),
-      first_part_id_(OB_INVALID_ID)
+      calc_id_type_(CALC_TABLET_ID)
   {}
   virtual ~CalcPartitionBaseInfo() {
     related_table_ids_.reset();
@@ -119,7 +118,6 @@ public:
   PartitionIdCalcType partition_id_calc_type_; //used to mark expr set partition id calc type.
   MayAddIntervalPart may_add_interval_part_; // a further action if cann't found interval partition
   CalcPartIdType calc_id_type_; // mark calc tablet_id or partition_id
-  int64_t first_part_id_; // for pkey enchance, no need serialize
   TO_STRING_KV(K_(ref_table_id), K_(related_table_ids),
                K_(part_level), K_(part_type),
                K_(subpart_type), K_(part_num), K_(subpart_num),
@@ -172,7 +170,8 @@ public:
 
   explicit ObExprCalcPartitionBase(common::ObIAllocator &alloc, ObExprOperatorType type,
                                    const char *name, int32_t param_num, int32_t dimension)
-    : ObFuncExprOperator(alloc, type, name, param_num, NOT_VALID_FOR_GENERATED_COL, dimension)
+    : ObFuncExprOperator(alloc, type, name, param_num, NOT_VALID_FOR_GENERATED_COL,
+                         dimension, true /* is_internal_for_mysql */)
   {};
   virtual ~ObExprCalcPartitionBase() {}
   virtual int calc_result_typeN(ObExprResType &type,

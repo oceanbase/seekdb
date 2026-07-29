@@ -36,8 +36,7 @@ class ObStorageCacheSuite
 {
 public:
   static ObStorageCacheSuite &get_instance();
-  int init(const int64_t bf_cache_miss_count_threshold);
-
+  int init(const int64_t bf_cache_miss_count_threshold = 100);
   int set_bf_cache_miss_count_threshold(const int64_t bf_cache_miss_count_threshold);
   ObDataMicroBlockCache &get_block_cache() { return user_block_cache_; }
   ObIndexMicroBlockCache &get_index_block_cache() { return index_block_cache_; }

@@ -592,6 +592,8 @@ template<typename Key, typename Value, typename AllocHandle, typename RefHandle=
 class ObAllocatingLinkHashMap : public ObLinkHashMap<Key, Value, AllocHandle, RefHandle>
 {
 public:
+  using ObLinkHashMap<Key, Value, AllocHandle, RefHandle>::ObLinkHashMap;
+
   int create(const Key &key, Value *&value)
   {
     int ret = OB_SUCCESS;

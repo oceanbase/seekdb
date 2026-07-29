@@ -1,0 +1,85 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_CONCURRENT_LIMIT_SQL_
+#define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_CONCURRENT_LIMIT_SQL_
+
+#include "share/ob_define.h"
+#include "lib/container/ob_se_array.h"
+#include "lib/hash/ob_hashmap.h"
+#include "share/schema/ob_schema_struct.h"
+#include "observer/virtual_table/ob_virtual_table_iterator.h"
+#include "observer/virtual_table/ob_all_virtual_outline.h"
+using oceanbase::common::OB_APP_MIN_COLUMN_ID;
+namespace oceanbase
+{
+namespace sql
+{
+class ObSQLSessionInfo;
+}
+
+namespace common
+{
+class ObNewRow;
+}
+namespace share
+{
+namespace schema
+{
+class ObOutlineInfo;
+}
+}
+namespace observer
+{
+class ObAllVirtualConcurrentLimitSql : public ObAllVirtualOutlineBase
+{
+  enum OUTLINE_COLUMN
+  {
+    // Keep column ids aligned with the concurrent-limit virtual-table schema.
+    // in generated inner-table schema.
+    DATABASE_ID = OB_APP_MIN_COLUMN_ID,
+    OUTLINE_ID = OB_APP_MIN_COLUMN_ID + 1,
+    DATABASE_NAME = OB_APP_MIN_COLUMN_ID + 2,
+    OUTLINE_NAME = OB_APP_MIN_COLUMN_ID + 3,
+    OUTLINE_CONTENT = OB_APP_MIN_COLUMN_ID + 4,
+    VISIBLE_SIGNATURE = OB_APP_MIN_COLUMN_ID + 5,
+    SQL_TEXT = OB_APP_MIN_COLUMN_ID + 6,
+    CONCURRENT_NUM = OB_APP_MIN_COLUMN_ID + 7,
+    LIMIT_TARGET = OB_APP_MIN_COLUMN_ID + 8,
+  };
+public:
+  ObAllVirtualConcurrentLimitSql()
+      : ObAllVirtualOutlineBase(),
+      param_idx_(common::OB_INVALID_INDEX)
+  {}
+  ~ObAllVirtualConcurrentLimitSql() {}
+  void reset();
+  virtual int inner_open();
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+
+private:
+  int fill_cells(const share::schema::ObOutlineInfo *outline_info,
+                 const share::schema::ObMaxConcurrentParam *param);
+  int get_next_concurrent_limit_row(const share::schema::ObOutlineInfo *outline_info,
+                                    bool &is_iter_end);
+  int is_need_output(const share::schema::ObOutlineInfo *outline_info, bool &is_output);
+private:
+  int64_t param_idx_;
+  DISALLOW_COPY_AND_ASSIGN(ObAllVirtualConcurrentLimitSql);
+};
+}
+}
+#endif /* OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_CONCURRENT_LIMIT_SQL_ */

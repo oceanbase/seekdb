@@ -482,8 +482,8 @@ int ObUnLockExecutor::execute(const ObTableLockOwnerID &owner_id)
     SMART_VAR(sql::ObExecContext, exec_ctx, allocator) {
       ObSqlCtx sql_ctx;
       
-      const ObServerRuntimeSchema *runtime_schema = NULL;
       ObSchemaGetterGuard guard;
+      const ObServerRuntimeSchema *runtime_schema = nullptr;
       LinkExecCtxGuard link_guard(session, exec_ctx);
       sql::ObPhysicalPlanCtx phy_plan_ctx(allocator);
       OZ (session.init(0 /*default session id*/, &allocator));

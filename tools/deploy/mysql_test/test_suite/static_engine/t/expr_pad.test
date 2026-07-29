@@ -34,7 +34,7 @@ insert into t1 values(1, 2,
     '9.5', '10.5');
 
 --echo // Case1: normal test.测试各种类型组合, 跟不开新引擎开关进行对比
-alter system flush plan cache global;
+alter system flush plan cache;
 set @@ob_enable_plan_cache = 0;
 select rpad(null, null, null), rpad('a', 1, null), rpad(null, 1, 'a') from dual;
 select lpad(null, null, null), lpad('a', 1, null), lpad(null, 1, 'a') from dual;

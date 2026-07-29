@@ -584,8 +584,6 @@ int ObTxCtx::kill(const KillTransArg &arg, ObTxCommitCallback *&cb_list)
  * @commit_time:    STC reference
  * @expire_ts:      timestamp in micorseconds after which
  *                  commit result is not concerned for the caller
- * @app_trace_info: application level tracing infor
- *                  will be recorded in txn CommitLog
  * @request_id:     commit request identifier
  *
  * Return:
@@ -599,7 +597,6 @@ int ObTxCtx::kill(const KillTransArg &arg, ObTxCommitCallback *&cb_list)
  */
 int ObTxCtx::commit(const MonotonicTs &commit_time,
                            const int64_t &expire_ts,
-                           const common::ObString &app_trace_info,
                            const int64_t &request_id)
 {
   TRANS_LOG(DEBUG, "tx.commit", K(trans_id_));
@@ -640,8 +637,6 @@ int ObTxCtx::commit(const MonotonicTs &commit_time,
     TRANS_LOG(WARN, "access in progress", K(ret), K_(pending_write), KPC(this));
   } else if (OB_FAIL(set_commit_request_id_(request_id))) {
     TRANS_LOG(WARN, "set request id failed", K(ret), K(request_id), KPC(this));
-  } else if (OB_FAIL(set_app_trace_info_(app_trace_info))) {
-    TRANS_LOG(WARN, "set app trace info error", K(ret), K(app_trace_info), KPC(this));
   } else if (FALSE_IT(stmt_expired_time_ = expire_ts)) {
   } else {
     exec_info_.mark_write_state();
@@ -1605,8 +1600,6 @@ int ObTxCtx::on_success(ObTxLogCb *log_cb)
     CtxLockGuard guard(lock_, is_committing_() ? CtxLockGuard::MODE::ALL : CtxLockGuard::MODE::CTX);
 
     log_sync_used_time = cur_ts - log_cb->get_submit_ts();
-    ObTransStatistic::get_instance().add_clog_sync_time( log_sync_used_time);
-    ObTransStatistic::get_instance().add_clog_sync_count( 1);
     ctx_lock_wait_time = guard.get_lock_acquire_used_time();
     if (log_sync_used_time + ctx_lock_wait_time >= ObServerConfig::get_instance().clog_sync_time_warn_threshold) {
       TRANS_LOG_RET(WARN, OB_ERR_TOO_MUCH_TIME, "transaction log sync use too much time", KPC(log_cb),
@@ -2534,7 +2527,7 @@ int ObTxCtx::submit_redo_commit_info_log_(ObTxLogBlock &log_block,
   } else {
     ObTxCommitInfoLog commit_info_log(
         can_elr_, trace_info_.get_app_trace_id(),
-        trace_info_.get_app_trace_info(), exec_info_.prev_record_lsn_, exec_info_.redo_lsns_);
+        exec_info_.prev_record_lsn_, exec_info_.redo_lsns_);
 
     if (OB_FAIL(validate_commit_info_log_(commit_info_log))) {
       TRANS_LOG(WARN, "invalid commit info log", K(ret), K(commit_info_log), K(trans_id_));
@@ -3835,8 +3828,6 @@ int ObTxCtx::replay_redo_in_ctx(const ObTxRedoLog &redo_log,
     }
   }
   if (OB_SUCC(ret)) {
-    ObTransStatistic::get_instance().add_redo_log_replay_count( 1);
-    ObTransStatistic::get_instance().add_redo_log_replay_time( timeguard.get_diff());
 
   }
 
@@ -4031,8 +4022,6 @@ int ObTxCtx::replay_commit_info(const ObTxCommitInfoLog &commit_info_log,
     TRANS_LOG(WARN, "update replaying log no failed", K(ret), K(timestamp), K(part_log_no));
   } else if (OB_FAIL(exec_info_.redo_lsns_.assign(commit_info_log.get_redo_lsns()))) {
     TRANS_LOG(WARN, "set redo log offsets error", K(commit_info_log), K(*this));
-  } else if (OB_FAIL(set_app_trace_info_(commit_info_log.get_app_trace_info()))) {
-    TRANS_LOG(WARN, "set app trace info error", K(ret), K(commit_info_log), K(*this));
   } else if (OB_FAIL(set_app_trace_id_(commit_info_log.get_app_trace_id()))) {
     TRANS_LOG(WARN, "set app trace id error", K(ret), K(commit_info_log), K(*this));
   } else {
@@ -4164,8 +4153,6 @@ int ObTxCtx::replay_commit(const ObTxCommitLog &commit_log,
   const int64_t used_time = timeguard.get_diff();
   REC_TRANS_TRACE_EXT2(tlog_, replay_commit, OB_ID(ret), ret, OB_ID(used), used_time, OB_ID(offset),
                        offset.val_, OB_ID(t), timestamp, OB_ID(ref), get_ref());
-  ObTransStatistic::get_instance().add_commit_log_replay_count( 1);
-  ObTransStatistic::get_instance().add_commit_log_replay_time( used_time);
   if (OB_FAIL(ret)) {
     TRANS_LOG(WARN, "[Replay Tx] replay commit log failed", K(ret), K(used_time), K(timestamp),
               K(offset), K(commit_log), K(*this));
@@ -4222,8 +4209,6 @@ int ObTxCtx::replay_clear(const ObTxClearLog &clear_log,
   REC_TRANS_TRACE_EXT2(tlog_, replay_clear, OB_ID(ret), ret, OB_ID(used),
                        used_time, OB_ID(offset), offset.val_,
                        OB_ID(t), timestamp, OB_ID(ref), get_ref());
-  ObTransStatistic::get_instance().add_clear_log_replay_count( 1);
-  ObTransStatistic::get_instance().add_clear_log_replay_time( used_time);
   if (OB_FAIL(ret)) {
     TRANS_LOG(WARN, "[Replay Tx] replay clear log failed", K(ret), K(used_time), K(timestamp), K(offset),
               K(clear_log), K(*this));
@@ -4321,8 +4306,6 @@ int ObTxCtx::replay_abort(const ObTxAbortLog &abort_log,
   REC_TRANS_TRACE_EXT2(tlog_, replay_abort, OB_ID(ret), ret, OB_ID(used),
                        used_time, OB_ID(offset), offset.val_,
                        OB_ID(t), timestamp, OB_ID(ref), get_ref());
-  ObTransStatistic::get_instance().add_abort_log_replay_count( 1);
-  ObTransStatistic::get_instance().add_abort_log_replay_time( used_time);
 
   if (OB_FAIL(ret)) {
     TRANS_LOG(WARN, "[Replay Tx] replay abort log failed", K(ret), K(used_time), K(timestamp),
@@ -4624,6 +4607,7 @@ int ObTxCtx::refresh_rec_log_ts_()
 int ObTxCtx::get_tx_ctx_table_info_(ObTxCtxTableInfo &info)
 {
   int ret = OB_SUCCESS;
+  info.data_version_ = DATA_CURRENT_VERSION;
   // leave target_scn to MAX and the callee will choose the greatest
   // calculable scn, especially when parallel replay, the max scn of
   // a parallel replayed callback-list will be carefully choosen to
@@ -5475,8 +5459,7 @@ inline int ObTxCtx::check_status_()
  */
 int ObTxCtx::start_access(const ObTxDesc &tx_desc,
                                  ObTxSEQ &data_scn,
-                                 const int16_t branch,
-                                 const concurrent_control::ObWriteFlag &write_flag)
+                                 const int16_t branch)
 {
   int ret = OB_SUCCESS;
   int pending_write = -1;

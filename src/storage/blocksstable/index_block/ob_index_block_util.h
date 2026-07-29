@@ -38,8 +38,6 @@ int check_skip_index_valid(const share::schema::ObTableSchema &table_schema);
 enum ObSkipIndexType : uint8_t
 {
   MIN_MAX,
-  BLOOM_FILTER,
-  NGRAM_BLOOM_FILTER,
   MAX_TYPE
 };
 

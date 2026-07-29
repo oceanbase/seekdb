@@ -332,26 +332,6 @@ int ObMultiVersionValueIterator::get_next_node_for_compact(const void *&tnode)
   return ret;
 }
 
-bool ObMultiVersionValueIterator::is_first_delete_compact_node() const
-{
-  bool ret = false;
-  if (nullptr == version_iter_ || NDT_COMPACT == version_iter_->type_) {
-  } else if (cur_trans_version_ == version_iter_->trans_version_.atomic_load() &&
-             blocksstable::ObDmlFlag::DF_DELETE == version_iter_->get_dml_flag()) {
-    const ObMvccTransNode *prev = version_iter_->prev_;
-    if (nullptr == prev || cur_trans_version_ != prev->trans_version_.atomic_load()) {
-      ret = true;
-    }
-  }
-  return ret;
-}
-
-bool ObMultiVersionValueIterator::is_last_compact_node() const
-{
-  return (nullptr == version_iter_ ||
-          cur_trans_version_ != version_iter_->trans_version_.atomic_load());
-}
-
 int ObMultiVersionValueIterator::get_next_multi_version_node(const void *&tnode)
 {
   int ret = OB_SUCCESS;
@@ -412,20 +392,6 @@ int ObMultiVersionValueIterator::get_next_multi_version_node(const void *&tnode)
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "meet trans node with larger trans version", K(ret), K(cur_trans_version),
           KPC_(multi_version_iter));
-    }
-  }
-  return ret;
-}
-
-bool ObMultiVersionValueIterator::is_first_delete_multi_version_node() const
-{
-  bool ret = false;
-  if (nullptr == multi_version_iter_ || NDT_COMPACT == multi_version_iter_->type_) {
-  } else if (cur_trans_version_ == multi_version_iter_->trans_version_ &&
-             blocksstable::ObDmlFlag::DF_DELETE == multi_version_iter_->get_dml_flag()) {
-    const ObMvccTransNode *prev = multi_version_iter_->prev_;
-    if (nullptr == prev || cur_trans_version_ != prev->trans_version_) {
-      ret = true;
     }
   }
   return ret;
@@ -494,9 +460,11 @@ ObMultiVersionRowIterator::ObMultiVersionRowIterator()
       value_iter_(),
       query_engine_(NULL),
       query_engine_iter_(NULL),
+      tablet_id_(),
       insert_row_count_(0),
       update_row_count_(0),
-      delete_row_count_(0)
+      delete_row_count_(0),
+      snapshot_gc_scn_row_count_(0)
 {
 }
 
@@ -509,7 +477,8 @@ int ObMultiVersionRowIterator::init(
     ObQueryEngine &query_engine,
     ObMvccAccessCtx &ctx,
     const ObVersionRange &version_range,
-    const ObMvccScanRange &range)
+    const ObMvccScanRange &range,
+    const ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
@@ -525,6 +494,7 @@ int ObMultiVersionRowIterator::init(
     query_engine_ = &query_engine;
     ctx_ = &ctx;
     version_range_ = version_range;
+    tablet_id_ = tablet_id;
     is_inited_ = true;
   }
   return ret;
@@ -553,7 +523,7 @@ int ObMultiVersionRowIterator::get_next_row(
     } else if (NULL == (value = query_engine_iter_->get_value())) {
       TRANS_LOG(ERROR, "unexpected value null pointer", "ctx", *ctx_);
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(try_cleanout_mvcc_row_(value))) {
+    } else if (OB_FAIL(try_cleanout_mvcc_row_(tmp_key, value))) {
       TRANS_LOG(WARN, "try cleanout mvcc row failed", K(ret), "ctx", *ctx_);
     } else if (OB_FAIL(value_iter_.init(ctx_,
                                         version_range_,
@@ -571,18 +541,21 @@ int ObMultiVersionRowIterator::get_next_row(
   return ret;
 }
 
-int ObMultiVersionRowIterator::try_cleanout_mvcc_row_(ObMvccRow *value)
+int ObMultiVersionRowIterator::try_cleanout_mvcc_row_(
+    const ObMemtableKey *key,
+    ObMvccRow *value)
 {
   int ret = OB_SUCCESS;
 
-  if (NULL == value) {
+  if (NULL == key || NULL == value) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "try cleanout mvcc row failed", K(ret), KPC(value));
+    TRANS_LOG(ERROR, "try cleanout mvcc row failed", K(ret), KPC(key), KPC(value));
   } else {
+    const bool is_snapshot_gc_scn_row = is_snapshot_gc_scn_row_(key);
     ObRowLatchGuard guard(value->latch_);
     ObMvccTransNode *iter = value->get_list_head();
     while (NULL != iter && OB_SUCC(ret)) {
-      if (OB_FAIL(try_cleanout_tx_node_(value, iter))) {
+      if (OB_FAIL(try_cleanout_tx_node_(value, iter, is_snapshot_gc_scn_row))) {
         TRANS_LOG(WARN, "try cleanout tx state failed", K(ret), KPC(value), KPC(iter));
       } else {
         iter = iter->prev_;
@@ -593,7 +566,10 @@ int ObMultiVersionRowIterator::try_cleanout_mvcc_row_(ObMvccRow *value)
   return ret;
 }
 
-int ObMultiVersionRowIterator::try_cleanout_tx_node_(ObMvccRow *value, ObMvccTransNode *tnode)
+int ObMultiVersionRowIterator::try_cleanout_tx_node_(
+    ObMvccRow *value,
+    ObMvccTransNode *tnode,
+    const bool is_snapshot_gc_scn_row)
 {
   int ret = OB_SUCCESS;
   const ObTransID data_tx_id = tnode->tx_id_;
@@ -611,6 +587,9 @@ int ObMultiVersionRowIterator::try_cleanout_tx_node_(ObMvccRow *value, ObMvccTra
       ++insert_row_count_;
     } else if (blocksstable::ObDmlFlag::DF_UPDATE == dml_flag) {
       ++update_row_count_;
+      if (is_snapshot_gc_scn_row) {
+        ++snapshot_gc_scn_row_count_;
+      }
     } else if (blocksstable::ObDmlFlag::DF_DELETE == dml_flag) {
       ++delete_row_count_;
     }
@@ -618,11 +597,32 @@ int ObMultiVersionRowIterator::try_cleanout_tx_node_(ObMvccRow *value, ObMvccTra
   return ret;
 }
 
+bool ObMultiVersionRowIterator::is_snapshot_gc_scn_row_(const ObMemtableKey *key) const
+{
+  const int64_t TABLE_NAME_IDX = 0;
+  const int64_t COLUMN_NAME_IDX = 2;
+  const int64_t CORE_TABLE_ROWKEY_COLUMN_COUNT = 3;
+  bool is_snapshot_gc_scn_row = false;
+  const ObStoreRowkey *rowkey = nullptr;
+  if (OB_ALL_CORE_TABLE_TID == tablet_id_.id()
+      && OB_NOT_NULL(key)
+      && OB_NOT_NULL(rowkey = key->get_rowkey())
+      && rowkey->get_obj_cnt() >= CORE_TABLE_ROWKEY_COLUMN_COUNT) {
+    const ObObj *objs = rowkey->get_obj_ptr();
+    is_snapshot_gc_scn_row = objs[TABLE_NAME_IDX].is_string_type()
+        && objs[COLUMN_NAME_IDX].is_string_type()
+        && 0 == objs[TABLE_NAME_IDX].get_string().compare("__all_global_stat")
+        && 0 == objs[COLUMN_NAME_IDX].get_string().compare("snapshot_gc_scn");
+  }
+  return is_snapshot_gc_scn_row;
+}
+
 void ObMultiVersionRowIterator::get_tnode_dml_stat(storage::ObTransNodeDMLStat &stat) const
 {
   stat.insert_row_count_ += insert_row_count_;
   stat.update_row_count_ += update_row_count_;
   stat.delete_row_count_ += delete_row_count_;
+  stat.snapshot_gc_scn_row_count_ += snapshot_gc_scn_row_count_;
 }
 
 void ObMultiVersionRowIterator::reset()
@@ -638,9 +638,11 @@ void ObMultiVersionRowIterator::reset()
   }
   query_engine_ = NULL;
 
+  tablet_id_.reset();
   insert_row_count_ = 0;
   update_row_count_ = 0;
   delete_row_count_ = 0;
+  snapshot_gc_scn_row_count_ = 0;
 }
 
 

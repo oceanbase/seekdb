@@ -46,7 +46,6 @@ ObAsyncCmdDriver::~ObAsyncCmdDriver()
  */
 int ObAsyncCmdDriver::response_result(ObMySQLResultSet &result)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_sql_execution);
   int ret = OB_SUCCESS;
   ObSqlEndTransCb &sql_end_cb = session_.get_mysql_end_trans_cb();
   ObEndTransCbPacketParam pkt_param;

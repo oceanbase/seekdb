@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 #define private public
 #define protected public
+#include "share/cache/ob_recycle_multi_kvcache.h"
 #include "storage/tablet/ob_tablet_meta.h"
 
 namespace oceanbase {

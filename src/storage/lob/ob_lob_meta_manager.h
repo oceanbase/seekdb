@@ -60,13 +60,6 @@ public:
   TO_STRING_KV("[LOB]", "meta mngr");
 
 private:
-  int local_scan(ObLobAccessParam& param, ObLobMetaScanIter &iter);
-  int remote_scan(ObLobAccessParam& param, ObLobMetaScanIter &iter);
-
-  int getlength_local(ObLobAccessParam &param, uint64_t &char_len);
-  int getlength_remote(ObLobAccessParam &param, uint64_t &char_len);
-
-private:
   // lob adaptor
   ObPersistentLobApator persistent_lob_adapter_;
 };

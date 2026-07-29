@@ -51,8 +51,7 @@ int ObDelUpdLogPlan::compute_dml_parallel()
   max_dml_parallel_ = ObGlobalHint::UNSET_PARALLEL;
   int64_t dml_parallel = ObGlobalHint::UNSET_PARALLEL;
   ObOptimizerContext &opt_ctx = get_optimizer_context();
-  int64_t server_cnt = 0;
-  if (OB_FAIL(get_parallel_info_from_candidate_plans(server_cnt, dml_parallel))) {
+  if (OB_FAIL(get_parallel_info_from_candidate_plans(dml_parallel))) {
     LOG_WARN("failed to get parallel info", K(ret));
   } else if (OB_FAIL(compute_dml_dop_by_auto_dop(dml_parallel, dml_parallel))) {
     LOG_WARN("failed to compute dml dop by auto dop", K(ret));
@@ -133,9 +132,8 @@ int ObDelUpdLogPlan::inner_compute_dml_dop_by_auto_dop(const ObDelUpdStmt &stmt,
                                 op_cost))) {
     LOG_WARN("failed to get insert cost", K(ret));
   } else {
-    int64_t server_cnt = 1;
     const double cost_threshold_us = 1000.0 * std::max(static_cast<int64_t>(10), opt_ctx.get_parallel_min_scan_time_threshold());
-    const int64_t calc_dop_limit = opt_ctx.get_parallel_degree_limit(server_cnt);
+    const int64_t calc_dop_limit = opt_ctx.get_parallel_degree_limit();
     int64_t calc_dop = op_cost / cost_threshold_us;
     dop = std::min(calc_dop, calc_dop_limit);
     OPT_TRACE("finish compute dml parallel degree:", dop);
@@ -370,7 +368,6 @@ int ObDelUpdLogPlan::calculate_table_location_and_sharding(const ObDelUpdStmt &s
     sharding_info = new(sharding_info) ObShardingInfo();
     table_partition_info = new(table_partition_info) ObTablePartitionInfo(allocator_);
     ObTableLocationType location_type = OB_TBL_LOCATION_UNINITIALIZED;
-    ObAddr &server = get_optimizer_context().get_local_server_addr();
     table_partition_info->get_table_location().set_check_no_partition(false);
     if (OB_FAIL(calculate_table_location(stmt,
                                          real_filters,
@@ -379,8 +376,7 @@ int ObDelUpdLogPlan::calculate_table_location_and_sharding(const ObDelUpdStmt &s
                                          part_ids,
                                          *table_partition_info))) {
       LOG_WARN("failed to calculate table location", K(ret));
-    } else if (OB_FAIL(table_partition_info->get_location_type(server, location_type))) {
-      LOG_WARN("get location type failed", K(ret));
+    } else if (FALSE_IT(location_type = table_partition_info->get_location_type())) {
     } else if (FALSE_IT(sharding_info->set_location_type(location_type))) {
       // do nothing
     } else if (OB_FAIL(sharding_info->init_partition_info(get_optimizer_context(),
@@ -433,9 +429,9 @@ int ObDelUpdLogPlan::calculate_table_location(const ObDelUpdStmt &stmt,
                                                                dtc_params,
                                                                true))) {
     LOG_WARN("Failed to initialize table location", K(ret));
-  } else if (OB_FAIL(table_partition_info.calculate_local_tablet_locations(*exec_ctx,
-                                                                           *params,
-                                                                           dtc_params))) {
+  } else if (OB_FAIL(table_partition_info.calculate_phy_table_location_info(*exec_ctx,
+                                                                             *params,
+                                                                             dtc_params))) {
     // For insert, the calculated partition order should match the value row correspondence, and should not be reordered
     LOG_WARN("failed to calculate table location", K(ret));
   } else {
@@ -453,7 +449,6 @@ int ObDelUpdLogPlan::compute_exchange_info_for_pdml_del_upd(const ObShardingInfo
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = NULL;
-  exch_info.server_list_.reuse();
   if (OB_ISNULL(get_stmt()) || OB_ISNULL(session = get_optimizer_context().get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(session), K(ret));
@@ -465,14 +460,11 @@ int ObDelUpdLogPlan::compute_exchange_info_for_pdml_del_upd(const ObShardingInfo
     LOG_WARN("failed to assign exprs", K(ret));
   } else if (OB_FAIL(compute_hash_dist_exprs_for_pdml_del_upd(exch_info, index_dml_info))) {
     LOG_WARN("failed to compute pdml hash dist exprs", K(ret));
-  } else if (OB_FAIL(target_table_partition.get_all_servers(exch_info.server_list_))) {
-    LOG_WARN("failed to get all servers", K(ret));
   } else if (!is_index_maintenance &&
              OB_FAIL(get_pdml_parallel_degree(target_table_partition.get_phy_tbl_location_info().get_partition_cnt(),
                                               exch_info.parallel_))) {
     LOG_WARN("failed to get pdml parallel degree", K(ret));
   } else {
-    exch_info.server_cnt_ = exch_info.server_list_.count();
     share::schema::ObPartitionLevel part_level = source_sharding.get_part_level();
     if (share::schema::PARTITION_LEVEL_ZERO != part_level) {
       exch_info.slice_count_ = source_sharding.get_part_cnt();
@@ -568,7 +560,6 @@ int ObDelUpdLogPlan::compute_exchange_info_for_pdml_insert(const ObShardingInfo 
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = NULL;
-  exch_info.server_list_.reuse();
   if (OB_ISNULL(get_stmt()) ||
       OB_ISNULL(session = get_optimizer_context().get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
@@ -580,14 +571,11 @@ int ObDelUpdLogPlan::compute_exchange_info_for_pdml_insert(const ObShardingInfo 
                              get_optimizer_context().get_expr_factory(),
                              exch_info))) {
     LOG_WARN("failed to compute repartition func info", K(ret));
-  } else if (OB_FAIL(target_table_partition.get_all_servers(exch_info.server_list_))) {
-    LOG_WARN("failed to get all servers", K(ret));
   } else if (!is_index_maintenance && !is_pdml_update_split &&
              OB_FAIL(get_pdml_parallel_degree(target_table_partition.get_phy_tbl_location_info().get_partition_cnt(),
                                               exch_info.parallel_))) {
     LOG_WARN("failed to get pdml parallel degree", K(ret));
   } else {
-    exch_info.server_cnt_ = exch_info.server_list_.count();
     share::schema::ObPartitionLevel part_level = target_sharding.get_part_level();
     if (share::schema::PARTITION_LEVEL_ZERO != part_level) {
       exch_info.repartition_ref_table_id_ = index_dml_info.ref_table_id_;

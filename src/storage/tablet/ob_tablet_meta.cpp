@@ -18,8 +18,6 @@
 
 #include "storage/tablet/ob_tablet_meta.h"
 
-#include "storage/tablet/ob_tablet_binding_info.h"
-
 namespace oceanbase
 {
 using namespace share;

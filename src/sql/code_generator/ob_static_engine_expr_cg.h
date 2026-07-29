@@ -19,7 +19,6 @@
 
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/engine/expr/ob_expr_frame_info.h"
-#include "share/ob_version_parser.h"
 #include "lib/container/ob_fixed_array.h"
 
 namespace oceanbase

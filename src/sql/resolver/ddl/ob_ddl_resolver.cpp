@@ -3003,7 +3003,6 @@ int ObDDLResolver::cast_default_value(ObSQLSessionInfo *session_info,
 }
 
 int ObDDLResolver::trim_space_for_default_value(
-    const bool is_mysql_mode,
     const bool is_char_type,
     const ObCollationType &collation_type,
     ObObj &default_value,
@@ -3012,7 +3011,7 @@ int ObDDLResolver::trim_space_for_default_value(
   int ret = OB_SUCCESS;
   if (OB_FAIL(default_value.get_varchar(out_str))) {
     LOG_WARN("invalid default data", K(ret), K(default_value));
-  } else if (is_mysql_mode && is_char_type) {
+  } else if (is_char_type) {
     const char *str = out_str.ptr();
     int32_t len = out_str.length();
     ObString space_pattern = ObCharsetUtils::get_const_str(collation_type, ' ');
@@ -3027,8 +3026,7 @@ int ObDDLResolver::trim_space_for_default_value(
   return ret;
 }
 
-int ObDDLResolver::check_default_value_length(const bool is_mysql_mode,
-                                              const ObColumnSchemaV2 &column,
+int ObDDLResolver::check_default_value_length(const ObColumnSchemaV2 &column,
                                               ObObj &default_value)
 {
   int ret = OB_SUCCESS;
@@ -3042,9 +3040,9 @@ int ObDDLResolver::check_default_value_length(const bool is_mysql_mode,
       ObString str;
       if (default_value.is_null()) {
         strlen = 0;
-      } else if (OB_FAIL(trim_space_for_default_value(is_mysql_mode, column.get_meta_type().is_char(), column.get_collation_type(), default_value, str))) {
+      } else if (OB_FAIL(trim_space_for_default_value(column.get_meta_type().is_char(), column.get_collation_type(), default_value, str))) {
         SQL_RESV_LOG(WARN, "trim space for default value failed", K(ret));
-      } else if (is_mysql_mode && str.empty()) {
+      } else if (str.empty()) {
         strlen = 0;
         default_value.set_varchar("");
       } else {
@@ -3797,7 +3795,7 @@ int ObDDLResolver::init_empty_session(const common::ObTimeZoneInfoWrap &tz_info_
     LOG_WARN("get null schema checker", K(ret));
   } else if (OB_FAIL(empty_session.test_init(0, 0, &allocator))) {
     LOG_WARN("init empty session failed", K(ret));
-  } else if (OB_FAIL(schema_checker->get_server_runtime_info(runtime_schema))) {
+  } else if (OB_FAIL(schema_checker->get_schema_guard()->get_server_runtime_info(runtime_schema))) {
     LOG_WARN("get runtime_schema failed", K(ret));
   } else if (OB_FAIL(empty_session.init_runtime(runtime_schema->get_runtime_name_str()))) {
     LOG_WARN("init server runtime failed", K(ret));
@@ -4067,7 +4065,7 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
     if (OB_FAIL(cast_default_value(session_info, default_value, tz_info_wrap.get_time_zone_info(),
                                    nls_formats, allocator, column, sql_mode))) {
       LOG_WARN("fail to cast default value!", K(ret), K(default_value), KPC(tz_info_wrap.get_time_zone_info()), K(column), K(sql_mode));
-    } else if (OB_FAIL(check_default_value_length(true/*is_mysql_mode*/, column, default_value))) {
+    } else if (OB_FAIL(check_default_value_length(column, default_value))) {
       LOG_WARN("fail to check default value length", K(ret), K(default_value), K(column));
     } else {
       default_value.set_collation_type(column.get_collation_type());
@@ -6259,7 +6257,6 @@ int ObDDLResolver::check_foreign_key_reference(
         ObSEArray<ObString, 8> &child_columns = arg.child_columns_;
         ObSEArray<ObString, 8> &parent_columns = arg.parent_columns_;
         if (OB_FAIL(ObResolverUtils::check_foreign_key_columns_type(
-                    true,
                     *child_table_schema,
                     *parent_table_schema,
                     child_columns,
@@ -6304,7 +6301,7 @@ int ObDDLResolver::check_foreign_key_reference(
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObResolverUtils::check_foreign_key_set_null_satisfy(arg, *child_table_schema, true))) {
+      if (OB_FAIL(ObResolverUtils::check_foreign_key_set_null_satisfy(arg, *child_table_schema))) {
         LOG_WARN("check fk set null satisfy failed", K(ret), K(arg));
       }
     }

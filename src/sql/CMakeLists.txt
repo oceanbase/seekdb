@@ -11,7 +11,6 @@ ob_set_subtarget(ob_sql code_generator
 ob_set_subtarget(ob_sql common
   ob_end_trans_callback.cpp
   ob_end_trans_cb_packet_param.cpp
-  ob_phy_table_location.cpp
   ob_result_set.cpp
   ob_scanner.cpp
   ob_spi.cpp
@@ -104,7 +103,7 @@ ob_set_subtarget(ob_sql das
   das/ob_das_insert_op.cpp
   das/ob_das_lock_op.cpp
   das/ob_das_ref.cpp
-  das/ob_das_location_router.cpp
+  das/ob_das_tablet_mapper.cpp
   das/ob_das_scan_op.cpp
   das/ob_das_task.cpp
   das/ob_das_update_op.cpp
@@ -116,7 +115,6 @@ ob_set_subtarget(ob_sql das
   das/ob_das_simple_op.cpp
   das/ob_das_domain_utils.cpp
   das/ob_das_attach_define.cpp
-  das/ob_group_scan_iter.cpp
   das/ob_das_dml_vec_iter.cpp
   das/ob_das_parallel_handler.cpp
   das/iter/ob_das_iter.cpp
@@ -276,7 +274,6 @@ ob_set_subtarget(ob_sql engine_cmd
   engine/cmd/ob_load_data_executor.cpp
   engine/cmd/ob_load_data_impl.cpp
   engine/cmd/ob_load_data_parser.cpp
-  engine/cmd/ob_load_data_rpc.cpp
   engine/cmd/ob_load_data_utils.cpp
   engine/cmd/ob_lock_table_executor.cpp
   engine/cmd/ob_outline_executor.cpp
@@ -692,7 +689,6 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_regexp_like.cpp
   engine/expr/ob_expr_regexp_replace.cpp
   engine/expr/ob_expr_regexp_substr.cpp
-  engine/expr/ob_expr_part_id.cpp
   engine/expr/ob_expr_part_id_pseudo_column.cpp
   engine/expr/ob_expr_password.cpp
   engine/expr/ob_expr_period_diff.cpp
@@ -903,7 +899,6 @@ ob_set_subtarget(ob_sql executor
   executor/ob_worker_session_guard.cpp
   executor/ob_job_id.cpp
   executor/ob_maintain_dependency_info_task.cpp
-  executor/ob_shuffle_service.cpp
   executor/ob_slice_id.cpp
   executor/ob_task_event.cpp
   executor/ob_task_executor_ctx.cpp

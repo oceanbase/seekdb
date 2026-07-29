@@ -26,7 +26,6 @@
 #include "pl/ob_pl_package.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
 #include "src/pl/pl_cache/ob_pl_cache_mgr.h"
-#include "src/pl/ob_pl_build.h"
 
 namespace oceanbase
 {
@@ -40,7 +39,6 @@ int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &st
   obcall::ObCreateRoutineArg &crt_routine_arg = stmt.get_routine_arg();
   ObString first_stmt;
   
-  obcall::ObRoutineDDLRes res;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("fail to get first stmt" , K(ret));
   } else {
@@ -50,7 +48,7 @@ int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &st
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
-  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_routine_with_res(crt_routine_arg, res); }))) {
+  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_routine(crt_routine_arg); }))) {
     LOG_WARN("rpc proxy create procedure failed", K(ret), "dst", GCTX.self_addr());
   }
   if(crt_routine_arg.with_if_not_exist_ && ret == OB_ERR_SP_ALREADY_EXISTS) {
@@ -306,11 +304,7 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
   bool need_create_routine = (alter_routine_arg.is_need_alter_);
   ObString first_stmt;
   if (need_create_routine) {
-    obcall::ObRoutineDDLRes res;
-    if (OB_ISNULL(ctx.get_pl_engine())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("pl engine is null", K(ret));
-    } else if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
+    if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
       LOG_WARN("fail to get first stmt" , K(ret));
     } else {
       alter_routine_arg.ddl_stmt_str_ = first_stmt;
@@ -319,7 +313,7 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
     } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       LOG_WARN("get task executor context failed", K(ret));
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->alter_routine_with_res(alter_routine_arg, res); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->alter_routine(alter_routine_arg); }))) {
       LOG_WARN("rpc proxy alter procedure failed", K(ret), "dst", GCTX.self_addr());
     }
   } else {

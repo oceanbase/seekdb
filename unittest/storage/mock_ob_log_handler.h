@@ -14,20 +14,13 @@
  * limitations under the License.
  */
 
-#include "logservice/ob_log_handler.h"
-#include "logservice/palf/palf_handle.h"
-#include "logservice/ob_log_service.h"
-#include "logservice/palf/palf_env.h"
-#include "share/scn.h"
-#include "logservice/ob_log_base_type.h"
-
 #ifndef MOCK_OB_LOG_HANDLER_H_
 #define MOCK_OB_LOG_HANDLER_H_
 
+#include "logservice/ob_log_handler.h"
+
 namespace oceanbase
 {
-using namespace palf;
-
 namespace storage
 {
 
@@ -73,41 +66,23 @@ public:
     return OB_SUCCESS;
   }
 
-  virtual int append(const void *buffer,
+  int append_big_log(const void *buffer,
                      const int64_t nbytes,
-                     const int64_t ref_ts_ns,
+                     const share::SCN &ref_scn,
                      const bool need_nonblock,
+                     const bool allow_compress,
                      logservice::AppendCb *cb,
                      palf::LSN &lsn,
-                     int64_t &ts_ns)
+                     share::SCN &scn) override
   {
-    UNUSED(need_nonblock);
-    UNUSED(buffer);
-    UNUSED(nbytes);
-    UNUSED(ref_ts_ns);
-    UNUSED(cb);
-    UNUSED(lsn);
-    UNUSED(ts_ns);
-    return OB_SUCCESS;
-  }
-  virtual int set_election_priority(palf::election::ElectionPriority *) { return OB_SUCCESS; }
-  virtual int reset_election_priority() { return OB_SUCCESS; }
-  virtual int get_role(common::ObRole &role, int64_t &proposal_id) const
-  {
-    UNUSED(role);
-    UNUSED(proposal_id);
-    return OB_SUCCESS;
-  }
-  virtual int get_access_mode(int64_t &mode_version, AccessMode &access_mode) const
-  {
-    UNUSED(access_mode);
-    UNUSED(mode_version);
+    UNUSEDx(buffer, nbytes, ref_scn, need_nonblock, allow_compress, cb, lsn, scn);
     return OB_SUCCESS;
   }
 
-  virtual int get_append_mode_initial_scn(SCN &initial_scn) const
+  int get_role(common::ObRole &role, int64_t &proposal_id) const override
   {
-    UNUSED(initial_scn);
+    role = common::LEADER;
+    proposal_id = palf::PALF_INITIAL_PROPOSAL_ID;
     return OB_SUCCESS;
   }
 
@@ -150,102 +125,95 @@ public:
   };
   int get_end_scn(share::SCN &scn) const
   {
-    UNUSED(scn);
-    return OB_SUCCESS;
-  }
-  int get_end_ts_ns(int64_t &ts) const
-  {
-    UNUSED(ts);
-    return OB_SUCCESS;
-  }
-  int get_global_learner_list(common::GlobalLearnerList &learner_list) const
-  {
-    UNUSED(learner_list);
-    return OB_SUCCESS;
-  }
-  int get_paxos_member_list(common::ObMemberList &member_list, int64_t &paxos_replica_num) const
-  {
-    UNUSED(member_list);
-    UNUSED(paxos_replica_num);
-    return OB_SUCCESS;
-  }
-  int get_paxos_member_list_and_learner_list(common::ObMemberList &member_list,
-                                             int64_t &paxos_replica_num,
-                                             common::GlobalLearnerList &learner_list) const
-  {
-    UNUSEDx(member_list, paxos_replica_num, learner_list);
-    return OB_SUCCESS;
-  }
-  int get_stable_membership(palf::LogConfigVersion &config_version,
-                            common::ObMemberList &member_list,
-                            int64_t &paxos_replica_num,
-                            common::GlobalLearnerList &learner_list) const
-  {
-    UNUSEDx(config_version, member_list, paxos_replica_num, learner_list);
-    return OB_SUCCESS;
-  }
-  int get_max_lsn(palf::LSN &lsn) const
-  {
-    UNUSED(lsn);
-    return OB_SUCCESS;
-  }
-  int get_max_scn(share::SCN &scn) const
-  {
-    UNUSED(scn);
-    return OB_SUCCESS;
-  }
-  int get_max_ts_ns(int64_t &ts_ns) const
-  {
-    UNUSED(ts_ns);
-    return OB_SUCCESS;
-  }
-  int locate_by_scn_coarsely(const share::SCN &scn, LSN &result_lsn)
-  {
-    LSN tmp(scn.get_val_for_inner_table_field());
-    result_lsn = tmp;
-    return OB_SUCCESS;
-  }
-  int locate_by_ts_ns_coarsely(const int64_t ts_ns, LSN &result_lsn)
-  {
-    LSN tmp(ts_ns);
-    result_lsn = tmp;
+    UNUSEDx(mode_version, access_mode, ref_scn);
     return OB_SUCCESS;
   }
 
-  int advance_base_lsn(const LSN &lsn)
+  int get_access_mode(int64_t &mode_version, palf::AccessMode &access_mode) const override
+  {
+    mode_version = palf::PALF_INITIAL_PROPOSAL_ID;
+    access_mode = palf::AccessMode::APPEND;
+    return OB_SUCCESS;
+  }
+
+  int get_append_mode_initial_scn(share::SCN &initial_scn) const override
+  {
+    initial_scn = share::SCN::min_scn();
+    return OB_SUCCESS;
+  }
+
+  int seek(const palf::LSN &lsn, palf::PalfBufferIterator &iter) override
+  {
+    UNUSEDx(lsn, iter);
+    return OB_SUCCESS;
+  }
+
+  int seek(const palf::LSN &lsn, palf::PalfGroupBufferIterator &iter) override
+  {
+    UNUSEDx(lsn, iter);
+    return OB_SUCCESS;
+  }
+
+  int locate_by_scn_coarsely(const share::SCN &scn, palf::LSN &result_lsn) override
+  {
+    result_lsn = palf::LSN(scn.get_val_for_inner_table_field());
+    return OB_SUCCESS;
+  }
+
+  int locate_by_lsn_coarsely(const palf::LSN &lsn, share::SCN &result_scn) override
+  {
+    UNUSED(lsn);
+    result_scn = result_scn_;
+    return OB_SUCCESS;
+  }
+
+  int get_max_decided_scn_as_leader(share::SCN &scn) const override
+  {
+    scn.set_max();
+    return OB_SUCCESS;
+  }
+
+  int advance_base_lsn(const palf::LSN &lsn) override
   {
     base_lsn_ = lsn;
     return OB_SUCCESS;
   }
 
-  int locate_by_lsn_coarsely(const palf::LSN &lsn, share::SCN &result_scn)
+  int get_begin_lsn(palf::LSN &lsn) const override
   {
-    result_scn = result_scn_;
+    lsn = base_lsn_;
     return OB_SUCCESS;
   }
 
-  int locate_by_lsn_coarsely(const palf::LSN &lsn, int64_t &result_ts_ns)
+  int get_end_lsn(palf::LSN &lsn) const override
   {
-    result_ts_ns = result_ts_ns_;
+    lsn = base_lsn_;
     return OB_SUCCESS;
   }
 
-  int get_begin_lsn(LSN &lsn) const
+  int get_max_lsn(palf::LSN &lsn) const override
   {
-    UNUSED(lsn);
+    lsn = base_lsn_;
     return OB_SUCCESS;
   }
 
-  int get_end_lsn(LSN &lsn) const
+  int get_max_scn(share::SCN &scn) const override
   {
-    UNUSED(lsn);
+    scn.set_max();
     return OB_SUCCESS;
   }
 
-  int get_palf_base_info(const palf::LSN &base_lsn, palf::PalfBaseInfo &palf_base_info)
+  int get_end_scn(share::SCN &scn) const override
+  {
+    scn.set_max();
+    return OB_SUCCESS;
+  }
+
+  int get_palf_base_info(const palf::LSN &base_lsn,
+                         palf::PalfBaseInfo &palf_base_info) override
   {
     UNUSED(base_lsn);
-    UNUSED(palf_base_info);
+    palf_base_info.generate_by_default();
     return OB_SUCCESS;
   }
   int advance_base_info(const palf::PalfBaseInfo &palf_base_info)
@@ -264,21 +232,18 @@ public:
   }
   int get_member_gc_stat(const common::ObAddr &addr, bool &is_valid_member, obcall::LogMemberGCStat &stat) const
   {
-    UNUSEDx(addr, is_valid_member, stat);
-    return OB_SUCCESS;
-  }
-  void wait_append_sync()
-  {
-    return;
-  }
-
-  int pend_submit_replay_log()
-  {
+    scn.set_max();
     return OB_SUCCESS;
   }
 
-  int restore_submit_replay_log()
+  int pend_submit_replay_log() override { return OB_SUCCESS; }
+  int restore_submit_replay_log() override { return OB_SUCCESS; }
+  bool is_replay_enabled() const override { return true; }
+  int offline() override { return OB_SUCCESS; }
+
+  int online(const palf::LSN &lsn, const share::SCN &scn) override
   {
+    UNUSEDx(lsn, scn);
     return OB_SUCCESS;
   }
 
@@ -334,8 +299,7 @@ public:
   int is_replay_fatal_error(bool &has_fatal_error) {has_fatal_error = false; return OB_SUCCESS;}
 };
 
-}  // namespace storage
-}  // namespace oceanbase
-
+} // namespace storage
+} // namespace oceanbase
 
 #endif

@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX PALF
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "log_cache.h"
 
 namespace oceanbase
@@ -90,9 +89,6 @@ int LogHotCache::read(const LSN &read_begin_lsn,
     int64_t cost_ts = ObTimeUtility::fast_current_time() - start_ts;
     hit_cnt = ATOMIC_AAF(&hit_count_, 1);
     read_size = ATOMIC_AAF(&read_size_, out_read_size);
-    EVENT_INC(PALF_READ_COUNT_FROM_HOT_CACHE);
-    EVENT_ADD(PALF_READ_SIZE_FROM_HOT_CACHE, out_read_size);
-    EVENT_ADD(PALF_READ_TIME_FROM_HOT_CACHE, cost_ts);
     PALF_LOG(TRACE, "read_data_from_buffer success", K(ret), K(read_begin_lsn),
         K(in_read_size), K(out_read_size));
   }

@@ -19,6 +19,7 @@
 #include <gtest/gtest.h>
 #define private public
 #include "blocksstable/ob_data_file_prepare.h"
+#include "storage/slog_ckpt/ob_linked_macro_block_reader.h"
 #include "storage/slog_ckpt/ob_linked_macro_block_writer.h"
 #undef private
 

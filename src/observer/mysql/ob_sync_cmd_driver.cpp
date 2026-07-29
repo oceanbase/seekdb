@@ -19,7 +19,6 @@
 #include "ob_sync_cmd_driver.h"
 
 #include "obsm_row.h"
-#include "sql/resolver/cmd/ob_variable_set_stmt.h"
 #include "observer/mysql/obmp_query.h"
 #include "rpc/obmysql/packet/ompk_row.h"
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
@@ -108,7 +107,6 @@ void ObSyncCmdDriver::free_output_row(ObMySQLResultSet &result)
 
 int ObSyncCmdDriver::response_result(ObMySQLResultSet &result)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_sql_execution);
   int ret = OB_SUCCESS;
   bool process_ok = false;
   // for select SQL
@@ -241,7 +239,7 @@ int ObSyncCmdDriver::response_query_result(ObMySQLResultSet &result)
       const ObSQLSessionInfo &my_session = result.get_session();
       if (OB_FAIL(my_session.get_character_set_results(charset_type))) {
         LOG_WARN("fail to get result charset", K(ret));
-      } 
+      }
     }
 
     ObNewRow *tmp_row = const_cast<ObNewRow*>(row);

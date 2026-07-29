@@ -1540,7 +1540,7 @@ int ObOBJLock::get_lock_op_iter(const ObLockID &lock_id,
     tmp_op.op_type_ = IN_TRANS_DML_LOCK;
     tmp_op.lock_op_status_ = LOCK_OP_DOING;
     // we use this one for the count.
-    tmp_op.lock_seq_no_ = ObTxSEQ::cast_from_int(row_exclusive_);
+    tmp_op.lock_seq_no_ = ObTxSEQ(row_exclusive_, 0);
     if (OB_FAIL(iter.push(tmp_op))) {
       TABLELOCK_LOG(WARN, "push tmp lock op into iterator failed", K(ret), K(tmp_op));
     }

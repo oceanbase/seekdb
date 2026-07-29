@@ -27,7 +27,6 @@
 #include "storage/access/ob_table_param.h"        // ObColDesc
 #include "share/schema/ob_multi_version_schema_service.h"     // ObMultiVersionSchemaService
 #include "share/ob_simple_batch.h"
-#include "sql/ob_phy_table_location.h"
 #include "sql/ob_sql_define.h"
 #include "sql/parser/parse_node.h"
 #include "sql/resolver/ob_stmt_type.h"
@@ -53,7 +52,6 @@ class ObOpRawExpr;
 class OrderItem;
 class ObTaskExecutorCtx;
 class ObTableLocation;
-class ObPhyTableLocation;
 class ObQueryRange;
 class ObSqlExpression;
 class ObPhysicalPlan;
@@ -330,7 +328,8 @@ public:
   static bool is_readonly_stmt(ParseResult &result);
   static int make_field_name(const char *src, int64_t len, const common::ObCollationType cs_type,
                              common::ObIAllocator *allocator, common::ObString &name);
-  static int set_compatible_cast_mode(const ObSQLSessionInfo *session, ObCastMode &cast_mode);
+  static int set_compatible_cast_mode(const ObSQLSessionInfo *session,
+                                      common::ObCastMode &cast_mode);
   static int get_default_cast_mode(const stmt::StmtType &stmt_type,
                                    const ObSQLSessionInfo *session,
                                    common::ObCastMode &cast_mode);
@@ -451,13 +450,6 @@ public:
 
   static int revise_hash_part_object(common::ObObj &obj);
 
-  static int get_local_partition_for_estimation(
-                              const ObCandiTabletLoc &tablet_location,
-                              EstimatedPartition &partition);
-
-  static int get_local_partition_addr(const ObCandiTabletLoc &tablet_location,
-                                      ObAddr &local_addr);
-
   static int has_global_index(share::schema::ObSchemaGetterGuard *schema_guard,
                               const uint64_t table_id,
                               bool &exists);
@@ -516,8 +508,7 @@ public:
                                                   common::ObCollationType connection_collation,
                                                   const share::schema::ObViewSchema &view_schema,
                                                   common::ObString &view_definition);
-  static void record_execute_time(const ObPhyPlanType type,
-                                  const int64_t time_cost);
+  static void record_execute_time(const ObPhyPlanType type, const int64_t time_cost);
   static int64_t get_query_record_size_limit()
   {
     int64_t thredhold = OB_MAX_SQL_LENGTH;

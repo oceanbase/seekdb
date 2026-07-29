@@ -43,9 +43,7 @@ while($i < 3)
 --enable_query_log
 
 connection conn0;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 --source mysql_test/include/wait_minor_merge.inc
 
 connection conn1;
@@ -54,9 +52,7 @@ sleep 10;
 
 # test minor merge
 connection conn0;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 --source mysql_test/include/wait_minor_merge.inc
 
 connection conn1;

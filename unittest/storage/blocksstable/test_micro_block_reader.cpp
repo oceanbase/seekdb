@@ -293,7 +293,7 @@ TEST_F(TestMicroBlockReader, test_success)
   ret = reader.get_rowkey(iter, rowkey2);
   ASSERT_EQ(OB_INVALID_ARGUMENT, ret);
   ObRowCacheValue value;
-  ASSERT_EQ(OB_INVALID_ARGUMENT, reader.get_cached_value(iter, value, MacroBlockId(0, 1, 0, 2)));
+  ASSERT_EQ(OB_INVALID_ARGUMENT, reader.get_cached_value(iter, value, MacroBlockId(0, 1, -1)));
   const ObStoreRow *read_row;
   ASSERT_EQ(OB_INVALID_ARGUMENT, reader.get_row(iter, read_row));
   ASSERT_TRUE(NULL == read_row);

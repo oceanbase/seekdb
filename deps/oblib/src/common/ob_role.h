@@ -27,20 +27,13 @@ enum ObRole
 {
   INVALID_ROLE = 0,
 
-  // Election Leader, supports strong consistent reading and writing, and supports member changes
+  // Local primary role; supports strongly consistent reads and writes.
   LEADER = 1,
 
   FOLLOWER = 2,
 
-  // Election Leader, supports member changes, does not support strong consistent reading and writing
-  // Currently used for physical standby database and physical restore partition (since 3.3)
+  // Local physical-standby role; does not serve strongly consistent reads or writes.
   STANDBY_LEADER = 3,
-
-  // The pseudo leader in the physical recovery process is not the election leader
-  // Does not support member changes, does not support strong consistent read and write
-  // This role has been deprecated since 3.3.
-  // TODO: To be deleted later
-  RESTORE_LEADER = 4,
 };
 
 // Is it a STRONG_LEADER role
@@ -55,16 +48,9 @@ bool is_follower(const ObRole role);
 //////////////////////////////////////////////////////
 // Utils function
 
-// Whether it is the leader selected by election
-//
-// STRONG_LEADER + STANDBY_LEADER
-//
-// The CLOG layer has a member list and supports member changes
-bool is_leader_by_election(const ObRole role);
-
 // Aggregated judgment Leader interface
 //
-// STRONG_LEADER + STANDBY_LEADER + RESTORE_LEADER
+// STRONG_LEADER + STANDBY_LEADER
 bool is_leader_like(const ObRole role);
 
 int role_to_string(const ObRole &role, char *role_str, const int64_t str_len);

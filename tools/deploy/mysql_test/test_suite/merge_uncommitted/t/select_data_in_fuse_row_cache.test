@@ -33,9 +33,7 @@ update t1_fuse set b = 2 where a = 2;
 update t1_fuse set b = 3 where a = 2;
 
 connection conn0;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 --source mysql_test/include/wait_minor_merge.inc
 sleep 3;
 

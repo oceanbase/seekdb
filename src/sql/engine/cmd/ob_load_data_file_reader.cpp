@@ -30,7 +30,6 @@ namespace sql
 {
 
 const ObLabel MEMORY_LABEL = ObLabel("LoadDataReader");
-static constexpr uint64_t OB_STORAGE_ID_LOAD_DATA = 2000;
 
 #define MEMORY_ATTR ObMemAttr(MEMORY_LABEL)
 
@@ -307,13 +306,6 @@ int ObPacketStreamFileReader::open(const ObString &filename,
       LOG_INFO("failed to flush socket buffer while send local infile packet", K(ret), K(filename));
     } else {
       LOG_INFO("[load data local]send filename to client success", K(filename));
-
-      observer::ObSMConnection *sm_connection = session->get_sm_connection();
-      if (OB_NOT_NULL(sm_connection) &&
-          sm_connection->pkt_rec_wrapper_.enable_proto_dia()) {
-        sm_connection->pkt_rec_wrapper_.record_send_mysql_pkt(filename_packet,
-                        filename_packet.get_serialize_size() + OB_MYSQL_HEADER_LENGTH);
-      }
     }
 
     packet_handle_ = &packet_handle;

@@ -168,7 +168,7 @@ int ObDDLIndependentDag::schedule_tablet_merge_task()
 
       ObDDLTabletContext *tablet_context = nullptr;
 
-      if (OB_FAIL(mock_start_scn.convert_for_tx(SS_DDL_START_SCN_VAL))) {
+      if (OB_FAIL(mock_start_scn.convert_for_tx(DDL_START_SCN_VAL))) {
         LOG_WARN("failed to convert for tx", K(ret));
       } else if (OB_FAIL(get_tablet_context(tablet_id, tablet_context))) {
         LOG_WARN("get ddl tablet context failed", K(ret), K(tablet_id));
@@ -626,7 +626,7 @@ int ObDDLIndependentDag::init_tablet_merge_task(
   ObDDLTabletContext *tablet_context = nullptr;
   ObDDLTabletMergeDagParamV2 merge_param;
   ObDDLMergePrepareTask *ddl_merge_task = nullptr;
-  if (OB_FAIL(mock_start_scn.convert_for_tx(SS_DDL_START_SCN_VAL))) {
+  if (OB_FAIL(mock_start_scn.convert_for_tx(DDL_START_SCN_VAL))) {
     LOG_WARN("failed to convert for tx", K(ret));
   } else if (OB_FAIL(get_tablet_context(tablet_id, tablet_context))) {
     LOG_WARN("get ddl tablet context failed", K(ret), K(tablet_id));

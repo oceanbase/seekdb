@@ -30,7 +30,8 @@ namespace sql
  * Params:
  *    token document count: count of documents contains query token
  *    total document count: count of all documents in retrieval domain
- *    document token count: count of tokens in specific document
+ *    document length: count of tokens in specific document
+ *    token weight: precomputed query-token weight
  *    average document token count: average count of tokens in document in retrieval domain
  *    related token count: count of query token in specific document
  *  

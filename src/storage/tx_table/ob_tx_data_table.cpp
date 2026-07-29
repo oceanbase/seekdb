@@ -15,7 +15,6 @@
  */
 
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_tx_data_table.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "share/rc/ob_module_provider.h"
@@ -462,7 +461,6 @@ int ObTxDataTable::check_tx_data_with_cache_once_(const transaction::ObTransID t
                     K(tx_data_guard),
                     KPC(tx_data_guard.tx_data()));
       } else {
-        EVENT_INC(TX_DATA_READ_TX_DATA_MEMTABLE_COUNT);
         ret = fn(*tx_data_guard.tx_data());
       }
     } else {
@@ -618,7 +616,6 @@ int ObTxDataTable::check_tx_data_in_sstable_(const ObTransID tx_id,
   } else if (OB_FAIL(get_tx_data_in_sstable_(tx_id, *tx_data_guard.tx_data(), recycled_scn))) {
     STORAGE_LOG(WARN, "get tx data from sstable failed.", KR(ret), K(tx_id));
   } else {
-    EVENT_INC(TX_DATA_READ_TX_DATA_SSTABLE_COUNT);
     if (OB_FAIL(fn(*tx_data_guard.tx_data()))) {
       STORAGE_LOG(WARN, "check tx data in sstable failed.", KR(ret), KP(this),
                   K(tablet_id_));

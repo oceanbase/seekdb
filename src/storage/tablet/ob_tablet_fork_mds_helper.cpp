@@ -18,13 +18,12 @@
 
 #include "ob_tablet_fork_mds_helper.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/ob_tablet_autoinc_seq_rpc_handler.h"
+#include "storage/ob_tablet_autoinc_seq_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "observer/ob_inner_sql_connection.h"
 #include "common/mysqlclient/ob_isql_connection.h"
 #include "storage/tx/ob_multi_data_source.h"
 
-using namespace oceanbase::obcall;
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::transaction;
@@ -228,8 +227,8 @@ int ObTabletForkMdsHelper::modify(
   }
 
   if (OB_SUCC(ret) && arg.autoinc_seq_arg_.is_valid()) {
-    if (OB_FAIL(ObTabletAutoincSeqRpcHandler::get_instance().batch_set_tablet_autoinc_seq_in_trans(
-            *tenant_ls, arg.autoinc_seq_arg_, scn, ctx))) {
+    if (OB_FAIL(ObTabletAutoincSeqService::get_instance().batch_set_tablet_autoinc_seq_in_trans(
+            *tenant_ls, arg.autoinc_seq_arg_.autoinc_params_, scn, ctx))) {
       LOG_WARN("failed to batch set tablet autoinc seq", KR(ret), K(scn),
           "param_cnt", arg.autoinc_seq_arg_.autoinc_params_.count());
     } else {

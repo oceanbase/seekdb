@@ -7,8 +7,7 @@
 connect (obsys_major,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
 connection obsys_major;
 
-eval alter system major freeze tenant $__freeze_tenant_name__;
-
+eval alter system major freeze;
 let $__i__= 600;
 while($__i__ > 0)
 {

@@ -1739,8 +1739,8 @@ int ObTimeConverter::str_to_offset(const ObString &str, int32_t &value, int &ret
         || !is_single_colon(colon) || (none.len_ > 0 && use_strict_format)) {
       ret = OB_ERR_UNKNOWN_TIME_ZONE;
     } else if (! need_check_valid) {
-      // In some scenarios, legality check is not required, for example, session deserialization; load the value of the timezone system variable into the session,
-      // Only need to check when setting system variables. These cases need to be handled separately because if a check is done, the true compatibility mode cannot be obtained.
+      // Session initialization and deserialization accept the loose persisted format;
+      // explicit system-variable updates use the strict validation path above.
       value = static_cast<int32_t>(((hour.value_ * MINS_PER_HOUR) + minute.value_) * SECS_PER_MIN);
       if ('-' == sign) {
         value = -value;

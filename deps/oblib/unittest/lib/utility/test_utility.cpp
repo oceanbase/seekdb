@@ -71,8 +71,8 @@ TEST(utility, load_file_to_string)
 }
 
 // DISABLED: reads /sys/class/net/*/speed; cloud/virtio NICs report -1 (no link
-// speed), so the speed assertion cannot pass on such VMs. Not single-tenant
-// related. Disabled (gtest convention, cf. DISABLED_bandwidth_throttle) to keep
+// speed), so the speed assertion cannot pass on such VMs. Disabled (gtest
+// convention, cf. DISABLED_bandwidth_throttle) to keep
 // the suite green on speed-less NICs; runs on real NICs if the prefix is dropped.
 TEST(utility, DISABLED_get_ethernet_speed)
 {

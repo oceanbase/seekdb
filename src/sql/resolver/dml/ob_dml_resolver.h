@@ -707,7 +707,6 @@ private:
   int check_stmt_order_by(const ObSelectStmt *stmt);
 
   int resolve_ora_rowscn_pseudo_column(const ObQualifiedName &q_name, ObRawExpr *&real_ref_expr);
-  int resolve_old_new_pseudo_column(const ObQualifiedName &q_name, ObRawExpr *&real_ref_expr);
   int resolve_pseudo_column(const ObQualifiedName &q_name, ObRawExpr *&real_ref_expr);
   int resolve_current_of(const ParseNode &node, ObDMLStmt &stmt, ObIArray<ObRawExpr*> &and_exprs);
   int get_all_column_ref(ObRawExpr *expr, common::ObIArray<ObColumnRefRawExpr*> &arr);
@@ -832,7 +831,6 @@ private:
   int add_udt_dependency(const pl::ObUserDefinedType &udt_type);
   int add_obj_to_llc_bitmap(const ObObj &obj, char *llc_bitmap, double &num_null);
   int compute_values_table_row_count(ObValuesTableDef &table_def);
-  bool is_update_for_mv_fast_refresh(const ObDMLStmt &stmt);
 protected:
   struct GenColumnExprInfo {
     GenColumnExprInfo():

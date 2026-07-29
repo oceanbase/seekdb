@@ -1,4 +1,3 @@
-#include "share/ob_ex_rpc.h"
 #include "share/ob_dml_sql_splicer.h"
 /*
  * Copyright (c) 2025 OceanBase.
@@ -67,26 +66,6 @@ int ObTableLockDetectFuncList::detect_session_alive(const uint32_t session_id, b
   if (OB_NOT_NULL(session)) {
     session_mgr->revert_session(session);
   }
-  return ret;
-}
-
-int ObTableLockDetectFuncList::detect_session_alive_for_rpc(const uint32_t session_id, obcall::Bool &is_alive)
-{
-  int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
-  bool tmp_is_alive = true;
-
-  // We should catch the error code by tmp_ret here, for 'is_alive' will be returned correctly
-  if (OB_TMP_FAIL(detect_session_alive(session_id, tmp_is_alive))) {
-    if (tmp_is_alive) {
-      LOG_WARN("detect session alive failed", K(tmp_ret), K(session_id), K(tmp_is_alive));
-    }
-  }
-
-  // No matter detect_session_alive is success or not,
-  // we should set tmp_is_alive to is_alive here.
-  is_alive = tmp_is_alive;
-  LOG_DEBUG("detect_session_alive_for_rpc", K(tmp_ret), K(session_id), K(is_alive));
   return ret;
 }
 

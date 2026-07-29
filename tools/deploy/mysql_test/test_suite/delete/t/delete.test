@@ -212,6 +212,6 @@ drop table if exists t_ignore;
 --enable_warnings
 
 create table t_ignore(c1 int);
-## delete ignore only syntax support
-delete ignore from t_ignore;
+## delete only syntax support
+delete from t_ignore;
 drop table t_ignore;

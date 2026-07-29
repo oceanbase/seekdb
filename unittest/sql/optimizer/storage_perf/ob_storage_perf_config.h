@@ -76,7 +76,7 @@ public:
   int get_scan_thread_count() { return scan_thread_count_; }
   bool is_test_write() { return (is_test_write_ > 0) ? true : false; }
   int get_write_to_memtable_percent() {return write_to_memtable_percent_;}
-  int64_t get_tenant_cache_size() { return tenant_cache_size_; }
+  int64_t get_cache_size() { return cache_size_; }
   int get_print_row_info() { return print_row_info_; }
   int is_test_single_row_speed() { return test_single_row_speed_; }
   int get_scan_use_cache() { return scan_use_cache_; }
@@ -125,7 +125,7 @@ public:
   int scan_thread_count_;
   int is_test_write_;
   int write_to_memtable_percent_;
-  int64_t tenant_cache_size_;
+  int64_t cache_size_;
   int print_row_info_;
   int test_single_row_speed_;
   int scan_use_cache_;
@@ -143,7 +143,6 @@ public:
   bool flush_block_index_cache_;
   bool flush_block_cache_;
   bool flush_row_cache_;
-  bool flush_bf_cache_;
   const char *log_level_;
   int64_t get_range_;
   bool unittest_mode_;

@@ -584,7 +584,7 @@ DROP TABLE t1, t2, t3;
 affected rows: 0
 #
 # Bug #46425 crash in Diagnostics_area::set_ok_status,
-#            empty statement, DELETE IGNORE
+#            empty statement, DELETE
 #
 CREATE table t1 (i INTEGER);
 affected rows: 0

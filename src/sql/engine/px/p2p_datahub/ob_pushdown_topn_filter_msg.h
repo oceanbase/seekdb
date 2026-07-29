@@ -79,7 +79,7 @@ struct ObPushDownTopNFilterInfo
 
 public:
   explicit ObPushDownTopNFilterInfo(common::ObIAllocator &alloc)
-      : enabled_(false), p2p_dh_id_(OB_INVALID), effective_sk_cnt_(0), total_sk_cnt_(0),
+      : enabled_(false), p2p_dh_id_(OB_INVALID_INDEX_INT64), effective_sk_cnt_(0), total_sk_cnt_(0),
         cmp_metas_(alloc), dh_msg_type_(ObP2PDatahubMsgBase::ObP2PDatahubMsgType::NOT_INIT),
         expr_ctx_id_(UINT32_MAX /*INVALID_EXP_CTX_ID*/), is_shared_(false), is_shuffle_(false),
         max_batch_size_(0), adaptive_filter_ratio_(0.5)

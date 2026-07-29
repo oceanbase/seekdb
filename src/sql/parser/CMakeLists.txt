@@ -1,35 +1,3 @@
-
-# charset objects used for proxy_parser
-
-
-
-set(ob_sql_parser_charset_object_list
-    ob_ctype_bin.cc
-    ob_ctype.cc
-    ob_ctype_mb.cc
-    ob_ctype_simple.cc
-    ob_ctype_utf8.cc
-    ob_dtoa.cc
-    )
-
-list(TRANSFORM ob_sql_parser_charset_object_list
-     PREPEND ${PROJECT_SOURCE_DIR}/deps/oblib/src/lib/charset/)
-# hash objects used for proxy parser
-set(ob_sql_parser_hash_object_list
-  murmur_hash.h
-  murmur_hash.cpp
-)
-
-list(TRANSFORM ob_sql_parser_hash_object_list
-  PREPEND ${PROJECT_SOURCE_DIR}/deps/oblib/src/lib/hash_func/)
-
-add_library(ob_sql_parser_base INTERFACE)
-target_include_directories(ob_sql_parser_base INTERFACE
-  ${PROJECT_SOURCE_DIR}/deps/oblib/src/common/sql_mode/
-  ${PROJECT_SOURCE_DIR}/deps/oblib/src
-  ${CMAKE_SOURCE_DIR}/deps/oblib/src/lib/charset/
-  )
-
 # common
 set(ob_inner_sql_parser_object_list
   ${ob_inner_sql_parser_object_list}
@@ -76,47 +44,23 @@ set(ob_extra_sql_parser_object_list
   ob_parser.cpp
   ob_parser.h
   ob_parser_utils.h
-  parser_proxy_func.cpp
-  parser_proxy_func.h
 )
 
-# ob_sql_proxy_parser_objects is the static library for proxy, it does not link against observer
-add_library(ob_sql_proxy_parser_objects OBJECT
-            ${ob_inner_sql_parser_object_list}
-            ${ob_sql_parser_hash_object_list}
-            ${ob_sql_parser_charset_object_list}
-            )
 # ob_sql_server_parser_object is the static library for observer
 add_library(ob_sql_server_parser_objects OBJECT
   ${ob_inner_sql_parser_object_list}
   ${ob_extra_sql_parser_object_list})
 
-target_link_libraries(ob_sql_proxy_parser_objects PUBLIC ob_base ob_sql_parser_base)
 target_link_libraries(ob_sql_server_parser_objects PUBLIC ob_base)
 
 if (WITH_COVERAGE)
   # 排除少量sql解析文件，不参与coverage编译，clang针对于特殊语法文件会core
-  config_remove_coverage_flag(ob_sql_proxy_parser_objects)
   config_remove_coverage_flag(ob_sql_server_parser_objects)
 endif()
-
-target_compile_definitions(ob_sql_proxy_parser_objects PUBLIC SQL_PARSER_COMPILATION)
-
-add_library(ob_sql_proxy_parser_static
-  STATIC
-  EXCLUDE_FROM_ALL)
 
 add_library(ob_sql_server_parser_static
   STATIC
   EXCLUDE_FROM_ALL)
-
-target_link_libraries(ob_sql_proxy_parser_static
-  PUBLIC
-  ob_sql_proxy_parser_objects)
-
-if(ENABLE_THIN_LTO AND USE_LTO_CACHE)
-  add_dependencies(ob_sql_proxy_parser_static observer)
-endif()
 
 target_link_libraries(ob_sql_server_parser_static
   PUBLIC

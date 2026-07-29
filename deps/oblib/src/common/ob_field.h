@@ -88,7 +88,6 @@ public:
   int32_t length_;//in bytes not characters. used for client
   ObParamedSelectItemCtx *paramed_ctx_; // context for paramed select item
   bool is_paramed_select_item_;
-  bool is_hidden_rowid_;
   uint8_t inout_mode_; // using for routine/anonymous resultset
 
   ObField()
@@ -97,7 +96,7 @@ public:
       default_value_(ObObj::make_nop_obj()), accuracy_(),
       charsetnr_(CS_TYPE_UTF8MB4_GENERAL_CI),
       flags_(0), length_(0), paramed_ctx_(NULL), is_paramed_select_item_(false),
-      is_hidden_rowid_(false), inout_mode_(0)
+      inout_mode_(0)
   {
   }
 

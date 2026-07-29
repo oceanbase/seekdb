@@ -90,7 +90,6 @@ private:
                       int64_t &row_num);
   int response_query_header(sql::ObSQLSessionInfo &session, const ColumnsFieldArray *fields);
   virtual int before_process();
-  void record_stat(const sql::stmt::StmtType type, const int64_t end_time) const;
   // Overload response, do not call flush_buffer(true) in response; flush_buffer(true) should be explicitly called when a response packet is needed to be sent
 private:
   int64_t cursor_id_;
