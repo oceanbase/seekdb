@@ -186,10 +186,6 @@ public:
                                     common::ObIArray<const ObTableSchema *> &table_schemas);
   int get_table_schemas_in_database(const uint64_t database_id,
                                     common::ObIArray<const ObSimpleTableSchemaV2 *> &table_schemas);
-  int get_table_schemas_in_tablegroup(const uint64_t tablegroup_id,
-                                      common::ObIArray<const ObTableSchema *> &table_schemas);
-  int get_table_schemas_in_tablegroup(const uint64_t tablegroup_id,
-                                      common::ObIArray<const ObSimpleTableSchemaV2 *> &table_schemas);
   int get_table_ids_in_runtime(common::ObIArray<uint64_t> &table_ids);
   int get_table_ids_in_tenant(common::ObIArray<uint64_t> &table_ids);
   int get_table_ids_in_database(const uint64_t dataspace_id,
@@ -198,13 +194,6 @@ public:
                                   common::ObIArray<uint64_t> &trigger_ids);
   int get_routine_ids_in_database(const uint64_t database_id,
                                   common::ObIArray<uint64_t> &routine_ids);
-  int get_udt_ids_in_database(const uint64_t database_id,
-                              common::ObIArray<uint64_t> &udt_ids);
-  int get_routine_info_in_udt(const uint64_t udt_id,
-                              const uint64_t subprogram_id,
-                              const ObRoutineInfo *&routine_info);
-  int get_routine_infos_in_udt(const uint64_t udt_id,
-                               common::ObIArray<const ObRoutineInfo *> &routine_infos);
   int get_routine_info_in_package(const uint64_t package_id,
                                   const uint64_t subprogram_id,
                                   const ObRoutineInfo *&routine_info);

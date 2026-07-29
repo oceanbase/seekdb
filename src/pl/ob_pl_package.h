@@ -33,8 +33,8 @@ enum ObPackageType
   PL_INVALID_PACKAGE_TYPE = 0,
   PL_PACKAGE_SPEC = 1,
   PL_PACKAGE_BODY = 2,
-  PL_UDT_OBJECT_SPEC = 3,
-  PL_UDT_OBJECT_BODY = 4,
+  PL_RESERVED_PACKAGE_TYPE_3 = 3,
+  PL_RESERVED_PACKAGE_TYPE_4 = 4,
 };
 
 class ObPLPackageBase
@@ -44,8 +44,7 @@ public:
     package_type_(PL_INVALID_PACKAGE_TYPE),
     id_(OB_INVALID_ID),
     database_id_(OB_INVALID_ID),
-    version_(OB_INVALID_VERSION),
-    serially_reusable_(false) {}
+    version_(OB_INVALID_VERSION) {}
   virtual ~ObPLPackageBase() {}
 
   inline const common::ObString &get_db_name() const { return db_name_; }
@@ -55,8 +54,6 @@ public:
   inline uint64_t get_id() const { return id_; }
   inline uint64_t get_database_id() const { return database_id_; }
   inline int64_t get_version() const { return version_; }
-  inline void set_serially_reusable() { serially_reusable_ = true; }
-  inline bool get_serially_reusable() const { return serially_reusable_; }
   inline void set_id(uint64_t id) { id_ = id; }
 protected:
   common::ObString db_name_;
@@ -65,7 +62,6 @@ protected:
   uint64_t id_;
   uint64_t database_id_;
   int64_t version_;
-  bool serially_reusable_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPLPackageBase);
 };
@@ -106,8 +102,7 @@ public:
       inited_(false),
       var_table_(),
       condition_table_(),
-      cursor_table_(allocator_),
-      public_syn_count_(0) {}
+      cursor_table_(allocator_) {}
   virtual ~ObPLPackage();
 
   int init(const ObPLPackageAST &package_ast);
@@ -145,9 +140,6 @@ public:
                                 ObExecContext &exec_ctx,
                                 ObPLPackageState &package_state);
   int execute_init_routine(ObIAllocator &allocator, ObExecContext &exec_ctx);
-  void set_public_syn_count(int64_t public_syn_count) { public_syn_count_ = public_syn_count; }
-  int64_t get_public_syn_count() const { return public_syn_count_; }
-
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPLPackage);
 
@@ -155,7 +147,6 @@ private:
   common::ObArray<ObPLVar *> var_table_;
   common::ObArray<ObPLCondition *> condition_table_;
   ObPLCursorTable cursor_table_;
-  int64_t public_syn_count_;
 };
 
 }

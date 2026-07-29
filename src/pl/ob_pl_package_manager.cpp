@@ -298,9 +298,10 @@ int ObPLPackageManager::read_and_exec_package_sql(ObMySQLProxy &sql_proxy,
                                                   ObCharStream &stream)
 {
   int ret = OB_SUCCESS;
-  if (!sql_proxy.is_inited()) {
+  if (!sql_proxy.is_inited() || !sql_proxy.is_active()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("sql_proxy not inited", K(ret));
+    LOG_WARN("sql_proxy not inited or not active", "sql_proxy inited",
+             sql_proxy.is_inited(), "sql_proxy active", sql_proxy.is_active(), K(ret));
   } else {
     int64_t affected_rows = 0;
     if (OB_FAIL(stream.open())) {

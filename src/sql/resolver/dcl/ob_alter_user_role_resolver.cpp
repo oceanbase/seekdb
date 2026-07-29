@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 
-#include "sql/resolver/dcl/ob_alter_user_profile_resolver.h"
+#include "sql/resolver/dcl/ob_alter_user_role_resolver.h"
 
 #include "lib/encrypt/ob_encrypted_helper.h"
 #include "sql/optimizer/ob_optimizer_util.h"
@@ -24,19 +24,19 @@ using namespace oceanbase::sql;
 using namespace oceanbase::common;
 using oceanbase::share::schema::ObUserInfo;
 
-ObAlterUserProfileResolver::ObAlterUserProfileResolver(ObResolverParams &params)
+ObAlterUserRoleResolver::ObAlterUserRoleResolver(ObResolverParams &params)
     : ObDCLResolver(params)
 {
 }
 
-ObAlterUserProfileResolver::~ObAlterUserProfileResolver()
+ObAlterUserRoleResolver::~ObAlterUserRoleResolver()
 {
 }
 
-int ObAlterUserProfileResolver::resolve_set_role(const ParseNode &parse_tree)
+int ObAlterUserRoleResolver::resolve_set_role(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
-  ObAlterUserProfileStmt *stmt = NULL;
+  ObAlterUserRoleStmt *stmt = NULL;
 
   if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -48,9 +48,9 @@ int ObAlterUserProfileResolver::resolve_set_role(const ParseNode &parse_tree)
              || 1 != parse_tree.num_child_) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("wrong root", K(ret), K(parse_tree.type_), K(parse_tree.num_child_));
-  } else if (OB_ISNULL(stmt = create_stmt<ObAlterUserProfileStmt>())) {
+  } else if (OB_ISNULL(stmt = create_stmt<ObAlterUserRoleStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Failed to create ObAlterUserProfileStmt", K(ret));
+    LOG_WARN("Failed to create ObAlterUserRoleStmt", K(ret));
   } else {
     ObString user_name;
     ObString host_name(OB_DEFAULT_HOST_NAME);
@@ -63,10 +63,10 @@ int ObAlterUserProfileResolver::resolve_set_role(const ParseNode &parse_tree)
       LOG_WARN("current user info is null", K(ret));
     } else {
       
-      obcall::ObAlterUserProfileArg &arg = stmt->get_ddl_arg();
+      obcall::ObAlterUserRoleArg &arg = stmt->get_ddl_arg();
       
       
-      stmt->set_set_role_flag(ObAlterUserProfileStmt::SET_ROLE);
+      stmt->set_set_role_flag(ObAlterUserRoleStmt::SET_ROLE);
 
       /* 1. resolve default role */
       OZ (resolve_default_role_clause(parse_tree.children_[0], arg, 
@@ -77,9 +77,9 @@ int ObAlterUserProfileResolver::resolve_set_role(const ParseNode &parse_tree)
   return ret;
 }
 
-int ObAlterUserProfileResolver::resolve_role_list(
+int ObAlterUserRoleResolver::resolve_role_list(
   const ParseNode *role_list,
-  obcall::ObAlterUserProfileArg &arg,
+  obcall::ObAlterUserRoleArg &arg,
   const ObIArray<uint64_t> &role_id_array,
   bool for_default_role_stmt)
 {
@@ -183,9 +183,9 @@ int ObAlterUserProfileResolver::resolve_role_list(
   return ret;
 }
 
-int ObAlterUserProfileResolver::resolve_default_role_clause(
+int ObAlterUserRoleResolver::resolve_default_role_clause(
     const ParseNode *parse_tree,
-    obcall::ObAlterUserProfileArg &arg,
+    obcall::ObAlterUserRoleArg &arg,
     const ObIArray<uint64_t> &role_id_array,
     bool for_default_role_stmt)
 {
@@ -235,10 +235,10 @@ int ObAlterUserProfileResolver::resolve_default_role_clause(
   return ret;
 }
 
-int ObAlterUserProfileResolver::resolve_default_role(const ParseNode &parse_tree)
+int ObAlterUserRoleResolver::resolve_default_role(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
-  ObAlterUserProfileStmt *stmt = NULL;
+  ObAlterUserRoleStmt *stmt = NULL;
   
 
   if (OB_ISNULL(params_.session_info_)) {
@@ -251,15 +251,15 @@ int ObAlterUserProfileResolver::resolve_default_role(const ParseNode &parse_tree
              || 2 != parse_tree.num_child_) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("wrong root", K(ret), K(parse_tree.type_), K(parse_tree.num_child_));
-  } else if (OB_ISNULL(stmt = create_stmt<ObAlterUserProfileStmt>())) {
+  } else if (OB_ISNULL(stmt = create_stmt<ObAlterUserRoleStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Failed to create ObAlterUserProfileStmt", K(ret));
+    LOG_WARN("Failed to create ObAlterUserRoleStmt", K(ret));
   } else {
     ObString user_name;
     ObString host_name;
     const ObUserInfo *user_info = NULL;
-    obcall::ObAlterUserProfileArg &arg = stmt->get_ddl_arg();
-    stmt->set_set_role_flag(ObAlterUserProfileStmt::SET_DEFAULT_ROLE);
+    obcall::ObAlterUserRoleArg &arg = stmt->get_ddl_arg();
+    stmt->set_set_role_flag(ObAlterUserRoleStmt::SET_DEFAULT_ROLE);
 
     /* 1. resolve user */
     
@@ -336,7 +336,7 @@ int ObAlterUserProfileResolver::resolve_default_role(const ParseNode &parse_tree
   return ret;
 }
 
-int ObAlterUserProfileResolver::resolve(const ParseNode &parse_tree)
+int ObAlterUserRoleResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(params_.session_info_)) {

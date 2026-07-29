@@ -53,10 +53,7 @@ int ObPLRouter::check_error_in_resolve(int code)
     case OB_ER_SP_BAD_SQLSTATE:
     case OB_ERR_UNKNOWN_TABLE:
     case OB_ER_SP_CANT_SET_AUTOCOMMIT:
-    case OB_ERR_GOTO_BRANCH_ILLEGAL:
     case OB_ERR_UNEXPECTED:
-    case OB_ERR_RETURN_VALUE_REQUIRED:
-    case OB_ERR_END_LABEL_NOT_MATCH:
     case OB_ERR_TOO_LONG_IDENT:
     case OB_ERR_PL_JSONTYPE_USAGE: {
       ret = code;
@@ -67,9 +64,6 @@ int ObPLRouter::check_error_in_resolve(int code)
     }
     break;
     case OB_ERR_NO_RETURN_IN_FUNCTION:
-    case OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_FUNC_TRIGGER:
-    case OB_ERR_TOO_LONG_STRING_TYPE:
-    case OB_ERR_WIDTH_OUT_OF_RANGE:
     case OB_ERR_REDEFINE_LABEL:
     case OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_PROCEDRUE:
     case OB_ERR_TOO_BIG_PRECISION:
@@ -160,9 +154,6 @@ int ObPLRouter::simple_resolve(ObPLFunctionAST &func_ast)
   } else if (ROUTINE_FUNCTION_TYPE == routine_info_.get_routine_type()) {
     func_ast.set_proc_type(STANDALONE_FUNCTION);
   }
-  if (routine_info_.is_udt_routine()) {
-      func_ast.set_is_udt_routine();
-  }
   //Add parameter list
   for (int64_t i = 0; OB_SUCC(ret) && i < routine_info_.get_routine_params().count(); ++i) {
     ObRoutineParam *param = routine_info_.get_routine_params().at(i);
@@ -187,8 +178,7 @@ int ObPLRouter::simple_resolve(ObPLFunctionAST &func_ast)
                                                param_type,
                                                NULL,
                                                &param->get_extended_type_info(),
-                                               param->is_in_sp_param(),
-                                               param->is_self_param()))) { //The default value of the input parameter is not used at compile time
+                                               param->is_in_sp_param()))) { //The default value of the input parameter is not used at compile time
         LOG_WARN("failed to add argument", K(param->get_param_name()), K(param->get_param_type()), K(ret));
       } else {
         // do nothing
@@ -259,8 +249,7 @@ int ObPLRouter::analyze_stmt(const ObPLStmt *stmt, ObString &route_sql)
       }
     }
     break;
-    case PL_OPEN:
-    case PL_OPEN_FOR: {
+    case PL_OPEN: {
       const ObPLOpenStmt *open_stmt = static_cast<const ObPLOpenStmt*>(stmt);
       const ObPLCursor *cursor = open_stmt->get_cursor();
       if (OB_ISNULL(cursor)) {

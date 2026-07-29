@@ -114,7 +114,7 @@ static ObPLConditionType classify_sqlstate(const char *sql_state)
 
 // Recover the *effective* raised condition (MySQL errno + SQLSTATE) from a
 // propagated OB error code, mirroring ObPLEH::eh_convert_exception (MySQL mode).
-// A MySQL SIGNAL/RESIGNAL with a SQLSTATE surfaces as OB_SP_RAISE_APPLICATION_ERROR
+// A MySQL SIGNAL/RESIGNAL with a SQLSTATE surfaces as OB_ERR_SIGNAL_EXCEPTION
 // (spi_process_resignal raises that via LOG_MYSQL_USER_ERROR and stashes the real
 // errno + literal sqlstate in the TSI warning buffer); for that code the true
 // condition lives in the warning buffer, not in ob_mysql_errno/ob_sqlstate of the
@@ -122,7 +122,7 @@ static ObPLConditionType classify_sqlstate(const char *sql_state)
 // condition derives from the code itself, as before.
 static void effective_raised_condition(int err, int &mysql_errno, const char *&sql_state)
 {
-  if (OB_SP_RAISE_APPLICATION_ERROR == err) {
+  if (OB_ERR_SIGNAL_EXCEPTION == err) {
     ObWarningBuffer *wb = common::ob_get_tsi_warning_buffer();
     if (OB_NOT_NULL(wb)) {
       mysql_errno = wb->get_err_code();
@@ -235,11 +235,11 @@ static int run_matched_handler(ObPLExecCtx *ctx, const ObPLDeclareHandlerStmt *e
       // A native error's message can be wiped off the buffer by an inner frame before the
       // handler catches it (errno + sqlstate survive); restore the standard message for the
       // caught OB code so a bare RESIGNAL re-raises it with text, not an empty message. Skip
-      // user SIGNALs (OB_SP_RAISE_APPLICATION_ERROR), whose message is user-supplied and lives
+      // user SIGNALs (OB_ERR_SIGNAL_EXCEPTION), whose message is user-supplied and lives
       // on the buffer.
       const char *live_msg = wb->get_err_msg();
       if ((OB_ISNULL(live_msg) || '\0' == live_msg[0])
-          && OB_SUCCESS != ob_err && OB_SP_RAISE_APPLICATION_ERROR != ob_err) {
+          && OB_SUCCESS != ob_err && OB_ERR_SIGNAL_EXCEPTION != ob_err) {
         wb->set_error(ob_strerror(ob_err), wb->get_err_code());  // keep errno, restore message
       }
       if (OB_NOT_NULL(exception.sql_state_) && '\0' != exception.sql_state_[0]) {
@@ -997,12 +997,12 @@ static int exec_signal(ObPLExecCtx *ctx, const ObPLSignalStmt *s)
     if (OB_SUCC(ret) && OB_SUCCESS != error_code) {
       // Mirror codegen: spi_process_resignal stashed the literal sqlstate + the
       // SIGNAL's errno (ER_SIGNAL_NOT_FOUND / ER_SIGNAL_EXCEPTION or a SET MYSQL_ERRNO)
-      // into the TSI warning buffer and raised OB_SP_RAISE_APPLICATION_ERROR via
+      // into the TSI warning buffer and raised OB_ERR_SIGNAL_EXCEPTION via
       // LOG_MYSQL_USER_ERROR. Surface *that* OB code so an unhandled SIGNAL reports the
       // literal sqlstate (send_error_packet/eh_convert_exception read the warning buffer
-      // for OB_SP_RAISE_APPLICATION_ERROR); the handler search recovers the real errno +
+      // for OB_ERR_SIGNAL_EXCEPTION); the handler search recovers the real errno +
       // sqlstate from the warning buffer too (see effective_raised_condition).
-      ret = OB_SP_RAISE_APPLICATION_ERROR;  // a non-warning SIGNAL raises
+      ret = OB_ERR_SIGNAL_EXCEPTION;  // a non-warning SIGNAL raises
     }
     LOG_WARN("[pl-interp] SIGNAL processed", K(ret), K(error_code),
              "sql_state", ObString(s->get_sql_state()));
@@ -1035,12 +1035,10 @@ static int exec_execute(ObPLExecCtx *ctx, const ObPLExecuteStmt *s)
   ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObObjParam **params = NULL;
   ObObjParam *storage = NULL;  // independent temps backing every USING actual
-  int64_t *params_mode = NULL;
   if (OB_SUCC(ret) && param_count > 0) {
     params = static_cast<ObObjParam **>(tmp_alloc.alloc(sizeof(ObObjParam *) * param_count));
     storage = static_cast<ObObjParam *>(tmp_alloc.alloc(sizeof(ObObjParam) * param_count));
-    params_mode = static_cast<int64_t *>(tmp_alloc.alloc(sizeof(int64_t) * param_count));
-    if (OB_ISNULL(params) || OB_ISNULL(storage) || OB_ISNULL(params_mode)) {
+    if (OB_ISNULL(params) || OB_ISNULL(storage)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("[pl-interp] failed to allocate USING params", K(ret), K(param_count));
     }
@@ -1048,17 +1046,14 @@ static int exec_execute(ObPLExecCtx *ctx, const ObPLExecuteStmt *s)
   for (int64_t i = 0; OB_SUCC(ret) && i < param_count; ++i) {
     const InOutParam &u = s->get_using().at(i);
     new (&storage[i]) ObObjParam();
-    params_mode[i] = static_cast<int64_t>(u.mode_);
-    if (!u.is_pure_out()) {  // IN/INOUT: evaluate the actual; pure-OUT filled by execute
-      OZ (ObSPIService::spi_calc_expr_at_idx(ctx, u.param_, OB_INVALID_INDEX, &storage[i]));
-    }
+    OZ (ObSPIService::spi_calc_expr_at_idx(ctx, u.param_, OB_INVALID_INDEX, &storage[i]));
     OX (params[i] = &storage[i]);
   }
   // spi_execute_immediate resolves the INTO targets from into_exprs_idx itself
   // (a `SET @uservar = expr` lowers to dynamic SQL with the variable as the INTO
   // target); result types come from the dynamic statement, so column_types stays NULL.
   OZ (ObSPIService::spi_execute_immediate(ctx, s->get_sql(),
-        params, params_mode, param_count,
+        params, param_count,
         into_idx, into_count,
         types, type_count,
         not_null, ranges,

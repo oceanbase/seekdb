@@ -108,8 +108,7 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_ADD_SUB_PARTITION, = 54)                            \
   ACT(OB_DDL_DROP_SUB_PARTITION, = 55)                           \
   ACT(OB_DDL_TRUNCATE_SUB_PARTITION, = 56)                       \
-  ACT(OB_DDL_SET_INTERVAL, = 57)                                 \
-  ACT(OB_DDL_INTERVAL_TO_RANGE, = 58)                            \
+  /* 57-58: removed interval-partition operations. */            \
   ACT(OB_DDL_TRUNCATE_TABLE, = 59)                               \
   ACT(OB_DDL_RENAME_PARTITION, = 60)                             \
   ACT(OB_DDL_RENAME_SUB_PARTITION, = 61)                         \
@@ -135,7 +134,7 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_GRANT_REVOKE_USER,)                                 \
   ACT(OB_DDL_ALTER_USER_REQUIRE,)                                \
   ACT(OB_DDL_MODIFY_USER_SCHEMA_VERSION,)                        \
-  ACT(OB_DDL_ALTER_USER_PROFILE,)                                \
+  ACT(OB_DDL_ALTER_USER_ROLE,)                                   \
   ACT(OB_DDL_ALTER_USER,)                                        \
   ACT(OB_DDL_ALTER_ROLE,)                                        \
   ACT(OB_DDL_USER_OPERATION_END, = 500)                          \
@@ -153,11 +152,7 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_DROP_OUTLINE,)                                      \
   ACT(OB_DDL_ALTER_OUTLINE,)                                     \
   ACT(OB_DDL_OUTLINE_OPERATION_END, = 800)                       \
-  ACT(OB_DDL_SYNONYM_OPERATION_BEGIN, = 901)                     \
-  ACT(OB_DDL_CREATE_SYNONYM,)                                    \
-  ACT(OB_DDL_DROP_SYNONYM,)                                      \
-  ACT(OB_DDL_REPLACE_SYNONYM,)                                   \
-  ACT(OB_DDL_SYNONYM_OPERATION_END, = 1000)                      \
+  /* 901-1000: removed object operations. */                     \
   ACT(OB_DDL_ROUTINE_OPERATION_BEGIN, = 1201)                    \
   ACT(OB_DDL_CREATE_ROUTINE,)                                    \
   ACT(OB_DDL_DROP_ROUTINE,)                                      \
@@ -169,17 +164,8 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_ALTER_PACKAGE,)                                     \
   ACT(OB_DDL_DROP_PACKAGE,)                                      \
   ACT(OB_DDL_PACKAGE_OPERATION_END, = 1300)                      \
-  ACT(OB_DDL_UDT_OPERATION_BEGIN, = 1321)                        \
-  ACT(OB_DDL_CREATE_UDT,)                                        \
-  ACT(OB_DDL_REPLACE_UDT,)                                       \
-  ACT(OB_DDL_DROP_UDT,)                                          \
-  ACT(OB_DDL_DROP_UDT_BODY,)                                     \
-  ACT(OB_DDL_UDT_OPERATION_END, = 1330)                          \
-  ACT(OB_DDL_AUDIT_OPERATION_BEGIN, = 1331)                      \
-  ACT(OB_DDL_ADD_AUDIT,)                                         \
-  ACT(OB_DDL_UPDATE_AUDIT,)                                      \
-  ACT(OB_DDL_DEL_AUDIT,)                                         \
-  ACT(OB_DDL_AUDIT_OPERATION_END, = 1340)                        \
+  /* 1321-1330: removed schema-level user-defined type operations. */ \
+  /* 1331-1340: Oracle AUDIT operations removed. */              \
   ACT(OB_DDL_SYS_VAR_OPERATION_BEGIN, = 1401)                    \
   ACT(OB_DDL_ALTER_SYS_VAR,)                                     \
   ACT(OB_DDL_SYS_VAR_OPERATION_END, = 1500)                      \
@@ -192,37 +178,8 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_FINISH_BOOTSTRAP,)                                  \
   ACT(OB_DDL_ONLY_SIGNAL_OPERATION_END, = 1600)                  \
   ACT(OB_DDL_STANDBY_FINISH_REPLAY_SCHEMA_SNAPSHOT, = 1601)      \
-  ACT(OB_DDL_LABEL_SE_POLICY_OPERATION_BEGIN, = 1701)            \
-  ACT(OB_DDL_CREATE_LABEL_SE_POLICY,)                            \
-  ACT(OB_DDL_ALTER_LABEL_SE_POLICY,)                             \
-  ACT(OB_DDL_DROP_LABEL_SE_POLICY,)                              \
-  ACT(OB_DDL_LABEL_SE_POLICY_OPERATION_END, = 1750)              \
-  ACT(OB_DDL_LABEL_SE_COMPONENT_OPERATION_BEGIN, = 1751)         \
-  ACT(OB_DDL_CREATE_LABEL_SE_LEVEL,)                             \
-  ACT(OB_DDL_ALTER_LABEL_SE_LEVEL,)                              \
-  ACT(OB_DDL_DROP_LABEL_SE_LEVEL,)                               \
-  ACT(OB_DDL_CREATE_LABEL_SE_COMPARTMENT,)                       \
-  ACT(OB_DDL_ALTER_LABEL_SE_COMPARTMENT,)                        \
-  ACT(OB_DDL_DROP_LABEL_SE_COMPARTMENT,)                         \
-  ACT(OB_DDL_CREATE_LABEL_SE_GROUP,)                             \
-  ACT(OB_DDL_ALTER_LABEL_SE_GROUP,)                              \
-  ACT(OB_DDL_DROP_LABEL_SE_GROUP,)                               \
-  ACT(OB_DDL_LABEL_SE_COMPONENT_OPERATION_END, = 1800)           \
-  ACT(OB_DDL_LABEL_SE_LABEL_OPERATION_BEGIN, = 1801)             \
-  ACT(OB_DDL_CREATE_LABEL_SE_LABEL,)                             \
-  ACT(OB_DDL_ALTER_LABEL_SE_LABEL,)                              \
-  ACT(OB_DDL_DROP_LABEL_SE_LABEL,)                               \
-  ACT(OB_DDL_LABEL_SE_LABEL_OPERATION_END, = 1850)               \
-  ACT(OB_DDL_LABEL_SE_USER_LABEL_OPERATION_BEGIN, = 1851)        \
-  ACT(OB_DDL_CREATE_LABEL_SE_USER_LEVELS,)                       \
-  ACT(OB_DDL_ALTER_LABEL_SE_USER_LEVELS,)                        \
-  ACT(OB_DDL_DROP_LABEL_SE_USER_LEVELS,)                         \
-  ACT(OB_DDL_LABEL_SE_USER_LABEL_OPERATION_END, = 1900)          \
-  ACT(OB_DDL_TABLESPACE_OPERATION_BEGIN, = 1901)                 \
-  ACT(OB_DDL_CREATE_TABLESPACE,)                                 \
-  ACT(OB_DDL_ALTER_TABLESPACE,)                                  \
-  ACT(OB_DDL_DROP_TABLESPACE,)                                   \
-  ACT(OB_DDL_TABLESPACE_OPERATION_END, = 1950)                   \
+  /* 1701-1900: Oracle Label Security operations removed. */     \
+  /* 1901-1950: Oracle TABLESPACE DDL operations removed. */      \
   ACT(OB_DDL_TRIGGER_OPERATION_BEGIN, = 1951)                    \
   ACT(OB_DDL_CREATE_TRIGGER,)                                    \
   ACT(OB_DDL_ALTER_TRIGGER,)                                     \
@@ -230,11 +187,7 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_DROP_TRIGGER_TO_RECYCLEBIN,)                        \
   ACT(OB_DDL_RESTORE_TRIGGER_FROM_RECYCLEBIN,)                                 \
   ACT(OB_DDL_TRIGGER_OPERATION_END, = 1960)                      \
-  ACT(OB_DDL_PROFILE_OPERATION_BEGIN, = 1961)                    \
-  ACT(OB_DDL_CREATE_PROFILE,)                                    \
-  ACT(OB_DDL_ALTER_PROFILE,)                                     \
-  ACT(OB_DDL_DROP_PROFILE,)                                      \
-  ACT(OB_DDL_PROFILE_OPERATION_END, = 1970)                      \
+  /* 1961-1970: Oracle PROFILE operations removed. */            \
   ACT(OB_DDL_SYS_PRIV_OPERATION_BEGIN, = 1971)                   \
   ACT(OB_DDL_SYS_PRIV_GRANT_REVOKE,)                             \
   ACT(OB_DDL_SYS_PRIV_DELETE,)                                   \
@@ -300,7 +253,6 @@ IS_DDL_TYPE(COLUMN_PRIV, column_priv)
 IS_DDL_TYPE(OUTLINE, outline)
 IS_DDL_TYPE(ROUTINE, routine)
 IS_DDL_TYPE(PACKAGE, package)
-IS_DDL_TYPE(UDT, udt)
 IS_DDL_TYPE(SYS_VAR, sys_var)
 IS_DDL_TYPE(ONLY_SIGNAL, only_signal)
 IS_DDL_TYPE(TRIGGER, trigger)

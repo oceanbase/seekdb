@@ -682,45 +682,6 @@ public:
                             ObRawExpr *expr1,
                             ObRawExpr *expr2,
                             ObOpRawExpr *&expr_out);
-  static int build_div_expr(ObRawExprFactory &raw_expr_factory,
-                            ObRawExpr *expr1,
-                            ObRawExpr *expr2,
-                            ObOpRawExpr *&expr_out);
-  static int build_add_all_expr(ObRawExprFactory &raw_expr_factory,
-                                ObRawExpr *expr1,
-                                ObRawExpr *expr2,
-                                ObRawExpr *expr3,
-                                ObRawExpr *expr4,
-                                ObOpRawExpr *&sum_expr);
-  static int build_second_expr_from_interval_ds(ObRawExprFactory &raw_expr_factory,
-                                                ObRawExpr *interval_ds_expr,
-                                                ObOpRawExpr *&second_expr);
-  static int build_month_expr_from_interval_ym(ObRawExprFactory &raw_expr_factory,
-                                               ObRawExpr *interval_ym_expr,
-                                               ObOpRawExpr *&month_expr);
-  static int build_datepart_to_second_expr(ObRawExprFactory &raw_expr_factory,
-                                           ObRawExpr *interval_ds_expr,
-                                           int datapart,
-                                           int n,
-                                           ObRawExpr *&expr_out);
-  static int build_high_bound_raw_expr(ObRawExprFactory &raw_expr_factory,
-                                       ObSQLSessionInfo* session,
-                                       ObObj &const_val,
-                                       const ObObj &transition_val,
-                                       const ObObj &interval_val,
-                                       ObRawExpr *&result_expr_out,
-                                       ObRawExpr *&n_part_expr);
-  static int build_common_diff_exprs(ObRawExprFactory &raw_expr_factory,
-                                     ObObj &const_val,
-                                     const ObObj &transition_val,
-                                     const ObObj &interval_val,
-                                     ObRawExpr *&diff_1_out,
-                                     ObRawExpr *&diff_2_out,
-                                     ObConstRawExpr *&transition_expr,
-                                     ObConstRawExpr *&interval_expr);
-  static int build_sign_expr(ObRawExprFactory &expr_factory,
-                             ObRawExpr *param,
-                             ObRawExpr *&sign_expr);
   static int build_less_than_expr(ObRawExprFactory &expr_factory,
                                   ObRawExpr *left,
                                   ObRawExpr *right,
@@ -879,7 +840,6 @@ public:
                                      int64_t udf_schema_version,
                                      int64_t pkg_schema_version,
                                      bool is_deterministic,
-                                     bool is_parallel_enable,
                                      bool is_pkg_body_udf,
                                      bool is_pl_agg,
                                      int64_t type_id,
@@ -1073,32 +1033,6 @@ public:
   static int set_call_in_pl(ObRawExpr *&raw_expr);
 
 
-  static int try_modify_expr_for_gen_col_recursively(const ObSQLSessionInfo &session,
-                                                 const obcall::ObCreateIndexArg *arg,
-                                                 ObRawExprFactory &expr_factory,
-                                                 ObRawExpr *expr,
-                                                 bool &expr_changed);
-  static int try_add_to_char_on_expr(const ObSQLSessionInfo &session,
-                                     const obcall::ObCreateIndexArg *arg,
-                                     ObRawExprFactory &expr_factory,
-                                     ObRawExpr *expr,
-                                     bool &expr_changed);
-  static int actual_add_to_char_on_expr(const ObSQLSessionInfo& session,
-                                        const obcall::ObCreateIndexArg *arg,
-                                        ObRawExprFactory &expr_factory,
-                                        ObRawExpr &src_expr,
-                                        const common::ObObjType &data_type,
-                                        ObSysFunRawExpr *&to_char_expr);
-  static int try_add_nls_fmt_in_to_char_expr(const ObSQLSessionInfo &session,
-                                             const obcall::ObCreateIndexArg *arg,
-                                             ObRawExprFactory &expr_factory,
-                                             ObRawExpr *expr,
-                                             bool &expr_changed);
-  static int actual_add_nls_fmt_in_to_char_expr(const ObSQLSessionInfo& session,
-                                                const obcall::ObCreateIndexArg *arg,
-                                                ObRawExprFactory &expr_factory,
-                                                const ObObjType &data_type,
-                                                ObSysFunRawExpr *to_char_expr);
   static int get_real_expr_without_generated_column(ObRawExpr *expr, ObRawExpr *&real_expr);
   static bool is_new_old_column_ref(const ParseNode *node);
   static int mock_obj_access_ref_node(common::ObIAllocator &allocator,

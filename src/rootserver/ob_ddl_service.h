@@ -227,7 +227,6 @@ public:
       const share::schema::ObTableSchema &origin_table_schema,
       const share::schema::AlterTableSchema &alter_table_schema,
       const common::ObTimeZoneInfoWrap &tz_info_wrap,
-      const common::ObString &nls_formats,
       share::ObLocalSessionVar &local_session_var,
       common::ObIAllocator &allocator,
       share::schema::ObTableSchema &new_table_schema,
@@ -664,6 +663,7 @@ public:
                                    const ObString &host_name,
                                    const ObNeedPriv &need_priv,
                                    share::schema::ObSchemaGetterGuard &schema_guard);
+  int alter_user_default_role(const obcall::ObAlterUserRoleArg &arg);
   int lock_user(const obcall::ObLockUserArg &arg, common::ObIArray<int64_t> &failed_index);
 
   virtual int grant_database(const share::schema::ObOriginalDBKey &db_key,
@@ -950,12 +950,6 @@ int check_will_be_having_domain_index_operation(
                                                   bool &has_index_task,
                                                   ObIArray<ObDDLTaskRecord> &ddl_tasks,
                                                   ObIArray<obcall::ObDDLRes> &ddl_res_array);
-  int fill_interval_info_for_set_interval(const ObTableSchema &orig_table_schema,
-      ObTableSchema &new_table_schema,
-      AlterTableSchema &inc_table_schema);
-  int fill_interval_info_for_offline(const ObTableSchema &orig_table_schema,
-                                     ObTableSchema &new_table_schema);
-  int reset_interval_info_for_interval_to_range(ObTableSchema &new_table_schema);
   int check_inner_stat() const;
   int get_valid_index_schema_by_id_for_drop_index_(
       const uint64_t data_table_id,
@@ -1393,13 +1387,11 @@ int check_will_be_having_domain_index_operation(
       share::schema::ObColumnSchemaV2 &alter_column_schema);
   int resolve_orig_default_value(share::schema::ObColumnSchemaV2 &column_schema,
                                  const common::ObTimeZoneInfoWrap &tz_info_wrap,
-                                 const common::ObString *nls_formats,
                                  common::ObIAllocator &allocator);
   int resolve_timestamp_column(share::schema::AlterColumnSchema *alter_column_schema,
                                share::schema::ObTableSchema &new_table_schema,
                                share::schema::ObColumnSchemaV2 &new_column_schema,
                                const common::ObTimeZoneInfoWrap &tz_info_wrap,
-                               const common::ObString *nls_formats,
                                common::ObIAllocator &allocator);
   int deal_default_value_padding(share::schema::ObColumnSchemaV2 &column_schema,
                                  common::ObIAllocator &allocator);
@@ -1540,7 +1532,6 @@ int check_will_be_having_domain_index_operation(
       const share::schema::ObColumnSchemaV2 &new_column_schema,
       ObDDLOperator &ddl_operator,
       common::ObMySQLTransaction &trans,
-      const share::schema::ObTableType table_type,
       const common::ObIArray<share::schema::ObTableSchema> *global_idx_schema_array = NULL);
   int update_prev_id_for_add_column(const share::schema::ObTableSchema &origin_table_schema,
       share::schema::ObTableSchema &new_table_schema,
@@ -1555,7 +1546,7 @@ int check_will_be_having_domain_index_operation(
                                      common::ObMySQLTransaction *trans);
   int build_need_flush_role_array(share::schema::ObSchemaGetterGuard &schema_guard,
                                   const share::schema::ObUserInfo *user_info,
-                                  const obcall::ObAlterUserProfileArg &arg,
+                                  const obcall::ObAlterUserRoleArg &arg,
                                   bool &need_flush,
                                   common::ObIArray<uint64_t> &role_id_array,
                                   common::ObIArray<uint64_t> &disable_flag_array);
@@ -1839,12 +1830,8 @@ private:
       const obcall::ObAlterTableArg &alter_table_arg);
   int check_alter_add_partitions(const share::schema::ObTableSchema &orig_table_schema,
                                  obcall::ObAlterTableArg &alter_table_arg);
-  int filter_out_duplicate_interval_part(const share::schema::ObTableSchema &orig_table_schema,
-                                         share::schema::ObTableSchema &alter_table_schema);
   int check_alter_add_subpartitions(const share::schema::ObTableSchema &orig_table_schema,
                                  const obcall::ObAlterTableArg &alter_table_arg);
-  int check_alter_set_interval(const share::schema::ObTableSchema &orig_table_schema,
-                               const obcall::ObAlterTableArg &alter_table_arg);
   int check_add_list_partition(const share::schema::ObPartitionSchema &orig_part,
                                const share::schema::ObPartitionSchema &new_part);
   int check_add_list_subpartition(const share::schema::ObPartition &orig_part,

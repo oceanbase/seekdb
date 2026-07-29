@@ -44,32 +44,19 @@ const char *ObMaxIdFetcher::max_id_name_info_[OB_MAX_ID_TYPE][2] = {
   { "ob_max_used_sys_pl_object_id", "max used sys pl object id"},
   { "ob_max_used_object_id", "max used object id"},
   { "ob_max_used_lock_owner_id", "max used lock owner id"},
-  /* OB_MAX_USED_TABLE_ID_TYPE ~ OB_MAX_USED_RLS_CONTEXT_ID_TYPE ObMaxIdType will be changed to OB_MAX_USED_OBJECT_ID_TYPE and won't be persisted. */
+  /* Legacy object id types mapped to OB_MAX_USED_OBJECT_ID_TYPE. */
   { "ob_max_used_table_id", "max used table id"},
   { "ob_max_used_database_id", "max used database id"},
   { "ob_max_used_user_id", "max used user id"},
   { "ob_max_used_outline_id", "max used outline id"},
   { "ob_max_used_constraint_id", "max used constraint id"},
-  { "ob_max_used_synonym_id", "max used synonym id"},
-  { "ob_max_used_udf_id", "max used udf id"},
+  { "ob_max_used_reserved_id", "reserved max id slot"},
   { "ob_max_used_udt_id", "max used udt id"},
   { "ob_max_used_routine_id", "max used routine id"},
   { "ob_max_used_package_id", "max used package id"},
-  { "ob_max_used_label_se_policy_id", "max used label se policy id"},
-  { "ob_max_used_label_se_component_id", "max used label se component id"},
-  { "ob_max_used_label_se_label_id", "max used label se label id"},
-  { "ob_max_used_label_se_user_level_id", "max used label se user level id"},
-  { "ob_max_used_tablespace_id", "max used tablespace id"},
   { "ob_max_used_trigger_id", "max used trigger id"},
-  { "ob_max_used_profile_id", "max used profile id"},
-  { "ob_max_used_audit_id", "max used audit id"},
   { "ob_max_used_partition_id", "max used partition_id" },
-  { "ob_max_used_rls_policy_id", "max used ddl rls policy id"},
-  { "ob_max_used_rls_group_id", "max used ddl rls group id"},
-  { "ob_max_used_rls_context_id", "max used ddl rls context id"},
   /* the following ObMaxIdType will be persisted. */
-  { "ob_max_used_service_name_id", "max used service name id"},
-  {"ob_max_used_external_resource_id", "max used external resources id"}, // OB_MAX_USED_EXTERNAL_RESOURCE_ID_TYPE will be changed to OB_MAX_USED_OBJECT_ID_TYPE and won't be persisted.
   { "ob_max_used_ai_model_id", "max used ai model id"},
   { "ob_max_used_ai_model_endpoint_id", "max used ai model endpoint id"}
 };
@@ -104,7 +91,6 @@ int ObMaxIdFetcher::convert_id_type(
     case OB_MAX_USED_SYS_PL_OBJECT_ID_TYPE:
     case OB_MAX_USED_OBJECT_ID_TYPE:
     case OB_MAX_USED_LOCK_OWNER_ID_TYPE:
-    case OB_MAX_USED_SERVICE_NAME_ID_TYPE:
     case OB_MAX_USED_AI_MODEL_ENDPOINT_ID_TYPE: {
       dst = src;
       break;
@@ -114,23 +100,12 @@ int ObMaxIdFetcher::convert_id_type(
     case OB_MAX_USED_USER_ID_TYPE:
     case OB_MAX_USED_OUTLINE_ID_TYPE:
     case OB_MAX_USED_CONSTRAINT_ID_TYPE:
-    case OB_MAX_USED_SYNONYM_ID_TYPE:
-    case OB_MAX_USED_UDF_ID_TYPE:
+    case OB_MAX_USED_RESERVED_ID_TYPE:
     case OB_MAX_USED_UDT_ID_TYPE:
     case OB_MAX_USED_ROUTINE_ID_TYPE:
     case OB_MAX_USED_PACKAGE_ID_TYPE:
-    case OB_MAX_USED_LABEL_SE_POLICY_ID_TYPE:
-    case OB_MAX_USED_LABEL_SE_COMPONENT_ID_TYPE:
-    case OB_MAX_USED_LABEL_SE_LABEL_ID_TYPE:
-    case OB_MAX_USED_LABEL_SE_USER_LEVEL_ID_TYPE:
-    case OB_MAX_USED_TABLESPACE_ID_TYPE:
     case OB_MAX_USED_TRIGGER_ID_TYPE:
-    case OB_MAX_USED_PROFILE_ID_TYPE:
-    case OB_MAX_USED_AUDIT_ID_TYPE:
     case OB_MAX_USED_PARTITION_ID_TYPE:
-    case OB_MAX_USED_RLS_POLICY_ID_TYPE:
-    case OB_MAX_USED_RLS_GROUP_ID_TYPE:
-    case OB_MAX_USED_RLS_CONTEXT_ID_TYPE:
     case OB_MAX_USED_AI_MODEL_ID_TYPE: {
       dst = OB_MAX_USED_OBJECT_ID_TYPE;
       break;
@@ -500,7 +475,6 @@ int ObMaxIdFetcher::check_id_valid(const ObMaxIdType &max_id_type, const uint64_
       case OB_MAX_USED_SERVER_ID_TYPE:
       case OB_MAX_USED_DDL_TASK_ID_TYPE:
       case OB_MAX_USED_LOCK_OWNER_ID_TYPE:
-      case OB_MAX_USED_SERVICE_NAME_ID_TYPE:
       case OB_MAX_USED_AI_MODEL_ID_TYPE:
       case OB_MAX_USED_AI_MODEL_ENDPOINT_ID_TYPE: {
         // won't check other id
@@ -553,13 +527,6 @@ int ObMaxIdFetcher::check_id_valid(const ObMaxIdType &max_id_type, const uint64_
         if (is_inner_object_id(id) && !is_inner_db(id)) {
           ret = OB_SIZE_OVERFLOW;
           LOG_ERROR("inner database_id is invalid", KR(ret), K(id), K(max_id_type));
-        }
-        break;
-      }
-      case OB_MAX_USED_PROFILE_ID_TYPE: {
-        if (is_inner_object_id(id) && !is_inner_profile_id(id)) {
-          ret = OB_SIZE_OVERFLOW;
-          LOG_ERROR("inner profile_id is invalid", KR(ret), K(id), K(max_id_type));
         }
         break;
       }

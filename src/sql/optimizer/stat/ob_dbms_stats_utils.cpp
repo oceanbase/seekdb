@@ -278,7 +278,6 @@ bool ObDbmsStatsUtils::is_no_stat_virtual_table(const int64_t table_id)
          table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_TABLE_TID ||
          table_id == share::OB_ALL_VIRTUAL_SHOW_TABLES_TID ||
          table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_PROCEDURE_TID ||
-         table_id == share::OB_ALL_VIRTUAL_OBJECT_DEFINITION_TID ||
          table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_TRIGGER_TID ||
          table_id == share::OB_ALL_VIRTUAL_INFORMATION_COLUMNS_TID ||
          table_id == share::OB_ALL_VIRTUAL_OPT_STAT_GATHER_MONITOR_TID ||

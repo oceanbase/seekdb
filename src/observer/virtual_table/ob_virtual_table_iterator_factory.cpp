@@ -71,7 +71,6 @@
 #include "observer/virtual_table/ob_all_virtual_ps_stat.h"
 #include "observer/virtual_table/ob_all_virtual_ps_item_info.h"
 #include "observer/virtual_table/ob_show_processlist.h"
-#include "observer/virtual_table/ob_all_virtual_object_definition.h"
 #include "observer/virtual_table/ob_all_virtual_session_info.h"
 #include "observer/virtual_table/ob_all_virtual_memory_info.h"
 #include "observer/virtual_table/ob_all_virtual_raid_stat.h"
@@ -92,7 +91,6 @@
 #include "observer/virtual_table/ob_virtual_collation.h"
 #include "observer/virtual_table/ob_all_virtual_dtl_channel.h"
 #include "observer/virtual_table/ob_all_virtual_dtl_memory.h"
-#include "observer/virtual_table/ob_virtual_get_object_definition.h"
 #include "observer/virtual_table/ob_virtual_outline.h"
 #include "observer/virtual_table/ob_all_virtual_sql_workarea_history_stat.h"
 #include "observer/virtual_table/ob_all_virtual_sql_workarea_active.h"
@@ -881,14 +879,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               ObShowCreateTrigger *create_tg = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObShowCreateTrigger, create_tg))) {
               vt_iter = static_cast<ObVirtualTableIterator *>(create_tg);
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_OBJECT_DEFINITION_TID:
-          {
-            ObAllVirtualObjectDefinition *get_object_def = NULL;
-            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualObjectDefinition, get_object_def))) {
-              vt_iter = static_cast<ObVirtualTableIterator *>(get_object_def);
             }
             break;
           }

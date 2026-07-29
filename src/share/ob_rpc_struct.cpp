@@ -53,34 +53,6 @@ bool ObStartRedefTableArg::is_valid() const
           && OB_INVALID_ID != target_table_id_
           && share::DDL_INVALID != ddl_type_);
 }
-int ObStartRedefTableArg::set_nls_formats(const common::ObString *nls_formats)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(nls_formats)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("nls_formats is nullptr", K(ret));
-  } else {
-    char *tmp_ptr[ObNLSFormatEnum::NLS_MAX] = {};
-    for (int64_t i = 0; OB_SUCC(ret) && i < ObNLSFormatEnum::NLS_MAX; ++i) {
-      if (OB_ISNULL(tmp_ptr[i] = (char *)allocator_.alloc(nls_formats[i].length()))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc memory!", K(ret), "size: ", nls_formats[i].length());
-      } else {
-        MEMCPY(tmp_ptr[i], nls_formats[i].ptr(), nls_formats[i].length());
-        nls_formats_[i].assign_ptr(tmp_ptr[i], nls_formats[i].length());
-      }
-    }
-    if (OB_FAIL(ret)) {
-      for (int64_t i = 0; i < ObNLSFormatEnum::NLS_MAX; ++i) {
-        allocator_.free(tmp_ptr[i]);
-      }
-    }
-  }
-  return ret;
-}
-
-
-
 OB_DEF_SERIALIZE(ObStartRedefTableArg)
 {
   int ret = OB_SUCCESS;
@@ -100,13 +72,6 @@ OB_DEF_SERIALIZE(ObStartRedefTableArg)
           trace_id_,
           sql_mode_,
           tz_info_wrap_);
-    if (OB_SUCC(ret)) {
-      for (int64_t i = 0; OB_SUCC(ret) && i < ObNLSFormatEnum::NLS_MAX; i++) {
-        if (OB_FAIL(nls_formats_[i].serialize(buf, buf_len, pos))) {
-          LOG_WARN("fail to serialize nls_formats_[i]", K(ret), K(nls_formats_[i]));
-        }
-      }
-    }
     if (OB_SUCC(ret)) {
       LST_DO_CODE(OB_UNIS_ENCODE, foreign_key_checks_);
     }
@@ -129,27 +94,6 @@ OB_DEF_DESERIALIZE(ObStartRedefTableArg)
           trace_id_,
           sql_mode_,
           tz_info_wrap_);
-  if (OB_SUCC(ret)) {
-    ObString tmp_string;
-    char *tmp_ptr[ObNLSFormatEnum::NLS_MAX] = {};
-    for (int64_t i = 0; OB_SUCC(ret) && i < ObNLSFormatEnum::NLS_MAX; i++) {
-      if (OB_FAIL(tmp_string.deserialize(buf, data_len, pos))) {
-        LOG_WARN("fail to deserialize nls_formats_", K(ret), K(i));
-      } else if (OB_ISNULL(tmp_ptr[i] = (char *)allocator_.alloc(tmp_string.length()))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc memory!", K(ret));
-      } else {
-        MEMCPY(tmp_ptr[i], tmp_string.ptr(), tmp_string.length());
-        nls_formats_[i].assign_ptr(tmp_ptr[i], tmp_string.length());
-        tmp_string.reset();
-      }
-    }
-    if (OB_FAIL(ret)) {
-      for (int64_t i = 0; i < ObNLSFormatEnum::NLS_MAX; i++) {
-        allocator_.free(tmp_ptr[i]);
-      }
-    }
-  }
   if (OB_SUCC(ret)) {
     LST_DO_CODE(OB_UNIS_DECODE, foreign_key_checks_);
   }
@@ -176,11 +120,6 @@ OB_DEF_SERIALIZE_SIZE(ObStartRedefTableArg)
           trace_id_,
           sql_mode_,
           tz_info_wrap_);
-    if (OB_SUCC(ret)) {
-      for (int64_t i = 0; i < ObNLSFormatEnum::NLS_MAX; i++) {
-        len += nls_formats_[i].get_serialize_size();
-      }
-    }
   }
   if (OB_SUCC(ret)) {
     LST_DO_CODE(OB_UNIS_ADD_LEN, foreign_key_checks_);
@@ -374,18 +313,6 @@ OB_SERIALIZE_MEMBER((ObDropDatabaseArg, ObDDLArg),
                     to_recyclebin_,
                     is_add_to_scheduler_);
 
-DEF_TO_STRING(ObCreateVertialPartitionArg)
-{
-  int64_t pos = 0;
-  J_OBJ_START();
-  J_KV(K_(vertical_partition_columns));
-  J_OBJ_END();
-  return pos;
-}
-
-OB_SERIALIZE_MEMBER((ObCreateVertialPartitionArg, ObDDLArg),
-                    vertical_partition_columns_);
-
 bool ObCreateTableArg::is_valid() const
 {
   // index_arg_list can be empty
@@ -404,7 +331,6 @@ int ObCreateTableArg::assign(const ObCreateTableArg &other)
   OX(db_name_ = other.db_name_);
   OX(last_replay_log_id_ = other.last_replay_log_id_);
   OX(is_inner_ = other.is_inner_);
-  OZ(vertical_partition_arg_list_.assign(other.vertical_partition_arg_list_));
   OZ(error_info_.assign(other.error_info_));
   OX(is_alter_view_ = other.is_alter_view_);
   OZ(dep_infos_.assign(other.dep_infos_));
@@ -424,7 +350,6 @@ DEF_TO_STRING(ObCreateTableArg)
        K_(last_replay_log_id),
        K_(foreign_key_arg_list),
        K_(is_inner),
-       K_(vertical_partition_arg_list),
        K_(error_info),
        K_(is_alter_view),
        K_(dep_infos));
@@ -441,7 +366,6 @@ OB_SERIALIZE_MEMBER((ObCreateTableArg, ObDDLArg),
                     constraint_list_,
                     last_replay_log_id_,
                     is_inner_,
-                    vertical_partition_arg_list_,
                     error_info_,
                     is_alter_view_,
                     dep_infos_);
@@ -532,31 +456,6 @@ int ObAlterTableArg::is_alter_comment(bool &is_alter_comment) const
         LOG_WARN("alter_column_schema is NULL", K(ret));
       } else {
         is_alter_comment |= alter_column_schema->is_set_comment_;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObAlterTableArg::set_nls_formats(const common::ObString *nls_formats)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(nls_formats)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    char *tmp_ptr[ObNLSFormatEnum::NLS_MAX] = {};
-    for (int64_t i = 0; OB_SUCC(ret) && i < ObNLSFormatEnum::NLS_MAX; ++i) {
-      if (OB_ISNULL(tmp_ptr[i] = (char *)allocator_.alloc(nls_formats[i].length()))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        SHARE_LOG(ERROR, "failed to alloc memory!", "size", nls_formats[i].length(), K(ret));
-      } else {
-        MEMCPY(tmp_ptr[i], nls_formats[i].ptr(), nls_formats[i].length());
-        nls_formats_[i].assign_ptr(tmp_ptr[i], nls_formats[i].length());
-      }
-    }
-    if (OB_FAIL(ret)) {
-      for (int64_t i = 0; i < ObNLSFormatEnum::NLS_MAX; ++i) {
-        allocator_.free(tmp_ptr[i]);
       }
     }
   }
@@ -878,12 +777,6 @@ OB_DEF_SERIALIZE(ObAlterTableArg)
     SHARE_SCHEMA_LOG(WARN, "fail to serialize session_id", K(ret));
   } else if (OB_FAIL(tz_info_wrap_.serialize(buf, buf_len, pos))) {
     SHARE_SCHEMA_LOG(WARN, "fail to serialize timezone info wrap", K(ret));
-  } else {
-    for (int64_t i = 0; i < ObNLSFormatEnum::NLS_MAX; ++i) {
-      if (OB_FAIL(nls_formats_[i].serialize(buf, buf_len, pos))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to serialize nls_formats_[i]", K(nls_formats_[i]), K(ret));
-      }
-    }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(foreign_key_arg_list_.serialize(buf, buf_len, pos))) {
@@ -942,29 +835,7 @@ OB_DEF_DESERIALIZE(ObAlterTableArg)
     SHARE_SCHEMA_LOG(WARN, "fail to deserialize timezone info", K(ret));
   }
 
-  if (OB_SUCC(ret)) {
-    ObString tmp_string;
-    char *tmp_ptr[ObNLSFormatEnum::NLS_MAX] = {};
-    for (int64_t i = 0; OB_SUCC(ret) && i < ObNLSFormatEnum::NLS_MAX; ++i) {
-      if (OB_FAIL(tmp_string.deserialize(buf, data_len, pos))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to deserialize nls_formats_", K(i), K(ret));
-      } else if (OB_ISNULL(tmp_ptr[i] = (char *)allocator_.alloc(tmp_string.length()))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        SHARE_LOG(ERROR, "failed to alloc memory!", "size", tmp_string.length(), K(ret));
-      } else {
-        MEMCPY(tmp_ptr[i], tmp_string.ptr(), tmp_string.length());
-        nls_formats_[i].assign_ptr(tmp_ptr[i], tmp_string.length());
-        tmp_string.reset();
-      }
-    }
-    if (OB_FAIL(ret)) {
-      for (int64_t i = 0; i < ObNLSFormatEnum::NLS_MAX; ++i) {
-        allocator_.free(tmp_ptr[i]);
-      }
-    }
-  }
-
-  if (OB_SUCC(ret)) {
+  if (OB_SUCC(ret) && pos < data_len) {
     if (OB_FAIL(foreign_key_arg_list_.deserialize(buf, data_len, pos))) {
       SHARE_SCHEMA_LOG(WARN, "fail to deserialize foreign_key_arg_list_", K(ret));
     }
@@ -1017,9 +888,6 @@ OB_DEF_SERIALIZE_SIZE(ObAlterTableArg)
     len += serialization::encoded_length_vi32(alter_constraint_type_);
     len += serialization::encoded_length_vi64(session_id_);
     len += tz_info_wrap_.get_serialize_size();
-    for (int64_t i = 0; i < ObNLSFormatEnum::NLS_MAX; ++i) {
-      len += nls_formats_[i].get_serialize_size();
-    }
     len += foreign_key_arg_list_.get_serialize_size();
     len += serialization::encoded_length_i64(sql_mode_);
     LST_DO_CODE(OB_UNIS_ADD_LEN,
@@ -1538,9 +1406,6 @@ DEF_TO_STRING(ObCreateIndexArg)
        K_(if_not_exist),
        K_(index_schema),
        K_(is_inner),
-       K_(nls_date_format),
-       K_(nls_timestamp_format),
-       K_(nls_timestamp_tz_format),
        K_(sql_mode),
        K_(local_session_var),
        K_(vidx_refresh_info),
@@ -1566,9 +1431,6 @@ OB_SERIALIZE_MEMBER((ObCreateIndexArg, ObIndexArg),
                     index_schema_,
                     is_inner_,
                     hidden_store_columns_,
-                    nls_date_format_,
-                    nls_timestamp_format_,
-                    nls_timestamp_tz_format_,
                     sql_mode_,
                     local_session_var_,
                     vidx_refresh_info_,
@@ -2329,7 +2191,7 @@ OB_DEF_SERIALIZE_SIZE(ObLockUserArg)
 
 
 
-OB_SERIALIZE_MEMBER((ObAlterUserProfileArg, ObDDLArg),
+OB_SERIALIZE_MEMBER((ObAlterUserRoleArg, ObDDLArg),
 
                     user_name_,
                     host_name_,
@@ -2947,9 +2809,6 @@ OB_SERIALIZE_MEMBER(ObDDLLocalBuildResponse, tablet_id_,
                     source_table_id_, dest_schema_id_, ret_code_, snapshot_version_, schema_version_,
                     task_id_, execution_id_, row_scanned_, row_inserted_, dest_schema_version_,
                     server_addr_, physical_row_count_);
-
-
-
 
 
 

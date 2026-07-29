@@ -1031,13 +1031,11 @@ all_user_def = dict(
       ('priv_super', 'int', 'false', '0'),
       ('is_locked', 'int'),
       ('priv_process', 'int', 'false', '0'),
-      ('priv_create_synonym', 'int', 'false', '0'),
       ('ssl_type', 'int', 'false', '0'),
       ('ssl_cipher', 'varchar:1024', 'false', ''),
       ('x509_issuer', 'varchar:1024', 'false', ''),
       ('x509_subject', 'varchar:1024', 'false', ''),
       ('type', 'int', 'true', 0),
-      ('profile_id', 'int', 'false', 'OB_INVALID_ID'),
       ('password_last_changed', 'timestamp', 'true'),
       ('priv_file', 'int', 'false', '0'),
       ('priv_alter_system', 'int', 'false', '0'),
@@ -2263,12 +2261,11 @@ def_table_schema(
 
 # 419-422: abandoned metadata tables
 
-# 429: __all_arbitration_service (abandoned)
-# 430: legacy ls arb replica task table (abandoned)
+# 429-430 reserved
 
 # 431: __all_data_dictionary_in_log (removed: CDC data dictionary log dumping deleted)
 
-# 432: legacy ls arb replica task history table (abandoned)
+# 432 reserved
 
 
 # 444: __all_reserved_snapshot # migrated to SQLite, see gen_sqlite_table_def above
@@ -2857,7 +2854,6 @@ def_table_schema(
   ('in_bytes', 'bigint'),
   ('out_bytes', 'bigint'),
   ('user_client_port', 'int', 'false', '0'),
-  ('service_name', 'varchar:64', 'true'),
   ('total_cpu_time', 'double', 'false'),
   ('top_info', 'varchar:MAX_COLUMN_VARCHAR_LENGTH', 'true'),
   ('memory_usage', 'bigint', 'true')
@@ -3052,7 +3048,6 @@ def_table_schema(
       ('is_in_pc', 'bool'),
       ('erase_time', 'timestamp'),
       ('compile_time', 'uint'),
-      ('pl_cg_mem_hold', 'int'),
       ('pl_evict_version', 'int'),
       ('first_get_plan_time', 'int'),
       ('first_exe_usec', 'int')
@@ -4474,17 +4469,7 @@ def_table_schema(
 
 # 12067: __all_virtual_table_privilege_history # removed (single-tenant: iterate VT mechanism deleted)
 
-# 12068: __all_virtual_database # removed (single-tenant: iterate VT mechanism deleted)
-
-# 12069: __all_virtual_database_history # removed (single-tenant: iterate VT mechanism deleted)
-
-# 12070: __all_virtual_tablegroup # removed (single-tenant: iterate VT mechanism deleted)
-
-# 12071: __all_virtual_tablegroup_history # removed (single-tenant: iterate VT mechanism deleted)
-
-# 12072: __all_virtual_table # removed (single-tenant: iterate VT mechanism deleted)
-
-# 12073: __all_virtual_table_history # removed (single-tenant: iterate VT mechanism deleted)
+# 12068-12073 reserved
 
 # 12074: __all_virtual_column # removed (single-tenant: iterate VT mechanism deleted)
 
@@ -4958,31 +4943,7 @@ def_table_schema(
 
 # 12198: __all_virtual_dependency # removed (single-tenant: iterate VT mechanism deleted)
 
-def_table_schema(
-  owner = 'dachuan.sdc',
-  table_name     = '__all_virtual_object_definition',
-  table_id       = '12199',
-  table_type = 'VIRTUAL_TABLE',
-  gm_columns = [],
-  rowkey_columns = [
-  ('object_type', 'int'),
-  ('object_name', 'varchar:OB_MAX_ORIGINAL_NANE_LENGTH'),
-  ('schema', 'varchar:OB_MAX_DATABASE_NAME_LENGTH'),
-  ('version', 'varchar:10'),
-  ('model', 'varchar:OB_MAX_DATABASE_NAME_LENGTH'),
-  ('transform', 'varchar:8')
-  ],
-
-  normal_columns = [
-  ('definition', 'longtext'),
-  ('create_database_with_if_not_exists', 'varchar:DATABASE_DEFINE_LENGTH'),
-  ('character_set_client', 'varchar:MAX_CHARSET_LENGTH'),
-  ('collation_connection', 'varchar:MAX_CHARSET_LENGTH'),
-  ('proc_type', 'int'),
-  ('collation_database', 'varchar:MAX_CHARSET_LENGTH'),
-  ('sql_mode', 'varchar:MAX_CHARSET_LENGTH')
-  ]
-  )
+# 12199 reserved
 
 # 12200: __all_virtual_reserved_table_mgr # abandoned in 4.0
 
@@ -5901,10 +5862,7 @@ def_table_schema(
                       ],  vtable_route_policy = 'local'
   )
 
-# 12385: __all_virtual_arbitration_member_info (abandoned)
-
-
-# 12387: __all_virtual_arbitration_service_status (abandoned)
+# 12385 and 12387 reserved
 
 # 12388: __all_virtual_wr_active_session_history
 # 12388: __all_virtual_wr_active_session_history # removed
@@ -6405,13 +6363,7 @@ def_table_schema(
 
 # 12513: removed
 
-# 12516: __all_virtual_catalog # removed (single-tenant: iterate VT mechanism deleted)
-
-# 12517: __all_virtual_catalog_history # removed (single-tenant: iterate VT mechanism deleted)
-
-# 12518: __all_virtual_catalog_privilege # removed (single-tenant: iterate VT mechanism deleted)
-
-# 12519: __all_virtual_catalog_privilege_history # removed (single-tenant: iterate VT mechanism deleted)
+# 12516-12519 reserved
 
 # 12520: __all_virtual_sswriter_group_stat
 # 12521: __all_virtual_sswriter_lease_mgr
@@ -6421,14 +6373,11 @@ def_table_schema(
 # 12525: __all_virtual_vector_index_task_history # removed (single-tenant: iterate VT mechanism deleted)
 
 
-# 12528: __tenant_virtual_show_catalog_tables
+# 12528 reserved
 # 12529: __all_virtual_storage_cache_task
 # 12530: __all_virtual_tablet_local_cache
 
-# 12531: __tenant_virtual_catalog_table_column
-# 12532: __all_virtual_show_create_catalog_table
-
-# 12533: __all_virtual_ccl_rule # removed (single-tenant: iterate VT mechanism deleted)
+# 12531-12533 reserved
 
 
 
@@ -6436,7 +6385,7 @@ def_table_schema(
 # 12538 __all_virtual_ss_notify_tasks_stat
 # 12539 __all_virtual_ss_notify_tablets_stat
 
-# 12549: __all_virtual_ccl_rule_history # removed (single-tenant: iterate VT mechanism deleted)
+# 12549 reserved
 
 def_table_schema(
   owner = 'tonghui.ht',
@@ -6463,8 +6412,7 @@ def_table_schema(
 
 # 12553: __all_virtual_ai_model_endpoint # removed (single-tenant: iterate VT mechanism deleted)
 
-# 12554: __all_virtual_tenant_location # removed (single-tenant: iterate VT mechanism deleted)
-# 12555: __all_virtual_tenant_location_history # removed (single-tenant: iterate VT mechanism deleted)
+# 12554-12555 reserved
 # 12556: __all_virtual_objauth_mysql # removed (single-tenant: iterate VT mechanism deleted)
 # 12557: __all_virtual_objauth_mysql_history # removed (single-tenant: iterate VT mechanism deleted)
 # 12559: __tenant_virtual_list_file # abandoned in seekdb
@@ -8351,7 +8299,7 @@ def_table_schema(
 # TODO:(yanmu.ztl)
 # 1. sys package is not visible in user tenant.
 # 2. tablespace/constraint are not supported yet.
-# 3. sequence_object/synonym/context objects are not exposed.
+# 3. sequence/context objects are not exposed.
 def_table_schema(
   owner           = 'yanmu.ztl',
   table_name      = 'DBA_OBJECTS',
@@ -9603,7 +9551,6 @@ def_table_schema(
                       IN_BYTES,
                       OUT_BYTES,
                       USER_CLIENT_PORT,
-                      SERVICE_NAME,
                       cast(total_cpu_time as SIGNED) as TOTAL_CPU_TIME,
                       TOP_INFO,
                       MEMORY_USAGE
@@ -10863,13 +10810,11 @@ def_table_schema(
             (CASE WHEN PRIV_SUPER = 0 THEN 'NO' ELSE 'YES' END) AS PRIV_SUPER,
             (CASE WHEN IS_LOCKED = 0 THEN 'NO' ELSE 'YES' END) AS IS_LOCKED,
             (CASE WHEN PRIV_PROCESS = 0 THEN 'NO' ELSE 'YES' END) AS PRIV_PROCESS,
-            (CASE WHEN PRIV_CREATE_SYNONYM = 0 THEN 'NO' ELSE 'YES' END) AS PRIV_CREATE_SYNONYM,
             SSL_TYPE,
             SSL_CIPHER,
             X509_ISSUER,
             X509_SUBJECT,
             (CASE WHEN TYPE = 0 THEN 'USER' ELSE 'ROLE' END) AS TYPE,
-            PROFILE_ID,
             PASSWORD_LAST_CHANGED,
             (CASE WHEN PRIV_FILE = 0 THEN 'NO' ELSE 'YES' END) AS PRIV_FILE,
             (CASE WHEN PRIV_ALTER_SYSTEM = 0 THEN 'NO' ELSE 'YES' END) AS PRIV_ALTER_SYSTEM,
@@ -11296,8 +11241,6 @@ def_table_schema(
                      AND U.PRIV_SUPER = 1 THEN 'SUPER'
                 WHEN V1.C1 = 14
                      AND U.PRIV_PROCESS = 1 THEN 'PROCESS'
-                WHEN V1.C1 = 15
-                     AND U.PRIV_CREATE_SYNONYM = 1 THEN 'CREATE SYNONYM'
                 WHEN V1.C1 = 16
                      AND (U.PRIV_OTHERS & (1 << 6)) != 0 THEN 'REFERENCES'
                 WHEN V1.C1 = 17
@@ -11351,7 +11294,6 @@ def_table_schema(
                      AND U.PRIV_SHOW_DB = 0
                      AND U.PRIV_SUPER = 0
                      AND U.PRIV_PROCESS = 0
-                     AND U.PRIV_CREATE_SYNONYM = 0
                      AND U.PRIV_FILE = 0
                      AND U.PRIV_ALTER_SYSTEM = 0
                      AND U.PRIV_REPL_SLAVE = 0
@@ -11374,7 +11316,6 @@ def_table_schema(
                      AND U.PRIV_SHOW_DB = 0
                      AND U.PRIV_SUPER = 0
                      AND U.PRIV_PROCESS = 0
-                     AND U.PRIV_CREATE_SYNONYM = 0
                      AND U.PRIV_FILE = 0
                      AND U.PRIV_ALTER_SYSTEM = 0
                      AND U.PRIV_REPL_SLAVE = 0
@@ -11398,7 +11339,6 @@ def_table_schema(
         UNION ALL SELECT 12 AS C1
         UNION ALL SELECT 13 AS C1
         UNION ALL SELECT 14 AS C1
-        UNION ALL SELECT 15 AS C1
         UNION ALL SELECT 16 AS C1
         UNION ALL SELECT 17 AS C1
         UNION ALL SELECT 18 AS C1
@@ -12041,7 +11981,7 @@ WHERE T.TABLE_TYPE IN (3,6,8,9)
   """.replace("\n", " ")
   )
 
-# 21357: DBA_OB_ARBITRATION_SERVICE (abandoned)
+# 21357 reserved
 # 21358: CDB_OB_LS_ARB_REPLICA_TASKS (abandoned)
 # 21359: DBA_OB_LS_ARB_REPLICA_TASKS (abandoned)
 # 21360: CDB_OB_LS_ARB_REPLICA_TASK_HISTORY (abandoned)
@@ -12097,16 +12037,14 @@ def_table_schema(
 
 # 21381: V$OB_THREAD # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_thread)
 
-# 21382: GV$OB_ARBITRATION_MEMBER_INFO (abandoned)
-# 21383: V$OB_ARBITRATION_MEMBER_INFO (abandoned)
+# 21382-21383 reserved
 # 21384: DBA_OB_ZONE_STORAGE (abandoned)
 
 # 21385: GV$OB_SERVER_STORAGE # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_server_storage;)
 
 # 21386: V$OB_SERVER_STORAGE # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_server_storage;)
 
-# 21387: GV$OB_ARBITRATION_SERVICE_STATUS (abandoned)
-# 21388: V$OB_ARBITRATION_SERVICE_STATUS (abandoned)
+# 21387-21388 reserved
 
 # 21389: DBA_WR_ACTIVE_SESSION_HISTORY
 # 21389: DBA_WR_ACTIVE_SESSION_HISTORY # removed
@@ -12489,7 +12427,6 @@ def_table_schema(
            PL_EVICT_VERSION,
            PS_STMT_ID,
            DB_ID,
-           PL_CG_MEM_HOLD,
            SYS_VARS,
            PARAM_INFOS,
            SQL_ID,

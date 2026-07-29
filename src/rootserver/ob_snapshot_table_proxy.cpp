@@ -32,14 +32,12 @@ using namespace oceanbase::share;
 using namespace oceanbase::lib;
 
 static_assert(SNAPSHOT_TYPE_RESERVED_3 == 3, "reserved snapshot type must keep its persisted value");
-static_assert(SNAPSHOT_FOR_BACKUP_POINT == 4, "backup point snapshot type must keep its persisted value");
 
 const char *ObSnapshotInfo::ObSnapShotTypeStr[] = {
     "SNAPSHOT_FOR_MAJOR",
     "SNAPSHOT_FOR_DDL",
     "SNAPSHOT_FOR_MULTI_VERSION",
-    nullptr,
-    "SNAPSHOT_FOR_BACKUP_POINT" };
+    nullptr };
 
 ObSnapshotInfo::ObSnapshotInfo()
 {

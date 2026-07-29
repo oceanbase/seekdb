@@ -165,7 +165,7 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
 ObSQLSessionInfo::~ObSQLSessionInfo()
 {
   plan_cache_ = NULL;
-  destroy();
+  destroy(false);
 }
 
 int ObSQLSessionInfo::init(uint32_t sessid,
@@ -175,7 +175,8 @@ int ObSQLSessionInfo::init(uint32_t sessid,
   static const int64_t PS_BUCKET_NUM = 64;
   if (OB_FAIL(ObBasicSessionInfo::init(sessid, bucket_allocator, tz_info))) {
     LOG_WARN("fail to init basic session info", K(ret));
-  } else if (OB_FAIL(package_state_map_.create(hash::cal_next_prime(4),
+  } else if (!is_acquire_from_pool() &&
+             OB_FAIL(package_state_map_.create(hash::cal_next_prime(4),
                                                ObMemAttr("PackStateMap")))) {
     LOG_WARN("create package state map failed", K(ret));
   } else {
@@ -208,7 +209,7 @@ int ObSQLSessionInfo::test_init(uint32_t version, uint32_t sessid,
   return ret;
 }
 
-void ObSQLSessionInfo::reset()
+void ObSQLSessionInfo::reset(bool skip_sys_var)
 {
   if (is_inited_) {
     // ObVersionProvider::reset();
@@ -267,7 +268,7 @@ void ObSQLSessionInfo::reset()
     int temp_ret = OB_SUCCESS;
     optimizer_tracer_.reset();
     //call at last time
-    ObBasicSessionInfo::reset();
+    ObBasicSessionInfo::reset(skip_sys_var);
   }
   in_bytes_ = 0;
   out_bytes_ = 0;
@@ -456,7 +457,7 @@ bool ObSQLSessionInfo::is_sqlstat_enabled()
   return bret;
 }
 
-void ObSQLSessionInfo::destroy()
+void ObSQLSessionInfo::destroy(bool skip_sys_var)
 {
   if (is_inited_) {
     int ret = OB_SUCCESS;
@@ -527,7 +528,7 @@ void ObSQLSessionInfo::destroy()
       get_session_allocator().free(btree_iter_cache_);
       btree_iter_cache_ = nullptr;
     }
-    reset();
+    reset(skip_sys_var);
     is_inited_ = false;
   }
 }

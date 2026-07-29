@@ -5033,7 +5033,7 @@ int ObDDLService::lock_tablets(ObMySQLTransaction &trans,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn_ is NULL", KR(ret));
   } else {
-    LOG_INFO("lock tablet", KR(ret), K(tablet_ids), K(table_id), KP(conn));
+    LOG_INFO("lock tablet", KR(ret), K(tablet_ids), K(table_id), KPC(conn));
     if (OB_FAIL(ObInnerConnectionLockUtil::lock_tablet(table_id,
                                                           tablet_ids,
                                                           EXCLUSIVE,
@@ -5066,7 +5066,7 @@ int ObDDLService::lock_table(ObMySQLTransaction &trans,
     LOG_WARN("conn_ is NULL", KR(ret));
   } else {
     LOG_INFO("lock table", KR(ret), K(table_id), K(owner_id),
-             K(lock_priority), K(timeout_us), KP(conn));
+             K(lock_priority), K(timeout_us), KPC(conn));
     if (OB_FAIL(ObInnerConnectionLockUtil::lock_table(table_id,
                                                       EXCLUSIVE,
                                                       timeout_us,

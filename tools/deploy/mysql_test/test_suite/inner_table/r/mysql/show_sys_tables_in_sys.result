@@ -751,7 +751,7 @@ id	field	type	length	precision	nullable
 21	disk_seq_read_speed	5	0	20	1
 22	disk_rnd_read_speed	5	0	20	1
 23	network_speed	5	0	20	1
-table oceanbase.__all_user column_count 38 table_id 1000
+table oceanbase.__all_user column_count 36 table_id 1000
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=1000 order by column_id;
 id	field	type	length	precision	nullable
 16	gmt_create	18	0	25	1
@@ -777,22 +777,20 @@ id	field	type	length	precision	nullable
 36	priv_super	5	0	20	0
 37	is_locked	5	0	20	0
 38	priv_process	5	0	20	0
-39	priv_create_synonym	5	0	20	0
-40	ssl_type	5	0	20	0
-41	ssl_cipher	22	1024	-1	0
-42	x509_issuer	22	1024	-1	0
-43	x509_subject	22	1024	-1	0
-44	type	5	0	20	1
-45	profile_id	5	0	20	0
-46	password_last_changed	18	0	25	1
-47	priv_file	5	0	20	0
-48	priv_alter_system	5	0	20	0
-49	max_connections	5	0	20	0
-50	max_user_connections	5	0	20	0
-51	priv_repl_slave	5	0	20	0
-52	priv_repl_client	5	0	20	0
-53	priv_others	5	0	20	0
-table oceanbase.__all_user_history column_count 40 table_id 1001
+39	ssl_type	5	0	20	0
+40	ssl_cipher	22	1024	-1	0
+41	x509_issuer	22	1024	-1	0
+42	x509_subject	22	1024	-1	0
+43	type	5	0	20	1
+44	password_last_changed	18	0	25	1
+45	priv_file	5	0	20	0
+46	priv_alter_system	5	0	20	0
+47	max_connections	5	0	20	0
+48	max_user_connections	5	0	20	0
+49	priv_repl_slave	5	0	20	0
+50	priv_repl_client	5	0	20	0
+51	priv_others	5	0	20	0
+table oceanbase.__all_user_history column_count 38 table_id 1001
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=1001 order by column_id;
 id	field	type	length	precision	nullable
 16	gmt_create	18	0	25	1
@@ -820,21 +818,19 @@ id	field	type	length	precision	nullable
 38	priv_super	5	0	20	1
 39	is_locked	5	0	20	1
 40	priv_process	5	0	20	1
-41	priv_create_synonym	5	0	20	1
-42	ssl_type	5	0	20	1
-43	ssl_cipher	22	1024	-1	1
-44	x509_issuer	22	1024	-1	1
-45	x509_subject	22	1024	-1	1
-46	type	5	0	20	1
-47	profile_id	5	0	20	1
-48	password_last_changed	18	0	25	1
-49	priv_file	5	0	20	1
-50	priv_alter_system	5	0	20	1
-51	max_connections	5	0	20	1
-52	max_user_connections	5	0	20	1
-53	priv_repl_slave	5	0	20	1
-54	priv_repl_client	5	0	20	1
-55	priv_others	5	0	20	1
+41	ssl_type	5	0	20	1
+42	ssl_cipher	22	1024	-1	1
+43	x509_issuer	22	1024	-1	1
+44	x509_subject	22	1024	-1	1
+45	type	5	0	20	1
+46	password_last_changed	18	0	25	1
+47	priv_file	5	0	20	1
+48	priv_alter_system	5	0	20	1
+49	max_connections	5	0	20	1
+50	max_user_connections	5	0	20	1
+51	priv_repl_slave	5	0	20	1
+52	priv_repl_client	5	0	20	1
+53	priv_others	5	0	20	1
 table oceanbase.__all_database column_count 8 table_id 1002
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=1002 order by column_id;
 id	field	type	length	precision	nullable
@@ -1938,7 +1934,7 @@ select column_id id, column_name field, data_type type, data_length length, data
 id	field	type	length	precision	nullable
 16	user_id	5	0	20	0
 17	grants	22	1024	-1	0
-table oceanbase.__all_virtual_processlist column_count 35 table_id 10008
+table oceanbase.__all_virtual_processlist column_count 34 table_id 10008
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=10008 order by column_id;
 id	field	type	length	precision	nullable
 16	id	10	0	20	0
@@ -1972,10 +1968,9 @@ id	field	type	length	precision	nullable
 44	in_bytes	5	0	20	0
 45	out_bytes	5	0	20	0
 46	user_client_port	5	0	20	0
-47	service_name	22	64	-1	1
-48	total_cpu_time	12	0	-1	0
-49	top_info	22	262143	-1	1
-50	memory_usage	5	0	20	1
+47	total_cpu_time	12	0	-1	0
+48	top_info	22	262143	-1	1
+49	memory_usage	5	0	20	1
 table oceanbase.__all_virtual_warning column_count 5 table_id 10009
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=10009 order by column_id;
 id	field	type	length	precision	nullable
@@ -2023,7 +2018,7 @@ id	field	type	length	precision	nullable
 22	plan_num	5	0	20	0
 23	mem_limit	5	0	20	0
 24	hash_bucket	5	0	20	0
-table oceanbase.__all_virtual_plan_stat column_count 65 table_id 11004
+table oceanbase.__all_virtual_plan_stat column_count 64 table_id 11004
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11004 order by column_id;
 id	field	type	length	precision	nullable
 16	plan_id	5	0	20	0
@@ -2087,10 +2082,9 @@ id	field	type	length	precision	nullable
 74	is_in_pc	1	0	4	0
 75	erase_time	18	0	25	0
 76	compile_time	10	0	20	0
-77	pl_cg_mem_hold	5	0	20	0
-78	pl_evict_version	5	0	20	0
-79	first_get_plan_time	5	0	20	0
-80	first_exe_usec	5	0	20	0
+77	pl_evict_version	5	0	20	0
+78	first_get_plan_time	5	0	20	0
+79	first_exe_usec	5	0	20	0
 table oceanbase.__all_virtual_kvcache_info column_count 8 table_id 11008
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11008 order by column_id;
 id	field	type	length	precision	nullable
@@ -3197,22 +3191,6 @@ id	field	type	length	precision	nullable
 51	CHECKSUM	10	0	20	1
 52	STATUS	22	20	-1	0
 53	EXTRA	22	255	-1	1
-table oceanbase.__all_virtual_object_definition column_count 13 table_id 12199
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12199 order by column_id;
-id	field	type	length	precision	nullable
-16	object_type	5	0	20	0
-17	object_name	22	256	-1	0
-18	schema	22	128	-1	0
-19	version	22	10	-1	0
-20	model	22	128	-1	0
-21	transform	22	8	-1	0
-22	definition	30	536870911	-1	0
-23	create_database_with_if_not_exists	22	4096	-1	0
-24	character_set_client	22	128	-1	0
-25	collation_connection	22	128	-1	0
-26	proc_type	5	0	20	0
-27	collation_database	22	128	-1	0
-28	sql_mode	22	128	-1	0
 table oceanbase.__all_virtual_deadlock_event_history column_count 19 table_id 12209
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12209 order by column_id;
 id	field	type	length	precision	nullable

@@ -50,7 +50,7 @@ struct RP
   };
 };
 
-template<const char *str = common::ObModIds::OB_UPS_RESOURCE_POOL_NODE>
+template<const char *str = common::ObModIds::OB_SERVER_OBJECT_POOL>
 struct RPStrLabel
 {
   static constexpr const char *LABEL = str;

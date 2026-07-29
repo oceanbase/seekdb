@@ -24,7 +24,7 @@
 #include "sql/resolver/dcl/ob_drop_user_stmt.h"
 #include "sql/resolver/dcl/ob_lock_user_stmt.h"
 #include "sql/resolver/dcl/ob_rename_user_stmt.h"
-#include "sql/resolver/dcl/ob_alter_user_profile_stmt.h"
+#include "sql/resolver/dcl/ob_alter_user_role_stmt.h"
 #include "sql/engine/ob_exec_context.h"
 
 namespace oceanbase
@@ -512,12 +512,12 @@ int ObLockUserExecutor::lock_user(const obcall::ObLockUserArg &arg)
   return ret;
 }
 
-int ObAlterUserProfileExecutor::set_role_exec(ObExecContext &ctx, ObAlterUserProfileStmt &stmt)
+int ObAlterUserRoleExecutor::set_role_exec(ObExecContext &ctx, ObAlterUserRoleStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = NULL;
   uint64_t role_id = OB_INVALID_ID;
-  CK (ObAlterUserProfileStmt::SET_ROLE == stmt.get_set_role_flag());
+  CK (ObAlterUserRoleStmt::SET_ROLE == stmt.get_set_role_flag());
   if (OB_ISNULL(session = ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL", K(ret));
@@ -527,7 +527,7 @@ int ObAlterUserProfileExecutor::set_role_exec(ObExecContext &ctx, ObAlterUserPro
     common::ObArray<uint64_t> enable_role_id_array;
     ObSchemaGetterGuard schema_guard;
 
-    obcall::ObAlterUserProfileArg &arg = static_cast<obcall::ObAlterUserProfileArg &>(stmt.get_ddl_arg());
+    obcall::ObAlterUserRoleArg &arg = static_cast<obcall::ObAlterUserRoleArg &>(stmt.get_ddl_arg());
     OZ (GCTX.schema_service_->get_runtime_schema_guard(
                   schema_guard));
     OZ (schema_guard.get_user_info(user_id, user_info));
@@ -577,7 +577,7 @@ int ObAlterUserProfileExecutor::set_role_exec(ObExecContext &ctx, ObAlterUserPro
   return ret;
 }
 
-int ObAlterUserProfileExecutor::execute(ObExecContext &ctx, ObAlterUserProfileStmt &stmt)
+int ObAlterUserRoleExecutor::execute(ObExecContext &ctx, ObAlterUserRoleStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
@@ -585,8 +585,21 @@ int ObAlterUserProfileExecutor::execute(ObExecContext &ctx, ObAlterUserProfileSt
   if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
-  } else if (ObAlterUserProfileStmt::SET_ROLE == stmt.get_set_role_flag()) {
+  } else if (ObAlterUserRoleStmt::SET_ROLE == stmt.get_set_role_flag()) {
     OZ (set_role_exec(ctx, stmt));
+  } else if (ObAlterUserRoleStmt::SET_DEFAULT_ROLE == stmt.get_set_role_flag()) {
+    if (OB_ISNULL(GCTX.local_management_service_)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("local management service is null", K(ret));
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&] {
+                 return GCTX.local_management_service_->get_ddl_service()
+                     .alter_user_default_role(stmt.get_ddl_arg());
+               }))) {
+      LOG_WARN("alter user default role failed", K(ret));
+    }
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected alter user role operation", K(ret), K(stmt.get_set_role_flag()));
   }
   return ret;
 }

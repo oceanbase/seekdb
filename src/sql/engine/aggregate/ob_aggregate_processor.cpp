@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_aggregate_processor.h"
+#include "share/ob_lob_access_utils.h"
 #include "sql/engine/expr/ob_expr_minus.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/expr/ob_expr_estimate_ndv.h"
@@ -37,9 +38,91 @@ namespace share
 {
 namespace aggregate
 {
-extern bool is_grouping(const ObAggrInfo &aggr_info, const int64_t val);
-extern int get_grouping_id(const ObAggrInfo &aggr_info, const int64_t val, number::ObCompactNumber *grouping_id);
-extern int get_grouping_id(const ObAggrInfo &aggr_info, const int64_t val, int64_t *grouping_id);
+using namespace common;
+using namespace sql;
+
+static bool is_rollup_expr(const ObAggrInfo &aggr_info, ObExpr *expr, const int64_t seq)
+{
+  bool is_rollup = false;
+  if (has_exist_in_array(aggr_info.hash_rollup_info_->gby_exprs_, expr)
+      || !has_exist_in_array(aggr_info.hash_rollup_info_->expand_exprs_, expr)) {
+  } else {
+    ObIArray<ObExpr *> &expand_exprs = aggr_info.hash_rollup_info_->expand_exprs_;
+    bool found = false;
+    for (int64_t i = expand_exprs.count() - seq - 1; !found && i >= 0; --i) {
+      found = expr == expand_exprs.at(i);
+    }
+    is_rollup = !found;
+  }
+  return is_rollup;
+}
+
+bool is_grouping(const ObAggrInfo &aggr_info, const int64_t seq)
+{
+  OB_ASSERT(aggr_info.param_exprs_.count() == 1 && aggr_info.param_exprs_.at(0) != nullptr);
+  return is_rollup_expr(aggr_info, aggr_info.param_exprs_.at(0), seq);
+}
+
+int get_grouping_id(const ObAggrInfo &aggr_info, const int64_t seq,
+                    number::ObCompactNumber *grouping_id)
+{
+  int ret = OB_SUCCESS;
+  const ObIArray<ObExpr *> &param_exprs = aggr_info.param_exprs_;
+  int512_t res = 0;
+  int512_t base = 1;
+  if (OB_UNLIKELY(param_exprs.count() <= 0) || OB_ISNULL(grouping_id)) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_LOG(WARN, "invalid grouping id arguments", K(ret), K(param_exprs.count()), KP(grouping_id));
+  }
+  for (int64_t i = param_exprs.count() - 1; OB_SUCC(ret) && i >= 0; --i) {
+    ObExpr *grouping_expr = param_exprs.at(i);
+    if (OB_ISNULL(grouping_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      SQL_LOG(WARN, "invalid null expr", K(ret));
+    } else if (is_rollup_expr(aggr_info, grouping_expr, seq)) {
+      res += base;
+    }
+    base = base << 1;
+  }
+  if (OB_SUCC(ret)) {
+    number::ObNumber tmp_nmb;
+    ObNumStackOnceAlloc tmp_alloc;
+    if (OB_FAIL(wide::to_number(res, 0, tmp_alloc, tmp_nmb))) {
+      SQL_LOG(WARN, "to_number failed", K(ret));
+    } else {
+      grouping_id->desc_ = tmp_nmb.d_;
+      MEMCPY(grouping_id->digits_, tmp_nmb.get_digits(),
+             tmp_nmb.d_.len_ * sizeof(uint32_t));
+    }
+  }
+  return ret;
+}
+
+int get_grouping_id(const ObAggrInfo &aggr_info, const int64_t seq, int64_t *grouping_id)
+{
+  int ret = OB_SUCCESS;
+  const ObIArray<ObExpr *> &param_exprs = aggr_info.param_exprs_;
+  int64_t res = 0;
+  int64_t base = 1;
+  if (OB_UNLIKELY(param_exprs.count() <= 0) || OB_ISNULL(grouping_id)) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_LOG(WARN, "invalid grouping id arguments", K(ret), K(param_exprs.count()), KP(grouping_id));
+  }
+  for (int64_t i = param_exprs.count() - 1; OB_SUCC(ret) && i >= 0; --i) {
+    ObExpr *grouping_expr = param_exprs.at(i);
+    if (OB_ISNULL(grouping_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      SQL_LOG(WARN, "invalid null expr", K(ret));
+    } else if (is_rollup_expr(aggr_info, grouping_expr, seq)) {
+      res += base;
+    }
+    base <<= 1;
+  }
+  if (OB_SUCC(ret)) {
+    *grouping_id = res;
+  }
+  return ret;
+}
 } // end aggregate
 } // end share
 using namespace common;
@@ -1356,7 +1439,6 @@ int ObAggregateProcessor::init()
     } else {
       has_distinct_ |= aggr_info.has_distinct_;
       has_group_concat_ |= (T_FUN_GROUP_CONCAT == aggr_info.get_expr_type() ||
-                            T_FUN_KEEP_WM_CONCAT == aggr_info.get_expr_type() ||
                             T_FUN_WM_CONCAT == aggr_info.get_expr_type() ||
                             T_FUN_JSON_ARRAYAGG == aggr_info.get_expr_type() ||
                             T_FUN_ORA_JSON_ARRAYAGG == aggr_info.get_expr_type() ||
@@ -2246,26 +2328,10 @@ int ObAggregateProcessor::collect_for_empty_set()
         case T_FUN_COUNT:
         case T_FUN_COUNT_SUM:
         case T_FUN_APPROX_COUNT_DISTINCT:
-        case T_FUN_KEEP_COUNT:
-        case T_FUN_GROUP_PERCENT_RANK:
         case T_FUN_SUM_OPNSIZE: {
           ObDatum &result = aggr_info.expr_->locate_datum_for_write(eval_ctx_);
           aggr_info.expr_->set_evaluated_projected(eval_ctx_);
           result.set_int(0);
-          break;
-        }
-        case T_FUN_GROUP_RANK:
-        case T_FUN_GROUP_DENSE_RANK:
-        case T_FUN_GROUP_CUME_DIST: {
-          ObDatum &result = aggr_info.expr_->locate_datum_for_write(eval_ctx_);
-          aggr_info.expr_->set_evaluated_projected(eval_ctx_);
-          ObNumber result_num;
-          int64_t num = 1;
-          if (OB_FAIL(result_num.from(num, aggr_alloc_))) {
-            LOG_WARN("failed to create number", K(ret));
-          } else {
-            result.set_number(result_num);
-          }
           break;
         }
         case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS:
@@ -2429,18 +2495,9 @@ int ObAggregateProcessor::generate_group_row(GroupRow *&new_group_row,
       AggrCell &aggr_cell = new_group_row->aggr_cells_[i];
       switch (aggr_info.get_expr_type()) {
         case T_FUN_GROUP_CONCAT:
-        case T_FUN_GROUP_RANK:
-        case T_FUN_GROUP_DENSE_RANK:
-        case T_FUN_GROUP_PERCENT_RANK:
-        case T_FUN_GROUP_CUME_DIST:
         case T_FUN_MEDIAN:
         case T_FUN_GROUP_PERCENTILE_CONT:
         case T_FUN_GROUP_PERCENTILE_DISC:
-        case T_FUN_KEEP_MAX:
-        case T_FUN_KEEP_MIN:
-        case T_FUN_KEEP_SUM:
-        case T_FUN_KEEP_COUNT:
-        case T_FUN_KEEP_WM_CONCAT:
         case T_FUN_WM_CONCAT:
         case T_FUN_PL_AGG_UDF:
         case T_FUN_JSON_ARRAYAGG:
@@ -2614,18 +2671,9 @@ int ObAggregateProcessor::fill_group_row(GroupRow *new_group_row,
       AggrCell &aggr_cell = new_group_row->aggr_cells_[i];
       switch (aggr_info.get_expr_type()) {
         case T_FUN_GROUP_CONCAT:
-        case T_FUN_GROUP_RANK:
-        case T_FUN_GROUP_DENSE_RANK:
-        case T_FUN_GROUP_PERCENT_RANK:
-        case T_FUN_GROUP_CUME_DIST:
         case T_FUN_MEDIAN:
         case T_FUN_GROUP_PERCENTILE_CONT:
         case T_FUN_GROUP_PERCENTILE_DISC:
-        case T_FUN_KEEP_MAX:
-        case T_FUN_KEEP_MIN:
-        case T_FUN_KEEP_SUM:
-        case T_FUN_KEEP_COUNT:
-        case T_FUN_KEEP_WM_CONCAT:
         case T_FUN_WM_CONCAT:
         case T_FUN_PL_AGG_UDF:
         case T_FUN_JSON_ARRAYAGG:
@@ -3017,18 +3065,9 @@ int ObAggregateProcessor::rollup_aggregation(AggrCell &aggr_cell, AggrCell &roll
       break;
     }
     case T_FUN_GROUP_CONCAT:
-    case T_FUN_GROUP_RANK:
-    case T_FUN_GROUP_PERCENT_RANK:
-    case T_FUN_GROUP_DENSE_RANK:
-    case T_FUN_GROUP_CUME_DIST:
     case T_FUN_MEDIAN:
     case T_FUN_GROUP_PERCENTILE_CONT:
     case T_FUN_GROUP_PERCENTILE_DISC:
-    case T_FUN_KEEP_COUNT:
-    case T_FUN_KEEP_MAX:
-    case T_FUN_KEEP_MIN:
-    case T_FUN_KEEP_SUM:
-    case T_FUN_KEEP_WM_CONCAT:
     case T_FUN_WM_CONCAT:
     case T_FUN_PL_AGG_UDF:
     case T_FUN_JSON_ARRAYAGG: 
@@ -3347,18 +3386,9 @@ int ObAggregateProcessor::prepare_aggr_result(const ObChunkDatumStore::StoredRow
       break;
     }
     case T_FUN_GROUP_CONCAT:
-    case T_FUN_GROUP_RANK:
-    case T_FUN_GROUP_DENSE_RANK:
-    case T_FUN_GROUP_PERCENT_RANK:
-    case T_FUN_GROUP_CUME_DIST:
     case T_FUN_MEDIAN:
     case T_FUN_GROUP_PERCENTILE_CONT:
     case T_FUN_GROUP_PERCENTILE_DISC:
-    case T_FUN_KEEP_MAX:
-    case T_FUN_KEEP_MIN:
-    case T_FUN_KEEP_COUNT:
-    case T_FUN_KEEP_SUM:
-    case T_FUN_KEEP_WM_CONCAT:
     case T_FUN_WM_CONCAT:
     case T_FUN_PL_AGG_UDF:
     case T_FUN_JSON_ARRAYAGG:
@@ -3658,18 +3688,9 @@ int ObAggregateProcessor::process_aggr_batch_result(
       break;
     }
     case T_FUN_GROUP_CONCAT:
-    case T_FUN_GROUP_RANK:
-    case T_FUN_GROUP_DENSE_RANK:
-    case T_FUN_GROUP_PERCENT_RANK:
-    case T_FUN_GROUP_CUME_DIST:
     case T_FUN_MEDIAN:
     case T_FUN_GROUP_PERCENTILE_CONT:
     case T_FUN_GROUP_PERCENTILE_DISC:
-    case T_FUN_KEEP_MAX:
-    case T_FUN_KEEP_MIN:
-    case T_FUN_KEEP_COUNT:
-    case T_FUN_KEEP_SUM:
-    case T_FUN_KEEP_WM_CONCAT:
     case T_FUN_WM_CONCAT:
     case T_FUN_PL_AGG_UDF:
     case T_FUN_JSON_ARRAYAGG:
@@ -3892,18 +3913,9 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
       break;
     }
     case T_FUN_GROUP_CONCAT:
-    case T_FUN_GROUP_RANK:
-    case T_FUN_GROUP_DENSE_RANK:
-    case T_FUN_GROUP_PERCENT_RANK:
-    case T_FUN_GROUP_CUME_DIST:
     case T_FUN_MEDIAN:
     case T_FUN_GROUP_PERCENTILE_CONT:
     case T_FUN_GROUP_PERCENTILE_DISC:
-    case T_FUN_KEEP_MAX:
-    case T_FUN_KEEP_MIN:
-    case T_FUN_KEEP_COUNT:
-    case T_FUN_KEEP_SUM:
-    case T_FUN_KEEP_WM_CONCAT:
     case T_FUN_WM_CONCAT:
     case T_FUN_PL_AGG_UDF:
     case T_FUN_JSON_ARRAYAGG:
@@ -4198,11 +4210,9 @@ int ObAggregateProcessor::collect_aggr_result(
       break;
     }
 
-    case T_FUN_WM_CONCAT:
-    case T_FUN_KEEP_WM_CONCAT: {
+    case T_FUN_WM_CONCAT: {
       GroupConcatExtraResult *extra = static_cast<GroupConcatExtraResult *>(aggr_cell.get_extra());
-      if (OB_FAIL(get_wm_concat_result(aggr_info, extra,
-                                       T_FUN_KEEP_WM_CONCAT == aggr_fun, result))) {
+      if (OB_FAIL(get_wm_concat_result(aggr_info, extra, result))) {
         LOG_WARN("failed to get wm concat result", K(ret));
       } else {
       }
@@ -4403,141 +4413,6 @@ int ObAggregateProcessor::collect_aggr_result(
       }
       break;
     }
-    case T_FUN_GROUP_RANK:
-    case T_FUN_GROUP_DENSE_RANK:
-    case T_FUN_GROUP_PERCENT_RANK:
-    case T_FUN_GROUP_CUME_DIST: {//Reused GroupConcatCtx, because the only difference is the final calculation method}
-      GroupConcatExtraResult *extra = NULL;
-      if (OB_ISNULL(extra = static_cast<GroupConcatExtraResult *>(aggr_cell.get_extra()))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("extra_ is NULL", K(ret), K(aggr_cell));
-      } else if (OB_UNLIKELY(extra->empty())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("extra is empty", K(ret), KPC(extra));
-      } else if (extra->is_iterated() && OB_FAIL(extra->rewind())) {
-        // Group concat row may be iterated in rollup_process(), rewind here.
-        LOG_WARN("rewind failed", KPC(extra), K(ret));
-      } else if (!extra->is_iterated() && OB_FAIL(extra->finish_add_row())) {
-        LOG_WARN("finish_add_row failed", KPC(extra), K(ret));
-      } else {
-        const ObChunkDatumStore::StoredRow *storted_row = NULL;
-        int64_t rank_num = 0;
-        bool need_check_order_equal = T_FUN_GROUP_DENSE_RANK == aggr_fun;
-        ObChunkDatumStore::LastStoredRow prev_row(aggr_alloc_);
-        int64_t total_sort_row_cnt = extra->get_row_count();
-        bool is_first = true;
-        while (OB_SUCC(ret) && OB_SUCC(extra->get_next_row(storted_row))) {
-          if (NULL == storted_row) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("group sort row store is NULL", K(ret), K(storted_row));
-          } else {
-            ++ rank_num;
-            bool find_target_rank = true;
-            int comp_result = -2;
-            bool is_all_equal = T_FUN_GROUP_CUME_DIST == aggr_fun;//use to cume dist(cumulative distribution)
-            bool need_continue = true;
-            for (int64_t i = 0;
-                 OB_SUCC(ret) && need_continue && i < aggr_info.sort_collations_.count();
-                 ++i) {
-              bool is_asc = false;
-              uint32_t field_index = aggr_info.sort_collations_.at(i).field_idx_;
-              if (OB_UNLIKELY(i >= storted_row->cnt_ || field_index >= storted_row->cnt_)) {
-                ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("get invalid argument", K(ret), K(i), K(storted_row->cnt_), K(field_index));
-              } else if (OB_FAIL(compare_calc(storted_row->cells()[i],
-                                              storted_row->cells()[field_index],
-                                              aggr_info,
-                                               i,
-                                              comp_result,
-                                              is_asc))) {
-                LOG_WARN("failed to compare calc", K(ret));
-              } else if (comp_result < -1 || comp_result > 1) {
-                ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("get invalid argument", K(ret), K(comp_result));
-              } else if (0 == comp_result) {//equal(=)
-                /*do nothing*/
-              } else if (is_asc && 1 == comp_result) {//asc great(>)
-                find_target_rank = false;
-                is_all_equal = false;
-                need_continue = false;
-              } else if (is_asc && -1 == comp_result) {//asc less(<)
-                find_target_rank = true;
-                is_all_equal = false;
-                need_continue = false;
-              } else if (!is_asc && 1 == comp_result) {//desc great(>)
-                find_target_rank = true;
-                is_all_equal = false;
-                need_continue = false;
-              } else if (!is_asc && -1 == comp_result) {//desc less(<)
-                find_target_rank = false;
-                is_all_equal = false;
-                need_continue = false;
-              } else {/*do nothing*/}
-            }
-            if (OB_SUCC(ret)) {
-              bool is_equal = false;
-              if (need_check_order_equal) {
-                if (is_first) {//first time
-                  if (OB_FAIL(prev_row.save_store_row(*storted_row))) {
-                    LOG_WARN("failed to deep copy limit last rows", K(ret));
-                  } else {
-                    is_first = false;
-                  }
-                } else if (OB_FAIL(check_rows_equal(prev_row,
-                                                    *storted_row,
-                                                    aggr_info,
-                                                    is_equal))) {
-                  LOG_WARN("failed to is order by item equal with prev row", K(ret));
-                } else if (is_equal) {
-                  -- rank_num;
-                } else {
-                  if (OB_FAIL(prev_row.save_store_row(*storted_row))) {
-                    LOG_WARN("failed to deep copy limit last rows", K(ret));
-                  }
-                }
-                if (OB_SUCC(ret)) {
-                  if (find_target_rank) {
-                    break;
-                  }
-                }
-              // cume dist requirement is <= total, therefore equality needs to continue searching
-              } else if (find_target_rank && !is_all_equal) {
-                break;
-              }
-            }
-          }
-        }
-        if (ret != OB_ITER_END && ret != OB_SUCCESS) {
-          LOG_WARN("fail to get next row", K(ret));
-        } else {
-          rank_num = ret == OB_ITER_END ? rank_num + 1 : rank_num;
-          ret = OB_SUCCESS;
-          ObNumber num_result;
-          if (T_FUN_GROUP_RANK == aggr_fun || T_FUN_GROUP_DENSE_RANK == aggr_fun) {
-            if (OB_FAIL(num_result.from(rank_num, aggr_alloc_))) {
-              LOG_WARN("failed to create number", K(ret));
-            }
-          } else {
-            ObNumber num;
-            ObNumber num_total;
-            rank_num = aggr_fun == T_FUN_GROUP_PERCENT_RANK ? rank_num - 1 : rank_num;
-            total_sort_row_cnt = aggr_fun == T_FUN_GROUP_CUME_DIST ?
-                                                    total_sort_row_cnt + 1 : total_sort_row_cnt;
-            if (OB_FAIL(num.from(rank_num, aggr_alloc_))) {
-              LOG_WARN("failed to create number", K(ret));
-            } else if (OB_FAIL(num_total.from(total_sort_row_cnt, aggr_alloc_))) {
-              LOG_WARN("failed to div number", K(ret));
-            } else if (OB_FAIL(num.div(num_total, num_result, aggr_alloc_))) {
-              LOG_WARN("failed to div number", K(ret));
-            }
-          }
-          if (OB_SUCC(ret)) {
-            result.set_number(num_result);
-          }
-        }
-      }
-      break;
-    }
     case T_FUN_GROUP_PERCENTILE_CONT:
     case T_FUN_GROUP_PERCENTILE_DISC:
     case T_FUN_MEDIAN: {
@@ -4653,131 +4528,6 @@ int ObAggregateProcessor::collect_aggr_result(
                                          K(dest_loc),
                                          K(need_linear_inter),
                                          K(result));
-        }
-      }
-      break;
-    }
-    case T_FUN_KEEP_MAX:
-    case T_FUN_KEEP_MIN:
-    case T_FUN_KEEP_SUM:
-    case T_FUN_KEEP_COUNT: {
-      if (OB_UNLIKELY(aggr_info.group_concat_param_count_ != 1 &&
-                      aggr_info.group_concat_param_count_ != 0)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(aggr_info.group_concat_param_count_));
-      } else {
-        GroupConcatExtraResult *extra = NULL;
-        if (OB_ISNULL(extra = static_cast<GroupConcatExtraResult *>(aggr_cell.get_extra()))) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("extra_ is NULL", K(ret), K(aggr_cell));
-        } else if (OB_UNLIKELY(extra->empty())) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("extra is empty", K(ret), KPC(extra));
-        // Similar to the implementation and calculation of group_concat, in rollup we can rewind, which is more efficient
-        } else if (extra->is_iterated() && OB_FAIL(extra->rewind())) {
-          LOG_WARN("rewind failed", KPC(extra), K(ret));
-        } else if (!extra->is_iterated() && OB_FAIL(extra->finish_add_row())) {
-          LOG_WARN("finish_add_row failed", KPC(extra), K(ret));
-        } else {
-          const ObChunkDatumStore::StoredRow *storted_row = NULL;
-          ObChunkDatumStore::LastStoredRow first_row(aggr_alloc_);
-          bool is_first = true;
-          while (OB_SUCC(ret) && OB_SUCC(extra->get_next_row(storted_row))) {
-            bool is_equal = false;
-            if (NULL == storted_row) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("group sort row store is NULL", K(ret), K(storted_row));
-            } else if (is_first && OB_FAIL(first_row.save_store_row(*storted_row))) {
-              LOG_WARN("failed to deep copy limit last rows", K(ret));
-            } else if (!is_first && OB_FAIL(check_rows_equal(first_row,
-                                                             *storted_row,
-                                                             aggr_info,
-                                                             is_equal))) {
-              LOG_WARN("failed to is order by item equal with prev row", K(ret));
-            } else if (is_first || is_equal) {
-              is_first = false;
-              switch (aggr_fun) {
-                case T_FUN_KEEP_MAX: {
-                  if (!storted_row->cells()[0].is_null()) {
-                    ret = max_calc(aggr_cell, aggr_cell.get_iter_result(),
-                                   storted_row->cells()[0],
-                                   aggr_info.expr_->basic_funcs_->null_first_cmp_,
-                                   aggr_info.is_number());
-                  }
-                  break;
-                }
-                case T_FUN_KEEP_MIN: {
-                  if (!storted_row->cells()[0].is_null()) {
-                    ret = min_calc(aggr_cell, aggr_cell.get_iter_result(),
-                                   storted_row->cells()[0],
-                                   aggr_info.expr_->basic_funcs_->null_first_cmp_,
-                                   aggr_info.is_number());
-                  }
-                  break;
-                }
-                case T_FUN_KEEP_SUM: {
-                  if (!storted_row->cells()[0].is_null()) {
-                    ret = add_calc(storted_row->cells()[0], aggr_cell, aggr_info);
-                  }
-                  break;
-                }
-                case T_FUN_KEEP_COUNT: {
-                  if (aggr_info.group_concat_param_count_ == 0 ||
-                      !storted_row->cells()[0].is_null()) {
-                    aggr_cell.inc_row_count();
-                  }
-                  break;
-                }
-                default: {
-                  ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("get unexpected aggr type", K(ret), K(aggr_fun));
-                  break;
-                }
-              }
-            } else {//not equal, end
-              break;
-            }
-          }
-          if (ret != OB_ITER_END && ret != OB_SUCCESS) {
-            LOG_WARN("fail to get next row", K(ret));
-          } else {
-            switch (aggr_fun) {
-              case T_FUN_KEEP_MAX:
-              case T_FUN_KEEP_MIN: {
-                if (OB_FAIL(aggr_info.expr_->deep_copy_datum(eval_ctx_,
-                                                                aggr_cell.get_iter_result()))) {
-                  LOG_WARN("fail to deep copy datum", K(ret));
-                } else {
-                  ret = OB_SUCCESS;
-                }
-                break;
-              }
-              case T_FUN_KEEP_SUM: {
-                const ObObjTypeClass tc = ob_obj_type_class(aggr_info.get_first_child_type());
-                if (OB_FAIL(aggr_cell.collect_result(tc, eval_ctx_, aggr_info))) {
-                  LOG_WARN("fail to collect_result", K(ret));
-                } else {
-                  ret = OB_SUCCESS;
-                }
-                break;
-              }
-              case T_FUN_KEEP_COUNT: {
-                ObNumber result_num;
-                char local_buff[ObNumber::MAX_BYTE_LEN];
-                ObDataBuffer local_alloc(local_buff, ObNumber::MAX_BYTE_LEN );
-                if (OB_FAIL(result_num.from(aggr_cell.get_row_count(), local_alloc))) {
-                  LOG_WARN("fail to call from", K(ret));
-                } else {
-                  ret = OB_SUCCESS;
-                  result.set_number(result_num);
-                }
-                break;
-              }
-              default:
-                ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("get unexpected aggr type", K(ret), K(aggr_fun));
-            }
-          }
         }
       }
       break;
@@ -6549,28 +6299,6 @@ int ObAggregateProcessor::llc_calc_hash_value(const ObChunkDatumStore::StoredRow
   return ret;
 }
 
-int ObAggregateProcessor::compare_calc(const ObDatum &left_value,
-                                       const ObDatum &right_value,
-                                       const ObAggrInfo &aggr_info,
-                                       int64_t index,
-                                       int &compare_result,
-                                       bool &is_asc)
-{
-  int ret = OB_SUCCESS;
-  is_asc = false;
-  if (OB_UNLIKELY(index >= aggr_info.sort_collations_.count() ||
-                  index >= aggr_info.sort_cmp_funcs_.count())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get invalid argument", K(index), K(aggr_info.sort_collations_.count()),
-                                     K(aggr_info.sort_cmp_funcs_.count()), K(ret));
-  } else if (OB_FAIL(aggr_info.sort_cmp_funcs_.at(index).cmp_func_(left_value, right_value, compare_result))) {
-    LOG_WARN("failed to cmp", K(ret), K(index), K(left_value), K(right_value));
-  } else {
-    is_asc = aggr_info.sort_collations_.at(index).is_ascending_;
-  }
-  return ret;
-}
-
 int ObAggregateProcessor::check_rows_equal(const ObChunkDatumStore::LastStoredRow &prev_row,
                                            const ObChunkDatumStore::StoredRow &cur_row,
                                            const ObAggrInfo &aggr_info,
@@ -6834,7 +6562,6 @@ int ObAggregateProcessor::clone_cell_for_wf(ObDatum &target_cell, const ObDatum 
 
 int ObAggregateProcessor::get_wm_concat_result(const ObAggrInfo &aggr_info,
                                                GroupConcatExtraResult *&extra,
-                                               bool is_keep_group_concat,
                                                ObDatum &concat_result)
 {
   int ret = OB_SUCCESS;
@@ -6854,30 +6581,16 @@ int ObAggregateProcessor::get_wm_concat_result(const ObAggrInfo &aggr_info,
                                ObCtxIds::WORK_AREA);
     // Default is comma
     ObString sep_str = ObCharsetUtils::get_const_str(aggr_info.expr_->datum_meta_.cs_type_, ',');
-    ObChunkDatumStore::LastStoredRow first_row(aggr_alloc_);
     const ObChunkDatumStore::StoredRow *storted_row = NULL;
-    bool is_first = true;
-    bool need_continue = true;
     int64_t str_len = 0;
     char *buf = NULL;
     int64_t buf_len = 0;
-    while (OB_SUCC(ret) && need_continue && OB_SUCC(extra->get_next_row(storted_row))) {
+    while (OB_SUCC(ret) && OB_SUCC(extra->get_next_row(storted_row))) {
       if (OB_ISNULL(storted_row)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret), K(storted_row));
-      } else if (is_keep_group_concat) {
-        if (is_first && OB_FAIL(first_row.save_store_row(*storted_row))) {
-          LOG_WARN("failed to deep copy limit last rows", K(ret));
-        } else if (!is_first && OB_FAIL(check_rows_equal(first_row,
-                                                         *storted_row,
-                                                         aggr_info,
-                                                         need_continue))) {
-          LOG_WARN("failed to is order by item equal with prev row", K(ret));
-        } else {
-          is_first = false;
-        }
       }
-      if (OB_SUCC(ret) && need_continue) {
+      if (OB_SUCC(ret)) {
         if (storted_row->cells()[0].is_null()) {
         } else {
           const ObDatum &datum = storted_row->cells()[0];
@@ -8424,7 +8137,8 @@ int ObAggregateProcessor::init_asmvt_result(ObIAllocator &allocator,
         if (OB_FAIL(ret)) {
         } else if (extent_res->get_int() == 0
                    || extent_res->is_overflow_integer(ObInt32Type)) {
-          ret = OB_ERR_INVALID_INPUT_VALUE;
+          ret = OB_ERR_ARGUMENT_OUT_OF_RANGE;
+          LOG_USER_ERROR(OB_ERR_ARGUMENT_OUT_OF_RANGE, extent_res->get_int());
           LOG_WARN("invalid extent value", K(ret), K(extent_res->get_int()));
         } else {
           mvt_res.extent_ = extent_res->get_int();

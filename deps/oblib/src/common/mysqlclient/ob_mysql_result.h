@@ -22,6 +22,7 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/ob_define.h"
 #include "lib/utility/ob_smart_var.h"
+#include "common/mysqlclient/ob_isql_connection_pool.h"
 #include "common/object/ob_obj_type.h"
 #include "common/object/ob_object.h"
 

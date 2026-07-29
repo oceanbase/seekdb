@@ -30,6 +30,7 @@ namespace oceanbase
 {
 namespace observer
 {
+class ObInnerSQLConnection;
 class ObITimeRecord;
 class ObQueryRetryCtrl;
 }
@@ -716,6 +717,10 @@ public:
                                   int *error_code,
                                   const char *resignal_sql_state,
                                   bool is_signal);
+
+  static int acquire_spi_conn(ObMySQLProxy &sql_proxy,
+                              ObSQLSessionInfo &session_info,
+                              observer::ObInnerSQLConnection *&spi_conn);
 
   static int spi_destruct_collection(pl::ObPLExecCtx *ctx, int64_t idx);
 

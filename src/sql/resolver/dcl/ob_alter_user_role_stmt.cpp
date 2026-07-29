@@ -14,20 +14,20 @@
  * limitations under the License.
  */
 
-#include "sql/resolver/dcl/ob_alter_user_profile_stmt.h"
+#include "sql/resolver/dcl/ob_alter_user_role_stmt.h"
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
-ObAlterUserProfileStmt::ObAlterUserProfileStmt(common::ObIAllocator *name_pool)
-    : ObDDLStmt(name_pool, stmt::T_ALTER_USER_PROFILE), arg_(), set_role_flag_(0)
+ObAlterUserRoleStmt::ObAlterUserRoleStmt(common::ObIAllocator *name_pool)
+    : ObDDLStmt(name_pool, stmt::T_ALTER_USER_ROLE), arg_(), set_role_flag_(0)
 {
 }
 
-ObAlterUserProfileStmt::ObAlterUserProfileStmt()
-    : ObDDLStmt(NULL, stmt::T_ALTER_USER_PROFILE), arg_(), set_role_flag_(0)
+ObAlterUserRoleStmt::ObAlterUserRoleStmt()
+    : ObDDLStmt(NULL, stmt::T_ALTER_USER_ROLE), arg_(), set_role_flag_(0)
 {
 }
 
-ObAlterUserProfileStmt::~ObAlterUserProfileStmt()
+ObAlterUserRoleStmt::~ObAlterUserRoleStmt()
 {
 }
 

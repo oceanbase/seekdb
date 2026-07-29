@@ -169,8 +169,7 @@ int ObPLParser::parse_procedure(const ObString &stmt_block,
 
 int ObPLParser::parse_routine_body(const ObString &routine_body,
                                    ObStmtNodeTree *&routine_stmt,
-                                   bool is_for_trigger,
-                                   bool need_unwrap)
+                                   bool is_for_trigger)
 {
   int ret = OB_SUCCESS;
   int32_t prefix_len = 0;
@@ -218,8 +217,7 @@ int ObPLParser::parse_package(const ObString &package,
                               const ObDataTypeCastParams &dtc_params,
                               share::schema::ObSchemaGetterGuard *schema_guard,
                               bool is_for_trigger,
-                              const ObTriggerInfo *trg_info,
-                              bool need_unwrap)
+                              const ObTriggerInfo *trg_info)
 {
   int ret = OB_SUCCESS;
   ObParseCtx parse_ctx;
@@ -296,8 +294,6 @@ int ObPLParser::parse_stmt_block(ObParseCtx &parse_ctx, ObStmtNodeTree *&multi_s
       }
       if (OB_NOT_SUPPORTED == ret) {
         LOG_USER_ERROR(OB_NOT_SUPPORTED, parse_ctx.global_errmsg_);
-      } else if (OB_ERR_NON_INT_LITERAL == ret) {
-       LOG_USER_ERROR(OB_ERR_NON_INT_LITERAL, static_cast<int32_t>(strlen(parse_ctx.global_errmsg_)), parse_ctx.global_errmsg_);
       }
       parse_ctx.stmt_tree_ = merge_tree(parse_ctx.mem_pool_, &(parse_ctx.global_errno_), T_STMT_LIST, parse_ctx.stmt_tree_);
       multi_stmt = parse_ctx.stmt_tree_;

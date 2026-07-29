@@ -11,6 +11,7 @@ ob_set_subtarget(ob_server schema
 ob_set_subtarget(ob_server common
   ob_dump_task_generator.cpp
   ob_inner_sql_connection.cpp
+  ob_inner_sql_connection_pool.cpp
   ob_inner_sql_read_context.cpp
   ob_inner_sql_result.cpp
   ob_req_time_service.cpp

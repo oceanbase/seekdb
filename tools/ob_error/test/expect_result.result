@@ -38,13 +38,6 @@ OceanBase:
 	Message: Object type error
 	Cause: Internal Error
 	Solution: Contact OceanBase Support
-$ob_error 20000
-
-OceanBase:
-	OceanBase Error Code: OB_SP_RAISE_APPLICATION_ERROR(-20000)
-	Message: The stored procedure 'raise_application_error' was called which causes this error to be generated
-	Cause: Internal Error
-	Solution: Contact OceanBase Support
 $ob_error 24761
 
 OceanBase:
@@ -78,6 +71,7 @@ MySQL:
 $ob_error 5794
 
 OceanBase:
+	OceanBase Error Code: OB_AUTOINC_SERVICE_BUSY(-5794)
 	Message: auto increment service busy
 	Cause: Internal Error
 	Solution: Contact OceanBase Support

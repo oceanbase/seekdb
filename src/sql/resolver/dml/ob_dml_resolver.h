@@ -33,7 +33,6 @@ class ObDelUpdStmt;
 class ObSelectResolver;
 class ObInsertResolver;
 
-static const char *err_log_default_columns_[] = { "ORA_ERR_NUMBER$", "ORA_ERR_MESG$", "ORA_ERR_ROWID$", "ORA_ERR_OPTYP$", "ORA_ERR_TAG$" };
 static char *str_to_lower(char *pszBuf, int64_t length);
 /*
  * ResolverJoinInfo is used to store temporary join information that would only be used in resolver.
@@ -396,8 +395,6 @@ protected:
                                               const bool &is_db_explicit,
                                               const common::ObString &tbl_name,
                                               const common::ObString &alias_name,
-                                              const common::ObString &synonym_name,
-                                              const common::ObString &synonym_db_name,
                                               TableItem *&tbl_item,
                                               bool cte_table_fisrt,
                                               uint64_t real_dep_obj_id);
@@ -519,32 +516,22 @@ public:
   int resolve_table_relation_factor_wrapper(const ParseNode *table_node,
                                             uint64_t &database_id,
                                             common::ObString &table_name,
-                                            common::ObString &synonym_name,
-                                            common::ObString &synonym_db_name,
                                             common::ObString &db_name,
-                                            bool &is_db_explicit,
-                                            common::ObIArray<uint64_t> &ref_obj_ids);
+                                            bool &is_db_explicit);
 
 protected:
   int resolve_table_relation_factor(const ParseNode *node,
                                     uint64_t &database_id,
                                     common::ObString &table_name,
-                                    common::ObString &synonym_name,
-                                    common::ObString &synonym_db_name,
                                     common::ObString &db_name,
-                                    bool &is_db_explicit,
-                                    common::ObIArray<uint64_t> &ref_obj_ids);
+                                    bool &is_db_explicit);
   int resolve_table_relation_factor_normal(const ParseNode *node,
                                            uint64_t &database_id,
                                            common::ObString &table_name,
-                                           common::ObString &synonym_name,
-                                           common::ObString &synonym_db_name,
                                            common::ObString &db_name);
   int resolve_table_relation_factor_normal(const ParseNode *node,
                                            uint64_t &database_id,
                                            common::ObString &table_name,
-                                           common::ObString &synonym_name,
-                                           common::ObString &synonym_db_name,
                                            common::ObString &db_name,
                                            bool &is_db_expilicit);
 
@@ -674,7 +661,6 @@ protected:
 
   int check_table_item_with_gen_col_using_udf(const TableItem *table_item, bool &ans);
 
-  int get_view_id_for_trigger(const TableItem &view_item, uint64_t &view_id);
   bool get_joininfo_by_id(int64_t table_id, ResolverJoinInfo *&join_info);
   int get_json_table_column_by_id(uint64_t table_id, ObDmlJtColDef *&col_def);
 
@@ -695,20 +681,12 @@ private:
   int check_table_exist_or_not(uint64_t &database_id,
                                common::ObString &table_name,
                                common::ObString &db_name);
-  int resolve_table_relation_recursively(uint64_t &database_id,
-                                         common::ObString &table_name,
-                                         common::ObString &db_name,
-                                         bool is_db_explicit,
-                                         bool &is_synonym_public);
-  int add_synonym_version(const common::ObIArray<uint64_t> &synonym_ids);
-
   int find_const_params_for_gen_column(const ObRawExpr &expr);
   int check_order_by_for_subquery_stmt(const ObSubQueryInfo &info);
   int check_stmt_order_by(const ObSelectStmt *stmt);
 
   int resolve_ora_rowscn_pseudo_column(const ObQualifiedName &q_name, ObRawExpr *&real_ref_expr);
   int resolve_pseudo_column(const ObQualifiedName &q_name, ObRawExpr *&real_ref_expr);
-  int resolve_current_of(const ParseNode &node, ObDMLStmt &stmt, ObIArray<ObRawExpr*> &and_exprs);
   int get_all_column_ref(ObRawExpr *expr, common::ObIArray<ObColumnRefRawExpr*> &arr);
 
   int convert_udf_to_agg_expr(ObRawExpr *&expr,
@@ -793,8 +771,6 @@ private:
                              bool &find_it,
                              int64_t &table_id,
                              int64_t &ref_id);
-  int check_cast_multiset(const ObRawExpr *expr, const ObRawExpr *parent_expr = NULL);
-
   int replace_col_udt_qname(ObQualifiedName& q_name);
   int check_column_scalar_type(ParseNode *root_node, bool &is_scalar);
 

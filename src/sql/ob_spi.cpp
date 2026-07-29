@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL
 #include "ob_spi.h"
 #include "ob_sql.h"
+#include "observer/ob_inner_sql_connection_pool.h"
 #include "observer/mysql/ob_sync_cmd_driver.h"
 #include "observer/mysql/obmp_stmt_execute.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
@@ -4129,6 +4130,20 @@ int ObSPIService::spi_interface_impl(pl::ObPLExecCtx *ctx, const char *interface
   return ret;
 }
 
+OB_INLINE int ObSPIService::acquire_spi_conn(ObMySQLProxy &sql_proxy,
+                                             ObSQLSessionInfo &session_info,
+                                             ObInnerSQLConnection *&spi_conn)
+{
+  int ret = OB_SUCCESS;
+  ObInnerSQLConnectionPool *pool = static_cast<ObInnerSQLConnectionPool*>(sql_proxy.get_pool());
+#ifndef NDEBUG
+  CK(sql_proxy.is_inited());
+  CK(OB_NOT_NULL(pool));
+#endif
+  OZ(pool->acquire_spi_conn(&session_info, spi_conn));
+  return ret;
+}
+
 int ObSPIService::adjust_out_params(
   ObResultSet &result_set, ObSPIOutParams &out_params)
 {
@@ -4514,6 +4529,7 @@ int ObSPIService::inner_open(ObPLExecCtx *ctx,
     } else {
       bool is_inner_session = session->is_inner();
       ObSQLSessionInfo::SessionType old_session_type = session->get_session_type();
+      ObInnerSQLConnection *spi_conn = NULL;
       !is_inner_session ? session->set_inner_session() : (void)NULL;
       session->set_session_type(ObSQLSessionInfo::USER_SESSION);
       if (OB_SUCC(ret)) {

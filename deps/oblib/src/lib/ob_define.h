@@ -447,9 +447,6 @@ const int32_t OB_TMP_BUF_SIZE_256 = 256;
 const int64_t OB_SCHEMA_MGR_MAX_USED_TID_MAP_BUCKET_NUM = 64;
 const int64_t OB_MAX_SLAVE_READ_DELAY_TS = 5 * 1000 * 1000;
 
-const int64_t OB_MAX_DIRECTORY_NAME_LENGTH = 128;
-const int64_t OB_MAX_DIRECTORY_PATH_LENGTH = 4000;
-const uint64_t OB_MAX_INTERVAL_PARTITIONS = 1048575; // interval parted table max partitions
 const int64_t OB_SERVICE_NAME_LENGTH = 64;
 
 //plan cache
@@ -478,7 +475,6 @@ const int64_t OB_LOG_SYNC = 1;
 const int64_t OB_LOG_DELAYED_SYNC = 2;
 const int64_t OB_LOG_NOT_PERSISTENT = 4;
 
-const int64_t OB_MAX_UPS_LEASE_DURATION_US = INT64_MAX;
 
 const int64_t OB_EXECABLE = 1;
 const int64_t OB_WRITEABLE = 2;
@@ -560,8 +556,6 @@ inline const char *get_cs_protocol_type_name(const ObCSProtocolType type) {
   }
 }
 
-const int64_t OB_UPS_START_MAJOR_VERSION = 2;
-const int64_t OB_UPS_START_MINOR_VERSION = 1;
 
 const int64_t OB_NEWEST_DATA_VERSION = -2;
 
@@ -575,9 +569,7 @@ const double OB_DOUBLE_EPSINON = 1e-14;
 
 const double OB_DOUBLE_PI = 3.141592653589793;
 
-const uint64_t OB_UPS_MAX_MINOR_VERSION_NUM = 2048;
 const int64_t OB_MAX_COMPACTSSTABLE_NUM = 64;
-const int32_t OB_UPS_LIMIT_RATIO = 2;
 
 const int64_t OB_MERGED_VERSION_INIT = 1;
 
@@ -734,8 +726,6 @@ const char *const OB_DROPPED_TABLE_ID_LIST = "dropped_table_ids_list";
 const char *const OB_STRING_PARTITION_GROUP_META = "partition_group_meta";
 const char *const OB_SECURITY_AUDIT_IDS_LIST = "security_audit_ids_list";
 const char *const OB_SECURITY_AUDIT_DEFINITION = "security_audit_definition";
-const char *const OB_SYNONYM_IDS_LIST = "synonym_ids_list";
-const char *const OB_CREATE_SYNONYM_DEFINITION = "create_synonym_definition";
 const char *const OB_TIMEZONE_INFO_DEFINITION = "timezone_info_definition";
 const char *const OB_MASKED_STR = "***";
 
@@ -766,8 +756,6 @@ const int64_t SERVER_STAT_LENGTH = 64;
 const int64_t TABLE_MAX_KEY_LENGTH = 128;
 const int64_t TABLE_MAX_VALUE_LENGTH = 128;
 const int64_t MAX_ZONE_INFO_LENGTH = 4096;
-const int64_t UPS_SESSION_TYPE_LENGTH = 64;
-const int64_t UPS_MEMTABLE_LOG_LENGTH = 128;
 const int64_t COLUMN_TYPE_LENGTH = 64;
 const int64_t COLUMN_NULLABLE_LENGTH = 4;
 const int64_t COLUMN_KEY_LENGTH = 4;
@@ -831,8 +819,6 @@ const uint64_t OB_MAX_SYS_POOL_ID = 100;
 const char *const OB_SYS_USER_NAME = "root";
 // todo yyj
 const char *const OB_EXTENDED_SYS_USER_NAME = "SYS";
-const char *const OB_LBACSYS_SCHEMA_NAME = "LBACSYS";
-const char *const OB_AUDITOR_SCHEMA_NAME = "ORAAUDITOR";
 const char *const OB_RESTORE_USER_NAME = "__oceanbase_inner_restore_user";
 const char *const OB_DRC_USER_NAME = "__oceanbase_inner_drc_user";
 const int64_t OB_MAX_DDL_OPNAME_LENGTH = 64;
@@ -1128,8 +1114,8 @@ const uint64_t OB_MYSQL_SCHEMA_ID             = OB_MIN_INNER_DATABASE_ID + 3;
 const uint64_t OB_RECYCLEBIN_SCHEMA_ID        = OB_MIN_INNER_DATABASE_ID + 4;
 const uint64_t OB_PUBLIC_SCHEMA_ID            = OB_MIN_INNER_DATABASE_ID + 5;
 const uint64_t OB_EXTENDED_SYS_DATABASE_ID = OB_MIN_INNER_DATABASE_ID + 6;
-const uint64_t OB_LBACSYS_DATABASE_ID      = OB_MIN_INNER_DATABASE_ID + 7;
-const uint64_t OB_AUDITOR_DATABASE_ID      = OB_MIN_INNER_DATABASE_ID + 8;
+// OB_MIN_INNER_DATABASE_ID + 7 and + 8 are reserved after removing
+// Oracle Label Security and Oracle auditing schemas.
 // use only if the 'use database' command is not executed.
 const uint64_t OB_MOCK_DEFAULT_DATABASE_ID = OB_MIN_INNER_DATABASE_ID + 9;
 const uint64_t OB_CTE_DATABASE_ID             = OB_MIN_INNER_DATABASE_ID + 10;
@@ -1195,20 +1181,6 @@ OB_INLINE bool is_sys_database_id(const uint64_t database_id)
 {
   return is_mysql_sys_database_id(database_id)
          || is_extended_sys_database_id(database_id);
-}
-
-/*
- * ################################################################################
- * OBJECT_ID FOR PROFILE (202200, 202300)
- * ################################################################################
- */
-const uint64_t OB_MIN_INNER_PROFILE_ID           = 202200;
-const uint64_t OB_MAX_INNER_PROFILE_ID           = 202300;
-
-OB_INLINE bool is_inner_profile_id(const uint64_t profile_id)
-{
-  return profile_id > OB_MIN_INNER_PROFILE_ID
-         && profile_id < OB_MAX_INNER_PROFILE_ID;
 }
 
 /*
@@ -1365,7 +1337,7 @@ const int64_t OB_MAX_UNUSED_COLUMNS_COUNT = 128; // drop column online.
 const int64_t OB_DEFAULT_COL_DEC_NUM = common::OB_ROW_MAX_COLUMNS_COUNT / 80;
 const int64_t OB_DEFAULT_MULTI_GET_ROWKEY_NUM = 8;
 const int64_t OB_MAX_TIMESTAMP_LENGTH = 32;
-// nls_date_format = 'yyyy-mm-dd hh24:mi:ss.ff TZR TZD' max length of TZR is 38, max length of TZD is 6
+// Standard timestamp text with region name: max length of TZR is 38, max length of TZD is 6.
 // 27 + 38 + 1 + 6 = 72; set OB_MAX_TIMESTAMP_TZ_LENGTH = 128 in case add new time zone with a long name
 const int64_t OB_MAX_TIMESTAMP_TZ_LENGTH = 128;
 const int64_t OB_COMMON_MEM_BLOCK_SIZE = 64 * 1024;

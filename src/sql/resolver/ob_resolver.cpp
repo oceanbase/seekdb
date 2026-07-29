@@ -71,7 +71,7 @@
 #include "sql/resolver/dcl/ob_revoke_resolver.h"
 #include "sql/resolver/dcl/ob_create_role_resolver.h"
 #include "sql/resolver/dcl/ob_drop_role_resolver.h"
-#include "sql/resolver/dcl/ob_alter_user_profile_resolver.h"
+#include "sql/resolver/dcl/ob_alter_user_role_resolver.h"
 #include "sql/resolver/tcl/ob_start_trans_resolver.h"
 #include "sql/resolver/tcl/ob_end_trans_resolver.h"
 #include "tcl/ob_savepoint_resolver.h"
@@ -457,10 +457,9 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(LockUser);
         break;
       }
-      case T_ALTER_USER_PROFILE:
       case T_ALTER_USER_DEFAULT_ROLE:
       case T_SET_ROLE: {
-        REGISTER_STMT_RESOLVER(AlterUserProfile);
+        REGISTER_STMT_RESOLVER(AlterUserRole);
         break;
       }
 
@@ -674,24 +673,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         params_.query_ctx_->has_dml_write_stmt_ = dml_stmt->is_dml_write_stmt();
       }
 
-      if (OB_SUCC(ret)) {
-        if (params_.session_info_->is_force_off_rich_format()) {
-          // do nothing
-        } else {
-          bool has_rich_format_hint = false;
-          bool enable_rich_format = false;
-          ObOptParamHint &opt_hint = params_.query_ctx_->query_hint_.global_hint_.opt_params_;
-          if (OB_FAIL(opt_hint.check_and_get_bool_opt_param(ObOptParamHint::ENABLE_RICH_VECTOR_FORMAT,
-                                                            has_rich_format_hint,
-                                                            enable_rich_format))) {
-            LOG_WARN("check and get bool opt param failed", K(ret));
-          } else if (has_rich_format_hint) {
-            params_.session_info_->set_force_rich_format(
-              enable_rich_format ? ObBasicSessionInfo::ForceRichFormatStatus::FORCE_ON :
-                                   ObBasicSessionInfo::ForceRichFormatStatus::FORCE_OFF);
-          }
-        }
-      }
     }
     if (OB_SUCC(ret)) {
       stmt::StmtType stmt_type = stmt->get_stmt_type();

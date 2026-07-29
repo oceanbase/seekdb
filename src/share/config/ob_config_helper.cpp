@@ -20,7 +20,6 @@
 #include "ob_config_helper.h"
 #include "share/ob_ddl_common.h"
 #include "share/ob_rpc_struct.h"
-#include "share/io/ob_backup_storage_info.h"
 
 namespace oceanbase
 {
@@ -417,15 +416,12 @@ bool ObConfigAuditLogCompressionChecker::check(const ObConfigItem &t) const
 
 bool ObConfigAuditLogPathChecker::check(const ObConfigItem &t) const
 {
-  int ret = OB_SUCCESS;
-  common::ObString tmp_string(t.str());
-  ObBackupDest dest;
-  if (tmp_string.empty()) {
-    // do nothing
-  } else if (OB_FAIL(dest.set(tmp_string))) {
-    OB_LOG(WARN, "failed to set backup dest", K(ret));
-  }
-  return OB_SUCCESS == ret;
+  static constexpr char FILE_PREFIX[] = "file://";
+  const char *path = t.str();
+  return '\0' == path[0]
+      || (0 == STRNCMP(path, FILE_PREFIX, sizeof(FILE_PREFIX) - 1)
+          && OB_ISNULL(STRCHR(path, '?'))
+          && STRLEN(path) < OB_MAX_URI_LENGTH);
 }
 
 bool ObConfigAuditLogFormatChecker::check(const ObConfigItem &t) const

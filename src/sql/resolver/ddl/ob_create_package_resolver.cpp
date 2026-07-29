@@ -290,8 +290,7 @@ int ObCreatePackageResolver::resolve_invoke_accessible(const ParseNode *package_
       if (OB_NOT_NULL(node)) {
         if (T_SP_INVOKE == node->type_) {
           if (has_sp_invoker_clause) {
-            ret = OB_ERR_DECL_MORE_THAN_ONCE;
-            LOG_USER_ERROR(OB_ERR_DECL_MORE_THAN_ONCE, static_cast<int>(strlen("AUTHID")), "AUTHID");
+            ret = OB_ERR_PARSER_SYNTAX;
             LOG_WARN("at most one declaration for 'AUTHID' is permitted",
                       K(ret), K(node->type_), K(has_sp_invoker_clause));
           } else {
@@ -302,8 +301,7 @@ int ObCreatePackageResolver::resolve_invoke_accessible(const ParseNode *package_
           }
         } else if (T_SP_ACCESSIBLE_BY == node->type_) {
           if (has_accessible_by_clause) {
-            ret = OB_ERR_DECL_MORE_THAN_ONCE;
-            LOG_USER_ERROR(OB_ERR_DECL_MORE_THAN_ONCE, static_cast<int>(strlen("ACCESSIBLE BY")), "ACCESSIBLE BY");
+            ret = OB_ERR_PARSER_SYNTAX;
             LOG_WARN("at most one declaration for 'ACCESSIBLE BY' is permitted",
                       K(ret), K(node->type_), K(has_accessible_by_clause));
           } else {
@@ -354,9 +352,6 @@ int ObCreatePackageResolver::resolve_functions_spec(const ObPackageInfo &package
       if (pl_routine_info->is_deterministic()) {
         routine_info.set_deterministic();
       }
-      if (pl_routine_info->is_parallel_enable()) {
-        routine_info.set_parallel_enable();
-      }
       //set data access info 
       if (pl_routine_info->is_no_sql()) {
         routine_info.set_no_sql();
@@ -366,25 +361,6 @@ int ObCreatePackageResolver::resolve_functions_spec(const ObPackageInfo &package
         routine_info.set_modifies_sql_data();
       } else if (pl_routine_info->is_contains_sql()) {
         routine_info.set_contains_sql();
-      }
-      // udt type related information setting
-      if (pl_routine_info->is_udt_routine()) {
-        routine_info.set_is_udt_udf();
-        if (pl_routine_info->is_udt_static_routine()) {
-          routine_info.set_is_static();
-        }
-        if (pl_routine_info->is_function()) {
-          routine_info.set_is_udt_function();
-        }
-        if (pl_routine_info->is_udt_cons()) {
-          routine_info.set_is_udt_cons();
-        }
-        if (pl_routine_info->is_udt_map()) {
-          routine_info.set_is_udt_map();
-        }
-        if (pl_routine_info->is_udt_order()) {
-          routine_info.set_is_udt_order();
-        }
       }
       if (package_info.is_invoker_right()) {
         routine_info.set_invoker_right();
@@ -556,8 +532,9 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
                                                 share::schema::PACKAGE_TYPE,
                                                 package_spec_info));
           if (OB_ERR_PACKAGE_DOSE_NOT_EXIST == ret) {
-            ret = OB_ERR_SPEC_NOT_EXIST;
-            LOG_USER_ERROR(OB_ERR_SPEC_NOT_EXIST, package_name.length(), package_name.ptr());
+            LOG_USER_ERROR(OB_ERR_PACKAGE_DOSE_NOT_EXIST, "PACKAGE",
+                           db_name.length(), db_name.ptr(),
+                           package_name.length(), package_name.ptr());
           }
 
           CK (OB_NOT_NULL(package_spec_info));
@@ -587,17 +564,6 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
                                     package_body_ast,
                                     false));
 
-          if (OB_SUCC(ret)) {
-            if (package_body_ast.get_serially_reusable()
-                != package_spec_ast.get_serially_reusable()) {
-              ret = OB_NOT_SUPPORTED;
-              LOG_WARN("pragma string must be declared in package specification and body",
-                       K(ret),
-                       K(package_body_ast.get_serially_reusable()),
-                       K(package_spec_ast.get_serially_reusable()));
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, "pragma string not declared in package specification and body");
-            }
-          }
           // update route sql of routine info
           if (OB_SUCC(ret)) {
             obcall::ObCreatePackageArg &create_package_arg = stmt->get_create_package_arg();

@@ -73,7 +73,6 @@ private:
     IN_BYTES,
     OUT_BYTES,
     USER_CLIENT_PORT,
-    SERVICE_NAME,
     TOTAL_CPU_TIME,
     TOP_INFO,
     MEMORY_USAGE

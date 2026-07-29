@@ -280,15 +280,13 @@ int ObMPPacketSender::send_error_packet(int err,
     const ObWarningBuffer *wb = common::ob_get_tsi_warning_buffer();
     if (NULL != wb
         && (wb->get_err_code() == err
-            || (err >= OB_MIN_RAISE_APPLICATION_ERROR
-                && err <= OB_MAX_RAISE_APPLICATION_ERROR))) {
+            || OB_ERR_SIGNAL_EXCEPTION == err)) {
       message = wb->get_err_msg();
     }
     if (message.length() <= 0) {
       if (OB_LIKELY(NULL != errmsg) && 0 < strlen(errmsg)) {
         message = ObString::make_string(errmsg);
-      } else if (err >= OB_MIN_RAISE_APPLICATION_ERROR
-                 && err <= OB_MAX_RAISE_APPLICATION_ERROR) {
+      } else if (OB_ERR_SIGNAL_EXCEPTION == err) {
         // do nothing ...
       } else {
         snprintf(msg_buf, MAX_MSG_BUF_SIZE, "%s", ob_errpkt_strerror(err));
@@ -367,7 +365,7 @@ int ObMPPacketSender::send_error_packet(int err,
     }
 
     // TODO Negotiate a err for rerouting sql
-    if (OB_SP_RAISE_APPLICATION_ERROR == err) {
+    if (OB_ERR_SIGNAL_EXCEPTION == err && OB_NOT_NULL(wb)) {
       epacket.set_errcode(static_cast<uint16_t>(wb->get_err_code()));
       if (strlen(wb->get_sql_state()) == 0) {
         if (OB_FAIL(epacket.set_sqlstate(ob_sqlstate(err)))) {
@@ -515,9 +513,6 @@ int ObMPPacketSender::send_ok_packet(ObSQLSessionInfo &session, ObOKPParam &ok_p
       if (ok_param.is_on_connect_ || ok_param.is_on_change_user_) {
         need_track_session_info = true;
         okp.set_use_standard_serialize(true);
-        if (OB_FAIL(ObMPUtils::add_nls_format(okp, session))) {
-          LOG_WARN("fail to add_nls_format", K(ret));
-        }
       } else {
         if (!ok_param.has_more_result_) {
           need_track_session_info = true;
@@ -525,8 +520,6 @@ int ObMPPacketSender::send_ok_packet(ObSQLSessionInfo &session, ObOKPParam &ok_p
             okp.set_use_standard_serialize(true);
             if (OB_FAIL(ObMPUtils::add_changed_session_info(okp, session))) {
               SERVER_LOG(WARN, "fail to add changed session info", K(ret));
-            } else if (OB_FAIL(ObMPUtils::add_nls_format(okp, session, true))) {
-              LOG_WARN("fail to add_nls_format", K(ret));
             }
           }
         }

@@ -47,7 +47,6 @@ int ObPLPackageAST::init(const ObString &db_name,
   version_ = package_version;
   if (OB_NOT_NULL(parent_package_ast)) {
     compile_flag_ = parent_package_ast->get_compile_flag();
-    serially_reusable_ = parent_package_ast->get_serially_reusable();
     parent_user_type_table = &parent_package_ast->get_user_type_table();
     parent_routine_table = &parent_package_ast->get_routine_table();
     parent_condition_table = &parent_package_ast->get_condition_table();
@@ -84,10 +83,6 @@ int ObPLPackageAST::init(const ObString &db_name,
     if (ObTriggerInfo::is_trigger_package_id(package_id)) {
       obj_version.object_id_ = ObTriggerInfo::get_package_trigger_id(package_id);
       obj_version.object_type_ = DEPENDENCY_TRIGGER;
-    } else if (PL_UDT_OBJECT_SPEC == package_type || PL_UDT_OBJECT_BODY == package_type) {
-      obj_version.object_id_ = package_id;
-      obj_version.object_type_
-        = PL_UDT_OBJECT_SPEC  == package_type ? DEPENDENCY_TYPE : DEPENDENCY_TYPE_BODY;
     } else {
       obj_version.object_id_ = package_id;
       obj_version.object_type_ = (PL_PACKAGE_SPEC == package_type) ? DEPENDENCY_PACKAGE : DEPENDENCY_PACKAGE_BODY;
@@ -116,7 +111,7 @@ int ObPLPackageAST::process_generic_type()
     "<V2_TABLE_1>",
     "<TABLE_1>",
     "<COLLECTION_1>",
-    "<REF_CURSOR_1>",
+    "", // retired Oracle cursor-type slot
 
     "<TYPED_TABLE>",
     "<ADT_WITH_OID>",
@@ -164,7 +159,6 @@ int ObPLPackage::init(const ObPLPackageAST &package_ast)
   id_ = package_ast.get_id();
   version_ = package_ast.get_version();
   package_type_ = package_ast.get_package_type();
-  serially_reusable_ = package_ast.get_serially_reusable();
   if (OB_FAIL(ob_write_string(get_allocator(), const_cast<ObString &>(package_ast.get_db_name()), db_name_))) {
     LOG_WARN("copy db name failed", "db name", package_ast.get_db_name(), K(ret));
   } else if (OB_FAIL(ob_write_string(get_allocator(), const_cast<ObString &>(package_ast.get_name()), name_))) {
@@ -210,7 +204,7 @@ int ObPLPackage::instantiate_package_state(const ObPLResolveCtx &resolve_ctx,
       LOG_WARN("cannot assign null to var with not null attribution", K(ret));
     }
     OZ (package_state.set_package_var_val(var_idx, value, false));
-    if (OB_SUCC(ret) && !package_state.get_serially_reusable()) {
+    if (OB_SUCC(ret)) {
       const sql::ObSqlExpression *default_expr =
           var->is_formal_param() ? NULL : get_default_expr(var->get_default());
       if (OB_NOT_NULL(default_expr)
@@ -218,9 +212,7 @@ int ObPLPackage::instantiate_package_state(const ObPLResolveCtx &resolve_ctx,
         resolve_ctx.session_info_.set_pl_can_retry(false);
       }
     }
-    if (OB_NOT_NULL(var) && var->get_type().is_cursor_type() && !var->get_type().is_cursor_var()) {
-      // package ref cursor variable, refrence outside, do not destruct it.
-    } else if (OB_FAIL(ret)) {
+    if (OB_FAIL(ret)) {
       ObUserDefinedType::destruct_objparam(package_state.get_pkg_allocator(), value, &(resolve_ctx.session_info_));
     }
   }
@@ -244,7 +236,6 @@ int ObPLPackage::execute_init_routine(ObIAllocator &allocator, ObExecContext &ex
 
     if (OB_SUCC(ret)) {
       ParamStore params;
-      ObSEArray<int64_t, 2> nocopy_param;
       ObObj result;
       int status;
       ObSEArray<int64_t, 2> subp_path;
@@ -254,7 +245,6 @@ int ObPLPackage::execute_init_routine(ObIAllocator &allocator, ObExecContext &ex
                              init_routine->get_routine_id(),
                              subp_path,
                              params,
-                             nocopy_param,
                              result,
                              &status,
                              false,
@@ -280,9 +270,9 @@ int ObPLPackage::get_var(const ObString &var_name, const ObPLVar *&var, int64_t 
     if (!tmp_var->is_formal_param()
         && ObCharset::case_insensitive_equal(var_name, tmp_var->get_name())) {
       if (tmp_var->is_dup_declare()) {
-        ret = OB_ERR_DECL_MORE_THAN_ONCE;
+        ret = OB_ERR_SP_DUP_VAR;
         LOG_WARN("package var dup", K(ret), K(var_idx));
-        LOG_USER_ERROR(OB_ERR_DECL_MORE_THAN_ONCE, tmp_var->get_name().length(), tmp_var->get_name().ptr());
+        LOG_USER_ERROR(OB_ERR_SP_DUP_VAR, tmp_var->get_name().length(), tmp_var->get_name().ptr());
       } else {
         var = tmp_var;
         var_idx = i;
@@ -380,8 +370,8 @@ int ObPLPackage::get_type(const common::ObString type_name, const ObUserDefinedT
     const ObUserDefinedType *tmp_type = type_table_.at(i);
     if (ObCharset::case_insensitive_equal(type_name, tmp_type->get_name())) {
       if (OB_NOT_NULL(type)) {
-        ret = OB_ERR_DECL_MORE_THAN_ONCE;
-        LOG_USER_ERROR(OB_ERR_DECL_MORE_THAN_ONCE, type_name.length(), type_name.ptr());
+        ret = OB_ERR_SP_DUP_TYPE;
+        LOG_USER_ERROR(OB_ERR_SP_DUP_TYPE, type_name.length(), type_name.ptr());
       } else {
         type = tmp_type;
       }
@@ -413,5 +403,3 @@ int ObPLPackage::get_type(uint64_t type_id, const ObUserDefinedType *&type) cons
 }
 } // end namespace pl
 } // end namespace oceanbase
-
-

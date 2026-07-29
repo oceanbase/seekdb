@@ -161,12 +161,6 @@ constexpr int OB_MINOR_SSTABLE_RANGE_CROSS = -4287;
 constexpr int OB_MEMTABLE_CANNOT_MINOR_MERGE = -4288;
 constexpr int OB_TASK_EXIST = -4289;
 constexpr int OB_ALLOCATE_DISK_SPACE_FAILED = -4290;
-constexpr int OB_CANT_FIND_UDF = -4291;
-constexpr int OB_CANT_INITIALIZE_UDF = -4292;
-constexpr int OB_UDF_NO_PATHS = -4293;
-constexpr int OB_UDF_EXISTS = -4294;
-constexpr int OB_CANT_OPEN_LIBRARY = -4295;
-constexpr int OB_CANT_FIND_DL_ENTRY = -4296;
 constexpr int OB_OBJECT_NAME_EXIST = -4297;
 constexpr int OB_OBJECT_NAME_NOT_EXIST = -4298;
 constexpr int OB_ERR_DUP_ARGUMENT = -4299;
@@ -186,16 +180,10 @@ constexpr int OB_SCHEMA_NOT_UPTODATE = -4346;
 constexpr int OB_ROLE_NOT_EXIST = -4347;
 constexpr int OB_ROLE_EXIST = -4348;
 constexpr int OB_PRIV_DUP = -4349;
-constexpr int OB_TABLESPACE_EXIST = -4353;
-constexpr int OB_TABLESPACE_NOT_EXIST = -4354;
-constexpr int OB_TABLESPACE_DELETE_NOT_EMPTY = -4355;
 constexpr int OB_FLOAT_PRECISION_OUT_RANGE = -4356;
 constexpr int OB_NUMERIC_PRECISION_OUT_RANGE = -4357;
 constexpr int OB_NUMERIC_SCALE_OUT_RANGE = -4358;
 constexpr int OB_SLOG_REACH_MAX_CONCURRENCY = -4361;
-constexpr int OB_ERR_BY_ACCESS_OR_SESSION_CLAUSE_NOT_ALLOWED_FOR_NOAUDIT = -4362;
-constexpr int OB_ERR_AUDITING_THE_OBJECT_IS_NOT_SUPPORTED = -4363;
-constexpr int OB_ERR_DDL_STATEMENT_CANNOT_BE_AUDITED_WITH_BY_SESSION_SPECIFIED = -4364;
 constexpr int OB_ERR_NOT_VALID_PASSWORD = -4365;
 constexpr int OB_ERR_MUST_CHANGE_PASSWORD = -4366;
 constexpr int OB_OVERSIZE_NEED_RETRY = -4367;
@@ -221,40 +209,14 @@ constexpr int OB_ERR_UNEXPECTED_UNIT_STATUS = -4399;
 constexpr int OB_AUTOINC_CACHE_NOT_EQUAL = -4400;
 constexpr int OB_IMPROPER_OS_PARAM = -4403;
 constexpr int OB_IO_TIMEOUT = -4404;
-constexpr int OB_IMPORT_NOT_IN_SERVER = -4505;
 constexpr int OB_CONVERT_ERROR = -4507;
-constexpr int OB_RS_STATE_NOT_ALLOW = -4512;
 constexpr int OB_NO_NEED_UPDATE = -4517;
 constexpr int OB_CACHE_TIMEOUT = -4518;
 constexpr int OB_ITER_STOP = -4519;
-constexpr int OB_CONFIG_NOT_SYNC = -4527;
-constexpr int OB_ROOT_TABLE_RANGE_NOT_EXIST = -4537;
-constexpr int OB_NOT_DATA_LOAD_TABLE = -4540;
-constexpr int OB_DATA_LOAD_TABLE_DUPLICATED = -4541;
-constexpr int OB_ROOT_TABLE_ID_EXIST = -4542;
-constexpr int OB_INDEX_TIMEOUT = -4543;
-constexpr int OB_ROOT_NOT_INTEGRATED = -4544;
-constexpr int OB_INDEX_INELIGIBLE = -4545;
-constexpr int OB_MERGE_NOT_STARTED = -4547;
-constexpr int OB_MERGE_ALREADY_STARTED = -4548;
 constexpr int OB_RS_SHUTDOWN = -4550;
-constexpr int OB_DATA_SOURCE_NOT_EXIST = -4600;
-constexpr int OB_DATA_SOURCE_TABLE_NOT_EXIST = -4601;
-constexpr int OB_DATA_SOURCE_RANGE_NOT_EXIST = -4602;
-constexpr int OB_DATA_SOURCE_DATA_NOT_EXIST = -4603;
-constexpr int OB_DATA_SOURCE_SYS_ERROR = -4604;
-constexpr int OB_DATA_SOURCE_TIMEOUT = -4605;
-constexpr int OB_DATA_SOURCE_CONCURRENCY_FULL = -4606;
-constexpr int OB_DATA_SOURCE_WRONG_URI_FORMAT = -4607;
-constexpr int OB_SSTABLE_VERSION_UNEQUAL = -4608;
-constexpr int OB_UPS_RENEW_LEASE_NOT_ALLOWED = -4609;
-constexpr int OB_UPS_COUNT_OVER_LIMIT = -4610;
-constexpr int OB_NO_UPS_MAJORITY = -4611;
 constexpr int OB_INDEX_COUNT_REACH_THE_LIMIT = -4613;
 constexpr int OB_TASK_EXPIRED = -4614;
-constexpr int OB_INVALID_SERVER_STATUS = -4620;
 constexpr int OB_MACHINE_RESOURCE_NOT_ENOUGH = -4624;
-constexpr int OB_SERVER_NOT_ACTIVE = -4637;
 constexpr int OB_RS_NOT_MASTER = -4638;
 constexpr int OB_LOCATION_NOT_EXIST = -4653;
 constexpr int OB_LOCATION_LEADER_NOT_EXIST = -4654;
@@ -262,7 +224,6 @@ constexpr int OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT = -4659;
 constexpr int OB_SESSION_ENTRY_EXIST = -4661;
 constexpr int OB_GOT_SIGNAL_ABORTING = -4662;
 constexpr int OB_GET_LOCATION_TIME_OUT = -4664;
-constexpr int OB_DATA_SOURCE_NOT_VALID = -4673;
 constexpr int OB_RUN_JOB_NOT_SUCCESS = -4674;
 constexpr int OB_NEED_REMOVE_UNNEED_TABLE = -4676;
 constexpr int OB_NO_NEED_MERGE = -4677;
@@ -270,16 +231,11 @@ constexpr int OB_CONFLICT_OPTION = -4678;
 constexpr int OB_DUPLICATE_OPTION = -4679;
 constexpr int OB_INVALID_OPTION = -4680;
 constexpr int OB_RPC_NEED_RECONNECT = -4681;
-constexpr int OB_CANNOT_COPY_MAJOR_SSTABLE = -4682;
 constexpr int OB_ACTIVE_MEMTBALE_NOT_EXSIT = -4685;
-constexpr int OB_NO_DISK_NEED_REBUILD = -4687;
 constexpr int OB_STANDBY_DATABASE_READ_ONLY = -4688;
-constexpr int OB_INVALD_WEB_SERVICE_CONTENT = -4689;
 constexpr int OB_ARRAY_BINDING_SWITCH_ITERATOR = -4691;
 constexpr int OB_ERR_CHECK_DROP_COLUMN_FAILED = -4694;
-constexpr int OB_WAIT_TRANS_TABLE_MERGE_TIMEOUT = -4697;
 constexpr int OB_ERR_PARAM_INVALID = -4701;
-constexpr int OB_FAILOVER_NOT_ALLOW = -4708;
 constexpr int OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX = -4713;
 constexpr int OB_ERR_ATLER_TABLE_ILLEGAL_FK = -4714;
 constexpr int OB_LS_NOT_EXIST = -4719;
@@ -290,7 +246,6 @@ constexpr int OB_TABLET_EXIST = -4724;
 constexpr int OB_TABLET_NOT_EXIST = -4725;
 constexpr int OB_LS_NEED_REVOKE = -4727;
 constexpr int OB_ERR_LAST_PARTITION_IN_THE_RANGE_SECTION_CANNOT_BE_DROPPED = -4730;
-constexpr int OB_ERR_SET_INTERVAL_IS_NOT_LEGAL_ON_THIS_TABLE = -4731;
 constexpr int OB_SSTABLE_NOT_EXIST = -4735;
 constexpr int OB_RESOURCE_UNIT_VALUE_INVALID = -4736;
 constexpr int OB_LS_EXIST = -4737;
@@ -302,9 +257,6 @@ constexpr int OB_FREEZE_SERVICE_EPOCH_MISMATCH = -4743;
 constexpr int OB_PACKET_STATUS_UNKNOWN = -4746;
 constexpr int OB_UNEXPECTED_TABLET_STATUS = -4749;
 constexpr int OB_INVALID_TABLE_STORE = -4750;
-constexpr int OB_WAIT_DEGRATION_TIMEOUT = -4751;
-constexpr int OB_ERR_ROOT_INSPECTION = -4754;
-constexpr int OB_ERR_ROOTSERVICE_THREAD_HUNG = -4755;
 constexpr int OB_IGNORE_ERR_ACCESS_VIRTUAL_TABLE = -4759;
 constexpr int OB_LS_OFFLINE = -4760;
 constexpr int OB_LS_IS_DELETED = -4761;
@@ -321,9 +273,6 @@ constexpr int OB_ERR_INDEX_MISMATCH_ALTER_TABLE_EXCHANGE_PARTITION = -4776;
 constexpr int OB_ERR_CHECK_CONSTRAINT_MISMATCH_ALTER_TABLE_EXCHANGE_PARTITION = -4777;
 constexpr int OB_ERR_FOREIGN_KEY_MISMATCH_ALTER_TABLE_EXCHANGE_PARTITION = -4778;
 constexpr int OB_ERR_EXCHANGE_COMPOSITE_PARTITION = -4779;
-constexpr int OB_SERVICE_NOT_FULLY_STARTED = -4781;
-constexpr int OB_SERVICE_STOPPED = -4783;
-constexpr int OB_SERVER_CONNECTION_ERROR = -4784;
 constexpr int OB_ERR_ATLER_TABLE_ILLEGAL_FK_DROP_INDEX = -4785;
 constexpr int OB_ERR_SNAPSHOT_QUERY_EXP_NULL = -4786;
 constexpr int OB_RELEASE_MDS_NODE_ERROR = -4787;
@@ -398,9 +347,7 @@ constexpr int OB_SCHEMA_NUMBER_PRECISION_OVERFLOW = -5090;
 constexpr int OB_SCHEMA_NUMBER_SCALE_OVERFLOW = -5091;
 constexpr int OB_ERR_INDEX_UNKNOWN = -5092;
 constexpr int OB_ERR_TOO_MANY_JOIN_TABLES = -5094;
-constexpr int OB_ERR_DDL_ON_REMOTE_DATABASE = -5095;
 constexpr int OB_ERR_MISSING_KEYWORD = -5096;
-constexpr int OB_ERR_DATABASE_LINK_EXPECTED = -5097;
 constexpr int OB_ERR_VARCHAR_TOO_LONG = -5098;
 constexpr int OB_ERR_LOCAL_VARIABLE = -5100;
 constexpr int OB_ERR_GLOBAL_VARIABLE = -5101;
@@ -416,7 +363,6 @@ constexpr int OB_SQL_OPT_JOIN_ORDER_FAILED = -5121;
 constexpr int OB_SQL_OPT_ERROR = -5122;
 constexpr int OB_ERR_OCI_INIT_TIMEZONE = -5123;
 constexpr int OB_ERR_ZLIB_DATA = -5124;
-constexpr int OB_ERR_DBLINK_SESSION_KILLED = -5125;
 constexpr int OB_SQL_RESOLVER_NO_MEMORY = -5130;
 constexpr int OB_SQL_DML_ONLY = -5131;
 constexpr int OB_ERR_NO_GRANT = -5133;
@@ -538,7 +484,6 @@ constexpr int OB_ERR_WRONG_TYPE_COLUMN_VALUE_ERROR = -5275;
 constexpr int OB_ERR_PARTITION_COLUMN_LIST_ERROR = -5276;
 constexpr int OB_ERR_TOO_MANY_VALUES_ERROR = -5277;
 constexpr int OB_ERR_PARTITION_VALUE_ERROR = -5278;
-constexpr int OB_ERR_PARTITION_INTERVAL_ERROR = -5279;
 constexpr int OB_ERR_SAME_NAME_PARTITION = -5280;
 constexpr int OB_ERR_RANGE_NOT_INCREASING_ERROR = -5281;
 constexpr int OB_ERR_PARSE_PARTITION_RANGE = -5282;
@@ -556,8 +501,6 @@ constexpr int OB_ERR_DEPENDENT_BY_GENERATED_COLUMN = -5293;
 constexpr int OB_ERR_TOO_MANY_ROWS = -5294;
 constexpr int OB_WRONG_FIELD_TERMINATORS = -5295;
 constexpr int OB_NO_READABLE_REPLICA = -5296;
-constexpr int OB_ERR_SYNONYM_EXIST = -5298;
-constexpr int OB_SYNONYM_NOT_EXIST = -5299;
 constexpr int OB_ERR_MISS_ORDER_BY_EXPR = -5300;
 constexpr int OB_ERR_NOT_CONST_EXPR = -5301;
 constexpr int OB_ERR_PARTITION_MGMT_ON_NONPARTITIONED = -5302;
@@ -582,10 +525,6 @@ constexpr int OB_ERR_NOCYCLE_REQUIRED = -5323;
 constexpr int OB_ERR_CONNECT_BY_LOOP = -5324;
 constexpr int OB_ERR_INVALID_SIBLINGS = -5325;
 constexpr int OB_ERR_INVALID_SEPARATOR = -5326;
-constexpr int OB_ERR_INVALID_SYNONYM_NAME = -5327;
-constexpr int OB_ERR_LOOP_OF_SYNONYM = -5328;
-constexpr int OB_ERR_SYNONYM_SAME_AS_OBJECT = -5329;
-constexpr int OB_ERR_SYNONYM_TRANSLATION_INVALID = -5330;
 constexpr int OB_ERR_EXIST_OBJECT = -5331;
 constexpr int OB_ERR_ILLEGAL_VALUE_FOR_TYPE = -5332;
 constexpr int OB_ER_TOO_LONG_SET_ENUM_VALUE = -5333;
@@ -622,7 +561,6 @@ constexpr int OB_ERR_MISSING_ON_KEYWORD = -5370;
 constexpr int OB_ERR_NO_GRANT_OPTION = -5371;
 constexpr int OB_ERR_ALTER_INDEX_AND_EXECUTE_NOT_ALLOWED_FOR_VIEWS = -5372;
 constexpr int OB_ERR_CIRCULAR_ROLE_GRANT_DETECTED = -5373;
-constexpr int OB_ERR_INVALID_PRIVILEGE_ON_DIRECTORIES = -5374;
 constexpr int OB_ERR_MISSING_OR_INVALID_ROLE_NAME = -5376;
 constexpr int OB_ERR_ROLE_NOT_GRANTED_OR_DOES_NOT_EXIST = -5377;
 constexpr int OB_ERR_DEFAULT_ROLE_NOT_GRANTED_TO_USER = -5378;
@@ -632,7 +570,6 @@ constexpr int OB_ERR_DUPLICATE_USERNAME_IN_LIST = -5381;
 constexpr int OB_ERR_CANNOT_GRANT_STRING_TO_A_ROLE = -5382;
 constexpr int OB_ERR_CASCADE_CONSTRAINTS_MUST_BE_SPECIFIED_TO_PERFORM_THIS_REVOKE = -5383;
 constexpr int OB_ERR_YOU_MAY_NOT_REVOKE_PRIVILEGES_FROM_YOURSELF = -5384;
-constexpr int OB_ERR_MISS_ERR_LOG_MANDATORY_COLUMN = -5385;
 constexpr int OB_TABLE_DEFINITION_CHANGED = -5386;
 constexpr int OB_ERR_NO_ROUTINE_PRIVILEGE = -5387;
 constexpr int OB_ERR_USER_REFFERD_AS_DEFINER = -5388;
@@ -743,7 +680,7 @@ constexpr int OB_ERR_SP_DUP_LABEL = -5552;
 constexpr int OB_ERR_SP_DUP_CURSOR = -5553;
 constexpr int OB_ERR_SP_INVALID_FETCH_ARG = -5554;
 constexpr int OB_ERR_SP_WRONG_ARG_NUM = -5555;
-constexpr int OB_ERR_SP_UNHANDLED_EXCEPTION = -5556;
+constexpr int OB_ERR_SIGNAL_EXCEPTION = -5556;
 constexpr int OB_ERR_SP_BAD_CONDITION_TYPE = -5557;
 constexpr int OB_ERR_PACKAGE_ALREADY_EXISTS = -5558;
 constexpr int OB_ERR_PACKAGE_DOSE_NOT_EXIST = -5559;
@@ -784,10 +721,8 @@ constexpr int OB_ERR_ADD_PARTITION_TO_DEFAULT_LIST = -5598;
 constexpr int OB_ERR_INVALID_PERCENTAGE = -5601;
 constexpr int OB_ERR_COLLECT_HISTOGRAM = -5602;
 constexpr int OB_ER_TEMP_TABLE_IN_USE = -5603;
-constexpr int OB_ERR_INVALID_NLS_PARAMETER_STRING = -5604;
 constexpr int OB_ERR_DATETIME_INTERVAL_PRECISION_OUT_OF_RANGE = -5605;
 constexpr int OB_ERR_CMD_NOT_PROPERLY_ENDED = -5607;
-constexpr int OB_ERR_INVALID_NUMBER_FORMAT_MODEL = -5608;
 constexpr int OB_WARN_NON_ASCII_SEPARATOR_NOT_IMPLEMENTED = -5609;
 constexpr int OB_WARN_AMBIGUOUS_FIELD_TERM = -5610;
 constexpr int OB_WARN_TOO_FEW_RECORDS = -5611;
@@ -832,19 +767,7 @@ constexpr int OB_ERR_DATE_OR_SYS_VAR_CANNOT_IN_CHECK_CST = -5691;
 constexpr int OB_ERR_NONEXISTENT_CONSTRAINT = -5692;
 constexpr int OB_ERR_CHECK_CONSTRAINT_VIOLATED = -5693;
 constexpr int OB_ERR_GROUP_FUNC_NOT_ALLOWED = -5694;
-constexpr int OB_ERR_POLICY_STRING_NOT_FOUND = -5695;
-constexpr int OB_ERR_INVALID_LABEL_STRING = -5696;
-constexpr int OB_ERR_UNDEFINED_COMPARTMENT_STRING_FOR_POLICY_STRING = -5697;
-constexpr int OB_ERR_UNDEFINED_LEVEL_STRING_FOR_POLICY_STRING = -5698;
-constexpr int OB_ERR_UNDEFINED_GROUP_STRING_FOR_POLICY_STRING = -5699;
-constexpr int OB_ERR_LBAC_ERROR = -5700;
-constexpr int OB_ERR_POLICY_ROLE_ALREADY_EXISTS_FOR_POLICY_STRING = -5701;
-constexpr int OB_ERR_NULL_OR_INVALID_USER_LABEL = -5702;
 constexpr int OB_ERR_ADD_INDEX = -5703;
-constexpr int OB_ERR_PROFILE_STRING_DOES_NOT_EXIST = -5704;
-constexpr int OB_ERR_INVALID_RESOURCE_LIMIT = -5705;
-constexpr int OB_ERR_PROFILE_STRING_ALREADY_EXISTS = -5706;
-constexpr int OB_ERR_PROFILE_STRING_HAS_USERS_ASSIGNED = -5707;
 constexpr int OB_ERR_ADD_CHECK_CONSTRAINT_VIOLATED = -5713;
 constexpr int OB_ERR_ILLEGAL_VIEW_UPDATE = -5714;
 constexpr int OB_ERR_VIRTUAL_COL_NOT_ALLOWED = -5715;
@@ -862,7 +785,6 @@ constexpr int OB_ERR_INVALID_PCTFREE_OR_PCTUSED_VALUE = -5726;
 constexpr int OB_ERR_ILLEGAL_ARGUMENT_FOR_FUNCTION = -5728;
 constexpr int OB_ERR_INVALID_SAMPLING_RANGE = -5730;
 constexpr int OB_ERR_SPECIFY_DATABASE_NOT_ALLOWED = -5731;
-constexpr int OB_ERR_STMT_TRIGGER_WITH_WHEN_CLAUSE = -5732;
 constexpr int OB_ERR_TRIGGER_NOT_EXIST = -5733;
 constexpr int OB_ERR_TRIGGER_ALREADY_EXIST = -5734;
 constexpr int OB_ERR_TRIGGER_EXIST_ON_OTHER_TABLE = -5735;
@@ -911,14 +833,11 @@ constexpr int OB_ERR_ORPHANED_CHILD_RECORD_EXISTS = -5785;
 constexpr int OB_ERR_COL_CHECK_CST_REFER_ANOTHER_COL = -5786;
 constexpr int OB_BATCHED_MULTI_STMT_ROLLBACK = -5787;
 constexpr int OB_ERR_FOR_UPDATE_SELECT_VIEW_CANNOT = -5788;
-constexpr int OB_ERR_POLICY_WITH_CHECK_OPTION_VIOLATION = -5789;
-constexpr int OB_ERR_POLICY_ALREADY_APPLIED_TO_TABLE = -5790;
 constexpr int OB_ERR_MUTATING_TABLE_OPERATION = -5791;
 constexpr int OB_ERR_MODIFY_OR_DROP_MULTI_COLUMN_CONSTRAINT = -5792;
 constexpr int OB_ERR_DROP_PARENT_KEY_COLUMN = -5793;
 constexpr int OB_AUTOINC_SERVICE_BUSY = -5794;
 constexpr int OB_ERR_CONSTRAINT_CONSTRAINT_DISABLE_VALIDATE = -5795;
-constexpr int OB_ERR_AUTONOMOUS_TRANSACTION_ROLLBACK = -5796;
 constexpr int OB_ORDERBY_CLAUSE_NOT_ALLOWED = -5797;
 constexpr int OB_DISTINCT_NOT_ALLOWED = -5798;
 constexpr int OB_ERR_ASSIGN_USER_VARIABLE_NOT_ALLOWED = -5799;
@@ -956,8 +875,6 @@ constexpr int OB_ERR_INVALID_SQL_ROW_LIMITING = -5831;
 constexpr int INCORRECT_ARGUMENTS_TO_ESCAPE = -5832;
 constexpr int STATIC_ENG_NOT_IMPLEMENT = -5833;
 constexpr int OB_OBJ_ALREADY_EXIST = -5834;
-constexpr int OB_DBLINK_NOT_EXIST_TO_ACCESS = -5835;
-constexpr int OB_DBLINK_NOT_EXIST_TO_DROP = -5836;
 constexpr int OB_ERR_ACCESS_INTO_NULL = -5837;
 constexpr int OB_ERR_COLLECION_NULL = -5838;
 constexpr int OB_ERR_NO_DATA_NEEDED = -5839;
@@ -968,7 +885,6 @@ constexpr int OB_ERR_SUBSCRIPT_OUTSIDE_LIMIT = -5843;
 constexpr int OB_ERR_INVALID_CURSOR = -5844;
 constexpr int OB_ERR_LOGIN_DENIED = -5845;
 constexpr int OB_ERR_NOT_LOGGED_ON = -5846;
-constexpr int OB_ERR_SELF_IS_NULL = -5847;
 constexpr int OB_ERR_TIMEOUT_ON_RESOURCE = -5848;
 constexpr int OB_COLUMN_CANT_CHANGE_TO_NOT_NULL = -5849;
 constexpr int OB_COLUMN_CANT_CHANGE_TO_NULLALE = -5850;
@@ -1026,7 +942,6 @@ constexpr int OB_ERR_ONLY_PURE_FUNC_CANBE_VIRTUAL_COLUMN_EXPRESSION = -5906;
 constexpr int OB_ERR_UPDATE_OPERATION_ON_VIRTUAL_COLUMNS = -5907;
 constexpr int OB_ERR_INVALID_COLUMN_EXPRESSION = -5908;
 constexpr int OB_ERR_REVOKE_BY_COLUMN = -5923;
-constexpr int OB_ERR_TYPE_BODY_NOT_EXIST = -5924;
 constexpr int OB_ERR_INVALID_ARGUMENT_FOR_WIDTH_BUCKET = -5925;
 constexpr int OB_ERR_CBY_NO_MEMORY = -5926;
 constexpr int OB_ERR_ILLEGAL_PARAM_FOR_CBY_PATH = -5927;
@@ -1088,9 +1003,6 @@ constexpr int OB_ERR_CHECK_CONSTRAINT_VARIABLES = -5993;
 constexpr int OB_ERR_CHECK_CONSTRAINT_REFERS_UNKNOWN_COLUMN = -5994;
 constexpr int OB_ERR_USE_UDF_IN_PART = -5995;
 constexpr int OB_ERR_USE_UDF_NOT_DETERMIN = -5996;
-constexpr int OB_ERR_INTERVAL_CLAUSE_HAS_MORE_THAN_ONE_COLUMN = -5997;
-constexpr int OB_ERR_INVALID_DATA_TYPE_INTERVAL_TABLE = -5998;
-constexpr int OB_ERR_INTERVAL_EXPR_NOT_CORRECT_TYPE = -5999;
 constexpr int OB_ERR_TABLE_IS_ALREADY_A_RANGE_PARTITIONED_TABLE = -6000;
 constexpr int OB_TRANSACTION_SET_VIOLATION = -6001;
 constexpr int OB_TRANS_ROLLBACKED = -6002;
@@ -1132,11 +1044,6 @@ constexpr int OB_OBJ_LOCK_NOT_EXIST = -6265;
 constexpr int OB_OBJ_LOCK_EXIST = -6266;
 constexpr int OB_TRY_LOCK_OBJ_CONFLICT = -6267;
 constexpr int OB_TX_NOLOGCB = -6268;
-constexpr int OB_ERR_ADD_PARTITION_ON_INTERVAL = -6269;
-constexpr int OB_ERR_MAXVALUE_PARTITION_WITH_INTERVAL = -6270;
-constexpr int OB_ERR_INVALID_INTERVAL_HIGH_BOUNDS = -6271;
-constexpr int OB_NO_PARTITION_FOR_INTERVAL_PART = -6272;
-constexpr int OB_ERR_INTERVAL_CANNOT_BE_ZERO = -6273;
 constexpr int OB_ERR_PARTITIONING_KEY_MAPS_TO_A_PARTITION_OUTSIDE_MAXIMUM_PERMITTED_NUMBER_OF_PARTITIONS = -6274;
 constexpr int OB_OBJ_LOCK_NOT_COMPLETED = -6275;
 constexpr int OB_OBJ_UNLOCK_CONFLICT = -6276;
@@ -1190,7 +1097,6 @@ constexpr int OB_ERR_INVALID_XPATH_EXPRESSION = -7404;
 constexpr int OB_ERR_EXTRACTVALUE_MULTI_NODES = -7405;
 constexpr int OB_XPATH_EXPRESSION_UNSUPPORTED = -7409;
 constexpr int OB_EXTRACTVALUE_NOT_LEAF_NODE = -7410;
-constexpr int OB_ERR_NO_ORDER_MAP_SQL = -7412;
 constexpr int OB_ERR_UPDATE_XML_WITH_INVALID_NODE = -7418;
 constexpr int OB_LOB_VALUE_NOT_EXIST = -7419;
 constexpr int OB_ERR_JSON_FUN_UNSUPPORTED_TYPE = -7420;
@@ -1199,7 +1105,6 @@ constexpr int OB_ERR_XQUERY_TYPE_MISMATCH = -7425;
 constexpr int OB_ERR_XQUERY_UNSUPPORTED = -7428;
 constexpr int OB_ERR_INVALID_XML_CHILD_NAME = -7429;
 constexpr int OB_ERR_XML_NOT_SUPPORT_OPERATION = -7430;
-constexpr int OB_ERR_COMPARE_VARRAY_LOB_ATTR = -7432;
 constexpr int OB_ERR_XML_PARENT_ALREADY_CONTAINS_CHILD = -7433;
 constexpr int OB_ERR_CONVERSION_OF_UNIT = -7434;
 constexpr int OB_ERR_PARAM_OUT_OF_RANGE = -7435;
@@ -1219,250 +1124,62 @@ constexpr int OB_FILE_OR_DIRECTORY_PERMISSION_DENIED = -9102;
 constexpr int OB_TOO_MANY_OPEN_FILES = -9103;
 constexpr int OB_FILE_DELETE_FAILED = -9128;
 constexpr int OB_RESOURCE_RELEASED = -9141;
-constexpr int OB_ERR_RESIZE_FILE_TO_SMALLER = -9200;
-constexpr int OB_MARK_BLOCK_INFO_TIMEOUT = -9201;
-constexpr int OB_NOT_READY_TO_EXTEND_FILE = -9202;
 constexpr int OB_FUNCTION_NOT_DEFINED = -9203;
-constexpr int OB_ERR_DUPLICATE_HAVING_CLAUSE_IN_TABLE_EXPRESSION = -9501;
-constexpr int OB_ERR_INOUT_PARAM_PLACEMENT_NOT_PROPERLY = -9502;
-constexpr int OB_ERR_OBJECT_NOT_FOUND = -9503;
-constexpr int OB_ERR_INVALID_INPUT_VALUE = -9504;
-constexpr int OB_ERR_GOTO_BRANCH_ILLEGAL = -9505;
-constexpr int OB_ERR_ONLY_SCHEMA_LEVEL_ALLOW = -9506;
-constexpr int OB_ERR_DECL_MORE_THAN_ONCE = -9507;
-constexpr int OB_ERR_DUPLICATE_FILED = -9508;
-constexpr int OB_ERR_PRAGMA_ILLEGAL = -9509;
-constexpr int OB_ERR_EXIT_CONTINUE_ILLEGAL = -9510;
-constexpr int OB_ERR_LABEL_ILLEGAL = -9512;
-constexpr int OB_ERR_CURSOR_LEFT_ASSIGN = -9513;
-constexpr int OB_ERR_INIT_NOTNULL_ILLEGAL = -9514;
-constexpr int OB_ERR_INIT_CONST_ILLEGAL = -9515;
-constexpr int OB_ERR_CURSOR_VAR_IN_PKG = -9516;
-constexpr int OB_ERR_LIMIT_CLAUSE = -9518;
 constexpr int OB_ERR_EXPRESSION_WRONG_TYPE = -9519;
-constexpr int OB_ERR_SPEC_NOT_EXIST = -9520;
-constexpr int OB_ERR_TYPE_SPEC_NO_ROUTINE = -9521;
-constexpr int OB_ERR_TYPE_BODY_NO_ROUTINE = -9522;
-constexpr int OB_ERR_BOTH_ORDER_MAP = -9523;
-constexpr int OB_ERR_NO_ORDER_MAP = -9524;
-constexpr int OB_ERR_ORDER_MAP_NEED_BE_FUNC = -9525;
 constexpr int OB_ERR_IDENTIFIER_TOO_LONG = -9526;
-constexpr int OB_ERR_INVOKE_STATIC_BY_INSTANCE = -9527;
-constexpr int OB_ERR_CONS_NAME_ILLEGAL = -9528;
-constexpr int OB_ERR_ATTR_FUNC_CONFLICT = -9529;
-constexpr int OB_ERR_SELF_PARAM_NOT_OUT = -9530;
-constexpr int OB_ERR_MAP_RET_SCALAR_TYPE = -9531;
-constexpr int OB_ERR_MAP_MORE_THAN_SELF_PARAM = -9532;
-constexpr int OB_ERR_ORDER_RET_INT_TYPE = -9533;
-constexpr int OB_ERR_ORDER_PARAM_TYPE = -9534;
-constexpr int OB_ERR_OBJ_CMP_SQL = -9535;
-constexpr int OB_ERR_MAP_ORDER_PRAGMA = -9536;
-constexpr int OB_ERR_ORDER_PARAM_MUST_IN_MODE = -9537;
-constexpr int OB_ERR_ORDER_PARAM_NOT_TWO = -9538;
-constexpr int OB_ERR_TYPE_REF_REFCURSIVE = -9539;
-constexpr int OB_ERR_DIRECTIVE_ERROR = -9540;
-constexpr int OB_ERR_CONS_HAS_RET_NODE = -9541;
 constexpr int OB_ERR_CALL_WRONG_ARG = -9542;
-constexpr int OB_ERR_FUNC_NAME_SAME_WITH_CONS = -9543;
 constexpr int OB_ERR_FUNC_DUP = -9544;
-constexpr int OB_ERR_WHEN_CLAUSE = -9545;
-constexpr int OB_ERR_NEW_OLD_REFERENCES = -9546;
-constexpr int OB_ERR_TYPE_DECL_ILLEGAL = -9547;
-constexpr int OB_ERR_OBJECT_INVALID = -9548;
-constexpr int OB_ERR_EXP_NOT_ASSIGNABLE = -9550;
-constexpr int OB_ERR_CURSOR_CONTAIN_BOTH_REGULAR_AND_ARRAY = -9551;
-constexpr int OB_ERR_STATIC_BOOL_EXPR = -9552;
-constexpr int OB_ERR_BIND_TYPE_NOT_MATCH_COLUMN = -9568;
-constexpr int OB_ERR_NESTED_TABLE_IN_TRI = -9569;
-constexpr int OB_ERR_COL_LIST_IN_TRI = -9570;
-constexpr int OB_ERR_WHEN_CLAUSE_IN_TRI = -9571;
-constexpr int OB_ERR_INSTEAD_TRI_ON_TABLE = -9572;
-constexpr int OB_ERR_RETURNING_CLAUSE = -9573;
 constexpr int OB_ERR_NO_RETURN_IN_FUNCTION = -9575;
-constexpr int OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_FUNC_TRIGGER = -9576;
-constexpr int OB_ERR_TOO_LONG_STRING_TYPE = -9577;
-constexpr int OB_ERR_WIDTH_OUT_OF_RANGE = -9578;
 constexpr int OB_ERR_REDEFINE_LABEL = -9579;
 constexpr int OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_PROCEDRUE = -9580;
-constexpr int OB_ERR_TRIGGER_NOT_SUPPORT = -9581;
 constexpr int OB_ERR_TRIGGER_IN_WRONG_SCHEMA = -9582;
-constexpr int OB_ERR_UNKNOWN_EXCEPTION = -9583;
 constexpr int OB_ERR_TRIGGER_CANT_CHANGE_ROW = -9584;
 constexpr int OB_ERR_ITEM_NOT_IN_BODY = -9585;
 constexpr int OB_ERR_WRONG_ROWTYPE = -9586;
 constexpr int OB_ERR_ROUTINE_NOT_DEFINE = -9587;
-constexpr int OB_ERR_DUP_NAME_IN_CURSOR = -9588;
 constexpr int OB_ERR_LOCAL_COLL_IN_SQL = -9589;
-constexpr int OB_ERR_TYPE_MISMATCH_IN_FETCH = -9590;
-constexpr int OB_ERR_OTHERS_MUST_LAST = -9591;
-constexpr int OB_ERR_RAISE_NOT_IN_HANDLER = -9592;
-constexpr int OB_ERR_INVALID_CURSOR_RETURN_TYPE = -9593;
-constexpr int OB_ERR_IN_CURSOR_OPEND = -9594;
-constexpr int OB_ERR_CURSOR_NO_RETURN_TYPE = -9595;
-constexpr int OB_ERR_NO_CHOICES = -9596;
-constexpr int OB_ERR_TYPE_DECL_MALFORMED = -9597;
-constexpr int OB_ERR_IN_FORMAL_NOT_DENOTABLE = -9598;
-constexpr int OB_ERR_OUT_PARAM_HAS_DEFAULT = -9599;
 constexpr int OB_ERR_MISMATCH_SUBPROGRAM = -9602;
-constexpr int OB_ERR_PARAM_IN_PACKAGE_SPEC = -9603;
-constexpr int OB_ERR_NUMERIC_LITERAL_REQUIRED = -9604;
-constexpr int OB_ERR_NON_INT_LITERAL = -9605;
-constexpr int OB_ERR_IMPROPER_CONSTRAINT_FORM = -9606;
-constexpr int OB_ERR_TYPE_CANT_CONSTRAINED = -9607;
-constexpr int OB_ERR_ANY_CS_NOT_ALLOWED = -9608;
-constexpr int OB_ERR_SCHEMA_TYPE_ILLEGAL = -9609;
-constexpr int OB_ERR_UNSUPPORTED_TABLE_INDEX_TYPE = -9610;
-constexpr int OB_ERR_ARRAY_MUST_HAVE_POSITIVE_LIMIT = -9611;
-constexpr int OB_ERR_FORALL_ITER_NOT_ALLOWED = -9612;
-constexpr int OB_ERR_BULK_IN_BIND = -9613;
-constexpr int OB_ERR_FORALL_BULK_TOGETHER = -9614;
-constexpr int OB_ERR_FORALL_DML_WITHOUT_BULK = -9615;
-constexpr int OB_ERR_SHOULD_COLLECTION_TYPE = -9616;
-constexpr int OB_ERR_ASSOC_ELEM_TYPE = -9617;
-constexpr int OB_ERR_INTO_CLAUSE_EXPECTED = -9618;
-constexpr int OB_ERR_SUBPROGRAM_VIOLATES_PRAGMA = -9619;
-constexpr int OB_ERR_EXPR_SQL_TYPE = -9620;
-constexpr int OB_ERR_PRAGMA_DECL_TWICE = -9621;
-constexpr int OB_ERR_PRAGMA_FOLLOW_DECL = -9622;
-constexpr int OB_ERR_IMPL_RESTRICTION = -9624;
-constexpr int OB_ERR_INSUFFICIENT_PRIVILEGE = -9625;
-constexpr int OB_ERR_ILLEGAL_OPTION = -9626;
-constexpr int OB_ERR_NO_FUNCTION_EXIST = -9627;
-constexpr int OB_ERR_OUT_OF_SCOPE = -9628;
-constexpr int OB_ERR_ILLEGAL_ERROR_NUM = -9629;
-constexpr int OB_ERR_DEFAULT_NOT_MATCH = -9630;
-constexpr int OB_ERR_TABLE_SINGLE_INDEX = -9631;
-constexpr int OB_ERR_PRAGMA_DECL = -9632;
-constexpr int OB_ERR_INCORRECT_ARGUMENTS = -9633;
-constexpr int OB_ERR_RETURN_VALUE_REQUIRED = -9634;
-constexpr int OB_ERR_LIMIT_ILLEGAL = -9636;
-constexpr int OB_ERR_INTO_EXPR_ILLEGAL = -9637;
-constexpr int OB_ERR_BULK_SQL_RESTRICTION = -9638;
-constexpr int OB_ERR_MIX_SINGLE_MULTI = -9639;
 constexpr int OB_ERR_TRIGGER_NO_SUCH_ROW = -9640;
 constexpr int OB_ERR_SET_USAGE = -9641;
-constexpr int OB_ERR_MODIFIER_CONFLICTS = -9642;
-constexpr int OB_ERR_DUPLICATE_MODIFIER = -9643;
-constexpr int OB_ERR_STR_LITERAL_TOO_LONG = -9644;
-constexpr int OB_ERR_SELF_PARAM_NOT_INOUT = -9645;
-constexpr int OB_ERR_CONSTRUCT_MUST_RETURN_SELF = -9646;
-constexpr int OB_ERR_FIRST_PARAM_MUST_NOT_NULL = -9647;
-constexpr int OB_ERR_COALESCE_AT_LEAST_ONE_NOT_NULL = -9648;
-constexpr int OB_ERR_STATIC_METHOD_HAS_SELF = -9649;
-constexpr int OB_ERR_NO_ATTR_FOUND = -9650;
-constexpr int OB_ERR_ILLEGAL_TYPE_FOR_OBJECT = -9651;
-constexpr int OB_ERR_UNSUPPORTED_TYPE = -9652;
 constexpr int OB_ERR_POSITIONAL_FOLLOW_NAME = -9653;
-constexpr int OB_ERR_NEED_A_LABEL = -9654;
-constexpr int OB_ERR_REFER_SAME_PACKAGE = -9655;
-constexpr int OB_ERR_PL_COMMON = -9656;
-constexpr int OB_ERR_IDENT_EMPTY = -9657;
-constexpr int OB_ERR_PRAGMA_STR_UNSUPPORT = -9658;
-constexpr int OB_ERR_END_LABEL_NOT_MATCH = -9659;
-constexpr int OB_ERR_WRONG_FETCH_INTO_NUM = -9660;
-constexpr int OB_ERR_PRAGMA_FIRST_ARG = -9661;
-constexpr int OB_ERR_TRIGGER_CANT_CHANGE_OLD_ROW = -9662;
-constexpr int OB_ERR_TRIGGER_CANT_CRT_ON_RO_VIEW = -9663;
-constexpr int OB_ERR_TRIGGER_INVALID_REF_NAME = -9664;
-constexpr int OB_ERR_EXP_NOT_INTO_TARGET = -9665;
-constexpr int OB_ERR_CASE_NULL = -9666;
-constexpr int OB_ERR_INVALID_GOTO = -9667;
 constexpr int OB_ERR_PRIVATE_UDF_USE_IN_SQL = -9668;
-constexpr int OB_ERR_FIELD_NOT_DENOTABLE = -9669;
-constexpr int OB_NUMERIC_PRECISION_NOT_INTEGER = -9670;
-constexpr int OB_ERR_REQUIRE_INTEGER = -9671;
-constexpr int OB_ERR_INDEX_TABLE_OF_CURSOR = -9672;
-constexpr int OB_NULL_CHECK_ERROR = -9673;
 constexpr int OB_ERR_EX_NAME_ARG = -9674;
 constexpr int OB_ERR_EX_ARG_NUM = -9675;
-constexpr int OB_ERR_EX_SECOND_ARG = -9676;
-constexpr int OB_NO_STMT_PARSE = -9678;
 constexpr int OB_ERR_WRONG_SCHEMA_REF = -9680;
 constexpr int OB_ERR_COMPONENT_UNDECLARED = -9681;
-constexpr int OB_ERR_FUNC_ONLY_IN_SQL = -9682;
 constexpr int OB_ERR_UNDEFINED = -9683;
-constexpr int OB_ERR_SUBTYPE_NOTNULL_MISMATCH = -9684;
-constexpr int OB_ERR_BIND_VAR_NOT_EXIST = -9685;
-constexpr int OB_ERR_CURSOR_IN_OPEN_DYNAMIC_SQL = -9686;
 constexpr int OB_ERR_INVALID_INPUT_ARGUMENT = -9687;
-constexpr int OB_ERR_CLIENT_IDENTIFIER_TOO_LONG = -9688;
-constexpr int OB_ERR_NOT_CURSOR_NAME_IN_CURRENT_OF = -9692;
-constexpr int OB_ERR_NOT_FOR_UPDATE_CURSOR_IN_CURRENT_OF = -9693;
 constexpr int OB_ERR_DUP_SIGNAL_SET = -9694;
 constexpr int OB_ERR_SIGNAL_NOT_FOUND = -9695;
 constexpr int OB_ERR_INVALID_CONDITION_NUMBER = -9696;
-constexpr int OB_ERR_RECURSIVE_SQL_LEVELS_EXCEEDED = -9697;
-constexpr int OB_ERR_INVALID_SECTION = -9698;
-constexpr int OB_ERR_DUPLICATE_TRIGGER_SECTION = -9699;
-constexpr int OB_ERR_PARSE_PLSQL = -9700;
 constexpr int OB_ERR_SIGNAL_WARN = -9701;
 constexpr int OB_ERR_RESIGNAL_WITHOUT_ACTIVE_HANDLER = -9702;
 constexpr int OB_ERR_CANNOT_UPDATE_VIRTUAL_COL_IN_TRG = -9703;
 constexpr int OB_ERR_TRG_ORDER = -9704;
-constexpr int OB_ERR_REF_ANOTHER_TABLE_IN_TRG = -9705;
-constexpr int OB_ERR_REF_TYPE_IN_TRG = -9706;
 constexpr int OB_ERR_REF_CYCLIC_IN_TRG = -9707;
-constexpr int OB_ERR_CANNOT_SPECIFY_PRECEDES_IN_TRG = -9708;
-constexpr int OB_ERR_CANNOT_PERFORM_DML_INSIDE_QUERY = -9709;
-constexpr int OB_ERR_CANNOT_PERFORM_DDL_COMMIT_OR_ROLLBACK_INSIDE_QUERY_OR_DML_TIPS = -9710;
-constexpr int OB_ERR_STATEMENT_STRING_IN_EXECUTE_IMMEDIATE_IS_NULL_OR_ZERO_LENGTH = -9711;
-constexpr int OB_ERR_MISSING_INTO_KEYWORD = -9712;
-constexpr int OB_ERR_CLAUSE_RETURN_ILLEGAL = -9713;
-constexpr int OB_ERR_NAME_HAS_TOO_MANY_PARTS = -9714;
 constexpr int OB_ERR_LOB_SPAN_TRANSACTION = -9715;
-constexpr int OB_ERR_INVALID_MULTISET = -9716;
 constexpr int OB_ERR_INVALID_CAST_UDT = -9717;
-constexpr int OB_ERR_POLICY_EXIST = -9718;
-constexpr int OB_ERR_POLICY_NOT_EXIST = -9719;
-constexpr int OB_ERR_ADD_POLICY_TO_SYS_OBJECT = -9720;
 constexpr int OB_ERR_INVALID_INPUT_STRING = -9721;
-constexpr int OB_ERR_SEC_COLUMN_ON_VIEW = -9722;
 constexpr int OB_ERR_INVALID_INPUT_FOR_ARGUMENT = -9723;
-constexpr int OB_ERR_POLICY_DISABLED = -9724;
-constexpr int OB_ERR_CIRCULAR_POLICIES = -9725;
-constexpr int OB_ERR_TOO_MANY_POLICIES = -9726;
-constexpr int OB_ERR_POLICY_FUNCTION = -9727;
-constexpr int OB_ERR_NO_PRIV_EVAL_PREDICATE = -9728;
-constexpr int OB_ERR_EXECUTE_POLICY_FUNCTION = -9729;
-constexpr int OB_ERR_POLICY_PREDICATE = -9730;
 constexpr int OB_ERR_NO_PRIV_DIRECT_PATH_ACCESS = -9731;
 constexpr int OB_ERR_INTEGRITY_CONSTRAINT_VIOLATED = -9732;
-constexpr int OB_ERR_POLICY_GROUP_EXIST = -9733;
-constexpr int OB_ERR_POLICY_GROUP_NOT_EXIST = -9734;
-constexpr int OB_ERR_DRIVING_CONTEXT_EXIST = -9735;
-constexpr int OB_ERR_DRIVING_CONTEXT_NOT_EXIST = -9736;
-constexpr int OB_ERR_UPDATE_DEFAULT_GROUP = -9737;
-constexpr int OB_ERR_CONTEXT_CONTAIN_INVALID_GROUP = -9738;
-constexpr int OB_ERR_INVALID_SEC_COLUMN_TYPE = -9739;
-constexpr int OB_ERR_UNPROTECTED_VIRTUAL_COLUMN = -9740;
-constexpr int OB_ERR_ATTRIBUTE_ASSOCIATION = -9741;
-constexpr int OB_ERR_MERGE_INTO_WITH_POLICY = -9742;
 constexpr int OB_ERR_SP_NO_DROP_SP = -9743;
-constexpr int OB_ERR_VARIABLE_NOT_IN_SELECT_LIST = -9745;
 constexpr int OB_ERR_MULTI_RECORD = -9746;
 constexpr int OB_ERR_MALFORMED_PS_PACKET = -9747;
 constexpr int OB_ERR_VIEW_SELECT_CONTAIN_QUESTIONMARK = -9748;
 constexpr int OB_ERR_OBJECT_NOT_EXIST = -9749;
-constexpr int OB_ERR_TABLE_OUT_OF_RANGE = -9750;
 constexpr int OB_ERR_WRONG_USAGE = -9751;
-constexpr int OB_ERR_FORALL_ON_REMOTE_TABLE = -9752;
 constexpr int OB_ERR_CLIENT_LOCAL_FILES_DISABLED = -9762;
 constexpr int OB_ERR_OUT_PARAM_NOT_BIND_VAR = -9763;
-constexpr int OB_ERR_TIME_EARLIER_THAN_SYSDATE = -9764;
 constexpr int OB_ERR_NOT_FUNC_NAME = -9765;
-constexpr int OB_ERR_INVALID_CURSOR_EXPR = -9766;
-constexpr int OB_APPLICATION_ERROR_FROM_REMOTE = -9767;
 constexpr int OB_NO_PARTITION_FOR_GIVEN_VALUE_SCHEMA_ERROR = -9781;
-constexpr int OB_ERR_INVALID_CHARACTER = -9782;
 constexpr int OB_ERR_CURSOR_ATTR_APPLY = -9784;
 constexpr int OB_DTL_WAIT_EAGAIN = -9799;
 constexpr int OB_ERR_COMPILE_RESULT_NOT_ADD_CACHE = -9800;
 constexpr int OB_ELEMENT_AT_GIVEN_INDEX_NOT_EXIST = -9801;
-constexpr int OB_ERR_CANNOT_DEFINE_TRIGGER = -9802;
-constexpr int OB_ERR_CANNOT_RENAME_TRIGGER = -9803;
-constexpr int OB_ERR_LOGON_TRIGGER = -9804;
-constexpr int OB_ERR_LOGOFF_TRIGGER = -9805;
-constexpr int OB_ERR_MALFORMED_WRAPPED_UNIT = -9806;
+constexpr int OB_ERR_MVIEW_INVALID_TABLE_TYPE = -9808;
+constexpr int OB_ERR_MVIEW_BASE_TABLE_ALTERED = -9809;
+constexpr int OB_ERR_MVIEW_MISSING_DEPENDENCE = -9810;
 constexpr int OB_ERR_INVALID_NESTED_CURSOR = -9811;
 constexpr int OB_ERR_VALUES_CLAUSE_NEED_HAVE_COLUMN = -11000;
 constexpr int OB_ERR_VALUES_CLAUSE_CANNOT_USE_DEFAULT_VALUES = -11001;
@@ -1495,8 +1212,6 @@ constexpr int OB_AI_FUNC_PARAM_VALUE_INVALID = -11116;
 constexpr int OB_AI_FUNC_PARAM_TYPE_INVALID = -11117;
 constexpr int OB_AI_FUNC_MODEL_NOT_FOUND = -11118;
 constexpr int OB_AI_FUNC_MODEL_EXISTS = -11119;
-constexpr int OB_SP_RAISE_APPLICATION_ERROR = -20000;
-constexpr int OB_SP_RAISE_APPLICATION_ERROR_NUM = -21000;
 constexpr int OB_CLOB_ONLY_SUPPORT_WITH_MULTIBYTE_FUN = -22998;
 constexpr int OB_ERR_UPDATE_TWICE = -30926;
 constexpr int OB_ERR_SNAPSHOT_QUERY_WITH_UPDATE = -32491;
@@ -1750,12 +1465,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_MEMTABLE_CANNOT_MINOR_MERGE__USER_ERROR_MSG "memtable cannot minor merge"
 #define OB_TASK_EXIST__USER_ERROR_MSG "task exist"
 #define OB_ALLOCATE_DISK_SPACE_FAILED__USER_ERROR_MSG "cannot allocate disk space"
-#define OB_CANT_FIND_UDF__USER_ERROR_MSG "Can not load function %s"
-#define OB_CANT_INITIALIZE_UDF__USER_ERROR_MSG "Can not initialize function '%.*s'"
-#define OB_UDF_NO_PATHS__USER_ERROR_MSG "No paths allowed for shared library"
-#define OB_UDF_EXISTS__USER_ERROR_MSG "Function %.*s already exists"
-#define OB_CANT_OPEN_LIBRARY__USER_ERROR_MSG "Can not open shared library '%.*s'"
-#define OB_CANT_FIND_DL_ENTRY__USER_ERROR_MSG "Can't find symbol %.*s in library"
 #define OB_OBJECT_NAME_EXIST__USER_ERROR_MSG "name is already used by an existing object"
 #define OB_OBJECT_NAME_NOT_EXIST__USER_ERROR_MSG "%s does not exist"
 #define OB_ERR_DUP_ARGUMENT__USER_ERROR_MSG "Option '%s' used twice in statement"
@@ -1775,16 +1484,10 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ROLE_NOT_EXIST__USER_ERROR_MSG "role '%.*s' does not exist"
 #define OB_ROLE_EXIST__USER_ERROR_MSG "role '%.*s' exists"
 #define OB_PRIV_DUP__USER_ERROR_MSG "duplicate privilege listed"
-#define OB_TABLESPACE_EXIST__USER_ERROR_MSG "tablespace '%.*s' already exists"
-#define OB_TABLESPACE_NOT_EXIST__USER_ERROR_MSG "Tablespace '%.*s' does not exist"
-#define OB_TABLESPACE_DELETE_NOT_EMPTY__USER_ERROR_MSG "cannot delete a tablespace which is not empty"
 #define OB_FLOAT_PRECISION_OUT_RANGE__USER_ERROR_MSG "floating point precision is out of range (1 to 126)"
 #define OB_NUMERIC_PRECISION_OUT_RANGE__USER_ERROR_MSG "numeric precision specifier is out of range (1 to 38)"
 #define OB_NUMERIC_SCALE_OUT_RANGE__USER_ERROR_MSG "numeric scale specifier is out of range (-84 to 127)"
 #define OB_SLOG_REACH_MAX_CONCURRENCY__USER_ERROR_MSG "slog active transaction entries reach maximum"
-#define OB_ERR_BY_ACCESS_OR_SESSION_CLAUSE_NOT_ALLOWED_FOR_NOAUDIT__USER_ERROR_MSG "BY ACCESS | SESSION clause not allowed for NOAUDIT"
-#define OB_ERR_AUDITING_THE_OBJECT_IS_NOT_SUPPORTED__USER_ERROR_MSG "auditing the object is not supported"
-#define OB_ERR_DDL_STATEMENT_CANNOT_BE_AUDITED_WITH_BY_SESSION_SPECIFIED__USER_ERROR_MSG "DDL statement cannot be audited with BY SESSION specified"
 #define OB_ERR_NOT_VALID_PASSWORD__USER_ERROR_MSG "Your password does not satisfy the current policy requirements"
 #define OB_ERR_MUST_CHANGE_PASSWORD__USER_ERROR_MSG "You must reset your password using ALTER USER statement before executing this statement"
 #define OB_OVERSIZE_NEED_RETRY__USER_ERROR_MSG "The data more than 64M(rpc limit), split into smaller task and retry"
@@ -1814,40 +1517,14 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_AUTOINC_CACHE_NOT_EQUAL__USER_ERROR_MSG "Autoinc cache's autoinc version is not equal to request's autoinc version"
 #define OB_IMPROPER_OS_PARAM__USER_ERROR_MSG "OS params check failed, because the operating system has improper parameter configurations"
 #define OB_IO_TIMEOUT__USER_ERROR_MSG "IO timeout"
-#define OB_IMPORT_NOT_IN_SERVER__USER_ERROR_MSG "Import not in service"
 #define OB_CONVERT_ERROR__USER_ERROR_MSG "Convert error"
-#define OB_RS_STATE_NOT_ALLOW__USER_ERROR_MSG "RootServer state error"
 #define OB_NO_NEED_UPDATE__USER_ERROR_MSG "No need to update"
 #define OB_CACHE_TIMEOUT__USER_ERROR_MSG "Cache timeout"
 #define OB_ITER_STOP__USER_ERROR_MSG "Iteration was stopped"
-#define OB_CONFIG_NOT_SYNC__USER_ERROR_MSG "Configuration not sync"
-#define OB_ROOT_TABLE_RANGE_NOT_EXIST__USER_ERROR_MSG "Tablet range not exist"
-#define OB_NOT_DATA_LOAD_TABLE__USER_ERROR_MSG "No data to load"
-#define OB_DATA_LOAD_TABLE_DUPLICATED__USER_ERROR_MSG "Duplicated table data to load"
-#define OB_ROOT_TABLE_ID_EXIST__USER_ERROR_MSG "Table ID exist"
-#define OB_INDEX_TIMEOUT__USER_ERROR_MSG "Building index timeout"
-#define OB_ROOT_NOT_INTEGRATED__USER_ERROR_MSG "Root not integrated"
-#define OB_INDEX_INELIGIBLE__USER_ERROR_MSG "index data not unique"
-#define OB_MERGE_NOT_STARTED__USER_ERROR_MSG "global merge not started"
-#define OB_MERGE_ALREADY_STARTED__USER_ERROR_MSG "merge already started"
 #define OB_RS_SHUTDOWN__USER_ERROR_MSG "rootservice is shutdown"
-#define OB_DATA_SOURCE_NOT_EXIST__USER_ERROR_MSG "Data source not exist"
-#define OB_DATA_SOURCE_TABLE_NOT_EXIST__USER_ERROR_MSG "Data source table not exist"
-#define OB_DATA_SOURCE_RANGE_NOT_EXIST__USER_ERROR_MSG "Data source range not exist"
-#define OB_DATA_SOURCE_DATA_NOT_EXIST__USER_ERROR_MSG "Data source data not exist"
-#define OB_DATA_SOURCE_SYS_ERROR__USER_ERROR_MSG "Data source sys error"
-#define OB_DATA_SOURCE_TIMEOUT__USER_ERROR_MSG "Data source timeout"
-#define OB_DATA_SOURCE_CONCURRENCY_FULL__USER_ERROR_MSG "Data source concurrency full"
-#define OB_DATA_SOURCE_WRONG_URI_FORMAT__USER_ERROR_MSG "Data source wrong URI format"
-#define OB_SSTABLE_VERSION_UNEQUAL__USER_ERROR_MSG "SSTable version not equal"
-#define OB_UPS_RENEW_LEASE_NOT_ALLOWED__USER_ERROR_MSG "ups should not renew its lease"
-#define OB_UPS_COUNT_OVER_LIMIT__USER_ERROR_MSG "ups count over limit"
-#define OB_NO_UPS_MAJORITY__USER_ERROR_MSG "ups not form a majority"
 #define OB_INDEX_COUNT_REACH_THE_LIMIT__USER_ERROR_MSG "created index tables count has reach the limit:128"
 #define OB_TASK_EXPIRED__USER_ERROR_MSG "task expired"
-#define OB_INVALID_SERVER_STATUS__USER_ERROR_MSG "server status is not valid"
 #define OB_MACHINE_RESOURCE_NOT_ENOUGH__USER_ERROR_MSG "zone '%s' server \'%s\' %s resource is not enough to hold a new unit"
-#define OB_SERVER_NOT_ACTIVE__USER_ERROR_MSG "server is not active"
 #define OB_RS_NOT_MASTER__USER_ERROR_MSG "The RootServer is not the master"
 #define OB_LOCATION_NOT_EXIST__USER_ERROR_MSG "location not exist"
 #define OB_LOCATION_LEADER_NOT_EXIST__USER_ERROR_MSG "location leader not exist"
@@ -1855,7 +1532,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_SESSION_ENTRY_EXIST__USER_ERROR_MSG "Session already exist"
 #define OB_GOT_SIGNAL_ABORTING__USER_ERROR_MSG "%s: Got signal %d. Aborting!"
 #define OB_GET_LOCATION_TIME_OUT__USER_ERROR_MSG "Timeout"
-#define OB_DATA_SOURCE_NOT_VALID__USER_ERROR_MSG "Data source not valid"
 #define OB_RUN_JOB_NOT_SUCCESS__USER_ERROR_MSG "run job not success yet"
 #define OB_NEED_REMOVE_UNNEED_TABLE__USER_ERROR_MSG "need remove unneed table"
 #define OB_NO_NEED_MERGE__USER_ERROR_MSG "no need to merge"
@@ -1863,16 +1539,11 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_DUPLICATE_OPTION__USER_ERROR_MSG "duplicate %.*s specifications"
 #define OB_INVALID_OPTION__USER_ERROR_MSG "%s"
 #define OB_RPC_NEED_RECONNECT__USER_ERROR_MSG "%s"
-#define OB_CANNOT_COPY_MAJOR_SSTABLE__USER_ERROR_MSG "cannot copy major sstable now"
 #define OB_ACTIVE_MEMTBALE_NOT_EXSIT__USER_ERROR_MSG "active memtable not exist"
-#define OB_NO_DISK_NEED_REBUILD__USER_ERROR_MSG "no disk need rebuild"
 #define OB_STANDBY_DATABASE_READ_ONLY__USER_ERROR_MSG "standby database is read only"
-#define OB_INVALD_WEB_SERVICE_CONTENT__USER_ERROR_MSG "web service content not valid"
 #define OB_ARRAY_BINDING_SWITCH_ITERATOR__USER_ERROR_MSG "array binding needs to switch iterator"
 #define OB_ERR_CHECK_DROP_COLUMN_FAILED__USER_ERROR_MSG "check drop column failed"
-#define OB_WAIT_TRANS_TABLE_MERGE_TIMEOUT__USER_ERROR_MSG "wait trans table merge finish timeout"
 #define OB_ERR_PARAM_INVALID__USER_ERROR_MSG "parameter cannot be modified because specified value is invalid"
-#define OB_FAILOVER_NOT_ALLOW__USER_ERROR_MSG "%s"
 #define OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX__USER_ERROR_MSG "rebuild global index:'%.*s' failed when drop/truncate partitions"
 #define OB_ERR_ATLER_TABLE_ILLEGAL_FK__USER_ERROR_MSG "unique/primary keys in table referenced by enabled foreign keys"
 #define OB_LS_NOT_EXIST__USER_ERROR_MSG "log stream does not exist"
@@ -1882,10 +1553,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_TABLET_EXIST__USER_ERROR_MSG "unexpected tablet existence"
 #define OB_TABLET_NOT_EXIST__USER_ERROR_MSG "tablet does not exist"
 #define OB_LS_NEED_REVOKE__USER_ERROR_MSG "ls need revoke"
-#define OB_ERR_INTERVAL_PARTITION_EXIST__USER_ERROR_MSG "interval partition already exists"
-#define OB_ERR_INTERVAL_PARTITION_ERROR__USER_ERROR_MSG "the property of interval partition is changed"
 #define OB_ERR_LAST_PARTITION_IN_THE_RANGE_SECTION_CANNOT_BE_DROPPED__USER_ERROR_MSG "Last partition in the range section cannot be dropped"
-#define OB_ERR_SET_INTERVAL_IS_NOT_LEGAL_ON_THIS_TABLE__USER_ERROR_MSG "SET INTERVAL is not legal on this table."
 #define OB_SSTABLE_NOT_EXIST__USER_ERROR_MSG "sstable not exist"
 #define OB_RESOURCE_UNIT_VALUE_INVALID__USER_ERROR_MSG "resource unit value is invalid"
 #define OB_LS_EXIST__USER_ERROR_MSG "log stream already exist"
@@ -1898,9 +1566,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_PACKET_STATUS_UNKNOWN__USER_ERROR_MSG "Network error and packet status unknown. Abort auto retry."
 #define OB_UNEXPECTED_TABLET_STATUS__USER_ERROR_MSG "%s"
 #define OB_INVALID_TABLE_STORE__USER_ERROR_MSG "%s"
-#define OB_WAIT_DEGRATION_TIMEOUT__USER_ERROR_MSG "wait degration finished timeout"
-#define OB_ERR_ROOT_INSPECTION__USER_ERROR_MSG "root inspection is not passed"
-#define OB_ERR_ROOTSERVICE_THREAD_HUNG__USER_ERROR_MSG "rootservice background thread may be hung"
 #define OB_IGNORE_ERR_ACCESS_VIRTUAL_TABLE__USER_ERROR_MSG "An error was ignored when accessing virtual table, actual error code: %d"
 #define OB_LS_OFFLINE__USER_ERROR_MSG "log stream is offline"
 #define OB_LS_IS_DELETED__USER_ERROR_MSG "log stream is deleted"
@@ -1919,9 +1584,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_CHECK_CONSTRAINT_MISMATCH_ALTER_TABLE_EXCHANGE_PARTITION__USER_ERROR_MSG "CHECK constraint mismatch in ALTER TABLE EXCHANGE PARTITION"
 #define OB_ERR_FOREIGN_KEY_MISMATCH_ALTER_TABLE_EXCHANGE_PARTITION__USER_ERROR_MSG "FOREIGN KEY constraint mismatch in ALTER TABLE EXCHANGE PARTITION"
 #define OB_ERR_EXCHANGE_COMPOSITE_PARTITION__USER_ERROR_MSG "Subpartitioned table, use subpartition instead of partition"
-#define OB_SERVICE_NOT_FULLY_STARTED__USER_ERROR_MSG "The service has not started on all servers"
-#define OB_SERVICE_STOPPED__USER_ERROR_MSG "The service has stopped"
-#define OB_SERVER_CONNECTION_ERROR__USER_ERROR_MSG "Server '%s' connection error"
 #define OB_ERR_ATLER_TABLE_ILLEGAL_FK_DROP_INDEX__USER_ERROR_MSG "Cannot drop index '%.*s': needed in a foreign key constraint"
 #define OB_ERR_SNAPSHOT_QUERY_EXP_NULL__USER_ERROR_MSG "NULL snapshot expression not allowed here"
 #define OB_RELEASE_MDS_NODE_ERROR__USER_ERROR_MSG "Release mds node error"
@@ -2003,9 +1665,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_INDEX_UNKNOWN__USER_ERROR_MSG "Unknown index"
 #define OB_NUMERIC_OVERFLOW__USER_ERROR_MSG "Result value was out of range when casting varchar to number"
 #define OB_ERR_TOO_MANY_JOIN_TABLES__USER_ERROR_MSG "too many joined tables"
-#define OB_ERR_DDL_ON_REMOTE_DATABASE__USER_ERROR_MSG "DDL operations are not allowed on a remote database"
 #define OB_ERR_MISSING_KEYWORD__USER_ERROR_MSG "missing keyword"
-#define OB_ERR_DATABASE_LINK_EXPECTED__USER_ERROR_MSG "database link name expected"
 #define OB_ERR_VARCHAR_TOO_LONG__USER_ERROR_MSG "Data too long(%d>%ld) for column '%s'"
 #define OB_ERR_SYS_CONFIG_UNKNOWN__USER_ERROR_MSG "System config unknown"
 #define OB_ERR_LOCAL_VARIABLE__USER_ERROR_MSG "Variable \'%.*s\' is a SESSION variable and can't be used with SET GLOBAL"
@@ -2030,7 +1690,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_SQL_OPT_ERROR__USER_ERROR_MSG "optimizer general error"
 #define OB_ERR_OCI_INIT_TIMEZONE__USER_ERROR_MSG "failure to initialize timezone information"
 #define OB_ERR_ZLIB_DATA__USER_ERROR_MSG "ZLIB: Input data corrupted"
-#define OB_ERR_DBLINK_SESSION_KILLED__USER_ERROR_MSG "your session has been killed"
 #define OB_SQL_RESOLVER_NO_MEMORY__USER_ERROR_MSG "sql resolver no memory"
 #define OB_SQL_DML_ONLY__USER_ERROR_MSG "plan cache support dml only"
 #define OB_ERR_NO_GRANT__USER_ERROR_MSG "No such grant defined"
@@ -2167,7 +1826,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_PARTITION_COLUMN_LIST_ERROR__USER_ERROR_MSG "Inconsistency in usage of column lists for partitioning"
 #define OB_ERR_TOO_MANY_VALUES_ERROR__USER_ERROR_MSG "Cannot have more than one value for this type of RANGE partitioning"
 #define OB_ERR_PARTITION_VALUE_ERROR__USER_ERROR_MSG "This partition value with incorrect charset type"
-#define OB_ERR_PARTITION_INTERVAL_ERROR__USER_ERROR_MSG "Partition interval must have type INT"
 #define OB_ERR_SAME_NAME_PARTITION__USER_ERROR_MSG "Duplicate partition name \'%.*s\'"
 #define OB_ERR_RANGE_NOT_INCREASING_ERROR__USER_ERROR_MSG "VALUES LESS THAN value must be strictly increasing for each partition%.*s"
 #define OB_ERR_PARSE_PARTITION_RANGE__USER_ERROR_MSG "Wrong number of partitions defined, mismatch with previous setting"
@@ -2186,8 +1844,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_WRONG_FIELD_TERMINATORS__USER_ERROR_MSG "Field separator argument is not what is expected; check the manual"
 #define OB_NO_READABLE_REPLICA__USER_ERROR_MSG "there has no readable replica"
 #define OB_ERR_UNEXPECTED_TZ_TRANSITION__USER_ERROR_MSG "unexpected time zone info transition"
-#define OB_ERR_SYNONYM_EXIST__USER_ERROR_MSG "synonym '%.*s' already exists"
-#define OB_SYNONYM_NOT_EXIST__USER_ERROR_MSG "synonym \'%.*s.%.*s\' doesn\'t exist"
 #define OB_ERR_MISS_ORDER_BY_EXPR__USER_ERROR_MSG "missing ORDER BY expression in the window specification"
 #define OB_ERR_NOT_CONST_EXPR__USER_ERROR_MSG "The argument of the window function should be a constant for a partition"
 #define OB_ERR_PARTITION_MGMT_ON_NONPARTITIONED__USER_ERROR_MSG "Partition management on a not partitioned table is not possible"
@@ -2212,10 +1868,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_CONNECT_BY_LOOP__USER_ERROR_MSG "CONNECT BY loop in user data"
 #define OB_ERR_INVALID_SIBLINGS__USER_ERROR_MSG "ORDER SIBLINGS BY clause not allowed here"
 #define OB_ERR_INVALID_SEPARATOR__USER_ERROR_MSG "when using SYS_CONNECT_BY_PATH function, cannot have separator as part of column value"
-#define OB_ERR_INVALID_SYNONYM_NAME__USER_ERROR_MSG "Database can not be specified in public synonym"
-#define OB_ERR_LOOP_OF_SYNONYM__USER_ERROR_MSG "Looping chain of synonyms"
-#define OB_ERR_SYNONYM_SAME_AS_OBJECT__USER_ERROR_MSG "Cannot create a synonym with same name as object"
-#define OB_ERR_SYNONYM_TRANSLATION_INVALID__USER_ERROR_MSG "Synonym %s translation is no longer valid"
 #define OB_ERR_EXIST_OBJECT__USER_ERROR_MSG "name is already used by an existing object"
 #define OB_ERR_ILLEGAL_VALUE_FOR_TYPE__USER_ERROR_MSG "Illegal %s '%.*s' value found during parsing"
 #define OB_ER_TOO_LONG_SET_ENUM_VALUE__USER_ERROR_MSG "Too long enumeration/set value for column %.*s."
@@ -2256,7 +1908,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_NO_GRANT_OPTION__USER_ERROR_MSG "grant option does not exist for '%.*s.%.*s'"
 #define OB_ERR_ALTER_INDEX_AND_EXECUTE_NOT_ALLOWED_FOR_VIEWS__USER_ERROR_MSG "ALTER, INDEX and EXECUTE not allowed for views"
 #define OB_ERR_CIRCULAR_ROLE_GRANT_DETECTED__USER_ERROR_MSG "User account `%.*s`@`%.*s` is directly or indirectly granted to the role `%.*s`@`%.*s`. The GRANT would create a loop"
-#define OB_ERR_INVALID_PRIVILEGE_ON_DIRECTORIES__USER_ERROR_MSG "invalid privilege on directories"
 #define OB_ERR_MISSING_OR_INVALID_ROLE_NAME__USER_ERROR_MSG "missing or invalid role name"
 #define OB_ERR_ROLE_NOT_GRANTED_OR_DOES_NOT_EXIST__USER_ERROR_MSG "role '%.*s' not granted or does not exist"
 #define OB_ERR_DEFAULT_ROLE_NOT_GRANTED_TO_USER__USER_ERROR_MSG "DEFAULT ROLE '%.*s' not granted to user"
@@ -2266,7 +1917,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_CANNOT_GRANT_STRING_TO_A_ROLE__USER_ERROR_MSG "cannot grant %.*s to a role"
 #define OB_ERR_CASCADE_CONSTRAINTS_MUST_BE_SPECIFIED_TO_PERFORM_THIS_REVOKE__USER_ERROR_MSG "CASCADE CONSTRAINTS must be specified to perform this revoke"
 #define OB_ERR_YOU_MAY_NOT_REVOKE_PRIVILEGES_FROM_YOURSELF__USER_ERROR_MSG "you may not GRANT/REVOKE privileges to/from yourself"
-#define OB_ERR_MISS_ERR_LOG_MANDATORY_COLUMN__USER_ERROR_MSG "miss mandatory column %.*s of error log table"
 #define OB_TABLE_DEFINITION_CHANGED__USER_ERROR_MSG "Unable to read data -- Table definition has changed"
 #define OB_ERR_NO_ROUTINE_PRIVILEGE__USER_ERROR_MSG "%.*s command denied to user '%.*s'@'%.*s' for routine '%.*s'"
 #define OB_ERR_USER_REFFERD_AS_DEFINER__USER_ERROR_MSG "User '%.*s'@'%.*s' is referenced as a definer account in a stored routine."
@@ -2412,7 +2062,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_SP_DUP_CURSOR__USER_ERROR_MSG "Duplicate cursor: %.*s"
 #define OB_ERR_SP_INVALID_FETCH_ARG__USER_ERROR_MSG "Incorrect number of FETCH variables"
 #define OB_ERR_SP_WRONG_ARG_NUM__USER_ERROR_MSG "Incorrect number of arguments for %s %s; expected %u, got %u"
-#define OB_ERR_SP_UNHANDLED_EXCEPTION__USER_ERROR_MSG "Unhandled user-defined exception condition"
+#define OB_ERR_SIGNAL_EXCEPTION__USER_ERROR_MSG "%.*s"
 #define OB_ERR_SP_BAD_CONDITION_TYPE__USER_ERROR_MSG "SIGNAL/RESIGNAL can only use a CONDITION defined with SQLSTATE"
 #define OB_ERR_PACKAGE_ALREADY_EXISTS__USER_ERROR_MSG "%s \'%.*s.%.*s\' already exists"
 #define OB_ERR_PACKAGE_DOSE_NOT_EXIST__USER_ERROR_MSG "%s \'%.*s.%.*s\' does not exist"
@@ -2453,10 +2103,8 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_INVALID_PERCENTAGE__USER_ERROR_MSG "Percentage should between 1 and 99"
 #define OB_ERR_COLLECT_HISTOGRAM__USER_ERROR_MSG "Should collect histogram after major freeze"
 #define OB_ER_TEMP_TABLE_IN_USE__USER_ERROR_MSG "Attempt to create, alter or drop an index on temporary table already in use"
-#define OB_ERR_INVALID_NLS_PARAMETER_STRING__USER_ERROR_MSG "invalid NLS parameter string used in SQL function"
 #define OB_ERR_DATETIME_INTERVAL_PRECISION_OUT_OF_RANGE__USER_ERROR_MSG "datetime/interval precision is out of range"
 #define OB_ERR_CMD_NOT_PROPERLY_ENDED__USER_ERROR_MSG "SQL command not properly ended"
-#define OB_ERR_INVALID_NUMBER_FORMAT_MODEL__USER_ERROR_MSG "invalid number format model"
 #define OB_WARN_NON_ASCII_SEPARATOR_NOT_IMPLEMENTED__USER_ERROR_MSG "Non-ASCII separator arguments are not fully supported"
 #define OB_WARN_AMBIGUOUS_FIELD_TERM__USER_ERROR_MSG "First character of the FIELDS TERMINATED string is ambiguous; please use non-optional and non-empty FIELDS ENCLOSED BY"
 #define OB_WARN_TOO_FEW_RECORDS__USER_ERROR_MSG "Row %ld doesn't contain data for all columns"
@@ -2540,19 +2188,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_NONEXISTENT_CONSTRAINT__USER_ERROR_MSG "Constraint \'%.*s\' does not exist."
 #define OB_ERR_CHECK_CONSTRAINT_VIOLATED__USER_ERROR_MSG "check constraint violated"
 #define OB_ERR_GROUP_FUNC_NOT_ALLOWED__USER_ERROR_MSG "group function is not allowed here"
-#define OB_ERR_POLICY_STRING_NOT_FOUND__USER_ERROR_MSG "policy string not found"
-#define OB_ERR_INVALID_LABEL_STRING__USER_ERROR_MSG "invalid label string"
-#define OB_ERR_UNDEFINED_COMPARTMENT_STRING_FOR_POLICY_STRING__USER_ERROR_MSG "undefined compartment string for policy string"
-#define OB_ERR_UNDEFINED_LEVEL_STRING_FOR_POLICY_STRING__USER_ERROR_MSG "undefined level string for policy string"
-#define OB_ERR_UNDEFINED_GROUP_STRING_FOR_POLICY_STRING__USER_ERROR_MSG "undefined group string for policy string"
-#define OB_ERR_LBAC_ERROR__USER_ERROR_MSG "LBAC error: %s"
-#define OB_ERR_POLICY_ROLE_ALREADY_EXISTS_FOR_POLICY_STRING__USER_ERROR_MSG "policy role already exists for policy string"
-#define OB_ERR_NULL_OR_INVALID_USER_LABEL__USER_ERROR_MSG "NULL or invalid user label: %s"
 #define OB_ERR_ADD_INDEX__USER_ERROR_MSG "Add index failed"
-#define OB_ERR_PROFILE_STRING_DOES_NOT_EXIST__USER_ERROR_MSG "profile %.*s does not exist"
-#define OB_ERR_INVALID_RESOURCE_LIMIT__USER_ERROR_MSG "invalid resource limit %s"
-#define OB_ERR_PROFILE_STRING_ALREADY_EXISTS__USER_ERROR_MSG "profile %.*s already exists"
-#define OB_ERR_PROFILE_STRING_HAS_USERS_ASSIGNED__USER_ERROR_MSG "profile %.*s has users assigned, cannot drop without CASCADE"
 #define OB_ERR_THE_LEADING_PRECISION_OF_THE_INTERVAL_IS_TOO_SMALL__USER_ERROR_MSG "the leading precision of the interval is too small"
 #define OB_ERR_INVALID_TIME_ZONE_HOUR__USER_ERROR_MSG "time zone hour must be between -12 and 14"
 #define OB_ERR_INVALID_TIME_ZONE_MINUTE__USER_ERROR_MSG "time zone minute must be between -59 and 59"
@@ -2576,7 +2212,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_OPERATOR_CANNOT_BE_USED_WITH_LIST__USER_ERROR_MSG "this operator cannot be used with lists"
 #define OB_ERR_INVALID_SAMPLING_RANGE__USER_ERROR_MSG "SAMPLE percentage must be in the range [0.000001,100)"
 #define OB_ERR_SPECIFY_DATABASE_NOT_ALLOWED__USER_ERROR_MSG "specifying owner's name of the table is not allowed"
-#define OB_ERR_STMT_TRIGGER_WITH_WHEN_CLAUSE__USER_ERROR_MSG "stmt trigger with when clause"
 #define OB_ERR_TRIGGER_NOT_EXIST__USER_ERROR_MSG "Trigger does not exist"
 #define OB_ERR_TRIGGER_ALREADY_EXIST__USER_ERROR_MSG "trigger '%.*s' already exist"
 #define OB_ERR_TRIGGER_EXIST_ON_OTHER_TABLE__USER_ERROR_MSG "trigger '%.*s' already exists on another table, cannot replace it"
@@ -2625,14 +2260,11 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_COL_CHECK_CST_REFER_ANOTHER_COL__USER_ERROR_MSG "Column check constraint \'%.*s\' references other column."
 #define OB_BATCHED_MULTI_STMT_ROLLBACK__USER_ERROR_MSG "batched multi statement execution needs rollback"
 #define OB_ERR_FOR_UPDATE_SELECT_VIEW_CANNOT__USER_ERROR_MSG "cannot select FOR UPDATE from view with DISTINCT, GROUP BY, etc."
-#define OB_ERR_POLICY_WITH_CHECK_OPTION_VIOLATION__USER_ERROR_MSG "policy with check option violation"
-#define OB_ERR_POLICY_ALREADY_APPLIED_TO_TABLE__USER_ERROR_MSG "policy already applied to table"
 #define OB_ERR_MUTATING_TABLE_OPERATION__USER_ERROR_MSG "Can\'t update table \'%s\' in stored function/trigger because it is already used by statement which invoked this stored function/trigger."
 #define OB_ERR_MODIFY_OR_DROP_MULTI_COLUMN_CONSTRAINT__USER_ERROR_MSG "column is referenced in a multi-column constraint"
 #define OB_ERR_DROP_PARENT_KEY_COLUMN__USER_ERROR_MSG "cannot drop parent key column"
 #define OB_AUTOINC_SERVICE_BUSY__USER_ERROR_MSG "auto increment service busy"
 #define OB_ERR_CONSTRAINT_CONSTRAINT_DISABLE_VALIDATE__USER_ERROR_MSG "No insert/update/delete on table with constraint (%.*s.%.*s) disabled and validated"
-#define OB_ERR_AUTONOMOUS_TRANSACTION_ROLLBACK__USER_ERROR_MSG "active autonomous transaction detected and rolled back"
 #define OB_ORDERBY_CLAUSE_NOT_ALLOWED__USER_ERROR_MSG "ORDER BY not allowed here"
 #define OB_DISTINCT_NOT_ALLOWED__USER_ERROR_MSG "DISTINCT not allowed here"
 #define OB_ERR_ASSIGN_USER_VARIABLE_NOT_ALLOWED__USER_ERROR_MSG "assign user variable with := only allowed in select filed list and as root expression"
@@ -2671,8 +2303,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define INCORRECT_ARGUMENTS_TO_ESCAPE__USER_ERROR_MSG "Incorrect arguments to ESCAPE"
 #define STATIC_ENG_NOT_IMPLEMENT__USER_ERROR_MSG "not implemented in SQL static typing engine, will try the old engine automatically"
 #define OB_OBJ_ALREADY_EXIST__USER_ERROR_MSG "name is already used by an existing object"
-#define OB_DBLINK_NOT_EXIST_TO_ACCESS__USER_ERROR_MSG "connection description for remote database not found"
-#define OB_DBLINK_NOT_EXIST_TO_DROP__USER_ERROR_MSG "database link not found"
 #define OB_ERR_ACCESS_INTO_NULL__USER_ERROR_MSG "Reference to uninitialized composite"
 #define OB_ERR_COLLECION_NULL__USER_ERROR_MSG "Reference to uninitialized collection"
 #define OB_ERR_NO_DATA_NEEDED__USER_ERROR_MSG "no more rows needed"
@@ -2683,7 +2313,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_INVALID_CURSOR__USER_ERROR_MSG "invalid cursor"
 #define OB_ERR_LOGIN_DENIED__USER_ERROR_MSG "invalid username/password; logon denied"
 #define OB_ERR_NOT_LOGGED_ON__USER_ERROR_MSG "not logged on"
-#define OB_ERR_SELF_IS_NULL__USER_ERROR_MSG "method dispatch on NULL SELF argument is disallowed"
 #define OB_ERR_TIMEOUT_ON_RESOURCE__USER_ERROR_MSG "timeout occurred while waiting for a resource"
 #define OB_COLUMN_CANT_CHANGE_TO_NOT_NULL__USER_ERROR_MSG "column to be modified to NOT NULL is already NOT NULL"
 #define OB_COLUMN_CANT_CHANGE_TO_NULLALE__USER_ERROR_MSG "column to be modified to NULL cannot be modified to NULL"
@@ -2743,7 +2372,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_UPDATE_OPERATION_ON_VIRTUAL_COLUMNS__USER_ERROR_MSG "UPDATE operation disallowed on virtual columns"
 #define OB_ERR_INVALID_COLUMN_EXPRESSION__USER_ERROR_MSG "Invalid column expression was specified"
 #define OB_ERR_REVOKE_BY_COLUMN__USER_ERROR_MSG "UPDATE/REFERENCES may only be REVOKEd from the whole table, not by column"
-#define OB_ERR_TYPE_BODY_NOT_EXIST__USER_ERROR_MSG "not executed, type body '%.*s' does not exist"
 #define OB_ERR_INVALID_ARGUMENT_FOR_WIDTH_BUCKET__USER_ERROR_MSG "The argument [%s] of WIDTH_BUCKET function is NULL or invalid."
 #define OB_ERR_CBY_NO_MEMORY__USER_ERROR_MSG "Not enough memory for CONNECT BY operation"
 #define OB_ERR_ILLEGAL_PARAM_FOR_CBY_PATH__USER_ERROR_MSG "illegal parameter in SYS_CONNECT_BY_PATH function"
@@ -2785,8 +2413,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_CHECK_OPTION_ON_NONUPDATABLE_VIEW__USER_ERROR_MSG "CHECK OPTION on non-updatable view '%.*s.%.*s'"
 #define OB_ERR_NO_DESC_FOR_POS__USER_ERROR_MSG "no descriptor for this position"
 #define OB_ERR_ILL_OBJ_FLAG__USER_ERROR_MSG "object specified is incompatible with the flag specified"
-#define OB_ERR_DBLINK_REMOTE_ECODE__USER_ERROR_MSG "\ndblink remote error code: %d,\nremote error msg: %.*s"
-#define OB_ERR_DBLINK_NO_LIB__USER_ERROR_MSG "can not find the expected version of OCI LIB: %.*s"
 #define OB_ERR_PARTITION_EXTENDED_ON_VIEW__USER_ERROR_MSG "partition-extended object names may only be used with tables and editioning views"
 #define OB_ERR_NOT_ALL_VARIABLE_BIND__USER_ERROR_MSG "not all variables bound"
 #define OB_ERR_BIND_VARIABLE_NOT_EXIST__USER_ERROR_MSG "bind variable does not exist"
@@ -2807,9 +2433,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_CHECK_CONSTRAINT_REFERS_UNKNOWN_COLUMN__USER_ERROR_MSG "Check constraint \'%.*s\' refers to non-existing column \'%.*s\'."
 #define OB_ERR_USE_UDF_IN_PART__USER_ERROR_MSG "Cannot use PL/SQL expressions in partitioning or subpartitioning columns"
 #define OB_ERR_USE_UDF_NOT_DETERMIN__USER_ERROR_MSG "The function is not deterministic"
-#define OB_ERR_INTERVAL_CLAUSE_HAS_MORE_THAN_ONE_COLUMN__USER_ERROR_MSG "Range partitioned table with INTERVAL clause has more than one column"
-#define OB_ERR_INVALID_DATA_TYPE_INTERVAL_TABLE__USER_ERROR_MSG "Invalid data type for partitioning column of an interval partitioned table"
-#define OB_ERR_INTERVAL_EXPR_NOT_CORRECT_TYPE__USER_ERROR_MSG "Interval expression is not a constant of the correct type"
 #define OB_ERR_TABLE_IS_ALREADY_A_RANGE_PARTITIONED_TABLE__USER_ERROR_MSG "Table is already a range partitioned table"
 #define OB_TRANSACTION_SET_VIOLATION__USER_ERROR_MSG "Transaction set changed during the execution"
 #define OB_TRANS_ROLLBACKED__USER_ERROR_MSG "transaction is rolled back"
@@ -2859,11 +2482,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_OBJ_LOCK_EXIST__USER_ERROR_MSG "object lock exists."
 #define OB_TRY_LOCK_OBJ_CONFLICT__USER_ERROR_MSG "Try lock object conflict"
 #define OB_TX_NOLOGCB__USER_ERROR_MSG "No log callbacks available"
-#define OB_ERR_ADD_PARTITION_ON_INTERVAL__USER_ERROR_MSG "ADD PARTITION is not permitted on Interval partitioned objects"
-#define OB_ERR_MAXVALUE_PARTITION_WITH_INTERVAL__USER_ERROR_MSG "MAXVALUE partition cannot be specified for Interval partitioned objects"
-#define OB_ERR_INVALID_INTERVAL_HIGH_BOUNDS__USER_ERROR_MSG "Cannot specify this interval with existing high bounds"
-#define OB_NO_PARTITION_FOR_INTERVAL_PART__USER_ERROR_MSG "Table has no partition for value in interval partition table"
-#define OB_ERR_INTERVAL_CANNOT_BE_ZERO__USER_ERROR_MSG "Interval cannot be zero"
 #define OB_ERR_PARTITIONING_KEY_MAPS_TO_A_PARTITION_OUTSIDE_MAXIMUM_PERMITTED_NUMBER_OF_PARTITIONS__USER_ERROR_MSG "partitioning key maps to a partition outside maximum permitted number of partitions"
 #define OB_OBJ_LOCK_NOT_COMPLETED__USER_ERROR_MSG "object lock not completed, and can not unlock."
 #define OB_OBJ_UNLOCK_CONFLICT__USER_ERROR_MSG "there is an unlock operation doing, unlock conflict."
@@ -3012,7 +2630,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_EXTRACTVALUE_MULTI_NODES__USER_ERROR_MSG "EXTRACTVALUE cannot extract values of multiple nodes"
 #define OB_XPATH_EXPRESSION_UNSUPPORTED__USER_ERROR_MSG "Only constant XPATH queries are supported"
 #define OB_EXTRACTVALUE_NOT_LEAF_NODE__USER_ERROR_MSG "EXTRACTVALUE can only retrieve value of leaf node"
-#define OB_ERR_NO_ORDER_MAP_SQL__USER_ERROR_MSG "cannot ORDER objects without MAP or ORDER method"
 #define OB_ERR_UPDATE_XML_WITH_INVALID_NODE__USER_ERROR_MSG "XML nodes must be updated with valid nodes and of the same type'"
 #define OB_LOB_VALUE_NOT_EXIST__USER_ERROR_MSG "LOB value does not exist"
 #define OB_ERR_JSON_FUN_UNSUPPORTED_TYPE__USER_ERROR_MSG "Input to JSON generation function has unsupported data type"
@@ -3026,7 +2643,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_INVALID_XML_CHILD_NAME__USER_ERROR_MSG "The document being inserted does not conform to specified child name"
 #define OB_ERR_XML_NOT_SUPPORT_OPERATION__USER_ERROR_MSG "XML node '' (type=%s) does not support this operation"
 #define OB_ERR_DUP_DEF_NAMESPACE__USER_ERROR_MSG "XQST0066 - duplicate default namespace definition - %s."
-#define OB_ERR_COMPARE_VARRAY_LOB_ATTR__USER_ERROR_MSG "cannot compare VARRAY or LOB attributes of an object type"
 #define OB_ERR_XML_PARENT_ALREADY_CONTAINS_CHILD__USER_ERROR_MSG "Parent %.*s already contains child entry %s%.*s"
 #define OB_ERR_CONVERSION_OF_UNIT__USER_ERROR_MSG "conversion error between the specified unit and standard unit"
 #define OB_ERR_PARAM_OUT_OF_RANGE__USER_ERROR_MSG "value is out of range"
@@ -3043,7 +2659,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_NOT_READ_ALL_DATA__USER_ERROR_MSG "Read all data fail"
 #define OB_RS_LIST_INVAILD__USER_ERROR_MSG "rs list invalid"
 #define OB_AGENT_HAS_FAILED_TASK__USER_ERROR_MSG "agent has failed task"
-#define OB_INVALID_BACKUP_DEST__USER_ERROR_MSG "%s is not a valid uri"
 #define OB_IO_LIMIT__USER_ERROR_MSG "IO limit"
 #define OB_AGENT_HAS_SUSPENDED__USER_ERROR_MSG "agent has suspended"
 #define OB_NO_SUCH_FILE_OR_DIRECTORY__USER_ERROR_MSG "no such file or directory"
@@ -3057,252 +2672,63 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_DUPLICATE_INDEX__USER_ERROR_MSG "Duplicate index \'%s\' defined on the table \'%s.%s\'"
 #define OB_RESOURCE_RELEASED__USER_ERROR_MSG "the resource has been released"
 #define OB_DAG_TASK_IS_SUSPENDED__USER_ERROR_MSG "dag task is pending, need to wait for resources"
-#define OB_ERR_RESIZE_FILE_TO_SMALLER__USER_ERROR_MSG "Extend ssblock file to smaller is not allowed"
-#define OB_MARK_BLOCK_INFO_TIMEOUT__USER_ERROR_MSG "Mark blocks timeout(5s) in auto extend process when alloc block fail"
-#define OB_NOT_READY_TO_EXTEND_FILE__USER_ERROR_MSG "Auto extend param is not ready to start extending file"
 #define OB_FUNCTION_NOT_DEFINED__USER_ERROR_MSG "Function %.*s is not defined"
-#define OB_ERR_DUPLICATE_HAVING_CLAUSE_IN_TABLE_EXPRESSION__USER_ERROR_MSG "Duplicate having-clause in table expression"
-#define OB_ERR_INOUT_PARAM_PLACEMENT_NOT_PROPERLY__USER_ERROR_MSG "OUT and IN/OUT modes cannot be used in this context"
-#define OB_ERR_OBJECT_NOT_FOUND__USER_ERROR_MSG "object '%.*s' of type %.*s not found in schema '%.*s'"
-#define OB_ERR_INVALID_INPUT_VALUE__USER_ERROR_MSG "invalid input value %.*s for parameter %.*s in function %.*s"
-#define OB_ERR_GOTO_BRANCH_ILLEGAL__USER_ERROR_MSG "no matching label: %.*s"
-#define OB_ERR_ONLY_SCHEMA_LEVEL_ALLOW__USER_ERROR_MSG "Only schema-level programs allow %s"
-#define OB_ERR_DECL_MORE_THAN_ONCE__USER_ERROR_MSG "at most one declaration for '%.*s' is permitted"
-#define OB_ERR_DUPLICATE_FILED__USER_ERROR_MSG "duplicate fields in RECORD,TABLE or argument list are not permitted"
-#define OB_ERR_PRAGMA_ILLEGAL__USER_ERROR_MSG "Pragma %s cannot be specified here"
-#define OB_ERR_EXIT_CONTINUE_ILLEGAL__USER_ERROR_MSG "illegal EXIT/CONTINUE statement; it must appear inside a loop"
-#define OB_ERR_LABEL_ILLEGAL__USER_ERROR_MSG "EXIT/CONTINUE label '%.*s' must label a LOOP statement"
-#define OB_ERR_CURSOR_LEFT_ASSIGN__USER_ERROR_MSG "expression '%.*s' is inappropriate as the left hand side of an assignment statement"
-#define OB_ERR_INIT_NOTNULL_ILLEGAL__USER_ERROR_MSG "a variable declared NOT NULL must have an initialization assignment"
-#define OB_ERR_INIT_CONST_ILLEGAL__USER_ERROR_MSG "declaration of a constant '%.*s' must contain an initialization assignment"
-#define OB_ERR_CURSOR_VAR_IN_PKG__USER_ERROR_MSG "Cursor Variables cannot be declared as part of a package"
-#define OB_ERR_LIMIT_CLAUSE__USER_ERROR_MSG "value in LIMIT clause: \'%.*s\' use is invalid"
 #define OB_ERR_EXPRESSION_WRONG_TYPE__USER_ERROR_MSG "expression is of wrong type"
-#define OB_ERR_SPEC_NOT_EXIST__USER_ERROR_MSG "cannot compile body of '%.*s' without its specification"
-#define OB_ERR_TYPE_SPEC_NO_ROUTINE__USER_ERROR_MSG "subprogram '%.*s' is declared in an object type body and must be defined in the object type specification"
-#define OB_ERR_TYPE_BODY_NO_ROUTINE__USER_ERROR_MSG "subprogram or cursor '%.*s' is declared in an object type specification and must be defined in the object type body"
-#define OB_ERR_BOTH_ORDER_MAP__USER_ERROR_MSG "An object type may have only 1 MAP or 1 ORDER method"
-#define OB_ERR_NO_ORDER_MAP__USER_ERROR_MSG "A MAP or ORDER function is required for comparing objects in PL/SQL"
-#define OB_ERR_ORDER_MAP_NEED_BE_FUNC__USER_ERROR_MSG "Only a function may be a MAP, ORDER or CONSTRUCTOR method"
 #define OB_ERR_IDENTIFIER_TOO_LONG__USER_ERROR_MSG "Identifier name \'%.*s\' is too long"
-#define OB_ERR_INVOKE_STATIC_BY_INSTANCE__USER_ERROR_MSG "a static method cannot be invoked on an instance value"
-#define OB_ERR_CONS_NAME_ILLEGAL__USER_ERROR_MSG "constructor method name must match type name"
-#define OB_ERR_ATTR_FUNC_CONFLICT__USER_ERROR_MSG "previous use of '%.*s' conflicts with this use"
-#define OB_ERR_SELF_PARAM_NOT_OUT__USER_ERROR_MSG "the SELF parameter can be declared only as IN or as IN OUT"
-#define OB_ERR_MAP_RET_SCALAR_TYPE__USER_ERROR_MSG "MAP methods must return a scalar type"
-#define OB_ERR_MAP_MORE_THAN_SELF_PARAM__USER_ERROR_MSG "MAP methods must be declared without any parameters other than (optional) SELF"
-#define OB_ERR_ORDER_RET_INT_TYPE__USER_ERROR_MSG "ORDER methods must return an INTEGER"
-#define OB_ERR_ORDER_PARAM_TYPE__USER_ERROR_MSG "The parameter type in an ORDER method must be the containing object type"
-#define OB_ERR_OBJ_CMP_SQL__USER_ERROR_MSG "Within SQL statements, only equality comparisons of objects are allowed without a map or order function"
-#define OB_ERR_MAP_ORDER_PRAGMA__USER_ERROR_MSG "MAP or ORDER functions require a PRAGMA RESTRICT_REFERENCES specifying :WNDS,WNPS,RNPS,RNDS"
-#define OB_ERR_ORDER_PARAM_MUST_IN_MODE__USER_ERROR_MSG "The parameters to an ORDER function must have IN mode"
-#define OB_ERR_ORDER_PARAM_NOT_TWO__USER_ERROR_MSG "ORDER methods must be declared with 1 (one) parameter in addition to (optional) SELF"
-#define OB_ERR_TYPE_REF_REFCURSIVE__USER_ERROR_MSG "type '%.*s' is malformed because it is a non-REF mutually recursive type"
-#define OB_ERR_DIRECTIVE_ERROR__USER_ERROR_MSG "$ERROR: %.*s"
-#define OB_ERR_CONS_HAS_RET_NODE__USER_ERROR_MSG "RETURN statement in a CONSTRUCTOR cannot include an expression"
 #define OB_ERR_CALL_WRONG_ARG__USER_ERROR_MSG "wrong number or types of arguments in call to '%.*s'"
-#define OB_ERR_FUNC_NAME_SAME_WITH_CONS__USER_ERROR_MSG "'%.*s' must be a type"
 #define OB_ERR_FUNC_DUP__USER_ERROR_MSG "too many declarations of '%.*s' match this call"
-#define OB_ERR_WHEN_CLAUSE__USER_ERROR_MSG "WHEN clause cannot be used with table level triggers"
-#define OB_ERR_NEW_OLD_REFERENCES__USER_ERROR_MSG "NEW or OLD references not allowed in table level triggers"
-#define OB_ERR_TYPE_DECL_ILLEGAL__USER_ERROR_MSG "%%TYPE must be applied to a variable, column, field or attribute, not to '%.*s'"
-#define OB_ERR_OBJECT_INVALID__USER_ERROR_MSG "object '%.*s' is invalid"
 #define OB_ERR_XML_PARSE__USER_ERROR_MSG "Incorrect XML value"
-#define OB_ERR_EXP_NOT_ASSIGNABLE__USER_ERROR_MSG "expression '%.*s' cannot be used as an assignment"
-#define OB_ERR_CURSOR_CONTAIN_BOTH_REGULAR_AND_ARRAY__USER_ERROR_MSG "Cursor contains both regular and array defines which is illegal"
-#define OB_ERR_STATIC_BOOL_EXPR__USER_ERROR_MSG "a static boolean expression must be used"
-#define OB_ERR_BIND_TYPE_NOT_MATCH_COLUMN__USER_ERROR_MSG "type of out argument must match type of column or bind variable"
-#define OB_ERR_NESTED_TABLE_IN_TRI__USER_ERROR_MSG "Nested table clause allowed only for INSTEAD OF triggers"
-#define OB_ERR_COL_LIST_IN_TRI__USER_ERROR_MSG "column list not valid for this trigger type"
-#define OB_ERR_WHEN_CLAUSE_IN_TRI__USER_ERROR_MSG "WHEN clause is not allowed in INSTEAD OF triggers"
-#define OB_ERR_INSTEAD_TRI_ON_TABLE__USER_ERROR_MSG "cannot create INSTEAD OF triggers on tables"
-#define OB_ERR_RETURNING_CLAUSE__USER_ERROR_MSG "unsupported feature with RETURNING clause"
-#define OB_ERR_XSLT_PARSE__USER_ERROR_MSG "document is not a stylesheet"
 #define OB_ERR_NO_RETURN_IN_FUNCTION__USER_ERROR_MSG "No Return found in FUNCTION '%.*s'"
-#define OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_FUNC_TRIGGER__USER_ERROR_MSG "'%.*s' is not allowed in stored function or trigger."
-#define OB_ERR_TOO_LONG_STRING_TYPE__USER_ERROR_MSG "Column length too big for column '%.*s' (max = %d); use BLOB or TEXT instead"
-#define OB_ERR_WIDTH_OUT_OF_RANGE__USER_ERROR_MSG "Display width out of range for column '%.*s' (max = %d)"
 #define OB_ERR_REDEFINE_LABEL__USER_ERROR_MSG "Redefining label '%.*s'"
 #define OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_PROCEDRUE__USER_ERROR_MSG "'%.*s' is not allowed in stored procedure."
-#define OB_ERR_TRIGGER_NOT_SUPPORT__USER_ERROR_MSG "This version of OceanBase doesn't yet support 'multiple triggers with the same action time and event for one table'"
 #define OB_ERR_TRIGGER_IN_WRONG_SCHEMA__USER_ERROR_MSG "Trigger in wrong schema"
-#define OB_ERR_UNKNOWN_EXCEPTION__USER_ERROR_MSG "unknown exception name '%.*s' in PRAGMA EXCEPTION_INIT"
 #define OB_ERR_TRIGGER_CANT_CHANGE_ROW__USER_ERROR_MSG "Updating of %s row is not allowed in %strigger"
 #define OB_ERR_ITEM_NOT_IN_BODY__USER_ERROR_MSG "subprogram or cursor '%.*s' is declared in a package specification and must be defined in the package body"
 #define OB_ERR_WRONG_ROWTYPE__USER_ERROR_MSG "with %%ROWTYPE attribute, '%.*s' must name a table, cursor or cursor-variable"
 #define OB_ERR_ROUTINE_NOT_DEFINE__USER_ERROR_MSG "A subprogram body must be defined for the forward declaration of %.*s."
-#define OB_ERR_DUP_NAME_IN_CURSOR__USER_ERROR_MSG "alias required in SELECT list of cursor to avoid duplicate column names"
 #define OB_ERR_LOCAL_COLL_IN_SQL__USER_ERROR_MSG "local collection types not allowed in SQL statements"
-#define OB_ERR_TYPE_MISMATCH_IN_FETCH__USER_ERROR_MSG "type mismatch found at '%.*s' between FETCH cursor and INTO variables"
-#define OB_ERR_OTHERS_MUST_LAST__USER_ERROR_MSG "OTHERS handler must be last among the exception handlers of a block"
-#define OB_ERR_RAISE_NOT_IN_HANDLER__USER_ERROR_MSG "a RAISE statement with no exception name must be inside an exception handler"
-#define OB_ERR_INVALID_CURSOR_RETURN_TYPE__USER_ERROR_MSG "invalid cursor return type; '%.*s' must be a record type"
-#define OB_ERR_IN_CURSOR_OPEND__USER_ERROR_MSG "IN cursor '%.*s' cannot be OPEN'ed"
-#define OB_ERR_CURSOR_NO_RETURN_TYPE__USER_ERROR_MSG "cursor declaration without body needs return type"
-#define OB_ERR_NO_CHOICES__USER_ERROR_MSG "no choices may appear with choice OTHERS in an exception handler"
-#define OB_ERR_TYPE_DECL_MALFORMED__USER_ERROR_MSG "the declaration of the type of this expression is incomplete or malformed"
-#define OB_ERR_IN_FORMAL_NOT_DENOTABLE__USER_ERROR_MSG "subprogram 'in' formal %.*s is not yet denotable"
-#define OB_ERR_OUT_PARAM_HAS_DEFAULT__USER_ERROR_MSG "OUT and IN OUT formal parameters may not have default expressions"
 #define OB_ERR_MISMATCH_SUBPROGRAM__USER_ERROR_MSG "mismatch between string on a subprogram specification and body"
-#define OB_ERR_PARAM_IN_PACKAGE_SPEC__USER_ERROR_MSG "Pragma %.*s must be declared in a package specification"
-#define OB_ERR_NUMERIC_LITERAL_REQUIRED__USER_ERROR_MSG "numeric literal required"
-#define OB_ERR_NON_INT_LITERAL__USER_ERROR_MSG "non-integral numeric literal %.*s is inappropriate in this context"
-#define OB_ERR_IMPROPER_CONSTRAINT_FORM__USER_ERROR_MSG "improper constraint form used"
-#define OB_ERR_TYPE_CANT_CONSTRAINED__USER_ERROR_MSG "type name '%.*s' cannot be constrained"
-#define OB_ERR_ANY_CS_NOT_ALLOWED__USER_ERROR_MSG "character set ANY_CS is only allowed on a subprogram parameter"
-#define OB_ERR_SCHEMA_TYPE_ILLEGAL__USER_ERROR_MSG "schema-level type has illegal reference to %.*s"
-#define OB_ERR_UNSUPPORTED_TABLE_INDEX_TYPE__USER_ERROR_MSG "Implementation restriction: unsupported table index type"
-#define OB_ERR_ARRAY_MUST_HAVE_POSITIVE_LIMIT__USER_ERROR_MSG "A VARRAY must have a positive limit"
-#define OB_ERR_FORALL_ITER_NOT_ALLOWED__USER_ERROR_MSG "FORALL iteration variable %.*s is not allowed in this context"
-#define OB_ERR_BULK_IN_BIND__USER_ERROR_MSG "references to fields of BULK In-BIND table of records or objects must have the form A(I).F"
-#define OB_ERR_FORALL_BULK_TOGETHER__USER_ERROR_MSG "implementation restriction: cannot use FORALL and BULK COLLECT INTO together in SELECT statements"
-#define OB_ERR_FORALL_DML_WITHOUT_BULK__USER_ERROR_MSG "DML statement without BULK In-BIND cannot be used inside FORALL"
-#define OB_ERR_SHOULD_COLLECTION_TYPE__USER_ERROR_MSG "Type of expression should be a collection type"
-#define OB_ERR_ASSOC_ELEM_TYPE__USER_ERROR_MSG "Element type of associative array should be pls_integer or binary_integer"
-#define OB_ERR_INTO_CLAUSE_EXPECTED__USER_ERROR_MSG "an INTO clause is expected in this SELECT statement"
-#define OB_ERR_SUBPROGRAM_VIOLATES_PRAGMA__USER_ERROR_MSG "Subprogram '%.*s' violates its associated pragma"
-#define OB_ERR_EXPR_SQL_TYPE__USER_ERROR_MSG "expressions have to be of SQL types"
-#define OB_ERR_PRAGMA_DECL_TWICE__USER_ERROR_MSG "PRAGMA %.*s cannot be declared twice"
-#define OB_ERR_PRAGMA_FOLLOW_DECL__USER_ERROR_MSG "this PRAGMA must follow the declaration of '%.*s'"
-#define OB_ERR_IMPL_RESTRICTION__USER_ERROR_MSG "implementation restriction (may be temporary) %s"
-#define OB_ERR_INSUFFICIENT_PRIVILEGE__USER_ERROR_MSG "insufficient privilege to access object string"
-#define OB_ERR_ILLEGAL_OPTION__USER_ERROR_MSG "illegal option for subprogram %.*s"
-#define OB_ERR_NO_FUNCTION_EXIST__USER_ERROR_MSG "no function with name '%.*s' exists in this scope"
-#define OB_ERR_OUT_OF_SCOPE__USER_ERROR_MSG "subprogram or cursor '%.*s' reference is out of scope"
-#define OB_ERR_ILLEGAL_ERROR_NUM__USER_ERROR_MSG "illegal error number %ld for PRAGMA EXCEPTION_INIT"
-#define OB_ERR_DEFAULT_NOT_MATCH__USER_ERROR_MSG "default value of parameter '%.*s' in body must match that of spec"
-#define OB_ERR_TABLE_SINGLE_INDEX__USER_ERROR_MSG "PL/SQL TABLEs must use a single index"
-#define OB_ERR_PRAGMA_DECL__USER_ERROR_MSG "pragma %.*s must be declared in package specification and body"
-#define OB_ERR_INCORRECT_ARGUMENTS__USER_ERROR_MSG "incorrect number of arguments for aggregate function"
-#define OB_ERR_RETURN_VALUE_REQUIRED__USER_ERROR_MSG "RETURN <value> statement required for this return from function"
-#define OB_ERR_LIMIT_ILLEGAL__USER_ERROR_MSG "A LIMIT clause must be used within a BULK FETCH"
-#define OB_ERR_INTO_EXPR_ILLEGAL__USER_ERROR_MSG "expression '%.*s' in the INTO list is of wrong type"
-#define OB_ERR_BULK_SQL_RESTRICTION__USER_ERROR_MSG "Implementation restriction: bulk SQL with associative arrays with VARCHAR2 key is not supported."
-#define OB_ERR_MIX_SINGLE_MULTI__USER_ERROR_MSG "cannot mix between single row and multi-row (BULK) in INTO list"
 #define OB_ERR_TRIGGER_NO_SUCH_ROW__USER_ERROR_MSG "There is no %s row in on %s trigger"
 #define OB_ERR_SET_USAGE__USER_ERROR_MSG "Incorrect usage of UNION and INTO"
-#define OB_ERR_MODIFIER_CONFLICTS__USER_ERROR_MSG "modifier '%s' conflicts with prior '%s' specification"
-#define OB_ERR_DUPLICATE_MODIFIER__USER_ERROR_MSG "duplicate modifier specification '%s'"
-#define OB_ERR_STR_LITERAL_TOO_LONG__USER_ERROR_MSG "string literal too long"
-#define OB_ERR_SELF_PARAM_NOT_INOUT__USER_ERROR_MSG "SELF parameter of constructor method must be IN OUT"
-#define OB_ERR_CONSTRUCT_MUST_RETURN_SELF__USER_ERROR_MSG "constructor method must return SELF AS RESULT"
-#define OB_ERR_FIRST_PARAM_MUST_NOT_NULL__USER_ERROR_MSG "the first operand in the NULLIF expression must not be NULL"
-#define OB_ERR_COALESCE_AT_LEAST_ONE_NOT_NULL__USER_ERROR_MSG "at least one operand in the COALESCE expression must not be NULL"
-#define OB_ERR_STATIC_METHOD_HAS_SELF__USER_ERROR_MSG "a static method cannot declare a parameter named SELF"
-#define OB_ERR_NO_ATTR_FOUND__USER_ERROR_MSG "no attributes found in object type '%.*s'"
-#define OB_ERR_ILLEGAL_TYPE_FOR_OBJECT__USER_ERROR_MSG "Illegal type used for object type attribute: '%.*s'."
-#define OB_ERR_UNSUPPORTED_TYPE__USER_ERROR_MSG "Unsupported type in a VARRAY or TABLE type: '%.*s'."
 #define OB_ERR_POSITIONAL_FOLLOW_NAME__USER_ERROR_MSG "a positional parameter association may not follow a named association"
-#define OB_ERR_NEED_A_LABEL__USER_ERROR_MSG "EXIT/CONTINUE statement may have a label here; '%.*s' is not a label"
-#define OB_ERR_REFER_SAME_PACKAGE__USER_ERROR_MSG "variable or constant initialization may not refer to functions declared in the same package"
-#define OB_ERR_PL_COMMON__USER_ERROR_MSG "%s"
-#define OB_ERR_IDENT_EMPTY__USER_ERROR_MSG "Identifier cannot be an empty string"
-#define OB_ERR_PRAGMA_STR_UNSUPPORT__USER_ERROR_MSG "Pragma %s does not support %.*s"
-#define OB_ERR_END_LABEL_NOT_MATCH__USER_ERROR_MSG "END identifier '%.*s' must match '%.*s'"
-#define OB_ERR_WRONG_FETCH_INTO_NUM__USER_ERROR_MSG "wrong number of values in the INTO list of a FETCH statement"
-#define OB_ERR_PRAGMA_FIRST_ARG__USER_ERROR_MSG "Pragma %s expects 1st argument to be a procedure/function/package/cursor"
-#define OB_ERR_TRIGGER_CANT_CHANGE_OLD_ROW__USER_ERROR_MSG "cannot change the value of an OLD reference variable"
-#define OB_ERR_TRIGGER_CANT_CRT_ON_RO_VIEW__USER_ERROR_MSG "cannot create trigger on read only view"
-#define OB_ERR_TRIGGER_INVALID_REF_NAME__USER_ERROR_MSG "invalid REFERENCING name"
-#define OB_ERR_EXP_NOT_INTO_TARGET__USER_ERROR_MSG "expression '%.*s' cannot be used as an INTO-target of a SELECT/FETCH statement"
-#define OB_ERR_CASE_NULL__USER_ERROR_MSG "at least one result in the CASE expression must not be NULL"
-#define OB_ERR_INVALID_GOTO__USER_ERROR_MSG "Invalid GOTO to non-label '%.*s'"
 #define OB_ERR_PRIVATE_UDF_USE_IN_SQL__USER_ERROR_MSG "function '%.*s' may not be used in SQL"
-#define OB_ERR_FIELD_NOT_DENOTABLE__USER_ERROR_MSG "field %.*s is not yet denotable"
-#define OB_NUMERIC_PRECISION_NOT_INTEGER__USER_ERROR_MSG "non-integral numeric literal %.*s is inappropriate in this context"
-#define OB_ERR_REQUIRE_INTEGER__USER_ERROR_MSG "integer value required"
-#define OB_ERR_INDEX_TABLE_OF_CURSOR__USER_ERROR_MSG "Index Tables of Cursor Variables are disallowed"
-#define OB_NULL_CHECK_ERROR__USER_ERROR_MSG "cannot pass NULL to a NOT NULL constrained formal parameter"
 #define OB_ERR_EX_NAME_ARG__USER_ERROR_MSG "name of exception expected for first arg in exception_init pragma"
 #define OB_ERR_EX_ARG_NUM__USER_ERROR_MSG "Illegal number of arguments for pragma EXCEPTION_INIT"
-#define OB_ERR_EX_SECOND_ARG__USER_ERROR_MSG "second argument to PRAGMA EXCEPTION_INIT must be a numeric literal"
-#define OB_NO_STMT_PARSE__USER_ERROR_MSG "no statement parsed"
 #define OB_ERR_WRONG_SCHEMA_REF__USER_ERROR_MSG "Table or view reference not '%.*s%.*s%.*s%.*s%.*s' allowed in this context"
 #define OB_ERR_COMPONENT_UNDECLARED__USER_ERROR_MSG "component '%.*s' must be declared"
-#define OB_ERR_FUNC_ONLY_IN_SQL__USER_ERROR_MSG "function or pseudo-column '%s' may be used inside a SQL statement only"
 #define OB_ERR_UNDEFINED__USER_ERROR_MSG "'%.*s' is not a procedure or is undefined"
-#define OB_ERR_SUBTYPE_NOTNULL_MISMATCH__USER_ERROR_MSG "subtype of a not null type must also be not null"
-#define OB_ERR_BIND_VAR_NOT_EXIST__USER_ERROR_MSG "bind variable does not exist"
-#define OB_ERR_CURSOR_IN_OPEN_DYNAMIC_SQL__USER_ERROR_MSG "cursor '%.*s' cannot be used in dynamic SQL OPEN statement"
 #define OB_ERR_INVALID_INPUT_ARGUMENT__USER_ERROR_MSG "input value for argument #%d is not valid"
-#define OB_ERR_CLIENT_IDENTIFIER_TOO_LONG__USER_ERROR_MSG "Client identifier is too long"
-#define OB_ERR_NOT_CURSOR_NAME_IN_CURRENT_OF__USER_ERROR_MSG "identifier in CURRENT OF clause is not a cursor name"
-#define OB_ERR_NOT_FOR_UPDATE_CURSOR_IN_CURRENT_OF__USER_ERROR_MSG "cursor '%.*s' must be declared with FOR UPDATE to use with CURRENT OF"
 #define OB_ERR_DUP_SIGNAL_SET__USER_ERROR_MSG "Duplicate condition information item '%s'"
 #define OB_ERR_SIGNAL_NOT_FOUND__USER_ERROR_MSG "Unhandled user-defined not found condition"
 #define OB_ERR_INVALID_CONDITION_NUMBER__USER_ERROR_MSG "Invalid condition number"
-#define OB_ERR_RECURSIVE_SQL_LEVELS_EXCEEDED__USER_ERROR_MSG "maximum number of recursive SQL levels exceeded"
-#define OB_ERR_INVALID_SECTION__USER_ERROR_MSG "invalid section for this type of Compound Trigger"
-#define OB_ERR_DUPLICATE_TRIGGER_SECTION__USER_ERROR_MSG "duplicate Compound Triggers section"
-#define OB_ERR_PARSE_PLSQL__USER_ERROR_MSG "Encountered the symbol %s when expecting one of the following: %s"
 #define OB_ERR_SIGNAL_WARN__USER_ERROR_MSG "Unhandled user-defined warning condition"
 #define OB_ERR_RESIGNAL_WITHOUT_ACTIVE_HANDLER__USER_ERROR_MSG "RESIGNAL when handler not active"
 #define OB_ERR_CANNOT_UPDATE_VIRTUAL_COL_IN_TRG__USER_ERROR_MSG "Virtual column cannot be updated in trigger body"
 #define OB_ERR_TRG_ORDER__USER_ERROR_MSG "Referenced trigger '%s' for the given action time and event type does not exist."
-#define OB_ERR_REF_ANOTHER_TABLE_IN_TRG__USER_ERROR_MSG "cannot reference a trigger defined on another table"
-#define OB_ERR_REF_TYPE_IN_TRG__USER_ERROR_MSG "cannot reference a trigger of a different type"
 #define OB_ERR_REF_CYCLIC_IN_TRG__USER_ERROR_MSG "Cyclic trigger dependency is not allowed"
-#define OB_ERR_CANNOT_SPECIFY_PRECEDES_IN_TRG__USER_ERROR_MSG "cannot specify PRECEDES clause"
-#define OB_ERR_CANNOT_PERFORM_DML_INSIDE_QUERY__USER_ERROR_MSG "cannot perform a DML operation inside a query"
-#define OB_ERR_CANNOT_PERFORM_DDL_COMMIT_OR_ROLLBACK_INSIDE_QUERY_OR_DML_TIPS__USER_ERROR_MSG "cannot perform a DDL commit or rollback inside a query or DML tips"
-#define OB_ERR_STATEMENT_STRING_IN_EXECUTE_IMMEDIATE_IS_NULL_OR_ZERO_LENGTH__USER_ERROR_MSG "statement string in EXECUTE IMMEDIATE is NULL or 0 length"
-#define OB_ERR_MISSING_INTO_KEYWORD__USER_ERROR_MSG "missing INTO keyword"
-#define OB_ERR_CLAUSE_RETURN_ILLEGAL__USER_ERROR_MSG "RETURNING clause must be used with INSERT, UPDATE, or DELETE statements"
-#define OB_ERR_NAME_HAS_TOO_MANY_PARTS__USER_ERROR_MSG "name has too many parts"
 #define OB_ERR_LOB_SPAN_TRANSACTION__USER_ERROR_MSG "LOB locators cannot span transactions"
-#define OB_ERR_INVALID_MULTISET__USER_ERROR_MSG "MULTISET expression not allowed"
 #define OB_ERR_INVALID_CAST_UDT__USER_ERROR_MSG "invalid CAST to a type that is not a nested table or VARRAY"
-#define OB_ERR_POLICY_EXIST__USER_ERROR_MSG "policy already exists"
-#define OB_ERR_POLICY_NOT_EXIST__USER_ERROR_MSG "policy does not exist"
-#define OB_ERR_ADD_POLICY_TO_SYS_OBJECT__USER_ERROR_MSG "adding a policy to an object owned by SYS is not allowed"
 #define OB_ERR_INVALID_INPUT_STRING__USER_ERROR_MSG "input value for %s is not valid"
-#define OB_ERR_SEC_COLUMN_ON_VIEW__USER_ERROR_MSG "cannot create security relevant column policy in an object view"
 #define OB_ERR_INVALID_INPUT_FOR_ARGUMENT__USER_ERROR_MSG "input value for argument %s is not valid"
-#define OB_ERR_POLICY_DISABLED__USER_ERROR_MSG "policy was disabled"
-#define OB_ERR_CIRCULAR_POLICIES__USER_ERROR_MSG "circular security policies detected"
-#define OB_ERR_TOO_MANY_POLICIES__USER_ERROR_MSG "the number of related policies has exceeded the limit of 16"
-#define OB_ERR_POLICY_FUNCTION__USER_ERROR_MSG "policy function or package %.*s.%.*s has error"
-#define OB_ERR_NO_PRIV_EVAL_PREDICATE__USER_ERROR_MSG "insufficient privilege to evaluate policy predicate"
-#define OB_ERR_EXECUTE_POLICY_FUNCTION__USER_ERROR_MSG "failed to execute policy function"
-#define OB_ERR_POLICY_PREDICATE__USER_ERROR_MSG "policy predicate has error"
 #define OB_ERR_NO_PRIV_DIRECT_PATH_ACCESS__USER_ERROR_MSG "insufficient privileges to do direct path access"
 #define OB_ERR_INTEGRITY_CONSTRAINT_VIOLATED__USER_ERROR_MSG "integrity constraint violated - parent record not found"
-#define OB_ERR_POLICY_GROUP_EXIST__USER_ERROR_MSG "policy group already exists"
-#define OB_ERR_POLICY_GROUP_NOT_EXIST__USER_ERROR_MSG "policy group does not exist"
-#define OB_ERR_DRIVING_CONTEXT_EXIST__USER_ERROR_MSG "driving context already exists"
-#define OB_ERR_DRIVING_CONTEXT_NOT_EXIST__USER_ERROR_MSG "driving context does not exist"
-#define OB_ERR_UPDATE_DEFAULT_GROUP__USER_ERROR_MSG "can not update SYS_DEFAULT policy group"
-#define OB_ERR_CONTEXT_CONTAIN_INVALID_GROUP__USER_ERROR_MSG "Driving context %.*s,%.*s contains invalid group %.*s"
-#define OB_ERR_INVALID_SEC_COLUMN_TYPE__USER_ERROR_MSG "Column %.*s in sec_relevant_cols cannot be of an object data type"
-#define OB_ERR_UNPROTECTED_VIRTUAL_COLUMN__USER_ERROR_MSG "A protected base column was referenced in an unprotected virtual column expression"
-#define OB_ERR_ATTRIBUTE_ASSOCIATION__USER_ERROR_MSG "Attribute association failed for policy %.*s"
-#define OB_ERR_MERGE_INTO_WITH_POLICY__USER_ERROR_MSG "The MERGE INTO syntax does not support the security policy"
 #define OB_ERR_SP_NO_DROP_SP__USER_ERROR_MSG "Can't drop or alter a '%s' from within another stored routine."
-#define OB_ERR_VARIABLE_NOT_IN_SELECT_LIST__USER_ERROR_MSG "variable not in select list"
 #define OB_ERR_MULTI_RECORD__USER_ERROR_MSG "coercion into multiple record targets not supported"
 #define OB_ERR_MALFORMED_PS_PACKET__USER_ERROR_MSG "malformed ps packet"
 #define OB_ERR_VIEW_SELECT_CONTAIN_QUESTIONMARK__USER_ERROR_MSG "View's SELECT contains a variable or parameter"
 #define OB_ERR_OBJECT_NOT_EXIST__USER_ERROR_MSG "object %.*s does not exist"
-#define OB_ERR_TABLE_OUT_OF_RANGE__USER_ERROR_MSG "PL/SQL: index for PL/SQL table out of range for host language array"
 #define OB_ERR_WRONG_USAGE__USER_ERROR_MSG "Incorrect usage of %s"
-#define OB_ERR_FORALL_ON_REMOTE_TABLE__USER_ERROR_MSG "FORALL INSERT/UPDATE/DELETE not support on remote tables"
 #define OB_ERR_CLIENT_LOCAL_FILES_DISABLED__USER_ERROR_MSG "Loading local data is disabled; this must be enabled on both the client and server sides"
 #define OB_ERR_OUT_PARAM_NOT_BIND_VAR__USER_ERROR_MSG "output parameter not a bind variable"
-#define OB_ERR_TIME_EARLIER_THAN_SYSDATE__USER_ERROR_MSG "the parameter %s must evaluate to a time in the future"
 #define OB_ERR_NOT_FUNC_NAME__USER_ERROR_MSG "object '%.*s' must be of type function or array to be used this way"
-#define OB_ERR_INVALID_CURSOR_EXPR__USER_ERROR_MSG "CURSOR expression not allowed"
-#define OB_APPLICATION_ERROR_FROM_REMOTE__USER_ERROR_MSG "%.*s"
 #define OB_NO_PARTITION_FOR_GIVEN_VALUE_SCHEMA_ERROR__USER_ERROR_MSG "Table has no partition for value"
-#define OB_ERR_INVALID_CHARACTER__USER_ERROR_MSG "invalid character"
 #define OB_ERR_CURSOR_ATTR_APPLY__USER_ERROR_MSG "cursor attribute may not be applied to non-cursor %.*s"
 #define OB_DTL_WAIT_EAGAIN__USER_ERROR_MSG "Px wait for dtl message again"
 #define OB_ERR_COMPILE_RESULT_NOT_ADD_CACHE__USER_ERROR_MSG "To be compatible with MySQL, if an exception occurs when compiling an OB PL object (such as the object does not exist or a parameter mismatch), the relevant statement will be converted to a statement that throws an exception, and compiled object will be evicted by any schema change which may cause performance problems. User should create or redefine the pl object of the problem indicated in the warning. Problem object name: '%.*s'"
 #define OB_ELEMENT_AT_GIVEN_INDEX_NOT_EXIST__USER_ERROR_MSG "element at index [%ld] does not exist"
-#define OB_ERR_CANNOT_DEFINE_TRIGGER__USER_ERROR_MSG "system triggers cannot be defined on the schema of SYS user"
-#define OB_ERR_CANNOT_RENAME_TRIGGER__USER_ERROR_MSG "renaming system triggers is not allowed"
-#define OB_ERR_LOGON_TRIGGER__USER_ERROR_MSG "client logon triggers cannot have BEFORE type"
-#define OB_ERR_LOGOFF_TRIGGER__USER_ERROR_MSG "client logoff triggers cannot have AFTER type"
-#define OB_ERR_MALFORMED_WRAPPED_UNIT__USER_ERROR_MSG "malformed or corrupted wrapped unit"
+#define OB_ERR_MVIEW_INVALID_TABLE_TYPE__USER_ERROR_MSG "Table type is not valid, the definition of materialized view can only reference user tables or other materialized views"
+#define OB_ERR_MVIEW_BASE_TABLE_ALTERED__USER_ERROR_MSG "Base tables are altered during the creation or complete refresh of materialized views, please try again when base tables have no ongoing DDL operations"
+#define OB_ERR_MVIEW_MISSING_DEPENDENCE__USER_ERROR_MSG "Materialized view %s.%s has invalid dependency info, please perform a complete refresh to recover."
 #define OB_ERR_INVALID_NESTED_CURSOR__USER_ERROR_MSG "Cursor Variable in record, object, or collection is not supported by this release"
 #define OB_ERR_VALUES_CLAUSE_NEED_HAVE_COLUMN__USER_ERROR_MSG "Each row of a VALUES clause must have at least one column, unless when used as source in an INSERT statement."
 #define OB_ERR_VALUES_CLAUSE_CANNOT_USE_DEFAULT_VALUES__USER_ERROR_MSG "A VALUES clause cannot use DEFAULT values, unless used as a source in an INSERT statement."
@@ -3335,8 +2761,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_AI_FUNC_PARAM_TYPE_INVALID__USER_ERROR_MSG "This type of param \'%.*s\' is invalid, should be %.*s"
 #define OB_AI_FUNC_MODEL_NOT_FOUND__USER_ERROR_MSG "This AI model \'%.*s\' was not found"
 #define OB_AI_FUNC_MODEL_EXISTS__USER_ERROR_MSG "This ai model \'%.*s\' is already exists"
-#define OB_SP_RAISE_APPLICATION_ERROR__USER_ERROR_MSG "%.*s"
-#define OB_SP_RAISE_APPLICATION_ERROR_NUM__USER_ERROR_MSG "error number argument to raise_application_error of '%d' is out of range"
 #define OB_CLOB_ONLY_SUPPORT_WITH_MULTIBYTE_FUN__USER_ERROR_MSG "CLOB or NCLOB in multibyte character set not supported"
 #define OB_ERR_UPDATE_TWICE__USER_ERROR_MSG "unable to get a stable set of rows in the source tables"
 #define OB_ERR_SNAPSHOT_QUERY_WITH_UPDATE__USER_ERROR_MSG "snapshot expression not allowed here"
@@ -3345,7 +2769,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_DATA_TOO_LONG_MSG_FMT_V2__USER_ERROR_MSG "Data too long for column '%.*s' at row %ld"
 #define OB_ERR_INVALID_DATE_MSG_FMT_V2__USER_ERROR_MSG "Incorrect datetime value for column '%.*s' at row %ld"
 
-extern int g_all_ob_errnos[1836];
+extern int g_all_ob_errnos[1545];
 
   const char *ob_error_name(const int oberr);
   const char* ob_error_cause(const int oberr);
