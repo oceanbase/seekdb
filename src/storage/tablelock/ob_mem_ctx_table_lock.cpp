@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX TABLELOCK
 #include "ob_mem_ctx_table_lock.h"
+#include "share/ob_internal_table_change_notifier.h"
 #include "storage/tablelock/ob_lock_memtable.h"
 #include "storage/tx/ob_trans_ctx_mgr_v4.h"
 
@@ -191,6 +192,17 @@ int ObLockMemCtx::commit_table_lock_(const SCN &commit_version, const SCN &commi
       switch (curr->lock_op_.op_type_) {
       case IN_TRANS_DML_LOCK:
       case IN_TRANS_COMMON_LOCK: {
+        if (IN_TRANS_DML_LOCK == curr->lock_op_.op_type_
+            && curr->lock_op_.lock_id_.is_tablet_lock()
+            && is_inner_table(curr->lock_op_.lock_id_.obj_id_)) {
+          // Normal DML must retain one IN_TRANS_DML_LOCK (or an equivalent
+          // touched-tablet marker) even when the transaction already owns a
+          // stronger table/tablet lock. Internal-table consumers use this
+          // commit-time record to detect changes without scanning modified
+          // rows. Removing that marker would silently lose notifications.
+          ObInternalTableChangeNotifier::get_instance().notify_table_changed(
+              curr->lock_op_.lock_id_.obj_id_);
+        }
         // remove the lock op.
         memtable->remove_lock_record(curr->lock_op_);
         break;

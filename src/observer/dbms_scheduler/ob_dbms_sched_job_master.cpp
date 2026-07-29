@@ -19,6 +19,8 @@
 #include "ob_dbms_sched_job_master.h"
 #include "ob_dbms_sched_job_executor.h"
 #include "share/ob_ex_rpc.h"
+#include "share/ob_internal_table_change_notifier.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "sql/session/ob_basic_session_info.h"
 #define TO_TS(second) (1000000L * second)
 namespace oceanbase
@@ -52,6 +54,9 @@ int ObDBMSSchedJobMaster::init(common::ObMySQLProxy *sql_proxy,
     LOG_WARN("failed to create job hash set", K(ret));
   } else if (OB_FAIL(thread_cond_.init(ObWaitEventIds::REENTRANT_THREAD_COND_WAIT))) {
     LOG_WARN("failed to init thread cond", K(ret));
+  } else if (OB_FAIL(ObInternalTableChangeNotifier::get_instance().register_table(
+                 OB_ALL_SCHEDULER_JOB_TID))) {
+    LOG_WARN("failed to register scheduler job table change tracking", K(ret));
   } else if (OB_ISNULL(ObCurTraceId::get())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("trace id is null", K(ret));
@@ -88,6 +93,7 @@ int ObDBMSSchedJobMaster::stop()
 void ObDBMSSchedJobMaster::switch_to_leader()
 {
   is_leader_ = true;
+  ATOMIC_STORE(&scheduler_job_table_change_seq_, 0);
 }
 void ObDBMSSchedJobMaster::switch_to_follower()
 {
@@ -242,6 +248,7 @@ int ObDBMSSchedJobMaster::scheduler_job(ObDBMSSchedJobKey *job_key)
     ObArenaAllocator allocator("DBMSSchedTmp");
     OZ (table_operator_.get_dbms_sched_job_info(
       job_key->get_job_id(), job_key->get_job_name(), allocator, job_info));
+    ObDIActionGuard ag(job_info.get_job_class());
     const int64_t now = ObTimeUtility::current_time();
     int64_t next_check_date = now + MIN_SCHEDULER_INTERVAL;
     if (OB_FAIL(ret) || !job_info.valid()) {
@@ -367,12 +374,26 @@ void ObDBMSSchedJobMaster::free_job_key(ObDBMSSchedJobKey *&job_key)
 int ObDBMSSchedJobMaster::check_runtime_jobs()
 {
   int ret = OB_SUCCESS;
+  uint64_t target_seq = 0;
+  const int seq_ret =
+      ObInternalTableChangeNotifier::get_instance().get_change_seq(
+          OB_ALL_SCHEDULER_JOB_TID, target_seq);
+  ObSchemaGetterGuard schema_guard;
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("dbms sched job not init yet", K(ret), K(inited_));
+  } else if (OB_SUCCESS == seq_ret
+             && target_seq == ATOMIC_LOAD(&scheduler_job_table_change_seq_)) {
+    // Keep the 20-second control wakeup, but avoid SQL while the table is unchanged.
+  } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("fail get schema guard", K(ret));
   } else {
+    const ObServerRuntimeSchema *runtime_schema = NULL;
+    OZ (schema_guard.get_server_runtime_info(runtime_schema));
+    CK (OB_NOT_NULL(runtime_schema));
     bool is_primary_server = true;
-    if (OB_FAIL(ObShareUtil::is_primary_server(is_primary_server))) {
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(ObShareUtil::is_primary_server(is_primary_server))) {
       LOG_WARN("fail to check whether is primary server", KR(ret), K(is_primary_server));
     } else if (!is_primary_server) {
       clear_wait_vector();
@@ -380,6 +401,11 @@ int ObDBMSSchedJobMaster::check_runtime_jobs()
       LOG_INFO("server is standby, not check new jobs, and remove exist jobs");
     } else {
       OZ (check_new_jobs());
+    }
+    if (OB_SUCC(ret) && OB_SUCCESS == seq_ret) {
+      // Advance only to the value captured before reconciliation. A commit
+      // racing with the table read remains visible to the next control wakeup.
+      ATOMIC_STORE(&scheduler_job_table_change_seq_, target_seq);
     }
   }
   LOG_INFO("check runtime scheduler jobs", K(ret));
@@ -401,6 +427,7 @@ int ObDBMSSchedJobMaster::register_new_jobs(ObIArray<ObDBMSSchedJobInfo> &job_in
 {
   int ret = OB_SUCCESS;
   ObDBMSSchedJobInfo job_info;
+  ObSEArray<int64_t, 16> removed_job_ids;
   for (int64_t i = 0; OB_SUCC(ret) && i < job_infos.count(); i++) {
     job_info = job_infos.at(i);
     if (job_info.valid() && !job_info.is_disabled() && !job_info.is_broken()) {
@@ -409,16 +436,46 @@ int ObDBMSSchedJobMaster::register_new_jobs(ObIArray<ObDBMSSchedJobInfo> &job_in
         // Job exists in memory, but its NEXT_DATE may have changed (e.g. via set_attribute).
         // Find the existing key in wait_vector_, remove it, update execute_at, and re-insert.
         int64_t new_next_date = job_info.get_next_date();
+        if (job_info.is_running()) {
+          new_next_date = MIN(
+              new_next_date,
+              job_info.get_this_date()
+                  + TO_TS(job_info.get_max_run_duration()));
+        } else if (job_info.is_killed()
+                   || ObTimeUtility::current_time() > job_info.get_end_date()) {
+          new_next_date = ObTimeUtility::current_time();
+        }
         common::ObSortedVector<ObDBMSSchedJobKey *>::iterator iter;
+        bool found = false;
         for (iter = wait_vector_.begin(); iter != wait_vector_.end(); ++iter) {
           ObDBMSSchedJobKey *exist_key = *iter;
           if (exist_key->get_job_id() == job_info.get_job_id()) {
-            wait_vector_.remove(iter);
-            if (OB_FAIL(register_job(exist_key, new_next_date))) {
+            found = true;
+            if (OB_FAIL(wait_vector_.remove(iter))) {
+              LOG_WARN("failed to remove existing scheduler job",
+                  K(ret), K(job_info));
+            } else if (OB_FAIL(register_job(exist_key, new_next_date))) {
               LOG_WARN("failed to update existing job next_date", K(ret), K(job_info));
               free_job_key(exist_key);
             }
             break;
+          }
+        }
+        if (OB_SUCC(ret) && !found) {
+          if (OB_FAIL(alive_jobs_.erase_refactored(job_info.get_job_id()))) {
+            LOG_WARN("failed to erase stale scheduler alive entry", K(ret), K(job_info));
+          } else {
+            ObDBMSSchedJobKey *job_key = NULL;
+            if (OB_FAIL(alloc_job_key(
+                    job_key,
+                    job_info.get_job_id(),
+                    job_info.get_job_name()))) {
+              LOG_WARN("failed to recreate scheduler job key", K(ret), K(job_info));
+            } else if (OB_FAIL(register_job(job_key, new_next_date))) {
+              LOG_WARN("failed to register recreated scheduler job",
+                  K(ret), K(job_info));
+              free_job_key(job_key);
+            }
           }
         }
       } else if (OB_HASH_NOT_EXIST == tmp) {
@@ -436,6 +493,44 @@ int ObDBMSSchedJobMaster::register_new_jobs(ObIArray<ObDBMSSchedJobInfo> &job_in
         LOG_INFO("register new job", K(ret), K(job_info));
       } else {
         LOG_ERROR("dbms sched job master check job exist failed", K(tmp), K(job_info));
+      }
+    }
+  }
+  for (common::hash::ObHashSet<int64_t>::iterator iter = alive_jobs_.begin();
+       OB_SUCC(ret) && iter != alive_jobs_.end(); ++iter) {
+    bool found = false;
+    for (int64_t i = 0; !found && i < job_infos.count(); ++i) {
+      ObDBMSSchedJobInfo &candidate = job_infos.at(i);
+      found = candidate.valid()
+          && !candidate.is_disabled()
+          && !candidate.is_broken()
+          && iter->first == candidate.get_job_id();
+    }
+    if (!found && OB_FAIL(removed_job_ids.push_back(iter->first))) {
+      LOG_WARN("failed to collect removed scheduler job", K(ret), K(iter->first));
+    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < removed_job_ids.count(); ++i) {
+    const int64_t removed_job_id = removed_job_ids.at(i);
+    bool found = false;
+    for (common::ObSortedVector<ObDBMSSchedJobKey *>::iterator iter =
+             wait_vector_.begin();
+         !found && iter != wait_vector_.end(); ++iter) {
+      ObDBMSSchedJobKey *job_key = *iter;
+      if (OB_NOT_NULL(job_key) && removed_job_id == job_key->get_job_id()) {
+        found = true;
+        if (OB_FAIL(wait_vector_.remove(iter))) {
+          LOG_WARN("failed to remove scheduler job from wait vector",
+              K(ret), K(removed_job_id));
+        } else {
+          free_job_key(job_key);
+        }
+      }
+    }
+    if (OB_SUCC(ret) && !found) {
+      if (OB_FAIL(alive_jobs_.erase_refactored(removed_job_id))) {
+        LOG_WARN("failed to erase removed scheduler job",
+            K(ret), K(removed_job_id));
       }
     }
   }

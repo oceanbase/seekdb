@@ -125,6 +125,7 @@ public:
   int scheduler(ObDBMSJobKey *job_key);
   int add_new_job(ObDBMSJobKey *job_key);
   int immediately(ObDBMSJobKey *job_key);
+  int remove_job(uint64_t job_id, ObDBMSJobKey *&job_key);
 
   inline static bool compare_job_key(
     const ObDBMSJobKey *lhs, const ObDBMSJobKey *rhs);
@@ -158,7 +159,8 @@ public:
       job_utils_(),
       lock_(common::ObLatchIds::DBMS_JOB_MASTER_LOCK),
       allocator_("DBMSJobMaster"),
-      alive_jobs_() {}
+      alive_jobs_(),
+      job_table_change_seq_(0) {}
 
   virtual ~ObDBMSJobMaster() { alive_jobs_.destroy(); };
 
@@ -187,6 +189,9 @@ public:
   int scheduler_job(ObDBMSJobKey *job_key, bool is_retry = false);
 
 private:
+  int check_table_change_(ObDBMSJobKey *check_key);
+  int schedule_change_check_(ObDBMSJobKey *check_key);
+
   const static int MAX_READY_JOBS_CAPACITY = (1 << 20);
   const static int MIN_SCHEDULER_INTERVAL = 5 * 1000 * 1000;
 
@@ -205,6 +210,7 @@ private:
   common::ObArenaAllocator allocator_;
 
   common::hash::ObHashSet<uint64_t> alive_jobs_;
+  uint64_t job_table_change_seq_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDBMSJobMaster);

@@ -17,6 +17,8 @@
 #ifndef OCEANBASE_SHARE_OB_INTERNAL_TABLE_CHANGE_NOTIFIER_H_
 #define OCEANBASE_SHARE_OB_INTERNAL_TABLE_CHANGE_NOTIFIER_H_
 
+#include "share/ob_module_data_arg.h"
+#include "lib/container/ob_array.h"
 #include "lib/function/ob_function.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "logservice/ob_log_base_type.h"
@@ -29,11 +31,6 @@ namespace share
 class ObInternalTableChangeNotifier : public logservice::ObILocalLogHandler
 {
 public:
-  enum class Module {
-    TIMEZONE = 0,
-    GIS,
-    MAX
-  };
   using ModuleCallback = common::ObFunction<int()>;
 
   static ObInternalTableChangeNotifier &get_instance();
@@ -41,10 +38,23 @@ public:
   int init();
   void destroy();
 
-  int register_module(Module module, ModuleCallback callback);
+  // Table registrations are completed during server initialization. seal()
+  // freezes and sorts the registry so transaction commit and timer threads can
+  // use lock-free binary lookup afterwards.
+  int register_table(uint64_t table_id);
+  int seal();
+  // change_seq is only a process-local change hint. Consumers compare it for
+  // equality; it is neither persistent nor an SCN/schema version.
+  void notify_table_changed(uint64_t table_id);
+  int get_change_seq(uint64_t table_id, uint64_t &change_seq) const;
+  void mark_all_tables_changed();
 
-  // Notify one cache owner after its backing inner table changes.
-  int notify(Module module);
+  int register_module(table::ObModuleDataArg::ObExecModule module,
+                      ModuleCallback callback);
+
+  // Schedule refresh for one module. Called by import executor and
+  // switch_to_leader. Returns immediately — the actual work is async.
+  int notify(table::ObModuleDataArg::ObExecModule module);
 
   // ObILocalLogHandler — called by ObLocalLogHandlerSet when LS switches role.
   void deactivate() override;
@@ -55,15 +65,36 @@ private:
   ~ObInternalTableChangeNotifier();
   DISALLOW_COPY_AND_ASSIGN(ObInternalTableChangeNotifier);
 
-  static constexpr int MAX_MODULE = static_cast<int>(Module::MAX);
+  static constexpr int MAX_MODULE = static_cast<int>(table::ObModuleDataArg::ObExecModule::MAX_MOD);
   struct ModuleEntry {
     ModuleCallback callback_;
     ModuleEntry() : callback_() {}
   };
 
+  struct TableEntry {
+    uint64_t table_id_;
+    uint64_t change_seq_;
+
+    TableEntry() : table_id_(OB_INVALID_ID), change_seq_(1) {}
+    explicit TableEntry(const uint64_t table_id) : table_id_(table_id), change_seq_(1) {}
+    TO_STRING_KV(K_(table_id), K_(change_seq));
+  };
+
+  struct TableEntryCompare {
+    bool operator()(const TableEntry &left, const TableEntry &right) const
+    {
+      return left.table_id_ < right.table_id_;
+    }
+  };
+
+  const TableEntry *find_table_entry_(uint64_t table_id) const;
+  TableEntry *find_table_entry_(uint64_t table_id);
+
   ModuleEntry entries_[MAX_MODULE];
-  common::ObSpinLock lock_;  // protects entries_ registration
+  common::ObArray<TableEntry> table_entries_;
+  common::ObSpinLock lock_;  // protects initialization-time registrations
   bool is_inited_;
+  bool is_sealed_;
 };
 
 } // namespace share

@@ -95,7 +95,8 @@ public:
       schema_service_(NULL),
       allocator_(ObMemAttr("DbmsScheduler"), OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_),
       alive_jobs_(),
-      wait_vector_(0, NULL, ObModIds::VECTOR) {}
+      wait_vector_(0, NULL, ObModIds::VECTOR),
+      scheduler_job_table_change_seq_(0) {}
 
   virtual ~ObDBMSSchedJobMaster() { alive_jobs_.destroy(); };
 
@@ -148,6 +149,7 @@ private:
 
   // wait list
   common::ObSortedVector<ObDBMSSchedJobKey *> wait_vector_;
+  uint64_t scheduler_job_table_change_seq_;
   void clear_wait_vector();
   inline static bool compare_job_key(
     const ObDBMSSchedJobKey *lhs, const ObDBMSSchedJobKey *rhs);

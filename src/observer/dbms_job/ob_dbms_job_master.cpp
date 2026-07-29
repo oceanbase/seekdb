@@ -19,6 +19,8 @@
 #include "ob_dbms_job_master.h"
 #include "ob_dbms_job_executor.h"
 #include "share/ob_ex_rpc.h"
+#include "share/ob_internal_table_change_notifier.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -203,6 +205,53 @@ int ObDBMSJobTask::immediately(ObDBMSJobKey *job_key)
   return ret;
 }
 
+int ObDBMSJobTask::remove_job(
+    const uint64_t job_id,
+    ObDBMSJobKey *&job_key)
+{
+  int ret = OB_SUCCESS;
+  job_key = NULL;
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("dbms job task not initialized", K(ret));
+  } else {
+    ObSpinLockGuard guard(lock_);
+    if (OB_NOT_NULL(job_key_)
+        && !job_key_->is_check_new()
+        && job_id == job_key_->get_job_id()) {
+      (void)timer_.cancel(*this);
+      job_key = job_key_;
+      job_key_ = NULL;
+      if (wait_vector_.count() > 0) {
+        job_key_ = wait_vector_.at(0);
+        if (OB_FAIL(wait_vector_.remove(wait_vector_.begin()))) {
+          LOG_WARN("failed to remove next dbms job", K(ret), KPC(job_key_));
+          job_key_ = NULL;
+        } else if (OB_FAIL(timer_.schedule(
+                       *this, job_key_->get_adjust_delay()))) {
+          LOG_WARN("failed to schedule next dbms job", K(ret), KPC(job_key_));
+        }
+      }
+    } else {
+      for (WaitVectorIterator iter = wait_vector_.begin();
+           NULL == job_key && iter != wait_vector_.end(); ++iter) {
+        ObDBMSJobKey *candidate = *iter;
+        if (OB_NOT_NULL(candidate)
+            && !candidate->is_check_new()
+            && job_id == candidate->get_job_id()) {
+          job_key = candidate;
+          if (OB_FAIL(wait_vector_.remove(iter))) {
+            LOG_WARN("failed to remove dbms job from wait vector",
+                K(ret), K(job_id));
+            job_key = NULL;
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 bool ObDBMSJobTask::compare_job_key(const ObDBMSJobKey *lhs, const ObDBMSJobKey *rhs)
 {
   return lhs->get_execute_at() < rhs->get_execute_at()
@@ -256,6 +305,9 @@ int ObDBMSJobMaster::init(ObISQLClient *sql_client,
     LOG_WARN("fail to init action record", K(ret));
   } else if (OB_FAIL(alive_jobs_.create(1024))) {
     LOG_WARN("failed to create job hash set", K(ret));
+  } else if (OB_FAIL(ObInternalTableChangeNotifier::get_instance().register_table(
+                 OB_ALL_JOB_TID))) {
+    LOG_WARN("failed to register dbms job table change tracking", K(ret));
   } else if (OB_ISNULL(ObCurTraceId::get())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("trace id is null", K(ret));
@@ -279,7 +331,7 @@ int ObDBMSJobMaster::start()
     LOG_WARN("fail to start scheduler thread", K(ret));
   } else if (OB_FAIL(scheduler_task_.start())) {
     LOG_WARN("fail to start ready queue", K(ret));
-  } else if (OB_FAIL(load_and_register_new_jobs())) {
+  } else if (OB_FAIL(check_table_change_(NULL))) {
     LOG_WARN("fail to load all dbms jobs", K(ret));
   }
   LOG_WARN("dbms job master started", K(ret));
@@ -360,7 +412,7 @@ int ObDBMSJobMaster::scheduler_job(ObDBMSJobKey *job_key, bool is_retry)
 
   if (OB_FAIL(ret)) {
   } else if (job_key->is_check_new()) {
-    OZ (load_and_register_new_jobs(job_key));
+    OZ (check_table_change_(job_key));
   } else {
     ObArenaAllocator allocator;
     OZ (job_utils_.get_dbms_job_info(
@@ -393,7 +445,7 @@ int ObDBMSJobMaster::scheduler_job(ObDBMSJobKey *job_key, bool is_retry)
         LOG_WARN("failed to register job to job queue", K(tmp_ret));
       }
     } else {
-      int tmp = alive_jobs_.erase_refactored(job_info.get_job_id());
+      int tmp = alive_jobs_.erase_refactored(job_key->get_job_id());
       if (tmp != OB_SUCCESS) {
         LOG_INFO("failed delete valid job from hash set", K(ret), K(job_info));
       }
@@ -446,45 +498,134 @@ int ObDBMSJobMaster::load_and_register_new_jobs(ObDBMSJobKey *job_key)
   return ret;
 }
 
+int ObDBMSJobMaster::check_table_change_(ObDBMSJobKey *check_key)
+{
+  int ret = OB_SUCCESS;
+  uint64_t target_seq = 0;
+  const int seq_ret =
+      ObInternalTableChangeNotifier::get_instance().get_change_seq(
+          OB_ALL_JOB_TID, target_seq);
+  if (OB_SUCCESS != seq_ret) {
+    // Preserve correctness if lifecycle wiring is broken. Do not advance the
+    // local sequence, so the next control tick retries both detection and read.
+    LOG_WARN("failed to get dbms job table change sequence",
+        K(seq_ret), K(job_table_change_seq_));
+    if (OB_FAIL(load_and_register_new_jobs(check_key))) {
+      LOG_WARN("failed to reconcile dbms jobs after sequence lookup failure", K(ret));
+      const int tmp_ret = schedule_change_check_(check_key);
+      if (OB_SUCCESS != tmp_ret) {
+        LOG_WARN("failed to reschedule dbms job change check", K(tmp_ret));
+      }
+    }
+  } else if (target_seq == job_table_change_seq_) {
+    if (OB_FAIL(schedule_change_check_(check_key))) {
+      LOG_WARN("failed to schedule dbms job change check", K(ret));
+    }
+  } else if (OB_FAIL(load_and_register_new_jobs(check_key))) {
+    LOG_WARN("failed to reconcile changed dbms job table", K(ret), K(target_seq));
+    const int tmp_ret = schedule_change_check_(check_key);
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN("failed to reschedule dbms job change check", K(tmp_ret));
+    }
+  } else {
+    // Use the value captured before the table read. A concurrent commit leaves
+    // a newer value for the next control tick.
+    job_table_change_seq_ = target_seq;
+  }
+  return ret;
+}
+
+int ObDBMSJobMaster::schedule_change_check_(ObDBMSJobKey *check_key)
+{
+  int ret = OB_SUCCESS;
+  const int64_t now = ObTimeUtility::current_time();
+  if (OB_ISNULL(check_key)) {
+    if (OB_FAIL(alloc_job_key(
+            check_key,
+            0,
+            now + MIN_SCHEDULER_INTERVAL,
+            MIN_SCHEDULER_INTERVAL,
+            false,
+            true))) {
+      LOG_WARN("failed to allocate dbms job change check key", K(ret));
+    }
+  } else if (OB_UNLIKELY(!check_key->is_check_new())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid dbms job change check key", K(ret), KPC(check_key));
+  } else {
+    check_key->set_execute_at(now + MIN_SCHEDULER_INTERVAL);
+    check_key->set_delay(MIN_SCHEDULER_INTERVAL);
+  }
+  if (OB_SUCC(ret) && OB_FAIL(scheduler_task_.scheduler(check_key))) {
+    LOG_WARN("failed to schedule dbms job table change check", K(ret));
+  }
+  return ret;
+}
+
 int ObDBMSJobMaster::register_jobs(
   ObIArray<ObDBMSJobInfo> &job_infos, ObDBMSJobKey *job_key)
 {
   int ret = OB_SUCCESS;
   ObDBMSJobInfo job_info;
-
-  uint64_t max_job_id = (NULL != job_key) ? job_key->get_job_id() : 0;
-  int64_t now = ObTimeUtility::current_time();
-  int64_t delay = MIN_SCHEDULER_INTERVAL; // 5s
+  ObSEArray<uint64_t, 16> deleted_job_ids;
 
   for (int64_t i = 0; OB_SUCC(ret) && i < job_infos.count(); i++) {
     job_info = job_infos.at(i);
     if (job_info.valid()) {
+      ObDBMSJobKey *existing_key = NULL;
       int tmp = alive_jobs_.exist_refactored(job_info.get_job_id());
       if (OB_HASH_EXIST == tmp) {
-        // do nothing ...
-      } else if (OB_HASH_NOT_EXIST) {
-        OZ (register_job(job_info));
-        OZ (alive_jobs_.set_refactored(job_info.get_job_id()));
+        if (OB_FAIL(scheduler_task_.remove_job(
+                job_info.get_job_id(), existing_key))) {
+          LOG_WARN("failed to remove existing dbms job before reconciliation",
+              K(ret), K(job_info));
+        }
+      } else if (OB_HASH_NOT_EXIST == tmp) {
+        if (OB_FAIL(alive_jobs_.set_refactored(job_info.get_job_id()))) {
+          LOG_WARN("failed to add dbms job to alive set", K(ret), K(job_info));
+        }
       } else {
+        ret = tmp;
         LOG_ERROR("dbms job master check job exist failed", K(ret), K(job_info));
       }
+      if (OB_SUCC(ret)) {
+        if (job_info.is_broken()) {
+          if (OB_NOT_NULL(existing_key)) {
+            allocator_.free(existing_key);
+          }
+        } else if (OB_FAIL(register_job(job_info, existing_key))) {
+          LOG_WARN("failed to register reconciled dbms job", K(ret), K(job_info));
+        }
+      }
     }
-    max_job_id = max_job_id > job_info.get_job_id() ? max_job_id : job_info.get_job_id();
   }
-  if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(job_key)) {
-    OZ (alloc_job_key(
-        job_key, max_job_id, now + delay, delay, false, true));
-    CK (OB_NOT_NULL(job_key));
-    CK (job_key->is_valid());
-  } else {
-    CK (true);
-    CK (job_key->is_check_new());
-    OX (job_key->set_job_id(max_job_id));
-    OX (job_key->set_execute_at(now + delay));
-    OX (job_key->set_delay(delay));
+
+  for (common::hash::ObHashSet<uint64_t>::iterator iter = alive_jobs_.begin();
+       OB_SUCC(ret) && iter != alive_jobs_.end(); ++iter) {
+    bool found = false;
+    for (int64_t i = 0; !found && i < job_infos.count(); ++i) {
+      found = job_infos.at(i).valid()
+          && iter->first == job_infos.at(i).get_job_id();
+    }
+    if (!found && OB_FAIL(deleted_job_ids.push_back(iter->first))) {
+      LOG_WARN("failed to collect deleted dbms job", K(ret), K(iter->first));
+    }
   }
-  OZ (scheduler_task_.scheduler(job_key));
+  for (int64_t i = 0; OB_SUCC(ret) && i < deleted_job_ids.count(); ++i) {
+    ObDBMSJobKey *deleted_key = NULL;
+    const uint64_t deleted_job_id = deleted_job_ids.at(i);
+    if (OB_FAIL(scheduler_task_.remove_job(deleted_job_id, deleted_key))) {
+      LOG_WARN("failed to remove deleted dbms job", K(ret), K(deleted_job_id));
+    } else if (OB_FAIL(alive_jobs_.erase_refactored(deleted_job_id))) {
+      LOG_WARN("failed to erase deleted dbms job from alive set",
+          K(ret), K(deleted_job_id));
+    } else if (OB_NOT_NULL(deleted_key)) {
+      allocator_.free(deleted_key);
+    }
+  }
+  if (OB_SUCC(ret) && OB_FAIL(schedule_change_check_(job_key))) {
+    LOG_WARN("failed to schedule next dbms job table change check", K(ret));
+  }
 
   return ret;
 }
@@ -502,7 +643,10 @@ int ObDBMSJobMaster::register_job(
   CK (OB_LIKELY(inited_));
   CK (job_info.valid());
   if (OB_FAIL(ret)) {
-  } else if (job_info.is_broken() || job_info.is_running()) {
+  } else if (job_info.is_broken()) {
+    // Broken jobs are re-enabled by table-change reconciliation, not polling.
+    delay = -1;
+  } else if (job_info.is_running()) {
     execute_at = now + MIN_SCHEDULER_INTERVAL;
     delay = MIN_SCHEDULER_INTERVAL; // every 5s check job status
     check_job = true;
@@ -510,17 +654,15 @@ int ObDBMSJobMaster::register_job(
     OZ (job_utils_.calc_execute_at(job_info, execute_at, delay, ignore_nextdate));
     if (OB_FAIL(ret) || delay < 0) {
       ret = OB_SUCCESS;
-      execute_at = now + MIN_SCHEDULER_INTERVAL;
-      delay = MIN_SCHEDULER_INTERVAL;
-      check_job = true;
-    } else if (delay > MIN_SCHEDULER_INTERVAL) {
-      // job may run later, but we need check job update.
-      execute_at = now + MIN_SCHEDULER_INTERVAL;
-      delay = MIN_SCHEDULER_INTERVAL;
-      check_job = true;
+      // No executable deadline. Metadata changes are detected by change_seq.
     }
   }
   if (OB_FAIL(ret)) {
+  } else if (delay < 0) {
+    if (OB_NOT_NULL(job_key)) {
+      allocator_.free(job_key);
+      job_key = NULL;
+    }
   } else if (OB_ISNULL(job_key)) {
     OZ (alloc_job_key(
       job_key,
@@ -539,7 +681,9 @@ int ObDBMSJobMaster::register_job(
     OX (job_key->set_check_job(check_job));
     OX (job_key->set_check_new(false));
   }
-  OZ (scheduler_task_.scheduler(job_key));
+  if (OB_SUCC(ret) && OB_NOT_NULL(job_key)) {
+    OZ (scheduler_task_.scheduler(job_key));
+  }
   if (OB_FAIL(ret) && OB_NOT_NULL(job_key)) {
     allocator_.free(job_key);
   }
