@@ -1235,8 +1235,7 @@ int ObSQLSessionInfo::make_server_cursor(pl::ObPLServerCursorInfo *&cursor,
   OV (OB_NOT_NULL(buf = get_cursor_allocator().alloc(sizeof(ObPLServerCursorInfo))),
       OB_ALLOCATE_MEMORY_FAILED, sizeof(ObPLServerCursorInfo));
   OX (MEMSET(buf, 0, sizeof(ObPLServerCursorInfo)));
-  OV (OB_NOT_NULL(cursor = new (buf) ObPLServerCursorInfo(get_cursor_allocator())));
-  OZ (cursor->init());
+  OV (OB_NOT_NULL(cursor = new (buf) ObPLServerCursorInfo()));
   OX (cursor->set_id(id));
   OZ (add_cursor(cursor));
   // A prepared-statement cursor owns a session-lifetime shell and shorter-lived

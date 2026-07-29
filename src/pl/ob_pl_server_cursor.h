@@ -28,9 +28,8 @@ namespace pl
 class ObPLServerCursorInfo : public ObPLCursorInfo
 {
 public:
-  explicit ObPLServerCursorInfo(common::ObIAllocator &alloc)
+  ObPLServerCursorInfo()
     : ObPLCursorInfo(true),
-      allocator_(alloc),
       stmt_type_(sql::stmt::T_NONE),
       sql_entity_(nullptr),
       ps_sql_(),
@@ -39,15 +38,12 @@ public:
   {}
   ~ObPLServerCursorInfo() override { reset(); }
 
-  int init() { return OB_SUCCESS; }
   int close(sql::ObSQLSessionInfo &session, bool is_reuse = false) override;
   void reset();
   int prepare_entity(sql::ObSQLSessionInfo &session);
   int init_params(int64_t param_count);
 
-  common::ObIAllocator &get_area_allocator() { return sql_entity_->get_arena_allocator(); }
   lib::MemoryContext &get_sql_entity() { return sql_entity_; }
-  const lib::MemoryContext get_sql_entity() const { return sql_entity_; }
 
   const common::ObString &get_ps_sql() const { return ps_sql_; }
   void set_ps_sql(const common::ObString &sql) { ps_sql_ = sql; }
@@ -62,7 +58,6 @@ public:
       common::ColumnsFieldArray &dst_fields);
 
 private:
-  common::ObIAllocator &allocator_;
   sql::stmt::StmtType stmt_type_;
   lib::MemoryContext sql_entity_;
   common::ObString ps_sql_;
