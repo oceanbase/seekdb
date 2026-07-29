@@ -59,79 +59,7 @@ ObSysTaskStat::ObSysTaskStat()
     comment_(),
     is_cancel_(false)
 {
-}
-
-ObSysStatMgrIter::ObSysStatMgrIter()
-  : is_ready_(false),
-    allocator_(ObModIds::OB_SYS_TASK_STATUS),
-    item_arr_(ObModIds::OB_SYS_TASK_STATUS, OB_MALLOC_NORMAL_BLOCK_SIZE),
-    it_()
-{
-}
-
-ObSysStatMgrIter::~ObSysStatMgrIter()
-{
-  reset();
-}
-
-void ObSysStatMgrIter::reset()
-{
-  is_ready_ = false;
-  item_arr_.reset();
-  allocator_.reset();
-}
-
-int ObSysStatMgrIter::push(const ObSysTaskStat &item)
-{
-  int ret = OB_SUCCESS;
-  ObSysTaskStat snapshot = item;
-  if (is_ready_) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "sys task status iterator is already ready", K(ret));
-  } else if (!item.comment_.empty()) {
-    char *comment_buf = static_cast<char *>(allocator_.alloc(item.comment_.length()));
-    if (OB_ISNULL(comment_buf)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      SERVER_LOG(WARN, "failed to allocate sys task comment snapshot", K(ret),
-          "comment_length", item.comment_.length());
-    } else {
-      MEMCPY(comment_buf, item.comment_.ptr(), item.comment_.length());
-      snapshot.comment_.assign_ptr(comment_buf, item.comment_.length());
-    }
-  }
-
-  if (OB_SUCC(ret) && OB_FAIL(item_arr_.push_back(snapshot))) {
-    SERVER_LOG(WARN, "failed to add sys task status snapshot", K(ret));
-  }
-  return ret;
-}
-
-int ObSysStatMgrIter::set_ready()
-{
-  int ret = OB_SUCCESS;
-  if (is_ready_) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "sys task status iterator is already ready", K(ret));
-  } else {
-    is_ready_ = true;
-    it_ = item_arr_.begin();
-  }
-  return ret;
-}
-
-int ObSysStatMgrIter::get_next(ObSysTaskStat &item)
-{
-  int ret = OB_SUCCESS;
-  if (!is_ready_) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "sys task status iterator is not ready", K(ret));
-  } else if (item_arr_.end() == it_) {
-    ret = OB_ITER_END;
-  } else {
-    item = *it_;
-    ++it_;
-  }
-  return ret;
+  comment_[0] = '\0';
 }
 
 ObSysTaskStatMgr::ObSysTaskStatMgr()
@@ -181,23 +109,13 @@ int ObSysTaskStatMgr::alloc_task_node_(
 {
   int ret = OB_SUCCESS;
   node = NULL;
-  const int64_t comment_length = std::min(
-      static_cast<int64_t>(task.comment_.length()),
-      common::OB_MAX_TASK_COMMENT_LENGTH - 1);
   ObMemAttr attr(ObModIds::OB_SYS_TASK_STATUS);
-  void *buf = ob_malloc(sizeof(ObSysTaskStatNode) + comment_length, attr);
+  void *buf = ob_malloc(sizeof(ObSysTaskStatNode), attr);
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     SERVER_LOG(WARN, "failed to allocate sys task status node", K(ret));
   } else {
     node = new(buf) ObSysTaskStatNode(task);
-    if (comment_length > 0) {
-      char *comment_buf = reinterpret_cast<char *>(node + 1);
-      MEMCPY(comment_buf, task.comment_.ptr(), comment_length);
-      node->task_.comment_.assign_ptr(comment_buf, comment_length);
-    } else {
-      node->task_.comment_.reset();
-    }
   }
   return ret;
 }
