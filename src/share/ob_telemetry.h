@@ -28,15 +28,21 @@ static const int64_t TELEMETRY_UUID_STRING_LENGTH = 36;
 
 // Generate an RFC 9562 UUID v8 in the seekdb telemetry application namespace.
 // The machine ID accepts a 32-hex identifier or its canonical UUID form. The
-// base directory must be an absolute, canonical path. The resulting UUID is
-// stable for the same (machine ID, base directory) pair. The derivation is
+// base directory must be an absolute, canonical path. The instance ID accepts
+// the same text forms and represents one database deployment. The resulting
+// UUID is stable for the same (machine ID, base directory, instance ID) tuple.
+// The derivation is
 // HMAC-SHA256(machine-id bytes,
-//             app-id[16] || uint64_be(base-dir byte length) || base-dir bytes),
+//             app-id[16]
+//             || uint64_be(base-dir byte length) || base-dir bytes
+//             || uint64_be(16) || instance-id bytes[16]),
 // truncated to 16 bytes before applying the UUID v8 and RFC variant bits.
 int generate_telemetry_uuid(const char *machine_id,
                             const int64_t machine_id_len,
                             const char *base_dir,
                             const int64_t base_dir_len,
+                            const char *instance_id,
+                            const int64_t instance_id_len,
                             char *uuid,
                             const int64_t uuid_len);
 

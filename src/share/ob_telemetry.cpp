@@ -15,6 +15,7 @@
  */
 
 #include "lib/utility/utility.h"
+#include "lib/file/file_directory_utils.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/string/ob_sql_string.h"
 #include "lib/cpu/ob_cpu_topology.h"
@@ -25,9 +26,12 @@
 #include <curl/curl.h>
 #include <errno.h>
 #include <openssl/hmac.h>
+#include <openssl/rand.h>
 #include <openssl/sha.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #ifdef _WIN32
 #include <direct.h>
@@ -52,11 +56,15 @@ namespace share
 
 static const char *TELEMETRY_URL = "https://openwebapi.oceanbase.com/api/web/oceanbase/report";
 static const char *TELEMETRY_FILE_NAME = "run/telemetry.json";
-// v3 derives content.id from both the stable machine identity and canonical base-dir.
-static const int64_t TELEMETRY_VERSION = 3;
+static const char *TELEMETRY_INSTANCE_ID_ENV_NAME = "SEEKDB_TELEMETRY_INSTANCE_ID";
+static const char *TELEMETRY_INSTANCE_ID_DIR_NAME = "etc";
+static const char *TELEMETRY_INSTANCE_ID_FILE_NAME = "etc/telemetry-instance-id";
+// v4 adds a persistent database instance ID to the machine and base-dir inputs.
+static const int64_t TELEMETRY_VERSION = 4;
 static const int64_t TELEMETRY_MACHINE_ID_BYTE_LENGTH = 16;
 static const int64_t TELEMETRY_MACHINE_ID_HEX_LENGTH = 2 * TELEMETRY_MACHINE_ID_BYTE_LENGTH;
 static const int64_t TELEMETRY_BASE_DIR_LENGTH_FIELD_SIZE = 8;
+static const int64_t TELEMETRY_INSTANCE_ID_LENGTH_FIELD_SIZE = 8;
 
 // A fixed, product-specific application ID
 // (ca528808-4e84-4520-89ce-4845da7d15de). Never change this value: doing so
@@ -86,31 +94,31 @@ static bool is_telemetry_space(const char ch)
   return ' ' == ch || '\t' == ch || '\r' == ch || '\n' == ch;
 }
 
-static int parse_telemetry_machine_id(const char *machine_id,
-                                      const int64_t machine_id_len,
-                                      unsigned char *machine_id_bytes,
-                                      const int64_t machine_id_bytes_len)
+static int parse_telemetry_uuid_text(const char *id,
+                                     const int64_t id_len,
+                                     unsigned char *id_bytes,
+                                     const int64_t id_bytes_len)
 {
   int ret = OB_SUCCESS;
   int64_t hex_pos = 0;
   int64_t begin = 0;
-  int64_t end = machine_id_len;
+  int64_t end = id_len;
   bool all_zero = true;
   bool all_f = true;
-  if (OB_ISNULL(machine_id) || machine_id_len <= 0
-      || OB_ISNULL(machine_id_bytes)
-      || machine_id_bytes_len < TELEMETRY_MACHINE_ID_BYTE_LENGTH) {
+  if (OB_ISNULL(id) || id_len <= 0
+      || OB_ISNULL(id_bytes)
+      || id_bytes_len < TELEMETRY_MACHINE_ID_BYTE_LENGTH) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    MEMSET(machine_id_bytes, 0, machine_id_bytes_len);
-    while (begin < end && is_telemetry_space(machine_id[begin])) {
+    MEMSET(id_bytes, 0, id_bytes_len);
+    while (begin < end && is_telemetry_space(id[begin])) {
       ++begin;
     }
-    while (end > begin && is_telemetry_space(machine_id[end - 1])) {
+    while (end > begin && is_telemetry_space(id[end - 1])) {
       --end;
     }
-    if (begin < end && ('{' == machine_id[begin] || '}' == machine_id[end - 1])) {
-      if ('{' != machine_id[begin] || '}' != machine_id[end - 1]) {
+    if (begin < end && ('{' == id[begin] || '}' == id[end - 1])) {
+      if ('{' != id[begin] || '}' != id[end - 1]) {
         ret = OB_INVALID_ARGUMENT;
       } else {
         ++begin;
@@ -123,7 +131,7 @@ static int parse_telemetry_machine_id(const char *machine_id,
       ret = OB_INVALID_ARGUMENT;
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < text_len; ++i) {
-      const char ch = machine_id[begin + i];
+      const char ch = id[begin + i];
       const bool expect_hyphen = is_canonical_uuid && (8 == i || 13 == i || 18 == i || 23 == i);
       if (expect_hyphen) {
         if ('-' != ch) {
@@ -138,9 +146,9 @@ static int parse_telemetry_machine_id(const char *machine_id,
         } else {
           const int64_t byte_pos = hex_pos / 2;
           if (0 == hex_pos % 2) {
-            machine_id_bytes[byte_pos] = static_cast<unsigned char>(value << 4);
+            id_bytes[byte_pos] = static_cast<unsigned char>(value << 4);
           } else {
-            machine_id_bytes[byte_pos] = static_cast<unsigned char>(machine_id_bytes[byte_pos] | value);
+            id_bytes[byte_pos] = static_cast<unsigned char>(id_bytes[byte_pos] | value);
           }
           all_zero = all_zero && (0 == value);
           all_f = all_f && (0x0f == value);
@@ -290,34 +298,43 @@ int generate_telemetry_uuid(const char *machine_id,
                             const int64_t machine_id_len,
                             const char *base_dir,
                             const int64_t base_dir_len,
+                            const char *instance_id,
+                            const int64_t instance_id_len,
                             char *uuid,
                             const int64_t uuid_len)
 {
   int ret = OB_SUCCESS;
   unsigned int digest_len = 0;
   unsigned char machine_id_bytes[TELEMETRY_MACHINE_ID_BYTE_LENGTH] = {0};
+  unsigned char instance_id_bytes[TELEMETRY_MACHINE_ID_BYTE_LENGTH] = {0};
   char normalized_base_dir[common::OB_MAX_FILE_NAME_LENGTH] = {'\0'};
   int64_t normalized_base_dir_len = 0;
   unsigned char hmac_input[sizeof(TELEMETRY_APP_ID)
                            + TELEMETRY_BASE_DIR_LENGTH_FIELD_SIZE
-                           + common::OB_MAX_FILE_NAME_LENGTH] = {0};
+                           + common::OB_MAX_FILE_NAME_LENGTH
+                           + TELEMETRY_INSTANCE_ID_LENGTH_FIELD_SIZE
+                           + TELEMETRY_MACHINE_ID_BYTE_LENGTH] = {0};
   unsigned char digest[SHA256_DIGEST_LENGTH] = {0};
   unsigned char uuid_bytes[TELEMETRY_MACHINE_ID_BYTE_LENGTH] = {0};
   if (OB_ISNULL(uuid) || uuid_len <= TELEMETRY_UUID_STRING_LENGTH) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     uuid[0] = '\0';
-    if (OB_FAIL(parse_telemetry_machine_id(machine_id, machine_id_len,
-                                           machine_id_bytes, sizeof(machine_id_bytes)))) {
+    if (OB_FAIL(parse_telemetry_uuid_text(machine_id, machine_id_len,
+                                          machine_id_bytes, sizeof(machine_id_bytes)))) {
       LOG_WARN("Invalid machine ID for telemetry UUID", K(ret), K(machine_id_len));
     } else if (OB_FAIL(normalize_telemetry_base_dir(
         base_dir, base_dir_len, normalized_base_dir, sizeof(normalized_base_dir),
         normalized_base_dir_len))) {
       LOG_WARN("Invalid base directory for telemetry UUID", K(ret), K(base_dir_len));
+    } else if (OB_FAIL(parse_telemetry_uuid_text(instance_id, instance_id_len,
+                                                 instance_id_bytes, sizeof(instance_id_bytes)))) {
+      LOG_WARN("Invalid instance ID for telemetry UUID", K(ret), K(instance_id_len));
     } else {
       int64_t input_pos = 0;
       // Freeze the derivation layout as:
-      // app-id[16] || uint64_be(base-dir byte length) || canonical base-dir bytes.
+      // app-id[16] || uint64_be(base-dir byte length) || canonical base-dir bytes
+      // || uint64_be(16) || instance-id bytes[16].
       MEMCPY(hmac_input + input_pos, TELEMETRY_APP_ID, sizeof(TELEMETRY_APP_ID));
       input_pos += sizeof(TELEMETRY_APP_ID);
       const uint64_t path_len = static_cast<uint64_t>(normalized_base_dir_len);
@@ -328,6 +345,14 @@ int generate_telemetry_uuid(const char *machine_id,
       input_pos += TELEMETRY_BASE_DIR_LENGTH_FIELD_SIZE;
       MEMCPY(hmac_input + input_pos, normalized_base_dir, normalized_base_dir_len);
       input_pos += normalized_base_dir_len;
+      const uint64_t instance_len = sizeof(instance_id_bytes);
+      for (int64_t i = 0; i < TELEMETRY_INSTANCE_ID_LENGTH_FIELD_SIZE; ++i) {
+        hmac_input[input_pos + i] = static_cast<unsigned char>(
+            instance_len >> (8 * (TELEMETRY_INSTANCE_ID_LENGTH_FIELD_SIZE - i - 1)));
+      }
+      input_pos += TELEMETRY_INSTANCE_ID_LENGTH_FIELD_SIZE;
+      MEMCPY(hmac_input + input_pos, instance_id_bytes, sizeof(instance_id_bytes));
+      input_pos += sizeof(instance_id_bytes);
 
       if (OB_ISNULL(HMAC(EVP_sha256(),
                          machine_id_bytes, static_cast<int>(sizeof(machine_id_bytes)),
@@ -349,6 +374,7 @@ int generate_telemetry_uuid(const char *machine_id,
     }
   }
   MEMSET(machine_id_bytes, 0, sizeof(machine_id_bytes));
+  MEMSET(instance_id_bytes, 0, sizeof(instance_id_bytes));
   MEMSET(normalized_base_dir, 0, sizeof(normalized_base_dir));
   MEMSET(hmac_input, 0, sizeof(hmac_input));
   MEMSET(digest, 0, sizeof(digest));
@@ -356,17 +382,17 @@ int generate_telemetry_uuid(const char *machine_id,
   return ret;
 }
 
-static int read_telemetry_machine_id_file(const char *file_name,
-                                          char *machine_id,
-                                          const int64_t machine_id_len,
-                                          int64_t &read_len)
+static int read_telemetry_uuid_file(const char *file_name,
+                                    char *id,
+                                    const int64_t id_size,
+                                    int64_t &read_len)
 {
   int ret = OB_SUCCESS;
   char raw_id[128] = {'\0'};
   unsigned char parsed_id[TELEMETRY_MACHINE_ID_BYTE_LENGTH] = {0};
   FILE *fp = nullptr;
   read_len = 0;
-  if (OB_ISNULL(file_name) || OB_ISNULL(machine_id) || machine_id_len <= 1) {
+  if (OB_ISNULL(file_name) || OB_ISNULL(id) || id_size <= TELEMETRY_UUID_STRING_LENGTH) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(fp = fopen(file_name, "r"))) {
     ret = ENOENT == errno ? OB_FILE_NOT_EXIST : OB_IO_ERROR;
@@ -376,19 +402,273 @@ static int read_telemetry_machine_id_file(const char *file_name,
       ret = OB_IO_ERROR;
     } else if (size == sizeof(raw_id) - 1 && 0 == feof(fp)) {
       ret = OB_SIZE_OVERFLOW;
-    } else if (OB_FAIL(parse_telemetry_machine_id(raw_id, size, parsed_id, sizeof(parsed_id)))) {
-      // The caller can continue with the next OS-specific identity source.
-    } else if (machine_id_len <= static_cast<int64_t>(size)) {
-      ret = OB_SIZE_OVERFLOW;
+    } else if (OB_FAIL(parse_telemetry_uuid_text(raw_id, size, parsed_id, sizeof(parsed_id)))) {
+      // Reject an existing but malformed identity instead of silently replacing it.
+    } else if (OB_FAIL(format_telemetry_uuid(parsed_id, id, id_size))) {
     } else {
-      MEMCPY(machine_id, raw_id, size);
-      machine_id[size] = '\0';
-      read_len = size;
+      read_len = TELEMETRY_UUID_STRING_LENGTH;
     }
     fclose(fp);
   }
   MEMSET(raw_id, 0, sizeof(raw_id));
   MEMSET(parsed_id, 0, sizeof(parsed_id));
+  return ret;
+}
+
+static int normalize_telemetry_uuid_text(const char *raw_id,
+                                         const int64_t raw_id_len,
+                                         char *id,
+                                         const int64_t id_size,
+                                         int64_t &id_len)
+{
+  int ret = OB_SUCCESS;
+  unsigned char id_bytes[TELEMETRY_MACHINE_ID_BYTE_LENGTH] = {0};
+  id_len = 0;
+  if (OB_ISNULL(id) || id_size <= TELEMETRY_UUID_STRING_LENGTH) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(parse_telemetry_uuid_text(raw_id, raw_id_len,
+                                               id_bytes, sizeof(id_bytes)))) {
+  } else if (OB_FAIL(format_telemetry_uuid(id_bytes, id, id_size))) {
+  } else {
+    id_len = TELEMETRY_UUID_STRING_LENGTH;
+  }
+  MEMSET(id_bytes, 0, sizeof(id_bytes));
+  return ret;
+}
+
+static int generate_random_telemetry_instance_id(char *instance_id,
+                                                 const int64_t instance_id_size,
+                                                 int64_t &instance_id_len)
+{
+  int ret = OB_SUCCESS;
+  unsigned char uuid_bytes[TELEMETRY_MACHINE_ID_BYTE_LENGTH] = {0};
+  instance_id_len = 0;
+  if (OB_ISNULL(instance_id) || instance_id_size <= TELEMETRY_UUID_STRING_LENGTH) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (1 != RAND_bytes(uuid_bytes, static_cast<int>(sizeof(uuid_bytes)))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Failed to generate random telemetry instance ID", K(ret));
+  } else {
+    uuid_bytes[6] = static_cast<unsigned char>((uuid_bytes[6] & 0x0f) | 0x40); // UUID v4
+    uuid_bytes[8] = static_cast<unsigned char>((uuid_bytes[8] & 0x3f) | 0x80); // RFC variant
+    if (OB_FAIL(format_telemetry_uuid(uuid_bytes, instance_id, instance_id_size))) {
+      LOG_WARN("Failed to format telemetry instance ID", K(ret));
+    } else {
+      instance_id_len = TELEMETRY_UUID_STRING_LENGTH;
+    }
+  }
+  MEMSET(uuid_bytes, 0, sizeof(uuid_bytes));
+  return ret;
+}
+
+static int write_telemetry_instance_id_temp_file(const char *file_name,
+                                                 const char *content,
+                                                 const int64_t content_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(file_name) || OB_ISNULL(content) || content_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+#ifdef _WIN32
+    HANDLE file_handle = CreateFileA(file_name, GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                                     FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (INVALID_HANDLE_VALUE == file_handle) {
+      ret = OB_IO_ERROR;
+      const DWORD win_error = GetLastError();
+      LOG_WARN("Failed to create telemetry instance ID temp file", K(ret), K(win_error), K(file_name));
+    } else {
+      int64_t write_pos = 0;
+      while (OB_SUCC(ret) && write_pos < content_len) {
+        DWORD write_size = 0;
+        const DWORD remain_size = static_cast<DWORD>(content_len - write_pos);
+        if (!WriteFile(file_handle, content + write_pos, remain_size, &write_size, nullptr)
+            || 0 == write_size) {
+          ret = OB_IO_ERROR;
+          const DWORD win_error = GetLastError();
+          LOG_WARN("Failed to write telemetry instance ID temp file", K(ret), K(win_error), K(file_name));
+        } else {
+          write_pos += write_size;
+        }
+      }
+      if (OB_SUCC(ret) && !FlushFileBuffers(file_handle)) {
+        ret = OB_IO_ERROR;
+        const DWORD win_error = GetLastError();
+        LOG_WARN("Failed to flush telemetry instance ID temp file", K(ret), K(win_error), K(file_name));
+      }
+      if (!CloseHandle(file_handle) && OB_SUCC(ret)) {
+        ret = OB_IO_ERROR;
+        const DWORD win_error = GetLastError();
+        LOG_WARN("Failed to close telemetry instance ID temp file", K(ret), K(win_error), K(file_name));
+      }
+    }
+#else
+    int open_flags = O_WRONLY | O_CREAT | O_EXCL;
+#ifdef O_CLOEXEC
+    open_flags |= O_CLOEXEC;
+#endif
+    const int fd = ::open(file_name, open_flags, S_IRUSR | S_IWUSR);
+    if (fd < 0) {
+      ret = OB_IO_ERROR;
+      LOG_WARN("Failed to create telemetry instance ID temp file", K(ret), K(errno), K(file_name));
+    } else {
+      int64_t write_pos = 0;
+      while (OB_SUCC(ret) && write_pos < content_len) {
+        const ssize_t write_size = ::write(fd, content + write_pos,
+                                           static_cast<size_t>(content_len - write_pos));
+        if (write_size < 0 && EINTR == errno) {
+          // Retry an interrupted write.
+        } else if (write_size <= 0) {
+          ret = OB_IO_ERROR;
+          LOG_WARN("Failed to write telemetry instance ID temp file", K(ret), K(errno), K(file_name));
+        } else {
+          write_pos += write_size;
+        }
+      }
+      if (OB_SUCC(ret) && 0 != ::fsync(fd)) {
+        ret = OB_IO_ERROR;
+        LOG_WARN("Failed to sync telemetry instance ID temp file", K(ret), K(errno), K(file_name));
+      }
+      if (0 != ::close(fd) && OB_SUCC(ret)) {
+        ret = OB_IO_ERROR;
+        LOG_WARN("Failed to close telemetry instance ID temp file", K(ret), K(errno), K(file_name));
+      }
+    }
+#endif
+  }
+  return ret;
+}
+
+static void remove_telemetry_instance_id_temp_file(const char *temp_file_name)
+{
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(temp_file_name)) {
+#ifdef _WIN32
+    if (!DeleteFileA(temp_file_name)) {
+      const DWORD win_error = GetLastError();
+      if (ERROR_FILE_NOT_FOUND != win_error) {
+        LOG_WARN("Failed to remove telemetry instance ID temp file", K(win_error), K(temp_file_name));
+      }
+    }
+#else
+    if (0 != ::unlink(temp_file_name)) {
+      const int sys_errno = errno;
+      if (ENOENT != sys_errno) {
+        LOG_WARN("Failed to remove telemetry instance ID temp file", K(sys_errno), K(temp_file_name));
+      }
+    }
+#endif
+  }
+  UNUSED(ret);
+}
+
+static int publish_telemetry_instance_id_file(const char *temp_file_name,
+                                              bool &published)
+{
+  int ret = OB_SUCCESS;
+  published = false;
+  if (OB_ISNULL(temp_file_name)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+#ifdef _WIN32
+    if (MoveFileExA(temp_file_name, TELEMETRY_INSTANCE_ID_FILE_NAME,
+                    MOVEFILE_WRITE_THROUGH)) {
+      published = true;
+    } else {
+      const DWORD win_error = GetLastError();
+      if (ERROR_ALREADY_EXISTS != win_error && ERROR_FILE_EXISTS != win_error) {
+        ret = OB_IO_ERROR;
+        LOG_WARN("Failed to publish telemetry instance ID file", K(ret), K(win_error));
+      }
+    }
+#else
+    if (0 == ::link(temp_file_name, TELEMETRY_INSTANCE_ID_FILE_NAME)) {
+      published = true;
+    } else if (EEXIST != errno) {
+      ret = OB_IO_ERROR;
+      LOG_WARN("Failed to publish telemetry instance ID file", K(ret), K(errno));
+    }
+#endif
+    remove_telemetry_instance_id_temp_file(temp_file_name);
+    // Sync for both the publisher and a concurrent loser. Otherwise the loser
+    // could report the winner's ID before the directory entry is durable.
+    if (OB_SUCC(ret)
+        && OB_FAIL(common::FileDirectoryUtils::fsync_dir(TELEMETRY_INSTANCE_ID_DIR_NAME))) {
+      LOG_WARN("Failed to sync telemetry instance ID directory", K(ret));
+    }
+  }
+  return ret;
+}
+
+static int create_telemetry_instance_id(char *instance_id,
+                                        const int64_t instance_id_size,
+                                        int64_t &instance_id_len)
+{
+  int ret = OB_SUCCESS;
+  int64_t generated_id_len = 0;
+  char generated_id[TELEMETRY_UUID_STRING_LENGTH + 1] = {'\0'};
+  char temp_file_name[common::OB_MAX_FILE_NAME_LENGTH] = {'\0'};
+  char file_content[TELEMETRY_UUID_STRING_LENGTH + 2] = {'\0'};
+  bool published = false;
+  instance_id_len = 0;
+  if (OB_ISNULL(instance_id) || instance_id_size <= TELEMETRY_UUID_STRING_LENGTH) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(generate_random_telemetry_instance_id(
+      generated_id, sizeof(generated_id), generated_id_len))) {
+  } else {
+    const int path_len = snprintf(temp_file_name, sizeof(temp_file_name), "%s.%s.tmp",
+                                  TELEMETRY_INSTANCE_ID_FILE_NAME, generated_id);
+    if (path_len <= 0 || path_len >= static_cast<int>(sizeof(temp_file_name))) {
+      ret = OB_SIZE_OVERFLOW;
+    } else {
+      MEMCPY(file_content, generated_id, generated_id_len);
+      file_content[generated_id_len] = '\n';
+      const int64_t file_content_len = generated_id_len + 1;
+      if (OB_FAIL(write_telemetry_instance_id_temp_file(
+          temp_file_name, file_content, file_content_len))) {
+        remove_telemetry_instance_id_temp_file(temp_file_name);
+      } else if (OB_FAIL(publish_telemetry_instance_id_file(temp_file_name, published))) {
+      } else if (published) {
+        MEMCPY(instance_id, generated_id, generated_id_len + 1);
+        instance_id_len = generated_id_len;
+      } else if (OB_FAIL(read_telemetry_uuid_file(
+          TELEMETRY_INSTANCE_ID_FILE_NAME, instance_id, instance_id_size, instance_id_len))) {
+        LOG_WARN("Failed to read concurrently created telemetry instance ID", K(ret));
+      }
+    }
+  }
+  MEMSET(generated_id, 0, sizeof(generated_id));
+  MEMSET(file_content, 0, sizeof(file_content));
+  return ret;
+}
+
+static int get_telemetry_instance_id(char *instance_id,
+                                     const int64_t instance_id_size,
+                                     int64_t &instance_id_len)
+{
+  int ret = OB_SUCCESS;
+  instance_id_len = 0;
+  const char *configured_id = getenv(TELEMETRY_INSTANCE_ID_ENV_NAME);
+  if (OB_ISNULL(instance_id) || instance_id_size <= TELEMETRY_UUID_STRING_LENGTH) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_NOT_NULL(configured_id)) {
+    const int64_t configured_id_len = static_cast<int64_t>(strlen(configured_id));
+    if (OB_FAIL(normalize_telemetry_uuid_text(configured_id, configured_id_len,
+                                              instance_id, instance_id_size,
+                                              instance_id_len))) {
+      LOG_WARN("Invalid configured telemetry instance ID", K(ret), K(configured_id_len));
+    }
+  } else {
+    ret = read_telemetry_uuid_file(TELEMETRY_INSTANCE_ID_FILE_NAME,
+                                   instance_id, instance_id_size, instance_id_len);
+    if (OB_FILE_NOT_EXIST == ret) {
+      ret = create_telemetry_instance_id(instance_id, instance_id_size, instance_id_len);
+      if (OB_SUCCESS != ret) {
+        LOG_WARN("Failed to create persistent telemetry instance ID", K(ret));
+      }
+    } else if (OB_SUCCESS != ret) {
+      LOG_WARN("Failed to read persistent telemetry instance ID", K(ret));
+    }
+  }
   return ret;
 }
 
@@ -417,7 +697,7 @@ static int get_telemetry_stable_machine_id(char *machine_id,
       raw_id[sizeof(raw_id) - 1] = '\0';
       value_len = strlen(raw_id);
       unsigned char parsed_id[TELEMETRY_MACHINE_ID_BYTE_LENGTH] = {0};
-      if (OB_FAIL(parse_telemetry_machine_id(raw_id, value_len, parsed_id, sizeof(parsed_id)))) {
+      if (OB_FAIL(parse_telemetry_uuid_text(raw_id, value_len, parsed_id, sizeof(parsed_id)))) {
       } else if (machine_id_len <= value_len) {
         ret = OB_SIZE_OVERFLOW;
       } else {
@@ -464,7 +744,7 @@ static int get_telemetry_stable_machine_id(char *machine_id,
     "/var/lib/dbus/machine-id"
   };
   for (int64_t i = 0; i < ARRAYSIZEOF(MACHINE_ID_FILES) && OB_SUCCESS != ret; ++i) {
-    ret = read_telemetry_machine_id_file(MACHINE_ID_FILES[i], machine_id, machine_id_len, value_len);
+    ret = read_telemetry_uuid_file(MACHINE_ID_FILES[i], machine_id, machine_id_len, value_len);
   }
   return ret;
 }
@@ -586,18 +866,25 @@ static int generate_id(char *id, const int64_t id_len)
   int ret = OB_SUCCESS;
   int64_t machine_id_len = 0;
   int64_t base_dir_len = 0;
+  int64_t instance_id_len = 0;
   char machine_id[128] = {'\0'};
   char base_dir[common::OB_MAX_FILE_NAME_LENGTH] = {'\0'};
+  char instance_id[TELEMETRY_UUID_STRING_LENGTH + 1] = {'\0'};
   if (OB_FAIL(get_telemetry_stable_machine_id(machine_id, sizeof(machine_id), machine_id_len))) {
     LOG_WARN("Failed to get a stable machine ID for telemetry", K(ret));
   } else if (OB_FAIL(get_telemetry_base_dir(base_dir, sizeof(base_dir), base_dir_len))) {
     LOG_WARN("Failed to get the canonical base directory for telemetry", K(ret));
+  } else if (OB_FAIL(get_telemetry_instance_id(
+      instance_id, sizeof(instance_id), instance_id_len))) {
+    LOG_WARN("Failed to get the persistent database instance ID for telemetry", K(ret));
   } else if (OB_FAIL(generate_telemetry_uuid(
-      machine_id, machine_id_len, base_dir, base_dir_len, id, id_len))) {
+      machine_id, machine_id_len, base_dir, base_dir_len,
+      instance_id, instance_id_len, id, id_len))) {
     LOG_WARN("Failed to generate stable telemetry UUID", K(ret));
   }
   MEMSET(machine_id, 0, sizeof(machine_id));
   MEMSET(base_dir, 0, sizeof(base_dir));
+  MEMSET(instance_id, 0, sizeof(instance_id));
   return ret;
 }
 
