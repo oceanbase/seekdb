@@ -5,10 +5,6 @@
 connect (sys_conn,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,oceanbase,$OBMYSQL_PORT);
 connection sys_conn;
 
---disable_query_log
-let $major_freeze_duty_time_ori = query_get_value(select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'major_freeze_duty_time' limit 1, value, 1);
-let $enable_major_freeze_ori = query_get_value(select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'enable_major_freeze' limit 1, value, 1);
---enable_query_log
 let $frozen_scn_ori = query_get_value(select frozen_scn from oceanbase.DBA_OB_MAJOR_COMPACTION, frozen_scn, 1);
 alter system set major_freeze_duty_time = 'Disable';
 alter system set enable_major_freeze = true;
@@ -29,8 +25,7 @@ sleep 10;
 
 connection sys_conn;
 --disable_query_log
-eval alter system set major_freeze_duty_time = '$major_freeze_duty_time_ori';
-eval alter system set enable_major_freeze = '$enable_major_freeze_ori';
+alter system set major_freeze_duty_time = 'Disable';
 sleep 3;
 --enable_query_log
 let $cur_frozen_scn = query_get_value(select frozen_scn from oceanbase.DBA_OB_MAJOR_COMPACTION, frozen_scn, 1);
