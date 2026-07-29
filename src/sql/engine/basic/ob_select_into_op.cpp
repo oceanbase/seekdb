@@ -26,7 +26,6 @@
 #include "sql/engine/expr/ob_expr_json_func_helper.h"
 #include "common/udt/ob_collection_type.h"
 #include "share/config/ob_server_config.h"
-#include "share/ob_lob_access_utils.h"
 
 namespace oceanbase
 {

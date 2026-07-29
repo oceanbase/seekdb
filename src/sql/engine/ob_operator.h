@@ -210,6 +210,7 @@ public:
   virtual ~ObDynamicParamSetter() {}
 
   int set_dynamic_param(ObEvalCtx &eval_ctx) const;
+  int set_dynamic_param_vec2(ObEvalCtx &eval_ctx, const sql::ObBitVector &skip_bit) const;
   int set_dynamic_param(ObEvalCtx &eval_ctx, common::ObObjParam *&param) const;
   int update_dynamic_param(ObEvalCtx &eval_ctx, common::ObDatum &datum) const;
 
@@ -234,7 +235,7 @@ public:
   virtual ~ObOpSpec();
 
   DECLARE_VIRTUAL_TO_STRING;
-  const char *op_name() const { return ob_phy_operator_type_str(type_); }
+  const char *op_name() const { return ob_phy_operator_type_str(type_, use_rich_format_); }
 
   // Pre-order recursive create execution components (ObOperator and ObOperatorInput)
   // for current DFO.
@@ -277,7 +278,7 @@ public:
   int32_t get_child_num() const { return get_child_cnt(); }
   ObPhyOperatorType get_type() const { return type_; }
   uint64_t get_id() const { return id_; }
-  const char *get_name() const { return get_phy_op_name(type_); }
+  const char *get_name() const { return get_phy_op_name(type_, use_rich_format_); }
 
   int accept(ObOpSpecVisitor &visitor) const;
   int64_t get_rows() const { return rows_; }
@@ -346,6 +347,7 @@ public:
   int64_t plan_depth_;
   int64_t max_batch_size_;
   bool need_check_output_datum_;
+  bool use_rich_format_;
   ObCompressorType compress_type_;
 
 private:
@@ -452,6 +454,8 @@ public:
   // clear evaluated flag of current datum (ObEvalCtx::batch_idx_) of batch.
   inline void clear_datum_eval_flag();
 
+  void reset_output_format();
+
   // check execution status: timeout, session kill, interrupted ..
   int check_status();
   // check execution status every CHECK_STATUS_TRY_TIMES tries.
@@ -475,6 +479,10 @@ public:
   static int filter_row(ObEvalCtx &eval_ctx,
                         const common::ObIArray<ObExpr *> &exprs,
                         bool &filtered);
+  static int filter_row_vector(ObEvalCtx &eval_ctx,
+                               const common::ObIArray<ObExpr *> &exprs,
+                               const sql::ObBitVector &skip_bit,
+                               bool &filtered);
   ObBatchRows &get_brs() { return brs_; }
   // Drain exchange in data for PX, or producer DFO will be blocked.
   int drain_exch();
@@ -534,6 +542,25 @@ protected:
       } else {
         SQL_ENG_LOG(WARN, "Failed to get_next_row", K(ret));
       }
+      /*
+        SORT (output: cast_expr, order_by: cast_expr)
+          TSC (output: cast_expr, filter: like(cast_expr, pattern_expr), access virtual table)
+      */
+      // output expr may have non-uniform format, and is shared and outputed in parent operator
+      // if parent is a vectorized operator which doesn't enable rich format
+      // cast_to_uniform is called when parent projecting expr and corresponding `datum.ptr_` becomes dangling pointer
+      // thus here we reset format to VEC_INVALID
+      if (OB_SUCC(ret)) {
+        FOREACH_CNT_X(e, spec_.output_, OB_SUCC(ret)) {
+          ObExpr *expr = *e;
+          // only non-uniform format need to set to vec_invalid
+          // if expr is a literal const expr, we can't set format_ to vec_invalid
+          // otherwise another thread using the same plan may read unexpected format
+          if (expr->enable_rich_format() && !is_uniform_format(expr->get_format(eval_ctx_))) {
+            expr->get_vector_header(eval_ctx_).format_ = VEC_INVALID;
+          }
+        }
+      }
     } else {
       brs_.size_ = 1;
       brs_.end_ = false;
@@ -555,6 +582,12 @@ private:
                         const int64_t bsize,
                         bool &all_filtered,
                         bool &all_active);
+  int filter_vector_rows(const ObExprPtrIArray &exprs,
+                         ObBitVector &skip,
+                         const int64_t bsize,
+                         bool &all_filtered,
+                         bool &all_active);
+  int convert_vector_format();
   int check_stack_once();
   int output_expr_decint_datum_len_check();
   int output_expr_decint_datum_len_check_batch();

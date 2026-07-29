@@ -32,11 +32,6 @@
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "storage/ddl/ob_ddl_macro_block_writer.h"
 #include "storage/ddl/ob_lob_macro_block_writer.h"
-#include "sql/engine/vector/ob_continuous_base.h"
-#include "sql/engine/vector/ob_discrete_format.h"
-#include "sql/engine/vector/ob_fixed_length_base.h"
-#include "sql/engine/vector/ob_uniform_base.h"
-#include "sql/engine/vector/type_traits.h"
 
 #include "sql/das/ob_das_utils.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"

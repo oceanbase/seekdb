@@ -9286,8 +9286,7 @@ int ObTableSchema::check_alter_column_in_index(const ObColumnSchemaV2 &src_colum
 }  // namespace oceanbase
 
 // ===== definition moved from share/ob_ddl_common.cpp(new_discrete_vector, discrete-vector template real user; external linkage, share callers resolve it through declarations) =====
-#include "sql/engine/vector/ob_discrete_format.h"
-#include "sql/engine/vector/type_traits.h"
+#include "sql/engine/vector/ob_discrete_vector.h"
 namespace oceanbase
 {
 namespace share

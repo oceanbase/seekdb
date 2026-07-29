@@ -35,17 +35,27 @@ class ObDtlBufEncoder
 {
 public:
   ObDtlBufEncoder()
-  : buffer_(nullptr),
-    msg_writer_(nullptr)
+  : use_row_store_(false),
+    buffer_(nullptr),
+    msg_writer_(nullptr),
+    meta_(nullptr),
+    size_per_buffer_(-1)
   {}
   ~ObDtlBufEncoder() {}
+  void set_use_row_store() {
+    use_row_store_ = true;
+  }
   int switch_writer(const ObDtlMsg &msg);
   int need_new_buffer(
     const ObDtlMsg &msg, ObEvalCtx *eval_ctx, int64_t &need_size, bool &need_new);
   int write_data_msg(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, bool is_eof);
   int set_new_buffer(ObDtlLinkedBuffer *buffer) {
     buffer_ = buffer;
-    return msg_writer_->init(buffer_);
+    int ret = msg_writer_->init(buffer_);
+    if (VECTOR_ROW_WRITER == msg_writer_->type()) {
+      (static_cast<ObDtlVectorRowMsgWriter *> (msg_writer_))->set_row_meta(meta_);
+    }
+    return ret;
   }
   void reset_writer()
   {
@@ -64,12 +74,20 @@ public:
   void write_msg_type(ObDtlLinkedBuffer* buffer)
   { msg_writer_->write_msg_type(buffer); }
   ObDtlLinkedBuffer *get_buffer() { return buffer_; }
+  void set_row_meta(RowMeta &meta) { meta_ = &meta; }
+  void set_size_per_buffer(const int64_t size) { size_per_buffer_ = size; }
 private:
+  int64_t use_row_store_;
   ObDtlLinkedBuffer *buffer_;
   ObDtlControlMsgWriter ctl_msg_writer_;
   ObDtlRowMsgWriter row_msg_writer_;
   ObDtlDatumMsgWriter datum_msg_writer_;
+  ObDtlVectorRowMsgWriter vector_row_msg_writer_;
+  ObDtlVectorMsgWriter vector_msg_writer_;
+  ObDtlVectorFixedMsgWriter vector_fixed_msg_writer_;
   ObDtlChannelEncoder *msg_writer_;
+  RowMeta *meta_;
+  int64_t size_per_buffer_;
 };
 
 class ObDtlChanAgent
@@ -87,6 +105,8 @@ public:
            common::ObIArray<ObDtlChannel *> &channels,
            int64_t timeout_ts);
   int destroy();
+  void set_row_meta(RowMeta &meta) { dtl_buf_encoder_.set_row_meta(meta); }
+  void set_size_per_buffer(const int64_t size) { dtl_buf_encoder_.set_size_per_buffer(size); }
 private:
   int switch_buffer(int64_t need_size);
   int send_last_buffer(ObDtlLinkedBuffer *&last_buffer);

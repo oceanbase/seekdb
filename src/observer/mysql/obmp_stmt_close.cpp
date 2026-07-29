@@ -67,6 +67,7 @@ int ObMPStmtClose::process()
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
+    session->init_use_rich_format();
     LOG_TRACE("close ps stmt or cursor", K_(stmt_id), K(session->get_server_sid()));
     if (is_cursor_close()) {
       if (OB_FAIL(session->close_cursor(stmt_id_))) {

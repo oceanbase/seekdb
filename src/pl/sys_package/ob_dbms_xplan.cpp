@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_dbms_xplan.h"
 #include "observer/ob_inner_sql_connection_pool.h"
-#include "share/ob_lob_access_utils.h"
 #include "sql/ob_spi.h"
 #include "sql/resolver/ddl/ob_explain_stmt.h" // ObExplainDisplayOpt
 

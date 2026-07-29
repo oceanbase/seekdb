@@ -23,7 +23,6 @@
 #include "ob_obj_cast.h"
 #include "common/json_type/ob_json_parse.h"  // ObJsonParser, previously hidden behind the exec_ctx include chain(free within lib)
 #include "share/object/ob_obj_cast_util.h"
-#include "share/ob_lob_access_utils.h"
 #include "share/ob_json_access_utils.h"
 #include "share/object/ob_obj_cast_hooks.h"
 #include "share/object/ob_array_cast.h"

@@ -1901,6 +1901,18 @@ OB_INLINE int ObPlanCache::construct_plan_cache_key(ObSQLSessionInfo &session,
   pc_key.namespace_ = ns;
   OZ (session.get_sys_var_in_pc_str(pc_key.sys_vars_str_));
   pc_key.config_str_ = session.get_config_in_pc_str();
+  // here we use `initial_use_rich_format` instead of `use_rich_format` as part of key
+  // consider scenario of binding outline:
+  // ```
+  //   set _enable_rich_vector_format = true;
+  //   create outline xx on select /*+opt_param('enable_rich_vector_format', 'false')*/ * from t on select * from t;
+  //   select * from t;
+  // ```
+  // rich_format is forced off by hint, thus `use_rich_format() = false`, `initial_use_rich_format() = true`
+  // added plan's key will be `true + other_info`, same as key constructed for getting plan.
+  // if `use_rich_format()` is used as part of key, added plan's key will be `false + other_info`.
+  pc_key.use_rich_vector_format_ = session.initial_use_rich_format();
+  pc_key.config_use_rich_format_ = session.config_use_rich_format();
   OZ (session.get_sys_var_config_hash_val(pc_key.sys_var_config_hash_val_));
   pc_key.enable_mysql_compatible_dates_ = session.enable_mysql_compatible_dates();
   return ret;

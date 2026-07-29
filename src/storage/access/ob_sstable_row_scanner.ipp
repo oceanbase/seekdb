@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_sstable_row_scanner.h"
 #include "ob_aggregated_store.h"
+#include "ob_aggregated_store_vec.h"
 #include "storage/blocksstable/ob_micro_block_row_lock_checker.h"
 
 namespace oceanbase
@@ -157,7 +158,11 @@ inline int ObSSTableRowScanner<PrefetchType>::inner_open(
           nullptr != block_row_store_ &&
           iter_param_->enable_skip_index() &&
           !sstable_->is_multi_version_table()) {
-        prefetcher_.agg_store_ = static_cast<ObAggStoreBase *>(static_cast<ObAggregatedStore *>(block_row_store_));
+        if (iter_param_->use_new_format()) {
+          prefetcher_.agg_store_ = static_cast<ObAggStoreBase *>(static_cast<ObAggregatedStoreVec *>(block_row_store_));
+        } else {
+          prefetcher_.agg_store_ = static_cast<ObAggStoreBase *>(static_cast<ObAggregatedStore *>(block_row_store_));
+        }
       }
       if (nullptr != sample_executor
           && sstable_->is_major_sstable()

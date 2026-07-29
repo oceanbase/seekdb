@@ -162,6 +162,8 @@ public:
   { pd_storage_flag_.set_use_global_iter_pool(false); }
   OB_INLINE void set_tablet_handle(const ObTabletHandle *tablet_handle)
   { tablet_handle_ = tablet_handle; }
+  OB_INLINE bool use_new_format() const
+  { return op_->enable_rich_format_; }
   OB_INLINE int64_t get_io_read_batch_size() const
   { return table_scan_opt_.io_read_batch_size_; }
   OB_INLINE int64_t get_io_read_gap_size() const

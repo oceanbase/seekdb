@@ -103,6 +103,15 @@ ob_set_subtarget(ob_storage blocksstable_encoding1
   blocksstable/encoding/ob_integer_base_diff_decoder.cpp
   blocksstable/encoding/ob_integer_base_diff_encoder.cpp
 )
+# Vector-decode explicit-instantiation sites: must be ALONE (own TU), not unity, so the include
+# guard does not swallow their definition pass and they remain the sole definers of the symbols.
+ob_set_subtarget(ob_storage ALONE
+  blocksstable/encoding/ob_vector_decode_util.cpp
+  blocksstable/encoding/ob_vector_decode_util_b.cpp
+  blocksstable/encoding/ob_vector_decode_util_c.cpp
+  blocksstable/encoding/ob_vector_decode_util_d.cpp
+  blocksstable/encoding/ob_vector_decode_util_e.cpp
+)
 ob_set_subtarget(ob_storage blocksstable_encoding2
   blocksstable/encoding/ob_inter_column_substring_decoder.cpp
   blocksstable/encoding/ob_inter_column_substring_encoder.cpp
@@ -438,6 +447,7 @@ ob_set_subtarget(ob_storage access
   access/ob_block_row_store.cpp
   access/ob_vector_store.cpp
   access/ob_aggregated_store.cpp
+  access/ob_aggregated_store_vec.cpp
   access/ob_scan_merge_loser_tree.cpp
   access/ob_single_merge.cpp
   access/ob_sstable_index_filter.cpp
@@ -465,6 +475,7 @@ ob_set_subtarget(ob_storage access
   access/ob_micro_block_handle_mgr.cpp
   access/ob_aggregate_base.cpp
   access/ob_pushdown_aggregate.cpp
+  access/ob_pushdown_aggregate_vec.cpp
   access/ob_empty_read_bucket.cpp
   access/ob_global_iterator_pool.cpp
   access/ob_where_optimizer.cpp

@@ -77,6 +77,8 @@ if(ANDROID)
     ${ANDROID_ALL_TEST_SOURCES})
   # Extra sources required by specific test macros (rs_unittest, aggr_unittest2)
   target_sources(all_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/sql/engine/test_op_engine.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/sql/engine/ob_fake_table_scan_vec_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/storage/ob_truncate_info_helper.cpp)
   # Rename each file's main() so only all_tests_main.cpp provides the real one
   target_compile_definitions(all_tests PRIVATE main=disabled_main)

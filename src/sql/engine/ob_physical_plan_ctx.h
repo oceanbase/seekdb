@@ -463,6 +463,9 @@ public:
   }
   const common::ObCurTraceId::TraceId &get_last_trace_id() const { return last_trace_id_; }
   common::ObCurTraceId::TraceId &get_last_trace_id() { return last_trace_id_; }
+  void set_rich_format(bool v) { enable_rich_format_ = v; }
+  bool is_rich_format() const { return enable_rich_format_; }
+
   int get_sqludt_meta_by_subschema_id(uint16_t subschema_id, ObSqlUDTMeta &udt_meta) const;
   int get_sqludt_meta_by_subschema_id(uint16_t subschema_id, ObSubSchemaValue &sub_meta) const;
   bool is_subschema_ctx_inited();
@@ -498,7 +501,8 @@ private:
   int reserve_param_frame(const int64_t capacity);
   void get_param_frame_info(int64_t param_idx,
                             ObDatum *&datum,
-                            ObEvalInfo *&eval_info);
+                            ObEvalInfo *&eval_info,
+                            VectorHeader *&vec_header);
   int inner_get_subschema_id_by_type_info(const ObObjMeta &obj_meta,
                                           const ObIArray<common::ObString> &type_info,
                                           uint16_t &subschema_id) const;
@@ -621,6 +625,7 @@ private:
   int64_t plan_start_time_;
   const common::ObIArray<int64_t> *ps_fixed_array_index_;
   ObSubSchemaCtx subschema_ctx_;
+  bool enable_rich_format_;
   // for dependant exprs of generated columns
   common::ObFixedArray<ObSolidifiedVarsContext, common::ObIAllocator> all_local_session_vars_;
   int64_t total_memstore_read_row_count_;

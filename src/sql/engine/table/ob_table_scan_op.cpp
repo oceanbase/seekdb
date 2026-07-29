@@ -18,7 +18,6 @@
 
 
 #include "ob_table_scan_op.h"
-#include "common/json_type/ob_json_bin.h"
 #include "share/rc/ob_module_provider.h"
 #include "sql/das/ob_das_attach_define.h"
 #include "sql/das/ob_das_vec_define.h"
@@ -2729,6 +2728,9 @@ int ObTableScanOp::construct_partition_range(ObArenaAllocator &allocator,
           end_row_key[i] = scan_range.end_key_.get_obj_ptr()[pos];
           sql::ObExpr *expr = part_dep_cols.at(i);
           sql::ObDatum &datum = expr->locate_datum_for_write(eval_ctx_);
+          if (get_spec().use_rich_format_) {
+            expr->init_vector_for_write(eval_ctx_, VEC_UNIFORM, 1);
+          }
           if (OB_FAIL(datum.from_obj(start_row_key[i], expr->obj_datum_map_))) {
             LOG_WARN("convert obj to datum failed", K(ret));
           } else if (is_lob_storage(start_row_key[i].get_type()) &&

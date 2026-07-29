@@ -35,6 +35,8 @@
 #include "lib/ob_define.h"
 #include "lib/lock/ob_futex.h"
 #include "sql/dtl/ob_dtl_interm_result_manager.h"
+#include "sql/dtl/ob_dtl_vectors_buffer.h"
+#include "sql/engine/basic/ob_temp_row_store.h"
 
 namespace oceanbase {
 
@@ -54,7 +56,10 @@ enum DtlWriterType
   CONTROL_WRITER = 0,
   CHUNK_ROW_WRITER = 1,
   CHUNK_DATUM_WRITER = 2,
-  MAX_WRITER = 3
+  VECTOR_WRITER = 3,
+  VECTOR_FIXED_WRITER = 4,
+  VECTOR_ROW_WRITER = 5,
+  MAX_WRITER = 6
 };
 
 static DtlWriterType msg_writer_map[] =
@@ -98,6 +103,9 @@ static DtlWriterType msg_writer_map[] =
   CONTROL_WRITER, // DH_SECOND_STAGE_REPORTING_WF_WHOLE_MSG,
   CONTROL_WRITER, // DH_OPT_STATS_GATHER_PIECE_MSG,
   CONTROL_WRITER, // DH_OPT_STATS_GATHER_WHOLE_MSG,
+  VECTOR_WRITER,  //PX_VECTOR,
+  VECTOR_FIXED_WRITER, //PX_FIXED_VECTOR
+  VECTOR_ROW_WRITER,  //PX_VECTOR_ROW,
   CONTROL_WRITER, // DH_SP_WINFUNC_PX_PIECE_MSG
   CONTROL_WRITER, // DH_SP_WINFUNC_PX_WHOLE_MSG
   CONTROL_WRITER, // DH_RD_WINFUNC_PX_PIECE_MSG
@@ -277,7 +285,8 @@ OB_INLINE int ObDtlDatumMsgWriter::write(
   const ObPxNewRow &px_row = static_cast<const ObPxNewRow&>(msg);
   const ObIArray<ObExpr *> *row = px_row.get_exprs();
   if (nullptr != row) {
-    if (OB_FAIL(block_->append_row(*row, eval_ctx, block_->get_buffer(), 0, nullptr, true))) {
+    if (OB_FAIL(block_->append_row(*row, eval_ctx, block_->get_buffer(), 0, nullptr, true,
+                                   px_row.get_vector_row_idx()))) {
       if (OB_BUF_NOT_ENOUGH != ret) {
         SQL_DTL_LOG(WARN, "failed to add row", K(ret));
       } else {
@@ -291,6 +300,289 @@ OB_INLINE int ObDtlDatumMsgWriter::write(
     write_buffer_->is_eof() = is_eof;
     // Here special processing, if there is no data row, only header bytes, it must be sent, but for the data part if there is no row, then do not send
     write_buffer_->pos() = used();
+  }
+  return ret;
+}
+
+class ObDtlVectorRowMsgWriter : public ObDtlChannelEncoder
+{
+public:
+  ObDtlVectorRowMsgWriter();
+  virtual ~ObDtlVectorRowMsgWriter();
+
+  virtual DtlWriterType type() { return type_; }
+  int init(ObDtlLinkedBuffer *buffer);
+  bool is_inited() const { return nullptr != write_buffer_; }
+  int try_append_row(const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx);
+  int try_append_batch(const common::ObIArray<ObExpr*> &exprs, 
+                       const common::ObIArray<ObIVector *> &vectors,
+                       ObEvalCtx &ctx, const uint16_t selector[],
+                       const int64_t size, uint32_t row_size_arr[],
+                       ObCompactRow **new_rows);
+  void prefetch()
+  {
+    if (nullptr != block_buffer_) {
+      __builtin_prefetch(block_buffer_->head(),
+                               1, // for write
+                               1); // low temporal locality
+    }
+  }
+  void reset();
+
+  int write(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, const bool is_eof);
+  int serialize();
+
+  int need_new_buffer(const ObDtlMsg &msg, ObEvalCtx *ctx, int64_t &need_size, bool &need_new);
+
+  OB_INLINE int64_t used() { return block_buffer_->head_size(); }
+  OB_INLINE int64_t rows() { return block_->cnt_; }
+  OB_INLINE int64_t remain() { return block_buffer_->remain(); }
+  int handle_eof() {
+    int ret = common::OB_SUCCESS;
+    if (nullptr != write_buffer_) {
+      write_buffer_->pos() = used();
+    }
+    return ret;
+  }
+  virtual void write_msg_type(ObDtlLinkedBuffer* buffer)
+  {
+    buffer->msg_type() = ObDtlMsgType::PX_VECTOR_ROW;
+  }
+  OB_INLINE ObTempRowStore::DtlRowBlock *get_block() { return block_; }
+  OB_INLINE ObDtlLinkedBuffer *get_write_buffer() { return write_buffer_; }
+  void set_row_meta(RowMeta *meta) { meta_ = meta; }
+private:
+  DtlWriterType type_;
+  ObDtlLinkedBuffer *write_buffer_;
+  ObTempRowStore::DtlRowBlock *block_;
+  ObTempRowStore::ShrinkBuffer *block_buffer_;
+  RowMeta *meta_;
+  int64_t row_cnt_;
+  int write_ret_;
+};
+
+OB_INLINE int ObDtlVectorRowMsgWriter::try_append_row(const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(meta_)) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_DTL_LOG(WARN, "failed to get meta", K(ret));
+  }
+  ObCompactRow *new_row = nullptr;
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(block_->add_row(*block_buffer_, exprs, *meta_,
+                                     ctx, new_row))) {
+    if (OB_BUF_NOT_ENOUGH != ret) {
+      SQL_DTL_LOG(WARN, "failed to add row", K(ret));
+    } else {
+      write_ret_ = OB_BUF_NOT_ENOUGH;
+    }
+  } else {
+    ++row_cnt_;
+  }
+  write_buffer_->pos() = used();
+  return ret;
+}
+
+OB_INLINE int ObDtlVectorRowMsgWriter::try_append_batch(const common::ObIArray<ObExpr*> &exprs, 
+                                                    const common::ObIArray<ObIVector *> &vectors,
+                                                    ObEvalCtx &ctx, const uint16_t selector[],
+                                                    const int64_t size, uint32_t row_size_arr[],
+                                                    ObCompactRow **new_rows)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(meta_)) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_DTL_LOG(WARN, "failed to get meta", K(ret));
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(ObTempRowStore::RowBlock::calc_rows_size(vectors, *meta_,
+                                                       selector, size, row_size_arr))) {
+    SQL_DTL_LOG(WARN, "failed to calc size", K(ret));
+  } else {
+    int64_t sum_size = 0;
+    for (int64_t i = 0; i < size; ++i) {
+      sum_size += row_size_arr[i];
+    }
+    if (OB_FAIL(block_->add_batch(*block_buffer_, vectors, *meta_, selector,
+                                  size, row_size_arr, sum_size,
+                                  new_rows))) {
+      if (OB_BUF_NOT_ENOUGH != ret) {
+        SQL_DTL_LOG(WARN, "failed to add row", K(ret));
+      } else {
+        write_ret_ = OB_BUF_NOT_ENOUGH;
+      }
+    } else {
+      row_cnt_ += size;
+    }
+    write_buffer_->pos() = used();
+  }
+  return ret;
+}
+
+OB_INLINE int ObDtlVectorRowMsgWriter::write(
+  const ObDtlMsg &msg, ObEvalCtx *eval_ctx, const bool is_eof)
+{
+  int ret = OB_SUCCESS;
+  const ObPxNewRow &px_row = static_cast<const ObPxNewRow&>(msg);
+  const ObIArray<ObExpr *> *row = px_row.get_exprs();
+  if (nullptr != row) {
+    if (OB_FAIL(try_append_row(*row, *eval_ctx))) {
+      if (OB_BUF_NOT_ENOUGH != ret) {
+        SQL_DTL_LOG(WARN, "failed to append row", K(ret));
+      }
+    }
+  } else {
+    write_buffer_->is_eof() = is_eof;
+    write_buffer_->pos() = used();
+  }
+  return ret;
+}
+
+class ObDtlVectorMsgWriter : public ObDtlChannelEncoder
+{
+public:
+  ObDtlVectorMsgWriter();
+  virtual ~ObDtlVectorMsgWriter();
+
+  virtual DtlWriterType type() { return type_; }
+  int init(ObDtlLinkedBuffer *buffer);
+  void reset();
+
+  int write(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, const bool is_eof);
+  int serialize();
+
+  int need_new_buffer(const ObDtlMsg &msg, ObEvalCtx *ctx, int64_t &need_size, bool &need_new);
+
+  OB_INLINE int64_t used() { return block_buffer_->data_size(); }
+  OB_INLINE int64_t rows() { return static_cast<int64_t>(block_->rows()); }
+  OB_INLINE int64_t remain() { return block_buffer_->remain(); }
+  int handle_eof() {
+    int ret = common::OB_SUCCESS;
+    if (nullptr != write_buffer_) {
+      write_buffer_->pos() = used();
+    }
+    return ret;
+  }
+  virtual void write_msg_type(ObDtlLinkedBuffer* buffer)
+  {
+    buffer->msg_type() = ObDtlMsgType::PX_VECTOR;
+  }
+private:
+  DtlWriterType type_;
+  ObDtlLinkedBuffer *write_buffer_;
+  ObDtlVectorsBlock *block_;
+  ObDtlVectorsBuffer* block_buffer_;
+  int write_ret_;
+};
+
+OB_INLINE int ObDtlVectorMsgWriter::write(
+  const ObDtlMsg &msg, ObEvalCtx *eval_ctx, const bool is_eof)
+{
+  int ret = OB_SUCCESS;
+  const ObPxNewRow &px_row = static_cast<const ObPxNewRow&>(msg);
+  const ObIArray<ObExpr *> *row = px_row.get_exprs();
+  if (nullptr != row) {
+    if (OB_FAIL(block_buffer_->append_row(*row, static_cast<int32_t> (eval_ctx->get_batch_idx()), *eval_ctx))) {
+      if (OB_BUF_NOT_ENOUGH != ret) {
+        SQL_DTL_LOG(WARN, "failed to add row", K(ret));
+      } else {
+        write_ret_ = OB_BUF_NOT_ENOUGH;
+        SQL_DTL_LOG(WARN, "to be remove, failed to add row", K(ret), K(used()), K(remain()), K(row->count()));
+      }
+    }
+    write_buffer_->pos() = used();
+  } else {
+    write_buffer_->is_eof() = is_eof;
+    // Here special processing, if there is no data row, only header bytes, it must be sent, but for the data part if there is no row, then do not send
+    write_buffer_->pos() = used();
+  }
+  return ret;
+}
+
+class ObDtlVectorFixedMsgWriter : public ObDtlChannelEncoder
+{
+public:
+  ObDtlVectorFixedMsgWriter();
+  virtual ~ObDtlVectorFixedMsgWriter();
+
+  virtual DtlWriterType type() { return type_; }
+  int init(ObDtlLinkedBuffer *buffer);
+  bool is_inited() const { return nullptr != write_buffer_; }
+  void reset();
+  OB_INLINE int64_t used() { return vector_buffer_.get_mem_used(); }
+  OB_INLINE int64_t rows() { return vector_buffer_.get_row_cnt(); }
+  OB_INLINE int64_t remain() { return vector_buffer_.get_mem_limit() - vector_buffer_.get_row_cnt(); }
+  OB_INLINE char *get_header(int32_t col_idx) { return vector_buffer_.get_data(col_idx); }
+  OB_INLINE int64_t get_row_cnt() const { return vector_buffer_.get_row_cnt(); }
+  OB_INLINE int64_t get_row_limit() const { return vector_buffer_.get_row_limit(); }
+  OB_INLINE int64_t get_fixed_len(int32_t col_idx) const { return vector_buffer_.get_fixed_length(col_idx); }
+  OB_INLINE void update_row_cnt(int64_t row_cnt) { vector_buffer_.update_row_cnt(row_cnt); } 
+  OB_INLINE void set_null(int32_t col_idx, int64_t row_idx) { vector_buffer_.get_nulls(col_idx)->set(row_idx); }
+  int write(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, const bool is_eof);
+  int append_row(const common::ObIArray<ObExpr*> &exprs, const int32_t batch_idx, ObEvalCtx &ctx)
+  { return vector_buffer_.append_row(exprs, batch_idx, ctx); }
+  int append_batch(const common::ObIArray<ObExpr*> &exprs, const ObIArray<ObIVector *> &vectors,
+                   const uint16_t selector[], const int64_t size, ObEvalCtx &ctx)
+  { return vector_buffer_.append_batch(exprs, vectors, selector, size, ctx); }
+  void update_buffer_used() { write_buffer_->pos() = used(); }
+  void update_write_ret() { write_ret_ = OB_BUF_NOT_ENOUGH; }
+  void prefetch()
+  {
+    if (nullptr != write_buffer_) {
+      for (int64_t i = 0; i < vector_buffer_.get_col_cnt(); ++i) {
+        __builtin_prefetch(vector_buffer_.get_data(i),
+                               1, // for write
+                               1); // low temporal locality
+      }
+    }
+  }
+  int serialize();
+
+  int need_new_buffer(const ObDtlMsg &msg, ObEvalCtx *ctx, int64_t &need_size, bool &need_new);
+  int handle_eof() {
+    int ret = common::OB_SUCCESS;
+    if (nullptr != write_buffer_) {
+      write_buffer_->pos() = used();
+    }
+    return ret;
+  }
+  virtual void write_msg_type(ObDtlLinkedBuffer* buffer)
+  {
+    buffer->msg_type() = ObDtlMsgType::PX_VECTOR_FIXED;
+  }
+  void set_size_per_buffer(const int64_t size) { size_per_buffer_ = size; }
+private:
+  DtlWriterType type_;
+  ObDtlLinkedBuffer *write_buffer_;
+  ObDtlVectors vector_buffer_;
+  int write_ret_;
+  int64_t size_per_buffer_;
+};
+
+OB_INLINE int ObDtlVectorFixedMsgWriter::write(
+  const ObDtlMsg &msg, ObEvalCtx *eval_ctx, const bool is_eof)
+{
+  int ret = OB_SUCCESS;
+  const ObPxNewRow &px_row = static_cast<const ObPxNewRow&>(msg);
+  const ObIArray<ObExpr *> *row = px_row.get_exprs();
+  if (nullptr != row) {
+    if (OB_FAIL(vector_buffer_.append_row(*row, static_cast<int32_t> (eval_ctx->get_batch_idx()), *eval_ctx))) {
+      if (OB_BUF_NOT_ENOUGH != ret) {
+        SQL_DTL_LOG(WARN, "failed to add row", K(ret));
+      } else {
+        write_ret_ = OB_BUF_NOT_ENOUGH;
+      }
+    }
+    write_buffer_->pos() = used();
+  } else {
+    if (!vector_buffer_.is_inited() && OB_FAIL(vector_buffer_.init())) {
+      SQL_DTL_LOG(WARN, "failed to init buffer", K(ret));
+    } else {
+      write_buffer_->is_eof() = is_eof;
+      // Here special processing, if there is no data row, only header bytes, it must be sent, but for the data part if there is no row, then do not send
+      write_buffer_->pos() = used();
+    }
   }
   return ret;
 }
@@ -407,7 +699,12 @@ public:
   ObDtlLinkedBuffer *alloc_buf(const int64_t payload_size);
   
   ObDtlDatumMsgWriter &get_datum_writer() { return datum_msg_writer_; }
+  ObDtlVectorRowMsgWriter &get_vector_row_writer() { return vector_row_msg_writer_; }
+  ObDtlVectorMsgWriter &get_vector_msg_writer() { return vector_msg_writer_; }
+  ObDtlVectorFixedMsgWriter &get_vector_fixed_msg_writer() { return vector_fixed_msg_writer_; }
   virtual int push_buffer_batch_info() override;
+  void switch_msg_type(const ObDtlMsg &msg);
+  void set_row_meta(RowMeta &meta) { meta_ = &meta; }
 
   TO_STRING_KV(KP_(id), K_(peer_id));
 protected:
@@ -430,6 +727,7 @@ protected:
   virtual void reset_px_row_iterator() 
   { 
     datum_iter_.reset();
+    row_iter_.reset();
   }
 protected:
   bool is_inited_;
@@ -460,9 +758,13 @@ protected:
   ObDtlControlMsgWriter ctl_msg_writer_;
   ObDtlRowMsgWriter row_msg_writer_;
   ObDtlDatumMsgWriter datum_msg_writer_;
+  ObDtlVectorRowMsgWriter vector_row_msg_writer_;
+  ObDtlVectorMsgWriter vector_msg_writer_;
+  ObDtlVectorFixedMsgWriter vector_fixed_msg_writer_;
   ObDtlChannelEncoder *msg_writer_;
   // row/datum store iterator for interm result iteration.
   ObChunkDatumStore::Iterator datum_iter_;
+  ObTempRowStore::Iterator row_iter_;
 
   ObDtlChannelBlockProc block_proc_;
   static const int64_t MAX_BUFFER_CNT = 2;
@@ -473,6 +775,7 @@ public:
   int64_t send_use_time_;
   int64_t msg_count_;
   dtl::ObDTLIntermResultInfoGuard result_info_guard_;
+  RowMeta *meta_;
 };
 
 OB_INLINE bool ObDtlBasicChannel::is_empty() const

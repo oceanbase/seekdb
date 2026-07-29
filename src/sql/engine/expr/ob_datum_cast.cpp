@@ -22,7 +22,6 @@
 #endif
 #include "share/object/ob_decint_scale_util.h"
 #include "share/object/ob_obj_cast_util.h"
-#include "share/ob_lob_access_utils.h"
 #include "share/ob_json_access_utils.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "share/object/ob_array_cast.h"

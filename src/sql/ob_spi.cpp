@@ -26,6 +26,7 @@
 #include "sql/engine/expr/ob_expr_pl_integer_checker.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "pl/ob_pl_package.h"
+#include "share/schema/ob_trigger_info.h"
 #include "sql/engine/expr/ob_expr_obj_access.h"
 #include "pl/ob_pl_exception_handling.h"
 
@@ -2016,7 +2017,20 @@ int ObSPIService::spi_parse_prepare(common::ObIAllocator &allocator,
     } else if (OB_FAIL(ob_write_string(allocator, ObString(parse_result.no_param_sql_len_, parse_result.no_param_sql_), prepare_result.route_sql_))) {
       LOG_WARN("failed to write string", K(sql), K(ret));
     } else {
+#ifdef __APPLE__
+      // Pass secondary_namespace for trigger packages so that SQL in trigger body
+      // is fully resolved at compile time, catching references to dropped columns
+      // early instead of crashing at runtime. For non-trigger PL, keep using simple
+      // PS protocol (NULL) to allow deferred resolution of dynamic SQL constructs.
+      pl::ObPLBlockNS *ns_for_prepare = NULL;
+      if (OB_NOT_NULL(secondary_namespace)
+          && ObTriggerInfo::is_trigger_package_id(secondary_namespace->get_package_id())) {
+        ns_for_prepare = secondary_namespace;
+      }
+      PLPrepareCtx pl_prepare_ctx(session, ns_for_prepare, false, false, false);
+#else
       PLPrepareCtx pl_prepare_ctx(session, NULL, false, false, false);
+#endif
       SMART_VAR(PLPrepareResult, pl_prepare_result) {
         CK (OB_NOT_NULL(GCTX.sql_engine_));
         OZ (pl_prepare_result.init(session));
@@ -4679,6 +4693,7 @@ int ObSPIService::spi_interface_impl(pl::ObPLExecCtx *ctx, const char *interface
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Invalid context", K(ctx->exec_ctx_), K(ctx->params_), K(ctx->result_));
   } else {
+    ctx->exec_ctx_->get_my_session()->init_use_rich_format();
     ObString name(interface_name);
     PL_C_INTERFACE_t fp = GCTX.pl_engine_->get_interface_service().get_entry(name);
     if (nullptr != fp) {

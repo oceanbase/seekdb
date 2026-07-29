@@ -18,10 +18,12 @@
 
 #include "ob_dfo_mgr.h"
 #include "sql/engine/basic/ob_temp_table_access_op.h"
+#include "sql/engine/basic/ob_temp_table_access_vec_op.h"
 #include "sql/engine/basic/ob_material_op.h"
 #include "sql/engine/join/ob_join_filter_op.h"
 #include "src/sql/engine/px/exchange/ob_px_transmit_op.h"
 #include "sql/engine/px/ob_px_coord_op.h"
+#include "sql/engine/basic/ob_material_vec_op.h"
 #include "sql/engine/basic/ob_select_into_op.h"
 
 using namespace oceanbase::common;
@@ -156,6 +158,16 @@ int ObDfoSchedDepthGenerator::try_set_dfo_block(ObExecContext &exec_ctx, ObDfo &
         LOG_WARN("operator is NULL", K(ret), KP(kit));
       } else {
         ObMaterialOpInput *mat_input = static_cast<ObMaterialOpInput *>(kit->input_);
+        mat_input->set_bypass(!block); // so that this dfo will have a blocked material op
+      }
+    } else if (PHY_VEC_MATERIAL == child->type_) {
+      const ObMaterialVecSpec *mat = static_cast<const ObMaterialVecSpec *>(child);
+      ObOperatorKit *kit = exec_ctx.get_operator_kit(mat->id_);
+      if (OB_ISNULL(kit) || OB_ISNULL(kit->input_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("operator is NULL", K(ret), KP(kit));
+      } else {
+        ObMaterialVecOpInput *mat_input = static_cast<ObMaterialVecOpInput *>(kit->input_);
         mat_input->set_bypass(!block); // so that this dfo will have a blocked material op
       }
     }
@@ -485,6 +497,10 @@ int ObDfoMgr::do_split(ObExecContext &exec_ctx,
   } else if (phy_op->get_type() == PHY_TEMP_TABLE_ACCESS && NULL != parent_dfo) {
     parent_dfo->set_temp_table_scan(true);
     const ObTempTableAccessOpSpec *access = static_cast<const ObTempTableAccessOpSpec*>(phy_op);
+    parent_dfo->set_temp_table_id(access->get_table_id());
+  } else if (phy_op->get_type() == PHY_VEC_TEMP_TABLE_ACCESS && NULL != parent_dfo) {
+    parent_dfo->set_temp_table_scan(true);
+    const ObTempTableAccessVecOpSpec *access = static_cast<const ObTempTableAccessVecOpSpec*>(phy_op);
     parent_dfo->set_temp_table_id(access->get_table_id());
   } else if (IS_PX_GI(phy_op->get_type()) && NULL != parent_dfo) {
     const ObGranuleIteratorSpec *gi_spec =

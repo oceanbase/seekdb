@@ -59,12 +59,15 @@ public:
 
 struct RangePartCmp {
 public:
-  RangePartCmp() : cmp_func_(nullptr), ret_(OB_SUCCESS) {}
+  RangePartCmp() : row_cmp_func_(nullptr), ret_(OB_SUCCESS),
+      part_expr_obj_meta_(), part_array_obj_meta_() {}
   ~RangePartCmp() = default;
   bool operator()(const ObDatum &l, const RangePartition &r);
 
-  ObExprCmpFuncType cmp_func_;
+  sql::RowCmpFunc row_cmp_func_;
   int ret_;
+  common::ObObjMeta part_expr_obj_meta_;
+  common::ObObjMeta part_array_obj_meta_;
 };
 
 struct PartValKey
@@ -131,6 +134,16 @@ class ObExprCalcPartitionBase : public ObFuncExprOperator
 {
 public:
   static const ObObjectID NONE_PARTITION_ID = OB_INVALID_ID;
+  enum OptRouteType {
+    OPT_ROUTE_NONE,
+    OPT_ROUTE_HASH_ONE
+  };
+  enum class PartType {
+    HASH,
+    KEY,
+    RANGE,
+    LIST
+  };
 
   class ObExprCalcPartCtx : public ObExprOperatorCtx
   {
@@ -193,6 +206,12 @@ public:
   static int calc_partition_level_one(const ObExpr &expr,
                                       ObEvalCtx &ctx,
                                       ObDatum &res_datum);
+  static int calc_partition_level_one_vector(const ObExpr &expr, ObEvalCtx &ctx,
+                                             const ObBitVector &skip, const EvalBound &bound);
+  static int fast_calc_partition_level_one_vector(const ObExpr &expr,
+                                                  ObEvalCtx &ctx,
+                                                  const ObBitVector &skip,
+                                                  const EvalBound &bound);
   static int calc_partition_level_two(const ObExpr &expr,
                                       ObEvalCtx &ctx,
                                       ObDatum &res_datum);

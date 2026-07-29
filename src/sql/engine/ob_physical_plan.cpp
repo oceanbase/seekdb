@@ -113,7 +113,6 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     can_set_feedback_info_(true),
     need_switch_to_table_lock_worker_(false),
     data_complement_gen_doc_id_(false),
-    direct_load_need_sort_(false),
     insertup_can_do_gts_opt_(false),
     px_worker_share_plan_enabled_(false)
 {
@@ -199,7 +198,6 @@ void ObPhysicalPlan::reset()
   can_set_feedback_info_.store(true);
   need_switch_to_table_lock_worker_ = false;
   data_complement_gen_doc_id_ = false;
-  direct_load_need_sort_ = false;
   insertup_can_do_gts_opt_ = false;
   px_worker_share_plan_enabled_ = false;
 }
@@ -673,7 +671,6 @@ OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     vars_,
                     px_dop_,
                     has_nested_sql_,
-                    stat_.enable_early_lock_release_,
                     use_pdml_,
                     is_new_engine_,
                     use_temp_table_,

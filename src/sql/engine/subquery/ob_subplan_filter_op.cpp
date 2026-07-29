@@ -112,6 +112,8 @@ int ObSubQueryIterator::get_next_row_vecrorizely()
   if (NULL == iter_brs_) {
     if (OB_FAIL(op_.get_next_batch(max_row_cnt, iter_brs_))) {
       LOG_WARN("get next batch failed", K(ret));
+    } else if (OB_FAIL(cast_vector_format())) {
+      LOG_WARN("failed to cast vector format", K(ret));
     } else if (OB_FAIL(brs_holder_.save(1))) {
       LOG_WARN("backup datumss[0] failed", K(ret));
     }
@@ -134,6 +136,8 @@ int ObSubQueryIterator::get_next_row_vecrorizely()
         brs_holder_.restore();
         if (OB_FAIL(op_.get_next_batch(max_row_cnt, iter_brs_))) {
           LOG_WARN("get next batch failed", K(ret));
+        }  else if (OB_FAIL(cast_vector_format())) {
+          LOG_WARN("failed to cast vector format", K(ret));
         } else {
           batch_row_pos_ = 0;
           if (0 == iter_brs_->size_ && iter_brs_->end_) {
@@ -169,6 +173,23 @@ int ObSubQueryIterator::get_next_row_vecrorizely()
   return ret;
 }
 
+
+int ObSubQueryIterator::cast_vector_format()
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(iter_brs_) || OB_ISNULL(parent_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid nullptr found", K(ret), K(iter_brs_), K(parent_));
+  } else if (parent_->get_spec().use_rich_format_ && op_.get_spec().use_rich_format_) {
+    FOREACH_CNT_X(e, op_.get_spec().output_, OB_SUCC(ret)) {
+      LOG_TRACE("cast to uniform", K(*e));
+      if (OB_FAIL((*e)->cast_to_uniform(iter_brs_->size_, eval_ctx_))) {
+        LOG_WARN("expr evaluate failed", K(ret), KPC(*e), K_(eval_ctx));
+      }
+    }
+  }
+  return ret;
+}
 
 void ObSubQueryIterator::drain_exch()
 {

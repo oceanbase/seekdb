@@ -6163,7 +6163,7 @@ int ObStaticEngineCG::generate_spec(
         }
       }
       if (OB_SUCC(ret) && is_all_subquery_deterministic) {
-        spec.exec_param_idxs_inited_ = true;
+        spec.enable_subquery_result_cache_ = true;
       }
     }
   }

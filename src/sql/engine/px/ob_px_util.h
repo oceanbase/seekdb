@@ -444,7 +444,12 @@ public:
         OB_UNIS_ENCODE(all_frames.at(i));
       }
     }
-    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+    int64_t item_size = 0;
+    if ((all_frames.count() > 0) && all_frames.at(0).use_rich_format_) {
+      item_size = sizeof(ObDatum) + sizeof(ObEvalInfo) + sizeof(VectorHeader);
+    } else {
+      item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+    }
     for (int64_t i = 0; i < all_frames.count() && OB_SUCC(ret); ++i) {
       const ObFrameInfo &frame_info = all_frames.at(i);
       //TODO shengle seri can opt, only serialize: sizeof(ObDatum) + sizeof(ObEvalInfo)
@@ -574,6 +579,17 @@ public:
     } else {
       ctx.set_frames(frames);
       ctx.set_frame_cnt(frame_cnt);
+      // init const vector
+      ObEvalCtx eval_ctx(ctx);
+      const ObIArray<ObExpr> &exprs = expr_frame_info.rt_exprs_;
+      for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
+        const ObExpr &expr = exprs.at(i);
+        if (expr.is_const_expr()
+            && UINT32_MAX != expr.vector_header_off_
+            && T_OP_ROW != expr.type_) {
+          ret = expr.init_vector(eval_ctx, VEC_UNIFORM_CONST, 1/*size*/);
+        }
+      }
     }
     return ret;
   }
@@ -650,7 +666,12 @@ public:
     }
     for (int64_t i = 0; i < all_frames.count() && OB_SUCC(ret); ++i) {
       const ObFrameInfo &frame_info = all_frames.at(i);
-      const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+      int64_t item_size = 0;
+      if (frame_info.use_rich_format_) {
+        item_size = sizeof(ObDatum) + sizeof(ObEvalInfo) + sizeof(VectorHeader);
+      } else {
+        item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+      }
       char *frame_buf = frames[frame_info.frame_idx_];
       for (int64_t j = 0; j < frame_info.expr_cnt_ && OB_SUCC(ret); ++j) {
         ObDatum *expr_datum = reinterpret_cast<ObDatum *>
@@ -744,7 +765,12 @@ public:
     int ret = OB_SUCCESS;
     int64_t len = 0;
     int64_t need_extra_mem_size = 0;
-    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+    int64_t item_size = 0;
+    if ((all_frames.count() > 0) && all_frames.at(0).use_rich_format_) {
+      item_size = sizeof(ObDatum) + sizeof(ObEvalInfo) + sizeof(VectorHeader);
+    } else {
+      item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+    }
     if (SERIALIZE_PLAN_PART) {
       OB_UNIS_ADD_LEN(all_frames.count());
       for (int64_t i = 0; i < all_frames.count() && OB_SUCC(ret); ++i) {

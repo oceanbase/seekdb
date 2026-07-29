@@ -723,6 +723,7 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarEnableStorageCardinalityEstimation)
         + sizeof(ObSysVarLcTimeNames)
         + sizeof(ObSysVarActivateAllRolesOnLogin)
+        + sizeof(ObSysVarEnableRichVectorFormat)
         + sizeof(ObSysVarInnodbStatsPersistent)
         + sizeof(ObSysVarDebug)
         + sizeof(ObSysVarInnodbChangeBufferingDebug)
@@ -2776,6 +2777,15 @@ int ObSysVarFactory::create_all_sys_vars_()
       } else {
         store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_ACTIVATE_ALL_ROLES_ON_LOGIN))] = sys_var_ptr;
         ptr = (void *)((char *)ptr + sizeof(ObSysVarActivateAllRolesOnLogin));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarEnableRichVectorFormat())) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to new ObSysVarEnableRichVectorFormat", K(ret));
+      } else {
+        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR__ENABLE_RICH_VECTOR_FORMAT))] = sys_var_ptr;
+        ptr = (void *)((char *)ptr + sizeof(ObSysVarEnableRichVectorFormat));
       }
     }
     if (OB_SUCC(ret)) {
@@ -8442,6 +8452,10 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
     }
     case share::SYS_VAR_ACTIVATE_ALL_ROLES_ON_LOGIN: {
       ret = create_one_sys_var<ObSysVarActivateAllRolesOnLogin>(allocator_, sys_var_ptr, "ObSysVarActivateAllRolesOnLogin");
+      break;
+    }
+    case share::SYS_VAR__ENABLE_RICH_VECTOR_FORMAT: {
+      ret = create_one_sys_var<ObSysVarEnableRichVectorFormat>(allocator_, sys_var_ptr, "ObSysVarEnableRichVectorFormat");
       break;
     }
     case share::SYS_VAR_INNODB_STATS_PERSISTENT: {

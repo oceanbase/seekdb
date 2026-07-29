@@ -379,7 +379,7 @@ int ObLogExchange::compute_op_ordering()
   return ret;
 }
 
-int ObLogExchange::compute_op_parallel_and_server_info()
+int ObLogExchange::compute_op_parallel_info()
 {
   int ret = OB_SUCCESS;
   ObLogicalOperator* child = NULL;
@@ -387,38 +387,16 @@ int ObLogExchange::compute_op_parallel_and_server_info()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(get_plan()), K(child));
   } else if (is_producer()) {
-    if (OB_FAIL(ObLogicalOperator::compute_op_parallel_and_server_info())) {
+    if (OB_FAIL(ObLogicalOperator::compute_op_parallel_info())) {
       LOG_WARN("failed to compute sharding info for producer exchange", K(ret));
     } else { /*do nothing*/ }
   } else if (is_pq_local()) {
     set_parallel(ObGlobalHint::DEFAULT_PARALLEL);
     set_available_parallel(child->get_available_parallel());
-    set_server_cnt(1);
-    static_cast<ObLogExchange*>(child)->set_in_server_cnt(1);
-    get_server_list().reuse();
-    if (OB_FAIL(get_server_list().push_back(get_plan()->get_optimizer_context().get_local_server_addr()))) {
-      LOG_WARN("failed to push back server list", K(ret));
-    }
   } else {
-    // set_exchange_info not set these info, use child parallel and server info.
-    if (OB_FAIL(ret)) {
-    } else if ((is_pq_hash_dist() && !is_slave_mapping()) || is_pq_random()) {
-      server_list_.reuse();
-      common::ObAddr all_server_list;
-      all_server_list.set_max(); // a special ALL server list indicating hash data distribution
-      if (OB_FAIL(server_list_.push_back(all_server_list))) {
-        LOG_WARN("failed to assign all server list", K(ret));
-      }
-    } else if (get_server_list().empty() && OB_FAIL(get_server_list().assign(child->get_server_list()))) {
-      LOG_WARN("failed to assign server list", K(ret));
-    }
-    if (OB_FAIL(ret)) {
-    } else if (0 == get_server_cnt()) {
-      set_server_cnt(child->get_server_cnt());
-    } else {
-      static_cast<ObLogExchange*>(child)->set_in_server_cnt(get_server_cnt());
-    }
-    if (OB_SUCC(ret) && ObGlobalHint::DEFAULT_PARALLEL > get_parallel()) {
+    // set_exchange_info may leave the consumer DOP unset; inherit the local
+    // worker parallelism from the child in that case.
+    if (ObGlobalHint::DEFAULT_PARALLEL > get_parallel()) {
       if (child->is_single()) {
         set_parallel(child->get_available_parallel());
         set_available_parallel(child->get_available_parallel());
@@ -491,8 +469,7 @@ int ObLogExchange::inner_est_cost(int64_t parallel, double child_card, double &o
     ObExchOutCostInfo est_cost_info(child_card,
                                     child->get_width(),
                                     dist_method_,
-                                    parallel,
-                                    get_in_server_cnt());
+                                    parallel);
     if (OB_FAIL(ObOptEstCost::cost_exchange_out(est_cost_info,
                                                 op_cost,
                                                 opt_ctx))) {
@@ -504,7 +481,6 @@ int ObLogExchange::inner_est_cost(int64_t parallel, double child_card, double &o
                                    child->get_width(),
                                    dist_method_,
                                    parallel,
-                                   get_server_cnt(),
                                    is_local_order_,
                                    sort_keys_);
     if (OB_FAIL(ObOptEstCost::cost_exchange_in(est_cost_info,
@@ -564,7 +540,6 @@ int ObLogExchange::set_exchange_info(const ObExchangeInfo &exch_info)
   null_row_dist_method_ = exch_info.null_row_dist_method_;
   slave_mapping_type_ = exch_info.slave_mapping_type_;
   if (is_producer()) {
-    in_server_cnt_ = exch_info.server_cnt_;
     slice_count_ = exch_info.slice_count_;
     repartition_type_ = exch_info.repartition_type_;
     repartition_ref_table_id_ = exch_info.repartition_ref_table_id_;
@@ -606,8 +581,6 @@ int ObLogExchange::set_exchange_info(const ObExchangeInfo &exch_info)
       LOG_WARN("failed to assign sort keys", K(ret));
     } else if (OB_FAIL(weak_sharding_.assign(exch_info.weak_sharding_))) {
       LOG_WARN("failed to assign weak sharding", K(ret));
-    } else if (OB_FAIL(server_list_.assign(exch_info.server_list_))) {
-      LOG_WARN("failed to assign server list", K(ret));
     } else {
       if (exch_info.is_wf_hybrid_) {
         strong_sharding_ = get_plan()->get_optimizer_context().get_distributed_sharding();
@@ -615,7 +588,6 @@ int ObLogExchange::set_exchange_info(const ObExchangeInfo &exch_info)
         strong_sharding_ = exch_info.strong_sharding_;
       }
       parallel_ = exch_info.parallel_;
-      server_cnt_ = exch_info.server_cnt_;
       is_task_order_ = exch_info.is_task_order_;
       is_merge_sort_ = exch_info.is_merge_sort_;
       is_sort_local_order_ = exch_info.is_sort_local_order_;

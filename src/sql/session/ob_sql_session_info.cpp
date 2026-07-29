@@ -417,6 +417,16 @@ bool ObSQLSessionInfo::is_var_assign_use_das_enabled() const
   return bret;
 }
 
+bool ObSQLSessionInfo::is_nlj_spf_use_rich_format_enabled() const
+{
+  bool bret = false;
+  
+  {
+    bret = GCONF._enable_nlj_spf_use_rich_format;
+  }
+  return bret;
+}
+
 int ObSQLSessionInfo::is_adj_index_cost_enabled(bool &enabled, int64_t &stats_cost_percent) const
 {
   int ret = OB_SUCCESS;

@@ -719,8 +719,14 @@ int ObDASTextRetrievalIter::fill_token_weight()
     LOG_WARN("unexpected null BM25 weight expr", K(ret),
              KPC_(token_weight_expr), KPC(total_doc_cnt_expr));
   } else {
-    const int64_t total_doc_cnt =
-        total_doc_cnt_expr->locate_expr_datum(*ir_rtdef_->eval_ctx_, 0).get_int();
+    int64_t total_doc_cnt = 0;
+    if (total_doc_cnt_expr->enable_rich_format()
+        && is_valid_format(total_doc_cnt_expr->get_format(*ir_rtdef_->eval_ctx_))) {
+      total_doc_cnt = total_doc_cnt_expr->get_vector(*ir_rtdef_->eval_ctx_)->get_int(0);
+    } else {
+      total_doc_cnt =
+          total_doc_cnt_expr->locate_expr_datum(*ir_rtdef_->eval_ctx_, 0).get_int();
+    }
     ObEvalCtx::BatchInfoScopeGuard guard(*ir_rtdef_->eval_ctx_);
     guard.set_batch_idx(0);
     ObDatum &token_weight_datum =

@@ -120,6 +120,7 @@ private:
 
   int get_next_row_from_child();
   int get_next_row_vecrorizely();
+  int cast_vector_format();
   // for das batch spf
   int alloc_das_batch_store();
   // for das batch spf end

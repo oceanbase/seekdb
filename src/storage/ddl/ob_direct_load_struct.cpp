@@ -18,7 +18,6 @@
 
 #include "ob_direct_load_struct.h"
 #include "storage/ddl/ob_ddl_storage_util.h"
-#include "storage/ddl/ob_ddl_vector_utils.h"
 #include "share/rc/ob_module_provider.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "storage/ob_tablet_autoincrement_service.h"
@@ -1320,11 +1319,11 @@ int ObDirectLoadSliceWriter::fill_sstable_slice(
         } else if (OB_UNLIKELY(i >= column_items.count()) || OB_UNLIKELY(!column_items.at(i).is_valid_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("column schema is wrong", K(ret), K(i), K(column_items));
-        } else if (OB_FAIL(ObDDLVectorUtils::reshape_storage_vector(column_items.at(i).col_type_,
-                                                                    column_items.at(i).col_accuracy_,
-                                                                    arena,
-                                                                    vector,
-                                                                    selector))) {
+        } else if (OB_FAIL(ObDASUtils::reshape_vector_value(column_items.at(i).col_type_,
+                                                            column_items.at(i).col_accuracy_,
+                                                            arena,
+                                                            vector,
+                                                            selector))) {
           LOG_WARN("fail to reshape vector value", K(ret));
         }
       }

@@ -3156,6 +3156,19 @@
     "background_cn": "",
     "ref_url": ""
   },
+  "_enable_rich_vector_format": {
+    "id": 10162,
+    "name": "_enable_rich_vector_format",
+    "default_value": "1",
+    "base_value": "1",
+    "data_type": "bool",
+    "info": "whether use rich vector format in vectorized execution engine",
+    "flags": "GLOBAL | SESSION | INFLUENCE_PLAN | NEED_SERIALIZE | INVISIBLE",
+    "publish_version": "430",
+    "info_cn": "在向量化引擎中, 开启/关闭使用多种列格式描述功能",
+    "background_cn": "",
+    "ref_url": ""
+  },
   "innodb_stats_persistent": {
     "id": 10163,
     "name": "innodb_stats_persistent",

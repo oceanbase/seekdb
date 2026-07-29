@@ -751,6 +751,236 @@ int ObDMLService::process_insert_row(const ObInsCtDef &ins_ctdef,
   return ret;
 }
 
+int ObDMLService::process_insert_batch(
+    const ObInsCtDef &ins_ctdef,
+    ObTableModifyOp &dml_op,
+    const bool use_rich_format)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(check_column_type_batch(ins_ctdef, dml_op, use_rich_format))) {
+    LOG_WARN("failed to check column type batch", KR(ret), K(ins_ctdef), K(use_rich_format));
+  } else if (OB_FAIL(check_nested_sql_legality(dml_op.get_exec_ctx(), ins_ctdef.das_ctdef_.index_tid_))) {
+    LOG_WARN("failed to check stmt table", KR(ret), K(ins_ctdef.das_ctdef_.index_tid_));
+  } else if (!ins_ctdef.has_instead_of_trigger_ && OB_FAIL(check_filter_row_batch(ins_ctdef, dml_op))) {
+    LOG_WARN("failed to check filter row batch", KR(ret));
+  }
+  return ret;
+}
+
+int ObDMLService::check_column_type_batch(
+    const ObInsCtDef &ins_ctdef,
+    ObTableModifyOp &dml_op,
+    const bool use_rich_format)
+{
+  int ret = OB_SUCCESS;
+  ObEvalCtx &eval_ctx = dml_op.get_eval_ctx();
+  ObExecContext &exec_ctx = dml_op.get_exec_ctx();
+  ObBatchRows &batch_rows = dml_op.get_brs();
+  const ExprFixedArray &dml_expr_array = ins_ctdef.new_row_;
+  const ObIArray<ColumnContent> &column_infos = ins_ctdef.column_infos_;
+  const int64_t column_offset = ins_ctdef.is_table_without_pk_ ? 1: 0;
+  // todo@lanyi check column_offset for the order by table
+  const int64_t row_num = 0; // no sense
+  ObUserLoggingCtx::Guard logging_ctx_guard(*(exec_ctx.get_user_logging_ctx()));
+  exec_ctx.set_cur_rownum(row_num);
+  CK (dml_expr_array.count() == column_infos.count() + column_offset);
+
+  for (int64_t i = 0; OB_SUCC(ret) && (i < dml_expr_array.count()); ++i) {
+    if (ins_ctdef.is_table_without_pk_ && (0 == i)) {
+      continue; // skip hidden table pk column
+    } else {
+      const ColumnContent &column_info = column_infos.at(i - column_offset);
+      common::ObString column_name = column_info.column_name_;
+      exec_ctx.set_cur_column_name(&column_name);
+      ObExpr *expr = dml_expr_array.at(column_info.projector_index_);
+      if (use_rich_format) {
+        if (OB_FAIL(expr->eval_vector(eval_ctx, batch_rows))) {
+          LOG_WARN("failed to eval vector", KR(ret));
+        }
+      } else {
+        if (OB_FAIL(expr->eval_batch(eval_ctx, *(batch_rows.skip_), batch_rows.size_))) {
+          LOG_WARN("failed to eval batch", KR(ret));
+        }
+      }
+      if (OB_FAIL(ret)) {
+        ret = log_user_error_inner(ret, row_num, column_name, exec_ctx, expr->datum_meta_.type_);
+      } else if (!ins_ctdef.has_instead_of_trigger_) {
+        if (OB_UNLIKELY(expr->obj_meta_.is_geometry())
+            && OB_FAIL(check_geometry_column_batch(ins_ctdef, dml_op, column_info, use_rich_format))) {
+          LOG_WARN("failed to check geometry column batch", KR(ret), K(column_info), K(use_rich_format));
+        } else if (!column_info.is_nullable_) {
+          bool need_check_null = use_rich_format ? expr->get_vector(eval_ctx)->has_null() : true;
+          if (need_check_null && OB_FAIL(check_column_null_batch(
+                                    ins_ctdef, dml_op, column_info, use_rich_format))) {
+            LOG_WARN("failed to check column null batch", KR(ret), K(column_info));
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObDMLService::check_geometry_column_batch(
+    const ObInsCtDef &ins_ctdef,
+    ObTableModifyOp &dml_op,
+    const ColumnContent &column_info,
+    const bool use_rich_format)
+{
+  int ret = OB_SUCCESS;
+  ObEvalCtx &eval_ctx = dml_op.get_eval_ctx();
+  ObBatchRows &batch_rows = dml_op.get_brs();
+  const ExprFixedArray &dml_expr_array = ins_ctdef.new_row_;
+  ObExpr *expr = dml_expr_array.at(column_info.projector_index_);
+  common::ObString column_name = column_info.column_name_;
+  ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx);
+  batch_info_guard.set_batch_size(batch_rows.size_);
+  batch_info_guard.set_batch_idx(0);
+  ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
+  for (int64_t i = 0; OB_SUCC(ret) && (i < batch_rows.size_); ++i) {
+    bool is_skipped = batch_rows.skip_->at(i);
+    batch_info_guard.set_batch_idx(i);
+    if (!is_skipped) {
+      ObDatum gis_datum;
+      ObDatum *ptr_datum = &gis_datum;
+      if (use_rich_format) {
+        ObIVector *vec = expr->get_vector(eval_ctx);
+        if (OB_ISNULL(vec)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected null vec", KR(ret), KP(vec));
+        } else if (vec->is_null(i)) {
+          gis_datum.set_null();
+        } else {
+          const char *payload = nullptr;
+          int32_t len = 0;
+          vec->get_payload(i, payload, len);
+          gis_datum.ptr_ = payload;
+          gis_datum.len_ = len;
+        }
+      } else {
+        ptr_datum = &expr->locate_expr_datum(eval_ctx);
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(check_geometry_type(eval_ctx, dml_expr_array, column_info, tmp_allocator, *ptr_datum))) {
+        LOG_WARN("failed to check geometry type", KR(ret), K(column_info));
+        if (OB_FAIL(check_error_ret_by_row(ins_ctdef, dml_op, ret))) {
+          LOG_WARN("failed to check error ret by row", KR(ret));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        ret = dml_op.err_log_rt_def_.first_err_ret_;
+      }
+    }
+  } // end for
+  return ret;
+}
+
+int ObDMLService::check_column_null_batch(
+    const ObInsCtDef &ins_ctdef,
+    ObTableModifyOp &dml_op,
+    const ColumnContent &column_info,
+    const bool use_rich_format)
+{
+  int ret = OB_SUCCESS;
+  ObSQLSessionInfo *session = nullptr;
+  ObEvalCtx &eval_ctx = dml_op.get_eval_ctx();
+  ObBatchRows &batch_rows = dml_op.get_brs();
+  const ExprFixedArray &dml_expr_array = ins_ctdef.new_row_;
+  ObExpr *expr = dml_expr_array.at(column_info.projector_index_);
+  common::ObString column_name = column_info.column_name_;
+  ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx);
+  batch_info_guard.set_batch_size(batch_rows.size_);
+  batch_info_guard.set_batch_idx(0);
+  if (OB_ISNULL(session = dml_op.get_exec_ctx().get_my_session())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null session", KR(ret), KP(session));
+  } else if (!column_info.is_nullable_) {
+    for (int64_t i = 0; OB_SUCC(ret) && (i < batch_rows.size_); ++i) {
+      bool is_skipped = batch_rows.skip_->at(i);
+      ObDatum *expr_datum = nullptr;
+      batch_info_guard.set_batch_idx(i);
+      if (!is_skipped) {
+        if (use_rich_format) {
+          ObIVector *vec = expr->get_vector(eval_ctx);
+          if (OB_ISNULL(vec)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected null vec", KR(ret), KP(vec));
+          } else if (!vec->is_null(i)) {
+            is_skipped = true;
+          } else {
+            if (OB_FAIL(expr->eval(eval_ctx, expr_datum))) {
+              common::ObString column_name = column_info.column_name_;
+              ret = ObDMLService::log_user_error_inner(ret, 0/*row_num*/, column_name, dml_op.get_exec_ctx(),
+                                                       expr->datum_meta_.type_);
+            } else if (OB_ISNULL(expr_datum)) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("unexpected null expr datum", KR(ret), KP(expr_datum));
+            }
+          }
+        } else {
+          expr_datum = expr->locate_expr_datumvector(eval_ctx).at(i);
+          if (OB_ISNULL(expr_datum)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected null expr datum", KR(ret), KP(expr_datum));
+          } else if (!expr_datum->is_null()) {
+            is_skipped = true;
+          }
+        }
+      }
+
+      if (OB_SUCC(ret)) {
+        if (!is_skipped && OB_FAIL(check_column_null(eval_ctx,
+                                                     dml_expr_array,
+                                                     column_info,
+                                                     *expr_datum,
+                                                     ins_ctdef.das_ctdef_.is_ignore_,
+                                                     ins_ctdef.is_single_value_,
+                                                     session->get_sql_mode()))) {
+          LOG_WARN("failed to check column null", KR(ret));
+          if (OB_FAIL(check_error_ret_by_row(ins_ctdef, dml_op, ret))) {
+            LOG_WARN("failed to check error ret by row", KR(ret));
+          }
+        }
+      }
+      if (OB_SUCC(ret)) {
+        ret = dml_op.err_log_rt_def_.first_err_ret_;
+      }
+    } // end for
+  }
+  return ret;
+}
+
+int ObDMLService::check_filter_row_batch(
+    const ObInsCtDef &ins_ctdef,
+    ObTableModifyOp &dml_op)
+{
+  int ret = OB_SUCCESS;
+  ObEvalCtx &eval_ctx = dml_op.get_eval_ctx();
+  ObBatchRows &batch_rows = dml_op.get_brs();
+  ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx);
+  batch_info_guard.set_batch_size(batch_rows.size_);
+  batch_info_guard.set_batch_idx(0);
+  for (int64_t i = 0; OB_SUCC(ret) && (i < batch_rows.size_); ++i) {
+    bool is_skipped = batch_rows.skip_->at(i);
+    batch_info_guard.set_batch_idx(i);
+    if (!is_skipped) {
+      bool is_filtered = false;
+      if (OB_FAIL(check_filter_row(ins_ctdef, eval_ctx, is_skipped))) {
+        LOG_WARN("failed to check filter row", KR(ret));
+        if (OB_FAIL(check_error_ret_by_row(ins_ctdef, dml_op, ret))) {
+          LOG_WARN("failed to check error ret by row", KR(ret));
+        }
+      } else if (is_skipped) {
+        batch_rows.skip_->set(i);
+      }
+      if (OB_SUCC(ret)) {
+        ret = dml_op.err_log_rt_def_.first_err_ret_;
+      }
+    }
+  } // end for
+  return ret;
+}
+
 int ObDMLService::check_filter_row(
     const ObInsCtDef &ins_ctdef,
     ObEvalCtx &eval_ctx,

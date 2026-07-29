@@ -82,9 +82,10 @@ public:
                  uint32_t frame_idx,
                  uint32_t frame_size,
                  uint32_t zero_init_pos,
-                 uint32_t zero_init_size)
+                 uint32_t zero_init_size,
+                 bool use_rich_format)
       : expr_start_pos_(start_pos),
-        frame_info_(expr_cnt, frame_idx, frame_size, zero_init_pos, zero_init_size)
+        frame_info_(expr_cnt, frame_idx, frame_size, zero_init_pos, zero_init_size, use_rich_format)
     {}
     TO_STRING_KV(K_(expr_start_pos), K_(frame_info));
   public:
@@ -152,7 +153,8 @@ public:
 
   static int generate_partial_expr_frame(const ObPhysicalPlan &plan,
                                          ObExprFrameInfo &partial_expr_frame_info,
-                                         ObIArray<ObRawExpr *> &raw_exprs);
+                                         ObIArray<ObRawExpr *> &raw_exprs,
+                                         const bool use_rich_format);
 
   void set_need_flatten_gen_col(const bool v) { need_flatten_gen_col_ = v; }
 
@@ -165,7 +167,7 @@ public:
                                     bool contain_dynamic_eval_rt_qm_ = false);
 
   static int init_temp_expr_mem_size(ObTempExpr &temp_expr);
-  static int64_t frame_max_offset(const ObExpr &e, const int64_t batch_size);
+  static int64_t frame_max_offset(const ObExpr &e, const int64_t batch_size, const bool use_rich_format);
 
 private:
   static ObExpr *get_rt_expr(const ObRawExpr &raw_expr);
@@ -183,6 +185,8 @@ private:
   // init type_, datum_meta_, obj_meta_, obj_datum_map_, args_, arg_cnt_
   // row_dimension_, op_
   int cg_expr_basic(const common::ObIArray<ObRawExpr *> &raw_exprs);
+
+  int init_attr_expr(ObExpr *rt_expr, ObRawExpr *raw_expr);
 
   // init parent_cnt_, parents_
   int cg_expr_parents(const common::ObIArray<ObRawExpr *> &raw_exprs);
@@ -372,7 +376,12 @@ private:
 
   // total datums size: header + reserved data
   int64_t get_expr_datums_size(const ObExpr &expr) {
-    return get_expr_datums_header_size(expr) + reserve_datums_buf_len(expr);
+    int64_t size = get_expr_datums_header_size(expr) + reserve_datums_buf_len(expr);
+    if (use_rich_format()) {
+      size += get_rich_format_size(expr);
+    }
+
+    return size;
   }
 
   // datums meta/header size vector version.
@@ -390,6 +399,45 @@ private:
     return size;
   }
 
+  static int64_t get_vector_header_size() {
+    return sizeof(VectorHeader);
+  }
+
+  // ptrs
+  inline int64_t get_ptrs_size(const ObExpr &expr) {
+    return get_ptrs_size(expr, batch_size_);
+  }
+
+  static inline int64_t get_ptrs_size(const ObExpr &expr, int64_t batch_size) {
+    return expr.is_fixed_length_data_ ? 0 : sizeof(char *) * get_expr_datums_count(expr, batch_size);
+  }
+
+  // cont dynamic buf header size
+  int64_t cont_dynamic_buf_header_size(const ObExpr &expr) {
+    return expr.is_fixed_length_data_
+           ? 0
+           : sizeof(ObDynReserveBuf);
+  }
+
+  // lens / offset
+  inline int64_t get_offsets_size(const ObExpr &expr) {
+    return get_offsets_size(expr, batch_size_);
+  }
+
+  static inline int64_t get_offsets_size(const ObExpr &expr, int64_t batch_size) {
+    return expr.is_fixed_length_data_ ? 0 : sizeof(uint32_t) * (get_expr_datums_count(expr, batch_size) + 1);
+  }
+
+  int64_t get_rich_format_size(const ObExpr &expr) {
+    int64_t size = 0;
+    size += get_offsets_size(expr);
+    size += get_ptrs_size(expr);
+    size += get_vector_header_size();
+    size += get_expr_bitmap_vector_size(expr); /* null bitmaps*/
+    size += cont_dynamic_buf_header_size(expr);
+
+    return size;
+  }
 
   // datum meta/header size non-vector version.
   // two parts:
@@ -439,6 +487,8 @@ private:
   void get_param_frame_idx(const int64_t idx, int64_t &frame_idx, int64_t &datum_idx);
 
   int divide_probably_local_exprs(common::ObIArray<ObRawExpr *> &exprs);
+
+  bool use_rich_format() const;
 
 private:
   int generate_extra_questionmarks(ObRawExprUniqueSet &flattened_raw_exprs, ObRawExprFactory &factory);

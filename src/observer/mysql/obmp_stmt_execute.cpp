@@ -25,7 +25,6 @@
 #include "rpc/obmysql/packet/ompk_field.h"
 #include "rpc/obmysql/packet/ompk_row.h"
 #include "observer/mysql/obsm_row.h"
-#include "share/ob_lob_access_utils.h"
 #include "share/ob_time_utility2.h"
 #include "sql/ob_sql.h"
 #include "observer/omt/ob_server_runtime.h"
@@ -1635,6 +1634,7 @@ int ObMPStmtExecute::process()
     ObSQLSessionInfo::LockGuard lock_guard(session.get_query_lock());
     SQL_INFO_GUARD(ctx_.cur_sql_, ObString(ctx_.sql_id_));
     session.set_current_trace_id(ObCurTraceId::get_trace_id());
+    session.init_use_rich_format();
     session.get_raw_audit_record().request_memory_used_ = 0;
     observer::ObProcessMallocCallback pmcb(0,
           session.get_raw_audit_record().request_memory_used_);

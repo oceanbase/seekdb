@@ -19011,6 +19011,7 @@ int ObJoinOrder::estimate_fts_index_scan(uint64_t table_id,
       tmp_exec_ctx.set_sql_ctx(OPT_CTX.get_exec_ctx()->get_sql_ctx());
       tmp_plan_ctx.set_timeout_timestamp(plan_ctx->get_timeout_timestamp());
       tmp_plan_ctx.set_cur_time(cur_time, *OPT_CTX.get_session_info());
+      tmp_plan_ctx.set_rich_format(OPT_CTX.get_session_info()->use_rich_format());
       if (FAILEDx(tmp_plan_ctx.get_param_store_for_update().assign(plan_ctx->get_param_store()))) {
         LOG_WARN("failed to assign phy plan ctx");
       } else if (OB_FAIL(tmp_plan_ctx.init_datum_param_store())) {

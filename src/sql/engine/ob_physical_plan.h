@@ -176,7 +176,6 @@ public:
   uint64_t get_signature() const { return signature_; }
   void set_plan_hash_value(uint64_t v) { stat_.plan_hash_value_ = v; }
   int32_t *alloc_projector(int64_t projector_size);
-  int add_table_location(const ObPhyTableLocation &table_location);
   ObExprOperatorFactory &get_expr_op_factory() { return expr_op_factory_; }
   const ObExprOperatorFactory &get_expr_op_factory() const { return expr_op_factory_; }
 
@@ -381,11 +380,6 @@ public:
   const ObSubSchemaCtx &get_subschema_ctx() const { return subschema_ctx_; }
   int set_all_local_session_vars(ObIArray<ObLocalSessionVar> *all_local_session_vars);
   ObIArray<ObLocalSessionVar> & get_all_local_session_vars() { return all_local_session_vars_; }
-  void set_direct_load_need_sort(const bool direct_load_need_sort)
-  {
-    direct_load_need_sort_ = direct_load_need_sort;
-  }
-  bool get_direct_load_need_sort() const { return direct_load_need_sort_; }
   inline bool get_insertup_can_do_gts_opt() const {return insertup_can_do_gts_opt_; }
   inline void set_insertup_can_do_gts_opt(bool v) { insertup_can_do_gts_opt_ = v; }
   void set_is_use_auto_dop(bool use_auto_dop)  { stat_.is_use_auto_dop_ = use_auto_dop; }
@@ -552,7 +546,6 @@ private:
   bool need_switch_to_table_lock_worker_; // for table lock switch worker thread
   bool data_complement_gen_doc_id_;
 private:
-  bool direct_load_need_sort_;
   bool insertup_can_do_gts_opt_;
   int64_t px_worker_share_plan_enabled_;
 };

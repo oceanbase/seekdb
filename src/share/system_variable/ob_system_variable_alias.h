@@ -186,6 +186,7 @@ namespace share
   static const char* const OB_SV__ENABLE_STORAGE_CARDINALITY_ESTIMATION = "_enable_storage_cardinality_estimation";
   static const char* const OB_SV_LC_TIME_NAMES = "lc_time_names";
   static const char* const OB_SV_ACTIVATE_ALL_ROLES_ON_LOGIN = "activate_all_roles_on_login";
+  static const char* const OB_SV__ENABLE_RICH_VECTOR_FORMAT = "_enable_rich_vector_format";
   static const char* const OB_SV_INNODB_STATS_PERSISTENT = "innodb_stats_persistent";
   static const char* const OB_SV_DEBUG = "debug";
   static const char* const OB_SV_INNODB_CHANGE_BUFFERING_DEBUG = "innodb_change_buffering_debug";

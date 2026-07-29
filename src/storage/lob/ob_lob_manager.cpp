@@ -158,7 +158,7 @@ int ObLobManager::fill_lob_header(ObIAllocator &allocator, ObString &data, ObStr
 // Only use for default lob col val.
 int ObLobManager::fill_lob_header(
     ObIAllocator &allocator,
-    blocksstable::ObStorageDatum &datum)
+    ObStorageDatum &datum)
 {
   int ret = OB_SUCCESS;
   if (datum.is_null() || datum.is_nop_value()) {

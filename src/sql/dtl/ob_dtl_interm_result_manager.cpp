@@ -226,12 +226,20 @@ int ObDTLIntermResultManager::get_interm_result_info(ObDTLIntermResultKey &key,
 
 int ObDTLIntermResultManager::create_interm_result_info(ObMemAttr &attr,
     ObDTLIntermResultInfoGuard &result_info_guard,
-    const ObDTLIntermResultMonitorInfo &monitor_info)
+    const ObDTLIntermResultMonitorInfo &monitor_info,
+    ObDTLIntermResultInfo::StoreType store_type)
 {
   int ret = OB_SUCCESS;
   void *result_info_buf = NULL;
   void *store_buf = NULL;
-  const int64_t store_size = sizeof(ObChunkDatumStore);
+  int64_t store_size = 0;
+  if (store_type == ObDTLIntermResultInfo::StoreType::DATUM) {
+    store_size = sizeof(ObChunkDatumStore);
+  } else if (store_type == ObDTLIntermResultInfo::StoreType::ROW) {
+    store_size = sizeof(ObTempRowStore);
+  } else {
+    store_size = sizeof(ObTempColumnStore);
+  }
   if (OB_ISNULL(result_info_buf = ob_malloc(sizeof(ObDTLIntermResultInfo), attr))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc dtl interm result info", K(ret));
@@ -240,7 +248,14 @@ int ObDTLIntermResultManager::create_interm_result_info(ObMemAttr &attr,
     LOG_WARN("fail to alloc store", K(ret));
   } else {
     ObDTLIntermResultInfo *result_info = new(result_info_buf) ObDTLIntermResultInfo();
-    result_info->datum_store_ = new(store_buf) ObChunkDatumStore("DtlIntermRes");
+    if (store_type == ObDTLIntermResultInfo::StoreType::DATUM) {
+      result_info->datum_store_ = new(store_buf) ObChunkDatumStore("DtlIntermRes");
+    } else if (store_type == ObDTLIntermResultInfo::StoreType::ROW) {
+      result_info->block_store_ = new(store_buf) ObTempRowStore();
+    } else {
+      result_info->block_store_ = new(store_buf) ObTempColumnStore();
+    }
+    result_info->store_type_ = store_type;
     result_info->is_read_ = false;
     result_info->trace_id_ = *ObCurTraceId::get_trace_id();
     result_info->monitor_info_ = monitor_info;
@@ -295,6 +310,15 @@ void ObDTLIntermResultManager::free_interm_result_info_store(ObDTLIntermResultIn
       result_info->datum_store_->~ObChunkDatumStore();
       ob_free(result_info->datum_store_);
       result_info->datum_store_ = NULL;
+    } else if (NULL != result_info->block_store_) {
+      result_info->block_store_->reset();
+      if (result_info->store_type_ == ObDTLIntermResultInfo::StoreType::COLUMN) {
+        result_info->get_column_store()->~ObTempColumnStore();
+      } else if (result_info->store_type_ == ObDTLIntermResultInfo::StoreType::ROW) {
+        result_info->get_row_store()->~ObTempRowStore();
+      }
+      ob_free(result_info->block_store_);
+      result_info->block_store_ = NULL;
     }
   }
 }
@@ -511,15 +535,27 @@ int ObDTLIntermResultManager::process_interm_result_inner(ObDtlLinkedBuffer &buf
       ret = OB_SUCCESS;
       ObMemAttr attr("DtlIntermRes", common::ObCtxIds::EXECUTE_CTX_ID);
       interm_res_key.start_time_ = oceanbase::common::ObTimeUtility::current_time();
-      if (buffer.msg_type() != PX_DATUM_ROW) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected buffer msg_type", K(ret), K(buffer.msg_type()));
+      ObDTLIntermResultInfo::StoreType store_type = ObDTLIntermResultInfo::StoreType::INVALID;
+      switch (buffer.msg_type()) {
+        case PX_DATUM_ROW: {
+          store_type = ObDTLIntermResultInfo::StoreType::DATUM;
+          break;
+        }
+        case PX_VECTOR_ROW: {
+          store_type = ObDTLIntermResultInfo::StoreType::ROW;
+          break;
+        }
+        default: {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("Unexpected buffer msg_type", K(ret), K(buffer.msg_type()));
+        }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(create_interm_result_info(attr,
             result_info_guard,
             ObDTLIntermResultMonitorInfo(buffer.get_dfo_key().qc_id_,
-                buffer.get_dfo_id(), buffer.get_sqc_id())))) {
+                buffer.get_dfo_id(), buffer.get_sqc_id()),
+            store_type))) {
         LOG_WARN("fail to create chunk row store", K(ret));
       } else if (OB_FAIL(ObDTLIntermResultManager::init_result_info_store(result_info_guard, buffer))) {
         LOG_WARN("fail to init result info store", K(ret));
@@ -911,9 +947,25 @@ int ObDTLIntermResultManager::init_result_info_store(ObDTLIntermResultInfoGuard 
                                   ObDtlLinkedBuffer &buffer) 
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(result_info_guard.result_info_->datum_store_->init(
-              0, common::ObCtxIds::EXECUTE_CTX_ID, "DtlIntermRes"))) {
-    LOG_WARN("fail to init datum_store", K(ret));
+  if (result_info_guard.result_info_->store_type_ == ObDTLIntermResultInfo::StoreType::DATUM) {
+    if (OB_FAIL(result_info_guard.result_info_->datum_store_->init(
+                0, common::ObCtxIds::EXECUTE_CTX_ID, "DtlIntermRes"))) {
+      LOG_WARN("fail to init datum_store", K(ret));
+    }
+  } else if (result_info_guard.result_info_->store_type_ == ObDTLIntermResultInfo::StoreType::ROW) {
+    ObMemAttr mem_attr("RowDtlIntermRes", ObCtxIds::EXECUTE_CTX_ID);
+    if (OB_FAIL(result_info_guard.result_info_->get_row_store()->init(
+                                                  buffer.get_row_meta(), 
+                                                  buffer.get_max_batch_size(),
+                                                  mem_attr, 
+                                                  0 /*mem_limit*/,
+                                                  true /*enable_dump*/,
+                                                  NONE_COMPRESSOR))) {
+      LOG_WARN("fail to init row_store", K(ret));
+    }
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected store type", K(result_info_guard.result_info_->store_type_), K(ret));
   }
   return ret;
 }

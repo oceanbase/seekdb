@@ -448,7 +448,12 @@ int ObTextRetrievalTokenIter::estimate_token_doc_cnt()
       LOG_WARN("unexpected null total doc cnt expr", K(ret));
     } else {
       int64_t total_doc_cnt = 0;
-      total_doc_cnt = total_doc_cnt_param_expr->locate_expr_datum(*eval_ctx_, 0).get_int();
+      if (total_doc_cnt_param_expr->enable_rich_format()
+          && is_valid_format(total_doc_cnt_param_expr->get_format(*eval_ctx_))) {
+        total_doc_cnt = total_doc_cnt_param_expr->get_vector(*eval_ctx_)->get_int(0);
+      } else {
+        total_doc_cnt = total_doc_cnt_param_expr->locate_expr_datum(*eval_ctx_, 0).get_int();
+      }
       max_token_relevance_ = sql::ObExprBM25::query_token_weight(token_doc_cnt_, total_doc_cnt);
     }
   }

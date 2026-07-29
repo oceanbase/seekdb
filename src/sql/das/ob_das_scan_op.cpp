@@ -168,7 +168,8 @@ int ObDASScanRtDef::init_pd_op(ObExecContext &exec_ctx,
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), K(eval_ctx_));
     } else if (FALSE_IT(p_pd_expr_op_ = new(&pd_expr_op_) ObPushdownOperator(*eval_ctx_,
-                                                                             scan_ctdef.pd_expr_spec_))) {
+                                                                             scan_ctdef.pd_expr_spec_,
+                                                                             enable_rich_format()))) {
     } else if (OB_FAIL(pd_expr_op_.init_pushdown_storage_filter())) {
       LOG_WARN("init pushdown storage filter failed", K(ret));
     } else if (OB_NOT_NULL(scan_ctdef.trans_info_expr_)) {
