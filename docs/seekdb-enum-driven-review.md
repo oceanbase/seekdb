@@ -36,11 +36,11 @@
 
 本轮已对照以下现有记录，不重复提交其中已明确在途删除的功能：
 
-1. [seekdb 配置驱动的功能纵切审查记录](https://www.yuque.com/nijia.nj/yz4do9/phucq2nlwzlh7uq3)
-2. [seekdb Session 变量驱动的功能纵切审查记录](https://www.yuque.com/nijia.nj/yz4do9/kxgqaem9pfcd7hlh)
-3. [seekdb 三方扩展库驱动的功能纵切审查记录](https://www.yuque.com/nijia.nj/yz4do9/dvz78fgdztfvyh3h)
-4. [seekdb 语法文件驱动的功能纵切审查记录](https://www.yuque.com/nijia.nj/yz4do9/bl6kv96wxbt9nesg)
-5. [seekdb 编译宏驱动的功能纵切审查记录](https://www.yuque.com/nijia.nj/yz4do9/krvou9gib0t1bf0t)
+1. seekdb 配置驱动的功能纵切审查记录
+2. seekdb Session 变量驱动的功能纵切审查记录
+3. seekdb 三方扩展库驱动的功能纵切审查记录
+4. seekdb 语法文件驱动的功能纵切审查记录
+5. seekdb 编译宏驱动的功能纵切审查记录
 
 因此，枚举扫描命中的下列大类只计入覆盖面、不再列为新增候选：多 Observer/多副本/迁移/均衡、Tenant/MTL、External Catalog/Location/外表、对象存储归档备份、Tablegroup、OBKV/Table API、Oracle compatibility mode、OLS/XMLTYPE/ROWID、Sequence、Context、CCL、TTL、XA、SQL Event、远程 DAS/DTL/PX、PL Native/Debugger/Result Cache、TDE/KMS、Storage Cache Policy、Merge Engine 旧模式、压缩器兼容别名等。
 
