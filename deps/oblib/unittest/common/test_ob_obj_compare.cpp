@@ -18,6 +18,7 @@
 #include <limits>
 
 #include "common/object/ob_obj_compare.h"
+#include "lib/allocator/page_arena.h"
 
 namespace oceanbase
 {
@@ -76,6 +77,43 @@ void expect_relation(const ObObj &lhs,
   ASSERT_FALSE(need_cast);
   ASSERT_TRUE(result.is_int32());
   EXPECT_EQ(expected_cmp, result.get_int32());
+}
+
+void expect_bidirectional_relation(const ObObj &lhs,
+                                   const ObObj &rhs,
+                                   const ObCompareCtx &cmp_ctx,
+                                   const int expected_cmp)
+{
+  expect_relation(lhs, rhs, cmp_ctx, expected_cmp);
+  expect_relation(rhs, lhs, cmp_ctx, -expected_cmp);
+}
+
+void expect_comparison_error(const ObObj &lhs,
+                             const ObObj &rhs,
+                             const ObCompareCtx &cmp_ctx)
+{
+  for (const ObCmpOp op : BOOL_CMP_OPS) {
+    obj_cmp_func func = nullptr;
+    ASSERT_EQ(OB_SUCCESS,
+              ObObjCmpFuncs::get_cmp_func(lhs.get_type_class(),
+                                          rhs.get_type_class(),
+                                          op,
+                                          func));
+    ASSERT_NE(nullptr, func);
+    EXPECT_EQ(ObObjCmpFuncs::CR_OB_ERROR, func(lhs, rhs, cmp_ctx));
+  }
+
+  ObObj result;
+  bool need_cast = true;
+  EXPECT_EQ(OB_ERR_UNEXPECTED,
+            ObObjCmpFuncs::compare(result, lhs, rhs, cmp_ctx, CO_CMP, need_cast));
+  EXPECT_FALSE(need_cast);
+}
+
+template <typename T>
+void set_decimal_int(ObObj &obj, T &value, const ObScale scale)
+{
+  obj.set_decimal_int(sizeof(T), scale, reinterpret_cast<ObDecimalInt *>(&value));
 }
 
 void expect_ieee_unordered(const ObObj &lhs,
@@ -201,6 +239,149 @@ TEST(TestObObjCompare, fixed_double_uses_declared_scale)
   expect_relation(lhs, near_rhs, cmp_ctx, 0);
   expect_relation(lhs, far_rhs, cmp_ctx, -1);
   expect_relation(far_rhs, lhs, cmp_ctx, 1);
+}
+
+TEST(TestObObjCompare, decimal_int_with_different_scales)
+{
+  const ObCompareCtx cmp_ctx(ObMaxType, CS_TYPE_INVALID, true,
+                             INVALID_TZ_OFF, NULL_FIRST);
+  int32_t scale_2_value = 1234;
+  int64_t equal_scale_4_value = 123400;
+  int64_t greater_scale_4_value = 123401;
+  int32_t negative_scale_2_value = -1234;
+  int64_t smaller_scale_4_value = -123401;
+  ObObj scale_2;
+  ObObj equal_scale_4;
+  ObObj greater_scale_4;
+  ObObj negative_scale_2;
+  ObObj smaller_scale_4;
+  set_decimal_int(scale_2, scale_2_value, 2);
+  set_decimal_int(equal_scale_4, equal_scale_4_value, 4);
+  set_decimal_int(greater_scale_4, greater_scale_4_value, 4);
+  set_decimal_int(negative_scale_2, negative_scale_2_value, 2);
+  set_decimal_int(smaller_scale_4, smaller_scale_4_value, 4);
+
+  expect_bidirectional_relation(scale_2, equal_scale_4, cmp_ctx, 0);
+  expect_bidirectional_relation(scale_2, greater_scale_4, cmp_ctx, -1);
+  expect_bidirectional_relation(negative_scale_2, smaller_scale_4, cmp_ctx, 1);
+}
+
+TEST(TestObObjCompare, decimal_int_with_integer_type_classes)
+{
+  const ObCompareCtx cmp_ctx(ObMaxType, CS_TYPE_INVALID, true,
+                             INVALID_TZ_OFF, NULL_FIRST);
+
+  int32_t equal_int_value = -420;
+  int32_t smaller_int_value = -425;
+  ObObj equal_decimal;
+  ObObj smaller_decimal;
+  ObObj int_value;
+  set_decimal_int(equal_decimal, equal_int_value, 1);
+  set_decimal_int(smaller_decimal, smaller_int_value, 1);
+  int_value.set_int(-42);
+  expect_bidirectional_relation(equal_decimal, int_value, cmp_ctx, 0);
+  expect_bidirectional_relation(smaller_decimal, int_value, cmp_ctx, -1);
+
+  int128_t max_uint_decimal_value = static_cast<int128_t>(
+      std::numeric_limits<uint64_t>::max());
+  int128_t above_max_uint_decimal_value = max_uint_decimal_value + 1;
+  ObObj max_uint_decimal;
+  ObObj above_max_uint_decimal;
+  ObObj max_uint;
+  set_decimal_int(max_uint_decimal, max_uint_decimal_value, 0);
+  set_decimal_int(above_max_uint_decimal, above_max_uint_decimal_value, 0);
+  max_uint.set_uint64(std::numeric_limits<uint64_t>::max());
+  expect_bidirectional_relation(max_uint_decimal, max_uint, cmp_ctx, 0);
+  expect_bidirectional_relation(above_max_uint_decimal, max_uint, cmp_ctx, 1);
+
+  int32_t negative_decimal_value = -1;
+  ObObj negative_decimal;
+  ObObj zero_uint;
+  set_decimal_int(negative_decimal, negative_decimal_value, 0);
+  zero_uint.set_uint64(0);
+  expect_bidirectional_relation(negative_decimal, zero_uint, cmp_ctx, -1);
+
+  int32_t equal_enum_value = 700;
+  int32_t greater_enum_value = 701;
+  ObObj equal_enum_decimal;
+  ObObj greater_enum_decimal;
+  ObObj enum_value;
+  set_decimal_int(equal_enum_decimal, equal_enum_value, 2);
+  set_decimal_int(greater_enum_decimal, greater_enum_value, 2);
+  enum_value.set_enum(7);
+  expect_bidirectional_relation(equal_enum_decimal, enum_value, cmp_ctx, 0);
+  expect_bidirectional_relation(greater_enum_decimal, enum_value, cmp_ctx, 1);
+}
+
+TEST(TestObObjCompare, decimal_int_with_number_type_class)
+{
+  const ObCompareCtx cmp_ctx(ObMaxType, CS_TYPE_INVALID, true,
+                             INVALID_TZ_OFF, NULL_FIRST);
+  ObArenaAllocator allocator;
+  number::ObNumber equal_number;
+  number::ObNumber smaller_number;
+  ASSERT_EQ(OB_SUCCESS, equal_number.from("12.3400", allocator));
+  ASSERT_EQ(OB_SUCCESS, smaller_number.from("-12.35", allocator));
+
+  int32_t positive_decimal_value = 1234;
+  int32_t negative_decimal_value = -1234;
+  ObObj positive_decimal;
+  ObObj negative_decimal;
+  ObObj equal_number_obj;
+  ObObj smaller_number_obj;
+  set_decimal_int(positive_decimal, positive_decimal_value, 2);
+  set_decimal_int(negative_decimal, negative_decimal_value, 2);
+  equal_number_obj.set_number(equal_number);
+  smaller_number_obj.set_number(smaller_number);
+
+  expect_bidirectional_relation(positive_decimal, equal_number_obj, cmp_ctx, 0);
+  expect_bidirectional_relation(negative_decimal, smaller_number_obj, cmp_ctx, 1);
+}
+
+TEST(TestObObjCompare, enumset_inner_with_decimal_int)
+{
+  const ObCompareCtx cmp_ctx(ObMaxType, CS_TYPE_INVALID, true,
+                             INVALID_TZ_OFF, NULL_FIRST);
+  char serialized[128] = {};
+  int64_t pos = 0;
+  ObString display_value("seven");
+  ObEnumSetInnerValue inner_value(7, display_value);
+  ASSERT_EQ(OB_SUCCESS,
+            inner_value.serialize(serialized, sizeof(serialized), pos));
+
+  ObObj enum_inner;
+  enum_inner.set_enum_inner(serialized,
+                            static_cast<ObString::obstr_size_t>(pos));
+  int32_t equal_decimal_value = 700;
+  int32_t greater_decimal_value = 701;
+  ObObj equal_decimal;
+  ObObj greater_decimal;
+  set_decimal_int(equal_decimal, equal_decimal_value, 2);
+  set_decimal_int(greater_decimal, greater_decimal_value, 2);
+
+  expect_relation(enum_inner, equal_decimal, cmp_ctx, 0);
+  expect_relation(enum_inner, greater_decimal, cmp_ctx, -1);
+}
+
+TEST(TestObObjCompare, decimal_int_comparison_errors)
+{
+  const ObCompareCtx cmp_ctx(ObMaxType, CS_TYPE_INVALID, true,
+                             INVALID_TZ_OFF, NULL_FIRST);
+  int64_t decimal_value = 42;
+  ObObj invalid_decimal;
+  invalid_decimal.set_decimal_int(
+      3, 0, reinterpret_cast<ObDecimalInt *>(&decimal_value));
+  ObObj int_value;
+  int_value.set_int(42);
+  expect_comparison_error(invalid_decimal, int_value, cmp_ctx);
+  expect_comparison_error(int_value, invalid_decimal, cmp_ctx);
+
+  const char malformed[] = "";
+  ObObj malformed_enum_inner;
+  malformed_enum_inner.set_enum_inner(malformed, 0);
+  ObObj valid_decimal;
+  set_decimal_int(valid_decimal, decimal_value, 0);
+  expect_comparison_error(malformed_enum_inner, valid_decimal, cmp_ctx);
 }
 
 TEST(TestObObjCompare, string_collations_and_trailing_spaces)
