@@ -183,6 +183,7 @@ ob_set_subtarget(ob_share common_mixed
   storage/ob_admin_job_table_storage.cpp
   longops_mgr/ob_i_longops.cpp
   longops_mgr/ob_longops_mgr.cpp
+  ob_module_data_arg.cpp
 )
 
 ob_set_subtarget(ob_share tablet
@@ -272,6 +273,7 @@ ob_set_subtarget(ob_share schema
 
 
 ob_set_subtarget(ob_share io
+  io/ob_backup_storage_info.cpp
   io/ob_io_define.cpp
   io/io_schedule/ob_io_schedule_v2.cpp
   io/ob_io_struct.cpp
@@ -303,6 +305,13 @@ ob_set_subtarget(ob_share text_analysis
 
 ob_set_subtarget(ob_share domain_id
 )
+
+if (SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
+  ob_set_subtarget(ob_share plugin
+    plugin/ob_plugin_loader.cpp
+    plugin/ob_plugin_registry.cpp
+  )
+endif()
 
 ob_set_subtarget(ob_share semistruct
   semistruct/ob_sub_column_path.cpp
@@ -409,6 +418,9 @@ ob_add_new_object_target(ob_share_extra ob_share_extra)
 target_compile_options(ob_share PRIVATE)
 #target_compile_options(ob_share PRIVATE -Wshorten-64-to-32)
 target_link_libraries(ob_share PUBLIC ob_base)
+if (SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
+  target_link_libraries(ob_share PUBLIC seekdb_plugin_sdk)
+endif()
 target_compile_options(ob_share_extra PRIVATE)
 target_link_libraries(ob_share_extra PUBLIC ob_base_without_pass)
 

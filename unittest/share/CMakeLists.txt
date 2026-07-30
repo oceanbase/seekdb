@@ -26,6 +26,19 @@ storage_unittest(test_ob_occam_thread_pool)
 ob_unittest(test_ob_future)
 ob_unittest(test_ob_occam_time_guard)
 ob_unittest(test_version_parser)
+if (SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
+  ob_unittest(test_plugin_registry)
+  ob_unittest(test_plugin_loader)
+  add_dependencies(test_plugin_loader
+    seekdb_reference_plugin seekdb_reference_blocked_plugin
+    seekdb_reference_stop_blocked_plugin)
+  target_link_libraries(test_plugin_loader PRIVATE seekdb_plugin_sdk)
+  target_compile_definitions(test_plugin_loader PRIVATE
+    SEEKDB_TEST_PLUGIN_DIR="$<TARGET_FILE_DIR:seekdb_reference_plugin>"
+    SEEKDB_TEST_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_plugin>"
+    SEEKDB_TEST_BLOCKED_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_blocked_plugin>"
+    SEEKDB_TEST_STOP_BLOCKED_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_stop_blocked_plugin>")
+endif()
 ob_unittest(test_standby_source_util)
 ob_unittest(test_scn)
 ob_unittest(test_log_allocator)

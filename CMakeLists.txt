@@ -9,6 +9,15 @@ project("OceanBase"
   HOMEPAGE_URL "https://www.oceanbase.ai"
   LANGUAGES CXX C ASM)
 
+include(cmake/Plugin.cmake)
+
+# R0 is a development preview until the catalog activation/recovery path and
+# the GIS SPI migration pass the RFC production gates.  Keeping it off by
+# default makes the incomplete public loader mechanically unreachable from the
+# normal lightweight server build.
+option(SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS
+  "Build the experimental in-process plugin runtime" OFF)
+
 if(WIN32)
   find_program(LLVM_LIB_PROGRAM llvm-lib)
   if(LLVM_LIB_PROGRAM)
@@ -75,6 +84,9 @@ endif()
 
 add_subdirectory(deps/oblib)
 add_subdirectory(src)
+# The SDK reference module is visible as an explicit target but excluded from
+# normal server/package builds.
+add_subdirectory(plugins EXCLUDE_FROM_ALL)
 
 include(CMakeDependentOption)
 # OB_BUILD_PACKAGE => include tools and build them.
@@ -171,6 +183,16 @@ add_dependencies(oblib_layer_check module_layer_check)
 add_custom_target(oblib_layer_check_strict)
 add_dependencies(oblib_layer_check_strict module_layer_check_strict)
 
+# Plugin code is an ABI consumer, never a core source dependency.  Keep this
+# check separate from the historical module DAG so future plugins share one
+# enforceable boundary from their first commit.
+add_custom_target(plugin_boundary_check
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/cmake/plugin_boundary_check.py
+          ${CMAKE_SOURCE_DIR}
+  COMMENT "Checking seekdb core/SPI/plugin dependency boundary"
+  VERBATIM)
+
 # Wiring: hang the layer check as a seekdb dependency. It has no deps of its own, so it runs in parallel with
 # compilation from the start (2s text scan, zero extra wall-clock); an upward edge fails make seekdb (fail-closed).
 add_dependencies(seekdb module_layer_check)
+add_dependencies(seekdb plugin_boundary_check)
