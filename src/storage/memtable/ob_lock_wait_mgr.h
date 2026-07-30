@@ -28,6 +28,7 @@
 #include "rpc/ob_lock_wait_node.h"
 #include "rpc/ob_request.h"
 #include "storage/deadlock/ob_deadlock_detector_common_define.h"
+#include "share/ob_background_task_executor.h"
 #include "share/ob_thread_pool.h"
 #include "sql/session/ob_sql_session_mgr.h"
 #include "storage/memtable/ob_memtable_context.h"
@@ -180,7 +181,8 @@ private:
 };
 /*******************************************/
 
-class ObLockWaitMgr: public share::ObThreadPool
+class ObLockWaitMgr: public share::ObThreadPool,
+                     public share::ObIBackgroundTaskSource
 {
 public:
   friend class ObDeadLockChecker;
@@ -210,7 +212,10 @@ public:
   void destroy();
   // periodicly check requests which may be killed or tmeout
   void run1();
-  void wait() { share::ObThreadPool::wait(); }
+  void wait();
+  int process_one_quantum(
+      const share::ObBackgroundTaskPriority priority,
+      share::ObBackgroundTaskRunResult &result) override;
   // Preprocessing before handling the request, which primarily sets up the
   // local variables, thread_node and hold_key.
   void setup(Node &node, int64_t recv_ts)
@@ -290,6 +295,11 @@ private:
   bool wait(Node* node);
   Node* get(uint64_t hash);
   void wakeup(uint64_t hash);
+  bool is_stop_requested_() const;
+  int process_waiters_(int64_t &processed_count);
+  void maintain_row_holder_mapper_();
+  int notify_background_source_();
+  int unregister_background_source_(const bool wait_running);
 private:
 
   static uint64_t& get_thread_hold_key()
@@ -327,10 +337,14 @@ private:
 
 private:
   bool is_inited_;
+  bool is_running_;
+  bool is_stopping_;
+  bool use_shared_executor_;
   Hash hash_;
   int64_t sequence_[LOCK_BUCKET_COUNT];
   char hash_buf_[sizeof(SpHashNode) * LOCK_BUCKET_COUNT];
   int64_t last_check_session_idle_ts_;
+  int64_t last_mapper_dump_ts_;
 
 public:
   int notify_deadlocked_session(const uint32_t sess_id);
@@ -350,6 +364,8 @@ private:
 private:
   RowHolderMapper row_holder_mapper_;
   int64_t total_wait_node_;
+  share::ObBackgroundTaskExecutor *background_executor_;
+  share::ObBackgroundTaskSourceHandle source_handle_;
 };
 
 class LockHashHelper {

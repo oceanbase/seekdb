@@ -100,6 +100,31 @@ public:
   // Thread count configuration
   int set_thread_count(int64_t n_threads);
   int set_adaptive_thread(int64_t min_thread_num, int64_t max_thread_num);
+  // Opt-in policy for zero-idle pools whose queued work is retried by the
+  // dynamic manager. Existing users retain the original expansion behavior.
+  void set_queue_driven_expansion(const bool enabled)
+  {
+    queue_driven_expansion_ = enabled;
+  }
+  // An external driver owns task dispatch when enabled. push() still keeps
+  // the original bounded queue semantics but never creates a pool worker.
+  // The owner must call pop_task_for_external_driver() and provide its own
+  // wakeup/lifecycle protocol.
+  void set_external_driver(const bool enabled)
+  {
+    external_driver_ = enabled;
+  }
+  int pop_task_for_external_driver(TaskType *&task);
+  int set_idle_shrink_timeout(const int64_t timeout_us)
+  {
+    int ret = OB_SUCCESS;
+    if (timeout_us <= 0) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      idle_shrink_timeout_us_ = timeout_us;
+    }
+    return ret;
+  }
 
   // CRTP for lib::ObAdaptiveWorkerPool
   bool do_add_worker();
@@ -118,6 +143,10 @@ protected:
 private:
   bool is_inited_;
   bool stop_;
+  bool queue_driven_expansion_;
+  bool external_driver_;
+  int64_t idle_shrink_timeout_us_;
+  int64_t last_pressure_ts_;
   T queue_;
   lib::IRunWrapper *run_wrapper_;
   WorkerList workers_;

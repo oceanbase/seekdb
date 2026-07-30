@@ -136,6 +136,35 @@ int ObDedupQueue::init(const int64_t thread_num /*= DEFAULT_THREAD_NUM*/,
                        const int64_t page_size /*= OB_SERVER_RUNTIME_ID*/,
                        const lib::ObLabel &label /*= "DedupQueue"*/)
 {
+  return init_(thread_num, thread_name, queue_size, task_map_size,
+      total_mem_limit, hold_mem_limit, page_size, label, true);
+}
+
+int ObDedupQueue::init_without_thread(
+    const int64_t max_concurrency,
+    const char *thread_name,
+    const int64_t queue_size,
+    const int64_t task_map_size,
+    const int64_t total_mem_limit,
+    const int64_t hold_mem_limit,
+    const int64_t page_size,
+    const lib::ObLabel &label)
+{
+  return init_(max_concurrency, thread_name, queue_size, task_map_size,
+      total_mem_limit, hold_mem_limit, page_size, label, false);
+}
+
+int ObDedupQueue::init_(
+    const int64_t thread_num,
+    const char *thread_name,
+    const int64_t queue_size,
+    const int64_t task_map_size,
+    const int64_t total_mem_limit,
+    const int64_t hold_mem_limit,
+    const int64_t page_size,
+    const lib::ObLabel &label,
+    const bool start_worker)
+{
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
@@ -166,7 +195,7 @@ int ObDedupQueue::init(const int64_t thread_num /*= DEFAULT_THREAD_NUM*/,
     }
 
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(start())) {
+    } else if (start_worker && OB_FAIL(start())) {
       COMMON_LOG(WARN, "start thread fail", K(ret));
     } else {
       is_inited_ = true;
@@ -177,7 +206,7 @@ int ObDedupQueue::init(const int64_t thread_num /*= DEFAULT_THREAD_NUM*/,
   } else {
     COMMON_LOG(INFO, "init dedup-queue:",
         K(thread_num), K(queue_size), K(task_map_size), K(total_mem_limit), K(hold_mem_limit),
-        K(page_size), KP(this), "lbt", lbt());
+        K(page_size), K(start_worker), KP(this), "lbt", lbt());
   }
 
   return ret;
@@ -243,6 +272,51 @@ int ObDedupQueue::add_task(const IObDedupTask &task)
     }
   }
 
+  return ret;
+}
+
+int ObDedupQueue::process_one_task(bool &processed, bool &has_more_ready)
+{
+  int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
+  IObDedupTask *task = NULL;
+  processed = false;
+  has_more_ready = false;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (OB_SUCCESS != (tmp_ret = task_queue_.pop(task))) {
+    if (OB_ENTRY_NOT_EXIST != tmp_ret) {
+      ret = tmp_ret;
+      COMMON_LOG(WARN, "task_queue_.pop error", K(ret), KP(task));
+    }
+  } else if (OB_ISNULL(task)) {
+    ret = OB_ERR_UNEXPECTED;
+    COMMON_LOG(WARN, "task_queue_.pop returned null", K(ret));
+  } else {
+    processed = true;
+    // Preserve ObDedupQueue's historical behavior: process() failures are
+    // owned/logged by the task and do not stop the queue.
+    (void) task->process();
+
+    gc_queue_sync_.lock();
+    task->set_next(NULL);
+    if (NULL == gc_queue_tail_) {
+      task->set_prev(NULL);
+      gc_queue_head_ = task;
+      gc_queue_tail_ = task;
+    } else {
+      task->set_prev(gc_queue_tail_);
+      gc_queue_tail_->set_next(task);
+      gc_queue_tail_ = task;
+    }
+    gc_queue_sync_.unlock();
+    task->set_process_done();
+  }
+
+  if (is_inited_) {
+    (void) gc_();
+    has_more_ready = task_queue_.get_total() > 0;
+  }
   return ret;
 }
 

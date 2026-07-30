@@ -78,6 +78,9 @@ ob_set_subtarget(ob_share cache
 ob_set_subtarget(ob_share common
   ob_autoincrement_param.cpp
   ob_autoincrement_service.cpp
+  ob_background_task_executor.cpp
+  ob_memory_dump_background_source.cpp
+  ob_timer_task_background_source.cpp
   ob_column_checksum_error_operator.cpp
   ob_core_table_proxy.cpp
   ob_ddl_checksum.cpp
@@ -144,7 +147,10 @@ ob_set_subtarget(ob_share common
 
 # ob_local_device.cpp defines AIO emulation types/functions for Android/macOS that
 # conflict with stub definitions in ob_file.h when merged into the same translation unit.
-set_source_files_properties(ob_local_device.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+set_source_files_properties(
+  ob_local_device.cpp
+  ob_timer_task_background_source.cpp
+  PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 ob_set_subtarget(ob_share common_mixed
   datum/ob_datum_cmp_func_def.cpp
@@ -164,11 +170,11 @@ ob_set_subtarget(ob_share common_mixed
   parameter/ob_parameter_seed.ipp
   rc/ob_context.cpp
   rc/ob_server_runtime.cpp
-  server_snapshot/ob_server_snapshot_id.cpp
   system_variable/ob_sys_var_meta.cpp
   system_variable/ob_system_variable_init.cpp
   ob_lob_access_utils.cpp
   ob_json_access_utils.cpp
+  server_snapshot/ob_server_snapshot_id.cpp
   table/ob_table_util.cpp
   compaction/ob_compaction_time_guard.cpp
   compaction/ob_schedule_batch_size_mgr.cpp
@@ -180,9 +186,10 @@ ob_set_subtarget(ob_share common_mixed
   storage/ob_tablet_local_checksum_table_storage.cpp
   storage/ob_merge_info_table_storage.cpp
   storage/ob_column_checksum_error_info_table_storage.cpp
-  storage/ob_admin_job_table_storage.cpp
+  storage/ob_rootservice_job_table_storage.cpp
   longops_mgr/ob_i_longops.cpp
   longops_mgr/ob_longops_mgr.cpp
+  ob_module_data_arg.cpp
 )
 
 ob_set_subtarget(ob_share tablet
@@ -291,8 +298,13 @@ ob_set_subtarget(ob_share resource_limit_calculator
   resource_limit_calculator/ob_resource_limit_calculator.cpp
 )
 
+ob_set_subtarget(ob_share errsim_module_mgr
+  errsim_module/ob_errsim_module_mgr.cpp
+)
+
 if (OB_ERRSIM)
-  ob_set_subtarget(ob_share errsim_module
+  ob_set_subtarget(ob_share errsim_module_interface
+    errsim_module/ob_errsim_module_interface_imp.cpp
   )
 endif()
 

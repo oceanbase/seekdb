@@ -31,6 +31,7 @@ class ObIOManager;
 namespace share
 {
 class ObLocalDevice;
+class ObBackgroundTaskExecutor;
 }
 namespace palf
 {
@@ -40,6 +41,7 @@ class ILogBlockPool;
 
 class PalfEnv
 {
+  friend class LogRequestHandler;
 public:
   // static interface
   // create the palf env with the specified "base_dir".
@@ -102,6 +104,9 @@ public:
   // last_working_time will be set as current time when a io task begins,
   // and will be reset as OB_INVALID_TIMESTAMP when an io task ends, atomically.
   int get_io_start_time(int64_t &last_working_time);
+  int attach_log_io_callback_background_executor(
+      share::ObBackgroundTaskExecutor *background_executor);
+  int detach_log_io_callback_background_executor();
   // @brief iterate each PalfHandle of PalfEnv and execute 'func'
   palf::IPalfEnvImpl *get_palf_env_impl() { return &palf_env_impl_; }
   int start();

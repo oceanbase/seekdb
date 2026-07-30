@@ -18,9 +18,11 @@
 
 #include "ob_dbms_job_master.h"
 #include "ob_dbms_job_executor.h"
+#include "lib/ob_running_mode.h"
 #include "share/ob_ex_rpc.h"
 #include "share/ob_internal_table_change_notifier.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
+#include "share/rc/ob_module_provider.h"
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -40,19 +42,22 @@ using namespace obcall;
 namespace dbms_job
 {
 
-int ObDBMSJobTask::init(ObDBMSJobQueue *ready_queue)
+int ObDBMSJobTask::init(
+    ObDBMSJobQueue *ready_queue,
+    ObDBMSJobMaster *owner)
 {
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret), K(inited_));
-  } else if (OB_ISNULL(ready_queue)) {
+  } else if (OB_ISNULL(ready_queue) || OB_ISNULL(owner)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL ptr", K(ret), K(ready_queue));
+    LOG_WARN("NULL ptr", K(ret), K(ready_queue), KP(owner));
   } else if (OB_FAIL(timer_.init())) {
     LOG_WARN("fail to init timer", K(ret));
   } else {
     ready_queue_ = ready_queue;
+    owner_ = owner;
     inited_ = true;
   }
   return ret;
@@ -102,37 +107,47 @@ int ObDBMSJobTask::destroy()
 void ObDBMSJobTask::runTimerTask()
 {
   int ret = OB_SUCCESS;
-  ObSpinLockGuard guard(lock_);
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("dbms job task not init", K(ret), K(inited_));
-  } else if (OB_ISNULL(job_key_)
-          || OB_ISNULL(ready_queue_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null ptr", K(ret), K(job_key_), K(ready_queue_));
-  } else if (OB_FAIL(ready_queue_->push(job_key_, 0))) {
-    LOG_WARN("fail to push ready job to queue", K(ret), K(*job_key_));
-  } else {
-    job_key_ = NULL;
-    if (wait_vector_.count() > 0) {
-      job_key_ = wait_vector_[0];
-      if (OB_FAIL(wait_vector_.remove(wait_vector_.begin()))) {
-        job_key_ = NULL;
-        LOG_WARN("fail to remove job_id from sorted vector", K(ret));
-      } else if (OB_ISNULL(job_key_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL ptr", K(ret), K(job_key_));
-      } else if (OB_FAIL(timer_.schedule(*this, job_key_->get_adjust_delay()))) {
-        LOG_WARN("fail to schedule task", K(ret), K(*job_key_));
+  bool need_notify = false;
+  {
+    ObSpinLockGuard guard(lock_);
+    if (!inited_) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("dbms job task not init", K(ret), K(inited_));
+    } else if (OB_ISNULL(job_key_)
+            || OB_ISNULL(ready_queue_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("null ptr", K(ret), K(job_key_), K(ready_queue_));
+    } else if (OB_FAIL(ready_queue_->push(job_key_, 0))) {
+      LOG_WARN("fail to push ready job to queue", K(ret), K(*job_key_));
+    } else {
+      need_notify = true;
+      job_key_ = NULL;
+      if (wait_vector_.count() > 0) {
+        job_key_ = wait_vector_[0];
+        if (OB_FAIL(wait_vector_.remove(wait_vector_.begin()))) {
+          job_key_ = NULL;
+          LOG_WARN("fail to remove job_id from sorted vector", K(ret));
+        } else if (OB_ISNULL(job_key_)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("NULL ptr", K(ret), K(job_key_));
+        } else if (OB_FAIL(timer_.schedule(*this, job_key_->get_adjust_delay()))) {
+          LOG_WARN("fail to schedule task", K(ret), K(*job_key_));
+        }
       }
     }
+    LOG_DEBUG("JobKEYS INFO HEADER ==== ", KPC(job_key_), K(wait_vector_.count()));
+    int i = 0;
+    for (WaitVectorIterator iter = wait_vector_.begin();
+            OB_SUCC(ret) && iter != wait_vector_.end(); ++iter, ++i) {
+      ObDBMSJobKey *job = *iter;
+      LOG_DEBUG("JobKEYS INFO ELEMENT ====", K(i), KPC(job));
+    }
   }
-  LOG_DEBUG("JobKEYS INFO HEADER ==== ", KPC(job_key_), K(wait_vector_.count()));
-  int i = 0;
-  for (WaitVectorIterator iter = wait_vector_.begin();
-          OB_SUCC(ret) && iter != wait_vector_.end(); ++iter, ++i) {
-    ObDBMSJobKey *job = *iter;
-    LOG_DEBUG("JobKEYS INFO ELEMENT ====", K(i), KPC(job));
+  if (need_notify && OB_NOT_NULL(owner_)) {
+    const int tmp_ret = owner_->notify_background_source_();
+    if (OB_SUCCESS != tmp_ret && OB_NOT_RUNNING != tmp_ret) {
+      LOG_WARN("failed to notify dbms job source", K(tmp_ret));
+    }
   }
   return;
 }
@@ -190,6 +205,7 @@ int ObDBMSJobTask::add_new_job(ObDBMSJobKey *new_job_key)
 int ObDBMSJobTask::immediately(ObDBMSJobKey *job_key)
 {
   int ret = OB_SUCCESS;
+  bool need_notify = false;
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("dbms job not init", K(ret), K(inited_));
@@ -197,9 +213,19 @@ int ObDBMSJobTask::immediately(ObDBMSJobKey *job_key)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret), K(job_key), K(ready_queue_));
   } else {
-    ObSpinLockGuard guard(lock_);
-    if (OB_FAIL(ready_queue_->push(job_key, 0))) {
-      LOG_WARN("fail to push ready job to queue", K(ret), K(*job_key));
+    {
+      ObSpinLockGuard guard(lock_);
+      if (OB_FAIL(ready_queue_->push(job_key, 0))) {
+        LOG_WARN("fail to push ready job to queue", K(ret), K(*job_key));
+      } else {
+        need_notify = true;
+      }
+    }
+    if (need_notify && OB_NOT_NULL(owner_)) {
+      const int tmp_ret = owner_->notify_background_source_();
+      if (OB_SUCCESS != tmp_ret && OB_NOT_RUNNING != tmp_ret) {
+        LOG_WARN("failed to notify dbms job source", K(tmp_ret));
+      }
     }
   }
   return ret;
@@ -227,8 +253,7 @@ int ObDBMSJobTask::remove_job(
         if (OB_FAIL(wait_vector_.remove(wait_vector_.begin()))) {
           LOG_WARN("failed to remove next dbms job", K(ret), KPC(job_key_));
           job_key_ = NULL;
-        } else if (OB_FAIL(timer_.schedule(
-                       *this, job_key_->get_adjust_delay()))) {
+        } else if (OB_FAIL(timer_.schedule(*this, job_key_->get_adjust_delay()))) {
           LOG_WARN("failed to schedule next dbms job", K(ret), KPC(job_key_));
         }
       }
@@ -295,11 +320,13 @@ int ObDBMSJobMaster::init(ObISQLClient *sql_client,
           ) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null ptr", K(ret), K(sql_client), K(schema_service));
+  } else if (FALSE_IT(use_shared_executor_ = lib::is_mini_mode())) {
   } else if (FALSE_IT(ready_queue_.set_limit(MAX_READY_JOBS_CAPACITY))) {
     // do-nothing
-  } else if (OB_FAIL(scheduler_task_.init(&ready_queue_))) {
+  } else if (OB_FAIL(scheduler_task_.init(&ready_queue_, this))) {
     LOG_WARN("fail to init ready queue", K(ret));
-  } else if (OB_FAIL(scheduler_thread_.init(1, 1))) {
+  } else if (!use_shared_executor_
+      && OB_FAIL(scheduler_thread_.init(1, 1))) {
     LOG_WARN("fail to init scheduler pool", K(ret));
   } else if (OB_FAIL(job_utils_.init(sql_client))) {
     LOG_WARN("fail to init action record", K(ret));
@@ -325,14 +352,31 @@ int ObDBMSJobMaster::start()
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init yet!", K(ret), K(inited_));
-  } else if (running_) {
+  } else if (ATOMIC_LOAD(&running_)) {
     // alreay running , do nothing ...
-  } else if (OB_FAIL(scheduler_thread_.push(static_cast<void *>(this)))) {
+  } else if (FALSE_IT(stoped_ = false)) {
+  } else if (use_shared_executor_
+      && OB_FAIL(register_background_source_())) {
+    LOG_WARN("fail to register dbms job source", K(ret));
+  } else if (!use_shared_executor_
+      && OB_FAIL(scheduler_thread_.push(static_cast<void *>(this)))) {
     LOG_WARN("fail to start scheduler thread", K(ret));
   } else if (OB_FAIL(scheduler_task_.start())) {
     LOG_WARN("fail to start ready queue", K(ret));
   } else if (OB_FAIL(check_table_change_(NULL))) {
     LOG_WARN("fail to load all dbms jobs", K(ret));
+  } else if (use_shared_executor_) {
+    ATOMIC_STORE(&running_, true);
+    if (ready_queue_.size() > 0
+        && OB_FAIL(notify_background_source_())) {
+      LOG_WARN("fail to notify pending dbms jobs", K(ret));
+    }
+  }
+  if (OB_FAIL(ret) && use_shared_executor_) {
+    ATOMIC_STORE(&stoped_, true);
+    (void)scheduler_task_.stop();
+    (void)unregister_background_source_(true);
+    ATOMIC_STORE(&running_, false);
   }
   LOG_WARN("dbms job master started", K(ret));
   return ret;
@@ -341,16 +385,26 @@ int ObDBMSJobMaster::start()
 int ObDBMSJobMaster::stop()
 {
   int ret = OB_SUCCESS;
-  scheduler_task_.stop();
-  stoped_ = true;
-  while (running_) {
+  ATOMIC_STORE(&stoped_, true);
+  if (use_shared_executor_) {
+    const int tmp_ret = unregister_background_source_(true);
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN("failed to unregister dbms job source", K(tmp_ret));
+      ret = tmp_ret;
+    }
+    scheduler_task_.stop();
+    ATOMIC_STORE(&running_, false);
+  } else {
+    scheduler_task_.stop();
+  }
+  while (!use_shared_executor_ && ATOMIC_LOAD(&running_)) {
 #ifdef _WIN32
     Sleep(1000);
 #else
     sleep(1);
 #endif
   }
-  stoped_ = false;
+  ATOMIC_STORE(&stoped_, false);
   LOG_INFO("dbms job master stoped", K(ret), K(lbt()));
   return ret;
 }
@@ -366,10 +420,10 @@ int ObDBMSJobMaster::scheduler()
     LOG_WARN("null trace_id_ ptr", K(ret), K(trace_id_));
   } else {
     ObCurTraceId::set(trace_id_);
-    running_ = true;
+    ATOMIC_STORE(&running_, true);
     LOG_INFO("NOTICE: DBMS Job master start running!", K(ret), K(running_));
     lib::set_thread_name("DBMS_JOB_MASTER");
-    while (OB_SUCC(ret) && !stoped_) {
+    while (OB_SUCC(ret) && !ATOMIC_LOAD(&stoped_)) {
       ObLink* ptr = NULL;
       int64_t timeout = MIN_SCHEDULER_INTERVAL;
       ObDBMSJobKey *job_key = NULL;
@@ -393,8 +447,50 @@ int ObDBMSJobMaster::scheduler()
       }
     }
     LOG_INFO("NOTICE: DBMS Job master end running!", K(ret), K(running_));
-    running_ = false;
+    ATOMIC_STORE(&running_, false);
   }
+  return ret;
+}
+
+int ObDBMSJobMaster::process_one_quantum(
+    const share::ObBackgroundTaskPriority priority,
+    share::ObBackgroundTaskRunResult &result)
+{
+  int ret = OB_SUCCESS;
+  const int64_t saved_worker_timeout_ts = THIS_WORKER.get_timeout_ts();
+  ObCurTraceId::TraceId saved_trace_id = *ObCurTraceId::get_trace_id();
+  if (!use_shared_executor_) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (share::BG_TASK_NORMAL != priority) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (ATOMIC_LOAD(&stoped_)) {
+  } else if (OB_ISNULL(trace_id_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObCurTraceId::set(trace_id_);
+    ObLink *ptr = NULL;
+    const int pop_ret = ready_queue_.pop(ptr, 0);
+    if (OB_ENTRY_NOT_EXIST == pop_ret) {
+    } else if (OB_SUCCESS != pop_ret) {
+      ret = pop_ret;
+      LOG_WARN("failed to pop dbms job ready queue", K(ret));
+    } else {
+      ObDBMSJobKey *job_key = static_cast<ObDBMSJobKey *>(ptr);
+      if (OB_ISNULL(job_key) || !job_key->is_valid()) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("unexpected invalid dbms job key", K(ret), KPC(job_key));
+      } else {
+        const int tmp_ret = scheduler_job(job_key);
+        if (OB_SUCCESS != tmp_ret) {
+          LOG_WARN("failed to schedule dbms job", K(tmp_ret), KPC(job_key));
+        }
+        result.processed_count_ = 1;
+        result.has_more_ready_ = ready_queue_.size() > 0;
+      }
+    }
+  }
+  ObCurTraceId::set(saved_trace_id);
+  THIS_WORKER.set_timeout_ts(saved_worker_timeout_ts);
   return ret;
 }
 
@@ -458,11 +554,77 @@ int ObDBMSJobMaster::scheduler_job(ObDBMSJobKey *job_key, bool is_retry)
 
 int ObDBMSJobMaster::destroy()
 {
+  (void)unregister_background_source_(true);
   ready_queue_.destroy();
   scheduler_task_.destroy();
-  scheduler_thread_.destroy();
+  if (!use_shared_executor_) {
+    scheduler_thread_.destroy();
+  }
   allocator_.clear();
+  background_executor_ = NULL;
+  source_handle_.reset();
+  inited_ = false;
   return OB_SUCCESS;
+}
+
+int ObDBMSJobMaster::register_background_source_()
+{
+  int ret = OB_SUCCESS;
+  if (!use_shared_executor_ || source_handle_.is_valid()) {
+  } else if (OB_ISNULL(share::g_mp)
+      || OB_ISNULL(background_executor_ =
+          share::g_mp->background_task_executor())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("background task executor is null",
+        K(ret), KP(share::g_mp), KP(background_executor_));
+  } else {
+    share::ObBackgroundTaskSourceConfig config;
+    config.name_ = "DBMS_JOB_MASTER";
+    config.max_concurrency_ = 1;
+    if (OB_FAIL(background_executor_->register_source(
+        *this, config, source_handle_))) {
+      LOG_WARN("failed to register dbms job source", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObDBMSJobMaster::unregister_background_source_(
+    const bool wait_running)
+{
+  int ret = OB_SUCCESS;
+  if (use_shared_executor_ && OB_NOT_NULL(background_executor_)
+      && source_handle_.is_valid()) {
+    do {
+      ret = background_executor_->unregister_source(source_handle_);
+      if (wait_running && OB_EAGAIN == ret) {
+        ob_usleep(1000);
+      }
+    } while (wait_running && OB_EAGAIN == ret);
+    if (OB_ENTRY_NOT_EXIST == ret || OB_NOT_INIT == ret) {
+      source_handle_.reset();
+      ret = OB_SUCCESS;
+    }
+  }
+  if (!source_handle_.is_valid()) {
+    background_executor_ = NULL;
+  }
+  return ret;
+}
+
+int ObDBMSJobMaster::notify_background_source_()
+{
+  int ret = OB_SUCCESS;
+  if (!use_shared_executor_) {
+  } else if (OB_ISNULL(background_executor_)
+      || !source_handle_.is_valid()
+      || !ATOMIC_LOAD(&running_)) {
+    ret = OB_NOT_RUNNING;
+  } else if (OB_FAIL(background_executor_->notify(
+      source_handle_, share::BG_TASK_NORMAL))) {
+    LOG_WARN("failed to notify dbms job source", K(ret));
+  }
+  return ret;
 }
 
 int ObDBMSJobMaster::alloc_job_key(

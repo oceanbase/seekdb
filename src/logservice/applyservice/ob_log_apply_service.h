@@ -23,6 +23,7 @@
 #include "lib/thread/ob_thread_lease.h"
 #include "logservice/palf/palf_callback.h"
 #include "logservice/palf/palf_handle.h"
+#include "share/ob_background_task_executor.h"
 #include "share/scn.h"
 
 namespace oceanbase
@@ -235,7 +236,9 @@ private:
   ObMiniStat::ObStatItem cb_stat_; // Time taken from cb generation to on_success execution
 };
 
-class ObLogApplyService : public common::ObLinkQueueThreadPool
+class ObLogApplyService
+  : public common::ObLinkQueueThreadPool,
+    public share::ObIBackgroundTaskSource
 {
 public:
   ObLogApplyService();
@@ -260,6 +263,9 @@ public:
   int get_max_applied_scn(share::SCN &scn);
   int get_palf_committed_end_scn(share::SCN &scn);
   int push_task(ObApplyServiceTask *task);
+  virtual int process_one_quantum(
+      const share::ObBackgroundTaskPriority priority,
+      share::ObBackgroundTaskRunResult &result) override;
   int wait_append_sync();
   int stat(LSApplyStat &apply_stat);
   int diagnose(ApplyDiagnoseInfo &diagnose_info);
@@ -268,13 +274,20 @@ private:
                        ObApplyServiceQueueTask *cb_queue,
                        bool &is_timeslice_run_out);
   int handle_submit_task_(ObApplyStatus *apply_status);
+  int notify_background_source_();
+  int unregister_background_source_(const bool wait_running);
+  void drain_external_tasks_();
 private:
   bool is_inited_;
   bool is_running_;
+  bool use_shared_executor_;
   palf::PalfEnv *palf_env_;
   ObLSAdapter *ls_adapter_;
   ObApplyStatus *apply_status_;
   mutable common::ObQSyncLock lock_;
+  share::ObBackgroundTaskExecutor *background_executor_;
+  share::ObBackgroundTaskSourceHandle source_handle_;
+  lib::ObMutex source_lock_;
   DISALLOW_COPY_AND_ASSIGN(ObLogApplyService);
 };
 

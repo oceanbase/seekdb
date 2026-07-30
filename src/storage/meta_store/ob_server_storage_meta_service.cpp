@@ -19,12 +19,13 @@
 #include <sys/statvfs.h>
 #endif
 #include "observer/omt/ob_server_runtime_controller.h"
+#include "lib/ob_running_mode.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
-#include "share/ob_force_print_log.h"
-#include "share/ob_local_device.h"
 #include "storage/ob_file_system_router.h"
+#include "share/ob_local_device.h"  // relocated-definition owner
 #include "storage/meta_store/ob_local_storage_meta_service.h"
+
 namespace oceanbase
 {
 namespace storage
@@ -90,6 +91,37 @@ int ObServerStorageMetaService::start()
   }
   const int64_t cost_time_us = ObTimeUtility::current_time() - start_time;
   FLOG_INFO("finish start server storage meta service", K(ret), K(cost_time_us));
+  return ret;
+}
+
+int ObServerStorageMetaService::attach_background_executor(
+    share::ObBackgroundTaskExecutor *background_executor)
+{
+  int ret = OB_SUCCESS;
+  if (!lib::is_mini_mode()) {
+    // Keep the normal-mode server SLOG behavior unchanged.
+  } else if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("server storage meta service is not inited", K(ret));
+  } else if (OB_FAIL(server_slogger_.attach_background_executor(
+      background_executor))) {
+    LOG_WARN("fail to attach server slog to background executor",
+        K(ret), KP(background_executor));
+  }
+  return ret;
+}
+
+int ObServerStorageMetaService::detach_background_executor()
+{
+  int ret = OB_SUCCESS;
+  if (!lib::is_mini_mode()) {
+    // Keep the normal-mode server SLOG behavior unchanged.
+  } else if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("server storage meta service is not inited", K(ret));
+  } else if (OB_FAIL(server_slogger_.detach_background_executor())) {
+    LOG_WARN("fail to detach server slog from background executor", K(ret));
+  }
   return ret;
 }
 
@@ -162,8 +194,9 @@ int ObServerStorageMetaService::get_server_slogger(ObStorageLogger *&slogger) co
 
 int ObServerStorageMetaService::set_need_reserved_for_test(const bool need_reserved)
 {
+  int ret = OB_SUCCESS;
   need_reserved_ = need_reserved;
-  return OB_SUCCESS;
+  return ret;
 }
 
 int ObServerStorageMetaService::write_checkpoint(bool is_force)
@@ -186,7 +219,7 @@ int ObServerStorageMetaService::check_log_disk(
   need_reserved_ = false;
   if (OB_ISNULL(data_dir) || OB_ISNULL(log_dir)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(data_dir), KP(log_dir));
+    LOG_WARN("Invalid argument", K(ret), KP(data_dir), KP(log_dir));
 #ifdef _WIN32
   } else {
     UNUSEDx(data_dir, log_dir);
@@ -203,7 +236,7 @@ int ObServerStorageMetaService::check_log_disk(
       LOG_WARN("fail to get slog directory vfs", K(ret), K(log_dir));
     } else if (OB_UNLIKELY(0 >= log_svfs.f_bavail)) {
       ret = OB_DISK_ERROR;
-      LOG_ERROR("slog disk is full", K(ret), K(log_dir), K(log_svfs.f_bavail));
+      LOG_ERROR("slog disk is full, please check", K(ret), K(log_dir), K(log_svfs.f_bavail));
     } else {
       need_reserved_ = (data_svfs.f_fsid == log_svfs.f_fsid);
     }

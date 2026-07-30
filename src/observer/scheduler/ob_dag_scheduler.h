@@ -25,10 +25,12 @@
 #include "lib/lock/ob_mutex.h"
 #include "lib/profile/ob_trace_id.h"
 #include "lib/thread/threads.h"
+#include "share/ob_background_task_executor.h"
 #include "share/rc/ob_server_runtime.h"
 #include "observer/scheduler/ob_dag_scheduler_config.h"
 #include "observer/scheduler/ob_diagnose_config.h"
 #include "share/ob_table_range.h"
+#include "lib/errsim_module/ob_errsim_module_type.h"
 #include "lib/utility/ob_smart_var.h"
 
 namespace oceanbase
@@ -196,15 +198,54 @@ public:
     TASK_TYPE_UNIQUE_CHECKING_MERGE,
     TASK_TYPE_DDL_PREPARE_SCAN,
     TASK_TYPE_DDL_BUILD_MAJOR_SSTABLE,
+    TASK_TYPE_DIRECT_LOAD_WRITE_CHANNEL_FLUSH,
+    TASK_TYPE_DIRECT_LOAD_WRITE_CHANNEL_FINISH,
     TASK_TYPE_DDL_WRITE_PIPELINE,
     TASK_TYPE_DDL_WRITE_USING_TMP_FILE_PIPELINE,
     TASK_TYPE_DDL_VECTOR_INDEX_APPEND_PIPELINE,
     TASK_TYPE_DDL_VECTOR_INDEX_BUILD_AND_WRITE_PIPELINE,
+    TASK_TYPE_DIRECT_LOAD_START_MERGE,
     TASK_TYPE_DDL_MERGE_PREPARE,
     TASK_TYPE_DDL_MERGE_SLICE,
     TASK_TYPE_DDL_MERGE_ASSEMBLE,
     TASK_TYPE_DDL_MERGE_GUARD,
+    TASK_TYPE_DIRECT_LOAD_WRITE_MACRO_BLOCK_PIPELINE,
+    TASK_TYPE_DIRECT_LOAD_FINISH_OP,
+    TASK_TYPE_DIRECT_LOAD_TABLE_OP_OPEN_OP,
+    TASK_TYPE_DIRECT_LOAD_TABLE_OP_CLOSE_OP,
+    TASK_TYPE_DIRECT_LOAD_DIRECT_WRITE_OP,
+    TASK_TYPE_DIRECT_LOAD_DIRECT_WRITE_OP_FINISH,
+    TASK_TYPE_DIRECT_LOAD_STORE_WRITE_OP,
+    TASK_TYPE_DIRECT_LOAD_STORE_WRITE_OP_FINISH,
+    TASK_TYPE_DIRECT_LOAD_PRE_SORT_WRITE_OP,
+    TASK_TYPE_DIRECT_LOAD_PRE_SORT_WRITE_OP_FINISH,
+    TASK_TYPE_DIRECT_LOAD_MEM_SORT_OP,
+    TASK_TYPE_DIRECT_LOAD_MEM_SORT_OP_FINISH,
+    TASK_TYPE_DIRECT_LOAD_COMPACT_TABLE_OP,
+    TASK_TYPE_DIRECT_LOAD_COMPACT_TABLE_OP_FINISH,
+    TASK_TYPE_DIRECT_LOAD_INSERT_SSTABLE_OP,
+    TASK_TYPE_DIRECT_LOAD_INSERT_SSTABLE_OP_FINISH,
+    TASK_TYPE_DIRECT_LOAD_INSERT_SSTABLE,
+    TASK_TYPE_DIRECT_LOAD_INSERT_SSTABLE_FINISH,
+    TASK_TYPE_DIRECT_LOAD_PRE_SORT_WRITE,
+    TASK_TYPE_DIRECT_LOAD_PRE_SORT_WRITE_SORT,
+    TASK_TYPE_DIRECT_LOAD_MEM_COMPACT_SAMPLE,
+    TASK_TYPE_DIRECT_LOAD_MEM_COMPACT_DUMP,
+    TASK_TYPE_DIRECT_LOAD_MEM_COMPACT_COMPACT,
+    TASK_TYPE_DIRECT_LOAD_PK_MEM_SORT,
+    TASK_TYPE_DIRECT_LOAD_PK_MEM_SORT_LOAD,
+    TASK_TYPE_DIRECT_LOAD_HEAP_MEM_SORT,
+    TASK_TYPE_DIRECT_LOAD_COMPACT_SSTABLE,
+    TASK_TYPE_DIRECT_LOAD_COMPACT_SSTABLE_SPLIT_RANGE,
+    TASK_TYPE_DIRECT_LOAD_COMPACT_SSTABLE_MERGE_RANGE,
+    TASK_TYPE_DIRECT_LOAD_COMPACT_SSTABLE_COMPACT,
+    TASK_TYPE_DIRECT_LOAD_COMPACT_HEAP_TABLE,
+    TASK_TYPE_DIRECT_LOAD_COMPACT_HEAP_TABLE_COMPACT,
+    TASK_TABLE_LOAD_MACRO_BLOCK_WRITE_TASK,
     TASK_TYPE_DDL_SCHEDULE_ANOTHER_MERGE,
+    TASK_TYPE_DIRECT_LOAD_INSERT_SSTABLE_CLEAR,
+    TASK_TYPE_DIRECT_LOAD_COMPACT_SSTABLE_CLEAR,
+    TASK_TYPE_DIRECT_LOAD_UPDATE_SS_INC_MAJOR,
     TASK_TYPE_DDL_FORK_PREPARE,
     TASK_TYPE_DDL_FORK_REUSE,
     TASK_TYPE_DDL_FORK_REWRITE,
@@ -1130,7 +1171,8 @@ private:
   void sub_##name() { ATOMIC_DEC(&var); } \
   void clear_##name() { ATOMIC_SET(&var, 0); } \
 
-class ObDagScheduler : public lib::ThreadPool
+class ObDagScheduler : public lib::ThreadPool,
+                       public ObIBackgroundTaskSource
 {
 public:
   static int server_module_init(ObDagScheduler* &scheduler);
@@ -1166,6 +1208,9 @@ public:
   template<typename T>
   void free_dag_net(T *&dag_net);
   void run1() final;
+  int process_one_quantum(
+      const ObBackgroundTaskPriority priority,
+      ObBackgroundTaskRunResult &result) override;
   void notify();
   void notify_when_dag_net_finish();
   void reset();
@@ -1303,9 +1348,13 @@ private:
       int64_t &idx);
   common::ObIAllocator &get_allocator(const bool use_reserved_allocator);
   int init_allocator(const lib::ObLabel &label, lib::MemoryContext &mem_context);
+  int notify_background_source_();
+  int unregister_background_source_(const bool wait_running);
 
 private:
   bool is_inited_;
+  bool is_running_;
+  bool use_shared_executor_;
   bool fast_schedule_dag_net_;
   int64_t dag_cnt_;              // atomic value
   int64_t dag_limit_;            // only set in init/destroy
@@ -1330,6 +1379,8 @@ private:
   ObDagPrioScheduler::WorkerList free_workers_; // free workers who have not been assigned to any task // locked by scheduler_sync_
   ObDagNetScheduler dag_net_sche_;
   ObDagPrioScheduler prio_sche_[ObDagPrio::DAG_PRIO_MAX];
+  ObBackgroundTaskExecutor *background_executor_;
+  ObBackgroundTaskSourceHandle source_handle_;
 };
 
 // ATTENTION! when alloc task success, the task is already added into task_list_!!!

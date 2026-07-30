@@ -151,9 +151,21 @@ public:
            const int64_t hold_mem_limit = HOLD_LIMIT,
            const int64_t page_size = ALLOC_PAGE_SIZE,
            const lib::ObLabel &label = "DedupQueue");
+  // Initializes the existing queue/registry semantics without creating its
+  // private worker. An external scheduler may drive process_one_task().
+  int init_without_thread(
+           const int64_t max_concurrency,
+           const char* thread_name = nullptr,
+           const int64_t queue_size = TASK_QUEUE_SIZE,
+           const int64_t task_map_size = TASK_MAP_SIZE,
+           const int64_t total_mem_limit = TOTAL_LIMIT,
+           const int64_t hold_mem_limit = HOLD_LIMIT,
+           const int64_t page_size = ALLOC_PAGE_SIZE,
+           const lib::ObLabel &label = "DedupQueue");
   void destroy();
 public:
   int add_task(const IObDedupTask &task);
+  int process_one_task(bool &processed, bool &has_more_ready);
   int64_t task_count() const { return task_queue_.get_total(); }
   void set_label(const lib::ObLabel &label) { allocator_.set_label(label); }
   void set_attr(const lib::ObMemAttr &attr) { allocator_.set_attr(attr); }
@@ -270,6 +282,16 @@ private:
   };
 private:
   int map_callback_(const IObDedupTask &task, TaskMapKVPair &kvpair);
+  int init_(
+      const int64_t thread_num,
+      const char *thread_name,
+      const int64_t queue_size,
+      const int64_t task_map_size,
+      const int64_t total_mem_limit,
+      const int64_t hold_mem_limit,
+      const int64_t page_size,
+      const lib::ObLabel &label,
+      const bool start_worker);
   int add_task_(const IObDedupTask &task);
   IObDedupTask *copy_task_(const IObDedupTask &task);
   void destroy_task_(IObDedupTask *task);

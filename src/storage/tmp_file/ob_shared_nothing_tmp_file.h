@@ -270,6 +270,7 @@ private:
 
   virtual int inner_seal_() override;
   virtual int inner_delete_file_() override;
+  virtual void notify_background_flush_() override;
 
 private:
   ObTmpFileBlockManager *tmp_file_block_manager_;

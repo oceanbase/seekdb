@@ -40,6 +40,7 @@
 #include "logservice/ob_log_allocator_mgr.h"
 #include "share/ob_device_manager.h"
 #include "share/ob_io_device_helper.h"
+#include "share/ob_internal_table_change_notifier.h"
 #include "share/resource/ob_server_runtime_config.h"
 #include "observer/scheduler/ob_dag_scheduler.h"
 #include "observer/scheduler/ob_dag_warning_history_mgr.h"
@@ -425,6 +426,9 @@ int MockServerRuntimeEnv::init_before_start_runtime()
     STORAGE_LOG(WARN, "fail to init env", K(ret));
   } else if (OB_FAIL(startup_accel_handler_.init())) {
     STORAGE_LOG(WARN, "init server startup task handler failed", KR(ret));
+  } else if (OB_FAIL(
+      share::ObInternalTableChangeNotifier::get_instance().init())) {
+    STORAGE_LOG(ERROR, "init internal table change notifier failed", KR(ret));
   } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.init())) {
     STORAGE_LOG(ERROR, "init server checkpoint slog handler fail", K(ret));
   } else if (OB_FAIL(runtime_controller_.init())) {
@@ -538,6 +542,7 @@ void MockServerRuntimeEnv::destroy()
   runtime_controller_.destroy();
   ObKVGlobalCache::get_instance().destroy();
   SERVER_STORAGE_META_SERVICE.destroy();
+  share::ObInternalTableChangeNotifier::get_instance().destroy();
 
   OB_STORAGE_OBJECT_MGR.stop();
   OB_STORAGE_OBJECT_MGR.wait();
@@ -558,5 +563,17 @@ void MockServerRuntimeEnv::destroy()
 }
 
 } // namespace storage
+
+// just for override HOOK
+namespace transaction
+{
+int ObGtiSource::get_trans_id(int64_t &trans_id)
+{
+  static int64_t trans_id_start = 1000;
+  trans_id = ATOMIC_FAA(&trans_id_start, 1 );
+  return OB_SUCCESS;
+}
+
+} // end transaction
 
 } // namespace oceanbase

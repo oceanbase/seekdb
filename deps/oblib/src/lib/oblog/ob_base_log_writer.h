@@ -101,10 +101,16 @@ public:
   }
 protected:
   void flush_log();
+  int flush_log_one_quantum(
+      const int64_t max_batch_count,
+      int64_t &processed_count,
+      bool &has_more);
+  virtual void on_log_item_appended() {}
   virtual void process_log_items(ObIBaseLogItem **items, const int64_t item_cnt, int64_t &finish_cnt) = 0;
 private:
   static void *flush_log_thread(void *arg);
   void do_flush_log();
+  int64_t flush_one_batch_();
   bool need_flush();
   virtual void drop_log_items(ObIBaseLogItem **items, const int64_t item_cnt);
 

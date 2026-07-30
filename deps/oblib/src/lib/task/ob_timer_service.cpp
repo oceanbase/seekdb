@@ -16,8 +16,10 @@
 
 #define USING_LOG_PREFIX COMMON
 #include <utility>
+#include "lib/ob_running_mode.h"
 #include "lib/task/ob_timer_service.h"
 #include "lib/task/ob_timer_monitor.h"       // ObTimerMonitor
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/profile/ob_trace_id.h"
 
 // Weak fallback; strong definition in share/rc/ob_server_runtime.cpp.
@@ -35,6 +37,13 @@ namespace common
 {
 using namespace obutil;
 using namespace lib;
+
+uint64_t OB_WEAK_SYMBOL server_runtime_id()
+{
+  int ret = OB_SUCCESS;
+  OB_LOG(WARN, "call weak server_runtime_id");
+  return OB_SERVER_RUNTIME_ID;
+}
 
 struct CompareForSet {
   using is_transparent = void;
@@ -204,7 +213,9 @@ ObTimerService::ObTimerService( /* = OB_SERVER_RUNTIME_ID */)
     priority_task_queue_(64L, nullptr, ObMemAttr("ts_queue")),
     running_task_set_(64L, nullptr, ObMemAttr("ts_run_set")),
     uncanceled_task_set_(64L, nullptr, ObMemAttr("ts_cancel_set")),
-    worker_thread_pool_(*this)
+    worker_thread_pool_(*this),
+    shared_worker_notify_fn_(nullptr),
+    shared_worker_notify_arg_(nullptr)
 {
   token_alloc_.set_attr(ObMemAttr("ts_token"));
 }
@@ -220,6 +231,10 @@ ObTimerService::~ObTimerService()
 int ObTimerService::start()
 {
   int ret = OB_SUCCESS;
+  const bool mini_mode = lib::is_mini_mode();
+  const int64_t max_worker_thread_num = mini_mode
+      ? MINI_MODE_MAX_WORKER_THREAD_NUM
+      : MAX_WORKER_THREAD_NUM;
   lib::ObMutexGuard mutex_guard(mutex_);
   ObMonitor<Mutex>::Lock guard(monitor_);
   if (is_stopped_) {
@@ -234,17 +249,21 @@ int ObTimerService::start()
       OB_LOG(WARN, "reserve uncanceled_task_set failed", K(reserve_size), K(ret));
     } else if (OB_FAIL(token_alloc_.reserve(INITIAL_ELEMENT_NUM))) {
       OB_LOG(WARN, "reserve token_alloc failed", K(ret));
+    } else if (FALSE_IT(
+        worker_thread_pool_.set_queue_driven_expansion(mini_mode))) {
     } else if (OB_FAIL(worker_thread_pool_.init(
         MIN_WORKER_THREAD_NUM, TASK_NUM_LIMIT, "TimerWK"))) {
       OB_LOG(WARN, "init ObTimerTaskThreadPool failed", K(ret));
-    } else if (OB_FAIL(worker_thread_pool_.set_thread_count(MAX_WORKER_THREAD_NUM))) {
+    } else if (OB_FAIL(worker_thread_pool_.set_thread_count(
+        max_worker_thread_num))) {
       OB_LOG(WARN, "set adaptive thread failed", K(ret));
     } else if (OB_FAIL(ThreadPool::start())) {
       OB_LOG(WARN, "failed to start ObTimerService thread", K(ret));
     } else {
       is_never_started_ = false;
       monitor_.notify_all();
-      OB_LOG(INFO, "ObTimerService start success", KP(this), KCSTRING(lbt()));
+      OB_LOG(INFO, "ObTimerService start success",
+          KP(this), K(mini_mode), K(max_worker_thread_num), KCSTRING(lbt()));
     }
     if (OB_FAIL(ret)) {
       is_stopped_ = true;
@@ -259,6 +278,19 @@ void ObTimerService::stop()
     ObMonitor<Mutex>::Lock guard(monitor_);
     // STEP1: set stop flag
     is_stopped_ = true;
+    // The shared executor is stopped before the process-wide timer service.
+    // Restore the dedicated fallback here as well so startup-failure and unit
+    // test shutdown paths cannot leave dispatched tokens without a consumer.
+    shared_worker_notify_fn_ = nullptr;
+    shared_worker_notify_arg_ = nullptr;
+    worker_thread_pool_.set_external_driver(false);
+    if (worker_thread_pool_.get_queue_num() > 0
+        && 0 == worker_thread_pool_.get_thread_count()) {
+      (void)worker_thread_pool_.try_expand_one_once(
+          lib::is_mini_mode()
+              ? MINI_MODE_MAX_WORKER_THREAD_NUM
+              : MAX_WORKER_THREAD_NUM);
+    }
     // STEP2: cancel tasks that haven't run yet (skip dispatched ones)
     for (int32_t i = 0; i < priority_task_queue_.size(); ++i) {
       TaskToken *token = priority_task_queue_.at(i);
@@ -436,6 +468,88 @@ int ObTimerService::wait_task(const ObTimer *timer, const ObTimerTask *task)
     } while (true);
   }
 
+  return ret;
+}
+
+int ObTimerService::attach_shared_worker_notifier(
+    SharedWorkerNotifyFn notify_fn,
+    void *notify_arg,
+    bool &has_pending)
+{
+  int ret = OB_SUCCESS;
+  has_pending = false;
+  ObMonitor<Mutex>::Lock guard(monitor_);
+  if (!lib::is_mini_mode()) {
+    ret = OB_NOT_SUPPORTED;
+  } else if (is_stopped_) {
+    ret = OB_NOT_RUNNING;
+  } else if (OB_ISNULL(notify_fn) || OB_ISNULL(notify_arg)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_NOT_NULL(shared_worker_notify_fn_)
+      && (shared_worker_notify_fn_ != notify_fn
+          || shared_worker_notify_arg_ != notify_arg)) {
+    ret = OB_STATE_NOT_MATCH;
+  } else {
+    shared_worker_notify_fn_ = notify_fn;
+    shared_worker_notify_arg_ = notify_arg;
+    worker_thread_pool_.set_external_driver(true);
+    // A positive ObLightyQueue size is work not already reserved by one of
+    // the legacy TimerWK workers that is draining during the handoff.
+    has_pending = worker_thread_pool_.get_queue_num() > 0;
+    OB_LOG(INFO, "timer service attached shared worker",
+        KP(this), K(has_pending),
+        "legacy_worker_count", worker_thread_pool_.get_thread_count());
+  }
+  return ret;
+}
+
+int ObTimerService::detach_shared_worker_notifier(void *notify_arg)
+{
+  int ret = OB_SUCCESS;
+  ObMonitor<Mutex>::Lock guard(monitor_);
+  if (OB_NOT_NULL(shared_worker_notify_arg_)
+      && shared_worker_notify_arg_ != notify_arg) {
+    ret = OB_STATE_NOT_MATCH;
+  } else {
+    shared_worker_notify_fn_ = nullptr;
+    shared_worker_notify_arg_ = nullptr;
+    worker_thread_pool_.set_external_driver(false);
+    // Tokens may have accumulated after the Source was unregistered. Start
+    // one fallback worker; queue pressure will grow it further when needed.
+    if (!is_stopped_
+        && worker_thread_pool_.get_queue_num() > 0
+        && 0 == worker_thread_pool_.get_thread_count()
+        && !worker_thread_pool_.try_expand_one_once(
+            MINI_MODE_MAX_WORKER_THREAD_NUM)) {
+      ret = OB_EAGAIN;
+    }
+    OB_LOG(INFO, "timer service detached shared worker",
+        KP(this), K(ret),
+        "pending_task_count", worker_thread_pool_.get_queue_num(),
+        "legacy_worker_count", worker_thread_pool_.get_thread_count());
+  }
+  return ret;
+}
+
+int ObTimerService::process_one_shared_worker_task(
+    bool &processed,
+    bool &has_more)
+{
+  int ret = OB_SUCCESS;
+  void *task_token = nullptr;
+  processed = false;
+  has_more = false;
+  if (OB_FAIL(worker_thread_pool_.pop_task_for_external_driver(task_token))) {
+    if (OB_ENTRY_NOT_EXIST == ret) {
+      ret = OB_SUCCESS;
+    }
+  } else if (OB_ISNULL(task_token)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    worker_thread_pool_.handle(task_token);
+    processed = true;
+    has_more = worker_thread_pool_.get_queue_num() > 0;
+  }
   return ret;
 }
 
@@ -627,7 +741,9 @@ void ObTimerService::run1()
             } else {
               delete_token(token);
             }
-          } else {}
+          } else if (OB_NOT_NULL(shared_worker_notify_fn_)) {
+            shared_worker_notify_fn_(shared_worker_notify_arg_);
+          }
         }
       }
     }  // unlock

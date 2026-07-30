@@ -21,7 +21,9 @@
 #include "storage/slog/ob_storage_log_item.h"
 #include "storage/slog/ob_storage_log_replayer.h"
 #include "storage/slog/ob_storage_log_writer.h"
+#include "lib/ob_running_mode.h"
 #include "lib/thread/ob_thread_name.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -32,7 +34,10 @@ namespace storage
 {
 
 ObStorageLogWriter::ObStorageLogWriter()
-  : is_inited_(false), flush_seq_(0), write_align_size_(0),
+  : is_inited_(false), use_shared_executor_(false),
+    base_flush_thread_started_(false), background_source_name_(nullptr),
+    background_executor_(nullptr),
+    source_handle_(), source_lock_(), flush_seq_(0), write_align_size_(0),
     file_size_(0),  write_offset_(0), cursor_(),
     retry_write_policy_(ObLogRetryWritePolicy::INVALID_RETRY_WRITE),
     log_write_policy_(ObLogWritePolicy::INVALID_WRITE), nop_log_(),
@@ -49,7 +54,8 @@ int ObStorageLogWriter::init(
     const char *log_dir,
     const int64_t log_file_size,
     const int64_t max_log_size,
-    const blocksstable::ObLogFileSpec &log_file_spec)
+    const blocksstable::ObLogFileSpec &log_file_spec,
+    const char *background_source_name)
 {
   int ret = OB_SUCCESS;
 
@@ -66,7 +72,10 @@ int ObStorageLogWriter::init(
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     STORAGE_REDO_LOG(WARN, "Init twice", K(ret));
-  } else if (OB_UNLIKELY(nullptr == log_dir || max_log_size <= 0 || log_file_size < max_log_size)) {
+  } else if (OB_UNLIKELY(nullptr == log_dir
+      || max_log_size <= 0
+      || log_file_size < max_log_size
+      || nullptr == background_source_name)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "Invalid arguments", K(ret), KP(log_dir),
         K(log_file_size), K(max_log_size));
@@ -86,9 +95,11 @@ int ObStorageLogWriter::init(
     STORAGE_REDO_LOG(WARN, "Fail to init batch write buf", K(ret), K(buf_size));
   } else if (OB_FAIL(file_handler_.init(log_dir, log_file_size))) {
     STORAGE_REDO_LOG(WARN, "Fail to create file handler", K(ret), KP(log_dir));
-  } else if (OB_FAIL(slog_write_runner_.init(this))) {  // seekdb: always init (was 500!=1)
+  } else if (FALSE_IT(use_shared_executor_ = lib::is_mini_mode())) {
+  } else if (OB_FAIL(slog_write_runner_.init(this))) {
     STORAGE_REDO_LOG(WARN, "Fail to init slog write runner.", K(ret));
   } else {
+    background_source_name_ = background_source_name;
     is_inited_ = true;
     STORAGE_REDO_LOG(INFO, "Successfully init slog writer", K(ret), KP(log_dir),
           K(log_file_size), K(max_log_size), K(log_file_spec));
@@ -110,18 +121,234 @@ int ObStorageLogWriter::start()
   } else if (!has_stopped_) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_REDO_LOG(WARN, "ObStorageLogWriter has started.", K(ret), K(has_stopped_));
-  } else if (FALSE_IT(has_stopped_ = false)) {
-    // has_stopped_ must be set before flush thread run. Otherwise it might caused thread exit
-    // No worry about councurrent slog write, because the ObStorageLogger hasn't started yet.
-  } else if (OB_FAIL(slog_write_runner_.start())) {
-    STORAGE_REDO_LOG(WARN, "fail to start ObSlogWriteRunner's thread", K(ret));
+  } else {
+    const bool current_mini_mode = lib::is_mini_mode();
+    share::ObBackgroundTaskExecutor *current_background_executor =
+        nullptr == share::g_mp
+            ? nullptr
+            : share::g_mp->background_task_executor();
+    const bool use_bootstrap_base_thread =
+        current_mini_mode && nullptr == current_background_executor;
+    const char *execution_mode =
+        !current_mini_mode
+            ? "slog_runner"
+            : use_bootstrap_base_thread
+                ? "bootstrap_base_thread"
+                : "shared_executor";
+    STORAGE_REDO_LOG(INFO, "choose slog writer execution mode",
+        K(current_mini_mode), K(execution_mode),
+        K(background_source_name_), KP(this),
+        KP(share::g_mp), KP(current_background_executor));
+    if (use_bootstrap_base_thread) {
+      if (OB_FAIL(start_base_flush_thread_())) {
+        STORAGE_REDO_LOG(WARN,
+            "fail to start bootstrap slog flush thread",
+            K(ret), K(background_source_name_));
+      }
+    } else if (current_mini_mode) {
+      share::ObBackgroundTaskExecutor *background_executor =
+          current_background_executor;
+      share::ObBackgroundTaskSourceConfig config;
+      config.name_ = background_source_name_;
+      config.max_concurrency_ = 1;
+      if (OB_FAIL(background_executor->register_source(
+          *this, config, source_handle_))) {
+        STORAGE_REDO_LOG(WARN,
+            "fail to register slog background source",
+            K(ret), K(background_source_name_));
+      } else {
+        {
+          lib::ObMutexGuard guard(source_lock_);
+          background_executor_ = background_executor;
+          use_shared_executor_ = true;
+          base_flush_thread_started_ = false;
+          has_stopped_ = false;
+        }
+        if (get_queued_item_cnt() > 0
+            && OB_FAIL(notify_background_source_())) {
+          STORAGE_REDO_LOG(WARN,
+              "fail to notify pending slog task",
+              K(ret), K(background_source_name_));
+        }
+      }
+    } else {
+      use_shared_executor_ = false;
+      base_flush_thread_started_ = false;
+      has_stopped_ = false;
+      // has_stopped_ must be set before the runner starts. The logger has not
+      // started accepting writes yet, so no producer can race this transition.
+      if (OB_FAIL(slog_write_runner_.start())) {
+        STORAGE_REDO_LOG(WARN, "fail to start ObSlogWriteRunner's thread", K(ret));
+      }
+    }
+    if (OB_FAIL(ret)) {
+      has_stopped_ = true;
+      (void)unregister_background_source_(true);
+      use_shared_executor_ = false;
+    }
   }
   return ret;
 }
 
+int ObStorageLogWriter::start_base_flush_thread_()
+{
+  int ret = OB_SUCCESS;
+  use_shared_executor_ = false;
+  base_flush_thread_started_ = false;
+  if (OB_FAIL(ObBaseLogWriter::start())) {
+    STORAGE_REDO_LOG(WARN,
+        "fail to start base slog flush thread",
+        K(ret), K(background_source_name_));
+  } else {
+    base_flush_thread_started_ = true;
+  }
+  return ret;
+}
+
+int ObStorageLogWriter::attach_background_executor(
+    share::ObBackgroundTaskExecutor *background_executor)
+{
+  int ret = OB_SUCCESS;
+  int start_ret = OB_SUCCESS;
+  if (!lib::is_mini_mode()) {
+    // The normal mode keeps its original dedicated flush implementation.
+  } else if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(background_executor)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (use_shared_executor_) {
+    if (background_executor_ != background_executor) {
+      ret = OB_ERR_UNEXPECTED;
+    }
+  } else if (!base_flush_thread_started_ || has_stopped_) {
+    ret = OB_NOT_RUNNING;
+  } else {
+    // Server SLOG starts before the runtime-owned background executor exists.
+    // Stop and join that bootstrap thread before publishing the same queue as
+    // a shared source, so the queue never has two concurrent consumers.
+    ObBaseLogWriter::stop();
+    ObBaseLogWriter::wait();
+    base_flush_thread_started_ = false;
+
+    share::ObBackgroundTaskSourceConfig config;
+    config.name_ = background_source_name_;
+    config.max_concurrency_ = 1;
+    if (OB_FAIL(background_executor->register_source(
+        *this, config, source_handle_))) {
+      STORAGE_REDO_LOG(WARN,
+          "fail to register bootstrap slog as background source",
+          K(ret), K(background_source_name_));
+    } else {
+      {
+        lib::ObMutexGuard guard(source_lock_);
+        background_executor_ = background_executor;
+        use_shared_executor_ = true;
+        has_stopped_ = false;
+      }
+      if (get_queued_item_cnt() > 0
+          && OB_FAIL(notify_background_source_())) {
+        STORAGE_REDO_LOG(WARN,
+            "fail to notify migrated slog source",
+            K(ret), K(background_source_name_));
+      } else {
+        STORAGE_REDO_LOG(INFO,
+            "migrated bootstrap slog flush thread to background executor",
+            K(background_source_name_), KP(background_executor));
+      }
+    }
+
+    if (OB_FAIL(ret)) {
+      has_stopped_ = true;
+      (void)unregister_background_source_(true);
+      use_shared_executor_ = false;
+      if (OB_SUCCESS != (start_ret = start_base_flush_thread_())) {
+        STORAGE_REDO_LOG_RET(ERROR, start_ret,
+            "fail to restore bootstrap slog flush thread",
+            K(start_ret), K(background_source_name_));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObStorageLogWriter::detach_background_executor()
+{
+  int ret = OB_SUCCESS;
+  bool was_running = false;
+  if (!lib::is_mini_mode() || !use_shared_executor_) {
+    // The normal mode and an already detached writer need no transition.
+  } else if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else {
+    was_running = !has_stopped_;
+    if (OB_FAIL(unregister_background_source_(true))) {
+      STORAGE_REDO_LOG(WARN,
+          "fail to unregister slog background source before fallback",
+          K(ret), K(background_source_name_));
+    } else {
+      {
+        lib::ObMutexGuard guard(source_lock_);
+        use_shared_executor_ = false;
+        background_executor_ = nullptr;
+        source_handle_.reset();
+        base_flush_thread_started_ = false;
+        // The shared executor does not use ObBaseLogWriter::start(), so make
+        // its lifecycle state ready for the fallback thread explicitly.
+        has_stopped_ = true;
+      }
+      if (was_running && OB_FAIL(start_base_flush_thread_())) {
+        STORAGE_REDO_LOG(ERROR,
+            "fail to restore base slog flush thread after shared executor detach",
+            K(ret), K(background_source_name_));
+      } else if (was_running) {
+        STORAGE_REDO_LOG(INFO,
+            "restored base slog flush thread after shared executor detach",
+            K(background_source_name_));
+      }
+    }
+  }
+  return ret;
+}
+
+void ObStorageLogWriter::stop()
+{
+  if (is_inited_) {
+    if (use_shared_executor_ && !has_stopped_) {
+      const int tmp_ret = notify_background_source_();
+      if (OB_SUCCESS != tmp_ret
+          && OB_NOT_RUNNING != tmp_ret
+          && OB_IN_STOP_STATE != tmp_ret
+          && OB_ENTRY_NOT_EXIST != tmp_ret) {
+        STORAGE_REDO_LOG_RET(WARN, tmp_ret,
+            "fail to notify slog source before stop",
+            K(tmp_ret), K(background_source_name_));
+      }
+    }
+    ObBaseLogWriter::stop();
+    if (use_shared_executor_) {
+      const int tmp_ret = unregister_background_source_(true);
+      if (OB_SUCCESS != tmp_ret) {
+        STORAGE_REDO_LOG_RET(WARN, tmp_ret,
+            "fail to stop slog background source",
+            K(tmp_ret), K(background_source_name_));
+      }
+    }
+  }
+}
+
 void ObStorageLogWriter::wait()
 {
-  if (has_stopped_ && is_inited_) {
+  if (has_stopped_ && is_inited_ && use_shared_executor_) {
+    const int tmp_ret = unregister_background_source_(true);
+    if (OB_SUCCESS != tmp_ret) {
+      STORAGE_REDO_LOG_RET(WARN, tmp_ret,
+          "fail to wait slog background source",
+          K(tmp_ret), K(background_source_name_));
+    }
+  } else if (has_stopped_ && is_inited_ && base_flush_thread_started_) {
+    ObBaseLogWriter::wait();
+    base_flush_thread_started_ = false;
+  } else if (has_stopped_ && is_inited_) {
     slog_write_runner_.stop();
     slog_write_runner_.wait();
   }
@@ -129,6 +356,10 @@ void ObStorageLogWriter::wait()
 
 void ObStorageLogWriter::destroy()
 {
+  if (is_inited_ && use_shared_executor_) {
+    stop();
+    wait();
+  }
   flush_seq_ = 0;
   write_align_size_ = 0;
   file_size_ = 0;
@@ -139,7 +370,103 @@ void ObStorageLogWriter::destroy()
   nop_log_.destroy();
   batch_write_buf_.destroy();
   slog_write_runner_.destroy();
+  {
+    lib::ObMutexGuard guard(source_lock_);
+    background_executor_ = nullptr;
+    source_handle_.reset();
+  }
+  background_source_name_ = nullptr;
+  use_shared_executor_ = false;
+  base_flush_thread_started_ = false;
   is_inited_ = false;
+}
+
+int ObStorageLogWriter::process_one_quantum(
+    const share::ObBackgroundTaskPriority priority,
+    share::ObBackgroundTaskRunResult &result)
+{
+  int ret = OB_SUCCESS;
+  int64_t processed_count = 0;
+  bool has_more = false;
+  if (!is_inited_ || !use_shared_executor_) {
+    ret = OB_NOT_INIT;
+  } else if (share::BG_TASK_HIGH != priority) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (has_stopped_) {
+  } else if (OB_FAIL(flush_log_one_quantum(
+      SHARED_FLUSH_BATCH_COUNT, processed_count, has_more))) {
+    STORAGE_REDO_LOG(WARN,
+        "fail to flush slog background quantum",
+        K(ret), K(background_source_name_));
+  } else {
+    result.processed_count_ = processed_count;
+    result.has_more_ready_ = has_more;
+  }
+  return ret;
+}
+
+void ObStorageLogWriter::on_log_item_appended()
+{
+  if (use_shared_executor_ && !has_stopped_) {
+    const int tmp_ret = notify_background_source_();
+    if (OB_SUCCESS != tmp_ret
+        && OB_NOT_RUNNING != tmp_ret
+        && OB_IN_STOP_STATE != tmp_ret
+        && OB_ENTRY_NOT_EXIST != tmp_ret) {
+      STORAGE_REDO_LOG_RET(WARN, tmp_ret,
+          "fail to notify appended slog task",
+          K(tmp_ret), K(background_source_name_));
+    }
+  }
+}
+
+int ObStorageLogWriter::notify_background_source_()
+{
+  int ret = OB_SUCCESS;
+  lib::ObMutexGuard guard(source_lock_);
+  if (!use_shared_executor_
+      || has_stopped_
+      || OB_ISNULL(background_executor_)
+      || !source_handle_.is_valid()) {
+    ret = OB_NOT_RUNNING;
+  } else if (OB_FAIL(background_executor_->notify(
+      source_handle_, share::BG_TASK_HIGH))) {
+    STORAGE_REDO_LOG(WARN,
+        "fail to notify slog background source",
+        K(ret), K(background_source_name_));
+  }
+  return ret;
+}
+
+int ObStorageLogWriter::unregister_background_source_(
+    const bool wait_running)
+{
+  int ret = OB_SUCCESS;
+  bool need_retry = false;
+  do {
+    need_retry = false;
+    {
+      lib::ObMutexGuard guard(source_lock_);
+      if (use_shared_executor_
+          && OB_NOT_NULL(background_executor_)
+          && source_handle_.is_valid()) {
+        ret = background_executor_->unregister_source(source_handle_);
+        if (OB_EAGAIN == ret && wait_running) {
+          need_retry = true;
+        } else if (OB_ENTRY_NOT_EXIST == ret || OB_NOT_INIT == ret) {
+          source_handle_.reset();
+          ret = OB_SUCCESS;
+        }
+      }
+      if (!source_handle_.is_valid()) {
+        background_executor_ = nullptr;
+      }
+    }
+    if (need_retry) {
+      ob_usleep(1000);
+    }
+  } while (need_retry);
+  return ret;
 }
 
 ObLogCursor ObStorageLogWriter::get_cur_cursor()

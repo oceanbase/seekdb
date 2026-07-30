@@ -62,6 +62,12 @@ public:
   // device health management
   ObIOFaultDetector &get_device_health_detector();
   int get_device_health_status(ObDeviceHealthStatus &dhs, int64_t &device_abnormal_time);
+  int attach_callback_background_executor(
+      share::ObBackgroundTaskExecutor *background_executor);
+  int detach_callback_background_executor();
+  int attach_sync_io_background_executor(
+      share::ObBackgroundTaskExecutor *background_executor);
+  int detach_sync_io_background_executor();
 
   // device channel management
   int add_device_channel(ObIODevice *device_handle, const int64_t async_channel_count, const int64_t sync_channel_count,
@@ -100,6 +106,7 @@ private:
   hash::ObHashMap<int64_t /*device_handle*/, ObDeviceChannel *> channel_map_;
   ObIOFaultDetector fault_detector_;
   ObIOService *io_service_;
+  share::ObBackgroundTaskExecutor *sync_io_background_executor_;
 };
 
 class ObIOService final

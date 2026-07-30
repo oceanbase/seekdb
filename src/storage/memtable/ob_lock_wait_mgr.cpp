@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
+#include "lib/ob_running_mode.h"
 #include "ob_lock_wait_mgr.h"
 #include "share/rc/ob_module_provider.h"
 
@@ -69,10 +71,17 @@ uint64_t hash_trans(const ObTransID &tx_id)
 
 ObLockWaitMgr::ObLockWaitMgr()
     : is_inited_(false),
+      is_running_(false),
+      is_stopping_(false),
+      use_shared_executor_(false),
       hash_(hash_buf_, sizeof(hash_buf_)),
+      last_check_session_idle_ts_(0),
+      last_mapper_dump_ts_(0),
       deadlocked_sessions_lock_(common::ObLatchIds::DEADLOCK_DETECT_LOCK),
       deadlocked_sessions_index_(0),
-      total_wait_node_(0)
+      total_wait_node_(0),
+      background_executor_(nullptr),
+      source_handle_()
 {
   memset(sequence_, 0, sizeof(sequence_));
 }
@@ -93,29 +102,118 @@ int ObLockWaitMgr::init()
   } else if (OB_FAIL(row_holder_mapper_.init())) {
     TRANS_LOG(WARN, "can't init row_holder", KR(ret));
   } else {
+    use_shared_executor_ = lib::is_mini_mode();
     share::ObThreadPool::set_run_wrapper(share::server_runtime());
     last_check_session_idle_ts_ = ObClockGenerator::getClock();
+    last_mapper_dump_ts_ = 0;
     total_wait_node_ = 0;
+    is_running_ = false;
+    is_stopping_ = false;
     is_inited_ = true;
   }
   TRANS_LOG(INFO, "LockWaitMgr.init", K(ret));
   return ret;
 }
 
-int ObLockWaitMgr::start() {
-  int ret = share::ObThreadPool::start();
+int ObLockWaitMgr::start()
+{
+  int ret = OB_SUCCESS;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (is_running_) {
+    // already started
+  } else if (use_shared_executor_) {
+    if (OB_ISNULL(share::g_mp)
+        || OB_ISNULL(background_executor_ =
+            share::g_mp->background_task_executor())) {
+      ret = OB_ERR_UNEXPECTED;
+      TRANS_LOG(WARN, "background task executor is null",
+          KR(ret), KP(share::g_mp), KP(background_executor_));
+    } else {
+      share::ObBackgroundTaskSourceConfig config;
+      config.name_ = "LockWaitMgr";
+      config.max_concurrency_ = 1;
+      if (OB_FAIL(background_executor_->register_source(
+          *this, config, source_handle_))) {
+        TRANS_LOG(WARN, "register lock wait source failed", KR(ret));
+      } else {
+        ATOMIC_STORE(&is_stopping_, false);
+        ATOMIC_STORE(&is_running_, true);
+        if (OB_FAIL(notify_background_source_())) {
+          TRANS_LOG(WARN, "start lock wait source failed", KR(ret));
+        }
+      }
+    }
+  } else if (OB_FAIL(share::ObThreadPool::start())) {
+    TRANS_LOG(WARN, "start lock wait thread failed", KR(ret));
+  } else {
+    ATOMIC_STORE(&is_stopping_, false);
+    ATOMIC_STORE(&is_running_, true);
+  }
+  if (OB_FAIL(ret) && use_shared_executor_) {
+    ATOMIC_STORE(&is_running_, false);
+    (void)unregister_background_source_(true);
+  }
   TRANS_LOG(INFO, "LockWaitMgr.start", K(ret));
   return ret;
 }
 
-void ObLockWaitMgr::stop() {
-  share::ObThreadPool::stop();
+void ObLockWaitMgr::stop()
+{
+  if (is_inited_) {
+    ATOMIC_STORE(&is_stopping_, true);
+    ATOMIC_STORE(&is_running_, false);
+    if (use_shared_executor_) {
+      const int tmp_ret = notify_background_source_();
+      if (OB_SUCCESS != tmp_ret && OB_NOT_RUNNING != tmp_ret
+          && OB_IN_STOP_STATE != tmp_ret) {
+        TRANS_LOG_RET(WARN, tmp_ret,
+            "notify stopping lock wait source failed", K(tmp_ret));
+      }
+    } else {
+      share::ObThreadPool::stop();
+    }
+  }
   TRANS_LOG(INFO, "LockWaitMgr.stop");
 }
-void ObLockWaitMgr::destroy() {
+
+void ObLockWaitMgr::wait()
+{
+  if (is_inited_) {
+    if (use_shared_executor_) {
+      while (!is_hash_empty() && source_handle_.is_valid()) {
+        const int tmp_ret = notify_background_source_();
+        if (OB_SUCCESS != tmp_ret && OB_IN_STOP_STATE != tmp_ret) {
+          TRANS_LOG_RET(WARN, tmp_ret,
+              "notify lock wait drain failed", K(tmp_ret));
+        }
+        ob_usleep(1000);
+      }
+      const int tmp_ret = unregister_background_source_(true);
+      if (OB_SUCCESS != tmp_ret) {
+        TRANS_LOG_RET(WARN, tmp_ret,
+            "wait lock wait source failed", K(tmp_ret));
+      }
+    } else {
+      share::ObThreadPool::wait();
+    }
+  }
+}
+
+void ObLockWaitMgr::destroy()
+{
+  if (use_shared_executor_) {
+    (void)unregister_background_source_(true);
+  }
   is_inited_ = false;
+  is_running_ = false;
+  is_stopping_ = false;
+  use_shared_executor_ = false;
   total_wait_node_ = 0;
   deadlocked_sessions_index_ = 0;
+  last_mapper_dump_ts_ = 0;
+  background_executor_ = nullptr;
+  source_handle_.reset();
 }
 
 void RowHolderMapper::set_hash_holder(const ObTabletID &tablet_id,
@@ -165,29 +263,116 @@ int RowHolderMapper::get_rowkey_holder(const ObTabletID &tablet_id,
 
 void ObLockWaitMgr::run1()
 {
-  int64_t last_dump_ts = 0;
-  int64_t now = 0;
   lib::set_thread_name("LockWaitMgr");
-  while(!has_set_stop() || !is_hash_empty()) {
-    if (ATOMIC_LOAD(&total_wait_node_) > 0) {
-      ObLink* iter = check_timeout();
-      while (NULL != iter) {
-        Node* cur = CONTAINER_OF(iter, Node, retire_link_);
-        iter = iter->next_;
-        (void)repost(cur);
-      }
-    }
-    // dump debug info, and check deadlock enabdle, clear mapper if deadlock is disabled
-    now = ObClockGenerator::getClock();
-    if (now - last_dump_ts > 5_s) {
-      last_dump_ts = now;
-      row_holder_mapper_.dump_mapper_info();
-      if (!ObDeadLockDetectorMgr::is_deadlock_enabled()) {
-        row_holder_mapper_.clear();
-      }
-    }
+  while (!is_stop_requested_() || !is_hash_empty()) {
+    int64_t processed_count = 0;
+    (void)process_waiters_(processed_count);
+    maintain_row_holder_mapper_();
     ob_usleep(100000, true/*is_idle_sleep*/);
   }
+}
+
+int ObLockWaitMgr::process_one_quantum(
+    const share::ObBackgroundTaskPriority priority,
+    share::ObBackgroundTaskRunResult &result)
+{
+  int ret = OB_SUCCESS;
+  int64_t processed_count = 0;
+  if (!use_shared_executor_) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (share::BG_TASK_HIGH != priority) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(process_waiters_(processed_count))) {
+    TRANS_LOG(WARN, "process lock wait requests failed", KR(ret));
+  } else {
+    maintain_row_holder_mapper_();
+    result.processed_count_ = processed_count;
+    if (!is_hash_empty()) {
+      result.next_ready_ts_ =
+          ObClockGenerator::getClock() + 100 * 1000L;
+    } else if (!is_stop_requested_()) {
+      result.next_ready_ts_ = last_mapper_dump_ts_ + 5_s;
+    }
+  }
+  return ret;
+}
+
+bool ObLockWaitMgr::is_stop_requested_() const
+{
+  return use_shared_executor_
+      ? ATOMIC_LOAD(&is_stopping_)
+      : has_set_stop();
+}
+
+int ObLockWaitMgr::process_waiters_(int64_t &processed_count)
+{
+  int ret = OB_SUCCESS;
+  processed_count = 0;
+  if (ATOMIC_LOAD(&total_wait_node_) > 0) {
+    ObLink *iter = check_timeout();
+    while (NULL != iter) {
+      Node *cur = CONTAINER_OF(iter, Node, retire_link_);
+      iter = iter->next_;
+      const int tmp_ret = repost(cur);
+      if (OB_SUCCESS != tmp_ret) {
+        TRANS_LOG(WARN, "repost lock wait request failed",
+            K(tmp_ret), KPC(cur));
+      }
+      ++processed_count;
+    }
+  }
+  return ret;
+}
+
+void ObLockWaitMgr::maintain_row_holder_mapper_()
+{
+  const int64_t now = ObClockGenerator::getClock();
+  if (now - last_mapper_dump_ts_ > 5_s) {
+    last_mapper_dump_ts_ = now;
+    row_holder_mapper_.dump_mapper_info();
+    if (!ObDeadLockDetectorMgr::is_deadlock_enabled()) {
+      row_holder_mapper_.clear();
+    }
+  }
+}
+
+int ObLockWaitMgr::notify_background_source_()
+{
+  int ret = OB_SUCCESS;
+  if (!use_shared_executor_) {
+  } else if (OB_ISNULL(background_executor_)
+      || !source_handle_.is_valid()
+      || (!ATOMIC_LOAD(&is_running_) && !ATOMIC_LOAD(&is_stopping_))) {
+    ret = OB_NOT_RUNNING;
+  } else if (OB_FAIL(background_executor_->notify(
+      source_handle_, share::BG_TASK_HIGH))) {
+    TRANS_LOG(WARN, "notify lock wait source failed", KR(ret));
+  }
+  return ret;
+}
+
+int ObLockWaitMgr::unregister_background_source_(const bool wait_running)
+{
+  int ret = OB_SUCCESS;
+  if (use_shared_executor_ && OB_NOT_NULL(background_executor_)
+      && source_handle_.is_valid()) {
+    do {
+      ret = background_executor_->unregister_source(source_handle_);
+      if (wait_running && OB_EAGAIN == ret) {
+        ob_usleep(1000);
+      }
+    } while (wait_running && OB_EAGAIN == ret);
+    if (OB_ENTRY_NOT_EXIST == ret || OB_NOT_INIT == ret) {
+      source_handle_.reset();
+      ret = OB_SUCCESS;
+    }
+  }
+  if (!source_handle_.is_valid()) {
+    background_executor_ = nullptr;
+  }
+  return ret;
 }
 
 
@@ -295,7 +480,7 @@ bool ObLockWaitMgr::wait(Node* node)
   uint64_t last_lock_seq = node->lock_seq_;
   bool is_standalone_task = false;
   ATOMIC_INC(&total_wait_node_);
-  if (has_set_stop()) {
+  if (is_stop_requested_()) {
     // wait fail if _stop
   } else if (check_wakeup_seq(hash, last_lock_seq, is_standalone_task)) {
     Node* tmp_node = NULL;
@@ -315,7 +500,7 @@ bool ObLockWaitMgr::wait(Node* node)
         }
       }
       // 3. Exception operation
-      if (has_set_stop()) {
+      if (is_stop_requested_()) {
         while(-EAGAIN == (err = hash_.del(node, tmp_node)))
           ;
         if (0 != err) {
@@ -336,9 +521,16 @@ bool ObLockWaitMgr::wait(Node* node)
   }
   if (!wait_succ) {
     ATOMIC_DEC(&total_wait_node_);
+  } else if (use_shared_executor_) {
+    const int tmp_ret = notify_background_source_();
+    if (OB_SUCCESS != tmp_ret) {
+      TRANS_LOG_RET(WARN, tmp_ret,
+          "notify new lock wait request failed",
+          K(tmp_ret), KPC(node));
+    }
   }
   TRANS_LOG(TRACE, "LockWaitMgr.wait", K(is_standalone_task),
-            K(wait_succ), K(has_set_stop()), KPC(node));
+            K(wait_succ), "has_set_stop", is_stop_requested_(), KPC(node));
   return wait_succ;
 }
 
@@ -350,6 +542,8 @@ void ObLockWaitMgr::wakeup(uint64_t hash)
     node = fetch_waiter(hash);
 
     if (NULL != node) {
+      EVENT_INC(MEMSTORE_WRITE_LOCK_WAKENUP_COUNT);
+      EVENT_ADD(MEMSTORE_WAIT_WRITE_LOCK_TIME, ObTimeUtility::current_time() - node->lock_ts_);
       node->on_retry_lock(hash);
       (void)repost(node);
     }
@@ -439,10 +633,11 @@ ObLink* ObLockWaitMgr::check_timeout()
       uint64_t hash = iter->hash();
       uint64_t last_lock_seq = iter->lock_seq_;
       uint64_t curr_lock_seq = ATOMIC_LOAD(&sequence_[(hash >> 1)% LOCK_BUCKET_COUNT]);
-      if (iter->is_timeout() || has_set_stop()) {
+      if (iter->is_timeout() || is_stop_requested_()) {
         TRANS_LOG_RET(WARN, OB_TIMEOUT, "LOCK_MGR: req wait lock timeout", K(curr_lock_seq), K(last_lock_seq), K(*iter));
         need_check_session = true;
         node2del = iter;
+        EVENT_INC(MEMSTORE_WRITE_LOCK_WAIT_TIMEOUT_COUNT);
         // it needs to be placed before the judgment of session_id to prevent the
         // abnormal case which session_id equals 0 from causing the problem of missing wakeup
       } else if (iter->is_standalone_task() && iter->get_run_ts() == 0) {
@@ -459,7 +654,7 @@ ObLink* ObLockWaitMgr::check_timeout()
         iter->on_retry_lock(hash);
         TRANS_LOG(INFO, "current task should be waken up cause reaching run ts", K(*iter));
       } else if (0 == iter->sessid_) {
-        // Sessionless tasks do not participate in session deadlock checks.
+        // do nothing, may be rpc plan, sessionid is not setted
       } else if (NULL != deadlocked_session
                  && is_deadlocked_session_(deadlocked_session,
                                            iter->sessid_)) {
@@ -520,6 +715,8 @@ void ObLockWaitMgr::retire_node(ObLink*& tail, Node* node)
 {
   int err = 0;
   Node* tmp_node = NULL;
+  EVENT_INC(MEMSTORE_WRITE_LOCK_WAKENUP_COUNT);
+  EVENT_ADD(MEMSTORE_WAIT_WRITE_LOCK_TIME, ObTimeUtility::current_time() - node->lock_ts_);
   while (-EAGAIN == (err = hash_.del(node, tmp_node)))
     ;
   if (0 == err) {
@@ -693,6 +890,7 @@ int ObLockWaitMgr::transform_row_lock_to_tx_lock(const ObTabletID &tablet_id,
   int64_t lock_seq = get_seq(hash_tx_id);
   Node *node = NULL;
   while (NULL != (node = fetch_waiter(hash_row_key))) {
+    int tmp_ret = OB_SUCCESS;
     ObTransID self_tx_id(node->tx_id_);
     ObTransDeadlockDetectorAdapter::change_detector_waiting_obj_from_row_to_trans(self_tx_id, tx_id);
     node->change_hash(hash_tx_id, lock_seq);
@@ -729,8 +927,20 @@ void ObLockWaitMgr::wakeup(const ObLockID &lock_id)
 
 int ObLockWaitMgr::notify_deadlocked_session(const uint32_t sess_id)
 {
-  ObSpinLockGuard guard(deadlocked_sessions_lock_);
-  return deadlocked_sessions_[deadlocked_sessions_index_].push_back(SessPair{sess_id});
+  int ret = OB_SUCCESS;
+  {
+    ObSpinLockGuard guard(deadlocked_sessions_lock_);
+    ret = deadlocked_sessions_[deadlocked_sessions_index_].push_back(
+        SessPair{sess_id});
+  }
+  if (OB_SUCC(ret) && use_shared_executor_) {
+    const int tmp_ret = notify_background_source_();
+    if (OB_SUCCESS != tmp_ret) {
+      TRANS_LOG(WARN, "notify deadlocked lock wait session failed",
+          K(tmp_ret), K(sess_id));
+    }
+  }
+  return ret;
 }
 
 void ObLockWaitMgr::fetch_deadlocked_sessions_(DeadlockedSessionArray* &sessions)

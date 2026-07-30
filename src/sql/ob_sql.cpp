@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SQL
 #include "sql/ob_sql.h"
 #include "lib/json/ob_json_print_utils.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/ob_truncated_string.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 #include "sql/plan_cache/ob_pcv_set.h"
@@ -74,6 +73,11 @@ int ObSql::init(common::ObOptStatManager *opt_stat_mgr,
     }
   }
   return ret;
+}
+
+int ObSql::start_background_task_source()
+{
+  return inited_ ? queue_.start_background_task_source() : OB_NOT_INIT;
 }
 
 void ObSql::destroy() {
@@ -191,6 +195,7 @@ int ObSql::fill_result_set(ObResultSet &result_set,
     ObString type_name = ObString::make_string("varchar");
     number::ObNumber number;
     number.set_zero();
+    ObDelUpdStmt *del_upd_stmt = NULL;
     ObField field;
     common::ObIAllocator &alloc = result_set.get_mem_pool();
     ObCharsetType result_charset = CHARSET_INVALID;
@@ -210,6 +215,92 @@ int ObSql::fill_result_set(ObResultSet &result_set,
     case stmt::T_REPLACE:
     case stmt::T_UPDATE:
     case stmt::T_DELETE: {
+      del_upd_stmt = static_cast<ObDelUpdStmt *>(stmt);
+      if (!del_upd_stmt->is_returning()) {
+        break;
+      }
+      const common::ObIArray<ObRawExpr*> *returning_exprs = &(del_upd_stmt->get_returning_exprs());
+      const common::ObIArray<ObString> &returning_strs = del_upd_stmt->get_returning_strs();
+      int64_t size = returning_exprs->count();
+      field.charsetnr_ = CS_TYPE_UTF8MB4_GENERAL_CI;
+      if (OB_FAIL(result_set.reserve_field_columns(size))) {
+        LOG_WARN("reserve field columns failed", K(ret), K(size));
+      }
+
+      for (int64_t i = 0; OB_SUCC(ret) && i < size; i++) {
+        ObRawExpr *expr = returning_exprs->at(i);
+        if (OB_UNLIKELY(OB_ISNULL(expr))) {
+          ret = OB_ERR_ILLEGAL_ID;
+          LOG_WARN("fail to get expr", K(ret), K(i), K(size));
+        }
+        if (OB_SUCC(ret)) {
+          if (ob_is_string_or_lob_type(expr->get_data_type())
+              && CS_TYPE_BINARY != expr->get_collation_type()
+              && ObCharset::is_valid_collation(collation_type)) {
+            field.charsetnr_ = static_cast<uint16_t>(collation_type);
+          } else {
+            field.charsetnr_ = static_cast<uint16_t>(expr->get_collation_type());
+          }
+        }
+        if (OB_SUCC(ret)) {
+          expr->deduce_type(context->session_info_);
+          field.type_.set_type(expr->get_data_type());
+          field.accuracy_ = expr->get_accuracy();
+          field.flags_ = static_cast<uint16_t>(expr->get_result_flag());
+          // Setup Collation and Collation levl
+          if (ob_is_string_or_lob_type(static_cast<ObObjType>(expr->get_data_type()))
+              || ob_is_enum_or_set_type(static_cast<ObObjType>(expr->get_data_type()))) {
+            field.type_.set_collation_type(expr->get_collation_type());
+            field.type_.set_collation_level(expr->get_collation_level());
+          }
+          if (ObVarcharType == field.type_.get_type()) {
+            field.type_.set_varchar(type_name);
+          } else if (ObNumberType == field.type_.get_type()) {
+            field.type_.set_number(number);
+          }
+
+          if (expr->get_result_type().is_geometry()) {
+            uint16_t subschema_id = ObInvalidSqlType;
+            ObSqlUDTMeta udt_meta;
+            field.type_.meta_.set_ext();
+            field.accuracy_.set_accuracy(T_OBJ_SDO_GEOMETRY);
+            if (OB_FAIL(result_set.get_exec_context().get_subschema_id_by_udt_id(T_OBJ_SDO_GEOMETRY, subschema_id))) {
+              LOG_WARN("unsupported udt id", K(ret), K(subschema_id));
+            } else if (OB_FAIL(result_set.get_exec_context().get_sqludt_meta_by_subschema_id(subschema_id, udt_meta))) {
+              LOG_WARN("failed to get udt meta", K(ret), K(subschema_id));
+            } else if(ObObjUDTUtil::ob_is_supported_sql_udt(udt_meta.udt_id_)) {
+              field.type_.set_subschema_id(subschema_id);
+              if (OB_FAIL(ob_write_string(alloc, ObString(udt_meta.udt_name_len_, udt_meta.udt_name_), field.type_name_))) {
+                LOG_WARN("fail to alloc string", K(i), K(field), K(ret));
+              }
+            } else {
+              ret = OB_NOT_SUPPORTED;
+              LOG_WARN("udt type not supported", K(ret), K(subschema_id));
+            }
+          }
+        }
+        if (OB_SUCC(ret)) {
+          if (OB_FAIL(ob_write_string(alloc, returning_strs.at(i), field.cname_))) {
+            LOG_WARN("fail to alloc", K(ret), K(returning_strs.at(i)));
+          }
+        }
+        if (OB_SUCC(ret)) {
+          field.is_paramed_select_item_ = false;
+          field.paramed_ctx_ = NULL;
+          if (OB_FAIL(result_set.add_field_column(field))) {
+            LOG_WARN("fail to add field column to result_set", K(ret));
+          }
+        }
+        if (OB_SUCC(ret)) {
+          field.cname_.assign(NULL, 0);
+          field.org_cname_.assign(NULL, 0);
+          field.dname_.assign(NULL, 0);
+          field.tname_.assign(NULL, 0);
+          field.org_tname_.assign(NULL, 0);
+          field.type_.reset();
+          field.type_.set_type(ObExtendType);
+        }
+      }
       break;
     }
     case stmt::T_EXPLAIN: {
@@ -391,6 +482,26 @@ int ObSql::fill_result_set(ObResultSet &result_set,
             K(param_field), K(i), K(question_marks_count));
       }
     }
+    // for resolve returning_params and only work for ps_mode
+    // SQL: insert/update/delete ...returning expr1 ... into ?...
+    if (OB_SUCC(ret) && ObStmt::is_dml_write_stmt(stmt->get_stmt_type())
+        && (PC_PS_MODE == mode || PC_PL_MODE == mode)) {
+      del_upd_stmt = static_cast<ObDelUpdStmt *>(stmt);
+      if (del_upd_stmt->is_returning()) {
+        int64_t returning_param_num = del_upd_stmt->get_returning_exprs().count();
+        if (OB_FAIL(result_set.reserve_returning_param_column(returning_param_num))) {
+          LOG_WARN("reserve returning param columns failed", K(ret), K(question_marks_count));
+        }
+        for (int i = 0; OB_SUCC(ret) && i < returning_param_num; ++i) {
+          ObField param_field;
+          // type is mock, client not depend it
+          param_field.type_.set_type(ObIntType);
+          param_field.cname_ = ObString::make_string("?");
+          param_field.inout_mode_ = ObRoutineParamInOut::SP_PARAM_OUT;
+          OZ (result_set.add_returning_param_column(param_field), param_field, i, returning_param_num);
+        }
+      }
+    }
   }
   return ret;
 }
@@ -431,15 +542,34 @@ int ObSql::fill_select_result_set(ObResultSet &result_set, ObSqlCtx *context, co
       }
 
       if (OB_SUCC(ret) && expr->get_result_type().is_ext()) {
-        is_ext_field = true;
-        field.type_.set_collation_type(CS_TYPE_BINARY);
-        field.type_.set_collation_level(CS_LEVEL_IMPLICIT);
-        field.length_ = OB_MAX_LONGTEXT_LENGTH;
-        if (CS_TYPE_BINARY != expr->get_collation_type()
-          && ObCharset::is_valid_collation(collation_type)) {
-          field.charsetnr_ = static_cast<uint16_t>(collation_type);
+        if (OB_FAIL(ret)) {
+          // do nothing
+        } else if (expr->is_query_ref_expr() && static_cast<ObQueryRefRawExpr*>(expr)->is_cursor()) {
+          if (OB_FAIL(ob_write_string(alloc, "SYS_REFCURSOR", field.type_name_))) {
+            LOG_WARN("fail to alloc string", K(i), K(field), K(ret));
+          }
+        } else if (expr->is_udf_expr() && static_cast<ObUDFRawExpr*>(expr)->get_is_return_sys_cursor()) {
+          CK (OB_NOT_NULL(context));
+          if (OB_FAIL(ret)) {
+          } else if (PC_TEXT_MODE == mode && NULL == context->secondary_namespace_ && NULL == context->session_info_->get_pl_context()) {
+            ret = OB_NOT_SUPPORTED;
+            LOG_WARN("refcursor in sql select field not supported", K(ret));
+          } else {
+            if (OB_FAIL(ob_write_string(alloc, "SYS_REFCURSOR", field.type_name_))) {
+              LOG_WARN("fail to alloc string", K(i), K(field), K(ret));
+            }
+          }
         } else {
-          field.charsetnr_ = static_cast<uint16_t>(expr->get_collation_type());
+          is_ext_field = true;
+          field.type_.set_collation_type(CS_TYPE_BINARY);
+          field.type_.set_collation_level(CS_LEVEL_IMPLICIT);
+          field.length_ = OB_MAX_LONGTEXT_LENGTH;
+          if (CS_TYPE_BINARY != expr->get_collation_type()
+            && ObCharset::is_valid_collation(collation_type)) {
+            field.charsetnr_ = static_cast<uint16_t>(collation_type);
+          } else {
+            field.charsetnr_ = static_cast<uint16_t>(expr->get_collation_type());
+          }
         }
       }
 
@@ -460,7 +590,7 @@ int ObSql::fill_select_result_set(ObResultSet &result_set, ObSqlCtx *context, co
         } else if (ObNumberType == field.type_.get_type()) {
           field.type_.set_number(number);
         }
-        if (context->session_info_->is_varparams_sql_prepare()) {
+        if (context->session_info_->is_varparams_sql_prepare() && !context->is_dbms_sql_) {
           // question mark expr has no valid result type in prepare stage
           if (!expr->get_result_type().is_ext()
               && !expr->get_result_type().is_collection_sql_type()
@@ -550,6 +680,9 @@ int ObSql::fill_select_result_set(ObResultSet &result_set, ObSqlCtx *context, co
                                 field_name.length() > 0 ? field_name.string() : select_item.alias_name_,
                                 field.cname_, CS_TYPE_UTF8MB4_BIN, field_names_collation))) {
           LOG_WARN("fail to alloc string", K(select_item.alias_name_), K(ret));
+        } else {
+          field.is_hidden_rowid_ = select_item.is_hidden_rowid_;
+          LOG_TRACE("is_hidden_rowid", K(select_item));
         }
       }
       if (OB_SUCC(ret)) {
@@ -822,7 +955,8 @@ int ObSql::do_real_prepare(const ObString &sql,
   ObSQLSessionInfo &session = result.get_session();
   ObExecContext &ectx = result.get_exec_context();
   ObParser parser(allocator, session.get_sql_mode(), session.get_charsets4parser());
-  ParseMode parse_mode = (context.is_dynamic_sql_  || !is_inner_sql) ? DYNAMIC_SQL_MODE :
+  ParseMode parse_mode = context.is_dbms_sql_ ? DBMS_SQL_MODE :
+                         (context.is_dynamic_sql_  || !is_inner_sql) ? DYNAMIC_SQL_MODE :
                          session.is_for_trigger_package() ? TRIGGER_MODE : STD_MODE;
 
   // normal ps sql also a dynamic sql, we adjust is_dynamic_sql_ for normal ps sql parser.
@@ -884,7 +1018,7 @@ int ObSql::do_real_prepare(const ObString &sql,
     }
 
   } else {
-    if (context.is_dynamic_sql_) {
+    if (context.is_dynamic_sql_ && !context.is_dbms_sql_) {
       parse_result.input_sql_ = parse_result.no_param_sql_;
       parse_result.input_sql_len_ = parse_result.no_param_sql_len_;
     }
@@ -893,7 +1027,9 @@ int ObSql::do_real_prepare(const ObString &sql,
     } else if (ObStmt::is_dml_stmt(stmt_type)
               && !ObStmt::is_show_stmt(stmt_type)
               && !is_inner_sql
-              && !is_from_pl) {
+              && !is_from_pl
+              && !(ObStmt::is_dml_write_stmt(stmt_type) && // returning into from oci not need parameterization
+                   static_cast<ObDelUpdStmt*>(basic_stmt)->get_returning_into_exprs().count() > 0)) {
       bool is_transform_outline = false;
       if (OB_FAIL(ObSqlParameterization::parameterize_syntax_tree(allocator,
                                                                   is_transform_outline,
@@ -960,13 +1096,24 @@ int ObSql::do_real_prepare(const ObString &sql,
       if (is_inner_sql) {
         // pl
         info_ctx.normalized_sql_ = basic_stmt->get_query_ctx()->get_sql_stmt();
+      } else if (result.is_returning() && ObStmt::is_dml_write_stmt(stmt_type)) {
+        info_ctx.normalized_sql_ = sql;
+        info_ctx.no_param_sql_ = basic_stmt->get_query_ctx()->get_sql_stmt();
       } else {
         info_ctx.normalized_sql_ = sql;
       }
     }
+    if (OB_SUCC(ret)) {
+      if (basic_stmt->is_insert_stmt() || basic_stmt->is_update_stmt() || basic_stmt->is_delete_stmt()) {
+        ObDelUpdStmt *dml_stmt = static_cast<ObDelUpdStmt*>(basic_stmt);
+        if (dml_stmt->get_returning_into_exprs().count() != 0 && dml_stmt->is_returning()) {
+          info_ctx.num_of_returning_into_ = dml_stmt->get_returning_into_exprs().count();
+        }
+      }
+    }
 
     LOG_INFO("generate new stmt", K(ret), K(param_cnt), K(stmt_type), K(info_ctx.no_param_sql_),
-             K(info_ctx.normalized_sql_),
+             K(info_ctx.normalized_sql_), K(info_ctx.num_of_returning_into_),
              "sql", context.is_sensitive_ ? ObString(OB_MASKED_STR) : sql);
   }
   if (OB_SUCC(ret)) {
@@ -1062,10 +1209,12 @@ int ObSql::handle_pl_prepare(const ObString &sql,
     if (NULL != pl_prepare_ctx.secondary_ns_) {
       is_for_trigger = ObTriggerInfo::is_trigger_package_id(pl_prepare_ctx.secondary_ns_->get_package_id());
     }
-    ParseMode parse_mode = pl_prepare_ctx.is_dynamic_sql_ ? DYNAMIC_SQL_MODE :
+    ParseMode parse_mode = pl_prepare_ctx.is_dbms_sql_ ? DBMS_SQL_MODE :
+                          pl_prepare_ctx.is_dynamic_sql_ ? DYNAMIC_SQL_MODE :
                           is_for_trigger ? TRIGGER_MODE : STD_MODE;
 
     context.is_dynamic_sql_ = pl_prepare_ctx.is_dynamic_sql_;
+    context.is_dbms_sql_ = pl_prepare_ctx.is_dbms_sql_;
     context.is_cursor_ = pl_prepare_ctx.is_cursor_;
     context.secondary_namespace_ = pl_prepare_ctx.secondary_ns_;
     context.session_info_ = &sess;
@@ -1104,7 +1253,7 @@ int ObSql::handle_pl_prepare(const ObString &sql,
           } else if (OB_FAIL(sess.store_query_string(sql))) {
             LOG_WARN("store query string fail", K(ret));
           } else if (OB_FAIL(parser.parse(sql, parse_result, parse_mode,
-                                          false, false, true,
+                                          false, false, true, pl_prepare_ctx.is_dbms_sql_,
                                           pl_prepare_ctx.is_parser_dynamic_sql_))) {
             LOG_WARN("generate syntax tree failed", K(ret),
                      "sql", parse_result.contain_sensitive_data_ ? ObString(OB_MASKED_STR) : sql);
@@ -1154,7 +1303,7 @@ int ObSql::handle_pl_prepare(const ObString &sql,
             if (parse_result.is_dynamic_sql_) {
               context.is_dynamic_sql_ = true;
             }
-            if (context.is_dynamic_sql_) {
+            if (context.is_dynamic_sql_ && !context.is_dbms_sql_) {
               parse_result.input_sql_ = parse_result.no_param_sql_;
               parse_result.input_sql_len_ = parse_result.no_param_sql_len_;
             }
@@ -1314,14 +1463,18 @@ int ObSql::handle_pl_execute(const ObString &sql,
     context.plan_key_.db_id_ = session.get_database_id();
     context.disable_privilege_check_ = PRIV_CHECK_FLAG_IN_PL;
     pctx = ectx.get_physical_plan_ctx();
-    int64_t local_database_schema_version = -1;
+    int64_t local_runtime_schema_version = -1;
+    int64_t local_sys_schema_version = -1;
     if (OB_ISNULL(context.schema_guard_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema guard is null");
-    } else if (OB_FAIL(context.schema_guard_->get_schema_version(local_database_schema_version))) {
-      LOG_WARN("failed to get database schema version", K(ret));
+    } else if (OB_FAIL(context.schema_guard_->get_schema_version(local_runtime_schema_version))) {
+      LOG_WARN("failed to get runtime schema version", K(ret));
+    } else if (OB_FAIL(context.schema_guard_->get_schema_version(local_sys_schema_version))) {
+      LOG_WARN("failed to get system schema version", K(ret));
     } else {
-      result.get_exec_context().get_task_exec_ctx().set_query_begin_schema_version(local_database_schema_version);
+      result.get_exec_context().get_task_exec_ctx().set_query_begin_schema_version(local_runtime_schema_version);
+      result.get_exec_context().get_task_exec_ctx().set_query_sys_begin_schema_version(local_sys_schema_version);
     }
   }
   if (OB_SUCC(ret) && is_prepare_protocol && !is_dynamic_sql) {
@@ -1692,10 +1845,9 @@ int ObSql::clac_fixed_param_store(const stmt::StmtType stmt_type,
                                                       static_cast<ObCollationType>(server_collation),
                                                       NULL, session.get_sql_mode(),
                                                       enable_decimal_int,
-                                                      share::COMPAT_MYSQL57,
                                                       enable_mysql_compatible_dates,
-                                                      session.get_min_const_integer_precision(),
-                                                      stmt::T_ANONYMOUS_BLOCK == stmt_type))) {
+                                                      stmt::T_ANONYMOUS_BLOCK == stmt_type,
+                                                      session.get_min_const_integer_precision()))) {
       SQL_PC_LOG(WARN, "fail to resolve const", K(ret));
     } else if (OB_FAIL(add_param_to_param_store(value, fixed_param_store))) {
       LOG_WARN("failed to add param to param store", K(ret), K(value), K(fixed_param_store));
@@ -1944,6 +2096,7 @@ int ObSql::handle_ps_execute(const ObPsStmtId client_stmt_id,
         pc_ctx.set_is_parameterized_execute();
         pc_ctx.set_is_inner_sql(is_inner_sql);
         pc_ctx.ab_params_ = ps_ab_params;
+        pc_ctx.is_arraybinding_ = (ps_info->get_num_of_returning_into() > 0);
         if (OB_FAIL(construct_parameterized_params(ps_params, pc_ctx))) {
           LOG_WARN("construct parameterized params failed", K(ret));
         } else {
@@ -2007,7 +2160,8 @@ int ObSql::handle_ps_execute(const ObPsStmtId client_stmt_id,
                         session.get_charsets4parser());
         ParseResult parse_result;
         ObSqlTraits sql_traits;
-        ParseMode parse_mode = context.is_dynamic_sql_ ? DYNAMIC_SQL_MODE :
+        ParseMode parse_mode = context.is_dbms_sql_ ? DBMS_SQL_MODE :
+                                context.is_dynamic_sql_ ? DYNAMIC_SQL_MODE :
                                 (context.session_info_->is_for_trigger_package() ? TRIGGER_MODE : STD_MODE);
         if (OB_FAIL(parser.parse(sql, parse_result, parse_mode))) {
           LOG_WARN("failed to parse sql", K(ret), K(stmt_type),
@@ -2184,6 +2338,7 @@ int ObSql::generate_stmt(ParseResult &parse_result,
     if (NULL != pc_ctx) {
       resolver_ctx.select_item_param_infos_ = &pc_ctx->select_item_param_infos_;
     }
+    resolver_ctx.is_returning_ = parse_result.is_returning_;
     plan_ctx = result.get_exec_context().get_physical_plan_ctx();
     if (OB_ISNULL(plan_ctx) || OB_ISNULL(result.get_exec_context().get_stmt_factory())
         || OB_ISNULL(result.get_exec_context().get_expr_factory())) {
@@ -2213,6 +2368,7 @@ int ObSql::generate_stmt(ParseResult &parse_result,
     resolver_ctx.is_prepare_stage_ = context.is_prepare_stage_;
     resolver_ctx.is_mock_prepare_ = context.is_mock_prepare_;
     resolver_ctx.is_dynamic_sql_ = context.is_dynamic_sql_;
+    resolver_ctx.is_dbms_sql_ = context.is_dbms_sql_;
     resolver_ctx.statement_id_ = context.statement_id_;
     resolver_ctx.param_list_ = &plan_ctx->get_param_store();
     resolver_ctx.sql_proxy_ = GCTX.sql_proxy_;
@@ -2272,7 +2428,11 @@ int ObSql::generate_stmt(ParseResult &parse_result,
       LOG_DEBUG("got all const param constraints", K(resolver_ctx.query_ctx_->all_possible_const_param_constraints_));
       NG_TRACE(resolve_end);
       if (OB_SUCC(ret)) {
+        // move init datum param store here
+        // if `opt_param("enable_rich_vector_format", "false")` is used in hints, use_rich_format will
+        // be off, we need reset value in pctx and initialize param frame accordingly.
         if (NULL != pc_ctx && NULL != pc_ctx->exec_ctx_.get_physical_plan_ctx()) {
+          pc_ctx->exec_ctx_.get_physical_plan_ctx()->set_rich_format(context.session_info_->use_rich_format());
           if (OB_FAIL(pc_ctx->exec_ctx_.get_physical_plan_ctx()->init_datum_param_store())) {
             LOG_WARN("init datum param store failed", K(ret));
           }
@@ -2295,14 +2455,26 @@ int ObSql::generate_stmt(ParseResult &parse_result,
         if (NULL != stmt && NULL != resolver_ctx.query_ctx_) {
           SQL_LOG(DEBUG, "SET STMT PARAM COUNT", K(resolver.get_params().prepare_param_count_), K(&resolver_ctx));
           // secondary_namespace_ is not empty, indicating that it is the prepare stage of sql in PL
-          // PL dynamic SQL needs its external parameters rebuilt after resolving.
+          // Dynamic SQL with a returning clause also needs to be rebuilt, used to remove the into clause
+          //pl context not null indicate PL dynamic sql, only need rebuild PL dynamic sql
+          bool in_pl = NULL != resolver_ctx.secondary_namespace_
+            || (resolver_ctx.is_dynamic_sql_ && OB_NOT_NULL(result.get_session().get_pl_context()))
+            || resolver_ctx.is_dbms_sql_;
           bool need_rebuild = (resolver_ctx.is_dynamic_sql_ &&
           OB_NOT_NULL(result.get_session().get_pl_context()) && resolver_ctx.is_prepare_stage_);
+          bool is_returning_into = false;
+          if (stmt->is_insert_stmt() || stmt->is_update_stmt() || stmt->is_delete_stmt()) {
+            ObDelUpdStmt &dml_stmt = static_cast<ObDelUpdStmt&>(*stmt);
+            if (dml_stmt.get_returning_into_exprs().count() != 0) {
+              need_rebuild = true;
+              is_returning_into = true;
+            }
+          }
           if (need_rebuild) {
             if (OB_FAIL(result.get_external_retrieve_info().build(*stmt,
                 result.get_session(),
                 resolver_ctx.secondary_namespace_,
-                resolver_ctx.is_dynamic_sql_,
+                resolver_ctx.is_dynamic_sql_ || resolver_ctx.is_dbms_sql_,
                 resolver.get_params().external_param_info_.params_))) {
               SQL_LOG(WARN, "failed to build external retrieve info", K(ret));
             } else {
@@ -2312,6 +2484,9 @@ int ObSql::generate_stmt(ParseResult &parse_result,
                 }
                 result.get_route_sql() = resolver_ctx.query_ctx_->get_sql_stmt();
                 resolver_ctx.query_ctx_->set_prepare_param_count(parse_result.question_mark_ctx_.count_);
+              } else if (is_returning_into && !in_pl) {
+                int64_t return_into_num = static_cast<ObDelUpdStmt&>(*stmt).get_returning_into_exprs().count();
+                resolver_ctx.query_ctx_->set_prepare_param_count(parse_result.question_mark_ctx_.count_- return_into_num);
               } else {
                 // For SQL statements within PL, the specific prepare_param_count_
                 // can only be determined after resolver completion.
@@ -2343,6 +2518,11 @@ int ObSql::generate_stmt(ParseResult &parse_result,
                                                                               log_level.length()))) {
                   LOG_WARN("Failed to process thread log id level map");
                 }
+              }
+              ObDelUpdStmt *del_up_stmt = NULL;
+              del_up_stmt = dynamic_cast<ObDelUpdStmt *>(dml_stmt);
+              if (del_up_stmt != NULL && del_up_stmt->is_returning()) {
+                result.set_returning(true);
               }
             } else if ((variable_set_stmt = dynamic_cast<ObVariableSetStmt*>(stmt)) != NULL) {
               result.set_has_global_variable(variable_set_stmt->has_global_variable());
@@ -2472,6 +2652,7 @@ int ObSql::generate_plan(ParseResult &parse_result,
     SQL_LOG(DEBUG, "stmt success", "query", SJ(*stmt));
     stmt->get_query_ctx()->root_stmt_ = stmt;
     const ObGlobalHint &global_hint = stmt->get_query_ctx()->get_global_hint();
+    sql_ctx.session_info_->set_early_lock_release(global_hint.enable_lock_early_release_);
     HEAP_VAR(ObOptimizerContext, optctx, sql_ctx.session_info_,
                               &result.get_exec_context(),
                               &result.get_exec_context().get_stmt_factory()->get_query_ctx()->sql_schema_guard_,
@@ -2503,6 +2684,8 @@ int ObSql::generate_plan(ParseResult &parse_result,
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_ERROR("Failed to alloc physical plan from tc factory", K(ret));
     } else {
+      phy_plan->set_use_rich_format(sql_ctx.session_info_->use_rich_format());
+      phy_plan->stat_.enable_early_lock_release_ = sql_ctx.session_info_->get_early_lock_release();
       if (NULL != pc_ctx) {
         pc_ctx->should_add_plan_ = true;
       }
@@ -2944,6 +3127,7 @@ int ObSql::code_generate(
       // session's ignore_stmt status for CG use, needs to be cleared after CG ends
       sql_ctx.session_info_->set_ignore_stmt(false);
       LOG_DEBUG("phy plan", K(*phy_plan));
+      phy_plan->set_returning(stmt->is_returning());
       last_mem_usage = phy_plan->get_mem_size();
     }
   }
@@ -3100,6 +3284,8 @@ OB_INLINE int ObSql::init_exec_context(const ObSqlCtx &context, ObExecContext &e
       context.session_info_->get_query_timeout(query_timeout);
       exec_ctx.get_physical_plan_ctx()->set_timeout_timestamp(
         context.session_info_->get_query_start_time() + query_timeout);
+      exec_ctx.get_physical_plan_ctx()->set_rich_format(
+         context.session_info_->use_rich_format());
       exec_ctx.set_retry_info(&context.session_info_->get_retry_info());
     }
   }
@@ -4101,7 +4287,8 @@ int ObSql::check_batched_multi_stmt_after_resolver(ObPlanCacheCtx &pc_ctx,
         is_valid = false;
       }
     }
-    if (delupd_stmt.has_order_by() || delupd_stmt.has_limit()) {
+    if (delupd_stmt.has_order_by() || delupd_stmt.has_limit() ||
+        !delupd_stmt.get_returning_exprs().empty()) {
       is_valid = false;
     }
 

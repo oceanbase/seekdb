@@ -31,6 +31,10 @@ template <class T>
 ObSimpleThreadPoolBase<T>::ObSimpleThreadPoolBase()
     : ObSimpleDynamicThreadPool(),
       is_inited_(false), stop_(false),
+      queue_driven_expansion_(false),
+      external_driver_(false),
+      idle_shrink_timeout_us_(SHRINK_TIMEOUT_US),
+      last_pressure_ts_(0),
       run_wrapper_(nullptr),
       cur_worker_idx_(0)
 {
@@ -59,6 +63,7 @@ int ObSimpleThreadPoolBase<T>::init(
   } else {
     is_inited_ = true;
     stop_ = false;
+    ATOMIC_STORE(&last_pressure_ts_, ObTimeUtility::current_time());
     name_ = name;
     
     if (max_thread_cnt_ < 0) {
@@ -122,9 +127,36 @@ int ObSimpleThreadPoolBase<T>::push(TaskType *task)
     if (OB_SIZE_OVERFLOW == ret) {
       ret = OB_EAGAIN;
     }
-    if (this->idle_count() == 0) {
+    if (external_driver_) {
+      // The external dispatcher is notified by the owning derived class.
+    } else if (queue_driven_expansion_) {
+      // ObLightyQueue reserves one pop sequence before an idle worker waits,
+      // so its size is <= 0 while queued work is already covered by idle
+      // workers. A positive size means there is uncovered backlog.
+      if (OB_SUCC(ret) && queue_size() > 0) {
+        ATOMIC_STORE(&last_pressure_ts_, ObTimeUtility::current_time());
+        this->try_expand_one_once(max_thread_cnt_);
+      }
+    } else if (this->idle_count() == 0) {
       this->try_expand_one(max_thread_cnt_);
     }
+  }
+  return ret;
+}
+
+template <class T>
+int ObSimpleThreadPoolBase<T>::pop_task_for_external_driver(TaskType *&task)
+{
+  int ret = OB_SUCCESS;
+  QElemType *queue_task = NULL;
+  task = NULL;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (!external_driver_) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (OB_FAIL(queue_.pop(queue_task))) {
+  } else {
+    task = static_cast<TaskType *>(queue_task);
   }
   return ret;
 }
@@ -230,16 +262,26 @@ void ObSimpleThreadPoolBase<T>::wait()
 template <class T>
 void ObSimpleThreadPoolBase<T>::reap_workers()
 {
-  // Called only from Mgr background thread
-  lib::ObMutexGuard g(workers_lock_);
-  DLIST_FOREACH_REMOVESAFE_NORET(wnode, workers_) {
-    Worker *w = wnode->get_data();
-    if (w->has_set_stop()) {
-      workers_.remove(wnode);
-      w->wait();
-      w->destroy();
-      OB_DELETE(Worker, "QThWker", w);
+  {
+    // Called only from Mgr background thread
+    lib::ObMutexGuard g(workers_lock_);
+    DLIST_FOREACH_REMOVESAFE_NORET(wnode, workers_) {
+      Worker *w = wnode->get_data();
+      if (w->has_set_stop()) {
+        workers_.remove(wnode);
+        w->wait();
+        w->destroy();
+        OB_DELETE(Worker, "QThWker", w);
+      }
     }
+  }
+  // A queue-driven pool leaves a token queued when a non-blocking cold-start
+  // attempt fails. The existing manager provides its retry path.
+  if (queue_driven_expansion_
+      && !stop_
+      && queue_size() > 0
+      && 0 == worker_count()) {
+    this->try_expand_one_once(max_thread_cnt_);
   }
 }
 
@@ -269,16 +311,26 @@ void ObSimpleThreadPoolBase<T>::run1()
     if (OB_SUCC(ret)) {
       if (OB_NOT_NULL(task)) {
         idle_since = 0;
-        if (expand) {
+        if (expand && !queue_driven_expansion_) {
           this->try_expand_one(max_thread_cnt_);
         }
         handle(static_cast<TaskType *>(task));
+        if (queue_driven_expansion_
+            // A negative ObLightyQueue size represents idle workers that
+            // already reserved future pop sequences, not pending work.
+            && queue_size() <= 0
+            && ObTimeUtility::current_time()
+                - ATOMIC_LOAD(&last_pressure_ts_)
+                >= idle_shrink_timeout_us_
+            && this->try_shrink_one(min_thread_cnt_)) {
+          return;
+        }
       }
     } else if (OB_ENTRY_NOT_EXIST == ret) {
       int64_t now = ObTimeUtility::current_time();
       if (idle_since == 0) {
         idle_since = now;
-      } else if (now - idle_since >= SHRINK_TIMEOUT_US) {
+      } else if (now - idle_since >= idle_shrink_timeout_us_) {
         if (this->try_shrink_one(min_thread_cnt_)) {
           return;  // Worker::run1 will set has_set_stop
         }

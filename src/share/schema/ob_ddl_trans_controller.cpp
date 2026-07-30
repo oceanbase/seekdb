@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX RS
 #include "ob_ddl_trans_controller.h"
 
+#include "lib/ob_running_mode.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -38,7 +40,9 @@ int ObDDLTransController::init(share::schema::ObMultiVersionSchemaService *schem
     } else if (OB_ISNULL(schema_service)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("schema_service is null", KR(ret));
-    } else if (OB_FAIL(lib::ThreadPool::start())) {
+    } else if (FALSE_IT(use_shared_executor_ = lib::is_mini_mode())) {
+    } else if (!use_shared_executor_
+        && OB_FAIL(lib::ThreadPool::start())) {
       LOG_WARN("thread start fail", KR(ret));
     } else {
       schema_service_ = schema_service;
@@ -48,27 +52,83 @@ int ObDDLTransController::init(share::schema::ObMultiVersionSchemaService *schem
   return ret;
 }
 
+int ObDDLTransController::start()
+{
+  int ret = OB_SUCCESS;
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+  } else if (!use_shared_executor_) {
+    // The dedicated worker was started by init(), preserving normal mode.
+  } else if (source_handle_.is_valid()) {
+  } else if (OB_ISNULL(share::g_mp)
+      || OB_ISNULL(background_executor_ =
+          share::g_mp->background_task_executor())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("background task executor is null", K(ret),
+        KP(share::g_mp), KP(background_executor_));
+  } else {
+    share::ObBackgroundTaskSourceConfig config;
+    config.name_ = "DDLTransCtr";
+    config.max_concurrency_ = 1;
+    if (OB_FAIL(background_executor_->register_source(
+        *this, config, source_handle_))) {
+      LOG_WARN("register ddl transaction controller source failed", K(ret));
+    } else if (claim_refresh_request_()) {
+      // Registration happens after schema-service initialization. Preserve a
+      // refresh request that may have arrived during the startup interval.
+      {
+        common::SpinWLockGuard guard(lock_);
+        need_refresh_ = true;
+      }
+      if (OB_FAIL(notify_background_source_())) {
+        LOG_WARN("notify initial ddl transaction refresh failed", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
 void ObDDLTransController::stop()
 {
-  lib::ThreadPool::stop();
-  wait_cond_.signal();
+  if (use_shared_executor_) {
+    const int tmp_ret = unregister_background_source_(false);
+    if (OB_SUCCESS != tmp_ret && OB_EAGAIN != tmp_ret) {
+      LOG_WARN_RET(tmp_ret, "stop ddl transaction controller source failed",
+          K(tmp_ret));
+    }
+  } else {
+    lib::ThreadPool::stop();
+    wait_cond_.signal();
+  }
 }
 
 void ObDDLTransController::wait()
 {
-  wait_cond_.signal();
-  lib::ThreadPool::wait();
+  if (use_shared_executor_) {
+    const int tmp_ret = unregister_background_source_(true);
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN_RET(tmp_ret, "wait ddl transaction controller source failed",
+          K(tmp_ret));
+    }
+  } else {
+    wait_cond_.signal();
+    lib::ThreadPool::wait();
+  }
 }
 
 void ObDDLTransController::destroy()
 {
   if (inited_) {
-    inited_ = false;
     stop();
     wait();
-    lib::ThreadPool::destroy();
+    if (!use_shared_executor_) {
+      lib::ThreadPool::destroy();
+    }
+    inited_ = false;
     tasks_.destroy();
     schema_service_ = NULL;
+    background_executor_ = NULL;
+    source_handle_.reset();
   }
 }
 
@@ -233,35 +293,97 @@ int ObDDLTransController::remove_task(const int64_t task_id)
 {
   int ret = OB_SUCCESS;
   int idx = OB_INVALID_INDEX;
-  SpinWLockGuard guard(lock_);
-  for (int i = 0; i < tasks_.count(); i++) {
-    if (tasks_.at(i).task_id_ == task_id) {
-      tasks_.at(i).task_end_ = true;
-      idx = i;
-      LOG_INFO("remove parallel ddl task", K(tasks_.at(i)));
-      if (OB_FAIL(tasks_.remove(i))) {
-        LOG_WARN("remove_task fail", KR(ret), K(task_id));
-      } else {
-        need_refresh_ = true;
-        wait_cond_.signal();
+  bool need_wakeup = false;
+  {
+    SpinWLockGuard guard(lock_);
+    for (int i = 0; i < tasks_.count(); i++) {
+      if (tasks_.at(i).task_id_ == task_id) {
+        tasks_.at(i).task_end_ = true;
+        idx = i;
+        LOG_INFO("remove parallel ddl task", K(tasks_.at(i)));
+        if (OB_FAIL(tasks_.remove(i))) {
+          LOG_WARN("remove_task fail", KR(ret), K(task_id));
+        } else {
+          need_refresh_ = true;
+          need_wakeup = true;
+        }
+        break;
       }
-      break;
     }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_INVALID_INDEX == idx) {
-    ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("task_id not found", KR(ret), K(task_id), K(tasks_));
-  } else {
-    // wake up next
-    for (int next = idx; next < tasks_.count(); next++) {
-      {
+    if (OB_FAIL(ret)) {
+    } else if (OB_INVALID_INDEX == idx) {
+      ret = OB_ENTRY_NOT_EXIST;
+      LOG_WARN("task_id not found", KR(ret), K(task_id), K(tasks_));
+    } else {
+      // wake up next
+      for (int next = idx; next < tasks_.count(); next++) {
         int64_t next_task_id = tasks_.at(next).task_id_;
         uint64_t cond_idx = next_task_id % DDL_TASK_COND_SLOT;
         cond_slot_[cond_idx].broadcast();
         break;
       }
     }
+  }
+  if (need_wakeup) {
+    if (use_shared_executor_) {
+      const int tmp_ret = notify_background_source_();
+      if (OB_SUCCESS != tmp_ret) {
+        // The schema task is already committed and removed. Preserve the old
+        // remove_task() result while retaining need_refresh_ for a later wake.
+        LOG_WARN_RET(tmp_ret,
+            "notify ddl transaction controller source failed", K(tmp_ret));
+      }
+    } else {
+      wait_cond_.signal();
+    }
+  }
+  return ret;
+}
+
+bool ObDDLTransController::claim_refresh_request_()
+{
+  bool need_refresh = false;
+  SpinWLockGuard guard(lock_);
+  need_refresh = need_refresh_;
+  need_refresh_ = false;
+  return need_refresh;
+}
+
+int ObDDLTransController::notify_background_source_()
+{
+  int ret = OB_SUCCESS;
+  if (!use_shared_executor_) {
+    wait_cond_.signal();
+  } else if (OB_ISNULL(background_executor_)
+      || !source_handle_.is_valid()) {
+    ret = OB_NOT_RUNNING;
+  } else if (OB_FAIL(background_executor_->notify(
+      source_handle_, share::BG_TASK_HIGH))) {
+    LOG_WARN("notify ddl transaction controller source failed", K(ret));
+  }
+  return ret;
+}
+
+int ObDDLTransController::unregister_background_source_(
+    const bool wait_running)
+{
+  int ret = OB_SUCCESS;
+  if (use_shared_executor_
+      && OB_NOT_NULL(background_executor_)
+      && source_handle_.is_valid()) {
+    do {
+      ret = background_executor_->unregister_source(source_handle_);
+      if (wait_running && OB_EAGAIN == ret) {
+        ob_usleep(1000);
+      }
+    } while (wait_running && OB_EAGAIN == ret);
+    if (OB_ENTRY_NOT_EXIST == ret || OB_NOT_INIT == ret) {
+      source_handle_.reset();
+      ret = OB_SUCCESS;
+    }
+  }
+  if (!source_handle_.is_valid()) {
+    background_executor_ = NULL;
   }
   return ret;
 }

@@ -22,6 +22,7 @@
 #include "storage/tmp_file/ob_tmp_file_eviction_manager.h"
 #include "storage/tmp_file/ob_tmp_file_global.h"
 #include "storage/tmp_file/ob_tmp_file_flush_manager.h"
+#include "share/ob_background_task_executor.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/task/ob_timer.h"
 #include "lib/thread/thread_pool.h"
@@ -62,6 +63,7 @@ public:
   int64_t get_flush_io_finished_ret();
   int64_t get_flush_io_finished_round();
   int64_t cal_idle_time();
+  bool has_pending_work() const;
   void clean_up_lists();
   TO_STRING_KV(K(is_inited_), K(mode_), K(last_flush_timestamp_), K(flush_io_finished_ret_), K(flush_io_finished_round_),
                K(flushing_block_num_), K(is_fast_flush_meta_), K(fast_flush_meta_task_cnt_),
@@ -116,7 +118,8 @@ private:
   common::ObTimer flush_timers_[ObTmpFileGlobal::FLUSH_TIMER_CNT];
 };
 
-class ObTmpFileSwapThread : public lib::ThreadPool
+class ObTmpFileSwapThread : public lib::ThreadPool,
+                            public share::ObIBackgroundTaskSource
 {
 public:
   ObTmpFileSwapThread(ObTmpWriteBufferPool &wbp,
@@ -133,14 +136,27 @@ public:
   int swap();
   int swap_job_enqueue(ObTmpFileSwapJob *swap_job);
   int swap_job_dequeue(ObTmpFileSwapJob *&swap_job);
-  // wake up swap thread to do work
-  void notify_doing_swap();
+  // wake up the shared LOW lane after buffered temporary-file writes
+  void notify_doing_flush();
+  virtual int process_one_quantum(
+      const share::ObBackgroundTaskPriority priority,
+      share::ObBackgroundTaskRunResult &result) override;
   TO_STRING_KV(K(is_inited_), K(swap_job_num_), K(working_list_size_),
-               K(flush_io_finished_round_), K(last_swap_timestamp_), K(has_set_stop()));
+               K(flush_io_finished_round_), K(last_swap_timestamp_),
+               "stopped", is_stop_requested_());
 private:
   static const int64_t ALLOC_PAGE_SIZE = ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   static const int64_t PROCCESS_JOB_NUM_PER_BATCH = 128;
-  void clean_up_lists_();
+  static const int64_t IDLE_MAINTENANCE_INTERVAL = 60 * 1000; // 60s
+  int process_one_iteration_();
+  int notify_background_source_(const share::ObBackgroundTaskPriority priority);
+  int notify_background_source_locked_(
+      const share::ObBackgroundTaskPriority priority);
+  int unregister_background_source_(const bool wait_running);
+  bool has_urgent_work_() const;
+  bool has_active_work_() const;
+  bool is_stop_requested_() const;
+  void clean_up_lists_(const int ret_code);
   int do_work_();
   int swap_normal_();
   int swap_fast_();
@@ -154,6 +170,9 @@ private:
   int shrink_wbp_if_needed_();
 private:
   bool is_inited_;
+  bool use_shared_executor_;
+  bool is_stopped_;
+  mutable lib::ObMutex source_lock_;
   ObThreadCond idle_cond_;
   int64_t last_swap_timestamp_;
 
@@ -166,6 +185,8 @@ private:
 
   ObTmpFileFlushThread &flush_thread_ref_;
   int64_t flush_io_finished_round_;
+  share::ObBackgroundTaskExecutor *background_executor_;
+  share::ObBackgroundTaskSourceHandle source_handle_;
 
   ObTmpWriteBufferPool &wbp_;
   ObTmpFileEvictionManager &evict_mgr_;

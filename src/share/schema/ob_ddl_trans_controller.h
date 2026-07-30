@@ -22,6 +22,7 @@
 #include "lib/task/ob_timer.h"
 #include "lib/hash/ob_hashset.h"
 #include "lib/thread/ob_queue_thread.h"
+#include "share/ob_background_task_executor.h"
 
 namespace oceanbase
 {
@@ -41,12 +42,22 @@ struct TaskDesc
 };
 
 // impl for ddl schema change trans commit in order with schema_version
-class ObDDLTransController : public lib::ThreadPool
+class ObDDLTransController
+    : public lib::ThreadPool,
+      public share::ObIBackgroundTaskSource
 {
 public:
-  ObDDLTransController() : inited_(false), schema_service_(NULL), need_refresh_(false) {}
+  ObDDLTransController()
+      : inited_(false),
+        schema_service_(NULL),
+        need_refresh_(false),
+        use_shared_executor_(false),
+        background_executor_(NULL),
+        source_handle_()
+  {}
   ~ObDDLTransController();
   int init(share::schema::ObMultiVersionSchemaService *schema_service);
+  int start();
   void stop();
   void wait();
   void destroy();
@@ -57,9 +68,16 @@ public:
   int wait_task_ready(const int64_t task_id, const int64_t wait_us);
   int remove_task(const int64_t task_id);
   int reserve_schema_version(const uint64_t schema_version_count);
+  int process_one_quantum(
+      const share::ObBackgroundTaskPriority priority,
+      share::ObBackgroundTaskRunResult &result) override;
 private:
   virtual void run1() override;
   int check_task_ready_(const int64_t task_id, bool &ready);
+  bool claim_refresh_request_();
+  int publish_schema_();
+  int notify_background_source_();
+  int unregister_background_source_(const bool wait_running);
 private:
   bool inited_;
   common::ObThreadCond cond_slot_[DDL_TASK_COND_SLOT];
@@ -71,6 +89,9 @@ private:
 
 
   common::ObCond wait_cond_;
+  bool use_shared_executor_;
+  share::ObBackgroundTaskExecutor *background_executor_;
+  share::ObBackgroundTaskSourceHandle source_handle_;
 };
 
 } // end schema

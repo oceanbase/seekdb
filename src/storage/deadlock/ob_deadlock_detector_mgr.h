@@ -20,6 +20,7 @@
 #include "ob_deadlock_detector_common_define.h"
 #include "ob_deadlock_parameters.h"
 #include "lib/hash/ob_link_hashmap.h"
+#include "lib/queue/ob_lighty_queue.h"
 #include "lib/thread/ob_simple_thread_pool.h"
 #include "storage/tx/ob_time_wheel.h"
 #include "lib/utility/utility.h"
@@ -27,6 +28,7 @@
 #include "ob_deadlock_arg_checker.h"
 #include "lib/function/ob_function.h"
 #include "share/config/ob_server_config.h"
+#include "share/ob_background_task_executor.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_lcl_scheme/ob_lcl_utils.h"
 #include <type_traits>
@@ -39,7 +41,8 @@ namespace detector
 {
 class ObDeadLockDetectorMgr;
 
-class ObDeadLockLocalTaskQueue : public common::ObLinkQueueThreadPool
+class ObDeadLockLocalTaskQueue : public common::ObSimpleThreadPool,
+                                 public share::ObIBackgroundTaskSource
 {
 public:
   ObDeadLockLocalTaskQueue();
@@ -56,9 +59,12 @@ public:
   int push_cycle_info(const ObDeadLockCycleInfo &cycle_info);
   int push_parent_notification(const UserBinaryKey &parent_key,
                                const UserBinaryKey &child_key);
+  int process_one_quantum(
+      const share::ObBackgroundTaskPriority priority,
+      share::ObBackgroundTaskRunResult &result) override;
 protected:
-  void handle(common::LinkTask *task) override;
-  void handle_drop(common::LinkTask *task) override;
+  void handle(void *task) override;
+  void handle_drop(void *task) override;
 private:
   enum class TaskType
   {
@@ -66,7 +72,7 @@ private:
     CYCLE_INFO,
     PARENT_NOTIFICATION
   };
-  class Task : public common::LinkTask
+  class Task
   {
   public:
     explicit Task(const TaskType type);
@@ -88,11 +94,17 @@ private:
     ObDeadLockCycleInfo cycle_info_;
   };
   int push_task_(Task *task);
+  int unregister_background_source_(const bool wait_running);
+  int notify_background_source_();
   static void destroy_task_(Task *task);
 private:
   bool is_inited_;
   bool is_running_;
+  bool use_shared_executor_;
   ObDeadLockDetectorMgr *mgr_;
+  common::ObLightyQueue shared_queue_;
+  share::ObBackgroundTaskExecutor *background_executor_;
+  share::ObBackgroundTaskSourceHandle source_handle_;
 };
 
 // ObDeadLockDetectorMgr is the process-local manager for all detector instances.
@@ -242,6 +254,8 @@ private:
     bool operator()(const UserBinaryKey &key, ObIDeadLockDetector *p_detector);
   };
 
+  template <typename KeyType>
+  int try_create_inner_detector_(const KeyType &key);
   int get_detector_(const UserBinaryKey &user_key, DetectorRefGuard &detector_guard);
 
   bool is_inited_;// marked ObDeadLockDetectorMgr hash been inited or not

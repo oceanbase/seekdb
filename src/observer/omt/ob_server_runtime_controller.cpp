@@ -49,6 +49,10 @@
 #include "observer/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/access/ob_table_scan_iterator.h"
 #include "share/ob_ddl_sim_point.h"
+#include "share/ob_background_task_executor.h"
+#include "share/ob_internal_table_change_notifier.h"
+#include "share/ob_memory_dump_background_source.h"
+#include "share/ob_timer_task_background_source.h"
 #include "rootserver/freeze/ob_major_freeze_service.h"
 #include "observer/omt/ob_srs_service.h"
 #include "rootserver/ddl_task/ob_ddl_scheduler.h" // ObDDLScheduler
@@ -57,12 +61,12 @@
 #include "observer/dbms_scheduler/ob_dbms_sched_service.h" // ObDBMSSchedService
 #include "sql/plan_cache/ob_ps_cache.h"
 #include "storage/access/ob_empty_read_bucket.h"
+#include "share/errsim_module/ob_errsim_module_mgr.h"
 #include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
 #include "sql/dtl/ob_dtl_interm_result_manager.h"
-#include "sql/session/ob_sql_session_mgr.h"
 #include "observer/omt/ob_ai_service.h"
 #include "storage/allocator/ob_memstore_allocator.h"  // relocated-definition owner
 #include "share/io/ob_io_manager.h"  // relocated-definition owner
@@ -113,8 +117,8 @@ template<typename T>
 static int server_obj_pool_create(common::ObServerObjectPool<T> *&pool)
 {
   int ret = common::OB_SUCCESS;
-  pool = SERVER_NEW(common::ObServerObjectPool<T>, "TntSrvObjPool",
-                    share::server_cpu_count());
+  pool = SERVER_NEW(common::ObServerObjectPool<T>, "TntSrvObjPool", false/*regist*/,
+                 share::server_is_mini_mode(), share::server_cpu_count());
   if (OB_ISNULL(pool)) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
   } else {
@@ -235,6 +239,12 @@ void ObServerRuntimeController::destroy()
     tmp_ret = GCTX.disk_reporter_->delete_usage_stat();
     if (OB_SUCCESS != tmp_ret) {
       LOG_WARN_RET(tmp_ret, "fail to delete runtime disk usage during shutdown", K(tmp_ret));
+    }
+  }
+  if (OB_NOT_NULL(GCTX.conn_res_mgr_)) {
+    tmp_ret = GCTX.conn_res_mgr_->erase_connection_resources();
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN_RET(tmp_ret, "fail to erase runtime connection resource during shutdown", K(tmp_ret));
     }
   }
   timer_.destroy();
@@ -1076,6 +1086,35 @@ void ObServerRuntimeController::reload_request_queue_size()
   }
 }
 
+int ObSrvNetworkFrame::reload_sql_thread_config()
+{
+  int ret = OB_SUCCESS;
+
+  int sql_net_thread_count = (int)GCONF.sql_net_thread_count;
+  if (sql_net_thread_count == 0) {
+    if (GCONF.net_thread_count == 0) {
+      sql_net_thread_count = get_default_net_thread_count();
+    } else {
+      sql_net_thread_count = GCONF.net_thread_count;
+    }
+  }
+
+  if (OB_NOT_NULL(obmysql::global_sql_nio_server)) {
+    int cur_sql_net_thread_count =
+        obmysql::global_sql_nio_server->get_nio()->get_thread_count();
+    if (sql_net_thread_count < cur_sql_net_thread_count) {
+      LOG_WARN("decrease sql_net_thread_count not allowed", K(ret),
+               K(sql_net_thread_count), K(cur_sql_net_thread_count));
+      GCONF.sql_net_thread_count = cur_sql_net_thread_count;
+    } else if (OB_FAIL(obmysql::global_sql_nio_server->set_thread_count(
+                   sql_net_thread_count))) {
+      LOG_WARN("update sql_net_thread_count error", K(ret));
+    }
+  }
+
+  return ret;
+}
+
 int ObSharedTimer::server_module_init(ObSharedTimer *&st)
 {
   int ret = common::OB_SUCCESS;
@@ -1277,13 +1316,18 @@ namespace observer
 int ObServer::obs_construct_modules()
 {
   int ret = OB_SUCCESS;
+  if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_background_task_executor_))) { SERVER_LOG(WARN, "mods_background_task_executor_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_memory_dump_background_source_))) { SERVER_LOG(WARN, "mods_memory_dump_background_source_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_timer_task_background_source_))) { SERVER_LOG(WARN, "mods_timer_task_background_source_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_shared_timer_))) { SERVER_LOG(WARN, "mods_shared_timer_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_shared_macro_block_mgr_))) { SERVER_LOG(WARN, "mods_shared_macro_block_mgr_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(ObSQLSessionPool::server_module_new(mods_sql_session_pool_))) { SERVER_LOG(WARN, "mods_sql_session_pool_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObStorageMetaMemMgr::server_module_new(mods_storage_meta_mem_mgr_))) { SERVER_LOG(WARN, "mods_storage_meta_mem_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_obj_pool_create<ObTableScanIterator>(mods_table_scan_iterator_obj_pool_))) { SERVER_LOG(WARN, "mods_table_scan_iterator_obj_pool_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObIOService::server_module_new(mods_io_service_))) { SERVER_LOG(WARN, "mods_io_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_mds_service_))) { SERVER_LOG(WARN, "mods_mds_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_shared_mem_alloc_mgr_))) { SERVER_LOG(WARN, "mods_shared_mem_alloc_mgr_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_errsim_module_mgr_))) { SERVER_LOG(WARN, "mods_errsim_module_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_trans_service_))) { SERVER_LOG(WARN, "mods_trans_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_log_service_))) { SERVER_LOG(WARN, "mods_log_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_ls_service_))) { SERVER_LOG(WARN, "mods_ls_service_ fail", KR(ret)); }
@@ -1322,6 +1366,7 @@ int ObServer::obs_construct_modules()
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_tablet_scheduler_))) { SERVER_LOG(WARN, "mods_tablet_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_medium_checker_))) { SERVER_LOG(WARN, "mods_medium_checker_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_compaction_mem_pool_))) { SERVER_LOG(WARN, "mods_compaction_mem_pool_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_ddl_merge_bucket_lock_))) { SERVER_LOG(WARN, "mods_ddl_merge_bucket_lock_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_direct_load_mgr_))) { SERVER_LOG(WARN, "mods_direct_load_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_dag_scheduler_))) { SERVER_LOG(WARN, "mods_dag_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_freeze_info_mgr_))) { SERVER_LOG(WARN, "mods_freeze_info_mgr_ fail", KR(ret)); }
@@ -1348,14 +1393,23 @@ int ObServer::obs_construct_modules()
 int ObServer::obs_init_modules()
 {
   int ret = OB_SUCCESS;
+  if (OB_SUCC(ret) && OB_FAIL(server_module_init_default(mods_background_task_executor_))) { SERVER_LOG(WARN, "mods_background_task_executor_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(SERVER_STORAGE_META_SERVICE.attach_background_executor(mods_background_task_executor_))) { SERVER_LOG(WARN, "server slog background source attach failed", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(OB_IO_MANAGER.attach_callback_background_executor(mods_background_task_executor_))) { SERVER_LOG(WARN, "global io callback background source attach failed", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(OB_IO_MANAGER.attach_sync_io_background_executor(mods_background_task_executor_))) { SERVER_LOG(WARN, "sync io background source attach failed", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(OB_IO_MANAGER.get_device_health_detector().attach_background_executor(mods_background_task_executor_))) { SERVER_LOG(WARN, "io health background source attach failed", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(mods_memory_dump_background_source_->init(mods_background_task_executor_))) { SERVER_LOG(WARN, "mods_memory_dump_background_source_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObSharedTimer::server_module_init(mods_shared_timer_))) { SERVER_LOG(WARN, "mods_shared_timer_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_init_default(mods_shared_macro_block_mgr_))) { SERVER_LOG(WARN, "mods_shared_macro_block_mgr_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(ObSQLSessionPool::server_module_init(mods_sql_session_pool_))) { SERVER_LOG(WARN, "mods_sql_session_pool_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_init_default(mods_storage_meta_mem_mgr_))) { SERVER_LOG(WARN, "mods_storage_meta_mem_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObIOService::server_module_init(mods_io_service_))) { SERVER_LOG(WARN, "mods_io_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(storage::mds::ObMdsService::server_module_init(mods_mds_service_))) { SERVER_LOG(WARN, "mods_mds_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(share::ObSharedMemAllocMgr::server_module_init(mods_shared_mem_alloc_mgr_))) { SERVER_LOG(WARN, "mods_shared_mem_alloc_mgr_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(share::ObErrsimModuleMgr::server_module_init(mods_errsim_module_mgr_))) { SERVER_LOG(WARN, "mods_errsim_module_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObTransService::server_module_init(mods_trans_service_))) { SERVER_LOG(WARN, "mods_trans_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObLogService::server_module_init(mods_log_service_))) { SERVER_LOG(WARN, "mods_log_service_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(mods_log_service_->attach_log_io_callback_background_executor(mods_background_task_executor_))) { SERVER_LOG(WARN, "log io callback background source attach failed", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObLSService::server_module_init(mods_ls_service_))) { SERVER_LOG(WARN, "mods_ls_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObLocalStorageMetaService::server_module_init(mods_local_storage_meta_service_))) { SERVER_LOG(WARN, "mods_local_storage_meta_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(tmp_file::ObTmpFileManager::server_module_init(mods_tmp_file_manager_))) { SERVER_LOG(WARN, "mods_tmp_file_manager_ fail", KR(ret)); }
@@ -1391,6 +1445,7 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(compaction::ObTabletScheduler::server_module_init(mods_tablet_scheduler_))) { SERVER_LOG(WARN, "mods_tablet_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(compaction::ObMediumChecker::server_module_init(mods_medium_checker_))) { SERVER_LOG(WARN, "mods_medium_checker_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(storage::ObCompactionMemPool::server_module_init(mods_compaction_mem_pool_))) { SERVER_LOG(WARN, "mods_compaction_mem_pool_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(ObDDLMergeBucketLock::server_module_init(mods_ddl_merge_bucket_lock_))) { SERVER_LOG(WARN, "mods_ddl_merge_bucket_lock_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObDirectLoadMgr::server_module_init(mods_direct_load_mgr_))) { SERVER_LOG(WARN, "mods_direct_load_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObDagScheduler::server_module_init(mods_dag_scheduler_))) { SERVER_LOG(WARN, "mods_dag_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObFreezeInfoMgr::server_module_init(mods_freeze_info_mgr_))) { SERVER_LOG(WARN, "mods_freeze_info_mgr_ fail", KR(ret)); }
@@ -1410,6 +1465,16 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObDDLScheduler::server_module_init(mods_ddl_scheduler_))) { SERVER_LOG(WARN, "mods_ddl_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObAiService::server_module_init(mods_ai_service_))) { SERVER_LOG(WARN, "mods_ai_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObChangeStreamMgr::server_module_init(mods_change_stream_mgr_))) { SERVER_LOG(WARN, "mods_change_stream_mgr_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(ObInternalTableChangeNotifier::get_instance().seal())) { SERVER_LOG(WARN, "seal internal table change notifier failed", KR(ret)); }
+  // Keep bootstrap timer callbacks on the legacy TimerWK pool until every
+  // runtime module has completed registration. Moving them earlier can let
+  // ServerRuntimeTimer seal global registries while later modules still init.
+  if (OB_SUCC(ret) && OB_FAIL(mods_timer_task_background_source_->init(mods_background_task_executor_))) { SERVER_LOG(WARN, "mods_timer_task_background_source_ fail", KR(ret)); }
+  if (OB_SUCC(ret)) {
+    SERVER_LOG(INFO, "background task sources registered",
+        "source_count",
+        mods_background_task_executor_->get_registered_source_count());
+  }
   return ret;
 }
 
@@ -1420,6 +1485,7 @@ int ObServer::obs_start_modules()
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_shared_macro_block_mgr_))) { SERVER_LOG(WARN, "mods_shared_macro_block_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_storage_meta_mem_mgr_))) { SERVER_LOG(WARN, "mods_storage_meta_mem_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_io_service_))) { SERVER_LOG(WARN, "mods_io_service_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(mods_io_service_->get_callback_mgr().attach_background_executor(mods_background_task_executor_))) { SERVER_LOG(WARN, "runtime io callback background source attach failed", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(storage::mds::ObMdsService::server_module_start(mods_mds_service_))) { SERVER_LOG(WARN, "mods_mds_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_shared_mem_alloc_mgr_))) { SERVER_LOG(WARN, "mods_shared_mem_alloc_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_trans_service_))) { SERVER_LOG(WARN, "mods_trans_service_ fail", KR(ret)); }
@@ -1453,6 +1519,47 @@ int ObServer::obs_start_modules()
 
 void ObServer::obs_stop_modules()
 {
+  {
+    // Server SLOG outlives a runtime. Restore its bootstrap consumer before
+    // the runtime-owned shared executor stops, including create-runtime
+    // failure paths that still need to append an abort SLOG afterwards.
+    const int tmp_ret =
+        SERVER_STORAGE_META_SERVICE.detach_background_executor();
+    if (OB_SUCCESS != tmp_ret && OB_NOT_INIT != tmp_ret) {
+      SERVER_LOG_RET(WARN, tmp_ret,
+          "server slog background source detach failed",
+          K(tmp_ret));
+    }
+  }
+  {
+    const int tmp_ret =
+        OB_IO_MANAGER.detach_callback_background_executor();
+    if (OB_SUCCESS != tmp_ret) {
+      SERVER_LOG_RET(WARN, tmp_ret,
+          "global io callback background source detach failed",
+          K(tmp_ret));
+    }
+  }
+  {
+    const int tmp_ret =
+        OB_IO_MANAGER.detach_sync_io_background_executor();
+    if (OB_SUCCESS != tmp_ret) {
+      SERVER_LOG_RET(WARN, tmp_ret,
+          "sync io background source detach failed",
+          K(tmp_ret));
+    }
+  }
+  if (OB_NOT_NULL(mods_io_service_)) {
+    const int tmp_ret =
+        mods_io_service_->get_callback_mgr().detach_background_executor();
+    if (OB_SUCCESS != tmp_ret) {
+      SERVER_LOG_RET(WARN, tmp_ret,
+          "runtime io callback background source detach failed",
+          K(tmp_ret));
+    }
+  }
+  server_module_stop_default(mods_timer_task_background_source_);
+  server_module_stop_default(mods_memory_dump_background_source_);
   server_module_stop_default(mods_shared_macro_block_mgr_);
   server_module_stop_default(mods_change_stream_mgr_);
   server_module_stop_default(mods_ai_service_);
@@ -1497,6 +1604,8 @@ void ObServer::obs_stop_modules()
 
 void ObServer::obs_wait_modules()
 {
+  server_module_wait_default(mods_timer_task_background_source_);
+  server_module_wait_default(mods_memory_dump_background_source_);
   server_module_wait_default(mods_shared_macro_block_mgr_);
   server_module_wait_default(mods_change_stream_mgr_);
   server_module_wait_default(mods_ai_service_);
@@ -1532,9 +1641,7 @@ void ObServer::obs_wait_modules()
   server_module_wait_default(mods_shared_mem_alloc_mgr_);
   storage::mds::ObMdsService::server_module_wait(mods_mds_service_);
   server_module_wait_default(mods_storage_meta_mem_mgr_);
-  if (OB_NOT_NULL(GCTX.session_mgr_)) {
-    GCTX.session_mgr_->wait_sessions_drained();
-  }
+  ObSQLSessionPool::server_module_wait(mods_sql_session_pool_);
   ObSharedTimer::server_module_wait(mods_shared_timer_);
 }
 
@@ -1561,6 +1668,7 @@ void ObServer::obs_destroy_modules()
   server_module_destroy_default(mods_freeze_info_mgr_);
   server_module_destroy_default(mods_dag_scheduler_);
   server_module_destroy_default(mods_direct_load_mgr_);
+  server_module_destroy_default(mods_ddl_merge_bucket_lock_);
   server_module_destroy_default(mods_compaction_mem_pool_);
   server_module_destroy_default(mods_medium_checker_);
   server_module_destroy_default(mods_tablet_scheduler_);
@@ -1597,14 +1705,55 @@ void ObServer::obs_destroy_modules()
   server_module_destroy_default(mods_tmp_file_manager_);
   server_module_destroy_default(mods_local_storage_meta_service_);
   server_module_destroy_default(mods_ls_service_);
+  if (OB_NOT_NULL(mods_log_service_)) {
+    const int tmp_ret =
+        mods_log_service_->detach_log_io_callback_background_executor();
+    if (OB_SUCCESS != tmp_ret) {
+      SERVER_LOG_RET(WARN, tmp_ret,
+          "log io callback background source detach failed",
+          K(tmp_ret));
+    }
+  }
   ObLogService::server_module_destroy(mods_log_service_);
   server_module_destroy_default(mods_trans_service_);
+  server_module_destroy_default(mods_errsim_module_mgr_);
   server_module_destroy_default(mods_shared_mem_alloc_mgr_);
   server_module_destroy_default(mods_mds_service_);
+  if (OB_NOT_NULL(mods_io_service_)) {
+    const int tmp_ret =
+        mods_io_service_->get_callback_mgr().detach_background_executor();
+    if (OB_SUCCESS != tmp_ret) {
+      SERVER_LOG_RET(WARN, tmp_ret,
+          "runtime io callback background source detach failed",
+          K(tmp_ret));
+    }
+  }
   ObIOService::server_module_destroy(mods_io_service_);
   server_obj_pool_destroy<ObTableScanIterator>(mods_table_scan_iterator_obj_pool_);
   server_module_destroy_default(mods_storage_meta_mem_mgr_);
+  ObSQLSessionPool::server_module_destroy(mods_sql_session_pool_);
   server_module_destroy_default(mods_shared_timer_);
+  {
+    const int tmp_ret =
+        OB_IO_MANAGER.detach_callback_background_executor();
+    if (OB_SUCCESS != tmp_ret) {
+      SERVER_LOG_RET(WARN, tmp_ret,
+          "global io callback background source detach failed",
+          K(tmp_ret));
+    }
+  }
+  {
+    const int tmp_ret =
+        OB_IO_MANAGER.get_device_health_detector().detach_background_executor();
+    if (OB_SUCCESS != tmp_ret) {
+      SERVER_LOG_RET(WARN, tmp_ret,
+          "io health background source detach failed",
+          K(tmp_ret));
+    }
+  }
+  server_module_destroy_default(mods_memory_dump_background_source_);
+  server_module_destroy_default(mods_timer_task_background_source_);
+  server_module_destroy_default(mods_background_task_executor_);
 }
 
 } // namespace observer

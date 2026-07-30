@@ -22,6 +22,7 @@
 #include "ob_tablet_runtime_meta_updater.h"
 #include "observer/omt/ob_server_runtime_controller.h"
 #include "share/tablet/ob_tablet_table_operator.h"  // for ObTabletOperator
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_service.h"                    // for is_mini_mode
 #include "share/ob_tablet_local_checksum_operator.h" // for ObTabletLocalChecksumItem
 #include "storage/compaction/ob_compaction_diagnose.h"
@@ -195,16 +196,42 @@ int ObTabletRuntimeMetaUpdater::init()
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("inited twice", KR(ret));
-  } else if (OB_FAIL(update_queue_.init(this,
-                                        update_task_thread_cnt,
-                                        update_queue_size,
-                                        "TbltMetaUp"))) {
+  } else if (FALSE_IT(use_shared_executor_ = lib::is_mini_mode())) {
+  } else if (use_shared_executor_
+             && (OB_ISNULL(share::g_mp)
+                 || OB_ISNULL(background_executor_ =
+                     share::g_mp->background_task_executor()))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("background task executor is null", K(ret),
+        KP(share::g_mp), KP(background_executor_));
+  } else if (use_shared_executor_
+             && OB_FAIL(update_queue_.init_without_thread(
+                 this, 1, update_queue_size, "TbltMetaUp", &is_stop_))) {
+    LOG_WARN("init externally driven tablet runtime metadata queue failed",
+        KR(ret), K(update_queue_size));
+  } else if (!use_shared_executor_
+             && OB_FAIL(update_queue_.init(this,
+                 update_task_thread_cnt,
+                 update_queue_size,
+                 "TbltMetaUp"))) {
     LOG_WARN("init tablet runtime metadata updater queue failed", KR(ret),
              "thread_count", update_task_thread_cnt,
              "queue_size", update_queue_size);
-  } else {
+  } else if (use_shared_executor_) {
+    share::ObBackgroundTaskSourceConfig config;
+    config.name_ = "TbltMetaUp";
+    config.max_concurrency_ = 1;
+    if (OB_FAIL(background_executor_->register_source(
+        *this, config, source_handle_))) {
+      LOG_WARN("register tablet runtime metadata source failed", K(ret));
+    }
+  }
+  if (OB_SUCC(ret)) {
     is_inited_ = true;
-    is_stop_ = false;
+    ATOMIC_STORE(&is_stop_, false);
+  } else {
+    (void) unregister_source_(true);
+    update_queue_.destroy();
   }
   if (OB_SUCC(ret)) {
     LOG_INFO("init a ObTabletRuntimeMetaUpdater success", K(update_task_thread_cnt));
@@ -215,8 +242,16 @@ int ObTabletRuntimeMetaUpdater::init()
 void ObTabletRuntimeMetaUpdater::stop()
 {
   if (is_inited_) {
-    is_stop_ = true;
-    update_queue_.stop();
+    ATOMIC_STORE(&is_stop_, true);
+    if (use_shared_executor_) {
+      const int tmp_ret = unregister_source_(false);
+      if (OB_SUCCESS != tmp_ret && OB_EAGAIN != tmp_ret) {
+        LOG_WARN_RET(tmp_ret, "fail to stop tablet runtime metadata source",
+            K(tmp_ret));
+      }
+    } else {
+      update_queue_.stop();
+    }
     LOG_INFO("stop ObTabletRuntimeMetaUpdater success");
   }
 }
@@ -224,7 +259,15 @@ void ObTabletRuntimeMetaUpdater::stop()
 void ObTabletRuntimeMetaUpdater::wait()
 {
   if (is_inited_) {
-    update_queue_.wait();
+    if (use_shared_executor_) {
+      const int tmp_ret = unregister_source_(true);
+      if (OB_SUCCESS != tmp_ret) {
+        LOG_WARN_RET(tmp_ret, "fail to wait tablet runtime metadata source",
+            K(tmp_ret));
+      }
+    } else {
+      update_queue_.wait();
+    }
     LOG_INFO("wait ObTabletRuntimeMetaUpdater");
   }
 }
@@ -233,8 +276,9 @@ void ObTabletRuntimeMetaUpdater::destroy()
 {
   stop();
   wait();
+  update_queue_.destroy();
   is_inited_ = false;
-  is_stop_ = true;
+  ATOMIC_STORE(&is_stop_, true);
 }
 
 int64_t ObTabletRuntimeMetaUpdater::cal_thread_count_()
@@ -311,15 +355,34 @@ int ObTabletRuntimeMetaUpdater::add_task_(
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", KR(ret));
+  } else if (ATOMIC_LOAD(&is_stop_)) {
+    ret = OB_IN_STOP_STATE;
+    LOG_WARN("tablet runtime metadata updater is stopping", K(ret));
   } else if (!task.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid task", KR(ret), K(task));
   }
-  if (FAILEDx(update_queue_.add(task))){
-    // TODO: deal with barrier-tasks when execute
-    if (OB_EAGAIN == ret) {
-      LOG_TRACE("tablet runtime metadata update task exists", K(task));
-      ret = OB_SUCCESS;
+  if (OB_SUCC(ret)) {
+    const int queue_ret = update_queue_.add(task);
+    if (OB_SUCCESS != queue_ret && OB_EAGAIN != queue_ret) {
+      ret = queue_ret;
+    } else {
+      // A duplicate means that runnable work is already pending. Notify again
+      // so a prior transient wakeup failure cannot strand that task.
+      if (use_shared_executor_) {
+        const int notify_ret = background_executor_->notify(
+            source_handle_, share::BG_TASK_NORMAL);
+        if (OB_SUCCESS != notify_ret) {
+          // The queue already owns the task. notify() is only a wakeup hint
+          // and must not change the submit result.
+          LOG_WARN_RET(notify_ret,
+              "fail to notify tablet runtime metadata source",
+              K(notify_ret));
+        }
+      } else if (OB_EAGAIN == queue_ret) {
+        // TODO: deal with barrier-tasks when execute
+        LOG_TRACE("tablet runtime metadata update task exists", K(task));
+      }
     }
   }
   if (OB_FAIL(ret)) {
@@ -379,10 +442,49 @@ int ObTabletRuntimeMetaUpdater::set_thread_count()
 {
   int ret = OB_SUCCESS;
   int64_t thread_count = cal_thread_count_();
-  if (OB_FAIL(update_queue_.set_thread_count(thread_count))) {
+  if (use_shared_executor_) {
+    // Mini mode is intentionally capped at one source quantum at a time.
+  } else if (OB_FAIL(update_queue_.set_thread_count(thread_count))) {
     LOG_WARN("fail to set thread count", K(ret), K(thread_count));
   } else {
     LOG_TRACE("success to set thread count", K(thread_count));
+  }
+  return ret;
+}
+
+int ObTabletRuntimeMetaUpdater::process_one_quantum(
+    const share::ObBackgroundTaskPriority priority,
+    share::ObBackgroundTaskRunResult &result)
+{
+  int ret = OB_SUCCESS;
+  int64_t processed_count = 0;
+  bool has_more_ready = false;
+  if (!use_shared_executor_) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (share::BG_TASK_NORMAL != priority) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(update_queue_.process_one_quantum(
+      processed_count, has_more_ready))) {
+    LOG_WARN("fail to process tablet runtime metadata quantum", K(ret));
+  } else {
+    result.processed_count_ = processed_count;
+    result.has_more_ready_ = has_more_ready;
+  }
+  return ret;
+}
+
+int ObTabletRuntimeMetaUpdater::unregister_source_(const bool wait_running)
+{
+  int ret = OB_SUCCESS;
+  if (use_shared_executor_
+      && OB_NOT_NULL(background_executor_)
+      && source_handle_.is_valid()) {
+    do {
+      ret = background_executor_->unregister_source(source_handle_);
+      if (wait_running && OB_EAGAIN == ret) {
+        ob_usleep(10 * 1000L);
+      }
+    } while (wait_running && OB_EAGAIN == ret);
   }
   return ret;
 }
@@ -807,7 +909,7 @@ int ObTabletRuntimeMetaUpdater::throttle_(
     LOG_WARN("detected slow update, may be too many concurrent updating", K(sleep_us));
   }
   const static int64_t sleep_step_us = 20 * 1000; // 20ms
-  for (; !is_stop_ && sleep_us > 0;
+  for (; !ATOMIC_LOAD(&is_stop_) && sleep_us > 0;
       sleep_us -= sleep_step_us) {
     ob_usleep(static_cast<int32_t>(std::min(sleep_step_us, sleep_us)), true /*is_idle_sleep*/);
   }

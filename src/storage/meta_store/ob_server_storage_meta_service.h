@@ -32,6 +32,9 @@ public:
   static ObServerStorageMetaService &get_instance();
   int init();
   int start();
+  int attach_background_executor(
+      share::ObBackgroundTaskExecutor *background_executor);
+  int detach_background_executor();
   void stop();
   void wait();
   void destroy();

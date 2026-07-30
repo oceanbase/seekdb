@@ -26,8 +26,10 @@ namespace share
 {
 ObAsyncTaskQueue::ObAsyncTaskQueue()
   : is_inited_(false),
+    use_external_driver_(false),
     queue_(),
-    allocator_()
+    allocator_(),
+    external_pending_task_(NULL)
 {
 }
 
@@ -41,11 +43,32 @@ ObAsyncTaskQueue::~ObAsyncTaskQueue()
 
 int ObAsyncTaskQueue::init(const int64_t thread_cnt, const int64_t queue_size, const char *thread_name, const int64_t page_size)
 {
+  return init_(
+      thread_cnt, queue_size, thread_name, page_size, true /* create_thread */);
+}
+
+int ObAsyncTaskQueue::init_without_thread(
+    const int64_t queue_size,
+    const int64_t page_size)
+{
+  return init_(
+      0, queue_size, NULL, page_size, false /* create_thread */);
+}
+
+int ObAsyncTaskQueue::init_(
+    const int64_t thread_cnt,
+    const int64_t queue_size,
+    const char *thread_name,
+    const int64_t page_size,
+    const bool create_thread)
+{
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("task queue has already been initialized", K(ret));
-  } else if (thread_cnt <= 0|| queue_size <= 0 || 0 != (queue_size & (queue_size - 1))) {
+  } else if ((create_thread && thread_cnt <= 0)
+      || queue_size <= 0
+      || 0 != (queue_size & (queue_size - 1))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(thread_cnt), K(queue_size), K(ret));
   } else if (OB_FAIL(allocator_.init(TOTAL_LIMIT, HOLD_LIMIT, page_size))) {
@@ -54,10 +77,12 @@ int ObAsyncTaskQueue::init(const int64_t thread_cnt, const int64_t queue_size, c
         "page size",  static_cast<int64_t>(ALLOC_PAGE_SIZE), K(ret));
   } else if (OB_FAIL(queue_.init(queue_size))) {
     LOG_WARN("queue init failed", K(queue_size), K(ret));
-  } else if (OB_FAIL(create(thread_cnt, thread_name))) {
+  } else if (create_thread && OB_FAIL(create(thread_cnt, thread_name))) {
     LOG_WARN("create async task thread failed", K(ret), K(thread_cnt));
   } else {
     allocator_.set_attr(ObMemAttr("AsyncTaskQueue"));
+    use_external_driver_ = !create_thread;
+    external_pending_task_ = NULL;
     is_inited_ = true;
   }
   return ret;
@@ -70,8 +95,13 @@ int ObAsyncTaskQueue::destroy()
     LOG_WARN("reentrant thread thread failed", K(ret));
   }
   if (is_inited_) {
+    if (use_external_driver_) {
+      clear_external_tasks_();
+    }
     queue_.destroy();
     allocator_.destroy();
+    external_pending_task_ = NULL;
+    use_external_driver_ = false;
     is_inited_ = false;
   }
   return ret;
@@ -174,11 +204,13 @@ void ObAsyncTaskQueue::run2()
 }
 int ObAsyncTaskQueue::start()
 {
-  return logical_start();
+  return use_external_driver_ ? OB_SUCCESS : logical_start();
 }
 void ObAsyncTaskQueue::stop()
 {
-  logical_stop();
+  if (!use_external_driver_) {
+    logical_stop();
+  }
 }
 void ObAsyncTaskQueue::wait()
 {
@@ -186,6 +218,8 @@ void ObAsyncTaskQueue::wait()
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
+  } else if (use_external_driver_) {
+    clear_external_tasks_();
   } else {
     logical_wait();
     ObAsyncTask *task = NULL;
@@ -216,6 +250,129 @@ int ObAsyncTaskQueue::pop(ObAsyncTask *&task)
     }
   }
   return ret;
+}
+
+int ObAsyncTaskQueue::try_pop(ObAsyncTask *&task)
+{
+  int ret = OB_SUCCESS;
+  void *vp = NULL;
+  task = NULL;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(queue_.pop(vp, 0))) {
+  } else {
+    task = static_cast<ObAsyncTask *>(vp);
+  }
+  return ret;
+}
+
+int ObAsyncTaskQueue::process_one_task(
+    bool &processed,
+    int64_t &next_ready_ts,
+    bool &has_more_ready)
+{
+  int ret = OB_SUCCESS;
+  processed = false;
+  next_ready_ts = 0;
+  has_more_ready = false;
+  ObAsyncTask *task = external_pending_task_;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (!use_external_driver_) {
+    ret = OB_STATE_NOT_MATCH;
+  } else {
+    external_pending_task_ = NULL;
+    if (OB_ISNULL(task)) {
+      const int pop_ret = try_pop(task);
+      if (OB_ENTRY_NOT_EXIST == pop_ret) {
+      } else if (OB_SUCCESS != pop_ret) {
+        ret = pop_ret;
+        LOG_WARN("pop externally driven async task failed", K(ret));
+      }
+    }
+
+    if (OB_SUCC(ret) && OB_NOT_NULL(task)) {
+      const int64_t now = ObTimeUtility::current_time();
+      const int64_t ready_ts = get_external_task_ready_ts_(*task, now);
+      if (ready_ts > now) {
+        external_pending_task_ = task;
+        next_ready_ts = ready_ts;
+      } else {
+        bool rescheduled = false;
+        ObAddr zero_addr;
+        ObCurTraceId::TraceId trace_id;
+        trace_id.init(zero_addr);
+        ObTraceIdGuard trace_id_guard(trace_id);
+        const int task_ret = task->process();
+        processed = true;
+        on_external_task_processed_(*task, task_ret);
+        if (OB_SUCCESS != task_ret) {
+          LOG_WARN_RET(task_ret, "task process failed, start retry",
+              "max retry time", task->get_retry_times(),
+              "retry interval", task->get_retry_interval());
+          if (task->get_retry_times() > 0
+              && can_retry_external_task_(*task)) {
+            task->set_retry_times(task->get_retry_times() - 1);
+            task->set_last_execute_time(ObTimeUtility::current_time());
+            const int push_ret = queue_.push(task);
+            if (OB_SUCCESS != push_ret) {
+              LOG_ERROR_RET(push_ret, "push retry task to queue failed");
+            } else {
+              rescheduled = true;
+            }
+          }
+        }
+        if (!rescheduled) {
+          task->~ObAsyncTask();
+          allocator_.free(task);
+          task = NULL;
+        }
+        has_more_ready = queue_.size() > 0;
+      }
+    }
+  }
+  return ret;
+}
+
+int64_t ObAsyncTaskQueue::get_external_task_ready_ts_(
+    const ObAsyncTask &task,
+    const int64_t now) const
+{
+  UNUSED(now);
+  return task.get_last_execute_time() > 0
+      ? task.get_last_execute_time() + task.get_retry_interval()
+      : 0;
+}
+
+bool ObAsyncTaskQueue::can_retry_external_task_(
+    const ObAsyncTask &task) const
+{
+  UNUSED(task);
+  return true;
+}
+
+void ObAsyncTaskQueue::on_external_task_processed_(
+    ObAsyncTask &task,
+    const int process_ret)
+{
+  UNUSEDx(task, process_ret);
+}
+
+void ObAsyncTaskQueue::clear_external_tasks_()
+{
+  if (OB_NOT_NULL(external_pending_task_)) {
+    external_pending_task_->~ObAsyncTask();
+    allocator_.free(external_pending_task_);
+    external_pending_task_ = NULL;
+  }
+  ObAsyncTask *task = NULL;
+  while (OB_SUCCESS == try_pop(task)) {
+    if (OB_NOT_NULL(task)) {
+      task->~ObAsyncTask();
+      allocator_.free(task);
+      task = NULL;
+    }
+  }
 }
 
 }//end namespace share

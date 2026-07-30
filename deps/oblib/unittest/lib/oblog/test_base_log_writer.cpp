@@ -38,10 +38,21 @@ public:
 class ObTLogWriter : public ObBaseLogWriter
 {
 public:
-  ObTLogWriter() : process_cnt_(0) {}
+  ObTLogWriter() : process_cnt_(0), notify_cnt_(0) {}
   virtual ~ObTLogWriter() {}
+  void start_external() { has_stopped_ = false; }
+  int flush_external(
+      const int64_t max_batch_count,
+      int64_t &processed_count,
+      bool &has_more)
+  {
+    return flush_log_one_quantum(
+        max_batch_count, processed_count, has_more);
+  }
   int64_t process_cnt_;
+  int64_t notify_cnt_;
 protected:
+  virtual void on_log_item_appended() override { ++notify_cnt_; }
   virtual void process_log_items(ObIBaseLogItem **items, const int64_t item_cnt, int64_t &finish_cnt);
 };
 
@@ -114,6 +125,38 @@ TEST(ObBaseLogWriter, normal)
 
   //repeat destroy
   writer.destroy();
+  writer.destroy();
+}
+
+TEST(ObBaseLogWriter, external_driver)
+{
+  ObTLogWriter writer;
+  ObBaseLogWriterCfg cfg(8, 500000, 1, 2);
+  ObTLogItem log_items[3];
+  int64_t processed_count = 0;
+  bool has_more = false;
+
+  ASSERT_EQ(OB_SUCCESS, writer.init(cfg));
+  writer.start_external();
+  for (int64_t i = 0; i < ARRAYSIZEOF(log_items); ++i) {
+    ASSERT_EQ(OB_SUCCESS, writer.append_log(log_items[i]));
+  }
+  ASSERT_EQ(ARRAYSIZEOF(log_items), writer.notify_cnt_);
+  ASSERT_EQ(ARRAYSIZEOF(log_items), writer.get_queued_item_cnt());
+
+  ASSERT_EQ(OB_SUCCESS,
+      writer.flush_external(1, processed_count, has_more));
+  ASSERT_EQ(2, processed_count);
+  ASSERT_TRUE(has_more);
+  ASSERT_EQ(1, writer.get_queued_item_cnt());
+
+  ASSERT_EQ(OB_SUCCESS,
+      writer.flush_external(1, processed_count, has_more));
+  ASSERT_EQ(1, processed_count);
+  ASSERT_FALSE(has_more);
+  ASSERT_EQ(0, writer.get_queued_item_cnt());
+
+  writer.stop();
   writer.destroy();
 }
 

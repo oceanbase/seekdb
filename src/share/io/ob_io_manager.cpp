@@ -20,6 +20,7 @@
 #include "ob_io_manager.h"
 #include "share/ob_share_util.h"  // ObShareUtil, previously hidden behind a transitive include(free within share)
 #include "share/ob_server_struct.h"  // GCTX, previously hidden behind a transitive include(free within share)
+#include "share/errsim_module/ob_errsim_module_interface_imp.h"
 #include "share/io/io_schedule/ob_io_schedule_v2.h"
 #include "share/ob_io_device_helper.h"
 
@@ -79,7 +80,9 @@ ObIOManager::ObIOManager()
     mutex_(ObLatchIds::GLOBAL_IO_CONFIG_LOCK),
     io_config_(),
     allocator_(),
-    fault_detector_(io_config_)
+    fault_detector_(io_config_),
+    io_service_(nullptr),
+    sync_io_background_executor_(nullptr)
 {
 }
 
@@ -161,15 +164,57 @@ private:
   const ObIOConfig &conf_;
 };
 
+struct AttachSyncIOBackgroundSourceFn
+{
+public:
+  explicit AttachSyncIOBackgroundSourceFn(
+      oceanbase::share::ObBackgroundTaskExecutor *background_executor)
+    : background_executor_(background_executor)
+  {}
+  int operator () (
+      oceanbase::common::hash::HashMapPair<
+          int64_t, ObDeviceChannel *> &entry)
+  {
+    int ret = OB_SUCCESS;
+    if (OB_NOT_NULL(entry.second)
+        && OB_FAIL(entry.second->attach_sync_io_background_executor(
+            background_executor_))) {
+      LOG_WARN("attach sync io background source failed", K(ret));
+    }
+    return ret;
+  }
+private:
+  oceanbase::share::ObBackgroundTaskExecutor *background_executor_;
+};
+
+struct DetachSyncIOBackgroundSourceFn
+{
+public:
+  int operator () (
+      oceanbase::common::hash::HashMapPair<
+          int64_t, ObDeviceChannel *> &entry)
+  {
+    int ret = OB_SUCCESS;
+    if (OB_NOT_NULL(entry.second)
+        && OB_FAIL(
+            entry.second->detach_sync_io_background_executor())) {
+      LOG_WARN("detach sync io background source failed", K(ret));
+    }
+    return ret;
+  }
+};
+
 void ObIOManager::destroy()
 {
   stop();
+  (void)detach_sync_io_background_executor();
   fault_detector_.destroy();
   DestroyChannelMapFn destry_channel_map_fn(allocator_);
   channel_map_.foreach_refactored(destry_channel_map_fn);
   channel_map_.destroy();
   OB_DELETE(ObIOService, "IO_MGR", io_service_);
   io_service_ = nullptr;
+  sync_io_background_executor_ = nullptr;
   allocator_.destroy();
   is_inited_ = false;
   LOG_INFO("io manager is destroyed");
@@ -371,10 +416,90 @@ int ObIOManager::detect_read(const ObIOInfo &info, ObIOHandle &handle)
   return ret;
 }
 
+int ObIOManager::attach_callback_background_executor(
+    share::ObBackgroundTaskExecutor *background_executor)
+{
+  int ret = OB_SUCCESS;
+  ObRefHolder<ObIOService> service_holder;
+  if (OB_FAIL(get_io_service(service_holder))) {
+    LOG_WARN("get io service for callback source failed", K(ret));
+  } else if (OB_FAIL(service_holder.get_ptr()->get_callback_mgr()
+      .attach_background_executor(background_executor))) {
+    LOG_WARN("attach io callback background source failed", K(ret));
+  }
+  return ret;
+}
+
+int ObIOManager::detach_callback_background_executor()
+{
+  int ret = OB_SUCCESS;
+  ObRefHolder<ObIOService> service_holder;
+  if (OB_FAIL(get_io_service(service_holder))) {
+    if (OB_HASH_NOT_EXIST == ret) {
+      ret = OB_SUCCESS;
+    } else {
+      LOG_WARN("get io service for callback source failed", K(ret));
+    }
+  } else if (OB_FAIL(service_holder.get_ptr()->get_callback_mgr()
+      .detach_background_executor())) {
+    LOG_WARN("detach io callback background source failed", K(ret));
+  }
+  return ret;
+}
+
+int ObIOManager::attach_sync_io_background_executor(
+    share::ObBackgroundTaskExecutor *background_executor)
+{
+  int ret = OB_SUCCESS;
+  if (!lib::is_mini_mode()) {
+  } else if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(background_executor)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    ObMutexGuard guard(mutex_);
+    if (OB_NOT_NULL(sync_io_background_executor_)) {
+      ret = OB_INIT_TWICE;
+    } else {
+      AttachSyncIOBackgroundSourceFn fn(background_executor);
+      if (OB_FAIL(channel_map_.foreach_refactored(fn))) {
+        LOG_WARN("attach sync io background sources failed", K(ret));
+        DetachSyncIOBackgroundSourceFn rollback_fn;
+        (void)channel_map_.foreach_refactored(rollback_fn);
+      } else {
+        sync_io_background_executor_ = background_executor;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObIOManager::detach_sync_io_background_executor()
+{
+  int ret = OB_SUCCESS;
+  ObMutexGuard guard(mutex_);
+  if (OB_NOT_NULL(sync_io_background_executor_)) {
+    DetachSyncIOBackgroundSourceFn fn;
+    if (OB_FAIL(channel_map_.foreach_refactored(fn))) {
+      LOG_WARN("detach sync io background sources failed", K(ret));
+    }
+    sync_io_background_executor_ = nullptr;
+  }
+  return ret;
+}
+
 int ObIOManager::dispatch_aio(const ObIOInfo &info, ObIOHandle &handle)
 {
   int ret = OB_SUCCESS;
   ObRefHolder<ObIOService> service_holder;
+#ifdef ERRSIM
+  const ObErrsimModuleType type = THIS_WORKER.get_module_type();
+  if (is_errsim_module(type.type_)) {
+    ret = OB_IO_ERROR;
+    LOG_ERROR("[ERRSIM MODULE] errsim IO error", K(ret));
+    return ret;
+  }
+#endif
 
   if (OB_FAIL(get_io_service(service_holder))) {
     LOG_WARN("get io service failed", K(ret));
@@ -446,6 +571,10 @@ int ObIOManager::add_device_channel(ObIODevice *device_handle,
                                           max_io_depth,
                                           allocator_))) {
     LOG_WARN("init device_channel failed", K(ret), K(async_channel_thread_count), K(sync_channel_thread_count));
+  } else if (OB_NOT_NULL(sync_io_background_executor_)
+      && OB_FAIL(device_channel->attach_sync_io_background_executor(
+          sync_io_background_executor_))) {
+    LOG_WARN("attach new device sync io background source failed", K(ret));
   } else if (OB_FAIL(channel_map_.set_refactored(reinterpret_cast<int64_t>(device_handle), device_channel))) {
     LOG_WARN("set channel map failed", K(ret), KP(device_handle));
   } else {
@@ -587,7 +716,7 @@ int ObIOService::server_module_new(ObIOService *&io_service)
 int ObIOService::server_module_init(ObIOService *&io_service)
 {
   int ret = OB_SUCCESS;
-
+  
   if (OB_ISNULL(io_service)) {
     {
       ret = OB_INVALID_ARGUMENT;

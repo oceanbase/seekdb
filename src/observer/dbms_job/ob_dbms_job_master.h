@@ -27,6 +27,7 @@
 #include "lib/task/ob_timer.h"
 #include "lib/container/ob_iarray.h"
 
+#include "share/ob_background_task_executor.h"
 #include "share/schema/ob_schema_service.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 
@@ -38,6 +39,8 @@ namespace oceanbase
 
 namespace dbms_job
 {
+class ObDBMSJobMaster;
+
 class ObDBMSJobThread : public ObSimpleThreadPool
 {
   virtual void handle(void *task);
@@ -110,12 +113,13 @@ public:
     : inited_(false),
       job_key_(NULL),
       ready_queue_(NULL),
+      owner_(NULL),
       wait_vector_(0, NULL, ObModIds::VECTOR),
       lock_(common::ObLatchIds::DBMS_JOB_TASK_LOCK) {}
 
   virtual ~ObDBMSJobTask() {}
 
-  int init(ObDBMSJobQueue *ready_queue);
+  int init(ObDBMSJobQueue *ready_queue, ObDBMSJobMaster *owner);
   int start();
   int stop();
   int destroy();
@@ -136,6 +140,7 @@ private:
   bool inited_;
   ObDBMSJobKey *job_key_;
   ObDBMSJobQueue *ready_queue_;
+  ObDBMSJobMaster *owner_;
   WaitVector wait_vector_;
 
   ObSpinLock lock_;
@@ -145,13 +150,14 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObDBMSJobTask);
 };
 
-class ObDBMSJobMaster
+class ObDBMSJobMaster : public share::ObIBackgroundTaskSource
 {
 public:
   ObDBMSJobMaster()
     : inited_(false),
       stoped_(false),
       running_(false),
+      use_shared_executor_(false),
       trace_id_(NULL),
       ready_queue_(),
       scheduler_task_(),
@@ -160,6 +166,8 @@ public:
       lock_(common::ObLatchIds::DBMS_JOB_MASTER_LOCK),
       allocator_("DBMSJobMaster"),
       alive_jobs_(),
+      background_executor_(NULL),
+      source_handle_(),
       job_table_change_seq_(0) {}
 
   virtual ~ObDBMSJobMaster() { alive_jobs_.destroy(); };
@@ -174,6 +182,9 @@ public:
   int start();
   int stop();
   int scheduler();
+  int process_one_quantum(
+      const share::ObBackgroundTaskPriority priority,
+      share::ObBackgroundTaskRunResult &result) override;
   int destroy();
 
   int alloc_job_key(
@@ -189,6 +200,10 @@ public:
   int scheduler_job(ObDBMSJobKey *job_key, bool is_retry = false);
 
 private:
+  friend class ObDBMSJobTask;
+  int register_background_source_();
+  int unregister_background_source_(const bool wait_running);
+  int notify_background_source_();
   int check_table_change_(ObDBMSJobKey *check_key);
   int schedule_change_check_(ObDBMSJobKey *check_key);
 
@@ -198,6 +213,7 @@ private:
   bool inited_;
   bool stoped_;
   bool running_;
+  bool use_shared_executor_;
 
   const uint64_t *trace_id_;
 
@@ -210,6 +226,8 @@ private:
   common::ObArenaAllocator allocator_;
 
   common::hash::ObHashSet<uint64_t> alive_jobs_;
+  share::ObBackgroundTaskExecutor *background_executor_;
+  share::ObBackgroundTaskSourceHandle source_handle_;
   uint64_t job_table_change_seq_;
 
 private:

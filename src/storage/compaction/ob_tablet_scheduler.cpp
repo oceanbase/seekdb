@@ -22,7 +22,6 @@
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "storage/compaction/ob_sstable_merge_info_mgr.h"
-#include "storage/compaction/ob_freeze_info_mgr.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "storage/compaction/ob_sstable_merge_info_mgr.h"
 #include "storage/ob_gc_upper_trans_helper.h"
@@ -229,6 +228,9 @@ constexpr ObMergeType ObTabletScheduler::MERGE_TYPES[];
 ObTabletScheduler::ObTabletScheduler()
  : ObBasicMergeScheduler(),
    is_inited_(false),
+   use_shared_bf_executor_(false),
+   background_executor_(nullptr),
+   bf_source_handle_(),
    bf_queue_(),
    fast_freeze_checker_(),
    minor_tablet_iter_(false/*is_major*/),
@@ -255,6 +257,13 @@ void ObTabletScheduler::reset()
   stop();
   wait();
 
+  if (use_shared_bf_executor_) {
+    const int tmp_ret = unregister_bf_source_(true);
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN_RET(tmp_ret, "fail to unregister bloom filter task source",
+          K(tmp_ret));
+    }
+  }
   is_inited_ = false;
   ObBasicMergeScheduler::reset();
   bf_queue_.destroy();
@@ -284,23 +293,55 @@ int ObTabletScheduler::init()
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTabletScheduler has inited", K(ret));
+  } else if (FALSE_IT(use_shared_bf_executor_ = lib::is_mini_mode())) {
+  } else if (use_shared_bf_executor_
+             && (OB_ISNULL(share::g_mp)
+                 || OB_ISNULL(background_executor_ =
+                     share::g_mp->background_task_executor()))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("background task executor is null", K(ret), KP(share::g_mp),
+        KP(background_executor_));
   } else if (FALSE_IT(bf_queue_.set_run_wrapper(share::server_runtime()))) {
-  } else if (OB_FAIL(bf_queue_.init(BLOOM_FILTER_LOAD_BUILD_THREAD_CNT,
-                                    "BFBuildTask",
-                                    BF_TASK_QUEUE_SIZE,
-                                    BF_TASK_MAP_SIZE,
-                                    BF_TASK_TOTAL_LIMIT,
-                                    BF_TASK_HOLD_LIMIT,
-                                    BF_TASK_PAGE_SIZE,
-                                    "bf_queue"))) {
+  } else if (use_shared_bf_executor_
+             && OB_FAIL(bf_queue_.init_without_thread(
+                 BLOOM_FILTER_LOAD_BUILD_THREAD_CNT,
+                 "BFBuildTask",
+                 BF_TASK_QUEUE_SIZE,
+                 BF_TASK_MAP_SIZE,
+                 BF_TASK_TOTAL_LIMIT,
+                 BF_TASK_HOLD_LIMIT,
+                 BF_TASK_PAGE_SIZE,
+                 "bf_queue"))) {
+    LOG_WARN("fail to init externally driven bloom filter queue", K(ret));
+  } else if (!use_shared_bf_executor_
+             && OB_FAIL(bf_queue_.init(BLOOM_FILTER_LOAD_BUILD_THREAD_CNT,
+                 "BFBuildTask",
+                 BF_TASK_QUEUE_SIZE,
+                 BF_TASK_MAP_SIZE,
+                 BF_TASK_TOTAL_LIMIT,
+                 BF_TASK_HOLD_LIMIT,
+                 BF_TASK_PAGE_SIZE,
+                 "bf_queue"))) {
     LOG_WARN("Fail to init bloom filter queue", K(ret));
   } else if (OB_FAIL(fast_freeze_checker_.init())) {
     LOG_WARN("Fail to create fast freeze checker", K(ret));
-  } else {
+  } else if (use_shared_bf_executor_) {
+    share::ObBackgroundTaskSourceConfig config;
+    config.name_ = "BFBuildTask";
+    config.max_concurrency_ = 1;
+    if (OB_FAIL(background_executor_->register_source(
+        *this, config, bf_source_handle_))) {
+      LOG_WARN("fail to register bloom filter task source", K(ret));
+    }
+  }
+  if (OB_SUCC(ret)) {
     IGNORE_RETURN runtime_status_.refresh_runtime_config(enable_adaptive_compaction);
     timer_task_mgr_.set_scheduler_interval(schedule_interval);
     batch_size_mgr_.set_tablet_batch_size(schedule_batch_size);
     is_inited_ = true;
+  } else {
+    (void) unregister_bf_source_(true);
+    bf_queue_.destroy();
   }
   return ret;
 }
@@ -357,8 +398,27 @@ int ObTabletScheduler::server_module_init(ObTabletScheduler* &scheduler)
 void ObTabletScheduler::stop()
 {
   is_stop_ = true;
+  if (use_shared_bf_executor_) {
+    const int tmp_ret = unregister_bf_source_(false);
+    if (OB_SUCCESS != tmp_ret && OB_EAGAIN != tmp_ret) {
+      LOG_WARN_RET(tmp_ret, "fail to stop bloom filter task source",
+          K(tmp_ret));
+    }
+  }
   timer_task_mgr_.stop();
   stop_major_merge();
+}
+
+void ObTabletScheduler::wait()
+{
+  if (use_shared_bf_executor_) {
+    const int tmp_ret = unregister_bf_source_(true);
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN_RET(tmp_ret, "fail to wait bloom filter task source",
+          K(tmp_ret));
+    }
+  }
+  timer_task_mgr_.wait();
 }
 
 int ObTabletScheduler::update_upper_trans_version_and_gc_sstable()
@@ -412,7 +472,6 @@ int ObTabletScheduler::try_update_upper_trans_version_and_gc_sstable(
       } else if (!tablet->get_tablet_meta().local_status_.check_allow_read()) {
       } else {
         int64_t multi_version_start = 0;
-        int64_t max_resolved_upper_trans_version = 0;
         int tmp_ret = OB_SUCCESS;
         bool need_update = false; // need update table store
         // The new_upper_trans array comes from the old table store. The last minor
@@ -421,9 +480,7 @@ int ObTabletScheduler::try_update_upper_trans_version_and_gc_sstable(
         new_upper_trans.set_attr(ObMemAttr("NewUpTxnVer"));
         UpdateUpperTransParam upper_trans_param;
         upper_trans_param.new_upper_trans_ = &new_upper_trans;
-        if (OB_TMP_FAIL(ObGCUpperTransHelper::check_need_gc_or_update_upper_trans_version(
-            ls, *tablet, multi_version_start, upper_trans_param, need_update,
-            max_resolved_upper_trans_version))) {
+        if (OB_TMP_FAIL(ObGCUpperTransHelper::check_need_gc_or_update_upper_trans_version(ls, *tablet, multi_version_start, upper_trans_param, need_update))) {
           LOG_WARN("faild to check need gc or update", K(tmp_ret), K(tablet_id));
         } else if (need_update) {
           ObArenaAllocator tmp_arena("RmOldTblTmp", OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -436,22 +493,8 @@ int ObTabletScheduler::try_update_upper_trans_version_and_gc_sstable(
             if (OB_TMP_FAIL(ls.update_tablet_table_store(tablet_id, param, new_tablet_handle))) {
               LOG_WARN("failed to update table store", K(tmp_ret), K(param), K(tablet_id));
             } else {
-              ObFreezeInfoMgr *freeze_info_mgr = nullptr;
               FLOG_INFO("success to remove old table in table store", K(tmp_ret),
                   K(tablet_id), K(multi_version_start), KPC(tablet));
-              if (max_resolved_upper_trans_version > 0
-                  && INT64_MAX != max_resolved_upper_trans_version) {
-                if (OB_ISNULL(share::g_mp)
-                    || OB_ISNULL(freeze_info_mgr = share::g_mp->freeze_info_mgr())) {
-                  LOG_WARN_RET(OB_ERR_UNEXPECTED, "freeze info mgr is null",
-                      K(tablet_id), K(max_resolved_upper_trans_version));
-                } else {
-                  freeze_info_mgr->get_snapshot_gc_scn_renewal_state()
-                      .update_target_scn(max_resolved_upper_trans_version);
-                  LOG_INFO("update snapshot gc renewal target after resolving upper trans version",
-                      K(tablet_id), K(max_resolved_upper_trans_version));
-                }
-              }
             }
           }
           ObTabletObjLoadHelper::free(tmp_arena, storage_schema);
@@ -557,13 +600,57 @@ int ObTabletScheduler::schedule_build_bloomfilter(
     LOG_WARN("Invalid argument", K(ret), K(macro_id), K(prefix_len));
   } else {
     ObBloomFilterBuildTask task(table_id, macro_id, prefix_len);
-    if (OB_FAIL(bf_queue_.add_task(task))) {
-      if (OB_LIKELY(OB_EAGAIN == ret)) {
-        ret = OB_SUCCESS;
-      } else {
-        LOG_WARN("Failed to add bloomfilter build task", K(ret));
+    const int queue_ret = bf_queue_.add_task(task);
+    if (OB_SUCCESS != queue_ret && OB_EAGAIN != queue_ret) {
+      ret = queue_ret;
+      LOG_WARN("Failed to add bloomfilter build task", K(ret));
+    } else if (use_shared_bf_executor_) {
+      const int notify_ret = background_executor_->notify(
+          bf_source_handle_, share::BG_TASK_LOW);
+      if (OB_SUCCESS != notify_ret) {
+        // The queue already accepted (or already owns) the task. notify() is
+        // a wakeup hint and must not change the historical submit result.
+        LOG_WARN_RET(notify_ret,
+            "failed to notify bloom filter task source", K(notify_ret));
       }
     }
+  }
+  return ret;
+}
+
+int ObTabletScheduler::process_one_quantum(
+    const share::ObBackgroundTaskPriority priority,
+    share::ObBackgroundTaskRunResult &result)
+{
+  int ret = OB_SUCCESS;
+  bool processed = false;
+  bool has_more_ready = false;
+  if (!use_shared_bf_executor_) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (share::BG_TASK_LOW != priority) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(bf_queue_.process_one_task(
+      processed, has_more_ready))) {
+    LOG_WARN("fail to process bloom filter task", K(ret));
+  } else {
+    result.processed_count_ = processed ? 1 : 0;
+    result.has_more_ready_ = has_more_ready;
+  }
+  return ret;
+}
+
+int ObTabletScheduler::unregister_bf_source_(const bool wait_running)
+{
+  int ret = OB_SUCCESS;
+  if (use_shared_bf_executor_
+      && OB_NOT_NULL(background_executor_)
+      && bf_source_handle_.is_valid()) {
+    do {
+      ret = background_executor_->unregister_source(bf_source_handle_);
+      if (wait_running && OB_EAGAIN == ret) {
+        ob_usleep(10 * 1000L);
+      }
+    } while (wait_running && OB_EAGAIN == ret);
   }
   return ret;
 }
@@ -721,7 +808,7 @@ int ObTabletScheduler::fill_minor_compaction_param(
     ObTabletMergeDagParam &param)
 {
   int ret = OB_SUCCESS;
-  param.data_size_ = 0;
+  ObCompactionParam &compaction_param = param.compaction_param_;
   ObProtectedMemtableMgrHandle *protected_handle = NULL;
 
   ObITable *table = nullptr;
@@ -734,7 +821,7 @@ int ObTabletScheduler::fill_minor_compaction_param(
       LOG_WARN("get unexpected table", K(ret), KPC(table), K(result));
     } else {
       ObSSTable *sstable = static_cast<ObSSTable *>(table);
-      param.data_size_ += sstable->get_occupy_size();
+      compaction_param.occupy_size_ += sstable->get_occupy_size();
       row_count += sstable->get_row_count();
       macro_count += sstable->get_data_macro_block_count();
     }

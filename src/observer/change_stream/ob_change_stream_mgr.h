@@ -21,6 +21,7 @@
 #define OB_CS_MGR_H_
 
 #include "lib/ob_define.h"
+#include "share/ob_background_task_executor.h"
 #include "observer/change_stream/ob_change_stream_fetcher.h"
 #include "observer/change_stream/ob_change_stream_dispatcher.h"
 #include "observer/change_stream/ob_change_stream_worker.h"
@@ -31,7 +32,7 @@ namespace share
 
 /// Process-wide Change Stream manager.
 /// Plugin instances are created per-batch in ObCSExecCtx, not held at Mgr level.
-class ObChangeStreamMgr
+class ObChangeStreamMgr : public ObIBackgroundTaskSource
 {
 public:
   ObChangeStreamMgr();
@@ -48,6 +49,14 @@ public:
 
   bool is_inited() const { return is_inited_; }
 
+  int process_one_quantum(
+      const ObBackgroundTaskPriority priority,
+      ObBackgroundTaskRunResult &result) override;
+
+  /// Wake the dedicated Fetcher after activation, or the mini-mode idle
+  /// maintenance source while the Change Stream components are still lazy.
+  void notify_schema_changed();
+
   /// Block until change_stream_refresh_scn >= current safe visible scn, or timeout.
   /// Can be called from any node (RS / observer) as long as sql_client is valid.
   static int wait_refresh_scn(
@@ -63,7 +72,23 @@ public:
   ObCSWorker &get_worker() { return worker_; }
 
 private:
+  int start_components_();
+  void stop_components_();
+  void wait_components_();
+  int register_background_source_();
+  int unregister_background_source_(const bool wait_running);
+  int notify_background_source_();
+
   bool is_inited_;
+  bool use_lazy_start_;
+  bool is_running_;
+  bool components_started_;
+  bool fetcher_started_;
+  bool dispatcher_started_;
+  bool worker_started_;
+  lib::ObMutex lifecycle_lock_;
+  ObBackgroundTaskExecutor *background_executor_;
+  ObBackgroundTaskSourceHandle source_handle_;
   ObCSFetcher fetcher_;
   ObCSDispatcher dispatcher_;
   ObCSWorker worker_;

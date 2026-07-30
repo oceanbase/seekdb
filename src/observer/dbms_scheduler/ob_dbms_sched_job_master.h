@@ -92,6 +92,8 @@ public:
       stoped_(true),
       is_leader_(false),
       wokeup_(false),
+      shared_first_iter_(true),
+      shared_next_check_ts_(0),
       schema_service_(NULL),
       allocator_(ObMemAttr("DbmsScheduler"), OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_),
       alive_jobs_(),
@@ -106,9 +108,14 @@ public:
 
   int start();
   int stop();
-  bool is_stop() { return stoped_; }
-  bool is_leader() { return is_leader_; }
+  bool is_stop() { return ATOMIC_LOAD(&stoped_); }
+  bool is_leader() { return ATOMIC_LOAD(&is_leader_); }
   int scheduler();
+  int process_one_quantum(
+      int64_t &processed_count,
+      bool &has_more_ready,
+      int64_t &next_ready_ts);
+  void reset_scheduler_state();
   int destroy();
   void wakeup();
   bool idle(int64_t deadline_us);
@@ -136,6 +143,8 @@ private:
   bool stoped_;
   bool is_leader_;
   bool wokeup_;
+  bool shared_first_iter_;
+  int64_t shared_next_check_ts_;
 
   common::ObThreadCond thread_cond_;
 

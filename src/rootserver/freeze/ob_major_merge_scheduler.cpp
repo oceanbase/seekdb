@@ -16,15 +16,16 @@
 
 #define USING_LOG_PREFIX RS_COMPACTION
 
+#include "lib/ob_running_mode.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "rootserver/freeze/ob_major_merge_scheduler.h"
-#include "share/ob_server_struct.h"
 #include "share/ob_structured_event_logger.h" // for ROOTSERVICE_EVENT_ADD
 #include "share/config/ob_runtime_config.h"  // RUNTIME_CONF, previously hidden behind a transitive include
 #include "share/ob_tablet_meta_table_compaction_operator.h"
 #include "share/ob_column_checksum_error_operator.h"
 #include "share/ob_global_merge_table_operator.h"
-#include "share/ob_column_checksum_error_operator.h"
+#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "rootserver/freeze/ob_major_merge_info_manager.h"
 
 namespace oceanbase
@@ -44,6 +45,21 @@ int ObMajorMergeIdling::init()
   return ret;
 }
 
+void ObMajorMergeIdling::wakeup()
+{
+  if (scheduler_.use_shared_executor_) {
+    const int ret = scheduler_.notify_background_source_();
+    if (OB_SUCCESS != ret
+        && OB_NOT_RUNNING != ret
+        && OB_IN_STOP_STATE != ret
+        && OB_ENTRY_NOT_EXIST != ret) {
+      LOG_WARN_RET(ret, "fail to wake major merge source", K(ret));
+    }
+  } else {
+    ObThreadIdling::wakeup();
+  }
+}
+
 int64_t ObMajorMergeIdling::get_idle_interval_us()
 {
   int64_t interval_us = DEFAULT_SCHEDULE_IDLE_US;
@@ -59,13 +75,19 @@ ObMajorMergeScheduler::ObMajorMergeScheduler()
   : ObFreezeReentrantThread{},
     is_inited_(false),
     is_primary_service_(true),
+    use_shared_executor_(false),
+    shared_merge_active_(false),
+    paused_cache_cleared_(false),
     fail_count_(0),
     first_check_merge_us_(0),
-    idling_(stop_),
+    paused_since_us_(0),
+    idling_(stop_, *this),
     merge_info_mgr_(nullptr),
     config_(nullptr),
     sql_proxy_(nullptr),
-    progress_checker_(nullptr)
+    progress_checker_(nullptr),
+    background_executor_(nullptr),
+    source_handle_()
 {
 }
 
@@ -109,6 +131,10 @@ int ObMajorMergeScheduler::init(
   } else {
     first_check_merge_us_ = 0;
     is_primary_service_ = is_primary_service;
+    use_shared_executor_ = lib::is_mini_mode();
+    shared_merge_active_ = false;
+    paused_cache_cleared_ = false;
+    paused_since_us_ = 0;
     merge_info_mgr_ = &merge_info_mgr;
     config_ = &config;
     sql_proxy_ = &sql_proxy;
@@ -124,6 +150,27 @@ int ObMajorMergeScheduler::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObMajorMergeScheduler not init", KR(ret));
+  } else if (use_shared_executor_) {
+    if (OB_ISNULL(share::g_mp)
+        || OB_ISNULL(background_executor_ =
+            share::g_mp->background_task_executor())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("background task executor is null",
+          KR(ret), KP(share::g_mp), KP(background_executor_));
+    } else {
+      share::ObBackgroundTaskSourceConfig config;
+      config.name_ = "MergeScheduler";
+      config.max_concurrency_ = 1;
+      if (OB_FAIL(background_executor_->register_source(
+          *this, config, source_handle_))) {
+        LOG_WARN("fail to register major merge source", KR(ret));
+      } else {
+        ATOMIC_STORE(&stop_, false);
+        if (OB_FAIL(notify_background_source_())) {
+          LOG_WARN("fail to start major merge source", KR(ret));
+        }
+      }
+    }
   } else if (OB_FAIL(create(MAJOR_MERGE_SCHEDULER_THREAD_CNT, "MergeScheduler"))) {
     LOG_WARN("fail to create thread", KR(ret));
   } else if (OB_FAIL(ObRsReentrantThread::start())) {
@@ -131,7 +178,61 @@ int ObMajorMergeScheduler::start()
   } else {
     LOG_INFO("succ to start ObMajorMergeScheduler");
   }
+  if (OB_FAIL(ret) && use_shared_executor_) {
+    ATOMIC_STORE(&stop_, true);
+    (void) unregister_background_source_(true);
+  }
   return ret;
+}
+
+void ObMajorMergeScheduler::stop()
+{
+  if (use_shared_executor_) {
+    ATOMIC_STORE(&stop_, true);
+    const int ret = unregister_background_source_(false);
+    if (OB_SUCCESS != ret && OB_EAGAIN != ret) {
+      LOG_WARN_RET(ret, "fail to stop major merge source", K(ret));
+    }
+  } else {
+    ObRsReentrantThread::stop();
+  }
+}
+
+void ObMajorMergeScheduler::wait()
+{
+  if (use_shared_executor_) {
+    const int ret = unregister_background_source_(true);
+    if (OB_SUCCESS != ret) {
+      LOG_WARN_RET(ret, "fail to wait major merge source", K(ret));
+    }
+    reset_last_run_timestamp();
+  } else {
+    ObRsReentrantThread::wait();
+  }
+}
+
+int ObMajorMergeScheduler::destroy()
+{
+  int ret = OB_SUCCESS;
+  if (use_shared_executor_) {
+    stop();
+    wait();
+  } else if (OB_FAIL(ObRsReentrantThread::destroy())) {
+    LOG_WARN("fail to destroy major merge scheduler", KR(ret));
+  }
+  return ret;
+}
+
+void ObMajorMergeScheduler::pause()
+{
+  ObFreezeReentrantThread::pause();
+  idling_.wakeup();
+}
+
+void ObMajorMergeScheduler::resume()
+{
+  ObFreezeReentrantThread::resume();
+  idling_.wakeup();
 }
 
 void ObMajorMergeScheduler::run3()
@@ -169,32 +270,10 @@ int ObMajorMergeScheduler::try_idle(
     const int work_ret)
 {
   int ret = OB_SUCCESS;
-  const int64_t IMMEDIATE_RETRY_CNT = 3;
-  int64_t idle_time_us = ori_idle_time_us;
-  int64_t merger_check_interval = idling_.get_idle_interval_us();
+  const int64_t idle_time_us =
+      update_fail_count_and_get_idle_time(ori_idle_time_us, work_ret);
   const int64_t start_time_us = ObTimeUtil::current_time();
   bool clear_cached_info = false;
-
-  if (OB_SUCCESS == work_ret) {
-    fail_count_ = 0;
-  } else {
-    ++fail_count_;
-  }
-
-  if (0 == fail_count_) {
-    // default idle
-  } else if (fail_count_ < IMMEDIATE_RETRY_CNT) {
-    idle_time_us = fail_count_ * DEFAULT_IDLE_US;
-    if (idle_time_us > merger_check_interval) {
-      idle_time_us = merger_check_interval;
-    }
-    LOG_WARN("fail to major merge, will immediate retry",
-             K_(fail_count), LITERAL_K(IMMEDIATE_RETRY_CNT), K(idle_time_us));
-  } else {
-    idle_time_us = merger_check_interval;
-    LOG_WARN("major merge failed more than immediate cnt, turn to idle status",
-             K_(fail_count), LITERAL_K(IMMEDIATE_RETRY_CNT), K(idle_time_us));
-  }
 
   if (is_paused()) {
     const uint64_t start_ts = ObTimeUtility::fast_current_time();
@@ -222,6 +301,36 @@ int ObMajorMergeScheduler::try_idle(
   const int64_t cost_time_us = ObTimeUtil::current_time() - start_time_us;
 
   return ret;
+}
+
+int64_t ObMajorMergeScheduler::update_fail_count_and_get_idle_time(
+    const int64_t ori_idle_time_us,
+    const int work_ret)
+{
+  const int64_t IMMEDIATE_RETRY_CNT = 3;
+  int64_t idle_time_us = ori_idle_time_us;
+  const int64_t merger_check_interval = idling_.get_idle_interval_us();
+  if (OB_SUCCESS == work_ret) {
+    fail_count_ = 0;
+  } else {
+    ++fail_count_;
+  }
+
+  if (0 == fail_count_) {
+    // use caller-specified idle time
+  } else if (fail_count_ < IMMEDIATE_RETRY_CNT) {
+    idle_time_us = MIN(
+        fail_count_ * DEFAULT_IDLE_US,
+        merger_check_interval);
+    LOG_WARN_RET(work_ret, "fail to major merge, will immediate retry",
+        K_(fail_count), LITERAL_K(IMMEDIATE_RETRY_CNT), K(idle_time_us));
+  } else {
+    idle_time_us = merger_check_interval;
+    LOG_WARN_RET(work_ret,
+        "major merge failed more than immediate cnt, turn to idle status",
+        K_(fail_count), LITERAL_K(IMMEDIATE_RETRY_CNT), K(idle_time_us));
+  }
+  return idle_time_us;
 }
 
 int ObMajorMergeScheduler::get_uncompacted_tablets(
@@ -293,6 +402,72 @@ int ObMajorMergeScheduler::do_work()
   return ret;
 }
 
+int ObMajorMergeScheduler::do_work_one_quantum(bool &merge_in_progress)
+{
+  int ret = OB_SUCCESS;
+  merge_in_progress = false;
+  HEAP_VAR(ObGlobalMergeInfo, global_info) {
+    if (IS_NOT_INIT) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("not init", KR(ret));
+    } else {
+      FREEZE_TIME_GUARD;
+      if (OB_FAIL(merge_info_mgr_->get_global_merge_mgr().try_reload())) {
+        LOG_WARN("fail to try reload", KR(ret));
+      }
+    }
+    if (FAILEDx(merge_info_mgr_->get_global_merge_mgr().get_snapshot(global_info))) {
+      LOG_WARN("fail to get merge info", KR(ret));
+    } else {
+      bool need_merge = true;
+      if (global_info.is_merge_error()) {
+        need_merge = false;
+        LOG_WARN("cannot do this round major merge cuz is_merge_error",
+            K(need_merge), K(global_info));
+      } else if (global_info.is_last_merge_complete()) {
+        shared_merge_active_ = false;
+        if (global_info.global_broadcast_scn() == global_info.frozen_scn()) {
+          need_merge = false;
+        } else if (global_info.global_broadcast_scn() < global_info.frozen_scn()) {
+          if (OB_FAIL(generate_next_global_broadcast_scn())) {
+            LOG_WARN("fail to generate next broadcast scn", KR(ret), K(global_info));
+          }
+        } else {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("invalid frozen_scn", KR(ret), K(global_info));
+        }
+      }
+
+      if (OB_SUCC(ret) && need_merge) {
+        if (!shared_merge_active_
+            && OB_FAIL(do_before_major_merge(true /* start_merge */))) {
+          LOG_WARN("fail to do before major merge", KR(ret));
+        } else {
+          bool merge_finished = false;
+          shared_merge_active_ = true;
+          if (OB_FAIL(do_one_round_major_merge_step(merge_finished))) {
+            LOG_WARN("fail to advance major merge", KR(ret));
+          }
+          if (merge_finished) {
+            shared_merge_active_ = false;
+          }
+        }
+      } else if (!need_merge) {
+        shared_merge_active_ = false;
+      }
+    }
+
+    merge_in_progress = shared_merge_active_;
+    if (!merge_in_progress) {
+      progress_checker_->reset_uncompacted_tablets();
+      check_merge_interval_time(false);
+    }
+    LOG_TRACE("finish one major merge scheduler quantum",
+        KR(ret), K(global_info), K(merge_in_progress));
+  }
+  return ret;
+}
+
 int ObMajorMergeScheduler::do_before_major_merge(const bool start_merge)
 {
   int ret = OB_SUCCESS;
@@ -320,44 +495,167 @@ int ObMajorMergeScheduler::do_one_round_major_merge()
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
 
-  HEAP_VAR(ObGlobalMergeInfo, global_info) {
-    LOG_INFO("start to do one round major_merge");
-    // loop until 'this round major merge finished' or 'epoch changed'
-    while (!stop_ && !is_paused()) {
-      update_last_run_timestamp();
-      ObCurTraceId::init(GCONF.self_addr_);
-      // Place is_last_merge_complete() to the head of this while loop.
-      // So as to break this loop at once, when the last merge is complete.
-      // Otherwise, may run one extra loop that should not run, and thus incur error.
-      // 
-      if (OB_FAIL(merge_info_mgr_->get_global_merge_mgr().get_snapshot(global_info))) {
-        LOG_WARN("fail to get global merge info", KR(ret));
-      } else if (global_info.is_last_merge_complete()) {
-        // this round major merge is complete
-        break;
-      }
-      if (FAILEDx(update_merge_status(global_info.global_broadcast_scn()))) {
-        LOG_WARN("fail to update merge status", KR(ret));
-        if (TC_REACH_TIME_INTERVAL(ADD_EVENT_INTERVAL)) {
-          MANAGEMENT_EVENT_ADD("daily_merge", "merge_process",
-                            "check merge progress fail", ret,
-                            "global_broadcast_scn", global_info.global_broadcast_scn_,
-                            "service_addr", GCONF.self_addr_);
-        }
-      }
-      // wait some time to merge
-      if (OB_SUCCESS != (tmp_ret = try_idle(IN_MERGE_IDLE_US, ret))) {
-        LOG_WARN("fail to idle", KR(ret));
-      }
-
-      ret = OB_SUCCESS;
-      // treat as is_merging = true, even though last merge complete
-      check_merge_interval_time(true);
-      LOG_INFO("finish one round of loop in do_one_round_major_merge", K(global_info));
+  LOG_INFO("start to do one round major_merge");
+  while (!stop_ && !is_paused()) {
+    bool merge_finished = false;
+    update_last_run_timestamp();
+    if (OB_FAIL(do_one_round_major_merge_step(merge_finished))) {
+      LOG_WARN("fail to advance major merge", KR(ret));
     }
+    if (merge_finished) {
+      break;
+    } else if (OB_SUCCESS != (tmp_ret = try_idle(IN_MERGE_IDLE_US, ret))) {
+      LOG_WARN("fail to idle", KR(tmp_ret));
+    }
+    ret = OB_SUCCESS;
   }
   LOG_INFO("finish do_one_round_major_merge");
 
+  return ret;
+}
+
+int ObMajorMergeScheduler::do_one_round_major_merge_step(bool &merge_finished)
+{
+  int ret = OB_SUCCESS;
+  merge_finished = false;
+  HEAP_VAR(ObGlobalMergeInfo, global_info) {
+    ObCurTraceId::init(GCONF.self_addr_);
+    if (OB_FAIL(merge_info_mgr_->get_global_merge_mgr().get_snapshot(global_info))) {
+      LOG_WARN("fail to get global merge info", KR(ret));
+    } else if (global_info.is_last_merge_complete()) {
+      merge_finished = true;
+    } else if (OB_FAIL(update_merge_status(global_info.global_broadcast_scn()))) {
+      LOG_WARN("fail to update merge status", KR(ret));
+      if (TC_REACH_TIME_INTERVAL(ADD_EVENT_INTERVAL)) {
+        MANAGEMENT_EVENT_ADD("daily_merge", "merge_process",
+            "check merge progress fail", ret,
+            "global_broadcast_scn", global_info.global_broadcast_scn_,
+            "service_addr", GCONF.self_addr_);
+      }
+    }
+    if (!merge_finished) {
+      check_merge_interval_time(true);
+      LOG_INFO("finish one round of loop in do_one_round_major_merge",
+          KR(ret), K(global_info));
+    }
+  }
+  return ret;
+}
+
+int ObMajorMergeScheduler::process_one_quantum(
+    const share::ObBackgroundTaskPriority priority,
+    share::ObBackgroundTaskRunResult &result)
+{
+  int ret = OB_SUCCESS;
+  if (!use_shared_executor_) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (share::BG_TASK_NORMAL != priority) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (ATOMIC_LOAD(&stop_)) {
+    // A quantum may already have been claimed when stop() begins.
+  } else {
+    common::ObRSThreadFlag rs_thread_flag;
+    if (is_paused()) {
+      ret = process_paused_quantum(result);
+    } else {
+      int work_ret = OB_SUCCESS;
+      bool merge_in_progress = false;
+      update_last_run_timestamp();
+      if (paused_since_us_ > 0) {
+        if (paused_cache_cleared_
+            && OB_SUCCESS != (work_ret =
+                do_before_major_merge(false /* start_merge */))) {
+          LOG_WARN_RET(work_ret,
+              "failed to restore major merge progress checker", K(work_ret));
+        }
+        paused_since_us_ = 0;
+        paused_cache_cleared_ = false;
+      }
+      if (OB_SUCCESS == work_ret
+          && OB_SUCCESS != (work_ret =
+              do_work_one_quantum(merge_in_progress))) {
+        LOG_WARN_RET(work_ret,
+            "major merge scheduler quantum failed", K(work_ret));
+      }
+      result.processed_count_ = 1;
+      if (!ATOMIC_LOAD(&stop_)) {
+        const int64_t idle_time_us =
+            update_fail_count_and_get_idle_time(
+                merge_in_progress ? IN_MERGE_IDLE_US : DEFAULT_IDLE_US,
+                work_ret);
+        result.next_ready_ts_ =
+            ObTimeUtility::current_time() + idle_time_us;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObMajorMergeScheduler::process_paused_quantum(
+    share::ObBackgroundTaskRunResult &result)
+{
+  int ret = OB_SUCCESS;
+  const int64_t now = ObTimeUtility::current_time();
+  update_last_run_timestamp();
+  if (shared_merge_active_) {
+    shared_merge_active_ = false;
+    progress_checker_->reset_uncompacted_tablets();
+  }
+  if (0 == paused_since_us_) {
+    paused_since_us_ = now;
+  } else if (!paused_cache_cleared_
+      && now - paused_since_us_ >= PAUSED_WAITING_CLEAR_MEMORY_THRESHOLD) {
+    const int tmp_ret = progress_checker_->clear_cached_info();
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN_RET(tmp_ret,
+          "failed to clear cached merge progress while paused", K(tmp_ret));
+    } else {
+      paused_cache_cleared_ = true;
+    }
+  }
+  result.processed_count_ = 0;
+  if (!ATOMIC_LOAD(&stop_)) {
+    result.next_ready_ts_ = now + DEFAULT_IDLE_US;
+  }
+  return ret;
+}
+
+int ObMajorMergeScheduler::notify_background_source_()
+{
+  int ret = OB_SUCCESS;
+  if (!use_shared_executor_) {
+  } else if (OB_ISNULL(background_executor_)
+      || !source_handle_.is_valid()
+      || ATOMIC_LOAD(&stop_)) {
+    ret = OB_NOT_RUNNING;
+  } else if (OB_FAIL(background_executor_->notify(
+      source_handle_, share::BG_TASK_NORMAL))) {
+    LOG_WARN("fail to notify major merge source", KR(ret));
+  }
+  return ret;
+}
+
+int ObMajorMergeScheduler::unregister_background_source_(
+    const bool wait_running)
+{
+  int ret = OB_SUCCESS;
+  if (use_shared_executor_
+      && OB_NOT_NULL(background_executor_)
+      && source_handle_.is_valid()) {
+    do {
+      ret = background_executor_->unregister_source(source_handle_);
+      if (wait_running && OB_EAGAIN == ret) {
+        ob_usleep(1000);
+      }
+    } while (wait_running && OB_EAGAIN == ret);
+    if (OB_ENTRY_NOT_EXIST == ret || OB_NOT_INIT == ret) {
+      source_handle_.reset();
+      ret = OB_SUCCESS;
+    }
+  }
+  if (!source_handle_.is_valid()) {
+    background_executor_ = nullptr;
+  }
   return ret;
 }
 

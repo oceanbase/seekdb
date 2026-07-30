@@ -26,6 +26,7 @@
 #endif
 #include <utility>
 #include "lib/signal/ob_signal_struct.h"
+#include "lib/ob_running_mode.h"
 #include "lib/thread/ob_thread_name.h"
 #include "lib/container/ob_vector.h"
 
@@ -151,6 +152,9 @@ ObMemoryDump::ObMemoryDump()
     r_stat_(nullptr),
     w_stat_(nullptr),
     huge_segv_cnt_(0),
+    use_shared_worker_(false),
+    shared_worker_notify_func_(nullptr),
+    shared_worker_notify_arg_(nullptr),
     is_inited_(false)
 {
 }
@@ -174,6 +178,7 @@ ObMemoryDump &ObMemoryDump::get_instance()
 int ObMemoryDump::init()
 {
   int ret = OB_SUCCESS;
+  use_shared_worker_ = lib::is_mini_mode();
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
@@ -208,7 +213,9 @@ int ObMemoryDump::init()
         }
       }
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(lib::ThreadPool::init())) {
+        if (use_shared_worker_) {
+          LOG_INFO("memory dump uses shared background worker");
+        } else if (OB_FAIL(lib::ThreadPool::init())) {
           LOG_WARN("memory dump thread pool init fail", K(ret));
         } else if (OB_FAIL(lib::ThreadPool::start())) {
           LOG_WARN("start memory dump thread pool fail", K(ret));
@@ -228,7 +235,7 @@ int ObMemoryDump::init()
 
 void ObMemoryDump::stop()
 {
-  if (is_inited_) {
+  if (is_inited_ && !use_shared_worker_) {
     lib::ThreadPool::stop();
     signal_stop();
   }
@@ -236,7 +243,7 @@ void ObMemoryDump::stop()
 
 void ObMemoryDump::wait()
 {
-  if (is_inited_) {
+  if (is_inited_ && !use_shared_worker_) {
     lib::ThreadPool::wait();
   }
 }
@@ -244,10 +251,14 @@ void ObMemoryDump::wait()
 void ObMemoryDump::destroy()
 {
   if (is_inited_) {
+    clear_shared_worker_notifier();
     stop();
     wait();
-    lib::ThreadPool::destroy();
+    if (!use_shared_worker_) {
+      lib::ThreadPool::destroy();
+    }
     cond_.destroy();
+    use_shared_worker_ = false;
     is_inited_ = false;
   }
 }
@@ -255,12 +266,22 @@ void ObMemoryDump::destroy()
 int ObMemoryDump::generate_mod_stat_task()
 {
   int ret = OB_SUCCESS;
+  SharedWorkerNotifyFunc notify_func = nullptr;
+  void *notify_arg = nullptr;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
   } else {
     ObThreadCondGuard guard(cond_);
     pending_ |= PENDING_STAT_LABEL;
-    cond_.signal();
+    if (use_shared_worker_) {
+      notify_func = shared_worker_notify_func_;
+      notify_arg = shared_worker_notify_arg_;
+    } else {
+      cond_.signal();
+    }
+  }
+  if (OB_SUCC(ret) && nullptr != notify_func) {
+    notify_func(notify_arg);
   }
   return ret;
 }
@@ -268,13 +289,92 @@ int ObMemoryDump::generate_mod_stat_task()
 int ObMemoryDump::request_dump(const ObMemoryDumpTask &task)
 {
   int ret = OB_SUCCESS;
+  SharedWorkerNotifyFunc notify_func = nullptr;
+  void *notify_arg = nullptr;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
   } else {
     ObThreadCondGuard guard(cond_);
     pending_dump_task_ = task;
     pending_ |= PENDING_DUMP;
-    cond_.signal();
+    if (use_shared_worker_) {
+      notify_func = shared_worker_notify_func_;
+      notify_arg = shared_worker_notify_arg_;
+    } else {
+      cond_.signal();
+    }
+  }
+  if (OB_SUCC(ret) && nullptr != notify_func) {
+    notify_func(notify_arg);
+  }
+  return ret;
+}
+
+int ObMemoryDump::set_shared_worker_notifier(
+    SharedWorkerNotifyFunc notify_func,
+    void *notify_arg,
+    bool &has_pending)
+{
+  int ret = OB_SUCCESS;
+  has_pending = false;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (!use_shared_worker_) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (nullptr == notify_func || nullptr == notify_arg) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    ObThreadCondGuard guard(cond_);
+    shared_worker_notify_func_ = notify_func;
+    shared_worker_notify_arg_ = notify_arg;
+    has_pending = 0 != pending_;
+  }
+  return ret;
+}
+
+void ObMemoryDump::clear_shared_worker_notifier()
+{
+  if (is_inited_ && use_shared_worker_) {
+    ObThreadCondGuard guard(cond_);
+    shared_worker_notify_func_ = nullptr;
+    shared_worker_notify_arg_ = nullptr;
+  }
+}
+
+int ObMemoryDump::process_one_pending_batch(
+    int64_t &processed_count,
+    bool &has_more)
+{
+  int ret = OB_SUCCESS;
+  int pending = 0;
+  ObMemoryDumpTask local_dump_task = {};
+  processed_count = 0;
+  has_more = false;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (!use_shared_worker_) {
+    ret = OB_STATE_NOT_MATCH;
+  } else {
+    {
+      ObThreadCondGuard guard(cond_);
+      pending = pending_;
+      local_dump_task = pending_dump_task_;
+      pending_ = 0;
+    }
+    if (0 != (pending & PENDING_DUMP)) {
+      handle(&local_dump_task);
+      ++processed_count;
+    }
+    if (0 != (pending & PENDING_STAT_LABEL)) {
+      ObMemoryDumpTask stat_task = {};
+      stat_task.type_ = STAT_LABEL;
+      handle(&stat_task);
+      ++processed_count;
+    }
+    {
+      ObThreadCondGuard guard(cond_);
+      has_more = 0 != pending_;
+    }
   }
   return ret;
 }

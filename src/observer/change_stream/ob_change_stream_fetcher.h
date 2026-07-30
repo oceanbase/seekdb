@@ -154,6 +154,14 @@ public:
   /// Called by publish_schema to wake Fetcher from IDLE cond_wait.
   void notify_schema_changed();
 
+  /// Cached schema check used by the mini-mode idle maintenance source before
+  /// the dedicated Fetcher / Dispatcher threads are started.
+  int get_has_async_index_tables(bool &has_async);
+
+  /// Preserve IDLE-mode progress without keeping the dedicated Fetcher thread:
+  /// advance the CLOG reclaim boundary and change-stream refresh SCN.
+  void run_idle_maintenance();
+
 protected:
   void run1() override;
 

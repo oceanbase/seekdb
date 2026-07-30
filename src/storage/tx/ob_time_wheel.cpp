@@ -15,6 +15,8 @@
  */
 
 #include "ob_time_wheel.h"
+#include "lib/ob_running_mode.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
@@ -230,77 +232,111 @@ int TimeWheelBase::cancel(ObTimeWheelTask *task)
 int TimeWheelBase::scan()
 {
   int ret = OB_SUCCESS;
-  int64_t sleep_us = 0;
-  const int64_t WARN_RUNTIME_US = 100 * 1000;
-
   while (OB_SUCC(ret) && !has_set_stop()) {
     const int64_t cur_ts = ObClockGenerator::getRealClock();
-    const int64_t cur_ticket = cur_ts / precision_;
+    int64_t processed_count = 0;
+    bool has_more_due = false;
+    if (OB_FAIL(scan_one_quantum(
+        INT64_MAX, processed_count, has_more_due))) {
+      TRANS_LOG(WARN, "scan time wheel quantum failed", K(ret));
+    } else if (!has_more_due) {
+      const int64_t sleep_us =
+          precision_ - (ObClockGenerator::getRealClock() - cur_ts);
+      if (sleep_us > 0) {
+        ObClockGenerator::usleep(MIN(sleep_us, MAX_SCAN_SLEEP));
+      }
+    }
+  } // while
 
-    while (OB_SUCC(ret) && !has_set_stop() && scan_ticket_ <= cur_ticket) {
+  return ret;
+}
+
+int TimeWheelBase::scan_one_quantum(
+    const int64_t max_scan_steps,
+    int64_t &processed_count,
+    bool &has_more_due)
+{
+  int ret = OB_SUCCESS;
+  int64_t scan_steps = 0;
+  const int64_t WARN_RUNTIME_US = 100 * 1000;
+  processed_count = 0;
+  has_more_due = false;
+
+  if (max_scan_steps <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    const int64_t cur_ticket =
+        ObClockGenerator::getRealClock() / precision_;
+    while (OB_SUCC(ret)
+        && !has_set_stop()
+        && scan_ticket_ <= cur_ticket
+        && scan_steps < max_scan_steps) {
       bool need_retry = true;
       const int64_t idx = (scan_ticket_ - start_ticket_) % MAX_BUCKET;
       TaskBucket *bucket = &(buckets_[idx]);
-      while (OB_SUCC(ret) && !has_set_stop() && need_retry) {
+      while (OB_SUCC(ret)
+          && !has_set_stop()
+          && need_retry
+          && scan_steps < max_scan_steps) {
         bool need_run = false;
+        ObTimeWheelTask *task = NULL;
+        ++scan_steps;
         bucket->lock();
-        ObTimeWheelTask *task = bucket->list_.get_first();
+        task = bucket->list_.get_first();
         if (NULL == task) {
           TRANS_LOG(WARN, "task is NULL", KP(task));
           ret = OB_ERR_UNEXPECTED;
         } else if (bucket->list_.get_header() == task) {
-          // bucket is empty
           if (!bucket->list_.is_empty()) {
             TRANS_LOG(ERROR, "bucket is empty");
             ret = OB_ERR_UNEXPECTED;
           } else {
             need_retry = false;
           }
-        } else {
-          // trylock, avoid deadlock
-          if (0 == task->trylock()) {
-            const ObTimeWheelTask *const tmp_task = bucket->list_.remove(task);
-            if (OB_ISNULL(tmp_task)) {
-              TRANS_LOG(ERROR, "task is NULL");
-              ret = OB_ERR_UNEXPECTED;
-            } else if (task->get_scan_ticket() == scan_ticket_) {
-              bucket->list_.add_first(task);
-              need_retry = false;
-            } else if (task->get_run_ticket() <= scan_ticket_) {
-              task->cancel();
-              task->begin_run();
-              need_run = true;
-            } else {
-              task->set_scan_ticket(scan_ticket_);
-              bucket->list_.add_last(task);
-            }
-            task->unlock();
-          } // try lock success
-        } // bucket is not empty
+        } else if (0 == task->trylock()) {
+          const ObTimeWheelTask *const tmp_task =
+              bucket->list_.remove(task);
+          if (OB_ISNULL(tmp_task)) {
+            TRANS_LOG(ERROR, "task is NULL");
+            ret = OB_ERR_UNEXPECTED;
+          } else if (task->get_scan_ticket() == scan_ticket_) {
+            bucket->list_.add_first(task);
+            need_retry = false;
+          } else if (task->get_run_ticket() <= scan_ticket_) {
+            task->cancel();
+            task->begin_run();
+            need_run = true;
+          } else {
+            task->set_scan_ticket(scan_ticket_);
+            bucket->list_.add_last(task);
+          }
+          task->unlock();
+        }
         bucket->unlock();
+
         if (need_run) {
           const int64_t start = ObTimeUtility::current_time();
           task->runTask();
           const int64_t end = ObTimeUtility::current_time();
-          // After task execution, ctx memory may have already been released, at this point, task object information should no longer be printed;
+          ++processed_count;
+          // The callback may release its task object, so do not dereference
+          // task after runTask() returns.
           if (end - start >= WARN_RUNTIME_US) {
-            TRANS_LOG_RET(WARN, OB_ERR_TOO_MUCH_TIME, "timer task use too much time", K(end), K(start), "delta", end - start);
+            TRANS_LOG_RET(WARN, OB_ERR_TOO_MUCH_TIME,
+                "timer task use too much time",
+                K(end), K(start), "delta", end - start);
           }
         }
       }
-      (void)ATOMIC_FAA(&scan_ticket_, 1);
-    }
-
-    sleep_us = precision_ - (ObClockGenerator::getRealClock() - cur_ts);
-    if (sleep_us > 0) {
-      if (sleep_us > MAX_SCAN_SLEEP) {
-        ObClockGenerator::usleep(MAX_SCAN_SLEEP);
-      } else {
-        ObClockGenerator::usleep(sleep_us);
+      if (!need_retry) {
+        (void)ATOMIC_FAA(&scan_ticket_, 1);
       }
     }
-  } // while
-
+    has_more_due =
+        !has_set_stop()
+        && scan_ticket_
+            <= ObClockGenerator::getRealClock() / precision_;
+  }
   return ret;
 }
 
@@ -379,8 +415,12 @@ void ObTimeWheel::reset()
 {
   is_inited_ = false;
   is_running_ = false;
+  use_shared_executor_ = false;
   real_thread_num_ = 0;
+  shared_scan_cursor_ = 0;
   precision_ = 1;
+  background_executor_ = NULL;
+  source_handle_.reset();
   memset(tname_, 0, sizeof(tname_));
   for (int64_t i = 0; i < MAX_THREAD_NUM; ++i) {
     tw_base_[i] = NULL;
@@ -397,6 +437,40 @@ int ObTimeWheel::start()
   } else if (is_running_) {
     TRANS_LOG(WARN, "ObTimeWheel is already running", "timer_name", tname_);
     ret = OB_ERR_UNEXPECTED;
+  } else if (FALSE_IT(use_shared_executor_ = lib::is_mini_mode())) {
+  } else if (use_shared_executor_) {
+    share::ObBackgroundTaskExecutor *background_executor =
+        OB_ISNULL(share::g_mp)
+            ? NULL
+            : share::g_mp->background_task_executor();
+    if (OB_ISNULL(background_executor)) {
+      ret = OB_ERR_UNEXPECTED;
+      TRANS_LOG(WARN, "background task executor is null",
+          K(ret), KP(share::g_mp), KP(background_executor));
+    } else {
+      share::ObBackgroundTaskSourceConfig config;
+      config.name_ = tname_;
+      config.max_concurrency_ = 1;
+      if (OB_FAIL(background_executor->register_source(
+          *this, config, source_handle_))) {
+        TRANS_LOG(WARN, "register time wheel source failed",
+            K(ret), "timer_name", tname_);
+      } else {
+        for (int64_t i = 0; i < real_thread_num_; ++i) {
+          tw_base_[i]->has_set_stop() = false;
+        }
+        {
+          lib::ObMutexGuard guard(source_lock_);
+          background_executor_ = background_executor;
+          shared_scan_cursor_ = 0;
+          is_running_ = true;
+        }
+        if (OB_FAIL(notify_background_source_())) {
+          TRANS_LOG(WARN, "notify time wheel source failed",
+              K(ret), "timer_name", tname_);
+        }
+      }
+    }
   } else {
     for (int64_t i = 0; i < real_thread_num_ && OB_SUCCESS == ret; ++i) {
       if (OB_SUCCESS != (ret = tw_base_[i]->start())) {
@@ -411,9 +485,19 @@ int ObTimeWheel::start()
         }
       }
     }
+    if (OB_SUCC(ret)) {
+      is_running_ = true;
+    }
   }
-  if (OB_SUCC(ret)) {
-    is_running_ = true;
+  if (OB_FAIL(ret) && use_shared_executor_) {
+    is_running_ = false;
+    for (int64_t i = 0; i < real_thread_num_; ++i) {
+      if (OB_NOT_NULL(tw_base_[i])) {
+        tw_base_[i]->has_set_stop() = true;
+      }
+    }
+    (void)unregister_background_source_(true);
+  } else if (OB_SUCC(ret)) {
     TRANS_LOG(INFO, "ObTimeWheel start success", "timer_name", tname_);
   }
 
@@ -430,6 +514,19 @@ int ObTimeWheel::stop()
   } else if (!is_running_) {
     TRANS_LOG(WARN, "ObTimeWheel already has been stopped", "timer_name", tname_);
     ret = OB_NOT_RUNNING;
+  } else if (use_shared_executor_) {
+    is_running_ = false;
+    for (int64_t i = 0; i < real_thread_num_; ++i) {
+      if (OB_NOT_NULL(tw_base_[i])) {
+        tw_base_[i]->has_set_stop() = true;
+      }
+    }
+    if (OB_FAIL(unregister_background_source_(true))) {
+      TRANS_LOG(WARN, "unregister time wheel source failed",
+          K(ret), "timer_name", tname_);
+    } else {
+      TRANS_LOG(INFO, "ObTimeWheel stop success", "timer_name", tname_);
+    }
   } else {
     for (int64_t i = 0; i < real_thread_num_; ++i) {
       if (NULL != tw_base_[i]) {
@@ -453,6 +550,11 @@ int ObTimeWheel::wait()
   } else if (is_running_) {
     TRANS_LOG(WARN, "ObTimeWheel is already running", "timer_name", tname_);
     ret = OB_ERR_UNEXPECTED;
+  } else if (use_shared_executor_) {
+    if (OB_FAIL(unregister_background_source_(true))) {
+      TRANS_LOG(WARN, "wait time wheel source failed",
+          K(ret), "timer_name", tname_);
+    }
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < real_thread_num_; ++i) {
       if (NULL != tw_base_[i]) {
@@ -488,10 +590,117 @@ void ObTimeWheel::destroy()
       }
     }
     real_thread_num_ = 0;
+    shared_scan_cursor_ = 0;
+    {
+      lib::ObMutexGuard guard(source_lock_);
+      background_executor_ = NULL;
+      source_handle_.reset();
+    }
+    use_shared_executor_ = false;
     is_inited_ = false;
     TRANS_LOG(INFO, "ObTimeWheel destroy success");
   }
 }
+
+int ObTimeWheel::process_one_quantum(
+    const share::ObBackgroundTaskPriority priority,
+    share::ObBackgroundTaskRunResult &result)
+{
+  int ret = OB_SUCCESS;
+  int64_t remaining_steps = SHARED_MAX_SCAN_STEPS;
+  int64_t visited_count = 0;
+  bool has_more_due = false;
+  if (!is_inited_ || !is_running_ || !use_shared_executor_) {
+    ret = OB_NOT_RUNNING;
+  } else if (share::BG_TASK_HIGH != priority) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (real_thread_num_ <= 0) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    const int64_t start_cursor =
+        shared_scan_cursor_ % real_thread_num_;
+    const int64_t steps_per_base =
+        MAX(static_cast<int64_t>(1),
+            SHARED_MAX_SCAN_STEPS / real_thread_num_);
+    while (OB_SUCC(ret)
+        && visited_count < real_thread_num_
+        && remaining_steps > 0) {
+      const int64_t base_idx =
+          (start_cursor + visited_count) % real_thread_num_;
+      int64_t processed_count = 0;
+      bool base_has_more_due = false;
+      const int64_t scan_steps =
+          MIN(steps_per_base, remaining_steps);
+      if (OB_FAIL(tw_base_[base_idx]->scan_one_quantum(
+          scan_steps, processed_count, base_has_more_due))) {
+        TRANS_LOG(WARN, "scan shared time wheel failed",
+            K(ret), K(base_idx), "timer_name", tname_);
+      } else {
+        result.processed_count_ += processed_count;
+        has_more_due = has_more_due || base_has_more_due;
+        remaining_steps -= scan_steps;
+        ++visited_count;
+      }
+    }
+    shared_scan_cursor_ =
+        (start_cursor + visited_count) % real_thread_num_;
+    result.has_more_ready_ =
+        has_more_due || visited_count < real_thread_num_;
+    if (!result.has_more_ready_) {
+      result.next_ready_ts_ =
+          ObTimeUtility::current_time() + precision_;
+    }
+  }
+  return ret;
+}
+
+int ObTimeWheel::notify_background_source_()
+{
+  int ret = OB_SUCCESS;
+  lib::ObMutexGuard guard(source_lock_);
+  if (!use_shared_executor_
+      || !is_running_
+      || OB_ISNULL(background_executor_)
+      || !source_handle_.is_valid()) {
+    ret = OB_NOT_RUNNING;
+  } else if (OB_FAIL(background_executor_->notify(
+      source_handle_, share::BG_TASK_HIGH))) {
+    TRANS_LOG(WARN, "notify time wheel background source failed",
+        K(ret), "timer_name", tname_);
+  }
+  return ret;
+}
+
+int ObTimeWheel::unregister_background_source_(const bool wait_running)
+{
+  int ret = OB_SUCCESS;
+  bool need_retry = false;
+  do {
+    need_retry = false;
+    {
+      lib::ObMutexGuard guard(source_lock_);
+      if (use_shared_executor_
+          && OB_NOT_NULL(background_executor_)
+          && source_handle_.is_valid()) {
+        ret = background_executor_->unregister_source(source_handle_);
+        if (OB_EAGAIN == ret && wait_running) {
+          need_retry = true;
+        } else if (OB_ENTRY_NOT_EXIST == ret || OB_NOT_INIT == ret) {
+          source_handle_.reset();
+          ret = OB_SUCCESS;
+        }
+      }
+      if (!source_handle_.is_valid()) {
+        background_executor_ = NULL;
+      }
+    }
+    if (need_retry) {
+      ob_usleep(1000);
+    }
+  } while (need_retry);
+  return ret;
+}
+
 int ObTimeWheel::schedule(ObTimeWheelTask *task, const int64_t delay)
 {
   int ret = OB_SUCCESS;

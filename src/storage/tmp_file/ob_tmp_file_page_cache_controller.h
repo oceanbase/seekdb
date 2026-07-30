@@ -63,6 +63,7 @@ public:
   OB_INLINE void set_flush_all_data(bool flush_all_data) { ATOMIC_STORE(&flush_all_data_, flush_all_data); }
   OB_INLINE int64_t get_disk_usage_limit() const { return ATOMIC_LOAD(&disk_usage_limit_); }
   virtual int invoke_swap_and_wait(int64_t expect_swap_size, int64_t timeout_ms = ObTmpFileSwapJob::DEFAULT_TIMEOUT_MS);
+  void notify_doing_flush();
   void refresh_disk_usage_limit();
 private:
   int swap_job_enqueue_(ObTmpFileSwapJob *swap_job);

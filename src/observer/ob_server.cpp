@@ -32,6 +32,7 @@ namespace oceanbase { namespace observer { common::ObILobReadService * ObServer:
 int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share::ObFreezeInfo &freeze_info) { return OB_ISNULL(mods_freeze_info_mgr_) ? common::OB_NOT_INIT : mods_freeze_info_mgr_->get_lower_bound_freeze_info_before_snapshot_version(snapshot_version, freeze_info); } } }
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "lib/alloc/memory_dump.h"
+#include "share/ob_memory_dump_background_source.h"
 #include "lib/oblog/ob_log_compressor.h"
 #include "lib/ob_running_mode.h"
 #include "lib/task/ob_timer_monitor.h"
@@ -843,6 +844,15 @@ int ObServer::initialize_server_runtime()
   }
   if (OB_SUCC(ret) && OB_FAIL(server_runtime_controller_.bring_up_runtime())) {
     LOG_ERROR("fail to bring up server runtime", KR(ret));
+  } else if (OB_SUCC(ret) && OB_FAIL(
+      schema_service_.get_ddl_trans_controller().start())) {
+    LOG_ERROR("start ddl transaction controller fail", KR(ret));
+  } else if (OB_SUCC(ret)
+      && OB_FAIL(sql_engine_.start_background_task_source())) {
+    LOG_ERROR("start SQL background task source fail", KR(ret));
+  } else if (OB_SUCC(ret)
+      && OB_FAIL(ob_service_.start_background_task_source())) {
+    LOG_ERROR("start observer background task source fail", KR(ret));
   }
   return ret;
 }
@@ -1050,6 +1060,9 @@ int ObServer::stop()
     }
 
     FLOG_INFO("begin to stop memory dump");
+    if (OB_NOT_NULL(mods_memory_dump_background_source_)) {
+      mods_memory_dump_background_source_->stop();
+    }
     ObMemoryDump::get_instance().stop();
     FLOG_INFO("memory dump stopped");
 
@@ -1669,9 +1682,6 @@ int ObServer::init_server_runtime()
 
   if (OB_FAIL(server_runtime_controller_.init())) {
     LOG_ERROR("init server runtime fail", KR(ret));
-  } else if (OB_FAIL(
-      ObInternalTableChangeNotifier::get_instance().seal())) {
-    LOG_ERROR("seal internal table change notifier fail", KR(ret));
   }
 
   if (OB_SUCC(ret)) {

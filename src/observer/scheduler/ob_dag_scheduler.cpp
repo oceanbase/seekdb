@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "ob_dag_scheduler.h"
+#include "lib/ob_running_mode.h"
 #include "share/rc/ob_module_provider.h"
 #include "lib/thread/ob_thread_name.h"
 #include "storage/compaction/ob_compaction_progress.h"
@@ -23,7 +24,6 @@
 #include "storage/compaction/ob_batch_freeze_tablets_dag.h"
 #include "storage/compaction/ob_batch_exec_dag.h"
 #include "share/ob_structured_event_logger.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 
 
 namespace oceanbase
@@ -309,15 +309,54 @@ const char *ObITask::ObITaskTypeStr[] = {
   "UNIQUE_CHECKING_MERGE",
   "DDL_PREPARE_SCAN",
   "DDL_BUILD_MAJOR_SSTABLE",
+  "DIRECT_LOAD_WRITE_CHANNEL_FLUSH",
+  "DIRECT_LOAD_WRITE_CHANNEL_FINISH",
   "DDL_WRITE_PIPELINE",
   "DDL_WRITE_USING_TMP_FILE_PIPELINE",
   "DDL_VECTOR_INDEX_APPEND_PIPELINE",
   "DDL_VECTOR_INDEX_BUILD_AND_WRITE_PIPELINE",
+  "DIRECT_LOAD_START_MERGE",
   "DDL_MERGE_PREPARE",
   "DDL_MERGE_SLICE",
   "DDL_MERGE_ASSEMBLE",
   "DDL_MERGE_GUARD",
+  "DIRECT_LOAD_WRITE_MACRO_BLOCK_PIPELINE",
+  "DIRECT_LOAD_FINISH_OP",
+  "DIRECT_LOAD_TABLE_OP_OPEN_OP",
+  "DIRECT_LOAD_TABLE_OP_CLOSE_OP",
+  "DIRECT_LOAD_DIRECT_WRITE_OP",
+  "DIRECT_LOAD_DIRECT_WRITE_OP_FINISH",
+  "DIRECT_LOAD_STORE_WRITE_OP",
+  "DIRECT_LOAD_STORE_WRITE_OP_FINISH",
+  "DIRECT_LOAD_PRE_SORT_WRITE_OP",
+  "DIRECT_LOAD_PRE_SORT_WRITE_OP_FINISH",
+  "DIRECT_LOAD_MEM_SORT_OP",
+  "DIRECT_LOAD_MEM_SORT_OP_FINISH",
+  "DIRECT_LOAD_COMPACT_TABLE_OP",
+  "DIRECT_LOAD_COMPACT_TABLE_OP_FINISH",
+  "DIRECT_LOAD_INSERT_SSTABLE_OP",
+  "DIRECT_LOAD_INSERT_SSTABLE_OP_FINISH",
+  "DIRECT_LOAD_INSERT_SSTABLE",
+  "DIRECT_LOAD_INSERT_SSTABLE_FINISH",
+  "DIRECT_LOAD_PRE_SORT_WRITE",
+  "DIRECT_LOAD_PRE_SORT_WRITE_SORT",
+  "DIRECT_LOAD_MEM_COMPACT_SAMPLE",
+  "DIRECT_LOAD_MEM_COMPACT_DUMP",
+  "DIRECT_LOAD_MEM_COMPACT_COMPACT",
+  "DIRECT_LOAD_PK_MEM_SORT",
+  "DIRECT_LOAD_PK_MEM_SORT_LOAD",
+  "DIRECT_LOAD_HEAP_MEM_SORT",
+  "DIRECT_LOAD_COMPACT_SSTABLE",
+  "DIRECT_LOAD_COMPACT_SSTABLE_SPLIT_RANGE",
+  "DIRECT_LOAD_COMPACT_SSTABLE_MERGE_RANGE",
+  "DIRECT_LOAD_COMPACT_SSTABLE_COMPACT",
+  "DIRECT_LOAD_COMPACT_HEAP_TABLE",
+  "DIRECT_LOAD_COMPACT_HEAP_TABLE_COMPACT",
+  "TABLE_LOAD_MACRO_BLOCK_WRITE_TASK",
   "DDL_SCHEDULE_ANOTHER_MERGE",
+  "DIRECT_LOAD_INSERT_SSTABLE_CLEAR",
+  "DIRECT_LOAD_COMPACT_SSTABLE_CLEAR",
+  "DIRECT_LOAD_INC_MAJOR_UPDATE_SS_INC_MAJOR",
   "DDL_FORK_PREPARE",
   "DDL_FORK_REUSE",
   "DDL_FORK_REWRITE",
@@ -2143,6 +2182,20 @@ int ObDagPrioScheduler::add_dag_into_list_and_map_(
   } else if (OB_FAIL(dag_map_.set_refactored(&dag, &dag))) {
     if (OB_HASH_EXIST == ret) {
       ret = OB_EAGAIN;
+      ObIDag *stored_dag = nullptr;
+      compaction::ObTabletMergeDag *merge_dag = nullptr;
+      // Accumulate data size for repeated mini-compaction flush requests.
+      if (is_mini_compaction_dag(dag.get_type())) {
+        if (OB_TMP_FAIL(get_stored_dag_(dag, stored_dag))) {
+          COMMON_LOG(WARN, "failed to get stored dag", K(tmp_ret));
+        } else if (OB_ISNULL(merge_dag = static_cast<compaction::ObTabletMergeDag *>(stored_dag))) {
+          tmp_ret = OB_ERR_UNEXPECTED;
+          COMMON_LOG(WARN, "get unexpected null stored dag", K(tmp_ret));
+        } else if (OB_TMP_FAIL(merge_dag->update_compaction_param(
+            static_cast<compaction::ObTabletMergeDag *>(&dag)->get_param()))) {
+          COMMON_LOG(WARN, "failed to add compaction param", K(tmp_ret));
+        }
+      }
     } else {
       COMMON_LOG(WARN, "failed to set dag_map", K(ret), K(dag));
     }
@@ -2281,9 +2334,7 @@ int ObDagPrioScheduler::sys_task_start(ObIDag &dag)
     sys_task_status.task_type_ = OB_DAG_TYPES[dag.get_type()].sys_task_type_;
 
     // allow comment truncation, no need to set ret
-    char comment[OB_MAX_TASK_COMMENT_LENGTH] = "";
-    (void) dag.fill_comment(comment, sizeof(comment));
-    sys_task_status.comment_.assign_ptr(comment, strlen(comment));
+    (void) dag.fill_comment(sys_task_status.comment_,sizeof(sys_task_status.comment_));
     if (OB_SUCCESS != (ret = ObSysTaskStatMgr::get_instance().add_task(sys_task_status))) {
       COMMON_LOG(WARN, "failed to add sys task", K(ret), K(sys_task_status));
     } else if (OB_SUCCESS != (ret = dag.set_dag_id(sys_task_status.task_id_))) { // may generate task_id in ObSysTaskStatMgr::add_task
@@ -3767,6 +3818,8 @@ int ObDagScheduler::server_module_init(ObDagScheduler* &scheduler)
 ObDagScheduler::ObDagScheduler()
   : lib::ThreadPool(1),
     is_inited_(false),
+    is_running_(false),
+    use_shared_executor_(false),
     fast_schedule_dag_net_(false),
     dag_cnt_(0),
     dag_limit_(0),
@@ -3780,7 +3833,9 @@ ObDagScheduler::ObDagScheduler()
     scheduler_sync_(),
     mem_context_(nullptr),
     reserved_mem_context_(nullptr),
-    independent_mem_context_(nullptr)
+    independent_mem_context_(nullptr),
+    background_executor_(nullptr),
+    source_handle_()
 {
 }
 
@@ -3791,12 +3846,29 @@ ObDagScheduler::~ObDagScheduler()
 
 void ObDagScheduler::stop()
 {
-  lib::ThreadPool::stop();
+  if (use_shared_executor_) {
+    ATOMIC_STORE(&is_running_, false);
+    const int tmp_ret = unregister_background_source_(false);
+    if (OB_SUCCESS != tmp_ret && OB_EAGAIN != tmp_ret) {
+      COMMON_LOG_RET(WARN, tmp_ret,
+          "stop dag scheduler source failed", K(tmp_ret));
+    }
+  } else {
+    lib::ThreadPool::stop();
+  }
 }
 
 void ObDagScheduler::wait()
 {
-  lib::ThreadPool::wait();
+  if (use_shared_executor_) {
+    const int tmp_ret = unregister_background_source_(true);
+    if (OB_SUCCESS != tmp_ret) {
+      COMMON_LOG_RET(WARN, tmp_ret,
+          "wait dag scheduler source failed", K(tmp_ret));
+    }
+  } else {
+    lib::ThreadPool::wait();
+  }
 }
 
 void ObDagScheduler::reload_config()
@@ -3844,7 +3916,8 @@ int ObDagScheduler::init(
     COMMON_LOG(WARN, "init ObDagScheduler with invalid arguments", K(ret), K(dag_limit));
   } else if (OB_FAIL(scheduler_sync_.init(ObWaitEventIds::SCHEDULER_COND_WAIT))) {
     COMMON_LOG(WARN, "failed to init scheduler sync", K(ret));
-  } else if (OB_FAIL(lib::ThreadPool::init())) {
+  } else if (FALSE_IT(use_shared_executor_ = lib::is_mini_mode())) {
+  } else if (!use_shared_executor_ && OB_FAIL(lib::ThreadPool::init())) {
     COMMON_LOG(WARN, "init dag scheduler thread failed", K(ret));
   } else if (OB_FAIL(init_allocator(ObModIds::OB_SCHEDULER, mem_context_))) {
     COMMON_LOG(WARN, "failed to init scheduler allocator", K(ret));
@@ -3880,12 +3953,43 @@ int ObDagScheduler::init(
     }
   }
 
-  if (FAILEDx(lib::ThreadPool::start())) {
-    COMMON_LOG(WARN, "failed to start dag scheduler", K(ret));
-  } else {
-    is_inited_ = true;
+  if (OB_SUCC(ret)) {
+    if (use_shared_executor_) {
+      if (OB_ISNULL(share::g_mp)
+          || OB_ISNULL(background_executor_ =
+              share::g_mp->background_task_executor())) {
+        ret = OB_ERR_UNEXPECTED;
+        COMMON_LOG(WARN, "background task executor is null",
+            K(ret), KP(share::g_mp), KP(background_executor_));
+      } else {
+        ObBackgroundTaskSourceConfig config;
+        config.name_ = "DagScheduler";
+        config.max_concurrency_ = 1;
+        if (OB_FAIL(background_executor_->register_source(
+            *this, config, source_handle_))) {
+          COMMON_LOG(WARN, "register dag scheduler source failed", K(ret));
+        } else {
+          is_inited_ = true;
+          ATOMIC_STORE(&is_running_, true);
+          if (OB_FAIL(notify_background_source_())) {
+            COMMON_LOG(WARN, "start dag scheduler source failed", K(ret));
+            ATOMIC_STORE(&is_running_, false);
+            (void)unregister_background_source_(true);
+            is_inited_ = false;
+          }
+        }
+      }
+    } else if (OB_FAIL(lib::ThreadPool::start())) {
+      COMMON_LOG(WARN, "failed to start dag scheduler", K(ret));
+    } else {
+      is_inited_ = true;
+      ATOMIC_STORE(&is_running_, true);
+    }
+  }
+  if (OB_SUCC(ret)) {
     dump_dag_status();
-    COMMON_LOG(INFO, "ObDagScheduler is inited", K(ret), K(work_thread_num_));
+    COMMON_LOG(INFO, "ObDagScheduler is inited", K(ret), K(work_thread_num_),
+        K(use_shared_executor_));
   }
 
   if (!is_inited_) {
@@ -3954,7 +4058,13 @@ void ObDagScheduler::reset()
   MEMSET(scheduled_dag_cnts_, 0, sizeof(scheduled_dag_cnts_));
   MEMSET(scheduled_task_cnts_, 0, sizeof(scheduled_task_cnts_));
   MEMSET(scheduled_data_size_, 0, sizeof(scheduled_data_size_));
-  lib::ThreadPool::destroy();
+  if (!use_shared_executor_) {
+    lib::ThreadPool::destroy();
+  }
+  ATOMIC_STORE(&is_running_, false);
+  use_shared_executor_ = false;
+  background_executor_ = nullptr;
+  source_handle_.reset();
   COMMON_LOG(INFO, "ObDagScheduler destroyed");
 }
 
@@ -4008,6 +4118,8 @@ int ObDagScheduler::add_dag_net(ObIDagNet *dag_net)
     if (OB_HASH_EXIST != ret) {
       COMMON_LOG(WARN, "fail to add dag net", K(ret), KPC(dag_net));
     }
+  } else if (use_shared_executor_) {
+    notify();
   }
   return ret;
 }
@@ -4044,6 +4156,8 @@ int ObDagScheduler::add_dag(
     if (OB_EAGAIN != ret) {
       LOG_WARN("failed to inner add dag", K(ret), KPC(dag));
     }
+  } else if (use_shared_executor_) {
+    notify();
   } else {
     ObThreadCondGuard guard(scheduler_sync_);
     if (OB_SUCC(guard.get_ret())) {
@@ -4473,6 +4587,52 @@ void ObDagScheduler::run1()
   }
 }
 
+int ObDagScheduler::process_one_quantum(
+    const ObBackgroundTaskPriority priority,
+    ObBackgroundTaskRunResult &result)
+{
+  int ret = OB_SUCCESS;
+  if (!use_shared_executor_) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (BG_TASK_HIGH != priority) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!ATOMIC_LOAD(&is_running_)) {
+    // The source may already have been claimed when stop() begins.
+  } else {
+    diagnose_for_suggestion();
+    dump_dag_status();
+    loop_dag_net();
+    const int schedule_ret = schedule();
+    if (OB_SUCCESS == schedule_ret) {
+      result.processed_count_ = 1;
+      result.has_more_ready_ = true;
+    } else if (OB_ENTRY_NOT_EXIST == schedule_ret) {
+      bool has_worker_to_reclaim = false;
+      ObThreadCondGuard guard(scheduler_sync_);
+      if (OB_SUCC(guard.get_ret())) {
+        if (OB_FAIL(try_reclaim_threads())) {
+          COMMON_LOG(WARN, "failed to reclaim idle dag workers", K(ret));
+        }
+        has_worker_to_reclaim = total_worker_cnt_ > 0;
+      } else {
+        ret = guard.get_ret();
+        COMMON_LOG(WARN, "lock dag scheduler failed", K(ret));
+      }
+      if (OB_SUCC(ret)
+          && (has_worker_to_reclaim
+              || get_cur_dag_cnt() > 0
+              || dag_net_sche_.get_dag_net_count() > 0)) {
+        result.next_ready_ts_ = ObClockGenerator::getClock()
+            + SCHEDULER_WAIT_TIME_MS * 1000L;
+      }
+    } else {
+      ret = schedule_ret;
+      COMMON_LOG(WARN, "failed to schedule dag task", K(ret));
+    }
+  }
+  return ret;
+}
+
 void ObReclaimUtil::reset()
 {
   total_periodic_running_worker_cnt_ = 0;
@@ -4523,10 +4683,56 @@ int64_t ObReclaimUtil::compute_expected_reclaim_worker_cnt(
 
 void ObDagScheduler::notify()
 {
-  ObThreadCondGuard cond_guard(scheduler_sync_);
-  if (OB_SUCCESS == cond_guard.get_ret()) {
-    scheduler_sync_.signal();
+  if (use_shared_executor_) {
+    const int tmp_ret = notify_background_source_();
+    if (OB_SUCCESS != tmp_ret && OB_NOT_RUNNING != tmp_ret
+        && OB_IN_STOP_STATE != tmp_ret) {
+      COMMON_LOG_RET(WARN, tmp_ret,
+          "notify dag scheduler source failed", K(tmp_ret));
+    }
+  } else {
+    ObThreadCondGuard cond_guard(scheduler_sync_);
+    if (OB_SUCCESS == cond_guard.get_ret()) {
+      scheduler_sync_.signal();
+    }
   }
+}
+
+int ObDagScheduler::notify_background_source_()
+{
+  int ret = OB_SUCCESS;
+  if (!use_shared_executor_) {
+  } else if (OB_ISNULL(background_executor_)
+      || !source_handle_.is_valid()
+      || !ATOMIC_LOAD(&is_running_)) {
+    ret = OB_NOT_RUNNING;
+  } else if (OB_FAIL(background_executor_->notify(
+      source_handle_, BG_TASK_HIGH))) {
+    COMMON_LOG(WARN, "notify dag scheduler source failed", K(ret));
+  }
+  return ret;
+}
+
+int ObDagScheduler::unregister_background_source_(const bool wait_running)
+{
+  int ret = OB_SUCCESS;
+  if (use_shared_executor_ && OB_NOT_NULL(background_executor_)
+      && source_handle_.is_valid()) {
+    do {
+      ret = background_executor_->unregister_source(source_handle_);
+      if (wait_running && OB_EAGAIN == ret) {
+        ob_usleep(1000);
+      }
+    } while (wait_running && OB_EAGAIN == ret);
+    if (OB_ENTRY_NOT_EXIST == ret || OB_NOT_INIT == ret) {
+      source_handle_.reset();
+      ret = OB_SUCCESS;
+    }
+  }
+  if (!source_handle_.is_valid()) {
+    background_executor_ = nullptr;
+  }
+  return ret;
 }
 
 void ObDagScheduler::notify_when_dag_net_finish()
@@ -4551,13 +4757,21 @@ int ObDagScheduler::deal_with_finish_task(ObITask *&task, ObDagWorker &worker, i
   } else if (OB_FAIL(prio_sche_[dag->get_priority()].deal_with_finish_task(task, dag, worker, error_code))) {
     COMMON_LOG(WARN, "fail to finish task", K(ret), KPC(dag));
   } else {
-    ObThreadCondGuard guard(scheduler_sync_);
-    if (OB_SUCC(guard.get_ret())) {
-      free_workers_.add_last(&worker);
-      worker.set_task(NULL);
-      if (OB_FAIL(scheduler_sync_.signal())) {
-        COMMON_LOG(WARN, "Failed to signal", K(ret), KPC(dag));
+    bool need_notify = false;
+    {
+      ObThreadCondGuard guard(scheduler_sync_);
+      if (OB_SUCC(guard.get_ret())) {
+        free_workers_.add_last(&worker);
+        worker.set_task(NULL);
+        if (use_shared_executor_) {
+          need_notify = true;
+        } else if (OB_FAIL(scheduler_sync_.signal())) {
+          COMMON_LOG(WARN, "Failed to signal", K(ret), KPC(dag));
+        }
       }
+    }
+    if (need_notify) {
+      notify();
     }
   }
 
@@ -4782,14 +4996,23 @@ int ObDagScheduler::set_compaction_dag_limit(const int64_t new_val)
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid argument", K(ret), K(new_val));
   } else if (old_val != new_val) {
-    ObThreadCondGuard guard(scheduler_sync_);
-    if (OB_SUCC(ret)) {
-      compaction_dag_limit_ = new_val;
-      if (OB_FAIL(scheduler_sync_.signal())) {
-        STORAGE_LOG(WARN, "Failed to signal", K(ret), K(compaction_dag_limit_));
-      } else {
-        COMMON_LOG(INFO, "set compaction dag limit successfully", K(compaction_dag_limit_));
+    bool need_notify = false;
+    {
+      ObThreadCondGuard guard(scheduler_sync_);
+      if (OB_SUCC(ret)) {
+        compaction_dag_limit_ = new_val;
+        if (use_shared_executor_) {
+          need_notify = true;
+        } else if (OB_FAIL(scheduler_sync_.signal())) {
+          STORAGE_LOG(WARN, "Failed to signal", K(ret), K(compaction_dag_limit_));
+        } else {
+          COMMON_LOG(INFO, "set compaction dag limit successfully", K(compaction_dag_limit_));
+        }
       }
+    }
+    if (need_notify) {
+      notify();
+      COMMON_LOG(INFO, "set compaction dag limit successfully", K(compaction_dag_limit_));
     }
   }
   return ret;
@@ -4809,17 +5032,28 @@ int ObDagScheduler::set_thread_score(const int64_t priority, const int64_t score
   } else if (OB_FAIL(prio_sche_[priority].set_thread_score(score, old_val, new_val))){
     COMMON_LOG(WARN, "fail to set thread score", K(ret));
   } else if (old_val != new_val) {
-    ObThreadCondGuard guard(scheduler_sync_);
-    if (OB_SUCC(ret)) {
-      work_thread_num_ -= old_val;
-      work_thread_num_ += new_val;
-      if (OB_FAIL(scheduler_sync_.signal())) {
-        STORAGE_LOG(WARN, "Failed to signal", K(ret), K(priority), K(score));
-      } else {
-        COMMON_LOG(INFO, "set thread score successfully", K(score),
-            "prio", OB_DAG_PRIOS[priority].dag_prio_str_,
-            "limits_", new_val, K_(work_thread_num));
+    bool need_notify = false;
+    {
+      ObThreadCondGuard guard(scheduler_sync_);
+      if (OB_SUCC(ret)) {
+        work_thread_num_ -= old_val;
+        work_thread_num_ += new_val;
+        if (use_shared_executor_) {
+          need_notify = true;
+        } else if (OB_FAIL(scheduler_sync_.signal())) {
+          STORAGE_LOG(WARN, "Failed to signal", K(ret), K(priority), K(score));
+        } else {
+          COMMON_LOG(INFO, "set thread score successfully", K(score),
+              "prio", OB_DAG_PRIOS[priority].dag_prio_str_,
+              "limits_", new_val, K_(work_thread_num));
+        }
       }
+    }
+    if (need_notify) {
+      notify();
+      COMMON_LOG(INFO, "set thread score successfully", K(score),
+          "prio", OB_DAG_PRIOS[priority].dag_prio_str_,
+          "limits_", new_val, K_(work_thread_num));
     }
   }
   return ret;
