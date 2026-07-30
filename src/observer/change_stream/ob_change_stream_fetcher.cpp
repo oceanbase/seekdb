@@ -40,6 +40,7 @@
 #include "logservice/palf/log_io_context.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_ts_mgr.h"
+#include <algorithm>
 
 namespace oceanbase
 {
@@ -52,12 +53,13 @@ ObCSFetcher::ObCSFetcher()
     dispatcher_(nullptr),
     iter_(),
     current_lsn_(),
+    processed_end_lsn_(0),
     current_scn_(),
     current_schema_version_(0),
     total_tx_committed_(0),
     running_mode_(IDLE),
-    has_async_index_tables_(false),
-    last_checked_schema_version_(0),
+    pending_ready_schema_version_(0),
+    async_schema_state_(),
     current_processing_tx_id_()
 {
 }
@@ -82,6 +84,9 @@ int ObCSFetcher::init(ObCSDispatcher *dispatcher)
     LOG_WARN("CSFetcher: fail to init thread pool", KR(ret));
   } else if (OB_FAIL(idle_cond_.init(ObWaitEventIds::THREAD_IDLING_COND_WAIT))) {
     LOG_WARN("CSFetcher: fail to init idle_cond", KR(ret));
+  } else if (OB_FAIL(schema_state_cond_.init(ObWaitEventIds::THREAD_IDLING_COND_WAIT))) {
+    LOG_WARN("CSFetcher: fail to init schema_state_cond", KR(ret));
+    idle_cond_.destroy();
   } else {
     dispatcher_ = dispatcher;
     current_scn_.set_min();
@@ -115,6 +120,7 @@ int ObCSFetcher::init_consumption_position_()
         LOG_WARN("CSFetcher: fail to seek_log_iterator by min_dep_lsn", KR(ret), K(start_lsn));
       } else {
         current_lsn_ = start_lsn;
+        ATOMIC_STORE(&processed_end_lsn_, static_cast<int64_t>(start_lsn.val_));
         FLOG_INFO("CSFetcher: initialized from global_stat min_dep_lsn", K(start_lsn));
       }
     }
@@ -129,6 +135,11 @@ int ObCSFetcher::init_consumption_position_()
     if (OB_ISNULL(GCTX.schema_service_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("CSFetcher: schema_service is null", KR(ret));
+    } else if (current_schema_version_ > 0) {
+      // ACTIVE is entered only after an exact runtime schema version is ready.
+      // Keep that version even when CREATE DDL logs were already reclaimed.
+      LOG_INFO("CSFetcher: keep ready runtime schema version for iterator init",
+               K(current_schema_version_));
     } else if (0 == persisted_min_dep_lsn) {
       current_scn_.set_min();
       LOG_INFO("CSFetcher: min_dep_lsn is 0, schema_version stays 0");
@@ -188,8 +199,14 @@ int ObCSFetcher::start()
 void ObCSFetcher::stop()
 {
   ObThreadPool::stop();
-  ObThreadCondGuard guard(idle_cond_);
-  idle_cond_.signal();
+  {
+    ObThreadCondGuard guard(idle_cond_);
+    idle_cond_.signal();
+  }
+  {
+    ObThreadCondGuard guard(schema_state_cond_);
+    schema_state_cond_.broadcast();
+  }
 }
 
 void ObCSFetcher::wait()
@@ -212,9 +229,13 @@ void ObCSFetcher::destroy()
     }
     tx_info_.destroy();
     idle_cond_.destroy();
+    schema_state_cond_.destroy();
     dispatcher_ = nullptr;
     current_lsn_.reset();
+    ATOMIC_STORE(&processed_end_lsn_, 0);
     current_scn_.reset();
+    pending_ready_schema_version_ = 0;
+    async_schema_state_.reset();
     is_inited_ = false;
   }
 }
@@ -232,10 +253,10 @@ void ObCSTxInfo::destroy()
 }
 
 // ---------------------------------------------------------------------------
-// get_min_dep_lsn: get end_lsn first, then real-time async-index check.
+// get_min_dep_lsn: capture end_lsn first, then use a version-matched ready proof.
 //   With async-index tables: min(tx_info_.start_lsn) if non-empty, else current_lsn_.
 //   Without async-index tables: end_lsn — allow PALF to reclaim up to the log tail.
-//   On failure returns error code and caller should not advance.
+//   A schema mismatch/error is fail-closed: caller must not advance.
 // ---------------------------------------------------------------------------
 
 int ObCSFetcher::get_min_dep_lsn(palf::LSN &min_lsn)
@@ -250,14 +271,29 @@ int ObCSFetcher::get_min_dep_lsn(palf::LSN &min_lsn)
     LOG_WARN("CSFetcher: fail to get end_lsn for min_dep_lsn", KR(ret));
     return ret;
   }
+  DEBUG_SYNC(CS_FETCHER_AFTER_MIN_DEP_END_LSN);
 
-  bool has_async = false;
-  if (OB_FAIL(get_has_async_cached_(has_async))) {
-    LOG_WARN("CSFetcher: get_has_async_cached_ failed in get_min_dep_lsn", KR(ret));
+  int64_t runtime_schema_version = 0;
+  ObCSAsyncSchemaState state;
+  if (OB_FAIL(get_runtime_schema_version_(runtime_schema_version))) {
+    LOG_WARN("CSFetcher: fail to get runtime schema version for min_dep_lsn", KR(ret));
+    return ret;
+  } else if (OB_FAIL(get_async_schema_state(state))) {
+    LOG_WARN("CSFetcher: fail to get async schema state for min_dep_lsn", KR(ret));
+    return ret;
+  } else if (state.error_code_ != OB_SUCCESS) {
+    ret = state.error_code_;
+    LOG_WARN("CSFetcher: async schema state has error, do not advance min_dep_lsn",
+             KR(ret), K(runtime_schema_version), K(state));
+    return ret;
+  } else if (state.ready_schema_version_ != runtime_schema_version) {
+    ret = OB_EAGAIN;
+    LOG_INFO("CSFetcher: schema state is not ready, do not advance min_dep_lsn",
+             KR(ret), K(runtime_schema_version), K(state));
     return ret;
   }
 
-  if (!has_async) {
+  if (!state.has_async_index_) {
     min_lsn = end_lsn;
     return OB_SUCCESS;
   }
@@ -278,110 +314,137 @@ int ObCSFetcher::get_min_dep_lsn(palf::LSN &min_lsn)
   } else {
     min_lsn = current_lsn_;
   }
-  return OB_SUCCESS;
-}
-
-// ---------------------------------------------------------------------------
-// get_refresh_scn: get GTS, then decide refresh_scn based on async-index state:
-//   1. !has_async: return GTS — no async vector index tables.
-//   2. has_async && tx_info_ not empty: return OB_SUCCESS with invalid refresh_scn — worker handles.
-//   3. has_async && current_lsn_.is_valid() && current_lsn_ >= max_lsn:
-//      return GTS — no pending logs to consume.
-//   4. otherwise (including invalid current_lsn_): return current_scn_ —
-//      still consuming logs / cannot prove caught-up.
-// ---------------------------------------------------------------------------
-int ObCSFetcher::get_refresh_scn(SCN &refresh_scn)
-{
-  int ret = OB_SUCCESS;
-  refresh_scn.reset();
-
-  SCN gts_scn;
-  if (OB_FAIL(OB_TS_MGR.get_gts(gts_scn))) {
-    LOG_WARN("CSFetcher: fail to get GTS for refresh_scn", KR(ret));
-    return ret;
-  }
-
-  bool has_async = false;
-  if (OB_FAIL(get_has_async_cached_(has_async))) {
-    return ret;
-  }
-
-  if (!has_async) {
-    // Case 1: no async vector index tables — advance to GTS.
-    refresh_scn = gts_scn;
-    return ret;
-  }
-
-  // Case 2: in-flight tx — worker will advance refresh_scn after draining; skip here.
-  if (!tx_info_.empty()) {
-    return OB_SUCCESS;
-  }
-
-  // Fetch max_lsn to distinguish case 3 and case 4.
-  palf::LSN max_lsn;
-  {
-    storage::ObLS *ls = nullptr;
-    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))
-        || OB_FAIL(ls->get_log_handler()->get_max_lsn(max_lsn))) {
-      LOG_WARN("CSFetcher: fail to get max_lsn in get_refresh_scn", KR(ret));
-      return ret;
-    }
-  }
-
-  if (current_lsn_.is_valid() && current_lsn_ >= max_lsn) {
-    // Case 3: caught up — no pending logs, advance to GTS.
-    SCN gts_scn;
-    if (OB_FAIL(OB_TS_MGR.get_gts(gts_scn))) {
-      LOG_WARN("CSFetcher: fail to get GTS for refresh_scn (caught-up)", KR(ret));
-    } else {
-      refresh_scn = gts_scn;
-    }
-  } else {
-    // Case 4: still consuming logs, or current_lsn_ is invalid (e.g. restart init phase).
-    // In both cases, be conservative and only advance to current_scn_.
-    refresh_scn = current_scn_;
+  if (!min_lsn.is_valid()) {
+    ret = OB_EAGAIN;
+    LOG_INFO("CSFetcher: current_lsn is not ready, do not advance min_dep_lsn", KR(ret), K(state));
   }
   return ret;
 }
 
-// get_has_async_cached_: use last_checked_schema_version_ / has_async_index_tables_; refresh cache when schema version changed.
-int ObCSFetcher::get_has_async_cached_(bool &has_async)
+int ObCSFetcher::get_runtime_schema_version_(int64_t &schema_version) const
 {
   int ret = OB_SUCCESS;
-  has_async = false;
-  int64_t refreshed_version = 0;
+  schema_version = 0;
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("CSFetcher: schema_service is null", KR(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_refreshed_schema_version(refreshed_version))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_refreshed_schema_version(schema_version))) {
     LOG_WARN("CSFetcher: get_runtime_refreshed_schema_version failed", KR(ret));
-  } else if (refreshed_version == last_checked_schema_version_) {
-    has_async = has_async_index_tables_;
+  } else if (schema_version <= 0 || !ObSchemaService::is_formal_version(schema_version)) {
+    ret = OB_SCHEMA_EAGAIN;
+    LOG_WARN("CSFetcher: runtime schema version is not formal", KR(ret), K(schema_version));
+  }
+  return ret;
+}
+
+int ObCSFetcher::get_async_schema_state(ObCSAsyncSchemaState &state)
+{
+  int ret = OB_SUCCESS;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
   } else {
-    if (OB_FAIL(check_has_async_index_tables_(has_async))) {
-      LOG_WARN("CSFetcher: check_has_async_index_tables_ failed in get_has_async_cached_", KR(ret));
+    ObThreadCondGuard guard(schema_state_cond_);
+    state = async_schema_state_;
+  }
+  return ret;
+}
+
+int ObCSFetcher::wait_async_schema_ready(
+    const int64_t schema_version,
+    const int64_t abs_timeout_us,
+    ObCSAsyncSchemaState &state)
+{
+  int ret = OB_SUCCESS;
+  bool ready = false;
+  while (OB_SUCC(ret) && !ready) {
+    int64_t runtime_schema_version = 0;
+    const int64_t now = ObTimeUtility::current_time();
+    if (now >= abs_timeout_us) {
+      ret = OB_TIMEOUT;
+    } else if (OB_FAIL(get_runtime_schema_version_(runtime_schema_version))) {
+      LOG_WARN("CSFetcher: fail to read runtime schema while waiting ready", KR(ret));
+    } else if (runtime_schema_version != schema_version) {
+      ret = OB_EAGAIN;
     } else {
-      last_checked_schema_version_ = refreshed_version;
-      has_async_index_tables_ = has_async;
+      ObThreadCondGuard guard(schema_state_cond_);
+      state = async_schema_state_;
+      if (state.ready_schema_version_ == schema_version
+          && state.error_code_ == OB_SUCCESS) {
+        ready = true;
+      } else if (state.error_code_ != OB_SUCCESS) {
+        ret = state.error_code_;
+      } else {
+        const int64_t wait_us = std::min<int64_t>(
+            100 * 1000, abs_timeout_us - ObTimeUtility::current_time());
+        if (wait_us > 0) {
+          const int wait_ret = schema_state_cond_.wait_us(wait_us);
+          if (wait_ret != OB_SUCCESS && wait_ret != OB_TIMEOUT) {
+            ret = wait_ret;
+          }
+        }
+      }
     }
   }
   return ret;
 }
 
-// check_has_async_index_tables_: uses get_runtime_schema_guard_with_version_in_inner_table
-// so that OB_SCHEMA_EAGAIN is handled (refresh + retry). On success sets has_async to true
-// only if at least one vector index has sync_mode=ASYNC in index_params.
-int ObCSFetcher::check_has_async_index_tables_(bool &has_async)
+void ObCSFetcher::reset_async_schema_state()
+{
+  {
+    ObThreadCondGuard guard(schema_state_cond_);
+    async_schema_state_.reset();
+    schema_state_cond_.broadcast();
+  }
+  {
+    ObThreadCondGuard guard(idle_cond_);
+    idle_cond_.signal();
+  }
+}
+
+void ObCSFetcher::publish_schema_state_(
+    const int64_t schema_version,
+    const bool has_async_index,
+    const bool advance_drained_version)
+{
+  ObThreadCondGuard guard(schema_state_cond_);
+  async_schema_state_.ready_schema_version_ = schema_version;
+  async_schema_state_.has_async_index_ = has_async_index;
+  async_schema_state_.error_code_ = OB_SUCCESS;
+  if (advance_drained_version
+      && schema_version > async_schema_state_.last_no_async_index_drained_schema_version_) {
+    async_schema_state_.last_no_async_index_drained_schema_version_ = schema_version;
+  }
+  schema_state_cond_.broadcast();
+}
+
+void ObCSFetcher::publish_schema_error_(const int error_code)
+{
+  ObThreadCondGuard guard(schema_state_cond_);
+  async_schema_state_.error_code_ = error_code;
+  schema_state_cond_.broadcast();
+}
+
+// Check exactly schema_version.  A guard for another version is never accepted
+// as proof for refresh/min_dep decisions.
+int ObCSFetcher::check_has_async_index_tables_(
+    const int64_t schema_version,
+    bool &has_async)
 {
   int ret = OB_SUCCESS;
   has_async = false;
-  if (OB_ISNULL(GCTX.schema_service_) || OB_ISNULL(GCTX.sql_proxy_)) {
+  if (OB_ISNULL(GCTX.schema_service_) || schema_version <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("CSFetcher: schema_service or sql_proxy is null", KR(ret));
+    LOG_WARN("CSFetcher: invalid schema service or version", KR(ret), K(schema_version));
   } else {
     schema::ObSchemaGetterGuard guard;
-    if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard_with_version_in_inner_table(guard))) {
-      LOG_WARN("CSFetcher: fail to get_runtime_schema_guard_with_version_in_inner_table", KR(ret));
+    int64_t guard_schema_version = 0;
+    if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard, schema_version))) {
+      LOG_WARN("CSFetcher: fail to get exact runtime schema guard", KR(ret), K(schema_version));
+    } else if (OB_FAIL(guard.get_schema_version(guard_schema_version))) {
+      LOG_WARN("CSFetcher: fail to get guard schema version", KR(ret), K(schema_version));
+    } else if (guard_schema_version != schema_version) {
+      ret = OB_SCHEMA_EAGAIN;
+      LOG_WARN("CSFetcher: runtime schema guard version mismatch",
+               KR(ret), K(schema_version), K(guard_schema_version));
     } else {
       bool has_ivf_index = false;
       common::ObArray<uint64_t> table_ids;
@@ -419,6 +482,100 @@ int ObCSFetcher::check_has_async_index_tables_(bool &has_async)
           }
         }
       }
+    }
+  }
+  return ret;
+}
+
+int ObCSFetcher::drain_to_idle_(const int64_t schema_version)
+{
+  int ret = OB_SUCCESS;
+  running_mode_ = IDLE; // Stop producing new tasks before taking the barrier.
+  pending_ready_schema_version_ = 0;
+
+  // Entries not yet handed to Dispatcher cannot complete once Fetcher is IDLE.
+  common::ObSEArray<int64_t, 16> stale_tx_ids;
+  for (common::hash::ObHashMap<int64_t, ObCSTxInfo *>::iterator it = tx_info_.begin();
+       OB_SUCC(ret) && it != tx_info_.end(); ++it) {
+    if (OB_NOT_NULL(it->second) && it->second->in_dispatch_time_ == 0) {
+      if (OB_FAIL(stale_tx_ids.push_back(it->first))) {
+        LOG_WARN("CSFetcher: fail to collect undispatched tx while draining", KR(ret));
+      }
+    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < stale_tx_ids.count(); ++i) {
+    ObCSTxInfo *tx = nullptr;
+    const int erase_ret = tx_info_.erase_refactored(stale_tx_ids.at(i), &tx);
+    if (erase_ret != OB_SUCCESS && erase_ret != OB_HASH_NOT_EXIST) {
+      ret = erase_ret;
+      LOG_WARN("CSFetcher: fail to erase undispatched tx while draining",
+               KR(ret), "tx_id", stale_tx_ids.at(i));
+    } else if (OB_NOT_NULL(tx)) {
+      tx->destroy();
+      OB_DELETE(ObCSTxInfo, "CSTxInfo", tx);
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    DEBUG_SYNC(CS_FETCHER_BEFORE_NO_ASYNC_DRAIN);
+    const int64_t drain_sn = dispatcher_->get_next_sn();
+    while (!has_set_stop() && dispatcher_->get_next_commit_sn() < drain_sn) {
+      usleep(1000);
+      if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
+        LOG_INFO("CSFetcher: waiting for no-async drain",
+                 K(schema_version), K(drain_sn),
+                 "next_commit_sn", dispatcher_->get_next_commit_sn());
+      }
+    }
+    if (has_set_stop()) {
+      ret = OB_IN_STOP_STATE;
+    } else {
+      DEBUG_SYNC(CS_FETCHER_AFTER_NO_ASYNC_DRAIN);
+      publish_schema_state_(schema_version, false, true);
+      LOG_INFO("CSFetcher: no-async schema is ready and drained",
+               K(schema_version), K(drain_sn));
+    }
+  }
+  if (OB_FAIL(ret)) {
+    publish_schema_error_(ret);
+  }
+  return ret;
+}
+
+int ObCSFetcher::refresh_async_schema_state_(bool &iter_ready)
+{
+  int ret = OB_SUCCESS;
+  int64_t runtime_schema_version = 0;
+  ObCSAsyncSchemaState state;
+  if (OB_FAIL(get_runtime_schema_version_(runtime_schema_version))) {
+    publish_schema_error_(ret);
+  } else if (OB_FAIL(get_async_schema_state(state))) {
+    LOG_WARN("CSFetcher: fail to get current async schema state", KR(ret));
+  } else if (state.ready_schema_version_ == runtime_schema_version
+             && state.error_code_ == OB_SUCCESS) {
+    // Already prepared exactly this runtime schema version.
+  } else {
+    bool has_async = false;
+    if (OB_FAIL(check_has_async_index_tables_(runtime_schema_version, has_async))) {
+      LOG_WARN("CSFetcher: fail to check async indexes for exact schema",
+               KR(ret), K(runtime_schema_version));
+      publish_schema_error_(ret);
+    } else if (!has_async) {
+      iter_ready = false;
+      ret = drain_to_idle_(runtime_schema_version);
+    } else if (IDLE == running_mode_) {
+      // A new async-index generation starts from the already-ready runtime
+      // schema, not from a CREATE DDL log that min_dep_lsn may have reclaimed.
+      running_mode_ = ACTIVE;
+      current_schema_version_ = runtime_schema_version;
+      pending_ready_schema_version_ = runtime_schema_version;
+      iter_ready = false;
+      LOG_INFO("CSFetcher: activating async-index consumption",
+               K(runtime_schema_version), K(current_schema_version_));
+    } else if (iter_ready) {
+      // Schema changed while remaining ACTIVE (for example partial deletion).
+      publish_schema_state_(runtime_schema_version, true, false);
+      LOG_INFO("CSFetcher: active async schema is ready", K(runtime_schema_version));
     }
   }
   return ret;
@@ -465,32 +622,6 @@ void ObCSFetcher::try_advance_min_dep_lsn_()
       LOG_INFO("CSFetcher: min_dep_lsn advanced",
                "mode", running_mode_ == ACTIVE ? "ACTIVE" : "IDLE",
                K(min_lsn), K(current_lsn_), "inflight_tx_count", tx_info_.size());
-    }
-  }
-}
-
-void ObCSFetcher::try_advance_refresh_scn_()
-{
-  if (!REACH_TIME_INTERVAL(CS_FETCHER_REFRESH_SCN_ADVANCE_INTERVAL_US)) {
-    return;
-  }
-  int ret = OB_SUCCESS;
-  SCN refresh_scn;
-  if (OB_FAIL(get_refresh_scn(refresh_scn))) {
-    LOG_WARN("CSFetcher: get_refresh_scn failed, skip advance this round", KR(ret));
-    return;
-  }
-  if (refresh_scn.is_valid()) {
-    if (OB_ISNULL(dispatcher_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("CSFetcher: dispatcher_ is null", KR(ret), K(refresh_scn));
-    } else if (OB_FAIL(dispatcher_->update_refresh_scn(
-                   static_cast<int64_t>(refresh_scn.get_val_for_gts())))) {
-      LOG_WARN("CSFetcher: fail to update_refresh_scn (idle gts)", KR(ret), K(refresh_scn));
-    } else if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {
-      LOG_INFO("CSFetcher: refresh_scn advanced",
-               "mode", running_mode_ == ACTIVE ? "ACTIVE" : "IDLE",
-               K(refresh_scn), "inflight_tx_count", tx_info_.size());
     }
   }
 }
@@ -691,10 +822,10 @@ int ObCSFetcher::handle_commit_log_(
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("CSFetcher: dispatcher_ is null", KR(ret));
       } else if (OB_FAIL(dispatcher_->push(tx))) {
-        LOG_WARN("CSFetcher: fail to push tx to dispatcher, destroy tx to avoid leak", KR(ret), K(tid));
-        (void)tx_info_.erase_refactored(tid);
-        tx->destroy();
-        OB_DELETE(ObCSTxInfo, "CSTxInfo", tx);
+        // Keep tx_info_ intact.  The iterator is rewound to current_lsn_ and
+        // retries this commit; deleting here would turn that retry into a
+        // successful no-op and lose the transaction.
+        LOG_WARN("CSFetcher: fail to push tx to dispatcher, keep tx for retry", KR(ret), K(tid));
       } else {
         total_tx_committed_++;
       }
@@ -766,97 +897,42 @@ void ObCSFetcher::run1()
     }
   }
 
-  // Determine initial mode: check if any async vector index tables exist.
-  if (!has_set_stop()) {
-    int64_t refreshed_version = 0;
-    if (OB_SUCC(GCTX.schema_service_->get_runtime_refreshed_schema_version(
-                    refreshed_version))) {
-      last_checked_schema_version_ = refreshed_version;
-    }
-    bool has_async = false;
-    int check_ret = check_has_async_index_tables_(has_async);
-    if (OB_SUCC(check_ret)) {
-      has_async_index_tables_ = has_async;
-      running_mode_ = has_async_index_tables_ ? ACTIVE : IDLE;
-      FLOG_INFO("CSFetcher: initial mode determined",
-                "mode", running_mode_ == ACTIVE ? "ACTIVE" : "IDLE",
-                K(has_async_index_tables_), K(last_checked_schema_version_));
-    } else {
-      has_async_index_tables_ = false;
-      running_mode_ = IDLE;
-      LOG_WARN("CSFetcher: check_has_async_index_tables_ failed, start in IDLE", KR(check_ret));
-    }
-  }
-
   bool iter_ready = false;
+  bool schema_state_initialized = false;
 
   // Main state-machine loop.
   while (!has_set_stop()) {
     ret = OB_SUCCESS;
 
-    // Periodic schema version check: detect schema changes and switch mode.
-    if (REACH_TIME_INTERVAL(CS_FETCHER_SCHEMA_CHECK_INTERVAL_US)
+    // Schema publish only wakes this loop.  Fetcher itself scans and publishes
+    // the versioned ready/drained proof.
+    if ((!schema_state_initialized
+         || REACH_TIME_INTERVAL(CS_FETCHER_SCHEMA_CHECK_INTERVAL_US))
         && OB_NOT_NULL(GCTX.schema_service_)) {
-      bool old_has_async = has_async_index_tables_;
-      bool new_has_async = false;
-      if (OB_SUCC(get_has_async_cached_(new_has_async))) {
-        RunningMode new_mode = has_async_index_tables_ ? ACTIVE : IDLE;
-        if (new_mode != running_mode_) {
-          if (ACTIVE == running_mode_ && IDLE == new_mode) {
-            // Transitioning ACTIVE -> IDLE: clean up tx_info_ entries that are solely
-            // owned by the fetcher (in_dispatch_time_ == 0, i.e. never pushed to dispatcher).
-            // This covers two cases:
-            //   1. DDL tx (is_ddl_ = true): never dispatched; cleaned inline on commit.
-            //   2. DML tx whose redo was seen but commit log not yet consumed.
-            // In both cases, IDLE mode will never consume the commit log, so these entries
-            // would remain permanently and block refresh_scn when switching back to ACTIVE.
-            // Entries with in_dispatch_time_ > 0 are already in the dispatcher ring buffer;
-            // their ownership belongs to the dispatcher and must not be freed here.
-            common::ObSEArray<int64_t, 16> stale_tx_ids;
-            for (common::hash::ObHashMap<int64_t, ObCSTxInfo *>::iterator it = tx_info_.begin();
-                 it != tx_info_.end(); ++it) {
-              if (OB_NOT_NULL(it->second) && it->second->in_dispatch_time_ == 0) {
-                (void)stale_tx_ids.push_back(it->first);
-              }
-            }
-            for (int64_t i = 0; i < stale_tx_ids.count(); ++i) {
-              ObCSTxInfo *tx = nullptr;
-              if (OB_SUCCESS == tx_info_.erase_refactored(stale_tx_ids.at(i), &tx)
-                  && OB_NOT_NULL(tx)) {
-                LOG_INFO("CSFetcher: ACTIVE->IDLE, discard undispatched tx_info",
-                         "tx_id", stale_tx_ids.at(i), "is_ddl", tx->is_ddl_);
-                tx->destroy();
-                OB_DELETE(ObCSTxInfo, "CSTxInfo", tx);
-              }
-            }
-          }
-          running_mode_ = new_mode;
-          if (ACTIVE == running_mode_) {
-            iter_ready = false;
-          }
-        }
-        if (old_has_async != new_has_async || REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
-          FLOG_INFO("CSFetcher: mode switched",
-                  "mode", running_mode_ == ACTIVE ? "ACTIVE" : "IDLE",
-                  K(has_async_index_tables_), K(last_checked_schema_version_));
-        }
+      const int schema_ret = refresh_async_schema_state_(iter_ready);
+      if (schema_ret == OB_SUCCESS) {
+        schema_state_initialized = true;
+      } else if (schema_ret != OB_IN_STOP_STATE) {
+        LOG_WARN("CSFetcher: refresh async schema state failed", KR(schema_ret));
       }
     }
 
-    // Advance min_dep_lsn regardless of mode (rate-limited internally; real-time async check inside).
+    // Advance min_dep_lsn regardless of mode.  The helper itself requires an
+    // exact runtime-version/ready-state match.
     try_advance_min_dep_lsn_();
-    try_advance_refresh_scn_();
 
     // IDLE branch: wait for schema change notification, with 10s timeout as fallback.
     if (IDLE == running_mode_) {
       ObThreadCondGuard guard(idle_cond_);
       if (IDLE == running_mode_ && !has_set_stop()) {
-        int64_t current_version = 0;
-        if (OB_NOT_NULL(GCTX.schema_service_)) {
-          GCTX.schema_service_->get_runtime_refreshed_schema_version(current_version);
-        }
-        if (current_version == last_checked_schema_version_) {
-          idle_cond_.wait(CS_FETCHER_IDLE_COND_WAIT_MS);
+        ObCSAsyncSchemaState state;
+        int64_t runtime_schema_version = 0;
+        (void)get_async_schema_state(state);
+        if (OB_SUCCESS == get_runtime_schema_version_(runtime_schema_version)
+            && runtime_schema_version == state.ready_schema_version_) {
+          const int64_t wait_ms = state.error_code_ == OB_SUCCESS
+                                ? CS_FETCHER_IDLE_COND_WAIT_MS : 100;
+          idle_cond_.wait(wait_ms);
         }
       }
       continue;
@@ -866,6 +942,10 @@ void ObCSFetcher::run1()
     if (!iter_ready) {
       if (OB_SUCC(init_consumption_position_())) {
         iter_ready = true;
+        if (pending_ready_schema_version_ > 0) {
+          publish_schema_state_(pending_ready_schema_version_, true, false);
+          pending_ready_schema_version_ = 0;
+        }
         FLOG_INFO("CSFetcher: iterator initialized, starting consumption",
                   K(current_lsn_), K(current_scn_));
       } else {
@@ -881,6 +961,7 @@ void ObCSFetcher::run1()
         continue;
       }
       LOG_WARN("CSFetcher: fail to iter.next", KR(ret));
+      iter_ready = false;
       usleep(CS_FETCHER_ITER_ERR_SLEEP_US);
       continue;
     }
@@ -889,24 +970,28 @@ void ObCSFetcher::run1()
     palf::LSN lsn;
     if (OB_FAIL(iter_.get_entry(log_entry, lsn))) {
       LOG_WARN("CSFetcher: fail to get_entry", KR(ret));
+      iter_ready = false;
       continue;
     }
 
     const char *buf = log_entry.get_data_buf();
     const int64_t buf_len = log_entry.get_data_len();
     const SCN scn = log_entry.get_scn();
+    const palf::LSN entry_end_lsn = lsn + log_entry.get_header_size() + buf_len;
 
     // Pre-check: only process transaction logs.
     logservice::ObLogBaseHeader base_header;
     int64_t header_pos = 0;
     if (OB_FAIL(base_header.deserialize(buf, buf_len, header_pos))) {
       LOG_WARN("CSFetcher: fail to deserialize ObLogBaseHeader", KR(ret), K(lsn));
+      iter_ready = false;
       continue;
     }
     if (base_header.get_log_type() != logservice::ObLogBaseType::TRANS_SERVICE_LOG_BASE_TYPE) {
       // Not a transaction log — skip.
-      current_lsn_ = lsn + log_entry.get_header_size() + buf_len;
+      current_lsn_ = entry_end_lsn;
       current_scn_ = scn;
+      ATOMIC_STORE(&processed_end_lsn_, static_cast<int64_t>(entry_end_lsn.val_));
       continue;
     }
 
@@ -914,6 +999,7 @@ void ObCSFetcher::run1()
     transaction::ObTxLogBlock tx_log_block;
     if (OB_FAIL(tx_log_block.init_for_replay(buf, buf_len))) {
       LOG_WARN("CSFetcher: fail to init_for_replay", KR(ret), K(lsn));
+      iter_ready = false;
       continue;
     }
 
@@ -921,8 +1007,9 @@ void ObCSFetcher::run1()
     // Log filter: only consume logs with has_async_index (tables with async vector index or DDL).
     if (!block_header.has_async_index()) {
       LOG_DEBUG("CSFetcher: skip log without has_async_index", K(lsn));
-      current_lsn_ = lsn + log_entry.get_header_size() + buf_len;
+      current_lsn_ = entry_end_lsn;
       current_scn_ = scn;
+      ATOMIC_STORE(&processed_end_lsn_, static_cast<int64_t>(entry_end_lsn.val_));
       continue;
     }
 
@@ -944,7 +1031,8 @@ void ObCSFetcher::run1()
       const transaction::ObTxLogType log_type = tx_header.get_tx_log_type();
       switch (log_type) {
         case transaction::ObTxLogType::TX_REDO_LOG: {
-          transaction::ObTxRedoLog redo_log;
+          transaction::ObTxRedoLogTempRef tmp_ref;
+          transaction::ObTxRedoLog redo_log(tmp_ref);
           if (OB_FAIL(tx_log_block.deserialize_log_body(redo_log))) {
             LOG_WARN("CSFetcher: fail to deserialize redo", KR(ret), K(lsn));
           } else {
@@ -1036,9 +1124,19 @@ void ObCSFetcher::run1()
       }
     }
 
-    // Advance progress tracking.
-    current_lsn_ = lsn + log_entry.get_header_size() + log_entry.get_data_len();
-    current_scn_ = scn;
+    // Publish progress only after every operation in this log entry succeeds.
+    // On failure re-seek from the last successfully published end LSN.
+    if (OB_FAIL(ret)) {
+      iter_ready = false;
+      LOG_WARN("CSFetcher: log entry processing failed, retry from last processed LSN",
+               KR(ret), K(lsn), K(current_lsn_));
+      usleep(CS_FETCHER_ITER_ERR_SLEEP_US);
+      continue;
+    } else {
+      current_lsn_ = entry_end_lsn;
+      current_scn_ = scn;
+      ATOMIC_STORE(&processed_end_lsn_, static_cast<int64_t>(entry_end_lsn.val_));
+    }
 
     if (REACH_TIME_INTERVAL(CS_FETCHER_PROGRESS_LOG_INTERVAL_US)) {
       LOG_INFO("CSFetcher: progress",

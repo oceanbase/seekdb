@@ -72,7 +72,7 @@ int ObAllVirtualChangeStreamRefreshStat::inner_get_next_row(ObNewRow *&row)
     // Get refresh_scn from in-memory manager state
     ObChangeStreamMgr *cs_mgr = share::g_mp->change_stream_mgr();
     if (OB_NOT_NULL(cs_mgr) && cs_mgr->is_inited()) {
-      refresh_scn_val = cs_mgr->get_dispatcher().get_refresh_scn();
+      refresh_scn_val = cs_mgr->get_refresh_scn();
     }
 
     // Get min_dep_lsn from global_stat
