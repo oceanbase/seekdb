@@ -32,6 +32,7 @@ namespace oceanbase { namespace observer { common::ObILobReadService * ObServer:
 int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share::ObFreezeInfo &freeze_info) { return OB_ISNULL(mods_freeze_info_mgr_) ? common::OB_NOT_INIT : mods_freeze_info_mgr_->get_lower_bound_freeze_info_before_snapshot_version(snapshot_version, freeze_info); } } }
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "lib/alloc/memory_dump.h"
+#include "share/ob_memory_dump_background_source.h"
 #include "lib/oblog/ob_log_compressor.h"
 #include "lib/ob_running_mode.h"
 #include "lib/task/ob_timer_monitor.h"
@@ -39,16 +40,17 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "observer/ob_server_utils.h"
 #include "observer/ob_server_options.h"
 #include "share/ob_timezone_mgr.h"
+#include "share/ob_internal_table_change_notifier.h"
 #include "share/ob_standby_source_util.h"
 #include "logservice/ob_log_allocator_mgr.h"
 #include "observer/omt/ob_server_runtime.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
 #include "sql/ob_sql_init.h"
 #include "sql/ob_sql_task.h"
-#include "sql/engine/cmd/ob_load_data_utils.h"
 #include "storage/tx_table/ob_tx_data_cache.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "storage/ob_file_system_router.h"
+#include "storage/ob_tablet_autoinc_seq_rpc_handler.h"
 #include "sql/engine/px/ob_px_target_monitor.h"
 #include "share/ob_device_manager.h"
 #include "storage/ob_tablet_autoincrement_service.h"
@@ -244,6 +246,8 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init queue_thread dynamic mgr failed", KR(ret));
     } else if (OB_FAIL(ObTimerService::get_instance().start())) {
       LOG_ERROR("start timer service failed", KR(ret));
+    } else if (OB_FAIL(ObInternalTableChangeNotifier::get_instance().init())) {
+      LOG_ERROR("init internal table change notifier failed", KR(ret));
     }
   }
 
@@ -395,6 +399,8 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init px target mgr failed", KR(ret));
     } else if (OB_FAIL(ObDictCache::get_instance().init("dict_cache"))) {
       LOG_ERROR("init dict cache failed", KR(ret));
+    } else if (OB_FAIL(ObLongopsMgr::get_instance().init())) {
+      LOG_WARN("init longops mgr fail", KR(ret));
     } else if (OB_FAIL(ObGenDicLoader::get_instance().init())) {
       LOG_WARN("init dictionary loader failed", K(ret));
     } else if (OB_FAIL(ObDDLRedoLock::get_instance().init())) {
@@ -562,6 +568,10 @@ void ObServer::destroy()
     FLOG_INFO("begin to destroy server runtime");
     server_runtime_controller_.destroy();
     FLOG_INFO("server runtime destroyed");
+
+    FLOG_INFO("begin to destroy internal table change notifier");
+    ObInternalTableChangeNotifier::get_instance().destroy();
+    FLOG_INFO("internal table change notifier destroyed");
 
     FLOG_INFO("begin to destroy query retry ctrl");
     ObQueryRetryCtrl::destroy();
@@ -834,6 +844,15 @@ int ObServer::initialize_server_runtime()
   }
   if (OB_SUCC(ret) && OB_FAIL(server_runtime_controller_.bring_up_runtime())) {
     LOG_ERROR("fail to bring up server runtime", KR(ret));
+  } else if (OB_SUCC(ret) && OB_FAIL(
+      schema_service_.get_ddl_trans_controller().start())) {
+    LOG_ERROR("start ddl transaction controller fail", KR(ret));
+  } else if (OB_SUCC(ret)
+      && OB_FAIL(sql_engine_.start_background_task_source())) {
+    LOG_ERROR("start SQL background task source fail", KR(ret));
+  } else if (OB_SUCC(ret)
+      && OB_FAIL(ob_service_.start_background_task_source())) {
+    LOG_ERROR("start observer background task source fail", KR(ret));
   }
   return ret;
 }
@@ -1041,6 +1060,9 @@ int ObServer::stop()
     }
 
     FLOG_INFO("begin to stop memory dump");
+    if (OB_NOT_NULL(mods_memory_dump_background_source_)) {
+      mods_memory_dump_background_source_->stop();
+    }
     ObMemoryDump::get_instance().stop();
     FLOG_INFO("memory dump stopped");
 
@@ -1607,7 +1629,7 @@ int ObServer::init_interrupt()
   if (OB_ISNULL(mgr)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("fail get interrupt mgr instance", KR(ret));
-  } else if (OB_FAIL(mgr->init())) {
+  } else if (OB_FAIL(mgr->init(get_self()))) {
     LOG_ERROR("fail init interrupt mgr", KR(ret));
   }
   return ret;
@@ -1660,7 +1682,6 @@ int ObServer::init_server_runtime()
 
   if (OB_FAIL(server_runtime_controller_.init())) {
     LOG_ERROR("init server runtime fail", KR(ret));
-
   }
 
   if (OB_SUCC(ret)) {
@@ -1716,6 +1737,8 @@ int ObServer::init_tablet_autoincrement_service()
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTabletAutoincrementService::get_instance().init())) {
     LOG_WARN("init tablet_autoincrement_service_ fail", KR(ret));
+  } else if (OB_FAIL(ObTabletAutoincSeqRpcHandler::get_instance().init())) {
+    LOG_WARN("init tablet autoinc seq rpc handler fail", K(ret));
   }
   return ret;
 }
@@ -1920,7 +1943,7 @@ int ObServer::parse_role(const ObServerOptions &opts)
 int ObServer::init_px_target_mgr()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(OB_PX_TARGET_MONITOR.init())) {
+  if (OB_FAIL(OB_PX_TARGET_MONITOR.init(self_addr_))) {
     LOG_ERROR("px target mgr init failed", K(self_addr_), KR(ret));
   } else {
     LOG_INFO("px target mgr init success");

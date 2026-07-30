@@ -29,6 +29,7 @@
 #include "storage/slog/ob_storage_log_nop_log.h"
 #include "storage/blocksstable/ob_log_file_spec.h"
 #include "lib/thread/thread_pool.h"
+#include "share/ob_background_task_executor.h"
 
 namespace oceanbase
 {
@@ -36,7 +37,9 @@ namespace storage
 {
 class ObStorageLogItem;
 
-class ObStorageLogWriter : public common::ObBaseLogWriter
+class ObStorageLogWriter
+  : public common::ObBaseLogWriter,
+    public share::ObIBackgroundTaskSource
 {
 public:
   ObStorageLogWriter();
@@ -46,21 +49,36 @@ public:
       const char *log_dir,
       const int64_t log_file_size,
       const int64_t max_log_size,
-      const blocksstable::ObLogFileSpec &log_file_spec);
+      const blocksstable::ObLogFileSpec &log_file_spec,
+      const char *background_source_name);
   virtual int start() override;
+  virtual void stop() override;
   virtual void wait() override;
   void destroy();
   common::ObLogCursor get_cur_cursor();
+  int attach_background_executor(
+      share::ObBackgroundTaskExecutor *background_executor);
+  int detach_background_executor();
 
   int delete_log_file(const int64_t file_id);
   int get_using_disk_space(int64_t &using_space) const;
 
   int start_log(const common::ObLogCursor &start_cursor);
+  virtual int process_one_quantum(
+      const share::ObBackgroundTaskPriority priority,
+      share::ObBackgroundTaskRunResult &result) override;
 
 private:
   static const int64_t FLUSH_THREAD_IDLE_INTERVAL_US = 1000 * 1000; // 1s
+  static const int64_t SHARED_FLUSH_BATCH_COUNT = 16;
 
 private:
+  virtual void on_log_item_appended() override;
+protected:
+  int start_base_flush_thread_();
+private:
+  int notify_background_source_();
+  int unregister_background_source_(const bool wait_running);
   int fill_nop_log(ObStorageLogItem *log_item, const int64_t occupied_len);
   int update_log_item_cursor(ObStorageLogItem *log_item, const int64_t begin_offset);
   virtual void process_log_items(common::ObIBaseLogItem **items,
@@ -107,6 +125,8 @@ private:
 			const ObStorageLogItem &log_item,
 			const int64_t used_len);
 
+  static int check_server_lease();
+
 private:
   class ObSLogWriteRunner : public lib::ThreadPool
   {
@@ -128,6 +148,12 @@ private:
 
 private:
   bool is_inited_;
+  bool use_shared_executor_;
+  bool base_flush_thread_started_;
+  const char *background_source_name_;
+  share::ObBackgroundTaskExecutor *background_executor_;
+  share::ObBackgroundTaskSourceHandle source_handle_;
+  lib::ObMutex source_lock_;
   int64_t flush_seq_;
   int64_t write_align_size_;
   int64_t file_size_;

@@ -124,6 +124,8 @@ private:
   static constexpr int64_t INITIAL_ELEMENT_NUM = 1024L;
   using TokenAlloc = hash::SimpleAllocer<TaskToken, INITIAL_ELEMENT_NUM>;
 public:
+  typedef void (*SharedWorkerNotifyFn)(void *);
+
   explicit ObTimerService();
   ~ObTimerService();
   static ObTimerService& get_instance()
@@ -152,6 +154,15 @@ public:
   int cancel_task(const ObTimer *timer, const ObTimerTask *task);
   int wait_task(const ObTimer *timer, const ObTimerTask *task);
   bool task_exist(const ObTimer *timer, const ObTimerTask &task);
+  // Mini-mode handoff: TimerSvr still owns deadline ordering, while expired
+  // callbacks are consumed by an external shared worker source. Existing
+  // TimerWK workers are allowed to drain and shrink during the transition.
+  int attach_shared_worker_notifier(
+      SharedWorkerNotifyFn notify_fn,
+      void *notify_arg,
+      bool &has_pending);
+  int detach_shared_worker_notifier(void *notify_arg);
+  int process_one_shared_worker_task(bool &processed, bool &has_more);
   
   bool is_never_started() const { return is_never_started_; }
   bool is_stopped() const { return is_stopped_; }
@@ -187,11 +198,14 @@ private:
   ObSortedVector<TaskToken *> running_task_set_;
   ObSortedVector<TaskToken *> uncanceled_task_set_;
   ObTimerTaskThreadPool worker_thread_pool_;
+  SharedWorkerNotifyFn shared_worker_notify_fn_;
+  void *shared_worker_notify_arg_;
   lib::ObMutex mutex_;
 private:
   static constexpr int64_t MIN_WAIT_INTERVAL = 10L * 1000L;          // 10ms
   static constexpr int64_t MAX_WAIT_INTERVAL = 100L * 1000L;         // 100ms
   static constexpr int64_t MIN_WORKER_THREAD_NUM = 4L;
+  static constexpr int64_t MINI_MODE_MAX_WORKER_THREAD_NUM = 4L;
   static constexpr int64_t MAX_WORKER_THREAD_NUM = 128L;
   static constexpr int64_t TASK_NUM_LIMIT = 10000L;
   static constexpr int64_t DUMP_INTERVAL = 60L * 1000L * 1000L;     // 60s

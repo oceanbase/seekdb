@@ -22,6 +22,43 @@
 
 using namespace oceanbase::common;
 
+namespace
+{
+
+class TestAdaptiveWorkerPool
+  : public oceanbase::lib::ObAdaptiveWorkerPool<TestAdaptiveWorkerPool>
+{
+public:
+  TestAdaptiveWorkerPool() : add_succeeds_(false), add_attempts_(0) {}
+
+  bool do_add_worker()
+  {
+    ++add_attempts_;
+    return add_succeeds_;
+  }
+
+  int64_t queue_size() const { return 0; }
+  int64_t get_worker_count() const { return worker_count(); }
+
+  bool add_succeeds_;
+  int64_t add_attempts_;
+};
+
+} // end anonymous namespace
+
+TEST(TestAdaptiveWorkerPool, one_shot_expansion_failure_rolls_back)
+{
+  TestAdaptiveWorkerPool pool;
+  EXPECT_FALSE(pool.try_expand_one_once(1));
+  EXPECT_EQ(1, pool.add_attempts_);
+  EXPECT_EQ(0, pool.get_worker_count());
+
+  pool.add_succeeds_ = true;
+  EXPECT_TRUE(pool.try_expand_one_once(1));
+  EXPECT_EQ(2, pool.add_attempts_);
+  EXPECT_EQ(1, pool.get_worker_count());
+}
+
 TEST(DISABLED_TestSimpleThreadPool, Basic)
 {
   class : public ObSimpleThreadPool {
@@ -95,6 +132,92 @@ TEST(TestSimpleThreadPool, test_dynamic_simple_thread_pool_bind)
   ASSERT_EQ(ret, OB_SUCCESS);
   ASSERT_EQ(0, pool.min_thread_cnt_);
   ASSERT_EQ(0, pool.get_thread_count());  // lazy creation, no workers yet
+  pool.stop();
+  pool.wait();
+  pool.destroy();
+}
+
+TEST(TestSimpleThreadPool, external_driver_keeps_zero_workers)
+{
+  class ObExternallyDrivenPool : public ObSimpleThreadPool {
+  public:
+    ObExternallyDrivenPool() : handled_count_(0) {}
+
+    int process_one()
+    {
+      int ret = OB_SUCCESS;
+      void *task = NULL;
+      if (OB_FAIL(pop_task_for_external_driver(task))) {
+      } else {
+        handle(task);
+      }
+      return ret;
+    }
+
+    int64_t handled_count_;
+
+  private:
+    void handle(void *task) override
+    {
+      if (NULL != task) {
+        ++handled_count_;
+      }
+    }
+  } pool;
+
+  pool.set_external_driver(true);
+  ASSERT_EQ(OB_SUCCESS, pool.init(1, 4, "ExtDriver"));
+  ASSERT_EQ(OB_SUCCESS, pool.push(reinterpret_cast<void *>(1)));
+  ASSERT_EQ(OB_SUCCESS, pool.push(reinterpret_cast<void *>(2)));
+  ::usleep(10 * 1000);
+  EXPECT_EQ(0, pool.get_thread_count());
+  EXPECT_EQ(0, pool.handled_count_);
+  EXPECT_EQ(OB_SUCCESS, pool.process_one());
+  EXPECT_EQ(OB_SUCCESS, pool.process_one());
+  EXPECT_EQ(2, pool.handled_count_);
+  EXPECT_EQ(OB_ENTRY_NOT_EXIST, pool.process_one());
+  pool.stop();
+  pool.wait();
+  pool.destroy();
+}
+
+TEST(TestSimpleThreadPool, queue_driven_pool_shrinks_under_periodic_light_work)
+{
+  class ObPeriodicPool : public ObSimpleThreadPool {
+  public:
+    ObPeriodicPool() : handled_count_(0) {}
+    int64_t handled_count_;
+
+  private:
+    void handle(void *task) override
+    {
+      UNUSED(task);
+      ATOMIC_INC(&handled_count_);
+    }
+  } pool;
+
+  ASSERT_EQ(OB_SUCCESS, pool.set_idle_shrink_timeout(50 * 1000));
+  pool.set_queue_driven_expansion(true);
+  ASSERT_EQ(OB_SUCCESS, pool.set_adaptive_thread(1, 4));
+  ASSERT_EQ(OB_SUCCESS, pool.init(4, 16, "Periodic"));
+  EXPECT_TRUE(pool.try_expand_one(4));
+  EXPECT_TRUE(pool.try_expand_one(4));
+  EXPECT_TRUE(pool.try_expand_one(4));
+  EXPECT_TRUE(pool.try_expand_one(4));
+  ASSERT_EQ(4, pool.get_thread_count());
+
+  for (int64_t i = 0; i < 30; ++i) {
+    ASSERT_EQ(OB_SUCCESS, pool.push(reinterpret_cast<void *>(i + 1)));
+    ::usleep(10 * 1000);
+  }
+  for (int64_t i = 0;
+      i < 100 && pool.get_thread_count() > 1;
+      ++i) {
+    ASSERT_EQ(OB_SUCCESS, pool.push(reinterpret_cast<void *>(i + 1)));
+    ::usleep(10 * 1000);
+  }
+  EXPECT_EQ(1, pool.get_thread_count());
+  EXPECT_GE(ATOMIC_LOAD(&pool.handled_count_), 30);
   pool.stop();
   pool.wait();
   pool.destroy();

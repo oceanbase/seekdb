@@ -18,13 +18,16 @@
 #define OCEANBASE_LOGSERVICE_LOG_IO_TASK_CB_THREAD_POOL_
 
 #include "lib/thread/ob_simple_thread_pool.h"
+#include "share/ob_background_task_executor.h"
 
 namespace oceanbase
 {
 namespace palf
 {
 class IPalfEnvImpl;
-class LogIOTaskCbThreadPool : public common::ObLinkQueueThreadPool
+class LogIOTaskCbThreadPool
+    : public common::ObLinkQueueThreadPool,
+      public share::ObIBackgroundTaskSource
 {
 public:
   LogIOTaskCbThreadPool();
@@ -37,19 +40,36 @@ public:
   int stop();
   int wait();
   void destroy();
+  int push(common::LinkTask *task);
+  int attach_background_executor(
+      share::ObBackgroundTaskExecutor *background_executor);
+  int detach_background_executor();
+  int process_one_quantum(
+      const share::ObBackgroundTaskPriority priority,
+      share::ObBackgroundTaskRunResult &result) override;
   void handle(common::LinkTask *task) override;
 
 public:
   static constexpr int64_t THREAD_NUM = 1;
+  static constexpr int64_t MINI_MODE_THREAD_NUM = 1;
   static constexpr int64_t MAX_LOG_IO_CB_TASK_NUM = 100 * 10000;
 
 private:
+  int notify_background_source_();
+  int unregister_background_source_(const bool wait_running);
+  void ensure_rescue_worker_(const bool force);
+
   DISALLOW_COPY_AND_ASSIGN(LogIOTaskCbThreadPool);
 
 private:
   int64_t thread_num_;
   IPalfEnvImpl *palf_env_impl_;
   bool is_inited_;
+  bool use_shared_executor_;
+  lib::ObMutex source_lock_;
+  lib::ObMutex rescue_lock_;
+  share::ObBackgroundTaskExecutor *background_executor_;
+  share::ObBackgroundTaskSourceHandle source_handle_;
 };
 } // end namespace palf
 } // end namespace oceanbase

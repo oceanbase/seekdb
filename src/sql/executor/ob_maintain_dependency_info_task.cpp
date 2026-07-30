@@ -16,14 +16,32 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 #include "sql/executor/ob_maintain_dependency_info_task.h"
+#include "lib/ob_running_mode.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ob_local_management_service.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
 using namespace common;
 namespace sql
 {
+ObMaintainDepInfoTaskQueue::ObMaintainDepInfoTaskQueue()
+  : last_execute_time_(0),
+    view_info_set_(),
+    sys_view_consistent_(),
+    use_shared_executor_(false),
+    stopping_(false),
+    background_executor_(NULL),
+    source_handle_()
+{
+}
+
+ObMaintainDepInfoTaskQueue::~ObMaintainDepInfoTaskQueue()
+{
+  (void) destroy();
+}
+
 ObMaintainObjDepInfoTask::ObMaintainObjDepInfoTask ()
   : gctx_(GCTX),
     view_schema_(&alloc_),
@@ -175,14 +193,229 @@ int ObMaintainDepInfoTaskQueue::init(const int64_t thread_cnt, const int64_t que
 {
   int ret = OB_SUCCESS;
   auto attr = lib::ObMemAttr("DepInfoTaskQ");
-  if (OB_FAIL(ObAsyncTaskQueue::init(thread_cnt, queue_size, "MaintainDepInfoTaskQueue", OB_MALLOC_MIDDLE_BLOCK_SIZE))) {
+  use_shared_executor_ = lib::is_mini_mode();
+  ATOMIC_STORE(&stopping_, false);
+  if (use_shared_executor_
+      && OB_FAIL(ObAsyncTaskQueue::init_without_thread(
+          queue_size, OB_MALLOC_MIDDLE_BLOCK_SIZE))) {
+    LOG_WARN("failed to init externally driven base queue", K(ret));
+  } else if (!use_shared_executor_
+      && OB_FAIL(ObAsyncTaskQueue::init(
+          thread_cnt,
+          queue_size,
+          "MaintainDepInfoTaskQueue",
+          OB_MALLOC_MIDDLE_BLOCK_SIZE))) {
     LOG_WARN("failed to init base queue", K(ret));
   } else if (OB_FAIL(view_info_set_.create(INIT_BKT_SIZE, attr, attr))) {
     LOG_WARN("failed to init view set", K(ret));
   } else if (OB_FAIL(sys_view_consistent_.create(INIT_BKT_SIZE, attr, attr))) {
     LOG_WARN("failed to init sys view set", K(ret));
   }
+  if (OB_FAIL(ret)) {
+    (void) destroy();
+  }
   return ret;
+}
+
+int ObMaintainDepInfoTaskQueue::start_background_task_source()
+{
+  int ret = OB_SUCCESS;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (!use_shared_executor_) {
+  } else if (source_handle_.is_valid()) {
+  } else if (OB_ISNULL(share::g_mp)
+      || OB_ISNULL(background_executor_ =
+          share::g_mp->background_task_executor())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("background task executor is null", K(ret),
+        KP(share::g_mp), KP(background_executor_));
+  } else {
+    share::ObBackgroundTaskSourceConfig config;
+    config.name_ = "MaintainDepI";
+    config.max_concurrency_ = 1;
+    ATOMIC_STORE(&stopping_, false);
+    if (OB_FAIL(background_executor_->register_source(
+        *this, config, source_handle_))) {
+      LOG_WARN("register dependency information source failed", K(ret));
+    } else if ((queue_.size() > 0 || OB_NOT_NULL(external_pending_task_))
+        && OB_FAIL(notify_background_source_())) {
+      LOG_WARN("notify pending dependency information task failed", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObMaintainDepInfoTaskQueue::destroy()
+{
+  int ret = OB_SUCCESS;
+  ATOMIC_STORE(&stopping_, true);
+  const int unregister_ret = unregister_background_source_(true);
+  if (OB_SUCCESS != unregister_ret) {
+    ret = unregister_ret;
+    LOG_WARN_RET(unregister_ret,
+        "unregister dependency information source failed", K(unregister_ret));
+  }
+  const int destroy_ret = ObAsyncTaskQueue::destroy();
+  if (OB_SUCCESS != destroy_ret) {
+    if (OB_SUCC(ret)) {
+      ret = destroy_ret;
+    }
+    LOG_WARN_RET(destroy_ret, "destroy dependency information queue failed",
+        K(destroy_ret));
+  }
+  view_info_set_.destroy();
+  sys_view_consistent_.destroy();
+  last_execute_time_ = 0;
+  background_executor_ = NULL;
+  source_handle_.reset();
+  return ret;
+}
+
+int ObMaintainDepInfoTaskQueue::push(const share::ObAsyncTask &task)
+{
+  int ret = ObAsyncTaskQueue::push(task);
+  if (OB_SUCC(ret) && use_shared_executor_) {
+    const int tmp_ret = notify_background_source_();
+    if (OB_SUCCESS != tmp_ret) {
+      // The queue owns the task already. Keep the historical push() result;
+      // startup registration or a later enqueue will republish readiness.
+      LOG_WARN_RET(tmp_ret,
+          "notify dependency information source failed", K(tmp_ret));
+    }
+  }
+  return ret;
+}
+
+int ObMaintainDepInfoTaskQueue::process_one_quantum(
+    const share::ObBackgroundTaskPriority priority,
+    share::ObBackgroundTaskRunResult &result)
+{
+  int ret = OB_SUCCESS;
+  bool processed = false;
+  int64_t next_ready_ts = 0;
+  bool has_more_ready = false;
+  if (!use_shared_executor_) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (share::BG_TASK_NORMAL != priority) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!ATOMIC_LOAD(&stopping_)
+      && OB_FAIL(ObAsyncTaskQueue::process_one_task(
+          processed, next_ready_ts, has_more_ready))) {
+    LOG_WARN("process dependency information task failed", K(ret));
+  } else if (!ATOMIC_LOAD(&stopping_)) {
+    result.processed_count_ = processed ? 1 : 0;
+    result.has_more_ready_ = has_more_ready;
+    result.next_ready_ts_ = next_ready_ts;
+    cleanup_sets_if_needed_();
+  }
+  return ret;
+}
+
+int64_t ObMaintainDepInfoTaskQueue::get_external_task_ready_ts_(
+    const share::ObAsyncTask &task,
+    const int64_t now) const
+{
+  int64_t ready_ts =
+      ObAsyncTaskQueue::get_external_task_ready_ts_(task, now);
+  const int64_t interval =
+      static_cast<int64_t>(GCONF._ob_obj_dep_maint_task_interval);
+  if (last_execute_time_ > 0 && interval > 0) {
+    ready_ts = MAX(ready_ts, last_execute_time_ + interval);
+  }
+  return ready_ts;
+}
+
+bool ObMaintainDepInfoTaskQueue::can_retry_external_task_(
+    const share::ObAsyncTask &task) const
+{
+  UNUSED(task);
+  const bool can_retry = !is_queue_almost_full();
+  if (!can_retry) {
+    LOG_WARN_RET(OB_SIZE_OVERFLOW,
+        "dependency information queue is too full to retry",
+        "queue_size", queue_.size(), "queue_capacity", queue_.capacity());
+  }
+  return can_retry;
+}
+
+void ObMaintainDepInfoTaskQueue::on_external_task_processed_(
+    share::ObAsyncTask &task,
+    const int process_ret)
+{
+  if (OB_SUCCESS == process_ret || task.get_retry_times() <= 0) {
+    const ObTableSchema &view_schema =
+        static_cast<ObMaintainObjDepInfoTask &>(task).get_view_schema();
+    if (view_schema.is_valid()) {
+      const int tmp_ret =
+          view_info_set_.erase_refactored(view_schema.get_table_id());
+      if (OB_SUCCESS != tmp_ret) {
+        LOG_WARN_RET(tmp_ret, "failed to erase view id",
+            K(tmp_ret), K(view_schema.get_table_id()));
+      }
+    }
+  }
+  last_execute_time_ = ObTimeUtility::current_time();
+}
+
+int ObMaintainDepInfoTaskQueue::add_consistent_sys_view_id_to_set(
+    const uint64_t view_id)
+{
+  int ret = sys_view_consistent_.set_refactored(view_id);
+  if (OB_SUCC(ret) && sys_view_consistent_.size() >= MAX_SYS_VIEW_SIZE) {
+    LOG_WARN("sys_view_consistent size too large, clear it",
+        K(sys_view_consistent_.size()));
+    sys_view_consistent_.clear();
+  }
+  return ret;
+}
+
+int ObMaintainDepInfoTaskQueue::notify_background_source_()
+{
+  int ret = OB_SUCCESS;
+  if (!use_shared_executor_) {
+  } else if (OB_ISNULL(background_executor_)
+      || !source_handle_.is_valid()) {
+    ret = OB_NOT_RUNNING;
+  } else if (OB_FAIL(background_executor_->notify(
+      source_handle_, share::BG_TASK_NORMAL))) {
+    LOG_WARN("notify dependency information source failed", K(ret));
+  }
+  return ret;
+}
+
+int ObMaintainDepInfoTaskQueue::unregister_background_source_(
+    const bool wait_running)
+{
+  int ret = OB_SUCCESS;
+  if (use_shared_executor_
+      && OB_NOT_NULL(background_executor_)
+      && source_handle_.is_valid()) {
+    do {
+      ret = background_executor_->unregister_source(source_handle_);
+      if (wait_running && OB_EAGAIN == ret) {
+        ob_usleep(1000);
+      }
+    } while (wait_running && OB_EAGAIN == ret);
+    if (OB_ENTRY_NOT_EXIST == ret || OB_NOT_INIT == ret) {
+      source_handle_.reset();
+      ret = OB_SUCCESS;
+    }
+  }
+  if (!source_handle_.is_valid()) {
+    background_executor_ = NULL;
+  }
+  return ret;
+}
+
+void ObMaintainDepInfoTaskQueue::cleanup_sets_if_needed_()
+{
+  if (sys_view_consistent_.size() >= MAX_SYS_VIEW_SIZE) {
+    LOG_WARN_RET(OB_SIZE_OVERFLOW,
+        "sys_view_consistent size too large, clear it",
+        K(sys_view_consistent_.size()));
+    sys_view_consistent_.clear();
+  }
 }
 
 void ObMaintainDepInfoTaskQueue::run2()
@@ -193,6 +426,7 @@ void ObMaintainDepInfoTaskQueue::run2()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else {
+    ObDIActionGuard ag("AsyncTaskThreadPool", "MaintainDepInfoTaskQueue", "detect task");
     ObAddr zero_addr;
     while (!stop_) {
       IGNORE_RETURN lib::Thread::update_loop_ts();
@@ -246,6 +480,7 @@ void ObMaintainDepInfoTaskQueue::run2()
         // generate trace id
         ObCurTraceId::init(zero_addr);
         // just do it
+        ObDIActionGuard ag1("MaintainObjDepInfoTask");
         ret = task->process();
         if (OB_FAIL(ret)) {
           LOG_WARN("task process failed, start retry", "max retry time",

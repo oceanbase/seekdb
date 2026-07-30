@@ -514,6 +514,17 @@ void ObCSFetcher::notify_schema_changed()
   idle_cond_.signal();
 }
 
+int ObCSFetcher::get_has_async_index_tables(bool &has_async)
+{
+  return get_has_async_cached_(has_async);
+}
+
+void ObCSFetcher::run_idle_maintenance()
+{
+  try_advance_min_dep_lsn_();
+  try_advance_refresh_scn_();
+}
+
 // ---------------------------------------------------------------------------
 // extract_ddl_schema_version_: scan DDL tx redo for __all_ddl_operation rows,
 // extract schema_version from the rowkey (single int64 column).
@@ -944,7 +955,8 @@ void ObCSFetcher::run1()
       const transaction::ObTxLogType log_type = tx_header.get_tx_log_type();
       switch (log_type) {
         case transaction::ObTxLogType::TX_REDO_LOG: {
-          transaction::ObTxRedoLog redo_log;
+          transaction::ObTxRedoLogTempRef tmp_ref;
+          transaction::ObTxRedoLog redo_log(tmp_ref);
           if (OB_FAIL(tx_log_block.deserialize_log_body(redo_log))) {
             LOG_WARN("CSFetcher: fail to deserialize redo", KR(ret), K(lsn));
           } else {

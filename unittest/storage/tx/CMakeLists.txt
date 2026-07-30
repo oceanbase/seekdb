@@ -11,10 +11,13 @@ endfunction()
 tx_unittest(test_ob_trans_hashmap)
 
 storage_unittest(test_ob_tx_log)
+storage_unittest(test_ob_timestamp_service)
 storage_unittest(test_undo_action)
 storage_unittest(test_ob_id_meta)
 # storage_unittest(test_ob_standby_read)
 storage_unittest(test_ob_trans_tlog)
+storage_unittest(test_tx_timestamp_waiter)
+storage_unittest(test_ob_time_wheel)
 add_subdirectory(it)
 
 storage_unittest(test_redo_submitter)

@@ -137,6 +137,7 @@ class ObMemoryDump : public lib::ThreadPool
 {
 public:
   static constexpr const char *LOG_FILE = "log/memory_meta";
+  typedef void (*SharedWorkerNotifyFunc)(void *);
 private:
 friend class observer::ObAllVirtualMemoryInfo;
 friend class lib::ObCtxAllocator;
@@ -188,8 +189,17 @@ public:
   void wait();
   void destroy();
   bool is_inited() const { return is_inited_; }
+  bool is_using_shared_worker() const { return use_shared_worker_; }
   int request_dump(const ObMemoryDumpTask &task);
   int generate_mod_stat_task();
+  int set_shared_worker_notifier(
+      SharedWorkerNotifyFunc notify_func,
+      void *notify_arg,
+      bool &has_pending);
+  void clear_shared_worker_notifier();
+  int process_one_pending_batch(
+      int64_t &processed_count,
+      bool &has_more);
   int load_malloc_sample_map(lib::ObMallocSampleMap &malloc_sample_map)
   {
     int ret = OB_SUCCESS;
@@ -227,6 +237,9 @@ private:
   Stat *r_stat_;
   Stat *w_stat_;
   int huge_segv_cnt_;
+  bool use_shared_worker_;
+  SharedWorkerNotifyFunc shared_worker_notify_func_;
+  void *shared_worker_notify_arg_;
   bool is_inited_;
 };
 

@@ -208,6 +208,7 @@ protected:
 
   virtual int inner_seal_() = 0;
   virtual int inner_delete_file_() = 0;
+  virtual void notify_background_flush_() = 0;
 public:
   struct ObTmpFileNode : public ObDLinkBase<ObTmpFileNode>
   {

@@ -221,6 +221,7 @@ int ObBaseLogWriter::append_log(ObIBaseLogItem &log_item, const uint64_t timeout
           ATOMIC_STORE(log_items_ + push_idx % max_buffer_item_cnt_, &log_item);
           if (need_flush()) {
             log_flush_cond_->signal(UINT32_MAX);
+            on_log_item_appended();
           }
           break;
         }
@@ -280,38 +281,69 @@ void ObBaseLogWriter::flush_log()
 
 void ObBaseLogWriter::do_flush_log()
 {
-  int64_t process_item_cnt = 0;
-  int64_t item_cnt = 0;
   const uint32_t key = log_flush_cond_->get_key();
   if (!need_flush() && !has_stopped_) {
     log_flush_cond_->wait(key, log_cfg_.group_commit_max_wait_us_);
   }
   while (OB_LIKELY(need_flush() && !has_stopped_)) {
-    // flush log will not block append any more, so there is no need to limit process_item_cnt
-    //if (process_item_cnt > log_cfg_.group_commit_max_item_cnt_) {
-    //  process_item_cnt = log_cfg_.group_commit_max_item_cnt_;
-    //}
-    int64_t pop_idx = ATOMIC_LOAD(&log_item_pop_idx_) % max_buffer_item_cnt_;
-    int64_t i = pop_idx;
-    // process to the end of array at most
-    while (i < max_buffer_item_cnt_
-           && i - pop_idx < log_cfg_.group_commit_max_item_cnt_
-           && OB_NOT_NULL(ATOMIC_LOAD(log_items_ + i))
-           ) {
-      ++i;
-    }
-    process_item_cnt = i - pop_idx;
-    // guarantee all item in process was not null.
-    if (process_item_cnt > 0) {
-      item_cnt = 0;
-      process_log_items(log_items_ + pop_idx, process_item_cnt, item_cnt);
-      if (item_cnt > 0) {
-        memset((void*)(log_items_+ pop_idx), 0, sizeof(ObIBaseLogItem*) * item_cnt);
-        IGNORE_RETURN ATOMIC_FAA(&log_item_pop_idx_, item_cnt);
-        log_write_cond_->signal(UINT32_MAX);
-      }
+    if (flush_one_batch_() <= 0) {
+      break;
     }
   }
+}
+
+int ObBaseLogWriter::flush_log_one_quantum(
+    const int64_t max_batch_count,
+    int64_t &processed_count,
+    bool &has_more)
+{
+  int ret = OB_SUCCESS;
+  processed_count = 0;
+  has_more = false;
+  if (max_batch_count <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (has_stopped_) {
+    ret = OB_NOT_RUNNING;
+  } else {
+    pthread_mutex_lock(&thread_mutex_);
+    for (int64_t i = 0;
+         i < max_batch_count && need_flush() && !has_stopped_;
+         ++i) {
+      const int64_t finish_count = flush_one_batch_();
+      if (finish_count <= 0) {
+        break;
+      }
+      processed_count += finish_count;
+    }
+    has_more = need_flush() && !has_stopped_;
+    pthread_mutex_unlock(&thread_mutex_);
+  }
+  return ret;
+}
+
+int64_t ObBaseLogWriter::flush_one_batch_()
+{
+  int64_t process_item_cnt = 0;
+  int64_t finish_cnt = 0;
+  int64_t pop_idx =
+      ATOMIC_LOAD(&log_item_pop_idx_) % max_buffer_item_cnt_;
+  int64_t i = pop_idx;
+  while (i < max_buffer_item_cnt_
+         && i - pop_idx < log_cfg_.group_commit_max_item_cnt_
+         && OB_NOT_NULL(ATOMIC_LOAD(log_items_ + i))) {
+    ++i;
+  }
+  process_item_cnt = i - pop_idx;
+  if (process_item_cnt > 0) {
+    process_log_items(log_items_ + pop_idx, process_item_cnt, finish_cnt);
+    if (finish_cnt > 0) {
+      memset((void *)(log_items_ + pop_idx),
+          0, sizeof(ObIBaseLogItem *) * finish_cnt);
+      IGNORE_RETURN ATOMIC_FAA(&log_item_pop_idx_, finish_cnt);
+      log_write_cond_->signal(UINT32_MAX);
+    }
+  }
+  return finish_cnt;
 }
 
 bool ObBaseLogWriter::need_flush()

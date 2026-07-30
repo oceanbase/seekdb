@@ -17,7 +17,9 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tmp_file_thread_wrapper.h"
+#include "lib/ob_running_mode.h"
 #include "lib/thread/ob_thread_name.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/tmp_file/ob_sn_tmp_file_manager.h"
 
@@ -260,6 +262,16 @@ int64_t ObTmpFileFlushThread::cal_idle_time()
     idle_time = ObTmpFilePageCacheController::FLUSH_INTERVAL;
   }
   return idle_time;
+}
+
+bool ObTmpFileFlushThread::has_pending_work() const
+{
+  return ATOMIC_LOAD(&flushing_block_num_) > 0
+      || ATOMIC_LOAD(&wait_list_size_) > 0
+      || ATOMIC_LOAD(&retry_list_size_) > 0
+      || ATOMIC_LOAD(&finished_list_size_) > 0
+      || ATOMIC_LOAD(&fast_flush_meta_task_cnt_) > 0
+      || ATOMIC_LOAD(&is_fast_flush_meta_);
 }
 
 int ObTmpFileFlushThread::try_work()
@@ -777,6 +789,9 @@ ObTmpFileSwapThread::ObTmpFileSwapThread(ObTmpWriteBufferPool &wbp,
                                  ObTmpFilePageCacheController &pc_ctrl)
   : lib::ThreadPool(1),
     is_inited_(false),
+    use_shared_executor_(false),
+    is_stopped_(true),
+    source_lock_(),
     idle_cond_(),
     last_swap_timestamp_(0),
     swap_job_num_(0),
@@ -786,6 +801,8 @@ ObTmpFileSwapThread::ObTmpFileSwapThread(ObTmpWriteBufferPool &wbp,
     swap_monitor_(),
     flush_thread_ref_(flush_thread),
     flush_io_finished_round_(0),
+    background_executor_(nullptr),
+    source_handle_(),
     wbp_(wbp),
     evict_mgr_(elimination_mgr),
     pc_ctrl_(pc_ctrl)
@@ -795,19 +812,24 @@ ObTmpFileSwapThread::ObTmpFileSwapThread(ObTmpWriteBufferPool &wbp,
 int ObTmpFileSwapThread::init()
 {
   int ret = OB_SUCCESS;
+  use_shared_executor_ = lib::is_mini_mode();
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "ObTmpFileSwapThread init twice");
-  } else if (OB_FAIL(idle_cond_.init(ObWaitEventIds::THREAD_IDLING_COND_WAIT))) {
+  } else if (!use_shared_executor_
+             && OB_FAIL(idle_cond_.init(ObWaitEventIds::THREAD_IDLING_COND_WAIT))) {
     STORAGE_LOG(WARN, "failed to init condition variable", KR(ret));
-  } else if (OB_FAIL(lib::ThreadPool::init())) {
+  } else if (!use_shared_executor_ && OB_FAIL(lib::ThreadPool::init())) {
     STORAGE_LOG(WARN, "fail to init swap thread", KR(ret));
   } else {
     is_inited_ = true;
+    ATOMIC_STORE(&is_stopped_, true);
     last_swap_timestamp_ = 0;
     swap_job_num_ = 0;
     working_list_size_ = 0;
     flush_io_finished_round_ = 0;
+    background_executor_ = nullptr;
+    source_handle_.reset();
   }
   return ret;
 }
@@ -818,8 +840,33 @@ int ObTmpFileSwapThread::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "ObTmpFileSwapThread thread is not inited", KR(ret));
+  } else if (use_shared_executor_) {
+    if (OB_ISNULL(share::g_mp)
+        || OB_ISNULL(background_executor_ =
+            share::g_mp->background_task_executor())) {
+      ret = OB_ERR_UNEXPECTED;
+      STORAGE_LOG(WARN, "background task executor is null",
+          KR(ret), KP(share::g_mp), KP(background_executor_));
+    } else {
+      share::ObBackgroundTaskSourceConfig config;
+      config.name_ = "TFSwap";
+      config.max_concurrency_ = 1;
+      if (OB_FAIL(background_executor_->register_source(
+          *this, config, source_handle_))) {
+        STORAGE_LOG(WARN, "fail to register tmp file swap source", KR(ret));
+      } else {
+        ATOMIC_STORE(&is_stopped_, false);
+        if (OB_FAIL(notify_background_source_(share::BG_TASK_LOW))) {
+          STORAGE_LOG(WARN, "fail to start tmp file swap source", KR(ret));
+        }
+      }
+    }
   } else if (OB_FAIL(lib::ThreadPool::start())) {
     STORAGE_LOG(WARN, "fail to start tmp file ObTmpFileSwapThread thread", KR(ret));
+  }
+  if (OB_FAIL(ret) && use_shared_executor_) {
+    ATOMIC_STORE(&is_stopped_, true);
+    (void) unregister_background_source_(true);
   }
   return ret;
 }
@@ -830,6 +877,17 @@ void ObTmpFileSwapThread::stop()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "ObTmpFileSwapThread thread is not inited", KR(ret));
+  } else if (use_shared_executor_) {
+    {
+      lib::ObMutexGuard guard(source_lock_);
+      ATOMIC_STORE(&is_stopped_, true);
+    }
+    const int tmp_ret = unregister_background_source_(false);
+    if (OB_SUCCESS != tmp_ret && OB_EAGAIN != tmp_ret) {
+      STORAGE_LOG(WARN, "fail to stop tmp file swap source", K(tmp_ret));
+    } else if (OB_SUCCESS == tmp_ret) {
+      clean_up_lists_(OB_IN_STOP_STATE);
+    }
   } else {
     lib::ThreadPool::stop();
     ObThreadCondGuard guard(idle_cond_);
@@ -843,6 +901,13 @@ void ObTmpFileSwapThread::wait()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "ObTmpFileSwapThread thread is not inited", KR(ret));
+  } else if (use_shared_executor_) {
+    const int tmp_ret = unregister_background_source_(true);
+    if (OB_SUCCESS != tmp_ret) {
+      STORAGE_LOG(WARN, "fail to wait tmp file swap source", K(tmp_ret));
+    } else {
+      clean_up_lists_(OB_IN_STOP_STATE);
+    }
   } else {
     lib::ThreadPool::wait();
   }
@@ -854,28 +919,59 @@ void ObTmpFileSwapThread::destroy()
   if (is_inited_) {
     stop();
     wait();
-    lib::ThreadPool::destroy();
+    if (!use_shared_executor_) {
+      lib::ThreadPool::destroy();
+    }
   }
 
-  clean_up_lists_();
+  clean_up_lists_(use_shared_executor_ ? OB_IN_STOP_STATE : OB_SUCCESS);
   last_swap_timestamp_ = 0;
   swap_job_num_ = 0;
   working_list_size_ = 0;
   flush_io_finished_round_ = 0;
-  idle_cond_.destroy();
+  if (!use_shared_executor_) {
+    idle_cond_.destroy();
+  }
+  {
+    lib::ObMutexGuard guard(source_lock_);
+    background_executor_ = nullptr;
+    source_handle_.reset();
+    use_shared_executor_ = false;
+    ATOMIC_STORE(&is_stopped_, true);
+  }
   is_inited_ = false;
 }
 
 int ObTmpFileSwapThread::swap_job_enqueue(ObTmpFileSwapJob *swap_job)
 {
   int ret = OB_SUCCESS;
-  if (has_set_stop()) {
+  if (use_shared_executor_) {
+    lib::ObMutexGuard guard(source_lock_);
+    if (is_stop_requested_()) {
+      ret = OB_IN_STOP_STATE;
+      STORAGE_LOG(WARN, "swap source has been stopped", KR(ret), KP(swap_job));
+    } else if (OB_FAIL(swap_job_list_.push(swap_job))) {
+      STORAGE_LOG(WARN, "fail push swap job", KR(ret), KP(swap_job));
+    } else {
+      ATOMIC_INC(&swap_job_num_);
+      const int notify_ret =
+          notify_background_source_locked_(share::BG_TASK_HIGH);
+      if (OB_SUCCESS != notify_ret) {
+        // Ownership has moved to the queue. Returning an error would let the
+        // caller free a job that may already be claimed by a worker.
+        STORAGE_LOG(WARN, "fail to publish tmp file swap readiness",
+            K(notify_ret), KP(swap_job));
+      }
+    }
+  } else if (is_stop_requested_()) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "swap thread has been stopped", KR(ret), KP(swap_job));
   } else if (OB_FAIL(swap_job_list_.push(swap_job))) {
     STORAGE_LOG(WARN, "fail push swap job", KR(ret), KP(swap_job));
   } else {
     ATOMIC_INC(&swap_job_num_);
+    ObThreadCondGuard guard(idle_cond_);
+    idle_cond_.signal();
   }
   return ret;
 }
@@ -896,10 +992,17 @@ int ObTmpFileSwapThread::swap_job_dequeue(ObTmpFileSwapJob *&swap_job)
   return ret;
 }
 
-void ObTmpFileSwapThread::notify_doing_swap()
+void ObTmpFileSwapThread::notify_doing_flush()
 {
-  ObThreadCondGuard guard(idle_cond_);
-  idle_cond_.signal();
+  if (use_shared_executor_) {
+    const int ret = notify_background_source_(share::BG_TASK_LOW);
+    if (OB_SUCCESS != ret
+        && OB_NOT_RUNNING != ret
+        && OB_IN_STOP_STATE != ret
+        && OB_ENTRY_NOT_EXIST != ret) {
+      STORAGE_LOG(WARN, "fail to notify tmp file flush source", K(ret));
+    }
+  }
 }
 
 int64_t ObTmpFileSwapThread::cal_idle_time()
@@ -921,39 +1024,211 @@ void ObTmpFileSwapThread::run1()
 {
   int ret = OB_SUCCESS;
   lib::set_thread_name("TFSwap");
-  while (!has_set_stop()) {
-    if (OB_FAIL(shrink_wbp_if_needed_())) {
-      STORAGE_LOG(WARN, "fail to flush for shrinking wbp", KR(ret), KPC(this));
-    }
-
-    // overwrite ret
-    if (OB_FAIL(swap())) {
-      STORAGE_LOG(WARN, "fail to try swap work", KR(ret));
-    }
-
-    // overwrite ret
-    if (OB_FAIL(flush_thread_ref_.try_work())) {
-      STORAGE_LOG(WARN, "fail to try flush work", KR(ret));
+  while (!is_stop_requested_()) {
+    if (OB_FAIL(process_one_iteration_())) {
+      // Each failed step has been logged. Preserve the original retry loop.
+      ret = OB_SUCCESS;
     }
 
     ObThreadCondGuard guard(idle_cond_);
     int64_t swap_idle_time = cal_idle_time();
     int64_t flush_idle_time = flush_thread_ref_.cal_idle_time();
     int64_t idle_time = min(swap_idle_time, flush_idle_time);
-    if (!has_set_stop() && idle_time != 0) {
+    if (!is_stop_requested_() && idle_time != 0) {
       idle_cond_.wait(idle_time);
     }
   }
 }
 
-void ObTmpFileSwapThread::clean_up_lists_()
+int ObTmpFileSwapThread::process_one_quantum(
+    const share::ObBackgroundTaskPriority priority,
+    share::ObBackgroundTaskRunResult &result)
+{
+  int ret = OB_SUCCESS;
+  if (!use_shared_executor_) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (share::BG_TASK_HIGH != priority
+             && share::BG_TASK_LOW != priority) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (is_stop_requested_()) {
+    // A quantum may already have been claimed when stop() begins.
+  } else if (share::BG_TASK_LOW == priority && has_urgent_work_()) {
+    const int notify_ret = notify_background_source_(share::BG_TASK_HIGH);
+    if (OB_SUCCESS != notify_ret
+        && OB_NOT_RUNNING != notify_ret
+        && OB_IN_STOP_STATE != notify_ret) {
+      STORAGE_LOG(WARN, "fail to promote tmp file swap work",
+          K(notify_ret));
+    }
+    result.next_ready_ts_ = ObTimeUtility::current_time()
+        + ObTmpFilePageCacheController::SWAP_INTERVAL * 1000L;
+  } else {
+    const int work_ret = process_one_iteration_();
+    if (OB_SUCCESS != work_ret) {
+      // Keep the periodic source runnable after a transient swap/flush error.
+      ret = OB_SUCCESS;
+    }
+    result.processed_count_ = 1;
+    if (!is_stop_requested_()) {
+      const bool has_urgent_work = has_urgent_work_();
+      const bool has_active_work = has_active_work_();
+      const int64_t idle_time = has_active_work
+          ? min(cal_idle_time(), flush_thread_ref_.cal_idle_time())
+          : IDLE_MAINTENANCE_INTERVAL;
+      if (share::BG_TASK_HIGH == priority) {
+        if (has_urgent_work) {
+          if (idle_time <= 0) {
+            result.has_more_ready_ = true;
+          } else {
+            result.next_ready_ts_ =
+                ObTimeUtility::current_time() + idle_time * 1000L;
+          }
+        } else if (idle_time
+                   <= ObTmpFilePageCacheController::FLUSH_FAST_INTERVAL) {
+          const int notify_ret =
+              notify_background_source_(share::BG_TASK_LOW);
+          if (OB_SUCCESS != notify_ret
+              && OB_NOT_RUNNING != notify_ret
+              && OB_IN_STOP_STATE != notify_ret) {
+            STORAGE_LOG(WARN, "fail to continue tmp file flush work",
+                K(notify_ret));
+          }
+        }
+      } else if (has_urgent_work) {
+        const int notify_ret =
+            notify_background_source_(share::BG_TASK_HIGH);
+        if (OB_SUCCESS != notify_ret
+            && OB_NOT_RUNNING != notify_ret
+            && OB_IN_STOP_STATE != notify_ret) {
+          STORAGE_LOG(WARN, "fail to notify urgent tmp file swap work",
+              K(notify_ret));
+        }
+        result.next_ready_ts_ = ObTimeUtility::current_time()
+            + ObTmpFilePageCacheController::SWAP_INTERVAL * 1000L;
+      } else if (idle_time <= 0) {
+        result.has_more_ready_ = true;
+      } else {
+        result.next_ready_ts_ =
+            ObTimeUtility::current_time() + idle_time * 1000L;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTmpFileSwapThread::process_one_iteration_()
+{
+  int ret = OB_SUCCESS;
+  int tmp_ret = shrink_wbp_if_needed_();
+  if (OB_SUCCESS != tmp_ret) {
+    ret = tmp_ret;
+    STORAGE_LOG(WARN, "fail to flush for shrinking wbp",
+        K(tmp_ret), KPC(this));
+  }
+
+  tmp_ret = swap();
+  if (OB_SUCCESS != tmp_ret) {
+    if (OB_SUCCESS == ret) {
+      ret = tmp_ret;
+    }
+    STORAGE_LOG(WARN, "fail to try swap work", K(tmp_ret));
+  }
+
+  tmp_ret = flush_thread_ref_.try_work();
+  if (OB_SUCCESS != tmp_ret) {
+    if (OB_SUCCESS == ret) {
+      ret = tmp_ret;
+    }
+    STORAGE_LOG(WARN, "fail to try flush work", K(tmp_ret));
+  }
+  return ret;
+}
+
+int ObTmpFileSwapThread::notify_background_source_(
+    const share::ObBackgroundTaskPriority priority)
+{
+  lib::ObMutexGuard guard(source_lock_);
+  return notify_background_source_locked_(priority);
+}
+
+int ObTmpFileSwapThread::notify_background_source_locked_(
+    const share::ObBackgroundTaskPriority priority)
+{
+  int ret = OB_SUCCESS;
+  if (!use_shared_executor_) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (OB_ISNULL(background_executor_)
+      || !source_handle_.is_valid()
+      || is_stop_requested_()) {
+    ret = OB_NOT_RUNNING;
+  } else if (OB_FAIL(background_executor_->notify(
+      source_handle_, priority))) {
+    STORAGE_LOG(WARN, "fail to notify tmp file background source",
+        KR(ret), K(priority));
+  }
+  return ret;
+}
+
+int ObTmpFileSwapThread::unregister_background_source_(
+    const bool wait_running)
+{
+  int ret = OB_SUCCESS;
+  bool need_retry = false;
+  do {
+    need_retry = false;
+    {
+      lib::ObMutexGuard guard(source_lock_);
+      if (use_shared_executor_
+          && OB_NOT_NULL(background_executor_)
+          && source_handle_.is_valid()) {
+        ret = background_executor_->unregister_source(source_handle_);
+        if (OB_ENTRY_NOT_EXIST == ret || OB_NOT_INIT == ret) {
+          source_handle_.reset();
+          ret = OB_SUCCESS;
+        }
+        need_retry = wait_running && OB_EAGAIN == ret;
+      }
+      if (!source_handle_.is_valid()) {
+        background_executor_ = nullptr;
+      }
+    }
+    if (need_retry) {
+      ob_usleep(1000L);
+    }
+  } while (need_retry);
+  return ret;
+}
+
+bool ObTmpFileSwapThread::has_urgent_work_() const
+{
+  return ATOMIC_LOAD(&swap_job_num_) > 0
+      || ATOMIC_LOAD(&working_list_size_) > 0;
+}
+
+bool ObTmpFileSwapThread::has_active_work_() const
+{
+  return has_urgent_work_()
+      || wbp_.get_cannot_be_evicted_page_num() > 0
+      || wbp_.get_swap_size() > 0
+      || WBPShrinkContext::INVALID != wbp_.get_wbp_state()
+      || flush_thread_ref_.has_pending_work();
+}
+
+bool ObTmpFileSwapThread::is_stop_requested_() const
+{
+  return use_shared_executor_
+      ? ATOMIC_LOAD(&is_stopped_)
+      : lib::ThreadPool::has_set_stop();
+}
+
+void ObTmpFileSwapThread::clean_up_lists_(const int ret_code)
 {
   int ret = OB_SUCCESS;
   while (!swap_job_list_.is_empty()) {
     ObTmpFileSwapJob *swap_job = nullptr;
     if (OB_FAIL(swap_job_dequeue(swap_job))) {
       STORAGE_LOG(WARN, "fail dequeue swap job or swap job is nullptr", KR(ret), KP(swap_job));
-    } else if (OB_FAIL(swap_job->signal_swap_complete(OB_SUCCESS))){
+    } else if (OB_FAIL(swap_job->signal_swap_complete(ret_code))){
       STORAGE_LOG(WARN, "fail to signal swap complete", KR(ret));
     }
   }
@@ -963,7 +1238,7 @@ void ObTmpFileSwapThread::clean_up_lists_()
     ObTmpFileSwapJob *swap_job = nullptr;
     if (OB_FAIL(pop_working_job_(swap_job))) {
       STORAGE_LOG(WARN, "fail to pop working job or ptr is null", KR(ret), KP(swap_job));
-    } else if (OB_FAIL(swap_job->signal_swap_complete(OB_SUCCESS))){
+    } else if (OB_FAIL(swap_job->signal_swap_complete(ret_code))){
       STORAGE_LOG(WARN, "fail to signal swap complete", KR(ret));
     }
   }
@@ -1182,7 +1457,7 @@ void ObTmpFileSwapThread::wakeup_all_jobs_(int ret_code)
 int ObTmpFileSwapThread::push_working_job_(ObTmpFileSwapJob *swap_job)
 {
   int ret = OB_SUCCESS;
-  if (has_set_stop()) {
+  if (is_stop_requested_()) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "swap thread has been stopped", KR(ret), KP(swap_job));
   } else if (OB_FAIL(working_list_.push(swap_job))) {
@@ -1212,7 +1487,7 @@ int ObTmpFileSwapThread::pop_working_job_(ObTmpFileSwapJob *&swap_job)
 int ObTmpFileSwapThread::push_working_job_front_(ObTmpFileSwapJob *swap_job)
 {
   int ret = OB_SUCCESS;
-  if (has_set_stop()) {
+  if (is_stop_requested_()) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "swap thread has been stopped", KR(ret), KP(swap_job));
   } else if (OB_FAIL(working_list_.push_front(swap_job))) {

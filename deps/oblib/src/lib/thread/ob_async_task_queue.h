@@ -102,12 +102,21 @@ public:
   //attention queue_size should be 2^n
   int init(const int64_t thread_cnt, const int64_t queue_size,
            const char *thread_name = nullptr, const int64_t page_size = ALLOC_PAGE_SIZE);
+  int init_without_thread(
+      const int64_t queue_size,
+      const int64_t page_size = ALLOC_PAGE_SIZE);
   int start();
   void stop();
   void wait();
   int destroy();
 
   int push(const ObAsyncTask &task);
+  // Process at most one task with an external worker. Business failures are
+  // handled with the queue's existing retry policy and are not returned.
+  int process_one_task(
+      bool &processed,
+      int64_t &next_ready_ts,
+      bool &has_more_ready);
 protected:
   static const int64_t TOTAL_LIMIT = 1024L * 1024L * 1024L;
   static const int64_t HOLD_LIMIT = 512L * 1024L * 1024L;
@@ -116,11 +125,28 @@ protected:
   virtual void run2();
   virtual int blocking_run() { BLOCKING_RUN_IMPLEMENT(); }
   int pop(ObAsyncTask *&task);
+  int try_pop(ObAsyncTask *&task);
+  virtual int64_t get_external_task_ready_ts_(
+      const ObAsyncTask &task,
+      const int64_t now) const;
+  virtual bool can_retry_external_task_(const ObAsyncTask &task) const;
+  virtual void on_external_task_processed_(
+      ObAsyncTask &task,
+      const int process_ret);
 protected:
   bool is_inited_;
+  bool use_external_driver_;
   common::ObLightyQueue queue_;
   common::ObConcurrentFIFOAllocator allocator_;
+  ObAsyncTask *external_pending_task_;
 private:
+  int init_(
+      const int64_t thread_cnt,
+      const int64_t queue_size,
+      const char *thread_name,
+      const int64_t page_size,
+      const bool create_thread);
+  void clear_external_tasks_();
   DISALLOW_COPY_AND_ASSIGN(ObAsyncTaskQueue);
 };
 }//end namespace share

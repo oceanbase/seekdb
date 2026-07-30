@@ -593,58 +593,64 @@ int ObITmpFile::inner_read_from_wbp_(ObTmpFileIOCtx &io_ctx)
 int ObITmpFile::aio_write(ObTmpFileIOCtx &io_ctx)
 {
   int ret = OB_SUCCESS;
+  const int64_t original_done_size = io_ctx.get_done_size();
   LOG_DEBUG("aio write start", K(fd_), K(io_ctx));
-  ObSpinLockGuard guard(multi_write_lock_);
+  {
+    ObSpinLockGuard guard(multi_write_lock_);
 
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("tmp file has not been inited", KR(ret), KPC(this));
-  } else if (OB_UNLIKELY(!io_ctx.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(fd_), K(io_ctx));
-  } else if (OB_UNLIKELY(is_deleting_)) {
-    // this check is just a hint.
-    // although is_deleting_ == false, it might be set as true in the processing of inner_write().
-    // we will check is_deleting_ again when try to update meta data in the inner_write()
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("attempt to write a deleting file", KR(ret), K(fd_));
-  } else if (OB_UNLIKELY(is_sealed_)) {
-    ret = OB_ERR_TMP_FILE_ALREADY_SEALED;
-    LOG_WARN("attempt to write a sealed file", KR(ret), K(fd_));
-  } else {
-    bool is_unaligned_write = 0 != file_size_ % ObTmpFileGlobal::ALLOC_PAGE_SIZE ||
-                              0 != io_ctx.get_todo_size() % ObTmpFileGlobal::ALLOC_PAGE_SIZE;
-    io_ctx.set_is_unaligned_write(is_unaligned_write);
-    while (OB_SUCC(ret) && io_ctx.get_todo_size() > 0) {
-      if (OB_FAIL(inner_write_(io_ctx))) {
-        if (OB_ALLOCATE_TMP_FILE_PAGE_FAILED == ret) {
-          io_ctx.add_lack_page_cnt();
-          ret = OB_SUCCESS;
-          if (TC_REACH_COUNT_INTERVAL(10)) {
-            LOG_INFO("alloc mem failed, try to evict pages", K(fd_), K(file_size_), K(io_ctx), KPC(this));
-          }
-          if (OB_FAIL(swap_page_to_disk_(io_ctx))) {
-            LOG_WARN("fail to swap page to disk", KR(ret), K(fd_), K(io_ctx));
-          }
-        } else {
-          LOG_WARN("fail to inner write", KR(ret), K(fd_), K(io_ctx), KPC(this));
-        }
-      }
-    } // end while
-  }
-
-  if (OB_SUCC(ret)) {
-    // ATTENTION! we print tmp file data members here without meta_lock_.
-    static const int64_t PRINT_LOG_FILE_SIZE = 100 * 1024 * 1024; // 100MB
-    int64_t cur_print_cnt = file_size_ / PRINT_LOG_FILE_SIZE;
-    if (cur_print_cnt > ATOMIC_LOAD(&diag_log_print_cnt_)) {
-      ATOMIC_INC(&diag_log_print_cnt_);
-      LOG_INFO("aio write finish", K(fd_), K(io_ctx), KPC(this));
+    if (IS_NOT_INIT) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("tmp file has not been inited", KR(ret), KPC(this));
+    } else if (OB_UNLIKELY(!io_ctx.is_valid())) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument", KR(ret), K(fd_), K(io_ctx));
+    } else if (OB_UNLIKELY(is_deleting_)) {
+      // this check is just a hint.
+      // although is_deleting_ == false, it might be set as true in the processing of inner_write().
+      // we will check is_deleting_ again when try to update meta data in the inner_write()
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("attempt to write a deleting file", KR(ret), K(fd_));
+    } else if (OB_UNLIKELY(is_sealed_)) {
+      ret = OB_ERR_TMP_FILE_ALREADY_SEALED;
+      LOG_WARN("attempt to write a sealed file", KR(ret), K(fd_));
     } else {
-      LOG_DEBUG("aio write finish", KR(ret), K(fd_), K(file_size_), K(io_ctx));
+      bool is_unaligned_write = 0 != file_size_ % ObTmpFileGlobal::ALLOC_PAGE_SIZE ||
+                                0 != io_ctx.get_todo_size() % ObTmpFileGlobal::ALLOC_PAGE_SIZE;
+      io_ctx.set_is_unaligned_write(is_unaligned_write);
+      while (OB_SUCC(ret) && io_ctx.get_todo_size() > 0) {
+        if (OB_FAIL(inner_write_(io_ctx))) {
+          if (OB_ALLOCATE_TMP_FILE_PAGE_FAILED == ret) {
+            io_ctx.add_lack_page_cnt();
+            ret = OB_SUCCESS;
+            if (TC_REACH_COUNT_INTERVAL(10)) {
+              LOG_INFO("alloc mem failed, try to evict pages", K(fd_), K(file_size_), K(io_ctx), KPC(this));
+            }
+            if (OB_FAIL(swap_page_to_disk_(io_ctx))) {
+              LOG_WARN("fail to swap page to disk", KR(ret), K(fd_), K(io_ctx));
+            }
+          } else {
+            LOG_WARN("fail to inner write", KR(ret), K(fd_), K(io_ctx), KPC(this));
+          }
+        }
+      } // end while
     }
-  } else {
-    LOG_DEBUG("aio write failed", KR(ret), K(fd_), K(file_size_), K(io_ctx), KPC(this));
+
+    if (OB_SUCC(ret)) {
+      // ATTENTION! we print tmp file data members here without meta_lock_.
+      static const int64_t PRINT_LOG_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+      int64_t cur_print_cnt = file_size_ / PRINT_LOG_FILE_SIZE;
+      if (cur_print_cnt > ATOMIC_LOAD(&diag_log_print_cnt_)) {
+        ATOMIC_INC(&diag_log_print_cnt_);
+        LOG_INFO("aio write finish", K(fd_), K(io_ctx), KPC(this));
+      } else {
+        LOG_DEBUG("aio write finish", KR(ret), K(fd_), K(file_size_), K(io_ctx));
+      }
+    } else {
+      LOG_DEBUG("aio write failed", KR(ret), K(fd_), K(file_size_), K(io_ctx), KPC(this));
+    }
+  }
+  if (io_ctx.get_done_size() > original_done_size) {
+    notify_background_flush_();
   }
 
   return ret;

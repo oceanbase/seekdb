@@ -18,7 +18,9 @@
 #define OB_SERVER_SCHEMA_UPDATER_H
 
 #include "share/ob_define.h"
+#include "lib/thread/ob_dedup_queue.h"
 #include "lib/net/ob_addr.h"
+#include "share/ob_background_task_executor.h"
 #include "share/schema/ob_schema_struct.h"
 #include "ob_uniq_task_queue.h"
 
@@ -44,10 +46,14 @@ public:
   friend class ObServerSchemaUpdater;
   enum TYPE {
     ASYNC_REFRESH,  // async schema refresh task caused by sql
+    REFRESH,        // schema refresh task caused by heartbeat
     RELEASE,        // schema memory release task
     INVALID
   };
   ObServerSchemaTask();
+  // for refresh
+  explicit ObServerSchemaTask(TYPE type,
+                              const share::schema::ObRefreshSchemaInfo &schema_info);
   // for release
   explicit ObServerSchemaTask(TYPE type);
   // for async refresh
@@ -78,24 +84,45 @@ private:
   share::schema::ObRefreshSchemaInfo schema_info_;
 };
 
-class ObServerSchemaUpdater
+class ObServerSchemaUpdater : public share::ObIBackgroundTaskSource
 {
 public:
-  ObServerSchemaUpdater() : schema_mgr_(NULL), inited_(false)
+  ObServerSchemaUpdater()
+      : schema_mgr_(NULL),
+        inited_(false),
+        use_shared_executor_(false),
+        stopping_(false),
+        background_executor_(NULL),
+        source_handle_()
   {}
   ~ObServerSchemaUpdater() { destroy(); }
   int init(const common::ObAddr &host_, share::schema::ObMultiVersionSchemaService *schema_mgr);
+  int start_background_task_source();
   void destroy();
   void stop();
   void wait();
 
+  int try_reload_schema(const share::schema::ObRefreshSchemaInfo &schema_info,
+                        const bool set_received_schema_version);
   int try_release_schema();
   int async_refresh_schema(const int64_t schema_version);
   int process_barrier(const ObServerSchemaTask &task, bool &stopped);
   int batch_process_tasks(const common::ObIArray<ObServerSchemaTask> &batch_tasks, bool &stopped);
+  int process_one_quantum(
+      const share::ObBackgroundTaskPriority priority,
+      share::ObBackgroundTaskRunResult &result) override;
 private:
+  int process_refresh_task(const ObServerSchemaTask &task);
+  int decide_schema_refresh_(
+      const share::schema::ObRefreshSchemaInfo &local_schema_info,
+      const share::schema::ObRefreshSchemaInfo &new_schema_info,
+      bool &skip_refresh);
   int process_release_task();
   int process_async_refresh_tasks(const common::ObIArray<ObServerSchemaTask> &tasks);
+
+  int try_load_baseline_schema_version_();
+  int notify_background_source_();
+  int unregister_background_source_(const bool wait_running);
 private:
   static const int32_t SSU_MAX_THREAD_NUM = 1;
   static const int64_t SSU_TASK_QUEUE_SIZE = 1024;
@@ -103,6 +130,10 @@ private:
   share::schema::ObMultiVersionSchemaService *schema_mgr_;
   ObServerSchemaTaskQueue task_queue_;
   bool inited_;
+  bool use_shared_executor_;
+  volatile bool stopping_;
+  share::ObBackgroundTaskExecutor *background_executor_;
+  share::ObBackgroundTaskSourceHandle source_handle_;
 };
 
 }

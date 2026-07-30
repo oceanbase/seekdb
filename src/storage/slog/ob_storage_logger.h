@@ -48,6 +48,9 @@ public:
       const blocksstable::ObLogFileSpec &log_file_spec,
       const bool is_server = false);
   int start();
+  int attach_background_executor(
+      share::ObBackgroundTaskExecutor *background_executor);
+  int detach_background_executor();
   void stop();
   void wait();
   void destroy();

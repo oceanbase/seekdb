@@ -68,6 +68,7 @@ public:
   int init(common::ObOptStatManager *opt_stat_mgr,
            common::ObITabletScan *vt_partition_service,
            common::ObAddr &addr);
+  int start_background_task_source();
   void destroy();
 public:
   /// print statatistics of SQL module
@@ -419,6 +420,7 @@ private:
                   ObOutlineState &outline_state,
                   ObPlanCache *plan_cache,
                   bool& plan_added);
+  // Check if the parameterized template SQL can be prepared
   int execute_get_plan(ObPlanCache &plan_cache,
                        ObPlanCacheCtx &pc_ctx,
                        ObCacheObjGuard& guard);

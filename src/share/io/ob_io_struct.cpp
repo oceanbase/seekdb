@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "ob_io_struct.h"
+#include "lib/ob_running_mode.h"
 #include "share/ob_server_struct.h"  // GCTX, previously hidden behind a transitive include(free within share)
 #include "share/rc/ob_server_runtime.h"  // SERVER_ID, previously hidden behind a transitive include(free within share)
 #include "share/ob_io_device_helper.h"
@@ -687,7 +688,7 @@ int ObIOTuner::init()
   return ret;
 }
 
-
+// send_detect_task moved definition to storage/blocksstable/ob_block_manager.cpp(SERVER_BLOCK_MGR real user)
 
 void ObIOTuner::stop()
 {
@@ -926,6 +927,8 @@ void ObAsyncIOChannel::run1()
   } else {
     char device_name[32] = "";
     (void)device_handle_->get_device_name(device_name, sizeof(device_name));
+    ObDIActionGuard program("IOManager", nullptr, nullptr);
+    ObDIActionGuard module(ObDIActionGuard::NS_MODULE, "AsyncIO_Device:%s", device_name);
     set_thread_name("IO_GETEVENT", thread_id);
     LOG_INFO("io get_events thread started", K(thread_id));
     while (!has_set_stop()) {
@@ -1044,6 +1047,7 @@ void ObAsyncIOChannel::get_events()
         const int system_errno = io_events_->get_ith_ret_code(i);
         const int complete_size = io_events_->get_ith_ret_bytes(i);
         if (OB_LIKELY(0 == system_errno)) { // io succ
+          ObDIActionGuard("IO success");
           if (complete_size == io_size) { // full complete
             LOG_DEBUG("Success to get io event", K(*req), K(complete_size));
             if (OB_FAIL(on_full_return(*req, io_size))) {
@@ -1073,6 +1077,7 @@ void ObAsyncIOChannel::get_events()
             }
           }
         } else { // io failed
+          ObDIActionGuard("IO failed");
           LOG_ERROR("io request failed", K(system_errno), K(complete_size), K(*req));
           if (-EAGAIN == system_errno) { //retry
             if (OB_FAIL(on_full_retry(*req))) {
@@ -1250,7 +1255,14 @@ int ObAsyncIOChannel::on_failed(ObIORequest &req, const ObIORetCode &ret_code)
 
 /******************             SyncIOChannel              **********************/
 ObSyncIOChannel::ObSyncIOChannel()
-  : is_inited_(false), used_io_depth_(0)
+  : is_inited_(false),
+    use_shared_executor_(false),
+    config_thread_count_(0),
+    source_lock_(),
+    rescue_lock_(),
+    background_executor_(nullptr),
+    source_handle_(),
+    used_io_depth_(0)
 {
 }
 
@@ -1284,9 +1296,18 @@ int ObSyncIOChannel::init(ObDeviceChannel *device_channel, const int64_t thread_
 
 void ObSyncIOChannel::destroy()
 {
+  const int tmp_ret = detach_background_executor();
+  if (OB_SUCCESS != tmp_ret) {
+    LOG_WARN_RET(tmp_ret,
+        "detach sync io background source failed", K(tmp_ret));
+  }
   destroy_thread();
   device_handle_ = nullptr;
   is_inited_ = false;
+  use_shared_executor_ = false;
+  config_thread_count_ = 0;
+  background_executor_ = nullptr;
+  source_handle_.reset();
 }
 
 void ObSyncIOChannel::handle(void *task)
@@ -1301,11 +1322,18 @@ void ObSyncIOChannel::handle(void *task)
   } else {
     char device_name[32] = "";
     (void)device_handle_->get_device_name(device_name, sizeof(device_name));
+    ObDIActionGuard program("IOManager", nullptr, nullptr);
+    ObDIActionGuard module(ObDIActionGuard::NS_MODULE, "SyncIO_Device:%s", device_name);
     ObIORequest *req = static_cast<ObIORequest *>(task);
     RequestHolder holder(req);
     ObTraceIdGuard trace_id_guard(req->trace_id_);
     if (OB_FAIL(do_sync_io(*req))) {
       LOG_WARN("do sync io failed", K(ret), KPC(req));
+    }
+    if (use_shared_executor_
+        && TC_REACH_TIME_INTERVAL(5 * 1000 * 1000L)) {
+      LOG_INFO("sync io request handled by background source",
+          K(get_queue_num()), KPC(req));
     }
     ATOMIC_FAA(&used_io_depth_, -get_io_depth(req->get_align_size()));
     req->dec_ref(); // ref for file system
@@ -1316,6 +1344,7 @@ void ObSyncIOChannel::handle(void *task)
 int ObSyncIOChannel::submit(ObIORequest &req)
 {
   int ret = OB_SUCCESS;
+  bool enqueued = false;
   const int64_t current_ts = ObTimeUtility::current_time();
   const int64_t io_depth = get_io_depth(min(max(GMEMCONF.get_server_memory_limit() / 10, static_cast<int64_t>(500LL * 1024LL * 1024LL)), static_cast<int64_t>(4LL * 1024LL * 1024LL * 1024LL))); 
   if (OB_UNLIKELY(!is_inited_)) {
@@ -1339,6 +1368,18 @@ int ObSyncIOChannel::submit(ObIORequest &req)
           LOG_WARN("too many io request in the sync channel", K(ret), K(get_queue_num()));
         }
       }
+    } else {
+      enqueued = true;
+    }
+  }
+  if (enqueued && use_shared_executor_) {
+    const int notify_ret = notify_background_source_();
+    if (OB_SUCCESS != notify_ret) {
+      LOG_WARN_RET(notify_ret,
+          "notify sync io background source failed", K(notify_ret));
+      ensure_rescue_worker_(true);
+    } else {
+      ensure_rescue_worker_(false);
     }
   }
   return ret;
@@ -1357,15 +1398,41 @@ int64_t ObSyncIOChannel::get_queue_count() const
 
 int ObSyncIOChannel::set_thread_count(const int64_t conf_thread_count)
 {
-  return ObSimpleThreadPool::set_thread_count(cal_thread_count(conf_thread_count));
+  int ret = OB_SUCCESS;
+  const int64_t thread_count = cal_thread_count(conf_thread_count);
+  share::ObBackgroundTaskExecutor *background_executor = nullptr;
+  {
+    lib::ObMutexGuard guard(source_lock_);
+    if (use_shared_executor_) {
+      background_executor = background_executor_;
+    }
+  }
+  if (OB_NOT_NULL(background_executor)
+      && OB_FAIL(detach_background_executor())) {
+    LOG_WARN("detach sync io source before resize failed",
+        K(ret), K(thread_count));
+  } else if (OB_FAIL(ObSimpleThreadPool::set_thread_count(thread_count))) {
+    LOG_WARN("set sync io thread count failed", K(ret), K(thread_count));
+  } else {
+    config_thread_count_ = thread_count;
+  }
+  if (OB_SUCC(ret)
+      && OB_NOT_NULL(background_executor)
+      && OB_FAIL(attach_background_executor(background_executor))) {
+    LOG_WARN("reattach sync io source after resize failed",
+        K(ret), K(thread_count));
+  }
+  return ret;
 }
 
 int ObSyncIOChannel::start_thread(const int64_t thread_num, const int64_t task_num)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObSimpleThreadPool::set_thread_count(thread_num))) {
+  config_thread_count_ = thread_num;
+  if (OB_FAIL(ObSimpleThreadPool::set_thread_count(config_thread_count_))) {
     LOG_WARN("simple thread pool set adaptive thread failed", K(ret), K(thread_num));
-  } else if (OB_FAIL(ObSimpleThreadPool::init(thread_num, task_num, "IO_SYNC_CH"))) {
+  } else if (OB_FAIL(ObSimpleThreadPool::init(
+      config_thread_count_, task_num, "IO_SYNC_CH"))) {
     LOG_WARN("simple thread pool init failed", K(ret), K(thread_num), K(task_num));
   }
   return ret;
@@ -1374,6 +1441,172 @@ int ObSyncIOChannel::start_thread(const int64_t thread_num, const int64_t task_n
 void ObSyncIOChannel::destroy_thread()
 {
   ObSimpleThreadPool::destroy();
+}
+
+int ObSyncIOChannel::attach_background_executor(
+    share::ObBackgroundTaskExecutor *background_executor)
+{
+  int ret = OB_SUCCESS;
+  if (!lib::is_mini_mode()) {
+  } else if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(background_executor)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    share::ObBackgroundTaskSourceConfig config;
+    config.name_ = "SyncIO";
+    // A synchronous pread/pwrite can block for seconds on a sick device.
+    // Keep at most one shared worker in this source; saturation rescue below
+    // preserves liveness without letting sync I/O occupy the entire pool.
+    config.max_concurrency_ = 1;
+    {
+      lib::ObMutexGuard guard(source_lock_);
+      if (use_shared_executor_ || source_handle_.is_valid()) {
+        ret = OB_INIT_TWICE;
+      } else if (OB_FAIL(background_executor->register_source(
+          *this, config, source_handle_))) {
+        LOG_WARN("register sync io background source failed", K(ret));
+      } else {
+        background_executor_ = background_executor;
+        use_shared_executor_ = true;
+        ObSimpleThreadPool::set_external_driver(true);
+      }
+    }
+    if (OB_SUCC(ret)
+        && ObSimpleThreadPool::get_queue_num() > 0
+        && OB_FAIL(notify_background_source_())) {
+      LOG_WARN("notify pending sync io request failed", K(ret));
+    }
+  }
+  if (OB_FAIL(ret)) {
+    (void)detach_background_executor();
+  }
+  return ret;
+}
+
+int ObSyncIOChannel::detach_background_executor()
+{
+  int ret = OB_SUCCESS;
+  bool was_shared = false;
+  {
+    lib::ObMutexGuard guard(source_lock_);
+    was_shared = use_shared_executor_ || source_handle_.is_valid();
+    use_shared_executor_ = false;
+    ObSimpleThreadPool::set_external_driver(false);
+  }
+  if (was_shared && OB_FAIL(unregister_background_source_(true))) {
+    LOG_WARN("unregister sync io background source failed", K(ret));
+  }
+  {
+    lib::ObMutexGuard guard(rescue_lock_);
+    if (!ObSimpleThreadPool::has_set_stop()
+        && ObSimpleThreadPool::get_queue_num() > 0
+        && ObSimpleThreadPool::get_thread_count() <= 0
+        && !ObSimpleThreadPool::try_expand_one(1)) {
+      const int tmp_ret = OB_ERR_UNEXPECTED;
+      LOG_WARN_RET(tmp_ret,
+          "failed to restore dedicated sync io worker", K(tmp_ret));
+      if (OB_SUCC(ret)) {
+        ret = tmp_ret;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObSyncIOChannel::process_one_quantum(
+    const share::ObBackgroundTaskPriority priority,
+    share::ObBackgroundTaskRunResult &result)
+{
+  int ret = OB_SUCCESS;
+  void *task = nullptr;
+  if (!is_inited_ || !use_shared_executor_) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (share::BG_TASK_HIGH != priority) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(
+      ObSimpleThreadPool::pop_task_for_external_driver(task))) {
+    if (OB_ENTRY_NOT_EXIST == ret) {
+      ret = OB_SUCCESS;
+    }
+  } else if (OB_ISNULL(task)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    handle(task);
+    result.processed_count_ = 1;
+    result.has_more_ready_ = ObSimpleThreadPool::get_queue_num() > 0;
+  }
+  return ret;
+}
+
+int ObSyncIOChannel::notify_background_source_()
+{
+  int ret = OB_SUCCESS;
+  lib::ObMutexGuard guard(source_lock_);
+  if (!use_shared_executor_
+      || OB_ISNULL(background_executor_)
+      || !source_handle_.is_valid()) {
+    ret = OB_NOT_RUNNING;
+  } else if (OB_FAIL(background_executor_->notify(
+      source_handle_, share::BG_TASK_HIGH))) {
+    LOG_WARN("notify sync io background source failed", K(ret));
+  }
+  return ret;
+}
+
+int ObSyncIOChannel::unregister_background_source_(
+    const bool wait_running)
+{
+  int ret = OB_SUCCESS;
+  bool need_retry = false;
+  do {
+    need_retry = false;
+    {
+      lib::ObMutexGuard guard(source_lock_);
+      if (OB_NOT_NULL(background_executor_)
+          && source_handle_.is_valid()) {
+        ret = background_executor_->unregister_source(source_handle_);
+        if (OB_EAGAIN == ret && wait_running) {
+          need_retry = true;
+        } else if (OB_ENTRY_NOT_EXIST == ret || OB_NOT_INIT == ret) {
+          source_handle_.reset();
+          ret = OB_SUCCESS;
+        }
+      }
+      if (!source_handle_.is_valid()) {
+        background_executor_ = nullptr;
+      }
+    }
+    if (need_retry) {
+      ob_usleep(1000);
+    }
+  } while (need_retry);
+  return ret;
+}
+
+void ObSyncIOChannel::ensure_rescue_worker_(const bool force)
+{
+  bool shared_pool_saturated = false;
+  {
+    lib::ObMutexGuard guard(source_lock_);
+    shared_pool_saturated =
+        use_shared_executor_
+        && OB_NOT_NULL(background_executor_)
+        && background_executor_->get_worker_count()
+            >= share::ObBackgroundTaskExecutor::MAX_WORKER_COUNT
+        && background_executor_->get_idle_worker_count() <= 0;
+  }
+  if (force || shared_pool_saturated) {
+    lib::ObMutexGuard guard(rescue_lock_);
+    if (ObSimpleThreadPool::get_queue_num() > 0
+        && ObSimpleThreadPool::get_thread_count() <= 0
+        && !ObSimpleThreadPool::try_expand_one(1)) {
+      const int tmp_ret = OB_ERR_UNEXPECTED;
+      LOG_WARN_RET(tmp_ret,
+          "failed to start rescue sync io worker",
+          K(force), K(shared_pool_saturated));
+    }
+  }
 }
 
 int ObSyncIOChannel::do_sync_io(ObIORequest &req)
@@ -1569,6 +1802,44 @@ void ObDeviceChannel::destroy()
   allocator_ = nullptr;
 }
 
+int ObDeviceChannel::attach_sync_io_background_executor(
+    share::ObBackgroundTaskExecutor *background_executor)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < sync_channels_.count(); ++i) {
+    ObSyncIOChannel *channel =
+        static_cast<ObSyncIOChannel *>(sync_channels_.at(i));
+    if (OB_NOT_NULL(channel)
+        && OB_FAIL(channel->attach_background_executor(
+            background_executor))) {
+      LOG_WARN("attach sync io channel background source failed",
+          K(ret), K(i));
+    }
+  }
+  return ret;
+}
+
+int ObDeviceChannel::detach_sync_io_background_executor()
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; i < sync_channels_.count(); ++i) {
+    ObSyncIOChannel *channel =
+        static_cast<ObSyncIOChannel *>(sync_channels_.at(i));
+    if (OB_NOT_NULL(channel)) {
+      const int tmp_ret = channel->detach_background_executor();
+      if (OB_SUCCESS != tmp_ret) {
+        LOG_WARN_RET(tmp_ret,
+            "detach sync io channel background source failed",
+            K(tmp_ret), K(i));
+        if (OB_SUCC(ret)) {
+          ret = tmp_ret;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObDeviceChannel::reload_config(const ObIOConfig &conf)
 {
   int ret = OB_SUCCESS;
@@ -1668,7 +1939,12 @@ int ObDeviceChannel::get_random_io_channel(ObIArray<ObIOChannel *> &io_channels,
 
 ObIOCallbackManager::ObIOCallbackManager()
   : is_inited_(false),
-    config_thread_count_(0)
+    use_shared_executor_(false),
+    config_thread_count_(0),
+    source_lock_(),
+    rescue_lock_(),
+    background_executor_(nullptr),
+    source_handle_()
 {
 
 }
@@ -1707,15 +1983,24 @@ int ObIOCallbackManager::init(const int64_t thread_count,
 void ObIOCallbackManager::destroy()
 {
   if (is_inited_) {
+    const int tmp_ret = detach_background_executor();
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN_RET(tmp_ret,
+          "detach io callback background source failed", K(tmp_ret));
+    }
     ObLinkQueueThreadPool::destroy();
     config_thread_count_ = 0;
     is_inited_ = false;
   }
+  use_shared_executor_ = false;
+  background_executor_ = nullptr;
+  source_handle_.reset();
 }
 
 int ObIOCallbackManager::enqueue_callback(ObIORequest &req)
 {
   int ret = OB_SUCCESS;
+  bool enqueued = false;
   const int64_t current_ts = ObTimeUtility::current_time();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -1738,7 +2023,23 @@ int ObIOCallbackManager::enqueue_callback(ObIORequest &req)
       if (OB_FAIL(ObLinkQueueThreadPool::push(&req.req_node_))) {
         req.dec_ref(); // ref for callback queue
         LOG_WARN("push callback failed", K(ret), K(req));
+      } else {
+        enqueued = true;
       }
+    }
+  }
+  if (enqueued && use_shared_executor_) {
+    const int notify_ret = notify_background_source_();
+    if (OB_SUCCESS != notify_ret) {
+      LOG_WARN_RET(notify_ret,
+          "notify io callback background source failed", K(notify_ret));
+      // Keep I/O completion live across source teardown or executor failure.
+      ensure_rescue_worker_(true);
+    } else {
+      // A shared worker may be synchronously waiting for this callback. If all
+      // shared workers already exist, temporarily start one callback worker to
+      // break the dependency cycle; it shrinks after becoming idle.
+      ensure_rescue_worker_(false);
     }
   }
   return ret;
@@ -1754,6 +2055,7 @@ void ObIOCallbackManager::handle(LinkTask *task)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(req));
   } else {
+    ObDIActionGuard ag("IOManager", "DiskCB", "handle io callback");
     const int64_t begin_time = ObTimeUtility::fast_current_time();
     req->dec_ref(); // ref for callback queue
     if (OB_NOT_NULL(req->io_result_)) {
@@ -1830,15 +2132,205 @@ int ObIOCallbackManager::update_thread_count(const int64_t thread_count)
     if (thread_count == cur_thread_count) {
       // do nothing
     } else {
+      share::ObBackgroundTaskExecutor *background_executor = nullptr;
+      {
+        lib::ObMutexGuard guard(source_lock_);
+        if (use_shared_executor_) {
+          background_executor = background_executor_;
+        }
+      }
+      if (OB_NOT_NULL(background_executor)
+          && OB_FAIL(detach_background_executor())) {
+        LOG_WARN("detach io callback source before resize failed",
+            K(ret), K(thread_count));
+      }
       config_thread_count_ = thread_count;
-      if (OB_FAIL(ObLinkQueueThreadPool::set_thread_count(thread_count))) {
+      if (OB_SUCC(ret)
+          && OB_FAIL(ObLinkQueueThreadPool::set_thread_count(thread_count))) {
         LOG_WARN("set max thread count failed", K(ret), K(thread_count));
-      } else {
+      } else if (OB_SUCC(ret)
+          && OB_NOT_NULL(background_executor)
+          && OB_FAIL(attach_background_executor(background_executor))) {
+        LOG_WARN("reattach io callback source after resize failed",
+            K(ret), K(thread_count));
+      }
+      if (OB_SUCC(ret)) {
         LOG_INFO("update io callback thread count", K(ret), "old_thread_cnt", cur_thread_count, "new_thread_cnt", thread_count);
       }
     }
   }
   return ret;
+}
+
+int ObIOCallbackManager::attach_background_executor(
+    share::ObBackgroundTaskExecutor *background_executor)
+{
+  int ret = OB_SUCCESS;
+  if (!lib::is_mini_mode()) {
+  } else if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(background_executor)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    share::ObBackgroundTaskSourceConfig config;
+    config.name_ = "DiskCallback";
+    config.max_concurrency_ = MIN(
+        config_thread_count_,
+        share::ObBackgroundTaskExecutor::MAX_WORKER_COUNT);
+    config.max_concurrency_by_priority_[share::BG_TASK_HIGH] =
+        config.max_concurrency_;
+    {
+      lib::ObMutexGuard guard(source_lock_);
+      if (use_shared_executor_ || source_handle_.is_valid()) {
+        ret = OB_INIT_TWICE;
+      } else if (OB_FAIL(background_executor->register_source(
+          *this, config, source_handle_))) {
+        LOG_WARN("register io callback background source failed", K(ret));
+      } else {
+        background_executor_ = background_executor;
+        use_shared_executor_ = true;
+        ObLinkQueueThreadPool::set_external_driver(true);
+      }
+    }
+    if (OB_SUCC(ret)
+        && ObLinkQueueThreadPool::get_queue_num() > 0
+        && OB_FAIL(notify_background_source_())) {
+      LOG_WARN("notify pending io callback failed", K(ret));
+    }
+  }
+  if (OB_FAIL(ret)) {
+    (void)detach_background_executor();
+  }
+  return ret;
+}
+
+int ObIOCallbackManager::detach_background_executor()
+{
+  int ret = OB_SUCCESS;
+  bool was_shared = false;
+  {
+    lib::ObMutexGuard guard(source_lock_);
+    was_shared = use_shared_executor_ || source_handle_.is_valid();
+    use_shared_executor_ = false;
+    // New callback submissions immediately regain the original dedicated
+    // worker fallback while an already claimed shared quantum drains.
+    ObLinkQueueThreadPool::set_external_driver(false);
+  }
+  if (was_shared && OB_FAIL(unregister_background_source_(true))) {
+    LOG_WARN("unregister io callback background source failed", K(ret));
+  }
+  {
+    lib::ObMutexGuard guard(rescue_lock_);
+    if (ObLinkQueueThreadPool::get_queue_num() > 0
+        && ObLinkQueueThreadPool::get_thread_count() <= 0
+        && !ObLinkQueueThreadPool::try_expand_one(
+            MAX(1L, config_thread_count_))) {
+      const int tmp_ret = OB_ERR_UNEXPECTED;
+      LOG_WARN_RET(tmp_ret,
+          "failed to restore dedicated io callback worker", K(tmp_ret));
+      if (OB_SUCC(ret)) {
+        ret = tmp_ret;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObIOCallbackManager::process_one_quantum(
+    const share::ObBackgroundTaskPriority priority,
+    share::ObBackgroundTaskRunResult &result)
+{
+  int ret = OB_SUCCESS;
+  LinkTask *task = nullptr;
+  if (!is_inited_ || !use_shared_executor_) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (share::BG_TASK_HIGH != priority) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(
+      ObLinkQueueThreadPool::pop_task_for_external_driver(task))) {
+    if (OB_ENTRY_NOT_EXIST == ret) {
+      ret = OB_SUCCESS;
+    }
+  } else if (OB_ISNULL(task)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    handle(task);
+    result.processed_count_ = 1;
+    result.has_more_ready_ =
+        ObLinkQueueThreadPool::get_queue_num() > 0;
+  }
+  return ret;
+}
+
+int ObIOCallbackManager::notify_background_source_()
+{
+  int ret = OB_SUCCESS;
+  lib::ObMutexGuard guard(source_lock_);
+  if (!use_shared_executor_
+      || OB_ISNULL(background_executor_)
+      || !source_handle_.is_valid()) {
+    ret = OB_NOT_RUNNING;
+  } else if (OB_FAIL(background_executor_->notify(
+      source_handle_, share::BG_TASK_HIGH))) {
+    LOG_WARN("notify io callback source failed", K(ret));
+  }
+  return ret;
+}
+
+int ObIOCallbackManager::unregister_background_source_(
+    const bool wait_running)
+{
+  int ret = OB_SUCCESS;
+  bool need_retry = false;
+  do {
+    need_retry = false;
+    {
+      lib::ObMutexGuard guard(source_lock_);
+      if (OB_NOT_NULL(background_executor_)
+          && source_handle_.is_valid()) {
+        ret = background_executor_->unregister_source(source_handle_);
+        if (OB_EAGAIN == ret && wait_running) {
+          need_retry = true;
+        } else if (OB_ENTRY_NOT_EXIST == ret || OB_NOT_INIT == ret) {
+          source_handle_.reset();
+          ret = OB_SUCCESS;
+        }
+      }
+      if (!source_handle_.is_valid()) {
+        background_executor_ = nullptr;
+      }
+    }
+    if (need_retry) {
+      ob_usleep(1000);
+    }
+  } while (need_retry);
+  return ret;
+}
+
+void ObIOCallbackManager::ensure_rescue_worker_(const bool force)
+{
+  bool shared_pool_saturated = false;
+  {
+    lib::ObMutexGuard guard(source_lock_);
+    shared_pool_saturated =
+        use_shared_executor_
+        && OB_NOT_NULL(background_executor_)
+        && background_executor_->get_worker_count()
+            >= share::ObBackgroundTaskExecutor::MAX_WORKER_COUNT
+        && background_executor_->get_idle_worker_count() <= 0;
+  }
+  if (force || shared_pool_saturated) {
+    // Serialize the 0 -> 1 check: several I/O completion threads can enqueue
+    // callbacks concurrently, but each I/O service needs at most one rescue.
+    lib::ObMutexGuard guard(rescue_lock_);
+    if (ObLinkQueueThreadPool::get_queue_num() > 0
+        && ObLinkQueueThreadPool::get_thread_count() <= 0
+        && !ObLinkQueueThreadPool::try_expand_one(1)) {
+      LOG_WARN_RET(OB_ERR_UNEXPECTED,
+          "failed to start rescue io callback worker",
+          K(force), K(shared_pool_saturated));
+    }
+  }
 }
 
 int64_t ObIOCallbackManager::to_string(char *buf, const int64_t len) const
@@ -1877,13 +2369,26 @@ const char *oceanbase::common::device_health_status_to_str(const ObDeviceHealthS
 
 /******************             IOFaultDetector              **********************/
 
+struct RetryTask
+{
+  ObIOInfo io_info_;
+  int64_t timeout_ms_;
+  TO_STRING_KV(K(io_info_), K(timeout_ms_));
+};
+
 ObIOFaultDetector::ObIOFaultDetector(const ObIOConfig &io_config)
   : common::ObSimpleThreadPool(),
     is_inited_(false),
+    is_running_(false),
+    use_shared_executor_(false),
     lock_(ObLatchIds::IO_FAULT_DETECTOR_LOCK),
     io_config_(io_config),
     is_device_warning_(false),
-    last_device_warning_ts_(0)
+    last_device_warning_ts_(0),
+    shared_queue_(),
+    source_lock_(),
+    background_executor_(nullptr),
+    source_handle_()
 {
 
 }
@@ -1900,19 +2405,28 @@ int ObIOFaultDetector::init()
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("io fault detector init twice", K(ret), K(!is_inited_));
-  } else if (OB_FAIL(common::ObSimpleThreadPool::init(1, IO_HEALTH_QUEUE_DEPTH, "IO_HEALTH"))) {
+  } else if (FALSE_IT(use_shared_executor_ = lib::is_mini_mode())) {
+  } else if (use_shared_executor_
+      && OB_FAIL(shared_queue_.init(IO_HEALTH_QUEUE_DEPTH, "IO_HEALTH"))) {
+    LOG_WARN("init shared io health queue failed", K(ret));
+  } else if (!use_shared_executor_
+      && OB_FAIL(common::ObSimpleThreadPool::init(
+          1, IO_HEALTH_QUEUE_DEPTH, "IO_HEALTH"))) {
     LOG_WARN("init io health thread pool failed", K(ret));
-  } else if (FALSE_IT(thread_pool_inited = true)) {
-  } else if (OB_FAIL(common::ObSimpleThreadPool::set_adaptive_thread(1, 1))) {
+  } else if (FALSE_IT(thread_pool_inited = !use_shared_executor_)) {
+  } else if (!use_shared_executor_
+      && OB_FAIL(common::ObSimpleThreadPool::set_adaptive_thread(1, 1))) {
     LOG_WARN("set io health thread pool failed", K(ret));
   } else {
+    ATOMIC_STORE(&is_running_, false);
     is_inited_ = true;
   }
   if (OB_UNLIKELY(!is_inited_)) {
     if (thread_pool_inited) {
       common::ObSimpleThreadPool::destroy();
     }
-    destroy();
+    shared_queue_.destroy();
+    use_shared_executor_ = false;
   }
   return ret;
 }
@@ -1920,11 +2434,25 @@ int ObIOFaultDetector::init()
 void ObIOFaultDetector::destroy()
 {
   if (is_inited_) {
-    common::ObSimpleThreadPool::stop();
-    common::ObSimpleThreadPool::wait();
-    common::ObSimpleThreadPool::destroy();
+    ATOMIC_STORE(&is_running_, false);
+    if (use_shared_executor_) {
+      const int tmp_ret = unregister_background_source_(true);
+      if (OB_SUCCESS != tmp_ret) {
+        LOG_WARN_RET(tmp_ret,
+            "fail to unregister io health background source", K(tmp_ret));
+      }
+      drain_shared_queue_();
+      shared_queue_.destroy();
+    } else {
+      common::ObSimpleThreadPool::stop();
+      common::ObSimpleThreadPool::wait();
+      common::ObSimpleThreadPool::destroy();
+    }
     is_device_warning_ = false;
     last_device_warning_ts_ = 0;
+    background_executor_ = nullptr;
+    source_handle_.reset();
+    use_shared_executor_ = false;
     is_inited_ = false;
   }
 }
@@ -1935,20 +2463,176 @@ int ObIOFaultDetector::start()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("io fault detector not init", K(ret), KP(is_inited_));
-  } else if (common::ObSimpleThreadPool::get_thread_count() <= 0
+  } else if (ATOMIC_LOAD(&is_running_)) {
+  } else if (!use_shared_executor_
+      && common::ObSimpleThreadPool::get_thread_count() <= 0
       && !common::ObSimpleThreadPool::try_expand_one(1)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("start thread pool failed", K(ret));
+  } else {
+    ATOMIC_STORE(&is_running_, true);
+    if (use_shared_executor_ && shared_queue_.size() > 0) {
+      const int tmp_ret = notify_background_source_();
+      if (OB_SUCCESS != tmp_ret && OB_NOT_RUNNING != tmp_ret) {
+        LOG_WARN_RET(tmp_ret,
+            "fail to notify pending io health tasks", K(tmp_ret));
+      }
+    }
   }
   return ret;
 }
 
-struct RetryTask
+int ObIOFaultDetector::attach_background_executor(
+    share::ObBackgroundTaskExecutor *background_executor)
 {
-  ObIOInfo io_info_;
-  int64_t timeout_ms_;
-  TO_STRING_KV(K(io_info_), K(timeout_ms_));
-};
+  int ret = OB_SUCCESS;
+  lib::ObMutexGuard guard(source_lock_);
+  if (!use_shared_executor_) {
+  } else if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(background_executor)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (source_handle_.is_valid()) {
+    if (background_executor_ != background_executor) {
+      ret = OB_STATE_NOT_MATCH;
+    }
+  } else {
+    share::ObBackgroundTaskSourceConfig config;
+    config.name_ = "IO_HEALTH";
+    config.max_concurrency_ = 1;
+    if (OB_FAIL(background_executor->register_source(
+        *this, config, source_handle_))) {
+      LOG_WARN("fail to register io health background source", K(ret));
+    } else {
+      background_executor_ = background_executor;
+      if (ATOMIC_LOAD(&is_running_) && shared_queue_.size() > 0
+          && OB_FAIL(background_executor_->notify(
+              source_handle_, share::BG_TASK_HIGH))) {
+        LOG_WARN("fail to notify pending io health tasks", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObIOFaultDetector::detach_background_executor()
+{
+  return unregister_background_source_(true);
+}
+
+int ObIOFaultDetector::process_one_quantum(
+    const share::ObBackgroundTaskPriority priority,
+    share::ObBackgroundTaskRunResult &result)
+{
+  int ret = OB_SUCCESS;
+  const int64_t saved_worker_timeout_ts = THIS_WORKER.get_timeout_ts();
+  if (!use_shared_executor_) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (share::BG_TASK_HIGH != priority) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!ATOMIC_LOAD(&is_running_)) {
+  } else {
+    void *task = nullptr;
+    const int pop_ret = shared_queue_.pop(task, 0);
+    if (OB_ENTRY_NOT_EXIST == pop_ret) {
+    } else if (OB_SUCCESS != pop_ret) {
+      ret = pop_ret;
+      LOG_WARN("fail to pop io health task", K(ret));
+    } else {
+      // Preserve the legacy detector semantics: one shared quantum owns one
+      // complete synchronous detect/retry task.
+      handle(task);
+      result.processed_count_ = 1;
+      result.has_more_ready_ = shared_queue_.size() > 0;
+    }
+  }
+  THIS_WORKER.set_timeout_ts(saved_worker_timeout_ts);
+  return ret;
+}
+
+int ObIOFaultDetector::push_retry_task_(void *task)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(task)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (!ATOMIC_LOAD(&is_running_)) {
+    ret = OB_NOT_RUNNING;
+  } else if (use_shared_executor_) {
+    ret = shared_queue_.push(task);
+    if (OB_SIZE_OVERFLOW == ret) {
+      ret = OB_EAGAIN;
+    }
+    if (OB_SUCC(ret)) {
+      const int tmp_ret = notify_background_source_();
+      if (OB_SUCCESS != tmp_ret && OB_NOT_RUNNING != tmp_ret
+          && OB_IN_STOP_STATE != tmp_ret
+          && OB_ENTRY_NOT_EXIST != tmp_ret) {
+        LOG_WARN_RET(tmp_ret,
+            "fail to notify io health background source", K(tmp_ret));
+      }
+    }
+  } else {
+    ret = common::ObSimpleThreadPool::push(task);
+  }
+  return ret;
+}
+
+int ObIOFaultDetector::notify_background_source_()
+{
+  int ret = OB_SUCCESS;
+  lib::ObMutexGuard guard(source_lock_);
+  if (!use_shared_executor_) {
+  } else if (OB_ISNULL(background_executor_)
+      || !source_handle_.is_valid()
+      || !ATOMIC_LOAD(&is_running_)) {
+    ret = OB_NOT_RUNNING;
+  } else if (OB_FAIL(background_executor_->notify(
+      source_handle_, share::BG_TASK_HIGH))) {
+    LOG_WARN("fail to notify io health background source", K(ret));
+  }
+  return ret;
+}
+
+int ObIOFaultDetector::unregister_background_source_(
+    const bool wait_running)
+{
+  int ret = OB_SUCCESS;
+  bool need_retry = false;
+  do {
+    need_retry = false;
+    {
+      lib::ObMutexGuard guard(source_lock_);
+      if (use_shared_executor_ && OB_NOT_NULL(background_executor_)
+          && source_handle_.is_valid()) {
+        ret = background_executor_->unregister_source(source_handle_);
+        if (OB_EAGAIN == ret && wait_running) {
+          need_retry = true;
+        } else if (OB_ENTRY_NOT_EXIST == ret || OB_NOT_INIT == ret) {
+          source_handle_.reset();
+          ret = OB_SUCCESS;
+        }
+      }
+      if (!source_handle_.is_valid()) {
+        background_executor_ = nullptr;
+      }
+    }
+    if (need_retry) {
+      ob_usleep(1000);
+    }
+  } while (need_retry);
+  return ret;
+}
+
+void ObIOFaultDetector::drain_shared_queue_()
+{
+  void *task = nullptr;
+  while (OB_SUCCESS == shared_queue_.pop(task, 0)) {
+    op_free(static_cast<RetryTask *>(task));
+    task = nullptr;
+  }
+}
 
 void ObIOFaultDetector::handle(void *task)
 {
@@ -2068,7 +2752,7 @@ int ObIOFaultDetector::record_timing_task(const int64_t first_id, const int64_t 
     retry_task->io_info_.offset_ = 0;
     retry_task->io_info_.callback_ = nullptr;
     retry_task->timeout_ms_ = io_config_.data_storage_warning_tolerance_time_; // default 5s
-    if (OB_FAIL(common::ObSimpleThreadPool::push(retry_task))) {
+    if (OB_FAIL(push_retry_task_(retry_task))) {
       LOG_WARN("io fault detector push task failed", K(ret), KP(retry_task));
     }
     if (OB_FAIL(ret)) {
@@ -2115,7 +2799,7 @@ void ObIOFaultDetector::record_io_timeout(const ObIOResult &result, const ObIORe
       LOG_WARN("fail to set detect task fd", KR(ret), K(result), K(req));
     } else {
       retry_task->timeout_ms_ = io_config_.data_storage_warning_tolerance_time_; // default 5s
-      if (OB_FAIL(common::ObSimpleThreadPool::push(retry_task))) {
+      if (OB_FAIL(push_retry_task_(retry_task))) {
         LOG_WARN("io fault detector push task failed", K(ret), KPC(retry_task));
       }
       if (OB_FAIL(ret)) {
@@ -2166,7 +2850,7 @@ int ObIOFaultDetector::record_read_failure_(const ObIOResult &result, const ObIO
     LOG_WARN("fail to set detect task fd", KR(ret), K(result), K(req));
   } else {
     retry_task->timeout_ms_ = 5000L; // 5s
-    if (OB_FAIL(common::ObSimpleThreadPool::push(retry_task))) {
+    if (OB_FAIL(push_retry_task_(retry_task))) {
       LOG_WARN("io fault detector push task failed", K(ret), KPC(retry_task));
     } else {
       LOG_INFO("io fault detector push task", KPC(retry_task));

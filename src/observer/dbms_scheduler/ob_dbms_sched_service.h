@@ -21,6 +21,7 @@
 #include "logservice/ob_log_base_type.h"                        //ObILocalLogHandler ObICheckpointSubHandler ObIReplaySubHandler
 #include "observer/dbms_scheduler/ob_dbms_sched_job_master.h"
 #include "rootserver/ob_server_thread_helper.h" // for ObServerThreadHelper
+#include "share/ob_background_task_executor.h"
 
 namespace oceanbase
 {
@@ -28,11 +29,15 @@ namespace rootserver
 {
 class ObDBMSSchedService : public ObServerThreadHelper,
                            public logservice::ObICheckpointSubHandler,
-                           public logservice::ObIReplaySubHandler
+                           public logservice::ObIReplaySubHandler,
+                           public share::ObIBackgroundTaskSource
 {
 public:
   ObDBMSSchedService()
-      : job_master_()
+      : job_master_(),
+        use_shared_executor_(false),
+        background_executor_(NULL),
+        source_handle_()
   {}
   virtual ~ObDBMSSchedService()
   {
@@ -44,6 +49,9 @@ public:
   int init();
   int start();
   virtual void do_work() override;
+  int process_one_quantum(
+      const share::ObBackgroundTaskPriority priority,
+      share::ObBackgroundTaskRunResult &result) override;
   void stop();
   void wait();
   void destroy();
@@ -75,7 +83,14 @@ public:
   int activate() override;
 
 private:
+  int register_background_source_();
+  int unregister_background_source_(const bool wait_running);
+  int notify_background_source_();
+
   dbms_scheduler::ObDBMSSchedJobMaster job_master_;
+  bool use_shared_executor_;
+  share::ObBackgroundTaskExecutor *background_executor_;
+  share::ObBackgroundTaskSourceHandle source_handle_;
 };
 }  // namespace rootserver
 }  // namespace oceanbase

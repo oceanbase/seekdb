@@ -168,7 +168,6 @@ int ObTmpFilePageCacheController::invoke_swap_and_wait(int64_t expect_swap_size,
   } else if (OB_FAIL(swap_job_enqueue_(swap_job))) {
     STORAGE_LOG(WARN, "fail to enqueue swap job", KR(ret), KPC(swap_job));
   } else {
-    swap_thread_.notify_doing_swap();
     if (OB_FAIL(swap_job->wait_swap_complete())) {
       STORAGE_LOG(WARN, "fail to wait for swap job complete", KR(ret));
     }
@@ -188,6 +187,11 @@ int ObTmpFilePageCacheController::invoke_swap_and_wait(int64_t expect_swap_size,
     }
   }
   return ret;
+}
+
+void ObTmpFilePageCacheController::notify_doing_flush()
+{
+  swap_thread_.notify_doing_flush();
 }
 
 }  // end namespace tmp_file

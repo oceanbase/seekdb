@@ -23,6 +23,7 @@
 #include "lib/list/ob_dlink_node.h"
 #include "lib/objectpool/ob_concurrency_objpool.h"
 #include "share/ob_define.h"
+#include "share/ob_background_task_executor.h"
 #include "share/ob_thread_pool.h"
 
 namespace oceanbase
@@ -101,6 +102,10 @@ public:
 
   int schedule(ObTimeWheelTask *task, const int64_t delay);
   int cancel(ObTimeWheelTask *task);
+  int scan_one_quantum(
+      const int64_t max_scan_steps,
+      int64_t &processed_count,
+      bool &has_more_due);
 public:
   static TimeWheelBase *alloc(const char *name);
   static void free(TimeWheelBase *base);
@@ -121,7 +126,7 @@ private:
   char tname_[MAX_TIMER_NAME_LEN];
 };
 
-class ObTimeWheel
+class ObTimeWheel : public share::ObIBackgroundTaskSource
 {
 public:
   ObTimeWheel() { reset(); }
@@ -136,17 +141,28 @@ public:
 public:
   int schedule(ObTimeWheelTask *task, const int64_t delay);
   int cancel(ObTimeWheelTask *task);
+  virtual int process_one_quantum(
+      const share::ObBackgroundTaskPriority priority,
+      share::ObBackgroundTaskRunResult &result) override;
 public:
   static const int64_t MAX_THREAD_NUM = 64;
 private:
   static const int64_t MAX_TIMER_NAME_LEN = 16;
+  static const int64_t SHARED_MAX_SCAN_STEPS = 64;
+  int notify_background_source_();
+  int unregister_background_source_(const bool wait_running);
 private:
   bool is_inited_;
   int64_t precision_;
   bool is_running_;
+  bool use_shared_executor_;
   int64_t real_thread_num_;
+  int64_t shared_scan_cursor_;
   char tname_[MAX_TIMER_NAME_LEN];
   TimeWheelBase *tw_base_[MAX_THREAD_NUM];
+  share::ObBackgroundTaskExecutor *background_executor_;
+  share::ObBackgroundTaskSourceHandle source_handle_;
+  lib::ObMutex source_lock_;
 };
 
 } // common

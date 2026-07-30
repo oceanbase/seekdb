@@ -31,6 +31,7 @@
 #include "share/tablet/ob_tablet_table_operator.h"
 #include "share/storage/ob_sqlite_connection_pool.h"
 #include "sql/ob_sql.h"
+#include "sql/engine/cmd/ob_load_data_rpc.h"
 #include "sql/das/ob_data_access_service.h"
 #include "sql/session/ob_user_resource_mgr.h"
 
@@ -53,6 +54,7 @@
 #include "observer/ob_srv_network_frame.h"
 #include "observer/ob_service.h"
 #include "observer/ob_server_reload_config.h"
+#include "observer/ob_inner_sql_transmit_struct.h"
 #include "observer/ob_startup_accel_task_handler.h"
 #include "storage/ddl/ob_ddl_heart_beat_task.h"
 
@@ -66,6 +68,11 @@ namespace oceanbase
 namespace omt
 {
 class ObTimezoneMgr;
+}
+namespace share
+{
+class ObMemoryDumpBackgroundSource;
+class ObTimerTaskBackgroundSource;
 }
 namespace observer
 {
@@ -337,11 +344,13 @@ public:
   // Module accessors.
   omt::ObSharedTimer * shared_timer() override { return mods_shared_timer_; }
   blocksstable::ObSharedMacroBlockMgr * shared_macro_block_mgr() override { return mods_shared_macro_block_mgr_; }
+  oceanbase::sql::ObSQLSessionPool * sql_session_pool() override { return mods_sql_session_pool_; }
   storage::ObStorageMetaMemMgr * storage_meta_mem_mgr() override { return mods_storage_meta_mem_mgr_; }
   ObTableScanIteratorObjPool * table_scan_iterator_obj_pool() override { return mods_table_scan_iterator_obj_pool_; }
   common::ObIOService * io_service() override { return mods_io_service_; }
   storage::mds::ObMdsService * mds_service() override { return mods_mds_service_; }
   share::ObSharedMemAllocMgr * shared_mem_alloc_mgr() override { return mods_shared_mem_alloc_mgr_; }
+  share::ObErrsimModuleMgr * errsim_module_mgr() override { return mods_errsim_module_mgr_; }
   transaction::ObTransService * trans_service() override { return mods_trans_service_; }
   logservice::ObLogService * log_service() override { return mods_log_service_; }
   storage::ObLSService * ls_service() override { return mods_ls_service_; }
@@ -382,8 +391,10 @@ public:
   compaction::ObTabletScheduler * tablet_scheduler() override { return mods_tablet_scheduler_; }
   compaction::ObMediumChecker * medium_checker() override { return mods_medium_checker_; }
   storage::ObCompactionMemPool * compaction_mem_pool() override { return mods_compaction_mem_pool_; }
+  storage::ObDDLMergeBucketLock * ddl_merge_bucket_lock() override { return mods_ddl_merge_bucket_lock_; }
   storage::ObDirectLoadMgr * direct_load_mgr() override { return mods_direct_load_mgr_; }
   share::ObDagScheduler * dag_scheduler() override { return mods_dag_scheduler_; }
+  share::ObBackgroundTaskExecutor * background_task_executor() override { return mods_background_task_executor_; }
   storage::ObFreezeInfoMgr * freeze_info_mgr() override { return mods_freeze_info_mgr_; }
   transaction::ObTxLoopWorker * tx_loop_worker() override { return mods_tx_loop_worker_; }
   storage::ObAccessService * access_service() override { return mods_access_service_; }
@@ -414,13 +425,18 @@ public:
 private:
   // ===== module instances (ObServer is the sole owner; created by
   // obs_construct_modules() at boot, accessed via the ObIModuleProvider facade) =====
+  share::ObBackgroundTaskExecutor * mods_background_task_executor_ = nullptr;
+  share::ObMemoryDumpBackgroundSource * mods_memory_dump_background_source_ = nullptr;
+  share::ObTimerTaskBackgroundSource * mods_timer_task_background_source_ = nullptr;
   omt::ObSharedTimer * mods_shared_timer_ = nullptr;
   blocksstable::ObSharedMacroBlockMgr * mods_shared_macro_block_mgr_ = nullptr;
+  oceanbase::sql::ObSQLSessionPool * mods_sql_session_pool_ = nullptr;
   storage::ObStorageMetaMemMgr * mods_storage_meta_mem_mgr_ = nullptr;
   ObTableScanIteratorObjPool * mods_table_scan_iterator_obj_pool_ = nullptr;
   common::ObIOService * mods_io_service_ = nullptr;
   storage::mds::ObMdsService * mods_mds_service_ = nullptr;
   share::ObSharedMemAllocMgr * mods_shared_mem_alloc_mgr_ = nullptr;
+  share::ObErrsimModuleMgr * mods_errsim_module_mgr_ = nullptr;
   transaction::ObTransService * mods_trans_service_ = nullptr;
   logservice::ObLogService * mods_log_service_ = nullptr;
   storage::ObLSService * mods_ls_service_ = nullptr;
@@ -459,6 +475,7 @@ private:
   compaction::ObTabletScheduler * mods_tablet_scheduler_ = nullptr;
   compaction::ObMediumChecker * mods_medium_checker_ = nullptr;
   storage::ObCompactionMemPool * mods_compaction_mem_pool_ = nullptr;
+  storage::ObDDLMergeBucketLock * mods_ddl_merge_bucket_lock_ = nullptr;
   storage::ObDirectLoadMgr * mods_direct_load_mgr_ = nullptr;
   share::ObDagScheduler * mods_dag_scheduler_ = nullptr;
   storage::ObFreezeInfoMgr * mods_freeze_info_mgr_ = nullptr;

@@ -24,6 +24,7 @@
 #include "palf/log_define.h"
 #include "localservice/ob_local_log_handler_set.h"
 #include "replayservice/ob_log_replay_service.h"
+#include "ob_net_keepalive_adapter.h"
 #include "ob_ls_adapter.h"
 #include "ob_log_handler.h"
 #include "ob_log_monitor.h"
@@ -34,12 +35,12 @@ namespace common
 {
 class ObAddr;
 class ObILogAllocator;
-class ObMySQLProxy;
 }
 
 namespace share
 {
 class SCN;
+class ObBackgroundTaskExecutor;
 }
 
 namespace storage
@@ -75,7 +76,7 @@ public:
            common::ObILogAllocator *alloc_mgr,
            storage::ObLSService *ls_service,
            palf::ILogBlockPool *log_block_pool,
-           common::ObMySQLProxy *sql_proxy);
+           IObNetKeepAliveAdapter *net_keepalive_adapter);
   // Create the unique log stream from its persisted base point.
   int create_ls(const palf::PalfBaseInfo &palf_base_info,
                 ObLogHandler &log_handler);
@@ -136,6 +137,9 @@ public:
   int diagnose_apply(ApplyDiagnoseInfo &diagnose_info);
   int get_io_start_time(int64_t &last_working_time);
   int check_disk_space_enough(bool &is_disk_enough);
+  int attach_log_io_callback_background_executor(
+      share::ObBackgroundTaskExecutor *background_executor);
+  int detach_log_io_callback_background_executor();
 
   palf::PalfEnv *get_palf_env() { return palf_env_; }
   ObLogReplayService *get_log_replay_service()  { return &replay_service_; }
@@ -153,9 +157,11 @@ private:
 private:
   bool is_inited_;
   bool is_running_;
+  bool enable_shared_storage_;
 
   common::ObAddr self_;
   palf::PalfEnv *palf_env_;
+  IObNetKeepAliveAdapter *net_keepalive_adapter_;
   common::ObILogAllocator *alloc_mgr_;
 
   ObLogApplyService apply_service_;
@@ -174,7 +180,7 @@ namespace oceanbase
 {
 namespace logservice
 {
-// Checks whether the clog disk is full or hung through the server log module.
+// demoted from share::ObShareUtil(checks whether the clog disk is full or hung, through MTL ObLogService)
 int check_clog_disk_full_or_hang(bool &clog_disk_is_full, bool &clog_disk_is_hang);
 }
 }

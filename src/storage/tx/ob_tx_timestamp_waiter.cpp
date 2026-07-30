@@ -31,7 +31,7 @@ namespace transaction
 int ObTxTimestampCallbackWorker::init(ObTxTimestampWaiter *waiter)
 {
   int ret = OB_SUCCESS;
-  const int64_t thread_count = MAX(common::get_cpu_count() / 12, 1L);
+  const int64_t thread_count = lib::is_mini_mode() ? 1 : MAX(common::get_cpu_count() / 12, 1L);
 
   waiter_ = waiter;
   set_run_wrapper(share::server_runtime());
@@ -51,17 +51,23 @@ ObTxTimestampWaiter::ObTxTimestampWaiter()
     : share::ObThreadPool(1),
       is_inited_(false),
       running_(false),
+      use_shared_executor_(false),
       latest_gts_(0),
       ts_mgr_(NULL),
       wait_queue_(),
       cond_(),
-      callback_worker_()
+      callback_worker_(),
+      background_executor_(NULL),
+      source_handle_()
 {
 }
 
-int ObTxTimestampWaiter::init(ObTsMgr *ts_mgr)
+int ObTxTimestampWaiter::init(
+    ObTsMgr *ts_mgr,
+    share::ObBackgroundTaskExecutor *background_executor)
 {
   int ret = OB_SUCCESS;
+  bool thread_pool_inited = false;
 
   if (is_inited_) {
     ret = OB_INIT_TWICE;
@@ -71,21 +77,35 @@ int ObTxTimestampWaiter::init(ObTsMgr *ts_mgr)
     TRANS_LOG(WARN, "invalid timestamp manager", KR(ret));
   } else if (OB_FAIL(cond_.init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
     TRANS_LOG(WARN, "timestamp waiter condition init failed", KR(ret));
-  } else if (OB_FAIL(share::ObThreadPool::init())) {
+  } else if (FALSE_IT(use_shared_executor_ = lib::is_mini_mode())) {
+  } else if (use_shared_executor_ && OB_ISNULL(background_executor)) {
+    ret = OB_INVALID_ARGUMENT;
+    TRANS_LOG(WARN, "invalid background task executor", KR(ret));
+  } else if (!use_shared_executor_
+      && OB_FAIL(share::ObThreadPool::init())) {
     TRANS_LOG(WARN, "timestamp waiter thread init failed", KR(ret));
-  } else if (FALSE_IT(share::ObThreadPool::set_run_wrapper(share::server_runtime()))) {
+  } else if (FALSE_IT(thread_pool_inited = !use_shared_executor_)) {
+  } else if (!use_shared_executor_
+      && FALSE_IT(share::ObThreadPool::set_run_wrapper(
+          share::server_runtime()))) {
   } else if (OB_FAIL(callback_worker_.init(this))) {
     TRANS_LOG(WARN, "timestamp callback worker init failed", KR(ret));
   } else {
     ts_mgr_ = ts_mgr;
+    background_executor_ =
+        use_shared_executor_ ? background_executor : NULL;
     is_inited_ = true;
     TRANS_LOG(INFO, "timestamp waiter init success");
   }
 
   if (OB_FAIL(ret)) {
     callback_worker_.destroy();
-    share::ObThreadPool::destroy();
+    if (thread_pool_inited) {
+      share::ObThreadPool::destroy();
+    }
     cond_.destroy();
+    background_executor_ = NULL;
+    use_shared_executor_ = false;
   }
   return ret;
 }
@@ -97,12 +117,35 @@ int ObTxTimestampWaiter::start()
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "timestamp waiter not init", KR(ret));
+  } else if (is_running_()) {
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(WARN, "timestamp waiter already running", KR(ret));
+  } else if (use_shared_executor_) {
+    share::ObBackgroundTaskSourceConfig config;
+    config.name_ = "TxTsWaiter";
+    config.max_concurrency_ = 1;
+    if (OB_FAIL(background_executor_->register_source(
+        *this, config, source_handle_))) {
+      TRANS_LOG(WARN,
+          "register timestamp waiter background source failed", KR(ret));
+    } else {
+      ATOMIC_STORE(&running_, true);
+      if (wait_queue_.size() > 0
+          && OB_FAIL(notify_background_source_())) {
+        TRANS_LOG(WARN,
+            "notify pending timestamp wait tasks failed", KR(ret));
+      }
+    }
   } else {
     ATOMIC_STORE(&running_, true);
     if (OB_FAIL(share::ObThreadPool::start())) {
       ATOMIC_STORE(&running_, false);
       TRANS_LOG(WARN, "timestamp waiter start failed", KR(ret));
     }
+  }
+  if (OB_FAIL(ret) && use_shared_executor_) {
+    ATOMIC_STORE(&running_, false);
+    (void)unregister_background_source_(true);
   }
   return ret;
 }
@@ -115,9 +158,18 @@ void ObTxTimestampWaiter::stop()
       ATOMIC_STORE(&running_, false);
       cond_.broadcast();
     }
-    share::ObThreadPool::stop();
+    if (use_shared_executor_) {
+      const int tmp_ret = unregister_background_source_(true);
+      if (OB_SUCCESS != tmp_ret) {
+        TRANS_LOG_RET(WARN, tmp_ret,
+            "unregister timestamp waiter background source failed",
+            K(tmp_ret));
+      }
+    } else {
+      share::ObThreadPool::stop();
+      share::ObThreadPool::wait();
+    }
     callback_worker_.stop();
-    share::ObThreadPool::wait();
     callback_worker_.wait();
     drain_wait_queue_();
     TRANS_LOG(INFO, "timestamp waiter stopped");
@@ -128,12 +180,25 @@ void ObTxTimestampWaiter::destroy()
 {
   if (is_inited_) {
     stop();
+    if (use_shared_executor_) {
+      const int tmp_ret = unregister_background_source_(true);
+      if (OB_SUCCESS != tmp_ret) {
+        TRANS_LOG_RET(WARN, tmp_ret,
+            "destroy timestamp waiter background source failed",
+            K(tmp_ret));
+      }
+    }
     drain_wait_queue_();
     callback_worker_.destroy();
-    share::ObThreadPool::destroy();
+    if (!use_shared_executor_) {
+      share::ObThreadPool::destroy();
+    }
     cond_.destroy();
     ts_mgr_ = NULL;
+    background_executor_ = NULL;
+    source_handle_.reset();
     latest_gts_ = 0;
+    use_shared_executor_ = false;
     is_inited_ = false;
   }
 }
@@ -147,7 +212,11 @@ int ObTxTimestampWaiter::wait_gts_elapse(const SCN &target_scn,
   bool gts_ready = true;
   need_wait = false;
 
-  if (OB_FAIL(ts_mgr_->get_gts(current_gts))) {
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(ctx)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(ts_mgr_->get_gts(current_gts))) {
     if (OB_EAGAIN == ret) {
       ret = OB_SUCCESS;
       gts_ready = false;
@@ -165,7 +234,16 @@ int ObTxTimestampWaiter::wait_gts_elapse(const SCN &target_scn,
       TRANS_LOG(ERROR, "push timestamp wait task failed", KR(ret), KP(ctx));
     } else {
       need_wait = true;
-      cond_.signal();
+      if (use_shared_executor_) {
+        const int tmp_ret = notify_background_source_();
+        if (OB_SUCCESS != tmp_ret) {
+          TRANS_LOG_RET(WARN, tmp_ret,
+              "notify timestamp waiter background source failed",
+              K(tmp_ret), KP(ctx));
+        }
+      } else {
+        cond_.signal();
+      }
     }
   }
   return ret;
@@ -190,7 +268,15 @@ void ObTxTimestampWaiter::run1()
         }
       } else {
         ATOMIC_STORE(&latest_gts_, gts.get_val_for_gts());
-        dispatch_ready_tasks_(gts);
+        int64_t dispatched_count = 0;
+        bool has_more_ready = false;
+        bool need_retry = false;
+        dispatch_ready_tasks_(
+            gts,
+            wait_queue_.size(),
+            dispatched_count,
+            has_more_ready,
+            need_retry);
       }
 
       ObThreadCondGuard guard(cond_);
@@ -201,10 +287,58 @@ void ObTxTimestampWaiter::run1()
   }
 }
 
-void ObTxTimestampWaiter::dispatch_ready_tasks_(const SCN &gts)
+int ObTxTimestampWaiter::process_one_quantum(
+    const share::ObBackgroundTaskPriority priority,
+    share::ObBackgroundTaskRunResult &result)
 {
   int ret = OB_SUCCESS;
-  int64_t task_count = wait_queue_.size();
+  bool need_retry = false;
+  if (!use_shared_executor_) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (share::BG_TASK_HIGH != priority) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!is_running_()) {
+  } else if (wait_queue_.size() > 0) {
+    SCN gts;
+    const int gts_ret = ts_mgr_->get_gts(gts);
+    if (OB_SUCCESS == gts_ret) {
+      ATOMIC_STORE(&latest_gts_, gts.get_val_for_gts());
+      dispatch_ready_tasks_(
+          gts,
+          MAX_DISPATCH_TASK_COUNT,
+          result.processed_count_,
+          result.has_more_ready_,
+          need_retry);
+    } else {
+      need_retry = true;
+      if (OB_EAGAIN != gts_ret) {
+        TRANS_LOG_RET(WARN, gts_ret,
+            "get gts in shared timestamp waiter failed", K(gts_ret));
+      }
+    }
+    if (!result.has_more_ready_
+        && need_retry
+        && wait_queue_.size() > 0) {
+      result.next_ready_ts_ =
+          ObTimeUtility::current_time() + POLL_INTERVAL_US;
+    }
+  }
+  return ret;
+}
+
+void ObTxTimestampWaiter::dispatch_ready_tasks_(
+    const SCN &gts,
+    const int64_t max_dispatch_count,
+    int64_t &dispatched_count,
+    bool &has_more_ready,
+    bool &need_retry)
+{
+  int ret = OB_SUCCESS;
+  int64_t task_count =
+      MIN(wait_queue_.size(), MAX(max_dispatch_count, 0L));
+  dispatched_count = 0;
+  has_more_ready = false;
+  need_retry = false;
 
   while (task_count-- > 0 && is_running_()) {
     ObLink *link = NULL;
@@ -214,10 +348,12 @@ void ObTxTimestampWaiter::dispatch_ready_tasks_(const SCN &gts)
     ObTxCtx *ctx = static_cast<ObTxCtx *>(link);
     if (ctx->get_commit_version() > gts) {
       wait_queue_.push(link);
+      need_retry = true;
       break;
     } else if (OB_FAIL(callback_worker_.push(ctx))) {
       if (is_running_()) {
         wait_queue_.push(link);
+        need_retry = true;
       } else {
         ctx->gts_callback_interrupted();
       }
@@ -225,8 +361,11 @@ void ObTxTimestampWaiter::dispatch_ready_tasks_(const SCN &gts)
         TRANS_LOG(WARN, "push timestamp callback failed", KR(ret), KP(ctx));
       }
       break;
+    } else {
+      ++dispatched_count;
     }
   }
+  has_more_ready = !need_retry && wait_queue_.size() > 0;
 }
 
 void ObTxTimestampWaiter::handle_callback_(ObTxCtx *ctx)
@@ -254,13 +393,63 @@ void ObTxTimestampWaiter::requeue_or_interrupt_(ObTxCtx *ctx)
     ObThreadCondGuard guard(cond_);
     if (is_running_()) {
       wait_queue_.push(static_cast<ObLink *>(ctx));
-      cond_.signal();
+      if (use_shared_executor_) {
+        const int tmp_ret = notify_background_source_();
+        if (OB_SUCCESS != tmp_ret) {
+          TRANS_LOG_RET(WARN, tmp_ret,
+              "notify requeued timestamp task failed",
+              K(tmp_ret), KP(ctx));
+        }
+      } else {
+        cond_.signal();
+      }
       requeued = true;
     }
   }
   if (!requeued) {
     ctx->gts_callback_interrupted();
   }
+}
+
+int ObTxTimestampWaiter::notify_background_source_()
+{
+  int ret = OB_SUCCESS;
+  if (!use_shared_executor_) {
+  } else if (OB_ISNULL(background_executor_)
+      || !source_handle_.is_valid()
+      || !is_running_()) {
+    ret = OB_NOT_RUNNING;
+  } else if (OB_FAIL(background_executor_->notify(
+      source_handle_, share::BG_TASK_HIGH))) {
+    TRANS_LOG(WARN,
+        "notify timestamp waiter background source failed", KR(ret));
+  }
+  return ret;
+}
+
+int ObTxTimestampWaiter::unregister_background_source_(
+    const bool wait_running)
+{
+  int ret = OB_SUCCESS;
+  bool need_retry = false;
+  do {
+    need_retry = false;
+    if (use_shared_executor_
+        && OB_NOT_NULL(background_executor_)
+        && source_handle_.is_valid()) {
+      ret = background_executor_->unregister_source(source_handle_);
+      if (OB_EAGAIN == ret && wait_running) {
+        need_retry = true;
+      } else if (OB_ENTRY_NOT_EXIST == ret || OB_NOT_INIT == ret) {
+        source_handle_.reset();
+        ret = OB_SUCCESS;
+      }
+    }
+    if (need_retry) {
+      ob_usleep(1000);
+    }
+  } while (need_retry);
+  return ret;
 }
 
 void ObTxTimestampWaiter::drain_wait_queue_()

@@ -251,6 +251,13 @@ int ObSharedNothingTmpFile::inner_seal_()
   return ret;
 }
 
+void ObSharedNothingTmpFile::notify_background_flush_()
+{
+  if (OB_NOT_NULL(page_cache_controller_)) {
+    page_cache_controller_->notify_doing_flush();
+  }
+}
+
 int ObSharedNothingTmpFile::inner_read_from_disk_(const int64_t expected_read_disk_size,
                                                   ObTmpFileIOCtx &io_ctx)
 {
@@ -1868,6 +1875,7 @@ int ObSharedNothingTmpFile::collect_flush_data_page_id_(
       LOG_ERROR("fail to push back flush page id", KR(ret), K(fd_), K(cur_page_id), KPC(this));
     } else {
       // ObTmpPageCacheKey cache_key(flush_task.get_block_index(),
+      //                             write_offset / ObTmpFileGlobal::ALLOC_PAGE_SIZE);
       // ObTmpPageCacheValue cache_value(page_buf);
       // ObTmpPageCache::get_instance().try_put_page_to_cache(cache_key, cache_value);
 

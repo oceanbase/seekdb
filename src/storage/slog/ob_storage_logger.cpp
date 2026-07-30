@@ -74,7 +74,12 @@ int ObStorageLogger::init(
     STORAGE_REDO_LOG(ERROR, "construct storage slog path fail", K(ret));
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(slog_dir_))) {
     STORAGE_REDO_LOG(WARN, "fail to create storage slog directory", K(ret), K_(slog_dir));
-  } else if (OB_FAIL(log_writer_->init(slog_dir_, max_log_file_size, max_log_size, log_file_spec))) {
+  } else if (OB_FAIL(log_writer_->init(
+      slog_dir_,
+      max_log_file_size,
+      max_log_size,
+      log_file_spec,
+      is_server ? "SLOGServer" : "SLOGLocal"))) {
     STORAGE_REDO_LOG(WARN, "fail to init log_writer_", K(ret), K_(slog_dir), K(max_log_file_size));
   } else {
     log_file_spec_ = log_file_spec;
@@ -96,6 +101,53 @@ int ObStorageLogger::start()
     STORAGE_REDO_LOG(WARN, "Slogger has not been inited.");
   } else if (OB_FAIL(log_writer_->start())) {
     STORAGE_REDO_LOG(WARN, "fail to start log_writer_");
+  }
+  return ret;
+}
+
+int ObStorageLogger::attach_background_executor(
+    share::ObBackgroundTaskExecutor *background_executor)
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    STORAGE_REDO_LOG(WARN,
+        "slogger has not been inited",
+        K(ret));
+  } else if (OB_ISNULL(background_executor)) {
+    ret = OB_INVALID_ARGUMENT;
+    STORAGE_REDO_LOG(WARN,
+        "background executor is null",
+        K(ret), KP(background_executor));
+  } else {
+    lib::ObMutexGuard guard(build_log_mutex_);
+    if (OB_FAIL(log_writer_->attach_background_executor(
+        background_executor))) {
+      STORAGE_REDO_LOG(WARN,
+          "fail to attach slog writer to background executor",
+          K(ret), KP(background_executor));
+    }
+  }
+  return ret;
+}
+
+int ObStorageLogger::detach_background_executor()
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    STORAGE_REDO_LOG(WARN,
+        "slogger has not been inited",
+        K(ret));
+  } else {
+    // Serialize the consumer transition with producers that append a newly
+    // built SLOG item. Existing waiters are released by either consumer.
+    lib::ObMutexGuard guard(build_log_mutex_);
+    if (OB_FAIL(log_writer_->detach_background_executor())) {
+      STORAGE_REDO_LOG(WARN,
+          "fail to detach slog writer from background executor",
+          K(ret));
+    }
   }
   return ret;
 }

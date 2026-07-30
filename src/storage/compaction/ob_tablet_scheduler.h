@@ -28,6 +28,7 @@
 #include "storage/compaction/ob_tablet_scheduler_task_mgr.h"
 #include "storage/compaction/ob_compaction_schedule_iterator.h"
 #include "share/compaction/ob_schedule_batch_size_mgr.h"
+#include "share/ob_background_task_executor.h"
 #include "storage/compaction/ob_compaction_schedule_util.h"
 #include "storage/compaction/ob_medium_loop.h"
 
@@ -94,7 +95,8 @@ private:
 };
 
 
-class ObTabletScheduler : public ObBasicMergeScheduler
+class ObTabletScheduler : public ObBasicMergeScheduler,
+                          public share::ObIBackgroundTaskSource
 {
 public:
   ObTabletScheduler();
@@ -106,7 +108,7 @@ public:
   void destroy();
   void reset();
   void stop();
-  void wait() { timer_task_mgr_.wait(); }
+  void wait();
   int reload_runtime_config();
   OB_INLINE bool schedule_ignore_error(const int ret)
   {
@@ -130,6 +132,9 @@ public:
       const uint64_t table_id,
       const blocksstable::MacroBlockId &macro_id,
       const int64_t prefix_len);
+  int process_one_quantum(
+      const share::ObBackgroundTaskPriority priority,
+      share::ObBackgroundTaskRunResult &result) override;
   static bool check_tx_table_ready(ObLS &ls, const share::SCN &check_scn);
   static int fill_minor_compaction_param(
       const ObTabletHandle &tablet_handle,
@@ -214,7 +219,12 @@ private:
   static const int64_t PRINT_LOG_INTERVAL = 2 * 60 * 1000 * 1000L; // 2m
   static const int64_t MERGE_BACTH_FREEZE_CNT = 100L;
 private:
+  int unregister_bf_source_(const bool wait_running);
+
   bool is_inited_;
+  bool use_shared_bf_executor_;
+  share::ObBackgroundTaskExecutor *background_executor_;
+  share::ObBackgroundTaskSourceHandle bf_source_handle_;
   common::ObDedupQueue bf_queue_;
   ObFastFreezeChecker fast_freeze_checker_;
   ObCompactionScheduleIterator minor_tablet_iter_;

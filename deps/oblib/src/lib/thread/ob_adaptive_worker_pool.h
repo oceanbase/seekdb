@@ -90,6 +90,25 @@ public:
     return false;
   }
 
+  /// A non-blocking expansion attempt for pools that can safely retry from
+  /// their queue/manager path. Unlike try_expand_one(), worker creation
+  /// failure rolls the reservation back instead of spinning in the caller.
+  bool try_expand_one_once(int64_t limit)
+  {
+    int64_t cur = total_cnt_.load(std::memory_order_relaxed);
+    while (cur < limit) {
+      if (total_cnt_.compare_exchange_weak(cur, cur + 1,
+              std::memory_order_acq_rel, std::memory_order_relaxed)) {
+        if (!self().do_add_worker()) {
+          total_cnt_.fetch_sub(1, std::memory_order_acq_rel);
+          return false;
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
   /// CAS-based shrink down to the given floor.
   /// Refuses to shrink to 0 when queue is non-empty.
   bool try_shrink_one(int64_t floor)
@@ -111,6 +130,11 @@ public:
 protected:
   int64_t idle_count() const { return idle_cnt_.load(std::memory_order_relaxed); }
   int64_t worker_count() const { return total_cnt_.load(std::memory_order_relaxed); }
+  void reset_worker_counts()
+  {
+    idle_cnt_.store(0, std::memory_order_release);
+    total_cnt_.store(0, std::memory_order_release);
+  }
 
 private:
   int64_t idle_enter() { return idle_cnt_.fetch_add(1, std::memory_order_relaxed); }

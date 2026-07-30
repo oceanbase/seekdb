@@ -81,6 +81,18 @@ int PalfEnv::start()
   return ret;
 }
 
+int PalfEnv::attach_log_io_callback_background_executor(
+    share::ObBackgroundTaskExecutor *background_executor)
+{
+  return palf_env_impl_.attach_log_io_callback_background_executor(
+      background_executor);
+}
+
+int PalfEnv::detach_log_io_callback_background_executor()
+{
+  return palf_env_impl_.detach_log_io_callback_background_executor();
+}
+
 void PalfEnv::stop_()
 {
   palf_env_impl_.stop();

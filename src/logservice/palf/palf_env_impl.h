@@ -52,6 +52,7 @@ class ObReqTransport;
 namespace share
 {
 class ObLocalDevice;
+class ObBackgroundTaskExecutor;
 }
 namespace palf
 {
@@ -215,6 +216,9 @@ public:
   void stop();
   void wait();
   void destroy();
+  int attach_log_io_callback_background_executor(
+      share::ObBackgroundTaskExecutor *background_executor);
+  int detach_log_io_callback_background_executor();
 public:
   // Create log stream interface
   // @param [in] palf_base_info, palf's log start information

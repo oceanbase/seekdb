@@ -33,6 +33,7 @@
 #include "lib/lock/ob_qsync_lock.h"
 #include "share/io/ob_io_define.h"
 #include "lib/queue/ob_lighty_queue.h"
+#include "share/ob_background_task_executor.h"
 
 #ifdef _WIN32
 // Windows: define rusage structure and getrusage function
@@ -396,7 +397,10 @@ private:
   ObThreadCond depth_cond_;
 };
 
-class ObSyncIOChannel : public ObIOChannel, public common::ObSimpleThreadPool
+class ObSyncIOChannel
+    : public ObIOChannel,
+      public common::ObSimpleThreadPool,
+      public share::ObIBackgroundTaskSource
 {
 public:
   ObSyncIOChannel();
@@ -407,17 +411,32 @@ public:
   virtual void cancel(ObIORequest &req) override;
   virtual int64_t get_queue_count() const override;
   int set_thread_count(const int64_t conf_thread_count);
+  int attach_background_executor(
+      share::ObBackgroundTaskExecutor *background_executor);
+  int detach_background_executor();
+  virtual int process_one_quantum(
+      const share::ObBackgroundTaskPriority priority,
+      share::ObBackgroundTaskRunResult &result) override;
   INHERIT_TO_STRING_KV("IOChannel", ObIOChannel, K(get_queue_num()));
 private:
   virtual void handle(void *task) override;
   int start_thread(const int64_t thread_num, const int64_t task_num);
   void destroy_thread();
   int do_sync_io(ObIORequest &req);
+  int notify_background_source_();
+  int unregister_background_source_(const bool wait_running);
+  void ensure_rescue_worker_(const bool force);
 private:
   static const int64_t SYNC_IO_TASK_COUNT = 1024;
   static int64_t cal_thread_count(const int64_t conf_thread_count);
 private:
   bool is_inited_;
+  bool use_shared_executor_;
+  int64_t config_thread_count_;
+  lib::ObMutex source_lock_;
+  lib::ObMutex rescue_lock_;
+  share::ObBackgroundTaskExecutor *background_executor_;
+  share::ObBackgroundTaskSourceHandle source_handle_;
   static const int64_t MAX_SYNC_IO_QUEUE_COUNT = 512;
   ObThreadCond cond_;
   int64_t used_io_depth_;
@@ -437,6 +456,9 @@ public:
            const int64_t max_io_depth,
            ObIAllocator &allocator);
   void destroy();
+  int attach_sync_io_background_executor(
+      share::ObBackgroundTaskExecutor *background_executor);
+  int detach_sync_io_background_executor();
   int submit(ObIORequest &req);
   void print_status();
   int reload_config(const ObIOConfig &conf);
@@ -458,7 +480,9 @@ private:
   ObSpinLock lock_for_sync_io_;
 };
 
-class ObIOCallbackManager final : public ObLinkQueueThreadPool
+class ObIOCallbackManager final
+    : public ObLinkQueueThreadPool,
+      public share::ObIBackgroundTaskSource
 {
 public:
   ObIOCallbackManager();
@@ -469,12 +493,26 @@ public:
 
   int enqueue_callback(ObIORequest &req);
   int update_thread_count(const int64_t thread_count);
+  int attach_background_executor(
+      share::ObBackgroundTaskExecutor *background_executor);
+  int detach_background_executor();
+  virtual int process_one_quantum(
+      const share::ObBackgroundTaskPriority priority,
+      share::ObBackgroundTaskRunResult &result) override;
   int64_t to_string(char *buf, const int64_t len) const;
 private:
   virtual void handle(LinkTask *task) override;
+  int notify_background_source_();
+  int unregister_background_source_(const bool wait_running);
+  void ensure_rescue_worker_(const bool force);
 private:
   bool is_inited_;
+  bool use_shared_executor_;
   int64_t config_thread_count_;
+  lib::ObMutex source_lock_;
+  lib::ObMutex rescue_lock_;
+  share::ObBackgroundTaskExecutor *background_executor_;
+  share::ObBackgroundTaskSourceHandle source_handle_;
 };
 
 struct ObIOGroupMemInfo
@@ -538,7 +576,9 @@ enum ObDeviceHealthStatus
 
 const char *device_health_status_to_str(const ObDeviceHealthStatus dhs);
 
-class ObIOFaultDetector : public common::ObSimpleThreadPool
+class ObIOFaultDetector
+  : public common::ObSimpleThreadPool,
+    public share::ObIBackgroundTaskSource
 {
 public:
   ObIOFaultDetector(const ObIOConfig &io_config);
@@ -546,13 +586,23 @@ public:
   int init();
   void destroy();
   int start();
+  int attach_background_executor(
+      share::ObBackgroundTaskExecutor *background_executor);
+  int detach_background_executor();
   virtual void handle(void *task) override;
+  virtual int process_one_quantum(
+      const share::ObBackgroundTaskPriority priority,
+      share::ObBackgroundTaskRunResult &result) override;
   int get_device_health_status(ObDeviceHealthStatus &dhs, int64_t &device_abnormal_time);
   void record_io_error(const ObIOResult &result, const ObIORequest &req);
   void record_io_timeout(const ObIOResult &result, const ObIORequest &req);
   int record_timing_task(const int64_t first_id, const int64_t second_id);
 
 private:
+  int push_retry_task_(void *task);
+  int notify_background_source_();
+  int unregister_background_source_(const bool wait_running);
+  void drain_shared_queue_();
   int record_read_failure_(const ObIOResult &result, const ObIORequest &req);
   int record_write_failure();
   void set_device_warning();
@@ -562,10 +612,16 @@ private:
   static const int64_t WRITE_FAILURE_DETECT_EVENT_COUNT = 100;
   static const int64_t IO_HEALTH_QUEUE_DEPTH = 100;
   bool is_inited_;
+  bool is_running_;
+  bool use_shared_executor_;
   ObSpinLock lock_;
   const ObIOConfig &io_config_;
   bool is_device_warning_;
   int64_t last_device_warning_ts_;
+  common::ObLightyQueue shared_queue_;
+  lib::ObMutex source_lock_;
+  share::ObBackgroundTaskExecutor *background_executor_;
+  share::ObBackgroundTaskSourceHandle source_handle_;
 };
 
 class ObIOTracer final

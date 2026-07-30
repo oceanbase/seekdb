@@ -15,8 +15,10 @@
  */
 
 #include "ob_ddl_task_executor.h"
+#include "lib/ob_running_mode.h"
 #include "lib/thread/ob_thread_name.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/ob_force_print_log.h"
 
@@ -200,6 +202,7 @@ void ObDDLTaskExecutor::run1()
   int64_t executed_task_count = 0;
   ObIDDLTask *task = NULL;
   ObIDDLTask *first_retry_task = NULL;
+  ObDIActionGuard ag("DDLService", "DDLTaskExecutor", "detect task");
   lib::set_thread_name("DDLTaskExecutor");
   while (!has_set_stop()) {
     while (!has_set_stop() && executed_task_count < BATCH_EXECUTE_COUNT) {
@@ -220,6 +223,7 @@ void ObDDLTaskExecutor::run1()
         }
         break;
       } else {
+        ObDIActionGuard(ObDIActionGuard::NS_ACTION, "TaskType:%d", task->get_type());
         task->process();
         ++executed_task_count;
         if (task->need_retry()) {
@@ -247,7 +251,10 @@ void ObDDLTaskExecutor::run1()
 ObDDLLocalBuilder::ObDDLLocalBuilder()
   : is_thread_started_(false),
     is_stopped_(true),
-    task_queue_()
+    use_shared_executor_(false),
+    task_queue_(),
+    background_executor_(nullptr),
+    source_handle_()
 {
 
 }
@@ -265,15 +272,37 @@ int ObDDLLocalBuilder::init()
   if (OB_UNLIKELY(is_thread_started_)) {
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("ddl local builder thread is already started", KR(ret), K(is_thread_started_));
-  } else if (OB_FAIL(task_queue_.init(get_thread_cnt_(), 4 << 10, "DdlBuild"))) {
+  } else if (FALSE_IT(use_shared_executor_ = lib::is_mini_mode())) {
+  } else if (use_shared_executor_
+      && (OB_ISNULL(share::g_mp)
+          || OB_ISNULL(background_executor_ =
+              share::g_mp->background_task_executor()))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("background task executor is null", K(ret),
+        KP(share::g_mp), KP(background_executor_));
+  } else if (use_shared_executor_
+      && OB_FAIL(task_queue_.init_without_thread(4 << 10))) {
+    LOG_ERROR("init externally driven ddl local builder queue failed",
+        KR(ret));
+  } else if (!use_shared_executor_
+      && OB_FAIL(task_queue_.init(get_thread_cnt_(), 4 << 10, "DdlBuild"))) {
     LOG_ERROR("init ddl local builder task queue failed", KR(ret));
-  } else if (OB_FAIL(task_queue_.start())) {
+  } else if (!use_shared_executor_ && OB_FAIL(task_queue_.start())) {
     LOG_WARN("index build thread start failed", KR(ret));
-  } else {
-    is_thread_started_ = true;
-    is_stopped_ = true;
+  } else if (use_shared_executor_) {
+    ObBackgroundTaskSourceConfig config;
+    config.name_ = "DdlBuild";
+    config.max_concurrency_ = 1;
+    if (OB_FAIL(background_executor_->register_source(
+        *this, config, source_handle_))) {
+      LOG_WARN("register ddl local builder source failed", KR(ret));
+    }
   }
-  if (OB_FAIL(ret)) {
+  if (OB_SUCC(ret)) {
+    is_thread_started_ = true;
+    ATOMIC_STORE(&is_stopped_, true);
+  } else {
+    (void) unregister_source_(true);
     task_queue_.destroy();
   }
   FLOG_INFO("[DDL_LOCAL_BUILDER] finish init ddl local builder",
@@ -290,7 +319,7 @@ int ObDDLLocalBuilder::start()
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("ddl local builder thread is not started", KR(ret), K(is_thread_started_));
   } else {
-    is_stopped_ = false;
+    ATOMIC_STORE(&is_stopped_, false);
   }
   FLOG_INFO("[DDL_LOCAL_BUILDER] finish start ddl local builder",
             KR(ret), K(is_thread_started_), K(is_stopped_));
@@ -302,7 +331,7 @@ void ObDDLLocalBuilder::stop()
   FLOG_INFO("[DDL_LOCAL_BUILDER] begin stop ddl local builder",
             K(is_thread_started_), K(is_stopped_));
   {
-    is_stopped_ = true;
+    ATOMIC_STORE(&is_stopped_, true);
   }
   FLOG_INFO("[DDL_LOCAL_BUILDER] finish stop ddl local builder",
             K(is_thread_started_), K(is_stopped_));
@@ -313,7 +342,16 @@ void ObDDLLocalBuilder::server_module_thread_stop()
   FLOG_INFO("[DDL_LOCAL_BUILDER] begin server_module_thread_stop ddl local builder",
             K(is_thread_started_), K(is_stopped_));
   if (is_thread_started_) {
-    task_queue_.stop();
+    ATOMIC_STORE(&is_stopped_, true);
+    if (use_shared_executor_) {
+      const int tmp_ret = unregister_source_(false);
+      if (OB_SUCCESS != tmp_ret && OB_EAGAIN != tmp_ret) {
+        LOG_WARN_RET(tmp_ret,
+            "failed to stop ddl local builder background source");
+      }
+    } else {
+      task_queue_.stop();
+    }
   }
   FLOG_INFO("[DDL_LOCAL_BUILDER] finish server_module_thread_stop ddl local builder",
             K(is_thread_started_), K(is_stopped_));
@@ -324,6 +362,13 @@ void ObDDLLocalBuilder::server_module_thread_wait()
   FLOG_INFO("[DDL_LOCAL_BUILDER] begin server_module_thread_wait ddl local builder",
             K(is_thread_started_), K(is_stopped_));
   if (is_thread_started_) {
+    if (use_shared_executor_) {
+      const int tmp_ret = unregister_source_(true);
+      if (OB_SUCCESS != tmp_ret) {
+        LOG_WARN_RET(tmp_ret,
+            "failed to wait ddl local builder background source");
+      }
+    }
     task_queue_.wait();
   }
   FLOG_INFO("[DDL_LOCAL_BUILDER] finish server_module_thread_wait ddl local builder",
@@ -336,7 +381,12 @@ void ObDDLLocalBuilder::destroy()
             K(is_thread_started_), K(is_stopped_));
   {
     if (is_thread_started_) {
-      is_stopped_ = true;
+      ATOMIC_STORE(&is_stopped_, true);
+      const int tmp_ret = unregister_source_(true);
+      if (OB_SUCCESS != tmp_ret) {
+        LOG_WARN_RET(tmp_ret,
+            "failed to unregister ddl local builder background source");
+      }
       task_queue_.destroy();
       is_thread_started_ = false;
     }
@@ -351,18 +401,73 @@ int ObDDLLocalBuilder::push_task(ObAsyncTask &task)
   if (OB_UNLIKELY(!is_thread_started_)) {
     ret = OB_ERR_SYS;
     LOG_WARN("ddl builder thread not started", K(ret), K(is_thread_started_));
-  } else if (is_stopped_) {
+  } else if (ATOMIC_LOAD(&is_stopped_)) {
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("ddl builder has stopped", KR(ret), K(is_stopped_));
   } else if (OB_FAIL(task_queue_.push(task))) {
     LOG_WARN("add task to queue failed", KR(ret));
+  } else if (use_shared_executor_) {
+    const int tmp_ret = background_executor_->notify(
+        source_handle_, BG_TASK_NORMAL);
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN_RET(tmp_ret,
+          "failed to notify ddl local builder after accepting task");
+    }
+  }
+  return ret;
+}
+
+int ObDDLLocalBuilder::process_one_quantum(
+    const ObBackgroundTaskPriority priority,
+    ObBackgroundTaskRunResult &result)
+{
+  int ret = OB_SUCCESS;
+  if (!use_shared_executor_) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (BG_TASK_NORMAL != priority) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    bool processed = false;
+    int64_t next_ready_ts = 0;
+    bool has_more_ready = false;
+    if (OB_FAIL(task_queue_.process_one_task(
+        processed, next_ready_ts, has_more_ready))) {
+      LOG_WARN("failed to process ddl local builder task", K(ret));
+    } else {
+      result.processed_count_ = processed ? 1 : 0;
+      result.has_more_ready_ = has_more_ready;
+      result.next_ready_ts_ = next_ready_ts;
+    }
+  }
+  return ret;
+}
+
+int ObDDLLocalBuilder::unregister_source_(const bool wait)
+{
+  int ret = OB_SUCCESS;
+  if (use_shared_executor_
+      && OB_NOT_NULL(background_executor_)
+      && source_handle_.is_valid()) {
+    do {
+      ret = background_executor_->unregister_source(source_handle_);
+      if (wait && OB_EAGAIN == ret) {
+        ob_usleep(10 * 1000L);
+      }
+    } while (wait && OB_EAGAIN == ret);
+    if (OB_ENTRY_NOT_EXIST == ret || OB_NOT_INIT == ret) {
+      source_handle_.reset();
+      ret = OB_SUCCESS;
+    }
+  }
+  if (!source_handle_.is_valid()) {
+    background_executor_ = nullptr;
   }
   return ret;
 }
 
 int64_t ObDDLLocalBuilder::get_thread_cnt_() const
 {
-  return 16;
+  return lib::is_mini_mode() ? 1 : 16;
 }
 
 }  // end namespace share

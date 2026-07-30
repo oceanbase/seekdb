@@ -263,6 +263,17 @@ int PalfEnvImpl::start()
   return ret;
 }
 
+int PalfEnvImpl::attach_log_io_callback_background_executor(
+    share::ObBackgroundTaskExecutor *background_executor)
+{
+  return cb_thread_pool_.attach_background_executor(background_executor);
+}
+
+int PalfEnvImpl::detach_log_io_callback_background_executor()
+{
+  return cb_thread_pool_.detach_background_executor();
+}
+
 void PalfEnvImpl::stop()
 {
   if (is_running_) {

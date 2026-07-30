@@ -19,6 +19,7 @@
 
 #include "observer/ob_uniq_task_queue.h"   // for ObIUniqTaskQueueTask
 #include "common/ob_tablet_id.h"           // for ObTablet
+#include "share/ob_background_task_executor.h"
 
 namespace oceanbase
 {
@@ -122,12 +123,15 @@ public:
 typedef ObArray<ObTabletRuntimeMetaUpdateTask> UpdateTaskList;
 typedef ObArray<ObTabletRuntimeMetaUpdateTask> RemoveTaskList;
 
-class ObTabletRuntimeMetaUpdater
+class ObTabletRuntimeMetaUpdater : public share::ObIBackgroundTaskSource
 {
 public:
   ObTabletRuntimeMetaUpdater()
       : is_inited_(false),
         is_stop_(true),
+        use_shared_executor_(false),
+        background_executor_(nullptr),
+        source_handle_(),
         update_queue_() {}
   virtual ~ObTabletRuntimeMetaUpdater() { destroy(); }
   static int server_module_init(ObTabletRuntimeMetaUpdater *&tablet_runtime_meta_updater);
@@ -168,7 +172,11 @@ public:
   int diagnose_existing_task(
       ObIArray<ObTabletRuntimeMetaUpdateTask> &waiting_tasks,
       ObIArray<ObTabletRuntimeMetaUpdateTask> &processing_tasks);
+  int process_one_quantum(
+      const share::ObBackgroundTaskPriority priority,
+      share::ObBackgroundTaskRunResult &result) override;
 private:
+  int unregister_source_(const bool wait_running);
   int64_t cal_thread_count_();
   void diagnose_batch_tasks_(
       const ObIArray<ObTabletRuntimeMetaUpdateTask> &batch_tasks,
@@ -240,7 +248,10 @@ private:
   const int64_t UPDATE_QUEUE_SIZE = 10 * 10000;
   const int64_t DIAGNOSE_MAX_BATCH_COUNT = 3;
   bool is_inited_;
-  bool is_stop_;
+  volatile bool is_stop_;
+  bool use_shared_executor_;
+  share::ObBackgroundTaskExecutor *background_executor_;
+  share::ObBackgroundTaskSourceHandle source_handle_;
   ObTabletRuntimeMetaUpdateTaskQueue update_queue_;
   DISALLOW_COPY_AND_ASSIGN(ObTabletRuntimeMetaUpdater);
 };

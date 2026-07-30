@@ -16,17 +16,17 @@
 
 #ifndef OCEANBASE_OBSERVER_OB_UNIQ_TASK_QUEUE_H_
 #define OCEANBASE_OBSERVER_OB_UNIQ_TASK_QUEUE_H_
-#include "share/rc/ob_module_provider.h"
 
-#include "lib/allocator/ob_malloc.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/hash/ob_hashset.h"
 #include "lib/list/ob_dlink_node.h"
 #include "lib/thread/ob_thread_name.h"
 #include "lib/list/ob_dlist.h"
+#include "lib/thread/ob_dedup_queue.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/utility/ob_tracepoint.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/ob_thread_pool.h"
 #include "share/ob_debug_sync.h"
 #include "share/ob_debug_sync_point.h"
@@ -106,13 +106,20 @@ public:
   ObUniqTaskQueue() : inited_(false), queue_size_(0), thread_name_(nullptr), task_set_(),
                       task_count_(0), group_map_(), processing_task_set_(), cur_group_(NULL),
                       processing_thread_count_(0), barrier_task_count_(0),
-  updater_(NULL) {}
+                      updater_(NULL), external_stop_flag_(NULL) {}
   virtual ~ObUniqTaskQueue() { }
 
   int init(Process *process, const int64_t thread_num, const int64_t queue_size,
            const char *thread_name = nullptr);
+  int init_without_thread(
+      Process *process,
+      const int64_t max_concurrency,
+      const int64_t queue_size,
+      const char *thread_name = nullptr,
+      const volatile bool *external_stop_flag = nullptr);
   // init() will trigger start(), we only want to init and start later in some cases
   int start() override;
+  void destroy();
   int init_only(
       Process *process,
       const int64_t thread_num,
@@ -125,6 +132,7 @@ public:
   //      OB_EAGAIN: same task exist
   //      OB_SIZE_OVERFLOW: queue size overflow
   virtual int add(const Task &task);
+  int process_one_quantum(int64_t &processed_count, bool &has_more_ready);
 
   virtual int check_exist(const Task &task, bool &exist);
   virtual int check_processing_exist(const Task &task, bool &exist);
@@ -160,6 +168,7 @@ private:
   int get_next_group(Group *&group);
   int batch_process_tasks(common::ObIArray<Task> &tasks);
   int process_barrier(Task &task);
+  bool is_processing_stopped() const;
   int try_lock(const Task &tasks);
   int batch_unlock(const common::ObIArray<Task> &tasks);
 
@@ -196,6 +205,9 @@ private:
   int64_t processing_thread_count_;
   int64_t barrier_task_count_;
   Process *updater_;
+  // Externally driven queues run on a shared physical thread, so the
+  // source-level stop state cannot be inferred from Thread::current().
+  const volatile bool *external_stop_flag_;
   DISALLOW_COPY_AND_ASSIGN(ObUniqTaskQueue);
 };
 // TODO: init should not trigger start(), have to remove start() out of init()
@@ -212,6 +224,22 @@ int ObUniqTaskQueue<Task, Process>::init(Process *updater, const int64_t thread_
     SERVER_LOG(WARN, "start thread failed", K(ret), K(thread_num));
   } else {
     inited_ = true;
+  }
+  return ret;
+}
+
+template <typename Task, typename Process>
+int ObUniqTaskQueue<Task, Process>::init_without_thread(
+    Process *updater,
+    const int64_t max_concurrency,
+    const int64_t queue_size,
+    const char *thread_name,
+    const volatile bool *external_stop_flag)
+{
+  const int ret =
+      init_only(updater, max_concurrency, queue_size, thread_name);
+  if (OB_SUCCESS == ret) {
+    external_stop_flag_ = external_stop_flag;
   }
   return ret;
 }
@@ -264,6 +292,33 @@ int ObUniqTaskQueue<Task, Process>::start()
     SERVER_LOG(WARN, "start thread failed", K(ret));
   }
   return ret;
+}
+
+template <typename Task, typename Process>
+void ObUniqTaskQueue<Task, Process>::destroy()
+{
+  if (inited_) {
+    share::ObThreadPool::stop();
+    share::ObThreadPool::wait();
+    share::ObThreadPool::destroy();
+    {
+      common::ObThreadCondGuard guard(cond_);
+      groups_.clear();
+      cur_group_ = NULL;
+      task_count_ = 0;
+      processing_thread_count_ = 0;
+      barrier_task_count_ = 0;
+      task_set_.destroy();
+      group_map_.destroy();
+      processing_task_set_.destroy();
+      updater_ = NULL;
+      external_stop_flag_ = NULL;
+      thread_name_ = NULL;
+      queue_size_ = 0;
+      inited_ = false;
+    }
+    cond_.destroy();
+  }
 }
 
 template <typename Task, typename Process>
@@ -382,142 +437,183 @@ template <typename Task, typename Process>
 void ObUniqTaskQueue<Task, Process>::run1()
 {
   SERVER_LOG(INFO, "UniqTaskQueue thread start");
-  int ret = common::OB_SUCCESS;
-  Group *group = NULL;
-  const int64_t batch_exec_cnt = common::UNIQ_TASK_QUEUE_BATCH_EXECUTE_NUM;
-  common::ObArray<Task> tasks;
+  ObDIActionGuard ag("UniqTaskThreadPool", thread_name_, nullptr);
   if (thread_name_ != nullptr) {
     lib::set_thread_name(thread_name_, get_thread_idx());
   }
   if (!inited_) {
-    ret = common::OB_NOT_INIT;
+    const int ret = common::OB_NOT_INIT;
     SERVER_LOG(WARN, "not init", K(ret));
   } else {
     while (!lib::Thread::current().has_set_stop()) {
       DEBUG_SYNC(common::BEFORE_UNIQ_TASK_RUN);
-      Task *t = NULL;
-      tasks.reuse();
-      if (OB_SUCC(tasks.reserve(batch_exec_cnt))) {
-        group = NULL;
-        common::ObThreadCondGuard guard(cond_);
-        if (task_count() > 0) {
-          if (OB_FAIL(get_next_group(group))) {
-            SERVER_LOG(WARN, "get_next_next failed", K(ret));
-          } else if (NULL == group || group->list_.get_size() <= 0) {
-            ret = common::OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "group is null or group is empty", K(ret));
-          } else {
-            while (common::OB_SUCCESS == ret && tasks.count() < batch_exec_cnt
-                && !group->list_.is_empty()) {
-              if (tasks.count() > 0 && group->list_.get_first()->need_process_alone()) {
-                break;
-              } else if (OB_FAIL(try_lock(*group->list_.get_first()))) {
-                ret = common::OB_SUCCESS;
-                break;
-              } else {
-                t = group->list_.remove_first();
-                if (NULL == t) {
-                  ret = common::OB_ERR_UNEXPECTED;
-                  SERVER_LOG(WARN, "remove first return null", K(ret));
-                } else if (OB_FAIL(tasks.push_back(*t))) {
-                  SERVER_LOG(WARN, "push_back failed", K(ret));
-                } else if (OB_FAIL(task_set_.erase_refactored(*t))) {
-                  SERVER_LOG(ERROR, "erase task from task map failed",
-                             K(ret), "task", tasks.at(tasks.count() - 1));
-                } else {
-                  t = NULL;
-                  --task_count_;
-                }
-                if (OB_SUCC(ret)
-                    && tasks.at(tasks.count() - 1).need_process_alone()) {
-                  break;
-                }
-              }
-            } //end while
-            if (common::OB_SUCCESS == ret && tasks.count() > 0) {
-              ++processing_thread_count_;
-              if (group->list_.get_size() <= 0) {
-                if (group->get_next() == groups_.get_header()) {
-                  // bugfix: workitem/49006474
-                  cur_group_ = group->get_next();
-                } else {
-                  cur_group_ = group->get_prev();
-                }
-                if (NULL == groups_.remove(group)) {
-                  ret = common::OB_ERR_UNEXPECTED;
-                  SERVER_LOG(WARN, "groups remove return null", K(ret));
-                } else {
-                  if (OB_FAIL(group_map_.erase_refactored(tasks.at(0).get_group_id()))) {
-                    SERVER_LOG(WARN, "erase group from group_map failed",
-                        K(ret), "group_id", tasks.at(0).get_group_id());
-                  }
-                }
-              } else {
-                cur_group_ = group;
-              }
-            }
-          }
-        } else {
-          cond_.wait(QUEUE_WAIT_INTERVAL_MS);
-        }
-      } else {//end cond_
-        ob_usleep(QUEUE_WAIT_INTERVAL_MS * 1000);
+      int64_t processed_count = 0;
+      bool has_more_ready = false;
+      const int ret = process_one_quantum(processed_count, has_more_ready);
+      if (OB_SUCCESS != ret) {
+        SERVER_LOG(WARN, "fail to process task quantum", K(ret));
       }
-      if (common::OB_SUCCESS == ret && tasks.count() > 0) {
-        bool is_batch_execute = false;
-        FOREACH_CNT_X(task, tasks, common::OB_SUCCESS == ret) {
-          if (OB_ISNULL(task)) {
-            ret = common::OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "get invalid task", K(ret), K(task));
-          } else if (task->is_barrier()) {
-            if (is_batch_execute) {
-              SERVER_LOG(ERROR, "barrier task should not execute with non-barrier task", K(*task));
-            }
-            common::ObThreadCondGuard guard(cond_);
-            ++barrier_task_count_;
-            --processing_thread_count_;
-            if (0 == processing_thread_count_) {
-              int tmp_ret = cond_.broadcast();
-              if (common::OB_SUCCESS != tmp_ret) {
-                SERVER_LOG(WARN, "condition broadcast fail", K(tmp_ret));
-              }
-            }
-            while (0 != processing_thread_count_) {
-              cond_.wait(QUEUE_WAIT_INTERVAL_MS);
-            }
-            if (OB_FAIL(process_barrier(*task))) {
-              SERVER_LOG(WARN, "process task failed", "task", *task, K(ret));
-            }
-            --barrier_task_count_;
-            ++processing_thread_count_;
-          } else {
-            is_batch_execute = true;
-          }
-        } //end foreach
-        if (OB_SUCC(ret) && is_batch_execute) {
-          if (OB_FAIL(batch_process_tasks(tasks))) {
-            SERVER_LOG(WARN, "fail to batch execute task", K(ret), K(tasks.count()));
-          }
-        }
-        // always decrease $processing_thread_count_
+      if (0 == processed_count) {
         common::ObThreadCondGuard guard(cond_);
-        --processing_thread_count_;
-        if (0 == processing_thread_count_ && barrier_task_count_ > 0) {
-          int tmp_ret = cond_.broadcast();
-          if (common::OB_SUCCESS != tmp_ret) {
-            SERVER_LOG(WARN, "condition broadcast fail", K(tmp_ret));
-          }
-        }
-      }
-      if (tasks.count() > 0) {
-        common::ObThreadCondGuard guard(cond_);
-        if (OB_FAIL(batch_unlock(tasks))) {
-          SERVER_LOG(ERROR, "fail to batch unlock task", K(ret));
+        if (0 == task_count_) {
+          (void) cond_.wait(QUEUE_WAIT_INTERVAL_MS);
         }
       }
     }
   }
   SERVER_LOG(INFO, "UniqTaskQueue thread stop");
+}
+
+template <typename Task, typename Process>
+int ObUniqTaskQueue<Task, Process>::process_one_quantum(
+    int64_t &processed_count,
+    bool &has_more_ready)
+{
+  int ret = common::OB_SUCCESS;
+  Group *group = NULL;
+  Task *task_ptr = NULL;
+  common::ObSEArray<Task, common::UNIQ_TASK_QUEUE_BATCH_EXECUTE_NUM> tasks;
+  processed_count = 0;
+  has_more_ready = false;
+
+  if (!inited_) {
+    ret = common::OB_NOT_INIT;
+    SERVER_LOG(WARN, "not init", K(ret));
+  } else {
+    {
+      common::ObThreadCondGuard guard(cond_);
+      if (task_count_ > 0) {
+        if (OB_FAIL(get_next_group(group))) {
+          SERVER_LOG(WARN, "get next group failed", K(ret));
+        } else if (OB_ISNULL(group) || group->list_.is_empty()) {
+          ret = common::OB_ERR_UNEXPECTED;
+          SERVER_LOG(WARN, "group is null or empty", K(ret), KP(group));
+        } else {
+          while (OB_SUCC(ret)
+                 && tasks.count() < common::UNIQ_TASK_QUEUE_BATCH_EXECUTE_NUM
+                 && !group->list_.is_empty()) {
+            if (tasks.count() > 0
+                && group->list_.get_first()->need_process_alone()) {
+              break;
+            } else if (OB_FAIL(try_lock(*group->list_.get_first()))) {
+              // Another quantum owns the same key. Keep it pending.
+              ret = common::OB_SUCCESS;
+              break;
+            } else if (OB_ISNULL(task_ptr = group->list_.remove_first())) {
+              ret = common::OB_ERR_UNEXPECTED;
+              SERVER_LOG(WARN, "remove first returned null", K(ret));
+            } else if (OB_FAIL(tasks.push_back(*task_ptr))) {
+              SERVER_LOG(WARN, "push task into batch failed", K(ret));
+            } else if (OB_FAIL(task_set_.erase_refactored(*task_ptr))) {
+              SERVER_LOG(ERROR, "erase task from task map failed",
+                  K(ret), KPC(task_ptr));
+            } else {
+              task_ptr = NULL;
+              --task_count_;
+            }
+            if (OB_SUCC(ret)
+                && tasks.at(tasks.count() - 1).need_process_alone()) {
+              break;
+            }
+          }
+
+          if (OB_SUCC(ret) && tasks.count() > 0) {
+            ++processing_thread_count_;
+            if (group->list_.is_empty()) {
+              if (group->get_next() == groups_.get_header()) {
+                cur_group_ = group->get_next();
+              } else {
+                cur_group_ = group->get_prev();
+              }
+              if (NULL == groups_.remove(group)) {
+                ret = common::OB_ERR_UNEXPECTED;
+                SERVER_LOG(WARN, "groups remove returned null", K(ret));
+              } else if (OB_FAIL(group_map_.erase_refactored(
+                  tasks.at(0).get_group_id()))) {
+                SERVER_LOG(WARN, "erase group from group map failed",
+                    K(ret), "group_id", tasks.at(0).get_group_id());
+              }
+            } else {
+              cur_group_ = group;
+            }
+          }
+        }
+      }
+    }
+
+    if (OB_SUCC(ret) && tasks.count() > 0) {
+      bool is_batch_execute = false;
+      FOREACH_CNT_X(task, tasks, OB_SUCC(ret)) {
+        if (OB_ISNULL(task)) {
+          ret = common::OB_ERR_UNEXPECTED;
+          SERVER_LOG(WARN, "get invalid task", K(ret), KP(task));
+        } else if (task->is_barrier()) {
+          if (is_batch_execute) {
+            SERVER_LOG(ERROR,
+                "barrier task should not execute with non-barrier task",
+                K(*task));
+          }
+          common::ObThreadCondGuard guard(cond_);
+          ++barrier_task_count_;
+          --processing_thread_count_;
+          if (0 == processing_thread_count_) {
+            const int tmp_ret = cond_.broadcast();
+            if (common::OB_SUCCESS != tmp_ret) {
+              SERVER_LOG(WARN, "condition broadcast fail", K(tmp_ret));
+            }
+          }
+          while (0 != processing_thread_count_) {
+            (void) cond_.wait(QUEUE_WAIT_INTERVAL_MS);
+          }
+          const int process_ret = process_barrier(*task);
+          if (OB_SUCCESS != process_ret) {
+            SERVER_LOG(WARN, "process barrier task failed",
+                K(process_ret), K(*task));
+          }
+          --barrier_task_count_;
+          ++processing_thread_count_;
+        } else {
+          is_batch_execute = true;
+        }
+      }
+      if (OB_SUCC(ret) && is_batch_execute) {
+        const int process_ret = batch_process_tasks(tasks);
+        if (OB_SUCCESS != process_ret) {
+          // The Process callback owns its retry/requeue policy. A completed
+          // callback failure must not suspend an externally scheduled source.
+          SERVER_LOG(WARN, "fail to batch execute task",
+              K(process_ret), "task_count", tasks.count());
+        }
+      }
+
+      common::ObThreadCondGuard guard(cond_);
+      --processing_thread_count_;
+      if (0 == processing_thread_count_ && barrier_task_count_ > 0) {
+        const int tmp_ret = cond_.broadcast();
+        if (common::OB_SUCCESS != tmp_ret) {
+          SERVER_LOG(WARN, "condition broadcast fail", K(tmp_ret));
+        }
+      }
+    }
+
+    if (tasks.count() > 0) {
+      common::ObThreadCondGuard guard(cond_);
+      const int unlock_ret = batch_unlock(tasks);
+      if (common::OB_SUCCESS != unlock_ret) {
+        if (OB_SUCC(ret)) {
+          ret = unlock_ret;
+        }
+        SERVER_LOG(ERROR, "fail to batch unlock task", K(unlock_ret));
+      }
+    }
+
+    {
+      common::ObThreadCondGuard guard(cond_);
+      processed_count = tasks.count();
+      has_more_ready = task_count_ > 0;
+    }
+  }
+  return ret;
 }
 
 template <typename Task, typename Process>
@@ -575,7 +671,7 @@ template <typename Task, typename Process>
 int ObUniqTaskQueue<Task, Process>::process_barrier(Task &task)
 {
   int ret = common::OB_SUCCESS;
-  bool stopped = lib::Thread::current().has_set_stop();
+  bool stopped = is_processing_stopped();
   if (OB_ISNULL(updater_)) {
     ret = common::OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "invalid updater", K(ret), K(updater_));
@@ -588,8 +684,9 @@ int ObUniqTaskQueue<Task, Process>::process_barrier(Task &task)
 template <typename Task, typename Process>
 int ObUniqTaskQueue<Task, Process>::batch_process_tasks(common::ObIArray<Task> &tasks)
 {
+  common::ObDIActionGuard ag(typeid(Task));
   int ret = common::OB_SUCCESS;
-  bool stopped = lib::Thread::current().has_set_stop();
+  bool stopped = is_processing_stopped();
   if (0 == tasks.count()) {
     //nothing todo
   } else if (OB_ISNULL(updater_)) {
@@ -599,6 +696,14 @@ int ObUniqTaskQueue<Task, Process>::batch_process_tasks(common::ObIArray<Task> &
     SERVER_LOG(WARN, "fail to batch process task", K(ret));
   }
   return ret;
+}
+
+template <typename Task, typename Process>
+bool ObUniqTaskQueue<Task, Process>::is_processing_stopped() const
+{
+  return NULL == external_stop_flag_
+      ? lib::Thread::current().has_set_stop()
+      : ATOMIC_LOAD(external_stop_flag_);
 }
 
 

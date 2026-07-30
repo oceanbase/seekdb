@@ -20,6 +20,7 @@
 #include "lib/container/ob_fixed_array.h"
 #include "lib/thread/ob_async_task_queue.h"
 #include "lib/hash/ob_hashset.h"
+#include "share/ob_background_task_executor.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/schema/ob_schema_struct.h" 
 #include "src/share/schema/ob_dependency_info.h"
@@ -80,32 +81,53 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObMaintainObjDepInfoTask);
 };
 
-class ObMaintainDepInfoTaskQueue: public share::ObAsyncTaskQueue
+class ObMaintainDepInfoTaskQueue
+    : public share::ObAsyncTaskQueue,
+      public share::ObIBackgroundTaskSource
 {
 public:
   static const int64_t INIT_BKT_SIZE = 512;
   static const int64_t MAX_SYS_VIEW_SIZE = 65536;
   constexpr static const double MAX_QUEUE_USAGE_RATIO = 0.8;
-  ObMaintainDepInfoTaskQueue() : last_execute_time_(0) {}
-  virtual ~ObMaintainDepInfoTaskQueue()
-  {
-    view_info_set_.destroy();
-    sys_view_consistent_.destroy();
-  }
+  ObMaintainDepInfoTaskQueue();
+  virtual ~ObMaintainDepInfoTaskQueue();
   int init(const int64_t thread_cnt, const int64_t queue_size);
+  int start_background_task_source();
+  int destroy();
+  int push(const share::ObAsyncTask &task);
   virtual void run2() override;
+  int process_one_quantum(
+      const share::ObBackgroundTaskPriority priority,
+      share::ObBackgroundTaskRunResult &result) override;
   inline int64_t get_last_execute_time() const { return last_execute_time_; }
   inline void set_last_execute_time(const int64_t execute_time)
   { last_execute_time_ = execute_time; }
   int add_view_id_to_set(const uint64_t view_id) { return view_info_set_.set_refactored(view_id); }
   int erase_view_id_from_set(const uint64_t view_id) { return view_info_set_.erase_refactored(view_id); }
-  int add_consistent_sys_view_id_to_set(const uint64_t view_id) { return sys_view_consistent_.set_refactored(view_id); }
+  int add_consistent_sys_view_id_to_set(const uint64_t view_id);
   int read_consistent_sys_view_from_set(const uint64_t view_id) { return sys_view_consistent_.exist_refactored(view_id); }
   bool is_queue_almost_full() const { return queue_.size() > queue_.capacity() * MAX_QUEUE_USAGE_RATIO; }
+protected:
+  int64_t get_external_task_ready_ts_(
+      const share::ObAsyncTask &task,
+      const int64_t now) const override;
+  bool can_retry_external_task_(
+      const share::ObAsyncTask &task) const override;
+  void on_external_task_processed_(
+      share::ObAsyncTask &task,
+      const int process_ret) override;
 private:
+  int notify_background_source_();
+  int unregister_background_source_(const bool wait_running);
+  void cleanup_sets_if_needed_();
+
   int64_t last_execute_time_;
   common::hash::ObHashSet<uint64_t, common::hash::ReadWriteDefendMode> view_info_set_;
   common::hash::ObHashSet<uint64_t, common::hash::ReadWriteDefendMode> sys_view_consistent_;
+  bool use_shared_executor_;
+  volatile bool stopping_;
+  share::ObBackgroundTaskExecutor *background_executor_;
+  share::ObBackgroundTaskSourceHandle source_handle_;
 };
 
 // demoted from share::schema::ObReferenceObjTable to sql free function(sql-bound: ObMaintainObjDepInfoTask/Queue; detached from the class through public getters)

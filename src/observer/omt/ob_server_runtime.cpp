@@ -842,9 +842,8 @@ void ObServerRuntime::check_px_thread_recycle()
 
 void ObServerRuntime::on_schema_publish()
 {
-  int ret = OB_SUCCESS;
   ObChangeStreamMgr *mgr = ::oceanbase::share::g_mp->change_stream_mgr();
   if (OB_NOT_NULL(mgr) && mgr->is_inited()) {
-    mgr->get_fetcher().notify_schema_changed();
+    mgr->notify_schema_changed();
   }
 }

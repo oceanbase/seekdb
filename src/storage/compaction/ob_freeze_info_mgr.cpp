@@ -19,6 +19,8 @@
 #include "share/rc/ob_module_provider.h"
 #include "share/ob_merge_info.h"
 #include "share/ob_global_merge_table_operator.h"
+#include "share/ob_internal_table_change_notifier.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "storage/compaction/ob_compaction_schedule_util.h"
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -87,7 +89,7 @@ ObFreezeInfoMgr::ObFreezeInfoMgr()
     snapshots_(),
     lock_(),
     cur_idx_(0),
-    snapshot_gc_scn_renewal_state_(),
+    last_change_ts_(0),
     reload_timer_(),
     inited_(false)
 {
@@ -124,7 +126,17 @@ int ObFreezeInfoMgr::init(ObISQLClient &sql_proxy)
     STORAGE_LOG(ERROR, "fail to init reload task", K(ret));
   } else if (OB_FAIL(reload_timer_.init("FreInfoReload", ObMemAttr("FreInfoReload")))) {
     STORAGE_LOG(ERROR, "fail to init timer", K(ret));
+  } else if (OB_FAIL(ObInternalTableChangeNotifier::get_instance().register_table(
+                 OB_ALL_CORE_TABLE_TID))) {
+    STORAGE_LOG(WARN, "fail to register core table change tracking", K(ret));
+  } else if (OB_FAIL(ObInternalTableChangeNotifier::get_instance().register_table(
+                 OB_ALL_FREEZE_INFO_TID))) {
+    STORAGE_LOG(WARN, "fail to register freeze info change tracking", K(ret));
+  } else if (OB_FAIL(ObInternalTableChangeNotifier::get_instance().register_table(
+                 OB_ALL_ACQUIRED_SNAPSHOT_TID))) {
+    STORAGE_LOG(WARN, "fail to register acquired snapshot change tracking", K(ret));
   } else {
+    last_change_ts_ = ObTimeUtility::current_time();
     inited_ = true;
   }
   return ret;
@@ -448,7 +460,10 @@ share::SCN ObFreezeInfoMgr::get_snapshot_gc_scn()
 ObFreezeInfoMgr::ReloadTask::ReloadTask(ObFreezeInfoMgr &mgr)
   : inited_(false),
     check_runtime_status_(),
-    mgr_(mgr)
+    mgr_(mgr),
+    core_table_change_seq_(0),
+    freeze_info_change_seq_(0),
+    acquired_snapshot_change_seq_(0)
 {
 }
 
@@ -538,15 +553,39 @@ int ObFreezeInfoMgr::inner_update_info(
     const common::ObIArray<share::ObSnapshotInfo> &new_snapshots)
 {
   int ret = OB_SUCCESS;
+  bool gc_snapshot_ts_changed = false;
   int64_t snapshot_gc_ts = 0;
   {
     WLockGuard lock_guard(lock_);
+    const int64_t old_snapshot_gc_ts = freeze_info_mgr_.get_snapshot_gc_scn().get_val_for_tx();
+    snapshot_gc_ts = old_snapshot_gc_ts;
     if (OB_FAIL(freeze_info_mgr_.update_freeze_info(new_freeze_infos, new_snapshot_gc_scn))) {
       STORAGE_LOG(WARN, "failed to reload freeze info mgr", K(ret));
     } else if (OB_FAIL(update_next_snapshots(new_snapshots))) {
       STORAGE_LOG(WARN, "fail to update next snapshots", K(ret));
     } else {
       snapshot_gc_ts = freeze_info_mgr_.get_snapshot_gc_scn().get_val_for_tx();
+      gc_snapshot_ts_changed = old_snapshot_gc_ts != snapshot_gc_ts;
+    }
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (gc_snapshot_ts_changed) {
+    last_change_ts_ = ObTimeUtility::current_time();
+  } else {
+    const int64_t last_not_change_interval_us = ObTimeUtility::current_time() - last_change_ts_;
+    if (MAX_GC_SNAPSHOT_TS_REFRESH_TS <= last_not_change_interval_us &&
+        (0 != snapshot_gc_ts && 1 != snapshot_gc_ts)) {
+      if (REACH_THREAD_TIME_INTERVAL(60L * 1000L * 1000L)) {
+        // ignore ret
+        STORAGE_LOG(WARN, "snapshot_gc_ts not refresh too long",
+                    K(snapshot_gc_ts), K(new_snapshots), K(last_change_ts_),
+                    K(last_not_change_interval_us));
+      }
+    } else if (FLUSH_GC_SNAPSHOT_TS_REFRESH_TS <= last_not_change_interval_us) {
+      STORAGE_LOG(WARN, "snapshot_gc_ts not refresh too long",
+                  K(snapshot_gc_ts), K(new_snapshots), K(last_change_ts_),
+                  K(last_not_change_interval_us));
     }
   }
   STORAGE_LOG(DEBUG, "reload freeze info and snapshots", K(snapshot_gc_ts), K(new_snapshots));
@@ -568,11 +607,41 @@ void ObFreezeInfoMgr::ReloadTask::runTimerTask()
       LOG_WARN_RET(tmp_ret, "slog replay hasn't finished, this task can't start");
     }
   } else {
-    if (OB_TMP_FAIL(refresh_merge_info())) {
-      LOG_WARN_RET(tmp_ret, "fail to refresh merge info", KR(tmp_ret));
+    ObInternalTableChangeNotifier &notifier =
+        ObInternalTableChangeNotifier::get_instance();
+    uint64_t target_core_seq = 0;
+    uint64_t target_freeze_seq = 0;
+    uint64_t target_snapshot_seq = 0;
+    int seq_ret = notifier.get_change_seq(OB_ALL_CORE_TABLE_TID, target_core_seq);
+    if (OB_SUCCESS == seq_ret) {
+      seq_ret = notifier.get_change_seq(OB_ALL_FREEZE_INFO_TID, target_freeze_seq);
     }
-    if (OB_TMP_FAIL(mgr_.try_update_info())) {
-      LOG_WARN_RET(tmp_ret, "fail to try update info", KR(tmp_ret));
+    if (OB_SUCCESS == seq_ret) {
+      seq_ret = notifier.get_change_seq(
+          OB_ALL_ACQUIRED_SNAPSHOT_TID, target_snapshot_seq);
+    }
+    const bool changed = OB_SUCCESS != seq_ret
+        || target_core_seq != core_table_change_seq_
+        || target_freeze_seq != freeze_info_change_seq_
+        || target_snapshot_seq != acquired_snapshot_change_seq_;
+    if (changed) {
+      int merge_ret = refresh_merge_info();
+      if (OB_SUCCESS != merge_ret) {
+        LOG_WARN_RET(merge_ret, "fail to refresh merge info", KR(merge_ret));
+      }
+      int info_ret = mgr_.try_update_info();
+      if (OB_SUCCESS != info_ret) {
+        LOG_WARN_RET(info_ret, "fail to try update info", KR(info_ret));
+      }
+      if (OB_SUCCESS == seq_ret
+          && OB_SUCCESS == merge_ret
+          && OB_SUCCESS == info_ret) {
+        core_table_change_seq_ = target_core_seq;
+        freeze_info_change_seq_ = target_freeze_seq;
+        acquired_snapshot_change_seq_ = target_snapshot_seq;
+      }
+    } else {
+      STORAGE_LOG(TRACE, "skip unchanged freeze and snapshot inner tables");
     }
   }
 }

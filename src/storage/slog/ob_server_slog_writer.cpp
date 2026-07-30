@@ -23,12 +23,14 @@ namespace storage
 
 int ObServerSlogWriter::start()
 {
-  return ObBaseLogWriter::start();
+  return lib::is_mini_mode()
+      ? ObStorageLogWriter::start()
+      : start_base_flush_thread_();
 }
 
 void ObServerSlogWriter::wait()
 {
-  ObBaseLogWriter::wait();
+  ObStorageLogWriter::wait();
 }
 
 }

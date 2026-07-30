@@ -18,6 +18,9 @@
 #include "logservice/ob_append_callback.h"
 #include "logservice/ob_ls_adapter.h"
 #include "logservice/palf/palf_env.h"
+#include "lib/ob_running_mode.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
+#include "share/rc/ob_module_provider.h"
 namespace oceanbase
 {
 using namespace common;
@@ -467,6 +470,7 @@ int ObApplyStatus::try_handle_cb_queue(ObApplyServiceQueueTask *cb_queue,
         CLOG_LOG(ERROR, "cb is NULL", KPC(cb_queue), KPC(this), K(ret));
       } else if ((lsn = cb->__get_lsn()).val_ < ATOMIC_LOAD(&palf_committed_end_lsn_.val_)) {
         // callbacks with log position less than the confirmed log position can callback on_success
+        ObDIActionGuard(cb->get_cb_name());
         if (OB_FAIL(cb_queue->pop())) {
           CLOG_LOG(ERROR, "cb_queue pop failed", KPC(cb_queue), KPC(this), K(ret));
         } else {
@@ -927,10 +931,14 @@ void ObApplyStatusGuard::set_apply_status_(ObApplyStatus *apply_status)
 ObLogApplyService::ObLogApplyService()
     : is_inited_(false),
       is_running_(false),
+      use_shared_executor_(false),
       palf_env_(NULL),
       ls_adapter_(NULL),
       apply_status_(NULL),
-      lock_()
+      lock_(),
+      background_executor_(NULL),
+      source_handle_(),
+      source_lock_()
   {}
 
 ObLogApplyService::~ObLogApplyService()
@@ -959,6 +967,8 @@ int ObLogApplyService::init(PalfEnv *palf_env,
   } else if (OB_FAIL(lock_.init(ObMemAttr("ApplyStatus")))) {
     CLOG_LOG(WARN, "apply status lock init error", K(ret));
   } else {
+    use_shared_executor_ = lib::is_mini_mode();
+    common::ObLinkQueueThreadPool::set_external_driver(use_shared_executor_);
     is_inited_ = true;
     CLOG_LOG(INFO, "ObLogApplyService init success", K(is_inited_));
   }
@@ -971,6 +981,14 @@ int ObLogApplyService::init(PalfEnv *palf_env,
 
 void ObLogApplyService::destroy()
 {
+  if (is_inited_ && is_running_) {
+    stop();
+    wait();
+  } else if (is_inited_ && use_shared_executor_) {
+    common::ObLinkQueueThreadPool::stop();
+    (void)unregister_background_source_(true);
+    drain_external_tasks_();
+  }
   if (is_inited_) {
     (void)remove_status();
   }
@@ -982,6 +1000,12 @@ void ObLogApplyService::destroy()
   common::ObLinkQueueThreadPool::destroy();
   palf_env_ = NULL;
   ls_adapter_ = NULL;
+  {
+    lib::ObMutexGuard guard(source_lock_);
+    background_executor_ = NULL;
+    source_handle_.reset();
+  }
+  use_shared_executor_ = false;
   lock_.destroy();
 }
 
@@ -991,6 +1015,32 @@ int ObLogApplyService::start()
   if (OB_UNLIKELY(IS_NOT_INIT)) {
     ret = OB_NOT_INIT;
     CLOG_LOG(ERROR, "ObLogApplyService has not been initialized", K(ret));
+  } else if (use_shared_executor_) {
+    share::ObBackgroundTaskExecutor *background_executor =
+        OB_ISNULL(share::g_mp)
+            ? NULL
+            : share::g_mp->background_task_executor();
+    share::ObBackgroundTaskSourceConfig config;
+    config.name_ = "ApplyService";
+    config.max_concurrency_ = 1;
+    if (OB_ISNULL(background_executor)) {
+      ret = OB_ERR_UNEXPECTED;
+      CLOG_LOG(ERROR, "background executor is null",
+          K(ret), KP(share::g_mp), KP(background_executor));
+    } else if (OB_FAIL(background_executor->register_source(
+        *this, config, source_handle_))) {
+      CLOG_LOG(WARN, "register apply service source failed", K(ret));
+    } else {
+      {
+        lib::ObMutexGuard guard(source_lock_);
+        background_executor_ = background_executor;
+        ATOMIC_STORE(&is_running_, true);
+      }
+      if (common::ObLinkQueueThreadPool::get_queue_num() > 0
+          && OB_FAIL(notify_background_source_())) {
+        CLOG_LOG(WARN, "notify pending apply service task failed", K(ret));
+      }
+    }
   } else if (common::ObLinkQueueThreadPool::get_thread_count() <= 0
       && !common::ObLinkQueueThreadPool::try_expand_one(1)) {
     ret = OB_ERR_UNEXPECTED;
@@ -998,6 +1048,13 @@ int ObLogApplyService::start()
   } else {
     ATOMIC_STORE(&is_running_, true);
     CLOG_LOG(INFO, "start ObLogApplyService success", K(ret));
+  }
+  if (OB_FAIL(ret) && use_shared_executor_) {
+    ATOMIC_STORE(&is_running_, false);
+    (void)unregister_background_source_(true);
+  } else if (OB_SUCC(ret) && use_shared_executor_) {
+    CLOG_LOG(INFO, "start ObLogApplyService with background executor",
+        K(ret), KP(background_executor_));
   }
   return ret;
 }
@@ -1008,15 +1065,27 @@ void ObLogApplyService::stop()
   ATOMIC_STORE(&is_running_, false);
   //Ensure that no new tasks will enter the thread pool when handle_drop is called
   common::ObLinkQueueThreadPool::stop();
+  if (use_shared_executor_) {
+    const int tmp_ret = unregister_background_source_(true);
+    if (OB_SUCCESS != tmp_ret) {
+      CLOG_LOG_RET(WARN, tmp_ret,
+          "unregister apply service source failed", K(tmp_ret));
+    }
+  }
   CLOG_LOG(INFO, "ObLogApplyService stop finish");
 }
 
 void ObLogApplyService::wait()
 {
   CLOG_LOG(INFO, "ObLogApplyService wait begin");
-  int64_t num = 0;
-  while ((num = common::ObLinkQueueThreadPool::get_queue_num()) > 0) {
-    PAUSE();
+  if (use_shared_executor_) {
+    (void)unregister_background_source_(true);
+    drain_external_tasks_();
+  } else {
+    int64_t num = 0;
+    while ((num = common::ObLinkQueueThreadPool::get_queue_num()) > 0) {
+      PAUSE();
+    }
   }
   common::ObLinkQueueThreadPool::wait();
   //At this point, it can be guaranteed that no new queue tasks will enter the thread pool,
@@ -1210,8 +1279,110 @@ int ObLogApplyService::push_task(ObApplyServiceTask *task)
       ob_throttle_usleep(1000, ret); //1ms
       CLOG_LOG(ERROR, "failed to push", K(ret));
     }
+    if (OB_SUCC(ret) && use_shared_executor_) {
+      const int tmp_ret = notify_background_source_();
+      if (OB_SUCCESS != tmp_ret
+          && OB_IN_STOP_STATE != tmp_ret
+          && OB_ENTRY_NOT_EXIST != tmp_ret
+          && OB_NOT_RUNNING != tmp_ret) {
+        CLOG_LOG_RET(ERROR, tmp_ret,
+            "notify apply service source failed", K(tmp_ret));
+      }
+    }
   }
   return ret;
+}
+
+int ObLogApplyService::process_one_quantum(
+    const share::ObBackgroundTaskPriority priority,
+    share::ObBackgroundTaskRunResult &result)
+{
+  int ret = OB_SUCCESS;
+  common::LinkTask *task = NULL;
+  if (!is_inited_ || !use_shared_executor_) {
+    ret = OB_NOT_INIT;
+  } else if (share::BG_TASK_HIGH != priority) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!ATOMIC_LOAD(&is_running_)) {
+    // stop() may race a quantum already claimed by the executor.
+  } else if (OB_FAIL(
+      common::ObLinkQueueThreadPool::pop_task_for_external_driver(task))) {
+    if (OB_ENTRY_NOT_EXIST == ret) {
+      ret = OB_SUCCESS;
+    }
+  } else if (OB_ISNULL(task)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    handle(task);
+    result.processed_count_ = 1;
+    result.has_more_ready_ =
+        common::ObLinkQueueThreadPool::get_queue_num() > 0;
+  }
+  return ret;
+}
+
+int ObLogApplyService::notify_background_source_()
+{
+  int ret = OB_SUCCESS;
+  lib::ObMutexGuard guard(source_lock_);
+  if (!use_shared_executor_
+      || !ATOMIC_LOAD(&is_running_)
+      || OB_ISNULL(background_executor_)
+      || !source_handle_.is_valid()) {
+    ret = OB_NOT_RUNNING;
+  } else if (OB_FAIL(background_executor_->notify(
+      source_handle_, share::BG_TASK_HIGH))) {
+    CLOG_LOG(WARN, "notify apply service background source failed", K(ret));
+  }
+  return ret;
+}
+
+int ObLogApplyService::unregister_background_source_(
+    const bool wait_running)
+{
+  int ret = OB_SUCCESS;
+  bool need_retry = false;
+  do {
+    need_retry = false;
+    {
+      lib::ObMutexGuard guard(source_lock_);
+      if (use_shared_executor_
+          && OB_NOT_NULL(background_executor_)
+          && source_handle_.is_valid()) {
+        ret = background_executor_->unregister_source(source_handle_);
+        if (OB_EAGAIN == ret && wait_running) {
+          need_retry = true;
+        } else if (OB_ENTRY_NOT_EXIST == ret || OB_NOT_INIT == ret) {
+          source_handle_.reset();
+          ret = OB_SUCCESS;
+        }
+      }
+      if (!source_handle_.is_valid()) {
+        background_executor_ = NULL;
+      }
+    }
+    if (need_retry) {
+      ob_usleep(1000);
+    }
+  } while (need_retry);
+  return ret;
+}
+
+void ObLogApplyService::drain_external_tasks_()
+{
+  int ret = OB_SUCCESS;
+  common::LinkTask *task = NULL;
+  while (OB_SUCCESS == (ret =
+      common::ObLinkQueueThreadPool::pop_task_for_external_driver(task))) {
+    if (OB_NOT_NULL(task)) {
+      handle_drop(task);
+    }
+    task = NULL;
+  }
+  if (OB_ENTRY_NOT_EXIST != ret && OB_NOT_INIT != ret) {
+    CLOG_LOG_RET(WARN, ret,
+        "drain apply service external tasks failed", K(ret));
+  }
 }
 
 int ObLogApplyService::get_apply_status(ObApplyStatusGuard &guard)
@@ -1246,6 +1417,7 @@ void ObLogApplyService::revert_apply_status(ObApplyStatus *apply_status)
 void ObLogApplyService::handle(common::LinkTask *task)
 {
   int ret = OB_SUCCESS;
+  ObDIActionGuard ag("LogService", "LogApplyService", "ApplyTask");
   ObApplyServiceTask *task_to_handle = static_cast<ObApplyServiceTask *>(task);
   ObApplyStatus *apply_status = NULL;
   bool need_push_back = false;
