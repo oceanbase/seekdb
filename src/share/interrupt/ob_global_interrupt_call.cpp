@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "share/interrupt/ob_global_interrupt_call.h"
+#include "lib/ob_running_mode.h"
 #include "share/ob_ex_rpc.h"
 
 namespace oceanbase {
@@ -99,7 +100,9 @@ int ObGlobalInterruptManager::init()
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-  } else if (OB_FAIL(map_.create(DEFAULT_HASH_MAP_BUCKETS_COUNT,
+  } else if (OB_FAIL(map_.create(lib::is_mini_mode()
+                                     ? MINI_MODE_HASH_MAP_BUCKETS_COUNT
+                                     : DEFAULT_HASH_MAP_BUCKETS_COUNT,
                                  ObModIds::OB_HASH_BUCKET_INTERRUPT_CHECKER,
                                  ObModIds::OB_HASH_NODE_INTERRUPT_CHECKER))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;

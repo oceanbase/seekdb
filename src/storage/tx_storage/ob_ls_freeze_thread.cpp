@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/tx_storage/ob_ls_freeze_thread.h"
+#include "lib/ob_running_mode.h"
 #include "storage/checkpoint/ob_data_checkpoint.h"
 
 namespace oceanbase
@@ -176,7 +177,7 @@ int ObLSFreezeThread::push_back_(ObLSFreezeTask *task)
 
 int64_t ObLSFreezeThread::get_thread_num_() const
 {
-  return QUEUE_THREAD_NUM;
+  return lib::is_mini_mode() ? MINI_MODE_QUEUE_THREAD_NUM : QUEUE_THREAD_NUM;
 }
 
 }  // namespace storage

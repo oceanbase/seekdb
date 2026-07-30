@@ -55,6 +55,7 @@ class ObLSFreezeThread : public common::ObSimpleThreadPool
 
 public:
   static const int64_t QUEUE_THREAD_NUM = 3;
+  static const int64_t MINI_MODE_QUEUE_THREAD_NUM = 1;
   static const int64_t MAX_FREE_TASK_NUM = 5;
 
   ObLSFreezeThread();

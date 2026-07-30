@@ -287,7 +287,10 @@ int ObCompactionMemPool::init()
   } else {
 
 
-    max_block_num_ = CHUNK_MEMORY_LIMIT / ObCompactionBufferChunk::DEFAULT_BLOCK_SIZE;
+    max_block_num_ = (share::server_is_mini_mode()
+                          ? MINI_MODE_CHUNK_MEMORY_LIMIT
+                          : CHUNK_MEMORY_LIMIT)
+                     / ObCompactionBufferChunk::DEFAULT_BLOCK_SIZE;
     total_block_num_ = 0;
     is_inited_ = true;
   }

@@ -114,7 +114,7 @@ static int server_obj_pool_create(common::ObServerObjectPool<T> *&pool)
 {
   int ret = common::OB_SUCCESS;
   pool = SERVER_NEW(common::ObServerObjectPool<T>, "TntSrvObjPool",
-                    share::server_cpu_count());
+                    share::server_is_mini_mode(), share::server_cpu_count());
   if (OB_ISNULL(pool)) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
   } else {

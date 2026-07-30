@@ -21,6 +21,7 @@
 #include "lib/list/ob_list.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/ob_define.h"
+#include "lib/ob_running_mode.h"
 #include "lib/queue/ob_fixed_queue.h"
 
 namespace oceanbase
@@ -67,6 +68,8 @@ public:
   static const int64_t MAX_MEMORY_ALLOCATION = OB_MAX_SYS_BKGD_THREAD_NUM * 2 * OB_DEFAULT_MACRO_BLOCK_SIZE; //256MB
 
 private:
+  static const int64_t MAX_MEMORY_IN_MINI_MODE = 64 * OB_DEFAULT_MACRO_BLOCK_SIZE; //128MB
+
   bool is_inited_;
   ObSpinLock lock_;
   int64_t total_block_num_;
@@ -279,7 +282,8 @@ template<int64_t SIZE>
 int ObFixedSizeBlockAllocator<SIZE>::init_max_block_num()
 {
   int ret = OB_SUCCESS;
-  const int64_t max_memory = MAX_MEMORY_ALLOCATION;
+  const int64_t max_memory =
+      lib::is_mini_mode() ? MAX_MEMORY_IN_MINI_MODE : MAX_MEMORY_ALLOCATION;
   if (SIZE > max_memory) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "block size is too large", K(ret), K(SIZE), K(max_memory));

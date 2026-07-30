@@ -31,7 +31,8 @@ namespace transaction
 int ObTxTimestampCallbackWorker::init(ObTxTimestampWaiter *waiter)
 {
   int ret = OB_SUCCESS;
-  const int64_t thread_count = MAX(common::get_cpu_count() / 12, 1L);
+  const int64_t thread_count =
+      lib::is_mini_mode() ? 1 : MAX(common::get_cpu_count() / 12, 1L);
 
   waiter_ = waiter;
   set_run_wrapper(share::server_runtime());
