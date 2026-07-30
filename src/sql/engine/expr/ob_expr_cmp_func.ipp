@@ -187,40 +187,10 @@ struct ObRelationalTCFunc<true, L_TC, R_TC>
   }
 };
 
-template<bool, ObDecimalIntWideType l, ObDecimalIntWideType r>
-struct ObRelationalDecintFunc{};
-
-template<ObDecimalIntWideType l, ObDecimalIntWideType r>
-struct ObRelationalDecintFunc<false, l, r>: ObDummyRelationalFunc {};
-
-template<ObDecimalIntWideType lw, ObDecimalIntWideType rw>
-struct ObRelationalDecintFunc<true, lw, rw>
+struct ObDecintRelationFunc
 {
-  struct ObDatumCmp
-  {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
-                   const ObCmpOp cmp_op) const
-    {
-      int cmp_ret = 0;
-      int ret = datum_cmp::ObDecintCmp<lw, rw>::cmp(l, r, cmp_ret);
-      if (OB_SUCC(ret)) {
-        res.set_int(get_cmp_ret(cmp_op, cmp_ret));
-      }
-      return ret;
-    }
-  };
-
-  inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
-  {
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    return def_relational_eval_func<ObDatumCmp>(expr, ctx, expr_datum, cmp_op);
-  }
-
-  inline static int eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
-  {
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    return def_relational_eval_batch_func<ObDatumCmp>(BATCH_EVAL_FUNC_ARG_LIST, cmp_op);
-  }
+  static OB_NOINLINE int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static OB_NOINLINE int eval_batch(BATCH_EVAL_FUNC_ARG_DECL);
 };
 
 template<bool, ObCollationType CS_TYPE, bool WITH_END_SPACE>
@@ -1126,15 +1096,13 @@ struct DecintCmpFuncIniter
 {
   using Def = datum_cmp::ObDecintCmp<static_cast<ObDecimalIntWideType>(X),
                                      static_cast<ObDecimalIntWideType>(Y)>;
-  using EvalCmp = ObRelationalDecintFunc<Def::defined_, static_cast<ObDecimalIntWideType>(X),
-                                         static_cast<ObDecimalIntWideType>(Y)>;
   static void init_array()
   {
     init_expr_cmp_func_array(EVAL_DECINT_CMP_FUNCS[X][Y],
                              EVAL_BATCH_DECINT_CMP_FUNCS[X][Y],
                              DATUM_DECINT_CMP_FUNCS[X][Y],
-                             Def::defined_ ? &EvalCmp::eval : NULL,
-                             Def::defined_ ? &EvalCmp::eval_batch : NULL,
+                             Def::defined_ ? &ObDecintRelationFunc::eval : NULL,
+                             Def::defined_ ? &ObDecintRelationFunc::eval_batch : NULL,
                              Def::defined_ ? &Def::cmp : NULL,
                              NULL);
   }
