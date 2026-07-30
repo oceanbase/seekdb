@@ -11,10 +11,10 @@ project("OceanBase"
 
 include(cmake/Plugin.cmake)
 
-# R0 is a development preview until the catalog activation/recovery path and
-# the GIS SPI migration pass the RFC production gates.  Keeping it off by
-# default makes the incomplete public loader mechanically unreachable from the
-# normal lightweight server build.
+# The plugin runtime remains opt-in while the broader GIS SPI and management
+# surface are still being migrated. Phase 1 provides a local catalog-identity
+# verifier/loader (without signature trust) and keeps it off in the lightweight
+# default build.
 option(SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS
   "Build the experimental in-process plugin runtime" OFF)
 

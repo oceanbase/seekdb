@@ -29,15 +29,24 @@ ob_unittest(test_version_parser)
 if (SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
   ob_unittest(test_plugin_registry)
   ob_unittest(test_plugin_loader)
+  ob_unittest(test_plugin_catalog)
+  target_link_libraries(test_plugin_registry PRIVATE seekdb_plugin_sdk)
+  target_link_libraries(test_plugin_catalog PRIVATE seekdb_plugin_sdk)
   add_dependencies(test_plugin_loader
     seekdb_reference_plugin seekdb_reference_blocked_plugin
-    seekdb_reference_stop_blocked_plugin)
+    seekdb_reference_invalid_extensions_plugin
+    seekdb_reference_invalid_manifest_plugin
+    seekdb_reference_stop_blocked_plugin
+    seekdb_reference_registration_conflict_plugin)
   target_link_libraries(test_plugin_loader PRIVATE seekdb_plugin_sdk)
   target_compile_definitions(test_plugin_loader PRIVATE
     SEEKDB_TEST_PLUGIN_DIR="$<TARGET_FILE_DIR:seekdb_reference_plugin>"
     SEEKDB_TEST_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_plugin>"
     SEEKDB_TEST_BLOCKED_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_blocked_plugin>"
-    SEEKDB_TEST_STOP_BLOCKED_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_stop_blocked_plugin>")
+    SEEKDB_TEST_INVALID_EXTENSIONS_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_invalid_extensions_plugin>"
+    SEEKDB_TEST_INVALID_MANIFEST_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_invalid_manifest_plugin>"
+    SEEKDB_TEST_STOP_BLOCKED_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_stop_blocked_plugin>"
+    SEEKDB_TEST_REGISTRATION_CONFLICT_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_reference_registration_conflict_plugin>")
 endif()
 ob_unittest(test_standby_source_util)
 ob_unittest(test_scn)

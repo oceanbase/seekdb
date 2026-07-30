@@ -20,6 +20,7 @@
 #ifndef _WIN32
 #include <sys/statvfs.h>
 #endif
+#include <memory>
 #include "lib/net/ob_net_util.h"
 #include "lib/task/ob_timer.h"
 #include "lib/random/ob_mysql_random.h"
@@ -49,6 +50,7 @@
 
 #include "observer/ob_signal_handle.h"
 #include "observer/ob_server_duty_task.h"
+#include "observer/ob_inner_sql_connection_pool.h"
 #include "observer/ob_srv_network_frame.h"
 #include "observer/ob_service.h"
 #include "observer/ob_server_reload_config.h"
@@ -70,6 +72,7 @@ namespace observer
 {
 
 class ObServerOptions;
+class ObServerPluginRuntime;
 
 // This the class definition of ObAddr which responds the server
 // itself. It's designed as a singleton in program. This class is
@@ -184,6 +187,9 @@ private:
   ~ObServer();
 
   int init_config(const ObServerOptions &opts);
+  int init_plugin_runtime(const ObServerOptions &opts);
+  int check_plugin_server_ready();
+  void destroy_plugin_runtime() noexcept;
   int init_opts_config(const ObServerOptions &opts, const char *optstr); // init configs from command line
   int init_data_dir_and_redo_dir(const ObServerOptions &opts);
   int init_self_addr();
@@ -258,6 +264,8 @@ private:
   ObSrvNetworkFrame net_frame_;
 
 
+  ObInnerSQLConnectionPool sql_conn_pool_;
+  ObInnerSQLConnectionPool ddl_conn_pool_;
   common::ObMySQLProxy sql_proxy_;
   common::ObMySQLProxy ddl_sql_proxy_;
 
@@ -278,6 +286,11 @@ private:
 
   // Shared SQLite connection pool for meta database (config and tablet_meta tables)
   share::ObSQLiteConnectionPool meta_db_pool_;
+
+  // Declared after meta_db_pool_ so the bridge (and its non-owning catalog
+  // reference to that pool) is destroyed first.  The opaque type keeps the
+  // optional plugin implementation out of ObServer's public class layout.
+  std::unique_ptr<ObServerPluginRuntime> plugin_runtime_;
 
   // The Oceanbase partition table relating to
   share::ObTabletTableOperator tablet_operator_;

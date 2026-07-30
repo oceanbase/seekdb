@@ -9,7 +9,11 @@
 
 > 本文使用“必须”“禁止”“应”“可以”表达规范强度。本文描述的是 v1 的目标契约，
 > 不代表所有机制已经实现。尤其是签名包 manifest parser、签名链验证和 manifest
-> 全字段对账目前尚未完成；当前实现边界仅包括 verifier token 与核心 identity 对账。
+> 全字段对账目前尚未完成；当前实现了 verifier token 的核心 identity/digest
+> 绑定、进程内 activation 握手，以及基于本地 `meta.db` 的实验性持久 catalog/恢复协调器；
+> `SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS=ON` 时，`ObServer` 已在 schema/timezone 就绪后、
+> `net_frame_.start()` 前接入本地 catalog-identity verifier/loader，可加载和重放已安装的
+> 本地插件；一期明确不做签名信任链、SQL 管理入口和 GIS typed SPI。
 > 在上述能力及本文验收矩阵全部通过前，禁止宣称插件系统 production complete。
 
 ### 规范层级与当前实现
@@ -19,8 +23,8 @@
 
 | 层级 | 范围 | 当前结论 |
 | --- | --- | --- |
-| R0 运行时地基 | C ABI、registry/lease/generation、loader、逻辑停用、构建边界、参考插件 | 已有开发预览实现；默认构建关闭，仍需接入 server/catalog 并完成门禁 |
-| R1 GIS 插件 GA | 通用 SQL/类型/索引 SPI、catalog owner/RESTRICT、启动恢复、GIS 独立包、core-only 验收 | 目标规范，尚未实现 |
+| R0 运行时地基 | C ABI、registry/lease/generation、loader、逻辑停用、构建边界、参考插件 | 已有实验性实现；activation permit/hidden candidate、持久 catalog、local identity verifier、loader/recovery server gate 已接入，默认构建仍关闭 |
+| R1 GIS 插件 GA | 通用 SQL/类型/索引 SPI、catalog owner/RESTRICT、启动恢复、GIS 独立包、core-only 验收 | 迁移中；扩展目录元数据、原子 registry、持久 intent/owner/dependency、RESTRICT 与恢复 planner 已实现，typed execution adapters、管理 SQL、production verifier/package materializer、GIS 迁移及无 GIS/S2/Boost 的 core-only 矩阵仍未完成 |
 | R2 版本演进 profile | package update、migration DAG、side-by-side generation、跨版本恢复 | 仅保留理论契约；当前单机轻量版本不实现、不验收 |
 
 R2 中的版本、迁移和 upgrade 字段是为协议可演进性预留，不能被解释为当前产品必须支持
@@ -32,16 +36,34 @@ seekdb build/SDK 组合。未来若放宽 CMake version compatibility，不能�
 R0 代码落点与诚实状态：
 
 - `include/seekdb/plugin/seekdb_plugin_abi.h`：独立 C99/C++11 ABI SDK。
+- `include/seekdb/plugin/extension_spi.h`：R1 七类扩展对象的不含执行/核心对象指针描述符与
+  只读快照；loader 随后归一化为 host-owned pointer-free 元数据。描述符仅引用命名实现
+  服务，不允许把执行函数指针或任意 catalog SQL 塞入元数据。
 - `src/share/plugin/ob_plugin_registry.*`：版本服务、原子发布、generation 与 move-only lease。
-- `src/share/plugin/ob_plugin_loader.*`：不可变 artifact token、路径约束、运行时 reservation、
-  结构化 disable outcome、BLOCKED，以及已发布 generation 的 terminal-only physical
-  close；从未发布且已证明安全回滚的 failed load 例外见第 7 节。
+  当前也会把 type/function/cast/index AM/optimizer hook/DAS hook/catalog object 与服务一起
+  原子发布，提供 SQL 名称查找、registry epoch，以及同时取得对象/实现的双 lease。
+- `src/share/plugin/ob_plugin_loader.*`：不可变 artifact token、路径约束、catalog-assigned
+  generation/incarnation/operation identity、activation/disable permit、启动恢复绑定入口、
+  结构化 outcome、BLOCKED，以及已发布 generation 的 terminal-only physical close；
+  从未发布且已证明安全回滚的 failed load 例外见第 7 节。
+- `src/share/plugin/ob_plugin_catalog.*` 与 `__all_plugin_*` SQLite 表：package、operation、
+  service/extension owner、dependency、非复用 generation/operation identity，activation/
+  restricted-disable permit、启动恢复计划和 ready 前一致性检查。稳定对象/数据依赖在同一
+  不可变 R1 package 的新 runtime generation 激活提交时原子重绑；插件依赖按 consumer
+  generation 归档。
+- `src/observer/ob_server_plugin_runtime.*`：experimental ON 时使用 opaque bridge 接入
+  本地 catalog-identity verifier、loader 和启动恢复；一期不做签名/信任链校验，仍只接受
+  trusted directory 下且与 catalog manifest identity 对账的插件。
 - `cmake/Plugin.cmake` 及两类检查脚本：显式插件 target、SDK package、源码/链接/二进制门禁。
 - `plugins/reference` 与 `unittest/share/test_plugin_*`：conformance、回滚 stop 失败、运行时 stop
   失败、并发 drain/disable/shutdown 等夹具。
 
-这些落点不包含 server 启动接线、真实签名 verifier、catalog 表/DDL、activation intent、恢复器
-或 GIS SPI，后者仍是 R1 的阻断工作。
+这些落点不包含真实签名 verifier、production
+package materializer、SQL `INSTALL/UNINSTALL` 入口和 catalog object materializer、SQL
+callable/type codec/index AM 等 typed execution adapter、plan/PX rebind，或 GIS 实现迁移。
+当前持久 catalog、local verifier 和 loader gate 仍是实验性内核，不等于完整生产管理面；
+扩展目录也只是 R1 的元数据与生命周期地基，不能被表述为 GIS SPI 已经可执行，更不能标记
+GIS 插件化完成。
 
 ## 1. 背景与仓库事实
 
@@ -49,8 +71,10 @@ seekdb 的轻量化目标不是简单删除低频能力，而是让能力按需�
 核心可独立构建和运行。GIS 是首个样板，但插件架构必须能被全文检索、向量算法、外部
 存储连接器等后续功能复用。
 
-实施前基线不存在通用动态插件内核；本变更新增了 R0 开发预览，但尚未接入 server 启动和
-catalog 管理面。下列事实解释了为何不能直接搬目录：
+实施前基线不存在通用动态插件内核；本变更新增了 R0 开发预览和进程内
+activation/disable 协调接口、实验性持久 catalog、local identity verifier/loader 和启动门禁。
+一期尚未接入签名信任、SQL 管理面与 GIS typed execution。
+下列事实解释了为何不能直接搬目录：
 
 - `src/share/rc/ob_server_runtime.h` 明确把进程运行时定义为“无 registry”的单实例状态。
 - `src/share/rc/ob_module_provider.h` 是固定 C++ 虚函数集合，不是带版本和租约的服务注册表。
@@ -115,7 +139,8 @@ Plugin = Package + Objects + Services + MigrationGraph
 其他术语：
 
 - **Plugin identity**：稳定、全局唯一且不可复用的标识，如 `org.seekdb.gis`。
-- **Generation**：同一 identity 每次成功发布运行时实现时递增的进程内代数。
+- **Generation**：catalog 在 activation intent 建立时分配、同一 identity 持久历史中永不复用的
+  fencing 代数；失败或 abort 也消耗该值，成功发布并不是首次分配点。
 - **Registry epoch**：任一可见服务集合变化时递增的全局世代，用于计划/cache 失效。
 - **Lease**：一次已计数的服务引用，绑定 plugin identity、generation、vtable 和 context。
 - **Desired state**：catalog 要求的版本及状态；**actual state** 是 loader 当前真实状态。
@@ -231,6 +256,70 @@ consumer 声明可接受区间。registry 必须：
 plan、prepared statement、执行上下文、后台任务、异步 callback 和存储迭代器只要可能执行
 插件代码，就必须持 lease；只记录 service 指针不合格。lease 不得跨进程退出。
 
+ABI 的默认“指针只在本次调用内借用”规则不适用于已经成功发布的静态或动态 service：
+service table 以及从该表递归可达的插件所有、不可变数据，必须持续有效且不可变，直到该
+service 已取消发布、所有可能引用它的 lease 已排空，并且 plugin `deinit` 已返回；发布不转移
+这些内存的分配所有权。失败或 abort 且从未发布的 registration transaction 可在事务结束后
+提前释放对应 table。registration commit 可能早于外层 activation publish，插件不能仅因
+`commit_registration()` 返回就释放 table。
+
+R1 扩展目录用一个带 `EXTENSION_CATALOG` capability 的具名 service 返回不可变 snapshot。
+loader 只在 `start` 成功后、且不持 loader mutex 时调用它，并把所有字符串/描述符深拷贝成
+host-owned 元数据；type、function、cast、index AM、optimizer/DAS hook 和 catalog object
+必须与其实现 service 在同一 registration 中原子发布。可执行对象只能通过
+`acquire_extension_with_implementation()` 同时取得 object lease 与 service lease，避免两次
+acquire 之间被 quiesce；catalog object 没有可执行 service。当前实现暂时要求实现 service
+属于同一 plugin generation，跨插件实现引用必须等 activation dependency DAG 后再开放。
+同名 function 被视为 overload 集，catalog object 名称按 `(object_kind, schema, name)` 判重。
+名称查询返回的 host-owned 副本只用于 binding；真正执行仍必须重新取得 lease 并核对
+registry epoch/generation。
+
+当前这一层**只完成元数据 registry**：它尚未定义或校验各 kind 的标准 execution vtable，
+因此不得把任意 implementation service 强转后执行。下一层必须先冻结 callable/type-codec/
+index-AM 等 kind-specific C ABI，并在 publish 前校验 function result、cast source/target type
+引用完整性，以及 core allowlist 中的 hook point/catalog object kind。catalog 真实 namespace
+冲突也必须由 core 的 typed object-kind 映射判断，不能信任插件自由字符串。optimizer/DAS
+同 hook point 的最终顺序固定为 priority 降序、object_id 升序；在执行 SPI 定义各 flag 的逐类
+语义前，通用 flags 只能用于诊断，不能作为优化正确性或安全判断。
+
+execution ABI 不得因为 metadata 已可发布就仓促标记为 v1。冻结前至少必须同时完成并用真实
+core adapter 反证以下契约：function typed parameter pattern、overload cost 与 result strategy；由
+host 签发且不可伪造的 runtime type token、typemod、canonical datum bytes、NULL/empty/batch/
+selection 和 result arena 所有权；authenticated package permission、catalog grant 与 kind/hook
+allowlist 的交集授权；index key/range sink、optimizer proposal 和 DAS task view 的稳定受限
+POD/opaque-handle API。禁止把 `ObDatum`、plan、transaction、tablet、DAS task 等 C++ 对象或
+裸地址跨 ABI。执行表最终应放入独立的 `execution_spi.h`，与低频 metadata descriptor 分开演进；
+每个 service table 只服务一种 execution kind，且必须在 publish 前完成 kind/size/version/
+feature/reserved/callback shape 校验。index/optimizer/DAS 在稳定 host IR 尚不存在时必须默认拒绝，
+不能用 no-op vtable 冒充已支持。hook chain 还必须补充同一 registry epoch 下整组原子 acquire，
+禁止逐项 acquire 混入不同 epoch。上述前置条件完成前，不安装或承诺 experimental execution
+header 的 ABI 兼容性。
+
+catalog object 的 `definition_digest` 只是插件提交的声明。production verifier/catalog 必须在
+materialize 或 publish 前，把它与已认证 package manifest 元数据及实际 payload 对账；仅校验
+`sha256:` 字符串格式既不证明内容绑定，也不建立发布者或包的可信性。完成这条对账前，catalog
+object contribution 仍只能用于实验协议测试，不能视为 production 可验证对象。
+
+当前 registry 已实现 `ObPluginRegistration::prepare()` 和
+`ObPluginActivationCandidate`：它在锁外构造完整 immutable next snapshot，完成深拷贝、
+资源上限、冲突和 implementation binding 校验，然后在短临界区复核 base epoch/snapshot
+并建立全局 hidden reservation。candidate 期间新内容不被 `list/find/acquire` 观测，普通
+读和 lease 仍使用旧的 immutable snapshot；竞争的 prepare/commit/quiesce 返回可重试错误。
+`promote()` 对合法 token 不分配、不调用插件/catalog，以指针交换同时将 owner 置为
+`ACTIVE` 并把 registry epoch 加一；不可能条件是编程不变量违反，必须 fail-stop，
+不能恢复为业务回滚分支。`abort()` 丢弃不可见 snapshot，不增加 epoch，也不发布
+generation。保留的 `commit()` 包装为 prepare+promote；production activation 必须使用分段接口。
+
+loader 和直接调用 registry staging API 的内部路径都必须执行同一资源上限：单 generation
+最多 4096 个 runtime service、4096 个 extension descriptor；进程内 live immutable registry
+同样分别最多保留 4096 项，且必须在复制 snapshot 前按 `live + staged` 拒绝越界。动态
+registration 的所有并行 transaction 共享 4096 个 pending service 预算，空 transaction 数量
+也受同一上限约束，不能用多事务绕过单事务预算；commit 必须在 host lock 下重新检查已提交
+staging key 的冲突。扩展快照中单个描述符最多 64 KiB、所有 descriptor array 的声明字节
+总量最多 64 MiB。每类数组必须给出精确 byte length，逐元素 `struct_size` 步长之和必须恰好
+消耗该边界；字符串另受 255-byte 单字段上限和 descriptor 总数共同约束。任何路径都不得以
+绕开 loader 为由放宽这些边界。
+
 依赖必须是显式 `requires`。初始化顺序采用拓扑序，停止顺序采用逆拓扑序；依赖环、版本
 区间无解、多默认 provider 冲突均在 publish 前失败。
 
@@ -245,6 +334,20 @@ catalog 是 desired state 和持久依赖关系的唯一事实源；运行时 re
 - 当前 persistent format、失败阶段和可诊断错误；已完成迁移边仅在 R2
   profile 启用时持久化；
 - 操作者、时间、审批/审计标识。
+
+当前实验性实现已在 seekdb 本地 WAL `meta.db` 中落地 package、operation/intent、service/
+extension owner 和 dependency 表，并由 `ObPluginCatalog` 实现 activation、restricted-disable、
+`UNINSTALL ... RESTRICT` store 语义及启动恢复计划。schema/DDL 适配器可以把 dependency
+增删加入调用方已有的 SQLite 写事务；该路径禁止再取得 catalog mutex，使用 SQLite writer
+作为与 disable 竞争的线性化点，避免 writer→mutex 与 mutex→writer 反序。调用方持有该
+writer transaction 期间不得调用任何会取得 catalog mutex 的其他 API，必须先 commit/rollback；
+普通管理路径的唯一顺序保持为 catalog mutex → SQLite writer。
+
+这仍不是可交付的完整生产管理面：experimental ON 时，`ObServer::start()` 在
+schema/timezone 检查后、`net_frame_.start()` 前执行 local identity verifier/loader 启动恢复。
+缺失本地 artifact 或 BLOCKED 状态会 fail closed；存在且与 catalog identity 对账的本地 DSO
+会按 durable DAG 重放。SQL 语句入口、权限/审计展示、签名 verifier/package materializer、
+catalog object materializer 和 GIS typed execution 仍未接线。
 
 规范管理语义为：
 
@@ -297,28 +400,34 @@ sequenceDiagram
   participant C as Catalog Txn/Intent
   participant V as Verifier
   participant L as Loader
-  participant R as Shadow Registry
+  participant R as Registry
   participant P as Plugin
   A->>C: INSTALL intent / R2-only UPDATE intent
-  C->>V: identity + immutable package ref
-  V-->>C: verification evidence + pinned artifact token
-  C->>L: prepare(token)
+  C->>L: activate immutable package ref
+  L->>V: verify_and_pin(canonical artifact)
+  V-->>L: identity + digest + pinned token
+  L->>C: begin_activation(exact package identity)
+  C-->>L: permit(generation, incarnation, operation)
   L->>P: dlopen(RTLD_NOW|RTLD_LOCAL) + entry
   P->>R: register provides/requires/objects
-  R-->>L: dependency + ABI validation
-  C->>C: object DDL transaction / R2-only migration
-  C->>C: commit desired state + ACTIVATING recovery intent
-  C->>L: publish committed intent
-  L->>R: atomic publish generation
-  L-->>C: actual state = runtime-local ACTIVE
-  C->>C: finish intent / persist actual state
-  C-->>A: production ACTIVE only after finish succeeds
+  L->>R: prepare hidden immutable candidate
+  R-->>L: host-owned contribution snapshot
+  L->>C: commit_candidate(snapshot)
+  C->>C: object ownership/dependencies + PROMOTE_PENDING
+  C-->>L: PROMOTE + commit token
+  L->>R: no-fail promote + epoch++
+  L->>C: complete(runtime ACTIVE)
+  C->>C: persist actual ACTIVE + clear intent
+  C-->>A: production ACTIVE
 ```
 
 物理包应先写入 staging，验证后以原子 rename 放入不可变目录，再开始 catalog 操作。动态加载
 和数据库事务无法天然成为同一原子域，所以实现必须使用 WAL/持久 intent：catalog 为事实源，
 publish 是已预检、不可失败的内存指针切换。若崩溃发生在 catalog commit 与 publish 之间，
 启动恢复器必须在 server ready 前重放 intent，而不是对外暴露半安装状态。
+图中 `commit_candidate` 成功只表示 durable `PROMOTE_PENDING`，不是最终
+`complete`；只有它返回 `PROMOTE` 且同时交付 commit token 才授权 publish。若返回
+`NOT_COMMITTED` 或 `UNKNOWN`，必须按第 7.1 节分支处理，不得猜测 catalog 结果。
 
 若未来显式启用 R2，升级优先使用 side-by-side generation：新 generation 在 shadow registry 初始化并验证，catalog
 迁移完成后切换新请求；旧 generation 在 lease 排空后逻辑 stop。v1 不 `dlclose` 旧 generation，
@@ -342,7 +451,7 @@ stateDiagram-v2
   VALIDATED --> FAILED: load fails safely
   LOADED --> INITIALIZING
   LOADED --> FAILED: initialization preparation fails safely
-  INITIALIZING --> ACTIVE: atomic runtime publish
+  INITIALIZING --> ACTIVE: catalog PROMOTE decision then no-fail promote
   INITIALIZING --> FAILED: rollback succeeds
   INITIALIZING --> BLOCKED: rollback stop fails
   ACTIVE --> QUIESCING: permit issued; reject new leases
@@ -361,8 +470,7 @@ stateDiagram-v2
 
 | 管理操作 | operation/journal phase | 稳定 runtime state 结果 |
 | --- | --- | --- |
-| load | `VALIDATING -> LOADING -> INITIALIZING -> STARTING -> PUBLISHING` | publish 前不可见；原子 publish 后才进入 runtime-local `ACTIVE` |
-| R1 activation | `ACTIVATING -> FINISHING` | runtime-local `ACTIVE` 只是 candidate；catalog finish 成功后才是 production `ACTIVE` |
+| R1 activation | `CATALOG_BEGIN -> LOADING -> INITIALIZING -> STARTING -> DISCOVERING -> PREPARING_CANDIDATE -> CATALOG_FINISH -> PROMOTING -> COMPLETE` | candidate 不被普通查询/acquire；`commit_candidate` 返回 `PROMOTE` 后执行 no-fail promote 进入 runtime-local `ACTIVE`，`complete` 成功才可对外报告 production `ACTIVE` |
 | disable | `DISABLING -> DRAINING -> STOPPING -> FINALIZING` | permit 在 quiesce 前 abort 时 runtime 始终是 `ACTIVE`；drain 超时为 `QUIESCING`，stop 失败为 `BLOCKED`，成功为 `STOPPED` |
 | retry/shutdown | `VALIDATING` 或 terminal `STOPPING` | `FAILED` 不原地复活；显式重试创建新 generation。`BLOCKED` 只能由 process-shutdown retry 收敛到 `STOPPED` |
 
@@ -371,6 +479,65 @@ stateDiagram-v2
 没有残余活跃资源，允许在修复后以**新 generation**重试；`BLOCKED` 表示 runtime
 可能仍持资源或回调，禁止普通重试和 identity 复用。FAILED/BLOCKED 必须记录首次和最近
 错误、operation phase、generation 和所有可观测 cleanup 结果。
+
+R1 的 candidate 是 registry 的不可见预发布映射，不是一个可以发普通 lease 的“半 ACTIVE”。
+`ObPluginRegistration::prepare()` 在 catalog commit 前完成全部校验与分配；`promote()`
+只在 registry mutex 内验证 hidden reservation、交换预构建 snapshot、把 epoch 加一，并执行
+`INITIALIZING -> ACTIVE`，不得分配、调用插件或访问 catalog。若 catalog 已持久
+`PROMOTE_PENDING` 后进程在 promote 前崩溃，启动恢复必须按该 intent 的精确 identity
+重新加载。禁止反过来先开放普通 lease 再补 catalog commit。
+
+### 7.1 Activation permit 与结果判定
+
+`ObPluginActivationGuard::begin_activation()` 必须在 `dlopen` 和任何插件回调之前执行。
+请求绑定 verifier 交付的 plugin/build/package identity、package digest、版本和模式；
+permit 交付 catalog-assigned generation、runtime incarnation 和 operation id。catalog 在返回
+permit 前必须完成 identity 级串行化与可恢复 intent，但不得把 catalog mutex 带入 loader/
+插件回调。
+
+这三个字段是持久 fencing identity，不是可回绕或可复用的展示序号。同一 plugin identity 的
+catalog generation 一经分配，就不得在持久历史中重新分配给另一 generation，包括失败、
+abort、卸载或记录归档之后；每个逻辑 runtime incarnation 和 operation 也必须取得在 catalog
+持久历史中唯一且永不重新指派的 id。启动恢复重放使用原 intent 中同一组 id，新尝试必须
+分配新 id，禁止通过复用历史值造成 ABA。
+
+verifier metadata、recovery record 和 permit 返回的所有 host-owned identity/build/digest
+字符串必须按容器的完整 `size()` 校验长度和字符集，禁止仅对 `.c_str()` 前缀做判断；内嵌
+NUL 或隐藏后缀一律 fail closed。无效 verifier/recovery identity 必须在 catalog begin 前拒绝；
+permit tuple 无效则不得 `dlopen`/publish，并必须以完整结果 abort 已签发 permit。
+
+loader 完成 start、扩展发现和 hidden candidate 准备后，把 host-owned service/object
+贡献快照传给 `permit.commit_candidate()`。该调用的返回值、decision 和 token 必须作为一个
+不可拆分的结果解释：
+
+- `NOT_COMMITTED` 且没有 commit token：catalog 证明 ownership/dependency/
+  `PROMOTE_PENDING` 未提交。loader 必须先 abort candidate、停止/反初始化 runtime，
+  再以最终 FAILED/BLOCKED outcome 调用 permit `abort()`；不得增加 epoch 或开放 lease。
+- `PROMOTE` 只有在调用成功且同时返回非空 `ObPluginActivationCommit` token 时合法。
+  这表示 catalog 已持久 ownership/dependency 和 `PROMOTE_PENDING`；从此点起禁止业务回滚，
+  loader 必须执行 no-fail promote。
+- `UNKNOWN`，或任何自相矛盾的返回值/decision/token 组合：禁止 promote，也禁止调用
+  catalog permit `abort()`。loader 丢弃不可见 candidate，在能证明安全时清理 runtime，
+  但必须保留 identity/operation 占位并返回 `OB_TRANS_UNKNOWN`，交由启动恢复定夺。
+
+permit 签发后、`commit_candidate()` 之前的任何失败，也必须先收敛 runtime 再把完整
+outcome 传给 permit `abort()`。回滚 stop 失败仍按 `BLOCKED` 处理；permit abort 自身
+失败则 identity 必须保留给恢复，禁止同进程重用。
+
+promote 之后，loader 以 runtime-local `ACTIVE` outcome 调用 commit token `complete()`。
+`complete()` 成功才表示 catalog actual state 已收敛且 intent 可清除；若它失败，runtime
+仍然 `ACTIVE`、registry 仍然可见，禁止取消发布或调用 activation abort。catalog 必须保留可
+重放的 `PROMOTE_PENDING`，管理语句返回 catalog 完成错误，不得谎报已回滚。
+
+### 7.2 Activation 与 terminal shutdown 线性化
+
+hidden candidate 准备完成后，loader 在调用 `commit_candidate()` 前用一次短 loader-mutex
+临界区作为唯一线性化点。若 terminal shutdown 先设置 barrier，activation 必须在 catalog
+commit 前停止，回滚 candidate/runtime 并 abort permit。若 activation 先通过该点，`loading_`
+保持到 `complete()` 结束；并发 shutdown 只能设置 terminal barrier、返回 `OB_EAGAIN`
+并要求调用方重试，不得跨过正在进行的 catalog 决策去 stop/close DSO。一旦 catalog
+返回合法 `PROMOTE`，即使 shutdown barrier 此后已存在，activation 也必须完成 promote
+和 `complete()` 尝试；否则会造成 catalog/runtime split brain。
 
 R0/R1 不允许把同一进程内的 STOPPED generation 重新变为 runtime-local `ACTIVE`；
 identity 与 DSO 一直保留到进程退出。只有未来启用 R2 activation intent 时，才可创建
@@ -402,14 +569,17 @@ runtime，再写 catalog”的松散流程。
    持久化为进行中，立即阻止创建新的持久化依赖，并执行完整 `RESTRICT` 检查。
 4. `begin` 返回前释放 catalog 内部互斥；调用方只持 permit 这个协调 token。
 5. loader 在短临界区内复核 operation/generation，然后释放全局 loader mutex。registry 原子
-   进入 QUIESCING 并拒绝新 lease；drain、stop、deinit 和任何插件 callback 均在不持全局
-   loader mutex、不持 catalog 内部互斥时执行。
-6. 调用 `permit.finish(runtime_outcome)`。outcome 必须包含 status、phase、generation、actual
+   进入 QUIESCING 并拒绝新 lease；drain 在不持全局 loader mutex、不持 catalog 内部互斥时执行。
+6. drain 成功后、进入第一个 fallible `stop` callback **之前**，loader 必须调用
+   `permit.record_stop_entered()` 并等待其事务提交。只有 checkpoint 明确成功才可调用 stop；
+   返回失败或提交结果不确定时不得进入 callback，销毁 unresolved permit，并保留可能已经落盘的
+   `stop_entered` 证据。这样即使进程死在 stop callback 内，恢复器也不会把它误判成安全 drain。
+7. 调用 `permit.finish(runtime_outcome)`。outcome 必须包含 status、phase、generation、actual
    state、是否已进入 stop 及独立 runtime error；finish 以 durable intent 幂等持久化真实结果。
    drain 超时保持 QUIESCING；stop 一旦进入且失败则为 BLOCKED；成功为 STOPPED/disabled。
-7. finish 返回后，loader 才释放 in-flight operation。finish 的 catalog error 与 runtime error
+8. finish 返回后，loader 才释放 in-flight operation。finish 的 catalog error 与 runtime error
    必须分别保留，不能互相覆盖。
-8. 只有 finish 成功且记录 STOPPED 后，管理语句才能报告停用成功。后续 catalog 对象删除和
+9. 只有 finish 成功且记录 STOPPED 后，管理语句才能报告停用成功。后续 catalog 对象删除和
    包引用移除仍在独立事务中按 RESTRICT 语义完成。
 
 锁序不变量为：
@@ -418,7 +588,9 @@ runtime，再写 catalog”的松散流程。
 loader mutex: reserve operation -> no loader mutex
 catalog begin lock domain       -> no catalog internal mutex
 loader mutex: revalidate        -> no loader mutex
-registry quiesce + drain + plugin stop/deinit
+registry quiesce + drain       -> no loader/catalog mutex
+catalog pre-stop checkpoint    -> no catalog internal mutex
+plugin stop/deinit             -> no loader/catalog mutex
 catalog finish lock domain      -> no catalog internal mutex
 loader mutex: release operation
 ```
@@ -438,6 +610,9 @@ loader mutex: release operation
   还必须完成 catalog activation finish。
 - `permit.finish(runtime_result)` 持久化失败时，actual runtime 状态不变；必须保留 recovery
   intent 并向调用方返回“不确定/需恢复”，禁止报告已回滚 runtime。
+- pre-stop checkpoint 未明确提交时不得调用 stop，也不得再用 `stop_entered=false` 的 finish
+  覆盖可能已提交的 checkpoint；permit 析构只能把 intent 标成待恢复并保留 phase/actual/stop
+  字段。checkpoint 已提交而 finish 未完成时，启动恢复必须视为不可证明安全的 stop。
 - stop 失败时 identity 必须是 BLOCKED。即使 finish 本身失败，恢复器也必须根据 durable
   intent 和 runtime journal 收敛到 BLOCKED，而不是 ACTIVE。
 - 进程退出时 shutdown 按逆依赖顺序重试 BLOCKED 插件的 stop；只有重试成功才可以清除
@@ -462,6 +637,31 @@ loader mutex: release operation
 5. 在 shadow registry 初始化，全部成功后原子 publish；按逆序清理任何失败步骤。
 6. 检查插件持久化对象的 provider 均为 production `ACTIVE` 后，才允许正常
    server ready。
+
+当前 loader 已提供 `recover_startup_activation()` 的单条重放契约。catalog 必须从 durable
+intent 交付 relative package ref、plugin identity、package digest、generation、runtime
+incarnation 和 operation id；loader 以 `STARTUP_RECOVERY` mode 请求 permit。pinned verifier
+artifact 的 identity/digest 必须与恢复记录完全相等，catalog 返回的 permit identity 也必须
+与 generation/incarnation/operation 完全相等；任一不匹配均 fail closed，不得默认
+创建新 activation。同一进程内已占用的 identity 或重复 generation/incarnation/operation
+也必须拒绝。catalog 恢复器负责构建 DAG，按拓扑序逐条调用；loader 不从动态库
+名称猜测依赖。
+
+当前实验性 catalog 已能扫描 durable unfinished intent、区分 pre-commit fresh retry 与
+`PROMOTE_PENDING` exact replay、按已持久依赖构造 DAG，并在依赖只存在于未提交 manifest 时
+对精确的 required-service-missing 结果做有界多轮重试。它也会在 ready 检查前拒绝未收敛
+operation、BLOCKED runtime、缺失/失配 provider；已经进入 fallible stop 且失败的记录不能借
+进程重启伪装为 `STOPPED`。稳定 catalog/user/data/job 边在同一不可变 R1 package 的新
+generation candidate 继续满足 service ABI/version/capability、extension 或 physical-format
+契约时才原子重绑，插件 consumer 边则随 generation 归档。`PROMOTE_PENDING` exact replay
+只能重建完全相同的 service/extension/逻辑依赖集合；唯一允许变化的是经兼容性复核后的
+provider generation fence。恢复协调器会消费已成功的 plan 项，失败后重试不会重复加载它们。
+
+这仍**不代表完整生产启动恢复已交付**：experimental ON 的 bridge 已接入
+`ObServer::start()` 的 schema/timezone-ready 之后、`net_frame_.start()` 之前；它可以消费
+非空 activation plan，但 verifier 目前只做本地 catalog identity pinning，不做签名、信任链
+或内容 hash。缺包、BLOCKED、未完 intent、stop failure、依赖环与重放冲突仍按 fail-closed
+处理；完整供应链和 GIS 迁移矩阵尚未验收。
 
 安装插件缺失、哈希不符或 ABI 不匹配时：只要 catalog 中存在其持久化对象/数据依赖，正常
 启动必须 fail closed，或进入管理员显式指定的受限 recovery mode；禁止跳过插件后正常提供
@@ -497,19 +697,31 @@ R0 ABI 的可检测范围必须如实表达：`stop` 返回 status，是插件�
 
 v1 设计要求签名 manifest parser、签名链、文件清单逐项校验，以及 package manifest/
 binary-returned manifest/catalog 全字段
-对账；**这些能力目前没有完整实现**。当前仅有 verifier token 与核心 identity 对账时，只能证明
-一次 loader 调用绑定到了预期 identity，不能证明包内容、发布者、依赖和迁移图可信。产品文档、
+对账；**这些能力目前没有完整实现**。当前只有 verifier token 与核心 identity/digest
+绑定；loader 会校验 digest 字符串形式并用它 fence activation/恢复，但不会自行计算或
+证明 artifact 内容等于该 digest。因此它只能证明一次 loader 调用绑定到了 verifier 声明的
+identity/digest，不能证明包内容、发布者、依赖和迁移图可信。产品文档、
 错误码和状态表必须显示该差异，不能把 `token_ok` 命名或展示为 `signature_verified`。
 在 R0 代码、测试、日志和错误文本中，该边界只能称为 `verified/pinned artifact`、
 `verifier-provided metadata` 或“已对账 artifact identity”；在真实签名链实现并返回可审计
 签名状态前，禁止使用 `signed metadata`、“已签名”或“签名验证通过”。
 
 R0 loader 通过 `SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS=ON` 才进入 `ob_share`，默认轻量构建不包含
-该运行时代码。当前初次 `load()` 的 catalog authorization 仍由 verifier 的预授权 allow-list
-契约承担，尚无完整 activation intent/permit，因此只能用于测试。R1 接入生产入口前必须让
-activation 与 disable 对称：catalog 先签发绑定 package identity、generation 和 durable intent
-的 permit，loader 才能 publish runtime-local `ACTIVE`；catalog finish 成功后才能对外标记
-production `ACTIVE`。禁止仅把实验开关默认打开来绕过这一门禁。
+该运行时代码。当前 `init()` 已强制要求 activation guard，`load()` 不再绕过 permit
+直接 publish；loader 已实现 package digest 绑定、catalog-assigned generation/incarnation/
+operation、hidden candidate、`NOT_COMMITTED/PROMOTE/UNKNOWN`、no-fail promote、后置
+`complete()` 和 startup-recovery fencing。这些运行时协议已经接入实验性 durable catalog，
+但仍不是 production 管理面或供应链实现。
+
+生产交付仍缺少：SQL 管理/权限入口、catalog object materializer、typed execution adapters、
+production package verifier/materializer、真实 loader activation/replay 和运维审计视图。
+`ObServer::start()` 现有接线是 experimental local identity verifier/loader gate，不是完整
+生产管理面。当前 verifier 接口交付的
+`sha256:` digest 只被校验格式并用于
+身份/恢复绑定；尚无生产 package manifest parser、文件逐项 hash、签名链、权限和完整
+provides/requires 对账，也没有把 catalog object `definition_digest` 与已认证 manifest/payload
+逐项核对。因此只能用于实验/测试，禁止仅把实验开关默认打开就宣称
+插件系统进入生产；一期只承诺本地可信目录可用。
 
 ## 11. 可观测性与运维接口
 
@@ -546,9 +758,36 @@ GIS 是首个 conformance plugin，不享有专用后门。
 返回明确的 provider-not-active 错误。已有持久化值不能被重解释；受限备份是否允许 opaque
 搬运由 recovery mode 决定。
 
+### 12.1 必须冻结的 GIS 兼容 token
+
+迁移删除的是实现依赖，不是已经进入磁盘、计划、协议或 catalog 的数值。下列项目必须留在
+core compatibility 层并增加 static assertion/旧数据反序列化 fixture，禁止删除、改号或复用：
+
+- `ObGeometryType = 37`、`ObOGeometryType = 25`、`ObGeometryTC = 23`，以及现有
+  `ObGeoType` 数值；MySQL protocol 的 `MYSQL_TYPE_GEOMETRY = 255`。
+- Geometry envelope `[4B SRID][1B version][WKB]`、版本位 `0x40`；core 只允许把它作为
+  opaque bytes 搬运、备份和恢复，语义校验/计算必须由 active provider 完成。
+- column `srs_id_` 的 5-bit subtype + 32-bit SRID 布局、默认值、spatial generated-column
+  flag bit 38，以及 spatial index enum 8/9/10。
+- 已持久化的 GIS `ObItemType` 和 `ObDomainOpType` 子值；后者应移入中性的 domain-index
+  token 头，而不是随 `share/geo` 删除。
+- SRS inner-table/view/aux table ID 和既有 GIS/SRS/spatial error number、MySQL errno、
+  SQLSTATE；这些 ID 即使插件未安装也永久保留。
+- spatial provider format：point MBR 16 bytes、非 point MBR 32 bytes，以及
+  `[S2 cellid][MBR][original rowkey...]` 的现有行布局。语义归 GIS 插件，但 format identity、
+  version 和旧数据 fail-closed 识别归核心。
+
+当前依赖基线为：`src/share/geo` 179 个文件、SQL GIS 53 对实现/头文件，合并 SRS 后至少
+94 个 core 文件存在直接硬边；已有构建的 334 个 `link.txt` 被 S2/protobuf-c 传播，seekdb
+本体还携带 20 个 Abseil 静态库。S2/Abseil/protobuf-c 必须在最终阶段成为 GIS package 私有
+依赖，core-only 验收不能只检查动态依赖，还必须扫描实际 link command 和最终符号表。
+
 ## 13. GIS 分阶段迁移计划
 
 下列阶段是依赖关系，不得跳序；当前状态不得标记为“GIS 插件化完成”。
+截至本 RFC 对应的实现，`plugins/gis` 独立包尚不存在，GIS 算法/codec/SRS/空间索引
+仍在核心树中，也尚未通过无 GIS/S2/Boost 的 core-only 构建和安装/缺失/停用/损坏/
+恢复矩阵。当前成果只是后续迁移可复用的插件内核，不是 GIS 交付物。
 
 ### Phase 0：恢复基线与语义盘点
 
@@ -562,6 +801,14 @@ GIS 是首个 conformance plugin，不享有专用后门。
 - 实现 catalog activation/disable intent、restricted-disable permit、启动恢复及 BLOCKED 行为。
 - 全局 loader 锁只保护短状态提交；drain 和任意插件 callback 均不得持有它。
 - 提供 hello/conformance 插件覆盖失败注入，不先耦合 GIS。
+
+当前 Phase 1 已完成开发预览的 C ABI、registry/lease/generation、hidden candidate、loader
+失败路径，以及 durable catalog intent/store、owner/dependency、RESTRICT 查询和恢复 planner。
+experimental ON 时还已接入位于 schema/timezone-ready 与 `net_frame_.start()` 之间的
+local identity verifier/loader gate；缺失 artifact 或 BLOCKED 状态保留 durable evidence 并
+拒绝启动，已安装且对账成功的本地插件可按恢复计划加载。签名信任、SQL 管理入口、catalog
+object materializer、typed execution adapters 和 GIS 迁移仍未完成，因此 Phase 1 不能标记
+为 production complete。
 
 ### Phase 2：通用 SQL 与对象 SPI
 
@@ -652,6 +899,7 @@ plugins/<identity>/
 | ABI（R0/R1） | major/minor 不同、截短 struct、未知 feature | 非精确 ABI 安全拒绝，无越界读取 |
 | ABI 演进（仅 R2） | minor 前后兼容、追加字段、未知 feature | 只按已声明且已测试的矩阵兼容 |
 | Registry | 缺服务、版本冲突、依赖环、重复 provider、半注册失败 | publish 前拒绝，旧 generation 不受影响 |
+| Activation | begin/prepare/commit/complete 各点故障、`NOT_COMMITTED/PROMOTE/UNKNOWN`、complete 失败、与 shutdown 并发 | candidate 不可见；只有合法 PROMOTE 发布；UNKNOWN 保留 identity；complete 失败不回滚 ACTIVE；shutdown 线性可重试 |
 | Lease | 并发执行、plan/PS、异步任务、长 iterator | stop 等待/超时可诊断，无旧地址调用 |
 | Catalog | install/uninstall 事务失败与崩溃点；仅 R2 增加 update | catalog/recovery 收敛，无半对象可见 |
 | 停用锁序 | begin、quiesce、stop、finish 各点故障/并发 DDL | 无双锁持有；无新依赖越过 permit |

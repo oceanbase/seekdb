@@ -28,6 +28,12 @@
  *    remains valid only for the duration of the call in which it is supplied.
  *    Manifest data returned by seekdb_plugin_entry_v1 is the exception: it MUST
  *    remain valid and immutable until the plugin library is unloaded.
+ *    A successfully published static or dynamically registered service is
+ *    another exception: its function table and all immutable plugin-owned data
+ *    recursively reachable through that table MUST remain valid and immutable
+ *    until the service has been unpublished, every lease that can reference it
+ *    has drained, and plugin deinit has returned.  Publication does not transfer
+ *    allocation ownership to the host.
  *  - ABI v1 defines logical quiesce/stop only.  A host may keep the library
  *    mapped until process exit; a plugin MUST NOT rely on dlclose or static
  *    destructors for correctness or durable state.
@@ -120,7 +126,13 @@ enum seekdb_plugin_capability {
   SEEKDB_PLUGIN_CAPABILITY_MULTI_INSTANCE = UINT64_C(1) << 1,
   SEEKDB_PLUGIN_CAPABILITY_SIDE_BY_SIDE_UPGRADE = UINT64_C(1) << 2,
   SEEKDB_PLUGIN_CAPABILITY_PERSISTENT_DATA = UINT64_C(1) << 3,
-  SEEKDB_PLUGIN_CAPABILITY_TRANSACTIONAL_SERVICES = UINT64_C(1) << 4
+  SEEKDB_PLUGIN_CAPABILITY_TRANSACTIONAL_SERVICES = UINT64_C(1) << 4,
+  /*
+   * Service-descriptor-only discovery marker.  It is invalid on the plugin
+   * manifest itself, required-service descriptors, or executable
+   * implementation references.  The loader does not publish this service.
+   */
+  SEEKDB_PLUGIN_CAPABILITY_EXTENSION_CATALOG = UINT64_C(1) << 5
 };
 
 /* Opaque identities.  No implementation may depend on their layout. */
@@ -135,7 +147,16 @@ typedef struct seekdb_plugin_semantic_version {
   uint32_t patch;
 } seekdb_plugin_semantic_version_t;
 
-/* Inclusive minimum and exclusive maximum.  all-zero maximum means unbounded. */
+/*
+ * Inclusive minimum and exclusive maximum for one ABI major.  An all-zero
+ * maximum means unbounded within minimum_inclusive.major; a nonzero maximum
+ * may stay in that major or be exactly {major + 1, 0, 0}.  Ranges never opt
+ * into another incompatible major.
+ * This is a fixed-layout v1 leaf because it is embedded by value in other ABI
+ * structures: struct_size MUST equal sizeof(seekdb_plugin_version_range_t).
+ * It must never grow in place; a future representation needs a new parent
+ * service/descriptor version.
+ */
 typedef struct seekdb_plugin_version_range {
   uint32_t struct_size;
   seekdb_plugin_semantic_version_t minimum_inclusive;
@@ -146,7 +167,11 @@ typedef struct seekdb_plugin_version_range {
 /*
  * A service pointer points to an immutable C function table.  That table MUST
  * begin with uint32_t struct_size and MUST obey all rules at the top of this
- * file.  service_id is a stable, reverse-DNS UTF-8 identifier.
+ * file, including the published-service lifetime for the table and all
+ * immutable plugin-owned data recursively reachable from it.  service_id is a
+ * stable, reverse-DNS UTF-8 identifier.  This is a fixed-layout v1 leaf because
+ * manifest arrays use sizeof(v1) element stride: struct_size MUST equal sizeof
+ * this type.  A future shape requires a new parent manifest ABI.
  */
 typedef struct seekdb_plugin_service_provide_descriptor {
   uint32_t struct_size;
@@ -162,6 +187,8 @@ typedef struct seekdb_plugin_service_provide_descriptor {
  * may store an acquired service table in it during initialization and clears it
  * before the corresponding lease is released.  A plugin that acquires services
  * explicitly may set service_slot to NULL.  Optional requirements may be absent.
+ * This is also a fixed-layout v1 leaf: struct_size MUST equal sizeof this type;
+ * it must not grow in place while embedded in a counted manifest array.
  */
 typedef struct seekdb_plugin_service_require_descriptor {
   uint32_t struct_size;
@@ -222,7 +249,12 @@ typedef void(SEEKDB_PLUGIN_CALL *seekdb_plugin_release_service_fn)(
 /*
  * Service publication is atomic.  After begin succeeds, exactly one commit or
  * abort call MUST be made.  Descriptors passed to register remain borrowed only
- * until that transaction completes.  A failed register does not end the txn.
+ * until that transaction completes.  A successful commit does not retain the
+ * descriptor or its strings, but the plugin MUST retain each accepted service
+ * table according to the published-service lifetime above; the outer activation
+ * publication may occur after this callback returns.  If a transaction fails or
+ * aborts and its service was never published, the plugin may release that table
+ * after the transaction completes.  A failed register does not end the txn.
  */
 typedef seekdb_plugin_status_t(
     SEEKDB_PLUGIN_CALL *seekdb_plugin_begin_registration_fn)(

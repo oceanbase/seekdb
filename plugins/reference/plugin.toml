@@ -4,10 +4,10 @@ package_version = "1.0.0"
 build_id = "reference-abi-v1"
 abi_major = 1
 abi_minor = 0
-catalog_schema_version = 0
+catalog_schema_version = 1
 data_format_version = 0
 entrypoint = "seekdb_reference.so"
-capabilities = ["service.reference.echo"]
+capabilities = ["service.reference.echo", "extension.catalog.v1"]
 
 [[provides]]
 service_id = "org.seekdb.reference.echo"
@@ -15,4 +15,8 @@ version = "1.0.0"
 
 [[provides]]
 service_id = "org.seekdb.reference.dynamic-echo"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.reference.extensions"
 version = "1.0.0"

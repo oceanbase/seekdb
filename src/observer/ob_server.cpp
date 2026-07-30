@@ -25,7 +25,7 @@
 #endif
 #include <thread>
 #include "observer/ob_server.h"
-#include "share/ob_autoincrement_service.h"
+#include "observer/ob_server_plugin_runtime.h"
 #include "storage/lob/ob_lob_manager.h"
 #include "storage/compaction/ob_freeze_info_mgr.h"
 #include "share/ob_freeze_info_proxy.h"
@@ -143,7 +143,7 @@ ObServer::ObServer()
   : need_ctas_cleanup_(true),
     gctx_(GCTX),
     prepare_stop_(true), stop_(true), has_stopped_(true), has_destroy_(false),
-    net_frame_(gctx_),
+    net_frame_(gctx_), sql_conn_pool_(), ddl_conn_pool_(),
     sql_proxy_(),
     config_(ObServerConfig::get_instance()),
     reload_config_(config_, gctx_), config_mgr_(config_, reload_config_),
@@ -196,6 +196,9 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
 
   if (OB_SUCC(ret) && OB_FAIL(init_config(opts))) {
     LOG_ERROR("init config failed", KR(ret));
+  }
+  if (OB_SUCC(ret) && OB_FAIL(init_plugin_runtime(opts))) {
+    LOG_ERROR("init plugin runtime bridge failed", KR(ret));
   }
 
 #ifndef _WIN32
@@ -285,7 +288,7 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
     } else if (OB_FAIL(parse_role(opts))) {
       LOG_ERROR("parse role failed", KR(ret));
     } else if (OB_FAIL(init_sql_proxy())) {
-      LOG_ERROR("init sql proxy failed", KR(ret));
+      LOG_ERROR("init sql connection pool failed", KR(ret));
     }
     if (OB_SUCC(ret)) {
     if (OB_FAIL(ObDeviceManager::get_instance().init_devices_env())) {
@@ -444,6 +447,11 @@ void ObServer::destroy()
   // Cause ObBackupInfo to lock the mutex that has been destroyed by itself, and finally trigger the core
   // This is essentially an implementation problem of repeated destruction of ObBackupInfo (or one of its members). ObServer also adds a layer of defense here.
   FLOG_INFO("[OBSERVER_NOTICE] destroy observer begin");
+
+  // The experimental bridge owns no runtime loader yet.  It does own a
+  // catalog with a non-owning meta_db_pool_ reference, so release it before
+  // any remaining server teardown can reach member destruction.
+  destroy_plugin_runtime();
 
   FLOG_INFO("begin to destroy config manager");
   config_mgr_.destroy();
@@ -770,6 +778,12 @@ int ObServer::start()
       FLOG_INFO("success to check if timezone usable");
     }
 
+    if (FAILEDx(check_plugin_server_ready())) {
+      LOG_ERROR("plugin catalog did not become safe for server ready", KR(ret));
+    } else {
+      FLOG_INFO("plugin catalog is safe for server ready");
+    }
+
     if (FAILEDx(net_frame_.start())) {
       LOG_ERROR("fail to start net frame", KR(ret));
     } else {
@@ -1025,10 +1039,13 @@ int ObServer::stop()
     ctas_clean_up_timer_.stop();
     FLOG_INFO("ctas clean up timer stopped");
 
-    FLOG_INFO("begin to stop inner sql proxy");
-    sql_proxy_.stop();
-    ddl_sql_proxy_.stop();
-    FLOG_INFO("inner sql proxy stopped");
+    FLOG_INFO("begin to stop sql conn pool");
+    sql_conn_pool_.stop();
+    FLOG_INFO("sql connection pool stopped");
+
+    FLOG_INFO("begin to stop ddl connection pool");
+    ddl_conn_pool_.stop();
+    FLOG_INFO("ddl connection pool stopped");
 
     FLOG_INFO("begin to stop local management service");
     if (OB_FAIL(local_management_service_.stop())) {
@@ -1161,6 +1178,56 @@ int ObServer::init_tz_info_mgr()
     LOG_ERROR("timezone_mgr_ init failed", K_(self_addr), KR(ret));
   }
   return ret;
+}
+
+int ObServer::init_plugin_runtime(const ObServerOptions &opts)
+{
+  int ret = OB_SUCCESS;
+  if (plugin_runtime_) {
+    ret = OB_INIT_TWICE;
+  } else {
+    std::unique_ptr<ObServerPluginRuntime> runtime(
+        new (std::nothrow) ObServerPluginRuntime());
+    if (!runtime) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      std::string plugin_root = "./plugins";
+      if (!opts.base_dir_.empty()) {
+        plugin_root.assign(opts.base_dir_.ptr(), opts.base_dir_.length());
+        plugin_root.append("/plugins");
+      }
+      if (OB_FAIL(runtime->init(&meta_db_pool_, plugin_root))) {
+      }
+    }
+    if (OB_SUCC(ret)) {
+      plugin_runtime_ = std::move(runtime);
+    }
+  }
+  return ret;
+}
+
+int ObServer::check_plugin_server_ready()
+{
+  int ret = OB_SUCCESS;
+  std::string error;
+  if (!plugin_runtime_) {
+    ret = OB_NOT_INIT;
+    error = "server plugin runtime bridge is not initialized";
+  } else if (OB_FAIL(plugin_runtime_->recover_before_server_ready(error))) {
+  }
+  if (OB_FAIL(ret)) {
+    LOG_ERROR("plugin server-ready gate failed", KR(ret),
+              KCSTRING(error.c_str()));
+  }
+  return ret;
+}
+
+void ObServer::destroy_plugin_runtime() noexcept
+{
+  if (plugin_runtime_) {
+    plugin_runtime_->destroy();
+    plugin_runtime_.reset();
+  }
 }
 
 int ObServer::init_config(const ObServerOptions &opts)
@@ -1489,9 +1556,20 @@ int ObServer::init_pre_setting()
 int ObServer::init_sql_proxy()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(sql_proxy_.init(false /* is_ddl */))) {
+  if (OB_FAIL(sql_conn_pool_.init(&schema_service_,
+                                  &sql_engine_,
+                                  &vt_data_service_.get_vt_iter_factory().get_vt_iter_creator(),
+                                  &config_))) {
+    LOG_ERROR("init sql connection pool failed", KR(ret));
+  } else if (OB_FAIL(ddl_conn_pool_.init(&schema_service_,
+                                  &sql_engine_,
+                                  &vt_data_service_.get_vt_iter_factory().get_vt_iter_creator(),
+                                  &config_,
+                                  true/*use static type engine*/))) {
+    LOG_ERROR("init sql connection pool failed", KR(ret));
+  } else if (OB_FAIL(sql_proxy_.init(&sql_conn_pool_))) {
     LOG_ERROR("init sql proxy failed", KR(ret));
-  } else if (OB_FAIL(ddl_sql_proxy_.init(true /* is_ddl */))) {
+  } else if (OB_FAIL(ddl_sql_proxy_.init(&ddl_conn_pool_))) {
     LOG_ERROR("init ddl sql proxy failed", KR(ret));
   }
   return ret;
