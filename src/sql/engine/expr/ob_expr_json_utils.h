@@ -20,7 +20,7 @@
 #include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "share/object/ob_obj_cast.h"
-#include "sql/parser/ob_item_type.h"
+#include "common/ob_item_type.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "common/json_type/ob_json_tree.h"
 #include "common/json_type/ob_json_base.h"

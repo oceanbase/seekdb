@@ -340,13 +340,9 @@ if(STDC_SHARED_LIB)
   target_link_options(oceanbase INTERFACE "-Wl,-rpath=${STDC_SHARED_LIB_DIR}")
 endif()
 
-# On macOS, malloc_hook conflicts with linked LLVM
-# LLVM's global constructors run before main() and use hooked malloc,
-# but free with system free, causing crashes
-if (NOT APPLE AND NOT WIN32 AND NOT ANDROID)
+if (TARGET malloc_hook)
   set(link_malloc_hook malloc_hook)
 else()
-  message(STATUS "Disabling malloc_hook on macOS/Windows/Android")
   set(link_malloc_hook "")
 endif()
 
@@ -375,6 +371,8 @@ if(WIN32)
   # oblib_add_extra_objects creates separate .lib files not merged into oblib.lib on Windows
   target_link_libraries(seekdb PRIVATE
     ${CMAKE_BINARY_DIR}/deps/oblib/src/lib/compress/zstd_1_3_8/zstd_1_3_8_objs.lib)
+  # Itanium ABI _Unwind_* stubs (Windows uses SEH; PL unwinding non-functional)
+  target_sources(seekdb PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/win32_unwind_stubs.c)
 endif()
 target_link_libraries(seekdb
   PRIVATE

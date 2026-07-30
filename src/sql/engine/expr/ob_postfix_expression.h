@@ -25,7 +25,7 @@
 #include "common/object/ob_object.h"
 #include "common/row/ob_row.h"
 #include "share/ob_i_sql_expression.h"
-#include "sql/parser/ob_item_type.h"
+#include "common/ob_item_type.h"
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
 #include "sql/session/ob_system_variable.h"
