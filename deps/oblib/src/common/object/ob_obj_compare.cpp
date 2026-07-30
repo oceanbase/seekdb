@@ -30,6 +30,48 @@ namespace common
     right_to_die_or_duty_to_live();\
   }
 
+namespace
+{
+
+// Keep the type-pair comparison in one out-of-line function and leave only a
+// small operator adapter at each address stored in cmp_funcs.
+OB_NOINLINE int apply_cmp_op(const int cmp_res, const ObCmpOp op)
+{
+  int result = ObObjCmpFuncs::CR_OB_ERROR;
+  if (OB_UNLIKELY(cmp_res < ObObjCmpFuncs::CR_LT
+                  || cmp_res > ObObjCmpFuncs::CR_GT)) {
+    // CR_NULL, CR_OB_ERROR, and any legacy error code are not boolean values.
+    result = cmp_res;
+  } else {
+    switch (op) {
+      case CO_EQ: result = (ObObjCmpFuncs::CR_EQ == cmp_res); break;
+      case CO_LE: result = (ObObjCmpFuncs::CR_GT != cmp_res); break;
+      case CO_LT: result = (ObObjCmpFuncs::CR_LT == cmp_res); break;
+      case CO_GE: result = (ObObjCmpFuncs::CR_LT != cmp_res); break;
+      case CO_GT: result = (ObObjCmpFuncs::CR_GT == cmp_res); break;
+      case CO_NE: result = (ObObjCmpFuncs::CR_EQ != cmp_res); break;
+      default:
+        OB_ASSERT(false);
+        break;
+    }
+  }
+  return result;
+}
+
+} // namespace
+
+template <ObObjTypeClass tc1, ObObjTypeClass tc2, ObCmpOp op>
+inline int ObObjCmpFuncs::cmp_op_func(const ObObj &obj1,
+                                      const ObObj &obj2,
+                                      const ObCompareCtx &cmp_ctx)
+{
+  // Type pairs with different boolean semantics (for example, unordered NaN,
+  // decimal-int legacy error paths, and geometry) keep explicit specializations
+  // below and therefore never instantiate this adapter.
+  static_assert(CO_EQ <= op && op < CO_CMP, "boolean comparison operator expected");
+  return apply_cmp_op(ObObjCmpFuncs::cmp_func<tc1, tc2>(obj1, obj2, cmp_ctx), op);
+}
+
 #define DEFINE_CMP_OP_FUNC(tc, type, op, op_str) \
   template <> inline \
   int ObObjCmpFuncs::cmp_op_func<tc, tc, op>(const ObObj &obj1, \
@@ -1966,12 +2008,6 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
 //==============================
 
 #define DEFINE_CMP_FUNCS(tc, type) \
-  DEFINE_CMP_OP_FUNC(tc, type, CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC(tc, type, CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC(tc, type, CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC(tc, type, CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC(tc, type, CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC(tc, type, CO_NE, !=); \
   DEFINE_CMP_FUNC(tc, type)
 
 #define DEFINE_CMP_FUNCS_XXX_REAL(tc, type, real_tc, real_type) \
@@ -1993,30 +2029,12 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNC_REAL_XXX(real_tc, real_type, tc, type); \
 
 #define DEFINE_CMP_FUNCS_XXX_NUMBER(tc, type) \
-  DEFINE_CMP_OP_FUNC_XXX_NUMBER(tc, type, CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_XXX_NUMBER(tc, type, CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_XXX_NUMBER(tc, type, CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_XXX_NUMBER(tc, type, CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_XXX_NUMBER(tc, type, CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_XXX_NUMBER(tc, type, CO_NE, !=); \
   DEFINE_CMP_FUNC_XXX_NUMBER(tc, type); \
 
 #define DEFINE_CMP_FUNCS_NUMBER_XXX(tc, type) \
-  DEFINE_CMP_OP_FUNC_NUMBER_XXX(tc, type, CO_EQ, CO_EQ); \
-  DEFINE_CMP_OP_FUNC_NUMBER_XXX(tc, type, CO_LE, CO_GE); \
-  DEFINE_CMP_OP_FUNC_NUMBER_XXX(tc, type, CO_LT, CO_GT); \
-  DEFINE_CMP_OP_FUNC_NUMBER_XXX(tc, type, CO_GE, CO_LE); \
-  DEFINE_CMP_OP_FUNC_NUMBER_XXX(tc, type, CO_GT, CO_LT); \
-  DEFINE_CMP_OP_FUNC_NUMBER_XXX(tc, type, CO_NE, CO_NE); \
   DEFINE_CMP_FUNC_NUMBER_XXX(tc, type); \
 
 #define DEFINE_CMP_FUNCS_REAL_REAL(real1_tc, real1_type, real2_tc, real2_type) \
-  DEFINE_CMP_OP_FUNC_REAL_REAL_EQ(real1_tc, real1_type, real2_tc, real2_type); \
-  DEFINE_CMP_OP_FUNC_REAL_REAL_LE(real1_tc, real1_type, real2_tc, real2_type); \
-  DEFINE_CMP_OP_FUNC_REAL_REAL_LT(real1_tc, real1_type, real2_tc, real2_type); \
-  DEFINE_CMP_OP_FUNC_REAL_REAL_GE(real1_tc, real1_type, real2_tc, real2_type); \
-  DEFINE_CMP_OP_FUNC_REAL_REAL_GT(real1_tc, real1_type, real2_tc, real2_type); \
-  DEFINE_CMP_OP_FUNC_REAL_REAL_NE(real1_tc, real1_type, real2_tc, real2_type); \
   DEFINE_CMP_FUNC_REAL_REAL(real1_tc, real1_type, real2_tc, real2_type)
 
 #define DEFINE_CMP_FUNCS_DECIMALINT_DECIMALINT()                                                   \
@@ -2070,21 +2088,9 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
 //==============================
 
 #define DEFINE_CMP_FUNCS_NULL_NULL() \
-  DEFINE_CMP_OP_FUNC_NULL_NULL(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_NULL_NULL(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_NULL_NULL(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_NULL_NULL(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_NULL_NULL(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_NULL_NULL(CO_NE, !=); \
   DEFINE_CMP_FUNC_NULL_NULL()
 
 #define DEFINE_CMP_FUNCS_NULL_EXT() \
-  DEFINE_CMP_OP_FUNC_NULL_EXT(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_NULL_EXT(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_NULL_EXT(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_NULL_EXT(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_NULL_EXT(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_NULL_EXT(CO_NE, !=); \
   DEFINE_CMP_FUNC_NULL_EXT()
 
 #define DEFINE_CMP_FUNCS_INT_INT() \
@@ -2102,12 +2108,6 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
 // float/double comparison using "==" or "!=" matches MySQL
 // raw float/double follows direct comparison semantics
 #define DEFINE_CMP_FUNCS_INT_UINT() \
-  DEFINE_CMP_OP_FUNC_INT_UINT(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_INT_UINT(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_INT_UINT(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_INT_UINT(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_INT_UINT(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_INT_UINT(CO_NE, !=); \
   DEFINE_CMP_FUNC_INT_UINT()
 
 // float/double comparison using "==" or "!=" matches MySQL
@@ -2122,21 +2122,9 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNCS_XXX_NUMBER(ObIntTC, int);
 
 #define DEFINE_CMP_FUNCS_INT_ENUMSET() \
-  DEFINE_CMP_OP_FUNC_INT_ENUMSET(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_INT_ENUMSET(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_INT_ENUMSET(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_INT_ENUMSET(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_INT_ENUMSET(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_INT_ENUMSET(CO_NE, !=); \
   DEFINE_CMP_FUNC_INT_ENUMSET()
 
 #define DEFINE_CMP_FUNCS_UINT_INT() \
-  DEFINE_CMP_OP_FUNC_UINT_INT(CO_EQ, CO_EQ); \
-  DEFINE_CMP_OP_FUNC_UINT_INT(CO_LE, CO_GE); \
-  DEFINE_CMP_OP_FUNC_UINT_INT(CO_LT, CO_GT); \
-  DEFINE_CMP_OP_FUNC_UINT_INT(CO_GE, CO_LE); \
-  DEFINE_CMP_OP_FUNC_UINT_INT(CO_GT, CO_LT); \
-  DEFINE_CMP_OP_FUNC_UINT_INT(CO_NE, CO_NE); \
   DEFINE_CMP_FUNC_UINT_INT()
 
 // float/double comparison using "==" or "!=" matches MySQL
@@ -2156,12 +2144,6 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNCS_XXX_NUMBER(ObUIntTC, uint64);
 
 #define DEFINE_CMP_FUNCS_UINT_ENUMSET() \
-  DEFINE_CMP_OP_FUNC_UINT_ENUMSET(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_UINT_ENUMSET(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_UINT_ENUMSET(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_UINT_ENUMSET(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_UINT_ENUMSET(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_UINT_ENUMSET(CO_NE, !=); \
   DEFINE_CMP_FUNC_UINT_ENUMSET()
 
 // float/double comparison using "==" or "!=" matches MySQL
@@ -2252,48 +2234,18 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNCS(ObMySQLDateTimeTC, mysql_datetime);
 
 #define DEFINE_CMP_FUNCS_DATETIME_OTIMESTAMP() \
-    DEFINE_CMP_OP_FUNC_DT_OT(CO_EQ, ==); \
-    DEFINE_CMP_OP_FUNC_DT_OT(CO_LE, <=); \
-    DEFINE_CMP_OP_FUNC_DT_OT(CO_LT, < ); \
-    DEFINE_CMP_OP_FUNC_DT_OT(CO_GE, >=); \
-    DEFINE_CMP_OP_FUNC_DT_OT(CO_GT, > ); \
-    DEFINE_CMP_OP_FUNC_DT_OT(CO_NE, !=); \
     DEFINE_CMP_FUNC_DT_OT(); \
 
 #define DEFINE_CMP_FUNCS_OTIMESTAMP_DATETIME() \
-    DEFINE_CMP_OP_FUNC_OT_DT(CO_EQ, ==); \
-    DEFINE_CMP_OP_FUNC_OT_DT(CO_LE, <=); \
-    DEFINE_CMP_OP_FUNC_OT_DT(CO_LT, < ); \
-    DEFINE_CMP_OP_FUNC_OT_DT(CO_GE, >=); \
-    DEFINE_CMP_OP_FUNC_OT_DT(CO_GT, > ); \
-    DEFINE_CMP_OP_FUNC_OT_DT(CO_NE, !=); \
     DEFINE_CMP_FUNC_OT_DT(); \
 
 #define DEFINE_CMP_FUNCS_OTIMESTAMP_OTIMESTAMP() \
-    DEFINE_CMP_OP_FUNC_OT_OT(CO_EQ, ==); \
-    DEFINE_CMP_OP_FUNC_OT_OT(CO_LE, <=); \
-    DEFINE_CMP_OP_FUNC_OT_OT(CO_LT, < ); \
-    DEFINE_CMP_OP_FUNC_OT_OT(CO_GE, >=); \
-    DEFINE_CMP_OP_FUNC_OT_OT(CO_GT, > ); \
-    DEFINE_CMP_OP_FUNC_OT_OT(CO_NE, !=); \
     DEFINE_CMP_FUNC_OT_OT(); \
 
 #define DEFINE_CMP_FUNCS_STRING_STRING() \
-  DEFINE_CMP_OP_FUNC_STRING_STRING(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_STRING_STRING(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_STRING_STRING(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_STRING_STRING(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_STRING_STRING(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_STRING_STRING(CO_NE, !=); \
   DEFINE_CMP_FUNC_STRING_STRING()
 
 #define DEFINE_CMP_FUNCS_RAW_RAW() \
-  DEFINE_CMP_OP_FUNC_RAW_RAW(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_RAW_RAW(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_RAW_RAW(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_RAW_RAW(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_RAW_RAW(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_RAW_RAW(CO_NE, !=); \
   DEFINE_CMP_FUNC_RAW_RAW()
 
 #define DEFINE_CMP_FUNCS_ENUMSETINNER_REAL(real_tc, real_type) \
@@ -2306,44 +2258,20 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNC_ENUMSETINNER_REAL(real_tc, real_type);
 
 #define DEFINE_CMP_FUNCS_ENUMSET_INT();\
-  DEFINE_CMP_OP_FUNC_ENUMSET_INT(CO_EQ, CO_EQ); \
-  DEFINE_CMP_OP_FUNC_ENUMSET_INT(CO_LE, CO_GE); \
-  DEFINE_CMP_OP_FUNC_ENUMSET_INT(CO_LT, CO_GT); \
-  DEFINE_CMP_OP_FUNC_ENUMSET_INT(CO_GE, CO_LE); \
-  DEFINE_CMP_OP_FUNC_ENUMSET_INT(CO_GT, CO_LT); \
-  DEFINE_CMP_OP_FUNC_ENUMSET_INT(CO_NE, CO_NE); \
   DEFINE_CMP_FUNC_ENUMSET_INT();
 
 // float/double comparison using "==" or "!=" matches MySQL
 // raw float/double follows direct comparison semantics
 #define DEFINE_CMP_FUNCS_ENUMSET_UINT();\
-  DEFINE_CMP_OP_FUNC_ENUMSET_UINT(CO_EQ, CO_EQ); \
-  DEFINE_CMP_OP_FUNC_ENUMSET_UINT(CO_LE, CO_GE); \
-  DEFINE_CMP_OP_FUNC_ENUMSET_UINT(CO_LT, CO_GT); \
-  DEFINE_CMP_OP_FUNC_ENUMSET_UINT(CO_GE, CO_LE); \
-  DEFINE_CMP_OP_FUNC_ENUMSET_UINT(CO_GT, CO_LT); \
-  DEFINE_CMP_OP_FUNC_ENUMSET_UINT(CO_NE, CO_NE); \
   DEFINE_CMP_FUNC_ENUMSET_UINT();
 
 
 #define DEFINE_CMP_FUNCS_ENUMSETINNER_INT()\
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_INT(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_INT(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_INT(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_INT(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_INT(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_INT(CO_NE, !=); \
   DEFINE_CMP_FUNC_ENUMSETINNER_INT();
 
 // float/double comparison using "==" or "!=" matches MySQL
 // raw float/double follows direct comparison semantics
 #define DEFINE_CMP_FUNCS_ENUMSETINNER_UINT() \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_UINT(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_UINT(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_UINT(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_UINT(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_UINT(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_UINT(CO_NE, !=); \
   DEFINE_CMP_FUNC_ENUMSETINNER_UINT();
 
 // float/double comparison using "==" or "!=" matches MySQL
@@ -2355,12 +2283,6 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNCS_ENUMSETINNER_REAL(ObDoubleTC, double);
 
 #define DEFINE_CMP_FUNCS_ENUMSETINNER_NUMBER() \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_NUMBER(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_NUMBER(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_NUMBER(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_NUMBER(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_NUMBER(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_NUMBER(CO_NE, !=); \
   DEFINE_CMP_FUNC_ENUMSETINNER_NUMBER()
 
 #define DEFINE_CMP_FUNCS_ENUMSETINNER_DECIMALINT()                                                 \
@@ -2373,21 +2295,9 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNC_ENUMSETINNER_DECIMALINT();
 
 #define DEFINE_CMP_FUNCS_TEXT_TEXT() \
-  DEFINE_CMP_OP_FUNC_TEXT_TEXT(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_TEXT_TEXT(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_TEXT_TEXT(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_TEXT_TEXT(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_TEXT_TEXT(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_TEXT_TEXT(CO_NE, !=); \
   DEFINE_CMP_FUNC_TEXT_TEXT()
 
 #define DEFINE_CMP_FUNCS_JSON_JSON() \
-  DEFINE_CMP_OP_FUNC_JSON_JSON(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_JSON_JSON(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_JSON_JSON(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_JSON_JSON(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_JSON_JSON(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_JSON_JSON(CO_NE, !=); \
   DEFINE_CMP_FUNC_JSON_JSON()
 
 #define DEFINE_CMP_FUNCS_GEOMETRY_GEOMETRY() \
@@ -2400,30 +2310,12 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNC_GEOMETRY_GEOMETRY()
 
 #define DEFINE_CMP_FUNCS_UDT_UDT() \
-  DEFINE_CMP_OP_FUNC_UDT_UDT(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_UDT_UDT(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_UDT_UDT(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_UDT_UDT(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_UDT_UDT(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_UDT_UDT(CO_NE, !=); \
   DEFINE_CMP_FUNC_UDT_UDT()
 
 #define DEFINE_CMP_FUNCS_COLLECTION_COLLECTION() \
-  DEFINE_CMP_OP_FUNC_COLLECTION_COLLECTION(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_COLLECTION_COLLECTION(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_COLLECTION_COLLECTION(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_COLLECTION_COLLECTION(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_COLLECTION_COLLECTION(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_COLLECTION_COLLECTION(CO_NE, !=); \
   DEFINE_CMP_FUNC_COLLECTION_COLLECTION()
 
 #define DEFINE_CMP_FUNCS_STRING_TEXT() \
-  DEFINE_CMP_OP_FUNC_STRING_TEXT(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_STRING_TEXT(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_STRING_TEXT(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_STRING_TEXT(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_STRING_TEXT(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_STRING_TEXT(CO_NE, !=); \
   DEFINE_CMP_FUNC_STRING_TEXT()
 
 #define DEFINE_CMP_FUNCS_TEXT_STRING() \
@@ -2438,12 +2330,6 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
 //==============================
 
 #define DEFINE_CMP_FUNCS_EXT_NULL() \
-  DEFINE_CMP_OP_FUNC_EXT_NULL(CO_EQ, CO_EQ); \
-  DEFINE_CMP_OP_FUNC_EXT_NULL(CO_LE, CO_GE); \
-  DEFINE_CMP_OP_FUNC_EXT_NULL(CO_LT, CO_GT); \
-  DEFINE_CMP_OP_FUNC_EXT_NULL(CO_GE, CO_LE); \
-  DEFINE_CMP_OP_FUNC_EXT_NULL(CO_GT, CO_LT); \
-  DEFINE_CMP_OP_FUNC_EXT_NULL(CO_NE, CO_NE); \
   DEFINE_CMP_FUNC_EXT_NULL()
 
 #define DEFINE_CMP_FUNCS_EXT_EXT() \
@@ -2456,39 +2342,15 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNC_EXT_EXT()
 
 #define DEFINE_CMP_FUNCS_NULL_XXX() \
-  DEFINE_CMP_OP_FUNC_NULL_XXX(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_NULL_XXX(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_NULL_XXX(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_NULL_XXX(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_NULL_XXX(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_NULL_XXX(CO_NE, !=); \
   DEFINE_CMP_FUNC_NULL_XXX()
 
 #define DEFINE_CMP_FUNCS_XXX_NULL() \
-  DEFINE_CMP_OP_FUNC_XXX_NULL(CO_EQ, CO_EQ); \
-  DEFINE_CMP_OP_FUNC_XXX_NULL(CO_LE, CO_GE); \
-  DEFINE_CMP_OP_FUNC_XXX_NULL(CO_LT, CO_GT); \
-  DEFINE_CMP_OP_FUNC_XXX_NULL(CO_GE, CO_LE); \
-  DEFINE_CMP_OP_FUNC_XXX_NULL(CO_GT, CO_LT); \
-  DEFINE_CMP_OP_FUNC_XXX_NULL(CO_NE, CO_NE); \
   DEFINE_CMP_FUNC_XXX_NULL()
 
 #define DEFINE_CMP_FUNCS_XXX_EXT() \
-  DEFINE_CMP_OP_FUNC_XXX_EXT(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_XXX_EXT(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_XXX_EXT(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_XXX_EXT(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_XXX_EXT(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_XXX_EXT(CO_NE, !=); \
   DEFINE_CMP_FUNC_XXX_EXT()
 
 #define DEFINE_CMP_FUNCS_EXT_XXX() \
-  DEFINE_CMP_OP_FUNC_EXT_XXX(CO_EQ, CO_EQ); \
-  DEFINE_CMP_OP_FUNC_EXT_XXX(CO_LE, CO_GE); \
-  DEFINE_CMP_OP_FUNC_EXT_XXX(CO_LT, CO_GT); \
-  DEFINE_CMP_OP_FUNC_EXT_XXX(CO_GE, CO_LE); \
-  DEFINE_CMP_OP_FUNC_EXT_XXX(CO_GT, CO_LT); \
-  DEFINE_CMP_OP_FUNC_EXT_XXX(CO_NE, CO_NE); \
   DEFINE_CMP_FUNC_EXT_XXX()
 
 #define DEFINE_CMP_FUNCS_JSON_EXTEND() \

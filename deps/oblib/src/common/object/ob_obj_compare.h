@@ -285,7 +285,9 @@ public:
                          const ObCompareCtx &cmp_ctx);
   // return CR_LT / CR_EQ / CR_GT / CR_NULL / CR_OB_ERROR.
   template <ObObjTypeClass tc1, ObObjTypeClass tc2>
-  static int cmp_func(const ObObj &Obj1, const ObObj &obj2, const ObCompareCtx &cmp_ctx);
+  static OB_NOINLINE int cmp_func(const ObObj &Obj1,
+                                  const ObObj &obj2,
+                                  const ObCompareCtx &cmp_ctx);
 private:
   OB_INLINE static int INT_TO_CR(int val) { return val < 0 ? CR_LT : val > 0 ? CR_GT : CR_EQ; }
 private:
