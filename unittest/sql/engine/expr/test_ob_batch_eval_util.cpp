@@ -17,6 +17,8 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <vector>
 
 #include "sql/engine/expr/ob_batch_eval_util.h"
@@ -71,6 +73,113 @@ struct DecimalIntCastBatchFrame
   uint64_t eval_flags_[2];
   ObEvalInfo eval_info_;
 };
+
+static constexpr int64_t FIXED_DOUBLE_CMP_BATCH_SIZE = 17;
+
+struct FixedDoubleCmpFrame
+{
+  common::ObDatum datums_[FIXED_DOUBLE_CMP_BATCH_SIZE];
+  uint64_t eval_flags_[1];
+  uint64_t pvt_skip_[1];
+  ObEvalInfo eval_info_;
+};
+
+struct FixedDoubleCmpScalarFrame
+{
+  common::ObDatum datum_;
+  ObEvalInfo eval_info_;
+  double value_;
+};
+
+static const common::ObCmpOp FIXED_DOUBLE_CMP_OPS[] = {
+    common::CO_EQ,
+    common::CO_LE,
+    common::CO_LT,
+    common::CO_GE,
+    common::CO_GT,
+    common::CO_NE,
+};
+
+static const ObExprOperatorType FIXED_DOUBLE_CMP_EXPR_TYPES[] = {
+    T_OP_EQ,
+    T_OP_LE,
+    T_OP_LT,
+    T_OP_GE,
+    T_OP_GT,
+    T_OP_NE,
+};
+
+static double get_fixed_double_tolerance(const common::ObScale scale)
+{
+  double tolerance = 0;
+  switch (scale) {
+    case 0:
+      tolerance = 5.0 / 1e001;
+      break;
+    case 2:
+      tolerance = 5.0 / 1e003;
+      break;
+    case 15:
+      tolerance = 5.0 / 1e016;
+      break;
+    case 30:
+      tolerance = 5.0 / 1e031;
+      break;
+    default:
+      ADD_FAILURE() << "unexpected fixed-double scale " << scale;
+      break;
+  }
+  return tolerance;
+}
+
+static int64_t get_expected_cmp_result(const common::ObCmpOp cmp_op, const int cmp_ret)
+{
+  int64_t result = 0;
+  switch (cmp_op) {
+    case common::CO_EQ:
+      result = 0 == cmp_ret;
+      break;
+    case common::CO_LE:
+      result = cmp_ret <= 0;
+      break;
+    case common::CO_LT:
+      result = cmp_ret < 0;
+      break;
+    case common::CO_GE:
+      result = cmp_ret >= 0;
+      break;
+    case common::CO_GT:
+      result = cmp_ret > 0;
+      break;
+    case common::CO_NE:
+      result = 0 != cmp_ret;
+      break;
+    default:
+      ADD_FAILURE() << "unexpected comparison operation " << cmp_op;
+      break;
+  }
+  return result;
+}
+
+static void init_fixed_double_batch_expr(ObExpr &expr,
+                                         const int64_t frame_idx,
+                                         FixedDoubleCmpFrame &frame,
+                                         char *frame_ptr)
+{
+  expr.frame_idx_ = static_cast<uint32_t>(frame_idx);
+  expr.datum_off_ = static_cast<uint32_t>(
+      reinterpret_cast<char *>(&frame.datums_) - frame_ptr);
+  expr.eval_flags_off_ = static_cast<uint32_t>(
+      reinterpret_cast<char *>(&frame.eval_flags_) - frame_ptr);
+  expr.pvt_skip_off_ = static_cast<uint32_t>(
+      reinterpret_cast<char *>(&frame.pvt_skip_) - frame_ptr);
+  expr.eval_info_off_ = static_cast<uint32_t>(
+      reinterpret_cast<char *>(&frame.eval_info_) - frame_ptr);
+  expr.batch_result_ = true;
+  expr.batch_idx_mask_ = UINT64_MAX;
+  frame.eval_info_.flag_ = 0;
+  frame.eval_info_.cnt_ = 0;
+}
 
 static void verify_batch_hash_shapes(const ObExprBasicFuncs &basic_funcs,
                                      common::ObDatum *datums,
@@ -434,6 +543,322 @@ TEST(ObExprCmpFunc, string_initializer_shards_cover_supported_collations)
     EXPECT_NE(nullptr, ObExprCmpFuncsHelper::get_eval_expr_cmp_func(
         common::ObVarcharType, common::ObVarcharType, 0, 0, 0, 0,
         common::CO_EQ, cs_type, false));
+  }
+}
+
+TEST(ObExprCmpFunc, fixed_double_runtime_scale_evaluators_are_shared)
+{
+  const common::ObScale scales[] = {0, 2, 15, 30};
+  static_assert(ARRAYSIZEOF(FIXED_DOUBLE_CMP_OPS) ==
+                ARRAYSIZEOF(FIXED_DOUBLE_CMP_EXPR_TYPES),
+                "comparison operation arrays must stay aligned");
+
+  for (int64_t op_idx = 0; op_idx < ARRAYSIZEOF(FIXED_DOUBLE_CMP_OPS); ++op_idx) {
+    const common::ObCmpOp cmp_op = FIXED_DOUBLE_CMP_OPS[op_idx];
+    ObExpr::EvalFunc shared_scalar = nullptr;
+    ObExpr::EvalBatchFunc shared_batch = nullptr;
+    for (const common::ObScale scale : scales) {
+      ObExpr::EvalFunc scalar_func = ObExprCmpFuncsHelper::get_eval_expr_cmp_func(
+          common::ObDoubleType, common::ObDoubleType, 0, scale, 0, 0,
+          cmp_op, common::CS_TYPE_BINARY, false);
+      ObExpr::EvalBatchFunc batch_func =
+          ObExprCmpFuncsHelper::get_eval_batch_expr_cmp_func(
+              common::ObDoubleType, common::ObDoubleType, 0, scale, 0, 0,
+              cmp_op, common::CS_TYPE_BINARY, false);
+      ASSERT_NE(nullptr, scalar_func);
+      ASSERT_NE(nullptr, batch_func);
+      EXPECT_EQ(scalar_func, ObExprCmpFuncsHelper::get_eval_expr_cmp_func(
+          common::ObDoubleType, common::ObDoubleType, scale, 0, 0, 0,
+          cmp_op, common::CS_TYPE_BINARY, false));
+      EXPECT_EQ(batch_func, ObExprCmpFuncsHelper::get_eval_batch_expr_cmp_func(
+          common::ObDoubleType, common::ObDoubleType, scale, 0, 0, 0,
+          cmp_op, common::CS_TYPE_BINARY, false));
+      if (nullptr == shared_scalar) {
+        shared_scalar = scalar_func;
+        shared_batch = batch_func;
+      } else {
+        EXPECT_EQ(shared_scalar, scalar_func) << "scale=" << scale;
+        EXPECT_EQ(shared_batch, batch_func) << "scale=" << scale;
+      }
+    }
+  }
+}
+
+TEST(ObExprCmpFunc, fixed_double_runtime_scale_scalar_semantics)
+{
+  struct ScalarCase
+  {
+    double left_;
+    double right_;
+    bool left_null_;
+    bool right_null_;
+    int cmp_ret_;
+  };
+  const common::ObScale scales[] = {0, 2, 15, 30};
+  FixedDoubleCmpScalarFrame left_frame{};
+  FixedDoubleCmpScalarFrame right_frame{};
+  char *frames[] = {
+      reinterpret_cast<char *>(&left_frame),
+      reinterpret_cast<char *>(&right_frame),
+  };
+  common::ObArenaAllocator allocator;
+  ObExecContext exec_ctx(allocator);
+  ObEvalCtx eval_ctx(exec_ctx);
+  eval_ctx.frames_ = frames;
+
+  ObExpr left;
+  left.frame_idx_ = 0;
+  left.datum_off_ = static_cast<uint32_t>(
+      reinterpret_cast<char *>(&left_frame.datum_) - frames[0]);
+  left.eval_info_off_ = static_cast<uint32_t>(
+      reinterpret_cast<char *>(&left_frame.eval_info_) - frames[0]);
+  left_frame.datum_.ptr_ = reinterpret_cast<const char *>(&left_frame.value_);
+
+  ObExpr right;
+  right.frame_idx_ = 1;
+  right.datum_off_ = static_cast<uint32_t>(
+      reinterpret_cast<char *>(&right_frame.datum_) - frames[1]);
+  right.eval_info_off_ = static_cast<uint32_t>(
+      reinterpret_cast<char *>(&right_frame.eval_info_) - frames[1]);
+  right_frame.datum_.ptr_ = reinterpret_cast<const char *>(&right_frame.value_);
+
+  ObExpr expr;
+  ObExpr *args[] = {&left, &right};
+  expr.args_ = args;
+  expr.arg_cnt_ = ARRAYSIZEOF(args);
+  int64_t result_value = 0;
+  common::ObDatum result;
+  result.ptr_ = reinterpret_cast<const char *>(&result_value);
+
+  for (const common::ObScale scale : scales) {
+    const double tolerance = get_fixed_double_tolerance(scale);
+    const double inside_tolerance = std::nextafter(tolerance, 0.0);
+    const double outside_tolerance =
+        std::nextafter(tolerance, std::numeric_limits<double>::infinity());
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const double infinity = std::numeric_limits<double>::infinity();
+    const ScalarCase cases[] = {
+        {42.0, 42.0, false, false, 0},
+        {0.0, inside_tolerance, false, false, 0},
+        {0.0, tolerance, false, false, -1},
+        {0.0, outside_tolerance, false, false, -1},
+        {outside_tolerance, 0.0, false, false, 1},
+        {-0.0, 0.0, false, false, 0},
+        {0.0, -0.0, false, false, 0},
+        {nan, nan, false, false, 0},
+        {nan, 0.0, false, false, 1},
+        {0.0, nan, false, false, -1},
+        {infinity, infinity, false, false, 0},
+        {infinity, 0.0, false, false, 1},
+        {-infinity, 0.0, false, false, -1},
+        {0.0, 0.0, true, false, 0},
+        {0.0, 0.0, false, true, 0},
+    };
+    left.datum_meta_ = ObDatumMeta(
+        common::ObDoubleType, common::CS_TYPE_BINARY, 0, 0);
+    right.datum_meta_ = ObDatumMeta(
+        common::ObDoubleType, common::CS_TYPE_BINARY, scale, 0);
+
+    for (int64_t op_idx = 0; op_idx < ARRAYSIZEOF(FIXED_DOUBLE_CMP_OPS); ++op_idx) {
+      const common::ObCmpOp cmp_op = FIXED_DOUBLE_CMP_OPS[op_idx];
+      expr.type_ = FIXED_DOUBLE_CMP_EXPR_TYPES[op_idx];
+      ObExpr::EvalFunc eval_func = ObExprCmpFuncsHelper::get_eval_expr_cmp_func(
+          common::ObDoubleType, common::ObDoubleType, 0, scale, 0, 0,
+          cmp_op, common::CS_TYPE_BINARY, false);
+      ASSERT_NE(nullptr, eval_func);
+      for (int64_t case_idx = 0; case_idx < ARRAYSIZEOF(cases); ++case_idx) {
+        SCOPED_TRACE(testing::Message() << "scale=" << scale
+                                       << ", op=" << cmp_op
+                                       << ", case=" << case_idx);
+        left_frame.datum_.set_double(cases[case_idx].left_);
+        right_frame.datum_.set_double(cases[case_idx].right_);
+        if (cases[case_idx].left_null_) {
+          left_frame.datum_.set_null();
+        }
+        if (cases[case_idx].right_null_) {
+          right_frame.datum_.set_null();
+        }
+        result.set_int(-1);
+        ASSERT_EQ(OB_SUCCESS, eval_func(expr, eval_ctx, result));
+        if (cases[case_idx].left_null_ || cases[case_idx].right_null_) {
+          EXPECT_TRUE(result.is_null());
+        } else {
+          EXPECT_FALSE(result.is_null());
+          EXPECT_EQ(get_expected_cmp_result(cmp_op, cases[case_idx].cmp_ret_),
+                    result.get_int());
+        }
+      }
+    }
+
+    left.datum_meta_ = ObDatumMeta(
+        common::ObDoubleType, common::CS_TYPE_BINARY, scale, 0);
+    right.datum_meta_ = ObDatumMeta(
+        common::ObDoubleType, common::CS_TYPE_BINARY, 0, 0);
+    left_frame.datum_.set_double(0.0);
+    right_frame.datum_.set_double(tolerance);
+    expr.type_ = T_OP_EQ;
+    ObExpr::EvalFunc reverse_scale_eval =
+        ObExprCmpFuncsHelper::get_eval_expr_cmp_func(
+            common::ObDoubleType, common::ObDoubleType, scale, 0, 0, 0,
+            common::CO_EQ, common::CS_TYPE_BINARY, false);
+    ASSERT_NE(nullptr, reverse_scale_eval);
+    ASSERT_EQ(OB_SUCCESS, reverse_scale_eval(expr, eval_ctx, result));
+    EXPECT_FALSE(result.is_null());
+    EXPECT_EQ(0, result.get_int()) << "scale=" << scale;
+  }
+}
+
+TEST(ObExprCmpFunc, fixed_double_runtime_scale_batch_semantics)
+{
+  static constexpr int64_t SKIPPED_IDX = 10;
+  static constexpr int64_t EVALUATED_IDX = 11;
+  static constexpr int64_t LEFT_NULL_IDX = 8;
+  static constexpr int64_t RIGHT_NULL_IDX = 9;
+  static constexpr int64_t RESULT_SENTINEL = -777;
+  const common::ObScale scales[] = {0, 2, 15, 30};
+  FixedDoubleCmpFrame left_frame{};
+  FixedDoubleCmpFrame right_frame{};
+  FixedDoubleCmpFrame result_frame{};
+  char *frames[] = {
+      reinterpret_cast<char *>(&left_frame),
+      reinterpret_cast<char *>(&right_frame),
+      reinterpret_cast<char *>(&result_frame),
+  };
+  common::ObArenaAllocator allocator;
+  ObExecContext exec_ctx(allocator);
+  ObEvalCtx eval_ctx(exec_ctx);
+  eval_ctx.frames_ = frames;
+  eval_ctx.reuse(FIXED_DOUBLE_CMP_BATCH_SIZE);
+  eval_ctx.set_max_batch_size(FIXED_DOUBLE_CMP_BATCH_SIZE);
+
+  ObExpr left;
+  init_fixed_double_batch_expr(left, 0, left_frame, frames[0]);
+  ObExpr right;
+  init_fixed_double_batch_expr(right, 1, right_frame, frames[1]);
+  ObExpr expr;
+  init_fixed_double_batch_expr(expr, 2, result_frame, frames[2]);
+  ObExpr *args[] = {&left, &right};
+  expr.args_ = args;
+  expr.arg_cnt_ = ARRAYSIZEOF(args);
+
+  double left_values[FIXED_DOUBLE_CMP_BATCH_SIZE] = {};
+  double right_values[FIXED_DOUBLE_CMP_BATCH_SIZE] = {};
+  int64_t result_values[FIXED_DOUBLE_CMP_BATCH_SIZE] = {};
+  int expected_cmp[FIXED_DOUBLE_CMP_BATCH_SIZE] = {};
+  for (int64_t i = 0; i < FIXED_DOUBLE_CMP_BATCH_SIZE; ++i) {
+    left_frame.datums_[i].ptr_ = reinterpret_cast<const char *>(&left_values[i]);
+    right_frame.datums_[i].ptr_ = reinterpret_cast<const char *>(&right_values[i]);
+    result_frame.datums_[i].ptr_ = reinterpret_cast<const char *>(&result_values[i]);
+  }
+  left.get_evaluated_flags(eval_ctx).init(FIXED_DOUBLE_CMP_BATCH_SIZE);
+  right.get_evaluated_flags(eval_ctx).init(FIXED_DOUBLE_CMP_BATCH_SIZE);
+  ASSERT_EQ(sizeof(result_frame.eval_flags_),
+            ObBitVector::memory_size(FIXED_DOUBLE_CMP_BATCH_SIZE));
+  ASSERT_EQ(sizeof(result_frame.pvt_skip_),
+            ObBitVector::memory_size(FIXED_DOUBLE_CMP_BATCH_SIZE));
+  alignas(uint64_t) uint64_t skip_buf[1] = {};
+  ObBitVector *skip = to_bit_vector(skip_buf);
+
+  for (const common::ObScale scale : scales) {
+    const double tolerance = get_fixed_double_tolerance(scale);
+    const double inside_tolerance = std::nextafter(tolerance, 0.0);
+    const double outside_tolerance =
+        std::nextafter(tolerance, std::numeric_limits<double>::infinity());
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const double infinity = std::numeric_limits<double>::infinity();
+    left.datum_meta_ = ObDatumMeta(
+        common::ObDoubleType, common::CS_TYPE_BINARY, 0, 0);
+    right.datum_meta_ = ObDatumMeta(
+        common::ObDoubleType, common::CS_TYPE_BINARY, scale, 0);
+
+    for (int64_t op_idx = 0; op_idx < ARRAYSIZEOF(FIXED_DOUBLE_CMP_OPS); ++op_idx) {
+      const common::ObCmpOp cmp_op = FIXED_DOUBLE_CMP_OPS[op_idx];
+      expr.type_ = FIXED_DOUBLE_CMP_EXPR_TYPES[op_idx];
+      ObExpr::EvalBatchFunc eval_func =
+          ObExprCmpFuncsHelper::get_eval_batch_expr_cmp_func(
+              common::ObDoubleType, common::ObDoubleType, 0, scale, 0, 0,
+              cmp_op, common::CS_TYPE_BINARY, false);
+      ASSERT_NE(nullptr, eval_func);
+
+      for (int64_t i = 0; i < FIXED_DOUBLE_CMP_BATCH_SIZE; ++i) {
+        left_values[i] = static_cast<double>(i);
+        right_values[i] = static_cast<double>(i);
+        expected_cmp[i] = 0;
+      }
+      left_values[0] = 0.0;
+      right_values[0] = inside_tolerance;
+      expected_cmp[0] = 0;
+      left_values[1] = 0.0;
+      right_values[1] = tolerance;
+      expected_cmp[1] = -1;
+      left_values[2] = 0.0;
+      right_values[2] = outside_tolerance;
+      expected_cmp[2] = -1;
+      left_values[3] = outside_tolerance;
+      right_values[3] = 0.0;
+      expected_cmp[3] = 1;
+      left_values[4] = nan;
+      right_values[4] = nan;
+      expected_cmp[4] = 0;
+      left_values[5] = nan;
+      right_values[5] = 0.0;
+      expected_cmp[5] = 1;
+      left_values[6] = 0.0;
+      right_values[6] = nan;
+      expected_cmp[6] = -1;
+      left_values[7] = -0.0;
+      right_values[7] = 0.0;
+      expected_cmp[7] = 0;
+      left_values[12] = -100.0;
+      right_values[12] = 100.0;
+      expected_cmp[12] = -1;
+      left_values[13] = 100.0;
+      right_values[13] = -100.0;
+      expected_cmp[13] = 1;
+      left_values[14] = infinity;
+      right_values[14] = infinity;
+      expected_cmp[14] = 0;
+      left_values[15] = infinity;
+      right_values[15] = 0.0;
+      expected_cmp[15] = 1;
+      left_values[16] = -infinity;
+      right_values[16] = 0.0;
+      expected_cmp[16] = -1;
+
+      for (int64_t i = 0; i < FIXED_DOUBLE_CMP_BATCH_SIZE; ++i) {
+        left_frame.datums_[i].set_double(left_values[i]);
+        right_frame.datums_[i].set_double(right_values[i]);
+        result_frame.datums_[i].set_int(RESULT_SENTINEL);
+      }
+      left_frame.datums_[LEFT_NULL_IDX].set_null();
+      right_frame.datums_[RIGHT_NULL_IDX].set_null();
+      skip->init(FIXED_DOUBLE_CMP_BATCH_SIZE);
+      skip->set(SKIPPED_IDX);
+      expr.get_evaluated_flags(eval_ctx).init(FIXED_DOUBLE_CMP_BATCH_SIZE);
+      expr.get_evaluated_flags(eval_ctx).set(EVALUATED_IDX);
+      expr.get_pvt_skip(eval_ctx).init(FIXED_DOUBLE_CMP_BATCH_SIZE);
+      result_frame.eval_info_.flag_ = 0;
+      result_frame.eval_info_.notnull_ = true;
+      result_frame.eval_info_.cnt_ = 0;
+
+      SCOPED_TRACE(testing::Message() << "scale=" << scale << ", op=" << cmp_op);
+      ASSERT_EQ(OB_SUCCESS,
+                eval_func(expr, eval_ctx, *skip, FIXED_DOUBLE_CMP_BATCH_SIZE));
+      for (int64_t i = 0; i < FIXED_DOUBLE_CMP_BATCH_SIZE; ++i) {
+        if (SKIPPED_IDX == i || EVALUATED_IDX == i) {
+          EXPECT_EQ(RESULT_SENTINEL, result_frame.datums_[i].get_int()) << "row=" << i;
+        } else if (LEFT_NULL_IDX == i || RIGHT_NULL_IDX == i) {
+          EXPECT_TRUE(result_frame.datums_[i].is_null()) << "row=" << i;
+        } else {
+          EXPECT_FALSE(result_frame.datums_[i].is_null()) << "row=" << i;
+          EXPECT_EQ(get_expected_cmp_result(cmp_op, expected_cmp[i]),
+                    result_frame.datums_[i].get_int()) << "row=" << i;
+        }
+        EXPECT_EQ(SKIPPED_IDX != i,
+                  expr.get_evaluated_flags(eval_ctx).at(i)) << "row=" << i;
+      }
+      EXPECT_FALSE(result_frame.eval_info_.notnull_);
+    }
   }
 }
 

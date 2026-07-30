@@ -68,6 +68,117 @@ ObDatumCmpFuncType DATUM_DECINT_CMP_FUNCS[DECIMAL_INT_MAX][DECIMAL_INT_MAX];
 ObExpr::EvalFunc EVAL_VEC_CMP_FUNCS[CO_MAX];
 ObExpr::EvalBatchFunc EVAL_BATCH_VEC_CMP_FUNCS[CO_MAX];
 
+namespace
+{
+
+// Keep the exact constants used by ObFixedDoubleCmp<SCALE>::P.  Looking the
+// tolerance up once per evaluator avoids making SCALE a template axis while
+// preserving fixed-double comparison semantics bit for bit.
+constexpr double FIXED_DOUBLE_CMP_TOLERANCE[] = {
+  5 / 1e001, 5 / 1e002, 5 / 1e003, 5 / 1e004,
+  5 / 1e005, 5 / 1e006, 5 / 1e007, 5 / 1e008,
+  5 / 1e009, 5 / 1e010, 5 / 1e011, 5 / 1e012,
+  5 / 1e013, 5 / 1e014, 5 / 1e015, 5 / 1e016,
+  5 / 1e017, 5 / 1e018, 5 / 1e019, 5 / 1e020,
+  5 / 1e021, 5 / 1e022, 5 / 1e023, 5 / 1e024,
+  5 / 1e025, 5 / 1e026, 5 / 1e027, 5 / 1e028,
+  5 / 1e029, 5 / 1e030, 5 / 1e031,
+};
+static_assert(ARRAYSIZEOF(FIXED_DOUBLE_CMP_TOLERANCE) == OB_NOT_FIXED_SCALE,
+              "fixed-double tolerance table must cover every supported scale");
+
+int get_fixed_double_tolerance(const ObExpr &expr, double &tolerance)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(2 != expr.arg_cnt_)
+      || OB_ISNULL(expr.args_)
+      || OB_ISNULL(expr.args_[0])
+      || OB_ISNULL(expr.args_[1])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid fixed-double comparison expression", K(ret), K(expr.arg_cnt_));
+  } else {
+    const ObDatumMeta &left_meta = expr.args_[0]->datum_meta_;
+    const ObDatumMeta &right_meta = expr.args_[1]->datum_meta_;
+    const ObScale left_scale = left_meta.scale_;
+    const ObScale right_scale = right_meta.scale_;
+    if (OB_UNLIKELY(!ob_is_double_type(left_meta.type_)
+                    || !ob_is_double_type(right_meta.type_)
+                    || left_scale <= SCALE_UNKNOWN_YET
+                    || left_scale >= OB_NOT_FIXED_SCALE
+                    || right_scale <= SCALE_UNKNOWN_YET
+                    || right_scale >= OB_NOT_FIXED_SCALE)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid fixed-double comparison metadata",
+               K(ret), K(left_meta), K(right_meta));
+    } else {
+      const ObScale scale = MAX(left_scale, right_scale);
+      tolerance = FIXED_DOUBLE_CMP_TOLERANCE[scale];
+    }
+  }
+  return ret;
+}
+
+struct RuntimeFixedDoubleCmp
+{
+  int operator()(ObDatum &res,
+                 const ObDatum &l_datum,
+                 const ObDatum &r_datum,
+                 const double &tolerance,
+                 const ObCmpOp &cmp_op) const
+  {
+    int cmp_ret = 0;
+    const double l = l_datum.get_double();
+    const double r = r_datum.get_double();
+    if (isnan(l) || isnan(r)) {
+      if (isnan(l) && isnan(r)) {
+        cmp_ret = 0;
+      } else if (isnan(l)) {
+        cmp_ret = 1;
+      } else {
+        cmp_ret = -1;
+      }
+    } else if (l == r || fabs(l - r) < tolerance) {
+      cmp_ret = 0;
+    } else {
+      cmp_ret = l < r ? -1 : 1;
+    }
+    res.set_int(get_cmp_ret(cmp_op, cmp_ret));
+    return OB_SUCCESS;
+  }
+};
+
+} // namespace
+
+int ObFixedDoubleRelationFunc::eval(const ObExpr &expr,
+                                    ObEvalCtx &ctx,
+                                    ObDatum &expr_datum)
+{
+  int ret = OB_SUCCESS;
+  double tolerance = 0;
+  if (OB_FAIL(get_fixed_double_tolerance(expr, tolerance))) {
+    LOG_WARN("get fixed-double comparison tolerance failed", K(ret));
+  } else {
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    ret = def_relational_eval_func<RuntimeFixedDoubleCmp>(
+        expr, ctx, expr_datum, tolerance, cmp_op);
+  }
+  return ret;
+}
+
+int ObFixedDoubleRelationFunc::eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
+{
+  int ret = OB_SUCCESS;
+  double tolerance = 0;
+  if (OB_FAIL(get_fixed_double_tolerance(expr, tolerance))) {
+    LOG_WARN("get fixed-double comparison tolerance failed", K(ret));
+  } else {
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    ret = def_relational_eval_batch_func<RuntimeFixedDoubleCmp>(
+        BATCH_EVAL_FUNC_ARG_LIST, tolerance, cmp_op);
+  }
+  return ret;
+}
+
 OB_NOINLINE void init_expr_cmp_func_array(ObExpr::EvalFunc *eval_funcs,
                               ObExpr::EvalBatchFunc *batch_eval_funcs,
                               ObDatumCmpFuncType &datum_cmp_func,

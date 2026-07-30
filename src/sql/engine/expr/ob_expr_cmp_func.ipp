@@ -293,35 +293,10 @@ struct ObStrRelationEvalWrap {
   }
 };
 
-template<bool, ObScale SCALE>
-struct ObRelationFixedDoubleFunc{};
-
-template<ObScale SCALE>
-struct ObRelationFixedDoubleFunc<false, SCALE> : ObDummyRelationalFunc {};
-
-template<ObScale SCALE>
-struct ObRelationFixedDoubleFunc<true, SCALE>
+struct ObFixedDoubleRelationFunc
 {
-  struct DatumCmp
-  {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
-                   const ObCmpOp cmp_op) const
-    {
-      return def_oper_cmp_func<datum_cmp::ObFixedDoubleCmp<SCALE>>(res, l, r, cmp_op);
-    }
-  };
-
-  inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
-  {
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum, cmp_op);
-  }
-
-  inline static int eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
-  {
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    return def_relational_eval_batch_func<DatumCmp>(BATCH_EVAL_FUNC_ARG_LIST, cmp_op);
-  }
+  static OB_NOINLINE int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static OB_NOINLINE int eval_batch(BATCH_EVAL_FUNC_ARG_DECL);
 };
 
 template<bool, ObCollationType CS_TYPE, bool WITH_END_SPACE>
@@ -1134,15 +1109,13 @@ template<int X>
 struct FixedDoubleCmpFuncIniter
 {
   using Def = datum_cmp::ObFixedDoubleCmp<static_cast<ObScale>(X)>;
-
-  using EvalCmp = ObRelationFixedDoubleFunc<Def::defined_, static_cast<ObScale>(X)>;
   static void init_array()
   {
     init_expr_cmp_func_array(EVAL_FIXED_DOUBLE_CMP_FUNCS[X],
                              EVAL_BATCH_FIXED_DOUBLE_CMP_FUNCS[X],
                              DATUM_FIXED_DOUBLE_CMP_FUNCS[X],
-                             Def::defined_ ? &EvalCmp::eval : NULL,
-                             Def::defined_ ? &EvalCmp::eval_batch : NULL,
+                             Def::defined_ ? &ObFixedDoubleRelationFunc::eval : NULL,
+                             Def::defined_ ? &ObFixedDoubleRelationFunc::eval_batch : NULL,
                              Def::defined_ ? &Def::cmp : NULL,
                              NULL);
   }
