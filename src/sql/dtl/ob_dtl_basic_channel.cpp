@@ -882,9 +882,6 @@ void ObDtlBasicChannel::free_buf(ObDtlLinkedBuffer *buf)
   } else {
     free_buffer_count();
   }
-  if (nullptr != buf) {
-    free_buffer_count();
-  }
 }
 
 int ObDtlBasicChannel::push_back_send_list()
