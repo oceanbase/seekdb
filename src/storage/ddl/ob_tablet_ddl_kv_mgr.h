@@ -53,21 +53,16 @@ public:
   ObDDLIdemKey();
   ~ObDDLIdemKey();
   ObDDLIdemKey(const ObDDLIdemKey &other);
-  int init(const MacroBlockId &macro_block_id,
-           const ObLogicMacroBlockId &logic_block_id,
+  int init(const ObLogicMacroBlockId &logic_block_id,
            const ObITable::TableType table_type);
   bool operator ==(const ObDDLIdemKey &other) const;
   ObDDLIdemKey& operator =(const ObDDLIdemKey &other);
   uint64_t hash() const;
   int hash(uint64_t &hash_val) const;
 private:
-  union ObDDLKeyType {
-    MacroBlockId macro_block_id_;
-    ObLogicMacroBlockId logic_block_id_;
-    ObDDLKeyType(): macro_block_id_() {}
-  } key_;
+  ObLogicMacroBlockId logic_block_id_;
   ObITable::TableType table_type_;
-  TO_STRING_KV(K(key_.macro_block_id_), K(key_.logic_block_id_), K(table_type_));
+  TO_STRING_KV(K_(logic_block_id), K_(table_type));
 };
 
 class ObDDLMacroIdemChecker final
@@ -85,14 +80,12 @@ public:
                                  int64_t &checksum);
   int check_block_exist(const ObDDLMacroBlockType block_type, 
                         const ObDirectLoadType direct_load_type,
-                        const blocksstable::MacroBlockId &block_id,
                         const blocksstable::ObLogicMacroBlockId &logic_id,
                         const int64_t checksum,
                         const ObITable::TableType table_type,
                         bool &is_marco_block_already_exist);
   int set_block_checksum(const ObDDLMacroBlockType block_type, 
                          const ObDirectLoadType direct_load_type,
-                         const blocksstable::MacroBlockId &block_id,
                          const blocksstable::ObLogicMacroBlockId &logic_id,
                          const int64_t checksum,
                          const ObITable::TableType table_type);
@@ -162,14 +155,12 @@ public:
                                int64_t &checksum);
   int check_idem_block_exist(const ObDDLMacroBlockType block_type,
                              const ObDirectLoadType direct_load_type,
-                             const blocksstable::MacroBlockId &macro_block_id,
                              const blocksstable::ObLogicMacroBlockId &logic_id,
                              const int64_t checksum,
                              const ObITable::TableType table_type,
                              bool &is_marco_block_already_exist);
   int set_idem_block_checksum(const ObDDLMacroBlockType block_type,
                               const ObDirectLoadType direct_load_type,
-                              const blocksstable::MacroBlockId &block_id,
                               const blocksstable::ObLogicMacroBlockId &logic_id,
                               const int64_t checksum,
                               const ObITable::TableType table_type);

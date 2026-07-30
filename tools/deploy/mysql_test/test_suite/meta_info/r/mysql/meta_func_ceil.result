@@ -1,4 +1,4 @@
-alter system flush plan cache global;
+alter system flush plan cache;
 select ceil(3.1415926);
 Catalog	Database	Table	Table_alias	Column	Column_alias	Type	Length	Max length	Is_null	Flags	Decimals	Charsetnr
 def					ceil(3.1415926)	246	9	1	N	32897	0	63

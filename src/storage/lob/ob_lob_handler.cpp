@@ -100,7 +100,7 @@ int ObLobQueryIterHandler::do_execute()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc lob meta scan iterator fail", K(ret));
   } else if (OB_FAIL(result_->open(param_, lob_meta_mngr_))) {
-    LOG_WARN("open local meta scan iter failed", K(ret), K(param_));
+    LOG_WARN("open meta scan iter failed", K(ret), K(param_));
   }
 
   if (OB_FAIL(ret) && OB_NOT_NULL(result_)) {

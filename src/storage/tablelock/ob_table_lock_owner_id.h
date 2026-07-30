@@ -51,7 +51,7 @@ bool is_lock_owner_type_valid(const ObLockOwnerType &type)
 class ObTableLockOwnerID
 {
 public:
-  static const int64_t MAGIC_NUM = -0xABC;
+  static constexpr int64_t MAGIC_NUM = -0xABC;
   static const int64_t INVALID_ID = -1;
   static const int64_t SESS_CREATE_TS_BIT = 22;
   static const int64_t SESS_ID_BIT = 32;

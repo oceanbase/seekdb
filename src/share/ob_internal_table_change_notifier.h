@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_SHARE_OB_INTERNAL_TABLE_CHANGE_NOTIFIER_H_
 #define OCEANBASE_SHARE_OB_INTERNAL_TABLE_CHANGE_NOTIFIER_H_
 
-#include "share/ob_module_data_arg.h"
 #include "lib/function/ob_function.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "logservice/ob_log_base_type.h"
@@ -30,6 +29,11 @@ namespace share
 class ObInternalTableChangeNotifier : public logservice::ObILocalLogHandler
 {
 public:
+  enum class Module {
+    TIMEZONE = 0,
+    GIS,
+    MAX
+  };
   using ModuleCallback = common::ObFunction<int()>;
 
   static ObInternalTableChangeNotifier &get_instance();
@@ -37,12 +41,10 @@ public:
   int init();
   void destroy();
 
-  int register_module(table::ObModuleDataArg::ObExecModule module,
-                      ModuleCallback callback);
+  int register_module(Module module, ModuleCallback callback);
 
-  // Schedule refresh for one module. Called by import executor and
-  // switch_to_leader. Returns immediately — the actual work is async.
-  int notify(table::ObModuleDataArg::ObExecModule module);
+  // Notify one cache owner after its backing inner table changes.
+  int notify(Module module);
 
   // ObILocalLogHandler — called by ObLocalLogHandlerSet when LS switches role.
   void deactivate() override;
@@ -53,7 +55,7 @@ private:
   ~ObInternalTableChangeNotifier();
   DISALLOW_COPY_AND_ASSIGN(ObInternalTableChangeNotifier);
 
-  static constexpr int MAX_MODULE = static_cast<int>(table::ObModuleDataArg::ObExecModule::MAX_MOD);
+  static constexpr int MAX_MODULE = static_cast<int>(Module::MAX);
   struct ModuleEntry {
     ModuleCallback callback_;
     ModuleEntry() : callback_() {}

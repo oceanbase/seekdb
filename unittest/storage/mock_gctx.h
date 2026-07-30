@@ -27,8 +27,6 @@ void init_global_context()
   static common::ObMySQLProxy sql_proxy_;
 
   GCTX.sql_proxy_ = &sql_proxy_;
-
-  GCONF._enable_ha_gts_full_service = false;
 }
 
 }//namespace storage

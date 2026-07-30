@@ -385,22 +385,6 @@ int ObRoutineInfo::add_routine_param(const ObRoutineParam &routine_param)
     *local_param = routine_param;
     if (OB_FAIL(routine_params_.push_back(local_param))) {
       LOG_WARN("push local param failed", K(ret));
-    } else if (local_param->is_self_param()) {
-      ObRoutineParam *first_param = is_procedure() ? routine_params_.at(0) : 1 < routine_params_.count() ? routine_params_.at(1) : NULL;
-      bool more_than_one = is_procedure() ? routine_params_.count() > 1 : routine_params_.count() > 2;
-      if (OB_NOT_NULL(first_param) && more_than_one && first_param->is_self_param()) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected self param, duplicate", K(ret));
-      } else if (routine_params_.at(0)->is_ret_param() && 2 < routine_params_.count()) {
-        std::rotate(routine_params_.begin() + 1,
-                  routine_params_.begin() + routine_params_.count() - 1,
-                  routine_params_.end());
-      } else if (!routine_params_.at(0)->is_ret_param() && 1 < routine_params_.count()) {
-        std::rotate(routine_params_.begin(),
-                  routine_params_.begin() + routine_params_.count() - 1,
-                  routine_params_.end());
-      }
-    } else {
     }
   }
   return ret;

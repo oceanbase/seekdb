@@ -50,7 +50,6 @@ public:
         out_client_params_(),
         out_param_id_(),
         db_name_(),
-        is_udt_routine_(false),
         enum_set_ctx_(allocator_) {
   }
 
@@ -97,8 +96,6 @@ public:
   void set_param_cnt(int64_t v) { param_cnt_ = v; }
   int64_t get_param_cnt() const { return param_cnt_; }
 
-  void set_is_udt_routine(bool v) { is_udt_routine_ = v; }
-  bool is_udt_routine() const { return is_udt_routine_; }
   pl::ObPLEnumSetCtx& get_enum_set_ctx() { return enum_set_ctx_; };
 
   int prepare_expression(const common::ObIArray<sql::ObRawExpr*> &params);
@@ -120,8 +117,7 @@ public:
                K_(out_type_name),
                K_(out_type_owner),
                K_(out_client_params),
-               K_(out_param_id),
-               K_(is_udt_routine));
+               K_(out_param_id));
 private:
   bool can_direct_use_param_;
   uint64_t package_id_;
@@ -145,7 +141,6 @@ private:
 
   ParamTypeInfoArray in_type_infos_;
   ObString db_name_;
-  bool is_udt_routine_;
   pl::ObPLEnumSetCtx enum_set_ctx_;
 
   DISALLOW_COPY_AND_ASSIGN(ObCallProcedureInfo);

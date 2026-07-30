@@ -21,14 +21,13 @@
 #include "pl/ob_pl_stmt.h"
 #include "sql/privilege_check/ob_privilege_check.h"
 #include "sql/resolver/ob_stmt_resolver.h"
-#include "share/schema/ob_schema_getter_guard.h"  // relocated-definition owner
+#include "share/schema/ob_schema_getter_guard.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
 using oceanbase::share::schema::ObColumnSchemaV2;
 using oceanbase::share::schema::ObTableSchema;
-using oceanbase::share::schema::ObServerRuntimeSchema;
 using oceanbase::share::schema::ObDatabaseSchema;
 
 namespace oceanbase
@@ -527,35 +526,6 @@ int ObSchemaChecker::get_user_info(const ObString &user_name,
   return ret;
 }
 
-int ObSchemaChecker::get_table_schema_with_synonym(const ObString &tbl_db_name,
-                                                   const ObString &tbl_name,
-                                                   bool is_index_table,
-                                                   bool &has_synonym,
-                                                   ObString &new_db_name,
-                                                   ObString &new_tbl_name,
-                                                   const share::schema::ObTableSchema *&tbl_schema)
-{
-  // synonym has been drop in lite version
-  int ret = OB_SUCCESS;
-  uint64_t tbl_db_id = OB_INVALID_ID;
-  uint64_t obj_db_id = OB_INVALID_ID;
-  ObString obj_name;
-  new_db_name.reset();
-  new_tbl_name.reset();
-  has_synonym = false;
-  tbl_schema = NULL;
-  ObSEArray<uint64_t, 8> syn_id_arr;
-
-  if (OB_FAIL(get_table_schema( tbl_db_name, tbl_name, is_index_table, tbl_schema))) {
-      LOG_WARN("get_table_schema failed", K(ret), K(tbl_db_name), K(tbl_db_id), K(tbl_name));
-  } else {
-    has_synonym = false;
-  }
-
-  return ret;
-}
-
-
 int ObSchemaChecker::get_table_schema( const ObString &database_name,
                                       const ObString &table_name, const bool is_index_table,
                                       const ObTableSchema *&table_schema, const bool with_hidden_flag,
@@ -769,27 +739,6 @@ int ObSchemaChecker::get_can_write_index_array(uint64_t table_id,
   } else if (OB_FAIL(schema_mgr_->get_can_write_index_array(table_id, index_tid_array, size, only_global))) {
     LOG_WARN("failed to get_can_write_index_array", K(table_id), K(ret));
   } else {}
-  return ret;
-}
-
-
-int ObSchemaChecker::get_server_runtime_info(const ObServerRuntimeSchema *&runtime_schema)
-{
-  int ret = OB_SUCCESS;
-  runtime_schema = NULL;
-
-  const ObServerRuntimeSchema *runtime = NULL;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("schema checker is not inited", K(is_inited_), K(ret));
-  } else if (OB_FAIL(schema_mgr_->get_server_runtime_info(runtime))) {
-    LOG_WARN("get server runtime schema failed", K(ret));
-  } else if (NULL == runtime) {
-    ret = OB_RUNTIME_SCHEMA_NOT_READY;
-    LOG_WARN("server runtime schema does not exist", K(ret));
-  } else {
-    runtime_schema = runtime;
-  }
   return ret;
 }
 
@@ -1215,68 +1164,6 @@ int ObSchemaChecker::get_column_schema_inner(uint64_t table_id, const uint64_t c
 
 
 
-int ObSchemaChecker::check_exist_same_name_object_with_synonym(uint64_t database_id,
-                                     const common::ObString &object_name,
-                                     bool &exist,
-                                     bool &is_private_syn)
-{
-  int ret = OB_SUCCESS;
-  exist = false;
-  is_private_syn = false;
-  common::ObString database_name;
-  const ObDatabaseSchema  *db_schema = NULL;
-  const share::schema::ObTableSchema *table_schema = NULL;
-  if (OB_FAIL(get_database_schema( database_id, db_schema))) {
-    LOG_WARN("fail to get db schema", K(ret));
-  } else if (OB_NOT_NULL(db_schema)) {
-    database_name = db_schema->get_database_name();
-    ret = get_table_schema( database_name, object_name, false, table_schema);
-    if (OB_SUCC(ret) && OB_NOT_NULL(table_schema)) {
-      exist = true;
-    }
-
-    //check procedure/function
-    if (OB_TABLE_NOT_EXIST == ret) {
-      uint64_t routine_id = 0;
-      bool is_proc = false;
-      if (OB_FAIL(get_routine_id(database_name, object_name, routine_id, is_proc))) {
-        if (OB_ERR_SP_DOES_NOT_EXIST == ret) {
-          ret = OB_TABLE_NOT_EXIST;
-        }
-      } else {
-        exist = true;
-      }
-    }
-    //check package
-    if (OB_TABLE_NOT_EXIST == ret) {
-      uint64_t package_id = 0;
-      if (OB_FAIL(get_package_id(database_name, object_name,
-                                  package_id))) {
-        if (OB_ERR_PACKAGE_DOSE_NOT_EXIST == ret) {
-          if (OB_FAIL(get_package_id(OB_SYS_DATABASE_ID,
-                                      object_name,
-                                      package_id))) {
-            if (OB_ERR_PACKAGE_DOSE_NOT_EXIST == ret) {
-              ret = OB_TABLE_NOT_EXIST;
-            }
-          } else {
-            exist = true;
-          }
-        }
-      } else {
-        exist = true;
-      }
-    }
-
-  }
-  if (OB_TABLE_NOT_EXIST == ret) {
-    ret = OB_SUCCESS;
-  }
-
-  return ret;
-}
-
-
 int ObSchemaChecker::remove_tmp_cte_schemas(const ObString& cte_table_name)
 {
   int ret = OB_SUCCESS;
@@ -1437,21 +1324,6 @@ int ObSchemaGetterGuard::check_priv(const ObSessionPrivInfo &session_priv,
         case OB_PRIV_DB_ACCESS_LEVEL: {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Privilege checking of database access should not use this function", KR(ret));
-          break;
-        }
-        case OB_PRIV_OBJECT_LEVEL: {
-          if (OB_ISNULL(this)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("schema guard is null", K(ret));
-          } else if (OB_FAIL(check_obj_mysql_priv(session_priv, enable_role_id_array, need_priv))) {
-            LOG_WARN("No privilege",
-                "user_id", session_priv.user_id_,
-                "need_priv", need_priv.priv_set_,
-                "table", need_priv.table_,
-                "db", need_priv.db_,
-                "user_priv", session_priv.user_priv_set_,
-                KR(ret));//need print priv
-          }
           break;
         }
         default: {

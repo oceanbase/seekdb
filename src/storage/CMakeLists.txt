@@ -78,7 +78,6 @@ ob_set_subtarget(ob_storage blocksstable
   blocksstable/ob_datum_row_utils.cpp
   blocksstable/ob_data_store_desc.cpp
   blocksstable/ob_column_checksum_struct.cpp
-  blocksstable/ob_table_flag.cpp
   blocksstable/ob_datum_rowkey_vector.cpp
   blocksstable/ob_batch_datum_rows.cpp
 )
@@ -103,15 +102,6 @@ ob_set_subtarget(ob_storage blocksstable_encoding1
   blocksstable/encoding/ob_new_column_decoder.cpp
   blocksstable/encoding/ob_integer_base_diff_decoder.cpp
   blocksstable/encoding/ob_integer_base_diff_encoder.cpp
-)
-# Vector-decode explicit-instantiation sites: must be ALONE (own TU), not unity, so the include
-# guard does not swallow their definition pass and they remain the sole definers of the symbols.
-ob_set_subtarget(ob_storage ALONE
-  blocksstable/encoding/ob_vector_decode_util.cpp
-  blocksstable/encoding/ob_vector_decode_util_b.cpp
-  blocksstable/encoding/ob_vector_decode_util_c.cpp
-  blocksstable/encoding/ob_vector_decode_util_d.cpp
-  blocksstable/encoding/ob_vector_decode_util_e.cpp
 )
 ob_set_subtarget(ob_storage blocksstable_encoding2
   blocksstable/encoding/ob_inter_column_substring_decoder.cpp
@@ -321,7 +311,6 @@ ob_set_subtarget(ob_storage tablet
 
 ob_set_subtarget(ob_storage tx
   tx/ob_ctx_tx_data.cpp
-  tx/ob_gti_source.cpp
   tx/ob_id_service.cpp
   tx/ob_keep_alive_ls_handler.cpp
   tx/ob_tx_loop_worker.cpp
@@ -340,7 +329,6 @@ ob_set_subtarget(ob_storage tx
   tx/ob_trans_define.cpp
   tx/ob_trans_define_v4.cpp
   tx/ob_trans_end_trans_callback.cpp
-  tx/ob_trans_event.cpp
   tx/ob_trans_factory.cpp
   tx/ob_trans_id_service.cpp
   tx/ob_trans_memory_stat.cpp
@@ -450,7 +438,6 @@ ob_set_subtarget(ob_storage access
   access/ob_block_row_store.cpp
   access/ob_vector_store.cpp
   access/ob_aggregated_store.cpp
-  access/ob_aggregated_store_vec.cpp
   access/ob_scan_merge_loser_tree.cpp
   access/ob_single_merge.cpp
   access/ob_sstable_index_filter.cpp
@@ -478,7 +465,6 @@ ob_set_subtarget(ob_storage access
   access/ob_micro_block_handle_mgr.cpp
   access/ob_aggregate_base.cpp
   access/ob_pushdown_aggregate.cpp
-  access/ob_pushdown_aggregate_vec.cpp
   access/ob_empty_read_bucket.cpp
   access/ob_global_iterator_pool.cpp
   access/ob_where_optimizer.cpp
@@ -567,7 +553,7 @@ ob_set_subtarget(ob_storage common
   ob_super_block_struct.cpp
   ob_sync_tablet_seq_clog.cpp
   ob_table_store_stat_mgr.cpp
-  ob_tablet_autoinc_seq_rpc_handler.cpp
+  ob_tablet_autoinc_seq_service.cpp
   ob_value_row_iterator.cpp
   ob_common_id_utils.cpp
   ob_tablet_stat_mgr.cpp
@@ -746,7 +732,6 @@ ob_set_subtarget(ob_storage lob
   lob/ob_lob_data_reader.cpp
   lob/ob_lob_locator.cpp
   lob/ob_lob_util.cpp
-  lob/ob_lob_rpc_struct.cpp
   lob/ob_ext_info_callback.cpp
   lob/ob_lob_access_param.cpp
   lob/ob_lob_persistent_reader.cpp
@@ -754,7 +739,6 @@ ob_set_subtarget(ob_storage lob
   lob/ob_lob_write_buffer.cpp
   lob/ob_lob_cursor.cpp
   lob/ob_lob_location.cpp
-  lob/ob_lob_remote.cpp
   lob/ob_lob_iterator.cpp
   lob/ob_lob_handler.cpp
   lob/ob_lob_meta_manager.cpp

@@ -2173,7 +2173,7 @@ void ParamFlag::reset()
   need_to_check_bool_value_ = false;
   expected_bool_value_ = false;
   need_to_check_extend_type_ = true;
-  is_ref_cursor_type_ = false;
+  reserved_legacy_bit_ = false;
   is_pl_mock_default_param_ = false;
   is_boolean_ = false;
   is_batch_parameter_ = false;

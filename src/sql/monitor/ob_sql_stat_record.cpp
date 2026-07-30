@@ -19,7 +19,6 @@
 #include "sql/monitor/ob_sql_stat_record.h"
 #include "share/rc/ob_module_provider.h"
 #include "sql/engine/ob_physical_plan.h"
-#include "lib/stat/ob_diagnose_info.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "lib/atomic/ob_atomic.h"
 #include "sql/ob_sql_context.h"
@@ -188,7 +187,7 @@ ObExecutingSqlStatRecord::ObExecutingSqlStatRecord()
 #undef DEF_SQL_STAT_ITEM_INIT
 }
 
-#define RECORD_ITEM(se, di)                                                                        \
+#define RECORD_ITEM(se)                                                                            \
   do {                                                                                             \
     elapsed_time_##se##_ = rdtsc() * 1000 / OBSERVER.get_cpu_frequency_khz();                      \
   } while (0);
@@ -253,17 +252,13 @@ int ObExecutingSqlStatRecord::assign(const ObExecutingSqlStatRecord& other)
 int ObExecutingSqlStatRecord::record_sqlstat_start_value()
 {
 
-  RECORD_ITEM(start, nullptr);
+  RECORD_ITEM(start);
   return OB_SUCCESS;
 }
 
-int ObExecutingSqlStatRecord::record_sqlstat_end_value(ObDiagnoseSessionInfo* di /*= nullptr*/)
+int ObExecutingSqlStatRecord::record_sqlstat_end_value()
 {
-  if (OB_NOT_NULL(di)) {
-    RECORD_ITEM(end, di);
-  } else {
-    RECORD_ITEM(end, nullptr);
-  }
+  RECORD_ITEM(end);
   return OB_SUCCESS;
 }
 

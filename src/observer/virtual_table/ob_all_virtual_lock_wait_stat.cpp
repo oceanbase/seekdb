@@ -118,6 +118,9 @@ int ObAllVirtualLockWaitStat::inner_get_next_row(ObNewRow *&row)
             cur_row_.cells_[i].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
+          cur_row_.cells_[i].set_collation_type(
+              ObCharset::get_default_collation(
+                  ObCharset::get_default_charset()));
           break;
         }
         case LAST_COMPACT_CNT:

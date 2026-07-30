@@ -3,7 +3,6 @@ mysqltest_for_standalone
 sysbench_for_standalone
 bmsqltest_for_standalone
 !vostest
-direct_load_lite
 ddlmigrate_lite
 ddltest_duomo
 multi_modal_test

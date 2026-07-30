@@ -71,12 +71,9 @@ int ObDDLMacroBlockWriter::init(
   } else if (OB_ISNULL(tablet_param.storage_schema_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("storage schema is null", K(ret), K(table_key), K(param));
-  } else if (OB_UNLIKELY(!is_full_direct_load(param.direct_load_type_))) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("only full direct load is supported", KR(ret), K(param.direct_load_type_));
   } else {
     share::SCN mock_start_scn;
-    IGNORE_RETURN mock_start_scn.convert_for_tx(SS_DDL_START_SCN_VAL);
+    IGNORE_RETURN mock_start_scn.convert_for_tx(DDL_START_SCN_VAL);
     const uint64_t data_format_version = param.data_format_version_;
     const ObDDLMacroBlockType block_type = DDL_MB_DATA_TYPE;
     const bool need_submit_io = true;

@@ -9,7 +9,7 @@ set @@session.explicit_defaults_for_timestamp=off;
 connect (conn_admin, $OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
 connection conn_admin;
 
-alter system flush plan cache global;
+alter system flush plan cache;
 
 connection default;
 set ob_enable_plan_cache = false;

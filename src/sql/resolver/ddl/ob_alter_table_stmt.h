@@ -62,12 +62,6 @@ public:
   inline void set_alter_table_column(){alter_table_arg_.is_alter_columns_ = true;}
   inline void set_alter_table_index(){alter_table_arg_.is_alter_indexs_ = true;}
   inline void set_alter_table_partition(){alter_table_arg_.is_alter_partitions_ = true;}
-  /* to do: interval */
-  inline void set_interval_expr(ObRawExpr *expr) {interval_expr_ = expr;}
-  inline void set_transition_expr(ObRawExpr *expr) {transition_expr_ = expr;}
-
-  inline ObRawExpr *get_transition_expr() { return transition_expr_; }
-  inline ObRawExpr *get_interval_expr() { return interval_expr_; }
 
   const common::ObString &get_org_database_name() const
   { return alter_table_arg_.alter_table_schema_.get_origin_database_name(); }
@@ -78,9 +72,6 @@ public:
   const common::ObString &get_table_name() const
   { return alter_table_arg_.alter_table_schema_.get_table_name_str(); }
   inline int set_tz_info_wrap(const common::ObTimeZoneInfoWrap &tz_info_wrap);
-  inline int set_nls_formats(const common::ObString &nls_date_format,
-                             const common::ObString &nls_timestamp_format,
-                             const common::ObString &nls_timestamp_tz_format);
   int fill_session_vars(const ObBasicSessionInfo &session);
   inline const common::ObTimeZoneInfoWrap &get_tz_info_wrap()
   { return alter_table_arg_.tz_info_wrap_; }
@@ -121,8 +112,6 @@ private:
   common::ObIAllocator *fts_arg_allocator_;
   bool is_alter_triggers_;
   obcall::ObAlterTriggerArg tg_arg_;
-  ObRawExpr *interval_expr_;
-  ObRawExpr *transition_expr_;
   uint64_t alter_table_action_count_;
   obcall::ObExchangePartitionArg exchange_partition_arg_;
 };
@@ -130,14 +119,6 @@ private:
 inline int ObAlterTableStmt::set_tz_info_wrap(const common::ObTimeZoneInfoWrap &tz_info_wrap)
 {
   return alter_table_arg_.tz_info_wrap_.deep_copy(tz_info_wrap);
-}
-
-inline int ObAlterTableStmt::set_nls_formats(const common::ObString &nls_date_format,
-                                             const common::ObString &nls_timestamp_format,
-                                             const common::ObString &nls_timestamp_tz_format)
-{
-  return alter_table_arg_.set_nls_formats(nls_date_format, nls_timestamp_format,
-                                          nls_timestamp_tz_format);
 }
 
 } // namespace sql

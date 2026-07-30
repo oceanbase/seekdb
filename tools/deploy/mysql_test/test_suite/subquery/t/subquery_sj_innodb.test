@@ -85,6 +85,7 @@ select * from t3 where b in (select A.a+B.a from t0 A, t0 B where B.a<5);
 # O2I join orders, with shortcutting: 
 explain  select * from t1 where a in (select b from t2);
 select * from t1;
+--sorted_result
 select * from t1 where a in (select b from t2);
 
 drop table t0, t1, t2, t3;

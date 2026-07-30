@@ -17,6 +17,7 @@
 #include "ob_storage_util.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
+#include "sql/engine/vector/ob_fixed_length_base.h"
 
 namespace oceanbase
 {
@@ -239,90 +240,6 @@ int pad_on_datums(const common::ObAccuracy accuracy,
   return ret;
 }
 
-int pad_on_rich_format_columns(const common::ObAccuracy accuracy,
-                               const common::ObCollationType cs_type,
-                               const int64_t row_count,
-                               const int64_t vec_offset,
-                               common::ObIAllocator &padding_alloc,
-                               sql::ObExpr &expr,
-                               sql::ObEvalCtx &eval_ctx)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(VectorFormat::VEC_DISCRETE != expr.get_format(eval_ctx))) {
-    ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "Unexpected vector format for padding column", K(expr.get_format(eval_ctx)));
-  } else {
-    ObDiscreteFormat *discrete_format = static_cast<ObDiscreteFormat *>(expr.get_vector(eval_ctx));
-    ObLength *lens = discrete_format->get_lens();
-    char **ptrs = discrete_format->get_ptrs();
-    sql::ObBitVector *nulls = discrete_format->get_nulls();
-    ObLength length = accuracy.get_length(); // byte or char length
-    const ObString space_pattern = get_padding_str(cs_type);
-    char *buf = nullptr;
-    if (1 == length) {
-      int32_t buf_len = space_pattern.length();
-      if (OB_ISNULL((buf = (char*) padding_alloc.alloc(buf_len)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        STORAGE_LOG(WARN, "no memory", K(ret));
-      } else {
-        int32_t true_len = 0;
-        append_padding_pattern(space_pattern, 0, buf_len, buf, true_len);
-        for (int64_t i = vec_offset; i < vec_offset + row_count; i++) {
-          if (nulls->at(i)) {
-            // do nothing
-          } else if (0 == lens[i]){
-            ptrs[i] = buf;
-            lens[i] = true_len;
-          }
-        }
-      }
-    } else if (can_do_ascii_optimize(cs_type)) {
-      int32_t buf_len = length * space_pattern.length() * row_count;
-      if (OB_ISNULL(buf = (char*) padding_alloc.alloc(buf_len))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        STORAGE_LOG(WARN, "no memory", K(ret));
-      } else {
-        char *ptr = buf;
-        MEMSET(buf, OB_PADDING_CHAR, buf_len);
-        for (int64_t i = vec_offset; OB_SUCC(ret) && i < vec_offset + row_count; i++) {
-          if (nulls->at(i)) {
-            // do nothing
-          } else {
-            if (is_ascii_str(ptrs[i], lens[i])) {
-              if (lens[i] < length) {
-                MEMCPY(ptr, ptrs[i], lens[i]);
-                ptrs[i] = ptr;
-                lens[i] = length;
-                ptr = ptr + length;
-              }
-            } else {
-              int32_t cur_len = static_cast<int32_t>(ObCharset::strlen_char(cs_type, ptrs[i], lens[i]));
-              if (cur_len < length &&
-                  OB_FAIL(pad_on_local_buf(space_pattern, length - cur_len, padding_alloc, (const char *&)ptrs[i], (uint32_t &)lens[i]))) {
-                STORAGE_LOG(WARN, "fail to pad on padding allocator", K(ret), K(length), K(cur_len));
-              }
-            }
-          }
-        }
-      }
-    } else {
-      for (int64_t i = vec_offset; OB_SUCC(ret) && i < vec_offset + row_count; i++) {
-        if (nulls->at(i)) {
-          // do nothing
-        } else {
-          int32_t cur_len = static_cast<int32_t>(ObCharset::strlen_char(cs_type, ptrs[i], lens[i]));
-          if (cur_len < length &&
-              OB_FAIL(pad_on_local_buf(space_pattern, length - cur_len, padding_alloc, (const char *&)ptrs[i], (uint32_t &)lens[i]))) {
-            STORAGE_LOG(WARN, "fail to pad on padding allocator", K(ret), K(length), K(cur_len));
-          }
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-
 int fill_datums_lob_locator(
     const ObTableIterParam &iter_param,
     const ObTableAccessContext &context,
@@ -352,46 +269,6 @@ int fill_datums_lob_locator(
   return ret;
 }
 
-int fill_exprs_lob_locator(
-    const ObTableIterParam &iter_param,
-    const ObTableAccessContext &context,
-    const share::schema::ObColumnParam &col_param,
-    sql::ObExpr &expr,
-    sql::ObEvalCtx &eval_ctx,
-    const int64_t vector_offset,
-    const int64_t row_cap)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!col_param.get_meta_type().is_lob_storage() ||
-                  nullptr == context.lob_locator_helper_ ||
-                  VectorFormat::VEC_DISCRETE != expr.get_format(eval_ctx))) {
-    ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "Unexpected param", K(ret), K(col_param.get_meta_type()),
-                K(context.lob_locator_helper_), K(expr.get_format(eval_ctx)));
-  } else {
-    ObDiscreteFormat *discrete_format = static_cast<ObDiscreteFormat *>(expr.get_vector(eval_ctx));
-    ObDatum datum;
-    ObLength length;
-    for (int64_t row_idx = vector_offset; OB_SUCC(ret) && (row_idx < row_cap + vector_offset); ++row_idx) {
-      if (!discrete_format->is_null(row_idx)) {
-        discrete_format->get_payload(row_idx, datum.ptr_, length);
-        datum.len_ = static_cast<uint32_t>(length);
-        if (!datum.get_lob_data().in_row_) {
-          if (OB_FAIL(context.lob_locator_helper_->fill_lob_locator_v2(datum, col_param, iter_param, context))) {
-            STORAGE_LOG(WARN, "Failed to fill lob loactor", K(ret), K(row_idx), K(datum), K(context), K(iter_param));
-          } else {
-            discrete_format->set_datum(row_idx, datum);
-          }
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-// Monotonic black filter only support ">", ">=", "<", "<=", "=" five types.
-// All of these monotonic black filters will return false if the input is null.
-// When has_null is true, we can not set_always_true() for bool_mask but can judge always false.
 int check_skip_by_monotonicity(
     sql::ObBlackFilterExecutor &filter,
     blocksstable::ObStorageDatum &min_datum,

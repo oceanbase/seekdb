@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_PC
+#include "share/rc/ob_module_provider.h"
 #include "ob_plan_cache_value.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/plan_cache/ob_pcv_set.h"
@@ -141,7 +142,6 @@ ObPlanCacheValue::ObPlanCacheValue()
     has_dynamic_values_table_(false),
     stored_schema_objs_(pc_alloc_),
     stmt_type_(stmt::T_MAX),
-    enable_rich_vector_format_(false),
     switchover_epoch_(OB_INVALID_VERSION)
 {
   MEMSET(sql_id_, 0, sizeof(sql_id_));
@@ -186,7 +186,6 @@ int ObPlanCacheValue::init(ObPCVSet *pcv_set, const ObILibCacheObject *cache_obj
     sys_schema_version_ = plan->get_sys_schema_version();
     runtime_schema_version_ = plan->get_runtime_schema_version();
     sql_traits_ = pc_ctx.sql_traits_;
-    enable_rich_vector_format_ = static_cast<const ObPhysicalPlan *>(plan)->get_use_rich_format();
     stmt_type_ = plan->get_stmt_type();
     need_param_ = plan->need_param();
     is_nested_sql_ = ObSQLUtils::is_nested_sql(&pc_ctx.exec_ctx_);
@@ -407,8 +406,6 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
   if (schema_array.count() == 0 && stored_schema_objs_.count() == 0) {
     need_check_schema = true;
   }
-  ObBasicSessionInfo::ForceRichFormatStatus orig_rich_format_status = ObBasicSessionInfo::ForceRichFormatStatus::Disable;
-  bool orig_phy_ctx_rich_format = false;
   if (stmt::T_NONE == pc_ctx.sql_ctx_.stmt_type_) {
     //sql_ctx_.stmt_type_ != stmt::T_NONE means this calling in nested sql,
     //can't cover the first stmt type in sql context
@@ -417,7 +414,6 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
   if (OB_ISNULL(session = pc_ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     SQL_PC_LOG(ERROR, "got session is NULL", K(ret));
-  } else if (FALSE_IT(orig_rich_format_status = session->get_force_rich_format_status())) {
   } else if (FALSE_IT(session->set_stmt_type(stmt_type_))) {
   } else if (OB_UNLIKELY(switchover_epoch_ != new_switchover_epoch)) {
     ret = OB_OLD_SCHEMA_VERSION;
@@ -463,12 +459,7 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
     if (OB_SUCC(ret)) {
       ObPhysicalPlanCtx *phy_ctx = pc_ctx.exec_ctx_.get_physical_plan_ctx();
       if (NULL != phy_ctx) {
-        orig_phy_ctx_rich_format = phy_ctx->is_rich_format();
         phy_ctx->set_original_param_cnt(phy_ctx->get_param_store().count());
-        phy_ctx->set_rich_format(enable_rich_vector_format_);
-        session->set_force_rich_format(enable_rich_vector_format_ ?
-                                         ObBasicSessionInfo::ForceRichFormatStatus::FORCE_ON :
-                                         ObBasicSessionInfo::ForceRichFormatStatus::FORCE_OFF);
         if (OB_FAIL(phy_ctx->init_datum_param_store())) {
           LOG_WARN("fail to init datum param store", K(ret));
         }
@@ -529,15 +520,6 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
   if (OB_SUCC(ret)) {
     plan_out = plan;
     pc_ctx.sql_traits_ = sql_traits_; //used for check read only
-  }
-  // reset force rich format status
-  if (NULL == plan) {
-    if (session != nullptr) {
-      session->set_force_rich_format(orig_rich_format_status);
-    }
-    if (pc_ctx.exec_ctx_.get_physical_plan_ctx() != nullptr) {
-      pc_ctx.exec_ctx_.get_physical_plan_ctx()->set_rich_format(orig_phy_ctx_rich_format);
-    }
   }
   return ret;
 }
@@ -1163,7 +1145,6 @@ void ObPlanCacheValue::reset()
     }
   }
   stored_schema_objs_.reset();
-  enable_rich_vector_format_ = false;
   pcv_set_ = NULL; // put last, there may be need for pcv_set before this
 }
 // Get all plan memory usage under this plan cache value
@@ -1407,23 +1388,9 @@ bool ObPlanCacheValue::is_contain_tmp_tbl() const
   return is_contain;
 }
 
-bool ObPlanCacheValue::is_contain_synonym() const
-{
-  bool is_contain = false;
-
-  for (int64_t i = 0; !is_contain && i < stored_schema_objs_.count(); i++) {
-    if (nullptr != stored_schema_objs_.at(i)
-        && (SYNONYM_SCHEMA == stored_schema_objs_.at(i)->schema_type_)) {
-      is_contain = true;
-    }
-  }
-
-  return is_contain;
-}
-
 /*!
- * System package/type changes may advance only the system schema version. Always
- * validate cached objects that depend on system packages or types.
+ * Updating system packages only increases the system tenant schema version. Objects
+ * under normal tenants that depend on system packages therefore always recheck them.
  */
 bool ObPlanCacheValue::is_contain_sys_pl_object() const
 {
@@ -1431,8 +1398,7 @@ bool ObPlanCacheValue::is_contain_sys_pl_object() const
 
   for (int64_t i = 0; !is_contain && i < stored_schema_objs_.count(); i++) {
     if (nullptr != stored_schema_objs_.at(i)
-        && (PACKAGE_SCHEMA == stored_schema_objs_.at(i)->schema_type_
-            || UDT_SCHEMA == stored_schema_objs_.at(i)->schema_type_)
+        && PACKAGE_SCHEMA == stored_schema_objs_.at(i)->schema_type_
         && true) {
       is_contain = true;
     }
@@ -1525,7 +1491,7 @@ int ObPlanCacheValue::set_stored_schema_objs(const DependenyTableStore &dep_tabl
       table_schema = nullptr;
       int hash_err = OB_SUCCESS;
       if (table_version.get_schema_type() != TABLE_SCHEMA) {
-        // If not table schema, directly store schema id and version only, synonym store an additional db_id
+        // If not table schema, directly store schema id and version only.
         if (OB_FAIL(ret)) {
         } else if (nullptr == (obj_buf = pc_alloc_->alloc(sizeof(PCVSchemaObj)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1632,9 +1598,6 @@ int ObPlanCacheValue::get_all_dep_schema(ObPlanCacheCtx &pc_ctx,
       } else if (TABLE_SCHEMA != pcv_schema->schema_type_) {
         // if no table schema, get schema version is enough
         int64_t new_version = 0;
-        if (PACKAGE_SCHEMA == stored_schema_objs_.at(i)->schema_type_
-            || UDT_SCHEMA == stored_schema_objs_.at(i)->schema_type_) {
-        }
         if (OB_FAIL(ret)) { 
         } else if (OB_FAIL(schema_guard.get_schema_version(pcv_schema->schema_type_,
                                                     pcv_schema->schema_id_,
@@ -1642,11 +1605,9 @@ int ObPlanCacheValue::get_all_dep_schema(ObPlanCacheCtx &pc_ctx,
           LOG_WARN("failed to get schema version",
                    K(ret), K(pcv_schema->schema_type_), K(pcv_schema->schema_id_));
         } else {
-          if (SYNONYM_SCHEMA != pcv_schema->schema_type_) {
-            tmp_schema_obj.schema_id_ = pcv_schema->schema_id_;
-            tmp_schema_obj.schema_version_ = new_version;
-            tmp_schema_obj.schema_type_ = pcv_schema->schema_type_;
-          }
+          tmp_schema_obj.schema_id_ = pcv_schema->schema_id_;
+          tmp_schema_obj.schema_version_ = new_version;
+          tmp_schema_obj.schema_type_ = pcv_schema->schema_type_;
           if (OB_FAIL(schema_array.push_back(tmp_schema_obj))) {
             LOG_WARN("failed to push back array", K(ret));
           } else {
@@ -1799,13 +1760,12 @@ int ObPlanCacheValue::need_check_schema_version(ObPlanCacheCtx &pc_ctx,
         Therefore, if there is a temporary table, you need to recheck the schema .
      */
     need_check = ((new_schema_version != cached_runtime_schema_version)
-                  || is_contain_synonym()
                   || is_contain_tmp_tbl()
                   || is_contain_sys_pl_object()
                   || contain_sys_name_table_);
     if (need_check && REACH_TIME_INTERVAL(10000000)) { // 10s interval print
       LOG_INFO("need check schema", K(new_schema_version), K(cached_runtime_schema_version),
-               K(is_contain_synonym()), K(contain_sys_name_table_), K(is_contain_tmp_tbl()),
+               K(contain_sys_name_table_), K(is_contain_tmp_tbl()),
                K(is_contain_sys_pl_object()), K(need_check), K(constructed_sql_));
     }
   }

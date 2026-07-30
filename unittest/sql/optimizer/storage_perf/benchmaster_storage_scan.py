@@ -3,44 +3,6 @@ __author__ = 'dongyun.zdy'
 import subprocess as sp
 import os
 import sys
-from random import randint
-import re
-
-txt = """1,8712
-PerfStat: scan_end_time: 2016-08-22T12:03:35Z
-PerfStat: --- scan 1 iteration 0 run ---
-PerfStat: runtime = 8712
-PerfStat: index_cache_hit_ = 0 , index_cache_miss_ = 1 ,
-PerfStat: row_cache_hit_ = 0 , row_cache_miss_ = 1 ,
-PerfStat: block_cache_hit_ = 0 , block_cache_miss_ = 1 ,
-PerfStat: bf_cache_hit_ = 0 , bf_cache_miss_ = 1 ,
-PerfStat: io_read_count_ = 2 , io_read_size_ = 24576 , io_read_delay_ = 133, io_read_queue_delay = 17,
-PerfStat: io_read_cb_alloc_delay = 43, io_read_cb_process_delay_ = 35 ,
-PerfStat: io_read_prefetch_micro_cnt = 1, io_read_prefetch_micro_size_ = 16444,
-PerfStat: io_read_uncomp_micro_cnt_ = 0, io_read_uncomp_micro_size_ = 0,
-PerfStat: total_delay = 473, avg_delay = 236,
-PerfStat: db_file_data_read_:
-PerfStat: total_waits_ = 1, total_timeouts_ = 0
-PerfStat: time_waited_micro_ = 114, average_wait_ = 114.00, max_wait_ = 114
-PerfStat: db_file_data_index_read_:
-PerfStat: total_waits_ = 1, total_timeouts_ = 0
-PerfStat: time_waited_micro_ = 90, average_wait_ = 90.00, max_wait_ = 90
-PerfStat: kv_cache_bucket_lock_wait_:
-PerfStat: total_waits_ = 0, total_timeouts_ = 0
-PerfStat: time_waited_micro_ = 0, average_wait_ = 0.00, max_wait_ = 0
-PerfStat: io_queue_lock_wait_:
-PerfStat: total_waits_ = 0, total_timeouts_ = 0
-PerfStat: time_waited_micro_ = 0, average_wait_ = 0.00, max_wait_ = 0
-PerfStat: io_controller_cond_wait_:
-PerfStat: total_waits_ = 0, total_timeouts_ = 0
-PerfStat: time_waited_micro_ = 0, average_wait_ = 0.00, max_wait_ = 103147
-PerfStat: io_processor_cond_wait_:
-PerfStat: total_waits_ = 0, total_timeouts_ = 0
-PerfStat: time_waited_micro_ = 0, average_wait_ = 0.00, max_wait_ = 0"""
-
-def get_kv(txt, k):
-    pat = re.compile(k +":\s*?PerfStat: total_waits_ = (\d+)[\w\d\s#:_,=]+?PerfStat: time_waited_micro_ = (\d+)")
-    return pat.findall(txt)
 
 def remove_schema():
     global schema_file
@@ -148,12 +110,9 @@ for table_width_factor in table_width_factors:
                 if len(cmd_res) == 0:
                     run_cmd('echo "# error" >> ' + outfile)
                 for runinfo in cmd_res:
-                    # print runinfo
-                    waitinfo = get_kv(runinfo, 'db_file_data_read_')
-                    # print waitinfo
                     lines = runinfo.splitlines()
-                    resline = prop + lines[1] + ',' + ','.join(list(waitinfo[0]))
+                    resline = prop + lines[0]
                     print resline
                     run_cmd('echo "%s" >> ' % (resline) + outfile)
-                    for statline in lines[2:]:
+                    for statline in lines[1:]:
                         run_cmd('echo "# %s" >> ' % statline + outfile)

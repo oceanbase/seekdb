@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/aggregate/ob_hash_groupby_op.h"
+#include "sql/engine/expr/ob_expr_estimate_ndv.h"
 #include "share/rc/ob_module_provider.h"
 #include "sql/engine/px/ob_px_util.h"
 
@@ -27,6 +28,31 @@ using namespace common::hash;
 
 namespace sql
 {
+
+int LlcEstimate::init_llc_map(common::ObArenaAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  char *llc_map = nullptr;
+  int64_t llc_map_size = 0;
+  if (OB_FAIL(ObAggregateProcessor::llc_init_empty(llc_map, llc_map_size, allocator))) {
+    LOG_WARN("failed to init llc map", K(ret));
+  } else {
+    llc_map_.assign_ptr(llc_map, llc_map_size);
+  }
+  return ret;
+}
+
+int LlcEstimate::reset()
+{
+  if (!llc_map_.empty()) {
+    MEMSET(llc_map_.ptr(), 0, llc_map_.length());
+  }
+  avg_group_mem_ = 0;
+  est_cnt_ = 0;
+  last_est_cnt_ = 0;
+  enabled_ = false;
+  return OB_SUCCESS;
+}
 
 OB_SERIALIZE_MEMBER(ObGroupByDupColumnPair, org_expr, dup_expr);
 

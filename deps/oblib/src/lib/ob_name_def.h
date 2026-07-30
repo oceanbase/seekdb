@@ -105,7 +105,6 @@
 #define N_EXPR_ID "expr_id"
 #define N_IS_ALIAS "is_alias"
 #define N_ALIAS_NAME "alias_name"
-#define N_SYNONYM_NAME "synonym_name"
 #define N_EXPR_NAME "expr_name"
 #define N_STR_PART_NUM "part_num"
 #define N_STR_PART_FUNC_TYPE "part_func_type"
@@ -513,7 +512,6 @@
 #define N_REF_ID "ref_id"
 #define N_REF_QUERY "ref_query"
 #define N_OBJ_ACCESS "obj_access"
-#define N_MULTISET "multiset"
 #define N_LEFT_TABLE "left_table"
 #define N_RIGHT_TABLE "right_table"
 #define N_COLUMN_NAME "column_name"
@@ -536,18 +534,10 @@
 #define N_EXTRACT "extract"
 #define N_DATE_FORMAT "date_format"
 #define N_STR_TO_DATE "str_to_date"
-#define N_TO_DATE "to_date"
-#define N_TO_CHAR "to_char"
 #define N_TIMESTAMP "timestamp"
 #define N_MAKEDATE "makedate"
 #define N_GET_FORMAT "get_format"
 #define N_FORMAT "format"
-#define N_TO_CLOB "to_clob"
-#define N_TO_BLOB "to_blob"
-#define N_EMPTY_CLOB "empty_clob"
-#define N_EMPTY_BLOB "empty_blob"
-#define N_TO_TIMESTAMP "to_timestamp"
-#define N_TO_TIMESTAMP_TZ "to_timestamp_tz"
 #define N_TO_DAYS "to_days"
 #define N_DAY_OF_MONTH "dayofmonth"
 #define N_DAY "day"
@@ -594,7 +584,6 @@
 #define N_QUESTION_MARK "?"
 #define N_FIRST "first"
 #define N_SECOND "second"
-#define N_ZONE "zone"
 #define N_EXPR_INFO "expr_info"
 #define N_REL_ID "rel_id"
 #define N_BASE_COLUMN_ID "base_column_id"
@@ -716,7 +705,6 @@
 #define N_PAD "pad"
 #define N_COLUMN_CONV "column_conv"
 #define N_DEFAULT "default"
-#define N_TRUNC "trunc"
 #define N_ROUND "round"
 #define N_TO_BINARY_FLOAT "TO_BINARY_FLOAT"
 #define N_TO_BINARY_DOUBLE "TO_BINARY_DOUBLE"
@@ -784,7 +772,6 @@
 #define N_IS_IGNORE "is_ignore"
 
 #define N_PRIMARY "primary"
-#define N_PART_ID "part_id"
 #define N_INNER_GET "inner_get"
 #define N_MATCH_AGAINST "match_against"
 
@@ -879,61 +866,6 @@
 
 #define N_OUTER_JOIN_SYMBOL "(+)"
 
-//for Lable Security
-
-#define N_OLS_POLICY_CREATE               "ols_policy_create"
-#define N_OLS_POLICY_ALTER                "ols_policy_alter"
-#define N_OLS_POLICY_DROP                 "ols_policy_drop"
-#define N_OLS_POLICY_DISABLE              "ols_policy_disable"
-#define N_OLS_POLICY_ENABLE               "ols_policy_enable"
-
-#define N_OLS_LEVEL_CREATE                "ols_level_create"
-#define N_OLS_LEVEL_ALTER                 "ols_level_alter"
-#define N_OLS_LEVEL_DROP                  "ols_level_drop"
-
-#define N_OLS_COMPARMENT_CREATE           "ols_compartment_create"
-#define N_OLS_COMPARMENT_ALTER            "ols_compartment_alter"
-#define N_OLS_COMPARMENT_DROP             "ols_compartment_drop"
-
-#define N_OLS_GROUP_CREATE                "ols_group_create"
-#define N_OLS_GROUP_ALTER                 "ols_group_alter"
-#define N_OLS_GROUP_DROP                  "ols_group_drop"
-
-#define N_OLS_LABEL_CREATE                "ols_label_create"
-#define N_OLS_LABEL_ALTER                 "ols_label_alter"
-#define N_OLS_LABEL_DROP                  "ols_label_drop"
-
-#define N_OLS_TABLE_POLICY_APPLY          "ols_table_policy_apply"
-#define N_OLS_TABLE_POLICY_REMOVE         "ols_table_policy_remove"
-#define N_OLS_TABLE_POLICY_DISABLE        "ols_table_policy_disable"
-#define N_OLS_TABLE_POLICY_ENABLE         "ols_table_policy_enable"
-
-#define N_OLS_SCHEMA_POLICY_APPLY         "ols_schema_policy_apply"
-#define N_OLS_SCHEMA_POLICY_REMOVE        "ols_schema_policy_remove"
-#define N_OLS_SCHEMA_POLICY_DISABLE       "ols_schema_policy_disable"
-#define N_OLS_SCHEMA_POLICY_ENABLE        "ols_schema_policy_enable"
-
-#define N_OLS_USER_SET_LEVELS             "ols_user_set_levels"
-#define N_OLS_USER_SET_COMPARTMENTS       "ols_user_set_compartments"
-#define N_OLS_USER_SET_GROUPS             "ols_user_set_groups"
-#define N_OLS_USER_ADD_COMPARTMENTS       "ols_user_add_compartments"
-#define N_OLS_USER_ALTER_COMPARTMENTS     "ols_user_alter_compartments"
-#define N_OLS_USER_DROP_COMPARTMENTS      "ols_user_drop_compartments"
-#define N_OLS_USER_DROP_ALL_COMPARTMENTS  "ols_user_drop_all_compartments"
-
-#define N_OLS_LABEL_VALUE_CMP_LE          "ols_label_value_cmp_le"
-#define N_OLS_LABEL_VALUE_CHECK           "ols_label_value_check"
-#define N_OLS_LABEL_VALUE_TO_CHAR         "label_to_char"
-#define N_OLS_CHAR_TO_LABEL_VALUE         "char_to_label"
-
-#define N_OLS_SESSION_SET_LABEL               "ols_session_set_label"
-#define N_OLS_SESSION_SET_ROW_LABEL           "ols_session_set_row_label"
-#define N_OLS_SESSION_RESTORE_DEFAULT_LABEL   "ols_session_restore_default_label"
-#define N_OLS_SESSION_SAVE_DEFAULT_LABEL      "ols_session_savle_default_label"
-
-#define N_OLS_SESSION_LABEL                   "ols_session_label"
-#define N_OLS_SESSION_ROW_LABEL               "ols_session_row_label"
-
 #define N_VSIZE                             "vsize"
 #define N_ORAHASH                           "ora_hash"
 
@@ -963,11 +895,9 @@
 #define N_DBMS_CRYPTO_ENCRYPT               "dbms_crypto_encrypt"
 #define N_DBMS_CRYPTO_DECRYPT               "dbms_crypto_decrypt"
 
-#define N_TO_NCHAR                          "to_nchar"
 #define N_LNNVL                             "lnnvl"
 #define N_SET                               "set"
 #define N_CARDINALITY                       "cardinality"
-#define N_COLL_PRED                         "coll_pred"
 #define N_USER_CAN_ACCESS_OBJ               "user_can_access_obj"
 #define N_IS_MULTI_CONDITIONS_INSERT        "is_multi_conditions_insert"
 #define N_IS_MULTI_INSERT_FIRST             "is_multi_insert_first"
@@ -1077,8 +1007,6 @@
 #define N_EXTRACTVALUE                      "extractvalue"
 #define N_UPDATEXML                         "updatexml"
 #define N_NLS_INITCAP                       "nls_initcap"
-#define N_PRIV_SQL_UDT_CONSTRUCT            "_udt_construct"
-#define N_PRIV_UDT_ATTR_ACCESS              "_udt_attr_access"
 #define N_TEMP_TABLE_SSID                   "temp_table_ssid"
 #define N_PRIV_ST_NUMINTERIORRINGS          "_st_numinteriorrings"
 #define N_PRIV_ST_ISCOLLECTION              "_st_iscollection"

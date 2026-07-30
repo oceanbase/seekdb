@@ -1,6 +1,6 @@
 result_format: 4
 
-alter system flush plan cache global;
+alter system flush plan cache;
 set ob_trx_timeout = 1000000000;
 drop table if exists t1;
 drop table if exists t2;
@@ -113,7 +113,7 @@ select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statemen
 |         0 | A158DDE0D57BDFAE891772AFFAEC56C1 |
 +-----------+----------------------------------+
 commit;
-alter system flush plan cache global;
+alter system flush plan cache;
 
 begin;
 
@@ -194,7 +194,7 @@ select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statemen
 |         0 | 8466D82B68244F2141D406FBE7C08EFB |
 +-----------+----------------------------------+
 
-alter system flush plan cache global;
+alter system flush plan cache;
 select - '1' from dual;
 +-------+
 | - '1' |
@@ -506,7 +506,7 @@ select hit_count, sql_id from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statemen
 commit;
 
 // CASE#6: INT64_MIN
-alter system flush plan cache global;
+alter system flush plan cache;
 begin;
 
 select - 9223372036854775808 from dual;

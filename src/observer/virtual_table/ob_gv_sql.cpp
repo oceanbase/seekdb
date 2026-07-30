@@ -561,16 +561,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
       cells[i].set_int(mem_used);
       break;
     }
-    case share::ALL_VIRTUAL_PLAN_STAT_CDE::PL_CG_MEM_HOLD: {
-      if (!cache_stat_updated) {
-        cells[i].set_null();
-      } else if (NULL != pl_object) {
-        cells[i].set_int(pl_object->get_stat().pl_cg_mem_hold_);
-      } else {
-        cells[i].set_int(0);
-      }
-      break;
-    }
     case share::ALL_VIRTUAL_PLAN_STAT_CDE::EXECUTIONS: {
       if (!cache_stat_updated) {
         cells[i].set_null();
@@ -874,36 +864,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
       cells[i].set_lob_value(ObLongTextType, type_name.ptr(),
                              static_cast<int32_t>(type_name.length()));
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-      break;
-    }
-    case share::ALL_VIRTUAL_PLAN_STAT_CDE::ENABLE_BF_CACHE: {
-      if (!cache_stat_updated) {
-        cells[i].set_null();
-      } else if (cache_obj->is_sql_crsr()) {
-        cells[i].set_bool(plan->stat_.enable_bf_cache_);
-      } else {
-        cells[i].set_bool(false);
-      }
-      break;
-    }
-    case share::ALL_VIRTUAL_PLAN_STAT_CDE::BF_FILTER_CNT: {
-      if (!cache_stat_updated) {
-        cells[i].set_null();
-      } else if (cache_obj->is_sql_crsr()) {
-        cells[i].set_int(plan->stat_.bf_filter_cnt_);
-      } else {
-        cells[i].set_int(0);
-      }
-      break;
-    }
-    case share::ALL_VIRTUAL_PLAN_STAT_CDE::BF_ACCESS_CNT: {
-      if (!cache_stat_updated) {
-        cells[i].set_null();
-      } else if (cache_obj->is_sql_crsr()) {
-        cells[i].set_int(plan->stat_.bf_access_cnt_);
-      } else {
-        cells[i].set_int(0);
-      }
       break;
     }
     case share::ALL_VIRTUAL_PLAN_STAT_CDE::ENABLE_ROW_CACHE: {

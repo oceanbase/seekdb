@@ -188,7 +188,7 @@ int ObNumber::from_(const char *str, IAllocator &allocator, int16_t *precision, 
   int ret = OB_SUCCESS;
   int warning = OB_SUCCESS;
   int64_t length = (NULL == str) ? 0 : strlen(str);
-  ret = from_(str, length, allocator, warning, NULL, precision, scale, NULL, do_rounding);
+  ret = from_(str, length, allocator, warning, precision, scale, NULL, do_rounding);
   if (OB_SUCCESS == ret && OB_SUCCESS != warning) {
     ret = warning;
   }
@@ -442,7 +442,7 @@ int ObNumber::from_sci_(const char *str, const int64_t length, IAllocator &alloc
           set_zero();
         } else {
           int tmp_warning = OB_SUCCESS;
-          ret = from_(full_str, nth, allocator, tmp_warning, NULL, precision, scale, NULL, do_rounding);
+          ret = from_(full_str, nth, allocator, tmp_warning, precision, scale, NULL, do_rounding);
           if (OB_SUCC(ret) && OB_SUCCESS != warning) {
             warning = tmp_warning;
           }
@@ -450,13 +450,13 @@ int ObNumber::from_sci_(const char *str, const int64_t length, IAllocator &alloc
       }
     }
   } else {
-    ret = from_(str, length, allocator, warning, NULL, precision, scale, NULL, do_rounding);
+    ret = from_(str, length, allocator, warning, precision, scale, NULL, do_rounding);
   }
   return ret;
 }
 
 int ObNumber::from_v1_(const char *str, const int64_t length, IAllocator &allocator, int &warning,
-    ObNumberFmtModel *fmt, int16_t *precision, int16_t *scale, const lib::ObMemAttr *attr)
+    int16_t *precision, int16_t *scale, const lib::ObMemAttr *attr)
 {
   int ret = OB_SUCCESS;
   uint32_t digits[MAX_CALC_LEN];
@@ -466,7 +466,7 @@ int ObNumber::from_v1_(const char *str, const int64_t length, IAllocator &alloca
   if (OB_UNLIKELY(NULL == str || length <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid param", K(length), KP(str), K(ret));
-  } else if (OB_FAIL(nb.build(str, length, warning, fmt, precision, scale))) {
+  } else if (OB_FAIL(nb.build(str, length, warning, precision, scale))) {
     LIB_LOG(WARN, "number build from fail", K(ret), K(length), "str", ObString(length, str));
   } else if (OB_FAIL(nb.number_.round_scale_(FLOATING_SCALE, true))) {
     LIB_LOG(WARN, "round scale fail", K(ret), K(length), "str", ObString(length, str));
@@ -494,7 +494,7 @@ int ObNumber::from_v1_(const char *str, const int64_t length, IAllocator &alloca
 }
 
 int ObNumber::from_v2_(const char *str, const int64_t length, IAllocator &allocator, int &warning,
-    ObNumberFmtModel *fmt, int16_t *precision, int16_t *scale, const lib::ObMemAttr *attr, const bool do_rounding)
+    int16_t *precision, int16_t *scale, const lib::ObMemAttr *attr, const bool do_rounding)
 {
   int ret = OB_SUCCESS;
   uint32_t digits[MAX_CALC_LEN] = {};
@@ -504,9 +504,9 @@ int ObNumber::from_v2_(const char *str, const int64_t length, IAllocator &alloca
   if (OB_ISNULL(str) || OB_UNLIKELY(length <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid param", K(length), KP(str), K(ret));
-  } else if (OB_FAIL(nb.build_v2(str, length, warning, fmt, precision, scale))) {
+  } else if (OB_FAIL(nb.build_v2(str, length, warning, precision, scale))) {
     LIB_LOG(WARN, "number build from fail", K(ret), K(length), "str", ObString(length, str));
-  } else if (do_rounding && OB_FAIL(nb.number_.round_scale_v3_(FLOATING_SCALE, true, false))) {
+  } else if (do_rounding && OB_FAIL(nb.number_.round_scale_v3_(FLOATING_SCALE, true))) {
     _LIB_LOG(WARN, "round scale fail, ret=%d str=[%.*s]", ret, static_cast<int32_t>(length), str);
   } else if (OB_FAIL(exp_check_(nb.number_.get_desc()))) {
     LIB_LOG(WARN, "exponent precision check fail", K(nb.number_), K(ret));
@@ -675,10 +675,9 @@ int ObNumber::construct_digits_(const char *str, const int64_t start_idx,
 }
 
 int ObNumber::from_v3_(const char *str, const int64_t length, IAllocator &allocator, int &warning,
-    ObNumberFmtModel *fmt, int16_t *precision, int16_t *scale, const lib::ObMemAttr *attr, const bool do_rounding)
+    int16_t *precision, int16_t *scale, const lib::ObMemAttr *attr, const bool do_rounding)
 {
   int ret = OB_SUCCESS;
-  UNUSED(fmt);
   uint32_t digits[OB_CALC_BUFFER_SIZE] ={}; // Only save up to 72 significant digits, occupying 9 uint32s, with extra digits rounded
   bool negative = false;
   int64_t start_idx = -1;
@@ -719,7 +718,7 @@ int ObNumber::from_v3_(const char *str, const int64_t length, IAllocator &alloca
       MEMCPY(digits_, digits, d.len_ * sizeof(uint32_t));
 
       /* Step 6: normalize to 72 digits and check */
-      if (do_rounding && OB_FAIL(round_scale_v3_(FLOATING_SCALE, true, false))) {
+      if (do_rounding && OB_FAIL(round_scale_v3_(FLOATING_SCALE, true))) {
         LOG_WARN("round scale fail", K(ret));
       } else if (OB_FAIL(exp_check_(d_))) {
         LOG_WARN("exponent precision check fail", K(ret));
@@ -770,7 +769,7 @@ int ObNumber::from_v2_(const uint32_t desc, const ObCalcVector &vector, IAllocat
     if (OB_FAIL(normalize_(digits_, d.len_))) {
       ObCStringHelper helper;
       _OB_LOG(WARN, "normalize [%s] fail, ret=%d", helper.convert(*this), ret);
-    } else if (OB_FAIL(round_scale_v3_(FLOATING_SCALE, true, false))) {
+    } else if (OB_FAIL(round_scale_v3_(FLOATING_SCALE, true))) {
       LOG_WARN("round scale fail", K(ret), K(*this));
     } else if (OB_FAIL(exp_check_(d_))) {
       LOG_WARN("exponent precision check fail", K(ret), K(*this));
@@ -1069,7 +1068,7 @@ int ObNumber::check_and_round(const int64_t precision, const int64_t scale)
              || 0 >= d_.len_)) {
     ret = OB_NOT_INIT;
   } else if (INT64_MAX != precision
-             && OB_FAIL(round_scale_v3_(scale, false, false))) {
+             && OB_FAIL(round_scale_v3_(scale, false))) {
     // ObCStringHelper helper;
     //_OB_LOG(WARN, "Buffer overflow, %s", helper.convert(*this));
   } else if (INT64_MAX != precision
@@ -1428,7 +1427,6 @@ int ObNumber::round_scale_(const int64_t scale, const bool using_floating_scale)
 }
 
 int ObNumber::round_scale_v2_(const int64_t scale, const bool using_floating_scale,
-    const bool for_to_char,
     int16_t *res_precision/*NULL*/, int16_t *res_scale/*NULL*/)
 {
   static const uint64_t ROUND_POWS_DESC[] = {
@@ -1567,7 +1565,6 @@ int ObNumber::round_scale_v2_(const int64_t scale, const bool using_floating_sca
 
 
 int ObNumber::round_scale_v3_(const int64_t scale, const bool using_floating_scale,
-    const bool for_to_char,
     int16_t *res_precision/*NULL*/, int16_t *res_scale/*NULL*/)
 {
   static const uint64_t ROUND_POWS[] = {
@@ -1587,7 +1584,7 @@ int ObNumber::round_scale_v3_(const int64_t scale, const bool using_floating_sca
   if (is_zero()) {
     //do nothing
   } else {
-    LOG_DEBUG("before round_scale_v3_", KPC(this), K(scale), K(using_floating_scale), K(for_to_char));
+    LOG_DEBUG("before round_scale_v3_", KPC(this), K(scale), K(using_floating_scale));
     const int64_t digit_0_len = get_digit_len_v2(digits_[0]);
     const int64_t expr_value = get_decode_exp(d_);
     //xxx_length means xx digit array length
@@ -1716,7 +1713,7 @@ int ObNumber::round_scale_v3_(const int64_t scale, const bool using_floating_sca
       }
     }
   }
-  LOG_DEBUG("finish round_scale_v3_", KPC(this), K(scale), K(using_floating_scale), K(for_to_char));
+  LOG_DEBUG("finish round_scale_v3_", KPC(this), K(scale), K(using_floating_scale));
   return ret;
 }
 
@@ -3090,7 +3087,7 @@ int ObNumber::sin(ObNumber &out, ObIAllocator &allocator, const bool do_rounding
         }
         if (OB_SUCC(ret)) {
           if (do_rounding) {
-            if (OB_FAIL(tmp_out.round_scale_v3_(FLOATING_SCALE, true, false))) {
+            if (OB_FAIL(tmp_out.round_scale_v3_(FLOATING_SCALE, true))) {
               LOG_WARN("round scale fail", K(ret), K(tmp_out));
             }
           }
@@ -3269,7 +3266,7 @@ int ObNumber::cos(ObNumber &out, ObIAllocator &allocator, const bool do_rounding
           }
           if (OB_SUCC(ret)) {
             if (do_rounding) {
-              if (OB_FAIL(tmp_out.round_scale_v3_(FLOATING_SCALE, true, false))) {
+              if (OB_FAIL(tmp_out.round_scale_v3_(FLOATING_SCALE, true))) {
                 LOG_WARN("round scale fail", K(ret), K(tmp_out));
               }
             }
@@ -3334,7 +3331,7 @@ int ObNumber::tan(ObNumber &out, ObIAllocator &allocator, const bool do_rounding
       if (OB_FAIL(sin_out.div_v3(cos_out, tmp_out, local_alloc, OB_MAX_DECIMAL_DIGIT, false))) {
         LOG_WARN("sin/cos failed", K(sin_out), K(cos_out), K(ret));
       } else if (do_rounding) {
-        if (OB_FAIL(tmp_out.round_scale_v3_(FLOATING_SCALE, true, false))) {
+        if (OB_FAIL(tmp_out.round_scale_v3_(FLOATING_SCALE, true))) {
           LOG_WARN("tmp_out.round_scale_v3_() fail", K(ret), K(tmp_out));
         }
       }
@@ -3392,7 +3389,7 @@ int ObNumber::asin(ObNumber &value, ObIAllocator &allocator, const bool do_round
   }
 
   if (OB_SUCC(ret)) {
-    if (do_rounding && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true, false))) {
+    if (do_rounding && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
       LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;
@@ -3431,7 +3428,7 @@ int ObNumber::acos(ObNumber &value, ObIAllocator &allocator, const bool do_round
   }
 
   if (OB_SUCC(ret)) {
-    if (do_rounding && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true, false))) {
+    if (do_rounding && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
         LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;
@@ -3567,7 +3564,7 @@ int ObNumber::atan(ObNumber &value, ObIAllocator &allocator, const bool do_round
   }
 
   if (OB_SUCC(ret)) {
-    if (do_rounding && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true, false))) {
+    if (do_rounding && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
         LOG_WARN("round scale fail", K(ret), K(res));
     } else if (OB_FAIL(value.from(res, allocator))){
       LOG_WARN("value copy from res failed", K(ret), K(res));
@@ -3623,7 +3620,7 @@ int ObNumber::atan2(const ObNumber &other, ObNumber &value, ObIAllocator &alloca
   }
 
   if (OB_SUCC(ret)) {
-    if (do_rounding && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true, false))) {
+    if (do_rounding && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
       LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;
@@ -3872,7 +3869,7 @@ int ObNumber::add_v2_(const ObNumber &other, ObNumber &value, IAllocator &alloca
   }
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(res.round_scale_v2_(FLOATING_SCALE, true, false))) {
+    if (OB_FAIL(res.round_scale_v2_(FLOATING_SCALE, true))) {
       LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;
@@ -4010,7 +4007,7 @@ int ObNumber::add_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 
   if (OB_SUCC(ret)) {
     if (do_rounding && res.need_round_after_arithmetic()
-        && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true, false))) {
+        && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
       LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;
@@ -4127,7 +4124,7 @@ int ObNumber::sub_v2_(const ObNumber &other, ObNumber &value, IAllocator &alloca
   }
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(res.round_scale_v2_(FLOATING_SCALE, true, false))) {
+    if (OB_FAIL(res.round_scale_v2_(FLOATING_SCALE, true))) {
       LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;
@@ -4301,7 +4298,7 @@ int ObNumber::sub_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 
   if (OB_SUCC(ret)) {
     if (do_rounding && res.need_round_after_arithmetic()
-        && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true, false))) {
+        && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
       LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;
@@ -4522,7 +4519,7 @@ int ObNumber::mul_v2_(const ObNumber &other, ObNumber &value, IAllocator &alloca
   }
   if (OB_SUCC(ret)) {
     if (do_rounding) {
-      if (OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true, false))) {
+      if (OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
         LOG_WARN("round scale fail", K(ret), K(res));
       } else {
         value = res;
@@ -4650,7 +4647,7 @@ int ObNumber::mul_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 
   if (OB_SUCC(ret)) {
     if (do_rounding && res.need_round_after_arithmetic()
-        && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true, false))) {
+        && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
       LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;
@@ -4788,7 +4785,7 @@ int ObNumber::div_v2_(const ObNumber &other, ObNumber &value, IAllocator &alloca
   }
   if (OB_SUCC(ret)) {
     if (do_rounding) {
-      if (OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true, false))) {
+      if (OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
         LOG_WARN("round scale fail", K(ret), K(res));
       } else {
         value = res;
@@ -4871,7 +4868,7 @@ int ObNumber::div_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
   if (OB_SUCC(ret)) {
     LOG_DEBUG("round scale before", K(res));
     if (do_rounding && res.need_round_after_arithmetic()
-        && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true, false))) {
+        && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
       LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;
@@ -5276,7 +5273,7 @@ int ObNumber::sqrt(ObNumber &value, ObIAllocator &allocator, const bool do_round
 
   if (OB_SUCC(ret)) {
     if (do_rounding && OB_FAIL(result.round_scale_v3_(FLOATING_SCALE,
-                                                      true, false))) {
+                                                      true))) {
       LOG_WARN("result.round_scale_v3_() fail", K(ret), K(result));
     } else {
       value = result;
@@ -5452,7 +5449,7 @@ int ObNumber::ln(ObNumber &value, ObIAllocator &allocator, const bool do_roundin
   if (OB_SUCC(ret)) {
     if (do_rounding) {
       if (OB_FAIL(result.round_scale_v3_(FLOATING_SCALE,
-                                         true, false))) {
+                                         true))) {
         LOG_WARN("result.round_scale_v3_() fail", K(ret), K(result));
       } else {
         value = result;
@@ -5603,7 +5600,7 @@ int ObNumber::e_power(ObNumber &value, ObIAllocator &allocator, const bool do_ro
 
   if (OB_SUCC(ret)) {
     if (do_rounding) {
-      if (OB_FAIL(result.round_scale_v3_(FLOATING_SCALE, true, false))) {
+      if (OB_FAIL(result.round_scale_v3_(FLOATING_SCALE, true))) {
         LOG_WARN("result.round_scale_v3_() fail", K(ret), K(result));
       }
     }
@@ -5742,7 +5739,7 @@ int ObNumber::power(const int64_t exponent, ObNumber &value,
 
   if (OB_SUCC(ret)) {
     if (do_rounding) {
-      if (OB_FAIL(result.round_scale_v3_(FLOATING_SCALE, true, false))) {
+      if (OB_FAIL(result.round_scale_v3_(FLOATING_SCALE, true))) {
         LOG_WARN("result.round_scale_v3_() fail", K(ret), K(result));
       }
     }
@@ -5798,7 +5795,7 @@ int ObNumber::log(const ObNumber &base, ObNumber &value,
 
   if (OB_SUCC(ret)) {
     if (do_rounding) {
-      if (OB_FAIL(result.round_scale_v3_(FLOATING_SCALE, true, false))) {
+      if (OB_FAIL(result.round_scale_v3_(FLOATING_SCALE, true))) {
         LOG_WARN("result.round_scale_v3_() fail", K(ret), K(result));
       }
     }
@@ -6182,7 +6179,6 @@ void ObNumberBuilder::reset()
 int ObNumberBuilder::build(const char *str,
                            int64_t length,
                            int &warning,
-                           ObNumberFmtModel *fmt,
                            int16_t *precision,
                            int16_t *scale)
 {
@@ -6194,32 +6190,15 @@ int ObNumberBuilder::build(const char *str,
   int64_t decimal_start = -1;
   bool integer_zero = false;
   bool decimal_zero = false;
-  char new_str[ObNumber::MAX_TOTAL_SCALE];
-  int64_t comma_cnt = 0;
   if (OB_ISNULL(number_.get_digits())) {
     ret = OB_ERR_UNEXPECTED;
     LIB_LOG(WARN, "digits_ should not be null when this func is invoked", K(ret));
-  } else {
-    if (OB_ISNULL(fmt)) {
-      if (OB_FAIL(find_point_(str, length, integer_start, integer_end, decimal_start,
-          negative, integer_zero, decimal_zero, warning))) {
-        LIB_LOG(WARN, "lookup fail", K(ret), K(length), "str", ObString(length, str));
-      }
-    } else {
-      if (OB_FAIL(find_point_(str, fmt, &new_str[0], length, integer_start, integer_end, decimal_start,
-          negative, integer_zero, decimal_zero, comma_cnt))) {
-        LIB_LOG(WARN, "lookup fail ", K(ret), "str", ObString(length, str), KCSTRING(fmt->fmt_str_), K(fmt->has_b_), K(fmt->has_currency_),
-            K(fmt->has_d_), K(fmt->has_sign_));
-      } else {
-        LIB_LOG(DEBUG, "lookup success with fmt", K(ret), KCSTRING(fmt->fmt_str_), K(fmt->has_b_), K(fmt->has_currency_),
-            K(fmt->has_d_), K(fmt->has_sign_), KCSTRING(new_str), K(length), K(integer_start), K(integer_end),
-            K(decimal_start), K(negative), K(integer_zero), K(decimal_zero));
-        str = &new_str[0];
-      }
-    }
+  } else if (OB_FAIL(find_point_(str, length, integer_start, integer_end, decimal_start,
+      negative, integer_zero, decimal_zero, warning))) {
+    LIB_LOG(WARN, "lookup fail", K(ret), K(length), "str", ObString(length, str));
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(build_integer_(str, integer_start, integer_end, decimal_zero, fmt))) {
+    if (OB_FAIL(build_integer_(str, integer_start, integer_end, decimal_zero))) {
       LIB_LOG(WARN, "build integer fail", K(ret), K(length), "str", ObString(length, str), K(integer_start), K(integer_end), K(decimal_zero));
     } else if (OB_FAIL(build_decimal_(str, length, decimal_start, integer_zero))) {
       LIB_LOG(WARN, "build decimal fail",  K(ret), K(length), "str", ObString(length, str), K(decimal_start), K(integer_zero));
@@ -6264,7 +6243,7 @@ int ObNumberBuilder::build(const char *str,
         if (*scale > ObNumber::FLOATING_SCALE) {
           *scale = ObNumber::FLOATING_SCALE;
         }
-        *precision = static_cast<int16_t>(integer_end - integer_start + 1 - comma_cnt  + *scale);
+        *precision = static_cast<int16_t>(integer_end - integer_start + 1 + *scale);
       }
       ret = number_.normalize_(number_.get_digits(), number_.d_.len_);
     }
@@ -6276,7 +6255,6 @@ int ObNumberBuilder::build(const char *str,
 int ObNumberBuilder::build_v2(const char *str,
                            int64_t length,
                            int &warning,
-                           ObNumberFmtModel *fmt,
                            int16_t *precision,
                            int16_t *scale)
 {
@@ -6288,33 +6266,15 @@ int ObNumberBuilder::build_v2(const char *str,
   int64_t decimal_start = -1;
   bool integer_zero = false;
   bool decimal_zero = false;
-  char new_str[ObNumber::MAX_TOTAL_SCALE];
-  int64_t comma_cnt = 0;
   if (OB_ISNULL(number_.get_digits())) {
     ret = OB_ERR_UNEXPECTED;
     LIB_LOG(WARN, "digits_ should not be null when this func is invoked", K(ret));
-  } else {
-    if (OB_ISNULL(fmt)) {
-      if (OB_FAIL(find_point_(str, length, integer_start, integer_end, decimal_start,
-                        negative, integer_zero, decimal_zero, warning))) {
-        LIB_LOG(WARN, "lookup fail", K(ret), K(length), "str", ObString(length, str));
-      }
-    } else {
-      //used for to_number(format)
-      if (OB_FAIL(find_point_(str, fmt, &new_str[0], length, integer_start, integer_end, decimal_start,
-          negative, integer_zero, decimal_zero, comma_cnt))) {
-        LIB_LOG(WARN, "lookup fail ", K(ret), "str", ObString(length, str), KCSTRING(fmt->fmt_str_), K(fmt->has_b_), K(fmt->has_currency_),
-            K(fmt->has_d_), K(fmt->has_sign_), K(fmt->has_x_));
-      } else {
-        LIB_LOG(DEBUG, "lookup success with fmt", K(ret), KCSTRING(fmt->fmt_str_), K(fmt->has_b_), K(fmt->has_currency_),
-            K(fmt->has_d_), K(fmt->has_sign_), K(fmt->has_x_), KCSTRING(new_str), K(length), K(integer_start), K(integer_end),
-            K(decimal_start), K(negative), K(integer_zero), K(decimal_zero));
-        str = &new_str[0];
-      }
-    }
+  } else if (OB_FAIL(find_point_(str, length, integer_start, integer_end, decimal_start,
+                    negative, integer_zero, decimal_zero, warning))) {
+    LIB_LOG(WARN, "lookup fail", K(ret), K(length), "str", ObString(length, str));
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(build_integer_v2_(str, integer_start, integer_end, decimal_zero, integer_zero, warning, fmt))) {
+    if (OB_FAIL(build_integer_v2_(str, integer_start, integer_end, decimal_zero, integer_zero, warning))) {
       LIB_LOG(WARN, "build integer fail", K(ret), K(length), "str", ObString(length, str), K(integer_start), K(integer_end), K(decimal_zero), K(integer_zero));
     } else if (OB_FAIL(build_decimal_v2_(str, length, decimal_start, integer_zero, decimal_zero, warning))) {
       LIB_LOG(WARN, "build decimal fail",  K(ret), K(length), "str", ObString(length, str), K(decimal_start), K(integer_zero), K(decimal_zero));
@@ -6342,7 +6302,7 @@ int ObNumberBuilder::build_v2(const char *str,
         if (*scale > ObNumber::FLOATING_SCALE) {
           *scale = ObNumber::FLOATING_SCALE;
         }
-        *precision = static_cast<int16_t>(integer_end - integer_start + 1 - comma_cnt  + *scale);
+        *precision = static_cast<int16_t>(integer_end - integer_start + 1 + *scale);
       }
       ret = number_.normalize_v3_(false);
     }
@@ -6427,352 +6387,7 @@ int ObNumberBuilder::build_integer_v2_(const char *str, const int64_t integer_st
   return ret;
 }
 
-int ObNumberBuilder::hex_to_num_(char c, int32_t &val) const
-{
-  int ret = OB_SUCCESS;
-
-  if (c >= '0' && c <= '9') {
-    val = c - '0';
-  } else if (c >= 'a' && c <= 'z') {
-    val = c - 'a' + 10;
-  } else if (c >= 'A' && c <= 'Z') {
-    val = c - 'A' + 10;
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("bad hexadecimal character", K(ret));
-  }
-  return ret;
-}
-
-int ObNumberBuilder::multiply_(int32_t multiplier, char *str, int32_t &len) const
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_ISNULL(str)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_ERROR("the pointer is null");
-  } else if (len >= ObNumber::MAX_TOTAL_SCALE) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_ERROR("str exceeds the max length");
-  } else {
-    int32_t carry = 0;
-    int32_t i = len;
-    int32_t tmp_str_idx = 0;
-    char tmp_str[ObNumber::MAX_TOTAL_SCALE] = {0};
-    while (OB_SUCC(ret) && --i >= 0) {
-      int val = 0;
-      if (OB_FAIL(hex_to_num_(str[i], val))) {
-        LOG_ERROR("failed to hex_to_num_", K(ret));
-      } else {
-        val = val * multiplier + carry;
-        carry = std::floor(val / 10);
-        tmp_str[tmp_str_idx++] = (val % 10) + '0';
-      }
-    }
-    if (OB_SUCC(ret)) {
-      while (carry > 0) {
-        tmp_str[tmp_str_idx++] = (carry % 10) + '0';
-        carry = std::floor(carry / 10);
-      }
-      // reverse tmp str
-      len = 0;
-      i = --tmp_str_idx;
-      for (; i >= 0; --i) {
-        str[len++] = tmp_str[i];
-      }
-    }
-  }
-  return ret;
-}
-
-int ObNumberBuilder::add_hex_str_(const char *str1, int32_t str1_len,
-                                  char *str2, int32_t &str2_len) const
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_ISNULL(str1)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_ERROR("the pointer is null");
-  } else if (str1_len >= ObNumber::MAX_TOTAL_SCALE) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_ERROR("str exceeds the max length");
-  } else {
-    int32_t carry = 0;
-    int32_t i = 0;
-    int val = 0;
-    int32_t tmp_str_idx = 0;
-    char tmp_str[ObNumber::MAX_TOTAL_SCALE] = {0};
-    while (OB_SUCC(ret) && i < str1_len && i < str2_len) {
-      int32_t val1 = 0;
-      int32_t val2 = 0;
-      if (OB_FAIL(hex_to_num_(str1[str1_len - i - 1], val1))
-         || OB_FAIL(hex_to_num_(str2[str2_len - i - 1], val2))) {
-        LOG_ERROR("failed to hex_to_num_", K(ret));
-      } else {
-        val = val1 + val2 + carry;
-        carry = std::floor(val / 10);
-        tmp_str[tmp_str_idx++] = (val % 10) + '0';
-        i++;
-      }
-    }
-    while(OB_SUCC(ret) && i < str1_len) {
-      int32_t val1 = 0;
-      if (OB_FAIL(hex_to_num_(str1[str1_len - i - 1], val1))) {
-        LOG_ERROR("failed to hex_to_num_", K(ret));
-      } else {
-        val = val1 + carry;
-        carry = std::floor(val / 10);
-        tmp_str[tmp_str_idx++] = (val % 10) + '0';
-        i++;
-      }
-    }
-    while(OB_SUCC(ret) && i < str2_len) {
-      int32_t val2 = 0;
-      if (OB_FAIL(hex_to_num_(str2[str2_len - i - 1], val2))) {
-        LOG_ERROR("failed to hex_to_num_", K(ret));
-      } else {
-        val = val2 + carry;
-        carry = std::floor(val / 10);
-        tmp_str[tmp_str_idx++] = (val % 10) + '0';
-        i++;
-      }
-    }
-    if (OB_SUCC(ret)) {
-      while (carry > 0) {
-        tmp_str[tmp_str_idx++] = (carry % 10) + '0';
-        carry = std::floor(carry / 10);
-      }
-      // reverse tmp str
-      str2_len = 0;
-      i = --tmp_str_idx;
-      for (; i >= 0; --i) {
-        str2[str2_len++] = tmp_str[i];
-      }
-    }
-  }
-  return ret;
-}
-
-int ObNumberBuilder::hex_to_dec_(const char *hex_str, int32_t hex_len,
-                                 char *dec_str, int32_t &dec_len) const
-{
-  int ret = OB_SUCCESS;
-  int32_t i = 0;
-  char str[ObNumber::MAX_TOTAL_SCALE] = {0};
-  while (OB_SUCC(ret) && i < hex_len) {
-    int32_t j = i;
-    str[0] = hex_str[hex_len - 1 - i];
-    int32_t str_len = 1;
-    while (OB_SUCC(ret) && j--) {
-      if (OB_FAIL(multiply_(16, str, str_len))) {
-        LOG_WARN("failed to multiply_", K(ret));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      ret = add_hex_str_(str, str_len, dec_str, dec_len);
-      i++;
-    }
-  }
-
-  return ret;
-}
-
-int ObNumberBuilder::build_hex_integer_(const char *str, const int64_t integer_start,
-                                        const int64_t integer_end, const bool reduce_zero,
-                                        ObNumberFmtModel * fmt)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(fmt)) {
-    ret = build_integer_(str, integer_start, integer_end, reduce_zero);
-  } else {
-    // the maximum length of to_number(123, 'xxx') format is 63
-    const int32_t MAX_FORMAT_LEN = 64;
-    int64_t c_p = fmt->fmt_len_ - 1;
-    ib_.reset();
-    if (OB_UNLIKELY(c_p >= MAX_FORMAT_LEN)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_ERROR("the format exceeds the max length");
-    } else if (OB_UNLIKELY(integer_start <= integer_end && NULL == str)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_ERROR("the pointer is null");
-    } else if (integer_start >= 0 && integer_end >= 0) {
-      int32_t new_len = 0;
-      bool digit_appeared = false;
-      int64_t i = integer_start;
-      char hex_str[ObNumber::MAX_TOTAL_SCALE] = {0};
-      char dec_str[ObNumber::MAX_TOTAL_SCALE] = {0};
-      for (; i <= integer_end && c_p >= 0; ++i) {
-        char c = str[i];
-        switch(c) {
-          case ',':
-            /* do nothing */
-            break;
-          case '0':
-            if (!digit_appeared) {
-              /* do nothing */
-            } else {
-              hex_str[new_len++] = c;
-              --c_p;
-            }
-            break;
-#ifdef _WIN32
-          case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
-          case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
-#else
-          case 'a'...'f':
-          case 'A'...'F':
-#endif
-          case '1':
-          case '2':
-          case '3':
-          case '4':
-          case '5':
-          case '6':
-          case '7':
-          case '8':
-          case '9':
-            digit_appeared = true;
-            hex_str[new_len++] = c;
-            --c_p;
-            break;
-          default:
-            ret = OB_INVALID_NUMERIC;
-            LOG_WARN("ObNumber got str error: got ", K(ret), K(c));
-            break;
-        }
-      }
-      if (i < integer_end) {
-        ret = OB_INVALID_NUMERIC;
-        LOG_WARN("integer part is longer than fmt str", K(ret), K(i), K(c_p));
-      }
-      int32_t dec_len = 0;
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(hex_to_dec_(hex_str, new_len, dec_str, dec_len))) {
-        LOG_WARN("failed to hex_to_dec", K(ret));
-      }
-      i = dec_len - 1;
-      for(; i >= 0; --i) {
-        char c = dec_str[i];
-        if (OB_FAIL(ib_.push((uint8_t)(c - '0'), reduce_zero))) {
-          LOG_WARN("push to integer builder fail", K(ret), K(c));
-          break;
-        }
-      }
-    } else { /* Do nothing */ }
-  }
-  return ret;
-}
-
-int ObNumberBuilder::build_integer_(const char *str, const int64_t integer_start,
-                                    const int64_t integer_end, const bool reduce_zero,
-                                    ObNumberFmtModel * fmt)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(fmt)) {
-    ret = build_integer_(str, integer_start, integer_end, reduce_zero);
-  } else {
-    ib_.reset();
-    int64_t skiped_zero_counter = 0;
-    if (OB_UNLIKELY(integer_start <= integer_end && NULL == str)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_ERROR("the pointer is null");
-    } else if (integer_start >= 0 && integer_end >= 0) {
-      int64_t c_p = fmt->fmt_len_ - 1;
-      char* fmt_str = fmt->fmt_str_;
-      bool got_comma_in_fmt = false;
-      bool pass_first_comma = false;
-      if (fmt->dc_position_ >= 0) {
-        c_p = fmt->dc_position_ - 1;
-      }
-      //comma:       4   32  1        4   32
-      //to_number('76,669,,83,5', '999,999,,999')=>76669835
-      //digit:     81 654  32 1    987 654  321
-      //check from right to left, before comma appears at fmt str for the first time, all commas in number_str can be ignored
-      //after the first appearance, commas in number_str must match with the fmt str
-      //so as the upper case, comma 1 can be ignored, comma 2\3\4 are match with fmt str
-      int64_t i = integer_end;
-      for (; i >= integer_start && c_p >= 0; --i) {
-        char c = str[i];
-        if ('0' == c) {
-          ++skiped_zero_counter;
-          --c_p;
-          if (got_comma_in_fmt && !pass_first_comma) {
-            pass_first_comma = true;
-          }
-          continue;
-        } else if (',' == c) {
-          if (pass_first_comma && ',' != fmt_str[c_p]) {
-            ret = OB_INVALID_NUMERIC;
-            LOG_WARN("comma(s) not match", K(ret), K(c_p), K(i), K(fmt_str[c_p]));
-            break;
-          } else if (',' == fmt_str[c_p]) {
-            got_comma_in_fmt = true;
-            --c_p;
-          }
-//          LOG_DEBUG("ignore comma", K(ret), K(c_p), K(i), K(fmt_str[c_p]));
-          continue;
-        } else if (',' == fmt_str[c_p]) {
-          ret = OB_INVALID_NUMERIC;
-          LOG_WARN("got error during build integer", K(ret), K(i), K(fmt_str[c_p]), K(c_p));
-          break;
-        } else {
-          if (got_comma_in_fmt && !pass_first_comma) {
-            pass_first_comma = true;
-          }
-          for (int64_t j = 0; j < skiped_zero_counter; ++j) {
-            if (OB_FAIL(ib_.push(0, reduce_zero))) {
-              LOG_WARN("push to integer builder fail", K(ret), K(j));
-              break;
-            }
-          }
-          if (OB_FAIL(ret)) {
-            break;
-          }
-          skiped_zero_counter = 0;
-          --c_p;
-        }
-        if (OB_FAIL(ib_.push((uint8_t)(c - '0'), reduce_zero))) {
-          LOG_WARN("push to integer builder fail", K(ret), K(c));
-          break;
-        }
-      }
-      /* fmt 0: there must be a digit that matches with the 0 */
-      if (c_p >= 0) {
-        while(c_p >= 0) {
-          if (fmt_str[c_p] == '0') {
-            ret = OB_INVALID_NUMERIC;
-            LOG_WARN("there has no digit that matches the 0(s) in the fmt str",
-                K(ret), K(i), K(c_p));
-            break;
-          }
-          c_p--;
-        }
-      }
-      if (i >= integer_start) {
-        ret = OB_INVALID_NUMERIC;
-        LOG_WARN("integer part is longer than fmt str", K(ret), K(i), K(c_p));
-      }
-    } else { /* Do nothing */ }
-  }
-  return ret;
-}
-
-int ObNumberBuilder::build_integer_v2_(const char *str, const int64_t integer_start,
-    const int64_t integer_end, const bool reduce_zero, const bool integer_zero,
-    int &warning, ObNumberFmtModel * fmt)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(fmt)) {
-    ret = build_integer_v2_(str, integer_start, integer_end, reduce_zero, integer_zero, warning);
-  } else if (fmt->has_x_) {
-    ret = build_hex_integer_(str, integer_start, integer_end, reduce_zero, fmt);
-  } else {
-    ret = build_integer_(str, integer_start, integer_end, reduce_zero, fmt);
-  }
-  return ret;
-}
-
-int ObNumberBuilder::build_decimal_(const char *str, const int64_t length,
+ int ObNumberBuilder::build_decimal_(const char *str, const int64_t length,
                                     const int64_t decimal_start, const bool reduce_zero)
 {
   int ret = OB_SUCCESS;
@@ -7034,201 +6649,6 @@ int ObNumberBuilder::find_point_v2_(
   }
   return ret;
 }
-
-int ObNumberBuilder::find_point_(
-    const char *str,
-    ObNumberFmtModel *fmt,
-    char* new_str,
-    int64_t &length,
-    int64_t &integer_start,
-    int64_t &integer_end,
-    int64_t &decimal_start,
-    bool &negative,
-    bool &integer_zero,
-    bool &decimal_zero,
-    int64_t &comma_cnt)
-{
-  int ret = OB_SUCCESS;
-  int64_t i_integer_start = -2;
-  int64_t dot_idx = -1;
-  bool b_negative = false;
-  bool b_integer_zero = true;
-  bool b_decimal_zero = true;
-  bool sign_appeared = false;
-  bool digit_appeared = false;
-  bool dot_appeared = false;
-  bool dollar_appeared = false;
-  int64_t heading_space = 0;
-  int64_t trailing_space = 0;
-  int64_t i = 0;
-  int64_t new_len = 0;
-  int64_t b_comma_cnt = 0;
-  if (OB_ISNULL(str)) {
-    ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(WARN, "the str pointer is null", K(ret));
-  } else {
-    for (i = 0; i < length && isspace(str[i]); ++i);
-    heading_space = i;
-    for (; i + 1 < length && isspace(str[length - 1]); --length, ++trailing_space);
-
-    if (OB_UNLIKELY(i == length)) {
-      //to_number('     ', '9B9.9') => 0
-      if (!fmt->has_b_ || fmt->has_currency_ || fmt->has_sign_
-          || heading_space + trailing_space != fmt->fmt_len_ + 1) {
-        ret = OB_INVALID_NUMERIC;
-        LIB_LOG(WARN, "ObNumber got format error", K(ret), K(fmt->has_b_), K(heading_space), K(trailing_space), K(fmt->fmt_len_));
-      } else {
-        new_str[0] = '0';
-        digit_appeared = true;
-        dot_idx = 0;
-        length = 1;
-        i = 1;
-        LIB_LOG(WARN, "ObNumber format:cast spaces to zero", K(ret));
-      }
-    } else {
-      for (; OB_SUCCESS == ret && i < length; ++i) {
-        char c = str[i];
-        switch (c) {
-          case '-':
-          case '+':
-            if (sign_appeared
-                || ((!fmt->has_sign_ || fmt->sign_position_ == FmtFirst) && (digit_appeared || dot_appeared))
-                || (fmt->sign_position_ == FmtLast && (i != (length - 1)))) {
-              ret = OB_INVALID_NUMERIC;
-              LIB_LOG(WARN, "ObNumber got format error", K(ret), K(fmt->sign_position_),
-                  K(digit_appeared), K(dot_appeared), K(i));
-            } else {
-              if ('-' == c) {
-                b_negative = true;
-              } else if (!fmt->has_sign_) {
-                ret = OB_INVALID_NUMERIC;
-                LIB_LOG(WARN, "ObNumber got format error:no sign in fmt str, but got '+'", K(ret));
-              }
-              sign_appeared = true;
-            }
-            break;
-#ifdef _WIN32
-          case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
-          case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
-#else
-          case 'a'...'f':
-          case 'A'...'F':
-#endif
-            if (!fmt->has_x_) {
-              ret = OB_INVALID_NUMERIC;
-              LIB_LOG(WARN, "ObNumber got format error: got ", K(ret), K(c));
-            }
-            /* no break. */
-          case '1':
-          case '2':
-          case '3':
-          case '4':
-          case '5':
-          case '6':
-          case '7':
-          case '8':
-          case '9':
-            if (!dot_appeared) {
-              b_integer_zero = false;
-            } else {
-              b_decimal_zero = false;
-            }
-            /* no break. */
-          case '0':
-            if (-2 == i_integer_start) {
-              i_integer_start = new_len;
-            }
-            digit_appeared = true;
-            new_str[new_len++] = c;
-            break;
-          case '.':
-            if (dot_appeared) {
-              ret = OB_INVALID_NUMERIC;
-              LIB_LOG(WARN, "ObNumber got format error:dot appeared more than one time");
-            } else {
-              if (!digit_appeared) {
-                //".95" means "0.95"
-                // i_integer_start and i_integer_end both will be -1
-                i_integer_start = -1;
-              }
-              dot_appeared = true;
-              dot_idx = new_len;
-              new_str[new_len++] = c;
-            }
-            break;
-          case ',':
-            if (dot_appeared) {
-              ret = OB_INVALID_NUMERIC;
-              LIB_LOG(WARN, "ObNumber got format error:comma appears at decimal part");
-            } else if (fmt->has_comma_) {
-              new_str[new_len++] = ',';
-              ++b_comma_cnt;
-            } else {
-              //ignore comma
-            }
-            break;
-          case '$':
-            if (dollar_appeared || dot_appeared || digit_appeared) {
-              ret = OB_INVALID_NUMERIC;
-              LIB_LOG(WARN, "ObNumber got format error:$ can only be the first valid character");
-            } else {
-              dollar_appeared = true;
-            }
-            break;
-          default:
-            ret = OB_INVALID_NUMERIC;
-            LIB_LOG(WARN, "ObNumber got format error: got ", K(ret), K(c));
-            break;
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (!digit_appeared && (dollar_appeared || sign_appeared)) {
-        ret = OB_INVALID_NUMERIC;
-        LIB_LOG(WARN, "ObNumber got error according to fmt ", K(ret), K(digit_appeared),
-            K(dollar_appeared));
-      } else if ((fmt->has_sign_ && !sign_appeared)
-                 || (fmt->has_currency_ && !dollar_appeared)) {
-        ret = OB_INVALID_NUMERIC;
-        LIB_LOG(WARN, "ObNumber got error according to fmt", K(ret), K(fmt->has_sign_),
-            K(sign_appeared), K(fmt->has_currency_), K(dollar_appeared));
-      } else if (fmt->has_x_ && (b_negative || dot_appeared)) {
-        ret = OB_INVALID_NUMERIC;
-        LIB_LOG(WARN, "ObNumber got error according to fmt ", K(ret), K(dot_appeared),
-            K(fmt->has_x_));
-      } else {
-        if (!dot_appeared) {
-          dot_idx = new_len;
-        }
-        negative = b_negative;
-        integer_zero = b_integer_zero;
-        decimal_zero = b_decimal_zero;
-        integer_start = i_integer_start;
-        integer_end   = dot_idx - 1;
-        decimal_start = dot_idx + 1;
-        comma_cnt = b_comma_cnt;
-        //to_number('12.34', '9.99') => error
-        //to_number('1.32', '9999.9') => error
-        //to_number('1.32', '9999.999') => 1.32
-        if (((fmt->dc_position_ > 0) && ((integer_end - integer_start + 1 - comma_cnt) > fmt->dc_position_))
-            || (fmt->has_x_ && new_len > fmt->fmt_len_)
-            || (dot_appeared && ((new_len - decimal_start) >
-                    (fmt->dc_position_ > 0 ? (fmt->fmt_len_ - fmt->dc_position_ - 1) : 0)))) {
-          LIB_LOG(WARN, "ObNumber got error according to fmt", K(integer_end), K(integer_start),
-              K(fmt->dc_position_), K(dot_appeared), K(new_len), K(decimal_start),
-              K(fmt->fmt_len_), K(fmt->dc_position_), K(comma_cnt));
-          ret = OB_INVALID_NUMERIC;
-        }
-        LIB_LOG(DEBUG, "ObNumber process fmt success", KCSTRING(new_str), K(length), K(new_len),
-            K(dot_appeared));
-        length = new_len;
-      }
-    }
-  }
-  return ret;
-}
-
-
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 

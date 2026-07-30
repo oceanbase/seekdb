@@ -539,14 +539,9 @@ TEST_F(TestSSTableMacroInfo, test_huge_block_ids)
   ASSERT_EQ(1, sstable_macro_info.other_block_count_);
   ASSERT_EQ(0, sstable_macro_info.linked_block_count_);
 
-  ObTabletID tablet_id(200001); // fake
-  ObSSTableLinkBlockWriteInfo link_write_info(1000/*macro_start_seq*/);
   ObObjectsWriteCtx linked_block_write_ctx;
   ObSArray<ObObjectsWriteCtx> total_ctxs;
-  ASSERT_EQ(OB_SUCCESS, sstable_macro_info.persist_block_ids(tablet_id,
-                                                              0, // snapshot_version
-                                                              allocator_,
-                                                              &link_write_info,
+  ASSERT_EQ(OB_SUCCESS, sstable_macro_info.persist_block_ids(allocator_,
                                                               linked_block_write_ctx));
   ASSERT_EQ(nullptr, sstable_macro_info.data_block_ids_);
   ASSERT_EQ(nullptr, sstable_macro_info.other_block_ids_);
@@ -619,10 +614,6 @@ TEST_F(TestSSTableMeta, test_common_sstable_persister_linked_block)
 
   ASSERT_EQ(OB_SUCCESS, sstable.persist_linked_block_if_need(
                                   allocator_,
-                                  tablet_id,
-                                  snapshot_version,
-                                  nullptr,
-                                  macro_start_seq,
                                   linked_block_write_ctx));
   ASSERT_NE(nullptr, sstable_macro_info.data_block_ids_);
   ASSERT_NE(nullptr, sstable_macro_info.other_block_ids_);
@@ -634,10 +625,6 @@ TEST_F(TestSSTableMeta, test_common_sstable_persister_linked_block)
   // Idempotent
   ASSERT_EQ(OB_SUCCESS, sstable.persist_linked_block_if_need(
                                   allocator_,
-                                  tablet_id,
-                                  snapshot_version,
-                                  nullptr,
-                                  macro_start_seq,
                                   linked_block_write_ctx));
   ASSERT_NE(nullptr, sstable_macro_info.data_block_ids_);
   ASSERT_NE(nullptr, sstable_macro_info.other_block_ids_);
@@ -665,10 +652,6 @@ TEST_F(TestSSTableMeta, test_common_sstable_persister_linked_block)
 
   ASSERT_EQ(OB_SUCCESS, tmp_sstable.persist_linked_block_if_need(
                                   allocator_,
-                                  tablet_id,
-                                  snapshot_version,
-                                  nullptr,
-                                  macro_start_seq,
                                   linked_block_write_ctx));
   ASSERT_NE(nullptr, tmp_sstable_macro_info.data_block_ids_);
   ASSERT_NE(nullptr, tmp_sstable_macro_info.other_block_ids_);
@@ -703,10 +686,6 @@ TEST_F(TestSSTableMeta, test_huge_sstable_persister_linked_block)
 
   ASSERT_EQ(OB_SUCCESS, sstable.persist_linked_block_if_need(
                                   allocator_,
-                                  tablet_id,
-                                  snapshot_version,
-                                  nullptr,
-                                  macro_start_seq,
                                   linked_block_write_ctx));
   ASSERT_EQ(nullptr, sstable_macro_info.data_block_ids_);
   ASSERT_EQ(nullptr, sstable_macro_info.other_block_ids_);
@@ -718,10 +697,6 @@ TEST_F(TestSSTableMeta, test_huge_sstable_persister_linked_block)
   // Idempotent
   ASSERT_EQ(OB_SUCCESS, sstable.persist_linked_block_if_need(
                                   allocator_,
-                                  tablet_id,
-                                  snapshot_version,
-                                  nullptr,
-                                  macro_start_seq,
                                   linked_block_write_ctx));
   ASSERT_EQ(nullptr, sstable_macro_info.data_block_ids_);
   ASSERT_EQ(nullptr, sstable_macro_info.other_block_ids_);
@@ -749,10 +724,6 @@ TEST_F(TestSSTableMeta, test_huge_sstable_persister_linked_block)
 
   ASSERT_EQ(OB_SUCCESS, tmp_sstable.persist_linked_block_if_need(
                                   allocator_,
-                                  tablet_id,
-                                  snapshot_version,
-                                  nullptr,
-                                  macro_start_seq,
                                   linked_block_write_ctx));
   ASSERT_EQ(nullptr, sstable_macro_info.data_block_ids_);
   ASSERT_EQ(nullptr, sstable_macro_info.other_block_ids_);

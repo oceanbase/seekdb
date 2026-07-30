@@ -213,7 +213,7 @@ int ObPartitionMergeProgress::inner_init_estimated_vals()
 
   if (OB_FAIL(ret)) {
   } else if (0 == estimated_total_size_ || 0 == estimated_total_row_cnt_) {
-    estimated_finish_time_ = ObCompactionProgress::EXTRA_TIME + UPDATE_INTERVAL;
+    estimated_finish_time_ = ObCompactionProgressBase::EXTRA_TIME + UPDATE_INTERVAL;
     is_empty_merge_ = true;
   } else {
     avg_row_length_ = estimated_total_size_ * 1.0 / estimated_total_row_cnt_;
@@ -290,8 +290,8 @@ void ObPartitionMergeProgress::update_estimated_finish_time(const int64_t cur_sc
   int64_t start_time = current_time;
 
   if (0 == cur_scanned_row_cnt) { // init merge progress
-    int64_t spend_time = estimated_total_size_ / common::OB_DEFAULT_MACRO_BLOCK_SIZE * ObCompactionProgress::MERGE_SPEED
-        + ObCompactionProgress::EXTRA_TIME;
+    int64_t spend_time = estimated_total_size_ / common::OB_DEFAULT_MACRO_BLOCK_SIZE * ObCompactionProgressBase::MERGE_SPEED
+        + ObCompactionProgressBase::EXTRA_TIME;
     estimated_finish_time_ = spend_time + start_time + UPDATE_INTERVAL;
   } else {
     start_time = merge_dag_->get_start_time();
@@ -308,7 +308,7 @@ void ObPartitionMergeProgress::update_estimated_finish_time(const int64_t cur_sc
   }
 }
 
-int ObPartitionMergeProgress::get_progress_info(ObCompactionProgress &input_progress)
+int ObPartitionMergeProgress::get_progress_info(ObCompactionProgressBase &input_progress)
 {
   int ret = OB_SUCCESS;
 

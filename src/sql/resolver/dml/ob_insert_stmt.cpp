@@ -122,19 +122,10 @@ int64_t ObInsertStmt::to_string(char *buf, const int64_t buf_len) const
          N_QUERY_CTX, *query_ctx_,
          N_VALUE, table_info_.values_vector_,
          "value_desc", table_info_.values_desc_,
-         "returning", returning_exprs_,
          N_CHILD_STMT, child_stmts);
     if (is_insert_up()) {
       J_COMMA();
       J_KV(N_ASSIGN, table_info_.assignments_);
-    }
-    if (is_error_logging()) {
-      J_KV("is_err_log", is_error_logging(),
-           "err_log_table_name", error_log_info_.table_name_,
-           "err_log_database_name", error_log_info_.database_name_,
-           "err_log_table_id", error_log_info_.table_id_,
-           "err_log_reject_limit", error_log_info_.reject_limit_,
-           "err_log_exprs", error_log_info_.error_log_exprs_);
     }
   }
   J_OBJ_END();
@@ -390,18 +381,6 @@ int ObInsertStmt::get_view_check_exprs(ObIArray<ObRawExpr*>& view_check_exprs) c
     LOG_WARN("failed to append view check exprs", K(ret));
   }
   return ret;
-}
-
-int64_t ObInsertStmt::get_instead_of_trigger_column_count() const
-{
-  const TableItem *table_item = NULL;
-  int64_t column_count = 0;
-  if (NULL != (table_item = get_table_item_by_id(table_info_.table_id_)) &&
-      table_item->is_view_table_ &&
-      NULL != table_item->ref_query_) {
-    column_count = table_item->ref_query_->get_select_item_size();
-  }
-  return column_count;
 }
 
 int ObInsertStmt::check_pdml_disabled(const bool is_online_ddl,

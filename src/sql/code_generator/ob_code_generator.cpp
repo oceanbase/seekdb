@@ -54,8 +54,6 @@ int ObCodeGenerator::generate_exprs(const ObLogPlan &log_plan,
   ObExecContext *exec_ctx = log_plan.get_optimizer_context().get_exec_ctx();
   CK(NULL != exec_ctx && NULL != exec_ctx->get_physical_plan_ctx());
   CK(exec_ctx->get_my_session() != NULL);
-  CK(exec_ctx->get_my_session()->use_rich_format() == exec_ctx->get_physical_plan_ctx()->is_rich_format()
-     && exec_ctx->get_my_session()->use_rich_format() == phy_plan.get_use_rich_format());
   if (OB_SUCC(ret)) {
     ObStaticEngineExprCG expr_cg(
         phy_plan.get_allocator(),
@@ -128,7 +126,16 @@ int ObCodeGenerator::detect_batch_size(
                                                      log_plan.get_plan_root()));
     }
     if (OB_FAIL(ret)) {
-    } else if (!vectorize) {
+    } else if (log_plan.get_optimizer_context().has_var_assign()
+               && !log_plan.get_optimizer_context().is_var_assign_only_in_root_stmt()) {
+      // Assignments in a child statement may feed a parent statement without being
+      // projected by the child. Keep the whole plan scalar so their row-by-row side
+      // effects cannot be reused by batch evaluation.
+      batch_size = 0;
+    } else if (log_plan.get_optimizer_context().has_var_assign() || !vectorize) {
+      // Retain the historical single-row batch path for root-statement assignments
+      // when a registered vector operator exists. This preserves evaluation order
+      // without forcing that operator onto an unsupported scalar path.
       // set max_batch_size = 1
       // if all physical operator is not registered as vec op, disable vectorization
       if (rowsets_enabled && has_registered_vec_op) {

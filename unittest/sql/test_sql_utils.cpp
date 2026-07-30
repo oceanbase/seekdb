@@ -150,12 +150,11 @@ void parse_cmd_line_param(int argc, char *argv[], CmdLineParam &clp)
 
 TestSqlUtils::TestSqlUtils()
     : //next_user_table_id_(OB_MIN_USER_TABLE_ID),
-      next_user_table_id_map_(),
+      next_user_table_id_(OB_MIN_USER_OBJECT_ID),
       sys_user_id_(OB_SYS_USER_ID),
       next_user_id_(OB_MIN_USER_OBJECT_ID),
       sys_database_id_(OB_SYS_DATABASE_ID),
       next_user_database_id_(OB_MIN_USER_OBJECT_ID),
-      sys_tenant_id_(OB_SERVER_RUNTIME_ID),
       schema_version_(2),
       allocator_(ObModIds::TEST),
       expr_factory_(allocator_),
@@ -185,7 +184,6 @@ void TestSqlUtils::init()
   int64_t ret = OB_SUCCESS;
   ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
   //common::ObSessionDIBuffer::get_instance().init(OB_MAX_SERVER_SESSION_CNT, 4);
-  //common::ObDITenantCache::get_instance().init(100000, 4);
   schema_service_ = new MockSchemaService();
   ASSERT_TRUE(schema_service_);
 
@@ -199,14 +197,13 @@ void TestSqlUtils::init()
   } else if (OB_FAIL(schema_service_->init())) {
     _OB_LOG(WARN, "schema_service_ init fail, ret=%ld", ret);
     ASSERT_TRUE(0);
-  } else if (OB_FAIL(schema_service_->get_schema_guard(schema_guard_, schema_version_))) {
+  } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard_, schema_version_))) {
     _OB_LOG(WARN, "schema_guard init fail, ret=%ld", ret);
     ASSERT_TRUE(0);
   } else {
     sql_schema_guard_.set_schema_guard(&schema_guard_);
     sql_ctx_.schema_guard_ = &schema_guard_;
-    ObString tenant("sql_test");
-    ASSERT_TRUE(OB_SUCCESS == session_info_.init_runtime(tenant));
+    ASSERT_TRUE(OB_SUCCESS == session_info_.init_runtime(OB_SERVER_RUNTIME_NAME));
 
     ObArenaAllocator *allocator = NULL;
     uint32_t version = 0;
@@ -221,14 +218,10 @@ void TestSqlUtils::init()
     } else if (OB_FAIL(exec_ctx_.create_physical_plan_ctx())) {
       OB_LOG(WARN, "Create plan ctx error", K(ret));
       ASSERT_TRUE(0);
-    } else if (OB_SUCCESS != (ret = next_user_table_id_map_.create(16, "HashBucAltTabMa"))) {
-      _OB_LOG(WARN, "create user table id map failed, ret=%ld", ret);
-      ASSERT_TRUE(0);
     } else {
       OK(session_info_.load_default_sys_variable(true, true));
       //OK(session_info_.load_sys_variable(sql_mode, type, value, ObSysVarFlag::GLOBAL_SCOPE | ObSysVarFlag::SESSION_SCOPE));
-      const uint64_t tenant_id = 1;
-      ASSERT_TRUE(OB_SUCCESS == session_info_.init_runtime(tenant));
+      ASSERT_TRUE(OB_SUCCESS == session_info_.init_runtime(OB_SERVER_RUNTIME_NAME));
       session_info_.set_user(OB_SYS_USER_NAME, OB_SYS_HOST_NAME, OB_SYS_USER_ID);
       session_info_.set_user_priv_set(OB_PRIV_ALL | OB_PRIV_GRANT | OB_PRIV_BOOTSTRAP);
       session_info_.set_default_database(OB_SYS_DATABASE_NAME, CS_TYPE_UTF8MB4_GENERAL_CI);
@@ -240,7 +233,7 @@ void TestSqlUtils::init()
       // create schema
       load_schema_from_file(schema_file_path_);
       // prevent interference between test schema and the following DDL test cases
-      next_user_table_id_map_.set_refactored(sys_tenant_id_, OB_MIN_USER_OBJECT_ID + 100, 1 /*replace*/);
+      next_user_table_id_ = OB_MIN_USER_OBJECT_ID + 100;
 
       //close the recyclebin
       ObObj obj2;
@@ -276,8 +269,7 @@ void TestSqlUtils::destroy()
   next_user_id_ = OB_MIN_USER_OBJECT_ID;
   sys_database_id_ = OB_SYS_DATABASE_ID;
   next_user_database_id_= OB_MIN_USER_OBJECT_ID;
-  sys_tenant_id_ = OB_SERVER_RUNTIME_ID;
-  next_user_table_id_map_.destroy();
+  next_user_table_id_ = OB_MIN_USER_OBJECT_ID;
   session_info_.~ObSQLSessionInfo();
   new (&session_info_) ObSQLSessionInfo();
   stmt_factory_.destory();
@@ -476,13 +468,6 @@ int TestSqlUtils::create_system_table()
     sys_table_schema_creators,
     virtual_table_schema_creators,
     NULL };
-  const ObServerRuntimeSchema *runtime_schema = NULL;
-  if (OB_FAIL(schema_guard_.get_server_runtime_info(runtime_schema))) {
-    _OB_LOG(WARN, "get tenant info fail, ret %d", ret);
-  } else if (OB_ISNULL(runtime_schema)) {
-    ret = OB_SCHEMA_ERROR;
-    _OB_LOG(WARN, "tenant schema is null, ret %d", ret);
-  }
   for (const schema_init_func **creator_ptr_ptr = creator_ptr_array;
        OB_SUCCESS == ret && NULL != *creator_ptr_ptr; ++creator_ptr_ptr) {
     for (const schema_init_func *creator_ptr = *creator_ptr_ptr;
@@ -558,7 +543,7 @@ void TestSqlUtils::do_create_table(ObStmt *&stmt)
     //combine the database_id and tenant_id
     table_schema.set_database_id(database_id);
     //get the next_table_id of this tenant and database
-    uint64_t next_table_id = get_next_table_id(OB_SERVER_RUNTIME_ID);
+    uint64_t next_table_id = get_next_table_id();
     table_schema.set_table_id(next_table_id);
     //table_schema.set_data_table_id( combine_id(next_user_tenant_id_, next_table_id));
 
@@ -578,18 +563,12 @@ void TestSqlUtils::do_create_table(ObStmt *&stmt)
 int TestSqlUtils::add_table_schema(ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
-  const ObServerRuntimeSchema *runtime_schema = NULL;
   const ObSysVariableSchema *sys_variable= NULL;
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(schema_guard_.get_server_runtime_info(runtime_schema))) {
-      OB_LOG(WARN, "get tenant info failed", K(table_schema), K(ret));
-    } else if (OB_ISNULL(runtime_schema)) {
-      ret = OB_RUNTIME_SCHEMA_NOT_READY;
-      OB_LOG(WARN, "tenant schema is null", K(ret));
-    } else if (OB_FAIL(schema_guard_.get_sys_variable_schema(sys_variable))) {
+    if (OB_FAIL(schema_guard_.get_sys_variable_schema(sys_variable))) {
       OB_LOG(WARN, "get sys variable failed", K(sys_variable), K(ret));
     } else if (OB_ISNULL(sys_variable)) {
-      ret = OB_RUNTIME_SCHEMA_NOT_READY;
+      ret = OB_ENTRY_NOT_EXIST;
       OB_LOG(WARN, "sys variable schema is null", K(ret));
     } else {
       ObNameCaseMode local_mode = sys_variable->get_name_case_mode();
@@ -629,17 +608,11 @@ void TestSqlUtils::do_drop_table(ObStmt *&stmt)
 int TestSqlUtils::drop_table_schema(const ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
-  const ObServerRuntimeSchema *runtime_schema = NULL;
   const ObSysVariableSchema *sys_variable = NULL;
-  if (OB_FAIL(schema_guard_.get_server_runtime_info(runtime_schema))) {
-    OB_LOG(WARN, "get tenant info failed", K_(sys_tenant_id), K(ret));
-  } else if (OB_ISNULL(runtime_schema)) {
-    ret = OB_RUNTIME_SCHEMA_NOT_READY;
-    OB_LOG(WARN, "tenant schema is null", K(ret));
-  } else if (OB_FAIL(schema_guard_.get_sys_variable_schema(sys_variable))) {
+  if (OB_FAIL(schema_guard_.get_sys_variable_schema(sys_variable))) {
     OB_LOG(WARN, "get sys variable failed", K(sys_variable), K(ret));
   } else if (OB_ISNULL(sys_variable)) {
-    ret = OB_RUNTIME_SCHEMA_NOT_READY;
+    ret = OB_ENTRY_NOT_EXIST;
     OB_LOG(WARN, "sys variable schema is null", K(ret));
   } else {
     ObNameCaseMode local_mode = sys_variable->get_name_case_mode();
@@ -676,18 +649,12 @@ void TestSqlUtils::do_create_database(ObStmt *&stmt)
 int TestSqlUtils::add_database_schema(ObDatabaseSchema &database_schema)
 {
   int ret = OB_SUCCESS;
-  const ObServerRuntimeSchema *runtime_schema = NULL;
   const ObSysVariableSchema *sys_variable = NULL;
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(schema_guard_.get_server_runtime_info(runtime_schema))) {
-      OB_LOG(WARN, "get tenant info failed", K(database_schema), K(ret));
-    } else if (OB_ISNULL(runtime_schema)) {
-      ret = OB_RUNTIME_SCHEMA_NOT_READY;
-      OB_LOG(WARN, "tenant schema is null", K(ret));
-    } else if (OB_FAIL(schema_guard_.get_sys_variable_schema(sys_variable))) {
+    if (OB_FAIL(schema_guard_.get_sys_variable_schema(sys_variable))) {
       OB_LOG(WARN, "get sys variable failed", K(sys_variable), K(ret));
     } else if (OB_ISNULL(sys_variable)) {
-      ret = OB_RUNTIME_SCHEMA_NOT_READY;
+      ret = OB_ENTRY_NOT_EXIST;
       OB_LOG(WARN, "sys variable schema is null", K(ret));
     } else {
       ObNameCaseMode local_mode = sys_variable->get_name_case_mode();
@@ -755,19 +722,9 @@ void TestSqlUtils::do_create_user(ObStmt *&stmt){
   }
 }
 
-uint64_t TestSqlUtils::get_next_table_id(const uint64_t user_tenant_id)
+uint64_t TestSqlUtils::get_next_table_id()
 {
-  uint64_t next_table_id = OB_INVALID_ID;
-  if (OB_HASH_NOT_EXIST == next_user_table_id_map_.get_refactored(user_tenant_id, next_table_id )){
-    next_table_id = OB_MIN_USER_OBJECT_ID + 1;
-    OB_ASSERT(OB_SUCCESS == next_user_table_id_map_.set_refactored(user_tenant_id, next_table_id));
-    _OB_LOG(INFO, "tenant_id = [%lu] not exist, set next_table_id = [%lu]", user_tenant_id, next_table_id);
-  } else {
-    ++next_table_id;
-    OB_ASSERT(OB_SUCCESS == next_user_table_id_map_.set_refactored(user_tenant_id, next_table_id, 1 /* replace */));
-    _OB_LOG(INFO, "tenant_id = [%lu] exist, set new next_table_id = [%lu]", user_tenant_id, next_table_id);
-  }
-  return next_table_id;
+  return ++next_user_table_id_;
 }
 
 
@@ -850,7 +807,7 @@ void TestSqlUtils::generate_index_schema(ObCreateIndexStmt &stmt)
   index_schema.set_index_status(INDEX_STATUS_AVAILABLE);
   _OB_LOG(INFO, "origin index_schema database id is %ld", index_schema.get_database_id() );
   //combine the database_id and tenant_id
-  uint64_t next_index_tid = get_next_table_id(OB_SERVER_RUNTIME_ID);
+  uint64_t next_index_tid = get_next_table_id();
   index_schema.set_table_id(next_index_tid);
   index_schema.set_index_status(INDEX_STATUS_AVAILABLE);
   ASSERT_TRUE(NULL != data_table_schema);
@@ -863,7 +820,7 @@ void TestSqlUtils::generate_index_schema(ObCreateIndexStmt &stmt)
     OK(table_schema.add_simple_index_info(ObAuxTableMetaInfo(
        index_schema.get_table_id(), USER_TABLE, INDEX_TYPE_NORMAL_LOCAL)));
     OK(add_table_schema(table_schema));
-    OK(schema_service_->get_schema_guard(schema_guard_, schema_version_));
+    OK(schema_service_->get_runtime_schema_guard(schema_guard_, schema_version_));
   }else{
     _OB_LOG_RET(ERROR, OB_ERROR, "no data table found for tid=%lu", data_table_schema->get_table_id());
   }

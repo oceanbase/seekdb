@@ -20,7 +20,7 @@
 #include "common/object/ob_object.h"
 #include "lib/container/ob_fixed_array.h"
 #include "lib/hash/ob_hashset.h"
-#include "lib/container/ob_tuple.h"  // ObTuple, previously hidden behind a transitive include
+#include "lib/container/ob_tuple.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 
 

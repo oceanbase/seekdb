@@ -90,7 +90,7 @@ int ObExprLeastGreatest::calc_result_typeN_mysql(ObExprResType &type,
       } else if (all_integer && ob_is_number_or_decimal_int_tc(type.get_type())) {
         // the args type is integer and result type is number/decimal, there are unsigned bigint in
         // args, set expr meta here.
-        type.set_accuracy(common::ObAccuracy::DDL_DEFAULT_ACCURACY2[0 /* mysql mode */][ObUInt64Type]);
+        type.set_accuracy(common::ObAccuracy::DDL_DEFAULT_ACCURACY[ObUInt64Type]);
       } else {
         for (int64_t i = 0; i < param_num; i++) {
           if (ob_is_enum_or_set_type(types[i].get_type())) {

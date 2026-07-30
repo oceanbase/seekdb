@@ -26,15 +26,12 @@ namespace sql
 #define IS_PX_COORD(type) \
      ((type) == PHY_PX_FIFO_COORD || \
       (type) == PHY_PX_MERGE_SORT_COORD ||\
-      (type) == PHY_PX_ORDERED_COORD ||\
-      (type) == PHY_VEC_PX_MERGE_SORT_COORD)
+      (type) == PHY_PX_ORDERED_COORD)
 // NOTE: There may be multiple receive op types, all of which need to be judged. Currently, there is only one.
 #define IS_PX_RECEIVE(type) \
      ((type) == PHY_PX_FIFO_RECEIVE || \
       (type) == PHY_PX_MERGE_SORT_RECEIVE || \
       (type) == PHY_PX_MERGE_SORT_COORD || \
-      (type) == PHY_VEC_PX_MERGE_SORT_COORD || \
-      (type) == PHY_VEC_PX_MERGE_SORT_RECEIVE || \
       (type) == PHY_PX_FIFO_COORD || \
       (type) == PHY_PX_ORDERED_COORD)
 
@@ -77,19 +74,13 @@ namespace sql
 #define IS_DML(type) \
   ((type) == PHY_INSERT || \
    (type) == PHY_INSERT_ON_DUP || \
-   (type) == PHY_INSERT_RETURNING || \
-   (type) == PHY_INSERT_ON_DUP_RETURNING || \
    (type) == PHY_DELETE || \
-   (type) == PHY_DELETE_RETURNING || \
    (type) == PHY_UPDATE || \
-   (type) == PHY_UPDATE_RETURNING || \
    (type) == PHY_REPLACE || \
-   (type) == PHY_REPLACE_RETURNING || \
    (type) == PHY_PX_MULTI_PART_DELETE || \
    (type) == PHY_PX_MULTI_PART_INSERT || \
    (type) == PHY_PX_MULTI_PART_UPDATE || \
    (type) == PHY_PX_MULTI_PART_SSTABLE_INSERT || \
-   (type) == PHY_VEC_PX_MULTI_PART_SSTABLE_INSERT || \
    (type) == PHY_LOCK)
 
 #define IS_SAMPLE_SCAN(type) \

@@ -14,10 +14,7 @@
  * limitations under the License.
  */
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_row_cache.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
-#include "lib/statistic_event/ob_stat_event.h"
 namespace oceanbase
 {
 using namespace common;
@@ -241,9 +238,7 @@ int ObRowCache::get_row(const ObRowCacheKey &key, ObRowValueHandle &handle)
     if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
       STORAGE_LOG(WARN, "Fail to get key from row cache, ", K(ret));
     }
-    EVENT_INC(ROW_CACHE_MISS);
   } else {
-    EVENT_INC(ROW_CACHE_HIT);
     if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpected error, the value is NULL, ", K(ret));

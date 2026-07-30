@@ -16,7 +16,6 @@
 
 #ifndef UNITTEST_DEADLOCK_TEST_KEY_H
 #define UNITTEST_DEADLOCK_TEST_KEY_H
-#include "lib/utility/ob_unify_serialize.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/ob_errno.h"
 #include "lib/utility/serialization.h"
@@ -25,24 +24,28 @@ namespace oceanbase {
 namespace unittest {
 
 class ObDeadLockTestIntKey {
-  OB_UNIS_VERSION(1);
 public:
   ObDeadLockTestIntKey() : v_(-1) {};
   ObDeadLockTestIntKey(int v) : v_(v) {};
   bool is_valid() const { return true; }
   TO_STRING_KV(K_(v));
   int get_value() const { return v_; }
+  int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
+  int deserialize(const char *buf, const int64_t data_len, int64_t &pos);
+  int64_t get_serialize_size() const;
 private:
   int v_;
 };
 
 class ObDeadLockTestDoubleKey {
-  OB_UNIS_VERSION(1);
 public:
   ObDeadLockTestDoubleKey() : v_(0.0) {};
   ObDeadLockTestDoubleKey(double v) : v_(v) {};
   bool is_valid() const { return true; }
   TO_STRING_KV(K_(v));
+  int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
+  int deserialize(const char *buf, const int64_t data_len, int64_t &pos);
+  int64_t get_serialize_size() const;
 private:
   double v_;
 };

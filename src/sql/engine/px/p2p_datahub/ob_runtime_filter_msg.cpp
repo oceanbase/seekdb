@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/px/p2p_datahub/ob_runtime_filter_msg.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
-#include "sql/engine/join/hash_join/ob_hash_join_vec_op.h"
+#include "sql/engine/expr/ob_expr_hash.h"
 #include "sql/engine/basic/ob_pushdown_filter.h"
 
 using namespace oceanbase::common;
@@ -32,7 +32,6 @@ OB_DEF_SERIALIZE(ObRFBloomFilterMsg)
   BASE_SER((ObRFBloomFilterMsg, ObP2PDatahubMsgBase));
   LST_DO_CODE(OB_UNIS_ENCODE,
               bloom_filter_,
-              use_rich_format_,
               use_hash_join_seed_);
   return ret;
 }
@@ -46,7 +45,6 @@ OB_DEF_DESERIALIZE(ObRFBloomFilterMsg)
 
   LST_DO_CODE(OB_UNIS_DECODE,
               bloom_filter_,
-              use_rich_format_,
               use_hash_join_seed_);
   return ret;
 }
@@ -57,7 +55,6 @@ OB_DEF_SERIALIZE_SIZE(ObRFBloomFilterMsg)
   BASE_ADD_LEN((ObRFBloomFilterMsg, ObP2PDatahubMsgBase));
   LST_DO_CODE(OB_UNIS_ADD_LEN,
               bloom_filter_,
-              use_rich_format_,
               use_hash_join_seed_);
   return len;
 }
@@ -238,7 +235,6 @@ int ObRFBloomFilterMsg::assign(const ObP2PDatahubMsgBase &msg)
 {
   int ret = OB_SUCCESS;
   const ObRFBloomFilterMsg &other_msg = static_cast<const ObRFBloomFilterMsg &>(msg);
-  use_rich_format_ = other_msg.use_rich_format_;
   use_hash_join_seed_ = other_msg.use_hash_join_seed_;
   if (OB_FAIL(ObP2PDatahubMsgBase::assign(msg))) {
     LOG_WARN("failed to assign base data", K(ret));
@@ -288,7 +284,7 @@ int ObRFBloomFilterMsg::might_contain(const ObExpr &expr,
     //                           |    |    |    |
     //                           6bit 6bit 6bit 6bit -> each low 6bit are used, high 2 bit is useless
     // the highest bit of hash values is not used in bloom filter
-    hash_val = ObHashJoinVecOp::HASH_SEED;
+    hash_val = ObExprHash::HASH_SEED;
   }
   ObDatum *datum = nullptr;
   ObHashFunc hash_func;
@@ -299,31 +295,13 @@ int ObRFBloomFilterMsg::might_contain(const ObExpr &expr,
     filter_ctx.filter_count_++;
     filter_ctx.check_count_++;
   } else {
-    if (!use_rich_format_) {
-      for (int i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
-        if (OB_FAIL(expr.args_[i]->eval(ctx, datum))) {
-          LOG_WARN("failed to eval datum", K(ret));
-        } else {
-          hash_func.hash_func_ = filter_ctx.hash_funcs_.at(i).hash_func_;
-          if (OB_FAIL(hash_func.hash_func_(*datum, hash_val, hash_val))) {
-            LOG_WARN("fail to calc hash val", K(ret));
-          }
-        }
-      }
-    } else {
-      bool all_rows_active = false;
-      int64_t batch_idx = ctx.get_batch_idx();
-      int64_t batch_size = ctx.get_batch_size();
-      EvalBound eval_bound(batch_size, batch_idx, batch_idx + 1, all_rows_active);
-      for (int i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
-        if (OB_FAIL(expr.args_[i]->eval_vector(ctx, *filter_ctx.skip_vector_, eval_bound))) {
-          LOG_WARN("failed to eval_vector", K(ret));
-        } else {
-          ObIVector *arg_vec = expr.args_[i]->get_vector(ctx);
-          if (OB_FAIL(arg_vec->murmur_hash_v3_for_one_row(*expr.args_[i], hash_val, batch_idx,
-                                                          batch_size, hash_val))) {
-            LOG_WARN("failed to cal hash");
-          }
+    for (int i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
+      if (OB_FAIL(expr.args_[i]->eval(ctx, datum))) {
+        LOG_WARN("failed to eval datum", K(ret));
+      } else {
+        hash_func.hash_func_ = filter_ctx.hash_funcs_.at(i).hash_func_;
+        if (OB_FAIL(hash_func.hash_func_(*datum, hash_val, hash_val))) {
+          LOG_WARN("fail to calc hash val", K(ret));
         }
       }
     }
@@ -500,205 +478,6 @@ int ObRFBloomFilterMsg::insert_by_row(
     LOG_WARN("fail to put  hash value to px bloom filter", K(ret));
   } else if (is_empty_) {
     is_empty_ = false;
-  }
-  return ret;
-}
-
-int ObRFBloomFilterMsg::do_might_contain_vector(
-    const ObExpr &expr,
-    ObEvalCtx &ctx,
-    const ObBitVector &skip,
-    const EvalBound &bound,
-    ObExprJoinFilter::ObExprJoinFilterContext &filter_ctx)
-{
-  int ret = OB_SUCCESS;
-  int64_t total_count = 0;
-  int64_t filter_count = 0;
-  bool is_match = true;
-  uint64_t seed = ObExprJoinFilter::JOIN_FILTER_SEED;
-  if (use_hash_join_seed_) {
-    // hash value explained in:
-    //        hash join            simd block bloom filter
-    //  10001111....1011010         10001111....1011010
-    //  ||_______63_______|          |___32___||__32___|
-    //  |     hash               _______|_______   |-->locate block
-    //  |                        |    |    |    |
-    // is match                  8bit 8bit 8bit 8bit -> split to 4 byte
-    //                           |    |    |    |
-    //                           6bit 6bit 6bit 6bit -> each low 6bit are used, high 2 bit is useless
-    // the highest bit of hash values is not used in bloom filter
-    seed = ObHashJoinVecOp::HASH_SEED;
-  }
-
-  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-  uint64_t *hash_values = filter_ctx.right_hash_vals_;
-
-  for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
-    ObExpr *e = expr.args_[i];
-    if (OB_FAIL(e->eval_vector(ctx, skip, bound))) {
-      LOG_WARN("evaluate vector failed", K(ret), K(*e));
-    } else {
-      const bool is_batch_seed = (i > 0);
-      ObIVector *arg_vec = e->get_vector(ctx);
-      if (OB_FAIL(arg_vec->murmur_hash_v3(*e, hash_values, skip,
-          bound, is_batch_seed ? hash_values : &seed, is_batch_seed))) {
-        LOG_WARN("failed to cal hash");
-      }
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else {
-    ret = bloom_filter_.might_contain_vector(expr, ctx, skip, bound, hash_values, total_count,
-                                             filter_count);
-  }
-  if (OB_FAIL(ret)) {
-  } else {
-    eval_flags.set_all(true);
-    filter_ctx.check_count_ += total_count;
-    filter_ctx.total_count_ += total_count;
-    filter_ctx.filter_count_ += filter_count;
-    filter_ctx.collect_sample_info(filter_count, total_count);
-  }
-  return ret;
-}
-
-int ObRFBloomFilterMsg::might_contain_vector(
-    const ObExpr &expr,
-    ObEvalCtx &ctx,
-    const ObBitVector &skip,
-    const EvalBound &bound,
-    ObExprJoinFilter::ObExprJoinFilterContext &filter_ctx)
-{
-  int ret = OB_SUCCESS;
-  if (!is_active_) {
-    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-    VectorFormat res_format = expr.get_format(ctx);
-    if (VEC_UNIFORM == res_format) {
-      IntegerUniVec *res_vec = static_cast<IntegerUniVec *>(expr.get_vector(ctx));
-      ret = proc_filter_not_active(res_vec, skip, bound);
-    } else if (VEC_FIXED == res_format) {
-      IntegerFixedVec *res_vec = static_cast<IntegerFixedVec *>(expr.get_vector(ctx));
-      ret = proc_filter_not_active(res_vec, skip, bound);
-    }
-    if (OB_SUCC(ret)) {
-      eval_flags.set_all(true);
-    }
-  } else if (OB_UNLIKELY(is_empty_)) {
-    int64_t total_count = 0;
-    int64_t filter_count = 0;
-    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-    VectorFormat res_format = expr.get_format(ctx);
-    if (VEC_UNIFORM == res_format) {
-      IntegerUniVec *res_vec = static_cast<IntegerUniVec *>(expr.get_vector(ctx));
-      ret = proc_filter_empty(res_vec, skip, bound, total_count, filter_count);
-    } else if (VEC_FIXED == res_format) {
-      IntegerFixedVec *res_vec = static_cast<IntegerFixedVec *>(expr.get_vector(ctx));
-      ret = proc_filter_empty(res_vec, skip, bound, total_count, filter_count);
-    }
-    if (OB_SUCC(ret)) {
-      eval_flags.set_all(true);
-      filter_ctx.filter_count_ += filter_count;
-      filter_ctx.check_count_ += total_count;
-      filter_ctx.total_count_ += total_count;
-    }
-  } else if (OB_FAIL(do_might_contain_vector(expr, ctx, skip, bound, filter_ctx))) {
-    LOG_WARN("fail to do might contain vector");
-  }
-  return ret;
-}
-
-template <typename ArgVec>
-int ObRFBloomFilterMsg::insert_partition_bloom_filter(ArgVec *arg_vec,
-                                                      const ObBatchRows *child_brs,
-                                                      uint64_t *batch_hash_values)
-{
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < child_brs->size_; ++i) {
-    if (ObExprCalcPartitionId::NONE_PARTITION_ID == arg_vec->get_int(i)) {
-      continue;
-    }
-    if (child_brs->skip_->at(i)) {
-      continue;
-    } else if (OB_FAIL(bloom_filter_.put(batch_hash_values[i]))) {
-      LOG_WARN("fail to put  hash value to px bloom filter", K(ret));
-    } else if (is_empty_) {
-      is_empty_ = false;
-    }
-  }
-  return ret;
-}
-
-int ObRFBloomFilterMsg::insert_bloom_filter_with_hash_values(
-    const ObBatchRows *child_brs,
-    uint64_t *batch_hash_values)
-{
-  int ret = OB_SUCCESS;
-  EvalBound bound(child_brs->size_, child_brs->all_rows_active_);
-  if (OB_FAIL(bloom_filter_.put_batch(batch_hash_values, bound, *child_brs->skip_, is_empty_))) {
-    LOG_WARN("failed to push hash value to px bloom filter");
-  }
-  return ret;
-}
-
-int ObRFBloomFilterMsg::insert_by_row_vector(
-    const ObBatchRows *child_brs,
-    const common::ObIArray<ObExpr *> &expr_array,
-    const common::ObHashFuncs &hash_funcs,
-    const ObExpr *calc_tablet_id_expr,
-    ObEvalCtx &eval_ctx,
-    uint64_t *batch_hash_values)
-{
-  int ret = OB_SUCCESS;
-  if (child_brs->size_ > 0) {
-    uint64_t seed = ObExprJoinFilter::JOIN_FILTER_SEED;
-    EvalBound bound(child_brs->size_, child_brs->all_rows_active_);
-    if (OB_NOT_NULL(calc_tablet_id_expr)) {
-      if (hash_funcs.count() != 1) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected part id expr", K(ret));
-      } else if (OB_FAIL(calc_tablet_id_expr->eval_vector(eval_ctx,
-        *child_brs))) {
-        LOG_WARN("failed to eval vector", K(ret));
-      } else {
-        VectorFormat arg_format = calc_tablet_id_expr->get_format(eval_ctx);
-        if (VEC_UNIFORM == arg_format) {
-          IntegerUniVec *arg_vec =
-              static_cast<IntegerUniVec *>(calc_tablet_id_expr->get_vector(eval_ctx));
-          if (OB_FAIL(arg_vec->murmur_hash_v3(*calc_tablet_id_expr, batch_hash_values,
-                                              *(child_brs->skip_), bound, &seed, false))) {
-            LOG_WARN("failed to cal murmur_hash_v2");
-          } else if (OB_FAIL(insert_partition_bloom_filter(arg_vec,
-                                                           child_brs, batch_hash_values))) {
-             LOG_WARN("failed to cal insert_partition_bloom_filter");
-          }
-        } else if (VEC_FIXED == arg_format) {
-          IntegerFixedVec *arg_vec =
-              static_cast<IntegerFixedVec *>(calc_tablet_id_expr->get_vector(eval_ctx));
-          if (OB_FAIL(arg_vec->murmur_hash_v3(*calc_tablet_id_expr, batch_hash_values,
-                                              *(child_brs->skip_), bound, &seed, false))) {
-            LOG_WARN("failed to cal murmur_hash_v2");
-          } else if (OB_FAIL(insert_partition_bloom_filter(arg_vec,
-                                                           child_brs, batch_hash_values))) {
-             LOG_WARN("failed to cal insert_partition_bloom_filter");
-          }
-        }
-      }
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < expr_array.count(); ++i) {
-        ObExpr *expr = expr_array.at(i); // expr ptr check in cg, not check here
-        if (OB_FAIL(expr->eval_vector(eval_ctx, *child_brs))) {
-          LOG_WARN("eval_vector failed", K(ret));
-        } else {
-          const bool is_batch_seed = (i > 0);
-          ObIVector *arg_vec = expr->get_vector(eval_ctx);
-          arg_vec->murmur_hash_v3(*expr, batch_hash_values, *(child_brs->skip_), bound, is_batch_seed ? batch_hash_values : &seed, is_batch_seed);
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(bloom_filter_.put_batch(batch_hash_values, bound, *child_brs->skip_, is_empty_))) {
-        LOG_WARN("failed to push hash value to px bloom filter");
-      }
-    }
   }
   return ret;
 }

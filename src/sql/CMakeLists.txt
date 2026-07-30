@@ -11,7 +11,6 @@ ob_set_subtarget(ob_sql code_generator
 ob_set_subtarget(ob_sql common
   ob_end_trans_callback.cpp
   ob_end_trans_cb_packet_param.cpp
-  ob_phy_table_location.cpp
   ob_result_set.cpp
   ob_scanner.cpp
   ob_spi.cpp
@@ -38,44 +37,21 @@ ob_set_subtarget(ob_sql hybrid_search
   hybrid_search/ob_hybrid_search_executor.cpp
 )
 
-ob_set_subtarget(ob_sql engine_vector_cmp
-  engine/vector/expr_cmp_func.cpp
-  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_0.cpp
-  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_1.cpp
-  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_2.cpp
-  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_3.cpp
-  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_4.cpp
-  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_5.cpp
-  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_6.cpp
-  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_7.cpp
-)
-
-ob_set_subtarget(ob_sql engine_vector_continuous
-  engine/vector/ob_continuous_base.cpp
-  engine/vector/ob_continuous_format.cpp
-  engine/vector/ob_continuous_vector.cpp
-)
-
 ob_set_subtarget(ob_sql engine_vector_discrete
   engine/vector/ob_discrete_base.cpp
-  engine/vector/ob_discrete_format.cpp
-  engine/vector/ob_discrete_vector.cpp
 )
 
 ob_set_subtarget(ob_sql engine_vector_uniform
   engine/vector/ob_uniform_base.cpp
-  engine/vector/ob_uniform_const_vector.cpp
-  engine/vector/ob_uniform_vector.cpp
-)
-
-ob_set_subtarget(ob_sql engine_vector_base
-  engine/vector/ob_vector_base.cpp
 )
 
 ob_set_subtarget(ob_sql engine_vector_fixed
   engine/vector/ob_fixed_length_base.cpp
-  engine/vector/ob_fixed_length_vector.cpp
-  engine/vector/vector_basic_op.cpp
+)
+
+set_source_files_properties(
+  engine/expr/ob_distribution.cpp
+  PROPERTIES COMPILE_OPTIONS "-ffp-contract=off"
 )
 
 ob_set_subtarget(ob_sql optimizer_stat
@@ -114,46 +90,7 @@ ob_set_subtarget(ob_sql optimizer_stat
 )
 
 set_source_files_properties(
-  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_0.cpp
-  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_1.cpp
-  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_2.cpp
-  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_3.cpp
-  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_4.cpp
-  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_5.cpp
-  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_6.cpp
-  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_7.cpp
-  engine/vector/ob_uniform_vector.cpp
-  engine/aggregate/approx_count_distinct.cpp
-  engine/aggregate/approx_count_distinct_mysql.cpp
-  engine/aggregate/approx_count_distinct_synopsis.cpp
-  engine/aggregate/aggr_extra.cpp
-  engine/aggregate/count.cpp
-  engine/aggregate/group_concat.cpp
-  engine/aggregate/grouping.cpp
-  engine/aggregate/hybrid_hist.cpp
-  engine/aggregate/iaggregate.cpp
-  engine/aggregate/max.cpp
-  engine/aggregate/min.cpp
   engine/aggregate/ob_aggregate_processor.cpp
-  engine/aggregate/processor.cpp
-  engine/aggregate/ob_exec_hash_struct_vec.cpp
-  engine/aggregate/ob_hash_groupby_vec_op.cpp
-  engine/aggregate/ob_hash_distinct_vec_op.cpp
-  engine/aggregate/ob_groupby_vec_op.cpp
-  engine/aggregate/ob_hash_agg_variant.cpp
-  engine/aggregate/ob_scalar_aggregate_vec_op.cpp
-  engine/aggregate/ob_merge_groupby_vec_op.cpp
-  engine/aggregate/single_row.cpp
-  engine/aggregate/single_row_count.cpp
-  engine/aggregate/single_row_count_sum.cpp
-  engine/aggregate/single_row_max.cpp
-  engine/aggregate/single_row_min.cpp
-  engine/aggregate/single_row_sum.cpp
-  engine/aggregate/str_prefix_max.cpp
-  engine/aggregate/sum.cpp
-  engine/aggregate/sum_opnsize.cpp
-  engine/aggregate/sys_bit.cpp
-  engine/aggregate/top_fre_hist.cpp
   engine/expr/ob_expr_add.cpp
   engine/expr/ob_expr_mul.cpp
   engine/expr/ob_expr_in.cpp
@@ -171,7 +108,7 @@ ob_set_subtarget(ob_sql das
   das/ob_das_insert_op.cpp
   das/ob_das_lock_op.cpp
   das/ob_das_ref.cpp
-  das/ob_das_location_router.cpp
+  das/ob_das_tablet_mapper.cpp
   das/ob_das_scan_op.cpp
   das/ob_das_task.cpp
   das/ob_das_update_op.cpp
@@ -183,7 +120,6 @@ ob_set_subtarget(ob_sql das
   das/ob_das_simple_op.cpp
   das/ob_das_domain_utils.cpp
   das/ob_das_attach_define.cpp
-  das/ob_group_scan_iter.cpp
   das/ob_das_dml_vec_iter.cpp
   das/ob_das_parallel_handler.cpp
   das/iter/ob_das_iter.cpp
@@ -233,13 +169,10 @@ ob_set_subtarget(ob_sql dtl
   dtl/ob_dtl_mem_manager.cpp
   dtl/ob_dtl_utils.cpp
   dtl/ob_op_metric.cpp
-  dtl/ob_dtl_vectors_buffer.cpp
 )
 
 ob_set_subtarget(ob_sql engine
   engine/ob_ddl_common_sql_impl.cpp
-  engine/cmd/ob_timezone_importer.cpp
-  engine/cmd/ob_srs_importer.cpp
   engine/ob_des_exec_context.cpp
   engine/ob_exec_context.cpp
   engine/ob_exec_feedback_info.cpp
@@ -267,35 +200,13 @@ ob_set_subtarget(ob_sql engine
   engine/user_defined_function/ob_pl_user_defined_agg_function.cpp
   engine/window_function/ob_window_function_op.cpp
   engine/opt_statistics/ob_optimizer_stats_gathering_op.cpp
-  engine/sort/ob_sort_vec_op.cpp
-  engine/sort/ob_sort_vec_op_provider.cpp
-  engine/sort/ob_sort_compare_vec_op.cpp
-  engine/sort/ob_sort_vec_op_eager_filter.cpp
-  engine/sort/ob_sort_key_fetcher_vec_op.cpp
   engine/ob_subschema_ctx.cpp
   engine/sort/ob_pd_topn_sort_filter.cpp
-  engine/window_function/ob_window_function_vec_op.cpp
-  engine/window_function/row_store.cpp
-  engine/window_function/win_expr.cpp
-  engine/window_function/row_store.cpp
   engine/expand/ob_expand_vec_op.cpp
-  engine/subquery/ob_subplan_filter_vec_op.cpp
 )
 
 ob_set_subtarget(ob_sql engine_aggregate_core
-  engine/aggregate/approx_count_distinct.cpp
-  engine/aggregate/approx_count_distinct_mysql.cpp
-  engine/aggregate/approx_count_distinct_synopsis.cpp
-  engine/aggregate/aggr_extra.cpp
-  engine/aggregate/count.cpp
-  engine/aggregate/group_concat.cpp
-  engine/aggregate/grouping.cpp
-  engine/aggregate/hybrid_hist.cpp
-  engine/aggregate/iaggregate.cpp
-  engine/aggregate/max.cpp
-  engine/aggregate/min.cpp
   engine/aggregate/ob_aggregate_processor.cpp
-  engine/aggregate/processor.cpp
 )
 
 ob_set_subtarget(ob_sql engine_aggregate_groupby
@@ -305,41 +216,14 @@ ob_set_subtarget(ob_sql engine_aggregate_groupby
   engine/aggregate/ob_hash_distinct_op.cpp
   engine/aggregate/ob_hash_groupby_op.cpp
   engine/aggregate/ob_merge_distinct_op.cpp
-  engine/aggregate/ob_merge_distinct_vec_op.cpp
   engine/aggregate/ob_merge_groupby_op.cpp
   engine/aggregate/ob_scalar_aggregate_op.cpp
   engine/aggregate/ob_adaptive_bypass_ctrl.cpp
 )
 
-ob_set_subtarget(ob_sql engine_aggregate_vec
-  engine/aggregate/ob_exec_hash_struct_vec.cpp
-  engine/aggregate/ob_hash_groupby_vec_op.cpp
-  engine/aggregate/ob_hash_distinct_vec_op.cpp
-  engine/aggregate/ob_groupby_vec_op.cpp
-  engine/aggregate/ob_hash_agg_variant.cpp
-  engine/aggregate/ob_scalar_aggregate_vec_op.cpp
-  engine/aggregate/ob_merge_groupby_vec_op.cpp
-)
-
-ob_set_subtarget(ob_sql engine_aggregate_scalar
-  engine/aggregate/single_row.cpp
-  engine/aggregate/single_row_count.cpp
-  engine/aggregate/single_row_count_sum.cpp
-  engine/aggregate/single_row_max.cpp
-  engine/aggregate/single_row_min.cpp
-  engine/aggregate/single_row_sum.cpp
-  engine/aggregate/str_prefix_max.cpp
-  engine/aggregate/sum.cpp
-  engine/aggregate/sum_opnsize.cpp
-  engine/aggregate/sys_bit.cpp
-  engine/aggregate/top_fre_hist.cpp
-)
-
 ob_set_subtarget(ob_sql engine_basic
   engine/basic/ob_batch_result_holder.cpp
-  engine/basic/ob_compact_row.cpp
   engine/basic/ob_temp_block_store.cpp
-  engine/basic/ob_temp_row_store.cpp
   engine/basic/ob_temp_column_store.cpp
   engine/basic/ob_chunk_datum_store.cpp
   engine/basic/ob_chunk_row_store.cpp
@@ -349,10 +233,8 @@ ob_set_subtarget(ob_sql engine_basic
   engine/basic/ob_hash_partitioning_infrastructure_op.cpp
   engine/basic/ob_json_table_op.cpp
   engine/basic/ob_limit_op.cpp
-  engine/basic/ob_limit_vec_op.cpp
   engine/basic/ob_material_op_impl.cpp
   engine/basic/ob_material_op.cpp
-  engine/basic/ob_material_vec_op.cpp
   engine/basic/ob_monitoring_dump_op.cpp
   engine/basic/ob_pushdown_filter.cpp
   engine/basic/ob_ra_datum_store.cpp
@@ -364,14 +246,9 @@ ob_set_subtarget(ob_sql engine_basic
   engine/basic/ob_temp_table_access_op.cpp
   engine/basic/ob_temp_table_insert_op.cpp
   engine/basic/ob_temp_table_transformation_op.cpp
-  engine/basic/ob_temp_table_insert_vec_op.cpp
-  engine/basic/ob_temp_table_access_vec_op.cpp
-  engine/basic/ob_temp_table_transformation_vec_op.cpp
   engine/basic/ob_topk_op.cpp
   engine/basic/ob_values_op.cpp
   engine/basic/ob_stat_collector_op.cpp
-  engine/basic/ob_vector_result_holder.cpp
-  engine/basic/ob_hp_infras_vec_op.cpp
   engine/basic/chunk_store/ob_chunk_block.cpp
   engine/basic/chunk_store/ob_compact_store.cpp
   engine/basic/chunk_store/ob_default_block_reader.cpp
@@ -379,12 +256,10 @@ ob_set_subtarget(ob_sql engine_basic
   engine/basic/chunk_store/ob_compact_block_reader.cpp
   engine/basic/chunk_store/ob_compact_block_writer.cpp
   engine/basic/chunk_store/ob_chunk_block_compressor.cpp
-  engine/basic/ob_group_join_buffer_v2.cpp
   #engine/basic/chunk_store/ob_encoded_block_writer.cpp
   #engine/basic/chunk_store/ob_encoded_block_reader.cpp
   engine/basic/ob_values_table_access_op.cpp
   engine/basic/ob_hp_infrastructure_manager.ipp
-  engine/basic/ob_hp_infras_vec_mgr.cpp
   engine/basic/ob_truncate_filter_struct.cpp
 )
 
@@ -402,7 +277,6 @@ ob_set_subtarget(ob_sql engine_cmd
   engine/cmd/ob_load_data_executor.cpp
   engine/cmd/ob_load_data_impl.cpp
   engine/cmd/ob_load_data_parser.cpp
-  engine/cmd/ob_load_data_rpc.cpp
   engine/cmd/ob_load_data_utils.cpp
   engine/cmd/ob_lock_table_executor.cpp
   engine/cmd/ob_outline_executor.cpp
@@ -426,8 +300,6 @@ ob_set_subtarget(ob_sql engine_dml
   engine/dml/ob_conflict_checker.cpp
   engine/dml/ob_dml_ctx_define.cpp
   engine/dml/ob_dml_service.cpp
-  engine/dml/ob_err_log_op.cpp
-  engine/dml/ob_err_log_service.cpp
   engine/dml/ob_table_delete_op.cpp
   engine/dml/ob_table_insert_op.cpp
   engine/dml/ob_table_insert_up_op.cpp
@@ -472,7 +344,6 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_char_length.cpp
   engine/expr/ob_expr_cast.cpp
   engine/expr/ob_expr_coalesce.cpp
-  engine/expr/ob_expr_coll_pred.cpp
   engine/expr/ob_expr_collation.cpp
   engine/expr/ob_expr_collection_construct.cpp
   engine/expr/ob_expr_column_conv.cpp
@@ -607,7 +478,6 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_md5.cpp
   engine/expr/ob_expr_mid.cpp
   engine/expr/ob_expr_mod.cpp
-  engine/expr/ob_expr_multiset.cpp
   engine/expr/ob_expr_tokenize.cpp
   engine/expr/ob_expr_gtid.cpp
   engine/expr/ob_expr_inner_table_option_printer.cpp
@@ -670,7 +540,6 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_update_xml.cpp
   engine/expr/ob_expr_sql_udt_utils.cpp
   engine/expr/ob_expr_collection_construct.cpp
-  engine/expr/ob_expr_sql_udt_construct.cpp
   engine/expr/ob_expr_priv_st_numinteriorrings.cpp
   engine/expr/ob_expr_priv_st_iscollection.cpp
   engine/expr/ob_expr_priv_st_equals.cpp
@@ -727,7 +596,6 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_xor.cpp
   engine/expr/ob_infix_expression.cpp
   engine/expr/ob_iter_expr_range_param.cpp
-  engine/expr/ob_number_format_models.cpp
   engine/expr/ob_pl_expr_subquery.cpp
   engine/expr/ob_postfix_expression.cpp
   engine/expr/ob_rt_datum_arith.cpp
@@ -748,7 +616,6 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_week_of_func.cpp
   engine/expr/ob_expr_weight_string.cpp
   engine/expr/ob_expr_to_outfile_row.cpp
-  engine/expr/ob_expr_to_temporal_base.cpp
   engine/expr/ob_expr_to_type.cpp
   engine/expr/ob_expr_trim.cpp
   engine/expr/ob_expr_truncate.cpp
@@ -773,6 +640,7 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_substr.cpp
   engine/expr/ob_expr_generator_func.cpp
   engine/expr/ob_expr_zipf.cpp
+  engine/expr/ob_distribution.cpp
   engine/expr/ob_expr_uniform.cpp
   engine/expr/ob_expr_normal.cpp
   engine/expr/ob_expr_substrb.cpp
@@ -818,7 +686,6 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_regexp_like.cpp
   engine/expr/ob_expr_regexp_replace.cpp
   engine/expr/ob_expr_regexp_substr.cpp
-  engine/expr/ob_expr_part_id.cpp
   engine/expr/ob_expr_part_id_pseudo_column.cpp
   engine/expr/ob_expr_password.cpp
   engine/expr/ob_expr_period_diff.cpp
@@ -917,35 +784,9 @@ ob_set_subtarget(ob_sql_extra ALONE
   engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_7.cpp
   engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_all.cpp
 
-  engine/expr/vector_cast/vector_cast_compile/vector_cast_part0.cpp
-  engine/expr/vector_cast/vector_cast_compile/vector_cast_part1.cpp
-  engine/expr/vector_cast/vector_cast_compile/vector_cast_part2.cpp
-  engine/expr/vector_cast/vector_cast_compile/vector_cast_part3.cpp
-  engine/expr/vector_cast/vector_cast_compile/vector_cast_part4.cpp
-  engine/expr/vector_cast/vector_cast_compile/vector_cast_part5.cpp
-  engine/expr/vector_cast/vector_cast_compile/vector_cast_part6.cpp
-  engine/expr/vector_cast/vector_cast_compile/vector_cast_part7.cpp
-  engine/expr/vector_cast/vector_cast_compile/vector_cast_part8.cpp
-  engine/expr/vector_cast/vector_cast_compile/vector_cast_part9.cpp
-  engine/expr/vector_cast/vector_cast_compile/vector_cast_part10.cpp
-  engine/expr/vector_cast/vector_cast_compile/vector_cast_part11.cpp
-  engine/expr/vector_cast/vector_cast_compile/vector_cast_part12.cpp
-  engine/expr/vector_cast/vector_cast_compile/vector_cast_part13.cpp
-  engine/expr/vector_cast/vector_cast_compile/vector_cast_part14.cpp
-  engine/expr/vector_cast/vector_cast_compile/vector_cast_part15.cpp
-  engine/expr/vector_cast/vector_cast_compile/vector_cast_all.cpp
-  engine/expr/vector_cast/float_to_decimal_impl.cpp
-  engine/expr/vector_cast/vector_cast.cpp
 )
 
 ob_set_subtarget(ob_sql engine_join
-  engine/join/hash_join/hash_table.cpp
-  engine/join/hash_join/ob_hash_join_struct.cpp
-  engine/join/hash_join/join_hash_table.cpp
-  engine/join/ob_partition_store.cpp
-  engine/join/hash_join/ob_hj_partition_mgr.cpp
-  engine/join/ob_join_vec_op.cpp
-  engine/join/hash_join/ob_hash_join_vec_op.cpp
   engine/join/ob_basic_nested_loop_join_op.cpp
   engine/join/ob_hash_join_basic.cpp
   engine/join/ob_hash_join_op.cpp
@@ -953,10 +794,7 @@ ob_set_subtarget(ob_sql engine_join
   engine/join/ob_join_op.cpp
   engine/join/ob_merge_join_op.cpp
   engine/join/ob_nested_loop_join_op.cpp
-  engine/join/ob_join_filter_partition_splitter.cpp
   engine/join/ob_join_filter_material_control_info.cpp
-  engine/join/ob_merge_join_vec_op.cpp
-  engine/join/ob_nested_loop_join_vec_op.cpp
 )
 
 ob_set_subtarget(ob_sql engine_pdml
@@ -1003,9 +841,7 @@ ob_set_subtarget(ob_sql engine_px
   engine/px/exchange/ob_px_dist_transmit_op.cpp
   engine/px/exchange/ob_px_fifo_coord_op.cpp
   engine/px/exchange/ob_px_ms_coord_op.cpp
-  engine/px/exchange/ob_px_ms_coord_vec_op.cpp
   engine/px/exchange/ob_px_ms_receive_op.cpp
-  engine/px/exchange/ob_px_ms_receive_vec_op.cpp
   engine/px/exchange/ob_px_ordered_coord_op.cpp
   engine/px/exchange/ob_px_receive_op.cpp
   engine/px/exchange/ob_px_reduce_transmit_op.cpp
@@ -1026,7 +862,6 @@ ob_set_subtarget(ob_sql engine_px
   engine/px/p2p_datahub/ob_p2p_dh_msg.cpp
   engine/px/p2p_datahub/ob_runtime_filter_query_range.cpp
   engine/px/p2p_datahub/ob_runtime_filter_msg.cpp
-  engine/px/p2p_datahub/ob_runtime_filter_vec_msg.cpp
   engine/px/p2p_datahub/ob_pushdown_topn_filter_msg.cpp
 )
 
@@ -1039,15 +874,7 @@ ob_set_subtarget(ob_sql engine_set
   engine/set/ob_merge_intersect_op.cpp
   engine/set/ob_merge_set_op.cpp
   engine/set/ob_merge_union_op.cpp
-  engine/set/ob_hash_set_vec_op.cpp
-  engine/set/ob_hash_union_vec_op.cpp
-  engine/set/ob_hash_except_vec_op.cpp
-  engine/set/ob_hash_intersect_vec_op.cpp
   engine/set/ob_set_op.cpp
-  engine/set/ob_merge_set_vec_op.cpp
-  engine/set/ob_merge_union_vec_op.cpp
-  engine/set/ob_merge_intersect_vec_op.cpp
-  engine/set/ob_merge_except_vec_op.cpp
 )
 
 ob_set_subtarget(ob_sql engine_table
@@ -1069,7 +896,6 @@ ob_set_subtarget(ob_sql executor
   executor/ob_worker_session_guard.cpp
   executor/ob_job_id.cpp
   executor/ob_maintain_dependency_info_task.cpp
-  executor/ob_shuffle_service.cpp
   executor/ob_slice_id.cpp
   executor/ob_task_event.cpp
   executor/ob_task_executor_ctx.cpp
@@ -1104,7 +930,6 @@ ob_set_subtarget(ob_sql optimizer
   optimizer/ob_log_del_upd.cpp
   optimizer/ob_log_delete.cpp
   optimizer/ob_log_distinct.cpp
-  optimizer/ob_log_err_log.cpp
   optimizer/ob_log_exchange.cpp
   optimizer/ob_log_expr_values.cpp
   optimizer/ob_log_for_update.cpp

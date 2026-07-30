@@ -59,7 +59,17 @@ cal_version(const uint64_t major, const uint64_t minor, const uint64_t major_pat
 class VersionUtil
 {
 public:
+  static int is_valid(const char *verstr);
+  static int get_version(const char *verstr, uint64_t &version);
+  static int get_version(const ObString &verstr, uint64_t &version);
+  static int64_t print_vsn(char *buf, const int64_t buf_len, uint64_t version);
   static int64_t print_version_str(char *buf, const int64_t buf_len, uint64_t version);
+
+  static const int64_t MAX_VERSION_ITEM = 16;
+  static const int64_t MAJOR_POS = 0;
+  static const int64_t MINOR_POS = 1;
+  static const int64_t MAJOR_PATCH_POS = 2;
+  static const int64_t MINOR_PATCH_POS = 3;
 };
 
 class ObVersionPrinter

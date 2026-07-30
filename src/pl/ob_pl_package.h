@@ -33,8 +33,8 @@ enum ObPackageType
   PL_INVALID_PACKAGE_TYPE = 0,
   PL_PACKAGE_SPEC = 1,
   PL_PACKAGE_BODY = 2,
-  PL_UDT_OBJECT_SPEC = 3,
-  PL_UDT_OBJECT_BODY = 4,
+  PL_RESERVED_PACKAGE_TYPE_3 = 3,
+  PL_RESERVED_PACKAGE_TYPE_4 = 4,
 };
 
 class ObPLPackageBase
@@ -106,8 +106,7 @@ public:
       inited_(false),
       var_table_(),
       condition_table_(),
-      cursor_table_(allocator_),
-      public_syn_count_(0) {}
+      cursor_table_(allocator_) {}
   virtual ~ObPLPackage();
 
   int init(const ObPLPackageAST &package_ast);
@@ -145,9 +144,6 @@ public:
                                 ObExecContext &exec_ctx,
                                 ObPLPackageState &package_state);
   int execute_init_routine(ObIAllocator &allocator, ObExecContext &exec_ctx);
-  void set_public_syn_count(int64_t public_syn_count) { public_syn_count_ = public_syn_count; }
-  int64_t get_public_syn_count() const { return public_syn_count_; }
-
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPLPackage);
 
@@ -155,7 +151,6 @@ private:
   common::ObArray<ObPLVar *> var_table_;
   common::ObArray<ObPLCondition *> condition_table_;
   ObPLCursorTable cursor_table_;
-  int64_t public_syn_count_;
 };
 
 }

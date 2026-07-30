@@ -250,12 +250,12 @@ int ObTabletDirectLoadMgrV3::init_v2(const ObTabletDirectLoadInsertParam &build_
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not exist", K(ret), K(build_param.runtime_only_param_.table_id_));
-  } else if (OB_FAIL(SERVER_TMP_FILE_MANAGER.alloc_dir(dir_id_))) {
+  } else if (OB_FAIL(share::g_mp->tmp_file_manager()->alloc_dir(dir_id_))) {
     LOG_WARN("failed to get direct_load ");
   } else {
     /* prepare table key*/
     share::SCN mock_start_scn;
-    if (OB_FAIL(mock_start_scn.convert_for_tx(SS_DDL_START_SCN_VAL))) {
+    if (OB_FAIL(mock_start_scn.convert_for_tx(DDL_START_SCN_VAL))) {
       LOG_WARN("failed to convert for tx", K(ret));
     } else if (OB_FAIL(tablet_handle.get_obj()->load_storage_schema(arena_allocator_, storage_schema_))) {
       LOG_WARN("failed to get tablet handle", K(ret));

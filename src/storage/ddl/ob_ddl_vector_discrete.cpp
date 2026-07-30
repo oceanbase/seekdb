@@ -18,10 +18,8 @@
 #include "storage/ddl/ob_ddl_vector_utils.h"
 #include "share/ob_tablet_autoincrement_param.h"
 #include "storage/access/ob_table_param.h"
-#include "sql/engine/vector/ob_continuous_vector.h"
-#include "sql/engine/vector/ob_discrete_vector.h"
-#include "sql/engine/vector/ob_fixed_length_vector.h"
-#include "sql/engine/vector/ob_uniform_vector.h"
+#include "sql/engine/vector/ob_discrete_format.h"
+#include "sql/engine/vector/type_traits.h"
 #include "storage/blocksstable/ob_storage_datum.h"
 #include "storage/ddl/ob_ddl_batch_rows.h"
 

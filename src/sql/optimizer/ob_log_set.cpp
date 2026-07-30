@@ -877,11 +877,11 @@ int ObLogSet::check_has_push_down(bool &has_push_down)
   return ret;
 }
 
-int ObLogSet::compute_op_parallel_and_server_info()
+int ObLogSet::compute_op_parallel_info()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(compute_normal_multi_child_parallel_and_server_info())) {
-    LOG_WARN("failed to compute multi child parallel and server info", K(ret), K(get_distributed_algo()));
+  if (OB_FAIL(compute_normal_multi_child_parallel_info())) {
+    LOG_WARN("failed to compute multi child parallel info", K(ret), K(get_distributed_algo()));
   } else if (DistAlgo::DIST_PARTITION_WISE == get_distributed_algo()) {
     ObLogicalOperator *child = get_child(first_child);
     if (OB_ISNULL(child)) {

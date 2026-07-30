@@ -300,19 +300,5 @@ int64_t ObStorageCompactionTimeGuard::to_string(char *buf, const int64_t buf_len
   return pos;
 }
 
-/**
- * --------------------------------------ObSSCompactionTimeGuard--------------------------------------
- */
-const char *ObSSCompactionTimeGuard::CompactionEventStr[] = {
-    "GET_SCHEDULE_TABLET",
-    "PREPARE_CLOG",
-    "UPDATE_TABLET_OBJ",
-    "GET_TABLET",
-    "SCHEDULE_MERGE",
-    "REFRESH",
-    "FORCE_FREEZE"
-};
-
-
 } // namespace compaction
 } // namespace oceanbase

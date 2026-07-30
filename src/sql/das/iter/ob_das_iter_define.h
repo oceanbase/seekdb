@@ -85,20 +85,17 @@ struct ObDASFTSTabletID
 public:
   ObDASFTSTabletID()
     : inv_idx_tablet_id_(),
-      fwd_idx_tablet_id_(),
       domain_id_idx_tablet_id_()
   {}
   common::ObTabletID inv_idx_tablet_id_;
-  common::ObTabletID fwd_idx_tablet_id_;
   common::ObTabletID domain_id_idx_tablet_id_;
 
   void reset()
   {
     inv_idx_tablet_id_.reset();
-    fwd_idx_tablet_id_.reset();
     domain_id_idx_tablet_id_.reset();
   }
-  TO_STRING_KV(K_(inv_idx_tablet_id), K_(fwd_idx_tablet_id), K_(domain_id_idx_tablet_id));
+  TO_STRING_KV(K_(inv_idx_tablet_id), K_(domain_id_idx_tablet_id));
 };
 
 #define SUPPORTED_DAS_ITER_TREE(_type)                    \
@@ -129,7 +126,6 @@ public:
 
   /* used by basic fulltext index */
   common::ObTabletID inv_idx_tablet_id_;
-  common::ObTabletID fwd_idx_tablet_id_;
   common::ObTabletID domain_id_idx_tablet_id_;
   /* used by basic fulltext index */
 
@@ -167,7 +163,6 @@ public:
     rowkey_doc_tablet_id_.reset();
     rowkey_vid_tablet_id_.reset();
     inv_idx_tablet_id_.reset();
-    fwd_idx_tablet_id_.reset();
     domain_id_idx_tablet_id_.reset();
     index_merge_tablet_ids_.reset();
     fts_tablet_ids_.reset();

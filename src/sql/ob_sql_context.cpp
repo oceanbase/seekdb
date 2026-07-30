@@ -129,7 +129,6 @@ ObSqlCtx::ObSqlCtx()
     is_mock_prepare_(false),
     is_prepare_stage_(false),
     is_dynamic_sql_(false),
-    is_dbms_sql_(false),
     is_cursor_(false),
     statement_id_(common::OB_INVALID_ID),
     stmt_type_(stmt::T_NONE),
@@ -150,7 +149,6 @@ ObSqlCtx::ObSqlCtx()
     is_execute_call_stmt_(false),
     is_text_ps_mode_(false),
     first_plan_hash_(0),
-    is_bulk_(false),
     ins_opt_ctx_(),
     flags_(0)
 {
@@ -203,7 +201,6 @@ void ObSqlCtx::reset()
   is_execute_call_stmt_ = false;
   is_text_ps_mode_ = false;
   enable_strict_defensive_check_ = false;
-  is_bulk_ = false;
   ins_opt_ctx_.reset();
   reconstruct_ps_sql_.reset();
 }

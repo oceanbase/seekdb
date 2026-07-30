@@ -116,7 +116,6 @@ select t1.c1 from t1 left join (t2 left join t3 on t2.c1 = t3.c1) on t2.c1 = 1;
 select /*+leading(t1 t2)  use_mj(t1 t2)*/ t1.c1, t2.c1 from tr t1 inner join tr t2 on t1.c1 = t2.c1 order by t1.c1 desc;
 #this should put at last
 use oceanbase;
-select * from __all_virtual_zone_stat where zone='zone1';
 select /*+leading(t2 t1) use_nl(t1 t2)*/ t1.c1, t2.c1 from opt.t4 t1 inner join  opt.t2 as t2 on t1.c1 = t2.c1;
 select /*+leading(opt.t1 opt.t2) use_nl(t1 t2)*/ t1.c1, t2.c1 from  opt.t1  as t1 inner join  opt.t2 as t2 on t1.c1 = t2.c2 order by t1.c1 desc, t2.c1 desc;
 select /*+use_nl(opt.t1 opt.t2 opt.t3)*/ * from opt.t1 as t1 left join opt.t2 as t2 on t1.c1 = t2.c1 and t1.c1 = 1 and t2.c1 = 1 left join opt.t3 as t3 on t2.c1 = t3.c1 and t3.c1 in (1, 2) order by t1.c1;

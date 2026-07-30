@@ -113,8 +113,8 @@ static const uint64_t OB_MIN_ID  = 0;//used for lower_bound
 #define STORED_GENERATED_COLUMN_FLAG (INT64_C(1) << 1)
 #define CTE_GENERATED_COLUMN_FLAG (INT64_C(1) << 2)
 #define DEFAULT_EXPR_V2_COLUMN_FLAG (INT64_C(1) << 3)
-#define PRIMARY_VP_COLUMN_FLAG (INT64_C(1) << 4)
-#define AUX_VP_COLUMN_FLAG (INT64_C(1) << 5)
+#define RESERVED_COLUMN_FLAG_4 (INT64_C(1) << 4)
+#define RESERVED_COLUMN_FLAG_5 (INT64_C(1) << 5)
 #define INVISIBLE_COLUMN_FLAG (INT64_C(1) << 6)
 // The logic of the new table without a primary key changes the column (partition key) to the primary key
 #define HEAP_ALTER_ROWKEY_FLAG (INT64_C(1) << 8)
@@ -212,7 +212,7 @@ enum ObPartitionFuncType
   PARTITION_FUNC_TYPE_RANGE_COLUMNS,
   PARTITION_FUNC_TYPE_LIST,
   PARTITION_FUNC_TYPE_LIST_COLUMNS,
-  PARTITION_FUNC_TYPE_INTERVAL,
+  RESERVED_PARTITION_FUNC_TYPE_7,
   PARTITION_FUNC_TYPE_MAX,
 };
 
@@ -245,13 +245,7 @@ inline bool is_key_part(const ObPartitionFuncType part_type)
 inline bool is_range_part(const ObPartitionFuncType part_type)
 {
   return PARTITION_FUNC_TYPE_RANGE == part_type
-      || PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_type
-      || PARTITION_FUNC_TYPE_INTERVAL == part_type;
-}
-
-inline bool is_interval_part(const ObPartitionFuncType part_type)
-{
-  return PARTITION_FUNC_TYPE_INTERVAL == part_type;
+      || PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_type;
 }
 
 inline bool is_list_part(const ObPartitionFuncType part_type)
@@ -274,7 +268,7 @@ enum ObTableType
                            // will add index for sys table???
   TMP_TABLE      = 6,      // Temporary table in mysql compatibility mode
   TMP_TABLE_ALL      = 10, // All types of temporary tables, only used for alter system statements
-  AUX_VERTIAL_PARTITION_TABLE = 11,
+  RESERVED_TABLE_TYPE_11 = 11,
   AUX_LOB_PIECE  = 12,
   AUX_LOB_META   = 13,
   MAX_TABLE_TYPE
@@ -1152,10 +1146,10 @@ typedef enum {
   DATABASE_PRIV = 6,
   TABLE_PRIV = 7,
   ROUTINE_SCHEMA = 8,
-  SYNONYM_SCHEMA = 9,
+  RESERVED_SCHEMA_9 = 9,
   PACKAGE_SCHEMA = 12,
   SYS_VARIABLE_SCHEMA = 15,
-  UDT_SCHEMA = 16,
+  RESERVED_SCHEMA_16 = 16,
   // Lightweight table representation used when a caller requests a simple schema.
   TABLE_SIMPLE_SCHEMA = 17,
   TRIGGER_SCHEMA = 19,
@@ -1311,14 +1305,14 @@ enum ObDependencyTableType
   DEPENDENCY_INVALID = 0,
   DEPENDENCY_TABLE = 1,
   DEPENDENCY_VIEW = 2,
-  DEPENDENCY_SYNONYM = 3,
+  RESERVED_DEPENDENCY_3 = 3,
   DEPENDENCY_PROCEDURE = 4,
   DEPENDENCY_OUTLINE = 5,
   DEPENDENCY_FUNCTION = 6,
   DEPENDENCY_PACKAGE = 7,
   DEPENDENCY_PACKAGE_BODY = 8,
-  DEPENDENCY_TYPE = 10,
-  DEPENDENCY_TYPE_BODY = 16,
+  RESERVED_DEPENDENCY_10 = 10,
+  RESERVED_DEPENDENCY_16 = 16,
   DEPENDENCY_TRIGGER = 17
 };
 
@@ -1326,15 +1320,15 @@ enum class ObObjectType {
   INVALID         = 0,
   TABLE           = 1,
   PACKAGE         = 3,
-  TYPE            = 4,
+  RESERVED_4      = 4,
   PACKAGE_BODY    = 5,
-  TYPE_BODY       = 6,
+  RESERVED_6      = 6,
   TRIGGER         = 7,
   VIEW            = 8,
   FUNCTION        = 9,
   INDEX           = 11,
   PROCEDURE       = 12,
-  SYNONYM         = 13,
+  RESERVED_13     = 13,
   SYS_PACKAGE     = 14,
   SYS_PACKAGE_ONLY_OBJ_PRIV = 15,
   AI_MODEL        = 18,
@@ -1348,18 +1342,16 @@ struct ObSchemaObjVersion
       // The default is table, which is compatible with the current logic
       object_type_(DEPENDENCY_TABLE),
       is_db_explicit_(false),
-      is_existed_(true),
-      invoker_db_id_(common::OB_INVALID_ID)
+      is_existed_(true)
   {
   }
 
-  ObSchemaObjVersion(int64_t object_id, int64_t version, ObDependencyTableType object_type, int64_t db_id = common::OB_INVALID_ID)
+  ObSchemaObjVersion(int64_t object_id, int64_t version, ObDependencyTableType object_type)
       : object_id_(object_id),
         version_(version),
         object_type_(object_type),
         is_db_explicit_(false),
-        is_existed_(true),
-        invoker_db_id_(db_id)
+        is_existed_(true)
     {
     }
 
@@ -1371,7 +1363,6 @@ struct ObSchemaObjVersion
     object_type_ = DEPENDENCY_TABLE;
     is_db_explicit_ = false;
     is_existed_ = true;
-    invoker_db_id_ = common::OB_INVALID_ID;
   }
   inline int64_t get_object_id() const { return object_id_; }
   inline int64_t get_version() const { return version_; }
@@ -1396,9 +1387,6 @@ struct ObSchemaObjVersion
       case DEPENDENCY_VIEW:
         ret_type = TABLE_SCHEMA;
         break;
-      case DEPENDENCY_SYNONYM:
-        ret_type = SYNONYM_SCHEMA;
-        break;
       case DEPENDENCY_PROCEDURE:
       case DEPENDENCY_FUNCTION:
         ret_type = ROUTINE_SCHEMA;
@@ -1409,10 +1397,6 @@ struct ObSchemaObjVersion
         break;
       case DEPENDENCY_OUTLINE:
         ret_type = OUTLINE_SCHEMA;
-        break;
-      case DEPENDENCY_TYPE:
-      case DEPENDENCY_TYPE_BODY:
-        ret_type = UDT_SCHEMA;
         break;
       case DEPENDENCY_TRIGGER:
         ret_type = TRIGGER_SCHEMA;
@@ -1445,12 +1429,6 @@ struct ObSchemaObjVersion
       case DEPENDENCY_PACKAGE_BODY:
         ret_type = ObObjectType::PACKAGE_BODY;
         break;
-      case DEPENDENCY_TYPE:
-        ret_type = ObObjectType::TYPE;
-        break;
-      case DEPENDENCY_SYNONYM:
-        ret_type = ObObjectType::SYNONYM;
-        break;
       default:
         break;
     }
@@ -1458,7 +1436,6 @@ struct ObSchemaObjVersion
   }
   inline bool is_valid() const { return common::OB_INVALID_ID != object_id_; }
   inline bool is_base_table() const { return DEPENDENCY_TABLE == object_type_; }
-  inline bool is_synonym() const { return DEPENDENCY_SYNONYM == object_type_; }
   inline bool is_procedure() const { return DEPENDENCY_PROCEDURE == object_type_; }
   inline bool is_db_explicit() const { return is_db_explicit_; }
   inline bool is_existed() const { return is_existed_; }
@@ -1468,14 +1445,12 @@ struct ObSchemaObjVersion
   ObDependencyTableType object_type_;
   bool is_db_explicit_;
   bool is_existed_;
-  int64_t invoker_db_id_; // for public synonym
 
   TO_STRING_KV(N_TID, object_id_,
                N_SCHEMA_VERSION, version_,
                K_(object_type),
                K_(is_db_explicit),
-               K_(is_existed),
-               K_(invoker_db_id));
+               K_(is_existed));
   OB_UNIS_VERSION(1);
 };
 
@@ -1953,8 +1928,6 @@ public:
 
   inline bool is_range_part() const
   { return share::schema::is_range_part(part_func_type_); }
-  inline bool is_interval_part() const
-  { return share::schema::is_interval_part(part_func_type_); }
   inline bool is_hash_part() const
   { return share::schema::is_hash_part(part_func_type_); }
   inline bool is_hash_like_part() const
@@ -1974,8 +1947,6 @@ public:
   inline int64_t get_part_num() const { return part_num_; }
   inline ObPartitionFuncType get_part_func_type() const { return part_func_type_; }
   inline ObPartitionFuncType get_sub_part_func_type() const { return part_func_type_; }
-  const common::ObString &get_intervel_start_str() const { return interval_start_; }
-  const common::ObString &get_part_intervel_str() const { return part_interval_; }
   //other methods
   virtual void reset();
   void reuse();
@@ -1989,8 +1960,6 @@ private:
   common::ObString part_func_expr_;
   // When ObPartOption is ObSubPartOption, it means subpartition num in template subpartition definition.
   int64_t part_num_;
-  common::ObString interval_start_; //interval start value
-  common::ObString part_interval_; // interval partition step
 };
 
 class ObSubPartitionOption : public ObPartitionOption
@@ -2450,7 +2419,6 @@ public:
   inline bool is_key_part() const { return part_option_.is_key_part(); }
   inline bool is_key_subpart() const { return sub_part_option_.is_key_part(); }
   inline bool is_range_part() const { return part_option_.is_range_part(); }
-  inline bool is_interval_part() const { return part_option_.is_interval_part(); }
   inline bool is_range_subpart() const { return sub_part_option_.is_range_part(); }
 
   inline bool is_hash_like_part() const { return part_option_.is_hash_like_part(); }
@@ -2571,21 +2539,6 @@ public:
   DECLARE_VIRTUAL_TO_STRING;
   int try_assign_def_subpart_array(const share::schema::ObPartitionSchema &that);
 
-  int set_transition_point(const common::ObRowkey &transition_point);
-  int set_transition_point_with_hex_str(const common::ObString &transition_point_hex);
-  const common::ObRowkey &get_transition_point() const
-  { return transition_point_; }
-
-  int set_interval_range(const common::ObRowkey &interval_range);
-  int set_interval_range_with_hex_str(const common::ObString &interval_range_hex);
-  const common::ObRowkey &get_interval_range() const
-  { return interval_range_; }
-
-  // for interval partitioned table, calc range partition number
-  // note interval parted table, range part number is not same as all part number, because table
-  // may have other interval partitions.
-  int get_interval_parted_range_part_num(uint64_t &part_num) const;
-
   // only used for virtual table
   int mock_list_partition_array();
   // only used for generate part_name
@@ -2691,8 +2644,6 @@ protected:
   ObPartition **hidden_partition_array_;
   int64_t hidden_partition_array_capacity_;
   int64_t hidden_partition_num_;
-  common::ObRowkey transition_point_;
-  common::ObRowkey interval_range_;
 };
 class ObPartitionUtils
 {
@@ -2745,11 +2696,6 @@ public:
   static bool is_types_equal_for_partition_check(
               const common::ObObjType &typ1,
               const common::ObObjType &type2);
-
-  static int set_low_bound_val_by_interval_range_by_innersql(
-      ObPartition &p,
-      const ObRowkey &interval_range);
-
 
   /* --- calc tablet_ids/part_ids/sub_part_ids by partition columns --- */
 
@@ -3467,50 +3413,6 @@ inline bool ObTableSchemaHashWrapper::operator ==(const ObTableSchemaHashWrapper
       && (name_case_mode_ == rv.name_case_mode_)
       && (session_id_ == rv.session_id_ || common::OB_INVALID_ID == rv.session_id_)
       && (0 == name_cmp.compare(table_name_ ,rv.table_name_));
-}
-
-class ObAuxVPSchemaHashWrapper
-{
-public :
-  ObAuxVPSchemaHashWrapper()
-      : database_id_(common::OB_INVALID_ID)
-  {
-  }
-  ObAuxVPSchemaHashWrapper(const uint64_t database_id,
-                           const common::ObString &aux_vp_name)
-      : database_id_(database_id), aux_vp_name_(aux_vp_name)
-  {
-  }
-  ~ObAuxVPSchemaHashWrapper() {}
-  inline uint64_t hash() const;
-  inline bool operator ==(const ObAuxVPSchemaHashWrapper &rv) const;
-
-  
-  inline uint64_t get_database_id() const { return database_id_; }
-  inline const common::ObString &get_aux_vp_name() const { return aux_vp_name_; }
-private :
-  
-  uint64_t database_id_;
-  common::ObString aux_vp_name_;
-};
-
-inline uint64_t ObAuxVPSchemaHashWrapper::hash() const
-{
-  uint64_t hash_ret = 0;
-  
-
-  hash_ret = common::murmurhash(&database_id_, sizeof(uint64_t), hash_ret);
-  //case insensitive
-  hash_ret = common::ObCharset::hash(common::CS_TYPE_UTF8MB4_GENERAL_CI, aux_vp_name_, hash_ret);
-  return hash_ret;
-}
-
-inline bool ObAuxVPSchemaHashWrapper::operator ==(const ObAuxVPSchemaHashWrapper &rv) const
-{
-  //case insensitive
-  ObSchemaNameComparator name_cmp;
-  return (database_id_ == rv.database_id_)
-         && (0 == name_cmp.compare(aux_vp_name_, rv.aux_vp_name_));
 }
 
 class ObDatabaseSchemaHashWrapper
@@ -5491,8 +5393,6 @@ public:
              const share::schema::ObSimpleTableSchemaV2 &table,
              bool &exist);
 
-  static bool is_cluster_private_runtime_table(const uint64_t table_id);
-
   static bool is_sys_table_index_tid(const int64_t index_id);
   static bool is_sys_table_has_index(const int64_t table_id);
   static int fill_sys_index_infos(share::schema::ObTableSchema &table);
@@ -5550,7 +5450,7 @@ public:
     INDEX    = 2,
     VIEW     = 3,
     DATABASE = 4,
-    AUX_VP   = 5,
+    RESERVED_TYPE_5 = 5,
     TRIGGER  = 6,
     AUX_LOB_META = 8,
     AUX_LOB_PIECE = 9,
@@ -5604,9 +5504,6 @@ inline bool ObRecycleObject::is_valid() const
 }
 
 typedef common::hash::ObHashSet<uint64_t> DropTableIdHashSet;
-// Used to count vertical partition columns
-typedef common::hash::ObPlacementHashSet<common::ObString, common::OB_MAX_USER_DEFINED_COLUMNS_COUNT> VPColumnNameHashSet;
-
 struct ObBasedSchemaObjectInfo
 {
   OB_UNIS_VERSION(1);

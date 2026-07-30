@@ -36,7 +36,7 @@ public:
     const share::schema::ObSysVariableSchema &sys_var_schema,
     const ObString &database_name,
     const share::schema::ObTableSchema &table_schema, 
-    ObIndexType index_type,
+    share::schema::ObIndexType index_type,
     uint64_t executor_data_version,
     const ObSQLMode sql_mode,
     bool &is_create_index_on_empty_table_opt);

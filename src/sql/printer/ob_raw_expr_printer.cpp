@@ -322,11 +322,6 @@ int ObRawExprPrinter::print(ObQueryRefRawExpr *expr)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt_ is NULL of buf_ is NULL or pos_ is NULL or expr is NULL", K(ret));
   } else {
-    if (expr->is_cursor()) {
-      DATA_PRINTF("CURSOR");
-    } else if (expr->is_multiset()) {
-      DATA_PRINTF("MULTISET");
-    }
     if (OB_SUCC(ret)) {
       ObStmt *stmt = expr->get_ref_stmt();
       if (OB_ISNULL(stmt)) {
@@ -371,8 +366,7 @@ int ObRawExprPrinter::print(ObColumnRefRawExpr *expr)
     ObArenaAllocator arena_alloc;
     ObString col_name = expr->get_column_name();
     if (expr->is_cte_generated_column()) {
-      ObString table_name = expr->get_synonym_name().empty() ?
-                                                  expr->get_table_name() : expr->get_synonym_name();
+      ObString table_name = expr->get_table_name();
       if (OB_SUCC(ret)) {
         // note: expr's table_name is equal to alias if table's alias is not empty,
         PRINT_IDENT_WITH_QUOT(table_name);
@@ -386,19 +380,12 @@ int ObRawExprPrinter::print(ObColumnRefRawExpr *expr)
       DATA_PRINTF(".");
       PRINT_IDENT_WITH_QUOT(col_name);
     } else {
-      if (!expr->get_synonym_name().empty() && !expr->get_synonym_db_name().empty()) {
-        ObString synonyn_db_name = expr->get_synonym_db_name();
-        PRINT_IDENT_WITH_QUOT(synonyn_db_name);
-        DATA_PRINTF(".");
-      } else if (!expr->get_synonym_name().empty() && expr->get_synonym_db_name().empty()) {
-        // do nothing, synonym database name is not explicit
-      } else if (expr->get_database_name().length() > 0) {
+      if (expr->get_database_name().length() > 0) {
         ObString database_name = expr->get_database_name();
         PRINT_IDENT_WITH_QUOT(database_name);
         DATA_PRINTF(".");
       }
-      ObString table_name = expr->get_synonym_name().empty() ?
-                                  expr->get_table_name() : expr->get_synonym_name();
+      ObString table_name = expr->get_table_name();
       if (OB_SUCC(ret)) {
         // note: expr's table_name is equal to alias if table's alias is not empty,
         if (!table_name.empty()) {
@@ -725,39 +712,6 @@ int ObRawExprPrinter::print(ObOpRawExpr *expr)
       }
       break;
     }
-    case T_OP_MULTISET: {
-      SET_SYMBOL_IF_EMPTY("MULTISET");
-      if (OB_UNLIKELY(2 != expr->get_param_count())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("param count should be equal 2", K(ret), K(expr->get_param_count()));
-      } else {
-        ObMultiSetType type = static_cast<ObMultiSetRawExpr*>(expr)->get_multiset_type();
-        ObMultiSetModifier modifier = static_cast<ObMultiSetRawExpr*>(expr)->get_multiset_modifier();
-        if (type < MULTISET_TYPE_UNION || type > MULTISET_TYPE_EXCEPT || modifier < MULTISET_MODIFIER_ALL || modifier > MULTISET_MODIFIER_DISTINCT)  {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid multi set type or modifier", K(ret), K(type), K(modifier));
-        } else {
-          DATA_PRINTF("(");
-          PRINT_EXPR(expr->get_param_expr(0));
-          DATA_PRINTF("MULTISET ");
-          if (type == MULTISET_TYPE_UNION) {
-            DATA_PRINTF("UNION ");
-          } else if (type == MULTISET_TYPE_INTERSECT) {
-            DATA_PRINTF("INTERSECT ");
-          } else {
-            DATA_PRINTF("EXCEPT ");
-          }
-          if (modifier == MULTISET_MODIFIER_ALL) {
-            DATA_PRINTF("ALL ");
-          } else {
-            DATA_PRINTF("DISTINCT ");
-          }
-          PRINT_EXPR(expr->get_param_expr(1));
-          DATA_PRINTF(")");
-        }
-      }
-      break;
-    }
     case T_OP_BOOL:{
       CK(1 == expr->get_param_count());
       if (expr->has_flag(IS_INNER_ADDED_EXPR)) {
@@ -790,46 +744,6 @@ int ObRawExprPrinter::print(ObOpRawExpr *expr)
       } else {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("wrapper expr have to be inner expr for now", K(ret), K(*expr));
-      }
-      break;
-    }
-    case T_OP_COLL_PRED: {
-      SET_SYMBOL_IF_EMPTY("collection predicate");
-      if (OB_UNLIKELY(2 != expr->get_param_count())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("param count should be equal 2", K(ret), K(expr->get_param_count()));
-      } else {
-        ObMultiSetType type = static_cast<ObCollPredRawExpr*>(expr)->get_multiset_type();
-        ObMultiSetModifier modifier = static_cast<ObCollPredRawExpr*>(expr)->get_multiset_modifier();
-        if (type < MULTISET_TYPE_SUBMULTISET || type > MULTISET_TYPE_EMPTY || (modifier != MULTISET_MODIFIER_INVALID && modifier != MULTISET_MODIFIER_NOT))  {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid coll pred type or modifier", K(ret), K(type), K(modifier));
-        } else {
-          DATA_PRINTF("(");
-          PRINT_EXPR(expr->get_param_expr(0));
-          if (type == MULTISET_TYPE_SUBMULTISET || type == MULTISET_TYPE_MEMBER_OF) {
-            if (modifier == MULTISET_MODIFIER_NOT) {
-              DATA_PRINTF("NOT ");
-            }
-            if (type == MULTISET_TYPE_SUBMULTISET) {
-              DATA_PRINTF("SUBMULTISET ");
-            } else {
-              DATA_PRINTF("MEMBER ");
-            }
-            PRINT_EXPR(expr->get_param_expr(1));
-          } else {
-             DATA_PRINTF("IS ");
-             if (modifier == MULTISET_MODIFIER_NOT) {
-               DATA_PRINTF("NOT ");
-             }
-             if (type == MULTISET_TYPE_IS_SET) {
-               DATA_PRINTF("A SET");
-             } else {
-               DATA_PRINTF("EMPTY");
-             }
-          }
-          DATA_PRINTF(")");
-        }
       }
       break;
     }
@@ -1019,34 +933,10 @@ int ObRawExprPrinter::print(ObAggFunRawExpr *expr)
       SET_SYMBOL_IF_EMPTY("variance");
     case T_FUN_STDDEV:
       SET_SYMBOL_IF_EMPTY("stddev");
-    case T_FUN_CORR:
-      SET_SYMBOL_IF_EMPTY("corr");
-    case T_FUN_COVAR_POP:
-      SET_SYMBOL_IF_EMPTY("covar_pop");
-    case T_FUN_COVAR_SAMP:
-      SET_SYMBOL_IF_EMPTY("covar_samp");
     case T_FUN_VAR_POP:
       SET_SYMBOL_IF_EMPTY("var_pop");
     case T_FUN_VAR_SAMP:
       SET_SYMBOL_IF_EMPTY("var_samp");
-    case T_FUN_REGR_SLOPE:
-      SET_SYMBOL_IF_EMPTY("regr_slope");
-    case T_FUN_REGR_INTERCEPT:
-      SET_SYMBOL_IF_EMPTY("regr_intercept");
-    case T_FUN_REGR_COUNT:
-      SET_SYMBOL_IF_EMPTY("regr_count");
-    case T_FUN_REGR_R2:
-      SET_SYMBOL_IF_EMPTY("regr_r2");
-    case T_FUN_REGR_AVGX:
-      SET_SYMBOL_IF_EMPTY("regr_avgx");
-    case T_FUN_REGR_AVGY:
-      SET_SYMBOL_IF_EMPTY("regr_avgy");
-    case T_FUN_REGR_SXX:
-      SET_SYMBOL_IF_EMPTY("regr_sxx");
-    case T_FUN_REGR_SYY:
-      SET_SYMBOL_IF_EMPTY("regr_syy");
-    case T_FUN_REGR_SXY:
-      SET_SYMBOL_IF_EMPTY("regr_sxy");
     case T_FUN_AVG:
       SET_SYMBOL_IF_EMPTY("avg");
     case T_FUN_STDDEV_POP:
@@ -1160,14 +1050,6 @@ int ObRawExprPrinter::print(ObAggFunRawExpr *expr)
       }
       break;
     }
-    case T_FUN_GROUP_RANK:
-      SET_SYMBOL_IF_EMPTY("rank");
-    case T_FUN_GROUP_DENSE_RANK:
-      SET_SYMBOL_IF_EMPTY("dense_rank");
-    case T_FUN_GROUP_PERCENT_RANK:
-      SET_SYMBOL_IF_EMPTY("percent_rank");
-    case T_FUN_GROUP_CUME_DIST:
-      SET_SYMBOL_IF_EMPTY("cume_dist");
     case T_FUN_GROUP_PERCENTILE_CONT:
       SET_SYMBOL_IF_EMPTY("percentile_cont");
     case T_FUN_GROUP_PERCENTILE_DISC:
@@ -1239,59 +1121,6 @@ int ObRawExprPrinter::print(ObAggFunRawExpr *expr)
         }
       }
       DATA_PRINTF(")");
-      break;
-    }
-    case T_FUN_KEEP_MAX:
-      SET_SYMBOL_IF_EMPTY("max");
-    case T_FUN_KEEP_MIN:
-      SET_SYMBOL_IF_EMPTY("min");
-    case T_FUN_KEEP_SUM:
-      SET_SYMBOL_IF_EMPTY("sum");
-    case T_FUN_KEEP_COUNT:
-      SET_SYMBOL_IF_EMPTY("count");
-    case T_FUN_KEEP_AVG:
-      SET_SYMBOL_IF_EMPTY("avg");
-    case T_FUN_KEEP_STDDEV:
-      SET_SYMBOL_IF_EMPTY("stddev");
-    case T_FUN_KEEP_VARIANCE:
-      SET_SYMBOL_IF_EMPTY("variance");
-    case T_FUN_KEEP_WM_CONCAT: {
-      SET_SYMBOL_IF_EMPTY("wm_concat");
-      DATA_PRINTF("%.*s(", LEN_AND_PTR(symbol));
-      if (0 == expr->get_real_param_count()) {//count(*) keep(...)
-        if (T_FUN_KEEP_COUNT != type) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("expr type should be T_FUN_KEEP_COUNT ", K(ret), K(type));
-        } else {
-          DATA_PRINTF("*");
-        }
-      } else if (OB_UNLIKELY(T_FUN_KEEP_WM_CONCAT != type && 1 != expr->get_real_param_count())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(type));
-      } else {
-        PRINT_EXPR(expr->get_real_param_exprs().at(0));
-      }
-      if (OB_SUCC(ret)) {
-        DATA_PRINTF(")");
-        const ObIArray<OrderItem> &order_items = expr->get_order_items();
-        if (order_items.count() > 0) {
-          DATA_PRINTF("keep(dense_rank first order by ");
-          for (int64_t i = 0; OB_SUCC(ret) && i < order_items.count(); ++i) {
-            const OrderItem &order_item = order_items.at(i);
-            PRINT_EXPR(order_item.expr_);
-            if (OB_SUCC(ret)) {
-              if (is_descending_direction(order_item.order_type_)) {
-                DATA_PRINTF(" desc ");
-              }
-            }
-            DATA_PRINTF(",");
-          }
-          if (OB_SUCC(ret)) {
-            --*pos_;
-            DATA_PRINTF(")");
-          }
-        }
-      }
       break;
     }
     default: {
@@ -3209,8 +3038,7 @@ int ObRawExprPrinter::print(ObUDFRawExpr *expr)
       DATA_PRINTF(".");
     }
 
-    if (!expr->get_package_name().empty() &&
-        !expr->get_is_udt_cons()) {
+    if (!expr->get_package_name().empty()) {
       PRINT_IDENT_WITH_QUOT(expr->get_package_name());
       DATA_PRINTF(".");
     }
@@ -3225,8 +3053,6 @@ int ObRawExprPrinter::print(ObUDFRawExpr *expr)
     for (int64_t  i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
       if (params_type.at(i).is_null()) { // default parameter, do not print
         // do nothing ...
-      } else if (0 == i && expr->get_is_udt_cons()) {
-        // do not print construct null self argument
       } else {
         if (!params_name.at(i).empty()) {
           PRINT_IDENT_WITH_QUOT(params_name.at(i));
@@ -3287,34 +3113,10 @@ int ObRawExprPrinter::print(ObWinFunRawExpr *expr)
         SET_SYMBOL_IF_EMPTY("count");
       case T_FUN_AVG:
         SET_SYMBOL_IF_EMPTY("avg");
-      case T_FUN_CORR:
-        SET_SYMBOL_IF_EMPTY("corr");
-      case T_FUN_COVAR_POP:
-        SET_SYMBOL_IF_EMPTY("covar_pop");
-      case T_FUN_COVAR_SAMP:
-        SET_SYMBOL_IF_EMPTY("covar_samp");
       case T_FUN_VAR_POP:
         SET_SYMBOL_IF_EMPTY("var_pop");
       case T_FUN_VAR_SAMP:
         SET_SYMBOL_IF_EMPTY("var_samp");
-      case T_FUN_REGR_SLOPE:
-        SET_SYMBOL_IF_EMPTY("regr_slope");
-      case T_FUN_REGR_INTERCEPT:
-        SET_SYMBOL_IF_EMPTY("regr_intercept");
-      case T_FUN_REGR_COUNT:
-        SET_SYMBOL_IF_EMPTY("regr_count");
-      case T_FUN_REGR_R2:
-        SET_SYMBOL_IF_EMPTY("regr_r2");
-      case T_FUN_REGR_AVGX:
-        SET_SYMBOL_IF_EMPTY("regr_avgx");
-      case T_FUN_REGR_AVGY:
-        SET_SYMBOL_IF_EMPTY("regr_avgy");
-      case T_FUN_REGR_SXX:
-        SET_SYMBOL_IF_EMPTY("regr_sxx");
-      case T_FUN_REGR_SYY:
-        SET_SYMBOL_IF_EMPTY("regr_syy");
-      case T_FUN_REGR_SXY:
-        SET_SYMBOL_IF_EMPTY("regr_sxy");
       case T_FUN_VARIANCE:
         SET_SYMBOL_IF_EMPTY("variance");
       case T_FUN_STDDEV:
@@ -3570,38 +3372,14 @@ int ObRawExprPrinter::print(ObWinFunRawExpr *expr)
         }
         break;
       }
-      case T_FUN_KEEP_MAX:
-        SET_SYMBOL_IF_EMPTY("max");
-      case T_FUN_KEEP_MIN:
-        SET_SYMBOL_IF_EMPTY("min");
-      case T_FUN_KEEP_SUM:
-        SET_SYMBOL_IF_EMPTY("sum");
-      case T_FUN_KEEP_COUNT:
-        SET_SYMBOL_IF_EMPTY("count");
-      case T_FUN_KEEP_AVG:
-        SET_SYMBOL_IF_EMPTY("avg");
-      case T_FUN_KEEP_STDDEV:
-        SET_SYMBOL_IF_EMPTY("stddev");
-      case T_FUN_KEEP_VARIANCE:
-        SET_SYMBOL_IF_EMPTY("variance");
       case T_FUN_APPROX_COUNT_DISTINCT:
         SET_SYMBOL_IF_EMPTY("approx_count_distinct");
       case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS:
         SET_SYMBOL_IF_EMPTY("approx_count_distinct_synopsis");
       case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE:
-        SET_SYMBOL_IF_EMPTY("approx_count_distinct_synopsis_merge");
-      case T_FUN_KEEP_WM_CONCAT: {
-        SET_SYMBOL_IF_EMPTY("wm_concat");
+        SET_SYMBOL_IF_EMPTY("approx_count_distinct_synopsis_merge"); {
         DATA_PRINTF("%.*s(", LEN_AND_PTR(symbol));
-        if (0 == expr->get_agg_expr()->get_real_param_count()) {//count(*) keep(...)
-          if (T_FUN_KEEP_COUNT != type) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("expr type should be T_FUN_KEEP_COUNT ", K(ret), K(type));
-          } else {
-            DATA_PRINTF("*");
-          }
-        } else if (OB_UNLIKELY(T_FUN_KEEP_WM_CONCAT != type &&
-                               1 != expr->get_agg_expr()->get_real_param_count())) {
+        if (OB_UNLIKELY(1 != expr->get_agg_expr()->get_real_param_count())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected error", K(ret), K(type));
         } else {
@@ -3609,29 +3387,6 @@ int ObRawExprPrinter::print(ObWinFunRawExpr *expr)
         }
         if (OB_SUCC(ret)) {
           DATA_PRINTF(")");
-          const ObIArray<OrderItem> &order_items = expr->get_agg_expr()->get_order_items();
-          if (order_items.count() > 0) {
-            DATA_PRINTF("keep(dense_rank first order by ");
-            for (int64_t i = 0; OB_SUCC(ret) && i < order_items.count(); ++i) {
-              const OrderItem &order_item = order_items.at(i);
-              if (OB_ISNULL(order_item.expr_)) {
-                ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("get unexpected null", K(ret));
-              } else {
-                PRINT_EXPR(order_item.expr_);
-                if (OB_SUCC(ret)) {
-                  if (is_descending_direction(order_item.order_type_)) {
-                    DATA_PRINTF(" desc ");
-                  }
-                }
-              }
-              DATA_PRINTF(",");
-            }
-            if (OB_SUCC(ret)) {
-              --*pos_;
-              DATA_PRINTF(")");
-            }
-          }
           if (OB_SUCC(ret)) {
             DATA_PRINTF(" over(");
             if (OB_FAIL(print_partition_exprs(expr))) {

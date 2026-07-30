@@ -895,7 +895,6 @@ int ObTableSqlService::drop_table(const ObTableSchema &table_schema,
           LOG_ERROR("is_force_drop_lonely_lob_aux_table is true, but not drop lob aux table", K(table_schema));
         }
       } else if (table_schema.is_index_table()
-          || table_schema.is_aux_vp_table()
           || table_schema.is_aux_lob_table()) {
         if (OB_FAIL(update_data_table_schema_version(sql_client,
             table_schema.get_data_table_id(), table_schema.get_in_offline_ddl_white_list()))) {
@@ -2190,7 +2189,6 @@ int ObTableSqlService::update_table_options(ObISQLClient &sql_client,
     LOG_DEBUG("alter table", "table type", table_schema.get_table_type(),
               "index type", table_schema.get_index_type());
     if (new_table_schema.is_index_table()
-        || new_table_schema.is_aux_vp_table()
         || new_table_schema.is_aux_lob_table()) {
       // use new_table_schema.get_in_offline_ddl_white_list() here for drop index when offline ddl failed, there is no foreign key on index table.
       if (OB_FAIL(update_data_table_schema_version(sql_client,
@@ -2390,8 +2388,7 @@ int ObTableSqlService::delete_single_column(
 
 bool ObTableSqlService::table_need_sync_schema_version(const ObTableSchema &table)
 {
-  return (table.is_index_table()
-          || table.is_aux_vp_table() || table.is_aux_lob_table());
+  return (table.is_index_table() || table.is_aux_lob_table());
 }
 
 int ObTableSqlService::inner_create_sys_table(ObTableSchema &table,
@@ -2700,87 +2697,6 @@ int ObTableSqlService::update_index_type(const ObTableSchema &data_table_schema,
   return ret;
 }
 
-int ObTableSqlService::add_transition_point_val(ObDMLSqlSplicer &dml,
-                                                const ObTableSchema &table) {
-  int ret = OB_SUCCESS;
-  const ObRowkey &transition_point = table.get_transition_point();
-  char *transition_point_str = NULL;
-  ObArenaAllocator allocator(ObModIds::OB_SCHEMA_OB_SCHEMA_ARENA);
-  transition_point_str = static_cast<char *>(allocator.alloc(OB_MAX_B_HIGH_BOUND_VAL_LENGTH));
-  if (OB_ISNULL(transition_point_str)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("transition point is null", K(ret), K(transition_point_str));
-  } else {
-    MEMSET(transition_point_str, 0, OB_MAX_B_HIGH_BOUND_VAL_LENGTH);
-    int64_t pos = 0;
-    ObTimeZoneInfo tz_info;
-    tz_info.set_offset(0);
-    if (OB_FAIL(OTTZ_MGR.get_timezone_map(tz_info.get_tz_map_wrap()))) {
-      LOG_WARN("get time zone map failed", K(ret));
-    } else if (transition_point.is_valid() && OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(
-               transition_point, transition_point_str,
-               OB_MAX_B_HIGH_BOUND_VAL_LENGTH, pos, false, &tz_info))) {
-      LOG_WARN("Failed to convert rowkey to sql text", K(tz_info), K(transition_point), K(ret));
-    } else if (OB_FAIL(dml.add_column("transition_point",
-                                      ObHexEscapeSqlStr(ObString(pos, transition_point_str))))) {
-      LOG_WARN("dml add part info failed", K(ret));
-    } else if (FALSE_IT(pos = 0)) {
-    } else if (transition_point.is_valid() && OB_FAIL(ObPartitionUtils::convert_rowkey_to_hex(
-        transition_point, transition_point_str,
-        OB_MAX_B_HIGH_BOUND_VAL_LENGTH, pos))) {
-      LOG_WARN("Failed to convert rowkey to hex", K(ret));
-    } else if (OB_FAIL(dml.add_column("b_transition_point", ObString(pos, transition_point_str)))) {
-      LOG_WARN("Failed to add column b_transition_point", K(ret));
-    } else {
-      LOG_DEBUG("transition point info", "transition_point", ObString(pos, transition_point_str).ptr(), K(pos));
-    } //do nothing
-  }
-  return ret;
-}
-
-int ObTableSqlService::add_interval_range_val(ObDMLSqlSplicer &dml,
-                                                const ObTableSchema &table) {
-  int ret = OB_SUCCESS;
-  const ObRowkey &interval_range = table.get_interval_range();
-  char *interval_range_str = NULL;
-  ObArenaAllocator allocator(ObModIds::OB_SCHEMA_OB_SCHEMA_ARENA);
-  interval_range_str = static_cast<char *>(allocator.alloc(OB_MAX_B_HIGH_BOUND_VAL_LENGTH));
-  if (OB_ISNULL(interval_range_str)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("interval range is null", K(ret), K(interval_range_str));
-  } else {
-    MEMSET(interval_range_str, 0, OB_MAX_B_HIGH_BOUND_VAL_LENGTH);
-    int64_t pos = 0;
-    ObTimeZoneInfo tz_info;
-    tz_info.set_offset(0);
-    if (OB_FAIL(OTTZ_MGR.get_timezone_map(tz_info.get_tz_map_wrap()))) {
-      LOG_WARN("get time zone map failed", K(ret));
-    } else if (interval_range.is_valid() && OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(
-            interval_range, interval_range_str,
-            OB_MAX_B_HIGH_BOUND_VAL_LENGTH, pos, false, &tz_info))) {
-      LOG_WARN("Failed to convert rowkey to sql text", K(tz_info), K(interval_range), K(ret));
-    } else if (OB_FAIL(
-        dml.add_column("interval_range", ObHexEscapeSqlStr(ObString(pos, interval_range_str))))) {
-      LOG_WARN("dml add part info failed", K(ret));
-    } else if (FALSE_IT(pos = 0)) {
-    } else if (interval_range.is_valid() && OB_FAIL(ObPartitionUtils::convert_rowkey_to_hex(
-            interval_range, interval_range_str,
-            OB_MAX_B_HIGH_BOUND_VAL_LENGTH, pos))) {
-      LOG_WARN("Failed to convert rowkey to hex", K(ret));
-    } else if (OB_FAIL(dml.add_column("b_interval_range", ObString(pos, interval_range_str)))) {
-      LOG_WARN("Failed to add column b_interval_range", K(ret));
-    } else {
-      LOG_DEBUG(
-          "interval range info",
-          "interval_range",
-          ObString(pos, interval_range_str).ptr(),
-          K(pos));
-    } //do nothing
-  }
-  return ret;
-}
-
-
 int ObTableSqlService::gen_table_dml_without_check(
     const ObTableSchema &table,
     const bool update_object_status_ignore_version,
@@ -2863,8 +2779,6 @@ int ObTableSqlService::gen_table_dml_without_check(
       || OB_FAIL(dml.add_column("define_user_id", ObSchemaUtils::get_extract_schema_id(
               table.get_define_user_id())))
       || OB_FAIL(dml.add_column("max_dependency_version", table.get_max_dependency_version()))
-      || (table.is_interval_part() && OB_FAIL(add_transition_point_val(dml, table)))
-      || (table.is_interval_part() && OB_FAIL(add_interval_range_val(dml, table)))
       || (OB_FAIL(dml.add_column("tablet_id", table.get_tablet_id().id())))
       || (OB_FAIL(dml.add_column("object_status", static_cast<int64_t> (table.get_object_status()))))
       || (OB_FAIL(dml.add_column("table_flags", table.get_table_flags())))
@@ -2926,14 +2840,6 @@ int ObTableSqlService::update_table_attribute(ObISQLClient &sql_client,
           update_object_status_ignore_version, dml))) {
     LOG_WARN("failed to gen_table_dml", KR(ret), K(new_table_schema),
         K(update_object_status_ignore_version));
-  } else if (!new_table_schema.is_interval_part()) {
-    bool is_null = true; // maybe unset transition_point
-    if (OB_FAIL(dml.add_column(is_null, "transition_point"))
-        || OB_FAIL(dml.add_column(is_null, "b_transition_point"))
-        || OB_FAIL(dml.add_column(is_null, "interval_range"))
-        || OB_FAIL(dml.add_column(is_null, "b_interval_range"))) {
-      LOG_WARN("fail to reset interval column info", KR(ret), K(new_table_schema));
-    }
   }
   if (OB_SUCC(ret) && !is_core_table(table_id)) {
     int64_t affected_rows = 0;
@@ -3002,8 +2908,6 @@ int ObTableSqlService::gen_partition_option_dml(const ObTableSchema &table, ObDM
       || OB_FAIL(dml.add_column("partition_schema_version", table.get_partition_schema_version()))
       || OB_FAIL(dml.add_column("sub_part_template_flags", table.get_sub_part_template_flags()))
       || OB_FAIL(dml.add_gmt_create())
-      || (table.is_interval_part() && OB_FAIL(add_transition_point_val(dml, table)))
-      || (table.is_interval_part() && OB_FAIL(add_interval_range_val(dml, table)))
       || (OB_FAIL(dml.add_column("table_flags", table.get_table_flags())))
       || OB_FAIL(dml.add_gmt_modified())) {
     LOG_WARN("add column failed", K(ret));

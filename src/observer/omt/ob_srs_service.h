@@ -109,6 +109,7 @@ private:
   typedef common::ObVector<ObSrsCacheSnapShot*, ObCGeoModuleArena> ObSrsSnapshotVector;
 
   int fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot);
+  int get_srs_cnt(int64_t &srs_cnt);
   int refresh_sys_srs();
   int generate_pg_reserved_srs(ObSrsCacheSnapShot *&srs_snapshot);
   void recycle_old_snapshots();

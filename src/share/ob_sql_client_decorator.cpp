@@ -19,6 +19,32 @@
 #include "common/mysqlclient/ob_isql_connection.h"
 using namespace oceanbase::common;
 
+namespace
+{
+class ObQuerySensitiveSysVarRefreshGuard
+{
+public:
+  ObQuerySensitiveSysVarRefreshGuard(
+      sqlclient::ObISQLConnection &conn,
+      const bool enabled)
+      : conn_(conn),
+        saved_enabled_(conn.is_query_sensitive_sys_var_refresh_enabled())
+  {
+    conn_.set_query_sensitive_sys_var_refresh_enabled(enabled);
+  }
+
+  ~ObQuerySensitiveSysVarRefreshGuard()
+  {
+    conn_.set_query_sensitive_sys_var_refresh_enabled(saved_enabled_);
+  }
+
+private:
+  sqlclient::ObISQLConnection &conn_;
+  const bool saved_enabled_;
+  DISALLOW_COPY_AND_ASSIGN(ObQuerySensitiveSysVarRefreshGuard);
+};
+}
+
 int ObSQLClientRetry::escape(const char *from, const int64_t from_size,
                              char *to, const int64_t to_size, int64_t &out_size)
 {

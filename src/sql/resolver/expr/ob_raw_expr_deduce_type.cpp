@@ -131,13 +131,7 @@ int ObRawExprDeduceType::visit(ObOpPseudoColumnRawExpr &)
 int ObRawExprDeduceType::visit(ObQueryRefRawExpr &expr)
 {
   int ret = OB_SUCCESS;
-  if (expr.is_cursor()) {
-    sql::ObRawExprResType result_type;
-    result_type.reset();
-    result_type.set_ext();
-    result_type.set_extend_type(pl::PL_REF_CURSOR_TYPE);
-    expr.set_result_type(result_type);
-  } else if (expr.is_scalar()) {
+  if (expr.is_scalar()) {
     expr.set_result_type(expr.get_column_types().at(0));
   } else {
     // for enumset query ref `is_set`, need warp enum_to_str/set_to_str expr at
@@ -398,7 +392,7 @@ int ObRawExprDeduceType::push_back_types(const ObRawExpr *param_expr, ObIExprRes
     if (ob_is_int_uint_tc(types.at(idx).get_type())
         && (param_expr->is_column_ref_expr())) {
       ObPrecision max_prec =
-        ObAccuracy::MAX_ACCURACY2[0 /*mysql*/][types.at(idx).get_type()].get_precision();
+        ObAccuracy::MAX_ACCURACY[types.at(idx).get_type()].get_precision();
       const ObPrecision prec = MAX(types.at(idx).get_precision(), max_prec);
       types.at(idx).set_precision(prec);
       types.at(idx).set_scale(0);
@@ -750,21 +744,6 @@ int ObRawExprDeduceType::visit(ObOpRawExpr &expr)
       }
     }
 
-    expr.set_result_type(result_type);
-  } else if (T_OP_MULTISET == expr.get_expr_type()) {
-    ObRawExpr *left = expr.get_param_expr(0);
-    ObRawExpr *right = expr.get_param_expr(1);
-    if (OB_ISNULL(left) || OB_ISNULL(right)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("multiset op' children is null.", K(expr), K(ret));
-    } else {
-      expr.set_result_type(left->get_result_type());
-    }
-  } else if (T_OP_COLL_PRED == expr.get_expr_type()) {
-    ObRawExprResType result_type;
-    result_type.set_tinyint();
-    result_type.set_precision(DEFAULT_PRECISION_FOR_BOOL);
-    result_type.set_scale(DEFAULT_SCALE_FOR_INTEGER);
     expr.set_result_type(result_type);
   } else if (T_OP_ROW == expr.get_expr_type()) {
     expr.set_data_type(ObNullType);
@@ -1139,8 +1118,7 @@ int64_t ObRawExprDeduceType::get_expr_output_column(const ObRawExpr &expr)
 {
   int64_t output_column_cnt = 1;
   if (expr.has_flag(IS_SUB_QUERY)) {
-    output_column_cnt = static_cast<const ObQueryRefRawExpr&>(expr).is_cursor()
-        ? 1 : static_cast<const ObQueryRefRawExpr&>(expr).get_output_column();
+    output_column_cnt = static_cast<const ObQueryRefRawExpr&>(expr).get_output_column();
   } else if (T_OP_ROW == expr.get_expr_type()) {
     output_column_cnt = expr.get_param_count();
   }
@@ -1394,10 +1372,8 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
       // count_sum is used in distributed count(*) to avoid unexpected NULL values of a in statements like select a, count(a) from t1 at the upper level
       // and generated internal expression
       case T_FUN_COUNT:
-      case T_FUN_REGR_COUNT:
       case T_FUN_COUNT_SUM:
       case T_FUN_APPROX_COUNT_DISTINCT:
-      case T_FUN_KEEP_COUNT:
       case T_FUN_SUM_OPNSIZE: {
         // APPROX_COUNT_DISTINCT uses the same integer result type as COUNT.
         expr.set_data_type(ObIntType);
@@ -1406,7 +1382,7 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
         break;
       }
       case T_FUN_WM_CONCAT:
-      case T_FUN_KEEP_WM_CONCAT: {
+      {
         need_add_cast = true;
         const ObRawExpr *param_expr = expr.get_param_expr(0);
         if (OB_ISNULL(param_expr) || OB_ISNULL(my_session_)) {
@@ -1459,7 +1435,7 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
           result_type.set_calc_type(ob_is_unsigned_type(child_expr->get_data_type()) ?
             ObUInt64Type : ObIntType);
           override_calc_meta = false;
-          result_type.set_accuracy(ObAccuracy::MAX_ACCURACY2[0/*mysql*/][ObUInt64Type]);
+          result_type.set_accuracy(ObAccuracy::MAX_ACCURACY[ObUInt64Type]);
           expr.set_result_type(result_type);
           ObObjTypeClass from_tc = child_expr->get_type_class();
           need_add_cast = (ObUIntTC != from_tc && ObIntTC != from_tc && ObBitTC != from_tc);
@@ -1470,10 +1446,6 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
       case T_FUN_VAR_SAMP:
       case T_FUN_AVG:
       case T_FUN_SUM:
-      case T_FUN_KEEP_AVG:
-      case T_FUN_KEEP_SUM:
-      case T_FUN_KEEP_STDDEV:
-      case T_FUN_KEEP_VARIANCE:
       case T_FUN_VARIANCE:
       case T_FUN_STDDEV:
       case T_FUN_STDDEV_POP:
@@ -1638,7 +1610,7 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
                 (T_FUN_SUM != real_child_expr->get_expr_type()
                   || !expr.has_flag(IS_INNER_ADDED_EXPR))) {
               if (ob_is_integer_type(obj_type)) {
-                const int16_t int_max_prec = ObAccuracy::MAX_ACCURACY2[0/*mysql mode*/][obj_type].get_precision();
+                const int16_t int_max_prec = ObAccuracy::MAX_ACCURACY[obj_type].get_precision();
                 result_precision = MAX(result_precision, int_max_prec) + OB_DECIMAL_LONGLONG_DIGITS;
                 result_precision = MIN(OB_MAX_DECIMAL_PRECISION, result_precision);
               } else {
@@ -1726,21 +1698,6 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
         }
         break;
       }
-      case T_FUN_CORR:
-      case T_FUN_REGR_INTERCEPT:
-      case T_FUN_REGR_R2:
-      case T_FUN_REGR_SLOPE:
-      case T_FUN_REGR_SXX:
-      case T_FUN_REGR_SYY:
-      case T_FUN_REGR_SXY:
-        need_add_cast = true; // CORR and selected REGR_* variants need casts; covar_pop/covar_samp do not.
-      case T_FUN_REGR_AVGX:
-      case T_FUN_REGR_AVGY:
-      case T_FUN_COVAR_POP:
-      case T_FUN_COVAR_SAMP: {
-        ret = set_agg_regr_result_type(expr, result_type);
-        break;
-      }
       case T_FUN_GROUPING:
       case T_FUN_GROUPING_ID:
       case T_FUN_GROUP_ID: {
@@ -1771,30 +1728,6 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
           result_type.set_collation_type(coll_type);
           result_type.set_collation_level(CS_LEVEL_IMPLICIT);
           expr.set_result_type(result_type);
-        }
-        break;
-      }
-      case T_FUN_GROUP_RANK:
-      case T_FUN_GROUP_DENSE_RANK:
-      case T_FUN_GROUP_PERCENT_RANK:
-      case T_FUN_GROUP_CUME_DIST: {
-        if (OB_FAIL(check_group_rank_aggr_param(expr))) {
-          LOG_WARN("failed to check group aggr param", K(ret));
-        } else {
-          result_type.set_type(ObNumberType);
-          result_type.set_scale(
-            ObAccuracy::DDL_DEFAULT_ACCURACY2[0][ObNumberType].get_scale());
-          result_type.set_precision(
-            ObAccuracy::DDL_DEFAULT_ACCURACY2[0][ObNumberType].get_precision());
-          expr.set_result_type(result_type);
-          //group-related rank comparison is special, new engine needs separate cast determination
-          ObCastMode def_cast_mode = CM_NONE;
-          if (OB_FAIL(ObSQLUtils::get_default_cast_mode(false, 0, my_session_,
-                                                        def_cast_mode))) {
-            LOG_WARN("get_default_cast_mode failed", K(ret));
-          } else if (OB_FAIL(add_group_aggr_implicit_cast(expr, def_cast_mode))) {
-            LOG_WARN("failed to add group aggr implicit cast", K(ret));
-          }
         }
         break;
       }
@@ -1934,48 +1867,6 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
   return ret;
 }
 
-int ObRawExprDeduceType::add_group_aggr_implicit_cast(ObAggFunRawExpr &expr,
-                                                      const ObCastMode& cast_mode)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(expr.get_real_param_count() != expr.get_order_items().count())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get invalid argument", K(expr.get_real_param_count()), K(ret),
-                                     K(expr.get_order_items().count()));
-  } else {
-    ObIArray<ObRawExpr*> &real_param_exprs = expr.get_real_param_exprs_for_update();
-    for (int64_t i = 0; OB_SUCC(ret) && i < real_param_exprs.count(); ++i) {
-      ObRawExpr *parent = expr.get_order_items().at(i).expr_;
-      ObRawExpr *&child_ptr = real_param_exprs.at(i);
-      if (OB_ISNULL(parent) || OB_ISNULL(child_ptr)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(parent), K(child_ptr));
-      } else {
-        ObExprResType res_type = parent->get_result_type();
-        res_type.set_calc_meta(res_type.get_obj_meta());
-        res_type.set_calc_accuracy(res_type.get_accuracy());
-        ObCastMode real_cast_mode = cast_mode;
-        if ((child_ptr->get_result_type().is_number()
-             || child_ptr->get_result_type().is_decimal_int())
-            && res_type.is_decimal_int()) {
-          // When the const data type is number/decimal_int and the input column is decimal_int,
-          // need to cast the number to decimal_int and it should be one-sided cast.
-          // for example, when c2 type is NUMBER(3, 0),
-          // query `SELECT CUME_DIST(123.89) WITHIN GROUP (ORDER BY C2) FROM T1;`
-          // should cast 123.89 to 123 to compare the less or equal result
-          real_cast_mode |= ObExprBetween::get_const_cast_mode(T_OP_LE, true);
-        }
-        if (skip_cast_expr(*parent, i)) {
-          // do nothing
-        } else if (OB_FAIL(try_add_cast_expr(expr, i, res_type, real_cast_mode))) {
-          LOG_WARN("try_add_cast_expr failed", K(ret));
-        } else {/*do nothing*/}
-      }
-    }
-  }
-  return ret;
-}
-
 int ObRawExprDeduceType::add_median_percentile_implicit_cast(ObAggFunRawExpr &expr,
                                                              const ObCastMode& cast_mode,
                                                              const bool keep_type)
@@ -2072,40 +1963,6 @@ int ObRawExprDeduceType::check_group_aggr_param(ObAggFunRawExpr &expr)
   }
   return ret;
 }
-
-/*@brief,ObRawExprDeduceType::check_group_rank_aggr_param checks the validity of parameters for rank, dense_rank, percent_rank,
- * cume_dist etc. aggregate functions:
- *  1.aggr parameter needs to correspond one-to-one with order by item, eg：
- *    select rank(1,2) within group(order by c1, c2) from t1; ==> (v)
- *    select rank(1,2) within group(order by c1) from t1; ==> (x)
- *    select rank(2) within group(order by c1,c2) from t1; ==> (x)
- *  2.aggr parameter must be a constant expression, eg:
- *    select rank(c1) within group(order by c1,c2) from t1; ==> (x)
- */
-int ObRawExprDeduceType::check_group_rank_aggr_param(ObAggFunRawExpr &expr)
-{
-  int ret = OB_SUCCESS;
-  if (expr.get_real_param_count() != expr.get_order_items().count()) {
-    ret = OB_ERR_PARAM_SIZE;
-    LOG_WARN("invalid number of arguments", K(ret), K(expr.get_real_param_count()),
-                                            K(expr.get_order_items().count()));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < expr.get_real_param_count(); ++i) {
-      const ObRawExpr *param_expr = expr.get_param_expr(i);
-      if (OB_ISNULL(param_expr)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(param_expr));
-      } else if (!param_expr->is_const_expr()) {
-        ret = OB_ERR_ARGUMENT_SHOULD_CONSTANT;
-        LOG_WARN("Argument should be a constant.", K(ret));
-      } else {
-        /*do nothing*/
-      }
-    }
-  }
-  return ret;
-}
-
 
 int ObRawExprDeduceType::deduce_type_visit_for_special_func(int64_t param_index,
                                                             const ObRawExpr &expr,
@@ -2283,7 +2140,6 @@ int ObRawExprDeduceType::visit(ObSysFunRawExpr &expr)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid argument", K(param_expr));
       } else if (!expr.is_calc_part_expr() &&
-                 !param_expr->is_multiset_expr() &&
                  get_expr_output_column(*param_expr) != 1) {
         // The value of each parameter of the function should be a scalar, including the result of a subquery as a parameter, cannot be row or table
         ret = OB_ERR_INVALID_COLUMN_NUM;
@@ -2936,59 +2792,6 @@ int ObRawExprDeduceType::set_agg_min_max_result_type(ObAggFunRawExpr &expr,
   return ret;
 }
 
-int ObRawExprDeduceType::set_agg_regr_result_type(ObAggFunRawExpr &expr, ObExprResType &result_type)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(expr.get_param_count() != 2) ||
-      OB_ISNULL(expr.get_param_expr(0)) ||
-      OB_ISNULL(expr.get_param_expr(1))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
-  } else {
-    ObObjType from_type1 = expr.get_param_expr(0)->get_result_type().get_type();
-    ObObjType from_type2 = expr.get_param_expr(1)->get_result_type().get_type();
-    ObCollationType from_cs_type1 = expr.get_param_expr(0)->get_result_type().get_collation_type();
-    ObCollationType from_cs_type2 = expr.get_param_expr(1)->get_result_type().get_collation_type();
-    if (expr.get_expr_type() == T_FUN_REGR_SXX ||
-        expr.get_expr_type() == T_FUN_REGR_AVGX) {
-      // These functions calculate on the first argument as NUMBER.
-      from_type1 = ObNumberType;
-    } else if (expr.get_expr_type() == T_FUN_REGR_SYY ||
-                expr.get_expr_type() == T_FUN_REGR_AVGY) {
-      // These functions calculate on the second argument as NUMBER.
-      from_type2 = ObNumberType;
-    }
-    ObObjType to_type = ObNumberType;
-    ObCollationType to_cs_type = CS_TYPE_BINARY;
-    if (ob_is_double_type(from_type1) || ob_is_float_type(from_type1) ||
-        ob_is_double_type(from_type2) || ob_is_float_type(from_type2)) {
-      if (ob_is_double_type(from_type1) || ob_is_double_type(from_type2)) {
-        to_type = ob_is_double_type(from_type1) ? from_type1 : from_type2;
-      } else {
-        to_type = ob_is_float_type(from_type1) ? from_type1 : from_type2;
-      }
-    }
-    if (from_type1 != to_type && !cast_supported(from_type1, from_cs_type1,
-                                                to_type, to_cs_type)
-        && !my_session_->is_varparams_sql_prepare()) {
-      ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("cast to expected type not supported", K(ret), K(from_type1), K(to_type));
-    } else if (from_type2 != to_type && !cast_supported(from_type2, from_cs_type2,
-                                                        to_type, to_cs_type)
-      && !my_session_->is_varparams_sql_prepare()) {
-      ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("cast to expected type not supported", K(ret), K(from_type2), K(to_type));
-    } else {
-      result_type.set_type(to_type);
-      result_type.set_scale(
-        ObAccuracy::DDL_DEFAULT_ACCURACY2[0][to_type].get_scale());
-      result_type.set_precision(
-        ObAccuracy::DDL_DEFAULT_ACCURACY2[0][to_type].get_precision());
-      expr.set_result_type(result_type);
-    }
-    }
-  return ret;
-}
 int ObRawExprDeduceType::set_asmvt_result_type(ObAggFunRawExpr &expr, 
                                                ObExprResType& result_type)
 {
@@ -3216,8 +3019,7 @@ int ObRawExprDeduceType::add_implicit_cast(ObOpRawExpr &parent,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected idx", K(ret), K(idx), K(input_types.count()), K(parent));
         } else if (skip_cast_expr(parent, child_idx) ||
-            skip_cast_json_expr(child_ptr, input_types.at(idx), parent.get_expr_type()) ||
-            child_ptr->is_multiset_expr()) {
+            skip_cast_json_expr(child_ptr, input_types.at(idx), parent.get_expr_type())) {
           idx += 1;
           // do nothing
         } else if (T_OP_ROW == child_ptr->get_expr_type()) {
@@ -3245,7 +3047,6 @@ int ObRawExprDeduceType::add_implicit_cast(ObOpRawExpr &parent,
           }
           idx += ele_cnt;
         } else if (T_REF_QUERY == child_ptr->get_expr_type()
-                   && !static_cast<ObQueryRefRawExpr *>(child_ptr)->is_cursor()
                    && !static_cast<ObQueryRefRawExpr *>(child_ptr)->is_scalar()) {
           // subquery result not scalar (is row or set), add cast on subquery stmt's output
           ObQueryRefRawExpr *query_ref_expr = static_cast<ObQueryRefRawExpr *>(child_ptr);
@@ -3283,8 +3084,6 @@ int ObRawExprDeduceType::add_implicit_cast(ObAggFunRawExpr &parent,
     ObRawExpr *&child_ptr = real_param_exprs.at(i);
     if (skip_cast_expr(parent, i)) {
       // do nothing
-    // regr_sxx and regr_syy only need casts on the calculated parameters;
-    // regr_sxy follows the regr_syy casting direction.
     } else if ((parent.get_expr_type() == T_FUN_JSON_OBJECTAGG ||
                 parent.get_expr_type() == T_FUN_JSON_ARRAYAGG) &&
                 child_ptr->get_result_type().is_enum_set_with_subschema()) {
@@ -3306,10 +3105,7 @@ int ObRawExprDeduceType::add_implicit_cast(ObAggFunRawExpr &parent,
       } else {
         LOG_DEBUG("add_implicit_cast for ObAggFunRawExpr", K(i), K(res_type), KPC(child_ptr));
       }
-    } else if ((parent.get_expr_type() == T_FUN_REGR_SXX && i == 0) ||
-               (parent.get_expr_type() == T_FUN_REGR_SYY && i == 1) ||
-               (parent.get_expr_type() == T_FUN_REGR_SXY && i == 1) ||
-               (parent.get_expr_type() == T_FUN_JSON_OBJECTAGG && i == 1) ||
+    } else if ((parent.get_expr_type() == T_FUN_JSON_OBJECTAGG && i == 1) ||
                (parent.get_expr_type() == T_FUN_ORA_JSON_OBJECTAGG && i > 0) ||
                parent.get_expr_type() == T_FUN_SYS_ST_ASMVT ||
                ((parent.get_expr_type() == T_FUN_SUM ||
@@ -3325,7 +3121,6 @@ int ObRawExprDeduceType::add_implicit_cast(ObAggFunRawExpr &parent,
                   T_FUN_VAR_SAMP == parent.get_expr_type()))) {
       //do nothing
     } else if (parent.get_expr_type() == T_FUN_WM_CONCAT ||
-               parent.get_expr_type() == T_FUN_KEEP_WM_CONCAT ||
                (parent.get_expr_type() == T_FUN_JSON_OBJECTAGG && i == 0) ||
                (parent.get_expr_type() == T_FUN_ORA_JSON_OBJECTAGG && i == 0)) {
       if (ob_is_string_type(child_ptr->get_result_type().get_type())
@@ -3424,12 +3219,10 @@ int ObRawExprDeduceType::try_add_cast_expr_above_for_deduce_type(ObRawExpr &expr
   }
   if (OB_SUCC(ret)) {
     ObSQLSessionInfo *session = NULL;
-    ObExecContext *exec_ctx = NULL;
     bool need_wrap = false;
-    if (OB_ISNULL(session = const_cast<ObSQLSessionInfo *>(my_session_)) ||
-        OB_ISNULL(exec_ctx = session->get_cur_exec_ctx())) {
+    if (OB_ISNULL(session = const_cast<ObSQLSessionInfo *>(my_session_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), KP(session), KP(exec_ctx));
+      LOG_WARN("get unexpected null", K(ret), KP(session));
     } else if (OB_FAIL(ObRawExprUtils::need_wrap_to_string(expr.get_result_type(),
                                           cast_dst_type.get_type(), false, need_wrap, true))) {
       LOG_WARN("failed to check_need_wrap_to_string", K(ret));
@@ -3515,7 +3308,6 @@ int ObRawExprDeduceType::add_implicit_cast_for_subquery(
   //   (select c1 from t1) + a
   int ret = OB_SUCCESS;
   CK(expr.get_output_column() > 1 || expr.is_set());
-  CK(!expr.is_multiset_expr());
   CK(expr.get_output_column() == input_types.count());
   CK(NULL != expr.get_ref_stmt());
   CK(expr.get_column_types().count() == expr.get_output_column()

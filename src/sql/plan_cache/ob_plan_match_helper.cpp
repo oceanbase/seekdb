@@ -32,7 +32,6 @@ int ObPlanMatchHelper::match_plan(const ObPlanCacheCtx &pc_ctx,
 {
   int ret = OB_SUCCESS;
   is_matched = true;
-  const ObAddr &server = pc_ctx.exec_ctx_.get_addr();
   const ObIArray<LocationConstraint>& base_cons = plan->get_base_constraints();
   const ObIArray<ObPlanPwjConstraint>& strict_cons = plan->get_strict_constraints();
   const ObIArray<ObPlanPwjConstraint>& non_strict_cons = plan->get_non_strict_constraints();
@@ -52,7 +51,7 @@ int ObPlanMatchHelper::match_plan(const ObPlanCacheCtx &pc_ctx,
       if (OB_FAIL(calc_table_locations(base_cons, plan_tbl_locs, pc_ctx,
                                       out_tbl_locations, phy_tbl_infos))) {
         LOG_WARN("failed to calculate table locations", K(ret), K(base_cons));
-      } else if (OB_FAIL(cmp_table_types(base_cons, server, out_tbl_locations,
+      } else if (OB_FAIL(cmp_table_types(base_cons, out_tbl_locations,
                                         phy_tbl_infos, is_matched))) {
         LOG_WARN("failed to compare table types", K(ret), K(base_cons));
       } else if (!is_matched) {
@@ -184,7 +183,6 @@ int ObPlanMatchHelper::calc_table_locations(
 
 int ObPlanMatchHelper::cmp_table_types(
     const ObIArray<LocationConstraint> &loc_cons,
-    const common::ObAddr &server,
     const common::ObIArray<ObTableLocation> &tbl_locs,
     const common::ObIArray<ObCandiTableLoc> &phy_tbl_infos,
     bool &is_same) const
@@ -197,20 +195,11 @@ int ObPlanMatchHelper::cmp_table_types(
     LOG_WARN("invalid argument", K(loc_cons.count()), K(phy_tbl_infos.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && is_same && i < loc_cons.count(); i++) {
-      ObTableLocationType loc_type = OB_TBL_LOCATION_UNINITIALIZED;
       const ObCandiTabletLocIArray &phy_part_loc_info_list =
         phy_tbl_infos.at(i).get_phy_part_loc_info_list();
       const ObTableLocation &tbl_loc = tbl_locs.at(i);
-      if (OB_FAIL(tbl_loc.get_location_type(server,
-                                            phy_part_loc_info_list,
-                                            loc_type))) {
-        LOG_WARN("failed to get table location type",
-                 K(ret),
-                 K(server),
-                 K(phy_part_loc_info_list));
-      } else {
-        is_same = (loc_type == loc_cons.at(i).phy_loc_type_);
-      }
+      const ObTableLocationType loc_type = tbl_loc.get_location_type(phy_part_loc_info_list);
+      is_same = (loc_type == loc_cons.at(i).phy_loc_type_);
     }
   }
   if (OB_FAIL(ret)) {
@@ -316,14 +305,7 @@ int ObPlanMatchHelper::check_inner_constraints(
   int ret = OB_SUCCESS;
   is_same = true;
   if (strict_cons.count() >0 || non_strict_cons.count() > 0) {
-    const int64_t tbl_count = phy_tbl_infos.count();
-    ObSEArray<PwjTable, 4> pwj_tables;
-    SMART_VARS_2((ObStrictPwjComparer, strict_pwj_comparer),
-                 (ObNonStrictPwjComparer, non_strict_pwj_comparer)) {
-      if (OB_FAIL(pwj_tables.prepare_allocate(tbl_count))) {
-        LOG_WARN("failed to prepare allocate pwj tables", K(ret));
-      }
-
+    SMART_VAR(ObStrictPwjComparer, strict_pwj_comparer) {
       for (int64_t i = 0; OB_SUCC(ret) && is_same && i < strict_cons.count(); ++i) {
         const ObPlanPwjConstraint &pwj_cons = strict_cons.at(i);
         if (OB_UNLIKELY(pwj_cons.count() <= 1)) {
@@ -342,11 +324,18 @@ int ObPlanMatchHelper::check_inner_constraints(
         if (OB_UNLIKELY(pwj_cons.count() <= 1)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected pwj constraint", K(ret), K(pwj_cons));
-        } else if (OB_FAIL(check_non_strict_pwj_cons(pwj_cons, phy_tbl_infos,
-                                                     non_strict_pwj_comparer, is_same))) {
-          LOG_WARN("failed to check non strict pwj cons", K(ret));
         } else {
-          LOG_DEBUG("succ to check non strict pwj cons", K(is_same));
+          // Every valid tablet is local in seekdb. A non-strict PWJ constraint
+          // therefore only needs each referenced table to have a local tablet.
+          for (int64_t j = 0; OB_SUCC(ret) && is_same && j < pwj_cons.count(); ++j) {
+            const int64_t table_idx = pwj_cons.at(j);
+            if (OB_UNLIKELY(table_idx < 0 || table_idx >= phy_tbl_infos.count())) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("invalid table index in pwj constraint", K(ret), K(table_idx), K(pwj_cons));
+            } else if (phy_tbl_infos.at(table_idx).get_partition_cnt() <= 0) {
+              is_same = false;
+            }
+          }
         }
       }
     }
@@ -413,32 +402,6 @@ int ObPlanMatchHelper::check_strict_pwj_cons(
                  OB_FAIL(pwj_map.set_refactored(table_idx, pwj_comparer.get_tablet_id_group().at(i)))) {
         LOG_WARN("failed to set refactored", K(ret));
       }
-    }
-  }
-  return ret;
-}
-
-int ObPlanMatchHelper::check_non_strict_pwj_cons(const ObPlanPwjConstraint &pwj_cons,
-                                                 const ObIArray<ObCandiTableLoc> &phy_tbl_infos,
-                                                 ObNonStrictPwjComparer &pwj_comparer,
-                                                 bool &is_same) const
-{
-  int ret = OB_SUCCESS;
-  ObSEArray<common::ObAddr, 8> server_list;
-  // non strict partition wise join constraint, request all tables in same group have at least
-  // one partition on same server. Each table's partition count may be different.
-  pwj_comparer.reset();
-  for (int64_t i = 0; OB_SUCC(ret) && is_same && i < pwj_cons.count(); ++i) {
-    const int64_t table_idx = pwj_cons.at(i);
-    PwjTable pwj_table;
-    server_list.reuse();
-    const ObCandiTableLoc &table_loc = phy_tbl_infos.at(table_idx);
-    if (OB_FAIL(table_loc.get_all_servers(server_list))) {
-      LOG_WARN("failed to get all servers", K(ret));
-    } else if (OB_FAIL(pwj_table.init(server_list))) {
-      LOG_WARN("failed to init pwj table with table schema", K(ret));
-    } else if (OB_FAIL(pwj_comparer.add_table(pwj_table, is_same))) {
-      LOG_WARN("failed to add table", K(ret));
     }
   }
   return ret;

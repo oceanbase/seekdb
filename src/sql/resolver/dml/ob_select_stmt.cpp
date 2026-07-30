@@ -127,7 +127,6 @@ bool ObSelectStmt::has_distinct_or_concat_agg() const
       has = aggr->is_param_distinct() ||
             // Consistent with the has_group_concat_ flag in ObAggregateProcessor.
             T_FUN_GROUP_CONCAT == aggr->get_expr_type() ||
-            T_FUN_KEEP_WM_CONCAT == aggr->get_expr_type() ||
             T_FUN_WM_CONCAT == aggr->get_expr_type() ||
             T_FUN_JSON_ARRAYAGG == aggr->get_expr_type() ||
             T_FUN_ORA_JSON_ARRAYAGG == aggr->get_expr_type() ||
@@ -962,7 +961,7 @@ int ObSelectStmt::get_pure_set_exprs(ObIArray<ObRawExpr*> &pure_set_exprs) const
 }
 
 // cast sys functions above set op expr can be:
-//   T_FUN_SYS_CAST/T_FUN_SYS_RAWTOHEX/T_FUN_SYS_TO_NCHAR/T_FUN_SYS_TO_CHAR
+//   T_FUN_SYS_CAST/T_FUN_SYS_RAWTOHEX/T_FUN_SYS_TO_NCHAR
 // use this function to get set op expr from expr child recursively
 ObRawExpr* ObSelectStmt::get_pure_set_expr(ObRawExpr *expr)
 {

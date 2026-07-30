@@ -176,8 +176,6 @@ int TableItem::deep_copy(ObIRawExprCopier &expr_copier,
   table_id_ = other.table_id_;
   table_name_ = other.table_name_;
   alias_name_ = other.alias_name_;
-  synonym_name_ = other.synonym_name_;
-  synonym_db_name_ = other.synonym_db_name_;
   qb_name_ = other.qb_name_;
   type_ = other.type_;
   ref_id_ = other.ref_id_;
@@ -2204,7 +2202,7 @@ int ObDMLStmt::remove_useless_sharable_expr(ObRawExprFactory *expr_factory,
     if (OB_ISNULL(expr = subquery_exprs_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret));
-    } else if (expr->is_explicited_reference() || expr->is_cursor()) {
+    } else if (expr->is_explicited_reference()) {
       /*do nothing*/
     } else if (OB_FAIL(subquery_exprs_.remove(i))) {
       LOG_WARN("failed to remove subquery expr", K(ret));
@@ -4761,22 +4759,6 @@ int ObDMLStmt::formalize_query_ref_exec_params(ObStmtExecParamFormatter &formatt
       LOG_WARN("failed to do formalize query ref exprs post", K(ret));
     } else if (OB_FAIL(do_formalize_lateral_derived_table_post())) {
       LOG_WARN("failed to do formalize lateral derived table post", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObDMLStmt::check_has_cursor_expression(bool &has_cursor_expr) const
-{
-  int ret = OB_SUCCESS;
-  ObQueryRefRawExpr *ref_query = NULL;
-  has_cursor_expr = false;
-  for (int64_t j = 0; OB_SUCC(ret) && !has_cursor_expr && j < subquery_exprs_.count(); ++j) {
-    if (OB_ISNULL(ref_query = subquery_exprs_.at(j))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret));
-    } else if (ref_query->is_cursor()) {
-      has_cursor_expr = true;
     }
   }
   return ret;

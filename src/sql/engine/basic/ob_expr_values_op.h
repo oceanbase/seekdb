@@ -19,14 +19,12 @@
 
 #include "sql/engine/ob_operator.h"
 #include "sql/engine/expr/ob_datum_cast.h"
-#include "sql/engine/dml/ob_err_log_service.h"
 
 namespace oceanbase
 {
 namespace sql
 {
 class ObPhyOpSeriCtx;
-class ObErrLogService;
 
 class ObExprValuesSpec : public ObOpSpec
 {
@@ -38,7 +36,6 @@ public:
       column_names_(alloc),
       is_strict_json_desc_(alloc),
       str_values_array_(alloc),
-      err_log_ct_def_(alloc),
       contain_ab_param_(0),
       ins_values_batch_opt_(false),
       array_group_idx_(-1)
@@ -59,7 +56,6 @@ public:
   common::ObFixedArray<common::ObString, common::ObIAllocator> column_names_;
   common::ObFixedArray<bool, common::ObIAllocator> is_strict_json_desc_;
   common::ObFixedArray<ObStrValues, common::ObIAllocator> str_values_array_;
-  ObErrLogCtDef err_log_ct_def_;
   int64_t contain_ab_param_;
   bool ins_values_batch_opt_;
   int64_t array_group_idx_;
@@ -72,7 +68,6 @@ public:
   virtual int inner_open() override;
   virtual int inner_rescan() override;
 
-  virtual int switch_iterator() override;
 
   virtual int inner_get_next_row() override;
 
@@ -97,8 +92,6 @@ private:
   int64_t vector_index_;
   ObDatumCaster datum_caster_;
   common::ObCastMode cm_;
-  ObErrLogService err_log_service_;
-  ObErrLogRtDef err_log_rt_def_;
   int64_t real_value_cnt_;
   int64_t param_idx_;
   int64_t param_cnt_;

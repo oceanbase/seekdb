@@ -23,6 +23,7 @@ name
 bf_cache_miss_count_threshold
 builtin_db_data_verify_cycle
 cache_wash_threshold
+clog_io_isolation_mode
 clog_sync_time_warn_threshold
 compaction_dag_cnt_limit
 compaction_high_thread_score
@@ -130,6 +131,7 @@ ssl_client_authentication
 stack_size
 storage_high_thread_score
 storage_rowsets_size
+strict_check_os_params
 sync_io_thread_count
 syslog_compress_func
 syslog_disk_size
@@ -156,6 +158,7 @@ workers_per_cpu_quota
 writing_throttling_maximum_duration
 writing_throttling_trigger_percentage
 _advance_checkpoint_interval
+_allow_skip_replay_redo_after_detete_tablet
 _bloom_filter_enabled
 _bloom_filter_ratio
 _cache_wash_interval
@@ -196,7 +199,6 @@ _enable_log_cache
 _enable_memleak_light_backtrace
 _enable_mysql_compatible_dates
 _enable_newsort
-_enable_nlj_spf_use_rich_format
 _enable_optimizer_qualify_filter
 _enable_parallel_das_dml
 _enable_parallel_minor_merge
@@ -214,6 +216,7 @@ _enable_spf_batch_rescan
 _enable_topn_runtime_filter
 _enable_trace_tablet_leak
 _enable_transaction_internal_routing
+_enable_tree_based_io_scheduler
 _enable_values_table_folding
 _enable_var_assign_use_das
 _fast_commit_callback_count
@@ -222,7 +225,6 @@ _force_hash_groupby_dump
 _force_hash_join_spill
 _force_skip_encoding_partition_id
 _force_subquery_unnest
-_global_enable_rich_vector_format
 _hash_area_size
 _hash_join_enabled
 _hnsw_max_scan_vectors

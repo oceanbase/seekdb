@@ -199,53 +199,6 @@ int ObExprArrayExtreme::eval_array_extreme_batch(const ObExpr &expr, ObEvalCtx &
   return ret;
 }
 
-int ObExprArrayExtreme::eval_array_extreme_vector(const ObExpr &expr, ObEvalCtx &ctx,
-                                            const ObBitVector &skip, const EvalBound &bound,
-                                            bool is_max)
-{
-  int ret = OB_SUCCESS;
-  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
-  ObExprStrResAlloc res_alloc(expr, ctx);
-  const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
-  ObIArrayType *src_arr = NULL;
-
-  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval source array failed", K(ret));
-  } else {
-    ObIVector *arr_vec = expr.args_[0]->get_vector(ctx);
-    VectorFormat arr_format = arr_vec->get_format();
-    ObIVector *res_vec = expr.get_vector(ctx);
-    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-    ObObj res_obj;
-    for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {
-      bool is_null_res = false;
-      int64_t arr_idx = 0;
-      if (skip.at(idx) || eval_flags.at(idx)) {
-        continue;
-      }
-      eval_flags.set(idx);
-      if (arr_vec->is_null(idx)) {
-        is_null_res = true;
-      } else {
-        ObString arr_str = arr_vec->get_string(idx);
-        if (OB_FAIL(ObNestedVectorFunc::construct_param(tmp_allocator, ctx, subschema_id, arr_str, src_arr))) {
-          LOG_WARN("construct array obj failed", K(ret));
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (is_null_res) {
-        res_vec->set_null(idx);
-      } else if (OB_FAIL(calc_extreme(src_arr, res_obj, is_max))) {
-        LOG_WARN("calc array extreme value failed", K(ret));
-      } else if (OB_FAIL(ObArrayExprUtils::set_obj_to_vector(res_vec, idx, res_obj, res_alloc))) {
-        LOG_WARN("failed to set object value to result vector", K(ret), K(idx), K(res_obj));
-      }
-    } // end for
-  }
-  return ret;
-}
-
 ObExprArrayMax::ObExprArrayMax(common::ObIAllocator &alloc)
     : ObExprArrayExtreme(alloc, T_FUNC_SYS_ARRAY_MAX, N_ARRAY_MAX)
 {
@@ -266,13 +219,6 @@ int ObExprArrayMax::eval_array_max_batch(const ObExpr &expr, ObEvalCtx &ctx,
   return ObExprArrayExtreme::eval_array_extreme_batch(expr, ctx, skip, batch_size, true);
 }
 
-int ObExprArrayMax::eval_array_max_vector(const ObExpr &expr, ObEvalCtx &ctx,
-                                          const ObBitVector &skip, const EvalBound &bound)
-
-{
-  return ObExprArrayExtreme::eval_array_extreme_vector(expr, ctx, skip, bound, true);
-}
-
 int ObExprArrayMax::cg_expr(ObExprCGCtx &expr_cg_ctx,
                             const ObRawExpr &raw_expr,
                             ObExpr &rt_expr) const
@@ -281,7 +227,6 @@ int ObExprArrayMax::cg_expr(ObExprCGCtx &expr_cg_ctx,
   UNUSED(raw_expr);
   rt_expr.eval_func_ = eval_array_max;
   rt_expr.eval_batch_func_ = eval_array_max_batch;
-  rt_expr.eval_vector_func_ = eval_array_max_vector; 
   return OB_SUCCESS;
 }
 
@@ -305,13 +250,6 @@ int ObExprArrayMin::eval_array_min_batch(const ObExpr &expr, ObEvalCtx &ctx,
   return ObExprArrayExtreme::eval_array_extreme_batch(expr, ctx, skip, batch_size, false);
 }
 
-int ObExprArrayMin::eval_array_min_vector(const ObExpr &expr, ObEvalCtx &ctx,
-                                          const ObBitVector &skip, const EvalBound &bound)
-
-{
-  return ObExprArrayExtreme::eval_array_extreme_vector(expr, ctx, skip, bound, false);
-}
-
 int ObExprArrayMin::cg_expr(ObExprCGCtx &expr_cg_ctx,
                             const ObRawExpr &raw_expr,
                             ObExpr &rt_expr) const
@@ -320,7 +258,6 @@ int ObExprArrayMin::cg_expr(ObExprCGCtx &expr_cg_ctx,
   UNUSED(raw_expr);
   rt_expr.eval_func_ = eval_array_min;
   rt_expr.eval_batch_func_ = eval_array_min_batch;
-  rt_expr.eval_vector_func_ = eval_array_min_vector; 
   return OB_SUCCESS;
 }
 

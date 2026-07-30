@@ -586,7 +586,7 @@ select * from information_schema.character_sets;
 | binary             | binary               | Binary pseudo charset |      1 |
 | utf8mb4            | utf8mb4_general_ci   | UTF-8 Unicode         |      4 |
 +--------------------+----------------------+-----------------------+--------+
-select * from information_schema.statistics where table_schema in ('oceanbase', 'mysql', 'information_schema') and TABLE_NAME not like "ob_all_proxy%" order by TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME;
+select * from information_schema.statistics where table_schema in ('oceanbase', 'mysql', 'information_schema') order by TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME;
 +---------------+--------------+-------------------------------------------+------------+--------------+------------------------------------+--------------+-------------------------+-----------+-------------+----------+--------+----------+------------+---------+---------------+------------+------------+
 | TABLE_CATALOG | TABLE_SCHEMA | TABLE_NAME                                | NON_UNIQUE | INDEX_SCHEMA | INDEX_NAME                         | SEQ_IN_INDEX | COLUMN_NAME             | COLLATION | CARDINALITY | SUB_PART | PACKED | NULLABLE | INDEX_TYPE | COMMENT | INDEX_COMMENT | IS_VISIBLE | EXPRESSION |
 +---------------+--------------+-------------------------------------------+------------+--------------+------------------------------------+--------------+-------------------------+-----------+-------------+----------+--------+----------+------------+---------+---------------+------------+------------+
@@ -1367,7 +1367,7 @@ select * from information_schema.table_constraints where table_schema in ('ocean
 | def                | test1             | PRIMARY         | test1        | t1tenant1  | PRIMARY KEY     | YES      |
 | def                | test1             | t1tenant1_uidx  | test1        | t1tenant1  | UNIQUE          | YES      |
 +--------------------+-------------------+-----------------+--------------+------------+-----------------+----------+
-select * from information_schema.statistics where table_schema in ('oceanbase', 'mysql', 'information_schema', 'test1') and TABLE_NAME not like "ob_all_proxy%" order by TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME;
+select * from information_schema.statistics where table_schema in ('oceanbase', 'mysql', 'information_schema', 'test1') order by TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME;
 +---------------+--------------+-------------------------------------------+------------+--------------+------------------------------------+--------------+-------------------------+-----------+-------------+----------+--------+----------+------------+---------+---------------+------------+------------+
 | TABLE_CATALOG | TABLE_SCHEMA | TABLE_NAME                                | NON_UNIQUE | INDEX_SCHEMA | INDEX_NAME                         | SEQ_IN_INDEX | COLUMN_NAME             | COLLATION | CARDINALITY | SUB_PART | PACKED | NULLABLE | INDEX_TYPE | COMMENT | INDEX_COMMENT | IS_VISIBLE | EXPRESSION |
 +---------------+--------------+-------------------------------------------+------------+--------------+------------------------------------+--------------+-------------------------+-----------+-------------+----------+--------+----------+------------+---------+---------------+------------+------------+

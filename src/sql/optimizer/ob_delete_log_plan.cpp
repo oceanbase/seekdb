@@ -117,16 +117,6 @@ int ObDeleteLogPlan::generate_normal_raw_plan()
       }
     }
 
-    // 5. allocate scalar operator, just for agg func returning
-    if (OB_SUCC(ret) && delete_stmt->get_returning_aggr_item_size() > 0) {
-      if (OB_FAIL(candi_allocate_scala_group_by(delete_stmt->get_returning_aggr_items()))) {
-        LOG_WARN("failed to allocate group by operator", K(ret));
-      } else {
-        LOG_TRACE("succeed to allocate group by operator",
-            K(candidates_.candidate_plans_.count()));
-      }
-    }
-
     //allocate temp-table transformation if needed.
     if (OB_SUCC(ret) && !get_optimizer_context().get_temp_table_infos().empty() && is_final_root_plan()) {
       if (OB_FAIL(candi_allocate_temp_table_transformation())) {
@@ -248,16 +238,12 @@ int ObDeleteLogPlan::allocate_delete_as_top(ObLogicalOperator *&top,
     LOG_WARN("failed to allocate delete operator", K(ret));
   } else {
     delete_op->set_child(ObLogicalOperator::first_child, top);
-    delete_op->set_is_returning(delete_stmt->is_returning());
     delete_op->set_is_multi_part_dml(is_multi_part_dml);
-    delete_op->set_has_instead_of_trigger(delete_stmt->has_instead_of_trigger());
     if (get_can_use_parallel_das_dml()) {
       delete_op->set_das_dop(max_dml_parallel_);
     }
     if (OB_FAIL(delete_op->assign_dml_infos(index_dml_infos_))) {
       LOG_WARN("failed to assign dml infos", K(ret));
-    } else if (delete_stmt->is_error_logging() && OB_FAIL(delete_op->extract_err_log_info())) {
-      LOG_WARN("failed to extract error log info", K(ret));
     } else if (OB_FAIL(delete_op->compute_property())) {
       LOG_WARN("failed to compute property", K(ret));
     } else {
@@ -295,7 +281,6 @@ int ObDeleteLogPlan::prepare_dml_infos()
     LOG_WARN("get unexpected null", K(ret));
   } else {
     const ObIArray<ObDeleteTableInfo*>& table_infos = delete_stmt->get_delete_table_info();
-    bool has_tg = delete_stmt->has_instead_of_trigger();
     for (int64_t i = 0; OB_SUCC(ret) && i < table_infos.count(); ++i) {
       const ObDeleteTableInfo* table_info = table_infos.at(i);
       IndexDMLInfo* table_dml_info = nullptr;
@@ -305,8 +290,7 @@ int ObDeleteLogPlan::prepare_dml_infos()
         LOG_WARN("get unexpected null", K(ret), K(i));
       } else if (OB_FAIL(prepare_table_dml_info_basic(*table_info,
                                                       table_dml_info,
-                                                      index_dml_infos,
-                                                      has_tg))) {
+                                                      index_dml_infos))) {
         LOG_WARN("failed to prepare table dml info basic", K(ret));
       } else if (OB_FAIL(prepare_table_dml_info_special(*table_info,
                                                         table_dml_info,

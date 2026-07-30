@@ -21,9 +21,9 @@ namespace oceanbase
 {
 using namespace common;
 using namespace share;
+
 namespace palf
 {
-
 LogModeMgr::LogModeMgr()
     : is_inited_(false),
       self_(),

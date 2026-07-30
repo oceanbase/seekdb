@@ -144,7 +144,6 @@ private:
 
 public:
   static constexpr int64_t CHUNK_MEMORY_LIMIT = 128_MB;
-  static constexpr int64_t MINI_MODE_CHUNK_MEMORY_LIMIT = 32_MB;
   static constexpr int64_t RESERVE_MEM_SIZE = 32_MB;
   static constexpr int64_t CHECK_SHRINK_INTERVAL = 120_s;
 private:

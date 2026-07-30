@@ -41,7 +41,6 @@
 #include "ob_log_temp_table_insert.h"
 #include "ob_log_temp_table_access.h"
 #include "ob_log_temp_table_transformation.h"
-#include "ob_log_err_log.h"
 #include "ob_log_stat_collector.h"
 #include "ob_del_upd_log_plan.h"
 #include "ob_log_values_table_access.h"
@@ -277,13 +276,6 @@ ObLogicalOperator *ObLogOperatorFactory::allocate(ObLogPlan &plan, ObLogOpType t
     ptr = allocator_.alloc(sizeof(ObLogForUpdate));
     if (NULL != ptr) {
       ret_op = new (ptr) ObLogForUpdate(plan);
-    }
-    break;
-  }
-  case LOG_ERR_LOG: {
-    ptr = allocator_.alloc(sizeof(ObLogErrLog));
-    if (NULL != ptr) {
-      ret_op = new (ptr) ObLogErrLog(plan);
     }
     break;
   }

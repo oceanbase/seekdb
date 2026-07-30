@@ -362,7 +362,6 @@ ObParser::State ObParser::transform_normal(ObString &normal)
   ELSIF(9, S_PROCEDURE, "procedure")
   ELSIF(7, S_PACKAGE, "package")
   ELSIF(7, S_TRIGGER, "trigger")
-  ELSIF(5, S_EVENT, "event")
   ELSIF(4, S_TYPE, "type")
   ELSIF(2, S_OR, "or")
   ELSIF(7, S_REPLACE, "replace")
@@ -413,7 +412,6 @@ ObParser::State ObParser::transform_normal(
         case S_FUNCTION:
         case S_PACKAGE:
         case S_TRIGGER:
-        case S_EVENT:
         case S_TYPE:
         case S_SIGNAL:
         case S_RESIGNAL: {
@@ -446,7 +444,6 @@ ObParser::State ObParser::transform_normal(
         case S_PROCEDURE:
         case S_PACKAGE:
         case S_TRIGGER:
-        case S_EVENT:
         case S_TYPE:
         case S_DEFINER: {
           is_pl = true;
@@ -487,7 +484,7 @@ ObParser::State ObParser::transform_normal(
     case S_ALTER: {
       State token = transform_normal(normal);
       if (S_PROCEDURE == token || S_FUNCTION == token
-          || S_PACKAGE == token || S_TRIGGER == token ||  S_EVENT == token || S_TYPE == token || S_DEFINER == token) {
+          || S_PACKAGE == token || S_TRIGGER == token || S_TYPE == token || S_DEFINER == token) {
         is_pl = true;
       } else {
         is_not_pl = true;
@@ -935,7 +932,6 @@ int ObParser::parse_(const ObString &query,
                     const bool is_batched_multi_stmt_split_on,
                     const bool no_throw_parser_error,
                     const bool is_pl_inner_parse,
-                    const bool is_dbms_sql,
                     const bool is_parse_dynamic_sql)
 {
   int ret = OB_SUCCESS;
@@ -969,7 +965,6 @@ int ObParser::parse_(const ObString &query,
                                   || FP_NO_PARAMERIZE_AND_FILTER_HINT_MODE == parse_mode);
   parse_result.is_for_trigger_ = (TRIGGER_MODE == parse_mode);
   parse_result.is_dynamic_sql_ = (DYNAMIC_SQL_MODE == parse_mode);
-  parse_result.is_dbms_sql_ = (DBMS_SQL_MODE == parse_mode) || is_dbms_sql;
   parse_result.is_batched_multi_enabled_split_ = is_batched_multi_stmt_split_on;
   parse_result.is_not_utf8_connection_ = ObCharset::is_valid_collation(charsets4parser_.string_collation_) ?
         (ObCharset::charset_type_by_coll(charsets4parser_.string_collation_) != CHARSET_UTF8MB4) : false;
@@ -1096,7 +1091,6 @@ int ObParser::parse(const ObString &query,
                     const bool is_batched_multi_stmt_split_on,
                     const bool no_throw_parser_error,
                     const bool is_pl_inner_parse,
-                    const bool is_dbms_sql,
                     const bool is_parse_dynamic_sql)
 {
   return SMART_CALL(parse_(query,
@@ -1105,7 +1099,6 @@ int ObParser::parse(const ObString &query,
                           is_batched_multi_stmt_split_on,
                           no_throw_parser_error,
                           is_pl_inner_parse,
-                          is_dbms_sql,
                           is_parse_dynamic_sql));
 }
 

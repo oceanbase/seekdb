@@ -39,7 +39,6 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     signature_(0),
     field_columns_(mem_context->get_arena_allocator()),
     param_columns_(mem_context->get_arena_allocator()),
-    returning_param_columns_(mem_context->get_arena_allocator()),
     autoinc_params_(allocator_),
     stmt_need_privs_(allocator_),
     vars_(allocator_),
@@ -79,11 +78,9 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     op_stats_(),
     need_drive_dml_query_(false),
     var_init_exprs_(allocator_),
-    is_returning_(false),
     is_late_materialized_(false),
     is_plain_insert_(false),
     contain_paramed_column_field_(false),
-    first_array_index_(OB_INVALID_INDEX),
     need_consistent_snapshot_(true),
     is_batched_multi_stmt_(false),
     is_new_engine_(false),
@@ -99,10 +96,9 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     ddl_execution_id_(-1),
     ddl_task_id_(0),
     is_packed_(false),
-    has_instead_of_trigger_(false),
+    reserved_advanced_trigger_(false),
     need_record_plan_info_(false),
     logical_plan_(),
-    use_rich_format_(false),
     subschema_ctx_(allocator_),
     das_dop_(0),
     disable_auto_memory_mgr_(false),
@@ -113,7 +109,6 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     can_set_feedback_info_(true),
     need_switch_to_table_lock_worker_(false),
     data_complement_gen_doc_id_(false),
-    direct_load_need_sort_(false),
     insertup_can_do_gts_opt_(false),
     px_worker_share_plan_enabled_(false)
 {
@@ -133,7 +128,6 @@ void ObPhysicalPlan::reset()
   signature_ = 0;
   field_columns_.reset();
   param_columns_.reset();
-  returning_param_columns_.reset();
   autoinc_params_.reset();
   stmt_need_privs_.reset();
   vars_.reset();
@@ -164,14 +158,12 @@ void ObPhysicalPlan::reset()
   is_update_uniq_index_ = false;
   contain_index_location_ = false;
   ObPlanCacheObject::reset();
-  is_returning_ = false;
   is_late_materialized_ = false;
   is_plain_insert_ = false;
   base_constraints_.reset();
   strict_constrinats_.reset();
   non_strict_constrinats_.reset();
   contain_paramed_column_field_ = false;
-  first_array_index_ = OB_INVALID_INDEX;
   need_consistent_snapshot_ = true;
   is_batched_multi_stmt_ = false;
   is_new_engine_ = false;
@@ -185,10 +177,7 @@ void ObPhysicalPlan::reset()
   batch_size_ = 0;
   contain_pl_udf_or_trigger_ = false;
   is_packed_ = false;
-  has_instead_of_trigger_ = false;
-  use_rich_format_ = false;
-  stat_.expected_worker_map_.destroy();
-  stat_.minimal_worker_map_.destroy();
+  reserved_advanced_trigger_ = false;
   need_record_plan_info_ = false;
   logical_plan_.reset();
   subschema_ctx_.reset();
@@ -201,7 +190,6 @@ void ObPhysicalPlan::reset()
   can_set_feedback_info_.store(true);
   need_switch_to_table_lock_worker_ = false;
   data_complement_gen_doc_id_ = false;
-  direct_load_need_sort_ = false;
   insertup_can_do_gts_opt_ = false;
   px_worker_share_plan_enabled_ = false;
 }
@@ -212,8 +200,6 @@ void ObPhysicalPlan::destroy()
 #endif
   sql_expression_factory_.destroy();
   expr_op_factory_.destroy();
-  stat_.expected_worker_map_.destroy();
-  stat_.minimal_worker_map_.destroy();
   subschema_ctx_.destroy();
 }
 
@@ -328,27 +314,6 @@ int ObPhysicalPlan::set_param_fields(const common::ParamsFieldArray &params)
       if (OB_FAIL(tmp_field.deep_copy(param_field, &allocator_))) {
         LOG_WARN("deep copy field failed", K(ret));
       } else if (OB_FAIL(param_columns_.push_back(tmp_field))) {
-        LOG_WARN("push back field columns failed", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObPhysicalPlan::set_returning_param_fields(const common::ParamsFieldArray &params)
-{
-  int ret = OB_SUCCESS;
-  int64_t N = params.count();
-  WITH_CONTEXT(mem_context_) {
-    if(N > 0 && OB_FAIL(returning_param_columns_.reserve(N))) {
-      LOG_WARN("failed to reserved returning param field", K(ret));
-    }
-    ObField tmp_field;
-    for (int i = 0; OB_SUCC(ret) && i < N; ++i) {
-      const ObField &param_field = params.at(i);
-      if (OB_FAIL(tmp_field.deep_copy(param_field, &allocator_))) {
-        LOG_WARN("deep copy field failed", K(ret));
-      } else if (OB_FAIL(returning_param_columns_.push_back(tmp_field))) {
         LOG_WARN("push back field columns failed", K(ret));
       }
     }
@@ -671,13 +636,11 @@ OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     stat_.sql_id_,
                     is_contain_inner_table_,
                     is_update_uniq_index_,
-                    is_returning_,
                     location_type_,
                     use_px_,
                     vars_,
                     px_dop_,
                     has_nested_sql_,
-                    stat_.enable_early_lock_release_,
                     use_pdml_,
                     is_new_engine_,
                     use_temp_table_,
@@ -689,14 +652,13 @@ OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     need_serial_exec_,
                     contain_pl_udf_or_trigger_,
                     is_packed_,
-                    has_instead_of_trigger_,
+                    reserved_advanced_trigger_,
                     is_plain_insert_,
                     ddl_execution_id_,
                     ddl_task_id_,
                     stat_.plan_id_,
                     need_record_plan_info_,
                     subschema_ctx_,
-                    use_rich_format_,
                     disable_auto_memory_mgr_,
                     udf_has_dml_stmt_,
                     stat_.format_sql_id_,
@@ -899,10 +861,7 @@ int ObPhysicalPlan::alloc_op_spec(const ObPhyOperatorType type,
     op->id_ = tmp_op_id;
     op->plan_ = this;
     op->max_batch_size_ = (ObOperatorFactory::is_vectorized(type)) ? batch_size_ : 0;
-    op->use_rich_format_ = use_rich_format_
-                           && op->is_vectorized()
-                           && ObOperatorFactory::support_rich_format(type);
-    LOG_TRACE("alloc op spec", K(use_rich_format_), K(op->max_batch_size_), K(op->use_rich_format_), K(*op));
+    LOG_TRACE("alloc op spec", K(op->max_batch_size_), K(*op));
   }
   return ret;
 }
@@ -919,11 +878,9 @@ int ObPhysicalPlan::alloc_op_spec_for_cg(ObLogicalOperator *op, ObSqlSchemaGuard
     LOG_WARN("check op vectorization failed", K(ret));
   } else if (disable_vectorize) {
     spec->max_batch_size_ = 0;
-    spec->use_rich_format_ = false;
   }
   if (OB_SUCC(ret)) {
-    LOG_TRACE("alloc op spec for cg", K(disable_vectorize), K(spec->max_batch_size_),
-              K(spec->use_rich_format_), K(*spec));
+    LOG_TRACE("alloc op spec for cg", K(disable_vectorize), K(spec->max_batch_size_), K(*spec));
   }
   return ret;
 }
@@ -1005,49 +962,6 @@ void ObPhysicalPlan::calc_whether_need_trans()
     bool_ret = true;
   }
   is_need_trans_ = bool_ret;
-}
-
-int ObPhysicalPlan::set_expected_worker_map(const common::hash::ObHashMap<ObAddr, int64_t> &c)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(assign_worker_map(stat_.expected_worker_map_, c))) {
-    LOG_WARN("set expected worker map failed", K(ret));
-  }
-  return ret;
-}
-const ObPlanStat::AddrMap& ObPhysicalPlan:: get_expected_worker_map() const
-{
-  return stat_.expected_worker_map_;
-}
-
-int ObPhysicalPlan::set_minimal_worker_map(const common::hash::ObHashMap<ObAddr, int64_t> &c)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(assign_worker_map(stat_.minimal_worker_map_, c))) {
-    LOG_WARN("set minimal worker map failed", K(ret));
-  }
-  return ret;
-}
-
-int ObPhysicalPlan::assign_worker_map(ObPlanStat::AddrMap &worker_map, const common::hash::ObHashMap<ObAddr, int64_t> &c)
-{
-  int ret = OB_SUCCESS;
-  ObMemAttr attr("WorkerMap");
-  ObMemAttr node_attr("WorkerMapNode");
-  if (worker_map.created()) {
-    worker_map.clear();
-  } else if (OB_FAIL(worker_map.create(common::hash::cal_next_prime(100), attr, node_attr))){
-    LOG_WARN("create hash map failed", K(ret));
-  }
-  if (OB_SUCC(ret)) {
-    for (common::hash::ObHashMap<ObAddr, int64_t>::const_iterator it = c.begin();
-        OB_SUCC(ret) && it != c.end(); ++it) {
-      if (OB_FAIL(worker_map.set_refactored(it->first, it->second))){
-        SQL_PC_LOG(WARN, "set refactored failed", K(ret), K(it->first), K(it->second));
-      }
-    }
-  }
-  return ret;
 }
 
 int ObPhysicalPlan::update_cache_obj_stat(ObILibCacheCtx &ctx)

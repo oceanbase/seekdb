@@ -806,9 +806,6 @@ DEF_PARAM(_enable_spf_batch_rescan, BOOL, OB_CLUSTER_PARAMETER, "False",
 DEF_PARAM(_enable_das_keep_order, BOOL, OB_CLUSTER_PARAMETER, "True",
          "enable das keep order optimization",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_enable_nlj_spf_use_rich_format, BOOL, OB_CLUSTER_PARAMETER, "True",
-         "enable nlj and spf use rich format",
-         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_enable_index_merge, BOOL, OB_CLUSTER_PARAMETER, "False",
          "enable index merge optimization",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -1049,8 +1046,26 @@ DEF_PARAM(_multimodel_memory_trace_level, INT, OB_CLUSTER_PARAMETER, "0", "[0,10
 DEF_PARAM(_query_record_size_limit, INT, OB_CLUSTER_PARAMETER, "65536", "[0, 67108864] in integer",
         "set sql_audit and plan stat query sql size. Range: [0,67108864] in integer in integer.",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_global_enable_rich_vector_format, BOOL, OB_CLUSTER_PARAMETER, "True",
-         "Control whether use rich vector format in vectorization engine",
+DEF_PARAM(_allow_skip_replay_redo_after_detete_tablet, BOOL, OB_CLUSTER_PARAMETER, "FALSE",
+         "allow skip replay invalid redo log after tablet delete transaction is committed."
+         "The default value is FALSE. Value: TRUE means we allow skip replaying this invalid redo log, False means we do not alow such behavior.",
+         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+
+// Deprecated: strict OS parameter check has been removed. Keep for compatibility only.
+DEF_PARAM(strict_check_os_params, BOOL, OB_CLUSTER_PARAMETER, "False",
+         "Deprecated. The strict OS parameter check logic has been removed and this parameter has no effect. "
+         "Default: False. Value: True/False are accepted for compatibility only.",
+         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::STATIC_EFFECTIVE));
+DEF_PARAM(_enable_tree_based_io_scheduler, BOOL, OB_CLUSTER_PARAMETER, "True",
+         "A switch that allows enabling the tree-based IO scheduler."
+         "Value: True: allowed; False: disabled",
+         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(clog_io_isolation_mode, INT, OB_CLUSTER_PARAMETER, "1", "[1,2]",
+         "Specifies the I/O isolation mode for Commit Log (clog). "
+         "Values: "
+         "1 - Non-isolation mode (disable I/O isolation), "
+         "2 - Full isolation mode (enable I/O isolation). "
+         "Example: 1=Off, 2=On",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_enable_memleak_light_backtrace, BOOL, OB_CLUSTER_PARAMETER, "True",
         "specifies whether allow memleak to get the backtrace of malloc by light_backtrace",

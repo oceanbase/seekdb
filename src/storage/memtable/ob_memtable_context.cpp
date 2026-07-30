@@ -17,7 +17,6 @@
 #include "ob_memtable_context.h"
 #include "storage/tx/ob_tx_ctx.h"
 #include "storage/tablelock/ob_lock_memtable.h"
-#include "storage/tx/ob_trans_deadlock_adapter.h"
 
 namespace oceanbase
 {
@@ -697,51 +696,6 @@ int ObMemtableCtx::get_callback_list_stat(ObIArray<ObTxCallbackListStat> &stats)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
-int ObMemtableCtx::get_conflict_trans_ids(common::ObIArray<ObTransID> &array)
-{
-  int ret = OB_SUCCESS;
-  {
-    ObByteLockGuard guard(lock_, ObWaitEventIds::MEMTABLE_CTX_ACCESS_LOCK);
-    ret = array.assign(conflict_trans_ids_);
-  }
-  if (OB_FAIL(ret)) {
-    DETECT_LOG(ERROR, "fail to copy conflict_trans_ids_", KR(ret), KPC(this));
-  }
-  return ret;
-}
-
-void ObMemtableCtx::reset_conflict_trans_ids()
-{
-  ObByteLockGuard guard(lock_, ObWaitEventIds::MEMTABLE_CTX_ACCESS_LOCK);
-  conflict_trans_ids_.reset();
-}
-
-int ObMemtableCtx::add_conflict_trans_id(const ObTransID conflict_trans_id)
-{
-  auto if_contains = [this](const ObTransID trans_id) -> bool
-  {
-    for (int64_t idx = 0; idx < this->conflict_trans_ids_.count(); ++idx) {
-      if (this->conflict_trans_ids_[idx] == trans_id) {
-        return true;
-      }
-    }
-    return false;
-  };
-  ObByteLockGuard guard(lock_, ObWaitEventIds::MEMTABLE_CTX_ACCESS_LOCK);
-  int ret = OB_SUCCESS;
-
-  if (conflict_trans_ids_.count() >= MAX_RESERVED_CONFLICT_TX_NUM) {
-    ret = OB_SIZE_OVERFLOW;
-    DETECT_LOG(WARN, "too many conflict trans_id", K(*this), K(conflict_trans_id), K(conflict_trans_ids_));
-  } else if (if_contains(conflict_trans_id)) {
-    // do nothing
-  } else if (OB_FAIL(conflict_trans_ids_.push_back(conflict_trans_id))) {
-    DETECT_LOG(WARN, "push trans id to blocked trans ids failed", K(*this), K(conflict_trans_id), K(conflict_trans_ids_));
-  }
-
-  return ret;
-}
 
 void ObMemtableCtx::inc_lock_for_read_retry_count()
 {

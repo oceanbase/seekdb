@@ -108,7 +108,7 @@ int ObAnalyzeStmtResolver::resolve_analyze_table(const ParseNode &parse_node,
     ParseNode *statistic_node = parse_node.children_[2];
     if (OB_ISNULL(table_node) || OB_NOT_NULL(statistic_node)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null parse node", K(table_node), K(statistic_node), K(ret));
+      LOG_WARN("null parse node", K(table_node), K(ret));
     } else if (OB_FAIL(recursive_resolve_table_info(table_node, analyze_stmt))) {
       LOG_WARN("failed to resolve table info", K(ret));
     } else if (OB_FAIL(resolve_partition_info(part_node, analyze_stmt))) {
@@ -314,7 +314,6 @@ int ObAnalyzeStmtResolver::inner_resolve_partition_info(const ParseNode *part_no
   ObSEArray<int64_t, 4> part_ids;
   ObSEArray<int64_t, 4> subpart_ids;
   bool is_subpart_name = false;
-
   ObString &partition_name = table_info.get_partition_name();
   if (OB_ISNULL(schema_checker_) || OB_ISNULL(params_.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -358,15 +357,15 @@ int ObAnalyzeStmtResolver::inner_resolve_partition_info(const ParseNode *part_no
       partition_name.assign_ptr(name_list->children_[i]->str_value_,
                                 static_cast<int32_t>(name_list->children_[i]->str_len_));
       if (ObCharset::case_insensitive_equal(partition_name, table_schema->get_table_name())) {
-        // do nothing
         partition_name.reset();
-      } else if (OB_FAIL(pl::ObDbmsStats::find_selected_part_infos(partition_name,
-                                                                   part_infos,
-                                                                   subpart_infos,
-                                                                   false,
-                                                                   table_info.get_part_infos(),
-                                                                   table_info.get_subpart_infos(),
-                                                                   is_subpart_name))) {
+      } else if (OB_FAIL(pl::ObDbmsStats::find_selected_part_infos(
+                     partition_name,
+                     part_infos,
+                     subpart_infos,
+                     false,
+                     table_info.get_part_infos(),
+                     table_info.get_subpart_infos(),
+                     is_subpart_name))) {
         LOG_WARN("failed to find selected part infos", K(ret));
       } else {
         table_info.set_is_sepcify_subpart(is_subpart_name);

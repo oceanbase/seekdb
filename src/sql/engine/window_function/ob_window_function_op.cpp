@@ -1243,28 +1243,11 @@ int ObWindowFunctionOp::init()
           case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS:
           case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE:
           case T_FUN_GROUP_CONCAT:
-          case T_FUN_CORR:
-          case T_FUN_COVAR_POP:
-          case T_FUN_COVAR_SAMP:
           case T_FUN_VAR_POP:
           case T_FUN_VAR_SAMP:
-          case T_FUN_REGR_SLOPE:
-          case T_FUN_REGR_INTERCEPT:
-          case T_FUN_REGR_COUNT:
-          case T_FUN_REGR_R2:
-          case T_FUN_REGR_AVGX:
-          case T_FUN_REGR_AVGY:
-          case T_FUN_REGR_SXX:
-          case T_FUN_REGR_SYY:
-          case T_FUN_REGR_SXY:
           case T_FUN_SYS_BIT_AND:
           case T_FUN_SYS_BIT_OR:
           case T_FUN_SYS_BIT_XOR:
-          case T_FUN_KEEP_MAX:
-          case T_FUN_KEEP_MIN:
-          case T_FUN_KEEP_SUM:
-          case T_FUN_KEEP_COUNT:
-          case T_FUN_KEEP_WM_CONCAT:
           case T_FUN_WM_CONCAT:
           case T_FUN_TOP_FRE_HIST:
           case T_FUN_PL_AGG_UDF:

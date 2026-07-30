@@ -262,7 +262,7 @@ public:
   int del_obj_mysql_priv(const ObObjMysqlPrivSortKey &obj_mysql_priv_key);
   int get_obj_mysql_priv(const ObObjMysqlPrivSortKey &obj_mysql_priv_key,
                          const ObObjMysqlPriv *&obj_mysql_priv) const;
-  int get_obj_mysql_priv_set(const ObObjMysqlPrivSortKey &obj_mysql_priv_key, 
+  int get_obj_mysql_priv_set(const ObObjMysqlPrivSortKey &obj_mysql_priv_key,
                              ObPrivSet &priv_set) const;
   // other
   int get_db_privs_in_runtime(common::ObIArray<const ObDBPriv *> &db_privs) const;

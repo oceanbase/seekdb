@@ -18,7 +18,7 @@
 
 #include "ob_expand_vec_op.h"
 #include "sql/engine/ob_bit_vector.h"
-#include "sql/engine/basic/ob_vector_result_holder.h"
+#include "sql/engine/basic/ob_batch_result_holder.h"
 
 namespace oceanbase
 {
@@ -40,28 +40,14 @@ int ObExpandVecOp::inner_open()
 int ObExpandVecOp::init()
 {
   int ret = OB_SUCCESS;
-  void *holder_buf = nullptr;
-  if (MY_SPEC.use_rich_format_) {
-    holder_buf = allocator_.alloc(sizeof(ObVectorsResultHolder));
-    if (OB_ISNULL(holder_buf)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate memory", K(ret));
-    } else {
-      vec_holder_ = new(holder_buf) ObVectorsResultHolder();
-      if (OB_FAIL(vec_holder_->init(child_->get_spec().output_, eval_ctx_))) {
-        LOG_WARN("init result holder failed", K(ret));
-      }
-    }
+  void *holder_buf = allocator_.alloc(sizeof(ObBatchResultHolder));
+  if (OB_ISNULL(holder_buf)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to allocate memory", K(ret));
   } else {
-    holder_buf = allocator_.alloc(sizeof(ObBatchResultHolder));
-    if (OB_ISNULL(holder_buf)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate memory", K(ret));
-    } else {
-      datum_holder_ = new (holder_buf) ObBatchResultHolder();
-      if (OB_FAIL(datum_holder_->init(child_->get_spec().output_, eval_ctx_))) {
-        LOG_WARN("init batch result holder failed", K(ret));
-      }
+    datum_holder_ = new (holder_buf) ObBatchResultHolder();
+    if (OB_FAIL(datum_holder_->init(child_->get_spec().output_, eval_ctx_))) {
+      LOG_WARN("init batch result holder failed", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -85,9 +71,7 @@ int ObExpandVecOp::inner_rescan()
   if (OB_FAIL(ObOperator::inner_rescan())) {
     LOG_WARN("inner rescan failed", K(ret));
   }
-  if (MY_SPEC.use_rich_format_) {
-    vec_holder_->reset();
-  } else {
+  if (datum_holder_ != nullptr) {
     datum_holder_->reset();
   }
   if (OB_SUCC(ret)) {
@@ -180,15 +164,6 @@ int ObExpandVecOp::do_dup_partial()
       || has_exist_in_array(MY_SPEC.gby_exprs_, MY_SPEC.expand_exprs_.at(expr_iter_idx_))
       || exists_dup_expr(expr_iter_idx_)) {
     // do nothing
-  } else if (MY_SPEC.use_rich_format_) {
-    ObExpr *null_expr = MY_SPEC.expand_exprs_.at(expr_iter_idx_);
-    if (OB_FAIL(null_expr->init_vector_for_write(eval_ctx_, null_expr->get_default_res_format(),
-                                                 child_input_size_))) {
-      LOG_WARN("init vector failed", K(ret));
-    } else {
-      null_expr->get_nulls(eval_ctx_).set_all(child_input_size_);
-      null_expr->get_vector(eval_ctx_)->set_has_null();
-    }
   } else {
     ObExpr *null_expr = MY_SPEC.expand_exprs_.at(expr_iter_idx_);
     ObDatumVector null_vec = null_expr->locate_expr_datumvector(eval_ctx_);
@@ -232,10 +207,6 @@ int ObExpandVecOp::backup_child_input(const ObBatchRows *child_brs)
   child_input_skip_ = child_brs->skip_;
   child_all_rows_active_ = child_brs->all_rows_active_;
   if (OB_UNLIKELY(child_brs->size_ <= 0)) {
-  } else if (MY_SPEC.use_rich_format_) {
-    if (OB_FAIL(vec_holder_->save(child_brs->size_))) {
-      LOG_WARN("save vec result failed", K(ret));
-    }
   } else {
     if (OB_FAIL(datum_holder_->save(child_brs->size_))) {
       LOG_WARN("save result failed", K(ret));
@@ -248,11 +219,7 @@ int ObExpandVecOp::restore_child_input()
 {
   int ret = OB_SUCCESS;
   if (child_input_size_ > 0) {
-    if (MY_SPEC.use_rich_format_) {
-      if (OB_FAIL(vec_holder_->restore())) {
-        LOG_WARN("restore vec results failed", K(ret));
-      }
-    } else if (OB_FAIL(datum_holder_->restore())) {
+    if (OB_FAIL(datum_holder_->restore())) {
       LOG_WARN("restore results failed", K(ret));
     }
     if (OB_SUCC(ret)) {
@@ -266,26 +233,10 @@ int ObExpandVecOp::restore_child_input()
 
 int ObExpandVecOp::setup_grouping_id()
 {
-  using id_vec_type = ObFixedLengthFormat<int64_t>;
   int ret = OB_SUCCESS;
   ObExpr *grouping_id = MY_SPEC.grouping_id_expr_;
   int64_t seq = MY_SPEC.expand_exprs_.count() - expr_iter_idx_;
   if (OB_UNLIKELY(child_input_size_ <= 0)) {
-  } else if (MY_SPEC.use_rich_format_) {
-    if (OB_UNLIKELY(grouping_id->get_vec_value_tc() != VEC_TC_INTEGER)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid vec tc", K(ret), K(grouping_id->get_vec_value_tc()));
-    } else if (OB_FAIL(grouping_id->init_vector_for_write(eval_ctx_, VEC_FIXED, child_input_size_))) {
-      LOG_WARN("init vector failed", K(ret));
-    } else {
-      id_vec_type *ids = static_cast<id_vec_type *>(grouping_id->get_vector(eval_ctx_));
-      for (int i = 0; i < child_input_size_; i++) {
-        if (child_input_skip_->at(i)) {
-        } else {
-          ids->set_int(i, seq);
-        }
-      }
-    }
   } else {
     ObDatum *datums = grouping_id->locate_datums_for_update(eval_ctx_, child_input_size_);
     for (int i = 0; i < child_input_size_; i++) {
@@ -301,204 +252,26 @@ int ObExpandVecOp::setup_grouping_id()
   return ret;
 }
 
-template<>
-int ObExpandVecOp::duplicate_expr<VEC_FIXED>(ObExpr *from, ObExpr *to)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(to->get_default_res_format() != VEC_FIXED)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid format", K(ret));
-  } else if (OB_FAIL(to->init_vector_for_write(eval_ctx_, VEC_FIXED, brs_.size_))) {
-    LOG_WARN("init vector failed", K(ret));
-  } else {
-    ObIVector *from_vec = from->get_vector(eval_ctx_);
-    ObIVector *to_vec = to->get_vector(eval_ctx_);
-    // copy nulls
-    copy_bitmap_based_nulls(from_vec, to_vec);
-    // copy datas
-    ObFixedLengthBase *from_data = static_cast<ObFixedLengthBase *>(from_vec);
-    ObFixedLengthBase *to_data = static_cast<ObFixedLengthBase *>(to_vec);
-    MEMCPY(to_data->get_data(), from_data->get_data(), brs_.size_ * from_data->get_length());
-  }
-  return ret;
-}
-
-template<>
-int ObExpandVecOp::duplicate_expr<VEC_DISCRETE>(ObExpr *from, ObExpr *to)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(to->get_default_res_format() != VEC_DISCRETE)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid format", K(ret));
-  } else if (OB_FAIL(to->init_vector_for_write(eval_ctx_, VEC_DISCRETE, brs_.size_))) {
-    LOG_WARN("init vector failed", K(ret));
-  } else {
-    ObIVector *from_vec = from->get_vector(eval_ctx_);
-    ObIVector *to_vec = to->get_vector(eval_ctx_);
-    // copy nulls
-    copy_bitmap_based_nulls(from_vec, to_vec);
-    // copy datas, shallow copy
-    ObDiscreteBase *from_data = static_cast<ObDiscreteBase *>(from_vec);
-    ObDiscreteBase *to_data = static_cast<ObDiscreteBase *>(to_vec);
-    for (int i = 0; i < brs_.size_; i++) {
-      to_data->get_ptrs()[i] = from_data->get_ptrs()[i];
-      to_data->get_lens()[i] = from_data->get_lens()[i];
-    }
-  }
-  return ret;
-}
-
-template<>
-int ObExpandVecOp::duplicate_expr<VEC_CONTINUOUS>(ObExpr *from, ObExpr *to)
-{// continuous to discrete
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(to->get_default_res_format() != VEC_DISCRETE)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid format", K(ret));
-  } else if (OB_FAIL(to->init_vector_for_write(eval_ctx_, VEC_DISCRETE, brs_.size_))) {
-    LOG_WARN("init vector failed", K(ret));
-  } else {
-    ObIVector *from_vec = from->get_vector(eval_ctx_);
-    ObIVector *to_vec = to->get_vector(eval_ctx_);
-    // copy nulls
-    copy_bitmap_based_nulls(from_vec, to_vec);
-    // shallow copy data
-    ObContinuousFormat *from_data = static_cast<ObContinuousFormat *>(from_vec);
-    ObDiscreteFormat *to_data = static_cast<ObDiscreteFormat *>(to_vec);
-    ObBitmapNullVectorBase *from_nulls = static_cast<ObBitmapNullVectorBase *>(from_vec);
-    for (int i = 0; i < brs_.size_; i++) {
-      if (brs_.skip_->at(i)) {
-        to_data->set_payload_shallow(i, nullptr, 0);
-      } else if (from_nulls->is_null(i)) {
-        to_data->set_null(i);
-      } else {
-        to_data->set_payload_shallow(i, from_data->get_payload(i), from_data->get_length(i));
-      }
-    }
-  }
-  return ret;
-}
-
-template<typename uni_vector>
-int ObExpandVecOp::duplicate_expr_from_uniform(uni_vector *from, ObExpr *to)
-{
-  int ret = OB_SUCCESS;
-  VectorFormat fmt = to->get_format(eval_ctx_);
-  ObIVector *to_vec = to->get_vector(eval_ctx_);
-  const char *payload = nullptr;
-  int32_t len = 0;
-  switch (fmt) {
-  case (VEC_FIXED): {
-    ObFixedLengthBase *to_data = static_cast<ObFixedLengthBase *>(to_vec);
-    ObBitmapNullVectorBase *to_nulls = static_cast<ObBitmapNullVectorBase *>(to_vec);
-    for (int i = 0; i < brs_.size_; i++) {
-      if (brs_.skip_->at(i)) {
-      } else if (from->is_null(i)) {
-        to_nulls->set_null(i);
-      } else if (FALSE_IT(from->get_payload(i, payload, len))) {
-      } else {
-        OB_ASSERT(len == to_data->get_length());
-        MEMCPY(to_data->get_data() + i * len, payload,len);
-      }
-    }
-    break;
-  }
-  case (VEC_DISCRETE): {
-    ObDiscreteFormat *to_data = static_cast<ObDiscreteFormat *>(to_vec);
-    for (int i = 0; i < brs_.size_; i++) {
-      if (brs_.skip_->at(i)) {
-      } else if (from->is_null(i)) {
-        to_data->set_null(i);
-      } else if (FALSE_IT(from->get_payload(i, payload, len))) {
-      } else {
-        to_data->set_payload_shallow(i, payload, len);
-      }
-    }
-    break;
-  }
-  default: {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid format", K(ret), K(fmt));
-  }
-  }
-  return ret;
-}
-template<>
-int ObExpandVecOp::duplicate_expr<VEC_UNIFORM>(ObExpr *from, ObExpr *to)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(to->init_vector_for_write(eval_ctx_, to->get_default_res_format(), brs_.size_))) {
-    LOG_WARN("init vector failed", K(ret));
-  } else {
-    ObIVector *from_vec = from->get_vector(eval_ctx_);
-    if (OB_FAIL(duplicate_expr_from_uniform(static_cast<ObUniformFormat<false> *>(from_vec), to))) {
-      LOG_WARN("duplicate expr failed", K(ret));
-    }
-  }
-  return ret;
-}
-
-template<>
-int ObExpandVecOp::duplicate_expr<VEC_UNIFORM_CONST>(ObExpr *from, ObExpr *to)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(to->init_vector_for_write(eval_ctx_, to->get_default_res_format(), brs_.size_))) {
-    LOG_WARN("init vector failed", K(ret));
-  } else {
-    ObIVector *from_vec = from->get_vector(eval_ctx_);
-    if (OB_FAIL(duplicate_expr_from_uniform(static_cast<ObUniformFormat<true> *>(from_vec), to))) {
-      LOG_WARN("duplicate expr failed", K(ret));
-    }
-  }
-  return ret;
-}
-
 int ObExpandVecOp::duplicate_rollup_exprs()
 {
-#define DO_DUP(fmt)                                                                                \
-  case fmt: {                                                                                      \
-    ret = duplicate_expr<fmt>(org_expr, dup_expr);                                                 \
-  } break
-
   int ret = OB_SUCCESS;
   copy_child_brs();
-  if (MY_SPEC.use_rich_format_) {
-    for (int i = 0; OB_SUCC(ret) && i < MY_SPEC.dup_expr_pairs_.count(); i++) {
-      ObExpr *org_expr = MY_SPEC.dup_expr_pairs_.at(i).org_expr_;
-      ObExpr *dup_expr = MY_SPEC.dup_expr_pairs_.at(i).dup_expr_;
-      if (OB_FAIL(org_expr->eval_vector(eval_ctx_, brs_))) {
-        LOG_WARN("eval vector failed", K(ret));
-      } else {
-        VectorFormat fmt = org_expr->get_format(eval_ctx_);
-        switch (fmt) {
-          LST_DO_CODE(DO_DUP, VEC_FIXED, VEC_DISCRETE, VEC_CONTINUOUS, VEC_UNIFORM,
-                      VEC_UNIFORM_CONST);
-        default: {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid format", K(ret), K(fmt));
-        }
+  for (int i = 0; OB_SUCC(ret) && i < MY_SPEC.dup_expr_pairs_.count(); i++) {
+    ObExpr *org_expr = MY_SPEC.dup_expr_pairs_.at(i).org_expr_;
+    ObExpr *dup_expr = MY_SPEC.dup_expr_pairs_.at(i).dup_expr_;
+    if (OB_FAIL(org_expr->eval_batch(eval_ctx_, *brs_.skip_, brs_.size_))) {
+      LOG_WARN("eval batch failed", K(ret));
+    } else {
+      ObDatum *to_datums = dup_expr->locate_datums_for_update(eval_ctx_, brs_.size_);
+      ObDatumVector src_datums = org_expr->locate_expr_datumvector(eval_ctx_);
+      for (int j = 0; j < brs_.size_; j++) {
+        if (brs_.skip_->at(j)) {
+        } else {
+          to_datums[j] = *src_datums.at(j);
         }
       }
-      if (OB_SUCC(ret)) { dup_expr->set_evaluated_projected(eval_ctx_); }
     }
-  } else {
-    for (int i = 0; OB_SUCC(ret) && i < MY_SPEC.dup_expr_pairs_.count(); i++) {
-      ObExpr *org_expr = MY_SPEC.dup_expr_pairs_.at(i).org_expr_;
-      ObExpr *dup_expr = MY_SPEC.dup_expr_pairs_.at(i).dup_expr_;
-      if (OB_FAIL(org_expr->eval_batch(eval_ctx_, *brs_.skip_, brs_.size_))) {
-        LOG_WARN("eval batch failed", K(ret));
-      } else {
-        ObDatum *to_datums = dup_expr->locate_datums_for_update(eval_ctx_, brs_.size_);
-        ObDatumVector src_datums = org_expr->locate_expr_datumvector(eval_ctx_);
-        for (int j = 0; j < brs_.size_; j++) {
-          if (brs_.skip_->at(j)) {
-          } else {
-            to_datums[j] = *src_datums.at(j);
-          }
-        }
-      }
-      if (OB_SUCC(ret)) { dup_expr->set_evaluated_projected(eval_ctx_); }
-    }
+    if (OB_SUCC(ret)) { dup_expr->set_evaluated_projected(eval_ctx_); }
   }
   return ret;
 }
@@ -507,12 +280,7 @@ void ObExpandVecOp::destroy()
 {
   expr_iter_idx_ = -1;
   dup_status_ = DupStatus::Init;
-  if (MY_SPEC.use_rich_format_) {
-    if (vec_holder_ != nullptr) {
-      vec_holder_->reset();
-      vec_holder_ = nullptr;
-    }
-  } else if (datum_holder_ != nullptr) {
+  if (datum_holder_ != nullptr) {
     datum_holder_->reset();
     datum_holder_ = nullptr;
   }

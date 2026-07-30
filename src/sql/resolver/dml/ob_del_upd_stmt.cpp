@@ -270,37 +270,6 @@ int ObMergeTableInfo::iterate_stmt_expr(ObStmtExprVisitor &visitor)
   return ret;
 }
 
-int ObErrLogInfo::assign(const ObErrLogInfo &other)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(error_log_exprs_.assign(other.error_log_exprs_))) {
-    LOG_WARN("failed to assign exprs", K(ret));
-  } else {
-    is_error_log_ = other.is_error_log_;
-    table_id_ = other.table_id_;
-    table_name_ = other.table_name_;
-    database_name_ = other.database_name_;
-    reject_limit_ = other.reject_limit_;
-  }
-  return ret;
-}
-
-int ObErrLogInfo::deep_copy(const ObErrLogInfo &other,
-                            ObRawExprCopier &expr_copier)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(expr_copier.copy(other.error_log_exprs_, error_log_exprs_))) {
-    LOG_WARN("failed to assign exprs", K(ret));
-  } else {
-    is_error_log_ = other.is_error_log_;
-    table_id_ = other.table_id_;
-    table_name_ = other.table_name_;
-    database_name_ = other.database_name_;
-    reject_limit_ = other.reject_limit_;
-  }
-  return ret;
-}
-
 int ObDelUpdStmt::deep_copy_stmt_struct(ObIAllocator &allocator,
                                         ObRawExprCopier &expr_copier,
                                         const ObDMLStmt &input)
@@ -312,15 +281,6 @@ int ObDelUpdStmt::deep_copy_stmt_struct(ObIAllocator &allocator,
     LOG_WARN("stmt type does not match", K(ret), K(input.get_stmt_type()), K(get_stmt_type()));
   } else if (OB_FAIL(ObDMLStmt::deep_copy_stmt_struct(allocator, expr_copier, other))) {
     LOG_WARN("failed to deep copy stmt structure", K(ret));
-  } else if (OB_FAIL(expr_copier.copy(other.returning_exprs_,
-                                      returning_exprs_))) {
-    LOG_WARN("failed to deep copy returning fileds", K(ret));
-  } else if (OB_FAIL(expr_copier.copy(other.returning_into_exprs_,
-                                      returning_into_exprs_))) {
-    LOG_WARN("failed to deep copy returning into fields", K(ret));
-  } else if (OB_FAIL(expr_copier.copy(other.returning_agg_items_,
-                                      returning_agg_items_))) {
-    LOG_WARN("failed to deep copy returning aggregation exprs", K(ret));
   } else if (OB_FAIL(expr_copier.copy(other.group_param_exprs_,
                                       group_param_exprs_))) {
     LOG_WARN("failed to deep copy group param fileds", K(ret));
@@ -328,18 +288,13 @@ int ObDelUpdStmt::deep_copy_stmt_struct(ObIAllocator &allocator,
                                                        other.order_items_,
                                                        order_items_))) {
     LOG_WARN("deep copy order items failed", K(ret));
-  } else if (OB_FAIL(returning_strs_.assign(other.returning_strs_))) {
-    LOG_WARN("failed to assign returning strings", K(ret));
   } else if (OB_FAIL(expr_copier.copy(other.sharding_conditions_, sharding_conditions_))) {
     LOG_WARN("failed to copy sharding conditions", K(ret));
   } else if (OB_FAIL(expr_copier.copy(other.ab_stmt_id_expr_, ab_stmt_id_expr_))) {
     LOG_WARN("copy ab_stmt_id_expr_ failed", K(ret));
-  } else if (OB_FAIL(error_log_info_.deep_copy(other.error_log_info_, expr_copier))) {
-    LOG_WARN("failed to deep copy error log info", K(ret));
   } else {
     ignore_ = other.ignore_;
     has_global_index_ = other.has_global_index_;
-    has_instead_of_trigger_ = other.has_instead_of_trigger_;
     dml_source_from_join_ = other.dml_source_from_join_;
     pdml_disabled_ = other.pdml_disabled_;
   }
@@ -351,14 +306,6 @@ int ObDelUpdStmt::assign(const ObDelUpdStmt &other)
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDMLStmt::assign(other))) {
     LOG_WARN("failed to copy stmt", K(ret));
-  } else if (OB_FAIL(returning_strs_.assign(other.returning_strs_))) {
-    LOG_WARN("failed to assign returning strs", K(ret));
-  } else if (OB_FAIL(returning_agg_items_.assign(other.returning_agg_items_))) {
-    LOG_WARN("failed to assign returning agg items", K(ret));
-  } else if (OB_FAIL(returning_into_exprs_.assign(other.returning_into_exprs_))) {
-    LOG_WARN("failed to assign returning into exprs", K(ret));
-  } else if (OB_FAIL(error_log_info_.assign(other.error_log_info_))) {
-    LOG_WARN("failed to assign error log info", K(ret));
   } else if (OB_FAIL(sharding_conditions_.assign(other.sharding_conditions_))) {
     LOG_WARN("failed to assign sharding conditions", K(ret));
   } else if (OB_FAIL(group_param_exprs_.assign(other.group_param_exprs_))) {
@@ -366,7 +313,6 @@ int ObDelUpdStmt::assign(const ObDelUpdStmt &other)
   } else {
     ignore_ = other.ignore_;
     has_global_index_ = other.has_global_index_;
-    has_instead_of_trigger_ = other.has_instead_of_trigger_;
     ab_stmt_id_expr_ = other.ab_stmt_id_expr_;
     dml_source_from_join_ = other.dml_source_from_join_;
     pdml_disabled_ = other.pdml_disabled_;
@@ -382,28 +328,15 @@ bool ObDelUpdStmt::is_dml_table_from_join() const
           !table_item->is_basic_table());
 }
 
-int64_t ObDelUpdStmt::get_instead_of_trigger_column_count() const
-{
-  return 0;
-}
-
 int ObDelUpdStmt::iterate_stmt_expr(ObStmtExprVisitor &visitor)
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObDmlTableInfo *, 4> dml_table_infos;
   if (OB_FAIL(ObDMLStmt::iterate_stmt_expr(visitor))) {
     LOG_WARN("failed to visit DMLStmt expr", K(ret));
-  } else if (OB_FAIL(visitor.visit(returning_exprs_, SCOPE_RETURNING))) {
-    LOG_WARN("failed to visit returning exprs", K(ret));
-  } else if (OB_FAIL(visitor.visit(returning_into_exprs_, SCOPE_RETURNING))) {
-    LOG_WARN("failed to visit returning into exprs", K(ret));
-  } else if (OB_FAIL(visitor.visit(returning_agg_items_, SCOPE_DICT_FIELDS))) {
-    LOG_WARN("failed to visit returning agg items", K(ret));
   } else if (ab_stmt_id_expr_ != NULL &&
              OB_FAIL(visitor.visit(ab_stmt_id_expr_, SCOPE_DMLINFOS))) {
     LOG_WARN("failed to visit ab stmt id expr", K(ret));
-  } else if (OB_FAIL(visitor.visit(error_log_info_.error_log_exprs_, SCOPE_DMLINFOS))) {
-    LOG_WARN("failed to visit errlog exprs", K(ret));
   } else if (OB_FAIL(visitor.visit(sharding_conditions_, SCOPE_DMLINFOS))) {
     LOG_WARN("failed to visit sharding conditions", K(ret));
   } else if (OB_FAIL(visitor.visit(group_param_exprs_, SCOPE_DMLINFOS))) {

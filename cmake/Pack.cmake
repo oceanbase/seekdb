@@ -139,16 +139,11 @@ message(STATUS "Bundled ${_bundled} runtime DLLs into bin/")
   # Timezone -> share/timezone/
   install(FILES
     tools/timezone_V1.log
-    tools/timezone.data
-    tools/timezone_name.data
-    tools/timezone_trans.data
-    tools/timezone_trans_type.data
     DESTINATION share/timezone
     COMPONENT server)
 
   # SRS -> share/srs/
   install(FILES
-    tools/spatial_reference_systems.data
     tools/default_srs_data_mysql.sql
     DESTINATION share/srs
     COMPONENT server)
@@ -255,16 +250,11 @@ else()
   # Install timezone files to /usr/share/seekdb/timezone
   install(FILES
     tools/timezone_V1.log
-    tools/timezone.data
-    tools/timezone_name.data
-    tools/timezone_trans.data
-    tools/timezone_trans_type.data
     DESTINATION usr/share/seekdb/timezone
     COMPONENT server)
 
   # Install SRS files to /usr/share/seekdb/srs
   install(FILES
-    tools/spatial_reference_systems.data
     tools/default_srs_data_mysql.sql
     DESTINATION usr/share/seekdb/srs
     COMPONENT server)

@@ -53,8 +53,6 @@ private:
                    ObExecContext &ctx);
   int revoke_routine(ObRevokeStmt &stmt,
                      ObExecContext &ctx);
-  int revoke_object(ObRevokeStmt &stmt,
-                    ObExecContext &ctx);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObRevokeExecutor);
 };

@@ -25,9 +25,9 @@ namespace oceanbase
 {
 namespace compaction
 {
-struct ObCompactionProgress
+struct ObCompactionProgressBase
 {
-  ObCompactionProgress()
+  ObCompactionProgressBase()
     : merge_type_(compaction::INVALID_MERGE_TYPE),
       merge_version_(0),
       status_(share::ObIDag::DAG_STATUS_MAX),
@@ -60,10 +60,10 @@ struct ObCompactionProgress
   int64_t estimated_finish_time_;
 };
 
-struct ObMajorCompactionProgress : public ObCompactionProgress
+struct ObCompactionProgress : public ObCompactionProgressBase
 {
-  ObMajorCompactionProgress()
-    : ObCompactionProgress(),
+  ObCompactionProgress()
+    : ObCompactionProgressBase(),
       is_inited_(false),
       total_tablet_cnt_(0),
       unfinished_tablet_cnt_(0),
@@ -71,8 +71,8 @@ struct ObMajorCompactionProgress : public ObCompactionProgress
       sum_time_guard_()
   {
   }
-  ObMajorCompactionProgress & operator=(const ObMajorCompactionProgress &other);
-  INHERIT_TO_STRING_KV("ObCompactionProgress", ObCompactionProgress, K_(is_inited), K_(total_tablet_cnt),
+  ObCompactionProgress &operator=(const ObCompactionProgress &other);
+  INHERIT_TO_STRING_KV("ObCompactionProgressBase", ObCompactionProgressBase, K_(is_inited), K_(total_tablet_cnt),
       K_(unfinished_tablet_cnt), K_(real_finish_cnt), K_(sum_time_guard));
 
   bool is_inited_;
@@ -85,7 +85,7 @@ struct ObMajorCompactionProgress : public ObCompactionProgress
 /*
  * ObCompactionProgressMgr
  * */
-class ObCompactionProgressMgr : public ObInfoRingArray<ObMajorCompactionProgress> {
+class ObCompactionProgressMgr : public ObInfoRingArray<ObCompactionProgress> {
 public:
   static const int64_t SERVER_PROGRESS_MAX_CNT = 30;
 
@@ -115,7 +115,7 @@ public:
 
 private:
   int loop_major_sstable_(int64_t version, int64_t &cnt, int64_t &size);
-  int finish_progress_(ObMajorCompactionProgress &progress);
+  int finish_progress_(ObCompactionProgress &progress);
   int get_pos_(const int64_t major_snapshot_version, int64_t &pos) const;
 
 private:
@@ -140,27 +140,27 @@ public:
   }
   virtual ~ObCompactionProgressIterator() { reset(); }
   int open();
-  int get_next_info(ObMajorCompactionProgress &info);
+  int get_next_info(ObCompactionProgress &info);
   void reset();
 
 private:
-  ObArray<ObMajorCompactionProgress> progress_array_;
+  ObArray<ObCompactionProgress> progress_array_;
   int64_t cur_idx_;
   bool is_opened_;
 };
 
 
-struct ObTabletCompactionProgress : public ObCompactionProgress
+struct ObTabletCompactionProgress : public ObCompactionProgressBase
 {
   ObTabletCompactionProgress()
-    : ObCompactionProgress(),
+    : ObCompactionProgressBase(),
       tablet_id_(0),
       dag_id_(),
       progressive_merge_round_(0),
       create_time_(0)
   {
   }
-  INHERIT_TO_STRING_KV("ObCompactionProgress", ObCompactionProgress, K_(tablet_id),
+  INHERIT_TO_STRING_KV("ObCompactionProgressBase", ObCompactionProgressBase, K_(tablet_id),
       K_(dag_id), K_(progressive_merge_round), K_(create_time));
 
   int64_t tablet_id_;
@@ -169,10 +169,10 @@ struct ObTabletCompactionProgress : public ObCompactionProgress
   int64_t create_time_;
 };
 
-struct ObDiagnoseTabletCompProgress : public ObCompactionProgress
+struct ObDiagnoseTabletCompProgress : public ObCompactionProgressBase
 {
   ObDiagnoseTabletCompProgress()
-    : ObCompactionProgress(),
+    : ObCompactionProgressBase(),
       is_suspect_abormal_(false),
       dag_id_(),
       create_time_(0),
@@ -182,7 +182,7 @@ struct ObDiagnoseTabletCompProgress : public ObCompactionProgress
   {
   }
   bool is_valid() const;
-  INHERIT_TO_STRING_KV("ObCompactionProgress", ObCompactionProgress, K_(is_suspect_abormal),
+  INHERIT_TO_STRING_KV("ObCompactionProgressBase", ObCompactionProgressBase, K_(is_suspect_abormal),
       K_(create_time), K_(latest_update_ts), K_(dag_id), K_(base_version), K_(snapshot_version), K_(status));
 
   bool is_suspect_abormal_;

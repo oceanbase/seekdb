@@ -41,26 +41,27 @@ public:
   int64_t package_body_version_;
   int64_t header_merge_version_;
   int64_t body_merge_version_;
-  int64_t header_public_syn_count_; // use to resolve object shadow same name public synonym issue
-  int64_t body_public_syn_count_;
+  // Reserved serialized slots retained for compatibility with existing session state.
+  int64_t reserved_header_count_;
+  int64_t reserved_body_count_;
 
   ObPackageStateVersion(int64_t package_version, int64_t package_body_version)
       : package_version_(package_version),
         package_body_version_(package_body_version),
         header_merge_version_(common::OB_INVALID_VERSION),
         body_merge_version_(common::OB_INVALID_VERSION),
-        header_public_syn_count_(0),
-        body_public_syn_count_(0) {}
+        reserved_header_count_(0),
+        reserved_body_count_(0) {}
   virtual ~ObPackageStateVersion()
   {
     package_version_ = common::OB_INVALID_VERSION;
     package_body_version_ = common::OB_INVALID_VERSION;
     header_merge_version_ = common::OB_INVALID_VERSION;
     body_merge_version_ = common::OB_INVALID_VERSION;
-    header_public_syn_count_ = 0;
-    body_public_syn_count_ = 0;
+    reserved_header_count_ = 0;
+    reserved_body_count_ = 0;
   }
-  void set_merge_version_and_public_syn_cnt(const ObPLPackage &head, const ObPLPackage *body);
+  void set_merge_versions(const ObPLPackage &head, const ObPLPackage *body);
   ObPackageStateVersion(const ObPackageStateVersion &other);
   bool is_valid() const { return package_version_ != common::OB_INVALID_VERSION; }
   ObPackageStateVersion &operator =(const ObPackageStateVersion &other);
@@ -69,7 +70,7 @@ public:
 
   TO_STRING_KV(K(package_version_), K(package_body_version_),
                K(header_merge_version_), K(body_merge_version_),
-               K(header_public_syn_count_), K(body_public_syn_count_));
+               K(reserved_header_count_), K(reserved_body_count_));
 };
 
 class ObPLPackageState

@@ -27,7 +27,6 @@ namespace sql
 
 ObExprObjAccess::ExtraInfo::ExtraInfo(common::ObIAllocator &alloc, ObExprOperatorType type)
     : ObIExprExtraInfo(alloc, type),
-    get_attr_func_(0),
     param_idxs_(alloc),
     access_idx_cnt_(0),
     for_write_(false),
@@ -39,7 +38,6 @@ ObExprObjAccess::ExtraInfo::ExtraInfo(common::ObIAllocator &alloc, ObExprOperato
 }
 
 OB_SERIALIZE_MEMBER(ObExprObjAccess::ExtraInfo,
-                    get_attr_func_,
                     param_idxs_,
                     access_idx_cnt_,
                     for_write_,
@@ -48,7 +46,6 @@ OB_SERIALIZE_MEMBER(ObExprObjAccess::ExtraInfo,
                     extend_size_);
 
 OB_SERIALIZE_MEMBER((ObExprObjAccess, ObExprOperator),
-                    info_.get_attr_func_,
                     info_.param_idxs_,
                     info_.access_idx_cnt_,
                     info_.for_write_,
@@ -69,7 +66,6 @@ ObExprObjAccess::~ObExprObjAccess()
 
 void ObExprObjAccess::ExtraInfo::reset()
 {
-  get_attr_func_ = 0;
   param_idxs_.reset();
   access_idx_cnt_ = 0;
   for_write_ = false;
@@ -101,7 +97,6 @@ int ObExprObjAccess::ExtraInfo::deep_copy(common::ObIAllocator &allocator,
 int ObExprObjAccess::ExtraInfo::assign(const ObExprObjAccess::ExtraInfo &other)
 {
   int ret = OB_SUCCESS;
-  get_attr_func_ = other.get_attr_func_;
   access_idx_cnt_ = other.access_idx_cnt_;
   for_write_ = other.for_write_;
   property_type_ = other.property_type_;
@@ -423,8 +418,6 @@ int ObExprObjAccess::ExtraInfo::calc(ObObj &result,
                                      ObEvalCtx *ctx) const
 {
   int ret = OB_SUCCESS;
-  typedef int32_t (*GetAttr)(int64_t, int64_t [], int64_t *, int64_t *);
-  GetAttr get_attr = reinterpret_cast<GetAttr>(get_attr_func_);
   ParamArray param_array;
   CK (OB_NOT_NULL(ctx));
   OZ (init_param_array(param_store, params, param_num, param_array));
@@ -433,11 +426,8 @@ int ObExprObjAccess::ExtraInfo::calc(ObObj &result,
     int64_t *param_ptr = const_cast<int64_t *>(param_array.head());
     int64_t attr_addr = 0;
     int64_t allocator_addr = 0;
-    if (!for_write_ && OB_NOT_NULL(get_attr)) {
-      OZ (get_attr(param_array.count(), param_ptr, &attr_addr, &allocator_addr));
-    } else {
-      OZ (get_attr_func(param_array.count(), param_ptr, &attr_addr, *ctx, &allocator_addr, ctx->exec_ctx_.get_my_session()));
-    }
+    OZ (get_attr_func(param_array.count(), param_ptr, &attr_addr, *ctx, &allocator_addr,
+                      ctx->exec_ctx_.get_my_session()));
     if (OB_FAIL(ret)) {
       if (OB_ERR_COLLECION_NULL == ret && pl::ObCollectionType::EXISTS_PROPERTY == property_type_) {
         ret = OB_SUCCESS;
@@ -510,7 +500,6 @@ int ObExprObjAccess::ExtraInfo::from_raw_expr(const ObObjAccessRawExpr &raw_acce
   int ret = 0;
   if (OB_SUCC(ret)) {
     extend_size_ = raw_access.get_extend_size();
-    get_attr_func_ = raw_access.get_get_attr_func_addr();
     for_write_ = raw_access.for_write();
     property_type_ = raw_access.get_property();
     access_idx_cnt_ = raw_access.get_access_idxs().count();
@@ -539,7 +528,6 @@ int ObExprObjAccess::cg_expr(ObExprCGCtx &op_cg_ctx,
     const ObObjAccessRawExpr &raw_access = static_cast<const ObObjAccessRawExpr &>(raw_expr);
     if (OB_SUCC(ret)) {
       info->extend_size_ = raw_access.get_extend_size();
-      info->get_attr_func_ = raw_access.get_get_attr_func_addr();
       info->for_write_ = raw_access.for_write();
       info->property_type_ = raw_access.get_property();
       info->access_idx_cnt_ = raw_access.get_access_idxs().count();

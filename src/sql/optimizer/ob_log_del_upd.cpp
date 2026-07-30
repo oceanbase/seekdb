@@ -280,7 +280,6 @@ ObLogDelUpd::ObLogDelUpd(ObDelUpdLogPlan &plan)
     stmt_id_expr_(nullptr),
     lock_row_flag_expr_(NULL),
     ignore_(false),
-    is_returning_(false),
     is_multi_part_dml_(false),
     is_pdml_(false),
     gi_charged_(false),
@@ -293,9 +292,7 @@ ObLogDelUpd::ObLogDelUpd(ObDelUpdLogPlan &plan)
     pdml_partition_id_expr_(NULL),
     ddl_slice_id_expr_(NULL),
     pdml_is_returning_(false),
-    err_log_define_(),
     need_alloc_part_id_expr_(false),
-    has_instead_of_trigger_(false),
     produced_trans_exprs_()
 {
 }
@@ -336,84 +333,6 @@ uint64_t ObLogDelUpd::hash(uint64_t seed) const
   seed = ObLogicalOperator::hash(seed);
 
   return seed;
-}
-
-int ObLogDelUpd::extract_err_log_info()
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(get_stmt()) ||
-      OB_UNLIKELY(!get_stmt()->is_update_stmt() &&
-                  !get_stmt()->is_delete_stmt() &&
-                  !get_stmt()->is_insert_stmt())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FAIL(generate_errlog_info(
-                       static_cast<const ObDelUpdStmt&>(*get_stmt()),
-                       get_err_log_define()))) {
-    LOG_WARN("failed to generate errlog info", K(ret));
-  } else { /*do nothing*/ }
-  return ret;
-}
-
-int ObLogDelUpd::generate_errlog_info(const ObDelUpdStmt &stmt, ObErrLogDefine &errlog_define)
-{
-  int ret = OB_SUCCESS;
-  const ObIArray<ObColumnRefRawExpr*> &error_log_exprs = stmt.get_error_log_info().error_log_exprs_;
-  ObSEArray<ObRawExpr *, 4> dml_columns;
-  ObSEArray<ObRawExpr *, 4> dml_values;
-  if (stmt.is_insert_stmt()) {
-    const ObInsertTableInfo& insert_info = static_cast<const ObInsertStmt&>(stmt).get_insert_table_info();
-    if (OB_FAIL(append(dml_columns, insert_info.column_exprs_))) {
-      LOG_WARN("failed to append column expr", K(ret));
-    } else if (OB_FAIL(append(dml_values, insert_info.column_conv_exprs_))) {
-      LOG_WARN("failed to append column convert expr", K(ret));
-    }
-  } else if (stmt.is_update_stmt()) {
-    const ObUpdateTableInfo* update_info = static_cast<const ObUpdateStmt&>(stmt).get_update_table_info().at(0);
-    if (OB_ISNULL(update_info)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null update", K(ret));
-    } else {
-      const ObAssignments &assigns = update_info->assignments_;
-      for (int64_t i = 0; OB_SUCC(ret) && i < assigns.count(); ++i) {
-        if (OB_FAIL(dml_columns.push_back(assigns.at(i).column_expr_))) {
-          LOG_WARN("failed to push back assign column", K(ret));
-        } else if (OB_FAIL(dml_values.push_back(assigns.at(i).expr_))) {
-          LOG_WARN("failed to push back assign value", K(ret));
-        }
-      }
-    }
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < error_log_exprs.count(); ++i) {
-    ObColumnRefRawExpr *col_expr = NULL;
-    ObRawExpr *val_expr = NULL;
-    int64_t idx = OB_INVALID_INDEX;
-    if (OB_ISNULL(col_expr = error_log_exprs.at(i))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
-    } else if (!ObOptimizerUtil::find_item(dml_columns, col_expr, &idx)) {
-      val_expr = col_expr;
-    } else if (OB_UNLIKELY(idx < 0 || idx >= dml_values.count())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid index", K(ret), K(idx), K(dml_columns.count()), K(dml_values.count()));
-    } else {
-      val_expr = dml_values.at(idx);
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(errlog_define.err_log_value_exprs_.push_back(val_expr))) {
-        LOG_WARN("failed to push back errlog expr value", K(ret));
-      } else if (OB_FAIL(errlog_define.err_log_column_names_.push_back(col_expr->get_column_name()))) {
-        LOG_WARN("failed to push back column name", K(ret));
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    errlog_define.is_err_log_ = stmt.is_error_logging();
-    errlog_define.err_log_database_name_ = stmt.get_err_log_database_name();
-    errlog_define.err_log_table_name_ = stmt.get_err_log_table_name();
-    errlog_define.reject_limit_ = stmt.get_err_log_reject_limit();
-  }
-  return ret;
 }
 
 int ObLogDelUpd::allocate_granule_pre(AllocGIContext &ctx)
@@ -867,15 +786,13 @@ int ObLogDelUpd::compute_plan_type()
 int ObLogDelUpd::get_table_location_type(ObTableLocationType &type)
 {
   int ret = OB_SUCCESS;
-  ObOptimizerContext& optimizer_context = get_plan()->get_optimizer_context();
-  ObAddr &server = optimizer_context.get_local_server_addr();
   type = OB_TBL_LOCATION_UNINITIALIZED;
   if (OB_ISNULL(table_partition_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FAIL(table_partition_info_->get_location_type(server, type))) {
-    LOG_WARN("get location type failed", K(ret));
-  } else { /*do nothing*/ }
+  } else {
+    type = table_partition_info_->get_location_type();
+  }
   return ret;
 }
 

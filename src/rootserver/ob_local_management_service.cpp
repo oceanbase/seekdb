@@ -38,7 +38,7 @@
 #include "rootserver/ob_ddl_sql_generator.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
 #include "rootserver/ddl_task/ob_constraint_task.h"
-#include "rootserver/ob_rs_job_table_operator.h"
+#include "rootserver/ob_admin_job_table_operator.h"
 #include "share/ob_ddl_sim_point.h"
 #include "rootserver/ob_control_event.h"
 #include "share/ob_timezone_mgr.h"
@@ -164,8 +164,8 @@ int ObLocalManagementService::init(ObServerConfig &config,
     FLOG_WARN("init runtime_ddl_service_ failed", KR(ret));
   } else if (OB_FAIL(snapshot_manager_.init(self_addr_))) {
     FLOG_WARN("init snapshot manager failed", KR(ret));
-  } else if (OB_FAIL(THE_RS_JOB_TABLE.init())) {
-    FLOG_WARN("init THE_RS_JOB_TABLE failed", KR(ret));
+  } else if (OB_FAIL(THE_ADMIN_JOB_TABLE.init())) {
+    FLOG_WARN("init THE_ADMIN_JOB_TABLE failed", KR(ret));
   } else if (OB_FAIL(dbms_job::ObDBMSJobMaster::get_instance().init(&sql_proxy_,
                                                                     schema_service_))) {
     FLOG_WARN("init ObDBMSJobMaster failed", KR(ret));
@@ -341,7 +341,7 @@ void ObLocalManagementService::wait()
   if (deadlock_event_clear_task_timer_.inited()) { deadlock_event_clear_task_timer_.wait(); }
   if (purge_recyclebin_task_timer_.inited()) { purge_recyclebin_task_timer_.wait(); }
   FLOG_INFO("task timer exit success");
-  THE_RS_JOB_TABLE.reset_max_job_id();
+  THE_ADMIN_JOB_TABLE.reset_max_job_id();
   int64_t cost = ObTimeUtility::current_time() - start_time;
   FLOG_INFO("wait local management services finished", K(start_time), K(cost));
   if (cost > 10 * 60 * 1000 * 1000L) { // 10min
@@ -954,82 +954,6 @@ int ObLocalManagementService::parallel_create_table_like(const obcall::ObCreateT
   return ret;
 }
 
-int ObLocalManagementService::precheck_interval_part(const obcall::ObAlterTableArg &arg)
-{
-  int ret = OB_SUCCESS;
-  ObSchemaGetterGuard schema_guard;
-  const ObAlterTableArg::AlterPartitionType op_type = arg.alter_part_type_;
-  const ObSimpleTableSchemaV2 *simple_table_schema = NULL;
-  const AlterTableSchema &alter_table_schema = arg.alter_table_schema_;
-
-  if (!alter_table_schema.is_interval_part()
-      || obcall::ObAlterTableArg::ADD_PARTITION != op_type) {
-  } else if (OB_ISNULL(schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("error unexpected, schema service must not be NULL", K(ret));
-  } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get schema guard", K(ret));
-  } else if (OB_FAIL(schema_guard.get_simple_table_schema(
-             alter_table_schema.get_table_id(), simple_table_schema))) {
-    LOG_WARN("get table schema failed", KR(ret), K(alter_table_schema));
-  } else if (OB_ISNULL(simple_table_schema)) {
-    ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("simple_table_schema is null", K(ret), K(alter_table_schema));
-  } else if (simple_table_schema->get_schema_version() < alter_table_schema.get_schema_version()) {
-  } else if (simple_table_schema->get_interval_range() != alter_table_schema.get_interval_range()
-             || simple_table_schema->get_transition_point() != alter_table_schema.get_transition_point()) {
-    ret = OB_ERR_INTERVAL_PARTITION_ERROR;
-    LOG_WARN("interval_range or transition_point is changed", KR(ret), \
-             KPC(simple_table_schema), K(alter_table_schema));
-  } else {
-    int64_t j = 0;
-    const ObRowkey *rowkey_orig= NULL;
-    bool is_all_exist = true;
-    ObPartition **inc_part_array = alter_table_schema.get_part_array();
-    ObPartition **orig_part_array = simple_table_schema->get_part_array();
-    if (OB_ISNULL(inc_part_array)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ptr is null", K(ret), K(alter_table_schema), KPC(simple_table_schema));
-    } else if (OB_ISNULL(orig_part_array)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ptr is null", K(ret), K(alter_table_schema), KPC(simple_table_schema));
-    }
-    for (int64_t i = 0; is_all_exist && OB_SUCC(ret) && i < alter_table_schema.get_part_option().get_part_num(); ++i) {
-      const ObRowkey *rowkey_cur = NULL;
-      if (OB_ISNULL(inc_part_array[i])) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ptr is null", K(ret), K(alter_table_schema), KPC(simple_table_schema));
-      } else if (OB_UNLIKELY(NULL == (rowkey_cur = &inc_part_array[i]->get_high_bound_val()))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ptr is null", K(ret), K(alter_table_schema), KPC(simple_table_schema));
-      }
-      while (is_all_exist && OB_SUCC(ret) && j < simple_table_schema->get_part_option().get_part_num()) {
-        if (OB_ISNULL(orig_part_array[j])) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("ptr is null", K(ret), K(alter_table_schema), KPC(simple_table_schema));
-        } else if (OB_UNLIKELY(NULL == (rowkey_orig = &orig_part_array[j]->get_high_bound_val()))) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("ptr is null", K(ret), K(alter_table_schema), KPC(simple_table_schema));
-        } else if (*rowkey_orig < *rowkey_cur) {
-          j++;
-        } else {
-          break;
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (*rowkey_orig != *rowkey_cur) {
-        is_all_exist = false;
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (is_all_exist) {
-      LOG_INFO("all interval part for add is exist", K(alter_table_schema), KPC(simple_table_schema));
-      ret = OB_ERR_INTERVAL_PARTITION_EXIST;
-    }
-  }
-  return ret;
-}
-
 int ObLocalManagementService::update_ddl_task_active_time(const obcall::ObUpdateDDLTaskActiveTimeArg &arg)
 {
   LOG_DEBUG("receive recv ddl task status arg", K(arg));
@@ -1203,10 +1127,6 @@ int ObLocalManagementService::alter_table(const obcall::ObAlterTableArg &arg, ob
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), K(ret));
-  } else if (OB_FAIL(precheck_interval_part(arg))) {
-    if (ret != OB_ERR_INTERVAL_PARTITION_EXIST) {
-      LOG_WARN("fail to precheck_interval_part", K(arg), KR(ret));
-    }
   } else {
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ddl_service_.get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
@@ -1987,7 +1907,7 @@ int ObLocalManagementService::calc_column_checksum_repsonse(const obcall::ObCalc
   return ret;
 }
 
-int ObLocalManagementService::root_minor_freeze(const ObRootMinorFreezeArg &arg)
+int ObLocalManagementService::root_minor_freeze(const ObMinorFreezeArg &arg)
 {
   int ret = OB_SUCCESS;
   LOG_INFO("receive minor freeze request", K(arg));
@@ -2559,16 +2479,7 @@ int ObLocalManagementService::create_routine(const ObCreateRoutineArg &arg)
 {
   int ret = OB_SUCCESS;
   OV (inited_, OB_NOT_INIT);
-  OZ (ObPLDDLService::create_routine(arg, NULL, ddl_service_));
-  return ret;
-}
-
-int ObLocalManagementService::create_routine_with_res(const ObCreateRoutineArg &arg,
-                                           obcall::ObRoutineDDLRes &res)
-{
-  int ret = OB_SUCCESS;
-  OV (inited_, OB_NOT_INIT);
-  OZ (ObPLDDLService::create_routine(arg, &res, ddl_service_));
+  OZ (ObPLDDLService::create_routine(arg, ddl_service_));
   return ret;
 }
 
@@ -2576,16 +2487,7 @@ int ObLocalManagementService::alter_routine(const ObCreateRoutineArg &arg)
 {
   int ret = OB_SUCCESS;
   OV (inited_, OB_NOT_INIT);
-  OZ (ObPLDDLService::alter_routine(arg, NULL, ddl_service_));
-  return ret;
-}
-
-int ObLocalManagementService::alter_routine_with_res(const ObCreateRoutineArg &arg,
-                                          obcall::ObRoutineDDLRes &res)
-{
-  int ret = OB_SUCCESS;
-  OV (inited_, OB_NOT_INIT);
-  OZ (ObPLDDLService::alter_routine(arg, &res, ddl_service_));
+  OZ (ObPLDDLService::alter_routine(arg, ddl_service_));
   return ret;
 }
 
@@ -2602,16 +2504,7 @@ int ObLocalManagementService::create_package(const obcall::ObCreatePackageArg &a
 {
   int ret = OB_SUCCESS;
   OV (inited_, OB_NOT_INIT);
-  OZ (ObPLDDLService::create_package(arg, NULL, ddl_service_));
-  return ret;
-}
-
-int ObLocalManagementService::create_package_with_res(const obcall::ObCreatePackageArg &arg,
-                                           obcall::ObRoutineDDLRes &res)
-{
-  int ret = OB_SUCCESS;
-  OV (inited_, OB_NOT_INIT);
-  OZ (ObPLDDLService::create_package(arg, &res, ddl_service_));
+  OZ (ObPLDDLService::create_package(arg, ddl_service_));
   return ret;
 }
 
@@ -2644,16 +2537,7 @@ int ObLocalManagementService::alter_trigger(const obcall::ObAlterTriggerArg &arg
 {
   int ret = OB_SUCCESS;
   OV (inited_, OB_NOT_INIT);
-  OZ (ObPLDDLService::alter_trigger(arg, NULL, ddl_service_));
-  return ret;
-}
-
-int ObLocalManagementService::alter_trigger_with_res(const obcall::ObAlterTriggerArg &arg,
-                                          obcall::ObRoutineDDLRes &res)
-{
-  int ret = OB_SUCCESS;
-  OV (inited_, OB_NOT_INIT);
-  OZ (ObPLDDLService::alter_trigger(arg, &res, ddl_service_));
+  OZ (ObPLDDLService::alter_trigger(arg, ddl_service_));
   return ret;
 }
 
@@ -3188,7 +3072,7 @@ int ObLocalManagementService::handle_ddl_local_build_response(const obcall::ObDD
   } else if (OB_FAIL(DDL_SIM(arg.task_id_, PROCESS_BUILD_SSTABLE_RESPONSE_SLOW))) {
     LOG_WARN("ddl sim failure: procesc build sstable response slow", K(ret));
   } else if (OB_FAIL(ObSysDDLSchedulerUtil::on_sstable_complement_job_reply(
-          arg.tablet_id_/*source tablet id*/, arg.server_addr_,
+          arg.tablet_id_/*source tablet id*/,
           ObDDLTaskKey(arg.dest_schema_id_, arg.dest_schema_version_),
           arg.snapshot_version_, arg.execution_id_, arg.ret_code_, info))) {
     LOG_WARN("handle column checksum calc response failed", K(ret), K(arg));

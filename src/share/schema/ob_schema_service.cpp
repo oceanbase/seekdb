@@ -363,7 +363,7 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
       //view schema
       view_schema_ = src_schema.view_schema_;
 
-      aux_vp_tid_array_ = src_schema.aux_vp_tid_array_;
+      reserved_table_ids_ = src_schema.reserved_table_ids_;
 
       depend_table_ids_ = src_schema.depend_table_ids_;
       depend_mock_fk_parent_table_ids_ = src_schema.depend_mock_fk_parent_table_ids_;

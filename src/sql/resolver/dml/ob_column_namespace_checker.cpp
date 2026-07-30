@@ -398,14 +398,6 @@ int ObColumnNamespaceChecker::find_column_in_single_table(const TableItem &table
                                                is_match))) {
       LOG_WARN("database name case compare failed", K(ret));
     }
-    if (OB_SUCC(ret) && !is_match && !table_item.synonym_db_name_.empty()
-        && OB_FAIL(ObResolverUtils::name_case_cmp(params_.session_info_,
-                                                  q_name.database_name_,
-                                                  table_item.synonym_db_name_,
-                                                  OB_TABLE_NAME_CLASS,
-                                                  is_match))) {
-      LOG_WARN("database name case compare failed", K(ret));
-    }
   }
   if (OB_SUCC(ret) && is_match && !q_name.tbl_name_.empty()) {
     if (OB_FAIL(ObResolverUtils::name_case_cmp(params_.session_info_,

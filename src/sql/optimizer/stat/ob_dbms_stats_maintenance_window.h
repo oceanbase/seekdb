@@ -96,11 +96,6 @@ private:
                                             const int64_t job_id,
                                             const ObString &exec_env,
                                             dbms_scheduler::ObDBMSSchedJobInfo &job_info);
-  static int get_next_job_id_and_exec_env(common::ObMySQLProxy *sql_proxy,
-                                          ObIAllocator &allocator,
-                                          int64_t &job_id,
-                                          ObString &exec_env);
-
 };
 
 }

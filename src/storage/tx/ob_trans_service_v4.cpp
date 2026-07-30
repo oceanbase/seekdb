@@ -17,6 +17,7 @@
 #include "src/storage/tx/ob_tx_ctx.h"
 #include "share/rc/ob_module_provider.h"
 #include "observer/ob_server.h"
+#include "storage/tx/ob_trans_id_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 /*  interface(s)  */
@@ -94,6 +95,12 @@ int ObTransService::acquire_tx(const char* buf,
     tx = NULL;
     TRANS_LOG(WARN, "desrialize txDesc fail", K(ret),
               K(len),K(pos), K(buf), KPC(this));
+  } else if (OB_UNLIKELY(DATA_CURRENT_VERSION != tx->data_version_)) {
+    ret = OB_NOT_SUPPORTED;
+    TRANS_LOG(WARN, "transaction descriptor data version mismatch", K(ret), KPC(tx),
+              "current_data_version", DATA_CURRENT_VERSION);
+    tx_desc_mgr_.revert(*tx);
+    tx = NULL;
   } else {
     tx->flags_.SHADOW_ = true;
   }
@@ -138,7 +145,6 @@ int ObTransService::do_commit_tx_(ObTxDesc &tx,
     TRANS_LOG(WARN, "init timeout task fail", K(ret), K(tx));
   } else if (OB_SUCC(local_ls_commit_tx_(tx.tx_id_,
                                          expire_ts,
-                                         tx.trace_info_.get_app_trace_info(),
                                          tx.op_sn_,
                                          SCN::max_scn(),
                                          commit_version))
@@ -177,7 +183,6 @@ int ObTransService::do_commit_tx_slowpath_(ObTxDesc &tx)
   SCN commit_version;
   const int commit_ret = local_ls_commit_tx_(tx.tx_id_,
                                              tx.commit_expire_ts_,
-                                             tx.trace_info_.get_app_trace_info(),
                                              tx.op_sn_,
                                              tx.commit_start_scn_,
                                              commit_version);
@@ -403,7 +408,6 @@ int ObTransService::handle_tx_commit_result_(ObTxDesc &tx,
     commit_out = result;
     break;
   case OB_TRANS_TIMEOUT:
-    TX_STAT_TIMEOUT_INC
   case OB_TRANS_STMT_TIMEOUT:
     state = ObTxDesc::State::COMMIT_TIMEOUT;
     commit_out = result;
@@ -747,7 +751,7 @@ int ObTransService::get_write_store_ctx(ObTxDesc &tx,
     TRANS_LOG(WARN, "acquire ls snapshot for mvcc write fail", K(ret));
   } else if (OB_FAIL(acquire_tx_ctx(tx, tx_ctx, store_ctx.ls_, special, snapshot.read_elr(), ctx_exist))) {
     TRANS_LOG(WARN, "acquire tx ctx fail", K(ret), K(tx), KPC(this));
-  } else if (OB_FAIL(tx_ctx->start_access(tx, data_scn, branch, write_flag))) {
+  } else if (OB_FAIL(tx_ctx->start_access(tx, data_scn, branch))) {
     TRANS_LOG(WARN, "tx ctx start access fail", K(ret), K(tx_ctx), KPC(this));
   }
   if (OB_FAIL(ret)) {
@@ -897,24 +901,6 @@ int ObTransService::create_tx_ctx_(const ObTxDesc &tx,
                                    bool &exist)
 { return create_tx_ctx_(NULL, tx, ctx, false, exist); }
 
-void ObTransService::fetch_cflict_tx_ids_from_mem_ctx_to_desc_(ObMvccAccessCtx &acc_ctx)// for deadlock
-{
-  // merge all ctx(in every logstream)'s conflict trans ids to trans_desc
-  int ret = OB_SUCCESS;
-  common::ObArray<ObTransID> array;
-  if (OB_ISNULL(acc_ctx.mem_ctx_)) {
-    ret = OB_BAD_NULL_ERROR;
-    DETECT_LOG(ERROR, "mem_ctx_ on acc_ctx is null", KR(ret), K(array));
-  } else if (OB_FAIL(acc_ctx.mem_ctx_->get_conflict_trans_ids(array))) {
-    DETECT_LOG(WARN, "get conflict ids from mem_ctx failed", KR(ret), K(acc_ctx));
-  } else if (FALSE_IT(acc_ctx.mem_ctx_->reset_conflict_trans_ids())) {
-  } else if (OB_FAIL(acc_ctx.tx_desc_->merge_conflict_txs(array))) {
-    DETECT_LOG(WARN, "fail to merge ctx conflict trans array", KR(ret), K(acc_ctx));
-  } else {
-    DETECT_LOG(DEBUG, "fetch conflict ids from mem_ctx to desc", KR(ret), K(array));
-  }
-}
-
 int ObTransService::revert_store_ctx(storage::ObStoreCtx &store_ctx)
 {
   int ret = OB_SUCCESS;
@@ -950,7 +936,6 @@ int ObTransService::revert_store_ctx(storage::ObStoreCtx &store_ctx)
       if (OB_FAIL(tx->merge_write_state(p))) {
         TRANS_LOG(WARN, "append part fail", K(ret), K(p), KPC(tx_ctx));
       }
-      (void) fetch_cflict_tx_ids_from_mem_ctx_to_desc_(acc_ctx);
       tx_ctx->end_access();
       revert_tx_ctx_(store_ctx.ls_, tx_ctx);
     }
@@ -978,8 +963,7 @@ int ObTransService::validate_snapshot_version_(const SCN snapshot,
       snapshot <= ls_weak_read_ts) {
   } else {
     SCN gts;
-    const int64_t GET_GTS_AHEAD_INTERVAL = 0;
-    const MonotonicTs stc_ahead = get_req_receive_mts_() - MonotonicTs(GET_GTS_AHEAD_INTERVAL);
+    const MonotonicTs stc_ahead = get_req_receive_mts_();
     MonotonicTs tmp_receive_gts_ts(0);
     do {
       ret = ts_mgr_->get_gts(stc_ahead, gts, tmp_receive_gts_ts);
@@ -1091,7 +1075,6 @@ int ObTransService::abort_write_ctx_(const ObTxDesc &tx_desc)
 
 int ObTransService::local_ls_commit_tx_(const ObTransID &tx_id,
                                         const int64_t &expire_ts,
-                                        const common::ObString &app_trace_info,
                                         const int64_t &request_id,
                                         const SCN commit_start_scn,
                                         SCN &commit_version)
@@ -1128,7 +1111,7 @@ int ObTransService::local_ls_commit_tx_(const ObTransID &tx_id,
         }
       }
     }
-  } else if (OB_FAIL(ctx->commit(commit_time, expire_ts, app_trace_info, request_id))) {
+  } else if (OB_FAIL(ctx->commit(commit_time, expire_ts, request_id))) {
     TRANS_LOG(WARN, "commit fail", K(ret), K(tx_id));
   }
   if (OB_NOT_NULL(ctx)) {
@@ -1178,9 +1161,17 @@ int ObTransService::gen_trans_id(ObTransID &trans_id)
   int retry_times = 0;
   {
     const int MAX_RETRY_TIMES = 50;
-    int64_t tx_id = 0;
+    int64_t start_id = 0;
+    int64_t end_id = 0;
     do {
-      if (OB_SUCC(gti_source_->get_trans_id(tx_id))) {
+      if (OB_ISNULL(trans_id_service_)) {
+        ret = OB_ERR_UNEXPECTED;
+        TRANS_LOG(ERROR, "trans id service is null", K(ret), KPC(this));
+      } else if (OB_SUCC(trans_id_service_->get_number(1, 0, start_id, end_id))) {
+        if (OB_UNLIKELY(end_id != start_id + 1)) {
+          ret = OB_ERR_UNEXPECTED;
+          TRANS_LOG(ERROR, "unexpected trans id range", K(ret), K(start_id), K(end_id));
+        }
       } else if (OB_EAGAIN == ret) {
         if (retry_times++ > MAX_RETRY_TIMES) {
           ret = OB_GTI_NOT_READY;
@@ -1193,7 +1184,7 @@ int ObTransService::gen_trans_id(ObTransID &trans_id)
       }
     } while (OB_EAGAIN == ret);
     if (OB_SUCC(ret)) {
-      trans_id = ObTransID(tx_id);
+      trans_id = ObTransID(start_id);
     }
   }
   TRANS_LOG(TRACE, "gen trans id", K(ret), K(trans_id), K(retry_times));

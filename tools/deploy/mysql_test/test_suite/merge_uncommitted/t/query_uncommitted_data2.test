@@ -34,10 +34,7 @@ select * from query_uncommitted_data2 where id=3;
 
 connection conn0;
 let $__table_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ table_id from oceanbase.__all_table where table_name= 'query_uncommitted_data2', table_id, 1);
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
-
+alter system minor freeze;
 connection conn2;
 select * from query_uncommitted_data2;
 select * from query_uncommitted_data2 where id=1;
@@ -82,9 +79,7 @@ insert into query_uncommitted_data2 values(6,6);
 update query_uncommitted_data2 set k=10 where id=5;
 
 connection conn0;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 let $i=300;
 while ($i > 0)
 {

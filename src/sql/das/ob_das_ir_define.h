@@ -83,7 +83,6 @@ public:
       field_boost_expr_(nullptr) {}
   bool need_calc_relevance() const { return nullptr != relevance_expr_; }
   bool need_proj_relevance_score() const { return nullptr != relevance_proj_col_; }
-  bool need_fwd_idx_agg() const { return has_fwd_agg_ && need_calc_relevance(); }
   bool need_inv_idx_agg() const { return has_inv_agg_ && need_calc_relevance(); }
   bool need_block_max_scan() const { return has_block_max_scan_; }
   bool need_avg_doc_len_est() const { return has_avg_doc_len_est_ && nullptr != avg_doc_token_cnt_expr_; }
@@ -127,18 +126,6 @@ public:
     }
     return doc_agg_ctdef;
   }
-  const ObDASScanCtDef *get_fwd_idx_agg_ctdef() const
-  {
-    const ObDASScanCtDef *fwd_idx_agg_ctdef = nullptr;
-    const int64_t ctdef_idx = get_fwd_agg_idx();
-    if (children_cnt_ > ctdef_idx && ctdef_idx > 0 && children_ != nullptr) {
-      const ObDASScanCtDef *child = static_cast<const ObDASScanCtDef *>(children_[ctdef_idx]);
-      if (child->ir_scan_type_ == ObTSCIRScanType::OB_IR_FWD_IDX_AGG) {
-        fwd_idx_agg_ctdef = child;
-      }
-    }
-    return fwd_idx_agg_ctdef;
-  }
   const ObDASScanCtDef *get_block_max_scan_ctdef() const
   {
     const ObDASScanCtDef *block_max_scan_ctdef = nullptr;
@@ -154,10 +141,9 @@ public:
   int64_t get_inv_scan_idx() const { return 0; }
   int64_t get_inv_agg_idx() const { return has_inv_agg_ ? 1 : -1; }
   int64_t get_doc_agg_idx() const { return has_doc_id_agg_ ? (1 + has_inv_agg_) : -1; }
-  int64_t get_fwd_agg_idx() const { return has_fwd_agg_ ? (1 + has_inv_agg_ + has_doc_id_agg_) : -1; }
   int64_t get_block_max_scan_idx() const
   {
-    return has_block_max_scan_ ? (1 + has_inv_agg_ + has_doc_id_agg_ + has_fwd_agg_) : -1;
+    return has_block_max_scan_ ? (1 + has_inv_agg_ + has_doc_id_agg_) : -1;
   }
   bool need_estimate_total_doc_cnt() const { return 0 != estimated_total_doc_cnt_; }
 
@@ -199,7 +185,7 @@ public:
     {
       uint8_t has_inv_agg_:1;
       uint8_t has_doc_id_agg_:1;
-      uint8_t has_fwd_agg_:1;
+      uint8_t reserved_ir_scan_flag_:1;
       uint8_t has_block_max_scan_:1;
       uint8_t has_avg_doc_len_est_:1;
       uint8_t reserved_:3;
@@ -248,16 +234,6 @@ public:
       doc_id_idx_agg_rtdef = static_cast<ObDASScanRtDef*>(children_[rtdef_idx]);
     }
     return doc_id_idx_agg_rtdef;
-  }
-  ObDASScanRtDef *get_fwd_idx_agg_rtdef() const
-  {
-    const ObDASIRScanCtDef *ctdef = static_cast<const ObDASIRScanCtDef *>(ctdef_);
-    const int64_t rtdef_idx = ctdef->get_fwd_agg_idx();
-    ObDASScanRtDef *fwd_idx_agg_rtdef = nullptr;
-    if (children_cnt_ > rtdef_idx && rtdef_idx > 0 && children_ != nullptr) {
-      fwd_idx_agg_rtdef = static_cast<ObDASScanRtDef*>(children_[rtdef_idx]);
-    }
-    return fwd_idx_agg_rtdef;
   }
   ObDASScanRtDef *get_block_max_scan_rtdef() const
   {

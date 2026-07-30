@@ -25,7 +25,7 @@ namespace oceanbase
 namespace sql
 {
 
-const char *get_phy_op_name(ObPhyOperatorType type, bool enable_rich_format /*false*/)
+const char *get_phy_op_name(ObPhyOperatorType type)
 {
   const char *ret_char = NULL;
   static const char *ObPhyOpName[PHY_END + 2] = {
@@ -37,23 +37,9 @@ const char *get_phy_op_name(ObPhyOperatorType type, bool enable_rich_format /*fa
 #undef END
   };
 
-  static const char *ObPhyVecOpName[PHY_END + 2] =
-  {
-#define PHY_OP_DEF(type) op_reg::ObOpTypeTraits<type>::vec_op_name_,
-#include "ob_phy_operator_type.h"
-#undef PHY_OP_DEF
-#define END ""
-    END
-#undef END
-  };
-
   if (type >= 0 && type < PHY_END + 2)
   {
-    if (enable_rich_format && strlen(ObPhyVecOpName[type]) > 0) {
-      ret_char = ObPhyVecOpName[type];
-    } else {
-      ret_char = ObPhyOpName[type];
-    }
+    ret_char = ObPhyOpName[type];
   } else {
     ret_char = "INVALID_OP";
   }
@@ -62,40 +48,33 @@ const char *get_phy_op_name(ObPhyOperatorType type, bool enable_rich_format /*fa
 
 ObPhyOperatorTypeDescSet::ObPhyOperatorTypeDescSet()
 {
-#define PHY_OP_DEF(type) set_type_str(type, #type, op_reg::ObOpTypeTraits<type>::vec_op_name_);
+#define PHY_OP_DEF(type) set_type_str(type, #type);
 #include "sql/engine/ob_phy_operator_type.h"
 #undef PHY_OP_DEF
 }
 
-void ObPhyOperatorTypeDescSet::set_type_str(ObPhyOperatorType type, const char *type_str,
-                                            const char *vec_name)
+void ObPhyOperatorTypeDescSet::set_type_str(ObPhyOperatorType type, const char *type_str)
 {
   if (OB_LIKELY(type >= PHY_INVALID && type < PHY_END)) {
     set_[type].name_ = type_str;
-    set_[type].vec_name_ = vec_name;
   } else {
     LOG_WARN_RET(OB_ERR_UNEXPECTED, "invalid phy operator", K(type));
   }
 }
 
-const char *ObPhyOperatorTypeDescSet::get_type_str(ObPhyOperatorType type,
-                                                   bool enable_rich_format /* false */) const
+const char *ObPhyOperatorTypeDescSet::get_type_str(ObPhyOperatorType type) const
 {
   const char *ret = "UNKNOWN_PHY_OP";
   if (OB_LIKELY(type >= PHY_INVALID && type < PHY_END)) {
-    if (enable_rich_format && strlen(set_[type].vec_name_) > 0) {
-      ret = set_[type].vec_name_;
-    } else {
-      ret = set_[type].name_;
-    }
+    ret = set_[type].name_;
   }
   return ret;
 }
 
 static ObPhyOperatorTypeDescSet PHY_OP_TYPE_DESC_SET;
-const char *ob_phy_operator_type_str(ObPhyOperatorType type, bool enable_rich_format /*false*/)
+const char *ob_phy_operator_type_str(ObPhyOperatorType type)
 {
-  return PHY_OP_TYPE_DESC_SET.get_type_str(type, enable_rich_format);
+  return PHY_OP_TYPE_DESC_SET.get_type_str(type);
 }
 
 }

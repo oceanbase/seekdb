@@ -38,7 +38,6 @@ public:
 
   static int eval_url_codec(EVAL_FUNC_ARG_DECL, bool is_encode);
   static int eval_url_codec_batch(BATCH_EVAL_FUNC_ARG_DECL, bool is_encode);
-  static int eval_url_codec_vector(VECTOR_EVAL_FUNC_ARG_DECL, bool is_encode);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprURLCODEC);
 };
@@ -53,8 +52,6 @@ public:
 
   static int eval_url_encode(EVAL_FUNC_ARG_DECL);
   static int eval_url_encode_batch(BATCH_EVAL_FUNC_ARG_DECL);
-  static int eval_url_encode_vector(VECTOR_EVAL_FUNC_ARG_DECL);
-
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprURLEncode);
 };
@@ -69,8 +66,6 @@ public:
 
   static int eval_url_decode(EVAL_FUNC_ARG_DECL);
   static int eval_url_decode_batch(BATCH_EVAL_FUNC_ARG_DECL);
-  static int eval_url_decode_vector(VECTOR_EVAL_FUNC_ARG_DECL);
-
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprURLDecode);
 };

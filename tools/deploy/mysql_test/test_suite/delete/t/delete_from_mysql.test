@@ -16,11 +16,11 @@ drop table if exists t1,t2,t3,t11,t12;
 CREATE TABLE t1 (a int, b int, c int, primary key(a,b));
 INSERT INTO t1 VALUES (1,1,0);
 # junyue: ob does not support LOW_PRIORITY
-#INSERT LOW_PRIORITY INTO t1 VALUES (1,2);
+#INSERT INTO t1 VALUES (1,2);
 INSERT INTO t1 VALUES (1,2,0);
 INSERT INTO t1 VALUES (1,3,0);
 DELETE from t1 where a=1 limit 1;
-#DELETE LOW_PRIORITY from t1 where a=1;
+#DELETE from t1 where a=1;
 DELETE from t1 where a=1 and b =1;
 
 INSERT INTO t1 VALUES (1,1,0);
@@ -121,14 +121,14 @@ select * from t2;
 delete t11.*, t12.* from t11,t12 where t11.a = t12.a and t11.b <> (select b from t2 where t11.a < t2.a);
 select * from t11;
 select * from t12;
-#delete ignore t11.*, t12.* from t11,t12 where t11.a = t12.a and t11.b <> (select b from t2 where t11.a < t2.a);
+#delete t11.*, t12.* from t11,t12 where t11.a = t12.a and t11.b <> (select b from t2 where t11.a < t2.a);
 #select * from t11;
 #select * from t12;
 insert into t11 values (2, 12) on duplicate key update a=values(a), b=values(b);
 -- error 1242
 delete from t11 where t11.b <> (select b from t2 where t11.a < t2.a);
 select * from t11;
-#delete ignore from t11 where t11.b <> (select b from t2 where t11.a < t2.a);
+#delete from t11 where t11.b <> (select b from t2 where t11.a < t2.a);
 select * from t11;
 drop table t11, t12, t2;
 
@@ -519,7 +519,7 @@ DROP TABLE t1, t2, t3;
 
 --echo #
 --echo # Bug #46425 crash in Diagnostics_area::set_ok_status,
---echo #            empty statement, DELETE IGNORE
+--echo #            empty statement, DELETE
 --echo #
 
 CREATE table t1 (i INTEGER);
@@ -535,7 +535,7 @@ INSERT INTO t1 VALUES (1);
 #
 #--delimiter ;
 #--error ER_CANT_UPDATE_USED_TABLE_IN_SF_OR_TRG
-#DELETE IGNORE FROM t1;
+#DELETE FROM t1;
 
 DROP TABLE t1;
 

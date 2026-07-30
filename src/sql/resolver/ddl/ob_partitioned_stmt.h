@@ -26,9 +26,11 @@ class ObPartitionedStmt : public ObDDLStmt
 {
 public:
   ObPartitionedStmt(common::ObIAllocator *name_pool, stmt::StmtType type)
-      : ObDDLStmt(name_pool, type), interval_expr_(NULL), use_def_sub_part_(true) {}
+      : ObDDLStmt(name_pool, type), use_def_sub_part_(true),
+        use_auto_partition_clause_(false) {}
   explicit ObPartitionedStmt(stmt::StmtType type)
-      : ObDDLStmt(type), interval_expr_(NULL), use_def_sub_part_(true) {}
+      : ObDDLStmt(type), use_def_sub_part_(true),
+        use_auto_partition_clause_(false) {}
   virtual ~ObPartitionedStmt() {}
 
   array_t &get_part_fun_exprs() { return part_fun_exprs_; }
@@ -36,17 +38,20 @@ public:
   array_t &get_subpart_fun_exprs() { return subpart_fun_exprs_; }
   array_t &get_template_subpart_values_exprs() { return template_subpart_values_exprs_; }
   array_array_t &get_individual_subpart_values_exprs() { return individual_subpart_values_exprs_; }
-  ObRawExpr *get_interval_expr() { return interval_expr_; }
-  void set_interval_expr(ObRawExpr* interval_expr) { interval_expr_ = interval_expr; }
   bool use_def_sub_part() const { return use_def_sub_part_; }
   void set_use_def_sub_part(bool use_def_sub_part) { use_def_sub_part_ = use_def_sub_part; }
+  bool use_auto_partition_clause() const { return use_auto_partition_clause_; }
+  void set_use_auto_partition_clause(bool use_auto_partition_clause)
+  {
+    use_auto_partition_clause_ = use_auto_partition_clause;
+  }
   TO_STRING_KV(K_(part_fun_exprs),
                K_(part_values_exprs),
                K_(subpart_fun_exprs),
                K_(template_subpart_values_exprs),
                K_(individual_subpart_values_exprs),
-               K_(interval_expr),
-               K_(use_def_sub_part));
+               K_(use_def_sub_part),
+               K_(use_auto_partition_clause));
 private:
 /**
  * The organization form of part_values_exprs is as follows:
@@ -66,8 +71,8 @@ private:
   array_t subpart_fun_exprs_;    // for subpart fun expr
   array_t template_subpart_values_exprs_;    // for template subpart fun expr
   array_array_t individual_subpart_values_exprs_; //for individual subpart values expr
-  ObRawExpr *interval_expr_;
   bool use_def_sub_part_; // control resolver behaviour when resolve composited-partitioned table/tablegroup
+  bool use_auto_partition_clause_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPartitionedStmt);
 };

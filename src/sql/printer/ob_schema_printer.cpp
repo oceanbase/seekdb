@@ -1599,28 +1599,6 @@ static int print_partition_func(const ObTableSchema &table_schema,
 }
 
 
-int ObSchemaPrinter::print_interval_if_ness(const ObTableSchema &table_schema,
-                                            char* buf,
-                                            const int64_t& buf_len,
-                                            int64_t& pos,
-                                            const ObTimeZoneInfo *tz_info) const
-{
-  int ret = OB_SUCCESS;
-  if (table_schema.is_interval_part()) {
-    const ObRowkey &interval_range = table_schema.get_interval_range();
-    OZ (databuff_printf(buf, buf_len, pos, " INTERVAL ("));
-
-    OZ (ObPartitionUtils::convert_rowkey_to_sql_literal(interval_range,
-                                                        buf,
-                                                        buf_len,
-                                                        pos,
-                                                        false,
-                                                        tz_info));
-    OZ (databuff_printf(buf, buf_len, pos, ") "));
-  }
-  return ret;
-}
-
 int ObSchemaPrinter::print_table_definition_partition_options(const ObTableSchema &table_schema,
                                                               char* buf,
                                                               const int64_t& buf_len,
@@ -1650,9 +1628,7 @@ int ObSchemaPrinter::print_table_definition_partition_options(const ObTableSchem
                                        disp_part_fun_expr_str.length(),
                                        disp_part_fun_expr_str.ptr()))) {
       SHARE_SCHEMA_LOG(WARN, "fail to printf partition expr", K(ret), K(disp_part_fun_expr_str));
-    } else if (OB_FAIL(print_interval_if_ness(table_schema, buf, buf_len, pos, tz_info))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to print interval", K(ret));
-     } else if (!strict_compat_ && is_subpart && partition_schema->sub_part_template_def_valid()) {
+    } else if (!strict_compat_ && is_subpart && partition_schema->sub_part_template_def_valid()) {
       if (OB_FAIL(print_template_sub_partition_elements(partition_schema, buf, buf_len, pos, tz_info))) {
         SHARE_SCHEMA_LOG(WARN, "fail to print sub partition elements", K(ret));
       }
@@ -2522,18 +2498,6 @@ int ObSchemaPrinter::print_range_partition_elements(const ObPartitionSchema *&sc
       SHARE_SCHEMA_LOG(WARN, "print enter failed", K(ret));
     } else {
       int64_t part_num = schema->get_first_part_num();
-      if (schema->is_interval_part()) {
-        for (int64_t i = 0 ; OB_SUCC(ret) && i < part_num; ++i) {
-          const ObPartition *partition = part_array[i];
-          if (OB_ISNULL(partition)) {
-            ret = OB_ERR_UNEXPECTED;
-            SHARE_SCHEMA_LOG(WARN, "partition is NULL", K(ret), K(part_num));
-          } else if (0 < partition->get_low_bound_val().get_obj_cnt()) {
-            part_num = i;
-            break;
-          }
-        }
-      }
 
       for (int64_t i = 0 ; OB_SUCC(ret) && i < part_num; ++i) {
         const ObPartition *partition = part_array[i];
@@ -2672,8 +2636,7 @@ int ObSchemaPrinter::print_package_definition(uint64_t package_id,
                            ObDataTypeCastParams(),
                            NULL,
                            false,
-                           nullptr,
-                           false));
+                           nullptr));
   CK (OB_NOT_NULL(package_stmt));
   CK (T_STMT_LIST == package_stmt->type_);
   CK (1 == package_stmt->num_child_);
@@ -2710,8 +2673,6 @@ int ObSchemaPrinter::print_routine_param_type(const ObRoutineParam *param,
     CK (false);
     CK (!param->get_type_name().empty());
     if (OB_FAIL(ret)) {
-    } else if (param->is_sys_refcursor_type()) {
-      OZ (databuff_printf(buf, buf_len, pos, " %.*s", param->get_type_name().length(), param->get_type_name().ptr()));
     } else {
       CK (param->get_type_owner() != OB_INVALID_ID);
       OZ (schema_guard_.get_database_schema(
@@ -3242,197 +3203,6 @@ int ObSchemaPrinter::print_trigger_definition(const ObTriggerInfo &trigger_info,
   OX (LOG_DEBUG("mysql trigger define", K(*buf)));
   return ret;
 }
-
-int ObSchemaPrinter::print_simple_trigger_definition(const ObTriggerInfo &trigger_info,
-                                                     char *buf, int64_t buf_len, int64_t &pos,
-                                                     bool get_ddl) const
-{
-  int ret = OB_SUCCESS;
-  bool has_print_event = false;
-  OV (ObTriggerInfo::TriggerType::TT_SIMPLE_DML == trigger_info.get_trigger_type(),
-      OB_ERR_UNEXPECTED, trigger_info.get_trigger_type());
-  // ^ is xor: one and only one condition should be true.
-  OV (trigger_info.has_before_point() ^ trigger_info.has_after_point(),
-      OB_INVALID_ARGUMENT, trigger_info.has_before_point(), trigger_info.has_after_point());
-  OV (trigger_info.has_stmt_point() ^ trigger_info.has_row_point(),
-      OB_INVALID_ARGUMENT, trigger_info.has_stmt_point(), trigger_info.has_row_point());
-
-  ObArenaAllocator alloc;
-  sql::ObParser parser(alloc, trigger_info.get_sql_mode());
-  ParseResult parse_result;
-  ParseNode *stmt_list_node = NULL;
-  const ParseNode *trigger_source_node = NULL;
-  const ParseNode *trigger_define_node = NULL;
-  const ParseNode *trigger_body_node = NULL;
-  OZ (parser.parse(trigger_info.get_trigger_body(), parse_result, TRIGGER_MODE,
-                  false, false, true),
-      trigger_info.get_trigger_body());
-  // stmt list node
-  OV (OB_NOT_NULL(stmt_list_node = parse_result.result_tree_));
-  OV (stmt_list_node->type_ == T_STMT_LIST, OB_ERR_UNEXPECTED, stmt_list_node->type_);
-  OV (stmt_list_node->num_child_ == 1, OB_ERR_UNEXPECTED, stmt_list_node->num_child_);
-  OV (OB_NOT_NULL(stmt_list_node->children_));
-  // trigger source node.
-  OV (OB_NOT_NULL(trigger_source_node = stmt_list_node->children_[0]));
-  if (!get_ddl) {
-    OZ (BUF_PRINTF(trigger_info.has_before_point() ? "\nBEFORE" : "\nAFTER"));
-    if (trigger_info.has_insert_event()) {
-      OZ (BUF_PRINTF(" INSERT"));
-      has_print_event = true;
-    }
-    if (trigger_info.has_delete_event()) {
-      OZ (BUF_PRINTF(has_print_event ? " OR DELETE" : " DELETE"));
-      has_print_event = true;
-    }
-    if (trigger_info.has_update_event()) {
-      if (!trigger_info.get_update_columns().empty()) {
-
-        OZ (BUF_PRINTF(has_print_event ? " OR %.*s" : " %.*s",
-                      trigger_info.get_update_columns().length(),
-                      trigger_info.get_update_columns().ptr()));
-      } else {
-        OZ (BUF_PRINTF(has_print_event ? " OR UPDATE": " UPDATE"));
-      }
-    }
-    OZ (print_trigger_base_object(trigger_info, buf, buf_len, pos),
-        trigger_info.get_trigger_name());
-    if (ObTriggerInfo::TriggerType::TT_SIMPLE_DML == trigger_info.get_trigger_type()
-        && trigger_info.has_row_point()) {
-      OZ (print_trigger_referencing(trigger_info, buf, buf_len, pos),
-          trigger_info.get_trigger_name());
-    }
-    if (trigger_info.has_row_point()) {
-      OZ (BUF_PRINTF("\nFOR EACH ROW"));
-    }
-    if (!trigger_info.get_when_condition().empty()) {
-      OZ (BUF_PRINTF("\nWHEN(%.*s)",
-                    trigger_info.get_when_condition().length(),
-                    trigger_info.get_when_condition().ptr()));
-    }
-    if (OB_FAIL(ret)) {
-    } else if (trigger_source_node->type_ == T_TG_SOURCE) {
-      // trigger define node.
-      OV (OB_NOT_NULL(trigger_define_node = trigger_source_node->children_[1]));
-      OV (T_TG_SIMPLE_DML == trigger_define_node->type_,
-            OB_ERR_UNEXPECTED, trigger_define_node->type_);
-      OV (OB_NOT_NULL(trigger_body_node = trigger_define_node->children_[4]));
-
-      OZ (BUF_PRINTF("\n%.*s",
-                    (int)(trigger_body_node->str_len_),
-                    trigger_body_node->str_value_));
-    }
-  } else {
-    CK (trigger_source_node->type_ == T_TG_SOURCE);
-    OZ (BUF_PRINTF(" %.*s",
-                   (int)(trigger_source_node->str_len_),
-                   trigger_source_node->str_value_));
-  }
-  if (OB_SUCC(ret) && get_ddl) {
-    OZ (print_trigger_status(trigger_info, buf, buf_len, pos));
-  }
-  return ret;
-}
-
-int ObSchemaPrinter::print_compound_instead_trigger_definition(const ObTriggerInfo &trigger_info,
-                                                               char *buf, int64_t buf_len, int64_t &pos,
-                                                               bool get_ddl) const
-{
-  int ret = OB_SUCCESS;
-  OV (trigger_info.is_compound_dml_type() || trigger_info.is_instead_dml_type(),
-      OB_ERR_UNEXPECTED, trigger_info.get_trigger_type());
-  ObArenaAllocator alloc;
-  sql::ObParser parser(alloc, trigger_info.get_sql_mode());
-  ParseResult parse_result;
-  OZ (parser.parse(trigger_info.get_trigger_body(), parse_result, TRIGGER_MODE,
-                  false, false, true),
-      trigger_info.get_trigger_body());
-  CK (OB_NOT_NULL(parse_result.result_tree_) && OB_NOT_NULL(parse_result.result_tree_->children_[0]));
-  OZ (BUF_PRINTF(" %.*s", (int)(parse_result.result_tree_->children_[0]->str_len_),
-                 parse_result.result_tree_->children_[0]->str_value_));
-  if (OB_SUCC(ret) && get_ddl) {
-    OZ (print_trigger_status(trigger_info, buf, buf_len, pos));
-  }
-  return ret;
-}
-
-int ObSchemaPrinter::print_system_trigger_definition(const ObTriggerInfo &trigger_info,
-                                                     char *buf, int64_t buf_len, int64_t &pos,
-                                                     bool get_ddl) const
-{
-  int ret = OB_SUCCESS;
-  ObArenaAllocator alloc;
-  sql::ObParser parser(alloc, trigger_info.get_sql_mode());
-  ParseResult parse_result;
-  OV (trigger_info.is_system_type());
-  OZ (parser.parse(trigger_info.get_trigger_body(), parse_result, TRIGGER_MODE,
-                  false, false, true),
-      trigger_info.get_trigger_body());
-  CK (OB_NOT_NULL(parse_result.result_tree_) && OB_NOT_NULL(parse_result.result_tree_->children_[0]));
-  OZ (BUF_PRINTF("\n%.*s", (int)(parse_result.result_tree_->children_[0]->str_len_),
-                 parse_result.result_tree_->children_[0]->str_value_));
-  if (OB_SUCC(ret) && get_ddl) {
-    OZ (print_trigger_status(trigger_info, buf, buf_len, pos));
-  }
-  return ret;
-}
-
-int ObSchemaPrinter::print_trigger_status(const ObTriggerInfo &trigger_info,
-                                          char *buf, int64_t buf_len, int64_t &pos) const
-{
-  int ret = OB_SUCCESS;
-  const ObDatabaseSchema *database_schema = NULL;
-  OZ (schema_guard_.get_database_schema(
-                                        trigger_info.get_database_id(),
-                                        database_schema));
-  CK (OB_NOT_NULL(database_schema));
-  OZ (BUF_PRINTF("; \n\nALTER TRIGGER \"%.*s\".\"%.*s\" %s",
-                 database_schema->get_database_name_str().length(),
-                 database_schema->get_database_name_str().ptr(),
-                 trigger_info.get_trigger_name().length(),
-                 trigger_info.get_trigger_name().ptr(),
-                 trigger_info.is_enable() ? "ENABLE" : "DISABLE"));
-  return ret;
-}
-
-int ObSchemaPrinter::print_trigger_base_object(const ObTriggerInfo &trigger_info,
-                                               char *buf, int64_t buf_len, int64_t &pos) const
-{
-  int ret = OB_SUCCESS;
-  const ObTableSchema *table_schema = NULL;
-  const ObDatabaseSchema *database_schema = NULL;
-  
-  OV (!trigger_info.is_system_type(), OB_NOT_SUPPORTED, trigger_info.get_trigger_type());
-  OZ (schema_guard_.get_table_schema( trigger_info.get_base_object_id(), table_schema),
-      trigger_info.get_base_object_id());
-  OV (OB_NOT_NULL(table_schema), OB_ERR_UNEXPECTED, trigger_info.get_base_object_id());
-  OZ (schema_guard_.get_database_schema(
-      table_schema->get_database_id(), database_schema),
-      trigger_info.get_base_object_id());
-  OV (OB_NOT_NULL(database_schema), OB_ERR_UNEXPECTED, table_schema->get_database_id());
-  OV (!database_schema->get_database_name_str().empty() && !table_schema->get_table_name_str().empty(),
-      OB_ERR_UNEXPECTED, trigger_info.get_base_object_id());
-  OZ (BUF_PRINTF("\nON %.*s.%.*s",
-                 database_schema->get_database_name_str().length(),
-                 database_schema->get_database_name_str().ptr(),
-                 table_schema->get_table_name_str().length(),
-                 table_schema->get_table_name_str().ptr()));
-  return ret;
-}
-
-int ObSchemaPrinter::print_trigger_referencing(const ObTriggerInfo &trigger_info,
-                                               char *buf, int64_t buf_len, int64_t &pos) const
-{
-  int ret = OB_SUCCESS;
-  OV (!trigger_info.get_ref_old_name().empty() && !trigger_info.get_ref_new_name().empty(),
-      OB_ERR_UNEXPECTED, trigger_info.get_ref_old_name(), trigger_info.get_ref_new_name());
-  OZ (BUF_PRINTF("\nREFERENCING OLD AS %.*s NEW AS %.*s",
-                 trigger_info.get_ref_old_name().length(),
-                 trigger_info.get_ref_old_name().ptr(),
-                 trigger_info.get_ref_new_name().length(),
-                 trigger_info.get_ref_new_name().ptr()));
-  return ret;
-}
-
 
 
 // print unique constraint definition for dbms_metadata.get_ddl

@@ -31,11 +31,6 @@ typedef int (*ObExprHashFuncType)(const common::ObDatum &datum, const uint64_t s
 using ObBatchDatumHashFunc = common::ObBatchDatumHashFunc;  // moved down to share/datum
 
 typedef int (*ObExprCmpFuncType)(const common::ObDatum &datum1, const common::ObDatum &datum2, int& cmp_ret);
-using NullSafeRowCmpFunc = common::NullSafeRowCmpFunc;  // moved down to share/datum
-typedef int (*RowCmpFunc) (const ObObjMeta &l_meta, const ObObjMeta &r_meta,
-                           const void *l_data, const int32_t l_len,
-                           const void *r_data, const int32_t r_len,
-                           int &cmp_ret);
 struct ObExprBasicFuncs
 {
   // Default hash method:
@@ -75,11 +70,6 @@ struct ObExprBasicFuncs
   */
   ObExprHashFuncType murmur_hash_v2_;
   ObBatchDatumHashFunc murmur_hash_v2_batch_;
-
-  // null first/last cmp funcs for vector engine 2.0
-  NullSafeRowCmpFunc row_null_first_cmp_;
-  NullSafeRowCmpFunc row_null_last_cmp_;
-  RowCmpFunc row_cmp_;
 };
 
 }  // namespace sql

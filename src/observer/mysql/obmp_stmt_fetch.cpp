@@ -15,15 +15,15 @@
  */
 
 #define USING_LOG_PREFIX SERVER
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/mysql/obmp_stmt_fetch.h"
 #include "observer/mysql/obsm_utils.h"
+#include "share/ob_lob_access_utils.h"
 #include "sql/ob_sql.h"
 #include "observer/omt/ob_server_runtime.h"
 #include "observer/mysql/ob_sync_plan_driver.h"
 #include "rpc/obmysql/packet/ompk_eof.h"
-#include "observer/mysql/obmp_stmt_send_piece_data.h"
 #include "sql/plan_cache/ob_ps_cache.h"
+#include "pl/ob_pl_server_cursor.h"
 
 namespace oceanbase
 {
@@ -41,11 +41,7 @@ ObMPStmtFetch::ObMPStmtFetch(const ObGlobalContext &gctx)
       fetch_rows_(OB_INVALID_COUNT),
       single_process_timestamp_(0),
       exec_start_timestamp_(0),
-      exec_end_timestamp_(0),
-      offset_type_(OB_OCI_DEFAULT),
-      offset_(0),
-      extend_flag_(0),
-      column_flag_(NULL)
+      exec_end_timestamp_(0)
 {
 }
 int ObMPStmtFetch::before_process()
@@ -71,9 +67,6 @@ int ObMPStmtFetch::before_process()
     if (pkt.get_clen() > FETCH_PACKET_SIZE_WITHOUT_OFFSET) {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("not support offset type in mysql mode.", K(ret), K(cursor_id));
-    } else {
-      offset_type_ = OB_OCI_DEFAULT;
-      offset_ = 0;
     }
   }
   if (OB_FAIL(ret)) {
@@ -114,6 +107,9 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
     LOG_WARN("cursor not found", K(cursor_id_), K(ret));
     //If a cursor is not found during the fetch process for any reason, immediately disconnect and let the application handle the fault tolerance
     //disconnect();
+  } else if (!cursor->is_ps_cursor()) {
+    ret = OB_ERR_FETCH_OUT_SEQUENCE;
+    LOG_WARN("cursor is not a prepared-statement server cursor", K(cursor_id_), K(ret));
   } else {
     int64_t fetch_limit = OB_INVALID_COUNT == fetch_rows_ ? INT64_MAX : fetch_rows_;
     int64_t true_row_num = 0;
@@ -146,7 +142,10 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
         // No need to handle the error response packet additionally
         session.set_current_execution_id(execution_id);
         OX(need_response_error = false);
-        OZ(response_result(*cursor, session, fetch_limit, true_row_num));
+        OZ(response_result(static_cast<ObPLServerCursorInfo &>(*cursor),
+                           session,
+                           fetch_limit,
+                           true_row_num));
         if (OB_READ_NOTHING == ret) {
           LOG_WARN("nothing to read", K(ret));
           ret = OB_SUCCESS;
@@ -164,7 +163,6 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
 
     {
       audit_record.exec_record_.record_end();
-      record_stat(stmt::T_EXECUTE, exec_end_timestamp_);
       audit_record.stmt_type_ = stmt::T_EXECUTE;
       audit_record.update_event_stage_state();
     }
@@ -173,8 +171,7 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
       sqlstat_record.record_sqlstat_end_value();
       sqlstat_record.inc_fetch_cnt();
       ObString sql = ObString::make_empty_string();
-      if (OB_NOT_NULL(cursor)
-          && cursor->is_ps_cursor()) {
+      if (OB_NOT_NULL(cursor)) {
         ObPsStmtInfoGuard guard;
         ObPsStmtInfo *ps_info = NULL;
         ObPsStmtId inner_stmt_id = OB_INVALID_ID;
@@ -217,13 +214,11 @@ int ObMPStmtFetch::response_query_header(ObSQLSessionInfo &session,
   return ret;
 }
 
-/* fetch protocol sends result set to the reverse client
+/* Fetch protocol sends rows from a MySQL prepared-statement server cursor.
  * Protocol notes: MySQL does not require a head packet before returning each result set
  * Memory usage notes: When obtaining rows to be returned by fetch, note that you need to switch to the allocator where the cursor is located
- * Cursor fetch is completed through methods in dbms_cursor
- * Offset functionality implementation: achieved by manipulating the current offset
  */
-int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
+int ObMPStmtFetch::response_result(pl::ObPLServerCursorInfo &cursor,
                                    ObSQLSessionInfo &session,
                                    int64_t fetch_limit,
                                    int64_t &row_num)
@@ -234,7 +229,6 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
   bool ac = true;
   bool admission_fail_and_need_retry = false;
   bool last_row = false;
-  int32_t offset = offset_;
   int64_t max_count = 0;
   row_num = 0;
 
@@ -247,7 +241,6 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
         lib::ContextTLOptGuard guard(false);
         ParamStore params;
         ObExecContext *exec_ctx = NULL;
-        const common::ObNewRow *row = NULL;
         bool need_fetch = true;
         int64_t cur = 0;
         const ColumnsFieldArray *fields = NULL;
@@ -259,17 +252,10 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
             CK (OB_NOT_NULL(cursor.get_cursor_handler()->get_result_set()));
             OX (fields = dynamic_cast<const common::ColumnsFieldArray *>(
               cursor.get_cursor_handler()->get_result_set()->get_field_columns()));
-          } else if (!cursor.is_ps_cursor()) {
-            CK (OB_NOT_NULL(cursor.get_spi_cursor()));
-            CK (cursor.get_spi_cursor()->fields_.count() > 0);
-            OX (fields = &(cursor.get_spi_cursor()->fields_));
           } else {
-            fields = &static_cast<pl::ObDbmsCursorInfo&>(cursor).get_field_columns();
+            fields = &cursor.get_field_columns();
           }
           if (OB_SUCC(ret)) {
-            // offset type
-            // TODO: Streaming can only roll forward, so it can only be compatible with next, default, relative (offset greater than 0), absolute (actual position greater than current position)
-            // Non-streaming uses OB_RA_ROW_STORE to implement, can access any row according to index, compatible with all offset types
             if (cursor.is_streaming()) {
               // Streaming result set requires exec_ctx, cannot be replaced by temporary result
               if (OB_NOT_NULL(cursor.get_cursor_handler()) &&
@@ -278,12 +264,6 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
               } else {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("get unexpect streaming result set.", K(ret), K(cursor.get_id()));
-              }
-              if (OB_OCI_DEFAULT != offset_type_ && OB_OCI_FETCH_NEXT != offset_type_) {
-                ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("streaming result set not support this offset type.", K(ret), 
-                                                                               K(cursor.get_id()), 
-                                                                               K(offset_type_));
               }
             } else {
               tmp_exec_ctx.set_my_session(&session);
@@ -295,81 +275,8 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
                 LOG_WARN("cursor result set is null.", K(ret), K(cursor.get_id()));
               } else {
                 ObSPICursor *spi_cursor = cursor.get_spi_cursor();
-                // ps cursor position is be record in current_position
-                // ref cursor position is be record in get_spi_cursor()->cur_
-                if (!cursor.is_ps_cursor() && cursor.get_spi_cursor()->cur_ > 0 
-                      && cursor.get_current_position() != cursor.get_spi_cursor()->cur_) {
-                  cursor.set_current_position(cursor.get_spi_cursor()->cur_ - 1);
-                }
-                cur = cursor.get_current_position();
+                cur = cursor.get_current_position() + 1;
                 max_count = spi_cursor->row_store_.get_row_cnt();
-                if (max_count > 0) {
-                  switch (offset_type_) {
-                    case OB_OCI_DEFAULT: {
-                      cur++;
-                      break;
-                    }
-                    case OB_OCI_FETCH_CURRENT: {
-                      break;
-                    }
-                    case OB_OCI_FETCH_NEXT: {
-                      cur++;
-                      break;
-                    }
-                    case OB_OCI_FETCH_FIRST: {
-                      cur = 0;
-                      if (max_count < fetch_limit) {
-                        cursor.set_current_position(fetch_limit);
-                        need_fetch = false;	
-                        ret = OB_ITER_END;
-                      }
-                      break;
-                    }
-                    case OB_OCI_FETCH_LAST: {
-                      const int64_t row_id = max_count - 1;
-                      cur = max_count - 1;
-                      if (cursor.get_last_row().is_invalid()) {
-                        if (OB_FAIL(spi_cursor->row_store_.get_row(row_id, row))){
-                          LOG_WARN("get first row fail.", K(ret), K(cursor.get_id()));
-                        } else {
-                          if (OB_FAIL(ob_write_row(cursor.get_cursor_entity()->get_arena_allocator(),
-                                                    *row,
-                                                    cursor.get_last_row()))){
-                            LOG_WARN("Fail to get last row", K(ret), K(cursor.get_id()));
-                          }
-                        }
-                      } else {
-                        row = &cursor.get_last_row();
-                      }
-                      if (OB_SUCC(ret)) {
-                        need_fetch = false;
-                      }
-                      break;
-                    }
-                    case OB_OCI_FETCH_PRIOR: {
-                      // prior protocol, regardless of the offset setting, it always rolls forward by 1 line each time, so cur needs to be decremented by 1
-                      cur = cur - 1;
-                      if (cur + fetch_limit > max_count) {
-                        need_fetch = false;
-                        cursor.set_current_position(max_count - 1);
-                        ret = OB_ITER_END;
-                      }
-                      break;
-                    }
-                    case OB_OCI_FETCH_ABSOLUTE: {
-                      cur = offset - 1;
-                      break;
-                    }
-                    case OB_OCI_FETCH_RELATIVE: {
-                      cur = cur + offset;
-                      break;
-                    }
-                    default: {
-                      ret = OB_ERR_UNEXPECTED;
-                      LOG_WARN("unexpect offset type.", K(ret));
-                    }
-                  }
-                }
                 if (OB_SUCC(ret) && (cur >= max_count || cur < 0 || max_count <= 0)) {
                   // During fetch, all errors except OB_ITER_END disconnect the connection.
                   // If the scan exceeds the range, set OB_ITER_END, report no error,
@@ -378,7 +285,6 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
                   ret = OB_ITER_END;
                 }
                 if (OB_SUCC(ret)) {
-                  // As long as the correct offset is set, the pointer in cursor should move accordingly
                   OZ (cursor.set_current_position(cur));
                 }
               }
@@ -388,22 +294,11 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
             // do nothing
           } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(schema_guard))) {
             LOG_WARN("get runtime schema guard failed ", K(ret));
-          } else if (!need_fetch && NULL != row) {
-            if (has_long_data()) {
-              OZ (response_row(session, *(const_cast<common::ObNewRow*>(row)), 
-                               fields, column_flag_, cursor_id_, true, cursor.is_packed(), &schema_guard));
-            } else {
-              OZ (response_row(session, *(const_cast<common::ObNewRow*>(row)), fields, cursor.is_packed(), NULL, &schema_guard));
-            }
-            if (OB_FAIL(ret)) {
-              LOG_WARN("response row fail.", K(ret));
-            }
           }
           ObPLExecCtx pl_ctx(cursor.get_allocator(), exec_ctx, &params,
                             NULL/*result*/, &ret, NULL/*func*/, true);
           while (OB_SUCC(ret) && need_fetch && row_num < fetch_limit
-                  && OB_SUCC(sql::ObSPIService::dbms_cursor_fetch(&pl_ctx,
-                                                  static_cast<pl::ObDbmsCursorInfo&>(cursor)))) {
+                  && OB_SUCC(sql::ObSPIService::fetch_server_cursor(&pl_ctx, cursor))) {
             common::ObNewRow &row = cursor.get_current_row();
 #ifndef NDEBUG
             LOG_INFO("cursor fetch: ", K(cursor.get_id()),
@@ -411,17 +306,12 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
                                        K(cursor.is_ps_cursor()),
                                        K(cursor.get_current_row().cells_[0]),
                                        K(cursor.get_current_position()),
-                                       K(offset), K(row_num), K(fetch_limit));
+                                       K(row_num), K(fetch_limit));
 #endif
             cur = cursor.get_current_position();
             ++cur;
             cursor.set_current_position(cur);
-            if (has_long_data()) {
-              OZ (response_row(session, row, fields, column_flag_, cursor_id_,
-                                0 == row_num ? true : false, cursor.is_packed(), &schema_guard));
-            } else {
-              OZ (response_row(session, row, fields, cursor.is_packed(), exec_ctx, &schema_guard));
-            }
+            OZ (response_row(session, row, fields, cursor.is_packed(), exec_ctx, &schema_guard));
             if (OB_SUCC(ret)) {
               ++row_num;
             } else {
@@ -523,7 +413,7 @@ int ObMPStmtFetch::process_fetch_stmt(ObSQLSessionInfo &session,
   {
     int tmp_ret = OB_SUCCESS;
     //Clear WARNING BUFFER
-    tmp_ret = do_after_process(session, false/*no asyn response*/);
+    tmp_ret = do_after_process(session, false/*no asyn response*/, ret);
     UNUSED(tmp_ret);
   }
   return ret;
@@ -561,7 +451,6 @@ int ObMPStmtFetch::process()
     THIS_WORKER.set_session(sess);
     ObSQLSessionInfo::LockGuard lock_guard(session.get_query_lock());
     session.set_current_trace_id(ObCurTraceId::get_trace_id());
-    session.init_use_rich_format();
     session.get_raw_audit_record().request_memory_used_ = 0;
     observer::ObProcessMallocCallback pmcb(0,
           session.get_raw_audit_record().request_memory_used_);
@@ -581,7 +470,7 @@ int ObMPStmtFetch::process()
       LOG_WARN("packet too large than allowed for the session", K_(cursor_id), K(ret));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
       LOG_WARN("fail to get query timeout", K(ret));
-    } else if (OB_FAIL(gctx_.schema_service_->get_runtime_received_broadcast_version(
+    } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(
                 runtime_version))) {
       LOG_WARN("fail to get runtime broadcast version", K(ret));
     } else {
@@ -626,140 +515,6 @@ int ObMPStmtFetch::process()
   }
   return (OB_SUCCESS != ret) ? ret : flush_ret;
 }
-
-void ObMPStmtFetch::record_stat(const stmt::StmtType type, const int64_t end_time) const
-{
-  UNUSED(type);
-  {
-    const int64_t time_cost = end_time - get_receive_timestamp();
-    EVENT_INC(SQL_OTHER_COUNT);
-    EVENT_ADD(SQL_OTHER_TIME, time_cost);
-  }
-}
-
-
-int ObMPStmtFetch::response_row(ObSQLSessionInfo &session,
-                                common::ObNewRow &src_row,
-                                const ColumnsFieldArray *fields,
-                                char *column_map,
-                                int32_t stmt_id,
-                                bool first_time,
-                                bool is_packed,
-                                ObSchemaGetterGuard *schema_guard)
-{
-  int ret = OB_SUCCESS;
-  common::ObNewRow row;
-  ObCharsetType charset_type = CHARSET_INVALID;
-  ObPieceCache *piece_cache = session.get_piece_cache(true);
-  ObArenaAllocator arena_allocator;
-
-  if (OB_ISNULL(piece_cache)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("piece cache is null.", K(ret), K(stmt_id));
-  } else if (NULL != column_map) {
-    if (OB_FAIL(ob_create_row(arena_allocator, src_row.get_count(), row))) {
-      LOG_WARN("create row fail.", K(ret), K(stmt_id));
-    } else if (OB_FAIL(ob_write_row_by_projector(arena_allocator, src_row, row))) {
-      LOG_WARN("wirte tmp row fail.", K(stmt_id));
-    }
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column_map is null.", K(stmt_id), K(ret));
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(session.get_character_set_results(charset_type))) {
-    LOG_WARN("fail to get result charset", K(ret));
-  }
-
-  for (int64_t i = 0; OB_SUCC(ret) && i < row.get_count(); ++i) {
-    ObObj &value = row.get_cell(i);
-    if (OB_SUCC(ret) && NULL != column_map && ObSMUtils::update_from_bitmap(column_map, i)) {
-      bool is_long_data = false;
-      ObString str;
-      ObPiece *piece = NULL;
-      ObCharsetType target_charset_type = charset_type;
-
-      if (OB_FAIL(piece_cache->get_piece(stmt_id, i, piece))) {
-        LOG_WARN("get piece fail", K(stmt_id), K(i), K(ret));
-      } else if (first_time) {
-        if (NULL != piece) {
-          if (OB_FAIL(piece_cache->remove_piece(piece_cache->get_piece_key(stmt_id, i), session))) {
-            LOG_WARN("remove old piece fail.", K(ret), K(stmt_id), K(i));
-          }
-        }
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(piece_cache->make_piece(stmt_id, i, piece, session))) {
-          LOG_WARN("make piece fail.", K(ret), K(stmt_id), K(i));
-        }
-      }
-      if (OB_FAIL(ret)) {
-        // do nothing
-      } else if (NULL == piece) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("piece is null before use.", K(ret), K(stmt_id), K(i));
-      } else if (is_lob_storage(value.get_type())) {
-        if (OB_FAIL(ObQueryDriver::convert_text_value_charset(
-                value, target_charset_type, arena_allocator, &session))) {
-          LOG_WARN("convert text value charset failed", K(ret), K(value));
-        } else {
-          ObTextStringIter iter(value);
-          if (OB_FAIL(iter.init(0, &session, &arena_allocator))) {
-            LOG_WARN("Lob: init lob str iter failed ", K(ret), K(value));
-          } else if (OB_FAIL(iter.get_full_data(str))) {
-            LOG_WARN("Lob: get full data failed ", K(ret), K(value));
-          }
-        }
-      } else if (ob_is_string_type(value.get_type())) {
-        if (CS_TYPE_INVALID != value.get_collation_type()
-            && OB_FAIL(value.convert_string_value_charset(target_charset_type, arena_allocator))) {
-          LOG_WARN("convert string value charset failed", K(ret), K(value));
-        } else if (OB_FAIL(value.get_string(str))) {
-          LOG_WARN("get string failed", K(ret), K(value));
-        }
-      } else if (ob_is_null(value.get_type())) {
-        str.assign(NULL, 0);
-      } else if (ob_is_extend(value.get_type())) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("long data protocol not support array type yet.",  
-                    K(stmt_id), K(i), K(value.get_type()));
-      } else {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("long piece protocol not support type: ", K(value.get_type()));
-      }
-      /* 
-        * Piece's memory management strategy:
-        * 1. All pieces allocate their own memory through session
-        * 2. Each piece has a separate memory, which is maintained by itself, 
-        *    and needs to be released when each piece dies
-        * 3. The memory of piecebuffer itself comes from piece, 
-        *    and the buf memory on piecebuffer also comes from this
-        * 4. The piecebuffer should be cleaned up immediately after use, 
-        *    and two parts should be cleaned up, 
-        *    the memory occupied by the buf and the memory of the piecebuffer itself
-        * 5. Clean up all pieces when the connection is closed, 
-        *    and clean up the memory of piecebuffer->buf, piecebuffer and piece step by step
-        */ 
-      if (OB_FAIL(ret)) {
-        // do nothing
-      } else if (OB_FAIL(piece_cache->add_piece_buffer(piece, ObInvalidPiece, &str))) {
-        LOG_WARN("add piece buffer fail.", K(ret), K(stmt_id));
-      } else {
-        value.set_null();
-      }
-    }
-  }
-
-  if (OB_FAIL(ret)) {
-    // do nothing
-  } else if (OB_FAIL(response_row(session, row, fields, is_packed, NULL, schema_guard))) {
-    LOG_WARN("response row fail.", K(ret), K(stmt_id));
-  } else {
-    LOG_DEBUG("response row success.", K(stmt_id));
-  }
-  return ret;
-}
-
 
 } //end of namespace observer
 } //end of namespace oceanbase

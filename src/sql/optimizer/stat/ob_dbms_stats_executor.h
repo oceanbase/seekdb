@@ -20,6 +20,7 @@
 #include "sql/optimizer/stat/ob_stat_define.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/optimizer/stat/ob_stat_item.h"
+#include "sql/optimizer/stat/ob_opt_stat_gather_stat.h"
 
 namespace oceanbase {
 namespace observer
@@ -29,7 +30,6 @@ class ObInnerSQLConnection;
 using namespace sql;
 namespace common {
 
-struct ObOptStatRunningMonitor;
 struct GatherHelper
 {
   explicit GatherHelper(ObOptStatRunningMonitor &running_monitor) :

@@ -1153,13 +1153,7 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
       quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
       ObString ik_smart;
       if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
-        if (OB_SEARCH_NOT_FOUND == ret) {
-          // from old version, ik_mode is not set, so use default value
-          ik_mode_smart_ = true;
-          ret = OB_SUCCESS;
-        } else {
-          LOG_WARN("fail to get ik mode", K(ret));
-        }
+        LOG_WARN("current IK parser properties must contain ik_mode", K(ret), K(json_str));
       } else {
         if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_SMART))) {
           ik_mode_smart_ = true;

@@ -466,10 +466,7 @@ DEFINE_ERROR(OB_TABLET_EXIST, -4724, -1, "HY000", "unexpected tablet existence")
 DEFINE_ERROR(OB_TABLET_NOT_EXIST, -4725, -1, "HY000", "tablet does not exist");
 
 DEFINE_ERROR(OB_LS_NEED_REVOKE, -4727, -1, "HY000", "ls need revoke");
-DEFINE_ERROR_DEP(OB_ERR_INTERVAL_PARTITION_EXIST, -4728, -1, "HY000", "interval partition already exists");
-DEFINE_ERROR_DEP(OB_ERR_INTERVAL_PARTITION_ERROR, -4729, -1, "HY000", "the property of interval partition is changed");
 DEFINE_ERROR(OB_ERR_LAST_PARTITION_IN_THE_RANGE_SECTION_CANNOT_BE_DROPPED, -4730, -1, "HY000", "Last partition in the range section cannot be dropped");
-DEFINE_ERROR(OB_ERR_SET_INTERVAL_IS_NOT_LEGAL_ON_THIS_TABLE, -4731, -1, "HY000", "SET INTERVAL is not legal on this table.");
 DEFINE_ERROR(OB_SSTABLE_NOT_EXIST, -4735, -1, "HY000", "sstable not exist");
 DEFINE_ERROR(OB_RESOURCE_UNIT_VALUE_INVALID, -4736, -1, "HY000", "resource unit value is invalid");
 DEFINE_ERROR(OB_LS_EXIST, -4737, -1, "HY000", "log stream already exist");
@@ -771,7 +768,6 @@ DEFINE_ERROR(OB_ERR_WRONG_TYPE_COLUMN_VALUE_ERROR, -5275, ER_WRONG_TYPE_COLUMN_V
 DEFINE_ERROR(OB_ERR_PARTITION_COLUMN_LIST_ERROR, -5276, ER_PARTITION_COLUMN_LIST_ERROR, "HY000", "Inconsistency in usage of column lists for partitioning");
 DEFINE_ERROR(OB_ERR_TOO_MANY_VALUES_ERROR, -5277, ER_TOO_MANY_VALUES_ERROR, "HY000", "Cannot have more than one value for this type of RANGE partitioning");
 DEFINE_ERROR(OB_ERR_PARTITION_VALUE_ERROR, -5278, -1, "HY000", "This partition value with incorrect charset type");
-DEFINE_ERROR(OB_ERR_PARTITION_INTERVAL_ERROR, -5279, -1, "HY000", "Partition interval must have type INT");
 DEFINE_ERROR_EXT(OB_ERR_SAME_NAME_PARTITION, -5280, ER_SAME_NAME_PARTITION, "HY000", "Duplicate partition name", "Duplicate partition name \'%.*s\'");
 DEFINE_ERROR_EXT(OB_ERR_RANGE_NOT_INCREASING_ERROR, -5281, ER_RANGE_NOT_INCREASING_ERROR, "HY000", "VALUES LESS THAN value must be strictly increasing for each partition", "VALUES LESS THAN value must be strictly increasing for each partition%.*s");
 DEFINE_ERROR(OB_ERR_PARSE_PARTITION_RANGE, -5282, ER_PARSE_ERROR, "42000", "Wrong number of partitions defined, mismatch with previous setting");
@@ -790,8 +786,6 @@ DEFINE_ERROR(OB_ERR_TOO_MANY_ROWS, -5294, ER_TOO_MANY_ROWS, "42000", "Result con
 DEFINE_ERROR(OB_WRONG_FIELD_TERMINATORS, -5295, ER_WRONG_FIELD_TERMINATORS, "42000", "Field separator argument is not what is expected; check the manual");
 DEFINE_ERROR(OB_NO_READABLE_REPLICA, -5296, -1, "42000", "there has no readable replica");
 DEFINE_ERROR_DEP(OB_ERR_UNEXPECTED_TZ_TRANSITION, -5297, -1, "HY000", "unexpected time zone info transition");
-DEFINE_ERROR_EXT(OB_ERR_SYNONYM_EXIST, -5298, -1, "HY000", "synonym exists", "synonym '%.*s' already exists");
-DEFINE_ERROR_EXT(OB_SYNONYM_NOT_EXIST, -5299, -1, "HY000", "synonym not exists", "synonym \'%.*s.%.*s\' doesn\'t exist");
 DEFINE_ERROR(OB_ERR_MISS_ORDER_BY_EXPR, -5300, -1, "HY000", "missing ORDER BY expression in the window specification");
 DEFINE_ERROR(OB_ERR_NOT_CONST_EXPR, -5301, -1, "HY000", "The argument of the window function should be a constant for a partition", "The argument of the window function should be a constant for a partition");
 DEFINE_ERROR(OB_ERR_PARTITION_MGMT_ON_NONPARTITIONED, -5302, ER_PARTITION_MGMT_ON_NONPARTITIONED, "HY000", "Partition management on a not partitioned table is not possible");
@@ -816,10 +810,6 @@ DEFINE_ERROR(OB_ERR_NOCYCLE_REQUIRED, -5323, -1, "HY000", "NOCYCLE keyword is re
 DEFINE_ERROR(OB_ERR_CONNECT_BY_LOOP, -5324, -1, "HY000", "CONNECT BY loop in user data");
 DEFINE_ERROR(OB_ERR_INVALID_SIBLINGS, -5325, -1, "HY000", "ORDER SIBLINGS BY clause not allowed here");
 DEFINE_ERROR(OB_ERR_INVALID_SEPARATOR, -5326, -1, "HY000", "when using SYS_CONNECT_BY_PATH function, cannot have separator as part of column value");
-DEFINE_ERROR(OB_ERR_INVALID_SYNONYM_NAME, -5327, -1, "HY000", "Database can not be specified in public synonym");
-DEFINE_ERROR(OB_ERR_LOOP_OF_SYNONYM, -5328, -1, "HY000", "Looping chain of synonyms");
-DEFINE_ERROR(OB_ERR_SYNONYM_SAME_AS_OBJECT, -5329, -1, "HY000", "Cannot create a synonym with same name as object");
-DEFINE_ERROR_EXT(OB_ERR_SYNONYM_TRANSLATION_INVALID, -5330, -1, "HY000", "Synonym translation is no longer valid", "Synonym %s translation is no longer valid");
 DEFINE_ERROR(OB_ERR_EXIST_OBJECT, -5331, -1, "HY000", "name is already used by an existing object");
 DEFINE_ERROR_EXT(OB_ERR_ILLEGAL_VALUE_FOR_TYPE, -5332, ER_ILLEGAL_VALUE_FOR_TYPE, "22007", "Illegal value found during parsing", "Illegal %s '%.*s' value found during parsing");
 DEFINE_ERROR_EXT(OB_ER_TOO_LONG_SET_ENUM_VALUE, -5333, ER_TOO_LONG_SET_ENUM_VALUE, "HY000", "Too long enumeration/set value for column.", "Too long enumeration/set value for column %.*s.");
@@ -861,7 +851,6 @@ DEFINE_ERROR(OB_ERR_MISSING_ON_KEYWORD, -5370, -1, "HY000", "missing ON keyword"
 DEFINE_ERROR_EXT(OB_ERR_NO_GRANT_OPTION, -5371, -1, "HY000", "grant option does not exists", "grant option does not exist for '%.*s.%.*s'");
 DEFINE_ERROR(OB_ERR_ALTER_INDEX_AND_EXECUTE_NOT_ALLOWED_FOR_VIEWS, -5372, -1, "HY000", "ALTER, INDEX and EXECUTE not allowed for views");
 DEFINE_ERROR_EXT(OB_ERR_CIRCULAR_ROLE_GRANT_DETECTED, -5373, ER_ROLE_GRANTED_TO_ITSELF, "HY000", "The GRANT would create a loop", "User account `%.*s`@`%.*s` is directly or indirectly granted to the role `%.*s`@`%.*s`. The GRANT would create a loop");
-DEFINE_ERROR(OB_ERR_INVALID_PRIVILEGE_ON_DIRECTORIES, -5374, -1, "HY000", "invalid privilege on directories");
 DEFINE_ERROR(OB_ERR_MISSING_OR_INVALID_ROLE_NAME, -5376, -1, "HY000", "missing or invalid role name");
 DEFINE_ERROR_EXT(OB_ERR_ROLE_NOT_GRANTED_OR_DOES_NOT_EXIST, -5377, ER_ROLE_NOT_GRANTED, "HY000", "role not granted or does not exist", "role '%.*s' not granted or does not exist");
 DEFINE_ERROR_EXT(OB_ERR_DEFAULT_ROLE_NOT_GRANTED_TO_USER, -5378, -1, "HY000", "DEFAULT ROLE not granted to user", "DEFAULT ROLE '%.*s' not granted to user");
@@ -872,7 +861,6 @@ DEFINE_ERROR_EXT(OB_ERR_CANNOT_GRANT_STRING_TO_A_ROLE, -5382, -1, "HY000", "cann
 DEFINE_ERROR(OB_ERR_CASCADE_CONSTRAINTS_MUST_BE_SPECIFIED_TO_PERFORM_THIS_REVOKE, -5383, -1, "HY000", "CASCADE CONSTRAINTS must be specified to perform this revoke");
 DEFINE_ERROR(OB_ERR_YOU_MAY_NOT_REVOKE_PRIVILEGES_FROM_YOURSELF, -5384, -1, "HY000", "you may not GRANT/REVOKE privileges to/from yourself");
 
-DEFINE_ERROR_EXT(OB_ERR_MISS_ERR_LOG_MANDATORY_COLUMN, -5385, -1, "HY000", "miss mandatory column of error log table", "miss mandatory column %.*s of error log table");
 DEFINE_ERROR(OB_TABLE_DEFINITION_CHANGED, -5386, ER_TABLE_DEF_CHANGED, "HY000", "Unable to read data -- Table definition has changed");
 DEFINE_ERROR_EXT(OB_ERR_NO_ROUTINE_PRIVILEGE, -5387, ER_PROCACCESS_DENIED_ERROR, "42000", "Command denied to user for routine", "%.*s command denied to user '%.*s'@'%.*s' for routine '%.*s'");
 DEFINE_ERROR_EXT(OB_ERR_USER_REFFERD_AS_DEFINER, -5388, ER_USER_REFERRED_AS_DEFINER, "HY000", "User '%.*s'@'%.*s' is referenced as a definer account in a stored routine.", "User '%.*s'@'%.*s' is referenced as a definer account in a stored routine.");
@@ -1075,10 +1063,8 @@ DEFINE_ERROR(OB_ERR_ADD_PARTITION_TO_DEFAULT_LIST, -5598, -1, "HY000", "cannot a
 DEFINE_ERROR(OB_ERR_INVALID_PERCENTAGE, -5601, -1, "HY000", "Percentage should between 1 and 99");
 DEFINE_ERROR(OB_ERR_COLLECT_HISTOGRAM, -5602, -1, "HY000", "Should collect histogram after major freeze");
 DEFINE_ERROR(OB_ER_TEMP_TABLE_IN_USE, -5603, -1, "0A000", "Attempt to create, alter or drop an index on temporary table already in use");
-DEFINE_ERROR(OB_ERR_INVALID_NLS_PARAMETER_STRING, -5604, -1, "HY000", "invalid NLS parameter string used in SQL function");
 DEFINE_ERROR(OB_ERR_DATETIME_INTERVAL_PRECISION_OUT_OF_RANGE, -5605, -1, "HY000", "datetime/interval precision is out of range");
 DEFINE_ERROR(OB_ERR_CMD_NOT_PROPERLY_ENDED, -5607, -1, "HY000", "SQL command not properly ended");
-DEFINE_ERROR(OB_ERR_INVALID_NUMBER_FORMAT_MODEL, -5608, -1, "42000", "invalid number format model");
 DEFINE_ERROR(OB_WARN_NON_ASCII_SEPARATOR_NOT_IMPLEMENTED, -5609, ER_WRONG_FIELD_TERMINATORS, "HY000", "Non-ASCII separator arguments are not fully supported");
 DEFINE_ERROR(OB_WARN_AMBIGUOUS_FIELD_TERM, -5610, ER_WRONG_FIELD_TERMINATORS, "HY000", "First character of the FIELDS TERMINATED string is ambiguous; please use non-optional and non-empty FIELDS ENCLOSED BY");
 DEFINE_ERROR_EXT(OB_WARN_TOO_FEW_RECORDS, -5611, ER_WARN_TOO_FEW_RECORDS, "01000", "Row doesn't contain data for all columns", "Row %ld doesn't contain data for all columns");
@@ -1263,7 +1249,6 @@ DEFINE_ERROR(OB_ERR_MODIFY_OR_DROP_MULTI_COLUMN_CONSTRAINT, -5792, -1, "HY000", 
 DEFINE_ERROR(OB_ERR_DROP_PARENT_KEY_COLUMN, -5793, -1, "HY000", "cannot drop parent key column");
 DEFINE_ERROR(OB_AUTOINC_SERVICE_BUSY, -5794, -1, "HY000", "auto increment service busy");
 DEFINE_ERROR_EXT(OB_ERR_CONSTRAINT_CONSTRAINT_DISABLE_VALIDATE, -5795, -1, "HY000", "No insert/update/delete on table with constraint disabled and validated", "No insert/update/delete on table with constraint (%.*s.%.*s) disabled and validated");
-DEFINE_ERROR(OB_ERR_AUTONOMOUS_TRANSACTION_ROLLBACK, -5796, -1, "HY000", "active autonomous transaction detected and rolled back");
 DEFINE_ERROR(OB_ORDERBY_CLAUSE_NOT_ALLOWED, -5797, -1, "HY000", "ORDER BY not allowed here");
 DEFINE_ERROR(OB_DISTINCT_NOT_ALLOWED, -5798, -1, "HY000", "DISTINCT not allowed here");
 DEFINE_ERROR(OB_ERR_ASSIGN_USER_VARIABLE_NOT_ALLOWED, -5799, -1, "HY000", "assign user variable with := only allowed in select filed list and as root expression");
@@ -1314,7 +1299,6 @@ DEFINE_ERROR(OB_ERR_SUBSCRIPT_OUTSIDE_LIMIT, -5843, -1, "HY000", "Subscript outs
 DEFINE_ERROR(OB_ERR_INVALID_CURSOR, -5844, -1, "HY000", "invalid cursor");
 DEFINE_ERROR(OB_ERR_LOGIN_DENIED, -5845, -1, "HY000", "invalid username/password; logon denied");
 DEFINE_ERROR(OB_ERR_NOT_LOGGED_ON, -5846, -1, "HY000", "not logged on");
-DEFINE_ERROR(OB_ERR_SELF_IS_NULL, -5847, -1, "HY000", "method dispatch on NULL SELF argument is disallowed");
 DEFINE_ERROR(OB_ERR_TIMEOUT_ON_RESOURCE, -5848, -1, "HY000", "timeout occurred while waiting for a resource");
 DEFINE_ERROR(OB_COLUMN_CANT_CHANGE_TO_NOT_NULL, -5849, -1, "HY000", "column to be modified to NOT NULL is already NOT NULL");
 DEFINE_ERROR(OB_COLUMN_CANT_CHANGE_TO_NULLALE, -5850, -1, "HY000", "column to be modified to NULL cannot be modified to NULL");
@@ -1374,7 +1358,6 @@ DEFINE_ERROR(OB_ERR_ONLY_PURE_FUNC_CANBE_VIRTUAL_COLUMN_EXPRESSION, -5906, 3102,
 DEFINE_ERROR(OB_ERR_UPDATE_OPERATION_ON_VIRTUAL_COLUMNS, -5907, -1, "HY000", "UPDATE operation disallowed on virtual columns");
 DEFINE_ERROR(OB_ERR_INVALID_COLUMN_EXPRESSION, -5908, -1, "HY000", "Invalid column expression was specified");
 DEFINE_ERROR(OB_ERR_REVOKE_BY_COLUMN, -5923, -1, "HY000", "UPDATE/REFERENCES may only be REVOKEd from the whole table, not by column");
-DEFINE_ERROR_EXT(OB_ERR_TYPE_BODY_NOT_EXIST, -5924, -1, "HY000", "not executed, type body does not exist", "not executed, type body '%.*s' does not exist");
 DEFINE_ERROR_EXT(OB_ERR_INVALID_ARGUMENT_FOR_WIDTH_BUCKET, -5925, -1, "HY000", "The argument of WIDTH_BUCKET function is NULL or invalid.", "The argument [%s] of WIDTH_BUCKET function is NULL or invalid.");
 DEFINE_ERROR(OB_ERR_CBY_NO_MEMORY, -5926, -1, "HY000", "Not enough memory for CONNECT BY operation");
 DEFINE_ERROR(OB_ERR_ILLEGAL_PARAM_FOR_CBY_PATH, -5927, -1, "HY000", "illegal parameter in SYS_CONNECT_BY_PATH function");
@@ -1451,9 +1434,6 @@ DEFINE_ERROR_EXT(OB_ERR_CHECK_CONSTRAINT_REFERS_UNKNOWN_COLUMN, -5994, ER_CHECK_
 
 DEFINE_ERROR_EXT(OB_ERR_USE_UDF_IN_PART, -5995, -1, "HY000", "Cannot use PL/SQL expressions in partitioning or subpartitioning columns", "Cannot use PL/SQL expressions in partitioning or subpartitioning columns");
 DEFINE_ERROR_EXT(OB_ERR_USE_UDF_NOT_DETERMIN, -5996, -1, "HY000", "The function is not deterministic", "The function is not deterministic");
-DEFINE_ERROR(OB_ERR_INTERVAL_CLAUSE_HAS_MORE_THAN_ONE_COLUMN, -5997, -1, "HY000", "Range partitioned table with INTERVAL clause has more than one column");
-DEFINE_ERROR(OB_ERR_INVALID_DATA_TYPE_INTERVAL_TABLE, -5998, -1, "HY000", "Invalid data type for partitioning column of an interval partitioned table");
-DEFINE_ERROR(OB_ERR_INTERVAL_EXPR_NOT_CORRECT_TYPE, -5999, -1, "HY000", "Interval expression is not a constant of the correct type");
 DEFINE_ERROR(OB_ERR_TABLE_IS_ALREADY_A_RANGE_PARTITIONED_TABLE, -6000, -1, "HY000", "Table is already a range partitioned table");
 
 // 余留位置，该区间已经用完
@@ -1524,11 +1504,6 @@ DEFINE_ERROR(OB_OBJ_LOCK_EXIST, -6266, -1, "HY000", "object lock exists.");
 DEFINE_ERROR(OB_TRY_LOCK_OBJ_CONFLICT, -6267, -1, "HY000", "Try lock object conflict");
 DEFINE_ERROR(OB_TX_NOLOGCB, -6268, -1, "HY000", "No log callbacks available");
 
-DEFINE_ERROR(OB_ERR_ADD_PARTITION_ON_INTERVAL, -6269, -1, "HY000", "ADD PARTITION is not permitted on Interval partitioned objects");
-DEFINE_ERROR(OB_ERR_MAXVALUE_PARTITION_WITH_INTERVAL, -6270, -1, "HY000", "MAXVALUE partition cannot be specified for Interval partitioned objects");
-DEFINE_ERROR(OB_ERR_INVALID_INTERVAL_HIGH_BOUNDS, -6271, -1, "HY000", "Cannot specify this interval with existing high bounds");
-DEFINE_ERROR(OB_NO_PARTITION_FOR_INTERVAL_PART, -6272, -1, "HY000", "Table has no partition for value in interval partition table", );
-DEFINE_ERROR(OB_ERR_INTERVAL_CANNOT_BE_ZERO, -6273, -1, "HY000", "Interval cannot be zero");
 DEFINE_ERROR(OB_ERR_PARTITIONING_KEY_MAPS_TO_A_PARTITION_OUTSIDE_MAXIMUM_PERMITTED_NUMBER_OF_PARTITIONS, -6274, -1, "HY000", "partitioning key maps to a partition outside maximum permitted number of partitions");
 
 DEFINE_ERROR(OB_OBJ_LOCK_NOT_COMPLETED, -6275, -1, "HY000", "object lock not completed, and can not unlock.");
@@ -1745,7 +1720,6 @@ DEFINE_ERROR(OB_ERR_INVALID_XPATH_EXPRESSION, -7404, ER_UNKNOWN_ERROR, "42000", 
 DEFINE_ERROR(OB_ERR_EXTRACTVALUE_MULTI_NODES, -7405, -1, "42000", "EXTRACTVALUE cannot extract values of multiple nodes");
 DEFINE_ERROR(OB_XPATH_EXPRESSION_UNSUPPORTED, -7409, ER_UNKNOWN_ERROR, "42000", "Only constant XPATH queries are supported");
 DEFINE_ERROR(OB_EXTRACTVALUE_NOT_LEAF_NODE, -7410, -1, "42000", "EXTRACTVALUE can only retrieve value of leaf node");
-DEFINE_ERROR(OB_ERR_NO_ORDER_MAP_SQL, -7412, -1, "42000", "cannot ORDER objects without MAP or ORDER method");
 DEFINE_ERROR(OB_ERR_UPDATE_XML_WITH_INVALID_NODE, -7418, -1, "42000", "XML nodes must be updated with valid nodes and of the same type'");
 DEFINE_ERROR(OB_LOB_VALUE_NOT_EXIST, -7419, -1, "42000", "LOB value does not exist");
 DEFINE_ERROR(OB_ERR_JSON_FUN_UNSUPPORTED_TYPE, -7420, -1, "HY000", "Input to JSON generation function has unsupported data type");
@@ -1759,7 +1733,6 @@ DEFINE_ERROR(OB_ERR_XQUERY_UNSUPPORTED, -7428, -1, "42000", "unsupported XQuery 
 DEFINE_ERROR(OB_ERR_INVALID_XML_CHILD_NAME, -7429, -1, "42000", "The document being inserted does not conform to specified child name");
 DEFINE_ERROR(OB_ERR_XML_NOT_SUPPORT_OPERATION, -7430, -1, "42000", "XML node '' (type=%s) does not support this operation");
 DEFINE_ERROR_EXT_DEP(OB_ERR_DUP_DEF_NAMESPACE, -7431, -1, "42000", "XQST0066 - duplicate default namespace definition - string", "XQST0066 - duplicate default namespace definition - %s.");
-DEFINE_ERROR(OB_ERR_COMPARE_VARRAY_LOB_ATTR, -7432, -1, "42000", "cannot compare VARRAY or LOB attributes of an object type");
 DEFINE_ERROR(OB_ERR_XML_PARENT_ALREADY_CONTAINS_CHILD, -7433, -1, "42000", "Parent %.*s already contains child entry %s%.*s");
 DEFINE_ERROR(OB_ERR_CONVERSION_OF_UNIT, -7434, -1, "42000", "conversion error between the specified unit and standard unit");
 DEFINE_ERROR(OB_ERR_PARAM_OUT_OF_RANGE, -7435, -1, "42000", "value is out of range");
@@ -1903,33 +1876,11 @@ DEFINE_ERROR_EXT(OB_ERR_LABEL_ILLEGAL, -9512, -1, "HY000", "EXIT/CONTINUE label 
 DEFINE_ERROR(OB_ERR_CURSOR_LEFT_ASSIGN, -9513, -1, "HY000", "expression '%.*s' is inappropriate as the left hand side of an assignment statement");
 DEFINE_ERROR(OB_ERR_INIT_NOTNULL_ILLEGAL, -9514, -1, "HY000", "a variable declared NOT NULL must have an initialization assignment");
 DEFINE_ERROR_EXT(OB_ERR_INIT_CONST_ILLEGAL, -9515, -1, "HY000", "declaration of a constant 'string' must contain an initialization assignment", "declaration of a constant '%.*s' must contain an initialization assignment");
-DEFINE_ERROR(OB_ERR_CURSOR_VAR_IN_PKG, -9516, -1, "HY000", "Cursor Variables cannot be declared as part of a package");
-DEFINE_ERROR(OB_ERR_LIMIT_CLAUSE, -9518, -1, "HY000", "value in LIMIT clause: \'%.*s\' use is invalid");
 DEFINE_ERROR(OB_ERR_EXPRESSION_WRONG_TYPE, -9519, -1, "HY000", "expression is of wrong type");
-DEFINE_ERROR_EXT(OB_ERR_SPEC_NOT_EXIST, -9520, -1, "HY000", "cannot compile type body without its specification", "cannot compile body of '%.*s' without its specification");
-DEFINE_ERROR_EXT(OB_ERR_TYPE_SPEC_NO_ROUTINE, -9521, -1, "HY000", "subprogram is declared in an object type body and must be defined in the object type specification", "subprogram '%.*s' is declared in an object type body and must be defined in the object type specification");
-DEFINE_ERROR_EXT(OB_ERR_TYPE_BODY_NO_ROUTINE, -9522, -1, "HY000", "subprogram or cursor is declared in an object type specification and must be defined in the object type body", "subprogram or cursor '%.*s' is declared in an object type specification and must be defined in the object type body");
-DEFINE_ERROR(OB_ERR_BOTH_ORDER_MAP, -9523, -1, "HY000", "An object type may have only 1 MAP or 1 ORDER method");
-DEFINE_ERROR(OB_ERR_NO_ORDER_MAP, -9524, -1, "HY000", "A MAP or ORDER function is required for comparing objects in PL/SQL");
-DEFINE_ERROR(OB_ERR_ORDER_MAP_NEED_BE_FUNC, -9525, -1, "HY000", "Only a function may be a MAP, ORDER or CONSTRUCTOR method");
 DEFINE_ERROR(OB_ERR_IDENTIFIER_TOO_LONG, -9526, ER_TOO_LONG_IDENT, "42000", "Identifier name \'%.*s\' is too long");
-DEFINE_ERROR(OB_ERR_INVOKE_STATIC_BY_INSTANCE, -9527, -1, "HY000", "a static method cannot be invoked on an instance value");
-DEFINE_ERROR(OB_ERR_CONS_NAME_ILLEGAL, -9528, -1, "HY000", "constructor method name must match type name");
 DEFINE_ERROR_EXT(OB_ERR_ATTR_FUNC_CONFLICT, -9529, -1, "HY000", "previous use of conflicts with this user", "previous use of '%.*s' conflicts with this use");
-DEFINE_ERROR(OB_ERR_SELF_PARAM_NOT_OUT, -9530, -1, "HY000", "the SELF parameter can be declared only as IN or as IN OUT");
-DEFINE_ERROR(OB_ERR_MAP_RET_SCALAR_TYPE, -9531, -1, "HY000", "MAP methods must return a scalar type");
-DEFINE_ERROR(OB_ERR_MAP_MORE_THAN_SELF_PARAM, -9532, -1, "HY000", "MAP methods must be declared without any parameters other than (optional) SELF");
-DEFINE_ERROR(OB_ERR_ORDER_RET_INT_TYPE, -9533, -1, "HY000", "ORDER methods must return an INTEGER");
-DEFINE_ERROR(OB_ERR_ORDER_PARAM_TYPE, -9534, -1, "HY000", "The parameter type in an ORDER method must be the containing object type");
-DEFINE_ERROR(OB_ERR_OBJ_CMP_SQL, -9535, -1, "HY000", "Within SQL statements, only equality comparisons of objects are allowed without a map or order function");
-DEFINE_ERROR(OB_ERR_MAP_ORDER_PRAGMA, -9536, -1, "HY000", "MAP or ORDER functions require a PRAGMA RESTRICT_REFERENCES specifying :WNDS,WNPS,RNPS,RNDS");
-DEFINE_ERROR(OB_ERR_ORDER_PARAM_MUST_IN_MODE, -9537, -1, "HY000", "The parameters to an ORDER function must have IN mode");
-DEFINE_ERROR(OB_ERR_ORDER_PARAM_NOT_TWO, -9538, -1, "HY000", "ORDER methods must be declared with 1 (one) parameter in addition to (optional) SELF");
-DEFINE_ERROR_EXT(OB_ERR_TYPE_REF_REFCURSIVE, -9539, -1, "HY000", "type is malformed because it is a non-REF mutually recursive type", "type '%.*s' is malformed because it is a non-REF mutually recursive type");
 DEFINE_ERROR_EXT(OB_ERR_DIRECTIVE_ERROR, -9540, -1, "HY000", "$ERROR: string", "$ERROR: %.*s");
-DEFINE_ERROR(OB_ERR_CONS_HAS_RET_NODE, -9541, -1, "HY000", "RETURN statement in a CONSTRUCTOR cannot include an expression");
 DEFINE_ERROR_EXT(OB_ERR_CALL_WRONG_ARG, -9542, -1, "HY000", "wrong number or types of arguments in call to procedure", "wrong number or types of arguments in call to '%.*s'");
-DEFINE_ERROR_EXT(OB_ERR_FUNC_NAME_SAME_WITH_CONS, -9543, -1, "HY000", "name must be a type", "'%.*s' must be a type");
 DEFINE_ERROR_EXT(OB_ERR_FUNC_DUP, -9544, -1, "HY000", "too many declarations of function match this call", "too many declarations of '%.*s' match this call");
 DEFINE_ERROR(OB_ERR_WHEN_CLAUSE, -9545, -1, "HY000", "WHEN clause cannot be used with table level triggers");
 DEFINE_ERROR(OB_ERR_NEW_OLD_REFERENCES, -9546, -1, "HY000", "NEW or OLD references not allowed in table level triggers");
@@ -1940,11 +1891,7 @@ DEFINE_ERROR_EXT(OB_ERR_EXP_NOT_ASSIGNABLE, -9550, -1, "HY000", "expression cann
 DEFINE_ERROR(OB_ERR_CURSOR_CONTAIN_BOTH_REGULAR_AND_ARRAY, -9551, -1, "HY000", "Cursor contains both regular and array defines which is illegal");
 DEFINE_ERROR(OB_ERR_STATIC_BOOL_EXPR, -9552, -1, "HY000", "a static boolean expression must be used");
 DEFINE_ERROR(OB_ERR_BIND_TYPE_NOT_MATCH_COLUMN, -9568, -1, "HY000", "type of out argument must match type of column or bind variable");
-DEFINE_ERROR(OB_ERR_NESTED_TABLE_IN_TRI, -9569, -1, "HY000", "Nested table clause allowed only for INSTEAD OF triggers");
 DEFINE_ERROR(OB_ERR_COL_LIST_IN_TRI, -9570, -1, "HY000", "column list not valid for this trigger type");
-DEFINE_ERROR(OB_ERR_WHEN_CLAUSE_IN_TRI, -9571, -1, "HY000", "WHEN clause is not allowed in INSTEAD OF triggers");
-DEFINE_ERROR(OB_ERR_INSTEAD_TRI_ON_TABLE, -9572, -1, "HY000", "cannot create INSTEAD OF triggers on tables");
-DEFINE_ERROR(OB_ERR_RETURNING_CLAUSE, -9573, -1, "HY000", "unsupported feature with RETURNING clause");
 DEFINE_ERROR_DEP(OB_ERR_XSLT_PARSE, -9574, -1, "HY000", "document is not a stylesheet");
 DEFINE_ERROR_EXT(OB_ERR_NO_RETURN_IN_FUNCTION, -9575, ER_SP_NORETURN, "42000", "No Return found in FUNCTION '%.*s'", "No Return found in FUNCTION '%.*s'");
 DEFINE_ERROR_EXT(OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_FUNC_TRIGGER, -9576, ER_COMMIT_NOT_ALLOWED_IN_SF_OR_TRG, "HY000", "'%.*s' is not allowed in stored function or trigger.", "'%.*s' is not allowed in stored function or trigger.");
@@ -1978,13 +1925,8 @@ DEFINE_ERROR_EXT(OB_ERR_NON_INT_LITERAL, -9605, -1, "HY000", "non-integral numer
 DEFINE_ERROR(OB_ERR_IMPROPER_CONSTRAINT_FORM, -9606, -1, "HY000", "improper constraint form used");
 DEFINE_ERROR_EXT(OB_ERR_TYPE_CANT_CONSTRAINED, -9607, -1, "HY000", "type name 'string' cannot be constrained", "type name '%.*s' cannot be constrained");
 DEFINE_ERROR(OB_ERR_ANY_CS_NOT_ALLOWED, -9608, -1, "HY000", "character set ANY_CS is only allowed on a subprogram parameter");
-DEFINE_ERROR_EXT(OB_ERR_SCHEMA_TYPE_ILLEGAL, -9609, -1, "HY000", "schema-level type has illegal reference to string", "schema-level type has illegal reference to %.*s");
 DEFINE_ERROR(OB_ERR_UNSUPPORTED_TABLE_INDEX_TYPE, -9610, -1, "HY000", "Implementation restriction: unsupported table index type");
 DEFINE_ERROR(OB_ERR_ARRAY_MUST_HAVE_POSITIVE_LIMIT, -9611, -1, "HY000", "A VARRAY must have a positive limit");
-DEFINE_ERROR_EXT(OB_ERR_FORALL_ITER_NOT_ALLOWED, -9612, -1, "HY000", "FORALL iteration variable string is not allowed in this context", "FORALL iteration variable %.*s is not allowed in this context");
-DEFINE_ERROR(OB_ERR_BULK_IN_BIND, -9613, -1, "HY000", "references to fields of BULK In-BIND table of records or objects must have the form A(I).F");
-DEFINE_ERROR(OB_ERR_FORALL_BULK_TOGETHER, -9614, -1, "HY000", "implementation restriction: cannot use FORALL and BULK COLLECT INTO together in SELECT statements");
-DEFINE_ERROR(OB_ERR_FORALL_DML_WITHOUT_BULK, -9615, -1, "HY000", "DML statement without BULK In-BIND cannot be used inside FORALL");
 DEFINE_ERROR(OB_ERR_SHOULD_COLLECTION_TYPE, -9616, -1, "HY000", "Type of expression should be a collection type");
 DEFINE_ERROR(OB_ERR_ASSOC_ELEM_TYPE, -9617, -1, "HY000", "Element type of associative array should be pls_integer or binary_integer");
 DEFINE_ERROR(OB_ERR_INTO_CLAUSE_EXPECTED, -9618, -1, "HY000", "an INTO clause is expected in this SELECT statement");
@@ -2003,22 +1945,14 @@ DEFINE_ERROR(OB_ERR_TABLE_SINGLE_INDEX, -9631, -1, "HY000", "PL/SQL TABLEs must 
 DEFINE_ERROR_EXT(OB_ERR_PRAGMA_DECL, -9632, -1, "HY000", "pragma string must be declared in package specification and body", "pragma %.*s must be declared in package specification and body");
 DEFINE_ERROR(OB_ERR_INCORRECT_ARGUMENTS, -9633, -1, "HY000", "incorrect number of arguments for aggregate function");
 DEFINE_ERROR(OB_ERR_RETURN_VALUE_REQUIRED, -9634, -1, "HY000", "RETURN <value> statement required for this return from function");
-DEFINE_ERROR(OB_ERR_LIMIT_ILLEGAL, -9636, -1, "HY000", "A LIMIT clause must be used within a BULK FETCH");
 DEFINE_ERROR_EXT(OB_ERR_INTO_EXPR_ILLEGAL, -9637, -1, "HY000", "expression 'string' in the INTO list is of wrong type", "expression '%.*s' in the INTO list is of wrong type");
-DEFINE_ERROR(OB_ERR_BULK_SQL_RESTRICTION, -9638, -1, "HY000", "Implementation restriction: bulk SQL with associative arrays with VARCHAR2 key is not supported.");
-DEFINE_ERROR(OB_ERR_MIX_SINGLE_MULTI, -9639, -1, "HY000", "cannot mix between single row and multi-row (BULK) in INTO list");
 DEFINE_ERROR_EXT(OB_ERR_TRIGGER_NO_SUCH_ROW, -9640, ER_TRG_NO_SUCH_ROW_IN_TRG, "HY000", "There is no NEW/OLD row in on this type trigger", "There is no %s row in on %s trigger");
 DEFINE_ERROR(OB_ERR_SET_USAGE, -9641, ER_WRONG_USAGE, "HY000", "Incorrect usage of UNION and INTO");
 DEFINE_ERROR_EXT(OB_ERR_MODIFIER_CONFLICTS, -9642, -1, "HY000", "modifier 'string' conflicts with prior 'string' specification", "modifier '%s' conflicts with prior '%s' specification");
 DEFINE_ERROR_EXT(OB_ERR_DUPLICATE_MODIFIER, -9643, -1, "HY000", "duplicate modifier specification 'string'", "duplicate modifier specification '%s'");
 DEFINE_ERROR(OB_ERR_STR_LITERAL_TOO_LONG, -9644, -1, "HY000", "string literal too long");
-DEFINE_ERROR(OB_ERR_SELF_PARAM_NOT_INOUT, -9645, -1, "HY000", "SELF parameter of constructor method must be IN OUT");
-DEFINE_ERROR(OB_ERR_CONSTRUCT_MUST_RETURN_SELF, -9646, -1, "HY000", "constructor method must return SELF AS RESULT");
 DEFINE_ERROR(OB_ERR_FIRST_PARAM_MUST_NOT_NULL, -9647, -1, "HY000", "the first operand in the NULLIF expression must not be NULL");
 DEFINE_ERROR(OB_ERR_COALESCE_AT_LEAST_ONE_NOT_NULL, -9648, -1, "HY000", "at least one operand in the COALESCE expression must not be NULL");
-DEFINE_ERROR(OB_ERR_STATIC_METHOD_HAS_SELF, -9649, -1, "HY000", "a static method cannot declare a parameter named SELF");
-DEFINE_ERROR_EXT(OB_ERR_NO_ATTR_FOUND, -9650, -1, "HY000", "no attributes found in object type 'string'", "no attributes found in object type '%.*s'");
-DEFINE_ERROR_EXT(OB_ERR_ILLEGAL_TYPE_FOR_OBJECT, -9651, -1, "HY000", "Illegal type used for object type attribute: 'string'.", "Illegal type used for object type attribute: '%.*s'.");
 DEFINE_ERROR_EXT(OB_ERR_UNSUPPORTED_TYPE, -9652, -1, "HY000", "Unsupported type in a VARRAY or TABLE type: 'string'.", "Unsupported type in a VARRAY or TABLE type: '%.*s'.");
 DEFINE_ERROR(OB_ERR_POSITIONAL_FOLLOW_NAME, -9653, -1, "HY000", "a positional parameter association may not follow a named association");
 DEFINE_ERROR_EXT(OB_ERR_NEED_A_LABEL, -9654, -1, "HY000", "EXIT/CONTINUE statement may have a label here; 'string' is not a label", "EXIT/CONTINUE statement may have a label here; '%.*s' is not a label");
@@ -2060,8 +1994,6 @@ DEFINE_ERROR_EXT(OB_ERR_DUP_SIGNAL_SET, -9694, ER_DUP_SIGNAL_SET, "42000", "Dupl
 DEFINE_ERROR_EXT(OB_ERR_SIGNAL_NOT_FOUND, -9695, ER_SIGNAL_NOT_FOUND, "02000", "Unhandled user-defined not found condition", "Unhandled user-defined not found condition");
 DEFINE_ERROR(OB_ERR_INVALID_CONDITION_NUMBER, -9696, ER_DA_INVALID_CONDITION_NUMBER, "35000", "Invalid condition number");
 DEFINE_ERROR(OB_ERR_RECURSIVE_SQL_LEVELS_EXCEEDED, -9697, -1, "HY000", "maximum number of recursive SQL levels exceeded");
-DEFINE_ERROR(OB_ERR_INVALID_SECTION, -9698, -1, "HY000", "invalid section for this type of Compound Trigger");
-DEFINE_ERROR(OB_ERR_DUPLICATE_TRIGGER_SECTION, -9699, -1, "HY000", "duplicate Compound Triggers section");
 DEFINE_ERROR_EXT(OB_ERR_PARSE_PLSQL, -9700, -1, "HY000", "unexpected symbol", "Encountered the symbol %s when expecting one of the following: %s");
 DEFINE_ERROR(OB_ERR_SIGNAL_WARN, -9701, ER_SIGNAL_WARN, "01000", "Unhandled user-defined warning condition");
 
@@ -2075,11 +2007,8 @@ DEFINE_ERROR(OB_ERR_CANNOT_SPECIFY_PRECEDES_IN_TRG, -9708, -1, "HY000", "cannot 
 DEFINE_ERROR(OB_ERR_CANNOT_PERFORM_DML_INSIDE_QUERY, -9709, -1, "HY000", "cannot perform a DML operation inside a query");
 DEFINE_ERROR(OB_ERR_CANNOT_PERFORM_DDL_COMMIT_OR_ROLLBACK_INSIDE_QUERY_OR_DML_TIPS, -9710, -1, "HY000", "cannot perform a DDL commit or rollback inside a query or DML tips");
 DEFINE_ERROR(OB_ERR_STATEMENT_STRING_IN_EXECUTE_IMMEDIATE_IS_NULL_OR_ZERO_LENGTH, -9711, -1, "HY000", "statement string in EXECUTE IMMEDIATE is NULL or 0 length");
-DEFINE_ERROR(OB_ERR_MISSING_INTO_KEYWORD, -9712, -1, "HY000", "missing INTO keyword");
-DEFINE_ERROR(OB_ERR_CLAUSE_RETURN_ILLEGAL, -9713, -1, "HY000", "RETURNING clause must be used with INSERT, UPDATE, or DELETE statements");
 DEFINE_ERROR(OB_ERR_NAME_HAS_TOO_MANY_PARTS, -9714, -1, "HY000", "name has too many parts");
 DEFINE_ERROR(OB_ERR_LOB_SPAN_TRANSACTION, -9715, -1, "HY000", "LOB locators cannot span transactions");
-DEFINE_ERROR(OB_ERR_INVALID_MULTISET, -9716, -1, "HY000", "MULTISET expression not allowed");
 DEFINE_ERROR(OB_ERR_INVALID_CAST_UDT, -9717, -1, "HY000", "invalid CAST to a type that is not a nested table or VARRAY");
 DEFINE_ERROR(OB_ERR_POLICY_EXIST, -9718, -1, "HY000", "policy already exists");
 DEFINE_ERROR(OB_ERR_POLICY_NOT_EXIST, -9719, -1, "HY000", "policy does not exist");
@@ -2114,7 +2043,6 @@ DEFINE_ERROR(OB_ERR_VIEW_SELECT_CONTAIN_QUESTIONMARK, -9748, 1351, "HY000", "Vie
 DEFINE_ERROR_EXT(OB_ERR_OBJECT_NOT_EXIST, -9749, -1, "HY000", "object does not exist", "object %.*s does not exist");
 DEFINE_ERROR(OB_ERR_TABLE_OUT_OF_RANGE, -9750, -1, "HY000", "PL/SQL: index for PL/SQL table out of range for host language array");
 DEFINE_ERROR_EXT(OB_ERR_WRONG_USAGE, -9751, ER_WRONG_USAGE, "HY000", "Incorrect usage", "Incorrect usage of %s", 600, "Incorrect usage", "Incorrect usage of %s");
-DEFINE_ERROR(OB_ERR_FORALL_ON_REMOTE_TABLE, -9752, -1, "HY000", "FORALL INSERT/UPDATE/DELETE not support on remote tables");
 DEFINE_ERROR(OB_ERR_CLIENT_LOCAL_FILES_DISABLED, -9762, ER_CLIENT_LOCAL_FILES_DISABLED, "42000", "Loading local data is disabled; this must be enabled on both the client and server sides");
 DEFINE_ERROR(OB_ERR_OUT_PARAM_NOT_BIND_VAR, -9763, -1, "HY000", "output parameter not a bind variable");
 DEFINE_ERROR_EXT(OB_ERR_TIME_EARLIER_THAN_SYSDATE, -9764, -1, "HY000", "the parameter must evaluate to a time in the future", "the parameter %s must evaluate to a time in the future");
@@ -2128,11 +2056,9 @@ DEFINE_ERROR_EXT(OB_ERR_CURSOR_ATTR_APPLY, -9784, -1, "HY000", "cursor attribute
 DEFINE_ERROR(OB_DTL_WAIT_EAGAIN, -9799, -1, "HY000", "Px wait for dtl message again");
 DEFINE_ERROR_EXT(OB_ERR_COMPILE_RESULT_NOT_ADD_CACHE, -9800, -1, "HY000", "Throw this warning means that the user has handled some MySQL exceptions which may cause performance problems.", "To be compatible with MySQL, if an exception occurs when compiling an OB PL object (such as the object does not exist or a parameter mismatch), the relevant statement will be converted to a statement that throws an exception, and compiled object will be evicted by any schema change which may cause performance problems. User should create or redefine the pl object of the problem indicated in the warning. Problem object name: '%.*s'");
 DEFINE_ERROR_EXT(OB_ELEMENT_AT_GIVEN_INDEX_NOT_EXIST, -9801, -1, "HY000", "collection element at the given index does not exist.", "element at index [%ld] does not exist");
-DEFINE_ERROR(OB_ERR_CANNOT_DEFINE_TRIGGER, -9802, -1, "HY000", "system triggers cannot be defined on the schema of SYS user");
-DEFINE_ERROR(OB_ERR_CANNOT_RENAME_TRIGGER, -9803, -1, "HY000", "renaming system triggers is not allowed");
-DEFINE_ERROR(OB_ERR_LOGON_TRIGGER, -9804, -1, "HY000", "client logon triggers cannot have BEFORE type");
-DEFINE_ERROR(OB_ERR_LOGOFF_TRIGGER, -9805, -1, "HY000", "client logoff triggers cannot have AFTER type");
-DEFINE_ERROR(OB_ERR_MALFORMED_WRAPPED_UNIT, -9806, -1, "HY000", "malformed or corrupted wrapped unit");
+DEFINE_ERROR(OB_ERR_MVIEW_INVALID_TABLE_TYPE, -9808, -1, "HY000", "Table type is not valid, the definition of materialized view can only reference user tables or other materialized views");
+DEFINE_ERROR(OB_ERR_MVIEW_BASE_TABLE_ALTERED, -9809, -1, "HY000", "Base tables are altered during the creation or complete refresh of materialized views, please try again when base tables have no ongoing DDL operations");
+DEFINE_ERROR(OB_ERR_MVIEW_MISSING_DEPENDENCE, -9810, -1, "HY000", "Materialized view %s.%s has invalid dependency info, please perform a complete refresh to recover.");
 DEFINE_ERROR(OB_ERR_INVALID_NESTED_CURSOR, -9811, -1, "HY000", "Cursor Variable in record, object, or collection is not supported by this release");
 // 余留位置
 ////////////////////////////////////////////////////////////////

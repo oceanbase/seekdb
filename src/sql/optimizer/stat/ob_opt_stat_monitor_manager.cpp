@@ -20,7 +20,6 @@
 #include "share/rc/ob_module_provider.h"
 #include "sql/ob_sql_init.h"
 #include "share/ob_sql_client_decorator.h"
-#include "lib/rc/ob_rc.h"
 #include "observer/ob_server.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"

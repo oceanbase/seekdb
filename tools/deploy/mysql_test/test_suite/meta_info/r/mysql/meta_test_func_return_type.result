@@ -1,4 +1,4 @@
-alter system flush plan cache global;
+alter system flush plan cache;
 select repeat('   ',10);
 Catalog	Database	Table	Table_alias	Column	Column_alias	Type	Length	Max length	Is_null	Flags	Decimals	Charsetnr
 def					repeat('   ',10)	253	2048	30	Y	0	0	45

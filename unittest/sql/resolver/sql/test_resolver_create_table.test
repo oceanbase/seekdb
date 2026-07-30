@@ -5,8 +5,6 @@ use createtable;
 #create table
 create table t1(c1 int primary key, c2 int) partition by hash(c1 + 1) partitions 3
 
-#create table locality
-create table wenduo(pk int primary key) locality = "f@zone1, f,l@region1";
 
 #index scope when partition_num > 1
 ##create table
@@ -216,14 +214,6 @@ CREATE TABLE h005 (c1 int primary key, c2 varchar(50))COMPRESSION 'abc'
 ##CONSISTENT_MODE ,指定表的默认一致性' static、frozen、weak、strong
 #CREATE TABLE t021 (c1 int primary key, c2 varchar(50))CONSISTENT_MODE = 'static'
 
-##REPLICA_NUM
-CREATE TABLE j001 (c1 int primary key, c2 varchar(50))REPLICA_NUM = 3
-CREATE TABLE j002 (c1 int primary key, c2 varchar(50))REPLICA_NUM 3
-
-##default internal table identity
-CREATE TABLE k001 (c1 int primary key, c2 varchar(50))
-CREATE TABLE k002 (c1 int primary key, c2 varchar(50))
-
 ##BLOCK_SIZE
 CREATE TABLE l001 (c1 int primary key, c2 varchar(50))BLOCK_SIZE = 16384
 CREATE TABLE l002 (c1 int primary key, c2 varchar(50))BLOCK_SIZE 16384
@@ -236,16 +226,6 @@ CREATE TABLE n002 (c1 int primary key, c2 varchar(50))progressive_merge_num 5
 CREATE TABLE o001 (c1 int primary key, c2 varchar(50))AUTO_INCREMENT = 1
 CREATE TABLE o002 (c1 int primary key, c2 varchar(50))AUTO_INCREMENT 1
 
-CREATE TABLE p001 (c1 int primary key, c2 varchar(50))
-CREATE TABLE p002 (c1 int primary key, c2 varchar(50))
-
-##ZONE_LIST
-#CREATE TABLE q001 (c1 int primary key, c2 varchar(50))ZONE_LIST = ('a','b','c')
-#CREATE TABLE q002 (c1 int primary key, c2 varchar(50))ZONE_LIST ('a','b','c')
-
-##PRIMARY_ZONE
-CREATE TABLE r001 (c1 int primary key, c2 varchar(50))PRIMARY_ZONE = 'a'
-CREATE TABLE r002 (c1 int primary key, c2 varchar(50))PRIMARY_ZONE 'a'
 
 #PARTITION
 CREATE TABLE r003 (c1 int not null primary key, c2 char(30)) PARTITION BY hash(c1) PARTITIONS 3;
@@ -411,10 +391,6 @@ create table r62(c1 int, primary key using hash (c1));
 create table t_bit_1(c1 bit);
 create table t_bit_2(c1 bit(1));
 create table t_bit_3(c1 bit(63));
-
-####################### test for synonym ###############################
-create synonym stbit for t_bit_1;
-drop synonym stbit;
 
 #constraint for primary key and unique key
 create table wang_01(c1 int, c2 varchar(30), primary key(c2));

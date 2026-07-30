@@ -117,10 +117,7 @@ int ObMysqlProtocolProcessor::do_decode(ObSMConnection& conn, ObICSMemPool& pool
 int ObMysqlProtocolProcessor::do_splice(ObSMConnection& conn, ObICSMemPool& pool, void*& pkt, bool& need_decode_more)
 {
   INIT_SUCC(ret);
-  __builtin_prefetch(&conn.pkt_rec_wrapper_.pkt_rec_[conn.pkt_rec_wrapper_.cur_pkt_pos_
-                                              % ObPacketRecordWrapper::REC_BUF_SIZE]);
-  if (OB_FAIL(process_mysql_packet(conn.mysql_pkt_context_, &conn.pkt_rec_wrapper_,
-                                                pool, pkt, need_decode_more))) {
+  if (OB_FAIL(process_mysql_packet(conn.mysql_pkt_context_, pool, pkt, need_decode_more))) {
     LOG_ERROR("fail to process_mysql_packet", K(ret));
   }
   return ret;
@@ -284,7 +281,7 @@ int ObMysqlProtocolProcessor::read_body(
       context.raw_pkt_.set_content(start + pos, static_cast<uint32_t>(context.payload_len_));
       const int64_t actual_data_len = handle_len;
       void *tmp_ipacket = reinterpret_cast<void *>(&context.raw_pkt_);
-      if (OB_FAIL(process_one_mysql_packet(context, NULL, pool, actual_data_len, 
+      if (OB_FAIL(process_one_mysql_packet(context, pool, actual_data_len,
                                                     tmp_ipacket, need_decode_more))) {
         LOG_ERROR("fail to process one mysql packet", K(context), K(ret));
       } else {
@@ -419,7 +416,6 @@ int ObMysqlProtocolProcessor::process_fragment_mysql_packet(
 
 int ObMysqlProtocolProcessor::process_one_mysql_packet(
     ObMysqlPktContext &context,
-    obmysql::ObPacketRecordWrapper *pkt_rec_wrapper,
     ObICSMemPool& pool,
     const int64_t actual_data_len,
     void *&ipacket,
@@ -482,9 +478,6 @@ int ObMysqlProtocolProcessor::process_one_mysql_packet(
         // no need set seq again
         need_decode_more = false;
         ipacket = raw_pkt;
-        if (OB_NOT_NULL(pkt_rec_wrapper) && pkt_rec_wrapper->enable_proto_dia()) {
-          pkt_rec_wrapper->record_recieve_mysql_packet(*raw_pkt);
-        }
         LOG_DEBUG("recevie one mysql packet complete", K(context), KPC(raw_pkt),
                   K(total_data_len), K(actual_data_len));
       }
@@ -506,7 +499,6 @@ int ObMysqlProtocolProcessor::process_one_mysql_packet(
 
 int ObMysqlProtocolProcessor::process_mysql_packet(
     ObMysqlPktContext &context,
-    obmysql::ObPacketRecordWrapper *pkt_rec_wrapper,
     ObICSMemPool& pool,
     void *&ipacket,
     bool &need_decode_more) {
@@ -519,12 +511,9 @@ int ObMysqlProtocolProcessor::process_mysql_packet(
   } else {
     int64_t data_len = raw_pkt->get_clen();
     const char *payload = raw_pkt->get_cdata();
-    if (OB_NOT_NULL(pkt_rec_wrapper) && pkt_rec_wrapper->enable_proto_dia()) {
-      pkt_rec_wrapper->record_recieve_mysql_pkt_fragment(raw_pkt->get_clen());
-    }
     if (FALSE_IT(context.payload_len_ = data_len)) {
       // impossible
-    } else if (OB_FAIL(process_one_mysql_packet(context, pkt_rec_wrapper,
+    } else if (OB_FAIL(process_one_mysql_packet(context,
                                   pool, data_len, ipacket, need_decode_more))) {
       LOG_ERROR("fail to process one mysql packet", K(context), K(need_decode_more), K(ret));
     } else {

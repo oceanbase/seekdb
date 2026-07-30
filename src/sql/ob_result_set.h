@@ -39,7 +39,6 @@
 #include "sql/engine/ob_exec_context.h"
 #include "sql/ob_sql_trans_control.h"
 #include "sql/plan_cache/ob_cache_object_factory.h"
-#include "observer/ob_inner_sql_transmit_struct.h"
 #include "observer/ob_req_time_service.h"
 #include "sql/resolver/tcl/ob_end_trans_stmt.h"
 
@@ -75,7 +74,6 @@ public:
         is_select_for_update_(false),
         has_hidden_rowid_(false),
         stmt_sql_(),
-        is_bulk_(false),
         is_skip_locked_(false) {}
     virtual ~ExternalRetrieveInfo() {}
 
@@ -96,7 +94,6 @@ public:
     bool is_select_for_update_;
     bool has_hidden_rowid_;
     ObString stmt_sql_;
-    bool is_bulk_;
     bool is_skip_locked_;
   };
 
@@ -147,7 +144,6 @@ public:
   /// get the field columns
   const common::ColumnsFieldIArray *get_field_columns() const;
   const common::ParamsFieldIArray *get_param_fields() const;
-  const common::ParamsFieldIArray *get_returning_param_fields() const;
 
   /**
    * Get the number of fields (columns)
@@ -159,8 +155,6 @@ public:
   void set_p_param_fileds(common::ParamsFieldIArray *p_param_columns) { p_param_columns_ = p_param_columns; }
 
   void set_p_column_fileds(common::ColumnsFieldIArray *p_columns_field ) { p_field_columns_ = p_columns_field; }
-  void set_p_returning_param_fileds(common::ParamsFieldIArray *p_returning_param_columns)
-  { p_returning_param_columns_ = p_returning_param_columns; }
   void set_exec_result(ObIExecuteResult *exec_result) { exec_result_ = exec_result; }
   ExternalRetrieveInfo &get_external_retrieve_info() { return external_retrieve_info_; }
   ObIArray<ObRawExpr*> &get_external_params();
@@ -171,7 +165,6 @@ public:
   ObString &get_stmt_sql();
   bool get_is_select_for_update();
   inline bool has_hidden_rowid();
-  inline bool is_bulk();
   inline bool is_skip_locked();
   /// whether the result is with rows (true for SELECT statement)
   bool is_with_rows() const;
@@ -218,8 +211,6 @@ public:
   int reserve_param_columns(int64_t size) { return param_columns_.reserve(size); };
   int add_field_column(const common::ObField &field);
   int add_param_column(const common::ObField &field);
-  int reserve_returning_param_column(int64_t size) { return returning_param_columns_.reserve(size); };
-  int add_returning_param_column(const common::ObField &param);
 
   int from_plan(const ObPhysicalPlan &phy_plan, const common::ObIArray<ObPCParam *> &raw_params);
   int to_plan(const PlanCacheMode mode, ObPhysicalPlan *phy_plan);
@@ -282,8 +273,6 @@ public:
   int get_read_consistency(ObConsistencyLevel &consistency);
   void set_has_global_variable(bool has_global_variable) { has_global_variable_ = has_global_variable;}
   bool has_global_variable() const { return has_global_variable_; }
-  void set_returning(bool is_returning) { is_returning_ = is_returning; }
-  bool is_returning() const { return is_returning_; }
   void set_user_sql(bool is_user_sql) { is_user_sql_ = is_user_sql; }
   bool is_user_sql() const { return is_user_sql_; }
   // Fill parameter information into the field name with ?
@@ -406,8 +395,6 @@ private:
 
   const common::ColumnsFieldIArray *p_field_columns_;
   const common::ParamsFieldIArray *p_param_columns_;
-  common::ParamsFieldArray returning_param_columns_;
-  const common::ParamsFieldIArray *p_returning_param_columns_;
 
   stmt::StmtType stmt_type_;
   // for a prepared SELECT, stmt_type_ is T_PREPARE
@@ -438,7 +425,6 @@ private:
   PsMode ps_protocol_;
   // Executor
   ObExecutor executor_;
-  bool is_returning_;
   bool is_com_filed_list_; //used to mark COM_FIELD_LIST
   bool will_retry_; // the query will retry, to figure out the final close
   common::ObString wild_str_;//uesd to save filed wildcard in COM_FIELD_LIST;
@@ -493,8 +479,6 @@ inline ObResultSet::ObResultSet(ObSQLSessionInfo &session, common::ObIAllocator 
       param_columns_(allocator),
       p_field_columns_(&field_columns_),
       p_param_columns_(&param_columns_),
-      returning_param_columns_(allocator),
-      p_returning_param_columns_(&returning_param_columns_),
       stmt_type_(stmt::T_NONE),
       inner_stmt_type_(stmt::T_NONE),
       literal_stmt_type_(stmt::T_NONE),
@@ -514,7 +498,6 @@ inline ObResultSet::ObResultSet(ObSQLSessionInfo &session, common::ObIAllocator 
       is_calc_found_rows_(false),
       ps_protocol_(NO_PS),
       executor_(),
-      is_returning_(false),
       is_com_filed_list_(false),
       will_retry_(false),
       wild_str_(),
@@ -572,7 +555,7 @@ inline void ObResultSet::set_errcode(int code)
   errcode_ = code;
   //Save the current execution state to determine whether to refresh location
   //and perform other necessary cleanup operations when the statement exits.
-  DAS_CTX(get_exec_context()).get_location_router().save_cur_exec_status(code);
+  DAS_CTX(get_exec_context()).save_cur_exec_status(code);
 }
 
 inline int ObResultSet::add_field_column(const common::ObField &field)
@@ -593,16 +576,6 @@ inline const common::ColumnsFieldIArray *ObResultSet::get_field_columns() const
 inline const common::ParamsFieldIArray *ObResultSet::get_param_fields() const
 {
   return p_param_columns_;
-}
-
-inline int ObResultSet::add_returning_param_column(const common::ObField &param)
-{
-  return returning_param_columns_.push_back(param);
-}
-
-inline const common::ParamsFieldIArray *ObResultSet::get_returning_param_fields() const
-{
-  return p_returning_param_columns_;
 }
 
 inline ObIArray<ObRawExpr*> &ObResultSet::get_external_params()
@@ -643,11 +616,6 @@ inline bool ObResultSet::get_is_select_for_update()
 inline bool ObResultSet::has_hidden_rowid()
 {
   return external_retrieve_info_.has_hidden_rowid_;
-}
-
-inline bool ObResultSet::is_bulk()
-{
-  return external_retrieve_info_.is_bulk_;
 }
 
 inline bool ObResultSet::is_skip_locked()
@@ -738,10 +706,8 @@ inline void ObResultSet::fields_clear()
   message_[0] = '\0';
   field_columns_.reset();
   param_columns_.reset();
-  returning_param_columns_.reset();
   p_field_columns_ = &field_columns_;
   p_param_columns_ = &param_columns_;
-  p_returning_param_columns_ = &returning_param_columns_;
 }
 
 inline int ObResultSet::get_row_desc(const common::ObRowDesc *&row_desc) const

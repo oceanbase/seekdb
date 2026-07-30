@@ -63,13 +63,13 @@ class ObLogValues : public ObLogicalOperator
       return ret;
     }
     int64_t get_col_count() const { return row_store_.get_col_count(); }
-    virtual int compute_op_parallel_and_server_info() override
+    virtual int compute_op_parallel_info() override
     {
       int ret = common::OB_SUCCESS;
       if (get_num_of_child() == 0) {
-        ret = set_parallel_and_server_info_for_match_all();
+        ret = set_parallel_info_for_match_all();
       } else {
-        ret = ObLogicalOperator::compute_op_parallel_and_server_info();
+        ret = ObLogicalOperator::compute_op_parallel_info();
       }
       return ret;
     }

@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_lock_wait_mgr.h"
 #include "share/rc/ob_module_provider.h"
 
@@ -351,8 +350,6 @@ void ObLockWaitMgr::wakeup(uint64_t hash)
     node = fetch_waiter(hash);
 
     if (NULL != node) {
-      EVENT_INC(MEMSTORE_WRITE_LOCK_WAKENUP_COUNT);
-      EVENT_ADD(MEMSTORE_WAIT_WRITE_LOCK_TIME, ObTimeUtility::current_time() - node->lock_ts_);
       node->on_retry_lock(hash);
       (void)repost(node);
     }
@@ -446,7 +443,6 @@ ObLink* ObLockWaitMgr::check_timeout()
         TRANS_LOG_RET(WARN, OB_TIMEOUT, "LOCK_MGR: req wait lock timeout", K(curr_lock_seq), K(last_lock_seq), K(*iter));
         need_check_session = true;
         node2del = iter;
-        EVENT_INC(MEMSTORE_WRITE_LOCK_WAIT_TIMEOUT_COUNT);
         // it needs to be placed before the judgment of session_id to prevent the
         // abnormal case which session_id equals 0 from causing the problem of missing wakeup
       } else if (iter->is_standalone_task() && iter->get_run_ts() == 0) {
@@ -463,7 +459,7 @@ ObLink* ObLockWaitMgr::check_timeout()
         iter->on_retry_lock(hash);
         TRANS_LOG(INFO, "current task should be waken up cause reaching run ts", K(*iter));
       } else if (0 == iter->sessid_) {
-        // do nothing, may be rpc plan, sessionid is not setted
+        // Sessionless tasks do not participate in session deadlock checks.
       } else if (NULL != deadlocked_session
                  && is_deadlocked_session_(deadlocked_session,
                                            iter->sessid_)) {
@@ -524,8 +520,6 @@ void ObLockWaitMgr::retire_node(ObLink*& tail, Node* node)
 {
   int err = 0;
   Node* tmp_node = NULL;
-  EVENT_INC(MEMSTORE_WRITE_LOCK_WAKENUP_COUNT);
-  EVENT_ADD(MEMSTORE_WAIT_WRITE_LOCK_TIME, ObTimeUtility::current_time() - node->lock_ts_);
   while (-EAGAIN == (err = hash_.del(node, tmp_node)))
     ;
   if (0 == err) {
@@ -699,7 +693,6 @@ int ObLockWaitMgr::transform_row_lock_to_tx_lock(const ObTabletID &tablet_id,
   int64_t lock_seq = get_seq(hash_tx_id);
   Node *node = NULL;
   while (NULL != (node = fetch_waiter(hash_row_key))) {
-    int tmp_ret = OB_SUCCESS;
     ObTransID self_tx_id(node->tx_id_);
     ObTransDeadlockDetectorAdapter::change_detector_waiting_obj_from_row_to_trans(self_tx_id, tx_id);
     node->change_hash(hash_tx_id, lock_seq);

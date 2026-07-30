@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/mysql/obmp_stmt_prepare.h"
 #include "observer/mysql/ob_mysql_result_set.h"
 #include "lib/trace/ob_trace.h"
@@ -152,13 +151,11 @@ int ObMPStmtPrepare::process()
     ObSQLSessionInfo::LockGuard lock_guard(session.get_query_lock());
     SQL_INFO_GUARD(ctx_.cur_sql_, ObString(ctx_.sql_id_));
     session.set_current_trace_id(ObCurTraceId::get_trace_id());
-    session.init_use_rich_format();
     session.get_raw_audit_record().request_memory_used_ = 0;
     observer::ObProcessMallocCallback pmcb(0,
           session.get_raw_audit_record().request_memory_used_);
     lib::ObMallocCallbackGuard guard(pmcb);
-    int64_t runtime_schema_version = 0;
-    int64_t sys_version = 0;
+    int64_t database_schema_version = 0;
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     int64_t packet_len = pkt.get_clen();
     if (OB_UNLIKELY(!session.is_valid())) {
@@ -170,20 +167,16 @@ int ObMPStmtPrepare::process()
                K(session.get_server_sid()), K(ret));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
       LOG_WARN("fail to get query timeout", K_(sql), K(ret));
-    } else if (OB_FAIL(gctx_.schema_service_->get_runtime_received_broadcast_version(
-                runtime_schema_version))) {
-      LOG_WARN("fail to get runtime schema broadcast version", K(ret));
-    } else if (OB_FAIL(gctx_.schema_service_->get_runtime_received_broadcast_version(
-                sys_version))) {
-      LOG_WARN("fail to get system schema broadcast version", K(ret));
+    } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(
+                database_schema_version))) {
+      LOG_WARN("fail to get published database schema version", K(ret));
     } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
       need_disconnect = false;
       LOG_WARN("packet too large than allowd for the session", K_(sql), K(ret));
     } else {
       THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
-      retry_ctrl_.set_current_global_schema_version(runtime_schema_version);
-      retry_ctrl_.set_sys_global_schema_version(sys_version);
+      retry_ctrl_.set_current_global_schema_version(database_schema_version);
       session.set_pl_can_retry(true);
 
       bool has_more = false;
@@ -236,8 +229,7 @@ int ObMPStmtPrepare::process_prepare_stmt(const ObMultiStmtItem &multi_stmt_item
 {
   int ret = OB_SUCCESS;
   bool need_response_error = true;
-  int64_t runtime_schema_version = 0;
-  int64_t sys_version = 0;
+  int64_t database_schema_version = 0;
   setup_wb(session);
 
   if (OB_FAIL(init_process_var(ctx_, multi_stmt_item, session))) {
@@ -263,15 +255,11 @@ int ObMPStmtPrepare::process_prepare_stmt(const ObMultiStmtItem &multi_stmt_item
                     schema_guard))) {
           LOG_WARN("get schema guard failed", K(ret));
         } else if (OB_FAIL(schema_guard.get_schema_version(
-                    runtime_schema_version))) {
+                    database_schema_version))) {
           LOG_WARN("fail get schema version", K(ret));
-        } else if (OB_FAIL(schema_guard.get_schema_version(
-                    sys_version))) {
-          LOG_WARN("fail get sys schema version", K(ret));
         } else {
           ctx_.schema_guard_ = &schema_guard;
-          retry_ctrl_.set_current_local_schema_version(runtime_schema_version);
-          retry_ctrl_.set_sys_local_schema_version(sys_version);
+          retry_ctrl_.set_current_local_schema_version(database_schema_version);
         }
         if (OB_SUCC(ret)) {
           ret = do_process(session,
@@ -291,7 +279,7 @@ int ObMPStmtPrepare::process_prepare_stmt(const ObMultiStmtItem &multi_stmt_item
   //For the handling of tracelog, it does not affect the normal logic, and the error code does not need to be assigned to ret
   int tmp_ret = OB_SUCCESS;
   //Clear WARNING BUFFER
-  tmp_ret = do_after_process(session, async_resp_used);
+  tmp_ret = do_after_process(session, async_resp_used, ret);
   // the need_response_error variable ensures that it only occurs in
   // do { do_process } while(retry) will only occur if an error happens before
   // Walk to the send_error_packet logic
@@ -367,7 +355,6 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
         LOG_ERROR("task executor ctx can not be NULL", K(task_ctx), K(ret));
       } else {
         task_ctx->set_query_begin_schema_version(retry_ctrl_.get_current_global_schema_version());
-        task_ctx->set_query_sys_begin_schema_version(retry_ctrl_.get_sys_global_schema_version());
         ctx_.retry_times_ = retry_ctrl_.get_retry_times();
         if (OB_ISNULL(ctx_.schema_guard_)) {
           ret = OB_INVALID_ARGUMENT;
@@ -432,8 +419,6 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
       audit_record.update_event_stage_state();
       if (!THIS_THWORKER.need_retry()) {
         const int64_t time_cost = exec_end_timestamp_ - get_receive_timestamp();
-        EVENT_INC(SQL_PS_PREPARE_COUNT);
-        EVENT_ADD(SQL_PS_PREPARE_TIME, time_cost);
       }
     }
     if (enable_sqlstat) {

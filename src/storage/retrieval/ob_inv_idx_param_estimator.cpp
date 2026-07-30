@@ -241,12 +241,7 @@ int ObBM25ParamEstimator::do_estimation(sql::ObEvalCtx &eval_ctx)
           total_doc_cnt_ = 0;
         }
       } else {
-        if (est_ctx_.total_doc_cnt_expr_->enable_rich_format()
-            && is_valid_format(est_ctx_.total_doc_cnt_expr_->get_format(eval_ctx))) {
-          total_doc_cnt_ = est_ctx_.total_doc_cnt_expr_->get_vector(eval_ctx)->get_int(0);
-        } else {
-          total_doc_cnt_ = est_ctx_.total_doc_cnt_expr_->locate_expr_datum(eval_ctx, 0).get_int();
-        }
+        total_doc_cnt_ = est_ctx_.total_doc_cnt_expr_->locate_expr_datum(eval_ctx, 0).get_int();
       }
     } else if (OB_ISNULL(est_ctx_.total_doc_cnt_expr_)) {
       ret = OB_ERR_UNEXPECTED;

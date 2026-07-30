@@ -97,7 +97,6 @@ int ObTaskController::init()
     LOG_PCTG(ObTaskType::GENERIC, 100.0);  // default limiter
     LOG_PCTG(ObTaskType::USER_REQUEST, 100.0);  // default limiter
     LOG_PCTG(ObTaskType::DATA_MAINTAIN, 100.0);  // default limiter
-    LOG_PCTG(ObTaskType::ROOT_SERVICE, 100.0);  // default limiter
     LOG_PCTG(ObTaskType::SCHEMA, 100.0);  // default limiter
 
 #undef LOG_PCTG

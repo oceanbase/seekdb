@@ -26,12 +26,10 @@
 #include "sql/engine/expr/ob_expr_pl_integer_checker.h"
 #include "sql/engine/expr/ob_expr_udf.h"
 #include "sql/engine/expr/ob_expr_object_construct.h"
-#include "sql/engine/expr/ob_expr_coll_pred.h"
 #include "sql/engine/expr/ob_expr_output_pack.h"
 #include "sql/engine/expr/ob_expr_plsql_variable.h"
 #include "sql/engine/expr/ob_pl_expr_subquery.h"
 #include "sql/engine/expr/ob_expr_cast.h"
-#include "sql/engine/expr/ob_expr_sql_udt_construct.h"
 #include "sql/engine/expr/ob_expr_lrpad.h"
 #include "sql/engine/expr/ob_expr_json_schema_valid.h"
 #include "sql/engine/expr/ob_expr_json_utils.h"
@@ -91,8 +89,6 @@ void ObExprExtraInfoFactory::register_expr_extra_infos()
   REG_EXTRA_INFO(T_FUN_PL_INTEGER_CHECKER, ObExprPLIntegerChecker::ExtraInfo);
   REG_EXTRA_INFO(T_FUN_UDF, ObExprUDFInfo);
   REG_EXTRA_INFO(T_FUN_PL_OBJECT_CONSTRUCT, ObExprObjectConstructInfo);
-  REG_EXTRA_INFO(T_OP_MULTISET, ObExprMultiSetInfo);
-  REG_EXTRA_INFO(T_OP_COLL_PRED, ObExprCollPredInfo);
   REG_EXTRA_INFO(T_OP_OUTPUT_PACK, ObOutputPackInfo);
   REG_EXTRA_INFO(T_FUN_PLSQL_VARIABLE, ObPLSQLVariableInfo);
   REG_EXTRA_INFO(T_FUN_SUBQUERY, ObExprPlSubQueryInfo);
@@ -102,8 +98,6 @@ void ObExprExtraInfoFactory::register_expr_extra_infos()
   REG_EXTRA_INFO(T_FUN_SYS_LEAST, ObExprOperator::DatumCastExtraInfo);
   REG_EXTRA_INFO(T_FUN_SYS_GREATEST, ObExprOperator::DatumCastExtraInfo);
   REG_EXTRA_INFO(T_FUN_SYS_NULLIF, ObExprOperator::DatumCastExtraInfo);
-  REG_EXTRA_INFO(T_FUN_SYS_CAST, ObExprCast::CastMultisetExtraInfo);
-  REG_EXTRA_INFO(T_FUN_SYS_PRIV_SQL_UDT_CONSTRUCT, ObExprUdtConstructInfo);
   REG_EXTRA_INFO(T_FUN_SYS_LPAD, ObExprLRpadInfo);
   REG_EXTRA_INFO(T_FUN_SYS_RPAD, ObExprLRpadInfo);
   REG_EXTRA_INFO(T_FUN_SYS_JSON_SCHEMA_VALID, ObExprJsonSchemaValidInfo);

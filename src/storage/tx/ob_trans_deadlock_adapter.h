@@ -72,8 +72,7 @@ class ObTransDeadlockDetectorAdapter
   typedef share::detector::CollectCallBack CollectCallBack;
  public:
   enum class UnregisterPath {
-    AUTONOMOUS_TRANS = 1,
-    LOCK_WAIT_MGR_REPOST,
+    LOCK_WAIT_MGR_REPOST = 1,
     LOCK_WAIT_MGR_WAIT_FAILED,
     LOCK_WAIT_MGR_TRANSFORM_WAITING_ROW_TO_TX,
     END_STMT_DONE,
@@ -87,8 +86,6 @@ class ObTransDeadlockDetectorAdapter
   static const char* to_string(const UnregisterPath path)
   {
     switch (path) {
-    case UnregisterPath::AUTONOMOUS_TRANS:
-      return "AUTONOMOUS_TRANS";
     case UnregisterPath::LOCK_WAIT_MGR_REPOST:
       return "LOCK_WAIT_MGR_REPOST";
     case UnregisterPath::LOCK_WAIT_MGR_WAIT_FAILED:
@@ -125,10 +122,10 @@ class ObTransDeadlockDetectorAdapter
                                                                   const uint32_t sess_id);
   // for statement retry, call from sql trans control
   static int maintain_deadlock_info_when_end_stmt(sql::ObExecContext &exec_ctx, const bool is_rollback);
-  // for autonomous trans
-  static int autonomous_register_to_deadlock(const ObTransID last_trans_id,
-                                             const ObTransID now_trans_id,
-                                             const int64_t query_timeout);
+  // for an internal transaction that temporarily replaces the session transaction
+  static int inner_tx_register_to_deadlock(const ObTransID parent_trans_id,
+                                           const ObTransID inner_trans_id,
+                                           const int64_t query_timeout);
   // if trans node on row removed(for example:1, dump trans. 2, a trans write too many row.)
   // change the dependency relationship from row to trans
   static int change_detector_waiting_obj_from_row_to_trans(const ObTransID &self_trans_id,

@@ -26,7 +26,6 @@
 #include "pl/ob_pl_package.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
 #include "src/pl/pl_cache/ob_pl_cache_mgr.h"
-#include "src/pl/ob_pl_build.h"
 
 namespace oceanbase
 {
@@ -40,7 +39,6 @@ int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &st
   obcall::ObCreateRoutineArg &crt_routine_arg = stmt.get_routine_arg();
   ObString first_stmt;
   
-  obcall::ObRoutineDDLRes res;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("fail to get first stmt" , K(ret));
   } else {
@@ -50,7 +48,7 @@ int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &st
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
-  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_routine_with_res(crt_routine_arg, res); }))) {
+  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_routine(crt_routine_arg); }))) {
     LOG_WARN("rpc proxy create procedure failed", K(ret), "dst", GCTX.self_addr());
   }
   if(crt_routine_arg.with_if_not_exist_ && ret == OB_ERR_SP_ALREADY_EXISTS) {
@@ -181,7 +179,6 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
     }
     if (OB_SUCC(ret)) {
       ObArray<int64_t> path;
-      ObArray<int64_t> nocopy_params;
       ObObj result;
       int64_t pkg_id = package_id;
       if (OB_FAIL(ctx.get_pl_engine()->execute(ctx,
@@ -190,7 +187,6 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
                                               routine_id,
                                               path,
                                               params,
-                                              nocopy_params,
                                               result))) {
         LOG_WARN("failed to execute pl",  K(ret), K(package_id), K(routine_id), K(pkg_id));
       }
@@ -263,7 +259,6 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
         for (int64_t i = 0; i < null_params.count() && i < params.count(); ++i) {
           if (null_params.at(i) &&
               params.at(i).is_pl_extend() &&
-              params.at(i).get_meta().get_extend_type() != pl::PL_REF_CURSOR_TYPE &&
               params.at(i).get_ext() != 0) {
             pl::ObUserDefinedType::destruct_obj(params.at(i), ctx.get_my_session());
           }
@@ -306,11 +301,7 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
   bool need_create_routine = (alter_routine_arg.is_need_alter_);
   ObString first_stmt;
   if (need_create_routine) {
-    obcall::ObRoutineDDLRes res;
-    if (OB_ISNULL(ctx.get_pl_engine())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("pl engine is null", K(ret));
-    } else if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
+    if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
       LOG_WARN("fail to get first stmt" , K(ret));
     } else {
       alter_routine_arg.ddl_stmt_str_ = first_stmt;
@@ -319,7 +310,7 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
     } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       LOG_WARN("get task executor context failed", K(ret));
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->alter_routine_with_res(alter_routine_arg, res); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->alter_routine(alter_routine_arg); }))) {
       LOG_WARN("rpc proxy alter procedure failed", K(ret), "dst", GCTX.self_addr());
     }
   } else {
@@ -432,15 +423,9 @@ int ObAnonymousBlockExecutor::execute(ObExecContext &ctx, ObAnonymousBlockStmt &
             OX (field.charsetnr_ = collation);
           } else { // complex data type
             field.length_ = field.accuracy_.get_length();
-            if (value.is_ref_cursor_type()) {
-              OZ (ob_write_string(ctx.get_allocator(), ObString("SYS_REFCURSOR"), field.type_name_));
-            } else {
-              ret = OB_NOT_SUPPORTED;
-              LOG_WARN("anonymous out parameter type is not anonymous collection",
-                       K(ret), K(value));
-              LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                             "anonymous out parameter type is not anonymous collection");
-            }
+            ret = OB_NOT_SUPPORTED;
+            LOG_WARN("anonymous out parameter type is not supported", K(ret), K(value));
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "anonymous complex out parameter");
           }
           if (need_push) {
             OZ (ctx.get_field_columns()->push_back(field));
@@ -455,7 +440,6 @@ int ObAnonymousBlockExecutor::execute(ObExecContext &ctx, ObAnonymousBlockStmt &
       for (int64_t i = 0; i < null_params.count() && i < stmt.get_params()->count(); ++i) {
         if (null_params.at(i) &&
             stmt.get_params()->at(i).is_pl_extend() &&
-            stmt.get_params()->at(i).get_meta().get_extend_type() != pl::PL_REF_CURSOR_TYPE &&
             stmt.get_params()->at(i).get_ext() != 0) {
           pl::ObUserDefinedType::destruct_obj(stmt.get_params()->at(i), ctx.get_my_session());
         }

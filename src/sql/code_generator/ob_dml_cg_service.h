@@ -91,9 +91,6 @@ public:
                           const IndexDMLInfo &index_dml_info,
                           ObDASScanCtDef &scan_ctdef);
 
-  int generate_err_log_ctdef(const ObErrLogDefine &err_log_define,
-                             ObErrLogCtDef &err_log_ins_ctdef);
-
   int convert_data_table_rowkey_info(ObLogDelUpd &op,
                                      const IndexDMLInfo *primary_dml_info,
                                      ObInsCtDef &ins_ctdef);
@@ -302,7 +299,6 @@ private:
   int convert_normal_triggers(ObLogDelUpd &log_op,
                               const IndexDMLInfo &dml_info,
                               ObDMLBaseCtDef &dml_ctdef,
-                              bool is_instead_of,
                               uint64_t dml_event);
   int convert_trigger_rowid(ObLogDelUpd &log_op,
                             const IndexDMLInfo &dml_info,
@@ -426,12 +422,6 @@ private:
                                      const IndexDMLInfo &index_dml_info,
                                      ObDASDMLBaseCtDef &das_dml_ctdef);
 private:
-  int need_fire_update_event(const ObTableSchema &table_schema,
-                            const ObString &update_events,
-                            const ObLogUpdate &log_op,
-                            const ObSQLSessionInfo &session,
-                            ObIAllocator &allocator,
-                            bool &need_fire);
   int generate_table_loc_meta(const IndexDMLInfo &index_dml_info, ObDASTableLocMeta &loc_meta);
 private:
   ObStaticEngineCG &cg_;

@@ -39,7 +39,6 @@ int ObUpdateResolver::resolve(const ParseNode &parse_tree)
   int ret = OB_SUCCESS;
   ObUpdateStmt *update_stmt = NULL;
   ObSEArray<ObTableAssignment, 2> tables_assign;
-  bool has_tg = false;
   if (T_UPDATE != parse_tree.type_
       || 3 > parse_tree.num_child_
       || OB_ISNULL(parse_tree.children_)
@@ -78,8 +77,6 @@ int ObUpdateResolver::resolve(const ParseNode &parse_tree)
     ParseNode *table_node = parse_tree.children_[TABLE];
     if (OB_FAIL(resolve_table_list(*table_node))) {
       LOG_WARN("resolve table failed", K(ret));
-    } else {
-      has_tg = update_stmt->has_instead_of_trigger();
     }
   }
 
@@ -100,8 +97,8 @@ int ObUpdateResolver::resolve(const ParseNode &parse_tree)
   if (OB_SUCC(ret)) {
     FOREACH_CNT_X(it, update_stmt->get_table_items(), OB_SUCC(ret)) {
       if (NULL != *it && ((*it)->is_generated_table() || (*it)->is_temp_table())) {
-        if ((NULL != (*it)->view_base_item_ || has_tg) &&
-            OB_FAIL(add_all_column_to_updatable_view(*update_stmt, *(*it), has_tg))) {
+        if (NULL != (*it)->view_base_item_ &&
+            OB_FAIL(add_all_column_to_updatable_view(*update_stmt, *(*it)))) {
           LOG_WARN("add all column for updatable view failed", K(ret));
         }
       }
@@ -109,13 +106,13 @@ int ObUpdateResolver::resolve(const ParseNode &parse_tree)
     if (OB_SUCC(ret)) {
       if (OB_FAIL(view_pullup_special_column_exprs())) {
         LOG_WARN("view pullup generated column exprs failed",K(ret));
-      } else if (!has_tg && OB_FAIL(view_pullup_part_exprs())) {
+      } else if (OB_FAIL(view_pullup_part_exprs())) {
         LOG_WARN("view pull up part exprs failed", K(ret));
       } else { /*do nothing*/ }
     }
   }
 
-  if (OB_SUCC(ret) && !has_tg) {
+  if (OB_SUCC(ret)) {
     // Parse cascading update columns
     if (OB_FAIL(resolve_additional_assignments(tables_assign,
                                                T_UPDATE_SCOPE))) {
@@ -157,8 +154,6 @@ int ObUpdateResolver::resolve(const ParseNode &parse_tree)
       LOG_WARN("resolve order clause failed", K(ret));
     } else if (OB_FAIL(resolve_limit_clause(parse_tree.children_[LIMIT], true))) {
       LOG_WARN("resolve limit clause failed", K(ret));
-    } else if (OB_FAIL(try_expand_returning_exprs())) {
-      LOG_WARN("failed to try expand returning exprs", K(ret));
     } else if (!update_stmt->is_ignore() &&
                OB_FAIL(check_join_update_conflict())) {
       LOG_WARN("failed to check join update conflict", K(ret));
@@ -181,49 +176,6 @@ int ObUpdateResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
-int ObUpdateResolver::try_expand_returning_exprs()
-{
-  int ret = OB_SUCCESS;
-  ObUpdateStmt *update_stmt = NULL;
-  // we do not need expand returing expr in prepare stage because we resolve
-  // it twice, first in prepare stage, second in actual execution. We can only
-  // do it in second stage
-  // Otherwise if we expand in prepare stage, which will pollute our spell SQL
-  // then got a wrong result
-  bool need_expand = !is_prepare_stage_;
-  if (OB_ISNULL(update_stmt = get_update_stmt())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
-  } else if (!update_stmt->get_returning_exprs().empty() && need_expand) {
-    // Replace each RETURNING column with its assigned value.
-    ObIArray<ObUpdateTableInfo*> &tables_info = update_stmt->get_update_table_info();
-    if (OB_UNLIKELY(1 != tables_info.count())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected table info count", K(ret));
-    } else {
-      ObIArray<ObAssignment> &assignments = tables_info.at(0)->assignments_;
-      ObRawExprCopier copier(*params_.expr_factory_);
-      for (int64_t i = 0; OB_SUCC(ret) && i < assignments.count(); ++i) {
-        if (OB_FAIL(copier.add_replaced_expr(assignments.at(i).column_expr_,
-                                             assignments.at(i).expr_))) {
-          LOG_WARN("failed to add replaced expr", K(ret));
-        }
-      }
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(copier.add_skipped_expr(update_stmt->get_returning_aggr_items(), false))) {
-          LOG_WARN("failed to add uncopy exprs", K(ret));
-        } else if (OB_FAIL(copier.copy_on_replace(update_stmt->get_returning_exprs(),
-                                                  update_stmt->get_returning_exprs()))) {
-          LOG_WARN("failed to copy on replace returning exprs", K(ret));
-        }
-      }
-    }
-  }
-
-  return ret;
-}
-
-
 int ObUpdateResolver::try_add_remove_const_expr_for_assignments()
 {
   int ret = OB_SUCCESS;
@@ -233,8 +185,6 @@ int ObUpdateResolver::try_add_remove_const_expr_for_assignments()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(stmt), K(session_info_), K(schema_checker_),
         K(params_.expr_factory_), K(ret));
-  } else if (stmt->has_instead_of_trigger()) {
-    /*do nothing*/
   } else {
     ObIArray<ObUpdateTableInfo*> &tables_info = stmt->get_update_table_info();
     for (int64_t i = 0; OB_SUCC(ret) && i < tables_info.count(); i++) {
@@ -469,11 +419,10 @@ int ObUpdateResolver::generate_update_table_info(ObTableAssignment &table_assign
       LOG_WARN("failed to assign exprs", K(ret));
     } else if (OB_FAIL(table_info->part_ids_.assign(table_item->get_base_table_item().part_ids_))) {
       LOG_WARN("failed to assign part ids", K(ret));
-    } else if (!update_stmt->has_instead_of_trigger()) {
+    } else {
       if (OB_FAIL(add_all_rowkey_columns_to_stmt(*table_item, table_info->column_exprs_))) {
         LOG_WARN("add all rowkey columns to stmt failed", K(ret));
-      } else if (need_all_columns(*table_schema, binlog_row_image) ||
-                 update_stmt->is_error_logging()) {
+      } else if (need_all_columns(*table_schema, binlog_row_image)) {
         if (OB_FAIL(add_all_columns_to_stmt(*table_item, table_info->column_exprs_))) {
           LOG_WARN("fail to add all column to stmt", K(ret), K(*table_item));
         }
@@ -493,19 +442,6 @@ int ObUpdateResolver::generate_update_table_info(ObTableAssignment &table_assign
         table_info->loc_table_id_ = table_item->get_base_table_item().table_id_;
         table_info->ref_table_id_ = table_item->get_base_table_item().ref_id_;
         table_info->table_name_ = table_schema->get_table_name_str();
-      }
-    } else {
-      // view has an enabled INSTEAD OF trigger
-      uint64_t view_id = OB_INVALID_ID;
-      if (OB_FAIL(add_all_columns_to_stmt_for_trigger(*table_item, table_info->column_exprs_))) {
-        LOG_WARN("failed to add all columns to stmt", K(ret));
-      } else if (OB_FAIL(get_view_id_for_trigger(*table_item, view_id))) {
-        LOG_WARN("get view id failed", K(table_item), K(ret));
-      } else {
-        table_info->table_id_ = table_item->table_id_;
-        table_info->loc_table_id_ = table_item->table_id_;
-        table_info->ref_table_id_ = view_id;
-        table_info->table_name_ = table_item->table_name_;
       }
     }
     if (OB_SUCC(ret)) {
@@ -666,8 +602,7 @@ int ObUpdateResolver::resolve_update_constraints()
           OB_ISNULL(table_item = update_stmt->get_table_item_by_id(table_info->table_id_))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(table_item), K(ret));
-      } else if (!update_stmt->has_instead_of_trigger() &&
-                 OB_FAIL(resolve_view_check_exprs(table_item->table_id_, table_item, false, table_info->view_check_exprs_))) {
+      } else if (OB_FAIL(resolve_view_check_exprs(table_item->table_id_, table_item, false, table_info->view_check_exprs_))) {
         LOG_WARN("failed to resolve view check exprs", K(ret));
       } else if (OB_FAIL(resolve_check_constraints(table_item, table_info->check_constraint_exprs_))) {
         LOG_WARN("failed to resolve view check exprs", K(ret));

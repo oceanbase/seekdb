@@ -39,6 +39,7 @@ ob_set_subtarget(ob_pl common
   ob_pl_package_guard.cpp
   ob_pl_resolver.cpp
   ob_pl_router.cpp
+  ob_pl_server_cursor.cpp
   ob_pl_stmt.cpp
   ob_pl_type.cpp
   ob_pl_user_type.cpp
@@ -58,8 +59,6 @@ ob_set_subtarget(ob_pl sys_package
   sys_package/ob_dbms_application.cpp
   sys_package/ob_dbms_session.cpp
   sys_package/ob_dbms_monitor.cpp
-  sys_package/ob_dbms_sql.cpp
-  sys_package/ob_dbms_xplan.cpp
   sys_package/ob_dbms_space.cpp
   sys_package/ob_dbms_limit_calculator_mysql.cpp
   sys_package/ob_dbms_vector_mysql.cpp

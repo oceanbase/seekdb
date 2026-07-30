@@ -274,11 +274,6 @@ int ObRowConflictHandler::post_row_read_conflict(ObMvccAccessCtx &acc_ctx,
   } else {
     int tmp_ret = OB_SUCCESS;
     ObTransID tx_id = acc_ctx.get_tx_id();
-    // register to deadlock detector
-    if (OB_TMP_FAIL(tx_desc->add_conflict_tx(conflict_tx_id))) {
-      TRANS_LOG(WARN, "record conflict transaction failed",
-                K(tmp_ret), K(conflict_tx_id), K(tx_id));
-    }
     ObFunction<int(bool&, bool&)> recheck_func([&](bool &locked, bool &wait_on_row) -> int {
       int ret = OB_SUCCESS;
       lock_state.is_locked_ = false;

@@ -20,9 +20,6 @@
 #include "share/ob_define.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/allocator/page_arena.h"
-#include "lib/statistic_event/ob_stat_event.h"
-#include "lib/stat/ob_diagnose_info.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "storage/memtable/ob_memtable_interface.h"
 #include "storage/memtable/ob_memtable_key.h"
 #include "storage/memtable/ob_memtable_single_row_reader.h"
@@ -51,7 +48,6 @@ public:
   virtual int get_next_row(const blocksstable::ObDatumRow *&row) {
     int ret = common::OB_SUCCESS;
     if (OB_SUCC(inner_get_next_row(row))) {
-      EVENT_INC(MEMSTORE_READ_ROW_COUNT);
     }
     return ret;
   }

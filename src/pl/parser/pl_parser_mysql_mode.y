@@ -755,7 +755,6 @@ unreserved_keyword:
   | BODY %prec LOWER_PARENS
   | C
   | CATALOG_NAME
-  | CANCEL
   | CLASS_ORIGIN
   | CLOSE
   | COLUMN_NAME
@@ -778,7 +777,6 @@ unreserved_keyword:
   | HANDLER
   | INTERFACE 
   | INVOKER
-  | JOB
   | JSON
   | LANGUAGE
   | MESSAGE_TEXT

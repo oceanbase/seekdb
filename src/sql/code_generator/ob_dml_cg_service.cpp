@@ -95,12 +95,6 @@ int ObDmlCgService::generate_insert_ctdef(ObLogDelUpd &op,
                                                 ins_ctdef.related_ctdefs_))) {
     LOG_WARN("generate related ins ctdef failed", K(ret));
   }
-  if (OB_SUCC(ret) && index_dml_info.is_primary_index_ && op.get_err_log_define().is_err_log_) {
-    if (OB_FAIL(generate_err_log_ctdef(op.get_err_log_define(), ins_ctdef.error_logging_ctdef_))) {
-      LOG_WARN("generate error_logging ctdef failed", K(ret), K(index_dml_info));
-    }
-  }
-
   // generate for replace into and insert_up fetch conflict rowkey
   if (OB_SUCC(ret) && op.get_stmt()->is_insert_stmt() &&
       (static_cast<ObLogInsert&>(op).is_replace() || static_cast<ObLogInsert&>(op).get_insert_up())) {
@@ -1557,7 +1551,7 @@ int ObDmlCgService::check_upd_need_all_columns(ObLogDelUpd &op,
     LOG_WARN("unexpected null ptr", K(ret), KP(session), KP(schema_guard), KP(table_schema));
   } else if (OB_FAIL(session->get_binlog_row_image(binlog_row_image))) {
     LOG_WARN("fail to get binlog image", K(ret));
-  } else if (binlog_row_image == ObBinlogRowImage::FULL || op.has_instead_of_trigger()) {
+  } else if (binlog_row_image == ObBinlogRowImage::FULL) {
     // full mode
     need_all_columns = true;
   } else if (!is_primary_index) {
@@ -1708,7 +1702,7 @@ int ObDmlCgService::check_del_need_all_columns(ObLogDelUpd &op,
     LOG_WARN("unexpected null ptr", K(ret), KP(session), KP(schema_guard), KP(table_schema));
   } else if (OB_FAIL(session->get_binlog_row_image(binlog_row_image))) {
     LOG_WARN("fail to get binlog image", K(ret));
-  } else if (binlog_row_image == ObBinlogRowImage::FULL || op.has_instead_of_trigger()) {
+  } else if (binlog_row_image == ObBinlogRowImage::FULL) {
     // full mode
     need_all_columns = true;
   } else if (table_schema->is_multivalue_index_aux()) {
@@ -2003,7 +1997,7 @@ int ObDmlCgService::generate_das_dml_ctdef(ObLogDelUpd &op,
     LOG_WARN("add column ids to das_dml_ctdef failed", K(ret));
   } else if (OB_FAIL(get_table_schema_version(op, index_tid, das_dml_ctdef.schema_version_))) {
     LOG_WARN("get table schema version failed", K(ret), K(index_dml_info));
-  } else if (!op.has_instead_of_trigger() && (OB_FAIL(convert_table_dml_param(op, das_dml_ctdef)))) {
+  } else if (OB_FAIL(convert_table_dml_param(op, das_dml_ctdef))) {
     LOG_WARN("convert table dml param failed", K(ret));
   } else if (OB_ISNULL(op.get_plan())
       || OB_ISNULL(session = op.get_plan()->get_optimizer_context().get_session_info())) {
@@ -2514,7 +2508,7 @@ int ObDmlCgService::convert_triggers(ObLogDelUpd &log_op,
                                      uint64_t dml_event)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(convert_normal_triggers(log_op, dml_info, dml_ctdef, log_op.has_instead_of_trigger(), dml_event))) {
+  if (OB_FAIL(convert_normal_triggers(log_op, dml_info, dml_ctdef, dml_event))) {
     LOG_WARN("failed to convert normal triggers", K(ret));
   }
   return ret;
@@ -2567,78 +2561,10 @@ int ObDmlCgService::convert_trigger_rowid(ObLogDelUpd &log_op,
   return ret;
 }
 
-int ObDmlCgService::need_fire_update_event(const ObTableSchema &table_schema,
-                                                const ObString &update_events,
-                                                const ObLogUpdate &log_op,
-                                                const ObSQLSessionInfo &session,
-                                                ObIAllocator &allocator,
-                                                bool &need_fire)
-{
-  int ret = OB_SUCCESS;
-  if (update_events.empty()) {
-    need_fire = true;
-  } else {
-    need_fire = false;
-    // session is just for passing sql mode? Then it should pass the information recorded in trigger info.
-    ObParser parser(allocator, session.get_sql_mode());
-    ParseResult parse_result;
-    const ParseNode *update_columns_node = NULL;
-    ObString column_name;
-    OV (log_op.get_primary_dml_info() != NULL);
-    OZ (parser.parse(update_events, parse_result));
-    OV (parse_result.result_tree_ != NULL);
-    OV (parse_result.result_tree_->children_ != NULL);
-    OX (update_columns_node = parse_result.result_tree_->children_[0]);
-    OV (update_columns_node != NULL);
-    OV (update_columns_node->type_ == T_TG_COLUMN_LIST, OB_ERR_UNEXPECTED, update_columns_node->type_);
-    OV (update_columns_node->num_child_ > 0, OB_ERR_UNEXPECTED, update_columns_node->num_child_);
-    OV (update_columns_node->children_ != NULL);
-    ObSEArray<uint64_t, 4> base_column_ids;
-    const ObAssignments &assignments = log_op.get_primary_dml_info()->assignments_;
-    const ObDMLStmt *stmt = log_op.get_stmt();
-    for (int64_t i = 0; OB_SUCC(ret) && i < assignments.count(); ++i) {
-      ObColumnRefRawExpr *column_expr = assignments.at(i).column_expr_;
-      const ColumnItem *column_item = nullptr;
-      if (OB_ISNULL(column_expr)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null column expr", K(ret));
-      } else if (OB_ISNULL(column_item = stmt->get_column_item_by_id(column_expr->get_table_id(),
-                                                                     column_expr->get_column_id()))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null column item", K(ret), KPC(column_expr));
-      } else if (OB_FAIL(base_column_ids.push_back(column_item->base_cid_))) {
-        LOG_WARN("failed to push back base cid", K(ret));
-      }
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && !need_fire && i < update_columns_node->num_child_; i++) {
-      const ParseNode *column_node = update_columns_node->children_[i];
-      const ObColumnSchemaV2 *column_schema = NULL;
-      OV (column_node != NULL);
-      OV (column_node->type_ == T_IDENT, OB_ERR_UNEXPECTED, column_node->type_);
-      OV (column_node->str_value_ != NULL && column_node->str_len_ > 0);
-      OX (column_name.assign_ptr(column_node->str_value_, static_cast<int32_t>(column_node->str_len_)));
-      OX (column_schema = table_schema.get_column_schema(column_name));
-      if (OB_SUCC(ret) && OB_ISNULL(column_schema)) {
-        ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
-        LOG_WARN("column not exist", K(ret), K(i), K(column_name));
-        LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(), column_name.ptr());
-      }
-      for (int64_t j = 0; OB_SUCC(ret) && j < base_column_ids.count(); j++) {
-        if (column_schema->get_column_id() == base_column_ids.at(j)) {
-          OX (need_fire = !assignments.at(j).is_implicit_);
-          break;
-        }
-      }
-    }
-  }
-  return ret;
-}
-
 // for table
 int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
                                             const IndexDMLInfo &dml_info,
                                             ObDMLBaseCtDef &dml_ctdef,
-                                            bool is_instead_of,
                                             uint64_t dml_event)
 {
   int ret = OB_SUCCESS;
@@ -2647,15 +2573,13 @@ int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
   const ObTableSchema *table_schema = NULL;
   ObDASDMLBaseCtDef &das_ctdef = dml_ctdef.das_base_ctdef_;
   ObTrigDMLCtDef &trig_ctdef = dml_ctdef.trig_ctdef_;
-  const ObDelUpdStmt *dml_stmt = NULL;
   if (OB_ISNULL(log_plan) ||
-      OB_ISNULL(schema_guard = log_plan->get_optimizer_context().get_schema_guard()) ||
-      OB_ISNULL(dml_stmt = static_cast<const ObDelUpdStmt*>(log_plan->get_stmt()))) {
+      OB_ISNULL(schema_guard = log_plan->get_optimizer_context().get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected status", K(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema( dml_info.ref_table_id_, table_schema))) {
     LOG_WARN("failed to get table schema", K(ret));
-  } else if ((table_schema->is_user_table() || table_schema->is_user_view()) &&
+  } else if (table_schema->is_user_table() &&
       0 < table_schema->get_trigger_list().count()) {
     
     const ObIArray<uint64_t> &trigger_list = table_schema->get_trigger_list();
@@ -2663,15 +2587,7 @@ int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
     ObSEArray<const ObTriggerInfo *, 2> trigger_infos;
     uint64_t trigger_id = OB_INVALID_ID;
     bool need_fire = false;
-    const ObSQLSessionInfo *session = NULL;
-    ObPhyOperatorType op_type = PHY_INVALID;
-    if (OB_ISNULL(session = log_plan->get_optimizer_context().get_session_info())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("session is null", K(ret));
-    } else if (OB_FAIL(cg_.get_phy_op_type(log_op, op_type, false))) {
-      LOG_WARN("get phy operator type failed", K(ret));
-    } else if (!is_instead_of &&
-        (NULL != dml_info.new_rowid_expr_ || NULL != dml_info.old_rowid_expr_)) {
+    if (NULL != dml_info.new_rowid_expr_ || NULL != dml_info.old_rowid_expr_) {
       if (OB_FAIL(convert_trigger_rowid(log_op, dml_info, dml_ctdef))) {
         LOG_WARN("failed to convert trigger rowid", K(ret));
       }
@@ -2687,23 +2603,14 @@ int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
       } else {
         // if disable trigger, use the previous plan cache, whether trigger is enable ???
         need_fire = trigger_info->has_event(dml_event) && trigger_info->is_enable();
-        if (OB_SUCC(ret) && need_fire && !is_instead_of && op_type == PHY_UPDATE) {
-          OZ (need_fire_update_event(*table_schema, trigger_info->get_update_columns(),
-                                    static_cast<ObLogUpdate &>(log_op), *session,
-                                    log_plan->get_optimizer_context().get_allocator(),
-                                    need_fire));
-        }
         if (OB_SUCC(ret) && need_fire) {
           OZ (trigger_infos.push_back(trigger_info));
         }
-        OX (LOG_DEBUG("TRIGGER", K(trigger_info->get_trigger_name()), K(need_fire), K(is_instead_of)));
+        OX (LOG_DEBUG("TRIGGER", K(trigger_info->get_trigger_name()), K(need_fire)));
       }
     }
     if (OB_SUCC(ret) && trigger_infos.count() > 0) {
       int64_t expectd_col_cnt = table_schema->get_column_count();
-      if (is_instead_of) {
-        expectd_col_cnt = dml_stmt->get_instead_of_trigger_column_count();
-      }
       trig_ctdef.tg_event_ = dml_event;
       ObTriggerInfo::ActionOrderComparator action_order_com;
       lib::ob_sort(trigger_infos.begin(), trigger_infos.end(), action_order_com);
@@ -2741,7 +2648,7 @@ int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
         LOG_DEBUG("update columns", K(updated_column_ids));
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected status: not supported", K(ret), K(op_type));
+        LOG_WARN("unexpected trigger event", K(ret), K(dml_event));
       }
       if (OB_SUCC(ret) && OB_FAIL(trig_ctdef.trig_col_info_.init(expectd_col_cnt))) {
         LOG_WARN("failed to init trigger column info", K(ret));
@@ -2750,37 +2657,29 @@ int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
       ObTableSchema::const_column_iterator cs_iter_end = table_schema->column_end();
       int64_t i = 0;
       int64_t col_idx = INT64_MAX;
-      int64_t total_count = is_instead_of ? expectd_col_cnt : table_schema->get_column_count();
-      for (i = 0; OB_SUCC(ret) && i < total_count; i++) {
+      for (i = 0; OB_SUCC(ret) && i < table_schema->get_column_count(); i++) {
         // how to calc cell_idx and proj_idx ?
         // see
         ObExpr *new_expr = nullptr;
         ObExpr *old_expr = nullptr;
         bool need_add = false;
-        if (!is_instead_of) {
-          if (cs_iter == cs_iter_end) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected status: column schema is null", K(ret), K(i));
-          } else if (OB_ISNULL(column_schema = *cs_iter)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected status: column schema is null", K(ret), K(i));
-          } else {
-            is_hidden = column_schema->is_hidden();
-            is_gen_col = column_schema->is_generated_column();
-            is_gen_col_dep = column_schema->has_generated_column_deps();
-            is_update = has_exist_in_array(updated_column_ids, column_schema->get_column_id());
-            if (!has_exist_in_array(column_ids, column_schema->get_column_id(), &col_idx)) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("Can't found column idx", K(i), K(column_ids),
-                K(column_schema->get_column_id()), K(ret));
-            }
-            ++cs_iter;
-          }
+        if (cs_iter == cs_iter_end) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected status: column schema is null", K(ret), K(i));
+        } else if (OB_ISNULL(column_schema = *cs_iter)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected status: column schema is null", K(ret), K(i));
         } else {
-          // instead trigger based on view, view may be composed of multiple base tables, so each column_id may appear multiple times
-          // So here we cannot assume that column_id = OB_APP_MIN_COLUMN_ID + i, directly let col_idx = i,
-          // Because the column order and view_schema are guaranteed to be consistent before this point
-          col_idx = i;
+          is_hidden = column_schema->is_hidden();
+          is_gen_col = column_schema->is_generated_column();
+          is_gen_col_dep = column_schema->has_generated_column_deps();
+          is_update = has_exist_in_array(updated_column_ids, column_schema->get_column_id());
+          if (!has_exist_in_array(column_ids, column_schema->get_column_id(), &col_idx)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("Can't found column idx", K(i), K(column_ids),
+              K(column_schema->get_column_id()), K(ret));
+          }
+          ++cs_iter;
         }
         LOG_DEBUG("debug trigger column", K(ret), K(is_hidden), K(i),
             K(col_idx), K(column_ids));
@@ -2789,7 +2688,7 @@ int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
         }
 
         if (OB_SUCC(ret)) {
-          LOG_DEBUG("debug trigger normal column", K(ret), K(is_instead_of),
+          LOG_DEBUG("debug trigger normal column", K(ret),
               K(dml_ctdef.old_row_.count()), K(dml_ctdef.new_row_.count()));
           if (ObTriggerEvents::is_insert_event(dml_event)) {
             if (OB_UNLIKELY(col_idx < 0) ||
@@ -2845,18 +2744,8 @@ int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
       }
 
       if (OB_FAIL(ret)) {
-      } else if (!is_instead_of) {
-        OV (i == table_schema->get_column_count() && cs_iter == cs_iter_end, OB_ERR_UNEXPECTED, i, table_schema->get_column_count());
       } else {
-        OV (i == expectd_col_cnt, OB_ERR_UNEXPECTED, i, expectd_col_cnt);
-        if (dml_stmt->get_instead_of_trigger_column_count() != trig_ctdef.trig_col_info_.get_count()) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected status: the column count of instead of trigger is not match",
-            K(ret),
-            K(dml_stmt->get_instead_of_trigger_column_count()),
-            K(trig_ctdef.trig_col_info_.get_count()),
-            K(expectd_col_cnt));
-        }
+        OV (i == table_schema->get_column_count() && cs_iter == cs_iter_end, OB_ERR_UNEXPECTED, i, table_schema->get_column_count());
       }
       LOG_DEBUG("debug trigger", K(trig_ctdef.new_row_exprs_.count()),
         K(trig_ctdef.old_row_exprs_.count()));
@@ -2912,7 +2801,7 @@ int ObDmlCgService::add_all_column_infos(ObLogDelUpd &op,
       // e.g. create table t1 (c1 int default null);
       //      update (select c1 from t1 where c1 > 10) v set c1 = null;
       //   Here t1.c1 is NULLABLE, but the output of view v has v.c1 as NOT NULL (because there is a null rejection condition `c1 > 10` in the view)
-      if (OB_ISNULL(table_item) || op.has_instead_of_trigger()) {
+      if (OB_ISNULL(table_item)) {
         // Can't find it means column expr is shadow pk, directly get flag info from column
       } else if ((table_item->is_generated_table() || table_item->is_temp_table()) &&
                  OB_FAIL(cg_.recursive_get_column_expr(column, *table_item))) {
@@ -3029,54 +2918,6 @@ int ObDmlCgService::convert_check_constraint(ObLogDelUpd &log_op,
   return ret;
 }
 
-int ObDmlCgService::generate_err_log_ctdef(const ObErrLogDefine &err_log_define,
-                                                ObErrLogCtDef &err_log_ins_ctdef)
-{
-  int ret = OB_SUCCESS;
-  err_log_ins_ctdef.is_error_logging_ = err_log_define.is_err_log_;
-  err_log_ins_ctdef.reject_limit_ = err_log_define.reject_limit_;
-  CK(err_log_define.err_log_column_names_.count() == err_log_define.err_log_value_exprs_.count());
-  if (OB_FAIL(ret)) {
-
-  } else if (OB_FAIL(deep_copy_ob_string(cg_.phy_plan_->get_allocator(),
-                                         err_log_define.err_log_database_name_,
-                                         err_log_ins_ctdef.err_log_database_name_))) {
-    LOG_WARN("fail to copy database name", K(ret), K(err_log_define.err_log_database_name_));
-  } else if (OB_FAIL(deep_copy_ob_string(cg_.phy_plan_->get_allocator(),
-                                         err_log_define.err_log_table_name_,
-                                         err_log_ins_ctdef.err_log_table_name_))) {
-    LOG_WARN("fail to copy table name", K(ret), K(err_log_define.err_log_table_name_));
-  } else if (OB_FAIL(err_log_ins_ctdef.err_log_column_names_.
-      prepare_allocate(err_log_define.err_log_column_names_.count()))) {
-    LOG_WARN("fail to prepare_allocate", K(ret), K(err_log_define.err_log_column_names_.count()));
-  } else if (OB_FAIL(err_log_ins_ctdef.err_log_values_.
-                     prepare_allocate(err_log_define.err_log_value_exprs_.count()))) {
-    LOG_WARN("fail to prepare_allocate", K(ret), K(err_log_define.err_log_value_exprs_.count()));
-  } else {
-    for (int i = 0; OB_SUCC(ret) && i < err_log_define.err_log_value_exprs_.count(); i++) {
-      ObRawExpr *raw_expr = err_log_define.err_log_value_exprs_.at(i);
-      ObExpr *expr = NULL;
-      if (OB_ISNULL(raw_expr)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("raw_expr is null", K(ret), K(i), K(raw_expr));
-      } else if (OB_FAIL(deep_copy_ob_string(cg_.phy_plan_->get_allocator(),
-                                             err_log_define.err_log_column_names_.at(i),
-                                             err_log_ins_ctdef.err_log_column_names_.at(i)))) {
-        LOG_WARN("fail to deep copy string", K(ret), K(err_log_define.err_log_column_names_.at(i)));
-      } else if (OB_FAIL(cg_.generate_rt_expr(*raw_expr, expr))) {
-        LOG_WARN("fail to generate rt expr", K(ret), K(i), KPC(raw_expr));
-      } else if (OB_ISNULL(expr)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("rt expr is null", K(ret), K(i), KPC(raw_expr));
-      } else {
-        err_log_ins_ctdef.err_log_values_.at(i) = expr;
-      }
-    }
-  }
-
-  return ret;
-}
-
 int ObDmlCgService::generate_multi_lock_ctdef(const IndexDMLInfo &index_dml_info,
                                               ObMultiLockCtDef &multi_lock_ctdef)
 {
@@ -3104,10 +2945,6 @@ int ObDmlCgService::generate_multi_ins_ctdef(const IndexDMLInfo &index_dml_info,
                                                     &multi_ins_ctdef.loc_meta_,
                                                     multi_ins_ctdef.calc_part_id_expr_))) {
     LOG_WARN("generate rt expr failed", K(ret));
-  } else if (OB_FAIL(ObExprCalcPartitionBase::set_may_add_interval_part(
-                                                 multi_ins_ctdef.calc_part_id_expr_,
-                                                 MayAddIntervalPart::YES))) {
-      LOG_WARN("failed to set partition info", K(ret));
   } else if (!index_dml_info.part_ids_.empty() && index_dml_info.is_primary_index_) {
     if (OB_FAIL(multi_ins_ctdef.hint_part_ids_.assign(index_dml_info.part_ids_))) {
       LOG_WARN("assign part ids failed", K(ret));
@@ -3153,19 +2990,6 @@ int ObDmlCgService::generate_multi_upd_ctdef(const ObLogDelUpd &op,
     LOG_WARN("generate new part id expr failed", K(ret));
   } else {
     multi_upd_ctdef.is_enable_row_movement_ = true;
-    if (multi_upd_ctdef.is_enable_row_movement_) {
-      if (OB_FAIL(ObExprCalcPartitionBase::set_may_add_interval_part(
-                                                 multi_upd_ctdef.calc_part_id_new_,
-                                                 MayAddIntervalPart::YES))) {
-        LOG_WARN("failed to set partition info", K(ret));
-      }
-    } else {
-      if (OB_FAIL(ObExprCalcPartitionBase::set_may_add_interval_part(
-                                     multi_upd_ctdef.calc_part_id_new_,
-                                     MayAddIntervalPart::PART_CHANGE_ERR))) {
-        LOG_WARN("failed to set partition info", K(ret));
-      }
-    }
   }
   if (OB_SUCC(ret)) {
     const ObDMLStmt *stmt = op.get_stmt();

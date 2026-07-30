@@ -46,8 +46,6 @@ ObPxOrderedCoordOp::ObPxOrderedCoordOp(ObExecContext &exec_ctx, const ObOpSpec &
     init_channel_piece_msg_proc_(exec_ctx, msg_proc_),
     reporting_wf_piece_msg_proc_(exec_ctx, msg_proc_),
     opt_stats_gather_piece_msg_proc_(exec_ctx, msg_proc_),
-    sp_winfunc_px_piece_msg_proc_(exec_ctx, msg_proc_),
-    rd_winfunc_px_piece_msg_proc_(exec_ctx, msg_proc_),
     join_filter_count_row_piece_msg_proc_(exec_ctx, msg_proc_),
     readers_(NULL),
     receive_order_(),
@@ -55,8 +53,7 @@ ObPxOrderedCoordOp::ObPxOrderedCoordOp(ObExecContext &exec_ctx, const ObOpSpec &
     channel_idx_(0),
     finish_ch_cnt_(0),
     all_rows_finish_(false),
-    stored_rows_(NULL),
-    vector_rows_(nullptr)
+    stored_rows_(NULL)
   {}
 
 int ObPxOrderedCoordOp::ObPxOrderedCoordOpEventListener::on_root_data_channel_setup()
@@ -92,15 +89,6 @@ int ObPxOrderedCoordOp::inner_open()
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("alloc stored rows pointer failed", K(ret));
       }
-      if (OB_SUCC(ret) && MY_SPEC.use_rich_format_) {
-        vector_rows_ = static_cast<const ObCompactRow **>(
-          ctx_.get_allocator().alloc(spec_.max_batch_size_ * sizeof(*vector_rows_)));
-        if (NULL == vector_rows_) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("alloc vector rows pointer failed", K(ret));
-        }
-      }
-
     }
   }
   return ret;
@@ -130,8 +118,6 @@ int ObPxOrderedCoordOp::setup_loop_proc()
       .register_processor(init_channel_piece_msg_proc_)
       .register_processor(reporting_wf_piece_msg_proc_)
       .register_processor(opt_stats_gather_piece_msg_proc_)
-      .register_processor(sp_winfunc_px_piece_msg_proc_)
-      .register_processor(rd_winfunc_px_piece_msg_proc_)
       .register_processor(join_filter_count_row_piece_msg_proc_)
       .register_interrupt_processor(interrupt_proc_);
   return ret;
@@ -337,7 +323,7 @@ int ObPxOrderedCoordOp::inner_get_next_batch(const int64_t max_row_cnt)
           if (OB_FAIL(next_rows(*reader, max_row_cnt, read_rows))) {
             LOG_WARN("next rows failed", K(ret));
           }
-          LOG_DEBUG("[VEC2.0 PX] order coord get rows from channel", K(idx), K(reader), K(max_row_cnt), K(read_rows));
+          LOG_DEBUG("PX order coord get rows from channel", K(idx), K(reader), K(max_row_cnt), K(read_rows));
           if (!first_row_sent_) {
             first_row_sent_ = true;
             LOG_TRACE("TIMERECORD ",
@@ -438,13 +424,8 @@ int ObPxOrderedCoordOp::next_rows(ObReceiveRowReader &reader, int64_t max_row_cn
   LOG_TRACE("Begin next_rows", K(max_row_cnt));
   metric_.mark_interval_start();
   read_rows = 0;
-  if (MY_SPEC.use_rich_format_) {
-    ret = reader.get_next_batch_vec(MY_SPEC.child_exprs_, MY_SPEC.dynamic_const_exprs_, eval_ctx_,
-                                    max_row_cnt, read_rows, vector_rows_);
-  } else {
-    ret = reader.get_next_batch(MY_SPEC.child_exprs_, MY_SPEC.dynamic_const_exprs_, eval_ctx_,
-                                max_row_cnt, read_rows, stored_rows_);
-  }
+  ret = reader.get_next_batch(MY_SPEC.child_exprs_, MY_SPEC.dynamic_const_exprs_, eval_ctx_,
+                              max_row_cnt, read_rows, stored_rows_);
   metric_.mark_interval_end(&time_recorder_);
   if (OB_ITER_END == ret) {
     finish_ch_cnt_++;
@@ -513,13 +494,8 @@ int ObPxOrderedCoordOp::setup_readers()
       LOG_WARN("allocate memory failed", K(ret));
     } else {
       reader_cnt_ = task_channels_.count();
-      bool reorder_fixed_expr = true;
-      common::ObIAllocator *allocator = &ctx_.get_allocator();
       for (int64_t i = 0; i < reader_cnt_; i++) {
-        new (&readers_[i]) ObReceiveRowReader(get_spec().id_,
-              &(static_cast<const ObPxReceiveSpec &>(spec_).child_exprs_),
-              reorder_fixed_expr,
-              allocator);
+        new (&readers_[i]) ObReceiveRowReader();
       }
     }
   }

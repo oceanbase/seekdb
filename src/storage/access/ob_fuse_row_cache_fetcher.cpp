@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_fuse_row_cache_fetcher.h"
 #include "storage/blocksstable/ob_storage_cache_suite.h"
 
@@ -68,7 +67,6 @@ int ObFuseRowCacheFetcher::get_fuse_row_cache(const ObDatumRowkey &rowkey, ObFus
         STORAGE_LOG(WARN, "fail to get row from fuse row cache", K(ret), K(cache_key));
       }
     } else {
-      EVENT_INC(FUSE_ROW_CACHE_HIT);
     }
   }
 

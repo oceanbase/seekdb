@@ -45,9 +45,7 @@ while($i < 30)
 --enable_query_log
 
 connection conn0;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 --source mysql_test/include/wait_minor_merge.inc
 
 connection conn1;
@@ -61,9 +59,7 @@ insert into t1 value(2, 'Hello OceanBase & Happy New Year', 2, '2012-10-10 12:00
 insert into t1 value(1, 'Hello OceanBase & Happy New Year', 2, '2012-10-10 12:00:00','2012-10-10');
 
 connection conn0;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 --source mysql_test/include/wait_minor_merge.inc
 
 connection conn1;
@@ -89,9 +85,7 @@ while($i < 10)
 --enable_query_log
 
 connection conn0;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 --source mysql_test/include/wait_minor_merge.inc
 
 connection conn1;
@@ -117,9 +111,7 @@ while($i < 10)
 update t1 set c3 = c1 * c3;
 
 connection conn0;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 --source mysql_test/include/wait_minor_merge.inc
 
 connection conn1;

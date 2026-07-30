@@ -82,7 +82,7 @@ int ObMysqlCompressProtocolProcessor::do_splice(observer::ObSMConnection& conn, 
 {
   INIT_SUCC(ret);
   if (OB_FAIL(process_compressed_packet(conn.compressed_pkt_context_, conn.mysql_pkt_context_,
-                                          conn.pkt_rec_wrapper_, pool, pkt, need_decode_more))) {
+                                          pool, pkt, need_decode_more))) {
     LOG_ERROR("fail to process_compressed_packet", K(ret));
   }
   return ret;
@@ -149,8 +149,7 @@ inline int ObMysqlCompressProtocolProcessor::decode_compressed_packet(
 
 inline int ObMysqlCompressProtocolProcessor::process_compressed_packet(
     ObCompressedPktContext& context, ObMysqlPktContext &mysql_pkt_context,
-    obmysql::ObPacketRecordWrapper &pkt_rec_wrapper, ObICSMemPool& pool,
-    void *&ipacket, bool &need_decode_more)
+    ObICSMemPool& pool, void *&ipacket, bool &need_decode_more)
 {
   int ret = OB_SUCCESS;
   need_decode_more = true;
@@ -169,9 +168,6 @@ inline int ObMysqlCompressProtocolProcessor::process_compressed_packet(
                                      ? iraw_pkt->get_comp_len()
                                      : iraw_pkt->get_uncomp_len());
     int64_t alloc_size = static_cast<int64_t>(decompress_data_size);
-    if (pkt_rec_wrapper.enable_proto_dia()) {
-      pkt_rec_wrapper.record_recieve_mysql_pkt_fragment(iraw_pkt->get_comp_len());
-    }
     //in order to reuse optimize memory, we put decompressed data into raw_pkt directly
     char *tmp_buffer = NULL;
     if (OB_ISNULL(tmp_buffer = reinterpret_cast<char *>(pool.alloc(alloc_size)))) {
@@ -192,15 +188,6 @@ inline int ObMysqlCompressProtocolProcessor::process_compressed_packet(
         if (need_decode_more) {
           context.is_multi_pkt_ = true;
         } else {
-          if (pkt_rec_wrapper.enable_proto_dia()) {
-            ObMySQLRawPacket *raw_pkt = NULL;
-            if (OB_ISNULL(raw_pkt = reinterpret_cast<ObMySQLRawPacket *>(ipacket))) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_ERROR("ipacket is null", K(ret));
-            } else {
-              pkt_rec_wrapper.record_recieve_comp_packet(*iraw_pkt, *raw_pkt);
-            }
-          }
           // reset all context except the compress packet sequence
           context.reuse(); 
         }

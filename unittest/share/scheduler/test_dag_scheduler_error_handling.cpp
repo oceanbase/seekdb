@@ -31,13 +31,12 @@ namespace oceanbase
 using namespace common;
 using namespace lib;
 using namespace share;
-using namespace omt;
 namespace unittest
 {
 
 TEST_F(TestDagScheduler, test_error_handling)
 {
-  ObDagScheduler *scheduler = MTL(ObDagScheduler*);
+  ObDagScheduler *scheduler = share::g_mp->dag_scheduler();
   ASSERT_TRUE(nullptr != scheduler);
   ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice));
 

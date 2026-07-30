@@ -1,0 +1,71 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_SHOW_TABLES_
+#define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_SHOW_TABLES_
+
+#include "observer/virtual_table/ob_virtual_table_iterator.h"
+#include "common/ob_range.h"
+#include "lib/container/ob_se_array.h"
+#include "lib/ob_define.h"
+using oceanbase::common::OB_APP_MIN_COLUMN_ID;
+namespace oceanbase
+{
+namespace sql
+{
+class ObSQLSessionInfo;
+}
+namespace common
+{
+class ObMySQLProxy;
+}
+namespace share
+{
+namespace schema
+{
+class ObSimpleTableSchemaV2;
+}
+}
+namespace observer
+{
+class ObAllVirtualShowTables : public common::ObVirtualTableIterator
+{
+  enum ALL_TABLES_COLUMN
+  {
+    DATABASE_ID = OB_APP_MIN_COLUMN_ID,
+    TABLE_NAME = OB_APP_MIN_COLUMN_ID + 1,
+    TABLE_TYPE = OB_APP_MIN_COLUMN_ID + 2,
+  };
+public:
+  ObAllVirtualShowTables();
+  virtual ~ObAllVirtualShowTables();
+  virtual int inner_open();
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+  virtual void reset();
+
+private:
+  int inner_get_next_row();
+private:
+  uint64_t database_id_;
+  common::ObString database_name_;
+  common::ObSEArray<const share::schema::ObSimpleTableSchemaV2 *, 128> table_schemas_;
+  int64_t table_schema_idx_;
+  DISALLOW_COPY_AND_ASSIGN(ObAllVirtualShowTables);
+};
+
+}// observer
+}// oceanbase
+#endif /* OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_SHOW_TABLES_ */

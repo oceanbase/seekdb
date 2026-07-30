@@ -40,7 +40,7 @@ int ObHashExceptOp::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObHashSetOp::inner_open())) {
-    LOG_WARN("failed to open in ObHashExceptVecOp", K(ret));
+    LOG_WARN("failed to open in ObHashExceptOp", K(ret));
   } else if (MY_SPEC.max_batch_size_ > 0 &&
       OB_ISNULL(store_rows_ = static_cast<const ObChunkDatumStore::StoredRow **> (ctx_.get_allocator().
       alloc(MY_SPEC.max_batch_size_ * sizeof(ObChunkDatumStore::StoredRow *))))) {

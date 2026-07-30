@@ -1,6 +1,6 @@
 result_format: 4
 
-alter system flush plan cache global;
+alter system flush plan cache;
 set @@ob_enable_plan_cache = 0;
 
 select neg(1) from dual;
@@ -745,7 +745,7 @@ select --9223372036854775808, ---9223372036854775808, ----9223372036854775808;
 |   9223372036854775808 |   -9223372036854775808 |     9223372036854775808 |
 +-----------------------+------------------------+-------------------------+
 
-alter system flush plan cache global;
+alter system flush plan cache;
 set ob_enable_plan_cache = 1;
 select --9223372036854775808, ---9223372036854775808, ----9223372036854775808;
 +-----------------------+------------------------+-------------------------+

@@ -909,8 +909,7 @@ DEF_NUMBER_FUNCS(ObUNumberType, unumber);
       if (ObTimestampType != obj.get_type()) {                          \
         tz_info = NULL;                                                 \
       }                                                                 \
-      const ObString nls_format;																				\
-      ret = ObTimeConverter::FTYPE##_to_str(obj.get_##TYPE(), tz_info, nls_format, \
+      ret = ObTimeConverter::FTYPE##_to_str(obj.get_##TYPE(), tz_info, \
                                             obj.get_scale(), buffer, length, pos); \
     }                                                                   \
     if (OB_SUCC(ret)) {                                            \
@@ -934,8 +933,7 @@ DEF_NUMBER_FUNCS(ObUNumberType, unumber);
       if (ObTimestampType != obj.get_type()) {                          \
         tz_info = NULL;                                                 \
       }                                                                 \
-      const ObString nls_format;																				\
-      ret = ObTimeConverter::FTYPE##_to_str(obj.get_##TYPE(), tz_info, nls_format, \
+      ret = ObTimeConverter::FTYPE##_to_str(obj.get_##TYPE(), tz_info, \
                                               obj.get_scale(), buffer, length, pos); \
     }                                                                   \
     if (OB_SUCC(ret)) {                                            \
@@ -952,8 +950,7 @@ DEF_NUMBER_FUNCS(ObUNumberType, unumber);
     if (ObTimestampType != obj.get_type()) {                            \
       tz_info = NULL;                                                   \
     }                                                                   \
-    const ObString nls_format;																				  \
-    return ObTimeConverter::FTYPE##_to_str(obj.get_##TYPE(), tz_info, nls_format, OB_MAX_DATETIME_PRECISION, buffer, length, pos); \
+    return ObTimeConverter::FTYPE##_to_str(obj.get_##TYPE(), tz_info, OB_MAX_DATETIME_PRECISION, buffer, length, pos); \
   }                                                                     \
                                                                         \
   template <>                                                           \
@@ -968,8 +965,7 @@ DEF_NUMBER_FUNCS(ObUNumberType, unumber);
     if (ObTimestampType != obj.get_type()) {                            \
       tz_info = NULL;                                                   \
     }                                                                   \
-    const ObString nls_format;																				\
-    int ret = ObTimeConverter::FTYPE##_to_str(obj.get_##TYPE(), tz_info, nls_format, OB_MAX_DATETIME_PRECISION, buf, buf_len, pos); \
+    int ret = ObTimeConverter::FTYPE##_to_str(obj.get_##TYPE(), tz_info, OB_MAX_DATETIME_PRECISION, buf, buf_len, pos); \
     if (OB_SUCC(ret)) {                                            \
       J_QUOTE();                                                        \
       J_OBJ_END();                                                      \

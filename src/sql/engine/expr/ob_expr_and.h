@@ -39,11 +39,6 @@ public:
                                   ObEvalCtx &ctx,
                                   const ObBitVector &skip,
                                   const int64_t batch_size);
-  static int eval_and_vector(const ObExpr &expr,
-                             ObEvalCtx &ctx,
-                             const ObBitVector &skip,
-                             const EvalBound &bound);
-
   enum EvalAndStage {
     FIRST,
     MIDDLE,

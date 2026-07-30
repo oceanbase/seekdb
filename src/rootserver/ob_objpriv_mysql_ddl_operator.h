@@ -34,7 +34,7 @@ public:
       sql_proxy_(sql_proxy)
   {}
   virtual ~ObObjPrivMysqlDDLOperator() {}
-  int grant_object(const ObObjMysqlPrivSortKey &object_priv_key,
+  int grant_object(const share::schema::ObObjMysqlPrivSortKey &object_priv_key,
                    const ObPrivSet priv_set,
                    common::ObMySQLTransaction &trans,
                    const uint64_t option,
@@ -64,4 +64,3 @@ private:
 }
 }
 #endif //OCEANBASE_ROOTSERVER_OB_OBJPRIV_MYSQL_DDL_OPERATOR_H_
-

@@ -32,7 +32,7 @@ insert into t1 values(1, 2,
     '9.5', '10.5');
 
 --echo // Case1: normal test.测试各种类型组合, 跟不开新引擎开关进行对比
-alter system flush plan cache global;
+alter system flush plan cache;
 --explain_protocol 2
 set @@ob_enable_plan_cache = 0;
 let $cnt=22;
@@ -145,7 +145,7 @@ set time_zone='-5:00';
 create table sb(a timestamp);
 insert into sb values ("2010-01-01 00:00:00");
 set time_zone='-5:00';
-alter system flush plan cache global;
+alter system flush plan cache;
 --explain_protocol 2
 set @@ob_enable_plan_cache = 0;
 select timestampadd(hour,1,a) from sb;
@@ -157,7 +157,7 @@ set time_zone='+6:00';
 create table sb(a datetime);
 insert into sb values ("2010-08-06 12:34:56");
 set time_zone='-7:00';
-alter system flush plan cache global;
+alter system flush plan cache;
 --explain_protocol 2
 select timestampadd(hour,1,a) from sb;
 select timestampadd(hour,-1,a) from sb;

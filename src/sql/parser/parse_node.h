@@ -24,13 +24,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <setjmp.h>
-#ifdef SQL_PARSER_COMPILATION
-#include "ob_sql_mode.h"
-#include "sql/parser/ob_item_type.h"
-#else
 #include "common/sql_mode/ob_sql_mode.h"
 #include "sql/parser/ob_item_type.h"
-#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -95,7 +90,6 @@ enum ParseMode
   FP_NO_PARAMERIZE_AND_FILTER_HINT_MODE,/*Filter out hint, and do not parameterize*/
   TRIGGER_MODE, /* treat ':xxx' as identifier */
   DYNAMIC_SQL_MODE, /*Parse dynamic SQL, :idx and :identifier need to be determined whether to check the placeholder name based on the statement type*/
-  DBMS_SQL_MODE,
   INS_MULTI_VALUES,
   METHOD_OPT_MODE,
 };
@@ -115,16 +109,6 @@ typedef struct _ObStmtLoc
   int first_line_;
   int last_line_;
 } ObStmtLoc;
-
-enum UdtUdfType
-{
-  UDT_UDF_UNKNOWN,
-  UDT_UDF_CONS = 1,
-  UDT_UDF_MEMBER = 2,
-  UDT_UDF_STATIC = 4,
-  UDT_UDF_MAP = 8,
-  UDT_UDF_ORDER = 16,
-};
 
 typedef struct _ParseNode
 {
@@ -147,7 +131,7 @@ typedef struct _ParseNode
       uint32_t is_date_unit_ : 1; // 1 indicates it is a date unit constant, which needs to be reversed to a string during reverse parsing
       uint32_t is_literal_bool_ : 1; // indicate node is a literal TRUE/FALSE
       uint32_t is_empty_ : 1; // indicates whether the node is default, 1 means default, 0 means not default, used in opt_asc_desc node
-      uint32_t is_multiset_ : 1; // for cast(multiset(...) as ...)
+      uint32_t reserved_multiset_ : 1;
       uint32_t is_input_quoted_ : 1; // indicate name_ob input whether with double quote
       uint32_t is_forbid_parameter_ : 1; //1 indicate forbid parameter
       uint32_t is_default_literal_expression_ : 1; // 1 indicate in default literal expression, "DEFAULT NOW()"
@@ -186,11 +170,6 @@ typedef struct _ParseNode
     int64_t raw_param_idx_; // Constant node index in fp_result.raw_params_
     int64_t raw_sql_offset_; // constant node character offset in sql
   };
-
-#ifdef SQL_PARSER_COMPILATION
-  int token_off_;
-  int token_len_;
-#endif
 } ParseNode;
 
 struct _ParamList;
@@ -256,14 +235,6 @@ typedef struct _ObMinusStatuCtx
   bool is_cur_numeric_; // Is the current constant node a numeric node
 } ObMinusStatusCtx;
 
-#ifdef SQL_PARSER_COMPILATION
-// for comment_list_ in ParseResult
-typedef struct TokenPosInfo
-{
-  int token_off_;
-  int token_len_;
-} TokenPosInfo;
-#endif
 // External dependency object linked list
 typedef struct _ParenthesesOffset
 {
@@ -313,7 +284,6 @@ typedef struct
     uint32_t in_q_quote_                       : 1;
     uint32_t is_for_trigger_                   : 1;
     uint32_t is_dynamic_sql_                   : 1;
-    uint32_t is_dbms_sql_                      : 1;
     uint32_t is_batched_multi_enabled_split_   : 1;
     uint32_t is_not_utf8_connection_           : 1;
     uint32_t may_bool_value_                   : 1; // used for true/false in sql parser
@@ -323,7 +293,6 @@ typedef struct
     uint32_t is_for_remap_                     : 1;
     uint32_t contain_sensitive_data_           : 1;
     uint32_t may_contain_sensitive_data_       : 1;
-    uint32_t is_returning_                     : 1;
     uint32_t is_into_cluster_                  : 1;
     uint32_t is_method_opt_parser_             : 1;
   };
@@ -355,13 +324,6 @@ typedef struct
   InsMultiValuesResult *ins_multi_value_res_;
 
 
-#ifdef SQL_PARSER_COMPILATION
-  TokenPosInfo *comment_list_;
-  int comment_cnt_;
-  int comment_cap_;
-  int realloc_cnt_;
-  bool stop_add_comment_;
-#endif
 } ParseResult;
 
 typedef struct _ObFastParseCtx
@@ -455,11 +417,9 @@ typedef enum ObNumberParseType
   NPT_EMPTY,
 } ObNumberParseType;
 
-#ifndef SQL_PARSER_COMPILATION
 bool check_stack_overflow_c();
 // Find the interface for external pl variables, get the index of the variable in the external symbol table, defined in ob_pl_stmt.cpp
 int lookup_pl_symbol(const void *pl_ns, const char *symbol, size_t len, int64_t *find_idx);
-#endif
 
 typedef struct _ParserLinkNode
 {

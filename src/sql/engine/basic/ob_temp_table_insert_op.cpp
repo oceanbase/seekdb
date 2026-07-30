@@ -263,8 +263,7 @@ int ObTempTableInsertOp::init_chunk_row_store(ObDTLIntermResultInfo *&chunk_row_
                                             MY_INPUT.qc_id_,
                                             MY_INPUT.dfo_id_,
                                             MY_INPUT.sqc_id_
-                                          ),
-                                          ObDTLIntermResultInfo::StoreType::DATUM))) {
+                                          )))) {
       LOG_WARN("failed to create row store.", K(ret));
     } else if (FALSE_IT(chunk_row_store = result_info_guard.result_info_)) {
     } else if (OB_FAIL(chunk_row_store->datum_store_->init(UINT64_MAX,
@@ -374,7 +373,6 @@ int ObTempTableInsertOp::prepare_interm_result_id_for_local(uint64_t &interm_res
   temp_table_ctx.is_local_interm_result_ = true;
   interm_result_id = dtl::ObDtlChannel::generate_id();
   ObTempTableResultInfo info;
-  info.addr_ = GCTX.self_addr();
   if (OB_FAIL(info.interm_result_ids_.push_back(interm_result_id))) {
     LOG_WARN("failed to push back", K(ret));
   } else if (OB_FAIL(temp_table_ctx.interm_result_infos_.push_back(info))) {

@@ -342,7 +342,7 @@ struct ObDatumUDTCmp : public ObDefined<>
     UNUSED(l);
     UNUSED(r);
     UNUSED(cmp_ret);
-    return OB_ERR_NO_ORDER_MAP_SQL;
+    return OB_ERR_INVALID_TYPE_FOR_OP;
   }
 };
 

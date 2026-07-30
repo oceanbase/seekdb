@@ -18,7 +18,6 @@
 #define OCEANBASE_SQL_OB_EXPR_STR_TO_DATE_H_
 
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "sql/engine/expr/ob_expr_to_temporal_base.h"
 
 namespace oceanbase
 {

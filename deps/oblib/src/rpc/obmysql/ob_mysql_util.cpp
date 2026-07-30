@@ -472,8 +472,7 @@ int ObMySQLUtil::datetime_cell_str(
       if (len - pos <= 1) {
         ret = OB_SIZE_OVERFLOW;
       } else {
-        const ObString nls_format;
-        if (OB_FAIL(ObTimeConverter::datetime_to_str(val, tz_info, nls_format, scale, buf, len, pos))) {
+        if (OB_FAIL(ObTimeConverter::datetime_to_str(val, tz_info, scale, buf, len, pos))) {
           pos = pos_begin + 1;
         } else {
           // store length as beginning
@@ -509,8 +508,7 @@ int ObMySQLUtil::mdatetime_cell_str(
       if (len - pos <= 1) {
         ret = OB_SIZE_OVERFLOW;
       } else {
-        const ObString nls_format;
-        if (OB_FAIL(ObTimeConverter::mdatetime_to_str(val, tz_info, nls_format, scale, buf, len, pos))) {
+        if (OB_FAIL(ObTimeConverter::mdatetime_to_str(val, tz_info, scale, buf, len, pos))) {
           pos = pos_begin + 1;
         } else {
           // store length as beginning

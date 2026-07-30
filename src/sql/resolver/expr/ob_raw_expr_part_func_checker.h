@@ -26,8 +26,8 @@ namespace sql
 class ObRawExprPartFuncChecker : public ObRawExprVisitor
 {
 public:
-  explicit ObRawExprPartFuncChecker(bool gen_col_check = false, bool accept_charset_function = false, bool interval_check = false)
-      : ObRawExprVisitor(), gen_col_check_(gen_col_check), accept_charset_function_(accept_charset_function), interval_check_(interval_check) { }
+  explicit ObRawExprPartFuncChecker(bool gen_col_check = false, bool accept_charset_function = false)
+      : ObRawExprVisitor(), gen_col_check_(gen_col_check), accept_charset_function_(accept_charset_function) { }
   virtual ~ObRawExprPartFuncChecker() {}
 
   /// interface of ObRawExprVisitor
@@ -49,7 +49,6 @@ private:
   // types and constants
   bool gen_col_check_;
   bool accept_charset_function_;
-  bool interval_check_;
 private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObRawExprPartFuncChecker);
@@ -59,4 +58,3 @@ private:
 } //end of oceanbase
 
 #endif //OCEANBASE_SQL_RESOLVER_OB_RAW_EXPR_PART_FUNC_CHECKER_H_
-

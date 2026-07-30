@@ -93,7 +93,6 @@ public:
                  const bool input_utc_time);
   static int parse_string(int64_t &timestamp_data, const ObString &tz_str,
                           ObSQLSessionInfo *session, const bool input_utc_time);
-  static int calc_convert_tz_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound);
 
 private:
   // disallow copy
@@ -104,10 +103,6 @@ private:
   static int calc_convert_tz_timestamp(const ObExpr &expr, ObEvalCtx &ctx, int64_t &timestamp_data, const ObString &tz_str_s,//source time zone (input2)
                       const ObString &tz_str_d,//destination time zone (input3)
                       ObSQLSessionInfo *session);
-  template <typename ArgVec, typename ResVec, typename IN_TYPE>
-  static int convert_tz_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound);
-  template <typename ArgVec, typename ResVec, typename IN_TYPE>
-  static int convert_tz_vector_const(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound);
   DISALLOW_COPY_AND_ASSIGN(ObExprConvertTZ);
 
 };

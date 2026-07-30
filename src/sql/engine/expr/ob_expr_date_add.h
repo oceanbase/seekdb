@@ -52,7 +52,6 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
   static int calc_date_add(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int calc_date_add_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprDateAdd);
 };
@@ -66,7 +65,6 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
   static int calc_date_sub(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int calc_date_sub_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprDateSub);
 };

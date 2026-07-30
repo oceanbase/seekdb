@@ -67,11 +67,6 @@ public:
     return type >= 0 && type < PHY_END && G_VECTORIZED_OP_ARRAY_[type];
   }
 
-  static inline bool support_rich_format(const ObPhyOperatorType type)
-  {
-    return type >= 0 && type < PHY_END && G_SUPPORT_RICH_FMT_ARRAY_[type];
-  }
-
   struct AllocFun
   {
     __typeof__(&ObOperatorFactory::alloc_op_spec) spec_func_;
@@ -82,7 +77,6 @@ public:
 private:
   static AllocFun *G_ALL_ALLOC_FUNS_;
   static bool *G_VECTORIZED_OP_ARRAY_;
-  static bool *G_SUPPORT_RICH_FMT_ARRAY_;
 };
 
 } // end namespace sql

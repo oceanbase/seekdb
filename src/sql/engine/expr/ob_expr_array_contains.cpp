@@ -263,124 +263,6 @@ int ObExprArrayContains::eval_array_contains_array_batch(const ObExpr &expr, ObE
   return ret;
 }
 
-#define EVAL_FUNC_ARRAY_CONTAINS_VECTOR(TYPE, GET_FUNC)                                                   \
-  int ObExprArrayContains::eval_array_contains_vector_##TYPE(                                             \
-      const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound)                \
-  {                                                                                                       \
-    int ret = OB_SUCCESS;                                                                                 \
-    uint32_t p0 = expr.extra_ == 1 ? 1 : 0;                                                               \
-    uint32_t p1 = expr.extra_ == 1 ? 0 : 1;                                                               \
-    if (OB_FAIL(expr.args_[p0]->eval_vector(ctx, skip, bound)) ||                                         \
-        OB_FAIL(expr.args_[p1]->eval_vector(ctx, skip, bound))) {                                         \
-      LOG_WARN("fail to eval params", K(ret));                                                            \
-    } else {                                                                                              \
-      ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);                                                         \
-      common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();                              \
-      ObIVector *left_vec = expr.args_[p0]->get_vector(ctx);                                              \
-      VectorFormat left_format = left_vec->get_format();                                                  \
-      ObIVector *right_vec = expr.args_[p1]->get_vector(ctx);                                             \
-      const uint16_t meta_id = expr.args_[p0]->obj_meta_.get_subschema_id();                              \
-      ObIVector *res_vec = expr.get_vector(ctx);                                                          \
-      ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);                                            \
-      ObIArrayType *arr_obj = NULL;                                                                       \
-      TYPE val;                                                                                           \
-      for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {                       \
-        bool is_null_res = false;                                                                         \
-        if (skip.at(idx) || eval_flags.at(idx)) {                                                         \
-          continue;                                                                                       \
-        } else if (left_vec->is_null(idx)) {                                                              \
-          is_null_res = true;                                                                             \
-        } else {                                                                                          \
-          ObString left = left_vec->get_string(idx);                                                      \
-          if (OB_FAIL(ObNestedVectorFunc::construct_param(tmp_allocator, ctx, meta_id, left, arr_obj))) { \
-            LOG_WARN("construct array obj failed", K(ret));                                               \
-          }                                                                                               \
-        }                                                                                                 \
-        bool bret = false;                                                                                \
-        if (OB_FAIL(ret)) {                                                                               \
-        } else if (is_null_res) {                                                                         \
-          res_vec->set_null(idx);                                                                         \
-          eval_flags.set(idx);                                                                            \
-        } else if (right_vec->is_null(idx)) {                                                             \
-          bool contains_null = arr_obj->contain_null();                                                   \
-          res_vec->set_bool(idx, contains_null);                                                          \
-          eval_flags.set(idx);                                                                            \
-        } else if (FALSE_IT(val = right_vec->GET_FUNC(idx))) {                                            \
-        } else if (OB_FAIL(ObArrayUtil::contains(*arr_obj, val, bret))) {                                 \
-          LOG_WARN("array contains failed", K(ret));                                                      \
-        } else {                                                                                          \
-          res_vec->set_bool(idx, bret);                                                                   \
-          eval_flags.set(idx);                                                                            \
-        }                                                                                                 \
-      }                                                                                                   \
-    }                                                                                                     \
-    return ret;                                                                                           \
-  }
-
-EVAL_FUNC_ARRAY_CONTAINS_VECTOR(int64_t, get_int)
-EVAL_FUNC_ARRAY_CONTAINS_VECTOR(float, get_float)
-EVAL_FUNC_ARRAY_CONTAINS_VECTOR(double, get_double)
-EVAL_FUNC_ARRAY_CONTAINS_VECTOR(ObString, get_string)
-
-int ObExprArrayContains::eval_array_contains_array_vector(const ObExpr &expr, ObEvalCtx &ctx,
-                                                          const ObBitVector &skip, const EvalBound &bound)
-{
-  int ret = OB_SUCCESS;
-  uint32_t p0 = expr.extra_ == 1 ? 1 : 0;
-  uint32_t p1 = expr.extra_ == 1 ? 0 : 1;
-  if (OB_FAIL(expr.args_[p0]->eval_vector(ctx, skip, bound)) || OB_FAIL(expr.args_[p1]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval params", K(ret));
-  } else {
-    ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-    common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
-    ObIVector *left_vec = expr.args_[p0]->get_vector(ctx);
-    VectorFormat left_format = left_vec->get_format();
-    ObIVector *right_vec = expr.args_[p1]->get_vector(ctx);
-    VectorFormat right_format = right_vec->get_format();
-    const uint16_t left_meta_id = expr.args_[p0]->obj_meta_.get_subschema_id();
-    const uint16_t right_meta_id = expr.args_[p1]->obj_meta_.get_subschema_id();
-    ObIVector *res_vec = expr.get_vector(ctx);
-    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-    ObIArrayType *arr_obj = NULL;
-    ObIArrayType *arr_val = NULL;
-    for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {
-      bool is_null_res = false;
-      if (skip.at(idx) || eval_flags.at(idx)) {
-        continue;
-      } else if (left_vec->is_null(idx)) {
-        is_null_res = true;
-      } else {
-        ObString left = left_vec->get_string(idx);
-        if (OB_FAIL(ObNestedVectorFunc::construct_param(tmp_allocator, ctx, left_meta_id, left, arr_obj))) {
-          LOG_WARN("construct array obj failed", K(ret));
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (is_null_res) {
-        res_vec->set_null(idx);
-        eval_flags.set(idx);
-      } else if (right_vec->is_null(idx)) {
-        bool contains_null = arr_obj->contain_null();
-        res_vec->set_bool(idx, contains_null);
-        eval_flags.set(idx);
-      } else {
-        bool bret = false;
-        ObString right = right_vec->get_string(idx);
-        if (OB_FAIL(ObNestedVectorFunc::construct_param(tmp_allocator, ctx, right_meta_id, right, arr_val))) {
-          LOG_WARN("construct array obj failed", K(ret));
-        } else if (OB_FAIL(ObArrayUtil::contains(*arr_obj, *arr_val, bret))) {
-          LOG_WARN("array contains failed", K(ret));
-        } else {
-          res_vec->set_bool(idx, bret);
-          eval_flags.set(idx);
-        }
-      }
-    }
-  }
-
-  return ret;
-}
-
 int ObExprArrayContains::cg_expr(ObExprCGCtx &expr_cg_ctx,
                          const ObRawExpr &raw_expr,
                          ObExpr &rt_expr) const
@@ -423,28 +305,23 @@ int ObExprArrayContains::cg_expr(ObExprCGCtx &expr_cg_ctx,
         case ObIntTC:
           rt_expr.eval_func_ = eval_array_contains_int64_t;
           rt_expr.eval_batch_func_ = eval_array_contains_batch_int64_t;
-          rt_expr.eval_vector_func_ = eval_array_contains_vector_int64_t;
           break;
         case ObFloatTC:
           rt_expr.eval_func_ = eval_array_contains_float;
           rt_expr.eval_batch_func_ = eval_array_contains_batch_float;
-          rt_expr.eval_vector_func_ = eval_array_contains_vector_float;
           break;
         case ObDoubleTC:
           rt_expr.eval_func_ = eval_array_contains_double;
           rt_expr.eval_batch_func_ = eval_array_contains_batch_double;
-          rt_expr.eval_vector_func_ = eval_array_contains_vector_double;
           break;
         case ObStringTC:
           rt_expr.eval_func_ = eval_array_contains_ObString;
           rt_expr.eval_batch_func_ = eval_array_contains_batch_ObString;
-          rt_expr.eval_vector_func_ = eval_array_contains_vector_ObString;
           break;
         case ObNullTC:
         case ObCollectionSQLTC:
           rt_expr.eval_func_ = eval_array_contains_array;
           rt_expr.eval_batch_func_ = eval_array_contains_array_batch;
-          rt_expr.eval_vector_func_ = eval_array_contains_array_vector;
           break;
         default :
           ret = OB_ERR_INVALID_TYPE_FOR_OP;

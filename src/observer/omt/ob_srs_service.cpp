@@ -17,9 +17,10 @@
 #define USING_LOG_PREFIX SERVER_OMT
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_srs_service.h"
+#include "lib/string/ob_sql_string.h"
 #include "share/ob_sql_client_decorator.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "src/share/ob_server_struct.h"
-#include "sql/engine/cmd/ob_srs_importer.h"
 #include "share/ob_internal_table_change_notifier.h"
 #include "share/geo/ob_geo_utils.h"
 
@@ -76,7 +77,7 @@ int ObSrsService::init()
     infinite_plane_.maxX_ = INT32_MAX;
     infinite_plane_.maxY_ = INT32_MAX;
     share::ObInternalTableChangeNotifier::get_instance().register_module(
-        table::ObModuleDataArg::GIS,
+        share::ObInternalTableChangeNotifier::Module::GIS,
         []() -> int {
           SRS_SERVICE->mark_stale();
           LOG_INFO("[SRS] marked stale by notifier");
@@ -234,7 +235,7 @@ int ObSrsService::fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot)
   int64_t srs_cnt = 0;
   const int TOTAL_SRS_CNT = 5152;
 
-  if (OB_FAIL(table::ObSRSImporter::get_srs_cnt(sql_proxy_, srs_cnt))) {
+  if (OB_FAIL(get_srs_cnt(srs_cnt))) {
     LOG_WARN("get srs cnt failed", K(ret));
   } else if (srs_cnt < TOTAL_SRS_CNT) {
     if (srs_cnt > 1) {
@@ -305,6 +306,35 @@ int ObSrsService::fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot)
           allocator_.free(snapshot);
           LOG_WARN("failed to get all srs item, iter quit", K(ret));
         }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObSrsService::get_srs_cnt(int64_t &srs_cnt)
+{
+  int ret = OB_SUCCESS;
+  ObSqlString sql;
+  srs_cnt = 0;
+  if (OB_ISNULL(sql_proxy_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql proxy is null", K(ret));
+  } else if (OB_FAIL(sql.assign_fmt("SELECT count(*) AS srs_cnt FROM oceanbase.%s",
+                                    OB_ALL_SPATIAL_REFERENCE_SYSTEMS_TNAME))) {
+    LOG_WARN("failed to assign sql", K(ret), K(sql));
+  } else {
+    HEAP_VAR(ObMySQLProxy::MySQLResult, res) {
+      common::sqlclient::ObMySQLResult *result = NULL;
+      if (OB_FAIL(sql_proxy_->read(res, sql.ptr()))) {
+        LOG_WARN("failed to read srs count", K(ret), K(sql));
+      } else if (OB_ISNULL(result = res.get_result())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to get sql result", K(ret));
+      } else if (OB_FAIL(result->next())) {
+        LOG_WARN("failed to get srs count row", K(ret), K(sql));
+      } else {
+        EXTRACT_INT_FIELD_MYSQL(*result, "srs_cnt", srs_cnt, int64_t);
       }
     }
   }

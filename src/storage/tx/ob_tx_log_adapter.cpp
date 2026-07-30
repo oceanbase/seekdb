@@ -96,8 +96,6 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
         cb->set_lsn(lsn);
         cb->set_log_ts(scn);
         cb->set_submit_ts(cur_ts);
-        ObTransStatistic::get_instance().add_clog_submit_count( 1);
-        ObTransStatistic::get_instance().add_trans_log_total_size( size);
       }
       if (!need_nonblock) {
         // retries are not needed in block mode.

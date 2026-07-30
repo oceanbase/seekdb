@@ -125,60 +125,6 @@ int ObExprMapComponents::eval_map_components(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 
-int ObExprMapComponents::eval_map_components_vector(const ObExpr &expr, 
-                         ObEvalCtx &ctx,
-                         const ObBitVector &skip, 
-                         const EvalBound &bound,
-                         bool is_key)
-{
-  int ret = OB_SUCCESS;
-  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
-  uint16_t res_subschema_id = expr.obj_meta_.get_subschema_id();
-  uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
-
-  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval source map failed", K(ret));
-  } else {
-    ObIVector *map_vec = expr.args_[0]->get_vector(ctx);
-    ObIVector *res_vec = expr.get_vector(ctx);
-    VectorFormat res_format = expr.get_format(ctx);
-    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-
-    for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {
-      ObIArrayType *res_arr = NULL;
-      bool is_null_res = false;
-      if (skip.at(idx) || eval_flags.at(idx)) {
-        continue;
-      }
-      if (map_vec->is_null(idx)) {
-        is_null_res = true;
-      } else {
-        ObString map_blob = map_vec->get_string(idx);
-        if (OB_FAIL(get_map_components_arr(tmp_allocator, ctx, map_blob, res_arr, res_subschema_id, subschema_id, is_key))) {
-          LOG_WARN("failed to get map key array", K(ret));
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (is_null_res) {
-        res_vec->set_null(idx);
-      } else if (res_format == VEC_DISCRETE) {
-        if (OB_FAIL(ObArrayExprUtils::set_array_res<ObDiscreteFormat>(res_arr, expr, ctx, static_cast<ObDiscreteFormat *>(res_vec), idx))) {
-          LOG_WARN("set array res failed", K(ret));
-        }
-      } else if (res_format == VEC_UNIFORM) {
-        if (OB_FAIL(ObArrayExprUtils::set_array_res<ObUniformFormat<false>>(res_arr, expr, ctx, static_cast<ObUniformFormat<false> *>(res_vec), idx))) {
-          LOG_WARN("set array res failed", K(ret));
-        }
-      } else if (OB_FAIL(ObArrayExprUtils::set_array_res<ObVectorBase>(res_arr, expr, ctx, static_cast<ObVectorBase *>(res_vec), idx))) {
-        LOG_WARN("set array res failed", K(ret));
-      } 
-    } // end for
-  }
-  return ret;
-}
-
-
 int ObExprMapComponents::get_map_components_arr(ObIAllocator &tmp_allocator,
                                     ObEvalCtx &ctx,
                                     ObString &map_blob, 
@@ -250,12 +196,6 @@ int ObExprMapKeys::eval_map_keys(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
   return ObExprMapComponents::eval_map_components(expr, ctx, res, true);
 }
 
-int ObExprMapKeys::eval_map_keys_vector(const ObExpr &expr, ObEvalCtx &ctx,
-                                          const ObBitVector &skip, const EvalBound &bound)
-{
-  return ObExprMapComponents::eval_map_components_vector(expr, ctx, skip, bound, true);
-}
-
 int ObExprMapKeys::cg_expr(ObExprCGCtx &expr_cg_ctx,
                          const ObRawExpr &raw_expr,
                          ObExpr &rt_expr) const
@@ -263,7 +203,6 @@ int ObExprMapKeys::cg_expr(ObExprCGCtx &expr_cg_ctx,
   UNUSED(expr_cg_ctx);
   UNUSED(raw_expr);
   rt_expr.eval_func_ = eval_map_keys;
-  rt_expr.eval_vector_func_ = eval_map_keys_vector;
   return OB_SUCCESS;
 }
 
@@ -288,12 +227,6 @@ int ObExprMapValues::eval_map_values(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   return ObExprMapComponents::eval_map_components(expr, ctx, res, false);
 }
 
-int ObExprMapValues::eval_map_values_vector(const ObExpr &expr, ObEvalCtx &ctx,
-                                          const ObBitVector &skip, const EvalBound &bound)
-{
-  return ObExprMapComponents::eval_map_components_vector(expr, ctx, skip, bound, false);
-}
-
 int ObExprMapValues::cg_expr(ObExprCGCtx &expr_cg_ctx,
                          const ObRawExpr &raw_expr,
                          ObExpr &rt_expr) const
@@ -301,7 +234,6 @@ int ObExprMapValues::cg_expr(ObExprCGCtx &expr_cg_ctx,
   UNUSED(expr_cg_ctx);
   UNUSED(raw_expr);
   rt_expr.eval_func_ = eval_map_values;
-  rt_expr.eval_vector_func_ = eval_map_values_vector;
   return OB_SUCCESS;
 }
 

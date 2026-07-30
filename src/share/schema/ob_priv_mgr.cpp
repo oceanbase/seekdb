@@ -231,7 +231,6 @@ const char *ObPrivMgr::get_priv_name(int64_t priv_shift) {
     case OB_PRIV_SUPER_SHIFT: cret = "SUPER"; break;
     case OB_PRIV_PROCESS_SHIFT: cret = "PROCESS"; break;
     case OB_PRIV_BOOTSTRAP_SHIFT: cret = "BOOTSTRAP"; break;
-    case OB_PRIV_CREATE_SYNONYM_SHIFT: cret = "CREATE SYNONYM"; break;
     case OB_PRIV_AUDIT_SHIFT: cret = "AUDIT"; break;
     case OB_PRIV_COMMENT_SHIFT: cret = "COMMENT"; break;
     case OB_PRIV_LOCK_SHIFT: cret = "LOCK"; break;
@@ -277,7 +276,7 @@ const char *ObPrivMgr::get_first_priv_name(ObPrivSet priv_set) {
 int ObPrivMgr::get_priv_schema_count(int64_t &priv_schema_count) const
 {
   int ret = OB_SUCCESS;
-  priv_schema_count = table_privs_.size() + db_privs_.size() 
+  priv_schema_count = table_privs_.size() + db_privs_.size()
                       + sys_privs_.size() + obj_privs_.size()
                       + obj_mysql_privs_.size();
   return ret;
@@ -1836,7 +1835,7 @@ int ObPrivMgr::add_obj_mysql_priv(const ObObjMysqlPriv &obj_mysql_priv)
   return ret;
 }
 
-int ObPrivMgr::del_obj_mysql_priv(const ObObjMysqlPrivSortKey &obj_mysql_priv_key) 
+int ObPrivMgr::del_obj_mysql_priv(const ObObjMysqlPrivSortKey &obj_mysql_priv_key)
 {
   int ret = OB_SUCCESS;
 
@@ -1871,7 +1870,7 @@ int ObPrivMgr::get_obj_mysql_priv(const ObObjMysqlPrivSortKey &obj_mysql_priv_ke
   obj_mysql_priv = NULL;
   ObObjMysqlPriv *tmp_obj_mysql_priv = NULL;
   int hash_ret = obj_mysql_priv_map_.get_refactored(obj_mysql_priv_key, tmp_obj_mysql_priv);
-  
+
   if (OB_SUCCESS == hash_ret) {
     if (OB_ISNULL(tmp_obj_mysql_priv)) {
       ret = OB_ERR_UNEXPECTED;
@@ -1886,8 +1885,8 @@ int ObPrivMgr::get_obj_mysql_priv(const ObObjMysqlPrivSortKey &obj_mysql_priv_ke
   return ret;
 }
 
-int ObPrivMgr::get_obj_mysql_priv_set(const ObObjMysqlPrivSortKey &obj_mysql_priv_key, 
-                                      ObPrivSet &priv_set) const 
+int ObPrivMgr::get_obj_mysql_priv_set(const ObObjMysqlPrivSortKey &obj_mysql_priv_key,
+                                      ObPrivSet &priv_set) const
 {
   int ret = OB_SUCCESS;
   priv_set = OB_PRIV_SET_EMPTY;

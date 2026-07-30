@@ -36,7 +36,7 @@ class ObRFBloomFilterMsg final : public ObP2PDatahubMsgBase
 {
   OB_UNIS_VERSION_V(1);
 public:
-  ObRFBloomFilterMsg() : bloom_filter_(), use_rich_format_(false) {}
+  ObRFBloomFilterMsg() : bloom_filter_() {}
   ~ObRFBloomFilterMsg() { destroy(); }
   virtual int assign(const ObP2PDatahubMsgBase &) final;
   virtual int merge(ObP2PDatahubMsgBase &) final;
@@ -50,22 +50,6 @@ public:
       const ObBitVector &skip,
       const int64_t batch_size,
       ObExprJoinFilter::ObExprJoinFilterContext &filter_ctx) override;
-  int might_contain_vector(
-      const ObExpr &expr,
-      ObEvalCtx &ctx,
-      const ObBitVector &skip,
-      const EvalBound &bound,
-      ObExprJoinFilter::ObExprJoinFilterContext &filter_ctx) override final;
-
-  int insert_bloom_filter_with_hash_values(const ObBatchRows *child_brs,
-                                           uint64_t *batch_hash_values);
-  int insert_by_row_vector(
-      const ObBatchRows *child_brs,
-      const common::ObIArray<ObExpr *> &expr_array,
-      const common::ObHashFuncs &hash_funcs,
-      const ObExpr *calc_tablet_id_expr,
-      ObEvalCtx &eval_ctx,
-      uint64_t *batch_hash_values) override final;
   virtual int insert_by_row(
     const common::ObIArray<ObExpr *> &expr_array,
     const common::ObHashFuncs &hash_funcs,
@@ -81,9 +65,6 @@ public:
   virtual int reuse() override;
   virtual int deep_copy_msg(ObP2PDatahubMsgBase *&new_msg_ptr);
   virtual int destroy();
-  inline void set_use_rich_format(bool value) { use_rich_format_ = value; }
-  inline bool get_use_rich_format() const { return use_rich_format_; }
-
   inline void set_use_hash_join_seed(bool value) { use_hash_join_seed_ = value; }
   inline bool use_hash_join_seed() const { return use_hash_join_seed_; }
 private:
@@ -93,19 +74,8 @@ private:
       const ObExpr *calc_tablet_id_expr,
       ObEvalCtx &eval_ctx,
       uint64_t &hash_value, bool &ignore);
-  int do_might_contain_vector(
-      const ObExpr &expr,
-      ObEvalCtx &ctx,
-      const ObBitVector &skip,
-      const EvalBound &bound,
-      ObExprJoinFilter::ObExprJoinFilterContext &filter_ctx);
-  template <typename ArgVec>
-  int insert_partition_bloom_filter(ArgVec *arg_vec, const ObBatchRows *child_brs,
-                                    uint64_t *batch_hash_values);
-
 public:
   ObPxBloomFilter bloom_filter_;
-  bool use_rich_format_;
   bool use_hash_join_seed_ {false};
 };
 

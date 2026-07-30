@@ -15,6 +15,7 @@
  */
 
 #include "log_loop_thread.h"
+#include "share/rc/ob_module_provider.h"
 #include "palf_env_impl.h"
 
 namespace oceanbase

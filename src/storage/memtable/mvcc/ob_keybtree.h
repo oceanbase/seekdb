@@ -137,7 +137,7 @@ private:
 private:
   common::ObIAllocator &allocator_;
   int64_t alloc_memory_;
-  // free lists partitioned by cpu to archive better scalability
+  // free lists partitioned by CPU to achieve better scalability
   BtreeNodeList free_list_array_[MAX_LIST_COUNT] CACHE_ALIGNED;
 };
 

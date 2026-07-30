@@ -1,1 +1,0 @@
-sql_unittest(test_dtl_rpc_channel)

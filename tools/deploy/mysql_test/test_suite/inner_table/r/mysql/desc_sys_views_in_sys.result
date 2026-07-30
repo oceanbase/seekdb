@@ -1481,7 +1481,7 @@ cnt
 desc oceanbase.DBA_OB_FREEZE_INFO;
 Field	Type	Null	Key	Default	Extra
 FROZEN_SCN	bigint(20) unsigned	NO		NULL	
-CLUSTER_VERSION	bigint(20)	NO		NULL	
+DATA_VERSION	bigint(20)	NO		NULL	
 SCHEMA_VERSION	bigint(20)	NO		NULL	
 GMT_CREATE	timestamp(6)	YES			
 GMT_MODIFIED	timestamp(6)	YES			
@@ -1544,7 +1544,6 @@ PRIV_CREATE_USER	varchar(3)	NO
 PRIV_SUPER	varchar(3)	NO			
 IS_LOCKED	varchar(3)	NO			
 PRIV_PROCESS	varchar(3)	NO			
-PRIV_CREATE_SYNONYM	varchar(3)	NO			
 SSL_TYPE	bigint(20)	NO			
 SSL_CIPHER	varchar(1024)	NO			
 X509_ISSUER	varchar(1024)	NO			
@@ -1870,7 +1869,6 @@ SCHEMA_VERSION	bigint(20)	NO		NULL
 PL_EVICT_VERSION	bigint(20)	NO		NULL	
 PS_STMT_ID	bigint(20)	NO		NULL	
 DB_ID	bigint(20) unsigned	NO		NULL	
-PL_CG_MEM_HOLD	bigint(20)	NO		NULL	
 SYS_VARS	varchar(4096)	NO		NULL	
 PARAM_INFOS	longtext	NO		NULL	
 SQL_ID	varchar(32)	NO		NULL	

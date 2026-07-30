@@ -44,7 +44,10 @@ struct ObExprUDFInfo : public ObIExprExtraInfo
 public:
   ObExprUDFInfo(common::ObIAllocator &alloc, ObExprOperatorType type)
       : ObIExprExtraInfo(alloc, type),
-      subprogram_path_(alloc), params_type_(alloc), params_desc_(alloc), nocopy_params_(alloc),
+      udf_id_(common::OB_INVALID_ID), udf_package_id_(common::OB_INVALID_ID),
+      subprogram_path_(alloc), result_type_(), params_type_(alloc), params_desc_(alloc),
+      reserved_udt_udf_(false), loc_(0), reserved_udt_cons_(false),
+      is_called_in_sql_(false),
       is_deterministic_(false)
   {
   }
@@ -62,10 +65,9 @@ public:
   ObExprResType result_type_;
   common::ObFixedArray<ObExprResType, common::ObIAllocator> params_type_;
   common::ObFixedArray<ObUDFParamDesc, common::ObIAllocator> params_desc_;
-  common::ObFixedArray<int64_t, common::ObIAllocator> nocopy_params_;
-  bool is_udt_udf_;
+  bool reserved_udt_udf_;
   uint64_t loc_;
-  bool is_udt_cons_;
+  bool reserved_udt_cons_;
   bool is_called_in_sql_;
   bool is_deterministic_;
 };
@@ -144,17 +146,8 @@ public:
   {
     return params_desc_.assign(params_desc);
   }
-  inline int set_nocopy_params(common::ObIArray<int64_t> &nocopy_params)
-  {
-    return nocopy_params_.assign(nocopy_params);
-  }
-
-  inline void set_is_udt_udf(bool is_udt_udf) { is_udt_udf_ = is_udt_udf; }
-  inline bool get_is_udt_udf() const { return is_udt_udf_; }
   inline void set_loc(uint64_t loc) { loc_ = loc; }
   inline uint64_t get_loc() const { return loc_; }
-  inline void set_is_udt_cons(bool flag) { is_udt_cons_ = flag; }
-  inline bool get_is_udt_cons() const { return is_udt_cons_; }
 
   static int process_in_params(const common::ObObj *objs_stack,
                                int64_t param_num,
@@ -168,7 +161,6 @@ public:
                                 common::ParamStore& iparams,
                                 common::ObIAllocator &alloc,
                                 ObExecContext &exec_ctx,
-                                const common::ObIArray<int64_t> &nocopy_params,
                                 const common::ObIArray<ObUDFParamDesc> &params_desc,
                                 const common::ObIArray<ObExprResType> &params_type);
 
@@ -180,7 +172,6 @@ public:
                                       ParamStore& iparams,
                                       ObIAllocator &alloc,
                                       ObExecContext &exec_ctx,
-                                      const ObIArray<int64_t> &nocopy_params,
                                       const ObIArray<ObUDFParamDesc> &params_desc,
                                       const ObIArray<ObExprResType> &params_type);
 
@@ -191,7 +182,6 @@ public:
                                        ParamStore& iparams,
                                        ObIAllocator &alloc,
                                        ObExecContext &exec_ctx,
-                                       const ObIArray<int64_t> &nocopy_params,
                                        const ObIArray<ObUDFParamDesc> &params_desc,
                                        const ObIArray<ObExprResType> &params_type);
   static int before_calc_result(share::schema::ObSchemaGetterGuard &schema_guard,
@@ -212,8 +202,6 @@ public:
   const ObExprResType &get_result_type() const { return result_type_;}
   const common::ObIArray<ObExprResType> &get_params_type() const { return params_type_;}
   const common::ObIArray<ObUDFParamDesc> &get_params_desc() const { return params_desc_; }
-  const common::ObIArray<int64_t> &get_nocopy_params() const { return nocopy_params_;}
-
   virtual bool need_rt_ctx() const override { return true; }
 
 private:
@@ -225,10 +213,9 @@ private:
   ObExprResType result_type_;
   common::ObSEArray<ObExprResType, 5> params_type_;
   common::ObSEArray<ObUDFParamDesc, 5> params_desc_;
-  common::ObSEArray<int64_t, 8> nocopy_params_;
-  bool is_udt_udf_;
+  bool reserved_udt_udf_;
   uint64_t loc_; // this is col and line number combination,
-  bool is_udt_cons_;
+  bool reserved_udt_cons_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprUDF);

@@ -357,7 +357,7 @@ void TestSSTableIndexFilter::init_micro_index_info(
   agg_row.storage_datums_[2].from_obj_enhance(null_count_obj);
 
   ObAggRowWriter row_writer;
-  ASSERT_EQ(OB_SUCCESS, row_writer.init(agg_cols, agg_result, DATA_CURRENT_VERSION, allocator_));
+  ASSERT_EQ(OB_SUCCESS, row_writer.init(agg_cols, agg_result, allocator_));
   int64_t buf_size = row_writer.get_serialize_data_size();
   char *buf = reinterpret_cast<char *>(allocator_.alloc(buf_size));
   EXPECT_TRUE(buf != nullptr);

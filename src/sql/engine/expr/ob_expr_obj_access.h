@@ -108,15 +108,13 @@ public:
              int64_t param_num,
              ObEvalCtx *ctx) const;
 
-    TO_STRING_KV(K_(get_attr_func),
-                 K_(param_idxs),
+    TO_STRING_KV(K_(param_idxs),
                  K_(access_idx_cnt),
                  K_(for_write),
                  K_(property_type),
                  K_(coll_idx),
                  K_(extend_size));
 
-    uint64_t get_attr_func_;
     common::ObFixedArray<int64_t, common::ObIAllocator> param_idxs_;
     int64_t access_idx_cnt_;
     bool for_write_;

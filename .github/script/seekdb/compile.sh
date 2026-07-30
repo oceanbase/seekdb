@@ -46,8 +46,8 @@ else
   set -e
 fi
 
-# 产物落到 build_*，打包 observer/obproxy 为 zst 并拷贝到任务目录
-for binary in observer obproxy; do
+# 产物落到 build_*，打包 observer 为 zst 并拷贝到任务目录
+for binary in observer; do
   for base in . build_debug build_release build; do
     if [[ -f "$WORKSPACE/$base/$binary" ]]; then
       cp -f "$WORKSPACE/$base/$binary" "$WORKSPACE/$binary" 2>/dev/null || true

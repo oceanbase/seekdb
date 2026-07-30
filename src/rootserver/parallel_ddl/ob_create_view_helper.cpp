@@ -153,7 +153,6 @@ int ObCreateViewHelper::lock_and_check_view_name_()
     LOG_WARN("fail to lock objects by name", KR(ret));
   }
   const ObTableSchema* table_schema = nullptr;
-  uint64_t synonym_id = OB_INVALID_ID;
   ObTableType table_type = MAX_TABLE_TYPE;
   int64_t schema_version = OB_INVALID_VERSION;
   const uint64_t session_id = arg_.schema_.get_session_id();
@@ -333,9 +332,7 @@ int ObCreateViewHelper::check_parallel_ddl_conflict_()
     bool exist = true;
     ObArray<uint64_t> table_ids;
     ObArray<uint64_t> routine_ids;
-    ObArray<uint64_t> synonym_ids;
     ObArray<uint64_t> package_ids;
-    ObArray<uint64_t> type_ids;
     for (int64_t i = 0; OB_SUCC(ret) && (i < arg_.dep_infos_.count()); ++i) {
       const ObDependencyInfo &dep = arg_.dep_infos_.at(i);
       if (is_inner_pl_object_id(dep.get_ref_obj_id())
@@ -355,21 +352,10 @@ int ObCreateViewHelper::check_parallel_ddl_conflict_()
               LOG_WARN("fail to push back routine id", KR(ret), K(dep));
             }
             break;
-          case ObObjectType::SYNONYM:
-            if (OB_FAIL(synonym_ids.push_back(dep.get_ref_obj_id()))) {
-              LOG_WARN("fail to push back synonym id", KR(ret), K(dep));
-            }
-            break;
           case ObObjectType::PACKAGE:
           case ObObjectType::PACKAGE_BODY:
             if (OB_FAIL(package_ids.push_back(dep.get_ref_obj_id()))) {
               LOG_WARN("fail to push back package id", KR(ret), K(dep));
-            }
-            break;
-          case ObObjectType::TYPE:
-          case ObObjectType::TYPE_BODY:
-            if (OB_FAIL(type_ids.push_back(dep.get_ref_obj_id()))) {
-              LOG_WARN("fail to push back type id", KR(ret), K(dep));
             }
             break;
           default:
@@ -773,10 +759,6 @@ int ObCreateViewHelper::drop_obj_privs_()
                                                                                new_schema_version, get_trans_()))) {
         LOG_WARN("fail to drop obj privs", KR(ret), K(obj_privs_.at(i)));
       }
-      // should not appear, just for compatible with old routine
-      if (OB_UNLIKELY(OB_SEARCH_NOT_FOUND != ret)) {
-        ret = OB_SUCCESS;
-      }
     }
   }
   return ret;
@@ -791,7 +773,7 @@ int ObCreateViewHelper::handle_error_info_()
     // do nothing
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected compat mode add create view error info", KR(ret));
+    LOG_WARN("unexpected create view error info", KR(ret));
   }
   return ret;
 }

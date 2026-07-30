@@ -36,12 +36,7 @@ class ObTimeZoneInfo;
 class ObOTimestampData;
 struct ObTimeConstStr;
 class ObDataTypeCastParams;
-struct ObDFMTimeLimiter;
 class ObObj;
-class ObDFMElem;
-class ObDFMFlag;
-template <int64_t N>
-class ObFixedBitSet;
 
 #define DT_TYPE_DATE        (1UL << 0)
 #define DT_TYPE_TIME        (1UL << 1)
@@ -310,17 +305,10 @@ struct ObTimeConvertCtx
 {
   ObTimeConvertCtx(const ObTimeZoneInfo *tz_info, const bool is_timestamp, const bool &need_truncate = false)
      :tz_info_(tz_info),
-      nls_format_(),
       is_timestamp_(is_timestamp),
       need_truncate_(need_truncate),
       date_sql_mode_(0) {}
-  ObTimeConvertCtx(const ObTimeZoneInfo *tz_info, const ObString &nls_format, const bool is_timestamp)
-     :tz_info_(tz_info),
-      nls_format_(nls_format),
-      is_timestamp_(is_timestamp),
-      date_sql_mode_(0) {}
   const ObTimeZoneInfo *tz_info_;
-  ObString nls_format_;
   bool is_timestamp_; //means mysql timestamp?
   bool need_truncate_;
   ObDateSqlMode date_sql_mode_;
@@ -340,12 +328,6 @@ public:
   static const int32_t MYSQL_ZERO_DATE = 0; // 0-0-0
   static const int64_t ZERO_TIME = 0;
   static const uint8_t ZERO_YEAR = 0;
-  static const ObString DEFAULT_NLS_DATE_FORMAT;
-  static const ObString DEFAULT_NLS_TIMESTAMP_FORMAT;
-  static const ObString DEFAULT_NLS_TIMESTAMP_TZ_FORMAT;
-  static const ObString COMPAT_OLD_NLS_DATE_FORMAT;
-  static const ObString COMPAT_OLD_NLS_TIMESTAMP_FORMAT;
-  static const ObString COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT;
 
 private:
   struct ObYearWeekWdayElems {
@@ -397,7 +379,6 @@ public:
   static int str_to_mdatetime(const ObString &str, const ObTimeConvertCtx &cvrt_ctx,
                              ObMySQLDateTime &value, int16_t *scale = NULL,
                              const ObDateSqlMode date_sql_mode = 0);
-  static int str_to_date_by_format_model(const ObString &str, const ObTimeConvertCtx &cvrt_ctx, ObDateTime &value);
   static int str_to_datetime_format(const ObString &str, const ObString &fmt,
                                     const ObTimeConvertCtx &cvrt_ctx, int64_t &value,
                                     int16_t *scale, const ObDateSqlMode date_sql_mode);
@@ -422,7 +403,6 @@ public:
   static int str_to_scn_value(const ObString &str,
                               const ObTimeZoneInfo *sys_tz_info,
                               const ObTimeZoneInfo *session_tz_info,
-                              const ObString &nlf_format,
                               uint64_t &scn_value);
   //convert a scn to timestamp str with ns
   //invoker need to gurantee scn_val is valid
@@ -445,10 +425,10 @@ public:
   static int mdatetime_to_int(ObMySQLDateTime value, int64_t &int64);
   static int datetime_to_double(int64_t value, const ObTimeZoneInfo *tz_info, double &dbl);
   static int mdatetime_to_double(ObMySQLDateTime value, double &dbl);
-  static int datetime_to_str(int64_t value, const ObTimeZoneInfo *tz_info, const ObString &nls_format,
+  static int datetime_to_str(int64_t value, const ObTimeZoneInfo *tz_info,
                              int16_t scale, char *buf, int64_t buf_len, int64_t &pos, bool with_delim = true);
   static int mdatetime_to_str(ObMySQLDateTime value, const ObTimeZoneInfo *tz_info,
-                              const ObString &nls_format, int16_t scale, char *buf, int64_t buf_len,
+                              int16_t scale, char *buf, int64_t buf_len,
                               int64_t &pos, bool with_delim = true);
   static int otimestamp_to_str(const ObOTimestampData &value, const ObDataTypeCastParams &dtc_params,
                                const int16_t scale, const ObObjType type, char *buf,
@@ -536,14 +516,6 @@ public:
   static int str_to_ob_time_without_date(const ObString &str, ObTime &ob_time, int16_t *scale = NULL, const bool &need_truncate = false);
   static int str_to_ob_time_format(const ObString &str, const ObString &fmt, ObTime &ob_time,
                                    int16_t *scale, const ObDateSqlMode date_sql_mode);
-  static int str_to_ob_time_by_format_model(const ObString &str, const ObTimeConvertCtx &cvrt_ctx,
-                                            const ObObjType target_type, ObTime &ob_time, ObScale &scale);
-  static int str_to_ob_time_by_dfm_elems(const ObString &str,
-                                         const ObIArray<ObDFMElem> &format_elems,
-                                         const ObFixedBitSet<OB_DEFAULT_BITSET_SIZE_FOR_DFM> &elem_flags,
-                                         const ObTimeConvertCtx &cvrt_ctx,
-                                         const ObObjType target_type, ObTime &ob_time, ObScale &scale);
-
   static int str_to_ob_time_by_literal_format(const ObString &str, const ObTimeConvertCtx &cvrt_ctx, const bool is_timestamp_literal, ObTime &ob_time, ObScale &scale);
   static int calc_date_with_year_week_wday(const ObYearWeekWdayElems &elements, ObTime &ot);
   static int handle_year_week_wday(const ObYearWeekWdayElems &elements, ObTime &ot);
@@ -565,14 +537,6 @@ public:
   static int ob_time_to_str(const ObTime &ob_time, ObDTMode mode, int16_t scale,
                             char *buf, int64_t buf_len, int64_t &pos, const bool with_delim);
   static bool valid_timestamp_year_range(const ObTime &ob_time);
-  static int ob_time_to_str_by_format_model(const ObTime &ob_time, ObScale scale, const ObString &format,
-                                            char *buf, int64_t buf_len, int64_t &pos);
-  static int ob_time_to_str_by_dfm_elems(const ObTime &ob_time, ObScale scale,
-                                         const ObIArray<ObDFMElem> &format_elems,
-                                         const ObString &format,
-                                         char *buf, int64_t buf_len, int64_t &pos);
-  static int deduce_max_len_from_datetime_format(const ObString &format,
-                                                 int64_t &max_char_len);
   static int ob_time_to_str_format(const ObTime &ob_time, const ObString &format,
                                    char *buf, int64_t buf_len, int64_t &pos, bool &res_null,
                                    const ObString &locale_name);
@@ -599,8 +563,6 @@ public:
   // year / month / day / quarter / week / hour / minite / second / microsecond.
   static int32_t ob_time_to_week(const ObTime &ob_time, ObDTMode mode);
   static int32_t ob_time_to_week(const ObTime &ob_time, ObDTMode mode, int32_t &delta);
-  static void get_first_day_of_isoyear(ObTime &ob_time);
-  static int get_round_day_of_isoyear(ObTime &ob_time);
   //mysql binary value encoder/decoder
   static int decode_otimestamp(const ObObjType obj_type, const char *data,
                                const int64_t total_len, const ObTimeConvertCtx &cvrt_ctx,
@@ -639,8 +601,6 @@ public:
 
 public:
   // other functions.
-  static int set_ob_time_part_directly(ObTime &ob_time, int64_t &conflict_bitset, const int64_t part_offset, const int32_t part_value);
-  static int set_ob_time_part_may_conflict(ObTime &ob_time, int64_t &conflict_bitset, const int64_t part_offset, const int32_t part_value);
   static int32_t calc_max_name_length(const ObTimeConstStr names[], const int64_t size);
   static int time_overflow_trunc(int64_t &value, const ObScale &time_scale = 0);
   static void round_datetime(int16_t scale, int64_t &value);
@@ -744,9 +704,6 @@ private:
   static int sub_timezone_offset(const ObTimeZoneInfo &tz_info, const ObString &tz_abbr_str,
                                  int64_t &value_us, int32_t &offset_min, int32_t &tz_id, int32_t &tran_type_id);
   static int get_str_array_idx(const ObString &str, const ObTimeConstStr *array, int32_t count, int32_t &idx);
-  static int get_day_and_month_from_year_day(const int32_t yday, const int32_t year, int32_t &month, int32_t &day);
-  static int set_ob_time_year_may_conflict(ObTime &ob_time, int32_t &julian_year_value,
-                                          int32_t check_year, int32_t set_year, bool overwrite);
   static void carry_over_microseconds(ObMySQLDateTime &value);
 private:
   ObTimeConverter();
@@ -754,17 +711,10 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObTimeConverter);
 };
 
-enum ObNLSFormatEnum {
-  NLS_DATE = 0,
-  NLS_TIMESTAMP,
-  NLS_TIMESTAMP_TZ,
-  NLS_MAX, // does not support expansion due to error use in ob_rpc_struct.h
-};
-
 /**
  * @brief The ObDataTypeCastParams struct
  * pass the session environment variables used for SQL parsing,
- * including timezone/time format/character set etc. information
+ * including timezone and character set information
  */
 
 class ObDataTypeCastParams
@@ -772,86 +722,28 @@ class ObDataTypeCastParams
 public:
   ObDataTypeCastParams() :
     tz_info_(NULL),
-    session_nls_formats_{},
-    force_use_standard_format_(false),
     nls_collation_(CS_TYPE_INVALID),
     nls_collation_nation_(CS_TYPE_INVALID),
     connection_collation_(CS_TYPE_UTF8MB4_BIN)
   {
   }
   ObDataTypeCastParams(const ObTimeZoneInfo *tz_info,
-                       const ObString *nls_formats,
                        const ObCollationType nls_collation,
                        const ObCollationType nls_collation_nation,
-                       const ObCollationType connection_collation,
-                       const bool force_use_standard_format = false)
+                       const ObCollationType connection_collation)
     : tz_info_(tz_info),
-      session_nls_formats_{},
-      force_use_standard_format_(force_use_standard_format),
       nls_collation_(nls_collation),
       nls_collation_nation_(nls_collation_nation),
       connection_collation_(connection_collation)
-  {
-    for (int64_t i = 0; NULL != nls_formats && i < ObNLSFormatEnum::NLS_MAX; ++i) {
-      session_nls_formats_[i] =  nls_formats[i];
-    }
-  }
-  ObDataTypeCastParams(const ObTimeZoneInfo *tz_info,
-                       const ObString nls_date_format,
-                       const ObString nls_timestamp_format,
-                       const ObString nls_timestmap_tz_format,
-                       const ObCollationType nls_collation,
-                       const ObCollationType nls_collation_nation,
-                       const ObCollationType connection_collation,
-                       const bool force_use_standard_format = false)
-    : tz_info_(tz_info),
-      session_nls_formats_{},
-      force_use_standard_format_(force_use_standard_format),
-      nls_collation_(nls_collation),
-      nls_collation_nation_(nls_collation_nation),
-      connection_collation_(connection_collation)
-  {
-    session_nls_formats_[0] = nls_date_format;
-    session_nls_formats_[1] = nls_timestamp_format;
-    session_nls_formats_[2] = nls_timestmap_tz_format;
-  }
+  {}
   ObDataTypeCastParams(const ObTimeZoneInfo *tz_info)
     : tz_info_(tz_info),
-      session_nls_formats_{},
-      force_use_standard_format_(true),
       nls_collation_(CS_TYPE_INVALID),
       nls_collation_nation_(CS_TYPE_INVALID),
       connection_collation_(CS_TYPE_UTF8MB4_BIN)
   {
   }
-  ObString get_nls_format(const ObObjType input_type) const
-  {
-    ObString format_str;
-    switch (input_type) {
-      case ObDateTimeType:
-        format_str = (force_use_standard_format_
-                      ? ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT
-                      : (session_nls_formats_[ObNLSFormatEnum::NLS_DATE].empty()
-                          ? ObTimeConverter::DEFAULT_NLS_DATE_FORMAT
-                          : session_nls_formats_[ObNLSFormatEnum::NLS_DATE]));
-        break;
-    case ObTimestampNanoType:
-        format_str = (force_use_standard_format_
-                      ? ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_FORMAT
-                      : (session_nls_formats_[ObNLSFormatEnum::NLS_TIMESTAMP].empty()
-                          ? ObTimeConverter::DEFAULT_NLS_TIMESTAMP_FORMAT
-                          : session_nls_formats_[ObNLSFormatEnum::NLS_TIMESTAMP]));
-        break;
-      default:
-        break;
-    }
-    return format_str;
-  }
-
   const ObTimeZoneInfo *tz_info_;
-  ObString session_nls_formats_[ObNLSFormatEnum::NLS_MAX];
-  //only user related str depend nls_format. others do not care it, such as ob_print_sql...
-  bool force_use_standard_format_;
   ObCollationType nls_collation_;
   ObCollationType nls_collation_nation_;
   ObCollationType connection_collation_; //as client cs for now

@@ -29,7 +29,6 @@ namespace sql
 // query_ctx_ no deep_copy
 // child_stmts_ no deep_copy
 // parent_stmt no deep_copy
-// synonym_is_store no deep_copy
 int ObStmt::assign(const ObStmt &other)
 {
   int ret = OB_SUCCESS;

@@ -85,7 +85,7 @@ public:
 
   INHERIT_TO_STRING_KV("ObDASIter", ObDASIter, K_(ir_ctdef), K_(ir_rtdef), K_(tx_desc),
       K_(snapshot), K_(query_tokens), K_(sr_iter_param), K_(sparse_retrieval_iter), K_(dim_iters),
-      K_(total_doc_cnt_tablet_id), K_(inv_idx_tablet_id), K_(fwd_idx_tablet_id),
+      K_(total_doc_cnt_tablet_id), K_(inv_idx_tablet_id),
       K_(flags), K_(check_rangekey_inited), K_(is_inited));
 protected:
   virtual int inner_init(ObDASIterParam &param) override;
@@ -103,7 +103,6 @@ public:
       inv_idx_tablet_switched_ = true;
     }
     inv_idx_tablet_id_ = related_tablet_ids.inv_idx_tablet_id_;
-    fwd_idx_tablet_id_ = related_tablet_ids.fwd_idx_tablet_id_;
     return ret;
   }
   static int build_query_tokens(
@@ -140,12 +139,10 @@ private:
   int set_children_iter_rangekey();
   int gen_inv_idx_scan_default_range(const ObString &query_token, ObNewRange &scan_range);
   int gen_inv_idx_scan_one_range(const ObString &query_token, const ObDocIdExt &doc_id, ObNewRange &scan_range);
-  int gen_fwd_idx_scan_feak_range(ObNewRange &scan_range);
   int init_topk_limit();
   int init_block_max_iter_param();
   int init_doc_length_est_param();
 private:
-  static const int64_t FWD_IDX_ROWKEY_COL_CNT = 2;
   static const int64_t INV_IDX_ROWKEY_COL_CNT = 2;
 private:
   lib::MemoryContext mem_context_;  // clean after release or reuse
@@ -165,7 +162,6 @@ private:
   ObTableScanParam *total_doc_cnt_scan_param_;
   ObFixedArray<ObTableScanParam *, ObIAllocator> inv_scan_params_;
   ObFixedArray<ObTableScanParam *, ObIAllocator> inv_agg_params_;
-  ObFixedArray<ObTableScanParam *, ObIAllocator> fwd_scan_params_;
   ObFtsEvalNode *boolean_compute_node_;
   ObFixedArray<ObTableScanParam *, ObIAllocator> block_max_scan_params_;
   ObBlockMaxScoreIterParam block_max_iter_param_;
@@ -174,7 +170,6 @@ private:
   int64_t topk_limit_;
   ObTabletID total_doc_cnt_tablet_id_;
   ObTabletID inv_idx_tablet_id_;
-  ObTabletID fwd_idx_tablet_id_;
   union {
     struct {
       uint32_t function_lookup_mode_  : 1;

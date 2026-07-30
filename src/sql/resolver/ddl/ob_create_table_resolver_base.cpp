@@ -62,7 +62,6 @@ int ObCreateTableResolverBase::resolve_partition_option(
             LOG_WARN("failed to resolve partition option", KR(ret));
           }
         }
-        /*  vertical partition is not support in 4.x, remove its code here */
       } else {
         ret = OB_INVALID_ARGUMENT;
         SQL_RESV_LOG(WARN, "node type is invalid.", KR(ret), K(node->type_));
@@ -91,7 +90,6 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
     table_schema.set_collation_type(collation_type_);
     table_schema.set_charset_type(charset_type_);
     table_schema.set_auto_increment(auto_increment_);
-    
     table_schema.set_read_only(read_only_);
     table_schema.set_enable_row_movement(enable_row_movement_);
     table_schema.set_table_mode_struct(table_mode_);

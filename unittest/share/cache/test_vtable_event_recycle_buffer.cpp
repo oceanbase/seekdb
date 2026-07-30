@@ -16,6 +16,7 @@
 #include <gtest/gtest.h>
 #define private public
 #define protected public
+#include "share/cache/ob_vtable_event_recycle_buffer.h"
 #include "storage/tablet/ob_tablet_meta.h"
 
 namespace oceanbase {

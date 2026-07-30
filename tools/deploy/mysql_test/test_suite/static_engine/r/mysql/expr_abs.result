@@ -1,6 +1,6 @@
 result_format: 4
 
-alter system flush plan cache global;
+alter system flush plan cache;
 
 
 drop table if exists t;
@@ -43,7 +43,7 @@ Warning	1265	Data truncated for column '"test"."t"."t16"' at row 1
 insert into t(t1) values (null);
 
 
-alter system flush plan cache global;
+alter system flush plan cache;
 
 set ob_enable_plan_cache=false;
 

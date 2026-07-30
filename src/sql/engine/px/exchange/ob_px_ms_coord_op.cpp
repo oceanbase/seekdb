@@ -91,8 +91,6 @@ ObPxMSCoordOp::ObPxMSCoordOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOp
   init_channel_piece_msg_proc_(exec_ctx, msg_proc_),
   reporting_wf_piece_msg_proc_(exec_ctx, msg_proc_),
   opt_stats_gather_piece_msg_proc_(exec_ctx, msg_proc_),
-  sp_winfunc_px_piece_msg_proc_(exec_ctx, msg_proc_),
-  rd_winfunc_px_piece_msg_proc_(exec_ctx, msg_proc_),
   join_filter_count_row_piece_msg_proc_(exec_ctx, msg_proc_),
   store_rows_(),
   last_pop_row_(nullptr),
@@ -171,8 +169,6 @@ int ObPxMSCoordOp::setup_loop_proc()
       .register_processor(init_channel_piece_msg_proc_)
       .register_processor(reporting_wf_piece_msg_proc_)
       .register_processor(opt_stats_gather_piece_msg_proc_)
-      .register_processor(sp_winfunc_px_piece_msg_proc_)
-      .register_processor(rd_winfunc_px_piece_msg_proc_)
       .register_processor(join_filter_count_row_piece_msg_proc_)
       .register_interrupt_processor(interrupt_proc_);
   
@@ -228,13 +224,8 @@ int ObPxMSCoordOp::setup_readers()
       LOG_WARN("allocate memory failed", K(ret));
     } else {
       reader_cnt_ = task_channels_.count();
-      bool reorder_fixed_expr = true;
-      common::ObIAllocator *allocator = &ctx_.get_allocator();
       for (int64_t i = 0; i < reader_cnt_; i++) {
-        new (&readers_[i]) ObReceiveRowReader(get_spec().id_,
-              &(static_cast<const ObPxReceiveSpec &>(spec_).child_exprs_),
-              reorder_fixed_expr,
-              allocator);
+        new (&readers_[i]) ObReceiveRowReader();
       }
     }
   }

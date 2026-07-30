@@ -193,8 +193,7 @@ public:
 
   int prepare_table_dml_info_basic(const ObDmlTableInfo& table_info,
                                    IndexDMLInfo*& table_dml_info,
-                                   ObIArray<IndexDMLInfo*> &index_dml_infos,
-                                   const bool has_tg);
+                                   ObIArray<IndexDMLInfo*> &index_dml_infos);
   virtual int prepare_table_dml_info_special(const ObDmlTableInfo& table_info,
                                              IndexDMLInfo* table_dml_info,
                                              ObIArray<IndexDMLInfo*> &index_dml_infos,

@@ -64,7 +64,6 @@ public:
   virtual int get_dml_table_infos(ObIArray<ObDmlTableInfo*>& dml_table_info) override;
   virtual int get_dml_table_infos(ObIArray<const ObDmlTableInfo*>& dml_table_info) const override;
   virtual int get_view_check_exprs(ObIArray<ObRawExpr*>& view_check_exprs) const override;
-  virtual int64_t get_instead_of_trigger_column_count() const override;
   virtual int remove_table_item_dml_info(const TableItem* table) override;
   int remove_invalid_assignment();
 

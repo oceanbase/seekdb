@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_micro_block_reader.h"
 #include "storage/access/ob_aggregated_store.h"
+#include "storage/access/ob_table_access_context.h"
+#include "storage/access/ob_table_access_param.h"
 
 namespace oceanbase
 {
@@ -845,11 +847,11 @@ int ObMicroBlockReader::filter_pushdown_truncate_filter(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected truncate filter type", K(ret), K(filter));
   } else {
-    ObITruncateFilterExecutor *truncate_executor = nullptr;
+    sql::ObITruncateFilterExecutor *truncate_executor = nullptr;
     if (filter.is_filter_black_node()) {
-      truncate_executor = static_cast<ObTruncateBlackFilterExecutor*>(&filter);
+      truncate_executor = static_cast<sql::ObTruncateBlackFilterExecutor*>(&filter);
     } else {
-      truncate_executor = static_cast<ObTruncateWhiteFilterExecutor*>(&filter);
+      truncate_executor = static_cast<sql::ObTruncateWhiteFilterExecutor*>(&filter);
     }
     ObStorageDatum *datum_buf = truncate_executor->get_tmp_datum_buffer();
     const common::ObIArray<int32_t> &col_idxs = truncate_executor->get_col_idxs();
@@ -989,127 +991,6 @@ int ObMicroBlockReader::get_rows(
                       row_cap,
                       col_datums))) {
             LOG_WARN("fail to pad on datums", K(ret), K(i), K(row_cap), KPC_(header));
-          }
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObMicroBlockReader::get_rows(
-    const common::ObIArray<int32_t> &cols_projector,
-    const common::ObIArray<const share::schema::ObColumnParam *> &col_params,
-    const common::ObIArray<blocksstable::ObStorageDatum> *default_datums,
-    const bool is_padding_mode,
-    const int32_t *row_ids,
-    const int64_t vector_offset,
-    const int64_t row_cap,
-    ObDatumRow &row_buf,
-    sql::ObExprPtrIArray &exprs,
-    sql::ObEvalCtx &eval_ctx,
-    const bool need_init_vector)
-{
-  int ret = OB_SUCCESS;
-  int64_t row_idx = common::OB_INVALID_INDEX;
-  allocator_.reuse();
-  if (OB_UNLIKELY(nullptr == header_ ||
-                  nullptr == read_info_ ||
-                  row_cap > header_->row_count_ ||
-                  !row_buf.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), KPC(header_), KPC_(read_info), K(row_cap), K(row_buf));
-  } else if (OB_FAIL(row_buf.reserve(read_info_->get_request_count()))) {
-    LOG_WARN("Failed to reserve row buf", K(ret), K(row_buf), KPC(read_info_));
-  } else if (0 == vector_offset) { 
-    if (need_init_vector) {
-      if (OB_FAIL(init_exprs_new_format_header(cols_projector, exprs, eval_ctx))) {
-        LOG_WARN("Failed to init vector header", K(ret), KPC_(read_info));
-      }
-    } else {
-      set_not_null_for_exprs(cols_projector, exprs, eval_ctx);
-    }
-  } 
-  if (OB_SUCC(ret)) {
-    ObStorageDatum trans_datum;
-    const int64_t trans_col_idx = header_->rowkey_column_count_ > 0 ? read_info_->get_schema_rowkey_count() : INT32_MIN;
-    const ObColumnIndexArray &cols_index = read_info_->get_columns_index();
-    for (int64_t idx = 0; OB_SUCC(ret) && idx < row_cap; ++idx) {
-      row_idx = row_ids[idx];
-      if (OB_UNLIKELY(row_idx < 0 || row_idx >= header_->row_count_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Uexpected row idx", K(ret), K(row_idx), KPC_(header));
-      } else if (OB_FAIL(flat_row_reader_.read_row(data_begin_ + index_data_[row_idx],
-                                                   index_data_[row_idx + 1] - index_data_[row_idx],
-                                                   read_info_,
-                                                   row_buf))) {
-        LOG_WARN("Fail to read row", K(ret), K(idx), K(row_idx), K(row_cap), K(vector_offset), KPC_(header));
-      } else {
-        for (int64_t i = 0; OB_SUCC(ret) && i < cols_projector.count(); ++i) {
-          sql::ObExpr *expr = exprs.at(i);
-          int32_t col_idx = cols_projector.at(i);
-          const ObDatum *col_datum = nullptr;
-          const VectorFormat format = expr->get_format(eval_ctx);
-          if (col_idx >= read_info_->get_request_count()) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("Unexpected col idx", K(ret), K(i), K(col_idx), K(read_info_->get_request_count()));
-          } else if (OB_UNLIKELY(trans_col_idx == cols_index.at(col_idx))) {
-            trans_datum.reuse();
-            trans_datum.set_int(-row_buf.storage_datums_[col_idx].get_int());
-            col_datum = &trans_datum;
-          } else if (row_buf.storage_datums_[col_idx].is_nop()) {
-            if (OB_ISNULL(default_datums)) {
-              ret = OB_ERR_UNEXPECTED;
-              STORAGE_LOG(WARN, "Unexpected null default row", K(ret), KP(default_datums));
-            } else if (default_datums->at(i).is_nop()) {
-              // virtual columns will be calculated in sql
-            } else {
-              col_datum = &(default_datums->at(i));
-            }
-          } else {
-            ObStorageDatum &tmp_datum = row_buf.storage_datums_[col_idx];
-            if ((VEC_DISCRETE == format && sizeof(uint64_t) == tmp_datum.len_ && tmp_datum.is_local_buf())) {
-              char* buf = expr->get_str_res_mem(eval_ctx, tmp_datum.len_, idx + vector_offset);
-              if (OB_ISNULL(buf)) {
-                ret = OB_ALLOCATE_MEMORY_FAILED;
-                LOG_WARN("Failed to get res mem", K(ret), KPC(expr));
-              } else {
-                MEMCPY(buf, tmp_datum.ptr_, tmp_datum.len_);
-                tmp_datum.ptr_ = buf;
-              }
-            }
-            col_datum = &tmp_datum;
-          }
-
-          if (OB_SUCC(ret)) {
-            if (OB_ISNULL(col_datum)) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("Unexpected null datum", K(ret));
-            } else {
-              const int64_t vec_idx = idx + vector_offset;
-              if (VEC_DISCRETE == format) {
-                static_cast<ObDiscreteFormat *>(expr->get_vector(eval_ctx))->set_datum(vec_idx, *col_datum);
-              } else {
-                static_cast<ObFixedLengthBase *>(expr->get_vector(eval_ctx))->set_datum(vec_idx, *col_datum);
-              }
-            }
-          }
-        }
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      for (int64_t i = 0; OB_SUCC(ret) && i < cols_projector.count(); ++i) {
-        if (nullptr != col_params.at(i) && need_padding(is_padding_mode, col_params.at(i)->get_meta_type())) {
-          if (OB_FAIL(storage::pad_on_rich_format_columns(
-                      col_params.at(i)->get_accuracy(),
-                      col_params.at(i)->get_meta_type().get_collation_type(),
-                      row_cap,
-                      vector_offset,
-                      allocator_.get_inner_allocator(),
-                      *(exprs.at(i)),
-                      eval_ctx))) {
-            LOG_WARN("Failed pad on rich format columns", K(ret), KPC(exprs.at(i)));
           }
         }
       }

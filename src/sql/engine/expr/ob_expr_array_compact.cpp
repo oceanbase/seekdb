@@ -170,68 +170,6 @@ int ObExprArrayCompact::eval_array_compact_batch(const ObExpr &expr, ObEvalCtx &
   return ret;
 }
 
-int ObExprArrayCompact::eval_array_compact_vector(const ObExpr &expr, ObEvalCtx &ctx,
-                                                const ObBitVector &skip, const EvalBound &bound)
-{
-  int ret = OB_SUCCESS;
-  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
-  const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
-  ObIArrayType *src_arr = NULL;
-  ObIArrayType *res_arr = NULL;
-  ObDatum *arr_datum = NULL;
-
-  if (!ob_is_null(expr.obj_meta_.get_type()) && subschema_id != expr.obj_meta_.get_subschema_id()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("subschema id is not equal", K(ret), K(subschema_id), K(expr.obj_meta_.get_subschema_id()));
-  } else if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval source array failed", K(ret));
-  } else {
-    ObIVector *arr_vec = expr.args_[0]->get_vector(ctx);
-    ObIVector *res_vec = expr.get_vector(ctx);
-    ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
-    VectorFormat res_format = expr.get_format(ctx);
-    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-    for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {
-      bool is_null_res = false;
-      int64_t arr_idx = 0;
-      if (skip.at(idx) || eval_flags.at(idx)) {
-        continue;
-      }
-      if (arr_vec->is_null(idx)) {
-        is_null_res = true;
-      } else {
-        ObString arr_str = arr_vec->get_string(idx);
-        if (OB_FAIL(ObNestedVectorFunc::construct_param(tmp_allocator, ctx, subschema_id, arr_str, src_arr))) {
-          LOG_WARN("construct array obj failed", K(ret));
-        }
-      }
-      if (OB_FAIL(ret) || is_null_res) {
-      } else if (OB_NOT_NULL(res_arr) && OB_FALSE_IT(res_arr->clear())) {
-      } else if (OB_ISNULL(res_arr) && OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator,ctx, subschema_id, res_arr, false))) {
-        LOG_WARN("construct child array obj failed", K(ret));
-      } else if (OB_FAIL(eval_compact(tmp_allocator, ctx, src_arr, res_arr))) {
-        LOG_WARN("failed to evalue compat", K(ret));
-      }
-      if (OB_FAIL(ret)) {
-      } else if (is_null_res) {
-        res_vec->set_null(idx);
-      } else if (res_format == VEC_DISCRETE) {
-        if (OB_FAIL(ObArrayExprUtils::set_array_res<ObDiscreteFormat>(res_arr, expr, ctx, static_cast<ObDiscreteFormat *>(res_vec), idx))) {
-          LOG_WARN("set array res failed", K(ret));
-        }
-      } else if (res_format == VEC_UNIFORM) {
-        if (OB_FAIL(ObArrayExprUtils::set_array_res<ObUniformFormat<false>>(res_arr, expr, ctx, static_cast<ObUniformFormat<false> *>(res_vec), idx))) {
-          LOG_WARN("set array res failed", K(ret));
-        }
-      } else if (OB_FAIL(ObArrayExprUtils::set_array_res<ObVectorBase>(res_arr, expr, ctx, static_cast<ObVectorBase *>(res_vec), idx))) {
-        LOG_WARN("set array res failed", K(ret));
-      } 
-    } //end for
-  }
-  return ret;
-}
-
 int ObExprArrayCompact::eval_compact(ObIAllocator &tmp_allocator, ObEvalCtx &ctx,
                                      ObIArrayType *src_arr, ObIArrayType *res_arr)
 {
@@ -322,7 +260,6 @@ int ObExprArrayCompact::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_e
   UNUSED(raw_expr);
   rt_expr.eval_func_ = eval_array_compact;
   rt_expr.eval_batch_func_ = eval_array_compact_batch;
-  rt_expr.eval_vector_func_ = eval_array_compact_vector;
   return OB_SUCCESS;
 }
 

@@ -100,42 +100,6 @@ int ObRLEDecoder::batch_decode(
   return ret;
 }
 
-int ObRLEDecoder::decode_vector(
-    const ObColumnDecoderCtx &decoder_ctx,
-    const ObIRowIndex *row_index,
-    ObVectorDecodeCtx &vector_ctx) const
-{
-  UNUSED(row_index);
-  int ret = OB_SUCCESS;
-  int64_t null_cnt = 0;
-  if (OB_UNLIKELY(!is_inited())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
-  } else if (OB_FAIL(extract_ref_and_null_count(
-      vector_ctx.row_ids_, vector_ctx.row_cap_, vector_ctx.len_arr_, null_cnt))) {
-    LOG_WARN("Failed to extract refs",K(ret));
-  } else {
-    if (0 == null_cnt) {
-      if (OB_FAIL(dict_decoder_.batch_decode_dict<false>(
-          decoder_ctx.obj_meta_,
-          decoder_ctx.col_header_->get_store_obj_type(),
-          decoder_ctx.col_header_->length_ - meta_header_->offset_,
-          vector_ctx))) {
-        LOG_WARN("Failed to batch decode dict", K(ret), K(decoder_ctx), K(vector_ctx));
-      }
-    } else {
-      if (OB_FAIL(dict_decoder_.batch_decode_dict<true>(
-          decoder_ctx.obj_meta_,
-          decoder_ctx.col_header_->get_store_obj_type(),
-          decoder_ctx.col_header_->length_ - meta_header_->offset_,
-          vector_ctx))) {
-        LOG_WARN("Failed to batch decode dict", K(ret), K(decoder_ctx), K(vector_ctx));
-      }
-    }
-  }
-  return ret;
-}
-
 int ObRLEDecoder::get_null_count(
     const ObColumnDecoderCtx &ctx,
     const ObIRowIndex *row_index,

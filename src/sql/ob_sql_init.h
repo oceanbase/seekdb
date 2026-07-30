@@ -61,9 +61,7 @@ inline int init_sql_expr_static_var()
 {
   int ret = common::OB_SUCCESS;
   static ObArenaAllocator allocator("init_sql");
-  if (OB_FAIL(ObExprTRDateFormat::init())) {
-    SQL_LOG(ERROR, "failed to init vars in truncate date format", K(ret));
-  } else if (OB_FAIL(ObExprUuid::init())) {
+  if (OB_FAIL(ObExprUuid::init())) {
     SQL_LOG(ERROR, "failed to init vars in uuid", K(ret));
   } else if (OB_FAIL(common::ObNumberConstValue::init(allocator))) {
     SQL_LOG(ERROR, "failed to init ObNumberConstValue", K(ret));

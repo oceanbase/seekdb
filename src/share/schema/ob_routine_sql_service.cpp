@@ -593,9 +593,6 @@ int ObRoutineSqlService::add_routine_params(ObISQLClient &sql_client,
     } else {
       routine_param->set_routine_id(routine_info.get_routine_id());
       routine_param->set_schema_version(routine_info.get_schema_version());
-      if (routine_param->is_self_param()) {
-        routine_param->set_type_owner(routine_info.get_database_id());
-      }
     }
     if (OB_FAIL(ret)) {
       //do nothing

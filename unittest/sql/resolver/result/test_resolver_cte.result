@@ -52,7 +52,6 @@ with cte(a) as (select count(c1) from t2 group by c2 limit 5) select * from cte;
       "table_id":-5,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -105,7 +104,6 @@ with cte(a) as (select count(c1) from t2 group by c2 limit 5) select * from cte;
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"a",
         "expr_level":0,
         "expr_levels": [
@@ -152,7 +150,6 @@ with cte(a) as (select count(c1) from t2 group by c2 limit 5) select * from cte;
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"a",
         "expr_level":0,
         "expr_levels": [
@@ -256,7 +253,6 @@ with cte(a) as (select count(c1) from t2 group by c2 limit 5) select * from cte;
           "table_id":-3,
           "table_name":"t2",
           "alias_name":"t2",
-          "synonym_name":"",
           "table_type":1,
           "ref_id":1099511677879,
           "database_name":"cte_db",
@@ -309,7 +305,6 @@ with cte(a) as (select count(c1) from t2 group by c2 limit 5) select * from cte;
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t2",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -361,7 +356,6 @@ with cte(a) as (select count(c1) from t2 group by c2 limit 5) select * from cte;
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t2",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -441,7 +435,6 @@ with cte(a) as (select count(c1) from t2 group by c2 limit 5) select * from cte;
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"t2",
-                "synonym_name":"",
                 "column_name":"c1",
                 "expr_level":0,
                 "expr_levels": [
@@ -514,7 +507,6 @@ with cte(a) as (select count(c1) from t2 group by c2 limit 5) select * from cte;
           "column_id":17,
           "database_name":"cte_db",
           "table_name":"t2",
-          "synonym_name":"",
           "column_name":"c2",
           "expr_level":0,
           "expr_levels": [
@@ -594,7 +586,6 @@ with cte(a) as (select count(c1) from t2 group by c2 limit 5) select * from cte;
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"t2",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -715,7 +706,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
       "table_id":-5,
       "table_name":"cte1",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -768,7 +758,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -815,7 +804,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -919,7 +907,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
           "table_id":-3,
           "table_name":"t1",
           "alias_name":"t1",
-          "synonym_name":"",
           "table_type":1,
           "ref_id":1099511677878,
           "database_name":"cte_db",
@@ -972,7 +959,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -1024,7 +1010,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -1071,7 +1056,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -1122,7 +1106,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -1236,7 +1219,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
       "table_id":-5,
       "table_name":"cte1",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -1289,7 +1271,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -1336,7 +1317,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -1440,7 +1420,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
           "table_id":-3,
           "table_name":"t1",
           "alias_name":"t1",
-          "synonym_name":"",
           "table_type":1,
           "ref_id":1099511677878,
           "database_name":"cte_db",
@@ -1493,7 +1472,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -1545,7 +1523,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -1592,7 +1569,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -1643,7 +1619,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -1757,7 +1732,6 @@ WITH cte1 (name1, name2) AS (select c1, c2 from t1) select name1 from cte1;
       "table_id":-5,
       "table_name":"cte1",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -1810,7 +1784,6 @@ WITH cte1 (name1, name2) AS (select c1, c2 from t1) select name1 from cte1;
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"name1",
         "expr_level":0,
         "expr_levels": [
@@ -1857,7 +1830,6 @@ WITH cte1 (name1, name2) AS (select c1, c2 from t1) select name1 from cte1;
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"name1",
         "expr_level":0,
         "expr_levels": [
@@ -1961,7 +1933,6 @@ WITH cte1 (name1, name2) AS (select c1, c2 from t1) select name1 from cte1;
           "table_id":-3,
           "table_name":"t1",
           "alias_name":"t1",
-          "synonym_name":"",
           "table_type":1,
           "ref_id":1099511677878,
           "database_name":"cte_db",
@@ -2014,7 +1985,6 @@ WITH cte1 (name1, name2) AS (select c1, c2 from t1) select name1 from cte1;
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -2066,7 +2036,6 @@ WITH cte1 (name1, name2) AS (select c1, c2 from t1) select name1 from cte1;
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -2113,7 +2082,6 @@ WITH cte1 (name1, name2) AS (select c1, c2 from t1) select name1 from cte1;
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -2164,7 +2132,6 @@ WITH cte1 (name1, name2) AS (select c1, c2 from t1) select name1 from cte1;
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -2278,7 +2245,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1), cte2 AS (SELECT c1, c2 FROM t2) select c1 
       "table_id":-6,
       "table_name":"cte2",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -2331,7 +2297,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1), cte2 AS (SELECT c1, c2 FROM t2) select c1 
         "column_id":16,
         "database_name":"",
         "table_name":"cte2",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -2378,7 +2343,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1), cte2 AS (SELECT c1, c2 FROM t2) select c1 
         "column_id":16,
         "database_name":"",
         "table_name":"cte2",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -2482,7 +2446,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1), cte2 AS (SELECT c1, c2 FROM t2) select c1 
           "table_id":-4,
           "table_name":"t2",
           "alias_name":"t2",
-          "synonym_name":"",
           "table_type":1,
           "ref_id":1099511677879,
           "database_name":"cte_db",
@@ -2535,7 +2498,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1), cte2 AS (SELECT c1, c2 FROM t2) select c1 
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t2",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -2587,7 +2549,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1), cte2 AS (SELECT c1, c2 FROM t2) select c1 
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t2",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -2634,7 +2595,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1), cte2 AS (SELECT c1, c2 FROM t2) select c1 
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t2",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -2685,7 +2645,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1), cte2 AS (SELECT c1, c2 FROM t2) select c1 
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t2",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -2799,7 +2758,6 @@ WITH cte1 AS (select * from t1) select c1, c2 from cte1;
       "table_id":-5,
       "table_name":"cte1",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -2852,7 +2810,6 @@ WITH cte1 AS (select * from t1) select c1, c2 from cte1;
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -2904,7 +2861,6 @@ WITH cte1 AS (select * from t1) select c1, c2 from cte1;
         "column_id":17,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c2",
         "expr_level":0,
         "expr_levels": [
@@ -2951,7 +2907,6 @@ WITH cte1 AS (select * from t1) select c1, c2 from cte1;
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -3002,7 +2957,6 @@ WITH cte1 AS (select * from t1) select c1, c2 from cte1;
         "column_id":17,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c2",
         "expr_level":0,
         "expr_levels": [
@@ -3106,7 +3060,6 @@ WITH cte1 AS (select * from t1) select c1, c2 from cte1;
           "table_id":-3,
           "table_name":"t1",
           "alias_name":"t1",
-          "synonym_name":"",
           "table_type":1,
           "ref_id":1099511677878,
           "database_name":"cte_db",
@@ -3159,7 +3112,6 @@ WITH cte1 AS (select * from t1) select c1, c2 from cte1;
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -3211,7 +3163,6 @@ WITH cte1 AS (select * from t1) select c1, c2 from cte1;
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -3263,7 +3214,6 @@ WITH cte1 AS (select * from t1) select c1, c2 from cte1;
             "column_id":18,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c3",
             "expr_level":0,
             "expr_levels": [
@@ -3310,7 +3260,6 @@ WITH cte1 AS (select * from t1) select c1, c2 from cte1;
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -3361,7 +3310,6 @@ WITH cte1 AS (select * from t1) select c1, c2 from cte1;
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -3412,7 +3360,6 @@ WITH cte1 AS (select * from t1) select c1, c2 from cte1;
             "column_id":18,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c3",
             "expr_level":0,
             "expr_levels": [
@@ -3526,7 +3473,6 @@ WITH cte1 (c1)AS(select c1 from t1), cte2 AS (select * from t1) select c1, c2 fr
       "table_id":-7,
       "table_name":"cte2",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -3579,7 +3525,6 @@ WITH cte1 (c1)AS(select c1 from t1), cte2 AS (select * from t1) select c1, c2 fr
         "column_id":16,
         "database_name":"",
         "table_name":"cte2",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -3631,7 +3576,6 @@ WITH cte1 (c1)AS(select c1 from t1), cte2 AS (select * from t1) select c1, c2 fr
         "column_id":17,
         "database_name":"",
         "table_name":"cte2",
-        "synonym_name":"",
         "column_name":"c2",
         "expr_level":0,
         "expr_levels": [
@@ -3678,7 +3622,6 @@ WITH cte1 (c1)AS(select c1 from t1), cte2 AS (select * from t1) select c1, c2 fr
         "column_id":16,
         "database_name":"",
         "table_name":"cte2",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -3729,7 +3672,6 @@ WITH cte1 (c1)AS(select c1 from t1), cte2 AS (select * from t1) select c1, c2 fr
         "column_id":17,
         "database_name":"",
         "table_name":"cte2",
-        "synonym_name":"",
         "column_name":"c2",
         "expr_level":0,
         "expr_levels": [
@@ -3833,7 +3775,6 @@ WITH cte1 (c1)AS(select c1 from t1), cte2 AS (select * from t1) select c1, c2 fr
           "table_id":-5,
           "table_name":"t1",
           "alias_name":"t1",
-          "synonym_name":"",
           "table_type":1,
           "ref_id":1099511677878,
           "database_name":"cte_db",
@@ -3886,7 +3827,6 @@ WITH cte1 (c1)AS(select c1 from t1), cte2 AS (select * from t1) select c1, c2 fr
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -3938,7 +3878,6 @@ WITH cte1 (c1)AS(select c1 from t1), cte2 AS (select * from t1) select c1, c2 fr
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -3990,7 +3929,6 @@ WITH cte1 (c1)AS(select c1 from t1), cte2 AS (select * from t1) select c1, c2 fr
             "column_id":18,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c3",
             "expr_level":0,
             "expr_levels": [
@@ -4037,7 +3975,6 @@ WITH cte1 (c1)AS(select c1 from t1), cte2 AS (select * from t1) select c1, c2 fr
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -4088,7 +4025,6 @@ WITH cte1 (c1)AS(select c1 from t1), cte2 AS (select * from t1) select c1, c2 fr
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -4139,7 +4075,6 @@ WITH cte1 (c1)AS(select c1 from t1), cte2 AS (select * from t1) select c1, c2 fr
             "column_id":18,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c3",
             "expr_level":0,
             "expr_levels": [
@@ -4253,7 +4188,6 @@ WITH cte0 AS ( select * from t1) select * from cte0 for update;
       "table_id":-5,
       "table_name":"cte0",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -4306,7 +4240,6 @@ WITH cte0 AS ( select * from t1) select * from cte0 for update;
         "column_id":16,
         "database_name":"",
         "table_name":"cte0",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -4358,7 +4291,6 @@ WITH cte0 AS ( select * from t1) select * from cte0 for update;
         "column_id":17,
         "database_name":"",
         "table_name":"cte0",
-        "synonym_name":"",
         "column_name":"c2",
         "expr_level":0,
         "expr_levels": [
@@ -4410,7 +4342,6 @@ WITH cte0 AS ( select * from t1) select * from cte0 for update;
         "column_id":18,
         "database_name":"",
         "table_name":"cte0",
-        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -4457,7 +4388,6 @@ WITH cte0 AS ( select * from t1) select * from cte0 for update;
         "column_id":16,
         "database_name":"",
         "table_name":"cte0",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -4508,7 +4438,6 @@ WITH cte0 AS ( select * from t1) select * from cte0 for update;
         "column_id":17,
         "database_name":"",
         "table_name":"cte0",
-        "synonym_name":"",
         "column_name":"c2",
         "expr_level":0,
         "expr_levels": [
@@ -4559,7 +4488,6 @@ WITH cte0 AS ( select * from t1) select * from cte0 for update;
         "column_id":18,
         "database_name":"",
         "table_name":"cte0",
-        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -4663,7 +4591,6 @@ WITH cte0 AS ( select * from t1) select * from cte0 for update;
           "table_id":-3,
           "table_name":"t1",
           "alias_name":"t1",
-          "synonym_name":"",
           "table_type":1,
           "ref_id":1099511677878,
           "database_name":"cte_db",
@@ -4716,7 +4643,6 @@ WITH cte0 AS ( select * from t1) select * from cte0 for update;
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -4768,7 +4694,6 @@ WITH cte0 AS ( select * from t1) select * from cte0 for update;
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -4820,7 +4745,6 @@ WITH cte0 AS ( select * from t1) select * from cte0 for update;
             "column_id":18,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c3",
             "expr_level":0,
             "expr_levels": [
@@ -4867,7 +4791,6 @@ WITH cte0 AS ( select * from t1) select * from cte0 for update;
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -4918,7 +4841,6 @@ WITH cte0 AS ( select * from t1) select * from cte0 for update;
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -4969,7 +4891,6 @@ WITH cte0 AS ( select * from t1) select * from cte0 for update;
             "column_id":18,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c3",
             "expr_level":0,
             "expr_levels": [
@@ -5083,7 +5004,6 @@ with cte as (select count(*) from t1) select * from cte;
       "table_id":-5,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -5136,7 +5056,6 @@ with cte as (select count(*) from t1) select * from cte;
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"count(*)",
         "expr_level":0,
         "expr_levels": [
@@ -5183,7 +5102,6 @@ with cte as (select count(*) from t1) select * from cte;
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"count(*)",
         "expr_level":0,
         "expr_levels": [
@@ -5287,7 +5205,6 @@ with cte as (select count(*) from t1) select * from cte;
           "table_id":-3,
           "table_name":"t1",
           "alias_name":"t1",
-          "synonym_name":"",
           "table_type":1,
           "ref_id":1099511677878,
           "database_name":"cte_db",
@@ -5482,7 +5399,6 @@ with cte as (select count(*) as k from t1) select * from cte where k = 1;
       "table_id":-5,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -5535,7 +5451,6 @@ with cte as (select count(*) as k from t1) select * from cte where k = 1;
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"k",
         "expr_level":0,
         "expr_levels": [
@@ -5582,7 +5497,6 @@ with cte as (select count(*) as k from t1) select * from cte where k = 1;
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"k",
         "expr_level":0,
         "expr_levels": [
@@ -5680,7 +5594,6 @@ with cte as (select count(*) as k from t1) select * from cte where k = 1;
           "column_id":16,
           "database_name":"",
           "table_name":"cte",
-          "synonym_name":"",
           "column_name":"k",
           "expr_level":0,
           "expr_levels": [
@@ -5796,7 +5709,6 @@ with cte as (select count(*) as k from t1) select * from cte where k = 1;
           "table_id":-3,
           "table_name":"t1",
           "alias_name":"t1",
-          "synonym_name":"",
           "table_type":1,
           "ref_id":1099511677878,
           "database_name":"cte_db",
@@ -5991,7 +5903,6 @@ with cte (k1) as (select count(*) as k from t1) select * from cte where k1 = 1;
       "table_id":-5,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -6044,7 +5955,6 @@ with cte (k1) as (select count(*) as k from t1) select * from cte where k1 = 1;
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"k1",
         "expr_level":0,
         "expr_levels": [
@@ -6091,7 +6001,6 @@ with cte (k1) as (select count(*) as k from t1) select * from cte where k1 = 1;
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"k1",
         "expr_level":0,
         "expr_levels": [
@@ -6189,7 +6098,6 @@ with cte (k1) as (select count(*) as k from t1) select * from cte where k1 = 1;
           "column_id":16,
           "database_name":"",
           "table_name":"cte",
-          "synonym_name":"",
           "column_name":"k1",
           "expr_level":0,
           "expr_levels": [
@@ -6305,7 +6213,6 @@ with cte (k1) as (select count(*) as k from t1) select * from cte where k1 = 1;
           "table_id":-3,
           "table_name":"t1",
           "alias_name":"t1",
-          "synonym_name":"",
           "table_type":1,
           "ref_id":1099511677878,
           "database_name":"cte_db",
@@ -6500,7 +6407,6 @@ with  cte1 (c22, c21) AS (select c1, c2 from t1) select c22 as c21, c21 from cte
       "table_id":-5,
       "table_name":"cte1",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -6553,7 +6459,6 @@ with  cte1 (c22, c21) AS (select c1, c2 from t1) select c22 as c21, c21 from cte
         "column_id":17,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c21",
         "expr_level":0,
         "expr_levels": [
@@ -6605,7 +6510,6 @@ with  cte1 (c22, c21) AS (select c1, c2 from t1) select c22 as c21, c21 from cte
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c22",
         "expr_level":0,
         "expr_levels": [
@@ -6652,7 +6556,6 @@ with  cte1 (c22, c21) AS (select c1, c2 from t1) select c22 as c21, c21 from cte
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c22",
         "expr_level":0,
         "expr_levels": [
@@ -6703,7 +6606,6 @@ with  cte1 (c22, c21) AS (select c1, c2 from t1) select c22 as c21, c21 from cte
         "column_id":17,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c21",
         "expr_level":0,
         "expr_levels": [
@@ -6801,7 +6703,6 @@ with  cte1 (c22, c21) AS (select c1, c2 from t1) select c22 as c21, c21 from cte
           "column_id":17,
           "database_name":"",
           "table_name":"cte1",
-          "synonym_name":"",
           "column_name":"c21",
           "expr_level":0,
           "expr_levels": [
@@ -6917,7 +6818,6 @@ with  cte1 (c22, c21) AS (select c1, c2 from t1) select c22 as c21, c21 from cte
           "table_id":-3,
           "table_name":"t1",
           "alias_name":"t1",
-          "synonym_name":"",
           "table_type":1,
           "ref_id":1099511677878,
           "database_name":"cte_db",
@@ -6970,7 +6870,6 @@ with  cte1 (c22, c21) AS (select c1, c2 from t1) select c22 as c21, c21 from cte
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -7022,7 +6921,6 @@ with  cte1 (c22, c21) AS (select c1, c2 from t1) select c22 as c21, c21 from cte
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -7069,7 +6967,6 @@ with  cte1 (c22, c21) AS (select c1, c2 from t1) select c22 as c21, c21 from cte
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -7120,7 +7017,6 @@ with  cte1 (c22, c21) AS (select c1, c2 from t1) select c22 as c21, c21 from cte
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -7234,7 +7130,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
       "table_id":-6,
       "table_name":"cte1",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -7246,7 +7141,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
       "table_id":1099511677879,
       "table_name":"t2",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677879,
       "database_name":"cte_db",
@@ -7264,7 +7158,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
         "table_id":-6,
         "table_name":"cte1",
         "alias_name":"",
-        "synonym_name":"",
         "table_type":2,
         "ref_id":-1,
         "database_name":"",
@@ -7276,7 +7169,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
         "table_id":1099511677879,
         "table_name":"t2",
         "alias_name":"",
-        "synonym_name":"",
         "table_type":0,
         "ref_id":1099511677879,
         "database_name":"cte_db",
@@ -7348,7 +7240,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
               "column_id":16,
               "database_name":"",
               "table_name":"cte1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -7391,7 +7282,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"t2",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -7450,7 +7340,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -7502,7 +7391,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
         "column_id":16,
         "database_name":"cte_db",
         "table_name":"t2",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -7554,7 +7442,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
         "column_id":17,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c2",
         "expr_level":0,
         "expr_levels": [
@@ -7606,7 +7493,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
         "column_id":18,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -7658,7 +7544,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
         "column_id":17,
         "database_name":"cte_db",
         "table_name":"t2",
-        "synonym_name":"",
         "column_name":"c2",
         "expr_level":0,
         "expr_levels": [
@@ -7705,7 +7590,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -7756,7 +7640,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
         "column_id":17,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c2",
         "expr_level":0,
         "expr_levels": [
@@ -7807,7 +7690,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
         "column_id":18,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c3",
         "expr_level":0,
         "expr_levels": [
@@ -7858,7 +7740,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
         "column_id":16,
         "database_name":"cte_db",
         "table_name":"t2",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -7909,7 +7790,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
         "column_id":17,
         "database_name":"cte_db",
         "table_name":"t2",
-        "synonym_name":"",
         "column_name":"c2",
         "expr_level":0,
         "expr_levels": [
@@ -8043,7 +7923,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"t2",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -8086,7 +7965,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
               "column_id":16,
               "database_name":"",
               "table_name":"cte1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -8138,7 +8016,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -8214,7 +8091,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
           "table_id":-4,
           "table_name":"t1",
           "alias_name":"t1",
-          "synonym_name":"",
           "table_type":1,
           "ref_id":1099511677878,
           "database_name":"cte_db",
@@ -8267,7 +8143,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -8319,7 +8194,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -8371,7 +8245,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
             "column_id":18,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c3",
             "expr_level":0,
             "expr_levels": [
@@ -8418,7 +8291,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -8469,7 +8341,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -8520,7 +8391,6 @@ with cte1 AS( select * from t1)select * from cte1 left join t2 on cte1.c1=t2.c1 
             "column_id":18,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c3",
             "expr_level":0,
             "expr_levels": [
@@ -8634,7 +8504,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
       "table_id":-9,
       "table_name":"cte1",
       "alias_name":"cte1",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -8646,7 +8515,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
       "table_id":-12,
       "table_name":"cte2",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -8664,7 +8532,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "table_id":-9,
         "table_name":"cte1",
         "alias_name":"cte1",
-        "synonym_name":"",
         "table_type":2,
         "ref_id":-1,
         "database_name":"",
@@ -8676,7 +8543,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "table_id":-12,
         "table_name":"cte2",
         "alias_name":"",
-        "synonym_name":"",
         "table_type":2,
         "ref_id":-1,
         "database_name":"",
@@ -8748,7 +8614,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
               "column_id":16,
               "database_name":"",
               "table_name":"cte1",
-              "synonym_name":"",
               "column_name":"c11",
               "expr_level":0,
               "expr_levels": [
@@ -8791,7 +8656,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
               "column_id":16,
               "database_name":"",
               "table_name":"cte2",
-              "synonym_name":"",
               "column_name":"c",
               "expr_level":0,
               "expr_levels": [
@@ -8850,7 +8714,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c11",
         "expr_level":0,
         "expr_levels": [
@@ -8902,7 +8765,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":16,
         "database_name":"",
         "table_name":"cte2",
-        "synonym_name":"",
         "column_name":"c",
         "expr_level":0,
         "expr_levels": [
@@ -8954,7 +8816,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":17,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -9006,7 +8867,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":17,
         "database_name":"",
         "table_name":"cte2",
-        "synonym_name":"",
         "column_name":"d",
         "expr_level":0,
         "expr_levels": [
@@ -9053,7 +8913,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c11",
         "expr_level":0,
         "expr_levels": [
@@ -9104,7 +8963,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":17,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -9155,7 +9013,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":16,
         "database_name":"",
         "table_name":"cte2",
-        "synonym_name":"",
         "column_name":"c",
         "expr_level":0,
         "expr_levels": [
@@ -9206,7 +9063,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":17,
         "database_name":"",
         "table_name":"cte2",
-        "synonym_name":"",
         "column_name":"d",
         "expr_level":0,
         "expr_levels": [
@@ -9310,7 +9166,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
           "table_id":-8,
           "table_name":"cte2",
           "alias_name":"",
-          "synonym_name":"",
           "table_type":2,
           "ref_id":-1,
           "database_name":"",
@@ -9363,7 +9218,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":16,
             "database_name":"",
             "table_name":"cte2",
-            "synonym_name":"",
             "column_name":"c3",
             "expr_level":0,
             "expr_levels": [
@@ -9415,7 +9269,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":17,
             "database_name":"",
             "table_name":"cte2",
-            "synonym_name":"",
             "column_name":"c4",
             "expr_level":0,
             "expr_levels": [
@@ -9462,7 +9315,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":16,
             "database_name":"",
             "table_name":"cte2",
-            "synonym_name":"",
             "column_name":"c3",
             "expr_level":0,
             "expr_levels": [
@@ -9513,7 +9365,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":17,
             "database_name":"",
             "table_name":"cte2",
-            "synonym_name":"",
             "column_name":"c4",
             "expr_level":0,
             "expr_levels": [
@@ -9617,7 +9468,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
               "table_id":-6,
               "table_name":"t3",
               "alias_name":"t3",
-              "synonym_name":"",
               "table_type":1,
               "ref_id":1099511677880,
               "database_name":"cte_db",
@@ -9670,7 +9520,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"t3",
-                "synonym_name":"",
                 "column_name":"c3",
                 "expr_level":0,
                 "expr_levels": [
@@ -9722,7 +9571,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
                 "column_id":17,
                 "database_name":"cte_db",
                 "table_name":"t3",
-                "synonym_name":"",
                 "column_name":"c4",
                 "expr_level":0,
                 "expr_levels": [
@@ -9769,7 +9617,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"t3",
-                "synonym_name":"",
                 "column_name":"c3",
                 "expr_level":0,
                 "expr_levels": [
@@ -9820,7 +9667,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
                 "column_id":17,
                 "database_name":"cte_db",
                 "table_name":"t3",
-                "synonym_name":"",
                 "column_name":"c4",
                 "expr_level":0,
                 "expr_levels": [
@@ -9932,7 +9778,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
           "table_id":-10,
           "table_name":"t2",
           "alias_name":"t2",
-          "synonym_name":"",
           "table_type":1,
           "ref_id":1099511677879,
           "database_name":"cte_db",
@@ -9985,7 +9830,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t2",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -10037,7 +9881,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t2",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -10084,7 +9927,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t2",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -10135,7 +9977,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t2",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -10249,7 +10090,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
       "table_id":-7,
       "table_name":"cte1",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -10261,7 +10101,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
       "table_id":-10,
       "table_name":"cte2",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -10279,7 +10118,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "table_id":-7,
         "table_name":"cte1",
         "alias_name":"",
-        "synonym_name":"",
         "table_type":2,
         "ref_id":-1,
         "database_name":"",
@@ -10291,7 +10129,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "table_id":-10,
         "table_name":"cte2",
         "alias_name":"",
-        "synonym_name":"",
         "table_type":2,
         "ref_id":-1,
         "database_name":"",
@@ -10363,7 +10200,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
               "column_id":16,
               "database_name":"",
               "table_name":"cte1",
-              "synonym_name":"",
               "column_name":"a",
               "expr_level":0,
               "expr_levels": [
@@ -10406,7 +10242,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
               "column_id":16,
               "database_name":"",
               "table_name":"cte2",
-              "synonym_name":"",
               "column_name":"c",
               "expr_level":0,
               "expr_levels": [
@@ -10465,7 +10300,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"a",
         "expr_level":0,
         "expr_levels": [
@@ -10517,7 +10351,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":16,
         "database_name":"",
         "table_name":"cte2",
-        "synonym_name":"",
         "column_name":"c",
         "expr_level":0,
         "expr_levels": [
@@ -10569,7 +10402,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":17,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"b",
         "expr_level":0,
         "expr_levels": [
@@ -10621,7 +10453,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":17,
         "database_name":"",
         "table_name":"cte2",
-        "synonym_name":"",
         "column_name":"d",
         "expr_level":0,
         "expr_levels": [
@@ -10668,7 +10499,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"a",
         "expr_level":0,
         "expr_levels": [
@@ -10719,7 +10549,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":17,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"b",
         "expr_level":0,
         "expr_levels": [
@@ -10770,7 +10599,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":16,
         "database_name":"",
         "table_name":"cte2",
-        "synonym_name":"",
         "column_name":"c",
         "expr_level":0,
         "expr_levels": [
@@ -10821,7 +10649,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":17,
         "database_name":"",
         "table_name":"cte2",
-        "synonym_name":"",
         "column_name":"d",
         "expr_level":0,
         "expr_levels": [
@@ -10955,7 +10782,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
               "column_id":17,
               "database_name":"",
               "table_name":"cte1",
-              "synonym_name":"",
               "column_name":"b",
               "expr_level":0,
               "expr_levels": [
@@ -10998,7 +10824,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
               "column_id":17,
               "database_name":"",
               "table_name":"cte2",
-              "synonym_name":"",
               "column_name":"d",
               "expr_level":0,
               "expr_levels": [
@@ -11050,7 +10875,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"a",
         "expr_level":0,
         "expr_levels": [
@@ -11126,7 +10950,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
           "table_id":-5,
           "table_name":"t1",
           "alias_name":"t1",
-          "synonym_name":"",
           "table_type":1,
           "ref_id":1099511677878,
           "database_name":"cte_db",
@@ -11179,7 +11002,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -11231,7 +11053,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -11278,7 +11099,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -11329,7 +11149,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -11437,7 +11256,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
           "table_id":-8,
           "table_name":"t2",
           "alias_name":"t2",
-          "synonym_name":"",
           "table_type":1,
           "ref_id":1099511677879,
           "database_name":"cte_db",
@@ -11490,7 +11308,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t2",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -11542,7 +11359,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t2",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -11589,7 +11405,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t2",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -11640,7 +11455,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t2",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -11754,7 +11568,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
       "table_id":-6,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -11807,7 +11620,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"hello",
         "expr_level":0,
         "expr_levels": [
@@ -11859,7 +11671,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
         "column_id":17,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"abc",
         "expr_level":0,
         "expr_levels": [
@@ -11906,7 +11717,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"hello",
         "expr_level":0,
         "expr_levels": [
@@ -11957,7 +11767,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
         "column_id":17,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"abc",
         "expr_level":0,
         "expr_levels": [
@@ -12064,7 +11873,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
             "table_id":-3,
             "table_name":"t1",
             "alias_name":"t1",
-            "synonym_name":"",
             "table_type":1,
             "ref_id":1099511677878,
             "database_name":"cte_db",
@@ -12117,7 +11925,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -12164,7 +11971,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -12272,7 +12078,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
             "table_id":-4,
             "table_name":"cte",
             "alias_name":"cte",
-            "synonym_name":"",
             "table_type":4,
             "ref_id":49500,
             "database_name":"cte_db",
@@ -12325,7 +12130,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
               "column_id":22330000,
               "database_name":"cte_db",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"hello",
               "expr_level":0,
               "expr_levels": [
@@ -12372,7 +12176,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
               "column_id":22330000,
               "database_name":"cte_db",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"hello",
               "expr_level":0,
               "expr_levels": [
@@ -12541,7 +12344,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"t1",
-                "synonym_name":"",
                 "column_name":"c1",
                 "expr_level":0,
                 "expr_levels": [
@@ -12584,7 +12386,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
                 "column_id":22330000,
                 "database_name":"cte_db",
                 "table_name":"cte",
-                "synonym_name":"",
                 "column_name":"hello",
                 "expr_level":0,
                 "expr_levels": [
@@ -12661,7 +12462,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n+1 from cte where n < 10) se
       "table_id":-6,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -12714,7 +12514,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n+1 from cte where n < 10) se
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"n",
         "expr_level":0,
         "expr_levels": [
@@ -12761,7 +12560,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n+1 from cte where n < 10) se
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"n",
         "expr_level":0,
         "expr_levels": [
@@ -12868,7 +12666,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n+1 from cte where n < 10) se
             "table_id":-3,
             "table_name":"t1",
             "alias_name":"t1",
-            "synonym_name":"",
             "table_type":1,
             "ref_id":1099511677878,
             "database_name":"cte_db",
@@ -12921,7 +12718,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n+1 from cte where n < 10) se
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -13002,7 +12798,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n+1 from cte where n < 10) se
                   "column_id":16,
                   "database_name":"cte_db",
                   "table_name":"t1",
-                  "synonym_name":"",
                   "column_name":"c1",
                   "expr_level":0,
                   "expr_levels": [
@@ -13144,7 +12939,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n+1 from cte where n < 10) se
             "table_id":-4,
             "table_name":"cte",
             "alias_name":"cte",
-            "synonym_name":"",
             "table_type":4,
             "ref_id":49500,
             "database_name":"cte_db",
@@ -13197,7 +12991,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n+1 from cte where n < 10) se
               "column_id":22330000,
               "database_name":"cte_db",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"n",
               "expr_level":0,
               "expr_levels": [
@@ -13309,7 +13102,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n+1 from cte where n < 10) se
                       "column_id":22330000,
                       "database_name":"cte_db",
                       "table_name":"cte",
-                      "synonym_name":"",
                       "column_name":"n",
                       "expr_level":0,
                       "expr_levels": [
@@ -13473,7 +13265,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n+1 from cte where n < 10) se
                 "column_id":22330000,
                 "database_name":"cte_db",
                 "table_name":"cte",
-                "synonym_name":"",
                 "column_name":"n",
                 "expr_level":0,
                 "expr_levels": [
@@ -13688,7 +13479,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n+1 from cte where n < 10) se
                     "column_id":16,
                     "database_name":"cte_db",
                     "table_name":"t1",
-                    "synonym_name":"",
                     "column_name":"c1",
                     "expr_level":0,
                     "expr_levels": [
@@ -13830,7 +13620,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n+1 from cte where n < 10) se
                         "column_id":22330000,
                         "database_name":"cte_db",
                         "table_name":"cte",
-                        "synonym_name":"",
                         "column_name":"n",
                         "expr_level":0,
                         "expr_levels": [
@@ -13973,7 +13762,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
       "table_id":-5,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -14026,7 +13814,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"n",
         "expr_level":0,
         "expr_levels": [
@@ -14073,7 +13860,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"n",
         "expr_level":0,
         "expr_levels": [
@@ -14514,7 +14300,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
             "table_id":-3,
             "table_name":"cte",
             "alias_name":"cte",
-            "synonym_name":"",
             "table_type":4,
             "ref_id":49500,
             "database_name":"cte_db",
@@ -14567,7 +14352,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
               "column_id":22330000,
               "database_name":"cte_db",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"n",
               "expr_level":0,
               "expr_levels": [
@@ -14679,7 +14463,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
                       "column_id":22330000,
                       "database_name":"cte_db",
                       "table_name":"cte",
-                      "synonym_name":"",
                       "column_name":"n",
                       "expr_level":0,
                       "expr_levels": [
@@ -14843,7 +14626,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
                 "column_id":22330000,
                 "database_name":"cte_db",
                 "table_name":"cte",
-                "synonym_name":"",
                 "column_name":"n",
                 "expr_level":0,
                 "expr_levels": [
@@ -15290,7 +15072,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
                         "column_id":22330000,
                         "database_name":"cte_db",
                         "table_name":"cte",
-                        "synonym_name":"",
                         "column_name":"n",
                         "expr_level":0,
                         "expr_levels": [
@@ -15392,7 +15173,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
       "table_id":-5,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -15445,7 +15225,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"n",
         "expr_level":0,
         "expr_levels": [
@@ -15497,7 +15276,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
         "column_id":17,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"abc",
         "expr_level":0,
         "expr_levels": [
@@ -15544,7 +15322,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"n",
         "expr_level":0,
         "expr_levels": [
@@ -15595,7 +15372,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
         "column_id":17,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"abc",
         "expr_level":0,
         "expr_levels": [
@@ -16036,7 +15812,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
             "table_id":-3,
             "table_name":"cte",
             "alias_name":"cte",
-            "synonym_name":"",
             "table_type":4,
             "ref_id":49500,
             "database_name":"cte_db",
@@ -16089,7 +15864,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
               "column_id":22330000,
               "database_name":"cte_db",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"n",
               "expr_level":0,
               "expr_levels": [
@@ -16201,7 +15975,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
                       "column_id":22330000,
                       "database_name":"cte_db",
                       "table_name":"cte",
-                      "synonym_name":"",
                       "column_name":"n",
                       "expr_level":0,
                       "expr_levels": [
@@ -16365,7 +16138,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
                 "column_id":22330000,
                 "database_name":"cte_db",
                 "table_name":"cte",
-                "synonym_name":"",
                 "column_name":"n",
                 "expr_level":0,
                 "expr_levels": [
@@ -16812,7 +16584,6 @@ with cte(n) as (select 1 from dual union all select n+1 from cte where n < 2) se
                         "column_id":22330000,
                         "database_name":"cte_db",
                         "table_name":"cte",
-                        "synonym_name":"",
                         "column_name":"n",
                         "expr_level":0,
                         "expr_levels": [
@@ -16956,7 +16727,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
         "table_id":-8,
         "table_name":"cte",
         "alias_name":"",
-        "synonym_name":"",
         "table_type":2,
         "ref_id":-1,
         "database_name":"",
@@ -17009,7 +16779,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
           "column_id":16,
           "database_name":"",
           "table_name":"cte",
-          "synonym_name":"",
           "column_name":"a",
           "expr_level":0,
           "expr_levels": [
@@ -17061,7 +16830,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
           "column_id":17,
           "database_name":"",
           "table_name":"cte",
-          "synonym_name":"",
           "column_name":"b",
           "expr_level":0,
           "expr_levels": [
@@ -17113,7 +16881,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
           "column_id":18,
           "database_name":"",
           "table_name":"cte",
-          "synonym_name":"",
           "column_name":"c",
           "expr_level":0,
           "expr_levels": [
@@ -17165,7 +16932,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
           "column_id":19,
           "database_name":"",
           "table_name":"cte",
-          "synonym_name":"",
           "column_name":"sad",
           "expr_level":0,
           "expr_levels": [
@@ -17212,7 +16978,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
           "column_id":16,
           "database_name":"",
           "table_name":"cte",
-          "synonym_name":"",
           "column_name":"a",
           "expr_level":0,
           "expr_levels": [
@@ -17263,7 +17028,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
           "column_id":17,
           "database_name":"",
           "table_name":"cte",
-          "synonym_name":"",
           "column_name":"b",
           "expr_level":0,
           "expr_levels": [
@@ -17314,7 +17078,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
           "column_id":18,
           "database_name":"",
           "table_name":"cte",
-          "synonym_name":"",
           "column_name":"c",
           "expr_level":0,
           "expr_levels": [
@@ -17365,7 +17128,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
           "column_id":19,
           "database_name":"",
           "table_name":"cte",
-          "synonym_name":"",
           "column_name":"sad",
           "expr_level":0,
           "expr_levels": [
@@ -17472,7 +17234,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
               "table_id":-4,
               "table_name":"emp",
               "alias_name":"emp",
-              "synonym_name":"",
               "table_type":1,
               "ref_id":1099511677877,
               "database_name":"cte_db",
@@ -17525,7 +17286,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"id",
                 "expr_level":0,
                 "expr_levels": [
@@ -17577,7 +17337,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":17,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"name",
                 "expr_level":0,
                 "expr_levels": [
@@ -17629,7 +17388,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":18,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"leaderid",
                 "expr_level":0,
                 "expr_levels": [
@@ -17676,7 +17434,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"id",
                 "expr_level":0,
                 "expr_levels": [
@@ -17727,7 +17484,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":17,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"name",
                 "expr_level":0,
                 "expr_levels": [
@@ -17778,7 +17534,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":18,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"leaderid",
                 "expr_level":0,
                 "expr_levels": [
@@ -17875,7 +17630,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                   "column_id":16,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"id",
                   "expr_level":0,
                   "expr_levels": [
@@ -17993,7 +17747,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
               "table_id":-5,
               "table_name":"emp",
               "alias_name":"emp",
-              "synonym_name":"",
               "table_type":1,
               "ref_id":1099511677877,
               "database_name":"cte_db",
@@ -18005,7 +17758,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
               "table_id":-6,
               "table_name":"cte",
               "alias_name":"cte",
-              "synonym_name":"",
               "table_type":4,
               "ref_id":49500,
               "database_name":"cte_db",
@@ -18058,7 +17810,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":18,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"leaderid",
                 "expr_level":0,
                 "expr_levels": [
@@ -18110,7 +17861,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":22330000,
                 "database_name":"cte_db",
                 "table_name":"cte",
-                "synonym_name":"",
                 "column_name":"a",
                 "expr_level":0,
                 "expr_levels": [
@@ -18162,7 +17912,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"id",
                 "expr_level":0,
                 "expr_levels": [
@@ -18214,7 +17963,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":17,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"name",
                 "expr_level":0,
                 "expr_levels": [
@@ -18261,7 +18009,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"id",
                 "expr_level":0,
                 "expr_levels": [
@@ -18312,7 +18059,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":17,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"name",
                 "expr_level":0,
                 "expr_levels": [
@@ -18363,7 +18109,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":18,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"leaderid",
                 "expr_level":0,
                 "expr_levels": [
@@ -18464,7 +18209,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                   "column_id":18,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"leaderid",
                   "expr_level":0,
                   "expr_levels": [
@@ -18507,7 +18251,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                   "column_id":22330000,
                   "database_name":"cte_db",
                   "table_name":"cte",
-                  "synonym_name":"",
                   "column_name":"a",
                   "expr_level":0,
                   "expr_levels": [
@@ -18656,7 +18399,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                   "column_id":16,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"id",
                   "expr_level":0,
                   "expr_levels": [
@@ -18699,7 +18441,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                   "column_id":16,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"id",
                   "expr_level":0,
                   "expr_levels": [
@@ -18784,7 +18525,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                   "column_id":17,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"name",
                   "expr_level":0,
                   "expr_levels": [
@@ -18827,7 +18567,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                   "column_id":17,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"name",
                   "expr_level":0,
                   "expr_levels": [
@@ -18912,7 +18651,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                   "column_id":18,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"leaderid",
                   "expr_level":0,
                   "expr_levels": [
@@ -18955,7 +18693,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                   "column_id":18,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"leaderid",
                   "expr_level":0,
                   "expr_levels": [
@@ -19033,7 +18770,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
       "table_id":-6,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -19086,7 +18822,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"n",
         "expr_level":0,
         "expr_levels": [
@@ -19133,7 +18868,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"n",
         "expr_level":0,
         "expr_levels": [
@@ -19240,7 +18974,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
             "table_id":-3,
             "table_name":"t1",
             "alias_name":"t1",
-            "synonym_name":"",
             "table_type":1,
             "ref_id":1099511677878,
             "database_name":"cte_db",
@@ -19293,7 +19026,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -19340,7 +19072,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -19448,7 +19179,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
             "table_id":-4,
             "table_name":"cte",
             "alias_name":"cte",
-            "synonym_name":"",
             "table_type":4,
             "ref_id":49500,
             "database_name":"cte_db",
@@ -19501,7 +19231,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
               "column_id":22330000,
               "database_name":"cte_db",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"n",
               "expr_level":0,
               "expr_levels": [
@@ -19548,7 +19277,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
               "column_id":22330000,
               "database_name":"cte_db",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"n",
               "expr_level":0,
               "expr_levels": [
@@ -19717,7 +19445,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"t1",
-                "synonym_name":"",
                 "column_name":"c1",
                 "expr_level":0,
                 "expr_levels": [
@@ -19760,7 +19487,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
                 "column_id":22330000,
                 "database_name":"cte_db",
                 "table_name":"cte",
-                "synonym_name":"",
                 "column_name":"n",
                 "expr_level":0,
                 "expr_levels": [
@@ -19878,7 +19604,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
       "table_id":-6,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -19931,7 +19656,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"n",
         "expr_level":0,
         "expr_levels": [
@@ -19978,7 +19702,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"n",
         "expr_level":0,
         "expr_levels": [
@@ -20085,7 +19808,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
             "table_id":-3,
             "table_name":"t1",
             "alias_name":"t1",
-            "synonym_name":"",
             "table_type":1,
             "ref_id":1099511677878,
             "database_name":"cte_db",
@@ -20138,7 +19860,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -20185,7 +19906,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -20293,7 +20013,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
             "table_id":-4,
             "table_name":"cte",
             "alias_name":"cte",
-            "synonym_name":"",
             "table_type":4,
             "ref_id":49500,
             "database_name":"cte_db",
@@ -20346,7 +20065,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
               "column_id":22330000,
               "database_name":"cte_db",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"n",
               "expr_level":0,
               "expr_levels": [
@@ -20393,7 +20111,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
               "column_id":22330000,
               "database_name":"cte_db",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"n",
               "expr_level":0,
               "expr_levels": [
@@ -20562,7 +20279,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"t1",
-                "synonym_name":"",
                 "column_name":"c1",
                 "expr_level":0,
                 "expr_levels": [
@@ -20605,7 +20321,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) search depth firs
                 "column_id":22330000,
                 "database_name":"cte_db",
                 "table_name":"cte",
-                "synonym_name":"",
                 "column_name":"n",
                 "expr_level":0,
                 "expr_levels": [
@@ -20682,7 +20397,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) select n from cte
       "table_id":-6,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -20735,7 +20449,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) select n from cte
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"n",
         "expr_level":0,
         "expr_levels": [
@@ -20782,7 +20495,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) select n from cte
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"n",
         "expr_level":0,
         "expr_levels": [
@@ -20889,7 +20601,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) select n from cte
             "table_id":-3,
             "table_name":"t1",
             "alias_name":"t1",
-            "synonym_name":"",
             "table_type":1,
             "ref_id":1099511677878,
             "database_name":"cte_db",
@@ -20942,7 +20653,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) select n from cte
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -20989,7 +20699,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) select n from cte
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -21097,7 +20806,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) select n from cte
             "table_id":-4,
             "table_name":"cte",
             "alias_name":"cte",
-            "synonym_name":"",
             "table_type":4,
             "ref_id":49500,
             "database_name":"cte_db",
@@ -21150,7 +20858,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) select n from cte
               "column_id":22330000,
               "database_name":"cte_db",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"n",
               "expr_level":0,
               "expr_levels": [
@@ -21197,7 +20904,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) select n from cte
               "column_id":22330000,
               "database_name":"cte_db",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"n",
               "expr_level":0,
               "expr_levels": [
@@ -21366,7 +21072,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) select n from cte
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"t1",
-                "synonym_name":"",
                 "column_name":"c1",
                 "expr_level":0,
                 "expr_levels": [
@@ -21409,7 +21114,6 @@ WITH cte(n) AS (SELECT c1 FROM t1 UNION ALL select n from cte) select n from cte
                 "column_id":22330000,
                 "database_name":"cte_db",
                 "table_name":"cte",
-                "synonym_name":"",
                 "column_name":"n",
                 "expr_level":0,
                 "expr_levels": [
@@ -21445,7 +21149,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
       "table_id":-5,
       "table_name":"fibonacci",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -21498,7 +21201,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
         "column_id":16,
         "database_name":"",
         "table_name":"fibonacci",
-        "synonym_name":"",
         "column_name":"n",
         "expr_level":0,
         "expr_levels": [
@@ -21550,7 +21252,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
         "column_id":17,
         "database_name":"",
         "table_name":"fibonacci",
-        "synonym_name":"",
         "column_name":"fib_n",
         "expr_level":0,
         "expr_levels": [
@@ -21602,7 +21303,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
         "column_id":18,
         "database_name":"",
         "table_name":"fibonacci",
-        "synonym_name":"",
         "column_name":"next_fib_n",
         "expr_level":0,
         "expr_levels": [
@@ -21649,7 +21349,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
         "column_id":16,
         "database_name":"",
         "table_name":"fibonacci",
-        "synonym_name":"",
         "column_name":"n",
         "expr_level":0,
         "expr_levels": [
@@ -21700,7 +21399,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
         "column_id":17,
         "database_name":"",
         "table_name":"fibonacci",
-        "synonym_name":"",
         "column_name":"fib_n",
         "expr_level":0,
         "expr_levels": [
@@ -21751,7 +21449,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
         "column_id":18,
         "database_name":"",
         "table_name":"fibonacci",
-        "synonym_name":"",
         "column_name":"next_fib_n",
         "expr_level":0,
         "expr_levels": [
@@ -22475,7 +22172,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
             "table_id":-3,
             "table_name":"fibonacci",
             "alias_name":"fibonacci",
-            "synonym_name":"",
             "table_type":4,
             "ref_id":49500,
             "database_name":"cte_db",
@@ -22528,7 +22224,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
               "column_id":22330000,
               "database_name":"cte_db",
               "table_name":"fibonacci",
-              "synonym_name":"",
               "column_name":"n",
               "expr_level":0,
               "expr_levels": [
@@ -22580,7 +22275,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
               "column_id":22330002,
               "database_name":"cte_db",
               "table_name":"fibonacci",
-              "synonym_name":"",
               "column_name":"next_fib_n",
               "expr_level":0,
               "expr_levels": [
@@ -22632,7 +22326,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
               "column_id":22330001,
               "database_name":"cte_db",
               "table_name":"fibonacci",
-              "synonym_name":"",
               "column_name":"fib_n",
               "expr_level":0,
               "expr_levels": [
@@ -22744,7 +22437,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
                       "column_id":22330000,
                       "database_name":"cte_db",
                       "table_name":"fibonacci",
-                      "synonym_name":"",
                       "column_name":"n",
                       "expr_level":0,
                       "expr_levels": [
@@ -22861,7 +22553,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
               "column_id":22330002,
               "database_name":"cte_db",
               "table_name":"fibonacci",
-              "synonym_name":"",
               "column_name":"next_fib_n",
               "expr_level":0,
               "expr_levels": [
@@ -22976,7 +22667,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
                       "column_id":22330001,
                       "database_name":"cte_db",
                       "table_name":"fibonacci",
-                      "synonym_name":"",
                       "column_name":"fib_n",
                       "expr_level":0,
                       "expr_levels": [
@@ -23019,7 +22709,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
                       "column_id":22330002,
                       "database_name":"cte_db",
                       "table_name":"fibonacci",
-                      "synonym_name":"",
                       "column_name":"next_fib_n",
                       "expr_level":0,
                       "expr_levels": [
@@ -23153,7 +22842,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
                 "column_id":22330000,
                 "database_name":"cte_db",
                 "table_name":"fibonacci",
-                "synonym_name":"",
                 "column_name":"n",
                 "expr_level":0,
                 "expr_levels": [
@@ -23702,7 +23390,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
                         "column_id":22330000,
                         "database_name":"cte_db",
                         "table_name":"fibonacci",
-                        "synonym_name":"",
                         "column_name":"n",
                         "expr_level":0,
                         "expr_levels": [
@@ -23883,7 +23570,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
                 "column_id":22330002,
                 "database_name":"cte_db",
                 "table_name":"fibonacci",
-                "synonym_name":"",
                 "column_name":"next_fib_n",
                 "expr_level":0,
                 "expr_levels": [
@@ -24131,7 +23817,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
                         "column_id":22330001,
                         "database_name":"cte_db",
                         "table_name":"fibonacci",
-                        "synonym_name":"",
                         "column_name":"fib_n",
                         "expr_level":0,
                         "expr_levels": [
@@ -24174,7 +23859,6 @@ WITH fibonacci (n, fib_n, next_fib_n) AS (   SELECT 1, 0, 1 from dual   UNION AL
                         "column_id":22330002,
                         "database_name":"cte_db",
                         "table_name":"fibonacci",
-                        "synonym_name":"",
                         "column_name":"next_fib_n",
                         "expr_level":0,
                         "expr_levels": [
@@ -24246,7 +23930,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
       "table_id":-6,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -24299,7 +23982,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"hello",
         "expr_level":0,
         "expr_levels": [
@@ -24351,7 +24033,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
         "column_id":17,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"abc",
         "expr_level":0,
         "expr_levels": [
@@ -24398,7 +24079,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"hello",
         "expr_level":0,
         "expr_levels": [
@@ -24449,7 +24129,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
         "column_id":17,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"abc",
         "expr_level":0,
         "expr_levels": [
@@ -24556,7 +24235,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
             "table_id":-3,
             "table_name":"t1",
             "alias_name":"t1",
-            "synonym_name":"",
             "table_type":1,
             "ref_id":1099511677878,
             "database_name":"cte_db",
@@ -24609,7 +24287,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -24656,7 +24333,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -24764,7 +24440,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
             "table_id":-4,
             "table_name":"cte",
             "alias_name":"cte",
-            "synonym_name":"",
             "table_type":4,
             "ref_id":49500,
             "database_name":"cte_db",
@@ -24817,7 +24492,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
               "column_id":22330000,
               "database_name":"cte_db",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"hello",
               "expr_level":0,
               "expr_levels": [
@@ -24864,7 +24538,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
               "column_id":22330000,
               "database_name":"cte_db",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"hello",
               "expr_level":0,
               "expr_levels": [
@@ -25033,7 +24706,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"t1",
-                "synonym_name":"",
                 "column_name":"c1",
                 "expr_level":0,
                 "expr_levels": [
@@ -25076,7 +24748,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
                 "column_id":22330000,
                 "database_name":"cte_db",
                 "table_name":"cte",
-                "synonym_name":"",
                 "column_name":"hello",
                 "expr_level":0,
                 "expr_levels": [
@@ -25153,7 +24824,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
       "table_id":-6,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -25206,7 +24876,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"hello",
         "expr_level":0,
         "expr_levels": [
@@ -25258,7 +24927,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
         "column_id":17,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"abc",
         "expr_level":0,
         "expr_levels": [
@@ -25305,7 +24973,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"hello",
         "expr_level":0,
         "expr_levels": [
@@ -25356,7 +25023,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
         "column_id":17,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"abc",
         "expr_level":0,
         "expr_levels": [
@@ -25463,7 +25129,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
             "table_id":-3,
             "table_name":"t1",
             "alias_name":"t1",
-            "synonym_name":"",
             "table_type":1,
             "ref_id":1099511677878,
             "database_name":"cte_db",
@@ -25516,7 +25181,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -25563,7 +25227,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -25671,7 +25334,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
             "table_id":-4,
             "table_name":"cte",
             "alias_name":"cte",
-            "synonym_name":"",
             "table_type":4,
             "ref_id":49500,
             "database_name":"cte_db",
@@ -25724,7 +25386,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
               "column_id":22330000,
               "database_name":"cte_db",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"hello",
               "expr_level":0,
               "expr_levels": [
@@ -25771,7 +25432,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
               "column_id":22330000,
               "database_name":"cte_db",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"hello",
               "expr_level":0,
               "expr_levels": [
@@ -25940,7 +25600,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"t1",
-                "synonym_name":"",
                 "column_name":"c1",
                 "expr_level":0,
                 "expr_levels": [
@@ -25983,7 +25642,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello from cte) search de
                 "column_id":22330000,
                 "database_name":"cte_db",
                 "table_name":"cte",
-                "synonym_name":"",
                 "column_name":"hello",
                 "expr_level":0,
                 "expr_levels": [
@@ -26060,7 +25718,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello+1 from cte where he
       "table_id":-6,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -26113,7 +25770,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello+1 from cte where he
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"hello",
         "expr_level":0,
         "expr_levels": [
@@ -26165,7 +25821,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello+1 from cte where he
         "column_id":17,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"abc",
         "expr_level":0,
         "expr_levels": [
@@ -26212,7 +25867,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello+1 from cte where he
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"hello",
         "expr_level":0,
         "expr_levels": [
@@ -26263,7 +25917,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello+1 from cte where he
         "column_id":17,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"abc",
         "expr_level":0,
         "expr_levels": [
@@ -26370,7 +26023,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello+1 from cte where he
             "table_id":-3,
             "table_name":"t1",
             "alias_name":"t1",
-            "synonym_name":"",
             "table_type":1,
             "ref_id":1099511677878,
             "database_name":"cte_db",
@@ -26423,7 +26075,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello+1 from cte where he
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -26504,7 +26155,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello+1 from cte where he
                   "column_id":16,
                   "database_name":"cte_db",
                   "table_name":"t1",
-                  "synonym_name":"",
                   "column_name":"c1",
                   "expr_level":0,
                   "expr_levels": [
@@ -26646,7 +26296,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello+1 from cte where he
             "table_id":-4,
             "table_name":"cte",
             "alias_name":"cte",
-            "synonym_name":"",
             "table_type":4,
             "ref_id":49500,
             "database_name":"cte_db",
@@ -26699,7 +26348,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello+1 from cte where he
               "column_id":22330000,
               "database_name":"cte_db",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"hello",
               "expr_level":0,
               "expr_levels": [
@@ -26811,7 +26459,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello+1 from cte where he
                       "column_id":22330000,
                       "database_name":"cte_db",
                       "table_name":"cte",
-                      "synonym_name":"",
                       "column_name":"hello",
                       "expr_level":0,
                       "expr_levels": [
@@ -26975,7 +26622,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello+1 from cte where he
                 "column_id":22330000,
                 "database_name":"cte_db",
                 "table_name":"cte",
-                "synonym_name":"",
                 "column_name":"hello",
                 "expr_level":0,
                 "expr_levels": [
@@ -27190,7 +26836,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello+1 from cte where he
                     "column_id":16,
                     "database_name":"cte_db",
                     "table_name":"t1",
-                    "synonym_name":"",
                     "column_name":"c1",
                     "expr_level":0,
                     "expr_levels": [
@@ -27332,7 +26977,6 @@ WITH cte(hello) AS (SELECT c1 FROM t1 UNION ALL select hello+1 from cte where he
                         "column_id":22330000,
                         "database_name":"cte_db",
                         "table_name":"cte",
-                        "synonym_name":"",
                         "column_name":"hello",
                         "expr_level":0,
                         "expr_levels": [
@@ -27475,7 +27119,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
       "table_id":-8,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -27528,7 +27171,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"a",
         "expr_level":0,
         "expr_levels": [
@@ -27580,7 +27222,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
         "column_id":17,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"b",
         "expr_level":0,
         "expr_levels": [
@@ -27632,7 +27273,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
         "column_id":18,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"c",
         "expr_level":0,
         "expr_levels": [
@@ -27684,7 +27324,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
         "column_id":19,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"sad",
         "expr_level":0,
         "expr_levels": [
@@ -27731,7 +27370,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"a",
         "expr_level":0,
         "expr_levels": [
@@ -27782,7 +27420,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
         "column_id":17,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"b",
         "expr_level":0,
         "expr_levels": [
@@ -27833,7 +27470,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
         "column_id":18,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"c",
         "expr_level":0,
         "expr_levels": [
@@ -27884,7 +27520,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
         "column_id":19,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"sad",
         "expr_level":0,
         "expr_levels": [
@@ -27991,7 +27626,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
             "table_id":-4,
             "table_name":"emp",
             "alias_name":"emp",
-            "synonym_name":"",
             "table_type":1,
             "ref_id":1099511677877,
             "database_name":"cte_db",
@@ -28044,7 +27678,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"id",
               "expr_level":0,
               "expr_levels": [
@@ -28096,7 +27729,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":17,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"name",
               "expr_level":0,
               "expr_levels": [
@@ -28148,7 +27780,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":18,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"leaderid",
               "expr_level":0,
               "expr_levels": [
@@ -28195,7 +27826,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"id",
               "expr_level":0,
               "expr_levels": [
@@ -28246,7 +27876,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":17,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"name",
               "expr_level":0,
               "expr_levels": [
@@ -28297,7 +27926,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":18,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"leaderid",
               "expr_level":0,
               "expr_levels": [
@@ -28395,7 +28023,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"id",
                 "expr_level":0,
                 "expr_levels": [
@@ -28515,7 +28142,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
             "table_id":-5,
             "table_name":"emp",
             "alias_name":"emp",
-            "synonym_name":"",
             "table_type":1,
             "ref_id":1099511677877,
             "database_name":"cte_db",
@@ -28527,7 +28153,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
             "table_id":-6,
             "table_name":"cte",
             "alias_name":"cte",
-            "synonym_name":"",
             "table_type":4,
             "ref_id":49500,
             "database_name":"cte_db",
@@ -28580,7 +28205,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":18,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"leaderid",
               "expr_level":0,
               "expr_levels": [
@@ -28632,7 +28256,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":22330000,
               "database_name":"cte_db",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"a",
               "expr_level":0,
               "expr_levels": [
@@ -28684,7 +28307,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"id",
               "expr_level":0,
               "expr_levels": [
@@ -28736,7 +28358,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":17,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"name",
               "expr_level":0,
               "expr_levels": [
@@ -28783,7 +28404,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"id",
               "expr_level":0,
               "expr_levels": [
@@ -28834,7 +28454,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":17,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"name",
               "expr_level":0,
               "expr_levels": [
@@ -28885,7 +28504,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":18,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"leaderid",
               "expr_level":0,
               "expr_levels": [
@@ -28986,7 +28604,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
                 "column_id":18,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"leaderid",
                 "expr_level":0,
                 "expr_levels": [
@@ -29029,7 +28646,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
                 "column_id":22330000,
                 "database_name":"cte_db",
                 "table_name":"cte",
-                "synonym_name":"",
                 "column_name":"a",
                 "expr_level":0,
                 "expr_levels": [
@@ -29178,7 +28794,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"id",
                 "expr_level":0,
                 "expr_levels": [
@@ -29221,7 +28836,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"id",
                 "expr_level":0,
                 "expr_levels": [
@@ -29306,7 +28920,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
                 "column_id":17,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"name",
                 "expr_level":0,
                 "expr_levels": [
@@ -29349,7 +28962,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
                 "column_id":17,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"name",
                 "expr_level":0,
                 "expr_levels": [
@@ -29434,7 +29046,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
                 "column_id":18,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"leaderid",
                 "expr_level":0,
                 "expr_levels": [
@@ -29477,7 +29088,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
                 "column_id":18,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"leaderid",
                 "expr_level":0,
                 "expr_levels": [
@@ -29554,7 +29164,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
       "table_id":-8,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -29607,7 +29216,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"a",
         "expr_level":0,
         "expr_levels": [
@@ -29659,7 +29267,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
         "column_id":17,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"b",
         "expr_level":0,
         "expr_levels": [
@@ -29711,7 +29318,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
         "column_id":18,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"c",
         "expr_level":0,
         "expr_levels": [
@@ -29763,7 +29369,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
         "column_id":19,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"iscyc",
         "expr_level":0,
         "expr_levels": [
@@ -29810,7 +29415,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"a",
         "expr_level":0,
         "expr_levels": [
@@ -29861,7 +29465,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
         "column_id":17,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"b",
         "expr_level":0,
         "expr_levels": [
@@ -29912,7 +29515,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
         "column_id":18,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"c",
         "expr_level":0,
         "expr_levels": [
@@ -29963,7 +29565,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
         "column_id":19,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"iscyc",
         "expr_level":0,
         "expr_levels": [
@@ -30070,7 +29671,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
             "table_id":-4,
             "table_name":"emp",
             "alias_name":"emp",
-            "synonym_name":"",
             "table_type":1,
             "ref_id":1099511677877,
             "database_name":"cte_db",
@@ -30123,7 +29723,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"id",
               "expr_level":0,
               "expr_levels": [
@@ -30175,7 +29774,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":17,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"name",
               "expr_level":0,
               "expr_levels": [
@@ -30227,7 +29825,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":18,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"leaderid",
               "expr_level":0,
               "expr_levels": [
@@ -30274,7 +29871,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"id",
               "expr_level":0,
               "expr_levels": [
@@ -30325,7 +29921,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":17,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"name",
               "expr_level":0,
               "expr_levels": [
@@ -30376,7 +29971,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":18,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"leaderid",
               "expr_level":0,
               "expr_levels": [
@@ -30474,7 +30068,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"id",
                 "expr_level":0,
                 "expr_levels": [
@@ -30594,7 +30187,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
             "table_id":-5,
             "table_name":"emp",
             "alias_name":"emp",
-            "synonym_name":"",
             "table_type":1,
             "ref_id":1099511677877,
             "database_name":"cte_db",
@@ -30606,7 +30198,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
             "table_id":-6,
             "table_name":"cte",
             "alias_name":"cte",
-            "synonym_name":"",
             "table_type":4,
             "ref_id":49500,
             "database_name":"cte_db",
@@ -30659,7 +30250,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":18,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"leaderid",
               "expr_level":0,
               "expr_levels": [
@@ -30711,7 +30301,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":22330000,
               "database_name":"cte_db",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"a",
               "expr_level":0,
               "expr_levels": [
@@ -30763,7 +30352,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"id",
               "expr_level":0,
               "expr_levels": [
@@ -30815,7 +30403,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":17,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"name",
               "expr_level":0,
               "expr_levels": [
@@ -30862,7 +30449,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"id",
               "expr_level":0,
               "expr_levels": [
@@ -30913,7 +30499,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":17,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"name",
               "expr_level":0,
               "expr_levels": [
@@ -30964,7 +30549,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
               "column_id":18,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"leaderid",
               "expr_level":0,
               "expr_levels": [
@@ -31065,7 +30649,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
                 "column_id":18,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"leaderid",
                 "expr_level":0,
                 "expr_levels": [
@@ -31108,7 +30691,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
                 "column_id":22330000,
                 "database_name":"cte_db",
                 "table_name":"cte",
-                "synonym_name":"",
                 "column_name":"a",
                 "expr_level":0,
                 "expr_levels": [
@@ -31257,7 +30839,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"id",
                 "expr_level":0,
                 "expr_levels": [
@@ -31300,7 +30881,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"id",
                 "expr_level":0,
                 "expr_levels": [
@@ -31385,7 +30965,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
                 "column_id":17,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"name",
                 "expr_level":0,
                 "expr_levels": [
@@ -31428,7 +31007,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
                 "column_id":17,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"name",
                 "expr_level":0,
                 "expr_levels": [
@@ -31513,7 +31091,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
                 "column_id":18,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"leaderid",
                 "expr_level":0,
                 "expr_levels": [
@@ -31556,7 +31133,6 @@ with cte (a,b,c) as (select id, name, leaderid from emp where emp.id = 1 union a
                 "column_id":18,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"leaderid",
                 "expr_level":0,
                 "expr_levels": [
@@ -31634,7 +31210,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
         "table_id":-8,
         "table_name":"cte",
         "alias_name":"",
-        "synonym_name":"",
         "table_type":2,
         "ref_id":-1,
         "database_name":"",
@@ -31687,7 +31262,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
           "column_id":16,
           "database_name":"",
           "table_name":"cte",
-          "synonym_name":"",
           "column_name":"a",
           "expr_level":0,
           "expr_levels": [
@@ -31739,7 +31313,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
           "column_id":17,
           "database_name":"",
           "table_name":"cte",
-          "synonym_name":"",
           "column_name":"b",
           "expr_level":0,
           "expr_levels": [
@@ -31791,7 +31364,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
           "column_id":18,
           "database_name":"",
           "table_name":"cte",
-          "synonym_name":"",
           "column_name":"c",
           "expr_level":0,
           "expr_levels": [
@@ -31843,7 +31415,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
           "column_id":19,
           "database_name":"",
           "table_name":"cte",
-          "synonym_name":"",
           "column_name":"iscyc",
           "expr_level":0,
           "expr_levels": [
@@ -31890,7 +31461,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
           "column_id":16,
           "database_name":"",
           "table_name":"cte",
-          "synonym_name":"",
           "column_name":"a",
           "expr_level":0,
           "expr_levels": [
@@ -31941,7 +31511,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
           "column_id":17,
           "database_name":"",
           "table_name":"cte",
-          "synonym_name":"",
           "column_name":"b",
           "expr_level":0,
           "expr_levels": [
@@ -31992,7 +31561,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
           "column_id":18,
           "database_name":"",
           "table_name":"cte",
-          "synonym_name":"",
           "column_name":"c",
           "expr_level":0,
           "expr_levels": [
@@ -32043,7 +31611,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
           "column_id":19,
           "database_name":"",
           "table_name":"cte",
-          "synonym_name":"",
           "column_name":"iscyc",
           "expr_level":0,
           "expr_levels": [
@@ -32150,7 +31717,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
               "table_id":-4,
               "table_name":"emp",
               "alias_name":"emp",
-              "synonym_name":"",
               "table_type":1,
               "ref_id":1099511677877,
               "database_name":"cte_db",
@@ -32203,7 +31769,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"id",
                 "expr_level":0,
                 "expr_levels": [
@@ -32255,7 +31820,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":17,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"name",
                 "expr_level":0,
                 "expr_levels": [
@@ -32307,7 +31871,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":18,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"leaderid",
                 "expr_level":0,
                 "expr_levels": [
@@ -32354,7 +31917,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"id",
                 "expr_level":0,
                 "expr_levels": [
@@ -32405,7 +31967,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":17,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"name",
                 "expr_level":0,
                 "expr_levels": [
@@ -32456,7 +32017,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":18,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"leaderid",
                 "expr_level":0,
                 "expr_levels": [
@@ -32553,7 +32113,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                   "column_id":16,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"id",
                   "expr_level":0,
                   "expr_levels": [
@@ -32671,7 +32230,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
               "table_id":-5,
               "table_name":"emp",
               "alias_name":"emp",
-              "synonym_name":"",
               "table_type":1,
               "ref_id":1099511677877,
               "database_name":"cte_db",
@@ -32683,7 +32241,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
               "table_id":-6,
               "table_name":"cte",
               "alias_name":"cte",
-              "synonym_name":"",
               "table_type":4,
               "ref_id":49500,
               "database_name":"cte_db",
@@ -32736,7 +32293,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":18,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"leaderid",
                 "expr_level":0,
                 "expr_levels": [
@@ -32788,7 +32344,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":22330000,
                 "database_name":"cte_db",
                 "table_name":"cte",
-                "synonym_name":"",
                 "column_name":"a",
                 "expr_level":0,
                 "expr_levels": [
@@ -32840,7 +32395,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"id",
                 "expr_level":0,
                 "expr_levels": [
@@ -32892,7 +32446,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":17,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"name",
                 "expr_level":0,
                 "expr_levels": [
@@ -32939,7 +32492,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"id",
                 "expr_level":0,
                 "expr_levels": [
@@ -32990,7 +32542,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":17,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"name",
                 "expr_level":0,
                 "expr_levels": [
@@ -33041,7 +32592,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                 "column_id":18,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"leaderid",
                 "expr_level":0,
                 "expr_levels": [
@@ -33142,7 +32692,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                   "column_id":18,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"leaderid",
                   "expr_level":0,
                   "expr_levels": [
@@ -33185,7 +32734,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                   "column_id":22330000,
                   "database_name":"cte_db",
                   "table_name":"cte",
-                  "synonym_name":"",
                   "column_name":"a",
                   "expr_level":0,
                   "expr_levels": [
@@ -33334,7 +32882,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                   "column_id":16,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"id",
                   "expr_level":0,
                   "expr_levels": [
@@ -33377,7 +32924,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                   "column_id":16,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"id",
                   "expr_level":0,
                   "expr_levels": [
@@ -33462,7 +33008,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                   "column_id":17,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"name",
                   "expr_level":0,
                   "expr_levels": [
@@ -33505,7 +33050,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                   "column_id":17,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"name",
                   "expr_level":0,
                   "expr_levels": [
@@ -33590,7 +33134,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                   "column_id":18,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"leaderid",
                   "expr_level":0,
                   "expr_levels": [
@@ -33633,7 +33176,6 @@ explain with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.
                   "column_id":18,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"leaderid",
                   "expr_level":0,
                   "expr_levels": [
@@ -33711,7 +33253,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
       "table_id":-8,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -33764,7 +33305,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"a",
         "expr_level":0,
         "expr_levels": [
@@ -33816,7 +33356,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
         "column_id":17,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"b",
         "expr_level":0,
         "expr_levels": [
@@ -33868,7 +33407,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
         "column_id":18,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"c",
         "expr_level":0,
         "expr_levels": [
@@ -33920,7 +33458,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
         "column_id":19,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"iscyc",
         "expr_level":0,
         "expr_levels": [
@@ -33967,7 +33504,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"a",
         "expr_level":0,
         "expr_levels": [
@@ -34018,7 +33554,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
         "column_id":17,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"b",
         "expr_level":0,
         "expr_levels": [
@@ -34069,7 +33604,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
         "column_id":18,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"c",
         "expr_level":0,
         "expr_levels": [
@@ -34120,7 +33654,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
         "column_id":19,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"iscyc",
         "expr_level":0,
         "expr_levels": [
@@ -34227,7 +33760,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
             "table_id":-4,
             "table_name":"emp",
             "alias_name":"emp",
-            "synonym_name":"",
             "table_type":1,
             "ref_id":1099511677877,
             "database_name":"cte_db",
@@ -34280,7 +33812,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"id",
               "expr_level":0,
               "expr_levels": [
@@ -34332,7 +33863,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
               "column_id":17,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"name",
               "expr_level":0,
               "expr_levels": [
@@ -34384,7 +33914,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
               "column_id":18,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"leaderid",
               "expr_level":0,
               "expr_levels": [
@@ -34431,7 +33960,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"id",
               "expr_level":0,
               "expr_levels": [
@@ -34482,7 +34010,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
               "column_id":17,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"name",
               "expr_level":0,
               "expr_levels": [
@@ -34533,7 +34060,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
               "column_id":18,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"leaderid",
               "expr_level":0,
               "expr_levels": [
@@ -34631,7 +34157,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"id",
                 "expr_level":0,
                 "expr_levels": [
@@ -34751,7 +34276,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
             "table_id":-5,
             "table_name":"emp",
             "alias_name":"emp",
-            "synonym_name":"",
             "table_type":1,
             "ref_id":1099511677877,
             "database_name":"cte_db",
@@ -34763,7 +34287,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
             "table_id":-6,
             "table_name":"cte",
             "alias_name":"cte",
-            "synonym_name":"",
             "table_type":4,
             "ref_id":49500,
             "database_name":"cte_db",
@@ -34816,7 +34339,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
               "column_id":18,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"leaderid",
               "expr_level":0,
               "expr_levels": [
@@ -34868,7 +34390,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
               "column_id":22330000,
               "database_name":"cte_db",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"a",
               "expr_level":0,
               "expr_levels": [
@@ -34920,7 +34441,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"id",
               "expr_level":0,
               "expr_levels": [
@@ -34972,7 +34492,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
               "column_id":17,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"name",
               "expr_level":0,
               "expr_levels": [
@@ -35019,7 +34538,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
               "column_id":16,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"id",
               "expr_level":0,
               "expr_levels": [
@@ -35070,7 +34588,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
               "column_id":17,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"name",
               "expr_level":0,
               "expr_levels": [
@@ -35121,7 +34638,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
               "column_id":18,
               "database_name":"cte_db",
               "table_name":"emp",
-              "synonym_name":"",
               "column_name":"leaderid",
               "expr_level":0,
               "expr_levels": [
@@ -35222,7 +34738,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
                 "column_id":18,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"leaderid",
                 "expr_level":0,
                 "expr_levels": [
@@ -35265,7 +34780,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
                 "column_id":22330000,
                 "database_name":"cte_db",
                 "table_name":"cte",
-                "synonym_name":"",
                 "column_name":"a",
                 "expr_level":0,
                 "expr_levels": [
@@ -35414,7 +34928,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"id",
                 "expr_level":0,
                 "expr_levels": [
@@ -35457,7 +34970,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"id",
                 "expr_level":0,
                 "expr_levels": [
@@ -35542,7 +35054,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
                 "column_id":17,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"name",
                 "expr_level":0,
                 "expr_levels": [
@@ -35585,7 +35096,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
                 "column_id":17,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"name",
                 "expr_level":0,
                 "expr_levels": [
@@ -35670,7 +35180,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
                 "column_id":18,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"leaderid",
                 "expr_level":0,
                 "expr_levels": [
@@ -35713,7 +35222,6 @@ with cte (a,b,c) as  (     select id, name, leaderid from emp where emp.id = 1  
                 "column_id":18,
                 "database_name":"cte_db",
                 "table_name":"emp",
-                "synonym_name":"",
                 "column_name":"leaderid",
                 "expr_level":0,
                 "expr_levels": [
@@ -35790,7 +35298,6 @@ with cte(n) as (select 1 from dual) search depth first by n set abc select * fro
       "table_id":-4,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -35843,7 +35350,6 @@ with cte(n) as (select 1 from dual) search depth first by n set abc select * fro
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"n",
         "expr_level":0,
         "expr_levels": [
@@ -35890,7 +35396,6 @@ with cte(n) as (select 1 from dual) search depth first by n set abc select * fro
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"n",
         "expr_level":0,
         "expr_levels": [
@@ -36127,7 +35632,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
       "table_id":-5,
       "table_name":"cte1",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -36180,7 +35684,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -36227,7 +35730,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -36331,7 +35833,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
           "table_id":-3,
           "table_name":"t1",
           "alias_name":"t1",
-          "synonym_name":"",
           "table_type":1,
           "ref_id":1099511677878,
           "database_name":"cte_db",
@@ -36384,7 +35885,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -36436,7 +35936,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -36483,7 +35982,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -36534,7 +36032,6 @@ WITH cte1 AS (SELECT c1, c2 FROM t1) select c1 from cte1;
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -36648,7 +36145,6 @@ with cte(a) as (select 1 from dual union all select 2 from dual), cte_1(b) as (s
       "table_id":-9,
       "table_name":"cte_1",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -36701,7 +36197,6 @@ with cte(a) as (select 1 from dual union all select 2 from dual), cte_1(b) as (s
         "column_id":16,
         "database_name":"",
         "table_name":"cte_1",
-        "synonym_name":"",
         "column_name":"b",
         "expr_level":0,
         "expr_levels": [
@@ -36748,7 +36243,6 @@ with cte(a) as (select 1 from dual union all select 2 from dual), cte_1(b) as (s
         "column_id":16,
         "database_name":"",
         "table_name":"cte_1",
-        "synonym_name":"",
         "column_name":"b",
         "expr_level":0,
         "expr_levels": [
@@ -36982,7 +36476,6 @@ with cte(a) as (select 1 from dual union all select 2 from dual), cte_1(b) as (s
             "table_id":-7,
             "table_name":"cte",
             "alias_name":"",
-            "synonym_name":"",
             "table_type":2,
             "ref_id":-1,
             "database_name":"",
@@ -37035,7 +36528,6 @@ with cte(a) as (select 1 from dual union all select 2 from dual), cte_1(b) as (s
               "column_id":16,
               "database_name":"",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"a",
               "expr_level":0,
               "expr_levels": [
@@ -37082,7 +36574,6 @@ with cte(a) as (select 1 from dual union all select 2 from dual), cte_1(b) as (s
               "column_id":16,
               "database_name":"",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"a",
               "expr_level":0,
               "expr_levels": [
@@ -37644,7 +37135,6 @@ with cte(a) as (select 1 from dual union all select 2 from dual), cte_1(b) as (s
                 "column_id":16,
                 "database_name":"",
                 "table_name":"cte",
-                "synonym_name":"",
                 "column_name":"a",
                 "expr_level":0,
                 "expr_levels": [
@@ -37680,7 +37170,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
       "table_id":-9,
       "table_name":"cte1",
       "alias_name":"cte1",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -37692,7 +37181,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
       "table_id":-12,
       "table_name":"cte2",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -37710,7 +37198,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "table_id":-9,
         "table_name":"cte1",
         "alias_name":"cte1",
-        "synonym_name":"",
         "table_type":2,
         "ref_id":-1,
         "database_name":"",
@@ -37722,7 +37209,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "table_id":-12,
         "table_name":"cte2",
         "alias_name":"",
-        "synonym_name":"",
         "table_type":2,
         "ref_id":-1,
         "database_name":"",
@@ -37794,7 +37280,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
               "column_id":16,
               "database_name":"",
               "table_name":"cte1",
-              "synonym_name":"",
               "column_name":"c11",
               "expr_level":0,
               "expr_levels": [
@@ -37837,7 +37322,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
               "column_id":16,
               "database_name":"",
               "table_name":"cte2",
-              "synonym_name":"",
               "column_name":"c",
               "expr_level":0,
               "expr_levels": [
@@ -37896,7 +37380,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c11",
         "expr_level":0,
         "expr_levels": [
@@ -37948,7 +37431,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":16,
         "database_name":"",
         "table_name":"cte2",
-        "synonym_name":"",
         "column_name":"c",
         "expr_level":0,
         "expr_levels": [
@@ -38000,7 +37482,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":17,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -38052,7 +37533,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":17,
         "database_name":"",
         "table_name":"cte2",
-        "synonym_name":"",
         "column_name":"d",
         "expr_level":0,
         "expr_levels": [
@@ -38099,7 +37579,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":16,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c11",
         "expr_level":0,
         "expr_levels": [
@@ -38150,7 +37629,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":17,
         "database_name":"",
         "table_name":"cte1",
-        "synonym_name":"",
         "column_name":"c4",
         "expr_level":0,
         "expr_levels": [
@@ -38201,7 +37679,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":16,
         "database_name":"",
         "table_name":"cte2",
-        "synonym_name":"",
         "column_name":"c",
         "expr_level":0,
         "expr_levels": [
@@ -38252,7 +37729,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
         "column_id":17,
         "database_name":"",
         "table_name":"cte2",
-        "synonym_name":"",
         "column_name":"d",
         "expr_level":0,
         "expr_levels": [
@@ -38356,7 +37832,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
           "table_id":-8,
           "table_name":"cte2",
           "alias_name":"",
-          "synonym_name":"",
           "table_type":2,
           "ref_id":-1,
           "database_name":"",
@@ -38409,7 +37884,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":16,
             "database_name":"",
             "table_name":"cte2",
-            "synonym_name":"",
             "column_name":"c3",
             "expr_level":0,
             "expr_levels": [
@@ -38461,7 +37935,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":17,
             "database_name":"",
             "table_name":"cte2",
-            "synonym_name":"",
             "column_name":"c4",
             "expr_level":0,
             "expr_levels": [
@@ -38508,7 +37981,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":16,
             "database_name":"",
             "table_name":"cte2",
-            "synonym_name":"",
             "column_name":"c3",
             "expr_level":0,
             "expr_levels": [
@@ -38559,7 +38031,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":17,
             "database_name":"",
             "table_name":"cte2",
-            "synonym_name":"",
             "column_name":"c4",
             "expr_level":0,
             "expr_levels": [
@@ -38663,7 +38134,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
               "table_id":-6,
               "table_name":"t3",
               "alias_name":"t3",
-              "synonym_name":"",
               "table_type":1,
               "ref_id":1099511677880,
               "database_name":"cte_db",
@@ -38716,7 +38186,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"t3",
-                "synonym_name":"",
                 "column_name":"c3",
                 "expr_level":0,
                 "expr_levels": [
@@ -38768,7 +38237,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
                 "column_id":17,
                 "database_name":"cte_db",
                 "table_name":"t3",
-                "synonym_name":"",
                 "column_name":"c4",
                 "expr_level":0,
                 "expr_levels": [
@@ -38815,7 +38283,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
                 "column_id":16,
                 "database_name":"cte_db",
                 "table_name":"t3",
-                "synonym_name":"",
                 "column_name":"c3",
                 "expr_level":0,
                 "expr_levels": [
@@ -38866,7 +38333,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
                 "column_id":17,
                 "database_name":"cte_db",
                 "table_name":"t3",
-                "synonym_name":"",
                 "column_name":"c4",
                 "expr_level":0,
                 "expr_levels": [
@@ -38978,7 +38444,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
           "table_id":-10,
           "table_name":"t2",
           "alias_name":"t2",
-          "synonym_name":"",
           "table_type":1,
           "ref_id":1099511677879,
           "database_name":"cte_db",
@@ -39031,7 +38496,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t2",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -39083,7 +38547,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t2",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -39130,7 +38593,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"t2",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -39181,7 +38643,6 @@ WITH cte1 (a, b) AS (SELECT c1, c2 FROM t1), cte2 (c, d) AS (SELECT c1, c2 FROM 
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"t2",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -39297,7 +38758,6 @@ with cte(n) as (select 1 from dual) search depth first by n set abc select * fro
       "table_id":-4,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -39350,7 +38810,6 @@ with cte(n) as (select 1 from dual) search depth first by n set abc select * fro
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"n",
         "expr_level":0,
         "expr_levels": [
@@ -39397,7 +38856,6 @@ with cte(n) as (select 1 from dual) search depth first by n set abc select * fro
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"n",
         "expr_level":0,
         "expr_levels": [
@@ -39634,7 +39092,6 @@ with cte(a,b,c) as (select * from emp) search depth first by a set abc select * 
       "table_id":-5,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -39687,7 +39144,6 @@ with cte(a,b,c) as (select * from emp) search depth first by a set abc select * 
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"a",
         "expr_level":0,
         "expr_levels": [
@@ -39739,7 +39195,6 @@ with cte(a,b,c) as (select * from emp) search depth first by a set abc select * 
         "column_id":17,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"b",
         "expr_level":0,
         "expr_levels": [
@@ -39791,7 +39246,6 @@ with cte(a,b,c) as (select * from emp) search depth first by a set abc select * 
         "column_id":18,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"c",
         "expr_level":0,
         "expr_levels": [
@@ -39838,7 +39292,6 @@ with cte(a,b,c) as (select * from emp) search depth first by a set abc select * 
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"a",
         "expr_level":0,
         "expr_levels": [
@@ -39889,7 +39342,6 @@ with cte(a,b,c) as (select * from emp) search depth first by a set abc select * 
         "column_id":17,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"b",
         "expr_level":0,
         "expr_levels": [
@@ -39940,7 +39392,6 @@ with cte(a,b,c) as (select * from emp) search depth first by a set abc select * 
         "column_id":18,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"c",
         "expr_level":0,
         "expr_levels": [
@@ -40044,7 +39495,6 @@ with cte(a,b,c) as (select * from emp) search depth first by a set abc select * 
           "table_id":-3,
           "table_name":"emp",
           "alias_name":"emp",
-          "synonym_name":"",
           "table_type":1,
           "ref_id":1099511677877,
           "database_name":"cte_db",
@@ -40097,7 +39547,6 @@ with cte(a,b,c) as (select * from emp) search depth first by a set abc select * 
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"emp",
-            "synonym_name":"",
             "column_name":"id",
             "expr_level":0,
             "expr_levels": [
@@ -40149,7 +39598,6 @@ with cte(a,b,c) as (select * from emp) search depth first by a set abc select * 
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"emp",
-            "synonym_name":"",
             "column_name":"name",
             "expr_level":0,
             "expr_levels": [
@@ -40201,7 +39649,6 @@ with cte(a,b,c) as (select * from emp) search depth first by a set abc select * 
             "column_id":18,
             "database_name":"cte_db",
             "table_name":"emp",
-            "synonym_name":"",
             "column_name":"leaderid",
             "expr_level":0,
             "expr_levels": [
@@ -40248,7 +39695,6 @@ with cte(a,b,c) as (select * from emp) search depth first by a set abc select * 
             "column_id":16,
             "database_name":"cte_db",
             "table_name":"emp",
-            "synonym_name":"",
             "column_name":"id",
             "expr_level":0,
             "expr_levels": [
@@ -40299,7 +39745,6 @@ with cte(a,b,c) as (select * from emp) search depth first by a set abc select * 
             "column_id":17,
             "database_name":"cte_db",
             "table_name":"emp",
-            "synonym_name":"",
             "column_name":"name",
             "expr_level":0,
             "expr_levels": [
@@ -40350,7 +39795,6 @@ with cte(a,b,c) as (select * from emp) search depth first by a set abc select * 
             "column_id":18,
             "database_name":"cte_db",
             "table_name":"emp",
-            "synonym_name":"",
             "column_name":"leaderid",
             "expr_level":0,
             "expr_levels": [
@@ -40466,7 +39910,6 @@ with cte(n) as (select 1 union all select n+1 from cte where n < 23) select n fr
       "table_id":-5,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -40519,7 +39962,6 @@ with cte(n) as (select 1 union all select n+1 from cte where n < 23) select n fr
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"n",
         "expr_level":0,
         "expr_levels": [
@@ -40566,7 +40008,6 @@ with cte(n) as (select 1 union all select n+1 from cte where n < 23) select n fr
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"n",
         "expr_level":0,
         "expr_levels": [
@@ -41007,7 +40448,6 @@ with cte(n) as (select 1 union all select n+1 from cte where n < 23) select n fr
             "table_id":-3,
             "table_name":"cte",
             "alias_name":"cte",
-            "synonym_name":"",
             "table_type":4,
             "ref_id":49500,
             "database_name":"cte_db",
@@ -41060,7 +40500,6 @@ with cte(n) as (select 1 union all select n+1 from cte where n < 23) select n fr
               "column_id":22330000,
               "database_name":"cte_db",
               "table_name":"cte",
-              "synonym_name":"",
               "column_name":"n",
               "expr_level":0,
               "expr_levels": [
@@ -41172,7 +40611,6 @@ with cte(n) as (select 1 union all select n+1 from cte where n < 23) select n fr
                       "column_id":22330000,
                       "database_name":"cte_db",
                       "table_name":"cte",
-                      "synonym_name":"",
                       "column_name":"n",
                       "expr_level":0,
                       "expr_levels": [
@@ -41336,7 +40774,6 @@ with cte(n) as (select 1 union all select n+1 from cte where n < 23) select n fr
                 "column_id":22330000,
                 "database_name":"cte_db",
                 "table_name":"cte",
-                "synonym_name":"",
                 "column_name":"n",
                 "expr_level":0,
                 "expr_levels": [
@@ -41783,7 +41220,6 @@ with cte(n) as (select 1 union all select n+1 from cte where n < 23) select n fr
                         "column_id":22330000,
                         "database_name":"cte_db",
                         "table_name":"cte",
-                        "synonym_name":"",
                         "column_name":"n",
                         "expr_level":0,
                         "expr_levels": [
@@ -41905,7 +41341,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
       "table_id":-16,
       "table_name":"cte",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -41958,7 +41393,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"a",
         "expr_level":0,
         "expr_levels": [
@@ -42010,7 +41444,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
         "column_id":17,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"b",
         "expr_level":0,
         "expr_levels": [
@@ -42062,7 +41495,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
         "column_id":18,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"c",
         "expr_level":0,
         "expr_levels": [
@@ -42114,7 +41546,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
         "column_id":19,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"sad",
         "expr_level":0,
         "expr_levels": [
@@ -42166,7 +41597,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
         "column_id":20,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"iscyc",
         "expr_level":0,
         "expr_levels": [
@@ -42213,7 +41643,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
         "column_id":16,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"a",
         "expr_level":0,
         "expr_levels": [
@@ -42264,7 +41693,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
         "column_id":17,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"b",
         "expr_level":0,
         "expr_levels": [
@@ -42315,7 +41743,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
         "column_id":18,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"c",
         "expr_level":0,
         "expr_levels": [
@@ -42366,7 +41793,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
         "column_id":19,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"sad",
         "expr_level":0,
         "expr_levels": [
@@ -42417,7 +41843,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
         "column_id":20,
         "database_name":"",
         "table_name":"cte",
-        "synonym_name":"",
         "column_name":"iscyc",
         "expr_level":0,
         "expr_levels": [
@@ -42521,7 +41946,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
           "table_id":-14,
           "table_name":"cte_recursive",
           "alias_name":"",
-          "synonym_name":"",
           "table_type":2,
           "ref_id":-1,
           "database_name":"",
@@ -42574,7 +41998,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
             "column_id":16,
             "database_name":"",
             "table_name":"cte_recursive",
-            "synonym_name":"",
             "column_name":"a",
             "expr_level":0,
             "expr_levels": [
@@ -42626,7 +42049,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
             "column_id":17,
             "database_name":"",
             "table_name":"cte_recursive",
-            "synonym_name":"",
             "column_name":"b",
             "expr_level":0,
             "expr_levels": [
@@ -42678,7 +42100,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
             "column_id":18,
             "database_name":"",
             "table_name":"cte_recursive",
-            "synonym_name":"",
             "column_name":"c",
             "expr_level":0,
             "expr_levels": [
@@ -42730,7 +42151,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
             "column_id":19,
             "database_name":"",
             "table_name":"cte_recursive",
-            "synonym_name":"",
             "column_name":"sad",
             "expr_level":0,
             "expr_levels": [
@@ -42782,7 +42202,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
             "column_id":20,
             "database_name":"",
             "table_name":"cte_recursive",
-            "synonym_name":"",
             "column_name":"iscyc",
             "expr_level":0,
             "expr_levels": [
@@ -42829,7 +42248,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
             "column_id":16,
             "database_name":"",
             "table_name":"cte_recursive",
-            "synonym_name":"",
             "column_name":"a",
             "expr_level":0,
             "expr_levels": [
@@ -42880,7 +42298,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
             "column_id":17,
             "database_name":"",
             "table_name":"cte_recursive",
-            "synonym_name":"",
             "column_name":"b",
             "expr_level":0,
             "expr_levels": [
@@ -42931,7 +42348,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
             "column_id":18,
             "database_name":"",
             "table_name":"cte_recursive",
-            "synonym_name":"",
             "column_name":"c",
             "expr_level":0,
             "expr_levels": [
@@ -42982,7 +42398,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
             "column_id":19,
             "database_name":"",
             "table_name":"cte_recursive",
-            "synonym_name":"",
             "column_name":"sad",
             "expr_level":0,
             "expr_levels": [
@@ -43033,7 +42448,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
             "column_id":20,
             "database_name":"",
             "table_name":"cte_recursive",
-            "synonym_name":"",
             "column_name":"iscyc",
             "expr_level":0,
             "expr_levels": [
@@ -43140,7 +42554,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                 "table_id":-10,
                 "table_name":"emp",
                 "alias_name":"emp",
-                "synonym_name":"",
                 "table_type":1,
                 "ref_id":1099511677877,
                 "database_name":"cte_db",
@@ -43193,7 +42606,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                   "column_id":16,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"id",
                   "expr_level":0,
                   "expr_levels": [
@@ -43245,7 +42657,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                   "column_id":17,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"name",
                   "expr_level":0,
                   "expr_levels": [
@@ -43297,7 +42708,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                   "column_id":18,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"leaderid",
                   "expr_level":0,
                   "expr_levels": [
@@ -43344,7 +42754,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                   "column_id":16,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"id",
                   "expr_level":0,
                   "expr_levels": [
@@ -43395,7 +42804,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                   "column_id":17,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"name",
                   "expr_level":0,
                   "expr_levels": [
@@ -43446,7 +42854,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                   "column_id":18,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"leaderid",
                   "expr_level":0,
                   "expr_levels": [
@@ -43544,7 +42951,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                     "column_id":16,
                     "database_name":"cte_db",
                     "table_name":"emp",
-                    "synonym_name":"",
                     "column_name":"id",
                     "expr_level":0,
                     "expr_levels": [
@@ -43664,7 +43070,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                 "table_id":-11,
                 "table_name":"emp",
                 "alias_name":"emp",
-                "synonym_name":"",
                 "table_type":1,
                 "ref_id":1099511677877,
                 "database_name":"cte_db",
@@ -43676,7 +43081,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                 "table_id":-12,
                 "table_name":"cte_recursive",
                 "alias_name":"cte_recursive",
-                "synonym_name":"",
                 "table_type":4,
                 "ref_id":49500,
                 "database_name":"cte_db",
@@ -43729,7 +43133,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                   "column_id":18,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"leaderid",
                   "expr_level":0,
                   "expr_levels": [
@@ -43781,7 +43184,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                   "column_id":22330000,
                   "database_name":"cte_db",
                   "table_name":"cte_recursive",
-                  "synonym_name":"",
                   "column_name":"a",
                   "expr_level":0,
                   "expr_levels": [
@@ -43833,7 +43235,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                   "column_id":16,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"id",
                   "expr_level":0,
                   "expr_levels": [
@@ -43885,7 +43286,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                   "column_id":17,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"name",
                   "expr_level":0,
                   "expr_levels": [
@@ -43932,7 +43332,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                   "column_id":16,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"id",
                   "expr_level":0,
                   "expr_levels": [
@@ -43983,7 +43382,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                   "column_id":17,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"name",
                   "expr_level":0,
                   "expr_levels": [
@@ -44034,7 +43432,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                   "column_id":18,
                   "database_name":"cte_db",
                   "table_name":"emp",
-                  "synonym_name":"",
                   "column_name":"leaderid",
                   "expr_level":0,
                   "expr_levels": [
@@ -44135,7 +43532,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                     "column_id":18,
                     "database_name":"cte_db",
                     "table_name":"emp",
-                    "synonym_name":"",
                     "column_name":"leaderid",
                     "expr_level":0,
                     "expr_levels": [
@@ -44178,7 +43574,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                     "column_id":22330000,
                     "database_name":"cte_db",
                     "table_name":"cte_recursive",
-                    "synonym_name":"",
                     "column_name":"a",
                     "expr_level":0,
                     "expr_levels": [
@@ -44327,7 +43722,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                     "column_id":16,
                     "database_name":"cte_db",
                     "table_name":"emp",
-                    "synonym_name":"",
                     "column_name":"id",
                     "expr_level":0,
                     "expr_levels": [
@@ -44370,7 +43764,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                     "column_id":16,
                     "database_name":"cte_db",
                     "table_name":"emp",
-                    "synonym_name":"",
                     "column_name":"id",
                     "expr_level":0,
                     "expr_levels": [
@@ -44455,7 +43848,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                     "column_id":17,
                     "database_name":"cte_db",
                     "table_name":"emp",
-                    "synonym_name":"",
                     "column_name":"name",
                     "expr_level":0,
                     "expr_levels": [
@@ -44498,7 +43890,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                     "column_id":17,
                     "database_name":"cte_db",
                     "table_name":"emp",
-                    "synonym_name":"",
                     "column_name":"name",
                     "expr_level":0,
                     "expr_levels": [
@@ -44583,7 +43974,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                     "column_id":18,
                     "database_name":"cte_db",
                     "table_name":"emp",
-                    "synonym_name":"",
                     "column_name":"leaderid",
                     "expr_level":0,
                     "expr_levels": [
@@ -44626,7 +44016,6 @@ with cte_recursive (a,b,c) as ( select id, name, leaderid from emp where emp.id 
                     "column_id":18,
                     "database_name":"cte_db",
                     "table_name":"emp",
-                    "synonym_name":"",
                     "column_name":"leaderid",
                     "expr_level":0,
                     "expr_levels": [

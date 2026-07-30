@@ -184,11 +184,6 @@ int ObRawExprPartFuncChecker::visit(ObSysFunRawExpr &expr)
       case T_FUN_SYS_YEARWEEK_OF_DATE: //case YEARKWEEK()
       case T_FUN_SYS_WEEK_OF_YEAR: //case WEEKOFYEAR()
       case T_FUN_SYS_ADDR_TO_PART_ID:
-      case T_FUN_SYS_TO_DATE:
-      case T_FUN_SYS_TO_TIMESTAMP:
-      case T_FUN_SYS_TO_TIMESTAMP_TZ:
-      case T_FUN_SYS_TO_NUMBER: //case TO_NUMBER()
-      case T_FUN_SYS_TO_CHAR:
         {
           ret = OB_SUCCESS;
           break;

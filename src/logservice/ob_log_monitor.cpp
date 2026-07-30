@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_log_monitor.h"
 #include "share/ob_structured_event_logger.h"   // SERVER_EVENT_ADD
 

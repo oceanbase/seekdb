@@ -16,11 +16,11 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_cast.h"
+#include "sql/engine/expr/ob_datum_cast.h"
 #include "share/geo/ob_geometry_cast.h"
 #include "sql/engine/expr/ob_expr_subquery_ref.h"
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
 #include "pl/ob_pl_resolver.h"
-#include "sql/engine/expr/vector_cast/vector_cast.h"
 
 // from sql_parser_base.h
 #define DEFAULT_STR_LENGTH -1
@@ -381,7 +381,6 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
     }
     if (OB_SUCC(ret)) {
       ObCollationType collation_connection = type_ctx.get_coll_type();
-      ObCollationType collation_nation = session->get_nls_collation_nation();
       type1.set_calc_type(get_calc_cast_type(type1.get_type(), dst_type.get_type()));
       int32_t length = 0;
       if (ob_is_string_or_lob_type(dst_type.get_type())
@@ -615,43 +614,6 @@ int ObExprCast::get_cast_type(const bool enable_decimal_int,
   return ret;
 }
 
-int ObExprCast::eval_cast_multiset(const sql::ObExpr &expr,
-                                   sql::ObEvalCtx &ctx,
-                                   sql::ObDatum &res_datum)
-{
-  int ret = OB_SUCCESS;
-  ret = OB_NOT_SUPPORTED;
-  LOG_USER_ERROR(OB_NOT_SUPPORTED, "eval cast multiset");
-  return ret;
-}
-
-int ObExprCast::cg_cast_multiset(ObExprCGCtx &op_cg_ctx,
-                                 const ObRawExpr &raw_expr,
-                                 ObExpr &rt_expr) const
-{
-  int ret = OB_SUCCESS;
-  ret = OB_NOT_SUPPORTED;
-  LOG_USER_ERROR(OB_NOT_SUPPORTED, "cast multiset");
-  return ret;
-}
-
-OB_SERIALIZE_MEMBER(ObExprCast::CastMultisetExtraInfo,
-                    pl_type_, not_null_, elem_type_, capacity_, udt_id_);
-
-int ObExprCast::CastMultisetExtraInfo::deep_copy(common::ObIAllocator &allocator,
-                                                    const ObExprOperatorType type,
-                                                    ObIExprExtraInfo *&copied_info) const
-{
-  int ret = OB_SUCCESS;
-  OZ(ObExprExtraInfoFactory::alloc(allocator, type, copied_info));
-  CastMultisetExtraInfo &other = *static_cast<CastMultisetExtraInfo *>(copied_info);
-  if (OB_SUCC(ret)) {
-    other = *this;
-  }
-  return ret;
-}
-
-
 int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
                         const ObRawExpr &raw_expr,
                         ObExpr &rt_expr) const
@@ -724,10 +686,6 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
       if (OB_ISNULL(src_raw_expr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null", K(ret));
-      } else if (src_raw_expr->is_multiset_expr()) {
-        if (OB_FAIL(cg_cast_multiset(op_cg_ctx, raw_expr, rt_expr))) {
-          LOG_WARN("failed to cg cast multiset", K(ret));
-        }
       } else if (fast_cast_decint) {
         if (CM_IS_EXPLICIT_CAST(cast_mode)) {
           ObDatumCast::get_decint_cast(ob_obj_type_class(in_type), in_prec, in_scale, out_prec,
@@ -745,19 +703,6 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
                                                       cast_mode, *(op_cg_ctx.allocator_),
                                                       just_eval_arg, rt_expr))) {
           LOG_WARN("choose_cast_func failed", K(ret));
-        }
-      }
-      if (OB_SUCC(ret)) {
-        int tmp_ret = OB_E(EventTable::EN_ENABLE_VECTOR_CAST) OB_SUCCESS;
-        rt_expr.eval_vector_func_ =
-          tmp_ret == OB_SUCCESS ?
-            VectorCasterUtil::get_vector_cast(rt_expr.args_[0]->get_vec_value_tc(),
-                                              rt_expr.get_vec_value_tc(), just_eval_arg,
-                                              rt_expr.eval_func_, cast_mode) :
-            nullptr;
-        // Some VEC_TC_XXXX classes still have some types not yet implemented for vectorization, and they still use the non-vectorized interface
-        if (ObTinyTextType == in_type || ObTinyTextType == out_type) {
-          rt_expr.eval_vector_func_ = nullptr;
         }
       }
     }

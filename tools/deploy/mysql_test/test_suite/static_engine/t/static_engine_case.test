@@ -13,7 +13,7 @@ connect (conn_admin, $OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
 --echo // Case3: 测试空串以及NULL的情况
 
 connection conn_admin;
-alter system flush plan cache global;
+alter system flush plan cache;
 set @@ob_enable_plan_cache = 0;
 --sleep 5
 --sleep 2
@@ -51,7 +51,7 @@ insert into t1 values(null, 1, 'a');
 
 --explain_protocol 2
 set @@ob_enable_plan_cache = 0;
-alter system flush plan cache global;
+alter system flush plan cache;
 --echo // 测试int的normal case，应该返回'a'
 select case col_int when 1 then 'a' when 2 then 'b' else 'c' end from t1;
 --echo // 测试int需要加cast的情况，第一个when需要加cast, 第二个when不需要

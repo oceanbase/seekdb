@@ -69,7 +69,7 @@ int ObServerReloadConfig::operator()()
   {
     GMEMCONF.reload_config(GCONF);
     OB_LOGGER.set_info_as_wdiag(false);
-    // reload log config again after get MIN_CLUSTER_VERSION
+    // Reload log configuration after applying the latest configuration values.
     if (OB_TMP_FAIL(ObReloadConfig::operator()())) {
       LOG_WARN("ObReloadConfig operator() failed", K(tmp_ret));
     }
@@ -153,8 +153,6 @@ int ObServerReloadConfig::operator()()
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(OBSERVER.get_net_frame().reload_ssl_config())) {
     LOG_WARN("reload ssl config for net frame fail", K(ret));
-  } else if (OB_FAIL(OBSERVER.get_net_frame().reload_sql_thread_config())) {
-    LOG_WARN("reload config for mysql login thread count failed", K(ret));
   } else if (OB_FAIL(GCTX.server_runtime_controller_->refresh_runtime_resources())) {
     LOG_WARN("refresh server runtime resources failed", K(ret));
   }

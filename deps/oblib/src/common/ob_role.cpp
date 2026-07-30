@@ -31,7 +31,7 @@ bool is_strong_leader(const ObRole role)
 
 bool is_standby_leader(const ObRole role)
 {
-  // leader of standby cluster or physical restore partition
+  // leader of the local physical standby
   return STANDBY_LEADER == role;
 }
 
@@ -40,14 +40,9 @@ bool is_follower(const ObRole role)
   return FOLLOWER == role;
 }
 
-bool is_leader_by_election(const ObRole role)
-{
-  return is_strong_leader(role) || is_standby_leader(role);
-}
-
 bool is_leader_like(const ObRole role)
 {
-  return is_leader_by_election(role);
+  return is_strong_leader(role) || is_standby_leader(role);
 }
 
 int role_to_string(const ObRole &role, char *role_str, const int64_t str_len)
@@ -94,4 +89,3 @@ int string_to_role(const ObString &role_str, ObRole &role)
 
 }//end namespace common
 }//end namespace oceanbase
-

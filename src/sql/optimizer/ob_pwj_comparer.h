@@ -34,7 +34,6 @@ class ObLogPlan;
 struct PwjTable {
   PwjTable()
     : phy_table_loc_info_(NULL),
-      server_list_(),
       part_level_(share::schema::PARTITION_LEVEL_ZERO),
       part_type_(share::schema::PARTITION_FUNC_TYPE_MAX),
       subpart_type_(share::schema::PARTITION_FUNC_TYPE_MAX),
@@ -51,16 +50,13 @@ struct PwjTable {
   int init(const ObShardingInfo &info);
   int init(const share::schema::ObTableSchema &table_schema,
            const ObCandiTableLoc &phy_tbl_info);
-  int init(const ObIArray<ObAddr> &server_list);
 
   TO_STRING_KV(K_(part_level), K_(part_type), K_(subpart_type),
                K_(part_number),
                K_(is_partition_single), K_(is_subpartition_single),
-               K_(all_partition_indexes), K_(all_subpartition_indexes),
-               K_(server_list));
+               K_(all_partition_indexes), K_(all_subpartition_indexes));
 
   const ObCandiTableLoc *phy_table_loc_info_;
-  ObSEArray<common::ObAddr, 8> server_list_;
   // Partition level
   share::schema::ObPartitionLevel part_level_;
   // First-level partition type
@@ -115,9 +111,6 @@ typedef common::hash::ObHashMap<uint64_t, uint64_t, common::hash::NoPthreadDefen
                                 common::hash::NormalPointer,
                                 oceanbase::common::ObMalloc,
                                 2> TabletIdIdMap;
-typedef common::hash::ObHashMap<uint64_t, const ObCandiTabletLoc *,
-                                common::hash::NoPthreadDefendMode> TabletIdLocationMap;
-
 //Do not allocate a ObPwjComparer on the heap. If it is necessary to allocate a ObPwjComparer on the heap, manually free it after its lifecycle ends.
 class ObPwjComparer
 {
@@ -195,13 +188,11 @@ public:
   TO_STRING_KV(K_(is_strict), K_(pwj_tables));
 
 protected:
-  // Whether to check partition wise join in strict mode
-  // Strict mode requires that the partition logic and physical structure of the two base tables are equal
-  // Non-strict mode requires that the data distribution nodes of the two base tables are the same
+  // Strict partition-wise comparison requires matching partition logic and
+  // physical tablet structure.
   bool is_strict_;
   // Save a set of pwj constraint related base table information
   common::ObSEArray<PwjTable, 4> pwj_tables_;
-  static const int64_t MIN_ID_LOCATION_BUCKET_NUMBER;
   static const int64_t DEFAULT_ID_ID_BUCKET_NUMBER;
   DISALLOW_COPY_AND_ASSIGN(ObPwjComparer);
 };
@@ -330,12 +321,10 @@ public:
                                     ObIArray<std::pair<uint64_t,uint64_t> > &subpart_tablet_id_map,
                                     bool &is_equal);
 
-  /**
-   * According to the mapping relationship of partition_id (physical partition id) in phy_part_map_, check if the corresponding partitions in the two tables are in the same physical location
-   */
-  int is_physically_equal_partitioned(const PwjTable &l_table,
-                                      const PwjTable &r_table,
-                                      bool &is_physical_equal);
+  // Validate the tablet mapping and record the right-table tablet order.
+  int match_partitioned_tablets(const PwjTable &l_table,
+                                const PwjTable &r_table,
+                                bool &is_match);
 
   /**
    * Get the part_id (primary logical partition id) of the partition corresponding to part_index (offset of the primary logical partition in part_array)
@@ -369,25 +358,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObStrictPwjComparer);
 };
 
-class ObNonStrictPwjComparer : public ObPwjComparer
-{
-public:
-  ObNonStrictPwjComparer()
-    : ObPwjComparer(false) {};
-  virtual ~ObNonStrictPwjComparer() {};
-  /**
-   * Add a PwjTable to ObPwjComparer, it will perform a non-strict comparison with subsequent PwjTables using the first added PwjTable as the baseline
-   */
-  virtual int add_table(PwjTable &table, bool &is_match_nonstrict_pw) override;
-  /**
-   * check left table and right table have at least one partition on corresponding server
-   */
-  int is_match_non_strict_partition_wise(PwjTable &l_table,
-                                         PwjTable &r_table,
-                                         bool &is_match_nonstrict_pw);
-private:  
-  DISALLOW_COPY_AND_ASSIGN(ObNonStrictPwjComparer);
-};
 }
 }
 #endif

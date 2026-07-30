@@ -167,8 +167,8 @@ a	b
 select * from t1 where a in (select b from t2);
 a	b
 1	1
-2	2
 1	1
+2	2
 drop table t0, t1, t2, t3;
 create table t1 (a int);
 insert into t1 values (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);

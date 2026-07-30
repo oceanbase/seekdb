@@ -53,7 +53,6 @@ public:
 
   virtual int inner_open() override;
   virtual int inner_rescan() override;
-  virtual int switch_iterator() override;
   virtual int inner_get_next_row() override;
   //virtual int inner_get_next_batch(int64_t max_row_cnt) override;
   virtual int inner_close() override;

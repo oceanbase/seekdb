@@ -295,7 +295,6 @@ int ObPersistentLobApator::build_common_scan_param(
                           true, // full_row
                           false, // index_back
                           false, // query_stat
-                          ObQueryFlag::MysqlMode, // sql_mode
                           param.need_read_latest_ // read_latest
                         );
   query_flag.disable_cache();

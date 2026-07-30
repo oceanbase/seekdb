@@ -68,22 +68,10 @@ OB_INLINE bool is_valid_read_snapshot_version(const int64_t read_snapshot_versio
   return read_snapshot_version > 0 && INT64_MAX != read_snapshot_version;
 }
 
-inline bool is_need_retry_interval_part_error(int code)
-{
-  bool ret = false;
-  if (OB_ERR_INTERVAL_PARTITION_EXIST == code
-     || OB_ERR_INTERVAL_PARTITION_ERROR == code) {
-    ret = true;
-  }
-  return ret;
-}
-
 inline bool is_schema_error(int err)
 {
   bool ret = false;
   switch(err) {
-    case OB_SERVER_RUNTIME_ALREADY_ACTIVE:
-    case OB_RUNTIME_SCHEMA_NOT_READY:
     case OB_ERR_BAD_DATABASE:
     case OB_DATABASE_EXIST:
     case OB_TABLE_NOT_EXIST:
@@ -96,8 +84,6 @@ inline bool is_schema_error(int err)
     case OB_ERR_NO_DB_PRIVILEGE:
     case OB_ERR_NO_TABLE_PRIVILEGE:
     case OB_SCHEMA_ERROR:
-    case OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH:
-    case OB_ERR_REMOTE_SCHEMA_NOT_FULL:
     case OB_ERR_SP_ALREADY_EXISTS:
     case OB_ERR_SP_DOES_NOT_EXIST:
     case OB_OBJECT_NAME_NOT_EXIST:
@@ -111,30 +97,6 @@ inline bool is_schema_error(int err)
       break;
     default:
       break;
-  }
-  return ret;
-}
-
-// this function only used for error logging
-// expr eval error range (-5000, -6000]
-inline bool should_catch_err(int err)
-{
-  bool ret = false;
-  // think that expr_eval err only in (-5000, -6000] should catch
-  if (err > -6000 && err < -5000) {
-    ret = true;
-  } else {
-    switch (err) {
-    case OB_ERR_DIVISOR_IS_ZERO:
-    case OB_INVALID_DATE_VALUE:
-    case OB_INVALID_DATE_FORMAT:
-    case OB_BAD_NULL_ERROR:
-    case OB_ERR_VALUE_LARGER_THAN_ALLOWED:
-      ret = true;
-      break;
-    default:
-      break;
-    }
   }
   return ret;
 }
@@ -295,15 +257,6 @@ inline bool is_static_engine_retry(const int err)
   return STATIC_ENG_NOT_IMPLEMENT == err;
 }
 
-inline void set_interval_partition_insert_error(int &ret)
-{
-  ret = OB_NO_PARTITION_FOR_INTERVAL_PART;
-}
-inline bool is_interval_partition_insert_error(const int err)
-{
-  return OB_NO_PARTITION_FOR_INTERVAL_PART == err;
-}
-
 inline bool is_query_killed_return(const int ret)
 {
   // TODO(handora.qc): check the mode for OB_DEAD_LOCK
@@ -339,7 +292,6 @@ const int64_t OB_MAX_ROUTINE_NAME_BINARY_LENGTH = 2048; // Should be OB_MAX_ROUT
                                                          // it is defined in primary key, and can not change randomly.
 const int64_t OB_MAX_PACKAGE_NAME_LENGTH = 128;
 const int64_t OB_MAX_KVCACHE_NAME_LENGTH = 128;
-const int64_t OB_MAX_SYNONYM_NAME_LENGTH = 128;
 const int64_t OB_MAX_PARAMETERS_NAME_LENGTH = 128;
 const int64_t OB_MAX_RESOURCE_PLAN_NAME_LENGTH = 128;
 // end for const define replace OB_MAX_TABLE_NAME_LENGTH
@@ -347,8 +299,6 @@ const int64_t OB_MAX_RESOURCE_PLAN_NAME_LENGTH = 128;
 ///////////////////////////////////////////////////////
 //          Schema defination                        //
 
-// internal aux-vertical partition table name prefix
-const char *const OB_AUX_VP_PREFIX = "__AUX_VP_";
 
 //          End of Schema defination                 //
 ///////////////////////////////////////////////////////

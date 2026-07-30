@@ -200,9 +200,8 @@ int ObVirtualOpenCursorTable::FillScanner::get_session_cursor_sql_text(ObSQLSess
       }
     }
   } else {
-    // refcursor can not get sql now
-    ObString sql = ObString("ref cursor");
-    if (OB_FAIL(ob_write_string(*allocator_, sql, sql_text))) {
+    ObString sql = cursor->get_non_session_sql_text();
+    if (OB_FAIL(ob_write_string(*allocator_, ObString(min(sql.length(), 60), sql.ptr()), sql_text))) {
       SERVER_LOG(WARN, "failed to ob_write_string", K(ret), K(sql));
     }
   }
@@ -308,8 +307,6 @@ int ObVirtualOpenCursorTable::FillScanner::fill_cursor_cell(ObSQLSessionInfo &se
       case CURSOR_TYPE: {
         if (is_session_cursor) {
           cur_row_->cells_[i].set_varchar("SESSION CURSOR CACHED");
-        } else if (cursor->is_ref_by_refcursor()) {
-          cur_row_->cells_[i].set_varchar("OPEN");
         } else {
           cur_row_->cells_[i].set_varchar("OPEN-PL/SQL");
         }

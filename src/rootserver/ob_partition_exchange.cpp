@@ -805,10 +805,6 @@ int ObPartitionExchange::check_column_flags_(const ObColumnSchemaV2 *base_table_
     LOG_WARN("has not null column attribute of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->has_not_null_constraint()), K(inc_table_col_schema->has_not_null_constraint()));
   } else if (OB_UNLIKELY(base_table_col_schema->is_fulltext_column() != inc_table_col_schema->is_fulltext_column())) {
     LOG_WARN("is full text column attribute of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->is_fulltext_column()), K(inc_table_col_schema->is_fulltext_column()));
-  } else if (OB_UNLIKELY(base_table_col_schema->is_primary_vp_column() != inc_table_col_schema->is_primary_vp_column())) {
-    LOG_WARN("is primary vp column attribute of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->is_primary_vp_column()), K(inc_table_col_schema->is_primary_vp_column()));
-  } else if (OB_UNLIKELY(base_table_col_schema->is_aux_vp_column() != inc_table_col_schema->is_aux_vp_column())) {
-    LOG_WARN("is aux vp column attribute of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->is_aux_vp_column()), K(inc_table_col_schema->is_aux_vp_column()));
   } else {
     is_equal = true;
   }

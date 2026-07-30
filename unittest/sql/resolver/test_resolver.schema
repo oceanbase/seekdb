@@ -4,7 +4,7 @@ create database rongxuan;
 use rongxuan;
 create table t1(c1 int primary key, c2 int) partition by hash(c1 + 1) partitions 3
 create table t2(c1 int, c2 int, c3 varchar(32), primary key(c2, c3)) partition by key(c2, c3) partitions 3
-create table t3(c3 int primary key, c4 int) locality "f@zone1, f,l@region1"
+create table t3(c3 int primary key, c4 int)
 create index idx1 on t1(c2) LOCAL
 create table test(c1 int , c2 int, c3 varchar(50), c4 varchar(50), c5 int , c6 double, c7 int, primary key(c1, c2, c3))
 create index test_indx on test(c4, c5)

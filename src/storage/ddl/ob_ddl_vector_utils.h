@@ -20,6 +20,7 @@
 #include "common/ob_tablet_id.h"
 #include "sql/engine/vector/ob_i_vector.h"
 #include "sql/engine/ob_batch_rows.h"
+#include "share/ob_batch_selector.h"
 
 namespace oceanbase
 {
@@ -49,6 +50,13 @@ public:
                             ObIAllocator &allocator);
 
   static int to_datum(common::ObIVector *vector, const int64_t idx, common::ObDatum &datum);
+
+  // Normalize values used by storage-only direct-load batches.
+  static int reshape_storage_vector(const common::ObObjMeta &col_type,
+                                    const common::ObAccuracy &col_accuracy,
+                                    common::ObIAllocator &allocator,
+                                    common::ObIVector *&vector,
+                                    share::ObBatchSelector &selector);
 
   static int check_rowkey_length(const ObDDLBatchRows &batch_rows,
                                  const int64_t rowkey_column_count);

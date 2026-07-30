@@ -21,7 +21,6 @@
 
 using namespace oceanbase::observer;
 using namespace oceanbase::common;
-using namespace oceanbase::obcall;
 
 namespace oceanbase {
 namespace sql {

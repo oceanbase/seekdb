@@ -21,9 +21,7 @@
 #endif
 #include "ob_log_file_group.h"
 #include "share/redolog/ob_log_file_handler.h"
-#include "share/config/ob_server_config.h"
 #include "share/ob_io_device_helper.h"
-#include "lib/statistic_event/ob_stat_event.h"
 
 using namespace oceanbase::share;
 

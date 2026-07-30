@@ -18,7 +18,7 @@
 #include "ob_ls_sync_tablet_seq_handler.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/ob_sync_tablet_seq_clog.h"
-#include "storage/ob_tablet_autoinc_seq_rpc_handler.h"
+#include "storage/ob_tablet_autoinc_seq_service.h"
 
 namespace oceanbase
 {
@@ -61,7 +61,7 @@ int ObLSSyncTabletSeqHandler::replay(const void *buffer,
   ObSyncTabletSeqLog log;
   int64_t tmp_pos = 0;
   const char *log_buf = static_cast<const char *>(buffer);
-  ObTabletAutoincSeqRpcHandler &autoinc_seq_handler = ObTabletAutoincSeqRpcHandler::get_instance();
+  ObTabletAutoincSeqService &autoinc_seq_service = ObTabletAutoincSeqService::get_instance();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObLSSyncTabletSeqHandler not inited", K(ret));
@@ -69,11 +69,12 @@ int ObLSSyncTabletSeqHandler::replay(const void *buffer,
     LOG_WARN("log base header deserialize error", K(ret));
   } else if (OB_FAIL(log.deserialize(log_buf, nbytes, tmp_pos))) {
     LOG_WARN("ObSyncTabletSeqLog deserialize error", K(ret));
-  } else if (OB_FAIL(autoinc_seq_handler.replay_update_tablet_autoinc_seq(ls_,
-                                                                          log.get_tablet_id(),
-                                                                          log.get_autoinc_seq(),
-                                                                          base_header.need_pre_replay_barrier(),
-                                                                          scn))) {
+  } else if (OB_FAIL(autoinc_seq_service.replay_update_tablet_autoinc_seq(
+      ls_,
+      log.get_tablet_id(),
+      log.get_autoinc_seq(),
+      base_header.need_pre_replay_barrier(),
+      scn))) {
     LOG_WARN("failed to update tablet auto inc seq", K(ret), K(log));
   }
   return ret;

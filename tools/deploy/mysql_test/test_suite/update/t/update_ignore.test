@@ -226,7 +226,7 @@ key idx27(col_blob_not_null_key  (255)),
 key idx37(col_decimal_key ),
 key idx17(col_enum_key ),
 key idx25(col_blob_key  (255)),
-key idx31(col_float_unsigned_key ))  ENGINE=innodb  PARTITION BY key (pk) partitions 2;
+key idx31(col_float_unsigned_key ))    PARTITION BY key (pk) partitions 2;
 
 set sql_mode = '';
 

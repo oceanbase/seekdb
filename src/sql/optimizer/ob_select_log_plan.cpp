@@ -782,7 +782,6 @@ int ObSelectLogPlan::get_valid_aggr_algo(const ObIArray<ObRawExpr*> &group_by_ex
                                          bool &normal_sort_valid)
 {
   int ret = OB_SUCCESS;
-  bool has_keep_aggr = false;
   if (groupby_helper.ignore_hint_) {
     use_hash_valid = true;
     use_merge_valid = true;
@@ -797,13 +796,10 @@ int ObSelectLogPlan::get_valid_aggr_algo(const ObIArray<ObRawExpr*> &group_by_ex
   if (OB_ISNULL(get_stmt()) || OB_ISNULL(optimizer_context_.get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(get_stmt()), K(optimizer_context_.get_query_ctx()), K(ret));
-  } else if (OB_FAIL(check_aggr_with_keep(get_stmt()->get_aggr_items(), has_keep_aggr))) {
-    LOG_WARN("failed to check aggr with keep", K(ret));
   } else if ((group_by_exprs.empty() && rollup_exprs.empty())
              || (get_stmt()->has_rollup() && !groupby_helper.enable_hash_rollup_)
-             || get_stmt()->has_distinct_or_concat_agg()
-             || has_keep_aggr) {
-    //keep_aggr、group_concat and distinct aggregation hold all input rows temporary,
+             || get_stmt()->has_distinct_or_concat_agg()) {
+    // Group concat and distinct aggregation hold all input rows temporarily,
     //too much memory consumption for hash aggregate.
     use_hash_valid = false;
   }
@@ -2060,7 +2056,7 @@ int ObSelectLogPlan::get_distribute_distinct_method(ObLogicalOperator *top,
                                                                           is_partition_wise))) {
       LOG_WARN("failed to check sharding compatible with reduce expr", K(ret));
     } else if (is_partition_wise &&
-               (top->is_parallel_more_than_part_cnt(2) || force_slave_mapping ||
+               (top->is_parallel_more_than_part_cnt(SLAVE_MAPPING_DOP_TO_PARTITION_RATIO) || force_slave_mapping ||
                 DistAlgo::DIST_HASH_HASH_LOCAL == distinct_dist_methods)) {
       distinct_dist_methods = DistAlgo::DIST_HASH_HASH_LOCAL;
       OPT_TRACE("distinct will use hash local method and prune other method");
@@ -2895,11 +2891,8 @@ int ObSelectLogPlan::create_union_all_plan(const ObIArray<ObLogicalOperator*> &c
     if (OB_ISNULL(largest_op)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpect random method param", K(ret));
-    } else if (OB_FAIL(exch_info.server_list_.assign(largest_op->get_server_list()))) {
-      LOG_WARN("failed to assign server list", K(ret));
     } else {
       exch_info.parallel_ = largest_op->get_parallel();
-      exch_info.server_cnt_ = largest_op->get_server_cnt();
       exch_info.dist_method_ = ObPQDistributeMethod::RANDOM;
       for (int64_t i = 0; OB_SUCC(ret) && i < child_ops.count(); i++) {
         ObLogicalOperator *child_op = NULL;
@@ -3050,7 +3043,6 @@ int ObSelectLogPlan::check_if_union_all_match_set_partition_wise(const ObIArray<
                                                                  bool &is_union_all_set_pw)
 {
   int ret = OB_SUCCESS;
-  ObSEArray<ObAddr, 4> first_server_list;
   bool is_inherit_from_access_all = false;
   is_union_all_set_pw = true;
   for (int64_t i = 0; OB_SUCC(ret) && is_union_all_set_pw && i < child_ops.count(); i++) {
@@ -3073,10 +3065,6 @@ int ObSelectLogPlan::check_if_union_all_match_set_partition_wise(const ObIArray<
       } else if (is_inherit_from_access_all) {
         //partition wise flag conflict with access all flag
         is_union_all_set_pw = false;
-      } else if (OB_FAIL(first_server_list.assign(child_op->get_server_list()))) {
-        LOG_WARN("failed to get first server list", K(ret));
-      } else {
-        LOG_TRACE("succ to check union all matching set pw", K(first_server_list));
       }
     } else if (OB_FAIL(check_sharding_inherit_from_access_all(child_op, 
                                                              is_inherit_from_access_all))) {
@@ -3084,16 +3072,6 @@ int ObSelectLogPlan::check_if_union_all_match_set_partition_wise(const ObIArray<
     } else if (is_inherit_from_access_all) {
       //partition wise flag conflict with access all flag
       is_union_all_set_pw = false;
-    } else if (OB_FAIL(ObShardingInfo::is_physically_equal_serverlist(first_server_list,
-                                                                      child_op->get_server_list(),
-                                                                      is_union_all_set_pw))) {
-      LOG_WARN("failed to check if equal server list", K(ret));
-    } else {
-      if (!is_union_all_set_pw) {
-        OPT_TRACE("server list not equal, can not use set partition wise");
-      }
-      LOG_TRACE("succ to check union all matching set pw",
-                K(first_server_list), K(child_op->get_server_list()), K(is_union_all_set_pw));
     }
   }
   return ret;
@@ -3133,7 +3111,6 @@ int ObSelectLogPlan::check_if_union_all_match_extended_partition_wise(const ObIA
                                                                       bool &is_union_all_ext_pw)
 {
   int ret = OB_SUCCESS;
-  ObSEArray<ObAddr, 4> first_server_list;
   is_union_all_ext_pw = true;
   for (int64_t i = 0; OB_SUCC(ret) && is_union_all_ext_pw && i < child_ops.count(); i++) {
     ObLogicalOperator *child_op = NULL;
@@ -3142,25 +3119,9 @@ int ObSelectLogPlan::check_if_union_all_match_extended_partition_wise(const ObIA
         OB_ISNULL(child_sharding = child_op->get_sharding())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid input", K(ret), K(child_op), K(child_sharding));
-    } else if (!child_sharding->is_distributed()) {
+    } else if (!child_sharding->is_distributed_without_table_location_with_partitioning()) {
       is_union_all_ext_pw = false;
-      OPT_TRACE("not distribute sharding, can not use extend partition wise");
-    } else if (i == 0) {
-      if (OB_FAIL(first_server_list.assign(child_op->get_server_list()))) {
-        LOG_WARN("failed to get first server list", K(ret));
-      } else {
-        LOG_TRACE("succ to check union all matching ext pw", K(first_server_list));
-      }
-    } else if (OB_FAIL(ObShardingInfo::is_physically_both_shuffled_serverlist(first_server_list,
-                                                                              child_op->get_server_list(),
-                                                                              is_union_all_ext_pw))) {
-      LOG_WARN("failed to check if both are shuffled server list", K(ret));
-    } else {
-      if (!is_union_all_ext_pw) {
-        OPT_TRACE("server list not match, can not use extend partition wise");
-      }
-      LOG_TRACE("succ to check union all matching ext pw",
-                K(first_server_list), K(child_op->get_server_list()), K(is_union_all_ext_pw));
+      OPT_TRACE("not a local hash-distributed sharding, can not use extended partition wise");
     }
   }
   return ret;
@@ -3702,8 +3663,8 @@ int ObSelectLogPlan::get_distributed_set_methods(const EqualSets &equal_sets,
                                                               is_partition_wise))) {
       LOG_WARN("failed to check if match partition wise join", K(ret));
     } else if (is_partition_wise &&
-               (left_child.is_parallel_more_than_part_cnt(2) || 
-                right_child.is_parallel_more_than_part_cnt(2) ||
+               (left_child.is_parallel_more_than_part_cnt(SLAVE_MAPPING_DOP_TO_PARTITION_RATIO) ||
+                right_child.is_parallel_more_than_part_cnt(SLAVE_MAPPING_DOP_TO_PARTITION_RATIO) ||
                 force_slave_mapping)) {
       set_dist_methods = DIST_HASH_HASH_LOCAL;
       OPT_TRACE("plan will use hash hash local method");
@@ -3745,14 +3706,10 @@ int ObSelectLogPlan::get_distributed_set_methods(const EqualSets &equal_sets,
     OPT_TRACE("check extended partition wise method");
     bool is_ext_partition_wise = false;
     if (!left_sharding->is_distributed_without_table_location_with_partitioning() ||
-        !ObShardingInfo::is_shuffled_server_list(left_child.get_server_list()) ||
-        !right_sharding->is_distributed_without_table_location_with_partitioning() ||
-        !ObShardingInfo::is_shuffled_server_list(right_child.get_server_list())) {
+        !right_sharding->is_distributed_without_table_location_with_partitioning()) {
       set_dist_methods &= ~DistAlgo::DIST_EXT_PARTITION_WISE;
       OPT_TRACE("sharding or exchange is not expected, plan will not use extended partition wise method");
     } else if (OB_FAIL(ObShardingInfo::check_if_match_extended_partition_wise(equal_sets,
-                                                                       left_child.get_server_list(),
-                                                                       right_child.get_server_list(),
                                                                        left_set_keys,
                                                                        right_set_keys,
                                                                        left_child.get_strong_sharding(),
@@ -3780,7 +3737,7 @@ int ObSelectLogPlan::get_distributed_set_methods(const EqualSets &equal_sets,
     } else if (!left_match_repart) {
       set_dist_methods &= ~DistAlgo::DIST_PARTITION_HASH_LOCAL;
       OPT_TRACE("plan will not use partition hash local method");
-    } else if (right_child.is_parallel_more_than_part_cnt(2) || force_slave_mapping) {
+    } else if (right_child.is_parallel_more_than_part_cnt(SLAVE_MAPPING_DOP_TO_PARTITION_RATIO) || force_slave_mapping) {
       set_dist_methods &= ~DistAlgo::DIST_HASH_NONE;
       set_dist_methods &= ~DistAlgo::DIST_PARTITION_NONE;
       OPT_TRACE("plan will use partition hash local method");
@@ -3841,7 +3798,7 @@ int ObSelectLogPlan::get_distributed_set_methods(const EqualSets &equal_sets,
     } else if (!right_match_repart) {
       set_dist_methods &= ~DistAlgo::DIST_HASH_LOCAL_PARTITION;
       OPT_TRACE("plan will not use hash local partition method");
-    } else if (left_child.is_parallel_more_than_part_cnt(2) || force_slave_mapping) {
+    } else if (left_child.is_parallel_more_than_part_cnt(SLAVE_MAPPING_DOP_TO_PARTITION_RATIO) || force_slave_mapping) {
       set_dist_methods &= ~DistAlgo::DIST_NONE_HASH;
       set_dist_methods &= ~DistAlgo::DIST_NONE_PARTITION;
       OPT_TRACE("plan will use hash local partition method");
@@ -3973,8 +3930,7 @@ int ObSelectLogPlan::check_if_set_match_rehash(const EqualSets &equal_sets,
   } else if (OB_ISNULL(target_sharding = target_child.get_sharding())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (!target_sharding->is_distributed_without_table_location() ||
-             !ObShardingInfo::is_shuffled_server_list(target_child.get_server_list())) {
+  } else if (!target_sharding->is_distributed_without_table_location()) {
     /* do nothing */
   } else if (OB_FAIL(target_sharding->get_all_partition_keys(target_part_keys, true))) {
     LOG_WARN("failed to get partition keys", K(ret));
@@ -4266,7 +4222,6 @@ int ObSelectLogPlan::get_minimal_cost_set_plan(const int64_t in_parallel,
                                                        right_child->get_width(),
                                                        right_orig_cost,
                                                        out_parallel,
-                                                       left_child.get_server_cnt(),
                                                        in_parallel,
                                                        right_order_items,
                                                        right_need_sort,
@@ -5218,9 +5173,6 @@ int ObSelectLogPlan::compute_set_exchange_info(const EqualSets &equal_sets,
   }
 
   if (OB_FAIL(ret) || NULL == parallel_source) {
-  } else if (OB_FAIL(left_exch_info.server_list_.assign(parallel_source->get_server_list()))
-             || OB_FAIL(right_exch_info.server_list_.assign(parallel_source->get_server_list()))) {
-    LOG_WARN("failed to assign server list", K(ret));
   } else {
     int64_t parallel = 1;
     if (parallel_source->get_parallel() > 1 || DistAlgo::DIST_HASH_HASH != set_method) {
@@ -5229,9 +5181,7 @@ int ObSelectLogPlan::compute_set_exchange_info(const EqualSets &equal_sets,
       parallel = parallel_source->get_available_parallel();
     }
     left_exch_info.parallel_ = parallel;
-    left_exch_info.server_cnt_ = parallel_source->get_server_cnt();
     right_exch_info.parallel_ = parallel;
-    right_exch_info.server_cnt_ = parallel_source->get_server_cnt();
   }
   return ret;
 }
@@ -5437,14 +5387,6 @@ int ObSelectLogPlan::allocate_plan_top()
       } else {
         LOG_TRACE("succeed to allocate select into clause",
             K(candidates_.candidate_plans_.count()));
-      }
-    }
-
-    if (OB_SUCC(ret) && NULL != get_insert_stmt() && get_insert_stmt()->is_error_logging()) {
-      if (OB_FAIL(candi_allocate_err_log(get_insert_stmt()))) {
-        LOG_WARN("failed to allocate err log", K(ret));
-      } else {
-        LOG_TRACE("succeed to allocate err log", K(candidates_.candidate_plans_.count()));
       }
     }
 
@@ -6165,7 +6107,7 @@ int ObSelectLogPlan::get_distribute_window_method(ObLogicalOperator *top,
                                                                          is_partition_wise))) {
         LOG_WARN("failed to check if sharding compatible", K(ret));
       } else if (is_partition_wise &&
-                 (top->is_parallel_more_than_part_cnt(2) || force_use_slave_mapping)) {
+                 (top->is_parallel_more_than_part_cnt(SLAVE_MAPPING_DOP_TO_PARTITION_RATIO) || force_use_slave_mapping)) {
         win_dist_methods = WinDistAlgo::WIN_DIST_HASH_LOCAL;
         OPT_TRACE("window function will use slave mapping method");
       } else {
@@ -6745,8 +6687,7 @@ int ObSelectLogPlan::check_win_func_pushdown(const int64_t dop,
     int64_t min_pby_ndv_idx = OB_INVALID_INDEX;
     double min_pby_ndv = 0.0;
     const ObIArray<ObWinFunRawExpr*> &win_func_exprs = win_func_helper.ordered_win_func_exprs_;
-    // use trace point to enforce pushdown window function regardless of ndv and dop
-    // use trace point : alter system set_tp tp_no = 247, error_code = 4000, frequency = 1;
+    // EN_ENFORCE_PUSH_DOWN_WF enforces pushdown regardless of NDV and DOP.
     const bool tract_point_pushdown = (OB_SUCCESS != (OB_E(EventTable::EN_ENFORCE_PUSH_DOWN_WF) OB_SUCCESS));
     bool can_pushdown = win_func_helper.card_ >= WF_CARD_DOP_RADIO * dop
                         || win_func_helper.force_pushdown_
@@ -8354,8 +8295,7 @@ int ObSelectLogPlan::generate_late_materialization_table_get(ObLogTableScan *ind
     // set parallel info
     table_scan->set_parallel(index_scan->get_parallel());
     table_scan->set_op_parallel_rule(OpParallelRule::OP_INHERIT_DOP);
-    table_scan->set_available_parallel(index_scan->get_available_parallel()),
-    table_scan->set_server_cnt(index_scan->get_server_cnt());
+    table_scan->set_available_parallel(index_scan->get_available_parallel());
     table_get = table_scan;
   }
   return ret;
@@ -8466,8 +8406,7 @@ int ObSelectLogPlan::allocate_late_materialization_join_as_top(ObLogicalOperator
       join->set_fd_item_set(&left_child->get_fd_item_set());
       // set parallel info
       join->set_parallel(left_child->get_parallel());
-      join->set_available_parallel(left_child->get_available_parallel()),
-      join->set_server_cnt(left_child->get_server_cnt());
+      join->set_available_parallel(left_child->get_available_parallel());
       join_op = join;
     }
   }
@@ -8757,22 +8696,6 @@ int ObSelectLogPlan::candi_allocate_order_by_if_losted(ObIArray<OrderItem> &orde
       } else if (OB_FAIL(prune_and_keep_best_plans(order_by_plans))) {
         LOG_WARN("failed to prune and keep best plans", K(ret));
       } else { /*do nothing*/ }
-    }
-  }
-  return ret;
-}
-
-int ObSelectLogPlan::check_aggr_with_keep(const ObIArray<ObAggFunRawExpr*> &aggr_items, 
-                                          bool &has_keep_aggr)
-{
-  int ret = OB_SUCCESS;
-  has_keep_aggr = false;
-  for (int64_t i = 0; OB_SUCC(ret) && !has_keep_aggr && i < aggr_items.count(); ++i) {
-    if (OB_ISNULL(aggr_items.at(i))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("aggr item is null", K(ret));
-    } else if (IS_KEEP_AGGR_FUN(aggr_items.at(i)->get_expr_type())) {
-      has_keep_aggr = true;
     }
   }
   return ret;

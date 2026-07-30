@@ -599,10 +599,10 @@ struct ObLobCommon
   static const int64_t LOB_DATA_VERSION = 1;
   ObLobCommon()
     : version_(LOB_DATA_VERSION), is_init_(0), is_empty_(0), in_row_(1),
-      opt_encrypt_(0), opt_compress_(0), opt_deduplicate_(0), has_content_type_(0),
+      reserved_opt_encrypt_(0), opt_compress_(0), opt_deduplicate_(0), has_content_type_(0),
       use_big_endian_(1), is_mem_loc_(0), reserve_(0)
   {}
-  TO_STRING_KV(K_(version), K_(is_init), K_(is_empty), K_(in_row), K_(opt_encrypt),
+  TO_STRING_KV(K_(version), K_(is_init), K_(is_empty), K_(in_row),
       K_(opt_compress), K_(opt_deduplicate), K_(has_content_type), K_(use_big_endian), K_(is_mem_loc),
       K_(reserve));
   int64_t get_handle_size(int64_t byte_size) const
@@ -662,7 +662,8 @@ struct ObLobCommon
   uint32_t is_init_ : 1;
   uint32_t is_empty_ : 1;
   uint32_t in_row_ : 1;
-  uint32_t opt_encrypt_ : 1;
+  // Keep the removed encryption flag's bit reserved for on-disk compatibility.
+  uint32_t reserved_opt_encrypt_ : 1;
   uint32_t opt_compress_ : 1;
   uint32_t opt_deduplicate_ : 1;
   uint32_t has_content_type_ : 1;
@@ -678,59 +679,6 @@ struct ObLobCommon
 #define LOB_COMPAT_MODE_FLAG (INT64_C(1) << 0) // 1 means old heap table without rowid, fake locator
 #define LOB_OPEN_MODE_FLAG (INT64_C(1) << 1) // 0 means lob_readwrite, 1 means lob_readonly
 #define LOB_IS_OPEN_FLAG (INT64_C(1) << 2) // 0 means is close, 1 means is open
-
-struct ObLobLocator
-{
-  static const uint32_t MAGIC_CODE = 0x4C4F4221; //LOB!
-  static const uint32_t LOB_LOCATOR_VERSION = 1;
-  ObLobLocator() = delete;
-  ~ObLobLocator() = delete;
-  OB_INLINE bool is_valid() const
-  {
-    return magic_code_ == MAGIC_CODE && version_ == LOB_LOCATOR_VERSION && snapshot_version_ >= 0
-           && is_valid_id(table_id_) && is_valid_id(column_id_)
-           && option_ == 0;
-  }
-  OB_INLINE bool is_fake_locator() const { return !is_inline_mode(); }
-  int init(const uint64_t table_id,
-           const uint32_t column_id,
-           const int64_t snapshot_version,
-           const uint16_t flags,
-           const ObString &rowid,
-           const ObString &payload);
-  int init(const ObString &payload); // init a lob locator with fake rowid/table_id and etc.
-  int get_rowid(ObString &rowid) const;
-  int get_payload(ObString &payload) const;
-  OB_INLINE int64_t get_data_length() const { return (payload_offset_ + payload_size_); }
-  OB_INLINE int64_t get_total_size() const { return offsetof(ObLobLocator, data_) + get_data_length(); }
-  OB_INLINE uint32_t get_payload_length() const { return payload_size_; }
-  //TODO @shanting to be deleted
-  OB_INLINE const char *get_payload_ptr() const { return &data_[payload_offset_]; }
-  OB_INLINE void add_flag(int64_t flag) { flags_ |= flag; }
-  OB_INLINE void del_flag(int64_t flag) { flags_ &= ~flag; }
-  OB_INLINE void set_inline_mode() { del_flag(LOB_COMPAT_MODE_FLAG); }
-  OB_INLINE void set_compat_mode() { add_flag(LOB_COMPAT_MODE_FLAG); }
-  OB_INLINE bool is_inline_mode() const { return !(flags_ & LOB_COMPAT_MODE_FLAG); }
-  OB_INLINE void set_readwrite() { del_flag(LOB_OPEN_MODE_FLAG); }
-  OB_INLINE void set_readonly() { add_flag(LOB_OPEN_MODE_FLAG); }
-  OB_INLINE bool is_readwrite() const { return !(flags_ & LOB_OPEN_MODE_FLAG); }
-  OB_INLINE void set_is_close() { del_flag(LOB_IS_OPEN_FLAG); }
-  OB_INLINE void set_is_open() { add_flag(LOB_IS_OPEN_FLAG); }
-  OB_INLINE bool is_open() const { return (flags_ & LOB_IS_OPEN_FLAG); }
-
-  DECLARE_TO_STRING;
-
-  uint32_t magic_code_;
-  uint32_t version_;
-  int64_t  snapshot_version_;
-  uint64_t table_id_;
-  uint32_t column_id_;
-  uint16_t flags_;
-  uint16_t option_; // storage option: compress/ encrypt / dedup
-  uint32_t payload_offset_; //  == rowid_size; payload = data_ + payload_offset_
-  uint32_t payload_size_;
-  char data_[0]; // rowid + varchar
-};
 
 // New In-Memory LobLocator
 enum ObMemLobType
@@ -868,13 +816,10 @@ struct ObMemLobExternHeader
   uint64_t table_id_;
   uint32_t column_idx_;
 
-  // correspoinding to ObLobLocator(v1) uint16_t mode_
   ObMemLobExternFlags flags_;
 
-  // correspoinding to ObLobLocator(v1) uint16_t option_
   uint16_t rowkey_size_; // Max rowkey size is 16KB
 
-  // correspoinding to ObLobLocator(v1) payload_offset_ and payload_size_
   uint32_t payload_offset_;  // total length of extern fields, rowkey, and disk locator
   uint32_t payload_size_;    // total inrow data size, <= 4GB
 
@@ -3625,7 +3570,7 @@ struct ParamFlag
                 need_to_check_bool_value_(false),
                 expected_bool_value_(false),
                 need_to_check_extend_type_(true),
-                is_ref_cursor_type_(false),
+                reserved_legacy_bit_(false),
                 is_pl_mock_default_param_(false),
                 is_boolean_(false),
                 is_batch_parameter_(0),
@@ -3647,7 +3592,7 @@ struct ParamFlag
       uint8_t need_to_check_bool_value_ : 1;//TRUE if the bool value need to be checked by plan cache, FALSE otherwise
       uint8_t expected_bool_value_ : 1;//bool value, effective only when need_to_check_bool_value_ is true
       uint8_t need_to_check_extend_type_ : 1; // True if the extended type needs to be checked
-      uint8_t is_ref_cursor_type_ : 1; // in pl/sql context, this will be true if the local var is a ref cursor
+      uint8_t reserved_legacy_bit_ : 1;
       uint8_t is_pl_mock_default_param_ : 1; // TRUE if ObObjParam is pl default param
       uint8_t is_boolean_ : 1; // to distinguish T_BOOL and T_TINYINT
       uint8_t is_batch_parameter_ : 1; // indicates it is a batch parameter
@@ -3715,8 +3660,6 @@ public:
   OB_INLINE void set_expected_bool_value(bool b_value) { flag_.expected_bool_value_ = b_value; }
   OB_INLINE bool expected_bool_value() const { return flag_.expected_bool_value_; }
 
-  OB_INLINE void set_is_ref_cursor_type(bool flag) { flag_.is_ref_cursor_type_ = flag; }
-  OB_INLINE bool is_ref_cursor_type() const { return flag_.is_ref_cursor_type_; }
   OB_INLINE void set_is_pl_mock_default_param(bool flag) { flag_.is_pl_mock_default_param_= flag; }
   OB_INLINE bool is_pl_mock_default_param() const { return flag_.is_pl_mock_default_param_; }
   OB_INLINE void set_is_boolean(bool flag) { flag_.is_boolean_ = flag; }
@@ -3739,9 +3682,9 @@ public:
     }
     if (ob_is_numeric_type(get_type())) {
       ObPrecision default_prec =
-        ObAccuracy::DDL_DEFAULT_ACCURACY2[0][get_type()].get_precision();
+        ObAccuracy::DDL_DEFAULT_ACCURACY[get_type()].get_precision();
       ObScale default_scale =
-        ObAccuracy::DDL_DEFAULT_ACCURACY2[0][get_type()].get_scale();
+        ObAccuracy::DDL_DEFAULT_ACCURACY[get_type()].get_scale();
       if (get_scale() < 0) {
         if (meta_.get_scale() >= 0) {
           set_scale(meta_.get_scale());

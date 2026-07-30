@@ -67,7 +67,6 @@ public:
     int64_t prev_ts = 0;
     int64_t total_time = 0;
     const char* event_name = NULL;
-    const ObString nls_format;
     for (int64_t i = 0; i < MIN(EVENT_COUNT, this->next_idx_); ++i) {
       const ObTraceEvent &ev = this->events_[i];
       event_name = NAME(ev.id_);

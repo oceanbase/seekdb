@@ -157,7 +157,11 @@ int ObStorageLogReplayer::replay(
 
     while(OB_SUCC(ret) && OB_SUCC(slog_reader.read_log(entry, log_data, disk_addr))) {
       ObIRedoModule::parse_cmd(entry.cmd_, main_type, sub_type);
-      if (ObRedoLogMainType::OB_REDO_LOG_SYS == main_type) {
+      if (ObRedoLogMainType::OB_REDO_LOG_INVALID == main_type
+          || static_cast<int>(main_type) >= static_cast<int>(ObRedoLogMainType::OB_REDO_LOG_MAX)) {
+        ret = OB_NOT_SUPPORTED;
+        STORAGE_REDO_LOG(WARN, "Unsupported redo log main type", K(ret), K(main_type), K(sub_type));
+      } else if (ObRedoLogMainType::OB_REDO_LOG_SYS == main_type) {
         STORAGE_REDO_LOG(INFO, "Skip these kinds of log", K(entry.cmd_));
       } else {
         if (OB_UNLIKELY(nullptr == redo_modules_[static_cast<int>(main_type)])) {

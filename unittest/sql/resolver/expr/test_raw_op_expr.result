@@ -60,7 +60,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -228,7 +227,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -396,7 +394,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -564,7 +561,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -732,7 +728,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -900,7 +895,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -1068,7 +1062,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -1236,7 +1229,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -1403,7 +1395,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -1508,7 +1499,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -1676,7 +1666,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -1844,7 +1833,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -2012,7 +2000,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -2181,7 +2168,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -2350,7 +2336,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -2464,7 +2449,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -2570,7 +2554,6 @@
               "column_id":-1,
               "database_name":"",
               "table_name":"",
-              "synonym_name":"",
               "column_name":"",
               "expr_level":-1,
               "expr_levels": [
@@ -2683,7 +2666,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -2861,7 +2843,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -3069,7 +3050,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -3215,7 +3195,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -3449,7 +3428,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -3584,7 +3562,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -3718,7 +3695,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -3853,7 +3829,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -3988,7 +3963,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -4123,7 +4097,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -4362,7 +4335,6 @@
           "column_id":-1,
           "database_name":"",
           "table_name":"",
-          "synonym_name":"",
           "column_name":"",
           "expr_level":-1,
           "expr_levels": [
@@ -4403,7 +4375,6 @@
           "column_id":-1,
           "database_name":"",
           "table_name":"",
-          "synonym_name":"",
           "column_name":"",
           "expr_level":-1,
           "expr_levels": [
@@ -4756,7 +4727,6 @@
     "column_id":-1,
     "database_name":"",
     "table_name":"",
-    "synonym_name":"",
     "column_name":"",
     "expr_level":-1,
     "expr_levels": [
@@ -5375,7 +5345,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -5453,7 +5422,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -5692,7 +5660,6 @@
           "column_id":-1,
           "database_name":"",
           "table_name":"",
-          "synonym_name":"",
           "column_name":"",
           "expr_level":-1,
           "expr_levels": [
@@ -5733,7 +5700,6 @@
           "column_id":-1,
           "database_name":"",
           "table_name":"",
-          "synonym_name":"",
           "column_name":"",
           "expr_level":-1,
           "expr_levels": [
@@ -6018,7 +5984,6 @@
   "column_id":-1,
   "database_name":"",
   "table_name":"",
-  "synonym_name":"",
   "column_name":"",
   "expr_level":-1,
   "expr_levels": [
@@ -6275,7 +6240,6 @@
           "column_id":-1,
           "database_name":"",
           "table_name":"",
-          "synonym_name":"",
           "column_name":"",
           "expr_level":-1,
           "expr_levels": [
@@ -6316,7 +6280,6 @@
           "column_id":-1,
           "database_name":"",
           "table_name":"",
-          "synonym_name":"",
           "column_name":"",
           "expr_level":-1,
           "expr_levels": [
@@ -6387,7 +6350,6 @@
           "column_id":-1,
           "database_name":"",
           "table_name":"",
-          "synonym_name":"",
           "column_name":"",
           "expr_level":-1,
           "expr_levels": [
@@ -6428,7 +6390,6 @@
           "column_id":-1,
           "database_name":"",
           "table_name":"",
-          "synonym_name":"",
           "column_name":"",
           "expr_level":-1,
           "expr_levels": [
@@ -6504,7 +6465,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -6608,7 +6568,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -6710,7 +6669,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -6751,7 +6709,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -6827,7 +6784,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -7052,7 +7008,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -7280,7 +7235,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -7355,7 +7309,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [
@@ -7523,7 +7476,6 @@
       "column_id":-1,
       "database_name":"",
       "table_name":"",
-      "synonym_name":"",
       "column_name":"",
       "expr_level":-1,
       "expr_levels": [

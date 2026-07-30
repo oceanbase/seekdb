@@ -45,10 +45,10 @@ int ObExprBool::calc_result_type1(ObExprResType &type,
   } else {
     const ObObjType &calc_type = ObDoubleType;
     type1.set_calc_type(calc_type);
-    const ObAccuracy &calc_acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][calc_type];
+    const ObAccuracy &calc_acc = ObAccuracy::DDL_DEFAULT_ACCURACY[calc_type];
     type1.set_calc_accuracy(calc_acc);
   }
-  const ObAccuracy &res_acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][ObInt32Type];
+  const ObAccuracy &res_acc = ObAccuracy::DDL_DEFAULT_ACCURACY[ObInt32Type];
   type.set_type(ObInt32Type);
   type.set_accuracy(res_acc);
   ObExprOperator::calc_result_flag1(type, type1);
@@ -220,154 +220,6 @@ inline int get_bool<>(const ObString &j_str,
   return ret;
 }
 
-template <typename ArgVec, typename ResVec, typename DataType>
-static int eval_vector_expr_bool(const ObExpr &expr,
-                                 ObEvalCtx &ctx,
-                                 const ObBitVector &skip,
-                                 const EvalBound &bound,
-                                 DataType (ArgVec::*get_data)(int64_t) const)
-{
-  int ret = OB_SUCCESS;
-  ArgVec *arg_vec = static_cast<ArgVec *>(expr.args_[0]->get_vector(ctx));
-  ResVec *res_vec = static_cast<ResVec *>(expr.get_vector(ctx));
-  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-  const bool isFixedLenRes = std::is_same<ResVec, IntegerFixedVec>::value;
-  int64_t *data_ptr = isFixedLenRes ?
-                      const_cast<int64_t*>(reinterpret_cast<const int64_t *>(res_vec->get_payload(0))) :
-                      nullptr;
-  bool no_skip_no_null = bound.get_all_rows_active() && !arg_vec->has_null();
-  if (no_skip_no_null) {
-    for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {
-      bool arg_is_true = false;
-      if (OB_FAIL(get_bool((arg_vec->*get_data)(idx),
-                            arg_vec->get_length(idx), expr, arg_is_true))) {
-        LOG_WARN("failed to check is true", K(ret));
-      } else if (isFixedLenRes) {
-        data_ptr[idx] = static_cast<int64_t>(arg_is_true);
-      } else {
-        res_vec->set_int(idx, static_cast<int64_t>(arg_is_true));
-      }
-    }
-    eval_flags.set_all(bound.start(), bound.end());
-  } else {
-    for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {
-      if (skip.at(idx) || eval_flags.at(idx)) {
-        continue;
-      } else if (arg_vec->is_null(idx)) {
-        res_vec->set_null(idx);
-      } else {
-        bool arg_is_true = false;
-        if (OB_FAIL(get_bool((arg_vec->*get_data)(idx),
-                              arg_vec->get_length(idx), expr, arg_is_true))) {
-          LOG_WARN("failed to check is true", K(ret));
-        } else {
-          res_vec->set_int(idx, static_cast<int64_t>(arg_is_true));
-        }
-      }
-      eval_flags.set(idx);
-    }
-  }
-  return ret;
-}
-
-template <typename ArgVec, typename DataType>
-static inline int def_eval_vector_bool_expr(const ObExpr &expr,
-                                          ObEvalCtx &ctx,
-                                          const ObBitVector &skip,
-                                          const EvalBound &bound,
-                                          DataType (ObVectorBase::*get_data)(int64_t) const)
-{
-  int ret = OB_SUCCESS;
-  VectorFormat res_format = expr.get_format(ctx);
-  // The 'res_format' is expected to be Type 'IntegerFixedVec' under the regular circumstances. 
-  // So a condition is added to optimize performance accordingly.
-  if (VEC_FIXED == res_format) {
-    VectorFormat arg_format = expr.args_[0]->get_format(ctx);
-    if (VEC_FIXED == arg_format || VEC_DISCRETE == arg_format || VEC_CONTINUOUS == arg_format) {
-      ret = eval_vector_expr_bool<ArgVec, IntegerFixedVec, DataType>
-                                (expr, ctx, skip, bound, get_data);
-    } else if (VEC_UNIFORM == arg_format) {
-      ret = eval_vector_expr_bool<ObUniformBase, IntegerFixedVec, DataType>
-                                (expr, ctx, skip, bound, get_data);
-    } else {
-      ret = eval_vector_expr_bool<ObVectorBase, IntegerFixedVec, DataType>
-                                (expr, ctx, skip, bound, get_data);
-    }
-  } else {
-    ret = eval_vector_expr_bool<ObVectorBase, ObVectorBase, DataType>
-                                (expr, ctx, skip, bound, get_data);
-  }
-  return ret;
-}
-
-int ObExprBool::calc_vector_bool_expr(const ObExpr &expr,
-                                      ObEvalCtx &ctx,
-                                      const ObBitVector &skip,
-                                      const EvalBound &bound)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval bool param", K(ret));
-  } else {
-    ObObjType data_type = expr.args_[0]->datum_meta_.type_;
-    VectorFormat arg_format = expr.args_[0]->get_format(ctx);
-    switch(data_type) {
-      case ObTinyIntType:
-      case ObSmallIntType:
-      case ObMediumIntType:
-      case ObInt32Type:
-      case ObIntType:
-      case ObUTinyIntType:
-      case ObUSmallIntType:
-      case ObUMediumIntType:
-      case ObUInt32Type:
-      case ObUInt64Type:
-      case ObBitType: {
-        ret = def_eval_vector_bool_expr<IntegerFixedVec, int64_t>
-                                      (expr, ctx, skip, bound, &ObVectorBase::get_int);
-        break;
-      }
-      case ObFloatType:
-      case ObUFloatType: {
-        ret = def_eval_vector_bool_expr<FloatFixedVec, float>
-                                      (expr, ctx, skip, bound, &ObVectorBase::get_float);
-        break;
-      }
-      case ObDoubleType:
-      case ObUDoubleType: {
-        ret = def_eval_vector_bool_expr<DoubleFixedVec, double>
-                                      (expr, ctx, skip, bound, &ObVectorBase::get_double);
-        break;
-      }
-      case ObDecimalIntType: {
-        ret = def_eval_vector_bool_expr<ObFixedLengthBase, const ObDecimalInt*>
-                                      (expr, ctx, skip, bound, &ObVectorBase::get_decimal_int);
-        break;
-      }
-      case ObJsonType: {
-        if (VEC_DISCRETE == arg_format) {
-          ret = def_eval_vector_bool_expr<JsonDiscVec, ObString>
-                                        (expr, ctx, skip, bound, &ObVectorBase::get_string);
-        } else {
-          ret = def_eval_vector_bool_expr<JsonContVec, ObString>
-                                        (expr, ctx, skip, bound, &ObVectorBase::get_string);
-        }
-        break;
-      }
-      default:
-        if (VEC_DISCRETE == arg_format) {
-          ret = def_eval_vector_bool_expr<NumberDiscVec, const number::ObCompactNumber &>
-                                        (expr, ctx, skip, bound, &ObVectorBase::get_number);
-        } else {
-          ret = def_eval_vector_bool_expr<NumberContVec, const number::ObCompactNumber &>
-                                        (expr, ctx, skip, bound, &ObVectorBase::get_number);
-        }
-        break;
-    } //switch
-  }
-  return ret;
-}
-
 int ObExprBool::cg_expr(ObExprCGCtx &expr_cg_ctx,
                         const ObRawExpr &raw_expr,
                         ObExpr &rt_expr) const
@@ -423,7 +275,6 @@ int ObExprBool::cg_expr(ObExprCGCtx &expr_cg_ctx,
           break;
       }
     }
-    rt_expr.eval_vector_func_ = ObExprBool::calc_vector_bool_expr;
   }
   return ret;
 }

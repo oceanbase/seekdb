@@ -625,6 +625,7 @@ int ObSkipIndexFilterExecutor::black_filter_on_min_max(
   const bool use_vectorize)
 {
   int ret = OB_SUCCESS;
+  UNUSED(use_vectorize);
   sql::ObBoolMask &fal_desc = filter.get_filter_bool_mask();
   const share::schema::ObColumnParam *col_param = filter.get_col_params().at(0);
   ObStorageDatum null_count;
@@ -649,12 +650,6 @@ int ObSkipIndexFilterExecutor::black_filter_on_min_max(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Not correct min_max agg info", K(ret), K(col_idx), K(row_count),
              K(null_count), K(min_datum), K(max_datum));
-  } else if (use_vectorize &&
-             filter.get_op().enable_rich_format_ &&
-             OB_FAIL(init_exprs_uniform_header(filter.get_column_exprs(),
-                                               filter.get_op().get_eval_ctx(),
-                                               filter.get_op().get_eval_ctx().max_batch_size_))) {
-    LOG_WARN("Failed to init exprs vector header", K(ret));
   } else {
     const bool is_all_null = null_count.get_int() == row_count;
     const bool has_null = null_count.get_int() > 0 && null_count.get_int() < row_count;

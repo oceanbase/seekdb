@@ -211,20 +211,6 @@ int ObUpdateStmt::get_view_check_exprs(ObIArray<ObRawExpr*>& view_check_exprs) c
   return ret;
 }
 
-int64_t ObUpdateStmt::get_instead_of_trigger_column_count() const
-{
-  const TableItem *table_item = NULL;
-  int64_t column_count = 0;
-  if (1 == table_info_.count() &&
-      NULL != table_info_.at(0) &&
-      NULL != (table_item = get_table_item_by_id(table_info_.at(0)->table_id_)) &&
-      table_item->is_view_table_ &&
-      NULL != table_item->ref_query_) {
-    column_count = table_item->ref_query_->get_select_item_size();
-  }
-  return column_count;
-}
-
 int ObUpdateStmt::remove_table_item_dml_info(const TableItem* table)
 {
   int ret = OB_SUCCESS;

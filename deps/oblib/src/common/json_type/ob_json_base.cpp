@@ -1439,19 +1439,7 @@ int ObIJsonBase::find_timestamp_method(ObIAllocator* allocator, ObSeekParentInfo
       LOG_WARN("fail to seek recursively", K(ret));
     }
   } else if (json_type() == ObJsonNodeType::J_STRING) {
-    common::ObOTimestampData date;
-    ObTimeZoneInfo tz_info;
-    ObTimeConvertCtx cvrt_ctx(&tz_info, false);
-    cvrt_ctx.nls_format_ = ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT;
-    ObOTimestampData ot_data;
-    int16_t scale = 0;
-
-    ObString str(get_data_length(), get_data());
-    
-    {
-      trans_fail = true;
-      LOG_WARN("fail to convert string to otimestamp", K(ret));
-    }
+    trans_fail = true;
   } else if (is_json_number(json_type())) {
     trans_fail = true;
   } else if (!is_json_scalar(json_type())) {
@@ -2076,17 +2064,8 @@ int ObIJsonBase::trans_to_date_timestamp(ObIAllocator* allocator,
       }
     }
   } else {
-    ObTime ob_time;
-    common::ObOTimestampData date;
-    ObTimeZoneInfo tz_info;
-    ObTimeConvertCtx cvrt_ctx(&tz_info, false);
-    cvrt_ctx.nls_format_ = ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT;
-    ObOTimestampData ot_data;
-    int16_t scale = 0;
-    {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to convert string to otimestamp", K(ret));
-    }
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to convert string to otimestamp", K(ret));
   }
   
   if (OB_SUCC(ret)) {
@@ -5523,7 +5502,6 @@ int ObIJsonBase::to_datetime(int64_t &value, ObTimeConvertCtx *cvrt_ctx_t) const
   ObTimeConvertCtx cvrt_ctx(NULL, false);
   if (OB_NOT_NULL(cvrt_ctx_t) && cvrt_ctx_t->is_timestamp_) {
     cvrt_ctx.tz_info_ = cvrt_ctx_t->tz_info_;
-    cvrt_ctx.nls_format_ = cvrt_ctx_t->nls_format_;
     cvrt_ctx.is_timestamp_ = cvrt_ctx_t->is_timestamp_;
   }
   switch (json_type()) {

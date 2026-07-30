@@ -51,35 +51,10 @@ inline int ObRawExprUtils::resolve_op_expr_add_implicit_cast(ObRawExprFactory &e
                                                       ObSysFunRawExpr *&func_expr)
 {
   int ret = OB_SUCCESS;
-  if (dst_type.is_varying_len_char_type()) {
-    ObItemType func_type = T_MAX;
-    const char* func_name = NULL;
-    if (OB_ISNULL(src_expr)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid args", K(ret), KP(src_expr));
-    } else if (dst_type.is_varchar()) {
-      func_type = T_FUN_SYS_TO_CHAR;
-      func_name = N_TO_CHAR;
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(expr_factory.create_raw_expr(func_type, func_expr))) {
-        LOG_WARN("create cast expr failed", K(ret));
-      } else if (OB_FAIL(func_expr->set_param_expr(src_expr))) {
-        LOG_WARN("add real param expr failed", K(ret));
-      } else {
-        func_expr->set_func_name(ObString::make_string(func_name));
-        if (OB_FAIL(func_expr->formalize(session_info))) {
-          LOG_WARN("formalize current expr failed", K(ret));
-        }
-        LOG_DEBUG("succ to create to char expr", K(dst_type));
-      }
-    }
-  } else {
-    OZ(ObRawExprUtils::create_cast_expr(expr_factory, src_expr, dst_type, func_expr, session_info,
-                                        dst_type.get_cast_mode() == CM_NONE,
-                                        dst_type.get_cast_mode()));
-    CK(OB_NOT_NULL(func_expr));
-  }
+  OZ(ObRawExprUtils::create_cast_expr(expr_factory, src_expr, dst_type, func_expr, session_info,
+                                      dst_type.get_cast_mode() == CM_NONE,
+                                      dst_type.get_cast_mode()));
+  CK(OB_NOT_NULL(func_expr));
 
   return ret;
 }
@@ -258,7 +233,7 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
           // Integer division can produce a decimal result, so cast integers to
           // number before division.
           if (tc1 == ObIntTC && tc2 == ObIntTC && op_type == T_OP_DIV) {
-            ObAccuracy    acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][ObNumberType];
+            ObAccuracy    acc = ObAccuracy::DDL_DEFAULT_ACCURACY[ObNumberType];
             dest_type.set_precision(acc.get_precision());
             dest_type.set_scale(acc.get_scale());
             dest_type.set_collation_level(CS_LEVEL_NUMERIC);
@@ -308,8 +283,8 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
               cast_mode |= ObRelationalExprOperator::get_const_cast_mode(op_type, false);
             }
           } else {
-            acc = (ObNumberType == dst_type ? ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][dst_type] :
-                                             ObAccuracy::MAX_ACCURACY2[0/*MySQL*/][dst_type]);
+            acc = (ObNumberType == dst_type ? ObAccuracy::DDL_DEFAULT_ACCURACY[dst_type] :
+                                             ObAccuracy::MAX_ACCURACY[dst_type]);
           }
           dest_type.set_precision(acc.get_precision());
           dest_type.set_scale(acc.get_scale());
@@ -355,8 +330,8 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
               cast_mode |= ObRelationalExprOperator::get_const_cast_mode(op_type, true);
             }
           } else {
-            acc = (ObNumberType == dst_type ? ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][dst_type] :
-                                             ObAccuracy::MAX_ACCURACY2[0/*MySQL*/][dst_type]);
+            acc = (ObNumberType == dst_type ? ObAccuracy::DDL_DEFAULT_ACCURACY[dst_type] :
+                                             ObAccuracy::MAX_ACCURACY[dst_type]);
           }
           dest_type.set_precision(acc.get_precision());
           dest_type.set_scale(acc.get_scale());
@@ -382,7 +357,7 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
           break;
         }
         case ImplicitCastDirection::IC_A_TO_C: {
-          ObAccuracy acc = (ObNumberType == r_type3 ? ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][r_type3] : ObAccuracy::MAX_ACCURACY2[0/*MySQL*/][r_type3]);
+          ObAccuracy acc = (ObNumberType == r_type3 ? ObAccuracy::DDL_DEFAULT_ACCURACY[r_type3] : ObAccuracy::MAX_ACCURACY[r_type3]);
           dest_type.set_precision(acc.get_precision());
           dest_type.set_scale(acc.get_scale());
           dest_type.set_type(r_type3);
@@ -403,7 +378,7 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
           break;
         }
         case ImplicitCastDirection::IC_B_TO_C: {
-          ObAccuracy acc = (ObNumberType == r_type3 ? ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][r_type3] : ObAccuracy::MAX_ACCURACY2[0/*MySQL*/][r_type3]);
+          ObAccuracy acc = (ObNumberType == r_type3 ? ObAccuracy::DDL_DEFAULT_ACCURACY[r_type3] : ObAccuracy::MAX_ACCURACY[r_type3]);
           dest_type.set_precision(acc.get_precision());
           dest_type.set_scale(acc.get_scale());
           dest_type.set_type(r_type3);
@@ -424,7 +399,7 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
           break;
         }
         case ImplicitCastDirection::IC_TO_MIDDLE_TYPE: {
-          ObAccuracy acc = (ObNumberType == middle_type ? ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][middle_type] : ObAccuracy::MAX_ACCURACY2[0/*MySQL*/][middle_type]);
+          ObAccuracy acc = (ObNumberType == middle_type ? ObAccuracy::DDL_DEFAULT_ACCURACY[middle_type] : ObAccuracy::MAX_ACCURACY[middle_type]);
           dest_type.set_precision(acc.get_precision());
           dest_type.set_scale(acc.get_scale());
           dest_type.set_collation_level(CS_LEVEL_NUMERIC);
@@ -651,7 +626,7 @@ int ObRawExprUtils::resolve_op_exprs_for_comparison_implicit_cast(ObRawExprFacto
 {
   int ret = OB_SUCCESS;
   if (session_info == NULL){
-    LOG_WARN("can't get compatibility mode from session_info", K(session_info));
+    LOG_WARN("session info is null", K(session_info));
   } else {
     ObOpRawExpr *b_expr = NULL;
     for (int64_t i = 0; OB_SUCC(ret) && i < op_exprs.count(); i++) {
@@ -754,9 +729,6 @@ int ObRawExprUtils::resolve_udf_param_types(const ObIRoutineInfo* func_info,
                                                   NULL));
     } else {
       OX (ret_pl_type = ret_param->get_pl_data_type());
-    }
-    if (ret_pl_type.is_ref_cursor_type() || ret_pl_type.is_sys_refcursor_type()) {
-      OX (udf_raw_expr->set_is_return_sys_cursor(true));
     }
     SET_RES_TYPE_BY_PL_TYPE(result_type, ret_pl_type);
     OX (udf_raw_expr->set_pls_type(ret_pl_type.get_pl_integer_type()));
@@ -1042,9 +1014,6 @@ do {                                                                            
         : c_expr->get_value().get_unknown());                                   \
 } while (0)
           if (OB_FAIL(ret)) {
-          } else if(T_NULL == iexpr->get_expr_type() && 0 == i && udf_info.is_udf_udt_cons()) {
-            // do nothing, udt constructor first param is mocked with null expr
-            OZ (udf_raw_expr->add_param_desc(ObUDFParamDesc()));
           } else if (T_QUESTIONMARK != iexpr->get_expr_type()
                      && T_OBJ_ACCESS_REF != iexpr->get_expr_type()
                      && T_OP_GET_PACKAGE_VAR != iexpr->get_expr_type()
@@ -1137,7 +1106,6 @@ do {                                                                            
       }
     }
   }
-  OZ (pl::ObPLResolver::resolve_nocopy_params(func_info, udf_info));
   OV (udf_raw_expr->get_params_desc().count() == udf_raw_expr->get_param_count(), OB_ERR_UNEXPECTED, KPC(udf_raw_expr));
   return ret;
 }
@@ -1811,12 +1779,8 @@ int ObRawExprUtils::build_generated_column_expr(const obcall::ObCreateIndexArg *
   }
   // Rewrite the expression generated above
   if (OB_SUCC(ret) && NULL != arg) {
-    bool expr_changed = false;
     if (OB_FAIL(ObRawExprUtils::erase_operand_implicit_cast(expr, expr))) {
       LOG_WARN("fail to remove implicit cast", K(ret));
-    } else if (OB_FAIL(try_modify_expr_for_gen_col_recursively(session_info, arg, expr_factory,
-                                                    expr, expr_changed))) {
-      LOG_WARN("try_add_to_char_on_expr failed", K(ret));
     }
     // Only formalize once when necessary
     if (OB_SUCC(ret)) {
@@ -2001,290 +1965,6 @@ int ObRawExprUtils::build_generated_column_expr(ObRawExprFactory &expr_factory,
   return ret;
 }
 
-
-/**
- * @brief Recursively modify the generated list expression
- * @param session session
- * @param arg arg Allow to be empty, in which case use nls_xx_format from session
- * @param expr_factory
- * @param expr The expression to be modified
- * @param expr_changed Flag indicating whether expr has been rewritten
- * @return ret
- */
-int ObRawExprUtils::try_modify_expr_for_gen_col_recursively(const ObSQLSessionInfo &session,
-                                                           const obcall::ObCreateIndexArg *arg,
-                                                           ObRawExprFactory &expr_factory,
-                                                           ObRawExpr *expr,
-                                                           bool &expr_changed)
-{
-  int ret = OB_SUCCESS;
-  bool is_stack_overflow = false;
-  if (OB_ISNULL(expr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
-  } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
-    LOG_WARN("check_stack_overflow failed", K(ret));
-  } else if (is_stack_overflow) {
-    ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(ret));
-  } else if (OB_FAIL(try_add_to_char_on_expr(session, arg, expr_factory,
-                                             expr, expr_changed))) {
-    LOG_WARN("try_add_to_char_on_expr failed", K(ret), KPC(expr));
-  } else if (OB_FAIL(try_add_nls_fmt_in_to_char_expr(session, arg, expr_factory,
-                                                     expr, expr_changed))) {
-    LOG_WARN("try_add_nls_fmt_in_to_char_expr failed", K(ret), KPC(expr));
-  } else {
-    for (int i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
-      ObRawExpr *child_expr = expr->get_param_expr(i);
-      CK (OB_NOT_NULL(child_expr));
-      OZ (SMART_CALL(try_modify_expr_for_gen_col_recursively(session, arg, expr_factory,
-                                              child_expr, expr_changed)));
-    }
-  }
-  return ret;
-}
-
-/**
- * @brief When expr is to_date/timestamp/timestamptz, wrap its first parameter
- * with to_char to store the nls_xx_format information of the current session.
- * to_date(c1, 'yyyy-mm-dd') => to_date(to_char(c1, nls_date_format), 'yyyy-mm-dd')
- * @param session session
- * @param arg arg is allowed to be empty, when empty, use nls_xx_format from the session
- * @param expr_factory factory
- * @param expr the expression being modified
- * @param expr_changed a flag indicating whether expr has been rewritten
- * @return
- */
-int ObRawExprUtils::try_add_to_char_on_expr(const ObSQLSessionInfo &session,
-                                            const obcall::ObCreateIndexArg *arg,
-                                            ObRawExprFactory &expr_factory,
-                                            ObRawExpr *expr,
-                                            bool &expr_changed)
-{
-  int ret = OB_SUCCESS;
-  bool need_add_to_char = false;
-  ObRawExpr *first_param_expr = NULL;
-  ObSysFunRawExpr *sys_func_expr = NULL;
-  ObObjType data_type = ObNullType;
-  CK (OB_NOT_NULL(expr));
-  // Only when the first parameter is a column of time type, or an expression that returns a value of time type, do you need to add to_char
-  if (OB_SUCC(ret) && need_add_to_char) {
-    need_add_to_char = false;
-    CK (OB_NOT_NULL(first_param_expr = expr->get_param_expr(0)));
-    if (OB_SUCC(ret)) {
-      data_type = first_param_expr->get_data_type();
-      if (ObTimestampType == data_type
-          || ObDateTimeType == data_type) {
-        need_add_to_char = true;
-      }
-    }
-  }
-  // Wrap a to_char expr outside of first_param_expr
-  if (OB_SUCC(ret) && need_add_to_char) {
-    ObSysFunRawExpr *to_char_expr = NULL;
-    OZ (actual_add_to_char_on_expr(session, arg, expr_factory, *first_param_expr,
-                                   data_type, to_char_expr));
-    CK (OB_NOT_NULL(to_char_expr));
-    if (OB_SUCC(ret) && first_param_expr != to_char_expr) {
-      CK (OB_NOT_NULL(sys_func_expr = dynamic_cast<ObSysFunRawExpr *>(expr)));
-      OZ (sys_func_expr->replace_param_expr(0, to_char_expr));
-      OX (expr_changed = true;)
-    }
-  }
-
-  return ret;
-}
-
-/**
- * @brief Generate to_char expression based on src_expr for use by try_add_to_char_on_expr
- * src_expr => to_char_expr(src_expr, nls_xx_format)
- * @param session session
- * @param arg arg is allowed to be empty, when empty, use nls_xx_format from session
- * @param expr_factory factory
- * @param src_expr one of the three expressions: to_date/to_timestamp/to_timestamp_tz
- * @param data_type type of the first parameter of src_expr
- * @param to_char_expr generated to_char expression, the first parameter of to_char_expr is src_expr
- * @return
- */
-int ObRawExprUtils::actual_add_to_char_on_expr(const ObSQLSessionInfo& session,
-                                               const obcall::ObCreateIndexArg *arg,
-                                               ObRawExprFactory &expr_factory,
-                                               ObRawExpr &src_expr,
-                                               const ObObjType &data_type,
-                                               ObSysFunRawExpr *&to_char_expr)
-{
-  int ret = OB_SUCCESS;
-  ObConstRawExpr *dst_expr = NULL;
-  ObCollationType collation_server = CS_TYPE_INVALID;
-  // 1. Create an empty expression
-  OZ (expr_factory.create_raw_expr(T_FUN_SYS_TO_CHAR, to_char_expr));
-  CK (OB_NOT_NULL(to_char_expr));
-  OZ (expr_factory.create_raw_expr(T_CHAR, dst_expr));
-  CK (OB_NOT_NULL(dst_expr));
-  // 2. Configure the second parameter of to_char, dst_expr
-  if (OB_SUCC(ret)) {
-    ObObjParam val;
-    switch (data_type) {
-      case ObDateTimeType: {
-        if (NULL == arg) {
-          val.set_char(session.get_local_nls_date_format());
-        } else {
-          val.set_char(arg->nls_date_format_);
-        }
-        break;
-      }
-      case ObTimestampType: {
-        if (NULL == arg) {
-          val.set_char(session.get_local_nls_timestamp_format());
-        } else {
-          val.set_char(arg->nls_timestamp_format_);
-        }
-        break;
-      }
-      default: {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("Invalid column_type", K(ret), K(data_type));
-        break;
-      }
-    }
-
-    OZ (session.get_collation_server(collation_server));
-    OX (val.set_collation_type(collation_server));
-    OX (val.set_collation_level(CS_LEVEL_COERCIBLE));
-    OX (val.set_length(static_cast<ObLength>(ObCharset::strlen_char(val.get_collation_type(),
-                                                                    val.get_string_ptr(),
-                                                                    val.get_string_len()))));
-    OX (val.set_length_semantics(LS_CHAR));
-    OX (val.set_param_meta());
-    OX (dst_expr->set_value(val));
-    OX (dst_expr->set_expr_obj_meta(val.get_param_meta()));
-    OX (dst_expr->set_accuracy(val.get_accuracy()));
-    OX (dst_expr->set_result_flag(val.get_result_flag()));
-    OX (dst_expr->set_data_type(ObCharType));
-  }
-  // 3. configure to_char
-  OZ (to_char_expr->set_param_exprs(&src_expr, dst_expr));
-  OX (to_char_expr->set_func_name(ObString::make_string(N_TO_CHAR)));
-
-  return ret;
-}
-
-
-/**
- * @brief Preserve NLS format in expression-index rewrites by adding nls_xx_format for one-argument to_char on date/time types
- * to_char(date) => to_char(date, nls_xx_format)
- * @param session session
- * @param arg arg is allowed to be empty, when empty, use nls_xx_format from session
- * @param expr_factory factory
- * @param expr the to_char expression being modified
- * @param expr_changed flag indicating whether expr has been rewritten
- * @return ret
- */
-int ObRawExprUtils::try_add_nls_fmt_in_to_char_expr(const ObSQLSessionInfo &session,
-                                                    const obcall::ObCreateIndexArg *arg,
-                                                    ObRawExprFactory &expr_factory,
-                                                    ObRawExpr *expr,
-                                                    bool &expr_changed)
-{
-  int ret = OB_SUCCESS;
-  bool need_add_nls_fmt = false;
-  ObRawExpr *first_param_expr = NULL;
-  ObObjType data_type = ObNullType;
-  CK (OB_NOT_NULL(expr));
-  // Only when the first parameter is a column of time type, or an expression that returns a time type, do you need to modify to_Char
-  if (OB_SUCC(ret) && need_add_nls_fmt) {
-    need_add_nls_fmt = false;
-    CK (OB_NOT_NULL(first_param_expr = expr->get_param_expr(0)));
-    // When and only when to_char has one parameter
-    if (OB_SUCC(ret) && 1 == expr->get_param_count()) {
-      data_type = first_param_expr->get_data_type();
-      if (ObTimestampType == data_type
-          || ObDateTimeType == data_type) {
-        need_add_nls_fmt = true;
-      }
-    }
-  }
-  // Add second parameter to to_char
-  if (OB_SUCC(ret) && need_add_nls_fmt) {
-    ObSysFunRawExpr *to_char_expr = dynamic_cast<ObSysFunRawExpr *>(expr);
-    CK (OB_NOT_NULL(to_char_expr));
-    OZ (actual_add_nls_fmt_in_to_char_expr(session, arg, expr_factory,
-                                           data_type, to_char_expr));
-    OX (expr_changed = true;)
-  }
-
-  return ret;
-}
-
-/**
- * @brief Add second parameter nls_xx_format to to_char_expr
- * @param session session
- * @param arg arg can be empty, if empty, use nls_xx_format from session
- * @param expr_factory factory
- * @param data_type type of the first parameter
- * @param to_char_expr modified to_char expression
- * @return
- */
-int ObRawExprUtils::actual_add_nls_fmt_in_to_char_expr(const ObSQLSessionInfo& session,
-                                                       const obcall::ObCreateIndexArg *arg,
-                                                       ObRawExprFactory &expr_factory,
-                                                       const ObObjType &data_type,
-                                                       ObSysFunRawExpr *to_char_expr)
-{
-  int ret = OB_SUCCESS;
-  ObConstRawExpr *fmt_expr = NULL;
-  ObCollationType collation_server = CS_TYPE_INVALID;
-  // 1. Create an empty expression
-  OZ (expr_factory.create_raw_expr(T_CHAR, fmt_expr));
-  CK (OB_NOT_NULL(fmt_expr));
-  CK (OB_NOT_NULL(to_char_expr));
-  // 2. Configure the second parameter of to_char, fmt_expr
-  if (OB_SUCC(ret)) {
-    ObObjParam val;
-    switch (data_type) {
-      case ObDateTimeType: {
-        if (NULL == arg) {
-          val.set_char(session.get_local_nls_date_format());
-        } else {
-          val.set_char(arg->nls_date_format_);
-        }
-        break;
-      }
-      case ObTimestampType: {
-        if (NULL == arg) {
-          val.set_char(session.get_local_nls_timestamp_format());
-        } else {
-          val.set_char(arg->nls_timestamp_format_);
-        }
-        break;
-      }
-      default: {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("Invalid column_type", K(ret), K(data_type));
-        break;
-      }
-    }
-
-    OZ (session.get_collation_server(collation_server));
-    OX (val.set_collation_type(collation_server));
-    OX (val.set_collation_level(CS_LEVEL_COERCIBLE));
-    OX (val.set_length(static_cast<ObLength>(ObCharset::strlen_char(val.get_collation_type(),
-                                                                    val.get_string_ptr(),
-                                                                    val.get_string_len()))));
-    OX (val.set_length_semantics(LS_CHAR));
-    OX (val.set_param_meta());
-    OX (fmt_expr->set_value(val));
-    OX (fmt_expr->set_expr_obj_meta(val.get_param_meta()));
-    OX (fmt_expr->set_accuracy(val.get_accuracy()));
-    OX (fmt_expr->set_result_flag(val.get_result_flag()));
-    OX (fmt_expr->set_data_type(ObCharType));
-  }
-  // 3. configure to_char
-  OZ (to_char_expr->extend_param_exprs(2));
-  OZ (to_char_expr->add_param_expr(fmt_expr));
-
-  return ret;
-}
 
 int ObRawExprUtils::build_raw_expr(ObRawExprFactory &expr_factory,
                                    const ObSQLSessionInfo &session_info,
@@ -4565,220 +4245,6 @@ int ObRawExprUtils::build_mul_expr(
   return ret;
 }
 
-int ObRawExprUtils::build_div_expr(
-    ObRawExprFactory &raw_expr_factory,
-    ObRawExpr *expr1,
-    ObRawExpr *expr2,
-    ObOpRawExpr *&expr_out)
-{
-  int ret = OB_SUCCESS;
-
-  CK (OB_NOT_NULL(expr1));
-  CK (OB_NOT_NULL(expr2));
-  OZ (raw_expr_factory.create_raw_expr(T_OP_DIV, expr_out));
-  OZ (expr_out->set_param_exprs(expr1, expr2));
-
-  return ret;
-}
-
-int ObRawExprUtils::build_add_all_expr(
-    ObRawExprFactory &raw_expr_factory,
-    ObRawExpr *expr1,
-    ObRawExpr *expr2,
-    ObRawExpr *expr3,
-    ObRawExpr *expr4,
-    ObOpRawExpr *&sum_expr)
-{
-  int ret = OB_SUCCESS;
-  ObOpRawExpr *tmp_add1 = NULL;
-  ObOpRawExpr *tmp_add2 = NULL;
-
-  CK (OB_NOT_NULL(expr1) && OB_NOT_NULL(expr2) && OB_NOT_NULL(expr3) && OB_NOT_NULL(expr4));
-
-  OZ (build_add_expr(raw_expr_factory, expr1, expr2, tmp_add1));
-  OZ (build_add_expr(raw_expr_factory, tmp_add1, expr3, tmp_add2));
-  OZ (build_add_expr(raw_expr_factory, tmp_add2, expr4, sum_expr));
-
-  return ret;
-}
-
-int ObRawExprUtils::build_datepart_to_second_expr(
-    ObRawExprFactory &raw_expr_factory,
-    ObRawExpr *interval_ds_expr,
-    int datepart,
-    int n,
-    ObRawExpr *&expr_out)
-{
-  int ret = OB_SUCCESS;
-  ObOpRawExpr *extract_day = NULL;
-  ObConstRawExpr *timepart_expr = NULL;
-
-  CK (OB_NOT_NULL(interval_ds_expr));
-  CK (DATE_UNIT_DAY == datepart ||
-      DATE_UNIT_HOUR == datepart ||
-      DATE_UNIT_MINUTE == datepart ||
-      DATE_UNIT_SECOND == datepart ||
-      DATE_UNIT_MONTH == datepart ||
-      DATE_UNIT_YEAR == datepart);
-  OZ (build_const_int_expr(raw_expr_factory, ObIntType, datepart, timepart_expr));
-  OZ (raw_expr_factory.create_raw_expr(T_FUN_SYS_EXTRACT, extract_day));
-  OZ (extract_day->set_param_exprs(timepart_expr, interval_ds_expr));
-
-  if (OB_SUCC(ret)) {
-    if (n > 1) {
-      ObConstRawExpr *n_expr = NULL;
-      ObOpRawExpr* tmp_out_expr = NULL;
-      OZ (build_const_int_expr(raw_expr_factory, ObIntType, n,n_expr));
-
-      OZ (build_mul_expr(raw_expr_factory, extract_day, n_expr, tmp_out_expr));
-      OX (expr_out = tmp_out_expr);
-    } else {
-      OX (expr_out = extract_day);
-    }
-  }
-
-return ret;
-}
-
-int ObRawExprUtils::build_second_expr_from_interval_ds(
-    ObRawExprFactory &raw_expr_factory,
-    ObRawExpr *interval_ds_expr,
-    ObOpRawExpr *&second_expr)
-{
-  int ret = OB_SUCCESS;
-  ObRawExpr* expr1 = NULL;
-  ObRawExpr* expr2 = NULL;
-  ObRawExpr* expr3 = NULL;
-  ObRawExpr* expr4 = NULL;
-
-  CK (OB_NOT_NULL(interval_ds_expr));
-  OZ (build_datepart_to_second_expr(raw_expr_factory, interval_ds_expr, DATE_UNIT_DAY, 24 * 3600, expr1));
-  OZ (build_datepart_to_second_expr(raw_expr_factory, interval_ds_expr, DATE_UNIT_HOUR, 3600, expr2));
-  OZ (build_datepart_to_second_expr(raw_expr_factory, interval_ds_expr, DATE_UNIT_MINUTE, 60, expr3));
-  OZ (build_datepart_to_second_expr(raw_expr_factory, interval_ds_expr, DATE_UNIT_SECOND, 1, expr4));
-  OZ (build_add_all_expr(raw_expr_factory, expr1, expr2, expr3, expr4, second_expr));
-
-  return ret;
-}
-
-int ObRawExprUtils::build_month_expr_from_interval_ym(
-    ObRawExprFactory &raw_expr_factory,
-    ObRawExpr *interval_ym_expr,
-    ObOpRawExpr *&month_expr)
-{
-  int ret = OB_SUCCESS;
-  ObRawExpr* expr1 = NULL;
-  ObRawExpr* expr2 = NULL;
-
-  CK (OB_NOT_NULL(interval_ym_expr));
-  OZ (build_datepart_to_second_expr(raw_expr_factory, interval_ym_expr, DATE_UNIT_YEAR, 12, expr1));
-  OZ (build_datepart_to_second_expr(raw_expr_factory, interval_ym_expr, DATE_UNIT_MONTH, 1, expr2));
-  OZ (build_add_expr(raw_expr_factory, expr1, expr2, month_expr));
-  return ret;
-}
-
-
-
-
-int ObRawExprUtils::build_common_diff_exprs(
-  ObRawExprFactory &raw_expr_factory,
-  ObObj &const_val,
-  const ObObj &transition_val,
-  const ObObj &interval_val,
-  ObRawExpr *&diff_1_out,
-  ObRawExpr *&diff_2_out,
-  ObConstRawExpr *&transition_expr,
-  ObConstRawExpr *&interval_expr)
-{
-  int ret = OB_SUCCESS;
-  ObConstRawExpr *const_expr = NULL;
-  ObOpRawExpr *sub_expr = NULL;
-  ObOpRawExpr *diff_1 = NULL;
-  ObOpRawExpr *diff_2 = NULL;
-  ObConstRawExpr *day_expr = NULL;
-
-  /* 1. build diff_1 */
-  /* 1.1 build const_expr and transition_expr */
-  CK (!const_val.is_datetime());
-  OZ (build_const_obj_expr(raw_expr_factory, const_val, const_expr));
-  OZ (build_const_obj_expr(raw_expr_factory, transition_val, transition_expr));
-
-  /* 1.2. build  const_expr - transition_expr */
-  OZ (build_minus_expr(raw_expr_factory, const_expr, transition_expr, sub_expr));
-  OX (diff_1 = sub_expr);
-
-  /* 2. build diff_2 */
-  OZ (build_const_obj_expr(raw_expr_factory, interval_val, interval_expr));
-
-  OX (diff_1_out = diff_1);
-  OX (diff_2_out = interval_expr);
-
-  return ret;
-}
-
-int ObRawExprUtils::build_high_bound_raw_expr(
-    ObRawExprFactory &raw_expr_factory,
-    ObSQLSessionInfo* session,
-    ObObj &const_val,
-    const ObObj &transition_val,
-    const ObObj &interval_val,
-    ObRawExpr *&result_expr_out,
-    ObRawExpr *&n_part_expr)
-{
-  int ret = OB_SUCCESS;
-  ObConstRawExpr *transition_expr = NULL;
-  ObOpRawExpr *div_expr = NULL;
-  ObOpRawExpr *mul_expr = NULL;
-  ObOpRawExpr *add_expr = NULL;
-  ObOpRawExpr *trunc_expr = NULL;
-  ObOpRawExpr *result_expr = NULL;
-  ObConstRawExpr *interval_expr = NULL;
-  ObConstRawExpr *zero_expr = NULL;
-  ObRawExpr *diff_1 = NULL;
-  ObRawExpr *diff_2 = NULL;
-  ObConstRawExpr *int_expr = NULL;
-  ObOpRawExpr *interval_round_expr = NULL;
-
-  CK (OB_NOT_NULL(session));
-  OZ (build_common_diff_exprs(raw_expr_factory,
-                              const_val,
-                              transition_val,
-                              interval_val,
-                              diff_1,
-                              diff_2,
-                              transition_expr,
-                              interval_expr));
-
-  /* build v1 / v2 */
-  OZ (build_div_expr(raw_expr_factory, diff_1, diff_2, div_expr));
-
-  /* build truncate(v, 0) */
-  OZ (raw_expr_factory.create_raw_expr(T_FUN_SYS_TRUNCATE, trunc_expr));
-  OZ (trunc_expr->set_param_expr(div_expr));
-  OZ (build_const_int_expr(raw_expr_factory, ObIntType, 0, zero_expr));
-  OZ (trunc_expr->set_param_expr(zero_expr));
-
-  /* build v1 + 1*/
-  OZ (build_const_int_expr(raw_expr_factory,
-                                           ObIntType, 1, int_expr));
-  OZ (build_add_expr(raw_expr_factory, trunc_expr, int_expr, add_expr));
-
-  /* build round(v) */
-  OZ (raw_expr_factory.create_raw_expr(T_FUN_SYS_ROUND, interval_round_expr));
-  OZ (interval_round_expr->set_param_expr(interval_expr));
-  /* build interval * n */
-  OZ (build_mul_expr(raw_expr_factory, interval_round_expr, add_expr, mul_expr));
-
-  /* build transiton + interval * n  */
-  OZ (build_add_expr(raw_expr_factory, transition_expr, mul_expr, result_expr));
-
-  OZ (result_expr->formalize(session));
-  OX (result_expr_out = result_expr);
-  OX (n_part_expr = add_expr);
-
-  return ret;
-}
-
 int ObRawExprUtils::build_const_obj_expr(ObRawExprFactory &expr_factory,
                                          const ObObj &obj,
                                          ObConstRawExpr *&expr)
@@ -4795,20 +4261,6 @@ int ObRawExprUtils::build_const_obj_expr(ObRawExprFactory &expr_factory,
         ob_is_interval_tc(objtype)) {
       expr->set_scale(obj.get_scale());
     }
-  }
-  return ret;
-}
-
-int ObRawExprUtils::build_sign_expr(ObRawExprFactory &expr_factory,
-                                    ObRawExpr *param, ObRawExpr *&sign_expr)
-{
-  int ret = OB_SUCCESS;
-  ObOpRawExpr *sexpr = NULL;
-  if (OB_FAIL(expr_factory.create_raw_expr(T_OP_SIGN, sexpr))) {
-    LOG_WARN("failed to create sign expr", K(ret));
-  } else {
-    OZ (sexpr->set_param_expr(param));
-    OX (sign_expr = sexpr);
   }
   return ret;
 }
@@ -5587,7 +5039,6 @@ int ObRawExprUtils::create_equal_expr(ObRawExprFactory &expr_factory,
 
 int ObRawExprUtils::create_null_safe_equal_expr(ObRawExprFactory &expr_factory,
                                                 const ObSQLSessionInfo *session_info,
-                                                const bool is_mysql_mode,
                                                 ObRawExpr *left_expr,
                                                 ObRawExpr *right_expr,
                                                 ObRawExpr *&expr)
@@ -5596,7 +5047,7 @@ int ObRawExprUtils::create_null_safe_equal_expr(ObRawExprFactory &expr_factory,
   if (OB_ISNULL(left_expr) || OB_ISNULL(right_expr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (is_mysql_mode) {
+  } else {
     // left <=> right
     ObOpRawExpr *nseq_expr = NULL;
     if (OB_FAIL(expr_factory.create_raw_expr(T_OP_NSEQ, nseq_expr))) {
@@ -5606,34 +5057,6 @@ int ObRawExprUtils::create_null_safe_equal_expr(ObRawExprFactory &expr_factory,
       LOG_WARN("unexpected null", K(ret));
     } else if (OB_FAIL(nseq_expr->set_param_exprs(left_expr, right_expr))) {
       LOG_WARN("failed to add param expr", K(ret));
-    } else if (OB_FAIL(expr->formalize(session_info))) {
-      LOG_WARN("formalize equal expr failed", K(ret));
-    }
-  } else {
-    // (left == right) or (left is null and right is null)
-    ObOpRawExpr *or_expr = NULL;
-    ObRawExpr *left_equal_expr = NULL;
-    ObOpRawExpr *and_expr = NULL;
-    ObRawExpr *left_is_null = NULL;
-    ObRawExpr *right_is_null = NULL;
-    if (OB_FAIL(expr_factory.create_raw_expr(T_OP_OR, or_expr))) {
-      LOG_WARN("failed to create raw expr", K(ret));
-    } else if (OB_ISNULL(expr = or_expr)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret));
-    } else if (OB_FAIL(create_equal_expr(expr_factory, session_info,
-                                         left_expr, right_expr, left_equal_expr))) {
-      LOG_WARN("failed to create equal expr", K(ret));
-    } else if (OB_FAIL(build_is_not_null_expr(expr_factory, left_expr, false, left_is_null))) {
-      LOG_WARN("failed to build is not null expr", K(ret));
-    } else if (OB_FAIL(build_is_not_null_expr(expr_factory, right_expr, false, right_is_null))) {
-      LOG_WARN("failed to build is not null expr", K(ret));
-    } else if (OB_FAIL(expr_factory.create_raw_expr(T_OP_AND, and_expr))) {
-      LOG_WARN("failed to create a new expr", K(ret));
-    } else if (OB_FAIL(and_expr->set_param_exprs(left_is_null, right_is_null))) {
-      LOG_WARN("add param expr to and expr failed", K(ret));
-    } else if (OB_FAIL(or_expr->set_param_exprs(left_equal_expr, and_expr))) {
-      LOG_WARN("add param expr to or expr failed", K(ret));
     } else if (OB_FAIL(expr->formalize(session_info))) {
       LOG_WARN("formalize equal expr failed", K(ret));
     }
@@ -6432,14 +5855,6 @@ int ObRawExprUtils::check_composite_cast(ObRawExpr *&expr, ObSchemaChecker &sche
         skip_check = true;
       }
       if (OB_FAIL(ret)) {
-      } else if (T_REF_QUERY == src->get_expr_type() &&
-                 static_cast<ObQueryRefRawExpr *>(src)->is_multiset()) {
-        // cast(multiset(...) as udt)
-        if (ObExtendType != obj_type || OB_INVALID_ID == udt_id) {
-          ret = OB_ERR_INVALID_MULTISET;
-          LOG_WARN("MULTISET expression not allowed", K(ret));
-        } else {
-        }
       } else if (ObExtendType == obj_type
                  && OB_INVALID_ID != udt_id
                  && !skip_check) {
@@ -7515,8 +6930,6 @@ int ObRawExprUtils::process_window_complex_agg_expr(ObSQLSessionInfo *session_in
     /*do nothing*/
   } else if (T_FUN_SUM == func_type
              || T_FUN_COUNT == func_type
-             || T_FUN_KEEP_SUM == func_type
-             || T_FUN_KEEP_COUNT == func_type
              || T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS == func_type) {
     ObWinFunRawExpr *win_func_expr = NULL;
     ObAggFunRawExpr *agg_expr = static_cast<ObAggFunRawExpr *>(window_agg_expr);
@@ -7704,7 +7117,7 @@ int ObRawExprUtils::new_parse_node(ParseNode *& node, ObRawExprFactory &expr_fac
     node->is_hidden_const_ = 0;
     node->is_date_unit_ = 0;
     node->is_tree_not_param_ = 0;
-    node->is_multiset_ = 0;
+    node->reserved_multiset_ = 0;
     node->value_ = INT64_MAX;
     node->str_len_ = 0;
     node->str_value_ = NULL;
@@ -8202,7 +7615,6 @@ int ObRawExprUtils::build_bm25_expr(ObRawExprFactory &expr_factory,
                                     ObRawExpr *related_doc_cnt,
                                     ObRawExpr *related_token_cnt,
                                     ObRawExpr *total_doc_cnt,
-                                    ObRawExpr *doc_token_cnt,
                                     ObRawExpr *doc_length,
                                     ObRawExpr *avg_doc_token_cnt,
                                     ObOpRawExpr *&bm25,

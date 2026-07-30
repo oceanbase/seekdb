@@ -41,14 +41,12 @@ public:
   }
 
   inline void set_ob_execution_id(const ObExecutionID &ob_execution_id) { ob_execution_id_ = ob_execution_id; }
-  inline void set_server(const common::ObAddr &server) { ob_execution_id_.set_server(server); }
   inline void set_dist_task_type() { ob_execution_id_.set_dist_task_type(); }
   inline void set_mini_task_type() { ob_execution_id_.set_mini_task_type(); }
   inline void set_execution_id(const uint64_t execution_id) { ob_execution_id_.set_execution_id(execution_id); }
   inline void set_job_id(const uint64_t job_id) { job_id_ = job_id; }
   inline void set_root_op_id(uint64_t root_op_id) { root_op_id_ = root_op_id; }
   inline const ObExecutionID &get_ob_execution_id() const { return ob_execution_id_; }
-  inline const common::ObAddr &get_server() const { return ob_execution_id_.get_server(); }
   inline uint64_t get_task_type() const { return ob_execution_id_.get_task_type(); }
   inline bool is_dist_task_type() const { return ob_execution_id_.is_dist_task_type(); }
   inline bool is_mini_task_type() const { return ob_execution_id_.is_mini_task_type(); }

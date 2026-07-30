@@ -5,7 +5,7 @@
 connect (conn_admin, $OBMYSQL_MS0,admin,$OBMYSQL_PWD,oceanbase,$OBMYSQL_PORT);
 connection conn_admin;
 
-alter system flush plan cache global;
+alter system flush plan cache;
 --sleep 2
 
 connection default;

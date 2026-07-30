@@ -262,7 +262,7 @@ private:
 private:
   bool is_inited_;
   TableName table_name_; // operation table name.
-  int32_t group_id_; //remote inner sql rpc queue
+  int32_t group_id_;
 };
 
 

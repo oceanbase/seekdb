@@ -302,8 +302,8 @@ int ObBasicStatsEstimator::do_estimate_block_count(ObExecContext &ctx,
                                                              tablet_ids,
                                                              partition_ids, estimate_res))) {
       LOG_WARN("failed to do estimate block count and row count", K(ret));
-      if (DAS_CTX(ctx).get_location_router().is_refresh_location_error(ret)) {
-        DAS_CTX(ctx).get_location_router().refresh_location_cache_by_errno(true, ret);
+      if (DAS_CTX(ctx).is_refresh_location_error(ret)) {
+        DAS_CTX(ctx).refresh_location_cache_by_errno(true, ret);
         ++ retry_cnt;
         ob_usleep(1000L * 1000L); // retry interval 1s
       } else {
@@ -325,99 +325,52 @@ int ObBasicStatsEstimator::do_estimate_block_count_and_row_count(ObExecContext &
   SMART_VAR(ObCandiTabletLocArray, candi_tablet_locs) {
     if (OB_FAIL(get_tablet_locations(ctx, table_id, tablet_ids, partition_ids, candi_tablet_locs))) {
       LOG_WARN("failed to get tablet locations", K(ret));
-    } else if (OB_UNLIKELY(candi_tablet_locs.count() != tablet_ids.count() ||
-                          candi_tablet_locs.count() != partition_ids.count())) {
+    } else if (OB_UNLIKELY(candi_tablet_locs.count() != tablet_ids.count()
+        || candi_tablet_locs.count() != partition_ids.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(candi_tablet_locs.count()), K(tablet_ids.count()),
-                                      K(partition_ids.count()), K(ret));
+      LOG_WARN("tablet location count does not match", K(ret), K(candi_tablet_locs.count()),
+          K(tablet_ids.count()), K(partition_ids.count()));
     } else if (OB_FAIL(estimate_res.prepare_allocate(partition_ids.count()))) {
-      LOG_WARN("Partitoin location list prepare error", K(ret));
+      LOG_WARN("failed to allocate estimation results", K(ret));
     } else {
-      ObSEArray<ObAddr, 4> all_selected_addr;
+      obcall::ObEstBlockArg arg;
+      obcall::ObEstBlockRes result;
       for (int64_t i = 0; OB_SUCC(ret) && i < candi_tablet_locs.count(); ++i) {
-        ObAddr selected_addr;
-        if (OB_FAIL(ObSQLUtils::get_local_partition_addr(candi_tablet_locs.at(i),
-                                                         selected_addr))) {
-          LOG_WARN("failed to get local partition addr", K(ret), K(candi_tablet_locs), K(i));
-        } else if (OB_FAIL(all_selected_addr.push_back(selected_addr))) {
-          LOG_WARN("failed to push back", K(ret));
-        } else {/*do nothing*/}
-      }
-      ObSqlBitSet<> skip_idx_set;
-      for (int64_t i = 0; OB_SUCC(ret) && i < all_selected_addr.count(); ++i) {
-        if (skip_idx_set.has_member(i)) {//have been estimate
-          //do nothing
+        const ObCandiTabletLoc &tablet_loc = candi_tablet_locs.at(i);
+        const ObOptTabletLoc &opt_tablet_loc = tablet_loc.get_partition_location();
+        if (OB_UNLIKELY(tablet_ids.at(i) != opt_tablet_loc.get_tablet_id())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("tablet location does not match", K(ret), K(tablet_ids), K(i),
+                   K(opt_tablet_loc.get_tablet_id()));
         } else {
-          ObAddr &cur_selected_addr = all_selected_addr.at(i);
-          obcall::ObEstBlockArg arg;
-          obcall::ObEstBlockRes result;
-          ObSEArray<int64_t, 4> selected_tablet_idx;
-          for (int64_t j = i ; OB_SUCC(ret) && j < all_selected_addr.count(); ++j) {
-            if (skip_idx_set.has_member(j)) {//have been estimate
-              //do nothing
-            } else if (all_selected_addr.at(j) == cur_selected_addr) {
-              if (OB_UNLIKELY(tablet_ids.at(j) !=
-                              candi_tablet_locs.at(j).get_partition_location().get_tablet_id())) {
-                ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("get unexpected error", K(ret), K(tablet_ids), K(j),
-                                K(candi_tablet_locs.at(j).get_partition_location().get_tablet_id()));
-              } else {
-                obcall::ObEstBlockArgElement arg_element;
-                
-                
-                arg_element.tablet_id_ = candi_tablet_locs.at(j).get_partition_location().get_tablet_id();
-                if (OB_FAIL(arg.tablet_params_arg_.push_back(arg_element))) {
-                  LOG_WARN("failed to push back", K(ret));
-                } else if (OB_FAIL(skip_idx_set.add_member(j))) {//record
-                  LOG_WARN("failed to add members", K(ret));
-                } else if (OB_FAIL(selected_tablet_idx.push_back(j))) {
-                  LOG_WARN("failed to push back", K(ret));
-                } else {/*do nothing*/}
-              }
-            } else {/*do nothing*/}
-          }
-          if (OB_SUCC(ret)) {//begin storage estimate block count
-            if (OB_FAIL(stroage_estimate_block_count_and_row_count(arg, result))) {
-              LOG_WARN("failed to stroage estimate block count", K(ret));
-            } else {
-              for (int64_t i = 0; OB_SUCC(ret) && i < selected_tablet_idx.count(); ++i) {
-                int64_t idx = selected_tablet_idx.at(i);
-                if (OB_UNLIKELY(idx >= estimate_res.count() || idx >= partition_ids.count() ||
-                                selected_tablet_idx.count() != result.tablet_params_res_.count())) {
-                  ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("get unexpected error", K(idx), K(estimate_res), K(result), K(partition_ids),
-                                                  K(selected_tablet_idx), K(ret));
-                } else {
-                  estimate_res.at(idx).part_id_ = partition_ids.at(idx);
-                  estimate_res.at(idx).macro_block_count_ = result.tablet_params_res_.at(i).macro_block_count_;
-                  estimate_res.at(idx).micro_block_count_ = result.tablet_params_res_.at(i).micro_block_count_;
-                  estimate_res.at(idx).sstable_row_count_ = result.tablet_params_res_.at(i).sstable_row_count_;
-                  estimate_res.at(idx).memtable_row_count_ = result.tablet_params_res_.at(i).memtable_row_count_;
-                }
-              }
-              LOG_TRACE("succeed to estimate block count", K(selected_tablet_idx), K(partition_ids),
-                                                  K(tablet_ids), K(arg), K(result), K(estimate_res));
-            }
+          obcall::ObEstBlockArgElement arg_element;
+          arg_element.tablet_id_ = opt_tablet_loc.get_tablet_id();
+          if (OB_FAIL(arg.tablet_params_arg_.push_back(arg_element))) {
+            LOG_WARN("failed to append local tablet estimation argument", K(ret), K(arg_element));
           }
         }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(ObStorageEstimator::estimate_block_count_and_row_count(arg, result))) {
+        LOG_WARN("failed to estimate local tablet block count", K(ret));
+      } else if (OB_UNLIKELY(result.tablet_params_res_.count() != estimate_res.count())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected local storage estimation result count", K(ret), K(result), K(estimate_res));
+      } else {
+        for (int64_t i = 0; i < estimate_res.count(); ++i) {
+          estimate_res.at(i).part_id_ = partition_ids.at(i);
+          estimate_res.at(i).macro_block_count_ = result.tablet_params_res_.at(i).macro_block_count_;
+          estimate_res.at(i).micro_block_count_ = result.tablet_params_res_.at(i).micro_block_count_;
+          estimate_res.at(i).sstable_row_count_ = result.tablet_params_res_.at(i).sstable_row_count_;
+          estimate_res.at(i).memtable_row_count_ = result.tablet_params_res_.at(i).memtable_row_count_;
+        }
+        LOG_TRACE("succeed to estimate local tablet block count", K(partition_ids),
+            K(tablet_ids), K(arg), K(result), K(estimate_res));
       }
     }
   }
   return ret;
 }
-
-int ObBasicStatsEstimator::stroage_estimate_block_count_and_row_count(const obcall::ObEstBlockArg &arg,
-                                                                      obcall::ObEstBlockRes &result)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObStorageEstimator::estimate_block_count_and_row_count(arg, result))) {
-    LOG_WARN("failed to estimate partition rows", K(ret));
-  } else {
-    LOG_TRACE("succeed to storage estimate block count and row count", K(arg), K(result));
-  }
-  return ret;
-}
-
 int ObBasicStatsEstimator::get_tablet_locations(ObExecContext &ctx,
                                                 const uint64_t ref_table_id,
                                                 const ObIArray<ObTabletID> &tablet_ids,
@@ -425,7 +378,6 @@ int ObBasicStatsEstimator::get_tablet_locations(ObExecContext &ctx,
                                                 ObCandiTabletLocIArray &candi_tablet_locs)
 {
   int ret = OB_SUCCESS;
-  ObDASLocationRouter &loc_router = ctx.get_das_ctx().get_location_router();
   ObSQLSessionInfo *session = ctx.get_my_session();
   if (OB_ISNULL(session) || OB_UNLIKELY(tablet_ids.count() != partition_ids.count())) {
     ret = OB_ERR_UNEXPECTED;
@@ -433,20 +385,22 @@ int ObBasicStatsEstimator::get_tablet_locations(ObExecContext &ctx,
   } else {
     candi_tablet_locs.reset();
     if (OB_FAIL(candi_tablet_locs.prepare_allocate(tablet_ids.count()))) {
-      LOG_WARN("Partitoin location list prepare error", K(ret));
+      LOG_WARN("partition location list prepare error", K(ret));
     } else {
-      ObArenaAllocator allocator(ObModIds::OB_SQL_PARSER);
-      //This interface does not require the first_level_part_ids, so construct an empty array.
-      ObSEArray<ObObjectID, 8> first_level_part_ids;
-      ObDASTableLocMeta loc_meta(allocator);
-      loc_meta.ref_table_id_ = ref_table_id;
-      loc_meta.table_loc_id_ = ref_table_id;
-      if (OB_FAIL(loc_router.nonblock_get_candi_tablet_locations(loc_meta,
-                                                                 tablet_ids,
-                                                                 partition_ids,
-                                                                 first_level_part_ids,
-                                                                 candi_tablet_locs))) {
-        LOG_WARN("nonblock get candi tablet location failed", K(ret), K(loc_meta), K(partition_ids), K(tablet_ids));
+      ObLSLocation local_location;
+      if (OB_FAIL(local_location.init(SYS_LS, GCTX.self_addr(), 1))) {
+        LOG_WARN("failed to initialize local LS location", K(ret), K(GCTX.self_addr()));
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
+        if (OB_FAIL(candi_tablet_locs.at(i).set_local_location(
+                       partition_ids.at(i),
+                       OB_INVALID_ID,
+                       tablet_ids.at(i),
+                       local_location,
+                       GCTX.self_addr()))) {
+          LOG_WARN("failed to construct local tablet location",
+                   K(ret), K(ref_table_id), K(tablet_ids.at(i)));
+        }
       }
     }
   }

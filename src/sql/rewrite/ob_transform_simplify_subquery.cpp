@@ -157,8 +157,7 @@ int ObTransformSimplifySubquery::try_trans_subquery_in_expr(ObDMLStmt *stmt,
              expr->is_alias_ref_expr()) {
     // If expr's param must be a subquery, then do not rewrite the subqueries it contains
     //do nothing
-  } else if (expr->is_query_ref_expr() &&
-             !static_cast<ObQueryRefRawExpr *>(expr)->is_multiset()) {
+  } else if (expr->is_query_ref_expr()) {
     // If it is a query ref expr, then try to rewrite
     if (OB_FAIL(do_trans_subquery_as_expr(stmt, expr, is_happened))) {
       LOG_WARN("failed to do_trans_subquery_as_expr", K(ret));
@@ -201,8 +200,6 @@ int ObTransformSimplifySubquery::do_trans_subquery_as_expr(ObDMLStmt *stmt,
     if (sub_stmt->get_stmt_hint().has_disable_hint(T_UNNEST)
         || sub_stmt->get_stmt_hint().enable_no_rewrite()) {
       // do nothing
-    } else if (query_ref->is_cursor()) {
-      /*do nothing*/
     } else if (OB_FAIL(is_subquery_to_expr_valid(sub_stmt, is_valid))) {
       LOG_WARN("fail to check subquery", K(ret));
     } else if (!is_valid) {

@@ -109,8 +109,7 @@ OB_DEF_SERIALIZE_SIZE(ObTableUpdateSpec)
 
 ObTableUpdateOp::ObTableUpdateOp(ObExecContext &exec_ctx, const ObOpSpec &spec,
                                  ObOpInput *input)
-  : ObTableModifyOp(exec_ctx, spec, input),
-    err_log_service_(ObOperator::get_eval_ctx())
+  : ObTableModifyOp(exec_ctx, spec, input)
 {
 }
 
@@ -235,17 +234,8 @@ OB_INLINE int ObTableUpdateOp::open_table_for_each()
       }
     }
     if (OB_SUCC(ret) && !rtdefs.empty()) {
-      const ObUpdCtDef &primary_upd_ctdef = *ctdefs.at(0);
       ObUpdRtDef &primary_upd_rtdef = rtdefs.at(0);
-      if (primary_upd_ctdef.error_logging_ctdef_.is_error_logging_) {
-        is_error_logging_ = true;
-      }
-      if (OB_FAIL(ObDMLService::process_before_stmt_trigger(primary_upd_ctdef,
-                                                            primary_upd_rtdef,
-                                                            dml_rtctx_,
-                                                            ObDmlEventType::DE_UPDATING))) {
-        LOG_WARN("process before stmt trigger failed", K(ret));
-      } else {
+      if (OB_SUCC(ret)) {
         //this table is being accessed by dml operator, mark its table location as writing
         primary_upd_rtdef.dupd_rtdef_.table_loc_->is_writing_ = true;
       }
@@ -265,12 +255,7 @@ OB_INLINE int ObTableUpdateOp::close_table_for_each()
         if (OB_NOT_NULL(primary_upd_rtdef.dupd_rtdef_.table_loc_)) {
           primary_upd_rtdef.dupd_rtdef_.table_loc_->is_writing_ = false;
         }
-        if (OB_FAIL(ObDMLService::process_after_stmt_trigger(primary_upd_ctdef,
-                                                             primary_upd_rtdef,
-                                                             dml_rtctx_,
-                                                             ObDmlEventType::DE_UPDATING))) {
-          LOG_WARN("process after stmt trigger failed", K(ret));
-        } else if (!primary_upd_rtdef.has_table_cycle_ && primary_upd_ctdef.need_check_table_cycle_ && OB_FAIL(ObDMLService::delete_table_id_from_parent_table_set(dml_rtctx_, primary_upd_ctdef))) {
+        if (!primary_upd_rtdef.has_table_cycle_ && primary_upd_ctdef.need_check_table_cycle_ && OB_FAIL(ObDMLService::delete_table_id_from_parent_table_set(dml_rtctx_, primary_upd_ctdef))) {
           LOG_WARN("delete from parent table set failed", K(ret), K(primary_upd_ctdef.das_base_ctdef_.index_tid_));
         }
       }
@@ -361,9 +346,7 @@ OB_INLINE int ObTableUpdateOp::update_row_to_das()
       ObDASTabletLoc *new_tablet_loc = nullptr;
       ObDMLModifyRowNode modify_row(this, &upd_ctdef, &upd_rtdef, ObDmlEventType::DE_UPDATING);
       bool is_skipped = false;
-      if (!MY_SPEC.upd_ctdefs_.at(0).at(0)->has_instead_of_trigger_) {
-        ++upd_rtdef.cur_row_num_;
-      }
+      ++upd_rtdef.cur_row_num_;
       if (OB_FAIL(ObDMLService::process_update_row(upd_ctdef, upd_rtdef, is_skipped, *this))) {
         LOG_WARN("process update row failed", K(ret));
       } else if (OB_UNLIKELY(is_skipped)) {
@@ -392,16 +375,6 @@ OB_INLINE int ObTableUpdateOp::update_row_to_das()
     }
   } // end for table ctdef loop
 
-  if (is_error_logging_ &&
-      OB_SUCCESS != err_log_rt_def_.first_err_ret_ &&
-      should_catch_err(ret)) {
-    if (OB_FAIL(err_log_service_.insert_err_log_record(GET_MY_SESSION(ctx_),
-                                                       MY_SPEC.upd_ctdefs_.at(0).at(0)->error_logging_ctdef_,
-                                                       err_log_rt_def_,
-                                                       ObDASOpType::DAS_OP_TABLE_UPDATE))) {
-      LOG_WARN("fail to insert_err_log_record", K(ret));
-    }
-  }
   return ret;
 }
 

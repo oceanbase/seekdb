@@ -76,11 +76,7 @@ int ObLatchMutex::try_lock(
     } else {
       IGNORE_RETURN ObLatch::reg_lock((uint32_t*)&lock_.val());
     }
-    if (need_record_stat()) {
-      TRY_LOCK_RECORD_STAT(latch_id, 1, ret);
-    }
   }
-  HOLD_LOCK_INC();
   return ret;
 }
 
@@ -91,8 +87,6 @@ int ObLatchMutex::lock(
 {
   int ret = OB_SUCCESS;
   uint64_t i = 0;
-  uint64_t spin_cnt = 0;
-  bool waited = false;
   uint64_t yield_cnt = 0;
   const uint32_t uid = static_cast<uint32_t>(GETTID());
 
@@ -106,11 +100,9 @@ int ObLatchMutex::lock(
     while (OB_SUCC(ret)) {
       //spin
       i = low_try_lock(OB_LATCHES[latch_id].max_spin_cnt_, (WRITE_MASK | uid));
-      spin_cnt += i;
 
       if (OB_LIKELY(i < OB_LATCHES[latch_id].max_spin_cnt_)) {
         //success lock
-        ++spin_cnt;
         break;
       } else if (yield_cnt < OB_LATCHES[latch_id].max_yield_cnt_) {
         sched_yield();
@@ -118,7 +110,6 @@ int ObLatchMutex::lock(
         continue;
       } else {
         //wait
-        waited = true;
         // latch mutex wait is an atomic wait event
         if (record_stat_) {
           ObLatchWaitEventGuard wait_guard(
@@ -146,11 +137,7 @@ int ObLatchMutex::lock(
         }
       }
     }
-    if (need_record_stat()) {
-      LOCK_RECORD_STAT(latch_id, waited, spin_cnt, yield_cnt);
-    }
   }
-  HOLD_LOCK_INC();
   return ret;
 }
 
@@ -199,7 +186,6 @@ int ObLatchMutex::unlock()
   } else if (OB_UNLIKELY(0 != (lock & WAIT_MASK))) {
     lock_.wake(1);
   }
-  HOLD_LOCK_DEC();
   return ret;
 }
 
@@ -527,11 +513,7 @@ int ObLatch::try_rdlock(const uint32_t latch_id)
       }
       PAUSE();
     } while (true);
-    if (need_record_stat()) {
-      TRY_LOCK_RECORD_STAT(latch_id, i, ret);
-    }
   }
-  HOLD_LOCK_INC();
   return ret;
 }
 
@@ -550,11 +532,7 @@ int ObLatch::try_wrlock(const uint32_t latch_id, const uint32_t *puid)
     } else {
       IGNORE_RETURN reg_lock((uint32_t*)&lock_);
     }
-    if (need_record_stat()) {
-      TRY_LOCK_RECORD_STAT(latch_id, 1, ret);
-    }
   }
-  HOLD_LOCK_INC();
   return ret;
 }
 
@@ -578,7 +556,6 @@ int ObLatch::rdlock(
       COMMON_LOG(WARN, "Fail to low lock, ", K(ret));
     }
   }
-  HOLD_LOCK_INC();
   return ret;
 }
 
@@ -603,7 +580,6 @@ int ObLatch::wrlock(
       COMMON_LOG(WARN, "Fail to low lock, ", K(ret));
     }
   }
-  HOLD_LOCK_INC();
   return ret;
 }
 
@@ -654,7 +630,6 @@ int ObLatch::unlock(const uint32_t *puid)
       COMMON_LOG(ERROR, "Fail to wake up latch wait queue, ", K(this), K(ret));
     }
   }
-  HOLD_LOCK_DEC();
   return ret;
 }
 
@@ -670,9 +645,7 @@ OB_INLINE int ObLatch::low_lock(
   int ret = OB_SUCCESS;
   uint64_t i = 0;
   uint32_t lock = 0;
-  uint64_t spin_cnt = 0;
   uint64_t yield_cnt = 0;
-  bool waited = false;
   bool conflict = false;
 
   if (OB_UNLIKELY(latch_id >= ObLatchIds::LATCH_END)
@@ -696,13 +669,10 @@ OB_INLINE int ObLatch::low_lock(
         }
         PAUSE();
       }
-      spin_cnt += i;
-
       if (OB_FAIL(ret)) {
         //fail
       } else if (i < OB_LATCHES[latch_id].max_spin_cnt_) {
         //success lock
-        ++spin_cnt;
         break;
       } else if (yield_cnt < OB_LATCHES[latch_id].max_yield_cnt_) {
         //yield and retry
@@ -711,7 +681,6 @@ OB_INLINE int ObLatch::low_lock(
         continue;
       } else {
         //wait
-        waited = true;
         ObLatchWaitEventGuard wait_guard(
           ObLatchDesc::wait_event_idx(latch_id),
           (abs_timeout_us - ObTimeUtility::current_time()) / 1000,
@@ -733,9 +702,6 @@ OB_INLINE int ObLatch::low_lock(
           break;
         }
       }
-    }
-    if (need_record_stat()) {
-      LOCK_RECORD_STAT(latch_id, waited, spin_cnt, yield_cnt);
     }
   }
   return ret;

@@ -21,6 +21,7 @@
 
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/ob_exec_context.h"
+#include "sql/session/ob_sql_session_info.h"
 #include "lib/charset/ob_charset_string_helper.h"
 
 namespace oceanbase

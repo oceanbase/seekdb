@@ -292,8 +292,6 @@ int assign(const ObColumnSchemaV2 &src_schema);
   inline bool is_multivalue_generated_array_column() const { return column_flags_ & MULTIVALUE_INDEX_GENERATED_ARRAY_COLUMN_FLAG; }
   inline bool is_domain_index_column() const { return is_vec_index_column() || is_fulltext_column() || is_multivalue_generated_column() || is_multivalue_generated_array_column(); }
   inline bool has_generated_column_deps() const { return column_flags_ & GENERATED_DEPS_CASCADE_FLAG; }
-  inline bool is_primary_vp_column() const { return column_flags_ & PRIMARY_VP_COLUMN_FLAG; }
-  inline bool is_aux_vp_column() const { return column_flags_ & AUX_VP_COLUMN_FLAG; }
   inline bool is_invisible_column() const { return column_flags_ & INVISIBLE_COLUMN_FLAG; }
   inline bool has_column_flag(int64_t flag) const { return column_flags_ & flag; }
   inline int64_t get_column_flags() const { return column_flags_; }
@@ -345,16 +343,6 @@ int assign(const ObColumnSchemaV2 &src_schema);
 
   int serialize_extended_type_info(char *buf, const int64_t buf_len, int64_t &pos) const;
   int deserialize_extended_type_info(const char *buf, const int64_t data_len, int64_t &pos);
-
-  int get_vp_table_ids(uint64_t *vp_tid_array, int64_t &vp_cnt) const
-  {
-    int ret = common::OB_SUCCESS;
-    // Column can't be shared by multi vertical-partitioned tables,
-    // so we assume each column has only one vp table at most.
-    vp_cnt = 1;
-    vp_tid_array[0] = table_id_;
-    return ret;
-  }
 
   inline share::ObLocalSessionVar &get_local_session_var() { return local_session_vars_; }
   inline const share::ObLocalSessionVar &get_local_session_var() const { return local_session_vars_; }

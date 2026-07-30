@@ -36,7 +36,7 @@ public:
       share::schema::ObSchemaService *schema_service,
       const share::schema::ObTableSchema &data_schema,
       const uint64_t specified_table_id,
-      share::schema::ObTableSchema &aux_vp_table_schema,
+      share::schema::ObTableSchema &aux_lob_piece_table_schema,
       bool generate_id);
 
   static int generate_lob_piece_table_name(
@@ -46,10 +46,10 @@ public:
       int64_t &pos);
 private:
   int generate_schema(const share::schema::ObTableSchema &data_schema,
-                      share::schema::ObTableSchema &aux_vp_table_schema);
+                      share::schema::ObTableSchema &aux_lob_piece_table_schema);
   
   int set_basic_infos(const share::schema::ObTableSchema &data_schema,
-                      share::schema::ObTableSchema &aux_vp_table_schema);
+                      share::schema::ObTableSchema &aux_lob_piece_table_schema);
 private:
   ObDDLService &ddl_service_;
 private:

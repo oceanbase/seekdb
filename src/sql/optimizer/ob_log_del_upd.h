@@ -261,12 +261,8 @@ public:
   virtual uint64_t hash(uint64_t seed) const override;
   void set_ignore(bool is_ignore) { ignore_ = is_ignore; }
   bool is_ignore() const { return ignore_; }
-  void set_is_returning(bool is) { is_returning_ = is; }
-  bool is_returning() const { return is_returning_; }
   bool is_multi_part_dml() const { return is_multi_part_dml_; }
   void set_is_multi_part_dml(bool is_multi_part_dml) { is_multi_part_dml_ = is_multi_part_dml; }
-  bool has_instead_of_trigger() const { return has_instead_of_trigger_; }
-  void set_has_instead_of_trigger(bool v) { has_instead_of_trigger_ = v;}
   bool is_pdml() const { return is_pdml_; }
   void set_is_pdml(bool is_pdml) { is_pdml_ = is_pdml; }
   bool need_barrier() const { return need_barrier_; }
@@ -314,10 +310,6 @@ public:
   bool pdml_is_returning() { return pdml_is_returning_; }
   bool has_part_id_expr() const { return nullptr != pdml_partition_id_expr_; }
   ObRawExpr* get_partition_id_expr() { return pdml_partition_id_expr_; }
-  // add for error logging
-  ObErrLogDefine &get_err_log_define() { return err_log_define_; }
-  const ObErrLogDefine &get_err_log_define() const { return err_log_define_; }
-
   virtual int est_cost() override;
   virtual int compute_op_ordering() override;
   virtual int compute_plan_type() override;
@@ -332,8 +324,6 @@ public:
                               ObIArray<ObRawExpr*> &all_exprs,
                               bool need_column_expr);
   virtual int allocate_expr_post(ObAllocExprContext &ctx) override;
-  int extract_err_log_info();
-  static int generate_errlog_info(const ObDelUpdStmt &stmt, ObErrLogDefine &errlog_define);
   virtual int inner_replace_op_exprs(ObRawExprReplacer &replacer) override;
   int replace_dml_info_exprs(
         ObRawExprReplacer &replacer,
@@ -421,7 +411,6 @@ protected:
   const ObRawExpr *stmt_id_expr_;
   ObRawExpr *lock_row_flag_expr_;
   bool ignore_;
-  bool is_returning_; // indicates whether the current DML plan needs to return a result
   bool is_multi_part_dml_;
   bool is_pdml_; // Mark the current logical operator as a PDML operator, the CG phase will decide to generate a PDML physical operator based on this
   bool gi_charged_;
@@ -438,13 +427,10 @@ private:
   ObRawExpr *pdml_partition_id_expr_;
   ObRawExpr *ddl_slice_id_expr_;
   bool pdml_is_returning_; // If the plan is a pdml plan, it indicates whether the physical operator converted from the current logical operator needs to output/return rows
-  // add for error logging
-  ObErrLogDefine err_log_define_;
 protected:
   // For non-partitioned tables, the dml in pdml does not need to allocate partition id expr
   // But for non-partitioned tables, the dml in pdml needs to allocate partition id expr
   bool need_alloc_part_id_expr_; // in the pdml plan, used to determine whether the current dml operator needs to allocate partition id expr
-  bool has_instead_of_trigger_;
   // Only when trans_info_expr can be pushed down to the corresponding table_scan operator,
   // the expression will be added to produced_trans_exprs_
   // When trans_info_expr does not find a producer operator,

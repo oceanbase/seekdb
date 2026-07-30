@@ -389,8 +389,6 @@ public:
                                ObTablePartitionInfo *&table_part_info);
   int assign_right_popular_value_to_left(ObExchangeInfo &left_exch_info,
                                          ObExchangeInfo &right_exch_info);
-  void set_insert_stmt(const ObInsertStmt *insert_stmt) { insert_stmt_ = insert_stmt; }
-  const ObInsertStmt *get_insert_stmt() const { return insert_stmt_; }
   int get_part_exprs(uint64_t table_id,
                      uint64_t ref_table_id,
                      share::schema::ObPartitionLevel &part_level,
@@ -796,12 +794,11 @@ public:
                                       int64_t &dop) const;
   int inner_compute_three_stage_groupby_dop_by_auto_dop(const ObIArray<ObRawExpr*> &group_exprs,
                                                         const GroupingOpHelper &groupby_helper,
-                                                        const int64_t server_cnt,
                                                         int64_t &dop) const;
   int get_three_stage_groupby_number_of_copies(const ObIArray<ObAggFunRawExpr*> &non_distinct_aggrs,
                                                const ObIArray<ObAggFunRawExpr*> &distinct_aggrs,
                                                int64_t &number_of_copies) const;
-  int get_parallel_info_from_candidate_plans(int64_t &server_cnt, int64_t &dop) const;
+  int get_parallel_info_from_candidate_plans(int64_t &dop) const;
   int check_candi_plan_need_calc_dop(bool &need_calc_dop) const;
   int check_op_need_calc_dop(const ObLogicalOperator *cur_op, bool &need_calc) const;
 
@@ -1019,9 +1016,6 @@ public:
   int is_plan_reliable(const ObLogicalOperator *root,
                        bool &is_reliable);
 
-  int candi_allocate_err_log(const ObDelUpdStmt *stmt);
-  int allocate_err_log_as_top(const ObDelUpdStmt *stmt, ObLogicalOperator *&old_top);
-
   /** @brief Allocate SELECTINTO on top of plan candidates */
   int candi_allocate_select_into();
   /** @brief allocate select into as new top(parent)**/
@@ -1075,7 +1069,6 @@ public:
                                           ObBitSet<> &initplan_idxs,
                                           ObBitSet<> &onetime_idxs,
                                           const ObIArray<ObRawExpr *> &filters,
-                                          const bool or_cursor_expr,
                                           const bool is_update_set);
 
   int inner_candi_allocate_subplan_filter(ObIArray<ObSEArray<CandidatePlan, 4>> &best_list,
@@ -1086,7 +1079,6 @@ public:
                                           ObBitSet<> &initplan_idxs,
                                           ObBitSet<> &onetime_idxs,
                                           const ObIArray<ObRawExpr *> &filters,
-                                          const bool for_cursor_expr,
                                           const bool is_update_set,
                                           const int64_t dist_methods,
                                           ObIArray<CandidatePlan> &subquery_plans);
@@ -1099,7 +1091,6 @@ public:
                                                   ObBitSet<> &initplan_idxs,
                                                   ObBitSet<> &onetime_idxs,
                                                   const ObIArray<ObRawExpr *> &filters,
-                                                  const bool for_cursor_expr,
                                                   const bool is_update_set,
                                                   const int64_t dist_methods,
                                                   ObIArray<CandidatePlan> &subquery_plans);
@@ -1109,7 +1100,6 @@ public:
                                      ObIArray<ObSEArray<CandidatePlan, 4>> &best_list,
                                      ObIArray<ObSEArray<CandidatePlan, 4>> &dist_best_list);
   int get_valid_subplan_filter_dist_method(ObIArray<ObLogPlan*> &subplans,
-                                           const bool for_cursor_expr,
                                            const bool has_onetime,
                                            const bool ignore_hint,
                                            int64_t &dist_methods);
@@ -1121,13 +1111,11 @@ public:
                                    ObIArray<ObExecParamRawExpr *> &onetime_exprs,
                                    ObBitSet<> &initplan_idxs,
                                    ObBitSet<> &onetime_idxs,
-                                   bool &for_cursor_expr,
                                    bool for_on_condition);
 
   int get_subplan_filter_distributed_method(ObLogicalOperator *&top,
                                             const ObIArray<ObLogicalOperator*> &subquery_ops,
                                             const ObIArray<ObExecParamRawExpr *> &params,
-                                            const bool for_cursor_expr,
                                             const bool has_onetime,
                                             int64_t &distributed_methods);
   int create_subplan_filter_plan(ObLogicalOperator *&top,
@@ -1140,8 +1128,7 @@ public:
                                  const ObBitSet<> &onetime_idxs,
                                  const int64_t dist_methods,
                                  const ObIArray<ObRawExpr*> &filters,
-                                 const bool is_update_set,
-                                 const bool for_cursor_expr);
+                                 const bool is_update_set);
 
   int check_contains_recursive_cte(ObIArray<ObLogicalOperator*> &child_ops,
                                    bool &is_recursive_cte);
@@ -1789,7 +1776,6 @@ public:
   int do_alloc_values_table_path(ValuesTablePath *values_table_path,
                                  ObLogValuesTableAccess *&out_access_path_op);
   inline ObRawExprReplacer &gen_col_replacer() { return gen_col_replacer_; }
-  int get_enable_rich_vector_format(bool &enable);
 private:
   static const int64_t IDP_PATHNUM_THRESHOLD = 5000;
 protected: // member variable
@@ -1909,8 +1895,6 @@ private:
   common::ObSEArray<ObShardingInfo*, 8, common::ModulePageAllocator, true> hash_dist_info_;
   //
   common::ObSEArray<ColumnItem, 8, common::ModulePageAllocator, true> column_items_;
-  // add only for error_logging
-  const ObInsertStmt *insert_stmt_;
   // all basic table meta before base table predicate
   OptTableMetas basic_table_metas_;
   // all basic table meta after base table predicate

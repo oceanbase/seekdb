@@ -48,7 +48,6 @@ int ObPLParser::parse(const ObString &stmt_block,
                       ParseResult &parse_result,
                       bool is_inner_parse)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_pl_parse);
   int ret = OB_SUCCESS;
   bool is_include_old_new_in_trigger = false;
   bool contain_sensitive_data = false;
@@ -170,10 +169,8 @@ int ObPLParser::parse_procedure(const ObString &stmt_block,
 
 int ObPLParser::parse_routine_body(const ObString &routine_body,
                                    ObStmtNodeTree *&routine_stmt,
-                                   bool is_for_trigger,
-                                   bool need_unwrap)
+                                   bool is_for_trigger)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_pl_parse);
   int ret = OB_SUCCESS;
   int32_t prefix_len = 0;
   char *buf = NULL;
@@ -220,10 +217,8 @@ int ObPLParser::parse_package(const ObString &package,
                               const ObDataTypeCastParams &dtc_params,
                               share::schema::ObSchemaGetterGuard *schema_guard,
                               bool is_for_trigger,
-                              const ObTriggerInfo *trg_info,
-                              bool need_unwrap)
+                              const ObTriggerInfo *trg_info)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_pl_parse);
   int ret = OB_SUCCESS;
   ObParseCtx parse_ctx;
   memset(&parse_ctx, 0, sizeof(ObParseCtx));

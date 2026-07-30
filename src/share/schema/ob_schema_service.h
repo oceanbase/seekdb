@@ -108,8 +108,7 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_ADD_SUB_PARTITION, = 54)                            \
   ACT(OB_DDL_DROP_SUB_PARTITION, = 55)                           \
   ACT(OB_DDL_TRUNCATE_SUB_PARTITION, = 56)                       \
-  ACT(OB_DDL_SET_INTERVAL, = 57)                                 \
-  ACT(OB_DDL_INTERVAL_TO_RANGE, = 58)                            \
+  /* 57-58: removed interval-partition operations. */            \
   ACT(OB_DDL_TRUNCATE_TABLE, = 59)                               \
   ACT(OB_DDL_RENAME_PARTITION, = 60)                             \
   ACT(OB_DDL_RENAME_SUB_PARTITION, = 61)                         \
@@ -153,11 +152,7 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_DROP_OUTLINE,)                                      \
   ACT(OB_DDL_ALTER_OUTLINE,)                                     \
   ACT(OB_DDL_OUTLINE_OPERATION_END, = 800)                       \
-  ACT(OB_DDL_SYNONYM_OPERATION_BEGIN, = 901)                     \
-  ACT(OB_DDL_CREATE_SYNONYM,)                                    \
-  ACT(OB_DDL_DROP_SYNONYM,)                                      \
-  ACT(OB_DDL_REPLACE_SYNONYM,)                                   \
-  ACT(OB_DDL_SYNONYM_OPERATION_END, = 1000)                      \
+  /* 901-1000: removed object operations. */                     \
   ACT(OB_DDL_ROUTINE_OPERATION_BEGIN, = 1201)                    \
   ACT(OB_DDL_CREATE_ROUTINE,)                                    \
   ACT(OB_DDL_DROP_ROUTINE,)                                      \
@@ -169,12 +164,7 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_ALTER_PACKAGE,)                                     \
   ACT(OB_DDL_DROP_PACKAGE,)                                      \
   ACT(OB_DDL_PACKAGE_OPERATION_END, = 1300)                      \
-  ACT(OB_DDL_UDT_OPERATION_BEGIN, = 1321)                        \
-  ACT(OB_DDL_CREATE_UDT,)                                        \
-  ACT(OB_DDL_REPLACE_UDT,)                                       \
-  ACT(OB_DDL_DROP_UDT,)                                          \
-  ACT(OB_DDL_DROP_UDT_BODY,)                                     \
-  ACT(OB_DDL_UDT_OPERATION_END, = 1330)                          \
+  /* 1321-1330: removed schema-level user-defined type operations. */ \
   ACT(OB_DDL_AUDIT_OPERATION_BEGIN, = 1331)                      \
   ACT(OB_DDL_ADD_AUDIT,)                                         \
   ACT(OB_DDL_UPDATE_AUDIT,)                                      \
@@ -300,7 +290,6 @@ IS_DDL_TYPE(COLUMN_PRIV, column_priv)
 IS_DDL_TYPE(OUTLINE, outline)
 IS_DDL_TYPE(ROUTINE, routine)
 IS_DDL_TYPE(PACKAGE, package)
-IS_DDL_TYPE(UDT, udt)
 IS_DDL_TYPE(SYS_VAR, sys_var)
 IS_DDL_TYPE(ONLY_SIGNAL, only_signal)
 IS_DDL_TYPE(TRIGGER, trigger)

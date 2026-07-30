@@ -137,7 +137,6 @@ void ObCallProcedureInfo::reset()
   package_id_ = common::OB_INVALID_ID;
   routine_id_ = common::OB_INVALID_ID;
   param_cnt_ = 0;
-  is_udt_routine_ = false;
 }
 
 int ObCallProcedureInfo::check_need_add_cache_obj_stat(ObILibCacheCtx &ctx, bool &need_real_add)

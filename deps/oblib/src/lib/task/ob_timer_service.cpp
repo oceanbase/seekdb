@@ -18,7 +18,6 @@
 #include <utility>
 #include "lib/task/ob_timer_service.h"
 #include "lib/task/ob_timer_monitor.h"       // ObTimerMonitor
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/profile/ob_trace_id.h"
 
 // Weak fallback; strong definition in share/rc/ob_server_runtime.cpp.
@@ -36,13 +35,6 @@ namespace common
 {
 using namespace obutil;
 using namespace lib;
-
-uint64_t OB_WEAK_SYMBOL server_runtime_id()
-{
-  int ret = OB_SUCCESS;
-  OB_LOG(WARN, "call weak server_runtime_id");
-  return OB_SERVER_RUNTIME_ID;
-}
 
 struct CompareForSet {
   using is_transparent = void;

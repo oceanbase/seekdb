@@ -41,13 +41,10 @@ public:
 
   static int div_float(EVAL_FUNC_ARG_DECL);
   static int div_float_batch(BATCH_EVAL_FUNC_ARG_DECL);
-  static int div_float_vector(VECTOR_EVAL_FUNC_ARG_DECL);
   static int div_double(EVAL_FUNC_ARG_DECL);
   static int div_double_batch(BATCH_EVAL_FUNC_ARG_DECL);
-  static int div_double_vector(VECTOR_EVAL_FUNC_ARG_DECL);
   static int div_number(EVAL_FUNC_ARG_DECL);
   static int div_number_batch(BATCH_EVAL_FUNC_ARG_DECL);
-  static int div_number_vector(VECTOR_EVAL_FUNC_ARG_DECL);
   static int div_vec(EVAL_FUNC_ARG_DECL);
   static int div_vec_batch(BATCH_EVAL_FUNC_ARG_DECL);
 
@@ -106,9 +103,6 @@ public:
 
   template<typename ltype, typename rtype>
   static int decint_div_mysql_batch_fn(BATCH_EVAL_FUNC_ARG_DECL);
-
-  template<typename ltype, typename rtype>
-  static int decint_div_mysql_vec_fn(VECTOR_EVAL_FUNC_ARG_DECL);
 
   DISALLOW_COPY_AND_ASSIGN(ObExprDiv);
   static ObScale decint_res_round_up_scale(const ObExpr &, int64_t div_inc);

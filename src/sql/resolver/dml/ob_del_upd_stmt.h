@@ -324,47 +324,14 @@ struct ObUniqueConstraintInfo
   common::ObString constraint_name_;
   common::ObSEArray<ObColumnRefRawExpr*, 8, common::ModulePageAllocator, true> constraint_columns_;
 };
-struct ObErrLogInfo
-{
-  ObErrLogInfo()
-    : is_error_log_(false),
-      table_id_(OB_INVALID_ID),
-      table_name_(),
-      database_name_(),
-      reject_limit_(0),
-      error_log_exprs_()
-  {
-  }
-  int assign(const ObErrLogInfo &other);
-  int deep_copy(const ObErrLogInfo &other,
-                ObRawExprCopier &expr_copier);
-  TO_STRING_KV(K_(is_error_log),
-               K_(table_id),
-               K_(table_name),
-               K_(database_name),
-               K_(reject_limit),
-               K_(error_log_exprs));
-  bool is_error_log_;
-  uint64_t table_id_;
-  ObString table_name_;
-  ObString database_name_;
-  int64_t reject_limit_;
-  common::ObSEArray<ObColumnRefRawExpr*, 4, common::ModulePageAllocator, true> error_log_exprs_;
-};
-
 class ObDelUpdStmt : public ObDMLStmt
 {
 public:
   explicit ObDelUpdStmt(stmt::StmtType type)
       : ObDMLStmt(type),
-        returning_exprs_(),
-        returning_strs_(),
-        returning_agg_items_(),
         group_param_exprs_(),
         ignore_(false),
         has_global_index_(false),
-        error_log_info_(),
-        has_instead_of_trigger_(false),
         ab_stmt_id_expr_(nullptr),
         dml_source_from_join_(false),
         pdml_disabled_(false)
@@ -378,45 +345,12 @@ public:
   int assign(const ObDelUpdStmt &other);
   virtual void set_ignore(bool ignore) { ignore_ = ignore; }
   virtual bool is_ignore() const { return ignore_; }
-  bool is_returning() const override { return !returning_exprs_.empty(); }
-  int add_value_to_returning_exprs(ObRawExpr *expr) { return returning_exprs_.push_back(expr); }
-  const common::ObIArray<ObRawExpr*> &get_returning_exprs() const { return returning_exprs_; }
-  common::ObIArray<ObRawExpr*> &get_returning_exprs() { return returning_exprs_; }
-  common::ObIArray<ObRawExpr*> &get_returning_into_exprs() { return returning_into_exprs_; }
-  const common::ObIArray<ObRawExpr*> &get_returning_into_exprs() const { return returning_into_exprs_; }
-  int add_value_to_returning_strs(ObString str) { return returning_strs_.push_back(str); }
-  const common::ObIArray<ObString> &get_returning_strs() const { return returning_strs_; }
-  int add_returning_agg_item(ObAggFunRawExpr &agg_expr)
-  {
-    agg_expr.set_explicited_reference();
-    return returning_agg_items_.push_back(&agg_expr);
-  }
-  int64_t get_returning_aggr_item_size() const { return returning_agg_items_.size(); }
-  const common::ObIArray<ObAggFunRawExpr*> &get_returning_aggr_items() const
-  { return returning_agg_items_; }
-  common::ObIArray<ObAggFunRawExpr*> &get_returning_aggr_items()
-  { return returning_agg_items_; }
   bool has_global_index() const { return has_global_index_; }
   void set_has_global_index(bool has_global_index) { has_global_index_ |= has_global_index; }
   bool is_dml_table_from_join() const;
-  virtual int64_t get_instead_of_trigger_column_count() const;
   int update_base_tid_cid();
   virtual int iterate_stmt_expr(ObStmtExprVisitor &visitor) override;
 
-  void set_is_error_logging(bool is_error_logging) { error_log_info_.is_error_log_ = is_error_logging; }
-  bool is_error_logging() const { return error_log_info_.is_error_log_; }
-  void set_err_log_table_name(ObString err_log_table_name) { error_log_info_.table_name_ = err_log_table_name; }
-  const ObString get_err_log_table_name() const { return error_log_info_.table_name_; }
-  void set_err_log_database_name(ObString err_log_database_name) { error_log_info_.database_name_ = err_log_database_name; }
-  const ObString get_err_log_database_name() const { return error_log_info_.database_name_; }
-  void set_err_log_table_id(uint64_t err_log_table_id) { error_log_info_.table_id_ = err_log_table_id; }
-  uint64_t get_err_log_table_id() { return error_log_info_.table_id_; }
-  void set_err_log_reject_limit(int64_t reject_limit) { error_log_info_.reject_limit_ = reject_limit; }
-  int64_t get_err_log_reject_limit() const { return error_log_info_.reject_limit_; }
-  const ObErrLogInfo &get_error_log_info() const { return error_log_info_; }
-  ObErrLogInfo &get_error_log_info() { return error_log_info_; }
-  bool has_instead_of_trigger() const override { return has_instead_of_trigger_; }
-  inline void set_has_instead_of_trigger(bool v) { has_instead_of_trigger_ = v; }
   void set_ab_stmt_id_expr(ObRawExpr *ab_stmt_id) { ab_stmt_id_expr_ = ab_stmt_id; }
   ObRawExpr *get_ab_stmt_id_expr() const { return ab_stmt_id_expr_; }
   virtual uint64_t get_trigger_events() const = 0;
@@ -439,15 +373,9 @@ public:
   bool is_pdml_disabled() const { return pdml_disabled_; }
   void set_pdml_disabled() { pdml_disabled_ = true; }
 protected:
-  common::ObSEArray<ObRawExpr*, common::OB_PREALLOCATED_NUM, common::ModulePageAllocator, true> returning_exprs_;
-  common::ObSEArray<ObRawExpr*, common::OB_PREALLOCATED_NUM, common::ModulePageAllocator, true> returning_into_exprs_;
-  common::ObSEArray<ObString, common::OB_PREALLOCATED_NUM, common::ModulePageAllocator, true> returning_strs_;
-  common::ObArray<ObAggFunRawExpr*, common::ModulePageAllocator, true> returning_agg_items_;
   common::ObSEArray<ObRawExpr*, 16, common::ModulePageAllocator, true> group_param_exprs_;
   bool ignore_;
   bool has_global_index_;
-  ObErrLogInfo error_log_info_;
-  bool has_instead_of_trigger_; // for instead of trigger, the trigger need to fired
   // for insert and merge stmt
   common::ObSEArray<ObRawExpr *, 16, common::ModulePageAllocator, true> sharding_conditions_;
   ObRawExpr *ab_stmt_id_expr_; //for array binding batch execution to mark the stmt id

@@ -347,7 +347,7 @@ int ObDtlFlowControl::notify_all_blocked_channels_unblocking(int64_t &unblock_cn
       LOG_WARN("failed to sync send drain", K(ret));
     }
   } else {
-    ObDfcUnblockAsynSender asyn_sender(chans_, ch_info_, is_transmit(), *this);
+    ObDfcUnblockAsynSender asyn_sender(chans_, *this);
     if (OB_FAIL(asyn_sender.asyn_send())) {
       LOG_WARN("failed to asyn send unblocking msg", K(ret));
     }
@@ -365,7 +365,7 @@ int ObDtlFlowControl::drain_all_channels()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected status: ch info is null", K(ret), KP(ch_info_), K(chans_.count()));
     } else {
-      ObDfcDrainAsynSender drain_asyn_sender(chans_, ch_info_, false, timeout_ts_);
+      ObDfcDrainAsynSender drain_asyn_sender(chans_, timeout_ts_);
       if (OB_FAIL(drain_asyn_sender.asyn_send())) {
         LOG_WARN("failed to asyn send drain", K(ret), K(lbt()));
       }

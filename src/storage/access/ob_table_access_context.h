@@ -79,7 +79,7 @@ struct ObTableScanStoreStat
   {
     MEMSET(this, 0, sizeof(ObTableScanStoreStat));
   }
-  // for rescan query, keep row cache and bf releated stats unchanged
+  // for rescan query, keep row cache and bloom filter stats unchanged
   OB_INLINE void reuse()
   {
     block_cache_hit_cnt_ = 0;
@@ -113,8 +113,8 @@ public:
   }
   OB_INLINE bool enable_bf_cache() const
   {
-    return (bf_access_cnt_ < common::DEFAULT_MAX_MULTI_GET_CACHE_AWARE_ROW_NUM
-           || bf_filter_cnt_ > (bf_access_cnt_ / 8));
+    return bf_access_cnt_ < common::DEFAULT_MAX_MULTI_GET_CACHE_AWARE_ROW_NUM
+           || bf_filter_cnt_ > bf_access_cnt_ / 8;
   }
   TO_STRING_KV(K_(row_cache_hit_cnt), K_(row_cache_miss_cnt), K_(row_cache_put_cnt),
                K_(bf_filter_cnt), K_(bf_access_cnt),
@@ -161,7 +161,10 @@ struct ObTableAccessContext
     return query_flag_.is_use_row_cache() && !use_fuse_row_cache_ && table_store_stat_.enable_put_row_cache() && !need_scn_ && !tablet_id_.is_ls_inner_tablet() && !has_truncate_filter();
   }
   inline bool enable_bf_cache() const {
-    return query_flag_.is_use_bloomfilter_cache() && table_store_stat_.enable_bf_cache() && !need_scn_ && !tablet_id_.is_ls_inner_tablet();
+    return query_flag_.is_use_bloomfilter_cache()
+        && table_store_stat_.enable_bf_cache()
+        && !need_scn_
+        && !tablet_id_.is_ls_inner_tablet();
   }
   inline bool is_multi_version_read(const int64_t snapshot_version) {
     return trans_version_range_.snapshot_version_ < snapshot_version;

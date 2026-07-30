@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX  SQL_ENG
 #include "sql/engine/expr/ob_expr_output_pack.h"
+#include "share/ob_lob_access_utils.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 namespace oceanbase{
@@ -334,10 +335,8 @@ int ObExprOutputPack::process_lob_locator_results(common::ObObj& value,
   if (!(value.is_lob() || value.is_json() || value.is_geometry())) {
     // not lob types, do nothing
   } else {
-    ObString raw_str = value.get_string();
     // remove locator header and read full lob data
     ObString data;
-    ObLobLocatorV2 loc(value.get_string());
     // lob locator v2
     ObTextStringIter instr_iter(value);
     if (OB_FAIL(ObTextStringHelper::build_text_iter(instr_iter, &exec_ctx, &my_session, &alloc))) {

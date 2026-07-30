@@ -26,9 +26,6 @@
 #include "sql/dtl/ob_dtl_linked_buffer.h"
 #include "sql/engine/basic/ob_chunk_row_store.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
-#include "sql/engine/basic/ob_compact_row.h"
-#include "sql/engine/basic/ob_temp_row_store.h"
-#include "sql/dtl/ob_dtl_vectors_buffer.h"
 
 namespace oceanbase
 {
@@ -38,22 +35,14 @@ namespace sql
 class ObReceiveRowReader
 {
 public:
-  ObReceiveRowReader(int64_t id, const ExprFixedArray *child_exprs,
-                    bool reorder_fixed_expr, common::ObIAllocator *allocator = NULL) :
+  ObReceiveRowReader() :
       recv_head_(NULL),
       recv_tail_(NULL),
       iterated_buffers_(NULL),
       cur_iter_pos_(0),
       cur_iter_rows_(0),
       recv_list_rows_(0),
-      datum_iter_(NULL),
-      vec_row_iter_(NULL),
-      row_meta_(),
-      curr_vector_(),
-      id_(id),
-      reorder_fixed_expr_(reorder_fixed_expr),
-      child_exprs_(child_exprs),
-      allocator_(allocator)
+      datum_iter_(NULL)
   {
   }
   ~ObReceiveRowReader()
@@ -62,14 +51,10 @@ public:
   }
 
   int add_buffer(dtl::ObDtlLinkedBuffer &buf, bool &transferred);
-  void set_allocator(common::ObIAllocator *allocator) {allocator_ = allocator;}
-  RowMeta &get_row_meta() { return row_meta_; }
-
   bool has_more() const
   {
     return (recv_list_rows_ > cur_iter_rows_)
-        || (NULL != datum_iter_ && datum_iter_->is_valid() && datum_iter_->has_next())
-        || (NULL != vec_row_iter_ && vec_row_iter_->is_valid() && vec_row_iter_->has_next());
+        || (NULL != datum_iter_ && datum_iter_->is_valid() && datum_iter_->has_next());
   }
 
   // return left rows for non interm result.
@@ -78,13 +63,7 @@ public:
   int64_t left_rows() const
   {
     int64_t rows = 0;
-    // The order cannot be changed.
-    // In the special vectorization 2.0 scenario,
-    // there will be a mock empty datum_iter_,
-    // so we need to prioritize checking vec_row_iter_.
-    if (NULL != vec_row_iter_) {
-      rows = (vec_row_iter_->is_valid() && vec_row_iter_->has_next()) ? INT64_MAX : 0;
-    } else if (NULL != datum_iter_) {
+    if (NULL != datum_iter_) {
       rows = (datum_iter_->is_valid() && datum_iter_->has_next()) ? INT64_MAX : 0;
     } else {
       rows = recv_list_rows_ - cur_iter_rows_;
@@ -102,19 +81,6 @@ public:
                           ObEvalCtx &eval_ctx,
                           const ObChunkDatumStore::StoredRow **srows,
                           const int64_t read_rows);
-  int attach_vectors(const common::ObIArray<ObExpr*> &exprs,
-                     const ObIArray<ObExpr*> &dynamic_const_exprs,
-                     const RowMeta &meta,
-                     ObEvalCtx &eval_ctx,
-                     const ObCompactRow **srows,
-                     const int64_t read_rows);
-  int attach_vectors(const common::ObIArray<ObExpr*> &exprs,
-                     const ObIArray<ObExpr*> &dynamic_const_exprs,
-                     ObEvalCtx &eval_ctx,
-                     const int64_t max_rows,
-                     int64_t &read_rows,
-                     dtl::ObDtlVectors &data_buffer);
-
   // get row interface for PX_CHUNK_ROW
   int get_next_row(common::ObNewRow &row);
 
@@ -131,25 +97,13 @@ public:
                      ObEvalCtx &eval_ctx,
                      const int64_t max_rows, int64_t &read_rows,
                      const ObChunkDatumStore::StoredRow **srows);
-  int get_next_batch_vec(const ObIArray<ObExpr*> &exprs,
-                         const ObIArray<ObExpr*> &dynamic_const_exprs,
-                         ObEvalCtx &eval_ctx,
-                         const int64_t max_rows, int64_t &read_rows,
-                         const ObCompactRow **srows);
   void reset();
-
-  int init_row_meta();
 
 private:
   template <typename BLOCK, typename ROW>
   // return NULL for iterate end.
   const ROW *next_store_row();
 
-  int get_next_compact_rows(ObTempRowStore::RowBlock *blk,
-                            int64_t max_rows,
-                            int64_t &read_rows,
-                            const ObCompactRow **srows);
-  int check_and_switch_buffer(dtl::ObDtlLinkedBuffer *&buffer);
   void move_to_iterated(const int64_t rows);
   void free(dtl::ObDtlLinkedBuffer *buf);
   inline void free_iterated_buffers()
@@ -173,15 +127,6 @@ private:
 
   // store iterator for interm result iteration.
   ObChunkDatumStore::Iterator *datum_iter_;
-  ObTempRowStore::Iterator *vec_row_iter_;
-  RowMeta row_meta_;
-  dtl::ObDtlMsgType msg_type_;
-  dtl::ObDtlVectors curr_vector_;
-  int64_t id_;
-  bool reorder_fixed_expr_ = false;
-  const ExprFixedArray *child_exprs_ = NULL;
-  common::ObIAllocator *allocator_ = NULL;
-  bool row_meta_init_ = false;
 };
 
 class ObPxNewRow
@@ -206,14 +151,13 @@ public:
       row_cell_count_(row.get_count()),
       type_(dtl::ObDtlMsgType::PX_CHUNK_ROW)
       {}
-  ObPxNewRow(const common::ObIArray<ObExpr*> &exprs, int64_t vector_row_idx, dtl::ObDtlMsgType type)
+  ObPxNewRow(const common::ObIArray<ObExpr*> &exprs, dtl::ObDtlMsgType type)
     : des_row_buf_(nullptr),
       des_row_buf_size_(0),
       row_(nullptr),
       exprs_(&exprs),
       row_cell_count_(exprs.count()),
-      type_(type),
-      vector_row_idx_(vector_row_idx)
+      type_(type)
       {}
   ~ObPxNewRow() { }
   void set_eof_row();
@@ -225,8 +169,6 @@ public:
   { return type_; }
   inline void set_data_type(const dtl::ObDtlMsgType type)
   {  type_ = type; }
-  int64_t get_vector_row_idx() const { return vector_row_idx_; }
-  void set_vector_row_idx(int64_t idx) { vector_row_idx_ = idx; }
   TO_STRING_KV(K_(row_cell_count), K_(des_row_buf_size));
 private:
   static const int64_t EOF_ROW_FLAG = -1;
@@ -236,11 +178,9 @@ private:
   const common::ObIArray<ObExpr*> *exprs_;
   int64_t row_cell_count_; // row_cell_count_ takes a special value -1 to indicate EOFRow, get_row returns OB_ITER_END
   dtl::ObDtlMsgType type_;
-  int64_t vector_row_idx_;
   DISALLOW_COPY_AND_ASSIGN(ObPxNewRow);
 };
 }
 }
 #endif /* _OB_SQL_ENGINE_PX_NEW_ROW_H_ */
 //// end of header file
-

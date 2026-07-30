@@ -74,6 +74,23 @@ TEST(ObTableSchemaParam, test_serialize)
 
 }
 
+TEST(ObTableSchemaParam, reject_truncated_current_format)
+{
+  ObArenaAllocator allocator;
+  ObArenaAllocator decoded_allocator;
+  ObTableSchemaParam param(allocator);
+  ObTableSchemaParam decoded_param(decoded_allocator);
+  char buf[1024];
+  int64_t serialize_pos = 0;
+  int64_t deserialize_pos = 0;
+
+  param.table_id_ = 1;
+  ASSERT_EQ(OB_SUCCESS, param.serialize_(buf, sizeof(buf), serialize_pos));
+  ASSERT_GT(serialize_pos, 0);
+  ASSERT_NE(OB_SUCCESS,
+            decoded_param.deserialize_(buf, serialize_pos - 1, deserialize_pos));
+}
+
 int main(int argc, char **argv)
 {
   OB_LOGGER.set_log_level("INFO");

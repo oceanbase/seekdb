@@ -87,10 +87,10 @@ int ObJoinFilterCountRowPieceMsgListener::on_message(ObJoinFilterCountRowPieceMs
   } else if (!pkt.each_sqc_has_full_data_) {
     // if each sqc only has partial data of left, gather all k(k=dop) thread's result
     piece_ctx.total_rows_ += pkt.total_rows_;
-    if (piece_ctx.ndv_info_.count() == 0
-        && OB_FAIL(ObJoinFilterCountRowPieceMsgCtx::init_target_ndv_info(pkt.ndv_info_,
-                                                                         piece_ctx.ndv_info_))) {
-      LOG_WARN("failed to init ndv_info", K(ret));
+    if (OB_UNLIKELY(piece_ctx.ndv_info_.count() != pkt.ndv_info_.count())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("join filter ndv info count mismatch", K(ret), K(piece_ctx.ndv_info_.count()),
+               K(pkt.ndv_info_.count()));
     }
     for (int64_t i = 0; i < pkt.ndv_info_.count() && OB_SUCC(ret); ++i) {
       if (OB_FAIL(
@@ -118,6 +118,10 @@ int ObJoinFilterCountRowPieceMsgListener::on_message(ObJoinFilterCountRowPieceMs
         if (sqc_row_info.received_ >= sqc_row_info.expected_) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("receive too much piece msg for one sqc", K(pkt), K(sqc_row_info));
+        } else if (OB_UNLIKELY(sqc_row_info.ndv_info_.count() != pkt.ndv_info_.count())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("join filter ndv info count mismatch", K(ret), K(sqc_row_info.ndv_info_.count()),
+                   K(pkt.ndv_info_.count()));
         } else {
           sqc_row_info.received_ += pkt.piece_count_;
           sqc_row_info.total_rows_ += pkt.total_rows_;

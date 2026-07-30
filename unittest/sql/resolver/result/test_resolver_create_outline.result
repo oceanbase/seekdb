@@ -34,7 +34,6 @@ create outline outline_name on select * from t1;
         "table_id":1099511677777,
         "table_name":"t1",
         "alias_name":"",
-        "synonym_name":"",
         "table_type":0,
         "ref_id":1099511677777,
         "database_name":"rongxuan",
@@ -110,7 +109,6 @@ create outline outline_name on select * from t1;
               "column_id":16,
               "database_name":"rongxuan",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -200,7 +198,6 @@ create outline outline_name on select * from t1;
           "column_id":16,
           "database_name":"rongxuan",
           "table_name":"t1",
-          "synonym_name":"",
           "column_name":"c1",
           "expr_level":0,
           "expr_levels": [
@@ -255,7 +252,6 @@ create outline outline_name on select * from t1;
           "column_id":17,
           "database_name":"rongxuan",
           "table_name":"t1",
-          "synonym_name":"",
           "column_name":"c2",
           "expr_level":0,
           "expr_levels": [
@@ -303,7 +299,6 @@ create outline outline_name on select * from t1;
           "column_id":16,
           "database_name":"rongxuan",
           "table_name":"t1",
-          "synonym_name":"",
           "column_name":"c1",
           "expr_level":0,
           "expr_levels": [
@@ -355,7 +350,6 @@ create outline outline_name on select * from t1;
           "column_id":17,
           "database_name":"rongxuan",
           "table_name":"t1",
-          "synonym_name":"",
           "column_name":"c2",
           "expr_level":0,
           "expr_levels": [
@@ -500,7 +494,6 @@ create or replace outline outline_name on select * from t1;
         "table_id":1099511677777,
         "table_name":"t1",
         "alias_name":"",
-        "synonym_name":"",
         "table_type":0,
         "ref_id":1099511677777,
         "database_name":"rongxuan",
@@ -576,7 +569,6 @@ create or replace outline outline_name on select * from t1;
               "column_id":16,
               "database_name":"rongxuan",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -666,7 +658,6 @@ create or replace outline outline_name on select * from t1;
           "column_id":16,
           "database_name":"rongxuan",
           "table_name":"t1",
-          "synonym_name":"",
           "column_name":"c1",
           "expr_level":0,
           "expr_levels": [
@@ -721,7 +712,6 @@ create or replace outline outline_name on select * from t1;
           "column_id":17,
           "database_name":"rongxuan",
           "table_name":"t1",
-          "synonym_name":"",
           "column_name":"c2",
           "expr_level":0,
           "expr_levels": [
@@ -769,7 +759,6 @@ create or replace outline outline_name on select * from t1;
           "column_id":16,
           "database_name":"rongxuan",
           "table_name":"t1",
-          "synonym_name":"",
           "column_name":"c1",
           "expr_level":0,
           "expr_levels": [
@@ -821,7 +810,6 @@ create or replace outline outline_name on select * from t1;
           "column_id":17,
           "database_name":"rongxuan",
           "table_name":"t1",
-          "synonym_name":"",
           "column_name":"c2",
           "expr_level":0,
           "expr_levels": [
@@ -966,7 +954,6 @@ create or replace outline outline_name on insert into t1 values (1, 2);
         "table_id":1099511677777,
         "table_name":"t1",
         "alias_name":"",
-        "synonym_name":"",
         "table_type":0,
         "ref_id":1099511677777,
         "database_name":"rongxuan",
@@ -1040,7 +1027,6 @@ create or replace outline outline_name on insert into t1 values (1, 2);
               "column_id":16,
               "database_name":"rongxuan",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -1130,7 +1116,6 @@ create or replace outline outline_name on insert into t1 values (1, 2);
                 "column_id":16,
                 "database_name":"rongxuan",
                 "table_name":"t1",
-                "synonym_name":"",
                 "column_name":"c1",
                 "expr_level":0,
                 "expr_levels": [
@@ -1174,7 +1159,6 @@ create or replace outline outline_name on insert into t1 values (1, 2);
                 "column_id":17,
                 "database_name":"rongxuan",
                 "table_name":"t1",
-                "synonym_name":"",
                 "column_name":"c2",
                 "expr_level":0,
                 "expr_levels": [
@@ -1381,7 +1365,6 @@ create or replace outline outline_name on insert into t1 values (1, 2);
             "column_id":16,
             "database_name":"",
             "table_name":"__values",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -1581,7 +1564,6 @@ create or replace outline outline_name on insert into t1 values (1, 2);
             "column_id":17,
             "database_name":"",
             "table_name":"__values",
-            "synonym_name":"",
             "column_name":"c2",
             "expr_level":0,
             "expr_levels": [
@@ -1741,7 +1723,6 @@ create outline outline_name on update t1 set c1=100 where c1=1;
         "table_id":1099511677777,
         "table_name":"t1",
         "alias_name":"",
-        "synonym_name":"",
         "table_type":0,
         "ref_id":1099511677777,
         "database_name":"rongxuan",
@@ -1816,7 +1797,6 @@ create outline outline_name on update t1 set c1=100 where c1=1;
               "column_id":16,
               "database_name":"rongxuan",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -1906,7 +1886,6 @@ create outline outline_name on update t1 set c1=100 where c1=1;
           "column_id":16,
           "database_name":"rongxuan",
           "table_name":"t1",
-          "synonym_name":"",
           "column_name":"c1",
           "expr_level":0,
           "expr_levels": [
@@ -1961,7 +1940,6 @@ create outline outline_name on update t1 set c1=100 where c1=1;
           "column_id":17,
           "database_name":"rongxuan",
           "table_name":"t1",
-          "synonym_name":"",
           "column_name":"c2",
           "expr_level":0,
           "expr_levels": [
@@ -2018,7 +1996,6 @@ create outline outline_name on update t1 set c1=100 where c1=1;
                 "column_id":16,
                 "database_name":"rongxuan",
                 "table_name":"t1",
-                "synonym_name":"",
                 "column_name":"c1",
                 "expr_level":0,
                 "expr_levels": [
@@ -2062,7 +2039,6 @@ create outline outline_name on update t1 set c1=100 where c1=1;
                 "column_id":17,
                 "database_name":"rongxuan",
                 "table_name":"t1",
-                "synonym_name":"",
                 "column_name":"c2",
                 "expr_level":0,
                 "expr_levels": [
@@ -2088,7 +2064,6 @@ create outline outline_name on update t1 set c1=100 where c1=1;
           "table_id":1099511677777,
           "table_name":"t1",
           "alias_name":"",
-          "synonym_name":"",
           "table_type":0,
           "ref_id":1099511677777,
           "database_name":"rongxuan",
@@ -2130,7 +2105,6 @@ create outline outline_name on update t1 set c1=100 where c1=1;
               "column_id":16,
               "database_name":"rongxuan",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -2248,7 +2222,6 @@ create outline outline_name on update t1 set c1=100 where c1=1;
             "column_id":16,
             "database_name":"rongxuan",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -2570,7 +2543,6 @@ create outline outline_name on delete from t1 where c1=1;
         "table_id":1099511677777,
         "table_name":"t1",
         "alias_name":"",
-        "synonym_name":"",
         "table_type":0,
         "ref_id":1099511677777,
         "database_name":"rongxuan",
@@ -2644,7 +2616,6 @@ create outline outline_name on delete from t1 where c1=1;
               "column_id":16,
               "database_name":"rongxuan",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -2734,7 +2705,6 @@ create outline outline_name on delete from t1 where c1=1;
           "column_id":16,
           "database_name":"rongxuan",
           "table_name":"t1",
-          "synonym_name":"",
           "column_name":"c1",
           "expr_level":0,
           "expr_levels": [
@@ -2789,7 +2759,6 @@ create outline outline_name on delete from t1 where c1=1;
           "column_id":17,
           "database_name":"rongxuan",
           "table_name":"t1",
-          "synonym_name":"",
           "column_name":"c2",
           "expr_level":0,
           "expr_levels": [
@@ -2868,7 +2837,6 @@ create outline outline_name on delete from t1 where c1=1;
             "column_id":16,
             "database_name":"rongxuan",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [

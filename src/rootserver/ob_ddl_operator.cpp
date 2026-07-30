@@ -747,126 +747,6 @@ int ObDDLOperator::try_reinit_autoinc_row(const ObTableSchema &table_schema,
   return ret;
 }
 
-// Notice: this function process index.
-int ObDDLOperator::alter_table_drop_aux_column(
-    ObTableSchema &new_table_schema,
-    const ObColumnSchemaV2 &orig_column_schema,
-    common::ObMySQLTransaction &trans,
-    const ObTableType table_type)
-{
-  int ret = OB_SUCCESS;
-  //should update the aux table
-
-  int64_t new_schema_version = OB_INVALID_VERSION;
-  const bool is_index = USER_INDEX == table_type;
-  ObSEArray<uint64_t, 16> aux_vp_tid_array; // for VP
-  ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-  ObSchemaGetterGuard schema_guard;
-  ObSchemaService *schema_service = schema_service_.get_schema_service();
-  if (OB_ISNULL(schema_service)) {
-    ret = OB_ERR_SYS;
-    RS_LOG(ERROR, "schema_service must not null");
-  } else if (OB_FAIL(schema_service_.get_runtime_schema_guard(schema_guard))) {
-    RS_LOG(WARN, "get schema guard failed", K(ret));
-  } else if (!is_index
-             && OB_FAIL(new_table_schema.get_aux_vp_tid_array(aux_vp_tid_array))) {
-    LOG_WARN("get_aux_tid_array failed", K(ret), K(is_index));
-  } else if (OB_FAIL(new_table_schema.get_simple_index_infos(
-                     simple_index_infos))) {
-    LOG_WARN("get simple_index_infos failed", K(ret));
-  }
-
-  //update all aux table schema
-  int64_t N = is_index ? simple_index_infos.count() : aux_vp_tid_array.count();
-  for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
-    const ObTableSchema *aux_table_schema = NULL;
-    uint64_t tid = is_index ? simple_index_infos.at(i).table_id_ : aux_vp_tid_array.at(i);
-    if (OB_FAIL(schema_guard.get_table_schema( tid, aux_table_schema))) {
-      LOG_WARN("get table schema failed", K(ret), K(tid));
-    } else if (OB_ISNULL(aux_table_schema)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table schema should not be null", K(ret));
-    } else if (aux_table_schema->is_in_recyclebin()) {
-      ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
-      LOG_WARN("aux table is in recyclebin", K(ret));
-    } else {
-      const ObColumnSchemaV2 *delete_column_schema =
-          aux_table_schema->get_column_schema(orig_column_schema.get_column_id());
-      if (NULL != delete_column_schema) {
-        if (delete_column_schema->is_index_column()) {
-          ret = OB_ERR_ALTER_INDEX_COLUMN;
-          RS_LOG(WARN, "can't not drop index column", K(ret));
-        } else {
-          // Notice: when the last VP column is deleted, the VP table should be deleted.
-          // If other VP column is hidden, the VP partition should be deleted.
-          int64_t normal_column_count = 0;
-          for (int64_t i = 0; OB_SUCC(ret) && (normal_column_count < 2) && (i < aux_table_schema->get_column_count()); ++i) {
-            if (!aux_table_schema->get_column_schema_by_idx(i)->is_hidden()) {
-              ++normal_column_count;
-            }
-          }
-          if (OB_FAIL(ret)) {
-          } else if (normal_column_count < 1) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("normal_column_count is error", K(ret), K(normal_column_count));
-          } else if (1 == normal_column_count) {
-            // DROP AUX_VERTIAL_PARTITION_TABLE
-            ObSEArray<uint64_t, 16> tmp_aux_vp_tid_array;
-            if (OB_FAIL(drop_table(*aux_table_schema, trans))) {
-              LOG_WARN("drop aux vertial partition table failed", K(ret), K(*aux_table_schema));
-            } else {
-              for (int64_t i = 0; OB_SUCC(ret) && (i < aux_vp_tid_array.count()); ++i) {
-                if (aux_vp_tid_array.at(i) == aux_table_schema->get_table_id()) {
-                  // skip
-                } else if (OB_FAIL(tmp_aux_vp_tid_array.push_back(aux_vp_tid_array.at(i)))) {
-                  LOG_WARN("push back to tmp_aux_vp_tid_array failed", K(ret), K(i), K(aux_vp_tid_array.at(i)));
-                }
-              }
-              if (OB_SUCC(ret)) {
-                // update aux_vp_tid_array of new_table_schema
-                if (OB_FAIL(new_table_schema.set_aux_vp_tid_array(tmp_aux_vp_tid_array))) {
-                  LOG_WARN("set aux_vp_tid_array to new_table_schema failed", K(ret), K(tmp_aux_vp_tid_array));
-                }
-              }
-            }
-          } else {
-            ObTableSchema tmp_aux_table_schema;
-            if (OB_FAIL(tmp_aux_table_schema.assign(*aux_table_schema))) {
-              LOG_WARN("fail to assign schema", K(ret));
-            } else if (OB_FAIL(update_prev_id_for_delete_column(
-                *aux_table_schema,
-                tmp_aux_table_schema,
-                *delete_column_schema,
-                trans))) {
-              LOG_WARN("failed to update column previous id for delete column", K(ret));
-            } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
-              LOG_WARN("fail to gen new schema_version", K(ret));
-            } else if (OB_FAIL(schema_service->get_table_sql_service().delete_single_column(
-                new_schema_version,
-                trans,
-                *aux_table_schema,
-                *delete_column_schema,
-                false/*need_record_ddl_operation*/))) {
-              RS_LOG(WARN, "failed to delete non-aux column!",
-                  "table schema", *aux_table_schema, K(ret));
-            } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
-              LOG_WARN("fail to gen new schema_version", K(ret));
-            } else if (OB_FAIL(schema_service->get_table_sql_service().sync_aux_schema_version_for_history(
-                trans,
-                *aux_table_schema,
-                new_schema_version
-                ))) {
-              RS_LOG(WARN, "fail to update aux schema version for update column");
-            }
-          }
-        }
-      }
-    }
-  }
-
-  return ret;
-}
-
 int ObDDLOperator::update_prev_id_for_delete_column(const ObTableSchema &origin_table_schema,
     ObTableSchema &new_table_schema,
     const ObColumnSchemaV2 &ori_column_schema,
@@ -2600,20 +2480,11 @@ int ObDDLOperator::alter_table_options(
           new_table_schema,
           schema_guard,
           trans,
-          AUX_VERTIAL_PARTITION_TABLE,
-          has_aux_table_updated,
-          NULL,
-          idx_schema_versions))) {
-        RS_LOG(WARN, "failed to update_aux_vp_table!", K(ret), K(table_schema), K(new_table_schema));
-      } else if (OB_FAIL(update_aux_table(table_schema,
-          new_table_schema,
-          schema_guard,
-          trans,
           AUX_LOB_META,
           has_aux_table_updated,
           NULL,
           idx_schema_versions))) {
-        RS_LOG(WARN, "failed to update_aux_vp_table!", K(ret), K(table_schema), K(new_table_schema));
+        RS_LOG(WARN, "failed to update aux lob meta table!", K(ret), K(table_schema), K(new_table_schema));
       } else if (OB_FAIL(update_aux_table(table_schema,
           new_table_schema,
           schema_guard,
@@ -2622,7 +2493,7 @@ int ObDDLOperator::alter_table_options(
           has_aux_table_updated,
           NULL,
           idx_schema_versions))) {
-        RS_LOG(WARN, "failed to update_aux_vp_table!", K(ret), K(table_schema), K(new_table_schema));
+        RS_LOG(WARN, "failed to update aux lob piece table!", K(ret), K(table_schema), K(new_table_schema));
       }
 
       if (OB_SUCC(ret) && has_aux_table_updated) {
@@ -2660,7 +2531,6 @@ int ObDDLOperator::update_aux_table(
   int ret = OB_SUCCESS;
 
   const bool is_index = USER_INDEX == table_type;
-  ObSEArray<uint64_t, 16> aux_tid_array;
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
   uint64_t lob_meta_table_id = OB_INVALID_ID;
   uint64_t lob_piece_table_id = OB_INVALID_ID;
@@ -2676,12 +2546,6 @@ int ObDDLOperator::update_aux_table(
         LOG_WARN("get_aux_tid_array failed", K(ret), K(table_type));
       } else {
         N = simple_index_infos.count();
-      }
-    } else if (table_type == AUX_VERTIAL_PARTITION_TABLE) {
-      if (OB_FAIL(new_table_schema.get_aux_vp_tid_array(aux_tid_array))) {
-        LOG_WARN("get_aux_tid_array failed", K(ret), K(table_type));
-      } else {
-        N = aux_tid_array.count();
       }
     } else if (table_type == AUX_LOB_META) {
       lob_meta_table_id = new_table_schema.get_aux_lob_meta_tid();
@@ -2709,8 +2573,6 @@ int ObDDLOperator::update_aux_table(
       uint64_t tid = 0;
       if (table_type == USER_INDEX) {
         tid = simple_index_infos.at(i).table_id_;
-      } else if (table_type == AUX_VERTIAL_PARTITION_TABLE) {
-        tid = aux_tid_array.at(i);
       } else if (table_type == AUX_LOB_META) {
         tid = lob_meta_table_id;
       } else if (table_type == AUX_LOB_PIECE) {
@@ -3721,9 +3583,6 @@ int ObDDLOperator::purge_table_with_aux_table(
     if (OB_FAIL(purge_aux_table(table_schema, schema_guard, trans, USER_INDEX))) {
       LOG_WARN("purge_aux_table failed", K(ret), K(table_schema));
     } else if (OB_FAIL(purge_aux_table(table_schema, schema_guard, trans,
-                                       AUX_VERTIAL_PARTITION_TABLE))) {
-      LOG_WARN("purge_aux_table failed", K(ret), K(table_schema));
-    } else if (OB_FAIL(purge_aux_table(table_schema, schema_guard, trans,
                                        AUX_LOB_META))) {
       LOG_WARN("purge_aux_lob_meta_table failed", K(ret), K(table_schema));
     } else if (OB_FAIL(purge_aux_table(table_schema, schema_guard, trans,
@@ -3751,7 +3610,7 @@ int ObDDLOperator::purge_aux_table(
 {
   int ret = OB_SUCCESS;
 
-  ObSEArray<uint64_t, 16> aux_tid_array; // for aux_vp or aux_lob
+  ObSEArray<uint64_t, 16> aux_tid_array;
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
   bool is_index = false;
   if (USER_INDEX == table_type) {
@@ -3768,10 +3627,6 @@ int ObDDLOperator::purge_aux_table(
     const uint64_t aux_lob_piece_tid = table_schema.get_aux_lob_piece_tid();
     if (OB_INVALID_ID != aux_lob_piece_tid && OB_FAIL(aux_tid_array.push_back(aux_lob_piece_tid))) {
       LOG_WARN("push back aux_lob_piece_tid failed", K(ret));
-    }
-  } else if (AUX_VERTIAL_PARTITION_TABLE == table_type) {
-    if (OB_FAIL(table_schema.get_aux_vp_tid_array(aux_tid_array))) {
-      LOG_WARN("get_aux_vp_tid_array failed", K(ret), K(table_schema));
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
@@ -4240,7 +4095,6 @@ UNLIMITED TABLESPACE
 resource role, pre define sys priv;
 RESOURCE CREATE TABLE                             NO  YES YES
 RESOURCE CREATE OPERATOR                          NO  YES YES
-RESOURCE CREATE TYPE                              NO  YES YES
 RESOURCE CREATE TRIGGER                           NO  YES YES
 RESOURCE CREATE INDEXTYPE                         NO  YES YES
 RESOURCE CREATE PROCEDURE                         NO  YES YES*/
@@ -4316,9 +4170,6 @@ int ObDDLOperator::init_runtime_user(const ObString &user_name,
     } else if (OB_FAIL(schema_service->get_user_sql_service().create_user(
                        user, new_schema_version, &ddl_sql, trans))) {
       LOG_WARN("insert user failed", K(user), K(ret));
-    } else if ((!is_user || is_extended_sys_user(user.get_user_id()))
-               && OB_FAIL(init_inner_user_privs(user, trans))) {
-      LOG_WARN("init user privs failed", K(user), K(ret));
     }
   }
   return ret;
@@ -6883,7 +6734,7 @@ int ObMultiVersionSchemaService::cal_purge_need_timeout(
           case ObRecycleObject::INDEX:
           case ObRecycleObject::AUX_LOB_META:
           case ObRecycleObject::AUX_LOB_PIECE:
-          case ObRecycleObject::AUX_VP: {
+          case ObRecycleObject::RESERVED_TYPE_5: {
             continue;
           }
           default: {

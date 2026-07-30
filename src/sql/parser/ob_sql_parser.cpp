@@ -18,10 +18,8 @@
 
 #include "ob_sql_parser.h"
 #include "sql/parser/parse_node.h"
-#include "sql/parser/parse_malloc.h"
 #include "share/ob_errno.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "sql/parser/parser_utility.h"
 
 
 namespace oceanbase

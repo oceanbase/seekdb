@@ -18,9 +18,7 @@ id	k
 select * from query_uncommitted_data2 where id=3;
 id	k
 3	3
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 select * from query_uncommitted_data2;
 id	k
 1	1
@@ -60,9 +58,7 @@ ERROR 23000: Duplicate entry '5' for key 'PRIMARY'
 begin;
 insert into query_uncommitted_data2 values(6,6);
 update query_uncommitted_data2 set k=10 where id=5;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 set ob_query_timeout = 1000000;
 set ob_trx_timeout = 1000000;
 insert into query_uncommitted_data2 values (6, 60);

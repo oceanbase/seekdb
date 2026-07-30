@@ -308,28 +308,6 @@ int64_t ObTransCtx::get_commit_retry_interval_us_()
   return ObServerConfig::get_instance().trx_commit_retry_interval;
 }
 
-int ObTransCtx::set_app_trace_info_(const ObString &app_trace_info)
-{
-  int ret = OB_SUCCESS;
-  const int64_t len = app_trace_info.length();
-
-  if (OB_UNLIKELY(len < 0) || OB_UNLIKELY(len > OB_MAX_TRACE_ID_BUFFER_SIZE)) {
-    TRANS_LOG(WARN, "invalid argument", "context", *this);
-    ret = OB_INVALID_ARGUMENT;
-  } else if (0 == trace_info_.get_app_trace_info().length()) {
-    // set for the first time
-    if (OB_FAIL(trace_info_.set_app_trace_info(app_trace_info))) {
-      TRANS_LOG(WARN, "set app trace info error", K(ret), K(app_trace_info), K(*this));
-    }
-  } else if (trace_info_.get_app_trace_info().length() != app_trace_info.length()) {
-    // in big trans case, leader may change if redo log is not persisted successfully
-    TRANS_LOG(WARN, "different app trace info", K(ret), K(app_trace_info), "context", *this, K(lbt()));
-  } else {
-    // do nothing
-  }
-  return ret;
-} 
-
 int ObTransCtx::set_app_trace_id_(const ObString &app_trace_id)
 {
   int ret = OB_SUCCESS;

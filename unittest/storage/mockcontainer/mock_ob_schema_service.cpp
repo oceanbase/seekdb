@@ -73,7 +73,7 @@ const ObSchemaGetterGuard *MockObSchemaService::get_schema_guard(
 //  return version;
 //}
 //
-//int64_t MockObSchemaService::get_received_broadcast_version(const bool core_schema_version) const
+//int64_t MockObSchemaService::get_published_schema_version(const bool core_schema_version) const
 //{
 //  UNUSED(core_schema_version);
 //  int64_t version = 2;

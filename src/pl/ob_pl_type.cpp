@@ -24,7 +24,7 @@
 #include "sql/resolver/ob_stmt_resolver.h"
 #include "observer/mysql/ob_query_driver.h"
 #include "pl/ob_pl_dependency_util.h"
-#include "share/schema/ob_routine_info.h"  // relocated-definition owner
+#include "share/schema/ob_routine_info.h"
 namespace oceanbase
 {
 using namespace common;
@@ -204,7 +204,6 @@ int ObPLDataType::transform_and_add_routine_param(const pl::ObPLRoutineParam *pa
   OX (param_info.set_param_position(position));
   OX (param_info.set_param_level(level));
   OX (param_info.set_flag(param->get_mode()));
-  OX (param->is_nocopy_param() ? param_info.set_nocopy_param() : void(NULL));
   OX (param->is_default_cast() ? param_info.set_default_cast() : void(NULL));
   OZ (param_info.set_param_name(param->get_name()));
   if (OB_FAIL(ret)) {
@@ -721,7 +720,7 @@ case type: {                                                            \
   {
     DEEP_COPY_TYPE(PL_OBJ_TYPE, ObPLDataType, COPY_COMMON);
     DEEP_COPY_TYPE(PL_RECORD_TYPE, ObRecordType, COPY_COMMON);
-    DEEP_COPY_TYPE(PL_CURSOR_TYPE, ObRefCursorType, COPY_COMMON);
+    DEEP_COPY_TYPE(PL_CURSOR_TYPE, ObPLCursorType, COPY_COMMON);
     case PL_INTEGER_TYPE: /*do nothing*/ break;
     default: {
       ret = OB_NOT_SUPPORTED;
@@ -1152,14 +1151,6 @@ bool ObObjAccessIdx::is_subprogram_basic_variable(
           && access_idxs.at(get_subprogram_idx(access_idxs)).elem_type_.is_obj_type();
 }
 
-bool ObObjAccessIdx::is_local_refcursor_variable(
-    const common::ObIArray<ObObjAccessIdx> &access_idxs)
-{
-  return is_local_variable(access_idxs)
-      && 1 == access_idxs.count()
-      && access_idxs.at(0).elem_type_.is_cursor_type();
-}
-
 bool ObObjAccessIdx::is_local_cursor_variable(
   const common::ObIArray<ObObjAccessIdx> &access_idxs)
 {
@@ -1227,23 +1218,16 @@ bool ObObjAccessIdx::is_pkg_type(
           && access_idxs.at(access_idxs.count() - 1).is_pkg_type();
 }
 
-bool ObObjAccessIdx::is_udt_type(
-  const common::ObIArray<ObObjAccessIdx> &access_idxs)
-{
-  return access_idxs.count() > 0
-          && access_idxs.at(access_idxs.count() - 1).is_udt_type();
-}
-
 bool ObObjAccessIdx::is_external_type(
   const common::ObIArray<ObObjAccessIdx> &access_idxs)
 {
-  return is_pkg_type(access_idxs) || is_udt_type(access_idxs);
+  return is_pkg_type(access_idxs);
 }
 
 bool ObObjAccessIdx::is_type(
   const common::ObIArray<ObObjAccessIdx> &access_idxs)
 {
-  return is_local_type(access_idxs) || is_pkg_type(access_idxs) || is_udt_type(access_idxs);
+  return is_local_type(access_idxs) || is_pkg_type(access_idxs);
 }
 
 
@@ -1511,12 +1495,8 @@ int ObPLCursorInfo::deep_copy(ObPLCursorInfo &src, common::ObIAllocator *allocat
       fetched_with_row_ = src.fetched_with_row_;
       rowcount_  = src.rowcount_;
       current_position_ = src.current_position_;
-      in_forall_ = src.in_forall_;
-      save_exception_ = src.save_exception_;
-      forall_rollback_ = src.forall_rollback_;
       trans_id_ = src.trans_id_;
       is_scrollable_ = src.is_scrollable_;
-      ref_count_ = src.ref_count_;
       cursor_flag_ = src.cursor_flag_;
       OZ (snapshot_.assign(src.snapshot_));
       is_need_check_snapshot_ = src.is_need_check_snapshot_;
@@ -1580,8 +1560,6 @@ int ObPLCursorInfo::deep_copy(ObPLCursorInfo &src, common::ObIAllocator *allocat
         OZ (ob_write_row(*copy_allocator, src.current_row_, current_row_));
         OZ (ob_write_row(*copy_allocator, src.first_row_, first_row_));
         OZ (ob_write_row(*copy_allocator, src.last_row_, last_row_));
-        OZ (bulk_rowcount_.assign(src.bulk_rowcount_));
-        OZ (bulk_exceptions_.assign(src.bulk_exceptions_));
 
         if (OB_FAIL(ret)) {
           common::ObIAllocator *old_allocator = get_allocator();
@@ -1589,7 +1567,6 @@ int ObPLCursorInfo::deep_copy(ObPLCursorInfo &src, common::ObIAllocator *allocat
           this->~ObPLCursorInfo();
           new(this) ObPLCursorInfo(old_allocator);
           this->reset();
-          this->set_ref_count(1);
         }
       }
     }
@@ -1709,15 +1686,7 @@ int ObPLCursorInfo::set_rowcount(int64_t rowcount)
       rowcount_ = rowcount;
     }
   } else {
-    if (in_forall_) {
-      if (OB_FAIL(add_bulk_row_count(rowcount))) {
-        LOG_WARN("faield to add bulk rowcount", K(ret), K(rowcount));
-      } else {
-        rowcount_ += rowcount;
-      }
-    } else {
-      rowcount_ = rowcount;
-    }
+    rowcount_ = rowcount;
     isopen_ = true; // The implicit cursor uses this value to determine if any DML has been executed, so this value is set every time set_rowcount is called
   }
   return ret;
@@ -1739,50 +1708,6 @@ int ObPLCursorInfo::get_rowid(ObString &rowid) const
   } else {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("implicit cursor has no rowid", K(ret));
-  }
-  return ret;
-}
-
-int ObPLCursorInfo::set_bulk_exception(int64_t error)
-{
-  int ret = OB_SUCCESS;
-  if (!in_forall_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("can not set bulk exception when not in forall", K(ret), K(in_forall_));
-  } else if (OB_FAIL(set_rowcount(0))) { // Set the row count of the failed statement to 0
-    LOG_WARN("failed to set rowcount for bulk exception", K(ret));
-  } else if (OB_FAIL(add_bulk_exception(bulk_rowcount_.count(), error))) {
-    LOG_WARN("failed to set exception for bulk exception", K(ret));
-  }
-  if (OB_FAIL(ret)) { // Set bulk exception failed, will exit for_all_ environment, to avoid incomplete reset of implicit cursor, reset implicit cursor
-    reset();
-  }
-  return ret;
-}
-
-int ObPLCursorInfo::get_bulk_rowcount(int64_t index, int64_t &rowcount) const
-{
-  int ret = OB_SUCCESS;
-  if (index < 0 || index >= bulk_rowcount_.count()) {
-    ret = OB_ARRAY_OUT_OF_RANGE;
-    LOG_WARN("bulk rowcount index is invalid", K(ret), K(index), K(bulk_rowcount_.count()));
-  } else {
-    rowcount = bulk_rowcount_.at(index);
-  }
-  return ret;
-}
-
-int ObPLCursorInfo::get_bulk_exception(int64_t index, bool need_code, int64_t &result) const
-{
-  int ret = OB_SUCCESS;
-  if (index < 0 || index >= bulk_exceptions_.count()) {
-    ret = OB_ARRAY_OUT_OF_RANGE;
-    LOG_WARN("bulk exceptions index is invalid",
-      K(ret), K(index), K(need_code), K(bulk_exceptions_.count()));
-  } else if (need_code) {
-    result = bulk_exceptions_.at(index).error_code_;
-  } else {
-    result = bulk_exceptions_.at(index).index_;
   }
   return ret;
 }
@@ -1927,9 +1852,6 @@ pl::ObPLDataType ObRoutineParam::get_pl_data_type() const
         default: // do nothing ...
         break;
       }
-    } else if (is_sys_refcursor_type()) {
-      type.set_type(pl::PL_REF_CURSOR_TYPE);
-      type.set_type_from(pl::PL_TYPE_SYS_REFCURSOR);
     } else {
       type.set_data_type(get_param_type());
     }

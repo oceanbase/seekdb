@@ -76,7 +76,7 @@ public:
   // OB_NEED_RETRY, log blocks changed during raw_read.
   // others.
   // 
-  // 1. use oceanbase::share::mtl_malloc_align or oceanbase::common::ob_malloc_align
+  // 1. use oceanbase::share::server_malloc_align or oceanbase::common::ob_malloc_align
   //    with LOG_DIO_ALIGN_SIZE to allocate aligned buffer.
   // 2. use oceanbase::common::lower_align or oceanbase::common::upper_align with
   //    LOG_DIO_ALIGN_SIZE to get aligned lsn or nbytes.

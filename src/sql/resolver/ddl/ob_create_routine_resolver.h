@@ -56,8 +56,7 @@ public:
                    const ParseNode *ret_node,
                    const ParseNode *param_node,
                    const ParseNode *clause_list,
-                   obcall::ObCreateRoutineArg *crt_routine_arg,
-                   bool is_udt_udf = false);
+                   obcall::ObCreateRoutineArg *crt_routine_arg);
   
   virtual int resolve(const ParseNode &parse_tree);
   virtual int resolve_impl(const ParseNode &parse_tree, obcall::ObCreateRoutineArg *crt_routine_arg) = 0;
@@ -70,8 +69,7 @@ private:
                               const common::ObString &param_name);
   int create_routine_arg(obcall::ObCreateRoutineArg *&crt_routine_arg);
   int set_routine_info(const share::schema::ObRoutineType &type,
-                       share::schema::ObRoutineInfo &routine_info,
-                       bool is_udt_udf = false);
+                       share::schema::ObRoutineInfo &routine_info);
   int analyze_router_sql(obcall::ObCreateRoutineArg *crt_routine_arg);
   int resolve_sp_definer(const ParseNode *parse_node, share::schema::ObRoutineInfo &routine_info);
   int resolve_sp_name(const ParseNode *parse_node, obcall::ObCreateRoutineArg *crt_routine_arg);

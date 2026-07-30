@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "util/easy_mod_stat.h"
 #include "observer/mysql/obmp_connect.h"
 #include "observer/ob_server.h"
@@ -63,7 +62,6 @@ ObMPConnect::ObMPConnect(const ObGlobalContext &gctx)
     : ObMPBase(gctx),
       user_name_(),
       client_ip_(),
-      runtime_name_(),
       db_name_(),
       deser_ret_(OB_SUCCESS),
       allocator_(ObModIds::OB_SQL_REQUEST),
@@ -100,7 +98,6 @@ int ObMPConnect::deserialize()
       conn->client_cs_type_ = hsr_.get_char_set();
       db_name_ = hsr_.get_database();
       user_name_ = extract_user_name(hsr_.get_username());
-      runtime_name_ = ObString::make_string(OB_SERVER_RUNTIME_NAME);
       LOG_DEBUG("database name", K(hsr_.get_database()));
     }
 
@@ -125,7 +122,6 @@ int ObMPConnect::init_process_single_stmt(const ObMultiStmtItem &multi_stmt_item
   ObArenaAllocator allocator(ObModIds::OB_SQL_SESSION);
   ObSqlCtx ctx;
   ctx.exec_type_ = MpQuery;
-  session.init_use_rich_format();
   if (OB_FAIL(init_process_var(ctx, multi_stmt_item, session))) {
     LOG_WARN("init process var failed.", K(ret), K(multi_stmt_item));
   } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(
@@ -161,7 +157,7 @@ int ObMPConnect::init_process_single_stmt(const ObMultiStmtItem &multi_stmt_item
     }
     //For the handling of tracelog, it does not affect the normal logic, and the error code does not need to be assigned to ret
     int tmp_ret = OB_SUCCESS;
-    tmp_ret = do_after_process(session, false); // not asynchronous response
+    tmp_ret = do_after_process(session, false, ret); // not asynchronous response
     UNUSED(tmp_ret);
   }
   return ret;
@@ -305,15 +301,11 @@ int ObMPConnect::process()
         free_session();
       }
       disconnect();
-      EVENT_INC(SQL_USER_LOGONS_FAILED_CUMULATIVE);
-      EVENT_INC(SQL_USER_LOGOUTS_CUMULATIVE);
     }
 
-    EVENT_INC(SQL_USER_LOGONS_CUMULATIVE);
-    EVENT_ADD(SQL_USER_LOGONS_COST_TIME_CUMULATIVE, common::ObTimeUtility::current_time() - req_->get_receive_timestamp());
 
     LOG_INFO("MySQL LOGIN", "direct_client_ip", client_ip_buf, K_(client_ip),
-             K_(runtime_name), K_(user_name), K(host_name),
+             K_(user_name), K(host_name),
              K(sessid),
              K(capability), K(use_ssl),
              "c/s protocol", get_cs_protocol_type_name(protoType),
@@ -337,7 +329,6 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
   } else {
     ObString host_name;
 
-    // TODO, checker ret
     if (OB_SUCC(ret)) {
       if (user_name_.length() > OB_MAX_USER_NAME_LENGTH) {
         // Tenant routing used to split user@tenant before this check.  Once
@@ -366,7 +357,7 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
     } else if (OB_ISNULL(sys_variable_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("sys variable schema is null", K(ret));
-    } else if (OB_FAIL(session.init_runtime(runtime_name_))) {
+    } else if (OB_FAIL(session.init_runtime(OB_SERVER_RUNTIME_NAME))) {
         LOG_WARN("failed to initialize session runtime", K(ret));
     } else if (OB_FAIL(session.load_all_sys_vars(*sys_variable_schema, false))) {
       LOG_WARN("load system variables failed", K(ret));
@@ -375,7 +366,6 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
       LOG_WARN("update autocommit failed", K(ret), K(conn->autocommit_snapshot_));
     } else {
       share::schema::ObUserLoginInfo login_info;
-      login_info.runtime_name_ = runtime_name_;
       login_info.user_name_ = user_name_;
       login_info.client_ip_ = client_ip_;
       SSL *ssl_st = SQL_REQ_OP.get_sql_ssl_st(req_);
@@ -502,7 +492,7 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
         int64_t global_version = OB_INVALID_VERSION;
         if (OB_SUCCESS != (tmp_ret = schema_service->get_runtime_refreshed_schema_version(local_version))) {
           LOG_WARN("fail to get local version", K(ret), K(tmp_ret));
-        } else if (OB_SUCCESS != (tmp_ret = schema_service->get_runtime_received_broadcast_version(global_version))) {
+        } else if (OB_SUCCESS != (tmp_ret = schema_service->get_published_schema_version(global_version))) {
           LOG_WARN("fail to get local version", K(ret), K(tmp_ret));
         } else if (local_version < global_version) {
           LOG_INFO("try to refresh schema", K(local_version), K(global_version));
@@ -542,24 +532,12 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
       session.set_enable_role_array(enable_role_id_array);
       host_name = session_priv.host_name_;
       uint64_t db_id = OB_INVALID_ID;
-      const ObServerRuntimeSchema *runtime_schema = NULL;
       if (OB_FAIL(session.set_user(session_priv.user_name_, session_priv.host_name_, session_priv.user_id_))) {
         LOG_WARN("failed to set_user", K(ret));
       } else if (OB_FAIL(session.set_real_client_ip_and_port(client_ip_, client_port_))) {
         LOG_WARN("failed to set_real_client_ip_and_port", K(ret));
       } else if (OB_FAIL(session.set_default_database(session_priv.db_))) {
         LOG_WARN("failed to set default database", K(ret), K(session_priv.db_));
-      } else if (OB_FAIL(schema_guard.get_server_runtime_info(runtime_schema))) {
-        LOG_WARN("get server runtime info failed", K(ret));
-      } else if (OB_ISNULL(runtime_schema)) {
-        ret = OB_RUNTIME_SCHEMA_NOT_READY;
-        LOG_WARN("runtime_schema is null", K(ret));
-      } else if (runtime_schema->is_in_recyclebin()) {
-        ret = OB_RUNTIME_SCHEMA_NOT_READY;
-        LOG_WARN("runtime is in recycle bin", KR(ret));
-      } else if (runtime_schema->is_restore()) {
-        ret = OB_STATE_NOT_MATCH;
-        LOG_WARN("runtime is restoring", KR(ret));
       } else if (OB_FAIL(session.update_database_variables(&schema_guard))) {
         LOG_WARN("failed to update database variables", K(ret));
       } else if (OB_FAIL(session.update_max_packet_size())) {
@@ -577,7 +555,7 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
           
           if (OB_SUCCESS != (tmp_ret = schema_service->get_runtime_refreshed_schema_version(local_version))) {
             LOG_WARN("fail to get local version", K(ret), K(tmp_ret));
-          } else if (OB_SUCCESS != (tmp_ret = schema_service->get_runtime_received_broadcast_version(global_version))) {
+          } else if (OB_SUCCESS != (tmp_ret = schema_service->get_published_schema_version(global_version))) {
             LOG_WARN("fail to get local version", K(ret), K(tmp_ret));
           } else if (local_version < global_version) {
             LOG_INFO("try to refresh schema", K(1UL),
@@ -601,7 +579,7 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
       }
     }
 
-    LOG_DEBUG("obmp connect info:", K(ret), K_(runtime_name), K_(user_name),
+    LOG_DEBUG("obmp connect info:", K(ret), K_(user_name),
               K(host_name), K_(client_ip), "database", hsr_.get_database(),
               K(hsr_.get_capability_flags().capability_));
   }
@@ -743,7 +721,6 @@ int ObMPConnect::verify_identify(ObSMConnection &conn, ObSQLSessionInfo &session
 
     // At this point, conn.runtime_ and sessid are stable.
     if (conn.sessid_ != 0) {
-      EVENT_INC(ACTIVE_SESSIONS);
       conn.has_inc_active_num_ = true;
     }
 
@@ -782,7 +759,6 @@ int ObMPConnect::verify_identify(ObSMConnection &conn, ObSQLSessionInfo &session
 int ObMPConnect::verify_ip_white_list() const
 {
   int ret = OB_SUCCESS;
-  const ObServerRuntimeSchema *runtime_schema = NULL;
   const ObSysVariableSchema *sys_variable_schema = NULL;
   share::schema::ObSchemaGetterGuard schema_guard;
   ObString var_name(OB_SV_TCP_INVITED_NODES);
@@ -794,11 +770,6 @@ int ObMPConnect::verify_ip_white_list() const
     LOG_INFO("match unix socket connection", K(client_ip_));
   } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("get_schema_guard failed", K(ret));
-  } else if (OB_FAIL(schema_guard.get_server_runtime_info(runtime_schema))) {
-    LOG_WARN("get server runtime info failed", K(ret));
-  } else if (OB_ISNULL(runtime_schema)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("runtime_schema is null", K(ret));
   } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
     LOG_WARN("get sys variable schema failed", K(ret));
   } else if (OB_ISNULL(sys_variable_schema)) {

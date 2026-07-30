@@ -4,7 +4,7 @@ explain_protocol: 2
 // Case1: normal test,测试是否将带参数的case转为不带参数的case
 // Case2: 测试case表达式里面有列的情况
 // Case3: 测试空串以及NULL的情况
-alter system flush plan cache global;
+alter system flush plan cache;
 set @@ob_enable_plan_cache = 0;
 // Case1: normal test. 
 // 所有带参数的case表达式都被转为不带参数的case表达式
@@ -166,7 +166,7 @@ insert into t1 values(null, 1, 'a');
 
 explain_protocol: 2
 set @@ob_enable_plan_cache = 0;
-alter system flush plan cache global;
+alter system flush plan cache;
 // 测试int的normal case，应该返回'a'
 EXPLAIN select case col_int when 1 then 'a' when 2 then 'b' else 'c' end from t1;
 Query Plan

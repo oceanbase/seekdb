@@ -47,9 +47,7 @@ typedef ObNumStackAllocator<1> ObNumStackOnceAlloc;
 
 #define array_elements(A) ((uint) (sizeof(A)/sizeof(A[0])))
 
-template <typename T>
-class ObTextStringVectorResult;
-using ObTextStringDatumResult = ObTextStringVectorResult<common::ObIVector>;
+class ObTextStringDatumResult;
 
 class ObExprUtil
 {
@@ -268,10 +266,6 @@ private:
 
 //Get the merged values of solidified vars and current session vars
 //If a var is solidified, return the solidified value. Otherwise return currrent session value.
-//e.g. :
-// ObSolidifiedVarsGetter helper(expr, ctx, session);
-// ObString format;
-// helper.get_local_nls_date_format(format);
 class ObSolidifiedVarsGetter
 {
 public:
@@ -279,7 +273,6 @@ public:
   int get_dtc_params(ObDataTypeCastParams &dtc_params);
   int get_time_zone_info(const common::ObTimeZoneInfo *&tz_info);
   int get_sql_mode(ObSQLMode &sql_mode);
-  int get_local_nls_date_format(ObString &format);
   int get_max_allowed_packet(int64_t &max_size);
   //get the specified solidified var
   int get_local_var(share::ObSysVarClassType var_type, ObSessionSysVar *&sys_var);

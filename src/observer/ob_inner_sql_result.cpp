@@ -203,7 +203,6 @@ int ObInnerSQLResult::next()
 {
   int ret = OB_SUCCESS;
   ObInnerSqlWaitGuard guard(is_inner_session(), &session_);
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_sql_execution);
   ObInterruptCheckerGuard interrupt_guard(interrupt_checker_);
   if (!opened_) {
     ret = OB_NOT_INIT;

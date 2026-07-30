@@ -210,8 +210,7 @@ int ObDependencyInfo::insert_schema_object_dependency(common::ObISQLClient &tran
                                           K(dep_info.get_ref_obj_type()),
                                           K(dep_info.get_ref_obj_id()));
   } else if (get_dep_obj_id() == get_ref_obj_id() && get_dep_obj_type() == get_ref_obj_type()) {
-    // rule out self reference scenario,
-    // except that type body share the same type id with its type spec
+    // rule out self reference
   } else if (OB_FAIL(gen_dependency_dml(dml))) {
     LOG_WARN("gen table dml failed", K(ret));
   } else {
@@ -289,9 +288,8 @@ int ObDependencyInfo::collect_dep_infos(const ObIArray<ObSchemaObjVersion> &sche
     const ObSchemaObjVersion &s_objs = schema_objs.at(i);
     const ObObjectType ref_obj_type = ObSchemaObjVersion::get_schema_object_type(
         s_objs.object_type_);
-    if (0 == i &&
-        (ObObjectType::TRIGGER == dep_obj_type || ObObjectType::TYPE_BODY == dep_obj_type)) {
-      // if dep_obj_type is TRIGGER or TYPE_BODY, schema_objs.at(0) is itself,
+    if (0 == i && ObObjectType::TRIGGER == dep_obj_type) {
+      // For a trigger, schema_objs.at(0) is itself;
       // need to skip to avoid self reference.
       continue;
     } else if (!s_objs.is_valid()) {
@@ -686,8 +684,6 @@ int ObDependencyInfo::batch_invalidate_dependents(const common::ObIArray<Critica
           && ObObjectType::PACKAGE_BODY != obj_type
           && ObObjectType::FUNCTION != obj_type
           && ObObjectType::PROCEDURE != obj_type
-          && ObObjectType::TYPE != obj_type
-          && ObObjectType::TYPE_BODY != obj_type
           && ObObjectType::TRIGGER != obj_type) {
         // types other than the above have different strategies for implementing INVALID status
         LOG_DEBUG("omitted object", K(i), K(objs.at(i)));
@@ -723,8 +719,6 @@ int ObDependencyInfo::batch_invalidate_dependents(const common::ObIArray<Critica
 }
 
 // modify_dep_obj_status / cascading_modify_obj_status / modify_all_obj_status
-// moved definition to the upper-layer owner cpp rootserver::ObDependencyDDLHelper(real upper-layer symbol user, declaration remains in the header, transitional state)
-// insert_dependency_infos is defined at the end of this file.
 
 void ObDependencyInfo::reset()
 {

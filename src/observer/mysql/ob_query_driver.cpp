@@ -181,7 +181,7 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
     const ObSQLSessionInfo &my_session = result.get_session();
     if (OB_FAIL(my_session.get_character_set_results(charset_type))) {
       LOG_WARN("fail to get result charset", K(ret));
-    } 
+    }
   }
 
   while (OB_SUCC(ret) && row_num < limit_count && !OB_FAIL(result.get_next_row(result_row)) ) {

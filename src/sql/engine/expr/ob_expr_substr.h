@@ -56,16 +56,9 @@ public:
 
   static int eval_substr(EVAL_FUNC_ARG_DECL);
   static int eval_substr_batch(BATCH_EVAL_FUNC_ARG_DECL);
-  static int eval_substr_vector(VECTOR_EVAL_FUNC_ARG_DECL);
   DECLARE_SET_LOCAL_SESSION_VARS;
 
 private:
-  template <typename ArgVec, typename ResVec>
-  static int vector_substr(const ObExpr &expr,
-                           ObEvalCtx &ctx,
-                           const ObBitVector &skip,
-                           const EvalBound &bound);
-
   int calc_result_length(ObExprResType *types_array,
                          int64_t param_num,
                          common::ObCollationType cs_type,

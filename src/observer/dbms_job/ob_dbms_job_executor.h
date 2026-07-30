@@ -41,15 +41,6 @@ public:
   int init(
     common::ObMySQLProxy *sql_proxy, share::schema::ObMultiVersionSchemaService *schema_service);
 
-  int init_session(
-    sql::ObSQLSessionInfo &session,
-    share::schema::ObSchemaGetterGuard &schema_guard,
-    const common::ObString &runtime_name,
-    const common::ObString &database_name, uint64_t database_id,
-    const share::schema::ObUserInfo* user_info,
-    sql::ObExecEnv &exec_env);
-
-
   int run_dbms_job(uint64_t job_id);
   int run_dbms_job(ObDBMSJobInfo &job_info, ObIAllocator &allocator);
 

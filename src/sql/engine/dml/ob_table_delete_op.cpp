@@ -179,17 +179,8 @@ OB_INLINE int ObTableDeleteOp::open_table_for_each()
       }
     }
     if (OB_SUCC(ret) && !rtdefs.empty()) {
-      const ObDelCtDef &primary_del_ctdef = *ctdefs.at(0);
       ObDelRtDef &primary_del_rtdef = rtdefs.at(0);
-      if (primary_del_ctdef.error_logging_ctdef_.is_error_logging_) {
-        is_error_logging_ = true;
-      }
-      if (OB_FAIL(ObDMLService::process_before_stmt_trigger(primary_del_ctdef,
-                                                            primary_del_rtdef,
-                                                            dml_rtctx_,
-                                                            ObDmlEventType::DE_DELETING))) {
-        LOG_WARN("process before stmt trigger failed", K(ret));
-      } else {
+      if (OB_SUCC(ret)) {
         //this table is being accessed by dml operator, mark its table location as writing
         primary_del_rtdef.das_rtdef_.table_loc_->is_writing_ = true;
       }
@@ -204,16 +195,9 @@ OB_INLINE int ObTableDeleteOp::close_table_for_each()
   if (OB_SUCCESS == ctx_.get_errcode()) {
     for (int64_t i = 0; OB_SUCC(ret) && i < del_rtdefs_.count(); ++i) {
       if (!del_rtdefs_.at(i).empty()) {
-        const ObDelCtDef &primary_del_ctdef = *MY_SPEC.del_ctdefs_.at(i).at(0);
         ObDelRtDef &primary_del_rtdef = del_rtdefs_.at(i).at(0);
         if (OB_NOT_NULL(primary_del_rtdef.das_rtdef_.table_loc_)) {
           primary_del_rtdef.das_rtdef_.table_loc_->is_writing_ = false;
-        }
-        if (OB_FAIL(ObDMLService::process_after_stmt_trigger(primary_del_ctdef,
-                                                             primary_del_rtdef,
-                                                             dml_rtctx_,
-                                                             ObDmlEventType::DE_DELETING))) {
-          LOG_WARN("process after stmt trigger failed", K(ret));
         }
       }
     }
@@ -282,7 +266,7 @@ OB_INLINE int ObTableDeleteOp::delete_row_to_das()
         LOG_WARN("insert row with das failed", K(ret));
       } else if (need_after_row_process(del_ctdef) && OB_FAIL(dml_modify_rows_.push_back(modify_row))) {
         LOG_WARN("failed to push dml modify row to modified row list", K(ret));
-      } else if (!MY_SPEC.del_ctdefs_.at(0).at(0)->has_instead_of_trigger_) {
+      } else {
         ++del_rtdef.cur_row_num_;
       }
     }
@@ -291,21 +275,6 @@ OB_INLINE int ObTableDeleteOp::delete_row_to_das()
       if (OB_FAIL(merge_implict_cursor(delete_rows, 0, 0, 0))) {
         LOG_WARN("merge implict cursor failed", K(ret));
       }
-    }
-  }
-
-  // if error logging can not catch the exception, the error code is thrown to the upper layer
-  if (is_error_logging_ && err_log_rt_def_.first_err_ret_ != OB_SUCCESS && should_catch_err(ret)) {
-    // if the exception that can be caught by error logging then change the error code to OB_SUCCESS;
-    // write error logging table
-    if (OB_FAIL(err_log_service_.insert_err_log_record(GET_MY_SESSION(ctx_),
-                                                       MY_SPEC.del_ctdefs_.at(0).at(0)->error_logging_ctdef_,
-                                                       err_log_rt_def_,
-                                                       ObDASOpType::DAS_OP_TABLE_DELETE))) {
-      LOG_WARN("fail to insert_err_log_record", K(ret));
-    } else {
-      clear_evaluated_flag();
-      err_log_rt_def_.curr_err_log_record_num_++;
     }
   }
 

@@ -28,17 +28,12 @@ namespace lib
 
 namespace sql
 {
-struct ObSortVecOpContext;
-struct ObCompactRow;
-struct RowMeta;
 class ObPushDownTopNFilterMsg;
 struct ObPushDownTopNFilterInfo;
 class ObExecContext;
 struct ObSortFieldCollation;
 class ObExprTopNFilterContext;
 
-// ob_sort_vec_op_impl.ipp is an ipp with variable template
-// move the topn code to the ob_pd_topn_sort_filter.cpp to accelerate the compile speed
 class ObPushDownTopNFilter
 {
 public:
@@ -49,12 +44,9 @@ public:
   ~ObPushDownTopNFilter();
   void destroy();
 
-  // for vec2.0
-  int init(const ObSortVecOpContext &ctx, lib::MemoryContext &mem_context);
   int init(bool is_fetch_with_ties, const ObPushDownTopNFilterInfo *pd_topn_filter_info, const ObIArray<ObSortFieldCollation> *sort_collations,
            ObExecContext *exec_ctx, lib::MemoryContext &mem_context);
 
-  int update_filter_data(ObCompactRow *compact_row, const RowMeta *row_meta_);
   int update_filter_data(ObChunkDatumStore::StoredRow *store_row);
 
   inline bool enabled() { return enabled_; }

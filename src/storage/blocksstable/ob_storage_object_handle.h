@@ -23,7 +23,7 @@ namespace oceanbase
 {
 namespace storage
 {
-  class ObBloomFilterBuildTask;
+class ObBloomFilterBuildTask;
 }
 namespace blocksstable
 {
@@ -36,7 +36,7 @@ class ObStorageObjectHandle final
   // for call set_macro_block_id
   friend class ObObjectManager; // in ObObjectManager::ss_get_object_id
   friend class ObBlockManager; // in ObBlockManager::alloc_object
-  friend class storage::ObBloomFilterBuildTask; // in construct_func
+  friend class storage::ObBloomFilterBuildTask; // keeps the macro block alive while the task is queued
   friend class blocksstable::ObMacroBlockWriter; // int ObMacroBlockWriter::alloc_block_from_device
 public:
   ObStorageObjectHandle() = default;

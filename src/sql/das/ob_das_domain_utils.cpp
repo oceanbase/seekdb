@@ -15,6 +15,7 @@
  */
 
 #include "lib/container/ob_se_array.h"
+#include "common/json_type/ob_json_bin.h"
 #include "share/rc/ob_module_provider.h"
 #include "share/ob_errno.h"
 #define USING_LOG_PREFIX SQL_DAS

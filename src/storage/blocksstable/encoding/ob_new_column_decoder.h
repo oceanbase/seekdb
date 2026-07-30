@@ -42,7 +42,6 @@ public:
       const int64_t row_cap,
       common::ObDatum *datums) const;
 
-  int decode_vector(ObVectorDecodeCtx &vector_ctx) const;
 
   int pushdown_operator(
       const sql::ObWhiteFilterExecutor &filter,
@@ -101,14 +100,6 @@ public:
     return common_decoder_.batch_decode(ctx.col_param_, ctx.allocator_, row_cap, datums);
   }
 
-  virtual int decode_vector(
-      const ObColumnDecoderCtx &decoder_ctx,
-      const ObIRowIndex *row_index,
-      ObVectorDecodeCtx &vector_ctx) const override
-  {
-    UNUSEDx(decoder_ctx, row_index, vector_ctx);
-    return common_decoder_.decode_vector(vector_ctx);
-  }
 
   virtual int pushdown_operator(
       const sql::ObPushdownFilterExecutor *parent,

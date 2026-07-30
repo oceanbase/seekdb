@@ -50,7 +50,7 @@ const char *ObMaxIdFetcher::max_id_name_info_[OB_MAX_ID_TYPE][2] = {
   { "ob_max_used_user_id", "max used user id"},
   { "ob_max_used_outline_id", "max used outline id"},
   { "ob_max_used_constraint_id", "max used constraint id"},
-  { "ob_max_used_synonym_id", "max used synonym id"},
+  { "ob_max_used_reserved_id", "reserved max id slot"},
   { "ob_max_used_udf_id", "max used udf id"},
   { "ob_max_used_udt_id", "max used udt id"},
   { "ob_max_used_routine_id", "max used routine id"},
@@ -114,7 +114,7 @@ int ObMaxIdFetcher::convert_id_type(
     case OB_MAX_USED_USER_ID_TYPE:
     case OB_MAX_USED_OUTLINE_ID_TYPE:
     case OB_MAX_USED_CONSTRAINT_ID_TYPE:
-    case OB_MAX_USED_SYNONYM_ID_TYPE:
+    case OB_MAX_USED_RESERVED_ID_TYPE:
     case OB_MAX_USED_UDF_ID_TYPE:
     case OB_MAX_USED_UDT_ID_TYPE:
     case OB_MAX_USED_ROUTINE_ID_TYPE:

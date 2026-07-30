@@ -724,12 +724,8 @@ int ObTransformRule::adjust_transformed_stmt(ObIArray<ObParentDMLStmt> &parent_s
 
 bool ObTransformRule::is_normal_disabled_transform(const ObDMLStmt &stmt)
 {
-  bool bret = false;
-  if (stmt.has_instead_of_trigger()) {
-    OPT_TRACE("stmt with instead of trigger can not transform");
-    bret = true;
-  }
-  return bret;
+  UNUSED(stmt);
+  return false;
 }
 
 int ObTransformRule::need_transform(const common::ObIArray<ObParentDMLStmt> &parent_stmts,
@@ -832,8 +828,7 @@ int ObTransformRule::transform_self(common::ObIArray<ObParentDMLStmt> &parent_st
     LOG_WARN("failed to update implicit distinct", K(ret));
   } else if (OB_FAIL(update_max_table_num(stmt))) {
       LOG_WARN("failed to update max table num", K(ret));
-  } else if ((!stmt->is_delete_stmt() && !stmt->is_update_stmt())
-              || stmt->has_instead_of_trigger()) {
+  } else if (!stmt->is_delete_stmt() && !stmt->is_update_stmt()) {
     // do nothing
   } else if (OB_FAIL(static_cast<ObDelUpdStmt *>(stmt)->update_base_tid_cid())) {
     LOG_WARN("failed to update base tid and cid", K(ret));

@@ -25,7 +25,6 @@ namespace oceanbase
 namespace sql
 {
 
-class ObVectorsResultHolder;
 class ObBatchResultHolder;
 
 class ObExpandVecSpec: public ObOpSpec
@@ -79,7 +78,7 @@ public:
   ObExpandVecOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInput *input) :
     ObOperator(exec_ctx, spec, input), dup_status_(DupStatus::Init), expr_iter_idx_(-1),
     child_input_size_(0), child_input_skip_(nullptr),
-    child_all_rows_active_(false), vec_holder_(nullptr),
+    child_all_rows_active_(false), datum_holder_(nullptr),
     allocator_("ValueExpansion", OB_MALLOC_NORMAL_BLOCK_SIZE, ObCtxIds::WORK_AREA)
   {}
   virtual ~ObExpandVecOp() {}
@@ -127,25 +126,6 @@ private:
 
   int duplicate_rollup_exprs();
 
-  template<VectorFormat vec>
-  int duplicate_expr(ObExpr *from, ObExpr *to);
-
-  template<typename uni_vector>
-  int duplicate_expr_from_uniform(uni_vector *from, ObExpr *to);
-
-  void copy_bitmap_based_nulls(ObIVector *from, ObIVector *to)
-  {
-    ObBitmapNullVectorBase *from_nulls = static_cast<ObBitmapNullVectorBase *>(from);
-    ObBitmapNullVectorBase *to_nulls = static_cast<ObBitmapNullVectorBase *>(to);
-    to_nulls->get_nulls()->deep_copy(*from_nulls->get_nulls(), brs_.size_);
-    to_nulls->set_has_null(from_nulls->has_null());
-    if (from_nulls->is_batch_ascii()) {
-      to_nulls->set_is_batch_ascii();
-    } else {
-      to_nulls->reset_is_batch_ascii();
-    }
-  }
-
   void next_status();
 
   int do_dup_partial();
@@ -167,11 +147,7 @@ private:
   int64_t child_input_size_;
   ObBitVector *child_input_skip_;
   bool child_all_rows_active_;
-  union
-  {
-    ObVectorsResultHolder *vec_holder_;
-    ObBatchResultHolder *datum_holder_;
-  };
+  ObBatchResultHolder *datum_holder_;
   common::ObArenaAllocator allocator_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExpandVecOp);

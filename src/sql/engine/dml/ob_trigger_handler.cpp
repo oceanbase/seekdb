@@ -461,7 +461,6 @@ int TriggerHandle::calc_trigger_routine(
 {
   int ret = OB_SUCCESS;
   ObArray<int64_t> path;
-  ObArray<int64_t> nocopy_params;
   trigger_id = ObTriggerInfo::get_trigger_spec_package_id(trigger_id);
   bool old_flag = false;
   common::ObArenaAllocator tmp_allocator(common::ObMemAttr("TriggerExec"));
@@ -470,7 +469,7 @@ int TriggerHandle::calc_trigger_routine(
   OX (exec_ctx.get_my_session()->set_for_trigger_package(true));
   OV (OB_NOT_NULL(exec_ctx.get_pl_engine()));
   OZ (exec_ctx.get_pl_engine()->execute(
-    exec_ctx, tmp_allocator, trigger_id, routine_id, path, params, nocopy_params, result),
+    exec_ctx, tmp_allocator, trigger_id, routine_id, path, params, result),
       trigger_id, routine_id, params);
   CK (OB_NOT_NULL(exec_ctx.get_my_session()));
   OZ (exec_ctx.get_my_session()->reset_all_package_state_by_dbms_session());
@@ -626,8 +625,7 @@ int TriggerHandle::do_handle_before_row(
         K(trig_ctdef.all_tm_points_.has_before_row()),
         K(trig_ctdef.all_tm_points_.has_after_row()),
         K(trig_ctdef.all_tm_points_.has_before_point()),
-        K(trig_ctdef.all_tm_points_.has_after_point()),
-        K(trig_ctdef.all_tm_points_.has_instead_row()));
+        K(trig_ctdef.all_tm_points_.has_after_point()));
       OV (OB_NOT_NULL(my_session));
       for (int64_t i = 0; OB_SUCC(ret) && i < trig_ctdef.tg_args_.count(); i++) {
         const ObTriggerArg &tg_arg = trig_ctdef.tg_args_.at(i);
@@ -649,21 +647,13 @@ int TriggerHandle::do_handle_before_row(
               LOG_WARN("failed to calc before row", K(ret));
             } else if ((ObTriggerEvents::is_update_event(tg_event) ||
                   ObTriggerEvents::is_insert_event(tg_event))) {
-                if (!trig_ctdef.all_tm_points_.has_instead_row() &&
-                    OB_FAIL(check_and_update_new_row(&dml_op,
+                if (OB_FAIL(check_and_update_new_row(&dml_op,
                                               trig_ctdef.trig_col_info_,
                                               dml_op.get_eval_ctx(),
                                               trig_ctdef.new_row_exprs_,
                                               trig_rtdef.new_record_,
                                               ObTriggerEvents::is_update_event(tg_event)))) {
                   LOG_WARN("failed to check updated new row", K(ret));
-              }
-            }
-            if (OB_SUCC(ret) && trig_ctdef.all_tm_points_.has_instead_row()) {
-              GET_PHY_PLAN_CTX(dml_op.get_exec_ctx())->add_affected_rows(1);
-              if (ObTriggerEvents::is_update_event(tg_event)) {
-                GET_PHY_PLAN_CTX(dml_op.get_exec_ctx())->add_row_matched_count(1);
-                GET_PHY_PLAN_CTX(dml_op.get_exec_ctx())->add_row_duplicated_count(1);
               }
             }
             LOG_DEBUG("TRIGGER calc before row", K(need_fire), K(i));
@@ -707,77 +697,7 @@ int TriggerHandle::calc_before_row(
   return ret;
 }
 
-int TriggerHandle::calc_before_stmt(
-  ObTableModifyOp &dml_op,
-  ObTrigDMLRtDef &trig_rtdef,
-  uint64_t trigger_id)
-{
-  UNUSED(trig_rtdef);
-  int ret = OB_SUCCESS;
-  ParamStore params;
-  if (OB_FAIL(calc_trigger_routine(dml_op.get_exec_ctx(),
-                                   trigger_id, ROUTINE_IDX_BEFORE_STMT, params))) {
-    LOG_WARN("failed to calc trigger routine", K(ret));
-  }
-  return ret;
-}
-
-int TriggerHandle::do_handle_after_stmt(
-  ObTableModifyOp &dml_op,
-  const ObTrigDMLCtDef &trig_ctdef,
-  ObTrigDMLRtDef &trig_rtdef,
-  uint64_t tg_event)
-{
-  int ret = OB_SUCCESS;
-  if (trig_ctdef.all_tm_points_.has_after_stmt()) {
-    LOG_DEBUG("TRIGGER", K(trig_ctdef.tg_args_));
-    for (int64_t i = 0; OB_SUCC(ret) && i < trig_ctdef.tg_args_.count(); i++) {
-      const ObTriggerArg &tg_arg = trig_ctdef.tg_args_.at(i);
-      if (tg_arg.has_after_stmt_point() && tg_arg.has_trigger_events(tg_event)) {
-        OZ (calc_after_stmt(dml_op, trig_rtdef, tg_arg.get_trigger_id()), ret);
-      }
-    }
-  }
-  int tmp_ret = OB_SUCCESS;
-  if (OB_SUCCESS != (tmp_ret = destroy_compound_trigger_state(dml_op.get_exec_ctx(), trig_ctdef))) {
-    LOG_WARN("destroy compound trigger state failed", K(tmp_ret), K(ret));
-  }
-  return ret;
-}
-
-int TriggerHandle::calc_after_stmt(
-  ObTableModifyOp &dml_op, ObTrigDMLRtDef &trig_rtdef, uint64_t trigger_id)
-{
-  UNUSED(trig_rtdef);
-  int ret = OB_SUCCESS;
-  ParamStore params;
-  OZ (calc_trigger_routine(dml_op.get_exec_ctx(),
-                           trigger_id, ROUTINE_IDX_AFTER_STMT, params));
-  return ret;
-}
-
 // only the first trigger need run statement trigger
-int TriggerHandle::do_handle_before_stmt(
-  ObTableModifyOp &dml_op,
-  const ObTrigDMLCtDef &trig_ctdef,
-  ObTrigDMLRtDef &trig_rtdef,
-  uint64_t tg_event)
-{
-  int ret = OB_SUCCESS;
-  if (trig_ctdef.all_tm_points_.has_before_stmt()) {
-    LOG_DEBUG("TRIGGER", K(trig_ctdef.tg_args_));
-    for (int64_t i = 0; OB_SUCC(ret) && i < trig_ctdef.tg_args_.count(); i++) {
-      const ObTriggerArg &tg_arg = trig_ctdef.tg_args_.at(i);
-      if (tg_arg.has_before_stmt_point() && tg_arg.has_trigger_events(tg_event)) {
-        if (OB_FAIL(calc_before_stmt(dml_op, trig_rtdef, tg_arg.get_trigger_id()))) {
-          LOG_WARN("failed to calc befeore stmt", K(ret));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
 // to compatible with oralce
 int TriggerHandle::do_handle_rowid_after_row(
   ObTableModifyOp &dml_op,
@@ -836,26 +756,6 @@ int TriggerHandle::do_handle_after_row(
           OZ (calc_after_row(dml_op, trig_rtdef, tg_arg.get_trigger_id()));
         }
       }
-    }
-  }
-  return ret;
-}
-
-int TriggerHandle::destroy_compound_trigger_state(ObExecContext &exec_ctx, const ObTrigDMLCtDef &trig_ctdef)
-{
-  int ret = OB_SUCCESS;
-  ObSQLSessionInfo *session_info = exec_ctx.get_my_session();
-  ObSchemaGetterGuard *schema_guard = exec_ctx.get_sql_ctx()->schema_guard_;
-  OV (OB_NOT_NULL(session_info) && OB_NOT_NULL(schema_guard));
-  for (int64_t i = 0; OB_SUCC(ret) && i < trig_ctdef.tg_args_.count(); i++) {
-    uint64_t trg_id = trig_ctdef.tg_args_.at(i).get_trigger_id();
-    const ObTriggerInfo *trg_info = NULL;
-    OZ (schema_guard->get_trigger_info( trg_id, trg_info), trg_id);
-    OV (OB_NOT_NULL(trg_info));
-    if (OB_SUCC(ret) && trg_info->is_compound_dml_type()) {
-      OZ (pl::ObPLPackageManager::destory_package_state(*session_info,
-                                                        ObTriggerInfo::get_trigger_body_package_id(trg_id)));
-      LOG_DEBUG("destroy trigger state", K(trg_id), K(ret));
     }
   }
   return ret;

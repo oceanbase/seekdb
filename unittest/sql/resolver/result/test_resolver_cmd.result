@@ -40,7 +40,6 @@ show columns from rongxuan.t1
       "table_id":-2,
       "table_name":"subquery_alias",
       "alias_name":"subquery_alias",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -96,7 +95,6 @@ show columns from rongxuan.t1
         "column_id":16,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"Field",
         "expr_level":0,
         "expr_levels": [
@@ -151,7 +149,6 @@ show columns from rongxuan.t1
         "column_id":17,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"Type",
         "expr_level":0,
         "expr_levels": [
@@ -206,7 +203,6 @@ show columns from rongxuan.t1
         "column_id":18,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"Null",
         "expr_level":0,
         "expr_levels": [
@@ -261,7 +257,6 @@ show columns from rongxuan.t1
         "column_id":19,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"Key",
         "expr_level":0,
         "expr_levels": [
@@ -316,7 +311,6 @@ show columns from rongxuan.t1
         "column_id":20,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"Default",
         "expr_level":0,
         "expr_levels": [
@@ -371,7 +365,6 @@ show columns from rongxuan.t1
         "column_id":21,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"Extra",
         "expr_level":0,
         "expr_levels": [
@@ -419,7 +412,6 @@ show columns from rongxuan.t1
         "column_id":16,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"Field",
         "expr_level":0,
         "expr_levels": [
@@ -471,7 +463,6 @@ show columns from rongxuan.t1
         "column_id":17,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"Type",
         "expr_level":0,
         "expr_levels": [
@@ -523,7 +514,6 @@ show columns from rongxuan.t1
         "column_id":18,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"Null",
         "expr_level":0,
         "expr_levels": [
@@ -575,7 +565,6 @@ show columns from rongxuan.t1
         "column_id":19,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"Key",
         "expr_level":0,
         "expr_levels": [
@@ -627,7 +616,6 @@ show columns from rongxuan.t1
         "column_id":20,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"Default",
         "expr_level":0,
         "expr_levels": [
@@ -679,7 +667,6 @@ show columns from rongxuan.t1
         "column_id":21,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"Extra",
         "expr_level":0,
         "expr_levels": [
@@ -790,7 +777,6 @@ show columns from rongxuan.t1
           "table_id":1099511637778,
           "table_name":"__tenant_virtual_table_column",
           "alias_name":"",
-          "synonym_name":"",
           "table_type":0,
           "ref_id":1099511637778,
           "database_name":"oceanbase",
@@ -846,7 +832,6 @@ show columns from rongxuan.t1
             "column_id":16,
             "database_name":"oceanbase",
             "table_name":"__tenant_virtual_table_column",
-            "synonym_name":"",
             "column_name":"table_id",
             "expr_level":0,
             "expr_levels": [
@@ -901,7 +886,6 @@ show columns from rongxuan.t1
             "column_id":17,
             "database_name":"oceanbase",
             "table_name":"__tenant_virtual_table_column",
-            "synonym_name":"",
             "column_name":"field",
             "expr_level":0,
             "expr_levels": [
@@ -956,7 +940,6 @@ show columns from rongxuan.t1
             "column_id":18,
             "database_name":"oceanbase",
             "table_name":"__tenant_virtual_table_column",
-            "synonym_name":"",
             "column_name":"type",
             "expr_level":0,
             "expr_levels": [
@@ -1011,7 +994,6 @@ show columns from rongxuan.t1
             "column_id":20,
             "database_name":"oceanbase",
             "table_name":"__tenant_virtual_table_column",
-            "synonym_name":"",
             "column_name":"null",
             "expr_level":0,
             "expr_levels": [
@@ -1066,7 +1048,6 @@ show columns from rongxuan.t1
             "column_id":21,
             "database_name":"oceanbase",
             "table_name":"__tenant_virtual_table_column",
-            "synonym_name":"",
             "column_name":"key",
             "expr_level":0,
             "expr_levels": [
@@ -1121,7 +1102,6 @@ show columns from rongxuan.t1
             "column_id":22,
             "database_name":"oceanbase",
             "table_name":"__tenant_virtual_table_column",
-            "synonym_name":"",
             "column_name":"default",
             "expr_level":0,
             "expr_levels": [
@@ -1176,7 +1156,6 @@ show columns from rongxuan.t1
             "column_id":23,
             "database_name":"oceanbase",
             "table_name":"__tenant_virtual_table_column",
-            "synonym_name":"",
             "column_name":"extra",
             "expr_level":0,
             "expr_levels": [
@@ -1224,7 +1203,6 @@ show columns from rongxuan.t1
             "column_id":17,
             "database_name":"oceanbase",
             "table_name":"__tenant_virtual_table_column",
-            "synonym_name":"",
             "column_name":"field",
             "expr_level":0,
             "expr_levels": [
@@ -1276,7 +1254,6 @@ show columns from rongxuan.t1
             "column_id":18,
             "database_name":"oceanbase",
             "table_name":"__tenant_virtual_table_column",
-            "synonym_name":"",
             "column_name":"type",
             "expr_level":0,
             "expr_levels": [
@@ -1328,7 +1305,6 @@ show columns from rongxuan.t1
             "column_id":20,
             "database_name":"oceanbase",
             "table_name":"__tenant_virtual_table_column",
-            "synonym_name":"",
             "column_name":"null",
             "expr_level":0,
             "expr_levels": [
@@ -1380,7 +1356,6 @@ show columns from rongxuan.t1
             "column_id":21,
             "database_name":"oceanbase",
             "table_name":"__tenant_virtual_table_column",
-            "synonym_name":"",
             "column_name":"key",
             "expr_level":0,
             "expr_levels": [
@@ -1432,7 +1407,6 @@ show columns from rongxuan.t1
             "column_id":22,
             "database_name":"oceanbase",
             "table_name":"__tenant_virtual_table_column",
-            "synonym_name":"",
             "column_name":"default",
             "expr_level":0,
             "expr_levels": [
@@ -1484,7 +1458,6 @@ show columns from rongxuan.t1
             "column_id":23,
             "database_name":"oceanbase",
             "table_name":"__tenant_virtual_table_column",
-            "synonym_name":"",
             "column_name":"extra",
             "expr_level":0,
             "expr_levels": [
@@ -1582,7 +1555,6 @@ show columns from rongxuan.t1
               "column_id":16,
               "database_name":"oceanbase",
               "table_name":"__tenant_virtual_table_column",
-              "synonym_name":"",
               "column_name":"table_id",
               "expr_level":0,
               "expr_levels": [
@@ -1713,7 +1685,6 @@ show databases
       "table_id":-2,
       "table_name":"subquery_alias",
       "alias_name":"subquery_alias",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -1770,7 +1741,6 @@ show databases
         "column_id":16,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"Database",
         "expr_level":0,
         "expr_levels": [
@@ -1818,7 +1788,6 @@ show databases
         "column_id":16,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"Database",
         "expr_level":0,
         "expr_levels": [
@@ -1930,7 +1899,6 @@ show databases
           "table_id":1099511627880,
           "table_name":"__all_database",
           "alias_name":"",
-          "synonym_name":"",
           "table_type":0,
           "ref_id":1099511627880,
           "database_name":"oceanbase",
@@ -2008,7 +1976,6 @@ show databases
                 "column_id":18,
                 "database_name":"oceanbase",
                 "table_name":"__all_database",
-                "synonym_name":"",
                 "column_name":"tenant_id",
                 "expr_level":0,
                 "expr_levels": [
@@ -2070,7 +2037,6 @@ show databases
             "column_id":18,
             "database_name":"oceanbase",
             "table_name":"__all_database",
-            "synonym_name":"",
             "column_name":"tenant_id",
             "expr_level":0,
             "expr_levels": [
@@ -2125,7 +2091,6 @@ show databases
             "column_id":28,
             "database_name":"oceanbase",
             "table_name":"__all_database",
-            "synonym_name":"",
             "column_name":"in_recyclebin",
             "expr_level":0,
             "expr_levels": [
@@ -2181,7 +2146,6 @@ show databases
             "column_id":20,
             "database_name":"oceanbase",
             "table_name":"__all_database",
-            "synonym_name":"",
             "column_name":"database_name",
             "expr_level":0,
             "expr_levels": [
@@ -2229,7 +2193,6 @@ show databases
             "column_id":20,
             "database_name":"oceanbase",
             "table_name":"__all_database",
-            "synonym_name":"",
             "column_name":"database_name",
             "expr_level":0,
             "expr_levels": [
@@ -2328,7 +2291,6 @@ show databases
               "column_id":18,
               "database_name":"oceanbase",
               "table_name":"__all_database",
-              "synonym_name":"",
               "column_name":"tenant_id",
               "expr_level":0,
               "expr_levels": [
@@ -2436,7 +2398,6 @@ show databases
               "column_id":28,
               "database_name":"oceanbase",
               "table_name":"__all_database",
-              "synonym_name":"",
               "column_name":"in_recyclebin",
               "expr_level":0,
               "expr_levels": [
@@ -2546,7 +2507,6 @@ show databases
               "column_id":20,
               "database_name":"oceanbase",
               "table_name":"__all_database",
-              "synonym_name":"",
               "column_name":"database_name",
               "expr_level":0,
               "expr_levels": [
@@ -2843,7 +2803,6 @@ show databases
                   "column_id":18,
                   "database_name":"oceanbase",
                   "table_name":"__all_database",
-                  "synonym_name":"",
                   "column_name":"tenant_id",
                   "expr_level":0,
                   "expr_levels": [
@@ -2887,7 +2846,6 @@ show databases
                   "column_id":20,
                   "database_name":"oceanbase",
                   "table_name":"__all_database",
-                  "synonym_name":"",
                   "column_name":"database_name",
                   "expr_level":0,
                   "expr_levels": [
@@ -3023,7 +2981,6 @@ show databases like 'ocean%'
       "table_id":-2,
       "table_name":"subquery_alias",
       "alias_name":"subquery_alias",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -3080,7 +3037,6 @@ show databases like 'ocean%'
         "column_id":16,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"Database",
         "expr_level":0,
         "expr_levels": [
@@ -3128,7 +3084,6 @@ show databases like 'ocean%'
         "column_id":16,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"Database",
         "expr_level":0,
         "expr_levels": [
@@ -3226,7 +3181,6 @@ show databases like 'ocean%'
           "column_id":16,
           "database_name":"",
           "table_name":"subquery_alias",
-          "synonym_name":"",
           "column_name":"Database",
           "expr_level":0,
           "expr_levels": [
@@ -3379,7 +3333,6 @@ show databases like 'ocean%'
           "table_id":1099511627880,
           "table_name":"__all_database",
           "alias_name":"",
-          "synonym_name":"",
           "table_type":0,
           "ref_id":1099511627880,
           "database_name":"oceanbase",
@@ -3457,7 +3410,6 @@ show databases like 'ocean%'
                 "column_id":18,
                 "database_name":"oceanbase",
                 "table_name":"__all_database",
-                "synonym_name":"",
                 "column_name":"tenant_id",
                 "expr_level":0,
                 "expr_levels": [
@@ -3519,7 +3471,6 @@ show databases like 'ocean%'
             "column_id":18,
             "database_name":"oceanbase",
             "table_name":"__all_database",
-            "synonym_name":"",
             "column_name":"tenant_id",
             "expr_level":0,
             "expr_levels": [
@@ -3574,7 +3525,6 @@ show databases like 'ocean%'
             "column_id":28,
             "database_name":"oceanbase",
             "table_name":"__all_database",
-            "synonym_name":"",
             "column_name":"in_recyclebin",
             "expr_level":0,
             "expr_levels": [
@@ -3630,7 +3580,6 @@ show databases like 'ocean%'
             "column_id":20,
             "database_name":"oceanbase",
             "table_name":"__all_database",
-            "synonym_name":"",
             "column_name":"database_name",
             "expr_level":0,
             "expr_levels": [
@@ -3678,7 +3627,6 @@ show databases like 'ocean%'
             "column_id":20,
             "database_name":"oceanbase",
             "table_name":"__all_database",
-            "synonym_name":"",
             "column_name":"database_name",
             "expr_level":0,
             "expr_levels": [
@@ -3777,7 +3725,6 @@ show databases like 'ocean%'
               "column_id":18,
               "database_name":"oceanbase",
               "table_name":"__all_database",
-              "synonym_name":"",
               "column_name":"tenant_id",
               "expr_level":0,
               "expr_levels": [
@@ -3885,7 +3832,6 @@ show databases like 'ocean%'
               "column_id":28,
               "database_name":"oceanbase",
               "table_name":"__all_database",
-              "synonym_name":"",
               "column_name":"in_recyclebin",
               "expr_level":0,
               "expr_levels": [
@@ -3995,7 +3941,6 @@ show databases like 'ocean%'
               "column_id":20,
               "database_name":"oceanbase",
               "table_name":"__all_database",
-              "synonym_name":"",
               "column_name":"database_name",
               "expr_level":0,
               "expr_levels": [
@@ -4292,7 +4237,6 @@ show databases like 'ocean%'
                   "column_id":18,
                   "database_name":"oceanbase",
                   "table_name":"__all_database",
-                  "synonym_name":"",
                   "column_name":"tenant_id",
                   "expr_level":0,
                   "expr_levels": [
@@ -4336,7 +4280,6 @@ show databases like 'ocean%'
                   "column_id":20,
                   "database_name":"oceanbase",
                   "table_name":"__all_database",
-                  "synonym_name":"",
                   "column_name":"database_name",
                   "expr_level":0,
                   "expr_levels": [
@@ -4472,7 +4415,6 @@ show tables
       "table_id":-2,
       "table_name":"subquery_alias",
       "alias_name":"subquery_alias",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -4528,7 +4470,6 @@ show tables
         "column_id":16,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"table_name",
         "expr_level":0,
         "expr_levels": [
@@ -4576,7 +4517,6 @@ show tables
         "column_id":16,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"table_name",
         "expr_level":0,
         "expr_levels": [
@@ -4687,7 +4627,6 @@ show tables
           "table_id":1099511637794,
           "table_name":"__tenant_virtual_show_tables",
           "alias_name":"",
-          "synonym_name":"",
           "table_type":0,
           "ref_id":1099511637794,
           "database_name":"oceanbase",
@@ -4743,7 +4682,6 @@ show tables
             "column_id":16,
             "database_name":"oceanbase",
             "table_name":"__tenant_virtual_show_tables",
-            "synonym_name":"",
             "column_name":"database_id",
             "expr_level":0,
             "expr_levels": [
@@ -4798,7 +4736,6 @@ show tables
             "column_id":17,
             "database_name":"oceanbase",
             "table_name":"__tenant_virtual_show_tables",
-            "synonym_name":"",
             "column_name":"table_name",
             "expr_level":0,
             "expr_levels": [
@@ -4846,7 +4783,6 @@ show tables
             "column_id":17,
             "database_name":"oceanbase",
             "table_name":"__tenant_virtual_show_tables",
-            "synonym_name":"",
             "column_name":"table_name",
             "expr_level":0,
             "expr_levels": [
@@ -4944,7 +4880,6 @@ show tables
               "column_id":16,
               "database_name":"oceanbase",
               "table_name":"__tenant_virtual_show_tables",
-              "synonym_name":"",
               "column_name":"database_id",
               "expr_level":0,
               "expr_levels": [
@@ -5063,7 +4998,6 @@ show tables
                 "column_id":17,
                 "database_name":"oceanbase",
                 "table_name":"__tenant_virtual_show_tables",
-                "synonym_name":"",
                 "column_name":"table_name",
                 "expr_level":0,
                 "expr_levels": [
@@ -5190,7 +5124,6 @@ show variables
       "table_id":-2,
       "table_name":"subquery_alias",
       "alias_name":"subquery_alias",
-      "synonym_name":"",
       "table_type":2,
       "ref_id":-1,
       "database_name":"",
@@ -5247,7 +5180,6 @@ show variables
         "column_id":16,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"Variable_name",
         "expr_level":0,
         "expr_levels": [
@@ -5302,7 +5234,6 @@ show variables
         "column_id":17,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"Value",
         "expr_level":0,
         "expr_levels": [
@@ -5350,7 +5281,6 @@ show variables
         "column_id":16,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"Variable_name",
         "expr_level":0,
         "expr_levels": [
@@ -5403,7 +5333,6 @@ show variables
         "column_id":17,
         "database_name":"",
         "table_name":"subquery_alias",
-        "synonym_name":"",
         "column_name":"Value",
         "expr_level":0,
         "expr_levels": [
@@ -5514,7 +5443,6 @@ show variables
           "table_id":1099511637782,
           "table_name":"__tenant_virtual_session_variable",
           "alias_name":"",
-          "synonym_name":"",
           "table_type":0,
           "ref_id":1099511637782,
           "database_name":"oceanbase",
@@ -5571,7 +5499,6 @@ show variables
             "column_id":16,
             "database_name":"oceanbase",
             "table_name":"__tenant_virtual_session_variable",
-            "synonym_name":"",
             "column_name":"variable_name",
             "expr_level":0,
             "expr_levels": [
@@ -5626,7 +5553,6 @@ show variables
             "column_id":17,
             "database_name":"oceanbase",
             "table_name":"__tenant_virtual_session_variable",
-            "synonym_name":"",
             "column_name":"value",
             "expr_level":0,
             "expr_levels": [
@@ -5674,7 +5600,6 @@ show variables
             "column_id":16,
             "database_name":"oceanbase",
             "table_name":"__tenant_virtual_session_variable",
-            "synonym_name":"",
             "column_name":"variable_name",
             "expr_level":0,
             "expr_levels": [
@@ -5727,7 +5652,6 @@ show variables
             "column_id":17,
             "database_name":"oceanbase",
             "table_name":"__tenant_virtual_session_variable",
-            "synonym_name":"",
             "column_name":"value",
             "expr_level":0,
             "expr_levels": [
@@ -5802,7 +5726,6 @@ show variables
             "column_id":16,
             "database_name":"oceanbase",
             "table_name":"__tenant_virtual_session_variable",
-            "synonym_name":"",
             "column_name":"variable_name",
             "expr_level":0,
             "expr_levels": [
@@ -5925,15 +5848,6 @@ drop database dbcmd;
   "to_recyclebin":false
 }
 ***************   Case 13   ***************
-alter system bootstrap REGION 'sys_region' ZONE 'zone1' SERVER '10.101.74.122:41425';
-{"stmt_type":77, "bootstrap_arg":{"server_list":["region":"sys_region", "zone":"zone1", "server":"10.101.74.122:41425"], "cluster_role":1}}
-***************   Case 14   ***************
-alter system bootstrap CLUSTER primary REGION 'sys_region' ZONE 'zone1' SERVER '10.101.74.122:41425';
-{"stmt_type":77, "bootstrap_arg":{"server_list":["region":"sys_region", "zone":"zone1", "server":"10.101.74.122:41425"], "cluster_role":1}}
-***************   Case 15   ***************
-alter system bootstrap cluster standby REGION 'sys_region' ZONE 'zone1' SERVER '10.101.74.122:41425';
-{"stmt_type":77, "bootstrap_arg":{"server_list":["region":"sys_region", "zone":"zone1", "server":"10.101.74.122:41425"], "cluster_role":2}}
-***************   Case 16   ***************
 alter system COMMIT TO SWITCHOVER TO PRIMARY;
 {
   "stmt_type":169,
@@ -5947,15 +5861,5 @@ alter system COMMIT TO SWITCHOVER TO PHYSICAL STANDBY;
   "stmt_type":169,
   "database_arg": {
     "op_type":1
-  }
-}
-***************   Case 18   ***************
-alter system remove cluster tt cluster_id = 4;
-{
-  "stmt_type":174,
-  "database_arg": {
-    "cluster_name":"tt",
-    "cluster_id":4,
-    "alter_type":1
   }
 }

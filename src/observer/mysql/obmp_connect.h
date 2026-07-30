@@ -88,7 +88,6 @@ private:
   obmysql::OMPKHandshakeResponse hsr_;
   common::ObString user_name_;
   common::ObString client_ip_;
-  common::ObString runtime_name_;
   common::ObString db_name_;
   char client_ip_buf_[common::MAX_IP_ADDR_LENGTH + 1];
   char user_name_var_[OB_MAX_USER_NAME_BUF_LENGTH];

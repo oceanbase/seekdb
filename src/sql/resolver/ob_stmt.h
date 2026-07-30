@@ -80,7 +80,6 @@ typedef common::ObPooledAllocator<common::hash::HashMapTypes<uint64_t, int64_t>:
 class ObStmt
 {
 public:
-    typedef common::ObSEArray<uint64_t, 8, common::ModulePageAllocator, true> ObSynonymIds;
 
 public:
   ObStmt()
@@ -152,12 +151,6 @@ public:
     return stmt_type_ == stmt::T_SELECT
             || stmt_type_ == stmt::T_DELETE
             || stmt_type_ == stmt::T_UPDATE;
-  }
-
-  inline bool is_support_instead_of_trigger_stmt() const {
-    return stmt::T_DELETE == stmt_type_
-           || stmt::T_UPDATE == stmt_type_
-           || stmt::T_INSERT == stmt_type_;
   }
 
   static inline bool is_show_stmt(stmt::StmtType stmt_type)
@@ -303,10 +296,6 @@ public:
             || stmt_type == stmt::T_CREATE_TRIGGER
             || stmt_type == stmt::T_DROP_TRIGGER
             || stmt_type == stmt::T_ALTER_TRIGGER
-
-            // user define type
-            || stmt_type == stmt::T_CREATE_TYPE
-            || stmt_type == stmt::T_DROP_TYPE
 
             // trigger
             || stmt_type == stmt::T_CREATE_TRIGGER

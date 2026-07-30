@@ -72,24 +72,6 @@ int ObFunctionTableOp::inner_close()
   return ret;
 }
 
-//ObFunctionTableOp has its own switch_iterator
-int ObFunctionTableOp::switch_iterator()
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObOperator::inner_switch_iterator())) {
-    LOG_WARN("failed to switch iterator", K(ret));
-  } else if (OB_ISNULL(ctx_.get_my_session())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get session", K(ret));
-  } else if (NULL == ctx_.get_my_session()->get_pl_implicit_cursor()
-            || !ctx_.get_my_session()->get_pl_implicit_cursor()->get_in_forall()) {
-    ret = OB_ITER_END;
-  } else {
-    node_idx_ = 0;
-  }
-  return ret;
-}
-
 void ObFunctionTableOp::destroy()
 {
   ObOperator::destroy();

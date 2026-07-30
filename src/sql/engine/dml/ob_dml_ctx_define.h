@@ -29,56 +29,6 @@ class ObTableModifyOp;
 class ObForeignKeyChecker;
 typedef common::ObArrayWrap<ObForeignKeyChecker*> FkCheckerArray;
 
-struct ObErrLogCtDef
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObErrLogCtDef(common::ObIAllocator &alloc)
-    : is_error_logging_(false),
-      err_log_database_name_(),
-      err_log_table_name_(),
-      reject_limit_(0),
-      err_log_values_(alloc),
-      err_log_column_names_(alloc)
-  {
-  }
-
-  TO_STRING_KV(K_(is_error_logging),
-               K_(err_log_database_name),
-               K_(err_log_table_name),
-               K_(reject_limit),
-               K_(err_log_values),
-               K_(err_log_column_names));
-
-  bool is_error_logging_;
-  ObString err_log_database_name_;
-  ObString err_log_table_name_;
-  int64_t reject_limit_;
-  common::ObFixedArray<ObExpr *, common::ObIAllocator> err_log_values_;
-  common::ObFixedArray<common::ObString, common::ObIAllocator> err_log_column_names_;
-};
-
-struct ObErrLogRtDef
-{
-public:
-  ObErrLogRtDef() :
-    curr_err_log_record_num_(0),
-    first_err_ret_(OB_SUCCESS)
-  {
-    msg_[0] = '\0';
-  }
-
-  void reset()
-  {
-    first_err_ret_ = OB_SUCCESS;
-    msg_[0] = '\0';
-  }
-  int64_t curr_err_log_record_num_;  // can’t be reset
-  int first_err_ret_;
-  char msg_[common::OB_MAX_ERROR_MSG_LEN];
-};
-
-
 class ObTriggerColumnsInfo
 {
   OB_UNIS_VERSION(1);
@@ -203,8 +153,6 @@ public:
   inline bool has_trigger_events(uint64_t event) const { return trigger_events_.has_value(event); }
   inline bool has_before_row_point() const { return timing_points_.has_before_row(); }
   inline bool has_after_row_point() const { return timing_points_.has_after_row(); }
-  inline bool has_before_stmt_point() const { return timing_points_.has_before_stmt(); }
-  inline bool has_after_stmt_point() const { return timing_points_.has_after_stmt(); }
   inline const share::schema::ObTriggerEvents &get_trigger_events() const { return trigger_events_; }
   inline const share::schema::ObTimingPoints &get_timing_points() const { return timing_points_; }
 
@@ -466,7 +414,6 @@ public:
                        K_(view_check_exprs),
                        K_(is_primary_index),
                        K_(is_table_without_pk),
-                       K_(has_instead_of_trigger),
                        KPC_(trans_info_expr));
 
   ObDMLOpType dml_type_;
@@ -485,11 +432,10 @@ public:
   // used by check_rowkey_whether_distinct
   static const int64_t MIN_ROWKEY_DISTINCT_BUCKET_NUM = 1 * 1024;
   static const int64_t MAX_ROWKEY_DISTINCT_BUCKET_NUM = 1 * 1024 * 1024;
-  ObErrLogCtDef error_logging_ctdef_;
   ExprFixedArray view_check_exprs_;
   bool is_primary_index_;
   bool is_table_without_pk_;
-  bool has_instead_of_trigger_;
+  bool reserved_advanced_trigger_;
   ObExpr *trans_info_expr_;
   bool is_vec_hnsw_index_vid_opt_;
 protected:
@@ -505,11 +451,10 @@ protected:
       new_row_(alloc),
       full_row_(alloc),
       das_base_ctdef_(das_base_ctdef),
-      error_logging_ctdef_(alloc),
       view_check_exprs_(alloc),
       is_primary_index_(false),
       is_table_without_pk_(false),
-      has_instead_of_trigger_(false),
+      reserved_advanced_trigger_(false),
       trans_info_expr_(nullptr),
       is_vec_hnsw_index_vid_opt_(false)
   { }

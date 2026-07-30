@@ -276,7 +276,7 @@ int ObAggregateExpression::calc(ObExprCtx &expr_ctx,
                                 common::ObObj &result) const
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY((T_FUN_COUNT == aggr_func_ || T_FUN_KEEP_COUNT == aggr_func_) && is_empty())) {
+  if (OB_UNLIKELY(T_FUN_COUNT == aggr_func_ && is_empty())) {
     // COUNT(*)
     // point the result to an arbitray non-null cell
     result = OBJ_ZERO;
@@ -362,9 +362,7 @@ int ObSqlExpressionUtil::expand_array_params(ObExprCtx &expr_ctx,
     CK (expr_ctx.my_session_);
     CK (expr_ctx.exec_ctx_);
     CK (expr_ctx.exec_ctx_->get_sql_ctx());
-    if ((NULL != expr_ctx.my_session_->get_pl_implicit_cursor() &&
-         expr_ctx.my_session_->get_pl_implicit_cursor()->get_in_forall()) ||
-        expr_ctx.exec_ctx_->get_sql_ctx()->multi_stmt_item_.is_batched_multi_stmt()) {
+    if (expr_ctx.exec_ctx_->get_sql_ctx()->multi_stmt_item_.is_batched_multi_stmt()) {
       const ObObjParam *array_data = NULL;
       const ObSqlArrayObj *array_params = nullptr;
       if (OB_UNLIKELY(!src_param.is_ext_sql_array())) {

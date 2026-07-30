@@ -31,7 +31,6 @@ namespace compaction
  * -- ObRSCompactionTimeGuard
  * -- ObScheduleCompactionTimeGuard
  * -- ObStorageCompactionTimeGuard
- * -- ObSSCompactionTimeGuard
  */
 class ObCompactionTimeGuard
 {

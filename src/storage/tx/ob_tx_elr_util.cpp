@@ -15,8 +15,6 @@
  */
 
 #include "ob_tx_elr_util.h"
-#include "share/config/ob_runtime_config.h"
-#include "ob_trans_event.h"
 
 namespace oceanbase
 {
@@ -25,9 +23,8 @@ namespace transaction
 
 int ObTxELRUtil::check_and_update_tx_elr_info()
 {
-  int ret = OB_SUCCESS;
-  // ELR reads the single server runtime configuration.
-  return ret;
+  refresh_elr_runtime_config_();
+  return OB_SUCCESS;
 }
 
 void ObTxELRUtil::refresh_elr_runtime_config_()

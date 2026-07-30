@@ -60,10 +60,8 @@ int ObServerStorageMetaReplayer::start_replay()
   } else if (OB_FAIL(apply_replay_result_(runtime_meta, runtime_meta_valid))) {
     LOG_WARN("fail to apply repaly result", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_->do_post_replay_work())) {
-    LOG_WARN("fail to do post repaly work", K(ret));
+    LOG_WARN("fail to do post replay work", K(ret));
   }
-  
-
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(finish_storage_meta_replay_())) {
@@ -154,7 +152,7 @@ int ObServerStorageMetaReplayer::finish_storage_meta_replay_()
   omt::ObServerRuntimeController *omt = GCTX.server_runtime_controller_;
   if (OB_ISNULL(omt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, omt is nullptr", K(ret));
+    LOG_WARN("unexpected error, server_runtime is nullptr", K(ret));
   }
 
   if (OB_SUCC(ret)) {

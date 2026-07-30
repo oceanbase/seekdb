@@ -23,11 +23,6 @@
 
 namespace oceanbase
 {
-namespace common
-{
-class ObAddr;
-}
-
 namespace palf
 {
 class LogStateMgr;

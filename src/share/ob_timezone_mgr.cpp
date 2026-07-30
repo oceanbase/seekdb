@@ -67,7 +67,7 @@ int ObTimezoneMgr::init(ObMySQLProxy &sql_proxy)
     // trigger the initial refresh after LS promotion; import path triggers
     // via notify().
     share::ObInternalTableChangeNotifier::get_instance().register_module(
-        table::ObModuleDataArg::TIMEZONE,
+        share::ObInternalTableChangeNotifier::Module::TIMEZONE,
         []() -> int {
           LOG_INFO("[TIMEZONE_NOTIFIER] scheduling async refresh");
           OTTZ_MGR.schedule_retry();

@@ -11,7 +11,6 @@ endfunction()
 tx_unittest(test_ob_trans_hashmap)
 
 storage_unittest(test_ob_tx_log)
-storage_unittest(test_ob_timestamp_service)
 storage_unittest(test_undo_action)
 storage_unittest(test_ob_id_meta)
 # storage_unittest(test_ob_standby_read)

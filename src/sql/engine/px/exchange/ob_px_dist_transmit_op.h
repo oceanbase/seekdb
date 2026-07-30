@@ -20,7 +20,6 @@
 #include "ob_px_transmit_op.h"
 #include "sql/engine/sort/ob_sort_basic_info.h"
 #include "sql/engine/ob_sql_memory_manager.h"
-#include "sql/engine/basic/ob_vector_result_holder.h"
 
 namespace oceanbase
 {
@@ -83,7 +82,6 @@ public:
   virtual int do_transmit() override;
 
 private:
-  int next_vector(const int64_t max_row_cnt);
   int next_batch(const int64_t max_row_cnt);
 
   int do_hash_dist();
@@ -105,7 +103,6 @@ protected:
   virtual int build_ds_piece_msg(int64_t expected_range_count,
       ObDynamicSamplePieceMsg &piece_msg) override;
   int add_batch_row_for_piece_msg(ObChunkDatumStore &sample_store);
-  int add_batch_row_for_piece_msg_vec(ObChunkDatumStore &sample_store);
   int add_row_for_piece_msg(ObChunkDatumStore &sample_store);
 private:
   int build_row_sample_piece_msg(int64_t expected_range_count,
@@ -114,7 +111,6 @@ private:
   // for range distribution to backup && restore last row/batch
   ObChunkDatumStore::ShadowStoredRow last_row_;
   ObBatchResultHolder brs_holder_;
-  ObVectorsResultHolder vec_holder_;
 
 
   // for auto memory manager of %sampled_input_rows_

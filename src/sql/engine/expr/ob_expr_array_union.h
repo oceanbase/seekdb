@@ -51,11 +51,6 @@ public:
                 const ObBitVector &skip, 
                 const int64_t batch_size,
                 SetOperation operation);
-  static int eval_array_set_operation_vector(const ObExpr &expr, 
-                ObEvalCtx &ctx,
-                const ObBitVector &skip, 
-                const EvalBound &bound,
-                SetOperation operation);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprArraySetOperation);
 };
@@ -70,10 +65,6 @@ public:
                 ObEvalCtx &ctx,
                 const ObBitVector &skip, 
                 const int64_t batch_size);
-  static int eval_array_union_vector(const ObExpr &expr, 
-                ObEvalCtx &ctx,
-                const ObBitVector &skip, 
-                const EvalBound &bound);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                   const ObRawExpr &raw_expr,
                   ObExpr &rt_expr) const override;

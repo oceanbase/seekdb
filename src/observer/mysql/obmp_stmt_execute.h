@@ -113,7 +113,7 @@ public:
   explicit ObMPStmtExecute(const ObGlobalContext &gctx);
   virtual ~ObMPStmtExecute() {}
 
-  // Parse basic param value, no MYSQL_TYPE_COMPLEX or MYSQL_TYPE_CURSOR.
+  // Parse a basic parameter value (MYSQL_TYPE_COMPLEX is handled separately).
   // see parse_param_value()
   static int parse_basic_param_value(ObIAllocator &allocator,
                                     const uint32_t type,
@@ -212,14 +212,10 @@ protected:
   inline void set_param(ParamStore *params) { params_ = params; }
   sql::ObSqlCtx &get_ctx() { return ctx_; }
   ObQueryRetryCtrl &get_retry_ctrl() { return retry_ctrl_; }
-  void record_stat(const sql::stmt::StmtType type, const int64_t end_time,
-                   const sql::ObSQLSessionInfo& session, const int64_t ret,
-                   const ObMySQLResultSet &result) const;
   int request_params(sql::ObSQLSessionInfo *session,
                      const char* &pos,
                      uint32_t ps_stmt_checksum,
-                     ObIAllocator &alloc,
-                     int32_t all_param_num);
+                     ObIAllocator &alloc);
   int parse_request_type(const char* &pos,
                          int64_t num_of_params,
                          int8_t new_param_bound_flag,
@@ -329,7 +325,7 @@ private:
 
   virtual int before_process();
   virtual int after_process(int error_code);
-  int response_query_header(sql::ObSQLSessionInfo &session, pl::ObDbmsCursorInfo &cursor);
+  int response_query_header(sql::ObSQLSessionInfo &session, pl::ObPLServerCursorInfo &cursor);
   // Overload response, do not call flush_buffer(true) in response; flush_buffer(true) should be explicitly called when a response packet is needed to be sent
 
 

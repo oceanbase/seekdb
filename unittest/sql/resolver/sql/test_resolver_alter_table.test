@@ -66,16 +66,10 @@ alter table alter_table1 rename to alter_t1
 alter table alter_table1 set comment = 'hahaha'
 #compression
 alter table alter_table1 set compression = 'none'
-#replica num
-alter table alter_table1 replica_num = 3
 #Partition block size
 alter table alter_table1 set block_size = 16384
 #step merge num range(1~64)
 alter table alter_table1 set progressive_merge_num = 1
-#zone list
-#alter table alter_table1 zone_list = ('z1', 'z2')
-#primary zone
-alter table alter_table1 primary_zone = 'z1'
 #autoincrement
 alter table alter_table1 auto_increment = 1
 

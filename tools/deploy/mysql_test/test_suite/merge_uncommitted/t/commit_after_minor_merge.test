@@ -54,7 +54,7 @@ connection conn1;
 commit;
 select * from test_commit_after_minor_merge_t;
 
-let $count = query_get_value(select count(1) as c from oceanbase.__all_virtual_table_mgr where tablet_id = $__tablet_id__ and table_type != 18 and table_type != 19 and size > 0 limit 1, c, 1);
+let $count = query_get_value(select count(1) as c from oceanbase.__all_virtual_table_mgr where tablet_id = $__tablet_id__ and table_type != 17 and table_type != 18 and table_type != 19 and size > 0 limit 1, c, 1);
 # one minor sstable
 echo $count;
 
@@ -71,7 +71,7 @@ insert into test_commit_after_minor_merge_t values (2,2);
 connection conn1;
 commit;
 
-let $count = query_get_value(select count(1) as c from oceanbase.__all_virtual_table_mgr where tablet_id = $__tablet_id__ and table_type != 18 and table_type != 19 and size > 0  limit 1, c, 1);
+let $count = query_get_value(select count(1) as c from oceanbase.__all_virtual_table_mgr where tablet_id = $__tablet_id__ and table_type != 17 and table_type != 18 and table_type != 19 and size > 0  limit 1, c, 1);
 # two minor sstable
 echo $count;
 
@@ -80,10 +80,7 @@ select * from test_commit_after_minor_merge_t;
 
 # major freeze, check if uncommitted row is correctly merged into major sstable
 connection conn0;
-alter system major freeze tenant = sys;
-alter system major freeze tenant = all_user;
-alter system major freeze tenant = all_meta;
-
+alter system major freeze;
 --source mysql_test/include/wait_daily_merge.inc
 
 connection conn1;
@@ -100,9 +97,7 @@ connection conn1;
 delete from test_commit_after_minor_merge_t where c1 <= 2;
 
 connection conn0;
-alter system major freeze tenant = sys;
-alter system major freeze tenant = all_user;
-alter system major freeze tenant = all_meta;
+alter system major freeze;
 let $major_snapshot  = query_get_value(select frozen_scn from __all_freeze_info order by frozen_scn desc limit 1, frozen_scn, 1);
 --source mysql_test/include/wait_daily_merge.inc
 

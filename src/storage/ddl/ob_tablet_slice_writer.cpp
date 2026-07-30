@@ -18,7 +18,6 @@
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ddl/ob_ddl_independent_dag.h"
 #include "sql/engine/pdml/static/ob_px_sstable_insert_op.h"
-#include "sql/das/ob_das_utils.h"
 #include "storage/ddl/ob_direct_load_struct.h"
 #include "storage/ddl/ob_ddl_macro_block_writer.h"
 #include "storage/ddl/ob_lob_macro_block_writer.h"
@@ -370,6 +369,8 @@ int ObHeapRsSliceWriter::append_current_row(const ObIArray<ObDatum *> &datums)
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
+  } else if (OB_FAIL(ready_datums_.assign(datums))) {
+    LOG_WARN("copy datum pointers failed", K(ret));
   } else {
   // set autoinc val
     uint64_t current_pk = 0;
@@ -378,12 +379,15 @@ int ObHeapRsSliceWriter::append_current_row(const ObIArray<ObDatum *> &datums)
     } else if (OB_FAIL(heap_info_.get_next(current_pk))) {
       LOG_WARN("get next hidden pk failed", K(ret), K(heap_info_));
     } else {
-      ObDatum *autoinc_datum = datums.at(heap_info_.get_autoinc_column_idx());
-      autoinc_datum->set_uint(current_pk);
+      // Scalar expression results may share frame storage. Replace only the hidden-PK
+      // pointer so generating it cannot overwrite another column in the input row.
+      autoinc_datum_.ptr_ = reinterpret_cast<const char *>(&autoinc_value_);
+      autoinc_datum_.set_uint(current_pk);
+      ready_datums_.at(heap_info_.get_autoinc_column_idx()) = &autoinc_datum_;
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(ObRsSliceWriter::append_current_row(datums))) {
+    if (OB_FAIL(ObRsSliceWriter::append_current_row(ready_datums_))) {
       LOG_WARN("append row failed", K(ret));
     }
   }
@@ -760,11 +764,11 @@ int ObBatchSliceWriter::convert_to_storage_vector(ObIArray<ObIVector *> &vectors
       const int64_t sql_column_idx = idx < rowkey_column_count_ ? idx : idx - ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
       ObIVector *&cur_vector = vectors.at(sql_column_idx);
       selector.rescan();
-      if (OB_FAIL(ObDASUtils::reshape_vector_value(column_schema_item.col_type_,
-                                                   column_schema_item.col_accuracy_,
-                                                   row_arena_,
-                                                   cur_vector,
-                                                   selector))) {
+      if (OB_FAIL(ObDDLVectorUtils::reshape_storage_vector(column_schema_item.col_type_,
+                                                           column_schema_item.col_accuracy_,
+                                                           row_arena_,
+                                                           cur_vector,
+                                                           selector))) {
         LOG_WARN("fail to reshape vector value", K(ret), K(column_schema_item), K(idx));
       }
     }
@@ -1074,6 +1078,8 @@ int ObHeapBatchSliceWriter::append_current_row(const ObIArray<ObDatum *> &datums
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
+  } else if (OB_FAIL(ready_datums_.assign(datums))) {
+    LOG_WARN("copy datum pointers failed", K(ret));
   } else {
   // set autoinc val
     uint64_t current_pk = 0;
@@ -1082,12 +1088,15 @@ int ObHeapBatchSliceWriter::append_current_row(const ObIArray<ObDatum *> &datums
     } else if (OB_FAIL(heap_info_.get_next(current_pk))) {
       LOG_WARN("get next hidden pk failed", K(ret), K(heap_info_));
     } else {
-      ObDatum *autoinc_datum = datums.at(heap_info_.get_autoinc_column_idx());
-      autoinc_datum->set_uint(current_pk);
+      // Keep the caller's expression datums immutable for the same reason as the
+      // row-store heap writer above.
+      autoinc_datum_.ptr_ = reinterpret_cast<const char *>(&autoinc_value_);
+      autoinc_datum_.set_uint(current_pk);
+      ready_datums_.at(heap_info_.get_autoinc_column_idx()) = &autoinc_datum_;
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(ObBatchSliceWriter::append_current_row(datums))) {
+    if (OB_FAIL(ObBatchSliceWriter::append_current_row(ready_datums_))) {
       LOG_WARN("append row failed", K(ret));
     }
   }

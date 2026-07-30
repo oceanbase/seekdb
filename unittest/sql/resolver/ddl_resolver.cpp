@@ -17,7 +17,6 @@
 #include "sql/ob_sql_init.h"
 #include "../test_sql_utils.h"
 
-using namespace oceanbase::obcall;
 namespace test
 {
 const char* SQL_DIR = "sql";

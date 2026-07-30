@@ -93,7 +93,7 @@ int ObTabletDDLCompleteReplayExecutor::freeze_ddl_kv(ObTablet &tablet, const ObT
   int ret = OB_SUCCESS;
   ObDDLKvMgrHandle ddl_kv_mgr_handle;
   share::SCN mock_start_scn;
-  if (OB_FAIL(mock_start_scn.convert_for_tx(SS_DDL_START_SCN_VAL))) {
+  if (OB_FAIL(mock_start_scn.convert_for_tx(DDL_START_SCN_VAL))) {
     LOG_WARN("failed to convert for tx", K(ret));
   } else if (OB_FAIL(tablet.get_ddl_kv_mgr(ddl_kv_mgr_handle, true /* create if need*/))) {
     LOG_WARN("failed to create ddl kv mgr", K(ret));

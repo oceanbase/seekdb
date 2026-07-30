@@ -21,7 +21,6 @@
 #undef private
 #include "lib/lock/ob_mutex.h"
 #include "lib/lock/ob_spin_lock.h"
-#include "lib/stat/ob_diagnose_info.h"
 #include "share/cache/ob_kv_storecache.h"
 #include "lib/random/ob_random.h"
 namespace oceanbase

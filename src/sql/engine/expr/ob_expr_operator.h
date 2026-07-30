@@ -24,17 +24,12 @@
 #include "lib/objectpool/ob_tc_factory.h"
 #include "lib/utility/ob_print_utils.h"
 #include "common/timezone/ob_timezone_info.h"
-#include "common/timezone/ob_datetime_format_models.h"
 #include "lib/container/ob_iarray.h"
 #include "share/ob_i_sql_expression.h"
 #include "share/config/ob_server_config.h"
 #include "share/datum/ob_datum_funcs.h"
 #include "common/expression/ob_expr_string_buf.h"
 #include "share/object/ob_obj_cast.h"
-#include "sql/engine/vector/ob_uniform_vector.h"
-#include "sql/engine/vector/ob_discrete_vector.h"
-#include "sql/engine/vector/ob_fixed_length_vector.h"
-#include "sql/engine/vector/ob_continuous_vector.h"
 #include "common/object/ob_obj_compare.h"
 #include "common/ob_accuracy.h"
 #include "common/mysqlclient/ob_mysql_global.h"
@@ -482,7 +477,6 @@ public:
                                 const common::ObObj &param,
                                 bool &is_boolean) const;
 
-  static bool is_valid_nls_param(const common::ObString &nls_param_str);
   inline bool is_param_lazy_eval() const { return param_lazy_eval_; }
 
   inline static bool is_type_valid(const common::ObObjType &type);
@@ -1912,11 +1906,7 @@ public:
   static int calc_result2_mysql(const ObExpr &expr, ObEvalCtx &ctx,
                                 ObDatum &res_datum);
 
-  static int calc_bitwise_result2_mysql_vector(VECTOR_EVAL_FUNC_ARG_DECL);
   DECLARE_SET_LOCAL_SESSION_VARS;
-
-private:
-  static void convert_tc_size(VecValueTypeClass vec_tc, int &len);
 
 protected:
   enum BitOperator
@@ -1931,9 +1921,6 @@ protected:
     BIT_MAX,
   };
 
-  static int dispatch_calc_vector(VECTOR_EVAL_FUNC_ARG_DECL, ObCastMode cast_mode);
-  template <typename RES_VEC, typename L_VEC, typename R_VEC>
-  static int inner_calc_vector(VECTOR_EVAL_FUNC_ARG_DECL, ObCastMode cast_mode);
   // Get int64/uint64 from datum, for number rounding/truncation operations are needed, for int tc will get directly
   // int value
   typedef int (*GetIntFunc)(const ObDatumMeta &, const common::ObDatum &, bool, int64_t &,
@@ -2081,45 +2068,6 @@ private:
   OB_INLINE static int get_pos_int64(const common::ObObj &obj, common::ObExprCtx &expr_ctx, int64_t &out);
 };
 
-class ObExprSingleFormatCtx : public ObExprOperatorCtx
-{
-public:
-  ObExprSingleFormatCtx():
-    ObExprOperatorCtx(),
-    fmt_id_(INT64_MAX)
-  {}
-  TO_STRING_KV(K(fmt_id_));
-public:
-  int64_t fmt_id_;
-};
-
-class ObExprDFMConvertCtx : public ObExprOperatorCtx
-{
-public:
-  int parse_format(const common::ObString &format_str,
-                   const common::ObObjType target_type,
-                   bool check_format_semantic,
-                   common::ObIAllocator &allocator);
-  common::ObIArray<common::ObDFMElem> &get_dfm_elems() { return dfm_elems_; }
-  common::ObFixedBitSet<common::OB_DEFAULT_BITSET_SIZE_FOR_DFM> &get_elem_flags() { return elem_flags_; }
-  TO_STRING_KV(K(dfm_elems_), K(elem_flags_));
-
-protected:
-  common::ObFixedArray<common::ObDFMElem, common::ObIAllocator> dfm_elems_;
-  common::ObFixedBitSet<common::OB_DEFAULT_BITSET_SIZE_FOR_DFM> elem_flags_;
-};
-
-class ObExprDateTimeStringConvertCtx : public ObExprDFMConvertCtx
-{
-public:
-  void set_format_string(ObString format) { format_ = format; }
-  ObString &get_format_string() { return format_; }
-  TO_STRING_KV(K(dfm_elems_), K(elem_flags_), K(format_));
-
-private:
-  ObString format_;
-};
-
 class ObExprFindIntCachedValue : public ObExprOperatorCtx
 {
   typedef common::hash::ObHashMap<common::ObString, uint64_t, hash::NoPthreadDefendMode> HASH_MAP_TYPE;
@@ -2129,76 +2077,6 @@ public:
   HASH_MAP_TYPE &get_hashmap() { return hash_map_; }
 private:
   HASH_MAP_TYPE hash_map_;
-};
-
-class ObExprTRDateFormat
-{
-public:
-  enum FORMAT_ID
-  {
-    SYYYY = 0,
-    YYYY =  1,
-    YEAR = 2,
-    SYEAR = 3,
-    YYY = 4,
-    YY = 5,
-    Y = 6,
-    IYYY = 7,
-    IY = 8,
-    I = 9,
-    Q = 10,
-    MONTH = 11,
-    MON = 12,
-    MM = 13,
-    RM = 14,
-    WW = 15,
-    IW = 16,
-    W = 17,
-    DDD = 18,
-    DD = 19,
-    J = 20,
-    DAY = 21,
-    DY = 22,
-    D = 23,
-    HH = 24,
-    HH12 = 25,
-    HH24 = 26,
-    MI = 27,
-    CC = 28,
-    SCC = 29,
-    FORMAT_MAX_TYPE
-  };
-
-  static int init();
-  static int calc_hash(const char *p, int64_t len, uint64_t &hash);
-  static int trunc_new_obtime(common::ObTime &ob_time,
-                              const common::ObString &fmt,
-                              bool is_mysql_compat_dates);
-  static int round_new_obtime(common::ObTime &ob_time,
-                              const common::ObString &fmt);
-  static int trunc_new_obtime_by_fmt_id(common::ObTime &ob_time,
-                                        int64_t fmt_id,
-                                        bool is_mysql_compat_dates);
-  static int trunc_obtime_by_fmt_id_for_mdatetime(ObTime &ob_time,
-                                        int64_t fmt_id);
-  static int round_new_obtime_by_fmt_id(common::ObTime &ob_time,
-                                        int64_t fmt_id);
-  inline static void get_format_id(const uint64_t fmt_hash, int64_t &fmt_id)
-  {
-    fmt_id = SYYYY;
-    while (FORMATS_HASH[fmt_id] != fmt_hash && ++fmt_id < FORMAT_MAX_TYPE) {};
-  }
-  static int get_format_id_by_format_string(const common::ObString &fmt, int64_t &fmt_id);
-  inline static void set_time_part_to_zero(common::ObTime &ob_time)
-  {
-    ob_time.parts_[DT_HOUR] = 0;
-    ob_time.parts_[DT_MIN] = 0;
-    ob_time.parts_[DT_SEC] = 0;
-    ob_time.parts_[DT_USEC] = 0;
-  }
-public:
-  static const char *FORMATS_TEXT[FORMAT_MAX_TYPE];
-  static uint64_t FORMATS_HASH[FORMAT_MAX_TYPE];
 };
 
 // Return same address if alloc size less than reserved size.
@@ -2270,8 +2148,6 @@ private:
                        is_null_safe, \
                        expr_ctx.tz_offset_,\
                        default_null_pos())
-#define EXPR_SET_CAST_CTX_MODE(expr_ctx) \
-    ObSQLUtils::set_compatible_cast_mode((expr_ctx).my_session_, (expr_ctx).cast_mode_)
 // external variables: expr_ctx.
 #define EXPR_DEFINE_CAST_CTX(expr_ctx, cast_mode)                       \
     EXPR_DEFINE_CAST_CTX_ZF(expr_ctx, cast_mode , NULL)
@@ -2288,10 +2164,6 @@ private:
         cast_coll_type = ObCharset::get_default_collation(                 \
             ObCharset::get_default_charset());                             \
       }                                                                    \
-    }                                                                      \
-    if (common::OB_SUCCESS != ObSQLUtils::set_compatible_cast_mode(        \
-                                (expr_ctx).my_session_, cp_cast_mode_)) {  \
-      SQL_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "fail to get compatible mode for cast_mode");         \
     }                                                                      \
   } else {                                                                 \
     SQL_LOG_RET(WARN, common::OB_ERR_UNEXPECTED, "session is null");                                      \

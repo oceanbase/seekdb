@@ -246,6 +246,10 @@ int ObDbmsStatsGather::init_opt_stat(ObIAllocator &allocator,
       col_stat->set_stat_level(param.stat_level_);
       col_stat->set_column_id(param.column_params_.at(i).column_id_);
       col_stat->set_collation_type(param.column_params_.at(i).cs_type_);
+      // A grouped basic-stat query has no result row for an empty partition.
+      // The stat object still represents a completed gather, so its sample size
+      // is zero instead of ObHistogram's -1 (unknown/not gathered) sentinel.
+      col_stat->get_histogram().set_sample_size(0);
     }
   }
   return ret;

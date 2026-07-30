@@ -708,18 +708,17 @@ static int exec_sql(ObPLExecCtx *ctx, const ObPLSqlStmt *s)
     const ObDataType *types = type_count > 0 ? &s->get_data_type().at(0) : NULL;
     const bool *not_null = s->get_not_null_flags().count() > 0 ? &s->get_not_null_flags().at(0) : NULL;
     const int64_t *ranges = s->get_pl_integer_ranges().count() > 0 ? &s->get_pl_integer_ranges().at(0) : NULL;
-    const bool is_bulk = s->is_bulk();
     const bool is_type_record = s->is_type_record();
     const bool for_update = s->is_for_update();
     if (s->get_params().empty()) {
       OZ (ObSPIService::spi_query_into_expr_idx(ctx, s->get_sql(), type, into_idx, into_count,
-            types, type_count, not_null, ranges, is_bulk, is_type_record, for_update));
+            types, type_count, not_null, ranges, is_type_record, for_update));
     } else {
       const int64_t param_count = s->get_params().count();
       const int64_t *param_idx = param_count > 0 ? &s->get_params().at(0) : NULL;
       OZ (ObSPIService::spi_execute_with_expr_idx(ctx, s->get_ps_sql(), type, param_idx, param_count,
             into_idx, into_count, types, type_count, not_null, ranges,
-            is_bulk, s->is_forall_sql(), is_type_record, for_update));
+            is_type_record, for_update));
     }
   }
   return ret;
@@ -756,19 +755,16 @@ static int exec_call(ObPLExecCtx *ctx, const ObPLCallStmt *s)
   ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObObjParam **argv = NULL;
   ObObjParam *storage = NULL;  // independent temps backing every actual
-  int64_t *nocopy = NULL;
   if (OB_SUCC(ret) && argc > 0) {
     argv = static_cast<ObObjParam **>(tmp_alloc.alloc(sizeof(ObObjParam *) * argc));
     storage = static_cast<ObObjParam *>(tmp_alloc.alloc(sizeof(ObObjParam) * argc));
-    nocopy = static_cast<int64_t *>(tmp_alloc.alloc(sizeof(int64_t) * argc));
-    if (OB_ISNULL(argv) || OB_ISNULL(storage) || OB_ISNULL(nocopy)) {
+    if (OB_ISNULL(argv) || OB_ISNULL(storage)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("[pl-interp] failed to allocate call argv", K(ret), K(argc));
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < argc; ++i) {
     const InOutParam &p = s->get_params().at(i);
-    nocopy[i] = (s->get_nocopy_params().count() == argc) ? s->get_nocopy_params().at(i) : OB_INVALID_INDEX;
     new (&storage[i]) ObObjParam();
     const bool local_out = p.is_out() && OB_INVALID_INDEX != p.out_idx_;
     const sql::ObRawExpr *act_expr = s->get_param_expr(i);
@@ -826,7 +822,7 @@ static int exec_call(ObPLExecCtx *ctx, const ObPLCallStmt *s)
     const ObIArray<int64_t> &subpath = s->get_subprogram_path();
     int64_t *path = subpath.count() > 0 ? const_cast<int64_t *>(&subpath.at(0)) : NULL;
     OZ (ObPL::execute_proc(*ctx, s->get_package_id(), s->get_proc_id(), path,
-          subpath.count(), 0 /*line_num*/, argc, argv, nocopy));
+          subpath.count(), 0 /*line_num*/, argc, argv));
   }
   // Copy each OUT/INOUT result from its temp back into the caller's local slot.
   for (int64_t i = 0; OB_SUCC(ret) && i < argc; ++i) {
@@ -925,8 +921,7 @@ static int exec_fetch(ObPLExecCtx *ctx, const ObPLFetchStmt *s)
     const int64_t *ranges = s->get_pl_integer_ranges().count() > 0 ? &s->get_pl_integer_ranges().at(0) : NULL;
     OZ (ObSPIService::spi_cursor_fetch(ctx, s->get_package_id(), s->get_routine_id(),
           s->get_index(), into_idx, into_count, types, type_count, not_null, ranges,
-          s->is_bulk(), s->get_limit(), NULL /*return_types*/, 0 /*return_type_count*/,
-          s->is_type_record()));
+          NULL /*return_types*/, 0 /*return_type_count*/, s->is_type_record()));
   }
   return ret;
 }
@@ -1067,14 +1062,13 @@ static int exec_execute(ObPLExecCtx *ctx, const ObPLExecuteStmt *s)
         into_idx, into_count,
         types, type_count,
         not_null, ranges,
-        s->is_bulk(), s->get_is_returning(), s->is_type_record()));
+        s->is_type_record()));
   return ret;
 }
 
 // PRAGMA INTERFACE(C, <entry>) routine bodies lower to a single PL_INTERFACE stmt.
-// Dispatch to the native C implementation registered under the entry name, mirroring
-// the legacy codegen path (ObPLCodeGenerateVisitor::visit(ObPLInterfaceStmt) -> spi_interface_impl)
-// and ObPL::interface_execute. The native impl reads its arguments from ctx->params_.
+// Dispatch to the C implementation registered under the entry name. The implementation
+// reads its arguments from ctx->params_.
 static int exec_interface(ObPLExecCtx *ctx, const ObPLInterfaceStmt *s)
 {
   int ret = OB_SUCCESS;

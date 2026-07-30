@@ -120,7 +120,6 @@ private:
 
   int get_next_row_from_child();
   int get_next_row_vecrorizely();
-  int cast_vector_format();
   // for das batch spf
   int alloc_das_batch_store();
   // for das batch spf end
@@ -173,7 +172,7 @@ public:
   // update set (, ,) = (subquery)
   ExprFixedArray update_set_;
   common::ObFixedArray<ObFixedArray<ObExpr *, common::ObIAllocator>, common::ObIAllocator> exec_param_array_;
-  bool exec_param_idxs_inited_;
+  bool enable_subquery_result_cache_;
   // Mark each subquery whether it can do px batch rescan
   common::ObFixedArray<bool, common::ObIAllocator> enable_px_batch_rescans_;
   bool enable_das_group_rescan_;

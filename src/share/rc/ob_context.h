@@ -91,7 +91,7 @@ private:
 class ObResourceOwner : public EntityBase
 {
 public:
-  ObResourceOwner(const uint64_t owner_id)
+  explicit ObResourceOwner(const uint64_t owner_id)
     : owner_id_(owner_id)
   {}
   int init() { return common::OB_SUCCESS; }

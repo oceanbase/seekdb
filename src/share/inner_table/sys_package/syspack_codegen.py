@@ -4,25 +4,22 @@
 syspack_codegen.py
 ~~~~~~~~~~~~~~~~~~
 This script is the configuration center for system packages, with the following functions:
-1. Calls the wrap program to convert specified system package source code files from plaintext to ciphertext, with the ciphertext file extension being `.plw`
-2. Embeds the content of specified system package source code files as strings into `syspack_source.cpp`, which is subsequently compiled and linked into observer
-3. Copies the specified system package to the `syspack_release` folder in the compilation directory for subsequent RPM packaging and deployment
+1. Embeds the content of specified system package source code files as strings into `syspack_source.cpp`, which is subsequently compiled and linked into observer
+2. Copies the specified system package to the `syspack_release` folder in the compilation directory for subsequent RPM packaging and deployment
 NOTE:
 1. This script will be automatically called during the compilation phase (make stage) and complete the above three steps, generally no manual invocation is required. It can also be manually invoked using `python2 syspack_codegen.py [option]`.
 2. RD only needs to modify the `syspack_config` variable, which is a list where each element is a `SysPackConfig` object containing all information about a system package.
     The current format of the `SysPackConfig` object constructor parameters is:
-        `SysPackConfig(group, name, header_file, body_file, wrap_type)`
+        `SysPackConfig(group, name, header_file, body_file)`
     Where:
         - group: The grouping of the system package, optional values are `SysPackGroup` enumeration type
         - name: The name of the system package, used to identify the system package in `syspack_source.cpp`
         - header_file: The header file of the system package, must be a `.sql` file
         - body_file: The implementation file of the system package, optional (can be filled with None), must be a `.sql` file
-        - wrap_type: The obfuscation method of the system package, optional values are `WrapType` enumeration type, controlling whether the header and body of the system package need to be encrypted and obfuscated, default is `WrapType.NONE`, i.e., no obfuscation
 """
 
 import os
 import sys
-import subprocess
 import argparse
 import shutil
 
@@ -47,14 +44,8 @@ class SysPackGroup:
     MYSQL          = "mysql"
     MYSQL_SPECIAL  = "mysql_special"
 
-class WrapType:
-    NONE        = 1
-    HEADER_ONLY = 2
-    BODY_ONLY   = 3
-    BOTH        = 4
-
 class SysPackConfig:
-    def __init__(self, group, name, header_file, body_file, **kwargs):
+    def __init__(self, group, name, header_file, body_file):
         assert group in [SysPackGroup.MYSQL, SysPackGroup.MYSQL_SPECIAL]
         self.group = group
         assert isinstance(name, str)
@@ -66,24 +57,8 @@ class SysPackConfig:
             assert isinstance(body_file, str) and body_file.endswith(".sql")
             self.body_file = body_file
 
-        self.wrap = WrapType.NONE
-        for key, value in kwargs.items():
-            if key == "wrap":
-                assert value in [WrapType.NONE, WrapType.HEADER_ONLY, WrapType.BODY_ONLY, WrapType.BOTH]
-                self.wrap = value
-            else:
-                assert False, "Unknown key: {}".format(key)
-
-        if body_file is None:
-            assert self.wrap != WrapType.BODY_ONLY, "WrapType.BODY_ONLY is not allowed when body_file is None"
-            assert self.wrap != WrapType.BOTH, "WrapType.BOTH is not allowed when body_file is None"
-
         self.release_header = self.header_file
         self.release_body = self.body_file
-        if self.wrap == WrapType.HEADER_ONLY or self.wrap == WrapType.BOTH:
-            self.release_header = self.header_file[:-3] + "plw"
-        if self.body_file and (self.wrap == WrapType.BODY_ONLY or self.wrap == WrapType.BOTH):
-            self.release_body = self.body_file[:-3] + "plw"
 
     def export_release_file_list(self):
         return [self.release_header] + ([self.release_body] if self.release_body else [])
@@ -93,16 +68,6 @@ class SysPackConfig:
             self.name,
             self.release_header,
             "\"{}\"".format(self.release_body) if self.release_body else "nullptr")
-
-    def export_files_to_wrap(self):
-        if self.wrap == WrapType.NONE:
-            return []
-        elif self.wrap == WrapType.HEADER_ONLY:
-            return [self.header_file]
-        elif self.wrap == WrapType.BODY_ONLY:
-            return [self.body_file]
-        elif self.wrap == WrapType.BOTH:
-            return [self.header_file, self.body_file]
 
 def install_syspack_files(syspack_config, release_dir):
     file_to_install = []
@@ -115,15 +80,6 @@ def install_syspack_files(syspack_config, release_dir):
         src_file = os.path.join(g_script_dir, file)
         dst_file = os.path.join(release_dir, file)
         shutil.copyfile(src_file, dst_file)
-
-def wrap_syspack(syspack_config, wrap_bin_path):
-    wrapped_files = []
-    for config in syspack_config:
-        wrapped_files += config.export_files_to_wrap()
-    for file in wrapped_files:
-        if g_verbose:
-            print("wrap {} -o {}".format(file, file[:-3] + "plw"))
-        subprocess.check_call([wrap_bin_path, file, "-o", file[:-3] + "plw"], cwd=g_script_dir)
 
 def embed_syspack(syspack_config):
     def gen_syspack_file_list(syspack_config, group):
@@ -171,8 +127,8 @@ def embed_syspack(syspack_config):
                     with open(file_path, "r", encoding="utf8") as file_content:
                         f.write(file_content.read())
                 except Exception as e:
-                    sys.stderr.write("[wrap] error! failed to embed file: {}\n".format(file_path))
-                    sys.stderr.write("[wrap] error! " + str(e) + "\n")
+                    sys.stderr.write("failed to embed file: {}\n".format(file_path))
+                    sys.stderr.write(str(e) + "\n")
                     sys.exit(1)
             else:
                 pass # file not found
@@ -192,7 +148,6 @@ syspack_config = [
     SysPackConfig(SysPackGroup.MYSQL, "dbms_application", "dbms_application_mysql.sql", "dbms_application_body_mysql.sql"),
     SysPackConfig(SysPackGroup.MYSQL, "dbms_session", "dbms_session_mysql.sql", "dbms_session_body_mysql.sql"),
     SysPackConfig(SysPackGroup.MYSQL, "dbms_monitor", "dbms_monitor_mysql.sql", "dbms_monitor_body_mysql.sql"),
-    SysPackConfig(SysPackGroup.MYSQL, "dbms_xplan", "dbms_xplan_mysql.sql", "dbms_xplan_mysql_body.sql"),
     SysPackConfig(SysPackGroup.MYSQL, "dbms_trusted_certificate_manager", "dbms_trusted_certificate_manager_mysql.sql", "dbms_trusted_certificate_manager_body_mysql.sql"),
     SysPackConfig(SysPackGroup.MYSQL, "dbms_ob_limit_calculator", "dbms_ob_limit_calculator_mysql.sql", "dbms_ob_limit_calculator_body_mysql.sql"),
     SysPackConfig(SysPackGroup.MYSQL, "dbms_vector", "dbms_vector_mysql.sql", "dbms_vector_body_mysql.sql"),
@@ -204,24 +159,17 @@ syspack_config = [
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="System Package Config Center")
-    parser.add_argument("-wp", "--wrap-bin-path", type=str, default=None,
-                        help="The path to the wrap binary. If empty, wrapping is skipped.")
     parser.add_argument("-rd", "--release-dir", type=str, default=None,
                         help="The path to the system package release directory. If empty, installation is not required.")
     parser.add_argument("-v", "--verbose", action="store_true", help="Print verbose information")
     args = parser.parse_args()
 
-    wrap_bin_path = args.wrap_bin_path
     release_dir = args.release_dir
     g_verbose = args.verbose
 
-    # 1. wrap syspack files
-    if wrap_bin_path:
-        assert os.path.exists(wrap_bin_path), "{} not exists".format(wrap_bin_path)
-        wrap_syspack(syspack_config, wrap_bin_path)
-    # 2. embed syspack files
+    # 1. embed syspack files
     embed_syspack(syspack_config)
-    # 3. install syspack files
+    # 2. install syspack files
     if release_dir:
         if not os.path.exists(release_dir):
             os.makedirs(release_dir)

@@ -270,7 +270,7 @@ int ObAutoincrementService::get_handle(AutoincParam &param, CacheHandle *&handle
 {
   ACTIVE_SESSION_FLAG_SETTER_GUARD(in_sequence_load);
   int ret = OB_SUCCESS;
-  
+
   const ObObjType column_type  = param.autoinc_col_type_;
   const uint64_t offset        = param.autoinc_offset_;
   const uint64_t increment     = param.autoinc_increment_;
@@ -1418,7 +1418,7 @@ int ObAutoIncInnerTableProxy::get_autoinc_value(const AutoincKey &key,
     ObASHSetInnerSqlWaitGuard ash_inner_sql_guard(ObInnerSqlWaitTypeId::SEQUENCE_LOAD);
     ObMySQLResult *result = NULL;
     int sql_len = 0;
-    
+
     const char *table_name = OB_ALL_AUTO_INCREMENT_TNAME;
     sql_len = snprintf(sql, OB_MAX_SQL_LENGTH,
                         " SELECT sequence_value, sync_value, truncate_version FROM %s"
@@ -1717,7 +1717,7 @@ int ObAutoIncInnerTableProxy::read_and_push_inner_table(const AutoincKey &key,
                                                         uint64_t &new_end)
 {
   int ret = OB_SUCCESS;
-  
+
   const uint64_t table_id = key.table_id_;
   const uint64_t column_id = key.column_id_;
   is_valid = false;
@@ -1733,7 +1733,7 @@ int ObAutoIncInnerTableProxy::read_and_push_inner_table(const AutoincKey &key,
   } else if (OB_FAIL(trans.start(mysql_proxy_, with_snap_shot))) {
     LOG_WARN("failed to start transaction", K(ret));
   } else {
-    
+
     const char *table_name = OB_ALL_AUTO_INCREMENT_TNAME;
     int64_t fetch_table_id = OB_INVALID_ID;
     if (OB_FAIL(sql.assign_fmt(" SELECT sequence_value, truncate_version FROM %s WHERE sequence_key = %lu"

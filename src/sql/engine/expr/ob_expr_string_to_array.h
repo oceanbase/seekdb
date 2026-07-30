@@ -37,8 +37,6 @@ public:
   static int eval_string_to_array(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
   static int eval_string_to_array_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                         const ObBitVector &skip, const int64_t batch_size);
-  static int eval_string_to_array_vector(const ObExpr &expr, ObEvalCtx &ctx,
-                                         const ObBitVector &skip, const EvalBound &bound);
   static int add_value_str_to_array(ObArrayBinary *binary_array, std::string value_str, bool has_null_str, std::string null_str);
   static int string_to_array(ObArrayBinary *binary_array,
                              std::string arr_str, std::string delimiter, std::string null_str,

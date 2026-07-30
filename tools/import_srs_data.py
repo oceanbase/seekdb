@@ -11,7 +11,7 @@ class SrsDataImporter:
     def get_args(self):
         parser = argparse.ArgumentParser(conflict_handler='resolve')
         parser.add_argument("-h", "--host", help="Connect to host", required=True)
-        parser.add_argument("-P", "--port", help="Port number to use for connection", required=True)
+        parser.add_argument("-P", "--port", type=int, help="Port number to use for connection", required=True)
         parser.add_argument("-p", "--password", default = '', help="Password of root user")
         parser.add_argument("-f", "--file", help="The sql script for loading default spatial reference system data", required=True)
         args = parser.parse_args()
@@ -49,7 +49,7 @@ class SrsDataImporter:
             print("ERROR: " + sql)
             print(err)
             self.conn.rollback()
-            print("ERROR: failed to import srs data")
+            raise
         else:
             print("INFO: succeed to import srs data")
 
@@ -87,4 +87,4 @@ def main():
     srs_data_importer.check_result()
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

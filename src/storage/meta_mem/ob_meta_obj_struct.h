@@ -133,7 +133,7 @@ private:
     };
   };
   union { // doesn't serialize
-    int64_t sixth_id_;
+    int64_t volatile_state_;
     uint64_t seq_;
   };
 };

@@ -159,7 +159,7 @@ int ObTimeZoneInfoManager::refresh_time_zone_info(const int64_t current_tz_versi
   if (current_tz_version == last_version_) {
     // already latest
   } else if (current_tz_version < last_version_) {
-    LOG_ERROR("current timezone version lower than local tz map version, wierd",
+    LOG_ERROR("current timezone version is lower than the loaded version",
       K(current_tz_version), K(last_version_));
   } else {
     auto &sql_client_retry_weak = sql_proxy_;

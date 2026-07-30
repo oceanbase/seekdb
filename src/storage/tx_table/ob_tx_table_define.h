@@ -93,14 +93,16 @@ public:
   void reset()
   {
     tx_id_.reset();
+    data_version_ = 0;
     tx_data_guard_.reset();
     exec_info_.reset();
     table_lock_info_.reset();
   }
   void destroy() { reset(); }
   TO_STRING_KV(K_(tx_id), K_(tx_data_guard),
-               K_(exec_info), K_(table_lock_info));
+               K_(exec_info), K_(table_lock_info), K_(data_version));
   transaction::ObTransID tx_id_;
+  uint64_t data_version_;
   ObTxDataGuard tx_data_guard_;
   transaction::ObTxExecInfo exec_info_;
   transaction::tablelock::ObTableLockInfo table_lock_info_;

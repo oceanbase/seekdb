@@ -66,14 +66,12 @@ int ObDBMSSchedJobExecutor::init(
 int ObDBMSSchedJobExecutor::init_session(
   sql::ObSQLSessionInfo &session,
   ObSchemaGetterGuard &schema_guard,
-  const ObString &runtime_name,
   const ObString &database_name, uint64_t database_id,
   const ObUserInfo* user_info,
   ObDBMSSchedJobInfo &job_info)
 {
   int ret = OB_SUCCESS;
   ObPrivSet db_priv_set = OB_PRIV_SET_EMPTY;
-  ObArenaAllocator *allocator = NULL;
   const bool print_info_log = true;
   const bool use_server_defaults = true;
   ObPCMemPctConf pc_mem_conf;
@@ -84,7 +82,7 @@ int ObDBMSSchedJobExecutor::init_session(
   OX (session.set_inner_session());
   OZ (session.load_default_sys_variable(print_info_log, use_server_defaults));
   OZ (session.update_max_packet_size());
-  OZ (session.init_runtime(runtime_name.ptr()));
+  OZ (session.init_runtime(OB_SERVER_RUNTIME_NAME));
   OZ (session.load_all_sys_vars(schema_guard));
   OZ (session.update_sys_variable(share::SYS_VAR_SQL_MODE, sql_mode));
   OZ (session.set_default_database(database_name));
@@ -95,7 +93,6 @@ int ObDBMSSchedJobExecutor::init_session(
     user_info->get_user_name(), user_info->get_host_name_str(), user_info->get_user_id()));
   OX (session.set_priv_user_id(user_info->get_user_id()));
   OX (session.set_user_priv_set(user_info->get_priv_set()));
-  OX (session.init_use_rich_format());
   OZ (schema_guard.get_db_priv_set(user_info->get_user_id(), database_name, db_priv_set));
   OX (session.set_db_priv_set(db_priv_set));
   OX (session.get_enable_role_array().reuse());
@@ -116,7 +113,6 @@ int ObDBMSSchedJobExecutor::init_env(ObDBMSSchedJobInfo &job_info, ObSQLSessionI
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
-  const ObServerRuntimeSchema *runtime_info = NULL;
   const ObSysVariableSchema *sys_variable_schema = NULL;
   ObSEArray<const ObUserInfo *, 1> user_infos;
   const ObUserInfo* user_info = NULL;
@@ -125,7 +121,6 @@ int ObDBMSSchedJobExecutor::init_env(ObDBMSSchedJobInfo &job_info, ObSQLSessionI
   CK (OB_NOT_NULL(schema_service_));
   CK (job_info.valid());
   OZ (schema_service_->get_runtime_schema_guard(schema_guard));
-  OZ (schema_guard.get_server_runtime_info(runtime_info));
   OZ (schema_guard.get_database_schema( job_info.get_cowner(), database_schema));
   if (OB_SUCC(ret)) {
     if (job_info.get_user_id() != OB_INVALID_ID) {
@@ -151,12 +146,10 @@ int ObDBMSSchedJobExecutor::init_env(ObDBMSSchedJobInfo &job_info, ObSQLSessionI
       }
     }
     CK (OB_NOT_NULL(user_info));
-    CK (OB_NOT_NULL(runtime_info));
     CK (OB_NOT_NULL(database_schema));
     OZ (exec_env.init(job_info.get_exec_env()));
     OZ (init_session(session,
                     schema_guard,
-                    runtime_info->get_runtime_name(),
                     database_schema->get_database_name(),
                     database_schema->get_database_id(),
                     user_info,
@@ -333,7 +326,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
       OZ (table_operator_.update_for_start_execute(job_info));
       rootserver::ObDBMSSchedService::wakeup_scheduler();
       OZ (pool->acquire_spi_conn(session_info, conn));
-      if (OB_NOT_NULL(conn) && OB_NOT_NULL(session_info) && !is_extended_sys_user(session_info->get_user_id()) && !is_root_user(session_info->get_user_id())) {
+      if (OB_NOT_NULL(conn) && OB_NOT_NULL(session_info) && !is_root_user(session_info->get_user_id())) {
         conn->set_check_priv(true);
       }
       OZ (conn->execute_write(what.string().ptr(), affected_rows));

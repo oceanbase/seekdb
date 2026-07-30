@@ -18,12 +18,13 @@
 #include "storage/ddl/ob_ddl_vector_utils.h"
 #include "share/ob_tablet_autoincrement_param.h"
 #include "storage/access/ob_table_param.h"
-#include "sql/engine/vector/ob_continuous_vector.h"
-#include "sql/engine/vector/ob_discrete_vector.h"
-#include "sql/engine/vector/ob_fixed_length_vector.h"
-#include "sql/engine/vector/ob_uniform_vector.h"
+#include "sql/engine/vector/ob_continuous_base.h"
+#include "sql/engine/vector/ob_discrete_base.h"
+#include "sql/engine/vector/ob_fixed_length_base.h"
+#include "sql/engine/vector/ob_uniform_base.h"
 #include "storage/blocksstable/ob_storage_datum.h"
 #include "storage/ddl/ob_ddl_batch_rows.h"
+#include "lib/charset/ob_charset.h"
 
 namespace oceanbase
 {
@@ -241,6 +242,88 @@ int ObDDLVectorUtils::to_datum(ObIVector *vector, const int64_t idx, ObDatum &da
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected vector format", KR(ret), K(format));
         break;
+    }
+  }
+  return ret;
+}
+
+int ObDDLVectorUtils::reshape_storage_vector(const ObObjMeta &col_type,
+                                             const ObAccuracy &col_accuracy,
+                                             ObIAllocator &allocator,
+                                             ObIVector *&vector,
+                                             ObBatchSelector &selector)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(vector) || !selector.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid storage vector reshape arguments", KR(ret), KP(vector), K(selector));
+  } else if (!col_type.is_binary() && !col_type.is_fixed_len_char_type()) {
+    // No storage normalization is needed for other column types.
+  } else {
+    const VectorFormat format = vector->get_format();
+    ObIVector *result_vector = vector;
+    if (VEC_CONTINUOUS == format) {
+      const VecValueTypeClass value_tc = get_vec_value_tc(
+          col_type.get_type(), col_type.get_scale(), col_type.get_stored_precision());
+      if (OB_FAIL(new_vector(VEC_DISCRETE, value_tc, allocator, result_vector))) {
+        LOG_WARN("failed to allocate discrete storage vector", KR(ret), K(value_tc));
+      } else if (OB_FAIL(prepare_vector(result_vector, selector.get_max(), allocator))) {
+        LOG_WARN("failed to prepare discrete storage vector", KR(ret), K(selector));
+      }
+    } else if (VEC_DISCRETE != format
+               && VEC_UNIFORM != format
+               && VEC_UNIFORM_CONST != format) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected storage vector format", KR(ret), K(format), K(col_type));
+    }
+
+    int64_t idx = 0;
+    while (OB_SUCC(ret) && OB_SUCC(selector.get_next(idx))) {
+      if (vector->is_null(idx)) {
+        if (result_vector != vector) {
+          result_vector->set_null(idx);
+        }
+      } else {
+        const char *payload = nullptr;
+        ObLength length = 0;
+        vector->get_payload(idx, payload, length);
+        const char *normalized_payload = payload;
+        ObLength normalized_length = length;
+        if (col_type.is_binary()) {
+          const int32_t binary_len = col_accuracy.get_length();
+          if (length < binary_len) {
+            char *padded_payload = static_cast<char *>(allocator.alloc(binary_len));
+            if (OB_ISNULL(padded_payload)) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+              LOG_WARN("failed to allocate binary padding", KR(ret), K(binary_len));
+            } else {
+              MEMCPY(padded_payload, payload, length);
+              MEMSET(padded_payload + length, '\0', binary_len - length);
+              normalized_payload = padded_payload;
+              normalized_length = binary_len;
+            }
+          }
+        } else {
+          const ObString space_pattern =
+              ObCharsetUtils::get_const_str(col_type.get_collation_type(), ' ');
+          while (normalized_length >= space_pattern.length()
+                 && 0 == MEMCMP(payload + normalized_length - space_pattern.length(),
+                                space_pattern.ptr(), space_pattern.length())) {
+            normalized_length -= space_pattern.length();
+          }
+        }
+        if (OB_SUCC(ret)
+            && (result_vector != vector || normalized_payload != payload
+                || normalized_length != length)) {
+          result_vector->set_payload_shallow(idx, normalized_payload, normalized_length);
+        }
+      }
+    }
+    if (OB_ITER_END == ret) {
+      ret = OB_SUCCESS;
+    }
+    if (OB_SUCC(ret) && result_vector != vector) {
+      vector = result_vector;
     }
   }
   return ret;

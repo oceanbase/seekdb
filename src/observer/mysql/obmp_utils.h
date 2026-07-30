@@ -42,9 +42,6 @@ class ObMPUtils
 {
 public:
   static int add_changed_session_info(obmysql::OMPKOK &ok_pkt, sql::ObSQLSessionInfo &session);
-  static int add_nls_format(obmysql::OMPKOK &pk_pkt,
-                            sql::ObSQLSessionInfo &session,
-                            const bool only_changed = false);
 private:
   static int get_user_sql_literal(common::ObIAllocator &allocator, const common::ObObj &obj,
                                   common::ObString &value_str, const common::ObObjPrintParams &print_param);

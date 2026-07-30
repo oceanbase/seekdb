@@ -34,11 +34,9 @@ using namespace oceanbase::common::serialization;
 
 
 OB_SERIALIZE_MEMBER((ObPxMultiPartSSTableInsertOpInput, ObPxMultiPartModifyOpInput));
-OB_SERIALIZE_MEMBER((ObPxMultiPartSSTableInsertVecOpInput, ObPxMultiPartSSTableInsertOpInput));
 
 OB_SERIALIZE_MEMBER((ObPxMultiPartSSTableInsertSpec, ObPxMultiPartInsertSpec), snapshot_query_expr_,
                      regenerate_heap_table_pk_);
-OB_SERIALIZE_MEMBER((ObPxMultiPartSSTableInsertVecSpec, ObPxMultiPartSSTableInsertSpec));
 
 int ObPxMultiPartSSTableInsertSpec::get_snapshot_version(ObEvalCtx &eval_ctx, int64_t &snapshot_version) const
 {
@@ -165,33 +163,6 @@ void ObPxMultiPartSSTableInsertOp::destroy()
   allocator_.reset();
 }
 
-int ObPxMultiPartSSTableInsertVecOp::inner_get_next_batch(const int64_t max_row_cnt)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(max_row_cnt);
-  if (OB_ISNULL(ddl_dag_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ddl dag is null", K(ret));
-  } else if (ddl_dag_->is_final_status() || is_all_partition_finished_) {
-    brs_.end_ = true;
-    brs_.size_ = 0;
-  } else if (is_heap_plan()) {
-    if (OB_FAIL(write_heap_slice_by_batch())) {
-      LOG_WARN("heap tablet write row failed", K(ret));
-    }
-  } else {
-    if (OB_FAIL(write_ordered_slice_by_batch())) {
-      LOG_WARN("ordered tablet write row failed", K(ret));
-    }
-  }
-  if (OB_SUCC(ret) && !brs_.end_) {
-    if (OB_FAIL(finish_dag())) {
-      LOG_WARN("finish dag failed", K(ret));
-    }
-  }
-  return ret;
-}
-
 int ObPxMultiPartSSTableInsertOp::inner_get_next_row()
 {
   int ret = OB_SUCCESS;
@@ -252,19 +223,6 @@ int ObPxMultiPartSSTableInsertOp::get_next_row_from_child(ObInsertMonitor *inser
   int ret = child_->get_next_row();
   if (OB_SUCC(ret) && nullptr != insert_monitor && nullptr != ddl_dag_) {
     insert_monitor->inserted_row_cnt_++;
-  }
-  if (OB_ITER_END == ret) {
-    is_all_partition_finished_ = true;
-    FLOG_INFO("all partition iterate finished", KP(this));
-  }
-  return ret;
-}
-
-int ObPxMultiPartSSTableInsertOp::get_next_batch_from_child(const int64_t max_batch_size, const ObBatchRows *&brs, ObInsertMonitor *insert_monitor)
-{
-  int ret = child_->get_next_batch(max_batch_size, brs);
-  if (OB_SUCC(ret) && nullptr != insert_monitor && nullptr != ddl_dag_ && nullptr != brs) {
-    insert_monitor->inserted_row_cnt_ += brs->size_;
   }
   if (OB_ITER_END == ret) {
     is_all_partition_finished_ = true;
@@ -379,31 +337,6 @@ int ObPxMultiPartSSTableInsertOp::eval_current_row(ObIArray<ObDatum *> &datums)
   return ret;
 }
 
-int ObPxMultiPartSSTableInsertOp::eval_current_batch(ObIArray<ObIVector *> &vectors, const ObBatchRows &brs)
-{
-  int ret = OB_SUCCESS;
-  vectors.reuse();
-  clear_evaluated_flag();
-  const ObExprPtrIArray &exprs = get_spec().ins_ctdef_.new_row_;
-  ObEvalCtx &eval_ctx = get_eval_ctx();
-  for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
-    const ObExpr *e = exprs.at(i);
-    if (OB_ISNULL(e)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expr is NULL", K(ret), K(i));
-    } else if (OB_FAIL(e->eval_vector(eval_ctx, brs))) {
-      LOG_WARN("evaluate expression failed", K(ret), K(i), KPC(e));
-    } else {
-      ObIVector *cur_vector = e->get_vector(eval_ctx);
-      if (OB_FAIL(vectors.push_back(cur_vector))) {
-        LOG_WARN("push back current vector failed", K(ret), K(i), KPC(cur_vector));
-      }
-    }
-  }
-  return ret;
-
-}
-
 int ObPxMultiPartSSTableInsertOp::locate_exprs()
 {
   int ret = OB_SUCCESS;
@@ -507,129 +440,7 @@ int ObPxMultiPartSSTableInsertOp::check_need_idempotence()
   return ret;
 }
 
-int ObPxMultiPartSSTableInsertOp::generate_tablet_active_rows(const ObIVector *tablet_id_vector,
-    const ObBatchRows &brs, hash::ObHashMap<ObTabletID, ObHeapBatchSliceWriter *, hash::NoPthreadDefendMode> &slice_writer_map)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(nullptr == tablet_id_vector || !slice_writer_map.created())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invlaid argument", K(ret), KP(tablet_id_vector), K(slice_writer_map.created()));
-  } else if (OB_FAIL(slice_writer_map.reuse())) {
-    LOG_WARN("reuse slice writer map failed", K(ret));
-  }
-  ObTabletID tablet_id;
-  ObISliceWriter *slice_writer = nullptr;
-  for (int64_t i = 0; OB_SUCC(ret) && i < brs.size_; ++i) {
-    if (!brs.all_rows_active_ && brs.skip_->at(i)) {
-      continue;
-    } else if (FALSE_IT(tablet_id = tablet_id_vector->get_int(i))) {
-    } else if (OB_FAIL(get_or_create_heap_writer(tablet_id, slice_writer))) {
-      LOG_WARN("get or create heap slice writer failed", K(ret));
-    } else {
-      ObHeapBatchSliceWriter *heap_batch_slice_writer = static_cast<ObHeapBatchSliceWriter *>(slice_writer);
-      if (OB_ISNULL(heap_batch_slice_writer)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("batch slice writer is null", K(ret));
-      } else if (OB_FAIL(heap_batch_slice_writer->set_active_row(i))) {
-        LOG_WARN("set active row failed", K(ret));
-      } else if (OB_FAIL(slice_writer_map.set_refactored(tablet_id, heap_batch_slice_writer, 1/*overwrite*/))) {
-        LOG_WARN("set slice writer into map failed", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
 // table autoinc not support batch interface, because its eval param is not vectorized
-int ObPxMultiPartSSTableInsertOp::write_heap_slice_by_batch()
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(ddl_dag_) || OB_ISNULL(tablet_autoinc_expr_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ddl dag is null", K(ret), KP(ddl_dag_), KP(tablet_autoinc_expr_));
-  }
-  const int64_t max_batch_size = get_spec().max_batch_size_;
-  const ObBatchRows *brs = nullptr;
-  ObEvalCtx &eval_ctx = get_eval_ctx();
-  ObArray<ObIVector *> vectors;
-  hash::ObHashMap<ObTabletID, ObHeapBatchSliceWriter *, hash::NoPthreadDefendMode> slice_writer_map;
-  int64_t unused_row_scan_cnt = 0;
-  ObInsertMonitor insert_monitor(unused_row_scan_cnt, op_monitor_info_.otherstat_2_value_);
-
-  if (OB_SUCC(ret) && nullptr != tablet_id_expr_) {
-    if (OB_FAIL(slice_writer_map.create(max_batch_size, ObMemAttr("act_writer_map")))) {
-      LOG_WARN("create slice writer map failed", K(ret));
-    }
-  }
-  while (OB_SUCC(ret) && !is_all_partition_finished_) {
-    if (OB_FAIL(get_next_batch_from_child(max_batch_size, brs, &insert_monitor))) {
-      if (OB_ITER_END != ret) {
-        LOG_WARN("get next row failed", K(ret));
-      } else {
-        is_all_partition_finished_ = true;
-        ret = OB_SUCCESS;
-      }
-    } else if (OB_UNLIKELY(brs->size_ <= 0)) {
-      is_all_partition_finished_ = brs->end_;
-    } else if (OB_FAIL(eval_current_batch(vectors, *brs))) {
-      LOG_WARN("eval current batch failed", K(ret));
-    } else {
-      if (nullptr == tablet_id_expr_) { // non partition table
-        ObISliceWriter *slice_writer = nullptr;
-        if (OB_FAIL(get_or_create_heap_writer(non_partitioned_tablet_id_, slice_writer))) {
-          LOG_WARN("get tablet slice writer failed", K(ret), K(non_partitioned_tablet_id_));
-        } else {
-          ObBatchSelector selector(*brs);
-          if (OB_FAIL(slice_writer->append_current_batch(vectors, selector))) {
-            LOG_WARN("append batch failed", K(ret));
-          }
-        }
-      } else {
-        if (OB_FAIL(tablet_id_expr_->eval_vector(eval_ctx, *brs))) {
-          LOG_WARN("failed to eval vector", K(ret));
-        } else {
-          ObIVector *tablet_id_vector = tablet_id_expr_->get_vector(eval_ctx);
-          if (OB_FAIL(generate_tablet_active_rows(tablet_id_vector, *brs, slice_writer_map))) {
-            LOG_WARN("generate tablet active rows failed", K(ret), KPC(tablet_id_vector));
-          }
-        }
-        hash::ObHashMap<ObTabletID, ObHeapBatchSliceWriter *, hash::NoPthreadDefendMode>::iterator it = slice_writer_map.begin();
-        for (; OB_SUCC(ret) && it != slice_writer_map.end(); ++it) {
-          ObHeapBatchSliceWriter *slice_writer = it->second;
-          if (OB_ISNULL(slice_writer)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("slice writer is null", K(ret), KP(slice_writer));
-          } else {
-            const ObIArray<uint16_t> &active_array = slice_writer->get_active_array();
-            ObBatchSelector selector(active_array.get_data(), active_array.count());
-            if (OB_FAIL(slice_writer->append_current_batch(vectors, selector))) {
-              LOG_WARN("append batch failed", K(ret));
-            } else {
-              slice_writer->reuse_active_array();
-            }
-          }
-        }
-      }
-    }
-  }
-
-  if (OB_SUCC(ret) && is_all_partition_finished_) {
-    // close all slice writer
-    TabletWriterMap::iterator iter = heap_tablet_writer_map_.begin();
-    for (; OB_SUCC(ret) && iter != heap_tablet_writer_map_.end(); ++iter) {
-      const ObTabletID &tablet_id = iter->first;
-      ObISliceWriter *slice_writer = iter->second;
-      if (OB_ISNULL(slice_writer)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("slice writer is null", K(ret));
-      } else if (OB_FAIL(slice_writer->close())) {
-        LOG_WARN("close slice writer failed", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
 int ObPxMultiPartSSTableInsertOp::write_heap_slice_by_row()
 {
   int ret = OB_SUCCESS;
@@ -689,25 +500,9 @@ int ObPxMultiPartSSTableInsertOp::get_or_create_heap_writer(const ObTabletID &ta
       ret = OB_SUCCESS;
       const int64_t slice_idx = ctx_.get_px_task_id();
       const int64_t parallel_count = ctx_.get_sqc_handler()->get_sqc_ctx().get_task_count();
-      const int64_t max_batch_size = get_spec().max_batch_size_;
       ObWriteMacroParam write_param;
       if (OB_FAIL(ObDDLUtil::fill_writer_param(tablet_id, slice_idx, ddl_dag_, 0/*max_batch_size*/, write_param))) {
         LOG_WARN("init write param failed", K(ret), K(tablet_id), K(slice_idx));
-      } else if (max_batch_size > 0) {
-        const bool direct_write_macro_block = true;
-        if (OB_ISNULL(slice_writer = OB_NEWx(ObHeapBatchSliceWriter, &allocator_))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("allocate memory for batch tablet writer failed", K(ret));
-        } else if (OB_FAIL(static_cast<ObHeapBatchSliceWriter *>(slice_writer)->init(
-                       write_param,
-                       parallel_count,
-                       tablet_autoinc_column_idx_,
-                       direct_write_macro_block,
-                       max_batch_size,
-                       need_idempotent_tablet_autoinc_))) {
-          LOG_WARN("init batch tablet writer failed", K(ret), K(tablet_id), K(slice_idx),
-              K(parallel_count), K(tablet_autoinc_column_idx_), K(max_batch_size));
-        }
       } else {
         if (OB_ISNULL(slice_writer = OB_NEWx(ObHeapRsSliceWriter, &allocator_))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -731,84 +526,6 @@ int ObPxMultiPartSSTableInsertOp::get_or_create_heap_writer(const ObTabletID &ta
         }
       }
     }
-  }
-  return ret;
-}
-
-int ObPxMultiPartSSTableInsertOp::write_ordered_slice_by_batch()
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(ddl_dag_) || OB_ISNULL(slice_info_expr_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ddl dag is null", K(ret), KP(ddl_dag_), KP(slice_info_expr_));
-  }
-  const int64_t max_batch_size = get_spec().max_batch_size_;
-  const ObBatchRows *brs = nullptr;
-  ObEvalCtx &eval_ctx = get_eval_ctx();
-  ObArray<ObIVector *> vectors;
-  ObISliceWriter *slice_writer = nullptr;
-  ObTabletID tablet_id;
-  int64_t slice_idx = -1;
-  ObIVector *slice_info_vector = nullptr;
-  ObIVector *tablet_id_vector = nullptr;
-  bool need_update_tablet_range_count = true;
-  int64_t unused_row_scan_cnt = 0;
-  ObInsertMonitor insert_monitor(unused_row_scan_cnt, op_monitor_info_.otherstat_2_value_);
-  
-  while (OB_SUCC(ret) && !is_all_partition_finished_) {
-    int64_t offset = 0;
-    int64_t row_count = 0;
-    if (OB_FAIL(get_next_batch_from_child(max_batch_size, brs, &insert_monitor))) {
-      if (OB_ITER_END != ret) {
-        LOG_WARN("get next row failed", K(ret));
-      } else {
-        is_all_partition_finished_ = true;
-        ret = OB_SUCCESS;
-      }
-    } else if (OB_UNLIKELY(need_update_tablet_range_count) && OB_FAIL(ddl_dag_->update_tablet_range_count())) {
-      LOG_WARN("update tablet range count failed", K(ret));
-    } else if (FALSE_IT(need_update_tablet_range_count = false)) {
-    } else if (OB_UNLIKELY(brs->size_ <= 0)) {
-      is_all_partition_finished_ = brs->end_;
-    } else if (OB_FAIL(eval_current_batch(vectors, *brs))) {
-      LOG_WARN("eval current batch failed", K(ret));
-    } else if (OB_FAIL(slice_info_expr_->eval_vector(eval_ctx, *brs))) {
-      LOG_WARN("eval slice info expr failed", K(ret));
-    }  else if (FALSE_IT(slice_info_vector = slice_info_expr_->get_vector(eval_ctx))) {
-    } else if (nullptr != tablet_id_expr_) {
-      if (OB_FAIL(tablet_id_expr_->eval_vector(eval_ctx, *brs))) {
-        LOG_WARN("eval slice info expr failed", K(ret));
-      } else {
-        tablet_id_vector = tablet_id_expr_->get_vector(eval_ctx);
-      }
-    }
-    while (OB_SUCC(ret) && offset < brs->size_) {
-      if (OB_FAIL(get_continue_slice(tablet_id_vector, slice_info_vector, *brs, tablet_id, slice_idx, offset, row_count))) {
-        LOG_WARN("get continue slice failed", K(ret));
-      } else if (OB_UNLIKELY(offset >= brs->size_)) {
-        // do nothing
-      } else if (OB_FAIL(switch_slice_if_need(tablet_id, slice_idx, true/*is_append_batch*/, slice_writer))) {
-        LOG_WARN("switch slice if need failed", K(ret), K(tablet_id), K(slice_idx));
-      } else {
-        ObBatchSelector selector(offset, row_count);
-        if (OB_FAIL(slice_writer->append_current_batch(vectors, selector))) {
-          LOG_WARN("append batch failed", K(ret));
-        } else {
-          offset += row_count;
-        }
-      }
-    }
-  }
-  if (OB_SUCC(ret) && is_all_partition_finished_ && nullptr != slice_writer) {
-    if (OB_FAIL(slice_writer->close())) {
-      LOG_WARN("close slice writer failed", K(ret));
-    }
-  }
-  // ignore ret
-  if (nullptr != slice_writer) {
-    slice_writer->~ObISliceWriter();
-    ob_free(slice_writer);
-    slice_writer = nullptr;
   }
   return ret;
 }
@@ -842,7 +559,7 @@ int ObPxMultiPartSSTableInsertOp::write_ordered_slice_by_row()
     } else if (FALSE_IT(need_update_tablet_range_count = false)) {
     } else if (OB_FAIL(get_tablet_info_from_row(child_->get_spec().output_, tablet_id, &slice_param))) {
       LOG_WARN("get tablet id from row failed", K(ret), K(child_->get_spec().output_));
-    } else if (OB_FAIL(switch_slice_if_need(tablet_id, slice_param.slice_idx_, false/*is_append_batch*/, slice_writer, &autoinc_param))) {
+    } else if (OB_FAIL(switch_slice_if_need(tablet_id, slice_param.slice_idx_, slice_writer, &autoinc_param))) {
       LOG_WARN("get or create slice writer failed", K(ret), K(tablet_id));
     } else if (autoinc_param.need_autoinc_ && FALSE_IT(
           get_eval_ctx().exec_ctx_.set_ddl_idempotent_autoinc_params(autoinc_param.slice_count_,
@@ -873,7 +590,7 @@ int ObPxMultiPartSSTableInsertOp::write_ordered_slice_by_row()
 }
 
 int ObPxMultiPartSSTableInsertOp::switch_slice_if_need(
-    const ObTabletID &tablet_id, const int64_t slice_idx, const bool is_append_batch,
+    const ObTabletID &tablet_id, const int64_t slice_idx,
     ObISliceWriter *&slice_writer, ObDDLAutoincParam *autoinc_param/* = nullptr */)
 {
   int ret = OB_SUCCESS;
@@ -909,7 +626,7 @@ int ObPxMultiPartSSTableInsertOp::switch_slice_if_need(
         LOG_WARN("allocate memory for vector index slice writer failed", K(ret));
       } else if (OB_FAIL(static_cast<ObBatchSliceWriter *>(slice_writer)->init(write_param,
                                                                             direct_write_macro_block,
-                                                                            is_append_batch,
+                                                                            false/*is_append_batch*/,
                                                                             0/*max_batch_size(not used)*/))) {
         LOG_WARN("init vector index slice writer failed", K(ret), K(write_param));
       }
@@ -932,42 +649,6 @@ int ObPxMultiPartSSTableInsertOp::switch_slice_if_need(
         }
       }
     }
-  }
-  return ret;
-}
-
-int ObPxMultiPartSSTableInsertOp::get_continue_slice(
-    const ObIVector *tablet_id_vector, const ObIVector *slice_info_vector_, const ObBatchRows &brs,
-    ObTabletID &tablet_id, int64_t &slice_idx, int64_t &offset, int64_t &row_count)
-{
-  int ret = OB_SUCCESS;
-  tablet_id.reset();
-  slice_idx = -1;
-  row_count = 0;
-  for (int64_t i = offset; OB_SUCC(ret) && i < brs.size_; ++i) {
-    if (brs.skip_->at(i)) {
-      if (tablet_id.is_valid()) { // tablet id already set, but not continious now
-        break;
-      }
-    } else {
-      const ObTabletID cur_tablet_id = nullptr == tablet_id_vector ? non_partitioned_tablet_id_ : ObTabletID(tablet_id_vector->get_int(i));
-      ObTabletSliceParam slice_param;
-      slice_param.slice_id_ = slice_info_vector_->get_int(i);
-      const int64_t cur_slice_idx = slice_param.slice_idx_;
-      if (!tablet_id.is_valid()) { // the first valid row
-        tablet_id = cur_tablet_id;
-        slice_idx = cur_slice_idx;
-        offset = i;
-        row_count = 1;
-      } else if (OB_LIKELY(cur_tablet_id == tablet_id && cur_slice_idx == slice_idx)) {
-        ++row_count;
-      } else {
-        break;
-      }
-    }
-  }
-  if (OB_SUCC(ret) && !tablet_id.is_valid()) {
-    offset = brs.size_;
   }
   return ret;
 }

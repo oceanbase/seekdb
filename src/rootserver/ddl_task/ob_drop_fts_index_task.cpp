@@ -254,16 +254,10 @@ int ObDropFTSIndexTask::deserialize_params_from_message(
     LOG_WARN("fail to deserialize aux doc word table info", K(ret));
   } else if (OB_FAIL(fts_doc_word_.deep_copy_from_other(tmp_info, allocator_))) {
     LOG_WARN("fail to deep copy from tmp info", K(ret), K(tmp_info));
-  } else if (OB_UNLIKELY(pos >= buf_size)) {
-    // The end of the message has been reached. It is an old version message without drop index arg.
-    // just skip.
   } else if (OB_FAIL(tmp_ddl_stmt_str.deserialize(buf, buf_size, pos))) {
-    LOG_WARN("fail to deserialize drop index arg", K(ret));
+    LOG_WARN("fail to deserialize ddl statement", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator_, tmp_ddl_stmt_str, ddl_stmt_str_))) {
     LOG_WARN("fail to copy ddl stmt string", K(ret), K(tmp_ddl_stmt_str));
-  } else if (OB_UNLIKELY(pos >= buf_size)) {
-    // The end of the message has been reached. It is an old version message without drop index arg.
-    // just skip.
   } else if (OB_FAIL(serialization::decode_i8(buf,
                                               buf_size,
                                               pos,
@@ -284,6 +278,9 @@ int ObDropFTSIndexTask::deserialize_params_from_message(
                                               pos,
                                               &drop_rowkey_doc_index_finish))) {
       LOG_WARN("fail to deserialize drop rowkey doc index finish", K(ret));
+  } else if (OB_UNLIKELY(pos != buf_size)) {
+    ret = OB_VERSION_NOT_MATCH;
+    LOG_WARN("drop fts index task message format mismatch", K(ret), K(buf_size), K(pos));
   } else {
     drop_domain_index_finish_ = static_cast<bool>(drop_domain_index_finish);
     drop_doc_word_index_finish_ = static_cast<bool>(drop_doc_word_index_finish);

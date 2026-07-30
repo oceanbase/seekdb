@@ -92,15 +92,11 @@ protected:
   int gen_list_val_str(const common::ObIArray<common::ObNewRow>& list_value,
                        common::ObString &list_val_str,
                        common::ObString &b_list_val_str);
-  int gen_interval_part_name(int64_t part_id,
-                             ObString &part_name);
-
 private:
   char high_bound_val_[common::OB_MAX_B_HIGH_BOUND_VAL_LENGTH];
   char b_high_bound_val_[common::OB_MAX_B_HIGH_BOUND_VAL_LENGTH];
   char list_val_[common::OB_MAX_PARTITION_EXPR_LENGTH];
   char b_list_val_[common::OB_MAX_B_PARTITION_EXPR_LENGTH];
-  char interval_part_name_[common::OB_MAX_PARTITION_NAME_LENGTH];
 };
 
 class ObAddIncPartDMLGenerator : public ObPartDMLGenerator

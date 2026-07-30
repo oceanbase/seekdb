@@ -231,89 +231,6 @@ int ObExprElementAt::eval_element_at_batch(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 
-int ObExprElementAt::eval_element_at_vector(const ObExpr &expr, ObEvalCtx &ctx,
-                                            const ObBitVector &skip, const EvalBound &bound)
-{
-  int ret = OB_SUCCESS;
-  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
-  ObExprStrResAlloc res_alloc(expr, ctx);
-  const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
-  ObIArrayType *src_arr = NULL;
-  ObIArrayType* child_arr = NULL;
-
-  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval source array failed", K(ret));
-  } else if (OB_FAIL(expr.args_[1]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval index failed", K(ret));
-  } else {
-    ObIVector *arr_vec = expr.args_[0]->get_vector(ctx);
-    VectorFormat arr_format = arr_vec->get_format();
-    ObIVector *idx_vec = expr.args_[1]->get_vector(ctx);
-    ObIVector *res_vec = expr.get_vector(ctx);
-    ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
-    VectorFormat res_format = expr.get_format(ctx);
-    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-    for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {
-      bool is_null_res = false;
-      int64_t arr_idx = 0;
-      if (skip.at(idx) || eval_flags.at(idx)) {
-        continue;
-      }
-      if (arr_vec->is_null(idx) || idx_vec->is_null(idx)) {
-        is_null_res = true;
-      } else {
-        ObString arr_str = arr_vec->get_string(idx);
-        if (OB_FAIL(ObNestedVectorFunc::construct_param(tmp_allocator, ctx, subschema_id, arr_str, src_arr))) {
-          LOG_WARN("construct array obj failed", K(ret));
-        }
-      }
-      if (OB_FAIL(ret) || is_null_res) {
-      } else if (OB_FALSE_IT(arr_idx = idx_vec->get_int(idx) - 1)) {
-      } else if (arr_idx < 0 || arr_idx >= src_arr->size() || arr_idx > UINT32_MAX) {
-        is_null_res = true;
-      } else if (src_arr->is_null(arr_idx)) {
-        is_null_res = true;
-      }
-      if (OB_FAIL(ret)) {
-      } else if (is_null_res) {
-        res_vec->set_null(idx);
-      } else if (src_arr->get_format() == Nested_Array) {
-        uint16_t child_subschema_id = expr.obj_meta_.get_subschema_id();
-        ObString child_arr_str;
-        if (OB_NOT_NULL(child_arr) && OB_FALSE_IT(child_arr->clear())) {
-        } else if (OB_ISNULL(child_arr) && OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator,ctx, child_subschema_id, child_arr, false))) {
-          LOG_WARN("construct child array obj failed", K(ret));
-        } else if (OB_FALSE_IT(child_arr->clear())) {
-        } else if (OB_FAIL(src_arr->at(static_cast<uint32_t>(arr_idx), *child_arr))) {
-          LOG_WARN("failed to get child array", K(ret), K(arr_idx));
-        } else if (res_format == VEC_DISCRETE) {
-          if (OB_FAIL(ObArrayExprUtils::set_array_res<ObDiscreteFormat>(child_arr, expr, ctx, static_cast<ObDiscreteFormat *>(res_vec), idx))) {
-            LOG_WARN("set array res failed", K(ret));
-          }
-        } else if (res_format == VEC_UNIFORM) {
-          if (OB_FAIL(ObArrayExprUtils::set_array_res<ObUniformFormat<false>>(child_arr, expr, ctx, static_cast<ObUniformFormat<false> *>(res_vec), idx))) {
-            LOG_WARN("set array res failed", K(ret));
-          }
-        } else if (OB_FAIL(ObArrayExprUtils::set_array_res<ObVectorBase>(child_arr, expr, ctx, static_cast<ObVectorBase *>(res_vec), idx))) {
-          LOG_WARN("set array res failed", K(ret));
-        }
-      } else {
-        ObObj elem_obj;
-        if (OB_FAIL(src_arr->elem_at(static_cast<uint32_t>(arr_idx), elem_obj))) {
-          LOG_WARN("failed to get element", K(ret), K(arr_idx));
-        } else if (OB_FAIL(ObArrayExprUtils::set_obj_to_vector(res_vec, idx, elem_obj, res_alloc))) {
-          LOG_WARN("failed to set object value to result vector", K(ret), K(idx), K(elem_obj));
-        }
-      }
-      if (OB_SUCC(ret)) {
-        eval_flags.set(idx);
-      }
-    } // end for
-  }
-  return ret;
-}
-
 int ObExprElementAt::cg_expr(ObExprCGCtx &expr_cg_ctx,
                          const ObRawExpr &raw_expr,
                          ObExpr &rt_expr) const
@@ -322,7 +239,6 @@ int ObExprElementAt::cg_expr(ObExprCGCtx &expr_cg_ctx,
   UNUSED(raw_expr);
   rt_expr.eval_func_ = eval_element_at;
   rt_expr.eval_batch_func_ = eval_element_at_batch;
-  rt_expr.eval_vector_func_ = eval_element_at_vector; 
   return OB_SUCCESS;
 }
 

@@ -90,7 +90,7 @@ public:
   virtual int compute_op_ordering() override;
   virtual int compute_one_row_info() override;
   virtual int compute_sharding_info() override;
-  virtual int compute_op_parallel_and_server_info() override;
+  virtual int compute_op_parallel_info() override;
 
   int get_equal_set_conditions(ObIArray<ObRawExpr*> &equal_conds);
   virtual int allocate_granule_post(AllocGIContext &ctx) override;

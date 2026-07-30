@@ -17,8 +17,6 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_subquery_ref.h"
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
-#include "sql/ob_spi.h"
-#include "sql/engine/subquery/ob_subplan_filter_op.h"
 
 namespace oceanbase
 {
@@ -26,9 +24,7 @@ using namespace common;
 namespace sql
 {
 OB_SERIALIZE_MEMBER(ObExprSubQueryRef::ExtraInfo,
-                    is_cursor_,
-                    scalar_result_type_,
-                    row_desc_);
+                    scalar_result_type_);
 
 int ObExprSubQueryRef::Extra::assign(const Extra &other)
 {
@@ -41,27 +37,23 @@ int ObExprSubQueryRef::Extra::assign(const Extra &other)
 
 void ObExprSubQueryRef::ExtraInfo::reset()
 {
-  is_cursor_ = 0;
-  row_desc_.reset();
   scalar_result_type_.reset();
 }
 
 int ObExprSubQueryRef::ExtraInfo::assign(const ExtraInfo &other)
 {
   int ret = OB_SUCCESS;
-  is_cursor_ = other.is_cursor_;
   OZ (scalar_result_type_.assign(other.scalar_result_type_));
-  OZ (row_desc_.assign(other.row_desc_));
   return ret;
 }
 
-int ObExprSubQueryRef::ExtraInfo::init_cursor_info(ObIAllocator *allocator,
-                                                   const ObQueryRefRawExpr &expr,
-                                                   const ObExprOperatorType type,
-                                                   ObExpr &rt_expr)
+int ObExprSubQueryRef::ExtraInfo::init_extra_info(ObIAllocator *allocator,
+                                                  const ObQueryRefRawExpr &expr,
+                                                  const ObExprOperatorType type,
+                                                  ObExpr &rt_expr)
 {
   int ret = OB_SUCCESS;
-  ExtraInfo *cursor_info = NULL;
+  ExtraInfo *extra_info = NULL;
   void *buf = NULL;
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
@@ -70,27 +62,15 @@ int ObExprSubQueryRef::ExtraInfo::init_cursor_info(ObIAllocator *allocator,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc memory", K(ret));
   } else {
-    cursor_info = new(buf) ExtraInfo(*allocator, type);
+    extra_info = new(buf) ExtraInfo(*allocator, type);
     bool result_is_scalar = expr.is_scalar();
     if (result_is_scalar) {
-      cursor_info->scalar_result_type_ = expr.get_result_type();
+      extra_info->scalar_result_type_ = expr.get_result_type();
     }
     Extra::get_info(rt_expr).is_scalar_ = result_is_scalar;
     Extra::get_info(rt_expr).iter_idx_ = expr.get_ref_id() - 1;
-    cursor_info->is_cursor_ = expr.is_cursor();
-    if (OB_FAIL(cursor_info->row_desc_.reserve(expr.get_column_types().count()))) {
-      LOG_WARN("fail to init row_desc_", K(ret));
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < expr.get_column_types().count(); ++i) {
-      ObDataType type;
-      type.set_meta_type(expr.get_column_types().at(i));
-      type.set_accuracy(expr.get_column_types().at(i).get_accuracy());
-      OZ (cursor_info->row_desc_.push_back(type));
-    }
-    if (OB_SUCC(ret)) {
-      rt_expr.extra_info_ = cursor_info;
-      LOG_DEBUG("succ init_cursor_info", KPC(cursor_info));
-    }
+    rt_expr.extra_info_ = extra_info;
+    LOG_DEBUG("succeed to initialize subquery extra info", KPC(extra_info));
   }
   return ret;
 }
@@ -100,19 +80,14 @@ int ObExprSubQueryRef::ExtraInfo::deep_copy(common::ObIAllocator &allocator,
                                             ObIExprExtraInfo *&copied_info) const
 {
   int ret = OB_SUCCESS;
-  ExtraInfo *copied_cursor_info = NULL;
+  ExtraInfo *copied_extra_info = NULL;
   if (OB_FAIL(ObExprExtraInfoFactory::alloc(allocator, type, copied_info))) {
     LOG_WARN("failed to alloc expr extra info", K(ret));
-  } else if (OB_ISNULL(copied_cursor_info = static_cast<ExtraInfo *>(copied_info))) {
+  } else if (OB_ISNULL(copied_extra_info = static_cast<ExtraInfo *>(copied_info))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret));
-  } else if (OB_FAIL(copied_cursor_info->row_desc_.prepare_allocate(row_desc_.count()))) {
-    LOG_WARN("failed to prepare allocate", K(ret));
-  } else {
-    copied_cursor_info->is_cursor_ = is_cursor_;
-    for (int i = 0; OB_SUCC(ret) && i < row_desc_.count(); i++) {
-      copied_cursor_info->row_desc_.at(i) = row_desc_.at(i);
-    }
+  } else if (OB_FAIL(copied_extra_info->scalar_result_type_.assign(scalar_result_type_))) {
+    LOG_WARN("failed to copy scalar result type", K(ret));
   }
   return ret;
 }
@@ -128,9 +103,7 @@ OB_DEF_SERIALIZE(ObExprSubQueryRef)
   LST_DO_CODE(OB_UNIS_ENCODE,
               is_scalar,
               extra_info_.scalar_result_type_,
-              iter_idx,
-              extra_info_.is_cursor_,
-              extra_info_.row_desc_);
+              iter_idx);
   return ret;
 }
 
@@ -145,9 +118,7 @@ OB_DEF_DESERIALIZE(ObExprSubQueryRef)
   LST_DO_CODE(OB_UNIS_DECODE,
               is_scalar,
               extra_info_.scalar_result_type_,
-              iter_idx,
-              extra_info_.is_cursor_,
-              extra_info_.row_desc_);
+              iter_idx);
   if (OB_SUCC(ret)) {
     extra_.is_scalar_ = static_cast<uint16_t>(is_scalar);
     extra_.iter_idx_ = static_cast<uint16_t>(iter_idx);
@@ -164,9 +135,7 @@ OB_DEF_SERIALIZE_SIZE(ObExprSubQueryRef)
   LST_DO_CODE(OB_UNIS_ADD_LEN,
               is_scalar,
               extra_info_.scalar_result_type_,
-              iter_idx,
-              extra_info_.is_cursor_,
-              extra_info_.row_desc_);
+              iter_idx);
   return len;
 }
 
@@ -214,10 +183,7 @@ void ObExprSubQueryRef::reset()
 int ObExprSubQueryRef::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_ctx) const
 {
   UNUSED(type_ctx);
-  if (extra_info_.is_cursor_) {
-    type.set_ext();
-    type.set_extend_type(pl::PL_REF_CURSOR_TYPE);
-  } else if (extra_.is_scalar_) {
+  if (extra_.is_scalar_) {
     // The result of the subquery is a scalar, then the return type is the actual return type of the scalar
     type = extra_info_.scalar_result_type_;
   } else {
@@ -240,7 +206,7 @@ int ObExprSubQueryRef::cg_expr(
   int ret = OB_SUCCESS;
   const ObQueryRefRawExpr *expr = static_cast<const ObQueryRefRawExpr *>(&raw_expr);
   CK (OB_NOT_NULL(expr));
-  OZ (ExtraInfo::init_cursor_info(op_cg_ctx.allocator_, *expr, type_, rt_expr));
+  OZ (ExtraInfo::init_extra_info(op_cg_ctx.allocator_, *expr, type_, rt_expr));
   OX (rt_expr.eval_func_ = &expr_eval);
   return ret;
 }
@@ -376,7 +342,7 @@ int ObExprSubQueryRef::get_subquery_iter(ObEvalCtx &ctx,
     if (OB_ISNULL(kit) || OB_ISNULL(kit->op_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("operator is NULL", K(ret), K(extra), KP(kit));
-    } else if (PHY_SUBPLAN_FILTER != kit->op_->get_spec().type_ && PHY_VEC_SUBPLAN_FILTER != kit->op_->get_spec().type_) {
+    } else if (PHY_SUBPLAN_FILTER != kit->op_->get_spec().type_) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("is not subplan filter operator", K(ret), K(extra),
                "spec", kit->op_->get_spec());

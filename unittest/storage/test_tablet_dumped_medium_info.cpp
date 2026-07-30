@@ -71,7 +71,7 @@ int TestTabletDumpedMediumInfo::create_medium_info(
     info->compaction_type_ = compaction::ObMediumCompactionInfo::ObCompactionType::MEDIUM_COMPACTION;
     info->medium_snapshot_ = medium_snapshot;
     info->last_medium_snapshot_ = last_medium_snapshot;
-    info->data_version_ = 100;
+    info->data_version_ = DATA_CURRENT_VERSION;
 
     // storage schema
     const uint64_t table_id = 1234567;

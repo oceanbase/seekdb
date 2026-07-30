@@ -1428,11 +1428,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
             } else if (OB_ISNULL(tbl_schema)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("table schema is NULL", K(ret));
-            } else if ((tbl_schema->is_primary_aux_vp_table() || tbl_schema->is_aux_vp_table())
-                && is_queuing_table_mode(static_cast<ObTableModeFlag>(table_mode_.mode_flag_))) {
-              ret = OB_NOT_SUPPORTED;
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, "set vertical partition table as queuing table mode");
-              SQL_RESV_LOG(WARN, "Vertical partition table cannot set queuing table mode", K(ret));
             } else { // Temporarily not supporting changing PK_MODE when altering table
               // Set Table current PK_MODE, assemble final TableMode
               table_mode_.pk_mode_ = tbl_schema->get_table_mode_struct().pk_mode_;
@@ -2882,7 +2877,6 @@ int ObDDLResolver::resolve_lob_inrow_threshold(const ParseNode *option_node, con
 int ObDDLResolver::cast_default_value(ObSQLSessionInfo *session_info,
                                       ObObj &default_value,
                                       const ObTimeZoneInfo *tz_info,
-                                      const common::ObString *nls_formats,
                                       ObIAllocator &allocator,
                                       ObColumnSchemaV2 &column_schema,
                                       const ObSQLMode sql_mode)
@@ -2903,7 +2897,7 @@ int ObDDLResolver::cast_default_value(ObSQLSessionInfo *session_info,
 
   if (need_cast) {
     ObAccuracy res_accuracy;
-    const ObDataTypeCastParams dtc_params(tz_info, nls_formats, CS_TYPE_INVALID, CS_TYPE_INVALID, CS_TYPE_UTF8MB4_GENERAL_CI);
+    const ObDataTypeCastParams dtc_params(tz_info, CS_TYPE_INVALID, CS_TYPE_INVALID, CS_TYPE_UTF8MB4_GENERAL_CI);
     ObCastMode cast_mode = CM_COLUMN_CONVERT;
     if (is_allow_invalid_dates(sql_mode)) {
       cast_mode |= CM_ALLOW_INVALID_DATES;
@@ -3003,7 +2997,6 @@ int ObDDLResolver::cast_default_value(ObSQLSessionInfo *session_info,
 }
 
 int ObDDLResolver::trim_space_for_default_value(
-    const bool is_mysql_mode,
     const bool is_char_type,
     const ObCollationType &collation_type,
     ObObj &default_value,
@@ -3012,7 +3005,7 @@ int ObDDLResolver::trim_space_for_default_value(
   int ret = OB_SUCCESS;
   if (OB_FAIL(default_value.get_varchar(out_str))) {
     LOG_WARN("invalid default data", K(ret), K(default_value));
-  } else if (is_mysql_mode && is_char_type) {
+  } else if (is_char_type) {
     const char *str = out_str.ptr();
     int32_t len = out_str.length();
     ObString space_pattern = ObCharsetUtils::get_const_str(collation_type, ' ');
@@ -3027,8 +3020,7 @@ int ObDDLResolver::trim_space_for_default_value(
   return ret;
 }
 
-int ObDDLResolver::check_default_value_length(const bool is_mysql_mode,
-                                              const ObColumnSchemaV2 &column,
+int ObDDLResolver::check_default_value_length(const ObColumnSchemaV2 &column,
                                               ObObj &default_value)
 {
   int ret = OB_SUCCESS;
@@ -3042,9 +3034,9 @@ int ObDDLResolver::check_default_value_length(const bool is_mysql_mode,
       ObString str;
       if (default_value.is_null()) {
         strlen = 0;
-      } else if (OB_FAIL(trim_space_for_default_value(is_mysql_mode, column.get_meta_type().is_char(), column.get_collation_type(), default_value, str))) {
+      } else if (OB_FAIL(trim_space_for_default_value(column.get_meta_type().is_char(), column.get_collation_type(), default_value, str))) {
         SQL_RESV_LOG(WARN, "trim space for default value failed", K(ret));
-      } else if (is_mysql_mode && str.empty()) {
+      } else if (str.empty()) {
         strlen = 0;
         default_value.set_varchar("");
       } else {
@@ -3781,7 +3773,6 @@ int ObDDLResolver::print_expr_to_default_value(ObRawExpr &expr,
 // this function is called in ddl service, which can not access user session_info, so need to
 // construct an empty session
 int ObDDLResolver::init_empty_session(const common::ObTimeZoneInfoWrap &tz_info_wrap,
-                                      const common::ObString *nls_formats,
                                       const ObLocalSessionVar *local_session_var,
                                       ObIAllocator &allocator,
                                       ObTableSchema &table_schema,
@@ -3797,7 +3788,7 @@ int ObDDLResolver::init_empty_session(const common::ObTimeZoneInfoWrap &tz_info_
     LOG_WARN("get null schema checker", K(ret));
   } else if (OB_FAIL(empty_session.test_init(0, 0, &allocator))) {
     LOG_WARN("init empty session failed", K(ret));
-  } else if (OB_FAIL(schema_checker->get_server_runtime_info(runtime_schema))) {
+  } else if (OB_FAIL(schema_checker->get_schema_guard()->get_server_runtime_info(runtime_schema))) {
     LOG_WARN("get runtime_schema failed", K(ret));
   } else if (OB_FAIL(empty_session.init_runtime(runtime_schema->get_runtime_name_str()))) {
     LOG_WARN("init server runtime failed", K(ret));
@@ -3816,7 +3807,6 @@ int ObDDLResolver::init_empty_session(const common::ObTimeZoneInfoWrap &tz_info_
     ObSessionDDLInfo ddl_info;
     ddl_info.set_ddl_check_default_value(true);
     empty_session.set_ddl_info(ddl_info);
-    empty_session.set_nls_formats(nls_formats);
     empty_session.set_sql_mode(sql_mode);
     empty_session.set_default_database(db_schema->get_database_name_str());
     empty_session.set_database_id(table_schema.get_database_id());
@@ -3831,7 +3821,6 @@ int ObDDLResolver::init_empty_session(const common::ObTimeZoneInfoWrap &tz_info_
 
 int ObDDLResolver::reformat_generated_column_expr(ObObj &default_value,
                                                   const common::ObTimeZoneInfoWrap &tz_info_wrap,
-                                                  const common::ObString *nls_formats,
                                                   const ObLocalSessionVar &local_session_var,
                                                   ObIAllocator &allocator,
                                                   ObTableSchema &table_schema,
@@ -3848,7 +3837,6 @@ int ObDDLResolver::reformat_generated_column_expr(ObObj &default_value,
                (ObPhysicalPlanCtx, phy_plan_ctx, allocator)) {
     LinkExecCtxGuard link_guard(empty_session, exec_ctx);
     if (OB_FAIL(init_empty_session(tz_info_wrap,
-                                   nls_formats,
                                    &local_session_var,
                                    allocator,
                                    table_schema,
@@ -3908,7 +3896,6 @@ int ObDDLResolver::resolve_generated_column_expr(ObString &expr_str,
 // construct an empty session
 int ObDDLResolver::check_default_value(ObObj &default_value,
                                        const common::ObTimeZoneInfoWrap &tz_info_wrap,
-                                       const common::ObString *nls_formats,
                                        const ObLocalSessionVar *local_session_var,
                                        ObIAllocator &allocator,
                                        ObTableSchema &table_schema,
@@ -3924,7 +3911,6 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
                (ObPhysicalPlanCtx, phy_plan_ctx, allocator)) {
     LinkExecCtxGuard link_guard(empty_session, exec_ctx);
     if (OB_FAIL(init_empty_session(tz_info_wrap,
-                                   nls_formats,
                                    local_session_var,
                                    allocator,
                                    table_schema,
@@ -3935,7 +3921,7 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
     } else if (FALSE_IT(empty_session.set_stmt_type(stmt::T_CREATE_TABLE))) { // set a fake ddl stmt type to specifiy ddl stmt type
     } else if (FALSE_IT(exec_ctx.set_physical_plan_ctx(&phy_plan_ctx))) {
     } else if (FALSE_IT(exec_ctx.set_my_session(&empty_session))) {
-    } else if (OB_FAIL(check_default_value(default_value, tz_info_wrap, nls_formats, allocator,
+    } else if (OB_FAIL(check_default_value(default_value, tz_info_wrap, allocator,
                                           table_schema, dummy_array,column, gen_col_expr_arr, sql_mode,
                                           &empty_session, schema_checker))) {
       LOG_WARN("check default value failed", K(ret));
@@ -3947,7 +3933,6 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
 // Parse the list expression by first looking for dependent columns in column_schema of table_schema, if not found, then look in resolved_cols
 int ObDDLResolver::check_default_value(ObObj &default_value,
                                        const common::ObTimeZoneInfoWrap &tz_info_wrap,
-                                       const common::ObString *nls_formats,
                                        ObIAllocator &allocator,
                                        ObTableSchema &table_schema,
                                        ObIArray<ObColumnSchemaV2 *> &resolved_cols,
@@ -4065,9 +4050,9 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
     LOG_DEBUG("finish check default value", K(input_default_value), K(expr_str), K(tmp_default_value), K(tmp_dest_obj), K(tmp_dest_obj_null), KPC(expr), K(ret));
   } else {
     if (OB_FAIL(cast_default_value(session_info, default_value, tz_info_wrap.get_time_zone_info(),
-                                   nls_formats, allocator, column, sql_mode))) {
+                                   allocator, column, sql_mode))) {
       LOG_WARN("fail to cast default value!", K(ret), K(default_value), KPC(tz_info_wrap.get_time_zone_info()), K(column), K(sql_mode));
-    } else if (OB_FAIL(check_default_value_length(true/*is_mysql_mode*/, column, default_value))) {
+    } else if (OB_FAIL(check_default_value_length(column, default_value))) {
       LOG_WARN("fail to check default value length", K(ret), K(default_value), K(column));
     } else {
       default_value.set_collation_type(column.get_collation_type());
@@ -4079,7 +4064,6 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
 
 int ObDDLResolver::check_default_value(ObObj &default_value,
                                        const common::ObTimeZoneInfoWrap &tz_info_wrap,
-                                       const common::ObString *nls_formats,
                                        const ObLocalSessionVar *local_session_var,
                                        ObIAllocator &allocator,
                                        ObTableSchema &table_schema,
@@ -4096,7 +4080,7 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
   for (int64_t i = 0; OB_SUCC(ret) && i < resolved_cols.count(); ++i) {
     OZ (resolved_col_ptrs.push_back(&resolved_cols.at(i)));
   }
-  OZ (check_default_value(default_value, tz_info_wrap, nls_formats, allocator, table_schema,
+  OZ (check_default_value(default_value, tz_info_wrap, allocator, table_schema,
                           resolved_col_ptrs, column, gen_col_expr_arr, sql_mode,
                           session_info, schema_checker, coltype_not_defined));
   return ret;
@@ -4106,7 +4090,6 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
 int ObDDLResolver::calc_default_value(share::schema::ObColumnSchemaV2 &column,
                                       common::ObObj &default_value,
                                       const common::ObTimeZoneInfoWrap &tz_info_wrap,
-                                      const common::ObString *nls_formats,
                                       common::ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
@@ -4178,7 +4161,6 @@ int ObDDLResolver::calc_default_value(share::schema::ObColumnSchemaV2 &column,
         LOG_WARN("session load default configs failed", K(ret));
       } else if (OB_FAIL(empty_session.set_tz_info_wrap(tz_info_wrap))) {
         LOG_WARN("fail to set set_tz_info_wrap", K(ret));
-      } else if (FALSE_IT(empty_session.set_nls_formats(nls_formats))) {
       } else if (FALSE_IT(empty_session.set_sql_mode(DEFAULT_MYSQL_MODE))) {
       } else if (FALSE_IT(empty_session.set_ddl_info(ddl_info))) {
         LOG_WARN("fail to set ddl_info", K(ret));
@@ -4194,7 +4176,7 @@ int ObDDLResolver::calc_default_value(share::schema::ObColumnSchemaV2 &column,
         ObObjType data_type = column.get_data_type();
         ObCollationType collation_type = column.get_collation_type();
         ObObj dest_obj;
-        const ObDataTypeCastParams dtc_params(tz_info_wrap.get_time_zone_info(), nls_formats, CS_TYPE_INVALID, CS_TYPE_INVALID, CS_TYPE_UTF8MB4_GENERAL_CI);
+        const ObDataTypeCastParams dtc_params(tz_info_wrap.get_time_zone_info(), CS_TYPE_INVALID, CS_TYPE_INVALID, CS_TYPE_UTF8MB4_GENERAL_CI);
         ObCastCtx cast_ctx(&allocator, &dtc_params, CM_NONE, collation_type);
         if (ob_is_enumset_tc(data_type)) {
           if (OB_FAIL(cast_enum_or_set_default_value(column, cast_ctx, default_value))) {
@@ -4239,7 +4221,6 @@ int ObDDLResolver::calc_default_value(share::schema::ObColumnSchemaV2 &column,
 // check default value for udt, do not call this function on rs
 int ObDDLResolver::check_udt_default_value(ObObj &default_value,
                                            const common::ObTimeZoneInfoWrap &tz_info_wrap,
-                                           const common::ObString *nls_formats,
                                            ObIAllocator &allocator,
                                            ObTableSchema &table_schema,
                                            ObColumnSchemaV2 &column,
@@ -4310,36 +4291,21 @@ int ObDDLResolver::ob_add_ddl_dependency(const pl::ObPLDependencyTable & depende
   return ret;
 }
 
-int ObDDLResolver::add_udt_default_dependency(ObRawExpr *expr,
-                                              ObSchemaChecker *schema_checker,
-                                              obcall::ObDDLArg &ddl_arg)
+int ObDDLResolver::add_default_expr_dependency(ObRawExpr *expr,
+                                               ObSchemaChecker *schema_checker,
+                                               obcall::ObDDLArg &ddl_arg)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
   } else if (OB_ISNULL(schema_checker) || OB_ISNULL(schema_checker->get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("need schema checker to validate udt dependency", K(ret));
+    LOG_WARN("need schema checker to validate default expression dependency", K(ret));
   } else {
     bool need_dependency = false;
     ObSchemaObjVersion obj_version;
     ObArray<ObSchemaObjVersion> obj_versions;
 
-    if (expr->get_expr_type() == T_FUN_PL_OBJECT_CONSTRUCT) {
-      ObObjectConstructRawExpr *obj_cons_expr = static_cast<ObObjectConstructRawExpr *>(expr);
-      // refer to ObDMLResolver::resolve_external_name
-      need_dependency = obj_cons_expr->need_add_dependency();
-      if (need_dependency) {
-        OZ(obj_cons_expr->get_schema_object_version(obj_version));
-        OZ(obj_versions.push_back(obj_version));
-      }
-    } else if (expr->get_expr_type() == T_FUN_PL_COLLECTION_CONSTRUCT) {
-      ObCollectionConstructRawExpr *obj_coll_expr = static_cast<ObCollectionConstructRawExpr *>(expr);
-      need_dependency = obj_coll_expr->need_add_dependency();
-      if (need_dependency) {
-        OZ(obj_coll_expr->get_schema_object_version(obj_version));
-        OZ(obj_versions.push_back(obj_version));
-      }
-    } else if (expr->is_udf_expr()) {
+    if (expr->is_udf_expr()) {
       ObUDFRawExpr *udf_expr = static_cast<ObUDFRawExpr *>(expr);
       need_dependency = udf_expr->need_add_dependency();
       if (need_dependency) {
@@ -4353,8 +4319,7 @@ int ObDDLResolver::add_udt_default_dependency(ObRawExpr *expr,
       int64_t schema_version = obj_version.get_version();
       int64_t schema_check_version = OB_INVALID_VERSION;
       // local validate
-      if (schema_type != UDT_SCHEMA
-          && schema_type != PACKAGE_SCHEMA
+      if (schema_type != PACKAGE_SCHEMA
           && schema_type != ROUTINE_SCHEMA) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("error default dependency item", K(ret), K(object_id), K(schema_type), K(schema_version));
@@ -4374,14 +4339,14 @@ int ObDDLResolver::add_udt_default_dependency(ObRawExpr *expr,
                                                schema_type,
                                                schema_version,
                                                ddl_arg))) {
-        LOG_WARN("failed to add udt type ddl dependency",
+        LOG_WARN("failed to add default expression ddl dependency",
                  K(ret), K(object_id), K(schema_type), K(schema_version));
       }
     }
 
     for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); i++) {
-      if (OB_FAIL(add_udt_default_dependency(expr->get_param_expr(i), schema_checker, ddl_arg))) {
-        LOG_WARN("fail to add udt default dependency", K(ret), K(expr), K(ddl_arg), K(i));
+      if (OB_FAIL(add_default_expr_dependency(expr->get_param_expr(i), schema_checker, ddl_arg))) {
+        LOG_WARN("fail to add default expression dependency", K(ret), K(expr), K(ddl_arg), K(i));
       }
     }
   }
@@ -4455,7 +4420,7 @@ int ObDDLResolver::get_udt_column_default_values(const ObObj &default_value,
     } else if (OB_FAIL(ObSQLUtils::calc_simple_expr_without_row(
         params.session_info_, expr, tmp_default_value, params.param_list_, allocator, true))) {
       LOG_WARN("Failed to get simple expr value", K(ret));
-    } else if (OB_FAIL(add_udt_default_dependency(expr, schema_checker, ddl_arg))) {
+    } else if (OB_FAIL(add_default_expr_dependency(expr, schema_checker, ddl_arg))) {
       LOG_WARN("Failed to add udt default expr dependency", K(ret), K(expr));
     } else { /* do nothing */ }
 
@@ -6259,7 +6224,6 @@ int ObDDLResolver::check_foreign_key_reference(
         ObSEArray<ObString, 8> &child_columns = arg.child_columns_;
         ObSEArray<ObString, 8> &parent_columns = arg.parent_columns_;
         if (OB_FAIL(ObResolverUtils::check_foreign_key_columns_type(
-                    true,
                     *child_table_schema,
                     *parent_table_schema,
                     child_columns,
@@ -6304,7 +6268,7 @@ int ObDDLResolver::check_foreign_key_reference(
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObResolverUtils::check_foreign_key_set_null_satisfy(arg, *child_table_schema, true))) {
+      if (OB_FAIL(ObResolverUtils::check_foreign_key_set_null_satisfy(arg, *child_table_schema))) {
         LOG_WARN("check fk set null satisfy failed", K(ret), K(arg));
       }
     }
@@ -7188,176 +7152,6 @@ int ObDDLResolver::resolve_partition_hash_or_key(
   return ret;
 }
 
-/*
-  4.1 Check if interval_expr is an immediate number or not, 1+1 does not count
-  4.2 Whether the type of expr matches col
-*/
-int ObDDLResolver::resolve_interval_node(ObResolverParams &params,
-                                         ParseNode *interval_node,
-                                         common::ColumnType &col_dt,
-                                         int64_t precision,
-                                         int64_t scale,
-                                         ObRawExpr *&interval_value_expr_out)
-{
-  int ret = OB_SUCCESS;
-  ParseNode * expr_node;
-
-  CK (NULL != interval_node);
-  expr_node = interval_node->children_[0];;
-  CK (NULL != expr_node);
-
-  if (OB_SUCC(ret)) {
-    if (expr_node->type_ == T_NULL) {
-      ret = OB_ERR_INVALID_DATA_TYPE_INTERVAL_TABLE;
-    } else {
-      ObRawExpr *interval_value_expr = NULL;
-      OZ (ObResolverUtils::resolve_partition_range_value_expr(params, *expr_node, "interval_part",
-                                             PARTITION_FUNC_TYPE_RANGE_COLUMNS,
-                                             interval_value_expr, true));
-      if (ret == OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED) {
-        ret = OB_ERR_INTERVAL_EXPR_NOT_CORRECT_TYPE;
-      } else if (!OB_SUCC(ret)) {
-        ret = OB_WRONG_COLUMN_NAME;
-        LOG_USER_ERROR(OB_WRONG_COLUMN_NAME, static_cast<int>(interval_node->str_len_),
-                       interval_node->str_value_);
-      } else {
-        common::ObObjType expr_type = interval_value_expr->get_data_type();
-        switch (col_dt) {
-          case ObIntType:
-          case ObFloatType:
-          case ObDoubleType:
-          case ObNumberType: {
-            if (expr_type != ObIntType && expr_type != ObFloatType
-               && expr_type != ObNumberType && expr_type != ObDoubleType) {
-              ret = OB_ERR_INTERVAL_EXPR_NOT_CORRECT_TYPE;
-              LOG_WARN("fail to check interval expr datatype", K(expr_type), K(col_dt), K(ret));
-            } else if (col_dt == ObNumberType) {
-              ObAccuracy acc;
-              acc.set_precision(precision);
-              acc.set_scale(scale);
-              interval_value_expr->set_accuracy(acc);
-            }
-            if (OB_SUCC(ret)) {
-              ParamStore dummy_params;
-              ObRawExprFactory expr_factory(*(params.allocator_));
-              ObObj out_val;
-              ObRawExpr *sign_expr = NULL;
-              OZ (ObRawExprUtils::build_sign_expr(expr_factory, interval_value_expr, sign_expr));
-              OZ (sign_expr->formalize(params.session_info_));
-              OZ (ObSQLUtils::calc_simple_expr_without_row(params.session_info_,
-                                                          sign_expr, out_val,
-                                                          &dummy_params, *(params.allocator_)));
-
-              if (OB_FAIL(ret)) {
-                // do nothing
-              } else if (out_val.is_negative_number()) {
-                ret = OB_ERR_INTERVAL_EXPR_NOT_CORRECT_TYPE;
-                LOG_WARN("fail to check interval expr datatype", K(expr_type), K(col_dt), K(ret));
-              }
-            }
-            break;
-          }
-          case ObDateTimeType:
-          default: {
-            ret = OB_ERR_INTERVAL_EXPR_NOT_CORRECT_TYPE;
-            LOG_WARN("fail to check interval expr datatype", K(expr_type), K(col_dt), K(ret));
-            break;
-          }
-        }
-      }
-      if (OB_SUCC(ret)) {
-        interval_value_expr_out = interval_value_expr;
-      }
-    }
-  }
-
-  return ret;
-}
-
-int ObDDLResolver::resolve_interval_expr_low(ObResolverParams &params,
-                                             ParseNode *interval_node,
-                                             const share::schema::ObTableSchema &table_schema,
-                                             ObRawExpr *transition_expr,
-                                             ObRawExpr *&interval_value)
-{
-  int ret = OB_SUCCESS;
-  const ObColumnSchemaV2 *col_schema = NULL;
-  common::ColumnType col_dt = ObNullType;
-  /* 1. interval partition only supports one partition key */
-  if (OB_SUCC(ret)) {
-    if (table_schema.get_partition_key_column_num() > 1) {
-      ret = OB_ERR_INTERVAL_CLAUSE_HAS_MORE_THAN_ONE_COLUMN;
-      SQL_RESV_LOG(WARN, "interval clause has more then one column", K(ret));
-    }
-  }
-
-  /* 2. interval partition column only supports data types: number, date, float, timestamp. */
-  if (OB_SUCC(ret)) {
-    uint64_t col_id = OB_INVALID_ID;
-    ObItemType item_type;
-    const ObPartitionKeyInfo &part_key_info = table_schema.get_partition_key_info();
-
-    OZ (part_key_info.get_column_id(0, col_id));
-    CK (OB_NOT_NULL(col_schema = table_schema.get_column_schema(col_id)));
-    if (OB_SUCC(ret)) {
-      col_dt = col_schema->get_data_type();
-      if (ObFloatType == col_dt || ObDoubleType == col_dt) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not support float or double as interval partition column", K(ret), K(col_dt));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "interval partition with float or double type partition column");
-      } else if (false == ObResolverUtils::is_valid_interval_data_type(col_dt, item_type)) {
-        ret = OB_ERR_INVALID_DATA_TYPE_INTERVAL_TABLE;
-        SQL_RESV_LOG(WARN, "invalid interval column data type", K(ret), K(col_dt));
-      }
-    }
-  }
-  /* 3. The maximum partition cannot be maxvalue. */
-  if (OB_SUCC(ret)) {
-    if (OB_SUCC(ret) && transition_expr->get_data_type() == ObMaxType) {
-      ret = OB_ERR_MAXVALUE_PARTITION_WITH_INTERVAL;
-      SQL_RESV_LOG(WARN, "interval with maxvalue ", K(ret), K(table_schema.get_table_name()));
-    }
-  }
-  /* 4. Check the expression of inteval
-    4.1 Check if it is an immediate number, 1+1 does not count
-    4.2 Whether the type of expr matches col
-  */
-  CK (OB_NOT_NULL(col_schema));
-  OZ (resolve_interval_node(params, interval_node, col_dt, col_schema->get_accuracy().get_precision(),
-                            col_schema->get_accuracy().get_scale(), interval_value));
-
-  return ret;
-}
-
-int ObDDLResolver::resolve_interval_clause(ObPartitionedStmt *stmt,
-                                           ParseNode *node,
-                                           ObTableSchema &table_schema,
-                                           common::ObSEArray<ObRawExpr*, 8> &range_exprs)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(node) || OB_ISNULL(stmt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(stmt), K(node));
-  } else if (node->num_child_ > RANGE_INTERVAL_NODE) {
-    /* interval info record in 6th param */
-    ParseNode *interval_node = node->children_[RANGE_INTERVAL_NODE];
-    ObRawExpr *transition_expr = range_exprs.at(range_exprs.count() - 1);
-    ObRawExpr *interval_value = NULL;
-    if (OB_ISNULL(transition_expr)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null transition expr", K(ret));
-    } else if (NULL == interval_node) {
-      // no nothing
-    } else if (OB_FAIL(resolve_interval_expr_low(params_, interval_node, table_schema,
-                                                 transition_expr, interval_value))) {
-      LOG_WARN("failed to resolve interval expr low", K(ret));
-    } else {
-      stmt->set_interval_expr(interval_value);
-    }
-  }
-  return ret;
-}
-
 int ObDDLResolver::resolve_partition_range(ObPartitionedStmt *stmt,
                                            ParseNode *node,
                                            const bool is_subpartition,
@@ -7462,8 +7256,6 @@ int ObDDLResolver::resolve_partition_range(ObPartitionedStmt *stmt,
         }
       }
     }
-    // 2.5 resolve interval clause
-    OZ (resolve_interval_clause(stmt, node, table_schema, range_values_exprs));
     // Parse templated secondary partition definition
     if (OB_SUCC(ret)) {
       if (NULL != node->children_[RANGE_SUBPARTITION_NODE] && stmt->use_def_sub_part()) {
@@ -9289,7 +9081,8 @@ int ObTableSchema::check_alter_column_in_index(const ObColumnSchemaV2 &src_colum
 }  // namespace oceanbase
 
 // ===== definition moved from share/ob_ddl_common.cpp(new_discrete_vector, discrete-vector template real user; external linkage, share callers resolve it through declarations) =====
-#include "sql/engine/vector/ob_discrete_vector.h"
+#include "sql/engine/vector/ob_discrete_format.h"
+#include "sql/engine/vector/type_traits.h"
 namespace oceanbase
 {
 namespace share

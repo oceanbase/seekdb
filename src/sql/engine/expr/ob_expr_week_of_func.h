@@ -40,7 +40,6 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
   static int calc_weekofyear(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int calc_weekofyear_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound);
   DECLARE_SET_LOCAL_SESSION_VARS;
 
 private:
@@ -138,16 +137,10 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
   static int calc_week(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int calc_week_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound);
   DECLARE_SET_LOCAL_SESSION_VARS;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprWeek);
-
-private:
-  template <typename ArgVec, typename ModeVec, typename ResVec, typename IN_TYPE>
-  static int vector_week(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound);
-  static int get_week_mode_value(int64_t mode_value, ObDTMode &mode);
 };
 
 }

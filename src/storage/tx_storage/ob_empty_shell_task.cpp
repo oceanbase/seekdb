@@ -15,7 +15,6 @@
  */
 #define USING_LOG_PREFIX STORAGE
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "storage/tx_storage/ob_empty_shell_task.h"
 #include "share/rc/ob_module_provider.h"
 #include "lib/literals/ob_literals.h"

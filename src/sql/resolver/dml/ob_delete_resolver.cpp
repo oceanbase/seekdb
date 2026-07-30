@@ -119,8 +119,7 @@ int ObDeleteResolver::resolve(const ParseNode &parse_tree)
     }
 
     if (OB_SUCC(ret)) {
-      if (!delete_stmt->has_instead_of_trigger() && OB_FAIL(view_pullup_part_exprs())) {
-        // instead of trigger's delete statement does not need pull up
+      if (OB_FAIL(view_pullup_part_exprs())) {
         LOG_WARN("view pull up part exprs failed", K(ret));
       } else if (OB_FAIL(check_view_deletable())) {
         LOG_WARN("failed to check view deletable", K(ret));
@@ -257,7 +256,6 @@ int ObDeleteResolver::resolve_table_list(const ParseNode &table_list, bool &is_m
 
   if (OB_SUCC(ret)) {
     if (NULL == delete_list) {
-      bool has_tg = false;
       //single table delete, delete list is same with from list
       CK(delete_stmt->get_table_size() == 1);
       OZ(delete_tables_.push_back(delete_stmt->get_table_item(0)));
@@ -305,11 +303,9 @@ int ObDeleteResolver::resolve_table_list(const ParseNode &table_list, bool &is_m
                           scope_name.length(), scope_name.ptr());
           LOG_WARN("table is not updatable", K(ret));
         } else if ((*table_item)->is_generated_table() || (*table_item)->is_temp_table()) {
-          if (!delete_stmt->has_instead_of_trigger()
-              && OB_FAIL(set_base_table_for_view(**table_item))) {
+          if (OB_FAIL(set_base_table_for_view(**table_item))) {
             LOG_WARN("set base table for delete view failed", K(ret));
-          } else if (OB_FAIL(add_all_column_to_updatable_view(*delete_stmt, **table_item,
-                            delete_stmt->has_instead_of_trigger()))) {
+          } else if (OB_FAIL(add_all_column_to_updatable_view(*delete_stmt, **table_item))) {
             LOG_WARN("add all column to updatable view failed", K(ret));
           }
         }
@@ -408,7 +404,7 @@ int ObDeleteResolver::generate_delete_table_info(const TableItem &table_item)
     table_info = new(ptr) ObDeleteTableInfo();
     if (OB_FAIL(table_info->part_ids_.assign(base_table_item.part_ids_))) {
       LOG_WARN("failed to assign part ids", K(ret));
-    } else if (!delete_stmt->has_instead_of_trigger()) {
+    } else {
       // todo @zimiao error logging also need all columns ?
       if (OB_FAIL(add_all_rowkey_columns_to_stmt(table_item, table_info->column_exprs_))) {
         LOG_WARN("add all rowkey columns to stmt failed", K(ret));
@@ -427,18 +423,6 @@ int ObDeleteResolver::generate_delete_table_info(const TableItem &table_item)
         table_info->loc_table_id_ = base_table_item.table_id_;
         table_info->ref_table_id_ = base_table_item.ref_id_;
         table_info->table_name_ = table_schema->get_table_name_str();
-      }
-    } else {
-      uint64_t view_id = OB_INVALID_ID;
-      if (OB_FAIL(add_all_columns_to_stmt_for_trigger(table_item, table_info->column_exprs_))) {
-        LOG_WARN("failed to add all columns to stmt", K(ret));
-      } else if (OB_FAIL(get_view_id_for_trigger(table_item, view_id))) {
-        LOG_WARN("get view id failed", K(table_item), K(ret));
-      } else {
-        table_info->table_id_ = table_item.table_id_;
-        table_info->loc_table_id_ = table_item.table_id_;
-        table_info->ref_table_id_ = view_id;
-        table_info->table_name_ = table_item.table_name_;
       }
     }
     if (OB_SUCC(ret)) {

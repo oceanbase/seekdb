@@ -69,7 +69,6 @@ ObTabletCreateSSTableParam::ObTabletCreateSSTableParam()
     root_macro_seq_(-1),
     data_block_ids_(),
     other_block_ids_(),
-    table_backup_flag_(),
     uncommitted_tx_id_(0)
 {}
 
@@ -82,9 +81,6 @@ bool ObTabletCreateSSTableParam::is_valid() const
   } else if (OB_UNLIKELY(!table_mode_.is_valid())) {
     ret = false;
     LOG_WARN("invalid table mode", K(table_mode_));
-  } else if (OB_UNLIKELY(!table_backup_flag_.is_valid())) {
-    ret = false;
-    LOG_WARN("invalid table backup flag", K_(table_backup_flag));
   } else if (!(schema_version_ >= 0
                && sstable_logic_seq_ >= 0
                && create_snapshot_version_ >= 0
@@ -160,8 +156,6 @@ int ObTabletCreateSSTableParam::inner_init_with_merge_res(const blocksstable::Ob
   nested_offset_ = res.nested_offset_;
   nested_size_ = res.nested_size_;
   root_macro_seq_ = res.root_macro_seq_;
-  table_backup_flag_ = res.table_backup_flag_;
-
   if (OB_FAIL(data_block_ids_.assign(res.data_block_ids_))) {
     LOG_WARN("fail to fill data block ids", K(ret), K(res.data_block_ids_));
   } else if (OB_FAIL(other_block_ids_.assign(res.other_block_ids_))) {
@@ -213,7 +207,6 @@ int ObTabletCreateSSTableParam::init_for_empty_major_sstable(const ObTabletID &t
     tx_data_recycle_scn_.set_min();
     original_size_ = 0;
     compressor_type_ = ObCompressorType::NONE_COMPRESSOR;
-    table_backup_flag_.reset();
     sstable_logic_seq_ = 0;
     row_count_ = 0;
     recycle_version_ = 0;
@@ -513,7 +506,6 @@ int ObTabletCreateSSTableParam::init_for_ddl_mem(const ObITable::TableKey &table
     other_block_ids_.reset(); // other blocks contains only index macro blocks now, so empty.
     filled_tx_scn_ = table_key.is_major_sstable() ? SCN::min_scn() : table_key.get_end_scn();
     tx_data_recycle_scn_.set_min();
-    table_backup_flag_.reset();
     sstable_logic_seq_ = 0;
     row_count_ = 0;
     recycle_version_ = 0;
@@ -645,7 +637,6 @@ int ObTabletCreateSSTableParam::init_for_fork(
   compressor_type_ = sstable_param.basic_meta_.compressor_type_;
   rowkey_column_cnt_ = sstable_param.basic_meta_.rowkey_column_count_;
   root_macro_seq_ = sstable_param.basic_meta_.root_macro_seq_;
-  table_backup_flag_ = sstable_param.basic_meta_.table_backup_flag_;
   is_meta_root_ = sstable_param.is_meta_root_;
   root_block_addr_.set_none_addr();
   data_block_macro_meta_addr_.set_none_addr();
@@ -817,7 +808,6 @@ int ObTabletCreateSSTableParam::inner_init_with_embedded_meta(
   compressor_type_ = sstable_param.basic_meta_.compressor_type_;
   is_meta_root_ = sstable_param.is_meta_root_;
   root_macro_seq_ = sstable_param.basic_meta_.root_macro_seq_;
-  table_backup_flag_ = sstable_param.basic_meta_.table_backup_flag_;
   if (OB_FAIL(data_block_ids_.assign(data_block_ids))) {
     LOG_WARN("failed to assign data block ids", K(ret), K(data_block_ids));
   } else if (OB_FAIL(other_block_ids_.assign(other_block_ids))) {

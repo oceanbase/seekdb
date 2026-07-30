@@ -180,7 +180,6 @@ protected:
   dtl::ObDtlChTotalInfo ch_info_;
   // stored rows used for get batch rows from DTL reader.
   const ObChunkDatumStore::StoredRow **stored_rows_;
-  const ObCompactRow **vector_rows_;
 };
 
 class ObPxFifoReceiveOpInput : public ObPxReceiveOpInput
@@ -221,7 +220,6 @@ protected:
 private:
   // try get %row_cnt rows from channels
   int get_rows_from_channels(const int64_t row_cnt, int64_t timeout_us);
-  int get_rows_from_channels_vec(const int64_t row_cnt, int64_t timeout_us);
 private:
   ObPxInterruptP interrupt_proc_;
 };

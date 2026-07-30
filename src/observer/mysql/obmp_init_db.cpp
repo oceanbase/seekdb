@@ -81,7 +81,7 @@ int ObMPInitDB::process()
     if (OB_UNLIKELY(session->is_zombie())) {
       ret = OB_ERR_SESSION_INTERRUPTED;
       LOG_WARN("session has been killed", K(ret), KPC(session));
-    } else if (OB_FAIL(gctx_.schema_service_->get_runtime_received_broadcast_version(global_version))) {
+    } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(global_version))) {
       LOG_WARN("fail to get global_version", K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_runtime_refreshed_schema_version(local_version))) {
       LOG_WARN("fail to get local_version", K(ret));

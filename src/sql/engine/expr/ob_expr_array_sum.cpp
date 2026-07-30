@@ -246,100 +246,6 @@ int ObExprArraySum::eval_array_sum_batch(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 
-int ObExprArraySum::eval_array_sum_vector(const ObExpr &expr, ObEvalCtx &ctx,
-                                          const ObBitVector &skip, const EvalBound &bound)
-{
-  int ret = OB_SUCCESS;
-  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
-  const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
-  ObCollectionArrayType *arr_type = NULL;
-  ObIArrayType *src_arr = NULL;
-
-  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval source array failed", K(ret));
-  } else {
-    uint32_t attr_count = expr.args_[0]->attrs_cnt_;
-    ObIVector *arr_vec = expr.args_[0]->get_vector(ctx);
-    ObIVector *res_vec = expr.get_vector(ctx);
-    VectorFormat arr_format = arr_vec->get_format();
-    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-
-    for (int64_t j = bound.start(); OB_SUCC(ret) && j < bound.end(); ++j) {
-      uint32_t len = 0, data_len = 0;
-      uint8_t *null_bitmaps = nullptr;
-      const char *data = nullptr;
-
-      if (skip.at(j) || eval_flags.at(j)) {
-        continue;
-      }
-      eval_flags.set(j);
-      ObString data_str = arr_vec->get_string(j);
-      if (arr_vec->is_null(j)) {
-        res_vec->set_null(j);
-      } else if (OB_FAIL(ObArrayExprUtils::get_array_type_by_subschema_id(ctx, subschema_id, arr_type))) {
-        LOG_WARN("failed to get array type by subschema id", K(ret), K(subschema_id));
-      } else if (!ObCollectionExprUtil::is_compact_fmt_cell(data_str.ptr())) {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_LOG(WARN, "unexpected data format", K(ret));
-      } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(&tmp_allocator, 
-                                            ObLongTextType,
-                                            CS_TYPE_BINARY, 
-                                            true, 
-                                            data_str))) {
-        LOG_WARN("fail to get real data.", K(ret), K(data_str));
-      } else if (OB_FAIL(ObArrayExprUtils::get_array_data(data_str, 
-                                              arr_type, 
-                                              len, 
-                                              null_bitmaps,
-                                              data, 
-                                              data_len))) {
-        LOG_WARN("failed to get array data", K(ret));
-      } else if (ob_is_integer_type(expr.obj_meta_.get_type())) {
-          if (ob_is_unsigned_type(expr.obj_meta_.get_type())) {
-            uint64_t res_sum = 0;
-            if (OB_FAIL(ObArrayExprUtils::calc_array_sum(len, 
-                                              null_bitmaps, 
-                                              data, 
-                                              data_len, 
-                                              arr_type, 
-                                              res_sum))) {
-              LOG_WARN("failed to calc sum", K(ret));
-            } else {
-              res_vec->set_uint(j, res_sum);
-            }
-        } else {
-          int64_t res_sum = 0;
-          if (OB_FAIL(ObArrayExprUtils::calc_array_sum(len, 
-                                            null_bitmaps, 
-                                            data, 
-                                            data_len, 
-                                            arr_type, 
-                                            res_sum))) {
-            LOG_WARN("failed to calc sum", K(ret));
-          } else {
-            res_vec->set_int(j, res_sum);
-          }
-        }
-      } else {
-        double res_sum = 0;
-        if (OB_FAIL(ObArrayExprUtils::calc_array_sum(len, 
-                                          null_bitmaps, 
-                                          data, 
-                                          data_len, 
-                                          arr_type, 
-                                          res_sum))) {
-          LOG_WARN("failed to calc sum", K(ret));
-        } else {
-          res_vec->set_double(j, res_sum);
-        }
-      }
-    } // end for
-  }
-
-  return ret;
-}
-
 int ObExprArraySum::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                             ObExpr &rt_expr) const
 {
@@ -347,7 +253,6 @@ int ObExprArraySum::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   UNUSED(raw_expr);
   rt_expr.eval_func_ = eval_array_sum;
   rt_expr.eval_batch_func_ = eval_array_sum_batch;
-  rt_expr.eval_vector_func_ = eval_array_sum_vector;
   return OB_SUCCESS;
 }
 

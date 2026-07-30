@@ -165,10 +165,6 @@ public:
       const int64_t row_cap,
       common::ObDatum *datums) const override;
 
-  virtual int decode_vector(
-      const ObColumnDecoderCtx &decoder_ctx,
-      const ObIRowIndex* row_index,
-      ObVectorDecodeCtx &vector_ctx) const override;
 
   virtual int pushdown_operator(
       const sql::ObPushdownFilterExecutor *parent,
@@ -316,13 +312,6 @@ private:
         bool &result) const;
   };
 
-  int decode_vector_bitpacked(
-      const ObColumnDecoderCtx &decoder_ctx,
-      ObVectorDecodeCtx &vector_ctx) const;
-  template<typename VectorType, bool HAS_NULL>
-  int decode_vector_bitpacked(
-      const ObColumnDecoderCtx &decoder_ctx,
-      ObVectorDecodeCtx &vector_ctx) const;
 
 private:
   ObObjTypeStoreClass store_class_;

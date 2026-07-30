@@ -58,9 +58,8 @@ class ObAllVirtualDag : public common::ObVirtualTableScannerIterator
 public:
   enum COLUMN_ID_LIST
   {
-        DAG_TYPE = common::OB_APP_MIN_COLUMN_ID,
+    DAG_TYPE = common::OB_APP_MIN_COLUMN_ID,
     DAG_KEY,
-    DAG_NET_KEY,
     DAG_ID,
     DAG_STATUS,
     RUNNING_TASK_CNT,

@@ -95,7 +95,6 @@ int ObField::full_deep_copy(const ObField &other, ObIAllocator *allocator)
       charsetnr_ = other.charsetnr_;
       flags_ = other.flags_;
       length_ = other.length_;
-      is_hidden_rowid_ = other.is_hidden_rowid_;
       inout_mode_ = other.inout_mode_;
       is_paramed_select_item_ = other.is_paramed_select_item_;
       if (is_paramed_select_item_ && NULL != other.paramed_ctx_) {
@@ -146,7 +145,6 @@ int ObField::deep_copy(const ObField &other, ObIAllocator *allocator)
       charsetnr_ = other.charsetnr_;
       flags_ = other.flags_;
       length_ = other.length_;
-      is_hidden_rowid_ = other.is_hidden_rowid_;
       inout_mode_ = other.inout_mode_;
 
       is_paramed_select_item_ = other.is_paramed_select_item_;
@@ -205,15 +203,13 @@ int64_t ObField::to_string(char *buffer, int64_t len) const
   databuff_printf(buffer, len, pos,
                   ", type_owner: %.*s, type_name: %.*s,"
                   "charset: %hu, "
-                  "decimal_scale: %hu, flags: %x, inout_mode_: %x"
-                  "is_paramed_select_item: %d,"
-                  "is_hidden_rowid: %d",
+                  "decimal_scale: %hu, flags: %x, inout_mode_: %x, "
+                  "is_paramed_select_item: %d",
                   type_owner_.length(), type_owner_.ptr(),
                   type_name_.length(), type_name_.ptr(),
                   charsetnr_, accuracy_.get_scale(), flags_,
                   inout_mode_,
-                  is_paramed_select_item_,
-                  is_hidden_rowid_);
+                  is_paramed_select_item_);
   if (is_paramed_select_item_ && NULL != paramed_ctx_) {
     pos = paramed_ctx_->to_string(buffer + pos, len - pos) + pos;
   }

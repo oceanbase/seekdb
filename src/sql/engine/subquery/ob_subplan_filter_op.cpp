@@ -112,8 +112,6 @@ int ObSubQueryIterator::get_next_row_vecrorizely()
   if (NULL == iter_brs_) {
     if (OB_FAIL(op_.get_next_batch(max_row_cnt, iter_brs_))) {
       LOG_WARN("get next batch failed", K(ret));
-    } else if (OB_FAIL(cast_vector_format())) {
-      LOG_WARN("failed to cast vector format", K(ret));
     } else if (OB_FAIL(brs_holder_.save(1))) {
       LOG_WARN("backup datumss[0] failed", K(ret));
     }
@@ -136,8 +134,6 @@ int ObSubQueryIterator::get_next_row_vecrorizely()
         brs_holder_.restore();
         if (OB_FAIL(op_.get_next_batch(max_row_cnt, iter_brs_))) {
           LOG_WARN("get next batch failed", K(ret));
-        }  else if (OB_FAIL(cast_vector_format())) {
-          LOG_WARN("failed to cast vector format", K(ret));
         } else {
           batch_row_pos_ = 0;
           if (0 == iter_brs_->size_ && iter_brs_->end_) {
@@ -173,23 +169,6 @@ int ObSubQueryIterator::get_next_row_vecrorizely()
   return ret;
 }
 
-
-int ObSubQueryIterator::cast_vector_format()
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(iter_brs_) || OB_ISNULL(parent_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid nullptr found", K(ret), K(iter_brs_), K(parent_));
-  } else if (parent_->get_spec().use_rich_format_ && op_.get_spec().use_rich_format_) {
-    FOREACH_CNT_X(e, op_.get_spec().output_, OB_SUCC(ret)) {
-      LOG_TRACE("cast to uniform", K(*e));
-      if (OB_FAIL((*e)->cast_to_uniform(iter_brs_->size_, eval_ctx_))) {
-        LOG_WARN("expr evaluate failed", K(ret), KPC(*e), K_(eval_ctx));
-      }
-    }
-  }
-  return ret;
-}
 
 void ObSubQueryIterator::drain_exch()
 {
@@ -421,7 +400,7 @@ ObSubPlanFilterSpec::ObSubPlanFilterSpec(ObIAllocator &alloc, const ObPhyOperato
     one_time_idxs_(ModulePageAllocator(alloc)),
     update_set_(alloc),
     exec_param_array_(alloc),
-    exec_param_idxs_inited_(false),
+    enable_subquery_result_cache_(false),
     enable_px_batch_rescans_(alloc),
     enable_das_group_rescan_(false),
     filter_exprs_(alloc),
@@ -438,7 +417,7 @@ OB_SERIALIZE_MEMBER((ObSubPlanFilterSpec, ObOpSpec),
                     one_time_idxs_,
                     update_set_,
                     exec_param_array_,
-                    exec_param_idxs_inited_,
+                    enable_subquery_result_cache_,
                     enable_px_batch_rescans_,
                     enable_das_group_rescan_,
                     filter_exprs_,
@@ -459,7 +438,7 @@ DEF_TO_STRING(ObSubPlanFilterSpec)
        K_(init_plan_idxs),
        K_(one_time_idxs),
        K_(update_set),
-       K_(exec_param_idxs_inited));
+       K_(enable_subquery_result_cache));
   J_OBJ_END();
   return pos;
 }
@@ -671,7 +650,7 @@ int ObSubPlanFilterOp::inner_open()
     // The result of subquery needs to participate in expression calculation, so generate a row_iterator for each subquery
     OZ(subplan_iters_.prepare_allocate(child_cnt_ - 1));
     //TODO move to the back
-    if (MY_SPEC.exec_param_idxs_inited_ && child_cnt_ - 1 != MY_SPEC.exec_param_array_.count()) {
+    if (child_cnt_ - 1 != MY_SPEC.exec_param_array_.count()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("exec param idx array is unexpected", K(ret), K(MY_SPEC.exec_param_array_.count()));
     }
@@ -694,7 +673,7 @@ int ObSubPlanFilterOp::inner_open()
             MY_SPEC.enable_px_batch_rescans_.at(i)) {
           enable_left_px_batch_ = true;
         }
-        if (!MY_SPEC.exec_param_idxs_inited_) {
+        if (!MY_SPEC.enable_subquery_result_cache_) {
           // Non-deterministic subqueries bypass the parameter-result cache.
         } else if (OB_FAIL(iter->init_mem_entity())) {
           LOG_WARN("failed to init mem_entity", K(ret));

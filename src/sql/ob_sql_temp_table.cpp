@@ -22,7 +22,6 @@
 using namespace oceanbase::sql;
 
 OB_SERIALIZE_MEMBER(ObTempTableResultInfo,
-                    addr_,
                     interm_result_ids_);
 
 OB_SERIALIZE_MEMBER(ObSqlTempTableCtx,

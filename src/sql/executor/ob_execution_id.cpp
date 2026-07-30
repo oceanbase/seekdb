@@ -23,12 +23,10 @@ namespace sql
 {
 
 
-DEFINE_TO_YSON_KV(ObExecutionID, OB_ID(addr), server_,
-                                 OB_ID(execution_id), execution_id_);
+DEFINE_TO_YSON_KV(ObExecutionID, OB_ID(execution_id), execution_id_);
 
-OB_SERIALIZE_MEMBER(ObExecutionID, server_, execution_id_, execution_flag_);
+OB_SERIALIZE_MEMBER(ObExecutionID, execution_id_, execution_flag_);
 
 }/* ns sql*/
 }/* ns oceanbase */
-
 

@@ -81,8 +81,6 @@ int ObDeleteStmtPrinter::print_basic_stmt()
     LOG_WARN("fail to print order by", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_limit())) {
     LOG_WARN("fail to print limit", K(ret), K(*stmt_));
-  } else if (OB_FAIL(print_returning())) {
-    LOG_WARN("fail to print_returning", K(ret), K(*stmt_));
   } else {
     // do-nothing
   }
@@ -113,6 +111,5 @@ int ObDeleteStmtPrinter::print_delete()
 
 } //end of namespace sql
 } //end of namespace oceanbase
-
 
 

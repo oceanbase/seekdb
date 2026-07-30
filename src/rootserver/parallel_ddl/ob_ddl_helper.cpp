@@ -1094,13 +1094,6 @@ ObSchemaType ObDDLHelper::transfer_obj_type_to_schema_type_for_dep_(const ObObje
     case ObObjectType::PACKAGE_BODY:
       ret_type = PACKAGE_SCHEMA;
       break;
-    case ObObjectType::TYPE:
-    case ObObjectType::TYPE_BODY:
-      ret_type = UDT_SCHEMA;
-      break;
-    case ObObjectType::SYNONYM:
-      ret_type = SYNONYM_SCHEMA;
-      break;
     default:
       break;
   }

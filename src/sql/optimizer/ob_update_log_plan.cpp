@@ -130,14 +130,6 @@ int ObUpdateLogPlan::generate_normal_raw_plan()
       }
     }
 
-    if (OB_SUCC(ret) && update_stmt->is_error_logging()) {
-      if (OB_FAIL(candi_allocate_err_log(update_stmt))) {
-        LOG_WARN("fail to allocate err_log", K(ret));
-      } else {
-        LOG_TRACE("succeed to allocate err log", K(candidates_.candidate_plans_.count()));
-      }
-    }
-
     // step. allocate update operator
     if (OB_SUCC(ret)) {
       if (OB_FAIL(prepare_dml_infos())) {
@@ -160,30 +152,6 @@ int ObUpdateLogPlan::generate_normal_raw_plan()
           LOG_TRACE("succeed to allocate normal update operator",
               K(candidates_.candidate_plans_.count()));
         }
-      }
-    }
-
-    // step. allocate scalar operator
-    if (OB_SUCC(ret) && update_stmt->get_returning_aggr_item_size() > 0) {
-      // returning logic is used to store the aggregated final result into a variable, for example:
-      //
-      // DECLARE
-      //   l_max_id NUMBER;
-      // BEGIN
-      //   UPDATE t1
-      //   SET    description = description
-      //   RETURNING MAX(id) INTO l_max_id;
-      //
-      //   DBMS_OUTPUT.put_line('l_max_id=' || l_max_id);
-      //
-      //   COMMIT;
-      // END;
-      //
-      if (OB_FAIL(candi_allocate_scala_group_by(update_stmt->get_returning_aggr_items()))) {
-        LOG_WARN("failed to allocate group by opeartor", K(ret));
-      } else {
-        LOG_TRACE("succeed to allocate group by operator",
-            K(candidates_.candidate_plans_.count()));
       }
     }
 
@@ -317,16 +285,12 @@ int ObUpdateLogPlan::allocate_update_as_top(ObLogicalOperator *&top,
   } else {
     update_op->set_child(ObLogicalOperator::first_child, top);
     update_op->set_ignore(update_stmt->is_ignore());
-    update_op->set_is_returning(update_stmt->is_returning());
-    update_op->set_has_instead_of_trigger(update_stmt->has_instead_of_trigger());
     update_op->set_is_multi_part_dml(is_multi_part_dml);
     update_op->set_lock_row_flag_expr(lock_row_flag_expr);
     if (get_can_use_parallel_das_dml()) {
       update_op->set_das_dop(max_dml_parallel_);
     }
-    if (update_stmt->is_error_logging() && OB_FAIL(update_op->extract_err_log_info())) {
-      LOG_WARN("failed to extract error log info", K(ret));
-    } else if (OB_FAIL(update_stmt->get_view_check_exprs(update_op->get_view_check_exprs()))) {
+    if (OB_FAIL(update_stmt->get_view_check_exprs(update_op->get_view_check_exprs()))) {
       LOG_WARN("failed to get view check exprs", K(ret));
     } else if (OB_FAIL(update_op->compute_property())) {
       LOG_WARN("failed to compute property", K(ret));
@@ -439,7 +403,6 @@ int ObUpdateLogPlan::prepare_dml_infos()
     LOG_WARN("get unexpected null", K(ret));
   } else {
     const ObIArray<ObUpdateTableInfo*>& table_infos = update_stmt->get_update_table_info();
-    bool has_tg = update_stmt->has_instead_of_trigger();
     for (int64_t i = 0; OB_SUCC(ret) && i < table_infos.count(); ++i) {
       ObUpdateTableInfo* table_info = table_infos.at(i);
       IndexDMLInfo* table_dml_info = nullptr;
@@ -449,8 +412,7 @@ int ObUpdateLogPlan::prepare_dml_infos()
         LOG_WARN("get unexpected null", K(ret), K(i));
       } else if (OB_FAIL(prepare_table_dml_info_basic(*table_info,
                                                       table_dml_info,
-                                                      index_dml_infos,
-                                                      has_tg))) {
+                                                      index_dml_infos))) {
         LOG_WARN("failed to prepare table dml info basic", K(ret));
       } else if (OB_FAIL(prepare_table_dml_info_special(*table_info,
                                                         table_dml_info,
@@ -486,8 +448,7 @@ int ObUpdateLogPlan::prepare_table_dml_info_special(const ObDmlTableInfo& table_
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get table schema", K(table_info), K(ret));
-  } else if (!update_stmt->has_instead_of_trigger() && 
-             OB_FAIL(check_update_primary_key(*schema_guard, index_schema, table_dml_info))) {
+  } else if (OB_FAIL(check_update_primary_key(*schema_guard, index_schema, table_dml_info))) {
     LOG_WARN("failed to check update unique key", K(ret));
   } else if (OB_FAIL(check_update_part_key(index_schema, table_dml_info))) {
     LOG_WARN("failed to check update part key", K(ret));

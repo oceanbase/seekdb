@@ -34,6 +34,7 @@ class ObColumnParam;
 namespace common
 {
 class ObBitmap;
+class ObIVector;
 struct ObVersionRange;
 }
 namespace sql
@@ -70,28 +71,12 @@ int pad_on_datums(const common::ObAccuracy accuracy,
                   int64_t row_count,
                   common::ObDatum *&datums);
 
-int pad_on_rich_format_columns(const common::ObAccuracy accuracy,
-                               const common::ObCollationType cs_type,
-                               const int64_t row_cap,
-                               const int64_t vec_offset,
-                               common::ObIAllocator &padding_alloc,
-                               sql::ObExpr &expr,
-                               sql::ObEvalCtx &eval_ctx);
-
 int fill_datums_lob_locator(const ObTableIterParam &iter_param,
                             const ObTableAccessContext &context,
                             const share::schema::ObColumnParam &col_param,
                             const int64_t row_cap,
                             ObDatum *datums,
                             bool reuse_lob_locator = true);
-
-int fill_exprs_lob_locator(const ObTableIterParam &iter_param,
-                           const ObTableAccessContext &context,
-                           const share::schema::ObColumnParam &col_param,
-                           sql::ObExpr &expr,
-                           sql::ObEvalCtx &eval_ctx,
-                           const int64_t vec_offset,
-                           const int64_t row_cap);
 
 int check_skip_by_monotonicity(sql::ObBlackFilterExecutor &filter,
                                blocksstable::ObStorageDatum &min_datum,
@@ -102,85 +87,6 @@ int check_skip_by_monotonicity(sql::ObBlackFilterExecutor &filter,
                                sql::ObBoolMask &bool_mask);
 
 
-
-OB_INLINE int init_expr_vector_header(
-    sql::ObExpr &expr,
-    sql::ObEvalCtx &eval_ctx,
-    const int64_t size,
-    const VectorFormat format = VectorFormat::VEC_UNIFORM)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(expr.init_vector(eval_ctx, format, size, true))) {
-    STORAGE_LOG(WARN, "Failed to init vector", K(ret), K(expr));
-  }
-  return ret;
-}
-
-OB_INLINE int init_exprs_uniform_header(
-    const sql::ObExprPtrIArray *exprs,
-    sql::ObEvalCtx &eval_ctx,
-    const int64_t size)
-{
-  int ret = OB_SUCCESS;
-  if (nullptr != exprs) {
-    for (int64_t i = 0; OB_SUCC(ret) && i < exprs->count(); ++i) {
-      sql::ObExpr *expr = exprs->at(i);
-      if (OB_ISNULL(expr)) {
-        ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(WARN, "Unexpected null expr", K(ret), KPC(exprs));
-      } else if (OB_FAIL(init_expr_vector_header(*expr, eval_ctx, size))) {
-        STORAGE_LOG(WARN, "Failed to init vector", K(ret), K(i), KPC(expr));
-      }
-    }
-  }
-  return ret;
-}
-
-OB_INLINE int init_exprs_vector_header(
-    const sql::ObExprPtrIArray *exprs,
-    sql::ObEvalCtx &eval_ctx,
-    const int64_t size)
-{
-  int ret = OB_SUCCESS;
-  if (nullptr != exprs) {
-    for (int64_t i = 0; OB_SUCC(ret) && i < exprs->count(); ++i) {
-      sql::ObExpr *expr = exprs->at(i);
-      if (OB_ISNULL(expr)) {
-        ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(WARN, "Unexpected null expr", K(ret), KPC(exprs));
-      } else if (OB_FAIL(init_expr_vector_header(*expr, eval_ctx, size, expr->get_default_res_format()))) {
-        STORAGE_LOG(WARN, "Failed to init vector", K(ret), K(i), KPC(expr));
-      }
-    }
-  }
-  return ret;
-}
-
-OB_INLINE int init_exprs_new_format_header(
-    const common::ObIArray<int32_t> &cols_projector,
-    const sql::ObExprPtrIArray &exprs,
-    sql::ObEvalCtx &eval_ctx)
-{
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < cols_projector.count(); ++i) {
-    sql::ObExpr *expr = exprs.at(i);
-    if (OB_FAIL(expr->init_vector_default(eval_ctx, eval_ctx.max_batch_size_))) {
-      STORAGE_LOG(WARN, "Failed to init vector", K(ret), K(i), KPC(exprs.at(i)));
-    }
-  }
-  return ret;
-}
-
-OB_INLINE void set_not_null_for_exprs(
-    const common::ObIArray<int32_t> &cols_projector,
-    const sql::ObExprPtrIArray &exprs,
-    sql::ObEvalCtx &eval_ctx)
-{
-  for (int64_t i = 0; i < cols_projector.count(); ++i) {
-    sql::ObExpr *expr = exprs.at(i);
-    expr->set_all_not_null(eval_ctx, eval_ctx.max_batch_size_);
-  }
-}
 
 OB_INLINE bool can_do_ascii_optimize(common::ObCollationType cs_type)
 {
@@ -453,7 +359,7 @@ inline int reverse_trans_version_val(common::ObDatum &datum)
   return ret;
 }
 int reverse_trans_version_val(common::ObDatum *datums, const int64_t count);
-int reverse_trans_version_val(ObIVector *vector, const int64_t count);
+int reverse_trans_version_val(common::ObIVector *vector, const int64_t count);
 
 }
 }

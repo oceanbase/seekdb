@@ -288,6 +288,9 @@ struct ObParallelBlockRangeTaskParams
 class ObGranuleUtil
 {
 public:
+  static constexpr int64_t PARTITION_SCAN_TABLETS_PER_WORKER = 64;
+  static constexpr int64_t HASH_PARTITION_SCAN_TABLETS_PER_WORKER = 13;
+
   /**
    *  table_partition_info  IN    partition info
    *  parallelism           IN    the parallelism from hint
@@ -327,8 +330,6 @@ public:
   static int use_partition_granule(ObGranulePumpArgs &args, bool &partition_granule);
   static bool use_partition_granule(int64_t partition_count,
                                     int64_t parallelism,
-                                    int64_t partition_scan_hold,
-                                    int64_t hash_partition_scan_hold,
                                     bool hash_part);
 
   static bool gi_has_attri(uint64_t bit_map, uint64_t attri) { return 0 != (bit_map & attri); }

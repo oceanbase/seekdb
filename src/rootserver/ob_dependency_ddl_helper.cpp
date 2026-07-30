@@ -97,8 +97,6 @@ int ObDependencyDDLHelper::modify_all_obj_status(const ObIArray<std::pair<uint64
             LOG_WARN("failed to update table status", K(ret));
           }
         }
-      } else if (share::schema::ObObjectType::SYNONYM == objs.at(i).second) {
-        // TODO:peihan.dph
       }
     }
   }

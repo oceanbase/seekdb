@@ -77,7 +77,6 @@ int ObExprValuesSpec::serialize(char *buf,
         OB_UNIS_ENCODE(values_);
       }
       OB_UNIS_ENCODE(str_values_array_);
-      OB_UNIS_ENCODE(err_log_ct_def_);
       OB_UNIS_ENCODE(contain_ab_param_);
       OB_UNIS_ENCODE(ins_values_batch_opt_);
       OB_UNIS_ENCODE(column_names_);
@@ -102,7 +101,6 @@ OB_DEF_SERIALIZE_SIZE(ObExprValuesSpec)
   BASE_ADD_LEN((ObExprValuesSpec, ObOpSpec));
   OB_UNIS_ADD_LEN(values_);
   OB_UNIS_ADD_LEN(str_values_array_);
-  OB_UNIS_ADD_LEN(err_log_ct_def_);
   OB_UNIS_ADD_LEN(contain_ab_param_);
   OB_UNIS_ADD_LEN(ins_values_batch_opt_);
   OB_UNIS_ADD_LEN(column_names_);
@@ -116,7 +114,6 @@ OB_DEF_SERIALIZE(ObExprValuesSpec)
   BASE_SER((ObExprValuesSpec, ObOpSpec));
   OB_UNIS_ENCODE(values_);
   OB_UNIS_ENCODE(str_values_array_);
-  OB_UNIS_ENCODE(err_log_ct_def_);
   OB_UNIS_ENCODE(contain_ab_param_);
   OB_UNIS_ENCODE(ins_values_batch_opt_);
   OB_UNIS_ENCODE(column_names_);
@@ -130,7 +127,6 @@ OB_DEF_DESERIALIZE(ObExprValuesSpec)
   BASE_DESER((ObExprValuesSpec, ObOpSpec));
   OB_UNIS_DECODE(values_);
   OB_UNIS_DECODE(str_values_array_);
-  OB_UNIS_DECODE(err_log_ct_def_);
   OB_UNIS_DECODE(contain_ab_param_);
   OB_UNIS_DECODE(ins_values_batch_opt_);
   OB_UNIS_DECODE(column_names_);
@@ -178,7 +174,6 @@ int64_t ObExprValuesSpec::get_serialize_size_(const ObPhyOpSeriCtx &seri_ctx) co
     OB_UNIS_ADD_LEN(values_);
   }
   OB_UNIS_ADD_LEN(str_values_array_);
-  OB_UNIS_ADD_LEN(err_log_ct_def_);
   OB_UNIS_ADD_LEN(contain_ab_param_);
   OB_UNIS_ADD_LEN(ins_values_batch_opt_);
   OB_UNIS_ADD_LEN(column_names_);
@@ -194,8 +189,6 @@ ObExprValuesOp::ObExprValuesOp(ObExecContext &exec_ctx,
     vector_index_(0),
     datum_caster_(),
     cm_(CM_NONE),
-    err_log_service_(get_eval_ctx()),
-    err_log_rt_def_(),
     real_value_cnt_(0),
     param_idx_(0),
     param_cnt_(0)
@@ -268,30 +261,10 @@ int ObExprValuesOp::inner_rescan()
   }
   return ret;
 }
-//ObExprValuesOp has its own switch iterator
-int ObExprValuesOp::switch_iterator()
-{
-  int ret = ObOperator::inner_switch_iterator();
-  if (OB_SUCC(ret)) {
-    ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
-    node_idx_ = 0;
-    if (plan_ctx->get_bind_array_idx() >= plan_ctx->get_bind_array_count() - 1) {
-      ret = OB_ITER_END;
-    }
-  }
-
-#ifndef NDEBUG
-  OX(OB_ASSERT(false == brs_.end_));
-#endif
-
-  return ret;
-}
-
 int ObExprValuesOp::inner_get_next_row()
 {
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
-  ObSQLSessionInfo *session = GET_MY_SESSION(ctx_);
   if (OB_SUCC(ret)) {
     plan_ctx->set_autoinc_id_tmp(0);
     if (OB_FAIL(try_check_status())) {
@@ -300,30 +273,14 @@ int ObExprValuesOp::inner_get_next_row()
   }
 
   if (OB_SUCC(ret)) {
-    const ObExprValuesSpec &my_spec = MY_SPEC;
-    do {
-      clear_evaluated_flag();
-      err_log_rt_def_.reset();
-      if (OB_FAIL(calc_next_row())) {
-        if(OB_ITER_END != ret) {
-          LOG_WARN("get next row from row store failed", K(ret));
-        }
-      } else if (my_spec.err_log_ct_def_.is_error_logging_ && OB_SUCCESS != err_log_rt_def_.first_err_ret_) {
-        // only if error_logging is true then first_err_ret_ could be set values
-        if (OB_FAIL(err_log_service_.insert_err_log_record(session,
-                                                           my_spec.err_log_ct_def_,
-                                                           err_log_rt_def_,
-                                                           ObDASOpType::DAS_OP_TABLE_INSERT))) {
-          LOG_WARN("insert_err_log_record failed", K(ret), K(err_log_rt_def_.first_err_ret_));
-        } else {
-          err_log_rt_def_.curr_err_log_record_num_++;
-        }
-      } else {
-        LOG_DEBUG("output row", "row", ROWEXPR2STR(eval_ctx_, my_spec.output_));
+    clear_evaluated_flag();
+    if (OB_FAIL(calc_next_row())) {
+      if (OB_ITER_END != ret) {
+        LOG_WARN("get next row from row store failed", K(ret));
       }
-    } while (OB_SUCC(ret) &&
-        my_spec.err_log_ct_def_.is_error_logging_ &&
-        OB_SUCCESS != err_log_rt_def_.first_err_ret_);
+    } else {
+      LOG_DEBUG("output row", "row", ROWEXPR2STR(eval_ctx_, MY_SPEC.output_));
+    }
   }
 
   return ret;
@@ -617,16 +574,7 @@ OB_INLINE int ObExprValuesOp::calc_next_row()
       }
 
       if (OB_FAIL(ret)) {
-        if (my_spec.err_log_ct_def_.is_error_logging_ && should_catch_err(ret)) {
-          if (OB_SUCCESS == err_log_rt_def_.first_err_ret_) {
-            err_log_rt_def_.first_err_ret_ = ret;
-          }
-          dst_expr->locate_datum_for_write(eval_ctx_).set_null();
-          dst_expr->set_evaluated_projected(eval_ctx_);
-          ret = OB_SUCCESS;
-        } else {
-          LOG_WARN("fail to do to_type and not need to catch err", K(ret), KPC(dst_expr), KPC(src_expr));
-        }
+        LOG_WARN("fail to do to_type", K(ret), KPC(dst_expr), KPC(src_expr));
       }
 
       if (OB_SUCC(ret)) {

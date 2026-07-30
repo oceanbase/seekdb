@@ -18,7 +18,6 @@
 #define OCEANBASE_STORAGE_OB_AGGREGATE_BASE_H_
 
 #include <stdint.h>
-#include "sql/engine/aggregate/agg_ctx.h"
 #include "storage/blocksstable/ob_datum_row.h"
 
 namespace oceanbase
@@ -166,25 +165,6 @@ protected:
   bool is_inited_;
 };
 
-class ObAggGroupBase
-{
-public:
-  virtual ~ObAggGroupBase() {}
-  virtual bool is_vec() const = 0;
-  virtual bool check_finished() const = 0;
-  virtual int eval(blocksstable::ObStorageDatum &datum, const int64_t row_count) = 0;
-  virtual int eval_batch(
-      const ObTableIterParam *iter_param,
-      const ObTableAccessContext *context,
-      const int32_t col_offset,
-      blocksstable::ObIMicroBlockReader *reader,
-      const ObPushdownRowIdCtx &pd_row_id_ctx,
-      const bool reserve_memory) = 0;
-  virtual int can_use_index_info(const blocksstable::ObMicroIndexInfo &index_info, const int32_t col_index, bool &can_agg) = 0;
-  virtual int fill_index_info(const blocksstable::ObMicroIndexInfo &index_info) = 0;
-  DECLARE_PURE_VIRTUAL_TO_STRING;
-};
-
 class ObAggStoreBase
 {
 public:
@@ -292,7 +272,7 @@ public:
     int ret = OB_SUCCESS;
     if (IS_NOT_INIT) {
       ret = OB_NOT_INIT;
-      STORAGE_LOG(WARN, "ObGroupByCellVec is not inited", K(ret), K_(is_inited));
+      STORAGE_LOG(WARN, "group by cell is not inited", K(ret), K_(is_inited));
     } else {
       const bool is_valid_bitmap = nullptr != bitmap && !bitmap->is_all_true();
       use_group_by = row_capacity_ == batch_size_ &&
@@ -350,51 +330,6 @@ protected:
   bool need_extract_distinct_;
   bool is_processing_;
   bool is_inited_;
-};
-
-struct ObColOffsetMap
-{
-  ObColOffsetMap() : col_offset_(-1), agg_idx_(-1) {}
-  ObColOffsetMap(const int64_t col_offset, const int64_t agg_idx)
-    : col_offset_(col_offset),
-      agg_idx_(agg_idx)
-  {}
-  bool operator < (const ObColOffsetMap &map)
-  {
-    return col_offset_ < map.col_offset_;
-  }
-  TO_STRING_KV(K_(col_offset), K_(agg_idx));
-  int32_t col_offset_;
-  int64_t agg_idx_;
-};
-
-struct ObPushdownAggContext
-{
-public:
-  ObPushdownAggContext(
-      const int64_t batch_size,
-      sql::ObEvalCtx &eval_ctx,
-      sql::ObBitVector *skip_bit, 
-      common::ObIAllocator &allocator);
-  virtual ~ObPushdownAggContext();
-  void reset();
-  void reuse_batch();
-  int init(const ObTableAccessParam &param, const int64_t row_count);
-  int prepare_aggregate_rows(const int64_t row_count);
-  TO_STRING_KV(K_(agg_infos), K_(cols_offset_map), KP_(rows), K_(row_meta), K_(batch_rows), K_(agg_row_num));
-private:
-  int init_agg_infos(const ObTableAccessParam &param);
-  OB_INLINE void setup_agg_row(share::aggregate::AggrRowPtr row, const int32_t row_size);
-public:
-  common::ObFixedArray<ObAggrInfo, common::ObIAllocator> agg_infos_;
-  common::ObFixedArray<ObColOffsetMap, common::ObIAllocator> cols_offset_map_;
-  share::aggregate::RuntimeContext agg_ctx_;
-  ObCompactRow **rows_;
-  RowMeta row_meta_;
-  ObBatchRows batch_rows_;
-  int64_t agg_row_num_;
-  common::ObIAllocator &allocator_;
-  common::ObArenaAllocator row_allocator_;
 };
 
 class ObAggDatumBuf

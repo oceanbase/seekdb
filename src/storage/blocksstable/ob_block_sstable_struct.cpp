@@ -58,7 +58,6 @@ bool ObMicroBlockEncodingCtx::is_valid() const
   return macro_block_size_ > 0 && micro_block_size_ > 0 && rowkey_column_cnt_ >= 0
       && column_cnt_ >= rowkey_column_cnt_ && NULL != col_descs_
       && encoder_opt_.is_valid()
-      && data_format_version_ >= 0
       && (FLAT_ROW_STORE != row_store_type_ &&  MAX_ROW_STORE != row_store_type_)
       && compressor_type_ != ObCompressorType::INVALID_COMPRESSOR
       && compressor_type_ != ObCompressorType::MAX_COMPRESSOR;
@@ -184,7 +183,6 @@ ObMacroBlockMarkerStatus::ObMacroBlockMarkerStatus()
     index_block_count_(0),
     ids_block_count_(0),
     disk_block_count_(0),
-    bloomfiter_count_(0),
     hold_count_(0),
     pending_free_count_(0),
     free_count_(0),
@@ -229,7 +227,6 @@ void ObMacroBlockMarkerStatus::reuse()
   index_block_count_ = 0;
   ids_block_count_ = 0;
   disk_block_count_ = 0;
-  bloomfiter_count_ = 0;
   hold_count_ = 0;
   pending_free_count_ = 0;
   free_count_ = 0;
@@ -263,10 +260,8 @@ void ObRecordHeaderV3::set_header_checksum()
   format_i64(data_encoding_length_, checksum);
   format_i64(row_count_, checksum);
   format_i64(column_cnt_, checksum);
-  if (RECORD_HEADER_VERSION_V3 == version_) {
-    for (int64_t i = 0; i < column_cnt_; ++i) {
-      format_i64(column_checksums_[i], checksum);
-    }
+  for (int64_t i = 0; i < column_cnt_; ++i) {
+    format_i64(column_checksums_[i], checksum);
   }
   header_checksum_ = checksum;
 }
@@ -287,10 +282,8 @@ int ObRecordHeaderV3::check_header_checksum() const
   format_i64(data_encoding_length_, checksum);
   format_i64(row_count_, checksum);
   format_i64(column_cnt_, checksum);
-  if (RECORD_HEADER_VERSION_V3 == version_) {
-    for (int64_t i = 0; i < column_cnt_; ++i) {
-      format_i64(column_checksums_[i], checksum);
-    }
+  for (int64_t i = 0; i < column_cnt_; ++i) {
+    format_i64(column_checksums_[i], checksum);
   }
 
   if (0 != checksum) {
@@ -382,18 +375,14 @@ int ObRecordHeaderV3::deserialize_and_check_record(const char *ptr, const int64_
 
 int64_t ObRecordHeaderV3::get_serialize_size() const
 {
-  int64_t size = 0;
-  size += sizeof(ObRecordCommonHeader);
-  if (RECORD_HEADER_VERSION_V3 == version_) {
-    size += column_cnt_ * sizeof(int64_t);
-  }
-  return size;
+  return sizeof(ObRecordCommonHeader) + column_cnt_ * sizeof(int64_t);
 }
 
 int ObRecordHeaderV3::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
 {
   int ret = OB_SUCCESS;
-  if (nullptr == buf || buf_len <= 0) {
+  if (nullptr == buf || buf_len <= 0 || RECORD_HEADER_VERSION_V3 != version_
+      || (column_cnt_ > 0 && nullptr == column_checksums_)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid arguments", K(ret), KP(buf), K(buf_len));
   } else {
@@ -418,10 +407,8 @@ int ObRecordHeaderV3::serialize(char *buf, const int64_t buf_len, int64_t &pos) 
       common_header->row_count_ = row_count_;
       common_header->column_cnt_ = column_cnt_;
       pos += sizeof(ObRecordCommonHeader);
-      if (RECORD_HEADER_VERSION_V3 == version_) {
-        MEMCPY(buf + pos, column_checksums_, column_cnt_ * sizeof(int64_t));
-        pos += column_cnt_ * sizeof(int64_t);
-      }
+      MEMCPY(buf + pos, column_checksums_, column_cnt_ * sizeof(int64_t));
+      pos += column_cnt_ * sizeof(int64_t);
     }
     pos += pos_orig;
   }
@@ -451,7 +438,14 @@ int ObRecordHeaderV3::deserialize(const char *buf, int64_t buf_len, int64_t &pos
     row_count_ = common_header->row_count_;
     column_cnt_ = common_header->column_cnt_;
     pos += sizeof(ObRecordCommonHeader);
-    if (RECORD_HEADER_VERSION_V3 == version_) {
+    if (RECORD_HEADER_VERSION_V3 != version_) {
+      ret = OB_NOT_SUPPORTED;
+      STORAGE_LOG(WARN, "record header version mismatch", K(ret), K(version_));
+    } else if (buf_len < pos_orig + static_cast<int64_t>(sizeof(ObRecordCommonHeader))
+                             + column_cnt_ * static_cast<int64_t>(sizeof(int64_t))) {
+      ret = OB_BUF_NOT_ENOUGH;
+      STORAGE_LOG(WARN, "record header buffer not enough", K(ret), K(buf_len), K(pos_orig), K(column_cnt_));
+    } else {
       const int64_t *column_checksums = nullptr;
       column_checksums = reinterpret_cast<const int64_t *>(buf + pos);
       column_checksums_ = const_cast<int64_t *>(column_checksums);

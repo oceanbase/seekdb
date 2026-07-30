@@ -51,9 +51,7 @@ public:
 
   virtual void destroy() override { ObOperator::destroy(); }
 private:
-  int next_vector(const int64_t max_row_cnt);
   int next_batch(const int64_t max_row_cnt);
-  int nested_next_vector(ObExpr &from, ObExpr &to);
 };
 
 } // end namespace sql

@@ -94,20 +94,11 @@ public:
   { }
   
   ObTabletDirectLoadMgrKey(const common::ObTabletID &tablet_id, const ObDirectLoadType &type, const int64_t ctx_id) // make sure type and ctx_id is correct.
-    : tablet_id_(tablet_id)
-  {
-    if (is_full_direct_load(type)) {
-      direct_load_type_ = DIRECT_LOAD_DDL;
-      context_id_ = 0;
-    }
-  }
+    : tablet_id_(tablet_id), direct_load_type_(DIRECT_LOAD_DDL), context_id_(0)
+  { UNUSED(type); UNUSED(ctx_id); }
   ObTabletDirectLoadMgrKey(const common::ObTabletID &tablet_id, const ObDirectLoadType &type)
-    : tablet_id_(tablet_id), context_id_(0)
-  {
-    direct_load_type_ = is_full_direct_load(type) ? DIRECT_LOAD_DDL
-                            : (is_incremental_minor_direct_load(type) ? DIRECT_LOAD_INCREMENTAL
-                                                              : DIRECT_LOAD_INCREMENTAL_MAJOR);
-  }
+    : tablet_id_(tablet_id), direct_load_type_(DIRECT_LOAD_DDL), context_id_(0)
+  { UNUSED(type); }
   ~ObTabletDirectLoadMgrKey() = default;
   uint64_t hash() const { 
     return tablet_id_.hash() + murmurhash(&direct_load_type_, sizeof(direct_load_type_), 0)
@@ -116,8 +107,7 @@ public:
   int hash(uint64_t &hash_val) const {hash_val = hash(); return OB_SUCCESS;}
   bool is_valid() const { 
     return tablet_id_.is_valid() && is_valid_direct_load(direct_load_type_) && 
-      (((is_incremental_minor_direct_load(direct_load_type_) || is_incremental_major_direct_load(direct_load_type_))
-          ? context_id_ > 0 : context_id_ == 0)); }
+      context_id_ == 0; }
   bool operator == (const ObTabletDirectLoadMgrKey &other) const {
         return tablet_id_ == other.tablet_id_ && direct_load_type_ == other.direct_load_type_
             && context_id_ == other.context_id_; }
@@ -848,13 +838,7 @@ public:
   int64_t get_next_block_start_seq() const { return nullptr == slice_store_ ? start_seq_.get_data_seq() /*slice empty*/ : slice_store_->get_next_block_start_seq(); }
   TO_STRING_KV(K(is_inited_), K(is_canceled_), K(start_seq_), K(slice_idx_), K(merge_slice_idx_), KPC(slice_store_));
 private:
-  int fill_lob_into_memtable( // for version < 4.3.0.0
-      ObIAllocator &allocator,
-      const ObBatchSliceWriteInfo &info,
-      const common::ObObjMeta &col_type,
-      const ObLobStorageParam &lob_storage_param,
-      blocksstable::ObStorageDatum &datum);
-  int fill_lob_into_macro_block( // for version >= 4.3.0.0
+  int fill_lob_into_macro_block(
       ObIAllocator &allocator,
       ObIAllocator &iter_allocator,
       const share::SCN &start_scn,

@@ -34,8 +34,6 @@ public:
   static const int64_t LIMIT = 4;            /* limit */
   static const int64_t WHEN = 5;              /* when */
   static const int64_t HINT = 6;              /* hint */
-  static const int64_t RETURNING = 7;       /* returning */
-  static const int64_t ERRORLOGGING = 8;     /* ERROR LOGGING*/
   static const int64_t IGNORE = 9;           /* ignore */
 
 public:

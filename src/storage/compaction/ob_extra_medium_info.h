@@ -37,13 +37,31 @@ public:
   int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
   int deserialize(const char *buf, const int64_t data_len, int64_t &pos);
   int64_t get_serialize_size() const;
+  bool is_valid() const
+  {
+    return MEDIUM_LIST_FORMAT_VERSION == format_version_
+        && 0 == reserved_
+        && last_medium_scn_ >= 0;
+  }
 
-  TO_STRING_KV(K_(last_compaction_type),
+  TO_STRING_KV(K_(info), K_(format_version), K_(last_compaction_type),
                K_(wait_check_flag), K_(last_medium_scn));
 
 public:
-  uint8_t last_compaction_type_; // check inner_table when last_compaction is major
-  bool wait_check_flag_; // true: need check finish, false: no need check
+  static constexpr int64_t MEDIUM_LIST_FORMAT_VERSION = 1;
+  static constexpr int32_t MEDIUM_LIST_INFO_RESERVED_BITS = 51;
+public:
+  union
+  {
+    uint64_t info_;
+    struct
+    {
+      uint64_t format_version_          : 8;
+      uint64_t last_compaction_type_    : 4; // check inner_table when last_compaction is major
+      uint64_t wait_check_flag_         : 1; // true: need check finish, false: no need check
+      uint64_t reserved_                : MEDIUM_LIST_INFO_RESERVED_BITS;
+    };
+  };
   int64_t last_medium_scn_;
 };
 } // namespace compaction

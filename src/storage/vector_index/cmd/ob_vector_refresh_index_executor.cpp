@@ -251,10 +251,8 @@ int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
     LOG_WARN("fail to get collation_connection", KR(ret));
   } else {
     ObString base_db_name, base_name, index_db_name, index_name;
-    ObString new_base_db_name, new_base_name;
     ObString index_id_table_name;
     ObString domain_index_table_name;
-    bool has_synonym = false;
     base_table_schema = domain_table_schema = index_id_table_schema = nullptr;
     uint64_t base_table_id = -1;
     ObString base_vector_index_col_name;
@@ -283,12 +281,10 @@ int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
     } else if (OB_UNLIKELY(base_db_name != index_db_name)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("different db name is not supported.");
-    } else if (OB_FAIL(schema_checker_.get_table_schema_with_synonym(base_db_name, base_name, false /*is_index_table*/,
-                  has_synonym, new_base_db_name, new_base_name,
-                  base_table_schema))) {
+    } else if (OB_FAIL(schema_checker_.get_table_schema(
+                  base_db_name, base_name, false /*is_index_table*/, base_table_schema))) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("fail to get table schema with synonym", KR(ret), K(base_db_name),
-              K(base_name));
+      LOG_WARN("fail to get table schema", KR(ret), K(base_db_name), K(base_name));
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "base table name");
     } else if (OB_ISNULL(base_table_schema)) {
       ret = OB_INVALID_ARGUMENT;

@@ -30,10 +30,8 @@ namespace sql
 
 #define PRINT_TABLE_NAME(print_params, table_item)                          \
   do {                                                                		  \
-    ObString database_name = table_item->synonym_name_.empty() ?         \
-                             table_item->database_name_ :                 \
-                             table_item->synonym_db_name_;                  \
-    ObString table_name = table_item->synonym_name_.empty() ? table_item->table_name_ : table_item->synonym_name_ ; \
+    ObString database_name = table_item->database_name_;                    \
+    ObString table_name = table_item->table_name_;                          \
     if (table_item->cte_type_ == TableItem::NOT_CTE) {								      \
       if (!database_name.empty()) {                                         \
         PRINT_IDENT_WITH_QUOT(database_name);                               \
@@ -75,7 +73,6 @@ public:
   int print_limit();
   int print_vector_index_query_param();
   int print_fetch();
-  int print_returning();
   int print_json_table(const TableItem *table_item);
   int print_values_table(const TableItem &table_item, bool no_print_alias);
   int print_table(const TableItem *table_item,

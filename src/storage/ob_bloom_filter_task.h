@@ -43,7 +43,7 @@ public:
   virtual int process();
 private:
   int build_bloom_filter();
-  
+
   uint64_t table_id_;
   blocksstable::MacroBlockId macro_id_;
   blocksstable::ObStorageObjectHandle macro_handle_;

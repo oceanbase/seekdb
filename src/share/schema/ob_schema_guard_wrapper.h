@@ -63,8 +63,6 @@ public:
                    uint64_t &table_id,
                    ObTableType &table_type,
                    int64_t &schema_version);
-  int get_server_runtime_schema(
-                        const ObServerRuntimeSchema *&runtime_schema);
 #ifndef GET_OBJ_SCHEMA_VERSIONS
 #define GET_OBJ_SCHEMA_VERSIONS(OBJECT_NAME) \
   int get_##OBJECT_NAME##_schema_versions(const common::ObIArray<uint64_t> &obj_ids, \

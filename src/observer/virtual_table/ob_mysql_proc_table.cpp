@@ -65,9 +65,8 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
             if (OB_ISNULL(routine_info = routine_array.at(row_idx))) {
               ret = OB_ERR_UNEXPECTED;
               SERVER_LOG(WARN, "User info should not be NULL", K(ret));
-            } else if (ROUTINE_PACKAGE_TYPE == routine_info->get_routine_type()
-                       || ROUTINE_UDT_TYPE == routine_info->get_routine_type()) {
-              // MySQL-compatible view ignores package and UDT routines.
+            } else if (ROUTINE_PACKAGE_TYPE == routine_info->get_routine_type()) {
+              // MySQL-compatible view ignores package routines.
               continue;
             } else if (OB_FAIL(schema_guard_->get_database_schema(
                         routine_info->get_database_id(), db_schema))) {

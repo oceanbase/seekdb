@@ -13,6 +13,7 @@ ob_set_subtarget(ob_rootserver common
   ddl_task/ob_ddl_longops.cpp
   ob_bootstrap.cpp
   ob_ddl_operator.cpp
+  ob_admin_job_table_operator.cpp
   ob_dependency_ddl_helper.cpp
   ob_ddl_sql_generator.cpp
   ob_index_builder.cpp
@@ -20,7 +21,6 @@ ob_set_subtarget(ob_rootserver common
   ob_root_minor_freeze.cpp
   ob_root_utils.cpp
   ob_root_inspection.cpp
-  ob_rs_job_table_operator.cpp
   ob_rs_reentrant_thread.cpp
   ob_schema2ddl_sql.cpp
   ob_snapshot_info_manager.cpp
@@ -28,7 +28,6 @@ ob_set_subtarget(ob_rootserver common
   ob_tablet_drop.cpp
   ob_table_creator.cpp
   ob_thread_idling.cpp
-  ob_vertical_partition_builder.cpp
   ob_server_thread_helper.cpp
   ob_system_admin_util.cpp
   ob_lob_piece_builder.cpp
@@ -83,12 +82,12 @@ ob_set_subtarget(ob_rootserver parallel_ddl
 
 ob_set_subtarget(ob_rootserver freeze
   freeze/ob_local_major_freeze.cpp
+  freeze/ob_global_merge_manager.cpp
   freeze/ob_major_merge_scheduler.cpp
   freeze/ob_major_merge_progress_checker.cpp
   freeze/ob_freeze_info_detector.cpp
   freeze/ob_snapshot_gc_scn_renewer.cpp
   freeze/ob_freeze_reentrant_thread.cpp
-  freeze/ob_global_merge_manager.cpp
   freeze/ob_major_merge_info_manager.cpp
   freeze/ob_daily_major_freeze_launcher.cpp
   freeze/ob_checksum_validator.cpp

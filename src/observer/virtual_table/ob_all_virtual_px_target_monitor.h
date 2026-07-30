@@ -38,24 +38,13 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual int inner_close();
 private:
-  int prepare_start_to_read();
-  int get_next_target_info(ObPxTargetInfo &target_info);
-private:
   enum TARGET_MONITOR_COLUMN
   {
-        IS_LEADER = common::OB_APP_MIN_COLUMN_ID,
-    VERSION,
-    PEER_IP,
-    PEER_PORT,
-    PEER_TARGET,
-    PEER_TARGET_USED,
+    LOCAL_TARGET = common::OB_APP_MIN_COLUMN_ID,
     LOCAL_TARGET_USED,
     LOCAL_PARALLEL_SESSION_COUNT
   };
-  common::ObSEArray<ObPxTargetInfo, 10> target_info_array_;
-  uint64_t target_usage_idx_;
-  char svr_ip_buff_[common::OB_IP_PORT_STR_BUFF];
-  char peer_ip_buff_[common::OB_IP_PORT_STR_BUFF];
+  bool row_emitted_;
 }; //class ObAllVirtualPxTargetMonitor
 }//namespace observer
 }//namespace oceanbase

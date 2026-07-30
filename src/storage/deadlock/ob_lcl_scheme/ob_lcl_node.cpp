@@ -675,7 +675,6 @@ int ObLCLNode::check_and_process_complete_cycle_(
 
   DETECT_TIME_GUARD(100_ms);
   if (!collected_info.empty() &&
-      collected_info.at(0).get_user_key() == self_key_ &&
       collected_info.at(0).get_detector_id() == private_label_.get_id()) {
     if (CLICK() && !if_self_has_lowest_priority_(collected_info)) {
       DETECT_LOG_(WARN, "killed node do not have the lowest priority in this cycle",
@@ -739,8 +738,6 @@ int ObLCLNode::generate_event_id_with_lock_(const ObIArray<ObDetectorInnerReport
   event_id = 0;
   LockGuard guard(lock_);
   if (collected_info.empty()) {
-    const uint64_t key_hash = self_key_.hash();
-    event_id = murmurhash(&key_hash, sizeof(key_hash), event_id);
     uint64_t id = private_label_.get_id();
     event_id = murmurhash(&id, sizeof(id), event_id);
     int64_t create_time = created_time_;

@@ -398,7 +398,7 @@ bool ObStmtCompareContext::compare_query(const ObQueryRefRawExpr &first,
   const ObSelectStmt *second_sel = NULL;
   if (&first == &second) {
     bret = true;
-  } else if (first.is_set() != second.is_set() || first.is_multiset() != second.is_multiset() ||
+  } else if (first.is_set() != second.is_set() ||
              OB_ISNULL(first_sel = first.get_ref_stmt()) ||
              OB_ISNULL(second_sel = second.get_ref_stmt())) {
     bret = false;

@@ -38,8 +38,6 @@ public:
   static int eval_array_avg(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
   static int eval_array_avg_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                   const ObBitVector &skip, const int64_t batch_size);
-  static int eval_array_avg_vector(const ObExpr &expr, ObEvalCtx &ctx,
-                                   const ObBitVector &skip, const EvalBound &bound);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

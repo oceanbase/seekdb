@@ -24,8 +24,6 @@ namespace oceanbase
 {
 namespace sql
 {
-struct EvalBound;
-
 struct ObSerializeFuncTag {};
 typedef void (*serializable_function)(ObSerializeFuncTag &);
 
@@ -36,17 +34,8 @@ extern int expr_default_eval_batch_func(const ObExpr &expr,
                                         ObEvalCtx &ctx,
                                         const ObBitVector &skip,
                                         const int64_t batch_size);
-// Implemented in ob_expr.cpp
-extern int expr_default_eval_vector_func(const ObExpr &expr,
-                                         ObEvalCtx &ctx,
-                                         const ObBitVector &skip,
-                                         const EvalBound &bound);
-
 struct ObBatchEvalFuncTag {};
 typedef void (*ser_eval_batch_function)(ObBatchEvalFuncTag &);
-
-struct ObEvalVectorFuncTag {};
-typedef void (*ser_eval_vector_function)(ObEvalVectorFuncTag &);
 
 // serialize help macro, can be used in OB_SERIALIZE_MEMBER like this:
 // OB_SERIALIZE_MEMBER(Foo, SER_FUNC(func_));
@@ -70,11 +59,6 @@ inline int64_t encoded_length(sql::ser_eval_batch_function func)
   return encoded_length(reinterpret_cast<sql::serializable_function>(func));
 }
 
-inline int64_t encoded_length(sql::ser_eval_vector_function func)
-{
-  return encoded_length(reinterpret_cast<sql::serializable_function>(func));
-}
-
 inline int encode(char *buf, const int64_t buf_len, int64_t &pos,
                   sql::serializable_function func)
 {
@@ -85,12 +69,6 @@ inline int encode(char *buf, const int64_t buf_len, int64_t &pos,
 
 inline int encode(char *buf, const int64_t buf_len, int64_t &pos,
                   sql::ser_eval_batch_function func)
-{
-  return encode(buf, buf_len, pos, reinterpret_cast<sql::serializable_function>(func));
-}
-
-inline int encode(char *buf, const int64_t buf_len, int64_t &pos,
-                  sql::ser_eval_vector_function func)
 {
   return encode(buf, buf_len, pos, reinterpret_cast<sql::serializable_function>(func));
 }
@@ -118,19 +96,6 @@ inline int decode(const char *buf, const int64_t data_len, int64_t &pos,
   }
   return ret;
 }
-
-inline int decode(const char *buf, const int64_t data_len, int64_t &pos,
-                  sql::ser_eval_vector_function &func)
-{
-  int ret = OB_SUCCESS;
-  uint64_t ptr = 0;
-  ret = decode(buf, data_len, pos, ptr);
-  if (OB_SUCC(ret)) {
-    func = reinterpret_cast<sql::ser_eval_vector_function>(ptr);
-  }
-  return ret;
-}
-
 
 } // end namespace serialization
 } // end namespace common

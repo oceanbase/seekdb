@@ -29,11 +29,11 @@ int ObTabletBlockHeader::init(const int32_t inline_meta_count)
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTabletBlockHeader has inited", K(ret));
-  } else if (inline_meta_count > MAX_INLINE_META_COUNT) {
+  } else if (inline_meta_count < 0 || inline_meta_count > MAX_INLINE_META_COUNT) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("inline meta count is too large", K(ret), K(inline_meta_count));
   } else {
-    version_ = TABLET_VERSION_V3;
+    version_ = TABLET_FORMAT_VERSION;
     inline_meta_count_ = inline_meta_count; 
     is_inited_ = true;
   }
@@ -45,25 +45,31 @@ int ObTabletBlockHeader::deserialize(const char* buf, const int64_t data_len, in
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &version_))) {
     LOG_WARN("failed to deserialize tablet version", K(ret), K(data_len), K(pos));
+  } else if (TABLET_FORMAT_VERSION != version_) {
+    ret = OB_VERSION_NOT_MATCH;
+    LOG_WARN("tablet format version mismatch", K(ret), K(version_), K(TABLET_FORMAT_VERSION));
   } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &length_))) {
     LOG_WARN("failed to deserialize tablet length", K(ret), K(data_len), K(pos));
-  } else if (TABLET_VERSION_V3 != version_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("only tablet v3 has header", K(ret), K(version_), K(length_));
   } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &checksum_))) {
     LOG_WARN("failed to deserialize checksum", K(ret), K(data_len), K(pos));
   } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &inline_meta_count_))) {
     LOG_WARN("failed to deserialize tablet secondary_meta_count", K(ret), K(data_len), K(pos));
-  } else if (OB_UNLIKELY(inline_meta_count_ > MAX_INLINE_META_COUNT)) {
+  } else if (OB_UNLIKELY(length_ <= 0)) {
     ret = OB_DESERIALIZE_ERROR;
-    LOG_WARN("inline_meta_count is too large", K(ret), K(inline_meta_count_));
+    LOG_WARN("tablet payload length is invalid", K(ret), K(length_));
+  } else if (OB_UNLIKELY(inline_meta_count_ < 0 || inline_meta_count_ > MAX_INLINE_META_COUNT)) {
+    ret = OB_DESERIALIZE_ERROR;
+    LOG_WARN("inline meta count is invalid", K(ret), K(inline_meta_count_));
   } else {
     const int64_t desc_array_len = inline_meta_count_ * sizeof(ObInlineSecondaryMetaDesc);
-    if (desc_array_len > 0) {
+    if (OB_UNLIKELY(data_len - pos < desc_array_len)) {
+      ret = OB_DESERIALIZE_ERROR;
+      LOG_WARN("buffer is not enough for inline meta descriptors", K(ret), K(data_len), K(pos), K(desc_array_len));
+    } else if (desc_array_len > 0) {
       MEMCPY(desc_array_, buf + pos, desc_array_len);
       pos += desc_array_len;
     }
-    if (OB_UNLIKELY(data_len - pos < length_)) {
+    if (OB_SUCC(ret) && OB_UNLIKELY(data_len - pos < length_)) {
       ret = OB_DESERIALIZE_ERROR;
       LOG_WARN("buffer's length is not enough", K(ret), K(data_len), K(pos), K(length_), K(desc_array_len));
     }

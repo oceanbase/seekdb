@@ -110,14 +110,14 @@ struct AutoDOPParams {
       parallel_min_scan_time_threshold_(1000)
     { }
 
-  int64_t get_parallel_degree_limit(const int64_t server_cnt) const {
+  int64_t get_parallel_degree_limit() const {
     int64_t limit = 0;
     if (0 < parallel_degree_limit_) {
       limit = parallel_degree_limit_;
-    } else if (0 >= parallel_servers_target_ || 0 >= min_cpu_ || 0 >= server_cnt) {
-      limit = std::max(parallel_servers_target_, server_cnt * min_cpu_);
+    } else if (0 >= parallel_servers_target_ || 0 >= min_cpu_) {
+      limit = std::max(parallel_servers_target_, min_cpu_);
     } else {
-      limit = std::min(parallel_servers_target_, server_cnt * min_cpu_);
+      limit = std::min(parallel_servers_target_, min_cpu_);
     }
     return std::max(limit, static_cast<int64_t>(1));
   }
@@ -263,8 +263,6 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
     is_ps_protocol_(is_ps_protocol),
     expected_worker_count_(0),
     minimal_worker_count_(0),
-    expected_worker_map_(),
-    minimal_worker_map_(),
     all_exprs_(false),
     model_type_(ObOptEstCost::VECTOR_MODEL),
     px_object_sample_rate_(-1),
@@ -292,7 +290,6 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
     partition_wise_plan_enabled_(true),
     enable_px_ordered_coord_(false),
     enable_opt_row_goal_(ObEnableOptRowGoal::MAX),
-    enable_distributed_das_scan_(true),
     enable_topn_runtime_filter_(true)
   { }
   inline common::ObOptStatManager *get_opt_stat_manager() { return opt_stat_manager_; }
@@ -300,8 +297,6 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
 
   virtual ~ObOptimizerContext()
   {
-    expected_worker_map_.destroy();
-    minimal_worker_map_.destroy();
     log_plan_factory_.destroy();
   }
   inline const ObSQLSessionInfo *get_session_info() const { return session_info_; }
@@ -380,7 +375,7 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   void set_das_keep_order_enabled(bool das_keep_order_enabled) { das_keep_order_enabled_ = das_keep_order_enabled; }
   inline int64_t get_parallel() const { return parallel_; }
   inline int64_t get_max_parallel() const { return max_parallel_; }
-  inline int64_t get_parallel_degree_limit(const int64_t server_cnt) const { return auto_dop_params_.get_parallel_degree_limit(server_cnt); }
+  inline int64_t get_parallel_degree_limit() const { return auto_dop_params_.get_parallel_degree_limit(); }
   inline int64_t get_session_parallel_degree_limit() const { return auto_dop_params_.parallel_degree_limit_; }
   inline int64_t get_parallel_min_scan_time_threshold() const { return auto_dop_params_.parallel_min_scan_time_threshold_; }
   inline bool force_disable_parallel() const  { return px_parallel_rule_ >= PL_UDF_DAS_FORCE_SERIALIZE
@@ -463,7 +458,6 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   static const int BATCH_RESCAN_BIT_NON_BASIC_SCAN = 9;
   static const int BATCH_RESCAN_BIT_STARTUP_FILTER = 10;
  
-  // Whether a batch rescan scenario is enabled is controlled by its configuration bit.
   void init_batch_rescan_flags(const bool enable_batch_nlj,
                                const bool enable_batch_spf,
                                const int64_t batch_rescan_flag)
@@ -638,10 +632,6 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   void set_minimal_worker_count(int64_t c) { minimal_worker_count_ = c; }
   int64_t get_minimal_worker_count() const { return minimal_worker_count_; }
 
-  common::hash::ObHashMap<ObAddr, int64_t>& get_expected_worker_map() { return expected_worker_map_; }
-  common::hash::ObHashMap<ObAddr, int64_t>& get_minimal_worker_map() { return minimal_worker_map_; }
-  const common::hash::ObHashMap<ObAddr, int64_t>& get_expected_worker_map() const { return expected_worker_map_; }
-  const common::hash::ObHashMap<ObAddr, int64_t>& get_minimal_worker_map() const { return minimal_worker_map_; }
   const ObIArray<DeducedExprInfo> &get_deduce_info() const { return deduced_exprs_info_; }
   ObIArray<DeducedExprInfo> &get_deduce_info() { return deduced_exprs_info_; }
   const ObRawExprUniqueSet &get_all_exprs() const { return all_exprs_; };
@@ -696,8 +686,6 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   bool has_trigger() const { return has_trigger_; }
   void set_has_pl_udf(bool v) { has_pl_udf_ = v; }
   bool has_pl_udf() const { return has_pl_udf_; }
-  void set_has_cursor_expression(bool v) { has_cursor_expression_ = v; }
-  bool has_cursor_expression() const { return has_cursor_expression_; }
   void set_has_subquery_in_function_table(bool v) { has_subquery_in_function_table_ = v; }
   bool has_subquery_in_function_table() const { return has_subquery_in_function_table_; }
   bool contain_nested_sql() const { return nested_sql_flags_ > 0; }
@@ -737,8 +725,6 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   inline void set_push_join_pred_into_view_enabled(bool enabled) { push_join_pred_into_view_enabled_ = enabled; }
   inline void set_enable_opt_row_goal(int64_t type) { enable_opt_row_goal_ = static_cast<ObEnableOptRowGoal>(type); }
   inline ObEnableOptRowGoal get_enable_opt_row_goal() const { return enable_opt_row_goal_; }
-  inline bool is_enable_distributed_das_scan() const { return enable_distributed_das_scan_; }
-  inline void set_enable_distributed_das_scan(bool enabled) { enable_distributed_das_scan_ = enabled; }
   inline bool enable_topn_runtime_filter() const { return enable_topn_runtime_filter_; }
   inline void set_enable_topn_runtime_filter(bool enabled) { enable_topn_runtime_filter_ = enabled; }
 private:
@@ -806,8 +792,6 @@ private:
   bool is_ps_protocol_;
   int64_t expected_worker_count_;
   int64_t minimal_worker_count_;
-  common::hash::ObHashMap<ObAddr, int64_t> expected_worker_map_;
-  common::hash::ObHashMap<ObAddr, int64_t> minimal_worker_map_;
   ObRawExprUniqueSet all_exprs_;
   ObOptEstCost::MODEL_TYPE model_type_;
   double px_object_sample_rate_;
@@ -828,7 +812,6 @@ private:
       int8_t has_trigger_                      : 1; //this sql has trigger object
       int8_t has_pl_udf_                       : 1; //this sql has pl user defined function
       int8_t has_subquery_in_function_table_   : 1; //this stmt has function table
-      int8_t has_cursor_expression_            : 1; //this sql has cursor expression
     };
   };
   bool has_no_skip_for_update_;
@@ -852,7 +835,6 @@ private:
   bool partition_wise_plan_enabled_;
   bool enable_px_ordered_coord_;
   ObEnableOptRowGoal enable_opt_row_goal_;
-  bool enable_distributed_das_scan_;
   bool enable_topn_runtime_filter_;
 };
 }

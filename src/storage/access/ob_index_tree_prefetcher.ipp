@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_index_tree_prefetcher.h"
 #include "storage/access/ob_aggregate_base.h"
+#include "storage/blocksstable/ob_storage_cache_suite.h"
 
 namespace oceanbase
 {
@@ -252,8 +253,8 @@ inline int ObIndexTreePrefetcher::lookup_in_index_tree(ObSSTableReadHandle &read
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
         LOG_WARN("Fail to get index block row", K(ret), K_(index_scanner));
       }
-    } else if (index_block_info.is_macro_node() &&
-               OB_FAIL(check_bloom_filter(index_block_info, false, read_handle))) {
+    } else if (index_block_info.is_macro_node()
+               && OB_FAIL(check_bloom_filter(index_block_info, false, read_handle))) {
       LOG_WARN("Fail to check bloom filter", K(ret), K(index_block_info), K(read_handle));
     } else if (ObSSTableRowState::NOT_EXIST == read_handle.row_state_) {
       found = true;
@@ -312,11 +313,9 @@ inline int ObIndexTreePrefetcher::last_handle_hit(const ObMicroIndexInfo &block_
   if (is_data) {
     if (last_micro_block_handle_.in_block_state() && last_micro_block_handle_.match(macro_id, offset, size) &&
         OB_SUCC(micro_handle.assign(last_micro_block_handle_))) {
-      EVENT_INC(ObStatEventIds::DATA_BLOCK_CACHE_HIT);
       hit = true;
     }
   } else if (micro_handle.match(macro_id, offset, size)) {
-    EVENT_INC(ObStatEventIds::INDEX_BLOCK_CACHE_HIT);
     hit = true;
   }
   return ret;
@@ -328,7 +327,7 @@ inline int ObIndexTreePrefetcher::check_bloom_filter(
     ObSSTableReadHandle &read_handle)
 {
   int ret = OB_SUCCESS;
-  if (!index_info.is_valid() || !index_info.is_macro_node()) {
+  if (OB_UNLIKELY(!index_info.is_valid() || !index_info.is_macro_node())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), K(index_info), K(read_handle));
   } else if (!access_ctx_->query_flag_.is_index_back() && access_ctx_->enable_bf_cache()) {
@@ -338,59 +337,55 @@ inline int ObIndexTreePrefetcher::check_bloom_filter(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get invalid macro id", K(ret), K(macro_id), K(index_info));
     } else if (is_multi_check) {
-      // If a rowkey happens to be the endkey of the microblock, the rowkey idx must also be included in the rowkey idx range of next index row,
-      // because there may be multiple versions of one row across the microblock. Otherwise, some multi-version rows may be missed when do check_rows_lock.
-      // We must recognize this situation where rowkey_begin_idx_ is overlapped with last index row,
-      // and treat it specifically when checking macro block bloom filters in prefetching phase,
-      // Otherwise, this border row may be filtered out incorrectly.
-      // At present, when we check bf, we just mindlessly skip the first row in the rowkeys idx range.
-      const int64_t tmp_rowkey_begin_idx = index_info.rowkey_begin_idx_ + 1;
-      if (OB_FAIL(OB_STORE_CACHE.get_bf_cache().may_contain(macro_id,
-                                                            index_info.rows_info_,
-                                                            tmp_rowkey_begin_idx,
-                                                            index_info.rowkey_end_idx_,
-                                                            *datum_utils_,
-                                                            is_contain))) {
+      const int64_t rowkey_begin_idx = index_info.rowkey_begin_idx_ + 1;
+      if (OB_FAIL(OB_STORE_CACHE.get_bf_cache().may_contain(
+              macro_id,
+              index_info.rows_info_,
+              rowkey_begin_idx,
+              index_info.rowkey_end_idx_,
+              *datum_utils_,
+              is_contain))) {
         if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
-          LOG_WARN("Fail to check bloomfilter", K(ret));
+          LOG_WARN("Fail to check bloom filter", K(ret));
         }
       } else {
+        // Multi-check updates each row state in rows_info_; the macro must still be visited.
         is_contain = true;
       }
     } else if (read_handle.is_sorted_multi_get_) {
-      if (OB_FAIL(OB_STORE_CACHE.get_bf_cache().may_contain(macro_id,
-                                                            index_info.rowkeys_info_,
-                                                            index_info.rowkey_begin_idx_,
-                                                            index_info.rowkey_end_idx_,
-                                                            *datum_utils_,
-                                                            is_contain))) {
+      if (OB_FAIL(OB_STORE_CACHE.get_bf_cache().may_contain(
+              macro_id,
+              index_info.rowkeys_info_,
+              index_info.rowkey_begin_idx_,
+              index_info.rowkey_end_idx_,
+              *datum_utils_,
+              is_contain))) {
         if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
-          LOG_WARN("Fail to check bloomfilter", K(ret));
+          LOG_WARN("Fail to check bloom filter", K(ret));
         }
       }
-    } else if (OB_FAIL(OB_STORE_CACHE.get_bf_cache().may_contain(macro_id,
-                                                                 read_handle.get_rowkey(),
-                                                                 *datum_utils_,
-                                                                 is_contain))) {
+    } else if (OB_FAIL(OB_STORE_CACHE.get_bf_cache().may_contain(
+            macro_id,
+            read_handle.get_rowkey(),
+            *datum_utils_,
+            is_contain))) {
       if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
-        LOG_WARN("Fail to check bloomfilter", K(ret));
+        LOG_WARN("Fail to check bloom filter", K(ret));
       }
     }
+
     if (OB_FAIL(ret)) {
+      // Cache lookup failures must not affect query correctness.
       ret = OB_SUCCESS;
-    } else if (is_contain) {
-      read_handle.is_bf_contain_ = true;
-    } else {
+    } else if (!is_contain) {
       read_handle.row_state_ = ObSSTableRowState::NOT_EXIST;
       ++access_ctx_->table_store_stat_.bf_filter_cnt_;
     }
-    LOG_DEBUG("check bloomfilter", K(ret), K(read_handle), K(is_contain));
-    if (is_multi_check) {
-      access_ctx_->table_store_stat_.rowkey_prefix_ = read_handle.rows_info_->get_datum_cnt();
-    } else {
-      access_ctx_->table_store_stat_.rowkey_prefix_ = read_handle.get_rowkey().get_datum_cnt();
-    }
+    access_ctx_->table_store_stat_.rowkey_prefix_ = is_multi_check
+        ? read_handle.rows_info_->get_datum_cnt()
+        : read_handle.get_rowkey().get_datum_cnt();
     ++access_ctx_->table_store_stat_.bf_access_cnt_;
+    LOG_DEBUG("check bloom filter", K(ret), K(read_handle), K(is_contain));
   }
   return ret;
 }
@@ -745,8 +740,8 @@ inline int ObIndexTreeMultiPrefetcher::drill_down(
   } else if (cur_level_is_leaf != index_block_info.is_data_block()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Fail to prefetch, unexpected level", K(ret), K(cur_level_is_leaf), K(index_block_info));
-  } else if (index_block_info.is_macro_node() &&
-             OB_FAIL(check_bloom_filter(index_block_info, false, read_handle))) {
+  } else if (index_block_info.is_macro_node()
+             && OB_FAIL(check_bloom_filter(index_block_info, false, read_handle))) {
     LOG_WARN("Fail to check bloom filter", K(ret), K(index_block_info), K(read_handle));
   } else if (ObSSTableRowState::NOT_EXIST == read_handle.row_state_) {
     mark_cur_rowkey_prefetched(read_handle);
@@ -1245,7 +1240,6 @@ inline int ObIndexTreeMultiPassPrefetcher<DATA_PREFETCH_DEPTH, INDEX_PREFETCH_DE
           ret = OB_SUCCESS;
         }
       } else {
-        EVENT_INC(ObStatEventIds::INDEX_BLOCK_READ_CNT);
       }
     }
 
@@ -1856,10 +1850,9 @@ inline int ObIndexTreeMultiPassPrefetcher<DATA_PREFETCH_DEPTH, INDEX_PREFETCH_DE
       } else {
         ObSSTableReadHandle &read_handle = prefetcher.read_handles_[index_info.range_idx() % prefetcher.max_range_prefetching_cnt_];
         if ((prefetcher.is_multi_check() || index_info.is_get())
-             && index_info.is_macro_node()
-             && OB_FAIL(prefetcher.check_bloom_filter(index_info, prefetcher.is_multi_check(), read_handle))) {
-          LOG_WARN("Fail to check bloom filter", K(ret), K(index_info), K(prefetcher.current_read_handle()),
-                    K(prefetcher.is_multi_check()));
+            && index_info.is_macro_node()
+            && OB_FAIL(prefetcher.check_bloom_filter(index_info, prefetcher.is_multi_check(), read_handle))) {
+          LOG_WARN("Fail to check bloom filter", K(ret), K(index_info), K(read_handle), K(prefetcher.is_multi_check()));
         } else if (level == prefetcher.index_tree_height_ -1 && !index_info.is_leaf_block()) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Unexpected unbalanced index tree", K(ret), K(level), K(index_info), K(parent));

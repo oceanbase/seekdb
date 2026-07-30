@@ -45,11 +45,7 @@ int ObMySQLResultSet::to_mysql_field(const ObField &field, ObMySQLField &mfield)
     ObScale decimals = mfield.accuracy_.get_scale();
     ObPrecision pre = mfield.accuracy_.get_precision();
     // TIMESTAMP, UNSIGNED are directly mapped through map
-    if (0 == field.type_name_.case_compare("SYS_REFCURSOR")) {
-      mfield.type_ = MYSQL_TYPE_CURSOR;
-    } else {
-      ret = ObSMUtils::get_mysql_type(field.type_.get_type(), mfield.type_, mfield.flags_, decimals);
-    }
+    ret = ObSMUtils::get_mysql_type(field.type_.get_type(), mfield.type_, mfield.flags_, decimals);
 
     mfield.type_owner_ = field.type_owner_;
     mfield.type_name_ = field.type_name_;
@@ -66,9 +62,6 @@ int ObMySQLResultSet::to_mysql_field(const ObField &field, ObMySQLField &mfield)
       ObScale num_decimals;
       ret = ObSMUtils::get_mysql_type(
         field.default_value_.get_type(), mfield.default_value_, flags, num_decimals);
-    }
-    if (field.is_hidden_rowid_) {
-      mfield.inout_mode_ |= 0x04;
     }
   }
   LOG_TRACE("to mysql field", K(ret), K(mfield), K(field));

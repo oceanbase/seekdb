@@ -85,12 +85,6 @@ enum PackageComplieUnit
   PACKAGE_UNIT_BODY = 2
 };
 
-enum PackageAlterOptions
-{
-  PACKAGE_ALTER_EDITIONABLE,
-  PACKAGE_ALTER_NONEDITIONABLE
-};
-
 enum TriggerAlterOptions
 {
   TRIGGER_ALTER_IF_ENABLE,
@@ -104,12 +98,6 @@ enum SpDataAccess
   SP_NO_SQL = 1,
   SP_READS_SQL_DATA = 2,
   SP_MODIFIES_SQL_DATA = 3
-};
-
-enum SystemTriggerEvent
-{
-  SYS_TRIGGER_LOGON = 0,
-  SYS_TRIGGER_LOGOFF = 1,
 };
 
 #ifdef __cplusplus

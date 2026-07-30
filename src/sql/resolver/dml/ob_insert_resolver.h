@@ -37,8 +37,6 @@ public:
   static const int64_t INTO_NODE = 0;
   static const int64_t VALUE_NODE = 1;
   static const int64_t DUPLICATE_NODE = 2;
-  static const int64_t RETURNING_NODE = 2;
-  static const int64_t ERR_LOG_NODE = 3;
   static const int64_t target_relation = 0; /* target relation */
   static const int64_t column_list = 1; /* column list */
   static const int64_t value_list = 2; /* value list */
@@ -48,7 +46,6 @@ public:
   static const int64_t insert_field = 6; /* insert_field_spec*/
   static const int64_t insert_ignore = 7; /* opt_ignore */
   static const int64_t insert_hint = 8; /* hint */
-  static const int64_t insert_returning = 9; /* returning */
 public:
   explicit ObInsertResolver(ObResolverParams &params);
   virtual ~ObInsertResolver();

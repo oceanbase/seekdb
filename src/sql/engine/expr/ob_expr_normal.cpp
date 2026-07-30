@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX  SQL_ENG
 #include "sql/engine/expr/ob_expr_normal.h"
+#include "sql/engine/expr/ob_distribution.h"
 #include "sql/engine/ob_exec_context.h"
 
 namespace oceanbase
@@ -34,10 +35,8 @@ int ObExprNormal::ObExprNormalCtx::initialize(ObEvalCtx &ctx, const ObExpr &expr
       ret = OB_INVALID_ARGUMENT;
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "normal function. first and second argument must be constant expression.");
   } else {
-    double mean = p1.get_double();
-    double stddev = p2.get_double();
-    std::normal_distribution<double>::param_type param(mean, stddev);
-    normal_dist_.param(param);
+    mean_ = p1.get_double();
+    stddev_ = p2.get_double();
   }
   return ret;
 }
@@ -45,9 +44,8 @@ int ObExprNormal::ObExprNormalCtx::initialize(ObEvalCtx &ctx, const ObExpr &expr
 
 int ObExprNormal::ObExprNormalCtx::generate_next_value(int64_t seed, double &result)
 {
-  normal_dist_.reset();
   gen_.seed(static_cast<uint64_t>(seed));
-  result = normal_dist_(gen_);
+  result = ObDistribution::normal(gen_, mean_, stddev_);
   return OB_SUCCESS;
 }
 

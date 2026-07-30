@@ -39,7 +39,7 @@ void ObDASRetryCtrl::tablet_location_retry_proc(ObDASRef &das_ref,
   need_retry = false;
   int ret = OB_SUCCESS;
   ObTableID ref_table_id = task_op.get_ref_table_id();
-  ObDASLocationRouter &loc_router = DAS_CTX(das_ref.get_exec_ctx()).get_location_router();
+  ObDASCtx &das_ctx = DAS_CTX(das_ref.get_exec_ctx());
   const ObDASTabletLoc *tablet_loc = task_op.get_tablet_loc();
   bool tablet_exist = false;
   schema::ObSchemaGetterGuard schema_guard;
@@ -72,7 +72,7 @@ void ObDASRetryCtrl::tablet_location_retry_proc(ObDASRef &das_ref,
     task_op.set_errcode(OB_SCHEMA_EAGAIN);
     LOG_WARN("partition not exist, maybe dropped by DDL or table was truncated", K(tablet_loc), K(ref_table_id));
   } else {
-    loc_router.force_refresh_location_cache(true, task_op.get_errcode());
+    das_ctx.force_refresh_location_cache(true, task_op.get_errcode());
     need_retry = true;
     const ObDASTableLocMeta *loc_meta = tablet_loc->loc_meta_;
     LOG_INFO("[DAS RETRY] refresh tablet location cache and retry DAS task",

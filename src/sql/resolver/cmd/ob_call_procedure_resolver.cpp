@@ -401,14 +401,6 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
         LOG_WARN("mismatch between string on a subprogram specification and body",
                 K(ret), KPC(proc_info));
       }
-      if (OB_SUCC(ret) && proc_info->is_udt_routine() && !proc_info->is_udt_static_routine()) {
-        ret = OB_ERR_CALL_WRONG_ARG;
-        LOG_USER_ERROR(OB_ERR_CALL_WRONG_ARG, proc_info->get_routine_name().length(),
-                                              proc_info->get_routine_name().ptr());
-      }
-      if (OB_SUCC(ret) && proc_info->is_udt_routine()) {
-        call_proc_info->set_is_udt_routine(true);
-      }
       if (OB_SUCC(ret)) {
         ObSchemaObjVersion obj_version;
         obj_version.object_id_ = proc_info->get_routine_id();
@@ -473,14 +465,6 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
             } else if (param->is_obj_access_expr() && !(static_cast<const ObObjAccessRawExpr *>(param))->for_write()) {
               ret = OB_ERR_OUT_PARAM_NOT_BIND_VAR;
               LOG_WARN("output parameter not a bind variable", K(ret));
-            } else if (param_info->is_sys_refcursor_type()
-                      || (param_info->is_pkg_type() && pl_type.is_cursor_type())) {
-              OZ (call_proc_info->add_out_param(i,
-                                      param_info->get_mode(),
-                                      param_info->get_param_name(),
-                                      pl_type,
-                                      ObString("SYS_REFCURSOR"),
-                                      ObString("")));
             } else if (pl_type.is_user_type()) {
               // Through Call statement to execute PL and the parameter is a complex type, only supported in PS mode, complex data types cannot be constructed by the client;
               // PS mode only supports UDT as output parameter, here we disable complex type output parameters for other modes;

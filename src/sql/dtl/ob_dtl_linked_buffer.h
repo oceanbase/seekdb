@@ -20,7 +20,6 @@
 #include "lib/queue/ob_link.h"
 #include "sql/dtl/ob_dtl_msg_type.h"
 #include "lib/container/ob_array_serialization.h"
-#include "sql/engine/basic/ob_compact_row.h"
 namespace oceanbase {
 namespace sql {
 namespace dtl {
@@ -230,7 +229,6 @@ public:
         dfo_id_(common::OB_INVALID_ID),
         sqc_id_(common::OB_INVALID_ID),
         enable_channel_sync_(false),
-        row_meta_(),
         op_info_()
   {}
   ObDtlLinkedBuffer(char * buf, int64_t size)
@@ -241,7 +239,6 @@ public:
         dfo_id_(common::OB_INVALID_ID),
         sqc_id_(common::OB_INVALID_ID),
         enable_channel_sync_(false),
-        row_meta_(),
         op_info_()
   {}
   TO_STRING_KV(K_(size), K_(pos), K_(is_data_msg), K_(seq_no), K_(allocated_chid),
@@ -255,10 +252,6 @@ public:
   static int deserialize_msg_header(const ObDtlLinkedBuffer &buffer,
                                     ObDtlMsgHeader &header,
                                     bool keep_pos = false);
-  int serialize_vector(char *buf, int64_t pos, int64_t size) const;
-  int64_t get_serialize_vector_size() const;
-  int serialize_fixed_vector(char *buf, int64_t pos, int64_t size) const;
-  int64_t get_serialize_fixed_vector_size() const;
 
   void set_empty() {
     if (size_ > 0 && NULL != buf_) {
@@ -375,7 +368,6 @@ public:
     dst->dfo_id_ = src.dfo_id_;
     dst->sqc_id_ = src.sqc_id_;
     dst->enable_channel_sync_ = src.enable_channel_sync_;
-    ret = dst->row_meta_.assign(src.row_meta_);
     dst->op_info_ = src.op_info_;
     return ret;
   }
@@ -397,7 +389,6 @@ public:
     dfo_id_ = src.dfo_id_;
     sqc_id_ = src.sqc_id_;
     enable_channel_sync_ = src.enable_channel_sync_;
-    ret = row_meta_.assign(src.row_meta_);
     op_info_ = src.op_info_;
     return ret;
   }
@@ -453,7 +444,6 @@ public:
     if (batch_info_valid_) {
       batch_info_.reset();
     }
-    row_meta_.reset();
   }
   int push_batch_id(int64_t batch_id, int64_t rows);
   int64_t get_batch_id() { return batch_id_; }
@@ -461,8 +451,6 @@ public:
   void set_dfo_id(int64_t dfo_id) { dfo_id_ = dfo_id; }
   int64_t get_dfo_id() { return dfo_id_; }
   int64_t get_sqc_id() { return sqc_id_; }
-  RowMeta &get_row_meta() { return row_meta_; }
-  void set_row_meta(const RowMeta &row_meta) { row_meta_ = row_meta; }
   uint64_t get_px_sequence_id() { return dfo_key_.px_sequence_id_; }
 
   int64_t get_dop() { return op_info_.dop_; }
@@ -573,7 +561,6 @@ The memory layout is as below:
   int64_t dfo_id_;
   int64_t sqc_id_;
   bool enable_channel_sync_;
-  RowMeta row_meta_;
   ObDtlOpInfo op_info_;
 };
 

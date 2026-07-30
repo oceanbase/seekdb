@@ -24,7 +24,6 @@ namespace oceanbase
 namespace share
 {
 
-// TODO(cangdi): remove this after origin global index builder code is removed
 class ObUniqueIndexRowTransformer
 {
 public:

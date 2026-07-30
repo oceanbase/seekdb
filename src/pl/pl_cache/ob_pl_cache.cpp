@@ -233,7 +233,6 @@ int PCVPlSchemaObj::init_with_version_obj(const ObSchemaObjVersion &schema_obj_v
   schema_type_ = schema_obj_version.get_schema_type();
   schema_id_ = schema_obj_version.object_id_;
   schema_version_ = schema_obj_version.version_;
-  invoker_db_id_ = schema_obj_version.invoker_db_id_;
   return ret;
 }
 
@@ -272,7 +271,6 @@ void ObPLObjectKey::reset()
 {
   db_id_ = common::OB_INVALID_ID;
   key_id_ = common::OB_INVALID_ID;
-  mode_ = ObjectMode::NORMAL;
   name_.reset();
   namespace_ = ObLibCacheNameSpace::NS_INVALID;
   sys_vars_str_.reset();
@@ -289,7 +287,6 @@ int ObPLObjectKey::deep_copy(ObIAllocator &allocator, const ObILibCacheKey &othe
   } else {
     db_id_ = key.db_id_;
     key_id_ = key.key_id_;
-    mode_ = key.mode_;
     namespace_ = key.namespace_;
   }
   return ret;
@@ -309,7 +306,6 @@ uint64_t ObPLObjectKey::hash() const
 {
   uint64_t hash_ret = murmurhash(&db_id_, sizeof(uint64_t), 0);
   hash_ret = murmurhash(&key_id_, sizeof(uint64_t), hash_ret);
-  hash_ret = murmurhash(&mode_, sizeof(mode_), hash_ret);
   hash_ret = name_.hash(hash_ret);
   hash_ret = murmurhash(&namespace_, sizeof(ObLibCacheNameSpace), hash_ret);
   hash_ret = sys_vars_str_.hash(hash_ret);
@@ -321,7 +317,6 @@ bool ObPLObjectKey::is_equal(const ObILibCacheKey &other) const
   const ObPLObjectKey &key = static_cast<const ObPLObjectKey&>(other);
   bool cmp_ret = db_id_ == key.db_id_ &&
                  key_id_ == key.key_id_ &&
-                 mode_ == key.mode_ &&
                  name_ == key.name_ &&
                  namespace_ == key.namespace_ &&
                  sys_vars_str_ == key.sys_vars_str_;
@@ -589,10 +584,6 @@ int ObPLObjectValue::get_all_dep_schema(ObPLCacheCtx &pc_ctx,
       } else if (TABLE_SCHEMA != pcv_schema->schema_type_) {
         // if no table schema, get schema version is enough
         int64_t new_version = 0;
-        if (PACKAGE_SCHEMA == pcv_schema->schema_type_
-            || UDT_SCHEMA == pcv_schema->schema_type_
-            || ROUTINE_SCHEMA == pcv_schema->schema_type_) {
-        }
         if (OB_FAIL(schema_guard.get_schema_version(pcv_schema->schema_type_,
                                                             pcv_schema->schema_id_,
                                                             new_version))) {
@@ -787,8 +778,7 @@ int ObPLObjectValue::set_stored_schema_objs(const DependenyTableStore &dep_table
           contain_tmp_table_ = true;
         }
         if (!contain_sys_pl_object_ &&
-            (PACKAGE_SCHEMA == pcv_schema_obj->schema_type_ ||
-             UDT_SCHEMA == pcv_schema_obj->schema_type_) &&
+            PACKAGE_SCHEMA == pcv_schema_obj->schema_type_ &&
             true) {
           contain_sys_pl_object_ = true;
         }

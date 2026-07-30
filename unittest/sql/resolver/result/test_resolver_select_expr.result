@@ -23,7 +23,6 @@ SELECT (select max(t1.c1) from t1) as field from t1 group by field;
       "table_id":1099511677777,
       "table_name":"t1",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677777,
       "database_name":"rongxuan",
@@ -99,7 +98,6 @@ SELECT (select max(t1.c1) from t1) as field from t1 group by field;
             "column_id":16,
             "database_name":"rongxuan",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -188,7 +186,6 @@ SELECT (select max(t1.c1) from t1) as field from t1 group by field;
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t1",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -414,7 +411,6 @@ SELECT (select max(t1.c1) from t1) as field from t1 group by field;
           "table_id":-2,
           "table_name":"t1",
           "alias_name":"t1",
-          "synonym_name":"",
           "table_type":1,
           "ref_id":1099511677777,
           "database_name":"rongxuan",
@@ -490,7 +486,6 @@ SELECT (select max(t1.c1) from t1) as field from t1 group by field;
                 "column_id":16,
                 "database_name":"rongxuan",
                 "table_name":"t1",
-                "synonym_name":"",
                 "column_name":"c1",
                 "expr_level":1,
                 "expr_levels": [
@@ -580,7 +575,6 @@ SELECT (select max(t1.c1) from t1) as field from t1 group by field;
             "column_id":16,
             "database_name":"rongxuan",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":1,
             "expr_levels": [
@@ -661,7 +655,6 @@ SELECT (select max(t1.c1) from t1) as field from t1 group by field;
                 "column_id":16,
                 "database_name":"rongxuan",
                 "table_name":"t1",
-                "synonym_name":"",
                 "column_name":"c1",
                 "expr_level":1,
                 "expr_levels": [
@@ -779,7 +772,6 @@ SELECT (select max(t1.c1) from t1) as field from t1 group by field;
               "column_id":16,
               "database_name":"rongxuan",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":1,
               "expr_levels": [
@@ -887,7 +879,6 @@ SELECT c1 as a FROM t1 GROUP BY (SELECT 1 FROM t1 HAVING a=1);
       "table_id":1099511677777,
       "table_name":"t1",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677777,
       "database_name":"rongxuan",
@@ -963,7 +954,6 @@ SELECT c1 as a FROM t1 GROUP BY (SELECT 1 FROM t1 HAVING a=1);
             "column_id":16,
             "database_name":"rongxuan",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -1053,7 +1043,6 @@ SELECT c1 as a FROM t1 GROUP BY (SELECT 1 FROM t1 HAVING a=1);
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t1",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -1101,7 +1090,6 @@ SELECT c1 as a FROM t1 GROUP BY (SELECT 1 FROM t1 HAVING a=1);
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t1",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -1269,7 +1257,6 @@ SELECT c1 as a FROM t1 GROUP BY (SELECT 1 FROM t1 HAVING a=1);
           "table_id":-2,
           "table_name":"t1",
           "alias_name":"t1",
-          "synonym_name":"",
           "table_type":1,
           "ref_id":1099511677777,
           "database_name":"rongxuan",
@@ -1345,7 +1332,6 @@ SELECT c1 as a FROM t1 GROUP BY (SELECT 1 FROM t1 HAVING a=1);
                 "column_id":16,
                 "database_name":"rongxuan",
                 "table_name":"t1",
-                "synonym_name":"",
                 "column_name":"c1",
                 "expr_level":1,
                 "expr_levels": [
@@ -1434,7 +1420,6 @@ SELECT c1 as a FROM t1 GROUP BY (SELECT 1 FROM t1 HAVING a=1);
             "column_id":16,
             "database_name":"rongxuan",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":1,
             "expr_levels": [
@@ -1568,7 +1553,6 @@ SELECT c1 as a FROM t1 GROUP BY (SELECT 1 FROM t1 HAVING a=1);
               "column_id":16,
               "database_name":"rongxuan",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -4220,7 +4204,6 @@ select 1 in (1, (select 1), (select c1 from t1));
           "table_id":1099511677777,
           "table_name":"t1",
           "alias_name":"",
-          "synonym_name":"",
           "table_type":0,
           "ref_id":1099511677777,
           "database_name":"rongxuan",
@@ -4296,7 +4279,6 @@ select 1 in (1, (select 1), (select c1 from t1));
                 "column_id":16,
                 "database_name":"rongxuan",
                 "table_name":"t1",
-                "synonym_name":"",
                 "column_name":"c1",
                 "expr_level":1,
                 "expr_levels": [
@@ -4386,7 +4368,6 @@ select 1 in (1, (select 1), (select c1 from t1));
             "column_id":16,
             "database_name":"rongxuan",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":1,
             "expr_levels": [
@@ -4434,7 +4415,6 @@ select 1 in (1, (select 1), (select c1 from t1));
             "column_id":16,
             "database_name":"rongxuan",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":1,
             "expr_levels": [
@@ -4555,7 +4535,6 @@ select MAX(c1) c from t1 having (select c) > 0;
       "table_id":1099511677777,
       "table_name":"t1",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677777,
       "database_name":"rongxuan",
@@ -4631,7 +4610,6 @@ select MAX(c1) c from t1 having (select c) > 0;
             "column_id":16,
             "database_name":"rongxuan",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -4721,7 +4699,6 @@ select MAX(c1) c from t1 having (select c) > 0;
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t1",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -4802,7 +4779,6 @@ select MAX(c1) c from t1 having (select c) > 0;
             "column_id":16,
             "database_name":"rongxuan",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -5043,7 +5019,6 @@ select MAX(c1) c from t1 having (select c) > 0;
           "column_id":16,
           "database_name":"rongxuan",
           "table_name":"t1",
-          "synonym_name":"",
           "column_name":"c1",
           "expr_level":0,
           "expr_levels": [
@@ -5208,7 +5183,6 @@ select MAX(c1) c from t1 having (select c) > 0;
                 "column_id":16,
                 "database_name":"rongxuan",
                 "table_name":"t1",
-                "synonym_name":"",
                 "column_name":"c1",
                 "expr_level":0,
                 "expr_levels": [
@@ -5340,7 +5314,6 @@ select MAX(c1) c from t1 order by (select c);
       "table_id":1099511677777,
       "table_name":"t1",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677777,
       "database_name":"rongxuan",
@@ -5416,7 +5389,6 @@ select MAX(c1) c from t1 order by (select c);
             "column_id":16,
             "database_name":"rongxuan",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -5506,7 +5478,6 @@ select MAX(c1) c from t1 order by (select c);
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t1",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -5587,7 +5558,6 @@ select MAX(c1) c from t1 order by (select c);
             "column_id":16,
             "database_name":"rongxuan",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -5705,7 +5675,6 @@ select MAX(c1) c from t1 order by (select c);
           "column_id":16,
           "database_name":"rongxuan",
           "table_name":"t1",
-          "synonym_name":"",
           "column_name":"c1",
           "expr_level":0,
           "expr_levels": [
@@ -5930,7 +5899,6 @@ select MAX(c1) c from t1 order by (select c);
                 "column_id":16,
                 "database_name":"rongxuan",
                 "table_name":"t1",
-                "synonym_name":"",
                 "column_name":"c1",
                 "expr_level":0,
                 "expr_levels": [
@@ -6064,7 +6032,6 @@ select max(c1) b from t1 having b > 0;
       "table_id":1099511677777,
       "table_name":"t1",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677777,
       "database_name":"rongxuan",
@@ -6140,7 +6107,6 @@ select max(c1) b from t1 having b > 0;
             "column_id":16,
             "database_name":"rongxuan",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -6230,7 +6196,6 @@ select max(c1) b from t1 having b > 0;
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t1",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -6311,7 +6276,6 @@ select max(c1) b from t1 having b > 0;
             "column_id":16,
             "database_name":"rongxuan",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -6460,7 +6424,6 @@ select max(c1) b from t1 having b > 0;
               "column_id":16,
               "database_name":"rongxuan",
               "table_name":"t1",
-              "synonym_name":"",
               "column_name":"c1",
               "expr_level":0,
               "expr_levels": [
@@ -6586,7 +6549,6 @@ select max(c1) b from t1 having b > 0;
           "column_id":16,
           "database_name":"rongxuan",
           "table_name":"t1",
-          "synonym_name":"",
           "column_name":"c1",
           "expr_level":0,
           "expr_levels": [
@@ -6688,7 +6650,6 @@ select max(c1) b from t1 order by b;
       "table_id":1099511677777,
       "table_name":"t1",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677777,
       "database_name":"rongxuan",
@@ -6764,7 +6725,6 @@ select max(c1) b from t1 order by b;
             "column_id":16,
             "database_name":"rongxuan",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -6854,7 +6814,6 @@ select max(c1) b from t1 order by b;
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t1",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -6935,7 +6894,6 @@ select max(c1) b from t1 order by b;
             "column_id":16,
             "database_name":"rongxuan",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -7053,7 +7011,6 @@ select max(c1) b from t1 order by b;
           "column_id":16,
           "database_name":"rongxuan",
           "table_name":"t1",
-          "synonym_name":"",
           "column_name":"c1",
           "expr_level":0,
           "expr_levels": [
@@ -7146,7 +7103,6 @@ select max(c1) b from t1 order by b;
             "column_id":16,
             "database_name":"rongxuan",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -7264,7 +7220,6 @@ select c1, c2 as c1 from t1 having t1.c1 > 2;
       "table_id":1099511677777,
       "table_name":"t1",
       "alias_name":"",
-      "synonym_name":"",
       "table_type":0,
       "ref_id":1099511677777,
       "database_name":"rongxuan",
@@ -7340,7 +7295,6 @@ select c1, c2 as c1 from t1 having t1.c1 > 2;
             "column_id":16,
             "database_name":"rongxuan",
             "table_name":"t1",
-            "synonym_name":"",
             "column_name":"c1",
             "expr_level":0,
             "expr_levels": [
@@ -7430,7 +7384,6 @@ select c1, c2 as c1 from t1 having t1.c1 > 2;
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t1",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -7485,7 +7438,6 @@ select c1, c2 as c1 from t1 having t1.c1 > 2;
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t1",
-        "synonym_name":"",
         "column_name":"c2",
         "expr_level":0,
         "expr_levels": [
@@ -7533,7 +7485,6 @@ select c1, c2 as c1 from t1 having t1.c1 > 2;
         "column_id":16,
         "database_name":"rongxuan",
         "table_name":"t1",
-        "synonym_name":"",
         "column_name":"c1",
         "expr_level":0,
         "expr_levels": [
@@ -7585,7 +7536,6 @@ select c1, c2 as c1 from t1 having t1.c1 > 2;
         "column_id":17,
         "database_name":"rongxuan",
         "table_name":"t1",
-        "synonym_name":"",
         "column_name":"c2",
         "expr_level":0,
         "expr_levels": [
@@ -7688,7 +7638,6 @@ select c1, c2 as c1 from t1 having t1.c1 > 2;
           "column_id":16,
           "database_name":"rongxuan",
           "table_name":"t1",
-          "synonym_name":"",
           "column_name":"c1",
           "expr_level":0,
           "expr_levels": [

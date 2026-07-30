@@ -31,7 +31,6 @@
 #include "lib/time/ob_cur_time.h"
 #include "lib/lock/ob_recursive_mutex.h"
 #include "lib/hash/ob_link_hashmap.h"
-#include "lib/stat/ob_diagnose_info.h"
 #include "rpc/obmysql/ob_mysql_packet.h"
 #include "sql/ob_sql_config_provider.h"
 #include "sql/ob_end_trans_callback.h"
@@ -43,7 +42,6 @@
 #include "sql/ob_optimizer_trace_impl.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_job_utils.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 
 namespace oceanbase
 {
@@ -60,9 +58,8 @@ class ObPL;
 struct ObPLExecRecursionCtx;
 struct ObPLSqlCodeInfo;
 class ObPLContext;
-class ObDbmsCursorInfo;
+class ObPLServerCursorInfo;
 
-class ObPLProfiler;
 
 } // namespace pl
 
@@ -155,25 +152,6 @@ private:
 
 typedef common::hash::ObHashMap<uint64_t, pl::ObPLPackageState *,
                                 common::hash::NoPthreadDefendMode> ObPackageStateMap;
-#define OB_UTL_TCP_DEFAULT_TX_TIMEOUT -1  //wait indefinitely
-struct ObSockFdParam
-{
-  ObSockFdParam()
-  : session_id_(OB_INVALID_ID), m_addr_info_(NULL), tx_timeout_(OB_UTL_TCP_DEFAULT_TX_TIMEOUT), collation_(CS_TYPE_INVALID)
-  {}
-
-  ObSockFdParam(const int64_t session_id, void* m_addr_info, const int32_t tx_timeout, const ObCollationType coll_type)
-  : session_id_(session_id), m_addr_info_(m_addr_info), tx_timeout_(tx_timeout), collation_(coll_type)
-  {}
-
-  int64_t  session_id_;
-  void*    m_addr_info_; 
-  int32_t  tx_timeout_;
-  ObCollationType collation_;
-
-  TO_STRING_KV(K_(session_id), K_(m_addr_info), K_(collation));
-};
-typedef common::hash::ObHashMap<int64_t, ObSockFdParam, common::hash::NoPthreadDefendMode> ObSockFdMap;
 typedef common::LinkHashNode<SessionInfoKey> SessionInfoHashNode;
 typedef common::LinkHashValue<SessionInfoKey> SessionInfoHashValue;
 // ObBasicSessionInfo stores system variables and state serialized for distributed SQL tasks.
@@ -472,6 +450,7 @@ public:
   void set_sess_create_time(const int64_t t) { sess_create_time_ = t; };
   int64_t get_sess_create_time() const { return sess_create_time_; };
 
+
   void set_has_temp_table_flag() { has_temp_table_flag_ = true; };
   bool get_has_temp_table_flag() const { return has_temp_table_flag_; };
   void set_accessed_session_level_temp_table() { has_accessed_session_level_temp_table_ = true; }
@@ -555,14 +534,6 @@ public:
     pl_context_ = pl_stack_ctx;
   }
 
-  inline pl::ObPLProfiler *get_pl_profiler() const
-  {
-    pl::ObPLProfiler *profiler = nullptr;
-
-
-    return profiler;
-  }
-
   inline void set_pl_query_sender(observer::ObQueryDriver *driver) { pl_query_sender_ = driver; }
   inline observer::ObQueryDriver* get_pl_query_sender() { return pl_query_sender_; }
 
@@ -572,6 +543,7 @@ public:
   int replace_user_variable(const common::ObString &name, const ObSessionVariable &value);
   int replace_user_variable(
     ObExecContext &ctx, const common::ObString &name, const ObSessionVariable &value);
+  int replace_user_variables(const ObSessionValMap &user_var_map);
   int replace_user_variables(ObExecContext &ctx, const ObSessionValMap &user_var_map);
 
   inline bool get_pl_can_retry() { return pl_can_retry_; }
@@ -584,23 +556,18 @@ public:
 
   CursorCache &get_cursor_cache() { return pl_cursor_cache_; }
   pl::ObPLCursorInfo *get_cursor(int64_t cursor_id);
-  pl::ObDbmsCursorInfo *get_dbms_cursor(int64_t cursor_id);
   int add_cursor(pl::ObPLCursorInfo *cursor);
   int close_cursor(pl::ObPLCursorInfo *&cursor);
   int close_cursor(int64_t cursor_id);
   inline void inc_session_cursor() {
-    EVENT_INC(SQL_OPEN_CURSORS_CURRENT);
-    EVENT_INC(SQL_OPEN_CURSORS_CUMULATIVE);
   };
   inline void dec_session_cursor() {
-    EVENT_DEC(SQL_OPEN_CURSORS_CURRENT);
   };
-  int make_cursor(pl::ObPLCursorInfo *&cursor);
   int add_non_session_cursor(pl::ObPLCursorInfo *cursor);
   void del_non_session_cursor(pl::ObPLCursorInfo *cursor);
   int init_cursor_cache();
-  int make_dbms_cursor(pl::ObDbmsCursorInfo *&cursor,
-                       uint64_t id = OB_INVALID_ID);
+  int make_server_cursor(pl::ObPLServerCursorInfo *&cursor,
+                         uint64_t id = OB_INVALID_ID);
   int print_all_cursor();
 
   inline void *get_inner_conn() { return inner_conn_; }
@@ -636,9 +603,6 @@ public:
   // sql from obclient, proxy, PL are all marked as user_session
   // NOTE: for sql from PL, is_inner() = true, is_user_session() = true
   inline bool is_user_session() const { return USER_SESSION == session_type_; }
-  void set_early_lock_release(bool enable);
-  bool get_early_lock_release() const { return enable_early_lock_release_; }
-
   bool is_inner() const
   {
     return inner_flag_;
@@ -699,7 +663,6 @@ public:
   const common::ObString& get_module_name() const { return client_app_info_.module_name_; }
   const common::ObString& get_action_name() const  { return client_app_info_.action_name_; }
   const common::ObString& get_client_info() const { return client_app_info_.client_info_; }
-  ObSockFdMap &get_sock_fd_map() { return sock_fd_map_; }
   const common::ObString &get_audit_filter_name() const { return audit_filter_name_; }
   int prepare_ps_stmt(const ObPsStmtId inner_stmt_id,
                       const ObPsStmtInfo *stmt_info,
@@ -724,7 +687,6 @@ public:
   bool is_qualify_filter_enabled() const;
   int is_enable_range_extraction_for_not_in(bool &enabled) const;
   bool is_var_assign_use_das_enabled() const;
-  bool is_nlj_spf_use_rich_format_enabled() const;
   int is_adj_index_cost_enabled(bool &enabled, int64_t &stats_cost_percent) const;
   bool is_spf_mlj_group_rescan_enabled() const;
   bool enable_parallel_das_dml() const;
@@ -898,7 +860,6 @@ private:
   int64_t sess_create_time_;  // session creation time, currently only used for temporary table cleanup judgment
   bool has_temp_table_flag_;  // Whether the session has created a temporary table
   bool has_accessed_session_level_temp_table_;  // Whether accessed Session temporary table
-  bool enable_early_lock_release_;
   // trigger.
   bool is_for_trigger_package_;
   transaction::ObTxClass trans_type_;
@@ -966,7 +927,6 @@ private:
   ObPsStmtId next_client_ps_stmt_id_;
   SessionType session_type_;
   ObPackageStateMap package_state_map_;
-  ObSockFdMap sock_fd_map_;
 
   pl::ObPLContext *pl_context_;
   CursorCache pl_cursor_cache_;
@@ -1062,6 +1022,7 @@ inline bool ObSQLSessionInfo::is_terminate(int &ret) const
   }
   return bret;
 }
+
 
 } // namespace sql
 } // namespace oceanbase

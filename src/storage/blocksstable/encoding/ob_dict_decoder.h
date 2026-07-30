@@ -80,10 +80,6 @@ public:
       const int64_t row_cap,
       common::ObDatum *datums) const override;
 
-  virtual int decode_vector(
-      const ObColumnDecoderCtx &ctx,
-      const ObIRowIndex* row_index,
-      ObVectorDecodeCtx &vector_ctx) const override;
 
   virtual int get_null_count(
       const ObColumnDecoderCtx &ctx,
@@ -102,13 +98,6 @@ public:
       const int64_t row_cap,
       const int64_t meta_length,
       common::ObDatum *datums) const;
-  template<bool HAS_NULL>
-  int batch_decode_dict(
-      const common::ObObjMeta &schema_obj_meta,
-      const common::ObObjType &stored_obj_type,
-      const int64_t meta_length,
-      ObVectorDecodeCtx &vector_ctx) const;
-
   void reset() { this->~ObDictDecoder(); new (this) ObDictDecoder(); }
   OB_INLINE void reuse();
   virtual ObColumnHeader::Type get_type() const override { return type_; }

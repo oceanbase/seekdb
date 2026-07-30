@@ -25,8 +25,6 @@ namespace oceanbase
 {
 namespace common
 {
-extern const char *print_server_role(const common::ObServerRole server_role);
-
 //@brief recursive function call should use this function to check if recursion is too deep
 //to avoid stack overflow, default reserved statck size is 1M
 extern int64_t get_reserved_stack_size();

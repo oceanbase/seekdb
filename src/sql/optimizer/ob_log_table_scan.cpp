@@ -185,7 +185,6 @@ int ObLogTableScan::do_re_est_cost(EstimateCostInfo &param, double &card, double
                                             limit_percent, limit_count, offset_count))) {
     LOG_WARN("failed to get limit offset value", K(ret));
   } else {
-    est_cost_info_->rescan_left_server_list_ = param.rescan_left_server_list_;
     card = get_output_row_count();
     int64_t part_count = est_cost_info_->index_meta_info_.index_part_count_;
     double limit_count_double = static_cast<double>(limit_count);
@@ -229,7 +228,6 @@ int ObLogTableScan::do_re_est_cost(EstimateCostInfo &param, double &card, double
                                                     op_cost))) {
       LOG_WARN("failed to re estimate cost", K(ret));
     } else {
-      est_cost_info_->rescan_left_server_list_ = NULL;
       cost = op_cost;
       if (0 <= limit_count && param.need_row_count_ == -1) {
         // full scan with table filters
@@ -1947,19 +1945,6 @@ int ObLogTableScan::get_plan_object_info(PlanText &plan_text,
         OB_ISNULL(table_item=stmt->get_table_item_by_id(table_id_))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpect null param", K(ret));
-    } else if (table_item->is_synonym()) {
-      BUF_PRINT_OB_STR(table_item->synonym_db_name_.ptr(),
-                      table_item->synonym_db_name_.length(),
-                      plan_item.object_owner_,
-                      plan_item.object_owner_len_);
-      BUF_PRINT_OB_STR(table_item->synonym_name_.ptr(),
-                      table_item->synonym_name_.length(),
-                      plan_item.object_name_,
-                      plan_item.object_name_len_);
-      BUF_PRINT_STR("SYNONYM",
-                    plan_item.object_type_,
-                    plan_item.object_type_len_);
-      plan_item.object_id_ = ref_table_id_;
     } else if (table_item->is_fake_cte_table()) {
       BUF_PRINT_OB_STR(table_item->table_name_.ptr(),
                       table_item->table_name_.length(),
@@ -2649,16 +2634,14 @@ int ObLogTableScan::get_phy_location_type(ObTableLocationType &location_type)
 {
   int ret = OB_SUCCESS;
   ObShardingInfo *sharding = get_sharding();
-  ObOptimizerContext &opt_ctx = get_plan()->get_optimizer_context();
   if (OB_ISNULL(sharding)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(sharding), K(ret));
   } else if (NULL == table_partition_info_) {
     // fake_cte_table, function_table, ...
     location_type = sharding->get_location_type();
-  } else if (OB_FAIL(table_partition_info_->get_location_type(opt_ctx.get_local_server_addr(),
-                                                              location_type))) {
-    LOG_WARN("get table location type error", K(ret));
+  } else {
+    location_type = table_partition_info_->get_location_type();
   }
   return ret;
 }
@@ -2793,7 +2776,7 @@ int ObLogTableScan::extract_text_retrieval_access_expr(ObTextRetrievalInfo &tr_i
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(tr_info.match_expr_) || OB_ISNULL(tr_info.total_doc_cnt_) ||
-      OB_ISNULL(tr_info.doc_token_cnt_) || OB_ISNULL(tr_info.related_doc_cnt_)) {
+      OB_ISNULL(tr_info.related_doc_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null match against expr", K(ret));
   } else if (OB_FAIL(exprs.push_back(tr_info.token_column_))) {
@@ -2806,8 +2789,6 @@ int ObLogTableScan::extract_text_retrieval_access_expr(ObTextRetrievalInfo &tr_i
     LOG_WARN("failed to append doc length column to access exprs", K(ret));
   } else if (OB_FAIL(exprs.push_back(tr_info.total_doc_cnt_->get_param_expr(0)))) {
     LOG_WARN("failed to append total doc cnt access col to access exprs", K(ret));
-  } else if (OB_FAIL(exprs.push_back(tr_info.doc_token_cnt_->get_param_expr(0)))) {
-    LOG_WARN("failed to append doc token cnt access col to access exprs", K(ret));
   } else if (OB_FAIL(exprs.push_back(tr_info.related_doc_cnt_->get_param_expr(0)))) {
     LOG_WARN("failed to append relater doc cnt access col to access exprs", K(ret));
   }
@@ -3001,8 +2982,6 @@ int ObLogTableScan::get_text_retrieval_calc_exprs(ObTextRetrievalInfo &tr_info,
     LOG_WARN("unexpected null match against expr", K(ret));
   } else if (OB_FAIL(all_exprs.push_back(tr_info.related_doc_cnt_))) {
     LOG_WARN("failed to append relevanced doc cnt expr", K(ret));
-  } else if (OB_FAIL(all_exprs.push_back(tr_info.doc_token_cnt_))) {
-    LOG_WARN("failed to append doc token cnt expr", K(ret));
   } else if (OB_FAIL(all_exprs.push_back(tr_info.total_doc_cnt_))) {
     LOG_WARN("failed to append total doc cnt expr", K(ret));
   } else if (OB_FAIL(all_exprs.push_back(tr_info.relevance_expr_))) {
@@ -4386,7 +4365,6 @@ int ObLogTableScan::prepare_text_retrieval_dep_exprs(ObTextRetrievalInfo &tr_inf
   ObColumnRefRawExpr *docid_or_rowkey_column = nullptr;
   ObAggFunRawExpr *related_doc_cnt = nullptr;
   ObAggFunRawExpr *total_doc_cnt = nullptr;
-  ObAggFunRawExpr *doc_token_cnt = nullptr;
   ObOpPseudoColumnRawExpr *avg_doc_token_cnt_expr = nullptr;
   ObOpRawExpr *relevance_expr = nullptr;
   ObRawExprResType avg_doc_token_cnt_res_type;
@@ -4395,7 +4373,7 @@ int ObLogTableScan::prepare_text_retrieval_dep_exprs(ObTextRetrievalInfo &tr_inf
   bool need_est_avg_doc_token_cnt = false;
   if (OB_NOT_NULL(tr_info.docid_or_rowkey_column_) &&
       OB_NOT_NULL(tr_info.token_column_) && OB_NOT_NULL(tr_info.token_cnt_column_) &&
-      OB_NOT_NULL(tr_info.doc_token_cnt_) && OB_NOT_NULL(tr_info.total_doc_cnt_) &&
+      OB_NOT_NULL(tr_info.total_doc_cnt_) &&
       OB_NOT_NULL(tr_info.related_doc_cnt_) && OB_NOT_NULL(tr_info.relevance_expr_)) {
     // do nothing, exprs already generated
   } else if (OB_ISNULL(get_stmt()) || OB_ISNULL(get_plan()) ||
@@ -4502,12 +4480,6 @@ int ObLogTableScan::prepare_text_retrieval_dep_exprs(ObTextRetrievalInfo &tr_inf
       LOG_WARN("failed to set agg param", K(ret));
     } else if (OB_FAIL(total_doc_cnt->formalize(session_info))) {
       LOG_WARN("failed to formalize total doc cnt expr", K(ret));
-    } else if (OB_FAIL(expr_factory->create_raw_expr(T_FUN_SUM, doc_token_cnt))) {
-      LOG_WARN("failed to create document token count sum agg expr", K(ret));
-    } else if (OB_FAIL(doc_token_cnt->add_real_param_expr(token_cnt_column))) {
-      LOG_WARN("failed to set agg param", K(ret));
-    } else if (OB_FAIL(doc_token_cnt->formalize(session_info))) {
-      LOG_WARN("failed to formalize document token count expr", K(ret));
     } else if (FALSE_IT(need_est_avg_doc_token_cnt = true)) {
     } else if (OB_FAIL(ObRawExprUtils::build_op_pseudo_column_expr(
         *expr_factory,
@@ -4520,7 +4492,7 @@ int ObLogTableScan::prepare_text_retrieval_dep_exprs(ObTextRetrievalInfo &tr_inf
       LOG_WARN("failed to formalize avg doc token count expr", K(ret));
     } else if (OB_FAIL(ObRawExprUtils::build_bm25_expr(*expr_factory, related_doc_cnt,
                                                       token_cnt_column, total_doc_cnt,
-                                                      doc_token_cnt, doc_length_column, avg_doc_token_cnt_expr,
+                                                      doc_length_column, avg_doc_token_cnt_expr,
                                                       relevance_expr, need_est_avg_doc_token_cnt,
                                                       session_info))) {
       LOG_WARN("failed to build bm25 expr", K(ret));
@@ -4532,15 +4504,12 @@ int ObLogTableScan::prepare_text_retrieval_dep_exprs(ObTextRetrievalInfo &tr_inf
       LOG_WARN("failed to copy related_doc_cnt expr", K(ret));
     } else if (OB_FAIL(copier.copy(total_doc_cnt->get_param_expr(0)))) {
       LOG_WARN("failed to copy total_doc_cnt expr", K(ret));
-    } else if (OB_FAIL(copier.copy(doc_token_cnt->get_param_expr(0)))) {
-      LOG_WARN("failed to copy doc_token_cnt expr", K(ret));
     } else {
       tr_info.token_column_ = token_column;
       tr_info.token_cnt_column_ = token_cnt_column;
       tr_info.docid_or_rowkey_column_ = docid_or_rowkey_column;
       tr_info.doc_length_column_ = doc_length_column;
       tr_info.related_doc_cnt_ = related_doc_cnt;
-      tr_info.doc_token_cnt_ = doc_token_cnt;
       tr_info.total_doc_cnt_ = total_doc_cnt;
       tr_info.avg_doc_token_cnt_ = need_est_avg_doc_token_cnt ? avg_doc_token_cnt_expr : nullptr;
       tr_info.relevance_expr_ = relevance_expr;

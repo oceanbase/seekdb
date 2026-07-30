@@ -19,8 +19,11 @@
 
 #include "share/ob_define.h"
 #include "sql/engine/basic/ob_temp_block_store.h"
-#include "sql/engine/basic/ob_compact_row.h"
-#include "sql/engine/vector/ob_i_vector.h"
+#include "sql/engine/vector/ob_bitmap_null_vector_base.h"
+#include "sql/engine/vector/ob_continuous_base.h"
+#include "sql/engine/vector/ob_discrete_base.h"
+#include "sql/engine/vector/ob_fixed_length_base.h"
+#include "sql/engine/vector/ob_uniform_base.h"
 #include "lib/alloc/alloc_struct.h"
 
 namespace oceanbase
@@ -79,26 +82,11 @@ public:
                                const int64_t size,
                                ObIVector *vector);
 
-    static int calc_rows_size(ObEvalCtx &ctx,
-                              const ObExprPtrIArray &exprs,
-                              const IVectorPtrs &vectors,
-                              const uint16_t *selector,
-                              const ObArray<ObLength> &lengths,
-                              const int64_t size,
-                              int64_t &batch_mem_size);
     static int calc_rows_size(const IVectorPtrs &vectors,
                               const uint16_t *selector,
                               const ObArray<ObLength> &lengths,
                               const int64_t size,
                               int64_t &batch_mem_size);
-    int add_batch(ObEvalCtx &ctx,
-                  const ObExprPtrIArray &exprs,
-                  ShrinkBuffer &buf,
-                  const IVectorPtrs &vectors,
-                  const uint16_t *selector,
-                  const ObArray<ObLength> &lengths,
-                  const int64_t size,
-                  const int64_t batch_mem_size);
     int add_batch(ShrinkBuffer &buf,
                   const IVectorPtrs &vectors,
                   const uint16_t *selector,
@@ -106,12 +94,6 @@ public:
                   const int64_t size,
                   const int64_t batch_mem_size);
 
-    int get_next_batch(const ObExprPtrIArray &exprs,
-                       ObEvalCtx &ctx,
-                       const IVectorPtrs &vectors,
-                       const int32_t start_read_pos,
-                       int32_t &batch_rows,
-                       int32_t &batch_pos) const;
     int get_next_batch(const IVectorPtrs &vectors,
                        const int32_t start_read_pos,
                        int32_t &batch_rows,
@@ -132,57 +114,41 @@ public:
     friend struct ColumnBlock;
     friend class ObTempColumnStore;
     Iterator() : ObTempBlockStore::BlockReader(), column_store_(NULL), cur_blk_(NULL),
-                 cur_blk_id_(0), rest_row_cnt_(0), read_pos_(0), vectors_(NULL) {}
+                 cur_blk_id_(0), read_pos_(0) {}
     virtual ~Iterator() {}
 
     int init(ObTempColumnStore *store, const bool async = true);
     inline bool has_next() const { return cur_blk_id_ < get_row_cnt(); }
     inline int64_t get_row_cnt() const { return column_store_->get_row_cnt(); }
     inline int64_t get_col_cnt() const { return column_store_->get_col_cnt(); }
-    int get_next_batch(const ObExprPtrIArray &exprs,
-                       ObEvalCtx &ctx,
-                       const int64_t max_rows,
-                       int64_t &read_rows);
     int get_next_batch(const IVectorPtrs &vectors,
                        int64_t &read_rows);
 
-    inline bool has_rest_row_in_batch() const { return rest_row_cnt_ > 0; }
     void reset()
     {
       cur_blk_ = NULL;
       cur_blk_id_ = 0;
-      rest_row_cnt_ = 0;
       read_pos_ = 0;
-      if (NULL != column_store_ && !column_store_->reuse_vector_array_ && NULL != vectors_) {
-        vectors_->reset();
-        column_store_->allocator_->free(vectors_);
-      }
-      vectors_ = NULL;
       ObTempBlockStore::BlockReader::reset();
     }
 
   private:
     int next_block();
-    int ensure_read_vectors(const ObExprPtrIArray &exprs, ObEvalCtx &ctx, const int64_t max_rows);
 
   private:
     ObTempColumnStore *column_store_;
     const ColumnBlock *cur_blk_;
     int64_t cur_blk_id_; // block id(row_id) for iterator, from 0 to row_cnt_
-    int32_t rest_row_cnt_; // rest row count unread in current batch
     int32_t read_pos_; // current memory read position in reader block
-    ObArray<ObIVector *> *vectors_;
   };
 
   struct BatchCtx
   {
     ~BatchCtx()
     {
-      vectors_.reset();
       lengths_.reset();
       selector_ = nullptr;
     }
-    ObArray<ObIVector *> vectors_;
     ObArray<ObLength> lengths_;
     int64_t max_batch_size_;
     uint16_t *selector_;
@@ -197,14 +163,6 @@ public:
   void reset_batch_ctx();
   void reuse();
 
-  int init(const ObExprPtrIArray &exprs,
-           const int64_t max_batch_size,
-           const lib::ObMemAttr &mem_attr,
-           const int64_t mem_limit,
-           const bool enable_dump,
-           const bool reuse_vector_array,
-           const common::ObCompressorType compressor_type);
-  // for vector interface
   int init(const IVectorPtrs &vectors,
            const int64_t max_batch_size,
            const lib::ObMemAttr &mem_attr,
@@ -221,15 +179,12 @@ public:
                           common::ObIAllocator &allocator,
                           IVectorPtrs &vectors);
 
-  int init_batch_ctx(const ObExprPtrIArray &exprs);
   int init_batch_ctx(const IVectorPtrs &vectors);
 
   int begin(Iterator &it, const bool async = true)
   {
     return it.init(this, async);
   }
-  int add_batch(const common::ObIArray<ObExpr *> &exprs, ObEvalCtx &ctx,
-                const ObBatchRows &brs, int64_t &stored_rows_count);
   int add_batch(const IVectorPtrs &vectors,
                 const ObBatchRows &brs,
                 int64_t &stored_rows_count);
@@ -288,21 +243,12 @@ private:
     // The default is not supported and requires specialized implementation.
     return common::OB_NOT_SUPPORTED;
   }
-  template<typename VEC>
-  inline static int from_vector(VEC *vec, ObExpr *expr, ObEvalCtx &ctx,
-                                const int64_t start_pos, const int64_t size)
-  {
-    // The default is not supported and requires specialized implementation.
-    return common::OB_NOT_SUPPORTED;
-  }
-
 private:
   lib::ObMemAttr mem_attr_;
   ColumnBlock *cur_blk_;
   int64_t col_cnt_;
   BatchCtx *batch_ctx_;
   int64_t max_batch_size_;
-  bool reuse_vector_array_;
 };
 
 // Bitmap null vector
@@ -351,24 +297,6 @@ inline int ObTempColumnStore::from_buf(char *buf, int64_t &pos, const int64_t si
   return common::OB_SUCCESS;
 }
 
-template<>
-inline int ObTempColumnStore::from_vector(ObBitmapNullVectorBase *vec, ObExpr *expr, ObEvalCtx &ctx,
-                                          const int64_t start_pos, const int64_t size)
-{
-  // reuse null vector memory if there is no null data
-  if (vec->has_null()) {
-    const uint16_t flag = vec->get_flag();
-    ObBitVector &nulls = expr->get_nulls(ctx);
-    nulls.reset(size - start_pos);
-    for (int64_t idx = start_pos; idx < size; ++idx) {
-      if (vec->is_null(idx)) {
-        nulls.set(idx - start_pos);
-      }
-    }
-    vec->from(&nulls, flag);
-  }
-  return common::OB_SUCCESS;
-}
 
 // Fixed length vector members: null bitmap, length and data array
 template<>
@@ -421,16 +349,6 @@ inline int ObTempColumnStore::from_buf(char *buf, int64_t &pos, const int64_t si
   return common::OB_SUCCESS;
 }
 
-template<>
-inline int ObTempColumnStore::from_vector(ObFixedLengthBase *vec, ObExpr *expr, ObEvalCtx &ctx,
-                                          const int64_t start_pos, const int64_t size)
-{
-  from_vector(static_cast<ObBitmapNullVectorBase*>(vec), expr, ctx, start_pos, size);
-  const ObLength len = vec->get_length();
-  char *data = vec->get_data() + start_pos * len;
-  vec->from(len, data);
-  return common::OB_SUCCESS;
-}
 
 // Continuous vector members: null bitmap, offset and data array
 template<>
@@ -498,20 +416,6 @@ inline int ObTempColumnStore::from_buf(char *buf, int64_t &pos, const int64_t si
   return common::OB_SUCCESS;
 }
 
-template<>
-inline int ObTempColumnStore::from_vector(ObContinuousBase *vec, ObExpr *expr, ObEvalCtx &ctx,
-                                          const int64_t start_pos, const int64_t size)
-{
-  from_vector(static_cast<ObBitmapNullVectorBase*>(vec), expr, ctx, start_pos, size);
-  const uint32_t *src_offsets = vec->get_offsets();
-  char *data = vec->get_data() + src_offsets[start_pos];
-  uint32_t *offsets = expr->get_continuous_vector_offsets(ctx);
-  for (int64_t idx = start_pos; idx <= size; ++idx) {
-    offsets[idx - start_pos] = (src_offsets[idx] - src_offsets[start_pos]);
-  }
-  vec->from(offsets, data);
-  return common::OB_SUCCESS;
-}
 
 // Discrete vector
 template<>

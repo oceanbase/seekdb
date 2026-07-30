@@ -20,7 +20,6 @@
 #include "sql/resolver/ob_resolver_utils.h"
 #include "lib/hash/ob_placement_hashset.h"
 #include "lib/string/ob_sql_string.h"
-#include "lib/worker.h"
 #include "share/schema/ob_table_schema.h"
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_schema_struct.h"
@@ -60,7 +59,6 @@ enum NUMCHILD {
   COLUMN_DEFINITION_NUM_CHILD = 4,
   COLUMN_DEF_NUM_CHILD = 3,
   INDEX_NUM_CHILD = 5,
-  CREATE_SYNONYM_NUM_CHILD = 7,
   GEN_COLUMN_DEFINITION_NUM_CHILD = 7
 };
 
@@ -136,7 +134,7 @@ public:
     RANGE_SUBPARTITION_NODE = 2,
     RANGE_PARTITION_NUM_NODE = 3,
     RANGE_TEMPLATE_MARK = 4,
-    RANGE_INTERVAL_NODE = 5,
+    RANGE_RESERVED_NODE = 5,
   };
   enum ElementsNode {
     PARTITION_NAME_NODE = 0,
@@ -215,14 +213,12 @@ public:
       const share::schema::ObColumnSchemaV2 &column,
       const bool is_prepare_stage=false);
   static int check_default_value_length(
-      const bool is_mysql_mode,
       const share::schema::ObColumnSchemaV2 &column,
       common::ObObj &default_value);
   static int cast_default_value(
       ObSQLSessionInfo *session_info,
       common::ObObj &default_value,
       const common::ObTimeZoneInfo *tz_info,
-      const common::ObString *nls_formats,
       common::ObIAllocator &allocator,
       share::schema::ObColumnSchemaV2 &column_schema,
       const ObSQLMode sql_mode);
@@ -231,7 +227,6 @@ public:
                                          ObSchemaChecker *schema_checker,
                                          const common::ObTimeZoneInfo *tz_info);
   static int init_empty_session(const common::ObTimeZoneInfoWrap &tz_info_wrap,
-                                const ObString *nls_formats,
                                 const ObLocalSessionVar *local_session_var,
                                 common::ObIAllocator &allocator,
                                 share::schema::ObTableSchema &table_schema,
@@ -240,7 +235,6 @@ public:
                                 ObSQLSessionInfo &session_info);
   static int reformat_generated_column_expr(ObObj &default_value,
                                             const common::ObTimeZoneInfoWrap &tz_info_wrap,
-                                            const common::ObString *nls_formats,
                                             const ObLocalSessionVar &local_session_var,
                                             common::ObIAllocator &allocator,
                                             share::schema::ObTableSchema &table_schema,
@@ -261,7 +255,6 @@ public:
   static int check_default_value(
       common::ObObj &default_value,
       const common::ObTimeZoneInfoWrap &tz_info_wrap,
-      const common::ObString *nls_formats,
       const ObLocalSessionVar *local_session_var,
       common::ObIAllocator &allocator,
       share::schema::ObTableSchema &table_schema,
@@ -273,7 +266,6 @@ public:
   static int check_default_value(
       common::ObObj &default_value,
       const common::ObTimeZoneInfoWrap &tz_info_wrap,
-      const common::ObString *nls_formats,
       const ObLocalSessionVar *local_session_var,
       common::ObIAllocator &allocator,
       share::schema::ObTableSchema &table_schema,
@@ -287,7 +279,6 @@ public:
   static int check_default_value(
       common::ObObj &default_value,
       const common::ObTimeZoneInfoWrap &tz_info_wrap,
-      const common::ObString *nls_formats,
       common::ObIAllocator &allocator,
       share::schema::ObTableSchema &table_schema,
       ObIArray<share::schema::ObColumnSchemaV2 *> &resolved_cols,
@@ -301,11 +292,9 @@ public:
       share::schema::ObColumnSchemaV2 &column_schema,
       common::ObObj &default_value,
       const common::ObTimeZoneInfoWrap &tz_info_wrap,
-      const common::ObString *nls_formats,
       common::ObIAllocator &allocator);
   static int check_udt_default_value(ObObj &default_value,
                                      const common::ObTimeZoneInfoWrap &tz_info_wrap,
-                                     const common::ObString *nls_formats,
                                      ObIAllocator &allocator,
                                      ObTableSchema &table_schema,
                                      ObColumnSchemaV2 &column,
@@ -328,9 +317,9 @@ public:
                                    obcall::ObDDLArg &ddl_arg);
   static int ob_add_ddl_dependency(const pl::ObPLDependencyTable & dependency_table,
                                    obcall::ObDDLArg &ddl_arg);
-  static int add_udt_default_dependency(ObRawExpr *expr,
-                                        ObSchemaChecker *schema_checker,
-                                        obcall::ObDDLArg &ddl_arg);
+  static int add_default_expr_dependency(ObRawExpr *expr,
+                                         ObSchemaChecker *schema_checker,
+                                         obcall::ObDDLArg &ddl_arg);
   static int adjust_string_column_length_within_max(
       share::schema::ObColumnSchemaV2 &column);
   static int adjust_number_decimal_column_accuracy_within_max(share::schema::ObColumnSchemaV2 &column);
@@ -595,24 +584,6 @@ protected:
       ParseNode *node,
       const bool is_subpartition,
       share::schema::ObTableSchema &table_schema);
-  int resolve_interval_clause(
-      ObPartitionedStmt *stmt,
-      ParseNode *node,
-      share::schema::ObTableSchema &table_schema,
-      common::ObSEArray<ObRawExpr*, 8> &range_exprs);
-  static int resolve_interval_node(
-      ObResolverParams &params,
-      ParseNode *interval_node,
-      common::ColumnType &col_dt,
-      int64_t precision,
-      int64_t scale,
-      ObRawExpr *&interval_value_expr_out);
-  static int resolve_interval_expr_low(
-      ObResolverParams &params,
-      ParseNode *interval_node,
-      const share::schema::ObTableSchema &table_schema,
-      ObRawExpr *transition_expr,
-      ObRawExpr *&interval_value);
   int resolve_partition_list(
       ObPartitionedStmt *stmt,
       ParseNode *node,
@@ -855,7 +826,6 @@ protected:
   // reset
   void reset_index();
   static int trim_space_for_default_value(
-      const bool is_mysql_mode,
       const bool is_char_type,
       const ObCollationType &collation_type,
       ObObj &default_value, ObString &str);

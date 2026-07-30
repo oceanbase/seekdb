@@ -1,4 +1,4 @@
-alter system flush plan cache global;
+alter system flush plan cache;
 
 // test multi query hit plan
 drop table if exists t1;

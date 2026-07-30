@@ -151,7 +151,7 @@ int ObUserDefinedType::deep_copy_obj(
   if (OB_SUCC(ret)) {
     switch (src.get_meta().get_extend_type()) {
     case PL_CURSOR_TYPE: {
-      OZ (ObRefCursorType::deep_copy_cursor(allocator, src, dst));
+      OZ (ObPLCursorType::deep_copy_cursor(allocator, src, dst));
     }
       break;
     case PL_RECORD_TYPE: {
@@ -279,10 +279,6 @@ int ObUserDefinedType::destruct_obj(ObObj &src, ObSQLSessionInfo *session, bool 
       OZ (cursor->close(*session));
       OX (cursor->~ObPLCursorInfo());
       OX (src.set_null());
-    }
-      break;
-    case PL_REF_CURSOR_TYPE: {
-      // do nothing
     }
       break;
     case PL_RECORD_TYPE: {
@@ -430,6 +426,11 @@ int ObUserDefinedType::deserialize_obj(ObObj &obj, const char* buf, const int64_
   uint8_t pl_type = PL_INVALID_TYPE;
   uint64_t id = OB_INVALID_ID;
   OZ (serialization::decode(buf, len, pos, version));
+  if (OB_SUCC(ret) && OB_UNLIKELY(DATA_CURRENT_VERSION != static_cast<uint64_t>(version))) {
+    ret = OB_VERSION_NOT_MATCH;
+    LOG_WARN("PL user type data format version does not match",
+             KR(ret), K(version), "expected_version", DATA_CURRENT_VERSION);
+  }
   OZ (serialization::decode(buf, len, pos, pl_type));
   OZ (serialization::decode(buf, len, pos, id));
   if (OB_SUCC(ret)) {
@@ -476,33 +477,32 @@ int64_t ObUserDefinedType::get_serialize_obj_size(const ObObj &obj)
 
 
 
-//---------- for ObRefCursorType ----------
+//---------- for ObPLCursorType ----------
 
-int ObRefCursorType::deep_copy(common::ObIAllocator &alloc, const ObRefCursorType &other)
+int ObPLCursorType::deep_copy(common::ObIAllocator &alloc, const ObPLCursorType &other)
 {
   int ret = OB_SUCCESS;
   OZ (ObUserDefinedType::deep_copy(alloc, other));
-  OX (return_type_id_ = other.return_type_id_);
   return ret;
 }
 
 
 
-int ObRefCursorType::newx(common::ObIAllocator &allocator, const ObPLINS *ns, int64_t &ptr) const
+int ObPLCursorType::newx(common::ObIAllocator &allocator, const ObPLINS *ns, int64_t &ptr) const
 {
   int ret = OB_NOT_SUPPORTED;
   UNUSEDx(allocator, ns, ptr);
   return ret;
 }
 
-int ObRefCursorType::get_size(ObPLTypeSize type, int64_t &size) const
+int ObPLCursorType::get_size(ObPLTypeSize type, int64_t &size) const
 {
   UNUSEDx(type, size);
   size = sizeof(ObPLCursorInfo) + 8;
   return OB_SUCCESS;
 }
 
-int ObRefCursorType::init_obj(ObSchemaGetterGuard &schema_guard,
+int ObPLCursorType::init_obj(ObSchemaGetterGuard &schema_guard,
                               ObIAllocator &allocator,
                               ObObj &obj,
                               int64_t &init_size) const
@@ -530,7 +530,7 @@ int ObRefCursorType::init_obj(ObSchemaGetterGuard &schema_guard,
   return ret;
 }
 
-int ObRefCursorType::init_session_var(const ObPLResolveCtx &resolve_ctx,
+int ObPLCursorType::init_session_var(const ObPLResolveCtx &resolve_ctx,
                                       ObIAllocator &obj_allocator,
                                       sql::ObExecContext &exec_ctx,
                                       const sql::ObSqlExpression *default_expr,
@@ -553,7 +553,7 @@ int ObRefCursorType::init_session_var(const ObPLResolveCtx &resolve_ctx,
   return ret;
 }
 
-int ObRefCursorType::deep_copy_cursor(common::ObIAllocator &allocator,
+int ObPLCursorType::deep_copy_cursor(common::ObIAllocator &allocator,
                                    const ObObj &src,
                                    ObObj &dest)
 {

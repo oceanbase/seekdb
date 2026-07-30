@@ -36,8 +36,6 @@ public:
   static int eval_array_compact(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
   static int eval_array_compact_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                       const ObBitVector &skip, const int64_t batch_size);
-  static int eval_array_compact_vector(const ObExpr &expr, ObEvalCtx &ctx,
-                                       const ObBitVector &skip, const EvalBound &bound);
   static int eval_compact(ObIAllocator &tmp_allocator, ObEvalCtx &ctx,
                           ObIArrayType *src_arr, ObIArrayType *res_arr);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,

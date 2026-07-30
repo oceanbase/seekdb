@@ -68,7 +68,7 @@ PRIMARY KEY (`id`) USING BTREE,
 KEY `idx_filter_item_filtersid` (`filtersId`) USING BTREE,
 KEY `idx_filter_item_tenantid` (`tenant_id`) USING BTREE,
 KEY `idx_multlang_itemtitle` (`tenant_id`,`itemTitle`)
-) ENGINE=InnoDB ROW_FORMAT=COMPACT;
+)  ROW_FORMAT=COMPACT;
 ALTER TABLE  pb_meta_filter_item_ext  ADD COLUMN ytenant_id varchar(36) DEFAULT "～" NOT NULL;
 alter table pb_meta_filter_item_ext alter  column cselfdefinetype set DEFAULT 'aa';
 alter table pb_meta_filter_item_ext modify column itemNameDesc varchar(500)  DEFAULT 'aa' not NULL;
@@ -110,7 +110,7 @@ PRIMARY KEY (`id`),
 KEY `pb_filter_solution_common_tenant_id_idx` (`tenant_id`),
 KEY `idx_filter_solution_common_id` (`solutionid`),
 KEY `idx_multlang_itemtitle` (`tenant_id`,`itemtitle`)
-) ENGINE=InnoDB ;
+)  ;
 DROP TABLE IF EXISTS pb_meta_filter_item_ext;
 CREATE TABLE IF NOT EXISTS `pb_meta_filter_item_ext` (
 `id` bigint(20) NOT NULL AUTO_INCREMENT,
@@ -161,7 +161,7 @@ PRIMARY KEY (`id`) USING BTREE,
 KEY `idx_filter_item_filtersid` (`filtersId`) USING BTREE,
 KEY `idx_filter_item_tenantid` (`tenant_id`) USING BTREE,
 KEY `idx_multlang_itemtitle` (`tenant_id`,`itemTitle`)
-) ENGINE=InnoDB ROW_FORMAT=COMPACT;
+)  ROW_FORMAT=COMPACT;
 DROP TABLE IF EXISTS pb_meta_filter_item;
 CREATE TABLE IF NOT EXISTS `pb_meta_filter_item` (
 `id` int(11) NOT NULL AUTO_INCREMENT,
@@ -211,7 +211,7 @@ CREATE TABLE IF NOT EXISTS `pb_meta_filter_item` (
 PRIMARY KEY (`id`),
 KEY `idx_filter_item_filtersid` (`filtersid`),
 KEY `idx_multlang_itemtitle` (`itemtitle`)
-) ENGINE=InnoDB ;
+)  ;
 call p_aa_updatecolumn('pb_filter_solution_common','compareLogic','ALTER TABLE pb_filter_solution_common modify `compareLogic` enum(\'is_not_null\',\'is_null\',\'between\',\'like\',\'rightlike\',\'leftlike\',\'egt\',\'elt\',\'gt\',\'lt\',\'neq\',\'nin\',\'in\',\'eq\',\'multlike\')','alter');
 desc pb_filter_solution_common;
 Field	Type	Null	Key	Default	Extra
@@ -439,7 +439,7 @@ CREATE TABLE IF NOT EXISTS `org_admin_define`  (
 `ytenant_id` varchar(36) DEFAULT '~',
 INDEX `IX_id`(`id`) USING BTREE,
 INDEX `idx_ytenant_id`(`ytenant_id`) USING BTREE
-) ENGINE = InnoDB ROW_FORMAT = DYNAMIC;
+)  ROW_FORMAT = DYNAMIC;
 call addIndex('org_admin_define', 'PRIMARY', 'alter table org_admin_define add primary key (id, ytenant_id)', 'add');
 alter table org_admin_define drop primary key,add primary key (id, ytenant_id);
 alter table org_admin_define drop primary key,add primary key (id,define50);

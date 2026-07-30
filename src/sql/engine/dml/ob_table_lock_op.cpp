@@ -201,11 +201,6 @@ int ObTableLockOp::inner_get_next_row()
         LOG_WARN("write row to das failed", K(ret));
       } else if (OB_FAIL(submit_row_by_strategy())) {
         LOG_WARN("submit row by strategy failed", K(ret));
-      } else if (is_error_logging_ && err_log_rt_def_.first_err_ret_ != OB_SUCCESS) {
-        clear_evaluated_flag();
-        err_log_rt_def_.curr_err_log_record_num_++;
-        err_log_rt_def_.reset();
-        continue;
       } else if (need_return_row_) {
         //break to output this row
         break;
@@ -274,11 +269,6 @@ int ObTableLockOp::inner_get_next_batch(const int64_t max_row_cnt)
         break;
       } else if (OB_FAIL(lock_batch_to_das(child_brs))) {
         LOG_WARN("write row to das failed", K(ret));
-      } else if (is_error_logging_ && err_log_rt_def_.first_err_ret_ != OB_SUCCESS) {
-        clear_evaluated_flag();
-        err_log_rt_def_.curr_err_log_record_num_++;
-        err_log_rt_def_.reset();
-        continue;
       } else if (!brs_.skip_->is_all_true(brs_.size_)) {
         //this batch has not been skipped for all rows, need break to output this batch
         break;

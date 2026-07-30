@@ -107,19 +107,16 @@ int ObLogTempTableTransformation::allocate_startup_expr_post()
   return ret;
 }
 
-int ObLogTempTableTransformation::compute_op_parallel_and_server_info()
+int ObLogTempTableTransformation::compute_op_parallel_info()
 {
   int ret = OB_SUCCESS;
   ObLogicalOperator *last_child = get_child(get_num_of_child() - 1);
   if (OB_ISNULL(last_child)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(last_child), K(ret));
-  } else if (OB_FAIL(get_server_list().assign(last_child->get_server_list()))) {
-    LOG_WARN("failed to assign server list", K(ret));
   } else {
     set_parallel(last_child->get_parallel());
     set_available_parallel(last_child->get_available_parallel());
-    set_server_cnt(last_child->get_server_cnt());
   }
   return ret;
 }

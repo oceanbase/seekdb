@@ -17,7 +17,6 @@
 #define OCEANBASE_STORAGE_TABLELOCK_OB_TABLE_LOCK_LIVE_DETECTOR_H
 #include "storage/tablelock/ob_table_lock_live_detect_func.h"
 #include "storage/tablelock/ob_table_lock_common.h"
-#include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include "common/mysqlclient/ob_isql_client.h"
 
 namespace oceanbase
@@ -26,13 +25,8 @@ namespace observer
 {
 class ObInnerSQLConnection;
 }
-namespace obcall
-{
-class Bool;
-}
 namespace common
 {
-class ObAddr;
 class ObSqlString;
 template <typename T>
 class ObIArray;
@@ -53,13 +47,8 @@ namespace tablelock
 {
 class ObTableLockDetectFuncList
 {
-  static const int64_t RETRY_RPC_TIMES = 10;
-  static const int64_t RPC_INTERVAL_TIME_US = 100L * 1000L;       // 100ms
-  static const int64_t DEFAULT_TIMEOUT_US = 10L * 1000L * 1000L;  // 10s
-
 public:
   static int detect_session_alive(const uint32_t session_id, bool &is_alive);
-  static int detect_session_alive_for_rpc(const uint32_t session_id, obcall::Bool &is_alive);
   static int do_session_alive_detect();
 
 private:

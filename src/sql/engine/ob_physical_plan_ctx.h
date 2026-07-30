@@ -72,7 +72,7 @@ public:
 
 class ObPhysicalPlanCtx
 {
-  OB_UNIS_VERSION(1);
+  OB_UNIS_VERSION(2);
 public:
   explicit ObPhysicalPlanCtx(common::ObIAllocator &allocator);
   virtual ~ObPhysicalPlanCtx();
@@ -387,13 +387,6 @@ public:
     row_deleted_count_ = 0;
     warning_count_ = 0;
   }
-  inline void set_bind_array_count(int64_t bind_array_count) { bind_array_count_ = bind_array_count; }
-  inline int64_t get_bind_array_count() const { return bind_array_count_; }
-
-  // Current index for array binding parameters used by operators and expressions.
-  void set_bind_array_idx(const int64_t idx) { bind_array_idx_ = idx; }
-  int64_t get_bind_array_idx() const { return bind_array_idx_; }
-  void inc_bind_array_idx() { bind_array_idx_++; }
   inline void set_exec_ctx(const ObExecContext *exec_ctx) { exec_ctx_ = exec_ctx; }
   void set_error_ignored(bool ignored) { is_error_ignored_ = ignored; }
   bool is_error_ignored() const { return is_error_ignored_; }
@@ -463,9 +456,6 @@ public:
   }
   const common::ObCurTraceId::TraceId &get_last_trace_id() const { return last_trace_id_; }
   common::ObCurTraceId::TraceId &get_last_trace_id() { return last_trace_id_; }
-  void set_rich_format(bool v) { enable_rich_format_ = v; }
-  bool is_rich_format() const { return enable_rich_format_; }
-
   int get_sqludt_meta_by_subschema_id(uint16_t subschema_id, ObSqlUDTMeta &udt_meta) const;
   int get_sqludt_meta_by_subschema_id(uint16_t subschema_id, ObSubSchemaValue &sub_meta) const;
   bool is_subschema_ctx_inited();
@@ -501,8 +491,7 @@ private:
   int reserve_param_frame(const int64_t capacity);
   void get_param_frame_info(int64_t param_idx,
                             ObDatum *&datum,
-                            ObEvalInfo *&eval_info,
-                            VectorHeader *&vec_header);
+                            ObEvalInfo *&eval_info);
   int inner_get_subschema_id_by_type_info(const ObObjMeta &obj_meta,
                                           const ObIArray<common::ObString> &type_info,
                                           uint16_t &subschema_id) const;
@@ -625,7 +614,6 @@ private:
   int64_t plan_start_time_;
   const common::ObIArray<int64_t> *ps_fixed_array_index_;
   ObSubSchemaCtx subschema_ctx_;
-  bool enable_rich_format_;
   // for dependant exprs of generated columns
   common::ObFixedArray<ObSolidifiedVarsContext, common::ObIAllocator> all_local_session_vars_;
   int64_t total_memstore_read_row_count_;

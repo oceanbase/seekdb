@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX SERVER
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "obmp_packet_sender.h"
 #include "rpc/obmysql/packet/ompk_error.h"
 #include "rpc/obmysql/packet/ompk_eof.h"
@@ -235,8 +234,6 @@ int ObMPPacketSender::response_packet(obmysql::ObMySQLPacket &pkt, sql::ObSQLSes
     } else {
       LOG_DEBUG("succ encode packet", K(pkt), K(seri_size));
       seq_ = pkt.get_seq(); // here will point next avail seq
-      EVENT_INC(MYSQL_PACKET_OUT);
-      EVENT_ADD(MYSQL_PACKET_OUT_BYTES, seri_size);
     }
   }
 
@@ -518,9 +515,6 @@ int ObMPPacketSender::send_ok_packet(ObSQLSessionInfo &session, ObOKPParam &ok_p
       if (ok_param.is_on_connect_ || ok_param.is_on_change_user_) {
         need_track_session_info = true;
         okp.set_use_standard_serialize(true);
-        if (OB_FAIL(ObMPUtils::add_nls_format(okp, session))) {
-          LOG_WARN("fail to add_nls_format", K(ret));
-        }
       } else {
         if (!ok_param.has_more_result_) {
           need_track_session_info = true;
@@ -528,8 +522,6 @@ int ObMPPacketSender::send_ok_packet(ObSQLSessionInfo &session, ObOKPParam &ok_p
             okp.set_use_standard_serialize(true);
             if (OB_FAIL(ObMPUtils::add_changed_session_info(okp, session))) {
               SERVER_LOG(WARN, "fail to add changed session info", K(ret));
-            } else if (OB_FAIL(ObMPUtils::add_nls_format(okp, session, true))) {
-              LOG_WARN("fail to add_nls_format", K(ret));
             }
           }
         }
@@ -684,13 +676,7 @@ int ObMPPacketSender::try_encode_with(ObMySQLPacket &pkt,
   if (OB_ISNULL(ez_buf_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("easy buffer is null", K(ret));
-  } else if (conn_->pkt_rec_wrapper_.enable_proto_dia() &&
-              (ez_buf_->last - ez_buf_->pos == 0) &&
-              comp_context_.use_compress()) {
-    conn_->pkt_rec_wrapper_.begin_seal_comp_pkt();
   }
-  __builtin_prefetch(&conn_->pkt_rec_wrapper_.pkt_rec_[conn_->pkt_rec_wrapper_.cur_pkt_pos_
-                                              % ObPacketRecordWrapper::REC_BUF_SIZE]);
 
   if (OB_FAIL(ret)) {
     // do nothing
@@ -707,9 +693,6 @@ int ObMPPacketSender::try_encode_with(ObMySQLPacket &pkt,
   } else {
     ObEasyBuffer easy_buffer(*ez_buf_);
     int encode_ret = pkt.encode(easy_buffer.last(), easy_buffer.write_avail_size(), seri_size);
-    if (conn_->pkt_rec_wrapper_.enable_proto_dia()) {
-      conn_->pkt_rec_wrapper_.record_send_mysql_pkt(pkt, seri_size);
-    }
     if (OB_SUCC(encode_ret)) {
       easy_buffer.write(seri_size);
     } else {
@@ -788,7 +771,7 @@ int ObMPPacketSender::flush_buffer(const bool is_last)
         if (OB_FAIL(SQL_REQ_OP.write_response(req_, ez_buf_->pos, ez_buf_->last - ez_buf_->pos))) {
           LOG_WARN("write response fail", K(ret));
         } else {
-          init_easy_buf(ez_buf_, (char*)(ez_buf_ + 1),  NULL, ez_buf_->end - ez_buf_->pos);
+          init_easy_buf(ez_buf_, (char*)(ez_buf_ + 1), NULL, ez_buf_->end - ez_buf_->pos);
         }
       }
     }

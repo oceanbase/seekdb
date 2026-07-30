@@ -51,7 +51,6 @@ int ObGranuleUtil::use_partition_granule(ObGranulePumpArgs &args, bool &partitio
   partition_granule = false;
   const ObGranuleIteratorSpec *gi_op = args.op_info_.gi_op_;
   const ObIArray<const ObTableScanSpec *> &scan_ops = args.op_info_.get_scan_ops();
-  int64_t partition_count = args.tablet_arrays_.at(0).count();
   bool hash_part = false;
   if (OB_UNLIKELY(scan_ops.count() != 1 || args.tablet_arrays_.count() != 1)) {
     ret = OB_ERR_UNEXPECTED;
@@ -62,23 +61,23 @@ int ObGranuleUtil::use_partition_granule(ObGranulePumpArgs &args, bool &partitio
 
   if (OB_SUCC(ret)) {
     partition_granule = ObGranuleUtil::use_partition_granule(args.tablet_arrays_.at(0).count(),
-                                                             args.parallelism_, 64, 13, hash_part);
+                                                             args.parallelism_, hash_part);
   }
   return ret;
 }
 
 bool ObGranuleUtil::use_partition_granule(int64_t partition_count,
                                          int64_t parallelism,
-                                         int64_t partition_scan_hold,
-                                         int64_t hash_partition_scan_hold,
                                          bool hash_part)
 {
   bool partition_granule = false;
   // if parallelism is too small, we use partition granule.
   if (hash_part) {
-    partition_granule = partition_count >= hash_partition_scan_hold * parallelism || 1 == parallelism;
+    partition_granule = partition_count >= HASH_PARTITION_SCAN_TABLETS_PER_WORKER * parallelism
+                        || 1 == parallelism;
   } else {
-    partition_granule = partition_count >= partition_scan_hold * parallelism || 1 == parallelism;
+    partition_granule = partition_count >= PARTITION_SCAN_TABLETS_PER_WORKER * parallelism
+                        || 1 == parallelism;
   }
   return partition_granule;
 }

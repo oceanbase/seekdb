@@ -38,11 +38,11 @@
 #include "ob_micro_block_checksum_helper.h"
 #include "storage/compaction/ob_compaction_memory_context.h"
 #include "storage/blocksstable/ob_macro_seq_generator.h"
-#include "storage/blocksstable/ob_shared_macro_block_manager.h"
 #include "storage/compaction/ob_compaction_util.h"
 #include "storage/compaction/ob_sstable_merge_history.h"
 #include "storage/blocksstable/ob_batch_datum_rows.h"
 #include "storage/blocksstable/ob_macro_block_flusher.h"
+#include "storage/blocksstable/ob_shared_macro_block_manager.h"
 
 namespace oceanbase
 {
@@ -300,8 +300,7 @@ private:
   int exec_callback(const ObStorageObjectHandle &macro_handle, ObMacroBlock *macro_block);
   void gen_logic_macro_id(ObLogicMacroBlockId &logic_macro_id);
   bool micro_index_clustered() const;
-  int create_pre_warmer(const share::ObPreWarmerType pre_warmer_type,
-                        const share::ObPreWarmerParam &pre_warm_param);
+  int create_mem_pre_warmer(const share::ObPreWarmerParam &pre_warm_param);
   bool is_for_index() const;
   bool is_pre_alloc() const;
 public:

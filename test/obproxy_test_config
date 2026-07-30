@@ -1,3 +1,0 @@
-# obproxy yum源配置
-obproxy_yum_version=4.2.1.0
-obproxy_yum_release=11.el7

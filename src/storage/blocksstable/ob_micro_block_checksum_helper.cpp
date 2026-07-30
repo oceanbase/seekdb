@@ -16,6 +16,7 @@
 
 #include "storage/blocksstable/ob_micro_block_checksum_helper.h"
 #include "lib/utility/ob_target_specific.h"
+#include "sql/engine/vector/ob_fixed_length_base.h"
 #include "sql/engine/vector/ob_continuous_format.h"
 #include "sql/engine/vector/ob_discrete_format.h"
 #include "sql/engine/vector/ob_uniform_format.h"

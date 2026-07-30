@@ -39,10 +39,6 @@ class ObReportingWFPieceMsg;
 class ObReportingWFWholeMsg;
 class ObOptStatsGatherPieceMsg;
 class ObOptStatsGatherWholeMsg;
-class SPWinFuncPXPieceMsg;
-class SPWinFuncPXWholeMsg;
-class RDWinFuncPXPieceMsg;
-class RDWinFuncPXWholeMsg;
 class ObJoinFilterCountRowPieceMsg;
 class ObJoinFilterCountRowWholeMsg;
 // The purpose of abstracting this interface class is to decouple MsgProc and ObPxCoord
@@ -62,8 +58,6 @@ public:
   virtual int on_piece_msg(ObExecContext &ctx, const ObInitChannelPieceMsg &pkt) = 0;
   virtual int on_piece_msg(ObExecContext &ctx, const ObReportingWFPieceMsg &pkt) = 0;
   virtual int on_piece_msg(ObExecContext &ctx, const ObOptStatsGatherPieceMsg &pkt) = 0;
-  virtual int on_piece_msg(ObExecContext &ctx, const SPWinFuncPXPieceMsg &pkt) = 0;
-  virtual int on_piece_msg(ObExecContext &ctx, const RDWinFuncPXPieceMsg &pkt) = 0;
   virtual int on_piece_msg(ObExecContext &ctx, const ObJoinFilterCountRowPieceMsg &pkt) = 0;
 };
 
@@ -90,10 +84,6 @@ public:
       const ObReportingWFWholeMsg &pkt) const = 0;
   virtual int on_whole_msg(
       const ObOptStatsGatherWholeMsg &pkt) const = 0;
-  virtual int on_whole_msg(
-      const SPWinFuncPXWholeMsg &pkt) const = 0;
-  virtual int on_whole_msg(
-      const RDWinFuncPXWholeMsg &pkt) const = 0;
   virtual int on_whole_msg(
       const ObJoinFilterCountRowWholeMsg &pkt) const = 0;
   // SQC is interrupted
@@ -128,10 +118,6 @@ public:
       const ObReportingWFWholeMsg &pkt) const;
   virtual int on_whole_msg(
       const ObOptStatsGatherWholeMsg &pkt) const;
-   virtual int on_whole_msg(
-      const SPWinFuncPXWholeMsg &pkt) const;
-   virtual int on_whole_msg(
-      const RDWinFuncPXWholeMsg &pkt) const;
   virtual int on_whole_msg(
       const ObJoinFilterCountRowWholeMsg &pkt) const;
  private:

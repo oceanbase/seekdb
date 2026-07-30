@@ -23,12 +23,12 @@
 #include "sql/engine/expr/ob_expr_null_safe_equal.h"
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
-#include "sql/engine/vector/expr_cmp_func.h"
 #include "sql/engine/expr/ob_expr_func_round.h"
+#include "sql/session/ob_sql_session_info.h"
 
 #include "common/object/ob_object.h"
 #include "rpc/obmysql/ob_mysql_util.h"
-#include "sql/engine/expr/ob_expr_multiset.h"
+#include "share/ob_lob_access_utils.h"
 
 namespace oceanbase
 {
@@ -37,15 +37,6 @@ using namespace common::number;
 using namespace oceanbase::lib;
 namespace sql
 {
-static const int32_t DAYS_PER_YEAR[2]=
-{
-  365, 366
-};
-static const int8_t DAYS_PER_MON[2][12 + 1] = {
-  {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31},
-  {0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
-};
-
 #if defined(__ANDROID__)
 static const ObRawExpr *get_real_cmp_operand_expr(const ObRawExpr *expr)
 {
@@ -67,24 +58,6 @@ static bool is_string_literal_cmp_operand(const ObRawExpr *expr)
          && ob_is_string_type(real_expr->get_data_type());
 }
 #endif
-
-const char *ObExprTRDateFormat::FORMATS_TEXT[FORMAT_MAX_TYPE] =
-{
-      "SYYYY", "YYYY", "YEAR", "SYEAR", "YYY", "YY", "Y",
-      "IYYY", "IY", "I",
-      "Q",
-      "MONTH", "MON", "MM", "RM",
-      "WW",
-      "IW",
-      "W",
-      "DDD", "DD", "J",
-      "DAY", "DY", "D",
-      "HH", "HH12", "HH24",
-      "MI",
-      "CC","SCC"
-};
-
-uint64_t ObExprTRDateFormat::FORMATS_HASH[FORMAT_MAX_TYPE] = {0};
 
 OB_SERIALIZE_MEMBER(ObFuncInputType, calc_meta_, max_length_, flag_);
 
@@ -659,19 +632,6 @@ int ObExprOperator::get_param_is_boolean(common::ObExprCtx &expr_ctx,
     }
   }
   return ret;
-}
-
-bool ObExprOperator::is_valid_nls_param(const common::ObString &nls_param_str)
-{
-  bool bret = false;
-  if (!nls_param_str.empty() && NULL != nls_param_str.find('=')) {
-    ObString value_str = const_cast<common::ObString &>(nls_param_str).trim();
-    ObString name_str = value_str.split_on('=');
-    name_str = name_str.trim();
-    value_str = value_str.trim();
-    UNUSEDx(name_str, value_str);
-  }
-  return bret;
 }
 
 /*
@@ -1387,7 +1347,7 @@ int ObExprOperator::aggregate_numeric_accuracy_for_merge(ObExprResType &type,
           a union c will result to 12345 and 123.33
         */
         if (ob_is_integer_type(types[i].get_type())) {
-          precision = MAX(ObAccuracy::DDL_DEFAULT_ACCURACY2[0][types[i].get_type()].precision_,
+          precision = MAX(ObAccuracy::DDL_DEFAULT_ACCURACY[types[i].get_type()].precision_,
                           types[i].get_precision());
           scale = 0;
         } else if (ob_is_number_tc(types[i].get_type())
@@ -1434,11 +1394,11 @@ int ObExprOperator::aggregate_numeric_accuracy_for_merge(ObExprResType &type,
           type.set_precision(MIN(precision, OB_MAX_DECIMAL_POSSIBLE_PRECISION));
         } else {
           type.set_precision(
-            MIN(precision, ObAccuracy::MAX_ACCURACY2[0][type.get_type()].precision_));
+            MIN(precision, ObAccuracy::MAX_ACCURACY[type.get_type()].precision_));
         }
       }
       if (max_decimal_digits >= 0) {
-        type.set_scale(MIN(max_decimal_digits, ObAccuracy::MAX_ACCURACY2[0][type.get_type()].scale_));
+        type.set_scale(MIN(max_decimal_digits, ObAccuracy::MAX_ACCURACY[type.get_type()].scale_));
       }
     }
     LOG_DEBUG("aggregate numeric accuracy", K(max_integer_digits), K(max_decimal_digits), K(type));
@@ -1502,29 +1462,6 @@ int ObExprOperator::aggregate_collection_sql_type(
       }
     }
   }
-  return ret;
-}
-
-int ObExprDFMConvertCtx::parse_format(const ObString &format_str,
-                                      const ObObjType target_type,
-                                      bool check_format_semantic,
-                                      ObIAllocator &allocator)
-{
-  int ret = OB_SUCCESS;
-  ObSEArray<ObDFMElem, ObDFMUtil::COMMON_ELEMENT_NUMBER> dfm_elems;
-  ObFixedBitSet<OB_DEFAULT_BITSET_SIZE_FOR_DFM> elem_flags;
-  //parse format
-  ObDTMode mode = DT_TYPE_DATETIME;
-  if (ob_is_otimestamp_type(target_type)) {
-    mode |= DT_TYPE_NANOSECOND;
-  }
-  OZ (ObDFMUtil::parse_datetime_format_string(format_str, dfm_elems));
-  if (check_format_semantic) {
-    OZ (ObDFMUtil::check_semantic(dfm_elems, elem_flags, mode));
-  }
-  OX (dfm_elems_.set_allocator(&allocator));
-  OZ (dfm_elems_.assign(dfm_elems));
-  OZ (elem_flags_.add_members(elem_flags));
   return ret;
 }
 
@@ -4623,311 +4560,12 @@ int ObBitwiseExprOperator::cg_bitwise_expr(ObExprCGCtx &expr_cg_ctx, const ObRaw
     if (2 == rt_expr.arg_cnt_) {
       rt_expr.eval_func_ = ObBitwiseExprOperator::calc_result2_mysql;
 
-      // The vector path chooses integer extraction by runtime datum metadata.
-      rt_expr.eval_vector_func_ = calc_bitwise_result2_mysql_vector;
     } else {
       // must be set in its cg_expr method
       // bit_neg and bit_count have their own calculation functions
       rt_expr.eval_func_ = NULL;
     }
   }
-  return ret;
-}
-
-int ObBitwiseExprOperator::calc_bitwise_result2_mysql_vector(VECTOR_EVAL_FUNC_ARG_DECL)
-{
-  int ret = OB_SUCCESS;
-  const BitOperator op = static_cast<const BitOperator>(expr.extra_);
-  ObCastMode cast_mode = CM_NONE;
-  const ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
-  ObSolidifiedVarsGetter helper(expr, ctx, session);
-  ObSQLMode sql_mode = 0;
-
-  if (OB_UNLIKELY(op < 0 || op >= BIT_MAX)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(op));
-  } else if (OB_ISNULL(session)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
-  } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
-    LOG_WARN("get sql mode failed", K(ret));
-  } else {
-    ObSQLUtils::get_default_cast_mode(false, 0, session->get_stmt_type(), session->is_ignore_stmt(),
-                                      sql_mode, cast_mode);
-    ObBitVector &tmp_skip = expr.get_pvt_skip(ctx);
-    bool skip_flag = false;
-    if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-      LOG_WARN("failed to eval vector result", K(ret), K(0));
-    } else {
-      tmp_skip.deep_copy(skip, bound.start(), bound.end());
-      VectorFormat left_format = expr.args_[0]->get_format(ctx);
-      ObIVector *param_vec = expr.args_[0]->get_vector(ctx);
-      if (left_format == VEC_DISCRETE || left_format == VEC_CONTINUOUS
-          || left_format == VEC_FIXED) {
-        ObBitmapNullVectorBase &cur_vec = *static_cast<ObBitmapNullVectorBase *>(param_vec);
-        if (cur_vec.has_null()) {
-          tmp_skip.bit_or(*cur_vec.get_nulls(), bound);
-          skip_flag = true;
-        }
-      } else if (left_format == VEC_UNIFORM) {
-        ObUniformFormat<false> &cur_vec = *static_cast<ObUniformFormat<false> *>(param_vec);
-        for (int i = bound.start(); i < bound.end(); i++) {
-          if (!tmp_skip.at(i) && cur_vec.is_null(i)) {
-            tmp_skip.set(i);
-            skip_flag = true;
-          }
-        }
-      } else if (left_format == VEC_UNIFORM_CONST) {
-        ObUniformFormat<true> &cur_vec = *static_cast<ObUniformFormat<true> *>(param_vec);
-        for (int i = bound.start(); i < bound.end(); i++) {
-          if (!tmp_skip.at(i) && cur_vec.is_null(i)) {
-            tmp_skip.set(i);
-            skip_flag = true;
-          }
-        }
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_LOG(WARN, "invalid param format", K(ret), K(left_format));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (!skip_flag && OB_FAIL(expr.args_[1]->eval_vector(ctx, tmp_skip, bound))) {
-        LOG_WARN("failed to eval vector result", K(ret), K(1));
-      } else if (skip_flag
-                 && OB_FAIL(expr.args_[1]->eval_vector(
-                      ctx, tmp_skip,
-                      EvalBound(bound.batch_size(), bound.start(), bound.end(), false)))) {
-        LOG_WARN("failed to eval vector result", K(ret), K(1));
-      } else if (OB_FAIL(dispatch_calc_vector(VECTOR_EVAL_FUNC_ARG_LIST, cast_mode))) {
-        LOG_WARN("failed to dispatch eval vector and", K(ret), K(expr), K(ctx), K(bound));
-      }
-    }
-  }
-  return ret;
-}
-
-using Discrete = ObDiscreteFormat;
-using Uniform = ObUniformFormat<false>;
-
-// Current VEC_MAX_FORMAT = 6, which can be welled handled by 4 bits where 2 ^ 4 = 16
-#define CALC_FORMAT(res, l, r) ((int32_t)l + (((int32_t)r) << 4) + (((int32_t)res) << 8))
-
-#define BITWISE_FORMAT_DISPATCH_BRANCH(RES, LEFT, RIGH)                                            \
-  case CALC_FORMAT(RES::FORMAT, LEFT::FORMAT, RIGH::FORMAT): {                                     \
-    ret = inner_calc_vector<RES, LEFT, RIGH>(VECTOR_EVAL_FUNC_ARG_LIST, cast_mode);                 \
-    break;                                                                                         \
-  }
-
-#define INNER_FIXED_CALC(left_type, right_type)                                                    \
-  ret = inner_calc_vector<ObFixedLengthFormat<uint64_t>, ObFixedLengthFormat<left_type>,           \
-                          ObFixedLengthFormat<right_type>>(VECTOR_EVAL_FUNC_ARG_LIST, cast_mode);
-
-#define RIGHT_FIXED_DISCRETE_CALC(left_type)                                                       \
-  ret =                                                                                            \
-    inner_calc_vector<ObFixedLengthFormat<uint64_t>, Discrete, ObFixedLengthFormat<left_type>>(    \
-      VECTOR_EVAL_FUNC_ARG_LIST, cast_mode);
-
-#define RIGHT_FIXED_UNIFORM_CALC(left_type)                                                        \
-  ret = inner_calc_vector<ObFixedLengthFormat<uint64_t>, Uniform, ObFixedLengthFormat<left_type>>( \
-    VECTOR_EVAL_FUNC_ARG_LIST, cast_mode);
-
-#define LEFT_FIXED_DISCRETE_CALC(left_type)                                                        \
-  ret =                                                                                            \
-    inner_calc_vector<ObFixedLengthFormat<uint64_t>, ObFixedLengthFormat<left_type>, Discrete>(    \
-      VECTOR_EVAL_FUNC_ARG_LIST, cast_mode);
-
-#define LEFT_FIXED_UNIFORM_CALC(left_type)                                                         \
-  ret = inner_calc_vector<ObFixedLengthFormat<uint64_t>, ObFixedLengthFormat<left_type>, Uniform>( \
-    VECTOR_EVAL_FUNC_ARG_LIST, cast_mode);
-
-void ObBitwiseExprOperator::convert_tc_size(VecValueTypeClass vec_tc, int &len)
-{
-  switch (vec_tc) {
-  case (VEC_TC_INTEGER): {
-    len = sizeof(int64_t);
-    break;
-  }
-  case (VEC_TC_DEC_INT32): {
-    len = sizeof(int32_t);
-    break;
-  }
-  case (VEC_TC_DEC_INT64): {
-    len = sizeof(int64_t);
-    break;
-  }
-  case (VEC_TC_DEC_INT128): {
-    len = sizeof(int128_t);
-    break;
-  }
-  case (VEC_TC_DEC_INT256): {
-    len = sizeof(int256_t);
-    break;
-  }
-  case (VEC_TC_DEC_INT512): {
-    len = sizeof(int512_t);
-    break;
-  }
-  default: {
-    break;
-  }
-  }
-}
-
-int ObBitwiseExprOperator::dispatch_calc_vector(VECTOR_EVAL_FUNC_ARG_DECL, ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  VectorFormat res_format = expr.get_format(ctx);
-  VectorFormat left_format = expr.args_[0]->get_format(ctx);
-  VectorFormat right_format = expr.args_[1]->get_format(ctx);
-
-  const int64_t cond = CALC_FORMAT(res_format, left_format, right_format);
-
-  const ObDatumMeta &left_meta = expr.args_[0]->datum_meta_;
-  const ObDatumMeta &right_meta = expr.args_[1]->datum_meta_;
-
-  VecValueTypeClass left_tc =
-    get_vec_value_tc(left_meta.type_, left_meta.scale_, left_meta.precision_);
-  VecValueTypeClass right_tc =
-    get_vec_value_tc(right_meta.type_, right_meta.scale_, right_meta.precision_);
-
-  int l_len = 0;
-  int r_len = 0;
-
-  convert_tc_size(left_tc, l_len);
-  convert_tc_size(right_tc, r_len);
-
-  if (res_format != VEC_FIXED) {
-    ret = inner_calc_vector<ObVectorBase, ObVectorBase, ObVectorBase>(VECTOR_EVAL_FUNC_ARG_LIST,
-                                                                      cast_mode);
-  } else if (left_format != VEC_FIXED && right_format != VEC_FIXED) {
-    switch (cond) {
-      BITWISE_FORMAT_DISPATCH_BRANCH(ObFixedLengthFormat<uint64_t>, Discrete, Discrete);
-      BITWISE_FORMAT_DISPATCH_BRANCH(ObFixedLengthFormat<uint64_t>, Discrete, Uniform);
-
-      BITWISE_FORMAT_DISPATCH_BRANCH(ObFixedLengthFormat<uint64_t>, Uniform, Discrete);
-      BITWISE_FORMAT_DISPATCH_BRANCH(ObFixedLengthFormat<uint64_t>, Uniform, Uniform);
-    default: {
-      ret = inner_calc_vector<ObVectorBase, ObVectorBase, ObVectorBase>(VECTOR_EVAL_FUNC_ARG_LIST,
-                                                                        cast_mode);
-      break;
-    }
-    }
-  } else {
-    if (left_format != VEC_FIXED) {
-      switch (left_format) {
-      case (VEC_DISCRETE): {
-        DISPATCH_WIDTH_TASK(r_len, RIGHT_FIXED_DISCRETE_CALC);
-        break;
-      }
-      case (VEC_UNIFORM): {
-        DISPATCH_WIDTH_TASK(r_len, RIGHT_FIXED_UNIFORM_CALC);
-        break;
-      }
-      default: {
-        ret = inner_calc_vector<ObVectorBase, ObVectorBase, ObVectorBase>(
-          VECTOR_EVAL_FUNC_ARG_LIST, cast_mode);
-        break;
-      }
-      }
-    } else if (right_format != VEC_FIXED) {
-      switch (right_format) {
-      case (VEC_DISCRETE): {
-        DISPATCH_WIDTH_TASK(l_len, LEFT_FIXED_DISCRETE_CALC);
-        break;
-      }
-      case (VEC_UNIFORM): {
-        DISPATCH_WIDTH_TASK(l_len, LEFT_FIXED_UNIFORM_CALC);
-        break;
-      }
-      default: {
-        ret = inner_calc_vector<ObVectorBase, ObVectorBase, ObVectorBase>(
-          VECTOR_EVAL_FUNC_ARG_LIST, cast_mode);
-        break;
-      }
-      }
-    } else {
-      DISPATCH_INOUT_WIDTH_TASK(l_len, r_len, INNER_FIXED_CALC);
-    }
-  }
-  return ret;
-}
-
-template <typename RES_VEC, typename L_VEC, typename R_VEC>
-int ObBitwiseExprOperator::inner_calc_vector(VECTOR_EVAL_FUNC_ARG_DECL, ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-
-  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-
-  const ObDatumMeta &left_meta = expr.args_[0]->datum_meta_;
-  const ObDatumMeta &right_meta = expr.args_[1]->datum_meta_;
-
-  void *get_int_func0 = NULL;
-  void *get_int_func1 = NULL;
-
-  if (OB_FAIL(choose_get_int_func(left_meta, get_int_func0))) {
-    LOG_WARN("choose_get_int_func failed", K(ret), K(left_meta));
-  } else if (OB_FAIL(choose_get_int_func(right_meta, get_int_func1))) {
-    LOG_WARN("choose_get_int_func failed", K(ret), K(right_meta));
-  } else {
-    L_VEC *l_vec = static_cast<L_VEC *>(expr.args_[0]->get_vector(ctx));
-    R_VEC *r_vec = static_cast<R_VEC *>(expr.args_[1]->get_vector(ctx));
-    RES_VEC *res_vec = static_cast<RES_VEC *>(expr.get_vector(ctx));
-
-    // The selected getter converts each supported input type to the integer
-    // representation used by bitwise calculation.
-    const ObBitwiseExprOperator::BitOperator op =
-      static_cast<const ObBitwiseExprOperator::BitOperator>(expr.extra_);
-    for (int i = bound.start(); OB_SUCC(ret) && i < bound.end(); i += 1) {
-      if (skip.at(i) || eval_flags.at(i)) {
-        continue;
-      }
-
-      if (l_vec->is_null(i) || r_vec->is_null(i)) {
-        res_vec->set_null(i);
-        eval_flags.set(i);
-      } else {
-        ObDatum left_datum = ObDatum(l_vec->get_payload(i), l_vec->get_length(i), false);
-        ObDatum right_datum = ObDatum(r_vec->get_payload(i), r_vec->get_length(i), false);
-
-        const ObDatumMeta &left_meta = expr.args_[0]->datum_meta_;
-        const ObDatumMeta &right_meta = expr.args_[1]->datum_meta_;
-
-        uint64_t left = 0;
-        uint64_t right = 0;
-
-        if (OB_FAIL((reinterpret_cast<ObBitwiseExprOperator::GetUIntFunc>(get_int_func0)(
-              left_meta, left_datum, true, left, cast_mode)))) {
-          LOG_WARN("get uint64 failed", K(ret), K(left_datum));
-        } else if (OB_FAIL((reinterpret_cast<ObBitwiseExprOperator::GetUIntFunc>(get_int_func1)(
-                      right_meta, right_datum, true, right, cast_mode)))) {
-          LOG_WARN("get uint64 failed", K(ret), K(right_datum));
-        } else {
-          // bit_neg and bit_count will be handled by theirs function
-
-          uint64_t res = 0;
-
-          switch (op) {
-          case ObBitwiseExprOperator::BIT_AND: res = left & right; break;
-          case ObBitwiseExprOperator::BIT_OR: res = left | right; break;
-          case ObBitwiseExprOperator::BIT_XOR: res = left ^ right; break;
-          case ObBitwiseExprOperator::BIT_LEFT_SHIFT:
-            res = right < sizeof(uint64_t) * 8 ? left << right : 0;
-            break;
-          case ObBitwiseExprOperator::BIT_RIGHT_SHIFT:
-            res = right < sizeof(uint64_t) * 8 ? left >> right : 0;
-            break;
-          default: break;
-          }
-
-          res_vec->set_uint(i, res);
-          eval_flags.set(i);
-        }
-      }
-    }
-  
-  }
-
   return ret;
 }
 
@@ -5710,411 +5348,6 @@ int ObLocationExprOperator::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw
   return OB_SUCCESS;
 }
 
-int ObExprTRDateFormat::calc_hash(const char *p, int64_t len, uint64_t &hash)
-{
-  int ret = OB_SUCCESS;
-  hash = 0;
-  if (OB_ISNULL(p) || OB_UNLIKELY(len <= 0)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("unexpected error.invalid arguments", K(p), K(len));
-  } else {
-    for(int64_t i = 0; i < len; ++i) {
-      hash = (hash << 7) + (hash << 1) + hash + toupper(p[i]);
-    }
-  }
-  return ret;
-}
-
-int ObExprTRDateFormat::init()
-{
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0; i < FORMAT_MAX_TYPE && OB_SUCC(ret); ++i) {
-    ret = calc_hash(FORMATS_TEXT[i], strlen(FORMATS_TEXT[i]), FORMATS_HASH[i]);
-    //validation
-    for (int64_t j = 0; j < i && OB_SUCC(ret); ++j) {
-      if (FORMATS_HASH[i] == FORMATS_HASH[j]) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("unexpected error.hash func is not perfect hash", K(i), K(j));
-        break;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObExprTRDateFormat::get_format_id_by_format_string(const ObString &fmt, int64_t &fmt_id)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(fmt.empty())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("empty string.", K(ret), K(fmt));
-  } else {
-    fmt_id = SYYYY;
-    const char *ptr = fmt.ptr();
-    int32_t ptr_len = fmt.length();
-    uint64_t fmt_hash = 0;
-    if (OB_FAIL(calc_hash(ptr, ptr_len, fmt_hash))) {
-      LOG_WARN("calc hash failed", K(ret), K(fmt));
-    } else if (FALSE_IT(get_format_id(fmt_hash, fmt_id))) {
-    } else if (OB_UNLIKELY(fmt_id < 0 || fmt_id >= FORMAT_MAX_TYPE)) {
-      ret = OB_INVALID_DATE_FORMAT;
-      LOG_WARN("invalid format string", K(ret), K(fmt_id), K(fmt));
-    } else if (OB_UNLIKELY(strncasecmp(ptr, FORMATS_TEXT[fmt_id], ptr_len))) {
-      //what a pity ! same hash value, while not expected content
-      ret = OB_INVALID_DATE_FORMAT;
-      LOG_WARN("invalid format string", K(ret), K(fmt_id), K(fmt));
-    }
-  }
-  return ret;
-}
-
-int ObExprTRDateFormat::trunc_new_obtime(ObTime &ob_time, const ObString &fmt,
-                                         bool is_mysql_compat_dates)
-{
-  int ret = OB_SUCCESS;
-  int64_t fmt_id = SYYYY;
-
-  OZ (get_format_id_by_format_string(fmt, fmt_id));
-  OZ (trunc_new_obtime_by_fmt_id(ob_time, fmt_id, is_mysql_compat_dates));
-  LOG_DEBUG("check value", K(ob_time), K(fmt_id), K(fmt));
-  return ret;
-}
-
-int ObExprTRDateFormat::trunc_new_obtime_by_fmt_id(ObTime &ob_time, int64_t fmt_id,
-                                                   bool is_mysql_compat_dates)
-{
-  int ret = OB_SUCCESS;
-  switch (fmt_id) {
-    case SYYYY:
-      //go through
-    case YYYY:
-      //go through
-    case YEAR:
-    case SYEAR:
-      //go through
-    case YYY:
-      //go through
-    case YY:
-      //go through
-    case Y: {
-      set_time_part_to_zero(ob_time);
-      int32_t offset = (ob_time.parts_[DT_YDAY] - 1);
-      ob_time.parts_[DT_MON] = 1;
-      ob_time.parts_[DT_MDAY] = 1;
-      ob_time.parts_[DT_DATE] -= offset;
-      break;
-    }
-    case Q: {
-      set_time_part_to_zero(ob_time);
-      int32_t quarter = (ob_time.parts_[DT_MON] + 2) / MONS_PER_QUAR;
-      ob_time.parts_[DT_MON] = (quarter - 1) * MONS_PER_QUAR + 1;
-      ob_time.parts_[DT_MDAY] = 1;
-      if (!is_mysql_compat_dates) {
-        ob_time.parts_[DT_DATE] = ObTimeConverter::ob_time_to_date(ob_time);
-      }
-      break;
-    }
-    case MONTH:
-      //go through
-    case MON:
-      //go through
-    case MM:
-      //go through
-    case RM: {
-      set_time_part_to_zero(ob_time);
-      int32_t offset = (ob_time.parts_[DT_MDAY] - 1);
-      ob_time.parts_[DT_MDAY] = 1;
-      ob_time.parts_[DT_DATE] -= offset;
-      break;
-    }
-    case WW: {
-      //01-01 is the first day of year
-      set_time_part_to_zero(ob_time);
-      int32_t offset = (ob_time.parts_[DT_YDAY] - 1) % DAYS_PER_WEEK;
-      ob_time.parts_[DT_DATE] -= offset;
-      if (is_mysql_compat_dates) {
-        ret = ObTimeConverter::date_to_ob_time(ob_time.parts_[DT_DATE], ob_time);
-      }
-      break;
-    }
-    case IW: {
-      //within a week. monday is the first day
-      set_time_part_to_zero(ob_time);
-      int32_t offset = (ob_time.parts_[DT_WDAY] - 1) % DAYS_PER_WEEK;
-      ob_time.parts_[DT_DATE] -= offset;
-      if (is_mysql_compat_dates) {
-        ret = ObTimeConverter::date_to_ob_time(ob_time.parts_[DT_DATE], ob_time);
-      }
-      break;
-    }
-    case W: {
-      //xx-01 is the first day
-      set_time_part_to_zero(ob_time);
-      int32_t offset = (ob_time.parts_[DT_MDAY] - 1) % DAYS_PER_WEEK;
-      ob_time.parts_[DT_MDAY] -= offset;
-      ob_time.parts_[DT_DATE] -= offset;
-      break;
-    }
-    case DDD:
-      //go through
-    case DD:
-      //go through
-    case J: {
-      set_time_part_to_zero(ob_time);
-      break;
-    }
-    case DAY:
-      //go through
-    case DY:
-      //go through
-    case D: {
-      //within a week. sunday is the first day
-      set_time_part_to_zero(ob_time);
-      int32_t offset = (ob_time.parts_[DT_WDAY]) % DAYS_PER_WEEK;
-      ob_time.parts_[DT_DATE] -= offset;
-      if (is_mysql_compat_dates) {
-        ret = ObTimeConverter::date_to_ob_time(ob_time.parts_[DT_DATE], ob_time);
-      }
-      break;
-    }
-    case HH:
-      //go through
-    case HH12:
-      //go through
-    case HH24: {
-      ob_time.parts_[DT_MIN] = 0;
-      ob_time.parts_[DT_SEC] = 0;
-      ob_time.parts_[DT_USEC] = 0;
-      break;
-    }
-    case MI: {
-      ob_time.parts_[DT_SEC] = 0;
-      ob_time.parts_[DT_USEC] = 0;
-      break;
-    }
-    case CC:
-      //go through
-    case SCC: {
-      set_time_part_to_zero(ob_time);
-      ob_time.parts_[DT_YEAR] = ob_time.parts_[DT_YEAR] / YEARS_PER_CENTURY * YEARS_PER_CENTURY + 1;
-      ob_time.parts_[DT_MON] = 1;
-      ob_time.parts_[DT_MDAY] = 1;
-      if (!is_mysql_compat_dates) {
-        ob_time.parts_[DT_DATE] = ObTimeConverter::ob_time_to_date(ob_time);
-      }
-      break;
-    }
-    case IYYY:
-      //go through
-    case IY:
-      //go through
-    case I: {
-      //not used heavily. so, do not care too much about performance !
-      set_time_part_to_zero(ob_time);
-      ObTimeConverter::get_first_day_of_isoyear(ob_time);
-      if (is_mysql_compat_dates) {
-        ret = ObTimeConverter::date_to_ob_time(ob_time.parts_[DT_DATE], ob_time);
-      }
-      break;
-    }
-    default: {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected fmt_id", K(fmt_id), K(ret));
-    }
-  }//end switch
-  return ret;
-}
-
-int ObExprTRDateFormat::round_new_obtime(ObTime &ob_time, const ObString &fmt)
-{
-  int ret = OB_SUCCESS;
-  int64_t fmt_id = SYYYY;
-
-  OZ (get_format_id_by_format_string(fmt, fmt_id));
-  OZ (round_new_obtime_by_fmt_id(ob_time, fmt_id));
-
-  LOG_DEBUG("check value", K(ob_time), K(fmt_id), K(fmt));
-  return ret;
-}
-
-int ObExprTRDateFormat::round_new_obtime_by_fmt_id(ObTime &ob_time, int64_t fmt_id)
-{
-  int ret = OB_SUCCESS;
-  switch (fmt_id) {
-    case SYYYY:
-      //go through
-    case YYYY:
-      //go through
-    case YEAR:
-    case SYEAR:
-      //go through
-    case YYY:
-      //go through
-    case YY:
-      //go through
-    case Y: {
-      //>6
-      const int32_t add_year = (ob_time.parts_[DT_MON] > DT_PART_MAX[DT_MON] / 2) ? 1 : 0;
-      set_time_part_to_zero(ob_time);
-      int32_t offset = (ob_time.parts_[DT_YDAY] - 1);
-      ob_time.parts_[DT_DATE] = ob_time.parts_[DT_DATE] - offset + add_year * DAYS_PER_YEAR[IS_LEAP_YEAR(ob_time.parts_[DT_YEAR])];
-      break;
-    }
-    case Q: {
-      //>15
-      const int32_t add_quarter = (((ob_time.parts_[DT_MON] - 1) % MONS_PER_QUAR > 1)
-                                    || (1 == (ob_time.parts_[DT_MON] - 1) % MONS_PER_QUAR
-                                        && ob_time.parts_[DT_MDAY] > DT_PART_MAX[DT_MDAY] / 2))
-                                   ? 1
-                                   : 0;
-      set_time_part_to_zero(ob_time);
-      int32_t quarter = (ob_time.parts_[DT_MON] + 2) / MONS_PER_QUAR + add_quarter;
-      ob_time.parts_[DT_MON] = (quarter - 1) * MONS_PER_QUAR + 1;
-      if (ob_time.parts_[DT_MON] > DT_PART_MAX[DT_MON]) {
-        ob_time.parts_[DT_MON] -= static_cast<int32_t>(DT_PART_MAX[DT_MON]);
-        ob_time.parts_[DT_YEAR] += 1;
-      }
-      ob_time.parts_[DT_MDAY] = 1;
-      ob_time.parts_[DT_DATE] = ObTimeConverter::ob_time_to_date(ob_time);
-      break;
-    }
-    case MONTH:
-      //go through
-    case MON:
-      //go through
-    case MM:
-      //go through
-    case RM: {
-      //>15
-      const int32_t add_month = (ob_time.parts_[DT_MDAY] > DT_PART_MAX[DT_MDAY] / 2) ? 1 : 0;
-      set_time_part_to_zero(ob_time);
-      int32_t offset = (ob_time.parts_[DT_MDAY] - 1);
-      ob_time.parts_[DT_DATE] = ob_time.parts_[DT_DATE] - offset + add_month * DAYS_PER_MON[IS_LEAP_YEAR(ob_time.parts_[DT_YEAR])][ob_time.parts_[DT_MON]];
-      break;
-    }
-    case WW: {
-      //01-01 is the first day of year
-      const int32_t add_ww = ((((ob_time.parts_[DT_YDAY] - 1) % DAYS_PER_WEEK) > DAYS_PER_WEEK / 2)
-                               || (((ob_time.parts_[DT_YDAY] - 1) % DAYS_PER_WEEK) == DAYS_PER_WEEK / 2
-                                   && ob_time.parts_[DT_HOUR] > DT_PART_MAX[DT_HOUR] / 2))
-                             ? 1
-                             : 0;
-      set_time_part_to_zero(ob_time);
-      int32_t offset = (ob_time.parts_[DT_YDAY] - 1) % DAYS_PER_WEEK;
-      ob_time.parts_[DT_DATE] = ob_time.parts_[DT_DATE] - offset + add_ww * DAYS_PER_WEEK;
-      break;
-    }
-    case IW: {
-      //within a week. monday is the first day
-      const int32_t add_iw = ((((ob_time.parts_[DT_WDAY] - 1) % DAYS_PER_WEEK) > DAYS_PER_WEEK / 2)
-                              || (((ob_time.parts_[DT_WDAY] - 1) % DAYS_PER_WEEK) == DAYS_PER_WEEK / 2
-                                  && ob_time.parts_[DT_HOUR] > DT_PART_MAX[DT_HOUR] / 2))
-                             ? 1
-                             : 0;
-      set_time_part_to_zero(ob_time);
-      int32_t offset = (ob_time.parts_[DT_WDAY] - 1) % DAYS_PER_WEEK;
-      ob_time.parts_[DT_DATE] = ob_time.parts_[DT_DATE] - offset + add_iw * DAYS_PER_WEEK;
-      break;
-    }
-    case W: {
-      //xx-01 is the first day
-      const int32_t add_w = ((((ob_time.parts_[DT_MDAY] - 1) % DAYS_PER_WEEK) > DAYS_PER_WEEK / 2)
-                             || (((ob_time.parts_[DT_MDAY] - 1) % DAYS_PER_WEEK) == DAYS_PER_WEEK / 2
-                                 && ob_time.parts_[DT_HOUR] > DT_PART_MAX[DT_HOUR] / 2))
-                            ? 1
-                            : 0;
-      set_time_part_to_zero(ob_time);
-      int32_t offset = (ob_time.parts_[DT_MDAY] - 1) % DAYS_PER_WEEK;
-      ob_time.parts_[DT_DATE] = ob_time.parts_[DT_DATE] - offset + add_w * DAYS_PER_WEEK;
-      break;
-    }
-    case DDD:
-      //go through
-    case DD:
-      //go through
-    case J: {
-      const int32_t add_d = (ob_time.parts_[DT_HOUR] > DT_PART_MAX[DT_HOUR] / 2) ? 1 : 0;
-      set_time_part_to_zero(ob_time);
-      ob_time.parts_[DT_DATE] += add_d;
-      break;
-    }
-    case DAY:
-      //go through
-    case DY:
-      //go through
-    case D: {
-      //within a week. sunday is the first day
-      const int32_t add_dy = (((ob_time.parts_[DT_WDAY] % DAYS_PER_WEEK) > DAYS_PER_WEEK / 2)
-                              || ((ob_time.parts_[DT_WDAY] % DAYS_PER_WEEK) == DAYS_PER_WEEK / 2
-                                  && ob_time.parts_[DT_HOUR] > DT_PART_MAX[DT_HOUR] / 2))
-                             ? 1
-                             : 0;
-      set_time_part_to_zero(ob_time);
-      int32_t offset = (ob_time.parts_[DT_WDAY]) % DAYS_PER_WEEK;
-      ob_time.parts_[DT_DATE] = ob_time.parts_[DT_DATE] - offset + add_dy * DAYS_PER_WEEK;
-      break;
-    }
-    case HH:
-      //go through
-    case HH12:
-      //go through
-    case HH24: {
-      const int32_t add_dh = (ob_time.parts_[DT_MIN] > DT_PART_MAX[DT_MIN] / 2) ? 1 : 0;
-      ob_time.parts_[DT_MIN] = 0;
-      ob_time.parts_[DT_SEC] = 0;
-      ob_time.parts_[DT_USEC] = 0;
-      ob_time.parts_[DT_HOUR] += add_dh;
-      if (ob_time.parts_[DT_HOUR] > DT_PART_MAX[DT_HOUR]) {
-        ob_time.parts_[DT_HOUR] -= static_cast<int32_t>(DT_PART_MAX[DT_HOUR]);
-        ob_time.parts_[DT_DATE] += 1;
-      }
-      break;
-    }
-    case MI: {
-      const int32_t add_mi = (ob_time.parts_[DT_SEC] >= DT_PART_MAX[DT_SEC] / 2) ? 1 : 0;
-      ob_time.parts_[DT_SEC] = 0;
-      ob_time.parts_[DT_USEC] = 0;
-      ob_time.parts_[DT_MIN] += add_mi;
-      if (ob_time.parts_[DT_MIN] > DT_PART_MAX[DT_MIN]) {
-        ob_time.parts_[DT_MIN] -= static_cast<int32_t>(DT_PART_MAX[DT_MIN]);
-        ob_time.parts_[DT_HOUR] += 1;
-
-        if (ob_time.parts_[DT_HOUR] > DT_PART_MAX[DT_HOUR]) {
-          ob_time.parts_[DT_HOUR] -= static_cast<int32_t>(DT_PART_MAX[DT_HOUR]);
-          ob_time.parts_[DT_DATE] += 1;
-        }
-      }
-      break;
-    }
-    case CC:
-      //go through
-    case SCC: {
-      const int32_t add_cc = (ob_time.parts_[DT_YEAR] % YEARS_PER_CENTURY  > YEARS_PER_CENTURY / 2) ? 1 : 0;
-      set_time_part_to_zero(ob_time);
-      ob_time.parts_[DT_YEAR] = ob_time.parts_[DT_YEAR] / YEARS_PER_CENTURY * YEARS_PER_CENTURY + 1 + add_cc * YEARS_PER_CENTURY;
-      ob_time.parts_[DT_MON] = 1;
-      ob_time.parts_[DT_MDAY] = 1;
-      ob_time.parts_[DT_DATE] = ObTimeConverter::ob_time_to_date(ob_time);
-      break;
-    }
-    case IYYY:
-      //go through
-    case IY:
-      //go through
-    case I: {
-      //not used heavily. so, do not care too much about performance !
-      set_time_part_to_zero(ob_time);
-      ret = ObTimeConverter::get_round_day_of_isoyear(ob_time);
-      break;
-    }
-    default: {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected fmt_id", K(fmt_id), K(ret));
-    }
-  }//end switch
-  return ret;
-}
-
 int ObRelationalExprOperator::is_row_cmp(const ObRawExpr &raw_expr,
                                          int &row_dim)
 {
@@ -6207,12 +5440,9 @@ int ObRelationalExprOperator::cg_datum_cmp_expr(ObIAllocator &allocator,
       rt_expr.eval_batch_func_ = ObExprCmpFuncsHelper::get_eval_batch_expr_cmp_func(
         input_type1, input_type2, input_scale1, input_scale2, in_prec1, in_prec2, cmp_op,
         cs_type, has_lob_header);
-      rt_expr.eval_vector_func_ = VectorCmpExprFuncsHelper::get_eval_vector_expr_cmp_func(
-        rt_expr.args_[0]->datum_meta_, rt_expr.args_[1]->datum_meta_, cmp_op);
     }
     CK(NULL != rt_expr.eval_func_);
     CK(NULL != rt_expr.eval_batch_func_);
-    CK(NULL != rt_expr.eval_vector_func_);
 
   }
   return ret;

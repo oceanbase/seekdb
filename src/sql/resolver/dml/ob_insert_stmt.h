@@ -97,7 +97,6 @@ public:
     }
     return events;
   }
-  virtual int64_t get_instead_of_trigger_column_count() const override;
   DECLARE_VIRTUAL_TO_STRING;
 private:
   bool is_all_const_values_;

@@ -126,14 +126,6 @@ int64_t ObDeleteStmt::to_string(char *buf, const int64_t buf_len) const
           K(child_stmts)
           );
   }
-  if (is_error_logging()) {
-    J_KV("is_err_log", error_log_info_.is_error_log_,
-         "err_log_table_name", error_log_info_.table_name_,
-         "err_log_database_name", error_log_info_.database_name_,
-         "err_log_table_id", error_log_info_.table_id_,
-         "err_log_reject_limit", error_log_info_.reject_limit_,
-         "err_log_exprs", error_log_info_.error_log_exprs_);
-  }
   J_OBJ_END();
   return pos;
 }
@@ -169,20 +161,6 @@ int ObDeleteStmt::get_view_check_exprs(ObIArray<ObRawExpr*>& view_check_exprs) c
     }
   }
   return ret;
-}
-
-int64_t ObDeleteStmt::get_instead_of_trigger_column_count() const
-{
-  const TableItem *table_item = NULL;
-  int64_t column_count = 0;
-  if (1 == table_info_.count() &&
-      NULL != table_info_.at(0) &&
-      NULL != (table_item = get_table_item_by_id(table_info_.at(0)->table_id_)) &&
-      table_item->is_view_table_ &&
-      NULL != table_item->ref_query_) {
-    column_count = table_item->ref_query_->get_select_item_size();
-  }
-  return column_count;
 }
 
 int ObDeleteStmt::remove_table_item_dml_info(const TableItem* table)

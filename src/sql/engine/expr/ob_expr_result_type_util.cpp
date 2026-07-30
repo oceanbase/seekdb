@@ -483,8 +483,7 @@ int check_string_res_type_extended(const ObExprResType &type)
  * In expression type inference, if the parameter needs to be implicitly converted
  * to a string type, this function can be used to obtain the maximum length of
  * the parameter after conversion to a string. For example, if the parameter is a
- * date, then different lengths can be inferred based on the different
- * nls_date_format settings.
+ * date, then the standard datetime string length is used.
  * TODO: The length inference for constants still needs optimization; the current
  * inference result is too long.
  * @param dtc_params Type conversion information, obtained through
@@ -587,11 +586,7 @@ int ObExprResultTypeUtil::deduce_max_string_length_extended(const ObDataTypeCast
       } else if (orig_type.is_numeric_type()) {
         ascii_bytes = MAX_NUMBER_BUFFER_SIZE_IN_TYPE_UTIL;
       } else if (orig_type.is_datetime()) {
-        // deduce by format
-        if (OB_FAIL(ObTimeConverter::deduce_max_len_from_datetime_format(
-                      dtc_params.get_nls_format(orig_type.get_type()), ascii_bytes))) {
-          LOG_WARN("fail to deduce max len from dfm format", K(ret));
-        }
+        ascii_bytes = DATETIME_MAX_LENGTH;
       } else {
         // TODO: support rowid and urowid
         ascii_bytes = orig_type.get_length();

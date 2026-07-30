@@ -170,7 +170,7 @@ public:
   int purge_index(const obcall::ObPurgeIndexArg &arg);
   int create_table_like(const obcall::ObCreateTableLikeArg &arg);
   int parallel_create_table_like(const obcall::ObCreateTableLikeArg &arg, obcall::ObCreateTableRes &res);
-  int root_minor_freeze(const obcall::ObRootMinorFreezeArg &arg);
+  int root_minor_freeze(const obcall::ObMinorFreezeArg &arg);
   int update_index_status(const obcall::ObUpdateIndexStatusArg &arg);
   int parallel_update_index_status(const obcall::ObUpdateIndexStatusArg &arg, obcall::ObParallelDDLRes &res);
   int purge_table(const obcall::ObPurgeTableArg &arg);
@@ -216,12 +216,8 @@ public:
 
   //----Functions for managing routines----
   int create_routine(const obcall::ObCreateRoutineArg &arg);
-  int create_routine_with_res(const obcall::ObCreateRoutineArg &arg,
-                              obcall::ObRoutineDDLRes &res);
   int drop_routine(const obcall::ObDropRoutineArg &arg);
   int alter_routine(const obcall::ObCreateRoutineArg &arg);
-  int alter_routine_with_res(const obcall::ObCreateRoutineArg &arg,
-                             obcall::ObRoutineDDLRes &res);
   //----End of functions for managing routines----
 
   //----Functions for managing routines----
@@ -230,8 +226,6 @@ public:
 
   //----Functions for managing package----
   int create_package(const obcall::ObCreatePackageArg &arg);
-  int create_package_with_res(const obcall::ObCreatePackageArg &arg,
-                              obcall::ObRoutineDDLRes &res);
   int drop_package(const obcall::ObDropPackageArg &arg);
   //----End of functions for managing package----
 
@@ -240,8 +234,6 @@ public:
   int create_trigger_with_res(const obcall::ObCreateTriggerArg &arg,
                               obcall::ObCreateTriggerRes &res);
   int alter_trigger(const obcall::ObAlterTriggerArg &arg);
-  int alter_trigger_with_res(const obcall::ObAlterTriggerArg &arg,
-                             obcall::ObRoutineDDLRes &res);
   int drop_trigger(const obcall::ObDropTriggerArg &arg);
   //----End of functions for managing trigger----
 
@@ -304,7 +296,6 @@ private:
   int finish_bootstrap();
   int set_config_after_bootstrap_();
 
-  int precheck_interval_part(const obcall::ObAlterTableArg &arg);
 
   int parallel_ddl_pre_check_();
   int check_tx_share_memory_limit_(obcall::ObAdminSetConfigItem &item);

@@ -44,7 +44,6 @@ namespace observer
 {
 class ObServer;
 class ObServerInstance;
-class ObRemoteLocationGetter;
 
 class ObSchemaReleaseTimeTask: public common::ObTimerTask
 {
@@ -84,8 +83,7 @@ public:
   void wait();
   int destroy();
 
-  //fill_tablet_replica: to build a tablet replica locally
-  // @params[in] tenant: tablet belongs to which tenant
+  // Build tablet report information locally.
   // @params[in] tablet_id: the tablet to build
   // @params[out] runtime_info: local runtime metadata for this tablet
   // @params[out] tablet_checksum: local tablet data/column checksum
@@ -100,8 +98,6 @@ public:
 
   ////////////////////////////////////////////////////////////////
   int check_frozen_scn(const obcall::ObCheckFrozenScnArg &arg);
-  // ObCallSwitchSchemaP @RS DDL
-  int switch_schema(const obcall::ObSwitchSchemaArg &arg, obcall::ObSwitchSchemaResult &result);
   int calc_column_checksum_request(const obcall::ObCalcColumnChecksumRequestArg &arg, obcall::ObCalcColumnChecksumRequestRes &res);
   int build_ddl_local(const obcall::ObDDLLocalBuildArg &arg, obcall::ObDDLLocalBuildResult &res);
   int check_and_cancel_ddl_complement_data_dag(const obcall::ObDDLLocalBuildArg &arg, bool &is_dag_exist);
@@ -109,7 +105,6 @@ public:
   int stop_partition_write(const obcall::Int64 &switchover_timestamp, obcall::Int64 &result);
   int check_partition_log(const obcall::Int64 &switchover_timestamp, obcall::Int64 &result);
   int get_wrs_info(const obcall::ObGetWRSArg &arg, obcall::ObGetWRSResult &result);
-  ////////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////
   // ObCallMinorFreezeP @RS minor freeze
   int minor_freeze(const obcall::ObMinorFreezeArg &arg,
@@ -130,35 +125,18 @@ public:
   int check_ddl_tablet_merge_status(
     const obcall::ObDDLCheckTabletMergeStatusArg &arg,
     obcall::ObDDLCheckTabletMergeStatusResult &result);
-  ////////////////////////////////////////////////////////////////
-  // ObCallBatchSwitchRsLeaderP @RS leader coordinator & admin
-  int batch_switch_rs_leader(const ObAddr &arg);
-  // ObCallGetPartitionCountP @RS leader coordinator
-  int get_partition_count(obcall::ObGetPartitionCountResult &result);
-
-  ////////////////////////////////////////////////////////////////
-
-  // ObCallGetServerStatusP @RS
   int get_server_resource_info(share::ObServerResourceInfo &resource_info);
   static int get_build_version(share::ObBuildVersion &build_version);
   int load_leader_cluster_login_info();
   // ObCallSetDebugSyncActionP @RS::admin to set debug sync action
   int set_ds_action(const obcall::ObDebugSyncActionArg &arg);
-  // ObSyncPartitionTableP @RS empty_server_checker
-  int sync_partition_table(const obcall::Int64 &arg);
   int set_tracepoint(const obcall::ObSetTracepointParam &param);
   int cancel_sys_task(const share::ObTaskId &task_id);
   int refresh_memory_stat();
   ////////////////////////////////////////////////////////////////
   // misc functions
 
-  int get_runtime_refreshed_schema_version(
-      const obcall::ObGetRuntimeSchemaVersionArg &arg,
-      obcall::ObGetRuntimeSchemaVersionResult &result);
   int submit_async_refresh_schema_task(const int64_t schema_version);
-  int init_runtime_config(
-      const obcall::ObInitRuntimeConfigArg &arg,
-      obcall::ObInitRuntimeConfigRes &result);
   int check_server_empty(bool &server_empty);
 
 private:

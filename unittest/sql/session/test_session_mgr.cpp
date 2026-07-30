@@ -116,7 +116,6 @@ TEST_F(DISABLED_TestSessionMgr, test_performace)
   gettimeofday(&get_end, NULL);
   gettimeofday(&stat_beg, NULL);
   for (uint32_t i = 1; i < SESSION_COUNT; ++i) {
-    EVENT_DEC(ACTIVE_SESSIONS);
   }
   gettimeofday(&stat_end, NULL);
   const uint64_t WEIGHT = 1000000;

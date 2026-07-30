@@ -1325,7 +1325,8 @@ struct InitUDTBasicFuncArray
 {
   // only for storage use, udt types are used as null bitmap in storage
   // storage will use murmur_hash_ and null_last_cmp_ maybe, so keep the origin basic func define and others
-  // basic func return error code wheh is called: hash func return OB_NOT_SUPPORTED and cmp func return OB_ERR_NO_ORDER_MAP_SQL
+  // Basic functions reject unsupported operations: hashing returns OB_NOT_SUPPORTED and
+  // comparison returns OB_ERR_INVALID_TYPE_FOR_OP.
   template <typename T>
   using StrHash = DefHashFunc<DatumStrHashCalculator<CS_TYPE_BINARY, false, T, false>>;
   template <typename T, bool HAS_LOB_HEADER>

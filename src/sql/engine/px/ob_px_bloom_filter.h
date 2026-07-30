@@ -56,9 +56,6 @@ public:
   inline int might_contain(uint64_t hash, bool &is_match) {
     return (this->*might_contain_)(hash, is_match);
   }
-  int might_contain_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
-                           const EvalBound &bound, uint64_t *hash_values, int64_t &total_count,
-                           int64_t &filter_count);
   int put(uint64_t hash);
   int put_batch(uint64_t *batch_hash_values, const EvalBound &bound, const ObBitVector &skip, bool &is_empty);
   int merge_filter(ObPxBloomFilter *filter);

@@ -46,14 +46,6 @@ int ObExprArrayExcept::eval_array_except_batch(const ObExpr &expr,
   return eval_array_set_operation_batch(expr, ctx, skip, batch_size, EXCEPT);
 }
 
-int ObExprArrayExcept::eval_array_except_vector(const ObExpr &expr, 
-                          ObEvalCtx &ctx,
-                          const ObBitVector &skip, 
-                          const EvalBound &bound)
-{
-  return eval_array_set_operation_vector(expr, ctx, skip, bound, EXCEPT);
-}
-
 int ObExprArrayExcept::cg_expr(ObExprCGCtx &expr_cg_ctx,
                           const ObRawExpr &raw_expr,
                           ObExpr &rt_expr) const
@@ -62,7 +54,6 @@ int ObExprArrayExcept::cg_expr(ObExprCGCtx &expr_cg_ctx,
   UNUSED(raw_expr);
   rt_expr.eval_func_ = eval_array_except;
   rt_expr.eval_batch_func_ = eval_array_except_batch;
-  rt_expr.eval_vector_func_ = eval_array_except_vector;
   return OB_SUCCESS;
 }
 

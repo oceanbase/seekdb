@@ -16,7 +16,7 @@ export BRANCH="${BRANCH:-master}"
 
 
 # Copy compile artifacts from task dir to workspace if running in container
-for f in observer.zst obproxy.zst; do
+for f in observer.zst; do
   if [[ -f "$SEEKDB_TASK_DIR/$f" ]] && [[ ! -f "$WORKSPACE/$f" ]]; then
     cp -f "$SEEKDB_TASK_DIR/$f" "$WORKSPACE/" || true
   fi

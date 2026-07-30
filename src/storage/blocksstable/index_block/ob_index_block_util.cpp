@@ -18,7 +18,7 @@
 
 #include "share/schema/ob_schema_struct.h"
 #include "storage/blocksstable/index_block/ob_index_block_util.h"
-#include "share/schema/ob_table_schema.h"  // relocated-definition owner
+#include "share/schema/ob_table_schema.h"
 
 namespace oceanbase
 {

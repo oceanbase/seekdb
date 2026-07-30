@@ -66,7 +66,6 @@ OB_SERIALIZE_MEMBER(ObDASTableLocMeta,
 
 OB_SERIALIZE_MEMBER(ObDASTabletLoc,
                     tablet_id_,
-                    server_,
                     flags_,
                     partition_id_,
                     first_level_part_id_);

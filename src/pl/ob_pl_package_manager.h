@@ -56,7 +56,6 @@ class ObMySQLProxy;
 
 namespace pl
 {
-struct ObPLExecCtx;
 class ObPLResolveCtx;
 class ObUserDefinedType;
 class ObPLVar;

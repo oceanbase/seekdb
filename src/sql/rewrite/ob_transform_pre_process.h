@@ -363,16 +363,6 @@ private:
                                 ObIArray<ObRawExpr*> &query_ref_exprs,
                                 ObIArray<ObRawExpr*> &query_ref_remove_const_exprs);
 
-  int transform_cast_multiset_for_stmt(ObDMLStmt *&stmt, bool &is_happened);
-  int transform_cast_multiset_for_expr(ObDMLStmt &stmt, ObRawExpr *&expr, bool &trans_happened);
-  int add_constructor_to_multiset(ObDMLStmt &stmt,
-                                  ObQueryRefRawExpr *multiset_expr,
-                                  const pl::ObPLDataType &elem_type,
-                                  bool& trans_happened);
-  int add_column_conv_to_multiset(ObQueryRefRawExpr *multiset_expr,
-                                  const pl::ObPLDataType &elem_type,
-                                  bool& trans_happened);
-
   int transform_for_last_insert_id(ObDMLStmt *stmt, bool &trans_happened);
   int expand_for_last_insert_id(ObDMLStmt &stmt, ObIArray<ObRawExpr*> &exprs, bool &is_happended);
   int expand_last_insert_id_for_join(ObDMLStmt &stmt, JoinedTable *join_table, bool &is_happened);

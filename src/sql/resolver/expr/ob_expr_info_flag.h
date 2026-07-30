@@ -101,7 +101,7 @@ DEF_EXPR_INFO_FLAG(IS_PL_ACCESS_IDX)
 DEF_EXPR_INFO_FLAG(IS_SELECT_REF)     // expr is refer to select item
 DEF_EXPR_INFO_FLAG(IS_SHARED_REF)
 DEF_EXPR_INFO_FLAG(IS_OP_OPERAND_IMPLICIT_CAST) // is implicit cast added for operand casting (add in type deducing)
-DEF_EXPR_INFO_FLAG(IS_UDT_UDF_SELF_PARAM) // this is a udt udf self param mock by pl engine
+DEF_EXPR_INFO_FLAG(RESERVED_EXPR_INFO_87)
 DEF_EXPR_INFO_FLAG(IS_PL_MOCK_DEFAULT_EXPR)
 DEF_EXPR_INFO_FLAG(IS_PROBABLY_LOCAL) // probably executed in local thread, for partial expr serialization
 DEF_EXPR_INFO_FLAG(IS_MARKED)

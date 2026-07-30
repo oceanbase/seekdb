@@ -164,63 +164,6 @@ int ObExprArrayDistinct::eval_array_distinct_batch(const ObExpr &expr, ObEvalCtx
   return ret;
 }
 
-int ObExprArrayDistinct::eval_array_distinct_vector(const ObExpr &expr, ObEvalCtx &ctx,
-                                                    const ObBitVector &skip, const EvalBound &bound)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval params", K(ret));
-  } else {
-    ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-    common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
-    ObIVector *left_vec = expr.args_[0]->get_vector(ctx);
-    VectorFormat left_format = left_vec->get_format();
-    const uint16_t left_meta_id = expr.args_[0]->obj_meta_.get_subschema_id();
-    ObIVector *res_vec = expr.get_vector(ctx);
-    VectorFormat res_format = expr.get_format(ctx);
-    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-    ObIArrayType *l_arr_obj = NULL;
-    ObIArrayType *res_obj = NULL;
-    for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {
-      bool is_null_res = false;
-      if (skip.at(idx) || eval_flags.at(idx)) {
-        continue;
-      } else if (left_vec->is_null(idx)) {
-        is_null_res = true;
-      } else {
-        ObString left = left_vec->get_string(idx);
-        if (OB_FAIL(ObNestedVectorFunc::construct_param(tmp_allocator, ctx, left_meta_id, left, l_arr_obj))) {
-          LOG_WARN("construct array obj failed", K(ret));
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (is_null_res) {
-        res_vec->set_null(idx);
-        eval_flags.set(idx);
-      } else if (OB_FAIL(l_arr_obj->distinct(tmp_allocator, res_obj))) {
-        LOG_WARN("array distinct failed", K(ret));
-      } else if (OB_FAIL(res_obj->init())) {
-        LOG_WARN("array init failed", K(ret));
-      } else if (res_format == VEC_DISCRETE) {
-        if (OB_FAIL(ObArrayExprUtils::set_array_res<ObDiscreteFormat>(res_obj, expr, ctx, static_cast<ObDiscreteFormat *>(res_vec), idx))) {
-          LOG_WARN("set array res failed", K(ret));
-        }
-      } else if (res_format == VEC_UNIFORM) {
-        if (OB_FAIL(ObArrayExprUtils::set_array_res<ObUniformFormat<false>>(res_obj, expr, ctx, static_cast<ObUniformFormat<false> *>(res_vec), idx))) {
-          LOG_WARN("set array res failed", K(ret));
-        }
-      } else if (OB_FAIL(ObArrayExprUtils::set_array_res<ObVectorBase>(res_obj, expr, ctx, static_cast<ObVectorBase *>(res_vec), idx))) {
-        LOG_WARN("set array res failed", K(ret));
-      } 
-      if (OB_SUCC(ret) && !is_null_res) {
-        eval_flags.set(idx);
-        res_obj->clear();
-      }
-    }
-  }
-  return ret;
-}
-
 int ObExprArrayDistinct::cg_expr(ObExprCGCtx &expr_cg_ctx,
                          const ObRawExpr &raw_expr,
                          ObExpr &rt_expr) const
@@ -230,7 +173,6 @@ int ObExprArrayDistinct::cg_expr(ObExprCGCtx &expr_cg_ctx,
   UNUSED(raw_expr);
   rt_expr.eval_func_ = eval_array_distinct;
   rt_expr.eval_batch_func_ = eval_array_distinct_batch;
-  rt_expr.eval_vector_func_ = eval_array_distinct_vector;
 
   return OB_SUCCESS;
 }

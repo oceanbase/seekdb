@@ -200,7 +200,7 @@ public:
   int64_t get_tmp_checksum() const { return tmp_checksum_; }
   share::SCN get_checksum_scn() const { return checksum_scn_; }
   void get_checksum_and_scn(uint64_t &checksum, share::SCN &checksum_scn);
-  void update_checksum(const uint64_t checksum, const share::SCN checksum_scn);
+  int update_checksum(const uint64_t checksum, const share::SCN checksum_scn);
   void inc_update_checksum_scn(const share::SCN checksum_scn)
   {
     checksum_scn_.inc_update(checksum_scn);

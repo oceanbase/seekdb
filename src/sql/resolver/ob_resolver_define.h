@@ -333,7 +333,6 @@ struct ObResolverParams
        is_mock_prepare_(false),
        is_prepare_stage_(false),
        is_dynamic_sql_(false),
-       is_dbms_sql_(false),
        statement_id_(common::OB_INVALID_ID),
        resolver_scope_stmt_type_(ObItemType::T_INVALID),
        cur_sql_(),
@@ -365,7 +364,6 @@ struct ObResolverParams
        package_guard_(NULL),
        star_expansion_infos_(),
        is_resolve_fake_cte_table_(false),
-       is_returning_(false),
        is_in_view_(false)
   {}
   bool is_force_trace_log() { return force_trace_log_; }
@@ -398,7 +396,6 @@ public:
   bool is_mock_prepare_;
   bool is_prepare_stage_;
   bool is_dynamic_sql_;
-  bool is_dbms_sql_;
   uint64_t statement_id_;
   // Record the type of top-level stmt. If it is prepare or outline,
   // Then record the type of stmt to be executed (such as select, insert, etc.)
@@ -435,7 +432,6 @@ public:
   pl::ObPLPackageGuard *package_guard_;
   common::ObArray<ObStarExpansionInfo> star_expansion_infos_;
   bool is_resolve_fake_cte_table_;
-  bool is_returning_;
   bool is_in_view_;
 };
 } // end namespace sql

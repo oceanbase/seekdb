@@ -707,11 +707,11 @@ int ObLogWindowFunction::check_use_child_ordering(bool &used, int64_t &inherit_c
   return ret;
 }
 
-int ObLogWindowFunction::compute_op_parallel_and_server_info()
+int ObLogWindowFunction::compute_op_parallel_info()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObLogicalOperator::compute_op_parallel_and_server_info())) {
-    LOG_WARN("failed to compute parallel and server info", K(ret));
+  if (OB_FAIL(ObLogicalOperator::compute_op_parallel_info())) {
+    LOG_WARN("failed to compute parallel info", K(ret));
   } else if (is_partition_wise()) {
     ObLogicalOperator *child = get_child(first_child);
     if (OB_ISNULL(child)) {

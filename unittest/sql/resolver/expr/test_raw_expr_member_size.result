@@ -43,14 +43,12 @@
 
 | class | sizeof(class) |
 | --- | --- |
-| ObColumnRefRawExpr | 312 |
+| ObColumnRefRawExpr | 280 |
 | ObTerminalRawExpr | 176 |
 | expr.table_id_ | 8 |
 | expr.column_id_ | 8 |
 | expr.database_name_ | 16 |
 | expr.table_name_ | 16 |
-| expr.synonym_name_ | 16 |
-| expr.synonym_db_name_ | 16 |
 | expr.column_name_ | 16 |
 | expr.column_flags_ | 8 |
 | expr.dependant_expr_ | 8 |
@@ -103,21 +101,17 @@
 | expr.ref_stmt_ | 8 |
 | expr.output_column_ | 8 |
 | expr.is_set_ | 1 |
-| expr.is_cursor_ | 1 |
 | expr.has_nl_param_ | 1 |
-| expr.is_multiset_ | 1 |
 | expr.column_types_ | 1160 |
 | expr.exec_params_ | 168 |
 
 | class | sizeof(class) |
 | --- | --- |
-| ObObjAccessRawExpr | 3848 |
+| ObObjAccessRawExpr | 3840 |
 | ObOpRawExpr | 232 |
-| expr.get_attr_func_ | 8 |
 | expr.func_name_ | 16 |
 | expr.access_indexs_ | 1704 |
 | expr.var_indexs_ | 168 |
 | expr.for_write_ | 1 |
 | expr.property_type_ | 4 |
 | expr.orig_access_indexs_ | 1704 |
-

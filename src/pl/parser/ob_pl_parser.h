@@ -53,15 +53,13 @@ public:
             bool is_inner_parse = false);
   int parse_routine_body(const common::ObString &routine_body,
                          ObStmtNodeTree *&routine_stmt,
-                         bool is_for_trigger,
-                         bool need_unwrap = true /* for wrapped procedure/function */);
+                         bool is_for_trigger);
   int parse_package(const common::ObString &source,
                     ObStmtNodeTree *&package_stmt,
                     const ObDataTypeCastParams &dtc_params,
                     share::schema::ObSchemaGetterGuard *schema_guard,
                     bool is_for_trigger,
-                    const share::schema::ObTriggerInfo *trg_info = NULL,
-                    bool need_unwrap = true /* for wrapped package */);
+                    const share::schema::ObTriggerInfo *trg_info = NULL);
 private:
   int parse_procedure(const common::ObString &stmt_block,
                       const common::ObString &orig_stmt_block,

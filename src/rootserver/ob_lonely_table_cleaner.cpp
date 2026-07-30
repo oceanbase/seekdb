@@ -18,36 +18,11 @@
 
 
 #include "ob_ddl_service.h"
-#include "share/schema/ob_schema_getter_guard.h"
 
 namespace oceanbase
 {
 namespace rootserver
 {
-
-static int check_runtime_not_active()
-{
-  int ret = OB_SUCCESS;
-  ObSchemaGetterGuard schema_guard;
-  const ObSimpleServerRuntimeSchema *runtime_schema = nullptr;
-  if (OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("get runtime schema guard failed", K(ret));
-  } else if (OB_FAIL(schema_guard.get_server_runtime_info(runtime_schema))) {
-    LOG_WARN("get runtime schema failed", K(ret));
-  } else if (OB_ISNULL(runtime_schema)) {
-    ret = OB_RUNTIME_SCHEMA_NOT_READY;
-    LOG_WARN("runtime schema does not exist", K(ret));
-  } else if (runtime_schema->is_normal() || runtime_schema->is_dropping()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("runtime is still active", K(ret), KPC(runtime_schema));
-  } else {
-    LOG_INFO("runtime is not active", K(ret), KPC(runtime_schema));
-  }
-  return ret;
-}
 
 // Notice: this function is only used for dropping lob aux table that's main table has been dropped casued by some bugs.
 int ObDDLService::force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonelyLobAuxTableArg &arg)
@@ -69,8 +44,6 @@ int ObDDLService::force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonel
     
     uint64_t data_table_id = arg.get_data_table_id();
     bool exist = false;
-    bool ignore_ls_not_exist_for_lob_meta = false;
-    bool ignore_ls_not_exist_for_lob_piece = false;
 
     HEAP_VAR(ObTableSchema, tmp_lob_table_schema) {
       if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
@@ -102,16 +75,6 @@ int ObDDLService::force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonel
       } else if (OB_FAIL(ddl_operator.drop_table(tmp_lob_table_schema, trans, nullptr/*ddl_stmt_str*/, false/*is_truncate_table*/,
           nullptr/*drop_table_set*/, false/*is_drop_db*/, true/*delete_priv*/, true/*is_force_drop_lonely_lob_aux_table*/))) {
         LOG_ERROR("fail to drop lob meta table", KR(ret), K(tmp_lob_table_schema));
-        if (OB_LS_NOT_EXIST == ret || OB_LS_IS_DELETED == ret) {
-          int tmp_ret = OB_SUCCESS;
-          if (OB_TMP_FAIL(check_runtime_not_active())) {
-            LOG_WARN("check runtime state failed", KR(tmp_ret));
-          } else {
-            LOG_ERROR("ls not exist, ignore this when drop lob meta aux table", KR(ret), K(tmp_lob_table_schema));
-            ret = OB_SUCCESS;
-            ignore_ls_not_exist_for_lob_meta = true;
-          }
-        }
       }
     
       // 5. drop lob piece table
@@ -122,26 +85,6 @@ int ObDDLService::force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonel
       } else if (OB_FAIL(ddl_operator.drop_table(tmp_lob_table_schema, trans, nullptr/*ddl_stmt_str*/, false/*is_truncate_table*/,
           nullptr/*drop_table_set*/, false/*is_drop_db*/, true/*delete_priv*/, true/*is_force_drop_lonely_lob_aux_table*/))) {
         LOG_WARN("fail to drop lob piece table", KR(ret), K(tmp_lob_table_schema));
-        if (OB_LS_NOT_EXIST == ret || OB_LS_IS_DELETED == ret) {
-          int tmp_ret = OB_SUCCESS;
-          if (OB_TMP_FAIL(check_runtime_not_active())) {
-             LOG_WARN("check runtime state failed", KR(tmp_ret));
-          } else {
-            LOG_ERROR("ls not exist, ignore this when drop lob piece aux table", KR(ret), K(tmp_lob_table_schema));
-            ret = OB_SUCCESS;
-            ignore_ls_not_exist_for_lob_piece = true;
-          }
-        }
-      }
-
-      if (OB_SUCC(ret)) {
-        if (ignore_ls_not_exist_for_lob_meta && ! ignore_ls_not_exist_for_lob_piece) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_ERROR("ignore_ls_not_exist_for_lob_meta but not ignore_ls_not_exist_for_lob_piece, unexpected situation", KR(ret), K(arg));
-        } else if (! ignore_ls_not_exist_for_lob_meta && ignore_ls_not_exist_for_lob_piece) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_ERROR("not ignore_ls_not_exist_for_lob_meta but ignore_ls_not_exist_for_lob_piece, unexpected situation", KR(ret), K(arg));
-        }
       }
     }
 

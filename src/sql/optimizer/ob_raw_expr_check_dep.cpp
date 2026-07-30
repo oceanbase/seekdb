@@ -25,7 +25,7 @@ int ObRawExprCheckDep::check_expr(const ObRawExpr &expr, bool &found)
 {
   int ret = OB_SUCCESS;
   found = false;
-  int64_t idx = OB_INVALID;
+  int64_t idx = OB_INVALID_INDEX;
   if (ObOptimizerUtil::find_item(dep_exprs_, &expr, &idx) && OB_INVALID_INDEX != idx) {
     if (OB_ISNULL(dep_indices_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -126,4 +126,3 @@ int ObRawExprCheckDep::check(const ObIArray<ObRawExpr *> &exprs)
   }
   return ret;
 }
-

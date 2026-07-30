@@ -51,8 +51,6 @@ public:
                              const ObTriggerInfo &trigger_info,
                              const ObString &db_name,
                              ObIArray<ObDependencyInfo> &dep_infos);
-  static int resolve_has_auto_trans(const ParseNode &declare_node,
-                                    share::schema::ObTriggerInfo &trigger_info);       
 private:
   int resolve_create_trigger_stmt(const ParseNode &parse_node,
                                   obcall::ObCreateTriggerArg &trigger_arg);
@@ -64,26 +62,8 @@ private:
                              obcall::ObCreateTriggerArg &trigger_arg);
   int resolve_simple_dml_trigger(const ParseNode &parse_node,
                                  obcall::ObCreateTriggerArg &trigger_arg);
-  int resolve_instead_dml_trigger(const ParseNode &parse_node,
-                                  obcall::ObCreateTriggerArg &trigger_arg);
-  int resolve_compound_dml_trigger(const ParseNode &parse_node,
-                                   obcall::ObCreateTriggerArg &trigger_arg);
-  int resolve_compound_timing_point(const ParseNode &parse_node,
-                                    obcall::ObCreateTriggerArg &trigger_arg);
-  int resolve_dml_event_option(const ParseNode &parse_node,
-                               obcall::ObCreateTriggerArg &trigger_arg);
-  int resolve_reference_names(const ParseNode *parse_node,
-                              obcall::ObCreateTriggerArg &trigger_arg);
-  int resolve_trigger_status(int16_t enable_or_disable,
-                             obcall::ObCreateTriggerArg &trigger_arg);
-  int resolve_when_condition(const ParseNode *parse_node,
-                             obcall::ObCreateTriggerArg &trigger_arg);
   int resolve_trigger_body(const ParseNode &parse_node,
                            obcall::ObCreateTriggerArg &trigger_arg);
-  int resolve_compound_trigger_body(const ParseNode &parse_node,
-                                    obcall::ObCreateTriggerArg &trigger_arg);
-  int resolve_dml_event_list(const ParseNode &parse_node,
-                             obcall::ObCreateTriggerArg &trigger_arg);
   int resolve_sp_definer(const ParseNode *parse_node,
                          obcall::ObCreateTriggerArg &trigger_arg);
   int resolve_schema_name(const ParseNode &parse_node,

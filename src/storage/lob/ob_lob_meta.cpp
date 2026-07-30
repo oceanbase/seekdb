@@ -23,7 +23,7 @@ namespace oceanbase
 namespace storage
 {
 
-int ObLobMetaScanIter::open_local(ObLobAccessParam &param, ObPersistentLobApator *lob_adatper)
+int ObLobMetaScanIter::open(ObLobAccessParam &param, ObPersistentLobApator *lob_adatper)
 {
   int ret = OB_SUCCESS;
   lob_adatper_ = lob_adatper;
@@ -41,32 +41,13 @@ int ObLobMetaScanIter::open_local(ObLobAccessParam &param, ObPersistentLobApator
   return ret;
 }
 
-int ObLobMetaScanIter::open_remote(ObLobAccessParam &param)
-{
-  int ret = OB_SUCCESS;
-  lob_adatper_ = nullptr;
-  byte_size_ = param.byte_size_;
-  offset_ = param.offset_;
-  len_ = param.len_;
-  coll_type_ = param.coll_type_;
-  scan_backward_ = param.scan_backward_;
-  allocator_ = param.allocator_;
-  cur_pos_ = 0;
-  cur_byte_pos_ = 0;
-  is_remote_ = true;
-  if (OB_FAIL(ObLobRemoteUtil::query(param, obcall::ObLobQueryArg::QueryType::READ, param.addr_, remote_ctx_))) {
-    LOG_WARN("fail to init remote query ctx", K(ret));
-  }
-  return ret;
-}
-
 ObLobMetaScanIter::ObLobMetaScanIter()
   : lob_adatper_(nullptr), meta_iter_(nullptr),
     byte_size_(0), offset_(0), len_(0), coll_type_(ObCollationType::CS_TYPE_INVALID), scan_backward_(false),
     allocator_(nullptr), cur_pos_(0), cur_byte_pos_(0), not_calc_char_len_(false),
-    not_need_last_info_(false), is_remote_(false), remote_ctx_(nullptr){}
+    not_need_last_info_(false){}
 
-int ObLobMetaScanIter::get_next_row_local(ObLobMetaInfo &row)
+int ObLobMetaScanIter::get_next_row(ObLobMetaInfo &row)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(meta_iter_)) {
@@ -130,11 +111,11 @@ int ObLobMetaScanIter::get_next_row_local(ObLobMetaInfo &row)
   return ret;
 }
 
-int ObLobMetaScanIter::get_next_row_local(ObLobMetaScanResult &result)
+int ObLobMetaScanIter::get_next_row(ObLobMetaScanResult &result)
 {
   int ret = OB_SUCCESS;
   bool is_char = coll_type_ != common::ObCollationType::CS_TYPE_BINARY;
-  ret = get_next_row_local(result.info_);
+  ret = get_next_row(result.info_);
   if (ret == OB_ITER_END) {
   } else if (OB_FAIL(ret)) {
     LOG_WARN("failed to get next row.", K(ret));
@@ -186,22 +167,7 @@ int ObLobMetaScanIter::get_next_row_local(ObLobMetaScanResult &result)
   return ret;
 }
 
-
-int ObLobMetaScanIter::get_next_row_remote(ObString &data)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(remote_ctx_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("remote ctx is null", K(ret));
-  } else if (OB_FAIL(remote_ctx_->get_next_block(data))) {
-    if (ret != OB_ITER_END) {
-      LOG_WARN("failed to get next lob query block", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObLobMetaScanIter::get_next_row_local(ObString &data)
+int ObLobMetaScanIter::get_next_row(ObString &data)
 {
   int ret = OB_SUCCESS;
   ObLobMetaScanResult result;
@@ -224,37 +190,6 @@ int ObLobMetaScanIter::get_next_row_local(ObString &data)
       LOG_WARN("end offset invalid", K(ret), K(coll_type_), K(start_byte_offset), K(res_byte_len), K(result));
     } else {
       data.assign_ptr(result.info_.lob_data_.ptr() + start_byte_offset, res_byte_len);
-    }
-  }
-  return ret;
-}
-
-int ObLobMetaScanIter::get_next_row(ObString &data)
-{
-  int ret = OB_SUCCESS;
-  if (is_remote_) {
-    if (OB_FAIL(get_next_row_remote(data))) {
-      if (ret != OB_ITER_END) {
-        LOG_WARN("get_next_row_remote fail", K(ret));
-      }
-    }
-  } else if (OB_FAIL(get_next_row_local(data))) {
-    if (ret != OB_ITER_END) {
-      LOG_WARN("get_next_row_local fail", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObLobMetaScanIter::get_next_row(ObLobMetaScanResult &result)
-{
-  int ret = OB_SUCCESS;
-  if (is_remote_) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("remote meta scan not support", K(ret), KPC(this));
-  } else if (OB_FAIL(get_next_row_local(result))) {
-    if (ret != OB_ITER_END) {
-      LOG_WARN("get_next_row_local fail", K(ret), KPC(this));
     }
   }
   return ret;
@@ -494,11 +429,6 @@ void ObLobMetaScanIter::reset()
     } else {
       LOG_ERROR_RET(OB_ERR_UNEXPECTED, "persist_iter not null, but lob_adapter is null, may not release iter", KPC(this), KPC(meta_iter_));
     }
-  }
-
-  if (remote_ctx_ != nullptr) {
-    remote_ctx_->~ObLobRemoteQueryCtx();
-    remote_ctx_ = nullptr;
   }
 
   lob_adatper_ = nullptr;

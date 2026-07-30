@@ -77,9 +77,6 @@ int ObDtlLocalChannel::send_shared_message(ObDtlLinkedBuffer *&buf)
           LOG_WARN("fail to process internal result", K(ret));
         }
       }
-    } else if (ObDtlMsgType::PX_VECTOR == buf->msg_type()) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("vector is not supported in local channel", K(ret), K(buf->msg_type()));
     } else if (OB_FAIL(DTL.get_channel(peer_id_, chan))) {
       int tmp_ret = ret;
       // The receiver may not be linked yet. Handle drain immediately and let

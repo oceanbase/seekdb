@@ -34,7 +34,7 @@ using namespace blocksstable;
 const static char * ObTableModeFlagStr[] = {
     "NORMAL",
     "QUEUING",
-    "PRIMARY_AUX_VP",
+    "RESERVED",
     "MODERATE",
     "SUPER",
     "EXTREME",
@@ -217,7 +217,6 @@ bool ObSimpleTableSchemaV2::has_tablet() const
 {
   return !(is_vir_table()
            || is_view_table()
-           || is_aux_vp_table()
            || is_virtual_table(get_table_id()) // virtual table index
            );
 }
@@ -329,7 +328,6 @@ bool ObSimpleTableSchemaV2::is_valid() const
       ret = false;
       LOG_WARN("invalid argument", K(table_id_), K(schema_version_), K(database_id_), K(table_name_));
     } else if (is_index_table()
-        || is_aux_vp_table()
         || is_aux_lob_table()) {
       if (OB_INVALID_ID == data_table_id_) {
         ret = false;
@@ -376,8 +374,6 @@ int64_t ObSimpleTableSchemaV2::get_convert_size() const
     convert_size += simple_constraint_info_array_.at(i).get_convert_size();
   }
   convert_size += origin_index_name_.length() + 1;
-  convert_size += transition_point_.get_deep_copy_size();
-  convert_size += interval_range_.get_deep_copy_size();
   return convert_size;
 }
 
@@ -1229,7 +1225,7 @@ ObTableSchema::ObTableSchema(ObIAllocator *allocator)
     view_schema_(allocator),
     depend_table_ids_(SCHEMA_SMALL_MALLOC_BLOCK_SIZE, ModulePageAllocator(*allocator)),
     simple_index_infos_(SCHEMA_MID_MALLOC_BLOCK_SIZE, ModulePageAllocator(*allocator)),
-    aux_vp_tid_array_(SCHEMA_SMALL_MALLOC_BLOCK_SIZE, ModulePageAllocator(*allocator)),
+    reserved_table_ids_(SCHEMA_SMALL_MALLOC_BLOCK_SIZE, ModulePageAllocator(*allocator)),
     rowkey_info_(allocator),
     shadow_rowkey_info_(allocator),
     index_info_(allocator),
@@ -1334,7 +1330,7 @@ int ObTableSchema::assign(const ObTableSchema &src_schema)
         }
       }
 
-      if (FAILEDx(aux_vp_tid_array_.assign(src_schema.aux_vp_tid_array_))) {
+      if (FAILEDx(reserved_table_ids_.assign(src_schema.reserved_table_ids_))) {
         LOG_WARN("fail to assign array", K(ret));
       }
 
@@ -2129,32 +2125,6 @@ int ObTableSchema::reorder_column(const ObString &column_name, const bool is_fir
   return ret;
 }
 
-int ObTableSchema::add_aux_vp_tid(const uint64_t aux_vp_tid)
-{
-  int ret = OB_SUCCESS;
-  bool need_add = true;
-  // we are sure that index_tid are added in sorted order
-  if (aux_vp_tid == OB_INVALID_ID) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid aux_vp table tid", K(ret), K(aux_vp_tid));
-  } else {
-    int64_t N = aux_vp_tid_array_.count();
-    for (int64_t i = 0; need_add && i < N; i++) {
-      if (aux_vp_tid == aux_vp_tid_array_.at(i)) {
-        need_add = false;
-      }
-    }
-  }
-
-  if (OB_SUCC(ret) && need_add) {
-    if (OB_FAIL(aux_vp_tid_array_.push_back(aux_vp_tid))) {
-      LOG_WARN("fail to push back aux_vp_tid", K(aux_vp_tid_array_), K(aux_vp_tid));
-    }
-  }
-
-  return ret;
-}
-
 // description: Legacy generated-name convention for creating an index without explicitly declaring the index name.
 //  the system will automatically generate a name for it
 //              Generation rules: index_name_sys_auto = tblname_OBIDX_timestamp
@@ -2469,16 +2439,6 @@ int ObTableSchema::get_simple_index_infos(
   return ret;
 }
 
-int ObTableSchema::get_aux_vp_tid_array(ObIArray<uint64_t> &aux_vp_tid_array) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(aux_vp_tid_array.assign(aux_vp_tid_array_))) {
-    LOG_WARN("fail to assign aux vp tid array", K(ret));
-  }
-  return ret;
-}
-
-
 int ObTableSchema::get_default_row(
     get_default_value func,
     const common::ObIArray<ObColDesc> &column_ids,
@@ -2725,7 +2685,7 @@ int64_t ObTableSchema::get_convert_size() const
   convert_size += parser_name_.length() + 1;
   convert_size += parser_properties_.length() + 1;
   convert_size += view_schema_.get_convert_size() - sizeof(view_schema_);
-  convert_size += aux_vp_tid_array_.get_data_size();
+  convert_size += reserved_table_ids_.get_data_size();
   convert_size += depend_table_ids_.get_data_size();
   convert_size += depend_mock_fk_parent_table_ids_.get_data_size();
   convert_size += rowkey_info_.get_convert_size() - sizeof(rowkey_info_);
@@ -2798,7 +2758,7 @@ void ObTableSchema::reset()
   reset_string(parser_properties_);
   view_schema_.reset();
 
-  aux_vp_tid_array_.reset();
+  reserved_table_ids_.reset();
 
   depend_table_ids_.reset();
   depend_mock_fk_parent_table_ids_.reset();
@@ -3621,7 +3581,7 @@ int ObTableSchema::delete_column_internal(ObColumnSchemaV2 *column_schema, const
     ret = OB_SCHEMA_ERROR;
     LOG_WARN("The column schema does not belong to this table", K(ret));
   } else if (!is_view_table() && !is_user_table() && !is_index_table() && !is_tmp_table()
-             && !is_sys_table() && !is_aux_vp_table()) {
+             && !is_sys_table()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("Only NORMAL table and index table and SYSTEM table and view table are allowed", K(ret));
   } else if (!for_view && ((!is_table_with_hidden_pk_column() && column_cnt_ <= MIN_COLUMN_COUNT_WITH_PK_TABLE)
@@ -4657,124 +4617,6 @@ int ObTableSchema::has_unused_column(bool &has_unused_column) const
   return ret;
 }
 
-// For the main VP table, it returns the primary key column and the VP column, get_column_ids() is different,
-// it will return all columns including other VP columns
-// For the secondary VP table, it returns the same as get_column_ids(), that is, the primary key column and the VP column
-int ObTableSchema::get_vp_store_column_ids(common::ObIArray<ObColDesc> &column_ids) const
-{
-  int ret = OB_SUCCESS;
-  column_ids.reset();
-
-  if (!is_valid()) {
-    ret = OB_SCHEMA_ERROR;
-    LOG_WARN("The ObTableSchema is invalid", K(ret));
-  } else if (is_aux_vp_table()) {
-    if (OB_FAIL(get_column_ids(column_ids))) {
-      LOG_WARN("Fail to get column ids", K(ret));
-    }
-  } else if (is_primary_vp_table()) {
-    if (OB_FAIL(get_vp_column_ids_with_rowkey(column_ids))) {
-      LOG_WARN("Fail to get vp column ids", K(ret));
-    }
-  }
-  return ret;
-}
-
-// Return all VP columns, including the VP column that is the primary key
-int ObTableSchema::get_vp_column_ids(common::ObIArray<ObColDesc> &column_ids) const
-{
-  int ret = OB_SUCCESS;
-
-  if (!is_valid()) {
-    ret = OB_SCHEMA_ERROR;
-    LOG_WARN("The ObTableSchema is invalid", K(ret));
-  } else if (OB_UNLIKELY(!column_ids.empty())) {
-    // do not reset array for ObFixedArray
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid non-empty array to get vp column ids", K(column_ids));
-  } else {
-    ObColDesc col_desc;
-    //add now-rowkey columns
-    for (int64_t i = 0; OB_SUCC(ret) && i < column_cnt_; ++i) {
-      const ObColumnSchemaV2 *it = get_column_schema_by_idx(i);
-      if (NULL == it) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("The rowkey column is NULL, ", K(i));
-      } else if (it->is_primary_vp_column() || it->is_aux_vp_column()) {
-        // The same VP table will not have a primary VP column and a secondary VP column at the same time
-        // Therefore, the type of VP table is not judged here.
-        col_desc.col_id_ = static_cast<int32_t>(it->get_column_id());
-        col_desc.col_type_ = it->get_meta_type();
-        if (col_desc.col_type_.is_decimal_int()) {
-          col_desc.col_type_.set_scale(it->get_data_scale());
-        }
-        //for non-rowkey, col_desc.col_order_ is not meaningful
-        if (OB_FAIL(column_ids.push_back(col_desc))) {
-          LOG_WARN("fail to add now-rowkey vp column id to column_ids", K(ret));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-// Used in the primary partition table, returns all VP columns, including the primary key + VP column
-int ObTableSchema::get_vp_column_ids_with_rowkey(common::ObIArray<ObColDesc> &column_ids,
-    const bool no_virtual) const
-{
-  int ret = OB_SUCCESS;
-
-  if (!is_primary_vp_table()) {
-    // do nothing
-  } else if (!is_valid()) {
-    ret = OB_SCHEMA_ERROR;
-    LOG_WARN("The ObTableSchema is invalid", K(ret));
-  } else if (OB_UNLIKELY(!column_ids.empty())) {
-    // do not reset array for ObFixedArray
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid non-empty array to get vp column ids", K(column_ids));
-  } else {
-    ObColDesc col_desc;
-    // firstly add rowkey columns
-    for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_info_.get_size(); ++i) {
-      const ObRowkeyColumn *rowkey_column = NULL;
-      if (NULL == (rowkey_column = rowkey_info_.get_column(i))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("The rowkey column is NULL, ", K(i));
-      } else {
-        col_desc.col_id_ = static_cast<int32_t>(rowkey_column->column_id_);
-        col_desc.col_type_ = rowkey_column->type_;
-        col_desc.col_order_ = rowkey_column->order_;
-        if (OB_FAIL(column_ids.push_back(col_desc))) {
-          LOG_WARN("Fail to add rowkey column id to column_ids", K(ret));
-        }
-      }
-    }
-    // secondly add vp columns without rowkey columns
-    for (int64_t i = 0; OB_SUCC(ret) && i < column_cnt_; ++i) {
-      const ObColumnSchemaV2 *it = get_column_schema_by_idx(i);
-      if (NULL == it) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("The rowkey column is NULL, ", K(i));
-      } else if (it->is_primary_vp_column() && !(it->is_rowkey_column())
-          && (!no_virtual || !(it->is_virtual_generated_column()))) {
-        // This column is a VP column, if it is also a primary key column, skip it,
-        // because the first step has been added
-        col_desc.col_id_ = static_cast<int32_t>(it->get_column_id());
-        col_desc.col_type_ = it->get_meta_type();
-        if (col_desc.col_type_.is_decimal_int()) {
-          col_desc.col_type_.set_scale(it->get_data_scale());
-        }
-        //for non-rowkey, col_desc.col_order_ is not meaningful
-        if (OB_FAIL(column_ids.push_back(col_desc))) {
-          LOG_WARN("fail to add now-rowkey vp column id to column_ids", K(ret));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
 // col id includes:
 //  1. all rowkey
 //  2. part key which is generate col
@@ -4851,10 +4693,6 @@ int ObTableSchema::get_store_column_ids(common::ObIArray<ObColDesc> &column_ids,
   if (!is_valid()) {
     ret = OB_SCHEMA_ERROR;
     LOG_WARN("The ObTableSchema is invalid", K(ret));
-  } else if (!full_col && is_primary_vp_table()) {
-    if (OB_FAIL(get_vp_column_ids_with_rowkey(column_ids, no_virtual))) {
-      LOG_WARN("failed to get_vp_column_ids_with_rowkey", K(ret));
-    }
   } else {
     if (is_storage_index_table()) {
       no_virtual = false;
@@ -4874,13 +4712,6 @@ int ObTableSchema::get_store_column_count(int64_t &column_count, const bool full
     LOG_WARN("The ObTableSchema is invalid", K(ret));
   } else if (is_storage_index_table()) {
     column_count = column_cnt_;
-  } else if (!full_col && (is_aux_vp_table() || is_primary_vp_table())) {
-    ObArray<ObColDesc> column_ids;
-    if (OB_FAIL(get_store_column_ids(column_ids))) {
-      LOG_WARN("failed to get store column ids", K(ret));
-    } else {
-      column_count = column_ids.count();
-    }
   } else {
     column_count = column_cnt_ - virtual_column_cnt_;
   }
@@ -5579,7 +5410,6 @@ int64_t ObTableSchema::to_string(char *buf, const int64_t buf_len) const
     K_(table_dop),
     "constraints", ObArrayWrap<ObConstraint* >(cst_array_, cst_cnt_),
     "column_array", ObArrayWrap<ObColumnSchemaV2* >(column_array_, column_cnt_),
-    "aux_vp_tid_array", aux_vp_tid_array_,
     K_(index_info),
     K_(define_user_id),
     K_(aux_lob_meta_tid),
@@ -5638,7 +5468,8 @@ bool ObTableSchema::same_subpartitions(const ObTableSchema &other) const
 OB_DEF_SERIALIZE(ObTableSchema)
 {
   int ret = OB_SUCCESS;
-  int64_t aux_vp_tid_array_count = aux_vp_tid_array_.count();
+  ObRowkey reserved_partition_metadata;
+  int64_t reserved_table_id_count = reserved_table_ids_.count();
 
   // !!! begin static check
   OB_UNIS_ENCODE(database_id_);
@@ -5695,7 +5526,7 @@ OB_DEF_SERIALIZE(ObTableSchema)
   OB_UNIS_ENCODE(pk_comment_);
   OB_UNIS_ENCODE(row_store_type_);
   OB_UNIS_ENCODE(store_format_);
-  OB_UNIS_ENCODE_ARRAY(aux_vp_tid_array_, aux_vp_tid_array_count);
+  OB_UNIS_ENCODE_ARRAY(reserved_table_ids_, reserved_table_id_count);
   OB_UNIS_ENCODE(table_mode_);
   OB_UNIS_ENCODE(trigger_list_);
   OB_UNIS_ENCODE(simple_index_infos_);
@@ -5705,8 +5536,9 @@ OB_DEF_SERIALIZE(ObTableSchema)
   OB_UNIS_ENCODE(association_table_id_);
   OB_UNIS_ENCODE_ARRAY_POINTER_IF(hidden_partition_array_, hidden_partition_num_, (PARTITION_LEVEL_ONE <= part_level_));
   OB_UNIS_ENCODE(define_user_id_);
-  OB_UNIS_ENCODE(transition_point_);
-  OB_UNIS_ENCODE(interval_range_);
+  // Preserve the two historical interval-partition rowkey slots in the wire layout.
+  OB_UNIS_ENCODE(reserved_partition_metadata);
+  OB_UNIS_ENCODE(reserved_partition_metadata);
   OB_UNIS_ENCODE(tablet_id_);
   OB_UNIS_ENCODE(aux_lob_meta_tid_);
   OB_UNIS_ENCODE(aux_lob_piece_tid_);
@@ -5822,7 +5654,7 @@ OB_DEF_DESERIALIZE(ObTableSchema)
   int ret = OB_SUCCESS;
   reset();
 
-  int64_t aux_vp_tid_array_count = 0;
+  int64_t reserved_table_id_count = 0;
   // !!! begin static check
   OB_UNIS_DECODE(database_id_);
   OB_UNIS_DECODE(table_id_);
@@ -5878,7 +5710,16 @@ OB_DEF_DESERIALIZE(ObTableSchema)
   OB_UNIS_DECODE_AND_FUNC(pk_comment_, deep_copy_str);
   OB_UNIS_DECODE(row_store_type_);
   OB_UNIS_DECODE(store_format_);
-  OB_UNIS_DECODE_ARRAY_AND_FUNC(aux_vp_tid_array_, aux_vp_tid_array_count, add_aux_vp_tid);
+  // Keep consuming the removed vertical-partition id array at its historical
+  // serialization position. New schemas leave this reserved array empty.
+  OB_UNIS_DECODE(reserved_table_id_count);
+  for (int64_t i = 0; OB_SUCC(ret) && i < reserved_table_id_count; ++i) {
+    uint64_t reserved_table_id = OB_INVALID_ID;
+    OB_UNIS_DECODE(reserved_table_id);
+    if (FAILEDx(reserved_table_ids_.push_back(reserved_table_id))) {
+      SHARE_SCHEMA_LOG(WARN, "failed to preserve reserved table id", K(ret), K(reserved_table_id));
+    }
+  }
   OB_UNIS_DECODE(table_mode_);
   OB_UNIS_DECODE(trigger_list_);
   OB_UNIS_DECODE(simple_index_infos_);
@@ -5891,8 +5732,7 @@ OB_DEF_DESERIALIZE(ObTableSchema)
 
   // !!! FOR STATIC CHECKER BEGIN
   // THE FOLLOWING CODE CANNOT BE DESCRIBED USING SERIALIZE MACROS. THEY ARE EQUIVALENT TO THESE CODES:
-  // OB_UNIS_DECODE(transition_point_);
-  // OB_UNIS_DECODE(interval_range_);
+  // Consume the two removed interval-partition rowkey slots.
   if (OB_SUCC(ret)) {
     static int64_t ROW_KEY_CNT = 1;
     ObObj obj_array[ROW_KEY_CNT];
@@ -5901,17 +5741,13 @@ OB_DEF_DESERIALIZE(ObTableSchema)
     ObRowkey rowkey;
     rowkey.assign(obj_array, ROW_KEY_CNT);
     if (FAILEDx(rowkey.deserialize(buf, data_len, pos, true))) {
-      LOG_WARN("fail to deserialize transintion point rowkey", KR(ret));
-    } else if (OB_FAIL(set_transition_point(rowkey))) {
-      LOG_WARN("Fail to deep copy high_bound_val", K(ret), K(rowkey));
+      LOG_WARN("fail to consume reserved partition rowkey", KR(ret));
     }
 
     obj_array[0].reset();
     rowkey.assign(obj_array, ROW_KEY_CNT);
     if (FAILEDx(rowkey.deserialize(buf, data_len, pos, true))) {
-      LOG_WARN("fail to deserialize interval range rowkey", KR(ret));
-    } else if (OB_FAIL(set_interval_range(rowkey))) {
-      LOG_WARN("Fail to deep copy high_bound_val", K(ret), K(rowkey));
+      LOG_WARN("fail to consume reserved partition rowkey", KR(ret));
     }
   }
   // !!! FOR STATIC CHECKER END
@@ -5962,7 +5798,8 @@ OB_DEF_DESERIALIZE(ObTableSchema)
 OB_DEF_SERIALIZE_SIZE(ObTableSchema)
 {
   int64_t len = 0;
-  int64_t aux_vp_tid_array_count = aux_vp_tid_array_.count();
+  ObRowkey reserved_partition_metadata;
+  int64_t reserved_table_id_count = reserved_table_ids_.count();
 
   // !!! begin static check
   OB_UNIS_ADD_LEN(database_id_);
@@ -6013,7 +5850,7 @@ OB_DEF_SERIALIZE_SIZE(ObTableSchema)
   OB_UNIS_ADD_LEN(pk_comment_);
   OB_UNIS_ADD_LEN(row_store_type_);
   OB_UNIS_ADD_LEN(store_format_);
-  OB_UNIS_ADD_LEN_ARRAY(aux_vp_tid_array_, aux_vp_tid_array_count);
+  OB_UNIS_ADD_LEN_ARRAY(reserved_table_ids_, reserved_table_id_count);
   OB_UNIS_ADD_LEN(table_mode_);
   OB_UNIS_ADD_LEN(trigger_list_);
   OB_UNIS_ADD_LEN(simple_index_infos_);
@@ -6023,8 +5860,8 @@ OB_DEF_SERIALIZE_SIZE(ObTableSchema)
   OB_UNIS_ADD_LEN(association_table_id_);
   OB_UNIS_ADD_LEN_ARRAY_POINTER_IF(hidden_partition_array_, hidden_partition_num_, (PARTITION_LEVEL_ONE <= part_level_));
   OB_UNIS_ADD_LEN(define_user_id_);
-  OB_UNIS_ADD_LEN(transition_point_);
-  OB_UNIS_ADD_LEN(interval_range_);
+  OB_UNIS_ADD_LEN(reserved_partition_metadata);
+  OB_UNIS_ADD_LEN(reserved_partition_metadata);
   OB_UNIS_ADD_LEN(tablet_id_);
   OB_UNIS_ADD_LEN(aux_lob_meta_tid_);
   OB_UNIS_ADD_LEN(aux_lob_piece_tid_);
@@ -6587,22 +6424,6 @@ int ObTableSchema::set_simple_index_infos(
   FOREACH_CNT_X(simple_index_info, simple_index_infos, OB_SUCC(ret)) {
     if (OB_FAIL(add_simple_index_info(*simple_index_info))) {
       LOG_WARN("failed to add simple index info", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObTableSchema::set_aux_vp_tid_array(const common::ObIArray<uint64_t> &aux_vp_tid_array)
-{
-  int ret = OB_SUCCESS;
-  aux_vp_tid_array_.reset();
-  int64_t count = aux_vp_tid_array.count();
-  if (OB_FAIL(aux_vp_tid_array_.reserve(count))) {
-    LOG_WARN("fail to reserve array", K(ret), K(count));
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && (i < aux_vp_tid_array.count()); ++i) {
-    if (OB_FAIL(add_aux_vp_tid(aux_vp_tid_array.at(i)))) {
-      LOG_WARN("failed to add to aux_vp_tid_array", K(ret));
     }
   }
   return ret;
@@ -7493,7 +7314,6 @@ int64_t ObPrintableTableSchema::to_string(char *buf, const int64_t buf_len) cons
     K_(autoinc_column_id),
     K_(auto_increment),
     K_(read_only),
-    "aux_vp_tid_array", aux_vp_tid_array_,
     K_(aux_lob_meta_tid),
     K_(aux_lob_piece_tid)
   );

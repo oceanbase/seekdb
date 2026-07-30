@@ -20,7 +20,6 @@
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/engine/expr/ob_i_expr_extra_info.h"
-#include "sql/session/ob_sql_session_info.h"
 
 namespace oceanbase
 {
@@ -30,35 +29,6 @@ namespace sql
 class ObSubQueryIterator;
 class ObExprSubQueryRef : public ObExprOperator
 {
-  class ObExprSubQueryRefCtx : public ObExprOperatorCtx
-  {
-  public:
-    ObExprSubQueryRefCtx() : ObExprOperatorCtx(), cursor_infos_(), session_info_(NULL) 
-    {
-      cursor_infos_.reset();
-      
-    }
-    virtual ~ObExprSubQueryRefCtx()
-    {
-      if (OB_NOT_NULL(session_info_)) {
-        for (int64_t i = 0; i < cursor_infos_.count(); ++i) {
-          pl::ObPLCursorInfo* cursor = cursor_infos_.at(i);
-          if (OB_NOT_NULL(cursor)) {
-            cursor->dec_ref_count();
-            if (0 == cursor->get_ref_count()) {
-              (void)session_info_->close_cursor(cursor->get_id());
-            }
-          }
-        }
-        cursor_infos_.reset();
-      }
-    }
-
-
-  private:
-    ObArray<pl::ObPLCursorInfo*> cursor_infos_;
-    sql::ObSQLSessionInfo *session_info_;
-  };
   OB_UNIS_VERSION(1);
 public:
   struct Extra : public ObExprExtraInfoAccess<Extra>
@@ -83,28 +53,20 @@ public:
   public:
     ExtraInfo(common::ObIAllocator &alloc, ObExprOperatorType type)
       : ObIExprExtraInfo(alloc, type),
-        is_cursor_(false), scalar_result_type_(), row_desc_(alloc) {}
-    virtual ~ExtraInfo() { row_desc_.destroy(); }
+        scalar_result_type_() {}
+    virtual ~ExtraInfo() = default;
     void reset();
     int assign(const ExtraInfo &other);
-    inline void set_allocator(common::ObIAllocator *alloc)
-    {
-      row_desc_.set_allocator(alloc);
-    }
-    static int init_cursor_info(common::ObIAllocator *allocator,
-                                const ObQueryRefRawExpr &expr,
-                                const ObExprOperatorType type,
-                                ObExpr &rt_expr);
+    static int init_extra_info(common::ObIAllocator *allocator,
+                               const ObQueryRefRawExpr &expr,
+                               const ObExprOperatorType type,
+                               ObExpr &rt_expr);
     virtual int deep_copy(common::ObIAllocator &allocator,
                           const ObExprOperatorType type,
                           ObIExprExtraInfo *&copied_info) const override;
-    TO_STRING_KV(K_(is_cursor),
-                 K_(scalar_result_type),
-                 K_(row_desc));
+    TO_STRING_KV(K_(scalar_result_type));
 
-    bool is_cursor_;
     ObExprResType scalar_result_type_;
-    common::ObFixedArray<common::ObDataType, common::ObIAllocator> row_desc_;
   };
 public:
   explicit  ObExprSubQueryRef(common::ObIAllocator &alloc);
@@ -126,10 +88,6 @@ public:
   void set_result_is_scalar(bool is_scalar) { extra_.is_scalar_ = is_scalar; }
   void set_scalar_result_type(const ObExprResType &result_type);
   void set_subquery_idx(int64_t subquery_idx) { extra_.iter_idx_ = subquery_idx; }
-  void set_cursor(bool is_cursor) { extra_info_.is_cursor_ = is_cursor; }
-  common::ObIArray<common::ObDataType> &get_row_desc() { return extra_info_.row_desc_; }
-  int init_row_desc(int64_t capacity) { return extra_info_.row_desc_.init(capacity); }
-  virtual bool need_rt_ctx() const override { return true; }
 
   VIRTUAL_TO_STRING_KV(N_EXPR_TYPE, get_type_name(type_),
                        N_EXPR_NAME, name_,

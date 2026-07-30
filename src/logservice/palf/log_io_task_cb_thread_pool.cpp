@@ -15,7 +15,6 @@
  */
 
 #include "log_io_task_cb_thread_pool.h"
-#include "lib/ob_running_mode.h"
 #include "palf_env_impl.h"                    // PalfEnvImpl
 
 namespace oceanbase
@@ -39,7 +38,7 @@ int LogIOTaskCbThreadPool::init(const int64_t log_io_cb_num,
                                 IPalfEnvImpl *palf_env_impl)
 {
   int ret = OB_SUCCESS;
-  const int64_t thread_num = lib::is_mini_mode() ? MINI_MODE_THREAD_NUM : THREAD_NUM;
+  const int64_t thread_num = THREAD_NUM;
   const int64_t task_num_limit = log_io_cb_num;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;

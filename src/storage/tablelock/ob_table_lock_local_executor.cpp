@@ -117,9 +117,6 @@ int check_exist(const ObLockTaskBatchRequest<T> &arg,
     ret;                                                                \
   })
 
-// ObTableLockTaskP / ObHighPriorityTableLockTaskP processors removed: single-task lock RPC
-// was dead (no clients). The batch path below is the live one.
-
 int handle_batch_lock_task(const ObLockTaskBatchRequest<ObLockParam> &arg,
                            ObTableLockTaskResult &result)
 {
@@ -176,7 +173,6 @@ int handle_batch_lock_task(const ObLockTaskBatchRequest<ObLockParam> &arg,
   result.ret_code_ = ret;
   LOG_DEBUG("handle_batch_lock_task", KR(ret), K(result), K(arg));
   ret = OB_SUCCESS;
-
   return ret;
 }
 
@@ -236,7 +232,6 @@ int handle_batch_replace_lock_task(const ObLockTaskBatchRequest<ObReplaceLockPar
   result.ret_code_ = ret;
   LOG_DEBUG("handle_batch_replace_lock_task", KR(ret), K(result), K(arg));
   ret = OB_SUCCESS;
-
   return ret;
 }
 
@@ -351,13 +346,8 @@ int handle_high_priority_batch_lock_task(const ObLockTaskBatchRequest<ObLockPara
   result.ret_code_ = ret;
   LOG_DEBUG("handle_high_priority_batch_lock_task", KR(ret), K(result), K(arg));
   ret = OB_SUCCESS;
-
   return ret;
 }
-
-// ObOutTransLockTableP / ObOutTransUnlockTableP processors removed: the out-trans lock RPC
-// (ObTableLockRpcProxy::lock_table/unlock_table) was dead (no callers).
-
 
 } // observer
 } // oceanbase

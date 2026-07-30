@@ -41,7 +41,6 @@ private:
   share::ObSysStatMgrIter iter_;
   char task_id_[common::OB_TRACE_STAT_BUFFER_SIZE];
   char svr_ip_[common::MAX_IP_ADDR_LENGTH];
-  char comment_[common::OB_MAX_TASK_COMMENT_LENGTH];
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualSysTaskStatus);
 
 };

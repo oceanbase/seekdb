@@ -121,46 +121,6 @@ int ObExprArrayCardinality::eval_array_cardinality_batch(const ObExpr &expr, ObE
   return ret;
 }
 
-int ObExprArrayCardinality::eval_array_cardinality_vector(const ObExpr &expr, ObEvalCtx &ctx,
-                                                          const ObBitVector &skip, const EvalBound &bound)
-{
-  int ret = OB_SUCCESS;
-  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
-
-  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval source array failed", K(ret));
-  } else {
-    ObIVector *arr_vec = expr.args_[0]->get_vector(ctx);
-    VectorFormat arr_format = arr_vec->get_format();
-    const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
-    ObIArrayType *src_arr = NULL;
-    ObIVector *res_vec = expr.get_vector(ctx);
-    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-    for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {
-      bool is_null_res = false;
-      if (skip.at(idx) || eval_flags.at(idx)) {
-        continue;
-      } else if (arr_vec->is_null(idx)) {
-        is_null_res = true;
-      } else {
-        ObString arr_str = arr_vec->get_string(idx);
-        if (OB_FAIL(ObNestedVectorFunc::construct_param(tmp_allocator, ctx, subschema_id, arr_str, src_arr))) {
-          LOG_WARN("construct array obj failed", K(ret));
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (is_null_res) {
-        res_vec->set_null(idx);
-        eval_flags.set(idx);
-      } else {
-        res_vec->set_int(idx, static_cast<int64_t>(src_arr->cardinality()));
-        eval_flags.set(idx);
-      }
-    } // end for
-  }
-  return ret;
-}
 int ObExprArrayCardinality::cg_expr(ObExprCGCtx &expr_cg_ctx,
                          const ObRawExpr &raw_expr,
                          ObExpr &rt_expr) const
@@ -169,7 +129,6 @@ int ObExprArrayCardinality::cg_expr(ObExprCGCtx &expr_cg_ctx,
   UNUSED(raw_expr);
   rt_expr.eval_func_ = eval_array_cardinality;
   rt_expr.eval_batch_func_ = eval_array_cardinality_batch;
-  rt_expr.eval_vector_func_ = eval_array_cardinality_vector;
   return OB_SUCCESS;
 }
 

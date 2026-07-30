@@ -421,7 +421,7 @@ private:
   int eval_float(const common::ObDatum &datum, const int32_t datum_offset);
   int eval_double(const common::ObDatum &datum, const int32_t datum_offset);
   int eval_number(const common::ObDatum &datum, const int32_t datum_offset);
-  int eval_vector(const common::ObDatum &datum, const int32_t datum_offset);
+  int eval_collection(const common::ObDatum &datum, const int32_t datum_offset);
   template<typename RES_T>
   int eval_number_decimal_int(const common::ObDatum &datum, const int32_t datum_offset);
   int init_eval_skip_index_func_for_decimal();
@@ -436,7 +436,7 @@ private:
   int eval_float_batch(const common::ObDatum *datums, const int64_t count);
   int eval_double_batch(const common::ObDatum *datums, const int64_t count);
   int eval_number_batch(const common::ObDatum *datums, const int64_t count);
-  int eval_vector_batch(const common::ObDatum *datums, const int64_t count);
+  int eval_collection_batch(const common::ObDatum *datums, const int64_t count);
   template<typename RES_T, typename CALC_T, typename ARG_T>
   int eval_decimal_int_batch(const common::ObDatum *datums, const int64_t count);
   template<typename CALC_T, typename ARG_T>

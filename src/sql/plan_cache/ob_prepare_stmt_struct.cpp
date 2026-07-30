@@ -258,7 +258,6 @@ ObPsStmtInfo::ObPsStmtInfo(ObIAllocator *inner_allocator)
     is_expired_evicted_(false),
     allocator_(inner_allocator),
     external_allocator_(inner_allocator),
-    num_of_returning_into_(-1),
     no_param_sql_(),
     is_sensitive_sql_(false),
     raw_sql_(),
@@ -287,7 +286,6 @@ ObPsStmtInfo::ObPsStmtInfo(ObIAllocator *inner_allocator,
     is_expired_evicted_(false),
     allocator_(inner_allocator),
     external_allocator_(external_allocator),
-    num_of_returning_into_(-1),
     no_param_sql_(),
     is_sensitive_sql_(false),
     raw_sql_(),
@@ -430,7 +428,6 @@ int ObPsStmtInfo::deep_copy(const ObPsStmtInfo &other)
     stmt_type_ = other.stmt_type_;
     ps_stmt_checksum_ = other.ps_stmt_checksum_;
     question_mark_count_ = other.question_mark_count_;
-    num_of_returning_into_ = other.num_of_returning_into_;
     is_sensitive_sql_ = other.is_sensitive_sql_;
     can_direct_use_param_ = other.can_direct_use_param();
     item_and_info_size_ = other.item_and_info_size_;
@@ -610,8 +607,7 @@ int64_t ObPsStmtInfo::to_string(char *buf, const int64_t buf_len) const
        K_(question_mark_count),
        K_(last_closed_timestamp),
        K_(runtime_schema_version),
-       K_(no_param_sql),
-       K_(num_of_returning_into));
+       K_(no_param_sql));
   J_COMMA();
   J_NAME("columns");
   J_COLON();

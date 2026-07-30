@@ -53,8 +53,6 @@ public:
   static uint64_t get_ssl_file_hash(const char *intl_file[3], const char *sm_file[5], bool &file_exist);
   ObSrvDeliver& get_deliver() { return deliver_; }
   inline rpc::frame::ObReqTranslator &get_xlator();
-  int reload_sql_thread_config();
-
   static int reload_rpc_auth_method();
 
 private:

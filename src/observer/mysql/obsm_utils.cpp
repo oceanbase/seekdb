@@ -424,7 +424,6 @@ const char* ObSMUtils::get_extend_type_name(int type)
     case PL_CURSOR_TYPE: return "CURSOR";
     case PL_SUBTYPE: return "SUBTYPE";
     case PL_INTEGER_TYPE: return "PL INTEGER";
-    case PL_REF_CURSOR_TYPE: return "REF CURSOR";
     case PL_OPAQUE_TYPE: return "OPAQUE";
     default: return "UNKNOW";
   }

@@ -68,7 +68,6 @@ public:
   bool is_valid() const;
   TO_STRING_KV(K_(tablet_id), K_(table_id),
                K_(row_cache_hit_cnt), K_(row_cache_miss_cnt), K_(row_cache_put_cnt),
-               K_(bf_filter_cnt), K_(bf_empty_read_cnt), K_(bf_access_cnt),
                K_(block_cache_hit_cnt), K_(block_cache_miss_cnt),
                K_(access_row_cnt), K_(output_row_cnt), K_(fuse_row_cache_hit_cnt),
                K_(fuse_row_cache_miss_cnt), K_(fuse_row_cache_put_cnt),
@@ -77,8 +76,6 @@ public:
                K_(single_get_stat), K_(multi_get_stat), K_(index_back_stat),
                K_(single_scan_stat), K_(multi_scan_stat),
                K_(exist_row), K_(get_row), K_(scan_row),
-               K_(sstable_bf_filter_cnt), K_(sstable_bf_empty_read_cnt),
-               K_(sstable_bf_access_cnt), K_(rowkey_prefix),
                K_(logical_read_cnt), K_(physical_read_cnt));
 
   common::ObTabletID tablet_id_;
@@ -86,9 +83,6 @@ public:
   int64_t row_cache_hit_cnt_;
   int64_t row_cache_miss_cnt_;
   int64_t row_cache_put_cnt_;
-  int64_t bf_filter_cnt_;
-  int64_t bf_empty_read_cnt_;
-  int64_t bf_access_cnt_;
   int64_t block_cache_hit_cnt_;
   int64_t block_cache_miss_cnt_;
   int64_t index_block_cache_hit_cnt_;
@@ -111,10 +105,6 @@ public:
   ObBlockAccessStat exist_row_;
   ObBlockAccessStat get_row_;
   ObBlockAccessStat scan_row_;
-  int64_t sstable_bf_filter_cnt_;
-  int64_t sstable_bf_empty_read_cnt_;
-  int64_t sstable_bf_access_cnt_;
-  int64_t rowkey_prefix_;
   int64_t logical_read_cnt_;
   int64_t physical_read_cnt_;
 };

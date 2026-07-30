@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_OPT
+#include "share/rc/ob_module_provider.h"
 #include "ob_table_location.h"
 #include "sql/resolver/dml/ob_delete_resolver.h"
 #include "sql/engine/expr/ob_expr_func_part_hash.h"
@@ -673,34 +674,15 @@ int ObPLGatherStatNode::add_part_calc_node(common::ObIArray<ObPartLocCalcNode*> 
 }
 
 
-int ObTableLocation::get_location_type(const common::ObAddr &server,
-                                       const ObCandiTabletLocIArray &phy_part_loc_info_list,
-                                       ObTableLocationType &location_type) const
+ObTableLocationType ObTableLocation::get_location_type(
+    const ObCandiTabletLocIArray &phy_part_loc_info_list) const
 {
-  int ret = OB_SUCCESS;
-  location_type = OB_TBL_LOCATION_UNINITIALIZED;
-  if (0 == phy_part_loc_info_list.count()) {
-    location_type = OB_TBL_LOCATION_LOCAL;
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < phy_part_loc_info_list.count(); ++i) {
-      const ObAddr &tablet_server =
-          phy_part_loc_info_list.at(i).get_partition_location().get_server();
-      if (!tablet_server.is_valid() || tablet_server != server) {
-        ret = OB_LOCATION_NOT_EXIST;
-        LOG_WARN("tablet is not at the local server", K(ret), K(server), K(tablet_server));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      // DISTRIBUTED describes a multi-tablet sharding shape here.  Even when
-      // every tablet is hosted by this standalone server, the optimizer must
-      // retain that shape so local PX can allocate partition iterators and
-      // exchanges.  It does not imply remote replica selection or transport.
-      location_type = 1 == phy_part_loc_info_list.count()
-                          ? OB_TBL_LOCATION_LOCAL
-                          : OB_TBL_LOCATION_DISTRIBUTED;
-    }
-  }
-  return ret;
+  // All tablets are routed locally in seekdb.  DISTRIBUTED only describes a
+  // multi-tablet sharding shape so local PX can retain its partition/exchange
+  // planning; it does not imply remote replica selection or transport.
+  return phy_part_loc_info_list.count() <= 1
+             ? OB_TBL_LOCATION_LOCAL
+             : OB_TBL_LOCATION_DISTRIBUTED;
 }
 
 ObTableLocation::ObTableLocation(const ObTableLocation &other) :
@@ -982,8 +964,7 @@ int ObTableLocation::init_table_location(ObExecContext &exec_ctx,
     } else if (OB_ISNULL(part_raw_expr = stmt.get_part_expr(table_id, loc_meta_.ref_table_id_))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("partition expr is null", K(table_id), K(loc_meta_.ref_table_id_));
-    } else if ((PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_type_ ||
-                PARTITION_FUNC_TYPE_INTERVAL == part_type_) &&
+    } else if (PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_type_ &&
                 OB_FAIL(can_get_part_by_range_for_range_columns(part_raw_expr, is_valid_range_columns_part_range_))) {
       LOG_WARN("failed ot check can get part by range for range columns", K(ret));
     } else if (OB_FAIL(can_get_part_by_range_for_temporal_column(part_raw_expr, is_valid_temporal_part_range_))) {
@@ -1002,8 +983,7 @@ int ObTableLocation::init_table_location(ObExecContext &exec_ctx,
     }
     if (OB_FAIL(ret)) {
     } else if (PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_type_
-        || PARTITION_FUNC_TYPE_LIST_COLUMNS == part_type_
-        || PARTITION_FUNC_TYPE_INTERVAL == part_type_) {
+        || PARTITION_FUNC_TYPE_LIST_COLUMNS == part_type_) {
       if (OB_FAIL(part_projector_.init_part_projector(&exec_ctx,
                                                       part_raw_expr, loc_row_desc))) {
         LOG_WARN("init part projector failed", K(ret));
@@ -1861,11 +1841,40 @@ int ObTableLocation::get_tablet_locations(ObDASCtx &das_ctx,
                                           const ObIArray<ObObjectID> &first_level_part_ids,
                                           ObCandiTabletLocIArray &candi_tablet_locs) const
 {
-  return das_ctx.get_location_router().nonblock_get_candi_tablet_locations(loc_meta_,
-                                                                           tablet_ids,
-                                                                           partition_ids,
-                                                                           first_level_part_ids,
-                                                                           candi_tablet_locs);
+  int ret = OB_SUCCESS;
+  NG_TRACE(get_location_cache_begin);
+  candi_tablet_locs.reset();
+  const int64_t tablet_cnt = tablet_ids.count();
+  if (OB_UNLIKELY(partition_ids.count() != tablet_cnt
+                  || (!first_level_part_ids.empty()
+                      && first_level_part_ids.count() != tablet_cnt))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("tablet and partition counts do not match",
+             K(ret), K(tablet_ids), K(partition_ids), K(first_level_part_ids));
+  } else if (OB_FAIL(candi_tablet_locs.prepare_allocate(tablet_cnt))) {
+    LOG_WARN("failed to allocate local tablet locations", K(ret), K(tablet_cnt));
+  } else {
+    UNUSED(das_ctx);
+    ObLSLocation local_location;
+    if (OB_FAIL(local_location.init(SYS_LS, GCTX.self_addr(), 1))) {
+      LOG_WARN("failed to initialize local LS location", K(ret), K(GCTX.self_addr()));
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < tablet_cnt; ++i) {
+      const ObObjectID first_level_part_id = first_level_part_ids.empty()
+          ? OB_INVALID_ID : first_level_part_ids.at(i);
+      if (OB_FAIL(candi_tablet_locs.at(i).set_local_location(
+                     partition_ids.at(i),
+                     first_level_part_id,
+                     tablet_ids.at(i),
+                     local_location,
+                     GCTX.self_addr()))) {
+        LOG_WARN("failed to construct local tablet location",
+                 K(ret), K(i), K(tablet_ids.at(i)));
+      }
+    }
+  }
+  NG_TRACE(get_location_cache_end);
+  return ret;
 }
 
 int ObTableLocation::add_final_tablet_locations(ObDASCtx &das_ctx,
@@ -2437,8 +2446,7 @@ int ObTableLocation::get_not_insert_dml_part_sort_expr(const ObDMLStmt &stmt,
     ObRawExpr *part_expr = NULL;
     // First-level column's range partition, range columns. The column exprs are ordered across partitions.
     if (PARTITION_LEVEL_ONE == part_level_) {
-      if (((PARTITION_FUNC_TYPE_RANGE == part_type_
-            || PARTITION_FUNC_TYPE_INTERVAL == part_type_) && is_col_part_expr_)
+      if ((PARTITION_FUNC_TYPE_RANGE == part_type_ && is_col_part_expr_)
           || (PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_type_)) {
         part_expr = stmt.get_part_expr(loc_meta_.table_loc_id_, loc_meta_.ref_table_id_);
       }
@@ -2926,8 +2934,7 @@ int ObTableLocation::get_partition_column_info(const ObDMLStmt &stmt,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Partition expr not in stmt", K(ret), K(loc_meta_));
   } else if (PARTITION_LEVEL_ONE == part_level &&
-             (PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_type_ ||
-             PARTITION_FUNC_TYPE_INTERVAL == part_type_) &&
+             PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_type_ &&
              OB_FAIL(can_get_part_by_range_for_range_columns(partition_raw_expr,
                                                              is_valid_range_columns_part_range_))) {
     LOG_WARN("failed ot check can get part by range for range columns", K(ret));
@@ -3589,7 +3596,7 @@ int ObTableLocation::calc_partition_ids_by_ranges(ObExecContext &exec_ctx,
     all_part = !is_all_single_value_ranges;
   } else if (NULL == part_ids) {//PARTITION_LEVEL_ONE
     if (!is_range_part(part_type_) ||
-        ((PARTITION_FUNC_TYPE_RANGE == part_type_ || PARTITION_FUNC_TYPE_INTERVAL == part_type_) && !is_col_part_expr_) ||
+        (PARTITION_FUNC_TYPE_RANGE == part_type_ && !is_col_part_expr_) ||
         (PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_type_ && !is_valid_range_columns_part_range_)) {
       if (!is_all_single_value_ranges) {
         if (is_valid_temporal_part_range_) {
@@ -3789,257 +3796,6 @@ int ObTableLocation::calc_partition_ids_by_rowkey(ObExecContext &exec_ctx,
   return ret;
 }
 
-/*
-case 1: interval_ym
-   diff1 = months_between(const_val - transition_val)
-   diff2 = extract(month, interval_val);
-case 2: interval_ds
-   diff1 = extract(second from (const_val - transition_val))
-   diff2 = extract(second from interval);
-case 3: other
-   diff1 = const_val - transition_val;
-   diff2 = interval_val;
-
-   n = trunc(diff1 / diff2) + 1;
-   result = transition + n * interval */
-int calc_high_bound_obj_new_engine(
-  ObIAllocator &allocator,
-  ObSQLSessionInfo *session,
-  ObObj &const_val,
-  uint64_t exist_parts,
-  const ObObj &transition_val,
-  const ObObj &interval_val,
-  ObObj &out_val)
-{
-  int ret = OB_SUCCESS;
-  ObNewRow tmp_row;
-  ObRawExpr *result_expr = NULL;
-  ObRawExpr *n_part_expr = NULL;
-  ParamStore dummy_params;
-  ObRawExprFactory expr_factory(allocator);
-  ObConstRawExpr *max_parts = NULL;
-  ObOpRawExpr *less_than_expr = NULL;
-  ObObj cmp_res;
-  ObObj max_interval;
-
-  CK (OB_NOT_NULL(session));
-
-  OZ (ObRawExprUtils::build_high_bound_raw_expr(expr_factory,
-                                                session,
-                                                const_val,
-                                                transition_val,
-                                                interval_val,
-                                                result_expr,
-                                                n_part_expr));
-  CK (OB_NOT_NULL(result_expr));
-  OZ (ObSQLUtils::calc_simple_expr_without_row(session,
-                                   result_expr, out_val, &dummy_params, allocator));
-
-  OX (max_interval.set_uint64(OB_MAX_INTERVAL_PARTITIONS - exist_parts));
-  OZ (ObRawExprUtils::build_const_obj_expr(expr_factory, max_interval, max_parts));
-  OZ (ObRawExprUtils::build_less_than_expr(expr_factory, n_part_expr, max_parts, less_than_expr));
-  OZ (less_than_expr->formalize(session));
-  OZ (ObSQLUtils::calc_simple_expr_without_row(session,
-                                   less_than_expr, cmp_res, &dummy_params, allocator));
-  if (OB_SUCC(ret) && !cmp_res.get_bool()) {
-    ret = OB_ERR_PARTITIONING_KEY_MAPS_TO_A_PARTITION_OUTSIDE_MAXIMUM_PERMITTED_NUMBER_OF_PARTITIONS;
-    LOG_WARN("exceed max partition", K(ret), K(const_val), K(exist_parts));
-  }
-  return ret;
-}
-
-// int calc_high_bound_obj(
-//   ObExecContext &exec_ctx,
-//   ObObj &const_val,
-//   const ObObj &transition_val,
-//   const ObObj &interval_val,
-//   ObObj &out_val)
-// {
-//   int ret = OB_SUCCESS;
-//   ParamStore dummy_params;
-//   const stmt::StmtType stmt_type = stmt::T_NONE;
-//   ObRawExpr *result_expr = NULL;
-//   ObRawExprFactory expr_factory(exec_ctx.get_allocator());
-
-//   OZ (ObRawExprUtils::build_high_bound_raw_expr(expr_factory,
-//                                                 exec_ctx.get_my_session(),
-//                                                 const_val,
-//                                                 transition_val,
-//                                                 interval_val,
-//                                                 result_expr));
-
-//   CK (OB_NOT_NULL(result_expr));
-//   OZ (ObSQLUtils::calc_simple_expr_without_row(stmt_type, exec_ctx.get_my_session(),
-//                                    result_expr, out_val, &dummy_params, exec_ctx.get_allocator()));
-
-//   return ret;
-// }
-
-/* sync task, need response */
-int ObTableLocation::send_add_interval_partition_rpc(
-    ObExecContext &exec_ctx,
-    share::schema::ObSchemaGetterGuard *schema_guard,
-    ObNewRow &row) const
-{
-  int ret = OB_SUCCESS;
-  const ObTableSchema *table_schema = NULL;
-  const ObDatabaseSchema *db_schema = NULL;
-  ObSqlString sql;
-  ObMySQLProxy *sql_proxy = nullptr;
-  int64_t affected_rows = 0;
-  ObTimeZoneInfo tz_info;
-  ObObj result_obj;
-  uint64_t range_part_num = 0;
-  if (OB_ISNULL(exec_ctx.get_my_session())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(exec_ctx.get_my_session()));
-  }
-
-  if (OB_SUCC(ret) && row.get_cell(0).is_null()) {
-    ret = OB_ERR_PARTITIONING_KEY_MAPS_TO_A_PARTITION_OUTSIDE_MAXIMUM_PERMITTED_NUMBER_OF_PARTITIONS;
-    LOG_USER_WARN(OB_ERR_PARTITIONING_KEY_MAPS_TO_A_PARTITION_OUTSIDE_MAXIMUM_PERMITTED_NUMBER_OF_PARTITIONS);
-  }
-
-  CK (OB_NOT_NULL(schema_guard));
-  OZ (schema_guard->get_table_schema(
-                                     loc_meta_.table_loc_id_, table_schema));
-  CK (OB_NOT_NULL(table_schema));
-  OZ (schema_guard->get_database_schema( table_schema->get_database_id(), db_schema));
-  CK (OB_NOT_NULL(db_schema));
-
-  CK (1 <= row.get_count());
-  CK (table_schema->get_transition_point().is_valid());
-  CK (table_schema->get_interval_range().is_valid());
-  CK (1 == table_schema->get_transition_point().get_obj_cnt());
-  CK (1 == table_schema->get_interval_range().get_obj_cnt());
-  OZ (table_schema->get_interval_parted_range_part_num(range_part_num));
-
-  OZ (calc_high_bound_obj_new_engine(exec_ctx.get_allocator(),
-                          exec_ctx.get_my_session(),
-                          row.get_cell(0),
-                          range_part_num,
-                          table_schema->get_transition_point().get_obj_ptr()[0],
-                          table_schema->get_interval_range().get_obj_ptr()[0],
-                          result_obj));
-
-  /* alter table table_name add partition ppp values less than (); */
-  if (OB_SUCC(ret)) {
-    ObRowkey high_bound_rowkey;
-    high_bound_rowkey.assign(&result_obj, 1);
-
-
-    tz_info.set_offset(0);
-    OZ (OTTZ_MGR.get_timezone_map(tz_info.get_tz_map_wrap()));
-
-    SMART_VAR(char[OB_MAX_DEFAULT_VALUE_LENGTH], high_bound_buf) {
-      MEMSET(high_bound_buf, 0, OB_MAX_DEFAULT_VALUE_LENGTH);
-      int64_t high_bound_buf_pos = 0;
-
-      OZ (ObPartitionUtils::convert_rowkey_to_sql_literal(high_bound_rowkey,
-                                                      high_bound_buf,
-                                                      OB_MAX_DEFAULT_VALUE_LENGTH,
-                                                      high_bound_buf_pos,
-                                                      false,
-                                                      &tz_info));
-
-      OZ (sql.assign_fmt("ALTER TABLE \"%.*s\".\"%.*s\" ADD PARTITION P_SYS_%d "
-                        "VALUES LESS THAN (%.*s);",
-                              db_schema->get_database_name_str().length(),
-                              db_schema->get_database_name_str().ptr(),
-                              table_schema->get_table_name_str().length(),
-                              table_schema->get_table_name_str().ptr(),
-                              1,
-                              static_cast<int>(high_bound_buf_pos), high_bound_buf
-                              ));
-      OX (sql_proxy = GCTX.sql_proxy_);
-      CK (OB_NOT_NULL(sql_proxy));
-      OZ (sql_proxy->write(sql.ptr(), affected_rows));
-    }
-  }
-  return ret;
-}
-
-/* sync task, need response */
-int ObTableLocation::send_add_interval_partition_rpc_new_engine(
-    ObIAllocator &allocator,
-    ObSQLSessionInfo *session,
-    ObSchemaGetterGuard *schema_guard,
-    const ObTableSchema *table_schema,
-    ObNewRow &row)
-{
-  int ret = OB_SUCCESS;
-  const ObDatabaseSchema *db_schema = NULL;
-  ObSqlString sql;
-  ObMySQLProxy *sql_proxy = nullptr;
-  int64_t affected_rows = 0;
-  ObTimeZoneInfo tz_info;
-  ObObj result_obj;
-  uint64_t range_part_num = 0;
-
-  CK (OB_NOT_NULL(schema_guard));
-  CK (OB_NOT_NULL(session));
-  CK (OB_NOT_NULL(table_schema));
-  OZ (schema_guard->get_database_schema( table_schema->get_database_id(), db_schema));
-  CK (OB_NOT_NULL(db_schema));
-
-  CK (1 <= row.get_count());
-  if (OB_SUCC(ret) && row.get_cell(0).is_null()) {
-    ret = OB_ERR_PARTITIONING_KEY_MAPS_TO_A_PARTITION_OUTSIDE_MAXIMUM_PERMITTED_NUMBER_OF_PARTITIONS;
-    LOG_USER_WARN(OB_ERR_PARTITIONING_KEY_MAPS_TO_A_PARTITION_OUTSIDE_MAXIMUM_PERMITTED_NUMBER_OF_PARTITIONS);
-  }
-  CK (table_schema->get_transition_point().is_valid());
-  CK (table_schema->get_interval_range().is_valid());
-  CK (1 == table_schema->get_transition_point().get_obj_cnt());
-  CK (1 == table_schema->get_interval_range().get_obj_cnt());
-  OZ (table_schema->get_interval_parted_range_part_num(range_part_num));
-
-  OZ (calc_high_bound_obj_new_engine(allocator,
-                                     session,
-                                     row.get_cell(0),
-                                     range_part_num,
-                                     table_schema->get_transition_point().get_obj_ptr()[0],
-                                     table_schema->get_interval_range().get_obj_ptr()[0],
-                                     result_obj));
-
-  /* alter table table_name add partition ppp values less than (); */
-  if (OB_SUCC(ret)) {
-    ObRowkey high_bound_rowkey;
-    high_bound_rowkey.assign(&result_obj, 1);
-
-
-    tz_info.set_offset(0);
-    OZ (OTTZ_MGR.get_timezone_map(tz_info.get_tz_map_wrap()));
-
-    SMART_VAR(char[OB_MAX_DEFAULT_VALUE_LENGTH], high_bound_buf) {
-      MEMSET(high_bound_buf, 0, OB_MAX_DEFAULT_VALUE_LENGTH);
-      int64_t high_bound_buf_pos = 0;
-
-      int64_t max_part_id = OB_INVALID_ID;
-      OZ (ObPartitionUtils::convert_rowkey_to_sql_literal(high_bound_rowkey,
-                                                          high_bound_buf,
-                                                          OB_MAX_DEFAULT_VALUE_LENGTH,
-                                                          high_bound_buf_pos,
-                                                          false,
-                                                          &tz_info));
-
-      OZ (table_schema->get_max_part_id(max_part_id));
-      OZ (sql.assign_fmt("ALTER TABLE \"%.*s\".\"%.*s\" ADD PARTITION P_SYS_%d "
-                        "VALUES LESS THAN (%.*s);",
-                              db_schema->get_database_name_str().length(),
-                              db_schema->get_database_name_str().ptr(),
-                              table_schema->get_table_name_str().length(),
-                              table_schema->get_table_name_str().ptr(),
-                              static_cast<int>(max_part_id + 1),
-                              static_cast<int>(high_bound_buf_pos), high_bound_buf
-                              ));
-      OX (sql_proxy = GCTX.sql_proxy_);
-      CK (OB_NOT_NULL(sql_proxy));
-      OZ (sql_proxy->write(sql.ptr(), affected_rows));
-    }
-  }
-  return ret;
-}
-
 int ObTableLocation::calc_partition_id_by_row(ObExecContext &exec_ctx,
                                               ObDASTabletMapper &tablet_mapper,
                                               ObNewRow &row,
@@ -4049,12 +3805,10 @@ int ObTableLocation::calc_partition_id_by_row(ObExecContext &exec_ctx,
 {
   int ret = OB_SUCCESS;
   ObObj func_result;
-  share::schema::ObPartitionLevel calc_range_part_level = part_level_;
   bool range_columns = false;
   if (NULL == part_ids) {
     if (PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_type_
-       || PARTITION_FUNC_TYPE_LIST_COLUMNS == part_type_
-       || PARTITION_FUNC_TYPE_INTERVAL == part_type_) {
+       || PARTITION_FUNC_TYPE_LIST_COLUMNS == part_type_) {
       part_projector_.project_part_row(PARTITION_LEVEL_ONE, row);
       ObObjectID partition_id = OB_INVALID_ID;
       ObTabletID tablet_id(ObTabletID::INVALID_TABLET_ID);
@@ -4071,8 +3825,7 @@ int ObTableLocation::calc_partition_id_by_row(ObExecContext &exec_ctx,
       LOG_DEBUG("part expr func result", K(func_result), K(part_type_));
     }
   } else if (PARTITION_FUNC_TYPE_RANGE_COLUMNS == subpart_type_ || PARTITION_FUNC_TYPE_LIST_COLUMNS == subpart_type_) {
-    calc_range_part_level = PARTITION_LEVEL_TWO;
-    part_projector_.project_part_row(calc_range_part_level, row);
+    part_projector_.project_part_row(PARTITION_LEVEL_TWO, row);
     for (int64_t idx = 0; OB_SUCC(ret) && idx < part_ids->count(); ++idx) {
       ObObjectID partition_id = OB_INVALID_ID;
       ObTabletID tablet_id(ObTabletID::INVALID_TABLET_ID);
@@ -4092,25 +3845,6 @@ int ObTableLocation::calc_partition_id_by_row(ObExecContext &exec_ctx,
   } else if (OB_FAIL(calc_partition_id_by_func_value(tablet_mapper, func_result, false,
                                                       tablet_ids, partition_ids, part_ids))) {
     LOG_WARN("Failed to calc partition id by func value", K(ret));
-  }
-  if (0 == partition_ids.count() && PARTITION_LEVEL_ONE == calc_range_part_level) {
-    bool is_interval = false;
-    if (OB_ISNULL(tablet_mapper.get_table_schema())) {
-      // virtual table, do nothing
-    } else if (tablet_mapper.get_table_schema()->is_interval_part()) {
-      if (OB_FAIL(send_add_interval_partition_rpc(exec_ctx,
-                                                  exec_ctx.get_sql_ctx()->schema_guard_,
-                                                  row))) {
-        /* to do: already added, do same thing as add success */
-        if (is_need_retry_interval_part_error(ret)) {
-          set_interval_partition_insert_error(ret);
-        }
-        LOG_WARN("failed to send add interval partition rpc", K(ret));
-      } else {
-        /* change error */
-        set_interval_partition_insert_error(ret);
-      }
-    }
   }
   return ret;
 }
@@ -5516,11 +5250,11 @@ int ObTableLocation::try_split_integer_range(const common::ObIArray<common::ObNe
   return ret;
 }
 
-int ObTableLocation::get_full_local_table_loc(ObDASLocationRouter &loc_router,
-                                              ObIAllocator &allocator,
-                                              uint64_t table_id,
-                                              uint64_t ref_table_id,
-                                              ObDASTableLoc *&table_loc)
+int ObTableLocation::build_full_local_table_loc(ObDASCtx &das_ctx,
+                                                ObIAllocator &allocator,
+                                                uint64_t table_id,
+                                                uint64_t ref_table_id,
+                                                ObDASTableLoc *&table_loc)
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = NULL;
@@ -5564,7 +5298,7 @@ int ObTableLocation::get_full_local_table_loc(ObDASLocationRouter &loc_router,
       OX(tablet_loc->loc_meta_ = loc_meta);
       OX(tablet_loc->partition_id_ = partition_ids.at(i));
       OX(tablet_loc->first_level_part_id_ = first_level_part_ids.at(i));
-      OZ(loc_router.nonblock_get_local(tablet_ids.at(i), *tablet_loc));
+      OZ(das_ctx.build_local_tablet_loc(ref_table_id, tablet_ids.at(i), *tablet_loc));
       OZ(table_loc->add_tablet_loc(tablet_loc));
     }
   }

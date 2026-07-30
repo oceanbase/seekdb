@@ -132,7 +132,6 @@ public:
     sql_mode_(0),
     tz_info_wrap_(),
     allocator_(lib::ObLabel("PrepAlterTblArg")),
-    nls_formats_{},
     foreign_key_checks_(true)
   {}
   ~ObPrepareAlterTableArgParam() = default;
@@ -143,7 +142,6 @@ public:
           const ObString &orig_database_name,
           const ObString &target_database_name,
           const ObTimeZoneInfoWrap &tz_info_wrap,
-          const ObString *nls_formats,
           const bool foreign_key_checks);
   bool is_valid() const
   {
@@ -151,7 +149,6 @@ public:
             !orig_database_name_.empty() &&
             !target_database_name_.empty();
   }
-  int set_nls_formats(const common::ObString *nls_formats);
   TO_STRING_KV(K_(session_id),
                 K_(sql_mode),
                 K_(ddl_stmt_str),
@@ -159,7 +156,6 @@ public:
                 K_(orig_database_name),
                 K_(target_database_name),
                 K_(tz_info_wrap),
-                "nls_formats", common::ObArrayWrap<ObString>(nls_formats_, common::ObNLSFormatEnum::NLS_MAX),
                 K_(foreign_key_checks));
 public:
   uint64_t session_id_;
@@ -170,7 +166,6 @@ public:
   common::ObString target_database_name_;
   common::ObTimeZoneInfoWrap tz_info_wrap_;
   common::ObArenaAllocator allocator_;
-  common::ObString nls_formats_[common::ObNLSFormatEnum::NLS_MAX];
   bool foreign_key_checks_;
 };
 
@@ -238,7 +233,7 @@ private:
 };
 
 /*
- * the only scheduler for all ddl tasks executed in root service
+ * the only scheduler for all ddl tasks executed in local DDL service
  *
  * each category of ddl request has an unique task type.
  * every ddl task has its record in an inner table(__all_ddl_task_status),
@@ -302,7 +297,6 @@ public:
 
   int on_sstable_complement_job_reply(
       const common::ObTabletID &tablet_id,
-      const ObAddr &svr,
       const ObDDLTaskKey &task_key,
       const int64_t snapshot_version,
       const int64_t execution_id,

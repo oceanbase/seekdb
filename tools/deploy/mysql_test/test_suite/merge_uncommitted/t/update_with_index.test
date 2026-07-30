@@ -39,9 +39,7 @@ insert into t1 values(1, 1, "c300000000000001", "v100000000000000000001", "v2000
 insert into t1 values(2, 2, "c300000000000002", "v100000000000000000002", "v200000000000000000002", 2, 2);
 
 connection conn0;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 --source mysql_test/include/wait_minor_merge.inc
 
 
@@ -53,9 +51,7 @@ update t1 set v1 = "11111111111" where c1 = 1 and c2 = 1;
 select /*+ INDEX(t1 idx1)*/c1, c2, c3, r1, r2, v1 from t1;
 
 connection conn0;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 --source mysql_test/include/wait_minor_merge.inc
 
 connection conn1;
@@ -67,9 +63,7 @@ select /*+ INDEX(t1 idx1)*/c1, c2, c3, r1, r2, v1 from t1;
 insert into t1(c1, c2, c3, v1) values(1, 1, "c300000000000001", "v19999999");
 
 connection conn0;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 --source mysql_test/include/wait_minor_merge.inc
 
 connection conn1;
@@ -77,9 +71,7 @@ ROLLBACK TO SAVEPOINT p1;
 update t1 set r2 = 77 where c1 = 1 and c2 = 1;
 
 connection conn0;
-alter system minor freeze tenant = sys;
-alter system minor freeze tenant = all_user;
-alter system minor freeze tenant = all_meta;
+alter system minor freeze;
 --source mysql_test/include/wait_minor_merge.inc
 
 connection conn1;

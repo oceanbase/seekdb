@@ -25,7 +25,6 @@ namespace observer
 ObAllVirtualTabletStoreStat::ObAllVirtualTabletStoreStat()
   : stat_(), stat_iter_(), is_inited_(false)
 {
-  memset(rowkey_prefix_info_, 0, sizeof(rowkey_prefix_info_));
 }
 
 ObAllVirtualTabletStoreStat::~ObAllVirtualTabletStoreStat()
@@ -71,7 +70,6 @@ void ObAllVirtualTabletStoreStat::reset()
   ObVirtualTableScannerIterator::reset();
   stat_.reset();
   stat_iter_.reset();
-  memset(rowkey_prefix_info_, 0, sizeof(rowkey_prefix_info_));
   is_inited_ = false;
 }
 
@@ -108,147 +106,130 @@ int ObAllVirtualTabletStoreStat::fill_cells(const ObTableStoreStat &stat)
         cells[i].set_int(stat.row_cache_put_cnt_);
         break;
       case OB_APP_MIN_COLUMN_ID + 5:
-        //bf_filter_count
-        cells[i].set_int(stat.bf_filter_cnt_);
-        break;
-      case OB_APP_MIN_COLUMN_ID + 6:
-        //bf_empty_read_count
-        cells[i].set_int(stat.bf_empty_read_cnt_);
-        break;
-      case OB_APP_MIN_COLUMN_ID + 7:
-        //bf_access_count
-        cells[i].set_int(stat.bf_access_cnt_);
-        break;
-      case OB_APP_MIN_COLUMN_ID + 8:
         //block_cache_hit_count
         cells[i].set_int(stat.block_cache_hit_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 9:
+      case OB_APP_MIN_COLUMN_ID + 6:
         //block_cache_miss_count
         cells[i].set_int(stat.block_cache_miss_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 10:
+      case OB_APP_MIN_COLUMN_ID + 7:
         //access_row_count
         cells[i].set_int(stat.access_row_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 11:
+      case OB_APP_MIN_COLUMN_ID + 8:
         //outout_row_count
         cells[i].set_int(stat.output_row_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 12:
+      case OB_APP_MIN_COLUMN_ID + 9:
         //fuse_row_cache_hit_count
         cells[i].set_int(stat.fuse_row_cache_hit_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 13:
+      case OB_APP_MIN_COLUMN_ID + 10:
         //fuse_row_cache_miss_count
         cells[i].set_int(stat.fuse_row_cache_miss_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 14:
+      case OB_APP_MIN_COLUMN_ID + 11:
         //fuse_row_cache_put_count
         cells[i].set_int(stat.fuse_row_cache_put_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 15:
+      case OB_APP_MIN_COLUMN_ID + 12:
         //single_get_call_count
         cells[i].set_int(stat.single_get_stat_.call_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 16:
+      case OB_APP_MIN_COLUMN_ID + 13:
         //single_get_output_row_count
         cells[i].set_int(stat.single_get_stat_.output_row_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 17:
+      case OB_APP_MIN_COLUMN_ID + 14:
         //multi_get_call_count
         cells[i].set_int(stat.multi_get_stat_.call_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 18:
+      case OB_APP_MIN_COLUMN_ID + 15:
         //multi_get_output_row_count
         cells[i].set_int(stat.multi_get_stat_.output_row_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 19:
+      case OB_APP_MIN_COLUMN_ID + 16:
         //index_back_call_count
         cells[i].set_int(stat.index_back_stat_.call_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 20:
+      case OB_APP_MIN_COLUMN_ID + 17:
         //index_back_output_row_count
         cells[i].set_int(stat.index_back_stat_.output_row_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 21:
+      case OB_APP_MIN_COLUMN_ID + 18:
         //single_scan_call_count
         cells[i].set_int(stat.single_scan_stat_.call_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 22:
+      case OB_APP_MIN_COLUMN_ID + 19:
         //single_scan_output_row_count
         cells[i].set_int(stat.single_scan_stat_.output_row_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 23:
+      case OB_APP_MIN_COLUMN_ID + 20:
         //multi_scan_call_count
         cells[i].set_int(stat.multi_scan_stat_.call_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 24:
+      case OB_APP_MIN_COLUMN_ID + 21:
         //multi_scan_output_row_count
         cells[i].set_int(stat.multi_scan_stat_.output_row_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 25:
+      case OB_APP_MIN_COLUMN_ID + 22:
         //exist_row and effect read
         cells[i].set_int(stat.exist_row_.effect_read_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 26:
+      case OB_APP_MIN_COLUMN_ID + 23:
         //exist_row and empty read
         cells[i].set_int(stat.exist_row_.empty_read_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 27:
+      case OB_APP_MIN_COLUMN_ID + 24:
         //get_row and effect read
         cells[i].set_int(stat.get_row_.effect_read_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 28:
+      case OB_APP_MIN_COLUMN_ID + 25:
         //get_row and empty read
         cells[i].set_int(stat.get_row_.empty_read_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 29:
+      case OB_APP_MIN_COLUMN_ID + 26:
         //scan_row and effect read
         cells[i].set_int(stat.scan_row_.effect_read_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 30:
+      case OB_APP_MIN_COLUMN_ID + 27:
         //scan_row and empty read
         cells[i].set_int(stat.scan_row_.empty_read_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 31:
+      case OB_APP_MIN_COLUMN_ID + 28:
         //scan macro block access count
         cells[i].set_int(stat.macro_access_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 32:
+      case OB_APP_MIN_COLUMN_ID + 29:
         //scan micro block access count
         cells[i].set_int(stat.micro_access_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 33:
+      case OB_APP_MIN_COLUMN_ID + 30:
         //pushdown scan micro block access count
         cells[i].set_int(stat.pushdown_micro_access_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 34:
+      case OB_APP_MIN_COLUMN_ID + 31:
         //pushdown scan row access count
         cells[i].set_int(stat.pushdown_row_access_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 35:
+      case OB_APP_MIN_COLUMN_ID + 32:
         //pushdown scan filtered row count
         cells[i].set_int(stat.pushdown_row_select_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 36:
-        //rowkey prefix read info
-        cells[i].set_varchar(rowkey_prefix_info_);
-        cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-        break;
-      case OB_APP_MIN_COLUMN_ID + 37:
+      case OB_APP_MIN_COLUMN_ID + 33:
         // index block cache hit count
         cells[i].set_int(stat.index_block_cache_hit_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 38:
+      case OB_APP_MIN_COLUMN_ID + 34:
         // index block cache miss count
         cells[i].set_int(stat.index_block_cache_miss_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 39:
+      case OB_APP_MIN_COLUMN_ID + 35:
         // logical read count
         cells[i].set_int(stat.logical_read_cnt_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 40:
+      case OB_APP_MIN_COLUMN_ID + 36:
         // physical read count
         cells[i].set_int(stat.physical_read_cnt_);
         break;
