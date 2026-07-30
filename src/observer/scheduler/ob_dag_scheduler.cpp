@@ -2281,7 +2281,10 @@ int ObDagPrioScheduler::sys_task_start(ObIDag &dag)
     sys_task_status.task_type_ = OB_DAG_TYPES[dag.get_type()].sys_task_type_;
 
     // allow comment truncation, no need to set ret
-    (void) dag.fill_comment(sys_task_status.comment_,sizeof(sys_task_status.comment_));
+    char comment[OB_MAX_TASK_COMMENT_LENGTH] = "";
+    (void) dag.fill_comment(comment, sizeof(comment));
+    sys_task_status.comment_.assign_ptr(
+        comment, static_cast<ObString::obstr_size_t>(strlen(comment)));
     if (OB_SUCCESS != (ret = ObSysTaskStatMgr::get_instance().add_task(sys_task_status))) {
       COMMON_LOG(WARN, "failed to add sys task", K(ret), K(sys_task_status));
     } else if (OB_SUCCESS != (ret = dag.set_dag_id(sys_task_status.task_id_))) { // may generate task_id in ObSysTaskStatMgr::add_task
