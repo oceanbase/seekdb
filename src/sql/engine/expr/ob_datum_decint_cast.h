@@ -125,9 +125,11 @@ int ObBatchCast::explicit_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const O
   return ret;
 }
 
-template <typename in_type, typename out_type, bool is_scale_up>
-void batch_implicit_scale(ObDatumVector &arg_dv, ObDatumVector &result_dv, unsigned scale,
-                          int64_t batch_size, const ObBitVector &skip, ObBitVector &eval_flags)
+template <typename in_type, typename out_type>
+OB_NOINLINE void batch_implicit_scale(ObDatumVector &arg_dv, ObDatumVector &result_dv,
+                                      unsigned scale, const bool is_scale_up,
+                                      int64_t batch_size, const ObBitVector &skip,
+                                      ObBitVector &eval_flags)
 {
   static_assert(wide::IsIntegral<out_type>::value, "");
   static_assert(wide::IsIntegral<in_type>::value, "");
@@ -214,10 +216,11 @@ void batch_implicit_scale(ObDatumVector &arg_dv, ObDatumVector &result_dv, unsig
   }
 }
 
-template <typename in_type, typename out_type, bool is_scale_up>
-void batch_explicit_scale(ObDatumVector &arg_dv, ObDatumVector &result_dv, unsigned scale,
-                          ObPrecision out_prec, int64_t batch_size, const ObBitVector &skip,
-                          ObBitVector &eval_flags)
+template <typename in_type, typename out_type>
+OB_NOINLINE void batch_explicit_scale(ObDatumVector &arg_dv, ObDatumVector &result_dv,
+                                      unsigned scale, const bool is_scale_up,
+                                      ObPrecision out_prec, int64_t batch_size,
+                                      const ObBitVector &skip, ObBitVector &eval_flags)
 {
   static_assert(wide::IsIntegral<in_type>::value, "");
   static_assert(wide::IsIntegral<out_type>::value, "");
@@ -315,10 +318,12 @@ void batch_explicit_scale(ObDatumVector &arg_dv, ObDatumVector &result_dv, unsig
   }
 }
 
-template <typename in_type, typename out_type, bool is_scale_up>
-void batch_const_scale(ObDatumVector &arg_dv, ObDatumVector &result_dv, const int64_t batch_size,
-                       const ObBitVector &skip, ObBitVector &eval_flags, unsigned scale,
-                       const ObScale out_prec, const ObCastMode cast_mode)
+template <typename in_type, typename out_type>
+OB_NOINLINE void batch_const_scale(ObDatumVector &arg_dv, ObDatumVector &result_dv,
+                                   const int64_t batch_size, const ObBitVector &skip,
+                                   ObBitVector &eval_flags, unsigned scale,
+                                   const bool is_scale_up, const ObScale out_prec,
+                                   const ObCastMode cast_mode)
 {
   static_assert(wide::IsIntegral<in_type>::value, "");
   static_assert(wide::IsIntegral<out_type>::value, "");
@@ -497,12 +502,12 @@ static int decimalint_fast_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const 
         || eval_flags.accumulate_bit_cnt(batch_size) == batch_size) {
       // do nothing
     } else {
-      if (in_scale <= out_scale) {
-        batch_implicit_scale<in_type, out_type, true>(arg_dv, result_dv, out_scale - in_scale,
-                                                      batch_size, skip, eval_flags);
-      } else {
-        batch_implicit_scale<in_type, out_type, false>(arg_dv, result_dv, in_scale - out_scale,
-                                                       batch_size, skip, eval_flags);
+      const bool is_scale_up = in_scale <= out_scale;
+      const unsigned scale = static_cast<unsigned>(
+          is_scale_up ? out_scale - in_scale : in_scale - out_scale);
+      batch_implicit_scale<in_type, out_type>(arg_dv, result_dv, scale, is_scale_up,
+                                              batch_size, skip, eval_flags);
+      if (!is_scale_up) {
         logging_truncated_decint<in_type>(expr, ctx, batch_size, skip, in_scale, out_scale);
       }
     }
@@ -648,32 +653,34 @@ int ObBatchCast::implicit_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const O
 }
 
 #define DO_EXPLICIT_CAST(in_type, out_type)                                                        \
-  if (in_scale <= out_scale) {                                                                     \
-    batch_explicit_scale<in_type, out_type, true>(arg_dv, result_dv, out_scale - in_scale,         \
-                                                  out_prec, batch_size, skip, eval_flags);         \
-  } else {                                                                                         \
-    batch_explicit_scale<in_type, out_type, false>(arg_dv, result_dv, in_scale - out_scale,        \
-                                                   out_prec, batch_size, skip, eval_flags);        \
-    logging_truncated_decint<in_type>(expr, ctx, batch_size, skip, in_scale, out_scale);           \
-  }
+  do {                                                                                             \
+    const bool is_scale_up = in_scale <= out_scale;                                                \
+    const unsigned scale = static_cast<unsigned>(                                                  \
+        is_scale_up ? out_scale - in_scale : in_scale - out_scale);                               \
+    batch_explicit_scale<in_type, out_type>(arg_dv, result_dv, scale, is_scale_up,                 \
+                                             out_prec, batch_size, skip, eval_flags);              \
+    if (!is_scale_up) {                                                                            \
+      logging_truncated_decint<in_type>(expr, ctx, batch_size, skip, in_scale, out_scale);         \
+    }                                                                                              \
+  } while (false)
 
 #define DO_IMPLICIT_CAST(in_type, out_type)                                                        \
-  if (in_scale <= out_scale) {                                                                     \
-    batch_implicit_scale<in_type, out_type, true>(arg_dv, result_dv, out_scale - in_scale,         \
-                                                  batch_size, skip, eval_flags);                   \
-  } else {                                                                                         \
-    batch_implicit_scale<in_type, out_type, false>(arg_dv, result_dv, in_scale - out_scale,        \
-                                                   batch_size, skip, eval_flags);                  \
-  }
+  do {                                                                                             \
+    const bool is_scale_up = in_scale <= out_scale;                                                \
+    const unsigned scale = static_cast<unsigned>(                                                  \
+        is_scale_up ? out_scale - in_scale : in_scale - out_scale);                               \
+    batch_implicit_scale<in_type, out_type>(arg_dv, result_dv, scale, is_scale_up,                 \
+                                             batch_size, skip, eval_flags);                        \
+  } while (false)
 
 #define DO_CONST_CAST(in_type, out_type)                                                           \
-  if (in_scale <= out_scale) {                                                                     \
-    batch_const_scale<in_type, out_type, true>(arg_dv, result_dv, batch_size, skip, eval_flags,    \
-                                               out_scale - in_scale, out_prec, expr.extra_);       \
-  } else {                                                                                         \
-    batch_const_scale<in_type, out_type, false>(arg_dv, result_dv, batch_size, skip, eval_flags,   \
-                                                in_scale - out_scale, out_prec, expr.extra_);      \
-  }
+  do {                                                                                             \
+    const bool is_scale_up = in_scale <= out_scale;                                                \
+    const unsigned scale = static_cast<unsigned>(                                                  \
+        is_scale_up ? out_scale - in_scale : in_scale - out_scale);                               \
+    batch_const_scale<in_type, out_type>(arg_dv, result_dv, batch_size, skip, eval_flags,          \
+                                         scale, is_scale_up, out_prec, expr.extra_);                \
+  } while (false)
 
 DEF_BATCH_CAST_FUNC(ObDecimalIntTC, ObDecimalIntTC)
 {

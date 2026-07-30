@@ -78,6 +78,7 @@ struct DecimalIntCastBatchFrame
   common::ObDatum datums_[DECINT_CAST_BATCH_SIZE];
   uint64_t eval_flags_[2];
   ObEvalInfo eval_info_;
+  alignas(64) char values_[DECINT_CAST_BATCH_SIZE][sizeof(common::int512_t)];
 };
 
 static constexpr int64_t FIXED_DOUBLE_CMP_BATCH_SIZE = 17;
@@ -249,6 +250,139 @@ static void set_decimal_int_value(common::ObDatum &datum,
       datum.set_null();
       break;
   }
+}
+
+static int64_t get_decimal_int_value(const common::ObDatum &datum,
+                                     const common::ObPrecision precision)
+{
+  int64_t value = 0;
+  switch (common::get_decimalint_type(precision)) {
+    case common::DECIMAL_INT_32:
+      value = datum.get_decimal_int32();
+      break;
+    case common::DECIMAL_INT_64:
+      value = datum.get_decimal_int64();
+      break;
+    case common::DECIMAL_INT_128:
+      value = static_cast<int64_t>(datum.get_decimal_int128());
+      break;
+    case common::DECIMAL_INT_256:
+      value = static_cast<int64_t>(datum.get_decimal_int256());
+      break;
+    case common::DECIMAL_INT_512:
+      value = static_cast<int64_t>(datum.get_decimal_int512());
+      break;
+    default:
+      ADD_FAILURE() << "unexpected decimal-int precision " << precision;
+      break;
+  }
+  return value;
+}
+
+static void init_decimal_int_batch_expr(ObExpr &expr,
+                                        const int64_t frame_idx,
+                                        DecimalIntCastBatchFrame &frame,
+                                        char *frame_ptr)
+{
+  expr.frame_idx_ = static_cast<uint32_t>(frame_idx);
+  expr.datum_off_ = static_cast<uint32_t>(
+      reinterpret_cast<char *>(&frame.datums_) - frame_ptr);
+  expr.eval_flags_off_ = static_cast<uint32_t>(
+      reinterpret_cast<char *>(&frame.eval_flags_) - frame_ptr);
+  expr.eval_info_off_ = static_cast<uint32_t>(
+      reinterpret_cast<char *>(&frame.eval_info_) - frame_ptr);
+  expr.batch_result_ = true;
+  expr.batch_idx_mask_ = UINT64_MAX;
+  frame.eval_info_.flag_ = 0;
+  frame.eval_info_.cnt_ = 0;
+}
+
+struct DecimalIntBatchCastContext
+{
+  DecimalIntBatchCastContext()
+      : frames_{reinterpret_cast<char *>(&child_frame_),
+                reinterpret_cast<char *>(&result_frame_)},
+        exec_ctx_(allocator_),
+        eval_ctx_(exec_ctx_),
+        skip_(to_bit_vector(skip_buf_))
+  {
+    eval_ctx_.frames_ = frames_;
+    eval_ctx_.reuse(DECINT_CAST_BATCH_SIZE);
+    eval_ctx_.set_max_batch_size(DECINT_CAST_BATCH_SIZE);
+    init_decimal_int_batch_expr(child_, 0, child_frame_, frames_[0]);
+    init_decimal_int_batch_expr(expr_, 1, result_frame_, frames_[1]);
+    args_[0] = &child_;
+    expr_.args_ = args_;
+    expr_.arg_cnt_ = ARRAYSIZEOF(args_);
+    for (int64_t i = 0; i < DECINT_CAST_BATCH_SIZE; ++i) {
+      child_frame_.datums_[i].ptr_ = child_frame_.values_[i];
+      result_frame_.datums_[i].ptr_ = result_frame_.values_[i];
+    }
+  }
+
+  void configure(const common::ObPrecision in_precision,
+                 const common::ObScale in_scale,
+                 const common::ObPrecision out_precision,
+                 const common::ObScale out_scale,
+                 const uint64_t cast_mode)
+  {
+    child_.datum_meta_ = ObDatumMeta(common::ObDecimalIntType, common::CS_TYPE_BINARY,
+                                    in_scale, in_precision);
+    expr_.datum_meta_ = ObDatumMeta(common::ObDecimalIntType, common::CS_TYPE_BINARY,
+                                   out_scale, out_precision);
+    expr_.extra_ = cast_mode;
+  }
+
+  void reset(const int64_t batch_size,
+             const common::ObPrecision out_precision,
+             const int64_t result_sentinel)
+  {
+    skip_->init(batch_size);
+    expr_.get_evaluated_flags(eval_ctx_).init(batch_size);
+    for (int64_t i = 0; i < batch_size; ++i) {
+      child_frame_.datums_[i].ptr_ = child_frame_.values_[i];
+      result_frame_.datums_[i].ptr_ = result_frame_.values_[i];
+      set_decimal_int_value(result_frame_.datums_[i], out_precision, result_sentinel);
+    }
+  }
+
+  template <typename T>
+  void set_input(const int64_t idx, const T &value)
+  {
+    child_frame_.datums_[idx].ptr_ = child_frame_.values_[idx];
+    child_frame_.datums_[idx].set_decimal_int(value);
+  }
+
+  DecimalIntCastBatchFrame child_frame_{};
+  DecimalIntCastBatchFrame result_frame_{};
+  char *frames_[2];
+  common::ObArenaAllocator allocator_;
+  ObExecContext exec_ctx_;
+  ObEvalCtx eval_ctx_;
+  ObExpr child_;
+  ObExpr expr_;
+  ObExpr *args_[1];
+  alignas(uint64_t) uint64_t skip_buf_[2]{};
+  ObBitVector *skip_;
+};
+
+static int init_decimal_int_const_values()
+{
+  static common::ObArenaAllocator allocator;
+  static const int ret = common::wide::ObDecimalIntConstValue::init_const_values(allocator);
+  return ret;
+}
+
+static int64_t round_decimal_int_down(const int64_t value, const int64_t scale_factor)
+{
+  const bool is_negative = value < 0;
+  int64_t absolute = is_negative ? -value : value;
+  const int64_t remainder = absolute % scale_factor;
+  absolute /= scale_factor;
+  if (remainder >= scale_factor / 2) {
+    ++absolute;
+  }
+  return is_negative ? -absolute : absolute;
 }
 
 static void verify_batch_hash_shapes(const ObExprBasicFuncs &basic_funcs,
@@ -1524,10 +1658,7 @@ TEST(ObDatumCast, decimal_int_fast_cast_reuses_runtime_variants)
 
 TEST(ObDatumCast, decimal_int_fast_scalar_uses_runtime_explicit_flag)
 {
-  static common::ObArenaAllocator decint_const_allocator;
-  static const int decint_const_init_ret =
-      common::wide::ObDecimalIntConstValue::init_const_values(decint_const_allocator);
-  ASSERT_EQ(OB_SUCCESS, decint_const_init_ret);
+  ASSERT_EQ(OB_SUCCESS, init_decimal_int_const_values());
 
   struct ScalarFrame
   {
@@ -1664,17 +1795,19 @@ TEST(ObDatumCast, decimal_int_fast_batch_uses_runtime_scale_direction)
   ASSERT_EQ(sizeof(skip_buf), ObBitVector::memory_size(DECINT_CAST_BATCH_SIZE));
   ASSERT_EQ(sizeof(result_frame.eval_flags_),
             ObBitVector::memory_size(DECINT_CAST_BATCH_SIZE));
-  skip->init(DECINT_CAST_BATCH_SIZE);
-  skip->set(SKIPPED_IDX);
-  skip->set(HIGH_SKIPPED_IDX);
   for (int64_t i = 0; i < DECINT_CAST_BATCH_SIZE; ++i) {
     child_frame.datums_[i].ptr_ = reinterpret_cast<const char *>(&input_values[i]);
     result_frame.datums_[i].ptr_ = reinterpret_cast<const char *>(&result_values[i]);
   }
 
-  auto prepare_batch = [&](const int32_t scale_factor) {
+  auto prepare_batch = [&](const int32_t scale_factor, const bool sparse) {
+    skip->init(DECINT_CAST_BATCH_SIZE);
     expr.get_evaluated_flags(eval_ctx).init(DECINT_CAST_BATCH_SIZE);
-    expr.get_evaluated_flags(eval_ctx).set(EVALUATED_IDX);
+    if (sparse) {
+      skip->set(SKIPPED_IDX);
+      skip->set(HIGH_SKIPPED_IDX);
+      expr.get_evaluated_flags(eval_ctx).set(EVALUATED_IDX);
+    }
     for (int64_t i = 0; i < DECINT_CAST_BATCH_SIZE; ++i) {
       input_values[i] = static_cast<int32_t>(i - DECINT_CAST_BATCH_SIZE / 2) * scale_factor;
       child_frame.datums_[i].set_decimal_int(
@@ -1693,7 +1826,7 @@ TEST(ObDatumCast, decimal_int_fast_batch_uses_runtime_scale_direction)
   ObDatumCast::get_decint_cast(common::ObDecimalIntTC, 9, 2, 9, 4, false,
                                batch_func, scalar_func);
   ASSERT_NE(nullptr, batch_func);
-  prepare_batch(1);
+  prepare_batch(1, true);
   ASSERT_EQ(OB_SUCCESS, batch_func(expr, eval_ctx, *skip, DECINT_CAST_BATCH_SIZE));
   for (int64_t i = 0; i < DECINT_CAST_BATCH_SIZE; ++i) {
     if (SKIPPED_IDX == i || HIGH_SKIPPED_IDX == i || EVALUATED_IDX == i) {
@@ -1714,7 +1847,11 @@ TEST(ObDatumCast, decimal_int_fast_batch_uses_runtime_scale_direction)
                                down_batch_func, scalar_func);
   ASSERT_NE(nullptr, down_batch_func);
   EXPECT_EQ(batch_func, down_batch_func);
-  prepare_batch(100);
+  prepare_batch(100, true);
+  input_values[0] = 12350;
+  input_values[1] = -12350;
+  input_values[3] = 12349;
+  input_values[4] = -12349;
   ASSERT_EQ(OB_SUCCESS, down_batch_func(expr, eval_ctx, *skip, DECINT_CAST_BATCH_SIZE));
   for (int64_t i = 0; i < DECINT_CAST_BATCH_SIZE; ++i) {
     if (SKIPPED_IDX == i || HIGH_SKIPPED_IDX == i || EVALUATED_IDX == i) {
@@ -1722,11 +1859,154 @@ TEST(ObDatumCast, decimal_int_fast_batch_uses_runtime_scale_direction)
     } else if (NULL_IDX == i) {
       EXPECT_TRUE(result_frame.datums_[i].is_null());
     } else {
-      EXPECT_EQ(input_values[i] / 100, result_frame.datums_[i].get_decimal_int32());
+      EXPECT_EQ(round_decimal_int_down(input_values[i], 100),
+                result_frame.datums_[i].get_decimal_int32());
     }
     EXPECT_EQ(SKIPPED_IDX != i && HIGH_SKIPPED_IDX != i,
               expr.get_evaluated_flags(eval_ctx).at(i));
   }
+
+  ObExpr::EvalBatchFunc equal_scale_batch_func = nullptr;
+  child.datum_meta_.scale_ = 2;
+  expr.datum_meta_.scale_ = 2;
+  ObDatumCast::get_decint_cast(common::ObDecimalIntTC, 9, 2, 9, 2, false,
+                               equal_scale_batch_func, scalar_func);
+  ASSERT_NE(nullptr, equal_scale_batch_func);
+  EXPECT_EQ(batch_func, equal_scale_batch_func);
+  prepare_batch(1, false);
+  ASSERT_EQ(OB_SUCCESS,
+            equal_scale_batch_func(expr, eval_ctx, *skip, DECINT_CAST_BATCH_SIZE));
+  for (int64_t i = 0; i < DECINT_CAST_BATCH_SIZE; ++i) {
+    if (NULL_IDX == i) {
+      EXPECT_TRUE(result_frame.datums_[i].is_null());
+    } else {
+      EXPECT_EQ(input_values[i], result_frame.datums_[i].get_decimal_int32());
+    }
+    EXPECT_TRUE(expr.get_evaluated_flags(eval_ctx).at(i));
+  }
+}
+
+TEST(ObDatumCast, decimal_int_generic_batch_explicit_uses_runtime_scale_direction)
+{
+  ASSERT_EQ(OB_SUCCESS, init_decimal_int_const_values());
+  static constexpr common::ObPrecision INT32_PRECISION =
+      common::MAX_PRECISION_DECIMAL_INT_32;
+  static constexpr common::ObPrecision INT128_PRECISION =
+      common::MAX_PRECISION_DECIMAL_INT_128;
+  DecimalIntBatchCastContext ctx;
+  ObBatchCast::batch_func_ batch_func =
+      ObBatchCast::get_implicit_cast_func(common::ObDecimalIntTC, common::ObDecimalIntTC);
+  ASSERT_NE(nullptr, batch_func);
+
+  // The common dispatcher selects batch_explicit_scale from the cast mode.  Calling the
+  // dispatcher directly keeps these assertions focused on scaling, before the outer CAST
+  // accuracy checker converts the exclusive boundary values to their final SQL values.
+  ctx.configure(INT32_PRECISION, 2, INT128_PRECISION, 4,
+                CM_EXPLICIT_CAST | CM_WARN_ON_FAIL);
+  ctx.reset(3, INT128_PRECISION, 777);
+  ctx.set_input(0, int32_t(12345));
+  ctx.set_input(1, int32_t(-12345));
+  ctx.set_input(2, int32_t(0));
+  ctx.child_frame_.datums_[2].set_null();
+  ASSERT_EQ(OB_SUCCESS, batch_func(ctx.expr_, ctx.eval_ctx_, *ctx.skip_, 3));
+  EXPECT_EQ(1234500, get_decimal_int_value(ctx.result_frame_.datums_[0], INT128_PRECISION));
+  EXPECT_EQ(-1234500, get_decimal_int_value(ctx.result_frame_.datums_[1], INT128_PRECISION));
+  EXPECT_TRUE(ctx.result_frame_.datums_[2].is_null());
+
+  ctx.configure(INT128_PRECISION, 2, 3, 0, CM_EXPLICIT_CAST | CM_WARN_ON_FAIL);
+  ctx.reset(4, 3, 77);
+  ctx.set_input(0, common::int128_t(12350));
+  ctx.set_input(1, common::int128_t(-12350));
+  ctx.set_input(2, common::int128_t(99999));
+  ctx.set_input(3, common::int128_t(-99999));
+  ASSERT_EQ(OB_SUCCESS, batch_func(ctx.expr_, ctx.eval_ctx_, *ctx.skip_, 4));
+  EXPECT_EQ(124, get_decimal_int_value(ctx.result_frame_.datums_[0], 3));
+  EXPECT_EQ(-124, get_decimal_int_value(ctx.result_frame_.datums_[1], 3));
+  EXPECT_EQ(1000, get_decimal_int_value(ctx.result_frame_.datums_[2], 3));
+  EXPECT_EQ(-1000, get_decimal_int_value(ctx.result_frame_.datums_[3], 3));
+
+  ctx.configure(INT128_PRECISION, 0, INT128_PRECISION, 1,
+                CM_EXPLICIT_CAST | CM_WARN_ON_FAIL);
+  ctx.reset(1, INT128_PRECISION, 0);
+  ctx.set_input(0, common::wide::Limits<common::int128_t>::max());
+  ASSERT_EQ(OB_SUCCESS, batch_func(ctx.expr_, ctx.eval_ctx_, *ctx.skip_, 1));
+  EXPECT_EQ(sizeof(common::int128_t), ctx.result_frame_.datums_[0].get_int_bytes());
+  EXPECT_EQ(0,
+            MEMCMP(ctx.result_frame_.datums_[0].get_decimal_int(),
+                   common::wide::ObDecimalIntConstValue::get_max_upper(INT128_PRECISION),
+                   sizeof(common::int128_t)));
+}
+
+TEST(ObDatumCast, decimal_int_generic_batch_const_modes_use_runtime_scale_direction)
+{
+  ASSERT_EQ(OB_SUCCESS, init_decimal_int_const_values());
+  static constexpr common::ObPrecision INT32_PRECISION =
+      common::MAX_PRECISION_DECIMAL_INT_32;
+  static constexpr common::ObPrecision INT64_PRECISION =
+      common::MAX_PRECISION_DECIMAL_INT_64;
+  static constexpr int64_t BATCH_SIZE = 6;
+  static constexpr int64_t NULL_IDX = 3;
+  static constexpr int64_t SKIPPED_IDX = 4;
+  static constexpr int64_t EVALUATED_IDX = 5;
+  static constexpr int64_t RESULT_SENTINEL = 77;
+  struct ConstModeCase
+  {
+    uint64_t mode_;
+    int32_t positive_expected_;
+    int32_t negative_expected_;
+  };
+  const ConstModeCase cases[] = {
+      {CM_CONST_TO_DECIMAL_INT_UP, 124, -123},
+      {CM_CONST_TO_DECIMAL_INT_DOWN, 123, -124},
+      {CM_CONST_TO_DECIMAL_INT_EQ, 1000, -1000},
+  };
+  DecimalIntBatchCastContext ctx;
+  ObBatchCast::batch_func_ batch_func =
+      ObBatchCast::get_implicit_cast_func(common::ObDecimalIntTC, common::ObDecimalIntTC);
+  ASSERT_NE(nullptr, batch_func);
+
+  for (const ConstModeCase &test_case : cases) {
+    SCOPED_TRACE(testing::Message() << "cast_mode=" << test_case.mode_);
+    ctx.configure(INT32_PRECISION, 2, 3, 0, test_case.mode_);
+    ctx.reset(BATCH_SIZE, 3, RESULT_SENTINEL);
+    ctx.set_input(0, int32_t(12345));
+    ctx.set_input(1, int32_t(-12345));
+    ctx.set_input(2, int32_t(12300));
+    ctx.set_input(NULL_IDX, int32_t(45678));
+    ctx.set_input(SKIPPED_IDX, int32_t(56789));
+    ctx.set_input(EVALUATED_IDX, int32_t(67891));
+    ctx.child_frame_.datums_[NULL_IDX].set_null();
+    ctx.skip_->set(SKIPPED_IDX);
+    ctx.expr_.get_evaluated_flags(ctx.eval_ctx_).set(EVALUATED_IDX);
+    ASSERT_EQ(OB_SUCCESS,
+              batch_func(ctx.expr_, ctx.eval_ctx_, *ctx.skip_, BATCH_SIZE));
+    EXPECT_EQ(test_case.positive_expected_,
+              get_decimal_int_value(ctx.result_frame_.datums_[0], 3));
+    EXPECT_EQ(test_case.negative_expected_,
+              get_decimal_int_value(ctx.result_frame_.datums_[1], 3));
+    EXPECT_EQ(123, get_decimal_int_value(ctx.result_frame_.datums_[2], 3));
+    EXPECT_TRUE(ctx.result_frame_.datums_[NULL_IDX].is_null());
+    EXPECT_EQ(RESULT_SENTINEL,
+              get_decimal_int_value(ctx.result_frame_.datums_[SKIPPED_IDX], 3));
+    EXPECT_EQ(RESULT_SENTINEL,
+              get_decimal_int_value(ctx.result_frame_.datums_[EVALUATED_IDX], 3));
+    for (int64_t i = 0; i < BATCH_SIZE; ++i) {
+      EXPECT_EQ(SKIPPED_IDX != i,
+                ctx.expr_.get_evaluated_flags(ctx.eval_ctx_).at(i)) << "row=" << i;
+    }
+  }
+
+  ctx.configure(INT32_PRECISION, 0, INT64_PRECISION, 2,
+                CM_CONST_TO_DECIMAL_INT_UP);
+  ctx.reset(3, INT64_PRECISION, RESULT_SENTINEL);
+  ctx.set_input(0, int32_t(123));
+  ctx.set_input(1, int32_t(-456));
+  ctx.set_input(2, int32_t(0));
+  ctx.child_frame_.datums_[2].set_null();
+  ASSERT_EQ(OB_SUCCESS, batch_func(ctx.expr_, ctx.eval_ctx_, *ctx.skip_, 3));
+  EXPECT_EQ(12300, get_decimal_int_value(ctx.result_frame_.datums_[0], INT64_PRECISION));
+  EXPECT_EQ(-45600, get_decimal_int_value(ctx.result_frame_.datums_[1], INT64_PRECISION));
+  EXPECT_TRUE(ctx.result_frame_.datums_[2].is_null());
 }
 
 } // namespace sql
