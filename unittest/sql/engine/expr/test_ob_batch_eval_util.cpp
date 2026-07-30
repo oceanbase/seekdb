@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "sql/engine/expr/ob_batch_eval_util.h"
+#include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/engine/expr/ob_expr_cmp_func.h"
 #include "sql/engine/expr/ob_expr_basic_funcs.h"
 #include "sql/engine/ob_exec_context.h"
@@ -60,6 +61,15 @@ struct BatchHashFuncPair
 {
   ObExprHashFuncType scalar_func_;
   ObBatchDatumHashFunc batch_func_;
+};
+
+static constexpr int64_t DECINT_CAST_BATCH_SIZE = 70;
+
+struct DecimalIntCastBatchFrame
+{
+  common::ObDatum datums_[DECINT_CAST_BATCH_SIZE];
+  uint64_t eval_flags_[2];
+  ObEvalInfo eval_info_;
 };
 
 static void verify_batch_hash_shapes(const ObExprBasicFuncs &basic_funcs,
@@ -424,6 +434,248 @@ TEST(ObExprCmpFunc, string_initializer_shards_cover_supported_collations)
     EXPECT_NE(nullptr, ObExprCmpFuncsHelper::get_eval_expr_cmp_func(
         common::ObVarcharType, common::ObVarcharType, 0, 0, 0, 0,
         common::CO_EQ, cs_type, false));
+  }
+}
+
+TEST(ObDatumCast, decimal_int_fast_cast_reuses_runtime_variants)
+{
+  ObExpr::EvalFunc scalar_up_implicit = nullptr;
+  ObExpr::EvalFunc scalar_up_explicit = nullptr;
+  ObExpr::EvalFunc scalar_down = nullptr;
+  ObExpr::EvalBatchFunc batch_up_implicit = nullptr;
+  ObExpr::EvalBatchFunc batch_up_explicit = nullptr;
+  ObExpr::EvalBatchFunc batch_down = nullptr;
+
+  ObDatumCast::get_decint_cast(common::ObDecimalIntTC, 9, 2, 18, 4, false,
+                               batch_up_implicit, scalar_up_implicit);
+  ObDatumCast::get_decint_cast(common::ObDecimalIntTC, 9, 2, 18, 4, true,
+                               batch_up_explicit, scalar_up_explicit);
+  ObDatumCast::get_decint_cast(common::ObDecimalIntTC, 9, 4, 18, 2, false,
+                               batch_down, scalar_down);
+
+  EXPECT_EQ(scalar_up_implicit, scalar_up_explicit);
+  EXPECT_EQ(batch_up_implicit, batch_up_explicit);
+  EXPECT_EQ(batch_up_implicit, batch_down);
+  EXPECT_NE(scalar_up_implicit, scalar_down);
+
+  ObExpr::EvalFunc scalar_int32 = nullptr;
+  ObExpr::EvalFunc scalar_int64 = nullptr;
+  ObExpr::EvalBatchFunc batch_int32 = nullptr;
+  ObExpr::EvalBatchFunc batch_int64 = nullptr;
+  ObDatumCast::get_decint_cast(common::ObIntTC, 9, 0, 38, 2, false,
+                               batch_int32, scalar_int32);
+  ObDatumCast::get_decint_cast(common::ObIntTC, 18, 0, 38, 2, false,
+                               batch_int64, scalar_int64);
+
+  EXPECT_EQ(batch_int32, batch_int64);
+  EXPECT_NE(nullptr, scalar_int32);
+  EXPECT_NE(nullptr, scalar_int64);
+}
+
+TEST(ObDatumCast, decimal_int_fast_scalar_uses_runtime_explicit_flag)
+{
+  static common::ObArenaAllocator decint_const_allocator;
+  static const int decint_const_init_ret =
+      common::wide::ObDecimalIntConstValue::init_const_values(decint_const_allocator);
+  ASSERT_EQ(OB_SUCCESS, decint_const_init_ret);
+
+  struct ScalarFrame
+  {
+    common::ObDatum datum_;
+    ObEvalInfo eval_info_;
+    alignas(64) char value_[64];
+  } child_frame{};
+  char *frames[] = {reinterpret_cast<char *>(&child_frame)};
+  common::ObArenaAllocator allocator;
+  ObExecContext exec_ctx(allocator);
+  ObEvalCtx eval_ctx(exec_ctx);
+  eval_ctx.frames_ = frames;
+
+  ObExpr child;
+  child.frame_idx_ = 0;
+  child.datum_off_ = static_cast<uint32_t>(
+      reinterpret_cast<char *>(&child_frame.datum_) - frames[0]);
+  child.eval_info_off_ = static_cast<uint32_t>(
+      reinterpret_cast<char *>(&child_frame.eval_info_) - frames[0]);
+  child_frame.eval_info_.flag_ = 0;
+  child_frame.eval_info_.cnt_ = 0;
+  child_frame.datum_.ptr_ = child_frame.value_;
+
+  ObExpr expr;
+  ObExpr *args[] = {&child};
+  expr.args_ = args;
+  expr.arg_cnt_ = ARRAYSIZEOF(args);
+
+  auto eval_scalar = [&](ObExpr::EvalFunc eval_func, const uint64_t cast_mode,
+                         const int32_t input, common::ObDatum &result) {
+    child_frame.datum_.ptr_ = child_frame.value_;
+    child_frame.datum_.set_decimal_int(
+        reinterpret_cast<const common::ObDecimalInt *>(&input), sizeof(input));
+    expr.extra_ = cast_mode;
+    return eval_func(expr, eval_ctx, result);
+  };
+  alignas(64) char result_value[64] = {};
+  common::ObDatum result;
+  ObExpr::EvalBatchFunc batch_func = nullptr;
+  ObExpr::EvalFunc scalar_func = nullptr;
+
+  child.datum_meta_ = ObDatumMeta(common::ObDecimalIntType, common::CS_TYPE_BINARY, 0, 3);
+  expr.datum_meta_ = ObDatumMeta(common::ObDecimalIntType, common::CS_TYPE_BINARY, 0, 2);
+  ObDatumCast::get_decint_cast(common::ObDecimalIntTC, 3, 0, 2, 0, false,
+                               batch_func, scalar_func);
+  ASSERT_NE(nullptr, scalar_func);
+  result.ptr_ = result_value;
+  ASSERT_EQ(OB_SUCCESS, eval_scalar(scalar_func, CM_WARN_ON_FAIL, 999, result));
+  EXPECT_EQ(999, result.get_decimal_int32());
+
+  result.ptr_ = result_value;
+  ASSERT_EQ(OB_SUCCESS,
+            eval_scalar(scalar_func, CM_EXPLICIT_CAST | CM_WARN_ON_FAIL, 999, result));
+  EXPECT_EQ(99, result.get_decimal_int32());
+
+  child.datum_meta_ = ObDatumMeta(common::ObDecimalIntType, common::CS_TYPE_BINARY, 2, 9);
+  expr.datum_meta_ = ObDatumMeta(common::ObDecimalIntType, common::CS_TYPE_BINARY, 4, 9);
+  ObDatumCast::get_decint_cast(common::ObDecimalIntTC, 9, 2, 9, 4, false,
+                               batch_func, scalar_func);
+  ASSERT_NE(nullptr, scalar_func);
+  result.ptr_ = result_value;
+  ASSERT_EQ(OB_SUCCESS, eval_scalar(scalar_func, CM_NONE, 12345, result));
+  EXPECT_EQ(1234500, result.get_decimal_int32());
+
+  child.datum_meta_.scale_ = 4;
+  expr.datum_meta_.scale_ = 2;
+  ObDatumCast::get_decint_cast(common::ObDecimalIntTC, 9, 4, 9, 2, false,
+                               batch_func, scalar_func);
+  ASSERT_NE(nullptr, scalar_func);
+  result.ptr_ = result_value;
+  ASSERT_EQ(OB_SUCCESS, eval_scalar(scalar_func, CM_NONE, -123400, result));
+  EXPECT_EQ(-1234, result.get_decimal_int32());
+
+  child_frame.datum_.set_null();
+  result.ptr_ = result_value;
+  result.set_int(1);
+  ASSERT_EQ(OB_SUCCESS, scalar_func(expr, eval_ctx, result));
+  EXPECT_TRUE(result.is_null());
+}
+
+TEST(ObDatumCast, decimal_int_fast_batch_uses_runtime_scale_direction)
+{
+  static constexpr int64_t SKIPPED_IDX = 2;
+  static constexpr int64_t HIGH_SKIPPED_IDX = 65;
+  static constexpr int64_t EVALUATED_IDX = 5;
+  static constexpr int64_t NULL_IDX = 66;
+  DecimalIntCastBatchFrame child_frame{};
+  DecimalIntCastBatchFrame result_frame{};
+  char *frames[] = {
+      reinterpret_cast<char *>(&child_frame),
+      reinterpret_cast<char *>(&result_frame),
+  };
+  common::ObArenaAllocator allocator;
+  ObExecContext exec_ctx(allocator);
+  ObEvalCtx eval_ctx(exec_ctx);
+  eval_ctx.frames_ = frames;
+  eval_ctx.reuse(DECINT_CAST_BATCH_SIZE);
+  eval_ctx.set_max_batch_size(DECINT_CAST_BATCH_SIZE);
+
+  ObExpr child;
+  child.frame_idx_ = 0;
+  child.datum_off_ = static_cast<uint32_t>(
+      reinterpret_cast<char *>(&child_frame.datums_) - frames[0]);
+  child.eval_flags_off_ = static_cast<uint32_t>(
+      reinterpret_cast<char *>(&child_frame.eval_flags_) - frames[0]);
+  child.eval_info_off_ = static_cast<uint32_t>(
+      reinterpret_cast<char *>(&child_frame.eval_info_) - frames[0]);
+  child.batch_result_ = true;
+  child.batch_idx_mask_ = UINT64_MAX;
+  child_frame.eval_info_.flag_ = 0;
+  child_frame.eval_info_.cnt_ = 0;
+
+  ObExpr expr;
+  ObExpr *args[] = {&child};
+  expr.args_ = args;
+  expr.arg_cnt_ = ARRAYSIZEOF(args);
+  expr.frame_idx_ = 1;
+  expr.datum_off_ = static_cast<uint32_t>(
+      reinterpret_cast<char *>(&result_frame.datums_) - frames[1]);
+  expr.eval_flags_off_ = static_cast<uint32_t>(
+      reinterpret_cast<char *>(&result_frame.eval_flags_) - frames[1]);
+  expr.eval_info_off_ = static_cast<uint32_t>(
+      reinterpret_cast<char *>(&result_frame.eval_info_) - frames[1]);
+  expr.batch_result_ = true;
+  expr.batch_idx_mask_ = UINT64_MAX;
+  expr.extra_ = CM_NONE;
+  result_frame.eval_info_.flag_ = 0;
+  result_frame.eval_info_.cnt_ = 0;
+
+  int32_t input_values[DECINT_CAST_BATCH_SIZE] = {};
+  int32_t result_values[DECINT_CAST_BATCH_SIZE] = {};
+  alignas(uint64_t) uint64_t skip_buf[2] = {};
+  ObBitVector *skip = to_bit_vector(skip_buf);
+  ASSERT_EQ(sizeof(skip_buf), ObBitVector::memory_size(DECINT_CAST_BATCH_SIZE));
+  ASSERT_EQ(sizeof(result_frame.eval_flags_),
+            ObBitVector::memory_size(DECINT_CAST_BATCH_SIZE));
+  skip->init(DECINT_CAST_BATCH_SIZE);
+  skip->set(SKIPPED_IDX);
+  skip->set(HIGH_SKIPPED_IDX);
+  for (int64_t i = 0; i < DECINT_CAST_BATCH_SIZE; ++i) {
+    child_frame.datums_[i].ptr_ = reinterpret_cast<const char *>(&input_values[i]);
+    result_frame.datums_[i].ptr_ = reinterpret_cast<const char *>(&result_values[i]);
+  }
+
+  auto prepare_batch = [&](const int32_t scale_factor) {
+    expr.get_evaluated_flags(eval_ctx).init(DECINT_CAST_BATCH_SIZE);
+    expr.get_evaluated_flags(eval_ctx).set(EVALUATED_IDX);
+    for (int64_t i = 0; i < DECINT_CAST_BATCH_SIZE; ++i) {
+      input_values[i] = static_cast<int32_t>(i - DECINT_CAST_BATCH_SIZE / 2) * scale_factor;
+      child_frame.datums_[i].set_decimal_int(
+          reinterpret_cast<const common::ObDecimalInt *>(&input_values[i]), sizeof(input_values[i]));
+      result_values[i] = 777;
+      result_frame.datums_[i].set_decimal_int(
+          reinterpret_cast<const common::ObDecimalInt *>(&result_values[i]), sizeof(result_values[i]));
+    }
+    child_frame.datums_[NULL_IDX].set_null();
+  };
+
+  ObExpr::EvalBatchFunc batch_func = nullptr;
+  ObExpr::EvalFunc scalar_func = nullptr;
+  child.datum_meta_ = ObDatumMeta(common::ObDecimalIntType, common::CS_TYPE_BINARY, 2, 9);
+  expr.datum_meta_ = ObDatumMeta(common::ObDecimalIntType, common::CS_TYPE_BINARY, 4, 9);
+  ObDatumCast::get_decint_cast(common::ObDecimalIntTC, 9, 2, 9, 4, false,
+                               batch_func, scalar_func);
+  ASSERT_NE(nullptr, batch_func);
+  prepare_batch(1);
+  ASSERT_EQ(OB_SUCCESS, batch_func(expr, eval_ctx, *skip, DECINT_CAST_BATCH_SIZE));
+  for (int64_t i = 0; i < DECINT_CAST_BATCH_SIZE; ++i) {
+    if (SKIPPED_IDX == i || HIGH_SKIPPED_IDX == i || EVALUATED_IDX == i) {
+      EXPECT_EQ(777, result_frame.datums_[i].get_decimal_int32());
+    } else if (NULL_IDX == i) {
+      EXPECT_TRUE(result_frame.datums_[i].is_null());
+    } else {
+      EXPECT_EQ(input_values[i] * 100, result_frame.datums_[i].get_decimal_int32());
+    }
+    EXPECT_EQ(SKIPPED_IDX != i && HIGH_SKIPPED_IDX != i,
+              expr.get_evaluated_flags(eval_ctx).at(i));
+  }
+
+  ObExpr::EvalBatchFunc down_batch_func = nullptr;
+  child.datum_meta_.scale_ = 4;
+  expr.datum_meta_.scale_ = 2;
+  ObDatumCast::get_decint_cast(common::ObDecimalIntTC, 9, 4, 9, 2, false,
+                               down_batch_func, scalar_func);
+  ASSERT_NE(nullptr, down_batch_func);
+  EXPECT_EQ(batch_func, down_batch_func);
+  prepare_batch(100);
+  ASSERT_EQ(OB_SUCCESS, down_batch_func(expr, eval_ctx, *skip, DECINT_CAST_BATCH_SIZE));
+  for (int64_t i = 0; i < DECINT_CAST_BATCH_SIZE; ++i) {
+    if (SKIPPED_IDX == i || HIGH_SKIPPED_IDX == i || EVALUATED_IDX == i) {
+      EXPECT_EQ(777, result_frame.datums_[i].get_decimal_int32());
+    } else if (NULL_IDX == i) {
+      EXPECT_TRUE(result_frame.datums_[i].is_null());
+    } else {
+      EXPECT_EQ(input_values[i] / 100, result_frame.datums_[i].get_decimal_int32());
+    }
+    EXPECT_EQ(SKIPPED_IDX != i && HIGH_SKIPPED_IDX != i,
+              expr.get_evaluated_flags(eval_ctx).at(i));
   }
 }
 
