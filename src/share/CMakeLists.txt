@@ -308,6 +308,7 @@ ob_set_subtarget(ob_share domain_id
 
 if (SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
   ob_set_subtarget(ob_share plugin
+    plugin/ob_plugin_catalog.cpp
     plugin/ob_plugin_loader.cpp
     plugin/ob_plugin_registry.cpp
   )

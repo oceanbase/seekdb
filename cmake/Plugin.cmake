@@ -19,6 +19,7 @@ if (NOT TARGET seekdb_plugin_sdk)
     "${CMAKE_INSTALL_LIBDIR}/cmake/SeekDBPluginSDK")
   install(FILES
     "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/seekdb_plugin_abi.h"
+    "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/extension_spi.h"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/seekdb/plugin"
     COMPONENT plugin-sdk)
   install(TARGETS seekdb_plugin_sdk

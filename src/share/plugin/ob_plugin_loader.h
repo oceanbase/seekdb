@@ -38,23 +38,25 @@ struct ObPluginArtifactMetadata
 
   std::string plugin_id_;
   std::string build_id_;
+  std::string package_digest_;
   seekdb_plugin_semantic_version_t package_version_;
   uint32_t catalog_version_;
   uint32_t data_format_version_;
 };
 
-// This is deliberately only the minimum identity envelope used by the R0
-// loader preview.  It is not a complete signed-package model: production
+// This is deliberately only the minimum identity envelope consumed by the
+// runtime loader.  It is not a complete signed-package model: production
 // activation must additionally reconcile ABI, provides/requires, permissions,
 // file hashes and catalog objects (or bind them with an authenticated canonical
-// manifest digest) before this loader may be treated as a trust boundary.
+// manifest digest) before the verifier may be treated as a trust boundary.
 
 // A successful verifier returns an ownership token for the exact immutable
 // artifact it verified.  The token must pin load_path() against replacement
 // (for example by holding a content-addressed store lease) until destruction.
 // The minimum identity metadata above comes from the verified package and is
-// compared with the binary manifest before any plugin callback runs.  R1 must
-// extend that reconciliation to the complete package contract described above.
+// compared with the binary manifest before any plugin callback runs.  A
+// production verifier must extend that reconciliation to the complete package
+// contract described above.
 class ObPluginVerifiedArtifact
 {
 public:
@@ -75,13 +77,178 @@ public:
   // Implementations must not throw; the loader nevertheless catches exceptions
   // at this boundary.  Success with a null artifact is rejected.  Verification
   // runs under a logical load reservation but without the global loader mutex;
-  // it must not recursively start another management operation.  R0 still
-  // requires a precomputed catalog authorization snapshot, while R1 replaces
-  // that temporary convention with an activation permit.
+  // it must not recursively start another management operation.  Catalog
+  // authorization is deliberately separate and is obtained through the
+  // activation guard after this immutable identity has been verified.
   virtual int verify_and_pin(
       const std::string &canonical_path,
       std::unique_ptr<ObPluginVerifiedArtifact> &artifact,
       std::string &error) const = 0;
+};
+
+enum class ObPluginActivationMode : uint8_t
+{
+  ACTIVATE = 0,
+  STARTUP_RECOVERY
+};
+
+enum class ObPluginActivationPhase : uint8_t
+{
+  NONE = 0,
+  CATALOG_BEGIN,
+  LOADING,
+  INITIALIZING,
+  STARTING,
+  DISCOVERING,
+  PREPARING_CANDIDATE,
+  CATALOG_FINISH,
+  PROMOTING,
+  COMPLETE
+};
+
+// Immutable identity presented to the catalog before any plugin lifecycle
+// callback runs.  package_digest comes from the pinned verifier artifact, not
+// from the DSO.  A recovery request additionally binds the unfinished durable
+// intent so the catalog cannot silently create a fresh activation.
+struct ObPluginActivationRequest
+{
+  ObPluginActivationRequest();
+
+  ObPluginActivationMode mode_;
+  std::string relative_path_;
+  std::string plugin_id_;
+  std::string build_id_;
+  std::string package_digest_;
+  seekdb_plugin_semantic_version_t package_version_;
+  uint32_t catalog_version_;
+  uint32_t data_format_version_;
+  uint64_t expected_generation_;
+  std::string expected_runtime_incarnation_;
+  std::string expected_operation_id_;
+};
+
+// Host-owned description of one service dependency resolved for the candidate
+// generation.  Persisting the provider identity together with the requested
+// range lets the catalog enforce RESTRICT and rebuild a startup DAG without
+// retaining pointers into either DSO.  Optional requirements which were not
+// resolved are deliberately absent: they do not create a durable dependency.
+struct ObPluginRuntimeServiceDependency
+{
+  ObPluginRuntimeServiceDependency();
+
+  std::string service_id_;
+  seekdb_plugin_version_range_t requested_version_;
+  uint64_t required_capabilities_;
+  bool optional_;
+  std::string provider_plugin_id_;
+  uint64_t provider_generation_;
+  seekdb_plugin_semantic_version_t provider_version_;
+};
+
+// Complete host-owned candidate/failure observation used to durably advance an
+// activation intent.  Before promote, services_/extensions_ are still
+// invisible to ordinary registry readers.
+struct ObPluginRuntimeActivationResult
+{
+  ObPluginRuntimeActivationResult();
+
+  // status_ is the primary activation failure (or OB_SUCCESS for a prepared/
+  // ACTIVE result).  Rollback stop failure does not overwrite that cause;
+  // actual_state_=BLOCKED plus error_ records the cleanup outcome.
+  int status_;
+  uint64_t generation_;
+  std::string runtime_incarnation_;
+  std::string operation_id_;
+  ObPluginState actual_state_;
+  ObPluginActivationPhase phase_;
+  bool start_entered_;
+  bool candidate_prepared_;
+  uint64_t candidate_base_epoch_;
+  std::vector<ObPluginServiceInfo> services_;
+  std::vector<ObPluginExtensionInfo> extensions_;
+  std::vector<ObPluginRuntimeServiceDependency> dependencies_;
+  std::string error_;
+};
+
+typedef int32_t ObPluginActivationDecision;
+enum ObPluginActivationDecisionValue
+{
+  OB_PLUGIN_ACTIVATION_NOT_COMMITTED = 0,
+  OB_PLUGIN_ACTIVATION_PROMOTE = 1,
+  OB_PLUGIN_ACTIVATION_UNKNOWN = 2
+};
+
+// Token returned only after the catalog transaction has durably installed
+// ownership/dependency rows and PROMOTE_PENDING.  complete() records actual
+// ACTIVE and clears the intent after no-fail registry promotion.  A failure or
+// unfinished destructor must retain a replayable PROMOTE_PENDING record;
+// runtime is already ACTIVE and must never be rolled back merely because this
+// final catalog write failed.
+class ObPluginActivationCommit
+{
+public:
+  virtual ~ObPluginActivationCommit() noexcept = default;
+  virtual int complete(const ObPluginRuntimeActivationResult &runtime_result,
+                       std::string &error) noexcept = 0;
+};
+
+// A durable, identity-scoped activation intent.  begin_activation() has
+// authorized the exact pinned package and serialized this identity before the
+// permit is returned.  It must not retain a catalog mutex while plugin code is
+// called.  generation/runtime_incarnation/operation_id are catalog-assigned
+// immutable fencing identities and must remain valid for the permit lifetime.
+// For one plugin identity, a generation value which has ever been assigned
+// must never be assigned to a different attempt, even after abort, uninstall,
+// or archival.  Runtime incarnation and operation id are likewise unique in
+// durable history.  Startup recovery reuses the original tuple; a new attempt
+// receives a wholly new tuple.  This non-reuse rule prevents stale metadata
+// from binding a different runtime through an ABA collision.
+//
+// commit_candidate() durably records object ownership/dependencies and
+// PROMOTE_PENDING.  Only decision=PROMOTE with a non-NULL commit token
+// authorizes registry publication.  NOT_COMMITTED permits safe rollback;
+// UNKNOWN forbids promote, abort and identity reuse until recovery.  abort()
+// is used for a final failed/BLOCKED runtime result before commit, and is also
+// mandatory after commit_candidate() returns NOT_COMMITTED and runtime cleanup
+// finishes.  commit_candidate() is attempted at most once; PROMOTE transfers
+// finalization to ObPluginActivationCommit.  Destruction while unresolved must
+// leave or mark a recoverable durable intent.
+class ObPluginActivationPermit
+{
+public:
+  virtual ~ObPluginActivationPermit() noexcept = default;
+  virtual uint64_t generation() const noexcept = 0;
+  virtual const std::string &runtime_incarnation() const noexcept = 0;
+  virtual const std::string &operation_id() const noexcept = 0;
+  virtual int commit_candidate(
+      const ObPluginRuntimeActivationResult &candidate_result,
+      ObPluginActivationDecision &decision,
+      std::unique_ptr<ObPluginActivationCommit> &commit,
+      std::string &error) noexcept = 0;
+  virtual int abort(const ObPluginRuntimeActivationResult &runtime_result,
+                    std::string &error) noexcept = 0;
+};
+
+class ObPluginActivationGuard
+{
+public:
+  virtual ~ObPluginActivationGuard() noexcept = default;
+  virtual int begin_activation(
+      const ObPluginActivationRequest &request,
+      std::unique_ptr<ObPluginActivationPermit> &permit,
+      std::string &error) const noexcept = 0;
+};
+
+struct ObPluginRecoveryActivation
+{
+  ObPluginRecoveryActivation();
+
+  std::string relative_path_;
+  std::string plugin_id_;
+  std::string package_digest_;
+  uint64_t generation_;
+  std::string runtime_incarnation_;
+  std::string operation_id_;
 };
 
 enum class ObPluginDisablePhase : uint8_t
@@ -116,16 +283,24 @@ struct ObPluginRuntimeDisableResult
 // dependencies before returning this permit.  It must not retain a catalog
 // mutex: plugin callbacks may need catalog services while runtime is drained.
 //
-// finish() is called exactly once, outside the loader mutex, after the runtime
-// attempt.  It must persist the actual runtime result (including QUIESCING or
-// STOPPED recovery state); a successful stop cannot be made active again merely
-// because catalog finalization fails.  Destroying an unfinished permit must
-// leave a durable recovery marker and release the logical exclusion.  finish is
-// noexcept and idempotence/replay must be keyed by the permit's durable intent.
+// record_stop_entered() is committed outside the loader mutex immediately
+// before the first fallible stop callback.  Only its proven success authorizes
+// callback entry.  finish() is then called outside the loader mutex after the
+// runtime attempt.  It must persist the actual runtime result (including
+// QUIESCING or STOPPED recovery state); a successful stop cannot be made active
+// again merely because catalog finalization fails.  Destroying an unfinished
+// permit must leave a durable recovery marker and release the logical
+// exclusion.  Both operations are noexcept and replay is keyed by the permit's
+// durable intent.
 class ObPluginDisablePermit
 {
 public:
   virtual ~ObPluginDisablePermit() noexcept = default;
+  // This checkpoint must commit before the loader enters the first fallible
+  // stop callback.  A non-success result forbids entering stop; the caller
+  // must destroy the unresolved permit so an uncertain checkpoint remains
+  // fail-closed for startup recovery.
+  virtual int record_stop_entered(std::string &error) noexcept = 0;
   virtual int finish(const ObPluginRuntimeDisableResult &runtime_result,
                      std::string &error) noexcept = 0;
 };
@@ -157,16 +332,31 @@ struct ObPluginStatusSnapshot
   std::string canonical_path_;
   seekdb_plugin_semantic_version_t version_;
   uint64_t generation_;
+  std::string runtime_incarnation_;
+  std::string operation_id_;
   ObPluginState state_;
   int64_t lease_count_;
   std::string last_error_;
 };
 
-// A process-local R0 experimental loader.  It intentionally loads one plugin
-// at a time and rejects an unresolved mandatory dependency; callers which need
-// batch loads should order a catalog/DAG and invoke load() in that order.  It is
-// excluded from the default build until the R1 catalog activation permit is
-// implemented; do not expose load() as a production management entry point.
+// Structured classification for the most recent load()/startup-recovery
+// attempt.  The return status remains the authoritative error code; this
+// narrow reason lets coordinators distinguish a retryable dependency ordering
+// failure from unrelated failures which happen to share OB_ENTRY_NOT_EXIST.
+enum class ObPluginLoadFailureReason : uint8_t
+{
+  NONE = 0,
+  REQUIRED_SERVICE_UNAVAILABLE,
+  OTHER
+};
+
+// A process-local activation execution engine.  It intentionally loads one
+// plugin at a time and rejects an unresolved mandatory dependency; callers
+// which need batch loads must order a verified catalog/DAG and invoke load() in
+// that order.  The permit/candidate protocol prevents catalog/runtime partial
+// publication, but this class is not by itself a production plugin manager: it
+// still requires a durable catalog coordinator, startup ready gate and
+// production package verifier supplied by the server integration.
 class ObPluginLoader
 {
 public:
@@ -182,15 +372,26 @@ public:
   // the complete runtime domain rather than unmapping code beneath callbacks.
   int init(const std::string &trusted_directory,
            const std::shared_ptr<const ObPluginVerifier> &verifier,
+           const std::shared_ptr<const ObPluginActivationGuard> &activation_guard,
            const std::shared_ptr<const ObPluginDisableGuard> &disable_guard,
            const std::shared_ptr<ObPluginServiceRegistry> &registry);
   bool is_initialized() const;
 
   // relative_path is an untrusted catalog-relative path.  Absolute paths,
-  // traversal, symlink escapes and non-regular files are rejected.  In R0 the
-  // verifier must also carry a pre-authorized catalog allow-list decision.
-  // A stopped/resident identity cannot be loaded again before process exit.
+  // traversal, symlink escapes and non-regular files are rejected.  The
+  // verifier pins the artifact; the activation guard independently authorizes
+  // the exact digest and assigns the durable runtime identity.  A
+  // stopped/resident or catalog-uncertain identity cannot be loaded again
+  // before process exit.
   int load(const std::string &relative_path, uint64_t *loaded_generation = nullptr);
+
+  // Replays one catalog-provided unfinished/desired activation before server
+  // ready.  The pinned artifact and permit identities must exactly match the
+  // durable record; mismatch fails closed.  The catalog coordinator owns DAG
+  // ordering and calls this once per entry in topological order.
+  int recover_startup_activation(
+      const ObPluginRecoveryActivation &recovery,
+      uint64_t *loaded_generation = nullptr);
 
   // Logical unload only.  The mandatory catalog coordinator holds a logical
   // durable-dependency exclusion permit across runtime quiesce and records its
@@ -211,9 +412,14 @@ public:
   int get_status(const std::string &plugin_id, ObPluginStatusSnapshot &status) const;
   int list_status(std::vector<ObPluginStatusSnapshot> &statuses) const;
   std::string last_error() const;
+  ObPluginLoadFailureReason last_failure_reason() const;
   std::string trusted_directory() const;
 
 private:
+  int activate_internal(const std::string &relative_path,
+                        const ObPluginRecoveryActivation *recovery,
+                        uint64_t *loaded_generation);
+
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };

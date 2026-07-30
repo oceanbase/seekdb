@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "seekdb/plugin/seekdb_plugin_abi.h"
+#include "seekdb/plugin/extension_spi.h"
 
 #include <string.h>
 
@@ -67,6 +67,203 @@ static const seekdb_plugin_service_provide_descriptor_t dynamic_echo_service = {
     SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE,
     {0, 0, 0, 0}
 };
+
+#define REFERENCE_ECHO_IMPLEMENTATION                                      \
+  {                                                                        \
+    sizeof(seekdb_plugin_implementation_ref_v1_t),                         \
+    "org.seekdb.reference.echo",                                          \
+    {                                                                      \
+      sizeof(seekdb_plugin_version_range_t),                               \
+      {1, 0, 0},                                                           \
+      {2, 0, 0},                                                           \
+      {0, 0}                                                               \
+    },                                                                     \
+    SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE,                                  \
+    {0, 0, 0, 0}                                                           \
+  }
+
+static const seekdb_plugin_type_descriptor_v1_t extension_types[] = {
+    {
+      sizeof(seekdb_plugin_type_descriptor_v1_t),
+      "org.seekdb.reference.type.echo",
+      "reference_echo_type",
+      "org.seekdb.reference.format.echo",
+      1,
+      0,
+      SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE,
+      REFERENCE_ECHO_IMPLEMENTATION,
+      {0, 0, 0, 0}
+    }
+};
+
+typedef struct reference_padded_function_descriptor {
+  seekdb_plugin_function_descriptor_v1_t descriptor;
+  uint64_t trailing_v1_compatible_words[2];
+} reference_padded_function_descriptor_t;
+
+typedef struct reference_function_descriptor_block {
+  reference_padded_function_descriptor_t padded;
+  seekdb_plugin_function_descriptor_v1_t compact;
+} reference_function_descriptor_block_t;
+
+/*
+ * Exercise the snapshot's forward-compatible byte-stride contract with two
+ * elements: the walker must skip the first element's trailing words before it
+ * can normalize the compact second descriptor.
+ */
+static const reference_function_descriptor_block_t extension_functions = {
+  {
+    {
+      offsetof(reference_function_descriptor_block_t, compact),
+      "org.seekdb.reference.function.echo",
+      "reference_echo",
+      1,
+      1,
+      "org.seekdb.reference.type.echo",
+      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
+          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE |
+          SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING |
+          SEEKDB_PLUGIN_EXTENSION_FLAG_PARALLEL_SAFE,
+      REFERENCE_ECHO_IMPLEMENTATION,
+      {0, 0, 0, 0}
+    },
+    {0, 0}
+  },
+  {
+    sizeof(seekdb_plugin_function_descriptor_v1_t),
+    "org.seekdb.reference.function.echo-pair",
+    "reference_echo_pair",
+    2,
+    2,
+    "org.seekdb.reference.type.echo",
+    SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
+        SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE |
+        SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING |
+        SEEKDB_PLUGIN_EXTENSION_FLAG_PARALLEL_SAFE,
+    REFERENCE_ECHO_IMPLEMENTATION,
+    {0, 0, 0, 0}
+  }
+};
+
+static const seekdb_plugin_cast_descriptor_v1_t extension_casts[] = {
+    {
+      sizeof(seekdb_plugin_cast_descriptor_v1_t),
+      "org.seekdb.reference.cast.varchar-to-echo",
+      "core.varchar",
+      "org.seekdb.reference.type.echo",
+      SEEKDB_PLUGIN_CAST_EXPLICIT,
+      10,
+      SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE,
+      REFERENCE_ECHO_IMPLEMENTATION,
+      {0, 0, 0, 0}
+    }
+};
+
+static const seekdb_plugin_index_access_method_descriptor_v1_t
+    extension_index_access_methods[] = {
+    {
+      sizeof(seekdb_plugin_index_access_method_descriptor_v1_t),
+      "org.seekdb.reference.index.echo",
+      "reference_echo_index",
+      SEEKDB_PLUGIN_EXTENSION_FLAG_PARALLEL_SAFE,
+      REFERENCE_ECHO_IMPLEMENTATION,
+      {0, 0, 0, 0}
+    }
+};
+
+static const seekdb_plugin_optimizer_hook_descriptor_v1_t
+    extension_optimizer_hooks[] = {
+    {
+      sizeof(seekdb_plugin_optimizer_hook_descriptor_v1_t),
+      "org.seekdb.reference.optimizer.echo",
+      "optimizer.post_rewrite",
+      100,
+      0,
+      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC,
+      REFERENCE_ECHO_IMPLEMENTATION,
+      {0, 0, 0, 0}
+    }
+};
+
+static const seekdb_plugin_das_hook_descriptor_v1_t extension_das_hooks[] = {
+    {
+      sizeof(seekdb_plugin_das_hook_descriptor_v1_t),
+      "org.seekdb.reference.das.echo",
+      "das.pre_execute",
+      100,
+      0,
+      SEEKDB_PLUGIN_EXTENSION_FLAG_PARALLEL_SAFE,
+      REFERENCE_ECHO_IMPLEMENTATION,
+      {0, 0, 0, 0}
+    }
+};
+
+static const seekdb_plugin_catalog_object_descriptor_v1_t
+    extension_catalog_objects[] = {
+    {
+      sizeof(seekdb_plugin_catalog_object_descriptor_v1_t),
+      "org.seekdb.reference.catalog.echo",
+      "extension.fixture",
+      "sys",
+      "reference_echo_catalog",
+      "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      SEEKDB_PLUGIN_EXTENSION_FLAG_PERSISTENT |
+          SEEKDB_PLUGIN_EXTENSION_FLAG_REQUIRES_CATALOG,
+      {0, 0, 0, 0}
+    }
+};
+
+static const seekdb_plugin_extension_snapshot_v1_t extension_snapshot = {
+    sizeof(seekdb_plugin_extension_snapshot_v1_t),
+    extension_types,
+    1,
+    sizeof(extension_types),
+    (const seekdb_plugin_function_descriptor_v1_t *)&extension_functions,
+    2,
+    sizeof(extension_functions),
+    extension_casts,
+    1,
+    sizeof(extension_casts),
+    extension_index_access_methods,
+    1,
+    sizeof(extension_index_access_methods),
+    extension_optimizer_hooks,
+    1,
+    sizeof(extension_optimizer_hooks),
+    extension_das_hooks,
+    1,
+    sizeof(extension_das_hooks),
+    extension_catalog_objects,
+    1,
+    sizeof(extension_catalog_objects),
+    {0, 0, 0, 0, 0, 0, 0, 0}
+};
+
+static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL reference_describe_extensions(
+    seekdb_plugin_instance_handle_t *instance,
+    const seekdb_plugin_extension_snapshot_v1_t **out_snapshot)
+{
+  seekdb_plugin_status_t status = SEEKDB_PLUGIN_STATUS_OK;
+  if (NULL != out_snapshot) {
+    *out_snapshot = NULL;
+  }
+  if (instance != &reference_instance || !reference_instance.started ||
+      NULL == out_snapshot) {
+    status = SEEKDB_PLUGIN_STATUS_FAILED_PRECONDITION;
+  } else {
+    *out_snapshot = &extension_snapshot;
+  }
+  return status;
+}
+
+static const seekdb_plugin_extension_catalog_service_v1_t
+    extension_catalog_service = {
+    sizeof(seekdb_plugin_extension_catalog_service_v1_t),
+    reference_describe_extensions,
+    {0, 0, 0, 0, 0, 0, 0, 0}
+};
+
+#undef REFERENCE_ECHO_IMPLEMENTATION
 
 static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL reference_init(
     const seekdb_plugin_host_api_v1_t *host_api,
@@ -148,6 +345,15 @@ static const seekdb_plugin_service_provide_descriptor_t provided_services[] = {
       &echo_service,
       SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE,
       {0, 0, 0, 0}
+    },
+    {
+      sizeof(seekdb_plugin_service_provide_descriptor_t),
+      "org.seekdb.reference.extensions",
+      {SEEKDB_PLUGIN_EXTENSION_SPI_MAJOR, SEEKDB_PLUGIN_EXTENSION_SPI_MINOR, 0},
+      &extension_catalog_service,
+      SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE |
+          SEEKDB_PLUGIN_CAPABILITY_EXTENSION_CATALOG,
+      {0, 0, 0, 0}
     }
 };
 
@@ -159,11 +365,12 @@ static const seekdb_plugin_manifest_v1_t reference_manifest = {
     "seekdb",
     {1, 0, 0},
     "reference-abi-v1",
-    0,
-    0,
-    SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE,
-    provided_services,
     1,
+    0,
+    SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE |
+        SEEKDB_PLUGIN_CAPABILITY_PERSISTENT_DATA,
+    provided_services,
+    2,
     NULL,
     0,
     reference_init,

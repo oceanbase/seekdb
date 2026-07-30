@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <limits>
 #include <map>
 #include <mutex>
@@ -31,6 +32,7 @@
 #include <utility>
 
 #include "lib/ob_errno.h"
+#include "seekdb/plugin/extension_spi.h"
 
 #if defined(_WIN32)
 #include <malloc.h>
@@ -58,13 +60,24 @@ namespace
 
 const uint32_t MAX_PLUGIN_STRING = SEEKDB_PLUGIN_MAX_IDENTIFIER_BYTES;
 const uint32_t MAX_SERVICE_COUNT = SEEKDB_PLUGIN_MAX_SERVICES;
+const uint32_t MAX_EXTENSION_COUNT = SEEKDB_PLUGIN_MAX_EXTENSIONS;
 const char PLUGIN_ENTRY_SYMBOL[] = "seekdb_plugin_entry_v1";
-const seekdb_plugin_capability_t KNOWN_CAPABILITIES =
+const seekdb_plugin_capability_t KNOWN_RUNTIME_CAPABILITIES =
     SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE |
     SEEKDB_PLUGIN_CAPABILITY_MULTI_INSTANCE |
     SEEKDB_PLUGIN_CAPABILITY_SIDE_BY_SIDE_UPGRADE |
     SEEKDB_PLUGIN_CAPABILITY_PERSISTENT_DATA |
     SEEKDB_PLUGIN_CAPABILITY_TRANSACTIONAL_SERVICES;
+const seekdb_plugin_capability_t KNOWN_SERVICE_CAPABILITIES =
+    KNOWN_RUNTIME_CAPABILITIES |
+    SEEKDB_PLUGIN_CAPABILITY_EXTENSION_CATALOG;
+const seekdb_plugin_extension_flags_t KNOWN_EXTENSION_FLAGS =
+    SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
+    SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE |
+    SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING |
+    SEEKDB_PLUGIN_EXTENSION_FLAG_PERSISTENT |
+    SEEKDB_PLUGIN_EXTENSION_FLAG_PARALLEL_SAFE |
+    SEEKDB_PLUGIN_EXTENSION_FLAG_REQUIRES_CATALOG;
 
 struct StagedService
 {
@@ -91,7 +104,7 @@ struct HostContext
 {
   HostContext()
       : registry_(nullptr), owner_(), api_(), mutex_(), leases_(), registrations_(), staged_(),
-        accepting_registrations_(false)
+        pending_service_count_(0), accepting_registrations_(false)
   {}
 
   ObPluginServiceRegistry *registry_;
@@ -101,6 +114,10 @@ struct HostContext
   std::set<HostLease *> leases_;
   std::set<HostRegistration *> registrations_;
   std::vector<StagedService> staged_;
+  // Aggregate across every open transaction.  A per-transaction limit is not
+  // sufficient because plugin callbacks may keep many transactions open and
+  // otherwise make their combined staging memory unbounded.
+  size_t pending_service_count_;
   bool accepting_registrations_;
 };
 
@@ -134,6 +151,25 @@ bool valid_identifier(const char *value)
   size_t length = 0;
   bool valid = bounded_string(value, MAX_PLUGIN_STRING, length);
   for (size_t i = 0; valid && i < length; ++i) {
+    const char c = value[i];
+    valid = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+        c == '.' || c == '_' || c == '-';
+  }
+  return valid;
+}
+
+bool valid_bounded_text(const std::string &value,
+                        const size_t maximum,
+                        const bool allow_empty = false)
+{
+  return (allow_empty || !value.empty()) && value.size() <= maximum &&
+         value.find('\0') == std::string::npos;
+}
+
+bool valid_identifier(const std::string &value)
+{
+  bool valid = valid_bounded_text(value, MAX_PLUGIN_STRING);
+  for (size_t i = 0; valid && i < value.size(); ++i) {
     const char c = value[i];
     valid = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
         c == '.' || c == '_' || c == '-';
@@ -186,7 +222,8 @@ bool unbounded(const seekdb_plugin_semantic_version_t &version)
 bool version_in_range(const seekdb_plugin_semantic_version_t &version,
                       const seekdb_plugin_version_range_t &range)
 {
-  return compare_version(version, range.minimum_inclusive) >= 0 &&
+  return version.major == range.minimum_inclusive.major &&
+      compare_version(version, range.minimum_inclusive) >= 0 &&
       (unbounded(range.maximum_exclusive) ||
        compare_version(version, range.maximum_exclusive) < 0);
 }
@@ -194,10 +231,22 @@ bool version_in_range(const seekdb_plugin_semantic_version_t &version,
 bool valid_range(const seekdb_plugin_version_range_t &range)
 {
   const size_t required_size = sizeof(seekdb_plugin_version_range_t);
-  return range.struct_size >= required_size &&
-      (unbounded(range.maximum_exclusive) ||
-       compare_version(range.minimum_inclusive, range.maximum_exclusive) < 0) &&
-      all_zero(range.reserved, sizeof(range.reserved) / sizeof(range.reserved[0]));
+  bool valid_maximum = unbounded(range.maximum_exclusive);
+  if (!valid_maximum &&
+      range.maximum_exclusive.major == range.minimum_inclusive.major) {
+    valid_maximum =
+        compare_version(range.minimum_inclusive, range.maximum_exclusive) < 0;
+  } else if (!valid_maximum &&
+             range.minimum_inclusive.major <
+                 std::numeric_limits<uint32_t>::max()) {
+    valid_maximum =
+        range.maximum_exclusive.major == range.minimum_inclusive.major + 1 &&
+        0 == range.maximum_exclusive.minor &&
+        0 == range.maximum_exclusive.patch;
+  }
+  return range.struct_size == required_size && valid_maximum &&
+      all_zero(range.reserved,
+               sizeof(range.reserved) / sizeof(range.reserved[0]));
 }
 
 seekdb_plugin_status_t to_plugin_status(const int ret)
@@ -218,7 +267,8 @@ seekdb_plugin_status_t to_plugin_status(const int ret)
     case OB_EAGAIN: status = SEEKDB_PLUGIN_STATUS_BUSY; break;
     case OB_TIMEOUT:
     case OB_IO_ERROR: status = SEEKDB_PLUGIN_STATUS_UNAVAILABLE; break;
-    case OB_INVALID_DATA: status = SEEKDB_PLUGIN_STATUS_INVALID_MANIFEST; break;
+    case OB_INVALID_DATA:
+    case OB_SIZE_OVERFLOW: status = SEEKDB_PLUGIN_STATUS_INVALID_MANIFEST; break;
     default: status = SEEKDB_PLUGIN_STATUS_INTERNAL; break;
   }
   return status;
@@ -317,9 +367,9 @@ int validate_registration_service(const seekdb_plugin_service_provide_descriptor
 {
   int ret = OB_SUCCESS;
   const size_t required_size = sizeof(seekdb_plugin_service_provide_descriptor_t);
-  if (service.struct_size < required_size || !valid_identifier(service.service_id) ||
+  if (service.struct_size != required_size || !valid_identifier(service.service_id) ||
       service.version.major == 0 || nullptr == service.service ||
-      (service.capabilities & ~KNOWN_CAPABILITIES) != 0 ||
+      (service.capabilities & ~KNOWN_SERVICE_CAPABILITIES) != 0 ||
       !all_zero(service.reserved, sizeof(service.reserved) / sizeof(service.reserved[0]))) {
     ret = OB_INVALID_ARGUMENT;
     error = "invalid provided service descriptor";
@@ -355,6 +405,7 @@ seekdb_plugin_status_t SEEKDB_PLUGIN_CALL host_acquire_service(
     if (nullptr != out_version) std::memset(out_version, 0, sizeof(*out_version));
     if (nullptr == host || nullptr == host->registry_ || !valid_identifier(service_id) ||
         nullptr == range || !valid_range(*range) || range->minimum_inclusive.major == 0 ||
+        (required_capabilities & ~KNOWN_RUNTIME_CAPABILITIES) != 0 ||
         nullptr == out_service || nullptr == out_version || nullptr == out_lease) {
       ret = OB_INVALID_ARGUMENT;
     } else if (nullptr == (holder = new (std::nothrow) HostLease(host))) {
@@ -426,6 +477,8 @@ seekdb_plugin_status_t SEEKDB_PLUGIN_CALL host_begin_registration(
       std::lock_guard<std::mutex> guard(host->mutex_);
       if (!host->accepting_registrations_) {
         ret = OB_STATE_NOT_MATCH;
+      } else if (host->registrations_.size() >= MAX_SERVICE_COUNT) {
+        ret = OB_SIZE_OVERFLOW;
       } else {
         std::unique_ptr<HostRegistration> txn(new (std::nothrow) HostRegistration(host));
         if (!txn) {
@@ -460,6 +513,11 @@ seekdb_plugin_status_t SEEKDB_PLUGIN_CALL host_register_service(
       if (!host->accepting_registrations_ || host->registrations_.count(txn) == 0 ||
           txn->host_ != host) {
         ret = OB_STATE_NOT_MATCH;
+      } else if (txn->services_.size() >= MAX_SERVICE_COUNT ||
+                 host->staged_.size() > MAX_SERVICE_COUNT ||
+                 host->pending_service_count_ >=
+                     MAX_SERVICE_COUNT - host->staged_.size()) {
+        ret = OB_SIZE_OVERFLOW;
       } else {
         StagedService staged;
         std::string ignored;
@@ -476,7 +534,10 @@ seekdb_plugin_status_t SEEKDB_PLUGIN_CALL host_register_service(
             ret = OB_ENTRY_EXIST;
           }
         }
-        if (OB_SUCCESS == ret) txn->services_.push_back(staged);
+        if (OB_SUCCESS == ret) {
+          txn->services_.push_back(staged);
+          ++host->pending_service_count_;
+        }
       }
     }
   } catch (const std::bad_alloc &) {
@@ -503,12 +564,35 @@ seekdb_plugin_status_t SEEKDB_PLUGIN_CALL host_commit_registration(
       if (!host->accepting_registrations_ || it == host->registrations_.end() ||
           txn->host_ != host) {
         ret = OB_STATE_NOT_MATCH;
+      } else if (host->pending_service_count_ < txn->services_.size()) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (host->staged_.size() > MAX_SERVICE_COUNT ||
+                 txn->services_.size() >
+                 MAX_SERVICE_COUNT - host->staged_.size()) {
+        ret = OB_SIZE_OVERFLOW;
       } else {
+        // Another open transaction may have staged the same key before this
+        // transaction committed.  Revalidate against the current committed
+        // staging set under the host lock; publication must never depend on a
+        // later registry failure to detect this conflict.
+        for (const StagedService &pending : txn->services_) {
+          for (const StagedService &committed : host->staged_) {
+            if (pending.spec_.name_ == committed.spec_.name_ &&
+                pending.spec_.abi_major_ == committed.spec_.abi_major_) {
+              ret = OB_ENTRY_EXIST;
+              break;
+            }
+          }
+          if (OB_SUCCESS != ret) break;
+        }
+      }
+      if (OB_SUCCESS == ret) {
         // Build an isolated candidate so allocation failure leaves both the
         // transaction and the shared staged set completely unchanged.
         std::vector<StagedService> candidate(host->staged_);
         candidate.insert(candidate.end(), txn->services_.begin(), txn->services_.end());
         host->staged_.swap(candidate);
+        host->pending_service_count_ -= txn->services_.size();
         host->registrations_.erase(it);
         delete txn;
       }
@@ -532,8 +616,25 @@ void SEEKDB_PLUGIN_CALL host_abort_registration(
       std::lock_guard<std::mutex> guard(host->mutex_);
       const auto it = host->registrations_.find(txn);
       if (it != host->registrations_.end() && txn->host_ == host) {
+        const size_t aborted_count = txn->services_.size();
         host->registrations_.erase(it);
         delete txn;
+        if (host->pending_service_count_ >= aborted_count) {
+          host->pending_service_count_ -= aborted_count;
+        } else {
+          // The C ABI abort callback cannot report an invariant failure.  Keep
+          // the host fail-closed by reconstructing the aggregate from the
+          // still-live transactions without allocating or throwing.
+          host->pending_service_count_ = 0;
+          for (const HostRegistration *remaining : host->registrations_) {
+            const size_t count = remaining->services_.size();
+            if (count > MAX_SERVICE_COUNT - host->pending_service_count_) {
+              host->pending_service_count_ = MAX_SERVICE_COUNT;
+              break;
+            }
+            host->pending_service_count_ += count;
+          }
+        }
       }
     }
   } catch (...) {
@@ -564,6 +665,7 @@ void cleanup_host_resources(HostContext &host)
   host.accepting_registrations_ = false;
   for (HostRegistration *registration : host.registrations_) delete registration;
   host.registrations_.clear();
+  host.pending_service_count_ = 0;
   for (HostLease *lease : host.leases_) delete lease;
   host.leases_.clear();
   host.staged_.clear();
@@ -780,6 +882,595 @@ void call_deinit(const seekdb_plugin_deinit_fn fn,
   }
 }
 
+bool valid_sql_name(const char *value, const bool allow_qualified = true)
+{
+  size_t length = 0;
+  bool valid = bounded_string(value, MAX_PLUGIN_STRING, length);
+  for (size_t i = 0; valid && i < length; ++i) {
+    const char c = value[i];
+    if (c == '.') {
+      valid = allow_qualified && i != 0 && i + 1 < length &&
+          value[i - 1] != '.';
+    } else {
+      valid = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+          c == '_' || c == '$';
+    }
+  }
+  return valid;
+}
+
+bool valid_digest(const char *value)
+{
+  static const char PREFIX[] = "sha256:";
+  size_t length = 0;
+  bool valid = bounded_string(value, MAX_PLUGIN_STRING, length) &&
+      length == sizeof(PREFIX) - 1 + 64 &&
+      0 == std::memcmp(value, PREFIX, sizeof(PREFIX) - 1);
+  for (size_t i = sizeof(PREFIX) - 1; valid && i < length; ++i) {
+    const char c = value[i];
+    valid = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+  }
+  return valid;
+}
+
+bool valid_digest(const std::string &value)
+{
+  static const char PREFIX[] = "sha256:";
+  bool valid = value.size() == sizeof(PREFIX) - 1 + 64 &&
+      0 == value.compare(0, sizeof(PREFIX) - 1, PREFIX);
+  for (size_t i = sizeof(PREFIX) - 1; valid && i < value.size(); ++i) {
+    const char c = value[i];
+    valid = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+  }
+  return valid;
+}
+
+int normalize_implementation(
+    const seekdb_plugin_implementation_ref_v1_t &source,
+    ObPluginImplementationSpec &target,
+    std::string &error)
+{
+  int ret = OB_SUCCESS;
+  if (source.struct_size != sizeof(seekdb_plugin_implementation_ref_v1_t) ||
+      !valid_identifier(source.service_id) ||
+      !valid_range(source.version_range) ||
+      0 == source.version_range.minimum_inclusive.major ||
+      (source.required_capabilities & ~KNOWN_RUNTIME_CAPABILITIES) != 0 ||
+      !all_zero(source.reserved,
+                sizeof(source.reserved) / sizeof(source.reserved[0]))) {
+    ret = OB_INVALID_DATA;
+    error = "invalid extension implementation service reference";
+  } else {
+    target.service_id_ = source.service_id;
+    target.version_range_ = source.version_range;
+    // Keep only the v1 fields in the host-owned normalized representation.
+    target.version_range_.struct_size = sizeof(target.version_range_);
+    std::memset(target.version_range_.reserved, 0,
+                sizeof(target.version_range_.reserved));
+    target.required_capabilities_ = source.required_capabilities;
+  }
+  return ret;
+}
+
+int validate_extension_common(const uint32_t struct_size,
+                              const uint32_t required_size,
+                              const char *object_id,
+                              const seekdb_plugin_extension_flags_t flags,
+                              const uint64_t *reserved,
+                              const size_t reserved_count,
+                              const char *kind,
+                              std::string &error)
+{
+  int ret = OB_SUCCESS;
+  if (struct_size < required_size || !valid_identifier(object_id) ||
+      (flags & ~KNOWN_EXTENSION_FLAGS) != 0 ||
+      !all_zero(reserved, reserved_count)) {
+    ret = OB_INVALID_DATA;
+    error = std::string("invalid ") + kind + " extension descriptor";
+  }
+  return ret;
+}
+
+int normalize_extension(const seekdb_plugin_type_descriptor_v1_t &source,
+                        ObPluginExtensionSpec &target,
+                        std::string &error)
+{
+  int ret = validate_extension_common(
+      source.struct_size, sizeof(source), source.object_id, source.flags,
+      source.reserved, sizeof(source.reserved) / sizeof(source.reserved[0]),
+      "type", error);
+  if (OB_SUCCESS == ret &&
+      (!valid_sql_name(source.sql_name) ||
+       !valid_identifier(source.physical_format_id) ||
+       0 == source.physical_format_version || 0 != source.reserved_word)) {
+    ret = OB_INVALID_DATA;
+    error = "invalid type extension metadata";
+  }
+  if (OB_SUCCESS == ret) {
+    target.kind_ = SEEKDB_PLUGIN_EXTENSION_TYPE;
+    target.object_id_ = source.object_id;
+    target.sql_name_ = source.sql_name;
+    target.physical_format_id_ = source.physical_format_id;
+    target.physical_format_version_ = source.physical_format_version;
+    target.flags_ = source.flags;
+    ret = normalize_implementation(source.codec_service,
+                                   target.implementation_, error);
+  }
+  return ret;
+}
+
+int normalize_extension(const seekdb_plugin_function_descriptor_v1_t &source,
+                        ObPluginExtensionSpec &target,
+                        std::string &error)
+{
+  int ret = validate_extension_common(
+      source.struct_size, sizeof(source), source.object_id, source.flags,
+      source.reserved, sizeof(source.reserved) / sizeof(source.reserved[0]),
+      "function", error);
+  if (OB_SUCCESS == ret &&
+      (!valid_sql_name(source.sql_name) ||
+       source.minimum_arity > source.maximum_arity ||
+       (nullptr != source.static_result_type_id &&
+        !valid_identifier(source.static_result_type_id)))) {
+    ret = OB_INVALID_DATA;
+    error = "invalid function extension metadata";
+  }
+  if (OB_SUCCESS == ret) {
+    target.kind_ = SEEKDB_PLUGIN_EXTENSION_FUNCTION;
+    target.object_id_ = source.object_id;
+    target.sql_name_ = source.sql_name;
+    target.minimum_arity_ = source.minimum_arity;
+    target.maximum_arity_ = source.maximum_arity;
+    if (nullptr != source.static_result_type_id) {
+      target.static_result_type_id_ = source.static_result_type_id;
+    }
+    target.flags_ = source.flags;
+    ret = normalize_implementation(source.implementation,
+                                   target.implementation_, error);
+  }
+  return ret;
+}
+
+int normalize_extension(const seekdb_plugin_cast_descriptor_v1_t &source,
+                        ObPluginExtensionSpec &target,
+                        std::string &error)
+{
+  int ret = validate_extension_common(
+      source.struct_size, sizeof(source), source.object_id, source.flags,
+      source.reserved, sizeof(source.reserved) / sizeof(source.reserved[0]),
+      "cast", error);
+  if (OB_SUCCESS == ret &&
+      (!valid_identifier(source.source_type_id) ||
+       !valid_identifier(source.target_type_id) ||
+       source.context < SEEKDB_PLUGIN_CAST_EXPLICIT ||
+       source.context > SEEKDB_PLUGIN_CAST_IMPLICIT)) {
+    ret = OB_INVALID_DATA;
+    error = "invalid cast extension metadata";
+  }
+  if (OB_SUCCESS == ret) {
+    target.kind_ = SEEKDB_PLUGIN_EXTENSION_CAST;
+    target.object_id_ = source.object_id;
+    target.source_type_id_ = source.source_type_id;
+    target.target_type_id_ = source.target_type_id;
+    target.cast_context_ = source.context;
+    target.cost_ = source.cost;
+    target.flags_ = source.flags;
+    ret = normalize_implementation(source.implementation,
+                                   target.implementation_, error);
+  }
+  return ret;
+}
+
+int normalize_extension(
+    const seekdb_plugin_index_access_method_descriptor_v1_t &source,
+    ObPluginExtensionSpec &target,
+    std::string &error)
+{
+  int ret = validate_extension_common(
+      source.struct_size, sizeof(source), source.object_id, source.flags,
+      source.reserved, sizeof(source.reserved) / sizeof(source.reserved[0]),
+      "index access method", error);
+  if (OB_SUCCESS == ret && !valid_sql_name(source.sql_name)) {
+    ret = OB_INVALID_DATA;
+    error = "invalid index access method extension metadata";
+  }
+  if (OB_SUCCESS == ret) {
+    target.kind_ = SEEKDB_PLUGIN_EXTENSION_INDEX_ACCESS_METHOD;
+    target.object_id_ = source.object_id;
+    target.sql_name_ = source.sql_name;
+    target.flags_ = source.flags;
+    ret = normalize_implementation(source.implementation,
+                                   target.implementation_, error);
+  }
+  return ret;
+}
+
+int normalize_extension(const seekdb_plugin_optimizer_hook_descriptor_v1_t &source,
+                        ObPluginExtensionSpec &target,
+                        std::string &error)
+{
+  int ret = validate_extension_common(
+      source.struct_size, sizeof(source), source.object_id, source.flags,
+      source.reserved, sizeof(source.reserved) / sizeof(source.reserved[0]),
+      "optimizer hook", error);
+  if (OB_SUCCESS == ret &&
+      (!valid_identifier(source.hook_point) || 0 != source.reserved_word)) {
+    ret = OB_INVALID_DATA;
+    error = "invalid optimizer hook extension metadata";
+  }
+  if (OB_SUCCESS == ret) {
+    target.kind_ = SEEKDB_PLUGIN_EXTENSION_OPTIMIZER_HOOK;
+    target.object_id_ = source.object_id;
+    target.hook_point_ = source.hook_point;
+    target.priority_ = source.priority;
+    target.flags_ = source.flags;
+    ret = normalize_implementation(source.implementation,
+                                   target.implementation_, error);
+  }
+  return ret;
+}
+
+int normalize_extension(const seekdb_plugin_das_hook_descriptor_v1_t &source,
+                        ObPluginExtensionSpec &target,
+                        std::string &error)
+{
+  int ret = validate_extension_common(
+      source.struct_size, sizeof(source), source.object_id, source.flags,
+      source.reserved, sizeof(source.reserved) / sizeof(source.reserved[0]),
+      "DAS hook", error);
+  if (OB_SUCCESS == ret &&
+      (!valid_identifier(source.hook_point) || 0 != source.reserved_word)) {
+    ret = OB_INVALID_DATA;
+    error = "invalid DAS hook extension metadata";
+  }
+  if (OB_SUCCESS == ret) {
+    target.kind_ = SEEKDB_PLUGIN_EXTENSION_DAS_HOOK;
+    target.object_id_ = source.object_id;
+    target.hook_point_ = source.hook_point;
+    target.priority_ = source.priority;
+    target.flags_ = source.flags;
+    ret = normalize_implementation(source.implementation,
+                                   target.implementation_, error);
+  }
+  return ret;
+}
+
+int normalize_extension(
+    const seekdb_plugin_catalog_object_descriptor_v1_t &source,
+    ObPluginExtensionSpec &target,
+    std::string &error)
+{
+  int ret = validate_extension_common(
+      source.struct_size, sizeof(source), source.object_id, source.flags,
+      source.reserved, sizeof(source.reserved) / sizeof(source.reserved[0]),
+      "catalog object", error);
+  const seekdb_plugin_extension_flags_t required_flags =
+      SEEKDB_PLUGIN_EXTENSION_FLAG_PERSISTENT |
+      SEEKDB_PLUGIN_EXTENSION_FLAG_REQUIRES_CATALOG;
+  if (OB_SUCCESS == ret &&
+      (!valid_identifier(source.object_kind) ||
+       !valid_sql_name(source.schema_name, false) ||
+       !valid_sql_name(source.sql_name, false) ||
+       !valid_digest(source.definition_digest) ||
+       required_flags != (source.flags & required_flags))) {
+    ret = OB_INVALID_DATA;
+    error = "invalid catalog object extension metadata";
+  }
+  if (OB_SUCCESS == ret) {
+    target.kind_ = SEEKDB_PLUGIN_EXTENSION_CATALOG_OBJECT;
+    target.object_id_ = source.object_id;
+    target.catalog_object_kind_ = source.object_kind;
+    target.schema_name_ = source.schema_name;
+    target.sql_name_ = source.sql_name;
+    target.definition_digest_ = source.definition_digest;
+    target.flags_ = source.flags;
+  }
+  return ret;
+}
+
+struct ExtensionManifestRequirements
+{
+  ExtensionManifestRequirements()
+      : requires_catalog_(false), persistent_(false),
+        persistent_data_format_(false)
+  {}
+
+  void observe(const ObPluginExtensionSpec &extension)
+  {
+    requires_catalog_ = requires_catalog_ ||
+        0 != (extension.flags_ &
+              SEEKDB_PLUGIN_EXTENSION_FLAG_REQUIRES_CATALOG);
+    const bool persistent =
+        0 != (extension.flags_ & SEEKDB_PLUGIN_EXTENSION_FLAG_PERSISTENT);
+    persistent_ = persistent_ || persistent;
+    persistent_data_format_ = persistent_data_format_ ||
+        (persistent &&
+         (SEEKDB_PLUGIN_EXTENSION_TYPE == extension.kind_ ||
+          SEEKDB_PLUGIN_EXTENSION_INDEX_ACCESS_METHOD == extension.kind_));
+  }
+
+  bool requires_catalog_;
+  bool persistent_;
+  bool persistent_data_format_;
+};
+
+template <typename Descriptor>
+int stage_extension_array(
+    const Descriptor *descriptors,
+    const uint32_t count,
+    const uint32_t array_bytes,
+    ObPluginRegistration &publication,
+    ExtensionManifestRequirements &requirements,
+    std::string &error,
+    const char *kind,
+    int (*normalize)(const Descriptor &, ObPluginExtensionSpec &, std::string &))
+{
+  int ret = OB_SUCCESS;
+  size_t offset = 0;
+  const unsigned char *bytes =
+      reinterpret_cast<const unsigned char *>(descriptors);
+  for (uint32_t i = 0; OB_SUCCESS == ret && i < count; ++i) {
+    uint32_t descriptor_size = 0;
+    if (offset > array_bytes ||
+        array_bytes - offset < sizeof(descriptor_size)) {
+      ret = OB_INVALID_DATA;
+      error = std::string("truncated ") + kind + " extension array";
+    } else {
+      std::memcpy(&descriptor_size, bytes + offset, sizeof(descriptor_size));
+    }
+    if (OB_SUCCESS == ret &&
+        (descriptor_size < sizeof(Descriptor) ||
+        descriptor_size > SEEKDB_PLUGIN_MAX_EXTENSION_DESCRIPTOR_BYTES ||
+        offset > std::numeric_limits<size_t>::max() - descriptor_size ||
+        descriptor_size > array_bytes - offset)) {
+      ret = OB_INVALID_DATA;
+      error = std::string("invalid ") + kind + " extension array layout";
+    } else if (OB_SUCCESS == ret) {
+      Descriptor descriptor;
+      std::memcpy(&descriptor, bytes + offset, sizeof(descriptor));
+      ObPluginExtensionSpec normalized;
+      ret = normalize(descriptor, normalized, error);
+      if (OB_SUCCESS == ret) {
+        requirements.observe(normalized);
+        ret = publication.add_extension(normalized);
+        if (OB_SUCCESS != ret) {
+          error = std::string("cannot stage ") + kind +
+              " extension: " + normalized.object_id_;
+        }
+      }
+      offset += descriptor_size;
+    }
+  }
+  if (OB_SUCCESS == ret && offset != array_bytes) {
+    ret = OB_INVALID_DATA;
+    error = std::string("invalid trailing bytes in ") + kind +
+        " extension array";
+  }
+  return ret;
+}
+
+bool valid_extension_array_span(const void *data,
+                                const uint32_t count,
+                                const uint32_t bytes)
+{
+  return (0 == count && nullptr == data && 0 == bytes) ||
+         (0 != count && nullptr != data &&
+          static_cast<uint64_t>(count) * sizeof(uint32_t) <= bytes);
+}
+
+int validate_and_stage_extensions(
+    const seekdb_plugin_extension_snapshot_v1_t *borrowed_snapshot,
+    const seekdb_plugin_manifest_v1_t &manifest,
+    ObPluginRegistration &publication,
+    std::string &error)
+{
+  int ret = OB_SUCCESS;
+  uint32_t snapshot_size = 0;
+  if (nullptr == borrowed_snapshot) {
+    ret = OB_INVALID_DATA;
+    error = "extension catalog returned a null snapshot";
+  } else {
+    std::memcpy(&snapshot_size, borrowed_snapshot, sizeof(snapshot_size));
+    if (snapshot_size < sizeof(seekdb_plugin_extension_snapshot_v1_t)) {
+      ret = OB_INVALID_DATA;
+      error = "extension snapshot has an invalid struct size";
+    }
+  }
+
+  seekdb_plugin_extension_snapshot_v1_t snapshot;
+  ExtensionManifestRequirements requirements;
+  if (OB_SUCCESS == ret) {
+    std::memcpy(&snapshot, borrowed_snapshot, sizeof(snapshot));
+    const uint64_t total = static_cast<uint64_t>(snapshot.type_count) +
+        snapshot.function_count + snapshot.cast_count +
+        snapshot.index_access_method_count + snapshot.optimizer_hook_count +
+        snapshot.das_hook_count + snapshot.catalog_object_count;
+    const uint64_t total_bytes = static_cast<uint64_t>(snapshot.type_bytes) +
+        snapshot.function_bytes + snapshot.cast_bytes +
+        snapshot.index_access_method_bytes + snapshot.optimizer_hook_bytes +
+        snapshot.das_hook_bytes + snapshot.catalog_object_bytes;
+    if (total > MAX_EXTENSION_COUNT ||
+        total_bytes > SEEKDB_PLUGIN_MAX_EXTENSION_ARRAY_BYTES ||
+        !valid_extension_array_span(
+            snapshot.types, snapshot.type_count, snapshot.type_bytes) ||
+        !valid_extension_array_span(snapshot.functions,
+                                    snapshot.function_count,
+                                    snapshot.function_bytes) ||
+        !valid_extension_array_span(
+            snapshot.casts, snapshot.cast_count, snapshot.cast_bytes) ||
+        !valid_extension_array_span(
+            snapshot.index_access_methods,
+            snapshot.index_access_method_count,
+            snapshot.index_access_method_bytes) ||
+        !valid_extension_array_span(snapshot.optimizer_hooks,
+                                    snapshot.optimizer_hook_count,
+                                    snapshot.optimizer_hook_bytes) ||
+        !valid_extension_array_span(
+            snapshot.das_hooks, snapshot.das_hook_count,
+            snapshot.das_hook_bytes) ||
+        !valid_extension_array_span(snapshot.catalog_objects,
+                                    snapshot.catalog_object_count,
+                                    snapshot.catalog_object_bytes) ||
+        !all_zero(snapshot.reserved,
+                  sizeof(snapshot.reserved) / sizeof(snapshot.reserved[0]))) {
+      ret = OB_INVALID_DATA;
+      error = "extension snapshot count, byte span, or reserved fields are invalid";
+    }
+  }
+
+  if (OB_SUCCESS == ret) {
+    ret = stage_extension_array(
+        snapshot.types, snapshot.type_count, snapshot.type_bytes, publication,
+        requirements, error, "type",
+        static_cast<int (*)(const seekdb_plugin_type_descriptor_v1_t &,
+                            ObPluginExtensionSpec &, std::string &)>(
+            normalize_extension));
+  }
+  if (OB_SUCCESS == ret) {
+    ret = stage_extension_array(
+        snapshot.functions, snapshot.function_count, snapshot.function_bytes,
+        publication, requirements, error, "function",
+        static_cast<int (*)(const seekdb_plugin_function_descriptor_v1_t &,
+                            ObPluginExtensionSpec &, std::string &)>(
+            normalize_extension));
+  }
+  if (OB_SUCCESS == ret) {
+    ret = stage_extension_array(
+        snapshot.casts, snapshot.cast_count, snapshot.cast_bytes, publication,
+        requirements, error, "cast",
+        static_cast<int (*)(const seekdb_plugin_cast_descriptor_v1_t &,
+                            ObPluginExtensionSpec &, std::string &)>(
+            normalize_extension));
+  }
+  if (OB_SUCCESS == ret) {
+    ret = stage_extension_array(
+        snapshot.index_access_methods, snapshot.index_access_method_count,
+        snapshot.index_access_method_bytes, publication, requirements, error,
+        "index access method",
+        static_cast<int (*)(
+            const seekdb_plugin_index_access_method_descriptor_v1_t &,
+            ObPluginExtensionSpec &, std::string &)>(normalize_extension));
+  }
+  if (OB_SUCCESS == ret) {
+    ret = stage_extension_array(
+        snapshot.optimizer_hooks, snapshot.optimizer_hook_count,
+        snapshot.optimizer_hook_bytes, publication, requirements, error,
+        "optimizer hook",
+        static_cast<int (*)(const seekdb_plugin_optimizer_hook_descriptor_v1_t &,
+                            ObPluginExtensionSpec &, std::string &)>(
+            normalize_extension));
+  }
+  if (OB_SUCCESS == ret) {
+    ret = stage_extension_array(
+        snapshot.das_hooks, snapshot.das_hook_count, snapshot.das_hook_bytes,
+        publication, requirements, error, "DAS hook",
+        static_cast<int (*)(const seekdb_plugin_das_hook_descriptor_v1_t &,
+                            ObPluginExtensionSpec &, std::string &)>(
+            normalize_extension));
+  }
+  if (OB_SUCCESS == ret) {
+    ret = stage_extension_array(
+        snapshot.catalog_objects, snapshot.catalog_object_count,
+        snapshot.catalog_object_bytes, publication, requirements, error,
+        "catalog object",
+        static_cast<int (*)(
+            const seekdb_plugin_catalog_object_descriptor_v1_t &,
+            ObPluginExtensionSpec &, std::string &)>(normalize_extension));
+  }
+  if (OB_SUCCESS == ret) {
+    requirements.requires_catalog_ = requirements.requires_catalog_ ||
+        snapshot.catalog_object_count > 0;
+    if (requirements.requires_catalog_ && 0 == manifest.catalog_version) {
+      ret = OB_INVALID_DATA;
+      error = "extension metadata requires a nonzero catalog version";
+    } else if (requirements.persistent_ &&
+               0 == (manifest.capabilities &
+                     SEEKDB_PLUGIN_CAPABILITY_PERSISTENT_DATA)) {
+      ret = OB_INVALID_DATA;
+      error = "persistent extension metadata requires plugin persistent-data capability";
+    } else if (requirements.persistent_data_format_ &&
+               0 == manifest.data_format_version) {
+      ret = OB_INVALID_DATA;
+      error = "persistent type or index metadata requires a data format version";
+    }
+  }
+  return ret;
+}
+
+int discover_and_stage_extensions(
+    seekdb_plugin_instance_handle_t *instance,
+    const seekdb_plugin_manifest_v1_t &manifest,
+    const std::vector<StagedService> &manifest_services,
+    const std::vector<StagedService> &dynamic_services,
+    ObPluginRegistration &publication,
+    std::string &error)
+{
+  int ret = OB_SUCCESS;
+  bool found = false;
+  ObPluginServiceSpec catalog;
+  std::set<std::pair<std::string, uint32_t> > service_keys;
+  const std::vector<StagedService> *groups[] = {
+      &manifest_services, &dynamic_services};
+  for (size_t group = 0; OB_SUCCESS == ret && group < 2; ++group) {
+    for (size_t i = 0; OB_SUCCESS == ret && i < groups[group]->size(); ++i) {
+      const ObPluginServiceSpec &candidate = (*groups[group])[i].spec_;
+      const std::pair<std::string, uint32_t> key(
+          candidate.name_, candidate.abi_major_);
+      if (!service_keys.insert(key).second) {
+        ret = OB_ENTRY_EXIST;
+        error = "duplicate manifest or dynamic service";
+      } else if (0 != (candidate.capabilities_ &
+                       SEEKDB_PLUGIN_CAPABILITY_EXTENSION_CATALOG)) {
+        if (found) {
+          ret = OB_ENTRY_EXIST;
+          error = "plugin exposes more than one extension catalog service";
+        } else {
+          catalog = candidate;
+          found = true;
+        }
+      }
+    }
+  }
+
+  seekdb_plugin_extension_catalog_service_v1_t service;
+  if (OB_SUCCESS == ret && found) {
+    uint32_t service_size = 0;
+    std::memcpy(&service_size, catalog.service_, sizeof(service_size));
+    if (catalog.abi_major_ != SEEKDB_PLUGIN_EXTENSION_SPI_MAJOR ||
+        service_size < sizeof(service)) {
+      ret = OB_NOT_SUPPORTED;
+      error = "extension catalog service has an unsupported ABI";
+    } else {
+      std::memcpy(&service, catalog.service_, sizeof(service));
+      if (nullptr == service.describe_extensions ||
+          !all_zero(service.reserved,
+                    sizeof(service.reserved) / sizeof(service.reserved[0]))) {
+        ret = OB_INVALID_DATA;
+        error = "extension catalog service table is invalid";
+      }
+    }
+  }
+
+  const seekdb_plugin_extension_snapshot_v1_t *snapshot = nullptr;
+  if (OB_SUCCESS == ret && found) {
+    // The loader's management reservation remains held, but the global loader
+    // mutex is deliberately not held across plugin code.
+    try {
+      ret = from_plugin_status(
+          service.describe_extensions(instance, &snapshot));
+    } catch (...) {
+      ret = OB_ERR_UNEXPECTED;
+    }
+    if (OB_SUCCESS != ret) {
+      error = "extension catalog describe callback failed";
+    } else {
+      ret = validate_and_stage_extensions(
+          snapshot, manifest, publication, error);
+    }
+  }
+  return ret;
+}
+
 } // namespace
 
 struct ObPluginLoader::Impl
@@ -787,9 +1478,11 @@ struct ObPluginLoader::Impl
   struct Module
   {
     Module()
-        : plugin_id_(), canonical_path_(), version_(), generation_(), handle_(INVALID_MODULE),
+        : plugin_id_(), canonical_path_(), version_(), generation_(),
+          runtime_incarnation_(), operation_id_(), handle_(INVALID_MODULE),
           manifest_(nullptr), verified_artifact_(), owner_(), host_(), instance_(nullptr),
-          dependencies_(), dependency_slots_(), last_error_(), initialized_(false), started_(false)
+          dependencies_(), resolved_dependencies_(), dependency_slots_(),
+          last_error_(), initialized_(false), started_(false)
     {
       std::memset(&version_, 0, sizeof(version_));
     }
@@ -798,6 +1491,8 @@ struct ObPluginLoader::Impl
     std::string canonical_path_;
     seekdb_plugin_semantic_version_t version_;
     uint64_t generation_;
+    std::string runtime_incarnation_;
+    std::string operation_id_;
     ModuleHandle handle_;
     const seekdb_plugin_manifest_v1_t *manifest_;
     std::unique_ptr<ObPluginVerifiedArtifact> verified_artifact_;
@@ -805,6 +1500,7 @@ struct ObPluginLoader::Impl
     HostContext host_;
     seekdb_plugin_instance_handle_t *instance_;
     std::vector<std::unique_ptr<ObPluginLease> > dependencies_;
+    std::vector<ObPluginRuntimeServiceDependency> resolved_dependencies_;
     std::vector<const void **> dependency_slots_;
     std::string last_error_;
     bool initialized_;
@@ -812,15 +1508,18 @@ struct ObPluginLoader::Impl
   };
 
   Impl()
-      : mutex_(), trusted_directory_(), verifier_(), disable_guard_(),
+      : mutex_(), trusted_directory_(), verifier_(), activation_guard_(),
+        disable_guard_(),
         registry_(), initialized_(false), shutting_down_(false), loading_(false),
-        shutdown_running_(false), terminal_completed_(false), next_generation_(1),
-        modules_(), active_(), disabling_(), last_error_()
+        shutdown_running_(false), terminal_completed_(false),
+        modules_(), active_(), disabling_(), last_error_(),
+        last_failure_reason_(ObPluginLoadFailureReason::NONE)
   {}
 
   mutable std::mutex mutex_;
   std::string trusted_directory_;
   std::shared_ptr<const ObPluginVerifier> verifier_;
+  std::shared_ptr<const ObPluginActivationGuard> activation_guard_;
   std::shared_ptr<const ObPluginDisableGuard> disable_guard_;
   std::shared_ptr<ObPluginServiceRegistry> registry_;
   bool initialized_;
@@ -828,11 +1527,11 @@ struct ObPluginLoader::Impl
   bool loading_;
   bool shutdown_running_;
   bool terminal_completed_;
-  uint64_t next_generation_;
   std::vector<std::unique_ptr<Module> > modules_;
   std::map<std::string, Module *> active_;
   std::map<std::string, uint64_t> disabling_;
   std::string last_error_;
+  ObPluginLoadFailureReason last_failure_reason_;
 
   static void fill_status(const Module &module, ObPluginStatusSnapshot &status)
   {
@@ -840,6 +1539,8 @@ struct ObPluginLoader::Impl
     status.canonical_path_ = module.canonical_path_;
     status.version_ = module.version_;
     status.generation_ = module.generation_;
+    status.runtime_incarnation_ = module.runtime_incarnation_;
+    status.operation_id_ = module.operation_id_;
     status.state_ = module.owner_ ? module.owner_->state() : ObPluginState::FAILED;
     status.lease_count_ = module.owner_ ? module.owner_->lease_count() : 0;
     status.last_error_ = module.last_error_;
@@ -889,7 +1590,7 @@ struct ObPluginLoader::Impl
       error = "plugin service descriptor count is invalid";
     } else if (nullptr == manifest->init || nullptr == manifest->start ||
                nullptr == manifest->stop || nullptr == manifest->deinit ||
-               (manifest->capabilities & ~KNOWN_CAPABILITIES) != 0 ||
+               (manifest->capabilities & ~KNOWN_RUNTIME_CAPABILITIES) != 0 ||
                !all_zero(manifest->reserved,
                          sizeof(manifest->reserved) / sizeof(manifest->reserved[0]))) {
       ret = OB_INVALID_DATA;
@@ -914,10 +1615,10 @@ struct ObPluginLoader::Impl
     for (uint32_t i = 0; OB_SUCCESS == ret && i < manifest->required_services_count; ++i) {
       const seekdb_plugin_service_require_descriptor_t &require = manifest->required_services[i];
       const size_t descriptor_size = sizeof(seekdb_plugin_service_require_descriptor_t);
-      if (require.struct_size < descriptor_size || !valid_identifier(require.service_id) ||
+      if (require.struct_size != descriptor_size || !valid_identifier(require.service_id) ||
           !valid_range(require.version_range) ||
           require.version_range.minimum_inclusive.major == 0 || require.optional > 1 ||
-          (require.required_capabilities & ~KNOWN_CAPABILITIES) != 0 ||
+          (require.required_capabilities & ~KNOWN_RUNTIME_CAPABILITIES) != 0 ||
           !all_zero(require.reserved, sizeof(require.reserved) / sizeof(require.reserved[0]))) {
         ret = OB_INVALID_DATA;
         error = "invalid required service descriptor";
@@ -944,11 +1645,15 @@ struct ObPluginLoader::Impl
     return ret;
   }
 
-  int resolve_dependencies(Module &module, std::string &error)
+  int resolve_dependencies(Module &module,
+                           std::string &error,
+                           ObPluginLoadFailureReason &failure_reason)
   {
     int ret = OB_SUCCESS;
     try {
       module.dependencies_.reserve(module.manifest_->required_services_count);
+      module.resolved_dependencies_.reserve(
+          module.manifest_->required_services_count);
       module.dependency_slots_.reserve(module.manifest_->required_services_count);
     } catch (const std::bad_alloc &) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -973,10 +1678,10 @@ struct ObPluginLoader::Impl
             require.version_range.minimum_inclusive.minor,
             require.version_range.minimum_inclusive.patch,
             require.required_capabilities, *lease);
+        seekdb_plugin_semantic_version_t actual = {};
         if (OB_SUCCESS == acquire_ret) {
-          seekdb_plugin_semantic_version_t actual = {
-              require.version_range.minimum_inclusive.major, lease->service_minor(),
-              lease->service_patch()};
+          actual = {require.version_range.minimum_inclusive.major,
+                    lease->service_minor(), lease->service_patch()};
           if (!version_in_range(actual, require.version_range)) {
             acquire_ret = OB_ENTRY_NOT_EXIST;
           }
@@ -986,8 +1691,19 @@ struct ObPluginLoader::Impl
           if (!require.optional) {
             ret = acquire_ret;
             error = std::string("required service is unavailable: ") + require.service_id;
+            failure_reason =
+                ObPluginLoadFailureReason::REQUIRED_SERVICE_UNAVAILABLE;
           }
         } else {
+          ObPluginRuntimeServiceDependency dependency;
+          dependency.service_id_ = require.service_id;
+          dependency.requested_version_ = require.version_range;
+          dependency.required_capabilities_ = require.required_capabilities;
+          dependency.optional_ = 0 != require.optional;
+          dependency.provider_plugin_id_ = lease->owner_plugin_id();
+          dependency.provider_generation_ = lease->owner_generation();
+          dependency.provider_version_ = actual;
+          module.resolved_dependencies_.push_back(std::move(dependency));
           module.dependencies_.push_back(std::move(lease));
           if (nullptr != require.service_slot) {
             module.dependency_slots_.push_back(require.service_slot);
@@ -1009,6 +1725,7 @@ struct ObPluginLoader::Impl
       (*it)->reset();
     }
     module.dependencies_.clear();
+    module.resolved_dependencies_.clear();
   }
 
   void fail_generation(Module &module, const std::string &error)
@@ -1043,11 +1760,14 @@ struct ObPluginLoader::Impl
   int disable_runtime(Module &module,
                       const int64_t timeout_us,
                       const bool allow_blocked_retry,
+                      ObPluginDisablePermit *disable_permit,
+                      bool &stop_checkpoint_failed,
                       const ObPluginTerminalStopAuthority *terminal_authority,
                       ObPluginRuntimeDisableResult &result,
                       std::string &error)
   {
     int ret = OB_SUCCESS;
+    stop_checkpoint_failed = false;
     result = ObPluginRuntimeDisableResult();
     result.generation_ = module.generation_;
     ObPluginState state = module.owner_->state();
@@ -1068,18 +1788,37 @@ struct ObPluginLoader::Impl
       ret = module.owner_->wait_for_drain(timeout_us);
     }
     if (OB_SUCCESS == ret && module.started_) {
-      result.phase_ = ObPluginDisablePhase::STOP;
-      result.stop_entered_ = true;
-      const int stop_ret = call_lifecycle(module.manifest_->stop, module.instance_);
-      if (OB_SUCCESS == stop_ret) {
-        module.started_ = false;
-      } else {
-        ret = stop_ret;
-        assign_error_noexcept(
-            error, "plugin stop callback failed; module is blocked until process-exit retry");
-        if (module.owner_->state() != ObPluginState::BLOCKED &&
-            OB_SUCCESS != module.owner_->transition_to(ObPluginState::BLOCKED)) {
-          append_error_noexcept(error, "; failed to record blocked runtime state");
+      if (nullptr != disable_permit) {
+        std::string checkpoint_error;
+        const int checkpoint_ret =
+            disable_permit->record_stop_entered(checkpoint_error);
+        if (OB_SUCCESS != checkpoint_ret) {
+          ret = checkpoint_ret;
+          stop_checkpoint_failed = true;
+          assign_error_noexcept(
+              error,
+              checkpoint_error.empty()
+                  ? "plugin stop checkpoint failed; stop callback was not entered"
+                  : checkpoint_error.c_str());
+        }
+      }
+      if (OB_SUCCESS == ret) {
+        result.phase_ = ObPluginDisablePhase::STOP;
+        result.stop_entered_ = true;
+        const int stop_ret =
+            call_lifecycle(module.manifest_->stop, module.instance_);
+        if (OB_SUCCESS == stop_ret) {
+          module.started_ = false;
+        } else {
+          ret = stop_ret;
+          assign_error_noexcept(
+              error, "plugin stop callback failed; module is blocked until process-exit retry");
+          if (module.owner_->state() != ObPluginState::BLOCKED &&
+              OB_SUCCESS !=
+                  module.owner_->transition_to(ObPluginState::BLOCKED)) {
+            append_error_noexcept(
+                error, "; failed to record blocked runtime state");
+          }
         }
       }
     }
@@ -1117,17 +1856,51 @@ struct ObPluginLoader::Impl
 };
 
 ObPluginArtifactMetadata::ObPluginArtifactMetadata()
-    : plugin_id_(), build_id_(), package_version_(), catalog_version_(0),
-      data_format_version_(0)
+    : plugin_id_(), build_id_(), package_digest_(), package_version_(),
+      catalog_version_(0), data_format_version_(0)
 {
   std::memset(&package_version_, 0, sizeof(package_version_));
 }
 
 ObPluginStatusSnapshot::ObPluginStatusSnapshot()
     : plugin_id_(), canonical_path_(), version_(), generation_(0),
+      runtime_incarnation_(), operation_id_(),
       state_(ObPluginState::DISCOVERED), lease_count_(0), last_error_()
 {
   std::memset(&version_, 0, sizeof(version_));
+}
+
+ObPluginActivationRequest::ObPluginActivationRequest()
+    : mode_(ObPluginActivationMode::ACTIVATE), relative_path_(), plugin_id_(),
+      build_id_(), package_digest_(), package_version_(), catalog_version_(0),
+      data_format_version_(0), expected_generation_(0),
+      expected_runtime_incarnation_(), expected_operation_id_()
+{
+  std::memset(&package_version_, 0, sizeof(package_version_));
+}
+
+ObPluginRuntimeServiceDependency::ObPluginRuntimeServiceDependency()
+    : service_id_(), requested_version_(), required_capabilities_(0),
+      optional_(false), provider_plugin_id_(), provider_generation_(0),
+      provider_version_()
+{
+  std::memset(&requested_version_, 0, sizeof(requested_version_));
+  std::memset(&provider_version_, 0, sizeof(provider_version_));
+}
+
+ObPluginRuntimeActivationResult::ObPluginRuntimeActivationResult()
+    : status_(OB_STATE_NOT_MATCH), generation_(0), runtime_incarnation_(),
+      operation_id_(), actual_state_(ObPluginState::DISCOVERED),
+      phase_(ObPluginActivationPhase::NONE), start_entered_(false),
+      candidate_prepared_(false), candidate_base_epoch_(0), services_(),
+      extensions_(), dependencies_(), error_()
+{
+}
+
+ObPluginRecoveryActivation::ObPluginRecoveryActivation()
+    : relative_path_(), plugin_id_(), package_digest_(), generation_(0),
+      runtime_incarnation_(), operation_id_()
+{
 }
 
 ObPluginRuntimeDisableResult::ObPluginRuntimeDisableResult()
@@ -1169,6 +1942,7 @@ ObPluginLoader::~ObPluginLoader()
 
 int ObPluginLoader::init(const std::string &trusted_directory,
                          const std::shared_ptr<const ObPluginVerifier> &verifier,
+                         const std::shared_ptr<const ObPluginActivationGuard> &activation_guard,
                          const std::shared_ptr<const ObPluginDisableGuard> &disable_guard,
                          const std::shared_ptr<ObPluginServiceRegistry> &registry)
 {
@@ -1184,15 +1958,16 @@ int ObPluginLoader::init(const std::string &trusted_directory,
     } else if (impl_->initialized_) {
       ret = OB_INIT_TWICE;
       error = "plugin loader is already initialized";
-    } else if (!verifier || !disable_guard || !registry ||
+    } else if (!verifier || !activation_guard || !disable_guard || !registry ||
                trusted_directory.empty()) {
       ret = OB_INVALID_ARGUMENT;
-      error = "trusted directory, verifier, disable guard and registry are mandatory";
+      error = "trusted directory, verifier, activation/disable guards and registry are mandatory";
     } else if (OB_SUCCESS !=
                (ret = canonical_existing(trusted_directory, true, canonical, error))) {
     } else {
       impl_->trusted_directory_ = canonical;
       impl_->verifier_ = verifier;
+      impl_->activation_guard_ = activation_guard;
       impl_->disable_guard_ = disable_guard;
       impl_->registry_ = registry;
       impl_->shutting_down_ = false;
@@ -1218,28 +1993,63 @@ bool ObPluginLoader::is_initialized() const
   return impl_->initialized_;
 }
 
-int ObPluginLoader::load(const std::string &relative_path, uint64_t *loaded_generation)
+int ObPluginLoader::load(const std::string &relative_path,
+                         uint64_t *loaded_generation)
+{
+  return activate_internal(relative_path, nullptr, loaded_generation);
+}
+
+int ObPluginLoader::recover_startup_activation(
+    const ObPluginRecoveryActivation &recovery,
+    uint64_t *loaded_generation)
+{
+  return activate_internal(recovery.relative_path_, &recovery,
+                           loaded_generation);
+}
+
+int ObPluginLoader::activate_internal(
+    const std::string &relative_path,
+    const ObPluginRecoveryActivation *recovery,
+    uint64_t *loaded_generation)
 {
   if (!impl_)
     return OB_ALLOCATE_MEMORY_FAILED;
   int ret = OB_SUCCESS;
   std::string error;
+  std::string catalog_error;
   std::string canonical;
   std::string trusted_directory;
   std::shared_ptr<const ObPluginVerifier> verifier;
+  std::shared_ptr<const ObPluginActivationGuard> activation_guard;
   std::unique_ptr<Impl::Module> module;
   std::vector<StagedService> manifest_services;
   ObPluginRegistration publication;
+  ObPluginActivationCandidate candidate;
+  std::unique_ptr<ObPluginActivationPermit> activation_permit;
+  std::unique_ptr<ObPluginActivationCommit> activation_commit;
+  ObPluginActivationRequest activation_request;
+  ObPluginRuntimeActivationResult activation_result;
+  ObPluginActivationDecision activation_decision =
+      OB_PLUGIN_ACTIVATION_UNKNOWN;
+  ObPluginLoadFailureReason failure_reason =
+      ObPluginLoadFailureReason::NONE;
   seekdb_plugin_entry_v1_fn entry = nullptr;
   bool publication_open = false;
   bool active_placeholder = false;
   bool load_reserved = false;
+  bool permit_issued = false;
+  bool commit_attempted = false;
+  bool catalog_committed = false;
+  bool promoted = false;
+  bool identity_must_remain = false;
+  Impl::Module *promoted_module = nullptr;
 
   try {
     if (nullptr != loaded_generation)
       *loaded_generation = 0;
     {
       std::lock_guard<std::mutex> guard(impl_->mutex_);
+      impl_->last_failure_reason_ = ObPluginLoadFailureReason::NONE;
       if (!impl_->initialized_) {
         ret = OB_NOT_INIT;
         error = "plugin loader is not initialized";
@@ -1249,12 +2059,19 @@ int ObPluginLoader::load(const std::string &relative_path, uint64_t *loaded_gene
       } else if (impl_->loading_ || !impl_->disabling_.empty()) {
         ret = OB_EAGAIN;
         error = "another plugin management operation is in progress";
-      } else if (!safe_relative_path(relative_path)) {
+      } else if (!safe_relative_path(relative_path) ||
+                 (nullptr != recovery &&
+                  (!valid_identifier(recovery->plugin_id_) ||
+                   !valid_digest(recovery->package_digest_) ||
+                   0 == recovery->generation_ ||
+                   !valid_identifier(recovery->runtime_incarnation_) ||
+                   !valid_identifier(recovery->operation_id_)))) {
         ret = OB_INVALID_ARGUMENT;
-        error = "plugin path must be a traversal-free relative path";
+        error = "plugin path or startup recovery identity is invalid";
       } else {
         trusted_directory = impl_->trusted_directory_;
         verifier = impl_->verifier_;
+        activation_guard = impl_->activation_guard_;
         impl_->loading_ = true;
         load_reserved = true;
       }
@@ -1300,6 +2117,153 @@ int ObPluginLoader::load(const std::string &relative_path, uint64_t *loaded_gene
       }
     }
     if (OB_SUCCESS == ret) {
+      const ObPluginArtifactMetadata &expected =
+          module->verified_artifact_->metadata();
+      if (!valid_identifier(expected.plugin_id_) ||
+          !valid_bounded_text(expected.build_id_,
+                              SEEKDB_PLUGIN_MAX_BUILD_ID_BYTES) ||
+          !valid_digest(expected.package_digest_) ||
+          0 == expected.package_version_.major) {
+        ret = OB_INVALID_DATA;
+        error = "verified artifact activation metadata is incomplete";
+      } else if (nullptr != recovery &&
+                 (recovery->plugin_id_ != expected.plugin_id_ ||
+                  recovery->package_digest_ != expected.package_digest_)) {
+        ret = OB_INVALID_DATA;
+        error = "startup recovery artifact identity does not match catalog intent";
+      } else {
+        activation_request.mode_ = nullptr == recovery
+            ? ObPluginActivationMode::ACTIVATE
+            : ObPluginActivationMode::STARTUP_RECOVERY;
+        activation_request.relative_path_ = relative_path;
+        activation_request.plugin_id_ = expected.plugin_id_;
+        activation_request.build_id_ = expected.build_id_;
+        activation_request.package_digest_ = expected.package_digest_;
+        activation_request.package_version_ = expected.package_version_;
+        activation_request.catalog_version_ = expected.catalog_version_;
+        activation_request.data_format_version_ = expected.data_format_version_;
+        module->plugin_id_ = expected.plugin_id_;
+        module->version_ = expected.package_version_;
+        if (nullptr != recovery) {
+          activation_request.expected_generation_ = recovery->generation_;
+          activation_request.expected_runtime_incarnation_ =
+              recovery->runtime_incarnation_;
+          activation_request.expected_operation_id_ = recovery->operation_id_;
+        }
+      }
+    }
+    if (OB_SUCCESS == ret) {
+      // Reject a locally fenced identity before creating another durable
+      // activation intent.  In particular, UNKNOWN/BLOCKED/STOPPED runtimes
+      // remain in active_ until recovery or terminal shutdown.  The check
+      // after begin_activation remains as a defensive fence for the exact
+      // catalog-assigned generation/incarnation/operation tuple.
+      std::lock_guard<std::mutex> guard(impl_->mutex_);
+      if (!impl_->initialized_ || impl_->shutting_down_ ||
+          !impl_->loading_) {
+        ret = OB_STATE_NOT_MATCH;
+        error = "plugin loader entered terminal shutdown before activation begin";
+      } else if (impl_->active_.count(activation_request.plugin_id_) != 0) {
+        ret = OB_ENTRY_EXIST;
+        error = "a generation of this plugin is already resident";
+      } else {
+        // Reserve both the success container and an identity placeholder
+        // before catalog begin.  If a later permit abort is itself uncertain,
+        // this preallocated record can fence the verified plugin identity even
+        // when generation-owner allocation failed.
+        impl_->modules_.reserve(impl_->modules_.size() + 1);
+        const auto inserted = impl_->active_.insert(std::make_pair(
+            module->plugin_id_, static_cast<Impl::Module *>(nullptr)));
+        if (!inserted.second) {
+          ret = OB_ENTRY_EXIST;
+          error = "a generation of this plugin became resident concurrently";
+        } else {
+          active_placeholder = true;
+        }
+      }
+    }
+    if (OB_SUCCESS == ret) {
+      activation_result.phase_ = ObPluginActivationPhase::CATALOG_BEGIN;
+      try {
+        ret = activation_guard->begin_activation(
+            activation_request, activation_permit, error);
+      } catch (const std::bad_alloc &) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        assign_error_noexcept(error, "activation guard allocation failed");
+      } catch (...) {
+        ret = OB_ERR_UNEXPECTED;
+        assign_error_noexcept(error, "activation guard threw an exception");
+      }
+      if (OB_SUCCESS == ret && !activation_permit) {
+        ret = OB_ERR_UNEXPECTED;
+        error = "catalog coordinator returned no activation permit";
+      } else if (OB_SUCCESS != ret) {
+        if (error.empty()) {
+          error = "catalog rejected plugin activation";
+        }
+        if (activation_permit) {
+          // An unsuccessful begin never issues a usable permit.  Its
+          // destructor owns any uncertain durable-begin recovery marker.
+          activation_permit.reset();
+        }
+      }
+    }
+    if (OB_SUCCESS == ret) {
+      permit_issued = true;
+      const uint64_t generation = activation_permit->generation();
+      const std::string &incarnation =
+          activation_permit->runtime_incarnation();
+      const std::string &operation_id = activation_permit->operation_id();
+      activation_result.generation_ = generation;
+      activation_result.runtime_incarnation_ = incarnation;
+      activation_result.operation_id_ = operation_id;
+      module->generation_ = generation;
+      module->runtime_incarnation_ = incarnation;
+      module->operation_id_ = operation_id;
+      if (0 == generation || !valid_identifier(incarnation) ||
+          !valid_identifier(operation_id) ||
+          (nullptr != recovery &&
+           (generation != recovery->generation_ ||
+            incarnation != recovery->runtime_incarnation_ ||
+            operation_id != recovery->operation_id_))) {
+        ret = OB_INVALID_DATA;
+        error = "catalog activation permit identity is invalid";
+      }
+    }
+    if (OB_SUCCESS == ret) {
+      std::lock_guard<std::mutex> guard(impl_->mutex_);
+      if (!impl_->initialized_ || impl_->shutting_down_ || !impl_->loading_) {
+        ret = OB_STATE_NOT_MATCH;
+        error = "plugin loader entered terminal shutdown during activation begin";
+      } else {
+        const auto active_it = impl_->active_.find(module->plugin_id_);
+        if (!active_placeholder || active_it == impl_->active_.end() ||
+            nullptr != active_it->second) {
+          ret = OB_ERR_UNEXPECTED;
+          error = "plugin activation identity placeholder was lost";
+        }
+      }
+      if (OB_SUCCESS == ret) {
+        for (const std::unique_ptr<Impl::Module> &resident : impl_->modules_) {
+          if (resident->plugin_id_ == module->plugin_id_ &&
+              (resident->generation_ == module->generation_ ||
+               resident->runtime_incarnation_ ==
+                   module->runtime_incarnation_ ||
+               resident->operation_id_ == module->operation_id_)) {
+            ret = OB_ENTRY_EXIST;
+            error = "catalog activation identity was already used in this runtime";
+            break;
+          }
+        }
+      }
+      if (OB_SUCCESS == ret) {
+        module->owner_.reset(new ObPluginGeneration(
+            module->plugin_id_, module->generation_));
+        activation_result.actual_state_ = module->owner_->state();
+      }
+    }
+    if (OB_SUCCESS == ret) {
+      activation_result.phase_ = ObPluginActivationPhase::LOADING;
       module->handle_ = open_module(module->canonical_path_, error);
       if (INVALID_MODULE == module->handle_)
         ret = OB_IO_ERROR;
@@ -1329,43 +2293,6 @@ int ObPluginLoader::load(const std::string &relative_path, uint64_t *loaded_gene
         error = "verified artifact metadata does not match the binary manifest";
       }
     }
-    if (OB_SUCCESS == ret) {
-      module->plugin_id_ = module->manifest_->plugin_id;
-      module->version_ = module->manifest_->version;
-    }
-    if (OB_SUCCESS == ret) {
-      std::lock_guard<std::mutex> guard(impl_->mutex_);
-      if (!impl_->initialized_ || impl_->shutting_down_ || !impl_->loading_) {
-        ret = OB_STATE_NOT_MATCH;
-        error = "plugin loader entered terminal shutdown during load";
-      } else if (impl_->active_.count(module->plugin_id_) != 0) {
-        ret = OB_ENTRY_EXIST;
-        error = "a generation of this plugin is already resident";
-      } else {
-        // Allocate both success and failure bookkeeping before any plugin
-        // callback.  Consequently a stop failure can always retain the complete
-        // runtime domain without allocating memory in the rollback path.
-        impl_->modules_.reserve(impl_->modules_.size() + 1);
-        const auto inserted = impl_->active_.insert(
-            std::make_pair(module->plugin_id_, static_cast<Impl::Module *>(nullptr)));
-        if (!inserted.second) {
-          ret = OB_ENTRY_EXIST;
-          error = "a generation of this plugin became resident concurrently";
-        } else {
-          active_placeholder = true;
-        }
-        if (OB_SUCCESS == ret) {
-          if (0 == impl_->next_generation_) {
-            ret = OB_SIZE_OVERFLOW;
-            error = "plugin generation space is exhausted";
-          } else {
-            module->generation_ = impl_->next_generation_++;
-            module->owner_.reset(
-                new ObPluginGeneration(module->plugin_id_, module->generation_));
-          }
-        }
-      }
-    }
     if (OB_SUCCESS == ret &&
         OB_SUCCESS != (ret = module->owner_->transition_to(ObPluginState::VALIDATED))) {
       error = "failed to enter validated state";
@@ -1378,7 +2305,7 @@ int ObPluginLoader::load(const std::string &relative_path, uint64_t *loaded_gene
       module->host_.registry_ = impl_->registry_.get();
       module->host_.owner_ = module->owner_;
       init_host_api(module->host_);
-      ret = impl_->resolve_dependencies(*module, error);
+      ret = impl_->resolve_dependencies(*module, error, failure_reason);
 
       if (OB_SUCCESS == ret) {
         ret = impl_->registry_->begin_registration(module->owner_, publication);
@@ -1388,9 +2315,13 @@ int ObPluginLoader::load(const std::string &relative_path, uint64_t *loaded_gene
       }
       for (size_t i = 0; OB_SUCCESS == ret && i < manifest_services.size(); ++i) {
         const StagedService &service = manifest_services[i];
-        ret = publication.add_service(service.spec_.name_.c_str(), service.spec_.abi_major_,
-                                      service.spec_.abi_minor_, service.spec_.abi_patch_,
-                                      service.spec_.capabilities_, service.spec_.service_);
+        if (0 == (service.spec_.capabilities_ &
+                  SEEKDB_PLUGIN_CAPABILITY_EXTENSION_CATALOG)) {
+          ret = publication.add_service(
+              service.spec_.name_.c_str(), service.spec_.abi_major_,
+              service.spec_.abi_minor_, service.spec_.abi_patch_,
+              service.spec_.capabilities_, service.spec_.service_);
+        }
         if (OB_SUCCESS != ret)
           error = "manifest service conflicts with the registry";
       }
@@ -1400,6 +2331,7 @@ int ObPluginLoader::load(const std::string &relative_path, uint64_t *loaded_gene
           error = "failed to enter initializing state";
       }
       if (OB_SUCCESS == ret) {
+        activation_result.phase_ = ObPluginActivationPhase::INITIALIZING;
         module->host_.accepting_registrations_ = true;
         ret = call_lifecycle_init(module->manifest_->init, &module->host_.api_, &module->instance_);
         module->initialized_ = OB_SUCCESS == ret;
@@ -1412,6 +2344,8 @@ int ObPluginLoader::load(const std::string &relative_path, uint64_t *loaded_gene
       if (OB_SUCCESS == ret) {
         // Once start has been entered, rollback must call stop even when start
         // reports failure: the plugin may have started only part of its work.
+        activation_result.phase_ = ObPluginActivationPhase::STARTING;
+        activation_result.start_entered_ = true;
         module->started_ = true;
         ret = call_lifecycle(module->manifest_->start, module->instance_);
         if (OB_SUCCESS != ret)
@@ -1420,40 +2354,129 @@ int ObPluginLoader::load(const std::string &relative_path, uint64_t *loaded_gene
       {
         std::lock_guard<std::mutex> host_guard(module->host_.mutex_);
         module->host_.accepting_registrations_ = false;
-        if (OB_SUCCESS == ret && !module->host_.registrations_.empty()) {
+        if (OB_SUCCESS == ret &&
+            (!module->host_.registrations_.empty() ||
+             module->host_.pending_service_count_ != 0)) {
           ret = OB_STATE_NOT_MATCH;
           error = "plugin left a registration transaction open";
+        } else if (OB_SUCCESS == ret &&
+                   (module->host_.staged_.size() > MAX_SERVICE_COUNT ||
+                    manifest_services.size() >
+                        MAX_SERVICE_COUNT - module->host_.staged_.size())) {
+          ret = OB_SIZE_OVERFLOW;
+          error = "combined manifest and dynamic service count is invalid";
         }
       }
       for (size_t i = 0; OB_SUCCESS == ret && i < module->host_.staged_.size(); ++i) {
         const StagedService &service = module->host_.staged_[i];
-        ret = publication.add_service(service.spec_.name_.c_str(), service.spec_.abi_major_,
-                                      service.spec_.abi_minor_, service.spec_.abi_patch_,
-                                      service.spec_.capabilities_, service.spec_.service_);
+        if (0 == (service.spec_.capabilities_ &
+                  SEEKDB_PLUGIN_CAPABILITY_EXTENSION_CATALOG)) {
+          ret = publication.add_service(
+              service.spec_.name_.c_str(), service.spec_.abi_major_,
+              service.spec_.abi_minor_, service.spec_.abi_patch_,
+              service.spec_.capabilities_, service.spec_.service_);
+        }
         if (OB_SUCCESS != ret)
           error = "dynamic service conflicts with manifest or registry";
       }
       if (OB_SUCCESS == ret) {
-        std::lock_guard<std::mutex> guard(impl_->mutex_);
-        if (!impl_->initialized_ || impl_->shutting_down_ || !impl_->loading_) {
-          ret = OB_STATE_NOT_MATCH;
-          error = "plugin loader entered terminal shutdown before publication";
+        activation_result.phase_ = ObPluginActivationPhase::DISCOVERING;
+        ret = discover_and_stage_extensions(
+            module->instance_, *module->manifest_, manifest_services,
+            module->host_.staged_, publication, error);
+      }
+      if (OB_SUCCESS == ret) {
+        activation_result.phase_ =
+            ObPluginActivationPhase::PREPARING_CANDIDATE;
+        ret = publication.prepare(candidate);
+        if (OB_SUCCESS == ret) {
+          publication_open = false;
+          activation_result.candidate_prepared_ = true;
+          activation_result.candidate_base_epoch_ = candidate.base_epoch();
+          // These copies are the last potentially allocating work before the
+          // catalog transaction.  Catalog code never observes DSO-owned
+          // descriptor memory and promote remains allocation-free.
+          activation_result.services_ = candidate.contributed_services();
+          activation_result.extensions_ = candidate.contributed_extensions();
+          activation_result.dependencies_ = module->resolved_dependencies_;
+          module->host_.staged_.clear();
         } else {
-          ret = publication.commit();
-          if (OB_SUCCESS == ret) publication_open = false;
-          if (OB_SUCCESS != ret) {
-            error = "atomic service publication failed";
+          error = "atomic service candidate preparation failed";
+        }
+      }
+      if (OB_SUCCESS == ret) {
+        // This mutex acquisition is the activation/shutdown linearization
+        // point.  If shutdown won, the invisible candidate is rolled back.  If
+        // activation wins, a later shutdown observes loading_ and must retry;
+        // catalog commit is then always followed by no-fail promotion.
+        std::lock_guard<std::mutex> guard(impl_->mutex_);
+        if (!impl_->initialized_ || impl_->shutting_down_ ||
+            !impl_->loading_) {
+          ret = OB_STATE_NOT_MATCH;
+          error = "plugin loader entered terminal shutdown before catalog commit";
+        } else {
+          activation_result.status_ = OB_SUCCESS;
+          activation_result.actual_state_ = module->owner_->state();
+          activation_result.phase_ = ObPluginActivationPhase::CATALOG_FINISH;
+          activation_result.error_.clear();
+        }
+      }
+      if (OB_SUCCESS == ret) {
+        commit_attempted = true;
+        activation_decision = OB_PLUGIN_ACTIVATION_UNKNOWN;
+        catalog_error.clear();
+        const int commit_ret = activation_permit->commit_candidate(
+            activation_result, activation_decision, activation_commit,
+            catalog_error);
+
+        if (OB_PLUGIN_ACTIVATION_PROMOTE == activation_decision &&
+            OB_SUCCESS == commit_ret && activation_commit) {
+          catalog_committed = true;
+        } else if (OB_PLUGIN_ACTIVATION_NOT_COMMITTED ==
+                       activation_decision &&
+                   !activation_commit) {
+          ret = OB_SUCCESS == commit_ret ? OB_STATE_NOT_MATCH : commit_ret;
+          if (!catalog_error.empty()) {
+            error = catalog_error;
           } else {
-            module->host_.staged_.clear();
-            Impl::Module *active = module.get();
-            impl_->active_.find(module->plugin_id_)->second = active;
-            if (nullptr != loaded_generation)
-              *loaded_generation = module->generation_;
-            impl_->modules_.push_back(std::move(module));
-            impl_->loading_ = false;
-            load_reserved = false;
-            impl_->set_error(std::string());
+            error = "catalog did not authorize plugin activation";
           }
+        } else {
+          // UNKNOWN, or any contradictory return/token tuple, cannot prove
+          // that ownership rows were not committed.  Never publish or issue a
+          // normal abort; retain the identity for startup recovery.
+          activation_decision = OB_PLUGIN_ACTIVATION_UNKNOWN;
+          identity_must_remain = true;
+          ret = OB_TRANS_UNKNOWN;
+          if (!catalog_error.empty()) {
+            error = catalog_error;
+          } else {
+            error = "plugin activation catalog outcome is unknown";
+          }
+        }
+      }
+      if (OB_SUCCESS == ret && catalog_committed) {
+        // From this point onward there is no business rollback path.  The
+        // candidate reservation made promotion infallible, and every loader
+        // container needed below was preallocated before dlopen.  Even an
+        // impossible mutex/bookkeeping exception is fail-stop: rolling back a
+        // durably committed catalog activation would create split brain.
+        try {
+          activation_result.phase_ = ObPluginActivationPhase::PROMOTING;
+          std::lock_guard<std::mutex> guard(impl_->mutex_);
+          candidate.promote();
+          promoted = true;
+          activation_result.actual_state_ = ObPluginState::ACTIVE;
+          activation_result.phase_ = ObPluginActivationPhase::COMPLETE;
+          activation_result.status_ = OB_SUCCESS;
+          activation_result.error_.clear();
+          promoted_module = module.get();
+          impl_->active_.find(module->plugin_id_)->second = promoted_module;
+          if (nullptr != loaded_generation)
+            *loaded_generation = module->generation_;
+          impl_->modules_.push_back(std::move(module));
+        } catch (...) {
+          std::terminate();
         }
       }
     }
@@ -1465,9 +2488,55 @@ int ObPluginLoader::load(const std::string &relative_path, uint64_t *loaded_gene
     assign_error_noexcept(error, "unexpected exception during plugin load");
   }
 
-  if (OB_SUCCESS != ret) {
-    if (publication_open)
+  if (promoted) {
+    // complete() records ACTIVE and clears PROMOTE_PENDING.  A failure here
+    // leaves a replayable catalog intent but must not roll back live runtime.
+    catalog_error.clear();
+    const int complete_ret = activation_commit->complete(
+        activation_result, catalog_error);
+    if (OB_SUCCESS != complete_ret) {
+      ret = complete_ret;
+      if (!catalog_error.empty()) {
+        assign_error_noexcept(error, catalog_error.c_str());
+      } else {
+        assign_error_noexcept(
+            error, "catalog failed to finalize active plugin runtime");
+      }
+    } else {
+      ret = OB_SUCCESS;
+      error.clear();
+    }
+    try {
+      std::lock_guard<std::mutex> guard(impl_->mutex_);
+      if (nullptr != promoted_module) {
+        assign_error_noexcept(promoted_module->last_error_, error.c_str());
+      }
+      if (load_reserved) {
+        impl_->loading_ = false;
+        load_reserved = false;
+      }
+      impl_->set_error(error);
+      impl_->last_failure_reason_ = OB_SUCCESS == ret
+          ? ObPluginLoadFailureReason::NONE
+          : (ObPluginLoadFailureReason::REQUIRED_SERVICE_UNAVAILABLE ==
+                     failure_reason
+                 ? failure_reason
+                 : ObPluginLoadFailureReason::OTHER);
+    } catch (...) {
+      // Runtime is already ACTIVE and catalog is committed.  Failing closed is
+      // safer than unwinding into a caller that might attempt compensating
+      // rollback or reuse the in-flight identity.
+      std::terminate();
+    }
+  } else if (OB_SUCCESS != ret) {
+    // Releasing the hidden registry reservation must precede FAILED/BLOCKED
+    // transitions; the generation deliberately rejects lifecycle mutations
+    // while a candidate is prepared.
+    candidate.abort();
+    if (publication_open) {
       publication.rollback();
+      publication_open = false;
+    }
     bool safe_to_teardown = true;
     if (module && module->started_) {
       const int stop_ret = call_lifecycle(module->manifest_->stop, module->instance_);
@@ -1501,24 +2570,61 @@ int ObPluginLoader::load(const std::string &relative_path, uint64_t *loaded_gene
         module->manifest_ = nullptr;
       }
     }
-    std::lock_guard<std::mutex> guard(impl_->mutex_);
-    if (module && active_placeholder) {
-      if (safe_to_teardown) {
-        impl_->active_.erase(module->plugin_id_);
-      } else {
-        // A callback may still be running.  Keep the plugin ID occupied by
-        // this failed generation so a second instance cannot be started.
-        impl_->active_.find(module->plugin_id_)->second = module.get();
+
+    if (!safe_to_teardown) {
+      identity_must_remain = true;
+    }
+    activation_result.status_ = ret;
+    activation_result.actual_state_ =
+        module && module->owner_ ? module->owner_->state()
+                                 : ObPluginState::DISCOVERED;
+    assign_error_noexcept(activation_result.error_, error.c_str());
+
+    if (permit_issued &&
+        (!commit_attempted ||
+         OB_PLUGIN_ACTIVATION_NOT_COMMITTED == activation_decision)) {
+      catalog_error.clear();
+      const int abort_ret = activation_permit->abort(
+          activation_result, catalog_error);
+      if (OB_SUCCESS != abort_ret) {
+        identity_must_remain = true;
+        ret = abort_ret;
+        if (!catalog_error.empty()) {
+          append_error_noexcept(error, "; catalog activation abort failed: ");
+          append_error_noexcept(error, catalog_error.c_str());
+        } else {
+          append_error_noexcept(error, "; catalog activation abort failed");
+        }
       }
     }
-    if (module && module->owner_) {
-      impl_->modules_.push_back(std::move(module));
+
+    {
+      std::lock_guard<std::mutex> guard(impl_->mutex_);
+      if (module && active_placeholder) {
+        if (safe_to_teardown && !identity_must_remain) {
+          impl_->active_.erase(module->plugin_id_);
+        } else {
+          // BLOCKED and catalog-uncertain identities remain occupied until
+          // terminal shutdown/recovery so a second runtime cannot start.
+          impl_->active_.find(module->plugin_id_)->second = module.get();
+        }
+      }
+      if (module &&
+          (module->owner_ || identity_must_remain || !safe_to_teardown)) {
+        assign_error_noexcept(module->last_error_, error.c_str());
+        impl_->modules_.push_back(std::move(module));
+      }
+      if (load_reserved) {
+        impl_->loading_ = false;
+        load_reserved = false;
+      }
+      impl_->set_error(error);
+      impl_->last_failure_reason_ =
+          ObPluginLoadFailureReason::REQUIRED_SERVICE_UNAVAILABLE ==
+                  failure_reason
+              ? failure_reason
+              : ObPluginLoadFailureReason::OTHER;
     }
-    if (load_reserved) {
-      impl_->loading_ = false;
-      load_reserved = false;
-    }
-    impl_->set_error(error);
   }
   return ret;
 }
@@ -1618,6 +2724,7 @@ int ObPluginLoader::disable(const std::string &plugin_id, const int64_t drain_ti
     runtime_result.actual_state_ = module->owner_->state();
   }
   std::string runtime_error;
+  bool stop_checkpoint_failed = false;
   if (OB_SUCCESS == ret) {
     bool may_run = false;
     {
@@ -1639,8 +2746,9 @@ int ObPluginLoader::disable(const std::string &plugin_id, const int64_t drain_ti
       }
     }
     if (may_run) {
-      (void)impl_->disable_runtime(*module, drain_timeout_us, false, nullptr,
-                                   runtime_result, runtime_error);
+      (void)impl_->disable_runtime(
+          *module, drain_timeout_us, false, permit.get(),
+          stop_checkpoint_failed, nullptr, runtime_result, runtime_error);
     } else if (nullptr != module && module->owner_) {
       runtime_result.actual_state_ = module->owner_->state();
       assign_error_noexcept(runtime_result.error_, runtime_error.c_str());
@@ -1648,7 +2756,19 @@ int ObPluginLoader::disable(const std::string &plugin_id, const int64_t drain_ti
   }
 
   int finish_ret = OB_SUCCESS;
-  if (permit) {
+  if (permit && stop_checkpoint_failed) {
+    // The catalog could not prove whether the pre-stop checkpoint committed.
+    // The callback was not entered.  Do not overwrite a possibly durable
+    // stop_entered marker with a weaker finish observation; permit destruction
+    // records RECOVERY_REQUIRED while preserving the checkpoint columns.
+    finish_ret = runtime_result.status_;
+    ret = finish_ret;
+    error.clear();
+    if (!runtime_result.error_.empty()) {
+      assign_error_noexcept(error, runtime_result.error_.c_str());
+    }
+    permit.reset();
+  } else if (permit) {
     std::string catalog_error;
     try {
       finish_ret = permit->finish(runtime_result, catalog_error);
@@ -1750,9 +2870,10 @@ int ObPluginLoader::shutdown_for_process_exit(const int64_t drain_timeout_us)
          ObPluginState::BLOCKED == state)) {
       ObPluginRuntimeDisableResult runtime_result;
       std::string error;
-      ret = impl_->disable_runtime(module, drain_timeout_us, true,
-                                   &terminal_authority,
-                                   runtime_result, error);
+      bool stop_checkpoint_failed = false;
+      ret = impl_->disable_runtime(
+          module, drain_timeout_us, true, nullptr, stop_checkpoint_failed,
+          &terminal_authority, runtime_result, error);
       std::lock_guard<std::mutex> guard(impl_->mutex_);
       try {
         if (OB_SUCCESS == ret) {
@@ -1849,6 +2970,13 @@ std::string ObPluginLoader::last_error() const
   if (!impl_) return "plugin loader allocation failed";
   std::lock_guard<std::mutex> guard(impl_->mutex_);
   return impl_->last_error_;
+}
+
+ObPluginLoadFailureReason ObPluginLoader::last_failure_reason() const
+{
+  if (!impl_) return ObPluginLoadFailureReason::OTHER;
+  std::lock_guard<std::mutex> guard(impl_->mutex_);
+  return impl_->last_failure_reason_;
 }
 
 std::string ObPluginLoader::trusted_directory() const
