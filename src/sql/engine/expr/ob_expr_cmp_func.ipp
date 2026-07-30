@@ -155,36 +155,10 @@ struct ObRelationalTypeFunc<true, L_T, R_T>
   }
 };
 
-template<bool, ObObjTypeClass L_TC, ObObjTypeClass R_TC>
-struct ObRelationalTCFunc {};
-
-template<ObObjTypeClass L_TC, ObObjTypeClass R_TC>
-struct ObRelationalTCFunc<false, L_TC, R_TC> : public ObDummyRelationalFunc {};
-
-template<ObObjTypeClass L_TC, ObObjTypeClass R_TC>
-struct ObRelationalTCFunc<true, L_TC, R_TC>
+struct ObTCRelationFunc
 {
-  struct DatumCmp
-  {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
-                   const ObCmpOp cmp_op) const
-    {
-      return def_oper_cmp_func<datum_cmp::ObDatumTCCmp<L_TC, R_TC>>(res, l, r, cmp_op);
-    }
-  };
-
-  inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
-  {
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum, cmp_op);
-  }
-
-
-  inline static int eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
-  {
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    return def_relational_eval_batch_func<DatumCmp>(BATCH_EVAL_FUNC_ARG_LIST, cmp_op);
-  }
+  static OB_NOINLINE int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static OB_NOINLINE int eval_batch(BATCH_EVAL_FUNC_ARG_DECL);
 };
 
 struct ObDecintRelationFunc
@@ -928,8 +902,6 @@ struct TCExprCmpFuncIniter
       static_cast<ObObjTypeClass>(X),
       static_cast<ObObjTypeClass>(Y)>;
 
-  using EvalCmp = ObRelationalTCFunc<Def::defined_,
-        static_cast<ObObjTypeClass>(X), static_cast<ObObjTypeClass>(Y)>;
   static void init_array()
   {
     const ObExpr::EvalBatchFunc *batch_eval_overrides =
@@ -938,9 +910,9 @@ struct TCExprCmpFuncIniter
     init_expr_cmp_func_array(EVAL_TC_CMP_FUNCS[X][Y],
                              EVAL_BATCH_TC_CMP_FUNCS[X][Y],
                              DATUM_TC_CMP_FUNCS[X][Y],
-                             Def::defined_ ? &EvalCmp::eval : NULL,
-                             Def::defined_ ? &EvalCmp::eval_batch : NULL,
-                             Def::defined_ ? &Def::cmp : NULL,
+                             &ObTCRelationFunc::eval,
+                             &ObTCRelationFunc::eval_batch,
+                             &Def::cmp,
                              batch_eval_overrides);
   }
 };

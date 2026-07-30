@@ -200,6 +200,56 @@ struct RuntimeDecintCmp
   }
 };
 
+int get_runtime_tc_cmp_func(const ObExpr &expr, ObDatumCmpFuncType &cmp_func)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(2 != expr.arg_cnt_)
+      || OB_ISNULL(expr.args_)
+      || OB_ISNULL(expr.args_[0])
+      || OB_ISNULL(expr.args_[1])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid type-class comparison expression", K(ret), K(expr.arg_cnt_));
+  } else {
+    const ObObjType left_type = expr.args_[0]->datum_meta_.type_;
+    const ObObjType right_type = expr.args_[1]->datum_meta_.type_;
+    if (OB_UNLIKELY(left_type < ObNullType || left_type >= ObMaxType
+                    || right_type < ObNullType || right_type >= ObMaxType)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid type-class comparison types", K(ret), K(left_type), K(right_type));
+    } else {
+      const ObObjTypeClass left_tc = ob_obj_type_class(left_type);
+      const ObObjTypeClass right_tc = ob_obj_type_class(right_type);
+      if (OB_UNLIKELY(ob_is_invalid_obj_tc(left_tc) || ob_is_invalid_obj_tc(right_tc))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("invalid comparison type classes", K(ret), K(left_tc), K(right_tc));
+      } else if (OB_ISNULL(cmp_func = DATUM_TC_CMP_FUNCS[left_tc][right_tc])) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("type-class comparison function is null", K(ret), K(left_tc), K(right_tc));
+      }
+    }
+  }
+  return ret;
+}
+
+struct RuntimeTCCmp
+{
+  int operator()(ObDatum &res,
+                 const ObDatum &l_datum,
+                 const ObDatum &r_datum,
+                 const ObDatumCmpFuncType &cmp_func,
+                 const ObCmpOp &cmp_op) const
+  {
+    int cmp_ret = 0;
+    int ret = cmp_func(l_datum, r_datum, cmp_ret);
+    if (OB_FAIL(ret)) {
+      LOG_WARN("fail to compare", K(ret));
+    } else {
+      res.set_int(get_cmp_ret(cmp_op, cmp_ret));
+    }
+    return ret;
+  }
+};
+
 } // namespace
 
 int ObFixedDoubleRelationFunc::eval(const ObExpr &expr,
@@ -257,6 +307,36 @@ int ObDecintRelationFunc::eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   } else {
     ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
     ret = def_relational_eval_batch_func<RuntimeDecintCmp>(
+        BATCH_EVAL_FUNC_ARG_LIST, cmp_func, cmp_op);
+  }
+  return ret;
+}
+
+int ObTCRelationFunc::eval(const ObExpr &expr,
+                           ObEvalCtx &ctx,
+                           ObDatum &expr_datum)
+{
+  int ret = OB_SUCCESS;
+  ObDatumCmpFuncType cmp_func = NULL;
+  if (OB_FAIL(get_runtime_tc_cmp_func(expr, cmp_func))) {
+    LOG_WARN("get type-class comparison function failed", K(ret));
+  } else {
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    ret = def_relational_eval_func<RuntimeTCCmp>(
+        expr, ctx, expr_datum, cmp_func, cmp_op);
+  }
+  return ret;
+}
+
+int ObTCRelationFunc::eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
+{
+  int ret = OB_SUCCESS;
+  ObDatumCmpFuncType cmp_func = NULL;
+  if (OB_FAIL(get_runtime_tc_cmp_func(expr, cmp_func))) {
+    LOG_WARN("get type-class comparison function failed", K(ret));
+  } else {
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    ret = def_relational_eval_batch_func<RuntimeTCCmp>(
         BATCH_EVAL_FUNC_ARG_LIST, cmp_func, cmp_op);
   }
   return ret;
