@@ -23,6 +23,7 @@
 #include "ob_service.h"
 #include "storage/ob_storage_rpc_arg.h"
 #include "share/rc/ob_module_provider.h"
+#include "share/ob_telemetry.h"
 #include "lib/alloc/memory_dump.h"
 
 #include "share/ob_version.h"
@@ -63,11 +64,6 @@ using namespace share;
 using namespace share::schema;
 using namespace storage;
 using namespace palf;
-
-namespace share
-{
-extern int report_telemetry(const char *reporter, const char *event_name);
-}
 
 namespace observer
 {
