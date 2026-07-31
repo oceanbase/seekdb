@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_physical_plan_ctx.h"
+#include "share/ob_autoincrement_service.h"
 #include "src/sql/engine/ob_des_exec_context.h"
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 

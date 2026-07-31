@@ -14,19 +14,39 @@
  * limitations under the License.
  */
 
-#include "sql/executor/ob_execution_id.h"
-#include "lib/json/ob_yson.h"
+#define USING_LOG_PREFIX SQL_EXE
+
+#include "ob_sql_executor_ctx.h"
+#include "observer/ob_server.h"
+
 using namespace oceanbase::common;
+using namespace oceanbase::share;
+using namespace oceanbase::share::schema;
 namespace oceanbase
 {
 namespace sql
 {
 
+OB_SERIALIZE_MEMBER(ObSqlExecutorCtx,
+                    retry_times_,
+                    expected_worker_cnt_,
+                    admited_worker_cnt_,
+                    query_begin_schema_version_,
+                    minimal_worker_cnt_);
 
-DEFINE_TO_YSON_KV(ObExecutionID, OB_ID(execution_id), execution_id_);
+ObSqlExecutorCtx::ObSqlExecutorCtx()
+    : expected_worker_cnt_(0),
+      minimal_worker_cnt_(0),
+      admited_worker_cnt_(0),
+      retry_times_(0),
+      query_begin_schema_version_(-1),
+      schema_service_(GCTX.schema_service_)
+{
+}
 
-OB_SERIALIZE_MEMBER(ObExecutionID, execution_id_, execution_flag_);
+ObSqlExecutorCtx::~ObSqlExecutorCtx()
+{
+}
 
 }/* ns sql*/
 }/* ns oceanbase */
-

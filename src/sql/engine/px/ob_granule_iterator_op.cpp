@@ -249,17 +249,6 @@ ObGIOpInput::ObGIOpInput(ObExecContext &ctx, const ObOpSpec &spec)
     deserialize_allocator_(nullptr)
 {}
 
-int ObGIOpInput::init(ObTaskInfo &task_info)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(task_info);
-  //new parallel framework do not use this interface to set parameters
-  ret = OB_NOT_SUPPORTED;
-  LOG_USER_ERROR(OB_NOT_SUPPORTED, "init gi input");
-  LOG_WARN("the interface should not be used", K(ret));
-  return ret;
-}
-
 void ObGIOpInput::set_deserialize_allocator(common::ObIAllocator *allocator)
 {
   deserialize_allocator_ = allocator;

@@ -45,7 +45,7 @@ int ObSetPasswordExecutor::execute(ObExecContext &ctx, ObSetPasswordStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = NULL;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   
   const common::ObStrings *user_passwd = NULL;
   const int64_t FIX_MEMBER_CNT = 7;
@@ -55,7 +55,7 @@ int ObSetPasswordExecutor::execute(ObExecContext &ctx, ObSetPasswordStmt &stmt)
   } else if (OB_ISNULL(user_passwd = stmt.get_user_password())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("user_passwd is null", K(ret));
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("task_exec_ctx is null", K(ret));
   } else if (OB_UNLIKELY(FIX_MEMBER_CNT != user_passwd->count())) {

@@ -490,7 +490,7 @@ int ObInnerSQLConnection::init_result(ObInnerSQLResult &res,
   UNUSED(vt_iter_factory);
   sql::ObResultSet &result_set = res.result_set();
   const ObGlobalContext &gctx = ObServer::get_instance().get_gctx();
-  result_set.get_exec_context().get_task_exec_ctx().schema_service_ = gctx.schema_service_;
+  result_set.get_exec_context().get_sql_exec_ctx().schema_service_ = gctx.schema_service_;
   result_set.get_exec_context().set_sql_ctx(&res.sql_ctx());
   res.sql_ctx().retry_times_ = retry_cnt;
   res.sql_ctx().session_info_ = &get_session();
@@ -643,7 +643,7 @@ int ObInnerSQLConnection::process_audit_record(sql::ObResultSet &result_set,
     MEMCPY(audit_record.sql_id_, sql_ctx.sql_id_, (int32_t)sizeof(audit_record.sql_id_));
     audit_record.affected_rows_ = result_set.get_affected_rows();
     audit_record.return_rows_ = result_set.get_return_rows();
-    if (NULL != result_set.get_exec_context().get_task_executor_ctx()) {
+    if (NULL != result_set.get_exec_context().get_sql_executor_ctx()) {
       audit_record.partition_cnt_ = result_set.get_exec_context()
                                                     .get_das_ctx()
                                                     .get_related_tablet_cnt();
@@ -853,7 +853,7 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
           } else if (OB_FAIL(res.schema_guard_.get_schema_version(local_database_schema_version))) {
             LOG_WARN("failed to get database schema version", K(ret), K(ob_sql_));
           } else {
-            res.result_set().get_exec_context().get_task_exec_ctx().set_query_begin_schema_version(local_database_schema_version);
+            res.result_set().get_exec_context().get_sql_exec_ctx().set_query_begin_schema_version(local_database_schema_version);
           }
 
           int ret_code = OB_SUCCESS;

@@ -33,14 +33,14 @@ namespace sql
 int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   ObCreateTriggerArg &arg = stmt.get_trigger_arg();
   
   ObString first_stmt;
   obcall::ObCreateTriggerRes res;
   OZ (stmt.get_first_stmt(first_stmt));
   arg.ddl_stmt_str_ = first_stmt;
-  OV (OB_NOT_NULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
+  OV (OB_NOT_NULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
   OZ (rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_trigger_with_res(arg, res); }), GCTX.self_addr());
   // Here needs to refresh schema, otherwise may not get the latest trigger_info
   OZ (ObSPIService::force_refresh_schema());
@@ -48,8 +48,8 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
   CK (OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
   CK (OB_NOT_NULL(ctx.get_my_session()));
   CK (OB_NOT_NULL(ctx.get_sql_proxy()));
-  CK (OB_NOT_NULL(ctx.get_task_exec_ctx().schema_service_));
-  OZ (ctx.get_task_exec_ctx().schema_service_->
+  CK (OB_NOT_NULL(ctx.get_sql_exec_ctx().schema_service_));
+  OZ (ctx.get_sql_exec_ctx().schema_service_->
       get_runtime_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
   OZ (analyze_dependencies(*ctx.get_sql_ctx()->schema_guard_,
                            ctx.get_my_session(),
@@ -84,12 +84,12 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
 int ObDropTriggerExecutor::execute(ObExecContext &ctx, ObDropTriggerStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   ObDropTriggerArg &arg = stmt.get_trigger_arg();
   ObString first_stmt;
   OZ (stmt.get_first_stmt(first_stmt));
   arg.ddl_stmt_str_ = first_stmt;
-  OV (OB_NOT_NULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
+  OV (OB_NOT_NULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
   OZ (rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_trigger(arg); }), GCTX.self_addr());
   return ret;
 }
@@ -97,13 +97,13 @@ int ObDropTriggerExecutor::execute(ObExecContext &ctx, ObDropTriggerStmt &stmt)
 int ObAlterTriggerExecutor::execute(ObExecContext &ctx, ObAlterTriggerStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   ObAlterTriggerArg &arg = stmt.get_trigger_arg();
   ObString first_stmt;
   OZ (stmt.get_first_stmt(first_stmt));
   if (OB_SUCC(ret)) {
     arg.ddl_stmt_str_ = first_stmt;
-    OV (OB_NOT_NULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
+    OV (OB_NOT_NULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
     if (OB_FAIL(ret)) {
     } else {
       OZ (rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->alter_trigger(arg); }), GCTX.self_addr());

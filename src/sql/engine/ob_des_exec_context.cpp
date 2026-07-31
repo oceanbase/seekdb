@@ -171,7 +171,7 @@ DEFINE_DESERIALIZE(ObDesExecContext)
     }
   }
 
-  OB_UNIS_DECODE(task_executor_ctx_);
+  OB_UNIS_DECODE(sql_executor_ctx_);
   OB_UNIS_DECODE(das_ctx_);
   OB_UNIS_DECODE(sql_ctx_);
   if (OB_SUCC(ret)) {

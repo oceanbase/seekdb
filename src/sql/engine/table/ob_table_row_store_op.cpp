@@ -29,31 +29,6 @@ void ObTableRowStoreOpInput::set_deserialize_allocator(ObIAllocator *allocator)
   multi_row_store_.set_allocator(allocator);
 }
 
-int ObTableRowStoreOpInput::init(ObTaskInfo &task_info)
-{
-  int ret = OB_SUCCESS;
-  LOG_DEBUG("init table row store input", K(task_info), K(MY_SPEC.id_));
-  allocator_ = &exec_ctx_.get_allocator();
-  // The same plan may have multiple tasks, so here we need to clear the previous plan status
-  multi_row_store_.reset();
-  ObIArray<ObTaskInfo::ObPartLoc> &part_locs = task_info.get_range_location().part_locs_;
-  multi_row_store_.set_allocator(&exec_ctx_.get_allocator());
-  if (OB_FAIL(multi_row_store_.init(part_locs.count()))) {
-    LOG_WARN("allocate multi row store failed", K(ret));
-  }
-  LOG_DEBUG("init table row store input", K(part_locs.count()));
-  for (int64_t i = 0; OB_SUCC(ret) && i < part_locs.count(); ++i) {
-    uint64_t value_ref_id = part_locs.at(i).value_ref_id_;
-    if (value_ref_id == MY_SPEC.id_) {
-       LOG_DEBUG("push table row store input", K(value_ref_id));
-      if (OB_FAIL(multi_row_store_.push_back(part_locs.at(i).datum_store_))) {
-        LOG_WARN("store partition row store failed", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
 OB_DEF_SERIALIZE(ObTableRowStoreOpInput)
 {
   int ret = OB_SUCCESS;

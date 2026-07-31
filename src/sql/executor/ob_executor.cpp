@@ -47,7 +47,7 @@ int ObExecutor::execute_plan(ObExecContext &ctx)
 {
   NG_TRACE(exec_plan_begin);
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx &task_exec_ctx = ctx.get_task_exec_ctx();
+  ObSqlExecutorCtx &task_exec_ctx = ctx.get_sql_exec_ctx();
   ObExecuteResult &exec_result = task_exec_ctx.get_execute_result();
   ObSQLSessionInfo *session_info = ctx.get_my_session();
   ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
@@ -122,7 +122,7 @@ int ObExecutor::execute_static_cg_px_plan(ObExecContext &ctx)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("created operator is NULL", K(ret));
   } else {
-    ctx.get_task_executor_ctx()
+    ctx.get_sql_executor_ctx()
         ->get_execute_result()
         .set_static_engine_root(op);
   }

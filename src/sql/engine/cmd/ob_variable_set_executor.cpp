@@ -470,7 +470,7 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = NULL;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   obcall::ObModifySysVarArg &arg = static_cast<obcall::ObModifySysVarArg &>(stmt.get_ddl_arg());
   ObString extra_var_name;
   ObString extra_var_value;
@@ -635,7 +635,7 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+    if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       LOG_WARN("task exec ctx is NULL", K(ret), K(task_exec_ctx));
     } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->modify_system_variable(arg); }))) {

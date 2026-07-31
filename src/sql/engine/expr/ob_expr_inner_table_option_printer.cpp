@@ -18,6 +18,7 @@
 #include "sql/engine/expr/ob_expr_inner_table_option_printer.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/printer/ob_schema_printer.h"
+#include "share/ob_autoincrement_service.h"
 
 
 namespace oceanbase

@@ -14,16 +14,29 @@
  * limitations under the License.
  */
 
-#include "sql/executor/ob_slice_id.h"
+#define USING_LOG_PREFIX SQL_ENG
+
+#include "sql/engine/px/ob_granule_task_info.h"
 
 namespace oceanbase
 {
-using namespace common;
-
 namespace sql
 {
 
-OB_SERIALIZE_MEMBER(ObSliceID, ob_task_id_, slice_id_);
+int ObGranuleTaskInfo::assign(const ObGranuleTaskInfo &other)
+{
+  int ret = OB_SUCCESS;
+  if (this != &other) {
+    if (OB_FAIL(ranges_.assign(other.ranges_))) {
+      LOG_WARN("assign ranges failed", K(ret));
+    } else {
+      tablet_loc_ = other.tablet_loc_;
+      task_id_ = other.task_id_;
+      granule_type_ = other.granule_type_;
+    }
+  }
+  return ret;
+}
 
-}/* ns */
-}/* ns oceanbase */
+} // namespace sql
+} // namespace oceanbase

@@ -114,7 +114,6 @@ public:
   {
     table_location_keys_.reset();
   }
-  virtual int init(ObTaskInfo &task_info) override;
   virtual void set_deserialize_allocator(common::ObIAllocator *allocator) override;
   inline int64_t get_parallelism() { return parallelism_; }
   void set_granule_pump(ObGranulePump *pump) { pump_ = pump; }

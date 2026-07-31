@@ -34,7 +34,7 @@ namespace sql
 int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   obcall::UInt64 table_id;
   obcall::ObCreateRoutineArg &crt_routine_arg = stmt.get_routine_arg();
   ObString first_stmt;
@@ -45,7 +45,7 @@ int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &st
     crt_routine_arg.ddl_stmt_str_ = first_stmt;
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
   } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_routine(crt_routine_arg); }))) {
@@ -273,7 +273,7 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
 int ObDropRoutineExecutor::execute(ObExecContext &ctx, ObDropRoutineStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   obcall::UInt64 table_id;
   obcall::ObDropRoutineArg &drop_routine_arg = stmt.get_routine_arg();
   ObString first_stmt;
@@ -283,7 +283,7 @@ int ObDropRoutineExecutor::execute(ObExecContext &ctx, ObDropRoutineStmt &stmt)
     drop_routine_arg.ddl_stmt_str_ = first_stmt;
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
   } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_routine(drop_routine_arg); }))) {
@@ -295,7 +295,7 @@ int ObDropRoutineExecutor::execute(ObExecContext &ctx, ObDropRoutineStmt &stmt)
 int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   obcall::ObCreateRoutineArg &alter_routine_arg = stmt.get_routine_arg();
   
   bool need_create_routine = (alter_routine_arg.is_need_alter_);
@@ -307,7 +307,7 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
       alter_routine_arg.ddl_stmt_str_ = first_stmt;
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+    } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       LOG_WARN("get task executor context failed", K(ret));
     } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->alter_routine(alter_routine_arg); }))) {
@@ -320,7 +320,7 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
     int64_t new_schema_version = OB_INVALID_VERSION;
     ObSArray<ObDependencyInfo> &dep_infos =
                       const_cast<ObSArray<ObDependencyInfo> &>(alter_routine_arg.dependency_infos_);
-    OZ (ctx.get_task_exec_ctx().schema_service_->
+    OZ (ctx.get_sql_exec_ctx().schema_service_->
         get_runtime_schema_guard(schema_guard));
     OZ(schema_guard.get_routine_info( alter_routine_arg.routine_info_.get_routine_id(), routine_info));
     CK (OB_NOT_NULL(routine_info));

@@ -33,10 +33,6 @@ public:
   ObPxMultiPartUpdateOpInput(ObExecContext &ctx, const ObOpSpec &spec)
     : ObPxMultiPartModifyOpInput(ctx, spec)
   {}
-  int init(ObTaskInfo &task_info) override
-  {
-    return ObPxMultiPartModifyOpInput::init(task_info);
-  }
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPxMultiPartUpdateOpInput);
 };

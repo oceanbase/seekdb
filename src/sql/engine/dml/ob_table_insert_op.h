@@ -108,10 +108,6 @@ public:
   ObTableInsertOpInput(ObExecContext &ctx, const ObOpSpec &spec)
     : ObTableModifyOpInput(ctx, spec)
   {}
-  int init(ObTaskInfo &task_info) override
-  {
-    return ObTableModifyOpInput::init(task_info);
-  }
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTableInsertOpInput);
 };

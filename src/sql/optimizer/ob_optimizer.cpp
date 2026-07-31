@@ -37,7 +37,7 @@ int ObOptimizer::optimize(ObDMLStmt &stmt, ObLogPlan *&logical_plan)
   int64_t last_mem_usage = ctx_.get_allocator().total();
   int64_t optimizer_mem_usage = 0;
   ObDMLStmt *target_stmt = &stmt;
-  ObTaskExecutorCtx *task_exec_ctx = ctx_.get_task_exec_ctx();
+  ObSqlExecutorCtx *task_exec_ctx = ctx_.get_sql_exec_ctx();
   if (stmt.is_explain_stmt()) {
     target_stmt = static_cast<ObExplainStmt*>(&stmt)->get_explain_query_stmt();
   }

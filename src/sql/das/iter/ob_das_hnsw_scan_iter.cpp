@@ -762,9 +762,9 @@ bool ObDASHNSWScanIter::is_parallel_with_block_granule()
 {
   int64_t expected_worker_cnt = 0;
   bool is_block_granule_type = false;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   if (OB_NOT_NULL(exec_ctx_)) {
-    task_exec_ctx = exec_ctx_->get_task_executor_ctx();
+    task_exec_ctx = exec_ctx_->get_sql_executor_ctx();
     is_block_granule_type = exec_ctx_->is_block_granule_type();
     if (OB_NOT_NULL(task_exec_ctx)) {
       expected_worker_cnt = task_exec_ctx->get_expected_worker_cnt();

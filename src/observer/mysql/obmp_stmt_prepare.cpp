@@ -348,7 +348,7 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
         session.sql_sess_record_sql_stat_start_value(sqlstat_record);
       }
       result.set_has_more_result(has_more_result);
-      ObTaskExecutorCtx *task_ctx = result.get_exec_context().get_task_executor_ctx();
+      ObSqlExecutorCtx *task_ctx = result.get_exec_context().get_sql_executor_ctx();
       int64_t execution_id = 0;
       if (OB_ISNULL(task_ctx)) {
         ret = OB_ERR_UNEXPECTED;

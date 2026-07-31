@@ -168,7 +168,6 @@ public:
       tablet_loc_(nullptr)
   { }
   virtual ~ObTableModifyOpInput() { }
-  virtual int init(ObTaskInfo &task_info) override { UNUSED(task_info); return common::OB_SUCCESS; }
   virtual void reset()
   {
     table_loc_ = nullptr;

@@ -865,7 +865,7 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
         session.sql_sess_record_sql_stat_start_value(sqlstat_record);
       }
       result.set_has_more_result(has_more_result);
-      ObTaskExecutorCtx &task_ctx = result.get_exec_context().get_task_exec_ctx();
+      ObSqlExecutorCtx &task_ctx = result.get_exec_context().get_sql_exec_ctx();
       task_ctx.schema_service_ = gctx_.schema_service_;
       task_ctx.set_query_begin_schema_version(retry_ctrl_.get_current_local_schema_version());
       ctx_.retry_times_ = retry_ctrl_.get_retry_times();

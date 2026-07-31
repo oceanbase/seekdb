@@ -393,13 +393,6 @@ public:
     }
     return ret;
   };
-  virtual int init(ObExecContext &ctx, ObTaskInfo &task_info, ObPhyOperator &op) {
-    UNUSED(ctx);
-    UNUSED(task_info);
-    UNUSED(op);
-    return OB_SUCCESS;
-  };
-
   virtual int rescan(ObExecContext &ctx) const {
     UNUSED(ctx);
     if (NULL == iter) {

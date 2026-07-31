@@ -47,12 +47,6 @@ public:
   {}
   virtual ~ObTempTableInsertOpInput() {}
   virtual void reset() override {}
-  virtual int init(ObTaskInfo &task_info) override
-  {
-    int ret = OB_SUCCESS;
-    UNUSED(task_info);
-    return ret;
-  }
   int64_t qc_id_;
   int64_t dfo_id_;
   int64_t sqc_id_;

@@ -167,25 +167,6 @@ int ObTableScanWithIndexBackOp::extract_range_from_index()
 int ObTableScanWithIndexBackOp::do_table_scan_with_index()
 {
   int ret = OB_SUCCESS;
-//  ObITabletScan *das = NULL;
-//  ObTaskExecutorCtx *task_exec_ctx = NULL;
-//  if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx_))) {
-//    ret = OB_ERR_UNEXPECTED;
-//    LOG_WARN("get task executor ctx failed", K(ret));
-//  } else if (OB_FAIL(extract_range_from_index())) {
-//    LOG_WARN("extract range from index failed", K(ret));
-//  } else if (scan_param_.key_ranges_.count() <= 0) {
-//    //do nothing
-//    read_action_ = READ_ITER_END;
-//  } else if (OB_FAIL(get_partition_service(*task_exec_ctx, das))) {
-//    LOG_WARN("fail to get partition service", K(ret));
-//  } else if (OB_FAIL(das->table_scan(scan_param_, result_))) {
-//    if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-//      LOG_WARN("fail to scan table", K(scan_param_), K(ret));
-//    }
-//  } else {
-//    read_action_ = READ_ITERATOR;
-//  }
   return ret;
 }
 

@@ -21,8 +21,8 @@
 #include "lib/allocator/page_arena.h"
 #include "sql/engine/ob_phy_operator_type.h"
 #include "sql/engine/table/ob_virtual_table_ctx.h"
-#include "sql/executor/ob_task_executor_ctx.h"
-#include "sql/executor/ob_task_info.h"
+#include "sql/executor/ob_sql_executor_ctx.h"
+#include "sql/engine/px/ob_granule_task_info.h"
 #include "sql/optimizer/ob_log_plan_factory.h"
 #include "sql/monitor/ob_exec_stat.h"
 #include "sql/monitor/ob_exec_stat_collector.h"
@@ -39,7 +39,7 @@
 
 #define GET_PHY_PLAN_CTX(ctx) ((ctx).get_physical_plan_ctx())
 #define GET_MY_SESSION(ctx) ((ctx).get_my_session())
-#define GET_TASK_EXECUTOR_CTX(ctx) ((ctx).get_task_executor_ctx())
+#define GET_SQL_EXECUTOR_CTX(ctx) ((ctx).get_sql_executor_ctx())
 #define CREATE_PHY_OPERATOR_CTX(ctx_type, exec_ctx, op_id, op_type, op_ctx) \
   ({void *ptr = NULL; \
     int _ret_ = oceanbase::common::OB_SUCCESS; \
@@ -90,7 +90,7 @@ namespace sql
 {
 class ObPhysicalPlanCtx;
 class ObIPhyOperatorInput;
-class ObTaskExecutorCtx;
+class ObSqlExecutorCtx;
 class ObSQLSessionInfo;
 class ObSQLSessionMgr;
 class ObExprOperatorCtx;
@@ -295,9 +295,9 @@ public:
   /**
    * @brief get executor context from exec context.
    */
-  inline const ObTaskExecutorCtx &get_task_exec_ctx() const;
-  inline ObTaskExecutorCtx &get_task_exec_ctx();
-  inline ObTaskExecutorCtx *get_task_executor_ctx();
+  inline const ObSqlExecutorCtx &get_sql_exec_ctx() const;
+  inline ObSqlExecutorCtx &get_sql_exec_ctx();
+  inline ObSqlExecutorCtx *get_sql_executor_ctx();
   inline ObDASCtx &get_das_ctx() { return das_ctx_; }
   /**
    * @brief get session_mgr.
@@ -625,7 +625,7 @@ protected:
   ObPhysicalPlanCtx *phy_plan_ctx_;
   uint64_t expr_op_size_;
   ObExprOperatorCtx **expr_op_ctx_store_;
-  ObTaskExecutorCtx task_executor_ctx_;
+  ObSqlExecutorCtx sql_executor_ctx_;
   ObSQLSessionInfo *my_session_;
   ObExecStatCollector *exec_stat_collector_;
   ObStmtFactory *stmt_factory_;
@@ -818,19 +818,19 @@ inline ObPhysicalPlanCtx *ObExecContext::get_physical_plan_ctx() const
   return phy_plan_ctx_;
 }
 
-inline const ObTaskExecutorCtx &ObExecContext::get_task_exec_ctx() const
+inline const ObSqlExecutorCtx &ObExecContext::get_sql_exec_ctx() const
 {
-  return task_executor_ctx_;
+  return sql_executor_ctx_;
 }
 
-inline ObTaskExecutorCtx &ObExecContext::get_task_exec_ctx()
+inline ObSqlExecutorCtx &ObExecContext::get_sql_exec_ctx()
 {
-  return task_executor_ctx_;
+  return sql_executor_ctx_;
 }
 
-inline ObTaskExecutorCtx *ObExecContext::get_task_executor_ctx()
+inline ObSqlExecutorCtx *ObExecContext::get_sql_executor_ctx()
 {
-  return &task_executor_ctx_;
+  return &sql_executor_ctx_;
 }
 
 inline ObSQLSessionMgr *ObExecContext::gesession_pool() const

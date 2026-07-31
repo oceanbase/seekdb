@@ -43,7 +43,6 @@ public:
     //deserialize_allocator_ cannot be reset
     //because it is only set once when creating operator input
   }
-  virtual int init(ObTaskInfo &task_info) override;
   /**
    * @brief set allocator which is used for deserialize, but not all objects will use allocator
    * while deserializing, so you can override it if you need.

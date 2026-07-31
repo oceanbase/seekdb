@@ -18,7 +18,6 @@
 
 
 #include "obmp_stmt_execute.h"
-#include "lib/ob_running_mode.h"
 #include "observer/mysql/ob_mysql_result_set.h"
 #include "lib/trace/ob_trace.h"
 #include "observer/mysql/obsm_utils.h"
@@ -1193,7 +1192,7 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
       }
       result.set_has_more_result(has_more_result);
       result.set_ps_protocol();
-      ObTaskExecutorCtx *task_ctx = result.get_exec_context().get_task_executor_ctx();
+      ObSqlExecutorCtx *task_ctx = result.get_exec_context().get_sql_executor_ctx();
       if (OB_ISNULL(task_ctx)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("task executor ctx can not be NULL", K(task_ctx), K(ret));
@@ -1398,8 +1397,7 @@ OB_NOINLINE int ObMPStmtExecute::process_retry(ObSQLSessionInfo &session,
   lib::ContextParam param;
   param.set_mem_attr(ObModIds::OB_SQL_EXECUTOR, ObCtxIds::DEFAULT_CTX_ID)
     .set_properties(lib::USE_TL_PAGE_OPTIONAL)
-    .set_page_size(!lib::is_mini_mode() ? OB_MALLOC_BIG_BLOCK_SIZE
-                                        : OB_MALLOC_MIDDLE_BLOCK_SIZE)
+    .set_page_size(OB_MALLOC_BIG_BLOCK_SIZE)
     .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
   CREATE_WITH_TEMP_CONTEXT(param) {
     ret = do_process(session,

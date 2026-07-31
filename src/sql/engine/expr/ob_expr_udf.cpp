@@ -589,7 +589,7 @@ int ObExprUDF::before_calc_result(share::schema::ObSchemaGetterGuard &schema_gua
   // Here according to the schema_version recorded in task_ctx to reacquire schema_guard
   if (OB_ISNULL(exec_ctx.get_sql_ctx())
       || OB_ISNULL(exec_ctx.get_sql_ctx()->schema_guard_)) {
-    sql::ObTaskExecutorCtx &task_ctx = exec_ctx.get_task_exec_ctx();
+    sql::ObSqlExecutorCtx &task_ctx = exec_ctx.get_sql_exec_ctx();
     const observer::ObGlobalContext &gctx = observer::ObServer::get_instance().get_gctx();
     if (OB_FAIL(gctx.schema_service_->get_runtime_schema_guard(
                 schema_guard,

@@ -256,7 +256,6 @@ public:
   ObTableScanOpInput(ObExecContext &ctx, const ObOpSpec &spec);
   virtual ~ObTableScanOpInput();
 
-  virtual int init(ObTaskInfo &task_info) override;
   virtual void reset() override;
   bool get_need_extract_query_range() const { return !not_need_extract_query_range_; }
   void set_need_extract_query_range(bool need_extract) { not_need_extract_query_range_ = !need_extract; }

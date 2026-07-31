@@ -164,15 +164,19 @@ public:
       ObTabletIdxMap &idx_map);
   static int find_dml_ops(common::ObIArray<const ObTableModifySpec *> &insert_ops,
                           const ObOpSpec &op);
+  static int find_scan_ops(common::ObIArray<const ObTableScanSpec *> &scan_ops,
+                           const ObOpSpec &op);
   static int check_slave_mapping_location_constraint(ObDfo &child, ObDfo &parent);
   static bool check_build_dfo_with_dml(const ObOpSpec &op);
 
 private:
   static int find_dml_ops_inner(common::ObIArray<const ObTableModifySpec *> &insert_ops,
                              const ObOpSpec &op);
+  static int find_scan_ops_inner(common::ObIArray<const ObTableScanSpec *> &scan_ops,
+                                 const ObOpSpec &op);
 
   static int build_tablet_idx_map(
-      ObTaskExecutorCtx &task_exec_ctx,
+      ObSqlExecutorCtx &task_exec_ctx,
       uint64_t ref_table_id,
       ObTabletIdxMap &idx_map);
   static int reorder_all_partitions(

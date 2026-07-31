@@ -60,13 +60,6 @@ void ObTempTableAccessOpInput::set_deserialize_allocator(common::ObIAllocator *a
   deserialize_allocator_ = allocator;
 }
 
-int ObTempTableAccessOpInput::init(ObTaskInfo &task_info)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(task_info);
-  return ret;
-}
-
 int ObTempTableAccessOpInput::check_finish(bool &is_end, int64_t &index)
 {
   int ret = OB_SUCCESS;

@@ -1032,7 +1032,7 @@ int ObConflictChecker::init_das_scan_rtdef()
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *plan_ctx = eval_ctx_.exec_ctx_.get_physical_plan_ctx();
   ObSQLSessionInfo *my_session = eval_ctx_.exec_ctx_.get_my_session();
-  ObTaskExecutorCtx &task_exec_ctx = eval_ctx_.exec_ctx_.get_task_exec_ctx();
+  ObSqlExecutorCtx &task_exec_ctx = eval_ctx_.exec_ctx_.get_sql_exec_ctx();
   das_scan_rtdef_.timeout_ts_ = plan_ctx->get_ps_timeout_timestamp();
   das_scan_rtdef_.sql_mode_ = my_session->get_sql_mode();
   das_scan_rtdef_.stmt_allocator_.set_alloc(&das_ref_.get_das_alloc());
@@ -1103,7 +1103,7 @@ int ObConflictChecker::init_attach_scan_rtdef(const ObDASBaseCtDef *attach_ctdef
     } else {
       ObPhysicalPlanCtx *plan_ctx = eval_ctx_.exec_ctx_.get_physical_plan_ctx();
       ObSQLSessionInfo *my_session = eval_ctx_.exec_ctx_.get_my_session();
-      ObTaskExecutorCtx &task_exec_ctx = eval_ctx_.exec_ctx_.get_task_exec_ctx();
+      ObSqlExecutorCtx &task_exec_ctx = eval_ctx_.exec_ctx_.get_sql_exec_ctx();
       const ObDASScanCtDef *attach_scan_ctdef = static_cast<const ObDASScanCtDef*>(attach_ctdef);
       const ObDASTableLocMeta *attach_loc_meta = checker_ctdef_.attach_spec_.get_attach_loc_meta(
           table_loc_->get_table_location_key(), attach_scan_ctdef->ref_table_id_);

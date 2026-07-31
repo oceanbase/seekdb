@@ -22,7 +22,7 @@
 #include "lib/container/ob_2d_array.h"
 #include "sql/optimizer/ob_table_location.h"
 #include "sql/optimizer/ob_table_partition_info.h"
-#include "sql/executor/ob_task_executor_ctx.h"
+#include "sql/executor/ob_sql_executor_ctx.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
 #include "sql/plan_cache/ob_dist_plans.h"
 #include "sql/session/ob_session_val_map.h"

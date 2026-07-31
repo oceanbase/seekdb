@@ -35,7 +35,7 @@ namespace sql
 int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   ObSQLSessionInfo *session_info = NULL;
   
   const ObStrings &users = stmt.get_users();
@@ -45,7 +45,7 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
   ObSchemaGetterGuard schema_guard;
   const ObUserInfo *user_info = NULL;
 
-  if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (OB_ISNULL(session_info = ctx.get_my_session())) {
@@ -177,9 +177,9 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
 int ObRevokeExecutor::execute(ObExecContext &ctx, ObRevokeStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
 
-  if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (stmt.get_has_warning()) {

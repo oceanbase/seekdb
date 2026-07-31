@@ -44,7 +44,7 @@ ObCreateIndexExecutor::~ObCreateIndexExecutor()
 int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   obcall::ObCreateIndexArg &create_index_arg = stmt.get_create_index_arg();
   ObSQLSessionInfo *my_session = ctx.get_my_session();
   const bool is_sys_index = is_inner_table(create_index_arg.index_table_id_);
@@ -67,7 +67,7 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
   } else if (NULL == my_session) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get my session", K(ret), K(ctx));
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(ObPartitionExecutorUtils::calc_values_exprs(ctx, stmt))) {
@@ -330,7 +330,7 @@ int ObDropIndexExecutor::wait_drop_index_finish(
 int ObDropIndexExecutor::execute(ObExecContext &ctx, ObDropIndexStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   const obcall::ObDropIndexArg &drop_index_arg = stmt.get_drop_index_arg();
   obcall::ObDropIndexArg &tmp_arg = const_cast<obcall::ObDropIndexArg&>(drop_index_arg);
   ObSQLSessionInfo *my_session = ctx.get_my_session();
@@ -347,7 +347,7 @@ int ObDropIndexExecutor::execute(ObExecContext &ctx, ObDropIndexStmt &stmt)
   } else if (NULL == my_session) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get my session", K(ret), K(ctx));
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   }  else if (OB_INVALID_ID == drop_index_arg.session_id_
@@ -370,7 +370,7 @@ int ObDropIndexExecutor::execute(ObExecContext &ctx, ObDropIndexStmt &stmt)
 
 int ObPurgeIndexExecutor::execute(ObExecContext &ctx, ObPurgeIndexStmt &stmt) {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   const obcall::ObPurgeIndexArg &purge_index_arg = stmt.get_purge_index_arg();
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
@@ -379,7 +379,7 @@ int ObPurgeIndexExecutor::execute(ObExecContext &ctx, ObPurgeIndexStmt &stmt) {
     const_cast<obcall::ObPurgeIndexArg&>(purge_index_arg).ddl_stmt_str_ = first_stmt;
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->purge_index(purge_index_arg); }))) {

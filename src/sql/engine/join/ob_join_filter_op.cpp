@@ -135,17 +135,6 @@ int SharedJoinFilterConstructor::notify_constructed()
   return ret;
 }
 
-int ObJoinFilterOpInput::init(ObTaskInfo &task_info)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(task_info);
-  //new parallel framework do not use this interface to set parameters
-  ret = OB_ERR_UNEXPECTED;
-  LOG_WARN("the interface should not be used", K(ret));
-  return ret;
-}
-
-
 bool ObJoinFilterOpInput::check_release()
 {
   bool res = false;

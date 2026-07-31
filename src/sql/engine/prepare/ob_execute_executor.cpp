@@ -61,7 +61,7 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
       ObSqlCtx sql_ctx;
       SMART_VAR(ObResultSet, result_set, *ctx.get_my_session(), ctx.get_allocator()) {
         result_set.set_ps_protocol();
-        ObTaskExecutorCtx *task_ctx = result_set.get_exec_context().get_task_executor_ctx();
+        ObSqlExecutorCtx *task_ctx = result_set.get_exec_context().get_sql_executor_ctx();
         int64_t database_schema_version = 0;
         if (OB_ISNULL(task_ctx)) {
           ret = OB_ERR_UNEXPECTED;

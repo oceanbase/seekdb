@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_ddl_operator.h"
+#include "share/ob_autoincrement_service.h"
 #include "rootserver/ob_dependency_ddl_helper.h"
 #include "observer/schema/ob_schema_service_sql_impl.h"
 #include "lib/encrypt/ob_encrypted_helper.h"

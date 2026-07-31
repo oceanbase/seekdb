@@ -1321,7 +1321,7 @@ int ObSql::handle_pl_execute(const ObString &sql,
     } else if (OB_FAIL(context.schema_guard_->get_schema_version(local_database_schema_version))) {
       LOG_WARN("failed to get database schema version", K(ret));
     } else {
-      result.get_exec_context().get_task_exec_ctx().set_query_begin_schema_version(local_database_schema_version);
+      result.get_exec_context().get_sql_exec_ctx().set_query_begin_schema_version(local_database_schema_version);
     }
   }
   if (OB_SUCC(ret) && is_prepare_protocol && !is_dynamic_sql) {
@@ -3088,7 +3088,7 @@ int ObSql::init_result_set(ObSqlCtx &context, ObResultSet &result_set)
 OB_INLINE int ObSql::init_exec_context(const ObSqlCtx &context, ObExecContext &exec_ctx)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx &task_exec_ctx = exec_ctx.get_task_exec_ctx();
+  ObSqlExecutorCtx &task_exec_ctx = exec_ctx.get_sql_exec_ctx();
   task_exec_ctx.set_retry_times(context.retry_times_);
   if (OB_FAIL(exec_ctx.create_physical_plan_ctx())) {
     LOG_WARN("faile to create physical plan ctx", K(ret));

@@ -23,7 +23,7 @@ namespace oceanbase
 {
 namespace sql
 {
-class ObTaskExecutorCtx;
+class ObSqlExecutorCtx;
 class ObExprFuncPartHashBase : public ObFuncExprOperator
 {
 public:
@@ -34,7 +34,7 @@ public:
   static int calc_value_for_mysql(const T &input, T &output, const common::ObObjType input_type);
 };
 
-class ObTaskExecutorCtx;
+class ObSqlExecutorCtx;
 class ObExprFuncPartHash : public ObExprFuncPartHashBase
 {
 public:

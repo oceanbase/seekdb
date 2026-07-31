@@ -38,11 +38,6 @@ public:
     sqc_id_(common::OB_INVALID_ID)
   {}
   virtual ~ObSelectIntoOpInput() = default;
-  virtual int init(ObTaskInfo &task_info) override
-  {
-    UNUSED(task_info);
-    return common::OB_SUCCESS;
-  }
   virtual void reset() override {}
   virtual void set_task_id(int64_t task_id) { task_id_ = task_id; }
   virtual void set_sqc_id(int64_t sqc_id) { sqc_id_ = sqc_id; }

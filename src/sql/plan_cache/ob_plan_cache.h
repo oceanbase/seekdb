@@ -48,7 +48,7 @@ namespace sql
 class ObPlanCacheValue;
 class ObPlanCacheAtomicOp;
 class ObPsPCVSetAtomicOp;
-class ObTaskExecutorCtx;
+class ObSqlExecutorCtx;
 struct ObSqlCtx;
 class ObExecContext;
 class ObPCVSet;

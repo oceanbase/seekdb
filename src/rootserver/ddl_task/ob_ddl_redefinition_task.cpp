@@ -16,17 +16,16 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_ddl_redefinition_task.h"
-#include "common/mysqlclient/ob_isql_connection.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "rootserver/ob_local_management_service.h"
+#include "share/ob_autoincrement_service.h"
 #include "share/ob_ddl_checksum.h"
 #include "share/ob_ddl_sim_point.h"
 #include "pl/sys_package/ob_dbms_stats.h"
 #include "storage/ob_tablet_autoinc_seq_service.h"
 #include "share/ob_ex_rpc.h"
-#include "share/system_variable/ob_system_variable_alias.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
@@ -35,66 +34,6 @@ using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::rootserver;
 using namespace oceanbase::transaction::tablelock;
-
-namespace
-{
-const int64_t DDL_STATS_SYNC_TRX_LOCK_TIMEOUT_US = 0L;
-const int64_t DDL_STATS_SYNC_LOCK_CONFLICT_RETRY_DELAY_US = 3L * 1000L * 1000L; // 3s
-
-class ObDDLStatsSyncTrxLockTimeoutGuard final
-{
-public:
-  ObDDLStatsSyncTrxLockTimeoutGuard()
-    : conn_(nullptr), old_trx_lock_timeout_(0), need_restore_(false)
-  {}
-  ~ObDDLStatsSyncTrxLockTimeoutGuard()
-  {
-    int ret = restore();
-    if (OB_SUCCESS != ret) {
-      LOG_WARN("fail to restore ddl stats sync trx lock timeout", K(ret));
-    }
-  }
-  int set_nowait(oceanbase::common::sqlclient::ObISQLConnection *conn)
-  {
-    int ret = OB_SUCCESS;
-    if (OB_ISNULL(conn)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("sql connection is null", K(ret));
-    } else if (OB_FAIL(conn->get_session_variable(oceanbase::share::OB_SV_TRX_LOCK_TIMEOUT,
-                                                  old_trx_lock_timeout_))) {
-      LOG_WARN("fail to get ddl stats sync trx lock timeout", K(ret));
-    } else if (OB_FAIL(conn->set_session_variable(oceanbase::share::OB_SV_TRX_LOCK_TIMEOUT,
-                                                 DDL_STATS_SYNC_TRX_LOCK_TIMEOUT_US))) {
-      LOG_WARN("fail to set ddl stats sync trx lock timeout", K(ret),
-               K(DDL_STATS_SYNC_TRX_LOCK_TIMEOUT_US));
-    } else {
-      conn_ = conn;
-      need_restore_ = true;
-    }
-    return ret;
-  }
-  int restore()
-  {
-    int ret = OB_SUCCESS;
-    if (!need_restore_) {
-    } else if (OB_ISNULL(conn_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("sql connection is null", K(ret));
-    } else if (OB_FAIL(conn_->set_session_variable(oceanbase::share::OB_SV_TRX_LOCK_TIMEOUT,
-                                                   old_trx_lock_timeout_))) {
-      LOG_WARN("fail to restore ddl stats sync trx lock timeout", K(ret),
-               K(old_trx_lock_timeout_));
-    } else {
-      need_restore_ = false;
-    }
-    return ret;
-  }
-private:
-  oceanbase::common::sqlclient::ObISQLConnection *conn_;
-  int64_t old_trx_lock_timeout_;
-  bool need_restore_;
-};
-}
 
 ObDDLRedefinitionSSTableBuildTask::ObDDLRedefinitionSSTableBuildTask(
     const int64_t task_id,
@@ -1350,24 +1289,6 @@ bool ObDDLRedefinitionTask::check_need_sync_stats() {
   return true;
 }
 
-bool ObDDLRedefinitionTask::is_stats_sync_lock_conflict(const int ret) const
-{
-  return OB_ERR_EXCLUSIVE_LOCK_CONFLICT == ret
-      || OB_ERR_SHARED_LOCK_CONFLICT == ret
-      || OB_TRY_LOCK_ROW_CONFLICT == ret
-      || OB_ERR_EXCLUSIVE_LOCK_CONFLICT_NOWAIT == ret;
-}
-
-void ObDDLRedefinitionTask::delay_take_effect_after_stats_sync_lock_conflict(const int ret)
-{
-  if (is_stats_sync_lock_conflict(ret)) {
-    LOG_INFO("ddl stats sync lock conflict, delay take effect retry",
-             K(ret), K_(task_id), K_(task_type), K_(object_id), K_(target_object_id),
-             K(DDL_STATS_SYNC_LOCK_CONFLICT_RETRY_DELAY_US));
-    set_delay_schedule_time(DDL_STATS_SYNC_LOCK_CONFLICT_RETRY_DELAY_US);
-  }
-}
-
 int ObDDLRedefinitionTask::sync_stats_info()
 {
   int ret = OB_SUCCESS;
@@ -1429,28 +1350,16 @@ int ObDDLRedefinitionTask::sync_stats_info_local(common::ObMySQLTransaction &tra
 {
   int ret = OB_SUCCESS;
   bool need_sync_history = check_need_sync_stats_history();
-  ObDDLStatsSyncTrxLockTimeoutGuard trx_lock_timeout_guard;
 
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
     LOG_WARN("fail to start transaction", K(ret));
-  } else if (OB_FAIL(trx_lock_timeout_guard.set_nowait(trans.get_connection()))) {
-    LOG_WARN("fail to set stats sync trx lock timeout", K(ret));
-  } else if (OB_FALSE_IT(DEBUG_SYNC(DDL_STATS_BEFORE_SYNC))) {
   } else if (OB_FAIL(sync_table_prefs(trans))) {
     LOG_WARN("fail to sync table prefs", K(ret));
   } else if (check_need_sync_stats()) {
-    // DDL stats sync is opportunistic.  Gather stats may hold __all_*_stat row
-    // locks across batches.  DDL must not queue behind those locks while holding
-    // its own stats locks, otherwise both flows can block each other.  The
-    // transaction lock timeout above makes stats sync fail fast; take_effect keeps
-    // the task in TAKE_EFFECT and retries after gather releases its transaction.
-    if (OB_FAIL(sync_table_level_stats_info(trans,
-                                           data_table_schema,
-                                           new_table_schema,
-                                           need_sync_history))) {
+    if (OB_FAIL(sync_table_level_stats_info(trans, data_table_schema, new_table_schema, need_sync_history))) {
       LOG_WARN("fail to sync table level stats", K(ret));
     } else if (DDL_ALTER_PARTITION_BY != task_type_
                 && OB_FAIL(sync_partition_level_stats_info(trans,
@@ -1464,13 +1373,6 @@ int ObDDLRedefinitionTask::sync_stats_info_local(common::ObMySQLTransaction &tra
                                                     *runtime_schema_guard,
                                                     need_sync_history))) {
       LOG_WARN("fail to sync column level stats", K(ret));
-    }
-  }
-  int tmp_ret = trx_lock_timeout_guard.restore();
-  if (OB_SUCCESS != tmp_ret) {
-    LOG_WARN("fail to restore stats sync trx lock timeout", K(ret), K(tmp_ret));
-    if (OB_SUCC(ret)) {
-      ret = tmp_ret;
     }
   }
 

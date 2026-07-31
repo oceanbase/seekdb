@@ -43,7 +43,7 @@
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/resolver/dcl/ob_create_user_stmt.h"
 #include "sql/optimizer/ob_log_plan_factory.h"
-#include "sql/executor/ob_task_executor_ctx.h"
+#include "sql/executor/ob_sql_executor_ctx.h"
 #include "sql/ob_sql_context.h"
 #include "sql/engine/ob_exec_context.h"
 #include "../share/schema/mock_schema_service.h"

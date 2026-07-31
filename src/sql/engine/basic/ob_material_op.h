@@ -44,7 +44,6 @@ public:
   ObMaterialOpInput(ObExecContext &ctx, const ObOpSpec &spec)
     : ObOpInput(ctx, spec), bypass_(false) {};
   virtual ~ObMaterialOpInput() = default;
-  virtual int init(ObTaskInfo &task_info) override { UNUSED(task_info); return common::OB_SUCCESS; }
   virtual void reset() override { bypass_ = false; }
   void set_bypass(bool bypass) { bypass_ = bypass; }
   int64_t is_bypass() const { return bypass_; }

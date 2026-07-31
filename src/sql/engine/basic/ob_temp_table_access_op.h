@@ -43,7 +43,6 @@ public:
   virtual void reset() override;
   virtual ObPhyOperatorType get_phy_op_type() const;
   virtual void set_deserialize_allocator(common::ObIAllocator *allocator);
-  virtual int init(ObTaskInfo &task_info);
   int check_finish(bool &is_end, int64_t &interm_res_ids);
 protected:
   common::ObIAllocator *deserialize_allocator_;

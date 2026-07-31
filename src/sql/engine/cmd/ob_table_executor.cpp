@@ -486,7 +486,7 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
 int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   obcall::ObCreateTableRes res;
   obcall::ObCreateTableArg &create_table_arg = stmt.get_create_table_arg();
   ObString first_stmt;
@@ -511,7 +511,7 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
                                      && GCONF._enable_parallel_table_creation;
 
     }
-    if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+    if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       LOG_WARN("get task executor context failed", K(ret));
     } else if (OB_FAIL(ObPartitionExecutorUtils::calc_values_exprs(ctx, stmt))) {
@@ -823,13 +823,13 @@ int ObAlterTableExecutor::alter_table_exchange_partition_rpc(obcall::ObExchangeP
 int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   obcall::ObAlterTableArg &alter_table_arg = stmt.get_alter_table_arg();
   obcall::ObExchangePartitionArg &exchange_partition_arg = stmt.get_exchange_partition_arg();
   LOG_DEBUG("start of alter table execute", K(alter_table_arg));
   ObString first_stmt;
   OZ (stmt.get_first_stmt(first_stmt));
-  OV (OB_NOT_NULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
+  OV (OB_NOT_NULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (stmt.is_alter_triggers()) {
@@ -1552,13 +1552,13 @@ ObCommentExecutor::~ObCommentExecutor()
 int ObCommentExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = nullptr;
+  ObSqlExecutorCtx *task_exec_ctx = nullptr;
   obcall::ObAlterTableArg &alter_table_arg = stmt.get_alter_table_arg();
   LOG_TRACE("start of comment execute", K(alter_table_arg));
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("fail to get first stmt", KR(ret));
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("task_exec_ctx is null", KR(ret));
   } else {
@@ -1647,7 +1647,7 @@ ObDropTableExecutor::~ObDropTableExecutor()
 int ObDropTableExecutor::execute(ObExecContext &ctx, ObDropTableStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   const obcall::ObDropTableArg &drop_table_arg = stmt.get_drop_table_arg();
   obcall::ObDropTableArg &tmp_arg = const_cast<obcall::ObDropTableArg&>(drop_table_arg);
   ObString first_stmt;
@@ -1664,7 +1664,7 @@ int ObDropTableExecutor::execute(ObExecContext &ctx, ObDropTableStmt &stmt)
     if (NULL == my_session) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get my session", KR(ret), K(ctx));
-    } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+    } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       LOG_WARN("get task executor context failed");
     } else if (OB_INVALID_ID == drop_table_arg.session_id_
@@ -1748,8 +1748,8 @@ int ObRenameTableExecutor::execute(ObExecContext &ctx, ObRenameTableStmt &stmt)
 {
   int ret = OB_SUCCESS;
   const obcall::ObRenameTableArg &rename_table_arg = stmt.get_rename_table_arg();
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
-  if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
+  if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->rename_table(rename_table_arg); }))) {
@@ -1816,8 +1816,8 @@ int ObTruncateTableExecutor::execute(ObExecContext &ctx, ObTruncateTableStmt &st
   } else {
     tmp_arg.ddl_stmt_str_ = first_stmt;
 
-    ObTaskExecutorCtx *task_exec_ctx = NULL;
-    if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+    ObSqlExecutorCtx *task_exec_ctx = NULL;
+    if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       LOG_WARN("get task executor context failed");
     } else if (OB_ISNULL(my_session)) {
@@ -1918,8 +1918,8 @@ int ObCreateTableLikeExecutor::execute(ObExecContext &ctx, ObCreateTableLikeStmt
   } else {
     tmp_arg.ddl_stmt_str_ = first_stmt;
     tmp_arg.session_id_ = my_session->get_sessid_for_table();
-    ObTaskExecutorCtx *task_exec_ctx = NULL;
-    if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+    ObSqlExecutorCtx *task_exec_ctx = NULL;
+    if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       LOG_WARN("get task executor context failed");
     } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_table_like(create_table_like_arg); }))) {
@@ -1954,8 +1954,8 @@ int ObForkTableExecutor::execute(ObExecContext &ctx, ObForkTableStmt &stmt)
     uint64_t data_version = 0;
     tmp_arg.ddl_stmt_str_ = first_stmt;
     tmp_arg.session_id_ = my_session->get_sessid_for_table();
-    ObTaskExecutorCtx *task_exec_ctx = NULL;
-    if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+    ObSqlExecutorCtx *task_exec_ctx = NULL;
+    if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       LOG_WARN("get task executor context failed");
     } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->fork_table(fork_table_arg, res); }))) {
@@ -1977,8 +1977,8 @@ int ObRecyclebinRestoreTableExecutor::execute(ObExecContext &ctx, ObRecyclebinRe
     LOG_WARN("get first statement failed", K(ret));
   } else {
     tmp_arg.ddl_stmt_str_ = first_stmt;
-    ObTaskExecutorCtx *task_exec_ctx = NULL;
-    if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+    ObSqlExecutorCtx *task_exec_ctx = NULL;
+    if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       LOG_WARN("get task executor context failed");
     } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->restore_table_from_recyclebin(restore_table_arg); }))) {
@@ -1999,8 +1999,8 @@ int ObPurgeTableExecutor::execute(ObExecContext &ctx, ObPurgeTableStmt &stmt)
   } else {
     tmp_arg.ddl_stmt_str_ = first_stmt;
 
-    ObTaskExecutorCtx *task_exec_ctx = NULL;
-    if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+    ObSqlExecutorCtx *task_exec_ctx = NULL;
+    if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       LOG_WARN("get task executor context failed");
     } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->purge_table(purge_table_arg); }))) {
@@ -2019,8 +2019,8 @@ int ObOptimizeTableExecutor::execute(ObExecContext &ctx, ObOptimizeTableStmt &st
     LOG_WARN("fail to get first stmt", K(ret));
   } else {
     arg.ddl_stmt_str_ = first_stmt;
-    ObTaskExecutorCtx *task_exec_ctx = nullptr;
-    if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+    ObSqlExecutorCtx *task_exec_ctx = nullptr;
+    if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("error unexpected, task executor must not be NULL", K(ret));
     } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->optimize_table(arg); }))) {

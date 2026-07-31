@@ -50,12 +50,6 @@ public:
   {}
   virtual ~ObPxTransmitOpInput() {}
   virtual void reset() override {}
-  virtual int init(ObTaskInfo &task_info)
-  {
-    int ret = OB_SUCCESS;
-    UNUSED(task_info);
-    return ret;
-  }
   // Set up by sqc and sent to task, this pointer will be serialized to task
   void set_sqc_proxy(ObPxSQCProxy &sqc_proxy)
   {

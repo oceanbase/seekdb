@@ -25,6 +25,7 @@
 #endif
 #include <thread>
 #include "observer/ob_server.h"
+#include "share/ob_autoincrement_service.h"
 #include "storage/lob/ob_lob_manager.h"
 #include "storage/compaction/ob_freeze_info_mgr.h"
 #include "share/ob_freeze_info_proxy.h"
