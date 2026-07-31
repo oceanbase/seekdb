@@ -49,10 +49,12 @@ ob_set_subtarget(ob_sql engine_vector_fixed
   engine/vector/ob_fixed_length_base.cpp
 )
 
-set_source_files_properties(
-  engine/expr/ob_distribution.cpp
-  PROPERTIES COMPILE_OPTIONS "-ffp-contract=off"
-)
+if(NOT WIN32)
+  set_source_files_properties(
+    engine/expr/ob_distribution.cpp
+    PROPERTIES COMPILE_OPTIONS "-ffp-contract=off"
+  )
+endif()
 
 ob_set_subtarget(ob_sql optimizer_stat
   optimizer/stat/ob_basic_stats_estimator.cpp
