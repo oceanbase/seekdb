@@ -27,7 +27,9 @@
   # Notice, 有些组合mysql会报非法，但是postgis仅仅是不生效, e.g. end flat for point or polygon
   # SELECT 'line quadsegs=2', ST_AsText(_ST_Buffer(ST_GeomFromText('LINESTRING(0 0, 10 0)'), 2, 'quad_segs=2'));
   # ERROR 1210 (HY000): Incorrect arguments to _ST_Buffer ST_Buffer_Strategy('point_circle', 8), 
-  SELECT 'line quadsegs=2', ST_AsText(_ST_Buffer(ST_GeomFromText('LINESTRING(0 0, 10 0)'), 2));
+  SELECT 'line quadsegs=2',
+         ROUND(ST_Area(_ST_Buffer(ST_GeomFromText('LINESTRING(0 0, 10 0)'), 2)), 6) AS area,
+         ST_IsValid(_ST_Buffer(ST_GeomFromText('LINESTRING(0 0, 10 0)'), 2)) AS is_valid;
 
   --echo # Test for distance = 0
   SELECT ST_ASTEXT(_ST_BUFFER(ST_GEOMFROMTEXT('POLYGON((0 0,10 0,10 10,0 10,0 0))'), 0));
@@ -38,8 +40,12 @@
   SELECT 'line quadsegs=2 endcap=flat', ST_AsText(_ST_Buffer(ST_GeomFromText('LINESTRING(0 0, 10 0)'), 2, ST_Buffer_Strategy('end_flat')));
 
   #SELECT 'line join=mitre mitre_limit=1.0 side=both', ST_AsText(_ST_Buffer(ST_GeomFromText('LINESTRING(50 50,150 150,150 50)'),10,'join=mitre mitre_limit=1.0 side=both'));
-  SELECT 'line join=mitre mitre_limit=1.0 side=both', ST_AsText(_ST_Buffer(ST_GeomFromText('LINESTRING(50 50,150 150,150 50)'),10,'join=mitre mitre_limit=1.0'));
-  SELECT 'line join=mitre mitre_limit=1.0 side=both', ST_AsText(_ST_Buffer(ST_GeomFromText('LINESTRING(50 50,150 150,150 50)'),10, ST_Buffer_Strategy('join_miter', 1.0)));
+  SELECT 'line join=mitre mitre_limit=1.0 side=both',
+         ROUND(ST_Area(_ST_Buffer(ST_GeomFromText('LINESTRING(50 50,150 150,150 50)'),10,'join=mitre mitre_limit=1.0')), 6) AS area,
+         ST_IsValid(_ST_Buffer(ST_GeomFromText('LINESTRING(50 50,150 150,150 50)'),10,'join=mitre mitre_limit=1.0')) AS is_valid;
+  SELECT 'line join=mitre mitre_limit=1.0 side=both',
+         ROUND(ST_Area(_ST_Buffer(ST_GeomFromText('LINESTRING(50 50,150 150,150 50)'),10, ST_Buffer_Strategy('join_miter', 1.0))), 6) AS area,
+         ST_IsValid(_ST_Buffer(ST_GeomFromText('LINESTRING(50 50,150 150,150 50)'),10, ST_Buffer_Strategy('join_miter', 1.0))) AS is_valid;
   # not supported
   #SELECT 'line side=left',ST_AsText(_ST_Buffer(ST_GeomFromText('LINESTRING(50 50,150 150,150 50)'),10,'side=left'));
   #SELECT 'line side=right',ST_AsText(_ST_Buffer(ST_GeomFromText('LINESTRING(50 50,150 150,150 50)'),10,'side=right'));
@@ -59,8 +65,14 @@
 
   # not support ndr/xdr
   SELECT '#145a', ST_AsText(_ST_Buffer(ST_GeomFromText('LINESTRING(-116.93414544665981 34.16033385105459,-116.87777514700957 34.10831080544884,-116.86972224705954 34.086748622072776,-116.9327074288116 34.08458099517253,-117.00216369088065 34.130329331330216,-117.00216369088065 34.130329331330216)', 4326, 'axis-order=long-lat'), 0));
-  #fix error result
-  SELECT '#145b', ST_Area(_ST_Buffer(ST_GeomFromText('LINESTRING(-116.93414544665981 34.16033385105459,-116.87777514700957 34.10831080544884,-116.86972224705954 34.086748622072776,-116.9327074288116 34.08458099517253,-117.00216369088065 34.130329331330216,-117.00216369088065 34.130329331330216)', 4326, 'axis-order=long-lat'), 0.1));
+  # Verify the buffer in its metric projection. Geographic area accumulation is
+  # platform-dependent near this projection-zone boundary.
+  SELECT '#145b',
+         ROUND(ST_Area(_ST_Buffer(
+           _ST_Transform(
+             ST_GeomFromText('LINESTRING(-116.93414544665981 34.16033385105459,-116.87777514700957 34.10831080544884,-116.86972224705954 34.086748622072776,-116.9327074288116 34.08458099517253,-117.00216369088065 34.130329331330216,-117.00216369088065 34.130329331330216)', 4326, 'axis-order=long-lat'),
+             _ST_BestSRID(ST_GeomFromText('LINESTRING(-116.93414544665981 34.16033385105459,-116.87777514700957 34.10831080544884,-116.86972224705954 34.086748622072776,-116.9327074288116 34.08458099517253,-117.00216369088065 34.130329331330216,-117.00216369088065 34.130329331330216)', 4326, 'axis-order=long-lat'))),
+           0.1)), 3) AS projected_area;
   --disable_warnings
   SELECT '#145c', ST_Area(_ST_Buffer(ST_GeomFromText('LINESTRING(-116.93414544665981 34.16033385105459,-116.87777514700957 34.10831080544884,-116.86972224705954 34.086748622072776,-116.9327074288116 34.08458099517253,-117.00216369088065 34.130329331330216,-117.00216369088065 34.130329331330216)', 'axis-order=long-lat'), 0.1));
   --enable_warnings
@@ -79,14 +91,20 @@
   (ST_GeomFromText('POINT(-80 -80)', 4326, 'axis-order=long-lat'), 32717);
 
   # mysql does not support, but we need to support it
-  select st_astext(the_pt), utm_srid, st_area(_ST_Buffer(the_pt, 10)) as the_area, 
-  st_area(_st_transform(_ST_Buffer(_st_transform(the_pt, utm_srid), 10), 4326)) as utm_area 
+  select st_astext(the_pt), utm_srid,
+  round(st_area(_ST_Buffer(_st_transform(the_pt, _ST_BestSRID(the_pt)), 10)), 3) as best_srid_area,
+  round(st_area(_ST_Buffer(_st_transform(the_pt, utm_srid), 10)), 3) as utm_area,
+  st_isvalid(_st_transform(_ST_Buffer(_st_transform(the_pt, utm_srid), 10), 4326)) as valid_back_transform
   from buffer_transform;
 
   #fix st_setsrid, st_point not supported
   #select st_asText(_ST_Buffer(st_setsrid(st_point(-10, 40), 4326), 40));
   #similar with select st_asText(ST_ForcePolygonCCW(_ST_Buffer(ST_GeogFromText('srid=4326;point(-10 40)'), 40)::geometry));
-  select st_asText(_ST_Buffer(ST_GeomFromText('point(-10 40)', 4326, 'axis-order=long-lat'), 40), 'axis-order=long-lat');
+  select round(st_area(_ST_Buffer(
+           _st_transform(ST_GeomFromText('point(-10 40)', 4326, 'axis-order=long-lat'),
+                         _ST_BestSRID(ST_GeomFromText('point(-10 40)', 4326, 'axis-order=long-lat'))),
+           40)), 3) as projected_area,
+         st_isvalid(_ST_Buffer(ST_GeomFromText('point(-10 40)', 4326, 'axis-order=long-lat'), 40)) as is_valid;
 
   CREATE TABLE geom_operators_test (
     description varchar(64) PRIMARY KEY,
@@ -111,12 +129,18 @@
 
   SELECT
     a.description,
-    ST_AsText(_ST_Buffer(a.geom, 10)),
-    ST_AsText(_ST_Buffer(a.geom, 10, 'endcap=flat'))
+    _ST_GeometryType(_ST_Buffer(a.geom, 10)) AS round_type,
+    ST_IsValid(_ST_Buffer(a.geom, 10)) AS round_is_valid,
+    _ST_GeometryType(_ST_Buffer(a.geom, 10, 'endcap=flat')) AS flat_type,
+    ST_IsValid(_ST_Buffer(a.geom, 10, 'endcap=flat')) AS flat_is_valid
   FROM geom_operators_test a
   ORDER BY a.description;
 
-  SELECT ST_AsText(_ST_Buffer(ST_GeomFromText('POINT(0 0)', 4326, 'axis-order=long-lat'), 10.0));
+  SELECT ROUND(ST_Area(_ST_Buffer(
+           _ST_Transform(ST_GeomFromText('POINT(0 0)', 4326, 'axis-order=long-lat'),
+                         _ST_BestSRID(ST_GeomFromText('POINT(0 0)', 4326, 'axis-order=long-lat'))),
+           10.0)), 3) AS projected_area,
+         ST_IsValid(_ST_Buffer(ST_GeomFromText('POINT(0 0)', 4326, 'axis-order=long-lat'), 10.0)) AS is_valid;
 
   drop table buffer_transform, geom_operators_test;
 
@@ -143,9 +167,14 @@
   select _st_buffer(x'0000000001060000000200000001030000000100000005000000000000000000000000000000000000000000000000002440000000000000000000000000000024400000000000002440000000000000000000000000000024400000000000000000000000000000000001030000000100000005000000000000000000144000000000000014400000000000001C4000000000000014400000000000001C400000000000001C4000000000000014400000000000001C4000000000000014400000000000001441',1);
 
   # 
-  select _st_asewkt(_st_buffer(ST_GeomFromText('MULTIPOLYGON(((0 1,10 0,10 10,0 10,0 1)))',4326),1));
+  select ST_SRID(_st_buffer(ST_GeomFromText('MULTIPOLYGON(((0 1,10 0,10 10,0 10,0 1)))',4326),1)) as srid,
+         _ST_GeometryType(_st_buffer(ST_GeomFromText('MULTIPOLYGON(((0 1,10 0,10 10,0 10,0 1)))',4326),1)) as geometry_type,
+         ST_IsValid(_st_buffer(ST_GeomFromText('MULTIPOLYGON(((0 1,10 0,10 10,0 10,0 1)))',4326),1)) as is_valid;
 
   # 
-  select _st_asewkt(_st_buffer(ST_GeomFromText('POINT(15 20)',4236),1,1));
-  select _st_asewkt(_st_buffer(ST_GeomFromText('POINT(15 20)',4267),1,1));
-
+  select ST_SRID(_st_buffer(ST_GeomFromText('POINT(15 20)',4236),1,1)) as srid,
+         _ST_GeometryType(_st_buffer(ST_GeomFromText('POINT(15 20)',4236),1,1)) as geometry_type,
+         ST_IsValid(_st_buffer(ST_GeomFromText('POINT(15 20)',4236),1,1)) as is_valid;
+  select ST_SRID(_st_buffer(ST_GeomFromText('POINT(15 20)',4267),1,1)) as srid,
+         _ST_GeometryType(_st_buffer(ST_GeomFromText('POINT(15 20)',4267),1,1)) as geometry_type,
+         ST_IsValid(_st_buffer(ST_GeomFromText('POINT(15 20)',4267),1,1)) as is_valid;

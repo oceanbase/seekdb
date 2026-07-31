@@ -1,0 +1,47 @@
+--disable_result_log
+--disable_warnings
+drop table if exists plan_table;
+--enable_warnings
+create table plan_table (
+statement_id varchar(30),
+plan_id int,
+gmt_create timestamp,
+remarks varchar(4000),
+operator varchar(255),
+options varchar(255),
+object_node varchar(40),
+object_owner varchar(128),
+object_name varchar(128),
+object_alias varchar(261),
+object_instance int,
+object_type varchar(30),
+optimizer varchar(4000),
+search_columns int,
+id int,
+parent_id int,
+depth int,
+position int,
+is_last_child int,
+cost int,
+cardinality int,
+bytes int,
+rowset int,
+other_tag varchar(4000),
+partition_start varchar(4000),
+partition_stop varchar(4000),
+partition_id int,
+other varchar(4000),
+distribution varchar(64),
+cpu_cost int,
+io_cost int,
+temp_space int,
+access_predicates varchar(4000),
+filter_predicates varchar(4000),
+startup_predicates varchar(4000),
+projection varchar(4000),
+special_predicates longtext,
+time int,
+qblock_name varchar(128),
+other_xml varchar(4000)
+);
+--enable_result_log

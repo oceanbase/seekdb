@@ -2464,7 +2464,7 @@ int ObLogicalOperator::reorder_filters_exprs(common::ObIArray<ObExprSelPair> &pr
     double rank = 0;
     if (sel < 0) {
       // security filter should be calc firstly
-      rank = -NAN;
+      rank = -std::numeric_limits<double>::infinity();
     } else if (OB_FAIL(ObOptEstCost::calc_pred_cost_per_row(filter_exprs.at(i),
                                                             card,
                                                             cost_per_tuple,
@@ -2474,7 +2474,7 @@ int ObLogicalOperator::reorder_filters_exprs(common::ObIArray<ObExprSelPair> &pr
       rank = (sel - 1) / cost_per_tuple;
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(filter_ranks.push_back(ObExprRankPair(rank, filter_exprs.at(i))))) {
+      if (OB_FAIL(filter_ranks.push_back(ObExprRankPair(rank, i, filter_exprs.at(i))))) {
         LOG_WARN("push back failed", K(ret));
       }
     }
@@ -2482,7 +2482,7 @@ int ObLogicalOperator::reorder_filters_exprs(common::ObIArray<ObExprSelPair> &pr
   if (OB_SUCC(ret)) {
     lib::ob_sort(filter_ranks.begin(), filter_ranks.end(), ObExprRankPairCompare());
     for(int64_t i = 0; i < filter_ranks.count(); ++i) {
-      filter_exprs.at(i) = filter_ranks.at(i).second;
+      filter_exprs.at(i) = filter_ranks.at(i).expr_;
     }
   }
   return ret;
