@@ -127,14 +127,6 @@ using namespace oceanbase::share;
 namespace share = oceanbase::share;
 using namespace oceanbase::lib;
 
-static oceanbase::observer::ObInnerSQLConnectionPool *get_embed_inner_sql_conn_pool()
-{
-  if (OB_ISNULL(GCTX.sql_proxy_)) {
-    return nullptr;
-  }
-  return static_cast<oceanbase::observer::ObInnerSQLConnectionPool *>(GCTX.sql_proxy_->get_pool());
-}
-
 // RAII: redirect stdout/stderr to /dev/null for the scope so LOG_STDOUT (e.g. "successfully init log writer") does not print.
 struct SuppressLogStdoutScope {
     int saved_stdout = -1;
@@ -256,6 +248,7 @@ struct SeekdbResultSet {
 };
 
 struct SeekdbConnection {
+    ObISQLConnectionGuard embed_conn_guard;  // Owns embedded connection lifetime
     ObInnerSQLConnection* embed_conn;  // Embedded connection
     ObSQLSessionInfo* embed_session;  // Session for transaction management
     ObCommonSqlProxy::ReadResult* embed_result;  // Query result
@@ -306,12 +299,9 @@ struct SeekdbConnection {
             ob_free(embed_result);
             embed_result = nullptr;
         }
-        // Release connection (using OBSERVER macro like Python embed)
+        // Release connection (guard owns lifetime; reset releases via free_self)
         if (embed_conn) {
-            oceanbase::observer::ObInnerSQLConnectionPool *pool = get_embed_inner_sql_conn_pool();
-            if (OB_NOT_NULL(pool)) {
-                pool->release(embed_conn, true);
-            }
+            embed_conn_guard.reset();
             embed_conn = nullptr;
         }
         // Release session (like Python embed does)
@@ -1369,7 +1359,6 @@ static int do_seekdb_connect_inner(ConnectParams* params) {
     }
     
     int ret = OB_SUCCESS;
-    sqlclient::ObISQLConnection* inner_conn = nullptr;
     uint32_t sid = ObSQLSessionInfo::INVALID_SESSID;
     ObSQLSessionInfo* session = nullptr;
     const schema::ObUserInfo* user_info = nullptr;
@@ -1475,16 +1464,8 @@ static int do_seekdb_connect_inner(ConnectParams* params) {
     
     // Use OBSERVER macro directly like Python embed does
     if (OB_SUCC(ret)) {
-        oceanbase::observer::ObInnerSQLConnectionPool *inner_sql_pool = get_embed_inner_sql_conn_pool();
-        if (OB_ISNULL(inner_sql_pool)) {
-            set_error(conn, "inner sql conn pool not ready");
-            if (session) {
-                GCTX.session_mgr_->revert_session(session);
-            }
-            delete conn;
-            params->result = SEEKDB_ERROR_CONNECTION_FAILED;
-            return OB_SUCCESS;
-        } else if (OB_FAIL(inner_sql_pool->acquire(session, inner_conn))) {
+        if (OB_FAIL(ObInnerSQLConnection::create_connection_with_external_session(
+                session, conn->embed_conn_guard))) {
             set_error(conn, "acquire conn failed");
             if (session) {
                 GCTX.session_mgr_->revert_session(session);
@@ -1492,8 +1473,17 @@ static int do_seekdb_connect_inner(ConnectParams* params) {
             delete conn;
             params->result = SEEKDB_ERROR_CONNECTION_FAILED;
             return OB_SUCCESS;
+        } else if (!conn->embed_conn_guard.is_valid()) {
+            set_error(conn, "inner sql conn not ready");
+            if (session) {
+                GCTX.session_mgr_->revert_session(session);
+            }
+            delete conn;
+            params->result = SEEKDB_ERROR_CONNECTION_FAILED;
+            return OB_SUCCESS;
         } else {
-            conn->embed_conn = static_cast<ObInnerSQLConnection*>(inner_conn);
+            conn->embed_conn = static_cast<ObInnerSQLConnection*>(
+                conn->embed_conn_guard.get_ptr());
             conn->initialized = true;
             *handle = static_cast<SeekdbHandle>(conn);
             // Align with MySQL protocol: no schema refresh on connect; first query will do check_and_refresh_schema_for_embed.
@@ -1847,12 +1837,9 @@ static int do_seekdb_execute_inner(ExecuteParams* params) {
         // Get detailed error message (aligned with Python embed)
         std::string errmsg;
         const oceanbase::common::ObWarningBuffer *wb = oceanbase::common::ob_get_tsi_warning_buffer();
-        if (nullptr != wb) {
-            if (wb->get_err_code() == ret ||
-                (ret >= OB_MIN_RAISE_APPLICATION_ERROR && ret <= OB_MAX_RAISE_APPLICATION_ERROR)) {
-                if (wb->get_err_msg() != nullptr && wb->get_err_msg()[0] != '\0') {
-                    errmsg = std::string(wb->get_err_msg());
-                }
+        if (nullptr != wb && wb->get_err_code() == ret) {
+            if (wb->get_err_msg() != nullptr && wb->get_err_msg()[0] != '\0') {
+                errmsg = std::string(wb->get_err_msg());
             }
         }
         if (errmsg.empty()) {
@@ -3269,12 +3256,9 @@ static int do_seekdb_execute_update_inner(ExecuteUpdateParams* params) {
         // seeing only a generic "Update execution failed".
         std::string errmsg;
         const oceanbase::common::ObWarningBuffer *wb = oceanbase::common::ob_get_tsi_warning_buffer();
-        if (nullptr != wb) {
-            if (wb->get_err_code() == ret ||
-                (ret >= OB_MIN_RAISE_APPLICATION_ERROR && ret <= OB_MAX_RAISE_APPLICATION_ERROR)) {
-                if (wb->get_err_msg() != nullptr && wb->get_err_msg()[0] != '\0') {
-                    errmsg = std::string(wb->get_err_msg());
-                }
+        if (nullptr != wb && wb->get_err_code() == ret) {
+            if (wb->get_err_msg() != nullptr && wb->get_err_msg()[0] != '\0') {
+                errmsg = std::string(wb->get_err_msg());
             }
         }
         if (errmsg.empty()) {
