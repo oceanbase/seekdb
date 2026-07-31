@@ -1445,7 +1445,6 @@ static int do_seekdb_connect_inner(ConnectParams* params) {
                 } else {
                     session->set_priv_user_id(user_info->get_user_id());
                     session->set_user_priv_set(user_info->get_priv_set());
-                    session->init_use_rich_format();
                     ObObj param_val;
                     param_val.set_int(60 * 1000 * 1000);
                     if (OB_FAIL(session->update_sys_variable(oceanbase::SYS_VAR_OB_QUERY_TIMEOUT, param_val))) {
