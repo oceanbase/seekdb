@@ -53,7 +53,6 @@ namespace das
 const int64_t OB_DAS_TASK_BUFFER_SIZE = 2 * 1024 * 1024l - 8 * 1024;
 const int64_t OB_DAS_TOTAL_TASK_BUFFER_SIZE = OB_DAS_TASK_BUFFER_SIZE;
 // offset of das parallel thread_pool group_id
-static const int32_t OB_DAS_PARALLEL_POOL_MARK = 1 << 30;
 }  // namespace das
 
 enum class ObDasTaskStatus: uint8_t

@@ -73,6 +73,12 @@ if(EXISTS "${STDC_SHARED_LIB_SYMLINK}")
   message(STATUS "STDC_SHARED_LIB: ${STDC_SHARED_LIB}")
 endif()
 
+# Rust network engine: defines the mandatory `sql_nio` target linked into the
+# observer.
+include(cmake/Rust.cmake)
+# Make the Rust/C++ ABI header visible to oblib.
+include_directories(${CMAKE_SOURCE_DIR}/rust/sql-nio/include)
+
 add_subdirectory(deps/oblib)
 add_subdirectory(src)
 

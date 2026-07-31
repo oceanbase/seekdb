@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "util/easy_mod_stat.h"
 #include "observer/mysql/obmp_connect.h"
+#include "rpc/ob_sql_request_operator.h"
 #include "observer/ob_server.h"
 #include "observer/omt/ob_server_runtime.h"
 #include "storage/tx/ob_weak_read_util.h"      //ObWeakReadUtil
@@ -90,9 +90,15 @@ int ObMPConnect::deserialize()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid req_", K(ret), K(req_));
   } else {
-    hsr_ = reinterpret_cast<const OMPKHandshakeResponse&>(req_->get_packet());
-    if (OB_FAIL(hsr_.decode())) {
-      LOG_WARN("decode hsr fail", K(ret));
+    // Rust owns the login parse now; the request carries the raw login body and
+    // the view maps Rust's offsets onto it (server_handle_context is the session
+    // handle the nio_login_* getters are keyed by).
+    const obmysql::ObMySQLRawPacket &login_pkt =
+        reinterpret_cast<const obmysql::ObMySQLRawPacket&>(req_->get_packet());
+    const uint64_t generation = req_->get_nio_request_generation();
+    if (OB_FAIL(hsr_.load(req_->get_server_handle_context(), generation,
+                          login_pkt.get_cdata(), login_pkt.get_clen()))) {
+      LOG_WARN("load login view fail", K(ret));
     } else {
       conn->cap_flags_ = hsr_.get_capability_flags();
       conn->client_cs_type_ = hsr_.get_char_set();
@@ -100,6 +106,11 @@ int ObMPConnect::deserialize()
       user_name_ = extract_user_name(hsr_.get_username());
       LOG_DEBUG("database name", K(hsr_.get_database()));
     }
+    // get_user_tenant() is an earlier consumer of the same Rust login view and
+    // ObMPConnect is the final one, but neither releases it: nio_commit_request
+    // frees unclaimed login metadata when the request completes, making commit
+    // the single owner instead of a comment-enforced "last consumer releases"
+    // protocol spread across three files.
 
     deser_ret_ = ret;  // record deserialize ret code.
     ret = OB_SUCCESS;  // return OB_SUCCESS anyway.
@@ -255,7 +266,6 @@ int ObMPConnect::process()
     const ObCSProtocolType protoType = conn->get_cs_protocol_type();
     const uint32_t sessid = conn->sessid_;
     const uint32_t capability = conn->cap_flags_.capability_;
-    const bool use_ssl = conn->cap_flags_.cap_flags_.OB_CLIENT_SSL;
 
     if (OB_SUCC(proc_ret)) {
       // send packet for client
@@ -306,7 +316,7 @@ int ObMPConnect::process()
     LOG_INFO("MySQL LOGIN", "direct_client_ip", client_ip_buf, K_(client_ip),
              K_(user_name), K(host_name),
              K(sessid),
-             K(capability), K(use_ssl),
+             K(capability),
              "c/s protocol", get_cs_protocol_type_name(protoType),
              K(autocommit), K(proc_ret), K(ret), K(conn->client_version_));
   }
@@ -367,7 +377,6 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
       share::schema::ObUserLoginInfo login_info;
       login_info.user_name_ = user_name_;
       login_info.client_ip_ = client_ip_;
-      SSL *ssl_st = SQL_REQ_OP.get_sql_ssl_st(req_);
       const ObUserInfo *user_info = NULL;
       // Normalize the requested database name before session privilege checks.
       if (!db_name_.empty()) {
@@ -411,12 +420,16 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
           // "AuthSwitchRequest" carry 20 bit random salt value(MySQL call it scramble) to client which has sent in "Initial Handshake Packet"
           auth_switch.set_scramble(ObString(sizeof(conn->scramble_buf_), conn->scramble_buf_));
           /*-------------------START-----------------If error occur, disconnect-------------------START-----------------*/
-          if (OB_FAIL(packet_sender_.response_packet(auth_switch, &session))) {
+          if (OB_FAIL(packet_sender_.response_packet(auth_switch))) {
             RPC_LOG(WARN, "failed to send auth switch request packet, disconnect", K(auth_switch), K(ret));
             LOG_WARN("failed to send auth switch request packet, disconnect", K(auth_switch), K(ret));
             packet_sender_.disable_response(); // The connection is about to be closed, do not need response ok pkt or err pkt, so disable it
             disconnect();// If send "AuthSwitchRequest" failed, observer need disconnect with client
-          } else if (OB_FAIL(packet_sender_.flush_buffer(false/*is_last*/))) { // "AuthSwitchRequest" may not have been sent yet, flush the buffer to ensure it has been sent.
+          } else if (OB_FAIL(packet_sender_.flush_buffer(
+                         false /*is_last*/))) { // "AuthSwitchRequest" may not
+                                                // have been sent yet, flush the
+                                                // buffer to ensure it has been
+                                                // sent.
             RPC_LOG(WARN, "failed to flush socket buffer while sending auth switch request packet, disconnect", K(auth_switch), K(ret));
             LOG_WARN("failed to flush socket buffer while sending auth switch request packet, disconnect", K(auth_switch), K(ret));
             packet_sender_.disable_response(); // The connection is about to be closed, do not need response ok pkt or err pkt, so disable it
@@ -424,38 +437,22 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
           } else {
             LOG_TRACE("suuc to send auth switch request", K(ret));
             obmysql::ObMySQLPacket *asr_pkt = NULL;
-            int64_t start_wait_asr_time = ObTimeUtil::current_time();
-            int receive_asr_times = 0;
-            while (OB_SUCC(ret) && OB_ISNULL(asr_pkt)) {
-              ++receive_asr_times;
-              usleep(10 * 1000); // Sleep 10 ms at every time trying receive auth-switch-response mysql pkt
-              // TO DO:
-              // In most unix system, The max TCP Retransmission Timeout is under 240 seconds, 
-              // we need to set a suitable timeout, what should this be?
-              if (ObTimeUtil::current_time() - start_wait_asr_time > 10000000) { 
-                ret = OB_WAIT_NEXT_TIMEOUT;
-                RPC_LOG(WARN, "read auth switch response pkt timeout, disconnect", K(ret), K(receive_asr_times));
-                LOG_WARN("read auth switch response pkt timeout, disconnect", K(ret), K(receive_asr_times));
-                packet_sender_.disable_response(); // The connection is about to be closed, do not need response ok pkt or err pkt, so disable it
-                disconnect(); // If receive "AuthSwitchResponse" timeout, observer need disconnect with client
-              } else if (OB_FAIL(read_packet(asr_mem_pool_, asr_pkt))) {
-                RPC_LOG(WARN, "failed to read auth switch response pkt, disconnect", K(ret), K(receive_asr_times));
-                LOG_WARN("failed to read auth switch response pkt, disconnect", K(ret), K(receive_asr_times));
-                packet_sender_.disable_response(); // The connection is about to be closed, do not need response ok pkt or err pkt, so disable it
-                disconnect(); // If receive "AuthSwitchResponse" failed, observer need disconnect with client
-              } else {
-                LOG_WARN("succ try to read auth switch response pkt", K(ret), K(receive_asr_times), KP(asr_pkt));
-              }
-            }
-            if (OB_FAIL(ret)) {
-              // Do nothing
-            } else if (OB_ISNULL(asr_pkt)) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("unexpected null ptr, disconnect", K(ret));
+            static const int64_t AUTH_SWITCH_TIMEOUT_US = 10 * 1000000L;
+            if (OB_FAIL(packet_sender_.wait_packet(
+                    asr_mem_pool_, AUTH_SWITCH_TIMEOUT_US, asr_pkt))) {
+              RPC_LOG(WARN, "failed to wait for auth switch response pkt, disconnect", K(ret));
+              LOG_WARN("failed to wait for auth switch response pkt, disconnect", K(ret));
               packet_sender_.disable_response(); // The connection is about to be closed, do not need response ok pkt or err pkt, so disable it
               disconnect(); // If receive "AuthSwitchResponse" failed, observer need disconnect with client
+            } else if (OB_ISNULL(asr_pkt)) {
+              ret = OB_WAIT_NEXT_TIMEOUT;
+              RPC_LOG(WARN, "read auth switch response pkt timeout, disconnect", K(ret));
+              LOG_WARN("read auth switch response pkt timeout, disconnect", K(ret));
+              packet_sender_.disable_response();
+              disconnect();
             } else {
-            /*--------------------END------------------if error occur, disconnect--------------------END------------------*/
+              /*--------------------END------------------if error occur,
+               * disconnect--------------------END------------------*/
               LOG_TRACE("suuc to receive auth switch response", K(ret));
               const obmysql::ObMySQLRawPacket *asr_raw_pkt  = reinterpret_cast<const ObMySQLRawPacket*>(asr_pkt);
               const char *auth_data = asr_raw_pkt->get_cdata();
@@ -475,7 +472,13 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
                 login_info.scramble_str_.assign_ptr(conn->scramble_buf_, static_cast<ObString::obstr_size_t>(sizeof(conn->scramble_buf_)));
                 login_info.passwd_.assign_ptr(static_cast<const char*>(auth_buf), auth_data_len);
               }
-              packet_sender_.release_packet(asr_pkt);
+              const int release_ret = packet_sender_.release_packet(asr_pkt);
+              if (OB_SUCCESS != release_ret) {
+                LOG_WARN("failed to release auth switch response pkt", K(release_ret));
+                if (OB_SUCC(ret)) {
+                  ret = release_ret;
+                }
+              }
               asr_pkt = NULL;
               asr_raw_pkt = NULL;
             }
@@ -484,7 +487,7 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
         }
       }
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(schema_guard.check_user_access(login_info, session_priv, enable_role_id_array, ssl_st, user_info))) {
+      } else if (OB_FAIL(schema_guard.check_user_access(login_info, session_priv, enable_role_id_array, NULL, user_info))) {
         int tmp_ret = OB_SUCCESS;
         ObMultiVersionSchemaService *schema_service = gctx_.schema_service_;
         int64_t local_version = OB_INVALID_VERSION;
@@ -501,7 +504,7 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
                                     schema_guard))) {
             LOG_WARN("get schema guard failed", K(ret), K(tmp_ret));
           } else if (OB_FAIL(schema_guard.check_user_access(login_info, session_priv,
-                     enable_role_id_array, ssl_st, user_info))) {
+                     enable_role_id_array, NULL, user_info))) {
             LOG_WARN("User access denied", K(login_info), K(ret));
           }
         }
@@ -700,7 +703,7 @@ int ObMPConnect::verify_identify(ObSMConnection &conn, ObSQLSessionInfo &session
   } else {
     session.update_last_active_time();
     SQL_REQ_OP.get_sock_desc(req_, session.get_sock_desc());
-    SQL_REQ_OP.set_sql_session_to_sock_desc(req_, (void *)&session);
+    SQL_REQ_OP.bind_sql_session(req_);
     session.set_peer_addr(get_peer());
     session.set_client_addr(get_peer());
     session.set_trans_type(transaction::ObTxClass::USER);

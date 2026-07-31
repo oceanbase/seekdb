@@ -44,8 +44,6 @@ int ObMPPing::process()
 {
   int ret = OB_SUCCESS;
   sql::ObSQLSessionInfo *session = NULL;
-  bool need_response_error = true; //temporary placeholder
-  const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
   if (OB_FAIL(get_session(session))) {
     LOG_WARN("get session fail", K(ret));
   } else if (OB_ISNULL(session)) {

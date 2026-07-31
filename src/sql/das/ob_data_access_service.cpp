@@ -257,7 +257,7 @@ int ObDataAccessService::do_local_das_task(ObIArray<ObIDASTaskOp*> &task_list) {
   return ret;
 }
 
-int ObDataAccessService::push_parallel_task(ObDASRef &das_ref, ObDasAggregatedTask &agg_task, int32_t group_id)
+int ObDataAccessService::push_parallel_task(ObDASRef &das_ref, ObDasAggregatedTask &agg_task)
 {
   int ret = OB_SUCCESS;
   ObDASParallelTask *task = nullptr;
@@ -270,7 +270,7 @@ int ObDataAccessService::push_parallel_task(ObDASRef &das_ref, ObDasAggregatedTa
   } else if (OB_ISNULL(task = ObDASParallelTaskFactory::alloc(das_ref.get_das_ref_count_ctx()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc memory failed", K(ret));
-  } else if (OB_FAIL(task->init(&agg_task, timeout_ts, group_id))) {
+  } else if (OB_FAIL(task->init(&agg_task, timeout_ts))) {
     LOG_WARN("init parallel task failed", K(ret), K(agg_task));
   } else {
     
@@ -308,12 +308,9 @@ int ObDataAccessService::parallel_submit_das_task(ObDASRef &das_ref, ObDasAggreg
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = das_ref.get_exec_ctx().get_my_session();
   int64_t timeout_ts = session->get_query_timeout_ts();
-  int32_t group_id = 0;
-  int32_t das_group_id = group_id | das::OB_DAS_PARALLEL_POOL_MARK;
-  LOG_TRACE("print group_id", K(group_id), K(das::OB_DAS_PARALLEL_POOL_MARK), K(das_group_id));
   if (OB_FAIL(das_ref.get_das_ref_count_ctx().acquire_task_execution_resource(timeout_ts))) {
     LOG_WARN("fail to acquire resource", K(ret));
-  } else if (OB_FAIL(push_parallel_task(das_ref, agg_task, das_group_id))) {
+  } else if (OB_FAIL(push_parallel_task(das_ref, agg_task))) {
     // NOTICE: if error occur, must release the reference count
     das_ref.get_das_ref_count_ctx().inc_concurrency_limit();
     LOG_WARN("fail to push parallel task", K(ret));

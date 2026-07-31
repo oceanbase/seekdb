@@ -61,9 +61,6 @@ int ObServerReloadConfig::operator()()
     if (OB_TMP_FAIL(OBSERVER.get_net_frame().reload_config())) {
       LOG_WARN("reload configuration for net frame fail", K(tmp_ret));
     }
-    if (OB_TMP_FAIL(OBSERVER.get_net_frame().reload_ssl_config())) {
-      LOG_WARN("reload ssl config for net frame fail", K(tmp_ret));
-    }
 
   }
   {
@@ -151,8 +148,6 @@ int ObServerReloadConfig::operator()()
   // moved from share ObConfigManager::reload_config(share base must not touch observer components;
   // this function is the original reload_config_func_ call site,order and fail-fast semantics are preserved)
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(OBSERVER.get_net_frame().reload_ssl_config())) {
-    LOG_WARN("reload ssl config for net frame fail", K(ret));
   } else if (OB_FAIL(GCTX.server_runtime_controller_->refresh_runtime_resources())) {
     LOG_WARN("refresh server runtime resources failed", K(ret));
   }

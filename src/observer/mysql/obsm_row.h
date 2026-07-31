@@ -36,7 +36,7 @@ class ObSchemaGetterGuard;
 namespace common
 {
 
-class ObSMRow
+class ObSMRow final
     : public obmysql::ObMySQLRow
 {
 public:
@@ -49,20 +49,21 @@ public:
 
   virtual ~ObSMRow() {}
 
+  int build_cell_value(int64_t idx, ObIAllocator &scratch_allocator,
+                       obmysql::ObMySQLCellValue &out) const override;
+  int get_packed_row_blob(const char *&data, int64_t &len) const override;
+
 protected:
-  virtual int64_t get_cells_cnt() const
+  int64_t get_cells_cnt() const override
   {
     return NULL == obrow_.projector_
         ? obrow_.count_
         : obrow_.projector_size_;
   }
-  virtual int encode_cell(
-      int64_t idx, char *buf,
-      int64_t len, int64_t &pos, char *bitmap) const;
 
 private:
   const ObNewRow &obrow_;
-  const ObDataTypeCastParams dtc_params_;
+  const ObDataTypeCastParams &dtc_params_;
   const sql::ObSQLSessionInfo &session_;
   const ColumnsFieldIArray *fields_;
   share::schema::ObSchemaGetterGuard *schema_guard_;

@@ -246,8 +246,8 @@ int ObSqlTransControl::end_trans(ObSQLSessionInfo *session,
         LOG_WARN("fail to inc session ref", K(ret));
       } else {
         callback->handout();
+        callback->callback(OB_SUCCESS);
       }
-      callback->callback(OB_SUCCESS);
     } else {
       reset_session_tx_state(session, true, reset_trans_variable);
       need_disconnect = false;

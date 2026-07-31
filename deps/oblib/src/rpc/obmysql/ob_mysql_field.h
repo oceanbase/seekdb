@@ -19,8 +19,9 @@
 
 #include <stdint.h>
 #include "lib/string/ob_string.h"
+#include "lib/utility/ob_print_utils.h"
 #include "common/ob_accuracy.h"
-#include "rpc/obmysql/ob_mysql_util.h"
+#include "common/mysqlclient/ob_mysql_global.h"
 
 namespace oceanbase
 {
@@ -29,63 +30,16 @@ namespace obmysql
 class ObMySQLField
 {
 public:
-  ObMySQLField();
-  /**
-   * serialize data to the format recognized by MySQL
-   *
-   * @param [in] buf data after serializing
-   * @param [in] len buf size
-   * @param [in,out] pos input is valid offset of buf, output is valid offset of buf after serialization.
-   *
-   * @return return oceanbase error code.
-   */
-  int serialize(char *buf, const int64_t len, int64_t &pos) const
-  {
-    return serialize_pro41(buf, len, pos);
-  }
+  ObMySQLField()
+      : type_(MYSQL_TYPE_NOT_DEFINED),
+        flags_(0),
+        default_value_(MYSQL_TYPE_NOT_DEFINED),
+        charsetnr_(0),
+        length_(0),
+        inout_mode_(0)
+  {}
 
-  void set_charset_number(uint16_t number)
-  {
-    charsetnr_ = number;
-  }
   int64_t to_string(char *buffer, int64_t len) const;
-
-
-  static int my_decimal_precision_to_length_no_truncation(
-      int32_t &ans,
-      int16_t precision,
-      int16_t scale,
-      bool unsigned_flag)
-  {
-    int ret = OB_SUCCESS;
-    /*
-     * When precision is 0 it means that original length was also 0. Thus
-     * unsigned_flag is ignored in this case.
-     **/
-    if (precision || !scale) {
-      ans = (int32_t)(precision + (scale > 0 ? 1 : 0) +
-                     (unsigned_flag || !precision ? 0 : 1));
-    } else {
-      ret = OB_INVALID_ARGUMENT;
-    }
-    return ret;
-  }
-private:
-  /**
-   * serialize data to the format recognized by MySQL(version 4.1)
-   *
-   * @param [in] buf data after serializing
-   * @param [in] len buf size
-   * @param [in,out] pos input is valid offset of buf, output is valid offset of buf after serialization.
-   *
-   * @return return oceanbase error code.
-   */
-  int serialize_pro41(char *buf, const int64_t len, int64_t &pos) const;
-
-private:
-  const char *catalog_;     /* Catalog for table */
-  // void *extension;
-
 public:
   common::ObString dname_;
   common::ObString tname_; // table name for display

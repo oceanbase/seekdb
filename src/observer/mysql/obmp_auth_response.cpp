@@ -34,11 +34,8 @@ int ObMPAuthResponse::process()
   ObSMConnection *conn = NULL;
   sql::ObSQLSessionInfo *session = NULL;
   int64_t query_timeout = 0;
-  const ObMySQLRawPacket &mysql_pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
 
-  if (OB_FAIL(packet_sender_.alloc_ezbuf())) {
-    LOG_WARN("failed to alloc easy buf", K(ret));
-  } else if (OB_ISNULL(conn = get_conn())) {
+  if (OB_ISNULL(conn = get_conn())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get connection fail", K(conn), K(ret));
   } else if (OB_FAIL(get_session(session))) {
@@ -52,7 +49,8 @@ int ObMPAuthResponse::process()
   } else if (OB_FAIL(session->set_login_auth_data(auth_data_))) {
     LOG_WARN("failed to set login auth data", K(ret));
   } else if (OB_FAIL(load_privilege_info_for_change_user(session))) {
-      OB_LOG(WARN,"load privilige info failed", K(ret),K(session->get_server_sid()));
+    OB_LOG(WARN, "load privilige info failed", K(ret),
+           K(session->get_server_sid()));
   } else {
     conn->set_auth_phase();
     ObOKPParam ok_param; // use default values

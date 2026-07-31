@@ -17,7 +17,7 @@
 #ifndef _OBMP_CONNECT_H_
 #define _OBMP_CONNECT_H_
 
-#include "rpc/obmysql/packet/ompk_handshake_response.h"
+#include "rpc/obmysql/ob_login_info.h"
 #include "observer/mysql/obmp_base.h"
 #include "rpc/obmysql/ob_i_cs_mem_pool.h"
 
@@ -85,7 +85,7 @@ private:
   int set_client_version(ObSMConnection &conn);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMPConnect);
-  obmysql::OMPKHandshakeResponse hsr_;
+  obmysql::ObHandshakeResponse hsr_;
   common::ObString user_name_;
   common::ObString client_ip_;
   common::ObString db_name_;

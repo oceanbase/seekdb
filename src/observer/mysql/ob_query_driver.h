@@ -38,7 +38,7 @@ class ObResultSet;
 namespace observer
 {
 
-class ObIMPPacketSender;
+class ObMPPacketSender;
 class ObMySQLResultSet;
 class ObQueryRetryCtrl;
 class ObQueryDriver
@@ -50,7 +50,7 @@ public:
                 const sql::ObSqlCtx &ctx,
                 sql::ObSQLSessionInfo &session,
                 ObQueryRetryCtrl &retry_ctrl,
-                ObIMPPacketSender &sender)
+                ObMPPacketSender &sender)
     : gctx_(gctx),
       ctx_(ctx),
       session_(session),
@@ -63,20 +63,17 @@ public:
   }
 
   virtual int response_result(ObMySQLResultSet &result) = 0;
-  virtual int response_query_header(sql::ObResultSet &result,
-                            bool has_more_result,
-                            bool need_set_ps_out_flag,
-                            bool need_flush_buffer = false);
+  int response_query_header(sql::ObResultSet &result, bool has_more_result,
+                            bool need_set_ps_out_flag);
   virtual int response_query_result(sql::ObResultSet &result,
                                     bool is_ps_protocol,
                                     bool has_more_result,
                                     bool &can_retry,
                                     int64_t fetch_limit  = common::OB_INVALID_COUNT);
-  ObIMPPacketSender& get_packet_sender() { return sender_; }
+  ObMPPacketSender& get_packet_sender() { return sender_; }
   int response_query_header(const ColumnsFieldIArray &fields,
                                     bool has_more_result = false,
                                     bool need_set_ps_out = false,
-                                    bool ps_cursor_execute = false,
                                     sql::ObResultSet *result = NULL);
   int convert_string_value_charset(common::ObObj& value, sql::ObResultSet &result,
                                    ObCharsetType charset_type);
@@ -117,7 +114,7 @@ protected:
   const sql::ObSqlCtx &ctx_;
   sql::ObSQLSessionInfo &session_;
   ObQueryRetryCtrl &retry_ctrl_;
-  ObIMPPacketSender &sender_;
+  ObMPPacketSender &sender_;
   /* const */
   /* disallow copy & assign */
   DISALLOW_COPY_AND_ASSIGN(ObQueryDriver);

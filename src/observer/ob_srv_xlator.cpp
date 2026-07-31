@@ -17,28 +17,30 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/ob_srv_xlator.h"
-#include "sql/ob_sql_task.h"
-#include "observer/mysql/obmp_query.h"
-#include "observer/mysql/obmp_ping.h"
-#include "observer/mysql/obmp_quit.h"
-#include "observer/mysql/obmp_connect.h"
-#include "observer/mysql/obmp_init_db.h"
-#include "observer/mysql/obmp_default.h"
-#include "observer/mysql/obmp_change_user.h"
-#include "observer/mysql/obmp_error.h"
-#include "observer/mysql/obmp_statistic.h"
-#include "observer/mysql/obmp_stmt_prepare.h"
-#include "observer/mysql/obmp_stmt_fetch.h"
-#include "observer/mysql/obmp_stmt_close.h"
-#include "observer/mysql/obmp_stmt_send_long_data.h"
-#include "observer/mysql/obmp_stmt_reset.h"
-#include "observer/mysql/obmp_reset_connection.h"
+#include "rpc/ob_sql_request_operator.h"
 #include "observer/mysql/obmp_auth_response.h"
-#include "observer/mysql/obmp_set_option.h"
-#include "observer/mysql/obmp_process_kill.h"
-#include "observer/mysql/obmp_process_info.h"
+#include "observer/mysql/obmp_change_user.h"
+#include "observer/mysql/obmp_connect.h"
 #include "observer/mysql/obmp_debug.h"
+#include "observer/mysql/obmp_default.h"
+#include "observer/mysql/obmp_error.h"
+#include "observer/mysql/obmp_init_db.h"
+#include "observer/mysql/obmp_ping.h"
+#include "observer/mysql/obmp_process_info.h"
+#include "observer/mysql/obmp_process_kill.h"
+#include "observer/mysql/obmp_query.h"
+#include "observer/mysql/obmp_quit.h"
 #include "observer/mysql/obmp_refresh.h"
+#include "observer/mysql/obmp_reset_connection.h"
+#include "observer/mysql/obmp_set_option.h"
+#include "observer/mysql/obmp_statistic.h"
+#include "observer/mysql/obmp_stmt_close.h"
+#include "observer/mysql/obmp_stmt_execute.h"
+#include "observer/mysql/obmp_stmt_fetch.h"
+#include "observer/mysql/obmp_stmt_prepare.h"
+#include "observer/mysql/obmp_stmt_reset.h"
+#include "observer/mysql/obmp_stmt_send_long_data.h"
+#include "sql/ob_sql_task.h"
 
 #include "sql/das/ob_das_parallel_handler.h"
 
@@ -143,8 +145,7 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
           processor = p;
         }
       } else if (pkt.get_cmd() == obmysql::COM_PROCESS_INFO) {
-        ObSMConnection *conn = reinterpret_cast<ObSMConnection* >(
-            SQL_REQ_OP.get_sql_session(&req));
+        ObSMConnection *conn = SQL_REQ_OP.get_sql_session(&req);
         if (OB_ISNULL(conn)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected null", K(conn), K(ret));
@@ -161,8 +162,7 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
           }
         }
       } else if (pkt.get_cmd() == obmysql::COM_PROCESS_KILL) {
-        ObSMConnection *conn = reinterpret_cast<ObSMConnection* >(
-            SQL_REQ_OP.get_sql_session(&req));
+        ObSMConnection *conn = SQL_REQ_OP.get_sql_session(&req);
         if (OB_ISNULL(conn)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected null", K(conn), K(ret));
@@ -213,8 +213,7 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
           }
           case obmysql::COM_FIELD_LIST: {
             // COM_FIELD_LIST is served through the normal query path.
-            ObSMConnection *conn = reinterpret_cast<ObSMConnection* >(
-                SQL_REQ_OP.get_sql_session(&req));
+            ObSMConnection *conn = SQL_REQ_OP.get_sql_session(&req);
             if (OB_ISNULL(conn)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("get unexpected null", K(conn), K(ret));
@@ -237,7 +236,7 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
         }
       }
       if (OB_SUCC(ret) && pkt.get_cmd() != obmysql::COM_QUERY) {
-        ObSMConnection *conn = reinterpret_cast<ObSMConnection *>(SQL_REQ_OP.get_sql_session(&req));
+        ObSMConnection *conn = SQL_REQ_OP.get_sql_session(&req);
         if (OB_ISNULL(conn) || OB_ISNULL(dynamic_cast<ObMPBase *>(processor))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected null", K(dynamic_cast<ObMPBase *>(processor)));

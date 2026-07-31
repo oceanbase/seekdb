@@ -40,10 +40,13 @@ int ObMPStmtReset::deserialize()
     LOG_WARN("invalid packet", K(ret), K_(req), K(req_->get_type()));
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
-    const char* pos = pkt.get_cdata();
-    uint32_t stmt_id = -1; //INVALID_STMT_ID
-    ObMySQLUtil::get_uint4(pos, stmt_id);
-    stmt_id_ = stmt_id;
+    if (OB_UNLIKELY(ObMySQLCommandLayout::U32 != pkt.get_command_layout())) {
+      ret = OB_INVALID_DATA;
+      LOG_WARN("unexpected stmt-reset command layout", K(ret),
+               K(pkt.get_command_layout()));
+    } else {
+      stmt_id_ = static_cast<uint32_t>(pkt.get_command_scalar0());
+    }
   }
   return ret;
 }
@@ -54,7 +57,6 @@ int ObMPStmtReset::process()
   bool need_disconnect = true;
   bool need_response_error = true;
   sql::ObSQLSessionInfo *session = NULL;
-  const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
   if (OB_ISNULL(req_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid packet", K(ret), KP(req_));

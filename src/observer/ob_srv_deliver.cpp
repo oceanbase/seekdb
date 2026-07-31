@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/ob_srv_deliver.h"
+#include "rpc/ob_sql_request_operator.h"
 #include "share/rc/ob_module_provider.h"
 
 #include "util/easy_mod_stat.h"
@@ -94,10 +95,8 @@ int ObSrvDeliver::deliver_mysql_request(ObRequest &req)
 {
   int ret = OB_SUCCESS;
   ObServerRuntime *runtime = NULL;
-  void *sess = SQL_REQ_OP.get_sql_session(&req);
-  ObSMConnection *conn = NULL;
-  if (NULL != sess) {
-    conn = static_cast<ObSMConnection *>(sess);
+  ObSMConnection *conn = SQL_REQ_OP.get_sql_session(&req);
+  if (NULL != conn) {
     runtime = conn->runtime_;
     req.set_group_id(conn->group_id_);
   } else {
@@ -116,8 +115,8 @@ int ObSrvDeliver::deliver_mysql_request(ObRequest &req)
           = reinterpret_cast<const obmysql::ObMySQLRawPacket &>(req.get_packet());
       if (need_update_stat) {
         EVENT_INC(MYSQL_PACKET_IN);
-        EVENT_ADD(MYSQL_PACKET_IN_BYTES, pkt.get_clen() + OB_MYSQL_HEADER_LENGTH);
-        conn->connect_in_bytes_ = pkt.get_clen() + OB_MYSQL_HEADER_LENGTH;
+        EVENT_ADD(MYSQL_PACKET_IN_BYTES, pkt.get_wire_bytes());
+        conn->connect_in_bytes_ = static_cast<int64_t>(pkt.get_wire_bytes());
       }
 
       if (OB_UNLIKELY(SQL_REQ_OP.get_peer(&req).get_port() <= 0)) {
@@ -136,7 +135,7 @@ int ObSrvDeliver::deliver_mysql_request(ObRequest &req)
 
       if (need_update_stat) {
         EVENT_INC(MYSQL_PACKET_IN);
-        EVENT_ADD(MYSQL_PACKET_IN_BYTES, pkt.get_clen() + OB_MYSQL_HEADER_LENGTH);
+        EVENT_ADD(MYSQL_PACKET_IN_BYTES, pkt.get_wire_bytes());
       }
       // Runtime validity was checked when the connection was authenticated.
 

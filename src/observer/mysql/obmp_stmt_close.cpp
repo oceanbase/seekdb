@@ -40,10 +40,13 @@ int ObMPStmtClose::deserialize()
     LOG_WARN("invalid packet", K(ret), K_(req), K(req_->get_type()));
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
-    const char* pos = pkt.get_cdata();
-    uint32_t stmt_id = -1; //INVALID_STMT_ID
-    ObMySQLUtil::get_uint4(pos, stmt_id);
-    stmt_id_ = stmt_id;
+    if (OB_UNLIKELY(ObMySQLCommandLayout::U32 != pkt.get_command_layout())) {
+      ret = OB_INVALID_DATA;
+      LOG_WARN("unexpected stmt-close command layout", K(ret),
+               K(pkt.get_command_layout()));
+    } else {
+      stmt_id_ = static_cast<uint32_t>(pkt.get_command_scalar0());
+    }
   }
   return ret;
 }
@@ -65,7 +68,6 @@ int ObMPStmtClose::process()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL or invalid", K(ret), K(session));
   } else {
-    const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
     LOG_TRACE("close ps stmt or cursor", K_(stmt_id), K(session->get_server_sid()));
     if (is_cursor_close()) {

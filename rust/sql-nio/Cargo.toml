@@ -1,0 +1,51 @@
+[package]
+name = "sql-nio"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Rust reimplementation of seekdb's ObSqlNioImpl network engine, exposed over a C ABI."
+
+# Accepted deviations from clippy defaults, with reasons. Keep this list short;
+# anything not listed here must stay clean under `cargo clippy -- -D warnings`.
+[lints.clippy]
+# The C ABI in include/nio.h fixes the FFI signatures; their arity is not ours
+# to choose.
+too_many_arguments = "allow"
+
+[lib]
+name = "sql_nio"
+# staticlib -> libsql_nio.a for linking into C++ (the future ObSqlNio shell);
+# rlib      -> cargo test / Rust consumers.
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+# mio = epoll (Linux) / kqueue (macOS) / IOCP (Windows), no async runtime.
+# os-ext: mio::windows::NamedPipe for the per-reactor pending-pipe acceptor.
+mio = { version = "1", features = ["os-poll", "net", "os-ext"] }
+# flate2 = zlib for the compressed MySQL protocol.
+flate2 = "1"
+# Direct-indexed storage for the reactor's mio Token -> connection hot table.
+slab = "0.4"
+# TCP keepalive configuration for accepted sockets on every supported OS.
+socket2 = { version = "0.6", features = ["all"] }
+# TLS for the MySQL channel. default-features=false drops the aws-lc-rs
+# provider (which would need cmake + bindgen reachable from cargo); `ring`
+# ships pre-generated assembly and needs only the C compiler already required
+# by the rest of the build. tls12 stays on: MySQL 5.7-era libmysqlclient never
+# negotiates TLS 1.3.
+rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"] }
+# PEM certificate/key loaders (ServerConfig inputs) live here.
+rustls-pki-types = { version = "1", features = ["std"] }
+
+# libc::shutdown is only used on the Unix path.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+# CreateNamedPipeW for re-armed pipe instances (mio's NamedPipe::new only
+# creates the first) plus its error constants.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Pipes",
+] }

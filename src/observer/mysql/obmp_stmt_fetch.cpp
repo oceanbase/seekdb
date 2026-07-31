@@ -57,16 +57,20 @@ int ObMPStmtFetch::before_process()
     LOG_ERROR("invalid request", K(ret), K_(*req));
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
-    const char* pos = pkt.get_cdata();
-    uint32_t cursor_id = -1; //OB_INVALID_ID;
-    ObMySQLUtil::get_uint4(pos, cursor_id);
-    cursor_id_ = cursor_id;
-    int32_t fetch_rows = 0;
-    ObMySQLUtil::get_int4(pos, fetch_rows);
-    fetch_rows_ = fetch_rows;
-    if (pkt.get_clen() > FETCH_PACKET_SIZE_WITHOUT_OFFSET) {
+    ObString tail;
+    if (OB_UNLIKELY(ObMySQLCommandLayout::FETCH != pkt.get_command_layout())) {
+      ret = OB_INVALID_DATA;
+      LOG_WARN("unexpected stmt-fetch command layout", K(ret),
+               K(pkt.get_command_layout()));
+    } else if (OB_FAIL(pkt.get_command_field(0, tail))) {
+      LOG_WARN("get rust parsed stmt-fetch tail failed", K(ret));
+    } else if (!tail.empty()) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not support offset type in mysql mode.", K(ret), K(cursor_id));
+      LOG_WARN("not support offset type in mysql mode.", K(ret),
+               K(pkt.get_command_scalar0()));
+    } else {
+      cursor_id_ = static_cast<uint32_t>(pkt.get_command_scalar0());
+      fetch_rows_ = static_cast<int32_t>(pkt.get_command_scalar1());
     }
   }
   if (OB_FAIL(ret)) {
@@ -200,12 +204,8 @@ int ObMPStmtFetch::response_query_header(ObSQLSessionInfo &session,
   bool ac = true;
   ObSqlCtx ctx;
   ObQueryRetryCtrl retry_ctrl;
-  ObSyncPlanDriver drv(gctx_,
-                           ctx,
-                           session,
-                           retry_ctrl,
-                           *this,
-                           OB_INVALID_COUNT);
+  ObSyncPlanDriver drv(gctx_, ctx, session, retry_ctrl, packet_sender_,
+                       OB_INVALID_COUNT);
   if (NULL == fields) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(drv.response_query_header(*fields, false, false))) {
@@ -361,12 +361,7 @@ int ObMPStmtFetch::response_result(pl::ObPLServerCursorInfo &cursor,
         }
         eofp.set_server_status(flags);
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(packet_sender_.alloc_ezbuf())) {
-            LOG_WARN("failed to alloc easy buf", K(ret));
-          }
-        }
-        if (OB_SUCC(ret)) {
-          if (OB_FAIL(response_packet(eofp, &session))) {
+          if (OB_FAIL(response_packet(eofp))) {
             LOG_WARN("response packet fail", K(ret));
           }
         }
@@ -428,7 +423,6 @@ int ObMPStmtFetch::process()
   int64_t query_timeout = 0;
   ObCurTraceId::TraceId *cur_trace_id = ObCurTraceId::get_trace_id();
   ObSMConnection *conn = get_conn();
-  const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
   bool cursor_fetched = false;
   reset_close_cursor();
   if (OB_ISNULL(req_) || OB_ISNULL(conn) || OB_ISNULL(cur_trace_id)) {

@@ -1,0 +1,23 @@
+# Cargo workspace for the Rust components that link into the seekdb
+# (OceanBase-lite) C++ server. Add new crates under `members`.
+[workspace]
+resolver = "2"
+members = ["sql-nio"]
+
+# The `release` profile is what gets linked into the server build
+# (CMAKE_BUILD_TYPE != Debug maps to `cargo build --release`).
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+debug = true        # keep symbols; seekdb's default build is RelWithDebInfo
+# Abort instead of unwinding: a Rust panic must never unwind into C++.
+# Only set on named profiles so the default `cargo test` harness still works.
+panic = "abort"
+
+# The profile CMake Debug builds link (cmake/Rust.cmake). Same dev-profile
+# codegen, but with panic="abort" so Debug/CI builds get the same
+# panic-at-the-boundary behavior as release instead of silently diverging.
+[profile.cmake-debug]
+inherits = "dev"
+panic = "abort"

@@ -57,7 +57,13 @@ int ObMPStmtPrepare::deserialize()
     LOG_ERROR("invalid request", K(ret), K(req_));
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
-    sql_.assign_ptr(const_cast<char *>(pkt.get_cdata()), pkt.get_clen()-1);
+    if (OB_UNLIKELY(ObMySQLCommandLayout::BYTES != pkt.get_command_layout())) {
+      ret = OB_INVALID_DATA;
+      LOG_WARN("unexpected prepare command layout", K(ret),
+               K(pkt.get_command_layout()));
+    } else if (OB_FAIL(pkt.get_command_field(0, sql_))) {
+      LOG_WARN("get rust parsed prepare text failed", K(ret));
+    }
   }
 
   return ret;
@@ -192,7 +198,7 @@ int ObMPStmtPrepare::process()
 
       if (OB_FAIL(ret)) {
         // Log the current attempt; retryable errors are handled by the upper scheduler.
-        if (is_conn_valid()) {//The memory of sql sting is invalid if conn_valid_ has ben set false.
+        if (is_conn_valid()) { // The SQL text may be request-owned after an async handoff.
           LOG_WARN("execute sql failed", "sql_id", ctx_.sql_id_, K_(sql), K(ret));
         } else {
           LOG_WARN("execute sql failed", K(ret));
@@ -516,7 +522,7 @@ int ObMPStmtPrepare::send_prepare_packet(const ObMySQLResultSet &result)
     }
   }
 
-  if (OB_SUCC(ret) && OB_FAIL(response_packet(prepare_packet, const_cast<ObSQLSessionInfo *>(&result.get_session())))) {
+  if (OB_SUCC(ret) && OB_FAIL(response_packet(prepare_packet))) {
     LOG_WARN("response packet failed", K(ret));
   }
 
@@ -536,7 +542,7 @@ int ObMPStmtPrepare::send_column_packet(const ObSQLSessionInfo &session,
     ret = result.next_field(field);
     while (OB_SUCC(ret)) {
       OMPKField fp(field);
-      if (OB_FAIL(response_packet(fp, const_cast<ObSQLSessionInfo *>(&session)))) {
+      if (OB_FAIL(response_packet(fp))) {
         LOG_WARN("response packet fail", K(ret));
       } else {
         LOG_DEBUG("response field succ", K(field));
@@ -569,10 +575,10 @@ int ObMPStmtPrepare::send_param_packet(const ObSQLSessionInfo &session,
     ret = result.next_param(field);
     while (OB_SUCC(ret)) {
       OMPKField fp(field);
-      if (OB_FAIL(response_packet(fp, const_cast<ObSQLSessionInfo *>(&session)))) {
+      if (OB_FAIL(response_packet(fp))) {
         LOG_DEBUG("response packet fail", K(ret));
       } else {
-//        LOG_INFO("response field succ", K(field));
+        //        LOG_INFO("response field succ", K(field));
         ret = result.next_param(field);
       }
     }

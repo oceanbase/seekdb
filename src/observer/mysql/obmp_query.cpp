@@ -35,7 +35,6 @@ using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::trace;
 using namespace oceanbase::sql;
-void OB_WEAK_SYMBOL request_finish_callback();
 ObMPQuery::ObMPQuery(const ObGlobalContext &gctx)
     : ObMPBase(gctx),
       single_process_timestamp_(0),
@@ -264,30 +263,34 @@ int ObMPQuery::process()
     // request_finish_callback, which may free the request.
     // this operation should be protected by the session lock.
     if (async_resp_used) {
-      request_finish_callback();
+      if (OB_FAIL(ret) && need_disconnect && is_conn_valid()) {
+        force_disconnect();
+      }
+      const int handoff_ret = handoff_async_request(session.get_mysql_end_trans_cb());
+      if (OB_UNLIKELY(OB_SUCCESS != handoff_ret)) {
+        LOG_ERROR("failed to hand off async mysql request ownership", K(handoff_ret));
+        force_disconnect();
+      }
     }
   }
 
-  if (OB_FAIL(ret) && need_response_error && is_conn_valid()) {
+  if (!async_resp_used && OB_FAIL(ret) && need_response_error && is_conn_valid()) {
     send_error_packet(ret, NULL);
   }
-  if (OB_FAIL(ret) && OB_UNLIKELY(need_disconnect) && is_conn_valid()) {
+  if (!async_resp_used && OB_FAIL(ret) && OB_UNLIKELY(need_disconnect) && is_conn_valid()) {
     force_disconnect();
     LOG_WARN("disconnect connection", KR(ret));
   }
   // If the response has already been sent asynchronously, this logic will be executed in cb, so skip flush_buffer() here
-  if (!THIS_WORKER.need_retry()) {
-    if (async_resp_used) {
-      async_resp_used_ = true;
-      packet_sender_.disable_response();
-    } else if (OB_UNLIKELY(!is_conn_valid())) {
+  if (async_resp_used) {
+    // The callback sender already owns response and finish.
+  } else if (!THIS_WORKER.need_retry()) {
+    if (OB_UNLIKELY(!is_conn_valid())) {
       tmp_ret = OB_CONNECT_ERROR;
       LOG_WARN("connection in error, maybe has disconnected", K(tmp_ret));
     } else if (OB_UNLIKELY(OB_SUCCESS != (tmp_ret = flush_buffer(true)))) {
       LOG_WARN("failed to flush_buffer", K(tmp_ret));
     }
-  } else {
-    need_retry_ = true;
   }
 
   // bugfix: 
@@ -439,11 +442,6 @@ int ObMPQuery::process_single_stmt(const ObMultiStmtItem &multi_stmt_item,
         //set session retry state
         session.set_session_in_retry(retry_ctrl_.need_retry());
       } while (RETRY_TYPE_LOCAL == retry_ctrl_.get_retry_type());
-      //@notice: after the async packet is responsed,
-      //the easy_buf_ hold by the sql string may have been released.
-      //from here on, we can no longer access multi_stmt_item.sql_,
-      //otherwise there is a risk of coredump
-      //@TODO: need to determine a mechanism to ensure the safety of memory access here
     }
     ObThreadLogLevelUtils::clear();
     const int64_t debug_sync_timeout = GCONF.debug_sync_timeout;
@@ -759,8 +757,8 @@ int ObMPQuery::process_trans_ctrl_cmd(ObSQLSessionInfo &session,
       LOG_WARN("explicit start trans fail", KR(ret), K(need_disconnect), K(read_only));
     }
   } else if (stmt_type == stmt::T_END_TRANS) {
-    bool is_async_end_trans = false;
     bool need_end_trans_callback = false;
+    bool callback_armed = false;
     ObEndTransAsyncCallback *callback = nullptr;
     TransState trans_state;
     ObEndTransCbPacketParam pkt_param;
@@ -774,7 +772,6 @@ int ObMPQuery::process_trans_ctrl_cmd(ObSQLSessionInfo &session,
 
     bool need_trans_cb  = need_end_trans_callback && (!force_sync_resp);
     if (need_trans_cb) {
-      is_async_end_trans = true;
       ObSqlEndTransCb &sql_end_cb = session.get_mysql_end_trans_cb();
       ObCurTraceId::TraceId *cur_trace_id = NULL;
       if (OB_ISNULL(cur_trace_id = ObCurTraceId::get_trace_id())) {
@@ -782,6 +779,7 @@ int ObMPQuery::process_trans_ctrl_cmd(ObSQLSessionInfo &session,
         LOG_ERROR("current trace id is NULL", K(ret));
       } else if (OB_FAIL(sql_end_cb.init(packet_sender_, &session))) {
         LOG_WARN("failed to init sql end callback", K(ret));
+      } else if (FALSE_IT(callback_armed = true)) {
       } else if (OB_FAIL(sql_end_cb.set_packet_param(pkt_param.fill("\0", // message
                                                                     0,  // affected_rows
                                                                     0,  // last_insert_id_to_client
@@ -802,8 +800,16 @@ int ObMPQuery::process_trans_ctrl_cmd(ObSQLSessionInfo &session,
                                                     callback))) {
       LOG_WARN("explicit end trans fail", K(ret));
     }
-    if (trans_state.is_end_trans_executed() && trans_state.is_end_trans_success()) {
+    const bool callback_submitted =
+        trans_state.is_end_trans_executed() && trans_state.is_end_trans_success();
+    if (callback_submitted) {
       async_resp_used = true;
+    } else if (callback_armed) {
+      const int cancel_ret = cancel_unsubmitted_callback(session.get_mysql_end_trans_cb());
+      if (OB_SUCCESS != cancel_ret) {
+        LOG_ERROR("failed to cancel unsubmitted mysql end-trans callback", K(cancel_ret));
+        ret = OB_SUCCESS == ret ? cancel_ret : ret;
+      }
     }
   }
   return ret;
@@ -1220,7 +1226,13 @@ int ObMPQuery::deserialize()
     }
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
-    sql_.assign_ptr(const_cast<char *>(pkt.get_cdata()), pkt.get_clen()-1);
+    if (OB_UNLIKELY(ObMySQLCommandLayout::BYTES != pkt.get_command_layout())) {
+      ret = OB_INVALID_DATA;
+      LOG_WARN("unexpected query command layout", K(ret),
+               K(pkt.get_command_layout()));
+    } else if (OB_FAIL(pkt.get_command_field(0, sql_))) {
+      LOG_WARN("get rust parsed query text failed", K(ret));
+    }
   }
 
   return ret;
@@ -1232,6 +1244,7 @@ OB_INLINE int ObMPQuery::response_result(ObMySQLResultSet &result,
                                          bool &async_resp_used)
 {
   int ret = OB_SUCCESS;
+  bool callback_armed = false;
   // When ac = 1, starting a new transaction in the thread to clean up temporary
   // table data can deadlock with the clog callback, so use a synchronous method.
   ObSQLSessionInfo &session = result.get_session();
@@ -1241,40 +1254,42 @@ OB_INLINE int ObMPQuery::response_result(ObMySQLResultSet &result,
   // Handle plan and cmd separately, the logic will be clearer.
   if (OB_LIKELY(NULL != result.get_physical_plan())) {
     if (need_trans_cb) {
-      ObAsyncPlanDriver drv(gctx_, ctx_, session, retry_ctrl_, *this);
+      ObAsyncPlanDriver drv(gctx_, ctx_, session, retry_ctrl_, packet_sender_);
       // NOTE: sql_end_cb must be initialized before drv.response_result()
       ObSqlEndTransCb &sql_end_cb = session.get_mysql_end_trans_cb();
       if (OB_FAIL(sql_end_cb.init(packet_sender_, &session))) {
         LOG_WARN("failed to init sql end callback", K(ret));
+      } else if (FALSE_IT(callback_armed = true)) {
       } else if (OB_FAIL(drv.response_result(result))) {
         LOG_WARN("fail response async result", K(ret));
       }
       async_resp_used = result.is_async_end_trans_submitted();
     } else {
       // Pilot ObQuerySyncDriver
-      ObSyncPlanDriver drv(gctx_, ctx_, session, retry_ctrl_, *this);
+      ObSyncPlanDriver drv(gctx_, ctx_, session, retry_ctrl_, packet_sender_);
       ret = drv.response_result(result);
     }
   } else {
 
-#define CMD_EXEC \
-    if (need_trans_cb) {\
-      ObSqlEndTransCb &sql_end_cb = session.get_mysql_end_trans_cb(); \
-      ObAsyncCmdDriver drv(gctx_, ctx_, session, retry_ctrl_, *this); \
-      if (OB_FAIL(sql_end_cb.init(packet_sender_, &session))) { \
-        LOG_WARN("failed to init sql end callback", K(ret)); \
-      } else if (OB_FAIL(drv.response_result(result))) { \
-        LOG_WARN("fail response async result", K(ret)); \
-      } \
-      async_resp_used = result.is_async_end_trans_submitted(); \
-    } else { \
-      ObSyncCmdDriver drv(gctx_, ctx_, session, retry_ctrl_, *this); \
-      session.set_pl_query_sender(&drv); \
-      session.set_ps_protocol(result.is_ps_protocol()); \
-      ret = drv.response_result(result); \
-      session.set_pl_query_sender(NULL); \
-    }
-  
+#define CMD_EXEC                                                               \
+  if (need_trans_cb) {                                                         \
+    ObSqlEndTransCb &sql_end_cb = session.get_mysql_end_trans_cb();            \
+    ObAsyncCmdDriver drv(gctx_, ctx_, session, retry_ctrl_, packet_sender_);   \
+    if (OB_FAIL(sql_end_cb.init(packet_sender_, &session))) {                  \
+      LOG_WARN("failed to init sql end callback", K(ret));                     \
+    } else if (FALSE_IT(callback_armed = true)) {                              \
+    } else if (OB_FAIL(drv.response_result(result))) {                         \
+      LOG_WARN("fail response async result", K(ret));                          \
+    }                                                                          \
+    async_resp_used = result.is_async_end_trans_submitted();                   \
+  } else {                                                                     \
+    ObSyncCmdDriver drv(gctx_, ctx_, session, retry_ctrl_, packet_sender_);    \
+    session.set_pl_query_sender(&drv);                                         \
+    session.set_ps_protocol(result.is_ps_protocol());                          \
+    ret = drv.response_result(result);                                         \
+    session.set_pl_query_sender(NULL);                                         \
+  }
+
     if (result.is_pl_stmt(result.get_stmt_type())) {
       CMD_EXEC;
     } else {
@@ -1283,6 +1298,14 @@ OB_INLINE int ObMPQuery::response_result(ObMySQLResultSet &result,
 
 #undef CMD_EXEC
 
+  }
+
+  if (callback_armed && !async_resp_used) {
+    const int cancel_ret = cancel_unsubmitted_callback(session.get_mysql_end_trans_cb());
+    if (OB_SUCCESS != cancel_ret) {
+      LOG_ERROR("failed to cancel unsubmitted mysql end-trans callback", K(cancel_ret));
+      ret = OB_SUCCESS == ret ? cancel_ret : ret;
+    }
   }
 
   return ret;
@@ -1314,37 +1337,38 @@ int ObMPQuery::deserialize_com_field_list()
     LOG_WARN("get unexpected null", K(alloc), K(ret));
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
-    const char *str = pkt.get_cdata();
-    uint32_t length = pkt.get_clen();
+    ObString table_name;
+    ObString wildcard;
     const char *str1 = "select * from ";
     const char *str2 = " where 0";
-    int64_t i = 0;
     const int64_t str1_len = strlen(str1);
     const int64_t str2_len = strlen(str2);
-    const int pre_size = str1_len + str2_len;
-    //Find the delimiter between client-provided table_name and field wildcard (table_name [NULL] field wildcard)
-    for (; static_cast<int>(str[i]) != 0 && i < length; ++i) {}
-    char *dest_str = static_cast<char *>(alloc->alloc(length + pre_size));
-    if (OB_ISNULL(dest_str)) {
+    if (OB_UNLIKELY(ObMySQLCommandLayout::FIELD_LIST !=
+                    pkt.get_command_layout())) {
+      ret = OB_INVALID_DATA;
+      LOG_WARN("unexpected field-list command layout", K(ret),
+               K(pkt.get_command_layout()));
+    } else if (OB_FAIL(pkt.get_command_field(0, table_name))) {
+      LOG_WARN("get rust parsed field-list table failed", K(ret));
+    } else if (OB_FAIL(pkt.get_command_field(1, wildcard))) {
+      LOG_WARN("get rust parsed field-list wildcard failed", K(ret));
+    }
+    const int64_t sql_len = str1_len + table_name.length() + str2_len;
+    char *dest_str =
+        OB_SUCC(ret) ? static_cast<char *>(alloc->alloc(sql_len + 1)) : NULL;
+    if (OB_SUCC(ret) && OB_ISNULL(dest_str)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc", K(dest_str));
-    } else {
+    } else if (OB_SUCC(ret)) {
       char *buf = dest_str;
-      uint32_t real_len = 0;
-      MEMSET(buf, 0, length + pre_size);
       MEMCPY(buf, str1, str1_len);
       buf = buf + str1_len;
-      real_len = real_len + str1_len;
-      MEMCPY(buf, str, i);
-      buf = buf + i;
-      real_len = real_len + i;
+      MEMCPY(buf, table_name.ptr(), table_name.length());
+      buf = buf + table_name.length();
       MEMCPY(buf, str2, str2_len);
-      real_len = real_len + str2_len;
-      sql_.assign_ptr(dest_str, real_len);
-      //extract wildcard
-      if (i + 1 < length - 1) {
-        wild_str_.assign_ptr(str + i + 1, (length - 1) - (i +1));
-      }
+      dest_str[sql_len] = '\0';
+      sql_.assign_ptr(dest_str, sql_len);
+      wild_str_ = wildcard;
     }
   }
   return ret;

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX  LIB_TIME
 
 #include "ob_time_convert.h"
+#include "common/timezone/ob_timezone_info.h"
 #include "lib/utility/ob_fast_convert.h"
 #include "rpc/obmysql/ob_mysql_util.h"
 #include "lib/locale/ob_locale_type.h"

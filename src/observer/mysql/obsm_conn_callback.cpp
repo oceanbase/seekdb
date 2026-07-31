@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX RPC_OBMYSQL
 #include "observer/mysql/obsm_conn_callback.h"
 #include "rpc/obmysql/ob_sql_sock_session.h"
-#include "rpc/obmysql/packet/ompk_handshake.h"
 #include "lib/random/ob_mysql_random.h"
 #include "observer/omt/ob_server_runtime.h"
 #include "observer/ob_srv_task.h"
@@ -29,22 +28,6 @@ using namespace common;
 using namespace observer;
 namespace obmysql
 {
-
-uint64_t ob_calculate_tls_version_option(const ObString &tls_min_version)
-{
-  uint64_t tls_option = SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
-  if (0 == tls_min_version.case_compare("NONE")) {
-  } else if (0 == tls_min_version.case_compare("TLSV1")) {
-    //no need to set because OPENSSL support all protocol by default
-  } else if (0 == tls_min_version.case_compare("TLSV1.1")) {
-    tls_option |= SSL_OP_NO_TLSv1;
-  } else if (0 == tls_min_version.case_compare("TLSV1.2")) {
-    tls_option |= (SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1);
-  } else if (0 == tls_min_version.case_compare("TLSV1.3")) {
-    tls_option |= (SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1 | SSL_OP_NO_TLSv1_2);
-  }
-  return tls_option;
-}
 
 static int create_scramble_string(char *scramble_buf, const int64_t buf_len, common::ObMysqlRandom &thread_rand)
 {
@@ -68,27 +51,6 @@ static int create_scramble_string(char *scramble_buf, const int64_t buf_len, com
   return ret;
 }
 
-static int send_handshake(ObSqlSockSession& sess, const OMPKHandshake &hsp)
-{
-  int ret = OB_SUCCESS;
-  static const int64_t MAX_HSPKT_SIZE = 128;
-  char buf[MAX_HSPKT_SIZE];
-  const int64_t len = MAX_HSPKT_SIZE;
-  int64_t pos = 0;
-  int64_t pkt_count = 0;
-
-  if (OB_FAIL(hsp.encode(buf, len, pos, pkt_count))) {
-    LOG_WARN("encode handshake packet fail", K(ret));
-  } else if (OB_UNLIKELY(pkt_count <= 0)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid pkt count", K(pkt_count), K(ret));
-  } else if (OB_FAIL(sess.write_hanshake_packet(buf, pos))) {
-    LOG_WARN("write handshake packet data fail", K(ret));
-  }
-
-  return ret;
-}
-
 static int sm_conn_init(ObSMConnection& conn)
 {
   int ret = OB_SUCCESS;
@@ -105,53 +67,29 @@ static int sm_conn_init(ObSMConnection& conn)
   return ret;
 }
 
-static int sm_conn_build_handshake(ObSMConnection& conn, obmysql::OMPKHandshake& hsp)
+int ObSMConnectionCallback::init(ObSqlSockSession& sess, ObSMConnection& conn)
 {
   int ret = OB_SUCCESS;
+  // The HandshakeV10 greeting itself is built and sent by the Rust reactor
+  // right after this callback returns; here we only create what it needs —
+  // the session id and the scramble the later auth check verifies against.
   RLOCAL(common::ObMysqlRandom, thread_scramble_rand);
-  hsp.set_thread_id(conn.sessid_);
-  const bool support_ssl = GCONF.ssl_client_authentication;
-  hsp.set_ssl_cap(support_ssl);
-  const int64_t BUF_LEN = sizeof(conn.scramble_buf_);
   int64_t autocommit = 0;
-  if (OB_FAIL(share::schema::ObSchemaUtils::get_runtime_int_variable(
-          share::SYS_VAR_AUTOCOMMIT, autocommit))) {
+  if (OB_FAIL(sm_conn_init(conn))) {
+    LOG_WARN("init conn fail", K(ret));
+  } else if (OB_FAIL(share::schema::ObSchemaUtils::get_runtime_int_variable(
+                 share::SYS_VAR_AUTOCOMMIT, autocommit))) {
     LOG_WARN("get global autocommit failed", K(ret));
   } else if (OB_UNLIKELY(0 != autocommit && 1 != autocommit)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected global autocommit", K(ret), K(autocommit));
+  } else if (OB_FAIL(create_scramble_string(conn.scramble_buf_, sizeof(conn.scramble_buf_), thread_scramble_rand))) {
+    LOG_WARN("create scramble string failed", K(ret));
   } else {
     conn.autocommit_snapshot_ = autocommit;
-    ObServerStatusFlags status_flags;
-    status_flags.status_flags_.OB_SERVER_STATUS_AUTOCOMMIT = conn.autocommit_snapshot_;
-    hsp.set_server_status(status_flags.flags_);
-    if (OB_FAIL(create_scramble_string(conn.scramble_buf_, BUF_LEN, thread_scramble_rand))) {
-      LOG_WARN("create scramble string failed", K(ret));
-    } else if (OB_FAIL(hsp.set_scramble(conn.scramble_buf_, BUF_LEN))) {
-      LOG_WARN("set scramble failed", K(ret));
-    } else {
-      LOG_INFO("new mysql sessid created", K(conn.sessid_), K(support_ssl), K(autocommit));
-    }
-  }
-  return ret;
-}
-
-int ObSMConnectionCallback::init(ObSqlSockSession& sess, ObSMConnection& conn)
-{
-  int ret = OB_SUCCESS;
-  obmysql::OMPKHandshake hsp;
-  if (OB_FAIL(sm_conn_init(conn))) {
-    LOG_WARN("init conn fail", K(ret));
-  } else if (OB_FAIL(sm_conn_build_handshake(conn, hsp))) {
-    LOG_WARN("conn send handshake fail", K(ret));
-  } else if (OB_FAIL(send_handshake(sess, hsp))) {
-    LOG_WARN("send handshake fail", K(ret), K(sess.client_addr_));
-  } else {
     sess.sql_session_id_ = conn.sessid_;
-    uint64_t tls_version_option = ob_calculate_tls_version_option(
-                                   GCONF.sql_protocol_min_tls_version.str());
-    sess.set_tls_version_option(tls_version_option);
-    LOG_INFO("sm conn init succ", K(conn.sessid_), K(sess.client_addr_));
+    LOG_INFO("sm conn init succ", K(conn.sessid_), K(sess.client_addr_),
+             K(autocommit));
   }
   return ret;
 }
@@ -171,8 +109,8 @@ void ObSMConnectionCallback::destroy(ObSMConnection& conn)
   int ret = OB_SUCCESS;
   sql::ObDisconnectState disconnect_state = sql::ObDisconnectState::DIS_INIT;
   ObCurTraceId::TraceId trace_id;
-  if (conn.is_sess_alloc_) {
-    if (!conn.is_sess_free_) {
+  if (conn.is_sess_alloc_.load(std::memory_order_acquire)) {
+    if (!conn.is_sess_free_.load(std::memory_order_acquire)) {
       {
         int tmp_ret = OB_SUCCESS;
         sql::ObSQLSessionInfo *sess_info = NULL;
@@ -222,8 +160,7 @@ void ObSMConnectionCallback::destroy(ObSMConnection& conn)
   LOG_INFO("connection close",
            "sessid", conn.sessid_,
            "c/s protocol", get_cs_protocol_type_name(conn.get_cs_protocol_type()),
-           "is_need_clear_sessid_", conn.is_need_clear_sessid_,
-           "is_sess_alloc_", conn.is_sess_alloc_,
+           "is_sess_alloc_", conn.is_sess_alloc_.load(std::memory_order_acquire),
            K(ret),
            K(trace_id),
            K(disconnect_state));
@@ -233,8 +170,8 @@ void ObSMConnectionCallback::destroy(ObSMConnection& conn)
 int ObSMConnectionCallback::on_disconnect(observer::ObSMConnection& conn)
 {
   int ret = OB_SUCCESS;
-  if (conn.is_sess_alloc_
-      && !conn.is_sess_free_
+  if (conn.is_sess_alloc_.load(std::memory_order_acquire)
+      && !conn.is_sess_free_.load(std::memory_order_acquire)
       && ObSMConnection::INITIAL_SESSID != conn.sessid_) {
     sql::ObSQLSessionInfo *sess_info = NULL;
     sql::ObSessionGetterGuard guard(*(GCTX.session_mgr_), conn.sessid_);

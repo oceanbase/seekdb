@@ -117,7 +117,6 @@ ObBasicSessionInfo::ObBasicSessionInfo()
       changed_sys_vars_(),
       changed_user_vars_(),
       changed_var_pool_(ObMemAttr(ObModIds::OB_SQL_SESSION), OB_MALLOC_NORMAL_BLOCK_SIZE),
-      extra_info_allocator_(ObMemAttr(ObModIds::OB_SQL_SESSION), OB_MALLOC_NORMAL_BLOCK_SIZE),
       is_database_changed_(false),
       debug_sync_actions_(),
       magic_num_(0x13572468),
@@ -377,7 +376,6 @@ void ObBasicSessionInfo::reset()
   plan_hash_ = 0;
   capability_.capability_ = 0;
   reset_session_changed_info();
-  extra_info_allocator_.reset();
   debug_sync_actions_.reset();
 //magic_num_ = 0x86427531;
   current_execution_id_ = -1;
@@ -5284,11 +5282,10 @@ observer::ObSMConnection *ObBasicSessionInfo::get_sm_connection()
 {
   observer::ObSMConnection *conn = nullptr;
   rpc::ObSqlSockDesc &sock_desc = thread_data_.sock_desc_;
-  obmysql::ObSqlSockSession *sess = nullptr;
-  if (OB_ISNULL(sess = static_cast<obmysql::ObSqlSockSession *>(sock_desc.sock_desc_))) {
+  if (OB_ISNULL(sock_desc.sock_desc_)) {
     LOG_ERROR_RET(OB_ERR_UNEXPECTED, "sql nio sock_desc is null");
   } else {
-    conn = &sess->conn_;
+    conn = &sock_desc.sock_desc_->conn_;
   }
   return conn;
 }

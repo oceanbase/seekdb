@@ -18,6 +18,7 @@
 
 #include "ob_sync_cmd_driver.h"
 
+#include "obmp_packet_sender.h"
 #include "obsm_row.h"
 #include "observer/mysql/obmp_query.h"
 #include "rpc/obmysql/packet/ompk_row.h"
@@ -36,7 +37,7 @@ ObSyncCmdDriver::ObSyncCmdDriver(const ObGlobalContext &gctx,
                                  const ObSqlCtx &ctx,
                                  sql::ObSQLSessionInfo &session,
                                  ObQueryRetryCtrl &retry_ctrl,
-                                 ObIMPPacketSender &sender)
+                                 ObMPPacketSender &sender)
     : ObQueryDriver(gctx, ctx, session, retry_ctrl, sender)
 {
 }
@@ -52,7 +53,7 @@ int ObSyncCmdDriver::send_eof_packet(bool has_more_result)
 
   if (OB_FAIL(seal_eof_packet(has_more_result, eofp))) {
     LOG_WARN("failed to seal eof packet", K(ret), K(has_more_result));
-  } else if (OB_FAIL(sender_.response_packet(eofp, &session_))) {
+  } else if (OB_FAIL(sender_.response_packet(eofp))) {
     LOG_WARN("response packet fail", K(ret), K(has_more_result));
   }
   return ret;
@@ -185,7 +186,7 @@ int ObSyncCmdDriver::response_result(ObMySQLResultSet &result)
         }
       }
     } else {
-      if (need_send_eof && OB_FAIL(sender_.response_packet(eofp, &session_))) {
+      if (need_send_eof && OB_FAIL(sender_.response_packet(eofp))) {
         LOG_WARN("response packet fail", K(ret));
       }
     }
@@ -272,7 +273,7 @@ int ObSyncCmdDriver::response_query_result(ObMySQLResultSet &result)
                      result.get_field_columns(),
                      ctx_.schema_guard_);
       OMPKRow rp(sm_row);
-      if (OB_FAIL(sender_.response_packet(rp, const_cast<ObSQLSessionInfo *>(tmp_session)))) {
+      if (OB_FAIL(sender_.response_packet(rp))) {
         LOG_WARN("response packet fail", K(ret), KP(row));
       } else {
         ObArenaAllocator *allocator = NULL;

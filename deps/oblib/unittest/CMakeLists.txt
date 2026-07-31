@@ -3,6 +3,9 @@ if(APPLE)
   set(GTEST_INCLUDE_DIRS "/opt/homebrew/include")
   include_directories(${DEP_DIR}/include)
   include_directories(${GTEST_INCLUDE_DIRS})
+  # Homebrew's lib dir is not on clang's default search path; the raw
+  # -lgmock/-lgtest below need it.
+  link_directories(/opt/homebrew/lib)
 endif()
 
 add_library(oblib_testbase INTERFACE)

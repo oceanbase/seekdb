@@ -18,6 +18,7 @@
 #define USING_LOG_PREFIX RPC
 #endif
 #include "rpc/ob_request.h"
+#include "rpc/ob_sql_request_operator.h"
 using namespace oceanbase::common;
 
 namespace oceanbase
@@ -29,8 +30,9 @@ common::ObAddr g_server_self_addr;
 void on_translate_fail(ObRequest* req, int)
 {
   if (ObRequest::OB_MYSQL == req->get_type()) {
-    SQL_REQ_OP.disconnect_sql_conn(req);
-    SQL_REQ_OP.finish_sql_request(req);
+    const uint64_t generation = req->get_nio_request_generation();
+    (void)SQL_REQ_OP.disconnect_sql_conn(req, generation);
+    (void)SQL_REQ_OP.finish_sql_request(req, generation);
   }
 }
 

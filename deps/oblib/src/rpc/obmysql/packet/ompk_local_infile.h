@@ -31,24 +31,21 @@ namespace obmysql
 // int<1>      | packet type  | 0xFB: LOCAL INFILE
 // string<EOF> | filename     | the path to the file the client shall send
 // The notation is "string<EOF>" Strings whose length will be calculated by the packet remaining length.
-class OMPKLocalInfile : public ObMySQLRawPacket
+class OMPKLocalInfile : public ObMySQLPacket
 {
 public:
   OMPKLocalInfile();
   virtual ~OMPKLocalInfile();
 
-  virtual int serialize(char *buffer, int64_t len, int64_t &pos) const override;
-  virtual int64_t get_serialize_size() const override;
-
   virtual int64_t to_string(char *buf, const int64_t buf_len) const override;
 
   void set_filename(const ObString &filename);
+  inline const ObString &get_filename() const { return filename_; }
 
   inline ObMySQLPacketType get_mysql_packet_type() override { return ObMySQLPacketType::PKT_FILENAME; }
 
 private:
   DISALLOW_COPY_AND_ASSIGN(OMPKLocalInfile);
-  int8_t   packet_type_;
   ObString filename_;
 };
 

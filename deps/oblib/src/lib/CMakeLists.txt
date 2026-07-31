@@ -200,7 +200,6 @@ ob_set_subtarget(oblib_lib utility
 )
 
 ob_set_subtarget(oblib_lib ssl
-  ssl/ob_ssl_config.cpp
 )
 
 ob_set_subtarget(oblib_lib ob_vector_util

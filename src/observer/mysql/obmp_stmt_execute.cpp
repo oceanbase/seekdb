@@ -16,14 +16,15 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "nio.h"
 
 #include "obmp_stmt_execute.h"
 #include "lib/ob_running_mode.h"
 #include "observer/mysql/ob_mysql_result_set.h"
 #include "lib/trace/ob_trace.h"
 #include "observer/mysql/obsm_utils.h"
-#include "rpc/obmysql/packet/ompk_resheader.h"
 #include "rpc/obmysql/packet/ompk_field.h"
+#include "rpc/obmysql/packet/ompk_resheader.h"
 #include "rpc/obmysql/packet/ompk_row.h"
 #include "observer/mysql/obsm_row.h"
 #include "share/ob_lob_access_utils.h"
@@ -70,6 +71,7 @@ void ObPsSessionInfoParamsCleaner::operator()(
     ObPsSessionInfo *ps_session_info =
         static_cast<ObPsSessionInfo *>(entry.second);
     ps_session_info->get_param_types().reuse();
+    ps_session_info->get_param_type_flags().reuse();
   } else {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "ps session info pointer is NULL", K(ret));
@@ -83,7 +85,23 @@ void ObPsSessionInfoParamsAssignment::operator()(
   if (OB_NOT_NULL(entry.second)) {
     ObPsSessionInfo *ps_session_info =
         static_cast<ObPsSessionInfo *>(entry.second);
-    ps_session_info->get_param_types().assign(param_types_);
+    if (param_types_.count() != param_type_flags_.count()) {
+      ret = OB_INVALID_ARGUMENT;
+      SERVER_LOG(WARN, "ps parameter type cache arrays disagree", K(ret),
+                 K(param_types_.count()), K(param_type_flags_.count()));
+    } else if (OB_FAIL(ps_session_info->get_param_types().reserve(
+                   param_types_.count()))) {
+      SERVER_LOG(WARN, "failed to reserve ps parameter type cache", K(ret));
+    } else if (OB_FAIL(ps_session_info->get_param_type_flags().reserve(
+                   param_type_flags_.count()))) {
+      SERVER_LOG(WARN, "failed to reserve ps parameter flag cache", K(ret));
+    } else if (OB_FAIL(
+                   ps_session_info->get_param_types().assign(param_types_))) {
+      SERVER_LOG(WARN, "failed to assign ps parameter types", K(ret));
+    } else if (OB_FAIL(ps_session_info->get_param_type_flags().assign(
+                   param_type_flags_))) {
+      SERVER_LOG(WARN, "failed to assign ps parameter type flags", K(ret));
+    }
   } else {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "ps session info pointer is NULL", K(ret));
@@ -383,7 +401,7 @@ int ObMPStmtExecute::send_eof_packet_for_arraybinding(ObSQLSessionInfo &session_
   flags.status_flags_.OB_SERVER_STATUS_AUTOCOMMIT = (session_info.get_local_autocommit() ? 1 : 0);
   flags.status_flags_.OB_SERVER_MORE_RESULTS_EXISTS = true;
   eofp.set_server_status(flags);
-  OZ (response_packet(eofp, &session_info));
+  OZ(response_packet(eofp));
 
   return ret;
 }
@@ -397,25 +415,25 @@ int ObMPStmtExecute::response_result_for_arraybinding(
     {
       OMPKResheader rhp;
       rhp.set_field_count(3);
-      OZ (response_packet(rhp, &session_info));
+      OZ(response_packet(rhp));
 
       for (int64_t i = 0; OB_SUCC(ret) && i < arraybinding_columns_->count(); ++i) {
         ObMySQLField field;
         OZ (ObMySQLResultSet::to_mysql_field(arraybinding_columns_->at(i), field));
         ObMySQLResultSet::replace_lob_type(field);
         OMPKField fp(field);
-        OZ (response_packet(fp, &session_info));
+        OZ(response_packet(fp));
       }
 
       OZ (send_eof_packet_for_arraybinding(session_info));
 
+      const ObDataTypeCastParams dtc_params =
+          ObBasicSessionInfo::create_dtc_params(&session_info);
       for (int64_t i = 0; OB_SUCC(ret) && i < exception_array.count(); ++i) {
         arraybinding_row_->get_cell(0).set_int(exception_array.at(i).pos_);
         arraybinding_row_->get_cell(1).set_int(exception_array.at(i).error_code_);
         arraybinding_row_->get_cell(2).set_varchar(exception_array.at(i).error_msg_);
 
-        const ObDataTypeCastParams dtc_params
-          = ObBasicSessionInfo::create_dtc_params(&session_info);
         ObSMRow sm_row(BINARY,
                 *arraybinding_row_,
                 dtc_params,
@@ -423,7 +441,7 @@ int ObMPStmtExecute::response_result_for_arraybinding(
                 arraybinding_columns_,
                 ctx_.schema_guard_);
         OMPKRow rp(sm_row);
-        OZ (response_packet(rp, &session_info));
+        OZ(response_packet(rp));
       }
       OZ (send_eof_packet_for_arraybinding(session_info));
     }
@@ -531,21 +549,24 @@ int ObMPStmtExecute::before_process()
     } else {
       params_ = new(params_)ParamStore( (ObWrapperAllocator(alloc)) );
     }
-    const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
-    const char* pos = pkt.get_cdata();
-    // pkt.get_cdata() do not include 1 byte for `request command code`
-    analysis_checker_.init(pos, pkt.get_clen() - 1);
-    int32_t stmt_id = -1; //INVALID_STMT_ID
+    const ObMySQLRawPacket &pkt =
+        reinterpret_cast<const ObMySQLRawPacket &>(req_->get_packet());
+    ObString param_tail;
+    const char *pos = NULL;
     uint32_t ps_stmt_checksum = 0;
     ObSQLSessionInfo *session = NULL;
-    PS_DEFENSE_CHECK(9) // stmt_id(4) + flag(1) + checksum(4)
-    {
-      ObMySQLUtil::get_int4(pos, stmt_id);
-      stmt_id_ = stmt_id;
-
-      // pos += 1; //skip flags
-      int8_t flag = 0;
-      ObMySQLUtil::get_int1(pos, flag);
+    if (ObMySQLCommandLayout::EXECUTE != pkt.get_command_layout()) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("stmt-execute command view has wrong layout", K(ret), "layout",
+                static_cast<uint32_t>(pkt.get_command_layout()));
+    } else if (OB_FAIL(pkt.get_command_field(0, param_tail))) {
+      LOG_WARN("get stmt-execute parameter tail failed", K(ret));
+    } else {
+      stmt_id_ = pkt.get_command_scalar0();
+      ps_stmt_checksum = static_cast<uint32_t>(pkt.get_command_scalar1());
+      const uint8_t flag = static_cast<uint8_t>(pkt.get_command_scalar2());
+      pos = param_tail.ptr();
+      analysis_checker_.init(pos, param_tail.length());
       const uint8_t ARRAYBINDING_MODE = 8;
       const uint8_t SAVE_EXCEPTION_MODE = 16;
       is_arraybinding_ = flag & ARRAYBINDING_MODE;
@@ -553,10 +574,6 @@ int ObMPStmtExecute::before_process()
       ps_cursor_type_ = 0 != (flag & CURSOR_TYPE_READ_ONLY)
                           ? ObExecutePsCursorType
                           : ObNormalType;
-
-      // 4 bytes, iteration-count, used for checksum
-      ObMySQLUtil::get_uint4(pos, ps_stmt_checksum);
-
       if (is_arraybinding_) {
         OZ (init_for_arraybinding(alloc));
       }
@@ -641,14 +658,13 @@ int ObMPStmtExecute::store_params_value_to_str(ObIAllocator &alloc,
   return ret;
 }
 
-int ObMPStmtExecute::parse_request_type(const char* &pos,
-                                       int64_t num_of_params,
-                                       int8_t new_param_bound_flag,
-                                       ObCollationType cs_type,
-                                       ParamTypeArray &param_types,
-                                       ParamTypeInfoArray &param_type_infos
-                                       /*ParamCastArray param_cast_infos*/)
-{
+int ObMPStmtExecute::parse_request_type(const char *&pos, int64_t num_of_params,
+                                        int8_t new_param_bound_flag,
+                                        ObCollationType cs_type,
+                                        ParamTypeArray &param_types,
+                                        ParamTypeFlagArray &param_type_flags,
+                                        ParamTypeInfoArray &param_type_infos
+                                        /*ParamCastArray param_cast_infos*/) {
   int ret = OB_SUCCESS;
   // Step3: get type info
   if (param_type_infos.count() < num_of_params) {
@@ -666,32 +682,37 @@ int ObMPStmtExecute::parse_request_type(const char* &pos,
         ObMySQLUtil::get_int1(pos, flag);
         if (OB_FAIL(param_types.push_back(static_cast<EMySQLFieldType>(type)))) {
           LOG_WARN("fail to push back", K(type), K(i));
-        } else if (EMySQLFieldType::MYSQL_TYPE_COMPLEX != type) {
-          int16_t unsigned_flag = 128;
-          ObObjType ob_elem_type;
-          if (OB_FAIL(ObSMUtils::get_ob_type(ob_elem_type, 
-                                    static_cast<EMySQLFieldType>(type), 
-                                    flag & unsigned_flag ? true : false))) {
-            LOG_WARN("get ob type fail. ", K(type));
-          } else {
-            type_name_info.elem_type_.set_obj_type(ob_elem_type);
-          }
+        } else if (OB_FAIL(param_type_flags.push_back(
+                       static_cast<uint8_t>(flag)))) {
+          LOG_WARN("fail to push parameter type flags", K(flag), K(i));
         }
       }
     } else {
-      if (num_of_params != param_types.count()) {
+      if (num_of_params != param_types.count() ||
+          num_of_params != param_type_flags.count()) {
         ret = OB_ERR_WRONG_DYNAMIC_PARAM;
         LOG_USER_ERROR(OB_ERR_WRONG_DYNAMIC_PARAM,
             param_types.count(), num_of_params);
       } else {
         type = static_cast<uint8_t>(param_types.at(i));
+        flag = static_cast<int8_t>(param_type_flags.at(i));
       }
     }
 
     if (OB_SUCC(ret)) {
-      
+      if (EMySQLFieldType::MYSQL_TYPE_COMPLEX != type) {
+        const int16_t unsigned_flag = 128;
+        ObObjType ob_elem_type;
+        if (OB_FAIL(ObSMUtils::get_ob_type(
+                ob_elem_type, static_cast<EMySQLFieldType>(type),
+                flag & unsigned_flag ? true : false))) {
+          LOG_WARN("get ob type fail", K(type), K(flag));
+        } else {
+          type_name_info.elem_type_.set_obj_type(ob_elem_type);
+        }
+      }
       uint8_t elem_type = 0;
-      if (EMySQLFieldType::MYSQL_TYPE_COMPLEX == type) {
+      if (OB_SUCC(ret) && EMySQLFieldType::MYSQL_TYPE_COMPLEX == type) {
         type_name_info.is_basic_type_ = false;
         if (OB_FAIL(decode_type_info(pos, type_name_info))) {
           LOG_WARN("failed to decode type info", K(ret));
@@ -799,6 +820,503 @@ bool ObMPStmtExecute::is_contain_complex_element(const sql::ParamTypeArray &para
   return b_ret;
 }
 
+int ObMPStmtExecute::set_standard_timestamp_param(
+    const EMySQLFieldType field_type, const uint16_t year, const uint8_t month,
+    const uint8_t day, const uint8_t hour, const uint8_t minute,
+    const uint8_t second, const uint32_t microseconds, const bool is_zero,
+    const ObTimeZoneInfo *tz_info, ObObj &param) {
+  int ret = OB_SUCCESS;
+  ObPreciseDateTime value = 0;
+  if (!is_zero) {
+    ObTime ob_time;
+    ob_time.parts_[DT_YEAR] = year;
+    ob_time.parts_[DT_MON] = month;
+    ob_time.parts_[DT_MDAY] = day;
+    ob_time.parts_[DT_HOUR] = hour;
+    ob_time.parts_[DT_MIN] = minute;
+    ob_time.parts_[DT_SEC] = second;
+    ob_time.parts_[DT_USEC] = microseconds;
+    if (!ObTimeUtility2::is_valid_date(year, month, day) ||
+        !ObTimeUtility2::is_valid_time(hour, minute, second, microseconds)) {
+      ret = OB_INVALID_DATE_FORMAT;
+      LOG_WARN("invalid date components from Rust execute parser", K(ret),
+               K(year), K(month), K(day), K(hour), K(minute), K(second),
+               K(microseconds));
+    } else {
+      ObTimeConvertCtx cvrt_ctx(NULL, false);
+      ob_time.parts_[DT_DATE] = ObTimeConverter::ob_time_to_date(ob_time);
+      if (MYSQL_TYPE_DATE == field_type || MYSQL_TYPE_NEWDATE == field_type) {
+        value = ob_time.parts_[DT_DATE];
+      } else if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ob_time, cvrt_ctx,
+                                                              value))) {
+        LOG_WARN("convert typed execute datetime failed", K(ret), K(ob_time));
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (MYSQL_TYPE_TIMESTAMP == field_type) {
+      int64_t timestamp = 0;
+      if (OB_FAIL(ObTimeConverter::datetime_to_timestamp(value, tz_info,
+                                                         timestamp))) {
+        LOG_WARN("convert typed execute timestamp failed", K(ret), K(value));
+      } else {
+        param.set_timestamp(timestamp);
+      }
+    } else if (MYSQL_TYPE_DATETIME == field_type) {
+      param.set_datetime(value);
+    } else if (MYSQL_TYPE_DATE == field_type ||
+               MYSQL_TYPE_NEWDATE == field_type) {
+      param.set_date(static_cast<int32_t>(value));
+    } else {
+      ret = OB_ERR_ILLEGAL_TYPE;
+      LOG_WARN("unexpected typed execute temporal type", K(ret), K(field_type));
+    }
+  }
+  return ret;
+}
+
+int ObMPStmtExecute::set_standard_time_param(
+    const uint32_t days, const uint8_t hour, const uint8_t minute,
+    const uint8_t second, const uint32_t microseconds, const bool negative,
+    const bool is_zero, ObObj &param) {
+  int ret = OB_SUCCESS;
+  int64_t value = 0;
+  if (!is_zero) {
+    ObTime ob_time;
+    ob_time.parts_[DT_MDAY] = days;
+    ob_time.parts_[DT_HOUR] = hour;
+    ob_time.parts_[DT_MIN] = minute;
+    ob_time.parts_[DT_SEC] = second;
+    ob_time.parts_[DT_USEC] = microseconds;
+    if (!ObTimeUtility2::is_valid_time(hour, minute, second, microseconds)) {
+      ret = OB_INVALID_DATE_FORMAT;
+      LOG_WARN("invalid time components from Rust execute parser", K(ret),
+               K(days), K(hour), K(minute), K(second), K(microseconds));
+    } else {
+      ob_time.parts_[DT_DATE] = ObTimeConverter::ob_time_to_date(ob_time);
+      ob_time.parts_[DT_HOUR] += ob_time.parts_[DT_MDAY] * 24;
+      ob_time.parts_[DT_MDAY] = 0;
+      value = ObTimeConverter::ob_time_to_time(ob_time);
+      if (negative) {
+        value = -value;
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    param.set_time(value);
+  }
+  return ret;
+}
+
+int ObMPStmtExecute::set_standard_bytes_param(ObIAllocator &allocator,
+                                              const uint32_t type,
+                                              const ObCharsetType charset,
+                                              const ObCollationType cs_type,
+                                              const ObString &str, ObObj &param,
+                                              const bool is_complex_element) {
+  int ret = OB_SUCCESS;
+  ObString dst;
+  ObCollationType cur_cs_type = ObCharset::get_default_collation(charset);
+  if (str.length() > OB_MAX_LONGTEXT_LENGTH) {
+    ret = OB_ERR_INVALID_INPUT_ARGUMENT;
+    LOG_WARN("typed execute parameter is over size", K(ret), K(str.length()));
+  } else {
+    if (MYSQL_TYPE_STRING == type || MYSQL_TYPE_VARCHAR == type ||
+        MYSQL_TYPE_VAR_STRING == type || MYSQL_TYPE_ORA_CLOB == type ||
+        MYSQL_TYPE_JSON == type || MYSQL_TYPE_GEOMETRY == type) {
+      if (MYSQL_TYPE_ORA_CLOB == type) {
+        ObLobLocatorV2 lob(str);
+        if (!lob.is_valid()) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("got invalid typed ps lob param", K(ret), K(lob), K(type));
+        }
+      }
+      if (OB_SUCC(ret) && MYSQL_TYPE_ORA_CLOB != type) {
+        OZ(copy_or_convert_str(allocator, cur_cs_type, cs_type, str, dst));
+      } else if (OB_SUCC(ret) &&
+                 OB_FAIL(ob_write_string(allocator, str, dst))) {
+        LOG_WARN("failed to copy typed ps clob", K(ret));
+      }
+    } else if (MYSQL_TYPE_OB_RAW == type || MYSQL_TYPE_TINY_BLOB == type ||
+               MYSQL_TYPE_MEDIUM_BLOB == type || MYSQL_TYPE_LONG_BLOB == type ||
+               MYSQL_TYPE_BLOB == type || MYSQL_TYPE_NEWDECIMAL == type ||
+               MYSQL_TYPE_ORA_BLOB == type) {
+      if (OB_FAIL(ob_write_string(allocator, str, dst))) {
+        LOG_WARN("failed to copy typed ps bytes", K(ret), K(type));
+      }
+    } else {
+      ret = OB_ERR_ILLEGAL_TYPE;
+      LOG_WARN("unsupported typed ps byte parameter", K(ret), K(type));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    if (MYSQL_TYPE_NEWDECIMAL == type) {
+      number::ObNumber number;
+      if (OB_FAIL(number.from(str.ptr(), str.length(), allocator))) {
+        LOG_WARN("parse typed decimal parameter failed", K(ret), K(str));
+      } else {
+        param.set_number(number);
+      }
+    } else if (MYSQL_TYPE_ORA_BLOB == type || MYSQL_TYPE_ORA_CLOB == type) {
+      param.set_collation_type(MYSQL_TYPE_ORA_BLOB == type ? CS_TYPE_BINARY
+                                                           : cs_type);
+      param.set_lob_value(ObLongTextType, dst.ptr(), dst.length());
+      param.set_has_lob_header();
+    } else if (MYSQL_TYPE_TINY_BLOB == type || MYSQL_TYPE_MEDIUM_BLOB == type ||
+               MYSQL_TYPE_BLOB == type || MYSQL_TYPE_LONG_BLOB == type ||
+               MYSQL_TYPE_JSON == type || MYSQL_TYPE_GEOMETRY == type) {
+      param.set_collation_type(cs_type);
+      if (MYSQL_TYPE_TINY_BLOB == type) {
+        param.set_lob_value(ObTinyTextType, dst.ptr(), dst.length());
+      } else if (MYSQL_TYPE_MEDIUM_BLOB == type) {
+        param.set_lob_value(ObMediumTextType, dst.ptr(), dst.length());
+      } else if (MYSQL_TYPE_BLOB == type) {
+        param.set_lob_value(ObTextType, dst.ptr(), dst.length());
+      } else if (MYSQL_TYPE_LONG_BLOB == type) {
+        param.set_lob_value(ObLongTextType, dst.ptr(), dst.length());
+      } else if (MYSQL_TYPE_JSON == type) {
+        param.set_json_value(ObJsonType, dst.ptr(), dst.length());
+      } else {
+        param.set_geometry_value(ObGeometryType, dst.ptr(), dst.length());
+      }
+      if (param.is_lob_storage() && dst.length() > 0 &&
+          OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(param,
+                                                                  allocator))) {
+        LOG_WARN("convert typed ps temporary lob failed", K(ret));
+      }
+    } else if (MYSQL_TYPE_STRING == type || MYSQL_TYPE_VARCHAR == type ||
+               MYSQL_TYPE_VAR_STRING == type) {
+      param.set_collation_type(cs_type);
+      if (is_complex_element && dst.empty()) {
+        param.set_null();
+      } else if (is_complex_element && MYSQL_TYPE_STRING == type) {
+        param.set_char(dst);
+      } else {
+        param.set_varchar(dst);
+      }
+    } else if (MYSQL_TYPE_OB_RAW == type) {
+      param.set_raw_value(dst.ptr(), dst.length());
+    }
+  }
+  return ret;
+}
+
+int ObMPStmtExecute::materialize_standard_long_data(
+    ObIAllocator &allocator, ObSQLSessionInfo &session,
+    const EMySQLFieldType type, const ObCharsetType charset,
+    const ObCollationType cs_type, const int64_t param_id, ObObjParam &param) {
+  int ret = OB_SUCCESS;
+  bool is_supported_type = false;
+  ObPieceCache *piece_cache = session.get_piece_cache(false);
+  ObPiece *piece = NULL;
+  ObSqlString payload;
+
+  switch (type) {
+  case MYSQL_TYPE_VARCHAR:
+  case MYSQL_TYPE_JSON:
+  case MYSQL_TYPE_NEWDECIMAL:
+  case MYSQL_TYPE_TINY_BLOB:
+  case MYSQL_TYPE_MEDIUM_BLOB:
+  case MYSQL_TYPE_LONG_BLOB:
+  case MYSQL_TYPE_BLOB:
+  case MYSQL_TYPE_VAR_STRING:
+  case MYSQL_TYPE_STRING:
+  case MYSQL_TYPE_GEOMETRY:
+    is_supported_type = true;
+    break;
+  default:
+    break;
+  }
+
+  if (param_id < 0 || param_id > UINT16_MAX) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid standard long-data parameter id", K(ret), K(param_id));
+  } else if (OB_ISNULL(piece_cache)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("piece cache is null for typed long-data parameter", K(ret),
+             K(stmt_id_), K(param_id));
+  } else if (OB_FAIL(piece_cache->get_piece(static_cast<int32_t>(stmt_id_),
+                                            static_cast<uint16_t>(param_id),
+                                            piece))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get typed long-data piece failed", K(ret), K(stmt_id_),
+             K(param_id));
+  } else if (OB_ISNULL(piece)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("typed long-data piece disappeared", K(ret), K(stmt_id_),
+             K(param_id));
+  } else if (!is_supported_type) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unsupported standard long-data parameter type", K(ret), K(type),
+             K(stmt_id_), K(param_id));
+  } else if (OB_ISNULL(piece->get_allocator())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("typed long-data piece allocator is null", K(ret), K(stmt_id_),
+             K(param_id));
+  } else if (OB_SUCCESS != piece->get_error_ret()) {
+    ret = piece->get_error_ret();
+    LOG_WARN("send long data has stored error", K(ret), K(stmt_id_),
+             K(param_id));
+  } else if (OB_FAIL(piece_cache->collect_piece_payload(
+                 *piece, OB_MAX_LONGTEXT_LENGTH, payload))) {
+    LOG_WARN("collect typed long-data payload failed", K(ret), K(stmt_id_),
+             K(param_id));
+  } else if (OB_FAIL(set_standard_bytes_param(allocator, type, charset, cs_type,
+                                              payload.string(), param))) {
+    LOG_WARN("materialize typed long-data parameter failed", K(ret), K(type),
+             K(stmt_id_), K(param_id), "payload_length", payload.length());
+  }
+  return ret;
+}
+
+int ObMPStmtExecute::request_standard_params(ObSQLSessionInfo *session,
+                                             ObPsSessionInfo &ps_session_info,
+                                             const char *tail,
+                                             ObIAllocator &alloc,
+                                             bool &handled) {
+  int ret = OB_SUCCESS;
+  handled = false;
+  const int64_t param_count = ps_session_info.get_param_count();
+  const int64_t tail_len = analysis_checker_.remain_len();
+  nio_mysql_execute_param_meta *cached = NULL;
+  nio_mysql_execute_param *parsed = NULL;
+  uint8_t *long_data = NULL;
+  nio_mysql_execute_parse_result parse_result = {};
+  const ParamTypeArray &cached_types = ps_session_info.get_param_types();
+  const ParamTypeFlagArray &cached_flags =
+      ps_session_info.get_param_type_flags();
+
+  static_assert(sizeof(nio_mysql_execute_param_meta) == 4,
+                "execute parameter meta ABI mismatch");
+  static_assert(sizeof(nio_mysql_execute_param) == 40,
+                "execute parameter descriptor ABI mismatch");
+  static_assert(sizeof(nio_mysql_execute_parse_result) == 8,
+                "execute parse result ABI mismatch");
+
+  if (OB_ISNULL(session) || param_count < 0 || tail_len < 0 ||
+      (param_count > 0 && OB_ISNULL(tail))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid standard execute parser input", K(ret), K(param_count),
+             K(tail_len), KP(tail));
+  } else if (param_count > INT64_MAX / static_cast<int64_t>(sizeof(*parsed))) {
+    ret = OB_SIZE_OVERFLOW;
+  } else if (param_count > 0 &&
+             (OB_ISNULL(parsed = static_cast<nio_mysql_execute_param *>(
+                            alloc.alloc(param_count * sizeof(*parsed)))) ||
+              OB_ISNULL(cached = static_cast<nio_mysql_execute_param_meta *>(
+                            alloc.alloc(param_count * sizeof(*cached)))) ||
+              OB_ISNULL(long_data = static_cast<uint8_t *>(
+                            alloc.alloc(param_count))))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate standard execute descriptors failed", K(ret),
+             K(param_count));
+  }
+
+  for (int64_t i = 0; OB_SUCC(ret) && i < param_count; ++i) {
+    cached[i].mysql_type = i < cached_types.count()
+                               ? static_cast<uint16_t>(cached_types.at(i))
+                               : static_cast<uint16_t>(MYSQL_TYPE_NOT_DEFINED);
+    cached[i].type_flags = i < cached_flags.count() ? cached_flags.at(i) : 0;
+    cached[i].reserved = 0;
+    long_data[i] = 0;
+    ObPieceCache *piece_cache = session->get_piece_cache();
+    ObPiece *piece = NULL;
+    if (OB_NOT_NULL(piece_cache) &&
+        OB_FAIL(piece_cache->get_piece(static_cast<int32_t>(stmt_id_),
+                                       static_cast<uint16_t>(i), piece))) {
+      LOG_WARN("get long-data state for Rust execute parser failed", K(ret),
+               K(stmt_id_), K(i));
+    } else {
+      long_data[i] = OB_NOT_NULL(piece) ? 1 : 0;
+    }
+  }
+
+  int parse_ret = NIO_MYSQL_EXECUTE_PARSE_INVALID_ARGUMENT;
+  if (OB_SUCC(ret)) {
+    const int64_t cached_count = cached_types.count() == param_count &&
+                                         cached_flags.count() == param_count
+                                     ? param_count
+                                     : 0;
+    parse_ret = nio_parse_mysql_execute_params(
+        tail, tail_len, param_count, cached, cached_count, long_data,
+        param_count, parsed, param_count, &parse_result);
+    if (NIO_MYSQL_EXECUTE_PARSE_UNSUPPORTED == parse_ret) {
+      handled = false;
+    } else {
+      handled = true;
+      if (NIO_MYSQL_EXECUTE_PARSE_MALFORMED == parse_ret) {
+        ret = OB_ERR_MALFORMED_PS_PACKET;
+        LOG_USER_ERROR(OB_ERR_MALFORMED_PS_PACKET);
+      } else if (NIO_MYSQL_EXECUTE_PARSE_CAPACITY == parse_ret) {
+        ret = OB_SIZE_OVERFLOW;
+      } else if (NIO_MYSQL_EXECUTE_PARSE_OK != parse_ret) {
+        ret = OB_ERR_UNEXPECTED;
+      }
+      if (OB_FAIL(ret)) {
+        LOG_WARN("Rust standard execute parser failed", K(ret), K(parse_ret),
+                 K(param_count), K(tail_len));
+      }
+    }
+  }
+
+  ObCharsetType charset = CHARSET_INVALID;
+  ObCollationType cs_conn = CS_TYPE_INVALID;
+  if (OB_SUCC(ret) && handled &&
+      (OB_FAIL(session->get_character_set_connection(charset)) ||
+       OB_FAIL(session->get_collation_connection(cs_conn)))) {
+    LOG_WARN("get session charset for typed execute parameters failed", K(ret));
+  } else if (OB_SUCC(ret) && handled &&
+             OB_FAIL(params_->prepare_allocate(param_count))) {
+    LOG_WARN("allocate typed execute parameter store failed", K(ret),
+             K(param_count));
+  }
+
+  ParamTypeArray new_types;
+  ParamTypeFlagArray new_flags;
+  for (int64_t i = 0; OB_SUCC(ret) && handled && i < param_count; ++i) {
+    const nio_mysql_execute_param &desc = parsed[i];
+    const EMySQLFieldType mysql_type =
+        static_cast<EMySQLFieldType>(desc.mysql_type);
+    const bool is_unsigned =
+        0 != (desc.flags & NIO_MYSQL_EXECUTE_PARAM_UNSIGNED);
+    ObObjParam &param = params_->at(i);
+    ObObjType ob_type = ObMaxType;
+    param.reset();
+    if (OB_FAIL(ObSMUtils::get_ob_type(ob_type, mysql_type, is_unsigned))) {
+      LOG_WARN("map typed execute parameter type failed", K(ret), K(i),
+               K(mysql_type), K(is_unsigned));
+    } else {
+      param.set_type(ob_type);
+    }
+
+    if (OB_FAIL(ret)) {
+    } else if (NIO_MYSQL_EXECUTE_VALUE_NULL == desc.kind) {
+      param.set_null();
+      if (ob_is_accuracy_length_valid_tc(ob_type)) {
+        param.set_collation_type(cs_conn);
+        param.set_collation_level(CS_LEVEL_COERCIBLE);
+      }
+    } else if (NIO_MYSQL_EXECUTE_VALUE_LONG_DATA == desc.kind) {
+      if (OB_FAIL(materialize_standard_long_data(alloc, *session, mysql_type,
+                                                 charset, cs_conn, i, param))) {
+        LOG_WARN("materialize long-data execute parameter failed", K(ret), K(i),
+                 K(mysql_type));
+      }
+    } else if (NIO_MYSQL_EXECUTE_VALUE_I64 == desc.kind ||
+               NIO_MYSQL_EXECUTE_VALUE_U64 == desc.kind) {
+      const int64_t signed_value = static_cast<int64_t>(desc.value);
+      switch (mysql_type) {
+      case MYSQL_TYPE_TINY:
+        is_unsigned ? param.set_utinyint(static_cast<uint8_t>(desc.value))
+                    : param.set_tinyint(static_cast<int8_t>(signed_value));
+        break;
+      case MYSQL_TYPE_SHORT:
+        is_unsigned ? param.set_usmallint(static_cast<uint16_t>(desc.value))
+                    : param.set_smallint(static_cast<int16_t>(signed_value));
+        break;
+      case MYSQL_TYPE_INT24:
+        is_unsigned ? param.set_umediumint(static_cast<uint32_t>(desc.value))
+                    : param.set_mediumint(static_cast<int32_t>(signed_value));
+        break;
+      case MYSQL_TYPE_LONG:
+        is_unsigned ? param.set_uint32(static_cast<uint32_t>(desc.value))
+                    : param.set_int32(static_cast<int32_t>(signed_value));
+        break;
+      case MYSQL_TYPE_LONGLONG:
+        is_unsigned ? param.set_uint(ObUInt64Type, desc.value)
+                    : param.set_int(signed_value);
+        break;
+      default:
+        ret = OB_ERR_ILLEGAL_TYPE;
+        LOG_WARN("integer descriptor has non-integer type", K(ret), K(i),
+                 K(mysql_type));
+        break;
+      }
+    } else if (NIO_MYSQL_EXECUTE_VALUE_F32_BITS == desc.kind) {
+      const uint32_t bits = static_cast<uint32_t>(desc.value);
+      float value = 0;
+      MEMCPY(&value, &bits, sizeof(value));
+      param.set_float(value);
+    } else if (NIO_MYSQL_EXECUTE_VALUE_F64_BITS == desc.kind) {
+      double value = 0;
+      MEMCPY(&value, &desc.value, sizeof(value));
+      param.set_double(value);
+    } else if (NIO_MYSQL_EXECUTE_VALUE_YEAR == desc.kind) {
+      uint8_t year = 0;
+      if (OB_FAIL(ObTimeConverter::int_to_year(static_cast<int64_t>(desc.value),
+                                               year))) {
+        LOG_WARN("convert typed execute year failed", K(ret), K(i),
+                 K(desc.value));
+      } else {
+        param.set_year(year);
+      }
+    } else if (NIO_MYSQL_EXECUTE_VALUE_BYTES == desc.kind) {
+      if (desc.value_off < 0 || desc.value_len < 0 ||
+          desc.value_off > tail_len ||
+          desc.value_len > tail_len - desc.value_off) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("Rust execute byte range escaped tail", K(ret), K(i),
+                  K(desc.value_off), K(desc.value_len), K(tail_len));
+      } else {
+        const ObString bytes(desc.value_len, tail + desc.value_off);
+        if (OB_FAIL(set_standard_bytes_param(alloc, desc.mysql_type, charset,
+                                             cs_conn, bytes, param))) {
+          LOG_WARN("apply typed execute bytes failed", K(ret), K(i),
+                   K(mysql_type));
+        }
+      }
+    } else if (NIO_MYSQL_EXECUTE_VALUE_DATE == desc.kind ||
+               NIO_MYSQL_EXECUTE_VALUE_DATETIME == desc.kind ||
+               NIO_MYSQL_EXECUTE_VALUE_TIMESTAMP == desc.kind) {
+      if (OB_FAIL(set_standard_timestamp_param(
+              mysql_type, desc.year, desc.month, desc.day, desc.hour,
+              desc.minute, desc.second, desc.microseconds, 0 == desc.value_len,
+              session->get_timezone_info(), param))) {
+        LOG_WARN("apply typed execute temporal failed", K(ret), K(i),
+                 K(mysql_type));
+      }
+    } else if (NIO_MYSQL_EXECUTE_VALUE_TIME == desc.kind) {
+      if (OB_FAIL(set_standard_time_param(
+              desc.days, desc.hour, desc.minute, desc.second, desc.microseconds,
+              0 != (desc.flags & NIO_MYSQL_EXECUTE_PARAM_NEGATIVE),
+              0 == desc.value_len, param))) {
+        LOG_WARN("apply typed execute time failed", K(ret), K(i));
+      }
+    } else {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("unknown Rust execute parameter descriptor", K(ret), K(i),
+                K(desc.kind));
+    }
+
+    if (OB_SUCC(ret)) {
+      if (NIO_MYSQL_EXECUTE_VALUE_NULL != desc.kind) {
+        // Preserve the legacy binary-protocol parameter coercibility used by
+        // expression type deduction and string comparison.
+        param.set_collation_level(CS_LEVEL_COERCIBLE);
+      }
+      param.set_param_meta();
+      if (NIO_MYSQL_EXECUTE_VALUE_NULL != desc.kind) {
+        param.set_length(param.get_val_len());
+      }
+      if (1 == parse_result.new_params_bound_flag) {
+        OZ(new_types.push_back(mysql_type));
+        OZ(new_flags.push_back(desc.type_flags));
+      }
+    }
+  }
+
+  if (OB_SUCC(ret) && handled && 1 == parse_result.new_params_bound_flag) {
+    ObPsSessionInfoParamsAssignment assignment(new_types, new_flags);
+    if (OB_FAIL(session->update_ps_session_info_safety(stmt_id_, assignment))) {
+      LOG_WARN("update typed ps parameter cache failed", K(ret), K(stmt_id_));
+    } else if (OB_FAIL(assignment.ret_)) {
+      LOG_WARN("assign typed ps parameter cache failed", K(ret), K(stmt_id_));
+    }
+  }
+  return ret;
+}
+
 int ObMPStmtExecute::request_params(ObSQLSessionInfo *session,
                                     const char* &pos,
                                     uint32_t ps_stmt_checksum,
@@ -854,8 +1372,18 @@ int ObMPStmtExecute::request_params(ObSQLSessionInfo *session,
       is_save_exception_ = 0;
     }
     params_num_ = input_param_num;
-    if (OB_SUCC(ret) && params_num_ > 0) {
+    bool rust_handled = false;
+    if (OB_SUCC(ret) && !is_arraybinding_ && !is_pl_stmt(stmt_type_)) {
+      if (OB_FAIL(request_standard_params(session, *ps_session_info, pos, alloc,
+                                          rust_handled))) {
+        LOG_WARN("parse standard execute parameters in Rust failed", K(ret),
+                 K(stmt_id_), K(input_param_num));
+      }
+    }
+    if (OB_SUCC(ret) && !rust_handled && params_num_ > 0) {
       ParamTypeArray &param_types = ps_session_info->get_param_types();
+      ParamTypeFlagArray &param_type_flags =
+          ps_session_info->get_param_type_flags();
       ParamTypeInfoArray param_type_infos;
       ParamCastArray param_cast_infos;
       // Step1: Handle null value bitmap
@@ -897,26 +1425,23 @@ int ObMPStmtExecute::request_params(ObSQLSessionInfo *session,
       if (OB_SUCC(ret)) {
         if (1 == new_param_bound_flag) {
           ParamTypeArray tmp_param_types;
-          ObPsSessionInfoParamsAssignment assignment(tmp_param_types);
-          if (OB_FAIL(parse_request_type(pos,
-                                         input_param_num,
-                                         new_param_bound_flag,
-                                         cs_conn,
-                                         tmp_param_types,
-                                         param_type_infos))) {
+          ParamTypeFlagArray tmp_param_type_flags;
+          ObPsSessionInfoParamsAssignment assignment(tmp_param_types,
+                                                     tmp_param_type_flags);
+          if (OB_FAIL(parse_request_type(
+                  pos, input_param_num, new_param_bound_flag, cs_conn,
+                  tmp_param_types, tmp_param_type_flags, param_type_infos))) {
             LOG_WARN("fail to parse input params type from packet", K(ret));
-          } else if (OB_FAIL(session->update_ps_session_info_safety(stmt_id_, assignment))) {
+          } else if (OB_FAIL(session->update_ps_session_info_safety(
+                         stmt_id_, assignment))) {
             LOG_WARN("fail to update params type of PsSessionInfo", K(ret));
           } else if (OB_FAIL(assignment.ret_)) {
             LOG_WARN("fail to update params type of PsSessionInfo", K(ret));
           }
         } else {
-          if (OB_FAIL(parse_request_type(pos,
-                                         input_param_num,
-                                         new_param_bound_flag,
-                                         cs_conn,
-                                         param_types,
-                                         param_type_infos))) {
+          if (OB_FAIL(parse_request_type(
+                  pos, input_param_num, new_param_bound_flag, cs_conn,
+                  param_types, param_type_flags, param_type_infos))) {
             LOG_WARN("fail to parse input params type", K(ret));
           }
         }
@@ -1330,39 +1855,38 @@ int ObMPStmtExecute::response_result(
     bool &async_resp_used)
 {
   int ret = OB_SUCCESS;
+  bool callback_armed = false;
   bool need_trans_cb  = result.need_end_trans_callback() && (!force_sync_resp);
 
   // NG_TRACE_EXT(exec_begin, ID(arg1), force_sync_resp, ID(end_trans_cb), need_trans_cb);
 
   if (OB_LIKELY(NULL != result.get_physical_plan())) {
     if (need_trans_cb) {
-      ObAsyncPlanDriver drv(gctx_, ctx_, session, retry_ctrl_, *this);
+      ObAsyncPlanDriver drv(gctx_, ctx_, session, retry_ctrl_, packet_sender_);
       // NOTE: sql_end_cb must be initialized before drv.response_result()
       ObSqlEndTransCb &sql_end_cb = session.get_mysql_end_trans_cb();
       if (OB_FAIL(sql_end_cb.init(packet_sender_, &session,
-                                    stmt_id_, params_num_, 0))) {
+                                    stmt_id_, params_num_))) {
         LOG_WARN("failed to init sql end callback", K(ret));
+      } else if (FALSE_IT(callback_armed = true)) {
       } else if (OB_FAIL(drv.response_result(result))) {
         LOG_WARN("fail response async result", K(ret));
       }
       async_resp_used = result.is_async_end_trans_submitted();
     } else {
       int32_t iteration_count = OB_INVALID_COUNT;
-      ObSyncPlanDriver drv(gctx_,
-                           ctx_,
-                           session,
-                           retry_ctrl_,
-                           *this,
+      ObSyncPlanDriver drv(gctx_, ctx_, session, retry_ctrl_, packet_sender_,
                            iteration_count);
       ret = drv.response_result(result);
     }
   } else {
     if (need_trans_cb) {
       ObSqlEndTransCb &sql_end_cb = session.get_mysql_end_trans_cb();
-      ObAsyncCmdDriver drv(gctx_, ctx_, session, retry_ctrl_, *this);
+      ObAsyncCmdDriver drv(gctx_, ctx_, session, retry_ctrl_, packet_sender_);
       if (OB_FAIL(sql_end_cb.init(packet_sender_, &session,
-                                    stmt_id_, params_num_, 0))) {
+                                    stmt_id_, params_num_))) {
         LOG_WARN("failed to init sql end callback", K(ret));
+      } else if (FALSE_IT(callback_armed = true)) {
       } else if (OB_FAIL(drv.response_result(result))) {
         LOG_WARN("fail response async result", K(ret));
       } else {
@@ -1371,7 +1895,7 @@ int ObMPStmtExecute::response_result(
       }
       async_resp_used = result.is_async_end_trans_submitted();
     } else {
-      ObSyncCmdDriver drv(gctx_, ctx_, session, retry_ctrl_, *this);
+      ObSyncCmdDriver drv(gctx_, ctx_, session, retry_ctrl_, packet_sender_);
       session.set_pl_query_sender(&drv);
       session.set_ps_protocol(result.is_ps_protocol());
       if (OB_FAIL(drv.response_result(result))) {
@@ -1384,6 +1908,13 @@ int ObMPStmtExecute::response_result(
     }
   }
 //  NG_TRACE(exec_end);
+  if (callback_armed && !async_resp_used) {
+    const int cancel_ret = cancel_unsubmitted_callback(session.get_mysql_end_trans_cb());
+    if (OB_SUCCESS != cancel_ret) {
+      LOG_ERROR("failed to cancel unsubmitted mysql end-trans callback", K(cancel_ret));
+      ret = OB_SUCCESS == ret ? cancel_ret : ret;
+    }
+  }
   return ret;
 }
 
@@ -1630,7 +2161,7 @@ int ObMPStmtExecute::process()
       if (OB_FAIL(ret)) {
         if (OB_EAGAIN == ret) {
           // Retryable request is handled by the upper scheduler.
-        } else if (is_conn_valid()) {// The memory of sql string is invalid if conn_valid_ has been set false.
+        } else if (is_conn_valid()) { // The SQL text may be request-owned after an async handoff.
           LOG_WARN("fail execute sql", "sql_id", ctx_.sql_id_, K_(stmt_id), K(ret));
         } else {
           LOG_WARN("fail execute sql", K(ret));
@@ -1665,13 +2196,23 @@ int ObMPStmtExecute::process()
       ret = upper_scope_ret;
     }
 
+    if (async_resp_used) {
+      if (OB_FAIL(ret) && need_disconnect && is_conn_valid()) {
+        force_disconnect();
+      }
+      const int handoff_ret = handoff_async_request(session.get_mysql_end_trans_cb());
+      if (OB_UNLIKELY(OB_SUCCESS != handoff_ret)) {
+        LOG_ERROR("failed to hand off async mysql request ownership", K(handoff_ret));
+        force_disconnect();
+      }
+    }
   }
 
   if (OB_NOT_NULL(sess) && !sess->get_in_transaction()) {
     // transcation ends, end trace
   }
 
-  if (OB_FAIL(ret) && is_conn_valid()) {
+  if (!async_resp_used && OB_FAIL(ret) && is_conn_valid()) {
     if (need_response_error) {
       send_error_packet(ret, NULL);
     }
@@ -1681,15 +2222,10 @@ int ObMPStmtExecute::process()
     }
   }
   // If the response has already been sent asynchronously, this logic will be executed in cb, so skip flush_buffer() here
-  if (!THIS_WORKER.need_retry()) {
-    if (async_resp_used) {
-      async_resp_used_ = true;
-      packet_sender_.disable_response();
-    } else {
-      flush_ret = flush_buffer(true);
-    }
-  } else {
-    need_retry_ = true;
+  if (async_resp_used) {
+    // The callback sender already owns response and finish.
+  } else if (!THIS_WORKER.need_retry()) {
+    flush_ret = flush_buffer(true);
   }
 
   THIS_WORKER.set_session(NULL);
@@ -1841,7 +2377,12 @@ int ObMPStmtExecute::parse_basic_param_value(ObIAllocator &allocator,
       PS_STATIC_DEFENSE_CHECK(checker, 2)
       {
         ObMySQLUtil::get_int2(data, value);
-        param.set_year(static_cast<uint8_t>(value));
+        uint8_t year = 0;
+        if (OB_FAIL(ObTimeConverter::int_to_year(value, year))) {
+        LOG_WARN("convert execute year failed", K(ret), K(value));
+        } else {
+        param.set_year(year);
+        }
       }
       break;
     }
@@ -2500,12 +3041,8 @@ int ObMPStmtExecute::parse_mysql_time_value(const char *&data, ObObj &param, ObP
 int ObMPStmtExecute::response_query_header(ObSQLSessionInfo &session, pl::ObPLServerCursorInfo &cursor)
 {
   int ret = OB_SUCCESS;
-  ObSyncPlanDriver drv(gctx_,
-                           ctx_,
-                           session,
-                           retry_ctrl_,
-                           *this,
-                           OB_INVALID_COUNT);
+  ObSyncPlanDriver drv(gctx_, ctx_, session, retry_ctrl_, packet_sender_,
+                       OB_INVALID_COUNT);
   if (0 == cursor.get_field_columns().count()) {
     // SELECT * INTO OUTFILE return null field, and only response ok packet
     ObOKPParam ok_param;
@@ -2515,10 +3052,8 @@ int ObMPStmtExecute::response_query_header(ObSQLSessionInfo &session, pl::ObPLSe
       LOG_WARN("fail to send ok packt", K(ok_param), K(ret));
     }
   } else {
-    if (OB_FAIL(drv.response_query_header(cursor.get_field_columns(),
-                                          false,
-                                          false,
-                                          true))) {
+    if (OB_FAIL(drv.response_query_header(cursor.get_field_columns(), false,
+                                          false))) {
       LOG_WARN("fail to get autocommit", K(ret));
     }
   }

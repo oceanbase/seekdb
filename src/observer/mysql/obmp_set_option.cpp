@@ -37,8 +37,13 @@ int ObMPSetOption::deserialize()
     LOG_WARN("invalid packet", K(ret), K_(req), K(req_->get_type()));
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
-    char *buf = const_cast<char *>(pkt.get_cdata());
-    ObMySQLUtil::get_uint2(buf, set_opt_);
+    if (OB_UNLIKELY(ObMySQLCommandLayout::U16 != pkt.get_command_layout())) {
+      ret = OB_INVALID_DATA;
+      LOG_WARN("unexpected set-option command layout", K(ret),
+               K(pkt.get_command_layout()));
+    } else {
+      set_opt_ = static_cast<uint16_t>(pkt.get_command_scalar0());
+    }
   }
   return ret;
 }
@@ -51,11 +56,7 @@ int ObMPSetOption::process()
   ObSQLSessionInfo *session = NULL;
   bool need_response_error = true;
   ObSMConnection *conn = NULL;
-  const ObMySQLRawPacket &mysql_pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
-
-  if (OB_FAIL(packet_sender_.alloc_ezbuf())) {
-    LOG_WARN("failed to alloc easy buf", K(ret));
-  } else if (OB_FAIL(get_session(session))) {
+  if (OB_FAIL(get_session(session))) {
     LOG_WARN("get session  fail", K(ret));
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;

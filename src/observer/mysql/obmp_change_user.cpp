@@ -37,109 +37,26 @@ int ObMPChangeUser::deserialize()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid request", K(req_));
   } else {
-    ObSQLSessionInfo *session = NULL;
-    ObMySQLCapabilityFlags capability;
-    if (OB_FAIL(get_session(session))) {
-      LOG_WARN("get session  fail", K(ret));
-    } else if (OB_ISNULL(session)) {
+    const ObMySQLRawPacket &pkt =
+        reinterpret_cast<const ObMySQLRawPacket &>(req_->get_packet());
+    const int64_t charset = pkt.get_command_scalar0();
+    if (ObMySQLCommandLayout::CHANGE_USER != pkt.get_command_layout()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("fail to get session info", K(ret), K(session));
+      LOG_ERROR("change-user command view has wrong layout", K(ret), "layout",
+                static_cast<uint32_t>(pkt.get_command_layout()));
+    } else if (OB_FAIL(pkt.get_command_field(0, username_))) {
+      LOG_WARN("get change-user username failed", K(ret));
+    } else if (OB_FAIL(pkt.get_command_field(1, auth_response_))) {
+      LOG_WARN("get change-user auth response failed", K(ret));
+    } else if (OB_FAIL(pkt.get_command_field(2, database_))) {
+      LOG_WARN("get change-user database failed", K(ret));
+    } else if (charset < -1 || charset > UINT16_MAX) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("change-user charset is outside typed ABI", K(ret), K(charset));
     } else {
-      ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
-      session->update_last_active_time();
-      capability = session->get_capability();
+      has_charset_ = charset >= 0;
+      charset_ = has_charset_ ? static_cast<uint16_t>(charset) : 0;
     }
-    if (NULL != session) {
-      revert_session(session);
-    }
-    if (OB_SUCC(ret)) {
-      pkt_  = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
-      const char *buf = pkt_.get_cdata();
-      const char *pos = pkt_.get_cdata();
-      // need skip command byte
-      const int64_t len = pkt_.get_clen() - 1;
-      const char *end = buf + len;
-
-      if (OB_LIKELY(pos < end)) {
-        username_.assign_ptr(pos, static_cast<int32_t>(STRLEN(pos)));
-        pos += username_.length() + 1;
-      }
-
-      if (OB_LIKELY(pos < end)) {
-        if (capability.cap_flags_.OB_CLIENT_SECURE_CONNECTION) {
-          uint8_t auth_response_len = 0;
-          ObMySQLUtil::get_uint1(pos, auth_response_len);
-          auth_response_.assign_ptr(pos, static_cast<int32_t>(auth_response_len));
-          pos += auth_response_len;
-        } else {
-          auth_response_.assign_ptr(pos, static_cast<int32_t>(STRLEN(pos)));
-          pos += auth_response_.length() + 1;
-        }
-      }
-
-      if (OB_LIKELY(pos < end)) {
-        database_.assign_ptr(pos, static_cast<int32_t>(STRLEN(pos)));
-        pos += database_.length() + 1;
-      }
-
-      if (OB_LIKELY(pos < end)) {
-        ObMySQLUtil::get_uint2(pos, charset_);
-      }
-
-      if (OB_LIKELY(pos < end)) {
-        if (capability.cap_flags_.OB_CLIENT_PLUGIN_AUTH) {
-          auth_plugin_name_.assign_ptr(pos, static_cast<int32_t>(STRLEN(pos)));
-          pos += auth_plugin_name_.length() + 1;
-        }
-      }
-
-      if (OB_LIKELY(pos < end)) {
-        if (capability.cap_flags_.OB_CLIENT_CONNECT_ATTRS) {
-          uint64_t all_attrs_len = 0;
-          const char *attrs_end = NULL;
-          if (OB_FAIL(ObMySQLUtil::get_length(pos, all_attrs_len))) {
-            LOG_WARN("fail to get all_attrs_len", K(ret));
-          } else {
-            attrs_end = pos + all_attrs_len;
-          }
-          ObStringKV str_kv;
-          while(OB_SUCC(ret) && OB_LIKELY(pos < attrs_end)) {
-            if (OB_FAIL(decode_string_kv(attrs_end, pos, str_kv))) {
-              OB_LOG(WARN, "fail to decode string kv", K(ret));
-            }
-          }
-        } // end connect attrs
-      } // end if
-    }
-  }
-  return ret;
-}
-
-int ObMPChangeUser::decode_string_kv(const char *attrs_end, const char *&pos, ObStringKV &kv)
-{
-  int ret = OB_SUCCESS;
-  uint64_t key_len = 0;
-  uint64_t value_len = 0;
-  if (OB_ISNULL(pos)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalie input value", K(pos), K(ret));
-  } else {
-    if (OB_FAIL(ObMySQLUtil::get_length(pos, key_len))) {
-      OB_LOG(WARN, "fail t get key len", K(pos), K(ret));
-    } else if (pos + key_len >= attrs_end) {
-      // skip this value
-      pos = attrs_end;
-    } else {
-      kv.key_.assign_ptr(pos, static_cast<uint32_t>(key_len));
-      pos += key_len;
-      if (OB_FAIL(ObMySQLUtil::get_length(pos, value_len))) {
-        OB_LOG(WARN, "fail t get value len", K(pos), K(ret));
-      } else {
-        kv.value_.assign_ptr(pos, static_cast<uint32_t>(value_len));
-        pos += value_len;
-      }
-    }
-
   }
   return ret;
 }
@@ -150,7 +67,6 @@ int ObMPChangeUser::process()
   ObSQLSessionInfo *session = NULL;
   bool need_disconnect = true;
   bool need_response_error = true;
-  const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
   int64_t query_timeout = 0;
   bool need_send_auth_switch =
       get_conn()->is_support_plugin_auth();
@@ -164,7 +80,9 @@ int ObMPChangeUser::process()
   } else if (FALSE_IT(THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout))) {
   } else {
     need_disconnect = false;
-    get_conn()->client_cs_type_ = charset_;
+    if (has_charset_) {
+      get_conn()->client_cs_type_ = charset_;
+    }
     ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
     session->update_last_active_time();
     if (OB_FAIL(ObSqlTransControl::rollback_trans(session, need_disconnect))) {
@@ -199,7 +117,7 @@ int ObMPChangeUser::process()
       OMPKAuthSwitch auth_switch;
       auth_switch.set_plugin_name(ObString(AUTH_PLUGIN_MYSQL_NATIVE_PASSWORD));
       auth_switch.set_scramble(ObString(sizeof(get_conn()->scramble_buf_), get_conn()->scramble_buf_));
-      if (OB_FAIL(packet_sender_.response_packet(auth_switch, session))) {
+      if (OB_FAIL(packet_sender_.response_packet(auth_switch))) {
         RPC_LOG(WARN, "failed to send error packet", K(auth_switch), K(ret));
         disconnect();
       } else {

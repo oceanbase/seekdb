@@ -20,6 +20,6 @@ namespace oceanbase
 {
 const char *ob_ash_mysql_cmd_name(int32_t mysql_cmd)
 {
-  return obmysql::ObMySQLPacket::get_mysql_cmd_name(static_cast<obmysql::ObMySQLCmd>(mysql_cmd));
+  return obmysql::get_mysql_cmd_str(static_cast<obmysql::ObMySQLCmd>(mysql_cmd));
 }
 }

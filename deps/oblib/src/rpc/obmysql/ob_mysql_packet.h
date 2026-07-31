@@ -28,12 +28,6 @@ static constexpr uint8_t CURSOR_TYPE_READ_ONLY = 1;
 
 #define INTERNAL_MYSQL_CMD_START 64
 
-static const int64_t OB_MYSQL_MAX_PACKET_LENGTH = (1L << 24); //3bytes , 16M
-static const int64_t OB_MYSQL_MAX_PAYLOAD_LENGTH = (OB_MYSQL_MAX_PACKET_LENGTH - 1);
-// EASY_IO_BUFFER_SIZE is 16k, reserve 3k for libeasy header and request
-static const int64_t OB_MULTI_RESPONSE_BUF_SIZE = (1L << 14) - 3 * 1024; //13k, for result
-static const int64_t OB_ONE_RESPONSE_BUF_SIZE = (1L << 14); //16k, error/ok(proxy)
-
 enum ObMySQLCmd
 {
   COM_SLEEP,
@@ -96,19 +90,16 @@ enum ObMySQLCmd
 enum class ObMySQLPacketType
 {
   INVALID_PKT = 0,
-  PKT_MYSQL,     // 1 -> mysql packet;
-  PKT_OKP,       // 2 -> okp;
-  PKT_ERR,       // 3 -> error packet;
-  PKT_EOF,       // 4 -> eof packet;
-  PKT_ROW,       // 5 -> row packet; 
-  PKT_FIELD,     // 6 -> field packet;
-  PKT_PIECE,     // 7 -> piece packet;
-  PKT_STR,       // 8 -> string packet;
-  PKT_PREPARE,   // 9 -> prepare packet; 
-  PKT_RESHEAD,   // 10 -> result header packet
-  PKT_AUTH_SWITCH,// 11 -> auth switch request packet;
-  PKT_FILENAME,  // 12 -> send file name to client(load local infile)
-  PKT_END        // 13 -> end of packet type
+  PKT_OKP = 2,         // okp;
+  PKT_ERR = 3,         // error packet;
+  PKT_EOF = 4,         // eof packet;
+  PKT_ROW = 5,         // row packet;
+  PKT_FIELD = 6,       // field packet;
+  PKT_STR = 8,         // string packet;
+  PKT_PREPARE = 9,     // prepare packet;
+  PKT_RESHEAD = 10,    // result header packet
+  PKT_AUTH_SWITCH = 11, // auth switch request packet;
+  PKT_FILENAME = 12    // send file name to client(load local infile)
 };
 
 union ObServerStatusFlags
@@ -270,221 +261,140 @@ public:
 
 typedef ObCommonKV<common::ObString, common::ObString> ObStringKV;
 
-static const int64_t MAX_STORE_LENGTH = 9;
-
-class ObMySQLPacketHeader
-{
-public:
-  ObMySQLPacketHeader()
-      : len_(0), seq_(0)
-  { }
-
-  void reset() {
-    len_ = 0;
-    seq_ = 0;
-  }
-
-  TO_STRING_KV("length", len_, "sequence", seq_);
-
-public:
-  uint32_t len_;         // MySQL packet length not include packet header
-  uint8_t  seq_;         // MySQL packet sequence
+// Pointer-free C++ sidecar for the Rust command metadata. The command itself
+// stays in ObMySQLRawPacket::cmd_. The ABI-facing nio_mysql_command_view is
+// copied field-by-field at the packet-storage boundary, so this core packet
+// header does not depend on nio.h and never retains a Rust view pointer.
+enum class ObMySQLCommandLayout : uint32_t {
+  BYTES = 1,
+  FIELD_LIST = 2,
+  U32 = 3,
+  U16 = 4,
+  FETCH = 5,
+  LONG_DATA = 6,
+  CHANGE_USER = 7,
+  EXECUTE = 8,
+  EMPTY = 9,
+  U8 = 10,
+  INVALID = static_cast<uint32_t>(-1)
 };
 
-/*
- * when use compress, packet header looks like:
- *  3B  length of compressed payload
- *  1B  compressed sequence id
- *  3B  length of payload before compression
- */
-class ObMySQLCompressedPacketHeader
-{
-public:
-  ObMySQLCompressedPacketHeader()
-      : comp_len_(0), comp_seq_(0), uncomp_len(0)
-  { }
-
-  TO_STRING_KV("compressed_length", comp_len_,
-               "compressed_sequence", comp_seq_,
-               "length_before_compression", uncomp_len);
-
-public:
-  uint32_t comp_len_;         // length of compressed payload, not include packet header
-  uint8_t  comp_seq_;         // compressed sequence id
-  uint32_t uncomp_len;        // length of payload before compressio
+struct ObMySQLCommandField {
+  int32_t off_;
+  int32_t len_;
 };
+
+struct ObMySQLCommandView {
+  ObMySQLCommandLayout layout_;
+  int64_t scalar0_;
+  int64_t scalar1_;
+  ObMySQLCommandField fields_[4];
+  int64_t scalar2_;
+};
+
+static_assert(sizeof(ObMySQLCommandField) == 8,
+              "mysql command field layout changed");
+static_assert(sizeof(ObMySQLCommandLayout) == sizeof(uint32_t),
+              "mysql command layout width changed");
 
 class ObMySQLPacket
     : public rpc::ObPacket
 {
 public:
-  ObMySQLPacket()
-      : hdr_(), cdata_(NULL), is_packed_(false)
-  {}
+  ObMySQLPacket() = default;
   virtual ~ObMySQLPacket() {}
 
-  static int store_string_kv(char *buf, int64_t len, const ObStringKV &str, int64_t &pos);
-  static uint64_t get_kv_encode_len(const ObStringKV &string_kv);
-  static const char *get_mysql_cmd_name(const ObMySQLCmd &cmd);
-  inline static ObStringKV get_separator_kv(); // separator for system variables and user variables
-
-  inline void set_seq(uint8_t seq);
-  inline uint8_t get_seq(void) const;
-  inline void set_content(const char *content, uint32_t len);
-  inline const char *get_cdata() const { return cdata_; }
-
-  virtual int64_t get_serialize_size() const;
-  int encode(char *buffer, int64_t length, int64_t &pos, int64_t &pkt_count) const;
-  int encode(char *buffer, int64_t length, int64_t &pos);
-  int get_pkt_len() { return hdr_.len_; }
-  virtual int decode() { return common::OB_NOT_SUPPORTED; }
   virtual ObMySQLPacketType get_mysql_packet_type() { return ObMySQLPacketType::INVALID_PKT; }
 
-  virtual void reset()
-  {
-    hdr_.reset();
-    cdata_ = NULL;
-  }
-
-  virtual void assign(const ObMySQLPacket &other) {
-    cdata_ = other.cdata_;
-    hdr_.len_ = other.hdr_.len_;
-    hdr_.seq_ = other.hdr_.seq_;
-  }
-
-  VIRTUAL_TO_STRING_KV("header", hdr_);
-
-protected:
-
-  virtual int serialize(char*, const int64_t, int64_t&) const
-  {
-    return common::OB_NOT_SUPPORTED;
-  }
-
-public:
-  static const int64_t HANDSHAKE_RESPONSE_RESERVED_SIZE = 23;
-  // 4: capability flags
-  // 4: max-packet size
-  // 1: character set
-  static const int64_t HANDSHAKE_RESPONSE_MIN_SIZE = 9 + HANDSHAKE_RESPONSE_RESERVED_SIZE;
-  // 4: capability flags
-  static const int64_t JDBC_SSL_MIN_SIZE = 4;
-  // 2: capability flags
-  static const int64_t MIN_CAPABILITY_SIZE = 2;
-  bool is_packed() const { return is_packed_; }
-  void set_is_packed(const bool is_packed) { is_packed_ = is_packed; }
-protected:
-  ObMySQLPacketHeader hdr_;
-  const char *cdata_;
-  //parallel encoding of output_expr in advance to speed up packet response
-  bool is_packed_;
+  VIRTUAL_TO_STRING_KV("packet_type", "MYSQL");
 };
 
 class ObMySQLRawPacket
     : public ObMySQLPacket
 {
 public:
-  ObMySQLRawPacket() : ObMySQLPacket(), cmd_(COM_MAX_NUM)
-  {}
+  ObMySQLRawPacket()
+      : ObMySQLPacket(), cdata_(NULL), clen_(0), wire_bytes_(0),
+        cmd_(COM_MAX_NUM), command_view_() {
+    reset_command_view();
+  }
 
-  explicit ObMySQLRawPacket(obmysql::ObMySQLCmd cmd)
-    : ObMySQLPacket(), cmd_(cmd), consume_size_(0)
-  {}
+  ObMySQLRawPacket(const ObMySQLRawPacket &other)
+      : ObMySQLPacket(), cdata_(NULL), clen_(0), wire_bytes_(0),
+        cmd_(COM_MAX_NUM), command_view_() {
+    assign(other);
+  }
+
+  ObMySQLRawPacket &operator=(const ObMySQLRawPacket &other) {
+    if (this != &other) {
+      assign(other);
+    }
+    return *this;
+  }
 
   virtual ~ObMySQLRawPacket() {}
 
   inline void set_cmd(ObMySQLCmd cmd);
   inline ObMySQLCmd get_cmd() const;
 
+  inline void set_content(const char *content, uint32_t len);
   inline const char *get_cdata() const;
   inline uint32_t get_clen() const;
+  inline void set_wire_bytes(uint64_t wire_bytes) { wire_bytes_ = wire_bytes; }
+  inline uint64_t get_wire_bytes() const { return wire_bytes_; }
 
-  virtual int64_t get_serialize_size() const;
-
-  void set_consume_size(int64_t consume_size) { consume_size_ = consume_size; }
-  int64_t get_consume_size() const { return consume_size_; }
+  inline void set_command_view(const ObMySQLCommandView &view) {
+    command_view_ = view;
+  }
+  inline bool has_command_view() const {
+    return ObMySQLCommandLayout::INVALID != command_view_.layout_;
+  }
+  inline ObMySQLCommandLayout get_command_layout() const {
+    return command_view_.layout_;
+  }
+  inline int64_t get_command_scalar0() const { return command_view_.scalar0_; }
+  inline int64_t get_command_scalar1() const { return command_view_.scalar1_; }
+  inline int64_t get_command_scalar2() const { return command_view_.scalar2_; }
+  int get_command_field(int64_t index, common::ObString &field) const;
 
   virtual void reset() {
-    ObMySQLPacket::reset();
+    cdata_ = NULL;
+    clen_ = 0;
+    wire_bytes_ = 0;
     cmd_ = COM_MAX_NUM;
-    consume_size_ = 0;
+    reset_command_view();
   }
 
   virtual void assign(const ObMySQLRawPacket &other)
   {
-    ObMySQLPacket::assign(other);
+    cdata_ = other.cdata_;
+    clen_ = other.clen_;
+    wire_bytes_ = other.wire_bytes_;
     cmd_ = other.cmd_;
-    consume_size_ = other.consume_size_;
+    command_view_ = other.command_view_;
   }
 
-  TO_STRING_KV("header", hdr_, "consume_size", consume_size_);
-protected:
-  virtual int serialize(char*, const int64_t, int64_t&) const;
+  TO_STRING_KV(K_(clen), K_(wire_bytes));
 
 private:
-  void set_len(uint32_t len);
-private:
-  ObMySQLCmd cmd_;
-
-  // In load local scenario, we should tell the NIO to consume specific size data.
-  // The size is a packet size in usually. But the mysql packet size if not equal
-  // to the packet that we received if we use compress protocol.
-  // NOTE: one compress packet has only one mysql packet in request message.
-  int64_t consume_size_;
-};
-
-class ObMySQLCompressedPacket
-    : public rpc::ObPacket
-{
-public:
-  ObMySQLCompressedPacket()
-      : hdr_(), cdata_(NULL)
-  {}
-  virtual ~ObMySQLCompressedPacket() {}
-
-  inline uint32_t get_comp_len() const { return hdr_.comp_len_; }
-  inline uint8_t get_comp_seq() const { return hdr_.comp_seq_; }
-  inline uint32_t get_uncomp_len() const { return hdr_.uncomp_len; }
-  inline const char *get_cdata() const { return cdata_; }
-  inline void set_content(const char *content, const uint32_t comp_len,
-                          const uint8_t comp_seq, const uint32_t uncomp_len)
-  {
-    cdata_ = content;
-    hdr_.comp_len_ = comp_len;
-    hdr_.comp_seq_ = comp_seq;
-    hdr_.uncomp_len = uncomp_len;
+  void reset_command_view() {
+    command_view_.layout_ = ObMySQLCommandLayout::INVALID;
+    command_view_.scalar0_ = 0;
+    command_view_.scalar1_ = 0;
+    for (int64_t i = 0; i < 4; ++i) {
+      command_view_.fields_[i].off_ = 0;
+      command_view_.fields_[i].len_ = 0;
+    }
+    command_view_.scalar2_ = 0;
   }
 
-  VIRTUAL_TO_STRING_KV("header", hdr_);
-
-protected:
-  ObMySQLCompressedPacketHeader hdr_;
+private:
   const char *cdata_;
+  uint32_t clen_;
+  uint64_t wire_bytes_;
+  ObMySQLCmd cmd_;
+  ObMySQLCommandView command_view_;
 };
-
-ObStringKV ObMySQLPacket::get_separator_kv()
-{
-  static ObStringKV separator_kv;
-  separator_kv.key_ = common::ObString::make_string("__NULL");
-  separator_kv.value_ = common::ObString::make_string("__NULL");
-  return separator_kv;
-}
-
-void ObMySQLPacket::set_seq(uint8_t seq)
-{
-  hdr_.seq_ = seq;
-}
-
-uint8_t ObMySQLPacket::get_seq(void) const
-{
-  return hdr_.seq_;
-}
-
-void ObMySQLPacket::set_content(const char *content, uint32_t len)
-{
-  cdata_ = content;
-  hdr_.len_ = len;
-}
 
 void ObMySQLRawPacket::set_cmd(ObMySQLCmd cmd)
 {
@@ -496,16 +406,17 @@ ObMySQLCmd ObMySQLRawPacket::get_cmd() const
   return cmd_;
 }
 
+inline void ObMySQLRawPacket::set_content(const char *content, uint32_t len) {
+  cdata_ = content;
+  clen_ = len;
+}
+
 inline const char *ObMySQLRawPacket::get_cdata() const
 {
   return cdata_;
 }
 
-inline uint32_t ObMySQLRawPacket::get_clen() const
-{
-  return hdr_.len_;
-}
-
+inline uint32_t ObMySQLRawPacket::get_clen() const { return clen_; }
 } // end of namespace obmysql
 } // end of namespace oceanbase
 

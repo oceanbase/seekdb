@@ -18,11 +18,10 @@
 
 #include "ob_query_driver.h"
 #include "ob_mysql_result_set.h"
+#include "obmp_packet_sender.h"
 #include "obsm_row.h"
-#include "rpc/obmysql/packet/ompk_row.h"
-#include "rpc/obmysql/packet/ompk_resheader.h"
-#include "rpc/obmysql/packet/ompk_field.h"
 #include "rpc/obmysql/packet/ompk_eof.h"
+#include "rpc/obmysql/packet/ompk_row.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 #include "sql/monitor/show_trace/ob_show_trace.h"
@@ -37,9 +36,7 @@ namespace observer
 
 int ObQueryDriver::response_query_header(ObResultSet &result,
                                          bool has_more_result,
-                                         bool need_set_ps_out_flag,
-                                         bool need_flush_buffer)
-{
+                                         bool need_set_ps_out_flag) {
   int ret = OB_SUCCESS;
   if (NULL == result.get_field_columns()) {
     ret = OB_INVALID_ARGUMENT;
@@ -47,7 +44,6 @@ int ObQueryDriver::response_query_header(ObResultSet &result,
   } else if (OB_FAIL(response_query_header(*result.get_field_columns(),
                                            has_more_result,
                                            need_set_ps_out_flag,
-                                           false,
                                            &result))) {
     LOG_WARN("response query head fail. ", K(ret));
   }
@@ -60,11 +56,12 @@ int ObQueryDriver::response_query_header(ObResultSet &result,
 int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
                                          bool has_more_result,
                                          bool need_set_ps_out_flag,
-                                         bool ps_cursor_execute,
                                          ObResultSet *result)
 {
   int ret = OB_SUCCESS;
   bool ac = true;
+  const bool is_field_list = NULL != result && result->get_is_com_filed_list();
+  ObSEArray<ObMySQLField, 16> mysql_fields;
   // result == null means ps cursor in execute or fetch .
   if (NULL != result && (&fields != result->get_field_columns())) {
     ret = OB_ERR_UNEXPECTED;
@@ -74,28 +71,23 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
     ret = OB_ERR_BAD_FIELD_ERROR;
   } else if (OB_FAIL(session_.get_autocommit(ac))) {
     LOG_WARN("fail to get autocommit", K(ret));
-  } else if (!(NULL != result && result->get_is_com_filed_list())) {
-    // Normal protocol sends cnt value
-    OMPKResheader rhp;
-    rhp.set_field_count(fields.count());
-    if (OB_FAIL(sender_.response_packet(rhp, &session_))) {
-      LOG_WARN("response packet fail", K(ret));
-    }
-  } else {
-    // com field protocol sends nothing here, directly sending field information
+  } else if (OB_FAIL(mysql_fields.reserve(fields.count()))) {
+    LOG_WARN("failed to reserve MySQL result-set fields", K(ret), "field_count",
+             fields.count());
   }
-  // send field information
+
+  // Complete wildcard filtering and every ObField conversion before entering
+  // Rust. A conversion failure must not leave a result header or field prefix
+  // in the response batch.
   if (OB_SUCC(ret)) {
     for (int64_t i = 0; OB_SUCC(ret) && i < fields.count(); ++i) {
       bool is_not_match = false;
       ObMySQLField field;
       const ObField &ob_field = fields.at(i);
-      if (NULL != result && result->get_is_com_filed_list() 
-                         && OB_FAIL(is_com_filed_list_match_wildcard_str(
-                                                  *result,
-                                                  static_cast<ObCollationType>(ob_field.charsetnr_),
-                                                  ob_field.org_cname_,
-                                                  is_not_match))) {
+      if (is_field_list &&
+          OB_FAIL(is_com_filed_list_match_wildcard_str(
+              *result, static_cast<ObCollationType>(ob_field.charsetnr_),
+              ob_field.org_cname_, is_not_match))) {
         LOG_WARN("failed to is com filed list match wildcard str", K(ret));
       } else if (is_not_match) {
         /*do nothing*/
@@ -107,12 +99,13 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
         }
         if (OB_SUCC(ret)) {
           ObMySQLResultSet::replace_lob_type(field);
-          if (NULL != result && result->get_is_com_filed_list()) {
-            field.default_value_ = static_cast<EMySQLFieldType>(ob_field.default_value_.get_ext());
+          if (is_field_list) {
+            field.default_value_ =
+                static_cast<EMySQLFieldType>(ob_field.default_value_.get_ext());
           }
-          OMPKField fp(field);
-          if (OB_FAIL(sender_.response_packet(fp, &session_))) {
-            LOG_WARN("response packet fail", K(ret));
+          if (OB_FAIL(mysql_fields.push_back(field))) {
+            LOG_WARN("failed to retain converted MySQL result field", K(ret),
+                     K(i));
           }
         }
       }
@@ -132,8 +125,11 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
     flags.status_flags_.OB_SERVER_STATUS_CURSOR_EXISTS = NULL == result ? 1 : 0; 
     eofp.set_server_status(flags);
 
-    if (OB_FAIL(sender_.response_packet(eofp, &session_))) {
-      LOG_WARN("response packet fail", K(ret));
+    if (OB_FAIL(sender_.response_resultset_metadata(
+            mysql_fields, !is_field_list, eofp.get_field_count(),
+            eofp.get_warning_count(), eofp.get_server_status().flags_))) {
+      LOG_WARN("response result-set metadata fail", K(ret), "field_count",
+               mysql_fields.count(), K(is_field_list));
     }
   }
   return ret;
@@ -184,6 +180,8 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
     }
   }
 
+  const ObDataTypeCastParams dtc_params =
+      ObBasicSessionInfo::create_dtc_params(&session_);
   while (OB_SUCC(ret) && row_num < limit_count && !OB_FAIL(result.get_next_row(result_row)) ) {
     ObNewRow *row = const_cast<ObNewRow*>(result_row);
     // If it is the first line, then reply to the client with field information etc.
@@ -235,15 +233,13 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
       }
     }
     if (OB_SUCC(ret)) {
-      const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(&session_);
       ObSMRow sm(protocol_type, *row, dtc_params,
                          session_,  
                          result.get_field_columns(),
                          ctx_.schema_guard_);
       sm.set_packed(is_packed);
       OMPKRow rp(sm);
-      rp.set_is_packed(is_packed);
-      if (OB_FAIL(sender_.response_packet(rp, &result.get_session()))) {
+      if (OB_FAIL(sender_.response_packet(rp))) {
         LOG_WARN("response packet fail", K(ret), KP(row), K(row_num),
             K(can_retry));
         // break;

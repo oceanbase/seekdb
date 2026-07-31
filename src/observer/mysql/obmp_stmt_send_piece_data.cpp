@@ -300,35 +300,71 @@ int ObPieceCache::get_buffer(int32_t stmt_id,
   return ret;
 }
 
-int ObPieceCache::get_mysql_buffer(int32_t stmt_id,
-                                   uint16_t param_id,
-                                   uint64_t &length,
-                                  ObSqlString &str_buf)
-{
+int ObPieceCache::get_mysql_buffer(int32_t stmt_id, uint16_t param_id,
+                                   uint64_t &length, ObSqlString &str_buf) {
   int ret = OB_SUCCESS;
   ObPiece *piece = NULL;
   length = 0;
   str_buf.reset();
   if (OB_FAIL(get_piece(stmt_id, param_id, piece))) {
-    LOG_WARN("get piece fail", K(stmt_id), K(param_id), K(ret) );
+    LOG_WARN("get piece fail", K(stmt_id), K(param_id), K(ret));
   } else if (NULL == piece) {
     ret = OB_ERR_PARAM_INVALID;
     LOG_WARN("piece is null", K(stmt_id), K(ret));
+  } else if (OB_FAIL(collect_piece_payload(*piece, INT64_MAX, str_buf))) {
+    LOG_WARN("collect mysql long-data payload failed", K(ret), K(stmt_id),
+             K(param_id));
   } else {
-    ObPieceBufferArray *buffer_array = piece->get_buffer_array();
-    for (int64_t i = 0; OB_SUCC(ret) && i < buffer_array->count(); i++) {
-      ObPieceBuffer *piece_buffer = &buffer_array->at(i);
-      if (NULL != piece_buffer->get_piece_buffer()) {
-        const ObString buffer = *(piece_buffer->get_piece_buffer());
-        if (OB_FAIL(str_buf.append(buffer))) {
-          LOG_WARN("append long data fail.", K(ret));
-        } else {}
-      }
-    }
     length += get_length_length(str_buf.length());
     length += str_buf.length();
   }
   LOG_DEBUG("get buffer.", K(ret), K(stmt_id), K(param_id), K(length));
+  return ret;
+}
+
+int ObPieceCache::collect_piece_payload(ObPiece &piece, int64_t max_length,
+                                        ObSqlString &str_buf) {
+  int ret = OB_SUCCESS;
+  int64_t total_length = 0;
+  ObPieceBufferArray *buffer_array = piece.get_buffer_array();
+  str_buf.reset();
+  if (max_length < 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid maximum piece payload length", K(ret), K(max_length));
+  } else if (OB_ISNULL(buffer_array)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("piece buffer array is null", K(ret), K(piece.get_stmt_id()),
+             K(piece.get_param_id()));
+  }
+
+  for (int64_t i = 0; OB_SUCC(ret) && i < buffer_array->count(); ++i) {
+    ObPieceBuffer *piece_buffer = &buffer_array->at(i);
+    ObString *buffer = piece_buffer->get_piece_buffer();
+    if (OB_ISNULL(buffer) || buffer->length() < 0) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid long-data piece buffer", K(ret), K(i), KP(buffer));
+    } else if (buffer->length() > max_length - total_length) {
+      ret = OB_ERR_INVALID_INPUT_ARGUMENT;
+      LOG_WARN("long-data payload is over size", K(ret), K(max_length),
+               K(total_length), "piece_length", buffer->length());
+    } else {
+      total_length += buffer->length();
+    }
+  }
+
+  if (OB_SUCC(ret) && total_length > 0 &&
+      OB_FAIL(str_buf.reserve(total_length))) {
+    LOG_WARN("reserve long-data payload failed", K(ret), K(total_length));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < buffer_array->count(); ++i) {
+    const ObString &buffer = *(buffer_array->at(i).get_piece_buffer());
+    if (OB_FAIL(str_buf.append(buffer))) {
+      LOG_WARN("append long-data piece failed", K(ret), K(i), "piece_length",
+               buffer.length());
+    }
+  }
+  LOG_DEBUG("collect piece payload", K(ret), K(piece.get_stmt_id()),
+            K(piece.get_param_id()), K(total_length));
   return ret;
 }
 

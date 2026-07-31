@@ -61,7 +61,7 @@ public:
       handler_()
   {}
   ~ObDASParallelTask() {}
-  int init(ObDasAggregatedTask *agg_task, int64_t timeout_ts, int32_t group_id);
+  int init(ObDasAggregatedTask *agg_task, int64_t timeout_ts);
   const ObCurTraceId::TraceId &get_trace_id() const { return trace_id_; }
   int64_t get_timeout_ts() { return timeout_ts_; }
   void reset()

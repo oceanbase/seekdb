@@ -18,12 +18,13 @@
 
 #include "obmp_base.h"
 
-#include "rpc/obmysql/packet/ompk_change_user.h"
+#include "observer/mysql/ob_mysql_end_trans_cb.h"
 #include "rpc/obmysql/packet/ompk_row.h"
 #include "observer/mysql/obsm_row.h"
 #include "observer/mysql/obmp_utils.h"
 #include "observer/mysql/ob_query_driver.h"
 #include "sql/engine/expr/ob_expr_xml_func_helper.h"
+void OB_WEAK_SYMBOL request_finish_callback();
 namespace oceanbase
 {
 using namespace share;
@@ -42,16 +43,28 @@ namespace observer
 {
 
 ObMPBase::ObMPBase(const ObGlobalContext &gctx)
-    : gctx_(gctx), process_timestamp_(0)
+    : gctx_(gctx), process_timestamp_(0), end_trans_cb_to_enable_(NULL)
 {
 }
 
 ObMPBase::~ObMPBase()
 {
-  // wakeup_request internally will judge the has_req_wakeup_ flag,
-  // Here calls the fallback exception path where flush_buffer is forgotten
-  if (!THIS_WORKER.need_retry()) {
-    packet_sender_.finish_sql_request();
+  // Finish any request still owned by the processor before releasing deferred
+  // callback state. Packet retry explicitly detaches the generation instead;
+  // successful async handoff makes either operation a no-op.
+  if (THIS_WORKER.need_retry()) {
+    const int detach_ret = packet_sender_.detach_for_retry();
+    if (OB_SUCCESS != detach_ret) {
+      LOG_WARN_RET(detach_ret,
+                   "failed to detach mysql request for packet retry");
+    }
+  } else {
+    (void)packet_sender_.finish_sql_request();
+  }
+  if (NULL != end_trans_cb_to_enable_) {
+    ObSqlEndTransCb *end_trans_cb = end_trans_cb_to_enable_;
+    end_trans_cb_to_enable_ = NULL;
+    end_trans_cb->allow_request_completion();
   }
 }
 
@@ -123,6 +136,61 @@ int ObMPBase::after_process(int error_code)
 
 void ObMPBase::cleanup()
 {
+  if (NULL != end_trans_cb_to_enable_) {
+    ObSqlEndTransCb *end_trans_cb = end_trans_cb_to_enable_;
+    end_trans_cb_to_enable_ = NULL;
+    // This is the final processor hook: response() and after_process() have
+    // stopped touching request-owned storage, so callback completion may now
+    // stage the final packet and let Rust reuse the request pool.
+    end_trans_cb->allow_request_completion();
+  }
+}
+
+int ObMPBase::handoff_async_request(ObSqlEndTransCb &end_trans_cb)
+{
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(end_trans_cb_to_enable_)) {
+    ret = OB_STATE_NOT_MATCH;
+    LOG_ERROR("an async mysql callback is already registered", K(ret));
+  } else {
+    ret = end_trans_cb.take_request_ownership(packet_sender_);
+    if (OB_SUCCESS != ret) {
+      LOG_ERROR("failed to hand off async mysql request ownership", K(ret));
+      const int abort_ret = end_trans_cb.abort_request_handoff();
+      if (OB_SUCCESS != abort_ret) {
+        LOG_ERROR("failed to abort async mysql request handoff", K(abort_ret), K(ret));
+      } else {
+        // The main sender still owns the request. Let response() finish it,
+        // then cleanup() can safely release the callback's session lease.
+        end_trans_cb_to_enable_ = &end_trans_cb;
+      }
+    } else {
+      end_trans_cb_to_enable_ = &end_trans_cb;
+      request_finish_callback();
+    }
+  }
+  return ret;
+}
+
+int ObMPBase::cancel_unsubmitted_callback(ObSqlEndTransCb &end_trans_cb)
+{
+  int ret = OB_SUCCESS;
+  bool needs_cleanup = false;
+  ret = end_trans_cb.cancel_unsubmitted(needs_cleanup);
+  if (needs_cleanup) {
+    if (OB_NOT_NULL(end_trans_cb_to_enable_)) {
+      const int register_ret = OB_STATE_NOT_MATCH;
+      LOG_ERROR("an async mysql callback is already registered",
+                K(register_ret), K(ret));
+      ret = OB_SUCCESS == ret ? register_ret : ret;
+    } else {
+      end_trans_cb_to_enable_ = &end_trans_cb;
+    }
+    // A callback arriving despite a negative submission flag breaks the wire
+    // response contract; retire the connection after both sides are cleaned.
+    force_disconnect();
+  }
+  return ret;
 }
 
 void ObMPBase::disconnect()
@@ -133,11 +201,6 @@ void ObMPBase::disconnect()
 void ObMPBase::force_disconnect()
 {
   return packet_sender_.force_disconnect();
-}
-
-int ObMPBase::clean_buffer()
-{
-  return packet_sender_.clean_buffer();
 }
 
 int ObMPBase::flush_buffer(const bool is_last)
@@ -155,32 +218,11 @@ int ObMPBase::get_conn_id(uint32_t &sessid) const
   return packet_sender_.get_conn_id(sessid);
 }
 
-int ObMPBase::read_packet(obmysql::ObICSMemPool& mem_pool, obmysql::ObMySQLPacket *&pkt)
-{
-  return packet_sender_.read_packet(mem_pool, pkt);
-}
-
-int ObMPBase::release_packet(obmysql::ObMySQLPacket* pkt)
-{
-  return packet_sender_.release_packet(pkt);
- }
 int ObMPBase::send_error_packet(int err,
                                 const char* errmsg,
                                 void *extra_err_info /* = NULL */)
 {
   return packet_sender_.send_error_packet(err, errmsg, extra_err_info);
-}
-
-int ObMPBase::send_switch_packet(ObString &auth_name, ObString& auth_data)
-{
-  int ret = OB_SUCCESS;
-  OMPKChangeUser packet;
-  packet.set_auth_plugin_name(auth_name);
-  packet.set_auth_response(auth_data);
-  if (OB_FAIL(response_packet(packet, NULL))) {
-    LOG_WARN("failed to send switch packet", K(packet), K(ret));
-  }
-  return ret;
 }
 
 int ObMPBase::load_system_variables(const ObSysVariableSchema &sys_variable_schema, ObSQLSessionInfo &session) const
@@ -239,14 +281,10 @@ int ObMPBase::create_session(ObSMConnection *conn, ObSQLSessionInfo *&sess_info)
       LOG_WARN("create session fail", "sessid", conn->sessid_, K(ret));
     } else {
       LOG_DEBUG("create session successfully", "sessid", conn->sessid_);
-      conn->is_sess_alloc_ = true;
+      conn->is_sess_alloc_.store(true, std::memory_order_release);
       sess_info->set_user_session();
       sess_info->set_shadow(false);
-      if (SQL_REQ_OP.get_sql_ssl_st(req_) != NULL) {
-        sess_info->set_ssl_cipher(SSL_get_cipher_name((SSL*)SQL_REQ_OP.get_sql_ssl_st(req_)));
-      } else {
-        sess_info->set_ssl_cipher("");
-      }
+      sess_info->set_ssl_cipher("");
     }
   }
   return ret;
@@ -271,7 +309,7 @@ int ObMPBase::free_session()
       LOG_WARN("fail to free session", K(ctx), K(ret));
     } else {
       LOG_INFO("free session successfully", K(ctx));
-      conn->is_sess_free_ = true;
+      conn->is_sess_free_.store(true, std::memory_order_release);
     }
   }
   return ret;
@@ -333,7 +371,8 @@ int ObMPBase::do_after_process(sql::ObSQLSessionInfo &session,
     session.set_retry_active_time(0);
   }
   // reset warning buffers
-  // Note, req_has_wokenup_ may be true here, do not access the req object again
+  // Finish ownership may already have moved to an async sender; do not access
+  // the request object again in that case.
   // @todo Refactor wb logic
   if (!async_resp_used) { // Asynchronous response does not reset warning buffer, reset operation is done in callback
     session.reset_warnings_buf();
@@ -463,8 +502,7 @@ int ObMPBase::response_row(ObSQLSessionInfo &session,
       ObSMRow sm_row(obmysql::BINARY, tmp_row, dtc_params, session, fields, schema_guard);
       sm_row.set_packed(is_packed);
       obmysql::OMPKRow rp(sm_row);
-      rp.set_is_packed(is_packed);
-      if (OB_FAIL(response_packet(rp, &session))) {
+      if (OB_FAIL(response_packet(rp))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("response packet fail", K(ret));
       }
@@ -507,7 +545,6 @@ int ObMPBase::load_privilege_info_for_change_user(sql::ObSQLSessionInfo *session
                                   schema_guard))) {
     OB_LOG(WARN,"fail get schema guard", K(ret));
   } else {
-    SSL *ssl_st = SQL_REQ_OP.get_sql_ssl_st(req_);
     share::schema::ObUserLoginInfo login_info = session->get_login_info();
     share::schema::ObSessionPrivInfo session_priv;
     EnableRoleIdArray enable_role_id_array;
@@ -519,7 +556,7 @@ int ObMPBase::load_privilege_info_for_change_user(sql::ObSQLSessionInfo *session
     const ObUserInfo *user_info = NULL;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(schema_guard.check_user_access(login_info, session_priv,
-                enable_role_id_array, ssl_st, user_info))) {
+                enable_role_id_array, NULL, user_info))) {
       OB_LOG(WARN, "User access denied", K(login_info), K(ret));
     } else if (OB_FAIL(session->on_user_connect(session_priv, user_info))) {
       OB_LOG(WARN, "user connect failed", K(ret), K(session_priv));

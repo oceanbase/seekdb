@@ -63,13 +63,17 @@ int ObMPStmtSendLongData::before_process()
     LOG_WARN("failed to pre processing packet", K(ret));
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
-    const char* pos = pkt.get_cdata();
-    defender_.init(pos, pkt.get_clen() - 1);  // pkt.get_cdata() do not include 1 byte for `request command code`
-
-    PS_STATIC_DEFENSE_CHECK(&defender_, 4 + 2)
-    {
-      ObMySQLUtil::get_int4(pos, stmt_id_);
-      ObMySQLUtil::get_uint2(pos, param_id_);
+    if (OB_UNLIKELY(ObMySQLCommandLayout::LONG_DATA !=
+                    pkt.get_command_layout())) {
+      ret = OB_INVALID_DATA;
+      LOG_WARN("unexpected stmt-long-data command layout", K(ret),
+               K(pkt.get_command_layout()));
+    } else if (OB_FAIL(pkt.get_command_field(0, buffer_))) {
+      LOG_WARN("get rust parsed stmt-long-data buffer failed", K(ret));
+    } else {
+      stmt_id_ = static_cast<int32_t>(pkt.get_command_scalar0());
+      param_id_ = static_cast<uint16_t>(pkt.get_command_scalar1());
+      buffer_len_ = buffer_.length();
     }
 
     if (OB_SUCC(ret) && stmt_id_ < 1) {
@@ -79,8 +83,6 @@ int ObMPStmtSendLongData::before_process()
       LOG_WARN("param_id_ has the risk of overflow", K(ret), K(stmt_id_), K(param_id_));
     }
     if (OB_SUCC(ret)) {
-      buffer_len_ = pkt.get_clen() - 7;
-      buffer_.assign_ptr(pos, static_cast<ObString::obstr_size_t>(buffer_len_));
       LOG_INFO("resolve send_long_data protocol packet successfully",
                K(stmt_id_), K(param_id_), K(buffer_len_));
       LOG_DEBUG("send_long_data packet content", K(buffer_));

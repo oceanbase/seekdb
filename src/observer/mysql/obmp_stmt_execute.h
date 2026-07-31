@@ -97,11 +97,14 @@ public:
 struct ObPsSessionInfoParamsAssignment
 {
 public:
-  ObPsSessionInfoParamsAssignment(sql::ParamTypeArray &param_types):
-    ret_(OB_SUCCESS), param_types_(param_types) {}
+  ObPsSessionInfoParamsAssignment(sql::ParamTypeArray &param_types,
+                                  sql::ParamTypeFlagArray &param_type_flags)
+      : ret_(OB_SUCCESS), param_types_(param_types),
+        param_type_flags_(param_type_flags) {}
   void operator() (common::hash::HashMapPair<uint64_t, sql::ObPsSessionInfo *> &entry);
   int ret_;
   sql::ParamTypeArray &param_types_;
+  sql::ParamTypeFlagArray &param_type_flags_;
 };
 
 class ObMPStmtExecute : public ObMPBase
@@ -146,10 +149,6 @@ public:
   int64_t get_exec_start_timestamp() const { return exec_start_timestamp_; }
   int64_t get_exec_end_timestamp() const { return exec_end_timestamp_; }
   int64_t get_send_timestamp() const { return get_receive_timestamp(); }
-  virtual int flush_buffer(const bool is_last) override
-  {
-    return ObMPBase::flush_buffer(is_last);
-  }
   int init_for_arraybinding(ObIAllocator &alloc);
   int init_arraybinding_paramstore(ObIAllocator &alloc);
   int set_session_active(sql::ObSQLSessionInfo &session) const;
@@ -216,11 +215,36 @@ protected:
                      const char* &pos,
                      uint32_t ps_stmt_checksum,
                      ObIAllocator &alloc);
-  int parse_request_type(const char* &pos,
-                         int64_t num_of_params,
-                         int8_t new_param_bound_flag,
-                         ObCollationType cs_type,
+  int request_standard_params(sql::ObSQLSessionInfo *session,
+                              sql::ObPsSessionInfo &ps_session_info,
+                              const char *tail, ObIAllocator &alloc,
+                              bool &handled);
+  static int set_standard_timestamp_param(obmysql::EMySQLFieldType field_type,
+                                          uint16_t year, uint8_t month,
+                                          uint8_t day, uint8_t hour,
+                                          uint8_t minute, uint8_t second,
+                                          uint32_t microseconds, bool is_zero,
+                                          const common::ObTimeZoneInfo *tz_info,
+                                          ObObj &param);
+  static int set_standard_time_param(uint32_t days, uint8_t hour,
+                                     uint8_t minute, uint8_t second,
+                                     uint32_t microseconds, bool negative,
+                                     bool is_zero, ObObj &param);
+  static int set_standard_bytes_param(ObIAllocator &allocator, uint32_t type,
+                                      ObCharsetType charset,
+                                      ObCollationType cs_type,
+                                      const common::ObString &str, ObObj &param,
+                                      bool is_complex_element = false);
+  int materialize_standard_long_data(ObIAllocator &allocator,
+                                     sql::ObSQLSessionInfo &session,
+                                     obmysql::EMySQLFieldType type,
+                                     ObCharsetType charset,
+                                     ObCollationType cs_type, int64_t param_id,
+                                     ObObjParam &param);
+  int parse_request_type(const char *&pos, int64_t num_of_params,
+                         int8_t new_param_bound_flag, ObCollationType cs_type,
                          sql::ParamTypeArray &param_types,
+                         sql::ParamTypeFlagArray &param_type_flags,
                          sql::ParamTypeInfoArray &param_type_infos
                          /*ParamCastArray param_cast_infos*/);
   int parse_request_param_value(ObIAllocator &alloc,
@@ -326,9 +350,6 @@ private:
   virtual int before_process();
   virtual int after_process(int error_code);
   int response_query_header(sql::ObSQLSessionInfo &session, pl::ObPLServerCursorInfo &cursor);
-  // Overload response, do not call flush_buffer(true) in response; flush_buffer(true) should be explicitly called when a response packet is needed to be sent
-
-
   // copy or convert string, resove %extra_buf_len before result string.
   static int copy_or_convert_str(common::ObIAllocator &allocator,
                                  const common::ObCollationType src_type,

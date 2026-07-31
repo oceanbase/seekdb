@@ -37,6 +37,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          # The rustup mirror below covers only rustup; this routes the crates
+          # `cargo build --locked` downloads through the same mirror.
+          crates-mirror: 'true'
+        env:
+          RUSTUP_INIT_URL: https://rsproxy.cn/rustup-init.sh
+          RUSTUP_DIST_SERVER: https://rsproxy.cn
+          RUSTUP_UPDATE_ROOT: https://rsproxy.cn/rustup
 
       - name: Cache deps
         uses: actions/cache@v4
