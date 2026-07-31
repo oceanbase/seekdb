@@ -64,11 +64,11 @@ class ObServerConfig : public ObCommonConfig, ObConfigUpdateCb
 {
 public:
   friend class ObServerMemoryConfig;
-  int init(const ObSystemConfig &config);
   static ObServerConfig &get_instance();
 
-  // read all config from system_config_
-  virtual int read_config(const bool enable_static_effect);
+  // Copy all applicable values from a temporary system config snapshot.
+  virtual int read_config(const ObSystemConfig &system_config,
+                          const bool enable_static_effect);
 
   // check if all config is validated
   virtual int check_all() const;
@@ -100,7 +100,6 @@ public:
     return v == 2;
   }
 
-  bool is_valid() const { return  system_config_!= NULL; };
   int publish_special_config_after_dump();
 
 public:
@@ -120,7 +119,6 @@ public:
 protected:
   ObServerConfig();
   virtual ~ObServerConfig();
-  const ObSystemConfig *system_config_;
   static const int16_t OB_CONFIG_MAGIC = static_cast<int16_t>(0XBCDE);
   static const int16_t OB_CONFIG_VERSION = 1;
 

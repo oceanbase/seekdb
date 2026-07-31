@@ -50,7 +50,7 @@ int64_t get_cpu_count()
 using namespace share;
 
 ObServerConfig::ObServerConfig()
-  : disk_actual_space_(0), self_addr_(), rwlock_(ObLatchIds::CONFIG_LOCK), system_config_(NULL), global_version_(0)
+  : disk_actual_space_(0), self_addr_(), rwlock_(ObLatchIds::CONFIG_LOCK), global_version_(0)
 {
 #undef DEF_PARAM
 #define DEF_PARAM(name, args...) name.update_cb_ = this;
@@ -69,17 +69,8 @@ ObServerConfig &ObServerConfig::get_instance()
   return config;
 }
 
-int ObServerConfig::init(const ObSystemConfig &config)
-{
-  int ret = OB_SUCCESS;
-  system_config_ = &config;
-  if (OB_ISNULL(system_config_)) {
-    ret = OB_INIT_FAIL;
-  }
-  return ret;
-}
-
-int ObServerConfig::read_config(const bool enable_static_effect)
+int ObServerConfig::read_config(const ObSystemConfig &system_config,
+                                const bool enable_static_effect)
 {
   int ret = OB_SUCCESS;
   int temp_ret = OB_SUCCESS;
@@ -91,7 +82,7 @@ int ObServerConfig::read_config(const bool enable_static_effect)
       ret = OB_ERR_UNEXPECTED;
       OB_LOG(ERROR, "config item is null", "name", it->first.str(), K(ret));
     } else if (!it->second->reboot_effective() || !enable_static_effect) {
-      temp_ret = system_config_->read_config(key, *(it->second));
+      temp_ret = system_config.read_config(key, *(it->second));
       if (OB_SUCCESS != temp_ret) {
         OB_LOG(DEBUG, "Read config error", "name", it->first.str(), K(temp_ret));
       }
