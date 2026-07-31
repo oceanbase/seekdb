@@ -83,8 +83,6 @@ elseif(ANDROID)
 elseif(WIN32)
   # Windows (Clang + lld): export C API from seekdb.cpp; pull full static archive like Linux --whole-archive.
   set_target_properties(libseekdb PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
-  # Same Itanium ABI stubs as observer_without_bolt — PL/shared code references _Unwind_* (non-functional on Win).
-  target_sources(libseekdb PRIVATE "${CMAKE_SOURCE_DIR}/src/observer/win32_unwind_stubs.c")
   target_link_options(libseekdb PRIVATE /FORCE:MULTIPLE
     "/WHOLEARCHIVE:$<TARGET_FILE:oceanbase_static>")
   # oceanbase_static is EXCLUDE_FROM_ALL and only referenced via LINK_OPTIONS; some generators do not
