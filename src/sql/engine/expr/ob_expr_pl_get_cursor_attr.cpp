@@ -279,27 +279,6 @@ int ObExprPLGetCursorAttr::calc_pl_get_cursor_attr(
         }
         break;
       }
-      case pl::ObPLGetCursorAttrInfo::PL_CURSOR_ROWID: {
-        if (OB_ISNULL(cursor)) {
-          ret = OB_ERR_INVALID_CURSOR;
-          LOG_WARN("cursor is null", K(ret));
-        } else {
-          ObString rowid;
-          if (OB_FAIL(cursor->get_rowid(rowid))) {
-            LOG_WARN("fail to get rowcount attr", K(ret));
-            // is_for_update && !has_hidden_rowid, indicates that it is a multi-table join without specifying a unique for update table
-            if (OB_INVALID_ROWID == ret && cursor->is_for_update() && !cursor->has_hidden_rowid()) {
-              ret = OB_SUCCESS;
-              expr_datum.set_null();
-            }
-          } else if (OB_UNLIKELY(rowid.empty())) {
-            expr_datum.set_null();
-          } else {
-            expr_datum.set_string(rowid.ptr(), rowid.length());
-          }
-        }
-        break;
-      }
       default: {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("wrong pl get cursor attribute info type", K(ret), K(type));

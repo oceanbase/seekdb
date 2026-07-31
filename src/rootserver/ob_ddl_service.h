@@ -663,6 +663,7 @@ public:
                                    const ObString &host_name,
                                    const ObNeedPriv &need_priv,
                                    share::schema::ObSchemaGetterGuard &schema_guard);
+  int alter_user_default_role(const obcall::ObAlterUserRoleArg &arg);
   int lock_user(const obcall::ObLockUserArg &arg, common::ObIArray<int64_t> &failed_index);
 
   virtual int grant_database(const share::schema::ObOriginalDBKey &db_key,
@@ -1545,7 +1546,7 @@ int check_will_be_having_domain_index_operation(
                                      common::ObMySQLTransaction *trans);
   int build_need_flush_role_array(share::schema::ObSchemaGetterGuard &schema_guard,
                                   const share::schema::ObUserInfo *user_info,
-                                  const obcall::ObAlterUserProfileArg &arg,
+                                  const obcall::ObAlterUserRoleArg &arg,
                                   bool &need_flush,
                                   common::ObIArray<uint64_t> &role_id_array,
                                   common::ObIArray<uint64_t> &disable_flag_array);

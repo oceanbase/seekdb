@@ -661,19 +661,11 @@ struct ObPLCompileFlag
 public:
   ObPLCompileFlag() : flags_() {}
 
-  enum { TRUST, RNDS, WNDS, RNPS, WNPS, INVOKER_RIGHT = 6,
+  enum { RESERVED_0, RESERVED_1, RESERVED_2, RESERVED_3, RESERVED_4, INVOKER_RIGHT = 6,
          INTF, RESERVED_8, RESERVED_9, RESERVED_10, RESERVED_11, RESERVED_12 };
 
-  inline int add_trust() { return flags_.add_member(TRUST); }
-  inline int add_rnds()  { return flags_.add_member(RNDS); }
-  inline int add_wnds()  { return flags_.add_member(WNDS); }
-  inline int add_rnps()  { return flags_.add_member(RNPS); }
-  inline int add_wnps()  { return flags_.add_member(WNPS); }
   inline int add_invoker_right() { return flags_.add_member(INVOKER_RIGHT); }
   inline int add_intf()   { return flags_.add_member(INTF); }
-
-  inline int add_compile_flag(int flag) { return flags_.add_member(flag); }
-  inline int del_compile_flag(int flag) { return flags_.del_member(flag); }
 
   inline int add_compile_flag(const ObPLCompileFlag &flag)
   {
@@ -682,26 +674,6 @@ public:
 
   inline bool has_flag() const { return flags_.num_members() != 0; }
 
-  inline bool compile_with_trust() const
-  {
-    return flags_.has_member(TRUST);
-  }
-  inline bool compile_with_rnds() const
-  {
-    return flags_.has_member(RNDS) && !flags_.has_member(TRUST);
-  }
-  inline bool compile_with_wnds() const
-  {
-    return flags_.has_member(WNDS) && !flags_.has_member(TRUST);
-  }
-  inline bool compile_with_rnps() const
-  {
-    return flags_.has_member(RNPS) && !flags_.has_member(TRUST);
-  }
-  inline bool compile_with_wnps() const
-  {
-    return flags_.has_member(WNPS) && !flags_.has_member(TRUST);
-  }
   inline bool compile_with_invoker_right() const
   {
     return flags_.has_member(INVOKER_RIGHT);
@@ -743,7 +715,6 @@ public:
         params_(allocator),
         compile_flag_(),
         is_deterministic_(false),
-        is_parallel_enable_(false),
         has_accessible_by_clause_(false),
         is_private_routine_(false),
         accessors_(allocator),
@@ -844,9 +815,6 @@ public:
   virtual void set_contains_sql() { is_no_sql_ = false; is_reads_sql_data_ = false; is_modifies_sql_data_ = false; is_contains_sql_ = true; }
   virtual bool is_contains_sql() const { return is_contains_sql_; }
 
-  virtual void set_parallel_enable() { is_parallel_enable_ = true; }
-  virtual bool is_parallel_enable() const { return is_parallel_enable_; }
-
   virtual bool is_invoker_right() const { return compile_flag_.compile_with_invoker_right(); }
 
   inline void set_analyze_flag(uint64_t flag) { analyze_flag_ = flag; }
@@ -885,7 +853,6 @@ public:
                K_(params),
                K_(compile_flag),
                K_(is_deterministic),
-               K_(is_parallel_enable),
                K_(accessors),
                K_(loc),
                K_(analyze_flag));
@@ -906,7 +873,6 @@ private:
   ObPLSEArray<ObPLRoutineParam *> params_;
   ObPLCompileFlag compile_flag_;
   bool is_deterministic_;
-  bool is_parallel_enable_;
   bool has_accessible_by_clause_;
   bool is_private_routine_;
   ObPLSEArray<AccessorItem> accessors_;
@@ -1005,7 +971,7 @@ public:
     EXTERNAL_PROC,      //Standalone procedure
     NESTED_PROC,
     TYPE_METHOD_TYPE,   //custom type method
-    SYSTEM_PROC,        //System predefined Procedure (e.g.: RAISE_APPLICATION_ERROR)
+    RESERVED_SYSTEM_PROC,
     RESERVED_UDT_NS,
     UDF_NS,
     LOCAL_TYPE,         // local custom type
@@ -1616,7 +1582,7 @@ enum ObPLStmtType
   PL_NULL,
   PL_ROUTINE_DEF,
   PL_ROUTINE_DECL,
-  PL_RAISE_APPLICATION_ERROR,
+  PL_RESERVED_30,
   PL_GOTO,
   PL_TRIM,
   PL_INTERFACE,

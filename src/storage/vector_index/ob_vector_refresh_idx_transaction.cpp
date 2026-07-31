@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/vector_index/ob_vector_refresh_idx_transaction.h"
-#include "observer/ob_inner_sql_connection_pool.h"
+#include "observer/ob_inner_sql_connection.h"
 
 namespace oceanbase
 {
@@ -97,44 +97,40 @@ ObVectorRefreshIdxTransaction::~ObVectorRefreshIdxTransaction()
     if (OB_FAIL(end(OB_SUCCESS == get_errno()))) {
       LOG_WARN("fail to end", KR(ret));
     }
+  } else {
+    close();
   }
 }
 
 int ObVectorRefreshIdxTransaction::connect(ObSQLSessionInfo *session_info, ObISQLClient *sql_client)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(nullptr != pool_ || nullptr != conn_)) {
+  if (OB_UNLIKELY(nullptr != sql_client_ || conn_.is_valid())) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("transaction can only be started once", KR(ret), K(pool_), K(conn_));
+    LOG_WARN("transaction can only be started once", KR(ret), K(sql_client_), K(conn_));
   } else if (OB_UNLIKELY(nullptr == session_info || nullptr == sql_client)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KP(session_info), KP(sql_client));
   } else {
-    ObInnerSQLConnectionPool *pool = nullptr;
-    ObInnerSQLConnection *conn = nullptr;
-    if (OB_ISNULL(pool = static_cast<ObInnerSQLConnectionPool *>(sql_client->get_pool()))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected connection pool", KR(ret));
-    } else if (OB_FAIL(pool->acquire_spi_conn(session_info, conn))) {
-      LOG_WARN("acquire connection failed", KR(ret), K(pool), K(session_info));
-    } else if (OB_ISNULL(conn)) {
+    if (OB_FAIL(
+            ObInnerSQLConnection::create_spi_connection_with_external_session(
+                session_info, conn_))) {
+      LOG_WARN("create connection failed", KR(ret), K(session_info));
+    } else if (!conn_.is_valid()) {
       ret = OB_INNER_STAT_ERROR;
-      LOG_WARN("connection can not be NULL", KR(ret), K_(pool));
-    } else if (!sql_client->is_active()) {
-      ret = OB_INACTIVE_SQL_CLIENT;
-      LOG_WARN("inactive sql client", KR(ret));
-      int tmp_ret = pool->release(conn, OB_SUCCESS == ret);
-      if (OB_SUCCESS != tmp_ret) {
-        LOG_WARN("release connection failed", K(tmp_ret));
-      }
-      conn = nullptr;
+      LOG_WARN("connection can not be NULL", KR(ret));
     } else {
       sql_client_ = sql_client;
-      pool_ = pool;
-      conn_ = conn;
     }
   }
   return ret;
+}
+
+void ObVectorRefreshIdxTransaction::close()
+{
+  conn_.reset();
+  sql_client_ = nullptr;
+  errno_ = OB_SUCCESS;
 }
 
 int ObVectorRefreshIdxTransaction::start_transaction()

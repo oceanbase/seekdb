@@ -44,8 +44,7 @@ public:
     package_type_(PL_INVALID_PACKAGE_TYPE),
     id_(OB_INVALID_ID),
     database_id_(OB_INVALID_ID),
-    version_(OB_INVALID_VERSION),
-    serially_reusable_(false) {}
+    version_(OB_INVALID_VERSION) {}
   virtual ~ObPLPackageBase() {}
 
   inline const common::ObString &get_db_name() const { return db_name_; }
@@ -55,8 +54,6 @@ public:
   inline uint64_t get_id() const { return id_; }
   inline uint64_t get_database_id() const { return database_id_; }
   inline int64_t get_version() const { return version_; }
-  inline void set_serially_reusable() { serially_reusable_ = true; }
-  inline bool get_serially_reusable() const { return serially_reusable_; }
   inline void set_id(uint64_t id) { id_ = id; }
 protected:
   common::ObString db_name_;
@@ -65,7 +62,6 @@ protected:
   uint64_t id_;
   uint64_t database_id_;
   int64_t version_;
-  bool serially_reusable_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPLPackageBase);
 };

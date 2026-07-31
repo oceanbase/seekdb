@@ -21,6 +21,7 @@
 #include "sql/engine/ob_exec_context.h"
 #include "sql/optimizer/stat/ob_stat_item.h"
 #include "sql/optimizer/stat/ob_opt_stat_gather_stat.h"
+#include "common/mysqlclient/ob_isql_client.h"
 
 namespace oceanbase {
 namespace observer
@@ -198,14 +199,13 @@ private:
                                      GatherHelper &gather_helper);
 
   static int prepare_conn_and_store_session_for_online_stats(sql::ObSQLSessionInfo *session,
-                                                             common::ObMySQLProxy *sql_proxy,
                                                              share::schema::ObSchemaGetterGuard *schema_guard,
                                                              sql::ObSQLSessionInfo::StmtSavedValue &saved_value,
                                                              int64_t &nested_count,
                                                              int64_t &old_trx_lock_timeout,
                                                              bool &need_restore_session,
                                                              bool &need_reset_trx_lock_timeout,
-                                                             sqlclient::ObISQLConnection *&conn);
+                                                             sqlclient::ObISQLConnectionGuard &conn);
 
   static int restore_session_for_online_stat(sql::ObSQLSessionInfo *session,
                                              sql::ObSQLSessionInfo::StmtSavedValue &saved_value,

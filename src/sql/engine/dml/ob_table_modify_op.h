@@ -300,6 +300,7 @@ protected:
   virtual void record_err_for_load_data(int err_ret, int row_num) { UNUSED(err_ret); UNUSED(row_num); }
 public:
   common::ObMySQLProxy *sql_proxy_;
+  common::sqlclient::ObISQLConnectionGuard inner_conn_guard_;
   observer::ObInnerSQLConnection *inner_conn_;
   observer::ObInnerSQLConnection::SavedValue saved_conn_;
   bool need_foreign_key_check_;

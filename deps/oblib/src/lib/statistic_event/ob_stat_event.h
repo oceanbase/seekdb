@@ -452,12 +452,6 @@ STAT_EVENT_SET_DEF(RINGBUF_ALLOC_DROP_COUNT, "ringbuf alloc drop count", ObStatC
 STAT_EVENT_SET_DEF(RINGBUF_ALLOC_SUCCESS_COUNT, "ringbuf alloc success count", ObStatClassIds::DEBUG, 160039, false, true, true)
 STAT_EVENT_SET_DEF(RINGBUF_QUEUE_DEPTH, "ringbuf queue depth", ObStatClassIds::DEBUG, 160040, false, true, true)
 
-
-//OBSERVER
-STAT_EVENT_SET_DEF(OBSERVER_PARTITION_TABLE_UPATER_USER_QUEUE_SIZE, "observer partition table updater user table queue size", ObStatClassIds::OBSERVER, 170001, false, true, true)
-STAT_EVENT_SET_DEF(OBSERVER_PARTITION_TABLE_UPATER_SYS_QUEUE_SIZE, "observer partition table updater system table queue size", ObStatClassIds::OBSERVER, 170002, false, true, true)
-STAT_EVENT_SET_DEF(OBSERVER_PARTITION_TABLE_UPATER_CORE_QUEUE_SIZE, "observer partition table updater core table queue size", ObStatClassIds::OBSERVER, 170003, false, true, true)
-
 // rootservice
 
 // das

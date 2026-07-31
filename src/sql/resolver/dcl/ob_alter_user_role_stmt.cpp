@@ -14,22 +14,20 @@
  * limitations under the License.
  */
 
-#define USING_LOG_PREFIX COMMON_MYSQLP
-
-#include "lib/ob_define.h"
-#include "common/mysqlclient/ob_mysql_proxy_util.h"
-#include "common/mysqlclient/ob_isql_connection_pool.h"
-
+#include "sql/resolver/dcl/ob_alter_user_role_stmt.h"
 using namespace oceanbase::common;
-using namespace oceanbase::common::sqlclient;
-
-ObMySQLProxyUtil::ObMySQLProxyUtil() : pool_(NULL)
+using namespace oceanbase::sql;
+ObAlterUserRoleStmt::ObAlterUserRoleStmt(common::ObIAllocator *name_pool)
+    : ObDDLStmt(name_pool, stmt::T_ALTER_USER_ROLE), arg_(), set_role_flag_(0)
 {
 }
 
-ObMySQLProxyUtil::~ObMySQLProxyUtil()
+ObAlterUserRoleStmt::ObAlterUserRoleStmt()
+    : ObDDLStmt(NULL, stmt::T_ALTER_USER_ROLE), arg_(), set_role_flag_(0)
 {
 }
 
-
+ObAlterUserRoleStmt::~ObAlterUserRoleStmt()
+{
+}
 

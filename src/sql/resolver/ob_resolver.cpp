@@ -71,7 +71,7 @@
 #include "sql/resolver/dcl/ob_revoke_resolver.h"
 #include "sql/resolver/dcl/ob_create_role_resolver.h"
 #include "sql/resolver/dcl/ob_drop_role_resolver.h"
-#include "sql/resolver/dcl/ob_alter_user_profile_resolver.h"
+#include "sql/resolver/dcl/ob_alter_user_role_resolver.h"
 #include "sql/resolver/tcl/ob_start_trans_resolver.h"
 #include "sql/resolver/tcl/ob_end_trans_resolver.h"
 #include "tcl/ob_savepoint_resolver.h"
@@ -457,10 +457,9 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(LockUser);
         break;
       }
-      case T_ALTER_USER_PROFILE:
       case T_ALTER_USER_DEFAULT_ROLE:
       case T_SET_ROLE: {
-        REGISTER_STMT_RESOLVER(AlterUserProfile);
+        REGISTER_STMT_RESOLVER(AlterUserRole);
         break;
       }
 

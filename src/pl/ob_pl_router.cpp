@@ -53,10 +53,7 @@ int ObPLRouter::check_error_in_resolve(int code)
     case OB_ER_SP_BAD_SQLSTATE:
     case OB_ERR_UNKNOWN_TABLE:
     case OB_ER_SP_CANT_SET_AUTOCOMMIT:
-    case OB_ERR_GOTO_BRANCH_ILLEGAL:
     case OB_ERR_UNEXPECTED:
-    case OB_ERR_RETURN_VALUE_REQUIRED:
-    case OB_ERR_END_LABEL_NOT_MATCH:
     case OB_ERR_TOO_LONG_IDENT:
     case OB_ERR_PL_JSONTYPE_USAGE: {
       ret = code;
@@ -67,9 +64,6 @@ int ObPLRouter::check_error_in_resolve(int code)
     }
     break;
     case OB_ERR_NO_RETURN_IN_FUNCTION:
-    case OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_FUNC_TRIGGER:
-    case OB_ERR_TOO_LONG_STRING_TYPE:
-    case OB_ERR_WIDTH_OUT_OF_RANGE:
     case OB_ERR_REDEFINE_LABEL:
     case OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_PROCEDRUE:
     case OB_ERR_TOO_BIG_PRECISION:

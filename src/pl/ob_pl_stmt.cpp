@@ -468,7 +468,8 @@ int ObPLRoutineInfo::add_param(ObPLRoutineParam *param)
   CK (OB_NOT_NULL(param));
   for (int64_t i = 0; OB_SUCC(ret) && i < params_.count(); ++i) {
     if (0 == param->get_name().case_compare(params_.at(i)->get_name())) {
-      ret = OB_ERR_DUPLICATE_FILED;
+      ret = OB_ERR_SP_DUP_PARAM;
+      LOG_USER_ERROR(OB_ERR_SP_DUP_PARAM, param->get_name().length(), param->get_name().ptr());
       LOG_WARN("duplicate fields in argument list are not permitted!", K(ret), K(i), KPC(param));
     }
   }
@@ -765,10 +766,8 @@ int ObPLRoutineTable::set_routine_info(int64_t routine_idx, ObPLRoutineInfo *rou
   int ret = OB_SUCCESS;
   CK (routine_idx >= 0 && routine_idx < get_count());
   if (OB_SUCC(ret) && OB_NOT_NULL(routine_infos_.at(routine_idx))) {
-    ret = OB_ERR_ATTR_FUNC_CONFLICT;
-    LOG_USER_ERROR(OB_ERR_ATTR_FUNC_CONFLICT,
-                   routine_infos_.at(routine_idx)->get_name().length(),
-                   routine_infos_.at(routine_idx)->get_name().ptr());
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("routine info slot is already occupied", K(ret), K(routine_idx));
   }
   OX (routine_infos_.at(routine_idx) = routine_info);
   OZ (routine_info->set_idx(routine_idx));
@@ -780,10 +779,8 @@ int ObPLRoutineTable::set_routine_ast(int64_t routine_idx, ObPLFunctionAST *rout
   int ret = OB_SUCCESS;
   CK (routine_idx >= 0 && routine_idx < get_count());
   if (OB_SUCC(ret) && OB_NOT_NULL(routine_asts_.at(routine_idx))) {
-    ret = OB_ERR_ATTR_FUNC_CONFLICT;
-    LOG_USER_ERROR(OB_ERR_ATTR_FUNC_CONFLICT,
-                   routine_asts_.at(routine_idx)->get_name().length(),
-                   routine_asts_.at(routine_idx)->get_name().ptr());
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("routine AST slot is already occupied", K(ret), K(routine_idx));
   }
   OX (routine_asts_.at(routine_idx) = routine_ast);
   return ret;
@@ -858,12 +855,13 @@ int ObPLBlockNS::add_symbol(const ObString &name,
     LOG_WARN("symbol table is NULL", K(ret));
   } else if (!name.empty() && OB_FAIL(check_dup_symbol(name, type, is_dup))) {
     LOG_WARN("failed to check dup", K(name), K(ret));
+  } else if (is_dup && is_formal_param) {
+    ret = OB_ERR_SP_DUP_PARAM;
+    LOG_USER_ERROR(OB_ERR_SP_DUP_PARAM, name.length(), name.ptr());
+    LOG_WARN("duplicate fields in argument list are not permitted", K(ret), K(name), K(is_dup), K(is_formal_param));
   } else if (is_dup) {
     ret = OB_ERR_SP_DUP_VAR;
     LOG_USER_ERROR(OB_ERR_SP_DUP_VAR, name.length(), name.ptr());
-  } else if (is_dup && is_formal_param) {
-    ret = OB_ERR_DUPLICATE_FILED;
-    LOG_WARN("duplicate fields in argument list are not permitted", K(ret), K(name), K(is_dup), K(is_formal_param));
   } else {
     OZ (symbols_.push_back(get_symbol_table()->get_count()));
     CK (OB_NOT_NULL(exprs_));
@@ -1064,8 +1062,8 @@ int ObPLBlockNS::check_dup_symbol(const ObString &name, const ObPLDataType &type
           ObPLVar *pl_var = const_cast<ObPLVar *>(symbol_table_->get_symbol(symbols_.at(i)));
           pl_var->set_dup_declare(is_dup);
           if (pl_var->is_referenced()) {
-            ret = OB_ERR_DECL_MORE_THAN_ONCE;
-            LOG_USER_ERROR(OB_ERR_DECL_MORE_THAN_ONCE, name.length(), name.ptr());
+            ret = OB_ERR_SP_DUP_VAR;
+            LOG_USER_ERROR(OB_ERR_SP_DUP_VAR, name.length(), name.ptr());
           }
         }
       } else { /*do nothing*/ }
@@ -1828,8 +1826,8 @@ int ObPLBlockNS::resolve_local_symbol(const ObString &name,
       if (OB_FAIL(ret)) {
       } else if (ObCharset::case_insensitive_equal(name, user_type->get_name())) {
         if (var_idx != OB_INVALID_INDEX) {
-          ret = OB_ERR_DECL_MORE_THAN_ONCE;
-          LOG_USER_ERROR(OB_ERR_DECL_MORE_THAN_ONCE, name.length(), name.ptr());
+          ret = OB_ERR_SP_DUP_TYPE;
+          LOG_USER_ERROR(OB_ERR_SP_DUP_TYPE, name.length(), name.ptr());
         } else {
           var_idx = user_type->get_user_type_id();
           type = get_block_type() != ObPLBlockNS::BlockType::BLOCK_ROUTINE
@@ -2037,8 +2035,8 @@ int ObPLBlockNS::resolve_symbol(const ObString &var_name,
         bool is_referenced = true;
         pl_var->set_is_referenced(is_referenced);
         if (pl_var->is_dup_declare()) {
-          ret = OB_ERR_DECL_MORE_THAN_ONCE;
-          LOG_USER_ERROR(OB_ERR_DECL_MORE_THAN_ONCE, var_name.length(), var_name.ptr());
+          ret = OB_ERR_SP_DUP_VAR;
+          LOG_USER_ERROR(OB_ERR_SP_DUP_VAR, var_name.length(), var_name.ptr());
         } else {
           data_type = pl_var->get_type();
           parent_id = package_id_;
@@ -2056,8 +2054,8 @@ int ObPLBlockNS::resolve_symbol(const ObString &var_name,
         if (OB_FAIL(ret)) {
         } else if (ObCharset::case_insensitive_equal(var_name, user_type->get_name())) {
           if (var_idx != OB_INVALID_INDEX) {
-            ret = OB_ERR_DECL_MORE_THAN_ONCE;
-            LOG_USER_ERROR(OB_ERR_DECL_MORE_THAN_ONCE, var_name.length(), var_name.ptr());
+            ret = OB_ERR_SP_DUP_TYPE;
+            LOG_USER_ERROR(OB_ERR_SP_DUP_TYPE, var_name.length(), var_name.ptr());
           } else {
             parent_id = package_id_;
             var_idx = user_type->get_user_type_id();

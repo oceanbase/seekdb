@@ -64,9 +64,7 @@ int ObExprCoalesce::calc_result_typeN(ObExprResType &type,
       ObExprOperator::calc_result_flagN(type, types, param_num);
       bool is_expr_integer_type = (ob_is_int_tc(type.get_type()) ||
                              ob_is_uint_tc(type.get_type()));
-      bool all_null_type = true;
       for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
-        all_null_type = (types[i].get_type() != ObNullType) ? false : all_null_type;
         if (ob_is_enumset_tc(types[i].get_type())) {
           ObObjType calc_type = get_enumset_calc_type(type.get_type(), i);
           if (OB_UNLIKELY(ObMaxType == calc_type)) {
@@ -94,10 +92,6 @@ int ObExprCoalesce::calc_result_typeN(ObExprResType &type,
             types[i].set_calc_accuracy(type.get_accuracy());
           }
         }
-      }
-      if (!is_called_in_sql() && all_null_type) {
-        ret = OB_ERR_COALESCE_AT_LEAST_ONE_NOT_NULL;
-        LOG_USER_ERROR(OB_ERR_COALESCE_AT_LEAST_ONE_NOT_NULL);
       }
     }
   }

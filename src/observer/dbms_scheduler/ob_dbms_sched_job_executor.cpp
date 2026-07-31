@@ -27,7 +27,7 @@
 #include "share/ob_errno.h"
 #include "share/schema/ob_schema_getter_guard.h"
 
-#include "observer/ob_inner_sql_connection_pool.h"
+#include "observer/ob_inner_sql_connection.h"
 #include "sql/executor/ob_worker_session_guard.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/ob_sql.h"
@@ -206,8 +206,8 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
 {
   int ret = OB_SUCCESS;
   ObSqlString what;
-  ObInnerSQLConnectionPool *pool = NULL;
   ObInnerSQLConnection *conn = NULL;
+  sqlclient::ObISQLConnectionGuard conn_guard;
   ObSQLSessionInfo *session_info = NULL;
   ObFreeSessionCtx free_session_ctx;
   int64_t affected_rows = 0;
@@ -321,23 +321,23 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
     if (OB_SUCC(ret)) {
       ObWorkerSessionGuard worker_session_guard(session_info);
       OZ (ObDBMSSchedJobExecutor::init_env(job_info, *session_info));
-      CK (OB_NOT_NULL(pool = static_cast<ObInnerSQLConnectionPool *>(sql_proxy_->get_pool())));
       OX (session_info->set_job_info(&job_info));
       OZ (table_operator_.update_for_start_execute(job_info));
       rootserver::ObDBMSSchedService::wakeup_scheduler();
-      OZ (pool->acquire_spi_conn(session_info, conn));
-      if (OB_NOT_NULL(conn) && OB_NOT_NULL(session_info) && !is_root_user(session_info->get_user_id())) {
+      OZ (ObInnerSQLConnection::create_spi_connection_with_external_session(
+          session_info, conn_guard));
+      OX (conn = static_cast<ObInnerSQLConnection *>(conn_guard.get_ptr()));
+      if (OB_NOT_NULL(conn) && OB_NOT_NULL(session_info) && !is_extended_sys_user(session_info->get_user_id()) && !is_root_user(session_info->get_user_id())) {
         conn->set_check_priv(true);
       }
       OZ (conn->execute_write(what.string().ptr(), affected_rows));
       if (OB_NOT_NULL(conn) && OB_NOT_NULL(session_info) && !is_extended_sys_user(session_info->get_user_id()) && !is_root_user(session_info->get_user_id())) {
         conn->set_check_priv(false);
       }
-      if (OB_NOT_NULL(conn)) {
-        sql_proxy_->close(conn, ret);
-      }
     }
   }
+  conn = NULL;
+  conn_guard.reset();
   if (NULL != session_info) {
     int tmp_ret = OB_SUCCESS;
     {

@@ -2191,7 +2191,7 @@ OB_DEF_SERIALIZE_SIZE(ObLockUserArg)
 
 
 
-OB_SERIALIZE_MEMBER((ObAlterUserProfileArg, ObDDLArg),
+OB_SERIALIZE_MEMBER((ObAlterUserRoleArg, ObDDLArg),
 
                     user_name_,
                     host_name_,

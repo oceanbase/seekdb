@@ -1467,7 +1467,7 @@ int ObBlockManager::extend_file_size_if_need() {
                  reserved_size))) {
     LOG_WARN("Fail to get reserved size", K(ret));
   } else if (!check_can_be_extend(reserved_size)) {
-    ret = OB_NOT_READY_TO_EXTEND_FILE;
+    ret = OB_SERVER_OUTOF_DISK_SPACE;
     LOG_DEBUG("Check auto extend, no need to start ssbfile auto extend",
               K(ret));
   } else {

@@ -118,35 +118,19 @@ public:
   //used for guarantee the unique sessid when observer generates sessid
   int create_sessid(uint32_t &sessid);
 private:
-  class SessionPool
-  {
-  public:
-    static const int64_t POOL_CAPACITY = 32;
-    SessionPool();
-    int init(const int64_t capacity);
-    int pop_session(ObSQLSessionInfo *&session);
-    int push_session(ObSQLSessionInfo *&session);
-    int64_t count() const;
-    TO_STRING_KV(K(session_pool_.capacity()),
-                 K(session_pool_.get_total()),
-                 K(session_pool_.get_free()));
-  private:
-    ObSQLSessionInfo *session_array_[POOL_CAPACITY];
-    common::ObFixedQueue<ObSQLSessionInfo> session_pool_;
-  };
-
   class ValueAlloc
   {
   public:
-    explicit ValueAlloc(ObSQLSessionMgr *session_mgr = NULL)
-      : session_mgr_(session_mgr),
+    ValueAlloc()
+      : session_allocator_(lib::ObMemAttr("SQLSessionInfo"), common::get_cpu_count(), 4),
+        active_count_(0),
         alloc_total_count_(0),
         free_total_count_(0)
     {}
     ~ValueAlloc() {}
-    int clean_sessions();
     ObSQLSessionInfo* alloc_value();
     void free_value(ObSQLSessionInfo *sess);
+    int64_t count() const { return ATOMIC_LOAD(&active_count_); }
     SessionInfoHashNode* alloc_node(ObSQLSessionInfo* value)
     {
       UNUSED(value);
@@ -160,11 +144,10 @@ private:
       }
     }
   private:
-    ObSQLSessionMgr *session_mgr_;
+    common::ObFixedClassAllocator<ObSQLSessionInfo> session_allocator_;
+    int64_t active_count_;
     volatile int64_t alloc_total_count_;
     volatile int64_t free_total_count_;
-    static const int64_t MAX_REUSE_COUNT = 10000;
-    static const int64_t MAX_SYS_VAR_MEM = 256 * 1024;
   };
 
 #ifdef OB_USE_ASAN
@@ -204,15 +187,6 @@ private:
   };
 
 private:
-  ObSQLSessionInfo *alloc_session();
-  void release_session(ObSQLSessionInfo *session);
-  void clean_session_pool();
-
-  // The pool and allocator must outlive sessinfo_map_: the map returns values
-  // to them while the map is being destroyed.
-  SessionPool session_pool_;
-  volatile int64_t allocated_session_count_;
-  ObFixedClassAllocator<ObSQLSessionInfo> session_allocator_;
   // used for manage ObSQLSessionInfo
   HashMap sessinfo_map_;
   // Monotonically increasing session id allocator. Wraps around at UINT32_MAX, skips 0.

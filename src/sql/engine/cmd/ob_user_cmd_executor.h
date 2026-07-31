@@ -101,17 +101,17 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObLockUserExecutor);
 };
 
-class ObAlterUserProfileStmt;
-class ObAlterUserProfileExecutor
+class ObAlterUserRoleStmt;
+class ObAlterUserRoleExecutor
 {
 private:
-  int set_role_exec(ObExecContext &ctx, ObAlterUserProfileStmt &stmt);  
+  int set_role_exec(ObExecContext &ctx, ObAlterUserRoleStmt &stmt);
 public:
-  ObAlterUserProfileExecutor() {}
-  virtual ~ObAlterUserProfileExecutor() {}
-  int execute(ObExecContext &ctx, ObAlterUserProfileStmt &stmt);
+  ObAlterUserRoleExecutor() {}
+  virtual ~ObAlterUserRoleExecutor() {}
+  int execute(ObExecContext &ctx, ObAlterUserRoleStmt &stmt);
 
-  DISALLOW_COPY_AND_ASSIGN(ObAlterUserProfileExecutor);
+  DISALLOW_COPY_AND_ASSIGN(ObAlterUserRoleExecutor);
 };
 
 class ObRenameUserStmt;

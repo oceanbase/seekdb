@@ -45,7 +45,7 @@
 #include "sql/resolver/ddl/ob_alter_routine_stmt.h"
 #include "sql/resolver/ddl/ob_drop_routine_stmt.h"
 #include "sql/resolver/ddl/ob_trigger_stmt.h"
-#include "sql/resolver/dcl/ob_alter_user_profile_stmt.h"
+#include "sql/resolver/dcl/ob_alter_user_role_stmt.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/cmd/ob_merge_table_stmt.h"
 
@@ -705,30 +705,6 @@ int get_drop_outline_stmt_need_privs(
   return ret;
 }
 
-int get_create_tablespace_priv(
-    const ObSessionPrivInfo &session_priv,
-    const ObStmt *basic_stmt,
-    ObIArray<ObNeedPriv> &need_privs)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(session_priv);
-  ObNeedPriv need_priv;
-  if (OB_ISNULL(basic_stmt)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else if (OB_UNLIKELY(stmt::T_CREATE_TABLESPACE != basic_stmt->get_stmt_type()
-                         && stmt::T_DROP_TABLESPACE != basic_stmt->get_stmt_type()
-                         && stmt::T_ALTER_TABLESPACE != basic_stmt->get_stmt_type())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected stmt type", K(basic_stmt->get_stmt_type()), K(ret));
-  } else {
-    need_priv.priv_set_ = OB_PRIV_CREATE_TABLESPACE;
-    need_priv.priv_level_ = OB_PRIV_USER_LEVEL;
-    ADD_NEED_PRIV(need_priv);
-  }
-  return ret;
-}
-
 int get_create_index_stmt_need_privs(
     const ObSessionPrivInfo &session_priv,
     const ObStmt *basic_stmt,
@@ -977,7 +953,7 @@ int get_create_user_privs(
     stmt::StmtType stmt_type = basic_stmt->get_stmt_type();
     switch (stmt_type) {//TODO deleted switch
       case stmt::T_LOCK_USER :
-      case stmt::T_ALTER_USER_PROFILE :
+      case stmt::T_ALTER_USER_ROLE :
       case stmt::T_ALTER_USER:
       case stmt::T_SET_PASSWORD :
       case stmt::T_RENAME_USER :
@@ -985,8 +961,8 @@ int get_create_user_privs(
       case stmt::T_CREATE_USER : {
         if (stmt::T_SET_PASSWORD == stmt_type
             && static_cast<const ObSetPasswordStmt*>(basic_stmt)->get_for_current_user()) {
-        } else if (stmt::T_ALTER_USER_PROFILE == stmt_type
-                   && !!static_cast<const ObAlterUserProfileStmt*>(basic_stmt)->get_set_role_flag()) {
+        } else if (stmt::T_ALTER_USER_ROLE == stmt_type
+                   && !!static_cast<const ObAlterUserRoleStmt*>(basic_stmt)->get_set_role_flag()) {
         } else {
           need_priv.priv_set_ = OB_PRIV_CREATE_USER;
           need_priv.priv_level_ = OB_PRIV_USER_LEVEL;

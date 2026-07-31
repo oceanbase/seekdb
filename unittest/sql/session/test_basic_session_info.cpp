@@ -205,7 +205,7 @@ TEST(test_basic_session_info, load_variables)
     re_type = session_info.get_sys_variable_type(name);
     ASSERT_EQ(re_type, ObIntType);
     LOG_WARN("session_info:", K(session_info));
-    session_info.reset(false);
+    session_info.reset();
   }
 }
 

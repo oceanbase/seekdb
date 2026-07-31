@@ -654,7 +654,6 @@ int ObRawExprUtils::resolve_udf_common_info(const ObString &db_name,
                                             int64_t udf_schema_version,
                                             int64_t pkg_schema_version,
                                             bool is_deterministic,
-                                            bool is_parallel_enable,
                                             bool is_pkg_body_udf,
                                             bool is_pl_agg,
                                             int64_t type_id,
@@ -669,7 +668,6 @@ int ObRawExprUtils::resolve_udf_common_info(const ObString &db_name,
   OX (udf_raw_expr->set_udf_id(udf_id));
   OX (udf_raw_expr->set_pkg_id(package_id));
   OX (udf_raw_expr->set_udf_deterministic(is_deterministic));
-  OX (udf_raw_expr->set_parallel_enable(is_parallel_enable));
   OX (udf_raw_expr->set_udf_schema_version(udf_schema_version));
   OX (udf_raw_expr->set_pkg_schema_version(pkg_schema_version));
   OX (udf_raw_expr->set_pkg_body_udf(is_pkg_body_udf));

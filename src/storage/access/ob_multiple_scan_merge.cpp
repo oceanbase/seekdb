@@ -782,7 +782,7 @@ int ObMultipleScanMerge::pause(bool& do_pause)
                                                  next_rowkey,
                                                  border_rowkey,
                                                  *access_ctx_->allocator_))) {
-          if (OB_UNLIKELY(ret != OB_ERR_UNSUPPORTED_TYPE )) {
+          if (OB_UNLIKELY(ret != OB_NOT_IMPLEMENT)) {
             LOG_WARN("Failed to get next rowkey", K(iter->get_iter_type()));
           } else {
             // `iter` has never called `get_next_rows`

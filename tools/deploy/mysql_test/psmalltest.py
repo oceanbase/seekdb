@@ -2784,7 +2784,6 @@ psmall_test += [
 'optimizer.query_range_in',
 'optimizer.straight_join_mysql',
 'data_generator_function_sqlqa.data_generator_function_operator_mysql',
-'auto_dop.distinct_group_by_dop',
 'plan_cache.decint',
 'insertIgnore_xianbank_sqlqa.insertIgnore_strictMode',
 'sqlmode_mysql_sqlqa.ansi_quotes_func_mysql',

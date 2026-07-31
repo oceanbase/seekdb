@@ -359,10 +359,6 @@ bool ObShowProcesslist::FillScanner::operator()(sql::ObSQLSessionMgr::Key key, O
             cur_row_->cells_[cell_idx].set_int(sess_info->get_client_addr_port());
             break;
           }
-          case SERVICE_NAME: {
-            cur_row_->cells_[cell_idx].set_null();
-            break;
-          }
           case TOTAL_CPU_TIME: {
             if (ObSQLSessionState::QUERY_ACTIVE == sess_info->get_session_state()) {
               // time_sec = current time - sql packet received from easy time

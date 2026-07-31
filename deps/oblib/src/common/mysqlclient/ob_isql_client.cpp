@@ -18,6 +18,7 @@
 #define USING_LOG_PREFIX LIB_MYSQLC
 #endif
 #include "common/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_isql_connection.h"
 #include "common/mysqlclient/ob_isql_result_handler.h"
 #include "common/mysqlclient/ob_mysql_result.h"
 
@@ -76,15 +77,13 @@ void ObISQLClient::ReadResult::reuse()
   }
 }
 
-void ObISQLClient::set_inactive()
+int ObISQLClient::acquire_connection(
+    ObISQLConnectionGuard &conn,
+    const int32_t group_id)
 {
-  active_ = false;
-  if (NULL != get_pool()) {
-    int ret = get_pool()->on_client_inactive(this);
-    if (OB_FAIL(ret)) {
-      COMMON_LOG(WARN, "connection pool on client inactive failed", K(ret));
-    }
-  }
+  UNUSED(group_id);
+  conn.reset();
+  return OB_NOT_SUPPORTED;
 }
 
 } // end namespace common

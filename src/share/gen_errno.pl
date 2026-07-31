@@ -232,9 +232,6 @@ for my $oberr (@errors_deps) {
 }
 
 print $fh_header_dep '
-constexpr int OB_MAX_RAISE_APPLICATION_ERROR         = -20000;
-constexpr int OB_MIN_RAISE_APPLICATION_ERROR         = -20999;
-
 } // common
 using namespace common; // maybe someone can fix
 } // oceanbase

@@ -71,7 +71,7 @@ private:
   array_t subpart_fun_exprs_;    // for subpart fun expr
   array_t template_subpart_values_exprs_;    // for template subpart fun expr
   array_array_t individual_subpart_values_exprs_; //for individual subpart values expr
-  bool use_def_sub_part_; // control resolver behaviour when resolve composited-partitioned table/tablegroup
+  bool use_def_sub_part_; // controls default subpartition handling for composite-partitioned tables
   bool use_auto_partition_clause_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPartitionedStmt);

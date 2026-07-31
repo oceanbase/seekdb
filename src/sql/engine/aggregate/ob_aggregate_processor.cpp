@@ -8137,7 +8137,8 @@ int ObAggregateProcessor::init_asmvt_result(ObIAllocator &allocator,
         if (OB_FAIL(ret)) {
         } else if (extent_res->get_int() == 0
                    || extent_res->is_overflow_integer(ObInt32Type)) {
-          ret = OB_ERR_INVALID_INPUT_VALUE;
+          ret = OB_ERR_ARGUMENT_OUT_OF_RANGE;
+          LOG_USER_ERROR(OB_ERR_ARGUMENT_OUT_OF_RANGE, extent_res->get_int());
           LOG_WARN("invalid extent value", K(ret), K(extent_res->get_int()));
         } else {
           mvt_res.extent_ = extent_res->get_int();

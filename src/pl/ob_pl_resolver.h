@@ -293,7 +293,6 @@ public:
                                     const ObString &ident_name,
                                     sql::ObSQLSessionInfo &session_info,
                                     ObPLDataType &data_type,
-                                    bool is_for_param_type = false,
                                     uint64_t package_id = OB_INVALID_ID);
   int resolve_var(sql::ObQualifiedName &q_name,
                   ObPLBlockNS &ns,
@@ -504,20 +503,9 @@ public:
   int resolve_routine_decl_param_list(const ParseNode *param_list,
       ObPLAstUnit &package_ast,
       ObPLRoutineInfo &routine_info);
-  int resolve_and_calc_static_expr(
-    ObPLFunctionAST &unit_ast, const ParseNode &node, ObObjType expect_type, ObObj &result);
   int replace_source_string(const ObString &old_sql, ParseNode *new_node);
   int replace_plsql_line(
     common::ObIAllocator &allocator, const ObStmtNodeTree *node, ObString &sql, ObString &new_sql);
-
-  int is_bool_literal_expr(const ObRawExpr *expr, bool &is_bool_literal_expr);
-  int is_static_expr(const ObRawExpr *expr, bool &is_static_expr);
-  int is_static_bool_expr(const ObRawExpr *expr, bool &is_static_bool_expr);
-  int is_pls_literal_expr(const ObRawExpr *expr, bool &is_pls_literal_expr);
-  int is_static_pls_expr(const ObRawExpr *expr, bool &is_static_pls_expr);
-  int is_static_pls_or_bool_expr(const ObRawExpr *expr, bool &is_static_pls_or_bool_expr);
-  int is_static_relation_expr(const ObRawExpr *expr, bool &is_static_relation_expr);
-  int check_static_bool_expr(const ObRawExpr *expr, bool &is_static_bool_expr);
 
   static int adjust_routine_param_type(ObPLDataType &type);
 
@@ -564,8 +552,7 @@ private:
                            ObPLAstUnit &func,
                            ObPLDataType &data_type,
                            ObPLExternTypeInfo *extern_type_info = NULL,
-                           bool with_rowid = false,
-                           bool is_for_param_type = false);
+                           bool with_rowid = false);
   int resolve_assign(const ObStmtNodeTree *parse_tree, ObPLAssignStmt *stmt, ObPLFunctionAST &func);
   int resolve_if(const ObStmtNodeTree *parse_tree, ObPLIfStmt *stmt, ObPLFunctionAST &func);
   int resolve_case(const ObStmtNodeTree *parse_tree, ObPLCaseStmt *stmt, ObPLFunctionAST &func);
@@ -576,7 +563,6 @@ private:
   int resolve_loop(const ObStmtNodeTree *parse_tree, ObPLLoopStmt *stmt, ObPLFunctionAST &func);
   int resolve_return(const ObStmtNodeTree *parse_tree, ObPLReturnStmt *stmt, ObPLFunctionAST &func);
   int resolve_sql(const ObStmtNodeTree *parse_tree, ObPLSqlStmt *stmt, ObPLFunctionAST &func);
-  int resolve_execute_immediate(const ObStmtNodeTree *parse_tree, ObPLExecuteStmt *stmt, ObPLFunctionAST &func);
   int resolve_declare_cond(const ObStmtNodeTree *parse_tree, ObPLPackageAST &package_ast);
   int resolve_declare_cond(const ObStmtNodeTree *parse_tree,
                            ObPLDeclareCondStmt *stmt,
@@ -669,8 +655,6 @@ private:
                            ObIArray<ObObjAccessIdx> &access_idxs, ObPLAstUnit &func,
                            bool is_proc = false, bool is_resolve_rowtype = false);
   int resolve_into(const ParseNode *into_node, ObPLInto &into, ObPLFunctionAST &func);
-  int resolve_using(const ObStmtNodeTree *using_node,  ObIArray<InOutParam> &using_params,
-                    ObPLFunctionAST &func);
   int resolve_stmt_list(const ObStmtNodeTree *parse_tree, ObPLStmtBlock *&stmt, ObPLFunctionAST &func,
                         bool stop_search_label = false, bool in_handler_scope = false);
   int resolve_when(const ObStmtNodeTree *parse_tree, ObRawExpr *case_expr_var, ObPLCaseStmt *stmt, ObPLFunctionAST &func);
@@ -752,8 +736,6 @@ private:
                       ObIArray<int64_t> &expr_idx);
   int check_in_param_type_legal(const share::schema::ObIRoutineParam *param_info, const ObRawExpr* param);
   int resolve_inout_param(ObRawExpr *param_expr, ObPLRoutineParamMode param_mode, int64_t &out_idx);
-  int resolve_serially_reusable_pragma(const ObStmtNodeTree *parse_tree, ObPLPackageAST &ast);
-  int resolve_restrict_references_pragma(const ObStmtNodeTree *parse_tree, ObPLPackageAST &ast);
   int resolve_interface_pragma(const ObStmtNodeTree *parse_tree, ObPLPackageAST &ast);
   int check_collection_expr_illegal(const ObRawExpr *expr, bool &is_obj_acc);
 
@@ -860,8 +842,6 @@ private:
                               ObParamExternType type,
                               uint64_t obj_id,
                               ObPLExternTypeInfo &extern_type_info);
-  static int get_number_literal_value(ObRawExpr *expr, int64_t &result);
-  int get_const_number_variable_literal_value(ObRawExpr *expr, int64_t &result);
 
   static const ObRawExpr *skip_implict_cast(const ObRawExpr *e);
 

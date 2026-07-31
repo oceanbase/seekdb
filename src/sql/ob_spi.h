@@ -30,7 +30,6 @@ namespace oceanbase
 {
 namespace observer
 {
-class ObInnerSQLConnection;
 class ObITimeRecord;
 class ObQueryRetryCtrl;
 }
@@ -523,7 +522,6 @@ public:
   static int spi_execute_immediate(pl::ObPLExecCtx *ctx,
                                    const int64_t sql_dix,
                                    common::ObObjParam **params,
-                                   const int64_t *params_mode,
                                    int64_t param_count,
                                    const int64_t *into_exprs_idx,
                                    int64_t into_count,
@@ -533,14 +531,11 @@ public:
                                    const int64_t *pl_integer_ranges,
                                    bool is_type_record = false);
   
-  static int check_dynamic_sql_legal(pl::ObPLExecCtx *ctx,
-                                     ObIAllocator &alloc,
+  static int check_dynamic_sql_legal(ObIAllocator &alloc,
                                      ObSqlString &sql_str,
                                      stmt::StmtType stmt_type,
                                      int64_t into_count,
-                                     common::ObObjParam **params,
-                                     int64_t param_count,
-                                     const int64_t *params_mode);
+                                     int64_t param_count);
 
   static int deep_copy_dynamic_param(pl::ObPLExecCtx *ctx,
                                       ObSPIResultSet &spi_result,
@@ -721,10 +716,6 @@ public:
                                   int *error_code,
                                   const char *resignal_sql_state,
                                   bool is_signal);
-
-  static int acquire_spi_conn(ObMySQLProxy &sql_proxy,
-                              ObSQLSessionInfo &session_info,
-                              observer::ObInnerSQLConnection *&spi_conn);
 
   static int spi_destruct_collection(pl::ObPLExecCtx *ctx, int64_t idx);
 

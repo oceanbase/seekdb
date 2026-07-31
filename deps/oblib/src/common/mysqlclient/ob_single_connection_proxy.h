@@ -25,7 +25,6 @@ namespace common
 namespace sqlclient
 {
 class ObISQLConnection;
-class ObISQLConnectionPool;
 } // end namespace sqlclient
 
 
@@ -46,8 +45,9 @@ public:
   using ObISQLClient::write;
 
   int connect(const int32_t group_id, ObISQLClient *sql_client);
-  virtual sqlclient::ObISQLConnectionPool *get_pool() override { return pool_; }
-  virtual sqlclient::ObISQLConnection *get_connection() override { return conn_; }
+  virtual sqlclient::ObISQLConnection *get_connection() override { return conn_.get_ptr(); }
+  virtual int acquire_connection(sqlclient::ObISQLConnectionGuard &conn,
+                                 const int32_t group_id) override;
 
   // in some situation, it allows continuation of SQL execution after failure in transaction,
   // and last_error should be reset.
@@ -63,17 +63,17 @@ public:
 protected:
   int errno_;
   int64_t statement_count_;
-  sqlclient::ObISQLConnection *conn_;
-  sqlclient::ObISQLConnectionPool *pool_;
+  sqlclient::ObISQLConnectionGuard conn_;
   ObISQLClient *sql_client_;
   DISALLOW_COPY_AND_ASSIGN(ObSingleConnectionProxy);
 };
 
 inline bool ObSingleConnectionProxy::check_inner_stat() const
 {
-  bool bret = (OB_SUCCESS == errno_ && NULL != pool_ && NULL != conn_);
+  bool bret = (OB_SUCCESS == errno_ && NULL != sql_client_ && conn_.is_valid());
   if (!bret) {
-    COMMON_MYSQLP_LOG_RET(WARN, errno_, "invalid inner stat", "errno", errno_, K_(pool), K_(conn));
+    COMMON_MYSQLP_LOG_RET(WARN, errno_, "invalid inner stat",
+                          "errno", errno_, K_(sql_client), K_(conn));
   }
   return bret;
 }

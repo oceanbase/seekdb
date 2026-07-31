@@ -18,7 +18,7 @@
 
 #include "ob_lock_inner_connection_util.h"
 #include "share/rc/ob_module_provider.h"
-#include "observer/ob_inner_sql_connection_pool.h"
+#include "observer/ob_inner_sql_connection.h"
 #include "observer/ob_inner_sql_result.h"
 #include "storage/tablelock/ob_table_lock_service.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -320,32 +320,27 @@ int ObInnerConnectionLockUtil::replace_lock_(const ObReplaceAllLocksRequest &req
   return ret;
 }
 
-int ObInnerConnectionLockUtil::create_inner_conn(sql::ObSQLSessionInfo *session_info,
-                                                 common::ObMySQLProxy *sql_proxy,
-                                                 observer::ObInnerSQLConnection *&inner_conn)
+int ObInnerConnectionLockUtil::acquire_inner_conn(sql::ObSQLSessionInfo *session_info,
+                                                  common::sqlclient::ObISQLConnectionGuard &conn_guard)
 {
   int ret = OB_SUCCESS;
-  observer::ObInnerSQLConnectionPool *pool = nullptr;
-  common::sqlclient::ObISQLConnection *conn = nullptr;
-
-  if (OB_ISNULL(session_info) || OB_ISNULL(sql_proxy)) {
+  observer::ObInnerSQLConnection *inner_conn = nullptr;
+  conn_guard.reset();
+  if (OB_ISNULL(session_info)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session or sql_proxy is NULL", KP(session_info), KP(sql_proxy));
+    LOG_WARN("session is NULL", KP(session_info));
   } else if (OB_NOT_NULL(inner_conn = static_cast<observer::ObInnerSQLConnection *>(session_info->get_inner_conn()))) {
-    LOG_INFO("session has had inner connection, no need to create again", KPC(session_info));
-  } else if (OB_ISNULL(pool = static_cast<observer::ObInnerSQLConnectionPool *>(sql_proxy->get_pool()))) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("connection pool is NULL", K(ret));
-  } else if (common::sqlclient::INNER_POOL != pool->get_type()) {
-    LOG_WARN("connection pool type is not inner", K(ret), K(pool->get_type()));
-    // NOTICE: the pool acquire no longer needs a compatibility-mode flag.
-  } else if (OB_FAIL(pool->acquire(session_info, conn))) {
-    LOG_WARN("acquire connection from inner sql connection pool failed", KR(ret), KPC(session_info));
-  } else if (OB_ISNULL(conn)) {
+    conn_guard = inner_conn->get_shared_guard();
+    if (!conn_guard.is_valid()) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("failed to retain inner connection from session", KR(ret), KPC(session_info));
+    }
+  } else if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_external_session(
+                         session_info, conn_guard))) {
+    LOG_WARN("create inner sql connection failed", KR(ret), KPC(session_info));
+  } else if (!conn_guard.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("acquire new connection but it's null", KR(ret), KPC(session_info));
-  } else {
-    inner_conn = static_cast<observer::ObInnerSQLConnection *>(conn);
   }
 
   return ret;

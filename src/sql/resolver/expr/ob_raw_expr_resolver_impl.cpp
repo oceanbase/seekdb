@@ -1301,44 +1301,6 @@ int ObRawExprResolverImpl::process_cursor_attr_node(const ParseNode &node, ObRaw
     OX (info.set_is_explicit(true));
     OX (info.set_type(node.value_));
     OZ (process_obj_access_node(*(node.children_[0]), child_expr));
-    if (OB_SUCC(ret) && T_SP_CURSOR_ROWID == node.value_ && NULL != child_expr) {
-      // in current of
-      // 1. the value must to be a cursor name
-      // 2. the cursor must to be a for update cursor
-      const pl::ObPLCursor *cursor = NULL;
-      const ObQualifiedName &col = ctx_.columns_->at(ctx_.columns_->count()-1);
-      ctx_.secondary_namespace_->get_cursor_by_name(ctx_, col.database_name_,
-        col.tbl_name_, col.col_name_, cursor);
-      if (NULL == cursor) {
-        ret = OB_ERR_NOT_CURSOR_NAME_IN_CURRENT_OF;
-        LOG_WARN(" not a cursor name", K(col.col_name_), K(col.tbl_name_), K(col.database_name_), K(ret));
-      } else if (!cursor->is_for_update()) {
-        ret = OB_ERR_NOT_FOR_UPDATE_CURSOR_IN_CURRENT_OF;
-        LOG_USER_ERROR(OB_ERR_NOT_FOR_UPDATE_CURSOR_IN_CURRENT_OF,
-          col.col_name_.length(), col.col_name_.ptr());
-        LOG_WARN("current of only support for update select.", K(ret), K(col.col_name_));
-      } else if (cursor->has_hidden_rowid()) {
-        if (OB_ISNULL(ctx_.stmt_)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("stmt is NULL", K(ret));
-        } else if (ObStmt::is_dml_write_stmt(ctx_.stmt_->stmt_type_)) {
-          ObDelUpdStmt *del_upd_stmt = static_cast<ObDelUpdStmt *>(ctx_.stmt_);
-          if (OB_ISNULL(del_upd_stmt)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("del_upd_stmt is NULL", K(ret));
-          } else if (1 == del_upd_stmt->get_table_items().count()) {
-            if (OB_ISNULL(del_upd_stmt->get_table_items().at(0))) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("table item is NULL", K(ret));
-            } else if (del_upd_stmt->get_table_items().at(0)->ref_id_ != cursor->get_rowid_table_id()) {
-              ret = OB_INVALID_ROWID;
-              LOG_WARN("invalid ROWID", K(del_upd_stmt->get_table_items().at(0)->ref_id_),
-                       K(cursor->get_rowid_table_id()), K(ret));
-            }
-          }
-        }
-      }
-    }
   } else { // implicit cursor attribute node
     info.set_is_explicit(false);
     if (0 == node.num_child_) {
@@ -1349,15 +1311,14 @@ int ObRawExprResolverImpl::process_cursor_attr_node(const ParseNode &node, ObRaw
     }
   }
   OX (c_expr->set_pl_get_cursor_attr_info(info));
-  // Note: Do a formalize before adding Child just to derive the type of ROWID attribute
+  // Formalize before adding the child so cursor attribute types are available.
   OZ (c_expr->formalize(ctx_.session_info_));
   if (OB_SUCC(ret) && OB_NOT_NULL(child_expr)) {
     OZ (c_expr->set_param_expr(child_expr));
   }
   if (OB_SUCC(ret)) {
     if (T_FUN_PL_GET_CURSOR_ATTR == c_expr->get_expr_type()) {
-      // Note: Replace with ColumnRef is to replace CURSOR%ROWID with QuestionMark in DML statements
-      // See: ObDMLResolver::resolve_qualified_identifier
+      // Cursor attributes are represented as column references while resolving DML expressions.
       ObQualifiedName column_ref;
       ObObjAccessIdent access_ident;
       ObColumnRefRawExpr *column_expr = NULL;
@@ -1708,8 +1669,8 @@ int ObRawExprResolverImpl::resolve_func_node_of_obj_access_idents(const ParseNod
             if (0 == access_ident.access_name_.case_compare("UID")) {
               // do nothing
             } else {
-              ret = OB_ERR_NO_FUNCTION_EXIST;
-              LOG_USER_ERROR(OB_ERR_NO_FUNCTION_EXIST,
+              ret = OB_ERR_FUNCTION_UNKNOWN;
+              LOG_USER_ERROR(OB_ERR_FUNCTION_UNKNOWN, "FUNCTION",
                              ident_name.length(), ident_name.ptr());
               LOG_WARN("no function with name 'string' exists in this scope",
                        K(ret), K(func_node.num_child_), K(access_ident));
@@ -1718,7 +1679,7 @@ int ObRawExprResolverImpl::resolve_func_node_of_obj_access_idents(const ParseNod
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("not expr list node!", K(func_node.children_[1]->type_), K(func_node.children_[1]->num_child_), K(ret));
           } else if (func_node.children_[1]->num_child_ != 1) {
-            ret = OB_ERR_TABLE_SINGLE_INDEX;
+            ret = OB_INVALID_ARGUMENT;
             LOG_WARN("PL/SQL TABLEs must use a single index", K(ret), K(func_node.children_[1]->num_child_));
           } else {
             const ParseNode *expr_node = func_node.children_[1]->children_[0];

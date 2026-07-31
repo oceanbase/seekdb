@@ -747,19 +747,6 @@ int ObRawExprPrinter::print(ObOpRawExpr *expr)
       }
       break;
     }
-    case T_FUN_PL_GET_CURSOR_ATTR: {
-      ObPLGetCursorAttrRawExpr *cursor_attr_expr = static_cast<ObPLGetCursorAttrRawExpr*>(expr);
-      if (cursor_attr_expr->get_pl_get_cursor_attr_info().is_rowid()) {
-        DATA_PRINTF("%s", "%ROWID");
-      } else {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("only rowid for cursor is supported",
-                 K(ret), "type", get_type_name(type),
-                 K(cursor_attr_expr->get_pl_get_cursor_attr_info()));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "only rowid for cursor is supported");
-      }
-      break;
-    }
     default: {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unknown expr type", K(ret), "type", get_type_name(type));

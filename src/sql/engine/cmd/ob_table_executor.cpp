@@ -18,6 +18,7 @@
 #include "sql/engine/cmd/ob_table_executor.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ob_local_management_service.h"
+#include "observer/ob_inner_sql_connection.h"
 #include "sql/engine/expr/ob_expr_regexp_context.h"  // ObExprRegexpSessionVariables (unity regroup)
 #include "sql/engine/cmd/ob_index_executor.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
@@ -304,7 +305,6 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
   ObString cur_query;
   int64_t affected_rows = 0;
   ObMySQLProxy *sql_proxy = ctx.get_sql_proxy();
-  common::ObCommonSqlProxy *user_sql_proxy;
   ObSQLSessionInfo *my_session = ctx.get_my_session();
   ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
   ObArenaAllocator allocator("CreateTableExec");
@@ -330,11 +330,7 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
     }
     
     if (OB_SUCC(ret)) {
-      ObInnerSQLConnectionPool *pool = static_cast<observer::ObInnerSQLConnectionPool*>(sql_proxy->get_pool());
-      if (OB_ISNULL(pool)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("pool is null", K(ret));
-      } else if (OB_FAIL(prepare_stmt(stmt, *my_session, create_table_name))) {
+      if (OB_FAIL(prepare_stmt(stmt, *my_session, create_table_name))) {
         LOG_WARN("failed to prepare stmt", K(ret));
       } else if (OB_FAIL(prepare_ins_arg(stmt, my_session, ctx.get_sql_ctx()->schema_guard_, &plan_ctx->get_param_store(), ins_sql))) { //1, parameter preparation;
         LOG_WARN("failed to prepare insert table arg", K(ret));
@@ -390,18 +386,20 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
           bool need_set_autocommit = (!is_mysql_temp_table || !in_trans);
           bool original_autocommit = false;
           ObBasicSessionInfo::UserScopeGuard user_scope_guard(my_session->get_sql_scope_flags());
-          common::sqlclient::ObISQLConnection *conn = NULL;
+          observer::ObInnerSQLConnection *conn = NULL;
+          sqlclient::ObISQLConnectionGuard conn_guard;
           
-          user_sql_proxy = sql_proxy;
           if (OB_FAIL(my_session->get_autocommit(original_autocommit))) {
             LOG_WARN("failed to get autocommit", K(ret));
           } else if (need_set_autocommit &&
                      !original_autocommit && OB_FAIL(my_session->set_autocommit(true))) {
             LOG_WARN("failed to set autocommit", K(ret));
           } else {
-            if (OB_FAIL(pool->acquire(my_session, conn))) {
+            if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_external_session(
+                            my_session, conn_guard))) {
               LOG_WARN("failed to acquire inner connection", K(ret));
-            } else if (OB_ISNULL(conn)) {
+            } else if (OB_ISNULL(conn = static_cast<observer::ObInnerSQLConnection *>(
+                                     conn_guard.get_ptr()))) {
               ret = OB_INNER_STAT_ERROR;
               LOG_WARN("connection can not be NULL", K(ret));
             } else if (OB_FAIL(
@@ -416,9 +414,8 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
                 LOG_WARN("failed to set autocommit", K(ret), K(tmp_ret), K(original_autocommit));
               }
             }
-            if (OB_NOT_NULL(conn)) {
-              user_sql_proxy->close(conn, true);
-            }
+            conn = NULL;
+            conn_guard.reset();
           } 
         }
 

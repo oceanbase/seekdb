@@ -16,7 +16,6 @@
 
 #include "ob_hybrid_search_executor.h"
 #include "observer/ob_inner_sql_connection.h"
-#include "observer/ob_inner_sql_connection_pool.h"
 #include "storage/vector_index/cmd/ob_vector_refresh_index_executor.h"
 
 #define USING_LOG_PREFIX SHARE
@@ -74,8 +73,8 @@ int ObHybridSearchExecutor::execute_search(ObObj &query_res) {
   int ret = OB_SUCCESS;
   ObString query_sql;
   common::ObMySQLProxy *sql_proxy = NULL;
-  observer::ObInnerSQLConnectionPool *conn_pool = NULL;
   observer::ObInnerSQLConnection *conn = NULL;
+  common::sqlclient::ObISQLConnectionGuard conn_guard;
   if (OB_ISNULL(ctx_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("exec context is not initialized", K(ret));
@@ -84,19 +83,15 @@ int ObHybridSearchExecutor::execute_search(ObObj &query_res) {
     LOG_WARN("session is not initialized", K(ret));
   } else if (OB_FAIL(do_get_sql(search_arg_.search_params_, query_sql, true))) {
     LOG_WARN("fail to do get sql", KR(ret));
-  } else if (OB_ISNULL(sql_proxy = ctx_->get_sql_proxy())
-             || OB_ISNULL(sql_proxy->get_pool())) {
+  } else if (OB_ISNULL(sql_proxy = ctx_->get_sql_proxy())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy or connection pool is null", K(ret), KP(sql_proxy));
-  } else if (OB_UNLIKELY(common::sqlclient::INNER_POOL != sql_proxy->get_pool()->get_type())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("hybrid search requires inner sql connection pool", K(ret),
-             "pool_type", sql_proxy->get_pool()->get_type());
-  } else if (OB_FALSE_IT(conn_pool = static_cast<observer::ObInnerSQLConnectionPool *>(
-                                      sql_proxy->get_pool()))) {
-  } else if (OB_FAIL(conn_pool->acquire_spi_conn(session_info_, conn))) {
+    LOG_WARN("sql proxy is null", K(ret), KP(sql_proxy));
+  } else if (OB_FAIL(
+                 observer::ObInnerSQLConnection::create_spi_connection_with_external_session(
+                     session_info_, conn_guard))) {
     LOG_WARN("failed to acquire connection with current session", K(ret));
-  } else if (OB_ISNULL(conn)) {
+  } else if (OB_ISNULL(conn = static_cast<observer::ObInnerSQLConnection *>(
+                           conn_guard.get_ptr()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("inner sql connection is null", K(ret), KP(conn));
   } else {
@@ -142,14 +137,6 @@ int ObHybridSearchExecutor::execute_search(ObObj &query_res) {
         LOG_ERROR("failed to restore session after hybrid search", K(tmp_ret));
         ret = COVER_SUCC(tmp_ret);
       }
-    }
-  }
-
-  if (OB_NOT_NULL(conn) && OB_NOT_NULL(sql_proxy)) {
-    int tmp_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (tmp_ret = sql_proxy->close(conn, ret))) {
-      LOG_WARN("failed to close hybrid search inner connection", K(tmp_ret));
-      ret = COVER_SUCC(tmp_ret);
     }
   }
 

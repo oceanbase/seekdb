@@ -19,7 +19,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/optimizer/stat/ob_basic_stats_estimator.h"
-#include "observer/ob_inner_sql_connection_pool.h"
+#include "observer/ob_inner_sql_connection.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/ob_access_path_estimation.h"
 using namespace oceanbase::common;
@@ -1031,17 +1031,18 @@ int ObDynamicSampling::do_estimate_rowcount(ObSQLSessionInfo *session_info,
     LOG_WARN("get unexpected empty", K(ret), K(ctx_->get_exec_ctx()), K(sql_proxy), K(session_info));
   }
   if (OB_SUCC(ret)) {
-    observer::ObInnerSQLConnectionPool *pool =
-                            static_cast<observer::ObInnerSQLConnectionPool*>(sql_proxy->get_pool());
-    sqlclient::ObISQLConnection *conn = NULL;
+    observer::ObInnerSQLConnection *conn = NULL;
+    sqlclient::ObISQLConnectionGuard conn_guard;
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       if (OB_UNLIKELY(raw_sql.empty())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected empty", K(ret));
-      } else if (OB_FAIL(pool->acquire(session_info, conn))) {
+      } else if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_external_session(
+                             session_info, conn_guard))) {
         LOG_WARN("failed to acquire inner connection", K(ret));
-      } else if (OB_ISNULL(conn)) {
+      } else if (OB_ISNULL(conn = static_cast<observer::ObInnerSQLConnection *>(
+                               conn_guard.get_ptr()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("conn is null", K(ret));
       } else if (OB_FAIL(conn->execute_read(raw_sql.ptr(),
@@ -1082,13 +1083,6 @@ int ObDynamicSampling::do_estimate_rowcount(ObSQLSessionInfo *session_info,
         } else {
           ret = OB_SUCCESS;
         }
-      }
-    }
-    if (conn != NULL && sql_proxy != NULL) {
-      int tmp_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (tmp_ret = sql_proxy->close(conn, true))) {
-        LOG_WARN("close result set failed", K(ret), K(tmp_ret));
-        ret = COVER_SUCC(tmp_ret);
       }
     }
   }

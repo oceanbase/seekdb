@@ -1782,8 +1782,9 @@ int ObDMLResolver::resolve_into_variables(const ParseNode *node,
             CK (OB_NOT_NULL(element_type));
             CK (0 < access_expr->get_orig_access_idxs().count());
             if (OB_SUCC(ret) && element_type->is_type_record()) {
-              ret = OB_ERR_INTO_EXPR_ILLEGAL;
-              LOG_USER_ERROR(OB_ERR_INTO_EXPR_ILLEGAL, access_expr->get_orig_access_idxs().at(access_expr->get_orig_access_idxs().count() - 1).var_name_.length(),
+              ret = OB_ERR_WRONG_TYPE_FOR_VAR;
+              LOG_USER_ERROR(OB_ERR_WRONG_TYPE_FOR_VAR,
+                             access_expr->get_orig_access_idxs().at(access_expr->get_orig_access_idxs().count() - 1).var_name_.length(),
                              access_expr->get_orig_access_idxs().at(access_expr->get_orig_access_idxs().count() - 1).var_name_.ptr());
               LOG_ERROR("inconsistent datatypes", K(ret));
             }
@@ -5682,31 +5683,6 @@ int ObDMLResolver::resolve_and_split_sql_expr_with_bool_expr(const ParseNode &no
 
 
 
-int ObDMLResolver::resolve_current_of(const ParseNode &node,
-                                      ObDMLStmt &stmt,
-                                      ObIArray<ObRawExpr*> &and_exprs)
-{
-  int ret = OB_SUCCESS;
-  ObRawExpr *cursor_expr = NULL;
-  ObRawExpr *equal_expr = NULL;
-  current_scope_ = T_CURRENT_OF_SCOPE;
-  if (OB_ISNULL(params_.secondary_namespace_)) {
-    // secondary_namespace_ is empty, indicating not in PL
-    ret = OB_UNIMPLEMENTED_FEATURE;
-    LOG_WARN("unimplemented feature");
-  }
-  CK(T_SP_EXPLICIT_CURSOR_ATTR == node.type_,
-     OB_NOT_NULL(params_.expr_factory_),
-     OB_NOT_NULL(params_.schema_checker_),
-     (stmt.is_update_stmt() || stmt.is_delete_stmt()));
-  if (OB_SUCC(ret)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("current of for multi-table not supported", K(stmt.get_table_size()), K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "current of for multi-table");
-  }
-  return ret;
-}
-
 int ObDMLResolver::resolve_where_clause(const ParseNode *node)
 {
   int ret = OB_SUCCESS;
@@ -5714,12 +5690,8 @@ int ObDMLResolver::resolve_where_clause(const ParseNode *node)
     current_scope_ = T_WHERE_SCOPE;
     ObDMLStmt *stmt = get_stmt();
     CK(OB_NOT_NULL(stmt), OB_NOT_NULL(node->children_[0]), node->type_ == T_WHERE_CLAUSE);
-    if (T_SP_EXPLICIT_CURSOR_ATTR == node->children_[0]->type_) {
-      OZ (resolve_current_of(*node->children_[0], *stmt, stmt->get_condition_exprs()));
-    } else {
-      OZ(resolve_and_split_sql_expr_with_bool_expr(*node->children_[0],
-                                                   stmt->get_condition_exprs()));
-    }
+    OZ(resolve_and_split_sql_expr_with_bool_expr(*node->children_[0],
+                                                stmt->get_condition_exprs()));
   }
   return ret;
 }
@@ -6228,7 +6200,7 @@ int ObDMLResolver::check_col_param_on_expr(ObRawExpr *expr)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
-    ret = OB_NULL_CHECK_ERROR;
+    ret = OB_INVALID_ARGUMENT;
     LOG_WARN("should not be nullptr", K(ret));
   } else if (expr->is_sys_func_expr()) {
     int param_num = expr->get_param_count();
@@ -9180,7 +9152,7 @@ int ObDMLResolver::resolve_external_name(ObQualifiedName &q_name,
                                                          params_.param_list_,
                                                          params_.is_prepare_protocol_,
                                                          false, /*is_check_mode*/
-                                                         current_scope_ != T_CURRENT_OF_SCOPE /*is_sql_scope*/,
+                                                         true /*is_sql_scope*/,
                                                          &dependency_objects))) {
       LOG_WARN_IGNORE_COL_NOTFOUND(ret, "failed to resolve var", K(q_name), K(ret));
     } else if (OB_ISNULL(expr)) {

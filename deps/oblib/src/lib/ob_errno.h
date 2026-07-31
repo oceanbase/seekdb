@@ -270,8 +270,6 @@ constexpr int OB_ERR_OPERATOR_CANNOT_BE_USED_WITH_LIST = -5729;
 constexpr int OB_INVALID_ROWID = -5802;
 constexpr int OB_ERR_NUMERIC_NOT_MATCH_FORMAT_LENGTH = -5873;
 constexpr int OB_ERR_DATETIME_INTERVAL_INTERNAL_ERROR = -5898;
-constexpr int OB_ERR_DBLINK_REMOTE_ECODE = -5975;
-constexpr int OB_ERR_DBLINK_NO_LIB = -5976;
 constexpr int OB_SWITCHING_TO_FOLLOWER_GRACEFULLY = -6202;
 constexpr int OB_MASK_SET_NO_NODE = -6203;
 constexpr int OB_TRANS_TIMEOUT = -6210;
@@ -384,7 +382,6 @@ constexpr int OB_ERR_INVALID_VECTOR_DIM = -7600;
 constexpr int OB_ERR_ARRAY_TYPE_MISMATCH = -7602;
 constexpr int OB_ERR_VSAG_RETURN_ERROR = -7604;
 constexpr int OB_OUT_OF_ELEMENT = -9005;
-constexpr int OB_INVALID_BACKUP_DEST = -9026;
 constexpr int OB_IO_LIMIT = -9061;
 constexpr int OB_ALLOCATE_TMP_FILE_PAGE_FAILED = -9124;
 constexpr int OB_ERR_TMP_FILE_ALREADY_SEALED = -9134;
@@ -392,10 +389,6 @@ constexpr int OB_TMP_FILE_EXCEED_DISK_QUOTA = -9135;
 constexpr int OB_ERR_DUPLICATE_INDEX = -9137;
 constexpr int OB_DAG_TASK_IS_SUSPENDED = -9143;
 constexpr int OB_ERR_XML_PARSE = -9549;
-constexpr int OB_ERR_XSLT_PARSE = -9574;
-constexpr int OB_MAX_RAISE_APPLICATION_ERROR         = -20000;
-constexpr int OB_MIN_RAISE_APPLICATION_ERROR         = -20999;
-
 } // common
 using namespace common; // maybe someone can fix
 } // oceanbase

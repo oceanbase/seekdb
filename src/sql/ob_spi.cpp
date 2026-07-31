@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SQL
 #include "ob_spi.h"
 #include "ob_sql.h"
-#include "observer/ob_inner_sql_connection_pool.h"
 #include "observer/mysql/ob_sync_cmd_driver.h"
 #include "observer/mysql/obmp_stmt_execute.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
@@ -2042,7 +2041,7 @@ int ObSPIService::calc_dynamic_sqlstr(
   OZ (spi_calc_expr(ctx, sql, OB_INVALID_INDEX, &result));
   if (OB_FAIL(ret)) {
   } else if (result.is_null_or_empty_string()) {
-    ret = OB_ERR_STATEMENT_STRING_IN_EXECUTE_IMMEDIATE_IS_NULL_OR_ZERO_LENGTH;
+    ret = OB_INVALID_ARGUMENT;
     LOG_WARN(
       "statement string in EXECUTE IMMEDIATE is NULL or 0 length", K(ret), K(result));
   } else if (!result.is_string_type()) {
@@ -2191,14 +2190,11 @@ int ObSPIService::dynamic_out_params(
 }
 
 
-int ObSPIService::check_dynamic_sql_legal(ObPLExecCtx *ctx,
-                                          ObIAllocator &alloc,
+int ObSPIService::check_dynamic_sql_legal(ObIAllocator &alloc,
                                           ObSqlString &sql_str,
                                           stmt::StmtType stmt_type,
                                           int64_t into_count,
-                                          common::ObObjParam **params,
-                                          int64_t param_count,
-                                          const int64_t *params_mode)
+                                          int64_t param_count)
 {
   int ret = OB_SUCCESS;
   if (OB_SUCC(ret)) {
@@ -2208,38 +2204,6 @@ int ObSPIService::check_dynamic_sql_legal(ObPLExecCtx *ctx,
       LOG_WARN("DDL statement is executed in an illegal context",
                 K(ret), K(into_count), K(param_count));
     } else { /*do nothing*/ }
-  }
-
-  for (int i = 0; OB_SUCC(ret) && i < param_count; ++i) {
-    ObPLRoutineParamMode pm = static_cast<ObPLRoutineParamMode>(params_mode[i]);
-    if (ObStmt::is_select_stmt(stmt_type) && (PL_PARAM_INOUT == pm || PL_PARAM_OUT == pm)) {
-      ret = OB_ERR_INOUT_PARAM_PLACEMENT_NOT_PROPERLY;
-      LOG_WARN("select stmt with using out/inout param mode is not allowed", K(ret));
-    }
-    if (ObStmt::is_dml_write_stmt(stmt_type) && PL_PARAM_OUT == pm) {
-      ret = OB_ERR_INOUT_PARAM_PLACEMENT_NOT_PROPERLY;
-      LOG_WARN("using out/inout param mode is not allowed", K(ret));
-    } else if (ObStmt::is_dml_write_stmt(stmt_type) &&
-               (PL_PARAM_INOUT == pm || PL_PARAM_OUT == pm)) {
-      ret = OB_ERR_INOUT_PARAM_PLACEMENT_NOT_PROPERLY;
-      LOG_WARN("using out/inout param mode is not allowed", K(ret));
-    }
-    if (OB_SUCC(ret) && ObStmt::is_dml_stmt(stmt_type)) {
-      if (PL_PARAM_IN == pm &&
-          NULL != params[i] &&
-          params[i]->is_pl_extend() &&
-          PL_RECORD_TYPE == params[i]->get_meta().get_extend_type()) {
-        const ObUserDefinedType *user_type = NULL;
-        ObPLComposite *composite = reinterpret_cast<ObPLComposite*>(params[i]->get_ext());
-        CK (OB_NOT_NULL(composite));
-        OZ (ctx->get_user_type(composite->get_id(), user_type));
-        CK (OB_NOT_NULL(user_type));
-        if (OB_SUCC(ret) && user_type->is_type_record()) {
-          ret = OB_ERR_EXPR_SQL_TYPE;
-          LOG_WARN("expressions have to be of SQL types", K(ret));
-        }
-      }
-    }
   }
 
   if (OB_SUCC(ret)) {
@@ -2328,7 +2292,6 @@ int ObSPIService::prepare_cursor_params(ObPLExecCtx *ctx,
 int ObSPIService::spi_execute_immediate(ObPLExecCtx *ctx,
                                         const int64_t sql_idx,
                                         common::ObObjParam **params,
-                                        const int64_t *params_mode,
                                         int64_t param_count,
                                         const int64_t *into_exprs_idx,
                                         int64_t into_count,
@@ -2390,14 +2353,11 @@ int ObSPIService::spi_execute_immediate(ObPLExecCtx *ctx,
                       skip_locked,
                       &param_store));
 
-  OZ (check_dynamic_sql_legal(ctx,
-                      allocator,
+  OZ (check_dynamic_sql_legal(allocator,
                       sql_str,
                       stmt_type,
                       into_count,
-                      params,
-                      param_count,
-                      params_mode));
+                      param_count));
 
   OX (session->set_stmt_type(saved_stmt_type));
 
@@ -3491,9 +3451,6 @@ int ObSPIService::spi_set_pl_exception_code(
   CK (OB_NOT_NULL(sqlcode_info = ctx->exec_ctx_->get_my_session()->get_pl_sqlcode_info()));
   if (OB_SUCC(ret) && code != sqlcode_info->get_sqlcode()) {
     OX (sqlcode_info->set_sqlcode(code));
-    if (code >= OB_MIN_RAISE_APPLICATION_ERROR && code <= OB_MAX_RAISE_APPLICATION_ERROR) {
-      LOG_MYSQL_USER_ERROR(OB_SP_RAISE_APPLICATION_ERROR, 0, "");
-    }
   }
   if (is_pop_warning_buf && sqlcode_info->get_stack_warning_buf().count() > 0) {
     int64_t idx = sqlcode_info->get_stack_warning_buf().count() - 1;
@@ -3806,7 +3763,7 @@ int ObSPIService::spi_process_resignal(pl::ObPLExecCtx *ctx,
       }
     } else {
       if (is_signal) {
-        LOG_MYSQL_USER_ERROR(OB_SP_RAISE_APPLICATION_ERROR,
+        LOG_MYSQL_USER_ERROR(OB_ERR_SIGNAL_EXCEPTION,
                             MIN(sqlcode_info->get_sqlmsg().length(), STR_LEN),
                             sqlcode_info->get_sqlmsg().ptr());
         if (OB_NOT_NULL(wb)) {
@@ -4169,20 +4126,6 @@ int ObSPIService::spi_interface_impl(pl::ObPLExecCtx *ctx, const char *interface
       LOG_WARN("Calling C interface which doesn't exist", K(interface_name), K(name));
     }
   }
-  return ret;
-}
-
-OB_INLINE int ObSPIService::acquire_spi_conn(ObMySQLProxy &sql_proxy,
-                                             ObSQLSessionInfo &session_info,
-                                             ObInnerSQLConnection *&spi_conn)
-{
-  int ret = OB_SUCCESS;
-  ObInnerSQLConnectionPool *pool = static_cast<ObInnerSQLConnectionPool*>(sql_proxy.get_pool());
-#ifndef NDEBUG
-  CK(sql_proxy.is_inited());
-  CK(OB_NOT_NULL(pool));
-#endif
-  OZ(pool->acquire_spi_conn(&session_info, spi_conn));
   return ret;
 }
 
@@ -4571,7 +4514,6 @@ int ObSPIService::inner_open(ObPLExecCtx *ctx,
     } else {
       bool is_inner_session = session->is_inner();
       ObSQLSessionInfo::SessionType old_session_type = session->get_session_type();
-      ObInnerSQLConnection *spi_conn = NULL;
       !is_inner_session ? session->set_inner_session() : (void)NULL;
       session->set_session_type(ObSQLSessionInfo::USER_SESSION);
       if (OB_SUCC(ret)) {
@@ -5210,7 +5152,7 @@ int ObSPIService::convert_obj(ObPLExecCtx *ctx,
                && !obj.is_geometry()
                && !obj.is_null()
                && result_types[i].get_meta_type().is_ext()) {
-      ret = OB_ERR_INTO_EXPR_ILLEGAL;
+      ret = OB_ERR_WRONG_TYPE_FOR_VAR;
       LOG_WARN("expression 'string' in the INTO list is of wrong type", K(ret), K(obj), K(i), K(current_type.at(i)), K(result_types[i]));
     } else {
       LOG_DEBUG("column convert", K(i), K(obj.get_meta()), K(result_types[i].get_meta_type()),
@@ -5675,7 +5617,7 @@ int ObSPIService::store_datums(ObObj &dest_addr, ObIArray<ObObj> &obj_array,
           // user_defined_sql_type can be cast into pl_extend, so it cannot be blocked in the front, 
           // but it is not allowed to be written into varray. 
           // Inserting user_defined_sql_type into the PL_VARRAY_TYPE type will take this part of the logic.
-          ret = OB_ERR_INTO_EXPR_ILLEGAL;
+          ret = OB_ERR_WRONG_TYPE_FOR_VAR;
           LOG_WARN("expression 'string' in the INTO list is of wrong type", K(ret));
         } else if (OB_ISNULL(record = static_cast<ObPLRecord*>(composite))) {
           ret = OB_ERR_UNEXPECTED;

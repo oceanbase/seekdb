@@ -153,9 +153,8 @@ int ObDBMSSchedJobUtils::job_class_check_impl(const ObString &job_class_name)
   ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
   int64_t rows = 0;
   if (OB_FAIL(ObDBMSSchedJobUtils::check_is_valid_name(job_class_name))) {
-    ret = OB_SP_RAISE_APPLICATION_ERROR;
-    ObString err_info("job class is an invalid name for a database object.");
-    LOG_MYSQL_USER_ERROR(OB_SP_RAISE_APPLICATION_ERROR, err_info.length(), err_info.ptr());
+    ret = OB_ERR_WRONG_IDENT_NAME;
+    LOG_MYSQL_USER_ERROR(OB_ERR_WRONG_IDENT_NAME);
   } else {
     CK (OB_NOT_NULL(sql_proxy));
     OZ (sql.append_fmt("select count(*) rows from %s where job_class_name = \'%.*s\'",

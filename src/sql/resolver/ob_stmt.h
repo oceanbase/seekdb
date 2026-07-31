@@ -248,8 +248,6 @@ public:
             || stmt_type == stmt::T_SET_TABLE_COMMENT
             // column
             || stmt_type == stmt::T_SET_COLUMN_COMMENT
-            // audit and noaudit
-            || stmt_type == stmt::T_AUDIT
             // analyze needs special handling before it can be treated as DDL here
             // TODO: wait for Xi Feng to finish handling the analyze issue then uncomment
             //|| stmt_type == stmt::T_ANALYZE
@@ -302,21 +300,14 @@ public:
             || stmt_type == stmt::T_DROP_TRIGGER
             || stmt_type == stmt::T_ALTER_TRIGGER
 
-            // tablespace
-            || stmt_type == stmt::T_CREATE_TABLESPACE
-            || stmt_type == stmt::T_ALTER_TABLESPACE
-            || stmt_type == stmt::T_DROP_TABLESPACE
             // user function
             );
   }
 
   static bool is_dcl_stmt(stmt::StmtType stmt_type)
   { return (stmt_type >= stmt::T_CREATE_USER && stmt_type <= stmt::T_REVOKE)
-            // user profile
-            || stmt_type == stmt::T_CREATE_PROFILE
-            || stmt_type == stmt::T_ALTER_PROFILE
-            || stmt_type == stmt::T_DROP_PROFILE
-            || stmt_type == stmt::T_ALTER_USER_PROFILE
+            // MySQL user roles
+            || stmt_type == stmt::T_ALTER_USER_ROLE
             || stmt_type == stmt::T_ALTER_USER
             //
             || stmt_type == stmt::T_CREATE_ROLE

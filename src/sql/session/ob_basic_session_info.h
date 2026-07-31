@@ -366,8 +366,7 @@ public:
   virtual int test_init(uint32_t sessid,
                    common::ObIAllocator *bucket_allocator);
   virtual void destroy();
-  //called before put session to freelist: unlock/set invalid
-  virtual void reset(bool skip_sys_var = false);
+  virtual void reset();
   void reset_user_var();
   virtual void clean_status();
   //setters
@@ -1079,14 +1078,6 @@ public:
   void set_reserved_snapshot_version(const share::SCN snapshot_version) { reserved_read_snapshot_version_ = snapshot_version; }
   void reset_reserved_snapshot_version() { reserved_read_snapshot_version_.reset(); }
 
-  bool is_acquire_from_pool() const { return acquire_from_pool_; }
-  void set_acquire_from_pool(bool acquire_from_pool) { acquire_from_pool_ = acquire_from_pool; }
-  bool can_release_to_pool() const { return release_to_pool_; }
-  void set_release_from_pool(bool release_to_pool) { release_to_pool_ = release_to_pool; }
-  bool is_server_stopping() { return ATOMIC_LOAD(&server_stopping_) > 0; }
-  void set_server_stopping() { ATOMIC_STORE(&server_stopping_, 1); }
-  bool is_use_inner_allocator() const;
-  int64_t get_reused_count() const { return reused_count_; }
   inline void set_first_need_txn_stmt_type(stmt::StmtType stmt_type)
   {
     if (stmt::T_NONE == first_need_txn_stmt_type_) {
@@ -1119,7 +1110,6 @@ protected:
                                const bool check_timezone_valid = true,
                                const bool is_update_sys_var = false,
                                const bool is_load_default = false);
-  int process_session_variable_fast();
   //@brief process session log_level setting like 'all.*:info, sql.*:debug'.
   //int process_session_ob_binlog_row_image(const common::ObObj &value);
   int process_session_log_level(const common::ObObj &val);
@@ -1666,7 +1656,6 @@ private:
   };
 protected:
 private:
-  static const int64_t CACHED_SYS_VAR_VERSION = 721;// a magic num
   // data structure related:
   common::ObRecursiveMutex query_mutex_;//mutex multiple query requests on the same session
   common::ObRecursiveMutex thread_data_mutex_;//mutex multiple threads for concurrent read and write to the same session member, protecting the consistency of thread_data_
@@ -1683,7 +1672,6 @@ private:
   uint64_t client_create_time_;
   int64_t global_vars_version_; // version of the loaded global system variables
   int64_t last_ddl_schema_version_; // internal Read-After-DDL schema fence
-  int64_t sys_var_base_version_;
   /*******************************************
    * transaction ctrl relative for session
    *******************************************/
@@ -1806,12 +1794,6 @@ private:
   // The end time of the previous statement
   int64_t curr_trans_last_stmt_end_time_;
 
-  bool acquire_from_pool_;
-  // In the constructor it is initialized to true, and set to false in some specific error cases, indicating that the session cannot be released back to the session pool.
-  // So reset interface does not need to, and cannot reset release_to_pool_.
-  bool release_to_pool_;
-  volatile int64_t server_stopping_;  // use int64_t for ATOMIC_LOAD / ATOMIC_STORE.
-  int64_t reused_count_;
   // type of first stmt which need transaction
   // either transactional read or transactional write
   stmt::StmtType first_need_txn_stmt_type_;

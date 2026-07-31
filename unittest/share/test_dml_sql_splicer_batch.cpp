@@ -193,7 +193,6 @@ public:
 
   MOCK_METHOD3(write, int(const char *sql, const int32_t group_id, int64_t &affected_rows));
 
-  sqlclient::ObISQLConnectionPool *get_pool() { return nullptr; }
   sqlclient::ObISQLConnection *get_connection() { return nullptr; }
 };
 

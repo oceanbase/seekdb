@@ -272,7 +272,6 @@ ob_set_subtarget(ob_share schema
 
 
 ob_set_subtarget(ob_share io
-  io/ob_backup_storage_info.cpp
   io/ob_io_define.cpp
   io/io_schedule/ob_io_schedule_v2.cpp
   io/ob_io_struct.cpp

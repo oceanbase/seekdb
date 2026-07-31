@@ -86,15 +86,6 @@ int ObSQLClientRetry::write(const char *sql, const int32_t group_id, int64_t &af
   return ret;
 }
 
-sqlclient::ObISQLConnectionPool *ObSQLClientRetry::get_pool()
-{
-  sqlclient::ObISQLConnectionPool *pool = NULL;
-  if (NULL != sql_client_) {
-    pool = sql_client_->get_pool();
-  }
-  return pool;
-}
-
 sqlclient::ObISQLConnection *ObSQLClientRetry::get_connection()
 {
   sqlclient::ObISQLConnection *conn = NULL;
@@ -102,4 +93,17 @@ sqlclient::ObISQLConnection *ObSQLClientRetry::get_connection()
     conn = sql_client_->get_connection();
   }
   return conn;
+}
+
+int ObSQLClientRetry::acquire_connection(
+    sqlclient::ObISQLConnectionGuard &conn,
+    const int32_t group_id)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(sql_client_)) {
+    ret = OB_NOT_INIT;
+  } else {
+    ret = sql_client_->acquire_connection(conn, group_id);
+  }
+  return ret;
 }

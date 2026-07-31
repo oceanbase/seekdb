@@ -475,7 +475,6 @@ const int64_t OB_LOG_SYNC = 1;
 const int64_t OB_LOG_DELAYED_SYNC = 2;
 const int64_t OB_LOG_NOT_PERSISTENT = 4;
 
-const int64_t OB_MAX_UPS_LEASE_DURATION_US = INT64_MAX;
 
 const int64_t OB_EXECABLE = 1;
 const int64_t OB_WRITEABLE = 2;
@@ -557,8 +556,6 @@ inline const char *get_cs_protocol_type_name(const ObCSProtocolType type) {
   }
 }
 
-const int64_t OB_UPS_START_MAJOR_VERSION = 2;
-const int64_t OB_UPS_START_MINOR_VERSION = 1;
 
 const int64_t OB_NEWEST_DATA_VERSION = -2;
 
@@ -572,9 +569,7 @@ const double OB_DOUBLE_EPSINON = 1e-14;
 
 const double OB_DOUBLE_PI = 3.141592653589793;
 
-const uint64_t OB_UPS_MAX_MINOR_VERSION_NUM = 2048;
 const int64_t OB_MAX_COMPACTSSTABLE_NUM = 64;
-const int32_t OB_UPS_LIMIT_RATIO = 2;
 
 const int64_t OB_MERGED_VERSION_INIT = 1;
 
@@ -761,8 +756,6 @@ const int64_t SERVER_STAT_LENGTH = 64;
 const int64_t TABLE_MAX_KEY_LENGTH = 128;
 const int64_t TABLE_MAX_VALUE_LENGTH = 128;
 const int64_t MAX_ZONE_INFO_LENGTH = 4096;
-const int64_t UPS_SESSION_TYPE_LENGTH = 64;
-const int64_t UPS_MEMTABLE_LOG_LENGTH = 128;
 const int64_t COLUMN_TYPE_LENGTH = 64;
 const int64_t COLUMN_NULLABLE_LENGTH = 4;
 const int64_t COLUMN_KEY_LENGTH = 4;
@@ -826,8 +819,6 @@ const uint64_t OB_MAX_SYS_POOL_ID = 100;
 const char *const OB_SYS_USER_NAME = "root";
 // todo yyj
 const char *const OB_EXTENDED_SYS_USER_NAME = "SYS";
-const char *const OB_LBACSYS_SCHEMA_NAME = "LBACSYS";
-const char *const OB_AUDITOR_SCHEMA_NAME = "ORAAUDITOR";
 const char *const OB_RESTORE_USER_NAME = "__oceanbase_inner_restore_user";
 const char *const OB_DRC_USER_NAME = "__oceanbase_inner_drc_user";
 const int64_t OB_MAX_DDL_OPNAME_LENGTH = 64;
@@ -1123,8 +1114,8 @@ const uint64_t OB_MYSQL_SCHEMA_ID             = OB_MIN_INNER_DATABASE_ID + 3;
 const uint64_t OB_RECYCLEBIN_SCHEMA_ID        = OB_MIN_INNER_DATABASE_ID + 4;
 const uint64_t OB_PUBLIC_SCHEMA_ID            = OB_MIN_INNER_DATABASE_ID + 5;
 const uint64_t OB_EXTENDED_SYS_DATABASE_ID = OB_MIN_INNER_DATABASE_ID + 6;
-const uint64_t OB_LBACSYS_DATABASE_ID      = OB_MIN_INNER_DATABASE_ID + 7;
-const uint64_t OB_AUDITOR_DATABASE_ID      = OB_MIN_INNER_DATABASE_ID + 8;
+// OB_MIN_INNER_DATABASE_ID + 7 and + 8 are reserved after removing
+// Oracle Label Security and Oracle auditing schemas.
 // use only if the 'use database' command is not executed.
 const uint64_t OB_MOCK_DEFAULT_DATABASE_ID = OB_MIN_INNER_DATABASE_ID + 9;
 const uint64_t OB_CTE_DATABASE_ID             = OB_MIN_INNER_DATABASE_ID + 10;
@@ -1190,20 +1181,6 @@ OB_INLINE bool is_sys_database_id(const uint64_t database_id)
 {
   return is_mysql_sys_database_id(database_id)
          || is_extended_sys_database_id(database_id);
-}
-
-/*
- * ################################################################################
- * OBJECT_ID FOR PROFILE (202200, 202300)
- * ################################################################################
- */
-const uint64_t OB_MIN_INNER_PROFILE_ID           = 202200;
-const uint64_t OB_MAX_INNER_PROFILE_ID           = 202300;
-
-OB_INLINE bool is_inner_profile_id(const uint64_t profile_id)
-{
-  return profile_id > OB_MIN_INNER_PROFILE_ID
-         && profile_id < OB_MAX_INNER_PROFILE_ID;
 }
 
 /*

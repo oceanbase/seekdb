@@ -2240,60 +2240,6 @@ static const _error _error_OB_ALLOCATE_DISK_SPACE_FAILED = {
       .str_error             = "cannot allocate disk space",
       .str_user_error        = "cannot allocate disk space"
 };
-static const _error _error_OB_CANT_FIND_UDF = {
-      .error_name            = "OB_CANT_FIND_UDF",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = ER_CANT_FIND_UDF,
-      .sqlstate              = "HY000",
-      .str_error             = "Can't load function",
-      .str_user_error        = "Can not load function %s"
-};
-static const _error _error_OB_CANT_INITIALIZE_UDF = {
-      .error_name            = "OB_CANT_INITIALIZE_UDF",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = ER_CANT_INITIALIZE_UDF,
-      .sqlstate              = "HY000",
-      .str_error             = "Can't initialize function",
-      .str_user_error        = "Can not initialize function '%.*s'"
-};
-static const _error _error_OB_UDF_NO_PATHS = {
-      .error_name            = "OB_UDF_NO_PATHS",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = ER_UDF_NO_PATHS,
-      .sqlstate              = "HY000",
-      .str_error             = "No paths allowed for shared library",
-      .str_user_error        = "No paths allowed for shared library"
-};
-static const _error _error_OB_UDF_EXISTS = {
-      .error_name            = "OB_UDF_EXISTS",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = ER_UDF_EXISTS,
-      .sqlstate              = "HY000",
-      .str_error             = "Function already exists",
-      .str_user_error        = "Function %.*s already exists"
-};
-static const _error _error_OB_CANT_OPEN_LIBRARY = {
-      .error_name            = "OB_CANT_OPEN_LIBRARY",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = ER_CANT_OPEN_LIBRARY,
-      .sqlstate              = "HY000",
-      .str_error             = "Can't open shared library",
-      .str_user_error        = "Can not open shared library '%.*s'"
-};
-static const _error _error_OB_CANT_FIND_DL_ENTRY = {
-      .error_name            = "OB_CANT_FIND_DL_ENTRY",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = ER_CANT_FIND_DL_ENTRY,
-      .sqlstate              = "HY000",
-      .str_error             = "Can't find symbol",
-      .str_user_error        = "Can't find symbol %.*s in library"
-};
 static const _error _error_OB_OBJECT_NAME_EXIST = {
       .error_name            = "OB_OBJECT_NAME_EXIST",
       .error_cause           = "Internal Error",
@@ -2465,33 +2411,6 @@ static const _error _error_OB_PRIV_DUP = {
       .str_error             = "duplicate privilege listed",
       .str_user_error        = "duplicate privilege listed"
 };
-static const _error _error_OB_TABLESPACE_EXIST = {
-      .error_name            = "OB_TABLESPACE_EXIST",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "tablespace already exists",
-      .str_user_error        = "tablespace '%.*s' already exists"
-};
-static const _error _error_OB_TABLESPACE_NOT_EXIST = {
-      .error_name            = "OB_TABLESPACE_NOT_EXIST",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = ER_TABLESPACE_NOT_EXIST,
-      .sqlstate              = "HY000",
-      .str_error             = "Tablespace does not exist",
-      .str_user_error        = "Tablespace '%.*s' does not exist"
-};
-static const _error _error_OB_TABLESPACE_DELETE_NOT_EMPTY = {
-      .error_name            = "OB_TABLESPACE_DELETE_NOT_EMPTY",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "cannot delete a tablespace which is not empty",
-      .str_user_error        = "cannot delete a tablespace which is not empty"
-};
 static const _error _error_OB_FLOAT_PRECISION_OUT_RANGE = {
       .error_name            = "OB_FLOAT_PRECISION_OUT_RANGE",
       .error_cause           = "Internal Error",
@@ -2527,33 +2446,6 @@ static const _error _error_OB_SLOG_REACH_MAX_CONCURRENCY = {
       .sqlstate              = "HY000",
       .str_error             = "slog active transaction entries reach maximum",
       .str_user_error        = "slog active transaction entries reach maximum"
-};
-static const _error _error_OB_ERR_BY_ACCESS_OR_SESSION_CLAUSE_NOT_ALLOWED_FOR_NOAUDIT = {
-      .error_name            = "OB_ERR_BY_ACCESS_OR_SESSION_CLAUSE_NOT_ALLOWED_FOR_NOAUDIT",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "BY ACCESS | SESSION clause not allowed for NOAUDIT",
-      .str_user_error        = "BY ACCESS | SESSION clause not allowed for NOAUDIT"
-};
-static const _error _error_OB_ERR_AUDITING_THE_OBJECT_IS_NOT_SUPPORTED = {
-      .error_name            = "OB_ERR_AUDITING_THE_OBJECT_IS_NOT_SUPPORTED",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "auditing the object is not supported",
-      .str_user_error        = "auditing the object is not supported"
-};
-static const _error _error_OB_ERR_DDL_STATEMENT_CANNOT_BE_AUDITED_WITH_BY_SESSION_SPECIFIED = {
-      .error_name            = "OB_ERR_DDL_STATEMENT_CANNOT_BE_AUDITED_WITH_BY_SESSION_SPECIFIED",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "DDL statement cannot be audited with BY SESSION specified",
-      .str_user_error        = "DDL statement cannot be audited with BY SESSION specified"
 };
 static const _error _error_OB_ERR_NOT_VALID_PASSWORD = {
       .error_name            = "OB_ERR_NOT_VALID_PASSWORD",
@@ -2816,15 +2708,6 @@ static const _error _error_OB_IO_TIMEOUT = {
       .str_error             = "IO timeout",
       .str_user_error        = "IO timeout"
 };
-static const _error _error_OB_IMPORT_NOT_IN_SERVER = {
-      .error_name            = "OB_IMPORT_NOT_IN_SERVER",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Import not in service",
-      .str_user_error        = "Import not in service"
-};
 static const _error _error_OB_CONVERT_ERROR = {
       .error_name            = "OB_CONVERT_ERROR",
       .error_cause           = "Internal Error",
@@ -2833,15 +2716,6 @@ static const _error _error_OB_CONVERT_ERROR = {
       .sqlstate              = "42000",
       .str_error             = "Convert error",
       .str_user_error        = "Convert error"
-};
-static const _error _error_OB_RS_STATE_NOT_ALLOW = {
-      .error_name            = "OB_RS_STATE_NOT_ALLOW",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "RootServer state error",
-      .str_user_error        = "RootServer state error"
 };
 static const _error _error_OB_NO_NEED_UPDATE = {
       .error_name            = "OB_NO_NEED_UPDATE",
@@ -2870,96 +2744,6 @@ static const _error _error_OB_ITER_STOP = {
       .str_error             = "Iteration was stopped",
       .str_user_error        = "Iteration was stopped"
 };
-static const _error _error_OB_CONFIG_NOT_SYNC = {
-      .error_name            = "OB_CONFIG_NOT_SYNC",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "F0000",
-      .str_error             = "Configuration not sync",
-      .str_user_error        = "Configuration not sync"
-};
-static const _error _error_OB_ROOT_TABLE_RANGE_NOT_EXIST = {
-      .error_name            = "OB_ROOT_TABLE_RANGE_NOT_EXIST",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Tablet range not exist",
-      .str_user_error        = "Tablet range not exist"
-};
-static const _error _error_OB_NOT_DATA_LOAD_TABLE = {
-      .error_name            = "OB_NOT_DATA_LOAD_TABLE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "No data to load",
-      .str_user_error        = "No data to load"
-};
-static const _error _error_OB_DATA_LOAD_TABLE_DUPLICATED = {
-      .error_name            = "OB_DATA_LOAD_TABLE_DUPLICATED",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Duplicated table data to load",
-      .str_user_error        = "Duplicated table data to load"
-};
-static const _error _error_OB_ROOT_TABLE_ID_EXIST = {
-      .error_name            = "OB_ROOT_TABLE_ID_EXIST",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Table ID exist",
-      .str_user_error        = "Table ID exist"
-};
-static const _error _error_OB_INDEX_TIMEOUT = {
-      .error_name            = "OB_INDEX_TIMEOUT",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Building index timeout",
-      .str_user_error        = "Building index timeout"
-};
-static const _error _error_OB_ROOT_NOT_INTEGRATED = {
-      .error_name            = "OB_ROOT_NOT_INTEGRATED",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "42000",
-      .str_error             = "Root not integrated",
-      .str_user_error        = "Root not integrated"
-};
-static const _error _error_OB_INDEX_INELIGIBLE = {
-      .error_name            = "OB_INDEX_INELIGIBLE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "index data not unique",
-      .str_user_error        = "index data not unique"
-};
-static const _error _error_OB_MERGE_NOT_STARTED = {
-      .error_name            = "OB_MERGE_NOT_STARTED",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "global merge not started",
-      .str_user_error        = "global merge not started"
-};
-static const _error _error_OB_MERGE_ALREADY_STARTED = {
-      .error_name            = "OB_MERGE_ALREADY_STARTED",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "merge already started",
-      .str_user_error        = "merge already started"
-};
 static const _error _error_OB_RS_SHUTDOWN = {
       .error_name            = "OB_RS_SHUTDOWN",
       .error_cause           = "Internal Error",
@@ -2968,114 +2752,6 @@ static const _error _error_OB_RS_SHUTDOWN = {
       .sqlstate              = "HY000",
       .str_error             = "rootservice is shutdown",
       .str_user_error        = "rootservice is shutdown"
-};
-static const _error _error_OB_DATA_SOURCE_NOT_EXIST = {
-      .error_name            = "OB_DATA_SOURCE_NOT_EXIST",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Data source not exist",
-      .str_user_error        = "Data source not exist"
-};
-static const _error _error_OB_DATA_SOURCE_TABLE_NOT_EXIST = {
-      .error_name            = "OB_DATA_SOURCE_TABLE_NOT_EXIST",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Data source table not exist",
-      .str_user_error        = "Data source table not exist"
-};
-static const _error _error_OB_DATA_SOURCE_RANGE_NOT_EXIST = {
-      .error_name            = "OB_DATA_SOURCE_RANGE_NOT_EXIST",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Data source range not exist",
-      .str_user_error        = "Data source range not exist"
-};
-static const _error _error_OB_DATA_SOURCE_DATA_NOT_EXIST = {
-      .error_name            = "OB_DATA_SOURCE_DATA_NOT_EXIST",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Data source data not exist",
-      .str_user_error        = "Data source data not exist"
-};
-static const _error _error_OB_DATA_SOURCE_SYS_ERROR = {
-      .error_name            = "OB_DATA_SOURCE_SYS_ERROR",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Data source sys error",
-      .str_user_error        = "Data source sys error"
-};
-static const _error _error_OB_DATA_SOURCE_TIMEOUT = {
-      .error_name            = "OB_DATA_SOURCE_TIMEOUT",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Data source timeout",
-      .str_user_error        = "Data source timeout"
-};
-static const _error _error_OB_DATA_SOURCE_CONCURRENCY_FULL = {
-      .error_name            = "OB_DATA_SOURCE_CONCURRENCY_FULL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "53000",
-      .str_error             = "Data source concurrency full",
-      .str_user_error        = "Data source concurrency full"
-};
-static const _error _error_OB_DATA_SOURCE_WRONG_URI_FORMAT = {
-      .error_name            = "OB_DATA_SOURCE_WRONG_URI_FORMAT",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "42000",
-      .str_error             = "Data source wrong URI format",
-      .str_user_error        = "Data source wrong URI format"
-};
-static const _error _error_OB_SSTABLE_VERSION_UNEQUAL = {
-      .error_name            = "OB_SSTABLE_VERSION_UNEQUAL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "42000",
-      .str_error             = "SSTable version not equal",
-      .str_user_error        = "SSTable version not equal"
-};
-static const _error _error_OB_UPS_RENEW_LEASE_NOT_ALLOWED = {
-      .error_name            = "OB_UPS_RENEW_LEASE_NOT_ALLOWED",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "ups should not renew its lease",
-      .str_user_error        = "ups should not renew its lease"
-};
-static const _error _error_OB_UPS_COUNT_OVER_LIMIT = {
-      .error_name            = "OB_UPS_COUNT_OVER_LIMIT",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "ups count over limit",
-      .str_user_error        = "ups count over limit"
-};
-static const _error _error_OB_NO_UPS_MAJORITY = {
-      .error_name            = "OB_NO_UPS_MAJORITY",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "ups not form a majority",
-      .str_user_error        = "ups not form a majority"
 };
 static const _error _error_OB_INDEX_COUNT_REACH_THE_LIMIT = {
       .error_name            = "OB_INDEX_COUNT_REACH_THE_LIMIT",
@@ -3095,15 +2771,6 @@ static const _error _error_OB_TASK_EXPIRED = {
       .str_error             = "task expired",
       .str_user_error        = "task expired"
 };
-static const _error _error_OB_INVALID_SERVER_STATUS = {
-      .error_name            = "OB_INVALID_SERVER_STATUS",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "server status is not valid",
-      .str_user_error        = "server status is not valid"
-};
 static const _error _error_OB_MACHINE_RESOURCE_NOT_ENOUGH = {
       .error_name            = "OB_MACHINE_RESOURCE_NOT_ENOUGH",
       .error_cause           = "Internal Error",
@@ -3112,15 +2779,6 @@ static const _error _error_OB_MACHINE_RESOURCE_NOT_ENOUGH = {
       .sqlstate              = "HY000",
       .str_error             = "machine resource is not enough to hold a new unit",
       .str_user_error        = "zone '%s' server \'%s\' %s resource is not enough to hold a new unit"
-};
-static const _error _error_OB_SERVER_NOT_ACTIVE = {
-      .error_name            = "OB_SERVER_NOT_ACTIVE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "server is not active",
-      .str_user_error        = "server is not active"
 };
 static const _error _error_OB_RS_NOT_MASTER = {
       .error_name            = "OB_RS_NOT_MASTER",
@@ -3185,15 +2843,6 @@ static const _error _error_OB_GET_LOCATION_TIME_OUT = {
       .str_error             = "Timeout",
       .str_user_error        = "Timeout"
 };
-static const _error _error_OB_DATA_SOURCE_NOT_VALID = {
-      .error_name            = "OB_DATA_SOURCE_NOT_VALID",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Data source not valid",
-      .str_user_error        = "Data source not valid"
-};
 static const _error _error_OB_RUN_JOB_NOT_SUCCESS = {
       .error_name            = "OB_RUN_JOB_NOT_SUCCESS",
       .error_cause           = "Internal Error",
@@ -3257,15 +2906,6 @@ static const _error _error_OB_RPC_NEED_RECONNECT = {
       .str_error             = "rpc need reconnect",
       .str_user_error        = "%s"
 };
-static const _error _error_OB_CANNOT_COPY_MAJOR_SSTABLE = {
-      .error_name            = "OB_CANNOT_COPY_MAJOR_SSTABLE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "cannot copy major sstable now",
-      .str_user_error        = "cannot copy major sstable now"
-};
 static const _error _error_OB_ACTIVE_MEMTBALE_NOT_EXSIT = {
       .error_name            = "OB_ACTIVE_MEMTBALE_NOT_EXSIT",
       .error_cause           = "Internal Error",
@@ -3275,15 +2915,6 @@ static const _error _error_OB_ACTIVE_MEMTBALE_NOT_EXSIT = {
       .str_error             = "active memtable not exist",
       .str_user_error        = "active memtable not exist"
 };
-static const _error _error_OB_NO_DISK_NEED_REBUILD = {
-      .error_name            = "OB_NO_DISK_NEED_REBUILD",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "no disk need rebuild",
-      .str_user_error        = "no disk need rebuild"
-};
 static const _error _error_OB_STANDBY_DATABASE_READ_ONLY = {
       .error_name            = "OB_STANDBY_DATABASE_READ_ONLY",
       .error_cause           = "Internal Error",
@@ -3292,15 +2923,6 @@ static const _error _error_OB_STANDBY_DATABASE_READ_ONLY = {
       .sqlstate              = "HY000",
       .str_error             = "standby database is read only",
       .str_user_error        = "standby database is read only"
-};
-static const _error _error_OB_INVALD_WEB_SERVICE_CONTENT = {
-      .error_name            = "OB_INVALD_WEB_SERVICE_CONTENT",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "web service content not valid",
-      .str_user_error        = "web service content not valid"
 };
 static const _error _error_OB_ARRAY_BINDING_SWITCH_ITERATOR = {
       .error_name            = "OB_ARRAY_BINDING_SWITCH_ITERATOR",
@@ -3320,15 +2942,6 @@ static const _error _error_OB_ERR_CHECK_DROP_COLUMN_FAILED = {
       .str_error             = "check drop column failed",
       .str_user_error        = "check drop column failed"
 };
-static const _error _error_OB_WAIT_TRANS_TABLE_MERGE_TIMEOUT = {
-      .error_name            = "OB_WAIT_TRANS_TABLE_MERGE_TIMEOUT",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "wait trans table merge finish timeout",
-      .str_user_error        = "wait trans table merge finish timeout"
-};
 static const _error _error_OB_ERR_PARAM_INVALID = {
       .error_name            = "OB_ERR_PARAM_INVALID",
       .error_cause           = "Internal Error",
@@ -3337,15 +2950,6 @@ static const _error _error_OB_ERR_PARAM_INVALID = {
       .sqlstate              = "HY000",
       .str_error             = "parameter cannot be modified because specified value is invalid",
       .str_user_error        = "parameter cannot be modified because specified value is invalid"
-};
-static const _error _error_OB_FAILOVER_NOT_ALLOW = {
-      .error_name            = "OB_FAILOVER_NOT_ALLOW",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Failover is not allowed",
-      .str_user_error        = "%s"
 };
 static const _error _error_OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX = {
       .error_name            = "OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX",
@@ -3545,33 +3149,6 @@ static const _error _error_OB_INVALID_TABLE_STORE = {
       .str_error             = "invalid table store",
       .str_user_error        = "%s"
 };
-static const _error _error_OB_WAIT_DEGRATION_TIMEOUT = {
-      .error_name            = "OB_WAIT_DEGRATION_TIMEOUT",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "wait degration finished timeout",
-      .str_user_error        = "wait degration finished timeout"
-};
-static const _error _error_OB_ERR_ROOT_INSPECTION = {
-      .error_name            = "OB_ERR_ROOT_INSPECTION",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "root inspection is not passed",
-      .str_user_error        = "root inspection is not passed"
-};
-static const _error _error_OB_ERR_ROOTSERVICE_THREAD_HUNG = {
-      .error_name            = "OB_ERR_ROOTSERVICE_THREAD_HUNG",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "rootservice background thread may be hung",
-      .str_user_error        = "rootservice background thread may be hung"
-};
 static const _error _error_OB_IGNORE_ERR_ACCESS_VIRTUAL_TABLE = {
       .error_name            = "OB_IGNORE_ERR_ACCESS_VIRTUAL_TABLE",
       .error_cause           = "Internal Error",
@@ -3733,33 +3310,6 @@ static const _error _error_OB_ERR_EXCHANGE_COMPOSITE_PARTITION = {
       .sqlstate              = "HY000",
       .str_error             = "Subpartitioned table, use subpartition instead of partition",
       .str_user_error        = "Subpartitioned table, use subpartition instead of partition"
-};
-static const _error _error_OB_SERVICE_NOT_FULLY_STARTED = {
-      .error_name            = "OB_SERVICE_NOT_FULLY_STARTED",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "The service has not started on all servers",
-      .str_user_error        = "The service has not started on all servers"
-};
-static const _error _error_OB_SERVICE_STOPPED = {
-      .error_name            = "OB_SERVICE_STOPPED",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "The service has stopped",
-      .str_user_error        = "The service has stopped"
-};
-static const _error _error_OB_SERVER_CONNECTION_ERROR = {
-      .error_name            = "OB_SERVER_CONNECTION_ERROR",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Server '%s' connection error",
-      .str_user_error        = "Server '%s' connection error"
 };
 static const _error _error_OB_ERR_ATLER_TABLE_ILLEGAL_FK_DROP_INDEX = {
       .error_name            = "OB_ERR_ATLER_TABLE_ILLEGAL_FK_DROP_INDEX",
@@ -4490,15 +4040,6 @@ static const _error _error_OB_ERR_TOO_MANY_JOIN_TABLES = {
       .str_error             = "too many joined tables",
       .str_user_error        = "too many joined tables"
 };
-static const _error _error_OB_ERR_DDL_ON_REMOTE_DATABASE = {
-      .error_name            = "OB_ERR_DDL_ON_REMOTE_DATABASE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "DDL operations are not allowed on a remote database",
-      .str_user_error        = "DDL operations are not allowed on a remote database"
-};
 static const _error _error_OB_ERR_MISSING_KEYWORD = {
       .error_name            = "OB_ERR_MISSING_KEYWORD",
       .error_cause           = "Internal Error",
@@ -4507,15 +4048,6 @@ static const _error _error_OB_ERR_MISSING_KEYWORD = {
       .sqlstate              = "HY000",
       .str_error             = "missing keyword",
       .str_user_error        = "missing keyword"
-};
-static const _error _error_OB_ERR_DATABASE_LINK_EXPECTED = {
-      .error_name            = "OB_ERR_DATABASE_LINK_EXPECTED",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "database link name expected",
-      .str_user_error        = "database link name expected"
 };
 static const _error _error_OB_ERR_VARCHAR_TOO_LONG = {
       .error_name            = "OB_ERR_VARCHAR_TOO_LONG",
@@ -4732,15 +4264,6 @@ static const _error _error_OB_ERR_ZLIB_DATA = {
       .sqlstate              = "HY000",
       .str_error             = "ZLIB: Input data corrupted",
       .str_user_error        = "ZLIB: Input data corrupted"
-};
-static const _error _error_OB_ERR_DBLINK_SESSION_KILLED = {
-      .error_name            = "OB_ERR_DBLINK_SESSION_KILLED",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "your session has been killed",
-      .str_user_error        = "your session has been killed"
 };
 static const _error _error_OB_SQL_RESOLVER_NO_MEMORY = {
       .error_name            = "OB_SQL_RESOLVER_NO_MEMORY",
@@ -8090,14 +7613,14 @@ static const _error _error_OB_ERR_SP_WRONG_ARG_NUM = {
       .str_error             = "Incorrect number of arguments",
       .str_user_error        = "Incorrect number of arguments for %s %s; expected %u, got %u"
 };
-static const _error _error_OB_ERR_SP_UNHANDLED_EXCEPTION = {
-      .error_name            = "OB_ERR_SP_UNHANDLED_EXCEPTION",
+static const _error _error_OB_ERR_SIGNAL_EXCEPTION = {
+      .error_name            = "OB_ERR_SIGNAL_EXCEPTION",
       .error_cause           = "Internal Error",
       .error_solution        = "Contact OceanBase Support",
       .mysql_errno           = ER_SIGNAL_EXCEPTION,
       .sqlstate              = "HY000",
-      .str_error             = "Unhandled exception has occurred in PL",
-      .str_user_error        = "Unhandled user-defined exception condition"
+      .str_error             = "Unhandled user-defined exception condition",
+      .str_user_error        = "%.*s"
 };
 static const _error _error_OB_ERR_SP_BAD_CONDITION_TYPE = {
       .error_name            = "OB_ERR_SP_BAD_CONDITION_TYPE",
@@ -9224,78 +8747,6 @@ static const _error _error_OB_ERR_GROUP_FUNC_NOT_ALLOWED = {
       .str_error             = "group function is not allowed here",
       .str_user_error        = "group function is not allowed here"
 };
-static const _error _error_OB_ERR_POLICY_STRING_NOT_FOUND = {
-      .error_name            = "OB_ERR_POLICY_STRING_NOT_FOUND",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "policy string not found",
-      .str_user_error        = "policy string not found"
-};
-static const _error _error_OB_ERR_INVALID_LABEL_STRING = {
-      .error_name            = "OB_ERR_INVALID_LABEL_STRING",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "invalid label string",
-      .str_user_error        = "invalid label string"
-};
-static const _error _error_OB_ERR_UNDEFINED_COMPARTMENT_STRING_FOR_POLICY_STRING = {
-      .error_name            = "OB_ERR_UNDEFINED_COMPARTMENT_STRING_FOR_POLICY_STRING",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "undefined compartment string for policy string",
-      .str_user_error        = "undefined compartment string for policy string"
-};
-static const _error _error_OB_ERR_UNDEFINED_LEVEL_STRING_FOR_POLICY_STRING = {
-      .error_name            = "OB_ERR_UNDEFINED_LEVEL_STRING_FOR_POLICY_STRING",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "undefined level string for policy string",
-      .str_user_error        = "undefined level string for policy string"
-};
-static const _error _error_OB_ERR_UNDEFINED_GROUP_STRING_FOR_POLICY_STRING = {
-      .error_name            = "OB_ERR_UNDEFINED_GROUP_STRING_FOR_POLICY_STRING",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "undefined group string for policy string",
-      .str_user_error        = "undefined group string for policy string"
-};
-static const _error _error_OB_ERR_LBAC_ERROR = {
-      .error_name            = "OB_ERR_LBAC_ERROR",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "LBAC error",
-      .str_user_error        = "LBAC error: %s"
-};
-static const _error _error_OB_ERR_POLICY_ROLE_ALREADY_EXISTS_FOR_POLICY_STRING = {
-      .error_name            = "OB_ERR_POLICY_ROLE_ALREADY_EXISTS_FOR_POLICY_STRING",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "policy role already exists for policy string",
-      .str_user_error        = "policy role already exists for policy string"
-};
-static const _error _error_OB_ERR_NULL_OR_INVALID_USER_LABEL = {
-      .error_name            = "OB_ERR_NULL_OR_INVALID_USER_LABEL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "NULL or invalid user label",
-      .str_user_error        = "NULL or invalid user label: %s"
-};
 static const _error _error_OB_ERR_ADD_INDEX = {
       .error_name            = "OB_ERR_ADD_INDEX",
       .error_cause           = "Internal Error",
@@ -9304,42 +8755,6 @@ static const _error _error_OB_ERR_ADD_INDEX = {
       .sqlstate              = "HY000",
       .str_error             = "Add index failed",
       .str_user_error        = "Add index failed"
-};
-static const _error _error_OB_ERR_PROFILE_STRING_DOES_NOT_EXIST = {
-      .error_name            = "OB_ERR_PROFILE_STRING_DOES_NOT_EXIST",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "profile string does not exist",
-      .str_user_error        = "profile %.*s does not exist"
-};
-static const _error _error_OB_ERR_INVALID_RESOURCE_LIMIT = {
-      .error_name            = "OB_ERR_INVALID_RESOURCE_LIMIT",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "invalid resource limit",
-      .str_user_error        = "invalid resource limit %s"
-};
-static const _error _error_OB_ERR_PROFILE_STRING_ALREADY_EXISTS = {
-      .error_name            = "OB_ERR_PROFILE_STRING_ALREADY_EXISTS",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "profile string already exists",
-      .str_user_error        = "profile %.*s already exists"
-};
-static const _error _error_OB_ERR_PROFILE_STRING_HAS_USERS_ASSIGNED = {
-      .error_name            = "OB_ERR_PROFILE_STRING_HAS_USERS_ASSIGNED",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "profile string has users assigned, cannot drop without CASCADE",
-      .str_user_error        = "profile %.*s has users assigned, cannot drop without CASCADE"
 };
 static const _error _error_OB_ERR_THE_LEADING_PRECISION_OF_THE_INTERVAL_IS_TOO_SMALL = {
       .error_name            = "OB_ERR_THE_LEADING_PRECISION_OF_THE_INTERVAL_IS_TOO_SMALL",
@@ -9547,15 +8962,6 @@ static const _error _error_OB_ERR_SPECIFY_DATABASE_NOT_ALLOWED = {
       .sqlstate              = "HY000",
       .str_error             = "specifying owner's name of the table is not allowed",
       .str_user_error        = "specifying owner's name of the table is not allowed"
-};
-static const _error _error_OB_ERR_STMT_TRIGGER_WITH_WHEN_CLAUSE = {
-      .error_name            = "OB_ERR_STMT_TRIGGER_WITH_WHEN_CLAUSE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "stmt trigger with when clause",
-      .str_user_error        = "stmt trigger with when clause"
 };
 static const _error _error_OB_ERR_TRIGGER_NOT_EXIST = {
       .error_name            = "OB_ERR_TRIGGER_NOT_EXIST",
@@ -9989,24 +9395,6 @@ static const _error _error_OB_ERR_FOR_UPDATE_SELECT_VIEW_CANNOT = {
       .str_error             = "cannot select FOR UPDATE from view with DISTINCT, GROUP BY, etc.",
       .str_user_error        = "cannot select FOR UPDATE from view with DISTINCT, GROUP BY, etc."
 };
-static const _error _error_OB_ERR_POLICY_WITH_CHECK_OPTION_VIOLATION = {
-      .error_name            = "OB_ERR_POLICY_WITH_CHECK_OPTION_VIOLATION",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "policy with check option violation",
-      .str_user_error        = "policy with check option violation"
-};
-static const _error _error_OB_ERR_POLICY_ALREADY_APPLIED_TO_TABLE = {
-      .error_name            = "OB_ERR_POLICY_ALREADY_APPLIED_TO_TABLE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "policy already applied to table",
-      .str_user_error        = "policy already applied to table"
-};
 static const _error _error_OB_ERR_MUTATING_TABLE_OPERATION = {
       .error_name            = "OB_ERR_MUTATING_TABLE_OPERATION",
       .error_cause           = "Internal Error",
@@ -10393,24 +9781,6 @@ static const _error _error_OB_OBJ_ALREADY_EXIST = {
       .sqlstate              = "HY000",
       .str_error             = "name is already used by an existing object",
       .str_user_error        = "name is already used by an existing object"
-};
-static const _error _error_OB_DBLINK_NOT_EXIST_TO_ACCESS = {
-      .error_name            = "OB_DBLINK_NOT_EXIST_TO_ACCESS",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "connection description for remote database not found",
-      .str_user_error        = "connection description for remote database not found"
-};
-static const _error _error_OB_DBLINK_NOT_EXIST_TO_DROP = {
-      .error_name            = "OB_DBLINK_NOT_EXIST_TO_DROP",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "database link not found",
-      .str_user_error        = "database link not found"
 };
 static const _error _error_OB_ERR_ACCESS_INTO_NULL = {
       .error_name            = "OB_ERR_ACCESS_INTO_NULL",
@@ -11401,24 +10771,6 @@ static const _error _error_OB_ERR_ILL_OBJ_FLAG = {
       .sqlstate              = "HY000",
       .str_error             = "object specified is incompatible with the flag specified",
       .str_user_error        = "object specified is incompatible with the flag specified"
-};
-static const _error _error_OB_ERR_DBLINK_REMOTE_ECODE = {
-      .error_name            = "OB_ERR_DBLINK_REMOTE_ECODE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "\ndblink remote error code: %d,\nremote error msg: %.*s",
-      .str_user_error        = "\ndblink remote error code: %d,\nremote error msg: %.*s"
-};
-static const _error _error_OB_ERR_DBLINK_NO_LIB = {
-      .error_name            = "OB_ERR_DBLINK_NO_LIB",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "can not find the expected version of OCI LIB: %.*s",
-      .str_user_error        = "can not find the expected version of OCI LIB: %.*s"
 };
 static const _error _error_OB_ERR_PARTITION_EXTENDED_ON_VIEW = {
       .error_name            = "OB_ERR_PARTITION_EXTENDED_ON_VIEW",
@@ -13634,15 +12986,6 @@ static const _error _error_OB_AGENT_HAS_FAILED_TASK = {
       .str_error             = "agent has failed task",
       .str_user_error        = "agent has failed task"
 };
-static const _error _error_OB_INVALID_BACKUP_DEST = {
-      .error_name            = "OB_INVALID_BACKUP_DEST",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "backup destination is not valid",
-      .str_user_error        = "%s is not a valid uri"
-};
 static const _error _error_OB_IO_LIMIT = {
       .error_name            = "OB_IO_LIMIT",
       .error_cause           = "Internal Error",
@@ -13760,33 +13103,6 @@ static const _error _error_OB_DAG_TASK_IS_SUSPENDED = {
       .str_error             = "dag task is pending, need to wait for resources",
       .str_user_error        = "dag task is pending, need to wait for resources"
 };
-static const _error _error_OB_ERR_RESIZE_FILE_TO_SMALLER = {
-      .error_name            = "OB_ERR_RESIZE_FILE_TO_SMALLER",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Extend ssblock file to smaller is not allowed",
-      .str_user_error        = "Extend ssblock file to smaller is not allowed"
-};
-static const _error _error_OB_MARK_BLOCK_INFO_TIMEOUT = {
-      .error_name            = "OB_MARK_BLOCK_INFO_TIMEOUT",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Mark blocks timeout(5s) in auto extend process when alloc block fail",
-      .str_user_error        = "Mark blocks timeout(5s) in auto extend process when alloc block fail"
-};
-static const _error _error_OB_NOT_READY_TO_EXTEND_FILE = {
-      .error_name            = "OB_NOT_READY_TO_EXTEND_FILE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Auto extend param is not ready to start extending file",
-      .str_user_error        = "Auto extend param is not ready to start extending file"
-};
 static const _error _error_OB_FUNCTION_NOT_DEFINED = {
       .error_name            = "OB_FUNCTION_NOT_DEFINED",
       .error_cause           = "Internal Error",
@@ -13795,132 +13111,6 @@ static const _error _error_OB_FUNCTION_NOT_DEFINED = {
       .sqlstate              = "HY000",
       .str_error             = "Function not defined",
       .str_user_error        = "Function %.*s is not defined"
-};
-static const _error _error_OB_ERR_DUPLICATE_HAVING_CLAUSE_IN_TABLE_EXPRESSION = {
-      .error_name            = "OB_ERR_DUPLICATE_HAVING_CLAUSE_IN_TABLE_EXPRESSION",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Duplicate having-clause in table expression",
-      .str_user_error        = "Duplicate having-clause in table expression"
-};
-static const _error _error_OB_ERR_INOUT_PARAM_PLACEMENT_NOT_PROPERLY = {
-      .error_name            = "OB_ERR_INOUT_PARAM_PLACEMENT_NOT_PROPERLY",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "OUT and IN/OUT modes cannot be used in this context",
-      .str_user_error        = "OUT and IN/OUT modes cannot be used in this context"
-};
-static const _error _error_OB_ERR_OBJECT_NOT_FOUND = {
-      .error_name            = "OB_ERR_OBJECT_NOT_FOUND",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "object not found",
-      .str_user_error        = "object '%.*s' of type %.*s not found in schema '%.*s'"
-};
-static const _error _error_OB_ERR_INVALID_INPUT_VALUE = {
-      .error_name            = "OB_ERR_INVALID_INPUT_VALUE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "invalid input value",
-      .str_user_error        = "invalid input value %.*s for parameter %.*s in function %.*s"
-};
-static const _error _error_OB_ERR_GOTO_BRANCH_ILLEGAL = {
-      .error_name            = "OB_ERR_GOTO_BRANCH_ILLEGAL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = ER_SP_LILABEL_MISMATCH,
-      .sqlstate              = "42000",
-      .str_error             = "no matching label: %.*s",
-      .str_user_error        = "no matching label: %.*s"
-};
-static const _error _error_OB_ERR_ONLY_SCHEMA_LEVEL_ALLOW = {
-      .error_name            = "OB_ERR_ONLY_SCHEMA_LEVEL_ALLOW",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Only schema-level programs allow AUTHID or DEFAULT COLLATION clause",
-      .str_user_error        = "Only schema-level programs allow %s"
-};
-static const _error _error_OB_ERR_DECL_MORE_THAN_ONCE = {
-      .error_name            = "OB_ERR_DECL_MORE_THAN_ONCE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "at most one declaration for identifier is permitted",
-      .str_user_error        = "at most one declaration for '%.*s' is permitted"
-};
-static const _error _error_OB_ERR_DUPLICATE_FILED = {
-      .error_name            = "OB_ERR_DUPLICATE_FILED",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "duplicate fields in RECORD,TABLE or argument list are not permitted",
-      .str_user_error        = "duplicate fields in RECORD,TABLE or argument list are not permitted"
-};
-static const _error _error_OB_ERR_PRAGMA_ILLEGAL = {
-      .error_name            = "OB_ERR_PRAGMA_ILLEGAL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Pragma string cannot be specified here",
-      .str_user_error        = "Pragma %s cannot be specified here"
-};
-static const _error _error_OB_ERR_EXIT_CONTINUE_ILLEGAL = {
-      .error_name            = "OB_ERR_EXIT_CONTINUE_ILLEGAL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "illegal EXIT/CONTINUE statement; it must appear inside a loop",
-      .str_user_error        = "illegal EXIT/CONTINUE statement; it must appear inside a loop"
-};
-static const _error _error_OB_ERR_LABEL_ILLEGAL = {
-      .error_name            = "OB_ERR_LABEL_ILLEGAL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "EXIT/CONTINUE label must label a LOOP statement",
-      .str_user_error        = "EXIT/CONTINUE label '%.*s' must label a LOOP statement"
-};
-static const _error _error_OB_ERR_CURSOR_LEFT_ASSIGN = {
-      .error_name            = "OB_ERR_CURSOR_LEFT_ASSIGN",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "expression '%.*s' is inappropriate as the left hand side of an assignment statement",
-      .str_user_error        = "expression '%.*s' is inappropriate as the left hand side of an assignment statement"
-};
-static const _error _error_OB_ERR_INIT_NOTNULL_ILLEGAL = {
-      .error_name            = "OB_ERR_INIT_NOTNULL_ILLEGAL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "a variable declared NOT NULL must have an initialization assignment",
-      .str_user_error        = "a variable declared NOT NULL must have an initialization assignment"
-};
-static const _error _error_OB_ERR_INIT_CONST_ILLEGAL = {
-      .error_name            = "OB_ERR_INIT_CONST_ILLEGAL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "declaration of a constant 'string' must contain an initialization assignment",
-      .str_user_error        = "declaration of a constant '%.*s' must contain an initialization assignment"
 };
 static const _error _error_OB_ERR_EXPRESSION_WRONG_TYPE = {
       .error_name            = "OB_ERR_EXPRESSION_WRONG_TYPE",
@@ -13940,24 +13130,6 @@ static const _error _error_OB_ERR_IDENTIFIER_TOO_LONG = {
       .str_error             = "Identifier name \'%.*s\' is too long",
       .str_user_error        = "Identifier name \'%.*s\' is too long"
 };
-static const _error _error_OB_ERR_ATTR_FUNC_CONFLICT = {
-      .error_name            = "OB_ERR_ATTR_FUNC_CONFLICT",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "previous use of conflicts with this user",
-      .str_user_error        = "previous use of '%.*s' conflicts with this use"
-};
-static const _error _error_OB_ERR_DIRECTIVE_ERROR = {
-      .error_name            = "OB_ERR_DIRECTIVE_ERROR",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "$ERROR: string",
-      .str_user_error        = "$ERROR: %.*s"
-};
 static const _error _error_OB_ERR_CALL_WRONG_ARG = {
       .error_name            = "OB_ERR_CALL_WRONG_ARG",
       .error_cause           = "Internal Error",
@@ -13976,42 +13148,6 @@ static const _error _error_OB_ERR_FUNC_DUP = {
       .str_error             = "too many declarations of function match this call",
       .str_user_error        = "too many declarations of '%.*s' match this call"
 };
-static const _error _error_OB_ERR_WHEN_CLAUSE = {
-      .error_name            = "OB_ERR_WHEN_CLAUSE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "WHEN clause cannot be used with table level triggers",
-      .str_user_error        = "WHEN clause cannot be used with table level triggers"
-};
-static const _error _error_OB_ERR_NEW_OLD_REFERENCES = {
-      .error_name            = "OB_ERR_NEW_OLD_REFERENCES",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "NEW or OLD references not allowed in table level triggers",
-      .str_user_error        = "NEW or OLD references not allowed in table level triggers"
-};
-static const _error _error_OB_ERR_TYPE_DECL_ILLEGAL = {
-      .error_name            = "OB_ERR_TYPE_DECL_ILLEGAL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "%%TYPE must be applied to a variable, column, field or attribute, not to other",
-      .str_user_error        = "%%TYPE must be applied to a variable, column, field or attribute, not to '%.*s'"
-};
-static const _error _error_OB_ERR_OBJECT_INVALID = {
-      .error_name            = "OB_ERR_OBJECT_INVALID",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "object is invalid",
-      .str_user_error        = "object '%.*s' is invalid"
-};
 static const _error _error_OB_ERR_XML_PARSE = {
       .error_name            = "OB_ERR_XML_PARSE",
       .error_cause           = "Internal Error",
@@ -14021,60 +13157,6 @@ static const _error _error_OB_ERR_XML_PARSE = {
       .str_error             = "Incorrect XML value",
       .str_user_error        = "Incorrect XML value"
 };
-static const _error _error_OB_ERR_EXP_NOT_ASSIGNABLE = {
-      .error_name            = "OB_ERR_EXP_NOT_ASSIGNABLE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "expression cannot be used as an assignment",
-      .str_user_error        = "expression '%.*s' cannot be used as an assignment"
-};
-static const _error _error_OB_ERR_CURSOR_CONTAIN_BOTH_REGULAR_AND_ARRAY = {
-      .error_name            = "OB_ERR_CURSOR_CONTAIN_BOTH_REGULAR_AND_ARRAY",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Cursor contains both regular and array defines which is illegal",
-      .str_user_error        = "Cursor contains both regular and array defines which is illegal"
-};
-static const _error _error_OB_ERR_STATIC_BOOL_EXPR = {
-      .error_name            = "OB_ERR_STATIC_BOOL_EXPR",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "a static boolean expression must be used",
-      .str_user_error        = "a static boolean expression must be used"
-};
-static const _error _error_OB_ERR_BIND_TYPE_NOT_MATCH_COLUMN = {
-      .error_name            = "OB_ERR_BIND_TYPE_NOT_MATCH_COLUMN",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "type of out argument must match type of column or bind variable",
-      .str_user_error        = "type of out argument must match type of column or bind variable"
-};
-static const _error _error_OB_ERR_COL_LIST_IN_TRI = {
-      .error_name            = "OB_ERR_COL_LIST_IN_TRI",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "column list not valid for this trigger type",
-      .str_user_error        = "column list not valid for this trigger type"
-};
-static const _error _error_OB_ERR_XSLT_PARSE = {
-      .error_name            = "OB_ERR_XSLT_PARSE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "document is not a stylesheet",
-      .str_user_error        = "document is not a stylesheet"
-};
 static const _error _error_OB_ERR_NO_RETURN_IN_FUNCTION = {
       .error_name            = "OB_ERR_NO_RETURN_IN_FUNCTION",
       .error_cause           = "Internal Error",
@@ -14083,33 +13165,6 @@ static const _error _error_OB_ERR_NO_RETURN_IN_FUNCTION = {
       .sqlstate              = "42000",
       .str_error             = "No Return found in FUNCTION '%.*s'",
       .str_user_error        = "No Return found in FUNCTION '%.*s'"
-};
-static const _error _error_OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_FUNC_TRIGGER = {
-      .error_name            = "OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_FUNC_TRIGGER",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = ER_COMMIT_NOT_ALLOWED_IN_SF_OR_TRG,
-      .sqlstate              = "HY000",
-      .str_error             = "'%.*s' is not allowed in stored function or trigger.",
-      .str_user_error        = "'%.*s' is not allowed in stored function or trigger."
-};
-static const _error _error_OB_ERR_TOO_LONG_STRING_TYPE = {
-      .error_name            = "OB_ERR_TOO_LONG_STRING_TYPE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = ER_TOO_BIG_FIELDLENGTH,
-      .sqlstate              = "42000",
-      .str_error             = "Column length too big for column '%.*s' (max = %d); use BLOB or TEXT instead",
-      .str_user_error        = "Column length too big for column '%.*s' (max = %d); use BLOB or TEXT instead"
-};
-static const _error _error_OB_ERR_WIDTH_OUT_OF_RANGE = {
-      .error_name            = "OB_ERR_WIDTH_OUT_OF_RANGE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = ER_TOO_BIG_DISPLAYWIDTH,
-      .sqlstate              = "42000",
-      .str_error             = "Display width out of range for column '%.*s' (max = %d)",
-      .str_user_error        = "Display width out of range for column '%.*s' (max = %d)"
 };
 static const _error _error_OB_ERR_REDEFINE_LABEL = {
       .error_name            = "OB_ERR_REDEFINE_LABEL",
@@ -14129,15 +13184,6 @@ static const _error _error_OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_PROCEDRUE = {
       .str_error             = "'%.*s' is not allowed in stored procedure.",
       .str_user_error        = "'%.*s' is not allowed in stored procedure."
 };
-static const _error _error_OB_ERR_TRIGGER_NOT_SUPPORT = {
-      .error_name            = "OB_ERR_TRIGGER_NOT_SUPPORT",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = ER_NOT_SUPPORTED_YET,
-      .sqlstate              = "42000",
-      .str_error             = "This version of OceanBase doesn't yet support 'multiple triggers with the same action time and event for one table'",
-      .str_user_error        = "This version of OceanBase doesn't yet support 'multiple triggers with the same action time and event for one table'"
-};
 static const _error _error_OB_ERR_TRIGGER_IN_WRONG_SCHEMA = {
       .error_name            = "OB_ERR_TRIGGER_IN_WRONG_SCHEMA",
       .error_cause           = "Internal Error",
@@ -14146,15 +13192,6 @@ static const _error _error_OB_ERR_TRIGGER_IN_WRONG_SCHEMA = {
       .sqlstate              = "HY000",
       .str_error             = "Trigger in wrong schema",
       .str_user_error        = "Trigger in wrong schema"
-};
-static const _error _error_OB_ERR_UNKNOWN_EXCEPTION = {
-      .error_name            = "OB_ERR_UNKNOWN_EXCEPTION",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "unknown exception name 'string' in PRAGMA EXCEPTION_INIT",
-      .str_user_error        = "unknown exception name '%.*s' in PRAGMA EXCEPTION_INIT"
 };
 static const _error _error_OB_ERR_TRIGGER_CANT_CHANGE_ROW = {
       .error_name            = "OB_ERR_TRIGGER_CANT_CHANGE_ROW",
@@ -14192,15 +13229,6 @@ static const _error _error_OB_ERR_ROUTINE_NOT_DEFINE = {
       .str_error             = "A subprogram body must be defined for the forward declaration of string.",
       .str_user_error        = "A subprogram body must be defined for the forward declaration of %.*s."
 };
-static const _error _error_OB_ERR_DUP_NAME_IN_CURSOR = {
-      .error_name            = "OB_ERR_DUP_NAME_IN_CURSOR",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "alias required in SELECT list of cursor to avoid duplicate column names",
-      .str_user_error        = "alias required in SELECT list of cursor to avoid duplicate column names"
-};
 static const _error _error_OB_ERR_LOCAL_COLL_IN_SQL = {
       .error_name            = "OB_ERR_LOCAL_COLL_IN_SQL",
       .error_cause           = "Internal Error",
@@ -14210,96 +13238,6 @@ static const _error _error_OB_ERR_LOCAL_COLL_IN_SQL = {
       .str_error             = "local collection types not allowed in SQL statements",
       .str_user_error        = "local collection types not allowed in SQL statements"
 };
-static const _error _error_OB_ERR_TYPE_MISMATCH_IN_FETCH = {
-      .error_name            = "OB_ERR_TYPE_MISMATCH_IN_FETCH",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "type mismatch found at 'string' between FETCH cursor and INTO variables",
-      .str_user_error        = "type mismatch found at '%.*s' between FETCH cursor and INTO variables"
-};
-static const _error _error_OB_ERR_OTHERS_MUST_LAST = {
-      .error_name            = "OB_ERR_OTHERS_MUST_LAST",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "OTHERS handler must be last among the exception handlers of a block",
-      .str_user_error        = "OTHERS handler must be last among the exception handlers of a block"
-};
-static const _error _error_OB_ERR_RAISE_NOT_IN_HANDLER = {
-      .error_name            = "OB_ERR_RAISE_NOT_IN_HANDLER",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "a RAISE statement with no exception name must be inside an exception handler",
-      .str_user_error        = "a RAISE statement with no exception name must be inside an exception handler"
-};
-static const _error _error_OB_ERR_INVALID_CURSOR_RETURN_TYPE = {
-      .error_name            = "OB_ERR_INVALID_CURSOR_RETURN_TYPE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "invalid cursor return type; 'string' must be a record type",
-      .str_user_error        = "invalid cursor return type; '%.*s' must be a record type"
-};
-static const _error _error_OB_ERR_IN_CURSOR_OPEND = {
-      .error_name            = "OB_ERR_IN_CURSOR_OPEND",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "IN cursor 'string' cannot be OPEN'ed",
-      .str_user_error        = "IN cursor '%.*s' cannot be OPEN'ed"
-};
-static const _error _error_OB_ERR_CURSOR_NO_RETURN_TYPE = {
-      .error_name            = "OB_ERR_CURSOR_NO_RETURN_TYPE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "cursor declaration without body needs return type",
-      .str_user_error        = "cursor declaration without body needs return type"
-};
-static const _error _error_OB_ERR_NO_CHOICES = {
-      .error_name            = "OB_ERR_NO_CHOICES",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "no choices may appear with choice OTHERS in an exception handler",
-      .str_user_error        = "no choices may appear with choice OTHERS in an exception handler"
-};
-static const _error _error_OB_ERR_TYPE_DECL_MALFORMED = {
-      .error_name            = "OB_ERR_TYPE_DECL_MALFORMED",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "the declaration of the type of this expression is incomplete or malformed",
-      .str_user_error        = "the declaration of the type of this expression is incomplete or malformed"
-};
-static const _error _error_OB_ERR_IN_FORMAL_NOT_DENOTABLE = {
-      .error_name            = "OB_ERR_IN_FORMAL_NOT_DENOTABLE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "subprogram 'in' formal string is not yet denotable",
-      .str_user_error        = "subprogram 'in' formal %.*s is not yet denotable"
-};
-static const _error _error_OB_ERR_OUT_PARAM_HAS_DEFAULT = {
-      .error_name            = "OB_ERR_OUT_PARAM_HAS_DEFAULT",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "OUT and IN OUT formal parameters may not have default expressions",
-      .str_user_error        = "OUT and IN OUT formal parameters may not have default expressions"
-};
 static const _error _error_OB_ERR_MISMATCH_SUBPROGRAM = {
       .error_name            = "OB_ERR_MISMATCH_SUBPROGRAM",
       .error_cause           = "Internal Error",
@@ -14308,249 +13246,6 @@ static const _error _error_OB_ERR_MISMATCH_SUBPROGRAM = {
       .sqlstate              = "HY000",
       .str_error             = "mismatch between string on a subprogram specification and body",
       .str_user_error        = "mismatch between string on a subprogram specification and body"
-};
-static const _error _error_OB_ERR_PARAM_IN_PACKAGE_SPEC = {
-      .error_name            = "OB_ERR_PARAM_IN_PACKAGE_SPEC",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Pragma string must be declared in a package specification",
-      .str_user_error        = "Pragma %.*s must be declared in a package specification"
-};
-static const _error _error_OB_ERR_NUMERIC_LITERAL_REQUIRED = {
-      .error_name            = "OB_ERR_NUMERIC_LITERAL_REQUIRED",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "numeric literal required",
-      .str_user_error        = "numeric literal required"
-};
-static const _error _error_OB_ERR_NON_INT_LITERAL = {
-      .error_name            = "OB_ERR_NON_INT_LITERAL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "non-integral numeric literal string is inappropriate in this context",
-      .str_user_error        = "non-integral numeric literal %.*s is inappropriate in this context"
-};
-static const _error _error_OB_ERR_IMPROPER_CONSTRAINT_FORM = {
-      .error_name            = "OB_ERR_IMPROPER_CONSTRAINT_FORM",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "improper constraint form used",
-      .str_user_error        = "improper constraint form used"
-};
-static const _error _error_OB_ERR_TYPE_CANT_CONSTRAINED = {
-      .error_name            = "OB_ERR_TYPE_CANT_CONSTRAINED",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "type name 'string' cannot be constrained",
-      .str_user_error        = "type name '%.*s' cannot be constrained"
-};
-static const _error _error_OB_ERR_ANY_CS_NOT_ALLOWED = {
-      .error_name            = "OB_ERR_ANY_CS_NOT_ALLOWED",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "character set ANY_CS is only allowed on a subprogram parameter",
-      .str_user_error        = "character set ANY_CS is only allowed on a subprogram parameter"
-};
-static const _error _error_OB_ERR_UNSUPPORTED_TABLE_INDEX_TYPE = {
-      .error_name            = "OB_ERR_UNSUPPORTED_TABLE_INDEX_TYPE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Implementation restriction: unsupported table index type",
-      .str_user_error        = "Implementation restriction: unsupported table index type"
-};
-static const _error _error_OB_ERR_ARRAY_MUST_HAVE_POSITIVE_LIMIT = {
-      .error_name            = "OB_ERR_ARRAY_MUST_HAVE_POSITIVE_LIMIT",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "A VARRAY must have a positive limit",
-      .str_user_error        = "A VARRAY must have a positive limit"
-};
-static const _error _error_OB_ERR_SHOULD_COLLECTION_TYPE = {
-      .error_name            = "OB_ERR_SHOULD_COLLECTION_TYPE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Type of expression should be a collection type",
-      .str_user_error        = "Type of expression should be a collection type"
-};
-static const _error _error_OB_ERR_ASSOC_ELEM_TYPE = {
-      .error_name            = "OB_ERR_ASSOC_ELEM_TYPE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Element type of associative array should be pls_integer or binary_integer",
-      .str_user_error        = "Element type of associative array should be pls_integer or binary_integer"
-};
-static const _error _error_OB_ERR_INTO_CLAUSE_EXPECTED = {
-      .error_name            = "OB_ERR_INTO_CLAUSE_EXPECTED",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "an INTO clause is expected in this SELECT statement",
-      .str_user_error        = "an INTO clause is expected in this SELECT statement"
-};
-static const _error _error_OB_ERR_SUBPROGRAM_VIOLATES_PRAGMA = {
-      .error_name            = "OB_ERR_SUBPROGRAM_VIOLATES_PRAGMA",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Subprogram 'string' violates its associated pragma",
-      .str_user_error        = "Subprogram '%.*s' violates its associated pragma"
-};
-static const _error _error_OB_ERR_EXPR_SQL_TYPE = {
-      .error_name            = "OB_ERR_EXPR_SQL_TYPE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "expressions have to be of SQL types",
-      .str_user_error        = "expressions have to be of SQL types"
-};
-static const _error _error_OB_ERR_PRAGMA_DECL_TWICE = {
-      .error_name            = "OB_ERR_PRAGMA_DECL_TWICE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "PRAGMA string cannot be declared twice",
-      .str_user_error        = "PRAGMA %.*s cannot be declared twice"
-};
-static const _error _error_OB_ERR_PRAGMA_FOLLOW_DECL = {
-      .error_name            = "OB_ERR_PRAGMA_FOLLOW_DECL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "this PRAGMA must follow the declaration of 'string'",
-      .str_user_error        = "this PRAGMA must follow the declaration of '%.*s'"
-};
-static const _error _error_OB_ERR_IMPL_RESTRICTION = {
-      .error_name            = "OB_ERR_IMPL_RESTRICTION",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "implementation restriction (may be temporary)",
-      .str_user_error        = "implementation restriction (may be temporary) %s"
-};
-static const _error _error_OB_ERR_INSUFFICIENT_PRIVILEGE = {
-      .error_name            = "OB_ERR_INSUFFICIENT_PRIVILEGE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "insufficient privilege to access object string",
-      .str_user_error        = "insufficient privilege to access object string"
-};
-static const _error _error_OB_ERR_ILLEGAL_OPTION = {
-      .error_name            = "OB_ERR_ILLEGAL_OPTION",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "illegal option for subprogram string",
-      .str_user_error        = "illegal option for subprogram %.*s"
-};
-static const _error _error_OB_ERR_NO_FUNCTION_EXIST = {
-      .error_name            = "OB_ERR_NO_FUNCTION_EXIST",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "no function with name 'string' exists in this scope",
-      .str_user_error        = "no function with name '%.*s' exists in this scope"
-};
-static const _error _error_OB_ERR_OUT_OF_SCOPE = {
-      .error_name            = "OB_ERR_OUT_OF_SCOPE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "subprogram or cursor 'string' reference is out of scope",
-      .str_user_error        = "subprogram or cursor '%.*s' reference is out of scope"
-};
-static const _error _error_OB_ERR_ILLEGAL_ERROR_NUM = {
-      .error_name            = "OB_ERR_ILLEGAL_ERROR_NUM",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "illegal error number string for PRAGMA EXCEPTION_INIT",
-      .str_user_error        = "illegal error number %ld for PRAGMA EXCEPTION_INIT"
-};
-static const _error _error_OB_ERR_DEFAULT_NOT_MATCH = {
-      .error_name            = "OB_ERR_DEFAULT_NOT_MATCH",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "default value of parameter 'string' in body must match that of spec",
-      .str_user_error        = "default value of parameter '%.*s' in body must match that of spec"
-};
-static const _error _error_OB_ERR_TABLE_SINGLE_INDEX = {
-      .error_name            = "OB_ERR_TABLE_SINGLE_INDEX",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "PL/SQL TABLEs must use a single index",
-      .str_user_error        = "PL/SQL TABLEs must use a single index"
-};
-static const _error _error_OB_ERR_PRAGMA_DECL = {
-      .error_name            = "OB_ERR_PRAGMA_DECL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "pragma string must be declared in package specification and body",
-      .str_user_error        = "pragma %.*s must be declared in package specification and body"
-};
-static const _error _error_OB_ERR_INCORRECT_ARGUMENTS = {
-      .error_name            = "OB_ERR_INCORRECT_ARGUMENTS",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "incorrect number of arguments for aggregate function",
-      .str_user_error        = "incorrect number of arguments for aggregate function"
-};
-static const _error _error_OB_ERR_RETURN_VALUE_REQUIRED = {
-      .error_name            = "OB_ERR_RETURN_VALUE_REQUIRED",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "RETURN <value> statement required for this return from function",
-      .str_user_error        = "RETURN <value> statement required for this return from function"
-};
-static const _error _error_OB_ERR_INTO_EXPR_ILLEGAL = {
-      .error_name            = "OB_ERR_INTO_EXPR_ILLEGAL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "expression 'string' in the INTO list is of wrong type",
-      .str_user_error        = "expression '%.*s' in the INTO list is of wrong type"
 };
 static const _error _error_OB_ERR_TRIGGER_NO_SUCH_ROW = {
       .error_name            = "OB_ERR_TRIGGER_NO_SUCH_ROW",
@@ -14570,60 +13265,6 @@ static const _error _error_OB_ERR_SET_USAGE = {
       .str_error             = "Incorrect usage of UNION and INTO",
       .str_user_error        = "Incorrect usage of UNION and INTO"
 };
-static const _error _error_OB_ERR_MODIFIER_CONFLICTS = {
-      .error_name            = "OB_ERR_MODIFIER_CONFLICTS",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "modifier 'string' conflicts with prior 'string' specification",
-      .str_user_error        = "modifier '%s' conflicts with prior '%s' specification"
-};
-static const _error _error_OB_ERR_DUPLICATE_MODIFIER = {
-      .error_name            = "OB_ERR_DUPLICATE_MODIFIER",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "duplicate modifier specification 'string'",
-      .str_user_error        = "duplicate modifier specification '%s'"
-};
-static const _error _error_OB_ERR_STR_LITERAL_TOO_LONG = {
-      .error_name            = "OB_ERR_STR_LITERAL_TOO_LONG",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "string literal too long",
-      .str_user_error        = "string literal too long"
-};
-static const _error _error_OB_ERR_FIRST_PARAM_MUST_NOT_NULL = {
-      .error_name            = "OB_ERR_FIRST_PARAM_MUST_NOT_NULL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "the first operand in the NULLIF expression must not be NULL",
-      .str_user_error        = "the first operand in the NULLIF expression must not be NULL"
-};
-static const _error _error_OB_ERR_COALESCE_AT_LEAST_ONE_NOT_NULL = {
-      .error_name            = "OB_ERR_COALESCE_AT_LEAST_ONE_NOT_NULL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "at least one operand in the COALESCE expression must not be NULL",
-      .str_user_error        = "at least one operand in the COALESCE expression must not be NULL"
-};
-static const _error _error_OB_ERR_UNSUPPORTED_TYPE = {
-      .error_name            = "OB_ERR_UNSUPPORTED_TYPE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Unsupported type in a VARRAY or TABLE type: 'string'.",
-      .str_user_error        = "Unsupported type in a VARRAY or TABLE type: '%.*s'."
-};
 static const _error _error_OB_ERR_POSITIONAL_FOLLOW_NAME = {
       .error_name            = "OB_ERR_POSITIONAL_FOLLOW_NAME",
       .error_cause           = "Internal Error",
@@ -14633,132 +13274,6 @@ static const _error _error_OB_ERR_POSITIONAL_FOLLOW_NAME = {
       .str_error             = "a positional parameter association may not follow a named association",
       .str_user_error        = "a positional parameter association may not follow a named association"
 };
-static const _error _error_OB_ERR_NEED_A_LABEL = {
-      .error_name            = "OB_ERR_NEED_A_LABEL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "EXIT/CONTINUE statement may have a label here; 'string' is not a label",
-      .str_user_error        = "EXIT/CONTINUE statement may have a label here; '%.*s' is not a label"
-};
-static const _error _error_OB_ERR_REFER_SAME_PACKAGE = {
-      .error_name            = "OB_ERR_REFER_SAME_PACKAGE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "variable or constant initialization may not refer to functions declared in the same package",
-      .str_user_error        = "variable or constant initialization may not refer to functions declared in the same package"
-};
-static const _error _error_OB_ERR_PL_COMMON = {
-      .error_name            = "OB_ERR_PL_COMMON",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "PL/SQL common error",
-      .str_user_error        = "%s"
-};
-static const _error _error_OB_ERR_IDENT_EMPTY = {
-      .error_name            = "OB_ERR_IDENT_EMPTY",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Identifier cannot be an empty string",
-      .str_user_error        = "Identifier cannot be an empty string"
-};
-static const _error _error_OB_ERR_PRAGMA_STR_UNSUPPORT = {
-      .error_name            = "OB_ERR_PRAGMA_STR_UNSUPPORT",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Pragma string does not support string",
-      .str_user_error        = "Pragma %s does not support %.*s"
-};
-static const _error _error_OB_ERR_END_LABEL_NOT_MATCH = {
-      .error_name            = "OB_ERR_END_LABEL_NOT_MATCH",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "END identifier 'string' must match 'string' at line string, column string",
-      .str_user_error        = "END identifier '%.*s' must match '%.*s'"
-};
-static const _error _error_OB_ERR_WRONG_FETCH_INTO_NUM = {
-      .error_name            = "OB_ERR_WRONG_FETCH_INTO_NUM",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "wrong number of values in the INTO list of a FETCH statement",
-      .str_user_error        = "wrong number of values in the INTO list of a FETCH statement"
-};
-static const _error _error_OB_ERR_PRAGMA_FIRST_ARG = {
-      .error_name            = "OB_ERR_PRAGMA_FIRST_ARG",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Pragma string expects 1st argument to be a procedure/function/package/cursor",
-      .str_user_error        = "Pragma %s expects 1st argument to be a procedure/function/package/cursor"
-};
-static const _error _error_OB_ERR_TRIGGER_CANT_CHANGE_OLD_ROW = {
-      .error_name            = "OB_ERR_TRIGGER_CANT_CHANGE_OLD_ROW",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "cannot change the value of an OLD reference variable",
-      .str_user_error        = "cannot change the value of an OLD reference variable"
-};
-static const _error _error_OB_ERR_TRIGGER_CANT_CRT_ON_RO_VIEW = {
-      .error_name            = "OB_ERR_TRIGGER_CANT_CRT_ON_RO_VIEW",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "cannot create trigger on read only view",
-      .str_user_error        = "cannot create trigger on read only view"
-};
-static const _error _error_OB_ERR_TRIGGER_INVALID_REF_NAME = {
-      .error_name            = "OB_ERR_TRIGGER_INVALID_REF_NAME",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "invalid REFERENCING name",
-      .str_user_error        = "invalid REFERENCING name"
-};
-static const _error _error_OB_ERR_EXP_NOT_INTO_TARGET = {
-      .error_name            = "OB_ERR_EXP_NOT_INTO_TARGET",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "expression 'string' cannot be used as an INTO-target of a SELECT/FETCH statement",
-      .str_user_error        = "expression '%.*s' cannot be used as an INTO-target of a SELECT/FETCH statement"
-};
-static const _error _error_OB_ERR_CASE_NULL = {
-      .error_name            = "OB_ERR_CASE_NULL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "at least one result in the CASE expression must not be NULL",
-      .str_user_error        = "at least one result in the CASE expression must not be NULL"
-};
-static const _error _error_OB_ERR_INVALID_GOTO = {
-      .error_name            = "OB_ERR_INVALID_GOTO",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Invalid GOTO to non-label 'string'",
-      .str_user_error        = "Invalid GOTO to non-label '%.*s'"
-};
 static const _error _error_OB_ERR_PRIVATE_UDF_USE_IN_SQL = {
       .error_name            = "OB_ERR_PRIVATE_UDF_USE_IN_SQL",
       .error_cause           = "Internal Error",
@@ -14767,51 +13282,6 @@ static const _error _error_OB_ERR_PRIVATE_UDF_USE_IN_SQL = {
       .sqlstate              = "HY000",
       .str_error             = "function 'string' may not be used in SQL",
       .str_user_error        = "function '%.*s' may not be used in SQL"
-};
-static const _error _error_OB_ERR_FIELD_NOT_DENOTABLE = {
-      .error_name            = "OB_ERR_FIELD_NOT_DENOTABLE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "field string is not yet denotable",
-      .str_user_error        = "field %.*s is not yet denotable"
-};
-static const _error _error_OB_NUMERIC_PRECISION_NOT_INTEGER = {
-      .error_name            = "OB_NUMERIC_PRECISION_NOT_INTEGER",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "non-integral numeric literal value is inappropriate in this context",
-      .str_user_error        = "non-integral numeric literal %.*s is inappropriate in this context"
-};
-static const _error _error_OB_ERR_REQUIRE_INTEGER = {
-      .error_name            = "OB_ERR_REQUIRE_INTEGER",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "integer value required",
-      .str_user_error        = "integer value required"
-};
-static const _error _error_OB_ERR_INDEX_TABLE_OF_CURSOR = {
-      .error_name            = "OB_ERR_INDEX_TABLE_OF_CURSOR",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Index Tables of Cursor Variables are disallowed",
-      .str_user_error        = "Index Tables of Cursor Variables are disallowed"
-};
-static const _error _error_OB_NULL_CHECK_ERROR = {
-      .error_name            = "OB_NULL_CHECK_ERROR",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "cannot pass NULL to a NOT NULL constrained formal parameter",
-      .str_user_error        = "cannot pass NULL to a NOT NULL constrained formal parameter"
 };
 static const _error _error_OB_ERR_EX_NAME_ARG = {
       .error_name            = "OB_ERR_EX_NAME_ARG",
@@ -14831,24 +13301,6 @@ static const _error _error_OB_ERR_EX_ARG_NUM = {
       .str_error             = "Illegal number of arguments for pragma EXCEPTION_INIT",
       .str_user_error        = "Illegal number of arguments for pragma EXCEPTION_INIT"
 };
-static const _error _error_OB_ERR_EX_SECOND_ARG = {
-      .error_name            = "OB_ERR_EX_SECOND_ARG",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "second argument to PRAGMA EXCEPTION_INIT must be a numeric literal",
-      .str_user_error        = "second argument to PRAGMA EXCEPTION_INIT must be a numeric literal"
-};
-static const _error _error_OB_NO_STMT_PARSE = {
-      .error_name            = "OB_NO_STMT_PARSE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "no statement parsed",
-      .str_user_error        = "no statement parsed"
-};
 static const _error _error_OB_ERR_WRONG_SCHEMA_REF = {
       .error_name            = "OB_ERR_WRONG_SCHEMA_REF",
       .error_cause           = "Internal Error",
@@ -14867,15 +13319,6 @@ static const _error _error_OB_ERR_COMPONENT_UNDECLARED = {
       .str_error             = "component must be declared",
       .str_user_error        = "component '%.*s' must be declared"
 };
-static const _error _error_OB_ERR_FUNC_ONLY_IN_SQL = {
-      .error_name            = "OB_ERR_FUNC_ONLY_IN_SQL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "function or pseudo-column may be used inside a SQL statement only",
-      .str_user_error        = "function or pseudo-column '%s' may be used inside a SQL statement only"
-};
 static const _error _error_OB_ERR_UNDEFINED = {
       .error_name            = "OB_ERR_UNDEFINED",
       .error_cause           = "Internal Error",
@@ -14885,33 +13328,6 @@ static const _error _error_OB_ERR_UNDEFINED = {
       .str_error             = "object is not a procedure or is undefined",
       .str_user_error        = "'%.*s' is not a procedure or is undefined"
 };
-static const _error _error_OB_ERR_SUBTYPE_NOTNULL_MISMATCH = {
-      .error_name            = "OB_ERR_SUBTYPE_NOTNULL_MISMATCH",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "subtype of a not null type must also be not null",
-      .str_user_error        = "subtype of a not null type must also be not null"
-};
-static const _error _error_OB_ERR_BIND_VAR_NOT_EXIST = {
-      .error_name            = "OB_ERR_BIND_VAR_NOT_EXIST",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "bind variable does not exist",
-      .str_user_error        = "bind variable does not exist"
-};
-static const _error _error_OB_ERR_CURSOR_IN_OPEN_DYNAMIC_SQL = {
-      .error_name            = "OB_ERR_CURSOR_IN_OPEN_DYNAMIC_SQL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "cursor cannot be used in dynamic SQL OPEN statement",
-      .str_user_error        = "cursor '%.*s' cannot be used in dynamic SQL OPEN statement"
-};
 static const _error _error_OB_ERR_INVALID_INPUT_ARGUMENT = {
       .error_name            = "OB_ERR_INVALID_INPUT_ARGUMENT",
       .error_cause           = "Internal Error",
@@ -14920,33 +13336,6 @@ static const _error _error_OB_ERR_INVALID_INPUT_ARGUMENT = {
       .sqlstate              = "HY000",
       .str_error             = "input value for argument",
       .str_user_error        = "input value for argument #%d is not valid"
-};
-static const _error _error_OB_ERR_CLIENT_IDENTIFIER_TOO_LONG = {
-      .error_name            = "OB_ERR_CLIENT_IDENTIFIER_TOO_LONG",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Client identifier is too long",
-      .str_user_error        = "Client identifier is too long"
-};
-static const _error _error_OB_ERR_NOT_CURSOR_NAME_IN_CURRENT_OF = {
-      .error_name            = "OB_ERR_NOT_CURSOR_NAME_IN_CURRENT_OF",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "identifier in CURRENT OF clause is not a cursor name",
-      .str_user_error        = "identifier in CURRENT OF clause is not a cursor name"
-};
-static const _error _error_OB_ERR_NOT_FOR_UPDATE_CURSOR_IN_CURRENT_OF = {
-      .error_name            = "OB_ERR_NOT_FOR_UPDATE_CURSOR_IN_CURRENT_OF",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "cursor must be declared with FOR UPDATE to use with CURRENT OF",
-      .str_user_error        = "cursor '%.*s' must be declared with FOR UPDATE to use with CURRENT OF"
 };
 static const _error _error_OB_ERR_DUP_SIGNAL_SET = {
       .error_name            = "OB_ERR_DUP_SIGNAL_SET",
@@ -14974,24 +13363,6 @@ static const _error _error_OB_ERR_INVALID_CONDITION_NUMBER = {
       .sqlstate              = "35000",
       .str_error             = "Invalid condition number",
       .str_user_error        = "Invalid condition number"
-};
-static const _error _error_OB_ERR_RECURSIVE_SQL_LEVELS_EXCEEDED = {
-      .error_name            = "OB_ERR_RECURSIVE_SQL_LEVELS_EXCEEDED",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "maximum number of recursive SQL levels exceeded",
-      .str_user_error        = "maximum number of recursive SQL levels exceeded"
-};
-static const _error _error_OB_ERR_PARSE_PLSQL = {
-      .error_name            = "OB_ERR_PARSE_PLSQL",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "unexpected symbol",
-      .str_user_error        = "Encountered the symbol %s when expecting one of the following: %s"
 };
 static const _error _error_OB_ERR_SIGNAL_WARN = {
       .error_name            = "OB_ERR_SIGNAL_WARN",
@@ -15029,24 +13400,6 @@ static const _error _error_OB_ERR_TRG_ORDER = {
       .str_error             = "must use LOG_USER_ERROR",
       .str_user_error        = "Referenced trigger '%s' for the given action time and event type does not exist."
 };
-static const _error _error_OB_ERR_REF_ANOTHER_TABLE_IN_TRG = {
-      .error_name            = "OB_ERR_REF_ANOTHER_TABLE_IN_TRG",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "cannot reference a trigger defined on another table",
-      .str_user_error        = "cannot reference a trigger defined on another table"
-};
-static const _error _error_OB_ERR_REF_TYPE_IN_TRG = {
-      .error_name            = "OB_ERR_REF_TYPE_IN_TRG",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "cannot reference a trigger of a different type",
-      .str_user_error        = "cannot reference a trigger of a different type"
-};
 static const _error _error_OB_ERR_REF_CYCLIC_IN_TRG = {
       .error_name            = "OB_ERR_REF_CYCLIC_IN_TRG",
       .error_cause           = "Internal Error",
@@ -15055,51 +13408,6 @@ static const _error _error_OB_ERR_REF_CYCLIC_IN_TRG = {
       .sqlstate              = "HY000",
       .str_error             = "Cyclic trigger dependency is not allowed",
       .str_user_error        = "Cyclic trigger dependency is not allowed"
-};
-static const _error _error_OB_ERR_CANNOT_SPECIFY_PRECEDES_IN_TRG = {
-      .error_name            = "OB_ERR_CANNOT_SPECIFY_PRECEDES_IN_TRG",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "cannot specify PRECEDES clause",
-      .str_user_error        = "cannot specify PRECEDES clause"
-};
-static const _error _error_OB_ERR_CANNOT_PERFORM_DML_INSIDE_QUERY = {
-      .error_name            = "OB_ERR_CANNOT_PERFORM_DML_INSIDE_QUERY",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "cannot perform a DML operation inside a query",
-      .str_user_error        = "cannot perform a DML operation inside a query"
-};
-static const _error _error_OB_ERR_CANNOT_PERFORM_DDL_COMMIT_OR_ROLLBACK_INSIDE_QUERY_OR_DML_TIPS = {
-      .error_name            = "OB_ERR_CANNOT_PERFORM_DDL_COMMIT_OR_ROLLBACK_INSIDE_QUERY_OR_DML_TIPS",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "cannot perform a DDL commit or rollback inside a query or DML tips",
-      .str_user_error        = "cannot perform a DDL commit or rollback inside a query or DML tips"
-};
-static const _error _error_OB_ERR_STATEMENT_STRING_IN_EXECUTE_IMMEDIATE_IS_NULL_OR_ZERO_LENGTH = {
-      .error_name            = "OB_ERR_STATEMENT_STRING_IN_EXECUTE_IMMEDIATE_IS_NULL_OR_ZERO_LENGTH",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "statement string in EXECUTE IMMEDIATE is NULL or 0 length",
-      .str_user_error        = "statement string in EXECUTE IMMEDIATE is NULL or 0 length"
-};
-static const _error _error_OB_ERR_NAME_HAS_TOO_MANY_PARTS = {
-      .error_name            = "OB_ERR_NAME_HAS_TOO_MANY_PARTS",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "name has too many parts",
-      .str_user_error        = "name has too many parts"
 };
 static const _error _error_OB_ERR_LOB_SPAN_TRANSACTION = {
       .error_name            = "OB_ERR_LOB_SPAN_TRANSACTION",
@@ -15119,33 +13427,6 @@ static const _error _error_OB_ERR_INVALID_CAST_UDT = {
       .str_error             = "invalid CAST to a type that is not a nested table or VARRAY",
       .str_user_error        = "invalid CAST to a type that is not a nested table or VARRAY"
 };
-static const _error _error_OB_ERR_POLICY_EXIST = {
-      .error_name            = "OB_ERR_POLICY_EXIST",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "policy already exists",
-      .str_user_error        = "policy already exists"
-};
-static const _error _error_OB_ERR_POLICY_NOT_EXIST = {
-      .error_name            = "OB_ERR_POLICY_NOT_EXIST",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "policy does not exist",
-      .str_user_error        = "policy does not exist"
-};
-static const _error _error_OB_ERR_ADD_POLICY_TO_SYS_OBJECT = {
-      .error_name            = "OB_ERR_ADD_POLICY_TO_SYS_OBJECT",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "adding a policy to an object owned by SYS is not allowed",
-      .str_user_error        = "adding a policy to an object owned by SYS is not allowed"
-};
 static const _error _error_OB_ERR_INVALID_INPUT_STRING = {
       .error_name            = "OB_ERR_INVALID_INPUT_STRING",
       .error_cause           = "Internal Error",
@@ -15155,15 +13436,6 @@ static const _error _error_OB_ERR_INVALID_INPUT_STRING = {
       .str_error             = "input value for %s is not valid",
       .str_user_error        = "input value for %s is not valid"
 };
-static const _error _error_OB_ERR_SEC_COLUMN_ON_VIEW = {
-      .error_name            = "OB_ERR_SEC_COLUMN_ON_VIEW",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "cannot create security relevant column policy in an object view",
-      .str_user_error        = "cannot create security relevant column policy in an object view"
-};
 static const _error _error_OB_ERR_INVALID_INPUT_FOR_ARGUMENT = {
       .error_name            = "OB_ERR_INVALID_INPUT_FOR_ARGUMENT",
       .error_cause           = "Internal Error",
@@ -15172,69 +13444,6 @@ static const _error _error_OB_ERR_INVALID_INPUT_FOR_ARGUMENT = {
       .sqlstate              = "HY000",
       .str_error             = "input value for argument %s is not valid",
       .str_user_error        = "input value for argument %s is not valid"
-};
-static const _error _error_OB_ERR_POLICY_DISABLED = {
-      .error_name            = "OB_ERR_POLICY_DISABLED",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "policy was disabled",
-      .str_user_error        = "policy was disabled"
-};
-static const _error _error_OB_ERR_CIRCULAR_POLICIES = {
-      .error_name            = "OB_ERR_CIRCULAR_POLICIES",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "circular security policies detected",
-      .str_user_error        = "circular security policies detected"
-};
-static const _error _error_OB_ERR_TOO_MANY_POLICIES = {
-      .error_name            = "OB_ERR_TOO_MANY_POLICIES",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "the number of related policies has exceeded the limit of 16",
-      .str_user_error        = "the number of related policies has exceeded the limit of 16"
-};
-static const _error _error_OB_ERR_POLICY_FUNCTION = {
-      .error_name            = "OB_ERR_POLICY_FUNCTION",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "policy function or package %.*s.%.*s has error",
-      .str_user_error        = "policy function or package %.*s.%.*s has error"
-};
-static const _error _error_OB_ERR_NO_PRIV_EVAL_PREDICATE = {
-      .error_name            = "OB_ERR_NO_PRIV_EVAL_PREDICATE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "insufficient privilege to evaluate policy predicate",
-      .str_user_error        = "insufficient privilege to evaluate policy predicate"
-};
-static const _error _error_OB_ERR_EXECUTE_POLICY_FUNCTION = {
-      .error_name            = "OB_ERR_EXECUTE_POLICY_FUNCTION",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "failed to execute policy function",
-      .str_user_error        = "failed to execute policy function"
-};
-static const _error _error_OB_ERR_POLICY_PREDICATE = {
-      .error_name            = "OB_ERR_POLICY_PREDICATE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "policy predicate has error",
-      .str_user_error        = "policy predicate has error"
 };
 static const _error _error_OB_ERR_NO_PRIV_DIRECT_PATH_ACCESS = {
       .error_name            = "OB_ERR_NO_PRIV_DIRECT_PATH_ACCESS",
@@ -15254,96 +13463,6 @@ static const _error _error_OB_ERR_INTEGRITY_CONSTRAINT_VIOLATED = {
       .str_error             = "integrity constraint violated - parent record not found",
       .str_user_error        = "integrity constraint violated - parent record not found"
 };
-static const _error _error_OB_ERR_POLICY_GROUP_EXIST = {
-      .error_name            = "OB_ERR_POLICY_GROUP_EXIST",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "policy group already exists",
-      .str_user_error        = "policy group already exists"
-};
-static const _error _error_OB_ERR_POLICY_GROUP_NOT_EXIST = {
-      .error_name            = "OB_ERR_POLICY_GROUP_NOT_EXIST",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "policy group does not exist",
-      .str_user_error        = "policy group does not exist"
-};
-static const _error _error_OB_ERR_DRIVING_CONTEXT_EXIST = {
-      .error_name            = "OB_ERR_DRIVING_CONTEXT_EXIST",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "driving context already exists",
-      .str_user_error        = "driving context already exists"
-};
-static const _error _error_OB_ERR_DRIVING_CONTEXT_NOT_EXIST = {
-      .error_name            = "OB_ERR_DRIVING_CONTEXT_NOT_EXIST",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "driving context does not exist",
-      .str_user_error        = "driving context does not exist"
-};
-static const _error _error_OB_ERR_UPDATE_DEFAULT_GROUP = {
-      .error_name            = "OB_ERR_UPDATE_DEFAULT_GROUP",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "can not update SYS_DEFAULT policy group",
-      .str_user_error        = "can not update SYS_DEFAULT policy group"
-};
-static const _error _error_OB_ERR_CONTEXT_CONTAIN_INVALID_GROUP = {
-      .error_name            = "OB_ERR_CONTEXT_CONTAIN_INVALID_GROUP",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Driving context %.*s,%.*s contains invalid group %.*s",
-      .str_user_error        = "Driving context %.*s,%.*s contains invalid group %.*s"
-};
-static const _error _error_OB_ERR_INVALID_SEC_COLUMN_TYPE = {
-      .error_name            = "OB_ERR_INVALID_SEC_COLUMN_TYPE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Column %.*s in sec_relevant_cols cannot be of an object data type",
-      .str_user_error        = "Column %.*s in sec_relevant_cols cannot be of an object data type"
-};
-static const _error _error_OB_ERR_UNPROTECTED_VIRTUAL_COLUMN = {
-      .error_name            = "OB_ERR_UNPROTECTED_VIRTUAL_COLUMN",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "A protected base column was referenced in an unprotected virtual column expression",
-      .str_user_error        = "A protected base column was referenced in an unprotected virtual column expression"
-};
-static const _error _error_OB_ERR_ATTRIBUTE_ASSOCIATION = {
-      .error_name            = "OB_ERR_ATTRIBUTE_ASSOCIATION",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "Attribute association failed for policy %.*s",
-      .str_user_error        = "Attribute association failed for policy %.*s"
-};
-static const _error _error_OB_ERR_MERGE_INTO_WITH_POLICY = {
-      .error_name            = "OB_ERR_MERGE_INTO_WITH_POLICY",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "The MERGE INTO syntax does not support the security policy",
-      .str_user_error        = "The MERGE INTO syntax does not support the security policy"
-};
 static const _error _error_OB_ERR_SP_NO_DROP_SP = {
       .error_name            = "OB_ERR_SP_NO_DROP_SP",
       .error_cause           = "Internal Error",
@@ -15352,15 +13471,6 @@ static const _error _error_OB_ERR_SP_NO_DROP_SP = {
       .sqlstate              = "HY000",
       .str_error             = "Can't drop or alter a procedure/function from within another stored routine.",
       .str_user_error        = "Can't drop or alter a '%s' from within another stored routine."
-};
-static const _error _error_OB_ERR_VARIABLE_NOT_IN_SELECT_LIST = {
-      .error_name            = "OB_ERR_VARIABLE_NOT_IN_SELECT_LIST",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "variable not in select list",
-      .str_user_error        = "variable not in select list"
 };
 static const _error _error_OB_ERR_MULTI_RECORD = {
       .error_name            = "OB_ERR_MULTI_RECORD",
@@ -15398,15 +13508,6 @@ static const _error _error_OB_ERR_OBJECT_NOT_EXIST = {
       .str_error             = "object does not exist",
       .str_user_error        = "object %.*s does not exist"
 };
-static const _error _error_OB_ERR_TABLE_OUT_OF_RANGE = {
-      .error_name            = "OB_ERR_TABLE_OUT_OF_RANGE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "PL/SQL: index for PL/SQL table out of range for host language array",
-      .str_user_error        = "PL/SQL: index for PL/SQL table out of range for host language array"
-};
 static const _error _error_OB_ERR_WRONG_USAGE = {
       .error_name            = "OB_ERR_WRONG_USAGE",
       .error_cause           = "Internal Error",
@@ -15434,15 +13535,6 @@ static const _error _error_OB_ERR_OUT_PARAM_NOT_BIND_VAR = {
       .str_error             = "output parameter not a bind variable",
       .str_user_error        = "output parameter not a bind variable"
 };
-static const _error _error_OB_ERR_TIME_EARLIER_THAN_SYSDATE = {
-      .error_name            = "OB_ERR_TIME_EARLIER_THAN_SYSDATE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "the parameter must evaluate to a time in the future",
-      .str_user_error        = "the parameter %s must evaluate to a time in the future"
-};
 static const _error _error_OB_ERR_NOT_FUNC_NAME = {
       .error_name            = "OB_ERR_NOT_FUNC_NAME",
       .error_cause           = "Internal Error",
@@ -15452,24 +13544,6 @@ static const _error _error_OB_ERR_NOT_FUNC_NAME = {
       .str_error             = "object 'string' must be of type function or array to be used this way",
       .str_user_error        = "object '%.*s' must be of type function or array to be used this way"
 };
-static const _error _error_OB_ERR_INVALID_CURSOR_EXPR = {
-      .error_name            = "OB_ERR_INVALID_CURSOR_EXPR",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "CURSOR expression not allowed",
-      .str_user_error        = "CURSOR expression not allowed"
-};
-static const _error _error_OB_APPLICATION_ERROR_FROM_REMOTE = {
-      .error_name            = "OB_APPLICATION_ERROR_FROM_REMOTE",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "application error from remote",
-      .str_user_error        = "%.*s"
-};
 static const _error _error_OB_NO_PARTITION_FOR_GIVEN_VALUE_SCHEMA_ERROR = {
       .error_name            = "OB_NO_PARTITION_FOR_GIVEN_VALUE_SCHEMA_ERROR",
       .error_cause           = "Internal Error",
@@ -15478,15 +13552,6 @@ static const _error _error_OB_NO_PARTITION_FOR_GIVEN_VALUE_SCHEMA_ERROR = {
       .sqlstate              = "HY000",
       .str_error             = "Table has no partition for value",
       .str_user_error        = "Table has no partition for value"
-};
-static const _error _error_OB_ERR_INVALID_CHARACTER = {
-      .error_name            = "OB_ERR_INVALID_CHARACTER",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "invalid character",
-      .str_user_error        = "invalid character"
 };
 static const _error _error_OB_ERR_CURSOR_ATTR_APPLY = {
       .error_name            = "OB_ERR_CURSOR_ATTR_APPLY",
@@ -15839,24 +13904,6 @@ static const _error _error_OB_AI_FUNC_MODEL_EXISTS = {
       .str_error             = "This ai model is already exists",
       .str_user_error        = "This ai model \'%.*s\' is already exists"
 };
-static const _error _error_OB_SP_RAISE_APPLICATION_ERROR = {
-      .error_name            = "OB_SP_RAISE_APPLICATION_ERROR",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "The stored procedure 'raise_application_error' was called which causes this error to be generated",
-      .str_user_error        = "%.*s"
-};
-static const _error _error_OB_SP_RAISE_APPLICATION_ERROR_NUM = {
-      .error_name            = "OB_SP_RAISE_APPLICATION_ERROR_NUM",
-      .error_cause           = "Internal Error",
-      .error_solution        = "Contact OceanBase Support",
-      .mysql_errno           = -1,
-      .sqlstate              = "HY000",
-      .str_error             = "error number argument to raise_application_error of stringstring is out of range",
-      .str_user_error        = "error number argument to raise_application_error of '%d' is out of range"
-};
 static const _error _error_OB_CLOB_ONLY_SUPPORT_WITH_MULTIBYTE_FUN = {
       .error_name            = "OB_CLOB_ONLY_SUPPORT_WITH_MULTIBYTE_FUN",
       .error_cause           = "Internal Error",
@@ -16154,12 +14201,6 @@ struct ObStrErrorInit
     _errors[-OB_MEMTABLE_CANNOT_MINOR_MERGE] = &_error_OB_MEMTABLE_CANNOT_MINOR_MERGE;
     _errors[-OB_TASK_EXIST] = &_error_OB_TASK_EXIST;
     _errors[-OB_ALLOCATE_DISK_SPACE_FAILED] = &_error_OB_ALLOCATE_DISK_SPACE_FAILED;
-    _errors[-OB_CANT_FIND_UDF] = &_error_OB_CANT_FIND_UDF;
-    _errors[-OB_CANT_INITIALIZE_UDF] = &_error_OB_CANT_INITIALIZE_UDF;
-    _errors[-OB_UDF_NO_PATHS] = &_error_OB_UDF_NO_PATHS;
-    _errors[-OB_UDF_EXISTS] = &_error_OB_UDF_EXISTS;
-    _errors[-OB_CANT_OPEN_LIBRARY] = &_error_OB_CANT_OPEN_LIBRARY;
-    _errors[-OB_CANT_FIND_DL_ENTRY] = &_error_OB_CANT_FIND_DL_ENTRY;
     _errors[-OB_OBJECT_NAME_EXIST] = &_error_OB_OBJECT_NAME_EXIST;
     _errors[-OB_OBJECT_NAME_NOT_EXIST] = &_error_OB_OBJECT_NAME_NOT_EXIST;
     _errors[-OB_ERR_DUP_ARGUMENT] = &_error_OB_ERR_DUP_ARGUMENT;
@@ -16179,16 +14220,10 @@ struct ObStrErrorInit
     _errors[-OB_ROLE_NOT_EXIST] = &_error_OB_ROLE_NOT_EXIST;
     _errors[-OB_ROLE_EXIST] = &_error_OB_ROLE_EXIST;
     _errors[-OB_PRIV_DUP] = &_error_OB_PRIV_DUP;
-    _errors[-OB_TABLESPACE_EXIST] = &_error_OB_TABLESPACE_EXIST;
-    _errors[-OB_TABLESPACE_NOT_EXIST] = &_error_OB_TABLESPACE_NOT_EXIST;
-    _errors[-OB_TABLESPACE_DELETE_NOT_EMPTY] = &_error_OB_TABLESPACE_DELETE_NOT_EMPTY;
     _errors[-OB_FLOAT_PRECISION_OUT_RANGE] = &_error_OB_FLOAT_PRECISION_OUT_RANGE;
     _errors[-OB_NUMERIC_PRECISION_OUT_RANGE] = &_error_OB_NUMERIC_PRECISION_OUT_RANGE;
     _errors[-OB_NUMERIC_SCALE_OUT_RANGE] = &_error_OB_NUMERIC_SCALE_OUT_RANGE;
     _errors[-OB_SLOG_REACH_MAX_CONCURRENCY] = &_error_OB_SLOG_REACH_MAX_CONCURRENCY;
-    _errors[-OB_ERR_BY_ACCESS_OR_SESSION_CLAUSE_NOT_ALLOWED_FOR_NOAUDIT] = &_error_OB_ERR_BY_ACCESS_OR_SESSION_CLAUSE_NOT_ALLOWED_FOR_NOAUDIT;
-    _errors[-OB_ERR_AUDITING_THE_OBJECT_IS_NOT_SUPPORTED] = &_error_OB_ERR_AUDITING_THE_OBJECT_IS_NOT_SUPPORTED;
-    _errors[-OB_ERR_DDL_STATEMENT_CANNOT_BE_AUDITED_WITH_BY_SESSION_SPECIFIED] = &_error_OB_ERR_DDL_STATEMENT_CANNOT_BE_AUDITED_WITH_BY_SESSION_SPECIFIED;
     _errors[-OB_ERR_NOT_VALID_PASSWORD] = &_error_OB_ERR_NOT_VALID_PASSWORD;
     _errors[-OB_ERR_MUST_CHANGE_PASSWORD] = &_error_OB_ERR_MUST_CHANGE_PASSWORD;
     _errors[-OB_OVERSIZE_NEED_RETRY] = &_error_OB_OVERSIZE_NEED_RETRY;
@@ -16218,40 +14253,14 @@ struct ObStrErrorInit
     _errors[-OB_AUTOINC_CACHE_NOT_EQUAL] = &_error_OB_AUTOINC_CACHE_NOT_EQUAL;
     _errors[-OB_IMPROPER_OS_PARAM] = &_error_OB_IMPROPER_OS_PARAM;
     _errors[-OB_IO_TIMEOUT] = &_error_OB_IO_TIMEOUT;
-    _errors[-OB_IMPORT_NOT_IN_SERVER] = &_error_OB_IMPORT_NOT_IN_SERVER;
     _errors[-OB_CONVERT_ERROR] = &_error_OB_CONVERT_ERROR;
-    _errors[-OB_RS_STATE_NOT_ALLOW] = &_error_OB_RS_STATE_NOT_ALLOW;
     _errors[-OB_NO_NEED_UPDATE] = &_error_OB_NO_NEED_UPDATE;
     _errors[-OB_CACHE_TIMEOUT] = &_error_OB_CACHE_TIMEOUT;
     _errors[-OB_ITER_STOP] = &_error_OB_ITER_STOP;
-    _errors[-OB_CONFIG_NOT_SYNC] = &_error_OB_CONFIG_NOT_SYNC;
-    _errors[-OB_ROOT_TABLE_RANGE_NOT_EXIST] = &_error_OB_ROOT_TABLE_RANGE_NOT_EXIST;
-    _errors[-OB_NOT_DATA_LOAD_TABLE] = &_error_OB_NOT_DATA_LOAD_TABLE;
-    _errors[-OB_DATA_LOAD_TABLE_DUPLICATED] = &_error_OB_DATA_LOAD_TABLE_DUPLICATED;
-    _errors[-OB_ROOT_TABLE_ID_EXIST] = &_error_OB_ROOT_TABLE_ID_EXIST;
-    _errors[-OB_INDEX_TIMEOUT] = &_error_OB_INDEX_TIMEOUT;
-    _errors[-OB_ROOT_NOT_INTEGRATED] = &_error_OB_ROOT_NOT_INTEGRATED;
-    _errors[-OB_INDEX_INELIGIBLE] = &_error_OB_INDEX_INELIGIBLE;
-    _errors[-OB_MERGE_NOT_STARTED] = &_error_OB_MERGE_NOT_STARTED;
-    _errors[-OB_MERGE_ALREADY_STARTED] = &_error_OB_MERGE_ALREADY_STARTED;
     _errors[-OB_RS_SHUTDOWN] = &_error_OB_RS_SHUTDOWN;
-    _errors[-OB_DATA_SOURCE_NOT_EXIST] = &_error_OB_DATA_SOURCE_NOT_EXIST;
-    _errors[-OB_DATA_SOURCE_TABLE_NOT_EXIST] = &_error_OB_DATA_SOURCE_TABLE_NOT_EXIST;
-    _errors[-OB_DATA_SOURCE_RANGE_NOT_EXIST] = &_error_OB_DATA_SOURCE_RANGE_NOT_EXIST;
-    _errors[-OB_DATA_SOURCE_DATA_NOT_EXIST] = &_error_OB_DATA_SOURCE_DATA_NOT_EXIST;
-    _errors[-OB_DATA_SOURCE_SYS_ERROR] = &_error_OB_DATA_SOURCE_SYS_ERROR;
-    _errors[-OB_DATA_SOURCE_TIMEOUT] = &_error_OB_DATA_SOURCE_TIMEOUT;
-    _errors[-OB_DATA_SOURCE_CONCURRENCY_FULL] = &_error_OB_DATA_SOURCE_CONCURRENCY_FULL;
-    _errors[-OB_DATA_SOURCE_WRONG_URI_FORMAT] = &_error_OB_DATA_SOURCE_WRONG_URI_FORMAT;
-    _errors[-OB_SSTABLE_VERSION_UNEQUAL] = &_error_OB_SSTABLE_VERSION_UNEQUAL;
-    _errors[-OB_UPS_RENEW_LEASE_NOT_ALLOWED] = &_error_OB_UPS_RENEW_LEASE_NOT_ALLOWED;
-    _errors[-OB_UPS_COUNT_OVER_LIMIT] = &_error_OB_UPS_COUNT_OVER_LIMIT;
-    _errors[-OB_NO_UPS_MAJORITY] = &_error_OB_NO_UPS_MAJORITY;
     _errors[-OB_INDEX_COUNT_REACH_THE_LIMIT] = &_error_OB_INDEX_COUNT_REACH_THE_LIMIT;
     _errors[-OB_TASK_EXPIRED] = &_error_OB_TASK_EXPIRED;
-    _errors[-OB_INVALID_SERVER_STATUS] = &_error_OB_INVALID_SERVER_STATUS;
     _errors[-OB_MACHINE_RESOURCE_NOT_ENOUGH] = &_error_OB_MACHINE_RESOURCE_NOT_ENOUGH;
-    _errors[-OB_SERVER_NOT_ACTIVE] = &_error_OB_SERVER_NOT_ACTIVE;
     _errors[-OB_RS_NOT_MASTER] = &_error_OB_RS_NOT_MASTER;
     _errors[-OB_LOCATION_NOT_EXIST] = &_error_OB_LOCATION_NOT_EXIST;
     _errors[-OB_LOCATION_LEADER_NOT_EXIST] = &_error_OB_LOCATION_LEADER_NOT_EXIST;
@@ -16259,7 +14268,6 @@ struct ObStrErrorInit
     _errors[-OB_SESSION_ENTRY_EXIST] = &_error_OB_SESSION_ENTRY_EXIST;
     _errors[-OB_GOT_SIGNAL_ABORTING] = &_error_OB_GOT_SIGNAL_ABORTING;
     _errors[-OB_GET_LOCATION_TIME_OUT] = &_error_OB_GET_LOCATION_TIME_OUT;
-    _errors[-OB_DATA_SOURCE_NOT_VALID] = &_error_OB_DATA_SOURCE_NOT_VALID;
     _errors[-OB_RUN_JOB_NOT_SUCCESS] = &_error_OB_RUN_JOB_NOT_SUCCESS;
     _errors[-OB_NEED_REMOVE_UNNEED_TABLE] = &_error_OB_NEED_REMOVE_UNNEED_TABLE;
     _errors[-OB_NO_NEED_MERGE] = &_error_OB_NO_NEED_MERGE;
@@ -16267,16 +14275,11 @@ struct ObStrErrorInit
     _errors[-OB_DUPLICATE_OPTION] = &_error_OB_DUPLICATE_OPTION;
     _errors[-OB_INVALID_OPTION] = &_error_OB_INVALID_OPTION;
     _errors[-OB_RPC_NEED_RECONNECT] = &_error_OB_RPC_NEED_RECONNECT;
-    _errors[-OB_CANNOT_COPY_MAJOR_SSTABLE] = &_error_OB_CANNOT_COPY_MAJOR_SSTABLE;
     _errors[-OB_ACTIVE_MEMTBALE_NOT_EXSIT] = &_error_OB_ACTIVE_MEMTBALE_NOT_EXSIT;
-    _errors[-OB_NO_DISK_NEED_REBUILD] = &_error_OB_NO_DISK_NEED_REBUILD;
     _errors[-OB_STANDBY_DATABASE_READ_ONLY] = &_error_OB_STANDBY_DATABASE_READ_ONLY;
-    _errors[-OB_INVALD_WEB_SERVICE_CONTENT] = &_error_OB_INVALD_WEB_SERVICE_CONTENT;
     _errors[-OB_ARRAY_BINDING_SWITCH_ITERATOR] = &_error_OB_ARRAY_BINDING_SWITCH_ITERATOR;
     _errors[-OB_ERR_CHECK_DROP_COLUMN_FAILED] = &_error_OB_ERR_CHECK_DROP_COLUMN_FAILED;
-    _errors[-OB_WAIT_TRANS_TABLE_MERGE_TIMEOUT] = &_error_OB_WAIT_TRANS_TABLE_MERGE_TIMEOUT;
     _errors[-OB_ERR_PARAM_INVALID] = &_error_OB_ERR_PARAM_INVALID;
-    _errors[-OB_FAILOVER_NOT_ALLOW] = &_error_OB_FAILOVER_NOT_ALLOW;
     _errors[-OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX] = &_error_OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX;
     _errors[-OB_ERR_ATLER_TABLE_ILLEGAL_FK] = &_error_OB_ERR_ATLER_TABLE_ILLEGAL_FK;
     _errors[-OB_LS_NOT_EXIST] = &_error_OB_LS_NOT_EXIST;
@@ -16299,9 +14302,6 @@ struct ObStrErrorInit
     _errors[-OB_PACKET_STATUS_UNKNOWN] = &_error_OB_PACKET_STATUS_UNKNOWN;
     _errors[-OB_UNEXPECTED_TABLET_STATUS] = &_error_OB_UNEXPECTED_TABLET_STATUS;
     _errors[-OB_INVALID_TABLE_STORE] = &_error_OB_INVALID_TABLE_STORE;
-    _errors[-OB_WAIT_DEGRATION_TIMEOUT] = &_error_OB_WAIT_DEGRATION_TIMEOUT;
-    _errors[-OB_ERR_ROOT_INSPECTION] = &_error_OB_ERR_ROOT_INSPECTION;
-    _errors[-OB_ERR_ROOTSERVICE_THREAD_HUNG] = &_error_OB_ERR_ROOTSERVICE_THREAD_HUNG;
     _errors[-OB_IGNORE_ERR_ACCESS_VIRTUAL_TABLE] = &_error_OB_IGNORE_ERR_ACCESS_VIRTUAL_TABLE;
     _errors[-OB_LS_OFFLINE] = &_error_OB_LS_OFFLINE;
     _errors[-OB_LS_IS_DELETED] = &_error_OB_LS_IS_DELETED;
@@ -16320,9 +14320,6 @@ struct ObStrErrorInit
     _errors[-OB_ERR_CHECK_CONSTRAINT_MISMATCH_ALTER_TABLE_EXCHANGE_PARTITION] = &_error_OB_ERR_CHECK_CONSTRAINT_MISMATCH_ALTER_TABLE_EXCHANGE_PARTITION;
     _errors[-OB_ERR_FOREIGN_KEY_MISMATCH_ALTER_TABLE_EXCHANGE_PARTITION] = &_error_OB_ERR_FOREIGN_KEY_MISMATCH_ALTER_TABLE_EXCHANGE_PARTITION;
     _errors[-OB_ERR_EXCHANGE_COMPOSITE_PARTITION] = &_error_OB_ERR_EXCHANGE_COMPOSITE_PARTITION;
-    _errors[-OB_SERVICE_NOT_FULLY_STARTED] = &_error_OB_SERVICE_NOT_FULLY_STARTED;
-    _errors[-OB_SERVICE_STOPPED] = &_error_OB_SERVICE_STOPPED;
-    _errors[-OB_SERVER_CONNECTION_ERROR] = &_error_OB_SERVER_CONNECTION_ERROR;
     _errors[-OB_ERR_ATLER_TABLE_ILLEGAL_FK_DROP_INDEX] = &_error_OB_ERR_ATLER_TABLE_ILLEGAL_FK_DROP_INDEX;
     _errors[-OB_ERR_SNAPSHOT_QUERY_EXP_NULL] = &_error_OB_ERR_SNAPSHOT_QUERY_EXP_NULL;
     _errors[-OB_RELEASE_MDS_NODE_ERROR] = &_error_OB_RELEASE_MDS_NODE_ERROR;
@@ -16404,9 +14401,7 @@ struct ObStrErrorInit
     _errors[-OB_ERR_INDEX_UNKNOWN] = &_error_OB_ERR_INDEX_UNKNOWN;
     _errors[-OB_NUMERIC_OVERFLOW] = &_error_OB_NUMERIC_OVERFLOW;
     _errors[-OB_ERR_TOO_MANY_JOIN_TABLES] = &_error_OB_ERR_TOO_MANY_JOIN_TABLES;
-    _errors[-OB_ERR_DDL_ON_REMOTE_DATABASE] = &_error_OB_ERR_DDL_ON_REMOTE_DATABASE;
     _errors[-OB_ERR_MISSING_KEYWORD] = &_error_OB_ERR_MISSING_KEYWORD;
-    _errors[-OB_ERR_DATABASE_LINK_EXPECTED] = &_error_OB_ERR_DATABASE_LINK_EXPECTED;
     _errors[-OB_ERR_VARCHAR_TOO_LONG] = &_error_OB_ERR_VARCHAR_TOO_LONG;
     _errors[-OB_ERR_SYS_CONFIG_UNKNOWN] = &_error_OB_ERR_SYS_CONFIG_UNKNOWN;
     _errors[-OB_ERR_LOCAL_VARIABLE] = &_error_OB_ERR_LOCAL_VARIABLE;
@@ -16431,7 +14426,6 @@ struct ObStrErrorInit
     _errors[-OB_SQL_OPT_ERROR] = &_error_OB_SQL_OPT_ERROR;
     _errors[-OB_ERR_OCI_INIT_TIMEZONE] = &_error_OB_ERR_OCI_INIT_TIMEZONE;
     _errors[-OB_ERR_ZLIB_DATA] = &_error_OB_ERR_ZLIB_DATA;
-    _errors[-OB_ERR_DBLINK_SESSION_KILLED] = &_error_OB_ERR_DBLINK_SESSION_KILLED;
     _errors[-OB_SQL_RESOLVER_NO_MEMORY] = &_error_OB_SQL_RESOLVER_NO_MEMORY;
     _errors[-OB_SQL_DML_ONLY] = &_error_OB_SQL_DML_ONLY;
     _errors[-OB_ERR_NO_GRANT] = &_error_OB_ERR_NO_GRANT;
@@ -16804,7 +14798,7 @@ struct ObStrErrorInit
     _errors[-OB_ERR_SP_DUP_CURSOR] = &_error_OB_ERR_SP_DUP_CURSOR;
     _errors[-OB_ERR_SP_INVALID_FETCH_ARG] = &_error_OB_ERR_SP_INVALID_FETCH_ARG;
     _errors[-OB_ERR_SP_WRONG_ARG_NUM] = &_error_OB_ERR_SP_WRONG_ARG_NUM;
-    _errors[-OB_ERR_SP_UNHANDLED_EXCEPTION] = &_error_OB_ERR_SP_UNHANDLED_EXCEPTION;
+    _errors[-OB_ERR_SIGNAL_EXCEPTION] = &_error_OB_ERR_SIGNAL_EXCEPTION;
     _errors[-OB_ERR_SP_BAD_CONDITION_TYPE] = &_error_OB_ERR_SP_BAD_CONDITION_TYPE;
     _errors[-OB_ERR_PACKAGE_ALREADY_EXISTS] = &_error_OB_ERR_PACKAGE_ALREADY_EXISTS;
     _errors[-OB_ERR_PACKAGE_DOSE_NOT_EXIST] = &_error_OB_ERR_PACKAGE_DOSE_NOT_EXIST;
@@ -16930,19 +14924,7 @@ struct ObStrErrorInit
     _errors[-OB_ERR_NONEXISTENT_CONSTRAINT] = &_error_OB_ERR_NONEXISTENT_CONSTRAINT;
     _errors[-OB_ERR_CHECK_CONSTRAINT_VIOLATED] = &_error_OB_ERR_CHECK_CONSTRAINT_VIOLATED;
     _errors[-OB_ERR_GROUP_FUNC_NOT_ALLOWED] = &_error_OB_ERR_GROUP_FUNC_NOT_ALLOWED;
-    _errors[-OB_ERR_POLICY_STRING_NOT_FOUND] = &_error_OB_ERR_POLICY_STRING_NOT_FOUND;
-    _errors[-OB_ERR_INVALID_LABEL_STRING] = &_error_OB_ERR_INVALID_LABEL_STRING;
-    _errors[-OB_ERR_UNDEFINED_COMPARTMENT_STRING_FOR_POLICY_STRING] = &_error_OB_ERR_UNDEFINED_COMPARTMENT_STRING_FOR_POLICY_STRING;
-    _errors[-OB_ERR_UNDEFINED_LEVEL_STRING_FOR_POLICY_STRING] = &_error_OB_ERR_UNDEFINED_LEVEL_STRING_FOR_POLICY_STRING;
-    _errors[-OB_ERR_UNDEFINED_GROUP_STRING_FOR_POLICY_STRING] = &_error_OB_ERR_UNDEFINED_GROUP_STRING_FOR_POLICY_STRING;
-    _errors[-OB_ERR_LBAC_ERROR] = &_error_OB_ERR_LBAC_ERROR;
-    _errors[-OB_ERR_POLICY_ROLE_ALREADY_EXISTS_FOR_POLICY_STRING] = &_error_OB_ERR_POLICY_ROLE_ALREADY_EXISTS_FOR_POLICY_STRING;
-    _errors[-OB_ERR_NULL_OR_INVALID_USER_LABEL] = &_error_OB_ERR_NULL_OR_INVALID_USER_LABEL;
     _errors[-OB_ERR_ADD_INDEX] = &_error_OB_ERR_ADD_INDEX;
-    _errors[-OB_ERR_PROFILE_STRING_DOES_NOT_EXIST] = &_error_OB_ERR_PROFILE_STRING_DOES_NOT_EXIST;
-    _errors[-OB_ERR_INVALID_RESOURCE_LIMIT] = &_error_OB_ERR_INVALID_RESOURCE_LIMIT;
-    _errors[-OB_ERR_PROFILE_STRING_ALREADY_EXISTS] = &_error_OB_ERR_PROFILE_STRING_ALREADY_EXISTS;
-    _errors[-OB_ERR_PROFILE_STRING_HAS_USERS_ASSIGNED] = &_error_OB_ERR_PROFILE_STRING_HAS_USERS_ASSIGNED;
     _errors[-OB_ERR_THE_LEADING_PRECISION_OF_THE_INTERVAL_IS_TOO_SMALL] = &_error_OB_ERR_THE_LEADING_PRECISION_OF_THE_INTERVAL_IS_TOO_SMALL;
     _errors[-OB_ERR_INVALID_TIME_ZONE_HOUR] = &_error_OB_ERR_INVALID_TIME_ZONE_HOUR;
     _errors[-OB_ERR_INVALID_TIME_ZONE_MINUTE] = &_error_OB_ERR_INVALID_TIME_ZONE_MINUTE;
@@ -16966,7 +14948,6 @@ struct ObStrErrorInit
     _errors[-OB_ERR_OPERATOR_CANNOT_BE_USED_WITH_LIST] = &_error_OB_ERR_OPERATOR_CANNOT_BE_USED_WITH_LIST;
     _errors[-OB_ERR_INVALID_SAMPLING_RANGE] = &_error_OB_ERR_INVALID_SAMPLING_RANGE;
     _errors[-OB_ERR_SPECIFY_DATABASE_NOT_ALLOWED] = &_error_OB_ERR_SPECIFY_DATABASE_NOT_ALLOWED;
-    _errors[-OB_ERR_STMT_TRIGGER_WITH_WHEN_CLAUSE] = &_error_OB_ERR_STMT_TRIGGER_WITH_WHEN_CLAUSE;
     _errors[-OB_ERR_TRIGGER_NOT_EXIST] = &_error_OB_ERR_TRIGGER_NOT_EXIST;
     _errors[-OB_ERR_TRIGGER_ALREADY_EXIST] = &_error_OB_ERR_TRIGGER_ALREADY_EXIST;
     _errors[-OB_ERR_TRIGGER_EXIST_ON_OTHER_TABLE] = &_error_OB_ERR_TRIGGER_EXIST_ON_OTHER_TABLE;
@@ -17015,8 +14996,6 @@ struct ObStrErrorInit
     _errors[-OB_ERR_COL_CHECK_CST_REFER_ANOTHER_COL] = &_error_OB_ERR_COL_CHECK_CST_REFER_ANOTHER_COL;
     _errors[-OB_BATCHED_MULTI_STMT_ROLLBACK] = &_error_OB_BATCHED_MULTI_STMT_ROLLBACK;
     _errors[-OB_ERR_FOR_UPDATE_SELECT_VIEW_CANNOT] = &_error_OB_ERR_FOR_UPDATE_SELECT_VIEW_CANNOT;
-    _errors[-OB_ERR_POLICY_WITH_CHECK_OPTION_VIOLATION] = &_error_OB_ERR_POLICY_WITH_CHECK_OPTION_VIOLATION;
-    _errors[-OB_ERR_POLICY_ALREADY_APPLIED_TO_TABLE] = &_error_OB_ERR_POLICY_ALREADY_APPLIED_TO_TABLE;
     _errors[-OB_ERR_MUTATING_TABLE_OPERATION] = &_error_OB_ERR_MUTATING_TABLE_OPERATION;
     _errors[-OB_ERR_MODIFY_OR_DROP_MULTI_COLUMN_CONSTRAINT] = &_error_OB_ERR_MODIFY_OR_DROP_MULTI_COLUMN_CONSTRAINT;
     _errors[-OB_ERR_DROP_PARENT_KEY_COLUMN] = &_error_OB_ERR_DROP_PARENT_KEY_COLUMN;
@@ -17060,8 +15039,6 @@ struct ObStrErrorInit
     _errors[-INCORRECT_ARGUMENTS_TO_ESCAPE] = &_error_INCORRECT_ARGUMENTS_TO_ESCAPE;
     _errors[-STATIC_ENG_NOT_IMPLEMENT] = &_error_STATIC_ENG_NOT_IMPLEMENT;
     _errors[-OB_OBJ_ALREADY_EXIST] = &_error_OB_OBJ_ALREADY_EXIST;
-    _errors[-OB_DBLINK_NOT_EXIST_TO_ACCESS] = &_error_OB_DBLINK_NOT_EXIST_TO_ACCESS;
-    _errors[-OB_DBLINK_NOT_EXIST_TO_DROP] = &_error_OB_DBLINK_NOT_EXIST_TO_DROP;
     _errors[-OB_ERR_ACCESS_INTO_NULL] = &_error_OB_ERR_ACCESS_INTO_NULL;
     _errors[-OB_ERR_COLLECION_NULL] = &_error_OB_ERR_COLLECION_NULL;
     _errors[-OB_ERR_NO_DATA_NEEDED] = &_error_OB_ERR_NO_DATA_NEEDED;
@@ -17172,8 +15149,6 @@ struct ObStrErrorInit
     _errors[-OB_ERR_CHECK_OPTION_ON_NONUPDATABLE_VIEW] = &_error_OB_ERR_CHECK_OPTION_ON_NONUPDATABLE_VIEW;
     _errors[-OB_ERR_NO_DESC_FOR_POS] = &_error_OB_ERR_NO_DESC_FOR_POS;
     _errors[-OB_ERR_ILL_OBJ_FLAG] = &_error_OB_ERR_ILL_OBJ_FLAG;
-    _errors[-OB_ERR_DBLINK_REMOTE_ECODE] = &_error_OB_ERR_DBLINK_REMOTE_ECODE;
-    _errors[-OB_ERR_DBLINK_NO_LIB] = &_error_OB_ERR_DBLINK_NO_LIB;
     _errors[-OB_ERR_PARTITION_EXTENDED_ON_VIEW] = &_error_OB_ERR_PARTITION_EXTENDED_ON_VIEW;
     _errors[-OB_ERR_NOT_ALL_VARIABLE_BIND] = &_error_OB_ERR_NOT_ALL_VARIABLE_BIND;
     _errors[-OB_ERR_BIND_VARIABLE_NOT_EXIST] = &_error_OB_ERR_BIND_VARIABLE_NOT_EXIST;
@@ -17420,7 +15395,6 @@ struct ObStrErrorInit
     _errors[-OB_NOT_READ_ALL_DATA] = &_error_OB_NOT_READ_ALL_DATA;
     _errors[-OB_RS_LIST_INVAILD] = &_error_OB_RS_LIST_INVAILD;
     _errors[-OB_AGENT_HAS_FAILED_TASK] = &_error_OB_AGENT_HAS_FAILED_TASK;
-    _errors[-OB_INVALID_BACKUP_DEST] = &_error_OB_INVALID_BACKUP_DEST;
     _errors[-OB_IO_LIMIT] = &_error_OB_IO_LIMIT;
     _errors[-OB_AGENT_HAS_SUSPENDED] = &_error_OB_AGENT_HAS_SUSPENDED;
     _errors[-OB_NO_SUCH_FILE_OR_DIRECTORY] = &_error_OB_NO_SUCH_FILE_OR_DIRECTORY;
@@ -17434,198 +15408,56 @@ struct ObStrErrorInit
     _errors[-OB_ERR_DUPLICATE_INDEX] = &_error_OB_ERR_DUPLICATE_INDEX;
     _errors[-OB_RESOURCE_RELEASED] = &_error_OB_RESOURCE_RELEASED;
     _errors[-OB_DAG_TASK_IS_SUSPENDED] = &_error_OB_DAG_TASK_IS_SUSPENDED;
-    _errors[-OB_ERR_RESIZE_FILE_TO_SMALLER] = &_error_OB_ERR_RESIZE_FILE_TO_SMALLER;
-    _errors[-OB_MARK_BLOCK_INFO_TIMEOUT] = &_error_OB_MARK_BLOCK_INFO_TIMEOUT;
-    _errors[-OB_NOT_READY_TO_EXTEND_FILE] = &_error_OB_NOT_READY_TO_EXTEND_FILE;
     _errors[-OB_FUNCTION_NOT_DEFINED] = &_error_OB_FUNCTION_NOT_DEFINED;
-    _errors[-OB_ERR_DUPLICATE_HAVING_CLAUSE_IN_TABLE_EXPRESSION] = &_error_OB_ERR_DUPLICATE_HAVING_CLAUSE_IN_TABLE_EXPRESSION;
-    _errors[-OB_ERR_INOUT_PARAM_PLACEMENT_NOT_PROPERLY] = &_error_OB_ERR_INOUT_PARAM_PLACEMENT_NOT_PROPERLY;
-    _errors[-OB_ERR_OBJECT_NOT_FOUND] = &_error_OB_ERR_OBJECT_NOT_FOUND;
-    _errors[-OB_ERR_INVALID_INPUT_VALUE] = &_error_OB_ERR_INVALID_INPUT_VALUE;
-    _errors[-OB_ERR_GOTO_BRANCH_ILLEGAL] = &_error_OB_ERR_GOTO_BRANCH_ILLEGAL;
-    _errors[-OB_ERR_ONLY_SCHEMA_LEVEL_ALLOW] = &_error_OB_ERR_ONLY_SCHEMA_LEVEL_ALLOW;
-    _errors[-OB_ERR_DECL_MORE_THAN_ONCE] = &_error_OB_ERR_DECL_MORE_THAN_ONCE;
-    _errors[-OB_ERR_DUPLICATE_FILED] = &_error_OB_ERR_DUPLICATE_FILED;
-    _errors[-OB_ERR_PRAGMA_ILLEGAL] = &_error_OB_ERR_PRAGMA_ILLEGAL;
-    _errors[-OB_ERR_EXIT_CONTINUE_ILLEGAL] = &_error_OB_ERR_EXIT_CONTINUE_ILLEGAL;
-    _errors[-OB_ERR_LABEL_ILLEGAL] = &_error_OB_ERR_LABEL_ILLEGAL;
-    _errors[-OB_ERR_CURSOR_LEFT_ASSIGN] = &_error_OB_ERR_CURSOR_LEFT_ASSIGN;
-    _errors[-OB_ERR_INIT_NOTNULL_ILLEGAL] = &_error_OB_ERR_INIT_NOTNULL_ILLEGAL;
-    _errors[-OB_ERR_INIT_CONST_ILLEGAL] = &_error_OB_ERR_INIT_CONST_ILLEGAL;
     _errors[-OB_ERR_EXPRESSION_WRONG_TYPE] = &_error_OB_ERR_EXPRESSION_WRONG_TYPE;
     _errors[-OB_ERR_IDENTIFIER_TOO_LONG] = &_error_OB_ERR_IDENTIFIER_TOO_LONG;
-    _errors[-OB_ERR_ATTR_FUNC_CONFLICT] = &_error_OB_ERR_ATTR_FUNC_CONFLICT;
-    _errors[-OB_ERR_DIRECTIVE_ERROR] = &_error_OB_ERR_DIRECTIVE_ERROR;
     _errors[-OB_ERR_CALL_WRONG_ARG] = &_error_OB_ERR_CALL_WRONG_ARG;
     _errors[-OB_ERR_FUNC_DUP] = &_error_OB_ERR_FUNC_DUP;
-    _errors[-OB_ERR_WHEN_CLAUSE] = &_error_OB_ERR_WHEN_CLAUSE;
-    _errors[-OB_ERR_NEW_OLD_REFERENCES] = &_error_OB_ERR_NEW_OLD_REFERENCES;
-    _errors[-OB_ERR_TYPE_DECL_ILLEGAL] = &_error_OB_ERR_TYPE_DECL_ILLEGAL;
-    _errors[-OB_ERR_OBJECT_INVALID] = &_error_OB_ERR_OBJECT_INVALID;
     _errors[-OB_ERR_XML_PARSE] = &_error_OB_ERR_XML_PARSE;
-    _errors[-OB_ERR_EXP_NOT_ASSIGNABLE] = &_error_OB_ERR_EXP_NOT_ASSIGNABLE;
-    _errors[-OB_ERR_CURSOR_CONTAIN_BOTH_REGULAR_AND_ARRAY] = &_error_OB_ERR_CURSOR_CONTAIN_BOTH_REGULAR_AND_ARRAY;
-    _errors[-OB_ERR_STATIC_BOOL_EXPR] = &_error_OB_ERR_STATIC_BOOL_EXPR;
-    _errors[-OB_ERR_BIND_TYPE_NOT_MATCH_COLUMN] = &_error_OB_ERR_BIND_TYPE_NOT_MATCH_COLUMN;
-    _errors[-OB_ERR_COL_LIST_IN_TRI] = &_error_OB_ERR_COL_LIST_IN_TRI;
-    _errors[-OB_ERR_XSLT_PARSE] = &_error_OB_ERR_XSLT_PARSE;
     _errors[-OB_ERR_NO_RETURN_IN_FUNCTION] = &_error_OB_ERR_NO_RETURN_IN_FUNCTION;
-    _errors[-OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_FUNC_TRIGGER] = &_error_OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_FUNC_TRIGGER;
-    _errors[-OB_ERR_TOO_LONG_STRING_TYPE] = &_error_OB_ERR_TOO_LONG_STRING_TYPE;
-    _errors[-OB_ERR_WIDTH_OUT_OF_RANGE] = &_error_OB_ERR_WIDTH_OUT_OF_RANGE;
     _errors[-OB_ERR_REDEFINE_LABEL] = &_error_OB_ERR_REDEFINE_LABEL;
     _errors[-OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_PROCEDRUE] = &_error_OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_PROCEDRUE;
-    _errors[-OB_ERR_TRIGGER_NOT_SUPPORT] = &_error_OB_ERR_TRIGGER_NOT_SUPPORT;
     _errors[-OB_ERR_TRIGGER_IN_WRONG_SCHEMA] = &_error_OB_ERR_TRIGGER_IN_WRONG_SCHEMA;
-    _errors[-OB_ERR_UNKNOWN_EXCEPTION] = &_error_OB_ERR_UNKNOWN_EXCEPTION;
     _errors[-OB_ERR_TRIGGER_CANT_CHANGE_ROW] = &_error_OB_ERR_TRIGGER_CANT_CHANGE_ROW;
     _errors[-OB_ERR_ITEM_NOT_IN_BODY] = &_error_OB_ERR_ITEM_NOT_IN_BODY;
     _errors[-OB_ERR_WRONG_ROWTYPE] = &_error_OB_ERR_WRONG_ROWTYPE;
     _errors[-OB_ERR_ROUTINE_NOT_DEFINE] = &_error_OB_ERR_ROUTINE_NOT_DEFINE;
-    _errors[-OB_ERR_DUP_NAME_IN_CURSOR] = &_error_OB_ERR_DUP_NAME_IN_CURSOR;
     _errors[-OB_ERR_LOCAL_COLL_IN_SQL] = &_error_OB_ERR_LOCAL_COLL_IN_SQL;
-    _errors[-OB_ERR_TYPE_MISMATCH_IN_FETCH] = &_error_OB_ERR_TYPE_MISMATCH_IN_FETCH;
-    _errors[-OB_ERR_OTHERS_MUST_LAST] = &_error_OB_ERR_OTHERS_MUST_LAST;
-    _errors[-OB_ERR_RAISE_NOT_IN_HANDLER] = &_error_OB_ERR_RAISE_NOT_IN_HANDLER;
-    _errors[-OB_ERR_INVALID_CURSOR_RETURN_TYPE] = &_error_OB_ERR_INVALID_CURSOR_RETURN_TYPE;
-    _errors[-OB_ERR_IN_CURSOR_OPEND] = &_error_OB_ERR_IN_CURSOR_OPEND;
-    _errors[-OB_ERR_CURSOR_NO_RETURN_TYPE] = &_error_OB_ERR_CURSOR_NO_RETURN_TYPE;
-    _errors[-OB_ERR_NO_CHOICES] = &_error_OB_ERR_NO_CHOICES;
-    _errors[-OB_ERR_TYPE_DECL_MALFORMED] = &_error_OB_ERR_TYPE_DECL_MALFORMED;
-    _errors[-OB_ERR_IN_FORMAL_NOT_DENOTABLE] = &_error_OB_ERR_IN_FORMAL_NOT_DENOTABLE;
-    _errors[-OB_ERR_OUT_PARAM_HAS_DEFAULT] = &_error_OB_ERR_OUT_PARAM_HAS_DEFAULT;
     _errors[-OB_ERR_MISMATCH_SUBPROGRAM] = &_error_OB_ERR_MISMATCH_SUBPROGRAM;
-    _errors[-OB_ERR_PARAM_IN_PACKAGE_SPEC] = &_error_OB_ERR_PARAM_IN_PACKAGE_SPEC;
-    _errors[-OB_ERR_NUMERIC_LITERAL_REQUIRED] = &_error_OB_ERR_NUMERIC_LITERAL_REQUIRED;
-    _errors[-OB_ERR_NON_INT_LITERAL] = &_error_OB_ERR_NON_INT_LITERAL;
-    _errors[-OB_ERR_IMPROPER_CONSTRAINT_FORM] = &_error_OB_ERR_IMPROPER_CONSTRAINT_FORM;
-    _errors[-OB_ERR_TYPE_CANT_CONSTRAINED] = &_error_OB_ERR_TYPE_CANT_CONSTRAINED;
-    _errors[-OB_ERR_ANY_CS_NOT_ALLOWED] = &_error_OB_ERR_ANY_CS_NOT_ALLOWED;
-    _errors[-OB_ERR_UNSUPPORTED_TABLE_INDEX_TYPE] = &_error_OB_ERR_UNSUPPORTED_TABLE_INDEX_TYPE;
-    _errors[-OB_ERR_ARRAY_MUST_HAVE_POSITIVE_LIMIT] = &_error_OB_ERR_ARRAY_MUST_HAVE_POSITIVE_LIMIT;
-    _errors[-OB_ERR_SHOULD_COLLECTION_TYPE] = &_error_OB_ERR_SHOULD_COLLECTION_TYPE;
-    _errors[-OB_ERR_ASSOC_ELEM_TYPE] = &_error_OB_ERR_ASSOC_ELEM_TYPE;
-    _errors[-OB_ERR_INTO_CLAUSE_EXPECTED] = &_error_OB_ERR_INTO_CLAUSE_EXPECTED;
-    _errors[-OB_ERR_SUBPROGRAM_VIOLATES_PRAGMA] = &_error_OB_ERR_SUBPROGRAM_VIOLATES_PRAGMA;
-    _errors[-OB_ERR_EXPR_SQL_TYPE] = &_error_OB_ERR_EXPR_SQL_TYPE;
-    _errors[-OB_ERR_PRAGMA_DECL_TWICE] = &_error_OB_ERR_PRAGMA_DECL_TWICE;
-    _errors[-OB_ERR_PRAGMA_FOLLOW_DECL] = &_error_OB_ERR_PRAGMA_FOLLOW_DECL;
-    _errors[-OB_ERR_IMPL_RESTRICTION] = &_error_OB_ERR_IMPL_RESTRICTION;
-    _errors[-OB_ERR_INSUFFICIENT_PRIVILEGE] = &_error_OB_ERR_INSUFFICIENT_PRIVILEGE;
-    _errors[-OB_ERR_ILLEGAL_OPTION] = &_error_OB_ERR_ILLEGAL_OPTION;
-    _errors[-OB_ERR_NO_FUNCTION_EXIST] = &_error_OB_ERR_NO_FUNCTION_EXIST;
-    _errors[-OB_ERR_OUT_OF_SCOPE] = &_error_OB_ERR_OUT_OF_SCOPE;
-    _errors[-OB_ERR_ILLEGAL_ERROR_NUM] = &_error_OB_ERR_ILLEGAL_ERROR_NUM;
-    _errors[-OB_ERR_DEFAULT_NOT_MATCH] = &_error_OB_ERR_DEFAULT_NOT_MATCH;
-    _errors[-OB_ERR_TABLE_SINGLE_INDEX] = &_error_OB_ERR_TABLE_SINGLE_INDEX;
-    _errors[-OB_ERR_PRAGMA_DECL] = &_error_OB_ERR_PRAGMA_DECL;
-    _errors[-OB_ERR_INCORRECT_ARGUMENTS] = &_error_OB_ERR_INCORRECT_ARGUMENTS;
-    _errors[-OB_ERR_RETURN_VALUE_REQUIRED] = &_error_OB_ERR_RETURN_VALUE_REQUIRED;
-    _errors[-OB_ERR_INTO_EXPR_ILLEGAL] = &_error_OB_ERR_INTO_EXPR_ILLEGAL;
     _errors[-OB_ERR_TRIGGER_NO_SUCH_ROW] = &_error_OB_ERR_TRIGGER_NO_SUCH_ROW;
     _errors[-OB_ERR_SET_USAGE] = &_error_OB_ERR_SET_USAGE;
-    _errors[-OB_ERR_MODIFIER_CONFLICTS] = &_error_OB_ERR_MODIFIER_CONFLICTS;
-    _errors[-OB_ERR_DUPLICATE_MODIFIER] = &_error_OB_ERR_DUPLICATE_MODIFIER;
-    _errors[-OB_ERR_STR_LITERAL_TOO_LONG] = &_error_OB_ERR_STR_LITERAL_TOO_LONG;
-    _errors[-OB_ERR_FIRST_PARAM_MUST_NOT_NULL] = &_error_OB_ERR_FIRST_PARAM_MUST_NOT_NULL;
-    _errors[-OB_ERR_COALESCE_AT_LEAST_ONE_NOT_NULL] = &_error_OB_ERR_COALESCE_AT_LEAST_ONE_NOT_NULL;
-    _errors[-OB_ERR_UNSUPPORTED_TYPE] = &_error_OB_ERR_UNSUPPORTED_TYPE;
     _errors[-OB_ERR_POSITIONAL_FOLLOW_NAME] = &_error_OB_ERR_POSITIONAL_FOLLOW_NAME;
-    _errors[-OB_ERR_NEED_A_LABEL] = &_error_OB_ERR_NEED_A_LABEL;
-    _errors[-OB_ERR_REFER_SAME_PACKAGE] = &_error_OB_ERR_REFER_SAME_PACKAGE;
-    _errors[-OB_ERR_PL_COMMON] = &_error_OB_ERR_PL_COMMON;
-    _errors[-OB_ERR_IDENT_EMPTY] = &_error_OB_ERR_IDENT_EMPTY;
-    _errors[-OB_ERR_PRAGMA_STR_UNSUPPORT] = &_error_OB_ERR_PRAGMA_STR_UNSUPPORT;
-    _errors[-OB_ERR_END_LABEL_NOT_MATCH] = &_error_OB_ERR_END_LABEL_NOT_MATCH;
-    _errors[-OB_ERR_WRONG_FETCH_INTO_NUM] = &_error_OB_ERR_WRONG_FETCH_INTO_NUM;
-    _errors[-OB_ERR_PRAGMA_FIRST_ARG] = &_error_OB_ERR_PRAGMA_FIRST_ARG;
-    _errors[-OB_ERR_TRIGGER_CANT_CHANGE_OLD_ROW] = &_error_OB_ERR_TRIGGER_CANT_CHANGE_OLD_ROW;
-    _errors[-OB_ERR_TRIGGER_CANT_CRT_ON_RO_VIEW] = &_error_OB_ERR_TRIGGER_CANT_CRT_ON_RO_VIEW;
-    _errors[-OB_ERR_TRIGGER_INVALID_REF_NAME] = &_error_OB_ERR_TRIGGER_INVALID_REF_NAME;
-    _errors[-OB_ERR_EXP_NOT_INTO_TARGET] = &_error_OB_ERR_EXP_NOT_INTO_TARGET;
-    _errors[-OB_ERR_CASE_NULL] = &_error_OB_ERR_CASE_NULL;
-    _errors[-OB_ERR_INVALID_GOTO] = &_error_OB_ERR_INVALID_GOTO;
     _errors[-OB_ERR_PRIVATE_UDF_USE_IN_SQL] = &_error_OB_ERR_PRIVATE_UDF_USE_IN_SQL;
-    _errors[-OB_ERR_FIELD_NOT_DENOTABLE] = &_error_OB_ERR_FIELD_NOT_DENOTABLE;
-    _errors[-OB_NUMERIC_PRECISION_NOT_INTEGER] = &_error_OB_NUMERIC_PRECISION_NOT_INTEGER;
-    _errors[-OB_ERR_REQUIRE_INTEGER] = &_error_OB_ERR_REQUIRE_INTEGER;
-    _errors[-OB_ERR_INDEX_TABLE_OF_CURSOR] = &_error_OB_ERR_INDEX_TABLE_OF_CURSOR;
-    _errors[-OB_NULL_CHECK_ERROR] = &_error_OB_NULL_CHECK_ERROR;
     _errors[-OB_ERR_EX_NAME_ARG] = &_error_OB_ERR_EX_NAME_ARG;
     _errors[-OB_ERR_EX_ARG_NUM] = &_error_OB_ERR_EX_ARG_NUM;
-    _errors[-OB_ERR_EX_SECOND_ARG] = &_error_OB_ERR_EX_SECOND_ARG;
-    _errors[-OB_NO_STMT_PARSE] = &_error_OB_NO_STMT_PARSE;
     _errors[-OB_ERR_WRONG_SCHEMA_REF] = &_error_OB_ERR_WRONG_SCHEMA_REF;
     _errors[-OB_ERR_COMPONENT_UNDECLARED] = &_error_OB_ERR_COMPONENT_UNDECLARED;
-    _errors[-OB_ERR_FUNC_ONLY_IN_SQL] = &_error_OB_ERR_FUNC_ONLY_IN_SQL;
     _errors[-OB_ERR_UNDEFINED] = &_error_OB_ERR_UNDEFINED;
-    _errors[-OB_ERR_SUBTYPE_NOTNULL_MISMATCH] = &_error_OB_ERR_SUBTYPE_NOTNULL_MISMATCH;
-    _errors[-OB_ERR_BIND_VAR_NOT_EXIST] = &_error_OB_ERR_BIND_VAR_NOT_EXIST;
-    _errors[-OB_ERR_CURSOR_IN_OPEN_DYNAMIC_SQL] = &_error_OB_ERR_CURSOR_IN_OPEN_DYNAMIC_SQL;
     _errors[-OB_ERR_INVALID_INPUT_ARGUMENT] = &_error_OB_ERR_INVALID_INPUT_ARGUMENT;
-    _errors[-OB_ERR_CLIENT_IDENTIFIER_TOO_LONG] = &_error_OB_ERR_CLIENT_IDENTIFIER_TOO_LONG;
-    _errors[-OB_ERR_NOT_CURSOR_NAME_IN_CURRENT_OF] = &_error_OB_ERR_NOT_CURSOR_NAME_IN_CURRENT_OF;
-    _errors[-OB_ERR_NOT_FOR_UPDATE_CURSOR_IN_CURRENT_OF] = &_error_OB_ERR_NOT_FOR_UPDATE_CURSOR_IN_CURRENT_OF;
     _errors[-OB_ERR_DUP_SIGNAL_SET] = &_error_OB_ERR_DUP_SIGNAL_SET;
     _errors[-OB_ERR_SIGNAL_NOT_FOUND] = &_error_OB_ERR_SIGNAL_NOT_FOUND;
     _errors[-OB_ERR_INVALID_CONDITION_NUMBER] = &_error_OB_ERR_INVALID_CONDITION_NUMBER;
-    _errors[-OB_ERR_RECURSIVE_SQL_LEVELS_EXCEEDED] = &_error_OB_ERR_RECURSIVE_SQL_LEVELS_EXCEEDED;
-    _errors[-OB_ERR_PARSE_PLSQL] = &_error_OB_ERR_PARSE_PLSQL;
     _errors[-OB_ERR_SIGNAL_WARN] = &_error_OB_ERR_SIGNAL_WARN;
     _errors[-OB_ERR_RESIGNAL_WITHOUT_ACTIVE_HANDLER] = &_error_OB_ERR_RESIGNAL_WITHOUT_ACTIVE_HANDLER;
     _errors[-OB_ERR_CANNOT_UPDATE_VIRTUAL_COL_IN_TRG] = &_error_OB_ERR_CANNOT_UPDATE_VIRTUAL_COL_IN_TRG;
     _errors[-OB_ERR_TRG_ORDER] = &_error_OB_ERR_TRG_ORDER;
-    _errors[-OB_ERR_REF_ANOTHER_TABLE_IN_TRG] = &_error_OB_ERR_REF_ANOTHER_TABLE_IN_TRG;
-    _errors[-OB_ERR_REF_TYPE_IN_TRG] = &_error_OB_ERR_REF_TYPE_IN_TRG;
     _errors[-OB_ERR_REF_CYCLIC_IN_TRG] = &_error_OB_ERR_REF_CYCLIC_IN_TRG;
-    _errors[-OB_ERR_CANNOT_SPECIFY_PRECEDES_IN_TRG] = &_error_OB_ERR_CANNOT_SPECIFY_PRECEDES_IN_TRG;
-    _errors[-OB_ERR_CANNOT_PERFORM_DML_INSIDE_QUERY] = &_error_OB_ERR_CANNOT_PERFORM_DML_INSIDE_QUERY;
-    _errors[-OB_ERR_CANNOT_PERFORM_DDL_COMMIT_OR_ROLLBACK_INSIDE_QUERY_OR_DML_TIPS] = &_error_OB_ERR_CANNOT_PERFORM_DDL_COMMIT_OR_ROLLBACK_INSIDE_QUERY_OR_DML_TIPS;
-    _errors[-OB_ERR_STATEMENT_STRING_IN_EXECUTE_IMMEDIATE_IS_NULL_OR_ZERO_LENGTH] = &_error_OB_ERR_STATEMENT_STRING_IN_EXECUTE_IMMEDIATE_IS_NULL_OR_ZERO_LENGTH;
-    _errors[-OB_ERR_NAME_HAS_TOO_MANY_PARTS] = &_error_OB_ERR_NAME_HAS_TOO_MANY_PARTS;
     _errors[-OB_ERR_LOB_SPAN_TRANSACTION] = &_error_OB_ERR_LOB_SPAN_TRANSACTION;
     _errors[-OB_ERR_INVALID_CAST_UDT] = &_error_OB_ERR_INVALID_CAST_UDT;
-    _errors[-OB_ERR_POLICY_EXIST] = &_error_OB_ERR_POLICY_EXIST;
-    _errors[-OB_ERR_POLICY_NOT_EXIST] = &_error_OB_ERR_POLICY_NOT_EXIST;
-    _errors[-OB_ERR_ADD_POLICY_TO_SYS_OBJECT] = &_error_OB_ERR_ADD_POLICY_TO_SYS_OBJECT;
     _errors[-OB_ERR_INVALID_INPUT_STRING] = &_error_OB_ERR_INVALID_INPUT_STRING;
-    _errors[-OB_ERR_SEC_COLUMN_ON_VIEW] = &_error_OB_ERR_SEC_COLUMN_ON_VIEW;
     _errors[-OB_ERR_INVALID_INPUT_FOR_ARGUMENT] = &_error_OB_ERR_INVALID_INPUT_FOR_ARGUMENT;
-    _errors[-OB_ERR_POLICY_DISABLED] = &_error_OB_ERR_POLICY_DISABLED;
-    _errors[-OB_ERR_CIRCULAR_POLICIES] = &_error_OB_ERR_CIRCULAR_POLICIES;
-    _errors[-OB_ERR_TOO_MANY_POLICIES] = &_error_OB_ERR_TOO_MANY_POLICIES;
-    _errors[-OB_ERR_POLICY_FUNCTION] = &_error_OB_ERR_POLICY_FUNCTION;
-    _errors[-OB_ERR_NO_PRIV_EVAL_PREDICATE] = &_error_OB_ERR_NO_PRIV_EVAL_PREDICATE;
-    _errors[-OB_ERR_EXECUTE_POLICY_FUNCTION] = &_error_OB_ERR_EXECUTE_POLICY_FUNCTION;
-    _errors[-OB_ERR_POLICY_PREDICATE] = &_error_OB_ERR_POLICY_PREDICATE;
     _errors[-OB_ERR_NO_PRIV_DIRECT_PATH_ACCESS] = &_error_OB_ERR_NO_PRIV_DIRECT_PATH_ACCESS;
     _errors[-OB_ERR_INTEGRITY_CONSTRAINT_VIOLATED] = &_error_OB_ERR_INTEGRITY_CONSTRAINT_VIOLATED;
-    _errors[-OB_ERR_POLICY_GROUP_EXIST] = &_error_OB_ERR_POLICY_GROUP_EXIST;
-    _errors[-OB_ERR_POLICY_GROUP_NOT_EXIST] = &_error_OB_ERR_POLICY_GROUP_NOT_EXIST;
-    _errors[-OB_ERR_DRIVING_CONTEXT_EXIST] = &_error_OB_ERR_DRIVING_CONTEXT_EXIST;
-    _errors[-OB_ERR_DRIVING_CONTEXT_NOT_EXIST] = &_error_OB_ERR_DRIVING_CONTEXT_NOT_EXIST;
-    _errors[-OB_ERR_UPDATE_DEFAULT_GROUP] = &_error_OB_ERR_UPDATE_DEFAULT_GROUP;
-    _errors[-OB_ERR_CONTEXT_CONTAIN_INVALID_GROUP] = &_error_OB_ERR_CONTEXT_CONTAIN_INVALID_GROUP;
-    _errors[-OB_ERR_INVALID_SEC_COLUMN_TYPE] = &_error_OB_ERR_INVALID_SEC_COLUMN_TYPE;
-    _errors[-OB_ERR_UNPROTECTED_VIRTUAL_COLUMN] = &_error_OB_ERR_UNPROTECTED_VIRTUAL_COLUMN;
-    _errors[-OB_ERR_ATTRIBUTE_ASSOCIATION] = &_error_OB_ERR_ATTRIBUTE_ASSOCIATION;
-    _errors[-OB_ERR_MERGE_INTO_WITH_POLICY] = &_error_OB_ERR_MERGE_INTO_WITH_POLICY;
     _errors[-OB_ERR_SP_NO_DROP_SP] = &_error_OB_ERR_SP_NO_DROP_SP;
-    _errors[-OB_ERR_VARIABLE_NOT_IN_SELECT_LIST] = &_error_OB_ERR_VARIABLE_NOT_IN_SELECT_LIST;
     _errors[-OB_ERR_MULTI_RECORD] = &_error_OB_ERR_MULTI_RECORD;
     _errors[-OB_ERR_MALFORMED_PS_PACKET] = &_error_OB_ERR_MALFORMED_PS_PACKET;
     _errors[-OB_ERR_VIEW_SELECT_CONTAIN_QUESTIONMARK] = &_error_OB_ERR_VIEW_SELECT_CONTAIN_QUESTIONMARK;
     _errors[-OB_ERR_OBJECT_NOT_EXIST] = &_error_OB_ERR_OBJECT_NOT_EXIST;
-    _errors[-OB_ERR_TABLE_OUT_OF_RANGE] = &_error_OB_ERR_TABLE_OUT_OF_RANGE;
     _errors[-OB_ERR_WRONG_USAGE] = &_error_OB_ERR_WRONG_USAGE;
     _errors[-OB_ERR_CLIENT_LOCAL_FILES_DISABLED] = &_error_OB_ERR_CLIENT_LOCAL_FILES_DISABLED;
     _errors[-OB_ERR_OUT_PARAM_NOT_BIND_VAR] = &_error_OB_ERR_OUT_PARAM_NOT_BIND_VAR;
-    _errors[-OB_ERR_TIME_EARLIER_THAN_SYSDATE] = &_error_OB_ERR_TIME_EARLIER_THAN_SYSDATE;
     _errors[-OB_ERR_NOT_FUNC_NAME] = &_error_OB_ERR_NOT_FUNC_NAME;
-    _errors[-OB_ERR_INVALID_CURSOR_EXPR] = &_error_OB_ERR_INVALID_CURSOR_EXPR;
-    _errors[-OB_APPLICATION_ERROR_FROM_REMOTE] = &_error_OB_APPLICATION_ERROR_FROM_REMOTE;
     _errors[-OB_NO_PARTITION_FOR_GIVEN_VALUE_SCHEMA_ERROR] = &_error_OB_NO_PARTITION_FOR_GIVEN_VALUE_SCHEMA_ERROR;
-    _errors[-OB_ERR_INVALID_CHARACTER] = &_error_OB_ERR_INVALID_CHARACTER;
     _errors[-OB_ERR_CURSOR_ATTR_APPLY] = &_error_OB_ERR_CURSOR_ATTR_APPLY;
     _errors[-OB_DTL_WAIT_EAGAIN] = &_error_OB_DTL_WAIT_EAGAIN;
     _errors[-OB_ERR_COMPILE_RESULT_NOT_ADD_CACHE] = &_error_OB_ERR_COMPILE_RESULT_NOT_ADD_CACHE;
@@ -17665,8 +15497,6 @@ struct ObStrErrorInit
     _errors[-OB_AI_FUNC_PARAM_TYPE_INVALID] = &_error_OB_AI_FUNC_PARAM_TYPE_INVALID;
     _errors[-OB_AI_FUNC_MODEL_NOT_FOUND] = &_error_OB_AI_FUNC_MODEL_NOT_FOUND;
     _errors[-OB_AI_FUNC_MODEL_EXISTS] = &_error_OB_AI_FUNC_MODEL_EXISTS;
-    _errors[-OB_SP_RAISE_APPLICATION_ERROR] = &_error_OB_SP_RAISE_APPLICATION_ERROR;
-    _errors[-OB_SP_RAISE_APPLICATION_ERROR_NUM] = &_error_OB_SP_RAISE_APPLICATION_ERROR_NUM;
     _errors[-OB_CLOB_ONLY_SUPPORT_WITH_MULTIBYTE_FUN] = &_error_OB_CLOB_ONLY_SUPPORT_WITH_MULTIBYTE_FUN;
     _errors[-OB_ERR_UPDATE_TWICE] = &_error_OB_ERR_UPDATE_TWICE;
     _errors[-OB_ERR_SNAPSHOT_QUERY_WITH_UPDATE] = &_error_OB_ERR_SNAPSHOT_QUERY_WITH_UPDATE;
@@ -17696,7 +15526,7 @@ namespace oceanbase
 {
 namespace common
 {
-int g_all_ob_errnos[1762] = {0, -4000, -4001, -4002, -4003, -4004, -4005, -4006, -4007, -4008, -4009, -4010, -4011, -4012, -4013, -4014, -4015, -4016, -4017, -4018, -4019, -4020, -4021, -4022, -4023, -4024, -4025, -4026, -4027, -4028, -4029, -4030, -4031, -4033, -4034, -4035, -4036, -4037, -4038, -4041, -4042, -4043, -4044, -4045, -4046, -4047, -4048, -4049, -4050, -4051, -4052, -4053, -4054, -4055, -4057, -4058, -4060, -4061, -4062, -4063, -4064, -4065, -4066, -4067, -4068, -4070, -4071, -4072, -4073, -4074, -4075, -4076, -4077, -4078, -4080, -4081, -4084, -4085, -4090, -4097, -4098, -4099, -4100, -4101, -4102, -4103, -4104, -4105, -4106, -4107, -4108, -4109, -4110, -4111, -4112, -4113, -4114, -4115, -4116, -4117, -4118, -4119, -4120, -4121, -4122, -4123, -4124, -4125, -4126, -4127, -4128, -4133, -4138, -4139, -4142, -4143, -4144, -4146, -4147, -4149, -4150, -4151, -4152, -4153, -4154, -4155, -4156, -4157, -4158, -4159, -4160, -4161, -4162, -4163, -4164, -4165, -4166, -4167, -4168, -4169, -4170, -4171, -4172, -4173, -4174, -4175, -4176, -4177, -4178, -4179, -4180, -4181, -4182, -4183, -4184, -4186, -4187, -4188, -4189, -4190, -4191, -4192, -4200, -4201, -4204, -4205, -4206, -4207, -4208, -4209, -4210, -4211, -4212, -4213, -4214, -4215, -4216, -4217, -4218, -4219, -4220, -4221, -4222, -4223, -4224, -4225, -4226, -4227, -4228, -4229, -4230, -4231, -4232, -4233, -4234, -4235, -4238, -4239, -4240, -4241, -4242, -4243, -4244, -4245, -4246, -4247, -4248, -4249, -4250, -4251, -4252, -4254, -4255, -4256, -4257, -4258, -4260, -4261, -4262, -4263, -4264, -4265, -4266, -4267, -4269, -4270, -4271, -4273, -4274, -4276, -4277, -4278, -4279, -4280, -4281, -4282, -4283, -4284, -4285, -4286, -4287, -4288, -4289, -4290, -4291, -4292, -4293, -4294, -4295, -4296, -4297, -4298, -4299, -4333, -4334, -4335, -4336, -4337, -4338, -4339, -4340, -4341, -4342, -4344, -4345, -4346, -4347, -4348, -4349, -4353, -4354, -4355, -4356, -4357, -4358, -4361, -4362, -4363, -4364, -4365, -4366, -4367, -4374, -4375, -4376, -4377, -4379, -4380, -4381, -4382, -4383, -4385, -4386, -4388, -4389, -4390, -4391, -4392, -4393, -4394, -4395, -4396, -4397, -4398, -4399, -4400, -4403, -4404, -4505, -4507, -4512, -4517, -4518, -4519, -4527, -4537, -4540, -4541, -4542, -4543, -4544, -4545, -4547, -4548, -4550, -4600, -4601, -4602, -4603, -4604, -4605, -4606, -4607, -4608, -4609, -4610, -4611, -4613, -4614, -4620, -4624, -4637, -4638, -4653, -4654, -4659, -4661, -4662, -4664, -4673, -4674, -4676, -4677, -4678, -4679, -4680, -4681, -4682, -4685, -4687, -4688, -4689, -4691, -4694, -4697, -4701, -4708, -4713, -4714, -4719, -4721, -4722, -4723, -4724, -4725, -4727, -4730, -4735, -4736, -4737, -4738, -4739, -4741, -4742, -4743, -4744, -4746, -4749, -4750, -4751, -4754, -4755, -4759, -4760, -4761, -4762, -4763, -4764, -4766, -4767, -4768, -4771, -4772, -4773, -4774, -4775, -4776, -4777, -4778, -4779, -4781, -4783, -4784, -4785, -4786, -4787, -5000, -5001, -5002, -5003, -5006, -5007, -5008, -5010, -5011, -5012, -5014, -5015, -5016, -5017, -5018, -5019, -5020, -5022, -5023, -5024, -5025, -5026, -5027, -5028, -5029, -5030, -5031, -5032, -5034, -5035, -5036, -5037, -5038, -5039, -5040, -5041, -5042, -5043, -5044, -5046, -5047, -5050, -5051, -5052, -5053, -5054, -5055, -5056, -5057, -5058, -5059, -5061, -5063, -5064, -5065, -5066, -5067, -5068, -5069, -5070, -5071, -5072, -5073, -5074, -5080, -5081, -5083, -5084, -5085, -5086, -5087, -5088, -5089, -5090, -5091, -5092, -5093, -5094, -5095, -5096, -5097, -5098, -5099, -5100, -5101, -5102, -5103, -5106, -5107, -5108, -5109, -5110, -5111, -5112, -5114, -5115, -5116, -5117, -5118, -5119, -5120, -5121, -5122, -5123, -5124, -5125, -5130, -5131, -5133, -5134, -5135, -5136, -5137, -5138, -5139, -5140, -5142, -5143, -5144, -5145, -5146, -5147, -5148, -5149, -5150, -5153, -5154, -5155, -5156, -5157, -5158, -5162, -5163, -5164, -5165, -5166, -5167, -5168, -5169, -5170, -5171, -5172, -5173, -5174, -5175, -5176, -5177, -5178, -5179, -5180, -5181, -5182, -5183, -5184, -5185, -5187, -5188, -5189, -5190, -5191, -5192, -5193, -5194, -5195, -5196, -5197, -5198, -5199, -5200, -5201, -5202, -5203, -5204, -5205, -5206, -5207, -5208, -5209, -5210, -5211, -5213, -5214, -5215, -5216, -5217, -5218, -5219, -5220, -5221, -5222, -5223, -5224, -5225, -5226, -5227, -5228, -5229, -5230, -5231, -5233, -5234, -5235, -5236, -5237, -5238, -5239, -5240, -5241, -5242, -5243, -5244, -5245, -5246, -5247, -5248, -5249, -5250, -5251, -5252, -5253, -5254, -5255, -5256, -5257, -5258, -5259, -5261, -5262, -5263, -5264, -5265, -5266, -5267, -5269, -5270, -5271, -5272, -5274, -5275, -5276, -5277, -5278, -5280, -5281, -5282, -5283, -5284, -5285, -5286, -5287, -5288, -5289, -5290, -5291, -5292, -5293, -5294, -5295, -5296, -5297, -5300, -5301, -5302, -5303, -5304, -5305, -5306, -5307, -5308, -5310, -5311, -5314, -5315, -5316, -5317, -5318, -5319, -5320, -5321, -5322, -5323, -5324, -5325, -5326, -5331, -5332, -5333, -5334, -5335, -5336, -5337, -5338, -5339, -5340, -5341, -5342, -5343, -5344, -5345, -5346, -5347, -5348, -5349, -5350, -5351, -5352, -5353, -5354, -5355, -5356, -5357, -5358, -5359, -5360, -5361, -5362, -5363, -5365, -5368, -5369, -5370, -5371, -5372, -5373, -5376, -5377, -5378, -5379, -5380, -5381, -5382, -5383, -5384, -5386, -5387, -5388, -5389, -5390, -5400, -5401, -5402, -5403, -5405, -5406, -5407, -5408, -5409, -5410, -5411, -5412, -5413, -5414, -5415, -5416, -5417, -5418, -5419, -5420, -5421, -5422, -5423, -5424, -5425, -5426, -5427, -5428, -5429, -5430, -5431, -5432, -5433, -5434, -5435, -5436, -5437, -5438, -5439, -5440, -5441, -5442, -5443, -5444, -5445, -5446, -5447, -5448, -5449, -5450, -5451, -5452, -5453, -5454, -5455, -5456, -5457, -5458, -5459, -5460, -5461, -5462, -5463, -5464, -5465, -5466, -5467, -5468, -5469, -5470, -5471, -5472, -5473, -5474, -5475, -5476, -5477, -5478, -5479, -5480, -5481, -5482, -5483, -5484, -5485, -5486, -5487, -5488, -5489, -5490, -5491, -5492, -5493, -5494, -5495, -5496, -5497, -5498, -5499, -5500, -5501, -5502, -5503, -5504, -5505, -5506, -5507, -5508, -5509, -5510, -5511, -5512, -5513, -5514, -5515, -5516, -5517, -5518, -5519, -5520, -5521, -5522, -5523, -5524, -5540, -5541, -5542, -5543, -5544, -5545, -5546, -5547, -5548, -5549, -5550, -5551, -5552, -5553, -5554, -5555, -5556, -5557, -5558, -5559, -5560, -5561, -5562, -5563, -5564, -5565, -5567, -5568, -5569, -5570, -5571, -5574, -5575, -5576, -5578, -5579, -5580, -5581, -5582, -5583, -5584, -5585, -5586, -5587, -5588, -5589, -5590, -5591, -5592, -5593, -5594, -5595, -5596, -5598, -5601, -5602, -5603, -5605, -5607, -5609, -5610, -5611, -5612, -5613, -5614, -5615, -5616, -5617, -5618, -5619, -5620, -5621, -5622, -5623, -5624, -5625, -5626, -5627, -5628, -5629, -5630, -5631, -5632, -5633, -5634, -5635, -5636, -5637, -5638, -5639, -5640, -5641, -5642, -5643, -5644, -5645, -5646, -5647, -5648, -5649, -5650, -5651, -5652, -5653, -5654, -5655, -5656, -5657, -5658, -5659, -5660, -5661, -5662, -5663, -5664, -5665, -5666, -5667, -5668, -5671, -5672, -5673, -5674, -5675, -5676, -5677, -5678, -5679, -5680, -5681, -5682, -5683, -5684, -5686, -5687, -5688, -5689, -5690, -5691, -5692, -5693, -5694, -5695, -5696, -5697, -5698, -5699, -5700, -5701, -5702, -5703, -5704, -5705, -5706, -5707, -5708, -5709, -5710, -5711, -5712, -5713, -5714, -5715, -5716, -5717, -5718, -5719, -5720, -5721, -5722, -5723, -5724, -5725, -5726, -5728, -5729, -5730, -5731, -5732, -5733, -5734, -5735, -5736, -5737, -5738, -5739, -5740, -5741, -5742, -5743, -5744, -5745, -5746, -5747, -5748, -5749, -5750, -5751, -5752, -5753, -5754, -5755, -5756, -5757, -5758, -5759, -5760, -5761, -5762, -5763, -5764, -5765, -5766, -5768, -5769, -5770, -5771, -5772, -5773, -5774, -5777, -5778, -5779, -5785, -5786, -5787, -5788, -5789, -5790, -5791, -5792, -5793, -5794, -5795, -5797, -5798, -5799, -5800, -5801, -5802, -5803, -5804, -5805, -5806, -5807, -5808, -5809, -5810, -5811, -5812, -5813, -5814, -5815, -5816, -5817, -5818, -5819, -5820, -5821, -5822, -5823, -5824, -5825, -5826, -5827, -5828, -5829, -5830, -5831, -5832, -5833, -5834, -5835, -5836, -5837, -5838, -5839, -5840, -5841, -5842, -5843, -5844, -5845, -5846, -5848, -5849, -5850, -5851, -5852, -5853, -5854, -5855, -5858, -5859, -5860, -5861, -5862, -5863, -5864, -5865, -5866, -5867, -5868, -5869, -5870, -5871, -5872, -5873, -5874, -5875, -5876, -5877, -5878, -5879, -5880, -5882, -5883, -5884, -5885, -5886, -5887, -5888, -5889, -5890, -5891, -5892, -5893, -5894, -5895, -5896, -5897, -5898, -5899, -5900, -5901, -5902, -5903, -5904, -5905, -5906, -5907, -5908, -5923, -5925, -5926, -5927, -5928, -5929, -5930, -5931, -5932, -5933, -5934, -5935, -5936, -5937, -5938, -5939, -5941, -5942, -5943, -5944, -5945, -5946, -5947, -5948, -5950, -5951, -5952, -5953, -5954, -5955, -5956, -5957, -5958, -5959, -5964, -5965, -5966, -5967, -5971, -5972, -5973, -5974, -5975, -5976, -5977, -5978, -5979, -5980, -5981, -5982, -5983, -5984, -5985, -5986, -5987, -5988, -5989, -5990, -5991, -5992, -5993, -5994, -5995, -5996, -6000, -6001, -6002, -6003, -6004, -6005, -6006, -6201, -6202, -6203, -6204, -6205, -6206, -6207, -6208, -6209, -6210, -6211, -6212, -6213, -6214, -6215, -6219, -6220, -6221, -6222, -6223, -6224, -6225, -6226, -6227, -6228, -6229, -6230, -6231, -6233, -6234, -6235, -6236, -6240, -6241, -6242, -6244, -6256, -6257, -6265, -6266, -6267, -6268, -6274, -6275, -6276, -6277, -6278, -6279, -6280, -6281, -6283, -6284, -6285, -6286, -6288, -6301, -6302, -6303, -6304, -6305, -6306, -6307, -6308, -6309, -6310, -6311, -6312, -6313, -6315, -6316, -6317, -6318, -6319, -6320, -6321, -6322, -6323, -6324, -6325, -6329, -6330, -6332, -7111, -7118, -7120, -7201, -7202, -7203, -7204, -7205, -7206, -7207, -7208, -7209, -7210, -7211, -7212, -7213, -7214, -7215, -7216, -7217, -7218, -7219, -7220, -7221, -7222, -7223, -7224, -7225, -7226, -7227, -7228, -7229, -7230, -7231, -7232, -7233, -7234, -7235, -7236, -7237, -7238, -7239, -7240, -7241, -7242, -7243, -7244, -7246, -7247, -7248, -7249, -7250, -7251, -7252, -7253, -7254, -7255, -7256, -7257, -7258, -7259, -7260, -7261, -7262, -7263, -7264, -7265, -7266, -7267, -7268, -7269, -7270, -7271, -7272, -7273, -7274, -7275, -7276, -7277, -7278, -7279, -7280, -7281, -7282, -7283, -7284, -7285, -7286, -7287, -7288, -7289, -7290, -7291, -7292, -7293, -7294, -7295, -7296, -7297, -7298, -7299, -7300, -7301, -7302, -7404, -7405, -7409, -7410, -7418, -7419, -7420, -7422, -7423, -7424, -7425, -7426, -7427, -7428, -7429, -7430, -7431, -7433, -7434, -7435, -7600, -7601, -7602, -7603, -7604, -7605, -8001, -8002, -8003, -9005, -9008, -9017, -9018, -9026, -9061, -9065, -9100, -9101, -9102, -9103, -9124, -9128, -9134, -9135, -9137, -9141, -9143, -9200, -9201, -9202, -9203, -9501, -9502, -9503, -9504, -9505, -9506, -9507, -9508, -9509, -9510, -9512, -9513, -9514, -9515, -9519, -9526, -9529, -9540, -9542, -9544, -9545, -9546, -9547, -9548, -9549, -9550, -9551, -9552, -9568, -9570, -9574, -9575, -9576, -9577, -9578, -9579, -9580, -9581, -9582, -9583, -9584, -9585, -9586, -9587, -9588, -9589, -9590, -9591, -9592, -9593, -9594, -9595, -9596, -9597, -9598, -9599, -9602, -9603, -9604, -9605, -9606, -9607, -9608, -9610, -9611, -9616, -9617, -9618, -9619, -9620, -9621, -9622, -9624, -9625, -9626, -9627, -9628, -9629, -9630, -9631, -9632, -9633, -9634, -9637, -9640, -9641, -9642, -9643, -9644, -9647, -9648, -9652, -9653, -9654, -9655, -9656, -9657, -9658, -9659, -9660, -9661, -9662, -9663, -9664, -9665, -9666, -9667, -9668, -9669, -9670, -9671, -9672, -9673, -9674, -9675, -9676, -9678, -9680, -9681, -9682, -9683, -9684, -9685, -9686, -9687, -9688, -9692, -9693, -9694, -9695, -9696, -9697, -9700, -9701, -9702, -9703, -9704, -9705, -9706, -9707, -9708, -9709, -9710, -9711, -9714, -9715, -9717, -9718, -9719, -9720, -9721, -9722, -9723, -9724, -9725, -9726, -9727, -9728, -9729, -9730, -9731, -9732, -9733, -9734, -9735, -9736, -9737, -9738, -9739, -9740, -9741, -9742, -9743, -9745, -9746, -9747, -9748, -9749, -9750, -9751, -9762, -9763, -9764, -9765, -9766, -9767, -9781, -9782, -9784, -9799, -9800, -9801, -9808, -9809, -9810, -9811, -11000, -11001, -11002, -11003, -11004, -11005, -11006, -11007, -11008, -11009, -11010, -11011, -11012, -11013, -11014, -11015, -11016, -11017, -11048, -11049, -11062, -11081, -11088, -11112, -11113, -11114, -11115, -11116, -11117, -11118, -11119, -20000, -21000, -22998, -30926, -32491, -38104, -38105};
+int g_all_ob_errnos[1545] = {0, -4000, -4001, -4002, -4003, -4004, -4005, -4006, -4007, -4008, -4009, -4010, -4011, -4012, -4013, -4014, -4015, -4016, -4017, -4018, -4019, -4020, -4021, -4022, -4023, -4024, -4025, -4026, -4027, -4028, -4029, -4030, -4031, -4033, -4034, -4035, -4036, -4037, -4038, -4041, -4042, -4043, -4044, -4045, -4046, -4047, -4048, -4049, -4050, -4051, -4052, -4053, -4054, -4055, -4057, -4058, -4060, -4061, -4062, -4063, -4064, -4065, -4066, -4067, -4068, -4070, -4071, -4072, -4073, -4074, -4075, -4076, -4077, -4078, -4080, -4081, -4084, -4085, -4090, -4097, -4098, -4099, -4100, -4101, -4102, -4103, -4104, -4105, -4106, -4107, -4108, -4109, -4110, -4111, -4112, -4113, -4114, -4115, -4116, -4117, -4118, -4119, -4120, -4121, -4122, -4123, -4124, -4125, -4126, -4127, -4128, -4133, -4138, -4139, -4142, -4143, -4144, -4146, -4147, -4149, -4150, -4151, -4152, -4153, -4154, -4155, -4156, -4157, -4158, -4159, -4160, -4161, -4162, -4163, -4164, -4165, -4166, -4167, -4168, -4169, -4170, -4171, -4172, -4173, -4174, -4175, -4176, -4177, -4178, -4179, -4180, -4181, -4182, -4183, -4184, -4186, -4187, -4188, -4189, -4190, -4191, -4192, -4200, -4201, -4204, -4205, -4206, -4207, -4208, -4209, -4210, -4211, -4212, -4213, -4214, -4215, -4216, -4217, -4218, -4219, -4220, -4221, -4222, -4223, -4224, -4225, -4226, -4227, -4228, -4229, -4230, -4231, -4232, -4233, -4234, -4235, -4238, -4239, -4240, -4241, -4242, -4243, -4244, -4245, -4246, -4247, -4248, -4249, -4250, -4251, -4252, -4254, -4255, -4256, -4257, -4258, -4260, -4261, -4262, -4263, -4264, -4265, -4266, -4267, -4269, -4270, -4271, -4273, -4274, -4276, -4277, -4278, -4279, -4280, -4281, -4282, -4283, -4284, -4285, -4286, -4287, -4288, -4289, -4290, -4297, -4298, -4299, -4333, -4334, -4335, -4336, -4337, -4338, -4339, -4340, -4341, -4342, -4344, -4345, -4346, -4347, -4348, -4349, -4356, -4357, -4358, -4361, -4365, -4366, -4367, -4374, -4375, -4376, -4377, -4379, -4380, -4381, -4382, -4383, -4385, -4386, -4388, -4389, -4390, -4391, -4392, -4393, -4394, -4395, -4396, -4397, -4398, -4399, -4400, -4403, -4404, -4507, -4517, -4518, -4519, -4550, -4613, -4614, -4624, -4638, -4653, -4654, -4659, -4661, -4662, -4664, -4674, -4676, -4677, -4678, -4679, -4680, -4681, -4685, -4688, -4691, -4694, -4701, -4713, -4714, -4719, -4721, -4722, -4723, -4724, -4725, -4727, -4730, -4735, -4736, -4737, -4738, -4739, -4741, -4742, -4743, -4744, -4746, -4749, -4750, -4759, -4760, -4761, -4762, -4763, -4764, -4766, -4767, -4768, -4771, -4772, -4773, -4774, -4775, -4776, -4777, -4778, -4779, -4785, -4786, -4787, -5000, -5001, -5002, -5003, -5006, -5007, -5008, -5010, -5011, -5012, -5014, -5015, -5016, -5017, -5018, -5019, -5020, -5022, -5023, -5024, -5025, -5026, -5027, -5028, -5029, -5030, -5031, -5032, -5034, -5035, -5036, -5037, -5038, -5039, -5040, -5041, -5042, -5043, -5044, -5046, -5047, -5050, -5051, -5052, -5053, -5054, -5055, -5056, -5057, -5058, -5059, -5061, -5063, -5064, -5065, -5066, -5067, -5068, -5069, -5070, -5071, -5072, -5073, -5074, -5080, -5081, -5083, -5084, -5085, -5086, -5087, -5088, -5089, -5090, -5091, -5092, -5093, -5094, -5096, -5098, -5099, -5100, -5101, -5102, -5103, -5106, -5107, -5108, -5109, -5110, -5111, -5112, -5114, -5115, -5116, -5117, -5118, -5119, -5120, -5121, -5122, -5123, -5124, -5130, -5131, -5133, -5134, -5135, -5136, -5137, -5138, -5139, -5140, -5142, -5143, -5144, -5145, -5146, -5147, -5148, -5149, -5150, -5153, -5154, -5155, -5156, -5157, -5158, -5162, -5163, -5164, -5165, -5166, -5167, -5168, -5169, -5170, -5171, -5172, -5173, -5174, -5175, -5176, -5177, -5178, -5179, -5180, -5181, -5182, -5183, -5184, -5185, -5187, -5188, -5189, -5190, -5191, -5192, -5193, -5194, -5195, -5196, -5197, -5198, -5199, -5200, -5201, -5202, -5203, -5204, -5205, -5206, -5207, -5208, -5209, -5210, -5211, -5213, -5214, -5215, -5216, -5217, -5218, -5219, -5220, -5221, -5222, -5223, -5224, -5225, -5226, -5227, -5228, -5229, -5230, -5231, -5233, -5234, -5235, -5236, -5237, -5238, -5239, -5240, -5241, -5242, -5243, -5244, -5245, -5246, -5247, -5248, -5249, -5250, -5251, -5252, -5253, -5254, -5255, -5256, -5257, -5258, -5259, -5261, -5262, -5263, -5264, -5265, -5266, -5267, -5269, -5270, -5271, -5272, -5274, -5275, -5276, -5277, -5278, -5280, -5281, -5282, -5283, -5284, -5285, -5286, -5287, -5288, -5289, -5290, -5291, -5292, -5293, -5294, -5295, -5296, -5297, -5300, -5301, -5302, -5303, -5304, -5305, -5306, -5307, -5308, -5310, -5311, -5314, -5315, -5316, -5317, -5318, -5319, -5320, -5321, -5322, -5323, -5324, -5325, -5326, -5331, -5332, -5333, -5334, -5335, -5336, -5337, -5338, -5339, -5340, -5341, -5342, -5343, -5344, -5345, -5346, -5347, -5348, -5349, -5350, -5351, -5352, -5353, -5354, -5355, -5356, -5357, -5358, -5359, -5360, -5361, -5362, -5363, -5365, -5368, -5369, -5370, -5371, -5372, -5373, -5376, -5377, -5378, -5379, -5380, -5381, -5382, -5383, -5384, -5386, -5387, -5388, -5389, -5390, -5400, -5401, -5402, -5403, -5405, -5406, -5407, -5408, -5409, -5410, -5411, -5412, -5413, -5414, -5415, -5416, -5417, -5418, -5419, -5420, -5421, -5422, -5423, -5424, -5425, -5426, -5427, -5428, -5429, -5430, -5431, -5432, -5433, -5434, -5435, -5436, -5437, -5438, -5439, -5440, -5441, -5442, -5443, -5444, -5445, -5446, -5447, -5448, -5449, -5450, -5451, -5452, -5453, -5454, -5455, -5456, -5457, -5458, -5459, -5460, -5461, -5462, -5463, -5464, -5465, -5466, -5467, -5468, -5469, -5470, -5471, -5472, -5473, -5474, -5475, -5476, -5477, -5478, -5479, -5480, -5481, -5482, -5483, -5484, -5485, -5486, -5487, -5488, -5489, -5490, -5491, -5492, -5493, -5494, -5495, -5496, -5497, -5498, -5499, -5500, -5501, -5502, -5503, -5504, -5505, -5506, -5507, -5508, -5509, -5510, -5511, -5512, -5513, -5514, -5515, -5516, -5517, -5518, -5519, -5520, -5521, -5522, -5523, -5524, -5540, -5541, -5542, -5543, -5544, -5545, -5546, -5547, -5548, -5549, -5550, -5551, -5552, -5553, -5554, -5555, -5556, -5557, -5558, -5559, -5560, -5561, -5562, -5563, -5564, -5565, -5567, -5568, -5569, -5570, -5571, -5574, -5575, -5576, -5578, -5579, -5580, -5581, -5582, -5583, -5584, -5585, -5586, -5587, -5588, -5589, -5590, -5591, -5592, -5593, -5594, -5595, -5596, -5598, -5601, -5602, -5603, -5605, -5607, -5609, -5610, -5611, -5612, -5613, -5614, -5615, -5616, -5617, -5618, -5619, -5620, -5621, -5622, -5623, -5624, -5625, -5626, -5627, -5628, -5629, -5630, -5631, -5632, -5633, -5634, -5635, -5636, -5637, -5638, -5639, -5640, -5641, -5642, -5643, -5644, -5645, -5646, -5647, -5648, -5649, -5650, -5651, -5652, -5653, -5654, -5655, -5656, -5657, -5658, -5659, -5660, -5661, -5662, -5663, -5664, -5665, -5666, -5667, -5668, -5671, -5672, -5673, -5674, -5675, -5676, -5677, -5678, -5679, -5680, -5681, -5682, -5683, -5684, -5686, -5687, -5688, -5689, -5690, -5691, -5692, -5693, -5694, -5703, -5708, -5709, -5710, -5711, -5712, -5713, -5714, -5715, -5716, -5717, -5718, -5719, -5720, -5721, -5722, -5723, -5724, -5725, -5726, -5728, -5729, -5730, -5731, -5733, -5734, -5735, -5736, -5737, -5738, -5739, -5740, -5741, -5742, -5743, -5744, -5745, -5746, -5747, -5748, -5749, -5750, -5751, -5752, -5753, -5754, -5755, -5756, -5757, -5758, -5759, -5760, -5761, -5762, -5763, -5764, -5765, -5766, -5768, -5769, -5770, -5771, -5772, -5773, -5774, -5777, -5778, -5779, -5785, -5786, -5787, -5788, -5791, -5792, -5793, -5794, -5795, -5797, -5798, -5799, -5800, -5801, -5802, -5803, -5804, -5805, -5806, -5807, -5808, -5809, -5810, -5811, -5812, -5813, -5814, -5815, -5816, -5817, -5818, -5819, -5820, -5821, -5822, -5823, -5824, -5825, -5826, -5827, -5828, -5829, -5830, -5831, -5832, -5833, -5834, -5837, -5838, -5839, -5840, -5841, -5842, -5843, -5844, -5845, -5846, -5848, -5849, -5850, -5851, -5852, -5853, -5854, -5855, -5858, -5859, -5860, -5861, -5862, -5863, -5864, -5865, -5866, -5867, -5868, -5869, -5870, -5871, -5872, -5873, -5874, -5875, -5876, -5877, -5878, -5879, -5880, -5882, -5883, -5884, -5885, -5886, -5887, -5888, -5889, -5890, -5891, -5892, -5893, -5894, -5895, -5896, -5897, -5898, -5899, -5900, -5901, -5902, -5903, -5904, -5905, -5906, -5907, -5908, -5923, -5925, -5926, -5927, -5928, -5929, -5930, -5931, -5932, -5933, -5934, -5935, -5936, -5937, -5938, -5939, -5941, -5942, -5943, -5944, -5945, -5946, -5947, -5948, -5950, -5951, -5952, -5953, -5954, -5955, -5956, -5957, -5958, -5959, -5964, -5965, -5966, -5967, -5971, -5972, -5973, -5974, -5977, -5978, -5979, -5980, -5981, -5982, -5983, -5984, -5985, -5986, -5987, -5988, -5989, -5990, -5991, -5992, -5993, -5994, -5995, -5996, -6000, -6001, -6002, -6003, -6004, -6005, -6006, -6201, -6202, -6203, -6204, -6205, -6206, -6207, -6208, -6209, -6210, -6211, -6212, -6213, -6214, -6215, -6219, -6220, -6221, -6222, -6223, -6224, -6225, -6226, -6227, -6228, -6229, -6230, -6231, -6233, -6234, -6235, -6236, -6240, -6241, -6242, -6244, -6256, -6257, -6265, -6266, -6267, -6268, -6274, -6275, -6276, -6277, -6278, -6279, -6280, -6281, -6283, -6284, -6285, -6286, -6288, -6301, -6302, -6303, -6304, -6305, -6306, -6307, -6308, -6309, -6310, -6311, -6312, -6313, -6315, -6316, -6317, -6318, -6319, -6320, -6321, -6322, -6323, -6324, -6325, -6329, -6330, -6332, -7111, -7118, -7120, -7201, -7202, -7203, -7204, -7205, -7206, -7207, -7208, -7209, -7210, -7211, -7212, -7213, -7214, -7215, -7216, -7217, -7218, -7219, -7220, -7221, -7222, -7223, -7224, -7225, -7226, -7227, -7228, -7229, -7230, -7231, -7232, -7233, -7234, -7235, -7236, -7237, -7238, -7239, -7240, -7241, -7242, -7243, -7244, -7246, -7247, -7248, -7249, -7250, -7251, -7252, -7253, -7254, -7255, -7256, -7257, -7258, -7259, -7260, -7261, -7262, -7263, -7264, -7265, -7266, -7267, -7268, -7269, -7270, -7271, -7272, -7273, -7274, -7275, -7276, -7277, -7278, -7279, -7280, -7281, -7282, -7283, -7284, -7285, -7286, -7287, -7288, -7289, -7290, -7291, -7292, -7293, -7294, -7295, -7296, -7297, -7298, -7299, -7300, -7301, -7302, -7404, -7405, -7409, -7410, -7418, -7419, -7420, -7422, -7423, -7424, -7425, -7426, -7427, -7428, -7429, -7430, -7431, -7433, -7434, -7435, -7600, -7601, -7602, -7603, -7604, -7605, -8001, -8002, -8003, -9005, -9008, -9017, -9018, -9061, -9065, -9100, -9101, -9102, -9103, -9124, -9128, -9134, -9135, -9137, -9141, -9143, -9203, -9519, -9526, -9542, -9544, -9549, -9575, -9579, -9580, -9582, -9584, -9585, -9586, -9587, -9589, -9602, -9640, -9641, -9653, -9668, -9674, -9675, -9680, -9681, -9683, -9687, -9694, -9695, -9696, -9701, -9702, -9703, -9704, -9707, -9715, -9717, -9721, -9723, -9731, -9732, -9743, -9746, -9747, -9748, -9749, -9751, -9762, -9763, -9765, -9781, -9784, -9799, -9800, -9801, -9808, -9809, -9810, -9811, -11000, -11001, -11002, -11003, -11004, -11005, -11006, -11007, -11008, -11009, -11010, -11011, -11012, -11013, -11014, -11015, -11016, -11017, -11048, -11049, -11062, -11081, -11088, -11112, -11113, -11114, -11115, -11116, -11117, -11118, -11119, -22998, -30926, -32491, -38104, -38105};
   const char *ob_error_name(const int err)
   {
     const char *ret = "Unknown error";

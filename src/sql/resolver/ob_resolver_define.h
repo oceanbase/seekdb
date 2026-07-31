@@ -63,8 +63,7 @@ enum ObStmtScope
   T_WITH_CLAUSE_CYCLE_SCOPE,
   T_NAMED_WINDOWS_SCOPE,
   T_PL_SCOPE,
-  T_LOAD_DATA_SCOPE,
-  T_CURRENT_OF_SCOPE
+  T_LOAD_DATA_SCOPE
 };
 
 inline const char *get_scope_name(const ObStmtScope &scope)

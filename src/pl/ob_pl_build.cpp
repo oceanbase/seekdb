@@ -819,7 +819,6 @@ int ObPLBuilder::build_package(const ObPackageInfo &package_info,
 
   OZ (generate_package(copy_exec_env, package_ast, package));
   OX (package.set_can_cached(package_ast.get_can_cached()));
-  OX (package_ast.get_serially_reusable() ? package.set_serially_reusable() : void(NULL));
   session_info_.set_for_trigger_package(saved_trigger_flag);
   OZ (check_dep_schema(schema_guard_, package.get_dependency_table()));
 

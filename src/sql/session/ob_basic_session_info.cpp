@@ -67,7 +67,6 @@ ObBasicSessionInfo::ObBasicSessionInfo()
       master_sessid_(INVALID_SESSID),
       global_vars_version_(0),
       last_ddl_schema_version_(0),
-      sys_var_base_version_(OB_INVALID_VERSION),
       tx_desc_(NULL),
       tx_result_(),
       reserved_read_snapshot_version_(),
@@ -129,10 +128,6 @@ ObBasicSessionInfo::ObBasicSessionInfo()
       nested_count_(-1),
       inf_pc_configs_(),
       curr_trans_last_stmt_end_time_(0),
-      acquire_from_pool_(false),
-      release_to_pool_(true),
-      server_stopping_(0),
-      reused_count_(0),
       first_need_txn_stmt_type_(stmt::T_NONE),
       need_recheck_txn_readonly_(false),
       stmt_type_(stmt::T_NONE),
@@ -198,34 +193,18 @@ int ObBasicSessionInfo::test_init(uint32_t sessid,
   return ret;
 }
 
-bool ObBasicSessionInfo::is_use_inner_allocator() const
-{
-  return bucket_allocator_wrapper_.get_alloc() == &block_allocator_;
-}
-
 int ObBasicSessionInfo::init(uint32_t sessid,
                              common::ObIAllocator *bucket_allocator, const ObTZInfoMap *tz_info)
 {
   int ret = OB_SUCCESS;
   ObWrapperAllocator *user_var_allocator_wrapper = NULL;
-  if (is_acquire_from_pool()) {
-    reused_count_++;
-    if (OB_NOT_NULL(bucket_allocator) || !is_use_inner_allocator()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("session from pool must use inner allocator", K(ret));
-    }
-  } else {
-    if (NULL != bucket_allocator) {
-      bucket_allocator_wrapper_.set_alloc(bucket_allocator);
-      user_var_allocator_wrapper = &bucket_allocator_wrapper_;
-    }
+  if (NULL != bucket_allocator) {
+    bucket_allocator_wrapper_.set_alloc(bucket_allocator);
+    user_var_allocator_wrapper = &bucket_allocator_wrapper_;
   }
-  if (OB_FAIL(ret)) {
-  } else if (!is_acquire_from_pool() &&
-             OB_FAIL(user_var_val_map_.init(1024 * 1024 * 2, 256, user_var_allocator_wrapper))) {
+  if (OB_FAIL(user_var_val_map_.init(1024 * 1024 * 2, 256, user_var_allocator_wrapper))) {
     LOG_WARN("fail to init user_var_val_map", K(ret));
-  } else if (!is_acquire_from_pool() &&
-             OB_FAIL(debug_sync_actions_.init(SMALL_BLOCK_SIZE, bucket_allocator_wrapper_))) {
+  } else if (OB_FAIL(debug_sync_actions_.init(SMALL_BLOCK_SIZE, bucket_allocator_wrapper_))) {
     LOG_WARN("fail to init debug sync actions", K(ret));
   } else if (OB_FAIL(set_session_state(SESSION_INIT))) {
     LOG_WARN("fail to set session stat", K(ret));
@@ -329,7 +308,7 @@ int ObBasicSessionInfo::reset_sys_vars()
   return ret;
 }
 
-void ObBasicSessionInfo::reset(bool skip_sys_var)
+void ObBasicSessionInfo::reset()
 {
   set_valid(false);
 
@@ -372,23 +351,8 @@ void ObBasicSessionInfo::reset(bool skip_sys_var)
   need_reset_package_ = false;
 //bucket_allocator_wrapper_.reset();
   user_var_val_map_.reuse();
-  if (!skip_sys_var) {
-    memset(sys_vars_, 0, sizeof(sys_vars_));
-    influence_plan_var_indexs_.reset();
-  } else {
-    const SysVarIds &all_sys_var_ids = sys_var_inc_info_.get_all_sys_var_ids();
-    for (int i = 0; i < all_sys_var_ids.count(); i++) {
-      int ret = OB_SUCCESS;
-      int64_t store_idx = -1;
-      ObSysVarClassType sys_var_id = all_sys_var_ids.at(i);
-      OZ (share::ObSysVarMeta::calc_sys_var_store_idx(sys_var_id, store_idx));
-      OV (0 <= store_idx && store_idx < share::ObSysVarMeta::ALL_SYS_VARS_COUNT);
-      OV (OB_NOT_NULL(sys_vars_[store_idx]));
-      OX (sys_vars_[store_idx]->clean_inc_value());
-    }
-    // I don't see any reason why we should reset timezone
-    // reset_timezone();
-  }
+  memset(sys_vars_, 0, sizeof(sys_vars_));
+  influence_plan_var_indexs_.reset();
   sys_var_inc_info_.reset();
   sys_var_in_pc_str_.reset();
   config_in_pc_str_.reset();
@@ -425,20 +389,9 @@ void ObBasicSessionInfo::reset(bool skip_sys_var)
   last_query_trace_id_.reset();
   thread_data_.reset();
   nested_count_ = -1;
-  // session caching scenario, only retain base value, clear inc value
-  // Remove sys var schema version, the base value is then the hardcoded value
-  if (!skip_sys_var) {
-    sys_vars_cache_.reset();
-    sys_var_base_version_ = OB_INVALID_VERSION;
-  } else {
-    sys_vars_cache_.clean_inc();
-    sys_var_base_version_ = CACHED_SYS_VAR_VERSION;
-  }
+  sys_vars_cache_.reset();
   curr_trans_last_stmt_end_time_ = 0;
   reserved_read_snapshot_version_.reset();
-  acquire_from_pool_ = false;
-  // Do not reset release_to_pool_, reason see the comment at the property declaration location.
-  server_stopping_ = 0;
   first_need_txn_stmt_type_ = stmt::T_NONE;
   need_recheck_txn_readonly_ = false;
   thread_id_ = 0;
@@ -452,10 +405,8 @@ void ObBasicSessionInfo::reset(bool skip_sys_var)
   inc_sys_var_alloc1_.reset();
   inc_sys_var_alloc2_.reset();
   current_buf_index_ = 0;
-  if (!skip_sys_var) {
-    base_sys_var_alloc_.reset();
-    sys_var_fac_.destroy();
-  }
+  base_sys_var_alloc_.reset();
+  sys_var_fac_.destroy();
   client_identifier_.reset();
   last_refresh_schema_version_ = OB_INVALID_VERSION;
   sys_var_config_hash_val_ = 0;
@@ -932,8 +883,6 @@ int ObBasicSessionInfo::init_system_variables(const bool print_info_log, const b
       }
     }
   }  // end for
-  release_to_pool_ = OB_SUCC(ret);
-
   if (OB_SUCC(ret)) {
     if (OB_FAIL(gen_sys_var_in_pc_str())) { // Serialize and cache the system variable sequence that affects the plan
       LOG_INFO("fail to generate system variables in pc str");
@@ -1024,7 +973,6 @@ int ObBasicSessionInfo::load_default_sys_variable(const bool print_info_log, con
   } else if (OB_FAIL(SMART_CALL(init_system_variables(print_info_log, use_server_defaults, is_deserialized)))) {
     LOG_WARN("Init system variables failed !", K(ret));
   }
-  release_to_pool_ = OB_SUCC(ret);
   return ret;
 }
 
@@ -1099,8 +1047,6 @@ int ObBasicSessionInfo::init_essential_system_variables_by_id(const bool print_i
       }
     }
   } // end for
-
-  release_to_pool_ = OB_SUCC(ret);
 
   if (OB_SUCC(ret)) {
     mark_sys_var_str_dirty();
@@ -2850,48 +2796,6 @@ int ObBasicSessionInfo::fill_sys_vars_cache_base_value(
 }
 
 
-int ObBasicSessionInfo::process_session_variable_fast()
-{
-  int ret = OB_SUCCESS;
-  int64_t store_idx = -1;
-  // SYS_VAR_OB_LOG_LEVEL
-  OZ (share::ObSysVarMeta::calc_sys_var_store_idx(SYS_VAR_OB_LOG_LEVEL, store_idx));
-  OV (share::ObSysVarMeta::is_valid_sys_var_store_idx(store_idx));
-  OZ (process_session_log_level(sys_vars_[store_idx]->get_value()));
-  // SYS_VAR_DEBUG_SYNC
-  OZ (share::ObSysVarMeta::calc_sys_var_store_idx(SYS_VAR_DEBUG_SYNC, store_idx));
-  OV (share::ObSysVarMeta::is_valid_sys_var_store_idx(store_idx));
-  OZ (process_session_debug_sync(sys_vars_[store_idx]->get_value(), false, false));
-  // SYS_VAR_OB_GLOBAL_DEBUG_SYNC
-  OZ (share::ObSysVarMeta::calc_sys_var_store_idx(SYS_VAR_OB_GLOBAL_DEBUG_SYNC, store_idx));
-  OV (share::ObSysVarMeta::is_valid_sys_var_store_idx(store_idx));
-  OZ (process_session_debug_sync(sys_vars_[store_idx]->get_value(), true, false));
-  // SYS_VAR_OB_READ_CONSISTENCY
-  // This system variable corresponds to consistency_level_, this attribute can only be modified through regular means, so it is suitable for adding to sys_vars_cache_,
-  // But such modifications involve a large amount of changes, so for safety's sake, we retain the existing serialization operation and only execute it in this interface to ensure the main thread is correctly initialized.
-  OZ (share::ObSysVarMeta::calc_sys_var_store_idx(SYS_VAR_OB_READ_CONSISTENCY, store_idx));
-  OV (share::ObSysVarMeta::is_valid_sys_var_store_idx(store_idx));
-  if (OB_SUCC(ret)) {
-    const ObObj &val = sys_vars_[store_idx]->get_value();
-    int64_t consistency = 0;
-    PROCESS_SESSION_INT_VARIABLE(consistency);
-    consistency = consistency == WEAK ? STRONG : consistency;
-    OX (consistency_level_ = static_cast<ObConsistencyLevel>(consistency));
-  }
-  // SYS_VAR_WAIT_TIMEOUT
-  {
-    LockGuard lock_guard(thread_data_mutex_);
-    get_int64_sys_var(SYS_VAR_WAIT_TIMEOUT, thread_data_.wait_timeout_);
-  }
-
-  // SYS_VAR_TIME_ZONE / SYS_VAR_ERROR_ON_OVERLAP_TIME
-  // These two system variables correspond to tz_info_wrap_, but this attribute can also be modified through non-system variable methods (update_timezone_info interface),
-  // So tz_info_wrap_ is not suitable for joining sys_vars_cache_, but it needs to be serialized.
-  // Main thread applies for session, it will call update_timezone_info interface in process_single_stmt interface, so it can also get proper initialization.
-  OZ (reset_timezone());
-  return ret;
-}
-
 int ObBasicSessionInfo::process_session_sql_mode_value(const ObObj &value)
 {
   int ret = OB_SUCCESS;
@@ -3748,13 +3652,7 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
   }
 
   sys_var_inc_info_.reset();
-  // When sys_var_base_version_ == CACHED_SYS_VAR_VERSION it indicates that there is a cache, no need to load default value
-  // Otherwise it means there is no cache, need to load default value, then apply patch
-  if (CACHED_SYS_VAR_VERSION != sys_var_base_version_) {
-    OZ (load_all_sys_vars_default());
-  } else {
-    // delay set.
-  }
+  OZ (load_all_sys_vars_default());
 
   if (OB_SUCC(ret)) {
     ObTZMapWrap tz_map_wrap;
@@ -3811,12 +3709,6 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
 
   }
 
-  if (CACHED_SYS_VAR_VERSION != sys_var_base_version_) {
-    // do nothing.
-  } else {
-    // cached already, skip load default vars
-    OZ (process_session_variable_fast());
-  }
   // split function, make stack checker happy
   [&]() {
   uint64_t sql_scope_flags = 0;
@@ -3879,7 +3771,6 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
   sql_scope_flags_.set_flags(sql_scope_flags);
   is_deserialized_ = true;
   tz_info_wrap_.set_tz_info_map(tz_info_map);
-  release_to_pool_ = OB_SUCC(ret);
   }();
   uint32_t unused_uint32_field = INVALID_SESSID;
   ObString sql_id;
@@ -3989,7 +3880,6 @@ int ObBasicSessionInfo::load_all_sys_vars(ObSchemaGetterGuard &schema_guard)
   OZ (schema_guard.get_sys_variable_schema( sys_var_schema));
   OV (OB_NOT_NULL(sys_var_schema));
   OZ (load_all_sys_vars(*sys_var_schema, true));
-  release_to_pool_ = OB_SUCC(ret);
   return ret;
 }
 
@@ -4021,7 +3911,6 @@ int ObBasicSessionInfo::load_all_sys_vars(const ObSysVariableSchema &sys_var_sch
       }
     }
   }
-  release_to_pool_ = OB_SUCC(ret);
   if (!is_deserialized_) {
     OZ (gen_sys_var_in_pc_str());
     OZ (gen_configs_in_pc_str());

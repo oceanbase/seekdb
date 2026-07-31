@@ -47,7 +47,6 @@ int ObPLPackageAST::init(const ObString &db_name,
   version_ = package_version;
   if (OB_NOT_NULL(parent_package_ast)) {
     compile_flag_ = parent_package_ast->get_compile_flag();
-    serially_reusable_ = parent_package_ast->get_serially_reusable();
     parent_user_type_table = &parent_package_ast->get_user_type_table();
     parent_routine_table = &parent_package_ast->get_routine_table();
     parent_condition_table = &parent_package_ast->get_condition_table();
@@ -160,7 +159,6 @@ int ObPLPackage::init(const ObPLPackageAST &package_ast)
   id_ = package_ast.get_id();
   version_ = package_ast.get_version();
   package_type_ = package_ast.get_package_type();
-  serially_reusable_ = package_ast.get_serially_reusable();
   if (OB_FAIL(ob_write_string(get_allocator(), const_cast<ObString &>(package_ast.get_db_name()), db_name_))) {
     LOG_WARN("copy db name failed", "db name", package_ast.get_db_name(), K(ret));
   } else if (OB_FAIL(ob_write_string(get_allocator(), const_cast<ObString &>(package_ast.get_name()), name_))) {
@@ -206,7 +204,7 @@ int ObPLPackage::instantiate_package_state(const ObPLResolveCtx &resolve_ctx,
       LOG_WARN("cannot assign null to var with not null attribution", K(ret));
     }
     OZ (package_state.set_package_var_val(var_idx, value, false));
-    if (OB_SUCC(ret) && !package_state.get_serially_reusable()) {
+    if (OB_SUCC(ret)) {
       const sql::ObSqlExpression *default_expr =
           var->is_formal_param() ? NULL : get_default_expr(var->get_default());
       if (OB_NOT_NULL(default_expr)
@@ -272,9 +270,9 @@ int ObPLPackage::get_var(const ObString &var_name, const ObPLVar *&var, int64_t 
     if (!tmp_var->is_formal_param()
         && ObCharset::case_insensitive_equal(var_name, tmp_var->get_name())) {
       if (tmp_var->is_dup_declare()) {
-        ret = OB_ERR_DECL_MORE_THAN_ONCE;
+        ret = OB_ERR_SP_DUP_VAR;
         LOG_WARN("package var dup", K(ret), K(var_idx));
-        LOG_USER_ERROR(OB_ERR_DECL_MORE_THAN_ONCE, tmp_var->get_name().length(), tmp_var->get_name().ptr());
+        LOG_USER_ERROR(OB_ERR_SP_DUP_VAR, tmp_var->get_name().length(), tmp_var->get_name().ptr());
       } else {
         var = tmp_var;
         var_idx = i;
@@ -372,8 +370,8 @@ int ObPLPackage::get_type(const common::ObString type_name, const ObUserDefinedT
     const ObUserDefinedType *tmp_type = type_table_.at(i);
     if (ObCharset::case_insensitive_equal(type_name, tmp_type->get_name())) {
       if (OB_NOT_NULL(type)) {
-        ret = OB_ERR_DECL_MORE_THAN_ONCE;
-        LOG_USER_ERROR(OB_ERR_DECL_MORE_THAN_ONCE, type_name.length(), type_name.ptr());
+        ret = OB_ERR_SP_DUP_TYPE;
+        LOG_USER_ERROR(OB_ERR_SP_DUP_TYPE, type_name.length(), type_name.ptr());
       } else {
         type = tmp_type;
       }

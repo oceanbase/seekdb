@@ -18,9 +18,9 @@
 #define OCEANBASE_MYSQLCLIENT_OB_ISQL_CONNECTION_H_
 
 #include "lib/ob_define.h"
+#include "lib/container/ob_iarray.h"
 #include "common/mysqlclient/ob_isql_client.h"
 #include "common/timezone/ob_timezone_info.h"
-#include "common/mysqlclient/ob_isql_connection_pool.h"
 #include "common/object/ob_object.h"
 
 namespace oceanbase
@@ -51,20 +51,6 @@ class ObString;
 
 namespace sqlclient
 {
-class ObISQLConnection;
-class ObCommonServerConnectionPool
-{
-public:
-  ObCommonServerConnectionPool() : free_conn_count_(0), busy_conn_count_(0) {}
-  virtual ~ObCommonServerConnectionPool() {}
-
-  virtual int release(common::sqlclient::ObISQLConnection *connection, const bool succ) = 0;
-  TO_STRING_KV(K_(free_conn_count), K_(busy_conn_count));
-protected:
-  volatile uint64_t free_conn_count_;
-  volatile uint64_t busy_conn_count_;
-};
-
 class ObISQLResultHandler;
 
 // execute in sql engine
@@ -89,11 +75,7 @@ public:
 class ObISQLConnection
 {
 public:
-  ObISQLConnection() :
-       sessid_(-1),
-       usable_(true),
-       check_priv_(false)
-  {}
+  ObISQLConnection() : check_priv_(false) {}
   virtual ~ObISQLConnection() {
     allocator_.reset();
   }
@@ -158,9 +140,6 @@ public:
   }
 
 
-  virtual ObCommonServerConnectionPool *get_common_server_pool() = 0;
-  void set_sessid(uint32_t sessid) { sessid_ = sessid; }
-  uint32_t get_sessid() { return sessid_; }
   virtual int set_ddl_info(const void *ddl_info) { UNUSED(ddl_info); return OB_NOT_SUPPORTED; }
   virtual int set_tz_info_wrap(const ObTimeZoneInfoWrap &tz_info_wrap) { UNUSED(tz_info_wrap); return OB_NOT_SUPPORTED; }
   virtual void set_is_load_data_exec(bool v) { UNUSED(v); }
@@ -168,14 +147,9 @@ public:
   virtual void set_ob_enable_pl_cache(bool v) { UNUSED(v); }
   virtual void set_user_timeout(int64_t user_timeout) { UNUSED(user_timeout); }
   virtual int64_t get_user_timeout() const { return 0; }
-  void set_usable(bool flag) { usable_ = flag; }
-  bool usable() { return usable_; }
-  virtual int ping() { return OB_SUCCESS; }
   void set_check_priv(bool on) { check_priv_ = on; }
   bool is_check_priv() { return check_priv_; }
 protected:
-  uint32_t sessid_;
-  bool usable_;  // usable_ = false: connection is unusable, should not execute query again.
   common::ObArenaAllocator allocator_;
   bool check_priv_;
 };

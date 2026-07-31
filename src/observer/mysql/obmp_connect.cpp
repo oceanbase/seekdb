@@ -195,7 +195,6 @@ int ObMPConnect::process()
   ObSMConnection *conn = NULL;
   ObSQLSessionInfo *session = NULL;
   bool autocommit = false;
-  ObString service_name;
   THIS_WORKER.set_timeout_ts(INT64_MAX); // avoid see a former timeout value
   if (THE_TRACE != nullptr) {
     THE_TRACE->reset();

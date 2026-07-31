@@ -53,7 +53,7 @@
 #include "sql/resolver/dcl/ob_revoke_stmt.h"
 #include "sql/resolver/dcl/ob_create_role_stmt.h"
 #include "sql/resolver/dcl/ob_drop_role_stmt.h"
-#include "sql/resolver/dcl/ob_alter_user_profile_stmt.h"
+#include "sql/resolver/dcl/ob_alter_user_role_stmt.h"
 #include "sql/resolver/tcl/ob_start_trans_stmt.h"
 #include "sql/resolver/tcl/ob_end_trans_stmt.h"
 #include "sql/resolver/tcl/ob_savepoint_stmt.h"
@@ -321,9 +321,9 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObCreateUserStmt, ObCreateUserExecutor);
         break;
       }
-      case stmt::T_ALTER_USER_PROFILE:
+      case stmt::T_ALTER_USER_ROLE:
       case stmt::T_ALTER_USER: {
-        DEFINE_EXECUTE_CMD(ObAlterUserProfileStmt, ObAlterUserProfileExecutor);
+        DEFINE_EXECUTE_CMD(ObAlterUserRoleStmt, ObAlterUserRoleExecutor);
         break;
       }
 

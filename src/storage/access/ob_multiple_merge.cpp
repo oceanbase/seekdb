@@ -1650,7 +1650,7 @@ int ObMultipleMerge::refresh_table_on_demand()
     } else if (!is_unprojected_row_valid_ && ScanState::SINGLE_ROW == scan_state_) {
       // do nothing
     } else if (OB_FAIL(save_curr_rowkey())) {
-      if (OB_ERR_UNSUPPORTED_TYPE == ret) {
+      if (OB_NOT_IMPLEMENT == ret) {
         ret = OB_SUCCESS;
         // do nothing
       } else {

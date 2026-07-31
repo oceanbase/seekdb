@@ -58,7 +58,7 @@ enum ObRoutineFlag
   SP_FLAG_INVALID         = 1,
   SP_FLAG_NONEDITIONABLE  = 2,
   SP_FLAG_DETERMINISTIC   = 4,
-  SP_FLAG_PARALLEL_ENABLE = 8,
+  SP_FLAG_RESERVED_8 = 8,
   SP_FLAG_INVOKER_RIGHT = 16,
   SP_FLAG_ACCESSIBLE_BY = 64,
   SP_FLAG_RESERVED_256 = 256,
@@ -124,8 +124,6 @@ public:
   virtual uint64_t get_package_id() const = 0;
   virtual void set_deterministic() = 0;
   virtual bool is_deterministic() const = 0;
-  virtual void set_parallel_enable() = 0;
-  virtual bool is_parallel_enable() const = 0;
   virtual void set_invoker_right() {}
   virtual bool is_invoker_right() const { return false; }
   virtual void set_accessible_by_clause() = 0;
@@ -382,7 +380,6 @@ public:
   OB_INLINE void set_routine_invalid() { flag_ |= SP_FLAG_INVALID; }
   OB_INLINE void set_noneditionable() { flag_ |= SP_FLAG_NONEDITIONABLE; }
   OB_INLINE void set_deterministic() { flag_ |= SP_FLAG_DETERMINISTIC; }
-  OB_INLINE void set_parallel_enable() { flag_ |= SP_FLAG_PARALLEL_ENABLE; }
   OB_INLINE void set_invoker_right() { flag_ |= SP_FLAG_INVOKER_RIGHT; }
   OB_INLINE void clear_invoker_right() { flag_ &= (~((uint64_t)SP_FLAG_INVOKER_RIGHT)); }
   OB_INLINE void set_accessible_by_clause() { flag_ |= SP_FLAG_ACCESSIBLE_BY; }
@@ -445,10 +442,6 @@ public:
   }
   OB_INLINE bool is_contains_sql() const {
     return !(is_no_sql()||is_reads_sql_data()||is_modifies_sql_data());
-  }
-  OB_INLINE bool is_parallel_enable() const
-  {
-    return SP_FLAG_PARALLEL_ENABLE == (flag_ & SP_FLAG_PARALLEL_ENABLE);
   }
   OB_INLINE bool is_invoker_right() const
   {

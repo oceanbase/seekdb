@@ -1949,7 +1949,7 @@ stmt::StmtType ObResolverUtils::get_stmt_type_by_item_type(const ObItemType item
       }
       break;
       case T_ALTER_USER_DEFAULT_ROLE: {
-        type = stmt::T_ALTER_USER_PROFILE;
+        type = stmt::T_ALTER_USER_ROLE;
       }
       break;
       case T_SP_CALL_STMT: {
@@ -3087,8 +3087,7 @@ int ObResolverUtils::check_partition_value_expr_for_range(const ObString &part_n
 
 int ObResolverUtils::check_partition_value_expr_for_range(const ObString &part_name,
                                                           ObRawExpr &part_value_expr,
-                                                          const ObPartitionFuncType part_type,
-                                                          const bool &in_tablegroup)
+                                                          const ObPartitionFuncType part_type)
 {
   int ret = OB_SUCCESS;
   // Check the type of expr for value less than (xxx), specific details can refer to MySQL's whitelist
@@ -3468,8 +3467,7 @@ int ObResolverUtils::resolve_partition_range_value_expr(ObResolverParams &params
                                                         const ParseNode &node,
                                                         const ObString &part_name,
                                                         const ObPartitionFuncType part_type,
-                                                        ObRawExpr *&part_value_expr,
-                                                        const bool &in_tablegroup)
+                                                        ObRawExpr *&part_value_expr)
 {
   int ret = OB_SUCCESS;
   ObCollationType collation_connection = CS_TYPE_INVALID;
@@ -3544,8 +3542,7 @@ int ObResolverUtils::resolve_partition_range_value_expr(ObResolverParams &params
         LOG_WARN("formailize expr failed", K(ret));
       } else if (OB_FAIL(check_partition_value_expr_for_range(part_name,
                                                               *part_value_expr,
-                                                              part_type,
-                                                              in_tablegroup))) {
+                                                              part_type))) {
         LOG_WARN("check_valid_column_for_hash or range func failed",
                  K(part_type), K(part_name), K(ret));
       }

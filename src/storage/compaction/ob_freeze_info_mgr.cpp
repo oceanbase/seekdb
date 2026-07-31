@@ -319,8 +319,6 @@ int is_snapshot_related_to_tablet(
   if (!snapshot.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid argument", K(ret), K(snapshot));
-  } else if (snapshot.snapshot_type_ == share::SNAPSHOT_FOR_BACKUP_POINT) {
-    related = false;
   } else {
     // A zero tablet id applies the snapshot to every local tablet.
     if (0 == snapshot.tablet_id_

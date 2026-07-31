@@ -389,8 +389,8 @@ public:
   //for test
   int test_init(uint32_t version, uint32_t sessid,
            common::ObIAllocator *bucket_allocator);
-  void destroy(bool skip_sys_var = false);
-  void reset(bool skip_sys_var);
+  void destroy() override;
+  void reset() override;
   void clean_status();
   void set_plan_cache(ObPlanCache *cache) { plan_cache_ = cache; }
   void set_ps_cache(ObPsCache *cache) { ps_cache_ = cache; }
@@ -654,7 +654,6 @@ public:
   }
   void reset_all_package_state();
   int reset_all_package_state_by_dbms_session();
-  int reset_all_serially_package_state();
   int set_client_id(const common::ObString &client_identifier);
   int set_module_name(const common::ObString &mod);
   int set_action_name(const common::ObString &act);

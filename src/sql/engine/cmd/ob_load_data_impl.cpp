@@ -27,7 +27,8 @@
 #include "sql/rewrite/ob_transform_utils.h"
 #include "share/ob_timezone_mgr.h"
 #include "src/observer/mysql/ob_query_driver.h"
-#include "observer/ob_inner_sql_connection_pool.h"
+#include "observer/ob_inner_sql_connection.h"
+#include "share/ob_ex_rpc.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;

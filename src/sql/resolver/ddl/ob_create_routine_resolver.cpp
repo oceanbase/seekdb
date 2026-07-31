@@ -378,8 +378,7 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
   CK (OB_NOT_NULL(type_node));
   CK (OB_NOT_NULL(allocator_));
   if (OB_SUCC(ret)) {
-    if (T_SP_ROWTYPE == type_node->type_
-        || T_SP_TYPE == type_node->type_) { // %Type %RowType
+    if (T_SP_ROWTYPE == type_node->type_) { // %ROWTYPE
       ObArray<ObObjAccessIdx> access_idxs;
       ObArray<ObObjAccessIdent> obj_access_idents;
       CK (OB_LIKELY(2 == type_node->num_child_),
@@ -410,7 +409,7 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
                                                       *(params_.expr_factory_),
                                                       obj_access_idents,
                                                       session_info));
-          OZ (ObPLResolver::resolve_extern_type_info(T_SP_ROWTYPE == type_node->type_,
+          OZ (ObPLResolver::resolve_extern_type_info(true,
                                                      *(schema_checker_->get_schema_guard()),
                                                      session_info,
                                                      obj_access_idents,
@@ -434,19 +433,8 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
         OX (routine_param.set_type_owner(owner_id));
         CK (OB_LIKELY(access_idxs.count() > 0));
         if (OB_SUCC(ret)) {
-          if (T_SP_TYPE == type_node->type_) {
-            if (ObObjAccessIdx::is_table_column(access_idxs)
-                || ObObjAccessIdx::is_package_variable(access_idxs)) {
-              OZ (set_routine_param(access_idxs, routine_param));
-            } else {
-              ret = OB_ERR_TYPE_DECL_ILLEGAL;
-              LOG_USER_ERROR(OB_ERR_TYPE_DECL_ILLEGAL,
-                            access_idxs.at(access_idxs.count() - 1).var_name_.length(), access_idxs.at(access_idxs.count() - 1).var_name_.ptr());
-              LOG_WARN("%TYPE must be applied to a variable, column, field or attribute",
-                      K(ret), K(access_idxs));
-            }
-          } else if (ObObjAccessIdx::is_table(access_idxs) ||
-                     ObObjAccessIdx::is_package_cursor_variable(access_idxs)) {
+          if (ObObjAccessIdx::is_table(access_idxs) ||
+              ObObjAccessIdx::is_package_cursor_variable(access_idxs)) {
             OZ (set_routine_param(access_idxs, routine_param));
           } else {
             ret = OB_ERR_WRONG_ROWTYPE;
@@ -538,8 +526,7 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
                                                type_node,
                                                param_name,
                                                *session_info_,
-                                               data_type,
-                                               param_name.empty() ? false : true));
+                                               data_type));
       if (OB_SUCC(ret) && data_type.is_pl_integer_type()) {
         routine_param.set_pl_integer_type(data_type.get_pl_integer_type());
       }

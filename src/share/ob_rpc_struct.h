@@ -2516,16 +2516,16 @@ public:
   bool locked_;
 };
 
-struct ObAlterUserProfileArg : public ObDDLArg
+struct ObAlterUserRoleArg : public ObDDLArg
 {
   OB_UNIS_VERSION(1);
 
 public:
-  ObAlterUserProfileArg() : ObDDLArg(),
+  ObAlterUserRoleArg() : ObDDLArg(),
     user_name_(), host_name_(), user_id_(common::OB_INVALID_ID),
     default_role_flag_(common::OB_INVALID_ID), role_id_array_(), user_ids_()
   { }
-  virtual ~ObAlterUserProfileArg() {}
+  virtual ~ObAlterUserRoleArg() {}
   TO_STRING_KV(K_(user_name), K_(host_name));
 
 
@@ -3991,18 +3991,6 @@ public:
 
 
 
-
-struct ObCreateTableGroupRes : ObParallelDDLRes
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObCreateTableGroupRes()
-    : ObParallelDDLRes(),
-      tablegroup_id_(OB_INVALID_ID)
-  {}
-  ~ObCreateTableGroupRes() = default;
-  uint64_t tablegroup_id_;
-};
 
 struct ObCreateAiModelArg : public ObDDLArg
 {

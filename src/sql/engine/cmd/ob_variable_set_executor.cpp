@@ -20,6 +20,7 @@
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ob_local_management_service.h"
 #include "observer/ob_server.h"
+#include "observer/ob_inner_sql_connection.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
 #include "sql/engine/cmd/ob_set_names_executor.h"
@@ -383,19 +384,17 @@ int ObVariableSetExecutor::execute_subquery_expr(ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
-  observer::ObInnerSQLConnectionPool *pool = NULL;
-  sqlclient::ObISQLConnection *conn = NULL;
+  observer::ObInnerSQLConnection *conn = NULL;
+  sqlclient::ObISQLConnectionGuard conn_guard;
   
-  if (OB_ISNULL(session_info) || OB_ISNULL(sql_proxy) || OB_ISNULL(sql_proxy->get_pool())) {
+  if (OB_ISNULL(session_info) || OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(session_info), K(sql_proxy));
-  } else if (OB_UNLIKELY(sqlclient::INNER_POOL != sql_proxy->get_pool()->get_type())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy must be inner", K(ret), K(sql_proxy->get_pool()->get_type()));
-  } else if (OB_FALSE_IT(pool = static_cast<observer::ObInnerSQLConnectionPool *>(sql_proxy->get_pool()))) {
-  } else if (OB_FAIL(pool->acquire(session_info, conn))) {
+  } else if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_external_session(
+                         session_info, conn_guard))) {
     LOG_WARN("failed to acquire connection", K(ret));
   } else {
+    conn = static_cast<observer::ObInnerSQLConnection *>(conn_guard.get_ptr());
     int64_t idx = 0;
     ObObj tmp_value;
     SMART_VAR(ObISQLClient::ReadResult, res) {
@@ -420,13 +419,6 @@ int ObVariableSetExecutor::execute_subquery_expr(ObExecContext &ctx,
       LOG_WARN("failed to write value", K(ret));
     }
     LOG_TRACE("succ to calculate value by executing inner sql", K(ret), K(value_obj), K(subquery_expr));
-  }
-  if (OB_NOT_NULL(conn) && OB_NOT_NULL(sql_proxy)) {
-    int tmp_ret = sql_proxy->close(conn, true);
-    if (OB_UNLIKELY(tmp_ret != OB_SUCCESS)) {
-      LOG_WARN("failed to close sql connection", K(tmp_ret));
-    }
-    ret = ret == OB_SUCCESS ? tmp_ret : ret;
   }
   return ret;
 }

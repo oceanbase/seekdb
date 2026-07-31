@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_SHARE_OB_GLOBAL_MERGE_TABLE_OPERATOR_
 #define OCEANBASE_SHARE_OB_GLOBAL_MERGE_TABLE_OPERATOR_
 
-#include "common/mysqlclient/ob_isql_connection_pool.h"
 #include "lib/container/ob_iarray.h"
 #include "common/mysqlclient/ob_isql_client.h"
 #include "common/mysqlclient/ob_mysql_transaction.h"

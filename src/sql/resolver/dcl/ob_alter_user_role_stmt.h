@@ -14,22 +14,22 @@
  * limitations under the License.
  */
 
-#ifndef OB_ALTER_USER_PROFILE_STMT_H_
-#define OB_ALTER_USER_PROFILE_STMT_H_
+#ifndef OB_ALTER_USER_ROLE_STMT_H_
+#define OB_ALTER_USER_ROLE_STMT_H_
 #include "sql/resolver/ddl/ob_ddl_stmt.h"
 #include "lib/string/ob_strings.h"
 namespace oceanbase
 {
 namespace sql
 {
-class ObAlterUserProfileStmt: public ObDDLStmt
+class ObAlterUserRoleStmt: public ObDDLStmt
 {
 public:
-  ObAlterUserProfileStmt();
-  explicit ObAlterUserProfileStmt(common::ObIAllocator *name_pool);
-  virtual ~ObAlterUserProfileStmt();
+  ObAlterUserRoleStmt();
+  explicit ObAlterUserRoleStmt(common::ObIAllocator *name_pool);
+  virtual ~ObAlterUserRoleStmt();
 
-  obcall::ObAlterUserProfileArg &get_ddl_arg() { return arg_; }
+  obcall::ObAlterUserRoleArg &get_ddl_arg() { return arg_; }
   // function members
   TO_STRING_KV(K_(stmt_type), K_(arg));
   enum {SET_ROLE = 1 << 0, SET_DEFAULT_ROLE = 1 << 1};
@@ -38,12 +38,12 @@ public:
   virtual bool cause_implicit_commit() const { return !(get_set_role_flag() == SET_ROLE); }
 private:
   // data members
-  obcall::ObAlterUserProfileArg arg_;
+  obcall::ObAlterUserRoleArg arg_;
   int set_role_flag_;
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObAlterUserProfileStmt);
+  DISALLOW_COPY_AND_ASSIGN(ObAlterUserRoleStmt);
 };
 } // end namespace sql
 } // end namespace oceanbase
 
-#endif //OB_ALTER_USER_PROFILE_STMT_H_
+#endif //OB_ALTER_USER_ROLE_STMT_H_

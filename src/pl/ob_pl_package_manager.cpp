@@ -298,10 +298,9 @@ int ObPLPackageManager::read_and_exec_package_sql(ObMySQLProxy &sql_proxy,
                                                   ObCharStream &stream)
 {
   int ret = OB_SUCCESS;
-  if (!sql_proxy.is_inited() || !sql_proxy.is_active()) {
+  if (!sql_proxy.is_inited()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("sql_proxy not inited or not active", "sql_proxy inited",
-             sql_proxy.is_inited(), "sql_proxy active", sql_proxy.is_active(), K(ret));
+    LOG_WARN("sql_proxy not inited", K(ret));
   } else {
     int64_t affected_rows = 0;
     if (OB_FAIL(stream.open())) {
@@ -1314,7 +1313,7 @@ int ObPLPackageManager::get_package_item_state(const ObPLResolveCtx &resolve_ctx
       LOG_WARN("memory allocate failed", K(ret));
     } else {
       new (package_state)
-        ObPLPackageState(package_id, state_version, package.get_serially_reusable());
+        ObPLPackageState(package_id, state_version);
       ExecCtxBak exec_ctx_bak;
       sql::ObExecEnv exec_env_bak;
       ObArenaAllocator tmp_allocator;
@@ -1346,7 +1345,7 @@ int ObPLPackageManager::get_package_item_state(const ObPLResolveCtx &resolve_ctx
             package_state->reset(&(resolve_ctx.session_info_));
             package_state->~ObPLPackageState();
             new (package_state)
-              ObPLPackageState(package_id, state_version, package.get_serially_reusable());
+              ObPLPackageState(package_id, state_version);
             LOG_WARN("failed to del package state", K(ret), K(package_id), K(tmp_ret));
           } else {
             // Deletion successful will release memory

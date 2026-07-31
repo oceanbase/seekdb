@@ -138,7 +138,6 @@ int ObLocalManagementService::init(ObServerConfig &config,
     self_addr_ = self;
 
     sql_proxy_.assign(sql_proxy);
-    sql_proxy_.set_inactive();
 
     schema_service_ = schema_service;
     need_bootstrap_ = need_bootstrap;
@@ -184,14 +183,7 @@ int ObLocalManagementService::init(ObServerConfig &config,
 void ObLocalManagementService::destroy()
 {
   int ret = OB_SUCCESS;
-  int fail_ret = OB_SUCCESS;
   FLOG_INFO("start to destroy local management services");
-  if (sql_proxy_.is_active()) {
-    if (OB_FAIL(stop_service())) {
-      FLOG_WARN("stop service failed", KR(ret));
-      fail_ret = OB_SUCCESS == fail_ret ? ret : fail_ret;
-    }
-  }
 
   load_ddl_task_timer_.destroy();
   deadlock_event_clear_task_timer_.destroy();
@@ -208,9 +200,6 @@ void ObLocalManagementService::destroy()
   }
 
   FLOG_INFO("destroy local management services finished", KR(ret));
-  if (OB_SUCCESS != fail_ret) {
-    LOG_WARN("destroy local management services had failures", KR(fail_ret));
-  }
 }
 
 int ObLocalManagementService::start_service()
@@ -220,11 +209,7 @@ int ObLocalManagementService::start_service()
   if (!inited_) {
     ret = OB_NOT_INIT;
     FLOG_WARN("local management services not initialized", KR(ret));
-  } else if (sql_proxy_.is_active()) {
-    ret = OB_INIT_TWICE;
-    FLOG_WARN("local management services already started", KR(ret));
   } else {
-    sql_proxy_.set_active();
     runtime_ddl_service_.restart();
     if (OB_FAIL(load_ddl_task_timer_.start())) {
       FLOG_WARN("load ddl task timer start failed", KR(ret));
@@ -238,7 +223,7 @@ int ObLocalManagementService::start_service()
   if (OB_FAIL(ret)) {
     FLOG_WARN("start local management services failed", KR(ret));
     int tmp_ret = OB_SUCCESS;
-    if (sql_proxy_.is_active() && OB_SUCCESS != (tmp_ret = stop_service())) {
+    if (OB_SUCCESS != (tmp_ret = stop_service())) {
       FLOG_WARN("stop service failed", KR(tmp_ret));
     }
   }
@@ -253,9 +238,6 @@ int ObLocalManagementService::start_runtime_dependent_services()
   if (!inited_) {
     ret = OB_NOT_INIT;
     FLOG_WARN("local management services not initialized", KR(ret));
-  } else if (!sql_proxy_.is_active()) {
-    ret = OB_NOT_INIT;
-    FLOG_WARN("local management sql proxy is not active", KR(ret));
   } else {
     if (local_services_ready_) {
       FLOG_INFO("runtime dependent local services already started");
@@ -294,8 +276,6 @@ int ObLocalManagementService::stop()
     fail_ret = OB_SUCCESS == fail_ret ? ret : fail_ret;
   } else {
     local_services_ready_ = false;
-    sql_proxy_.set_inactive();
-    FLOG_INFO("sql_proxy set inactive finished");
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(stop_timer_tasks())) {
@@ -416,10 +396,9 @@ int ObLocalManagementService::execute_bootstrap()
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("local_management_service not inited", K(ret));
-  } else if (!sql_proxy_.is_inited() || !sql_proxy_.is_active()) {
+  } else if (!sql_proxy_.is_inited()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("sql_proxy not inited or not active", "sql_proxy inited",
-             sql_proxy_.is_inited(), "sql_proxy active", sql_proxy_.is_active(), K(ret));
+    LOG_WARN("sql_proxy not inited", K(ret));
   } else {
     FLOG_INFO("try to get local-service lock in execute_bootstrap");
     ObLatchWGuard guard(bootstrap_lock_, ObLatchIds::RS_BOOTSTRAP_LOCK);
@@ -3108,7 +3087,7 @@ int ObLocalManagementService::purge_recyclebin_objects(int64_t purge_each_time)
     const int64_t purge_interval = GCONF._recyclebin_object_purge_frequency;
     int64_t purge_sum = purge_each_time;
     const ObSimpleServerRuntimeSchema *simple_runtime = NULL;
-    if (purge_interval <= 0 || !sql_proxy_.is_active() || purge_sum <= 0) {
+    if (purge_interval <= 0 || !local_services_ready_ || purge_sum <= 0) {
       // Purging is disabled or there is no work to do.
     } else if (OB_FAIL(guard.get_server_runtime_info(simple_runtime))) {
       LOG_WARN("fail to get simple runtime schema", KR(ret));
@@ -3124,7 +3103,7 @@ int ObLocalManagementService::purge_recyclebin_objects(int64_t purge_each_time)
       arg.expire_time_ = expire_time;
       arg.auto_purge_ = true;
       LOG_INFO("start purging runtime recycle-bin objects", K(arg), K(purge_sum));
-      while (OB_SUCC(ret) && sql_proxy_.is_active() && purge_sum > 0) {
+      while (OB_SUCC(ret) && local_services_ready_ && purge_sum > 0) {
         int64_t cal_timeout = 0;
         int64_t start_time = ObTimeUtility::current_time();
         arg.purge_num_ = purge_sum > PURGE_EACH_BATCH ? PURGE_EACH_BATCH : purge_sum;
@@ -3142,7 +3121,7 @@ int ObLocalManagementService::purge_recyclebin_objects(int64_t purge_each_time)
             int64_t cost_time = ObTimeUtility::current_time() - start_time;
             LOG_INFO("purge recycle objects", KR(ret), K(cost_time), K(purge_sum),
                                               K(cal_timeout), K(expire_time), K(current_time), K(affected_rows));
-            if (OB_SUCC(ret) && sql_proxy_.is_active()) {
+            if (OB_SUCC(ret) && local_services_ready_) {
               ob_usleep(SLEEP_INTERVAL_US);
             }
             break;
@@ -3151,7 +3130,7 @@ int ObLocalManagementService::purge_recyclebin_objects(int64_t purge_each_time)
         int64_t cost_time = ObTimeUtility::current_time() - start_time;
         LOG_INFO("purge recycle objects", KR(ret), K(cost_time), K(purge_sum),
                                           K(cal_timeout), K(expire_time), K(current_time), K(affected_rows));
-        if (OB_SUCC(ret) && sql_proxy_.is_active()) {
+        if (OB_SUCC(ret) && local_services_ready_) {
           ob_usleep(SLEEP_INTERVAL_US);
         }
       }

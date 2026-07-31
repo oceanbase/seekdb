@@ -5033,7 +5033,7 @@ int ObDDLService::lock_tablets(ObMySQLTransaction &trans,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn_ is NULL", KR(ret));
   } else {
-    LOG_INFO("lock tablet", KR(ret), K(tablet_ids), K(table_id), KPC(conn));
+    LOG_INFO("lock tablet", KR(ret), K(tablet_ids), K(table_id), KP(conn));
     if (OB_FAIL(ObInnerConnectionLockUtil::lock_tablet(table_id,
                                                           tablet_ids,
                                                           EXCLUSIVE,
@@ -5066,7 +5066,7 @@ int ObDDLService::lock_table(ObMySQLTransaction &trans,
     LOG_WARN("conn_ is NULL", KR(ret));
   } else {
     LOG_INFO("lock table", KR(ret), K(table_id), K(owner_id),
-             K(lock_priority), K(timeout_us), KPC(conn));
+             K(lock_priority), K(timeout_us), KP(conn));
     if (OB_FAIL(ObInnerConnectionLockUtil::lock_table(table_id,
                                                       EXCLUSIVE,
                                                       timeout_us,
@@ -23523,7 +23523,7 @@ int ObDDLService::grant_revoke_user(
 int ObDDLService::build_need_flush_role_array(
   ObSchemaGetterGuard &schema_guard,
   const ObUserInfo *user_info,
-  const ObAlterUserProfileArg &arg,
+  const ObAlterUserRoleArg &arg,
   bool &need_flush,
   ObIArray<uint64_t> &role_id_array,
   ObIArray<uint64_t> &disable_flag_array)
@@ -23590,6 +23590,80 @@ int ObDDLService::build_need_flush_role_array(
   default:
     ret = OB_INVALID_ARGUMENT;
     break;
+  }
+  return ret;
+}
+
+int ObDDLService::alter_user_default_role(const ObAlterUserRoleArg &arg)
+{
+  int ret = OB_SUCCESS;
+  ObSchemaGetterGuard schema_guard;
+  ObSEArray<uint64_t, 8> role_id_array;
+  ObSEArray<uint64_t, 8> disable_flag_array;
+  const ObUserInfo *user_info = NULL;
+  bool need_publish = false;
+
+  if (OB_FAIL(check_inner_stat())) {
+    LOG_WARN("check inner stat failed", K(ret));
+  } else if (OB_UNLIKELY(arg.user_ids_.empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("user ids are empty", K(ret), K(arg));
+  } else if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
+    LOG_WARN("fail to get schema guard", K(ret));
+  } else {
+    ObDDLSQLTransaction trans(schema_service_);
+    ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
+    for (int64_t i = 0; OB_SUCC(ret) && i < arg.user_ids_.count(); ++i) {
+      const uint64_t user_id = arg.user_ids_.at(i);
+      bool need_flush = false;
+      role_id_array.reuse();
+      disable_flag_array.reuse();
+      if (OB_FAIL(schema_guard.get_user_info(user_id, user_info))) {
+        LOG_WARN("get user info failed", K(ret), K(user_id));
+      } else if (OB_ISNULL(user_info)) {
+        ret = OB_ERR_USER_NOT_EXIST;
+        LOG_WARN("user does not exist", K(ret), K(user_id));
+      } else if (OB_FAIL(build_need_flush_role_array(schema_guard,
+                                                     user_info,
+                                                     arg,
+                                                     need_flush,
+                                                     role_id_array,
+                                                     disable_flag_array))) {
+        LOG_WARN("build role update array failed", K(ret), K(user_id));
+      } else if (need_flush) {
+        if (!trans.is_started()) {
+          int64_t refreshed_schema_version = 0;
+          if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
+            LOG_WARN("failed to get schema version", K(ret));
+          } else if (OB_FAIL(trans.start(sql_proxy_, refreshed_schema_version))) {
+            LOG_WARN("start transaction failed", K(ret), K(refreshed_schema_version));
+          }
+        }
+        if (OB_SUCC(ret)
+            && OB_FAIL(ddl_operator.alter_user_default_role(arg.ddl_stmt_str_,
+                                                            *user_info,
+                                                            role_id_array,
+                                                            disable_flag_array,
+                                                            trans))) {
+          LOG_WARN("alter user default role failed", K(ret), K(user_id));
+        } else if (OB_SUCC(ret)) {
+          need_publish = true;
+        }
+      }
+    }
+
+    if (trans.is_started()) {
+      const int tmp_ret = trans.end(OB_SUCC(ret));
+      if (OB_SUCCESS != tmp_ret) {
+        LOG_WARN("transaction end failed", K(tmp_ret), K(ret));
+        if (OB_SUCC(ret)) {
+          ret = tmp_ret;
+        }
+      }
+    }
+    if (OB_SUCC(ret) && need_publish && OB_FAIL(publish_schema())) {
+      LOG_WARN("publish schema failed", K(ret));
+    }
   }
   return ret;
 }
@@ -26194,7 +26268,7 @@ int ObDDLService::fix_local_idx_part_name_(const ObSimpleTableSchemaV2 &ori_data
         } else if (OB_FAIL(check_same_partition(*ori_data_part, *ori_part, ori_part_func_type, is_matched))) {
           LOG_WARN("fail to check ori_table_part and ori_aux_part is the same", KR(ret), KPC(ori_data_part), KPC(ori_part), K(ori_part_func_type));
         } else if (OB_UNLIKELY(!is_matched)) {
-          ret = OB_INDEX_INELIGIBLE;
+          ret = OB_SCHEMA_ERROR;
           LOG_WARN("part with the same offset not equal, maybe not the right index", KR(ret), KPC(ori_data_part), KPC(ori_part));
         } else if (OB_FAIL(inc_part->set_part_name(part_name))) {
           LOG_WARN("fail to set part name", KR(ret), KPC(inc_part), K(part_name));
@@ -26273,7 +26347,7 @@ int ObDDLService::fix_local_idx_subpart_name_(const ObSimpleTableSchemaV2 &ori_d
           } else if (OB_FAIL(check_same_partition(*ori_data_part, *ori_part, ori_part_func_type, is_matched))) {
             LOG_WARN("fail to check ori_table_part and ori_aux_part is the same", KR(ret), KPC(ori_data_part), KPC(ori_part), K(ori_part_func_type));
           } else if (OB_UNLIKELY(!is_matched)) {
-            ret = OB_INDEX_INELIGIBLE;
+            ret = OB_SCHEMA_ERROR;
             LOG_WARN("part with the same offset not equal, maybe not the right index", KR(ret), KPC(inc_part), KPC(ori_part));
           } else if (FALSE_IT(subpart_id = ori_data_subpart->get_sub_part_id())) {
           } else if (OB_FAIL(ori_data_part->get_normal_subpartition_index_by_id(subpart_id, subpart_idx))) {
@@ -26287,7 +26361,7 @@ int ObDDLService::fix_local_idx_subpart_name_(const ObSimpleTableSchemaV2 &ori_d
           } else if (OB_FAIL(check_same_subpartition(*ori_data_subpart, *ori_subpart, ori_subpart_func_type, is_matched))) {
             LOG_WARN("fail to check ori_table_subpart and ori_aux_subpart is the same", KR(ret), KPC(ori_data_part), KPC(ori_part), K(ori_subpart_func_type));
           } else if (OB_UNLIKELY(!is_matched)) {
-            ret = OB_INDEX_INELIGIBLE;
+            ret = OB_SCHEMA_ERROR;
             LOG_WARN("part with the same offset not equal, maybe not the right index", KR(ret), KPC(inc_subpart), KPC(ori_subpart));
           } else if (OB_FAIL(inc_subpart->set_part_name(part_name))) {
             LOG_WARN("fail to set subpart name", KR(ret), KPC(inc_part), K(part_name));

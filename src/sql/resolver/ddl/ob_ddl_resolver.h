@@ -369,15 +369,6 @@ public:
        ParseNode *node,
        const bool is_subpartition,
        share::schema::ObTableSchema &table_schema);
-  int resolve_list_partition_elements(ParseNode *node,
-                                      const bool is_subpartition,
-                                      const share::schema::ObPartitionFuncType part_type,
-                                      int64_t &expr_num,
-                                      ObDDLStmt::array_t &list_value_exprs,
-                                      common::ObIArray<share::schema::ObPartition> &partitions,
-                                      common::ObIArray<share::schema::ObSubPartition> &subpartitions,
-                                      const bool &in_tablegroup = false);
-  //}
   int check_column_in_foreign_key(const share::schema::ObTableSchema &table_schema,
                                   const common::ObString &column_name,
                                   const bool is_drop_column);

@@ -36,6 +36,7 @@ public:
   sql::ObSQLSessionInfo *get_session_info() const { return session_info_; }
 protected:
   int connect(sql::ObSQLSessionInfo *session_info, ObISQLClient *sql_client);
+  void close();
   int start_transaction();
   int end_transaction(const bool commit);
 

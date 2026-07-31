@@ -124,11 +124,11 @@ int ObServerSchemaService::init(ObMySQLProxy *sql_proxy,
   auto attr = lib::ObMemAttr(ObModIds::OB_SCHEMA_ID_VERSIONS, ObCtxIds::SCHEMA_SERVICE);
   if (OB_ISNULL(sql_proxy)
      || NULL != schema_service_
-     || OB_ISNULL(sql_proxy->get_pool())
+     || !sql_proxy->is_inited()
      || OB_ISNULL(config)) {
     ret = OB_INIT_FAIL;
     LOG_WARN("check param failed", KR(ret), KP(sql_proxy), KP_(schema_service),
-        "proxy->pool", (NULL == sql_proxy ? NULL : sql_proxy->get_pool()), KP(config));
+        KP(config));
   } else if (OB_FAIL(ObSysTableChecker::instance().init())) {
     LOG_WARN("fail to init runtime space table checker", KR(ret));
   } else if (NULL == (schema_service_ = ObSchemaServiceFactory::create())) {

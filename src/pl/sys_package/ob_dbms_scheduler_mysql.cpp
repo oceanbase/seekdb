@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX PL
 
-#include "observer/ob_inner_sql_connection_pool.h"
+#include "observer/ob_inner_sql_connection.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_job_executor.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_service.h"
 #include "ob_dbms_scheduler_mysql.h"
@@ -36,19 +36,16 @@ namespace pl
 int ObDBMSSchedulerMysql::execute_sql(sql::ObExecContext &ctx, ObSqlString &sql, int64_t &affected_rows)
 {
   int ret = OB_SUCCESS;
-  ObInnerSQLConnectionPool *pool = NULL;
   ObInnerSQLConnection *conn = NULL;
+  sqlclient::ObISQLConnectionGuard conn_guard;
   sql::ObSQLSessionInfo *session = NULL;
   CK (OB_NOT_NULL(ctx.get_sql_proxy()));
   CK (OB_NOT_NULL(session = ctx.get_my_session()));
 
-  CK (OB_NOT_NULL(
-    pool = static_cast<ObInnerSQLConnectionPool *>(ctx.get_sql_proxy()->get_pool())));
-  OZ (pool->acquire_spi_conn(session, conn));
+  OZ (ObInnerSQLConnection::create_spi_connection_with_external_session(
+      session, conn_guard));
+  OX (conn = static_cast<ObInnerSQLConnection *>(conn_guard.get_ptr()));
   OZ (conn->execute_write(sql.ptr(), affected_rows));
-  if (OB_NOT_NULL(conn)) {
-    ctx.get_sql_proxy()->close(conn, ret);
-  }
   return ret;
 }
 

@@ -290,8 +290,7 @@ int ObCreatePackageResolver::resolve_invoke_accessible(const ParseNode *package_
       if (OB_NOT_NULL(node)) {
         if (T_SP_INVOKE == node->type_) {
           if (has_sp_invoker_clause) {
-            ret = OB_ERR_DECL_MORE_THAN_ONCE;
-            LOG_USER_ERROR(OB_ERR_DECL_MORE_THAN_ONCE, static_cast<int>(strlen("AUTHID")), "AUTHID");
+            ret = OB_ERR_PARSER_SYNTAX;
             LOG_WARN("at most one declaration for 'AUTHID' is permitted",
                       K(ret), K(node->type_), K(has_sp_invoker_clause));
           } else {
@@ -302,8 +301,7 @@ int ObCreatePackageResolver::resolve_invoke_accessible(const ParseNode *package_
           }
         } else if (T_SP_ACCESSIBLE_BY == node->type_) {
           if (has_accessible_by_clause) {
-            ret = OB_ERR_DECL_MORE_THAN_ONCE;
-            LOG_USER_ERROR(OB_ERR_DECL_MORE_THAN_ONCE, static_cast<int>(strlen("ACCESSIBLE BY")), "ACCESSIBLE BY");
+            ret = OB_ERR_PARSER_SYNTAX;
             LOG_WARN("at most one declaration for 'ACCESSIBLE BY' is permitted",
                       K(ret), K(node->type_), K(has_accessible_by_clause));
           } else {
@@ -353,9 +351,6 @@ int ObCreatePackageResolver::resolve_functions_spec(const ObPackageInfo &package
     } */else {
       if (pl_routine_info->is_deterministic()) {
         routine_info.set_deterministic();
-      }
-      if (pl_routine_info->is_parallel_enable()) {
-        routine_info.set_parallel_enable();
       }
       //set data access info 
       if (pl_routine_info->is_no_sql()) {
@@ -569,17 +564,6 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
                                     package_body_ast,
                                     false));
 
-          if (OB_SUCC(ret)) {
-            if (package_body_ast.get_serially_reusable()
-                != package_spec_ast.get_serially_reusable()) {
-              ret = OB_NOT_SUPPORTED;
-              LOG_WARN("pragma string must be declared in package specification and body",
-                       K(ret),
-                       K(package_body_ast.get_serially_reusable()),
-                       K(package_spec_ast.get_serially_reusable()));
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, "pragma string not declared in package specification and body");
-            }
-          }
           // update route sql of routine info
           if (OB_SUCC(ret)) {
             obcall::ObCreatePackageArg &create_package_arg = stmt->get_create_package_arg();

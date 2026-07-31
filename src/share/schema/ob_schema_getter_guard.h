@@ -186,10 +186,6 @@ public:
                                     common::ObIArray<const ObTableSchema *> &table_schemas);
   int get_table_schemas_in_database(const uint64_t database_id,
                                     common::ObIArray<const ObSimpleTableSchemaV2 *> &table_schemas);
-  int get_table_schemas_in_tablegroup(const uint64_t tablegroup_id,
-                                      common::ObIArray<const ObTableSchema *> &table_schemas);
-  int get_table_schemas_in_tablegroup(const uint64_t tablegroup_id,
-                                      common::ObIArray<const ObSimpleTableSchemaV2 *> &table_schemas);
   int get_table_ids_in_runtime(common::ObIArray<uint64_t> &table_ids);
   int get_table_ids_in_tenant(common::ObIArray<uint64_t> &table_ids);
   int get_table_ids_in_database(const uint64_t dataspace_id,

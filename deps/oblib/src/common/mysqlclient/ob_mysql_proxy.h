@@ -28,9 +28,12 @@ namespace common
 namespace sqlclient
 {
 class ObISQLConnection;
-class ObISQLConnectionPool;
 }
 
+int create_inner_sql_connection_for_proxy(
+    bool is_ddl,
+    int32_t group_id,
+    sqlclient::ObISQLConnectionGuard &conn);
 
 struct InnerDDLInfo final
 {
@@ -168,8 +171,7 @@ public:
   virtual ~ObCommonSqlProxy();
 
 
-  // init the connection pool
-  virtual int init(sqlclient::ObISQLConnectionPool *pool);
+  int init(const bool is_ddl);
 
   virtual int escape(const char *from, const int64_t from_size,
       char *to, const int64_t to_size, int64_t &out_size) override;
@@ -183,23 +185,26 @@ public:
         const ObSessionParam *session_param = nullptr);
   using ObISQLClient::write;
 
-  bool is_inited() const { return NULL != pool_; }
-  virtual sqlclient::ObISQLConnectionPool *get_pool() override { return pool_; }
+  bool is_inited() const { return inited_; }
   virtual sqlclient::ObISQLConnection *get_connection() override { return NULL; }
+  virtual int acquire_connection(sqlclient::ObISQLConnectionGuard &conn,
+                                 const int32_t group_id) override;
+  void stop()
+  {
+    stopped_ = true;
+  }
 
   // can only use assign() to copy to prevent passing ObCommonSqlProxy by value unintentionally.
   void assign(const ObCommonSqlProxy &proxy) { *this = proxy; }
 
-  // relase the connection
-  int close(sqlclient::ObISQLConnection *conn, const int succ);
-
-
 protected:
-  int acquire(sqlclient::ObISQLConnection *&conn) { return this->acquire(conn, 0); }
-  int acquire(sqlclient::ObISQLConnection *&conn, const int32_t group_id);
+  int acquire(sqlclient::ObISQLConnectionGuard &conn) { return this->acquire(conn, 0); }
+  int acquire(sqlclient::ObISQLConnectionGuard &conn, const int32_t group_id);
   int read(sqlclient::ObISQLConnection *conn, ReadResult &result, const char *sql);
 
-  sqlclient::ObISQLConnectionPool *pool_;
+  bool inited_;
+  bool is_ddl_;
+  bool stopped_;
 
   DISALLOW_COPY_AND_ASSIGN(ObCommonSqlProxy);
 };

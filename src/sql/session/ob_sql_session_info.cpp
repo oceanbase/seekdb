@@ -165,7 +165,7 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
 ObSQLSessionInfo::~ObSQLSessionInfo()
 {
   plan_cache_ = NULL;
-  destroy(false);
+  destroy();
 }
 
 int ObSQLSessionInfo::init(uint32_t sessid,
@@ -175,8 +175,7 @@ int ObSQLSessionInfo::init(uint32_t sessid,
   static const int64_t PS_BUCKET_NUM = 64;
   if (OB_FAIL(ObBasicSessionInfo::init(sessid, bucket_allocator, tz_info))) {
     LOG_WARN("fail to init basic session info", K(ret));
-  } else if (!is_acquire_from_pool() &&
-             OB_FAIL(package_state_map_.create(hash::cal_next_prime(4),
+  } else if (OB_FAIL(package_state_map_.create(hash::cal_next_prime(4),
                                                ObMemAttr("PackStateMap")))) {
     LOG_WARN("create package state map failed", K(ret));
   } else {
@@ -209,7 +208,7 @@ int ObSQLSessionInfo::test_init(uint32_t version, uint32_t sessid,
   return ret;
 }
 
-void ObSQLSessionInfo::reset(bool skip_sys_var)
+void ObSQLSessionInfo::reset()
 {
   if (is_inited_) {
     // ObVersionProvider::reset();
@@ -268,7 +267,7 @@ void ObSQLSessionInfo::reset(bool skip_sys_var)
     int temp_ret = OB_SUCCESS;
     optimizer_tracer_.reset();
     //call at last time
-    ObBasicSessionInfo::reset(skip_sys_var);
+    ObBasicSessionInfo::reset();
   }
   in_bytes_ = 0;
   out_bytes_ = 0;
@@ -457,7 +456,7 @@ bool ObSQLSessionInfo::is_sqlstat_enabled()
   return bret;
 }
 
-void ObSQLSessionInfo::destroy(bool skip_sys_var)
+void ObSQLSessionInfo::destroy()
 {
   if (is_inited_) {
     int ret = OB_SUCCESS;
@@ -528,7 +527,7 @@ void ObSQLSessionInfo::destroy(bool skip_sys_var)
       get_session_allocator().free(btree_iter_cache_);
       btree_iter_cache_ = nullptr;
     }
-    reset(skip_sys_var);
+    reset();
     is_inited_ = false;
   }
 }
@@ -1514,26 +1513,6 @@ int ObSQLSessionInfo::reset_all_package_state_by_dbms_session()
     }
     // wether reset succ or not, set need_reset_package to false
     set_need_reset_package(false);
-  }
-  return ret;
-}
-
-int ObSQLSessionInfo::reset_all_serially_package_state()
-{
-  int ret = OB_SUCCESS;
-  ObSEArray<int64_t, 4> serially_packages;
-  if (0 != package_state_map_.size()) {
-    FOREACH(it, package_state_map_) {
-      if (it->second->get_serially_reusable()) {
-        it->second->reset(this);
-        it->second->~ObPLPackageState();
-        get_package_allocator().free(it->second);
-        OZ (serially_packages.push_back(it->first));
-      }
-    }
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < serially_packages.count(); ++i) {
-    OZ (package_state_map_.erase_refactored(serially_packages.at(i)));
   }
   return ret;
 }

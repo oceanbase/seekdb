@@ -453,8 +453,7 @@ public:
                                                 const ParseNode &node,
                                                 const common::ObString &part_name,
                                                 const share::schema::ObPartitionFuncType part_type,
-                                                ObRawExpr *&part_value_expr,
-                                                const bool &in_tablegroup = false);
+                                                ObRawExpr *&part_value_expr);
   static int resolve_columns_for_partition_expr(ObResolverParams &params,
                                                 ObRawExpr *&expr,
                                                 common::ObIArray<ObQualifiedName> &columns,
@@ -547,8 +546,7 @@ public:
                                                   const share::schema::ObPartitionFuncType part_type);
   static int check_partition_value_expr_for_range(const common::ObString &part_name,
                                                   ObRawExpr &part_value_expr,
-                                                  const share::schema::ObPartitionFuncType part_type,
-                                                  const bool &in_tablegroup = false);
+                                                  const share::schema::ObPartitionFuncType part_type);
   static int check_column_valid_for_partition(const ObRawExpr &part_expr,
                                               const share::schema::ObPartitionFuncType part_func_type,
                                               const share::schema::ObTableSchema &tbl_schema);

@@ -840,7 +840,6 @@ public:
                                      int64_t udf_schema_version,
                                      int64_t pkg_schema_version,
                                      bool is_deterministic,
-                                     bool is_parallel_enable,
                                      bool is_pkg_body_udf,
                                      bool is_pl_agg,
                                      int64_t type_id,

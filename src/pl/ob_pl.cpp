@@ -476,13 +476,6 @@ void ObPLContext::destory(
           ret = OB_SUCCESS == ret ? tmp_ret : ret;
         }
       }
-      // clean serially package
-      int tmp_ret = OB_SUCCESS;
-      if (OB_SUCCESS !=
-        (tmp_ret = session_info.reset_all_serially_package_state())) {
-        LOG_WARN("failed to reset all serially package state", K(ret), K(tmp_ret));
-        ret = OB_SUCCESS == ret ? tmp_ret : ret;
-      }
     }
     if (!cur_query_.empty()) {
       int tmp_ret = session_info.store_query_string(cur_query_);
@@ -2100,7 +2093,7 @@ int ObPLExecState::final(int ret)
               dbms_output.put_line('c1 ' || c1.a || '  ' || c1.b);
             end loop;
             null;
-            raise_application_error(-20002, 'test error');
+            signal sqlstate '45000' set message_text = 'test error';
             null;
             for c2 in (select * from tt) loop
               dbms_output.put_line('c2 ' || c2.a || ' ' || c2.b);
@@ -2556,7 +2549,7 @@ do {                                                                  \
   if (OB_FAIL(ret)) {                                                 \
   } else if (pl_type.is_not_null()) {                                 \
       if (param.is_null() || param.is_null_or_empty_string()) {                \
-      ret = OB_NULL_CHECK_ERROR;                                      \
+      ret = OB_INVALID_ARGUMENT;                                      \
       LOG_WARN("not null check violated!", K(ret), K(i), K(param));   \
     }                                                                 \
   }                                                                   \

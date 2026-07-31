@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
-#include "observer/ob_inner_sql_connection_pool.h"
+#include "observer/ob_inner_sql_connection.h"
 #include "sql/engine/expr/ob_expr_validate_password_strength.h"
 #include "sql/resolver/dcl/ob_dcl_resolver.h"
 
@@ -223,7 +223,6 @@ int ObDCLResolver::check_dcl_on_inner_user(const ObItemType &type,
   uint64_t user_id = OB_INVALID_ID;
   bool is_valid = true;
   if (T_ALTER_USER_DEFAULT_ROLE == type ||
-      T_ALTER_USER_PROFILE == type ||
       T_DROP_USER == type ||
       T_GRANT == type ||
       T_LOCK_USER == type ||
@@ -272,7 +271,6 @@ int ObDCLResolver::check_dcl_on_inner_user(const ObItemType &type,
   int ret = OB_SUCCESS;
   bool is_valid = true;
   if (T_ALTER_USER_DEFAULT_ROLE == type ||
-      T_ALTER_USER_PROFILE == type ||
       T_DROP_USER == type ||
       T_GRANT == type ||
       T_LOCK_USER == type ||

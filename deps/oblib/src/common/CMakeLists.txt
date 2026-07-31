@@ -119,7 +119,6 @@ ob_set_subtarget(oblib_common ALONE
 ob_set_subtarget(oblib_common reloc_mysqlclient
   mysqlclient/ob_isql_client.cpp
   mysqlclient/ob_mysql_proxy.cpp
-  mysqlclient/ob_mysql_proxy_util.cpp
   mysqlclient/ob_mysql_result.cpp
   mysqlclient/ob_mysql_transaction.cpp
   mysqlclient/ob_single_connection_proxy.cpp

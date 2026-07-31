@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX  SQL_ENG
 #include "sql/engine/cmd/ob_get_diagnostics_executor.h"
-#include "observer/ob_inner_sql_connection_pool.h"
+#include "observer/ob_inner_sql_connection.h"
 #include "share/ob_lob_access_utils.h"
 #include "sql/session/ob_basic_session_info.h"
 using namespace oceanbase::common;
@@ -362,28 +362,21 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
   int tmp_ret = OB_SUCCESS;
   ObSQLSessionInfo *session_info = ctx.get_my_session();
   ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
-  sqlclient::ObISQLConnection *conn = NULL;
-  observer::ObInnerSQLConnectionPool *pool = NULL;
-  ObMySQLProxy *sql_proxy = ctx.get_sql_proxy();
+  observer::ObInnerSQLConnection *conn = NULL;
+  sqlclient::ObISQLConnectionGuard conn_guard;
    
   int64_t warning_count = 0;
   ObSqlString query_virtual;
   if (OB_ISNULL(session_info)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), KP(session_info));
-  } else if (OB_ISNULL(sql_proxy = GCTX.sql_proxy_) || OB_ISNULL(sql_proxy->get_pool())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy must not null", K(ret), KP(GCTX.sql_proxy_));
-  } else if (OB_UNLIKELY(sqlclient::INNER_POOL != sql_proxy->get_pool()->get_type())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pool type must be inner", K(ret), "type", sql_proxy->get_pool()->get_type());
-  } else if (OB_ISNULL(pool = static_cast<observer::ObInnerSQLConnectionPool*>(sql_proxy->get_pool()))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pool must not null", K(ret));
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(pool->acquire(session_info, conn))) {
+  } else if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_external_session(
+                         session_info, conn_guard))) {
     LOG_WARN("failed to get conn", K(ret));
+  } else if (FALSE_IT(conn = static_cast<observer::ObInnerSQLConnection *>(
+                          conn_guard.get_ptr()))) {
   } else if (OB_FAIL(query_virtual.assign_fmt("select count(*) from %s.%s", 
                       OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_WARNING_TNAME))) {
     LOG_WARN("assign format failed", K(ret));
@@ -594,10 +587,6 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
         LOG_WARN("unexpected expr type", K(ret));
       }
     }
-  }
-  if (OB_SUCCESS != (tmp_ret = pool->release(conn, true))) {
-    ret = OB_SUCCESS == ret ? tmp_ret : ret;
-    LOG_WARN("release failed", K(ret), K(tmp_ret));
   }
   return ret;
 }

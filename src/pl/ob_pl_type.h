@@ -643,7 +643,7 @@ public:
     IS_EXTERNAL_PROC      = 15,//Standalone procedure
     IS_NESTED_PROC        = 16,//
     IS_TYPE_METHOD        = 17,//custom type method
-    IS_SYSTEM_PROC        = 18,//System predefined Procedure (e.g.: RAISE_APPLICATION_ERROR)
+    IS_RESERVED_18        = 18,
     IS_RESERVED_19        = 19,
     IS_UDF_NS             = 20,
     IS_LOCAL_TYPE         = 21,// local custom type
@@ -701,7 +701,6 @@ public:
   bool is_type_method() const { return IS_TYPE_METHOD == access_type_; }
   bool is_internal_procedure() const { return IS_INTERNAL_PROC == access_type_; }
   bool is_external_procedure() const { return IS_EXTERNAL_PROC == access_type_; }
-  bool is_system_procedure() const { return IS_SYSTEM_PROC == access_type_; }
   bool is_nested_procedure() const { return IS_NESTED_PROC == access_type_; }
   bool is_procedure() const { return is_internal_procedure() || is_external_procedure() || is_nested_procedure(); }
   bool is_variable() const { return IS_LOCAL == access_type_ || IS_PKG == access_type_; }
@@ -1010,7 +1009,6 @@ public:
       SET_TYPE(FOUND);
       SET_TYPE(NOTFOUND);
       SET_TYPE(ROWCOUNT);
-      SET_TYPE(ROWID);
       default: {
         type_ = PL_CURSOR_INVALID;
       }
@@ -1024,7 +1022,6 @@ public:
   inline bool is_found() const { return  PL_CURSOR_FOUND == type_; }
   inline bool is_notfound() const { return PL_CURSOR_NOTFOUND == type_; }
   inline bool is_rowcount() const { return PL_CURSOR_ROWCOUNT == type_; }
-  inline bool is_rowid() const { return PL_CURSOR_ROWID == type_; }
   inline int64_t get_type() const { return type_; }
 
   enum Type
@@ -1034,7 +1031,6 @@ public:
     PL_CURSOR_FOUND,
     PL_CURSOR_NOTFOUND,
     PL_CURSOR_ROWCOUNT,
-    PL_CURSOR_ROWID,
   };
 
   int64_t type_; // The type of the attribute obtained

@@ -18,9 +18,10 @@
 
 #include "ob_dbms_job_utils.h"
 #include "ob_dbms_job_executor.h"
-
-
-#include "observer/ob_inner_sql_connection_pool.h"
+#include "lib/oblog/ob_warning_buffer.h"
+#include "share/ob_server_struct.h"
+#include "sql/plan_cache/ob_plan_cache_util.h"
+#include "sql/session/ob_sql_session_info.h"
 
 namespace oceanbase
 {
