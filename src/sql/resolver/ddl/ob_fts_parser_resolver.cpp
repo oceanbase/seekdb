@@ -37,6 +37,7 @@ int ObFTParserResolverHelper::resolve_parser_properties(
   } else {
     storage::ObFTParserJsonProps property;
     if (OB_FAIL(property.init())) {
+      LOG_WARN("fail to init parser properties", K(ret));
     }
 
     for (int64_t i = 0; OB_SUCC(ret) && i < parse_tree.num_child_; ++i) {
@@ -44,10 +45,12 @@ int ObFTParserResolverHelper::resolve_parser_properties(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("option_node child is nullptr", K(ret));
       } else if (OB_FAIL(resolve_fts_index_parser_properties(parse_tree.children_[i], property))) {
+        LOG_WARN("fail to resolve fts index parser properties", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(property.to_format_json(allocator, parser_property))) {
+      LOG_WARN("fail to serialize parser properties", K(ret), K(property));
     }
   }
   return ret;
@@ -75,6 +78,7 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
                    K(node->children_[0]->value_));
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, storage::ObFTSLiteral::MIN_TOKEN_SIZE_SCOPE_STR);
         } else if (OB_FAIL(property.config_set_min_token_size(node->children_[0]->value_))) {
+          LOG_WARN("fail to set min token size", K(ret));
         }
         break;
       }
@@ -90,6 +94,7 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
                    K(node->children_[0]->value_));
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, storage::ObFTSLiteral::MAX_TOKEN_SIZE_SCOPE_STR);
         } else if (OB_FAIL(property.config_set_max_token_size(node->children_[0]->value_))) {
+          LOG_WARN("fail to set max token size", K(ret));
         }
         break;
       }
@@ -105,6 +110,7 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
                    K(node->children_[0]->value_));
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, storage::ObFTSLiteral::NGRAM_TOKEN_SIZE_SCOPE_STR);
         } else if OB_FAIL (property.config_set_ngram_token_size(node->children_[0]->value_)) {
+          LOG_WARN("fail to set ngram token size", K(ret));
         }
         break;
       }
@@ -120,6 +126,7 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
           int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
           if (OB_FAIL(property.config_set_stopword_table(
                   common::ObString(str_len, node->children_[0]->str_value_)))) {
+            LOG_WARN("fail to set stopword table", K(ret));
           }
         }
         break;
@@ -136,6 +143,7 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
           int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
           if (OB_FAIL(property.config_set_dict_table(
                   common::ObString(str_len, node->children_[0]->str_value_)))) {
+            LOG_WARN("fail to set dict table", K(ret));
           }
         }
         break;
@@ -152,6 +160,7 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
           int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
           if (OB_FAIL(property.config_set_quantifier_table(
                   common::ObString(str_len, node->children_[0]->str_value_)))) {
+            LOG_WARN("fail to set quantifier table", K(ret));
           }
         }
         break;
@@ -169,9 +178,11 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
                                (char *)(node->children_[0]->str_value_));
           if (0 == ik_mode_str.case_compare(storage::ObFTSLiteral::FT_IK_MODE_MAX_WORD)) {
             if (OB_FAIL(property.config_set_ik_mode(storage::ObFTSLiteral::FT_IK_MODE_MAX_WORD))) {
+              LOG_WARN("fail to set use ik smart", K(ret));
             }
           } else if (0 == ik_mode_str.case_compare(storage::ObFTSLiteral::FT_IK_MODE_SMART)) {
             if (OB_FAIL(property.config_set_ik_mode(storage::ObFTSLiteral::FT_IK_MODE_SMART))) {
+              LOG_WARN("fail to set use ik smart", K(ret));
             }
           } else {
             ret = OB_INVALID_ARGUMENT;
@@ -193,6 +204,7 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
                    K(ret),
                    K(node->children_[0]->value_));
         } else if (OB_FAIL(property.config_set_min_ngram_token_size(node->children_[0]->value_))) {
+          LOG_WARN("fail to set min ngram token size", K(ret));
         }
         break;
       }
@@ -209,6 +221,7 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
                    K(ret),
                    K(node->children_[0]->value_));
         } else if (OB_FAIL(property.config_set_max_ngram_token_size(node->children_[0]->value_))) {
+          LOG_WARN("fail to set max ngram token size", K(ret));
         }
         break;
       }

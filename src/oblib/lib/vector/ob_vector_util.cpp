@@ -30,16 +30,19 @@ void ObVsagLogger::SetLevel(Level Log_level)
 void ObVsagLogger::Trace(const std::string& msg)
 {
     ObString Log = ObString(msg.size(), msg.c_str());
+    LOG_TRACE("[Vsag]",K(Log));
 }
 
 void ObVsagLogger::Debug(const std::string& msg)
 {
     ObString Log = ObString(msg.size(), msg.c_str());
+    LOG_TRACE("[Vsag]",K(Log));
 }
 
 void ObVsagLogger::Info(const std::string& msg)
 {
     ObString Log = ObString(msg.size(), msg.c_str());
+    LOG_TRACE("[Vsag]",K(Log));
 }
 
 void ObVsagLogger::Warn(const std::string& msg)

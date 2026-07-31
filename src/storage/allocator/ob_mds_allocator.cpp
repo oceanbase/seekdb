@@ -92,6 +92,7 @@ void *ObMdsAllocator::alloc(const int64_t size, const int64_t abs_expire_time)
     share::mds_throttled_alloc() += size;
   }
   void *obj = allocator_.alloc(size);
+  MDS_LOG(DEBUG, "mds alloc ", K(size), KP(obj), K(abs_expire_time));
   return obj;
 }
 

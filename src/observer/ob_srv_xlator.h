@@ -28,6 +28,8 @@ namespace oceanbase { namespace observer {
 using rpc::frame::ObReqProcessor;
 using common::ObIAllocator;
 
+class ObVTIterCreator;
+
 extern thread_local bool g_in_sync_dispatch;
 ObIAllocator &get_sql_arena_allocator();
 
@@ -37,13 +39,19 @@ template <typename T> void worker_allocator_delete(T *&ptr) {
 
 class ObSrvMySQLXlator : public rpc::frame::ObReqTranslator {
 public:
-  explicit ObSrvMySQLXlator(const share::ObGlobalContext &gctx) : gctx_(gctx) {}
+  explicit ObSrvMySQLXlator(const share::ObGlobalContext &gctx)
+      : gctx_(gctx), vt_iter_creator_(nullptr) {}
+  void bind_virtual_table_iterator_creator(ObVTIterCreator &vt_iter_creator)
+  {
+    vt_iter_creator_ = &vt_iter_creator;
+  }
   int translate(rpc::ObRequest &req, ObReqProcessor *&processor);
 protected:
   ObReqProcessor *get_processor(rpc::ObRequest &) { return NULL; }
   int get_mp_connect_processor(ObReqProcessor *&ret_proc);
 private:
   const share::ObGlobalContext &gctx_;
+  ObVTIterCreator *vt_iter_creator_;
   DISALLOW_COPY_AND_ASSIGN(ObSrvMySQLXlator);
 };
 
@@ -51,6 +59,10 @@ class ObSrvXlator : public rpc::frame::ObReqTranslator {
 public:
   explicit ObSrvXlator(const share::ObGlobalContext &gctx)
       : mysql_xlator_(gctx) {}
+  void bind_virtual_table_iterator_creator(ObVTIterCreator &vt_iter_creator)
+  {
+    mysql_xlator_.bind_virtual_table_iterator_creator(vt_iter_creator);
+  }
   int th_init();
   int th_destroy();
   int release(ObReqProcessor *processor);

@@ -474,6 +474,7 @@ public: // API
       page = curr;
       curr = curr->next_page_;
       if (OB_FAIL(mprotect_page(page, page_size_, prot, "page_arena"))) {
+        LIB_LOG(WARN, "mprotect page failed", K(ret));
       }
     }
     return ret;

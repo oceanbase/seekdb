@@ -78,6 +78,7 @@ int ObTabletCreateDeleteHelper::get_tablet(
       break;
     } else if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_TABLET_NOT_EXIST;
+      LOG_DEBUG("tablet does not exist", K(ret), K(key));
     } else if (OB_ITEM_NOT_SETTED == ret) {
       current_time = ObClockGenerator::getClock();
       if (current_time - begin_time > timeout_us) {
@@ -107,6 +108,7 @@ int ObTabletCreateDeleteHelper::check_and_get_tablet(
 
   if (OB_FAIL(get_tablet(key, handle, timeout_us))) {
     if (OB_TABLET_NOT_EXIST == ret) {
+      LOG_DEBUG("tablet does not exist", K(ret), K(key), K(mode));
     } else {
       LOG_WARN("failed to get tablet", K(ret), K(key), K(mode));
     }
@@ -122,9 +124,11 @@ int ObTabletCreateDeleteHelper::check_and_get_tablet(
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("read all committed mode should only pass max scn", K(ret), K(key), K(mode), K(snapshot_version));
     } else if (OB_FAIL(tablet->check_tablet_status_for_read_all_committed())) {
+      LOG_WARN("failed to check tablet status", K(ret), K(key));
     }
   } else if (ObMDSGetTabletMode::READ_READABLE_COMMITED == mode) {
     if (OB_FAIL(tablet->check_new_mds_with_cache(snapshot_version))) {
+      LOG_WARN("failed to check status for new mds", K(ret), K(mode), K(snapshot_version));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -253,9 +257,13 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_for_normal(
     LOG_INFO("tablet create transaction is committed",
         K(ret), K(tablet_id), K(snapshot_version), K(trans_state), K(user_data));
     if (OB_FAIL(check_read_snapshot_for_committed_tablet_tx(tablet, snapshot_version, user_data))) {
+      LOG_WARN("fail to check read snapshot for committed tablet transaction",
+          K(ret), K(tablet_id), K(snapshot_version), K(trans_state), K(user_data));
     }
   } else if (OB_FAIL(check_read_snapshot_for_create_tx(
       tablet, snapshot_version, user_data, writer, trans_state, trans_version))) {
+    LOG_WARN("fail to check read snapshot for create tx",
+        K(ret), K(tablet_id), K(snapshot_version), K(trans_state), K(user_data));
   }
 
   return ret;
@@ -296,6 +304,7 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_for_create_tx(
     LOG_WARN("tablet creation transaction has not entered 2pc procedure",
         K(ret), K(tablet_id), K(snapshot_version), K(trans_state), K(user_data));
   } else if (OB_FAIL(read_snapshot.convert_for_tx(snapshot_version))) {
+    LOG_WARN("failed to convert from int64_t to SCN", K(ret), K(snapshot_version));
   } else if (trans_state >= mds::TwoPhaseCommitState::ON_PREPARE && trans_state < mds::TwoPhaseCommitState::ON_COMMIT) {
     if (read_snapshot < trans_version) {
       ret = OB_SNAPSHOT_DISCARDED;
@@ -339,6 +348,7 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_for_deleted(
     LOG_WARN("read snapshot smaller than create commit version",
         K(ret), K(tablet_id), K(snapshot_version), K(user_data));
   } else if (OB_FAIL(read_snapshot.convert_for_tx(snapshot_version))) {
+    LOG_WARN("failed to convert from int64_t to SCN", K(ret), K(snapshot_version));
   } else if (trans_state < mds::TwoPhaseCommitState::ON_PREPARE) {
     if (read_snapshot.is_max()) {
       ret = OB_TABLET_NOT_EXIST;
@@ -381,6 +391,7 @@ int ObTabletCreateDeleteHelper::create_tmp_tablet(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("storage meta memory manager is null", K(ret));
   } else if (OB_FAIL(t3m->create_tmp_tablet(WashTabletPriority::WTP_HIGH, key, allocator, &ls, handle))) {
+    LOG_WARN("fail to create temporary tablet", K(ret), K(key));
   } else if (OB_ISNULL(handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("new tablet is null", K(ret), K(handle));
@@ -393,6 +404,7 @@ int ObTabletCreateDeleteHelper::prepare_create_msd_tablet()
   int ret = OB_SUCCESS;
   ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   if (OB_FAIL(t3m->get_mstx_tablet_creator().throttle_tablet_creation())) {
+    LOG_WARN("fail to prepare full tablet", K(ret));
   }
   return ret;
 }
@@ -409,7 +421,9 @@ int ObTabletCreateDeleteHelper::create_msd_tablet(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key));
   } else if (OB_FAIL(ls_service->get_ls(tenant_ls))) {
+    LOG_WARN("fail to get ls", K(ret));
   } else if (OB_FAIL(t3m->create_msd_tablet(WashTabletPriority::WTP_HIGH, key, tenant_ls, handle))) {
+    LOG_WARN("fail to create multi source data tablet", K(ret), K(key));
   } else if (OB_ISNULL(handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("new tablet is null", K(ret), K(handle));
@@ -448,6 +462,7 @@ int ObTabletCreateDeleteHelper::acquire_tablet_from_pool(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key));
   } else if (OB_FAIL(t3m->acquire_tablet_from_pool(type, WashTabletPriority::WTP_HIGH, key, handle))) {
+    LOG_WARN("fail to acquire tablet from pool", K(ret), K(key), K(type));
   } else if (OB_ISNULL(handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("new tablet is null", K(ret), K(handle));
@@ -470,7 +485,9 @@ int ObTabletCreateDeleteHelper::create_empty_sstable(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get invalid arguments", K(ret), K(snapshot_version), K(storage_schema));
   } else if (OB_FAIL(param.init_for_empty_major_sstable(tablet_id, storage_schema, snapshot_version))) {
+    LOG_WARN("failed to build sstable param", K(ret), K(tablet_id), K(storage_schema), K(snapshot_version));
   } else if (OB_FAIL(create_sstable(param, allocator, table_handle))) {
+    LOG_WARN("failed to create sstable", K(ret), K(param));
   }
 
   if (OB_FAIL(ret)) {

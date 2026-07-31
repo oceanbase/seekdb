@@ -114,6 +114,7 @@ int ObForkTableTask::init(
     snapshot_version_ = snapshot_version;
     data_format_version_ = data_format_version;
     if (OB_FAIL(deep_copy_fork_table_arg(fork_table_arg))) {
+      LOG_WARN("deep copy fork table arg failed", K(ret));
     } else {
       is_data_complement_ = false;
       is_inited_ = true;
@@ -138,6 +139,7 @@ int ObForkTableTask::init(const ObDDLTaskRecord &task_record)
   } else if (OB_FAIL(deserialize_params_from_message(task_record.message_.ptr(),
                                                      task_record.message_.length(),
                                                      pos))) {
+    LOG_WARN("deserialize params from message failed", K(ret), K(task_record.message_));
   } else {
     task_type_ = task_record.ddl_type_;
     
@@ -156,6 +158,7 @@ int ObForkTableTask::init(const ObDDLTaskRecord &task_record)
     dst_schema_version_ = schema_version_;
 
     if (OB_FAIL(init_ddl_task_monitor_info(target_object_id_))) {
+      LOG_WARN("init ddl task monitor info failed", K(ret));
     } else {
       is_inited_ = true;
     }
@@ -172,12 +175,15 @@ int ObForkTableTask::process()
     ret = OB_NOT_INIT;
     LOG_WARN("fork table task not inited", K(ret));
   } else {
+    LOG_DEBUG("fork table task process tick", K(task_id_), K(task_status_), 
+        "src_table_id", object_id_, "dst_table_id", target_object_id_);
     switch (task_status_) {
       case ObDDLTaskStatus::PREPARE: {
         DEBUG_SYNC(FORK_TABLE_PREPARE);
         const ObDDLTaskStatus from_status = task_status_;
         const ObDDLTaskStatus to_status = ObDDLTaskStatus::WAIT_FROZE_END;
         if (OB_FAIL(switch_status(to_status, true, ret))) {
+          LOG_WARN("fail to switch task status", K(ret));
         } else {
           LOG_INFO("fork table stage enter", K(task_id_),
               "from", ddl_task_status_to_str(from_status),
@@ -192,6 +198,7 @@ int ObForkTableTask::process()
         DEBUG_SYNC(FORK_TABLE_WAIT_FREEZE_END);
         const ObDDLTaskStatus from_status = task_status_;
         if (OB_FAIL(wait_freeze_end(ObDDLTaskStatus::BUILD_DATA))) {
+          LOG_WARN("fail to wait freeze end", K(ret));
         } else if (task_status_ == ObDDLTaskStatus::BUILD_DATA) {
           LOG_INFO("fork table stage enter", K(task_id_),
               "from", ddl_task_status_to_str(from_status),
@@ -206,6 +213,7 @@ int ObForkTableTask::process()
         DEBUG_SYNC(FORK_TABLE_BUILD_DATA);
         const ObDDLTaskStatus from_status = task_status_;
         if (OB_FAIL(build_data(ObDDLTaskStatus::WAIT_DATA_COMPLEMENT))) {
+          LOG_WARN("fail to build data", K(ret));
         } else if (task_status_ == ObDDLTaskStatus::WAIT_DATA_COMPLEMENT) {
           LOG_INFO("fork table stage enter", K(task_id_),
               "from", ddl_task_status_to_str(from_status),
@@ -236,11 +244,13 @@ int ObForkTableTask::process()
       case ObDDLTaskStatus::SUCCESS: {
         DEBUG_SYNC(FORK_TABLE_SUCCESS);
         if (OB_FAIL(succ())) {
+          LOG_WARN("fail to do clean up", K(ret));
         }
         break;
       }
       case ObDDLTaskStatus::FAIL: {
         if (OB_FAIL(fail())) {
+          LOG_WARN("fail to do clean up", K(ret));
         }
         break;
       }
@@ -266,8 +276,11 @@ int ObForkTableTask::serialize_params_to_message(char *buf, const int64_t buf_si
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(ObDDLTask::serialize_params_to_message(buf, buf_size, pos))) {
+    LOG_WARN("serialize ddl task failed", K(ret));
   } else if (OB_FAIL(serialization::encode_bool(buf, buf_size, pos, is_data_complement_))) {
+    LOG_WARN("serialize is_data_complement failed", K(ret));
   } else if (OB_FAIL(fork_table_arg_.serialize(buf, buf_size, pos))) {
+    LOG_WARN("serialize fork_table_arg failed", K(ret));
   }
   return ret;
 }
@@ -280,9 +293,13 @@ int ObForkTableTask::deserialize_params_from_message(const char *buf, const int6
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_size));
     } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, buf_size, pos))) {
+      LOG_WARN("deserialize ddl task failed", K(ret));
     } else if (OB_FAIL(serialization::decode_bool(buf, buf_size, pos, &is_data_complement_))) {
+      LOG_WARN("deserialize is_data_complement failed", K(ret));
     } else if (OB_FAIL(tmp_arg.deserialize(buf, buf_size, pos))) {
+      LOG_WARN("deserialize fork_table_arg failed", K(ret));
     } else if (OB_FAIL(deep_copy_fork_table_arg(tmp_arg))) {
+      LOG_WARN("deep copy fork_table_arg failed", K(ret));
     }
   }
   return ret;
@@ -301,9 +318,13 @@ int ObForkTableTask::deep_copy_fork_table_arg(const obcall::ObForkTableArg &arg)
   int ret = OB_SUCCESS;
   
   if (OB_FAIL(ob_write_string(allocator_, arg.src_database_name_, fork_table_arg_.src_database_name_))) {
+    LOG_WARN("deep copy src database name failed", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator_, arg.src_table_name_, fork_table_arg_.src_table_name_))) {
+    LOG_WARN("deep copy src table name failed", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator_, arg.dst_database_name_, fork_table_arg_.dst_database_name_))) {
+    LOG_WARN("deep copy dst database name failed", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator_, arg.dst_table_name_, fork_table_arg_.dst_table_name_))) {
+    LOG_WARN("deep copy dst table name failed", K(ret));
   } else {
     fork_table_arg_.if_not_exist_ = arg.if_not_exist_;
     fork_table_arg_.session_id_ = arg.session_id_;
@@ -319,14 +340,18 @@ int ObForkTableTask::wait_freeze_end(const ObDDLTaskStatus next_task_status)
   const int64_t start_ts = ObTimeUtility::current_time();
   
   if (OB_FAIL(get_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get schema guard", K(ret));
   } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, object_id_, src_tablet_ids))) {
+    LOG_WARN("fail to get src tablet ids", K(ret));
   } else if (OB_FAIL(storage::ObTabletForkUtil::freeze_tablets(src_tablet_ids))) {
+    LOG_WARN("fail to freeze tablets", K(ret), K(src_tablet_ids));
   }
 
   if (OB_SUCC(ret)) {
     ObTableForkFreezeLog freeze_log;
     SCN free_log_scn;
     if (OB_FAIL(freeze_log.tablet_ids_.assign(src_tablet_ids))) {
+      LOG_WARN("fail to assign source tablet ids", K(ret));
     } else if (OB_UNLIKELY(!freeze_log.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid fork freeze log", K(ret), K(freeze_log));
@@ -334,10 +359,12 @@ int ObForkTableTask::wait_freeze_end(const ObDDLTaskStatus next_task_status)
                                                                logservice::ObReplayBarrierType::NO_NEED_BARRIER,
                                                                freeze_log,
                                                                free_log_scn))) {
+      LOG_WARN("fail to write table fork freeze log", K(ret), K(freeze_log));
     } else {
       LOG_INFO("fork table freeze stage done", K(task_id_), K(free_log_scn),
           "src_table_id", object_id_, "tablet_cnt", src_tablet_ids.count(),
           "cost_us", ObTimeUtility::current_time() - start_ts);
+      LOG_DEBUG("fork table freeze log detail", K(task_id_), K(freeze_log));
     }
   }
 
@@ -360,24 +387,32 @@ int ObForkTableTask::build_data(const ObDDLTaskStatus next_task_status)
   const int64_t start_ts = ObTimeUtility::current_time();
 
   if (OB_FAIL(get_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get schema guard", K(ret));
   } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, object_id_, src_tablet_ids))) {
+    LOG_WARN("fail to get src tablet ids", K(ret));
   } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, target_object_id_, dst_tablet_ids))) {
+    LOG_WARN("fail to get dst tablet ids", K(ret));
   } else if (src_tablet_ids.count() != dst_tablet_ids.count()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet count mismatch", K(ret), 
              K(src_tablet_ids.count()), K(dst_tablet_ids.count()));
   } else if (OB_FAIL(build_fork_info(src_tablet_ids, dst_tablet_ids, fork_info))) {
+    LOG_WARN("fail to build fork info", K(ret));
   } else if (OB_FAIL(start_log.fork_info_.assign(fork_info))) {
+    LOG_WARN("fail to assign fork info", K(ret));
   } else if (OB_FAIL(storage::ObTabletForkUtil::try_schedule_fork_dags(fork_info))) {
+    LOG_WARN("fail to try schedule fork dags", K(ret));
   } else if (OB_FAIL(ObDDLRedoLogWriter::write_auto_fork_log(ObDDLClogType::DDL_TABLE_FORK_START_LOG,
                                                              logservice::ObReplayBarrierType::STRICT_BARRIER,
                                                              start_log,
                                                              start_log_scn))) {
+    LOG_WARN("fail to write table fork start log", K(ret), K(start_log));
   } else {
     LOG_INFO("fork table build_data stage started", K(task_id_), K(start_log_scn),
         "src_table_id", object_id_, "dst_table_id", target_object_id_,
         "tablet_cnt", src_tablet_ids.count(),
         "cost_us", ObTimeUtility::current_time() - start_ts);
+    LOG_DEBUG("fork table start log detail", K(task_id_), K(start_log));
   }
 
   if (OB_SUCC(ret) && OB_FAIL(switch_status(next_task_status, true, ret))) {
@@ -396,12 +431,16 @@ int ObForkTableTask::wait_data_complement(const ObDDLTaskStatus next_task_status
   const int64_t start_ts = ObTimeUtility::current_time();
 
   if (OB_FAIL(get_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get schema guard", K(ret));
   } else if (is_data_complement_) {
+    LOG_DEBUG("data complement already completed, skip waiting", K(task_id_), K(target_object_id_));
   } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, dst_table_schema))) {
+    LOG_WARN("fail to get destination table schema", K(ret));
   } else if (OB_ISNULL(dst_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("destination table not exist", K(ret), K_(target_object_id));
   } else if (OB_FAIL(rootserver::ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, *dst_table_schema, dst_tablet_ids))) {
+    LOG_WARN("fail to collect dst tablet ids", K(ret));
   } else if (dst_tablet_ids.empty()) {
     is_data_complement_ = true;
     LOG_INFO("no tablets to check, data complement considered complete", K(target_object_id_));
@@ -440,6 +479,7 @@ int ObForkTableTask::wait_data_complement(const ObDDLTaskStatus next_task_status
   if (OB_SUCC(ret) && is_data_complement_) {
     ObSEArray<ObTabletID, 4> src_tablet_ids;
     if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, object_id_, src_tablet_ids))) {
+      LOG_WARN("fail to get src tablet ids", K(ret));
     } else if (OB_UNLIKELY(src_tablet_ids.count() != dst_tablet_ids.count())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("src and dst tablet count mismatch", K(ret), 
@@ -447,6 +487,7 @@ int ObForkTableTask::wait_data_complement(const ObDDLTaskStatus next_task_status
     } else {
       storage::ObTableForkInfo fork_info;
       if (OB_FAIL(build_fork_info(src_tablet_ids, dst_tablet_ids, fork_info))) {
+        LOG_WARN("fail to build fork info", K(ret));
       } else {
         ObTableForkFinishLog finish_log;
         finish_log.fork_info_ = fork_info;
@@ -456,10 +497,12 @@ int ObForkTableTask::wait_data_complement(const ObDDLTaskStatus next_task_status
             logservice::ObReplayBarrierType::STRICT_BARRIER,
             finish_log,
             scn))) {
+          LOG_WARN("fail to write table fork finish log", K(ret), K(finish_log));
         } else {
           LOG_INFO("fork table finish log written", K(task_id_), K(scn),
               "src_table_id", object_id_, "dst_table_id", target_object_id_,
               "tablet_cnt", dst_tablet_ids.count());
+          LOG_DEBUG("fork table finish log detail", K(task_id_), K(finish_log));
         }
       }
     }
@@ -467,6 +510,7 @@ int ObForkTableTask::wait_data_complement(const ObDDLTaskStatus next_task_status
 
   if (OB_SUCC(ret) && is_data_complement_) {
     if (OB_FAIL(switch_status(next_task_status, true, ret))) {
+      LOG_WARN("fail to switch task status", K(ret));
     }
   }
 
@@ -480,7 +524,9 @@ int ObForkTableTask::succ()
     ret = OB_NOT_INIT;
     LOG_WARN("ObForkTableTask has not been inited", K(ret));
   } else if (OB_FAIL(finish())) {
+    LOG_WARN("fail to finish", K(ret));
   } else if (OB_FAIL(cleanup())) {
+    LOG_WARN("fail to cleanup", K(ret));
   }
   return ret;
 }
@@ -492,7 +538,9 @@ int ObForkTableTask::fail()
     ret = OB_NOT_INIT;
     LOG_WARN("ObForkTableTask has not been inited", K(ret));
   } else if (OB_FAIL(finish())) {
+    LOG_WARN("finish failed", K(ret));
   } else if (OB_FAIL(cleanup())) {
+    LOG_WARN("fail to cleanup", K(ret));
   } else {
     need_retry_ = false;
   }
@@ -507,10 +555,13 @@ int ObForkTableTask::finish()
     ret = OB_NOT_INIT;
     LOG_WARN("ObForkTableTask has not been inited", K(ret));
   } else if (OB_FAIL(get_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get schema guard", K(ret));
   } else if (snapshot_version_ > 0) {
     ObSEArray<uint64_t, 1> table_ids;
     if (OB_FAIL(table_ids.push_back(object_id_))) {
+      LOG_WARN("fail to push back object id", K(ret), K(object_id_));
     } else if (OB_FAIL(ObForkTableUtil::release_snapshot(this, schema_guard, table_ids, snapshot_version_))) {
+      LOG_WARN("fail to release snapshot", K(ret), K(object_id_), K(snapshot_version_));
     }
   }
   return ret;
@@ -524,6 +575,7 @@ int ObForkTableTask::cleanup_impl()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(report_error_code(unused_str))) {
+    LOG_WARN("report error code failed", K(ret));
   }
 
   if (OB_SUCC(ret) && OB_INVALID_ID != object_id_) {
@@ -540,16 +592,21 @@ int ObForkTableTask::cleanup_impl()
       ObTimeoutCtx ctx;
       
       if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+        LOG_WARN("get runtime schema guard failed", K(ret));
       } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, src_table_schema))) {
+        LOG_WARN("fail to get table schema", K(ret), K(object_id_));
       } else if (OB_ISNULL(src_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("source table not exist", K(ret), K(object_id_));
       } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, dst_table_schema))) {
+        LOG_WARN("fail to get destination table schema", K(ret));
       } else if (OB_ISNULL(dst_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("destination table not exist", K(ret), K_(target_object_id));
       } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+        LOG_WARN("start transaction failed", K(ret));
       } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF.rpc_timeout))) {
+        LOG_WARN("fail to set timeout ctx", KR(ret));
       } else if (OB_ISNULL(conn = trans.get_connection())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("conn_ is NULL", KR(ret));
@@ -562,20 +619,27 @@ int ObForkTableTask::cleanup_impl()
         lock_arg.op_type_ = ObTableLockOpType::IN_TRANS_COMMON_LOCK;
         lock_arg.timeout_us_ = ctx.get_timeout();
         if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(lock_arg, conn))) {
+          LOG_WARN("lock runtime failed", KR(ret));
         }
       }
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(lock_owner.convert_from_value(ObLockOwnerType::FORK_TABLE_OWNER_TYPE, FORK_TABLE_LOCK_OWNER_ID))) {
+        LOG_WARN("failed to convert owner id", K(ret), K(task_id_));
       } else if (OB_FAIL(storage::ObDDLLock::unlock_for_fork_table(schema_guard, *src_table_schema, *dst_table_schema, task_id_, lock_owner, trans))) {
+        LOG_WARN("failed to unlock for fork table", K(ret), K(task_id_), K(object_id_));
       } else {
         ObSqlString sql_string;
         int64_t affected_rows = 0;
         if (OB_FAIL(sql_string.assign_fmt(" DELETE FROM %s WHERE task_id=%ld",
             share::OB_ALL_DDL_TASK_STATUS_TNAME, task_id_))) {
+          LOG_WARN("assign sql string failed", K(ret), K(task_id_));
         } else if (OB_FAIL(DDL_SIM(task_id_, TASK_STATUS_OPERATOR_SLOW))) {
+          LOG_WARN("ddl sim failure: slow inner sql", K(ret), K(task_id_));
         } else if (OB_FAIL(DDL_SIM(task_id_, DELETE_TASK_RECORD_FAILED))) {
+          LOG_WARN("ddl sim failure: delete task record failed", K(ret), K(task_id_));
         } else if (OB_FAIL(trans.write(sql_string.ptr(), affected_rows))) {
+          LOG_WARN("delete ddl task record failed", K(ret), K(sql_string));
         } else if (OB_UNLIKELY(affected_rows < 0)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected affected_rows", K(ret), K(affected_rows));
@@ -611,6 +675,7 @@ int ObForkTableTask::get_schema_guard(share::schema::ObSchemaGetterGuard &schema
     LOG_WARN("local management service is null", K(ret));
   } else if (OB_FAIL(local_management_service_->get_ddl_service().get_runtime_schema_guard_with_version_in_inner_table(
       schema_guard))) {
+    LOG_WARN("fail to get runtime schema guard", K(ret));
   }
   return ret;
 }

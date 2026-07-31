@@ -59,6 +59,7 @@ int collect_db_level_priv_in_roles(const ObPrivMgr &priv_mgr,
   ObOriginalDBKey db_priv_key_role(role_info.get_user_id(),
                                    need_priv.db_);
   if (OB_FAIL(priv_mgr.get_db_priv_set(db_priv_key_role, role_priv_set))) {
+    LOG_WARN("get db priv set failed", KR(ret), K(role_priv_set));
   } else {
     collected_priv.priv_set_ |= role_priv_set;
   }
@@ -77,6 +78,7 @@ int collect_table_level_priv_in_roles(const ObPrivMgr &priv_mgr,
                                          need_priv.db_,
                                          need_priv.table_);
   if (OB_FAIL(priv_mgr.get_table_priv_set(role_table_priv_key, role_priv_set))) {
+    LOG_WARN("get table priv failed", KR(ret), K(role_priv_set) );
   } else {
     collected_priv.priv_set_ |= role_priv_set;
   }
@@ -97,8 +99,10 @@ int collect_column_level_priv_in_roles(const ObPrivMgr &priv_mgr,
                                         need_priv.table_,
                                         column_name);
     if (OB_FAIL(priv_mgr.get_column_priv_set(column_priv_key, role_priv_set))) {
+      LOG_WARN("get table priv failed", KR(ret));
     } else if (OB_TEST_PRIVS(role_priv_set, need_priv.priv_set_)) {
       if (OB_FAIL(add_var_to_array_no_dup(collected_priv.columns_, column_name))) {
+        LOG_WARN("fail to append array", K(ret));
       }
     }
   }
@@ -116,8 +120,10 @@ int collect_any_column_level_priv_in_roles(const ObPrivMgr &priv_mgr,
                                                 need_priv.db_,
                                                 need_priv.table_,
                                                 column_privs))) {
+    LOG_WARN("get table priv failed", KR(ret));
   } else if (column_privs.count() > 0) {
     if (OB_FAIL(collected_priv.columns_.push_back(""))) {
+      LOG_WARN("fail to push back", K(ret));
     }
   }
   return ret;
@@ -140,6 +146,7 @@ int collect_column_level_all_priv_in_roles(const ObPrivMgr &priv_mgr,
                                    need_priv.columns_.at(0));
 
     if (OB_FAIL(priv_mgr.get_column_priv_set(column_key, priv_set))) {
+      LOG_WARN("get table priv failed", KR(ret));
     } else if (priv_set != OB_PRIV_SET_EMPTY) {
       collected_priv.priv_set_ |= priv_set;
     }
@@ -155,6 +162,7 @@ int collect_user_db_level_priv_in_roles(const ObPrivMgr &priv_mgr,
   int ret = OB_SUCCESS;
   ObPrivSet role_priv_set = role_info.get_priv_set();
   if (OB_FAIL(collect_db_level_priv_in_roles(priv_mgr, role_info, need_priv, collected_priv))) {
+    LOG_WARN("get db priv set failed", KR(ret), K(role_priv_set));
   } else {
     collected_priv.priv_set_ |= role_priv_set;
   }
@@ -169,7 +177,9 @@ int collect_user_db_tb_level_priv_in_roles(const ObPrivMgr &priv_mgr,
   int ret = OB_SUCCESS;
   ObPrivSet role_priv_set = role_info.get_priv_set();
   if (OB_FAIL(collect_db_level_priv_in_roles(priv_mgr, role_info, need_priv, collected_priv))) {
+    LOG_WARN("get db priv set failed", KR(ret), K(role_priv_set));
   } else if (OB_FAIL(collect_table_level_priv_in_roles(priv_mgr, role_info, need_priv, collected_priv))) {
+    LOG_WARN("get db priv set failed", KR(ret), K(role_priv_set));
   } else {
     collected_priv.priv_set_ |= role_priv_set;
   }
@@ -207,6 +217,7 @@ int collect_priv_in_roles(const ObPrivMgr &priv_mgr,
       //enabled role can be revoked from the current user by other session
       //only check the granted roles
       if (OB_FAIL(role_ids_queue.push_back(cur_role_id))) {
+        LOG_WARN("fail to push back", K(ret));
       }
     }
   }
@@ -218,6 +229,7 @@ int collect_priv_in_roles(const ObPrivMgr &priv_mgr,
       ret = OB_ERR_USER_NOT_EXIST;
       LOG_WARN("user not exist", K(ret));
     } else if (OB_FAIL(collect_func(priv_mgr, *role_info, need_priv, collected_priv))) {
+      LOG_WARN("fail to collect priv", K(ret));
     } else {
       switch (mode) {
         case CheckRolePrivMode::CHECK_PRIV_HAS_ALL:
@@ -284,6 +296,7 @@ int ObSchemaGetterGuard::check_table_show(const ObSessionPrivInfo &session_priv,
   const ObSchemaMgr *mgr = NULL;
   allow_show = true;
   if (OB_FAIL(check_lazy_guard( mgr))) {
+    LOG_WARN("fail to check lazy guard", KR(ret));
   } else if (OB_PRIV_HAS_ANY(session_priv.user_priv_set_, OB_PRIV_TABLE_ACC)) {
     //allow
   } else if (0 == db.length() || 0 == table.length()) {
@@ -299,6 +312,7 @@ int ObSchemaGetterGuard::check_table_show(const ObSessionPrivInfo &session_priv,
     } else {
       ObOriginalDBKey db_priv_key(session_priv.user_id_, db);
       if (OB_FAIL(priv_mgr.get_db_priv_set(db_priv_key, db_priv_set))) {
+        LOG_WARN("get db priv set failed", K(db_priv_key), KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -308,6 +322,7 @@ int ObSchemaGetterGuard::check_table_show(const ObSessionPrivInfo &session_priv,
       } else {
         ObTablePrivSortKey table_priv_key(session_priv.user_id_, db, table);
         if (OB_FAIL(priv_mgr.get_table_priv(table_priv_key, table_priv))) {
+          LOG_WARN("get table priv failed", K(table_priv_key), KR(ret));
         } else if (NULL != table_priv
                    && OB_PRIV_HAS_ANY(table_priv->get_priv_set(), OB_PRIV_TABLE_ACC)) {
           // allow
@@ -325,6 +340,7 @@ int ObSchemaGetterGuard::check_table_show(const ObSessionPrivInfo &session_priv,
                                       need_priv, collect_user_db_tb_level_priv_in_roles,
                                       collected_priv, allow_show,
                                       CheckRolePrivMode::CHECK_PRIV_HAS_ANY))) {
+      LOG_WARN("fail to collect priv in roles", K(ret));
     }
   }
 
@@ -343,6 +359,7 @@ int ObSchemaGetterGuard::check_routine_show(const ObSessionPrivInfo &session_pri
   const ObSchemaMgr *mgr = NULL;
   allow_show = true;
   if (OB_FAIL(check_lazy_guard( mgr))) {
+    LOG_WARN("fail to check lazy guard", KR(ret));
   } else if (OB_PRIV_HAS_ANY(session_priv.user_priv_set_, OB_PRIV_ROUTINE_ACC | OB_PRIV_CREATE_ROUTINE)) {
     //allow
   } else if (0 == db.length() || 0 == routine.length()) {
@@ -358,6 +375,7 @@ int ObSchemaGetterGuard::check_routine_show(const ObSessionPrivInfo &session_pri
     } else {
       ObOriginalDBKey db_priv_key(session_priv.user_id_, db);
       if (OB_FAIL(priv_mgr.get_db_priv_set(db_priv_key, db_priv_set))) {
+        LOG_WARN("get db priv set failed", K(db_priv_key), KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -367,6 +385,7 @@ int ObSchemaGetterGuard::check_routine_show(const ObSessionPrivInfo &session_pri
       } else {
         ObRoutinePrivSortKey routine_priv_key(session_priv.user_id_, db, routine, routine_type);
         if (OB_FAIL(priv_mgr.get_routine_priv(routine_priv_key, routine_priv))) {
+          LOG_WARN("get routine priv failed", K(routine_priv_key), KR(ret));
         } else if (NULL != routine_priv
                    && OB_PRIV_HAS_ANY(routine_priv->get_priv_set(), OB_PRIV_ROUTINE_ACC | OB_PRIV_CREATE_ROUTINE)) {
           // allow
@@ -384,6 +403,7 @@ int ObSchemaGetterGuard::check_routine_show(const ObSessionPrivInfo &session_pri
                                       need_priv, collect_user_db_tb_level_priv_in_roles,
                                       collected_priv, allow_show,
                                       CheckRolePrivMode::CHECK_PRIV_HAS_ANY))) {
+      LOG_WARN("fail to collect priv in roles", K(ret));
     }
   }
 
@@ -401,6 +421,7 @@ int ObSchemaGetterGuard::check_user_priv(const ObSessionPrivInfo &session_priv,
   ObPrivSet user_priv_set = session_priv.user_priv_set_;
 
   if (OB_FAIL(check_lazy_guard( mgr))) {
+    LOG_WARN("fail to check lazy guard", KR(ret));
   } else if ((!OB_TEST_PRIVS(user_priv_set, priv_set) && check_all)
              || (!OB_PRIV_HAS_ANY(user_priv_set, priv_set) && !check_all)) {
     if (priv_set == OB_PRIV_ALTER_SYSTEM
@@ -411,6 +432,7 @@ int ObSchemaGetterGuard::check_user_priv(const ObSessionPrivInfo &session_priv,
       bool check_succ = false;
       if (OB_FAIL(collect_priv_in_roles(mgr->priv_mgr_, session_priv, enable_role_id_array, *this, need_priv,
                                         collect_user_level_priv_in_roles, collected_privs, check_succ))) {
+        LOG_WARN("fail to collect privs in roles", K(ret));
       } else {
         user_priv_set |= collected_privs.priv_set_;
         if ((!check_succ && check_all) || (!OB_PRIV_HAS_ANY(user_priv_set, priv_set) && !check_all)) {
@@ -461,15 +483,18 @@ int ObSchemaGetterGuard::check_single_table_priv_or(const ObSessionPrivInfo &ses
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid arguments",  "user_id", user_id, KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
+    LOG_WARN("fail to check lazy guard", KR(ret));
   } else if (OB_PRIV_HAS_ANY(session_priv.user_priv_set_, table_need_priv.priv_set_)) {
     /* check success */
   } else {
     const ObPrivMgr &priv_mgr = mgr->priv_mgr_;
     bool pass = false;
     if (OB_FAIL(check_priv_db_or_(session_priv, enable_role_id_array, table_need_priv, priv_mgr, user_id, pass))) {
+      LOG_WARN("failed to check priv db or", K(ret));
     } else if (pass) {
       /* check success */
     } else if (OB_FAIL(check_priv_table_or_(session_priv, enable_role_id_array, table_need_priv, priv_mgr, user_id, pass))) {
+      LOG_WARN("fail to check priv table or", K(ret));
     } else if (pass) {
       /* check success */
     } else {
@@ -497,6 +522,7 @@ int ObSchemaGetterGuard::check_single_table_priv(const ObSessionPrivInfo &sessio
         "user_id", session_priv.user_id_,
         KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
+    LOG_WARN("fail to check lazy guard", KR(ret));
   } else {
     //first:check user and db priv.
     //second:If user_db_priv_set has no enough privileges, check table priv.
@@ -513,6 +539,7 @@ int ObSchemaGetterGuard::check_single_table_priv(const ObSessionPrivInfo &sessio
                                           table_need_priv.db_,
                                           table_need_priv.table_);
         if (OB_FAIL(priv_mgr.get_table_priv(table_priv_key, table_priv))) {
+          LOG_WARN("get table priv failed", KR(ret), K(table_priv_key) );
         } else if (NULL != table_priv) {
           table_priv_set = table_priv->get_priv_set();
           is_table_priv_empty = false;
@@ -525,6 +552,7 @@ int ObSchemaGetterGuard::check_single_table_priv(const ObSessionPrivInfo &sessio
           bool check_succ = false;
           if (OB_FAIL(collect_priv_in_roles(mgr->priv_mgr_, session_priv, enable_role_id_array, *this, table_need_priv,
                                             collect_user_db_tb_level_priv_in_roles, collected_tb_privs, check_succ))) {
+            LOG_WARN("fail to collect privs in roles", K(ret));
           } else {
             table_priv_set |= collected_tb_privs.priv_set_;
           }
@@ -553,6 +581,7 @@ int ObSchemaGetterGuard::check_single_table_priv(const ObSessionPrivInfo &sessio
               if (OB_FAIL(priv_mgr.get_column_priv_in_table(table_priv_key.user_id_,
                                                           table_priv_key.db_, table_priv_key.table_, 
                                                           column_privs))) {
+                LOG_WARN("get column priv in table failed", K(ret));
               } else {
                 bool pass = false;
                 for (int64_t i = 0; OB_SUCC(ret) && !pass && i < column_privs.count(); i++) {
@@ -577,6 +606,7 @@ int ObSchemaGetterGuard::check_single_table_priv(const ObSessionPrivInfo &sessio
               bool check_succ = false;
               if (OB_FAIL(collect_priv_in_roles(mgr->priv_mgr_, session_priv, enable_role_id_array, *this, table_need_priv,
                                                 collect_column_level_priv_in_roles, collected_privs, check_succ))) {
+                LOG_WARN("fail to collect privs in roles", K(ret));
               } else {
                 if (!check_succ) {
                   ret = OB_ERR_NO_COLUMN_PRIVILEGE;
@@ -610,6 +640,7 @@ int ObSchemaGetterGuard::check_single_table_priv(const ObSessionPrivInfo &sessio
                                             table_need_priv.columns_.at(i));
 
               if (OB_FAIL(priv_mgr.get_column_priv(column_priv_key, column_priv))) {
+                LOG_WARN("get table priv failed", KR(ret), K(table_priv_key) );
               } else if (NULL != column_priv) {
                 column_priv_set = column_priv->get_priv_set();
                 if (!OB_TEST_PRIVS(column_priv_set | table_priv_set | user_db_priv_set, table_need_priv.priv_set_)) {
@@ -629,6 +660,7 @@ int ObSchemaGetterGuard::check_single_table_priv(const ObSessionPrivInfo &sessio
               bool check_succ = false;
               if (OB_FAIL(collect_priv_in_roles(mgr->priv_mgr_, session_priv, enable_role_id_array, *this, table_need_priv,
                                                 collect_column_level_priv_in_roles, collected_privs, check_succ))) {
+                LOG_WARN("fail to collect privs in roles", K(ret));
               } else {
                 if (!check_succ) {
                   ret = OB_ERR_NO_COLUMN_PRIVILEGE;
@@ -643,6 +675,7 @@ int ObSchemaGetterGuard::check_single_table_priv(const ObSessionPrivInfo &sessio
               if (OB_FAIL(priv_mgr.get_column_priv_in_table(table_priv_key.user_id_,
                                                           table_priv_key.db_, table_priv_key.table_, 
                                                           column_privs))) {
+                LOG_WARN("get column priv in table failed", K(ret));
               } else {
                 for (int64_t i = 0; OB_SUCC(ret) && !found && i < column_privs.count(); i++) {
                   if (OB_ISNULL(column_privs.at(i))) {
@@ -656,6 +689,7 @@ int ObSchemaGetterGuard::check_single_table_priv(const ObSessionPrivInfo &sessio
               ObPrivSet lack_priv_set = table_need_priv.priv_set_ & (~(column_priv_set | table_priv_set | user_db_priv_set));
               const char *priv_name = priv_mgr.get_first_priv_name(lack_priv_set);
               if (OB_FAIL(ret)) {
+                LOG_WARN("other errors occur", K(ret));
               } else if (found) {
                 ret = OB_ERR_NO_COLUMN_PRIVILEGE;
                 LOG_USER_ERROR(OB_ERR_NO_COLUMN_PRIVILEGE, (int)strlen(priv_name), priv_name,
@@ -677,6 +711,7 @@ int ObSchemaGetterGuard::check_single_table_priv(const ObSessionPrivInfo &sessio
     }
     if (OB_SUCC(ret) && table_need_priv.is_for_update_) {
       if (OB_FAIL(check_single_table_priv_for_update_(session_priv, enable_role_id_array, table_need_priv, priv_mgr))) {
+        LOG_WARN("failed to check select table for update priv", K(ret));
       }
     }
   }
@@ -704,6 +739,7 @@ int ObSchemaGetterGuard::check_single_table_priv_for_update_(const ObSessionPriv
   } else if (OB_PRIV_HAS_ANY(session_priv.user_priv_set_, need_priv.priv_set_)) {
     /* check ok */
   } else if (OB_FAIL(check_priv_db_or_(session_priv, enable_role_id_array, need_priv, priv_mgr, user_id, pass))) {
+    LOG_WARN("failed to check priv db or", K(ret));
   } else if (!pass && OB_FAIL(check_priv_table_or_(session_priv, enable_role_id_array, need_priv, priv_mgr, user_id, pass))) {
     LOG_WARN("fail to check priv table or", K(ret));
   } else if (!pass) {
@@ -730,6 +766,7 @@ int ObSchemaGetterGuard::check_routine_priv(const ObSessionPrivInfo &session_pri
         "user_id", session_priv.user_id_,
         KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
+    LOG_WARN("fail to check lazy guard", KR(ret));
   } else {
     //first:check user and db priv.
     //second:If user_db_priv_set has no enough privileges, check routine priv.
@@ -749,6 +786,7 @@ int ObSchemaGetterGuard::check_routine_priv(const ObSessionPrivInfo &session_pri
                                           routine_need_priv.obj_type_ == ObObjectType::FUNCTION ? ObRoutineType::ROUTINE_FUNCTION_TYPE : 
                                                                                                      ObRoutineType::INVALID_ROUTINE_TYPE);
         if (OB_FAIL(priv_mgr.get_routine_priv(routine_priv_key, routine_priv))) {
+          LOG_WARN("get routine priv failed", KR(ret), K(routine_priv_key) );
         } else if (NULL != routine_priv) {
           routine_priv_set = routine_priv->get_priv_set();
           is_routine_priv_empty = false;
@@ -758,6 +796,7 @@ int ObSchemaGetterGuard::check_routine_priv(const ObSessionPrivInfo &session_pri
           //2. fetch roles privs
           const ObUserInfo *user_info = NULL;
           if (OB_FAIL(get_user_info(session_priv.user_id_, user_info))) {
+            LOG_WARN("failed to get user info", KR(ret), K(session_priv.user_id_));
           } else if (NULL == user_info) {
             ret = OB_USER_NOT_EXIST;
             LOG_WARN("user info is null", KR(ret), K(session_priv.user_id_));
@@ -767,6 +806,7 @@ int ObSchemaGetterGuard::check_routine_priv(const ObSessionPrivInfo &session_pri
               const ObUserInfo *role_info = NULL;
               const ObRoutinePriv *role_routine_priv = NULL;
               if (OB_FAIL(get_user_info(role_id_array.at(i), role_info))) {
+                LOG_WARN("failed to get role ids", KR(ret), K(role_id_array.at(i)));
               } else if (NULL == role_info) {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("role info is null", KR(ret), K(role_id_array.at(i)));
@@ -778,6 +818,7 @@ int ObSchemaGetterGuard::check_routine_priv(const ObSessionPrivInfo &session_pri
                     routine_need_priv.obj_type_ == ObObjectType::FUNCTION ? ObRoutineType::ROUTINE_FUNCTION_TYPE : 
                                                                           ObRoutineType::INVALID_ROUTINE_TYPE);
                 if (OB_FAIL(priv_mgr.get_routine_priv(role_routine_priv_key, role_routine_priv))) {
+                  LOG_WARN("get routine priv failed", KR(ret), K(role_routine_priv_key) );
                 } else if (NULL != role_routine_priv) {
                   is_routine_priv_empty = false;
                   // append additional role
@@ -837,6 +878,7 @@ int ObSchemaGetterGuard::check_db_priv(const ObSessionPrivInfo &session_priv,
                                   "user_id", session_priv.user_id_,
                                   KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
+    LOG_WARN("fail to check lazy guard", KR(ret));
   } else {
     ObPrivSet db_priv_set = 0;
     if (session_priv.db_.length() != 0 && (session_priv.db_ == db || 0 == db.length())) {
@@ -845,6 +887,7 @@ int ObSchemaGetterGuard::check_db_priv(const ObSessionPrivInfo &session_priv,
       const ObPrivMgr &priv_mgr = mgr->priv_mgr_;
       ObOriginalDBKey db_priv_key(session_priv.user_id_, db);
       if (OB_FAIL(priv_mgr.get_db_priv_set(db_priv_key, db_priv_set))) {
+        LOG_WARN("get db priv set failed", K(db_priv_key), KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -853,6 +896,7 @@ int ObSchemaGetterGuard::check_db_priv(const ObSessionPrivInfo &session_priv,
       bool check_succ = false;
       if (OB_FAIL(collect_priv_in_roles(mgr->priv_mgr_, session_priv, enable_role_id_array, *this, need_priv,
                                         collect_user_db_level_priv_in_roles, collected_privs, check_succ))) {
+        LOG_WARN("fail to collect privs in roles", K(ret));
       } else {
         total_db_priv_set_role |= collected_privs.priv_set_;
       }
@@ -910,6 +954,11 @@ int ObSchemaGetterGuard::check_priv(
                                       enable_role_id_array,
                                       need_priv.priv_set_,
                                       OB_PRIV_CHECK_ALL == need_priv.priv_check_type_))) {
+            LOG_WARN("No privilege",
+                     "user_id", session_priv.user_id_,
+                     "need_priv", need_priv.priv_set_,
+                     "user_priv", session_priv.user_priv_set_,
+                     KR(ret));
           }
           break;
         }
@@ -918,6 +967,11 @@ int ObSchemaGetterGuard::check_priv(
                                     enable_role_id_array,
                                     need_priv.db_,
                                     need_priv.priv_set_))) {
+            LOG_WARN("No privilege",
+                     "user_id", session_priv.user_id_,
+                     "need_priv", need_priv.priv_set_,
+                     "user_priv", session_priv.user_priv_set_,
+                     KR(ret));
           }
           break;
         }
@@ -925,10 +979,24 @@ int ObSchemaGetterGuard::check_priv(
           if (OB_PRIV_CHECK_ALL == need_priv.priv_check_type_) {
             if (OB_FAIL(check_single_table_priv(
                     session_priv, enable_role_id_array, need_priv))) {
+              LOG_WARN("No privilege",
+                       "user_id", session_priv.user_id_,
+                       "need_priv", need_priv.priv_set_,
+                       "table", need_priv.table_,
+                       "db", need_priv.db_,
+                       "user_priv", session_priv.user_priv_set_,
+                       KR(ret));
             }
           } else if (OB_PRIV_CHECK_ANY == need_priv.priv_check_type_) {
             if (OB_FAIL(check_single_table_priv_or(
                     session_priv, enable_role_id_array, need_priv))) {
+              LOG_WARN("No privilege",
+                       "user_id", session_priv.user_id_,
+                       "need_priv", need_priv.priv_set_,
+                       "table", need_priv.table_,
+                       "db", need_priv.db_,
+                       "user_priv", session_priv.user_priv_set_,
+                       KR(ret));
             }
           } else {
             ret = OB_ERR_UNEXPECTED;
@@ -939,6 +1007,13 @@ int ObSchemaGetterGuard::check_priv(
         case OB_PRIV_ROUTINE_LEVEL: {
           if (OB_FAIL(check_routine_priv(
                   session_priv, enable_role_id_array, need_priv))) {
+            LOG_WARN("No privilege",
+                     "user_id", session_priv.user_id_,
+                     "need_priv", need_priv.priv_set_,
+                     "table", need_priv.table_,
+                     "db", need_priv.db_,
+                     "user_priv", session_priv.user_priv_set_,
+                     KR(ret));
           }
           break;
         }
@@ -973,6 +1048,7 @@ int ObSchemaGetterGuard::check_priv_db_or_(const ObSessionPrivInfo &session_priv
   } else {
     ObOriginalDBKey db_priv_key(user_id, db);
     if (OB_FAIL(priv_mgr.get_db_priv_set(db_priv_key, db_priv_set))) {
+      LOG_WARN("get db priv set failed", K(db_priv_key), KR(ret));
     }
   }
 
@@ -987,6 +1063,7 @@ int ObSchemaGetterGuard::check_priv_db_or_(const ObSessionPrivInfo &session_priv
     ObNeedPriv collected_privs(db, "", OB_PRIV_DB_LEVEL, OB_PRIV_SET_EMPTY, false);
     if (OB_FAIL(collect_priv_in_roles(priv_mgr, session_priv, enable_role_id_array, *this, need_priv,
                                       collect_user_db_level_priv_in_roles, collected_privs, check_succ))) {
+      LOG_WARN("fail to collect priv in roles", K(ret));
     } else {
       db_priv_set |= collected_privs.priv_set_;
     }
@@ -1013,6 +1090,7 @@ int ObSchemaGetterGuard::check_priv_table_or_(const ObSessionPrivInfo &session_p
                                     need_priv.db_,
                                     need_priv.table_);
   if (OB_FAIL(priv_mgr.get_table_priv(table_priv_key, table_priv))) {
+    LOG_WARN("get table priv failed", KR(ret), K(table_priv_key));
   } else if (NULL != table_priv) {
     table_priv_set = table_priv->get_priv_set();
   }
@@ -1027,6 +1105,7 @@ int ObSchemaGetterGuard::check_priv_table_or_(const ObSessionPrivInfo &session_p
     ObNeedPriv collected_privs(need_priv.db_, need_priv.table_, OB_PRIV_TABLE_LEVEL, OB_PRIV_SET_EMPTY, false);
     if (OB_FAIL(collect_priv_in_roles(priv_mgr, session_priv, enable_role_id_array, *this, need_priv,
                                       collect_user_db_tb_level_priv_in_roles, collected_privs, check_succ))) {
+      LOG_WARN("fail to collect priv in roles", K(ret));
     } else {
       table_priv_set |= collected_privs.priv_set_;
     }
@@ -1054,6 +1133,7 @@ int ObSchemaGetterGuard::collect_all_priv_for_column(const ObSessionPrivInfo &se
                                column_name);
   col_priv_set = OB_PRIV_SET_EMPTY;
   if (OB_FAIL(get_column_priv_set(sort_key, col_priv_set))) {
+    LOG_WARN("get column priv failed", K(ret), K(sort_key));
   } else {
     bool pass = false;
     
@@ -1061,12 +1141,15 @@ int ObSchemaGetterGuard::collect_all_priv_for_column(const ObSessionPrivInfo &se
     ObNeedPriv collected_privs(db_name, table_name, OB_PRIV_TABLE_LEVEL, OB_PRIV_SET_EMPTY, false);
     const ObSchemaMgr *mgr = NULL;
     if (OB_FAIL(check_lazy_guard( mgr))) {
+      LOG_WARN("fail to check lazy guard", KR(ret));
     } else if (OB_ISNULL(mgr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("mgr is NULL", KR(ret));
     } else if (OB_FAIL(need_priv.columns_.push_back(column_name))) {
+      LOG_WARN("fail to push back", K(ret));
     } else if (OB_FAIL(collect_priv_in_roles(mgr->priv_mgr_, session_priv, enable_role_id_array, *this, need_priv,
                                              collect_column_level_all_priv_in_roles, collected_privs, pass))) {
+      LOG_WARN("fail to collect priv in roles", K(ret));
     } else {
       col_priv_set |= collected_privs.priv_set_;
     }
@@ -1087,6 +1170,7 @@ int ObSchemaGetterGuard::check_priv_any_column_priv(const ObSessionPrivInfo &ses
   if (OB_FAIL(get_column_priv_in_table(
                 ObTablePrivSortKey(session_priv.user_id_, db_name, table_name),
                 column_privs))) {
+    LOG_WARN("get column priv in table failed", K(ret));
   } else if (!column_privs.empty()) {
     pass = true;
   } else {
@@ -1096,12 +1180,15 @@ int ObSchemaGetterGuard::check_priv_any_column_priv(const ObSessionPrivInfo &ses
     need_priv.check_any_column_priv_ = true;
     const ObSchemaMgr *mgr = NULL;
     if (OB_FAIL(check_lazy_guard( mgr))) {
+      LOG_WARN("fail to check lazy guard", KR(ret));
     } else if (OB_ISNULL(mgr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("mgr is NULL", KR(ret));
     } else if (OB_FAIL(need_priv.columns_.push_back(""))) {
+      LOG_WARN("fail to push back", K(ret));
     } else if (OB_FAIL(collect_priv_in_roles(mgr->priv_mgr_, session_priv, enable_role_id_array, *this, need_priv,
                                              collect_any_column_level_priv_in_roles, collected_privs, pass))) {
+      LOG_WARN("fail to collect priv in roles", K(ret));
     }
   }
   return ret;
@@ -1120,6 +1207,7 @@ int ObSchemaGetterGuard::check_priv_or(const ObSessionPrivInfo &session_priv,
   uint64_t user_id = session_priv.user_id_;
   const ObSchemaMgr *mgr = NULL;
   if (OB_FAIL(check_lazy_guard( mgr))) {
+    LOG_WARN("fail to check lazy guard", KR(ret));
   } else if (OB_ISNULL(mgr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("mgr is NULL", KR(ret));
@@ -1138,6 +1226,7 @@ int ObSchemaGetterGuard::check_priv_or(const ObSessionPrivInfo &session_priv,
             ObNeedPriv collected_privs("", "", OB_PRIV_USER_LEVEL, OB_PRIV_SET_EMPTY, false);
             if (OB_FAIL(collect_priv_in_roles(priv_mgr, session_priv, enable_role_id_array, *this, need_priv,
                                               collect_user_level_priv_in_roles, collected_privs, check_succ))) {
+              LOG_WARN("fail to collect priv in roles", K(ret));
             } else {
               ObPrivSet total_set = (session_priv.user_priv_set_ | collected_privs.priv_set_);
               pass = OB_PRIV_HAS_ANY(total_set, need_priv.priv_set_);
@@ -1147,11 +1236,13 @@ int ObSchemaGetterGuard::check_priv_or(const ObSessionPrivInfo &session_priv,
         }
         case OB_PRIV_DB_LEVEL: {
           if (OB_FAIL(check_priv_db_or_(session_priv, enable_role_id_array, need_priv, priv_mgr, user_id, pass))) {
+            LOG_WARN("fail to check priv db only", KR(ret), K(user_id), K(need_priv.db_));
           }
           break;
         }
         case OB_PRIV_TABLE_LEVEL: {
           if (OB_FAIL(check_priv_table_or_(session_priv, enable_role_id_array, need_priv, priv_mgr, user_id, pass))) {
+            LOG_WARN("fail to check priv table only", KR(ret), K(user_id), K(need_priv.db_), K(need_priv.table_));
           }
           break;
         }

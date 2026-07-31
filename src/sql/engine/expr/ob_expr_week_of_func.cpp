@@ -69,10 +69,13 @@ int ObExprWeekOfYear::calc_weekofyear(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
+    LOG_WARN("eval param value failed");
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
+    LOG_WARN("get sql mode failed", K(ret));
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
+    LOG_WARN("get tz info failed", K(ret));
   } else if (FALSE_IT(date_sql_mode.init(sql_mode))) {
   } else if (OB_FAIL(ob_datum_to_ob_time_with_date(ctx.exec_ctx_,
                  *param_datum, expr.args_[0]->datum_meta_.type_,
@@ -149,10 +152,13 @@ int ObExprWeekDay::calc_weekday(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
+    LOG_WARN("eval param value failed");
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
+    LOG_WARN("get sql mode failed", K(ret));
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
+    LOG_WARN("get tz info failed", K(ret));
   } else if (FALSE_IT(date_sql_mode.init(sql_mode))) {
   } else if (OB_FAIL(ob_datum_to_ob_time_with_date(ctx.exec_ctx_,
                  *param_datum, expr.args_[0]->datum_meta_.type_,
@@ -323,10 +329,13 @@ int ObExprYearWeek::calc_yearweek(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
+    LOG_WARN("eval param value failed");
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
+    LOG_WARN("get sql mode failed", K(ret));
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
+    LOG_WARN("get tz info failed", K(ret));
   } else if (FALSE_IT(date_sql_mode.init(sql_mode))) {
   } else if (OB_FAIL(ob_datum_to_ob_time_with_date(ctx.exec_ctx_,
                      *param_datum, expr.args_[0]->datum_meta_.type_,
@@ -350,6 +359,7 @@ int ObExprYearWeek::calc_yearweek(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
     if (2 == expr.arg_cnt_) {
       ObDatum *param_datum2 = NULL;
       if (OB_FAIL(expr.args_[1]->eval(ctx, param_datum2))) {
+        LOG_WARN("eval param value failed");
       } else if (OB_LIKELY(!param_datum2->is_null())) {
         mode_value = param_datum2->get_int();
       }
@@ -446,10 +456,13 @@ int ObExprWeek::calc_week(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
+    LOG_WARN("eval param value failed");
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
+    LOG_WARN("get sql mode failed", K(ret));
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
+    LOG_WARN("get tz info failed", K(ret));
   } else if (FALSE_IT(date_sql_mode.init(sql_mode))) {
   } else if (OB_FAIL(ob_datum_to_ob_time_with_date(ctx.exec_ctx_,
                  *param_datum, expr.args_[0]->datum_meta_.type_,
@@ -476,12 +489,14 @@ int ObExprWeek::calc_week(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
     if (2 == expr.arg_cnt_) {
       ObDatum *param_datum2 = NULL;
       if (OB_FAIL(expr.args_[1]->eval(ctx, param_datum2))) {
+        LOG_WARN("eval param value failed");
       } else if (OB_LIKELY(!param_datum2->is_null())) {
         mode_value = param_datum2->get_int();
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ob_expr_calc_yearweek(mode_value, ot, week, DT_WEEK_ZERO_BEGIN, expr_datum))) {
+        LOG_WARN("cal yearweek failed", K(ret), K(mode_value), K(ot));
       } else {
         expr_datum.set_int(week);
       }

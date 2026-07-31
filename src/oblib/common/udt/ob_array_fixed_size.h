@@ -102,6 +102,7 @@ public :
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(clone_empty(alloc, output, false))) {
+      OB_LOG(WARN, "clone empty failed", K(ret));
     } else if (OB_UNLIKELY(OB_ISNULL(elem_except))) {
       ret = OB_ERR_UNEXPECTED;
       OB_LOG(WARN, "elem except is null", K(ret));
@@ -116,9 +117,11 @@ public :
           if (this->is_null(i)) {
             // do nothing
           } else if (OB_FAIL(arr_data->push_back((*this)[i]))) {
+            OB_LOG(WARN, "push null failed", K(ret));
           }
         } else if (this->is_null(i)) {
           if (OB_FAIL(arr_data->push_null())) {
+            OB_LOG(WARN, "push null failed", K(ret));
           }
         } else if ((*this)[i] != *elem_except && OB_FAIL(arr_data->push_back((*this)[i]))) {
           OB_LOG(WARN, "failed to add element", K(ret));

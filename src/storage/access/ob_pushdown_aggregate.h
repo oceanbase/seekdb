@@ -693,6 +693,7 @@ OB_INLINE int ObSumAggCell::eval_int_inner(const common::ObDatum &datum, ObDataB
     int64_t new_int = datum.get_int();
     int64_t sum_int = datum_int + new_int;
     if (query::ObArithmeticOverflow::is_int_add_out_of_range(datum_int, new_int, sum_int)) {
+      LOG_DEBUG("int64_t add overflow, will use decimal int", K(datum_int), K(new_int), K(sum_int));
       if (OB_UNLIKELY(result_datum.is_null())) {
         DATUM_TO_DECIMAL_INT(result_datum, RES_T) = datum_int;
         DATUM_TO_DECIMAL_INT(result_datum, RES_T) += new_int;
@@ -703,6 +704,7 @@ OB_INLINE int ObSumAggCell::eval_int_inner(const common::ObDatum &datum, ObDataB
       }
       datum_int = 0;
     } else {
+      LOG_DEBUG("int64_t add does not overflow", K(datum_int), K(new_int), K(sum_int));
       datum_int = sum_int;
     }
     sum_use_int_flag = true;
@@ -725,18 +727,21 @@ OB_INLINE int ObSumAggCell::eval_int_inner<number::ObNumber>(const common::ObDat
     int64_t new_int = datum.get_int();
     int64_t sum_int = datum_int + new_int;
     if (query::ObArithmeticOverflow::is_int_add_out_of_range(datum_int, new_int, sum_int)) {
+      LOG_DEBUG("int64_t add overflow, will use number", K(datum_int), K(new_int), K(sum_int));
       common::number::ObNumber result_nmb;
       if (!result_datum.is_null()) {
         common::number::ObCompactNumber &cnum = const_cast<common::number::ObCompactNumber &>(result_datum.get_number());
         result_nmb.assign(cnum.desc_.desc_, cnum.digits_ + 0);
       }
       if (OB_FAIL(result_nmb.add(datum_int, new_int, result_nmb, alloc))) {
+        LOG_WARN("number add failed", K(ret));
       } else {
         result_datum.set_number(result_nmb);
         datum_int = 0;
         alloc.free();
       }
     } else {
+      LOG_DEBUG("int64_t add does not overflow", K(datum_int), K(new_int), K(sum_int), K(datum_offset));
       datum_int = sum_int;
     }
     sum_use_int_flag = true;
@@ -758,6 +763,7 @@ OB_INLINE int ObSumAggCell::eval_uint_inner(const common::ObDatum &datum, ObData
     uint64_t new_uint = datum.get_uint();
     uint64_t sum_uint = datum_uint + new_uint;
     if (query::ObArithmeticOverflow::is_uint_add_out_of_range(datum_uint, new_uint, sum_uint)) {
+      LOG_DEBUG("uint64_t add overflow, will use number", K(datum_uint), K(new_uint), K(sum_uint));
       if (OB_UNLIKELY(result_datum_.is_null())) {
         DATUM_TO_DECIMAL_INT(result_datum_, RES_T) = datum_uint;
         DATUM_TO_DECIMAL_INT(result_datum_, RES_T) += new_uint;
@@ -768,6 +774,7 @@ OB_INLINE int ObSumAggCell::eval_uint_inner(const common::ObDatum &datum, ObData
       }
       datum_uint = 0;
     } else {
+      LOG_DEBUG("uint64_t add does not overflow", K(datum_uint), K(new_uint), K(sum_uint), K(datum_offset));
       datum_uint = sum_uint;
     }
     sum_use_int_flag = true;
@@ -790,18 +797,21 @@ OB_INLINE int ObSumAggCell::eval_uint_inner<number::ObNumber>(const common::ObDa
     uint64_t new_uint = datum.get_uint();
     uint64_t sum_uint = datum_uint + new_uint;
     if (query::ObArithmeticOverflow::is_uint_add_out_of_range(datum_uint, new_uint, sum_uint)) {
+      LOG_DEBUG("uint64_t add overflow, will use number", K(datum_uint), K(new_uint), K(sum_uint));
       common::number::ObNumber result_nmb;
       if (!result_datum.is_null()) {
         common::number::ObCompactNumber &cnum = const_cast<common::number::ObCompactNumber &>(result_datum.get_number());
         result_nmb.assign(cnum.desc_.desc_, cnum.digits_ + 0);
       }
       if (OB_FAIL(result_nmb.add(datum_uint, new_uint, result_nmb, alloc))) {
+        LOG_WARN("number add failed", K(ret));
       } else {
         result_datum.set_number(result_nmb);
         datum_uint = 0;
         alloc.free();
       }
     } else {
+      LOG_DEBUG("uint64_t add does not overflow", K(datum_uint), K(new_uint), K(sum_uint));
       datum_uint = sum_uint;
     }
     sum_use_int_flag = true;

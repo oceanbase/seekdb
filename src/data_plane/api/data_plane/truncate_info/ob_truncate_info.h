@@ -350,6 +350,7 @@ int ObTruncatePartition::init_truncate_part(
           part_type,
           nullptr == prev_part ? ObRowkey::MIN_ROWKEY : prev_part->get_high_bound_val(),
           found_part.get_high_bound_val()))) {
+      STORAGE_LOG(WARN, "failed to init truncate range part", K(ret), K(part_type), K(found_part));
     } else {
       STORAGE_LOG(INFO, "success to init range part", K(ret), KPC(this), KPC(prev_part));
     }
@@ -359,6 +360,7 @@ int ObTruncatePartition::init_truncate_part(
         part_type,
         ObTruncatePartition::INCLUDE,
         found_part.get_list_row_values_struct()))) {
+      STORAGE_LOG(WARN, "failed to init truncate list part", K(ret), K(part_type), K(found_part));
     } else {
       STORAGE_LOG(INFO, "success to init list part", K(ret), KPC(this), KPC(prev_part));
     }

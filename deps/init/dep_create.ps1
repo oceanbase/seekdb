@@ -10,7 +10,6 @@
         deps/3rd/vcpkg/x64-windows/   (vcpkg installed packages)
         deps/3rd/openssl/             (OpenSSL)
         deps/3rd/vsag/               (vsag vector search library)
-        deps/3rd/tools/cmake/         (CMake)
         deps/3rd/tools/ninja/         (Ninja)
         deps/3rd/tools/llvm18/        (LLVM 18)
         deps/3rd/tools/win_flex_bison/(Flex & Bison)
@@ -161,7 +160,6 @@ Write-Log "Layout:"
 Write-Log "  deps/3rd/vcpkg/x64-windows/    vcpkg packages"
 Write-Log "  deps/3rd/openssl/              OpenSSL"
 Write-Log "  deps/3rd/vsag/                 vsag vector search library"
-Write-Log "  deps/3rd/tools/cmake/          CMake"
 Write-Log "  deps/3rd/tools/ninja/          Ninja"
 Write-Log "  deps/3rd/tools/llvm18/         LLVM 18"
 Write-Log "  deps/3rd/tools/win_flex_bison/ Flex & Bison"

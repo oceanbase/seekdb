@@ -40,7 +40,7 @@ namespace share
 {
 namespace aggregate
 {
-class ObIPushdownAggregatePlan;
+class ObIPushdownAggregateProgram;
 }
 namespace schema
 {
@@ -985,6 +985,7 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL((*hash_func_)(*datum_, seed, seed, access_ctx_))) {
+      STORAGE_LOG(WARN, "Failed to do hash for datum", K_(datum));
     } else {
       hash_val = seed;
     }
@@ -1096,6 +1097,7 @@ public:
     int ret = OB_SUCCESS;
     uint64_t hash_val;
     if (OB_FAIL(hash_func_(datum, 0, hash_val, access_ctx_))) {
+      STORAGE_LOG(WARN, "Failed to do hash for datum", K(datum));
     } else {
       ret = set_.insert_hash(hash_val);
     }
@@ -1106,6 +1108,7 @@ public:
     int ret = OB_SUCCESS;
     uint64_t hash_val;
     if (OB_FAIL(hash_func_(datum, 0, hash_val, access_ctx_))) {
+      STORAGE_LOG(WARN, "Failed to do hash for datum", K(datum));
     } else {
       is_exist = set_.test_hash(hash_val);
     }
@@ -1413,8 +1416,8 @@ public:
 
   int init_pushdown_storage_filter();
   OB_INLINE ObEvalCtx &get_eval_ctx() { return eval_ctx_; }
-  OB_INLINE share::aggregate::ObIPushdownAggregatePlan *get_pushdown_aggregate_plan()
-  { return pd_aggregate_plan_; }
+  OB_INLINE share::aggregate::ObIPushdownAggregateProgram *get_pushdown_aggregate_program()
+  { return pd_aggregate_program_; }
   OB_INLINE bool is_vectorized() const { return 0 != expr_spec_.max_batch_size_; }
   OB_INLINE int64_t get_batch_size() const { return expr_spec_.max_batch_size_; }
   // filter row for storage callback.
@@ -1431,10 +1434,9 @@ public:
   int write_trans_info_datum(blocksstable::ObDatumRow &out_row);
 public:
   ObPushdownFilterExecutor *pd_storage_filters_;
-  share::aggregate::ObIPushdownAggregatePlan *pd_aggregate_plan_;
+  share::aggregate::ObIPushdownAggregateProgram *pd_aggregate_program_;
   // Transitional quarantine for legacy rich aggregates.  Storage borrows the
-  // immutable plan and owns one opaque mutable program per logical scan store;
-  // SQL owns every concrete implementation and row layout.
+  // opaque interface; SQL owns every aggregate implementation and row layout.
   ObEvalCtx &eval_ctx_;
   const ObPushdownExprSpec &expr_spec_;
 private:
@@ -1581,6 +1583,7 @@ int ObPushdownFilterExecutor::init_array_param(common::ObFixedArray<T, common::O
     } else {
       param.reset();
       if (OB_FAIL(param.init(size))) {
+        STORAGE_LOG(WARN, "Failed to init params", K(ret), K(size));
       }
     }
   }

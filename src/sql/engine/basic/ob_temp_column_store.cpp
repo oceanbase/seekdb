@@ -146,6 +146,7 @@ int ObTempColumnStore::ColumnBlock::calc_rows_size(const IVectorPtrs &vectors,
   for (int64_t i = 0; OB_SUCC(ret) && i < vectors.count(); ++i) {
     const ObIVector *vec = vectors.at(i);
     if (OB_FAIL(calc_vector_size(vec, selector, lengths[i], size, batch_mem_size))) {
+      LOG_WARN("fail to calc vector size", KR(ret));
     }
   }
   return ret;
@@ -171,6 +172,7 @@ int ObTempColumnStore::ColumnBlock::add_batch(ShrinkBuffer &buf,
       const ObIVector *vec = vectors.at(i);
       vec_offsets[i] = pos;
       if (OB_FAIL(vector_to_buf(vec, selector, lengths[i], size, head, pos))) {
+        LOG_WARN("vector to buf failed", KR(ret));
       }
     }
     vec_offsets[vectors.count()] = pos; // last offset, the size of vector
@@ -199,6 +201,7 @@ int ObTempColumnStore::ColumnBlock::get_next_batch(const IVectorPtrs &vectors,
     ObIVector *vec = vectors.at(i);
     int64_t pos = vec_offsets[i];
     if (OB_FAIL(vector_from_buf(buf, pos ,size, vec))) {
+      LOG_WARN("vector from buf failed", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -231,6 +234,7 @@ int ObTempColumnStore::Iterator::get_next_batch(const IVectorPtrs &vectors,
   int32_t batch_pos = 0;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(cur_blk_->get_next_batch(vectors, read_pos_, batch_rows, batch_pos))) {
+    LOG_WARN("fail to get next batch from column block", K(ret));
   } else {
     cur_blk_id_ += batch_rows;
     read_pos_ += batch_pos;
@@ -246,6 +250,7 @@ int ObTempColumnStore::Iterator::next_block()
   if (cur_blk_id_ >= get_row_cnt()) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(get_block(cur_blk_id_, read_blk))) {
+    LOG_WARN("fail to get block from store", K(ret), K(cur_blk_id_));
   } else {
     cur_blk_ = static_cast<const ColumnBlock*>(read_blk);
     read_pos_ = 0;
@@ -317,7 +322,9 @@ int ObTempColumnStore::init(const common::ObIArray<query::ObSpillColumnDesc> &co
   ObArenaAllocator arena;
   ObArray<ObIVector *> vectors;
   if (OB_FAIL(init_vectors(col_array, arena, vectors))) {
+    LOG_WARN("init vectors failed", K(ret));
   } else if (OB_FAIL(init(vectors, max_batch_size, mem_attr, mem_limit, enable_dump, compressor_type))) {
+    LOG_WARN("init with vectors failed", K(ret), "column_count", col_array.count());
   }
   return ret;
 }
@@ -332,6 +339,7 @@ int ObTempColumnStore::init_vectors(const ObIArray<query::ObSpillColumnDesc> &co
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(col_array));
   } else if (OB_FAIL(vectors.prepare_allocate(col_array.count()))) {
+    LOG_WARN("fail to prepare allocate vectors", K(ret), K(col_array.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < col_array.count(); ++i) {
       const query::ObSpillColumnDesc &column = col_array.at(i);
@@ -436,6 +444,7 @@ int ObTempColumnStore::init_batch_ctx(const IVectorPtrs &vectors)
       batch_ctx_->lengths_.set_attr(mem_attr_);
       batch_ctx_->max_batch_size_ = max_batch_size;
       if (OB_FAIL(batch_ctx_->lengths_.prepare_allocate(col_cnt_))) {
+        LOG_WARN("fail to prepare allocate lengths", K(ret), K(col_cnt_));
       } else {
         mem += sizeof(*batch_ctx_);
         batch_ctx_->selector_ = reinterpret_cast<typeof(batch_ctx_->selector_)>(mem);
@@ -502,13 +511,16 @@ int ObTempColumnStore::add_batch(const IVectorPtrs &vectors,
                                                    batch_ctx_->lengths_,
                                                    size,
                                                    batch_mem_size))) {
+      LOG_WARN("fail to calc rows size", K(ret));
     } else if (OB_FAIL(ensure_write_blk(batch_mem_size))) {
+      LOG_WARN("ensure write block failed", K(ret));
     } else if (OB_FAIL(cur_blk_->add_batch(blk_buf_,
                                            vectors,
                                            selector,
                                            batch_ctx_->lengths_,
                                            size,
                                            batch_mem_size))) {
+      LOG_WARN("fail to add batch to column store", K(ret));
     } else {
       block_id_cnt_ += size;
       inc_mem_used(batch_mem_size);

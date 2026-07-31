@@ -63,6 +63,7 @@ int ObDeadLockLocalTaskQueue::Task::set_cycle_info(const ObDeadLockCycleInfo &cy
   if (!cycle_info.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(cycle_info_.assign(cycle_info))) {
+    DETECT_LOG(WARN, "assign deadlock cycle info failed", KR(ret));
   }
   return ret;
 }
@@ -102,8 +103,10 @@ int ObDeadLockLocalTaskQueue::init(ObDeadLockDetectorMgr *mgr)
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(common::ObLinkQueueThreadPool::init(
                  1, DEADLOCK_LOCAL_TASK_QUEUE_LIMIT, "DeadLockLocal"))) {
+    DETECT_LOG(WARN, "init local deadlock task queue failed", KR(ret));
   } else if (FALSE_IT(thread_pool_inited = true)) {
   } else if (OB_FAIL(common::ObLinkQueueThreadPool::set_adaptive_thread(1, 1))) {
+    DETECT_LOG(WARN, "fix local deadlock task queue worker count failed", KR(ret));
   } else {
     common::ObLinkQueueThreadPool::set_run_wrapper(share::server_runtime());
     mgr_ = mgr;
@@ -167,6 +170,7 @@ int ObDeadLockLocalTaskQueue::push_task_(Task *task)
   } else if (!ATOMIC_LOAD(&is_running_)) {
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(common::ObLinkQueueThreadPool::push(task))) {
+    DETECT_LOG(WARN, "push local deadlock task failed", KR(ret), K(task->type_));
   }
   if (OB_FAIL(ret) && OB_NOT_NULL(task)) {
     destroy_task_(task);
@@ -234,13 +238,17 @@ void ObDeadLockLocalTaskQueue::handle(common::LinkTask *task)
                                          local_task->lclv_,
                                          local_task->label_,
                                          local_task->send_ts_))) {
+      DETECT_LOG(WARN, "process local lcl state failed", KR(ret), KPC(local_task));
     }
   } else if (TaskType::CYCLE_INFO == local_task->type_) {
     if (OB_FAIL(mgr_->process_cycle_info_(local_task->cycle_info_))) {
+      DETECT_LOG(WARN, "process local deadlock cycle info failed", KR(ret), KPC(local_task));
     }
   } else if (TaskType::PARENT_NOTIFICATION == local_task->type_) {
     if (OB_FAIL(mgr_->process_parent_notification_(local_task->dest_key_,
                                                    local_task->child_key_))) {
+      DETECT_LOG(WARN, "process local deadlock parent notification failed",
+                 KR(ret), KPC(local_task));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -376,6 +384,7 @@ int ObDeadLockDetectorMgr::server_module_init(ObDeadLockDetectorMgr *&p_deadlock
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(p_deadlock_detector_mgr->init())) {
+    DETECT_LOG(ERROR, "init failure detector failed", KR(ret));
   }
   return ret;
 }
@@ -391,14 +400,18 @@ int ObDeadLockDetectorMgr::init()
     ret = OB_INIT_TWICE;
     DETECT_LOG(WARN, "deadlock detector manager init twice", PRINT_WRAPPER);
   } else if (OB_FAIL(ObDeadLockInnerTableService::init())) {
+    DETECT_LOG(WARN, "failed to init deadlock inner table service", K(ret));
   } else {
     ObMemAttr attr(MEMORY_LABEL);
     if (OB_FAIL(time_wheel_.init(TIME_WHEEL_PRECISION_US,
                                  TIMER_THREAD_COUNT,
                                  DETECTOR_TIMER_NAME))) {
+      DETECT_LOG(WARN, "time_wheel_ init failed", PRINT_WRAPPER);
     } else if (OB_FAIL(detector_map_.init(attr))) {
+      DETECT_LOG(WARN, "detector_map_ init failed", PRINT_WRAPPER);
     } else if (FALSE_IT(detector_map_inited = true)) {
     } else if (OB_FAIL(local_task_queue_.init(this))) {
+      DETECT_LOG(WARN, "local deadlock task queue init failed", PRINT_WRAPPER);
     } else {
       ATOMIC_STORE(&stop_ts_, 0);
       is_inited_ = true;
@@ -420,6 +433,7 @@ int ObDeadLockDetectorMgr::start()
   } else if (is_stopping_()) {
     ret = OB_IN_STOP_STATE;
   } else if (OB_FAIL(local_task_queue_.start())) {
+    DETECT_LOG(WARN, "local deadlock task queue start failed", KR(ret));
   } else if (OB_FAIL(time_wheel_.start())) {
     DETECT_LOG(WARN, "time wheel start failed");
     local_task_queue_.stop();
@@ -459,6 +473,7 @@ void ObDeadLockDetectorMgr::wait()
   if (!is_inited_) {
     DETECT_LOG(WARN, "deadlock detector manager is not initialized");
   } else if (OB_FAIL(time_wheel_.wait())) {
+    DETECT_LOG(WARN, "ObDeadLockDetectorMgr wait time wheel failed", KR(ret));
   }
   local_task_queue_.wait();
 }
@@ -512,7 +527,9 @@ int ObDeadLockDetectorMgr::unregister_key_(const UserBinaryKey &key)
   } else {
     ref_guard.get_detector()->unregister_timer_task();
     if (OB_FAIL(detector_map_.del(key))) {
+      DETECT_LOG(WARN, "detector_map_ erase node failed", PRINT_WRAPPER);
     } else {
+      DETECT_LOG(TRACE, "unregister key success", PRINT_WRAPPER);
     }
   }
   return ret;
@@ -647,6 +664,7 @@ int ObDeadLockDetectorMgr::process_parent_notification_(const UserBinaryKey &par
                                                             0,
                                                             true,
                                                             p_detector))) {
+      DETECT_LOG(WARN, "create new detector instance failed", PRINT_WRAPPER);
     } else if (OB_FAIL(detector_map_.insert_and_get(binary_key, p_detector))) {
       DETECT_LOG(WARN, "detector_map_ insert key and value failed", PRINT_WRAPPER);
       p_deadlock_detector_mgr->inner_alloc_handle_.inner_factory_.release(p_detector);
@@ -691,9 +709,12 @@ int ObDeadLockDetectorMgr::check_and_report_cycle_(
     if (organizer.get_user_key() == cycle_info.get_dest_key()) {
       uint64_t cycle_hash = calculate_cycle_hash_(cycle_info);
       if (OB_FAIL(check_and_record_cycle_hash_(cycle_hash))) {
+        DETECT_LOG(INFO, "this cycle may has been reported",
+                         KR(ret), K(cycle_info), K(cycle_hash));
       } else {
         if (OB_FAIL(ObDeadLockInnerTableService::
                     insert_all(cycle_info.get_collected_info()))) {
+          DETECT_LOG(INFO, "report inner table success", KR(ret), K(cycle_info));
         } else {
           DETECT_LOG(INFO, "report inner table success", K(cycle_info));
         }

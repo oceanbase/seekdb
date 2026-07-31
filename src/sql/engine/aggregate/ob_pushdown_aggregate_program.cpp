@@ -40,8 +40,11 @@ int ObCountPushdownAggregateProgramBase::init(
   if (OB_UNLIKELY(inputs.empty())) {
     ret = OB_NOT_SUPPORTED;
   } else if (OB_FAIL(inputs_.reserve(inputs.count()))) {
+    LOG_WARN("failed to reserve count pushdown inputs", K(ret), K(inputs.count()));
   } else if (OB_FAIL(counts_.reserve(inputs.count()))) {
+    LOG_WARN("failed to reserve count pushdown values", K(ret), K(inputs.count()));
   } else if (OB_FAIL(deltas_.reserve(inputs.count()))) {
+    LOG_WARN("failed to reserve count pushdown deltas", K(ret), K(inputs.count()));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < inputs.count(); ++i) {
     const ObCountPushdownInputSpec &input = inputs.at(i);
@@ -49,8 +52,11 @@ int ObCountPushdownAggregateProgramBase::init(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid count pushdown input slot", K(ret), K(i), K(input));
     } else if (OB_FAIL(inputs_.push_back(input))) {
+      LOG_WARN("failed to append count pushdown input", K(ret), K(i), K(input));
     } else if (OB_FAIL(counts_.push_back(0))) {
+      LOG_WARN("failed to append count pushdown value", K(ret), K(i));
     } else if (OB_FAIL(deltas_.push_back(0))) {
+      LOG_WARN("failed to append count pushdown delta", K(ret), K(i));
     }
   }
   return ret;
@@ -110,6 +116,8 @@ int ObCountPushdownAggregateProgramBase::can_consume(
       ret = reduce_ret;
       LOG_WARN("failed to probe aggregate reduction", K(ret), K(input.slot_), K(requested));
     } else if (OB_FAIL(validate_reduction(requested, reduction))) {
+      LOG_WARN("invalid aggregate reduction probe", K(ret), K(input.slot_), K(requested),
+               K(reduction.present_), K(reduction.row_count_), K(reduction.null_count_));
     }
   }
   return ret;
@@ -138,6 +146,8 @@ int ObCountPushdownAggregateProgramBase::consume(
     int64_t delta = 0;
     if (OB_SUCCESS == reduce_ret) {
       if (OB_FAIL(validate_reduction(requested, reduction))) {
+        LOG_WARN("invalid aggregate reduction", K(ret), K(input.slot_), K(requested),
+                 K(reduction.present_), K(reduction.row_count_), K(reduction.null_count_));
       } else {
         delta = reduction.row_count_ - (input.exclude_null_ ? reduction.null_count_ : 0);
       }
@@ -152,6 +162,7 @@ int ObCountPushdownAggregateProgramBase::consume(
       } else {
         share::aggregate::ObAggregateValueBatchView values;
         if (OB_FAIL(segment.read_values(input.slot_, values))) {
+          LOG_WARN("failed to read aggregate input values", K(ret), K(input.slot_));
         } else if (OB_UNLIKELY(values.count_ != segment.selection().count_
                                || values.count_ < 0
                                || (values.count_ > 0 && OB_ISNULL(values.datums_)))) {
@@ -228,6 +239,7 @@ int ObCountPushdownAggregateProgramBase::emit(
       result.row_count_ = 1;
       result.end_ = true;
       state_ = share::aggregate::AGG_PROGRAM_END;
+      LOG_DEBUG("materialized query-owned count pushdown result", K(counts_));
     }
   }
   return ret;
@@ -384,11 +396,10 @@ public:
     }
   }
 
-  void destroy() override
+  void destroy(common::ObIAllocator &allocator) override
   {
-    common::ObIAllocator *allocator = &allocator_;
     this->~ObScalarPushdownAggregateProgram();
-    allocator->free(this);
+    allocator.free(this);
   }
 
   int init(const common::ObIArray<ObExpr *> &aggregate_exprs)
@@ -397,8 +408,11 @@ public:
     if (OB_UNLIKELY(aggregate_exprs.empty())) {
       ret = OB_NOT_SUPPORTED;
     } else if (OB_FAIL(eval_ctx_.get_datum_access_ctx(access_ctx_))) {
+      LOG_WARN("failed to get datum access context", K(ret));
     } else if (OB_FAIL(specs_.reserve(aggregate_exprs.count()))) {
+      LOG_WARN("failed to reserve scalar aggregate specs", K(ret), K(aggregate_exprs.count()));
     } else if (OB_FAIL(states_.reserve(aggregate_exprs.count()))) {
+      LOG_WARN("failed to reserve scalar aggregate states", K(ret), K(aggregate_exprs.count()));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < aggregate_exprs.count(); ++i) {
       ObExpr *expr = aggregate_exprs.at(i);
@@ -467,6 +481,7 @@ public:
     for (int64_t i = 0; OB_SUCC(ret) && can_consume && i < specs_.count(); ++i) {
       bool spec_can_consume = false;
       if (OB_FAIL(probe_spec(specs_.at(i), segment, spec_can_consume))) {
+        LOG_WARN("failed to probe scalar aggregate input", K(ret), K(i));
       } else {
         can_consume = spec_can_consume;
       }
@@ -487,6 +502,7 @@ public:
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < specs_.count(); ++i) {
       if (OB_FAIL(stage_spec(specs_.at(i), segment, states_.at(i)))) {
+        LOG_WARN("failed to stage scalar aggregate input", K(ret), K(i));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < specs_.count(); ++i) {
@@ -820,6 +836,7 @@ private:
         expr->locate_datum_for_write(eval_ctx_).set_null();
         expr->get_eval_info(eval_ctx_).evaluated_ = true;
       } else if (OB_FAIL(expr->deep_copy_datum(eval_ctx_, agg_state.current_.datum_))) {
+        LOG_WARN("failed to copy scalar MIN/MAX output", K(ret), K(i));
       } else {
         expr->get_eval_info(eval_ctx_).evaluated_ = true;
       }
@@ -942,11 +959,10 @@ public:
 
   ~ObProcessorSumPushdownAggregateProgram() override = default;
 
-  void destroy() override
+  void destroy(common::ObIAllocator &allocator) override
   {
-    common::ObIAllocator *allocator = &allocator_;
     this->~ObProcessorSumPushdownAggregateProgram();
-    allocator->free(this);
+    allocator.free(this);
   }
 
   int init(const common::ObIArray<ObExpr *> &aggregate_exprs)
@@ -1196,10 +1212,7 @@ private:
 
 } // namespace
 
-namespace
-{
-
-int create_pushdown_aggregate_program_instance(
+int create_pushdown_aggregate_program(
     ObEvalCtx &eval_ctx,
     const common::ObIArray<ObExpr *> &aggregate_exprs,
     const bool rich_format,
@@ -1227,92 +1240,13 @@ int create_pushdown_aggregate_program_instance(
   return ret;
 }
 
-class ObPushdownAggregatePlan final
-  : public share::aggregate::ObIPushdownAggregatePlan
-{
-public:
-  ObPushdownAggregatePlan(
-      ObEvalCtx &eval_ctx,
-      const common::ObIArray<ObExpr *> &aggregate_exprs,
-      const bool rich_format,
-      common::ObIAllocator &allocator)
-    : eval_ctx_(eval_ctx),
-      aggregate_exprs_(aggregate_exprs),
-      rich_format_(rich_format),
-      allocator_(allocator)
-  {}
-
-  ~ObPushdownAggregatePlan() override = default;
-
-  void destroy() override
-  {
-    common::ObIAllocator *allocator = &allocator_;
-    this->~ObPushdownAggregatePlan();
-    allocator->free(this);
-  }
-
-  int validate()
-  {
-    int ret = OB_SUCCESS;
-    share::aggregate::ObIPushdownAggregateProgram *probe = nullptr;
-    if (OB_FAIL(create_program(probe))) {
-    } else {
-      probe->destroy();
-      probe = nullptr;
-    }
-    return ret;
-  }
-
-  int create_program(
-      share::aggregate::ObIPushdownAggregateProgram *&program) const override
-  {
-    return create_pushdown_aggregate_program_instance(
-        eval_ctx_, aggregate_exprs_, rich_format_, allocator_, program);
-  }
-
-private:
-  ObEvalCtx &eval_ctx_;
-  const common::ObIArray<ObExpr *> &aggregate_exprs_;
-  bool rich_format_;
-  common::ObIAllocator &allocator_;
-  DISALLOW_COPY_AND_ASSIGN(ObPushdownAggregatePlan);
-};
-
-} // namespace
-
-int create_pushdown_aggregate_plan(
-    ObEvalCtx &eval_ctx,
-    const common::ObIArray<ObExpr *> &aggregate_exprs,
-    const bool rich_format,
+void destroy_pushdown_aggregate_program(
     common::ObIAllocator &allocator,
-    share::aggregate::ObIPushdownAggregatePlan *&plan)
+    share::aggregate::ObIPushdownAggregateProgram *&program)
 {
-  int ret = OB_SUCCESS;
-  void *buf = nullptr;
-  ObPushdownAggregatePlan *aggregate_plan = nullptr;
-  plan = nullptr;
-  if (OB_ISNULL(buf = allocator.alloc(sizeof(ObPushdownAggregatePlan)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate pushdown aggregate plan", K(ret));
-  } else {
-    aggregate_plan = new (buf) ObPushdownAggregatePlan(
-        eval_ctx, aggregate_exprs, rich_format, allocator);
-    if (OB_FAIL(aggregate_plan->validate())) {
-      aggregate_plan->destroy();
-      aggregate_plan = nullptr;
-    } else {
-      plan = aggregate_plan;
-    }
-  }
-  return ret;
-}
-
-void destroy_pushdown_aggregate_plan(
-    share::aggregate::ObIPushdownAggregatePlan *&plan)
-{
-  if (nullptr != plan) {
-    plan->destroy();
-    plan = nullptr;
+  if (nullptr != program) {
+    program->destroy(allocator);
+    program = nullptr;
   }
 }
 

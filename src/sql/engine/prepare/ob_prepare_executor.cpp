@@ -34,6 +34,7 @@ int ObPrepareExecutor::multiple_query_check(
   ObParser parser(allocator, session.get_sql_mode(), session.get_charsets4parser());
   ObMPParseStat parse_stat;
   if (OB_FAIL(parser.split_multiple_stmt(sql, queries, parse_stat, false, true))) {
+    LOG_WARN("failed to split multiple stmt", K(ret), K(sql));
   } else if (OB_UNLIKELY(queries.count() <= 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("emtpy query count", K(ret));
@@ -48,16 +49,14 @@ int ObPrepareExecutor::multiple_query_check(
 int ObPrepareExecutor::execute(ObExecContext &ctx, ObPrepareStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(ctx.get_sql_ctx()) || OB_ISNULL(ctx.get_my_session())
-      || OB_ISNULL(ctx.get_plan_cache_access_service())
-      || OB_ISNULL(ctx.get_prepared_statement_runtime())) {
+  if (OB_ISNULL(ctx.get_sql_ctx()) || OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("required execution dependency is NULL", K(ctx.get_sql_ctx()), K(ctx.get_my_session()),
-        KP(ctx.get_plan_cache_access_service()), K(ret));
+    LOG_WARN("sql ctx or session is NULL", K(ctx.get_sql_ctx()), K(ctx.get_my_session()), K(ret));
   } else {
     ObObj result;
     ParamStore params_array( (ObWrapperAllocator(ctx.get_allocator())) );
     if (OB_FAIL(ObSQLUtils::calc_const_expr(ctx, stmt.get_prepare_sql(), result, ctx.get_allocator(), params_array))) {
+      LOG_WARN("failed to calc const expr", K(stmt.get_prepare_sql()), K(ret));
     } else if (!result.is_string_type()) {
       ret = OB_ERR_PARSER_SYNTAX;
       LOG_WARN("prepare sql is not a string", K(result), K(ret));
@@ -66,6 +65,7 @@ int ObPrepareExecutor::execute(ObExecContext &ctx, ObPrepareStmt &stmt)
       ObPsStmtId ps_id = OB_INVALID_ID;
       ObString sql_string = result.get_string();
       if (OB_FAIL(ob_simple_low_to_up(ctx.get_allocator(), stmt.get_prepare_name(), stmt_name))) {
+        LOG_WARN("failed to write stirng", K(ret));
       } else if(OB_FAIL(ctx.get_my_session()->get_prepare_id(stmt_name, ps_id))) {
         if (OB_EER_UNKNOWN_STMT_HANDLER == ret) {
           ret = OB_SUCCESS;
@@ -75,13 +75,12 @@ int ObPrepareExecutor::execute(ObExecContext &ctx, ObPrepareStmt &stmt)
       } else if (OB_INVALID_ID != ps_id) {
         bool is_in_use = false;
         if (OB_FAIL(ctx.get_my_session()->check_ps_stmt_id_in_use(ps_id, is_in_use))) {
+          LOG_WARN("failed to check ps stmt id is in use",  K(ret), K(ps_id), K(is_in_use));
         } else if(!is_in_use) {
           if (OB_FAIL(ctx.get_my_session()->remove_prepare(stmt_name))) {
-          } else if (OB_ISNULL(ctx.get_ps_cache())) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("PS cache is not available in execution context", K(ret));
-          } else if (OB_FAIL(ctx.get_my_session()->close_ps_stmt(
-                         *ctx.get_ps_cache(), ps_id))) {
+            LOG_WARN("failed to remove old prepare stmt", K(stmt_name), K(ret));
+          } else if (OB_FAIL(ctx.get_my_session()->close_ps_stmt(ps_id))) {
+            LOG_WARN("fail to deallocate old prepare stmt", K(ret), K(ps_id));
           }
         } else {
           ret = OB_ERR_PS_NO_RECURSION;
@@ -90,16 +89,19 @@ int ObPrepareExecutor::execute(ObExecContext &ctx, ObPrepareStmt &stmt)
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(multiple_query_check(*ctx.get_my_session(), sql_string, ctx.get_allocator()))) {
+        LOG_WARN("failed to check multiple query", K(ret), K(sql_string));
       } else {
-        SMART_VAR(ObResultSet, result_set, *ctx.get_my_session(), ctx.get_allocator(),
-            *ctx.get_plan_cache_access_service()) {
+        SMART_VAR(ObResultSet, result_set, *ctx.get_my_session(), ctx.get_allocator()) {
           ctx.get_sql_ctx()->is_prepare_protocol_ = true; //set to prepare protocol
           ctx.get_sql_ctx()->is_prepare_stage_ = true;
           const bool is_inner_sql = false;
-          if (OB_FAIL(ctx.get_prepared_statement_runtime()->stmt_prepare(
-              sql_string, *ctx.get_sql_ctx(), result_set, is_inner_sql))) {
+          if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObSql>()->stmt_prepare(sql_string, *ctx.get_sql_ctx(),
+                                                            result_set, is_inner_sql))) {
+            LOG_WARN("failed to prepare stmt", K(sql_string), K(ret));
           } else if (OB_FAIL(ctx.get_my_session()->add_prepare(stmt_name,
                                                                result_set.get_statement_id()))) {
+            LOG_WARN("failed to add prepare", K(stmt_name),
+            K(result_set.get_statement_id()), K(ret));
           } else { /*do nothing*/ }
         }
       }
@@ -110,3 +112,4 @@ int ObPrepareExecutor::execute(ObExecContext &ctx, ObPrepareStmt &stmt)
 
 }
 }
+

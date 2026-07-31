@@ -16,8 +16,6 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "obmp_stmt_reset.h"
-#include "observer/omt/ob_server_runtime.h"
-#include "sql/ob_sql.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 #include "sql/session/ob_piece_cache.h"
 
@@ -66,6 +64,7 @@ int ObMPStmtReset::process()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("stmt_id is invalid", K(ret));
   } else if (OB_FAIL(get_session(session))) {
+    LOG_WARN("get session failed");
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL or invalid", K(ret), K(session));
@@ -77,14 +76,13 @@ int ObMPStmtReset::process()
     ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
     LOG_TRACE("close ps stmt or cursor", K_(stmt_id), K(session->get_server_sid()));
     // get stmt info
-    ObPsCache *ps_cache = OB_ISNULL(get_observer_sql_engine())
-        ? nullptr : &get_observer_sql_engine()->get_ps_cache();
-    if (OB_NOT_NULL(ps_cache)) {
+    if (OB_NOT_NULL(session->get_ps_cache())) {
       ObPsStmtInfoGuard guard;
       ObPsStmtInfo *ps_info = NULL;
       ObPsStmtId inner_stmt_id = OB_INVALID_ID;
       OZ (session->get_inner_ps_stmt_id(stmt_id_, inner_stmt_id));
-      if (OB_FAIL(ps_cache->get_stmt_info_guard(inner_stmt_id, guard))) {
+      if (OB_FAIL(session->get_ps_cache()->get_stmt_info_guard(inner_stmt_id, guard))) {
+        LOG_WARN("get stmt info guard failed", K(ret), K(stmt_id_), K(inner_stmt_id));
       } else if (OB_ISNULL(ps_info = guard.get_stmt_info())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get stmt info is null", K(ret));
@@ -112,6 +110,7 @@ int ObMPStmtReset::process()
     // close cursor
     if (OB_NOT_NULL(session->get_cursor(stmt_id_))) {
       if (OB_FAIL(session->close_cursor(stmt_id_))) {
+        LOG_WARN("fail to close cursor", K(ret), K_(stmt_id), K(session->get_server_sid()));
       }
     }
 
@@ -122,6 +121,7 @@ int ObMPStmtReset::process()
     ok_param.affected_rows_ = 0;
     ok_param.has_more_result_ = false;
     if (OB_FAIL(send_ok_packet(*session, ok_param))) {
+      LOG_WARN("send ok packet fail.", K(ret), K(stmt_id_));
     }
   } else {
     if (need_response_error) {

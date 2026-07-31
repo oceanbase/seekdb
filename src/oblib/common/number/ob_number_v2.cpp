@@ -286,6 +286,8 @@ int ObNumber::from_sci_(const char *str, const int64_t length, IAllocator &alloc
   if (OB_SUCC(ret) && (has_digit || 0 < i_nth) 
                    && ('e' == cur || 'E' == cur) 
                    && is_valid_sci_tail_(str, length, i)) {
+    LOG_DEBUG("ObNumber from sci", K(ret), K(i), K(cur), K(is_neg), K(nth), KCSTRING(digit_str), K(i_nth),
+      K(valid_len), K(dec_n_zero));
     if (0 == i || i >= length - 1) {
       if (i_nth > 0) {
         memcpy(full_str + nth, digit_str, i_nth);
@@ -336,6 +338,7 @@ int ObNumber::from_sci_(const char *str, const int64_t length, IAllocator &alloc
         cur = str[i];
       }
 
+      LOG_DEBUG("ObNumber from sci E", K(warning), K(e_neg), K(e_cnt), K(e_value), K(valid_len), K(i));
       if (0 == e_cnt) {
         warning = OB_INVALID_NUMERIC;
         e_value = 0;
@@ -352,15 +355,18 @@ int ObNumber::from_sci_(const char *str, const int64_t length, IAllocator &alloc
         /* 0.01234e-5 */
         if (e_value < 0) {
           nth += snprintf(full_str + nth, MAX_PRINTABLE_SIZE - nth, "0.%0*d%s", 0 - e_value + dec_n_zero, 0, digit_str);
+          LOG_DEBUG("ObNumber sci", KCSTRING(tmpstr), K(nth), KCSTRING(full_str), K(e_value), K(dec_n_zero), KCSTRING(digit_str));
         } else {
           if (dec_n_zero - e_value > 0) {
             /* 0.00012e2 -> 0.012 */
             nth += snprintf(full_str + nth, MAX_PRINTABLE_SIZE - nth, "0.%0*d%s", dec_n_zero - e_value, 0, digit_str);
+            LOG_DEBUG("ObNumber sci", KCSTRING(tmpstr), K(e_value), K(dec_n_zero));
           } else if (e_value < dec_n_zero + i_nth) {
             /* 0.001234e4 -> 12.34
              * e_value - dec_n_zero = 4 - 2 = 2
              * fmt str: %2.s%s, digit_str, digit_str + 2*/
             nth += snprintf(full_str + nth, MAX_PRINTABLE_SIZE - nth, "%.*s.%s", e_value - dec_n_zero, digit_str, digit_str + e_value - dec_n_zero);
+            LOG_DEBUG("ObNumber sci", KCSTRING(tmpstr), KCSTRING(full_str), K(nth), K(e_value), K(dec_n_zero), KCSTRING(digit_str));
           } else {
             /* 0.001234e8 -> 123400
              * e_value - dec_n_zero - i_nth = 8 - 2 - 4 = 2 */
@@ -368,6 +374,7 @@ int ObNumber::from_sci_(const char *str, const int64_t length, IAllocator &alloc
               snprintf(tmpstr, MAX_PRINTABLE_SIZE, "%0*d", e_value - dec_n_zero - i_nth, 0);
             }
             nth += snprintf(full_str + nth, MAX_PRINTABLE_SIZE - nth, "%s%s", digit_str, tmpstr);
+            LOG_DEBUG("ObNumber sci", KCSTRING(tmpstr), KCSTRING(digit_str), KCSTRING(full_str), K(nth), K(e_value), K(i_nth), K(dec_n_zero));
           }
         }
       } else {
@@ -377,14 +384,17 @@ int ObNumber::from_sci_(const char *str, const int64_t length, IAllocator &alloc
           if (e_value - (i_nth - valid_len) > 0) {
             nth += snprintf(full_str + nth, MAX_PRINTABLE_SIZE - nth, "%s%0*d",
                 digit_str, e_value - (i_nth - valid_len), 0);
+            LOG_DEBUG("ObNumber sci", KCSTRING(tmpstr), KCSTRING(full_str), K(nth), K(e_value), K(i_nth), K(valid_len));
           } else if (e_value - (i_nth - valid_len) == 0) {
             nth += snprintf(full_str + nth, MAX_PRINTABLE_SIZE - nth, "%s", digit_str);
+            LOG_DEBUG("ObNumber sci", KCSTRING(full_str), K(nth), K(e_value), K(i_nth), K(valid_len));
           } else {
             /* 12.345e2 -> 1234.5
              * valid_len + e_value = 2 + 2 = 4
              * fmt_str: %4.s, digit_str, digit_str + 4*/
             nth += snprintf(full_str + nth, MAX_PRINTABLE_SIZE - nth, "%.*s.%s",
                 valid_len + e_value, digit_str, digit_str + valid_len + e_value);
+            LOG_DEBUG("ObNumber sci", K(valid_len + e_value), KCSTRING(full_str), K(nth), K(e_value), KCSTRING(digit_str), K(valid_len));
           }
         } else {
           if (valid_len + e_value > 0)
@@ -395,6 +405,7 @@ int ObNumber::from_sci_(const char *str, const int64_t length, IAllocator &alloc
             //sprintf(tmpstr, "%%%d.s.%%s", valid_len + e_value);
             nth += snprintf(full_str + nth, MAX_PRINTABLE_SIZE - nth, "%.*s.%s",
                 valid_len + e_value, digit_str, digit_str + valid_len + e_value);
+            LOG_DEBUG("ObNumber sci", K(valid_len + e_value), KCSTRING(full_str), K(nth), K(e_value), KCSTRING(digit_str), K(valid_len));
           } else {
             /* 12.34e-4 -> 0.001234
              * 0 - (valid_len + e_value) = 0 - (2 - 4) = 2 */
@@ -402,6 +413,7 @@ int ObNumber::from_sci_(const char *str, const int64_t length, IAllocator &alloc
               snprintf(tmpstr, MAX_PRINTABLE_SIZE, "%0*d", 0 - (valid_len + e_value), 0);
             }
             nth += snprintf(full_str + nth, MAX_PRINTABLE_SIZE - nth, "0.%s%s", tmpstr, digit_str);
+            LOG_DEBUG("ObNumber sci", KCSTRING(tmpstr), KCSTRING(full_str), K(nth), K(e_value), KCSTRING(digit_str), K(valid_len));
           }
         }
       }
@@ -423,6 +435,7 @@ int ObNumber::from_sci_(const char *str, const int64_t length, IAllocator &alloc
         ret = OB_SUCCESS;
       }
       if (OB_SUCC(ret)) {
+        LOG_DEBUG("ObNumber sci final", K(ret), K(warning), K(full_str), K(nth), K(as_zero), K(e_neg), K(e_value), K(valid_len), K(i), K(i_nth));
         if (as_zero || 0 == valid_len || 0 == i_nth) {
           full_str[0] = '0';
           nth = 1;
@@ -454,7 +467,9 @@ int ObNumber::from_v1_(const char *str, const int64_t length, IAllocator &alloca
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid param", K(length), KP(str), K(ret));
   } else if (OB_FAIL(nb.build(str, length, warning, precision, scale))) {
+    LIB_LOG(WARN, "number build from fail", K(ret), K(length), "str", ObString(length, str));
   } else if (OB_FAIL(nb.number_.round_scale_(FLOATING_SCALE, true))) {
+    LIB_LOG(WARN, "round scale fail", K(ret), K(length), "str", ObString(length, str));
   } else if (OB_FAIL(exp_check_(nb.number_.get_desc()))) {
     LIB_LOG(WARN, "exponent precision check fail", K(ret));
     if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
@@ -490,6 +505,7 @@ int ObNumber::from_v2_(const char *str, const int64_t length, IAllocator &alloca
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid param", K(length), KP(str), K(ret));
   } else if (OB_FAIL(nb.build_v2(str, length, warning, precision, scale))) {
+    LIB_LOG(WARN, "number build from fail", K(ret), K(length), "str", ObString(length, str));
   } else if (do_rounding && OB_FAIL(nb.number_.round_scale_v3_(FLOATING_SCALE, true))) {
     _LIB_LOG(WARN, "round scale fail, ret=%d str=[%.*s]", ret, static_cast<int32_t>(length), str);
   } else if (OB_FAIL(exp_check_(nb.number_.get_desc()))) {
@@ -595,6 +611,9 @@ int ObNumber::find_point_range_(const char *str, const int64_t length,
     }
   }
   const ObString tmp_string(length, str);
+  LIB_LOG(DEBUG, "succ to find_point_range_", K(tmp_string), K(start_idx),
+                K(tmp_start_idx), K(floating_point), K(end_idx), K(negative),
+                K(ret), K(warning), K(tmp_precision), K(tmp_scale));
   return ret;
 }
 
@@ -651,6 +670,7 @@ int ObNumber::construct_digits_(const char *str, const int64_t start_idx,
     --curr_digit;
   }
   len = (curr_digit >= digits ? (curr_digit - digits + 1) : 0);
+  LIB_LOG(DEBUG, "succ to construct_digits_", K(exp), K(len));
   return ret;
 }
 
@@ -670,7 +690,11 @@ int ObNumber::from_v3_(const char *str, const int64_t length, IAllocator &alloca
   /* Step 1: find floating point and integer & decimal range */
   if (OB_FAIL(find_point_range_(str, length, start_idx, floating_point, end_idx, negative, warning,
               precision, scale))) {
+    LOG_WARN("find floating point and range error\n");
+  /* Step 2: construct digits with fixed length, ignore overflowed, return exp and len */
   } else if (OB_FAIL(construct_digits_(str, start_idx, floating_point, end_idx, digits, exp, len))) {
+    LOG_WARN("fail to construct digits\n");
+  /* Step 3: calc desc : promise exp and len are in range */
   } else {
     d.desc_ = 0;
     d.sign_ = negative ? ObNumber::NEGATIVE : ObNumber::POSITIVE;
@@ -723,11 +747,13 @@ int ObNumber::from_v2_(const uint32_t desc, const ObCalcVector &vector, IAllocat
   int ret = OB_SUCCESS;
   ObCalcVector normalized_vector = vector;
   if (OB_FAIL(normalized_vector.normalize())) {
+    LOG_WARN("normalized_vector.normalize() fails", K(ret));
   }
   Desc d;
   d.desc_ = desc;
   d.len_ = (uint8_t)std::min(+MAX_STORE_LEN, normalized_vector.size());
   if (OB_FAIL(ret)) {
+    LOG_WARN("Previous normalize() fails", K(ret));
   } else if (0 == d.len_) {
     set_zero();
   } else if (OB_UNLIKELY(d.len_ > ObNumber::MAX_CALC_LEN)) {
@@ -744,6 +770,7 @@ int ObNumber::from_v2_(const uint32_t desc, const ObCalcVector &vector, IAllocat
       ObCStringHelper helper;
       _OB_LOG(WARN, "normalize [%s] fail, ret=%d", helper.convert(*this), ret);
     } else if (OB_FAIL(round_scale_v3_(FLOATING_SCALE, true))) {
+      LOG_WARN("round scale fail", K(ret), K(*this));
     } else if (OB_FAIL(exp_check_(d_))) {
       LOG_WARN("exponent precision check fail", K(ret), K(*this));
       if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
@@ -772,6 +799,7 @@ int ObNumber::from_(const ObNumber &other, IAllocator &allocator)
     _OB_LOG(WARN, "out of range, ret = %d , length = %d",
                   ret, (int)other.d_.len_);
   } else if (OB_ISNULL(digits_ = alloc_(allocator, other.d_.len_))) {
+    _OB_LOG(DEBUG, "alloc digits fail, length=%hhu", other.d_.len_);
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     MEMCPY(digits_, other.digits_, other.d_.len_ * ITEM_SIZE(digits_));
@@ -794,12 +822,14 @@ int ObNumber::deep_copy(const ObNumber &other, IAllocator &allocator)
     _OB_LOG(WARN, "out of range, ret = %d , length = %d",
                   ret, (int)other.d_.len_);
   } else if (OB_ISNULL(digits = alloc_(allocator, other.d_.len_))) {
+    _OB_LOG(DEBUG, "alloc digits fail, length=%hhu", other.d_.len_);
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     MEMCPY(digits, other.digits_, other.d_.len_ * ITEM_SIZE(digits));
     d_ = other.d_;
     d_.reserved_ = 0;
     digits_ = digits;
+    OB_LOG(DEBUG, "deep_copy", K(other));
   }
   return ret;
 }
@@ -817,6 +847,7 @@ int ObNumber::deep_copy_v3(const ObNumber &other, ObIAllocator &allocator)
     _OB_LOG(WARN, "out of range, ret = %d , length = %d",
                   ret, (int)other.d_.len_);
   } else if (OB_ISNULL(digits = (uint32_t *)allocator.alloc(sizeof(uint32_t) * other.d_.len_))) {
+    _OB_LOG(DEBUG, "alloc digits fail, length=%hhu", other.d_.len_);
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     MEMCPY(digits, other.digits_, other.d_.len_ * ITEM_SIZE(digits));
@@ -833,6 +864,8 @@ int ObNumber::deep_copy_to_allocator_(ObIAllocator &allocator)
   int ret = OB_SUCCESS;
   number::ObNumber tmp;
   if (OB_FAIL(tmp.from(*this, allocator))) {
+    LOG_WARN("failed: depp copy *this to tmp with given allocator",
+             KPC(this), K(tmp), K(ret));
   } else {
     *this = tmp;
   }
@@ -1015,7 +1048,9 @@ int ObNumber::trunc(const int64_t scale)
              || 0 >= d_.len_)) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(trunc_scale_(scale, false))) {
+    LOG_WARN("trunc scale failed", K(*this), K(ret));
   } else {
+    LOG_DEBUG("trunc scale succ", K(*this), K(scale));
     // do nothing
   }
   return ret;
@@ -1103,7 +1138,9 @@ int ObNumber::extract_valid_int64_with_trunc(int64_t &value) const
     ObDataBuffer allocator(buf_alloc, ObNumber::MAX_BYTE_LEN);
     //need deep copy before round
     if (OB_FAIL(tmp_number.from(*this, allocator))) {
+      LOG_WARN("fail to deep_copy", K(ret), K(tmp_number));
     } else if (OB_FAIL(tmp_number.trunc(0))) {
+      LOG_WARN("fail to trunc", K(ret), K(tmp_number));
     } else if (!tmp_number.is_valid_int64(value)) {
       ret = OB_DATA_OUT_OF_RANGE;
       LOG_WARN("invalid const type for array index", K(tmp_number), K(ret));
@@ -1122,7 +1159,9 @@ int ObNumber::extract_valid_uint64_with_trunc(uint64_t &value) const
     ObDataBuffer allocator(buf_alloc, ObNumber::MAX_BYTE_LEN);
     //need deep copy before round
     if (OB_FAIL(tmp_number.from(*this, allocator))) {
+      LOG_WARN("fail to deep_copy", K(ret), K(tmp_number));
     } else if (OB_FAIL(tmp_number.trunc(0))) {
+      LOG_WARN("fail to trunc", K(ret), K(tmp_number));
     } else if (!tmp_number.is_valid_uint64(value)) {
       ret = OB_DATA_OUT_OF_RANGE;
       LOG_WARN("invalid const type for array index", K(tmp_number), K(ret));
@@ -1141,7 +1180,9 @@ int ObNumber::extract_valid_int64_with_round(int64_t &value) const
     ObDataBuffer allocator(buf_alloc, ObNumber::MAX_BYTE_LEN);
     //need deep copy before round
     if (OB_FAIL(tmp_number.from(*this, allocator))) {
+      LOG_WARN("fail to deep_copy", K(ret), K(tmp_number));
     } else if (OB_FAIL(tmp_number.round(0))) {
+      LOG_WARN("fail to trunc", K(ret), K(tmp_number));
     } else if (!tmp_number.is_valid_int64(value)) {
       ret = OB_DATA_OUT_OF_RANGE;
       LOG_WARN("invalid const type for array index", K(tmp_number), K(ret));
@@ -1177,6 +1218,7 @@ bool ObNumber::is_int_parts_valid_int64(int64_t &int_parts, int64_t &decimal_par
     decimal_parts = tmp_decimal_parts;
     int_parts = is_negative() ? (-1 * tmp_int_parts) : tmp_int_parts;
   }
+  LOG_DEBUG("is int parts valid int64", K(*this), K(int_parts), K(decimal_parts));
   return bret;
 }
 
@@ -1358,11 +1400,13 @@ int ObNumber::round_scale_(const int64_t scale, const bool using_floating_scale)
     // do nothing
   } else if (0 < floating_scale) {
     if (OB_FAIL(round_decimal_(floating_scale, decimal_digits, decimal_length))) {
+      LOG_ERROR("fail to get round_decimal");
     } else {
       ret = rebuild_digits_(integer_digits, integer_length, decimal_digits, decimal_length);
     }
   } else if (0 > floating_scale) {
     if (OB_FAIL(round_integer_(-floating_scale, integer_digits, integer_length))) {
+      LOG_ERROR("fail to get round_integer");
     } else {
       ret = rebuild_digits_(integer_digits, integer_length, NULL, 0);
     }
@@ -1511,9 +1555,11 @@ int ObNumber::round_scale_v2_(const int64_t scale, const bool using_floating_sca
 
     if (need_normalize) {
       if (OB_FAIL(normalize_v2_(true, true))) {
+        LOG_ERROR("fail to normalize_v2_", KPC(this), K(ret));
       }
     }
   }
+  LOG_DEBUG("finish round_scale_v2_", KPC(this));
   return ret;
 }
 
@@ -1538,6 +1584,7 @@ int ObNumber::round_scale_v3_(const int64_t scale, const bool using_floating_sca
   if (is_zero()) {
     //do nothing
   } else {
+    LOG_DEBUG("before round_scale_v3_", KPC(this), K(scale), K(using_floating_scale));
     const int64_t digit_0_len = get_digit_len_v2(digits_[0]);
     const int64_t expr_value = get_decode_exp(d_);
     //xxx_length means xx digit array length
@@ -1666,6 +1713,7 @@ int ObNumber::round_scale_v3_(const int64_t scale, const bool using_floating_sca
       }
     }
   }
+  LOG_DEBUG("finish round_scale_v3_", KPC(this), K(scale), K(using_floating_scale));
   return ret;
 }
 
@@ -1723,6 +1771,10 @@ int ObNumber::round_precision(const int64_t precision)
     }
 
 
+    LOG_DEBUG("Number before round_precision", K(precision), K(floating_scale),
+              K(expr_value), K(integer_length), K(valid_integer_length), K(integer_count),
+              K(decimal_length), K(valid_decimal_length), K(decimal_count), K(decimal_prefix_zero_count),
+              K(decimal_non_zero_count), KPC(this));
 
     int32_t digit_id = OB_INVALID_INDEX;
     int32_t pow_id = OB_INVALID_INDEX;
@@ -1830,6 +1882,7 @@ int ObNumber::round_precision(const int64_t precision)
       }
     }
   }
+  LOG_DEBUG("finish round_precision", KPC(this), K(precision));
   return ret;
 }
 
@@ -1851,6 +1904,7 @@ int ObNumber::round_integer_(
   } else {
     int64_t round_length = scale / DIGIT_LEN;
     int64_t round = scale % DIGIT_LEN;
+    LOG_DEBUG("round_integer_", K(round_length), K(round), K(integer_length));
     if (integer_length < round_length) {
       integer_length = 0;
     } else {
@@ -1891,6 +1945,7 @@ int ObNumber::round_decimal_(
 
     if (decimal_length <= round_length) {
       // do nothing
+      LOG_DEBUG("with no round", K(decimal_length), K(round_length));
     } else {
       decimal_length = std::min(decimal_length, round_length + 1);
       if (0 == round) { // scale >= 9, decimal_length >= 2
@@ -1963,12 +2018,14 @@ int ObNumber::trunc_scale_(int64_t scale, bool using_floating_scale)
     // do nothing
   } else if (0 < floating_scale) {
     if (OB_FAIL(trunc_decimal_(floating_scale, decimal_digits, decimal_length))) {
+      LOG_ERROR("fail to get trunc decimal", K(ret));
     } else {
       ret = rebuild_digits_(integer_digits, integer_length, decimal_digits, decimal_length);
     }
   } else if (0 > floating_scale) {
     // todo ouxing
     if (OB_FAIL(trunc_integer_(-floating_scale, integer_digits, integer_length))) {
+      LOG_ERROR("fail to get trunc integer", K(ret));
     } else {
       ret = rebuild_digits_(integer_digits, integer_length, NULL, 0);
     }
@@ -2290,6 +2347,7 @@ int ObNumber::rebuild_digits_(
   if (OB_SUCC(ret)) {
     ret = normalize_(digits, length);
   }
+  OB_LOG(DEBUG, "succ to rebuild_digits_", K(integer_length), K(decimal_length), K(length), KPC(this));
   return ret;
 }
 
@@ -2481,6 +2539,7 @@ int ObNumber::format_int64(char *buf, int64_t &pos, const int16_t scale, bool &i
       buf[pos] = '\0';
     }
     ObString tmp_str(pos - orig_pos, buf);
+    LOG_DEBUG("finish format int64", KPC(this), K(scale), K(tmp_str));
   } else {
     pos = orig_pos;
   }
@@ -2503,7 +2562,10 @@ int ObNumber::format_v2(
     LOG_WARN("argument is invalid", KP(buf), K(max_need_size), K(ret));
   } else if (OB_UNLIKELY((buf_len - pos) < max_need_size)) {
     ret = OB_SIZE_OVERFLOW;
+    LOG_TRACE("size is overflow", K(buf_len), K(pos), K(max_need_size),
+                 KPC(this), K(scale), K(ret));
   } else if (OB_FAIL(format_int64(buf, pos, scale, is_finish))) {
+    LOG_ERROR("format_int64 failed", KPC(this), K(ret));
   } else if (is_finish) {
     //fast path succ
   } else {
@@ -2784,6 +2846,7 @@ int ObNumber::to_sci_str_(ObString &num_str, char *buf,
     // fill exponent part
     if (OB_SUCC(ret)) {
       if (OB_FAIL(databuff_printf(pow_str, sizeof(pow_str), pow_pos, "%ld", pow_size))) {
+        LOG_WARN("fail to generate pow str", K(ret));
       } else {
         for (int i = 0; i < pow_pos; ++i) {
           buf[pos++] = pow_str[i];
@@ -2824,7 +2887,9 @@ int ObNumber::get_npi_(double n, ObNumber& out, ObIAllocator &alloc, const bool 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("len of number string should not less than zero", K(ret), K(str_len));
   } else if (OB_FAIL(n_obnum.from_sci_opt(buf, str_len, local_alloc, NULL, NULL, do_rounding))) {
+    LOG_WARN("n_obnum.from(n) failed", K(n), K(ret));
   } else if (OB_FAIL(pi.mul_v3(n_obnum, out, alloc, true, do_rounding))) {
+    LOG_WARN("pi.mul(n_obnum) failed", K(n_obnum), K(pi), K(out));
   }
 
   return ret;
@@ -2843,7 +2908,9 @@ int ObNumber::get_npi_(int64_t n, ObNumber& out, ObIAllocator &alloc, const bool
   ObNumber n_obnum;
   ObNumber pi = get_pi();
   if (OB_FAIL(n_obnum.from(n, local_alloc))) {
+    LOG_WARN("n_obnum.from(n) failed", K(n), K(ret));
   } else if (OB_FAIL(pi.mul_v3(n_obnum, out, alloc, true, do_rounding))) {
+    LOG_WARN("pi.mul(n_obnum) failed", K(n_obnum), K(pi), K(out));
   } else {
     // done
   }
@@ -2863,11 +2930,16 @@ int ObNumber::simple_factorial_for_sincos_(int64_t start, ObIAllocator &allocato
   ObDataBuffer local_alloc(local_buf, LOCAL_BUF_SIZE);
 
   if (OB_FAIL(y.from(start, local_alloc))) {
+    LOG_WARN("y.from(start) failed", K(y), K(start), K(ret));
   } else if (OB_FAIL(result.mul_v3(y, result, local_alloc, true, false))) {
+    LOG_WARN("result.mul_v3(y) failed", K(result), K(y), K(ret));
   } else if (OB_FAIL(y.add_v3(ObNumber::get_positive_one(), y, local_alloc, true, false))) {
+    LOG_WARN("y.add(1) failed", K(y), K(ret));
   } else if (OB_FAIL(result.mul_v3(y, result, allocator, true, false))) {
+    LOG_WARN("result.mul(y) failed", K(result), K(y), K(ret));
   } else {
     // done
+    LOG_DEBUG("factorial done", K(result));
   }
   return ret;
 }
@@ -2892,10 +2964,15 @@ int ObNumber::taylor_series_sin_(const ObNumber &transformed_x, ObNumber &out, O
     ObNumber tmp_out;
 
     if (OB_FAIL(iter_result.from(transformed_x, local_alloc))) {
+      LOG_WARN("iter_result.from(transformed_x) failed", K(iter_result), K(transformed_x), K(ret));
     } else if (OB_FAIL(square_x.from(transformed_x, local_alloc))) {
+      LOG_WARN("square_x.from(transformed_x) failed", K(square_x), K(transformed_x), K(ret));
     } else if (OB_FAIL(square_x.mul_v3(transformed_x, square_x, local_alloc, true, false))) {
+      LOG_WARN("square_x.mul(transformed_x) failed", K(square_x), K(transformed_x), K(ret));
     } else if (OB_FAIL(tmp_out.from(transformed_x, local_alloc))) {
+      LOG_WARN("tmp_out.from(transformed_x) failed", K(tmp_out), K(transformed_x), K(ret));
     } else if (OB_FAIL(divisor.from(ObNumber::get_positive_one(), local_alloc))) {
+      LOG_WARN("divisor.from(1) failed", K(divisor), K(ret));
     } else {
       size_t idx = 1;
       size_t start_div_num = 2;
@@ -2906,26 +2983,35 @@ int ObNumber::taylor_series_sin_(const ObNumber &transformed_x, ObNumber &out, O
       ObDataBuffer local_alloc_for_loop_1(local_buf_for_loop_1, LOCAL_BUF_SIZE_FOR_LOOP);
       ObDataBuffer local_alloc_for_loop_2(local_buf_for_loop_2, LOCAL_BUF_SIZE_FOR_LOOP);
 
+      LOG_DEBUG("start to calc taylor series expansion for sin", K(iter_result), K(tmp_out), K(square_x), K(divisor));
       while (OB_SUCC(ret) && (false == iter_result.is_zero())) {
         if (OB_FAIL(iter_result.mul_v3(square_x, iter_result, local_alloc_for_loop_1, true, false))) {
+          LOG_WARN("iter_result.mul_v3(square_x) failed", K(ret), K(iter_result), K(square_x));
         } else if (OB_FAIL(simple_factorial_for_sincos_(start_div_num, local_alloc_for_loop_1, divisor))) {
+          LOG_WARN("simple_factorial_for_sincos_(start_div_num) failed", K(ret));
         } else if (OB_FAIL(iter_result.div_v3(divisor, iter_result, local_alloc_for_loop_1, ObNumber::OB_MAX_DECIMAL_DIGIT, false))) {
+          LOG_WARN("iter_result.div_v3(divisor) failed", K(ret), K(iter_result));
         } else {
           if (idx & 1) { // odd time
             if (OB_FAIL(tmp_out.sub_v3(iter_result, tmp_out, local_alloc_for_loop_1, true, false))) {
+              LOG_WARN("tmp_out.sub_v3(iter_result) failed", K(ret), K(tmp_out));
             }
           } else {
             if (OB_FAIL(tmp_out.add_v3(iter_result, tmp_out, local_alloc_for_loop_1, true, false))) {
+              LOG_WARN("tmp_out.add_v3(iter_result) failed", K(ret), K(tmp_out));
             }
           }
+          LOG_DEBUG("iteration computing", K(iter_result), K(tmp_out));
           local_alloc_for_loop_2.free();
           std::swap(local_alloc_for_loop_1, local_alloc_for_loop_2);
           idx += 1;
           start_div_num += 2;
         }
       }
+      LOG_DEBUG("iteration done", K(tmp_out));
       if (OB_SUCC(ret)) {
         if (OB_FAIL(out.from(tmp_out, allocator))) {
+          LOG_WARN("out.from(tmp_out) failed", K(out), K(tmp_out));
         }
       }
     }
@@ -2954,22 +3040,28 @@ int ObNumber::sin(ObNumber &out, ObIAllocator &allocator, const bool do_rounding
 
   if (x.is_zero()) {
     if (OB_FAIL(out.from(static_cast<int64_t>(0), allocator))) {
+      LOG_WARN("out.from(0) failed", K(ret), K(out));
     }
   } else if (OB_FAIL(get_npi_(static_cast<int64_t>(2), range_high, local_alloc, false))) {
+    LOG_WARN("get_npi_(2) failed", K(ret));
   } else if (OB_FAIL(get_npi_(static_cast<int64_t>(1), pi, local_alloc, false))) {
+    LOG_WARN("get_npi_(1) failed", K(ret));
   } else {
     range_low.set_zero();
     if (x.is_negative()) {
       neg = !neg;
       if (OB_FAIL(x.negate(x, local_alloc))) {
+        LOG_WARN("x.negate() failed", K(x), K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (!(range_low <= x && x <= range_high)) {
         if (OB_FAIL(x.rem(range_high, transformed_x, local_alloc))) {
+          LOG_WARN("x.rem(range_high) failed", K(ret), K(x), K(range_high));
         }
       } else {
         if (OB_FAIL(transformed_x.from(x, local_alloc))) {
+          LOG_WARN("transformed_x.from(x) failed", K(x), K(ret));
         }
       }
     }
@@ -2979,29 +3071,36 @@ int ObNumber::sin(ObNumber &out, ObIAllocator &allocator, const bool do_rounding
       if (pi < transformed_x) {
         neg = !neg;
         if (OB_FAIL(transformed_x.sub_v3(pi, transformed_x, local_alloc, true, false))) {
+          LOG_WARN("transformed_x.sub_v3(pi) failed", K(transformed_x), K(pi));
         }
       }
     }
+    LOG_DEBUG("transform input done, start to taylor series expansion", K(neg), K(transformed_x), K(x));
     if (OB_SUCC(ret)) {
       if (OB_FAIL(taylor_series_sin_(transformed_x, tmp_out, local_alloc, range_low, pi))) {
+        LOG_WARN("taylor_series_sin_(transformed_x) failed", K(ret), K(transformed_x));
       } else {
         if (neg) {
           if (OB_FAIL(tmp_out.negate(tmp_out, local_alloc))) {
+            LOG_WARN("tmp_out.negate() failed", K(ret), K(tmp_out));
           }
         }
         if (OB_SUCC(ret)) {
           if (do_rounding) {
             if (OB_FAIL(tmp_out.round_scale_v3_(FLOATING_SCALE, true))) {
+              LOG_WARN("round scale fail", K(ret), K(tmp_out));
             }
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(out.from(tmp_out, allocator))) {
+            LOG_WARN("out.from(tmp_out) failed", K(ret), K(tmp_out));
           }
         }
       }
     }
   }
+  LOG_DEBUG("sin done", K(out));
   return ret;
 }
 
@@ -3027,11 +3126,17 @@ int ObNumber::taylor_series_cos_(const ObNumber &transformed_x, ObNumber &out, O
     ObNumber tmp_out;
 
     if (OB_FAIL(square_x.from(transformed_x, local_alloc))) {
+      LOG_WARN("square_x.from failed", K(square_x), K(transformed_x), K(ret));
     } else if (OB_FAIL(square_x.mul_v3(transformed_x, square_x, local_alloc, true, false))) {
+      LOG_WARN("square_x.mul failed", K(square_x), K(transformed_x), K(ret));
     } else if (OB_FAIL(two.from(static_cast<int64_t>(2), local_alloc))) {
+      LOG_WARN("two.from(2) failed", K(ret));
     } else if (OB_FAIL(divisor.from(two, local_alloc))) {
+      LOG_WARN("divisor.from(1) failed", K(divisor), K(ret));
     } else if (OB_FAIL(square_x.div_v3(two, iter_result, local_alloc, ObNumber::OB_MAX_DECIMAL_DIGIT, false))) {
+      LOG_WARN("square_x.div_v3(two) failed", K(square_x), K(ret));
     } else if (OB_FAIL(one.sub_v3(iter_result, tmp_out, local_alloc, true, false))) {
+      LOG_WARN("one.sub_v3(iter_result) failed", K(iter_result), K(one), K(ret));
     } else {
       size_t idx = 2;
       size_t start_div_num = 3;
@@ -3043,26 +3148,35 @@ int ObNumber::taylor_series_cos_(const ObNumber &transformed_x, ObNumber &out, O
       ObDataBuffer local_alloc_for_loop_1(local_buf_for_loop_1, LOCAL_BUF_SIZE_FOR_LOOP);
       ObDataBuffer local_alloc_for_loop_2(local_buf_for_loop_2, LOCAL_BUF_SIZE_FOR_LOOP);
 
+      LOG_DEBUG("before while", K(iter_result), K(tmp_out), K(square_x), K(divisor));
       while (OB_SUCC(ret) && (false == iter_result.is_zero())) {
         if (OB_FAIL(iter_result.mul_v3(square_x, iter_result, local_alloc_for_loop_1, true, false))) {
+          LOG_WARN("iter_result.mul_v3(square_x) failed", K(ret), K(iter_result));
         } else if (OB_FAIL(simple_factorial_for_sincos_(start_div_num, local_alloc_for_loop_1, divisor))) {
+          LOG_WARN("simple_factorial_for_sincos_(start_div_num) failed", K(ret));
         } else if (OB_FAIL(iter_result.div_v3(divisor, iter_result, local_alloc_for_loop_1, ObNumber::OB_MAX_DECIMAL_DIGIT, false))) {
+          LOG_WARN("iter_result.div_v3(divisor) failed", K(ret), K(iter_result), K(divisor));
         } else {
           if (idx & 1) { // odd number loop
             if (OB_FAIL(tmp_out.sub_v3(iter_result, tmp_out, local_alloc_for_loop_1, true, false))) {
+              LOG_WARN("tmp_out.sub_v3(iter_result) failed", K(ret), K(tmp_out), K(iter_result));
             }
           } else {
             if (OB_FAIL(tmp_out.add_v3(iter_result, tmp_out, local_alloc_for_loop_1, true, false))) {
+              LOG_WARN("tmp_out.add_v3(iter_result) failed", K(ret), K(tmp_out), K(iter_result));
             }
           }
+          LOG_DEBUG("iteration computing", K(idx), K(tmp_out));
           local_alloc_for_loop_2.free();
           std::swap(local_alloc_for_loop_1, local_alloc_for_loop_2);
           idx += 1;
           start_div_num += 2;
         }
       }
+      LOG_DEBUG("iteration done", K(tmp_out));
       if (OB_SUCC(ret)) {
         if (OB_FAIL(out.from(tmp_out, allocator))) {
+          LOG_WARN("out.from(tmp_out) failed", K(out), K(tmp_out));
         }
       }
     }
@@ -3080,6 +3194,7 @@ int ObNumber::cos(ObNumber &out, ObIAllocator &allocator, const bool do_rounding
 
   if (is_zero()) {
     if (OB_FAIL(out.from(static_cast<int64_t>(1), allocator))) {
+      LOG_WARN("out.from(1) failed", K(ret));
     }
   } else {
     // remember to change this
@@ -3101,23 +3216,32 @@ int ObNumber::cos(ObNumber &out, ObIAllocator &allocator, const bool do_rounding
     if (x.is_negative()) {
       // cos(x) is an even function, no need to set neg
       if (OB_FAIL(x.negate(x, local_alloc))) {
+        LOG_WARN("x.negate failed", K(ret), K(x));
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(get_npi_(static_cast<double>(-1)/2, range_low, local_alloc, false))) {
+        LOG_WARN("get_npi_(-1/2) failed", K(ret));
       } else if (OB_FAIL(get_npi_(static_cast<double>(1)/2, half_pi, local_alloc, false))) {
+        LOG_WARN("get_npi_(1/2) failed", K(ret));
       } else if (OB_FAIL(get_npi_(static_cast<double>(3)/2, range_high, local_alloc, false))) {
+        LOG_WARN("get_npi_(3/2) failed", K(ret));
       } else if (OB_FAIL(get_npi_(static_cast<int64_t>(2), double_pi, local_alloc, false))) {
+        LOG_WARN("get_npi_(2) failed", K(ret));
       } else if (OB_FAIL(get_npi_(static_cast<int64_t>(1), pi, local_alloc, false))) {
+        LOG_WARN("get_npi_(1) failed", K(ret));
       } else {
         if (range_low <= x && x <= range_high) {
           if (OB_FAIL(transformed_x.from(x, local_alloc))) {
+            LOG_WARN("transformed_x.from(x) failed", K(ret), K(transformed_x));
           }
         } else {
           if (OB_FAIL(x.rem(double_pi, transformed_x, local_alloc))) {
+            LOG_WARN("x.rem(double_pi) failed", K(ret), K(x), K(double_pi));
           } else if (range_high < transformed_x) {
             if (OB_FAIL(transformed_x.sub_v3(double_pi, transformed_x, local_alloc, true, false))) {
+              LOG_WARN("transformed_x.sub_v3(double_pi) failed", K(ret), K(transformed_x), K(double_pi));
             }
           }
         }
@@ -3128,26 +3252,34 @@ int ObNumber::cos(ObNumber &out, ObIAllocator &allocator, const bool do_rounding
           if (half_pi < transformed_x) {
             neg = !neg;
             if (OB_FAIL(transformed_x.sub_v3(pi, transformed_x, local_alloc, true, false))) {
+              LOG_WARN("transformed_x.sub_v3(pi) failed", K(ret), K(transformed_x), K(pi));
             }
           }
         }
 
+        LOG_DEBUG("transform x done, starto taylor series expansion", K(double_pi), K(range_low),
+                                                                     K(range_high), K(transformed_x),
+                                                                     K(x), K(tmp_out));
         if (OB_SUCC(ret)) {
           if (OB_FAIL(taylor_series_cos_(transformed_x, tmp_out, local_alloc, range_low, half_pi))) {
+            LOG_WARN("taylor_series_cos_(transformed_x) failed", K(ret), K(transformed_x), K(tmp_out));
           }
           if (OB_SUCC(ret)) {
             if (do_rounding) {
               if (OB_FAIL(tmp_out.round_scale_v3_(FLOATING_SCALE, true))) {
+                LOG_WARN("round scale fail", K(ret), K(tmp_out));
               }
             }
             if (OB_SUCC(ret)) {
               if (neg) {
                 if (OB_FAIL(tmp_out.negate(tmp_out, local_alloc))) {
+                  LOG_WARN("tmp_out.negate() failed", K(ret), K(tmp_out));
                 }
               }
             }
             if (OB_SUCC(ret)) {
               if (OB_FAIL(out.from(tmp_out, allocator))) {
+                LOG_WARN("out.from(tmp_out) failed", K(ret), K(tmp_out));
               }
             }
           }
@@ -3175,17 +3307,20 @@ int ObNumber::tan(ObNumber &out, ObIAllocator &allocator, const bool do_rounding
   ObNumber tmp_out;
 
   if (OB_FAIL(sin(sin_out, local_alloc, false))) {
+    LOG_WARN("sin(x) failed", K(*this), K(ret));
   } else if (sin_out.is_zero()) {
     sin_is_zero = true;
   }
 
   if (OB_SUCC(ret) && !sin_is_zero) {
     if (OB_FAIL(cos(cos_out, local_alloc, false))) {
+      LOG_WARN("cos(x) failed", K(*this), K(ret));
     } else if (cos_out.is_zero()) {
       cos_is_zero = true;
     }
   }
 
+  LOG_DEBUG("start to calc sin/cos", K(*this), K(sin_out), K(cos_out), K(sin_is_zero), K(cos_is_zero));
   if (OB_SUCC(ret)) {
     if (sin_is_zero) {
       out.set_zero();
@@ -3194,12 +3329,15 @@ int ObNumber::tan(ObNumber &out, ObIAllocator &allocator, const bool do_rounding
       LOG_WARN("cos(x) is zero", K(*this), K(ret));
     } else {
       if (OB_FAIL(sin_out.div_v3(cos_out, tmp_out, local_alloc, OB_MAX_DECIMAL_DIGIT, false))) {
+        LOG_WARN("sin/cos failed", K(sin_out), K(cos_out), K(ret));
       } else if (do_rounding) {
         if (OB_FAIL(tmp_out.round_scale_v3_(FLOATING_SCALE, true))) {
+          LOG_WARN("tmp_out.round_scale_v3_() fail", K(ret), K(tmp_out));
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(out.from(tmp_out, allocator))) {
+          LOG_WARN("out.from(tmp_out) failed", K(ret), K(tmp_out));
         }
       }
     }
@@ -3219,25 +3357,34 @@ int ObNumber::asin(ObNumber &value, ObIAllocator &allocator, const bool do_round
   ObNumber one;
 
   if (OB_FAIL(one.from(static_cast<int64_t>(1), allocator_local))) {
+    LOG_WARN("create const one failed", K(one), K(ret));
   } else if (abs_compare(one) >= 0) {
     if (OB_UNLIKELY(1 == abs_compare(one))) {
       ret = OB_ERROR_OUT_OF_RANGE;
       LOG_WARN("parameter abs larger than 1", K(ret));
     } else if (0 == compare(one)) {
       if (OB_FAIL(res.from(half_pi_buf, allocator,NULL,NULL,false))) {
+        LOG_WARN("res from pi/2 failed", K(res), K(ret));
       }
     } else {
       if (OB_FAIL(res.from(half_pi_buf, allocator_local,NULL,NULL,false))) {
+        LOG_WARN("res from pi/2 failed", K(res), K(ret));
       } else if(OB_FAIL(res.negate(res, allocator))) {
+        LOG_WARN("res from pi/2 negate failed", K(res), K(ret));
       }
     }
   } else {
     ObNumber atan_arg;
     if (OB_FAIL(mul_v3(*this, atan_arg, allocator_local, true, false))) {
+      LOG_WARN("*this mul *this failed", K(*this), K(atan_arg), K(ret));
     } else if (OB_FAIL(one.sub_v3(atan_arg, atan_arg, allocator_local, true, false))) {
+      LOG_WARN("one sub atan_arg failed", K(one), K(atan_arg), K(ret));
     } else if (OB_FAIL(atan_arg.sqrt(atan_arg, allocator_local, false))) {
+      LOG_WARN("atan_arg sqrt failed", K(atan_arg), K(ret));
     } else if (OB_FAIL(div_v3(atan_arg, atan_arg, allocator_local, OB_MAX_DECIMAL_DIGIT, false))) {
+      LOG_WARN("*this div atan_arg failed", K(*this), K(atan_arg), K(ret));
     } else if (OB_FAIL(atan_arg.atan(res, allocator, false))) {
+      LOG_WARN("atan_arg atan failed", K(atan_arg), K(ret));
     }
   }
 
@@ -3267,12 +3414,16 @@ int ObNumber::acos(ObNumber &value, ObIAllocator &allocator, const bool do_round
     LOG_WARN("parameter abs larger than 1", K(ret));
   } else if ((*this) == static_cast<int64_t>(1)) {
     if (OB_FAIL(res.from(static_cast<int64_t>(0), allocator))) {
+      LOG_WARN("res from const 1 failed", K(res), K(ret));
     }
   } else {
     ObNumber half_pi;
     if (OB_FAIL(half_pi.from(half_pi_buf, allocator_local,NULL,NULL,false))) {
+      LOG_WARN("half_pi from const pi/2 failed", K(half_pi), K(ret));
     } else if (OB_FAIL(asin(res, allocator_local, false))) {
+      LOG_WARN("res=this->asin failed", K(*this), K(res), K(ret));
     } else if (OB_FAIL(half_pi.sub_v3(res, res, allocator, true, false))) {
+      LOG_WARN("res = half_pi sub res failed", K(res), K(half_pi), K(ret));
     }
   }
 
@@ -3317,8 +3468,11 @@ int ObNumber::atan(ObNumber &value, ObIAllocator &allocator, const bool do_round
   const char half_pi_buf[] = "1.57079632679489661923132169163975144209858469968755291048747229615";
 
   if (OB_FAIL(res.from(static_cast<int64_t>(0), allocator_res))) {
+    LOG_WARN("res from const 0 failed", K(res), K(ret));
   } else if (OB_FAIL(param_bound.from(PARAM_MAX_VALUE, allocator_const1))) {
+    LOG_WARN("create const 0.5 failed", K(param_bound), K(ret));
   } else if (OB_FAIL(copy_this.from(*this, allocator_this))) {
+    LOG_WARN("copy *this failed", K(copy_this), K(ret));
   } else {
     ObNumber one;
     ObNumber tmp;
@@ -3328,12 +3482,14 @@ int ObNumber::atan(ObNumber &value, ObIAllocator &allocator, const bool do_round
       if (0 == reduction_count && OB_FAIL(one.from(static_cast<int64_t>(1),allocator_const2))) {
         LOG_WARN("create const 1 failed", K(one), K(ret));
       } else if (OB_FAIL(tmp.from(copy_this, allocator_iter1))) {
+        LOG_WARN("tmp copy from copy_this failed", K(copy_this), K(tmp), K(ret));
       } else if (OB_FAIL(tmp.mul_v3(copy_this, tmp, allocator_iter1, true, false))) {
         if (OB_INTEGER_PRECISION_OVERFLOW == ret) {
           ret = OB_SUCCESS;
           copy_this.set_zero();
           allocator_res.free();
           if (OB_FAIL(res.from(half_pi_buf, allocator_res,NULL,NULL,false))) {
+            LOG_WARN("res from pi/2 failed", K(res), K(ret));
           } else if (is_negative()) {
             res = res.negate();
           }
@@ -3342,9 +3498,13 @@ int ObNumber::atan(ObNumber &value, ObIAllocator &allocator, const bool do_round
         }
       } else {
         if (OB_FAIL(tmp.add_v3(one, tmp, allocator_iter1, true, false))) {
+          LOG_WARN("tmp add one failed", K(copy_this), K(tmp), K(one), K(ret));
         } else if (OB_FAIL(tmp.sqrt(tmp, allocator_iter1, false))) {
+          LOG_WARN("tmp sqrt failed", K(copy_this), K(tmp), K(ret));
         } else if (OB_FAIL(tmp.add_v3(one, tmp, allocator_iter1, true, false))) {
+          LOG_WARN("tmp add one failed", K(copy_this), K(tmp), K(one), K(ret));
         } else if (OB_FAIL(copy_this.div_v3(tmp, copy_this, allocator_tmp, OB_MAX_DECIMAL_DIGIT, false))) {
+          LOG_WARN("copy_this div tmp failed", K(copy_this), K(tmp), K(ret));
         } else {
           std::swap(allocator_tmp, allocator_this);
           allocator_tmp.free();
@@ -3361,12 +3521,17 @@ int ObNumber::atan(ObNumber &value, ObIAllocator &allocator, const bool do_round
     //taylor series: atan(x) = x-(x^3)/3+(x^5)/5-(x^7)/7+... when |x|<1
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(taylor_series.from(copy_this, allocator_iter2))) {
+      LOG_WARN("taylor series from copy_this failed", K(copy_this), K(taylor_series), K(ret));
     } else if (OB_FAIL(copy_this.mul_v3(copy_this, doublex, allocator_doublex, true, false))) {
+      LOG_WARN("doublex = copy_this*copy_this failed", K(copy_this), K(doublex), K(ret));
     } else if (OB_FAIL(iter_const.from(static_cast<int64_t>(1), allocator_const1))){
+      LOG_WARN("iter_const from 1 failed", K(iter_const), K(ret));
     } else {
       while (OB_SUCC(ret) && !taylor_series.is_zero() && count < MAX_TAYLOR_SERIES_COUNT) {
         if (OB_FAIL(res.add_v3(taylor_series, res, allocator_tmp, true, false))) {
+          LOG_WARN("res add taylor failed", K(res), K(taylor_series), K(ret));
         } else if (OB_FAIL(taylor_series.mul_v3(iter_const, taylor_series, allocator_iter1, true, false))) {
+          LOG_WARN("taylor_series mul iter_const failed", K(taylor_series), K(iter_const), K(ret));
         } else {
           std::swap(allocator_tmp, allocator_res);
           allocator_tmp.free();
@@ -3374,9 +3539,13 @@ int ObNumber::atan(ObNumber &value, ObIAllocator &allocator, const bool do_round
           allocator_const1.free();
           count++;
           if (OB_FAIL(iter_const.from(static_cast<int64_t>(2 * count + 1), allocator_const1))) {
+            LOG_WARN("iter_const from 2*count+1 failed", K(count), K(iter_const), K(ret));
           } else if (OB_FAIL(taylor_series.div_v3(iter_const, taylor_series, allocator_iter1, OB_MAX_DECIMAL_DIGIT, false))) {
+            LOG_WARN("taylor_series div iter_const failed", K(taylor_series), K(iter_const), K(ret));
           } else if (OB_FAIL(taylor_series.mul_v3(doublex, taylor_series, allocator_iter1, true, false))) {
+            LOG_WARN("taylor_series mul doublex failed", K(taylor_series), K(doublex), K(ret));
           } else if (OB_FAIL(taylor_series.negate(taylor_series, allocator_iter2))) {
+            LOG_WARN("taylor_series negate failed", K(taylor_series), K(ret));
           } else {
             allocator_iter1.free();
           }
@@ -3384,6 +3553,7 @@ int ObNumber::atan(ObNumber &value, ObIAllocator &allocator, const bool do_round
       }
       while (OB_SUCC(ret) && reduction_count > 0) {
         if (OB_FAIL(res.add_v3(res, res, allocator_tmp, true, false))) {
+          LOG_WARN("res=res+res failed", K(res), K(ret));
         } else {
           std::swap(allocator_tmp, allocator_res);
           allocator_tmp.free();
@@ -3397,6 +3567,7 @@ int ObNumber::atan(ObNumber &value, ObIAllocator &allocator, const bool do_round
     if (do_rounding && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
         LOG_WARN("round scale fail", K(ret), K(res));
     } else if (OB_FAIL(value.from(res, allocator))){
+      LOG_WARN("value copy from res failed", K(ret), K(res));
     }
   }
   _OB_LOG(DEBUG, "atan [%s], ret=%d [%s]", this->format(), ret, res.format());
@@ -3415,11 +3586,14 @@ int ObNumber::atan2(const ObNumber &other, ObNumber &value, ObIAllocator &alloca
       LOG_WARN("atan2 numeric overflow", K(ret));
     } else if (other.is_negative()) {
       if (OB_FAIL(res.from(pi_buf, allocator, NULL, NULL, false))) {
+        LOG_WARN("res from pi failed", K(ret), K(res));
       }
     } else if (OB_FAIL(res.from("0", allocator, NULL, NULL, false))) {
+      LOG_WARN("res from 0 failed", K(ret), K(res));
     }
   } else if (other.is_zero()) {
     if (OB_FAIL(res.from(half_pi_buf, allocator,NULL,NULL,false))) {
+      LOG_WARN("res from pi/2 failed", K(res), K(ret));
     } else if (is_negative()) {
       res = res.negate();
     }
@@ -3430,10 +3604,13 @@ int ObNumber::atan2(const ObNumber &other, ObNumber &value, ObIAllocator &alloca
     ObDataBuffer allocator1(buf_alloc1, buf_len);
     ObNumber quotient;
     if (OB_FAIL(div_v3(other, quotient, allocator1, OB_MAX_DECIMAL_DIGIT, false))) {
+      LOG_WARN("this div other failed", K(*this), K(other), K(ret));
     } else if (OB_FAIL(quotient.atan(res, other_negative ? allocator1 : allocator, false))) {
+      LOG_WARN("quotient atan_ failed", K(quotient), K(ret));
     } else if (other_negative) {
       ObNumber num_pi;
       if (OB_FAIL(num_pi.from(pi_buf, allocator1, NULL, NULL, false))) {
+        LOG_WARN("num from pi failed", K(ret));
       } else if (is_negative() && OB_FAIL(res.sub_v3(num_pi, res, allocator, true, false))) {
         LOG_WARN("res sub pi failed", K(ret));
       } else if (!is_negative() && OB_FAIL(res.add_v3(num_pi, res, allocator, true, false))) {
@@ -3461,6 +3638,7 @@ int ObNumber::add_(const ObNumber &other, ObNumber &value, IAllocator &allocator
   Desc addend_desc;
   augend_desc.desc_ = d_.desc_;
   addend_desc.desc_ = other.d_.desc_;
+  LOG_DEBUG("add_", K(ret), KPC(this), K(other));
   if (is_zero()) {
     ret = res.deep_copy(other, allocator);
   } else if (other.is_zero()) {
@@ -3472,11 +3650,14 @@ int ObNumber::add_(const ObNumber &other, ObNumber &value, IAllocator &allocator
     exp_shift_(shift, augend_desc);
     exp_shift_(shift, addend_desc);
     if (OB_FAIL(augend.init(augend_desc.desc_, digits_))) {
+      LOG_WARN("fail to assign values", K(ret));
     } else if (OB_FAIL(addend.init(addend_desc.desc_, other.digits_))) {
+      LOG_WARN("fail to assign values", K(ret));
     } else {
       ObCalcVector sum;
       int64_t sum_size = std::max(augend.size(), addend.size()) + 1;
       if (OB_FAIL(sum.ensure(sum_size))) {
+        LOG_WARN("Fail to ensure sum_size", K(ret));
       } else if (OB_FAIL(poly_poly_add(augend, addend, sum))) {
         ObCStringHelper helper;
         _OB_LOG(WARN, "[%s] add [%s] fail ret=%d", helper.convert(*this), helper.convert(other), ret);
@@ -3512,6 +3693,7 @@ int ObNumber::sub_(const ObNumber &other, ObNumber &value, IAllocator &allocator
   Desc subtrahend_desc;
   minuend_desc.desc_ = d_.desc_;
   subtrahend_desc.desc_ = other.d_.desc_;
+  LOG_DEBUG("sub", K(ret), KPC(this), K(other));
   if (is_zero()) {
     ret = other.negate_(res, allocator);
   } else if (other.is_zero()) {
@@ -3523,13 +3705,16 @@ int ObNumber::sub_(const ObNumber &other, ObNumber &value, IAllocator &allocator
     exp_shift_(shift, minuend_desc);
     exp_shift_(shift, subtrahend_desc);
     if (OB_FAIL(minuend.init(minuend_desc.desc_, digits_))) {
+      LOG_WARN("fail to assign values", K(ret));
     } else if (OB_FAIL(subtrahend.init(subtrahend_desc.desc_, other.digits_))) {
+      LOG_WARN("fail to assign values", K(ret));
     } else {
       ObCalcVector remainder;
       int64_t remainder_size = std::max(minuend.size(), subtrahend.size());
 
       bool sub_negative = false;
       if (OB_FAIL(remainder.ensure(remainder_size))) {
+        LOG_WARN("remainder.ensure(remainder_size) fails", K(ret));
       } else if (OB_FAIL(poly_poly_sub(minuend, subtrahend, remainder, sub_negative))) {
         ObCStringHelper helper;
         _OB_LOG(WARN, "[%s] sub [%s] fail ret=%d", helper.convert(*this), helper.convert(other), ret);
@@ -3603,6 +3788,7 @@ int ObNumber::add_v2_(const ObNumber &other, ObNumber &value, IAllocator &alloca
   Desc addend_desc;
   augend_desc.desc_ = d_.desc_;
   addend_desc.desc_ = other.d_.desc_;
+  LOG_DEBUG("add_v2_", K(ret), KPC(this), K(other));
   if (is_zero()) {
     ret = res.deep_copy(other, allocator);
   } else if (other.is_zero()) {
@@ -3684,6 +3870,7 @@ int ObNumber::add_v2_(const ObNumber &other, ObNumber &value, IAllocator &alloca
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(res.round_scale_v2_(FLOATING_SCALE, true))) {
+      LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;
     }
@@ -3697,6 +3884,7 @@ int ObNumber::add_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 {
   int ret = OB_SUCCESS;
   ObNumber res;
+  LOG_DEBUG("add_v3", K(ret), KPC(this), K(other));
   if (OB_UNLIKELY(is_zero())) {
     ret = res.deep_copy_v3(other, allocator);
   } else if (OB_UNLIKELY(other.is_zero())) {
@@ -3837,6 +4025,7 @@ int ObNumber::sub_v2_(const ObNumber &other, ObNumber &value, IAllocator &alloca
   Desc subtrahend_desc;
   minuend_desc.desc_ = d_.desc_;
   subtrahend_desc.desc_ = other.d_.desc_;
+  LOG_DEBUG("sub_v2_", K(ret), KPC(this), K(other));
   if (is_zero()) {
     ret = other.negate_v2_(res, allocator);
   } else if (other.is_zero()) {
@@ -3936,6 +4125,7 @@ int ObNumber::sub_v2_(const ObNumber &other, ObNumber &value, IAllocator &alloca
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(res.round_scale_v2_(FLOATING_SCALE, true))) {
+      LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;
     }
@@ -3949,6 +4139,7 @@ int ObNumber::sub_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 {
   int ret = OB_SUCCESS;
   ObNumber res;
+  LOG_DEBUG("sub_v3", K(ret), KPC(this), K(other));
   if (OB_UNLIKELY(is_zero())) {
     ret = other.negate_v3_(res, allocator);
   } else if (OB_UNLIKELY(other.is_zero())) {
@@ -4127,6 +4318,7 @@ int ObNumber::negate_(ObNumber &value, IAllocator &allocator) const
   } else {
     ObCalcVector cv;
     if (OB_FAIL(cv.init(d_.desc_, digits_))) {
+      LOG_WARN("fail to assign values", K(ret));
     } else {
       int64_t size2alloc = d_.len_;
       if (POSITIVE == d_.sign_) {
@@ -4215,11 +4407,14 @@ int ObNumber::mul_(const ObNumber &other, ObNumber &value, IAllocator &allocator
     ObCalcVector multiplicand;
     ObCalcVector multiplier;
     if (OB_FAIL(multiplicand.init(multiplicand_desc.desc_, digits_))) {
+      LOG_WARN("fail to assign values", K(ret));
     } else if (OB_FAIL(multiplier.init(multiplier_desc.desc_, other.digits_))) {
+      LOG_WARN("fail to assign values", K(ret));
     } else {
       ObCalcVector product;
       int64_t product_size = multiplicand.size() + multiplier.size();
       if (OB_FAIL(product.ensure(product_size))) {
+        LOG_WARN("product.ensure(product_size) fails", K(ret));
       } else if (OB_FAIL(poly_poly_mul(multiplicand, multiplier, product))) {
         ObCStringHelper helper;
         _OB_LOG(WARN, "[%s] mul [%s] fail, ret=%d", helper.convert(*this), helper.convert(other), ret);
@@ -4247,6 +4442,7 @@ int ObNumber::mul_v2_(const ObNumber &other, ObNumber &value, IAllocator &alloca
   Desc multiplier_desc;
   multiplicand_desc.desc_ = d_.desc_;
   multiplier_desc.desc_ = other.d_.desc_;
+  LOG_DEBUG("mul_v2_", K(ret), KPC(this), K(other));
   if (is_zero() || other.is_zero()) {
     res.set_zero();
   } else {
@@ -4324,6 +4520,7 @@ int ObNumber::mul_v2_(const ObNumber &other, ObNumber &value, IAllocator &alloca
   if (OB_SUCC(ret)) {
     if (do_rounding) {
       if (OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
+        LOG_WARN("round scale fail", K(ret), K(res));
       } else {
         value = res;
       }
@@ -4340,6 +4537,7 @@ int ObNumber::mul_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 {
   int ret = OB_SUCCESS;
   ObNumber res;
+  LOG_DEBUG("mul_v3_", K(ret), KPC(this), K(other));
   if (is_zero() || other.is_zero()) {
     res.set_zero();
   } else {
@@ -4526,6 +4724,7 @@ int ObNumber::div_v2_(const ObNumber &other, ObNumber &value, IAllocator &alloca
   Desc divisor_desc;
   dividend_desc.desc_ = d_.desc_;
   divisor_desc.desc_ = other.d_.desc_;
+  LOG_DEBUG("div_v2_", K(ret), KPC(this), K(other));
   if (OB_UNLIKELY(other.is_zero())) {
     ObCStringHelper helper;
     _OB_LOG(ERROR, "[%s] div zero [%s]", helper.convert(*this), helper.convert(other));
@@ -4587,6 +4786,7 @@ int ObNumber::div_v2_(const ObNumber &other, ObNumber &value, IAllocator &alloca
   if (OB_SUCC(ret)) {
     if (do_rounding) {
       if (OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
+        LOG_WARN("round scale fail", K(ret), K(res));
       } else {
         value = res;
       }
@@ -4603,6 +4803,7 @@ int ObNumber::div_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 {
   int ret = OB_SUCCESS;
   ObNumber res;
+  LOG_DEBUG("div_v3_", K(ret), KPC(this), K(other));
   if (OB_UNLIKELY(other.is_zero())) {
     ObCStringHelper helper;
     _OB_LOG(ERROR, "[%s] div zero [%s]", helper.convert(*this), helper.convert(other));
@@ -4665,6 +4866,7 @@ int ObNumber::div_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
     }
   }
   if (OB_SUCC(ret)) {
+    LOG_DEBUG("round scale before", K(res));
     if (do_rounding && res.need_round_after_arithmetic()
         && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true))) {
       LOG_WARN("round scale fail", K(ret), K(res));
@@ -4784,6 +4986,7 @@ int ObNumber::rem_v2_(const ObNumber &other, ObNumber &value, IAllocator &alloca
   ObNumber res;
   Desc dividend_desc(d_);
   Desc divisor_desc(other.d_);
+  LOG_DEBUG("rem_v2_", K(ret), KPC(this), K(other));
   int cmp_ret = 0;
   if (OB_UNLIKELY(other.is_zero())) {
     ObCStringHelper helper;
@@ -4867,6 +5070,7 @@ int ObNumber::rem_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
   Desc divisor_desc;
   dividend_desc.desc_ = d_.desc_;
   divisor_desc.desc_ = other.d_.desc_;
+  LOG_DEBUG("rem_v3_", K(ret), KPC(this), K(other));
   int cmp_ret = 0;
   if (OB_UNLIKELY(other.is_zero())) {
     ObCStringHelper helper;
@@ -4977,9 +5181,11 @@ int ObNumber::sqrt_first_guess_(ObNumber &value, ObIAllocator &allocator) const
     }
     digits[0] = digit;
     res.assign(guess_desc.desc_, digits);
+    LOG_DEBUG("sqrt_first_guess_, main path", KPC(this), K(res), K(ret));
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(value.from(res, allocator))) {
+      LOG_WARN("failed: deep_copy res to value", K(ret));
     }
   }
   _OB_LOG(DEBUG, "sqrt_first_guess_ [%s], ret=%d [%s]", format(), ret, value.format());
@@ -4995,6 +5201,7 @@ int ObNumber::sqrt(ObNumber &value, ObIAllocator &allocator, const bool do_round
   // OB_DIVISION_BY_ZERO error
   if (is_zero()) {
     if (OB_FAIL(result.from(number::ObNumber::get_zero(), allocator))) {
+      LOG_WARN("set result to 0 failed", K(ret));
     }
   } else if (is_negative()) {
     LOG_WARN("cannot take sqrt of negative arg", KPC(this), K(ret));
@@ -5009,12 +5216,14 @@ int ObNumber::sqrt(ObNumber &value, ObIAllocator &allocator, const bool do_round
 
     number::ObNumber guess;
     if (OB_FAIL(sqrt_first_guess_(guess, one_time_allocator))) {
+      LOG_WARN("failed: sqrt_first_guess_", KPC(this), K(ret));
     } else {
       // main loop of Newton's algorithm
       number::ObNumber quotient;
       number::ObNumber const_zero_point_five;
       number::ObNumber new_guess;
       if (OB_FAIL(const_zero_point_five.from("0.5", one_time_allocator))) {
+        LOG_WARN("fail to initialize const_zero_point_five", K(ret));
       }
 
       // max number of ObNumber calculations in the following loop. update this
@@ -5029,8 +5238,13 @@ int ObNumber::sqrt(ObNumber &value, ObIAllocator &allocator, const bool do_round
       bool guess_is_answer = false;
       while (OB_SUCC(ret) && !guess_is_answer) {
         if (OB_FAIL(div_v3(guess, quotient, loop_allocator_current, OB_MAX_DECIMAL_DIGIT, false))) {
+          LOG_WARN("failed: quotient = this / guess", KPC(this), K(guess), K(ret));
         } else if (OB_FAIL(guess.add_v3(quotient, new_guess, loop_allocator_current, true, false))) {
+          // new guess is the average of current guess and quotient
+          LOG_WARN("failed: new_guess = guess + quotient", K(guess), K(quotient), K(ret));
         } else if (OB_FAIL(new_guess.mul(const_zero_point_five, new_guess, loop_allocator_current, false))) {
+          // *0.5 is faster than /2 ?
+          LOG_WARN("failed: new_guess *= 0.5", K(new_guess), K(ret));
         } else {
           // why not use "quotient == guess" as end condition:
           // - arg                = 3.16227766016837933199889354443271853372
@@ -5051,6 +5265,7 @@ int ObNumber::sqrt(ObNumber &value, ObIAllocator &allocator, const bool do_round
 
       if (OB_SUCC(ret)) {
         if (OB_FAIL(result.from(guess, allocator))) {
+          LOG_WARN("failed: deep copy guess to result", K(ret));
         }
       }
     }
@@ -5107,16 +5322,26 @@ int ObNumber::ln(ObNumber &value, ObIAllocator &allocator, const bool do_roundin
     number::ObNumber reduced_arg;
     number::ObNumber reduction_compensation;
     if (OB_FAIL(const_two.from((int64_t)2, one_time_allocator))) {
+      LOG_WARN("fail to initialize const_two", K(ret));
     } else if (OB_FAIL(const_zero_point_nine.from("0.9", one_time_allocator))) {
+      LOG_WARN("fail to initialize const_zero_point_nine", K(ret));
     } else if (OB_FAIL(const_one_point_one.from("1.1", one_time_allocator))) {
+      LOG_WARN("fail to initialize const_one_point_one", K(ret));
     } else if (OB_FAIL(reduced_arg.from(*this, one_time_allocator))) {
+      LOG_WARN("failed: deep copy this to reduced_arg", KPC(this), K(ret));
     } else if (OB_FAIL(reduction_compensation.from(const_two, one_time_allocator))) {
+      // reduction_compensation starts with 2 instead of 1, because the
+      // following taylor series will get 0.5 * ln(reduced_arg), not
+      // ln(reduced_arg)
+      LOG_WARN("failed to initialize reduction_compensation", K(ret));
     } else {
       // note: here this and reduced_arg > 0
       while (OB_SUCC(ret) && reduced_arg.compare(const_zero_point_nine) <= 0) {
         if (OB_FAIL(reduced_arg.sqrt(reduced_arg, loop_allocator_current, false))) {
+          LOG_WARN("sqrt reduced_arg failed", K(reduced_arg), K(ret));
         } else if (OB_FAIL(reduction_compensation.mul(const_two, reduction_compensation,
                                                       loop_allocator_current, false))) {
+          LOG_WARN("reduction_compensation *= 2 failed", K(reduction_compensation), K(ret));
         } else {
           loop_allocator_next.free();
           std::swap(loop_allocator_current, loop_allocator_next);
@@ -5124,8 +5349,10 @@ int ObNumber::ln(ObNumber &value, ObIAllocator &allocator, const bool do_roundin
       }
       while (OB_SUCC(ret) && reduced_arg.compare(const_one_point_one) >= 0) {
         if (OB_FAIL(reduced_arg.sqrt(reduced_arg, loop_allocator_current, false))) {
+          LOG_WARN("sqrt reduced_arg failed", K(reduced_arg), K(ret));
         } else if (OB_FAIL(reduction_compensation.mul(const_two, reduction_compensation,
                                                       loop_allocator_current, false))) {
+          LOG_WARN("reduction_compensation *= 2 failed", K(reduction_compensation), K(ret));
         } else{
           loop_allocator_next.free();
           std::swap(loop_allocator_current, loop_allocator_next);
@@ -5136,7 +5363,9 @@ int ObNumber::ln(ObNumber &value, ObIAllocator &allocator, const bool do_roundin
         // loop_calc_allocator will be reuse. move numbers that are used later
         // to one_time_allocator
         if (OB_FAIL(reduced_arg.deep_copy_to_allocator_(one_time_allocator))) {
+          LOG_WARN("failed: deep copy reduced_arg to one_time_allocator", K(ret));
         } else if (OB_FAIL(reduction_compensation.deep_copy_to_allocator_(one_time_allocator))) {
+          LOG_WARN("failed: deep copy reduction_compensation to one_time_allocator", K(ret));
         }
       }
 
@@ -5157,29 +5386,42 @@ int ObNumber::ln(ObNumber &value, ObIAllocator &allocator, const bool do_roundin
         // term is z^i/i
         number::ObNumber term;
         if (OB_FAIL(series_number.from(number::ObNumber::get_positive_one(), one_time_allocator))) {
+          LOG_WARN("initialize series_number to 1 failed", K(ret));
         } else if (OB_FAIL(reduced_arg.sub_v3(number::ObNumber::get_positive_one(), z,
                                               one_time_allocator, true, false))) {
+          LOG_WARN("failed: z=reduced_arg-1", K(reduced_arg), K(z), K(ret));
         } else if (OB_FAIL(reduced_arg.add_v3(number::ObNumber::get_positive_one(), tmp,
                                               one_time_allocator, true, false))) {
+          LOG_WARN("failed: tmp=reduced_arg+1", K(reduced_arg), K(tmp), K(ret));
         } else if (OB_FAIL(z.div(tmp, z, one_time_allocator, OB_MAX_DECIMAL_DIGIT, false))) {
+          // z = (reduced_arg-1)/(reduced_arg+1) now
+          LOG_WARN("failed: z/=tmp, where tmp = reduced_arg+1", K(z), K(tmp), K(ret));
         } else if (OB_FAIL(z.mul(z, z_square, one_time_allocator, false))) {
+          LOG_WARN("failed: z_square = z*z", K(z), K(ret));
         } else if (OB_FAIL(term_x_exponent.from(z, one_time_allocator))) {
+          LOG_WARN("failed: deep copy z to term_x_exponent", K(ret));
         } else if (OB_FAIL(result.from(z, one_time_allocator))) {
+          LOG_WARN("failed: deep copy z to result", K(z), K(ret));
         } else {
           bool term_reachs_zero = false;
           while (OB_SUCC(ret) && !term_reachs_zero) {
             // main loop of the Taylor series
             if (OB_FAIL(series_number.add_v3(const_two, series_number,
                                              loop_allocator_current, true, false))) {
+              LOG_WARN("failed: series_number+=2", K(series_number), K(ret));
             } else if (OB_FAIL(term_x_exponent.mul(z_square, term_x_exponent,
                                                    loop_allocator_current, false))) {
+              LOG_WARN("failed: term_x_exponent *= z_square", K(term_x_exponent), K(z_square), K(ret));
             } else if (OB_FAIL(term_x_exponent.div(series_number, term, loop_allocator_current,
                                                    OB_MAX_DECIMAL_DIGIT, false))) {
+              LOG_WARN("failed: term = term_x_exponent / series_number, K(ret)",
+                       K(term_x_exponent), K(series_number));
             } else {  // now we have the term of this loop
               if (term.is_zero()) {
                 term_reachs_zero = true;
               } else {
                 if (OB_FAIL(result.add_v3(term, result, loop_allocator_current, true, false))) {
+                  LOG_WARN("failed: result += term", K(result), K(term), K(ret));
                 }
               }
               // this iteration is ending. data from last iteration will not
@@ -5195,6 +5437,8 @@ int ObNumber::ln(ObNumber &value, ObIAllocator &allocator, const bool do_roundin
             // don't use one_time_allocator here, because result is shallow-copied
             // to value later.
             if (OB_FAIL(result.mul(reduction_compensation, result, allocator, false))) {
+              LOG_WARN("failed: result *= reduction_compensation",
+                       K(result), K(reduction_compensation), K(ret));
             }
           }
         }
@@ -5206,6 +5450,7 @@ int ObNumber::ln(ObNumber &value, ObIAllocator &allocator, const bool do_roundin
     if (do_rounding) {
       if (OB_FAIL(result.round_scale_v3_(FLOATING_SCALE,
                                          true))) {
+        LOG_WARN("result.round_scale_v3_() fail", K(ret), K(result));
       } else {
         value = result;
       }
@@ -5221,6 +5466,7 @@ int ObNumber::ln(ObNumber &value, ObIAllocator &allocator, const bool do_roundin
 
 int ObNumber::e_power(ObNumber &value, ObIAllocator &allocator, const bool do_rounding/*true*/) const
 {
+  LOG_DEBUG("ObExprPower, e_power", K(*this), KPC(this), K(do_rounding));
 
   int ret = OB_SUCCESS;
   number::ObNumber result;
@@ -5244,10 +5490,12 @@ int ObNumber::e_power(ObNumber &value, ObIAllocator &allocator, const bool do_ro
   if (is_zero()) {
     // note: result.set_one() will raise error if not initialized.
     if (OB_FAIL(result.from(number::ObNumber::get_positive_one(), one_time_allocator))) {
+      LOG_WARN("set result to 1 failed", K(ret));
     }
   } else {
     number::ObNumber exponent_new;
     if (OB_FAIL(exponent_new.from(*this, one_time_allocator))) {
+      LOG_WARN("deep copy failed", KPC(this), K(ret));
     } else {
       // Reduce exponent_new to the range [-0.01, 0.01] by dividing by 2^n, to
       // improve the convergence rate of the Taylor series.
@@ -5256,11 +5504,14 @@ int ObNumber::e_power(ObNumber &value, ObIAllocator &allocator, const bool do_ro
       number::ObNumber const_two;
       int times_exponent_div_2 = 0;
       if (OB_FAIL(small_fraction_number.from(small_fraction, one_time_allocator))) {
+        LOG_WARN("initialize small_fraction_number failed", K(ret));
       } else if (OB_FAIL(const_two.from((int64_t)2, one_time_allocator))) {
+        LOG_WARN("fail to initialize const_two", K(ret));
       } else {
         while (OB_SUCC(ret) && exponent_new.abs_compare(small_fraction_number) > 0) {
           if (OB_FAIL(exponent_new.div(const_two, exponent_new,
                                        loop_allocator_current, OB_MAX_DECIMAL_DIGIT, false))) {
+            LOG_WARN("exponent_new /= 2 failed", K(exponent_new), K(ret));
           } else {
             times_exponent_div_2 ++;
 
@@ -5270,6 +5521,7 @@ int ObNumber::e_power(ObNumber &value, ObIAllocator &allocator, const bool do_ro
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(exponent_new.deep_copy_to_allocator_(one_time_allocator))) {
+            LOG_WARN("failed: move exponent_new to one_time_allocator", K(ret));
           }
         }
 
@@ -5283,8 +5535,11 @@ int ObNumber::e_power(ObNumber &value, ObIAllocator &allocator, const bool do_ro
         number::ObNumber term;  // current term in the Taylor series
         number::ObNumber series_index;
         if (OB_FAIL(result.from(number::ObNumber::get_positive_one(), one_time_allocator))) {
+          LOG_WARN("deep copy positive one failed", K(ret));
         } else if (OB_FAIL(term.from(exponent_new, one_time_allocator))) {
+          LOG_WARN("deep copy failed", K(exponent_new), K(ret));
         } else if (OB_FAIL(series_index.from(number::ObNumber::get_positive_one(), one_time_allocator))) {
+          LOG_WARN("deep copy positive one failed", K(ret));
         } else {
           LOG_DEBUG("begin taylor series",
                     K(result), KCSTRING(result.format()),
@@ -5293,11 +5548,15 @@ int ObNumber::e_power(ObNumber &value, ObIAllocator &allocator, const bool do_ro
                     K(ret));
           do {
             if (OB_FAIL(result.add_v3(term, result, loop_allocator_current, true, false))) {
+              LOG_WARN("failed: result += term", K(ret));
             } else if (OB_FAIL(term.mul(exponent_new, term, loop_allocator_current, false))) {
+              LOG_WARN("failed: term *= exponent_new", K(ret));
             } else if (OB_FAIL(series_index.add_v3(number::ObNumber::get_positive_one(),
                                                    series_index, loop_allocator_current, true, false))) {
+              LOG_WARN("failed: series_index += 1", K(ret));
             } else if (OB_FAIL(term.div(series_index, term, loop_allocator_current,
                                         OB_MAX_DECIMAL_DIGIT, false))) {
+              LOG_WARN("failed: term /= series_index", K(ret));
             } else {
               loop_allocator_next.free();
               std::swap(loop_allocator_current, loop_allocator_next);
@@ -5317,6 +5576,7 @@ int ObNumber::e_power(ObNumber &value, ObIAllocator &allocator, const bool do_ro
 
           if (OB_SUCC(ret)) {
             if (OB_FAIL(result.deep_copy_to_allocator_(one_time_allocator))) {
+              LOG_WARN("failed: move result to one_time_allocator", K(ret));
             }
           }
 
@@ -5326,6 +5586,7 @@ int ObNumber::e_power(ObNumber &value, ObIAllocator &allocator, const bool do_ro
           // Compensate for the argument range reduction
           while (OB_SUCC(ret) && times_exponent_div_2-- > 0) {
             if (OB_FAIL(result.mul(result, result, loop_allocator_current, false))) {
+              LOG_WARN("failed: result *= result", K(ret));
             } else {
               loop_allocator_next.free();
               std::swap(loop_allocator_current, loop_allocator_next);
@@ -5340,10 +5601,12 @@ int ObNumber::e_power(ObNumber &value, ObIAllocator &allocator, const bool do_ro
   if (OB_SUCC(ret)) {
     if (do_rounding) {
       if (OB_FAIL(result.round_scale_v3_(FLOATING_SCALE, true))) {
+        LOG_WARN("result.round_scale_v3_() fail", K(ret), K(result));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(value.from(result, allocator))) {
+        LOG_WARN("failed: deep copy result to value", K(ret));
       }
     }
 
@@ -5377,24 +5640,29 @@ int ObNumber::power(const int64_t exponent, ObNumber &value,
     switch (exponent) {
       case 0:
         if (OB_FAIL(result.from(number::ObNumber::get_positive_one(), one_time_allocator))) {
+          LOG_WARN("copy one failed", K(ret));
         }
         break;
       case 1:
         if (OB_FAIL(result.from(*this, one_time_allocator))) {
+          LOG_WARN("copy base failed", K(ret));
         }
         break;
       case -1:
         if (OB_FAIL(number::ObNumber::get_positive_one().div(*this, result, one_time_allocator,
                                                              OB_MAX_DECIMAL_DIGIT, false))) {
+          LOG_WARN("result=1/base failed", KPC(this), K(ret));
         }
         break;
       case 2:
         if (OB_FAIL(mul(*this, result, one_time_allocator, false))) {
+          LOG_WARN("result=base^2 failed", KPC(this), K(ret));
         }
         break;
       default:
         if (is_zero()) {
           if (OB_FAIL(result.from(number::ObNumber::get_zero(), one_time_allocator))) {
+            LOG_WARN("copy zero failed", K(ret));
           }
         } else {
           done_in_special_cases = false;
@@ -5409,11 +5677,14 @@ int ObNumber::power(const int64_t exponent, ObNumber &value,
 
     number::ObNumber base_product;
     if (OB_FAIL(base_product.from(*this, one_time_allocator))) {
+        LOG_WARN("failed: deep copy this to base_product", K(ret));
     } else if ((abs_exponent & 1) != 0) {
       if (OB_FAIL(result.from(*this, one_time_allocator))) {
+        LOG_WARN("failed: deep copy base to result", K(ret));
       }
     } else {
       if (OB_FAIL(result.from(number::ObNumber::get_positive_one(), one_time_allocator))) {
+        LOG_WARN("failed: deep copy 1 to result", K(ret));
       }
     }
     // max number of ObNumber calculations in all loops in this function. update
@@ -5437,8 +5708,10 @@ int ObNumber::power(const int64_t exponent, ObNumber &value,
     ObDataBuffer result_allocator_next(result_buffer_2, RESULT_BUFFER_SIZE);
     while (OB_SUCC(ret) and (abs_exponent >>= 1) > 0) {
       if (OB_FAIL(base_product.mul(base_product, base_product, loop_allocator_current, false))) {
+        LOG_WARN("failed: square base_product", K(ret));
       } else if (abs_exponent & 1) {
         if (OB_FAIL(result.mul(base_product, result, result_allocator_current, false))) {
+          LOG_WARN("failed: result *= base_product", K(ret));
         } else {
           result_allocator_next.free();
           std::swap(result_allocator_current, result_allocator_next);
@@ -5456,8 +5729,10 @@ int ObNumber::power(const int64_t exponent, ObNumber &value,
       if (is_exponent_negative) {
         if (OB_FAIL(number::ObNumber::get_positive_one().div(result, result, one_time_allocator,
                                                              OB_MAX_DECIMAL_DIGIT, false))) {
+          LOG_WARN("failed: result = 1 / result", K(ret));
         }
       } else if (OB_FAIL(result.deep_copy_to_allocator_(one_time_allocator))) {
+        LOG_WARN("failed: move result to one_time_allocator", K(ret));
       }
     }
   }
@@ -5465,10 +5740,12 @@ int ObNumber::power(const int64_t exponent, ObNumber &value,
   if (OB_SUCC(ret)) {
     if (do_rounding) {
       if (OB_FAIL(result.round_scale_v3_(FLOATING_SCALE, true))) {
+        LOG_WARN("result.round_scale_v3_() fail", K(ret), K(result));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(value.from(result, allocator))) {
+        LOG_WARN("failed: deep copy result to value", K(ret));
       }
     }
   }
@@ -5487,6 +5764,7 @@ int ObNumber::log(const ObNumber &base, ObNumber &value,
   int ret = OB_SUCCESS;
   number::ObNumber result;
 
+  LOG_DEBUG("log() start", KPC(this), K(base), K(do_rounding));
 
   // max number of times one_time_allocator is used in this function. update
   // this when modifying this function
@@ -5507,18 +5785,23 @@ int ObNumber::log(const ObNumber &base, ObNumber &value,
     number::ObNumber ln_x;
     number::ObNumber ln_base;
     if (OB_FAIL(ln(ln_x, one_time_allocator, false))) {
+      LOG_WARN("failed: ln_x = ln(this)", KPC(this), K(ret));
     } else if (OB_FAIL(base.ln(ln_base, one_time_allocator, false))) {
+      LOG_WARN("failed: ln_base = ln(base)", K(ret));
     } else if (OB_FAIL(ln_x.div(ln_base, result, one_time_allocator, OB_MAX_DECIMAL_DIGIT, false))) {
+      LOG_WARN("failed: result = ln_x / ln_base", K(ln_x), K(ln_base), K(ret));
     }
   }
 
   if (OB_SUCC(ret)) {
     if (do_rounding) {
       if (OB_FAIL(result.round_scale_v3_(FLOATING_SCALE, true))) {
+        LOG_WARN("result.round_scale_v3_() fail", K(ret), K(result));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(value.from(result, allocator))) {
+        LOG_WARN("failed: deep copy result to value", K(ret));
       }
     }
   }
@@ -5631,11 +5914,13 @@ int ObNumber::cast_to_int64(int64_t &value) const
 
     if (is_valid_integer) {
       value = is_negative() ? 0 - tmp_value : tmp_value;
+      LOG_DEBUG("finish cast_to_int64", K(tmp_value), K(is_valid_integer), KPC(this), K(value));
     }
   }
 
   if (OB_UNLIKELY(!is_valid_integer)) {
     ret = OB_INTEGER_PRECISION_OVERFLOW;
+    LOG_DEBUG("this is not valid integer number", KPC(this), K(ret));
   }
   return ret;
 }
@@ -5910,10 +6195,13 @@ int ObNumberBuilder::build(const char *str,
     LIB_LOG(WARN, "digits_ should not be null when this func is invoked", K(ret));
   } else if (OB_FAIL(find_point_(str, length, integer_start, integer_end, decimal_start,
       negative, integer_zero, decimal_zero, warning))) {
+    LIB_LOG(WARN, "lookup fail", K(ret), K(length), "str", ObString(length, str));
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(build_integer_(str, integer_start, integer_end, decimal_zero))) {
+      LIB_LOG(WARN, "build integer fail", K(ret), K(length), "str", ObString(length, str), K(integer_start), K(integer_end), K(decimal_zero));
     } else if (OB_FAIL(build_decimal_(str, length, decimal_start, integer_zero))) {
+      LIB_LOG(WARN, "build decimal fail",  K(ret), K(length), "str", ObString(length, str), K(decimal_start), K(integer_zero));
     } else if (OB_UNLIKELY(ib_.get_length() < 0 || db_.get_length() < 0)) {
       ret = OB_ERR_UNEXPECTED;
       LIB_LOG(ERROR, "unexpected integer length or decimal length. ",
@@ -5983,10 +6271,13 @@ int ObNumberBuilder::build_v2(const char *str,
     LIB_LOG(WARN, "digits_ should not be null when this func is invoked", K(ret));
   } else if (OB_FAIL(find_point_(str, length, integer_start, integer_end, decimal_start,
                     negative, integer_zero, decimal_zero, warning))) {
+    LIB_LOG(WARN, "lookup fail", K(ret), K(length), "str", ObString(length, str));
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(build_integer_v2_(str, integer_start, integer_end, decimal_zero, integer_zero, warning))) {
+      LIB_LOG(WARN, "build integer fail", K(ret), K(length), "str", ObString(length, str), K(integer_start), K(integer_end), K(decimal_zero), K(integer_zero));
     } else if (OB_FAIL(build_decimal_v2_(str, length, decimal_start, integer_zero, decimal_zero, warning))) {
+      LIB_LOG(WARN, "build decimal fail",  K(ret), K(length), "str", ObString(length, str), K(decimal_start), K(integer_zero), K(decimal_zero));
     } else if (OB_UNLIKELY(ib_.get_length() < 0) || OB_UNLIKELY(db_.get_length() < 0)) {
       ret = OB_ERR_UNEXPECTED;
       LIB_LOG(ERROR, "unexpected integer length or decimal length. ",
@@ -6016,6 +6307,7 @@ int ObNumberBuilder::build_v2(const char *str,
       ret = number_.normalize_v3_(false);
     }
   }
+  LIB_LOG(DEBUG, "succ to build_v2", K(number_), K(ret), K(warning));
   return ret;
 }
 
@@ -6273,6 +6565,8 @@ int ObNumberBuilder::find_point_(
       integer_end   = dot_idx - 1;
       decimal_start = dot_idx + 1;
       ObString tmp_str(length, str);
+      LOG_DEBUG("find v1", K(tmp_str), K(negative), K(integer_zero),
+                K(decimal_zero), K(integer_start), K(dot_idx), K(i), K(length));
     }
   }
 
@@ -6428,11 +6722,13 @@ ObCalcVector::~ObCalcVector()
 
 ObCalcVector::ObCalcVector(const ObCalcVector &other)
 {
+  LIB_LOG(DEBUG, "copy assignment invoked");
   *this = other;
 }
 
 ObCalcVector &ObCalcVector::operator =(const ObCalcVector &other)
 {
+  LIB_LOG(DEBUG, "operator = invoked");
   if (this != &other) {
     base_ = other.base_;
     length_ = other.length_;

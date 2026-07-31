@@ -841,6 +841,7 @@ int ObModeConfigParserUitl::format_mode_str(const char *src, int64_t src_len, ch
            && (NULL != (locate_str = STRCHR(source_str, ',')))) {
       locate = static_cast<int32_t>(locate_str - source_str);
       if (OB_FAIL(databuff_printf(dst, dst_len, pos, "%.*s , ", locate, source_str))) {
+        OB_LOG(WARN, "failed to databuff_print", K(ret), K(dst), K(locate), K(source_str));
       } else {
         source_str = locate_str + 1;
         source_left_len -= (locate + 1);
@@ -849,8 +850,10 @@ int ObModeConfigParserUitl::format_mode_str(const char *src, int64_t src_len, ch
 
     if (OB_SUCC(ret) && source_left_len > 0) {
       if (OB_FAIL(databuff_printf(dst, dst_len, pos, "%s", source_str))) {
+        OB_LOG(WARN, "failed to databuff_print", KR(ret), K(dst), K(pos));
       }
     }
+    OB_LOG(DEBUG, "format_option_str", K(ret), K(src), K(dst));
   }
   return ret;
 }
@@ -874,7 +877,9 @@ int ObModeConfigParserUitl::get_kv_list(char *str, ObIArray<std::pair<ObString, 
       while (len > 0 && token[len - 1] == ' ') token[--len] = '\0';
       // check and set mode
       if (OB_FAIL(parse_item_to_kv(token, key, value, delim))) {
+        OB_LOG(WARN, "fail to check config item", K(ret));
       } else if (OB_FAIL(kv_list.push_back(std::make_pair(key, value)))) {
+        OB_LOG(WARN, "fail to push back key and value pair", K(ret), K(key), K(value));
       } else {
         token = STRTOK_R(NULL, ",", &save_ptr);
       }
@@ -1093,7 +1098,9 @@ int ObParallelDDLControlMode::is_parallel_ddl_enable(const ObParallelDDLType ddl
   is_parallel = true;
   ObParallelDDLControlMode cfg;
   if (OB_FAIL(GCONF._parallel_ddl_control.init_mode(cfg))) {
+    LOG_WARN("init mode failed", KR(ret));
   } else if (OB_FAIL(cfg.is_parallel_ddl(ddl_type, is_parallel))) {
+    LOG_WARN("fail to check is parallel ddl", KR(ret), K(ddl_type));
   }
   return ret;
 }
@@ -1111,6 +1118,7 @@ int ObParallelDDLControlMode::generate_parallel_ddl_control_config_for_create_te
     if (unsupported) {
       // skip
     } else if (OB_FAIL(config_value.append_fmt("%s:ON, ", DDL_TYPES[i]))) {
+      LOG_WARN("fail to append fmt", KR(ret), K(i));
     }
   }
   if (config_value.is_valid()) {

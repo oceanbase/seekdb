@@ -90,6 +90,7 @@ int ObDDLStartClogCb::init(const ObITable::TableKey &table_key,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(table_key), K(execution_id), K(data_format_version), K(lock_tid));
   } else if (OB_FAIL(direct_load_mgr_handle_.assign(direct_load_mgr_handle))) {
+    LOG_WARN("assign direct load mgr handle failed", K(ret));
   } else {
     table_key_ = table_key;
     data_format_version_ = data_format_version;
@@ -117,6 +118,7 @@ int ObDDLStartClogCb::on_success()
     LOG_WARN("unexpected error", K(ret), K(table_key_));
   } else if (OB_FAIL(data_direct_load_mgr->start_nolock(table_key_, start_scn, data_format_version_,
       execution_id_, SCN::min_scn()/*checkpoint_scn*/, ddl_kv_mgr_handle_, lob_kv_mgr_handle_))) {
+    LOG_WARN("failed to start ddl in cb", K(ret), K(table_key_), K(start_scn), K(execution_id_));
   }
   if (OB_NOT_NULL(data_direct_load_mgr)) {
     data_direct_load_mgr->unlock(lock_tid_);
@@ -182,6 +184,7 @@ int ObDDLMacroBlockClogCb::init(const storage::ObDDLMacroBlockRedoInfo &redo_inf
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(redo_info), K(macro_block_id));
   } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.inc_ref(macro_block_id))) {
+    LOG_WARN("inc reference count failed", K(ret), K(macro_block_id));
   } else {
     macro_block_id_ = macro_block_id;
     tablet_handle_ = tablet_handle;
@@ -189,10 +192,12 @@ int ObDDLMacroBlockClogCb::init(const storage::ObDDLMacroBlockRedoInfo &redo_inf
     data_format_version_ = redo_info.data_format_version_;
     direct_load_type_ = direct_load_type;
     if (OB_FAIL(ddl_macro_block_.block_handle_.set_block_id(macro_block_id_))) {
+      LOG_WARN("set macro block id failed", K(ret), K(macro_block_id_));
     } else if (OB_FAIL(ddl_macro_block_.set_data_macro_meta(macro_block_id_, 
                                                             redo_info.data_buffer_.ptr(),
                                                             redo_info.data_buffer_.length(),
                                                             redo_info.block_type_))) {
+      LOG_WARN("failed to set data macro meta", K(ret), K(redo_info));
     } else {
       ddl_macro_block_.block_type_ = redo_info.block_type_;
       ddl_macro_block_.logic_id_ = redo_info.logic_id_;
@@ -210,6 +215,7 @@ int ObDDLMacroBlockClogCb::init(const storage::ObDDLMacroBlockRedoInfo &redo_inf
   } else if (is_idem_type(direct_load_type_)) {
     /* check idempotence, if already exist, skip set macro block in ddl kv */
     if (OB_FAIL(tablet->get_ddl_kv_mgr(kv_mgr_handle))) {
+      LOG_WARN("failed to get ddl kv mgr", K(ret));
     } else if (!kv_mgr_handle.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ddl kv mgr handle not valid", K(ret));
@@ -218,12 +224,14 @@ int ObDDLMacroBlockClogCb::init(const storage::ObDDLMacroBlockRedoInfo &redo_inf
                                                                          redo_info.data_buffer_.ptr(),
                                                                          redo_info.data_buffer_.length(),
                                                                          block_checksum_))) {
+      LOG_WARN("failed to check idempotence", K(ret), K(ddl_macro_block_));
     } else if (OB_FAIL(kv_mgr_handle.get_obj()->check_idem_block_exist(ddl_macro_block_.block_type_,
                                                                        direct_load_type_,
                                                                        ddl_macro_block_.logic_id_,
                                                                        block_checksum_,
                                                                        ddl_macro_block_.table_key_.table_type_,
                                                                        is_macro_block_exist_))) {
+      LOG_WARN("failed to check idempotence", K(ret), K(ddl_macro_block_));
     }
   }
   return ret;
@@ -290,6 +298,7 @@ int ObDDLMacroBlockClogCb::on_success()
   } else if (is_idem_type(direct_load_type_) && !is_macro_block_exist_) {
     /* set checksum */
     if (OB_FAIL(tablet->get_ddl_kv_mgr(kv_mgr_handle))) {
+      LOG_WARN("failed to get ddl kv mgr", K(ret));
     } else if (!kv_mgr_handle.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ddl kv mgr handle not valid", K(ret));
@@ -298,6 +307,7 @@ int ObDDLMacroBlockClogCb::on_success()
                                                                         ddl_macro_block_.logic_id_,
                                                                         block_checksum_,
                                                                         ddl_macro_block_.table_key_.table_type_))) {
+      LOG_WARN("failed to set block checksum", K(ret), K(ddl_macro_block_));
    } else {
     FLOG_INFO("set block checksum success", K(ret), K(ddl_macro_block_), K(block_checksum_));
    }
@@ -337,7 +347,9 @@ int ObDDLCommitClogCb::init(const common::ObTabletID &tablet_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id), K(start_scn), K(lock_tid));
   } else if (OB_FAIL(direct_load_mgr_handle_.assign(direct_load_mgr_handle))) {
+    LOG_WARN("assign handle failed", K(ret));
   } else if (OB_FAIL(lob_direct_load_mgr_handle_.assign(lob_direct_load_mgr_handle))) {
+    LOG_WARN("assign handle failed", K(ret));
   } else {
     tablet_id_ = tablet_id;
     start_scn_ = start_scn;
@@ -406,6 +418,7 @@ DEFINE_SERIALIZE(ObDDLClogHeader)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(buf_len));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, tmp_pos, static_cast<int64_t>(ddl_clog_type_)))) {
+    LOG_WARN("fail to serialize ObDDLClogHeader", K(ret));
   } else {
     pos = tmp_pos;
   }
@@ -422,6 +435,7 @@ DEFINE_DESERIALIZE(ObDDLClogHeader)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(data_len));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, tmp_pos, &log_type))) {
+    LOG_WARN("fail to deserialize ObDDLClogHeader", K(ret));
   } else {
     ddl_clog_type_ = static_cast<ObDDLClogType>(log_type);
     pos = tmp_pos;

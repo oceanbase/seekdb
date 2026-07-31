@@ -212,9 +212,11 @@ int ObLooseMinMaxStatCollector<AGG_TYPE>::collect(const ObDatum &datum)
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "not init", K(ret));
   } else if (OB_FAIL(cmp_func_(datum, *agg_result_, cmp_res, nullptr))) {
+    STORAGE_LOG(WARN, "failed to compare datum", K(ret), K(datum), KPC_(agg_result));
   } else if (!need_update_result(cmp_res)) {
     // skip
   } else if (OB_FAIL(update_agg_result(datum))) {
+    STORAGE_LOG(WARN, "failed to update agg result", K(ret), K(datum), K(cmp_res));
   }
   return ret;
 }
@@ -245,8 +247,10 @@ int ObLooseMinMaxStatCollector<AGG_TYPE>::update_agg_result(const ObDatum &datum
       const int64_t max_copy_size = common::OBJ_DATUM_NUMBER_RES_SIZE;
       int64_t copy_pos = 0;
       if (OB_FAIL(agg_result_->ObDatum::deep_copy(datum, copy_buf, max_copy_size, copy_pos))) {
+        STORAGE_LOG(WARN, "fail to deep copy datum", K(ret), K(datum));
       }
     } else if (OB_FAIL(agg_result_->ObDatum::deep_copy(datum, *allocator_))) {
+      STORAGE_LOG(WARN, "fail to deep copy datum", K(ret), K(datum));
     }
   }
   return ret;
@@ -265,6 +269,7 @@ int ObBlockStatCollector::collect_row(
     const blocksstable::ObStorageDatum &datum = row.storage_datums_[proj];
     CollectorType &collector = collectors.at(i);
     if (OB_FAIL(collector.collect(datum))) {
+      STORAGE_LOG(WARN, "failed to collect datum stat", K(i), K(proj), K(datum));
     }
   }
   return ret;

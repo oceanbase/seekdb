@@ -41,6 +41,7 @@ public:
     } else {
       const obmysql::ObMySQLRawPacket &pkt = reinterpret_cast<const obmysql::ObMySQLRawPacket&>(req_->get_packet());
       if (OB_FAIL(send_error_packet(common::OB_NOT_SUPPORTED, NULL))) {
+        SERVER_LOG(WARN, "failed to send error packet", K(ret));
       } else {
         SERVER_LOG(WARN, "MySQL command not supported", "cmd", pkt.get_cmd());
       }

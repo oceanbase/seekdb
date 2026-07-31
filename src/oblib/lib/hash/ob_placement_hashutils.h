@@ -99,6 +99,7 @@ int placement_hash_find_set_pos(const K keys[N], ObBitSet<N, BlockAllocatorT, au
       }
     }
     if (N == i) {
+      OB_LOG(DEBUG, "hash buckets are full");
       hash_ret = OB_HASH_FULL;
     }
   }

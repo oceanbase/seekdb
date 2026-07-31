@@ -84,10 +84,13 @@ public:
 
     if (heap_.count() < limit_size_) {
       if (OB_FAIL(heap_.push(item))) {
+        SHARE_LOG(WARN, "failed to push heap", K(ret));
       }
     } else if (cmp_(item, heap_.top())) {
       if (OB_FAIL(heap_.pop())) {
+        SHARE_LOG(WARN, "failed to pop heap", K(ret));
       } else if (OB_FAIL(heap_.push(item))) {
+        SHARE_LOG(WARN, "failed to push heap", K(ret));
       }
     }
 
@@ -546,7 +549,9 @@ int ObVectorCenterClusterHelper<VEC_T, CENTER_T>::push_center(
   } else {
     double distance = DBL_MAX;
     if (OB_FAIL(ObVectorDistanceDispatch<VEC_T>::distance_funcs[static_cast<int64_t>(dis_type_)](const_vec_, center_vec, dim_, distance))) {
+      SHARE_LOG(WARN, "failed to get distance type", K(ret));
     } else if (OB_FAIL(push_center(center, distance, center_save_mode, center_vec))) {
+      SHARE_LOG(WARN, "fail to push back center with distance", K(ret), K(distance));
     }
   }
 
@@ -572,6 +577,7 @@ int ObVectorCenterClusterHelper<VEC_T, CENTER_T>::push_center(
         ret = OB_ERR_UNEXPECTED;
         SHARE_LOG(WARN, "center_entity is null", K(ret));
       } else if (OB_FAIL(center_with_buf->new_from_src(center))) {
+        SHARE_LOG(WARN, "center_entity fail init", K(ret));
       } else {
         HeapCenterItemTemp item(distance, center_with_buf);
         if (center_save_mode == DEEP_COPY_CENTER_VEC && OB_FAIL(item.vec_dim_.new_from_src(alloc_, center_vec, dim_))) {
@@ -580,6 +586,7 @@ int ObVectorCenterClusterHelper<VEC_T, CENTER_T>::push_center(
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(heap_.push(item))) {
+          SHARE_LOG(WARN, "failed to push center heap", K(ret), K(center), K(distance));
         }
       }
     }
@@ -593,11 +600,13 @@ int ObVectorCenterClusterHelper<VEC_T, CENTER_T>::push_center(
         ret = OB_ERR_UNEXPECTED;
         SHARE_LOG(WARN, "center_with_buf is null", K(ret));
       } else if (OB_FAIL(old_center_with_buf->new_from_src(center))) {
+        SHARE_LOG(WARN, "failed to new from src", K(ret), K(center));
       } else {
         HeapCenterItemTemp new_top(distance, old_center_with_buf);
         if (center_save_mode == DEEP_COPY_CENTER_VEC) {
           new_top.set_vec_dim(top.vec_dim_);
           if (OB_FAIL(new_top.vec_dim_.reuse_from_src(center_vec, dim_))) {
+            SHARE_LOG(WARN, "failed to new from src", K(ret), K(center_vec));
           }
         } else if (center_save_mode == SHALLOW_COPY_CENTER_VEC) {
           new_top.set_vec_dim(top.vec_dim_);
@@ -605,6 +614,7 @@ int ObVectorCenterClusterHelper<VEC_T, CENTER_T>::push_center(
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(heap_.replace_top(new_top))) {
+          SHARE_LOG(WARN, "failed to replace top", K(ret), K(new_top));
         }
       }
     }

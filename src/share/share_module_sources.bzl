@@ -161,7 +161,7 @@ def share_validate_source_inventory(unity_groups, standalone_sources):
 
     if len(group_keys) != 28:
         fail("Share inventory must contain 28 Unity groups, got %s" % len(group_keys))
-    if len(unity_paths) != 312:
-        fail("Share inventory must contain 312 Unity sources, got %s" % len(unity_paths))
+    if len(unity_paths) != 313:
+        fail("Share inventory must contain 313 Unity sources, got %s" % len(unity_paths))
     if len(standalone_paths) != 46:
         fail("Share inventory must contain 46 standalone sources, got %s" % len(standalone_paths))

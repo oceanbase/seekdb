@@ -89,6 +89,7 @@ int ObPlanCacheObject::set_params_info(const ParamStore &params)
     if (params.at(i).is_ext_sql_array()) {
       ObDataType data_type;
       if (OB_FAIL(ObSQLUtils::get_ext_obj_data_type(params.at(i), data_type))) {
+        LOG_WARN("fail to get ext obj data type", K(ret));
       } else {
         param_info.ext_real_type_ = data_type.get_obj_type();
         param_info.scale_ = data_type.get_scale();
@@ -106,6 +107,7 @@ int ObPlanCacheObject::set_params_info(const ParamStore &params)
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(params_info_.push_back(param_info))) {
+        LOG_WARN("failed to push back param info", K(ret));
       }
     }
     param_info.reset();
@@ -166,13 +168,16 @@ int ObPlanCacheObject::check_pre_calc_cons(const bool is_ignore_stmt,
   } else if (OB_FALSE_IT(phy_plan_ctx->set_ignore_stmt(is_ignore_stmt))) {
   } else if (PRE_CALC_ERROR == expect_res) {
     if (OB_FAIL(pre_calc_frame.eval_expect_err(exec_ctx, is_match))) {
+      LOG_WARN("failed to eval pre calc expr frame info expect error", K(ret));
     }
   } else if (OB_FAIL(pre_calc_frame.eval(exec_ctx, datum_params))) {
+    LOG_TRACE("failed to eval pre calc expr frame info", K(ret));
     is_match = false;
     ret = OB_SUCCESS;
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && is_match && i < datum_params.count(); ++i) {
       if (OB_FAIL(pre_calc_con.check_is_match(datum_params.at(i), exec_ctx, is_match))) {
+        LOG_WARN("failed to check is match", K(ret));
       } // else end
     } // for end
   }
@@ -205,8 +210,10 @@ int ObPlanCacheObject::match_pre_calc_cons(common::ObDList<ObPreCalcExprConstrai
       } else if (OB_ISNULL(cached_con) || OB_ISNULL(cur_con)) {
         is_matched = false;
       } else if (OB_FAIL(check_pre_calc_cons(is_ignore_stmt, is_matched, *cached_con, pc_ctx.exec_ctx_))) {
+        LOG_WARN("failed to pre calculate expression and match constraint", K(ret));
       } else if (!is_matched) {
       } else if (OB_FAIL(is_same_pre_calc_cons(*cached_con, *cur_con, is_matched))) {
+        LOG_WARN("failed to check is same pre calc cons", K(ret));
       } else if (!is_matched) {
       } else {
         cached_con = cached_con->get_next();
@@ -233,6 +240,7 @@ int ObPlanCacheObject::is_same_pre_calc_cons(const ObPreCalcExprConstraint &cons
     is_same = true;
     for (int64_t i = 0; is_same && OB_SUCC(ret) && i < rt_exprs1.count(); ++i) {
       if (OB_FAIL(is_same_expr(rt_exprs1.at(i), rt_exprs2.at(i), is_same))) {
+        LOG_WARN("failed to check is is_same_expr", K(ret));
       }
     }
   }
@@ -258,6 +266,7 @@ int ObPlanCacheObject::is_same_expr(const ObExpr *expr1,
     is_same = true;
     for (int64_t i = 0; is_same && OB_SUCC(ret) && i < expr1->arg_cnt_; ++i) {
       if (OB_FAIL(SMART_CALL(is_same_expr(expr1->args_[i], expr2->args_[i], is_same)))) {
+        LOG_WARN("failed to smart call check is is_same_expr", K(ret));
       }
     }
   }
@@ -280,6 +289,8 @@ int ObPlanCacheObject::pre_calculation(const bool is_ignore_stmt,
   } else if (pre_calc_frame.pre_calc_rt_exprs_.count() <= 0) {
     /* do nothing */
   } else if (OB_FAIL(pre_calc_frame.eval(exec_ctx, datum_params))) {
+    LOG_WARN("failed to eval pre calc expr frame info", K(ret),
+             K(calc_types));
   } else { /* do nothing */
   }
 

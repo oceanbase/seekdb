@@ -34,6 +34,7 @@ int ObITabletMemtable::inc_unsubmitted_cnt()
   TRANS_LOG(DEBUG, "inc_unsubmitted_cnt", KPC(this), K(lbt()));
 
   if (OB_FAIL(get_unset_active_memtable_logging_blocked())) {
+    TRANS_LOG(WARN, "cannot inc unsubmitted_cnt", K(unsubmitted_cnt), KPC(this));
   }
 
   return ret;
@@ -99,6 +100,7 @@ int ObITabletMemtable::resolve_left_boundary_for_active_memtable_()
 
   if (OB_NOT_NULL(memtable_mgr)) {
     if (OB_FAIL(memtable_mgr->resolve_left_boundary_for_active_memtable(this, get_end_scn()))) {
+      TRANS_LOG(WARN, "fail to resolve left boundary for active memtable", K(ret), KPC(this));
     }
   }
 
@@ -112,6 +114,7 @@ int ObITabletMemtable::get_ls_current_right_boundary_(SCN &current_right_boundar
     ret = OB_ENTRY_NOT_EXIST;
     TRANS_LOG(WARN, "freezer should not be null", K(ret));
   } else if (OB_FAIL(freezer_->get_max_consequent_callbacked_scn(current_right_boundary))) {
+    TRANS_LOG(WARN, "fail to get min_unreplay_scn", K(ret), K(current_right_boundary));
   }
 
   return ret;
@@ -302,6 +305,7 @@ int ObITabletMemtable::resolve_right_boundary()
   }
 
   if (OB_FAIL(set_end_scn(end_scn))) {
+    TRANS_LOG(ERROR, "fail to set end_scn", K(ret));
   }
 
   return ret;

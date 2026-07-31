@@ -322,7 +322,9 @@ int ObIDiagnoseInfoMgr::alloc_and_add(const int64_t key, T *input_info)
         ret = purge_with_rw_lock(true);
       }
       if (OB_FAIL(ret)) {
+        STORAGE_LOG(WARN, "failed to add info into pool", K(ret), K(key));
       } else if (OB_FAIL(add_with_no_lock(key, info))) {
+        STORAGE_LOG(WARN, "failed to add info into pool", K(ret), K(key));
       }
     }
   }
@@ -806,6 +808,7 @@ int ObDiagnoseInfoParam<int_size, str_size>::deep_copy(ObIAllocator &allocator, 
   out_param = nullptr;
   if (OB_ISNULL(buf = allocator.alloc(get_deep_copy_size()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    STORAGE_LOG(TRACE, "fail to alloc memory", K(ret));
   } else if (OB_FAIL(deep_copy(buf, get_deep_copy_size(), out_param))) {
     STORAGE_LOG(WARN, "fail to deep copy", K(ret));
     allocator.free(buf);

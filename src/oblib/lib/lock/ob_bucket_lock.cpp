@@ -140,6 +140,7 @@ int ObBucketLock::rdlock(const uint64_t bucket_idx, const int64_t abs_timeout_us
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "Invalid argument, ", K(bucket_idx), K_(bucket_cnt), K(ret));
   } else if (OB_FAIL(latches_[bucket_to_latch_idx(bucket_idx)].rdlock(latch_id_, abs_timeout_us))) {
+    COMMON_LOG(WARN, "Fail to read lock latch, ", K(bucket_idx), K_(latch_id), K(abs_timeout_us), K(ret));
   }
   return ret;
 }
@@ -154,6 +155,7 @@ int ObBucketLock::wrlock(const uint64_t bucket_idx, const int64_t abs_timeout_us
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(ERROR, "Invalid argument, ", K(bucket_idx), K_(bucket_cnt), K(ret));
   } else if (OB_FAIL(latches_[bucket_to_latch_idx(bucket_idx)].wrlock(latch_id_, abs_timeout_us))) {
+    COMMON_LOG(WARN, "Fail to write lock latch, ", K(bucket_idx), K_(latch_id), K(abs_timeout_us), K(ret));
   }
   return ret;
 }
@@ -168,6 +170,7 @@ int ObBucketLock::unlock(const uint64_t bucket_idx)
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "Invalid argument, ", K(bucket_idx), K_(bucket_cnt), K(ret));
   } else if (OB_FAIL(latches_[bucket_to_latch_idx(bucket_idx)].unlock())) {
+    COMMON_LOG(WARN, "Fail to unlock latch, ", K(bucket_idx), K(ret));
   }
   return ret;
 }
@@ -182,6 +185,7 @@ int ObBucketLock::rdlock_latch_idx(const uint64_t latch_idx)
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid args", K(ret), K(latch_idx), K(latch_cnt_));
   } else if (OB_FAIL(latches_[latch_idx].rdlock(latch_id_))) {
+    COMMON_LOG(WARN, "failed to rd lock", K(ret), K(latch_idx), K(latch_id_));
   }
   return ret;
 }
@@ -196,6 +200,7 @@ int ObBucketLock::wrlock_latch_idx(const uint64_t latch_idx)
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid args", K(ret), K(latch_idx), K(latch_cnt_));
   } else if (OB_FAIL(latches_[latch_idx].wrlock(latch_id_))) {
+    COMMON_LOG(WARN, "failed to wrlock", K(ret), K(latch_idx), K(latch_id_));
   }
   return ret;
 }
@@ -210,6 +215,7 @@ int ObBucketLock::unlock_latch_idx(const uint64_t latch_idx)
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid args", K(ret), K(latch_idx), K(latch_cnt_));
   } else if (OB_FAIL(latches_[latch_idx].unlock())) {
+    COMMON_LOG(WARN, "failed to unlock", K(ret), K(latch_idx), K(latch_id_));
   }
   return ret;
 }
@@ -244,6 +250,7 @@ int ObBucketLock::wrlock_all()
   }
 
   const int64_t cost_ts = ObTimeUtility::current_time() - start_ts;
+  COMMON_LOG(DEBUG, "wrlock all", K_(latch_id), K_(latch_cnt), K(cost_ts), K(ret));
   return ret;
 }
 
@@ -289,6 +296,7 @@ int ObBucketLock::try_lock_all(const bool is_write_lock)
     }
   }
   const int64_t cost_ts = ObTimeUtility::current_time() - start_ts;
+  COMMON_LOG(DEBUG, "try lock all", K(is_write_lock), K_(latch_id), K_(latch_cnt), K(cost_ts), K(ret));
   return ret;
 }
 
@@ -306,6 +314,7 @@ int ObBucketLock::unlock_all()
     }
   }
   const int64_t cost_ts = ObTimeUtility::current_time() - start_ts;
+  COMMON_LOG(DEBUG, "unlock all", K_(latch_id), K_(latch_cnt), K(cost_ts), K(ret));
   return ret;
 }
 
@@ -343,10 +352,12 @@ int ObMultiBucketLockGuard::lock_multi_buckets(ObIArray<uint64_t> &hash_array)
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "cannot lock twice", K(ret), "count", latch_array_.count());
   } else if (OB_FAIL(latch_idx_set.create(hash_array.count()))) {
+    COMMON_LOG(WARN, "failed to create latch idx set", K(ret), "count", hash_array.count());
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < hash_array.count(); ++i) {
       const uint64_t latch_idx = lock_.get_latch_idx(hash_array.at(i));
       if (OB_FAIL(latch_idx_set.set_refactored(latch_idx))) {
+        COMMON_LOG(WARN, "failed to set latch idx set", K(ret));
       }
     }
   }
@@ -357,6 +368,7 @@ int ObMultiBucketLockGuard::lock_multi_buckets(ObIArray<uint64_t> &hash_array)
         ++it) {
       uint64_t latch_idx = it->first;
       if (OB_FAIL(latch_array_.push_back(latch_idx))) {
+        COMMON_LOG(WARN, "failed to add latch idx", K(ret));
       }
     }
   }
@@ -367,9 +379,11 @@ int ObMultiBucketLockGuard::lock_multi_buckets(ObIArray<uint64_t> &hash_array)
       const uint64_t latch_idx = latch_array_.at(next_lock_idx);
       if (is_write_lock_) {
         if (OB_FAIL(lock_.wrlock_latch_idx(latch_idx))) {
+          COMMON_LOG(WARN, "failed to wrlock latch idx", K(ret), K(next_lock_idx), K(latch_idx));
         }
       } else {
         if (OB_FAIL(lock_.rdlock_latch_idx(latch_idx))) {
+          COMMON_LOG(WARN, "failed to rdlock latch idx", K(ret), K(next_lock_idx), K(latch_idx));
         }
       }
     }
@@ -381,6 +395,7 @@ int ObMultiBucketLockGuard::lock_multi_buckets(ObIArray<uint64_t> &hash_array)
     for (int64_t i = 0; i < next_lock_idx; ++i) {
       const uint64_t latch_idx = latch_array_.at(i);
       if(OB_SUCCESS != (tmp_ret = lock_.unlock_latch_idx(latch_idx))) {
+        COMMON_LOG(ERROR, "failed to unlock latch", K(ret), K(i), K(latch_idx));
       }
     }
     latch_array_.reset();

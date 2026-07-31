@@ -40,6 +40,7 @@ public:
   {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(common::serialization::encode_vi64(buf, buf_len, pos, partition_num))) {
+      SHARE_SCHEMA_LOG(WARN, "failed to encode partition count", KR(ret));
     } else if (OB_NOT_NULL(partition_array)) {
       for (int64_t i = 0; OB_SUCC(ret) && i < partition_num; ++i) {
         if (OB_ISNULL(partition_array[i])) {

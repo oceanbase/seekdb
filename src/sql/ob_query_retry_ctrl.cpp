@@ -983,6 +983,9 @@ void ObQueryRetryCtrl::test_and_save_retry_state(const share::ObGlobalContext &g
     // this is possible. #issue/43953721
     LOG_WARN("session is null in exec_context. maybe OOM. don't retry", K(err));
   } else if (OB_FAIL(get_func(err, is_inner_sql, func))) {
+    // note: if no err proc registered, a default handler
+    // 'empty_proc' is used as processor func
+    LOG_WARN("fail get retry func", K(err), K(ret));
   } else if (OB_ISNULL(func)) {
     client_ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid retry processor, no retry", K(err));

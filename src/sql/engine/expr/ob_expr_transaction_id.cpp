@@ -64,6 +64,7 @@ int ObExprTransactionId::eval_transaction_id(const ObExpr &expr, ObEvalCtx &ctx,
       ObNumStackOnceAlloc tmp_alloc;
       number::ObNumber num;
       if (OB_FAIL(num.from(tx_id, tmp_alloc))) {
+        LOG_WARN("copy number fail", K(ret));
       } else {
         expr_datum.set_number(num);
       }

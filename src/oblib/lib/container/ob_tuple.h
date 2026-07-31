@@ -354,6 +354,7 @@ protected:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(copy_assign_element(std::get<N>(tuple_), std::get<N>(rhs)))) {
+      OB_LOG(WARN, "assign element failed", K(ret), K(std::get<N>(tuple_)));
     } else if (OB_FAIL(assign_<N + 1>(rhs))) {
     }
     return ret;
@@ -364,6 +365,7 @@ protected:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(copy_assign_element(std::get<sizeof...(T) - 1>(tuple_), std::get<sizeof...(T) - 1>(rhs)))) {
+      OB_LOG(WARN, "assign element failed", K(ret), K(std::get<sizeof...(T) - 1>(tuple_)));
     }
     return ret;
   }

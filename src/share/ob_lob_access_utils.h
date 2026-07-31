@@ -324,6 +324,7 @@ int pack_to_disk_inrow_lob(Allocator &allocator, const ObString data, const ObOb
   int ret = OB_SUCCESS;
   ObString result;
   if (OB_FAIL(pack_to_disk_inrow_lob(allocator, data, result))) {
+    COMMON_LOG(WARN, "alloc memory for lob fail", K(ret), K(data));
   } else {
     res_obj.set_lob_value(type, result.ptr(), result.length());
     res_obj.set_has_lob_header();

@@ -97,6 +97,7 @@ int ObLSService::stop()
         LOG_WARN("failed to get ls", K(ret));
       }
     } else if (OB_FAIL(stop_and_remove_ls_(ls, remove_from_disk))) {
+      LOG_WARN("safe remove ls failed", K(ret), KPC(ls));
     }
     is_running_ = false;
     is_stopped_ = true;
@@ -128,6 +129,7 @@ int ObLSService::init()
   } else if (OB_FAIL(ls_allocator_.init(common::OB_MALLOC_NORMAL_BLOCK_SIZE,
                                         OB_LS_SERVICE,
                                         LS_ALLOC_TOTAL_LIMIT))) {
+    LOG_WARN("fail to init ls allocator, ", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -167,6 +169,7 @@ int ObLSService::inner_create_ls_(const ObRestoreStatus &restore_status,
   } else if (FALSE_IT(ls = new (buf) ObLS())) {
 
   } else if (OB_FAIL(ls->init(restore_status, create_scn))) {
+    LOG_WARN("fail to init ls", K(ret));
   }
   if (OB_FAIL(ret) && NULL != ls) {
     ls->~ObLS();
@@ -214,6 +217,7 @@ int ObLSService::create_ls(const share::ObServerRole &server_role)
   arg.create_scn_ = SCN::base_scn();
   arg.need_create_inner_tablet_ = true;
   if (OB_FAIL(create_ls_(arg))) {
+    LOG_WARN("create ls failed", K(ret));
   }
   FLOG_INFO("create_ls finish", K(ret));
   return ret;
@@ -228,6 +232,7 @@ int ObLSService::create_ls_for_restore()
   arg.create_scn_ = SCN::min_scn();
   arg.need_create_inner_tablet_ = false;
   if (OB_FAIL(create_ls_(arg))) {
+    LOG_WARN("create system ls for restore failed", K(ret));
   }
   return ret;
 }
@@ -237,13 +242,16 @@ int ObLSService::post_create_ls_(const bool is_restore, ObLS *ls)
   int ret = OB_SUCCESS;
   bool need_online = false;
   if (OB_FAIL(ls->check_ls_need_online(need_online))) {
+    LOG_WARN("check ls need online failed", K(ret));
   } else if (need_online &&
              OB_FAIL(ls->online_without_lock())) {
     LOG_ERROR("ls start failed", K(ret));
   } else if (is_restore) {
     if (OB_FAIL(ls->set_start_restore_state())) {
+      LOG_ERROR("ls set start restore state failed", KR(ret), KPC(ls));
     }
   } else if (OB_FAIL(ls->set_start_work_state())) {
+    LOG_ERROR("ls set start work state failed", KR(ret), KPC(ls));
   }
 
   return ret;
@@ -260,6 +268,7 @@ int ObLSService::replay_create_ls(const int64_t ls_epoch, const ObLSMeta &ls_met
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(ls_meta));
   } else if (OB_FAIL(replay_create_ls_(ls_epoch, ls_meta))) {
+    LOG_WARN("fail to create ls for replay", K(ret), K(ls_meta));
   }
 
   return ret;
@@ -276,6 +285,7 @@ int ObLSService::replay_update_ls(const ObLSMeta &ls_meta)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(ls_meta));
   } else if (OB_FAIL(replay_update_ls_(ls_meta))) {
+    LOG_WARN("fail to update ls for replay", K(ret), K(ls_meta));
   }
 
   return ret;
@@ -288,6 +298,7 @@ int ObLSService::replay_remove_ls()
     ret = OB_NOT_INIT;
     LOG_WARN("the ls service has not been inited", K(ret));
   } else if (OB_FAIL(replay_remove_ls_())) {
+    LOG_WARN("fail to remove ls for replay", K(ret));
   }
 
   return ret;
@@ -301,9 +312,11 @@ int ObLSService::replay_create_ls_commit()
     ret = OB_NOT_INIT;
     LOG_WARN("the ls service has not been inited", K(ret));
   } else if (OB_FAIL(get_ls(ls))) {
+    LOG_WARN("fail to get ls", K(ret));
   } else {
     ObLSLockGuard lock_ls(ls);
     if (OB_FAIL(ls->set_start_work_state())) {
+      LOG_ERROR("ls set start work state failed", KR(ret), KPC(ls));
     }
     FLOG_INFO("replay create ls", KR(ret), KPC(ls));
   }
@@ -336,6 +349,7 @@ int ObLSService::gc_ls_after_replay_slog()
     if (ls_status.is_need_gc()) {
       do {
         if (OB_TMP_FAIL(ls->stop())) {
+          LOG_WARN("ls stop failed", K(tmp_ret), KP(ls));
         } else {
           ls->wait();
         }
@@ -349,6 +363,7 @@ int ObLSService::gc_ls_after_replay_slog()
       if (ls_status.is_init_state()) {
         do {
           if (OB_TMP_FAIL(LOCAL_STORAGE_META_PERSISTER.abort_create_ls())) {
+            LOG_ERROR("fail to write create ls abort slog", K(tmp_ret), KPC(ls));
           }
           if (OB_TMP_FAIL(tmp_ret)) {
             ob_usleep(SLEEP_TS);
@@ -382,6 +397,7 @@ int ObLSService::online_ls()
   } else {
     ObLSLockGuard lock_ls(ls);
     if (OB_FAIL(post_create_ls_(false, ls))) {
+      LOG_WARN("post create ls failed", K(ret));
     }
   }
 
@@ -393,7 +409,9 @@ int ObLSService::replay_update_ls_(const ObLSMeta &ls_meta)
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
   if (OB_FAIL(get_ls(ls))) {
+    LOG_WARN("fail to get ls", K(ls_meta));
   } else if (OB_FAIL(ls->set_ls_meta(ls_meta))) {
+    LOG_WARN("fail to set ls's meta for replay", K(ls_meta));
   }
   return ret;
 }
@@ -403,7 +421,9 @@ int ObLSService::replay_remove_ls_()
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
   if (OB_FAIL(get_ls(ls))) {
+    LOG_WARN("fail to get ls", K(ret));
   } else if (OB_FAIL(ls->set_remove_state())) {
+    LOG_ERROR("ls set remove state failed", KR(ret), KPC(ls));
   } else {
   }
   return ret;
@@ -418,7 +438,9 @@ int ObLSService::replay_create_ls_(const int64_t ls_epoch, const ObLSMeta &ls_me
   if (OB_SUCCESS == (ret = get_ls(ls))) {
     ObLSLockGuard lock_ls(ls);
     if (OB_FAIL(ls->set_ls_meta(ls_meta))) {
+      LOG_WARN("fail to update ls meta for replay", K(ret), K(ls_meta));
     } else if (OB_FAIL(ls->set_ls_epoch(ls_epoch))) {
+      LOG_WARN("fail to update ls epoch for replay", K(ret), K(ls_epoch));
     } else {
       LOG_INFO("updated existing ls for replay", K(ls_epoch), K(ls_meta));
     }
@@ -428,14 +450,19 @@ int ObLSService::replay_create_ls_(const int64_t ls_epoch, const ObLSMeta &ls_me
   } else if (OB_FAIL(inner_create_ls_(ObRestoreStatus(ObRestoreStatus::Status::NONE),
                                       ls_meta.get_clog_checkpoint_scn(),
                                       ls))) {
+    LOG_WARN("fail to inner create ls", K(ret));
   } else {
     state = ObLSCreateState::CREATE_STATE_LS_ALLOCATED;
     ObLSLockGuard lock_ls(ls);
     if (OB_FAIL(ls->set_ls_meta(ls_meta))) {
+      LOG_WARN("set ls meta failed", K(ret), K(ls_meta));
     } else if (OB_FAIL(ls->set_ls_epoch(ls_epoch))) {
+      LOG_WARN("fail to set ls epoch", K(ret), K(ls_epoch));
     } else if (OB_FAIL(publish_ls_(ls))) {
+      LOG_WARN("fail to publish replayed ls", K(ret), K(ls_meta));
     } else if (FALSE_IT(state = ObLSCreateState::CREATE_STATE_PUBLISHED)) {
     } else if (OB_FAIL(ls->load_ls())) {
+      LOG_WARN("enable ls palf failed", K(ret), K(ls_meta));
     } else {
       LOG_INFO("success replay create ls", K(ret), K(ls_meta));
     }
@@ -504,6 +531,7 @@ void ObLSService::remove_ls_(ObLS *ls, const bool remove_from_disk, const bool w
     if (success_step < 1) {
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ls->prepare_for_safe_destroy())) {
+        LOG_WARN("prepare safe destroy failed", K(ret), KPC(ls));
       } else {
         success_step = 1;
       }
@@ -579,6 +607,7 @@ int ObLSService::create_ls_(const ObCreateLSCommonArg &arg)
       } else if (OB_BREAK_FAIL(LOCAL_STORAGE_META_PERSISTER.prepare_create_ls(ls_meta, ls_epoch))) {
         LOG_ERROR("fail to write create log stream slog", K(ls_meta));
       } else if (OB_FAIL(ls->set_ls_epoch(ls_epoch))) {
+        LOG_WARN("fail to set ls epoch", K(ret));
       } else if (FALSE_IT(state = ObLSCreateState::CREATE_STATE_WRITE_PREPARE_SLOG)) {
       } else if (OB_BREAK_FAIL(ls->create_ls(palf_base_info))) {
         LOG_WARN("enable ls palf failed", K(ret), K(ls_meta));
@@ -695,6 +724,7 @@ ObMdsThrottleGuard::~ObMdsThrottleGuard()
   } else if (throttle_tool_->is_throttling<ObMdsAllocator>(share_ti_guard, module_ti_guard)) {
 
     if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
+      STORAGE_LOG(WARN, "get ls failed", KR(ret));
     } else {
       (void)TxShareMemThrottleUtil::do_throttle<ObMdsAllocator>(for_replay_,
                                                                       abs_expire_time_,
@@ -733,6 +763,7 @@ ObTxDataThrottleGuard::~ObTxDataThrottleGuard()
     MDS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "throttle tool is unexpected nullptr", KP(throttle_tool_));
   } else if (throttle_tool_->is_throttling<ObTxDataAllocator>(share_ti_guard, module_ti_guard)) {
     if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
+      STORAGE_LOG(WARN, "get ls failed", KR(ret));
     } else {
       (void)TxShareMemThrottleUtil::do_throttle<ObTxDataAllocator>(for_replay_,
                                                                          abs_expire_time_,
@@ -785,6 +816,7 @@ OB_WEAK_SYMBOL int ObTxDataAllocator::init(const char *label)
     SHARE_LOG(WARN, "throttle tool is unexpected null", KP(throttle_tool_), KP(share_mem_alloc_mgr));
   } else if (OB_FAIL(slice_allocator_.init(
                  storage::TX_DATA_SLICE_SIZE, OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_, mem_attr))) {
+    SHARE_LOG(WARN, "init slice allocator failed", KR(ret));
   } else {
     slice_allocator_.set_nway(ObTxDataAllocator::ALLOC_TX_DATA_MAX_CONCURRENCY);
     is_inited_ = true;
@@ -826,7 +858,9 @@ int get_sys_ls_readable_scn(SCN &readable_scn)
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
   if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
+      LOG_WARN("get log stream failed", KR(ret));
   } else if (OB_FAIL(ls->get_max_decided_scn(readable_scn))) {
+    LOG_WARN("failed to get_max_decided_scn", KR(ret), KPC(ls));
   }
   return ret;
 }

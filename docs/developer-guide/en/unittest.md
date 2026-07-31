@@ -1,101 +1,70 @@
-# Write and Run Unit Tests
+# Building and Running Unit Tests with Bazel
 
-## How to Build and Run All Unit Tests
+Bazel owns the seekdb C++ unit-test suite. Every test under `unittest` belongs
+to one production module. Each module produces one test binary, and Bazel runs
+its GTest cases in parallel shards.
 
-[OceanBase seekdb](https://github.com/oceanbase/seekdb) has two unittest directories.
-
-- `unittest`: These are the main unit test cases, and they test the code in the `src` directory.
-
-- `deps/oblib/unittest`: Test cases for oblib.
-
-First, you should build `unittest`. Enter the `unittest` directory in the build directory and build explicitly. When you build the seekdb project, it doesn't build the unit tests by default. For example:
+Run the complete suite:
 
 ```bash
-bash build.sh --init --make # init and build a debug mode project
-cd build_debug/unittest  # or cd build_debug/deps/oblib/unittest
-make -j4 # build unittest
+./bazel.py test //unittest/...
 ```
 
-Then you can execute the script file `run_tests.sh` to run all test cases.
-
-## How to Build and Run a Single Unit Test
-
-You can also build and test a single unit test case. Enter the `build_debug` directory and execute `make case-name` to build the specific case and run the built binary file. For example:
+Run one module, for example OBLib:
 
 ```bash
-cd build_debug
-# **NOTE**: don't enter the unittest directory
-make -j4 test_chunk_row_store
-find . -name "test_chunk_row_store"
-# got ./unittest/sql/engine/basic/test_chunk_row_store
-./unittest/sql/engine/basic/test_chunk_row_store
+./bazel.py test //unittest/oblib:oblib_tests
 ```
 
-## How to Write Unit Tests
+Run matching GTest cases only:
 
-As a C++ project, [OceanBase seekdb](https://github.com/oceanbase/seekdb) uses [Google Test](https://github.com/google/googletest) as the unit test framework. 
-
-seekdb uses `test_xxx.cpp` as the unit test file name. Create a `test_xxx.cpp` file and add the file name to the specific `CMakeLists.txt` file.
-
-In the `test_xxx.cpp` file, add the header file `#include <gtest/gtest.h>` and the main function below.
-
-```cpp
-int main(int argc, char **argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
+```bash
+./bazel.py test //unittest/sql:sql_tests \
+  --test_arg='--gtest_filter=TestName.CaseName'
 ```
 
-You can then add functions to test different scenarios. Below is an example from `test_ra_row_store_projector.cpp`.
+Remote compilation accepts the regular Bazel options:
 
-```cpp
-///
-/// TEST is a google test macro.
-/// You can use it to create a new test function
-///
-/// RARowStore is the test suite name and alloc_project_fail
-/// is the test name.
-///
-TEST(RARowStore, alloc_project_fail)
-{
-  ObEmptyAlloc alloc;
-  ObRARowStore rs(&alloc, true);
-
-  /// ASSERT_XXX are testing macros that help us determine whether the results
-  /// are expected, and they will terminate the test if failed.
-  ///
-  /// There are some other testing macros beginning with `EXPECT_` which
-  /// don't terminate the test if failed.
-  ///
-  ASSERT_EQ(OB_SUCCESS, rs.init(100 << 20));
-  const int64_t OBJ_CNT = 3;
-  ObObj objs[OBJ_CNT];
-  ObNewRow r;
-  r.cells_ = objs;
-  r.count_ = OBJ_CNT;
-  int64_t val = 0;
-  for (int64_t i = 0; i < OBJ_CNT; i++) {
-    objs[i].set_int(val);
-    val++;
-  }
-
-  int32_t projector[] = {0, 2};
-  r.projector_ = projector;
-  r.projector_size_ = ARRAYSIZEOF(projector);
-
-  ASSERT_EQ(OB_ALLOCATE_MEMORY_FAILED, rs.add_row(r));
-}
+```bash
+./bazel.py test //unittest/... \
+  --jobs=80 \
+  --remote-executor="${REMOTE_EXECUTOR}"
 ```
 
-Please refer to the [Google Test documentation](https://google.github.io/googletest/) for more details about `TEST`, `ASSERT`, and `EXPECT`.
+`unittest/run_tests.sh` and `unittest/oblib/run_tests.sh` are convenience
+entry points for the complete suite and OBLib tests. Both delegate to the
+root-level `bazel.py`.
 
-## Unit Tests on GitHub CI
+## Test Build Model
 
-Before a pull request is merged, the CI will test your pull request. The `Farm` will test the `mysql test` and `unittest`. You can see the details by following the `Details` link as shown below.
+- Every test source has exactly one module owner. Ownership is defined
+  centrally in `bazel/architecture/module_policy.bzl`.
+- Every module uses the single `unittest/all_tests_main.cpp` entry point. Test
+  sources must not define `main()`.
+- A module test sees production headers only through that module's
+  `*_unit_test_interface`. `liboceanbase.so` supplies implementation symbols
+  without broadening source-level visibility.
+- Test sources are Unity-compiled according to `unity_size`. A source that
+  demonstrably cannot participate in Unity must appear in `unity_exceptions`
+  with a reason. It still belongs to the same module test binary; it does not
+  create a standalone test program.
+- `shard_count` controls how many GTest shards Bazel may execute in parallel
+  for the module binary.
 
-![GitHub CI](images/unittest-github-ci.png)
+## Adding or Changing a Test
 
-![GitHub CI Farm Details](images/unittest-ci-details.png)
+1. Put the test under its `unittest/<module>` owner and do not add `main()`.
+2. Test only that module. Direct access to a peer business module is a module
+   or integration test and must instead use the owner's interface, fixture, or
+   fake, or move outside the C++ unit-test suite.
+3. Declare runtime files explicitly in the module `BUILD.bazel` `data`.
+4. Keep sources in normal Unity groups by default. Only proven macro pollution
+   or translation-unit symbol collisions justify a reasoned
+   `unity_exceptions` entry.
+5. Performance, stress, and benchmark programs do not belong to the default
+   unit-test suite.
 
-![Farm Unittest](images/unittest-unittest.png)
+The central gate checks ownership, cross-module dependencies, legacy
+`main()` functions, test sources omitted from the build, and performance or
+stress naming. Architectural changes must update and review the central policy
+instead of bypassing it in an individual `BUILD.bazel`.

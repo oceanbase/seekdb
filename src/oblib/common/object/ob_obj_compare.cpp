@@ -89,12 +89,14 @@ OB_NOINLINE int compare_decimalint_views(const ObDecimalInt *lhs,
   if (lhs_scale < rhs_scale) {
     if (OB_FAIL(wide::common_scale_decimalint(
           lhs, lhs_bytes, lhs_scale, rhs_scale, lhs_value))) {
+      LOG_WARN("scale lhs decimal int failed", K(ret), K(lhs_scale), K(rhs_scale));
     } else {
       rhs_value.from(rhs, rhs_bytes);
     }
   } else if (lhs_scale > rhs_scale) {
     if (OB_FAIL(wide::common_scale_decimalint(
           rhs, rhs_bytes, rhs_scale, lhs_scale, rhs_value))) {
+      LOG_WARN("scale rhs decimal int failed", K(ret), K(lhs_scale), K(rhs_scale));
     } else {
       lhs_value.from(lhs, lhs_bytes);
     }
@@ -123,6 +125,7 @@ OB_NOINLINE int compare_decimalint_integer(const ObObj &decimal_obj,
   ObDecimalInt *integer_value = nullptr;
   int32_t integer_bytes = 0;
   if (OB_FAIL(wide::from_integer(integer, allocator, integer_value, integer_bytes))) {
+    LOG_WARN("convert integer to decimal int failed", K(ret));
   } else if (OB_FAIL(compare_decimalint_views(decimal_obj.get_decimal_int(),
                                               decimal_obj.get_int_bytes(),
                                               decimal_obj.get_scale(),
@@ -130,6 +133,7 @@ OB_NOINLINE int compare_decimalint_integer(const ObObj &decimal_obj,
                                               integer_bytes,
                                               0,
                                               cmp_res))) {
+    LOG_WARN("compare decimal int with integer failed", K(ret));
   }
   return ret;
 }
@@ -146,6 +150,7 @@ OB_NOINLINE int compare_decimalint_number(const ObObj &decimal_obj,
   int32_t number_bytes = 0;
   if (OB_FAIL(wide::from_number(
         number, allocator, number_scale, number_value, number_bytes))) {
+    LOG_WARN("convert number to decimal int failed", K(ret));
   } else if (OB_FAIL(compare_decimalint_views(decimal_obj.get_decimal_int(),
                                               decimal_obj.get_int_bytes(),
                                               decimal_obj.get_scale(),
@@ -153,6 +158,7 @@ OB_NOINLINE int compare_decimalint_number(const ObObj &decimal_obj,
                                               number_bytes,
                                               number_scale,
                                               cmp_res))) {
+    LOG_WARN("compare decimal int with number failed", K(ret));
   }
   return ret;
 }

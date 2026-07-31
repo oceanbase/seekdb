@@ -119,6 +119,7 @@ public:
                                                : das_ctdef_->old_row_projector_),
                                 mode);
         if (OB_FAIL(domain_iter_->rewind())) {
+          LOG_WARN("fail to rewind for domain iterator", K(ret));
         }
       } else {
         // need to reset domain iter
@@ -168,12 +169,15 @@ int ObDASUpdIterator::get_next_row(blocksstable::ObDatumRow *&row)
     got_old_row_ = true;
     if (OB_ISNULL(old_row_)) {
       if (OB_FAIL(data_plane::create_datum_row(allocator_, das_ctdef_->old_row_projector_.count(), old_row_))) {
+        LOG_WARN("create row buffer failed", K(ret), K(das_ctdef_->old_row_projector_.count()));
       } else if (OB_FAIL(write_buffer_.begin(result_iter_))) {
+        LOG_WARN("begin datum result iterator failed", K(ret));
       }
     }
 
     if (OB_SUCC(ret) && OB_ISNULL(new_row_)) {
       if (OB_FAIL(data_plane::create_datum_row(allocator_, das_ctdef_->new_row_projector_.count(), new_row_))) {
+        LOG_WARN("create row buffer failed", K(ret), K(das_ctdef_->new_row_projector_.count()));
       }
     }
 
@@ -187,13 +191,21 @@ int ObDASUpdIterator::get_next_row(blocksstable::ObDatumRow *&row)
                                                          das_ctdef_->old_row_projector_,
                                                          allocator_,
                                                          *old_row_))) {
+        LOG_WARN("project old storage row failed", K(ret));
       } else if (OB_FAIL(ObDASUtils::project_storage_row(*das_ctdef_,
                                                          *sr,
                                                          das_ctdef_->new_row_projector_,
                                                          allocator_,
                                                          *new_row_))) {
+        LOG_WARN("project new storage row failed", K(ret));
       } else {
         row = old_row_;
+        LOG_DEBUG("DAS update get old row",
+                  K_(das_ctdef_->old_row_projector),
+                  K_(das_ctdef_->new_row_projector),
+                  "table_id", das_ctdef_->table_id_,
+                  "index_tid", das_ctdef_->index_tid_, KPC_(old_row),
+                  KPC_(new_row));
       }
     }
   } else {
@@ -203,6 +215,9 @@ int ObDASUpdIterator::get_next_row(blocksstable::ObDatumRow *&row)
       LOG_WARN("new row is null", K(ret));
     } else {
       row = new_row_;
+      LOG_DEBUG("DAS update get new row",
+                "table_id", das_ctdef_->table_id_,
+                "index_tid", das_ctdef_->index_tid_, KPC_(new_row));
     }
   }
   return ret;
@@ -225,17 +240,21 @@ int ObDASUpdIterator::get_next_rows(blocksstable::ObDatumRow *&rows, int64_t &ro
     }
   } else if (is_domain_index) {
     if (OB_FAIL(get_next_domain_index_rows(rows, row_count))) {
+      LOG_WARN("fail to get next domain index rows", K(ret));
     }
   } else if (!got_old_row_) {
     got_old_row_ = true;
     if (OB_ISNULL(old_rows_)) {
       if (OB_FAIL(data_plane::create_datum_rows(allocator_, batch_size_, das_ctdef_->old_row_projector_.count(), old_rows_))) {
+        LOG_WARN("create old rows buffer failed", K(ret), K(das_ctdef_->old_row_projector_.count()));
       } else if (OB_FAIL(write_buffer_.begin(result_iter_))) {
+        LOG_WARN("begin datum result iterator failed", K(ret));
       }
     }
 
     if (OB_SUCC(ret) && OB_ISNULL(new_rows_)) {
       if (OB_FAIL(data_plane::create_datum_rows(allocator_, batch_size_, das_ctdef_->new_row_projector_.count(), new_rows_))) {
+        LOG_WARN("create new rows buffer failed", K(ret), K(das_ctdef_->new_row_projector_.count()));
       }
     }
     while (OB_SUCC(ret) && row_count < batch_size_) {
@@ -248,12 +267,17 @@ int ObDASUpdIterator::get_next_rows(blocksstable::ObDatumRow *&rows, int64_t &ro
                                                          das_ctdef_->old_row_projector_,
                                                          allocator_,
                                                          old_rows_[row_count]))) {
+        LOG_WARN("project old storage row failed", K(ret));
       } else if (OB_FAIL(ObDASUtils::project_storage_row(*das_ctdef_,
                                                          *sr,
                                                          das_ctdef_->new_row_projector_,
                                                          allocator_,
                                                          new_rows_[row_count]))) {
+        LOG_WARN("project new storage row failed", K(ret));
       } else {
+        LOG_DEBUG("DAS update get row", K_(das_ctdef_->old_row_projector), K_(das_ctdef_->new_row_projector),
+                  "table_id", das_ctdef_->table_id_, "index_tid", das_ctdef_->index_tid_,
+                  K(old_rows_[row_count]), K(new_rows_[row_count]));
         ++row_count;
         got_row_count_ = row_count;
       }
@@ -293,6 +317,7 @@ int ObDASUpdIterator::get_next_domain_index_row(ObDatumRow *&row)
   int ret = OB_SUCCESS;
   if (!iter_has_built_) {
     if (OB_FAIL(write_buffer_.begin(result_iter_))) {
+      LOG_WARN("begin write iterator failed", K(ret));
     } else {
       iter_has_built_ = true;
     }
@@ -308,6 +333,7 @@ int ObDASUpdIterator::get_next_domain_index_row(ObDatumRow *&row)
         param.ft_doc_word_info_ = ft_doc_word_info_;
       }
       if (OB_FAIL(ObDomainDMLIterator::create_domain_dml_iterator(param, domain_iter_))) {
+        LOG_WARN("fail to create domain index dml iterator", K(ret));
       }
     }
     if (FAILEDx(domain_iter_->get_next_domain_row(row))) {
@@ -323,12 +349,15 @@ int ObDASUpdIterator::get_next_domain_index_row(ObDatumRow *&row)
           tmp_iter->is_old_row_ = false;
         }
         if (OB_FAIL(domain_iter_->change_domain_dml_mode(ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT))) {
+          LOG_WARN("fail to change domain dml mode", K(ret));
         } else {
           ret = OB_ITER_END;
         }
       }
     }
   }
+  LOG_DEBUG("get next domain index row", K(ret), K(iter_has_built_), K(got_old_row_),
+      KPC(domain_iter_), KPC(row));
   return ret;
 }
 
@@ -337,6 +366,7 @@ int ObDASUpdIterator::get_next_domain_index_rows(ObDatumRow *&rows, int64_t &row
   int ret = OB_SUCCESS;
   if (!iter_has_built_) {
     if (OB_FAIL(write_buffer_.begin(result_iter_))) {
+      LOG_WARN("begin write iterator failed", K(ret));
     } else {
       iter_has_built_ = true;
     }
@@ -352,6 +382,7 @@ int ObDASUpdIterator::get_next_domain_index_rows(ObDatumRow *&rows, int64_t &row
         param.ft_doc_word_info_ = ft_doc_word_info_;
       }
       if (OB_FAIL(ObDomainDMLIterator::create_domain_dml_iterator(param, domain_iter_))) {
+        LOG_WARN("fail to create domain index dml iterator", K(ret));
       }
     }
     if (FAILEDx(domain_iter_->get_next_domain_rows(rows, row_count))) {
@@ -367,12 +398,15 @@ int ObDASUpdIterator::get_next_domain_index_rows(ObDatumRow *&rows, int64_t &row
           tmp_iter->is_old_row_ = false;
         }
         if (OB_FAIL(domain_iter_->change_domain_dml_mode(ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT))) {
+          LOG_WARN("fail to change domain dml mode", K(ret));
         } else {
           ret = OB_ITER_END;
         }
       }
     }
   }
+  LOG_DEBUG("get next domain index rows", K(ret), K(iter_has_built_), K(got_old_row_),
+      KPC(domain_iter_), KPC(rows), K(row_count));
   return ret;
 }
 
@@ -459,6 +493,8 @@ int ObDASUpdateOp::open_op()
   upd_adaptor.ft_doc_word_infos_ = &doc_word_infos;
   if (OB_FAIL(ObDASDomainUtils::build_ft_doc_word_infos(trans_desc_, snapshot_, related_ctdefs_, related_tablet_ids_,
           upd_ctdef_->is_main_table_in_fts_ddl_, doc_word_infos))) {
+    LOG_WARN("fail to build fulltext doc word infos", K(ret), KPC(snapshot_), K(related_ctdefs_),
+        K(related_tablet_ids_));
   } else if (OB_FAIL(upd_adaptor.write_tablet(upd_iter, affected_rows))) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
       LOG_WARN("update row to partition storage failed", K(ret));
@@ -514,6 +550,7 @@ int ObDASUpdateOp::write_row(const ExprFixedArray &row,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("buffer not inited", K(ret));
   } else if (OB_FAIL(write_buffer_.add_row(row, &eval_ctx, stored_row, true))) {
+    LOG_WARN("add row to write buffer failed", K(ret), K(row), K(write_buffer_));
   }
   return ret;
 }

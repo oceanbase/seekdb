@@ -63,7 +63,9 @@ int ObExprEmbeddedVec::calc_result_typeN(ObExprResType &type,
     // If input is string/lob type (VARCHAR, TEXT, etc.), convert to vector type
     if (OB_FAIL(exec_ctx->get_subschema_id_by_collection_elem_type(ObNestedType::OB_VECTOR_TYPE,
                                                                    elem_type, subschema_id))) {
+      LOG_WARN("failed to get vector subschema id", K(ret), K(types[0]));
     } else {
+      LOG_DEBUG("EmbeddedVec subschema_id is : ", K(ret), K(subschema_id));
       type.set_collection(subschema_id);
     }
   }
@@ -75,7 +77,9 @@ int ObExprEmbeddedVec::pack_embedded_res(const ObExpr &expr, ObEvalCtx &ctx, ObD
   int ret = OB_SUCCESS;
   ObTextStringDatumResult text_result(expr.datum_meta_.type_, &expr, &ctx, &res);
   if (OB_FAIL(text_result.init(str.length()))) {
+    LOG_WARN("init lob result failed");
   } else if (OB_FAIL(text_result.append(str.ptr(), str.length()))) {
+    LOG_WARN("failed to append realdata", K(ret), K(text_result));
   } else {
     text_result.set_result();
   }
@@ -124,19 +128,28 @@ int ObExprEmbeddedVec::cg_expr(
   ObDatum *dim_datum = NULL;
   if (raw_ctx.arg_cnt_ == 1) {
     if (OB_FAIL(raw_ctx.args_[0]->eval(eval_ctx, data_datum))) {
+      LOG_WARN("failed to eval data parameter", K(ret));
     } else {
       ObString chunk_data = data_datum->get_string();
       if (OB_FAIL(pack_embedded_res(raw_ctx, eval_ctx, expr_datum, chunk_data))) {
+        LOG_WARN("fail to pack embedded res", K(ret));
       } else {
+        LOG_DEBUG("generated inrow LOB chunk when ai embedding: ", K(chunk_data));
       }
     }
   } else if (raw_ctx.arg_cnt_ == 6) {
     if (OB_FAIL(raw_ctx.args_[0]->eval(eval_ctx, data_datum))) {
+      LOG_WARN("failed to eval data parameter", K(ret));
     } else if (OB_FAIL(raw_ctx.args_[1]->eval(eval_ctx, model_datum))) {
+      LOG_WARN("failed to eval model parameter", K(ret));
     } else if (OB_FAIL(raw_ctx.args_[2]->eval(eval_ctx, url_datum))) {
+      LOG_WARN("failed to eval url parameter", K(ret));
     } else if (OB_FAIL(raw_ctx.args_[3]->eval(eval_ctx, user_key_datum))) {
+      LOG_WARN("failed to eval user_key parameter", K(ret));
     } else if (OB_FAIL(raw_ctx.args_[4]->eval(eval_ctx, sync_mode_datum))) {
+      LOG_WARN("failed to eval sync_mode parameter", K(ret));
     } else if (OB_FAIL(raw_ctx.args_[5]->eval(eval_ctx, dim_datum))) {
+      LOG_WARN("failed to eval dim parameter", K(ret));
     } else if (OB_ISNULL(data_datum) || OB_ISNULL(model_datum) || OB_ISNULL(url_datum) || OB_ISNULL(user_key_datum) || OB_ISNULL(sync_mode_datum) || OB_ISNULL(dim_datum)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null datum", K(ret));
@@ -146,7 +159,9 @@ int ObExprEmbeddedVec::cg_expr(
     } else {
       ObString chunk_data = data_datum->get_string();
       if (OB_FAIL(pack_embedded_res(raw_ctx, eval_ctx, expr_datum, chunk_data))) {
+        LOG_WARN("fail to pack embedded res", K(ret));
       } else {
+        LOG_DEBUG("generated inrow LOB chunk when ai embedding: ", K(chunk_data));
       }
     }
   } else {

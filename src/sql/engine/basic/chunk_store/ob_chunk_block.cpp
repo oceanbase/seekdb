@@ -40,7 +40,9 @@ int ChunkRowMeta::init(const ObExprPtrIArray &exprs, const int32_t extra_size)
     var_data_off_ = 0;
 
     if (OB_FAIL(column_length_.prepare_allocate(exprs.count()))) {
+      LOG_WARN("fail to prepare allocate column_length", K(ret), K(exprs.count()));
     } else if (OB_FAIL(column_offset_.prepare_allocate(exprs.count()))) {
+      LOG_WARN("fail to prepare allocate column_offset", K(ret), K(exprs.count()));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
         ObExpr *e = exprs.at(i);

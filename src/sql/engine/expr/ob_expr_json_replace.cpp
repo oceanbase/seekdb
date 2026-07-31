@@ -47,10 +47,12 @@ int ObExprJsonReplace::calc_result_typeN(ObExprResType& type,
     LOG_USER_ERROR(OB_ERR_PARAM_SIZE, func_name_.length(), func_name_.ptr());
   } else {
     if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(types_stack, 0, N_JSON_REPLACE))) {
+      LOG_WARN("wrong type for json doc.", K(ret), K(types_stack[0].get_type()));
     }
 
     for (int64_t i = 1; OB_SUCC(ret) && i < param_num; i+=2) {
       if (OB_FAIL(ObJsonExprHelper::is_valid_for_path(types_stack, i))) {
+        LOG_WARN("wrong type for json path.", K(ret), K(types_stack[i].get_type()));
       } else {
         ObJsonExprHelper::set_type_for_value(types_stack, i+1);
       }
@@ -74,6 +76,7 @@ int ObExprJsonReplace::eval_json_replace(const ObExpr &expr, ObEvalCtx &ctx, ObD
     LOG_WARN("invalid out put charset", K(ret), K(expr.datum_meta_.cs_type_));
   } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0,
                                                     json_doc, is_null_result))) {
+    LOG_WARN("get_json_doc failed", K(ret));
   }
 
   ObJsonPathCache ctx_cache(&temp_allocator);
@@ -90,16 +93,19 @@ int ObExprJsonReplace::eval_json_replace(const ObExpr &expr, ObEvalCtx &ctx, ObD
       is_null_result = true;
       break;
     } else if (OB_FAIL(temp_allocator.eval_arg(expr.args_[i], ctx, path_data))) {
+      LOG_WARN("eval json path datum failed", K(ret));
     } else {
       ObString path_val = path_data->get_string();
       ObJsonPath *json_path;
       if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *path_data,
                   expr.args_[i]->datum_meta_, expr.args_[i]->obj_meta_.has_lob_header(), path_val))) {
+        LOG_WARN("fail to get real data.", K(ret), K(path_val));
       } else if (OB_FAIL(ObJsonExprHelper::find_and_add_cache(path_cache, json_path, path_val, i, false))) {
         ret = OB_ERR_INVALID_JSON_PATH;
         LOG_USER_ERROR(OB_ERR_INVALID_JSON_PATH);
       } else if (OB_FAIL(json_doc->seek(*json_path, json_path->path_node_cnt(),
                                         true, false, hit))) {
+        LOG_WARN("json seek failed", K(path_data->get_string()), K(ret));
       }
     }
 
@@ -107,6 +113,7 @@ int ObExprJsonReplace::eval_json_replace(const ObExpr &expr, ObEvalCtx &ctx, ObD
       ObIJsonBase *json_val = NULL;
       if (OB_FAIL(ObJsonExprHelper::get_json_val(expr, ctx, &temp_allocator,
                                                  i+1, json_val))) {
+        LOG_WARN("get_json_val failed", K(ret));
       }
 
       // replace 
@@ -119,6 +126,7 @@ int ObExprJsonReplace::eval_json_replace(const ObExpr &expr, ObEvalCtx &ctx, ObD
         LOG_WARN("Input path seek failed", K(ret));
       } else {
         if (OB_FAIL(ObJsonExprHelper::json_base_replace(hit[0], json_val, json_doc))) {
+          LOG_WARN("json_base_replace failed", K(ret));
         }
       }
     }
@@ -126,9 +134,11 @@ int ObExprJsonReplace::eval_json_replace(const ObExpr &expr, ObEvalCtx &ctx, ObD
 
   // set result
   if (OB_UNLIKELY(OB_FAIL(ret))) {
+    LOG_WARN("Json parse and seek failed", K(ret));
   } else if (is_null_result) {
     res.set_null();
   } else if (OB_FAIL(ObJsonExprHelper::pack_json_res(expr, ctx, temp_allocator, json_doc, res))) {
+    LOG_WARN("pack fail", K(ret));
   }
   if (OB_NOT_NULL(json_doc)) {
     json_doc->reset();
@@ -142,6 +152,7 @@ int ObExprJsonReplace::cg_expr(ObExprCGCtx &expr_cg_ctx,
 {
   INIT_SUCC(ret);
   if (OB_FAIL(ObJsonExprHelper::init_json_expr_extra_info(expr_cg_ctx.allocator_, raw_expr, type_, rt_expr))) {
+    LOG_WARN("init_json_expr_extra_info fail", K(ret));
   } else {
     rt_expr.eval_func_ = eval_json_replace;
   }

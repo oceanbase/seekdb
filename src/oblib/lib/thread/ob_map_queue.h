@@ -104,6 +104,7 @@ int ObMapQueue<T>::init(const char *label)
     LIB_LOG(ERROR, "init twice");
     ret = common::OB_INIT_TWICE;
   } else if (OB_FAIL(map_.init(label))) {
+    LIB_LOG(ERROR, "init map fail", K(ret), K(label));
   } else {
     head_ = 0;
     tail_ = 0;
@@ -143,6 +144,7 @@ int ObMapQueue<T>::push(const T &val)
     Key key;
     key.reset(sn);
     if (OB_FAIL(map_.insert(key, val))) {
+      LIB_LOG(ERROR, "err insert map", K(ret), K(sn));
     }
 
     // Update tail.
@@ -175,6 +177,7 @@ int ObMapQueue<T>::pop(T &val)
         key.reset(sn);
         PopCond cond(val);
         if (OB_FAIL(map_.erase_if(key, cond))) {
+          LIB_LOG(ERROR, "err erase map", K(ret), K(sn));
         }
         else {
           done = true;

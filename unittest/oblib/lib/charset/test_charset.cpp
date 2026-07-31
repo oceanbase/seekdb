@@ -179,7 +179,7 @@ TEST_F(TestCharset, sortkey)
   
   const char ascii_string[] = {'\x7f','\0'};
   const char non_ascii_string[] = {'\xff','\0'};
-  const char utf8_string[] = { '\xe4', '\xbd', '\xa0', '\xe5', '\xa5', '\xbd','\0'}; // Chinese greeting in UTF-8
+  const char utf8_string[] = { '\xe4', '\xbd', '\xa0', '\xe5', '\xa5', '\xbd','\0'};//meaning is '你好'
   struct SortkeyCase {
     ObCollationType type;
     const char *valid_str;

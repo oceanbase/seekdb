@@ -198,6 +198,7 @@ struct ObDatumTCCmp<ObDecimalIntTC, ObDecimalIntTC>: public ObDefined<>
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(wide::compare(l, r, cmp_ret))) {
+      COMMON_LOG(WARN, "compare error", K(ret));
     }
     return ret;
   }

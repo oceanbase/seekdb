@@ -248,8 +248,11 @@ public:
 
   // for multi rows
   void add_avg_row_size(double avg_row_size, int64_t rc) {
+    SQL_LOG(DEBUG, "INFO", K(partition_id_));
+    SQL_LOG(DEBUG, "MERGE TABLE AVG LEN", K(avg_row_size_), K(row_count_), K(avg_row_size), K(rc));
     if (row_count_ + rc != 0) {
       avg_row_size_ = (avg_row_size_ * row_count_ + avg_row_size * rc) / (row_count_ + rc);
+      SQL_LOG(DEBUG, "avg size ", K(avg_row_size_));
     }
   }
   // for one row

@@ -39,7 +39,9 @@ int ObSSTableIndexFilter::init(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected nullptr read_info", K(ret), KP(read_info));
   } else if (OB_FAIL(build_skipping_filter_nodes(read_info, pushdown_filter))) {
+    LOG_WARN("Fail to build skipping filter node", K(ret));
   } else if (OB_FAIL(skip_filter_executor_.init(MAX(1, pushdown_filter.get_op().get_batch_size()), allocator))) {
+    LOG_WARN("Failed to init skip filter executor", K(ret));
   } else {
     pushdown_filter_ = &pushdown_filter;
     allocator_ = allocator;
@@ -72,6 +74,7 @@ int ObSSTableIndexFilter::check_range(
     for (int64_t i = 0; OB_SUCC(ret) && i < skipping_filter_nodes_.count(); ++i) {
       ObSkippingFilterNode &node = skipping_filter_nodes_[i];
       if (OB_FAIL(is_filtered_by_skipping_index(read_info, index_info, node, allocator, use_vectorize))) {
+        LOG_WARN("Fail to do filter by skipping index", K(ret), K(index_info));
       } else {
         can_use_skipping_index_filter =
           (can_use_skipping_index_filter || node.filter_->is_filter_constant());
@@ -79,6 +82,7 @@ int ObSSTableIndexFilter::check_range(
     }
     if (OB_SUCC(ret) && can_use_skipping_index_filter) {
       if (OB_FAIL(pushdown_filter_->execute_skipping_filter(bm))) {
+        LOG_WARN("Fail to execute skipping filter", K(ret), KP_(pushdown_filter));
       } else {
         index_info.set_filter_constant_type(bm.bmt_);
         // Recover ObBoolMask of the filter.
@@ -124,6 +128,7 @@ int ObSSTableIndexFilter::is_filtered_by_skipping_index(
                                                                   *node.filter_,
                                                                   allocator,
                                                                   use_vectorize))) {
+      LOG_WARN("Fail to falsifiable pushdown filter", K(ret), K(node.filter_));
     }
   }
   return ret;
@@ -142,9 +147,11 @@ int ObSSTableIndexFilter::build_skipping_filter_nodes(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Unexecpected nullptr filter", K(ret));
       } else if (OB_FAIL(build_skipping_filter_nodes(read_info, *children[i]))) {
+        LOG_WARN("Fail to traverse filter tree", K(ret), K(i), KP(children[i]));
       }
     }
   } else if (OB_FAIL(extract_skipping_filter_from_tree(read_info, filter))) {
+    LOG_WARN("Fail to extract physical operator from tree", K(ret));
   }
   return ret;
 }
@@ -158,7 +165,9 @@ int ObSSTableIndexFilter::extract_skipping_filter_from_tree(
   if (physical_filter.is_filter_white_node() || static_cast<sql::ObBlackFilterExecutor &>(physical_filter).is_monotonic()) {
     IndexList index_list;
     if (OB_FAIL(find_skipping_index(read_info, physical_filter, index_list))) {
+      LOG_WARN("Fail to find useful skipping index", K(ret));
     } else if (OB_FAIL(find_useful_skipping_filter(index_list, physical_filter))) {
+      LOG_WARN("Fail to find useful skipping filter", K(ret));
     }
   }
   return ret;
@@ -214,6 +223,7 @@ int ObSSTableIndexFilter::find_useful_skipping_filter(
     } else if (node.is_useful()) {
       node.filter_ = &filter;
       if (OB_FAIL(skipping_filter_nodes_.push_back(node))) {
+        LOG_WARN("Fail to push back skipping filter node", K(ret));
       }
     }
   }
@@ -238,6 +248,7 @@ int ObSSTableIndexFilterFactory::build_sstable_index_filter(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Fail to new ObSSTableIndexFilter", K(ret));
   } else if (OB_FAIL(tmp_index_filter->init(read_info, pushdown_filter, allocator))) {
+    LOG_WARN("Fail to init ObSSTableIndexFilter", K(ret));
   }
   if (OB_SUCC(ret) && tmp_index_filter->can_use_skipping_index()) {
     index_filter = tmp_index_filter;

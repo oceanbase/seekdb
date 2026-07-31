@@ -75,6 +75,7 @@ int ObCreateRoutineResolver::set_routine_info(const ObRoutineType &type,
     char buf[OB_MAX_PROC_ENV_LENGTH];
     int64_t pos = 0;
     if (OB_FAIL(ObExecEnv::gen_exec_env(*session_info_, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
+      LOG_WARN("failed to generate exec env", K(ret));
     } else {
       routine_info.set_exec_env(ObString(pos, buf));
     }
@@ -88,17 +89,15 @@ int ObCreateRoutineResolver::analyze_router_sql(obcall::ObCreateRoutineArg *crt_
   ObRoutineInfo &routine_info = crt_routine_arg->routine_info_;
   CK(OB_NOT_NULL(schema_checker_), OB_NOT_NULL(params_.sql_proxy_), OB_NOT_NULL(session_info_));
   if (OB_SUCC(ret)) {
-    pl::ObPLRouter router(routine_info,
-                          *session_info_,
-                          *schema_checker_->get_schema_guard(),
-                          *params_.sql_proxy_,
-                          params_.pl_sql_runtime_,
-                          params_.pl_engine_);
+    pl::ObPLRouter router(routine_info, *session_info_, *schema_checker_->get_schema_guard(), *params_.sql_proxy_);
     ObString route_sql;
     if (OB_FAIL(router.analyze(route_sql, crt_routine_arg->dependency_infos_, routine_info, crt_routine_arg))) {
+      LOG_WARN("failed to analyze route sql", K(route_sql), K(ret));
     } else if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
                          *allocator_, session_info_->get_dtc_params(), route_sql))) {
+      LOG_WARN("fail to convert charset", K(ret));
     } else if (OB_FAIL(routine_info.set_route_sql(route_sql))) {
+      LOG_WARN("set routine body failed", K(route_sql), K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -160,6 +159,7 @@ int ObCreateRoutineResolver::resolve_sp_definer(const ParseNode *parse_node,
           if (OB_FAIL(schema_checker_->get_schema_guard()->get_user_info(user_name,
                                                                          host_name,
                                                                          user_info))) {
+            LOG_WARN("fail to get_user_info", K(ret));
           } else if (OB_ISNULL(user_info)) {
             LOG_USER_WARN(OB_ERR_USER_NOT_EXIST, user_name.length(), user_name.ptr());
             ObPL::insert_error_msg(OB_ERR_USER_NOT_EXIST);
@@ -182,7 +182,9 @@ int ObCreateRoutineResolver::resolve_sp_definer(const ParseNode *parse_node,
     ObString priv_user(tmp_buf);
     if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
               *allocator_, session_info_->get_dtc_params(), priv_user))) {
+      LOG_WARN("fail to convert charset", K(ret));
     } else if (OB_FAIL(routine_info.set_priv_user(priv_user))) {
+      LOG_WARN("failed to set priv user", K(ret));
     }
   }
   return ret;
@@ -197,7 +199,9 @@ int ObCreateRoutineResolver::resolve_sp_name(const ParseNode *parse_node,
     ObRoutineInfo &proc_info = crt_routine_arg->routine_info_;
     ObString db_name, sp_name;
     if (OB_FAIL(ObResolverUtils::resolve_sp_name(*session_info_, *parse_node, db_name, sp_name))) {
+      LOG_WARN("failed to resolve sp name", K(ret));
     } else if (OB_FAIL(proc_info.set_routine_name(sp_name))) {
+      LOG_WARN("failed to set routine name", K(sp_name), K(ret));
     } else {
       crt_routine_arg->db_name_ = db_name;
     }
@@ -215,7 +219,9 @@ int ObCreateRoutineResolver::resolve_sp_body(const ParseNode *parse_node,
     routine_body.assign_ptr(parse_node->str_value_, static_cast<int32_t>(parse_node->str_len_));
     if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
                   *allocator_, session_info_->get_dtc_params(), routine_body))) {
+      LOG_WARN("fail to convert charset", K(ret));
     } else if (OB_FAIL(routine_info.set_routine_body(routine_body))) {
+      LOG_WARN("failed to set routine body", K(ret));
     }
   }
   return ret;
@@ -604,11 +610,14 @@ int ObCreateRoutineResolver::resolve_param_list(const ParseNode *param_list, obc
         routine_param.set_param_level(0); //todo user defined type guangang.gg
         param_name.assign_ptr(name_node->str_value_, static_cast<int32_t>(name_node->str_len_));
         if (OB_FAIL(check_dup_routine_param(routine_info.get_routine_params(), param_name))) {
+          LOG_WARN("fail to check dup routine param", K(param_name), K(ret));
         } else if (OB_FAIL(routine_param.set_param_name(param_name))) {
+          LOG_WARN("set param name failed", K(ret), K(param_name));
         } else if (OB_FAIL(resolve_param_type(type_node,
                                               param_name,
                                               *session_info_,
                                               routine_param))) {
+          LOG_WARN("failed to resolve param type", K(ret), K(param_name));
         }
       }
       if (OB_SUCC(ret)) {
@@ -642,6 +651,7 @@ int ObCreateRoutineResolver::resolve_param_list(const ParseNode *param_list, obc
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(routine_info.add_routine_param(routine_param))) {
+          LOG_WARN("add proc param failed", K(ret));
         }
       }
     }
@@ -804,6 +814,7 @@ int ObCreateRoutineResolver::resolve(const ParseNode &parse_tree,
                                     param_node,
                                     clause_list,
                                     crt_routine_arg))) {
+      LOG_WARN("failed to resolve routine info", K(ret));
     } else {
       if (parse_tree.value_ != 0) {
         OX (crt_routine_arg->with_if_not_exist_ = parse_tree.value_);
@@ -820,6 +831,7 @@ int ObCreateRoutineResolver::resolve(const ParseNode &parse_tree)
   if (OB_NOT_NULL(get_basic_stmt())) {
     // basic stmt would be set externally in alter routine
     OX (crt_routine_arg = &(static_cast<ObCreateRoutineStmt *>(get_basic_stmt())->get_routine_arg()));
+    LOG_DEBUG("get basic stmt from alter routine");
   } else {
     OZ (create_routine_arg(crt_routine_arg));
   }
@@ -856,6 +868,7 @@ int ObCreateProcedureResolver::resolve_impl(
     if (OB_FAIL(ObCreateRoutineResolver::resolve(parse_tree, sp_definer_node, sp_name_node,
                                                  body_node, NULL, param_node, clause_node,
                                                  crt_routine_arg))) {
+      LOG_WARN("failed to resolve sp body", K(ret));
     }
   }
   return ret;
@@ -891,6 +904,7 @@ int ObCreateFunctionResolver::resolve_impl(
                                                  param_node,
                                                  sf_clause_list,
                                                  crt_routine_arg))) {
+      LOG_WARN("failed to resolve sp body", K(ret));
     }
   }
   return ret;

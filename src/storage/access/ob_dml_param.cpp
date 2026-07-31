@@ -52,6 +52,7 @@ int ObRow2ExprsProjector::init(const sql::ObExprPtrIArray &exprs,
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(outputs_.prepare_allocate(exprs.count()))) {
+      LOG_WARN("array prepare allocate failed", K(ret));
     } else {
       for (int64_t i = 0; i < exprs.count(); i++) {
         sql::ObExpr *e = exprs.at(i);
@@ -188,6 +189,7 @@ int ObRow2ExprsProjector::project(const sql::ObExprPtrIArray &exprs,
           item.datum_->ptr_ = item.data_;
         }
         if (OB_FAIL(item.datum_->from_storage_datum(*datum, exprs.at(item.expr_idx_)->obj_datum_map_))) {
+          LOG_WARN("convert obj to datum failed", K(ret), K(i), K(item), KPC(datum));
         } else {
           // the other items may contain virtual columns, set evaluated flag.
           item.eval_info_->evaluated_ = true;
@@ -215,6 +217,7 @@ int ObRow2ExprsProjector::project(const sql::ObExprPtrIArray &exprs,
       } else {
         if (OB_FAIL(item.datum_[idx].from_storage_datum(
                     *datum, exprs.at(item.expr_idx_)->obj_datum_map_))) {
+          LOG_WARN("convert obj to datum failed", K(ret), K(i), K(item), KPC(datum));
         } else {
           // the other items may contain virtual columns, set evaluated flag.
           item.eval_flags_->set(idx);
@@ -331,8 +334,11 @@ int ScanResumePoint::add_range(const ObITableReadInfo& read_info, const blocksst
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(tmp_range.deep_copy(datum_range, allocator_))) {
+    LOG_WARN("failed to deep copy range");
   } else if (OB_FAIL(tmp_range.to_new_range(new_range, obj_metas, allocator_))) {
+    LOG_WARN("Fail to convert datum range to new range");
   } else if (OB_FAIL(ranges_.push_back(new_range))) {
+    LOG_WARN("failed to push back remain range");
   }
 
   return ret;

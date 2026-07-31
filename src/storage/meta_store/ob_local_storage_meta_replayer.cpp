@@ -54,6 +54,7 @@ int ObLocalStorageMetaReplayer::start_replay(const ObServerRuntimeSuperBlock &su
     LOG_WARN("runtime super block invalid", K(ret), K(super_block));
   } else {
     if (OB_FAIL(ckpt_slog_handler_->start_replay(super_block))) {
+      LOG_WARN("fail to start replay", K(ret));
     }
   }
   return ret;

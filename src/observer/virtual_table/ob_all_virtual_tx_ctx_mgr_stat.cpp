@@ -57,6 +57,7 @@ int ObGVTxCtxMgrStat::prepare_start_to_read_()
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
   } else if (OB_FAIL(trans_service_->get_tx_ctx_mgr_stat(tx_ctx_mgr_stat_))) {
+    SERVER_LOG(WARN, "get_tx_ctx_mgr_stat error", K(ret));
   }
   if (OB_SUCC(ret)) {
     start_to_read_ = true;

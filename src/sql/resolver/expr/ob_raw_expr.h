@@ -425,6 +425,7 @@ public:
       } else if (OB_UNLIKELY(pos >= desc_.cap_)) {
         int64_t new_word_cnt = pos * 2;
         if (OB_FAIL(alloc_new_buf(new_word_cnt))) {
+          SQL_RESV_LOG(WARN, "failed to alloc new buf", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -508,6 +509,7 @@ public:
       } else if (OB_UNLIKELY(pos >= desc_.cap_)) {
         int64_t new_word_cnt = pos + 1;
         if (OB_FAIL(alloc_new_buf(new_word_cnt))) {
+          SQL_RESV_LOG(WARN, "failed to alloc new buf", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -540,6 +542,7 @@ public:
         } else {
           int64_t new_word_cnt = that_count * 2;
           if (OB_FAIL(alloc_new_buf(new_word_cnt))) {
+            SQL_RESV_LOG(WARN, "failed to alloc new buffer", K(ret));
           }
         }
       }
@@ -722,6 +725,7 @@ public:
       for (int64_t i = 0; OB_SUCC(ret) && count < num && i < max_bit_count; i++) {
         if (has_member(i)) {
           if (OB_FAIL(arr.push_back(i))) {
+            SQL_RESV_LOG(WARN, "failed to push back element", K(ret));
           } else {
             count++;
           }
@@ -784,6 +788,7 @@ public:
       if (desc_.cap_ < that_count) {
         int64_t new_word_cnt = that_count * 2;
         if (OB_FAIL(alloc_new_buf(new_word_cnt))) {
+          SQL_RESV_LOG(WARN, "failed to alloc new buffer", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -822,6 +827,7 @@ public:
       if (desc_.cap_ < that_count) {
         int64_t new_word_cnt = that_count * 2;
         if (OB_FAIL(alloc_new_buf(new_word_cnt))) {
+          SQL_RESV_LOG(WARN, "failed to alloc new buffer", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -864,6 +870,7 @@ public:
         }
         FlagType flag = static_cast<FlagType>(i);
         if (OB_FAIL(databuff_print_obj(buf, buf_len, pos, flag))) {
+          SQL_RESV_LOG(WARN, "databuff print obj failed", K(ret));
         }
         ++count;
       }
@@ -887,6 +894,7 @@ public:
       if (other.bitset_word_count() > desc_.cap_) {
         int64_t new_word_cnt = other.bitset_word_count() * 2;
         if (OB_FAIL(alloc_new_buf(new_word_cnt))) {
+          SQL_RESV_LOG(WARN, "failed to alloc new buf", K(ret));
         }
       }
 
@@ -914,6 +922,7 @@ private:
       SQL_RESV_LOG(WARN, "not inited", K(ret));
     } else if (desc_.cap_ <= LOCAL_ARRAY_SIZE) {
       if (OB_FAIL(init_alloc_buf(word_cnt))) {
+        SQL_RESV_LOG(WARN, "failed to init array buf", K(ret));
       }
     } else if (OB_ISNULL(allocator = get_block_allocator())) {
       ret = OB_ERR_UNEXPECTED;
@@ -948,9 +957,11 @@ private:
     int ret = OB_SUCCESS;
     if (word_cnt <= LOCAL_ARRAY_SIZE) {
       if (OB_FAIL(init_local_buf())) {
+        SQL_RESV_LOG(WARN, "failed to init local buf", K(ret));
       }
     } else {
       if (OB_FAIL(init_alloc_buf(word_cnt))) {
+        SQL_RESV_LOG(WARN, "failed to init alloc buf", K(ret));
       }
     }
     return ret;
@@ -981,6 +992,7 @@ private:
       MEMCPY(old_data, bit_set_word_array_, desc_.len_ * sizeof(BitSetWord));
     }
     if (OB_FAIL(init_block_allocator())) {
+      SQL_RESV_LOG(WARN, "failed to init block allocator", K(ret));
     } else {
       int64_t words_size = sizeof(BitSetWord) * word_cnt;
       if (OB_ISNULL(bit_set_word_array_ = (BitSetWord *)block_allocator_->alloc(words_size))) {
@@ -5042,10 +5054,12 @@ public:
       SQL_RESV_LOG(ERROR, "no more memory to create raw expr");
     } else if (OB_NOT_NULL(proxy_)) {
       if (OB_FAIL(check_stack_overflow(is_overflow))) {
+        SQL_RESV_LOG(WARN, "failed to check stack overflow", K(ret));
       } else if (is_overflow) {
         ret = OB_SIZE_OVERFLOW;
         SQL_RESV_LOG(WARN, "too deep recursive", K(ret));
       } else if (OB_FAIL(proxy_->create_raw_expr(expr_type, raw_expr))) {
+        SQL_RESV_LOG(WARN, "failed to create raw expr by pl factory", K(ret));
       } else {
         raw_expr->set_is_called_in_sql(is_called_sql_);
       }
@@ -5083,7 +5097,9 @@ public:
   {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(try_check_status())) {
+      SQL_RESV_LOG(WARN, "Exceeded memory usage limit", K(ret));
     } else if (OB_FAIL(create_raw_expr_inner(expr_type, raw_expr))) {
+      SQL_RESV_LOG(WARN, "failed to create raw expr", K(ret));
     }
     return ret;
   }

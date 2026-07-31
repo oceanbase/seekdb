@@ -373,6 +373,7 @@ int ObKVCache<Key, Value>::init(const char *cache_name, const int64_t mem_limit_
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "Invalid argument, ", KP(cache_name), K(ret));
   } else if (OB_FAIL(ObKVGlobalCache::get_instance().register_cache(cache_name, mem_limit_pct, cache_id_))) {
+    COMMON_LOG(WARN, "Fail to register cache, ", K(ret));
   } else {
     COMMON_LOG(INFO, "Succ to register cache", K(cache_name), K_(cache_id));
     inited_ = true;
@@ -471,6 +472,7 @@ int ObKVCache<Key, Value>::get_iterator(ObKVCacheIterator &iter)
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "The ObKVCache has not been inited, ", K(ret));
   } else if (OB_FAIL(iter.init(cache_id_, &ObKVGlobalCache::get_instance().map_))) {
+    COMMON_LOG(WARN, "Fail to init ObKVCacheIterator, ", K(ret));
   }
   return ret;
 }
@@ -546,6 +548,7 @@ int ObKVCache<Key, Value>::erase(const Key &key)
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "The ObKVCache has not been inited, ", K(ret));
   } else if (OB_FAIL(ObKVGlobalCache::get_instance().erase(cache_id_, key))) {
+    COMMON_LOG(WARN, "Fail to erase key from ObKVGlobalCache, ", K_(cache_id), K(ret));
   }
   return ret;
 }
@@ -566,6 +569,7 @@ int ObKVCache<Key, Value>::alloc(const int64_t key_size, const int64_t value_siz
           kvpair,
           handle.hazptr_holder_,
           inst_handle))) {
+    COMMON_LOG(WARN, "failed to alloc", K(ret));
   } else {
   }
 
@@ -613,6 +617,7 @@ int ObKVCacheIterator::get_next_kvpair(
       } else if (OB_SUCC(handle_list_.pop_front(node))) {
         bool protect_success;
         if (OB_FAIL(handle.hazptr_holder_.protect(protect_success, node.mb_handle_, node.seq_num_))) {
+          COMMON_LOG(WARN, "protect failed", KP(node.mb_handle_));
         } else if (protect_success) {
           break;
         }
@@ -621,6 +626,7 @@ int ObKVCacheIterator::get_next_kvpair(
           if (pos_ >= map_->bucket_num_) {
             ret = OB_ITER_END;
           } else if (OB_FAIL(map_->multi_get(cache_id_, pos_++, handle_list_))) {
+            COMMON_LOG(WARN, "Fail to multi get from map, ", K(ret));
           }
         } else {
           COMMON_LOG(WARN, "Unexpected error, ", K(ret));

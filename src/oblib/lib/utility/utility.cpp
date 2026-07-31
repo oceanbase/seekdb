@@ -235,7 +235,7 @@ int escape_range_string(char *buffer, const int64_t length, int64_t &pos, const 
   if (pos + in.length() >= length || NULL == buffer) {
     ret = OB_BUF_NOT_ENOUGH;
   } else {
-    char escape = 0;
+    char escape = 0;;
     for (int i = 0; OB_SUCC(ret) && i < in.length(); ++i) {
       escape = 0;
       switch (in.ptr()[i]) {
@@ -275,6 +275,7 @@ int convert_comment_str(char *comment_str)
   if (comment_str == NULL) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_SUCCESS != (ret = replace_str(comment_str, strlen(comment_str), "\\n", "\n"))) {
+    _OB_LOG(WARN, "replace \\n to enter failed, src_str=%s, ret=%d", comment_str, ret);
   }
   return ret;
 }
@@ -576,10 +577,12 @@ int get_ethernet_speed(const ObString &devname, int64_t &speed)
     IGNORE_RETURN snprintf(path, sizeof(path), "/sys/class/net/%.*s/bonding/",
                            devname.length(), devname.ptr());
     if (OB_SUCCESS != (ret = FileDirectoryUtils::is_exists(path, exist))) {
+      LIB_LOG(WARN, "check net file if exists failed.", K(ret));
     } else if (exist) {
       IGNORE_RETURN snprintf(path, sizeof(path), "/sys/class/net/%.*s/bonding/slaves",
                              devname.length(), devname.ptr());
       if (OB_SUCCESS != (ret = load_file_to_string(path, alloc, str))) {
+        _OB_LOG(WARN, "load file %s failed, ret %d", path, ret);
       } else if (0 == str.length()) {
         _OB_LOG(WARN, "can't get slave ethernet");
         ret = OB_ERROR;
@@ -596,6 +599,7 @@ int get_ethernet_speed(const ObString &devname, int64_t &speed)
     }
     if (OB_SUCCESS == ret) {
       if (OB_SUCCESS != (ret = load_file_to_string(path, alloc, str))) {
+        _OB_LOG(WARN, "load file %s failed, ret %d", path, ret);
       } else {
         speed = atoll(str.ptr());
         speed = speed * 1024 * 1024 / 8;
@@ -1080,6 +1084,7 @@ int sql_append_hex_escape_str(const ObString &str, ObSqlString &sql)
   char buf[LOCAL_BUF_LEN];
   int64_t pos = 0;
   if (OB_FAIL(sql.reserve(need_len))) {
+    LOG_WARN("reserve sql failed, ", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -1101,6 +1106,7 @@ int sql_append_hex_escape_str(const ObString &str, ObSqlString &sql)
       buf[pos++] = '\'';
       buf[pos] = '\0';
       if (OB_FAIL(sql.append(buf))) {
+        LOG_WARN("append string failed", K(ret));
       }
     }
   }
@@ -1251,6 +1257,7 @@ int start_daemon(const char *pidfile, bool skip_daemon)
 #endif
       long pid = 0;
       if (OB_FAIL(read_pid(pidfile, pid))) {
+        LOG_ERROR("read pid fail", KCSTRING(pidfile), K(ret));
       } else {
         LOG_ERROR("process is running", K(pid));
       }
@@ -1460,7 +1467,9 @@ int ObBandwidthThrottle::limit_and_sleep(const int64_t bytes, const int64_t last
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "throttle is not initialized.", K(ret));
   } else if (OB_FAIL(cal_limit(bytes, avaliable_timestamp))) {
+    LOG_WARN("failed to cal limit", K(ret));
   } else if (OB_FAIL(do_sleep(avaliable_timestamp, last_active_time, max_idle_time, sleep_us))) {
+    LOG_WARN("failed to do sleep", K(ret));
   } else {
     ObSpinLockGuard guard(lock_);
     const int64_t cur_time = ObTimeUtility::current_time();
@@ -1543,6 +1552,7 @@ int ObBandwidthThrottle::do_sleep(
   sleep_us = 0;
 
   if (real_sleep_time > 0 && real_sleep_time <= UINT32_MAX) {
+    COMMON_LOG(DEBUG, "do band limit sleep", K(max_wait_time), K(sleep_time), K(real_sleep_time), K(last_active_time));
     sleep_us = real_sleep_time;
     ob_usleep<common::ObWaitEventIds::BANDWIDTH_THROTTLE_SLEEP>(static_cast<uint32_t>(real_sleep_time));
   }
@@ -1565,7 +1575,9 @@ int ObInOutBandwidthThrottle::init(const int64_t rate)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(in_throttle_.init(rate, "in"))) {
+    COMMON_LOG(WARN, "failed to init in_throttle_", K(ret));
   } else if (OB_FAIL(out_throttle_.init(rate, "out"))) {
+    COMMON_LOG(WARN, "failed to init out_throttle_", K(ret));
   }
   return ret;
 }
@@ -1575,7 +1587,9 @@ int ObInOutBandwidthThrottle::set_rate(const int64_t rate)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(in_throttle_.set_rate(rate))) {
+    COMMON_LOG(WARN, "failed to set in_throttle_ rate", K(ret));
   } else if (OB_FAIL(out_throttle_.set_rate(rate))) {
+    COMMON_LOG(WARN, "failed to set out_throttle_", K(ret));
   }
   return ret;
 }
@@ -1585,6 +1599,7 @@ int ObInOutBandwidthThrottle::get_rate(int64_t &rate)
   int ret = OB_SUCCESS;
   rate = 0;
   if (OB_FAIL(out_throttle_.get_rate(rate))) {
+    COMMON_LOG(WARN, "failed to get rate", K(ret));
   }
   return ret;
 }
@@ -1596,6 +1611,7 @@ int ObInOutBandwidthThrottle::limit_in_and_sleep(
   int64_t sleep_us = 0;
 
   if (OB_FAIL(in_throttle_.limit_and_sleep(bytes, last_active_time, max_idle_time, sleep_us))) {
+    COMMON_LOG(WARN, "failed to limit in_throttle_", K(ret));
   }
 
   return ret;
@@ -1608,6 +1624,7 @@ int ObInOutBandwidthThrottle::limit_out_and_sleep(
   int64_t sleep_us = 0;
 
   if (OB_FAIL(out_throttle_.limit_and_sleep(bytes, last_active_time, max_idle_time, sleep_us))) {
+    COMMON_LOG(WARN, "failed to limit out_throttle_", K(ret));
   }
   if (OB_SUCC(ret) && nullptr != need_sleep_us) {
     *need_sleep_us = sleep_us;
@@ -1761,6 +1778,7 @@ int ob_atoll(const char *str, int64_t &res)
   if (OB_ISNULL(str)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ob_strtoll(str, endptr, val))) {
+    LIB_LOG(WARN, "failed to strtoll", K(ret), KCSTRING(str));
   } else if (str == endptr || OB_ISNULL(endptr) || OB_UNLIKELY('\0' != *endptr)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
@@ -1777,6 +1795,7 @@ int ob_atoull(const char *str, uint64_t &res)
   if (OB_ISNULL(str)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ob_strtoull(str, endptr, val))) {
+    LIB_LOG(WARN, "failed to strtoll", K(ret), KCSTRING(str));
   } else if (str == endptr || OB_ISNULL(endptr) || OB_UNLIKELY('\0' != *endptr)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
@@ -1838,7 +1857,7 @@ void ob_fast_localtime(time_t &cached_unix_sec, struct tm &cached_localtime,
 #else
       localtime_r(&input_unix_sec, output_localtime);
 #endif
-      cached_localtime = *output_localtime;
+      cached_localtime = *output_localtime;;
     } else {
       cached_unix_sec = input_unix_sec;
       cached_localtime = *ob_localtime(&input_unix_sec, output_localtime);

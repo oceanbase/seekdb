@@ -148,6 +148,7 @@ int ObExtendibleRingBuffer<T, RefT>::init(const int64_t begin_sn, const int64_t 
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "err begin sn", K(ret), K(begin_sn));
   } else if (OB_FAIL(BaseType::init(begin_sn, &alloc_, seg_size))) {
+    CLOG_LOG(WARN, "err init", K(ret), K(begin_sn));
   }
   return ret;
 }

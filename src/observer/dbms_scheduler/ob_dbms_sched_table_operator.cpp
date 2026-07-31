@@ -282,6 +282,7 @@ int ObDBMSSchedTableOperator::check_job_can_running(int64_t alive_job_count, boo
     if (OB_SUCC(ret) && job_queue_processor > 0) {
       SMART_VAR(ObMySQLProxy::MySQLResult, result) {
         if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
+          LOG_WARN("execute query failed", K(ret), K(sql));
         } else if (OB_ISNULL(result.get_result())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get result failed", K(ret), K(sql));
@@ -289,6 +290,7 @@ int ObDBMSSchedTableOperator::check_job_can_running(int64_t alive_job_count, boo
           if (OB_SUCCESS == (ret = result.get_result()->next())) {
             int64_t int_value = 0;
             if (OB_FAIL(result.get_result()->get_int(static_cast<const int64_t>(0), int_value))) {
+              LOG_WARN("failed to get column in row. ", K(ret));
             } else {
               job_running_cnt = static_cast<uint64_t>(int_value);
             }
@@ -449,6 +451,7 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_info(
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
       if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
+        LOG_WARN("execute query failed", K(ret), K(sql), K(job_id));
       } else if (OB_ISNULL(result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get result", K(ret), K(job_id));
@@ -496,12 +499,14 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_infos_in_runtime(
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
       if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
+        LOG_WARN("execute query failed", K(ret), K(sql));
       } else if (OB_ISNULL(result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get result failed", K(ret), K(sql));
       } else {
         do {
           if (OB_FAIL(result.get_result()->next())) {
+            LOG_INFO("failed to get result", K(ret));
           } else {
             ObDBMSSchedJobInfo job_info;
             OZ (extract_info(*(result.get_result()), allocator, job_info));
@@ -554,6 +559,7 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_class_info(
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
       if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
+        LOG_WARN("execute query failed", K(ret), K(sql), K(job_class_name));
       } else if (OB_ISNULL(result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get result failed", K(ret), K(sql), K(job_class_name));
@@ -596,12 +602,14 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_class_infos_in_runtime(
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
       if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
+        LOG_WARN("execute query failed", K(ret), K(sql));
       } else if (OB_ISNULL(result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get result failed", K(ret), K(sql));
       } else {
         do {
           if (OB_FAIL(result.get_result()->next())) {
+            LOG_INFO("failed to get result", K(ret));
           } else {
             ObDBMSSchedJobClassInfo job_class_info;
             OZ (extract_job_class_info(*(result.get_result()), allocator, job_class_info));

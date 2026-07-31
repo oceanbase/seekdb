@@ -86,11 +86,13 @@ int ObExprGetUserVar::calc_result_type1(ObExprResType &type,
     //set length
     int64_t mbmaxlen = 0;
     if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(type.get_collation_type(), mbmaxlen))) {
+      SQL_RESV_LOG(WARN, "fail to get mbmaxlen", K(ret), K(type.get_collation_type()));
     } else {
       type.set_length(static_cast<ObLength>(OB_MAX_VARCHAR_LENGTH / mbmaxlen));
       type.set_length_semantics(type_ctx.get_session()->get_actual_length_semantics());
     }
   }
+  LOG_DEBUG("get_user_var calc_result_type", K(type1), K(type1), K(type));
   return ret;
 }
 
@@ -99,6 +101,7 @@ int ObExprGetUserVar::eval_get_user_var(const ObExpr &expr, ObEvalCtx &ctx, ObDa
   int ret = OB_SUCCESS;
   ObDatum *key = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, key))) {
+    LOG_WARN("eval arg failed", K(ret));
   } else if (key->is_null()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("user var name is NULL", K(ret));

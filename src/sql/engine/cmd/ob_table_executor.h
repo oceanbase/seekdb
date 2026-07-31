@@ -40,8 +40,6 @@ struct ObAlterTableArg;
 }
 namespace query
 {
-class ObILocalCommandService;
-class ObIQueryRuntimeEnvironment;
 class ObIRootCommandService;
 }
 namespace common
@@ -128,9 +126,7 @@ private:
       obcall::ObAlterTableRes &res,
       common::ObIAllocator &allocator,
       ObSQLSessionInfo *my_session,
-      query::ObIRootCommandService &root_commands,
-      query::ObIQueryRuntimeEnvironment &runtime_environment,
-      query::ObILocalCommandService &local_commands);
+      query::ObIRootCommandService &root_commands);
 
   int alter_table_exchange_partition_rpc(
       obcall::ObExchangePartitionArg &exchange_partition_arg,

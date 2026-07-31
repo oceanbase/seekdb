@@ -34,8 +34,6 @@ namespace sql
 };
 namespace common
 {
-class ObILobReadService;
-class ObISrsProvider;
 class ObTimeZoneInfo;
 }
 namespace share
@@ -455,20 +453,16 @@ public:
                        ObIAllocator &allocator,
                        const ObPLINS *ns,
                        sql::ObSQLSessionInfo *session,
-                       common::ObISrsProvider *srs_provider,
-                       common::ObILobReadService *lob_read_service,
                        bool need_new_allocator,
                        bool ignore_del_element = false);
   static int assign_element(ObObj &src, ObObj &dest, ObIAllocator &allocator);
   static int copy_element(const ObObj &src,
                           ObObj &dest,
                           ObIAllocator &allocator,
-                          const ObPLINS *ns,
-                          sql::ObSQLSessionInfo *session,
-                          const ObDataType *dest_type,
-                          common::ObISrsProvider *srs_provider,
-                          common::ObILobReadService *lob_read_service,
-                          bool need_new_allocator,
+                          const ObPLINS *ns = NULL,
+                          sql::ObSQLSessionInfo *session = NULL,
+                          const ObDataType *dest_type = NULL,
+                          bool need_new_allocator = true,
                           bool ignore_del_element = false);
   //NOTICE: Cannot be implemented as a virtual function!!!
   int64_t get_init_size() const;
@@ -526,9 +520,7 @@ public:
 
   int assign(ObPLRecord *src, ObIAllocator *allocator);
   int deep_copy(ObPLRecord &src, ObIAllocator &allocator,
-                const ObPLINS *ns, sql::ObSQLSessionInfo *session,
-                common::ObISrsProvider *srs_provider,
-                common::ObILobReadService *lob_read_service,
+                const ObPLINS *ns = NULL, sql::ObSQLSessionInfo *session = NULL,
                 bool ignore_del_element = false);
 
   int set_data(const ObIArray<ObObj> &row);

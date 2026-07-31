@@ -100,6 +100,7 @@ int ObLCObjectManager::foreach_cache_obj(_callback &callback) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(cache_obj_map_.foreach_refactored(callback))) {
+    OB_LOG(WARN, "traversal cache_obj_map_ failed", K(ret));
   }
   return ret;
 }
@@ -109,6 +110,7 @@ int ObLCObjectManager::foreach_alloc_cache_obj(_callback &callback) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(alloc_cache_obj_map_.foreach_refactored(callback))) {
+    OB_LOG(WARN, "traversal alloc_cache_obj_map_ failed", K(ret));
   }
   return ret;
 }
@@ -118,6 +120,7 @@ int ObLCObjectManager::atomic_get_cache_obj(ObCacheObjID id, _callback &callback
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(cache_obj_map_.atomic_refactored(id, callback))) {
+    OB_LOG(WARN, "failed to atomic get cache obj", K(ret));
   }
   return ret;
 }
@@ -127,6 +130,7 @@ int ObLCObjectManager::atomic_get_alloc_cache_obj(ObCacheObjID id, _callback &ca
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(alloc_cache_obj_map_.atomic_refactored(id, callback))) {
+    OB_LOG(WARN, "failed to atomic get cache obj", K(ret));
   }
   return ret;
 }

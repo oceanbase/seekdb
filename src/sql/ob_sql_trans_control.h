@@ -254,6 +254,7 @@ inline int ObSqlTransControl::get_trans_expire_ts(const ObSQLSessionInfo &my_ses
   int ret = common::OB_SUCCESS;
   int64_t tx_timeout = 0;
   if (OB_FAIL(my_session.get_tx_timeout(tx_timeout))) {
+    SQL_LOG(WARN, "fail to get tx timeout", K(ret));
   } else {
     trans_timeout_ts = my_session.get_query_start_time() + tx_timeout;
   }

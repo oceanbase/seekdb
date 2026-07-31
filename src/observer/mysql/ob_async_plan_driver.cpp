@@ -54,7 +54,9 @@ int ObAsyncPlanDriver::response_result(ObMySQLResultSet &result)
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("current trace id is NULL", K(ret));
   } else if (OB_FAIL(result.open())) {
+    LOG_WARN("failed to do result set open", K(ret));
   } else if (OB_FAIL(result.update_last_insert_id_to_client())) {
+    LOG_WARN("failed to update last insert id after open", K(ret));
   } else {
     // open success, allow asynchronous response
     result.set_end_trans_async(true);
@@ -88,6 +90,7 @@ int ObAsyncPlanDriver::response_result(ObMySQLResultSet &result)
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("SELECT should not use async method. wrong code!!!", K(ret));
   } else if (OB_FAIL(result.close())) {
+    LOG_WARN("result close failed, let's leave process(). EndTransCb will clean this mess", K(ret));
   } else {
   }
   // Only set after end_trans is executed (regardless of success or failure), meaning a callback will definitely occur
@@ -108,6 +111,7 @@ int ObAsyncPlanDriver::response_result(ObMySQLResultSet &result)
   if (!OB_SUCC(ret) && !async_resp_used && !retry_ctrl_.need_retry()) {
     int sret = OB_SUCCESS;
     if (OB_SUCCESS != (sret = sender_.send_error_packet(ret, NULL))) {
+      LOG_WARN("send error packet fail", K(sret), K(ret));
     }
     //According to the agreement with the transaction layer, regardless of whether end_stmt succeeds or not,
     //Determine whether the transaction commit or rollback is successful by only checking if the final end_trans is successful,

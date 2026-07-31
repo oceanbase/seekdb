@@ -53,6 +53,7 @@ int ObPxCoroWorker::run(ObPxInitTaskArgs &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(deep_copy_assign(arg, task_arg_))) {
+    LOG_WARN("fail deep copy assign arg", K(arg), K(ret));
   } else {
   }
   return ret;
@@ -81,13 +82,13 @@ int ObPxCoroWorker::deep_copy_assign(const ObPxInitTaskArgs &src,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail alloc memory", K(ser_arg_len), KP(ser_ptr), K(ret));
   } else if (OB_FAIL(src.serialize(static_cast<char *>(ser_ptr), ser_arg_len, ser_pos))) {
+    LOG_WARN("fail serialize init task arg", KP(ser_ptr), K(ser_arg_len), K(ser_pos), K(ret));
   } else if (OB_FAIL(dest.deserialize(static_cast<const char *>(ser_ptr), ser_pos, des_pos))) {
+    LOG_WARN("fail des task arg", KP(ser_ptr), K(ser_pos), K(des_pos), K(ret));
   } else if (ser_pos != des_pos) {
     ret = OB_DESERIALIZE_ERROR;
     LOG_WARN("data_len and pos mismatch", K(ser_arg_len), K(ser_pos), K(des_pos), K(ret));
   } else {
-    dest.exec_ctx_->set_runtime_services(
-        src.exec_ctx_->get_runtime_services());
     // PLACE_HOLDER: if want to shared trans_desc
     // dest.exec_ctx_->get_my_session()->set_effective_trans_desc(src.exec_ctx_->get_my_session()->get_effective_trans_desc());
   }
@@ -143,6 +144,7 @@ void PxWorkerFunctor::operator ()(bool need_exec)
   if (!need_exec) {
     LOG_INFO("px pool already stopped, do not execute the task.");
   } else if (OB_FAIL(px_int_guard.get_interrupt_reg_ret())) {
+    LOG_WARN("px worker failed to SET_INTERRUPTABLE");
   } else if (OB_NOT_NULL(sqc_handler) && OB_LIKELY(!sqc_handler->has_interrupted())) {
     THIS_WORKER.set_worker_level(sqc_handler->get_request_level());
     THIS_WORKER.set_curr_request_level(sqc_handler->get_request_level());
@@ -160,6 +162,7 @@ void PxWorkerFunctor::operator ()(bool need_exec)
       CREATE_WITH_TEMP_ENTITY(RESOURCE_OWNER, PROCESS_OWNER_ID) {
         if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mem_context,
             lib::ContextParam().set_mem_attr(ObModIds::OB_SQL_PX)))) {
+          LOG_WARN("create memory entity failed", K(ret));
         } else {
           WITH_CONTEXT(mem_context) {
             lib::ContextTLOptGuard guard(true);
@@ -167,7 +170,9 @@ void PxWorkerFunctor::operator ()(bool need_exec)
             ObPxInitTaskArgs runtime_arg;
             if (OB_FAIL(runtime_arg.init_deserialize_param(
                     task_arg_, mem_context, *env_arg_.get_gctx()))) {
+              LOG_WARN("fail to init args", K(ret));
             } else if (OB_FAIL(runtime_arg.deep_copy_assign(task_arg_, mem_context->get_arena_allocator()))) {
+              LOG_WARN("fail deep copy assign arg", K(task_arg_), K(ret));
             } else {
               // Bind sqc_handler, convenient for the operator to get sqc_handle anywhere
               runtime_arg.sqc_handler_ = sqc_handler;
@@ -234,8 +239,10 @@ int ObPxThreadWorker::run(ObPxInitTaskArgs &task_arg)
 {
   int ret = OB_SUCCESS;
   static constexpr int64_t DEFAULT_PX_GROUP_ID = 0;
-  query::ObIQueryRuntimeEnvironment *runtime = OB_ISNULL(task_arg.exec_ctx_)
-      ? nullptr : task_arg.exec_ctx_->get_query_runtime_environment();
+  ObSQLSessionInfo *session = OB_ISNULL(task_arg.exec_ctx_)
+      ? nullptr : task_arg.exec_ctx_->get_my_session();
+  query::ObIQueryRuntimeEnvironment *runtime = OB_ISNULL(session)
+      ? nullptr : session->get_query_runtime_environment();
   if (OB_ISNULL(runtime)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("query runtime environment is unavailable", K(ret));
@@ -249,8 +256,10 @@ int ObPxThreadWorker::run(ObPxInitTaskArgs &task_arg)
     }
     PxWorkerFunctor task(env_args, task_arg);
     if (OB_FAIL(runtime->submit_px_task(DEFAULT_PX_GROUP_ID, task))) {
+      LOG_WARN("schedule px worker failed", K(ret));
     }
   }
+  LOG_DEBUG("submit px worker to pool", K(ret));
   return ret;
 }
 
@@ -290,6 +299,7 @@ ObPxThreadWorker * ObPxThreadWorkerFactory::create_worker()
   if (OB_NOT_NULL(ptr)) {
     worker = new(ptr)ObPxThreadWorker(gctx_);
     if (OB_FAIL(workers_.push_back(worker))) {
+      LOG_WARN("array push back failed", K(ret));
     }
     if (OB_SUCCESS != ret) {
       worker->~ObPxThreadWorker();

@@ -174,6 +174,7 @@ struct ObClassOp<T, false>
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(copy_assign(dst, src))) {
+      LIB_LOG(WARN, "failed to copy data", K(ret));
     }
     return ret;
   }
@@ -181,6 +182,7 @@ struct ObClassOp<T, false>
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(copy_assign(dst, src))) {
+      LIB_LOG(WARN, "failed to copy data", K(ret));
     }
     src.~T();
     return ret;
@@ -189,6 +191,7 @@ struct ObClassOp<T, false>
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(construct_assign(addr, src))) {
+      LIB_LOG(WARN, "failed to copy data", K(ret));
     }
     return ret;
   }
@@ -197,6 +200,7 @@ struct ObClassOp<T, false>
     int ret = OB_SUCCESS;
     for (int64_t i = idx; OB_SUCC(ret) && i < arr_size - 1; ++i) {
         if (OB_FAIL(copy_assign(arr[i], arr[i + 1]))) {
+          LIB_LOG(WARN, "failed to copy data", K(ret));
         }
     }
     if (OB_SUCC(ret)) {
@@ -223,6 +227,7 @@ struct ObClassOp<T, false>
     int ret = OB_SUCCESS;
     for (int64_t i = 0; OB_SUCC(ret) && i < arr_size; ++i) {
       if (OB_FAIL(construct_assign(dst_arr[i], src_arr[i]))) {
+        LIB_LOG(WARN, "failed to copy data", K(ret), K(i));
       }
     }
     return ret;
@@ -524,9 +529,11 @@ int ObSEArrayImpl<T, LOCAL_ARRAY_SIZE, BlockAllocatorT, auto_free>::serialize(
 {
   int ret = OB_SUCCESS;
   if (OB_SUCCESS != (ret = serialization::encode_vi64(buf, buf_len, pos, count()))) {
+    LIB_LOG(WARN, "fail to encode ob array count", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < count(); i ++) {
     if (OB_SUCCESS != (ret = serialization::encode(buf, buf_len, pos, at(i)))) {
+      LIB_LOG(WARN, "fail to encode item", K(i), K(ret));
     }
   }
   return ret;
@@ -540,11 +547,14 @@ int ObSEArrayImpl<T, LOCAL_ARRAY_SIZE, BlockAllocatorT, auto_free>::deserialize(
   int64_t count = 0;
   reset();
   if (OB_SUCCESS != (ret = serialization::decode_vi64(buf, data_len, pos, &count))) {
+    LIB_LOG(WARN, "fail to decode ob array count", K(ret));
   } else if (OB_SUCCESS != (ret = prepare_allocate(count))) {
+    LIB_LOG(WARN, "fail to allocate space", K(ret), K(count));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < count; i ++) {
     T &item = at(i);
     if (OB_SUCCESS != (ret = serialization::decode(buf, data_len, pos, item))) {
+      LIB_LOG(WARN, "fail to decode array item", K(ret), K(i), K(count));
     }
   }
   return ret;
@@ -778,6 +788,7 @@ ObSEArrayImpl<T, LOCAL_ARRAY_SIZE, BlockAllocatorT, auto_free>
     ret = reserve(N);
     for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
       if (OB_FAIL(construct_assign(data_[i], other.data_[i]))) {
+        LIB_LOG(WARN, "failed to copy data", K(ret));
       }
     }
     error_ = ret;

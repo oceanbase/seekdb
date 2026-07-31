@@ -47,7 +47,6 @@ devdeps-jemalloc-5.3.1-22026072411.el8.aarch64.rpm
 obdevtools-binutils-2.30-12022100413.el8.aarch64.rpm
 obdevtools-bison-2.4.1-12022100413.el8.aarch64.rpm
 obdevtools-ccache-3.7.12-12022100417.el8.aarch64.rpm
-obdevtools-cmake-3.30.3-52024111819.el8.aarch64.rpm
 obdevtools-flex-2.5.35-12022100417.el8.aarch64.rpm
 obdevtools-gcc-12.3.0-32024122017.el8.aarch64.rpm
 obdevtools-llvm-17.0.6-202026032415.el8.aarch64.rpm

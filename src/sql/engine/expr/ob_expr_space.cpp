@@ -44,6 +44,7 @@ inline int ObExprSpace::calc_result_type1(
     res_type = ObVarcharType;
   } else if (type1.is_literal()) {
     if (OB_FAIL(calc_result_type(type_ctx, type1.get_param(), res_type))) {
+      LOG_WARN("calc_result_type fail", K(ret), K(type1), K(type_ctx));
     }
   } else if (OB_ISNULL(raw_expr = type_ctx.get_raw_expr())) {
     ret = OB_INVALID_ARGUMENT;
@@ -67,6 +68,7 @@ inline int ObExprSpace::calc_result_type1(
     if (child_raw_expr->get_param_expr(0)->get_result_type().is_null()) {
       res_type = ObVarcharType;
     } else if (OB_FAIL(calc_result_type(type_ctx, const_expr->get_param(), res_type))) {
+      LOG_WARN("calc_result_type fail", K(ret), K(type1), K(type_ctx));
     }
   } else {
     res_type = ObLongTextType;
@@ -132,9 +134,11 @@ int ObExprSpace::eval_space(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_da
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null session", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, count))) {
+    LOG_WARN("evaluate parameters failed", K(ret));
   } else if (count->is_null()) {
     expr_datum.set_null();
   } else if (OB_FAIL(helper.get_max_allowed_packet(max_size))) {
+    LOG_WARN("get max packet length failed", K(ret));
   } else if (count->get_int() > max_size) {
     LOG_WARN("Result of space was larger than max_allow_packet_size",
              K(count->get_int()), K(max_size));
@@ -151,6 +155,7 @@ int ObExprSpace::eval_space(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_da
                                       space, count->get_int(), expr_res_alloc, max_size);
     }
     if (OB_FAIL(ret)) {
+      LOG_WARN("do repeat failed", K(ret));
     } else {
       if (is_null) {
         expr_datum.set_null();

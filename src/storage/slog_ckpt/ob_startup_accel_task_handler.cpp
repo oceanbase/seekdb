@@ -44,9 +44,11 @@ int ObStartupAccelTaskHandler::init()
     LOG_WARN("ObStartupAccelTaskHandler has already been inited", K(ret));
   } else if (OB_FAIL(task_allocator_.init(lib::ObMallocAllocator::get_instance(),
       OB_MALLOC_NORMAL_BLOCK_SIZE, mem_attr))) {
+    LOG_WARN("fail to init startup task allocator", K(ret));
   } else if (OB_FAIL(common::ObSimpleThreadPool::init(get_thread_cnt(),
                                                       MAX_QUEUED_TASK_NUM,
                                                       "StartupAccel"))) {
+    LOG_WARN("fail to init startup accel thread pool", K(ret), K(get_thread_cnt()));
   } else {
     is_inited_ = true;
   }
@@ -108,6 +110,7 @@ int ObStartupAccelTaskHandler::push_task(ObStartupAccelTask *task)
     ret = OB_NOT_INIT;
     LOG_WARN("ObStartupAccelTaskHandler not inited", K(ret));
   } else if (OB_FAIL(common::ObSimpleThreadPool::push(task))) {
+    LOG_WARN("fail to push startup accel task", K(ret), KPC(task));
   }
   return ret;
 }
@@ -121,6 +124,7 @@ void ObStartupAccelTaskHandler::handle(void *task)
   } else {
     ObStartupAccelTask *startup_task = static_cast<ObStartupAccelTask *>(task);
     if (OB_FAIL(startup_task->execute())) {
+      LOG_WARN("fail to execute startup task", K(ret), KPC(startup_task));
     }
     startup_task->~ObStartupAccelTask();
     task_allocator_.free(startup_task);

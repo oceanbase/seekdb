@@ -137,6 +137,7 @@ public:
       reset();
     }
     if (OB_FAIL(prepare_allocate(capacity))) {
+      OB_LOG(WARN, "fail to prepare allocate", K(ret), K(capacity));
     }
     return ret;
   }

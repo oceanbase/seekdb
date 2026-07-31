@@ -156,6 +156,7 @@ public:
       if (OB_FAIL(allocator_.init(NULL, //use default allocator in fifo_allocator
                                   common::OB_MALLOC_NORMAL_BLOCK_SIZE,
                                   attr))) {
+        TRANS_LOG(ERROR, "query allocator init failed", K(ret), K(lbt()));
       } else {
         ATOMIC_STORE(&is_inited_, true);
       }
@@ -245,6 +246,7 @@ public:
       if (OB_FAIL(allocator_.init(NULL,
                                   common::OB_MALLOC_NORMAL_BLOCK_SIZE,
                                   attr))) {
+        TRANS_LOG(ERROR, "callback allocator init failed", K(ret), K(lbt()));
       } else {
         ATOMIC_STORE(&is_inited_, true);
       }

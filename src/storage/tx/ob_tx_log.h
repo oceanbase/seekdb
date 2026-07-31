@@ -898,11 +898,14 @@ int ObTxLogBlock::deserialize_log_body(T &tx_log_body)
   } else {
     if (OB_NOT_NULL(big_segment_buf_)) {
       if (OB_FAIL(big_segment_buf_->deserialize_object(tx_log_body))) {
+        TRANS_LOG(WARN, "deserialize log body from big segment buf failed", K(ret), K(tx_log_body),
+                  KPC(this));
       } else {
         // big_segment_buf_->reset();
         big_segment_buf_ = nullptr;
       }
     } else if (OB_FAIL(tx_log_body.deserialize(replay_buf_, len_, tmp_pos))) {
+      TRANS_LOG(WARN, "desrialize tx_log_body error", K(ret), K(*this));
     }
     if (OB_SUCC(ret)) {
       pos_ = tmp_pos;
@@ -929,6 +932,7 @@ int ObTxLogBlock::add_new_log(T &tx_log_body, ObTxBigSegmentBuf *big_segment_buf
     TRANS_LOG(WARN, "big segment is not empty, can not add new log", K(ret), KPC(this));
   } else if (T::LOG_TYPE == ObTxLogType::TX_REDO_LOG) {
     // ret = OB_EAGAIN;
+    TRANS_LOG(DEBUG, "insert redo_log type into cb_arg_array_", K(tx_log_body), KPC(this));
   } else {
     if constexpr (requires(T &log) { log.before_serialize(); }) {
       if (OB_FAIL(tx_log_body.before_serialize())) {
@@ -942,6 +946,9 @@ int ObTxLogBlock::add_new_log(T &tx_log_body, ObTxBigSegmentBuf *big_segment_buf
       } else {
         while (OB_SUCC(ret) && len_ < serialize_size + tmp_pos) {
           if (OB_FAIL(extend_log_buf())) {
+            // ret = OB_BUF_NOT_ENOUGH;
+            TRANS_LOG(WARN, "extend a log buf failed", K(ret), K(len_), K(tmp_pos), K(serialize_size),
+                      K(fill_buf_), KPC(this));
           }
         }
       }
@@ -949,7 +956,9 @@ int ObTxLogBlock::add_new_log(T &tx_log_body, ObTxBigSegmentBuf *big_segment_buf
         if (len_ < serialize_size + tmp_pos) {
           ret = OB_BUF_NOT_ENOUGH;
         } else if (OB_FAIL(header.serialize(fill_buf_.get_buf(), len_, tmp_pos))) {
+          TRANS_LOG(WARN, "serialize log header error", K(ret), K(header), K(*this));
         } else if (OB_FAIL(tx_log_body.serialize(fill_buf_.get_buf(), len_, tmp_pos))) {
+          TRANS_LOG(WARN, "serialize tx_log_body error", K(ret), K(tx_log_body), K(*this));
         }
       }
     }
@@ -958,6 +967,7 @@ int ObTxLogBlock::add_new_log(T &tx_log_body, ObTxBigSegmentBuf *big_segment_buf
   if (OB_SUCC(ret)) {
     // it should be not failed
     if (OB_FAIL(cb_arg_array_.push_back(ObTxCbArg(T::LOG_TYPE, NULL)))) {
+      TRANS_LOG(ERROR, "push log cb arg failed", K(ret), K(*this));
     } else {
       pos_ = tmp_pos;
     }
@@ -970,14 +980,18 @@ int ObTxLogBlock::add_new_log(T &tx_log_body, ObTxBigSegmentBuf *big_segment_buf
     } else if (OB_FALSE_IT(big_segment_buf_ = big_segment_buf)) {
     } else if (OB_FAIL(big_segment_buf_->init_for_serialize(header.get_serialize_size()
                                                             + tx_log_body.get_serialize_size()))) {
+      TRANS_LOG(WARN, "init big segment buf failed", K(ret), KPC(big_segment_buf_));
     } else if (OB_FAIL(big_segment_buf_->serialize_object(header))) {
+      TRANS_LOG(WARN, "serialize log header error", K(ret), K(header), K(*this));
     } else if (OB_FAIL(big_segment_buf_->serialize_object(tx_log_body))) {
+      TRANS_LOG(WARN, "serialize tx_log_body error", K(ret), K(tx_log_body), K(*this));
     } else {
       ret = OB_LOG_TOO_LARGE;
     }
   }
 
   if (OB_FAIL(ret)) {
+    TRANS_LOG(WARN, "[TxLogBlock] add new log", K(ret), K(tx_log_body), K(*this), K(tmp_pos));
   }
 
   return ret;

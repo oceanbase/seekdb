@@ -51,15 +51,20 @@ int ObLocalMajorFreeze::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
   } else if (OB_FAIL(major_merge_info_mgr_.init(sql_proxy))) {
+    LOG_WARN("fail to init major merge info mgr", KR(ret));
   } else if (OB_FAIL(snapshot_gc_scn_renewer_.init(
              is_primary_service, major_merge_info_mgr_))) {
+    LOG_WARN("fail to init snapshot gc scn renewer", KR(ret), K(is_primary_service));
   } else if (OB_FAIL(merge_scheduler_.init(is_primary_service, major_merge_info_mgr_,
              schema_service, config, sql_proxy))) {
+    LOG_WARN("fail to init merge_scheduler", KR(ret), K(is_primary_service));
   }  else if (OB_FAIL(major_merge_info_detector_.init(is_primary_service, sql_proxy,
               major_merge_info_mgr_, snapshot_gc_scn_renewer_,
               merge_scheduler_.get_major_scheduler_idling()))) {
+    LOG_WARN("fail to init freeze_info_detector", KR(ret), K(is_primary_service));
   } else if (is_primary_service) {
     if (OB_FAIL(daily_launcher_.init(config, sql_proxy, major_merge_info_mgr_))) {
+      LOG_WARN("fail to init daily_launcher", KR(ret), K(is_primary_service));
     }
   }
   if (OB_SUCC(ret)) {
@@ -78,9 +83,12 @@ int ObLocalMajorFreeze::start()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
   } else if (OB_FAIL(major_merge_info_detector_.start())) {
+    LOG_WARN("fail to start freeze_info_detector", KR(ret));
   } else if (OB_FAIL(merge_scheduler_.start())) {
+    LOG_WARN("fail to start merge_scheduler", KR(ret));
   } else if (is_primary_service()) {
     if (OB_FAIL(daily_launcher_.start())) {
+      LOG_WARN("fail to start daily_launcher", KR(ret), K_(is_primary_service));
     }
   }
   return ret;
@@ -119,21 +127,25 @@ int ObLocalMajorFreeze::destroy()
   if (is_primary_service()) {
     LOG_INFO("daily_launcher start to destroy", K_(is_primary_service));
     if (OB_FAIL(daily_launcher_.destroy())) {
+      LOG_WARN("fail to destroy daily_launcher", KR(ret), K_(is_primary_service));
     }
   }
   if (OB_SUCC(ret)) {
     LOG_INFO("freeze_info_detector start to destroy", K_(is_primary_service));
     if (OB_FAIL(major_merge_info_detector_.destroy())) {
+      LOG_WARN("fail to destroy freeze_info_detector", KR(ret), K_(is_primary_service));
     }
   }
   if (OB_SUCC(ret)) {
     LOG_INFO("snapshot gc scn renewer start to destroy", K_(is_primary_service));
     if (OB_FAIL(snapshot_gc_scn_renewer_.destroy())) {
+      LOG_WARN("fail to destroy snapshot gc scn renewer", KR(ret), K_(is_primary_service));
     }
   }
   if (OB_SUCC(ret)) {
     LOG_INFO("merge_scheduler start to destroy", K_(is_primary_service));
     if (OB_FAIL(merge_scheduler_.destroy())) {
+      LOG_WARN("fail to destroy merge_scheduler", KR(ret), K_(is_primary_service));
     }
   }
   return ret;
@@ -169,7 +181,9 @@ int ObLocalMajorFreeze::on_become_primary()
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("local major freeze is not primary service", KR(ret));
   } else if (OB_FAIL(snapshot_gc_scn_renewer_.on_become_primary())) {
+    LOG_WARN("fail to activate snapshot gc scn renewer for primary", KR(ret));
   } else if (OB_FAIL(major_merge_info_detector_.signal())) {
+    LOG_WARN("fail to signal freeze info detector after becoming primary", KR(ret));
   }
   return ret;
 }
@@ -192,6 +206,7 @@ int ObLocalMajorFreeze::set_freeze_info(const ObMajorFreezeReason freeze_reason)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
   } else if (OB_FAIL(major_merge_info_mgr_.set_freeze_info(freeze_reason))) {
+    LOG_WARN("fail to set_freeze_info", KR(ret));
   }
   return ret;
 }
@@ -204,6 +219,7 @@ int ObLocalMajorFreeze::launch_major_freeze(const ObMajorFreezeReason freeze_rea
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
   } else if (OB_FAIL(check_runtime_status())) {
+    LOG_WARN("fail to check runtime status", KR(ret));
   } else if (!GCONF.enable_major_freeze) {
     ret = OB_MAJOR_FREEZE_NOT_ALLOW;
     LOG_WARN("enable_major_freeze is off, refuse to to major_freeze",
@@ -219,7 +235,9 @@ int ObLocalMajorFreeze::launch_major_freeze(const ObMajorFreezeReason freeze_rea
       LOG_ERROR("fail to check freeze info", KR(ret));
     }
   } else if (OB_FAIL(set_freeze_info(freeze_reason))) {
+    LOG_WARN("fail to set_freeze_info", KR(ret));
   } else if (OB_FAIL(major_merge_info_detector_.signal())) {
+    LOG_WARN("fail to signal", KR(ret));
   }
   return ret;
 }
@@ -234,7 +252,9 @@ int ObLocalMajorFreeze::suspend_merge()
     ret = OB_LEADER_NOT_EXIST;
     LOG_WARN("leader may switch", KR(ret));
   } else if (OB_FAIL(major_merge_info_mgr_.get_global_merge_mgr().try_reload())) {
+    LOG_WARN("fail to try reload global_merge_mgr", KR(ret));
   } else if (OB_FAIL(major_merge_info_mgr_.get_global_merge_mgr().suspend_merge())) {
+    LOG_WARN("fail to suspend merge", KR(ret));
   }
   return ret;
 }
@@ -249,7 +269,9 @@ int ObLocalMajorFreeze::resume_merge()
     ret = OB_LEADER_NOT_EXIST;
     LOG_WARN("leader may switch", KR(ret));
   } else if (OB_FAIL(major_merge_info_mgr_.get_global_merge_mgr().try_reload())) {
+    LOG_WARN("fail to try reload global_merge_mgr", KR(ret));
   } else if (OB_FAIL(major_merge_info_mgr_.get_global_merge_mgr().resume_merge())) {
+    LOG_WARN("fail to resume merge", KR(ret));
   }
   return ret;
 }
@@ -265,9 +287,11 @@ int ObLocalMajorFreeze::clear_merge_error()
     ret = OB_LEADER_NOT_EXIST;
     LOG_WARN("leader may switch", KR(ret));
   } else if (OB_FAIL(major_merge_info_mgr_.get_global_merge_mgr().try_reload())) {
+    LOG_WARN("fail to try reload global_merge_mgr", KR(ret));
   } else {
     if (OB_FAIL(ObTabletMetaTableCompactionOperator::batch_update_status(
         GCTX.meta_db_pool_))) {
+      LOG_WARN("fail to batch update status", KR(ret));
     }
 
     if (FAILEDx(major_merge_info_mgr_.get_global_merge_mgr().set_merge_status(error_type))) {
@@ -287,6 +311,7 @@ int ObLocalMajorFreeze::get_uncompacted_tablets(
     LOG_WARN("not init", KR(ret));
   } else {
     if (OB_FAIL(merge_scheduler_.get_uncompacted_tablets(uncompacted_tablets, uncompacted_table_ids))) {
+      LOG_WARN("fail to get uncompacted tablets", KR(ret));
     }
   }
   return ret;
@@ -301,7 +326,9 @@ int ObLocalMajorFreeze::check_runtime_status() const
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
   } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_server_runtime_info(runtime_schema))) {
+    LOG_WARN("fail to get runtime schema", KR(ret));
   } else if ((nullptr == runtime_schema) || !runtime_schema->is_normal()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("database runtime is not normal", KR(ret), KPC(runtime_schema));
@@ -320,11 +347,15 @@ int ObLocalMajorFreeze::check_freeze_info()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
   } else if (OB_FAIL(major_merge_info_mgr_.get_local_latest_frozen_scn(latest_frozen_scn))) {
+    LOG_WARN("fail to get local latest frozen_scn", KR(ret));
   } else {
     ObGlobalMergeManager &global_merge_mgr = major_merge_info_mgr_.get_global_merge_mgr();
     if (OB_FAIL(global_merge_mgr.try_reload())) {
+      LOG_WARN("fail to reload global merge info", KR(ret));
     } else if (OB_FAIL(global_merge_mgr.get_global_last_merged_scn(global_last_merged_scn))) {
+      LOG_WARN("fail to get global_last_merged_scn", KR(ret));
     } else if (OB_FAIL(global_merge_mgr.get_global_merge_status(global_merge_status))) {
+      LOG_WARN("fail to get_global_merge_status", KR(ret));
     } else {
       // check pending freeze_info
       if (latest_frozen_scn > global_last_merged_scn) {

@@ -135,6 +135,7 @@ int ObExtStoreRowkey::to_collation_free_store_rowkey_on_demand(ObIAllocator &all
   int ret = OB_SUCCESS;
   if (OB_FAIL(store_rowkey_.to_collation_free_store_rowkey_on_demand(collation_free_store_rowkey_,
                                                                      allocator))) {
+    COMMON_LOG(WARN, "fail to get collation free store rowkey.", K(ret), K(store_rowkey_));
   }
 
   return ret;

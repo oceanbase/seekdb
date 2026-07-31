@@ -2143,6 +2143,7 @@ int ObDDLService::fill_part_name(const SCHEMA &orig_schema,
       char part_name[OB_MAX_PARTITION_NAME_LENGTH];
       int64_t pos = 0;
       if (OB_FAIL(databuff_printf(part_name, OB_MAX_PARTITION_NAME_LENGTH, pos, "P%ld", max_part_id))) {
+        RS_LOG(WARN, "failed to constrate partition name", K(ret), K(max_part_id));
       } else {
         part_name_str.assign(part_name, static_cast<int32_t>(pos));
         bool is_valid = false;
@@ -2152,6 +2153,7 @@ int ObDDLService::fill_part_name(const SCHEMA &orig_schema,
           // If the partition name is reasonable, can add it to the partition, prepare to process
           // the next empty partition name
           if (OB_FAIL(part_array[i]->set_part_name(part_name_str))) {
+            RS_LOG(WARN, "failed to set partition name", K(ret), K(part_name_str));
           }
           max_part_id++;
           break;

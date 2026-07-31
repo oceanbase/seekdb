@@ -81,6 +81,7 @@ int ObPool<BlockAllocatorT, LockT>::mprotect_mem_pool(int prot)
   while (OB_SUCC(ret) && NULL != curr) {
     next = curr->next_;
     if (OB_FAIL(mprotect_page(curr, block_size_, prot, "mem_pool"))) {
+      LIB_LOG(WARN, "mprotect page failed", K(ret));
     }
     curr = next;
   }

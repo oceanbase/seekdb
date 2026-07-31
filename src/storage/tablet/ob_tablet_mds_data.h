@@ -225,6 +225,7 @@ int ObTabletMdsData::update_user_data_from_complex_addr(
     } else {
       int64_t pos = 0;
       if (OB_FAIL(user_data.deserialize(str.ptr(), str.length(), pos))) {
+        STORAGE_LOG(WARN, "failed to deserialize", K(ret));
       }
     }
   }

@@ -49,6 +49,7 @@ int ObMaintainObjDepInfoTask::check_cur_maintain_task_is_valid(
     const share::schema::ObSimpleTableSchemaV2 *table_schema = nullptr;
     if (OB_FAIL(schema_guard.get_simple_table_schema(
                 dep_obj_key.dep_obj_id_, table_schema))) {
+      LOG_WARN("failed to get table schema", K(ret), K(dep_obj_key));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema is null", K(ret));
@@ -87,6 +88,7 @@ int ObMaintainObjDepInfoTask::check_and_build_dep_info_arg(
                 dep_objs.at(i).dep_obj_item_.dep_obj_schema_version_,
                 schema_guard,
                 is_valid))) {
+      LOG_WARN("failed to check current maintain task is valid");
     } else if (is_valid) {
       switch (op) {
       case share::schema::ObReferenceObjTable::INSERT_OP:
@@ -165,6 +167,7 @@ int ObMaintainObjDepInfoTask::process()
     } else if (OB_FAIL(query::serialize_root_service_call(
         [&]{ return root_command_service_->
             maintain_obj_dependency_info(dep_obj_info_arg); }))) {
+      LOG_WARN("failed to maintain_obj_dependency_info", K(ret), K(dep_obj_info_arg));
     }
   }
   return ret;
@@ -174,6 +177,7 @@ int ObMaintainObjDepInfoTask::assign_view_schema(const ObTableSchema &view_schem
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(view_schema_.assign(view_schema))) {
+    LOG_WARN("failed to copy view schema", K(ret));
   }
   return ret;
 }
@@ -183,8 +187,11 @@ int ObMaintainDepInfoTaskQueue::init(const int64_t thread_cnt, const int64_t que
   int ret = OB_SUCCESS;
   auto attr = lib::ObMemAttr("DepInfoTaskQ");
   if (OB_FAIL(ObAsyncTaskQueue::init(thread_cnt, queue_size, "MaintainDepInfoTaskQueue", OB_MALLOC_MIDDLE_BLOCK_SIZE))) {
+    LOG_WARN("failed to init base queue", K(ret));
   } else if (OB_FAIL(view_info_set_.create(INIT_BKT_SIZE, attr, attr))) {
+    LOG_WARN("failed to init view set", K(ret));
   } else if (OB_FAIL(sys_view_consistent_.create(INIT_BKT_SIZE, attr, attr))) {
+    LOG_WARN("failed to init sys view set", K(ret));
   }
   return ret;
 }
@@ -262,6 +269,7 @@ void ObMaintainDepInfoTaskQueue::run2()
               ret = OB_SIZE_OVERFLOW;
               LOG_WARN("push task to queue failed", K(ret));
             } else if (OB_FAIL(queue_.push(task))) {
+              LOG_WARN("push task to queue failed", K(ret));
             } else {
               rescheduled = true;
             }
@@ -272,6 +280,7 @@ void ObMaintainDepInfoTaskQueue::run2()
             // ignore ret
             int tmp_ret = OB_SUCCESS;
             if (OB_SUCCESS != (tmp_ret = view_info_set_.erase_refactored(view_schema.get_table_id()))) {
+              LOG_WARN("failed to erase obj id", K(tmp_ret), K(view_schema.get_table_id()));
             }
           }
         }
@@ -296,6 +305,7 @@ int process_reference_obj_table(share::schema::ObReferenceObjTable &ref_obj_tabl
   share::ObServerRole::Role server_role;
   bool is_standby = false;
   if (OB_FAIL(share::ObShareUtil::check_if_server_role_is_standby(is_standby))) {
+    LOG_WARN("fail to execute check_if_server_role_is_standby", KR(ret));
   } else if (OB_UNLIKELY(!ref_obj_table.is_inited() || is_standby)) {
     if (OB_INVALID_ID != dep_obj_id) {
       OZ (task_queue.erase_view_id_from_set(dep_obj_id));
@@ -310,9 +320,11 @@ int process_reference_obj_table(share::schema::ObReferenceObjTable &ref_obj_tabl
                               &task.get_update_dep_objs(),
                               &task.get_delete_dep_objs());
       if (OB_FAIL(ref_obj_table.get_ref_obj_table().foreach_refactored(op))) {
+        LOG_WARN("traverse ref_obj_version_table_ failed", K(ret));
       } else if (nullptr != view_schema && OB_FAIL(task.assign_view_schema(*view_schema))) {
         LOG_WARN("failed to assign view schema", K(ret));
       } else if (OB_FAIL(op.get_callback_ret())) {
+        LOG_WARN("traverse ref_obj_version_table_ failed", K(ret));
       } else if (task.is_empty_task()) {
         if (OB_INVALID_ID != dep_obj_id) {
           OZ (task_queue.erase_view_id_from_set(dep_obj_id));
@@ -329,9 +341,11 @@ int process_reference_obj_table(share::schema::ObReferenceObjTable &ref_obj_tabl
   if (OB_FAIL(ret) && OB_INVALID_ID != dep_obj_id) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = task_queue.erase_view_id_from_set(dep_obj_id))) {
+      LOG_WARN("failed to erase obj id", K(tmp_ret), K(ret));
     }
     if (OB_SIZE_OVERFLOW == ret) {
       ret = OB_SUCCESS;
+      LOG_TRACE("async queue is full");
     }
   }
   return ret;

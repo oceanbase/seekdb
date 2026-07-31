@@ -85,7 +85,7 @@ public:
   void inc_ref_count() { ATOMIC_AAF(&reference_count_, 1); }
   void dec_ref_count() { ATOMIC_AAF(&reference_count_, -1); }
 
-  int init(const ObExecContext::RuntimeServices &runtime_services);
+  int init();
   bool valid() { return  ((nullptr != notifier_)      &&
                          (nullptr != exec_ctx_)       &&
                          (nullptr != des_phy_plan_)   &&
@@ -165,7 +165,6 @@ private:
   Ob2DArray<ObPxTabletRange> part_ranges_;
   SpinRWLock part_ranges_spin_lock_;
   bool is_session_query_locked_;
-  ObExecContext::RuntimeServices runtime_services_;
 };
 
 }

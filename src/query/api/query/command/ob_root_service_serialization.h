@@ -45,6 +45,7 @@ inline int serialize_root_service_call(F &&fn)
 {
   int ret = root_service_serial_mutex().lock(THIS_WORKER.get_timeout_ts());
   if (OB_SUCCESS != ret) {
+    COMMON_LOG(WARN, "fail to acquire Root Service serial lock before its deadline", K(ret));
   } else {
     struct UnlockGuard
     {

@@ -41,7 +41,9 @@ int ObMergeFuser::base_init(const bool is_fuse_row_flag)
   is_fuse_row_flag_ = is_fuse_row_flag;
 
   if (OB_FAIL(result_row_.init(allocator_, column_cnt_))) {
+    STORAGE_LOG(WARN, "Failed to init datum row", K(ret));
   } else if (OB_FAIL(nop_pos_.init(allocator_, column_cnt_))) {
+    STORAGE_LOG(WARN, "Failed to init nop pos", K(ret), K(column_cnt_));
   }
   return ret;
 }
@@ -65,6 +67,7 @@ int ObMergeFuser::add_fuse_row(const blocksstable::ObDatumRow &row, bool &final_
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "ObMergeFuser is not inited", K(ret), K(is_inited_));
   } else if (OB_FAIL(storage::ObRowFuse::fuse_row(row, result_row_, nop_pos_, final_result))) {
+    STORAGE_LOG(WARN, "Failed to fuse row", K(ret));
   } else if (result_row_.count_ != column_cnt_) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "row count is not valid", K(ret), K(row), K(result_row_), K(column_cnt_));
@@ -121,6 +124,7 @@ int ObMergeFuser::fuse_row(MERGE_ITER_ARRAY &macro_row_iters)
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid macro row iters to fuse row", K(ret), K(macro_row_iters));
   } else if (OB_FAIL(preprocess_fuse_row(*macro_row_iters.at(0)->get_curr_row(), is_need_fuse))) {
+    STORAGE_LOG(WARN, "failed to preprocess_fuse_row", K(ret));
   } else if (!is_need_fuse && macro_row_iters.at(0)->get_curr_row()->row_flag_.is_delete()) {
     result_row_.row_flag_.reset();
     result_row_.row_flag_ = macro_row_iters.at(0)->get_curr_row()->row_flag_;
@@ -131,10 +135,12 @@ int ObMergeFuser::fuse_row(MERGE_ITER_ARRAY &macro_row_iters)
     bool final_result = false;
     for (int64_t i = 0; OB_SUCC(ret) && !final_result && i < macro_row_iters_cnt; ++i) {
       if (OB_FAIL(add_fuse_row(*macro_row_iters.at(i)->get_curr_row(), final_result))) {
+        STORAGE_LOG(WARN, "Failed to fuse row", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(end_fuse_row(nop_pos_, result_row_))) {
+      STORAGE_LOG(WARN, "failed to end fuse row", K(ret), KPC(this));
     }
   }
   return ret;
@@ -170,6 +176,7 @@ int ObMergeFuser::fuse_delete_row(
       result_row_.row_flag_.set_flag(ObDmlFlag::DF_DELETE);
       result_row_.mvcc_row_flag_ = del_row.mvcc_row_flag_;
       result_row_.set_compacted_multi_version_row();
+      STORAGE_LOG(DEBUG, "fuse delete row", K(ret), K(del_row), K(result_row_));
     }
   }
 
@@ -199,7 +206,9 @@ int ObIPartitionMergeFuser::init(const ObMergeParameter &merge_param, const bool
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument to init ObIPartitionMergeFuser", K(merge_param), K(ret));
   } else if (OB_FAIL(inner_init(merge_param))) {
+    STORAGE_LOG(WARN, "Failed to inner init", K(ret), K(*this));
   } else if (OB_FAIL(base_init(is_fuse_row_flag))){
+    STORAGE_LOG(WARN, "failed to init ObMergeFuser", K(ret), K(merge_param));
   } else {
     is_inited_ = true;
     STORAGE_LOG(INFO, "Succ to init partition fuser", K(ret), K(*this));
@@ -219,6 +228,7 @@ int ObDefaultMergeFuser::init(const int64_t column_count)
     STORAGE_LOG(WARN, "ObMergeFuser init twice", K(ret));
   } else if (FALSE_IT(column_cnt_ = column_count)) {
   } else if (OB_FAIL(base_init())) {
+    STORAGE_LOG(WARN, "Failed to init datum row", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -243,10 +253,14 @@ int ObMajorPartitionMergeFuser::inner_init(const ObMergeParameter &merge_param)
   const bool need_trim_default_row = true;
 
   if (OB_FAIL(default_row_.init(allocator_, column_cnt_))) {
+    STORAGE_LOG(WARN, "Failed to init datum row", K(ret), K_(column_cnt));
   } else if (OB_FAIL(schema->get_orig_default_row(multi_version_column_ids, need_trim_default_row, default_row_))) {
+    STORAGE_LOG(WARN, "Failed to get default row from table schema", K(ret), K(multi_version_column_ids));
   } else if (OB_FAIL(data_plane::fill_lob_header(allocator_, multi_version_column_ids, default_row_))) {
+    STORAGE_LOG(WARN, "fail to fill lob header for default row", K(ret), K(multi_version_column_ids));
   } else if (FALSE_IT(default_row_.row_flag_.set_flag(ObDmlFlag::DF_UPDATE))) {
   } else if (OB_FAIL(generated_cols_.init(column_cnt_))) {
+    LOG_WARN("Fail to init generated_cols", K(ret), K_(column_cnt));
   } else {
     const ObColumnSchemaV2 *column_schema = NULL;
     for (int64_t i = 0; OB_SUCC(ret) && i < column_cnt_; ++i) {
@@ -263,6 +277,7 @@ int ObMajorPartitionMergeFuser::inner_init(const ObMergeParameter &merge_param)
             && !schema->is_storage_index_table()) {
           // the generated columns in index are always filled before insert
           if (OB_FAIL(generated_cols_.push_back(i))) {
+            LOG_WARN("Fail to push_back generated_cols", K(ret));
           }
         }
       }
@@ -280,6 +295,7 @@ int ObMajorPartitionMergeFuser::end_fuse_row(const storage::ObNopPos &nop_pos, b
       int64_t idx = -1;
       for (int64_t i = 0; OB_SUCC(ret) && i < nop_pos.count(); i++) {
         if (OB_FAIL(nop_pos.get_nop_pos(i, idx))) {
+          LOG_WARN("Failed to get nop pos", K(i), K(ret));
         } else {
           for (int64_t j = 0; OB_SUCC(ret) && j < generated_cols_.count(); j++) {
             if (idx == generated_cols_.at(j)) {
@@ -294,6 +310,7 @@ int ObMajorPartitionMergeFuser::end_fuse_row(const storage::ObNopPos &nop_pos, b
     if (OB_SUCC(ret)) {
       bool final_result = false;
       if (OB_FAIL(add_fuse_row(default_row_, final_result))) {
+        STORAGE_LOG(WARN, "Failed to fuse default row", K(ret));
       }
     }
   }
@@ -322,6 +339,7 @@ int ObMinorPartitionMergeFuser::inner_init(const ObMergeParameter &merge_param)
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "ObIPartitionMergeFuser init twice", K(ret));
   } else if (OB_FAIL(merge_param.get_schema()->get_store_column_count(column_cnt, true/*full_col*/))) {
+    STORAGE_LOG(WARN, "failed to get store column count", K(ret), K(merge_param.get_schema()));
   } else {
     column_cnt_ = column_cnt + storage::ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
     multi_version_rowkey_column_cnt_ = merge_param.static_param_.multi_version_column_descs_.count();
@@ -356,6 +374,7 @@ int ObMinorPartitionMergeFuser::preprocess_fuse_row(const blocksstable::ObDatumR
   if (OB_FAIL(ret)) {
   } else if (row.row_flag_.is_delete()) {
     if (OB_FAIL(fuse_delete_row(row, multi_version_rowkey_column_cnt_))) {
+      STORAGE_LOG(WARN, "failed to fuse_delete_row", K(ret), K(row), K(multi_version_rowkey_column_cnt_));
     } else {
       is_need_fuse = false;
     }
@@ -387,6 +406,7 @@ int ObMergeFuserBuilder::build(const ObMergeParameter &merge_param,
       ret = OB_ALLOCATE_MEMORY_FAILED;
       STORAGE_LOG(WARN, "Failed to allocate memory for partition fuser", K(ret), K(merge_param));
     } else if (OB_FAIL(partition_fuser->init(merge_param, is_fuse_row_flag))) {
+      STORAGE_LOG(WARN, "Failed to init partition fuser", K(ret));
     }
 
     if (OB_FAIL(ret)) {

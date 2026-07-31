@@ -39,12 +39,15 @@ int dispatch_freeze(const ObMemstoreFreezeArg &arg)
     LOG_ERROR("should not be here");
   } else if (storage::TX_DATA_TABLE_FREEZE == arg.freeze_type_) {
     if (OB_FAIL(do_tx_data_table_freeze_(arg))) {
+      LOG_WARN("do tx data table freeze failed.", KR(ret), K(arg));
     }
   } else if (storage::MAJOR_FREEZE == arg.freeze_type_) {
     if (OB_FAIL(do_major_freeze_(arg))) {
+      LOG_WARN("do major freeze failed", K(ret));
     }
   } else if (storage::MDS_TABLE_FREEZE == arg.freeze_type_) {
     if (OB_FAIL(do_mds_table_freeze_(arg))) {
+      LOG_WARN("do mds table freeze failed.", KR(ret), K(arg));
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
@@ -69,14 +72,18 @@ static int do_tx_data_table_freeze_(const ObMemstoreFreezeArg &arg)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("[MemstoreFreezer] ls service is null", K(ret));
   } else if (OB_FAIL(freeze_guard.init(freezer))) {
+    LOG_WARN("[MemstoreFreezer] fail to initialize tx data freeze guard", K(ret));
   } else if (!freeze_guard.can_freeze()) {
     // skip tx data self freeze due to another freeze task is running
   } else if (OB_FAIL(ls_srv->get_ls(ls))) {
+    LOG_WARN("[MemstoreFreezer] fail to get local log stream", K(ret));
   } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("local log stream is unexpected nullptr", KR(ret), K(arg));
   } else if (OB_FAIL(ls->get_tx_table_guard(tx_table_guard))) {
+    LOG_WARN("get tx table guard failed.", KR(ret), K(arg));
   } else if (OB_FAIL(tx_table_guard.self_freeze_task())) {
+    LOG_WARN("freeze tx data table failed.", KR(ret), K(arg));
   }
 
   LOG_INFO("finish tx data table self freeze task", KR(ret), K(arg));
@@ -94,6 +101,7 @@ static int do_major_freeze_(const ObMemstoreFreezeArg &arg)
     ret = OB_NOT_INIT;
     LOG_WARN("major freeze coordinator is not configured", KR(ret));
   } else if (OB_FAIL(major_freeze_coordinator->get_frozen_scn(frozen_scn))) {
+    LOG_WARN("get_frozen_scn failed", KR(ret));
   } else {
     int64_t frozen_scn_val = frozen_scn.get_val_for_tx();
     bool need_major = true;
@@ -117,6 +125,7 @@ static int do_major_freeze_(const ObMemstoreFreezeArg &arg)
       if (OB_FAIL(
               major_freeze_coordinator
                   ->trigger_memstore_pressure_major_freeze())) {
+        LOG_WARN("major freeze failed", KR(ret));
       } else {
         retry_major_info.reset();
       }
@@ -140,10 +149,12 @@ static int do_mds_table_freeze_(const ObMemstoreFreezeArg &arg)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("[MemstoreFreezer] ls service is null", K(ret));
   } else if (OB_FAIL(ls_srv->get_ls(ls))) {
+    LOG_WARN("[MemstoreFreezer] fail to get local log stream", K(ret));
   } else if (OB_ISNULL(ls) || OB_ISNULL(ls->get_tablet_svr())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("local log stream is unexpected nullptr", KR(ret), K(arg));
   } else if (OB_FAIL(ls->flush_mds_table(INT64_MAX))) {
+    LOG_WARN("flush mds table failed", KR(ret), KPC(ls));
   } else {
     LOG_INFO("flush local mds table successfully", K(arg));
   }

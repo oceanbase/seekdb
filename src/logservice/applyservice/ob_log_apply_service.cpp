@@ -216,6 +216,7 @@ int ObApplyServiceQueueTask::is_snapshot_apply_done(bool &is_done)
 {
   int ret = OB_SUCCESS;
   is_done = (total_apply_cb_cnt_ >= last_check_submit_cb_cnt_);
+  CLOG_LOG(TRACE, "is_snapshot_apply_done check", K(total_apply_cb_cnt_), K(last_check_submit_cb_cnt_));
   return ret;
 }
 
@@ -230,6 +231,8 @@ int ObApplyServiceQueueTask::is_apply_done(bool &is_done)
                K(total_submit_cb_cnt), KPC(apply_status_));
   } else {
     is_done = (total_apply_cb_cnt == total_submit_cb_cnt);
+    CLOG_LOG(TRACE, "check is_apply_done", K(is_done), K(total_apply_cb_cnt),
+               K(total_submit_cb_cnt), KPC(apply_status_));
   }
   return ret;
 }
@@ -282,10 +285,13 @@ int ObApplyStatus::init(palf::PalfEnv *palf_env,
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", KP(palf_env), K(ap_sv), K(ret));
   } else if (OB_FAIL(palf_env->open(palf_handle_))) {
+    CLOG_LOG(ERROR, "failed to open palf handle", K(palf_env));
   } else if (OB_FAIL(submit_task_.init(this))) {
+    CLOG_LOG(WARN, "failed to init submit_task", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < APPLY_TASK_QUEUE_SIZE; ++i) {
       if (OB_FAIL(cb_queues_[i].init(this, i))) {
+        CLOG_LOG(WARN, "failed to init cb_queues", K(ret));
       }
     }
     if (OB_SUCCESS == ret) {
@@ -299,6 +305,7 @@ int ObApplyStatus::init(palf::PalfEnv *palf_env,
       IGNORE_RETURN new (&fs_cb_) ObApplyFsCb(this);
       is_in_stop_state_ = false;
       if (OB_FAIL(palf_handle_.register_file_size_cb(&fs_cb_))) {
+        CLOG_LOG(ERROR, "failed to register cb", K(ret));
       } else {
         is_inited_ = true;
         CLOG_LOG(INFO, "apply status init success", K(ret), KPC(this), KP(&cb_append_stat_),
@@ -386,11 +393,14 @@ int ObApplyStatus::push_append_cb(AppendCb *cb)
       CLOG_LOG(ERROR, "push_append_cb failed", K(thread_index), K(cb_lsn), K(cb_sign),
                K(cb_queues_[thread_index]), KPC(this));
     } else {
+      CLOG_LOG(TRACE, "push_append_cb", K(thread_index), K(cb_lsn), K(cb_sign), K(cb_queues_[thread_index]), KPC(this));
       palf_committed_end_lsn.val_ = ATOMIC_LOAD(&palf_committed_end_lsn_.val_);
       if (cb_lsn < palf_committed_end_lsn) {
         // The cb that needs to call on_success should actively trigger the push into the thread pool when entering the queue
         if (OB_FAIL(submit_task_to_apply_service_(cb_queues_[thread_index]))) {
+          CLOG_LOG(ERROR, "apply service push_task failed", K(thread_index), K(cb_lsn), K(cb_sign), KPC(this));
         } else {
+          CLOG_LOG(TRACE, "apply service push_task success", K(thread_index), K(cb_lsn), K(cb_sign), KPC(this));
         }
       }
     }
@@ -414,9 +424,11 @@ int ObApplyStatus::try_submit_cb_queues()
       if (cb_queues_[i].get_total_apply_cb_cnt() >= cb_queues_[i].get_total_submit_cb_cnt()) {
         // do nothing
       } else if (OB_FAIL(submit_task_to_apply_service_(cb_queues_[i]))) {
+        CLOG_LOG(ERROR, "apply service push_task failed", K(i), KPC(this));
       }
     }
     if (OB_SUCC(ret)) {
+      CLOG_LOG(TRACE, "try_submit_cb_queues success", KPC(this));
     }
   }
   return ret;
@@ -447,6 +459,7 @@ int ObApplyStatus::try_handle_cb_queue(ObApplyServiceQueueTask *cb_queue,
       ObLink *link = NULL;
       AppendCb *cb = NULL;
       if (NULL == (link = cb_queue->top())) {
+        CLOG_LOG(TRACE, "cb_queue empty", KPC(cb_queue), KPC(this));
         ret = OB_SUCCESS;
         is_queue_empty = true;
       } else if (OB_ISNULL(cb = AppendCb::__get_class_address(link))) {
@@ -455,9 +468,11 @@ int ObApplyStatus::try_handle_cb_queue(ObApplyServiceQueueTask *cb_queue,
       } else if ((lsn = cb->__get_lsn()).val_ < ATOMIC_LOAD(&palf_committed_end_lsn_.val_)) {
         // callbacks with log position less than the confirmed log position can callback on_success
         if (OB_FAIL(cb_queue->pop())) {
+          CLOG_LOG(ERROR, "cb_queue pop failed", KPC(cb_queue), KPC(this), K(ret));
         } else {
           scn = cb->__get_scn();
           get_cb_trace_(cb, append_start_time, append_finish_time, cb_first_handle_time, cb_start_time);
+          CLOG_LOG(TRACE, "cb on_success", K(lsn), K(scn), KP(link->next_), KPC(cb_queue), KPC(this));
           if (OB_FAIL(cb->on_success())) {
             // Do not handle this type of failure case
             CLOG_LOG(ERROR, "cb on_success failed", KP(cb), K(ret), KPC(this));
@@ -470,6 +485,7 @@ int ObApplyStatus::try_handle_cb_queue(ObApplyServiceQueueTask *cb_queue,
       } else if (!accepting_append_) {
         // Fail callbacks that remain beyond the confirmed position after local append stops.
         if (OB_FAIL(cb_queue->pop())) {
+          CLOG_LOG(ERROR, "cb_queue pop failed", KPC(cb_queue), KPC(this), K(ret));
         } else {
           scn = cb->__get_scn();
           get_cb_trace_(cb, append_start_time, append_finish_time, cb_first_handle_time, cb_start_time);
@@ -500,6 +516,7 @@ int ObApplyStatus::try_handle_cb_queue(ObApplyServiceQueueTask *cb_queue,
       ret = OB_SUCCESS;
     }
   }
+  CLOG_LOG(DEBUG, "try_handle_cb_queue finish", KPC(this), KPC(cb_queue), K(ret), K(is_queue_empty), K(is_timeslice_run_out));
   return ret;
 }
 
@@ -514,6 +531,7 @@ int ObApplyStatus::is_apply_done(bool &is_done,
     is_done = true;
     for (int64_t i = 0; OB_SUCC(ret) && is_done && i < APPLY_TASK_QUEUE_SIZE; ++i) {
       if (OB_FAIL(cb_queues_[i].is_apply_done(is_done))) {
+        CLOG_LOG(WARN, "check is_apply_done failed", K(ret), K(i));
       }
     }
     if (is_done) {
@@ -548,6 +566,7 @@ int ObApplyStatus::stop_local_append()
   int ret = OB_SUCCESS;
   WLockGuardWithRetryInterval guard(lock_, WRLOCK_RETRY_INTERVAL_US, WRLOCK_RETRY_INTERVAL_US);
   if (OB_FAIL(stop_local_append_())) {
+    CLOG_LOG(WARN, "ObApplyStatus stop_local_append_ failed", K(ret));
   }
   return ret;
 }
@@ -565,6 +584,7 @@ int ObApplyStatus::stop_local_append_()
     last_check_scn_.reset();
     accepting_append_ = false;
     if (OB_FAIL(submit_task_to_apply_service_(submit_task_))) {
+      CLOG_LOG(ERROR, "submit_task_to_apply_service_ failed", KPC(this), K(ret));
     } else {
       CLOG_LOG(INFO, "stop_local_append submit_task_to_apply_service_ success", KPC(this), K(ret));
     }
@@ -592,6 +612,7 @@ int ObApplyStatus::update_palf_committed_end_lsn(const palf::LSN &end_lsn,
           palf_committed_end_scn_.atomic_store(end_scn);
           palf_committed_end_lsn_ = end_lsn;
           if (OB_FAIL(submit_task_to_apply_service_(submit_task_))) {
+            CLOG_LOG(ERROR, "submit_task_to_apply_service_ failed", KPC(this), K(ret), K(end_lsn));
           }
         }
       } else {
@@ -599,6 +620,7 @@ int ObApplyStatus::update_palf_committed_end_lsn(const palf::LSN &end_lsn,
         CLOG_LOG(ERROR, "invalid new end_lsn", KPC(this), K(end_lsn));
       }
     }
+    CLOG_LOG(TRACE, "update_palf_committed_end_lsn", KPC(this), K(end_lsn), KR(ret));
   }
   return ret;
 }
@@ -614,6 +636,7 @@ int ObApplyStatus::unregister_file_size_cb()
   int ret = OB_SUCCESS;
   if (palf_handle_.is_valid()) {
     if (OB_FAIL(palf_handle_.unregister_file_size_cb())) {
+      CLOG_LOG(ERROR, "failed to unregister cb", K(ret));
     } else {
       // do nothing
     }
@@ -649,6 +672,7 @@ int ObApplyStatus::get_max_applied_scn(SCN &scn)
     if (max_applied_cb_scn_ == cur_palf_committed_end_scn) {
       //no need to push up
     } else if (OB_FAIL(is_apply_done(is_done, apply_end_lsn))) {
+      CLOG_LOG(WARN, "check is_apply_done failed", K(ret), KPC(this));
     } else if (!is_done) {
       // Do not update until all callbacks are complete.
       // All cb callbacks completed, attempt to advance the maximum consecutive callback point once
@@ -658,6 +682,7 @@ int ObApplyStatus::get_max_applied_scn(SCN &scn)
     }
   } else if ((!last_check_scn.is_valid()) || last_check_scn == max_applied_cb_scn_) {
     if (OB_FAIL(update_last_check_scn_())) {
+      CLOG_LOG(ERROR, "update_last_check_scn_ failed", K(ret), KPC(this));
     } else {
       //do nothing
     }
@@ -666,11 +691,14 @@ int ObApplyStatus::get_max_applied_scn(SCN &scn)
     bool is_done = true;
     for (int64_t i = 0; OB_SUCC(ret) && is_done && i < APPLY_TASK_QUEUE_SIZE; ++i) {
       if (OB_FAIL(cb_queues_[i].is_snapshot_apply_done(is_done))) {
+        CLOG_LOG(WARN, "check is_snapshot_apply_done failed", K(ret), K(i));
       }
     }
     if (OB_SUCC(ret) && is_done) {
       max_applied_cb_scn_ = last_check_scn;
+      CLOG_LOG(TRACE, "is_snapshot_apply_done", K(ret), KPC(this));
       if (OB_FAIL(update_last_check_scn_())) {
+        CLOG_LOG(ERROR, "update_last_check_scn_ failed", K(ret), KPC(this));
       } else {
         //do nothing
       }
@@ -680,6 +708,7 @@ int ObApplyStatus::get_max_applied_scn(SCN &scn)
     CLOG_LOG(ERROR, "max_applied_cb_scn_ larger than last_check_scn_, unexpected", K(ret), KPC(this));
   }
   scn = max_applied_cb_scn_;
+  CLOG_LOG(TRACE, "get_max_applied_scn finish", K(ret), KPC(this), K(scn));
   if (palf_reach_time_interval(5 * 1000 * 1000, get_info_debug_time_)) {
     CLOG_LOG(INFO, "get_max_applied_scn", K(scn), KPC(this));
   }
@@ -707,6 +736,7 @@ int ObApplyStatus::handle_drop_cb()
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < APPLY_TASK_QUEUE_SIZE; ++i) {
     if (OB_FAIL(handle_drop_cb_queue_(cb_queues_[i]))) {
+      CLOG_LOG(ERROR, "handle_drop_cb_queue_ failed", KPC(this), K(i), K(ret));
     }
   }
   CLOG_LOG(INFO, "handle_drop_cb finish", KPC(this), K(ret));
@@ -718,6 +748,7 @@ int ObApplyStatus::diagnose(ApplyDiagnoseInfo &diagnose_info)
   int ret = OB_SUCCESS;
   SCN max_applied_scn;
   if (OB_FAIL(get_max_applied_scn(max_applied_scn))) {
+    CLOG_LOG(WARN, "get_max_applied_scn failed", KPC(this), K(ret));
   } else {
     diagnose_info.max_applied_scn_ = max_applied_scn;
   }
@@ -745,8 +776,12 @@ int ObApplyStatus::submit_task_to_apply_service_(ObApplyServiceTask &task)
                K(task), K(ret));
       dec_ref();
     } else {
+      CLOG_LOG(TRACE, "push task to apply service", KPC(this),
+               K(task), K(ret));
     }
   } else {
+    CLOG_LOG(TRACE, "acquire lease failed", KPC(this),
+             K(task), K(ret));
   }
   return ret;
 }
@@ -756,11 +791,13 @@ int ObApplyStatus::update_last_check_scn_()
   int ret = OB_SUCCESS;
   SCN palf_max_scn;
   if (OB_FAIL(palf_handle_.get_max_scn(palf_max_scn))) {
+    CLOG_LOG(WARN, "get_max_scn failed", K(ret));
   } else if (max_applied_cb_scn_.is_valid() && palf_max_scn < max_applied_cb_scn_) {
     //Defensive check, palf's max_scn should not regress to before the agreed max_applied_cb_scn_
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "invalid palf_max_scn", K(ret), K(palf_max_scn), KPC(this));
   } else if (OB_FAIL(ap_sv_->wait_append_sync())) {
+    CLOG_LOG(WARN, "wait_append_sync failed", K(ret), KPC(this));
   } else {
     for (int64_t i = 0; i < APPLY_TASK_QUEUE_SIZE; ++i) {
       cb_queues_[i].set_snapshot_check_submit_cb_cnt();
@@ -785,12 +822,14 @@ int ObApplyStatus::handle_drop_cb_queue_(ObApplyServiceQueueTask &cb_queue)
     ObLink *link = NULL;
     AppendCb *cb = NULL;
     if (NULL == (link = cb_queue.top())) {
+      CLOG_LOG(TRACE, "cb_queue empty", K(cb_queue));
       ret = OB_SUCCESS;
       is_queue_empty = true;
     } else if (OB_ISNULL(cb = AppendCb::__get_class_address(link))) {
       ret = OB_ERR_UNEXPECTED;
       CLOG_LOG(ERROR, "cb is NULL", K(cb_queue), KPC(this), K(ret));
     } else if (OB_FAIL(cb_queue.pop())) {
+      CLOG_LOG(ERROR, "cb_queue pop failed", K(cb_queue), K(ret), KPC(this));
     } else {
       lsn = cb->__get_lsn();
       scn = cb->__get_scn();
@@ -805,6 +844,7 @@ int ObApplyStatus::handle_drop_cb_queue_(ObApplyServiceQueueTask &cb_queue)
       cb_queue.inc_total_apply_cb_cnt();
     }
   } while (OB_SUCC(ret) && (!is_queue_empty));
+  CLOG_LOG(TRACE, "handle_drop_cb_queue_ finish", K(cb_queue), K(ret), K(is_queue_empty), KPC(this));
   return ret;
 }
 
@@ -913,8 +953,11 @@ int ObLogApplyService::init(PalfEnv *palf_env,
       1,
       common::APPLY_TASK_QUEUE_SIZE + 1,
       "ApplySrv"))) {
+    CLOG_LOG(WARN, "fail to init apply service thread pool", K(ret));
   } else if (OB_FAIL(common::ObLinkQueueThreadPool::set_adaptive_thread(1, 1))) {
+    CLOG_LOG(WARN, "fail to set apply service thread count", K(ret));
   } else if (OB_FAIL(lock_.init(ObMemAttr("ApplyStatus")))) {
+    CLOG_LOG(WARN, "apply status lock init error", K(ret));
   } else {
     is_inited_ = true;
     CLOG_LOG(INFO, "ObLogApplyService init success", K(is_inited_));
@@ -1037,7 +1080,9 @@ int ObLogApplyService::remove_status()
     }
     if (OB_NOT_NULL(apply_status)) {
       if (OB_FAIL(apply_status->handle_drop_cb())) {
+        CLOG_LOG(ERROR, "apply status handle drop cb failed", K(ret));
       } else if (OB_FAIL(apply_status->unregister_file_size_cb())) {
+        CLOG_LOG(ERROR, "apply status unregister file size cb failed", K(ret));
       }
       revert_apply_status(apply_status);
     }
@@ -1055,11 +1100,14 @@ int ObLogApplyService::is_apply_done(bool &is_done,
     ret = OB_NOT_INIT;
     CLOG_LOG(ERROR, "apply service not init", K(ret));
   } else if (OB_FAIL(get_apply_status(guard))) {
+    CLOG_LOG(WARN, "guard get apply status failed", K(ret));
   } else if (NULL == (apply_status = guard.get_apply_status())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "apply status is not exist", K(ret));
   } else if (OB_FAIL(apply_status->is_apply_done(is_done, end_lsn))) {
+    CLOG_LOG(WARN, "apply status check is_apply_done failed", K(ret), K(is_done));
   } else {
+    CLOG_LOG(TRACE, "apply service check is_apply_done", K(is_done), K(end_lsn));
   }
   return ret;
 }
@@ -1073,10 +1121,12 @@ int ObLogApplyService::start_local_append()
     ret = OB_NOT_INIT;
     CLOG_LOG(ERROR, "apply service not init", K(ret));
   } else if (OB_FAIL(get_apply_status(guard))) {
+    CLOG_LOG(WARN, "guard get apply status failed", K(ret));
   } else if (NULL == (apply_status = guard.get_apply_status())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "apply status is not exist", K(ret));
   } else if (OB_FAIL(apply_status->start_local_append())) {
+    CLOG_LOG(WARN, "apply status start_local_append failed", K(ret));
   } else {
     CLOG_LOG(INFO, "apply service start_local_append success");
   }
@@ -1092,10 +1142,12 @@ int ObLogApplyService::stop_local_append()
     ret = OB_NOT_INIT;
     CLOG_LOG(ERROR, "apply service not init", K(ret));
   } else if (OB_FAIL(get_apply_status(guard))) {
+    CLOG_LOG(WARN, "guard get apply status failed", K(ret));
   } else if (NULL == (apply_status = guard.get_apply_status())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "apply status is not exist", K(ret));
   } else if (OB_FAIL(apply_status->stop_local_append())) {
+    CLOG_LOG(WARN, "apply status stop_local_append failed", K(ret));
   } else {
     CLOG_LOG(INFO, "apply service stop_local_append success");
   }
@@ -1111,11 +1163,14 @@ int ObLogApplyService::get_max_applied_scn(SCN &scn)
     ret = OB_NOT_INIT;
     CLOG_LOG(ERROR, "apply service not init", K(ret));
   } else if (OB_FAIL(get_apply_status(guard))) {
+    CLOG_LOG(WARN, "guard get apply status failed", K(ret));
   } else if (NULL == (apply_status = guard.get_apply_status())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "apply status is not exist", K(ret));
   } else if (OB_FAIL(apply_status->get_max_applied_scn(scn))) {
+    CLOG_LOG(WARN, "apply status get_max_applied_scn failed", K(ret));
   } else {
+    CLOG_LOG(TRACE, "apply service get_max_applied_scn success");
   }
   return ret;
 }
@@ -1129,11 +1184,13 @@ int ObLogApplyService::get_palf_committed_end_scn(share::SCN &scn)
     ret = OB_NOT_INIT;
     CLOG_LOG(ERROR, "apply service not init", K(ret));
   } else if (OB_FAIL(get_apply_status(guard))) {
+    CLOG_LOG(WARN, "guard get apply status failed", K(ret));
   } else if (NULL == (apply_status = guard.get_apply_status())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "apply status is not exist", K(ret));
   } else {
     scn = apply_status->get_palf_committed_end_scn();
+    CLOG_LOG(TRACE, "apply service get palf_committed_end_lsn success", K(scn));
   }
   return ret;
 }
@@ -1271,6 +1328,8 @@ int ObLogApplyService::wait_append_sync()
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "ObLogApplyService not init", K(ret));
   } else if (OB_FAIL(log_storage_->wait_append_sync())) {
+    CLOG_LOG(WARN, "wait_append_sync failed", K(ret));
+  // TODO:@keqing.llt Remove before release
   } else {
     int64_t cost_time = ObTimeUtility::fast_current_time() - start_ts;
     if (cost_time > 10 * 1000) { //10ms
@@ -1286,10 +1345,12 @@ int ObLogApplyService::stat(LSApplyStat &apply_stat)
   ObApplyStatusGuard guard;
   ObApplyStatus *apply_status = NULL;
   if (OB_FAIL(get_apply_status(guard))) {
+    CLOG_LOG(WARN, "failed to get apply status", K(ret));
   } else if (OB_ISNULL(apply_status = guard.get_apply_status())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "apply status is null", K(ret));
   } else if (OB_FAIL(apply_status->stat(apply_stat))) {
+    CLOG_LOG(WARN, "stat apply failed", K(ret), KPC(apply_status));
   }
   return ret;
 }
@@ -1303,11 +1364,14 @@ int ObLogApplyService::diagnose(ApplyDiagnoseInfo &diagnose_info)
     ret = OB_NOT_INIT;
     CLOG_LOG(ERROR, "apply service not init", K(ret));
   } else if (OB_FAIL(get_apply_status(guard))) {
+    CLOG_LOG(WARN, "guard get apply status failed", K(ret));
   } else if (NULL == (apply_status = guard.get_apply_status())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "apply status is not exist", K(ret));
   } else if (OB_FAIL(apply_status->diagnose(diagnose_info))) {
+    CLOG_LOG(WARN, "apply status diagnose failed", K(ret));
   } else {
+    CLOG_LOG(TRACE, "apply service diagnose success");
   }
   return ret;
 }
@@ -1318,6 +1382,7 @@ int ObLogApplyService::handle_cb_queue_(ObApplyStatus *apply_status,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(apply_status->try_handle_cb_queue(cb_queue, is_timeslice_run_out))) {
+    CLOG_LOG(WARN, "handle_cb_queue_ failed", KPC(apply_status), KPC(cb_queue), K(ret));
   }
   return ret;
 }
@@ -1326,7 +1391,9 @@ int ObLogApplyService::handle_submit_task_(ObApplyStatus *apply_status)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(apply_status->try_submit_cb_queues())) {
+    CLOG_LOG(WARN, "handle_submit_task_ failed", KPC(apply_status), K(ret));
   } else {
+    CLOG_LOG(TRACE, "handle_submit_task_ success", KPC(apply_status), K(ret));
   }
   return ret;
 }

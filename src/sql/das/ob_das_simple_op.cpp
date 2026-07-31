@@ -60,6 +60,7 @@ int ObDASSplitRangesOp::open_op()
                                                  expected_task_count_,
                                                  op_alloc_,
                                                  multi_range_split_array_))) {
+    LOG_WARN("failed to split multi ranges", K(ret), K_(tablet_id));
   }
   return ret;
 }
@@ -70,6 +71,7 @@ int ObDASSplitRangesOp::init(const common::ObIArray<ObStoreRange> &ranges, int64
   expected_task_count_ = expected_task_count;
   timeout_us_ = timeout_us;
   if (OB_FAIL(ranges_.assign(ranges))) {
+    LOG_WARN("failed to assign ranges array", K(ret));
   }
   return ret;
 }
@@ -90,6 +92,7 @@ int ObDASRangesCostOp::open_op()
                                                     timeout_us_,
                                                     ranges_,
                                                     total_size_))) {
+    LOG_WARN("failed to get multi ranges cost", K(ret), K_(tablet_id));
   }
   return ret;
 }
@@ -98,6 +101,7 @@ int ObDASRangesCostOp::init(const common::ObIArray<ObStoreRange> &ranges, const 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ranges_.assign(ranges))) {
+    LOG_WARN("failed to assign ranges array", K(ret));
   }
   timeout_us_ = timeout_us;
   return ret;
@@ -121,6 +125,7 @@ int ObDASSimpleUtils::split_multi_ranges(ObExecContext &exec_ctx,
   ObDASRef das_ref(eval_ctx, exec_ctx);
   das_ref.set_mem_attr(ObMemAttr("DASSplitRanges"));
   if (OB_FAIL(das_ref.create_das_task(tablet_loc, DAS_OP_SPLIT_MULTI_RANGES, task_op))) {
+    LOG_WARN("prepare das split_multi_ranges task failed", K(ret));
   } else {
     split_ranges_op = static_cast<ObDASSplitRangesOp*>(task_op);
     split_ranges_op->set_can_part_retry(true);
@@ -131,8 +136,11 @@ int ObDASSimpleUtils::split_multi_ranges(ObExecContext &exec_ctx,
     } else if (OB_FAIL(split_ranges_op->init(ranges,
                                              expected_task_count,
                                              plan_ctx->get_timeout_timestamp() - ObTimeUtility::current_time()))) {
+      LOG_WARN("failed to init das split ranges op", K(ret));
     } else if (OB_FAIL(das_ref.execute_all_task())) {
+      LOG_WARN("execute das split_multi_ranges task failed", K(ret));
     } else if (OB_FAIL(multi_range_split_array.assign(split_ranges_op->get_split_array()))) {
+      LOG_WARN("assgin split multi ranges array failed", K(ret));
     } else {
       int64_t count = multi_range_split_array.count();
       // scan range is finally shared by all px workers, use thread safe allocator to avoid data race
@@ -147,7 +155,9 @@ int ObDASSimpleUtils::split_multi_ranges(ObExecContext &exec_ctx,
           ObStoreRowkey dst_start_key;
           ObStoreRowkey dst_end_key;
           if (OB_FAIL(start_key.deep_copy(dst_start_key, alloc))) {
+            LOG_WARN("failed to deep copy start key", K(start_key), K(ret));
           } else if (OB_FAIL(end_key.deep_copy(dst_end_key, alloc))) {
+            LOG_WARN("failed to deep copy end key", K(start_key), K(ret));
           } else {
             store_range.set_start_key(dst_start_key);
             store_range.set_end_key(dst_end_key);
@@ -171,6 +181,7 @@ int ObDASSimpleUtils::get_multi_ranges_cost(ObExecContext &exec_ctx,
   ObDASRef das_ref(eval_ctx, exec_ctx);
   das_ref.set_mem_attr(ObMemAttr("DASGetRangeCost"));
   if (OB_FAIL(das_ref.create_das_task(tablet_loc, DAS_OP_GET_RANGES_COST, task_op))) {
+    LOG_WARN("prepare das get_multi_ranges_cost task failed", K(ret));
   } else {
     ranges_cost_op = static_cast<ObDASRangesCostOp*>(task_op);
     ranges_cost_op->set_can_part_retry(true);
@@ -179,7 +190,9 @@ int ObDASSimpleUtils::get_multi_ranges_cost(ObExecContext &exec_ctx,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected nullptr", K(ret));
     } else if (OB_FAIL(ranges_cost_op->init(ranges, plan_ctx->get_timeout_timestamp() - ObTimeUtility::current_time()))) {
+      LOG_WARN("failed to init das ranges cost op", K(ret));
     } else if (OB_FAIL(das_ref.execute_all_task())) {
+      LOG_WARN("execute das get_multi_ranges_cost task failed", K(ret));
     } else {
       total_size = ranges_cost_op->get_total_size();
     }

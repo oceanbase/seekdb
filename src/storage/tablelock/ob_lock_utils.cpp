@@ -52,6 +52,7 @@ int ObInnerTableLockUtil::lock_inner_table_in_trans(
     table_lock_arg.op_type_ = IN_TRANS_COMMON_LOCK;
     table_lock_arg.is_from_sql_ = is_from_sql;
     if (OB_FAIL(ObInnerConnectionLockUtil::lock_table(table_lock_arg, conn))) {
+      LOG_WARN("lock table failed", KR(ret), K(table_lock_arg));
     }
   }
   return ret;

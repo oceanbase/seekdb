@@ -63,7 +63,6 @@
 #include "sql/plan_cache/ob_ps_cache.h"
 #include "storage/access/ob_empty_read_bucket.h"
 #include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
-#include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
@@ -176,6 +175,7 @@ static int init_log_service(
       false,
       GCONF.cpu_quota_concurrency,
       current_log_runtime_config()))) {
+    SERVER_LOG(WARN, "failed to initialize log service", KR(ret));
   } else {
     ::oceanbase::share::server_service<::oceanbase::logservice::ObServerLogBlockMgr>()->bind_log_service(*log_service);
   }
@@ -213,16 +213,21 @@ int ObServerRuntimeController::start()
         && OB_FAIL(timer_.init("ServerRuntimeTimer", ObMemAttr("RuntimeTimer")))) {
       LOG_ERROR("create multi runtime timer failed", K(ret));
     } else if (OB_FAIL(timer_.start())) {
+      LOG_ERROR("start multi runtime timer failed", K(ret));
     } else {
       timer_stopped_ = false;
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(timer_.schedule(*this, TIME_SLICE_PERIOD, true/*is_repeat*/))) {
+      LOG_ERROR("schedule multi runtime timer failed", K(ret));
+    // start memstore print timer.
     } else if (!memory_printer_timer_.inited()
         && OB_FAIL(memory_printer_timer_.init("MemPrinter", ObMemAttr("MemPrinter")))) {
       LOG_ERROR("create memory printer timer failed", K(ret));
     } else if (OB_FAIL(memory_printer_timer_.start())) {
+      LOG_ERROR("start memory printer timer failed", K(ret));
     } else if (OB_FAIL(printer.register_timer_task(memory_printer_timer_))) {
+      LOG_ERROR("Fail to register timer task", K(ret));
     } else {
       LOG_INFO("succ to start multi runtime");
     }
@@ -296,10 +301,13 @@ int ObServerRuntimeController::construct_bootstrap_meta(ObServerRuntimeMeta &met
     ret = OB_NOT_INIT;
     LOG_WARN("log block manager is not initialized", KR(ret));
   } else if (OB_FAIL(resource_config.generate_default(log_block_mgr_->get_log_disk_size()))) {
+    LOG_WARN("failed to generate bootstrap resource config", KR(ret));
   } else if (OB_FAIL(runtime_config.init(resource_config,
                         lib::Worker::CompatMode::MYSQL,
                         has_memstore))) {
+    LOG_WARN("failed to initialize bootstrap runtime config", K(ret));
   } else if (OB_FAIL(meta.build(runtime_config, super_block))) {
+    LOG_WARN("fail to build runtime meta", K(ret));
   }
 
   return ret;
@@ -310,7 +318,9 @@ int ObServerRuntimeController::create_bootstrap_runtime()
   int ret = OB_SUCCESS;
   ObServerRuntimeMeta meta;
   if (OB_FAIL(construct_bootstrap_meta(meta))) {
+    LOG_ERROR("fail to construct meta", K(ret));
   } else if (OB_FAIL(create_runtime(meta, true /* write_slog */))) {
+    LOG_ERROR("create bootstrap runtime failed", K(ret));
   }
   return ret;
 }
@@ -322,10 +332,13 @@ int ObServerRuntimeController::refresh_runtime_resources()
   omt::ObServerRuntime *runtime = nullptr;
   SMART_VAR(ObServerRuntimeMeta, meta) {
     if (OB_FAIL(get_runtime_unsafe(runtime))) {
+      LOG_WARN("failed to get server runtime", K(ret));
     } else if (OB_FAIL(construct_bootstrap_meta(meta))) {
+      LOG_ERROR("fail to construct meta", K(ret));
     } else if (!runtime->is_hidden() || meta.runtime_config_ == runtime->get_runtime_config()) {
       // do nothing
     } else if (OB_FAIL(update_server_resources_no_lock(meta.runtime_config_))) {
+      LOG_WARN("failed to update runtime config", K(ret));
     }
   }
   return ret;
@@ -341,6 +354,7 @@ int ObServerRuntimeController::activate_runtime(const ObServerRuntimeConfig &run
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(get_runtime_unsafe(runtime))) {
+    LOG_WARN("fail to get server runtime", K(ret));
   } else if (!runtime->is_hidden()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("runtime is already active", K(ret));
@@ -349,7 +363,9 @@ int ObServerRuntimeController::activate_runtime(const ObServerRuntimeConfig &run
       new_super_block = runtime->get_super_block();
       new_super_block.is_hidden_ = false;
       if (OB_FAIL(update_server_resources_no_lock(runtime_config))) {
+        LOG_WARN("fail to update_server_resources_no_lock", K(ret), K(runtime_config));
       } else if (OB_FAIL(SERVER_STORAGE_META_PERSISTER.update_runtime_super_block(new_super_block))) {
+        LOG_WARN("fail to update runtime super block", K(ret), K(new_super_block));
       } else {
         runtime->set_server_super_block(new_super_block);
       }
@@ -398,6 +414,7 @@ int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta, b
     // do nothing
   } else if (write_slog) {
     if (OB_FAIL(SERVER_STORAGE_META_PERSISTER.prepare_create_runtime(meta))) {
+      LOG_ERROR("fail to write create runtime prepare slog", K(ret));
     } else {
       create_step = ObRuntimeCreateStep::STEP_CREATION_PREPARED; // step4
     }
@@ -411,6 +428,7 @@ int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta, b
   } else {
     CREATE_WITH_TEMP_ENTITY(RESOURCE_OWNER, runtime_->id()) {
       if (OB_FAIL(runtime_->init(meta))) {
+        LOG_ERROR("init runtime fail", K(ret));
       }
     }
   }
@@ -421,6 +439,7 @@ int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta, b
     const int64_t memory_budget = lib::get_memory_budget();
     if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>()
                     ->set_memory_limit(memory_budget, memory_budget))) {
+      LOG_WARN("fail to set_memory_limit", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -435,6 +454,7 @@ int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta, b
   runtime_active_ = true;
   // TODO: @lingyang Expected not to fail
   if (OB_TMP_FAIL(update_server_config())) {
+    LOG_WARN("update runtime config fail", K(tmp_ret));
   }
 
 #ifdef ENABLE_DEBUG_LOG
@@ -477,6 +497,7 @@ int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta, b
 
     if (write_slog && create_step >= ObRuntimeCreateStep::STEP_CREATION_PREPARED) {
       if (OB_SUCCESS != (tmp_ret = SERVER_STORAGE_META_PERSISTER.abort_create_runtime())) {
+        LOG_ERROR("fail to write create runtime abort slog", K(tmp_ret));
       }
     }
   }
@@ -509,17 +530,22 @@ int ObServerRuntimeController::update_server_resources_no_lock(const ObServerRun
     LOG_WARN("log block manager is not initialized", KR(ret));
   } else if (FALSE_IT(log_disk_size = log_block_mgr_->get_log_disk_size())) {
   } else if (OB_FAIL(get_runtime_unsafe(runtime))) {
+    LOG_WARN("fail to get runtime", K(ret));
   } else if (OB_ISNULL(runtime)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("runtime is nullptr");
   } else if (OB_FAIL(old_runtime_config.assign(runtime->get_runtime_config()))) {
+    LOG_ERROR("failed to assign old runtime config", K(runtime_config));
   } else if (OB_FAIL(update_server_log_disk_size(old_runtime_config.resource_config_.log_disk_size(),
                                                  log_disk_size,
                                                  allowed_new_log_disk_size))) {
+    LOG_WARN("fail to update runtime log disk size", K(ret));
   } else if (OB_FAIL(construct_allowed_runtime_config(allowed_new_log_disk_size,
                                                    max_cpu, min_cpu,
                                                    runtime_config,
                                                    allowed_runtime_config))) {
+    LOG_WARN("fail to construct_allowed_runtime_config", K(allowed_new_log_disk_size),
+             K(allowed_runtime_config));
   } else if (FALSE_IT(need_persist_config = !(old_runtime_config == allowed_runtime_config))) {
   } else if (need_persist_config
              && OB_FAIL(SERVER_STORAGE_META_PERSISTER.update_server_resources(allowed_runtime_config))) {
@@ -549,11 +575,14 @@ int ObServerRuntimeController::update_server_memory(const ObServerRuntimeConfig 
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(get_runtime_unsafe(runtime))) {
+    LOG_WARN("fail to get runtime", K(ret));
   } else if (OB_ISNULL(runtime)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("runtime is nullptr");
   } else if (OB_FAIL(update_freezer_mem_limit(memory_budget, memory_budget))) {
+    LOG_WARN("fail to update_freezer_mem_limit", K(ret));
   } else if (OB_FAIL(update_throttle_config_())) {
+    LOG_WARN("update throttle config failed", K(ret));
   } else if (FALSE_IT(runtime->set_memory_size(memory_budget))) {
     // unreachable
   }
@@ -570,6 +599,7 @@ int ObServerRuntimeController::construct_allowed_runtime_config(const int64_t al
       || !expected_runtime_config.is_valid()) {
     ret= OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(allowed_runtime_config.assign(expected_runtime_config))) {
+    LOG_ERROR("failed to assign new runtime config", K(allowed_new_log_disk_size), K(expected_runtime_config));
   } else {
     // construct allowed resource.
     ObServerResource allowed_resource(
@@ -583,6 +613,8 @@ int ObServerRuntimeController::construct_allowed_runtime_config(const int64_t al
         expected_runtime_config.resource_config_.max_net_bandwidth(),
         expected_runtime_config.resource_config_.net_bandwidth_weight());
     if (OB_FAIL(allowed_runtime_config.resource_config_.update_resource(allowed_resource))) {
+      LOG_WARN("update_resource failed", K(allowed_new_log_disk_size), K(allowed_runtime_config),
+               K(allowed_resource));
     }
   }
   return ret;
@@ -596,6 +628,7 @@ int ObServerRuntimeController::update_server_resources(const ObServerRuntimeConf
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(update_server_resources_no_lock(runtime_config))) {
+    LOG_WARN("fail to update_server_resources_no_lock", K(ret), K(runtime_config));
   }
 
   LOG_INFO("finished updating runtime config", K(ret), K(runtime_config));
@@ -620,6 +653,8 @@ int ObServerRuntimeController::update_server_log_disk_size(const int64_t old_log
                  new_log_disk_size,
                  allowed_new_log_disk_size,
                  log_service))) {
+    LOG_WARN("fail to update_log_disk_size", K(old_log_disk_size), K(new_log_disk_size),
+             K(allowed_new_log_disk_size));
   } else {
     LOG_INFO("update_server_log_disk_size success", K(old_log_disk_size),
              K(new_log_disk_size), K(allowed_new_log_disk_size));
@@ -633,12 +668,16 @@ int ObServerRuntimeController::update_server_config()
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   if (OB_TMP_FAIL(update_palf_config())) {
+    LOG_WARN("failed to update palf disk config", K(tmp_ret));
   }
   if (OB_TMP_FAIL(update_dag_scheduler_config())) {
+    LOG_WARN("failed to update runtime dag scheduler config", K(tmp_ret));
   }
   if (OB_TMP_FAIL(update_freezer_config_())) {
+    LOG_WARN("failed to update runtime runtime freezer config", K(tmp_ret));
   }
   if (OB_TMP_FAIL(update_throttle_config_())) {
+    LOG_WARN("update throttle config failed", K(ret));
   }
   LOG_INFO("update_server_config success");
   return ret;
@@ -678,6 +717,7 @@ int ObServerRuntimeController::update_freezer_config_()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("runtime freezer should not be null", K(ret));
   } else if (OB_FAIL(freezer->reload_config())) {
+    LOG_WARN("runtime freezer config update failed", K(ret));
   }
   return ret;
 }
@@ -709,6 +749,7 @@ int ObServerRuntimeController::update_freezer_mem_limit(const int64_t server_min
   if (FALSE_IT(freezer = ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>())) {
   } else if (freezer->is_memory_limit_changed(server_min_mem, server_max_mem)) {
     if (OB_FAIL(freezer->set_memory_limit(server_min_mem, server_max_mem))) {
+      LOG_WARN("set runtime mem limit failed", K(ret));
     }
   }
   return ret;
@@ -719,6 +760,7 @@ int ObServerRuntimeController::get_server_resources(ObServerRuntimeConfig &runti
   int ret = OB_SUCCESS;
   ObServerRuntime *runtime = nullptr;
   if (OB_FAIL(get_runtime_unsafe(runtime))) {
+    LOG_WARN("fail to get runtime", K(ret));
   } else {
     runtime_config = runtime->get_runtime_config();
   }
@@ -731,6 +773,7 @@ int ObServerRuntimeController::get_server_log_disk_size(int64_t &log_disk_size)
   int ret = OB_SUCCESS;
   ObServerRuntimeConfig runtime_config;
   if (OB_FAIL(get_server_resources(runtime_config))) {
+    LOG_WARN("get server resources failed", K(ret));
   } else {
     log_disk_size = runtime_config.resource_config_.log_disk_size();
   }
@@ -773,6 +816,7 @@ int ObServerRuntimeController::modify_server_io(const ObServerResourceConfig &re
   ObServerRuntime *runtime = NULL;
 
   if (OB_FAIL(get_runtime_unsafe(runtime))) {
+    LOG_WARN("can't modify runtime which doesn't exist", K(ret));
   } else if (OB_ISNULL(runtime)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("unexpected condition, runtime is NULL", K(runtime));
@@ -782,7 +826,9 @@ int ObServerRuntimeController::modify_server_io(const ObServerResourceConfig &re
     io_param_config.memory_limit_ = resource_config.memory_size();
     io_param_config.callback_thread_count_ = GCONF._io_callback_thread_count;
     if (OB_FAIL(OB_IO_MANAGER.refresh_io_resource_config(io_resource_config))) {
+      LOG_WARN("failed to refresh runtime IO resource config", K(ret), K(io_resource_config));
     } else if (OB_FAIL(OB_IO_MANAGER.refresh_io_param_config(io_param_config))) {
+      LOG_WARN("refresh runtime io param config failed", K(ret), K(io_param_config));
     }
   }
   return ret;
@@ -809,6 +855,7 @@ void ObServerRuntimeController::stop_runtime_()
     runtime_->stop();
     runtime_active_ = false;
     if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->kill_all_sessions(true))) {
+      LOG_WARN("fail to kill runtime session", K(ret));
     }
   }
 }
@@ -862,10 +909,12 @@ int ObServerRuntimeController::recv_request(ObRequest &req) const
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(get_runtime_unsafe(runtime))) {
+    LOG_ERROR("get runtime failed", K(ret));
   } else if (NULL == runtime) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("runtime is null", K(ret));
   } else if (OB_FAIL(runtime->recv_request(req))) {
+    LOG_ERROR("recv request failed", K(ret));
   } else {
     // do nothing
   }
@@ -895,9 +944,11 @@ int ObServerRuntimeController::build_server_resource_config_(ObServerRuntimeConf
     ret = OB_NOT_INIT;
     LOG_WARN("log block manager is not initialized", KR(ret));
   } else if (OB_FAIL(resource_config.generate_default(log_block_mgr_->get_log_disk_size()))) {
+    LOG_WARN("failed to generate server resource config", KR(ret));
   } else if (OB_FAIL(runtime_config.init(resource_config,
                                lib::Worker::CompatMode::MYSQL/*compat_mode*/,
                                true/*has_memstore*/))) {
+    LOG_WARN("fail to init server runtime config", KR(ret), K(resource_config));
   }
   return ret;
 }
@@ -928,6 +979,7 @@ int ObServerRuntimeController::apply_server_resource_config_(const ObServerRunti
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(modify_server_io(runtime_config.resource_config_))) {
+        LOG_WARN("modify runtime io config failed", K(ret), K(runtime_config.resource_config_));
       }
     }
   }
@@ -940,7 +992,9 @@ int ObServerRuntimeController::bring_up_runtime_()
   int ret = OB_SUCCESS;
   ObServerRuntimeConfig runtime_config;
   if (OB_FAIL(build_server_resource_config_(runtime_config))) {
+    LOG_WARN("failed to build server runtime config", KR(ret));
   } else if (OB_FAIL(apply_server_resource_config_(runtime_config))) {
+    LOG_WARN("fail to bring up server runtime", KR(ret), K(runtime_config));
   } else {
     set_synced();
     LOG_INFO("server runtime is ready", K(runtime_config));
@@ -964,7 +1018,9 @@ int ObServerRuntimeController::refresh_server_config_()
     LOG_INFO("server slog not finish replaying, need wait");
     ret = OB_NEED_RETRY;
   } else if (OB_FAIL(build_server_resource_config_(runtime_config))) {
+    LOG_WARN("failed to build server runtime config", KR(ret));
   } else if (OB_FAIL(apply_server_resource_config_(runtime_config))) {
+    LOG_WARN("failed to refresh server runtime", KR(ret), K(runtime_config));
   } else {
     set_synced();
     periodically_check_runtime_();
@@ -975,6 +1031,7 @@ int ObServerRuntimeController::refresh_server_config_()
   // Keep the log allocator sizing aligned with the current runtime memory budget.
   int tmp_ret = OB_SUCCESS;
   if (OB_SUCCESS != (tmp_ret = LOG_ALLOCATOR_MGR_INSTANCE.update_memory_limit(runtime_config))) {
+    LOG_WARN("LOG_ALLOCATOR_MGR_INSTANCE.update_memory_limit failed", K(tmp_ret));
   }
 
   FLOG_INFO("refresh runtime config", K(ret));
@@ -990,6 +1047,7 @@ void ObServerRuntimeController::periodically_check_runtime_()
   bool locked = false;
   if (!OB_ISNULL(runtime) && !runtime->has_stopped()) {
     if (OB_FAIL(runtime->rdlock())) {
+      LOG_WARN("failed to rd lock runtime", K(ret));
     } else {
       locked = true;
     }
@@ -1057,6 +1115,7 @@ int ObSharedTimer::server_module_init(ObSharedTimer *&st)
   int ret = common::OB_SUCCESS;
   if (st != NULL) {
     if (OB_FAIL(st->timer_.init("TntSharedTimer", common::ObMemAttr("TntSharedTimer")))) {
+      LOG_WARN("init shared timer failed", K(ret));
     }
   }
   return ret;
@@ -1067,6 +1126,7 @@ int ObSharedTimer::server_module_start(ObSharedTimer *&st)
   int ret = common::OB_SUCCESS;
   if (st != NULL) {
     if (OB_FAIL(st->timer_.start())) {
+      LOG_WARN("start shared timer failed", K(ret));
     }
   }
   return ret;
@@ -1117,6 +1177,7 @@ int ObServerRuntimeController::inc_ddl_count(const int64_t cpu_quota_concurrency
   int ret = OB_SUCCESS;
   ObServerRuntime *runtime = NULL;
   if (OB_FAIL(get_runtime_unsafe(runtime))) {
+    LOG_WARN("fail to get runtime", KR(ret));
   } else if (OB_ISNULL(runtime)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("runtime is null", KR(ret));
@@ -1137,6 +1198,7 @@ int ObServerRuntimeController::dec_ddl_count()
   int ret = OB_SUCCESS;
   ObServerRuntime *runtime = NULL;
   if (OB_FAIL(get_runtime_unsafe(runtime))) {
+    LOG_WARN("fail to get runtime", KR(ret));
   } else if (OB_ISNULL(runtime)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("runtime is null", KR(ret));
@@ -1307,6 +1369,8 @@ int ObServer::obs_construct_modules()
         &local_management_service_);
     ::oceanbase::share::bind_server_service<observer::ObService>(&ob_service_);
     ::oceanbase::share::bind_server_service<sql::ObSQLSessionMgr>(&session_mgr_);
+    ::oceanbase::share::bind_server_service<sql::ObSql>(&sql_engine_);
+    ::oceanbase::share::bind_server_service<pl::ObPL>(&pl_engine_);
     ::oceanbase::share::bind_server_service<omt::ObServerRuntimeController>(
         &server_runtime_controller_);
     ::oceanbase::share::bind_server_service<observer::ObVTIterCreator>(
@@ -1497,42 +1561,17 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObDBMSSchedService::server_module_init(mods_dbms_sched_service_))) { SERVER_LOG(WARN, "mods_dbms_sched_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObOptStatMonitorManager::server_module_init(mods_opt_stat_monitor_manager_))) { SERVER_LOG(WARN, "mods_opt_stat_monitor_manager_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(omt::ObSrsService::server_module_init(mods_srs_service_))) { SERVER_LOG(WARN, "mods_srs_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(sql_engine_.init(
-      &ObOptStatManager::get_instance(),
-      &vt_data_service_,
-      self_addr_,
-      *mods_plan_cache_,
-      *mods_ps_cache_,
-      pl_engine_,
-      *this,
-      *this,
-      local_management_service_,
-      ob_service_,
-      *this,
-      *this,
-      *this,
-      *mods_srs_service_,
-      *mods_lob_manager_))) {
-    SERVER_LOG(WARN, "sql_engine_ init failed", KR(ret));
-  }
   if (OB_SUCC(ret) && OB_FAIL(internal_table_refresh_adapter_.init(
       timezone_mgr_, *mods_srs_service_))) {
     SERVER_LOG(WARN, "internal_table_refresh_adapter_ init failed", KR(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(mods_resource_limit_calculator_->init(
-      mods_storage_meta_mem_mgr_->get_t3m_limit_calculator()))) {
+      mods_ls_service_, mods_storage_meta_mem_mgr_->get_t3m_limit_calculator()))) {
     SERVER_LOG(WARN, "mods_resource_limit_calculator_ fail", KR(ret));
-  }
-  if (OB_SUCC(ret) && OB_FAIL(pl_engine_.init(
-      sql_proxy_, *this, *mods_resource_limit_calculator_))) {
-    SERVER_LOG(WARN, "pl_engine_ init failed", KR(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(ObGlobalIteratorPool::server_module_init(mods_global_iterator_pool_))) { SERVER_LOG(WARN, "mods_global_iterator_pool_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(common::ObRbMemMgr::server_module_init(mods_rb_mem_mgr_))) { SERVER_LOG(WARN, "mods_rb_mem_mgr_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObPluginVectorIndexService::server_module_init(
-      mods_plugin_vector_index_service_, mods_lob_manager_))) {
-    SERVER_LOG(WARN, "mods_plugin_vector_index_service_ fail", KR(ret));
-  }
+  if (OB_SUCC(ret) && OB_FAIL(ObPluginVectorIndexService::server_module_init(mods_plugin_vector_index_service_))) { SERVER_LOG(WARN, "mods_plugin_vector_index_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObDDLServiceLauncher::server_module_init(mods_ddl_service_launcher_))) { SERVER_LOG(WARN, "mods_ddl_service_launcher_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObSystemPackageLoadService::server_module_init(mods_system_package_load_service_))) { SERVER_LOG(WARN, "mods_system_package_load_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObDDLScheduler::server_module_init(mods_ddl_scheduler_))) { SERVER_LOG(WARN, "mods_ddl_scheduler_ fail", KR(ret)); }
@@ -1554,9 +1593,18 @@ int ObServer::obs_init_modules()
     SERVER_LOG(WARN, "ls_runtime_adapter_ init failed", KR(ret));
   }
   if (OB_SUCC(ret)) {
-    session_mgr_.bind_lifecycle_services(
+    session_mgr_.bind_runtime_services(
+        *mods_plan_cache_,
         *mods_ps_cache_,
-        debug_sync_broadcaster_,
+        *this,
+        *this,
+        local_management_service_,
+        ob_service_,
+        *this,
+        *this,
+        *this,
+        *mods_srs_service_,
+        *mods_lob_manager_,
         conn_res_mgr_);
   }
   return ret;
@@ -1768,6 +1816,8 @@ void ObServer::obs_destroy_modules()
   UNBIND_SERVICE(rootserver::ObLocalManagementService);
   UNBIND_SERVICE(observer::ObService);
   UNBIND_SERVICE(sql::ObSQLSessionMgr);
+  UNBIND_SERVICE(sql::ObSql);
+  UNBIND_SERVICE(pl::ObPL);
   UNBIND_SERVICE(omt::ObServerRuntimeController);
   UNBIND_SERVICE(observer::ObVTIterCreator);
   UNBIND_SERVICE(observer::ObSrvNetworkFrame);

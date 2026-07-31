@@ -39,9 +39,13 @@ int ObDatumJsonCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret,
   const ObLobReadOptions *options =
       OB_ISNULL(access_ctx) ? nullptr : access_ctx->lob_read_options_;
   if (OB_FAIL(l_instr_iter.init(0, options, &allocator))) {
+    COMMON_LOG(WARN, "Lob: init left lob str iter failed", K(ret), K(l));
   } else if (OB_FAIL(l_instr_iter.get_full_data(l_data))) {
+    COMMON_LOG(WARN, "Lob: get left lob str iter full data failed ", K(ret), K(l_instr_iter));
   } else if (OB_FAIL(r_instr_iter.init(0, options, &allocator))) {
+    COMMON_LOG(WARN, "Lob: init right lob str iter failed", K(ret), K(ret), K(r));
   } else if (OB_FAIL(r_instr_iter.get_full_data(r_data))) {
+    COMMON_LOG(WARN, "Lob: get right lob str iter full data failed ", K(ret), K(r_instr_iter));
   } else if (r_data.empty() || l_data.empty()) {
     if (l_data.empty() && r_data.empty()) {
       cmp_ret = 0;
@@ -57,8 +61,11 @@ int ObDatumJsonCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret,
     ObIJsonBase *j_base_r = &j_bin_r;
 
     if (OB_FAIL(j_bin_l.reset_iter())) {
+      COMMON_LOG(WARN, "fail to reset left json bin iter", K(ret), K(l.len_));
     } else if (OB_FAIL(j_bin_r.reset_iter())) {
+      COMMON_LOG(WARN, "fail to reset right json bin iter", K(ret), K(r.len_));
     } else if (OB_FAIL(j_base_l->compare(*j_base_r, cmp_ret))) {
+      COMMON_LOG(WARN, "fail to compare json", K(ret), K(*j_base_l), K(*j_base_r));
     }
   }
   return ret;
@@ -77,9 +84,13 @@ int ObDatumGeoCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret,
   const ObLobReadOptions *options =
       OB_ISNULL(access_ctx) ? nullptr : access_ctx->lob_read_options_;
   if (OB_FAIL(l_instr_iter.init(0, options, &allocator))) {
+    COMMON_LOG(WARN, "Lob: init left lob str iter failed", K(ret), K(l));
   } else if (OB_FAIL(l_instr_iter.get_full_data(l_data))) {
+    COMMON_LOG(WARN, "Lob: get left lob str iter full data failed ", K(ret), K(l_instr_iter));
   } else if (OB_FAIL(r_instr_iter.init(0, options, &allocator))) {
+    COMMON_LOG(WARN, "Lob: init right lob str iter failed", K(ret), K(ret), K(r));
   } else if (OB_FAIL(r_instr_iter.get_full_data(r_data))) {
+    COMMON_LOG(WARN, "Lob: get right lob str iter full data failed ", K(ret), K(r_instr_iter));
   } else {
     cmp_ret = ObCharset::strcmpsp(CS_TYPE_BINARY, l_data.ptr(), l_data.length(), r_data.ptr(), r_data.length(), false);
   }
@@ -101,9 +112,13 @@ int ObDatumCollectionCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_r
   const ObLobReadOptions *options =
       OB_ISNULL(access_ctx) ? nullptr : access_ctx->lob_read_options_;
   if (OB_FAIL(l_instr_iter.init(0, options, &allocator))) {
+    COMMON_LOG(WARN, "Lob: init left lob str iter failed", K(ret), K(l));
   } else if (OB_FAIL(l_instr_iter.get_full_data(l_data))) {
+    COMMON_LOG(WARN, "Lob: get left lob str iter full data failed ", K(ret), K(l_instr_iter));
   } else if (OB_FAIL(r_instr_iter.init(0, options, &allocator))) {
+    COMMON_LOG(WARN, "Lob: init right lob str iter failed", K(ret), K(ret), K(r));
   } else if (OB_FAIL(r_instr_iter.get_full_data(r_data))) {
+    COMMON_LOG(WARN, "Lob: get right lob str iter full data failed ", K(ret), K(r_instr_iter));
   } else {
     // only memcmp supported now
     cmp_ret = MEMCMP(l_data.ptr(), r_data.ptr(), std::min(l_data.length(), r_data.length()));
@@ -130,9 +145,13 @@ int ObDatumTextCmpImpl::cmp_out_row(const ObDatum &l, const ObDatum &r, int &cmp
   const ObLobReadOptions *options =
       OB_ISNULL(access_ctx) ? nullptr : access_ctx->lob_read_options_;
   if (OB_FAIL(l_instr_iter.init(0, options, &allocator))) {
+    COMMON_LOG(WARN, "Lob: init left lob str iter failed", K(ret), K(cs), K(l));
   } else if (OB_FAIL(l_instr_iter.get_full_data(l_data))) {
+    COMMON_LOG(WARN, "Lob: get left lob str iter full data failed ", K(ret), K(cs), K(l_instr_iter));
   } else if (OB_FAIL(r_instr_iter.init(0, options, &allocator))) {
+    COMMON_LOG(WARN, "Lob: init right lob str iter failed", K(ret), K(ret), K(r));
   } else if (OB_FAIL(r_instr_iter.get_full_data(r_data))) {
+    COMMON_LOG(WARN, "Lob: get right lob str iter full data failed ", K(ret), K(cs), K(r_instr_iter));
   } else {
     cmp_ret = ObCharset::strcmpsp(
         cs, l_data.ptr(), l_data.length(), r_data.ptr(), r_data.length(), with_end_space);
@@ -155,7 +174,9 @@ int ObDatumTextStringCmpImpl::cmp_out_row(const ObDatum &l, const ObDatum &r, in
   const ObLobReadOptions *options =
       OB_ISNULL(access_ctx) ? nullptr : access_ctx->lob_read_options_;
   if (OB_FAIL(l_instr_iter.init(0, options, &allocator))) {
+    COMMON_LOG(WARN, "Lob: init left lob str iter failed", K(ret), K(cs), K(l));
   } else if (OB_FAIL(l_instr_iter.get_full_data(l_data))) {
+    COMMON_LOG(WARN, "Lob: get left lob str iter full data failed ", K(ret), K(cs), K(l_instr_iter));
   } else {
     cmp_ret = ObCharset::strcmpsp(
         cs, l_data.ptr(), l_data.length(), r.ptr_, r.len_, with_end_space);
@@ -179,7 +200,9 @@ int ObDatumStringTextCmpImpl::cmp_out_row(const ObDatum &l, const ObDatum &r, in
   const ObLobReadOptions *options =
       OB_ISNULL(access_ctx) ? nullptr : access_ctx->lob_read_options_;
   if (OB_FAIL(r_instr_iter.init(0, options, &allocator))) {
+    COMMON_LOG(WARN, "Lob: init right lob str iter failed", K(ret), K(ret), K(r));
   } else if (OB_FAIL(r_instr_iter.get_full_data(r_data))) {
+    COMMON_LOG(WARN, "Lob: get right lob str iter full data failed ", K(ret), K(cs), K(r_instr_iter));
   } else {
     cmp_ret = ObCharset::strcmpsp(
         cs, l.ptr_, l.len_, r_data.ptr(), r_data.length(), with_end_space);

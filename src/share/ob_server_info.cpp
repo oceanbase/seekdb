@@ -135,6 +135,7 @@ static int load_server_info_from_config(
       ret = OB_ENTRY_NOT_EXIST;
       LOG_WARN("server_role_info config value is empty", KR(ret));
     } else if (OB_FAIL(deserialize_server_info_from_string(config_value, server_info))) {
+      LOG_WARN("failed to deserialize server_info from config", KR(ret), K(config_value));
     }
   }
   return ret;
@@ -160,6 +161,7 @@ static int update_server_info_config(
     common::ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
     common::ObString config_value;
     if (OB_FAIL(serialize_server_info_to_string(server_info, config_value, allocator))) {
+      LOG_WARN("failed to serialize server_info to string", KR(ret), K(server_info));
     } else {
       // Save config to internal table only (no reload)
       // config_value is allocated from allocator, need to ensure null-terminated for save_config
@@ -172,6 +174,7 @@ static int update_server_info_config(
         buf[config_value.length()] = '\0';
 
         if (OB_FAIL(config_mgr->save_config("server_role_info", buf))) {
+          LOG_WARN("failed to save config server_role_info", KR(ret), K(config_value));
         } else {
           LOG_INFO("persisted server_role_info config to internal table", K(config_value), K(server_info));
         }
@@ -236,6 +239,7 @@ int ObServerInfoProxy::init_server_info_from_role(
   if (OB_SUCC(ret)) {
     // Update server_info via config parameter
     if (OB_FAIL(update_server_info_config(config_mgr, server_info))) {
+      LOG_WARN("failed to update server_info config", KR(ret), K(server_info));
     } else {
       LOG_INFO("initialized server_info from server role", K(server_role), K(server_info));
     }

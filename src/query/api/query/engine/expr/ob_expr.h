@@ -1015,6 +1015,7 @@ _Pragma("GCC diagnostic push")
 _Pragma("GCC diagnostic ignored \"-Warray-bounds\"")
     if (OB_FAIL(args_[param_index]->eval(
                 ctx, param_index < ARRAYSIZEOF(params) ? *params[param_index] : tmp))) {
+      SQL_LOG(WARN, "evaluate parameter failed", K(ret), K(param_index));
     }
 _Pragma("GCC diagnostic pop")
   }
@@ -1029,6 +1030,7 @@ OB_INLINE int ObExpr::eval_batch_param_value(ObEvalCtx &ctx, const ObBitVector &
   ObDatumVector *params[] = { &args...};
   for (int param_index = 0; OB_SUCC(ret) && param_index < arg_cnt_; param_index++) {
     if (OB_FAIL(args_[param_index]->eval_batch(ctx, skip, size))) {
+      SQL_LOG(WARN, "evaluate parameter failed", K(ret), K(param_index));
     } else if (param_index < ARRAYSIZEOF(params)) {
       *params[param_index] = locate_param_datumvector(ctx, param_index);
     }
@@ -1097,6 +1099,7 @@ OB_INLINE int ObExpr::deep_copy_self_datum(ObEvalCtx &ctx) const
   int ret = OB_SUCCESS;
   const ObDatum &datum = locate_expr_datum(ctx);
   if (OB_FAIL(deep_copy_datum(ctx, datum))) {
+    SQL_LOG(WARN, "fail to deep copy datum", K(ret), K(ctx), K(datum));
   }
 
   return ret;
@@ -1148,6 +1151,7 @@ OB_INLINE int64_t VectorizedRowsWrapper::to_string(char *buf, const int64_t buf_
   int64_t pos = 0;
   if (nullptr != buf && buf_len > 0) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos, "vectorized_rows(%ld)=", index_))) {
+      LIB_LOG(WARN, "call databuff_printf failed", K(pos), K(ret));
     } else {
       int64_t str_len = vec_.to_string(buf + pos, buf_len - pos - 1);
       pos += str_len;
@@ -1183,6 +1187,7 @@ OB_INLINE int64_t VectorizedExprsMetaWrapper::to_string(char *buf, const int64_t
   int64_t pos = 0;
   if (nullptr != buf && buf_len > 0) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos, "vectorized_exprs_meta="))) {
+      LIB_LOG(WARN, "call databuff_printf failed", K(pos), K(ret));
     } else {
       int64_t str_len = vec_.meta_to_string(buf + pos, buf_len - pos - 1);
       pos += str_len;
@@ -1222,6 +1227,7 @@ OB_INLINE int64_t VectorizedRowByColumnWrapper::to_string(char *buf, const int64
   int64_t pos = 0;
   if (nullptr != buf && buf_len > 0) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos, "vectorized_expr(%ld)=", index_))) {
+      LIB_LOG(WARN, "call databuff_printf failed", K(pos), K(ret));
     } else if (NULL != expr_) {
       int64_t batch_size = bound_.batch_size();
       ObEvalCtx::BatchInfoScopeGuard _batch_info_guard(ctx_);
@@ -1235,6 +1241,7 @@ OB_INLINE int64_t VectorizedRowByColumnWrapper::to_string(char *buf, const int64
       }
     } else {
       if (OB_FAIL(databuff_printf(buf, buf_len, pos, "{null}"))) {
+        LIB_LOG(WARN, "call databuff_printf failed", K(pos), K(ret));
       }
     }
     if (OB_SUCC(ret) && pos >= 0 && pos < buf_len) {

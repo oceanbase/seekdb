@@ -2,16 +2,6 @@
  * Copyright (c) 2025 OceanBase.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  */
 
 #define USING_LOG_PREFIX STORAGE
@@ -280,6 +270,7 @@ int ObDatumReshape::reshape_vector_value(const ObObjMeta &col_type,
                                                       col_type.get_scale(),
                                                       col_type.get_stored_precision());
         if (OB_FAIL(new_discrete_vector(value_tc, selector.get_max(), allocator, discrete_vec))) {
+          LOG_WARN("fail to new discrete vector", KR(ret));
         } else {
           ptrs = discrete_vec->get_ptrs();
           lens = discrete_vec->get_lens();
@@ -413,6 +404,7 @@ int ObDatumReshape::reshape_vector_value(const ObObjMeta &col_type,
                                                       col_type.get_scale(),
                                                       col_type.get_stored_precision());
         if (OB_FAIL(new_discrete_vector(value_tc, selector.get_max(), allocator, discrete_vec))) {
+          LOG_WARN("fail to new discrete vector", KR(ret));
         } else {
           ptrs = discrete_vec->get_ptrs();
           lens = discrete_vec->get_lens();

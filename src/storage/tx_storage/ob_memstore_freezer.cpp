@@ -83,6 +83,7 @@ int ObMemstoreFreezer::init()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("[MemstoreFreezer] invalid argument", KR(ret), K(GCONF.self_addr_));
   } else if (OB_FAIL(freeze_trigger_timer_.init("MemstoreFreezer", ObMemAttr("MemstoreFreezer")))) {
+    LOG_WARN("[MemstoreFreezer] fail to init MemstoreFreezer timer", K(ret));
   } else {
     is_freezing_tx_data_ = false;
     self_ = GCONF.self_addr_;
@@ -109,6 +110,7 @@ int ObMemstoreFreezer::start()
     LOG_WARN("[MemstoreFreezer] memstore freezer not inited", KR(ret));
   } else if (OB_FAIL(freeze_trigger_timer_.schedule(freeze_trigger_timer_task_,
                                                    FREEZE_TRIGGER_INTERVAL, true/*repeat*/, false/*immediate*/))) {
+    LOG_WARN("[MemstoreFreezer] fail to schedule freeze_trigger_timer_task", KR(ret));
   } else {
     LOG_INFO("[MemstoreFreezer] ObMemstoreFreezer start", K_(memstore_info));
   }
@@ -147,6 +149,7 @@ bool ObMemstoreFreezer::exist_ls_freezing()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("[MemstoreFreezer] ls service is null", KR(ret));
   } else if (OB_FAIL(ls_srv->get_ls(ls))) {
+    LOG_WARN("[MemstoreFreezer] fail to get local log stream", KR(ret));
   } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("[MemstoreFreezer] local log stream is null", KR(ret));
@@ -176,6 +179,7 @@ bool ObMemstoreFreezer::exist_ls_throttle_is_skipping()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("[MemstoreFreezer] ls service is null", KR(ret));
     } else if (OB_FAIL(ls_srv->get_ls(ls))) {
+      LOG_WARN("[MemstoreFreezer] fail to get local log stream", KR(ret));
     } else if (OB_ISNULL(ls)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("[MemstoreFreezer] local log stream is null", KR(ret));
@@ -204,7 +208,7 @@ bool ObMemstoreFreezer::memstore_remain_memory_is_exhausting()
     } else {
       const int64_t MEMORY_IS_EXHAUSTING_PERCENTAGE = 10;
       ObMemstoreAllocator &memstore_allocator =
-          share::server_service<share::ObSharedMemAllocMgr>()->memstore_allocator();
+          share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
       const int64_t memstore_limit = memstore_info_.get_memstore_limit();
       const int64_t memstore_used = memstore_allocator.get_memstore_quota_used();
       const int64_t memstore_remain = memstore_limit - memstore_used;
@@ -310,10 +314,12 @@ int ObMemstoreFreezer::freeze_all_data_()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("[MemstoreFreezer] ls service is null", KR(ret));
   } else if (OB_FAIL(ls_srv->get_ls(ls))) {
+    LOG_WARN("[MemstoreFreezer] fail to get local log stream", KR(ret));
   } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("[MemstoreFreezer] local log stream is null", KR(ret));
   } else if (OB_FAIL(ls_freeze_data_(ls))) {
+    LOG_ERROR("[MemstoreFreezer] fail to freeze local log stream", KR(ret));
   } else {
     LOG_INFO("[MemstoreFreezer] succeed to freeze local log stream", KR(ret));
   }
@@ -335,21 +341,26 @@ int ObMemstoreFreezer::freeze_all(const ObFreezeSourceFlag source)
     LOG_WARN("[MemstoreFreezer] memstore freezer not inited", KR(ret));
   } else if (OB_FAIL(ObShareUtil::get_abs_timeout(MAX_FREEZE_TIMEOUT_US /* default timeout */,
                                                   abs_timeout_ts))) {
+    LOG_WARN("get timeout ts failed", KR(ret));
   } else if (OB_ISNULL(ls_srv)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("[MemstoreFreezer] ls service is null", KR(ret));
   } else if (OB_FAIL(ls_srv->get_ls(ls))) {
+    LOG_WARN("[MemstoreFreezer] fail to get local log stream", KR(ret));
   } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("[MemstoreFreezer] local log stream is null", KR(ret));
   } else if (OB_FAIL(set_freezing_())) {
+    LOG_WARN("set global freeze failed", K(ret));
   } else if (OB_FAIL(ls_freeze_all_unit_(ls, abs_timeout_ts, source))) {
+    LOG_WARN("local log stream freeze all unit failed", K(ret));
   }
 
   if (OB_SUCC(ret)) {
     freezer_stat_.add_freeze_event();
   }
   if (OB_TMP_FAIL(unset_freezing_(OB_FAIL(ret)))) {
+    LOG_WARN("unset global freeze failed", KR(tmp_ret));
   }
 
   LOG_INFO("freeze_all finished", KR(ret), K(abs_timeout_ts));
@@ -383,6 +394,7 @@ int ObMemstoreFreezer::tablet_freeze(const common::ObTabletID &tablet_id,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("[MemstoreFreezer] ls service is null", KR(ret));
   } else if (OB_FAIL(ls_srv->get_ls(ls))) {
+    LOG_WARN("[MemstoreFreezer] fail to get local ls", K(ret));
   } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("[MemstoreFreezer] local ls is null", KR(ret));
@@ -407,16 +419,20 @@ int ObMemstoreFreezer::check_and_freeze_normal_data_(ObMemstoreFreezeCtx &ctx)
   int tmp_ret = OB_SUCCESS;
   bool need_freeze = false;
   if (OB_FAIL(get_freeze_trigger_(ctx))) {
+    LOG_WARN("[MemstoreFreezer] fail to get minor freeze trigger", KR(ret));
   } else if (OB_FAIL(get_memory_usage_(ctx))) {
+    LOG_WARN("[MemstoreFreezer] fail to get mem usage", KR(ret));
   } else {
     need_freeze = need_freeze_(ctx);
     log_frozen_memstore_info_if_need_(ctx);
   }
   // must out of the lock, to make sure there is no deadlock, just because of global freeze hung.
   if (OB_TMP_FAIL(do_major_if_need_(need_freeze))) {
+    LOG_WARN("[MemstoreFreezer] fail to do major freeze", K(tmp_ret));
   }
   if (need_freeze) {
     if (OB_TMP_FAIL(do_minor_freeze_data_(ctx))) {
+      LOG_WARN("[MemstoreFreezer] fail to do minor freeze", K(tmp_ret));
     }
   }
   return ret;
@@ -451,9 +467,11 @@ int ObMemstoreFreezer::check_and_freeze_tx_data_()
                    K(cost_time));
     }
   } else if (OB_FAIL(get_tx_data_info_for_freeze_(frozen_tx_data_mem_used, active_tx_data_mem_used, need_re_freeze))) {
+    LOG_WARN("[MemstoreFreezer] get tx data mem used failed.", KR(ret));
   } else if (need_re_freeze || active_tx_data_mem_used > self_freeze_trigger_memory) {
     // trigger tx data self freeze
     if (OB_FAIL(post_tx_data_freeze_request_())) {
+      LOG_WARN("[MemstoreFreezer] fail to do tx data self freeze", KR(ret));
     }
 
     LOG_INFO("[MemstoreFreezer] Trigger Tx Data Table Self Freeze", STATISTIC_PRINT_MACRO);
@@ -466,6 +484,7 @@ int ObMemstoreFreezer::check_and_freeze_tx_data_()
       LOG_INFO("tx data use too much memory!!!", STATISTIC_PRINT_MACRO);
     } else if (OB_FAIL(get_tx_data_info_for_freeze_(
                    frozen_tx_data_mem_used, active_tx_data_mem_used, need_re_freeze, true /*for_statistic_print*/))) {
+      LOG_INFO("print statistic failed");
     } else {
       LOG_INFO("TxData Memory Statistic : ", STATISTIC_PRINT_MACRO);
     }
@@ -492,6 +511,7 @@ int ObMemstoreFreezer::get_tx_data_info_for_freeze_(int64_t &tx_data_frozen_mem_
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("[MemstoreFreezer] ls service is null", KR(ret));
   } else if (OB_FAIL(ls_srv->get_ls(ls))) {
+    LOG_WARN("[MemstoreFreezer] fail to get local log stream", KR(ret));
   } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("[MemstoreFreezer] local log stream is null", KR(ret));
@@ -499,6 +519,7 @@ int ObMemstoreFreezer::get_tx_data_info_for_freeze_(int64_t &tx_data_frozen_mem_
     need_re_freeze = true;
   } else if (OB_FAIL(get_ls_tx_data_memory_info_(
                  ls, tx_data_frozen_mem_used, tx_data_active_mem_used, for_statistic_print))) {
+    LOG_WARN("[MemstoreFreezer] fail to get tx data memory used in local log stream", KR(ret));
   } else {
     // Values were populated by the single local log stream.
   }
@@ -520,14 +541,17 @@ int ObMemstoreFreezer::get_ls_tx_data_memory_info_(ObLS *ls,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("[MemstoreFreezer] get ls tx data mem used failed.", KR(ret));
   } else if (OB_FAIL(ls->get_tablet_svr()->get_tx_data_memtable_mgr(mgr_handle))) {
+    LOG_WARN("[MemstoreFreezer] get tx data memtable mgr failed.", KR(ret));
   } else if (OB_ISNULL(memtable_mgr
                        = static_cast<ObTxDataMemtableMgr *>(mgr_handle.get_memtable_mgr()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("[MemstoreFreezer] tx data memtable mgr is unexpected nullptr.", KR(ret));
   } else if (OB_FAIL(memtable_mgr->get_all_memtables(memtable_handles))) {
+    LOG_WARN("get active memtable from tx data memtable mgr failed.", KR(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < memtable_handles.count(); i++) {
       if (OB_FAIL(memtable_handles.at(i).get_tx_data_memtable(memtable))) {
+        LOG_ERROR("get tx data memtable failed.", KR(ret));
       } else if (OB_ISNULL(memtable)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("unexpected nullptr of tx data memtable", KR(ret));
@@ -578,6 +602,7 @@ int ObMemstoreFreezer::check_and_freeze_mds_table_()
     } else if (hold_memory >= trigger_freeze_memory) {
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(post_mds_table_freeze_request_())) {
+        LOG_WARN("[MemstoreFreezer] fail to do mds table self freeze", K(tmp_ret));
       }
 
       LOG_INFO(
@@ -688,14 +713,17 @@ int ObMemstoreFreezer::check_and_do_freeze()
   } else {
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(check_and_freeze_normal_data_(ctx))) {
+      LOG_WARN("[MemstoreFreezer] check and freeze normal data failed.", KR(tmp_ret));
     }
 
     tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(check_and_freeze_tx_data_())) {
+      LOG_WARN("[MemstoreFreezer] check and freeze tx data failed.", KR(tmp_ret));
     }
 
     tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(check_and_freeze_mds_table_())) {
+      LOG_WARN("[MemstoreFreezer] check and freeze mds table failed.", KR(tmp_ret));
     }
   }
 
@@ -714,6 +742,7 @@ int ObMemstoreFreezer::retry_failed_major_freeze_(bool &triggered)
   if (get_retry_major_info().is_valid()) {
     LOG_INFO("A major freeze is needed due to previous failure");
     if (OB_FAIL(do_major_freeze_(get_retry_major_info().frozen_scn_))) {
+      LOG_WARN("major freeze failed", K(ret));
     }
     triggered = true;
   }
@@ -838,6 +867,7 @@ int ObMemstoreFreezer::set_memory_limit(const int64_t lower_limit,
       memstore_info_.is_loaded_ = true;
       memstore_info_.get_freeze_ctx(ctx);
       if (OB_FAIL(get_freeze_trigger_(ctx))) {
+        LOG_WARN("[MemstoreFreezer] fail to get minor freeze trigger", KR(ret));
       }
       if (OB_SUCC(ret)) {
         LOG_INFO("[MemstoreFreezer] set memory limit",
@@ -847,8 +877,7 @@ int ObMemstoreFreezer::set_memory_limit(const int64_t lower_limit,
                  "memstore_freeze_trigger_limit", ctx.memstore_freeze_trigger_,
                  "memory_budget", lib::get_memory_budget(),
                  "memstore_quota_used",
-                 share::server_service<share::ObSharedMemAllocMgr>()
-                     ->memstore_allocator().get_memstore_quota_used());
+                 share::g_mp->shared_mem_alloc_mgr()->memstore_allocator().get_memstore_quota_used());
       }
     }
   }
@@ -892,6 +921,7 @@ bool ObMemstoreFreezer::is_replay_pending_log_too_large(const int64_t pending_si
                                               memstore_limit,
                                               unused,
                                               false/* not force refresh */))) {
+    LOG_WARN("get memstore condition failed", K(ret));
   } else {
     int64_t memstore_left = memstore_limit - memstore_quota_used - REPLAY_RESERVE_MEMSTORE_BYTES;
     memstore_left = (memstore_left > 0 ? memstore_left : 0);
@@ -920,6 +950,7 @@ int ObMemstoreFreezer::get_memstore_condition(int64_t &active_memstore_used,
                                                memstore_limit,
                                                freeze_cnt,
                                                force_refresh))) {
+    LOG_WARN("get memstore used failed", K(ret));
   }
   return ret;
 }
@@ -962,7 +993,9 @@ int ObMemstoreFreezer::get_memstore_condition_(
       LOG_INFO("[MemstoreFreezer] runtime is unavailable", KR(ret));
     } else if (FALSE_IT(memstore_info_.get_freeze_ctx(ctx))) {
     } else if (OB_FAIL(get_memory_usage_(ctx))) {
+      LOG_WARN("[MemstoreFreezer] failed to get memory usage", KR(ret));
     } else if (OB_FAIL(get_freeze_trigger_(ctx))) {
+      LOG_WARN("[MemstoreFreezer] fail to get minor freeze trigger", KR(ret));
     } else {
       memstore_limit = ctx.mem_memstore_limit_;
       active_memstore_used = ctx.active_memstore_used_;
@@ -1045,6 +1078,7 @@ int ObMemstoreFreezer::get_memory_stat_(ObMemstoreStatistic &stat)
   ObMemstoreFreezeCtx ctx;
   memstore_info_.get_freeze_ctx(ctx);
   if (OB_FAIL(get_freeze_trigger_(ctx))) {
+    LOG_WARN("[MemstoreFreezer] get minor freeze trigger error", KR(ret));
   } else {
     active_memstore_used = memstore_allocator.get_active_memstore_used();
     memstore_quota_used = memstore_allocator.get_memstore_quota_used();
@@ -1101,6 +1135,7 @@ int ObMemstoreFreezer::check_memstore_full_(bool &last_result,
         LOG_INFO("[MemstoreFreezer] runtime is unavailable", KR(ret));
       } else if (FALSE_IT(memstore_info_.get_freeze_ctx(ctx))) {
       } else if (OB_FAIL(get_memory_usage_(ctx))) {
+        LOG_WARN("[MemstoreFreezer] fail to get mem usage", KR(ret));
       } else {
         is_out_of_mem = (ctx.memstore_quota_used_ > ctx.mem_memstore_limit_ - reserved_memstore);
       }
@@ -1123,6 +1158,7 @@ int ObMemstoreFreezer::check_memstore_full_internal(bool &is_out_of_mem)
                                    last_check_timestamp,
                                    is_out_of_mem,
                                    false /* does not from user */))) {
+    LOG_WARN("check memstore full failed", K(ret));
   }
   return ret;
 }
@@ -1136,6 +1172,7 @@ int ObMemstoreFreezer::check_memstore_full(bool &is_out_of_mem)
                                    last_check_timestamp,
                                    is_out_of_mem,
                                    true /* from user */))) {
+    LOG_WARN("check memstore full failed", K(ret));
   }
   return ret;
 }
@@ -1153,7 +1190,9 @@ bool ObMemstoreFreezer::need_major_freeze()
       // do nothing
     } else if (FALSE_IT(memstore_info_.get_freeze_ctx(ctx))) {
     } else if (OB_FAIL(get_freeze_trigger_(ctx))) {
+      LOG_WARN("fail to get minor freeze trigger", K(ret));
     } else if (OB_FAIL(get_memory_usage_(ctx))) {
+      LOG_WARN("fail to get mem usage", K(ret));
     } else {
       bool_ret = need_freeze_(ctx);
       if (bool_ret) {
@@ -1190,6 +1229,7 @@ int ObMemstoreFreezer::async_freeze_(const ObMemstoreFreezeArg &arg)
       int ret = OB_SUCCESS;
       SERVER_MODULE_SCOPE {
         if (OB_FAIL(dispatch_freeze(req))) {
+          LOG_WARN("[MemstoreFreezer] async global freeze failed", KR(ret), K(req));
         }
       }
     });
@@ -1214,6 +1254,7 @@ int ObMemstoreFreezer::post_freeze_request_(
     arg.try_frozen_scn_ = try_frozen_scn;
     LOG_INFO("[MemstoreFreezer] post local freeze request", K(arg));
     if (OB_FAIL(async_freeze_(arg))) {
+      LOG_WARN("[MemstoreFreezer] fail to post async freeze request", K(arg), KR(ret));
     }
     LOG_INFO("[MemstoreFreezer] after freeze at remote");
   }
@@ -1230,6 +1271,7 @@ int ObMemstoreFreezer::post_tx_data_freeze_request_()
     ObMemstoreFreezeArg arg;
     arg.freeze_type_ = ObFreezeType::TX_DATA_TABLE_FREEZE;
     if (OB_FAIL(async_freeze_(arg))) {
+      LOG_WARN("[MemstoreFreezer] fail to post async freeze request", K(arg), KR(ret));
     }
   }
   return ret;
@@ -1245,6 +1287,7 @@ int ObMemstoreFreezer::post_mds_table_freeze_request_()
     ObMemstoreFreezeArg arg;
     arg.freeze_type_ = ObFreezeType::MDS_TABLE_FREEZE;
     if (OB_FAIL(async_freeze_(arg))) {
+      LOG_WARN("[MemstoreFreezer] fail to post async freeze request", K(arg), KR(ret));
     }
   }
   return ret;
@@ -1293,6 +1336,7 @@ int ObMemstoreFreezer::print_memory_usage(
     ret = OB_NOT_INIT;
     LOG_WARN("[MemstoreFreezer] runtime controller not init", KR(ret));
   } else if (OB_FAIL(get_memory_stat_(stat))) {
+    LOG_WARN("[MemstoreFreezer] fail to get memory statistics", KR(ret));
   } else {
     ret = databuff_printf(print_buf, buf_len, pos,
                           "[MEMORY] "
@@ -1333,6 +1377,7 @@ int ObMemstoreFreezer::get_global_frozen_scn_(int64_t &frozen_scn)
     ret = OB_NOT_INIT;
     LOG_WARN("major freeze coordinator is not configured", KR(ret));
   } else if (OB_FAIL(major_freeze_coordinator->get_frozen_scn(tmp_frozen_scn))) {
+    LOG_WARN("get_frozen_scn failed", KR(ret));
   } else {
     frozen_scn = tmp_frozen_scn.get_val_for_tx();
   }
@@ -1422,6 +1467,7 @@ int ObMemstoreFreezer::do_major_if_need_(const bool need_freeze)
   bool need_major = false;
   bool major_triggered = false;
   if (OB_TMP_FAIL(retry_failed_major_freeze_(major_triggered))) {
+    LOG_WARN("fail to do major freeze due to previous failure", K(tmp_ret));
   }
   if (!memstore_info_.is_loaded_) {
     // do nothing
@@ -1431,6 +1477,7 @@ int ObMemstoreFreezer::do_major_if_need_(const bool need_freeze)
   } else if (!is_major_freeze_turn_()) {
     // do nothing
   } else if (OB_FAIL(get_global_frozen_scn_(frozen_scn))) {
+    LOG_WARN("fail to get global frozen version", K(ret));
   } else if (0 != frozen_scn && OB_FAIL(memstore_info_.update_frozen_scn(frozen_scn))) {
     LOG_WARN("fail to update frozen version", K(ret), K(frozen_scn), K_(memstore_info));
   } else {
@@ -1441,6 +1488,7 @@ int ObMemstoreFreezer::do_major_if_need_(const bool need_freeze)
   }
   if (need_major) {
     if (OB_FAIL(do_major_freeze_(curr_frozen_scn))) {
+      LOG_WARN("[MemstoreFreezer] fail to do major freeze", K(tmp_ret));
     } else {
       // do nothing
     }
@@ -1454,6 +1502,7 @@ int ObMemstoreFreezer::do_major_freeze_(const int64_t try_frozen_scn)
   LOG_INFO("A major freeze is needed", K(try_frozen_scn));
   if (OB_FAIL(post_freeze_request_(MAJOR_FREEZE,
                                    try_frozen_scn))) {
+    LOG_WARN("major freeze failed", K(ret), K_(memstore_info));
   }
 
   return ret;
@@ -1497,6 +1546,7 @@ int ObMemstoreFreezer::update_frozen_scn(const int64_t frozen_scn)
   if (!memstore_info_.is_loaded_) {
     // do nothing
   } else if (OB_FAIL(memstore_info_.update_frozen_scn(frozen_scn))) {
+    LOG_WARN("update frozen scn failed", K(ret), K(frozen_scn));
   }
   return ret;
 }
@@ -1704,6 +1754,7 @@ void* ObMemstoreAllocator::alloc(AllocHandle& handle, int64_t size, const int64_
 
   bool is_out_of_mem = false;
   if (!handle.is_id_valid()) {
+    COMMON_LOG(TRACE, "MTALLOC.first_alloc", KP(&handle.mt_));
     LockGuard guard(lock_);
     if (handle.is_frozen()) {
       ret = OB_EAGAIN;
@@ -1722,6 +1773,7 @@ void* ObMemstoreAllocator::alloc(AllocHandle& handle, int64_t size, const int64_
     storage::ObMemstoreFreezer *freezer = nullptr;
     if (FALSE_IT(freezer = ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>())) {
     } else if (OB_FAIL(freezer->check_memstore_full_internal(is_out_of_mem))) {
+      COMMON_LOG(ERROR, "fail to check memory limit", K(ret), K(1UL));
     }
   }
 
@@ -1752,6 +1804,7 @@ int ObMemstoreAllocator::set_memstore_threshold_without_lock()
   storage::ObMemstoreFreezer *freezer = nullptr;
   if (FALSE_IT(freezer = ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>())) {
   } else if (OB_FAIL(freezer->get_memstore_limit(memstore_threshold))) {
+    COMMON_LOG(WARN, "failed to get_memstore_limit", K(ret));
   } else {
     throttle_tool_->set_resource_limit<ObMemstoreAllocator>(memstore_threshold);
   }

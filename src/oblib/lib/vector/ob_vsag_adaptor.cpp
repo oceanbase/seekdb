@@ -225,6 +225,7 @@ int HnswIndexHandler::build_index(const vsag::DatasetPtr &base)
   try {
     tl::expected<std::vector<int64_t>, Error> result = index_->Build(base);
     if (result.has_value()) {
+      LOG_DEBUG("build index success");
     } else {
       ret = vsag_errcode2ob(result.error().type);
     }
@@ -306,6 +307,7 @@ int HnswIndexHandler::get_extra_info_by_ids(const int64_t *ids, int64_t count,
   int ret = OB_SUCCESS;
   tl::expected<void, Error> result = index_->GetExtraInfoByIds(ids, count, extra_infos);
   if (result.has_value()) {
+    LOG_DEBUG("get_extra_info_by_ids success", KP(ids), K(count), KP(extra_infos));
   } else {
     ret = vsag_errcode2ob(result.error().type);
   }
@@ -317,6 +319,7 @@ int HnswIndexHandler::get_vid_bound(int64_t &min_vid, int64_t &max_vid)
   int ret = OB_SUCCESS;
   int64_t element_cnt = index_->GetNumElements();
   if (element_cnt == 0) {
+    LOG_TRACE("num elements is zero");
   } else {
     tl::expected<std::pair<int64_t, int64_t>, Error> result = index_->GetMinAndMaxId();
     if (result.has_value()) {
@@ -622,12 +625,15 @@ int construct_vsag_create_param(
   int64_t buff_size = 0;
   if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos, "{\"dim\":%d",
                               int(dim)))) {
+    LOG_WARN("failed to fill result_param_str", K(ret), K(dim));
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos,
                                      ",\"dtype\":\"%s\"",
                                      dtype))) {
+    LOG_WARN("failed to fill result_param_str", K(ret), K(dtype));
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos,
                                      ",\"metric_type\":\"%s\"",
                                      metric))) {
+    LOG_WARN("failed to fill result_param_str", K(ret), K(metric));
   } else if (extra_info_size > 0 &&
              OB_FAIL(databuff_printf(result_param_str, buf_len, pos,
                                  ",\"extra_info_size\": %d",
@@ -635,12 +641,15 @@ int construct_vsag_create_param(
     LOG_WARN("failed to fill result_param_str", K(ret), K(extra_info_size));
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos,
                                  ",\"use_old_serial_format\":false"))) {
+    LOG_WARN("failed to fill result_param_str", K(ret), K(extra_info_size));
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos,
                                      ",\"%s\":{",
                                      index_type_str))) {
+    LOG_WARN("failed to fill result_param_str", K(ret), K(index_type_str));
   } else if (OB_FAIL(databuff_printf(
                  result_param_str, buf_len, pos, "\"ef_construction\":%d",
                  ef_construction))) {
+    LOG_WARN("failed to fill result_param_str", K(ret), K(ef_construction));
   } else if (! is_hgraph_type && OB_FAIL(databuff_printf(result_param_str,
                                  buf_len, pos, ",\"ef_search\":%d",
                                  ef_search))) {
@@ -648,6 +657,7 @@ int construct_vsag_create_param(
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos,
                                      ",\"max_degree\":%d",
                                      max_degree))) {
+    LOG_WARN("failed to fill result_param_str", K(ret), K(max_degree));
   } else if (is_hgraph_type &&
       OB_FAIL(databuff_printf(
           result_param_str, buf_len, pos,
@@ -688,6 +698,7 @@ int construct_vsag_create_param(
     LOG_WARN("failed to fill result_param_str", K(ret), K(bq_use_fht));
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos,
                                      "}}"))) {
+    LOG_WARN("failed to fill result_param_str", K(ret));
   }
   if (OB_SUCC(ret)) {
     LOG_INFO("build param", K(create_type), KCSTRING(result_param_str), K(lbt()));
@@ -708,19 +719,28 @@ int construct_vsag_sindi_create_param(uint8_t create_type, const char *dtype, co
   // TODO(ningxin.ning): adapt vsag serial with seek
   const bool deserialize_without_footer = true;
   if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos, "{\"dtype\":\"%s\"", dtype))) {
+    LOG_WARN("failed to fill result_param_str", K(ret), K(dtype));
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos, ",\"metric_type\":\"%s\"", metric))) {
+    LOG_WARN("failed to fill result_param_str", K(ret), K(metric));
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos, ",\"dim\": 1024"))) {
+    LOG_WARN("failed to fill result_param_str", K(ret));
   } else if (extra_info_size > 0 &&
              OB_FAIL(databuff_printf(result_param_str, buf_len, pos, ",\"extra_info_size\": %d", extra_info_size))) {
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos, ",\"%s\":{", index_type_str))) {
+    LOG_WARN("failed to fill result_param_str", K(ret), K(index_type_str));
   } else if (OB_FAIL(databuff_printf(
                  result_param_str, buf_len, pos, "\"use_reorder\":%s", use_reorder ? "true" : "false"))) {
+    LOG_WARN("failed to fill result_param_str", K(ret), K(use_reorder));
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos, ",\"doc_prune_ratio\":%f", doc_prune_ratio))) {
+    LOG_WARN("failed to fill result_param_str", K(ret), K(doc_prune_ratio));
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos, ",\"window_size\":%d", window_size))) {
+    LOG_WARN("failed to fill result_param_str", K(ret), K(window_size));
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos,
                                  ",\"deserialize_without_footer\":%s",
                                  (deserialize_without_footer ? "true": "false")))) {
+    LOG_WARN("failed to fill result_param_str", K(ret), K(extra_info_size));
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos, "}}"))) {
+    LOG_WARN("failed to fill result_param_str", K(ret));
   }
   if (OB_SUCC(ret)) {
     LOG_INFO("build param", K(create_type), KCSTRING(result_param_str), K(lbt()));
@@ -748,14 +768,17 @@ int construct_vsag_search_param(uint8_t create_type,
                         buf_len, 
                         pos, 
                         "{\"%s\":{", index_type_str))) {
+    LOG_WARN("failed to fill result_param_str", K(ret), K(index_type_str));
   } else if (OB_FAIL(databuff_printf(result_param_str, 
                         buf_len, 
                         pos, 
                         "\"ef_search\":%d", int(ef_search)))) {
+    LOG_WARN("failed to fill result_param_str", K(ret), K(index_type_str));
   } else if (OB_FAIL(databuff_printf(result_param_str, 
                         buf_len, 
                         pos, 
                         ",\"skip_ratio\":%f", 0.7))) {
+    LOG_WARN("failed to fill result_param_str", K(ret), K(index_type_str));
   } else if (is_hgraph_type && OB_FAIL(databuff_printf(result_param_str, 
                         buf_len, 
                         pos, 
@@ -765,6 +788,7 @@ int construct_vsag_search_param(uint8_t create_type,
                         buf_len, 
                         pos, 
                         "}}"))) {
+    LOG_WARN("failed to fill result_param_str", K(ret), K(index_type_str));
   }
   if (OB_SUCC(ret)) {
     LOG_TRACE("search param", KCSTRING(result_param_str), K(lbt()));
@@ -784,14 +808,17 @@ int construct_vsag_sindi_search_param(float query_prune_ratio, uint64_t n_candid
                         buf_len, 
                         pos, 
                         "{\"%s\":{", index_type_str))) {
+    LOG_WARN("failed to fill result_param_str", K(ret), K(index_type_str));
   } else if (OB_FAIL(databuff_printf(result_param_str, 
                         buf_len, 
                         pos, 
                         "\"query_prune_ratio\":%f", query_prune_ratio))) {
+    LOG_WARN("failed to fill result_param_str", K(ret), K(index_type_str));
   } else if (OB_FAIL(databuff_printf(result_param_str, 
                         buf_len, 
                         pos, 
                         ",\"n_candidate\":%lu}}", n_candidate))) {
+    LOG_WARN("failed to fill result_param_str", K(ret), K(index_type_str));
   }
   if (OB_SUCC(ret)) {
     LOG_TRACE("search param", KCSTRING(result_param_str), K(lbt()));
@@ -828,6 +855,7 @@ int create_index(VectorIndexPtr &index_handler,
         uint8_t(index_type), dtype, metric, dim, max_degree, 
         ef_construction, ef_search, allocator, extra_info_size,
         refine_type, bq_bits_query, bq_use_fht, result_param_str))) {
+      LOG_WARN("construct_vsag_create_param fail", K(ret), K(index_type));
     } else {
       const std::string input_json_str(result_param_str);
       tl::expected<std::shared_ptr<Index>, Error> index = vsag::Factory::CreateIndex(index_type_str, input_json_str, vsag_allocator);
@@ -883,6 +911,7 @@ int validate_create_index(const CreateIndexParam &param, std::string &err_msg)
                                                     param.doc_prune_ratio_,
                                                     param.window_size_,
                                                     result_param_str))) {
+        LOG_WARN("construct_vsag_sindi_create_param fail", K(ret), K(param.index_type_));
       }
     } else {
       int max_degree = param.max_degree_;
@@ -891,6 +920,7 @@ int validate_create_index(const CreateIndexParam &param, std::string &err_msg)
           uint8_t(param.index_type_), param.dtype_, param.metric_, param.dim_, max_degree,
           param.ef_construction_, param.ef_search_, param.allocator_, param.extra_info_size_,
           param.refine_type_, param.bq_bits_query_, param.bq_use_fht_, result_param_str))) {
+        LOG_WARN("construct_vsag_create_param fail", K(ret), K(param.index_type_));
       }
     }
     if (OB_SUCC(ret)) {
@@ -936,6 +966,7 @@ int create_index(VectorIndexPtr &index_handler, IndexType index_type, const char
             doc_prune_ratio,
             window_size,
             result_param_str))) {
+      LOG_WARN("construct_vsag_create_param fail", K(ret), K(index_type));
     } else {
       const std::string input_json_str(result_param_str);
       tl::expected<std::shared_ptr<Index>, Error> index =
@@ -989,6 +1020,7 @@ int build_index(VectorIndexPtr &index_handler, float *vector_list,
       dataset->ExtraInfos(extra_infos);
     }
     if (OB_FAIL(hnsw->build_index(dataset))) {
+      LOG_WARN("[OBVSAG] build index error happend", K(ret));
     }
   }
   return ret;
@@ -1019,6 +1051,7 @@ int build_index(VectorIndexPtr &index_handler, uint32_t *lens, uint32_t *dims, f
       dataset->ExtraInfos(extra_info);
     }
     if (OB_FAIL(handler->build_index(dataset))) {
+      LOG_WARN("[OBVSAG] build index error happend", K(ret));
     }
   }
   return ret;
@@ -1045,6 +1078,7 @@ int add_index(VectorIndexPtr &index_handler, float *vector,
       incremental->ExtraInfos(extra_info);
     }
     if (OB_FAIL(hnsw->add_index(incremental))) {
+      LOG_WARN("[OBVSAG] add index error happend", K(ret));
     }
   }
   return ret;
@@ -1092,6 +1126,7 @@ int add_index(VectorIndexPtr &index_handler, uint32_t *lens, uint32_t *dims, flo
         incremental->ExtraInfos(extra_info);
       }
       if (OB_FAIL(hnsw->add_index(incremental))) {
+        LOG_WARN("[OBVSAG] add index error happend", K(ret));
       }
     }
   }
@@ -1128,6 +1163,7 @@ int cal_distance_by_id(VectorIndexPtr &index_handler,
   } else {
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
     if (OB_FAIL(hnsw->cal_distance_by_id(vector, ids, count, distances))) {
+      LOG_WARN("[OBVSAG] knn search error happend", K(ret));
     }
   }
   return ret;
@@ -1143,6 +1179,7 @@ int cal_distance_by_id(VectorIndexPtr &index_handler, uint32_t len, uint32_t *di
   } else {
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
     if (OB_FAIL(hnsw->cal_distance_by_id(len, dims, vals, ids, count, distances))) {
+      LOG_WARN("[OBVSAG] knn search error happend", K(ret));
     }
   }
   return ret;
@@ -1164,6 +1201,7 @@ int get_vid_bound(VectorIndexPtr &index_handler,
       max_vid = 0;
     } else {
       if (OB_FAIL(hnsw->get_vid_bound(min_vid, max_vid))) {
+        LOG_WARN("[OBVSAG] get vid bound error happend", K(ret));
       }
     }
   }
@@ -1197,6 +1235,7 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
       ef_search = ef_search < ef_search_threshold ? ef_search : ef_search_threshold;
     }
     if (OB_FAIL(construct_vsag_search_param(uint8_t(index_type), ef_search, use_extra_info_filter, result_param_str))) {
+      LOG_WARN("[OBVSAG] construct_vsag_search_param fail", K(ret), K(index_type), K(ef_search), K(use_extra_info_filter), K(topk));
     } else {
       const std::string input_json_string(result_param_str);
       DatasetPtr query = vsag::Dataset::Make();
@@ -1204,6 +1243,7 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
       if (OB_FAIL(hnsw->knn_search(query, topk, input_json_string, dist, ids,
                                    result_size, valid_ratio, index_type, bitmap,
                                    reverse_filter, need_extra_info, extra_infos, allocator, distance_threshold))) {
+        LOG_WARN("[OBVSAG] knn search error happend", K(ret), K(index_type), KCSTRING(result_param_str));
       }
     }
   }
@@ -1237,6 +1277,7 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
       ef_search = ef_search < ef_search_threshold ? ef_search : ef_search_threshold;
     }
     if (OB_FAIL(construct_vsag_search_param(uint8_t(index_type), ef_search, use_extra_info_filter, result_param_str))) {
+      LOG_WARN("[OBVSAG] construct_vsag_search_param fail", K(ret), K(index_type), K(ef_search), K(use_extra_info_filter), K(topk));
     } else {
       const std::string input_json_string(result_param_str);
       DatasetPtr query = vsag::Dataset::Make();
@@ -1245,6 +1286,7 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
                             result_size, valid_ratio, index_type, bitmap,
                             reverse_filter, need_extra_info, extra_infos, iter_ctx,
                             is_last_search, allocator))) {
+        LOG_WARN("[OBVSAG] knn search error happend", K(ret), K(index_type), K(topk), KCSTRING(result_param_str));
       }
     }
   }
@@ -1266,6 +1308,7 @@ int knn_search(obvsag::VectorIndexPtr &index_handler, uint32_t len, uint32_t *di
     const IndexType index_type = static_cast<IndexType>(hnsw->get_index_type());
     char result_param_str[1024]= {0};
     if (OB_FAIL(construct_vsag_sindi_search_param(query_prune_ratio, n_candidate, result_param_str))) {
+      LOG_WARN("[OBVSAG] construct_vsag_search_param fail", K(ret), K(index_type), K(n_candidate));
     } else if (len == 0) {
       result_size = 0;
     } else {
@@ -1279,6 +1322,7 @@ int knn_search(obvsag::VectorIndexPtr &index_handler, uint32_t len, uint32_t *di
       if (OB_FAIL(hnsw->knn_search(query, topk, input_json_string, result_dist, result_ids,
                             result_size, valid_ratio, index_type, bitmap,
                             reverse_filter, need_extra_info, extra_infos, allocator))) {
+        LOG_WARN("[OBVSAG] knn search error happend", K(ret), K(index_type), KCSTRING(result_param_str));
       }
     }
   }
@@ -1342,12 +1386,14 @@ int fdeserialize(VectorIndexPtr &index_handler,
               doc_prune_ratio,
               window_size,
               result_param_str))) {
+        LOG_WARN("construct_vsag_create_param fail", K(ret), K(index_type));
       }
     } else {
       if (OB_FAIL(construct_vsag_create_param(
         uint8_t(index_type), dtype, metric, dim, max_degree,
         ef_construction, ef_search, hnsw->get_allocator(),
         extra_info_size, refine_type, bq_bits_query, bq_use_fht, result_param_str))) {
+        LOG_WARN("construct_vsag_create_param fail", K(ret), K(index_type));
       } 
     }
     if (OB_FAIL(ret)) {
@@ -1406,6 +1452,7 @@ int get_extra_info_by_ids(VectorIndexPtr &index_handler,
   } else {
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
     if (OB_FAIL(hnsw->get_extra_info_by_ids(ids, count, extra_infos))) {
+      LOG_WARN("[OBVSAG] get_extra_info_by_ids error happend", K(ret));
     }
   }
   return ret;
@@ -1430,6 +1477,7 @@ int immutable_optimize(VectorIndexPtr& index_handler)
   } else {
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
     if (OB_FAIL(hnsw->immutable_optimize())) {
+      LOG_WARN("[OBVSAG] immutable_optimize error happend", K(ret));
     }
   }
   return ret;

@@ -114,7 +114,9 @@ int ObColumnIndexArray::init(const int64_t count, const int64_t schema_rowkey_cn
     schema_rowkey_cnt_ = schema_rowkey_cnt;
   } else {
     if (OB_FAIL(array_.init(count, allocator))) {
+      LOG_WARN("failed to init array", K(ret), K(count));
     } else if (OB_FAIL(array_.prepare_allocate(count))) {
+      LOG_WARN("failed to pre alloc array", K(ret), K(count));
     }
   }
   return ret;
@@ -124,6 +126,7 @@ int ObColumnIndexArray::init_and_assign(const ObIArray<int32_t> &other, ObIAlloc
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(array_.init_and_assign(other, allocator))) {
+    STORAGE_LOG(WARN, "failed to assign from other array", K(ret), K(other));
   }
   return ret;
 }
@@ -321,15 +324,18 @@ int ObTableReadInfo::init(
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_pre_check(schema_column_count, schema_rowkey_cnt, cols_desc,
                              storage_cols_index, cols_param, cols_extend))) {
+    LOG_WARN("failed to pre check", K(ret));
   } else if (FALSE_IT(init_basic_info(schema_column_count, schema_rowkey_cnt,
       false/*is_global_index_table*/))) { // init basic info
   } else if (OB_FAIL(ObReadInfoStruct::prepare_arrays(allocator, cols_desc, cols_desc.count()))) {
+    LOG_WARN("failed to prepare arrays", K(ret), K(cols_desc.count()));
   } else if (nullptr != cols_param && OB_FAIL(cols_param_.init_and_assign(*cols_param, allocator))) {
     LOG_WARN("Fail to assign cols_param", K(ret));
   } else if (nullptr != cols_extend && OB_FAIL(cols_extend_.init_and_assign(*cols_extend, allocator))) {
     LOG_WARN("Fail to assign cols_extend", K(ret));
   } else if (FALSE_IT(inner_gene_cols_index_by_col_descs(schema_rowkey_cnt, cols_desc, storage_cols_index))) {
   } else if (OB_FAIL(init_datum_utils(allocator))) {
+    LOG_WARN("failed to init sequence read info & datum utils", K(ret));
   } else {
     need_truncate_filter_ = need_truncate_filter;
     is_inited_ = true;
@@ -384,8 +390,11 @@ int ObReadInfoStruct::prepare_arrays(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(cols_desc_.init_and_assign(cols_desc, allocator))) {
+    LOG_WARN("Fail to assign cols_desc", K(ret));
   } else if (OB_FAIL(cols_index_.init(out_cols_cnt, schema_rowkey_cnt_, allocator))) {
+    LOG_WARN("Fail to init cols_index", K(ret), K(out_cols_cnt));
   } else if (OB_FAIL(memtable_cols_index_.init(out_cols_cnt, schema_rowkey_cnt_, allocator))) {
+    LOG_WARN("Fail to init memtable_cols_index", K(ret), K(out_cols_cnt));
   }
   return ret;
 }
@@ -415,6 +424,7 @@ int ObTableReadInfo::init_datum_utils(common::ObIAllocator &allocator)
     }
   }
   if (OB_FAIL(datum_utils_.init(cols_desc_, schema_rowkey_cnt_, allocator))) {
+    STORAGE_LOG(WARN, "Failed to init datum utils", K(ret), K_(schema_rowkey_cnt));
   }
   return ret;
 }
@@ -456,12 +466,14 @@ int ObTableReadInfo::serialize(
               memtable_cols_index_.array_);
   if (OB_SUCC(ret)) {
     if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, cols_param_.count()))) {
+      LOG_WARN("Fail to encode column count", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < cols_param_.count(); ++i) {
       if (OB_ISNULL(cols_param_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", K(ret), K(i));
       } else if (OB_FAIL(cols_param_.at(i)->serialize(buf, buf_len, pos))) {
+        LOG_WARN("Fail to serialize column", K(ret));
       }
     }
   }
@@ -471,6 +483,7 @@ int ObTableReadInfo::serialize(
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(serialization::encode_bool(buf, buf_len, pos, need_truncate_filter_))) {
+      LOG_WARN("Fail to encode need truncate filter", K(ret));
     }
   }
   return ret;
@@ -496,14 +509,18 @@ int ObTableReadInfo::deserialize(
     ret = OB_VERSION_NOT_MATCH;
     LOG_WARN("table read info format version mismatch", K(ret), K_(format_version), K(READ_INFO_FORMAT_VERSION));
   } else if (OB_FAIL(cols_desc_.deserialize(buf, data_len, pos, allocator))) {
+    LOG_WARN("Fail to deserialize cols_desc", K(ret), K(data_len), K(pos));
   } else if (FALSE_IT(cols_index_.rowkey_mode_ = false)) {
   } else if (OB_FAIL(cols_index_.array_.deserialize(buf, data_len, pos, allocator))) {
+    LOG_WARN("Fail to deserialize cols_index", K(ret), K(data_len), K(pos));
   } else if (FALSE_IT(memtable_cols_index_.rowkey_mode_ = false)) {
   } else if (OB_FAIL(memtable_cols_index_.array_.deserialize(buf, data_len, pos, allocator))) {
+    LOG_WARN("Fail to deserialize memtable_cols_index_", K(ret), K(data_len), K(pos));
   }
   if (OB_SUCC(ret)) {
     int64_t column_param_cnt = 0;
     if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &column_param_cnt))) {
+      LOG_WARN("Fail to decode column count", K(ret));
     } else if (column_param_cnt > 0) {
       ObColumnParam **column = NULL;
       void *tmp_ptr  = NULL;
@@ -522,7 +539,9 @@ int ObTableReadInfo::deserialize(
             LOG_WARN("alloc failed", K(ret));
           } else if (FALSE_IT(cur_column = new (tmp_ptr) ObColumnParam(allocator))) {
           } else if (OB_FAIL(cur_column->deserialize(buf, data_len, pos))) {
+            LOG_WARN("Fail to deserialize column", K(ret));
           } else if (OB_FAIL(tmp_columns.push_back(cur_column))) {
+            LOG_WARN("Fail to add column", K(ret));
           }
         }
         if (OB_SUCC(ret) && OB_FAIL(cols_param_.init_and_assign(tmp_columns, allocator))) {
@@ -533,10 +552,12 @@ int ObTableReadInfo::deserialize(
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(cols_extend_.deserialize(buf, data_len, pos, allocator))) {
+      LOG_WARN("Fail to deserialize columns extend", K(ret), K(data_len), K(pos));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(serialization::decode_bool(buf, data_len, pos, &need_truncate_filter_))) {
+      LOG_WARN("Fail to decode need truncate filter", K(ret));
     }
   }
 
@@ -550,6 +571,7 @@ int ObTableReadInfo::deserialize(
       }
     }
     if (OB_FAIL(datum_utils_.init(cols_desc_, schema_rowkey_cnt_, allocator, false))) {
+      STORAGE_LOG(WARN, "Failed to init datum utils", K(ret), K_(schema_rowkey_cnt));
     } else {
       is_inited_ = true;
     }
@@ -660,8 +682,10 @@ int ObRowkeyReadInfo::init(
     init_basic_info(schema_column_count, schema_rowkey_cnt,
                     is_global_index_table); // init basic info
     if (OB_FAIL(prepare_arrays(allocator, rowkey_col_descs, out_cols_cnt))) {
+      LOG_WARN("failed to prepare arrays", K(ret), K(out_cols_cnt));
     } else if (OB_FAIL(datum_utils_.init(cols_desc_, schema_rowkey_cnt_,
                                          allocator))) {
+      STORAGE_LOG(WARN, "Failed to init datum utils", K(ret), K_(schema_rowkey_cnt));
     } else {
       is_inited_ = true;
     }
@@ -701,10 +725,14 @@ int ObRowkeyReadInfo::deep_copy(char *buf, const int64_t buf_len, ObRowkeyReadIn
     dst_value->rowkey_cnt_ = rowkey_cnt_;
     // can not deep copy cols param cuz ObColumnParam need an allocator on constructor for default value
     if (OB_FAIL(cols_desc_.deep_copy(buf, buf_len, pos, dst_value->cols_desc_))) {
+      LOG_WARN("fail to deep copy cols_desc array", K(ret));
     } else if (OB_FAIL(cols_index_.deep_copy(buf, buf_len, pos, dst_value->cols_index_))) {
+      LOG_WARN("fail to deep copy cols_index array", K(ret));
     } else if (OB_FAIL(memtable_cols_index_.deep_copy(buf, buf_len, pos, dst_value->memtable_cols_index_))) {
+      LOG_WARN("fail to deep copy memtable_cols_index array", K(ret));
     } else if (OB_FAIL(dst_value->datum_utils_.init(
         cols_desc_, schema_rowkey_cnt_, buf_len - pos, buf + pos))) {
+      LOG_WARN("fail to init datum utilities on fixed memory buf", K(ret));
     } else {
       pos += datum_utils_.get_deep_copy_size();
       dst_value->is_inited_ = is_inited_;
@@ -749,12 +777,16 @@ int ObRowkeyReadInfo::deserialize(
     ret = OB_VERSION_NOT_MATCH;
     LOG_WARN("rowkey read info format version mismatch", K(ret), K_(format_version), K(READ_INFO_FORMAT_VERSION));
   } else if (OB_FAIL(cols_desc_.deserialize(buf, data_len, pos, allocator))) {
+    LOG_WARN("Fail to deserialize cols_desc", K(ret), K(data_len), K(pos));
   } else if (OB_FAIL(cols_index_.deserialize(buf, data_len, pos, allocator))) {
+    LOG_WARN("Fail to deserialize cols_index", K(ret), K(data_len), K(pos));
   } else if (OB_FAIL(memtable_cols_index_.deserialize(buf, data_len, pos, allocator))) {
+    LOG_WARN("Fail to deserialize memtable_cols_index", K(ret), K(data_len), K(pos));
   }
 
   if (OB_SUCC(ret) && cols_desc_.count() > 0) {
     if (OB_FAIL(datum_utils_.init(cols_desc_, schema_rowkey_cnt_, allocator, false))) {
+      STORAGE_LOG(WARN, "Failed to init datum utils", K(ret), K_(schema_rowkey_cnt));
     } else {
       is_inited_ = true;
     }

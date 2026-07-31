@@ -29,6 +29,7 @@ int ObDASGlobalLookupIter::inner_init(ObDASIterParam &param)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDASLookupIter::inner_init(param))) {
+    LOG_WARN("failed to init das lookup iter", K(ret));
   } else if (param.type_ != ObDASIterType::DAS_ITER_GLOBAL_LOOKUP) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("inner init das iter with bad param type", K(param), K(ret));
@@ -45,6 +46,7 @@ int ObDASGlobalLookupIter::inner_init(ObDASIterParam &param)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected empty global rowkey exprs", K(ret));
     } else if (OB_FAIL(rowkey_exprs_.assign(*lookup_param.rowkey_exprs_))) {
+      LOG_WARN("failed to assign rowkey exprs", K(ret));
     }
   }
   return ret;
@@ -55,7 +57,9 @@ int ObDASGlobalLookupIter::inner_reuse()
   int ret = OB_SUCCESS;
   // for global lookup, the reuse of index table will handled in TSC.
   if (OB_FAIL(data_table_iter_->reuse())) {
+    LOG_WARN("failed to reuse data table iter", K(ret));
   } else if (OB_FAIL(ObDASLookupIter::inner_reuse())) {
+    LOG_WARN("failed to reuse das lookup iter", K(ret));
   }
   index_ordered_idx_ = 0;
   return ret;
@@ -65,6 +69,7 @@ int ObDASGlobalLookupIter::inner_release()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDASLookupIter::inner_release())) {
+    LOG_WARN("failed to release das lookup iter", K(ret));
   }
   return ret;
 }
@@ -98,6 +103,7 @@ int ObDASGlobalLookupIter::add_rowkey()
                                           *eval_ctx_,
                                           partition_id,
                                           tablet_id))) {
+      LOG_WARN("failed to calc_part_and_tablet_id", K(ret), KPC(calc_part_id_));
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(das_ctx->extended_tablet_loc(*lookup_rtdef_->table_loc_,
@@ -105,13 +111,16 @@ int ObDASGlobalLookupIter::add_rowkey()
                                                     tablet_loc,
                                                     partition_id,
                                                     first_partition_id))) {
+      LOG_WARN("failed to get tablet loc by tablet_id", K(ret));
     } else if (OB_FAIL(merge_iter->create_das_task(tablet_loc, das_scan_op, reuse_das_op))) {
+      LOG_WARN("failed to create das task", K(ret));
     } else if (!reuse_das_op) {
       das_scan_op->set_scan_ctdef(lookup_ctdef_);
       das_scan_op->set_scan_rtdef(lookup_rtdef_);
       das_scan_op->set_can_part_retry(can_retry_);
       if (OB_NOT_NULL(attach_rtinfo_)) {
         if (OB_FAIL(pushdown_attach_task_to_das(*das_scan_op))) {
+          LOG_WARN("fail to pushdown attach task into das scan", K(ret));
         }
       }
     }
@@ -128,10 +137,12 @@ int ObDASGlobalLookupIter::add_rowkey()
     if (nullptr != index_ctdef->trans_info_expr_) {
       ObDatum *datum_ptr = nullptr;
       if (OB_FAIL(build_trans_info_datum(index_ctdef->trans_info_expr_, datum_ptr))) {
+        LOG_WARN("failed to build trans info datum", K(ret));
       } else if (OB_ISNULL(datum_ptr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected nullptr", K(ret));
       } else if (OB_FAIL(das_scan_op->trans_info_array_.push_back(datum_ptr))) {
+        LOG_WARN("failed to push back trans info array", K(ret), KPC(datum_ptr));
       }
     }
 
@@ -139,12 +150,15 @@ int ObDASGlobalLookupIter::add_rowkey()
     index_ordered_idx_++;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(build_lookup_range(lookup_range))) {
+      LOG_WARN("failed to build lookup range", K(ret));
     } else if (FALSE_IT(lookup_range.group_idx_ = group_idx)) {
     } else if (FALSE_IT(lookup_range.index_ordered_idx_ = index_ordered_idx_)) {
     } else if (OB_FAIL(scan_param.key_ranges_.push_back(lookup_range))) {
+      LOG_WARN("failed to push back lookup range", K(ret));
     } else {
       scan_param.is_get_ = true;
     }
+    LOG_DEBUG("build global lookup range", K(lookup_range), K(ret));
   }
 
   return ret;
@@ -162,6 +176,7 @@ int ObDASGlobalLookupIter::add_rowkeys(int64_t count)
     for(int i = 0; OB_SUCC(ret) && i < count; i++) {
       batch_info_guard.set_batch_idx(i);
       if(OB_FAIL(add_rowkey())) {
+        LOG_WARN("failed to add rowkey", K(ret), K(i));
       }
     }
   }
@@ -175,6 +190,7 @@ int ObDASGlobalLookupIter::do_index_lookup()
   OB_ASSERT(data_table_iter_->get_type() == DAS_ITER_MERGE);
   ObDASMergeIter *merge_iter = static_cast<ObDASMergeIter*>(data_table_iter_);
   if (OB_FAIL(merge_iter->do_table_scan())) {
+    LOG_WARN("failed to do global index lookup", K(ret));
   } else {
     merge_iter->set_merge_status(merge_iter->get_merge_type());
   }
@@ -247,7 +263,9 @@ int ObDASGlobalLookupIter::pushdown_attach_task_to_das(ObDASScanOp &target_op)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("attach ctdef or rtinfo is nullptr", K(ret), KPC(attach_ctdef_), KP(attach_rtinfo_));
   } else if (OB_FAIL(target_op.reserve_related_buffer(attach_rtinfo_->related_scan_cnt_))) {
+    LOG_WARN("reserve related buffer failed", K(ret), K(attach_rtinfo_->related_scan_cnt_));
   } else if (OB_FAIL(attach_related_taskinfo(target_op, attach_rtinfo_->attach_rtdef_))) {
+    LOG_WARN("attach related task info failed", K(ret));
   } else {
     target_op.set_attach_ctdef(attach_ctdef_);
     target_op.set_attach_rtdef(attach_rtinfo_->attach_rtdef_);
@@ -275,12 +293,14 @@ int ObDASGlobalLookupIter::attach_related_taskinfo(ObDASScanOp &target_op, ObDAS
     } else if (OB_FAIL(target_op.set_related_task_info(scan_ctdef,
                                                        scan_rtdef,
                                                        tablet_loc->tablet_id_))) {
+      LOG_WARN("set attach task info failed", K(ret), KPC(tablet_loc));
     } else {
       table_loc->is_reading_ = true;
     }
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < attach_rtdef->children_cnt_; ++i) {
       if (OB_FAIL(attach_related_taskinfo(target_op, attach_rtdef->children_[i]))) {
+        LOG_WARN("recursive attach related task info failed", K(ret), K(i));
       }
     }
   }

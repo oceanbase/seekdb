@@ -56,9 +56,11 @@ int MergeStoreRows::save(bool is_vectorized, int64_t size)
       for (int64_t i = 0; OB_SUCC(ret) && i < size; i++) {
         batch_info_guard.set_batch_idx(i);
         if (OB_FAIL(store_rows_[i].save_store_row(*exprs_, *eval_ctx_))) {
+          LOG_WARN("das merge iter failed to store rows", K(ret));
         }
       }
     } else if (OB_FAIL(store_rows_[0].save_store_row(*exprs_, *eval_ctx_))) {
+      LOG_WARN("das merge iter failed to store rows", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -155,6 +157,7 @@ int ObDASMergeIter::set_merge_status(MergeType merge_type)
     DASTaskIter task_iter = das_ref_->begin_task_iter();
     if (need_update_partition_id_) {
       if (OB_FAIL(update_output_tablet_id(*task_iter))) {
+        LOG_WARN("failed to update output tablet id", K(ret), K((*task_iter)->get_tablet_loc()->tablet_id_));
       }
     }
   } else {
@@ -193,6 +196,7 @@ int ObDASMergeIter::create_das_task(const ObDASTabletLoc *tablet_loc, ObDASScanO
     // reuse scan op
     reuse_op = true;
   } else if (OB_FAIL(das_ref_->create_das_task(tablet_loc, op_type, task_op))) {
+    LOG_WARN("das ref failed to create das task", K(ret));
   }
   if (OB_SUCC(ret)) {
     scan_op = static_cast<ObDASScanOp*>(task_op);
@@ -243,6 +247,7 @@ int ObDASMergeIter::rescan_das_task(ObDASScanOp *scan_op)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(das_ref_), K(scan_op), K(ret));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->rescan_das_task(*das_ref_, *scan_op))) {
+    LOG_WARN("failed to rescan das task", K(ret));
   }
   return ret;
 }
@@ -254,6 +259,7 @@ int ObDASMergeIter::do_table_scan()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr das ref", K(das_ref_), K(ret));
   } else if (OB_FAIL(das_ref_->execute_all_task())) {
+    LOG_WARN("failed to execute all das task", K(ret));
   } else {
     DASTaskIter task_iter = das_ref_->begin_task_iter();
     for (; OB_SUCC(ret) && !task_iter.is_end(); ++task_iter) {
@@ -262,6 +268,7 @@ int ObDASMergeIter::do_table_scan()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected das task nullptr", K(ret));
       } else if (OB_FAIL(das_tasks_arr_.push_back(das_task_ptr))) {
+        LOG_WARN("failed to push back das task ptr", K(ret));
       }
     } // for end
     LOG_DEBUG("[DAS ITER] merge iter do table scan", K(ref_table_id_), K(das_tasks_arr_.count()));
@@ -326,6 +333,7 @@ int ObDASMergeIter::inner_reuse()
   }
   if (OB_NOT_NULL(das_ref_)) {
     if (OB_FAIL(das_ref_->close_all_task())) {
+      LOG_WARN("das ref failed to close das task", K(ret));
     }
     das_ref_->reuse();
   }
@@ -348,6 +356,7 @@ int ObDASMergeIter::inner_release()
   }
   if (OB_NOT_NULL(das_ref_)) {
     if (OB_FAIL(das_ref_->close_all_task())) {
+      LOG_WARN("das ref failed to close das task", K(ret));
     }
     das_ref_->reset();
     das_ref_->~ObDASRef();
@@ -385,6 +394,7 @@ int ObDASMergeIter::inner_get_next_rows(int64_t &count, int64_t capacity)
   if (OB_UNLIKELY(first_get_row_)) {
     first_get_row_ = false;
   }
+  LOG_DEBUG("[DAS ITER] merge iter get next rows end", K(count), K(merge_type_), K(merge_state_arr_), K(ret));
   const ObBitVector *skip = nullptr;
   PRINT_VECTORIZED_ROWS(SQL, DEBUG, *eval_ctx_, *output_, count, skip);
   return ret;
@@ -481,6 +491,7 @@ int ObDASMergeIter::update_output_tablet_id(ObIDASTaskOp *output_das_task)
         expr->locate_datum_for_write(*eval_ctx_).set_int(output_id);
       }
       expr->set_evaluated_projected(*eval_ctx_);
+      LOG_TRACE("find the partition id expr in pdml table scan", K(ret), K(output_id), K(expr), KPC(tablet_loc));
     }
   }
   return ret;
@@ -530,6 +541,7 @@ int ObDASMergeIter::get_next_seq_row()
             scan_op->get_scan_param().need_update_tablet_param_ = true;
             if (need_update_partition_id_) {
               if (OB_FAIL(update_output_tablet_id(scan_op))) {
+                LOG_WARN("failed to update output tablet id", K(ret), K(scan_op->get_tablet_loc()->tablet_id_));
               }
             }
           }
@@ -598,6 +610,8 @@ int ObDASMergeIter::get_next_seq_rows(int64_t &count, int64_t capacity)
             scan_op->get_scan_param().need_update_tablet_param_ = true;
             if (need_update_partition_id_) {
               if (OB_FAIL(update_output_tablet_id(scan_op))) {
+                LOG_WARN("failed to update output tablet id", K(ret),
+                  K(scan_op->get_tablet_loc()->tablet_id_));
               }
             }
           }
@@ -615,6 +629,7 @@ int ObDASMergeIter::get_next_sorted_row()
   int ret = OB_SUCCESS;
   int64_t output_idx = OB_INVALID_INDEX;
   if (OB_FAIL(prepare_sort_merge_info())) {
+    LOG_WARN("failed to prepare sort merge info", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < das_tasks_arr_.count(); i++) {
     if (!merge_state_arr_[i].das_task_iter_end_) {
@@ -627,9 +642,11 @@ int ObDASMergeIter::get_next_sorted_row()
         } else if (FALSE_IT(scan_op->get_scan_param().need_update_tablet_param_ = true)) {
         } else if (OB_SUCC(scan_op->get_output_result_iter()->get_next_row())) {
           if (OB_FAIL(merge_store_rows_arr_[i].save(false, 1))) {
+            LOG_WARN("failed to save store row", K(ret));
           } else {
             merge_state_arr_[i].row_store_have_data_ = true;
             if (OB_FAIL(compare(i, output_idx))) {
+              LOG_WARN("failed to compare two rows", K(ret));
             }
           }
         } else if (OB_ITER_END == ret) {
@@ -639,6 +656,7 @@ int ObDASMergeIter::get_next_sorted_row()
           LOG_WARN("das iter failed to get next row", K(ret));
         }
       } else if (OB_FAIL(compare(i, output_idx))) {
+        LOG_WARN("failed to compare two rows", K(ret));
       }
     }
   } // for end
@@ -650,6 +668,7 @@ int ObDASMergeIter::get_next_sorted_row()
       if (need_update_partition_id_) {
         ObTabletID tablet_id = das_tasks_arr_[output_idx]->get_tablet_loc()->tablet_id_;
         if (OB_FAIL(update_output_tablet_id(das_tasks_arr_[output_idx]))) {
+          LOG_WARN("failed to update output tablet id", K(ret), K(tablet_id));
         }
       }
       if (OB_SUCC(ret)) {
@@ -693,6 +712,7 @@ int ObDASMergeIter::get_next_sorted_rows(int64_t &count, int64_t capacity)
   } else {
     int64_t output_idx = OB_INVALID_INDEX;
     if (OB_FAIL(prepare_sort_merge_info())) {
+      LOG_WARN("failed to prepare sort merge info", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < das_tasks_arr_.count(); i++) {
       if (!merge_state_arr_[i].das_task_iter_end_) {
@@ -717,9 +737,11 @@ int ObDASMergeIter::get_next_sorted_rows(int64_t &count, int64_t capacity)
                 update_wild_datum_ptr(count);
               }
               if (OB_FAIL(merge_store_rows_arr_[i].save(true, count))) {
+                LOG_WARN("failed to save store row", K(ret));
               } else {
                 merge_state_arr_[i].row_store_have_data_ = true;
                 if (OB_FAIL(compare(i, output_idx))) {
+                  LOG_WARN("failed to compare two rows", K(ret));
                 }
               }
             } else if (OB_ITER_END == ret) {
@@ -731,6 +753,7 @@ int ObDASMergeIter::get_next_sorted_rows(int64_t &count, int64_t capacity)
           }
         } else {
           if (OB_FAIL(compare(i, output_idx))) {
+            LOG_WARN("failed to compare two rows", K(ret));
           }
         }
       }
@@ -746,6 +769,7 @@ int ObDASMergeIter::get_next_sorted_rows(int64_t &count, int64_t capacity)
         if (need_update_partition_id_) {
           ObTabletID tablet_id = das_tasks_arr_[output_idx]->get_tablet_loc()->tablet_id_;
           if (OB_FAIL(update_output_tablet_id(das_tasks_arr_[output_idx]))) {
+            LOG_WARN("failed to update output tablet id", K(ret), K(tablet_id));
           }
         }
         MergeStoreRows &store_rows = merge_store_rows_arr_.at(output_idx);
@@ -773,9 +797,11 @@ int ObDASMergeIter::prepare_sort_merge_info()
       // init merge state for each das task
       if (merge_state_arr_.empty()) {
         if (OB_FAIL(merge_state_arr_.reserve(das_tasks_arr_.count()))) {
+          LOG_WARN("failed to reserve merge state array", K(ret));
         } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < das_tasks_arr_.count(); i++) {
             if (OB_FAIL(merge_state_arr_.push_back(MergeState()))) {
+              LOG_WARN("failed to push back merge state", K(ret));
             }
           }
         }
@@ -789,11 +815,14 @@ int ObDASMergeIter::prepare_sort_merge_info()
         // init store rows for each das task
         if (merge_store_rows_arr_.empty()) {
           if (OB_FAIL(merge_store_rows_arr_.reserve(das_tasks_arr_.count()))) {
+            LOG_WARN("failed to reserve merge store rows array", K(ret));
           } else {
             for (int64_t i = 0; OB_SUCC(ret) && i < das_tasks_arr_.count(); i++) {
               if (OB_FAIL(merge_store_rows_arr_.push_back(
                   MergeStoreRows(output_, eval_ctx_, group_id_idx_, max_size_)))) {
+                LOG_WARN("failed to push back merge store rows", K(ret));
               } else if (OB_FAIL(merge_store_rows_arr_.at(i).init(*iter_alloc_))) {
+                LOG_WARN("failed to init merge store rows", K(ret));
               }
             }
           }
@@ -835,6 +864,7 @@ int ObDASMergeIter::compare(int64_t cur_idx, int64_t &output_idx)
       }
     }
   }
+  LOG_DEBUG("[DAS ITER] merge iter compare finished", K(cur_idx), K(output_idx), K(used_for_keep_order_));
   return ret;
 }
 

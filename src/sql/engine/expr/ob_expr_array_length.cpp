@@ -56,6 +56,7 @@ int ObExprArrayLength::calc_result_type1(ObExprResType &type,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(type1.get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type))) {
+    LOG_WARN("failed to get array type by subschema id", K(ret), K(type1.get_subschema_id()));
   } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("invalid collection type", K(ret), K(coll_type->type_id_));
@@ -78,10 +79,12 @@ int ObExprArrayLength::eval_array_length(const ObExpr &expr, ObEvalCtx &ctx, ObD
   ObCollectionArrayType *arr_type = NULL;
   ObDatum *datum_arr = nullptr;
   if (OB_FAIL(expr.args_[0]->eval(ctx, datum_arr))) {
+    LOG_WARN("failed to eval source array arg", K(ret));
   } else if (datum_arr->is_null()) {
     res.set_null();
   } else if (OB_FAIL(
                  ObArrayExprUtils::get_array_type_by_subschema_id(ctx, subschema_id, arr_type))) {
+    LOG_WARN("failed to get array type by subschema id", K(ret), K(subschema_id));
   } else {
     ObString arr_str = datum_arr->get_string();
     uint32_t len = 0;
@@ -91,6 +94,7 @@ int ObExprArrayLength::eval_array_length(const ObExpr &expr, ObEvalCtx &ctx, ObD
                                       CS_TYPE_BINARY,
                                       true,
                                       arr_str))) {
+      LOG_WARN("fail to get real data.", K(ret), K(arr_str));
     } else if (arr_type->type_id_ == ObNestedType::OB_ARRAY_TYPE){
       raw_str = arr_str.ptr();
       len = *reinterpret_cast<uint32_t *>(raw_str);
@@ -120,6 +124,7 @@ int ObExprArrayLength::eval_array_length_batch(const ObExpr &expr,
   const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
   ObCollectionArrayType *arr_type = NULL;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
+    LOG_WARN("failed to eval args", K(ret));
   } else {
     ObDatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
@@ -130,6 +135,7 @@ int ObExprArrayLength::eval_array_length_batch(const ObExpr &expr,
       if (arr_array.at(j)->is_null()) {
         res_datum.at(j)->set_null();
       } else if (OB_FAIL( ObArrayExprUtils::get_array_type_by_subschema_id(ctx, subschema_id, arr_type))) {
+        LOG_WARN("failed to get array type by subschema id", K(ret), K(subschema_id));
       } else {
         ObString arr_str = arr_array.at(j)->get_string();
         uint32_t len = 0;
@@ -139,6 +145,7 @@ int ObExprArrayLength::eval_array_length_batch(const ObExpr &expr,
                                           CS_TYPE_BINARY,
                                           true,
                                           arr_str))) {
+          LOG_WARN("fail to get real data.", K(ret), K(arr_str));
         } else if (arr_type->type_id_ == ObNestedType::OB_ARRAY_TYPE){
           raw_str = arr_str.ptr();
           len = *reinterpret_cast<uint32_t *>(raw_str);

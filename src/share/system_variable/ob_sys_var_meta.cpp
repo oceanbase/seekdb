@@ -2267,6 +2267,7 @@ int ObSysVarMeta::calc_sys_var_store_idx_by_name(const common::ObString &sys_var
   int ret = OB_SUCCESS;
   ObSysVarClassType sys_var_id = find_sys_var_id_by_name(sys_var_name);
   if (OB_FAIL(calc_sys_var_store_idx(sys_var_id, store_idx))) {
+    LOG_WARN("fail to calc sys var store idx", K(ret), K(sys_var_name), K(lbt()));
   }
   return ret;
 }
@@ -2281,6 +2282,7 @@ int ObSysVarMeta::get_sys_var_name_by_id(ObSysVarClassType sys_var_id, ObString 
   int ret = OB_SUCCESS;
   int64_t store_idx = -1;
   if (OB_FAIL(calc_sys_var_store_idx(sys_var_id, store_idx))) {
+    LOG_WARN("fail to calc sys var store idx", K(ret), K(sys_var_id));
   } else {
     sys_var_name = ObString::make_string(ObSysVarMeta::SYS_VAR_NAMES_SORTED_BY_ID[store_idx]);
   }

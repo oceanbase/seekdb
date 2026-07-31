@@ -56,6 +56,7 @@ int ObExprGetMySQLRoutineParameterTypeStr::get_mysql_routine_parameter_type_str(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
+    LOG_WARN("eval arg failed", K(ret));
   } else {
     const share::schema::ObRoutineInfo *routine_info = NULL;
     ObDatum &first_param = expr.locate_param_datum(ctx, 0);

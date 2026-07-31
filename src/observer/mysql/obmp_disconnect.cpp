@@ -41,6 +41,7 @@ int ObMPDisconnect::kill_unfinished_session(uint32_t sessid)
   sql::ObSQLSessionInfo *session = NULL;
   sql::ObSessionGetterGuard guard(*::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>(), sessid);
   if (OB_FAIL(guard.get_session(session))) {
+    LOG_WARN("get session fail", K(ret));
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("fail to get session info", K(session), K(sessid), K(ret));
@@ -55,6 +56,7 @@ int ObMPDisconnect::kill_unfinished_session(uint32_t sessid)
      *     Ultimately, the reference count is reduced to 0, and the session is physically recycled.
      */
     if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->disconnect_session(*session))) {
+      LOG_WARN("fail to disconnect session", K(session), K(sessid), K(ret));
     }
   }
   return ret;
@@ -71,6 +73,7 @@ int ObMPDisconnect::run()
       // bugfix:
       (void) kill_unfinished_session(ctx_.sessid_); // ignore ret
       if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->free_session(ctx_))) {
+        LOG_WARN("free session fail", K(ctx_));
       } else {
         LOG_INFO("free session successfully", "sessid", ctx_.sessid_);
       }

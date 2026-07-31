@@ -77,6 +77,7 @@ int OptSystemIoBenchmark::run_benchmark(ObIAllocator &allocator)
     LOG_WARN("optimizer storage service is not available", K(ret));
   } else if (OB_FAIL(storage_service->run_io_benchmark(
                  allocator, disk_rnd_read_speed_, disk_seq_read_speed_))) {
+    LOG_WARN("failed to run storage IO benchmark", K(ret));
   } else {
     init_ = true;
   }

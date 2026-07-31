@@ -2154,17 +2154,23 @@ int ObTableSchema::add_column(const ColumnType &column)
       SHARE_SCHEMA_LOG(WARN, "Fail to new local_column", KR(ret));
     } else {
       if (OB_FAIL(local_column->assign(column))) {
+        SHARE_SCHEMA_LOG(WARN, "failed copy assign column", KR(ret), K(column));
       } else if (FALSE_IT(local_column->set_table_id(table_id_))) {
       } else if (!local_column->is_valid()) {
         ret = common::OB_ERR_UNEXPECTED;
         SHARE_SCHEMA_LOG(WARN, "The local column is not valid", KR(ret));
       } else if (OB_FAIL(add_column_update_prev_id(local_column))) {
+        SHARE_SCHEMA_LOG(WARN, "Fail to update previous next column id", KR(ret));
       } else if (OB_FAIL(add_col_to_id_hash_array(local_column))) {
+        SHARE_SCHEMA_LOG(WARN, "Fail to add column to id_hash_array", KR(ret));
       } else if (OB_FAIL(add_col_to_name_hash_array(local_column))) {
+        SHARE_SCHEMA_LOG(WARN, "Fail to add column to name_hash_array", KR(ret));
       } else if (OB_FAIL(add_col_to_column_array(local_column))) {
+        SHARE_SCHEMA_LOG(WARN, "Fail to push column to array", KR(ret));
       } else {
         if (column.is_rowkey_column()) {
           if (OB_FAIL(set_rowkey_info(column))) {
+            SHARE_SCHEMA_LOG(WARN, "set rowkey info to table schema failed", KR(ret));
           }
         }
         if (OB_SUCC(ret) && column.is_index_column()) {
@@ -2179,6 +2185,7 @@ int ObTableSchema::add_column(const ColumnType &column)
             index_column.type_.set_scale(column.get_accuracy().get_scale());
           } 
           if (OB_FAIL(index_info_.set_column(column.get_index_position() - 1, index_column))) {
+            SHARE_SCHEMA_LOG(WARN, "Fail to set column to index info", KR(ret));
           } else {
             if (index_column_num_ < index_info_.get_size()) {
               index_column_num_ = index_info_.get_size();
@@ -2191,6 +2198,7 @@ int ObTableSchema::add_column(const ColumnType &column)
         }
         if (OB_SUCC(ret) && column.is_generated_column()) {
           if (OB_FAIL(generated_columns_.add_member(column.get_column_id() - common::OB_APP_MIN_COLUMN_ID))) {
+            SHARE_SCHEMA_LOG(WARN, "add column id to generated columns failed", KR(ret), K(column));
           } else if (!column.is_column_stored_in_sstable()) {
             ++virtual_column_cnt_;
           }
@@ -2205,6 +2213,7 @@ int ObTableSchema::add_column(const ColumnType &column)
           if (column.is_part_key_column()) {
             if (OB_FAIL(partition_key_info_.set_column(column.get_part_key_pos() - 1,
                     partition_key_column))) {
+              SHARE_SCHEMA_LOG(WARN, "Failed to set partition coumn", KR(ret));
             } else {
               part_key_column_num_ = partition_key_info_.get_size();
             }
@@ -2214,6 +2223,7 @@ int ObTableSchema::add_column(const ColumnType &column)
             if (column.is_subpart_key_column()) {
               if (OB_FAIL(subpartition_key_info_.set_column(column.get_subpart_key_pos() - 1,
                 partition_key_column))) {
+                SHARE_SCHEMA_LOG(WARN, "Failed to set subpartition column", KR(ret));
               } else {
                 subpart_key_column_num_ = subpartition_key_info_.get_size();
               }
@@ -2239,6 +2249,7 @@ int ObTableSchema::add_column(const ColumnType &column)
         SHARE_SCHEMA_LOG(WARN, "the column is NULL, ", KR(ret), K(i));
       } else if (is_shadow_column(tmp_column->column_id_)) {
         if (OB_FAIL(shadow_rowkey_info_.set_column(shadow_pk_pos, *tmp_column))) {
+          SHARE_SCHEMA_LOG(WARN, "fail to set column to shadow rowkey info", KR(ret), KPC(tmp_column));
         } else {
           ++shadow_pk_pos;
         }
@@ -2253,7 +2264,13 @@ int ObTableSchema::add_column(const ColumnType &column)
     }
   }
   if (OB_FAIL(ret)) {
+    SHARE_SCHEMA_LOG(WARN, "add column failed", KR(ret),
+                     K(table_id_), K(in_replay_thread),
+                     "thead_name", OB_NOT_NULL(thread_name) ? thread_name : "NULL", K(column));
   } else {
+    SHARE_SCHEMA_LOG(TRACE, "add column success", KR(ret),
+                     K(table_id_), K(in_replay_thread),
+                     "thead_name", OB_NOT_NULL(thread_name) ? thread_name : "NULL", K(column));
   }
   return ret;
 }

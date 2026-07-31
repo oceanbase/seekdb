@@ -60,6 +60,7 @@ int ObMdsTableMergeDag::init_by_param(const share::ObIDagInitParam *param)
       ret = OB_ERR_SYS;
       LOG_WARN("flush scn is invalid", K(ret), KPC(mds_param));
     } else if (OB_FAIL(ObTabletMergeDag::inner_init(mds_param))) {
+      LOG_WARN("failed to init ObTabletMergeDag", K(ret), KPC(mds_param));
     } else {
       flush_scn_ = mds_param->flush_scn_;
       generate_ts_ = mds_param->generate_ts_;
@@ -87,6 +88,7 @@ int ObMdsTableMergeDag::create_first_task()
   if (!need_create_task) { 
     FLOG_INFO("skip create mds table merge dag first task");
   } else if (OB_FAIL(create_task(nullptr/*parent*/, task))) {
+    STORAGE_LOG(WARN, "fail to alloc mds merge task", K(ret));
   }
   return ret;
 }
@@ -101,6 +103,7 @@ int ObMdsTableMergeDag::fill_info_param(compaction::ObIBasicInfoParam *&out_para
     if (OB_FAIL(ADD_DAG_WARN_INFO_PARAM(out_param, allocator, ObIDag::get_type(),
         static_cast<int64_t>(tablet_id_.id()),
         static_cast<int64_t>(flush_scn_.get_val_for_inner_table_field())))) {
+      LOG_WARN("failed to fill info param", K(ret));
     }
   }
   return ret;
@@ -112,6 +115,7 @@ int ObMdsTableMergeDag::fill_dag_key(char *buf, const int64_t buf_len) const
 
   if (OB_FAIL(databuff_printf(buf, buf_len, "mds table merge task, tablet_id=%ld, flush_scn=%ld",
       tablet_id_.id(), flush_scn_.get_val_for_inner_table_field()))) {
+    LOG_WARN("failed to fill dag key", K(ret), K_(tablet_id), K_(flush_scn));
   }
 
   return ret;

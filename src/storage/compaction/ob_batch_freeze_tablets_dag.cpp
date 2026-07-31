@@ -79,6 +79,7 @@ int ObBatchFreezeTabletsParam::assign(const ObBatchFreezeTabletsParam &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObBatchExecParam<ObTabletSchedulePair>::assign(other))) {
+    LOG_WARN("failed to assign batch freeze tablets param", K(ret), K(other));
   } else {
     loop_cnt_ = other.loop_cnt_;
   }
@@ -125,6 +126,7 @@ int ObBatchFreezeTabletsTask::inner_process()
   ObLS *ls = nullptr;
   int64_t weak_read_ts = 0;
   if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
+    LOG_WARN("failed to get single log stream", K(ret), K(param));
   } else {
     weak_read_ts = ls->get_ls_wrs_handler()->get_ls_weak_read_ts().get_val_for_tx();
   }
@@ -186,6 +188,7 @@ int ObBatchFreezeTabletsTask::schedule_tablet_major_after_freeze(
   } else if (OB_FAIL(ls.get_tablet_svr()->get_tablet(
                  cur_pair.tablet_id_, tablet_handle, 0 /*timeout_us*/,
                  ObMDSGetTabletMode::READ_ALL_COMMITED))) {
+    LOG_WARN("failed to get tablet", K(ret), K(cur_pair));
   } else if (FALSE_IT(tablet = tablet_handle.get_obj())) {
   } else if (OB_UNLIKELY(tablet->get_snapshot_version() < cur_pair.schedule_merge_scn_)) {
     // do nothing

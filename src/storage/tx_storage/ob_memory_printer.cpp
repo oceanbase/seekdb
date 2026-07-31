@@ -46,6 +46,7 @@ int ObMemoryPrinter::register_timer_task(common::ObTimer &timer)
   const bool is_repeated = true;
   const int64_t print_delay = 10 * 1000000; // 10s
   if (OB_FAIL(timer.schedule(print_task_, print_delay, is_repeated))) {
+    LOG_WARN("fail to schedule memory print task", K(ret));
   }
   return ret;
 }
@@ -67,9 +68,11 @@ int ObMemoryPrinter::print_memory_usage()
                                 "=== MEMORY INFO ===\n"
                                 "unmanaged_memory_size=% '15ld\n",
                                 lib::get_unmanaged_memory_size()))) {
+      LOG_WARN("print failed", K(ret));
     } else if (OB_SUCCESS != (tmp_ret = print_memory_usage_(print_buf,
                                                             BUF_LEN,
                                                             pos))) {
+      LOG_WARN("print memstore usage failed", K(tmp_ret));
     }
 
     if (OB_SIZE_OVERFLOW == ret) {
@@ -101,6 +104,7 @@ int ObMemoryPrinter::print_memory_usage_(
     } else if (OB_FAIL(freezer->print_memory_usage(print_buf,
                                                    buf_len,
                                                    pos))) {
+      LOG_WARN("print memstore usage failed", K(ret));
     }
   }
   return ret;

@@ -165,6 +165,7 @@ int ObExprGetLock::get_lock(const ObExpr &expr,
   ObDatum *lock_timeout = NULL;
 
   if (OB_FAIL(expr.eval_param_value(ctx, lock_name, lock_timeout))) {
+    LOG_WARN("calc param failed", K(ret));
   } else if (lock_name->is_null()) {
     // TODO: yichang.yyf use the error code of mysql ER_USER_LOCK_WRONG_NAME or ER_USER_LOCK_OVERLONG_NAME;
     ret = OB_INVALID_ARGUMENT;
@@ -189,6 +190,7 @@ int ObExprGetLock::get_lock(const ObExpr &expr,
     } else if (OB_FAIL(executor.execute(ctx.exec_ctx_,
                                         lock_name_str,
                                         timeout_us))) {
+      LOG_WARN("get lock execute failed", K(ret), K(lock_name_str), K(timeout_us));
     }
   }
 
@@ -239,6 +241,7 @@ int ObExprIsFreeLock::is_free_lock(const ObExpr &expr,
 
   ObDatum *lock_name = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, lock_name))) {
+    LOG_WARN("calc param failed", K(ret));
   } else if (lock_name->is_null()) {
     // TODO: yichang.yyf use the error code of mysql ER_USER_LOCK_WRONG_NAME or ER_USER_LOCK_OVERLONG_NAME;
     ret = OB_INVALID_ARGUMENT;
@@ -303,6 +306,7 @@ int ObExprIsUsedLock::is_used_lock(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   ObDatum *lock_name = NULL;
 
   if (OB_FAIL(expr.eval_param_value(ctx, lock_name))) {
+    LOG_WARN("calc param failed", K(ret));
   } else if (lock_name->is_null()) {
     // TODO: yichang.yyf use the error code of mysql ER_USER_LOCK_WRONG_NAME or ER_USER_LOCK_OVERLONG_NAME;
     ret = OB_INVALID_ARGUMENT;
@@ -368,6 +372,7 @@ int ObExprReleaseLock::release_lock(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
   int64_t release_cnt = ObLockExecutor::INVALID_RELEASE_CNT;
 
   if (OB_FAIL(expr.eval_param_value(ctx, lock_name))) {
+    LOG_WARN("calc param failed", K(ret));
   } else if (lock_name->is_null()) {
     // TODO: yichang.yyf use the error code of mysql ER_USER_LOCK_WRONG_NAME or ER_USER_LOCK_OVERLONG_NAME;
     ret = OB_INVALID_ARGUMENT;
@@ -382,6 +387,7 @@ int ObExprReleaseLock::release_lock(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
     } else if (OB_FAIL(executor.execute(ctx.exec_ctx_,
                                         lock_name_str,
                                         release_cnt))) {
+      LOG_WARN("release lock failed", K(ret), K(lock_name_str));
     }
   }
 

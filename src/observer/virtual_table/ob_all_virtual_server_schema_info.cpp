@@ -34,11 +34,15 @@ int ObAllVirtualServerSchemaInfo::inner_get_next_row(common::ObNewRow *&row)
     int64_t schema_count = OB_INVALID_ID;
     share::schema::ObSchemaGetterGuard schema_guard;
     if (OB_FAIL(schema_service_.get_runtime_refreshed_schema_version(refreshed_schema_version))) {
+      LOG_WARN("fail to get runtime refreshed schema version", K(ret), K(refreshed_schema_version));
     } else if (OB_FAIL(schema_service_.get_published_schema_version(received_schema_version))) {
+      LOG_WARN("fail to get runtime received schema version", K(ret), K(received_schema_version));
     } else {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = schema_service_.get_runtime_schema_guard(schema_guard))) {
+        LOG_WARN("fail to get schema guard", K(tmp_ret));
       } else if (OB_SUCCESS != (tmp_ret = schema_guard.get_schema_count(schema_count))) {
+        LOG_WARN("fail to get schema count", K(tmp_ret));
       }
     }
 

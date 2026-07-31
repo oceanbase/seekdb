@@ -399,6 +399,7 @@ inline static int batch_load_data_to_datum(
     if (OB_FAIL(get_uint_data_datum_len(
         common::ObDatum::get_obj_datum_map_type(obj_type),
         datum_len))) {
+      STORAGE_LOG(WARN, "Failed to get datum len for int data", K(ret));
     } else {
       uint64_t value = 0;
       for (int64_t i = 0; i < row_cap; ++i) {
@@ -419,6 +420,7 @@ inline static int batch_load_data_to_datum(
   }
   case ObNumberSC: {
     if (OB_FAIL(batch_load_number_data_to_datum(cell_datas, row_cap, datums))) {
+      STORAGE_LOG(WARN, "Failed to load batch data to datum", K(ret));
     }
     break;
   }
@@ -473,6 +475,7 @@ inline static int load_data_to_datum(
         if (OB_FAIL(get_uint_data_datum_len(
             common::ObDatum::get_obj_datum_map_type(obj_type),
             datum_len))) {
+          STORAGE_LOG(WARN, "Failed to get datum len for int data", K(ret));
         } else {
           uint64_t value = 0;
           MEMCPY(&value, cell_data, cell_len);
@@ -547,6 +550,7 @@ inline static int compare_datum(
   int cmp_ret = 0;
   //TODo @yunsong, support datum compare
   if (OB_FAIL(cmp_func(datum1, datum2, cmp_ret, nullptr))) {
+    STORAGE_LOG(WARN, "Failed to compare datum", K(ret), K(datum1), K(datum2));
   } else {
     switch (cmp_op) {
       case CO_EQ: { // WHITE_OP_EQ
@@ -630,6 +634,7 @@ public:
       const int64_t pos = size_ / BLOCK_ITEM_CNT;
       if (OB_UNLIKELY(NULL == block_list_[pos])) {
         if (OB_FAIL(extend(1))) {
+          STORAGE_LOG(WARN, "extend block failed", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -656,6 +661,7 @@ public:
   int resize(const int64_t size) {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(reserve(size))) {
+      STORAGE_LOG(WARN, "reserve failed", K(ret));
     } else {
       size_ = size;
     }
@@ -668,6 +674,7 @@ public:
       int64_t cur_blocks_cnt = (size_ + BLOCK_ITEM_CNT - 1) / BLOCK_ITEM_CNT;
       if (total_block_cnt > cur_blocks_cnt) {
         if (OB_FAIL(extend(total_block_cnt - cur_blocks_cnt))) {
+          STORAGE_LOG(WARN, "extend failed", K(ret), K(cur_blocks_cnt), K(total_block_cnt));
         }
       }
     }

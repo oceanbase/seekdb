@@ -73,6 +73,8 @@ int ObMajorFreezeCoordinatorAdapter::trigger_memstore_pressure_major_freeze()
   ObMajorFreezeParam param;
   param.freeze_reason_ = MF_MAJOR_COMPACT_TRIGGER;
   if (OB_FAIL(ObMajorFreezeHelper::major_freeze(param))) {
+    LOG_WARN("failed to trigger memstore-pressure major freeze",
+             KR(ret), K(param));
   }
   return ret;
 }
@@ -132,10 +134,14 @@ int ObMajorFreezeCoordinatorAdapter::collect_major_merge_diagnostics(
           diagnostic.checksum_error_ =
               ObTabletRuntimeInfo::SCN_STATUS_ERROR == tablet.get_status();
           if (OB_FAIL(uncompacted_tablets.push_back(diagnostic))) {
+            LOG_WARN("failed to append major merge tablet diagnostic",
+                     KR(ret), K(tablet));
           }
         }
         for (int64_t i = 0; OB_SUCC(ret) && i < table_ids.count(); ++i) {
           if (OB_FAIL(uncompacted_table_ids.push_back(table_ids.at(i)))) {
+            LOG_WARN("failed to append uncompacted table id",
+                     KR(ret), K(i));
           }
         }
       }

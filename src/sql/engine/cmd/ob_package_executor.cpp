@@ -38,6 +38,7 @@ int ObCreatePackageExecutor::execute(ObExecContext &ctx, ObCreatePackageStmt &st
   
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
+    LOG_WARN("fail to get first stmt" , K(ret));
   } else {
     arg.ddl_stmt_str_ = first_stmt;
   }
@@ -47,6 +48,8 @@ int ObCreatePackageExecutor::execute(ObExecContext &ctx, ObCreatePackageStmt &st
     LOG_WARN("get task executor context failed", K(ret));
   } else if (OB_FAIL(query::serialize_root_service_call(
                  [&]{ return ctx.root_command_service().create_package(arg); }))) {
+    LOG_WARN("rpc proxy create package failed", K(ret),
+             "dst", GCTX.self_addr());
   }
   return ret;
 }
@@ -59,6 +62,7 @@ int ObDropPackageExecutor::execute(ObExecContext &ctx, ObDropPackageStmt &stmt)
   obcall::ObDropPackageArg &arg = stmt.get_drop_package_arg();
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
+    LOG_WARN("fail to get first stmt" , K(ret));
   } else {
     arg.ddl_stmt_str_ = first_stmt;
   }
@@ -68,6 +72,7 @@ int ObDropPackageExecutor::execute(ObExecContext &ctx, ObDropPackageStmt &stmt)
     LOG_WARN("get task executor context failed", K(ret));
   } else if (OB_FAIL(query::serialize_root_service_call(
                  [&]{ return ctx.root_command_service().drop_package(arg); }))) {
+    LOG_WARN("rpc proxy drop package failed", K(ret), "dst", GCTX.self_addr());
   }
   return ret;
 }

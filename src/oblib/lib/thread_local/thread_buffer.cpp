@@ -94,6 +94,7 @@ ThreadSpecificBuffer::Buffer *ThreadSpecificBuffer::get_buffer() const
           ob_free(ptr);
           ptr = NULL;
         } else {
+          _OB_LOG(DEBUG, "new thread specific buffer, addr=%p size=%d this=%p", ptr, size_, this);
           buffer = new(ptr) Buffer(static_cast<char *>(ptr) + sizeof(Buffer), size_);
         }
       }

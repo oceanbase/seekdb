@@ -149,6 +149,7 @@ inline int DRWLock::wrlock(int64_t timeout)
   if (OB_FAIL(ret)) {
     for (--i; i >= 0; --i) {
       if (OB_SUCCESS != (tmp_ret = latches_[i].latch_.unlock())) {
+        COMMON_LOG(WARN, "Fail to unlock latch, ", K(i), K(tmp_ret));
       }
     }
   }
@@ -187,6 +188,7 @@ inline int DRWLock::try_wrlock()
   if (OB_FAIL(ret)) {
     for (--i; i >= 0; --i) {
       if (OB_SUCCESS != (tmp_ret = latches_[i].latch_.unlock())) {
+        COMMON_LOG(WARN, "Fail to try unlock latch, ", K(i), K(tmp_ret));
       }
     }
   }

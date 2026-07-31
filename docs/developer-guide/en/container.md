@@ -695,4 +695,4 @@ ObRbTree is a red-black tree implementation that supports basic operations such 
 
 
 # Others
-seekdb also has many basic container implementations, such as some queues (ObFixedQueue, ObLightyQueue, ObLinkQueue), bitmap (ObBitmap), tuple (ObTuple), etc. If the common containers don't meet your needs, you can find more in the `deps/oblib/src/lib` directory.
+seekdb also has many basic container implementations, such as some queues (ObFixedQueue, ObLightyQueue, ObLinkQueue), bitmap (ObBitmap), tuple (ObTuple), etc. If the common containers don't meet your needs, you can find more in the `src/oblib/lib` directory.

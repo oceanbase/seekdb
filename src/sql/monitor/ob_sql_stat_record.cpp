@@ -38,6 +38,7 @@ int ObSqlStatRecordKey::deep_copy(common::ObIAllocator &allocator, const ObILibC
   UNUSED(allocator);
   int ret = OB_SUCCESS;
   if (OB_FAIL(deep_copy(other))) {
+    LOG_WARN("failed to deep copy sql stat record key", K(ret));
   }
   return ret;
 }
@@ -85,6 +86,7 @@ int ObSqlStatInfo::init(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(key_.deep_copy(key))){
+    LOG_WARN("failed to assign sql stat key", K(ret));
   } else {
     sql_type_ = session_info.get_stmt_type();
     sql_cs_type_ = session_info.get_local_collation_connection();
@@ -143,6 +145,7 @@ int ObSqlStatInfo::assign(const ObSqlStatInfo& other)
   int ret = OB_SUCCESS;
   common::ObArenaAllocator no_use;
   if (OB_FAIL(key_.deep_copy(no_use , other.get_key()))){
+    LOG_WARN("failed to assign sql stat key", K(ret));
   } else {
     plan_id_ = other.get_plan_id();
     plan_type_ = other.get_plan_type();
@@ -272,8 +275,6 @@ int ObExecutingSqlStatRecord::record_sqlstat_end_value(
 
 int ObExecutingSqlStatRecord::move_to_sqlstat_cache(
   ObSQLSessionInfo &session_info,
-  ObPlanCache &plan_cache,
-  query::ObIPlanCacheAccessService &access_service,
   ObString &cur_sql,
   const ObPhysicalPlan *plan /*= nullptr*/)
 {
@@ -282,19 +283,25 @@ int ObExecutingSqlStatRecord::move_to_sqlstat_cache(
   ObSqlStatRecordKey key;
   session_info.get_cur_sql_id(key.sql_id_, sizeof(key.sql_id_));
   key.set_plan_hash(plan== nullptr? session_info.get_current_plan_hash(): plan->get_plan_hash_value());
+  LOG_DEBUG("view sqlstat cache key and query_sql", K(ret), K(key), K(cur_sql));
 
   if (key.is_valid()) {
     if (OB_ISNULL(plan)) {
       ObCacheObjGuard guard;
+      ObPlanCache *plan_cache = session_info.get_plan_cache();
       bool is_use_cache = true;
-      if (OB_FAIL(ObSqlStatRecordUtil::get_cache_obj(
-          plan_cache, access_service, key, guard))) {
+      if (OB_ISNULL(plan_cache)) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("plan cache is not bound to SQL session", K(ret));
+      } else if (OB_FAIL(ObSqlStatRecordUtil::get_cache_obj(
+          *plan_cache, session_info.get_plan_cache_access_service(), key, guard))) {
         if (ret == OB_SQL_PC_NOT_EXIST) {
           // not found, need create 
           ret =OB_SUCCESS;
           is_use_cache = false;
           if (OB_FAIL(ObSqlStatRecordUtil::create_cache_obj(
-              plan_cache, access_service, key, guard))) {
+              *plan_cache, session_info.get_plan_cache_access_service(), key, guard))) {
+            LOG_WARN("failed to create cache obj", K(ret));
           }
         } else {
           LOG_WARN("failed to get cache obj", K(ret));
@@ -310,11 +317,13 @@ int ObExecutingSqlStatRecord::move_to_sqlstat_cache(
           ObExecutedSqlStatRecord *sql_stat_value = cache_obj->get_record_value();
           if (!is_use_cache) {
             if (OB_FAIL(sql_stat_value->get_sql_stat_info().init(key, session_info, cur_sql, plan))) {
+              LOG_WARN("failed to init sql stat info", K(ret));
             } 
           }
 
           if (OB_SUCC(ret)) {
             if (OB_FAIL(sql_stat_value->sum_stat_value(*this))) {
+              LOG_WARN("sql_stat_value sum value failed", KR(ret));
             }
           }
         }
@@ -327,6 +336,7 @@ int ObExecutingSqlStatRecord::move_to_sqlstat_cache(
       } else {
         if (!sql_stat_value->get_key().is_valid()) {
           if (OB_FAIL(sql_stat_value->get_sql_stat_info().init(key, session_info, cur_sql, plan))) {
+            LOG_WARN("failed to init sql stat info", K(ret));
           } 
         }
 
@@ -400,6 +410,7 @@ int ObExecutedSqlStatRecord::assign(const ObExecutedSqlStatRecord& other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(sql_stat_info_.assign(other.get_sql_stat_info()))){
+    LOG_WARN("failed to assign sql stat info", K(ret));
   } else {
 #define DEF_ASSIGN_FUNC(def_name)                                           \
     def_name##_total_ = other.get_##def_name##_total();                     \
@@ -557,10 +568,12 @@ int ObSqlStatRecordUtil::create_cache_obj(
   query::ObPlanCacheAccessGuard req_timeinfo_guard(access_service);
   if (OB_FAIL(ObCacheObjectFactory::alloc(
       plan_cache, guard, ObLibCacheNameSpace::NS_SQLSTAT))) {
+    LOG_WARN("fail to alloc new cache obj", K(ret));
   } else if (OB_ISNULL(cache_obj = static_cast<ObSqlStatRecordObj *>(guard.get_cache_obj()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get cache obj", K(ret));
   } else if (OB_FAIL(plan_cache.add_cache_obj(cache_ctx, &key, cache_obj))) {
+    LOG_WARN( "fail to add cache obj to lib cache", K(ret), K(key));
   }
   return ret;
 }

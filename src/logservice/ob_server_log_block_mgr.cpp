@@ -127,6 +127,7 @@ int ObServerLogBlockMgr::init(
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(ERROR, "Invalid argument", K(ret), KPC(this), KP(log_disk_base_path));
   } else if (OB_FAIL(do_load_(log_disk_base_path))) {
+    CLOG_LOG(ERROR, "do_load_ failed", K(ret), KPC(this), K(log_disk_base_path));
   } else {
     get_log_disk_info_in_config_func_ = get_log_disk_info_in_config;
     is_inited_ = true;
@@ -184,12 +185,14 @@ int64_t ObServerLogBlockMgr::get_log_disk_size()
   int64_t unused_log_disk_percentage = 0;
   int64_t total_log_disk_size = 0;
   if (OB_FAIL(get_runtime_log_disk_size_(log_disk_size))) {
+    CLOG_LOG(WARN, "get_runtime_log_disk_size failed", K(ret), K(log_disk_size));
   } else if (OB_ISNULL(get_log_disk_info_in_config_func_)) {
     ret = OB_NOT_INIT;
     CLOG_LOG(ERROR, "get_log_disk_info_in_config_func_ is null", K(ret), KPC(this));
   } else if (OB_FAIL(get_log_disk_info_in_config_func_(expected_log_disk_size,
              unused_log_disk_percentage,
              total_log_disk_size))) {
+    CLOG_LOG(ERROR, "get_log_disk_info_in_config failed", K(expected_log_disk_size), KPC(this));
   } else if (expected_log_disk_size > total_log_disk_size) {
     ret = OB_MACHINE_RESOURCE_NOT_ENOUGH;
     CLOG_LOG(ERROR, "try_resize failed, log disk space is not enough", K(expected_log_disk_size), KPC(this));
@@ -223,6 +226,8 @@ int ObServerLogBlockMgr::create_block_at(const FileDesc &dest_dir_fd,
   // make sure the meta info of both directory has been flushed.
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(fsync_until_success_(dest_dir_fd))) {
+    CLOG_LOG(ERROR, "fsync_until_success_ failed", K(ret), KPC(this), K(dest_block_path),
+             K(dest_dir_fd));
   } else {
     ATOMIC_INC(&block_cnt_in_use_);
     CLOG_LOG(INFO, "create_new_block_at success", K(ret), KPC(this), K(dest_dir_fd),
@@ -239,6 +244,7 @@ int ObServerLogBlockMgr::remove_block_at(const FileDesc &src_dir_fd,
   char dest_block_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
   bool result = true;
   if (OB_FAIL(is_block_used_for_palf(src_dir_fd, src_block_path, result))) {
+    CLOG_LOG(ERROR, "block_is_used_for_palf failed", K(ret));
   } else if (false == result) {
     CLOG_LOG(ERROR, "this block is not used for palf", K(ret), K(src_block_path));
     ::unlinkat(src_dir_fd, src_block_path, 0);
@@ -247,7 +253,12 @@ int ObServerLogBlockMgr::remove_block_at(const FileDesc &src_dir_fd,
       ret = OB_NOT_INIT;
       CLOG_LOG(ERROR, "ObServerLogBlockMGR has not inited", K(ret), KPC(this));
     } else if (OB_FAIL(free_block_at_(src_dir_fd, src_block_path))) {
+      CLOG_LOG(ERROR, "free_block_at_ failed", K(ret), KPC(this), K(src_dir_fd),
+               K(src_block_path));
+      // make sure the meta info of both directory has been flushed.
     } else if (OB_FAIL(fsync_until_success_(src_dir_fd))) {
+      CLOG_LOG(ERROR, "fsync_until_success_ failed", K(ret), KPC(this), K(dest_block_id),
+               K(src_dir_fd), K(src_block_path));
     } else {
       ATOMIC_DEC(&block_cnt_in_use_);
       CLOG_LOG(INFO, "delete_block_at success", K(ret), KPC(this), K(src_dir_fd),
@@ -272,6 +283,8 @@ int ObServerLogBlockMgr::update_log_disk_size(const int64_t old_log_disk_size,
   } else {
     allowed_new_log_disk_size = new_log_disk_size;
     if (OB_FAIL(log_service->update_log_disk_usage_limit_size(new_log_disk_size))) {
+      CLOG_LOG(WARN, "failed to update_log_disk_usage_limit_size", K(new_log_disk_size), K(old_log_disk_size),
+               K(allowed_new_log_disk_size));
     }
   }
   return ret;
@@ -284,7 +297,10 @@ int ObServerLogBlockMgr::do_load_(const char *log_disk_path)
   int64_t has_allocated_block_cnt = 0;
   ObTimeGuard time_guard("RestartServerBlockMgr", 1 * 1000 * 1000);
   if (OB_FAIL(remove_tmp_file_or_directory_for_runtime_(log_disk_path))) {
+    CLOG_LOG(WARN, "remove_tmp_file_or_directory_at failed", K(ret), K(log_disk_path));
   } else if (OB_FAIL(scan_log_disk_dir_(log_disk_path, has_allocated_block_cnt))) {
+    CLOG_LOG(WARN, "scan_log_disk_dir_ failed", K(ret), KPC(this), K(log_disk_path),
+             K(has_allocated_block_cnt));
   } else {
     time_guard.click("scan_log_disk_");
     ATOMIC_STORE(&block_cnt_in_use_, has_allocated_block_cnt);
@@ -305,6 +321,7 @@ bool ObServerLogBlockMgr::check_space_is_enough_(const int64_t log_disk_size) co
   int64_t runtime_log_disk_size = 0;
   int ret = OB_SUCCESS;
   if (OB_FAIL(get_runtime_log_disk_size_(runtime_log_disk_size))) {
+    CLOG_LOG(WARN, "get_runtime_log_disk_size failed", K(ret), K(runtime_log_disk_size));
   } else {
     bool_ret = runtime_log_disk_size <= log_disk_size;
     CLOG_LOG(INFO, "check_space_is_enough_ finished", K(runtime_log_disk_size), K(log_disk_size));
@@ -321,6 +338,7 @@ int ObServerLogBlockMgr::get_runtime_log_disk_size_(int64_t &runtime_log_disk_si
   PalfOptions opts;
   if (NULL == log_service_) {
   } else if (OB_FAIL(log_service_->get_palf_options(opts))) {
+    CLOG_LOG(WARN, "get_palf_options failed", K(ret), K(runtime_log_disk_size));
   } else {
     runtime_log_disk_size += opts.disk_options_.log_disk_usage_limit_size_;
   }
@@ -371,6 +389,8 @@ int ObServerLogBlockMgr::free_block_at_(const FileDesc &src_dir_fd,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(unlinkat_until_success_(src_dir_fd, block_path, 0))) {
+    CLOG_LOG(ERROR, "unlinkat_until_success_ failed", K(ret), KPC(this), K(src_dir_fd),
+             K(block_path));
   } else {
     if (REACH_TIME_INTERVAL(PRINT_INTERVAL)) {
       CLOG_LOG(INFO, "free_block_at_ success", K(ret), KPC(this), K(src_dir_fd),
@@ -404,6 +424,7 @@ int ObServerLogBlockMgr::get_has_allocated_blocks_cnt_in_(
         CLOG_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(log_disk_path),
                 K(entry->d_name));
       } else if (OB_FAIL(FileDirectoryUtils::is_directory(current_file_path, is_dir))) {
+        CLOG_LOG(WARN, "is_directory failed", K(ret), K(entry->d_name));
       } else if (false == is_dir) {
         ret = OB_ERR_UNEXPECTED;
         LOG_DBA_ERROR_V2(OB_LOG_EXTERNAL_FILE_EXIST, ret, "Attention!!!", "There are several files in the log directory that are not generated by "
@@ -449,10 +470,12 @@ int ObServerLogBlockMgr::remove_tmp_file_or_directory_for_runtime_(const char *l
         CLOG_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(log_disk_path),
                 K(entry->d_name));
       } else if (OB_FAIL(FileDirectoryUtils::is_directory(current_file_path, is_dir))) {
+        CLOG_LOG(WARN, "is_directory failed", K(ret), K(entry->d_name));
       } else if (false == is_dir) {
         CLOG_LOG(ERROR, "is not diectory, unexpected", K(ret), K(log_disk_path), K(current_file_path));
       } else if (true == std::regex_match(current_file_path, pattern_runtime)) {
         if (OB_FAIL(remove_tmp_file_or_directory_at(current_file_path, this))) {
+          CLOG_LOG(ERROR, "this dir is runtime, remove_tmp_file_or_directory_at failed", K(ret), K(current_file_path));
         } else {
           CLOG_LOG(INFO, "this dir is runtime, remove_tmp_file_or_directory_at success", K(ret), K(current_file_path));
         }
@@ -487,6 +510,7 @@ int ObServerLogBlockMgr::fsync_until_success_(const FileDesc &dest_dir_fd)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(fsync_with_retry(dest_dir_fd))) {
+    CLOG_LOG(ERROR, "fsync_with_retry failed", KR(ret), KPC(this), K(dest_dir_fd));
   }
   return ret;
 }
@@ -513,6 +537,7 @@ int ObServerLogBlockMgr::scan_runtime_dir_(const char *runtime_dir,
         CLOG_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(runtime_dir),
                 K(entry->d_name));
       } else if (OB_FAIL(FileDirectoryUtils::is_directory(current_file_path, is_dir))) {
+        CLOG_LOG(WARN, "is_directory failed", K(ret), K(entry->d_name));
       } else if (false == is_dir) {
         ret = OB_ERR_UNEXPECTED;
         LOG_DBA_ERROR_V2(OB_LOG_EXTERNAL_FILE_EXIST, ret, "Attention!!!", "There are several files in the log directory that are not generated by "
@@ -559,6 +584,7 @@ int ObServerLogBlockMgr::scan_ls_dir_(const char *ls_dir,
         CLOG_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(ls_dir),
                 K(entry->d_name));
       } else if (OB_FAIL(FileDirectoryUtils::is_directory(current_file_path, is_dir))) {
+        CLOG_LOG(WARN, "is_directory failed", K(ret), K(entry->d_name));
       } else if (false == is_dir) {
         ret = OB_ERR_UNEXPECTED;
         LOG_DBA_ERROR_V2(OB_LOG_EXTERNAL_FILE_EXIST, ret, "Attention!!!", "There are several files in the log directory that are not generated by "

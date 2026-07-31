@@ -67,12 +67,14 @@ void HazardNodeList::push(HazardNode *node)
 
 void RetireList::set_reclaim_version(uint64_t version)
 {
+  _OB_LOG(DEBUG, "reclaim_version: %ld", version);
   inc_update((int64_t*)&hazard_version_, (int64_t)version);
 }
 
 void RetireList::set_retire_version(uint64_t version)
 {
   ThreadRetireList *retire_list = NULL;
+  _OB_LOG(DEBUG, "retire_version: %ld", version);
   if (NULL != (retire_list = get_thread_retire_list())) {
     retire_list->prepare_list_.set_version(version);
     retire_list->retire_list_.concat(retire_list->prepare_list_);

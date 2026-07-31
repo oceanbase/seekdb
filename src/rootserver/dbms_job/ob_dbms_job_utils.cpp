@@ -168,10 +168,12 @@ int ObDBMSJobUtils::check_job_can_running(bool &can_running)
   } else if (is_primary && job_queue_processor > 0) {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
       if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
+        LOG_WARN("execute query failed", K(ret), K(sql));
       } else if (OB_NOT_NULL(result.get_result())) {
         if (OB_SUCCESS == (ret = result.get_result()->next())) {
           int64_t int_value = 0;
           if (OB_FAIL(result.get_result()->get_int(static_cast<const int64_t>(0), int_value))) {
+            LOG_WARN("failed to get column in row. ", K(ret));
           } else {
             job_running_cnt = static_cast<uint64_t>(int_value);
           }
@@ -263,6 +265,7 @@ int ObDBMSJobUtils::get_dbms_job_info(
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
       if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
+        LOG_WARN("execute query failed", K(ret), K(sql), K(job_id));
       } else if (OB_NOT_NULL(result.get_result())) {
         if (OB_SUCCESS == (ret = result.get_result()->next())) {
           OZ (extract_info(*(result.get_result()), allocator, job_info));
@@ -296,6 +299,7 @@ int ObDBMSJobUtils::get_dbms_job_infos_in_runtime(
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
       if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
+        LOG_WARN("execute query failed", K(ret), K(sql));
       } else if (OB_NOT_NULL(result.get_result())) {
         do {
           if (OB_FAIL(result.get_result()->next())) {
@@ -353,8 +357,10 @@ int ObDBMSJobUtils::calc_execute_at(
     if (OB_SUCC(ret)) {
       SMART_VAR(ObMySQLProxy::MySQLResult, result) {
         if (OB_FAIL(inner_proxy->read(result, sql.ptr()))) {
+          LOG_WARN("execute query failed", K(ret), K(sql), K(job_info));
         } else if (OB_NOT_NULL(result.get_result())) {
           if (OB_FAIL(result.get_result()->next())) {
+            LOG_WARN("failed to get result", K(ret));
           } else {
             int64_t sysdate = 0;
             int64_t col_idx = 0;

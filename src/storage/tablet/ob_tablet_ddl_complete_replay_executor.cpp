@@ -71,14 +71,18 @@ int ObTabletDDLCompleteReplayExecutor::do_replay_(ObTabletHandle &tablet_handle)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid tablet handle", K(ret), K(tablet_handle), KP(user_data_));
   } else if (OB_FAIL(freeze_ddl_kv(*tablet_handle.get_obj(), *user_data_))) {
+    LOG_WARN("failed to freeze ddl kv", K(ret));
   } else if (OB_FAIL(update_tablet_table_store(*tablet_handle.get_obj(), *user_data_))) {
+    LOG_WARN("failed to update tablet table store", K(ret));
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(replay_to_mds_table_(tablet_handle, *user_data_, user_ctx, scn_))) {
+    LOG_WARN("failed to replay to tablet", K(ret));
   } else if (user_data_->has_complete_) {
     /* use tmp ret to avoid pending replay */
     if (OB_TMP_FAIL(schedule_merge(*tablet_handle.get_obj(), *user_data_))) {
+      LOG_WARN("failed to schedule merge", K(tmp_ret), KPC(tablet_handle.get_obj()), KPC(user_data_));
     }
   }
   return ret;
@@ -90,9 +94,13 @@ int ObTabletDDLCompleteReplayExecutor::freeze_ddl_kv(ObTablet &tablet, const ObT
   ObDDLKvMgrHandle ddl_kv_mgr_handle;
   share::SCN mock_start_scn;
   if (OB_FAIL(mock_start_scn.convert_for_tx(DDL_START_SCN_VAL))) {
+    LOG_WARN("failed to convert for tx", K(ret));
   } else if (OB_FAIL(tablet.get_ddl_kv_mgr(ddl_kv_mgr_handle, true /* create if need*/))) {
+    LOG_WARN("failed to create ddl kv mgr", K(ret));
   } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->freeze_ddl_kv(mock_start_scn, user_data.snapshot_version_, user_data.data_format_version_))) {
+    LOG_WARN("failed freeze ddl kv", K(ret), K(user_data));
   } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->remove_idempotence_checker())) {
+    LOG_WARN("remove idempotence checker failed", K(ret));
   } 
   return ret;
 }
@@ -107,18 +115,21 @@ int ObTabletDDLCompleteReplayExecutor::update_tablet_table_store(ObTablet &table
   ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper;
 
   if (OB_FAIL(tablet.fetch_table_store(table_store_wrapper))) {
+    LOG_WARN("fail to fetch table store", K(ret));
   } else if (OB_FALSE_IT(first_major_sstable = static_cast<ObSSTable *>(
                                                 table_store_wrapper.get_member()->get_major_sstables().get_boundary_table(false/*first*/)))) {
   } else if (nullptr != first_major_sstable) {
     /* do nothing */
     LOG_INFO("first major sstable exist, do nothing", K(ret), K(user_data));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
+    LOG_WARN("failed to get ls", K(ret), K(user_data));
   } else {
     ObUpdateTableStoreParam param(user_data.snapshot_version_,
                                     ObVersionRange::MIN_VERSION, // multi_version_start
                                     &user_data.storage_schema_);
     param.ddl_info_.keep_old_ddl_sstable_ = true;
     if (OB_FAIL(tenant_ls->update_tablet_table_store(user_data.table_key_.tablet_id_, param, new_tablet_handle))) {
+      LOG_WARN("failed to update table store", K(ret));
     }
   }
   return ret;
@@ -134,7 +145,9 @@ int ObTabletDDLCompleteReplayExecutor::schedule_merge(ObTablet &tablet, const Ob
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet), K(user_data));
   } else if (OB_FAIL(ObDirectLoadMgrUtil::generate_merge_param(user_data, tablet, merge_param))) {
+    LOG_WARN("failed to generate merge param", K(ret), K(user_data));
   } else if (OB_FAIL(tablet.get_ddl_kv_mgr(ddl_kv_mgr_handle, true /* create if need*/))) {
+    LOG_WARN("failed to create ddl kv mgr", K(ret));
   } else {
     merge_param.rec_scn_ = ddl_kv_mgr_handle.get_obj()->get_max_freeze_scn();
   }
@@ -144,6 +157,7 @@ int ObTabletDDLCompleteReplayExecutor::schedule_merge(ObTablet &tablet, const Ob
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid merge param", K(ret), K(merge_param));
   } else if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_ddl_table_merge_dag(merge_param))) {
+    LOG_WARN("schedule ddl merge dag failed", K(ret), K(merge_param));
   }
   return ret;
 }

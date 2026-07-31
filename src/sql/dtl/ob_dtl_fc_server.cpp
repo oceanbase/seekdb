@@ -59,6 +59,7 @@ int ObDfc::server_module_init(ObDfc *&dfc_manager)
     dfc_manager->max_blocked_buffer_size_ = 0;
     dfc_manager->max_buffer_size_ = 0;
     if (OB_FAIL(dfc_manager->mem_mgr_.init())) {
+      LOG_WARN("failed to init DTL memory manager", K(ret));
     }
     // dfc_manager->calc_max_buffer(10);
     LOG_INFO("init DFC manager", K(ret));
@@ -100,6 +101,7 @@ int ObDfc::clean_on_timeout()
   int ret = OB_SUCCESS;
   
   if (OB_FAIL(mem_mgr_.auto_free_on_time())) {
+    LOG_WARN("failed to auto free memory manager", K(ret));
   }
   LOG_INFO("DFC manager status", K(ret), K(1UL),
     K(get_channel_cnt()),
@@ -145,6 +147,7 @@ int ObDfc::register_dfc_channel(ObDtlFlowControl &dfc, ObDtlChannel* ch)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dfc.register_channel(ch))) {
+    LOG_WARN("failed to regiester channel", KP(ch->get_id()), K(ret));
   } else {
     increase_channel_cnt(1);
   }
@@ -196,6 +199,7 @@ int ObDfc::enforce_block(ObDtlFlowControl *dfc, int64_t ch_idx)
   if (!dfc->is_block(ch_idx)) {
     increase_blocked_channel_cnt();
     dfc->set_block(ch_idx);
+    LOG_TRACE("receive set channel block trace", K(dfc), K(ret), K(ch_idx));
   }
   return ret;
 }
@@ -207,13 +211,16 @@ int ObDfc::try_unblock_dfc(ObDtlFlowControl *dfc, int64_t ch_idx)
     int64_t unblock_cnt = 0;
     if (can_unblock(dfc)) {
       if (OB_FAIL(dfc->notify_all_blocked_channels_unblocking(unblock_cnt))) {
+        LOG_WARN("failed to unblock all blocked channel", K(dfc), K(ch_idx), K(ret));
       }
       if (0 < unblock_cnt) {
         decrease_blocked_channel_cnt(unblock_cnt);
       }
+      LOG_TRACE("unblock channel on decrease size", K(dfc), K(ret), K(unblock_cnt), K(ch_idx));
     } else if (dfc->is_block(ch_idx)) {
       ObDtlChannel *dtl_ch = nullptr;
       if (OB_FAIL(dfc->get_channel(ch_idx, dtl_ch))) {
+        LOG_WARN("failed to get dtl channel", K(dfc), K(ch_idx), K(ret));
       } else {
         ObDtlBasicChannel *ch = reinterpret_cast<ObDtlBasicChannel*>(dtl_ch);
         int64_t unblock_cnt = 0;
@@ -223,6 +230,9 @@ int ObDfc::try_unblock_dfc(ObDtlFlowControl *dfc, int64_t ch_idx)
           LOG_TRACE("unblock channel on decrease size by self", K(dfc), K(ret), KP(ch->get_id()), K(ch_idx),
             K(ch->get_processed_buffer_cnt()));
           if (OB_FAIL(dfc->notify_channel_unblocking(ch, unblock_cnt))) {
+            LOG_WARN("failed to unblock channel",
+              K(dfc), K(ret), KP(ch->get_id()), K(ch->belong_to_receive_data()),
+              K(ch->belong_to_transmit_data()), K(ch->get_processed_buffer_cnt()));
           }
           decrease_blocked_channel_cnt(unblock_cnt);
         }
@@ -239,6 +249,7 @@ int ObDfc::unblock_dfc(ObDtlFlowControl *dfc, int64_t ch_idx, int64_t size)
   dfc->decrease(size);
   decrease(size);
   if (OB_FAIL(try_unblock_dfc(dfc, ch_idx))) {
+    LOG_WARN("failed to try unblock DFC manager", K(ret));
   }
   return ret;
 }
@@ -247,6 +258,7 @@ int ObDfc::unblock_channel(ObDtlFlowControl *dfc, int64_t ch_idx)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(try_unblock_dfc(dfc, ch_idx))) {
+    LOG_WARN("failed to unblock all blocked channel", K(dfc), K(ret));
   }
   return ret;
 }
@@ -257,10 +269,12 @@ int ObDfc::unblock_channels(ObDtlFlowControl *dfc)
   if (dfc->is_block()) {
     int64_t unblock_cnt = 0;
     if (OB_FAIL(dfc->notify_all_blocked_channels_unblocking(unblock_cnt))) {
+      LOG_WARN("failed to unblock all blocked channel", K(dfc), K(ret));
     }
     if (0 < unblock_cnt) {
       decrease_blocked_channel_cnt(unblock_cnt);
     }
+    LOG_TRACE("unblock channel on decrease size", K(dfc), K(ret), K(unblock_cnt));
   }
   return ret;
 }
@@ -273,6 +287,7 @@ int ObDfc::block_dfc(ObDtlFlowControl *dfc, int64_t ch_idx, int64_t size)
   //LOG_TRACE("DFC manager size", K(dfc->get_used()), K(dfc->get_total_buffer_cnt()), K(aggregate_dfc_.get_used()), K(aggregate_dfc_.get_total_buffer_cnt()), K(need_block(dfc)));
   if (need_block(dfc)) {
     if (OB_FAIL(enforce_block(dfc, ch_idx))) {
+      LOG_WARN("failed to block channel", K(size), K(dfc), K(ret), K(ch_idx));
     }
   }
   return ret;
@@ -306,6 +321,7 @@ ObDtlMemManager *ObDfcServer::get_mem_manager()
   ObDtlMemManager *memory_manager = nullptr;
   ObDfc *dfc_manager = nullptr;
   if (OB_FAIL(get_current_dfc(dfc_manager))) {
+    LOG_WARN("failed to get DFC manager", K(ret));
   } else if (OB_ISNULL(dfc_manager)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("DFC manager is null", K(ret));
@@ -321,10 +337,12 @@ int ObDfcServer::block_on_increase_size(ObDtlFlowControl *dfc, int64_t ch_idx, i
   
   ObDfc *dfc_manager = nullptr;
   if (OB_FAIL(get_current_dfc(dfc_manager))) {
+    LOG_WARN("failed to get DFC manager", K(ret));
   } else if (OB_ISNULL(dfc_manager)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("DFC manager is null", K(ret));
   } else if (OB_FAIL(dfc_manager->block_dfc(dfc, ch_idx, size))) {
+    LOG_WARN("failed to block DFC manager", K(ret));
   }
   return ret;
 }
@@ -335,10 +353,12 @@ int ObDfcServer::unblock_on_decrease_size(ObDtlFlowControl *dfc, int64_t ch_idx,
   
   ObDfc *dfc_manager = nullptr;
   if (OB_FAIL(get_current_dfc(dfc_manager))) {
+    LOG_WARN("failed to get DFC manager", K(ret));
   } else if (OB_ISNULL(dfc_manager)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("DFC manager is null", K(ret));
   } else if (OB_FAIL(dfc_manager->unblock_dfc(dfc, ch_idx, size))) {
+    LOG_WARN("failed to unblock DFC manager", K(ch_idx), K(ret));
   }
   return ret;
 }
@@ -349,7 +369,9 @@ int ObDfcServer::unblock_channel(ObDtlFlowControl *dfc, int64_t ch_idx)
   
   ObDfc *dfc_manager = nullptr;
   if (OB_FAIL(get_current_dfc(dfc_manager))) {
+    LOG_WARN("failed to get DFC manager", K(ret));
   } else if (OB_FAIL(dfc_manager->unblock_channel(dfc, ch_idx))) {
+    LOG_WARN("failed to unblock DFC manager", K(ret));
   }
   return ret;
 }
@@ -360,10 +382,12 @@ int ObDfcServer::unblock_channels(ObDtlFlowControl *dfc)
   
   ObDfc *dfc_manager = nullptr;
   if (OB_FAIL(get_current_dfc(dfc_manager))) {
+    LOG_WARN("failed to get DFC manager", K(ret));
   } else if (OB_ISNULL(dfc_manager)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("DFC manager is null", K(ret));
   } else if (OB_FAIL(dfc_manager->unblock_channels(dfc))) {
+    LOG_WARN("failed to unblock DFC manager", K(ret));
   }
   return ret;
 }
@@ -374,10 +398,12 @@ int ObDfcServer::register_dfc_channel(ObDtlFlowControl &dfc, ObDtlChannel* ch)
   
   ObDfc *dfc_manager = nullptr;
   if (OB_FAIL(get_current_dfc(dfc_manager))) {
+    LOG_WARN("failed to get DFC manager", K(ret));
   } else if (OB_ISNULL(dfc_manager)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("DFC manager is null", K(ret));
   } else if (OB_FAIL(dfc_manager->register_dfc_channel(dfc, ch))) {
+    LOG_WARN("failed to register dfc", K(ret));
   }
   return ret;
 }
@@ -388,10 +414,12 @@ int ObDfcServer::unregister_dfc_channel(ObDtlFlowControl &dfc, ObDtlChannel* ch)
   
   ObDfc *dfc_manager = nullptr;
   if (OB_FAIL(get_current_dfc(dfc_manager))) {
+    LOG_WARN("failed to get DFC manager", K(ret));
   } else if (OB_ISNULL(dfc_manager)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("DFC manager is null", K(ret));
   } else if (OB_FAIL(dfc_manager->unregister_dfc_channel(dfc, ch))) {
+    LOG_WARN("failed to register dfc", K(ret));
   }
   return ret;
 }
@@ -409,10 +437,12 @@ int ObDfcServer::deregister_dfc(ObDtlFlowControl &dfc)
     
     ObDfc *dfc_manager = nullptr;
     if (OB_FAIL(get_current_dfc(dfc_manager))) {
+      LOG_WARN("failed to get DFC manager", K(ret));
     } else if (OB_ISNULL(dfc_manager)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("DFC manager is null", K(ret));
     } else if (OB_FAIL(dfc_manager->deregister_dfc(dfc))) {
+      LOG_WARN("failed to deregister dfc", K(ret));
     }
   }
   return ret;

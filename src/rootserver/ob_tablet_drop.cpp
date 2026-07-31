@@ -97,6 +97,7 @@ int ObTabletDrop::add_drop_tablets_of_table_arg(
       ObPartitionLevel part_level = table_schema.get_part_level();
       if (PARTITION_LEVEL_ZERO == part_level) {
         if (OB_FAIL(drop_tablet_(schemas, OB_INVALID_INDEX, OB_INVALID_INDEX, false/*is_hidden*/))) {
+          LOG_WARN("fail to drop tablet", K(table_schema), KR(ret));
         }
       } else {
         ObPartition **part_array = table_schema.get_part_array();
@@ -143,6 +144,7 @@ int ObTabletDrop::add_drop_tablets_of_table_arg(
                     LOG_WARN("NULL ptr", K(j), K(table_schema), KR(ret));
                   } else {
                     if (OB_FAIL(drop_tablet_(schemas, i, j, false/*is_hidden*/))) {
+                      LOG_WARN("fail to drop tablet", K(table_schema), KR(ret));
                     }
                   }
                 }
@@ -206,6 +208,7 @@ int ObTabletDrop::drop_tablet_(
       } else if (PARTITION_LEVEL_ZERO == table_schema_ptr->get_part_level()) {
         ObTabletID tablet_id = table_schema_ptr->get_tablet_id();
         if (OB_FAIL(tablet_ids_->push_back(tablet_id))) {
+          LOG_WARN("failed to assign table schema point", KR(ret), KPC(table_schema_ptr));
         }
       } else if(is_hidden && OB_FALSE_IT(part = table_schema_ptr->get_hidden_part_array()[part_idx])) {
       } else if (!is_hidden && OB_FAIL(table_schema_ptr->get_part_by_idx(part_idx, subpart_idx, part))) {
@@ -224,6 +227,7 @@ int ObTabletDrop::drop_tablet_(
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(tablet_ids_->push_back(part->get_tablet_id()))) {
+          LOG_WARN("failed to assign table schema point", KR(ret), K(part_idx), K(subpart_idx));
         }
       }
     }
@@ -249,9 +253,12 @@ int ObTabletDrop::execute()
   } else {
     obcall::ObBatchRemoveTabletArg arg;
     if (OB_FAIL(share::ObTabletMappingTableOperator::batch_remove(trans_, *tablet_ids_))) {
+      LOG_WARN("tablet_ids count less than 1", KR(ret));
     } else if (OB_FAIL(share::ObTabletToTableHistoryOperator::drop_tablet_to_table_history(
                        trans_, schema_version_, *tablet_ids_))) {
+      LOG_WARN("fail to create tablet to table history", KR(ret), K(schema_version_), KPC(tablet_ids_));
     } else if (OB_FAIL(arg.init(*tablet_ids_))) {
+      LOG_WARN("failed to init remove tablet arg", KR(ret), KPC(tablet_ids_));
     } else {
       LOG_INFO("generate remove arg", K(arg), K(lbt()), KPC(tablet_ids_));
       int64_t buf_len = arg.get_serialize_size();
@@ -261,7 +268,9 @@ int ObTabletDrop::execute()
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail alloc memory", KR(ret));
       } else if (OB_FAIL(arg.serialize(buf, buf_len, pos))) {
+        LOG_WARN("fail to serialize", KR(ret), K(arg));
       } else if (OB_FAIL(share::ObShareUtil::set_default_timeout_ctx(ctx, default_timeout_ts))) {
+        LOG_WARN("fail to set timeout ctx", KR(ret), K(default_timeout_ts));
       } else {
         do {
           if (ctx.is_timeouted()) {

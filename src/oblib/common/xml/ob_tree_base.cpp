@@ -78,6 +78,8 @@ int ObLibTreeNodeBase::insert_slibing(ObLibTreeNodeBase* new_node, int64_t relat
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to insert, parent is not container", K(ret), K(pos_), K(flags_), K(type_));
   } else if (OB_FAIL(parent->insert(pos_ + relative_index, new_node))) {
+    LOG_WARN("fail to insert", K(ret), K(pos_), K(flags_),
+      K(type_), K(parent->count()));
   }
 
   return ret;
@@ -318,6 +320,7 @@ int ObLibContainerNode::tree_iterator::start()
     ObLibContainerNode* tmp = root_;
     while (OB_SUCC(ret) && OB_NOT_NULL(tmp)) {
       if (OB_FAIL(stack_.push(tmp))) {
+        LOG_WARN("fail to push ObStack", K(ret), K(stack_.count()));
       } else if (!tmp->is_leaf_node() && tmp->size() > 0) {
         tmp = static_cast<ObLibContainerNode*>(tmp->member(0));
       } else {
@@ -326,6 +329,7 @@ int ObLibContainerNode::tree_iterator::start()
     }
   } else {
     if (OB_FAIL(stack_.push(root_))) {
+      LOG_WARN("fail to push ObStack", K(ret));
     }
   }
 
@@ -355,6 +359,7 @@ int ObLibContainerNode::tree_iterator::next(ObLibContainerNode*& res)
       if (!tmp->is_leaf_node() && tmp->size() > 0) {
         while (OB_NOT_NULL(tmp) && OB_SUCC(ret)) {
           if (OB_FAIL(stack_.push(tmp))) {
+            LOG_WARN("fail to push ObStack", K(ret), K(stack_.size()));
           } else if (!tmp->is_leaf_node() && tmp->size() > 0) {
             tmp = static_cast<ObLibContainerNode*>(tmp->member(0));
             if (tmp->is_leaf_node()) {
@@ -388,6 +393,7 @@ int ObLibContainerNode::tree_iterator::next(ObLibContainerNode*& res)
       } else if (node->size() > 0 && !node->is_leaf_node()) {
         ObLibContainerNode* tmp = *cur_iter;
         if (OB_FAIL(stack_.push(tmp))) {
+          LOG_WARN("fail to push ObStack", K(ret), K(stack_.size()));
         }
       }
     } else { // container has more than 0 element
@@ -408,6 +414,7 @@ int ObLibContainerNode::tree_iterator::next(ObLibContainerNode*& res)
         ObLibContainerNode* tmp = res;
         if (!tmp->is_leaf_node() && tmp->size() > 0) {
           if (OB_FAIL(stack_.push(iterator(tmp, true)))) {
+            LOG_WARN("fail to push ObStack", K(ret), K(stack_.size()));
           }
         } else {
           cur_iter.next();
@@ -439,6 +446,7 @@ int ObLibContainerNode::alter_member_sort_policy(bool actived)
 
   if (!is_do_scan) {
   } else if (OB_FAIL(iter.start())) {
+    LOG_WARN("fail to prepare scan iterator", K(ret));
   } else {
     ObLibContainerNode* tmp = nullptr;
     while (OB_SUCC(iter.next(tmp))) {
@@ -486,6 +494,7 @@ int ObLibContainerNode::get_children(const ObString& key, ObIArray<ObLibTreeNode
     if (low_iter != sorted_children_->end()) {
       for (; OB_SUCC(ret) && low_iter != up_iter; low_iter++) {
         if (OB_FAIL(res.push_back(*low_iter))) {
+          LOG_WARN("fail to store node", K(ret), K(res.count()));
         }
       }
     }
@@ -568,11 +577,13 @@ int ObLibContainerNode::get_range(int64_t start, int64_t end, ObIArray<ObLibTree
     
     if (start > end) {
     } else if (OB_FAIL(res.reserve(end - start + 1))) {
+      LOG_WARN("fail to get all children, reserve memory failed", K(ret), K(data_vector->size()));
     }
 
     for (ObLibTreeNodeVector::iterator iter = data_vector->begin() + start; 
           OB_SUCC(ret) && iter <= data_vector->begin() + end; iter++) {
       if (OB_FAIL(res.push_back(*iter))) {
+        LOG_WARN("fail to store current node", K(ret), K(res.count()));
       }
     }
   }
@@ -659,7 +670,9 @@ int ObLibContainerNode::append(ObLibTreeNodeBase* node)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to append child on leaf node", K(ret), K(flags_), K(type_));
   } else if  (OB_FAIL(append_into_sequent_container(node))) {
+    LOG_WARN("fail to store new node in order array", K(ret));
   } else if (OB_FAIL(append_into_sorted_container(node))) {
+    LOG_WARN("fail to store new node in sorted array", K(ret));
   } else {
     node->set_parent(this);
   }
@@ -700,9 +713,12 @@ int ObLibContainerNode::insert(int64_t pos, ObLibTreeNodeBase* node)
       LOG_WARN("fail to insert child on leaf node", K(ret), K(flags_), K(type_));
     } else if (pos >= count) {
       if (OB_FAIL(append(node))) {
+        LOG_WARN("fail to append.", K(ret), K(count), K(pos));
       }
     } else if (OB_FAIL(insert_into_sequent_container(pos, node))) {
+      LOG_WARN("fail to insert new node into sequent container.", K(ret), K(count), K(pos));
     } else if (OB_FAIL(append_into_sorted_container(node))) {
+      LOG_WARN("fail to insert new node into sorted container.", K(ret), K(count), K(pos));
     }
   }
   return ret;
@@ -728,6 +744,7 @@ int ObLibContainerNode::remove(ObLibTreeNodeBase* node)
   } else if (has_sequent_member() && OB_FAIL(remove_from_sequent_container(node->get_index()))) {
     LOG_WARN("fail to remove from sequent", K(ret), K(node->get_index()));
   } else if (OB_FAIL(remove_from_sorted_container(node))) {
+    LOG_WARN("fail to remove from sorted children", K(ret), K(count()), K(pos_));
   } else if (!check_container_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to remove node, as too array number not consistent", K(ret));
@@ -752,7 +769,9 @@ int ObLibContainerNode::remove(int64_t pos)
     } else {
       ObLibTreeNodeBase* cur = children_->at(pos);
       if (OB_FAIL(children_->remove(pos))) {
+        LOG_WARN("fail to remove child node", K(ret), K(count));
       } else if (OB_FAIL(remove_from_sorted_container(cur))) {
+        LOG_WARN("fail to remove from sorted children", K(ret), K(count), K(pos));
       } else if (!check_container_valid()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to remove node, as too array number not consistent", K(ret));
@@ -762,6 +781,7 @@ int ObLibContainerNode::remove(int64_t pos)
     }
   } else if (has_sequent_member()) {
     if (OB_FAIL(remove_from_sequent_container(pos))) {
+      LOG_WARN("fail to remove from sequent", K(ret), K(pos));
     }
   } else if (has_sorted_member()) {
     remove_from_sorted_container(pos);
@@ -778,6 +798,7 @@ int ObLibContainerNode::remove_from_sequent_container(int64_t pos)
   } else if (is_using_child_buffer()) {
     child_[0] = nullptr;
   } else if (OB_FAIL(children_->remove(pos))) {
+    LOG_WARN("fail to remove child from sequent", K(ret), K(pos));
   } else {
     decrease_index_after(pos);
   }
@@ -835,11 +856,13 @@ int ObLibContainerNode::append_into_sequent_container(ObLibTreeNodeBase* node)
       child_[0] = static_cast<ObLibContainerNode*>(node);
       node->set_index(0);
     } else if (OB_FAIL(extend())) {
+      LOG_WARN("failed to extend", K(ret));
     } else {
       ret = append_into_sequent_container(node);
     }
   } else {
     if (OB_FAIL(children_->push_back(node))) {
+      LOG_WARN("fail to store new node in order array", K(ret), K(children_->size()));
     } else {
       node->set_index(children_->size() - 1);
     }
@@ -858,6 +881,7 @@ int ObLibContainerNode::insert_into_sequent_container(int64_t pos, ObLibTreeNode
       child_[0] = static_cast<ObLibContainerNode*>(node);
       node->set_index(0);
     } else if (OB_FAIL(extend())) {
+      LOG_WARN("failed to extend", K(ret));
     } else {
       node->set_index(0);
       ret = insert_into_sequent_container(pos, node);
@@ -866,6 +890,7 @@ int ObLibContainerNode::insert_into_sequent_container(int64_t pos, ObLibTreeNode
     ObLibTreeNodeVector::iterator iter = pos > children_->size() ?
                                          children_->end() : children_->begin() + pos;
     if (OB_FAIL(children_->insert(iter, node))) {
+      LOG_WARN("fail to insert new node in order array", K(ret), K(children_->size()));
     } else {
       node->set_index(pos);
       increase_index_after(pos+1);
@@ -885,10 +910,12 @@ int ObLibContainerNode::append_into_sorted_container(ObLibTreeNodeBase* node)
       child_[0] = static_cast<ObLibContainerNode*>(node);
       node->set_index(0);
     } else if (OB_FAIL(extend())) {
+      LOG_WARN("failed to extend", K(ret));
     } else {
       ret = append_into_sorted_container(node);
     }
   } else if (OB_FAIL(sorted_children_->push_back(node))) {
+    LOG_WARN("fail to append into sorted children", K(ret), K(sorted_children_->size()));
   } else {
     sort();
   }
@@ -921,9 +948,12 @@ int ObLibContainerNode::update(int64_t pos, ObLibTreeNodeBase* new_node)
         ObLibTreeNodeVector::iterator iter = children_->begin() + pos;
         ObLibTreeNodeBase* tmp_node = nullptr;
         if (OB_FAIL(children_->replace(iter, new_node, tmp_node))) {
+          LOG_WARN("fail to replace child node", K(ret), K(count), K(pos));
         } else {
           if (OB_FAIL(remove_from_sorted_container(old_node))) {
+            LOG_WARN("fail to remove from sorted children", K(ret), K(count), K(pos));
           } else if (OB_FAIL(append_into_sorted_container(new_node))) {
+            LOG_WARN("fail to append into sorted children", K(ret), K(count), K(pos));
           }
         }  
       }      
@@ -934,6 +964,7 @@ int ObLibContainerNode::update(int64_t pos, ObLibTreeNodeBase* new_node)
       } else {
         remove_from_sorted_container(pos);
         if (OB_FAIL(append_into_sorted_container(new_node))) {
+          LOG_WARN("fail to append into sorted children", K(ret), K(count), K(pos));
         }
       }
     }
@@ -964,9 +995,12 @@ int ObLibContainerNode::update(ObLibTreeNodeBase* old_node, ObLibTreeNodeBase* n
           LOG_WARN("fail to update child as old node not exist", K(ret), K(flags_));
         }
       } else if (OB_FAIL(update(old_node->get_index(), new_node))) {
+        LOG_WARN("fail to update node", K(ret), K(flags_), K(type_), K(old_node->get_index()));
       }
     } else if (OB_FAIL(remove_from_sorted_container(old_node))) {
+      LOG_WARN("fail to remove from sorted children", K(ret), K(count()), K(old_node->get_index()));
     } else if (OB_FAIL(append_into_sorted_container(new_node))) {
+      LOG_WARN("fail to append into sorted children", K(ret));
     }
   }
 
@@ -1007,7 +1041,9 @@ int ObLibContainerNode::extend()
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(append_into_sequent_container(tmp))) {
+      LOG_WARN("failed to add sequent array", K(ret), K(ctx_));
     } else if (OB_FAIL(append_into_sorted_container(tmp))) {
+      LOG_WARN("failed to add sorted array", K(ret), K(ctx_));
     }
 
   }

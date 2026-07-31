@@ -49,6 +49,7 @@ int ObDASUtils::check_nested_sql_mutating(ObTableID ref_table_id, ObExecContext 
   }
   while (OB_SUCC(ret) && cur_parent_ctx != nullptr) {
     ObDASCtx &parent_das_ctx = cur_parent_ctx->get_das_ctx();
+    LOG_DEBUG("check nested sql mutating", K(cur_parent_ctx), K(parent_das_ctx), K(ref_table_id));
     FOREACH_X(node, parent_das_ctx.get_table_loc_list(), OB_SUCC(ret)) {
       ObDASTableLoc *table_loc = *node;
       if (table_loc->loc_meta_->ref_table_id_ == ref_table_id 
@@ -58,7 +59,9 @@ int ObDASUtils::check_nested_sql_mutating(ObTableID ref_table_id, ObExecContext 
         const ObTableSchema *table_schema = NULL;
         
         if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+          LOG_WARN("get runtime schema guard failed", K(ret));
         } else if (OB_FAIL(schema_guard.get_table_schema( ref_table_id, table_schema))) {
+          LOG_WARN("get table schema failed", K(ret), K(ref_table_id));
         } else if (table_schema != nullptr) {
           LOG_MYSQL_USER_ERROR(OB_ERR_MUTATING_TABLE_OPERATION, table_schema->get_table_name());
         }
@@ -112,6 +115,7 @@ int ObDASUtils::build_table_loc_meta(ObIAllocator &allocator,
   } else {
     dst = new(buf) ObDASTableLocMeta(allocator);
     if (OB_FAIL(dst->assign(src))) {
+      LOG_WARN("assign table loc meta failed", K(ret));
     }
   }
   return ret;
@@ -150,6 +154,7 @@ int ObDASUtils::deserialize_das_ctdefs(const char *buf, const int64_t data_len, 
   for (int64_t i = 0; OB_SUCC(ret) && i < array_size; ++i) {
     ObDASDMLBaseCtDef *ctdef = nullptr;
     if (OB_FAIL(ObDASTaskFactory::alloc_das_ctdef(op_type, allocator, ctdef))) {
+      SQL_DAS_LOG(WARN, "allocate das ctdef failed", K(ret));
     }
     OB_UNIS_DECODE(*ctdef);
     OZ(ctdefs.push_back(ctdef));
@@ -176,6 +181,7 @@ int ObDASUtils::project_storage_row(const ObDASDMLBaseCtDef &dml_ctdef,
       //nothing to do
     } else if (OB_FAIL(data_plane::ObDatumReshape::reshape_datum_value(
             col_type, col_accuracy, allocator, storage_row.storage_datums_[i]))) {
+      LOG_WARN("reshape storage value failed", K(ret));
     } else if (col_type.is_lob_storage() && col_type.has_lob_header()) {
       storage_row.storage_datums_[i].set_has_lob_header();
     }
@@ -207,6 +213,7 @@ int ObDASUtils::reshape_storage_value(const ObObjMeta &col_type,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(padding_fixed_string_value(col_accuracy.get_length(), allocator, value))) {
+    LOG_WARN("padding char value failed", K(ret), K(col_accuracy), K(value));
   }
   return ret;
 }
@@ -272,6 +279,7 @@ int ObDASUtils::find_child_das_def(const ObDASBaseCtDef *root_ctdef,
                                      op_type,
                                      target_ctdef,
                                      target_rtdef))) {
+        LOG_WARN("find child das def failed", K(ret));
       }
     }
   }
@@ -293,6 +301,7 @@ int ObDASUtils::find_child_das_ctdef(const ObDASBaseCtDef *root_ctdef,
       if (OB_FAIL(find_child_das_ctdef(root_ctdef->children_[i],
                                      op_type,
                                      target_ctdef))) {
+        LOG_WARN("find child das def failed", K(ret));
       }
     }
   }
@@ -314,6 +323,7 @@ int ObDASUtils::find_child_das_rtdef(ObDASBaseRtDef *root_rtdef,
       if (OB_FAIL(find_child_das_rtdef(root_rtdef->children_[i],
                                       op_type,
                                       target_rtdef))) {
+        LOG_WARN("find child das def failed", K(ret));
       }
     }
   }
@@ -345,6 +355,7 @@ bool ObDASUtils::is_func_lookup(const ObDASBaseCtDef *attach_ctdef)
   if (nullptr != attach_ctdef && attach_ctdef->op_type_ == ObDASOpType::DAS_OP_INDEX_PROJ_LOOKUP) {
     const ObDASBaseCtDef *func_ctdef = nullptr;
     if (OB_FAIL(ObDASUtils::find_child_das_ctdef(attach_ctdef, DAS_OP_FUNC_LOOKUP, func_ctdef))) {
+      SQL_DAS_LOG(WARN, "find chld das def failed", K(ret));
     } else {
       bret = (nullptr != func_ctdef);
     }
@@ -360,6 +371,7 @@ bool ObDASUtils::is_vec_idx_scan(const ObDASBaseCtDef *attach_ctdef)
   if (attach_ctdef != nullptr) {
     const ObDASBaseCtDef *vir_scan_ctdef = nullptr;
     if (OB_FAIL(ObDASUtils::find_child_das_ctdef(attach_ctdef, DAS_OP_VEC_SCAN, vir_scan_ctdef))) {
+      SQL_DAS_LOG(WARN, "find chld das def failed", K(ret));
     } else {
       bret = (nullptr != vir_scan_ctdef);
     }
@@ -376,6 +388,7 @@ bool ObDASUtils::is_fts_idx_scan(const ObDASBaseCtDef *attach_ctdef)
   if (attach_ctdef != nullptr) {
     const ObDASBaseCtDef *vir_scan_ctdef = nullptr;
     if (OB_FAIL(ObDASUtils::find_child_das_ctdef(attach_ctdef, DAS_OP_IR_SCAN, vir_scan_ctdef))) {
+      SQL_DAS_LOG(WARN, "find chld das def failed", K(ret));
     } else {
       bret = (nullptr != vir_scan_ctdef);
     }
@@ -393,6 +406,7 @@ bool ObDASUtils::is_es_match_scan(const ObDASBaseCtDef *attach_ctdef)
     const ObDASBaseCtDef *match_scan_ctdef = nullptr;
     ObDASBaseRtDef *match_scan_rtdef = nullptr;
     if (OB_FAIL(ObDASUtils::find_child_das_ctdef(attach_ctdef, DAS_OP_IR_ES_SCORE, match_scan_ctdef))) {
+      SQL_DAS_LOG(WARN, "find chld das def failed", K(ret));
     } else {
       bret = (nullptr != match_scan_ctdef);
     }

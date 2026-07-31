@@ -37,6 +37,7 @@
 #include "sql/session/ob_session_val_map.h"
 #include "sql/session/ob_basic_session_info.h"
 #include "sql/monitor/ob_exec_stat.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/rc/ob_context.h"
 #include "sql/ob_optimizer_trace_impl.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
@@ -244,6 +245,7 @@ public:
         int ret = OB_SUCCESS;
         if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mem_context_,
             lib::ContextParam().set_mem_attr(ObModIds::OB_PL)))) {
+          SQL_ENG_LOG(WARN, "create memory entity failed");
         } else if (OB_ISNULL(mem_context_)) {
           ret = OB_ERR_UNEXPECTED;
           SQL_ENG_LOG(WARN, "null memory entity returned");
@@ -289,6 +291,7 @@ public:
               break;
             }
           } else if (OB_FAIL(session.close_cursor(cursor->get_id()))) {
+            SQL_ENG_LOG(WARN, "failed to close session cursor", K(ret), K(cursor->get_id()));
           } else {
             SQL_ENG_LOG(INFO, "clsoe session cursor implicit successed!", K(cursor->get_id()));
           }
@@ -413,6 +416,63 @@ public:
   void destroy(bool skip_sys_var = false);
   void reset(bool skip_sys_var);
   void clean_status();
+  void set_plan_cache(ObPlanCache *cache) { plan_cache_ = cache; }
+  void set_ps_cache(ObPsCache *cache) { ps_cache_ = cache; }
+  void bind_plan_cache_runtime(
+      ObPlanCache &plan_cache,
+      ObPsCache &ps_cache,
+      query::ObIPlanCacheAccessService &access_service,
+      query::ObIQueryRuntimeEnvironment &runtime_environment)
+  {
+    plan_cache_ = &plan_cache;
+    ps_cache_ = &ps_cache;
+    plan_cache_access_service_ = &access_service;
+    query_runtime_environment_ = &runtime_environment;
+  }
+  query::ObIPlanCacheAccessService &get_plan_cache_access_service() const
+  {
+    OB_ASSERT_MSG(
+        nullptr != plan_cache_access_service_,
+        "plan-cache access service is not bound to SQL session");
+    return *plan_cache_access_service_;
+  }
+  query::ObIQueryRuntimeEnvironment *get_query_runtime_environment() const
+  {
+    return query_runtime_environment_;
+  }
+  void bind_command_services(
+      query::ObIRootCommandService &root_command_service,
+      query::ObILocalCommandService &local_command_service,
+      query::ObIChangeStreamService &change_stream_service,
+      query::ObIDdlExecutionLimiter &ddl_execution_limiter,
+      ObIVirtualTableFactoryProvider &virtual_table_factory_provider)
+  {
+    root_command_service_ = &root_command_service;
+    local_command_service_ = &local_command_service;
+    change_stream_service_ = &change_stream_service;
+    ddl_execution_limiter_ = &ddl_execution_limiter;
+    virtual_table_factory_provider_ = &virtual_table_factory_provider;
+  }
+  query::ObIRootCommandService *get_root_command_service() const
+  {
+    return root_command_service_;
+  }
+  query::ObILocalCommandService *get_local_command_service() const
+  {
+    return local_command_service_;
+  }
+  query::ObIChangeStreamService *get_change_stream_service() const
+  {
+    return change_stream_service_;
+  }
+  query::ObIDdlExecutionLimiter *get_ddl_execution_limiter() const
+  {
+    return ddl_execution_limiter_;
+  }
+  ObIVirtualTableFactoryProvider *get_virtual_table_factory_provider() const
+  {
+    return virtual_table_factory_provider_;
+  }
   const common::ObWarningBuffer &get_show_warnings_buffer() const { return show_warnings_buf_; }
   const common::ObWarningBuffer &get_warnings_buffer() const { return warnings_buf_; }
   common::ObWarningBuffer &get_warnings_buffer() { return warnings_buf_; }
@@ -425,6 +485,9 @@ public:
   void reset_show_warnings_buf() { show_warnings_buf_.reset(); }
   ObPrivSet get_user_priv_set() const { return user_priv_set_; }
   ObPrivSet get_db_priv_set() const { return db_priv_set_; }
+  ObPlanCache *get_plan_cache();
+  ObPlanCache *get_plan_cache_directly() const { return plan_cache_; };
+  ObPsCache *get_ps_cache();
   void *get_btree_iter_cache() { return btree_iter_cache_; }
   void set_user_priv_set(const ObPrivSet priv_set) { user_priv_set_ = priv_set; }
   void set_db_priv_set(const ObPrivSet priv_set) { db_priv_set_ = priv_set; }
@@ -453,10 +516,23 @@ public:
   {
     config_provider_ = config_provider;
   }
-  void configure_obj_cast(
-      common::ObObjCastParams &params,
-      common::ObISrsProvider *srs_provider,
-      common::ObILobReadService *lob_read_service) const;
+  void set_srs_provider(common::ObISrsProvider *srs_provider)
+  {
+    srs_provider_ = srs_provider;
+  }
+  common::ObISrsProvider *get_srs_provider() const
+  {
+    return srs_provider_;
+  }
+  void set_lob_read_service(common::ObILobReadService *lob_read_service)
+  {
+    lob_read_service_ = lob_read_service;
+  }
+  common::ObILobReadService *get_lob_read_service() const
+  {
+    return lob_read_service_;
+  }
+  void configure_obj_cast(common::ObObjCastParams &params) const;
   bool is_read_only() const { return config_provider_->is_read_only(); };
   int64_t get_nlj_cache_limit() const { return config_provider_->get_nlj_cache_limit(); };
   bool is_terminate(int &ret) const;
@@ -537,6 +613,8 @@ public:
     return ret;
   }
   int64_t get_ps_session_info_size() const { return ps_session_info_map_.size(); }
+  inline pl::ObPL *get_pl_engine() const { return ::oceanbase::share::server_service<::oceanbase::pl::ObPL>(); }
+
   pl::ObPLCursorInfo *get_pl_implicit_cursor();
 
   pl::ObPLSqlCodeInfo *get_pl_sqlcode_info();
@@ -687,7 +765,7 @@ public:
                       bool &already_exists,
                       bool is_inner_sql);
   int get_inner_ps_stmt_id(ObPsStmtId cli_stmt_id, ObPsStmtId &inner_stmt_id);
-  int close_ps_stmt(ObPsCache &ps_cache, ObPsStmtId stmt_id);
+  int close_ps_stmt(ObPsStmtId stmt_id);
   void reset_ps_session_info() { ps_session_info_map_.reuse(); }
   void reset_ps_name() 
   {
@@ -828,6 +906,7 @@ public:
     if (OB_UNLIKELY(!ps_session_info_map_.created())) {
       // do nothing
     } else if (OB_FAIL(ps_session_info_map_.foreach_refactored(fn))) {
+      SQL_ENG_LOG(WARN, "failed to read each ps session info", K(ret));
     }
     return ret;
   }
@@ -868,9 +947,8 @@ public:
 public:
   bool has_tx_level_temp_table() const
   { return data_plane::tx_desc_has_temporary_tables(tx_desc_); }
-  int close_all_ps_stmt(ObPsCache &ps_cache);
+  int close_all_ps_stmt();
 private:
-  void release_all_ps_session_info();
   void set_cur_exec_ctx(ObExecContext *cur_exec_ctx) { cur_exec_ctx_ = cur_exec_ctx; }
 
   static const int64_t MAX_STORED_PLANS_COUNT = 10240;
@@ -895,6 +973,17 @@ private:
   transaction::ObTxClass trans_type_;
   const common::ObVersionProvider *version_provider_;
   const ObSQLConfigProvider *config_provider_;
+  common::ObISrsProvider *srs_provider_;
+  common::ObILobReadService *lob_read_service_;
+  ObPlanCache *plan_cache_;
+  ObPsCache *ps_cache_;
+  query::ObIPlanCacheAccessService *plan_cache_access_service_;
+  query::ObIQueryRuntimeEnvironment *query_runtime_environment_;
+  query::ObIRootCommandService *root_command_service_;
+  query::ObILocalCommandService *local_command_service_;
+  query::ObIChangeStreamService *change_stream_service_;
+  query::ObIDdlExecutionLimiter *ddl_execution_limiter_;
+  ObIVirtualTableFactoryProvider *virtual_table_factory_provider_;
   // Record the number of rows scanned in the select stmt result set for use with found_row() when setting sql_calc_found_row;
   int64_t found_rows_;
   // Record affected_row in dml operations, for use by row_count()

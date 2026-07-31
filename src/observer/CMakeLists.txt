@@ -4,6 +4,8 @@ seekdb_apply_standalone_inventory(
   ob_server SEEKDB_OBSERVER_RETRIEVAL_COMPOSITION)
 ob_server_add_target(ob_server)
 
+configure_file(../share/ob_version.cpp.in ob_version.cpp)
+
 add_library(oceanbase_static STATIC EXCLUDE_FROM_ALL
   ${CMAKE_CURRENT_BINARY_DIR}/ob_version.cpp)
 target_link_libraries(oceanbase_static PUBLIC
@@ -136,8 +138,6 @@ if (NOT CMAKE_BUILD_TYPE)
 else()
   set(BUILD_FLAGS "${CMAKE_BUILD_TYPE}" CACHE INTERNAL "build flags")
 endif()
-
-configure_file(../share/ob_version.cpp.in ob_version.cpp)
 
 if(STDC_SHARED_LIB)
   get_filename_component(STDC_SHARED_LIB_DIR ${STDC_SHARED_LIB} DIRECTORY)

@@ -61,6 +61,7 @@ int ObOptDmlStatMapGetter::consume(ObOptDmlStat &dml_stat)
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(scanner_.add_row(cur_row_))) {
+      SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
     } else {/*do nothing*/}
   }
   return ret;
@@ -91,6 +92,7 @@ int ObAllVirtualDMmlStats::inner_get_next_row(ObNewRow *&row)
     ret = OB_ITER_END;
   } else if (!start_to_read_) {
     if (OB_FAIL(fill_scanner())) {
+      SERVER_LOG(WARN, "fill scanner failed", K(ret));
     } else {
       start_to_read_ = true;
     }
@@ -129,6 +131,7 @@ int ObAllVirtualDMmlStats::fill_scanner()
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "optstat monitor mgr is NULL", K(ret));
       } else if (OB_FAIL(optstat_monitor_mgr->generate_opt_stat_monitoring_info_rows(getter))) {
+        SERVER_LOG(WARN, "generate monitor info array failed", K(ret));
       } else {
         scanner_it_ = scanner_.begin();
         start_to_read_ = true;

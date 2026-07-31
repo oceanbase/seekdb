@@ -47,6 +47,7 @@ int ObFixedArrayImpl<T, BlockAllocatorT>::deserialize(const char *buf, int64_t d
   OB_UNIS_DECODE(count);
   if (OB_SUCC(ret) && count > 0) {
     if (OB_FAIL(prepare_allocate(count))) {
+      _OB_LOG(WARN, "fail to init ob array item:ret[%d]", ret);
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < count; i ++) {
         OB_UNIS_DECODE(at(i));
@@ -81,9 +82,11 @@ int Ob2DArray<T, max_block_size,
 {
   int ret = OB_SUCCESS;
   if (OB_SUCCESS != (ret = serialization::encode_vi64(buf, buf_len, pos, count()))) {
+    _OB_LOG(WARN, "failed to encode ob array count:ret[%d]", ret);
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < count(); i++) {
     if (OB_SUCCESS != (ret = serialization::encode(buf, buf_len, pos, at(i)))) {
+      _OB_LOG(WARN, "failed to encode item[%ld]:ret[%d]", i, ret);
     }
   }
   return ret;
@@ -131,11 +134,14 @@ int Ob2DArray<T,
   reset();
 
   if (OB_SUCCESS != (ret = serialization::decode_vi64(buf, data_len, pos, &count))) {
+    _OB_LOG(WARN, "failed to decode ob array count:ret[%d]", ret);
   } else if (OB_SUCCESS != (ret = prepare_allocate(count))) {
+    OB_LOG(WARN, "failed to prepare allocate array space", K(ret), K(count));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < count; i++) {
     T &item = at(i);
     if (OB_SUCCESS != (ret = serialization::decode(buf, data_len, pos, item))) {
+      _OB_LOG(WARN, "failed to decode array item:ret[%d]", ret);
     }
   }
   return ret;

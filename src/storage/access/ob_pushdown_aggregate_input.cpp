@@ -1,17 +1,11 @@
 /*
- * Copyright (c) 2025 OceanBase.
+ * Copyright (c) 2026 OceanBase.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  */
 
 #define USING_LOG_PREFIX STORAGE
@@ -190,6 +184,8 @@ int ObPushdownAggregateInput::get_null_count(
               false,
               &col_param,
               valid_row_count))) {
+        LOG_WARN("failed to count non-null aggregate input rows", K(ret), K(col_offset),
+                 K(selection_.count_));
       } else if (OB_UNLIKELY(valid_row_count < 0 || valid_row_count > selection_.count_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid non-null aggregate input count", K(ret), K(valid_row_count),
@@ -213,7 +209,9 @@ int ObPushdownAggregateInput::get_null_count(
       meta.col_idx_ = col_index;
       meta.col_type_ = blocksstable::SK_IDX_NULL_COUNT;
       if (OB_FAIL(agg_reader.init(index_info_->agg_row_buf_, index_info_->agg_buf_size_))) {
+        LOG_WARN("failed to initialize aggregate row reader", K(ret), K(col_index));
       } else if (OB_FAIL(agg_reader.read(meta, datum, is_prefix))) {
+        LOG_WARN("failed to read aggregate null count", K(ret), K(col_index));
       } else if (OB_UNLIKELY(datum.is_null() || is_prefix)) {
         ret = OB_NOT_SUPPORTED;
       } else {
@@ -236,6 +234,7 @@ int ObPushdownAggregateInput::can_read_values(
   const share::schema::ObColumnParam *col_param = nullptr;
   can_read = false;
   if (OB_FAIL(get_input_column(slot, col_offset, col_index, col_param))) {
+    LOG_WARN("failed to map aggregate value slot", K(ret), K(slot));
   } else {
     if (OB_COUNT_AGG_PD_COLUMN_ID == col_offset || nullptr == col_param) {
     } else if (INPUT_ROW == kind_ && nullptr != row_
@@ -298,7 +297,9 @@ int ObPushdownAggregateInput::read_index_extreme(
     // any minor summary, must fall back to decoded values.
     ret = OB_NOT_SUPPORTED;
   } else if (OB_FAIL(agg_reader.init(index_info_->agg_row_buf_, index_info_->agg_buf_size_))) {
+    LOG_WARN("failed to initialize aggregate row reader", K(ret), K(col_index), K(read_min));
   } else if (OB_FAIL(agg_reader.read(meta, datum, is_prefix))) {
+    LOG_WARN("failed to read aggregate extreme", K(ret), K(col_index), K(read_min));
   } else if (datum.is_null() && selection_.count_ > 0) {
     // A missing serialized MIN/MAX can mean either "not collected" (NOP) or
     // "all selected values are NULL".  Prove the latter with an exact NULL
@@ -332,6 +333,7 @@ int ObPushdownAggregateInput::try_reduce(
   if (OB_UNLIKELY(0 != (requested & ~supported))) {
     ret = OB_NOT_SUPPORTED;
   } else if (OB_FAIL(get_input_column(slot, col_offset, col_index, col_param))) {
+    LOG_WARN("failed to map aggregate input slot", K(ret), K(slot));
   } else if (INPUT_INDEX == kind_
              && (OB_ISNULL(index_info_)
                  || !index_info_->can_blockscan()
@@ -437,6 +439,7 @@ int ObPushdownAggregateInput::normalize_value(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("decoded NOP aggregate value has no schema default", K(ret), K(col_param));
     } else if (OB_FAIL(storage_datum.from_obj_enhance(default_value))) {
+      LOG_WARN("failed to materialize aggregate default value", K(ret));
     }
   } else {
     storage_datum.shallow_copy_from_datum(datum);
@@ -464,10 +467,13 @@ int ObPushdownAggregateInput::read_values(
   values = share::aggregate::ObAggregateValueBatchView();
   bool can_read = false;
   if (OB_FAIL(can_read_values(slot, can_read))) {
+    LOG_WARN("failed to probe aggregate value slot", K(ret), K(slot));
   } else if (!can_read) {
     ret = OB_NOT_SUPPORTED;
   } else if (OB_FAIL(get_input_column(slot, col_offset, col_index, col_param))) {
+    LOG_WARN("failed to map aggregate value slot", K(ret), K(slot));
   } else if (OB_FAIL(prepare_value_buffer(selection_.count_))) {
+    LOG_WARN("failed to prepare aggregate value buffer", K(ret), K(selection_.count_));
   } else if (0 == selection_.count_) {
   } else if (INPUT_ROW == kind_) {
     if (OB_ISNULL(row_)
@@ -480,6 +486,7 @@ int ObPushdownAggregateInput::read_values(
       }
       LOG_WARN("failed to own row aggregate value", K(ret), K(col_offset), KP(row_));
     } else if (OB_FAIL(normalize_value(*col_param, value_datums_[0]))) {
+      LOG_WARN("failed to normalize row aggregate value", K(ret), K(col_offset));
     }
   } else if (INPUT_READER == kind_) {
     const int64_t dense_begin = selection_.begin_;
@@ -487,9 +494,11 @@ int ObPushdownAggregateInput::read_values(
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(reader_->read_column_values(
         col_offset, dense_begin, row_ids_, selection_.count_, value_allocator_, value_datums_))) {
+      LOG_WARN("failed to decode aggregate values", K(ret), K(col_offset), K(selection_.count_));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < selection_.count_; ++i) {
       if (OB_FAIL(normalize_value(*col_param, value_datums_[i]))) {
+        LOG_WARN("failed to normalize decoded aggregate value", K(ret), K(i), K(col_offset));
       }
     }
   } else {

@@ -54,10 +54,12 @@ int ObTabletDumpMdsNodeOperator::dump<mds::DummyKey, ObTabletCreateDeleteMdsUser
         {
           if (!uncommitted_tablet_status.is_memory_object()) {
             if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator_, uncommitted_tablet_status.ptr_))) {
+              LOG_WARN("failed to alloc and new", K(ret));
             }
           }
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(uncommitted_tablet_status.ptr_->assign(kv, allocator_))) {
+            LOG_WARN("failed to copy mds dump kv", K(ret));
           }
         }
         break;
@@ -65,10 +67,12 @@ int ObTabletDumpMdsNodeOperator::dump<mds::DummyKey, ObTabletCreateDeleteMdsUser
         {
           if (!committed_tablet_status.is_memory_object()) {
             if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator_, committed_tablet_status.ptr_))) {
+              LOG_WARN("failed to alloc and new", K(ret));
             }
           }
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(committed_tablet_status.ptr_->assign(kv, allocator_))) {
+            LOG_WARN("failed to copy mds dump kv", K(ret));
           }
         }
         break;
@@ -107,10 +111,12 @@ int ObTabletDumpMdsNodeOperator::dump<mds::DummyKey, ObTabletBindingMdsUserData>
         {
           if (!uncommitted_aux_tablet_info.is_memory_object()) {
             if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator_, uncommitted_aux_tablet_info.ptr_))) {
+              LOG_WARN("failed to alloc and new", K(ret));
             }
           }
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(uncommitted_aux_tablet_info.ptr_->assign(kv, allocator_))) {
+            LOG_WARN("failed to copy mds dump kv", K(ret));
           }
         }
         break;
@@ -118,10 +124,12 @@ int ObTabletDumpMdsNodeOperator::dump<mds::DummyKey, ObTabletBindingMdsUserData>
         {
           if (!committed_aux_tablet_info.is_memory_object()) {
             if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator_, committed_aux_tablet_info.ptr_))) {
+              LOG_WARN("failed to alloc and new", K(ret));
             }
           }
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(committed_aux_tablet_info.ptr_->assign(kv, allocator_))) {
+            LOG_WARN("failed to copy mds dump kv", K(ret));
           }
         }
         break;
@@ -158,11 +166,13 @@ int ObTabletDumpMdsNodeOperator::dump<mds::DummyKey, ObTabletAutoincSeq>(const m
       LOG_WARN("invalid state", K(ret), K(state));
     } else if (!auto_inc_seq.is_memory_object()) {
       if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator_, auto_inc_seq.ptr_))) {
+        LOG_WARN("failed to alloc and new", K(ret));
       }
     }
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(auto_inc_seq.ptr_->deserialize(allocator_, user_data.ptr(), user_data.length(), pos))) {
+      LOG_WARN("failed to deserialize", K(ret));
     } else {
       dumped = true;
     }
@@ -188,12 +198,15 @@ int ObTabletDumpMdsNodeOperator::dump<compaction::ObMediumCompactionInfoKey, com
       LOG_WARN("invalid state", K(ret), K(state));
     } else if (!medium_info_list.is_memory_object()) {
       if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator_, medium_info_list.ptr_))) {
+        LOG_WARN("failed to alloc and new", K(ret));
       } else if (OB_FAIL(medium_info_list.ptr_->init_for_first_creation(allocator_))) {
+        LOG_WARN("failed to init medium info list", K(ret));
       }
     }
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(medium_info_list.ptr_->append(key, node))) {
+      LOG_WARN("failed to copy mds dump node", K(ret));
     } else {
       dumped = true;
     }
@@ -209,21 +222,25 @@ int ObTabletDumpMdsNodeOperator::operator()(const mds::MdsDumpKV &kv)
 
   if (OB_SUCC(ret) && !dumped) {
     if (OB_UNLIKELY(OB_SUCCESS != (ret = dump<mds::DummyKey, ObTabletCreateDeleteMdsUserData>(kv, dumped)))) {
+      LOG_WARN("failed to dump tablet status", K(ret), K(kv));
     }
   }
 
   if (OB_SUCC(ret) && !dumped) {
     if (OB_UNLIKELY(OB_SUCCESS != (ret = dump<mds::DummyKey, ObTabletBindingMdsUserData>(kv, dumped)))) {
+      LOG_WARN("failed to dump aux tablet info", K(ret), K(kv));
     }
   }
 
   if (OB_SUCC(ret) && !dumped) {
     if (OB_UNLIKELY(OB_SUCCESS != (ret = dump<mds::DummyKey, ObTabletAutoincSeq>(kv, dumped)))) {
+      LOG_WARN("failed to dump auto inc seq", K(ret), K(kv));
     }
   }
 
   if (OB_SUCC(ret) && !dumped) {
     if (OB_UNLIKELY(OB_SUCCESS != (ret = dump<compaction::ObMediumCompactionInfoKey, compaction::ObMediumCompactionInfo>(kv, dumped)))) {
+      LOG_WARN("failed to dump medium info", K(ret), K(kv));
     }
   }
 

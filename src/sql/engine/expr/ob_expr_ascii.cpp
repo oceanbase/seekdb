@@ -95,6 +95,7 @@ int ObExprAscii::calc(common::ObObj &obj,
     ObString str_val = obj1.get_string();
     if (OB_FAIL(sql::ObTextStringHelper::read_prefix_string_data(
             *expr_ctx.exec_ctx_, expr_ctx.calc_buf_, obj1, str_val))) {
+      LOG_WARN("failed to get string data", K(ret), K(obj1.get_meta()));                                                     
     } else {
       calc_ascii_inner(obj, expr_ctx, str_val);
     }
@@ -116,6 +117,7 @@ int ObExprAscii::calc_ascii_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
   int ret = OB_SUCCESS;
   ObDatum *s_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, s_datum))) {
+    LOG_WARN("eval arg failed", K(ret));
   } else if (s_datum->is_null()) {
     res_datum.set_null();
   } else if (!ob_is_text_tc(expr.args_[0]->datum_meta_.type_)) {
@@ -131,6 +133,7 @@ int ObExprAscii::calc_ascii_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
                                                             expr.args_[0]->obj_meta_.has_lob_header(),
                                                             &temp_allocator,
                                                             str_val))) {
+      LOG_WARN("failed to get lob data", K(ret), K(expr.args_[0]->datum_meta_));   
     } else {
       calc_ascii_expr_inner(res_datum, str_val);
     }
@@ -245,6 +248,7 @@ int ObExprOrd::calc_ord_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_da
   int ret = OB_SUCCESS;
   ObDatum *s_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, s_datum))) {
+    LOG_WARN("eval arg failed", K(ret));
   } else if (s_datum->is_null()) {
     res_datum.set_null();
   } else {
@@ -264,6 +268,7 @@ int ObExprOrd::calc_ord_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_da
                                                               expr.args_[0]->obj_meta_.has_lob_header(),
                                                               &temp_allocator,
                                                               str_val))) {
+        LOG_WARN("failed to get string data", K(ret), K(expr.args_[0]->datum_meta_));   
       } else {
         ret = calc_ord_expr_inner(cs_type, str_val, res_int, res_null);
       }
@@ -278,6 +283,7 @@ int ObExprOrd::calc_ord_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_da
         number::ObNumber res_nmb;
         ObNumStackOnceAlloc tmp_alloc;
         if (OB_FAIL(res_nmb.from(res_int, tmp_alloc))) {
+          LOG_WARN("get nmb from int failed", K(ret), K(res_int));
         } else {
           res_datum.set_number(res_nmb);
         }

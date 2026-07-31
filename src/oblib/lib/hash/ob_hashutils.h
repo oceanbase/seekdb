@@ -878,7 +878,9 @@ struct HashMapPair
   {
     int ret = OB_SUCCESS;
     if (OB_UNLIKELY(OB_SUCCESS != (ret = copy_assign(first, a)))) {
+      _OB_LOG(ERROR, "copy first failed, ret=[%d]", ret);
     } else if (OB_UNLIKELY(OB_SUCCESS != (ret = copy_assign(second, b)))) {
+      _OB_LOG(ERROR, "copy second failed, ret=[%d]", ret);
     }
     return ret;
   }
@@ -887,7 +889,9 @@ struct HashMapPair
   {
     int ret = OB_SUCCESS;
     if (OB_UNLIKELY(OB_SUCCESS != (ret = copy_assign(first, other.first)))) {
+      _OB_LOG(ERROR, "copy first failed, ret=[%d]", ret);
     } else if (OB_UNLIKELY(OB_SUCCESS != (ret = copy_assign(second, other.second)))) {
+      _OB_LOG(ERROR, "copy second failed, ret=[%d]", ret);
     }
     return ret;
   }
@@ -896,6 +900,7 @@ struct HashMapPair
   {
     int ret = OB_SUCCESS;
     if (OB_UNLIKELY(OB_SUCCESS != (ret = copy_assign(second, pair.second)))) {
+      _OB_LOG(ERROR, "copy failed, ret=[%d]", ret);
     }
     return ret;
   }
@@ -928,6 +933,7 @@ int copy(Pair &dest, const Pair &src, NormalPairTag)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(OB_SUCCESS != (ret = copy_assign(dest, src)))) {
+    _OB_LOG(ERROR, "copy failed, ret=[%d]", ret);
   }
   return ret;
 }
@@ -941,6 +947,7 @@ int do_copy(Pair &dest, const Pair &src, NormalPairTag)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(OB_SUCCESS != (ret = copy_assign(dest, src)))) {
+    _OB_LOG(ERROR, "copy failed, ret=[%d]", ret);
   }
   return ret;
 }

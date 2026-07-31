@@ -98,6 +98,8 @@ ObTxCtx *ObTxCtxFactory::alloc()
     tmp_ret = OB_TRANS_CTX_COUNT_REACH_LIMIT;
   } else if (NULL != (ctx = sop_borrow(ObTxCtx))) {
     (void)ATOMIC_FAA(&active_tx_ctx_count_, 1);
+    TRANS_LOG(DEBUG, "alloc tx ctx success", KP(ctx), K(active_tx_ctx_count_),
+              K(total_release_tx_ctx_count_));
   } else {
     // do nothing
   }
@@ -120,6 +122,8 @@ void ObTxCtxFactory::release(ObTransCtx *ctx)
     sop_return(ObTxCtx, tx_ctx);
     (void)ATOMIC_FAA(&active_tx_ctx_count_, -1);
     (void)ATOMIC_FAA(&total_release_tx_ctx_count_, 1);
+    TRANS_LOG(DEBUG, "release tx ctx success", KP(ctx), K(active_tx_ctx_count_),
+              K(total_release_tx_ctx_count_));
     ctx = NULL;
   }
 }

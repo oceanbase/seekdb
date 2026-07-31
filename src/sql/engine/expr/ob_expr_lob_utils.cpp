@@ -35,6 +35,7 @@ int ObTextStringHelper::build_text_iter(
   int ret = OB_SUCCESS;
   const common::ObLobReadOptions *options = nullptr;
   if (OB_FAIL(exec_ctx.get_lob_read_options(options))) {
+    LOG_WARN("get LOB read options failed", K(ret));
   } else {
     ret = build_text_iter(
         text_iter, *options, res_allocator, tmp_allocator);
@@ -65,6 +66,7 @@ int ObTextStringHelper::read_real_string_data(
   int ret = OB_SUCCESS;
   const common::ObLobReadOptions *options = nullptr;
   if (OB_FAIL(exec_ctx.get_lob_read_options(options))) {
+    LOG_WARN("get LOB read options failed", K(ret));
   } else {
     ret = read_real_string_data(
         *options, allocator, type, cs_type, has_lob_header, str);
@@ -104,6 +106,7 @@ int ObTextStringHelper::read_real_string_data(
   } else {
     const common::ObLobReadOptions *options = nullptr;
     if (OB_FAIL(exec_ctx.get_lob_read_options(options))) {
+      LOG_WARN("get LOB read options failed", K(ret));
     } else {
       ret = read_real_string_data(*options, allocator, obj, str);
     }
@@ -120,6 +123,7 @@ int ObTextStringHelper::build_text_iter(
   int ret = text_iter.init(
       0 /*buffer_len*/, &options, res_allocator, tmp_allocator);
   if (OB_FAIL(ret)) {
+    LOG_WARN("init lob string iterator failed", K(ret), K(text_iter));
   }
   return ret;
 }
@@ -141,6 +145,7 @@ int ob_adjust_lob_datum(ObExecContext &exec_ctx,
       ObString full_data;
       if (OB_FAIL(ObTextStringHelper::read_real_string_data(
               exec_ctx, &allocator, origin_obj, full_data))) {
+        LOG_WARN("Lob: failed to get full data", K(ret));
       } else {
         out_datum.set_string(full_data);
       }
@@ -184,6 +189,7 @@ int ob_adjust_lob_datum(ObExecContext &exec_ctx,
       ObString full_data;
       if (OB_FAIL(ObTextStringHelper::read_real_string_data(
               exec_ctx, &allocator, origin_obj, full_data))) {
+        LOG_WARN("Lob: failed to get full data", K(ret));
       } else {
         out_datum->set_string(full_data);
       }
@@ -191,7 +197,9 @@ int ob_adjust_lob_datum(ObExecContext &exec_ctx,
       // use by not strict default value add lob header
       ObObj out_obj(origin_obj);
       if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(out_obj, allocator))) {
+        LOG_WARN("Lob: failed to convert plain lob data to temp lob", K(ret));
       } else if (OB_FAIL(out_datum->from_obj(out_obj))) {
+        LOG_WARN("convert lob obj to datum failed", K(ret), K(out_obj));
       }
     }
   }
@@ -221,6 +229,7 @@ int ob_adjust_lob_datum(ObExecContext &exec_ctx,
                                                             in_obj_meta.get_collation_type(),
                                                             in_obj_meta.has_lob_header(),
                                                             full_data))) {
+        LOG_WARN("Lob: failed to get full data", K(ret));
       } else {
         datum.set_string(full_data);
       }
@@ -229,6 +238,7 @@ int ob_adjust_lob_datum(ObExecContext &exec_ctx,
                                                                     in_obj_meta,
                                                                     out_obj_meta,
                                                                     allocator))) {
+        LOG_WARN("Lob: failed to convert plain lob data to temp lob", K(ret));
       }
     }
   }
@@ -255,6 +265,7 @@ int ob_adjust_in_memory_lob_datum(const ObObj &origin_obj,
         LOG_WARN("constant expression contains non-in-memory LOB",
                  K(ret), K(origin_obj), K(obj_meta));
       } else if (OB_FAIL(locator.get_inrow_data(full_data))) {
+        LOG_WARN("get in-memory LOB data failed", K(ret), K(origin_obj));
       } else {
         out_datum->set_string(full_data);
       }
@@ -262,7 +273,9 @@ int ob_adjust_in_memory_lob_datum(const ObObj &origin_obj,
       ObObj out_obj(origin_obj);
       if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(
               out_obj, allocator))) {
+        LOG_WARN("failed to convert plain LOB data to temporary LOB", K(ret));
       } else if (OB_FAIL(out_datum->from_obj(out_obj))) {
+        LOG_WARN("convert LOB object to datum failed", K(ret), K(out_obj));
       }
     }
   }

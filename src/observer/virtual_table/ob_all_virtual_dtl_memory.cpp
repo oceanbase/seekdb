@@ -90,10 +90,12 @@ int ObAllVirtualDtlMemoryIterator::get_memory_pool_infos()
     for (int64_t i = 0; i < cnt && OB_SUCC(ret); ++i) {
       ObDtlChannelMemManager *chan_mem_mgr = nullptr;
       if (OB_FAIL(mem_mgr->get_channel_mem_manager(i, chan_mem_mgr))) {
+        LOG_WARN("failed to get channel memory manager", K(ret), K(i));
       } else {
         ObAllVirtualDtlMemoryPoolInfo mem_pool_info;
         mem_pool_info.set_mem_pool_info(dfc_manager, chan_mem_mgr);
         if (OB_FAIL(mem_pool_infos_.push_back(mem_pool_info))) {
+          LOG_WARN("failed to push back memory pool info", K(ret), K(i));
         }
       }
     }
@@ -110,6 +112,7 @@ int ObAllVirtualDtlMemoryIterator::get_next_memory_pools()
   } else if (!done_) {
     done_ = true;
     if (OB_FAIL(get_memory_pool_infos())) {
+      LOG_WARN("failed to get dtl memory pool infos", K(ret));
     }
   } else {
     ret = OB_ITER_END;
@@ -179,6 +182,7 @@ int ObAllVirtualDtlMemory::inner_open()
   int ret = OB_SUCCESS;
   if (!start_to_read_) {
     if (OB_FAIL(iter_.init())) {
+      LOG_WARN("failed to init iterator", K(ret));
     } else {
       start_to_read_ = true;
       char ipbuf[common::OB_IP_STR_BUFF];
@@ -189,6 +193,7 @@ int ObAllVirtualDtlMemory::inner_open()
       } else {
         ipstr_ = ObString::make_string(ipbuf);
         if (OB_FAIL(ob_write_string(*allocator_, ipstr_, ipstr_))) {
+          SERVER_LOG(WARN, "failed to write string", K(ret));
         }
         port_ = addr.get_port();
       }
@@ -208,6 +213,7 @@ int ObAllVirtualDtlMemory::inner_get_next_row(ObNewRow *&row)
       arena_allocator_.reuse();
     }
   } else if (OB_FAIL(get_row(mem_pool_info, row))) {
+    LOG_WARN("failed to get row from channel info", K(ret));
   }
   return ret;
 }

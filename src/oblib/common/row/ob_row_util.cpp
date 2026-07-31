@@ -38,9 +38,11 @@ int ObRowUtil::convert(const char *compact_row, int64_t buf_len, ObNewRow &row)
   int64_t cell_idx = 0;
   ObObj cell;
   if (OB_FAIL(cell_reader.init(compact_row, buf_len, DENSE))) {
+    LOG_WARN("fail to init cell reader", K(ret));
   }
   while (OB_SUCC(ret) && !is_row_finished && OB_SUCC(cell_reader.next_cell())) {
     if (OB_FAIL(cell_reader.get_cell(column_id, cell, &is_row_finished))) {
+      LOG_WARN("failed to get cell", K(column_id), K(ret));
     } else if (is_row_finished) {
       ret = OB_SUCCESS;
     } else if (cell_idx < row.count_) {

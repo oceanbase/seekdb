@@ -49,10 +49,13 @@ int ObFreezeExecutor::execute(ObExecContext &ctx, ObFreezeStmt &stmt)
       ObMinorFreezeArg arg;
       arg.tablet_id_ = stmt.get_tablet_id();
       if (OB_FAIL(ctx.root_command_service().root_minor_freeze(arg))) {
+        LOG_WARN("minor freeze failed", K(arg), K(ret), "dst", GCTX.self_addr());
       }
     } else if (stmt.get_tablet_id().is_valid()) {
       if (OB_FAIL(ctx.root_command_service().tablet_major_freeze(
               stmt.get_tablet_id()))) {
+        LOG_WARN("failed to schedule tablet major freeze",
+                 K(ret), K(stmt.get_tablet_id()));
       }
     } else {
       if (OB_FAIL(ctx.root_command_service().major_freeze())) {
@@ -177,11 +180,13 @@ int ObFlushKVCacheExecutor::execute(ObExecContext &ctx, ObFlushKVCacheStmt &stmt
   int ret = OB_SUCCESS;
   if (stmt.cache_name_.is_empty()) {
     if (OB_FAIL(common::ObKVGlobalCache::get_instance().erase_cache())) {
+      LOG_WARN("clear kv cache failed", K(ret));
     } else {
       LOG_INFO("success erase all kvcache");
     }
   } else if (OB_FAIL(common::ObKVGlobalCache::get_instance().erase_cache(
                  stmt.cache_name_.ptr()))) {
+    LOG_WARN("clear kv cache failed", K(ret), K(stmt.cache_name_));
   } else {
     LOG_INFO("success erase kvcache", K(stmt.cache_name_));
   }
@@ -220,10 +225,12 @@ int ObAdminMergeExecutor::execute(ObExecContext &ctx, ObAdminMergeStmt &stmt)
     switch (stmt.get_merge_type()) {
       case ObAdminMergeStmt::MergeType::SUSPEND:
         if (OB_FAIL(ctx.root_command_service().suspend_merge())) {
+          LOG_WARN("fail to suspend merge", KR(ret));
         }
         break;
       case ObAdminMergeStmt::MergeType::RESUME:
         if (OB_FAIL(ctx.root_command_service().resume_merge())) {
+          LOG_WARN("fail to resume merge", KR(ret));
         }
         break;
       default:
@@ -250,6 +257,7 @@ int ObRefreshMemStatExecutor::execute(ObExecContext &ctx, ObRefreshMemStatStmt &
     ret = OB_NOT_INIT;
     LOG_WARN("local command service is null", K(ret));
   } else if (OB_FAIL(ctx.local_command_service().refresh_memory_stat())) {
+    LOG_WARN("refresh memory stat failed", K(ret));
   }
   return ret;
 }
@@ -270,6 +278,7 @@ int ObRefreshIOCalibraitonExecutor::execute(ObExecContext &ctx, ObRefreshIOCalib
     for (int64_t i = 0; OB_SUCC(ret) && i < param.calibration_list_.count(); ++i) {
       const ObIOBenchResult &item = param.calibration_list_.at(i);
       if (OB_FAIL(io_ability.add_measure_item(item))) {
+        LOG_WARN("add io calibration item failed", K(ret), K(item));
       }
     }
     if (OB_SUCC(ret) && param.calibration_list_.count() > 0 && !io_ability.is_valid()) {
@@ -295,6 +304,7 @@ int ObSetConfigExecutor::execute(ObExecContext &ctx, ObSetConfigStmt &stmt)
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(ctx.root_command_service().admin_set_config(
                  stmt.get_rpc_arg()))) {
+    LOG_WARN("set config rpc failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
   }
   return ret;
 }
@@ -307,6 +317,7 @@ int ObSetTPExecutor::execute(ObExecContext &ctx, ObSetTPStmt &stmt)
     LOG_WARN("local command service is null", K(ret));
   } else if (OB_FAIL(ctx.local_command_service().set_tracepoint(
                  stmt.get_param()))) {
+    LOG_WARN("set tracepoint failed", K(ret), K(stmt.get_param()));
   } else {
     LOG_INFO("set tracepoint locally", K(stmt.get_param()));
   }
@@ -322,6 +333,7 @@ int ObClearMergeErrorExecutor::execute(ObExecContext &ctx, ObClearMergeErrorStmt
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(ctx.root_command_service().clear_merge_error())) {
+    LOG_WARN("clear merge error failed", K(ret));
   }
   return ret;
 }
@@ -343,9 +355,11 @@ int ObCancelTaskExecutor::execute(ObExecContext &ctx, ObCancelTaskStmt &stmt)
     ret = OB_ERR_SYS;
     LOG_ERROR("local command service is not bound", K(ret));
   } else if (OB_FAIL(parse_task_id(stmt.get_task_id(), task_id))) {
+    LOG_WARN("failed to parse task id", K(ret), K(stmt.get_task_id()));
   } else if (OB_FAIL(ex_rpc::sync_call([&]{
     return local_commands->cancel_sys_task(task_id);
   }))) {
+    LOG_WARN("failed to cancel sys task", K(ret), K(task_id));
   }
   return ret;
 }
@@ -375,7 +389,9 @@ int ObCancelTaskExecutor::fetch_sys_task_info(
 	  	ret = OB_ERR_UNEXPECTED;
 	  	LOG_WARN("sql proxy or session from exec context is NULL", K(ret), K(sql_proxy), K(cur_sess));
 	  } else if (OB_FAIL(read_sql.append_fmt(sql_str, task_id.length(), task_id.ptr()))) {
+	  	LOG_WARN("fail to generate sql", K(ret), K(read_sql), K(*cur_sess), K(task_id));
 	  } else if (OB_FAIL(sql_proxy->read(res, read_sql.ptr()))) {
+	  	LOG_WARN("fail to read by sql proxy", K(ret), K(read_sql));
 	  } else if (OB_ISNULL(result_set = res.get_result())) {
 	  	ret = OB_ERR_UNEXPECTED;
 	  	LOG_WARN("result set is NULL", K(ret), K(read_sql));
@@ -445,6 +461,7 @@ int ObResetConfigExecutor::execute(ObExecContext &ctx, ObResetConfigStmt &stmt)
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(ctx.root_command_service().admin_set_config(
                  stmt.get_rpc_arg()))) {
+    LOG_WARN("set config rpc failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
   }
   return ret;
 }

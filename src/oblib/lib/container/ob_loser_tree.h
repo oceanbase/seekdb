@@ -253,7 +253,9 @@ int ObLoserTree<T, CompareFunctor>::init(
     allocator_ = &allocator;
     max_player_cnt_ = max_player_cnt;
     if (OB_FAIL(alloc_max_space(max_player_cnt))) {
+      LIB_LOG(WARN, "alloc space fail,", K(ret));
     } else if (OB_FAIL(init_basic_info(player_cnt))) {
+      LIB_LOG(WARN, "fail to init basic info", K(ret), K(max_player_cnt));
     } else {
       is_inited_ = true;
     }
@@ -276,6 +278,7 @@ int ObLoserTree<T, CompareFunctor>::open(const int64_t total_player_cnt)
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid total player count", K(ret), K(total_player_cnt), K_(max_player_cnt));
   } else if (OB_FAIL(init_basic_info(total_player_cnt))) {
+    LIB_LOG(WARN, "fail to init basic info", K(ret), K(total_player_cnt));
   }
   return ret;
 }
@@ -362,6 +365,7 @@ int ObLoserTree<T, CompareFunctor>::get_match_result(
     matches_[match_idx].loser_idx_ = defender;
     matches_[match_idx].is_draw_ = false;
   } else if (OB_FAIL(duel(players_[offender], players_[defender], match_idx, is_offender_win))) {
+    LIB_LOG(WARN, "duel fail", K(ret), K(match_idx), K(is_offender_win));
   } else {
     matches_[match_idx].winner_idx_ = is_offender_win ? offender : defender;
     matches_[match_idx].loser_idx_ = is_offender_win ? defender : offender;
@@ -376,6 +380,7 @@ int ObLoserTree<T, CompareFunctor>::duel(
   int ret = OB_SUCCESS;
   int64_t cmp_ret = 0;
   if (OB_FAIL(cmp_.cmp(offender, defender, cmp_ret))) {
+    LIB_LOG(WARN, "compare fail", K(ret), K(match_idx), K(is_offender_win));
   } else {
     matches_[match_idx].is_draw_ = (0 == cmp_ret);
     is_offender_win = cmp_ret < 0;
@@ -413,6 +418,8 @@ int ObLoserTree<T, CompareFunctor>::rebuild()
     ret = OB_EMPTY_RESULT;
     LIB_LOG(WARN, "the tree is already empty", K(ret));
   } else if (OB_FAIL(inner_rebuild())) {
+    LIB_LOG(WARN, "fail to build", K(ret), K(need_rebuild_), K(player_cnt_),
+        K(cur_free_cnt_), K(match_cnt_), K(matches_[0]));
   }
   return ret;
 }
@@ -434,6 +441,7 @@ int ObLoserTree<T, CompareFunctor>::inner_rebuild()
     } else if (OB_FAIL(get_match_result(matches_[l_player].winner_idx_,
                                         matches_[r_player].winner_idx_,
                                         j))) {
+      LIB_LOG(WARN, "get match result fail", K(ret), K(l_player), K(r_player), K(j));
     } else {
       if (matches_[j].replay_ == ReplayType::LOSER_CHANGE && old_winner == matches_[j].winner_idx_) {
         // loser still be loser, no need to change parent match
@@ -476,6 +484,7 @@ int ObLoserTree<T, CompareFunctor>::update_champion_path(
       LIB_LOG(INFO, "candidate is not winner", K(ret), K(child),
           K(parent), K(matches_[parent]), K(matches_[child]));
     } else if (OB_FAIL(get_match_result(winner_idx, loser_idx, parent))) {
+      LIB_LOG(WARN, "get match result fail", K(ret), K(winner_idx), K(loser_idx), K(parent));
     } else {
       child = parent;
       parent = get_parent(child);
@@ -528,6 +537,7 @@ int ObLoserTree<T, CompareFunctor>::push(const T &player)
     int64_t leaf = get_leaf(idx);
     int64_t parent = get_parent(leaf);
     if (OB_FAIL(matches_[parent].set_replay_type(idx))) {
+      LIB_LOG(WARN, "fail to set replay type", K(ret), K(parent), K(leaf), K(player_cnt_));
     } else {
       players_[idx] = player;
       matches_[leaf].winner_idx_ = idx;
@@ -570,6 +580,7 @@ int ObLoserTree<T, CompareFunctor>::pop()
       ret = OB_ERR_UNEXPECTED;
       LIB_LOG(WARN, "champion is invalid", K(ret), K(matches_[0]));
     } else if (OB_FAIL(update_champion_path(champion))){
+      LIB_LOG(WARN, "update_champion_path fail", K(ret), K(matches_[0]));
     } else {
       set_unique_champion();
       free_players_[cur_free_cnt_++] = champion;

@@ -89,6 +89,7 @@ int ObLobAccessParam::assign(const ObLobAccessParam& other)
   this->lob_id_geneator_ = other.lob_id_geneator_;
 
   if (OB_FAIL(this->snapshot_.assign(other.snapshot_))) {
+    LOG_WARN("assign snapshot fail", K(ret), K(other));
   }
   return ret;
 }
@@ -100,6 +101,7 @@ int ObLobAccessParam::prepare()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("allocator is null", K(ret), KPC(this));
   } else if (OB_FAIL(set_lob_locator(lob_locator_))) {
+    LOG_WARN("set_lob_locator fail", K(ret), KPC(this));
   }
   return ret;
 }
@@ -119,6 +121,7 @@ int ObLobAccessParam::set_lob_locator(common::ObLobLocatorV2 *lob_locator)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("lob locator type is invalid", K(ret), KPC(lob_locator));
   } else if (OB_FAIL(lob_locator->get_disk_locator(disk_locator))) {
+    LOG_WARN("failed to get lob common from lob locator", K(ret), KPC(lob_locator));
   } else {
     lob_common_ = reinterpret_cast<ObLobCommon*>(disk_locator.ptr());
     handle_size_ = disk_locator.length();
@@ -191,6 +194,7 @@ bool ObLobAccessParam::has_single_chunk() const
   if (byte_size_ <= 0) {
     // skip
   } else if (OB_FAIL(get_store_chunk_size(chunk_size))) {
+    LOG_WARN("get_store_chunk_size fail", K(ret), KPC(this));
   } else if (byte_size_ <= chunk_size) {
     res = true;
   }
@@ -293,6 +297,7 @@ int ObLobAccessParam::update_handle_data_size(const ObLobMetaInfo *old_info, con
       char_len = *char_len_ptr;
     }
   }
+  LOG_DEBUG("update handle success", K(ret), K_(byte_size), KP(char_len_ptr), K(char_len), K_(lob_data), KPC(old_info), KPC(new_info));
   return ret;
 }
 
@@ -318,6 +323,7 @@ int ObLobAccessParam::init_seq_no(const uint64_t modified_len)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("seq_no has been inited", K(ret), KPC(this));
   } else if (OB_FAIL(get_store_chunk_size(store_chunk_size))) {
+    LOG_WARN("get_store_chunk_size fail", K(ret), KPC(this));
   } else if (store_chunk_size <= 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("store_chunk_size is invalid", K(ret), KPC(this));
@@ -341,15 +347,18 @@ int ObLobAccessParam::init_seq_no(const uint64_t modified_len)
       if (OB_FAIL(tx_desc_->get_and_inc_tx_seq(this->parent_seq_no_.get_branch(),
                                                       need_seq_cnt,
                                                       seq_no_st_))) {
+        LOG_WARN("get and inc tx seq failed", K(ret), K(need_seq_cnt), KPC(this));
       }
     } else {
       // Callers without a transaction descriptor do not use sequence numbers.
+      LOG_DEBUG("tx_desc is null", KPC(this));
     }
   }
 
   if (OB_SUCC(ret)) {
     used_seq_cnt_ = 0;
     total_seq_cnt_ = need_seq_cnt;
+    LOG_DEBUG("init lob seq no success", K_(op_type), K(modified_len), K_(update_len),  K(store_chunk_size), K_(schema_chunk_size), K_(seq_no_st), K_(total_seq_cnt));
   }
 
   return ret;
@@ -382,6 +391,7 @@ int ObLobAccessParam::init_out_row_ctx(uint64_t modified_len)
     out_row_ctx->modified_len_ = modified_len;
     out_row_ctx->first_meta_offset_ = 0;
 
+    LOG_DEBUG("init lob out_row_ctx success", KPC_(lob_data), KPC(out_row_ctx), K(modified_len), K_(op_type), K_(seq_no_st));
   }
   return ret;
 }
@@ -399,6 +409,7 @@ int ObLobAccessParam::update_out_row_ctx(const ObLobMetaInfo *old_info, const Ob
     // no need check_sum and modified_len of updated lob data
     // and seq_no_cnt is not needed actually, this is just for debug
     out_row_ctx->seq_no_cnt_ = this->used_seq_cnt_;
+    LOG_DEBUG("update outrow ctx success", K_(op_type), KPC_(lob_data), KPC(out_row_ctx), KPC(old_info), K(new_info));
   } else {
     // update seq no
     // it sholud be update when each lob meta table row is modified (insert/delete/update)
@@ -426,6 +437,7 @@ int ObLobAccessParam::update_out_row_ctx(const ObLobMetaInfo *old_info, const Ob
     int64_t new_meta_len = (new_info.byte_len_);
     out_row_ctx->modified_len_ += std::abs(new_meta_len - old_meta_len);
 
+    LOG_DEBUG("update outrow ctx success", K_(op_type), KPC_(lob_data), KPC(out_row_ctx), K(new_meta_len), K(old_meta_len), KPC(old_info), K(new_info));
   }
   return ret;
 }
@@ -438,6 +450,7 @@ int ObLobAccessParam::get_tx_read_snapshot(ObLobLocatorV2 &locator, transaction:
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("not outrow persit lob", K(ret), K(locator));
   } else if (OB_FAIL(locator.get_extern_header(extern_header))) {
+    LOG_WARN("failed to get extern header", K(ret), K(locator));
   } else if (extern_header->flags_.has_tx_info_ || !extern_header->flags_.has_read_snapshot_) {
     ret = OB_VERSION_NOT_MATCH;
     LOG_WARN("lob locator transaction snapshot format does not match current version", K(ret), K(locator));
@@ -445,14 +458,17 @@ int ObLobAccessParam::get_tx_read_snapshot(ObLobLocatorV2 &locator, transaction:
     ObString read_snapshot_data;
     int64_t read_snapshot_data_pos = 0;
     if (OB_FAIL(locator.get_read_snapshot_data(read_snapshot_data))) {
+      LOG_WARN("failed to get read_snapshot_data", K(ret), K(locator));
     } else if (OB_FAIL(read_snapshot.deserialize_for_lob(fb_snapshot_,
         read_snapshot_data.ptr(), read_snapshot_data.length(), read_snapshot_data_pos))) {
+      LOG_WARN("failed to deserialize read_snapshot_data", K(ret), K(locator));
     }
   }
 
   if (OB_SUCC(ret) && extern_header->flags_.has_retry_info_) {
     ObMemLobRetryInfo *retry_info = nullptr;
     if (OB_FAIL(locator.get_retry_info(retry_info))) {
+      LOG_WARN("failed to get retry info", K(ret), K(locator));
     } else if (retry_info->read_latest_) {
       this->read_latest_ = retry_info->read_latest_;
     }
@@ -465,10 +481,16 @@ int ObLobAccessParam::set_tx_read_snapshot(ObLobLocatorV2 &locator)
   int ret = OB_SUCCESS;
   transaction::ObTxReadSnapshot read_snapshot;
   if (OB_FAIL(get_tx_read_snapshot(locator, read_snapshot))) {
+    LOG_WARN("get tx read snapshot fail", K(ret), KPC(this), K(locator));
+  
+  // 1. if tx_desc is null , use read snapshot in locator
+  // 2. if tx_id in tx_desc is equal to tx_id in locator read snapshot, use read snapshot in locator
+  // 3. if tx_id in locator read snapshot is zero and snapshot version is valid, use read snapshot in locator
   } else if (OB_ISNULL(this->tx_desc_) 
       || this->tx_desc_->get_tx_id() == read_snapshot.tx_id()  // read in same tx
       || read_snapshot.is_not_in_tx_snapshot()) { // read not in tx
     if (OB_FAIL(this->snapshot_.assign(read_snapshot))) {
+      LOG_WARN("assign snapshot fail", K(ret), K(read_snapshot));
     }
   } else {
     // if tx_desc is not null 

@@ -60,8 +60,10 @@ int ObAllVirtualMemstoreInfo::get_next_tablet(ObTabletHandle &tablet_handle)
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "ls service is null", K(ret));
     } else if (OB_FAIL(ls_service->get_ls(ls_))) {
+      SERVER_LOG(WARN, "get log stream failed", K(ret));
     } else if (OB_FAIL(ls_->build_tablet_iter(
         tablet_iter_, true /* except_ls_inner_tablet */))) {
+      SERVER_LOG(WARN, "fail to build tablet iter", K(ret));
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(tablet_iter_.get_next_tablet(tablet_handle))) {
@@ -95,6 +97,7 @@ int ObAllVirtualMemstoreInfo::get_next_memtable(ObITabletMemtable *&mt)
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "invalid tablet handle", K(ret), K(tablet_handle));
       } else if (OB_FAIL(tablet_handle.get_obj()->get_all_memtables_from_memtable_mgr(tables_handle_))) {
+        SERVER_LOG(WARN, "failed to get_memtable_mgr for get all memtable", K(ret), KPC(tablet_handle.get_obj()));
       }
     } else if (OB_FAIL(tables_handle_.at(memtable_array_pos_++).get_tablet_memtable(mt))) {
       // get next memtable

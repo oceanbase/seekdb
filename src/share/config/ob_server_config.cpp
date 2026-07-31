@@ -82,6 +82,7 @@ int ObServerConfig::read_config(const ObSystemConfig &system_config,
     } else if (!it->second->reboot_effective() || !enable_static_effect) {
       temp_ret = system_config.read_config(key, *(it->second));
       if (OB_SUCCESS != temp_ret) {
+        OB_LOG(DEBUG, "Read config error", "name", it->first.str(), K(temp_ret));
       }
     }
   }

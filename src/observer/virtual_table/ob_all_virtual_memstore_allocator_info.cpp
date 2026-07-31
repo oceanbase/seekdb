@@ -71,6 +71,7 @@ int ObAllVirtualMemstoreAllocatorInfo::inner_open()
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>() shouldn't be NULL", K(ret));
   } else if (OB_FAIL(fill_memstore_infos())) {
+    SERVER_LOG(WARN, "fail to fill memstore info", K(ret));
   } else {
     col_count_ = output_column_ids_.count();
   }
@@ -94,6 +95,7 @@ int ObAllVirtualMemstoreAllocatorInfo::fill_memstore_infos()
     ObMemstoreAllocator &memstore_allocator = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->memstore_allocator();
     MemstoreInfoFill fill_func(memstore_infos_);
     if (OB_FAIL(memstore_allocator.for_each(fill_func))) {
+      SERVER_LOG(WARN, "fill memstore info fail", K(ret));
     } else {
       retire_clock_ = memstore_allocator.get_retire_clock();
       memstore_infos_idx_ = 0;

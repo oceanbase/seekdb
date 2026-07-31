@@ -76,6 +76,7 @@ void ObStorageTableGuard::throttle_if_needed_()
           ObLS *tenant_ls = nullptr;
           ObLS *ls = nullptr;
           if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
+            STORAGE_LOG(WARN, "get ls failed", KR(ret));
           } else {
             ls = tenant_ls;
             (void)TxShareMemThrottleUtil::do_throttle<ObMemstoreAllocator>(for_replay_,
@@ -128,6 +129,8 @@ int ObStorageTableGuard::refresh_and_protect_memtable_for_write(ObRelativeTable 
         store_ctx_.mvcc_acc_ctx_.get_snapshot_version().get_val_for_tx(),
         iter,
         relative_table.allow_not_ready()))) {
+      LOG_WARN("fail to get read tables", K(ret), K(remain_timeout),
+           "table_id", relative_table.get_table_id());
     } else {
       // no worry. iter will hold tablet reference and its life cycle is longer than guard
       tablet_ = iter.get_tablet();
@@ -161,6 +164,7 @@ int ObStorageTableGuard::refresh_and_protect_memtable_for_replay()
         LOG_WARN("fail to get boundary memtable", K(ret), K(tablet_id));
       }
     } else if (OB_FAIL(handle.get_tablet_memtable(tablet_memtable))) {
+      LOG_WARN("fail to get memtable from ObTableHandle", K(ret), K(tablet_id));
     } else if (OB_FAIL(check_freeze_to_inc_write_ref(static_cast<ObMemtable*>(tablet_memtable), need_retry))) {
       if (OB_EAGAIN == ret) {
       } else if (OB_MINOR_FREEZE_NOT_ALLOW != ret) {
@@ -192,12 +196,15 @@ int ObStorageTableGuard::create_data_memtable_for_replay_(const common::ObTablet
                                                           bool &need_retry)
 {
   int ret = OB_SUCCESS;
+  LOG_DEBUG("there is no boundary memtable", K(ret), K(tablet_id));
   ObLS *tenant_ls = nullptr;
   ObTabletHandle tmp_handle;
   SCN clog_checkpoint_scn;
   if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
+    LOG_WARN("failed to get log stream", K(ret), K(tablet_id));
   } else if (OB_FAIL(tenant_ls->get_tablet_svr()->get_tablet(
           tablet_id, tmp_handle, 0, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
+    LOG_WARN("fail to get tablet", K(ret), K(tablet_id));
   } else if (FALSE_IT(clog_checkpoint_scn = tmp_handle.get_obj()->get_tablet_meta().clog_checkpoint_scn_)) {
   } else if (replay_scn_ > clog_checkpoint_scn) {
     // TODO: get the newest schema_version from tablet
@@ -205,12 +212,15 @@ int ObStorageTableGuard::create_data_memtable_for_replay_(const common::ObTablet
     arg.for_replay_ = for_replay_;
     arg.clog_checkpoint_scn_ = clog_checkpoint_scn;
     if (OB_FAIL(tenant_ls->get_tablet_svr()->create_memtable(tablet_id, arg))) {
+      LOG_WARN("fail to create a boundary memtable", K(ret), K(tablet_id));
     }
     // In situation that replay_log_scn_ <= clog_checkpoint_scn, we have no need
     // to create the memtable. While we need double check to decide whether
     // another thread has created the memtable that we need replay. And if it
     // does, we must replay on the memtable.
   } else if (OB_FAIL(double_check_get_memtable_for_replay_(replay_scn_, need_retry))) {
+    LOG_WARN("fail to double check replay memtable", K(ret), K(tablet_id),
+             K(replay_scn_), K(clog_checkpoint_scn));
   }
   return ret;
 }
@@ -223,6 +233,7 @@ int ObStorageTableGuard::double_check_get_memtable_for_replay_(const share::SCN 
   ObProtectedMemtableMgrHandle *protected_handle = NULL;
 
   if (OB_FAIL(tablet_->get_protected_memtable_mgr_handle(protected_handle))) {
+    LOG_WARN("failed to get_protected_memtable_mgr_handle", K(ret), KPC(tablet_));
   } else if (OB_FAIL(protected_handle->get_memtable_for_replay(replay_scn_, handle))) {
     if (OB_NO_NEED_UPDATE == ret) {
       // no need to replay the log
@@ -315,6 +326,7 @@ int ObStorageTableGuard::check_freeze_to_inc_write_ref(ObMemtable *memtable, boo
       // filter memtables for replay or multi_source_data according to scn
       ObTableHandleV2 handle;
       if (OB_FAIL(tablet_->get_protected_memtable_mgr_handle(protected_handle))) {
+        LOG_WARN("failed to get_protected_memtable_mgr_handle", K(ret), KPC(tablet_));
       } else if (OB_FAIL(protected_handle->get_memtable_for_replay(replay_scn_, handle))) {
         if (OB_NO_NEED_UPDATE == ret) {
           // no need to replay the log
@@ -324,6 +336,7 @@ int ObStorageTableGuard::check_freeze_to_inc_write_ref(ObMemtable *memtable, boo
           LOG_WARN("fail to get memtable for replay", K(ret), K(need_retry), K(tablet_id));
         }
       } else if (OB_FAIL(handle.get_data_memtable(memtable))) {
+        LOG_WARN("fail to get memtable from ObTableHandle", K(ret), K(need_retry), K(tablet_id));
       } else {
         if (memtable != old_memtable) {
           is_tablet_freeze = memtable->get_is_tablet_freeze();
@@ -344,10 +357,12 @@ int ObStorageTableGuard::check_freeze_to_inc_write_ref(ObMemtable *memtable, boo
       ObTabletHandle tmp_handle;
       ObLS *tenant_ls = nullptr;
       if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
+        LOG_WARN("failed to get log stream", K(ret), K(need_retry), K(tablet_id));
       } else if (OB_FAIL(tenant_ls->get_tablet_svr()->get_tablet(tablet_id,
                                                                           tmp_handle,
                                                                           0,
                                                                           ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
+        LOG_WARN("fail to get tablet", K(ret), K(tablet_id));
       } else if (FALSE_IT(clog_checkpoint_scn = tmp_handle.get_obj()->get_tablet_meta().clog_checkpoint_scn_)) {
       } else if (for_replay_ && replay_scn_ <= clog_checkpoint_scn) {
         need_create_memtable = false;
@@ -369,6 +384,7 @@ int ObStorageTableGuard::check_freeze_to_inc_write_ref(ObMemtable *memtable, boo
       } else if (for_replay_) {
         ObTableHandleV2 handle;
         if (OB_FAIL(tablet_->get_protected_memtable_mgr_handle(protected_handle))) {
+          LOG_WARN("failed to get_protected_memtable_mgr_handle", K(ret), KPC(tablet_));
         } else if (OB_FAIL(protected_handle->get_memtable_for_replay(replay_scn_, handle))) {
           if (OB_NO_NEED_UPDATE == ret) {
             // no need to replay the log
@@ -378,6 +394,7 @@ int ObStorageTableGuard::check_freeze_to_inc_write_ref(ObMemtable *memtable, boo
             LOG_WARN("fail to get memtable for replay", K(ret), K(need_retry), K(tablet_id));
           }
         } else if (OB_FAIL(handle.get_data_memtable(memtable))) {
+          LOG_WARN("fail to get memtable from ObTableHandle", K(ret), K(need_retry), K(tablet_id));
         } else {
           if (memtable != old_memtable) {
             is_tablet_freeze = memtable->get_is_tablet_freeze();
@@ -420,6 +437,7 @@ bool ObStorageTableGuard::need_to_refresh_table(ObTableStoreIterator &iter)
     CreateMemtableArg arg;
     arg.for_replay_ = for_replay_;
     if (OB_FAIL(store_ctx_.ls_->get_tablet_svr()->create_memtable(tablet_id, arg))) {
+      LOG_WARN("fail to create a boundary memtable", K(ret), K(tablet_id));
     }
     bool_ret = true;
     exit_flag = 0;

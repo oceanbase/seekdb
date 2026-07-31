@@ -113,6 +113,7 @@ inline int ObDDLContinuousVector::_append_batch(const int64_t batch_idx,
   const int64_t total_size = offsets[offset + size] - offsets[offset];
   if (total_size <= 0) {
   } else if (OB_FAIL(expand(total_size))) {
+    LOG_WARN("fail to expand", KR(ret));
   } else {
     MEMCPY(data_ + size_, src_vec->get_data() + offsets[offset], total_size);
     size_ += total_size;
@@ -139,6 +140,7 @@ inline int ObDDLContinuousVector::_append_batch(const int64_t batch_idx,
       offsets_[dest_idx + 1] = size_;
     }
   } else if (OB_FAIL(expand(total_size))) {
+    LOG_WARN("fail to expand", KR(ret));
   } else {
     for (int64_t src_idx = offset, dest_idx = batch_idx; src_idx < offset + size;
          ++src_idx, ++dest_idx) {
@@ -169,6 +171,7 @@ inline int ObDDLContinuousVector::_append_batch<false>(const int64_t batch_idx,
       offsets_[dest_idx + 1] = size_;
     }
   } else if (OB_FAIL(expand(total_size))) {
+    LOG_WARN("fail to expand", KR(ret));
   } else {
     for (int64_t src_idx = offset, dest_idx = batch_idx; src_idx < offset + size;
          ++src_idx, ++dest_idx) {
@@ -195,6 +198,7 @@ inline int ObDDLContinuousVector::_append_batch<true>(const int64_t batch_idx,
       offsets_[dest_idx + 1] = size_;
     }
   } else if (OB_FAIL(expand(total_size))) {
+    LOG_WARN("fail to expand", KR(ret));
   } else {
     for (int64_t dest_idx = batch_idx; dest_idx < batch_idx + size; ++dest_idx) {
       MEMCPY(data_ + size_, datum.ptr_, datum.len_);
@@ -226,6 +230,7 @@ inline int ObDDLContinuousVector::_append_selective(const int64_t batch_idx,
       offsets_[dest_idx + 1] = size_;
     }
   } else if (OB_FAIL(expand(total_size))) {
+    LOG_WARN("fail to expand", KR(ret));
   } else {
     for (int64_t i = 0, dest_idx = batch_idx; i < size; ++i, ++dest_idx) {
       const int64_t src_idx = selector[i];
@@ -259,6 +264,7 @@ inline int ObDDLContinuousVector::_append_selective(const int64_t batch_idx,
       offsets_[dest_idx + 1] = size_;
     }
   } else if (OB_FAIL(expand(total_size))) {
+    LOG_WARN("fail to expand", KR(ret));
   } else {
     for (int64_t i = 0, dest_idx = batch_idx; i < size; ++i, ++dest_idx) {
       const int64_t src_idx = selector[i];
@@ -289,6 +295,7 @@ inline int ObDDLContinuousVector::_append_selective<false>(const int64_t batch_i
       offsets_[dest_idx + 1] = size_;
     }
   } else if (OB_FAIL(expand(total_size))) {
+    LOG_WARN("fail to expand", KR(ret));
   } else {
     for (int64_t i = 0, dest_idx = batch_idx; i < size; ++i, ++dest_idx) {
       const int64_t src_idx = selector[i];
@@ -346,6 +353,7 @@ int ObDDLContinuousVector::append_datum(const int64_t batch_idx, const ObDatum &
   uint32_t *offsets = continuous_vector_->get_offsets();
   if (datum.len_ <= 0) {
   } else if (OB_FAIL(expand(datum.len_))) {
+    LOG_WARN("fail to expand", KR(ret));
   } else {
     MEMCPY(data_ + offsets[batch_idx], datum.ptr_, datum.len_);
     size_ += datum.len_;

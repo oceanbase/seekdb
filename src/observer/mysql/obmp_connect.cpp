@@ -61,12 +61,15 @@ ObString extract_user_name(const ObString &in)
 }  // namespace observer
 }  // namespace oceanbase
 
-ObMPConnect::ObMPConnect(const oceanbase::share::ObGlobalContext &gctx)
+ObMPConnect::ObMPConnect(
+    const oceanbase::share::ObGlobalContext &gctx,
+    ObVTIterCreator &vt_iter_creator)
     : ObMPBase(gctx),
       user_name_(),
       client_ip_(),
       db_name_(),
       deser_ret_(OB_SUCCESS),
+      vt_iter_creator_(vt_iter_creator),
       allocator_(ObModIds::OB_SQL_REQUEST),
       asr_mem_pool_(&allocator_)
 {
@@ -101,6 +104,7 @@ int ObMPConnect::deserialize()
     const uint64_t generation = req_->get_nio_request_generation();
     if (OB_FAIL(hsr_.load(req_->get_server_handle_context(), generation,
                           login_pkt.get_cdata(), login_pkt.get_clen()))) {
+      LOG_WARN("load login view fail", K(ret));
     } else {
       conn->cap_flags_ = hsr_.get_capability_flags();
       conn->client_cs_type_ = hsr_.get_char_set();
@@ -126,6 +130,7 @@ int ObMPConnect::init_process_single_stmt(const ObMultiStmtItem &multi_stmt_item
 {
   int ret = OB_SUCCESS;
   const ObString &sql = multi_stmt_item.get_sql();
+  ObVirtualTableIteratorFactory vt_iter_factory(vt_iter_creator_);
   ObSchemaGetterGuard schema_guard;
   // init_connect can execute query and dml statements, must add req_timeinfo_guard
   observer::ObReqTimeGuard req_timeinfo_guard;
@@ -135,28 +140,33 @@ int ObMPConnect::init_process_single_stmt(const ObMultiStmtItem &multi_stmt_item
   ObSqlCtx ctx;
   ctx.exec_type_ = MpQuery;
   if (OB_FAIL(init_process_var(ctx, multi_stmt_item, session))) {
+    LOG_WARN("init process var failed.", K(ret), K(multi_stmt_item));
   } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(
                                   schema_guard))) {
+    LOG_WARN("get schema guard failed.", K(ret));
   } else if (OB_FAIL(set_session_active(sql, session, ObTimeUtil::current_time()))) {
+    LOG_WARN("fail to set session active", K(ret));
   } else {
     //set session log_level.Must use ObThreadLogLevelUtils::clear() in pair
     ObThreadLogLevelUtils::init(session.get_log_id_level_map());
     ctx.retry_times_ = 0; // This is the initialization SQL execution when establishing a connection, no retry
     ctx.schema_guard_ = &schema_guard;
-    HEAP_VAR(ObMySQLResultSet, result, session, allocator,
-             ::oceanbase::observer::get_observer_sql_engine()->get_plan_cache_access_service()) {
+    HEAP_VAR(ObMySQLResultSet, result, session, allocator) {
       result.set_has_more_result(has_more_result);
       if (OB_FAIL(result.init())) {
+        LOG_WARN("result set init failed");
       } else if (OB_ISNULL(::oceanbase::observer::get_observer_sql_engine())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("invalid sql engine", K(ret), K(gctx_));
       } else if (OB_FAIL(::oceanbase::observer::get_observer_sql_engine()->stmt_query(sql, ctx, result))) {
+        LOG_WARN("sql execute failed", K(multi_stmt_item), K(sql), K(ret));
       } else {
         int open_ret = result.open();
         if (open_ret) {
           LOG_WARN("failed to do result set open", K(open_ret));
         }
         if (OB_FAIL(result.close())) {
+          LOG_WARN("result close failed, disconnect.", K(ret));
         }
         ret = (open_ret != OB_SUCCESS) ? open_ret : ret;
       }
@@ -187,6 +197,7 @@ int ObMPConnect::init_connect_process(ObString &init_sql,
     ARRAY_FOREACH(queries, i) {
       has_more = (queries.count() > i + 1);
       if (OB_FAIL(init_process_single_stmt(ObMultiStmtItem(true, i, queries[i]), session, has_more))) {
+        LOG_WARN("process single stmt failed!", K(ret), K(queries[i]));
       }
     }
   } else {
@@ -206,6 +217,7 @@ int ObMPConnect::process()
     THE_TRACE->reset();
   }
   if (OB_FAIL(ret)) {
+    LOG_ERROR("deserialize failed", K(ret));
   } else if (OB_ISNULL(req_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("null ez_req", K(ret));
@@ -216,19 +228,26 @@ int ObMPConnect::process()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("session mgr is NULL", K(ret));
   } else if (OB_FAIL(conn->ret_)) {
+    LOG_WARN("connection fail at obsm_handle process", K(conn->ret_));
   } else {
     if (SS_STOPPING == GCTX.status_) {
       ret = OB_SERVER_IS_STOPPING;
       LOG_WARN("server is stopping", K(ret));
     } else if (OB_FAIL(share::check_server_runtime_ready())) {
+      LOG_WARN("server runtime is not ready", K(ret));
     } else if (OB_FAIL(check_client_property(*conn))) {
+      LOG_WARN("check_client_property fail", K(ret));
     } else if (OB_FAIL(verify_connection())) {
+      LOG_WARN("verify connection fail", K(ret));
     } else if (OB_FAIL(create_session(conn, session))) {
+      LOG_WARN("alloc session fail", K(ret));
     } else if (OB_ISNULL(session)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("null session", K(ret), K(session));
     } else if (OB_FAIL(verify_identify(*conn, *session))) {
+      LOG_WARN("fail to verify_identify", K(ret));
     } else if (OB_FAIL(update_charset_sys_vars(*conn, *session))) {
+      LOG_WARN("fail to update charset sys vars", K(ret));
     } else {
       // set connection info to session
       LOG_TRACE("setup user session OK", "user_id", session->get_user_id(), K(user_name_));
@@ -265,6 +284,7 @@ int ObMPConnect::process()
       login_warning[0] = '\0';
       ok_param.message_ = login_warning;
       if (OB_FAIL(send_ok_packet(*session, ok_param))) {
+        LOG_WARN("fail to send ok packet", K(ok_param), K(ret));
       }
     } else {
       char buf[OB_MAX_ERROR_MSG_LEN];
@@ -283,6 +303,7 @@ int ObMPConnect::process()
         }
       }
       if (OB_FAIL(send_error_packet(ret, buf))) {
+        LOG_WARN("response fail packet fail", K(ret));
       }
     }
 
@@ -311,6 +332,7 @@ int ObMPConnect::process()
 const char *AUTH_PLUGIN_MYSQL_NATIVE_PASSWORD = "mysql_native_password";
 int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
 {
+  LOG_DEBUG("load privilege info");
   int ret = OB_SUCCESS;
   ObSMConnection *conn = get_conn();
   ObSchemaGetterGuard schema_guard;
@@ -318,6 +340,7 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(gctx_.schema_service_));
   } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("get schema guard failed", K(ret));
   } else {
     ObString host_name;
 
@@ -345,13 +368,17 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
     const ObSysVariableSchema *sys_variable_schema = NULL;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
+      LOG_WARN("get sys variable schema failed", K(ret));
     } else if (OB_ISNULL(sys_variable_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("sys variable schema is null", K(ret));
     } else if (OB_FAIL(session.init_runtime(OB_SERVER_RUNTIME_NAME))) {
+        LOG_WARN("failed to initialize session runtime", K(ret));
     } else if (OB_FAIL(session.load_all_sys_vars(*sys_variable_schema, false))) {
+      LOG_WARN("load system variables failed", K(ret));
     } else if (OB_FAIL(session.update_sys_variable(
                    SYS_VAR_AUTOCOMMIT, conn->autocommit_snapshot_))) {
+      LOG_WARN("update autocommit failed", K(ret), K(conn->autocommit_snapshot_));
     } else {
       share::schema::ObUserLoginInfo login_info;
       login_info.user_name_ = user_name_;
@@ -364,11 +391,15 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
         bool perserve_lettercase = true;
         ObCollationType cs_type = CS_TYPE_INVALID;
         if (OB_FAIL(session.get_collation_connection(cs_type))) {
+          LOG_WARN("fail to get collation_connection", K(ret));
         } else if (OB_FAIL(session.get_name_case_mode(mode))) {
+          LOG_WARN("fail to get name case mode", K(mode), K(ret));
         } else if (FALSE_IT(perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE))) {
         } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
                     cs_type, perserve_lettercase, db_name))) {
+          LOG_WARN("fail to check and convert database name", K(db_name), K(ret));
         } else if (OB_FAIL(ObSQLUtils::cvt_db_name_to_org(schema_guard, &session, db_name, &allocator_))) {
+          LOG_WARN("fail to convert db name to org", K(ret));
         } else {
           login_info.db_ = db_name;
         }
@@ -381,6 +412,7 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
         login_info.passwd_ = hsr_.get_auth_response();// Assume client is use mysql_native_password
         bool is_empty_passwd = false;
         if (OB_FAIL(schema_guard.is_user_empty_passwd(login_info, is_empty_passwd))) {
+          LOG_WARN("failed to check is user account is empty && login_info.passwd_ is empty", K(ret), K(login_info.passwd_));
         } else if (!is_empty_passwd && // user account with empty password do not need auth switch, same as MySQL 5.7 and 8.x
                   !hsr_.get_auth_plugin_name().empty() && // client do not use mysql_native_method
                   hsr_.get_auth_plugin_name().compare(AUTH_PLUGIN_MYSQL_NATIVE_PASSWORD)) {
@@ -409,6 +441,7 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
             packet_sender_.disable_response(); // The connection is about to be closed, do not need response ok pkt or err pkt, so disable it
             disconnect();// If send "AuthSwitchRequest" failed, observer need disconnect with client
           } else {
+            LOG_TRACE("suuc to send auth switch request", K(ret));
             obmysql::ObMySQLPacket *asr_pkt = NULL;
             static const int64_t AUTH_SWITCH_TIMEOUT_US = 10 * 1000000L;
             if (OB_FAIL(packet_sender_.wait_packet(
@@ -426,6 +459,7 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
             } else {
               /*--------------------END------------------if error occur,
                * disconnect--------------------END------------------*/
+              LOG_TRACE("suuc to receive auth switch response", K(ret));
               const obmysql::ObMySQLRawPacket *asr_raw_pkt  = reinterpret_cast<const ObMySQLRawPacket*>(asr_pkt);
               const char *auth_data = asr_raw_pkt->get_cdata();
               const int64_t auth_data_len = asr_raw_pkt->get_clen();
@@ -465,28 +499,36 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
         int64_t local_version = OB_INVALID_VERSION;
         int64_t global_version = OB_INVALID_VERSION;
         if (OB_SUCCESS != (tmp_ret = schema_service->get_runtime_refreshed_schema_version(local_version))) {
+          LOG_WARN("fail to get local version", K(ret), K(tmp_ret));
         } else if (OB_SUCCESS != (tmp_ret = schema_service->get_published_schema_version(global_version))) {
+          LOG_WARN("fail to get local version", K(ret), K(tmp_ret));
         } else if (local_version < global_version) {
           LOG_INFO("try to refresh schema", K(local_version), K(global_version));
           if (OB_SUCCESS != (tmp_ret = gctx_.schema_service_->async_refresh_schema(global_version))) {
+            LOG_WARN("failed to refresh schema", K(tmp_ret), K(global_version));
           } else if (OB_SUCCESS != (tmp_ret = gctx_.schema_service_->get_runtime_schema_guard(
                                     schema_guard))) {
+            LOG_WARN("get schema guard failed", K(ret), K(tmp_ret));
           } else if (OB_FAIL(schema_guard.check_user_access(login_info, session_priv,
                      enable_role_id_array, NULL, user_info))) {
+            LOG_WARN("User access denied", K(login_info), K(ret));
           }
         }
 
         if (OB_FAIL(ret)) {
+          LOG_WARN("User access denied", K(login_info), K(ret));
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(session.on_user_connect(session_priv, user_info))) {
+          LOG_WARN("session on user connect failed", K(ret));
         }
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(check_password_expired(schema_guard, session))) {
+        LOG_WARN("fail to check password expired", K(ret));
       }
     }
 
@@ -499,10 +541,15 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
       host_name = session_priv.host_name_;
       uint64_t db_id = OB_INVALID_ID;
       if (OB_FAIL(session.set_user(session_priv.user_name_, session_priv.host_name_, session_priv.user_id_))) {
+        LOG_WARN("failed to set_user", K(ret));
       } else if (OB_FAIL(session.set_real_client_ip_and_port(client_ip_, client_port_))) {
+        LOG_WARN("failed to set_real_client_ip_and_port", K(ret));
       } else if (OB_FAIL(session.set_default_database(session_priv.db_))) {
+        LOG_WARN("failed to set default database", K(ret), K(session_priv.db_));
       } else if (OB_FAIL(session.update_database_variables(&schema_guard))) {
+        LOG_WARN("failed to update database variables", K(ret));
       } else if (OB_FAIL(session.update_max_packet_size())) {
+        LOG_WARN("failed to update max packet size", K(ret));
       }
 
       if (OB_SUCC(ret) && !session.get_database_name().empty()) {
@@ -515,13 +562,19 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
           int64_t global_version = OB_INVALID_VERSION;
           
           if (OB_SUCCESS != (tmp_ret = schema_service->get_runtime_refreshed_schema_version(local_version))) {
+            LOG_WARN("fail to get local version", K(ret), K(tmp_ret));
           } else if (OB_SUCCESS != (tmp_ret = schema_service->get_published_schema_version(global_version))) {
+            LOG_WARN("fail to get local version", K(ret), K(tmp_ret));
           } else if (local_version < global_version) {
             LOG_INFO("try to refresh schema", K(1UL),
                      K(local_version), K(global_version));
             if (OB_SUCCESS != (tmp_ret = gctx_.schema_service_->async_refresh_schema(global_version))) {
+              LOG_WARN("failed to refresh schema", K(tmp_ret),
+                       K(1UL), K(global_version));
             } else if (OB_SUCCESS != (tmp_ret = gctx_.schema_service_->get_runtime_schema_guard(schema_guard))) {
+              LOG_WARN("get schema guard failed", K(ret), K(tmp_ret));
             } else if (OB_SUCCESS != (tmp_ret = schema_guard.get_database_id(session.get_database_name(), db_id))) {
+              LOG_WARN("failed to get database id", K(ret), K(tmp_ret));
             } else {
               // Only reset the error code when schema is successfully refreshed
               ret = OB_SUCCESS;
@@ -551,9 +604,11 @@ int ObMPConnect::check_password_expired(ObSchemaGetterGuard &schema_guard,
                                                    ObString(OB_DEFAULT_HOST_NAME),
                                                    is_exist,
                                                    &user_id))) {
+    LOG_WARN("fail to check user exist", K(ret));
   } else if (!is_exist) {
     //do nothing
   } else if (OB_FAIL(ObPrivilegeCheck::check_password_expired_on_connection(user_id, schema_guard, session))) {
+    LOG_WARN("fail to check password expired", K(ret), K(user_id));
   }
   return ret;
 }
@@ -583,6 +638,7 @@ int ObMPConnect::get_conn_id(uint32_t &conn_id) const
       ObCastCtx cast_ctx(&allocator, NULL, CM_NONE, ObCharset::get_system_collation());
       EXPR_GET_UINT32_V2(value, conn_id);
       if (OB_FAIL(ret)) {
+        LOG_WARN("fail to cast connection id to uint32", K(kv.value_), K(ret));
       } else {
         is_found = true;
       }
@@ -601,6 +657,7 @@ int ObMPConnect::check_client_property(ObSMConnection &conn)
   int ret = OB_SUCCESS;
   ObMySQLCapabilityFlags client_cap = hsr_.get_capability_flags();
   if (OB_FAIL(set_client_version(conn))) {
+    LOG_WARN("get proxy version fail", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -625,9 +682,11 @@ int ObMPConnect::verify_connection() const
     if (0 == user_name_.compare(OB_SYS_USER_NAME)
         && (0 == client_ip_.compare(IPV4_LOCAL_STR)
             || 0 == client_ip_.compare(IPV6_LOCAL_STR))) {
+      LOG_DEBUG("local administrator bypasses the IP allowlist", K(ret));
     } else if (SS_INIT == GCTX.status_ || SS_STARTING == GCTX.status_) {
       LOG_INFO("server is initializing, ignore verify_ip_white_list", "status", GCTX.status_, K(ret));
     } else if (OB_FAIL(verify_ip_white_list())) {
+      LOG_WARN("failed to verify_ip_white_list", K(ret));
     }
   }
   return ret;
@@ -658,6 +717,7 @@ int ObMPConnect::verify_identify(ObSMConnection &conn, ObSQLSessionInfo &session
     if (NULL != share::server_service<omt::ObServerRuntimeController>()) {
       if (OB_FAIL(share::server_service<omt::ObServerRuntimeController>()
                       ->lock_runtime(conn.runtime_))) {
+        LOG_WARN("can't get server runtime", K(ret));
       } else if (OB_ISNULL(conn.runtime_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("null server runtime", K(ret));
@@ -678,14 +738,17 @@ int ObMPConnect::verify_identify(ObSMConnection &conn, ObSQLSessionInfo &session
         && !(OB_PRIV_SUPER & session.get_user_priv_set())) {
       ObString sql_str;
       if (OB_FAIL(session.get_init_connect(sql_str))) {
+        LOG_WARN("get sys variable init_connect failed.", K(ret));
       } else {
         if (0 == sql_str.compare("")) {
           // do nothing
         } else {
           if (OB_FAIL(init_connect_process(sql_str, session))) {
+            LOG_WARN("init connect failed.", K(sql_str), K(ret));
           }
         }
       }
+      LOG_DEBUG("INIT_CONNECT", K(ret), K(sql_str));
       //a statement that has a error will causing client connections to fail
       if (OB_SUCCESS != ret) {
         force_disconnect();
@@ -695,6 +758,7 @@ int ObMPConnect::verify_identify(ObSMConnection &conn, ObSQLSessionInfo &session
     //set session state
     if (OB_SUCC(ret)) {
       if(OB_FAIL(session.set_session_state(SESSION_SLEEP))) {
+        LOG_WARN("fail to set session state", K(ret));
       }
     }
   }
@@ -714,11 +778,14 @@ int ObMPConnect::verify_ip_white_list() const
   } else if (0 == client_ip_.compare(UNIX_SOCKET_CLIENT_IP)) {
     LOG_INFO("match unix socket connection", K(client_ip_));
   } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("get_schema_guard failed", K(ret));
   } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
+    LOG_WARN("get sys variable schema failed", K(ret));
   } else if (OB_ISNULL(sys_variable_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sys variable schema is null", K(ret));
   } else if (OB_FAIL(sys_variable_schema->get_sysvar_schema(var_name, sysvar))) {
+    LOG_WARN("fail to get_sysvar_schema",  K(ret));
   } else {
     ObString var_value = sysvar->get_value();
     if (!obsys::ObNetUtil::is_in_white_list(client_ip_, var_value)) {
@@ -763,6 +830,7 @@ int ObMPConnect::set_client_version(ObSMConnection &conn)
       }
     }
     if (OB_FAIL(ObVersionParser::get_version(buff, conn.client_version_))) {
+      LOG_WARN("failed to get version", K(ret));
     } else {/*do nothing*/}
   }
   return ret;

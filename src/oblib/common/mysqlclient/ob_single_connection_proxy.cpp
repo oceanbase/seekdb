@@ -45,6 +45,7 @@ int ObSingleConnectionProxy::connect(const int32_t group_id, ObISQLClient *sql_c
     LOG_WARN("transaction can only be started once", K_(sql_client), KP(conn_.get_ptr()));
   } else {
     if (OB_FAIL(sql_client->acquire_connection(conn_, group_id))) {
+      LOG_WARN("acquire connection failed", K(ret), K(sql_client));
     } else if (!conn_.is_valid()) {
       ret = OB_INNER_STAT_ERROR;
       LOG_WARN("connection can not be NULL", K(ret));
@@ -91,6 +92,7 @@ int ObSingleConnectionProxy::read(ReadResult &res, const char *sql, const int32_
     }
   }
   ++statement_count_;
+  LOG_TRACE("execute sql", KCSTRING(sql), K(ret));
   return ret;
 }
 
@@ -110,6 +112,7 @@ int ObSingleConnectionProxy::write(
     LOG_WARN("execute sql failed", K(ret), KCSTRING(sql), K_(conn));
   }
   ++statement_count_;
+  LOG_TRACE("execute sql", KCSTRING(sql), K(ret));
   return ret;
 }
 
@@ -128,6 +131,9 @@ int ObSingleConnectionProxy::escape(const char *from, const int64_t from_size,
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("transcation not started");
   } else if (OB_FAIL(sql_client_->escape(from, from_size, to, to_size, out_size))) {
+    LOG_WARN("escape string failed",
+        "from", ObString(from_size, from), K(from_size),
+        "to", static_cast<void *>(to), K(to_size));
   }
   return ret;
 }

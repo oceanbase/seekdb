@@ -93,8 +93,11 @@ int ObLogCursor::next_entry(ObLogEntry &entry, const LogCommand cmd, const char 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(entry.set_log_seq(log_id_))) {
+    SHARE_LOG(WARN, "set_log_seq error", K(log_id_), K(ret));
   } else if (OB_FAIL(entry.set_log_command(cmd))) {
+    SHARE_LOG(WARN, "set_log_command error", K(cmd), K(ret));
   } else if (OB_FAIL(entry.fill_header(log_data, data_len, 0))) {
+    SHARE_LOG(WARN, "fill_header error", KP(log_data), K(data_len), K(ret));
   }
   return ret;
 }

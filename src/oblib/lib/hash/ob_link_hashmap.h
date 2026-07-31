@@ -216,6 +216,7 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(array_alloc_.init(attr))) {
+      COMMON_LOG(ERROR, "array_alloc_ init error", K(ret), K(attr));
     } else {
       magic_code_ = MAGIC_CODE;
     }

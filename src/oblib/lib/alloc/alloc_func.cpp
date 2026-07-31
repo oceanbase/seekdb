@@ -110,6 +110,7 @@ int set_ctx_limit(uint64_t ctx_id, const int64_t limit)
     auto ctx_allocator = alloc->get_ctx_allocator(ctx_id);
     if (OB_NOT_NULL(ctx_allocator)) {
       if (OB_FAIL(ctx_allocator->set_limit(limit))) {
+        LIB_LOG(WARN, "set_limit failed", K(ret), K(limit));
       }
     } else {
       ret = OB_INVALID_ARGUMENT;

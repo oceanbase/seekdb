@@ -37,6 +37,7 @@ int ObGlobalMergeTableOperator::init(ObSQLiteConnectionPool &meta_db_pool)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(storage_.init(&meta_db_pool))) {
+    LOG_WARN("failed to init storage", K(ret));
   }
   return ret;
 }
@@ -75,6 +76,7 @@ int ObGlobalMergeTableOperator::insert_global_merge_info(
   } else {
     ret = storage_.insert_or_update(info);
     if (OB_FAIL(ret)) {
+      LOG_WARN("failed to insert or update global merge info", K(ret), K(info));
     }
   }
   return ret;
@@ -92,6 +94,7 @@ int ObGlobalMergeTableOperator::update_partial_global_merge_info(
     // Use SQLite storage - partial update is same as full update for SQLite
     ret = storage_.insert_or_update(info);
     if (OB_FAIL(ret)) {
+      LOG_WARN("failed to insert or update global merge info", K(ret), K(info));
     }
   }
   return ret;
@@ -109,6 +112,7 @@ int ObGlobalMergeTableOperator::check_scn_revert(
     HEAP_VAR(ObGlobalMergeInfo, global_merge_info) {
       if (OB_FAIL(ObGlobalMergeTableOperator::load_global_merge_info(sql_client,
                                                                      global_merge_info))) {
+        LOG_WARN("fail to load global merge info", KR(ret));
       } else {
         const ObMergeInfoItem *it = info.list_.get_first();
         while (OB_SUCC(ret) && (it != info.list_.get_header())) {

@@ -127,6 +127,7 @@ int ObIDMap<T, ID_TYPE, TSI_HOLD_NUM>::init(const ID_TYPE num)
     _OB_LOG(WARN, "malloc array fail num=%lu", (uint64_t)(num + 1));
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_SUCCESS != (ret = free_list_.init(num))) {
+    _OB_LOG(WARN, "free list init fail ret=%d", ret);
   } else {
     memset(array_, 0, (num + 1) * sizeof(Node));
     for (ID_TYPE i = 0; i < (num + 1); i++) {

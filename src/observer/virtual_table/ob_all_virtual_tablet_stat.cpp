@@ -54,6 +54,7 @@ int ObAllVirtualTabletStat::inner_get_next_row(ObNewRow *&row)
   if (need_collect_stats_) {
     tablet_stats_.reset();
     if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObTabletStatMgr>()->get_all_tablet_stats(tablet_stats_))) {
+      SERVER_LOG(WARN, "failed to get all tablet stats", K(ret));
     } else {
       need_collect_stats_ = false;
       cur_idx_ = 0;

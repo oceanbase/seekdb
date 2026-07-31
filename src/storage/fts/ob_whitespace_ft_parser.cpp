@@ -158,6 +158,7 @@ int ObWhiteSpaceFTParserDesc::segment(
     LOG_WARN("fail to allocate space ft parser", K(ret));
   } else {
     if (OB_FAIL(parser->init(param))) {
+      LOG_WARN("fail to init whitespace fulltext parser", K(ret), KPC(param));
     } else {
       iter = parser;
     }

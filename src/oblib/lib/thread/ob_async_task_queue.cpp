@@ -35,6 +35,7 @@ ObAsyncTaskQueue::~ObAsyncTaskQueue()
 {
   int ret = destroy();
   if (OB_FAIL(ret)) {
+    LOG_WARN("destroy failed", K(ret));
   }
 }
 
@@ -48,8 +49,13 @@ int ObAsyncTaskQueue::init(const int64_t thread_cnt, const int64_t queue_size, c
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(thread_cnt), K(queue_size), K(ret));
   } else if (OB_FAIL(allocator_.init(TOTAL_LIMIT, HOLD_LIMIT, page_size))) {
+    LOG_WARN("allocator init failed", "total limit", static_cast<int64_t>(TOTAL_LIMIT),
+        "hold limit", static_cast<int64_t>(HOLD_LIMIT),
+        "page size",  static_cast<int64_t>(ALLOC_PAGE_SIZE), K(ret));
   } else if (OB_FAIL(queue_.init(queue_size))) {
+    LOG_WARN("queue init failed", K(queue_size), K(ret));
   } else if (OB_FAIL(create(thread_cnt, thread_name))) {
+    LOG_WARN("create async task thread failed", K(ret), K(thread_cnt));
   } else {
     allocator_.set_attr(ObMemAttr("AsyncTaskQueue"));
     is_inited_ = true;
@@ -61,6 +67,7 @@ int ObAsyncTaskQueue::destroy()
 {
   int ret = ObReentrantThread::destroy();
   if (OB_FAIL(ret)) {
+    LOG_WARN("reentrant thread thread failed", K(ret));
   }
   if (is_inited_) {
     queue_.destroy();
@@ -149,6 +156,7 @@ void ObAsyncTaskQueue::run2()
             task->set_retry_times(task->get_retry_times() - 1);
             task->set_last_execute_time(ObTimeUtility::current_time());
             if (OB_FAIL(queue_.push(task))) {
+              LOG_ERROR("push task to queue failed", K(ret));
             } else {
               rescheduled = true;
             }

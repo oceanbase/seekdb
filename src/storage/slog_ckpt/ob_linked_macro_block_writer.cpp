@@ -74,6 +74,7 @@ int ObLinkedMacroBlockWriter::write_block(
     int64_t pos = 0;
     if (!handle_.is_empty()) {
       if (OB_FAIL(handle_.wait())) {
+        LOG_WARN("fail to wait io finish", K(ret));
       } else {
         previous_block_id = handle_.get_macro_id();
         pre_block_id = previous_block_id;
@@ -84,6 +85,7 @@ int ObLinkedMacroBlockWriter::write_block(
       pos = common_header.get_serialize_size();
       linked_header.set_previous_block_id(previous_block_id);
       if (OB_FAIL(linked_header.serialize(buf, buf_len, pos))) {
+        LOG_WARN("fail to serialize linked header", K(ret));
       } else {
         common_header.set_payload_checksum(static_cast<int32_t>(
             ob_crc64(buf + common_header.get_serialize_size(), common_header.get_payload_size())));
@@ -92,12 +94,15 @@ int ObLinkedMacroBlockWriter::write_block(
     if (OB_SUCC(ret)) {
       pos = 0;
       if (OB_FAIL(common_header.serialize(buf, buf_len, pos))) {
+        LOG_WARN("fail to serialize common header", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       handle_.reset();
       if (OB_FAIL(ObObjectManager::async_write_object(opt, write_info, handle_))) {
+        LOG_WARN("fail to async write block", K(ret), K(write_info), K(handle_));
       } else if (OB_FAIL(write_ctx_.add_macro_block_id(handle_.get_macro_id()))) {
+        LOG_WARN("fail to add macro id", K(ret), "macro id", handle_.get_macro_id());
       }
     }
   }
@@ -114,6 +119,7 @@ int ObLinkedMacroBlockWriter::close(MacroBlockId &pre_block_id)
     // do nothing
   } else {
     if (OB_FAIL(handle_.wait())) {
+      LOG_WARN("fail to wait io finish", K(ret));
     } else {
       entry_block_id_ = handle_.get_macro_id();
       pre_block_id = entry_block_id_;
@@ -171,11 +177,13 @@ int ObLinkedMacroBlockItemWriter::init(const bool need_disk_addr, const ObMemAtt
     LOG_WARN("ObLinkedMacroBlockItemWriter has already been inited", K(ret));
   } else if (FALSE_IT(allocator_.set_attr(mem_attr))) {
   } else if (OB_FAIL(block_writer_.init())) {
+    LOG_WARN("fail to init meta block writer", K(ret));
   } else if (OB_ISNULL(io_buf_ = static_cast<char *>(allocator_.alloc(macro_block_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate memory", K(ret), K(macro_block_size));
   } else if (FALSE_IT(MEMSET(io_buf_, 0, macro_block_size))) {
   } else if (OB_FAIL(common_header_.set_attr(ObMacroBlockCommonHeader::LinkedBlock))) {
+    LOG_WARN("fail to set type for common header", K(ret), K(common_header_));
   } else {
     need_disk_addr_ = need_disk_addr;
     io_buf_size_ = macro_block_size;
@@ -206,14 +214,18 @@ int ObLinkedMacroBlockItemWriter::write_item(
     int64_t remain_size = io_buf_size_ - io_buf_pos_;
     if (real_item_size <= remain_size) {
       if (OB_FAIL(write_item_header(item_buf, item_buf_len))) {
+        LOG_WARN("fail to write item header", K(ret));
       } else if (OB_FAIL(write_item_content(item_buf, item_buf_len, item_buf_pos))) {
+        LOG_WARN("fail to write item buffer", K(ret));
       } else if (OB_FAIL(record_inflight_item(item_buf_len, item_idx))) {
+        LOG_WARN("fail to record inflight item info", K(ret));
       } else {
         ++linked_header_.item_count_;
       }
     } else {
       if (0 != linked_header_.item_count_) {
         if (OB_FAIL(write_block())) {
+          LOG_WARN("fail to write block", K(ret));
         }
       }
 
@@ -223,7 +235,9 @@ int ObLinkedMacroBlockItemWriter::write_item(
         if (real_item_size > remain_size) {
           // write big meta which larger than 2M
           if (OB_FAIL(write_item_header(item_buf, item_buf_len))) {
+            LOG_WARN("fail to write item header", K(ret));
           } else if (OB_FAIL(record_inflight_item(item_buf_len, item_idx))) {
+            LOG_WARN("fail to record inflight item info", K(ret));
           }
           while (OB_SUCC(ret) && item_buf_pos < item_buf_len) {
             remain_size = io_buf_size_ - io_buf_pos_;
@@ -231,21 +245,27 @@ int ObLinkedMacroBlockItemWriter::write_item(
             linked_header_.item_count_ = is_last_block ? 1 : 0;
             linked_header_.fragment_offset_ = item_buf_pos;
             if (OB_FAIL(write_item_content(item_buf, item_buf_len, item_buf_pos))) {
+              LOG_WARN("fail to write item buffer", K(ret));
             } else if (io_buf_pos_ == io_buf_size_) {
               if (OB_FAIL(write_block())) {
+                LOG_WARN("fail to write block", K(ret));
               }
             }
           }
           if (OB_SUCC(ret)) {
             if (io_buf_pos_ > ObMacroBlockCommonHeader::get_serialize_size() + linked_header_.get_serialize_size()) {
               if (OB_FAIL(write_block())) {
+                LOG_WARN("fail to write block", K(ret));
               }
             }
           }
         } else {
           if (OB_FAIL(write_item_header(item_buf, item_buf_len))) {
+            LOG_WARN("fail to write item header", K(ret));
           } else if (OB_FAIL(write_item_content(item_buf, item_buf_len, item_buf_pos))) {
+            LOG_WARN("fail to write item buffer", K(ret));
           } else if (OB_FAIL(record_inflight_item(item_buf_len, item_idx))) {
+            LOG_WARN("fail to record inflight item info", K(ret));
           } else {
             ++linked_header_.item_count_;
           }
@@ -270,6 +290,7 @@ int ObLinkedMacroBlockItemWriter::record_inflight_item(
     LOG_WARN("invalid argument", K(ret), K_(need_disk_addr), KP(item_idx));
   } else if (need_disk_addr_) {
     if (OB_FAIL(item_size_arr_.push_back(item_buf_len + sizeof(ObLinkedMacroBlockItemHeader)))) {
+      LOG_WARN("fail to push back addr", K(ret));
     } else {
       *item_idx = item_size_arr_.count() - 1;
       ++curr_block_inflight_items_cnt_;
@@ -300,7 +321,9 @@ int ObLinkedMacroBlockItemWriter::set_pre_block_inflight_items_addr(
         OB_SUCC(ret) && idx < first_inflight_item_idx_ + pre_block_inflight_items_cnt_; idx++) {
       ObMetaDiskAddr addr;
       if (OB_FAIL(addr.set_block_addr(pre_block_id, offset, item_size_arr_.at(idx), ObMetaDiskAddr::DiskType::BLOCK))) {
+        LOG_WARN("fail to push back address", K(ret), K(addr));
       } else if (OB_FAIL(item_disk_addr_arr_.push_back(addr))) {
+        LOG_WARN("fail to push back address", K(ret), K(addr));
       } else {
         offset += item_size_arr_.at(idx);
       }
@@ -363,7 +386,9 @@ int ObLinkedMacroBlockItemWriter::write_block()
   const int64_t upper_align_size = upper_align(io_buf_pos_, DIO_ALIGN_SIZE);
   if (OB_FAIL(block_writer_.write_block(
         io_buf_, upper_align_size, common_header_, linked_header_, pre_block_id))) {
+    LOG_WARN("fail to write block", K(ret));
   } else if (OB_FAIL(set_pre_block_inflight_items_addr(pre_block_id))) {
+    LOG_WARN("fail to set pre block inflight items addr", K(ret));
   } else {
     io_buf_pos_ = common_header_.get_serialize_size() + linked_header_.get_serialize_size();
     linked_header_.item_count_ = 0;
@@ -428,7 +453,9 @@ int ObLinkedMacroBlockItemWriter::close()
       && OB_FAIL(write_block())) {
     LOG_WARN("fail to write block", K(ret));
   } else if (OB_FAIL(block_writer_.close(pre_block_id))) {
+    LOG_WARN("fail to close writer", K(ret));
   } else if (OB_FAIL(set_pre_block_inflight_items_addr(pre_block_id))) {
+    LOG_WARN("fail to set pre block inflight items addr", K(ret));
   } else {
     is_closed_ = true;
   }

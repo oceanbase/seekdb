@@ -85,8 +85,10 @@ int ObMultiVersionGarbageCollector::start()
     ret = OB_NOT_INIT;
     MVCC_LOG(ERROR, "has not been inited", KR(ret));
   } else if (OB_FAIL(timer_.init("MultiVersionGC", ObMemAttr("MultiVersionGC")))) {
+    MVCC_LOG(ERROR, "fail to init MultiVersionGarbageCollector timer", KR(ret));
   } else if (OB_FAIL(timer_.schedule(timer_task_,
                                      GARBAGE_COLLECT_RETRY_INTERVAL, true/*repeat*/, false/*immediate*/))) {
+    MVCC_LOG(ERROR, "fail to schdule MultiVersionGarbageCollector timer", KR(ret));
   } else {
     MVCC_LOG(INFO, "multi version garbage collector start", KPC(this),
              K(GARBAGE_COLLECT_RETRY_INTERVAL), K(GARBAGE_COLLECT_EXEC_INTERVAL),
@@ -208,6 +210,7 @@ int ObMultiVersionGarbageCollector::study()
 
   // standby cluster uses the same interface for GTS
   if (OB_FAIL(study_min_unallocated_GTS(min_unallocated_GTS))) {
+    MVCC_LOG(WARN, "study min unallocated GTS failed", K(ret));
   } else if (!min_unallocated_GTS.is_valid()
              || min_unallocated_GTS.is_min()
              || min_unallocated_GTS.is_max()) {
@@ -225,6 +228,7 @@ int ObMultiVersionGarbageCollector::study()
     bool is_primary = true;
     
     if (OB_FAIL(ObShareUtil::check_if_server_role_is_primary(is_primary))) {
+      MVCC_LOG(WARN, "fail to execute check_if_server_role_is_primary", KR(ret));
     } else if (is_primary && OB_FAIL(study_min_unallocated_WRS(min_unallocated_WRS))) {
       MVCC_LOG(WARN, "study min unallocated GTS failed", K(ret), K(is_primary));
     } else if (!min_unallocated_WRS.is_valid() || min_unallocated_WRS.is_min()) {
@@ -241,6 +245,7 @@ int ObMultiVersionGarbageCollector::study()
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(study_max_committed_txn_version(max_committed_txn_version))) {
+      MVCC_LOG(WARN, "study max committed txn version failed", K(ret));
     } else if (!max_committed_txn_version.is_valid()
                || max_committed_txn_version.is_max()) {
       ret = OB_ERR_UNEXPECTED;
@@ -256,6 +261,7 @@ int ObMultiVersionGarbageCollector::study()
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(study_min_active_txn_version(min_active_txn_version))) {
+      MVCC_LOG(WARN, "study min active txn version failed", K(ret));
     } else {
       MVCC_LOG(INFO, "study min active txn version succeed",
                K(ret), K(min_active_txn_version), KPC(this));
@@ -306,6 +312,7 @@ int ObMultiVersionGarbageCollector::study_min_unallocated_GTS(share::SCN &min_un
   share::SCN gts_scn;
 
   if (OB_FAIL(OB_TS_MGR.get_gts_sync(timeout_us, gts_scn))) {
+    MVCC_LOG(WARN, "get gts fail", KR(ret));
   } else if (!gts_scn.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     MVCC_LOG(ERROR, "get gts fail", K(gts_scn), K(ret));
@@ -397,6 +404,7 @@ int ObMultiVersionGarbageCollector::study_min_active_txn_version(
     ret = OB_INVALID_ARGUMENT;
     MVCC_LOG(WARN, "active snapshot service is nullptr");
   } else if (OB_FAIL(snapshot_service->get_min_active_snapshot_version(min_active_txn_version))) {
+    MVCC_LOG(WARN, "get min active snaphot version failed", K(ret));
   }
 
   return ret;
@@ -407,6 +415,7 @@ int ObMultiVersionGarbageCollector::refresh_disk_status_()
   int ret = OB_SUCCESS;
   bool is_almost_full = false;
   if (OB_FAIL(is_disk_almost_full_(is_almost_full))) {
+    MVCC_LOG(WARN, "check disk almost full failed", K(ret), KPC(this));
   } else {
     update_disk_pressure_status_(is_almost_full);
   }

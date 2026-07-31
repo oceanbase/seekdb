@@ -100,6 +100,7 @@ struct ObOptParamHint
   #define OPT_PARAM_TYPE_DEF(DEF)                   \
     DEF(INVALID_OPT_PARAM_TYPE, = 0)                \
     DEF(HIDDEN_COLUMN_VISIBLE,)                     \
+    DEF(ROWSETS_ENABLED,)                           \
     DEF(ROWSETS_MAX_ROWS,)                          \
     DEF(DDL_EXECUTION_ID,)                          \
     DEF(DDL_TASK_ID,)                               \

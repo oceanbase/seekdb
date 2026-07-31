@@ -67,7 +67,9 @@ int ObAllVirtualVectorMemInfo::inner_get_next_row(ObNewRow *&row)
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
     } else if (OB_FAIL(malloc_sample_map_.create(1000, "MallocInfoMap", "MallocInfoMap"))) {
+        SERVER_LOG(WARN, "create memory info map failed", K(ret));
     } else if (OB_FAIL(ObMemoryDump::get_instance().load_malloc_sample_map(malloc_sample_map_))) {
+        SERVER_LOG(WARN, "load memory info map failed", K(ret));
     } else {
       {
         int64_t manage_used = 0;
@@ -87,11 +89,16 @@ int ObAllVirtualVectorMemInfo::inner_get_next_row(ObNewRow *&row)
           partial_tablet_ids_.reset();
           cache_tablet_ids_.reset();
           if (OB_FAIL(service->get_snapshot_ids(complete_tablet_ids_, partial_tablet_ids_))) {
+            SERVER_LOG(WARN, "failed to get snapshot_ids", K(ret));
           } else if (OB_FAIL(service->get_cache_ids(cache_tablet_ids_))) {
+            SERVER_LOG(WARN, "failed to get cache_ids", K(ret));
           } else if (OB_FAIL(databuff_printf(vector_used_str_, OB_MAX_MYSQL_VARCHAR_LENGTH, pos, "{\"rb_used\":%lu", rb_used))) {
+            SERVER_LOG(WARN, "failed to print total vector mem usage", K(ret), K(vector_hold));
           } else if (OB_FAIL(ObPluginVectorIndexUtils::get_mem_context_detail_info(service, complete_tablet_ids_,
              partial_tablet_ids_, cache_tablet_ids_, vector_used_str_, OB_MAX_MYSQL_VARCHAR_LENGTH, pos))) {
+            SERVER_LOG(WARN, "failed to print vector mem usage detail", K(ret), K(vector_hold));
           } else if (OB_FAIL(databuff_printf(vector_used_str_, OB_MAX_MYSQL_VARCHAR_LENGTH, pos, "}"))) {
+            SERVER_LOG(WARN, "failed to print total vector mem usage", K(ret));
           }
           vector_limit = shared_mem_mgr->vector_throttle_tool().get_resource_limit<ObVectorAllocator>();
           int64_t tx_share_limit = shared_mem_mgr->share_resource_throttle_tool().get_resource_limit<FakeAllocatorForTxShare>();

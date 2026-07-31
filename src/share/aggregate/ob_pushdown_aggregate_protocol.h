@@ -174,32 +174,17 @@ struct ObAggregateEmitResult
   bool end_;
 };
 
-class ObIPushdownAggregateProgram;
-
-// Query owns the immutable aggregate definition behind this plan.  Storage
-// borrows the plan only long enough to create one independently owned program
-// for each logical scan store.  Programs created from the same plan must not
-// share mutable aggregate state.
-class ObIPushdownAggregatePlan
-{
-public:
-  virtual ~ObIPushdownAggregatePlan() = default;
-  virtual void destroy() = 0;
-  virtual int create_program(ObIPushdownAggregateProgram *&program) const = 0;
-};
-
-// Query owns the implementation and all SQL semantics/materialization.  One
-// program belongs to exactly one logical scan store; it is non-copyable,
-// thread-confined, and must outlive every segment passed to consume().  A hard
-// consume/seal/emit error poisons the program; callers may only reset_scan() or
-// destroy it afterwards.
+// Query owns the implementation and all SQL semantics/materialization.  The
+// program is non-copyable, thread-confined, and must outlive every segment
+// passed to consume().  A hard consume/seal/emit error poisons the program;
+// callers may only reset_scan() or destroy it afterwards.
 class ObIPushdownAggregateProgram
 {
 public:
   virtual ~ObIPushdownAggregateProgram() = default;
-  // The Query implementation retains its allocator so Storage can release an
-  // independently owned program without knowing its concrete allocation.
-  virtual void destroy() = 0;
+  // Implementations are allocator-owned and may have different concrete
+  // types.  Query ownership invokes this virtual hook; storage never does.
+  virtual void destroy(common::ObIAllocator &allocator) = 0;
   virtual ObPushdownAggregateProgramState state() const = 0;
   virtual int reset_scan() = 0;
   // Probe whether the segment can provide every exact physical fact required

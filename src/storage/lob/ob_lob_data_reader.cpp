@@ -123,10 +123,12 @@ int ObLobDataReader::read_lob_data_impl(blocksstable::ObStorageDatum &datum, ObC
         } else {
           output_data.assign_buffer(buf, param.byte_size_);
           if (OB_FAIL(lob_mngr->query(param, output_data))) {
+            LOG_WARN("falied to query lob tablets.", K(ret), K(param));
           } else if (output_data.length() != param.len_) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("query result length is not equal.", K(ret), K(output_data), K(param));
           } else {
+            LOG_DEBUG("read output for query.", K(output_data));
             datum.set_string(output_data);
           }
         }
@@ -144,6 +146,7 @@ int ObLobDataReader::read_lob_data(blocksstable::ObStorageDatum &datum, ObCollat
     LOG_WARN("ObLobDataReader has not been inited", KP(this), K(ret));
   } else if (datum.is_nop() || datum.is_null()) {
   } else if (OB_FAIL(read_lob_data_impl(datum, coll_type))) {
+    LOG_WARN("fail to read lob data", K(ret));
   }
   return ret;
 }
@@ -156,6 +159,7 @@ int ObLobDataReader::fuse_disk_lob_header(common::ObObj &obj)
     ObString data = obj.get_string();
     ObString out;
     if (OB_FAIL(ObLobManager::fill_lob_header(allocator_, data, out))) {
+      LOG_WARN("failed to fill header for lob data", K(ret), K(data));
     } else {
       obj.set_string(obj.get_type(), out);
       obj.set_has_lob_header();

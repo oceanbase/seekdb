@@ -64,7 +64,11 @@ int ObSrvNetworkFrame::init()
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(request_qhandler_.init())) {
+    LOG_ERROR("init request queue handler fail", K(ret));
+
   } else if (OB_FAIL(deliver_.init())) {
+    LOG_ERROR("init request deliverer fail", K(ret));
+
   } else {
     LOG_INFO("init network frame successfully");
   }
@@ -100,7 +104,9 @@ int ObSrvNetworkFrame::start()
     if (OB_FAIL(obmysql::global_sql_nio_server->start(
             GCONF.mysql_port, &deliver_, sql_net_thread_count,
             disable_tcp, GCONF.ssl_client_authentication))) {
+      LOG_ERROR("sql nio server start failed", K(ret));
     } else if (OB_FAIL(reload_config())) {
+      LOG_ERROR("apply initial sql nio configuration failed", K(ret));
     }
   }
   return ret;
@@ -125,6 +131,7 @@ int ObSrvNetworkFrame::reload_config()
   if (OB_FAIL(update_tcp_keepalive_parameters_for_sql_nio_server(enable_tcp_keepalive,
                                                                         tcp_keepidle, tcp_keepintvl,
                                                                         tcp_keepcnt))) {
+    LOG_WARN("Failed to set sql tcp keepalive parameters for sql nio server", K(ret));
   }
   return ret;
 }

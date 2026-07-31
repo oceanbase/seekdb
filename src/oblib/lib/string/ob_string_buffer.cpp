@@ -82,6 +82,7 @@ int ObStringBuffer::append(const char *str, const uint64_t len, int8_t flag)
         ret = OB_SIZE_OVERFLOW;
         LOG_WARN("size over flow", K(ret), K(need_len), K(len_));
       } else if (OB_FAIL(reserve(flag == -1 ? need_len : len))) {
+        LOG_WARN("reserve data failed", K(ret), K(need_len), K(len_));
       } else {
         MEMCPY(data_ + len_, str, len);
         len_ += len;
@@ -116,6 +117,7 @@ int ObStringBuffer::reserve(const uint64_t len)
       ret = OB_SIZE_OVERFLOW;
       LOG_ERROR("size overflow", K(ret), K(extend_to), K(need_size));
     } else if (OB_FAIL(extend(extend_to))) {
+      LOG_WARN("extend failed", K(ret), K(extend_to));
     }
   }
   return ret;

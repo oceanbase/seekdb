@@ -60,7 +60,9 @@ int ObExprRegexpLike::calc_result_typeN(ObExprResType &type,
     if (OB_SUCC(ret)) {
       ObExprResType cmp_type;
       if (OB_FAIL(ObExprRegexContext::check_binary_compatible(types, 2))) {
+        LOG_WARN("types are not compatible with binary.", K(ret));
       } else if (OB_FAIL(aggregate_charsets_for_comparison(cmp_type, types, 2, type_ctx))) {
+        LOG_WARN("fail to aggregate charsets for comparison");
       } else {
         regexp_res_coll = cmp_type.get_calc_collation_type();
         is_case_sensitive = ObCharset::is_bin_sort(cmp_type.get_calc_collation_type());
@@ -90,12 +92,14 @@ int ObExprRegexpLike::calc_result_typeN(ObExprResType &type,
       const ObCollationType regexp_calc_coll =
           ObExprRegexContext::get_regexp_calc_collation(regexp_res_coll, is_case_sensitive);
       if (OB_FAIL(ObExprRegexContext::check_need_utf8(raw_expr->get_param_expr(1), need_utf8))) {
+        LOG_WARN("fail to check need utf8", K(ret));
       } else {
         types[1].set_calc_collation_type(regexp_calc_coll);
       }
       need_utf8 = false;
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObExprRegexContext::check_need_utf8(raw_expr->get_param_expr(0), need_utf8))) {
+        LOG_WARN("fail to check need utf8", K(ret));
       } else {
         types[0].set_calc_collation_type(regexp_calc_coll);
       }
@@ -121,6 +125,7 @@ int ObExprRegexpLike::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
       const bool const_pattern = pattern->is_const_expr();
       rt_expr.extra_ = (!const_text && const_pattern) ? 1 : 0;
       rt_expr.eval_func_ = eval_regexp_like;
+      LOG_DEBUG("regexp like expr cg", K(const_text), K(const_pattern), K(rt_expr.extra_));
     }
   }
   return ret;
@@ -182,6 +187,7 @@ int ObExprRegexpLike::regexp_like(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
       if (NULL == (regexp_ctx = static_cast<RegExpCtx *>(
                   ctx.exec_ctx_.get_expr_op_ctx(expr.expr_ctx_id_)))) {
         if (OB_FAIL(ctx.exec_ctx_.create_expr_op_ctx(expr.expr_ctx_id_, regexp_ctx))) {
+          LOG_WARN("create expr regex context failed", K(ret), K(expr));
         } else if (OB_ISNULL(regexp_ctx)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("NULL context returned", K(ret));
@@ -191,7 +197,9 @@ int ObExprRegexpLike::regexp_like(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(RegExpCtx::get_regexp_flags(match_param, is_case_sensitive, false, true, flags))) {
+      LOG_WARN("fail to get regexp flags", K(ret), K(match_param));
     } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_regexp_session_vars(regexp_vars))) {
+      LOG_WARN("fail to get regexp");
     } else if (!pattern->is_null() &&
                OB_FAIL(regexp_ctx->init(reusable ? ctx.exec_ctx_.get_allocator() : tmp_alloc,
                                         regexp_vars,
@@ -201,6 +209,7 @@ int ObExprRegexpLike::regexp_like(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
     //need pre check the pattern valid, and then set result.
     } else if (ob_is_text_tc(expr.args_[0]->datum_meta_.type_)) {
       if (OB_FAIL(ObTextStringHelper::get_string(ctx.exec_ctx_, expr, tmp_alloc, 0, text, text_str))) {
+        LOG_WARN("get text string failed", K(ret));
       }
     } else {
       text_str = text->get_string();
@@ -219,12 +228,14 @@ int ObExprRegexpLike::regexp_like(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
           && expr.args_[0]->datum_meta_.cs_type_ != expected_ci_coll) {
         if (OB_FAIL(RegExpCtx::convert_to_regexp_utf16(
               tmp_alloc, text_str, expr.args_[0]->datum_meta_.cs_type_, text_utf))) {
+          LOG_WARN("convert charset failed", K(ret));
         }
       } else {
         text_utf = text_str;
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(regexp_ctx->match(tmp_alloc, text_utf, res_coll_type, start_pos - 1, match))) {
+        LOG_WARN("fail to match", K(ret), K(text));
       } else {
         expr_datum.set_int32(match);
       }

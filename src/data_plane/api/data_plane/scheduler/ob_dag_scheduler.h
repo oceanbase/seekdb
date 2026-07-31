@@ -1259,6 +1259,7 @@ public:
       ret = OB_INVALID_ARGUMENT;
       COMMON_LOG(WARN, "invalid arugment", K(ret), KPC(dag));
     } else if (OB_FAIL(prio_sche_[dag->get_priority()].get_dag_progress(*dag, row_inserted, physical_row_count))) {
+      COMMON_LOG(WARN, "fail to get dag progress", K(ret), KPC(dag));
     }
     return ret;
   }
@@ -1376,7 +1377,9 @@ int ObIDag::inner_create_task(bool need_add, ObITask *parent, T *&task, Args&&..
   int ret = common::OB_SUCCESS;
   task = nullptr;
   if (OB_FAIL(alloc_task(task))) {
+    STORAGE_LOG(WARN, "fail to alloc task", KR(ret));
   } else if (OB_FAIL(task->init(args...))) {
+    STORAGE_LOG(WARN, "failed to init task", KR(ret));
   } else if (nullptr != parent && OB_FAIL(parent->add_child(*task))) {
     STORAGE_LOG(WARN, "failed to add child for parent", KR(ret), KPC(parent), KPC(task));
   } else if (need_add && OB_FAIL(add_task(*task))) {
@@ -1409,6 +1412,7 @@ int ObDagScheduler::alloc_dag(T *&dag)
     const bool use_reserved_allocator = tmp_dag.uses_reserved_allocator();
     ObIAllocator &allocator = get_allocator(use_reserved_allocator);
     if (OB_FAIL(alloc_dag(allocator, use_reserved_allocator, dag))) {
+      STORAGE_LOG(WARN, "fail to alloc dag", K(ret));
     }
   }
   return ret;
@@ -1434,6 +1438,7 @@ int ObDagScheduler::alloc_dag(
       ret = OB_ERR_UNEXPECTED;
       COMMON_LOG(WARN, "dag allocator class does not match", K(ret), KPC(new_dag), K(use_reserved_allocator));
     } else if (OB_FAIL(new_dag->basic_init(allocator))) {
+      COMMON_LOG(WARN, "failed to init dag", K(ret));
     } else {
       dag = static_cast<T*>(new_dag);
     }
@@ -1460,6 +1465,7 @@ int ObDagScheduler::alloc_dag_with_priority(
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "get invalid arg", K(ret), K(prio));
   } else if (OB_FAIL(alloc_dag(dag))) {
+    COMMON_LOG(WARN, "failed to alloc dag", K(ret));
   } else if (OB_ISNULL(dag)) {
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(WARN, "dag should not be null", K(ret), KP(dag));
@@ -1498,11 +1504,13 @@ int ObDagScheduler::create_and_add_dag_net(const ObIDagInitParam *param)
       COMMON_LOG(WARN, "failed to alloc dag_net", K(ret));
     } else if (FALSE_IT(dag_net = new (buf) T())) {
     } else if (OB_FAIL(dag_net->init_by_param(param))) {
+      COMMON_LOG(WARN, "failed to init dag_net", K(ret), KPC(dag_net));
     } else if (FALSE_IT(dag_net->basic_init(allocator))) {
     } else if (FALSE_IT(dag_net->init_dag_id())) {
     } else if (OB_FAIL(add_dag_net(dag_net))) {
       if (common::OB_HASH_EXIST == ret) {
         ret = common::OB_TASK_EXIST;
+        COMMON_LOG(DEBUG, "dag_net is in blocking_dag_net_map now", K(ret), KPC(dag_net));
       } else {
         COMMON_LOG(WARN, "failed to add dag_net", K(ret), KPC(dag_net));
       }
@@ -1528,8 +1536,11 @@ int ObDagScheduler::create_dag(
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "ObDagScheduler is not inited", K(ret));
   } else if (OB_FAIL(alloc_dag(dag))) {
+    COMMON_LOG(WARN, "failed to alloc dag", K(ret));
   } else if (OB_FAIL(dag->init_by_param(param))) {
+    COMMON_LOG(WARN, "failed to init dag", K(ret), KPC(dag));
   } else if (OB_FAIL(dag->create_first_task())) {
+    COMMON_LOG(WARN, "failed to create first task", K(ret), KPC(dag));
   }
   return ret;
 }
@@ -1546,6 +1557,7 @@ int ObDagScheduler::create_and_add_dag(
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "ObDagScheduler is not inited", K(ret));
   } else if (OB_FAIL(create_dag(param, dag))) {
+    COMMON_LOG(WARN, "failed to alloc dag", K(ret));
   } else if (OB_FAIL(add_dag(dag, emergency, check_size_overflow))) {
     if (common::OB_SIZE_OVERFLOW != ret && common::OB_EAGAIN != ret) {
       COMMON_LOG(WARN, "failed to add dag", K(ret), KPC(dag));

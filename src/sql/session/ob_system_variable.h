@@ -682,6 +682,7 @@ public:
       ret = common::OB_ERR_UNEXPECTED;
       SQL_SESSION_LOG(ERROR, "function ptr session_special_update_ is NULL", K(ret));
     } else if (OB_FAIL(session_special_update_(ctx, set_var, val))) {
+      SQL_SESSION_LOG(WARN, "fail to call session_special_update_", K(ret));
     }
     return ret;
   }
@@ -722,6 +723,7 @@ public:
       ret = common::OB_ERR_UNEXPECTED;
       SQL_SESSION_LOG(ERROR, "function ptr session_special_update_ is NULL", K(ret));
     } else if (OB_FAIL(session_special_update_(ctx, set_var, val))) {
+      SQL_SESSION_LOG(WARN, "fail to call session_special_update_", K(ret));
     }
     return ret;
   }
@@ -762,6 +764,7 @@ public:
       ret = common::OB_ERR_UNEXPECTED;
       SQL_SESSION_LOG(ERROR, "function ptr session_special_update_ is NULL", K(ret));
     } else if (OB_FAIL(session_special_update_(ctx, set_var, val))) {
+      SQL_SESSION_LOG(WARN, "fail to call session_special_update_", K(ret));
     }
     return ret;
   }

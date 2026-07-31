@@ -370,7 +370,8 @@ seekdb 的混合检索 + 多模引擎同样适用于经典 AI 工作负载：
 git clone https://github.com/oceanbase/seekdb.git
 cd seekdb
 source ~/.bashrc
-./build.sh release --init --make
+./build.sh release --init
+cd build_release && make -j"$(nproc)" && cd ..
 mkdir -p ~/seekdb/bin
 cp build_release/src/observer/seekdb ~/seekdb/bin
 cd ~/seekdb

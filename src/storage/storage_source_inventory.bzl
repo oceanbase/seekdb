@@ -961,6 +961,7 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/tx_storage/ob_memstore_freezer.cpp",
             "src/storage/tx_storage/ob_memstore_freezer_common.cpp",
             "src/storage/tx_storage/ob_memstore_freezer_local_dispatch.cpp",
+            "src/storage/tx_storage/ob_server_mem_limit_getter.cpp",
         ],
         generated_srcs = [],
         external_srcs = [],

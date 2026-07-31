@@ -41,14 +41,17 @@ int ObMajorFreezeHelper::major_freeze(const ObMajorFreezeParam &param)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(param), KR(ret));
   } else if (OB_FAIL(check_runtime_ready(is_restore))) {
+    LOG_WARN("database runtime is not ready for major freeze", KR(ret), K(param));
   } else if (is_restore) {
     ret = OB_MAJOR_FREEZE_NOT_ALLOW;
     LOG_WARN("major freeze is not allowed while restoring", KR(ret));
   } else if (OB_FAIL(ObShareUtil::is_primary_server(is_primary_server))) {
+    LOG_WARN("failed to read server role", KR(ret));
   } else if (!is_primary_server) {
     ret = OB_MAJOR_FREEZE_NOT_ALLOW;
     LOG_WARN("major freeze is not allowed on a standby server", KR(ret));
   } else if (OB_FAIL(do_local_major_freeze(param.freeze_reason_))) {
+    LOG_WARN("failed to launch local major freeze", KR(ret), K(param));
   }
   return ret;
 }
@@ -70,6 +73,7 @@ int ObMajorFreezeHelper::tablet_major_freeze(const ObTabletMajorFreezeParam &par
       SERVER_MODULE_SCOPE {
         if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObTabletScheduler>()->user_request_schedule_medium_merge(
             param.tablet_id_))) {
+          LOG_WARN("failed to try schedule tablet major freeze", K(ret), K(param));
         }
       }
       return ret;
@@ -90,7 +94,9 @@ int ObMajorFreezeHelper::check_runtime_ready(bool &is_restore)
     ret = OB_NOT_INIT;
     LOG_WARN("schema service is not initialized", KR(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("failed to get runtime schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_server_runtime_info(runtime_schema))) {
+    LOG_WARN("failed to get runtime schema", KR(ret));
   } else if (OB_ISNULL(runtime_schema) || !runtime_schema->is_normal()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("database runtime is not normal", KR(ret), KPC(runtime_schema));
@@ -117,6 +123,7 @@ int ObMajorFreezeHelper::do_local_major_freeze(const ObMajorFreezeReason freeze_
       LOG_WARN("restore major freeze service is null", KR(ret));
     } else if (OB_FAIL(ObMajorFreezeUtil::get_major_freeze_service(
         primary_service, restore_service, major_freeze_service, is_primary_service))) {
+      LOG_WARN("failed to select major freeze service", KR(ret));
     } else if (OB_ISNULL(major_freeze_service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("major freeze service is null", KR(ret));
@@ -124,6 +131,7 @@ int ObMajorFreezeHelper::do_local_major_freeze(const ObMajorFreezeReason freeze_
       ret = OB_MAJOR_FREEZE_NOT_ALLOW;
       LOG_WARN("major freeze is forbidden while restoring", KR(ret));
     } else if (OB_FAIL(major_freeze_service->launch_major_freeze(freeze_reason))) {
+      LOG_WARN("failed to launch major freeze", KR(ret));
     }
   }
   const int64_t launch_cost_time = ObTimeUtility::current_time() - launch_start_time;
@@ -162,6 +170,7 @@ int ObMajorFreezeHelper::do_admin_merge(const AdminMergeType admin_type)
       LOG_WARN("restore_major_freeze_service is nullptr", KR(ret));
     } else if (OB_FAIL(ObMajorFreezeUtil::get_major_freeze_service(primary_service,
         restore_service, major_freeze_service, is_primary_service))) {
+      LOG_WARN("fail to get major freeze service", KR(ret));
     } else if (OB_ISNULL(major_freeze_service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("major_freeze_service is null", KR(ret));
@@ -169,14 +178,17 @@ int ObMajorFreezeHelper::do_admin_merge(const AdminMergeType admin_type)
       switch (admin_type) {
         case AdminMergeType::SUSPEND:
           if (OB_FAIL(major_freeze_service->suspend_merge())) {
+            LOG_WARN("fail to suspend merge", KR(ret), K(is_primary_service));
           }
           break;
         case AdminMergeType::RESUME:
           if (OB_FAIL(major_freeze_service->resume_merge())) {
+            LOG_WARN("fail to resume merge", KR(ret), K(is_primary_service));
           }
           break;
         case AdminMergeType::CLEAR_ERROR:
           if (OB_FAIL(major_freeze_service->clear_merge_error())) {
+            LOG_WARN("fail to clear merge error", KR(ret), K(is_primary_service));
           }
           break;
         default:
@@ -223,6 +235,7 @@ int ObMajorFreezeHelper::get_frozen_scn(SCN &frozen_scn, ObISQLClient *proxy)
   int ret = OB_SUCCESS;
   ObFreezeInfo frozen_status;
   if (OB_FAIL(get_frozen_status(SCN::min_scn(), frozen_status, proxy))) {
+    LOG_WARN("get latest freeze info failed", KR(ret));
   } else {
     frozen_scn = frozen_status.frozen_scn_;
   }

@@ -109,6 +109,7 @@ int ObDecimalIntConstValue::init_const_values(ObIAllocator &alloc)
     // parse mysql_min
     if (OB_FAIL(wide::from_string(buf, precision + 1, allocator, calc_scale, calc_precision,
                                   int_bytes, min_decint))) {
+      COMMON_LOG(WARN, "failed to parse MYSQL_MIN", K(ret), K(precision));
     } else {
       OB_ASSERT(int_bytes == get_int_bytes_by_precision(precision));
       MIN_DECINT[precision] = min_decint;
@@ -117,6 +118,7 @@ int ObDecimalIntConstValue::init_const_values(ObIAllocator &alloc)
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(wide::from_string(buf + 1, precision, allocator, calc_scale, calc_precision,
                                          int_bytes, max_decint))) {
+      COMMON_LOG(WARN, "failed to parse MYSQL_MAX", K(ret), K(precision));
     } else {
       OB_ASSERT(int_bytes == get_int_bytes_by_precision(precision));
       MAX_DECINT[precision] = max_decint;
@@ -135,6 +137,7 @@ int ObDecimalIntConstValue::init_const_values(ObIAllocator &alloc)
     // parse mysql_min_lower
     if (OB_FAIL(wide::from_string(buf, precision + 2, allocator, calc_scale, calc_precision,
                                   int_bytes, min_decint))) {
+      COMMON_LOG(WARN, "failed to parse MYSQL_MIN", K(ret), K(precision));
     } else {
       MIN_LOWER[precision] = min_decint;
     }
@@ -142,6 +145,7 @@ int ObDecimalIntConstValue::init_const_values(ObIAllocator &alloc)
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(wide::from_string(buf + 1, precision + 1, allocator, calc_scale,
                                          calc_precision, int_bytes, max_decint))) {
+      COMMON_LOG(WARN, "failed to parse MYSQL_MAX", K(ret), K(precision));
     } else {
       MAX_UPPER[precision] = max_decint;
     }

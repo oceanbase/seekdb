@@ -58,14 +58,18 @@ public:
       iter_param_.stat_cols_.set_allocator(&allocator);
       iter_param_.stat_projectors_.set_allocator(&allocator);
       if (OB_FAIL(iter_param_.stat_cols_.init(spec.column_count_))) {
+        LOG_WARN("failed to initialize block statistic columns", K(ret));
       } else if (OB_FAIL(iter_param_.stat_projectors_.init(spec.column_count_))) {
+        LOG_WARN("failed to initialize block statistic projectors", K(ret));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < spec.column_count_; ++i) {
         const ObSparseVectorBlockColumnSpec &column = spec.columns_[i];
         if (OB_FAIL(iter_param_.stat_cols_.push_back(blocksstable::ObSkipIndexColMeta(
             column.store_index_,
             static_cast<blocksstable::ObSkipIndexColType>(column.statistic_type_))))) {
+          LOG_WARN("failed to copy block statistic column", K(ret), K(i));
         } else if (OB_FAIL(iter_param_.stat_projectors_.push_back(column.projector_))) {
+          LOG_WARN("failed to copy block statistic projector", K(ret), K(i));
         }
       }
       if (OB_SUCC(ret)) {
@@ -122,6 +126,7 @@ public:
         LOG_WARN("failed to advance sparse vector block source", K(ret), K(inclusive));
       }
     } else if (OB_FAIL(block_iter_.get_curr_max_score_tuple(tuple))) {
+      LOG_WARN("failed to read sparse vector block bound", K(ret));
     } else if (OB_ISNULL(tuple) || OB_ISNULL(tuple->min_domain_id_)
         || OB_ISNULL(tuple->max_domain_id_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -180,6 +185,7 @@ private:
     } else if (is_reset_ || OB_ISNULL(scan_param_)) {
       ret = OB_NOT_INIT;
     } else if (OB_FAIL(block_iter_.init(ranking_param_, iter_param_, *scan_param_))) {
+      LOG_WARN("failed to initialize sparse vector block scan", K(ret));
     } else {
       max_score_ = 0.0;
       while (OB_SUCC(ret)) {
@@ -196,6 +202,7 @@ private:
         ret = OB_SUCCESS;
         block_iter_.reset();
         if (OB_FAIL(block_iter_.init(ranking_param_, iter_param_, *scan_param_))) {
+          LOG_WARN("failed to rewind sparse vector block scan", K(ret));
         } else {
           prepared_ = true;
           exhausted_ = false;

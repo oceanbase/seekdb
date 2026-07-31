@@ -197,6 +197,7 @@ int ObBatchExecParam<ITEM>::assign(
   if (this == &other) {
     // do nothing
   } else if (OB_FAIL(tablet_info_array_.assign(other.tablet_info_array_))) {
+    STORAGE_LOG(WARN, "failed to copy tablet ids", KR(ret));
   } else {
     compaction_scn_ = other.compaction_scn_;
     batch_size_ = other.batch_size_;
@@ -240,8 +241,11 @@ int ObBatchExecDag<TASK, PARAM>::init_by_param(
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "get invalid arguments", KR(ret), KPC(init_param));
   } else if (OB_FAIL(param_.assign(*init_param))) {
+    STORAGE_LOG(WARN, "failed to init param", KR(ret), KPC(init_param));
   } else if (OB_FAIL(init_merge_history())) {
+    STORAGE_LOG(WARN, "failed to init merge history", KR(ret), KPC(init_param));
   } else if (OB_FAIL(inner_init())) {
+    STORAGE_LOG(WARN, "failed to inner init", KR(ret), KPC(init_param));
   } else {
     is_inited_ = true;
   }
@@ -258,6 +262,7 @@ int ObBatchExecDag<TASK, PARAM>::create_first_task()
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "ObBatchExecDag has not inited", KR(ret));
   } else if (OB_FAIL(create_task(nullptr/*parent*/, task, 0/*idx*/))) {
+    STORAGE_LOG(WARN, "failed to create task", KR(ret));
   }
   return ret;
 }
@@ -290,6 +295,7 @@ int ObBatchExecDag<TASK, PARAM>::fill_info_param(
                                              allocator,
                                              get_type(),
                                              param_.tablet_info_array_.count()))) {
+    STORAGE_LOG(WARN, "failed to fill info param", KR(ret), K(param_));
   }
   return ret;
 }
@@ -300,6 +306,7 @@ int ObBatchExecDag<TASK, PARAM>::fill_dag_key(char *buf, const int64_t buf_len) 
   int ret = OB_SUCCESS;
   if (OB_FAIL(databuff_printf(buf, buf_len, "tablet_cnt=%ld",
       param_.tablet_info_array_.count()))) {
+    STORAGE_LOG(WARN, "failed to fill dag key", K(param_));
   }
   return ret;
 }
@@ -362,7 +369,9 @@ int ObBatchExecTask<TASK, PARAM>::generate_next_task(ObITask *&next_task)
   } else {
     TASK *task = NULL;
     if (OB_FAIL(base_dag_->alloc_task(task))) {
+      STORAGE_LOG(WARN, "fail to alloc task", K(ret));
     } else if (OB_FAIL(task->init(idx_ + 1))) {
+      STORAGE_LOG(WARN, "fail to init task", K(ret));
     } else {
       next_task = task;
     }

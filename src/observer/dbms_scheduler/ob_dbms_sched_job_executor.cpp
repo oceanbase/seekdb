@@ -60,6 +60,7 @@ int ObDBMSSchedJobExecutor::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("sql proxy or schema service is null", K(sql_proxy), K(ret));
   } else if (OB_FAIL(table_operator_.init(sql_proxy_))) {
+    LOG_WARN("fail to init action record", K(ret));
   } else {
     inited_ = true;
   }
@@ -170,6 +171,7 @@ int ObDBMSSchedJobExecutor::create_session(
   uint32_t sid = sql::ObSQLSessionInfo::INVALID_SESSID;
   ObSQLSessionMgr &session_mgr = OBSERVER.get_sql_session_mgr();
   if (OB_FAIL(session_mgr.create_sessid(sid))) {
+    LOG_WARN("alloc session id failed", KR(ret));
   } else if (OB_FAIL(session_mgr.create_session(sid, session_info))) {
     LOG_WARN("create session failed", K(ret), K(sid));
     session_info = NULL;
@@ -216,6 +218,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(ObDBMSSchedJobExecutor::create_session(free_session_ctx, session_info))) {
+    LOG_WARN("failed to create session", KR(ret));
   } else {
     if (job_info.get_what().length() != 0) { // action
       //mysql mode not support anonymous block
@@ -231,6 +234,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
         job_info.get_program_name().ptr()));
       SMART_VAR(ObMySQLProxy::MySQLResult, result) {
         if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
+          LOG_WARN("execute query failed", K(ret), K(sql), K(job_info.get_program_name().ptr()), K(job_info.get_job_name().ptr()));
         } else if (OB_NOT_NULL(result.get_result())) {
           if (OB_SUCCESS == (ret = result.get_result()->next())) {
             EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(*(result.get_result()), "program_action", program_action);
@@ -262,6 +266,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
             i));
           SMART_VAR(ObMySQLProxy::MySQLResult, result) {
             if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
+              LOG_WARN("execute query failed", K(ret), K(sql), K(result.get_result()), K(job_info.get_job_name().ptr()));
             } else if (OB_NOT_NULL(result.get_result())) {
               if (OB_SUCCESS == (ret = result.get_result()->next())) {
                 EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(*(result.get_result()), "default_value", argument_value);
@@ -280,6 +285,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
                   i));
                 SMART_VAR(ObMySQLProxy::MySQLResult, tmp_result) {
                   if (OB_FAIL(sql_proxy_->read(tmp_result, sql.ptr()))) {
+                    LOG_WARN("execute query failed", K(ret), K(sql), K(job_info.get_job_name().ptr()));
                   } else if (OB_NOT_NULL(tmp_result.get_result())) {
                     if (OB_SUCCESS == (ret = tmp_result.get_result()->next())) {
                       EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(*(tmp_result.get_result()), "default_value", argument_value);
@@ -368,6 +374,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(uint64_t job_id, const ObString &
         int tmp_user_stop_ret = OB_SUCCESS;
         bool job_is_killed = false;
         if ((tmp_user_stop_ret = table_operator_.get_dbms_sched_job_is_killed(job_info, job_is_killed)) != OB_SUCCESS) {
+          LOG_WARN("double check get dbms sched job failed", K(tmp_user_stop_ret), K(ret));
         } else if (job_is_killed) {
           job_is_user_stop = true;
         }
@@ -375,6 +382,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(uint64_t job_id, const ObString &
       int tmp_ret = OB_SUCCESS;
       if (job_is_user_stop) {
         if ((OB_TMP_FAIL(table_operator_.update_for_kill(job_info)))) {
+          LOG_WARN("update user stop dbms sched job failed", K(tmp_ret), K(ret));
         }
         rootserver::ObDBMSSchedService::wakeup_scheduler();
       } else {
@@ -384,6 +392,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(uint64_t job_id, const ObString &
                             ob_errpkt_strerror(ret));
         }
         if ((OB_TMP_FAIL(table_operator_.update_for_end(job_info, ret, errmsg)))) {
+          LOG_WARN("update dbms sched job failed", K(tmp_ret), K(ret));
         }
         rootserver::ObDBMSSchedService::wakeup_scheduler();
       }

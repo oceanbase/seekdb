@@ -73,6 +73,7 @@ int ObInfoSchemaColumnsTable::inner_get_next_row(common::ObNewRow *&row)
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ or schema_guard_ is NULL", K(ret));
   } else if (OB_FAIL(init_mem_context())) {
+    SERVER_LOG(WARN, "failed to init mem context", K(ret));
   } else {
     if (!start_to_read_) {
       void *tmp_ptr = NULL;
@@ -120,6 +121,7 @@ int ObInfoSchemaColumnsTable::inner_get_next_row(common::ObNewRow *&row)
           || ObString(OB_PUBLIC_SCHEMA_NAME) == database_schema->get_database_name_str()) {
           continue;
         } else if (OB_FAIL(iterate_table_schema_array(is_filter_table_schema, i))) {
+            SERVER_LOG(WARN, "fail to iterate all table schema. ", K(ret));
         }
       } // end for database_schema_array_ loop
       // 2. scan table_schema_array
@@ -127,6 +129,7 @@ int ObInfoSchemaColumnsTable::inner_get_next_row(common::ObNewRow *&row)
       if (OB_SUCC(ret) && database_schema_array_.count() == i) {
         is_filter_table_schema = true;
         if (OB_FAIL(iterate_table_schema_array(is_filter_table_schema, -1))) {
+            SERVER_LOG(WARN, "fail to iterate all table schema. ", K(ret));
         }
       }
 
@@ -180,6 +183,8 @@ int ObInfoSchemaColumnsTable::iterate_table_schema_array(const bool is_filter_ta
     //get all tables
     if (OB_FAIL(schema_guard_->get_table_schemas_in_database(
         database_id, table_schema_array))) {
+      SERVER_LOG(WARN, "fail to get table schemas in database", K(ret),
+          K(database_id));
     } else {
       table_schema_array_size = table_schema_array.count();
     }
@@ -241,6 +246,7 @@ int ObInfoSchemaColumnsTable::iterate_table_schema_array(const bool is_filter_ta
                         session_->get_local_collation_connection(),
                         table_schema->get_view_schema(),
                         view_definition))) {
+            SERVER_LOG(WARN, "fail to generate view definition for resolve", K(ret));
           } else if (OB_FAIL(ObTableColumns::resolve_view_definition(&mem_context_->get_arena_allocator(), session_, schema_guard_,
                         *table_schema, select_stmt, expr_factory, stmt_factory, false))) {
             if (OB_ERR_UNKNOWN_TABLE != ret && OB_ERR_VIEW_INVALID != ret) {
@@ -261,6 +267,7 @@ int ObInfoSchemaColumnsTable::iterate_table_schema_array(const bool is_filter_ta
           for (int64_t k = 0; OB_SUCC(ret) && k < real_stmt->get_select_item_size() && !has_more_; ++k) {
             if (OB_FAIL(fill_row_cells(database_schema->get_database_name_str(), table_schema,
                                         real_stmt, real_stmt->get_select_item(k), k + 1/* add for position */))) {
+              SERVER_LOG(WARN, "fail to fill row cells", K(ret));
             } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
               SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
               if (OB_SIZE_OVERFLOW == ret) {
@@ -278,6 +285,7 @@ int ObInfoSchemaColumnsTable::iterate_table_schema_array(const bool is_filter_ta
                                                      last_db_schema_idx,
                                                      i,
                                                      is_filter_table_schema))) {
+        SERVER_LOG(WARN, "fail to iterate all table columns. ", K(ret));
       }
     }
   }
@@ -322,6 +330,7 @@ int ObInfoSchemaColumnsTable::iterate_column_schema_array(
       }
       if (OB_FAIL(fill_row_cells(database_name, &table_schema,
                                  column_schema, ordinal_position))) {
+        SERVER_LOG(WARN, "failed to fill row cells", K(ret));
       } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
         if (OB_SIZE_OVERFLOW == ret) {
           if (is_filter_table_schema) {
@@ -389,6 +398,7 @@ int ObInfoSchemaColumnsTable::check_database_table_filter()
       if (database_name.empty()) {
       } else if (OB_FAIL(schema_guard_->get_database_schema(
             database_name, filter_database_schema))) {
+        SERVER_LOG(WARN, "fail to get database schema", K(ret), K(database_name));
       } else if (NULL == filter_database_schema) {
       } else if (start_key_obj_ptr[1].is_varchar_or_char()
            && end_key_obj_ptr[1].is_varchar_or_char()
@@ -404,11 +414,14 @@ int ObInfoSchemaColumnsTable::check_database_table_filter()
             table_name,
             false/*is_index*/,
             filter_table_schema))) {
+          SERVER_LOG(WARN, "fail to get table", K(ret), K(database_name), K(table_name));
         } else if (NULL == filter_table_schema) {
         } else if (OB_FAIL(filter_table_schema_array_.push_back(filter_table_schema))) {
+          SERVER_LOG(WARN, "push_back failed", K(filter_table_schema->get_table_name()));
         }
       // At this point, only db_name is specified, directly push_back this db into filter_database_schema_array
       } else if (OB_FAIL(add_var_to_array_no_dup(database_schema_array_, filter_database_schema))) {
+        SERVER_LOG(WARN, "push_back failed", K(filter_database_schema->get_database_name()));
       }
     } else {
       is_filter_db_ = false;
@@ -496,6 +509,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
         // if rowkey_info[0] is pk_increment, means there is no primary key
         uint64_t cid = OB_INVALID_ID;
         if (OB_FAIL(rowkey_info.get_column_id(0, cid))) {
+          LOG_WARN("failed to column id");
         } else {
           if (cid != OB_HIDDEN_PK_INCREMENT_COLUMN_ID &&
               cid >= OB_APP_MIN_COLUMN_ID) {
@@ -551,6 +565,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
               ObObj def_now_obj;
               def_now_obj.set_string(column_type, ObString::make_string(N_UPPERCASE_CUR_TIMESTAMP));
               if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(def_now_obj, *allocator_))) {
+                SERVER_LOG(WARN, "convert lob type obj fail", K(ret), K(def_now_obj));
               } else {
                 cells[cell_idx] = def_now_obj;
               }
@@ -563,22 +578,27 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
                 SERVER_LOG(WARN, "fail to allocate memory", K(ret));
               } else if (def_obj.is_bit()) {
                 if (OB_FAIL(def_obj.print_varchar_literal(buf, buf_len, pos, TZ_INFO(session_)))) {
+                  SERVER_LOG(WARN, "fail to print varchar literal", K(ret), K(def_obj), K(buf_len), K(pos), K(buf));
                 } else {
                   cells[cell_idx].set_string(column_type, ObString(static_cast<int32_t>(pos), buf));
                 }
               } else {
                 if (OB_FAIL(def_obj.print_plain_str_literal(column_schema->get_extended_type_info(), buf, buf_len, pos))) {
+                  SERVER_LOG(WARN, "fail to print plain str literal",  KPC(column_schema), K(buf), K(buf_len), K(pos), K(ret));
                 } else {
                   cells[cell_idx].set_string(column_type, ObString(static_cast<int32_t>(pos), buf));
                 }
               }
               if (OB_FAIL(ret)) {
               } else if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(cells[cell_idx], *allocator_))) {
+                SERVER_LOG(WARN, "convert lob type obj fail", K(ret), K(cells[cell_idx]));
               }
             } else {
               if (OB_FAIL(ObObjCaster::to_type(column_type, cast_ctx,
                                                def_obj,
                                                casted_cell, res_cell))) {
+                SERVER_LOG(WARN, "failed to cast to object",
+                           K(ret), K(def_obj));
               } else if (OB_ISNULL(res_cell)) {
                 ret = OB_ERR_UNEXPECTED;
                 SERVER_LOG(WARN, "succ to cast to object, but res_cell is NULL",
@@ -617,12 +637,14 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
                                         column_schema->get_extended_type_info(),
                                         column_schema->get_geo_type(),
                                         column_schema->is_string_lob()))) {
+              SERVER_LOG(WARN,"fail to get data type str",K(ret), K(column_schema->get_data_type()));
             } else {
               ObString type_val(column_type_str_len_,
                                 static_cast<int32_t>(strlen(data_type_str_)),data_type_str_);
               cells[cell_idx].set_string(column_type, type_val);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(cells[cell_idx], *allocator_))) {
+                SERVER_LOG(WARN, "convert lob type obj fail", K(ret), K(cells[cell_idx]));
               }
             }
             break;
@@ -641,6 +663,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
               ObCollationType coll = column_schema->get_collation_type();
               int64_t mbmaxlen = 0;
               if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(coll, mbmaxlen))) {
+                SERVER_LOG(WARN, "failed to get mbmaxlen", K(ret), K(coll));
               } else {
                 cells[cell_idx].set_uint64(static_cast<uint64_t>(
                         mbmaxlen * column_schema->get_data_length()));
@@ -737,10 +760,12 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
                                      column_schema->get_extended_type_info(),
                                      default_length_semantics,
                                      pos, sub_type, column_schema->is_string_lob()))) {
+              SERVER_LOG(WARN,"fail to get column type str",K(ret), K(column_schema->get_data_type()));
             } else if (column_schema->is_zero_fill()) {
              // zerofill, only for int, float, decimal
               if (OB_FAIL(databuff_printf(column_type_str_, column_type_str_len_,
                                           pos, " zerofill"))) {
+                SERVER_LOG(WARN, "fail to print zerofill", K(ret));
               }
             }
             if (OB_SUCC(ret)) {
@@ -748,6 +773,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
               cells[cell_idx].set_string(column_type, type_val);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(cells[cell_idx], *allocator_))) {
+                SERVER_LOG(WARN, "convert lob type obj fail", K(ret), K(cells[cell_idx]));
               }
             }
             break;
@@ -765,6 +791,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
               if (OB_FAIL(table_schema->
                   is_unique_key_column(*schema_guard_, column_schema->get_column_id(),
                                         is_unique, is_first_not_null_unique))) {
+                LOG_WARN("judge unique key fail", K(ret));
               } else if (is_unique) {
                 if (column_schema->is_nullable() || has_primary_key || !is_first_not_null_unique) {
                   cells[cell_idx].set_varchar("UNI");
@@ -776,6 +803,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
                 ObCharset::get_default_charset()));
               } else if (OB_FAIL(table_schema->
                   is_multiple_key_column(*schema_guard_, column_schema->get_column_id(), is_multiple))) {
+                LOG_WARN("judge multiple key fail", K(ret));
               } else if (is_multiple) {
                 cells[cell_idx].set_varchar("MUL");
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
@@ -806,6 +834,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
                   ret = OB_ALLOCATE_MEMORY_FAILED;
                   SERVER_LOG(WARN, "fail to allocate memory", K(ret));
                 } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "on update current_timestamp(%d)", scale))) {
+                  SHARE_SCHEMA_LOG(WARN, "fail to print on update current_tiemstamp", K(ret));
                 } else {
                   extra = ObString(static_cast<int32_t>(pos), buf);
                 }
@@ -851,6 +880,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
             ObSessionPrivInfo session_priv;
             const common::ObIArray<uint64_t> &enable_role_id_array = session_->get_enable_role_array();
             if (OB_FAIL(session_->get_session_priv_info(session_priv))) {
+              SERVER_LOG(WARN, "fail to get session priv info", K(ret));
             } else if (OB_UNLIKELY(!session_priv.is_valid())) {
               ret = OB_INVALID_ARGUMENT;
               SERVER_LOG(WARN, "session priv is invalid", 
@@ -863,12 +893,16 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
                                    OB_PRIV_TABLE_LEVEL, OB_PRIV_SELECT, false);
               if (OB_FAIL(fill_col_privs(session_priv, enable_role_id_array, need_priv, OB_PRIV_SELECT,
                                          "select,", buf, buf_len, pos))) {
+                SERVER_LOG(WARN, "fail to fill col priv", K(need_priv), K(ret));
               } else if (OB_FAIL(fill_col_privs(session_priv, enable_role_id_array, need_priv, OB_PRIV_INSERT,
                                                 "insert,", buf, buf_len, pos))) {
+                SERVER_LOG(WARN, "fail to fill col priv", K(need_priv), K(ret));
               } else if (OB_FAIL(fill_col_privs(session_priv, enable_role_id_array, need_priv, OB_PRIV_UPDATE,
                                                 "update,", buf, buf_len, pos))) {
+                SERVER_LOG(WARN, "fail to fill col priv", K(need_priv), K(ret));
               } else if (OB_FAIL(fill_col_privs(session_priv, enable_role_id_array, need_priv, OB_PRIV_REFERENCES,
                                                 "reference,", buf, buf_len, pos))) {
+                SERVER_LOG(WARN, "fail to fill col priv", K(need_priv), K(ret));
               } else {
                 if (pos > 0) {
                   cells[cell_idx].set_varchar(ObString(0, pos - 1, buf));
@@ -895,6 +929,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                     ObCharset::get_default_charset()));
               if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(cells[cell_idx], *allocator_))) {
+                SERVER_LOG(WARN, "convert lob type obj fail", K(ret), K(cells[cell_idx]));
               }
             }
             break;
@@ -917,6 +952,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
                                                ObCharset::get_default_charset()));
             if (OB_FAIL(ret)) {
             } else if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(cells[cell_idx], *allocator_))) {
+              SERVER_LOG(WARN, "convert lob type obj fail", K(ret), K(cells[cell_idx]));
             }
             break;
           }
@@ -1003,6 +1039,8 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
                                                               session_, column_type_str_,
                                                               column_type_str_len_,
                                                               column_attributes, false, *allocator_))) {
+    SERVER_LOG(WARN, "failed to deduce column attributes",
+             K(select_item), K(ret));
   } else {
     const ObDataTypeCastParams dtc_params = sql::ObBasicSessionInfo::create_dtc_params(session_);
     ObCastCtx cast_ctx(allocator_, &dtc_params, CM_NONE, ObCharset::get_system_collation());
@@ -1054,10 +1092,12 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
               SERVER_LOG(WARN, "table or column schema or allocator is null", KR(ret), KP(table_schema_), KP(tmp_column_schema), KP(allocator_));
             } else if (FALSE_IT(column_type = tmp_column_schema->get_meta_type().get_type())) {
             } else if (OB_FAIL(ObResolverUtils::resolve_default_value_and_expr_from_select_item(select_item, column_item, select_stmt))) {
+              SERVER_LOG(WARN, "failed to resolve default value", K(ret));
             } else if (IS_DEFAULT_NOW_OBJ(column_item.default_value_)) {
               ObObj def_now_obj;
               def_now_obj.set_string(column_type, ObString::make_string(N_UPPERCASE_CUR_TIMESTAMP));
               if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(def_now_obj, *allocator_))) {
+                SERVER_LOG(WARN, "convert lob type obj fail", K(ret), K(def_now_obj));
               } else {
                 cells[cell_idx] = def_now_obj;
               }
@@ -1070,6 +1110,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
                 SERVER_LOG(WARN, "fail to allocate memory", K(ret));
               } else if (column_item.default_value_.is_bit()) {
                 if (OB_FAIL(column_item.default_value_.print_varchar_literal(buf, buf_len, pos, TZ_INFO(session_)))) {
+                  SERVER_LOG(WARN, "fail to print varchar literal", K(ret), K(column_item.default_value_), K(buf_len), K(pos), K(buf));
                 } else {
                   cells[cell_idx].set_string(column_type, ObString(static_cast<int32_t>(pos), buf));
                 }
@@ -1079,18 +1120,23 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
                 if (OB_FAIL(ObRawExprUtils::extract_extended_type_info(select_item.expr_,
                                                                        session_,
                                                                        extended_type_info))) {
+                  SERVER_LOG(WARN, "failed to extract extended type info", K(ret));
                 } else if (OB_FAIL(column_item.default_value_.print_plain_str_literal(extended_type_info, buf, buf_len, pos))) {
+                  SERVER_LOG(WARN, "fail to print plain str literal", K(buf), K(buf_len), K(pos), K(ret));
                 } else {
                   cells[cell_idx].set_string(column_type, ObString(static_cast<int32_t>(pos), buf));
                 }
               }
               if (OB_FAIL(ret)) {
               } else if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(cells[cell_idx], *allocator_))) {
+                SERVER_LOG(WARN, "convert lob type obj fail", K(ret), K(cells[cell_idx]));
               }
             } else {
               if (OB_FAIL(ObObjCaster::to_type(column_type, cast_ctx,
                                                column_item.default_value_,
                                                casted_cell, res_cell))) {
+                SERVER_LOG(WARN, "failed to cast to object",
+                           K(ret), K(column_item.default_value_));
               } else if (OB_ISNULL(res_cell)) {
                 ret = OB_ERR_UNEXPECTED;
                 SERVER_LOG(WARN, "succ to cast to object, but res_cell is NULL",
@@ -1121,6 +1167,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
             if (ob_is_collection_sql_type(column_attributes.result_type_.get_type())) {
               ObString type_str(strlen(column_type_str_), column_type_str_);
               if (OB_FAIL(extend_type_info.push_back(type_str))) {
+                SERVER_LOG(WARN, "fail to push to array", K(ret));
               }
             }
             ObObjType column_type = ObMaxType;
@@ -1139,12 +1186,14 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
                                         extend_type_info,
                                         geo_sub_type,
                                         column_attributes.is_string_lob_))) {
+              SERVER_LOG(WARN,"fail to get data type str",K(ret), K(column_attributes.type_));
             } else {
               ObString type_val(column_type_str_len_,
                                 static_cast<int32_t>(strlen(data_type_str_)),data_type_str_);
               cells[cell_idx].set_string(column_type, type_val);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(cells[cell_idx], *allocator_))) {
+                SERVER_LOG(WARN, "convert lob type obj fail", K(ret), K(cells[cell_idx]));
               }
             }
             break;
@@ -1162,6 +1211,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
               ObCollationType coll = ObCharset::get_default_collation(ObCharset::get_default_charset());
               int64_t mbmaxlen = 0;
               if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(coll, mbmaxlen))) {
+                SERVER_LOG(WARN, "failed to get mbmaxlen", K(ret), K(coll));
               } else {
                 cells[cell_idx].set_uint64(static_cast<uint64_t>(
                         mbmaxlen * column_attributes.get_data_length()));
@@ -1241,6 +1291,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
               cells[cell_idx].set_string(column_type, type_val);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(cells[cell_idx], *allocator_))) {
+                SERVER_LOG(WARN, "convert lob type obj fail", K(ret), K(cells[cell_idx]));
               }
             }
             break;
@@ -1264,6 +1315,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
             ObSessionPrivInfo session_priv;
             const common::ObIArray<uint64_t> &enable_role_id_array = session_->get_enable_role_array();
             if (OB_FAIL(session_->get_session_priv_info(session_priv))) {
+              SERVER_LOG(WARN, "fail to get session priv info", K(ret));
             } else if (OB_UNLIKELY(!session_priv.is_valid())) {
               ret = OB_INVALID_ARGUMENT;
               SERVER_LOG(WARN, "session priv is invalid", 
@@ -1276,12 +1328,16 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
                                    OB_PRIV_TABLE_LEVEL, OB_PRIV_SELECT, false);
               if (OB_FAIL(fill_col_privs(session_priv, enable_role_id_array, need_priv, OB_PRIV_SELECT,
                                          "select,", buf, buf_len, pos))) {
+                SERVER_LOG(WARN, "fail to fill col priv", K(need_priv), K(ret));
               } else if (OB_FAIL(fill_col_privs(session_priv, enable_role_id_array, need_priv, OB_PRIV_INSERT,
                                                 "insert,", buf, buf_len, pos))) {
+                SERVER_LOG(WARN, "fail to fill col priv", K(need_priv), K(ret));
               } else if (OB_FAIL(fill_col_privs(session_priv, enable_role_id_array, need_priv, OB_PRIV_UPDATE,
                                                 "update,", buf, buf_len, pos))) {
+                SERVER_LOG(WARN, "fail to fill col priv", K(need_priv), K(ret));
               } else if (OB_FAIL(fill_col_privs(session_priv, enable_role_id_array, need_priv, OB_PRIV_REFERENCES,
                                                 "reference,", buf, buf_len, pos))) {
+                SERVER_LOG(WARN, "fail to fill col priv", K(need_priv), K(ret));
               } else {
                 if (pos > 0) {
                   cells[cell_idx].set_varchar(ObString(0, pos - 1, buf));
@@ -1327,6 +1383,7 @@ inline int ObInfoSchemaColumnsTable::init_mem_context()
     param.set_properties(lib::USE_TL_PAGE_OPTIONAL)
       .set_mem_attr("InfoColCtx", ObCtxIds::DEFAULT_CTX_ID);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
+      SQL_ENG_LOG(WARN, "create entity failed", K(ret));
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
       SQL_ENG_LOG(WARN, "mem entity is null", K(ret));

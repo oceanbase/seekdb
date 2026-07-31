@@ -1,17 +1,11 @@
 /*
- * Copyright (c) 2025 OceanBase.
+ * Copyright (c) 2026 OceanBase.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  */
 
 #ifndef OCEANBASE_SQL_ENGINE_AGGREGATE_OB_PUSHDOWN_AGGREGATE_PROGRAM_H_
@@ -86,19 +80,19 @@ private:
   share::aggregate::ObPushdownAggregateProgramState state_;
 };
 
-// Creates the immutable SQL aggregate definition for the subset supported by
-// the aggregate seam.  Each Storage scan store creates its own mutable program
-// from this plan.  OB_NOT_SUPPORTED is a clean dispatch miss: the caller must
-// keep using the legacy path and plan remains null.
-int create_pushdown_aggregate_plan(
+// Creates the production SQL implementation for the subset supported by the
+// new deep aggregate seam.  OB_NOT_SUPPORTED is a clean dispatch miss: the
+// caller must keep using the legacy path and program remains null.
+int create_pushdown_aggregate_program(
     ObEvalCtx &eval_ctx,
     const common::ObIArray<ObExpr *> &aggregate_exprs,
     const bool rich_format,
     common::ObIAllocator &allocator,
-    share::aggregate::ObIPushdownAggregatePlan *&plan);
+    share::aggregate::ObIPushdownAggregateProgram *&program);
 
-void destroy_pushdown_aggregate_plan(
-    share::aggregate::ObIPushdownAggregatePlan *&plan);
+void destroy_pushdown_aggregate_program(
+    common::ObIAllocator &allocator,
+    share::aggregate::ObIPushdownAggregateProgram *&program);
 
 } // namespace sql
 } // namespace oceanbase

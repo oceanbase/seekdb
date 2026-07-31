@@ -59,7 +59,9 @@ int ObPLServerCursorInfo::prepare_entity(ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObPLCursorInfo::prepare_entity(session, sql_entity_))) {
+    LOG_WARN("prepare server cursor SQL entity failed", K(ret), K(get_id()));
   } else if (OB_FAIL(ObPLCursorInfo::prepare_entity(session, get_cursor_entity()))) {
+    LOG_WARN("prepare server cursor entity failed", K(ret), K(get_id()));
   }
   return ret;
 }
@@ -93,11 +95,14 @@ int ObPLServerCursorInfo::deep_copy_field_columns(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid cursor field count", K(ret), K(src_fields->count()));
   } else if (OB_FAIL(dst_fields.reserve(src_fields->count()))) {
+    LOG_WARN("reserve cursor fields failed", K(ret), K(src_fields->count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < src_fields->count(); ++i) {
       ObField field;
       if (OB_FAIL(field.deep_copy(src_fields->at(i), &allocator))) {
+        LOG_WARN("deep copy cursor field failed", K(ret), K(i));
       } else if (OB_FAIL(dst_fields.push_back(field))) {
+        LOG_WARN("append cursor field failed", K(ret), K(i));
       }
     }
   }

@@ -27,8 +27,11 @@ int ObVectorF32Data::print(ObStringBuffer &format_str, uint32_t begin, uint32_t 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(format_str.append("["))) {
+    OB_LOG(WARN, "fail to append [", K(ret));
   } else if (OB_FAIL(print_element(format_str, begin, print_size, print_whole))) {
+    OB_LOG(WARN, "fail to print vector element", K(ret));
   } else if (OB_FAIL(format_str.append("]"))) {
+    OB_LOG(WARN, "fail to append ]", K(ret));
   }
   return ret;
 }
@@ -55,10 +58,12 @@ int ObVectorF32Data::print_element(ObStringBuffer &format_str,
       is_first_elem = false;
       int buf_size = FLOAT_TO_STRING_CONVERSION_BUFFER_SIZE;
       if (OB_FAIL(format_str.reserve(buf_size + 1))) {
+        OB_LOG(WARN, "fail to reserve memory for format_str", K(ret));
       } else {
         char *start = format_str.ptr() + format_str.length();
         uint64_t len = ob_gcvt(data_[i], ob_gcvt_arg_type::OB_GCVT_ARG_FLOAT, buf_size, start, NULL);
         if (OB_FAIL(format_str.set_length(format_str.length() + len))) {
+          OB_LOG(WARN, "fail to set format_str len", K(ret), K(format_str.length()), K(len));
         }
       }
     }
@@ -77,6 +82,7 @@ int ObVectorF32Data::print_element_at(ObStringBuffer &format_str, uint32_t idx) 
     char *start = format_str.ptr() + format_str.length();
     uint64_t len = ob_gcvt(data_[idx], ob_gcvt_arg_type::OB_GCVT_ARG_FLOAT, buf_size, start, NULL);
     if (OB_FAIL(format_str.set_length(format_str.length() + len))) {
+      OB_LOG(WARN, "fail to set format_str len", K(ret), K(format_str.length()), K(len));
     }
   }
   return ret;
@@ -126,8 +132,11 @@ int ObVectorU8Data::print(ObStringBuffer &format_str, uint32_t begin, uint32_t p
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(format_str.append("["))) {
+    OB_LOG(WARN, "fail to append [", K(ret));
   } else if (OB_FAIL(print_element(format_str, begin, print_size, print_whole))) {
+    OB_LOG(WARN, "fail to print vector element", K(ret));
   } else if (OB_FAIL(format_str.append("]"))) {
+    OB_LOG(WARN, "fail to append ]", K(ret));
   }
   return ret;
 }
@@ -154,6 +163,7 @@ int ObVectorU8Data::print_element(ObStringBuffer &format_str,
       is_first_elem = false;
       ObFastFormatInt ffi(data_[i]);
       if (OB_FAIL(format_str.append(ffi.ptr(), ffi.length()))) {
+        OB_LOG(WARN, "fail to append format int", K(ret), KP(ffi.ptr()));
       }
     }
   }
@@ -169,6 +179,7 @@ int ObVectorU8Data::print_element_at(ObStringBuffer &format_str, uint32_t idx) c
   } else {
     ObFastFormatInt ffi(data_[idx]);
     if (OB_FAIL(format_str.append(ffi.ptr(), ffi.length()))) {
+      OB_LOG(WARN, "fail to append format int", K(ret), KP(ffi.ptr()));
     }
   }
   return ret;

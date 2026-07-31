@@ -55,9 +55,6 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
       get_runtime_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
   OZ (analyze_dependencies(*ctx.get_sql_ctx()->schema_guard_,
                            ctx.get_my_session(),
-                           *ctx.get_plan_cache(),
-                           ctx.get_pl_sql_runtime(),
-                           ctx.get_pl_engine(),
                            ctx.get_sql_proxy(),
                            ctx.get_allocator(),
                            arg));
@@ -125,9 +122,6 @@ int ObAlterTriggerExecutor::execute(ObExecContext &ctx, ObAlterTriggerStmt &stmt
 
 int ObCreateTriggerExecutor::analyze_dependencies(ObSchemaGetterGuard &schema_guard,
                                                   ObSQLSessionInfo *session_info,
-                                                  ObPlanCache &plan_cache,
-                                                  ObIPLSqlRuntime *pl_sql_runtime,
-                                                  pl::ObPL *pl_engine,
                                                   ObMySQLProxy *sql_proxy,
                                                   ObIAllocator &allocator,
                                                   ObCreateTriggerArg &arg)
@@ -139,13 +133,14 @@ int ObCreateTriggerExecutor::analyze_dependencies(ObSchemaGetterGuard &schema_gu
   const ObTriggerInfo *trigger_info = NULL;
   if (OB_FAIL(schema_guard.get_trigger_info( arg.trigger_info_.get_database_id(),
                                             trigger_name, trigger_info))) {
+    LOG_WARN("failed to get trigger info", K(ret));
   } else if (NULL == trigger_info) {
     ret = OB_ERR_TRIGGER_NOT_EXIST;
     LOG_WARN("trigger not exist", K(db_name), K(trigger_name), K(ret));
   } else {
-    if (OB_FAIL(ObTriggerResolver::analyze_trigger(schema_guard, session_info, plan_cache,
-                                                   pl_sql_runtime, pl_engine, sql_proxy,
+    if (OB_FAIL(ObTriggerResolver::analyze_trigger(schema_guard, session_info, sql_proxy,
                                                    allocator, *trigger_info, db_name, arg.dependency_infos_))) {
+      LOG_WARN("analyze trigger failed", K(trigger_info), K(db_name), K(ret));
     }
     if (OB_FAIL(ret) && ret != OB_ERR_UNEXPECTED) {
         LOG_USER_WARN(OB_ERR_TRIGGER_COMPILE_ERROR, "TRIGGER",

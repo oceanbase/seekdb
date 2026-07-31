@@ -166,6 +166,7 @@ int ObRelativeTable::get_rowkey_column_ids(ObIArray<ObColDesc> &column_ids) cons
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("relative table is invalid", K(ret), K(*this));
   } else if (OB_FAIL(schema_param_->get_rowkey_column_ids(column_ids))) {
+    LOG_WARN("get rowkey column ids from param fail", K(ret));
   }
   return ret;
 }
@@ -177,6 +178,7 @@ int ObRelativeTable::get_rowkey_column_ids(ObIArray<uint64_t> &column_ids) const
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("relative table is invalid", K(ret), KPC(this));
   } else if (OB_FAIL(schema_param_->get_rowkey_column_ids(column_ids))) {
+    LOG_WARN("get rowkey column ids from param fail", K(ret));
   }
   return ret;
 }
@@ -210,6 +212,7 @@ int ObRelativeTable::is_rowkey_column_id(const uint64_t column_id, bool &is_rowk
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid column id", K(ret), K(column_id));
   } else if (OB_FAIL(schema_param_->is_rowkey_column(column_id, is_rowkey))) {
+    LOG_WARN("check is_rowkey fail", K(ret), K(column_id), K(*schema_param_));
   }
   return ret;
 }
@@ -226,6 +229,7 @@ int ObRelativeTable::is_column_nullable_for_write(const uint64_t column_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid column id", K(ret), K(column_id));
   } else if (OB_FAIL(schema_param_->is_column_nullable_for_write(column_id, is_nullable_for_write))) {
+    LOG_WARN("check is_rowkey fail", K(ret), K(column_id), K(*schema_param_));
   }
   return ret;
 }
@@ -280,6 +284,7 @@ int ObRelativeTable::has_udf_column(bool &has_udf) const
   int ret = OB_SUCCESS;
   has_udf = false;
   if (OB_FAIL(schema_param_->has_udf_column(has_udf))) {
+    LOG_WARN("check has udf column failed", K(ret));
   }
   return ret;
 }
@@ -348,6 +353,7 @@ int ObRelativeTable::get_index_name(ObString &index_name) const
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("relative table is invalid", K(ret), K(*this));
   } else if (OB_FAIL(schema_param_->get_index_name(index_name))) {
+    LOG_WARN("get index name from param fail", K(ret));
   }
   return ret;
 }
@@ -452,6 +458,8 @@ int ObRelativeTable::set_index_value(
   if (OB_SUCC(ret)) {
     if (idx_columns) {
       if (OB_FAIL(idx_columns->push_back(col_desc))) {
+        LOG_WARN("failed to add column id",
+                    "column_id", col_desc.col_id_);
       }
     }
   }
@@ -471,12 +479,14 @@ int ObRelativeTable::prepare_truncate_part_filter(
   } else if (OB_UNLIKELY(!tablet_iter_.table_iter()->is_valid())) {
     LOG_DEBUG("[TRUNCATE INFO], empty tablet", KPC(tablet_iter_.table_iter()));
   } else if (OB_FAIL(tablet_iter_.table_iter()->get_boundary_table(false, table_ptr))) {
+    LOG_WARN("failed to get boundary table", K(ret));
   } else {
     const int64_t major_table_version = nullptr != table_ptr && table_ptr->is_major_sstable() ?
                                         table_ptr->get_snapshot_version() : 0;
     ObVersionRange read_version_range(major_table_version, read_snapshot);
     const storage::ObITableReadInfo &read_info = schema_param_->get_read_info();
     if (OB_UNLIKELY(!read_version_range.is_valid())) {
+      LOG_DEBUG("[TRUNCATE INFO] invalid version range, filter is empty", K(ret), K(read_version_range), KPC_(truncate_part_filter));
     } else if (OB_UNLIKELY(nullptr != table_ptr && table_ptr->is_major_sstable() && major_table_version <= 0)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected major sstable", K(ret), KPC(table_ptr));
@@ -487,7 +497,9 @@ int ObRelativeTable::prepare_truncate_part_filter(
         read_version_range,
         &allocator,
         truncate_part_filter_))) {
+      LOG_WARN("failed to build truncate part filter", K(ret));
     } else {
+      LOG_DEBUG("[TRUNCATE INFO]", K(ret), K(read_version_range), KPC_(truncate_part_filter));
     }
   }
   return ret;

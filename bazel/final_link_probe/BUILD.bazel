@@ -1,0 +1,100 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load(
+    "//bazel:defs.bzl",
+    "seekdb_final_link",
+    cc_library = "seekdb_cc_library",
+)
+
+package(default_visibility = ["//visibility:private"])
+
+cc_library(
+    name = "entry_object",
+    srcs = ["main.cpp"],
+    tags = ["manual"],
+)
+
+cc_library(
+    name = "whole_dep",
+    srcs = ["whole_dep.cpp"],
+    tags = ["manual"],
+)
+
+cc_library(
+    name = "group_first",
+    srcs = ["group_first.cpp"],
+    implementation_deps = [":whole_dep"],
+    tags = ["manual"],
+)
+
+cc_library(
+    name = "group_second",
+    srcs = ["group_second.cpp"],
+    tags = ["manual"],
+)
+
+# A source-less aggregate verifies that the final link rule flattens the
+# transitive static archives carried by CcInfo.
+cc_library(
+    name = "group_bundle",
+    implementation_deps = [
+        ":group_first",
+        ":group_second",
+    ],
+    tags = ["manual"],
+)
+
+cc_library(
+    name = "whole",
+    srcs = ["whole.cpp"],
+    implementation_deps = [":whole_dep"],
+    tags = ["manual"],
+)
+
+cc_library(
+    name = "tail",
+    srcs = ["tail.cpp"],
+    tags = ["manual"],
+)
+
+cc_binary(
+    name = "libshared_probe.so",
+    srcs = ["shared.cpp"],
+    linkshared = True,
+    tags = ["manual"],
+)
+
+filegroup(
+    name = "empty_tail_first",
+    srcs = ["empty_tail.a"],
+    tags = ["manual"],
+)
+
+filegroup(
+    name = "empty_tail_second",
+    srcs = ["empty_tail.a"],
+    tags = ["manual"],
+)
+
+seekdb_final_link(
+    name = "final_link_probe",
+    direct_object_deps = [":entry_object"],
+    extra_inputs = ["shared_probe.runtime"],
+    group_deps = [":group_bundle"],
+    ordered_link_files = [
+        ":empty_tail_first",
+        ":libshared_probe.so",
+        # label_list rejects the same label twice, so two positional aliases
+        # deliberately carry the same archive artifact.
+        ":empty_tail_second",
+    ],
+    whole_archive_deps = [":whole"],
+    tail_deps = [":tail"],
+    system_libs = [
+        "pthread",
+        "dl",
+        "rt",
+    ],
+    linkopts = ["-Wl,--export-dynamic"],
+    out = "seekdb_final_link_probe",
+    tags = ["manual"],
+)

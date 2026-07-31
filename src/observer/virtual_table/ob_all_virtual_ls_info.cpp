@@ -56,7 +56,9 @@ int ObAllVirtualLSInfo::inner_get_next_row(ObNewRow *&row)
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "ls service is null", K(ret));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls_))) {
+    SERVER_LOG(WARN, "get log stream failed", K(ret));
   } else if (OB_FAIL(ls_->get_ls_info(ls_info))) {
+    SERVER_LOG(WARN, "get log stream info failed", K(ret));
   } else {
     start_to_read_ = true;
     const int64_t col_count = output_column_ids_.count();

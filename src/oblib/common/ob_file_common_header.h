@@ -113,6 +113,7 @@ public:
       header.payload_checksum_ = ob_crc64(buf + ori_pos + header_length, payload_length);
       header.set_header_checksum();
       if (OB_FAIL(header.serialize(buf, buf_len, header_pos))) {
+        COMMON_LOG(WARN, "fail to serialize header", K(ret), K(header), K(buf_len), K(header_pos));
       } else if (OB_UNLIKELY(header_pos != header_length)) {
         ret = OB_ERR_UNEXPECTED;
         COMMON_LOG(WARN, "header pos is unexpected", K(ret), K(header_pos), K(header_length));
@@ -137,14 +138,17 @@ public:
       ret = OB_INVALID_ARGUMENT;
       COMMON_LOG(WARN, "invalid arguments", K(ret), KP(buf), K(buf_len), K(pos), K(header_serialize_size));
     } else if (OB_FAIL(header.deserialize(buf, buf_len, pos))) {
+      COMMON_LOG(WARN, "fail to deserialize header", K(ret), KP(buf), K(buf_len), K(pos));
     } else if (OB_UNLIKELY((pos - ori_pos) != header_serialize_size)) {
       ret = OB_ERR_UNEXPECTED;
       COMMON_LOG(WARN, "unexpected pos", K(ret), K(ori_pos), K(pos), K(header_serialize_size));
     } else if (OB_FAIL(header.check_header_checksum())) {
+      COMMON_LOG(WARN, "fail to check header checksum", K(ret), K(header));
     } else if (OB_UNLIKELY((buf_len - pos) < header.payload_zlength_)) {
       ret = OB_ERR_UNEXPECTED;
       COMMON_LOG(WARN, "unexpected buf len", K(ret), K(buf_len), K(pos), K(header));
     } else if (OB_FAIL(header.check_payload_checksum(buf + pos, header.payload_zlength_))) {
+      COMMON_LOG(WARN, "fail to check payload checksum", K(ret), K(pos), K(header));
     } else if (OB_FAIL(payload.deserialize(buf, buf_len, pos))) {
       COMMON_LOG(WARN, "fail to deserialize payload", K(ret), KP(buf), K(buf_len), K(pos));
     } else if (OB_UNLIKELY(pos != (ori_pos + header_serialize_size + header.payload_zlength_))) {

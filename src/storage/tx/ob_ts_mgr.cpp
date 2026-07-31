@@ -36,6 +36,7 @@ int ObTsMgr::get_gts(SCN &scn)
       TRANS_LOG(WARN, "get local timestamp failed", KR(ret));
     }
   } else if (OB_FAIL(scn.convert_for_gts(gts))) {
+    TRANS_LOG(WARN, "convert local timestamp failed", KR(ret), K(gts));
   }
   return ret;
 }
@@ -47,6 +48,7 @@ int ObTsMgr::get_gts(const MonotonicTs stc,
   int ret = get_gts(scn);
   if (OB_SUCC(ret)) {
     receive_gts_ts = MonotonicTs::current_time();
+    TRANS_LOG(DEBUG, "get local timestamp", K(stc), K(scn), K(receive_gts_ts));
   }
   return ret;
 }

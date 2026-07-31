@@ -294,11 +294,13 @@ int ObIvfCacheMgr::get_or_create_cache_node(const IvfCacheKey &key, CacheType *&
       ret = OB_SUCCESS;
       OB_LOG(INFO, "cache obj not exist, create new one", K(key), K(cache_objs_.size()));
       if (OB_FAIL(create_cache_obj(key, icache))) {
+        OB_LOG(WARN, "fail to create cache obj", K(ret), K(key));
       } else if (OB_FAIL(cache_objs_.set_refactored(key, icache))) {
         release_cache_obj(icache);
         if (ret == OB_HASH_EXIST) {
           // other thread may already created, try get again.
           if (OB_FAIL(cache_objs_.get_refactored(key, icache))) {
+            OB_LOG(WARN, "fail to get cache obj", K(ret), K(key));
           }
         } else {
           OB_LOG(WARN, "fail to set cache obj", K(ret), K(key));

@@ -80,6 +80,7 @@ int ObAllVirtualSqlPlan::DumpAllPlan::operator()(
     
     info.plan_id_ = plan->get_plan_id();
     if (OB_FAIL(plan_ids_->push_back(info))) {
+      SERVER_LOG(WARN, "failed to push back plan id", K(ret));
     }
   }
   return ret;
@@ -115,6 +116,7 @@ int ObAllVirtualSqlPlan::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(extract_plan_ids(key_ranges_))) {
+    SERVER_LOG(WARN, "extract plan ids failed", K(ret));
   }
   return ret;
 }
@@ -126,10 +128,12 @@ int ObAllVirtualSqlPlan::inner_get_next_row(common::ObNewRow *&row)
     if (plan_idx_ >= plan_ids_.count()) {
       ret = OB_ITER_END;
     } else if (OB_FAIL(prepare_next_plan())) {
+      SERVER_LOG(WARN, "failed to prepare next plan", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(fill_cells(plan_items_.at(plan_item_idx_++)))) {
+    SERVER_LOG(WARN, "failed to fill cell", K(ret));
   } else {
     //finish fetch one row
     row = &cur_row_;
@@ -416,6 +420,7 @@ int ObAllVirtualSqlPlan::extract_plan_ids(const common::ObIArray<common::ObNewRa
                end_key_obj_ptr[KEY_PLAN_ID_IDX].is_max_value()) {
       is_always_true = true;
       if (OB_FAIL(dump_plans())) {
+        SERVER_LOG(WARN, "failed to dump plans", K(ret));
       }
     } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX].is_max_value() &&
                end_key_obj_ptr[KEY_PLAN_ID_IDX].is_min_value()) {
@@ -438,6 +443,7 @@ int ObAllVirtualSqlPlan::extract_plan_ids(const common::ObIArray<common::ObNewRa
         
         info.plan_id_ = plan_id;
         if (OB_FAIL(plan_ids_.push_back(info))) {
+          SERVER_LOG(WARN, "failed to push back plan info", K(ret));
         }
       }
     }
@@ -461,6 +467,7 @@ int ObAllVirtualSqlPlan::dump_plans()
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "unexpect null plan cache", K(ret));
       } else if (OB_FAIL(plan_cache->foreach_alloc_cache_obj(dump_plan))) {
+        SERVER_LOG(WARN, "failed to dump plan", K(ret));
       }
     }
     if (OB_OP_NOT_ALLOW == ret) {
@@ -480,6 +487,7 @@ int ObAllVirtualSqlPlan::prepare_next_plan()
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "no more plan", K(ret));
   } else if (OB_INVALID_INDEX == plan_ids_.at(plan_idx_).plan_id_) {
+    SERVER_LOG(DEBUG, "invalid plan_id");
     //next plan
     ++plan_idx_;
   } else {
@@ -508,6 +516,7 @@ int ObAllVirtualSqlPlan::prepare_next_plan()
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "unexpect null allocator", K(ret));
         } else if (OB_FAIL(raw_plan.uncompress_logical_plan(*allocator_, plan_items_))) {
+          SERVER_LOG(WARN, "failed to uncompress logical plan", K(ret));
         } else {
           db_id_ = plan->stat_.db_id_;
           plan_hash_ = plan->get_plan_hash_value();

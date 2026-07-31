@@ -39,12 +39,14 @@ OB_SERIALIZE_MEMBER(GroupPWJTabletIdInfo, group_id_, tablet_id_array_);
 
 query::ObIRootCommandService *ObExecContext::get_root_command_service() const
 {
-  return root_command_service_;
+  return OB_ISNULL(my_session_)
+      ? nullptr : my_session_->get_root_command_service();
 }
 
 query::ObILocalCommandService *ObExecContext::get_local_command_service() const
 {
-  return local_command_service_;
+  return OB_ISNULL(my_session_)
+      ? nullptr : my_session_->get_local_command_service();
 }
 
 query::ObIRootCommandService &ObExecContext::root_command_service() const
@@ -94,6 +96,7 @@ int ObOpKitStore::init(ObIAllocator &alloc, const int64_t size)
     memset(kits_, 0, size * sizeof(kits_[0]));
     size_ = size;
   }
+  LOG_DEBUG("trace init kit store", K(ret), K(size));
   return ret;
 }
 
@@ -115,7 +118,9 @@ void ObOpKitStore::destroy()
 int ObDiagnosisManager::add_warning_info(int err_ret, int line_idx) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(rets_.push_back(err_ret))) {
+    LOG_WARN("failed to push back error code into array", K(ret), K(err_ret));
   } else if (OB_FAIL(idxs_.push_back(line_idx))) {
+    LOG_WARN("failed to push back line number into array", K(ret), K(line_idx));
   }
   return ret;
 }
@@ -151,12 +156,14 @@ int ObDiagnosisManager::do_diagnosis(ObBitVector &skip, int64_t limit_num) {
                                                         idx + cur_line_number_,
                                                         cur_col_name.length(), cur_col_name.ptr(),
                                                         common::ob_strerror(err_ret)))) {
+            LOG_WARN("failed to append error message", K(err_ret));
           }
         } else {
           if (OB_FAIL(err_msg.append_fmt("fail to scan file %.*s at line %ld, error: %s",
                                         cur_file_url_.length(), cur_file_url_.ptr(),
                                         idx + cur_line_number_,
                                         common::ob_strerror(err_ret)))) {
+            LOG_WARN("failed to append error message", K(err_ret));
           }
         }
 
@@ -195,19 +202,6 @@ ObExecContext::ObExecContext(ObIAllocator &allocator,
     my_session_(NULL),
     session_mgr_(session_mgr),
     lob_read_service_(nullptr),
-    plan_cache_(nullptr),
-    ps_cache_(nullptr),
-    plan_cache_access_service_(nullptr),
-    pl_sql_runtime_(nullptr),
-    pl_engine_(nullptr),
-    prepared_statement_runtime_(nullptr),
-    sql_execution_id_provider_(nullptr),
-    query_runtime_environment_(nullptr),
-    root_command_service_(nullptr),
-    local_command_service_(nullptr),
-    change_stream_service_(nullptr),
-    ddl_execution_limiter_(nullptr),
-    srs_provider_(nullptr),
     exec_stat_collector_(NULL),
     stmt_factory_(NULL),
     expr_factory_(NULL),
@@ -243,7 +237,6 @@ ObExecContext::ObExecContext(ObIAllocator &allocator,
     group_pwj_map_(nullptr),
     check_status_times_(0),
     vt_ift_(nullptr),
-    vt_factory_provider_(nullptr),
     px_batch_id_(0),
     admission_acquired_(false),
     use_temp_expr_ctx_cache_(false),
@@ -273,48 +266,6 @@ ObExecContext::ObExecContext(ObIAllocator &allocator,
     diagnosis_manager_(),
     current_granule_type_(OB_GRANULE_UNINITIALIZED)
 {
-}
-
-ObExecContext::RuntimeServices ObExecContext::get_runtime_services() const
-{
-  RuntimeServices services;
-  services.lob_read_service_ = lob_read_service_;
-  services.plan_cache_ = plan_cache_;
-  services.ps_cache_ = ps_cache_;
-  services.plan_cache_access_service_ = plan_cache_access_service_;
-  services.pl_sql_runtime_ = pl_sql_runtime_;
-  services.pl_engine_ = pl_engine_;
-  services.prepared_statement_runtime_ = prepared_statement_runtime_;
-  services.sql_execution_id_provider_ = sql_execution_id_provider_;
-  services.query_runtime_environment_ = query_runtime_environment_;
-  services.root_command_service_ = root_command_service_;
-  services.local_command_service_ = local_command_service_;
-  services.change_stream_service_ = change_stream_service_;
-  services.ddl_execution_limiter_ = ddl_execution_limiter_;
-  services.virtual_table_factory_provider_ = vt_factory_provider_;
-  services.srs_provider_ = srs_provider_;
-  services.resource_limit_calculator_ = resource_limit_calculator_;
-  return services;
-}
-
-void ObExecContext::set_runtime_services(const RuntimeServices &services)
-{
-  lob_read_service_ = services.lob_read_service_;
-  plan_cache_ = services.plan_cache_;
-  ps_cache_ = services.ps_cache_;
-  plan_cache_access_service_ = services.plan_cache_access_service_;
-  pl_sql_runtime_ = services.pl_sql_runtime_;
-  pl_engine_ = services.pl_engine_;
-  prepared_statement_runtime_ = services.prepared_statement_runtime_;
-  sql_execution_id_provider_ = services.sql_execution_id_provider_;
-  query_runtime_environment_ = services.query_runtime_environment_;
-  root_command_service_ = services.root_command_service_;
-  local_command_service_ = services.local_command_service_;
-  change_stream_service_ = services.change_stream_service_;
-  ddl_execution_limiter_ = services.ddl_execution_limiter_;
-  vt_factory_provider_ = services.virtual_table_factory_provider_;
-  srs_provider_ = services.srs_provider_;
-  resource_limit_calculator_ = services.resource_limit_calculator_;
 }
 
 ObExecContext::~ObExecContext()
@@ -398,6 +349,8 @@ void ObExecContext::set_my_session(ObSQLSessionInfo *session)
   if (OB_NOT_NULL(session)) {
     session_mgr_ = session->get_session_manager();
   }
+  lob_read_service_ =
+      OB_ISNULL(session) ? nullptr : session->get_lob_read_service();
   if (OB_NOT_NULL(session)) {
     set_mem_attr(ObMemAttr(ObModIds::OB_SQL_EXEC_CONTEXT,
                           ObCtxIds::EXECUTE_CTX_ID));
@@ -477,6 +430,7 @@ int ObExecContext::init_phy_op(const uint64_t phy_op_size)
   } else {
     phy_op_size_ = phy_op_size;
     if (OB_FAIL(op_kit_store_.init(allocator_, phy_op_size))) {
+      LOG_WARN("init operator kit store failed", K(ret));
     }
   }
   return ret;
@@ -689,6 +643,7 @@ int ObExecContext::check_status()
     ret = ic.code_;
     LOG_WARN("px execution was interrupted", K(ic), K(ret));
   } else if (OB_UNLIKELY((OB_SUCCESS != (ret = CHECK_MEM_STATUS())))) {
+    LOG_WARN("Exceeded memory usage limit", K(ret));
   }
   int tmp_ret = OB_SUCCESS;
   if (OB_SUCCESS != (tmp_ret = check_extra_status())) {
@@ -726,6 +681,7 @@ int ObExecContext::check_status_ignore_interrupt()
   }
   int tmp_ret = OB_SUCCESS;
   if (OB_SUCCESS != (tmp_ret = check_extra_status())) {
+    LOG_WARN("check extra status failed", K(tmp_ret));
   } else if (OB_SUCC(ret)) {
     ret = tmp_ret;
   }
@@ -774,6 +730,7 @@ int ObExecContext::get_gi_task_map(GIPrepareTaskMap *&gi_task_map)
     } else if (FALSE_IT(gi_task_map_ = new(buf) GIPrepareTaskMap())) {
     } else if (OB_FAIL(gi_task_map_->create(PARTITION_WISE_JOIN_TSC_HASH_BUCKET_NUM, /* assume no more than 8 table scan in a plan */
                                             ObModIds::OB_SQL_PX))) {
+      LOG_WARN("Failed to create gi task map", K(ret));
     } else {
       gi_task_map = gi_task_map_;
     }
@@ -797,6 +754,7 @@ int ObExecContext::get_convert_charset_allocator(ObArenaAllocator *&allocator)
            .set_mem_attr(common::ObModIds::OB_SQL_EXPR_CALC,
                          common::ObCtxIds::DEFAULT_CTX_ID);
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(convert_allocator_, param))) {
+        SQL_ENG_LOG(WARN, "create entity failed", K(ret));
       }
     }
   }
@@ -821,6 +779,7 @@ int ObExecContext::get_malloc_allocator(ObIAllocator *&allocator)
            .set_mem_attr(common::ObModIds::OB_SQL_EXPR_CALC,
                          common::ObCtxIds::DEFAULT_CTX_ID);
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
+        SQL_ENG_LOG(WARN, "create entity failed", K(ret));
       }
     }
   }
@@ -850,7 +809,9 @@ int ObExecContext::add_temp_table_interm_result_ids(uint64_t temp_table_id,
     if (temp_table_id == ctx.temp_table_id_) {
       ObTempTableResultInfo info;
       if (OB_FAIL(info.interm_result_ids_.assign(ids))) {
+        LOG_WARN("failed to assign to interm result ids.", K(ret));
       } else if (OB_FAIL(ctx.interm_result_infos_.push_back(info))) {
+        LOG_WARN("failed to push back result info", K(ret));
       } else {
         is_existed = true;
       }
@@ -862,8 +823,11 @@ int ObExecContext::add_temp_table_interm_result_ids(uint64_t temp_table_id,
     ctx.temp_table_id_ = temp_table_id;
     ObTempTableResultInfo info;
     if (OB_FAIL(info.interm_result_ids_.assign(ids))) {
+      LOG_WARN("failed to assign to interm result ids.", K(ret));
     } else if (OB_FAIL(ctx.interm_result_infos_.push_back(info))) {
+      LOG_WARN("failed to push back result info", K(ret));
     } else if (OB_FAIL(temp_ctx.push_back(ctx))) {
+      LOG_WARN("failed to push back temp table context", K(ret));
     }
   }
   return ret;
@@ -874,10 +838,14 @@ ObVirtualTableCtx ObExecContext::get_virtual_table_ctx()
   int ret = OB_SUCCESS;
   ObVirtualTableCtx vt_ctx;
   if (OB_ISNULL(vt_ift_)) {
+    vt_factory_provider_ = OB_ISNULL(my_session_)
+        ? nullptr
+        : my_session_->get_virtual_table_factory_provider();
     if (OB_ISNULL(vt_factory_provider_)) {
       ret = OB_NOT_INIT;
       LOG_WARN("virtual table factory provider is null", K(ret));
     } else if (OB_FAIL(vt_factory_provider_->create_virtual_table_factory(allocator_, vt_ift_))) {
+      LOG_WARN("create virtual table iterator factory failed", K(ret));
     }
   }
   vt_ctx.vt_iter_factory_ = vt_ift_;
@@ -896,6 +864,7 @@ int ObExecContext::init_physical_plan_ctx(const ObPhysicalPlan &plan)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K_(phy_plan_ctx), K_(my_session), K(ret));
   } else if (OB_FAIL(my_session_->get_foreign_key_checks(foreign_key_checks))) {
+    LOG_WARN("failed to get foreign_key_checks", K(ret));
   } else {
     int64_t start_time = my_session_->get_query_start_time();
     int64_t plan_timeout = 0;
@@ -908,6 +877,7 @@ int ObExecContext::init_physical_plan_ctx(const ObPhysicalPlan &plan)
       plan_timeout = phy_plan_hint.query_timeout_;
     } else {
       if (OB_FAIL(my_session_->get_query_timeout(plan_timeout))) {
+        LOG_WARN("fail to get query timeout", K(ret));
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(phy_plan_ctx_->reserve_param_space(plan.get_param_count()))) {
@@ -954,6 +924,7 @@ int ObExecContext::set_partition_ranges(const Ob2DArray<ObPxTabletRange> &part_r
       } else if (0 != size && OB_FAIL(tmp_range.deep_copy_from<false>(cur_range, get_allocator(), buf, size, pos))) {
         LOG_WARN("deep copy partition range failed", K(ret), K(cur_range));
       } else if (OB_FAIL(part_ranges_.push_back(tmp_range))) {
+        LOG_WARN("push back partition range failed", K(ret), K(tmp_range));
       }
     }
   }
@@ -987,6 +958,7 @@ int ObExecContext::get_group_pwj_map(GroupPWJTabletIdMap *&group_pwj_map)
       group_pwj_map_ = new (buf) GroupPWJTabletIdMap();
       /* assume no more than 8table scan in a plan */
       if (OB_FAIL(group_pwj_map_->create(PARTITION_WISE_JOIN_TSC_HASH_BUCKET_NUM, ObModIds::OB_SQL_PX))) {
+        LOG_WARN("Failed to create group_pwj_map_", K(ret));
       } else {
         group_pwj_map = group_pwj_map_;
       }
@@ -1005,6 +977,7 @@ int ObExecContext::deep_copy_group_pwj_map(const GroupPWJTabletIdMap *src)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null");
   } else if (OB_FAIL(get_group_pwj_map(des))) {
+    LOG_WARN("failed to get_group_pwj_map");
   } else if (des->size() > 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("size should be 0", K(des->size()), K(src->size()));
@@ -1013,6 +986,7 @@ int ObExecContext::deep_copy_group_pwj_map(const GroupPWJTabletIdMap *src)
       const uint64_t table_id = iter->first;
       const GroupPWJTabletIdInfo &group_pwj_tablet_id_info = iter->second;
       if (OB_FAIL(des->set_refactored(table_id, group_pwj_tablet_id_info))) {
+        LOG_WARN("failed to set refactored", K(table_id));
       }
     }
   }
@@ -1050,11 +1024,13 @@ int ObExecContext::fill_px_batch_info(ObBatchRescanParams &params,
           } else if (FALSE_IT(expr = &array.at(idx - 1))) {
           } else if (T_INVALID == expr->type_) {
             // do nothing.
+            LOG_TRACE("empty expr", KPC(expr));
           } else {
             expr->get_eval_info(eval_ctx).clear_evaluated_flag();
             ObDynamicParamSetter::clear_parent_evaluated_flag(eval_ctx, *expr);
             ObDatum &param_datum = expr->locate_datum_for_write(eval_ctx);
             if (OB_FAIL(param_datum.from_obj(one_params.at(i), expr->obj_datum_map_))) {
+              LOG_WARN("fail to cast datum", K(ret));
             } else if (is_lob_storage(one_params.at(i).get_type()) &&
                        OB_FAIL(ob_adjust_lob_datum(*this, one_params.at(i), expr->obj_meta_,
                                                    expr->obj_datum_map_, get_allocator(), param_datum))) {
@@ -1108,6 +1084,7 @@ pl::ObPLPackageGuard* ObExecContext::get_package_guard()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to construct exec context`s package guard!", K(ret), K(package_guard_));
       } else if (OB_FAIL(package_guard_->init())) {
+        LOG_WARN("failed to initialize exec context`s package guard!", K(ret));
       }
     }
   }
@@ -1227,12 +1204,15 @@ int ObExecContext::deserialize_group_pwj_map(const char *buf, const int64_t data
     uint64_t table_id;
     GroupPWJTabletIdInfo group_pwj_tablet_id_info;
     if (OB_FAIL(get_group_pwj_map(group_pwj_map))) {
+      LOG_WARN("failed to get_group_pwj_map");
     } else {
       for (int64_t i = 0; i < pwj_map_element_count && OB_SUCC(ret); ++i) {
         OB_UNIS_DECODE(table_id);
         OB_UNIS_DECODE(group_pwj_tablet_id_info);
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(group_pwj_map->set_refactored(table_id, group_pwj_tablet_id_info))) {
+          LOG_WARN("failed to set refactored", K(table_id), K(pwj_map_element_count),
+                   K(group_pwj_map->size()));
         }
       }
     }
@@ -1378,6 +1358,7 @@ int ObExecContext::get_lob_access_ctx(common::ObILobAccessContext *&lob_access_c
     lob_access_ctx = lob_access_ctx_;
   } else if (OB_FAIL(data_plane::create_lob_access_context(
                  get_allocator(), lob_access_ctx_))) {
+    LOG_WARN("failed to create lob access context", K(ret));
   } else {
     lob_access_ctx = lob_access_ctx_;
   }
@@ -1391,10 +1372,14 @@ int ObExecContext::get_lob_read_options(
   lob_read_options = nullptr;
   common::ObILobReadService *read_service = lob_read_service_;
   common::ObILobAccessContext *lob_access_ctx = nullptr;
+  if (OB_ISNULL(read_service) && OB_NOT_NULL(my_session_)) {
+    read_service = my_session_->get_lob_read_service();
+  }
   if (OB_ISNULL(read_service)) {
     ret = OB_NOT_INIT;
     LOG_WARN("LOB read service is not installed in execution context", K(ret));
   } else if (OB_FAIL(get_lob_access_ctx(lob_access_ctx))) {
+    LOG_WARN("get LOB access context failed", K(ret));
   } else {
     const int64_t timeout_ts = OB_ISNULL(my_session_)
         ? 0
@@ -1427,11 +1412,15 @@ int ObExecContext::get_datum_access_ctx(
   datum_access_ctx = nullptr;
   const common::ObLobReadOptions *lob_read_options = nullptr;
   common::ObILobReadService *read_service = lob_read_service_;
+  if (OB_ISNULL(read_service) && OB_NOT_NULL(my_session_)) {
+    read_service = my_session_->get_lob_read_service();
+  }
   // Datum comparison and hashing only need this context when they encounter
   // an out-row LOB.  Keep it absent for pure in-row execution; the LOB
   // iterator rejects a missing read service at the actual dereference point.
   if (OB_ISNULL(read_service)) {
   } else if (OB_FAIL(get_lob_read_options(lob_read_options))) {
+    LOG_WARN("get LOB read options failed", K(ret));
   } else if (OB_ISNULL(datum_access_ctx_)) {
     void *buf = allocator_.alloc(sizeof(common::ObDatumAccessContext));
     if (OB_ISNULL(buf)) {
@@ -1461,16 +1450,6 @@ namespace query
 sql::ObSQLSessionInfo *ObExecContextAccess::get_session(sql::ObExecContext &ctx)
 {
   return ctx.get_my_session();
-}
-
-void ObExecContextAccess::configure_obj_cast(
-    sql::ObExecContext &ctx,
-    common::ObObjCastParams &params)
-{
-  if (OB_NOT_NULL(ctx.get_my_session())) {
-    ctx.get_my_session()->configure_obj_cast(
-        params, ctx.get_srs_provider(), ctx.get_lob_read_service());
-  }
 }
 
 common::ObMySQLProxy *ObExecContextAccess::get_sql_proxy(sql::ObExecContext &ctx)

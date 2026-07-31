@@ -64,6 +64,7 @@ int ObVectorL2Distance<T>::l2_distance_func(const T *a, const T *b, const int64_
     ret = OB_ERR_NULL_VALUE;
     LIB_LOG(WARN, "invalid null pointer", K(ret), KP(a), KP(b));
   } else if (OB_FAIL(l2_square_func(a, b, len, square))) {
+    LIB_LOG(WARN, "failed to cal l2 square", K(ret));
   } else {
     distance = sqrt(square);
   }

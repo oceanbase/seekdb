@@ -79,6 +79,7 @@ bool ObReqQHandler::handle_request(ObRequest *req)
   } else {
     req->set_trace_point(ObRequest::OB_REQUEST_QHANDLER_PROCESSOR_RUN);
     if (OB_FAIL(processor->run())) {
+      LOG_WARN("process request fail", K(ret));
     }
     translator_.release(processor);
   }

@@ -53,8 +53,11 @@ int ObTxDataTable::init(ObLS *ls, ObTxCtxTable *tx_ctx_table)
     STORAGE_LOG(WARN, "unexpected null runtime object", KR(ret), KP(tx_data_allocator_));
   } else if (FALSE_IT(ls_tablet_svr_ = ls->get_tablet_svr())) {
   } else if (OB_FAIL(ls_tablet_svr_->get_tx_data_memtable_mgr(memtable_mgr_handle))) {
+    STORAGE_LOG(WARN, "get tx data memtable mgr fail.", KR(ret), K(tablet_id_));
   } else if (OB_FAIL(init_arena_allocator_())) {
+    STORAGE_LOG(ERROR, "slice_allocator_ init fail");
   } else if (OB_FAIL(init_tx_data_read_schema_())) {
+    STORAGE_LOG(WARN, "init tx data read ctx failed.", KR(ret), K(tablet_id_));
   } else {
     calc_upper_trans_version_cache_.commit_versions_.array_.set_attr(
       ObMemAttr("CommitVersions"));
@@ -77,8 +80,7 @@ int ObTxDataTable::init_arena_allocator_()
   
   mem_attr.ctx_id_ = ObCtxIds::TX_DATA_TABLE;
   arena_allocator_.set_attr(mem_attr);
-  ObSharedMemAllocMgr *manager =
-      share::server_service<share::ObSharedMemAllocMgr>();
+  ObSharedMemAllocMgr *manager = share::g_mp->shared_mem_alloc_mgr();
   if (nullptr != manager) {
     arena_allocator_.set_memory_tracker(&manager->tx_data_metadata_tracker());
   }
@@ -133,16 +135,23 @@ int ObTxDataTable::init_tx_data_read_schema_()
   iter_param.tablet_id_ = LS_TX_DATA_TABLET;
 
   if (OB_FAIL(columns.push_back(key))) {
+    STORAGE_LOG(WARN, "failed to push back key", KR(ret), K(key));
   } else if (OB_FAIL(columns.push_back(idx))) {
+    STORAGE_LOG(WARN, "failed to push back idx", KR(ret), K(idx));
   } else if (OB_FAIL(columns.push_back(total_row_cnt))) {
+    STORAGE_LOG(WARN, "failed to push back total row cnt", KR(ret), K(total_row_cnt));
   } else if (OB_FAIL(columns.push_back(end_ts))) {
+    STORAGE_LOG(WARN, "failed to push back end_ts", KR(ret), K(end_ts));
   } else if (OB_FAIL(columns.push_back(value))) {
+    STORAGE_LOG(WARN, "failed to push back value", KR(ret), K(value));
   } else if (OB_FAIL(read_info.init(arena_allocator_, LS_TX_DATA_SCHEMA_COLUMN_CNT,
                                     LS_TX_DATA_SCHEMA_ROWKEY_CNT,
                                     columns, nullptr/*storage_cols_index*/))) {
+    STORAGE_LOG(WARN, "Fail to init read_info", K(ret));
   } else if (OB_FAIL(full_read_info.init(arena_allocator_, LS_TX_DATA_SCHEMA_COLUMN_CNT,
                                          LS_TX_DATA_SCHEMA_ROWKEY_CNT,
                                          columns))) {
+    STORAGE_LOG(WARN, "Fail to init read_info", K(ret));
   } else {
     read_schema_.iter_param_.read_info_ = &read_info;
   }
@@ -191,6 +200,7 @@ int ObTxDataTable::offline()
   } else if (OB_FAIL(get_memtable_mgr_()->offline()) && OB_NOT_INIT != ret) {
     STORAGE_LOG(WARN, "release memtables failed", KR(ret));
   } else if (OB_FAIL(clean_memtables_cache_())) {
+    STORAGE_LOG(WARN, "clean memtables cache failed", KR(ret), KPC(this));
   } else {
     is_started_ = false;
     calc_upper_trans_version_cache_.reset();
@@ -212,8 +222,10 @@ int ObTxDataTable::online()
     LOG_ERROR("get ls tablet svr failed", K(ret));
   } else if (OB_FAIL(ls_tablet_svr->get_tablet(LS_TX_DATA_TABLET,
                                                handle))) {
+    LOG_WARN("get tablet failed", K(ret));
   } else if (FALSE_IT(tablet = handle.get_obj())) {
   } else if (OB_FAIL(ls_tablet_svr->create_memtable(LS_TX_DATA_TABLET, arg/* use default arg */))) {
+    LOG_WARN("failed to create memtable", K(ret));
   } else {
     // load tx data table succeed
     {
@@ -309,7 +321,9 @@ int ObTxDataTable::insert(ObTxData *&tx_data)
     STORAGE_LOG(ERROR, "trying to insert an invalid tx data into tx data table", KR(ret),
                 KP(tx_data), KPC(tx_data));
   } else if (OB_FAIL(get_memtable_mgr_()->get_all_memtables_for_write(write_guard))) {
+    STORAGE_LOG(WARN, "get all memtables for write fail.", KR(ret), KPC(get_memtable_mgr_()));
   } else if (OB_FAIL(insert_(tx_data, write_guard))) {
+    STORAGE_LOG(WARN, "insert tx data failed.", KR(ret), KPC(tx_data), KP(this), K(tablet_id_));
   } else {
     // successfully insert
     // TODO : @gengli do not dec ref and set nullptr after insert
@@ -341,11 +355,17 @@ int ObTxDataTable::insert_(ObTxData *&tx_data, ObTxDataMemtableWriteGuard &write
     } else if (tx_data_memtable->get_start_scn() < tx_data->end_scn_
                && tx_data_memtable->get_end_scn() >= tx_data->end_scn_) {
       if (OB_FAIL(tx_data_memtable->insert(tx_data))) {
+        STORAGE_LOG(WARN,
+                    "insert tx data into tx data memtable failed",
+                    KR(ret),
+                    KPC(tx_data),
+                    KPC(tx_data_memtable));
       } else {
         inserted = true;
       }
     } else {
       // should not insert into this memtable
+      STORAGE_LOG(DEBUG, "skip this tx data memtable", KPC(tx_data), KPC(tx_data_memtable));
     }
   }
 
@@ -356,6 +376,7 @@ int ObTxDataTable::insert_(ObTxData *&tx_data, ObTxDataMemtableWriteGuard &write
     if (tx_data->end_scn_ <= clog_checkpoint_scn) {
       // Filter this tx data. The part trans ctx need to handle this error code because the memory
       // of tx data need to be freed.
+      STORAGE_LOG(DEBUG, "This tx data is filtered.", K(clog_checkpoint_scn), KPC(tx_data));
     } else {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(ERROR, "cannot find the correct tx data memtable to insert", KR(ret),
@@ -377,8 +398,10 @@ int ObTxDataTable::check_with_tx_data(const ObTransID tx_id,
     STORAGE_LOG(WARN, "tx data table is not init.", KR(ret), KP(this), K(tx_id));
   } else if (OB_SUCC(check_tx_data_in_memtable_(tx_id, fn, tx_data_guard))) {
     // successfully do check function in memtable, check done
+    STORAGE_LOG(DEBUG, "tx data table check with tx memtable data succeed", K(tx_id), K(fn));
   } else if (OB_TRANS_CTX_NOT_EXIST == ret && OB_SUCC(check_tx_data_in_sstable_(tx_id, fn, tx_data_guard, recycled_scn))) {
     // successfully do check function in sstable
+    STORAGE_LOG(DEBUG, "tx data table check with tx sstable data succeed", K(tx_id), K(fn));
   } else {
     STORAGE_LOG(WARN, "check something in tx data fail.", KR(ret), K(tx_id), KP(this),
                 K(tablet_id_));
@@ -403,6 +426,7 @@ int ObTxDataTable::check_tx_data_in_memtable_(const ObTransID tx_id, ObITxDataCh
       if (OB_EAGAIN == ret) {
         ret = OB_SUCCESS;
         if (OB_FAIL(update_memtables_cache())) {
+          STORAGE_LOG(WARN, "update memtables cache failed", KR(ret));
         } else {
           // do check_tx_data_with_cache_once_ again
         }
@@ -447,6 +471,7 @@ int ObTxDataTable::check_tx_data_with_cache_once_(const transaction::ObTransID t
       int64_t memtable_head = -1;
       int64_t memtable_tail = -1;
       if (OB_FAIL(get_memtable_mgr_()->get_memtable_range(memtable_head, memtable_tail))) {
+        STORAGE_LOG(WARN, "get memtable range failed", KR(ret));
       } else if (memtable_head != memtables_cache_.memtable_head_ || memtable_tail != memtables_cache_.memtable_tail_) {
         ret = OB_EAGAIN;
       } else {
@@ -505,12 +530,14 @@ int ObTxDataTable::update_memtables_cache()
   // lock for updating memtables cache
   TCWLockGuard guard(memtables_cache_.lock_);
   if (OB_FAIL(check_need_update_memtables_cache_(need_update))) {
+    STORAGE_LOG(WARN, "check if memtable handles need update failed.", KR(ret));
   } else if (!need_update) {
     // do not need update cache, skip update
   } else if (FALSE_IT(memtables_cache_.reuse())) {
   } else if (OB_FAIL(get_memtable_mgr_()->get_all_memtables_with_range(memtables_cache_.memtable_handles_,
                                                                        memtables_cache_.memtable_head_,
                                                                        memtables_cache_.memtable_tail_))) {
+    STORAGE_LOG(WARN, "get all memtables with range failed.", KR(ret), KPC(this), KPC(get_memtable_mgr_()));
   }
 
   return ret;
@@ -522,6 +549,7 @@ int ObTxDataTable::check_need_update_memtables_cache_(bool &need_update)
   int64_t memtable_head = -1;
   int64_t memtable_tail = -1;
   if (OB_FAIL(get_memtable_mgr_()->get_memtable_range(memtable_head, memtable_tail))) {
+    STORAGE_LOG(WARN, "get memtable range failed.", KR(ret));
   } else if (memtables_cache_.memtable_head_ == memtable_head && memtables_cache_.memtable_tail_ == memtable_tail) {
     // cache already up to date, skip update
     need_update = false;
@@ -585,12 +613,16 @@ int ObTxDataTable::check_tx_data_in_sstable_(const ObTransID tx_id,
   tx_data_guard.reset();
 
   if (OB_FAIL(alloc_tx_data(tx_data_guard, false/* enable_throttle */))) {
+    STORAGE_LOG(WARN, "allocate tx data to read from sstable failed", KR(ret), K(tx_data_guard));
   } else if (OB_ISNULL(tx_data_guard.tx_data())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "tx data is unexpected null", KR(ret), K(tx_data_guard));
   } else if (OB_FAIL(get_tx_data_in_sstable_(tx_id, *tx_data_guard.tx_data(), recycled_scn))) {
+    STORAGE_LOG(WARN, "get tx data from sstable failed.", KR(ret), K(tx_id));
   } else {
     if (OB_FAIL(fn(*tx_data_guard.tx_data()))) {
+      STORAGE_LOG(WARN, "check tx data in sstable failed.", KR(ret), KP(this),
+                  K(tablet_id_));
     }
   }
 
@@ -609,14 +641,17 @@ int ObTxDataTable::get_tx_data_in_sstable_(const transaction::ObTransID tx_id, O
 
   if (FALSE_IT(tx_data.tx_id_ = tx_id)) {
   } else if (OB_FAIL(ls_tablet_svr_->get_tablet(tablet_id_, tablet_handle))) {
+    STORAGE_LOG(WARN, "get tablet from ls tablet service fail.", KR(ret), KP(this), K(tablet_id_));
   } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid tablet handle", KR(ret), K(tablet_handle), K(tablet_id_));
   } else if (OB_FAIL(tablet_handle.get_obj()->fetch_table_store(table_store_wrapper))) {
+    LOG_WARN("fail to fetch table store", K(ret));
   } else {
     const ObSSTableArray &sstables = table_store_wrapper.get_member()->get_minor_sstables();
     ObTxDataSingleRowGetter getter(iter_param, sstables, *tx_data_allocator_, recycled_scn);
     if (OB_FAIL(getter.init(tx_id))) {
+      STORAGE_LOG(WARN, "init ObTxDataSingleRowGetter fail.", KR(ret), KP(this), K(tablet_id_));
     } else if (OB_FAIL(getter.get_next_row(tx_data))) {
       if (OB_ITER_END == ret) {
         ret = OB_TRANS_CTX_NOT_EXIST;
@@ -650,13 +685,16 @@ int ObTxDataTable::get_recycle_scn(SCN &recycle_scn)
     ret = OB_EAGAIN;
     STORAGE_LOG(INFO, "EN_COMPACTION_TX_DATA_GET_MIN_SCN", KR(ret));
   } else if (OB_FAIL(ls_->get_restore_status(restore_status))) {
+    STORAGE_LOG(WARN, "get restore status failed", KR(ret));
   } else if (ObRestoreStatus::Status::NONE != restore_status.get_status()) {
     recycle_scn.set_min();
     STORAGE_LOG(INFO, "logstream is in restore state. skip recycle tx data");
   } else if (FALSE_IT(tg.click("iterate tablets start"))) {
   } else if (OB_FAIL(ls_tablet_svr_->get_ls_min_end_scn(min_end_scn_from_latest_tablets,
                                                         min_end_scn_from_old_tablets))) {
+    STORAGE_LOG(WARN, "fail to get ls min end log ts", KR(ret));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>()->get_min_end_scn_from_major_dag(min_end_scn_from_major_dag))) {
+    STORAGE_LOG(WARN, "fail to get min end log ts from major dag", KR(ret));
   } else if (FALSE_IT(tg.click("iterate tablets finish"))) {
   } else {
     min_end_scn = std::min(min_end_scn_from_old_tablets, min_end_scn_from_latest_tablets);
@@ -700,6 +738,7 @@ int ObTxDataTable::get_recycle_scn(SCN &recycle_scn)
 int ObTxDataTable::self_freeze_task()
 {
   int ret = OB_SUCCESS;
+  STORAGE_LOG(DEBUG, "start tx data table self freeze task");
 
   const int64_t current_time = ObClockGenerator::getClock();
   int64_t last_freeze_ts = 0;
@@ -716,6 +755,7 @@ int ObTxDataTable::self_freeze_task()
     // skip freeze tx data this time
   }
 
+  STORAGE_LOG(DEBUG, "finish tx data table self freeze task", KR(ret));
   return ret;
 }
 
@@ -727,6 +767,7 @@ int ObTxDataTable::get_upper_trans_version_before_given_scn(const SCN sstable_en
   bool skip_calc = false;
   upper_trans_version.set_max();
 
+  STORAGE_LOG(DEBUG, "start get upper trans version");
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -736,6 +777,7 @@ int ObTxDataTable::get_upper_trans_version_before_given_scn(const SCN sstable_en
   } else {
     TCWLockGuard lock_guard(calc_upper_trans_version_cache_.lock_);
     if (OB_FAIL(update_cache_if_needed_(skip_calc))) {
+      STORAGE_LOG(WARN, "update cache failed.", KR(ret));
     }
   }
 
@@ -750,6 +792,7 @@ int ObTxDataTable::get_upper_trans_version_before_given_scn(const SCN sstable_en
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "invalid cache for upper trans version calculation. ", KR(ret));
     } else if (OB_FAIL(calc_upper_trans_scn_(sstable_end_scn, upper_trans_version))) {
+      STORAGE_LOG(WARN, "calc upper trans version failed", KR(ret));
     } else {
       FLOG_INFO("get upper trans version finish.",
                 KR(ret),
@@ -775,10 +818,12 @@ int ObTxDataTable::DEBUG_calc_with_all_sstables_(ObTableAccessContext &access_co
   ObStoreRowIterator *row_iter = nullptr;
 
   if (OB_FAIL(ls_tablet_svr_->get_tablet(tablet_id_, tablet_handle))) {
+    STORAGE_LOG(WARN, "get tablet from ls tablet service failed.", KR(ret));
   } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid tablet handle", KR(ret), K(tablet_handle), K(tablet_id_));
   } else if (OB_FAIL(tablet_handle.get_obj()->fetch_table_store(table_store_wrapper))) {
+    LOG_WARN("fail to fetch table store", K(ret));
   } else {
     const ObSSTableArray &sstables = table_store_wrapper.get_member()->get_minor_sstables();
     blocksstable::ObDatumRange whole_range;
@@ -787,11 +832,14 @@ int ObTxDataTable::DEBUG_calc_with_all_sstables_(ObTableAccessContext &access_co
     for (int i = 0; OB_SUCC(ret) && i < sstables.count(); i++) {
       if (OB_FAIL(
             sstables[i]->scan(read_schema_.iter_param_, access_context, whole_range, row_iter))) {
+        STORAGE_LOG(WARN, "scan tx data sstable failed.", KR(ret), KPC(sstables[i]));
       } else if (OB_ISNULL(row_iter)) {
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(ERROR, "row iter is unexpected nullptr", KR(ret), KPC(sstables[i]));
       } else if (OB_FAIL(
                    DEBUG_calc_with_row_iter_(row_iter, sstable_end_scn, tmp_upper_trans_version))) {
+        STORAGE_LOG(WARN, "calculation upper trans version with row iter failed", KR(ret),
+                    KPC(sstables[i]));
       } else if (OB_NOT_NULL(row_iter)) {
         row_iter->~ObStoreRowIterator();
         row_iter = nullptr;
@@ -824,6 +872,7 @@ int ObTxDataTable::DEBUG_calc_with_row_iter_(ObStoreRowIterator *row_iter,
       const ObString &str = row->storage_datums_[TX_DATA_VAL_COLUMN].get_string();
 
       if (OB_FAIL(tx_data.deserialize(str.ptr(), str.length(), pos, *tx_data_allocator_))) {
+        STORAGE_LOG(WARN, "deserialize tx data from store row fail.", KR(ret), K(*row), KPHEX(str.ptr(), str.length()));
       } else if (tx_data.start_scn_ <= sstable_end_scn
                  && tx_data.commit_version_ > tmp_upper_trans_version) {
         // FLOG_INFO("update tmp upper trans version", K(tmp_upper_trans_version), K(tx_data));
@@ -883,6 +932,14 @@ bool ObTxDataTable::skip_this_sstable_end_scn_(const SCN &sstable_end_scn)
                 K(effective_scn),
                 K(min_start_scn_in_tx_data_memtable));
   } else {
+    STORAGE_LOG(TRACE,
+                "do calculate upper trans version.",
+                K(need_skip),
+                K(sstable_end_scn),
+                K(max_decided_scn),
+                K(min_start_scn_in_ctx),
+                K(effective_scn),
+                K(min_start_scn_in_tx_data_memtable));
   }
 
   return need_skip;
@@ -900,8 +957,16 @@ int ObTxDataTable::check_min_start_in_ctx_(const SCN &sstable_end_scn,
 
   if (OB_FAIL(ls_->get_uncommitted_tx_min_start_scn(min_start_scn, effective_scn))) {
     need_skip = true;
+    STORAGE_LOG(DEBUG, "get uncommited tx min_start_scn failed", KR(ret), K(sstable_end_scn), K(max_decided_scn));
   } else if (min_start_scn <= sstable_end_scn || max_decided_scn <= effective_scn) {
     need_skip = true;
+    STORAGE_LOG(DEBUG,
+                "skip calculate upper_trans_version",
+                K(sstable_end_scn),
+                K(max_decided_scn),
+                K(min_start_scn),
+                K(effective_scn),
+                K(need_skip));
   } else {
     // there is no ctx whose start_scn less than sstable_end_scn
   }
@@ -940,6 +1005,7 @@ int ObTxDataTable::check_min_start_in_tx_data_(const SCN &sstable_end_scn,
       } else if (sstable_end_scn >= min_start_scn_in_tx_data_memtable) {
         // there is a min_start_scn in tx_data_memtable less than sstable_end_scn, skip this calculation
         need_skip = true;
+        STORAGE_LOG(DEBUG, "skip calculate upper_trans_version", K(ret), K(sstable_end_scn), KPC(tx_data_memtable));
         break;
       }
     }
@@ -963,7 +1029,9 @@ int ObTxDataTable::update_cache_if_needed_(bool &skip_calc)
   ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper;
 
   if (OB_FAIL(ls_tablet_svr_->get_tablet(LS_TX_DATA_TABLET, tablet_handle))) {
+    STORAGE_LOG(WARN, "get tablet from ls tablet service failed.", KR(ret));
   } else if (OB_FAIL(tablet_handle.get_obj()->fetch_table_store(table_store_wrapper))) {
+    LOG_WARN("fail to fetch table store", K(ret));
   } else {
     ObITable *table =table_store_wrapper.get_member()->get_minor_sstables().get_boundary_table(true /*is_last*/);
 
@@ -988,10 +1056,12 @@ int ObTxDataTable::update_cache_if_needed_(bool &skip_calc)
 int ObTxDataTable::update_calc_upper_trans_version_cache_(ObITable *table)
 {
   int ret = OB_SUCCESS;
+  STORAGE_LOG(DEBUG, "update calc upper trans version cache once.");
   const ObTableIterParam &iter_param = read_schema_.iter_param_;
   ObTabletHandle tablet_handle;
 
   if (OB_FAIL(ls_tablet_svr_->get_tablet(tablet_id_, tablet_handle))) {
+    STORAGE_LOG(WARN, "get tablet from ls tablet service fail.", KR(ret), KP(this), K(tablet_id_));
   } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid tablet handle", KR(ret), K(tablet_handle), K(tablet_id_));
@@ -1000,11 +1070,14 @@ int ObTxDataTable::update_calc_upper_trans_version_cache_(ObITable *table)
     ObSSTable *sstable = static_cast<ObSSTable *>(table);
     if (sstable->is_loaded()) {
     } else if (OB_FAIL(ObCacheSSTableHelper::load_sstable(sstable->get_addr(), sstable_handle))) {
+      STORAGE_LOG(WARN, "fail to load sstable", K(ret), KPC(sstable));
     } else if (OB_FAIL(sstable_handle.get_sstable(sstable))) {
+      STORAGE_LOG(WARN, "fail to get sstable", K(ret), K(sstable_handle));
     }
     if (OB_SUCC(ret)) {
       ObCommitVersionsGetter getter(iter_param, sstable);
       if (OB_FAIL(getter.get_next_row(calc_upper_trans_version_cache_.commit_versions_))) {
+        STORAGE_LOG(WARN, "update calc_upper_trans_trans_version_cache failed.", KR(ret), KPC(sstable));
       } else {
         calc_upper_trans_version_cache_.is_inited_ = true;
         calc_upper_trans_version_cache_.cache_version_ = table->get_end_scn();
@@ -1097,15 +1170,18 @@ int ObTxDataTable::get_start_tx_scn(SCN &start_tx_scn)
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "tx data table is not init", KR(ret), KPC(this));
   } else if (OB_FAIL(ls_tablet_svr_->get_tablet(tablet_id_, tablet_handle))) {
+    STORAGE_LOG(WARN, "get tablet from ls tablet service failed.", KR(ret));
   } else if (OB_ISNULL(tablet = tablet_handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(ERROR, "tablet is nullptr.", KR(ret), KP(this), K(tablet_id_));
   } else if (OB_FAIL(tablet->fetch_table_store(table_store_wrapper))) {
+    LOG_WARN("fail to fetch table store", K(ret));
   } else if (OB_ISNULL(oldest_minor_sstable = static_cast<ObSSTable *>(
       table_store_wrapper.get_member()->get_minor_sstables().get_boundary_table(false /*is_last*/)))) {
     start_tx_scn.set_max();
     STORAGE_LOG(INFO, "this logstream do not have tx data sstable", K(start_tx_scn), KPC(tablet));
   } else if (OB_FAIL(oldest_minor_sstable->get_meta(meta_handle))) {
+    LOG_WARN("fail to get sstable meta", K(ret));
   } else if (FALSE_IT(start_tx_scn = meta_handle.get_sstable_meta().get_filled_tx_scn())) {
   } else if (start_tx_scn.is_max()) {
     ret = OB_ERR_UNEXPECTED;
@@ -1134,8 +1210,10 @@ int ObTxDataTable::dump_single_tx_data_2_text(const int64_t tx_id_int, FILE *fd)
     STORAGE_LOG(WARN, "tx data table is not init.", KR(ret), KP(this), K(tx_id));
   } else if (OB_SUCC(dump_tx_data_in_memtable_2_text_(tx_id, fd))) {
     // successfully do check function in memtable, check done
+    STORAGE_LOG(DEBUG, "tx data table check with tx memtable data succeed", K(tx_id));
   } else if (OB_TRANS_CTX_NOT_EXIST == ret && OB_SUCC(dump_tx_data_in_sstable_2_text_(tx_id, fd))) {
     // successfully do check function in sstable
+    STORAGE_LOG(DEBUG, "tx data table check with tx sstable data succeed", K(tx_id));
   } else {
     STORAGE_LOG(WARN, "check something in tx data fail.", KR(ret), K(tx_id), KP(this),
                 K(tablet_id_));
@@ -1148,6 +1226,7 @@ int ObTxDataTable::dump_tx_data_in_memtable_2_text_(const ObTransID tx_id, FILE 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(update_memtables_cache())) {
+    STORAGE_LOG(WARN, "get all memtables fail.", KR(ret), K(tx_id));
   } else {
     ObTableHandleV2 src_memtable_handle;
     ObTxDataGuard tx_data_guard;
@@ -1155,6 +1234,7 @@ int ObTxDataTable::dump_tx_data_in_memtable_2_text_(const ObTransID tx_id, FILE 
     bool find = false;
 
     if (OB_FAIL(get_tx_data_in_memtables_cache_(tx_id, src_memtable_handle, tx_data_guard, find))) {
+      STORAGE_LOG(INFO, "get tx data in memtables cache failed.", KR(ret), K(tx_id));
     } else if (find) {
       fprintf(fd, "********** Tx Data MemTable ***********\n\n");
       tx_data_guard.tx_data()->dump_2_text(fd);
@@ -1174,6 +1254,7 @@ int ObTxDataTable::dump_tx_data_in_sstable_2_text_(const ObTransID tx_id, FILE *
   SCN unused_scn;
 
   if (OB_FAIL(get_tx_data_in_sstable_(tx_id, tx_data, unused_scn))) {
+    STORAGE_LOG(WARN, "get tx data from sstable failed.", KR(ret), K(tx_id));
   } else {
     fprintf(fd, "********** Tx Data SSTable ***********\n\n");
     tx_data.dump_2_text(fd);
@@ -1226,10 +1307,12 @@ int ObTxDataTable::get_sstable_recycle_scn(share::SCN &recycle_scn)
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "tx data table is not init.", KR(ret), KP(this));
   } else if (OB_FAIL(ls_tablet_svr_->get_tablet(tablet_id_, tablet_handle))) {
+    STORAGE_LOG(WARN, "get tablet from ls tablet service fail.", KR(ret), KP(this), K(tablet_id_));
   } else if (OB_ISNULL(tablet = tablet_handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet should not be NULL", K(ret), KP(tablet));
   } else if (OB_FAIL(tablet->get_all_minor_sstables(iter))) {
+    LOG_WARN("failed to get all minor sstables", K(ret), KPC(tablet));
   } else if (0 == iter.count()) {
     recycle_scn.set_min();
   } else {

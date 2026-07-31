@@ -87,6 +87,7 @@ OB_DEF_DESERIALIZE(ObRFRangeFilterMsg)
               query_range_info_,
               build_obj_metas_);
   if (OB_FAIL(adjust_cell_size())) {
+    LOG_WARN("fail do adjust cell size", K(ret));
   }
   return ret;
 }
@@ -120,6 +121,7 @@ OB_DEF_SERIALIZE(ObRFInFilterMsg)
   if (is_active_) {
     for (int i = 0; OB_SUCC(ret) && i < serial_rows_.count(); ++i) {
       if (OB_FAIL(serial_rows_.at(i)->serialize(buf, buf_len, pos))) {
+        LOG_WARN("fail to serialize rows", K(ret));
       }
     }
   }
@@ -144,10 +146,13 @@ OB_DEF_DESERIALIZE(ObRFInFilterMsg)
     void *array_ptr = nullptr;
     int64_t buckets_cnt = max(row_cnt, 1);
     if (OB_FAIL(serial_rows_.reserve(row_cnt))) {
+      LOG_WARN("fail to init row cnt", K(ret));
     } else if (OB_FAIL(rows_set_.create(buckets_cnt * 2,
         "RFDEInFilter",
         "RFDEInFilter"))) {
+      LOG_WARN("fail to init in hash set", K(ret));
     } else if (OB_FAIL(cur_row_.prepare_allocate(col_cnt_))) {
+      LOG_WARN("fail to prepare allocate col cnt datum", K(ret));
     }
     for (int i = 0; OB_SUCC(ret) && i < row_cnt; ++i) {
       new_row = nullptr;
@@ -158,11 +163,14 @@ OB_DEF_DESERIALIZE(ObRFInFilterMsg)
       } else {
         new_row = new(array_ptr) ObFixedArray<ObDatum, ObIAllocator>(allocator_);
         if (OB_FAIL(new_row->deserialize(buf, data_len, pos))) {
+          LOG_WARN("fail to serialize rows", K(ret));
         } else if (OB_FAIL(serial_rows_.push_back(new_row))) {
+          LOG_WARN("fail to push back new row", K(ret));
         } else {
           ObRFInFilterNode node(
               &cmp_funcs_, &hash_funcs_for_insert_, new_row, datum_access_ctx_);
           if (OB_FAIL(rows_set_.set_refactored(node))) {
+            LOG_WARN("fail to insert in filter node", K(ret));
           }
         }
       }
@@ -211,7 +219,9 @@ int ObRFBloomFilterMsg::deep_copy_msg(ObP2PDatahubMsgBase *&new_msg_ptr)
   ObRFBloomFilterMsg *bf_msg = nullptr;
   ObMemAttr attr("PxBfMsg");
   if (OB_FAIL(PX_P2P_DH.alloc_msg<ObRFBloomFilterMsg>(attr, bf_msg))) {
+    LOG_WARN("fail to alloc rf msg", K(ret));
   } else if (OB_FAIL(bf_msg->assign(*this))) {
+    LOG_WARN("fail to assign rf msg", K(ret));
   } else {
     new_msg_ptr = bf_msg;
   }
@@ -228,7 +238,9 @@ int ObRFBloomFilterMsg::assign(const ObP2PDatahubMsgBase &msg)
   const ObRFBloomFilterMsg &other_msg = static_cast<const ObRFBloomFilterMsg &>(msg);
   use_hash_join_seed_ = other_msg.use_hash_join_seed_;
   if (OB_FAIL(ObP2PDatahubMsgBase::assign(msg))) {
+    LOG_WARN("failed to assign base data", K(ret));
   } else if (OB_FAIL(bloom_filter_.assign(other_msg.bloom_filter_))) {
+    LOG_WARN("fail to assign bf msg", K(ret));
   }
   return ret;
 }
@@ -240,6 +252,7 @@ int ObRFBloomFilterMsg::merge(ObP2PDatahubMsgBase &msg)
   ObRFBloomFilterMsg &bf_msg = static_cast<ObRFBloomFilterMsg &>(msg);
   if (bf_msg.is_empty_) {
   } else if (OB_FAIL(bloom_filter_.merge_filter(&bf_msg.bloom_filter_))) {
+    LOG_WARN("fail to merge bloom filter msg", K(ret));
   } else {
     is_empty_ = false;
   }
@@ -284,19 +297,23 @@ int ObRFBloomFilterMsg::might_contain(const ObExpr &expr,
     filter_ctx.filter_count_++;
     filter_ctx.check_count_++;
   } else if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
+    LOG_WARN("failed to get datum access context", K(ret));
   } else {
     for (int i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
       if (OB_FAIL(expr.args_[i]->eval(ctx, datum))) {
+        LOG_WARN("failed to eval datum", K(ret));
       } else {
         hash_func.hash_func_ = filter_ctx.hash_funcs_.at(i).hash_func_;
         if (OB_FAIL(hash_func.hash_func_(
                 *datum, hash_val, hash_val, access_ctx))) {
+          LOG_WARN("fail to calc hash val", K(ret));
         }
       }
     }
     if (OB_SUCC(ret)) {
       bool is_match = true;
       if (OB_FAIL(bloom_filter_.might_contain(hash_val, is_match))) {
+        LOG_WARN("fail to check filter might contain value", K(ret), K(hash_val));
       } else {
         if (!is_match) {
           filter_ctx.filter_count_++;
@@ -335,6 +352,7 @@ int ObRFBloomFilterMsg::might_contain_batch(
       ++total_count;
       return OB_SUCCESS;
     }))) {
+      LOG_WARN("fail to do for each operation", K(ret));
     }
     if (OB_SUCC(ret)) {
       eval_flags.set_all(true);
@@ -343,10 +361,12 @@ int ObRFBloomFilterMsg::might_contain_batch(
       filter_ctx.total_count_ += total_count;
     }
   } else if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
+    LOG_WARN("failed to get datum access context", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
       ObExpr *e = expr.args_[i];
       if (OB_FAIL(e->eval_batch(ctx, skip, batch_size))) {
+        LOG_WARN("evaluate batch failed", K(ret), K(*e));
       } else {
         const bool is_batch_seed = (i > 0);
         ObBatchDatumHashFunc hash_func_batch = filter_ctx.hash_funcs_.at(i).batch_hash_func_;
@@ -373,6 +393,7 @@ int ObRFBloomFilterMsg::might_contain_batch(
           }
           return tmp_ret;
         }))) {
+      LOG_WARN("failed to process prefetch block", K(ret));
     } else {
       eval_flags.set_all(true);
       filter_ctx.filter_count_ += filter_count;
@@ -397,12 +418,14 @@ int ObRFBloomFilterMsg::insert_by_row_batch(
   if (child_brs->size_ > 0) {
     uint64_t seed = ObExprJoinFilter::JOIN_FILTER_SEED;
     if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
+      LOG_WARN("failed to get datum access context", K(ret));
     } else if (OB_NOT_NULL(calc_tablet_id_expr)) {
       if (OB_ISNULL(calc_tablet_id_expr) || hash_funcs.count() != 1) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected part id expr", K(ret));
       } else if (OB_FAIL(calc_tablet_id_expr->eval_batch(eval_ctx,
         *(child_brs->skip_), child_brs->size_))) {
+        LOG_WARN("failed to eval", K(ret));
       } else {
         ObBatchDatumHashFunc hash_func_batch = hash_funcs.at(0).batch_hash_func_;
         hash_func_batch(batch_hash_values,
@@ -417,6 +440,7 @@ int ObRFBloomFilterMsg::insert_by_row_batch(
       for (int64_t i = 0; OB_SUCC(ret) && i < expr_array.count(); ++i) {
         ObExpr *expr = expr_array.at(i); // expr ptr check in cg, not check here
         if (OB_FAIL(expr->eval_batch(eval_ctx, *(child_brs->skip_), child_brs->size_))) {
+          LOG_WARN("eval failed", K(ret));
         } else {
           ObBatchDatumHashFunc hash_func_batch = hash_funcs.at(i).batch_hash_func_;
           const bool is_batch_seed = (i > 0);
@@ -440,6 +464,7 @@ int ObRFBloomFilterMsg::insert_by_row_batch(
         if (child_brs->skip_->at(i)) {
           continue;
         } else if (OB_FAIL(bloom_filter_.put(batch_hash_values[i]))) {
+          LOG_WARN("fail to put  hash value to px bloom filter", K(ret));
         } else if (is_empty_) {
           is_empty_ = false;
         }
@@ -460,9 +485,11 @@ int ObRFBloomFilterMsg::insert_by_row(
   if (OB_FAIL(calc_hash_value(expr_array,
     hash_funcs, calc_tablet_id_expr,
     eval_ctx, hash_value, ignore))) {
+    LOG_WARN("failed to calc hash value", K(ret));
   } else if (ignore) {
       /*do nothing*/
   } else if (OB_FAIL(bloom_filter_.put(hash_value))) {
+    LOG_WARN("fail to put  hash value to px bloom filter", K(ret));
   } else if (is_empty_) {
     is_empty_ = false;
   }
@@ -482,22 +509,27 @@ int ObRFBloomFilterMsg::calc_hash_value(
   ObDatum *datum = nullptr;
   const ObDatumAccessContext *access_ctx = nullptr;
   if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
+    LOG_WARN("failed to get datum access context", K(ret));
   } else if (OB_NOT_NULL(calc_tablet_id_expr)) {
     int64_t partition_id = 0;
     if (hash_funcs.count() != 1) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected part id expr", K(ret));
     } else if (OB_FAIL(calc_tablet_id_expr->eval(eval_ctx, datum))) {
+      LOG_WARN("failed to eval datum", K(ret));
     } else if (ObExprCalcPartitionId::NONE_PARTITION_ID == (partition_id = datum->get_int())) {
       ignore = true;
     } else if (OB_FAIL(
                    hash_funcs.at(0).hash_func_(*datum, hash_value, hash_value, access_ctx))) {
+      LOG_WARN("failed to do hash funcs", K(ret));
     }
   } else {
     for (int64_t idx = 0; OB_SUCC(ret) && idx < expr_array.count() ; ++idx) {
       if (OB_FAIL(expr_array.at(idx)->eval(eval_ctx, datum))) {
+        LOG_WARN("failed to eval datum", K(ret));
       } else if (OB_FAIL(
                      hash_funcs.at(idx).hash_func_(*datum, hash_value, hash_value, access_ctx))) {
+        LOG_WARN("failed to do hash funcs", K(ret));
       }
     }
   }
@@ -525,8 +557,11 @@ int ObRFRangeFilterMsg::reuse()
   upper_bounds_.reset();
   cells_size_.reset();
   if (OB_FAIL(lower_bounds_.prepare_allocate(cmp_funcs_.count()))) {
+    LOG_WARN("fail to prepare allocate col cnt", K(ret));
   } else if (OB_FAIL(upper_bounds_.prepare_allocate(cmp_funcs_.count()))) {
+    LOG_WARN("fail to prepare allocate col cnt", K(ret));
   } else if (OB_FAIL(cells_size_.prepare_allocate(cmp_funcs_.count()))) {
+    LOG_WARN("fail to prepare allocate col cnt", K(ret));
   }
   (void)reuse_query_range();
   return ret;
@@ -537,14 +572,23 @@ int ObRFRangeFilterMsg::assign(const ObP2PDatahubMsgBase &msg)
   int ret = OB_SUCCESS;
   const ObRFRangeFilterMsg &other_msg = static_cast<const ObRFRangeFilterMsg &>(msg);
   if (OB_FAIL(ObP2PDatahubMsgBase::assign(msg))) {
+    LOG_WARN("failed to assign base data", K(ret));
   } else if (OB_FAIL(lower_bounds_.assign(other_msg.lower_bounds_))) {
+    LOG_WARN("fail to assign lower bounds", K(ret));
   } else if (OB_FAIL(upper_bounds_.assign(other_msg.upper_bounds_))) {
+    LOG_WARN("fail to assign upper bounds", K(ret));
   } else if (OB_FAIL(cmp_funcs_.assign(other_msg.cmp_funcs_))) {
+    LOG_WARN("failed to assign cmp funcs", K(ret));
   } else if (OB_FAIL(build_obj_metas_.assign(other_msg.build_obj_metas_))) {
+    LOG_WARN("failed to assign build obj_metas", K(ret));
   } else if (OB_FAIL(need_null_cmp_flags_.assign(other_msg.need_null_cmp_flags_))) {
+    LOG_WARN("failed to assign cmp flags", K(ret));
   } else if (OB_FAIL(cells_size_.assign(other_msg.cells_size_))) {
+    LOG_WARN("failed to assign cell size", K(ret));
   } else if (OB_FAIL(adjust_cell_size())) {
+    LOG_WARN("fail to adjust cell size", K(ret));
   } else if (OB_FAIL(query_range_info_.assign(other_msg.query_range_info_))) {
+    LOG_WARN("fail to assign query_range_info_", K(ret));
   } else {
     datum_access_ctx_ = other_msg.datum_access_ctx_;
   }
@@ -557,13 +601,17 @@ int ObRFRangeFilterMsg::deep_copy_msg(ObP2PDatahubMsgBase *&new_msg_ptr)
   ObRFRangeFilterMsg *rf_msg = nullptr;
   ObMemAttr attr("PxRangeMsg");
   if (OB_FAIL(PX_P2P_DH.alloc_msg<ObRFRangeFilterMsg>(attr, rf_msg))) {
+    LOG_WARN("fail to alloc rf msg", K(ret));
   } else if (OB_FAIL(rf_msg->assign(*this))) {
+    LOG_WARN("fail to assign rf msg", K(ret));
   } else {
     for (int i = 0; i < rf_msg->lower_bounds_.count() && OB_SUCC(ret); ++i) {
       if (OB_FAIL(rf_msg->lower_bounds_.at(i).deep_copy(lower_bounds_.at(i),
           rf_msg->get_allocator()))) {
+        LOG_WARN("fail to deep copy rf msg", K(ret));
       } else if (OB_FAIL(rf_msg->upper_bounds_.at(i).deep_copy(upper_bounds_.at(i),
           rf_msg->get_allocator()))) {
+        LOG_WARN("fail to deep copy rf msg", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -584,6 +632,7 @@ int ObRFRangeFilterMsg::merge(ObP2PDatahubMsgBase &msg)
   CK(range_msg.lower_bounds_.count() == lower_bounds_.count() &&
      range_msg.upper_bounds_.count() == upper_bounds_.count());
   if (OB_FAIL(ret)) {
+    LOG_WARN("unexpected bounds count", K(lower_bounds_.count()), K(range_msg.lower_bounds_.count()));
   } else if (range_msg.is_empty_) {
     /*do nothing*/
   } else {
@@ -592,7 +641,9 @@ int ObRFRangeFilterMsg::merge(ObP2PDatahubMsgBase &msg)
       datum_access_ctx_ = range_msg.datum_access_ctx_;
     }
     if (OB_FAIL(get_min(range_msg.lower_bounds_, datum_access_ctx_))) {
+      LOG_WARN("fail to get min lower bounds", K(ret));
     } else if (OB_FAIL(get_max(range_msg.upper_bounds_, datum_access_ctx_))) {
+      LOG_WARN("fail to get max lower bounds", K(ret));
     } else if (is_empty_) {
       is_empty_ = false;
     }
@@ -609,6 +660,7 @@ int ObRFRangeFilterMsg::get_min(
     // null value is also suitable
     if (OB_FAIL(get_min(cmp_funcs_.at(i), lower_bounds_.at(i),
         vals.at(i), cells_size_.at(i).min_datum_buf_size_, access_ctx))) {
+      LOG_WARN("fail to compare value", K(ret));
     }
   }
   return ret;
@@ -623,6 +675,7 @@ int ObRFRangeFilterMsg::get_max(
     // null value is also suitable
     if (OB_FAIL(get_max(cmp_funcs_.at(i), upper_bounds_.at(i),
         vals.at(i), cells_size_.at(i).max_datum_buf_size_, access_ctx))) {
+      LOG_WARN("fail to compare value", K(ret));
     }
   }
   return ret;
@@ -644,10 +697,13 @@ int ObRFRangeFilterMsg::get_min(
   // l.len=0 and null_=false, it should not be covered by r directly
   if (is_empty_) {
     if (OB_FAIL(dynamic_copy_cell(r, l, cell_size))) {
+      LOG_WARN("fail to deep copy datum");
     }
   } else if (OB_FAIL(func.cmp_func_(l, r, cmp, access_ctx))) {
+    LOG_WARN("fail to cmp", K(ret));
   } else if (cmp > 0) {
     if (OB_FAIL(dynamic_copy_cell(r, l, cell_size))) {
+      LOG_WARN("fail to deep copy datum");
     }
   }
   return ret;
@@ -662,6 +718,7 @@ int ObRFRangeFilterMsg::prepare_query_range()
   } else if (is_empty_) {
     // make empty range
     if (OB_FAIL(fill_empty_query_range(query_range_info_, query_range_allocator_, query_range_))) {
+      LOG_WARN("failed to fill_empty_query_range");
     } else {
       is_query_range_ready_ = true;
     }
@@ -709,6 +766,7 @@ int ObRFRangeFilterMsg::prepare_query_range()
       is_query_range_ready_ = true;
     }
   }
+  LOG_TRACE("range filter prepare query range", K(ret), K(is_query_range_ready_), K(query_range_), K(query_range_info_), K(is_empty_));
   return ret;
 }
 
@@ -729,10 +787,13 @@ int ObRFRangeFilterMsg::try_extract_query_range(bool &has_extract, ObIArray<ObNe
     ranges.reset();
     if (need_deep_copy) {
       if (OB_FAIL(ranges.prepare_allocate(1))) {
+        LOG_WARN("failed to prepare_allocate");
       } else if (OB_FAIL(deep_copy_range(*allocator, query_range_, ranges.at(0)))) {
+        LOG_WARN("failed to deep_copy_range");
       }
     } else {
       if (OB_FAIL(ranges.push_back(query_range_))) {
+        LOG_WARN("failed to push_back range");
       }
     }
     if (OB_SUCC(ret)) {
@@ -794,10 +855,13 @@ int ObRFRangeFilterMsg::get_max(
   int cmp = 0;
   if (is_empty_) {
     if (OB_FAIL(dynamic_copy_cell(r, l, cell_size))) {
+      LOG_WARN("fail to deep copy datum");
     }
   } else if (OB_FAIL(func.cmp_func_(l, r, cmp, access_ctx))) {
+    LOG_WARN("fail to cmp value", K(ret));
   } else if (cmp < 0) {
     if (OB_FAIL(dynamic_copy_cell(r, l, cell_size))) {
+      LOG_WARN("fail to deep copy datum");
     }
   }
   return ret;
@@ -813,16 +877,20 @@ int ObRFRangeFilterMsg::insert_by_row(
   UNUSED(hash_funcs);
   ObDatum *datum = nullptr;
   if (OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx_))) {
+    LOG_WARN("failed to get datum access context", K(ret));
   } else if (is_empty_) {
     bool ignore_null = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < expr_array.count(); ++i) {
       ObExpr *expr = expr_array.at(i);
       if (OB_FAIL(expr->eval(eval_ctx, datum))) {
+        LOG_WARN("fail to eval expr", K(ret));
       } else if (datum->is_null() && !need_null_cmp_flags_.at(i)) {
         ignore_null = true;
         break;
       } else if (OB_FAIL(dynamic_copy_cell(*datum, lower_bounds_.at(i), cells_size_.at(i).min_datum_buf_size_))) {
+        LOG_WARN("fail to deep copy datum", K(ret));
       } else if (OB_FAIL(dynamic_copy_cell(*datum, upper_bounds_.at(i), cells_size_.at(i).max_datum_buf_size_))) {
+        LOG_WARN("fail to deep copy datum", K(ret));
       }
     }
     if (!ignore_null) {
@@ -832,13 +900,16 @@ int ObRFRangeFilterMsg::insert_by_row(
     for (int64_t i = 0; OB_SUCC(ret) && i < expr_array.count(); ++i) {
       ObExpr *expr = expr_array.at(i);
       if (OB_FAIL(expr->eval(eval_ctx, datum))) {
+        LOG_WARN("fail to eval expr", K(ret));
       } else if (datum->is_null() && !need_null_cmp_flags_.at(i)) {
         /*do nothing*/
         break;
       } else if (OB_FAIL(get_min(cmp_funcs_.at(i), lower_bounds_.at(i), *datum,
                                  cells_size_.at(i).min_datum_buf_size_, datum_access_ctx_))) {
+        LOG_WARN("failed to compare value", K(ret));
       } else if (OB_FAIL(get_max(cmp_funcs_.at(i), upper_bounds_.at(i), *datum,
                                  cells_size_.at(i).max_datum_buf_size_, datum_access_ctx_))) {
+        LOG_WARN("failed to compare value", K(ret));
       }
     }
   }
@@ -866,6 +937,7 @@ int ObRFRangeFilterMsg::insert_by_row_batch(
         batch_info_guard.set_batch_idx(idx);
         if (OB_FAIL(insert_by_row(expr_array, hash_funcs,
             calc_tablet_id_expr, eval_ctx))) {
+          LOG_WARN("fail to insert by row", K(ret));
         }
       }
     }
@@ -889,20 +961,24 @@ int ObRFRangeFilterMsg::might_contain(const ObExpr &expr,
     filter_ctx.filter_count_++;
     filter_ctx.check_count_++;
   } else if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx_))) {
+    LOG_WARN("failed to get datum access context", K(ret));
   } else {
     for (int i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
       if (OB_FAIL(expr.args_[i]->eval(ctx, datum))) {
+        LOG_WARN("failed to eval datum", K(ret));
       } else {
         cmp_min = 0;
         cmp_max = 0;
         cmp_func.cmp_func_ = filter_ctx.cmp_funcs_.at(i).cmp_func_;
         if (OB_FAIL(cmp_func.cmp_func_(
                 *datum, lower_bounds_.at(i), cmp_min, datum_access_ctx_))) {
+          LOG_WARN("fail to compare value", K(ret));
         } else if (cmp_min < 0) {
           is_match = false;
           break;
         } else if (OB_FAIL(cmp_func.cmp_func_(
                        *datum, upper_bounds_.at(i), cmp_max, datum_access_ctx_))) {
+          LOG_WARN("fail to compare value", K(ret));
         } else if (cmp_max > 0) {
           is_match = false;
           break;
@@ -932,6 +1008,7 @@ int ObRFRangeFilterMsg::do_might_contain_batch(const ObExpr &expr,
   ObDatum *results = expr.locate_batch_datums(ctx);
   for (int idx = 0; OB_SUCC(ret) && idx < expr.arg_cnt_; ++idx) {
     if (OB_FAIL(expr.args_[idx]->eval_batch(ctx, skip, batch_size))) {
+      LOG_WARN("eval failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -951,12 +1028,14 @@ int ObRFRangeFilterMsg::do_might_contain_batch(const ObExpr &expr,
         datum = &expr.args_[arg_i]->locate_expr_datum(ctx, batch_i);
         if (OB_FAIL(filter_ctx.cmp_funcs_.at(arg_i).cmp_func_(
                 *datum, lower_bounds_.at(arg_i), cmp_min, datum_access_ctx_))) {
+          LOG_WARN("fail to compare value", K(ret));
         } else if (cmp_min < 0) {
           filter_count++;
           is_match = false;
           break;
         } else if (OB_FAIL(filter_ctx.cmp_funcs_.at(arg_i).cmp_func_(
                        *datum, upper_bounds_.at(arg_i), cmp_max, datum_access_ctx_))) {
+          LOG_WARN("fail to compare value", K(ret));
         } else if (cmp_max > 0) {
           filter_count++;
           is_match = false;
@@ -992,7 +1071,9 @@ int ObRFRangeFilterMsg::might_contain_batch(
       results[i].set_int(0);
     }
   } else if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx_))) {
+    LOG_WARN("failed to get datum access context", K(ret));
   } else if (OB_FAIL(do_might_contain_batch(expr, ctx, skip, batch_size, filter_ctx))) {
+    LOG_WARN("failed to do_might_contain_batch");
   }
   if (OB_SUCC(ret)) {
     eval_flags.set_all(batch_size);
@@ -1011,7 +1092,9 @@ int ObRFRangeFilterMsg::prepare_storage_white_filter_data(ObDynamicFilterExecuto
     dynamic_filter.set_filter_action(DynamicFilterAction::FILTER_ALL);
     is_data_prepared = true;
   } else if (OB_FAIL(params.push_back(lower_bounds_.at(col_idx)))) {
+    LOG_WARN("failed to push back lower_bound");
   } else if (OB_FAIL(params.push_back(upper_bounds_.at(col_idx)))) {
+    LOG_WARN("failed to push back upper_bound");
   } else {
     dynamic_filter.set_filter_val_meta(build_obj_metas_.at(col_idx));
     is_data_prepared = true;
@@ -1028,12 +1111,19 @@ int ObRFInFilterMsg::assign(const ObP2PDatahubMsgBase &msg)
   int ret = OB_SUCCESS;
   const ObRFInFilterMsg &other_msg = static_cast<const ObRFInFilterMsg &>(msg);
   if (OB_FAIL(ObP2PDatahubMsgBase::assign(msg))) {
+    LOG_WARN("failed to assign base data", K(ret));
   } else if (OB_FAIL(cmp_funcs_.assign(other_msg.cmp_funcs_))) {
+    LOG_WARN("fail to assign bf msg", K(ret));
   } else if (OB_FAIL(hash_funcs_for_insert_.assign(other_msg.hash_funcs_for_insert_))) {
+    LOG_WARN("fail to assign bf msg", K(ret));
   } else if (OB_FAIL(cur_row_.assign(other_msg.cur_row_))) {
+    LOG_WARN("failed to assign filter indexes", K(ret));
   } else if (OB_FAIL(need_null_cmp_flags_.assign(other_msg.need_null_cmp_flags_))) {
+    LOG_WARN("failed to assign filter indexes", K(ret));
   } else if (OB_FAIL(query_range_info_.assign(other_msg.query_range_info_))) {
+    LOG_WARN("fail to assign query_range_info_", K(ret));
   } else if (OB_FAIL(build_obj_metas_.assign(other_msg.build_obj_metas_))) {
+    LOG_WARN("failed to assign build obj_metas", K(ret));
   } else {
     col_cnt_ = other_msg.col_cnt_;
     max_in_num_ = other_msg.max_in_num_;
@@ -1049,10 +1139,13 @@ int ObRFInFilterMsg::deep_copy_msg(ObP2PDatahubMsgBase *&new_msg_ptr)
   int64_t row_cnt = max(serial_rows_.count(), 1);
   ObMemAttr attr("PxInMsg");
   if (OB_FAIL(PX_P2P_DH.alloc_msg<ObRFInFilterMsg>(attr, in_msg))) {
+    LOG_WARN("fail to alloc rf msg", K(ret));
   } else if (OB_FAIL(in_msg->assign(*this))) {
+    LOG_WARN("fail to assign rf msg", K(ret));
   } else if (OB_FAIL(in_msg->rows_set_.create(row_cnt * 2,
         "RFCPInFilter",
         "RFCPInFilter"))) {
+    LOG_WARN("fail to init in hash set", K(ret));
   } else {
     int64_t row_cnt = serial_rows_.count();
     if (0 == row_cnt) {
@@ -1063,6 +1156,7 @@ int ObRFInFilterMsg::deep_copy_msg(ObP2PDatahubMsgBase *&new_msg_ptr)
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(in_msg->append_row())) {
+            LOG_WARN("fail to append row", K(ret));
           }
         }
       }
@@ -1105,6 +1199,7 @@ int ObRFInFilterMsg::insert_by_row_batch(
         for (int64_t i = 0; OB_SUCC(ret) && i < expr_array.count(); ++i) {
           ObExpr *expr = expr_array.at(i);
           if (OB_FAIL(expr->eval(eval_ctx, datum))) {
+            LOG_WARN("fail to eval expr", K(ret));
           } else if (datum->is_null() && !need_null_cmp_flags_.at(i)) {
             ignore_null_row = true;
             break;
@@ -1114,6 +1209,7 @@ int ObRFInFilterMsg::insert_by_row_batch(
         }
         if (OB_SUCC(ret) && !ignore_null_row) {
           if (OB_FAIL(insert_node())) {
+            LOG_WARN("fail to insert node", K(ret));
           }
         }
       }
@@ -1133,6 +1229,7 @@ int ObRFInFilterMsg::insert_node()
       if (serial_rows_.count() > max_in_num_) {
         is_active_ = false;
       } else if (OB_FAIL(append_row())) {
+        LOG_WARN("fail to append row", K(ret));
       } else if (is_empty_) {
         is_empty_ = false;
       }
@@ -1160,6 +1257,7 @@ int ObRFInFilterMsg::insert_by_row(
     for (int64_t idx = 0; OB_SUCC(ret) && idx < expr_array.count() ; ++idx) {
       datum = nullptr;
       if (OB_FAIL(expr_array.at(idx)->eval(eval_ctx, datum))) {
+        LOG_WARN("failed to eval datum", K(ret));
       } else if (datum->is_null() && !need_null_cmp_flags_.at(idx)) {
         ignore_null_row = true;
         break;
@@ -1169,6 +1267,7 @@ int ObRFInFilterMsg::insert_by_row(
     }
     if (OB_SUCC(ret) && !ignore_null_row) {
       if (OB_FAIL(insert_node())) {
+        LOG_WARN("fail to insert node", K(ret));
       }
     }
   }
@@ -1187,19 +1286,24 @@ int ObRFInFilterMsg::append_row()
   } else {
     new_row = new(array_ptr) ObFixedArray<ObDatum, ObIAllocator>(allocator_);
     if (OB_FAIL(new_row->init(cur_row_.count()))) {
+      LOG_WARN("fail to init cur row", K(ret));
     } else {
       ObDatum datum;
       for (int i = 0; i < cur_row_.count() && OB_SUCC(ret); ++i) {
         if (OB_FAIL(datum.deep_copy(cur_row_.at(i), allocator_))) {
+          LOG_WARN("fail to deep copy datum", K(ret));
         } else if (OB_FAIL(new_row->push_back(datum))) {
+          LOG_WARN("fail to push back new row", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(serial_rows_.push_back(new_row))) {
+          LOG_WARN("fail to push back serial rows", K(ret));
         } else {
           ObRFInFilterNode node(
               &cmp_funcs_, &hash_funcs_for_insert_, new_row, datum_access_ctx_);
           if (OB_FAIL(rows_set_.set_refactored(node))) {
+            LOG_WARN("fail to insert in filter node", K(ret));
           }
         }
       }
@@ -1218,6 +1322,7 @@ int ObRFInFilterMsg::ObRFInFilterNode::hash(uint64_t &hash_ret) const
     for (int i = 0; i < row_->count() && OB_SUCC(ret); ++i) {
       if (OB_FAIL(hash_funcs_->at(i).hash_func_(
               row_->at(i), hash_ret, hash_ret, datum_access_ctx_))) {
+        LOG_WARN("fail to calc hash value", K(ret), K(hash_ret));
       }
     }
   }
@@ -1243,6 +1348,7 @@ bool ObRFInFilterMsg::ObRFInFilterNode::operator==(const ObRFInFilterNode &other
           other.row_->at(i), row_->at(i), cmp_ret, other.datum_access_ctx_);
       if (OB_SUCCESS != tmp_ret || cmp_ret != 0) {
         if (OB_SUCCESS != tmp_ret) {
+          LOG_WARN("fail to compare in-filter node", K(tmp_ret));
         }
         ret = false;
         break;
@@ -1268,6 +1374,7 @@ int ObRFInFilterMsg::merge(ObP2PDatahubMsgBase &msg)
         cur_row_.at(j) = in_msg.serial_rows_.at(i)->at(j);
       }
       if (OB_FAIL(insert_node())) {
+        LOG_WARN("fail to insert node", K(ret));
       }
     }
   }
@@ -1291,15 +1398,18 @@ int ObRFInFilterMsg::might_contain(const ObExpr &expr,
     filter_ctx.filter_count_++;
     filter_ctx.check_count_++;
   } else if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx_))) {
+    LOG_WARN("failed to get datum access context", K(ret));
   } else {
     for (int i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
       if (OB_FAIL(expr.args_[i]->eval(ctx, datum))) {
+        LOG_WARN("failed to eval datum", K(ret));
       } else {
         cur_row.at(i) = *datum;
         ObHashFunc hash_func;
         hash_func.hash_func_ = filter_ctx.hash_funcs_.at(i).hash_func_;
         if (OB_FAIL(hash_func.hash_func_(
                 *datum, hash_val, hash_val, datum_access_ctx_))) {
+          LOG_WARN("fail to calc hash val", K(ret));
         }
       }
     }
@@ -1354,6 +1464,7 @@ int ObRFInFilterMsg::do_might_contain_batch(const ObExpr &expr,
   uint64_t seed = ObExprJoinFilter::JOIN_FILTER_SEED;
   for (int idx = 0; OB_SUCC(ret) && idx < expr.arg_cnt_; ++idx) {
     if (OB_FAIL(expr.args_[idx]->eval_batch(ctx, skip, batch_size))) {
+      LOG_WARN("eval failed", K(ret));
     } else {
       const bool is_batch_seed = (idx > 0);
       ObBatchDatumHashFunc hash_func = filter_ctx.hash_funcs_.at(idx).batch_hash_func_;
@@ -1422,7 +1533,9 @@ int ObRFInFilterMsg::might_contain_batch(
       results[i].set_int(0);
     }
   } else if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx_))) {
+    LOG_WARN("failed to get datum access context", K(ret));
   } else if (OB_FAIL(do_might_contain_batch(expr, ctx, skip, batch_size, filter_ctx))) {
+    LOG_WARN("failed to do_might_contain_batch");
   }
   if (OB_SUCC(ret)) {
     eval_flags.set_all(batch_size);
@@ -1446,6 +1559,7 @@ int ObRFInFilterMsg::prepare_storage_white_filter_data(ObDynamicFilterExecutor &
   } else {
     for (int64_t i = 0; i < serial_rows_.count() && OB_SUCC(ret); ++i) {
       if (OB_FAIL(params.push_back(serial_rows_.at(i)->at(col_idx)))) {
+        LOG_WARN("failed to push back");
       }
     }
     if (OB_SUCC(ret)) {
@@ -1488,7 +1602,9 @@ int ObRFInFilterMsg::prepare_query_ranges()
     // make empty range
     ObNewRange query_range;
     if (OB_FAIL(fill_empty_query_range(query_range_info_, query_range_allocator_, query_range))) {
+      LOG_WARN("failed to fill_empty_query_range");
     } else if (OB_FAIL(query_range_.push_back(query_range))) {
+      LOG_WARN("failed to push back query_range");
     } else {
       is_query_range_ready_ = true;
     }
@@ -1531,21 +1647,28 @@ int ObRFInFilterMsg::process_query_ranges_with_deduplicate()
   const ObIArray<int64_t> &prefix_col_idxs = query_range_info_.prefix_col_idxs_;
 
   if (OB_FAIL(tmp_rows_set.create(rows_set_.size() * 2, "RFInTmpHashSet", "RFInTmpHashSet"))) {
+    LOG_WARN("fail to init in hash set", K(ret));
   } else if (OB_FAIL(hash_func.init(prefix_col_idxs.count()))) {
+    LOG_WARN("failed to init hash func");
   } else if (OB_FAIL(cmp_funcs.init(prefix_col_idxs.count()))) {
+    LOG_WARN("failed to init compare func");
   }
   // reorder compare function and hash function
   for (int64_t j = 0; j < prefix_col_idxs.count() && OB_SUCC(ret); ++j) {
     int64_t col_idx = prefix_col_idxs.at(j);
     if (OB_FAIL(hash_func.push_back(hash_funcs_for_insert_.at(col_idx)))) {
+      LOG_WARN("failed to pushback hash func");
     } else if (OB_FAIL(cmp_funcs.push_back(cmp_funcs_.at(col_idx)))) {
+      LOG_WARN("failed to pushback compare func");
     }
   }
   ObTMArray<ObTMArray<ObDatum>> tmp_rows;
   ObTMArray<int64_t> effective_row_idxs;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(tmp_rows.prepare_allocate(serial_rows_.count()))) {
+    LOG_WARN("failed to prepare_allocate query_range_", K(serial_rows_.count()));
   } else if (OB_FAIL(effective_row_idxs.reserve(serial_rows_.count()))) {
+    LOG_WARN("failed to reserve query_range_", K(serial_rows_.count()));
   }
   for (int64_t row_idx = 0; row_idx < serial_rows_.count() && OB_SUCC(ret); ++row_idx) {
     if (OB_ISNULL(serial_rows_.at(row_idx))) {
@@ -1554,6 +1677,7 @@ int ObRFInFilterMsg::process_query_ranges_with_deduplicate()
     } else {
       ObTMArray<ObDatum> &tmp_row = tmp_rows.at(row_idx);
       if (OB_FAIL(tmp_row.prepare_allocate(prefix_col_idxs.count()))) {
+        LOG_WARN("failed to prepare_allocate tmp_row");
       }
       for (int64_t j = 0; j < prefix_col_idxs.count() && OB_SUCC(ret); ++j) {
         int64_t col_idx = prefix_col_idxs.at(j);
@@ -1591,6 +1715,7 @@ int ObRFInFilterMsg::process_query_ranges_with_deduplicate()
       is_query_range_ready_ = false;
     } else {
       if (OB_FAIL(query_range_.reserve(effective_row_idxs.count()))) {
+        LOG_WARN("failed to reserve query_range_", K(effective_row_idxs.count()));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < effective_row_idxs.count(); ++i) {
         OZ(generate_one_range(effective_row_idxs.at(i)));
@@ -1621,6 +1746,7 @@ int ObRFInFilterMsg::process_query_ranges_without_deduplicate()
     is_query_range_ready_ = false;
   } else {
     if (OB_FAIL(query_range_.reserve(serial_rows_.count()))) {
+      LOG_WARN("failed to reserve query_range_", K(serial_rows_.count()));
     }
     for (int64_t row_idx = 0; row_idx < serial_rows_.count() && OB_SUCC(ret); ++row_idx) {
       if (OB_ISNULL(serial_rows_.at(row_idx))) {
@@ -1682,6 +1808,7 @@ int ObRFInFilterMsg::generate_one_range(int row_idx)
     query_range.start_key_ = start_key;
     query_range.end_key_ = end_key;
     if (OB_FAIL(query_range_.push_back(query_range))) {
+      LOG_WARN("failed to push range");
     }
   }
   return ret;
@@ -1704,14 +1831,17 @@ int ObRFInFilterMsg::try_extract_query_range(bool &has_extract, ObIArray<ObNewRa
     ranges.reset();
     if (need_deep_copy) {
       if (OB_FAIL(ranges.prepare_allocate(query_range_.count()))) {
+        LOG_WARN("failed to prepare_allocate");
       } else if (need_deep_copy) {
         for (int64_t i = 0; i < ranges.count() && OB_SUCC(ret); ++i) {
           if (OB_FAIL(deep_copy_range(*allocator, query_range_.at(i), ranges.at(i)))) {
+            LOG_WARN("failed to deep_copy_range");
           }
         }
       }
     } else {
       if (OB_FAIL(ranges.assign(query_range_))) {
+        LOG_WARN("failed to assign");
       }
     }
     if (OB_SUCC(ret)) {

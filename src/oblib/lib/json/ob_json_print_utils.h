@@ -85,9 +85,11 @@ struct ObFormatedJsonPrinter
       out_len = 0;
       ObStdJsonConvertor convertor;
       if (OB_FAIL(convertor.init(js_buf, js_buf + BUFFER_SIZE, BUFFER_SIZE))) {
+        LIB_LOG(WARN, "fail to init convertor", K(ret));
       } else {
         convertor.disable_backslash_escape();
         if (OB_FAIL(convertor.convert(out_len))) {
+          LIB_LOG(WARN, "convert failed", K(ret));
         } else {
           js_buf[BUFFER_SIZE + std::min(out_len, BUFFER_SIZE - 1)] = '\0';
         }
@@ -96,6 +98,7 @@ struct ObFormatedJsonPrinter
         Parser json_parser;
         Value *root = NULL;
         if (OB_FAIL(json_parser.init(&allocator))) {
+          LIB_LOG(WARN, "fail to init json parser", K(ret));
         } else if (OB_FAIL(json_parser.parse(js_buf + BUFFER_SIZE, out_len, root))) {
           LIB_LOG(WARN, "fail to parse json", K(ret));
           BUF_PRINTF("%s", js_buf + BUFFER_SIZE);

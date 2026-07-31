@@ -80,12 +80,14 @@ int ObExprVecIVFCenterID::calc_center_id(
   int ret = OB_SUCCESS;
   if (expr.arg_cnt_ == 1) {
     expr_datum.set_null();
+    LOG_DEBUG("[vec index debug]succeed to genearte empty center id", KP(&expr), K(expr), K(expr_datum), K(eval_ctx));
   } else if (expr.arg_cnt_ == 2) {
     int64_t buf_len = OB_DOC_ID_COLUMN_BYTE_LENGTH;
     char *buf = expr.get_str_res_mem(eval_ctx, buf_len);
     ObString str(buf_len, 0, buf);
     ObCenterId center_id(1, 0);
     if (OB_FAIL(share::ObVectorKmeansClusterHelper::set_center_id_to_string(center_id, str))) {
+      LOG_WARN("failed to set center_id to string", K(ret), K(center_id), K(str));
     } else {
       expr_datum.set_string(str);
     }
@@ -104,6 +106,7 @@ int ObExprVecIVFCenterID::calc_center_id(
     uint64_t center_prefix = 0;
     if (OB_FAIL(share::ObVectorIndexUtil::eval_ivf_centers_common(
         tmp_allocator, expr, eval_ctx, centers, table_id, tablet_id, dis_algo, contain_null, arr, center_prefix))) {
+      LOG_WARN("failed to eval ivf centers", K(ret), K(expr), K(eval_ctx));
     } else if (contain_null) {
       // do nothing
     } else {
@@ -116,7 +119,9 @@ int ObExprVecIVFCenterID::calc_center_id(
           1/*nprobe*/,
           tmp_allocator,
           share::VIDA_COS != dis_algo ? nullptr: &norm_info))) {
+        LOG_WARN("failed to get nearest center", K(ret));
       } else if (OB_FAIL(helper.get_center_idx(0, center_idx))) {
+        LOG_WARN("failed to get center idx", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -125,6 +130,7 @@ int ObExprVecIVFCenterID::calc_center_id(
       ObString str(buf_len, 0, buf);
       ObCenterId center_id(center_prefix, center_idx);
       if (OB_FAIL(share::ObVectorKmeansClusterHelper::set_center_id_to_string(center_id, str))) {
+        LOG_WARN("failed to set center_id to string", K(ret), K(center_id), K(str));
       } else {
         expr_datum.set_string(str);
       }

@@ -1322,6 +1322,7 @@ struct ObIArraySerDeTrait {
       }
     }
     if (OB_FAIL(ret)) {
+      TRANS_LOG(WARN, "", K(i), K(ret));
     }
     return ret;
   }
@@ -1332,20 +1333,25 @@ struct ObIArraySerDeTrait {
     bool need_push_back = true;
     int64_t count = 0;
     if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
+      TRANS_LOG(WARN, "decode count fail", K(ret));
     } else if (OB_FAIL(arr_.prepare_allocate(count))) {
       if (OB_NOT_SUPPORTED == ret) {
         ret = arr_.reserve(count);
       }
       if (OB_FAIL(ret)) {
+        TRANS_LOG(WARN, "pre-allocate fail", K(ret), K(count));
       }
     } else { need_push_back = false; }
     for (int i = 0; i < count && OB_SUCC(ret); i++) {
       if (need_push_back) {
         T it;
         if (OB_FAIL(serialization::decode(buf, data_len, pos, it))) {
+          TRANS_LOG(WARN, "item decode fail", K(ret), K(i));
         } else if (OB_FAIL(arr_.push_back(it))) {
+          TRANS_LOG(WARN, "push fail", K(ret), K(i));
         }
       } else if (OB_FAIL(serialization::decode(buf, data_len, pos, arr_.at(i)))) {
+        TRANS_LOG(WARN, "item decode fail", K(ret), K(i));
       }
     }
     return ret;

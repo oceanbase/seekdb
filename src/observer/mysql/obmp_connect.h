@@ -30,6 +30,7 @@ class ObSQLSessionInfo;
 }
 namespace observer
 {
+class ObVTIterCreator;
 struct ObSMConnection;
 
 ObString extract_user_name(const ObString &in);
@@ -55,7 +56,9 @@ class ObMPConnect
     : public ObMPBase
 {
 public:
-  explicit ObMPConnect(const share::ObGlobalContext &gctx);
+  ObMPConnect(
+      const share::ObGlobalContext &gctx,
+      ObVTIterCreator &vt_iter_creator);
   virtual ~ObMPConnect();
 
 protected:
@@ -93,6 +96,7 @@ private:
   char user_name_var_[OB_MAX_USER_NAME_BUF_LENGTH];
   char db_name_var_[OB_MAX_DATABASE_NAME_BUF_LENGTH];
   int deser_ret_;
+  ObVTIterCreator &vt_iter_creator_;
   ObArenaAllocator allocator_;
   AuthSwitchResonseMemPool asr_mem_pool_;
   int32_t client_port_;

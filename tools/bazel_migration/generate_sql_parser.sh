@@ -7,7 +7,6 @@ readonly FLEX="$(readlink -f "$2")"
 readonly BISON_DATA="$(readlink -f "$3")"
 readonly OUTPUT_DIR="$([[ "$4" = /* ]] && printf '%s' "$4" || printf '%s/%s' "${PWD}" "$4")"
 readonly SOURCE_DIR="$(readlink -f "$5")"
-readonly ITEM_TYPE_HEADER="$(readlink -f "$6")"
 
 export BISON_PKGDATADIR="${BISON_DATA}"
 
@@ -149,5 +148,5 @@ sed_in_place \
   -e '}' \
   "${OUTPUT_DIR}/sql_parser_mysql_mode_lex.c"
 
-"${SOURCE_DIR}/gen_type_name.sh" "${ITEM_TYPE_HEADER}" \
+"${SOURCE_DIR}/gen_type_name.sh" "${SOURCE_DIR}/ob_item_type.h" \
   > "${OUTPUT_DIR}/type_name.c"

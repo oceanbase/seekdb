@@ -166,10 +166,12 @@ int ObLockContext::implicit_end_trans_(ObSQLSessionInfo &session_info,
     is_async = !is_rollback && ctx.is_end_trans_async() && can_async;
     if (!is_async) {
       if (OB_FAIL(ObSqlTransControl::implicit_end_trans(ctx, is_rollback))) {
+        LOG_WARN("failed to implicit end trans with sync callback", K(ret));
       }
     } else {
       ObEndTransAsyncCallback &callback = session_info.get_end_trans_cb();
       if (OB_FAIL(ObSqlTransControl::implicit_end_trans(ctx, is_rollback, &callback))) {
+        LOG_WARN("failed implicit end trans with async callback", K(ret));
       }
       ctx.get_trans_state().set_end_trans_executed(OB_SUCCESS == ret);
     }
@@ -177,6 +179,8 @@ int ObLockContext::implicit_end_trans_(ObSQLSessionInfo &session_info,
     ObSqlTransControl::reset_session_tx_state(&session_info, true);
     ctx.set_need_disconnect(false);
   }
+  LOG_TRACE("lock function implicit_end_trans", K(is_async), K(session_info),
+            K(can_async), K(is_rollback));
   return ret;
 }
 
@@ -185,7 +189,9 @@ int ObLockContext::valid_execute_context(ObExecContext &ctx)
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(ctx.get_sql_ctx()));
   CK (OB_NOT_NULL(ctx.get_my_session()));
+  CK (OB_NOT_NULL(ctx.get_sql_proxy()));
   CK (OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
+  CK (OB_NOT_NULL(ctx.get_package_guard()));
   return ret;
 }
 
@@ -200,9 +206,12 @@ void ObLockContext::register_for_deadlock_(ObSQLSessionInfo &session_info,
       parent_tx_id.is_valid() &&
       child_tx_id.is_valid()) {
     if (OB_FAIL(session_info.get_query_timeout(query_timeout))) {
+      LOG_WARN("get query timeout failed", K(parent_tx_id), K(child_tx_id), KR(ret));
     } else {
       if (OB_FAIL(data_plane::register_autonomous_transaction_dependency(
               parent_tx_id, child_tx_id, query_timeout))) {
+        LOG_WARN("autonomous register to deadlock failed", K(parent_tx_id),
+                 K(child_tx_id), KR(ret));
       }
     }
   } else {
@@ -215,14 +224,15 @@ int ObLockContext::open_inner_conn_()
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = nullptr;
+  common::ObMySQLProxy *sql_proxy = nullptr;
   common::sqlclient::ObISQLConnection *inner_conn = nullptr;
 
   if (OB_ISNULL(my_exec_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("ObExecContext in ObLockFuncContext is null", K(ret));
-  } else if (OB_ISNULL(session = my_exec_ctx_->get_my_session())) {
+  } else if (OB_ISNULL(session = my_exec_ctx_->get_my_session()) || OB_ISNULL(sql_proxy = my_exec_ctx_->get_sql_proxy())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session in ObExecContext is NULL", K(ret), KP(session));
+    LOG_WARN("session or sql_proxy in ObExecContext is NULL", K(ret), KP(session), KP(sql_proxy));
   } else if (OB_NOT_NULL(inner_conn_) || OB_NOT_NULL(store_inner_conn_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("inner_conn_ or store_inner_conn_ should be null", K(ret), KP(inner_conn_), KP(store_inner_conn_));
@@ -232,6 +242,7 @@ int ObLockContext::open_inner_conn_()
                  query::ObInnerSQLConnectionAccess::
                      create_connection_with_external_session(
                          session, inner_conn_guard_))) {
+    LOG_WARN("create inner connection failed", K(ret), KPC(session));
   } else if (OB_ISNULL(inner_conn = inner_conn_guard_.get_ptr())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("inner connection is still null", KPC(session));
@@ -242,6 +253,9 @@ int ObLockContext::open_inner_conn_()
      */
     inner_conn_ = inner_conn;
     session->set_inner_conn(inner_conn);
+    LOG_DEBUG("ObLockFuncContext::open_inner_conn_ successfully",
+              KP(inner_conn_),
+              KP(store_inner_conn_));
   }
   return ret;
 }
@@ -250,14 +264,15 @@ int ObLockContext::close_inner_conn_()
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = nullptr;
+  common::ObMySQLProxy *sql_proxy = nullptr;
 
   if (OB_ISNULL(my_exec_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("ObExecContext in ObLockFuncContext is null", K(ret));
   } else {
-    if (OB_ISNULL(inner_conn_)) {
+    if (OB_ISNULL(sql_proxy = my_exec_ctx_->get_sql_proxy()) || OB_ISNULL(inner_conn_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("inner_conn of session is NULL", K(ret), KP(session), KP(inner_conn_));
+      LOG_WARN("sql_proxy or inner_conn of session is NULL", K(ret), KP(sql_proxy), KP(session), KP(inner_conn_));
     }
     if (OB_ISNULL(session = my_exec_ctx_->get_my_session())) {
       ret = OB_NOT_INIT;
@@ -287,6 +302,7 @@ int ObLockContext::execute_write(const ObSqlString &sql,
     ret = OB_NOT_INIT;
     LOG_WARN("inner connection is NULL", K(ret));
   } else if (OB_FAIL(inner_conn_->execute_write(sql.ptr(), affected_rows))) {
+    LOG_WARN("execute write sql failed", K(ret));
   }
   return ret;
 }
@@ -300,6 +316,7 @@ int ObLockContext::execute_read(const ObSqlString &sql,
     ret = OB_NOT_INIT;
     LOG_WARN("inner connection is NULL", K(ret));
   } else if (OB_FAIL(inner_conn_->execute_read(sql.ptr(), res))) {
+    LOG_WARN("execute read sql failed", K(ret));
   }
   return ret;
 }
@@ -314,7 +331,8 @@ int ObLockExecutor::clear_lock_session_if_no_lock_(ObLockContext &ctx,
 
   OV (OB_NOT_NULL(ctx.my_exec_ctx_), OB_INVALID_ARGUMENT);
   OV (OB_NOT_NULL(session = ctx.my_exec_ctx_->get_my_session()), OB_INVALID_ARGUMENT);
-  query::ObSessionInnerSql session_io(session);
+  query::ObSessionInnerSql session_io(
+      session, ctx.my_exec_ctx_->get_sql_proxy());
   const data_plane::ObSessionLockOwner owner(session_id, session_create_ts);
   OZ (data_plane::session_has_locks(session_io, owner, owner_exist));
   if (OB_SUCC(ret) && !owner_exist) {
@@ -471,6 +489,8 @@ int ObUnLockExecutor::execute(uint8_t owner_type, int64_t owner_id)
       OX (exec_ctx.set_physical_plan_ctx(nullptr));  // avoid core during release exec_ctx
     }
   }
+  LOG_DEBUG("lock_executor debug: release by owner identity", K(ret),
+            K(owner_type), K(owner_id), K(release_cnt));
   return ret;
 }
 
@@ -491,7 +511,7 @@ int ObUnLockExecutor::execute_(ObExecContext &ctx,
       if (OB_SUCC(ret)) {
         ObSQLSessionInfo *session = GET_MY_SESSION(ctx);
         ObTxParam tx_param;
-        query::ObSessionInnerSql session_io(session);
+        query::ObSessionInnerSql session_io(session, ctx.get_sql_proxy());
         const data_plane::ObSessionLockOwner owner(
             session_id, session_create_ts);
         OZ (ObSqlTransControl::build_tx_param(session, tx_param));
@@ -536,7 +556,7 @@ int ObUnLockExecutor::execute_(ObExecContext &ctx,
       if (OB_SUCC(ret)) {
         ObSQLSessionInfo *session = GET_MY_SESSION(ctx);
         ObTxParam tx_param;
-        query::ObSessionInnerSql session_io(session);
+        query::ObSessionInnerSql session_io(session, ctx.get_sql_proxy());
         OZ (ObSqlTransControl::build_tx_param(session, tx_param));
         CK (OB_NOT_NULL(session->get_tx_desc()));
         OZ (data_plane::release_persisted_locks(

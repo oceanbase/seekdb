@@ -1,17 +1,6 @@
 /*
  * Copyright (c) 2025 OceanBase.
- *
  * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  */
 
 #define USING_LOG_PREFIX TABLELOCK
@@ -108,13 +97,17 @@ int acquire_named_lock(share::ObILockMetadataSession &session_io,
   } else if (OB_FAIL(lock_id.set(
                  transaction::tablelock::ObLockOBJType::OBJ_TYPE_MYSQL_LOCK_FUNC,
                  lock_id_value))) {
+    LOG_WARN("set named lock id failed", KR(ret), K(lock_id_value));
   } else if (OB_FAIL(make_owner(owner, request.owner_id_))) {
+    LOG_WARN("make named lock owner failed", KR(ret));
   } else if (OB_FAIL(request.objs_.push_back(lock_id))) {
+    LOG_WARN("append named lock id failed", KR(ret));
   } else if (OB_FAIL(
                  transaction::tablelock::ObTableLockDetector::
                      record_detect_info_to_inner_table(
                          session_io, transaction::tablelock::LOCK_OBJECT,
                          request, false, need_lock))) {
+    LOG_WARN("record named lock failed", KR(ret));
   } else if (need_lock && OB_FAIL(service->lock(tx, tx_param, request))) {
     LOG_WARN("acquire named lock failed", KR(ret), K(lock_id_value));
   }
@@ -144,11 +137,13 @@ int acquire_mysql_table_lock(share::ObILockMetadataSession &session_io,
   } else if (OB_UNLIKELY(transaction::tablelock::NO_LOCK == target.lock_mode_)) {
     ret = common::OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(make_owner(owner, request.owner_id_))) {
+    LOG_WARN("make table lock owner failed", KR(ret));
   } else if (OB_FAIL(
                  transaction::tablelock::ObTableLockDetector::
                      record_detect_info_to_inner_table(
                          session_io, transaction::tablelock::LOCK_TABLE,
                          request, false, need_lock))) {
+    LOG_WARN("record MySQL table lock failed", KR(ret));
   } else if (need_lock && OB_FAIL(service->lock(tx, tx_param, request))) {
     LOG_WARN("acquire MySQL table lock failed", KR(ret), K(target));
   }
@@ -243,6 +238,7 @@ int release_persisted_locks(share::ObILockMetadataSession &session_io,
                      get_unlock_request_list(
                          session_io, lock_owner, task_type_for_scope(scope),
                          allocator, requests))) {
+    LOG_WARN("get session unlock requests failed", KR(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < requests.count(); ++i) {
       transaction::tablelock::ObLockRequest *request = requests.at(i);
@@ -254,7 +250,9 @@ int release_persisted_locks(share::ObILockMetadataSession &session_io,
                          remove_detect_info_from_inner_table(
                              session_io, task_type_for_scope(scope), *request,
                              removed))) {
+        LOG_WARN("remove session lock record failed", KR(ret));
       } else if (OB_FAIL(unlock_request(tx, tx_param, *request))) {
+        LOG_WARN("release session lock failed", KR(ret));
       } else {
         release_count += removed;
       }
@@ -362,6 +360,7 @@ int generate_named_lock_identity(const common::ObString &lock_name,
   if (OB_UNLIKELY(lock_name.empty() || min_lock_id > max_lock_id)) {
     ret = common::OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ObCommonIDUtils::gen_unique_id(unique_id))) {
+    LOG_WARN("generate named-lock unique id failed", KR(ret));
   } else {
     name_hash = murmurhash(lock_name.ptr(), lock_name.length(), name_hash);
     lock_id = unique_id.id() % (max_lock_id - min_lock_id + 1) + min_lock_id;

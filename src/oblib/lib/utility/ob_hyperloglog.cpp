@@ -42,6 +42,7 @@ OB_DEF_DESERIALIZE(ObHyperLogLogCalculator)
       ret = OB_ERR_UNEXPECTED;
       COMMON_LOG(WARN, "fail to get deserialize allocator of hyperloglog", K(ret));
     } else if (OB_FAIL(init(alloc_, n_bit_))) {
+      COMMON_LOG(WARN, "fail to init hyperloglog", K(ret));
     } else {
       for (int64_t i = 0; i < n_bucket_ && OB_SUCC(ret); ++i) {
         LST_DO_CODE(OB_UNIS_DECODE, buckets_[i]);

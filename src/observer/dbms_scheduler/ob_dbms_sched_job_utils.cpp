@@ -166,6 +166,7 @@ int ObDBMSSchedJobUtils::job_class_check_impl(const ObString &job_class_name)
       rows = 0;
       SMART_VAR(ObMySQLProxy::MySQLResult, result) {
         if (OB_FAIL(sql_proxy->read(result, sql.ptr()))) {
+          LOG_WARN("execute query failed", K(ret), K(sql));
         } else if (OB_NOT_NULL(result.get_result())) {
           if (OB_SUCCESS == (ret = result.get_result()->next())) {
             EXTRACT_INT_FIELD_MYSQL_SKIP_RET(*(result.get_result()), "rows", rows, uint64_t);
@@ -222,6 +223,8 @@ void ObDBMSSchedJobUtils::upgrade_legacy_func_type(
     OZ (dml.splice_update_sql(OB_ALL_SCHEDULER_JOB_TNAME, sql));
     OZ (sql_client.write(sql.ptr(), affected_rows));
     if (OB_FAIL(ret)) {
+      LOG_WARN("failed to persist legacy scheduler function type",
+               KR(ret), K(job_info), K(inferred_type));
     }
     job_info.func_type_ = inferred_type;
   }
@@ -232,6 +235,7 @@ int ObDBMSSchedJobUtils::generate_job_id(int64_t &max_job_id)
   int ret = OB_SUCCESS;
   ObCommonID raw_id;
   if (OB_FAIL(storage::ObCommonIDUtils::gen_unique_id(raw_id))) {
+    LOG_WARN("gen unique id failed", K(ret));
   } else {
     max_job_id = raw_id.id() + ObDBMSSchedTableOperator::JOB_ID_OFFSET;
   }
@@ -251,15 +255,18 @@ int ObDBMSSchedJobUtils::stop_dbms_sched_job(
       ObObj state_obj;
       state_obj.set_char("KILLED");
       if(OB_FAIL(update_dbms_sched_job_info(sql_client, job_info, ObString("state"), state_obj))) {
+        LOG_WARN("update job info failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       // The virtual table reports jobs running in this process.
       if (OB_FAIL(sql.append_fmt("select session_id from %s where job_name = \'%.*s\'",
         OB_ALL_VIRTUAL_SCHEDULER_RUNNING_JOB_TNAME, job_info.job_name_.length(),job_info.job_name_.ptr()))) {
+        LOG_WARN("append sql failed", KR(ret)); 
       } else {
         SMART_VAR(ObMySQLProxy::MySQLResult, result) {
           if (OB_FAIL(sql_client.read(result, sql.ptr()))) {
+            LOG_WARN("execute query failed", K(ret), K(sql), K(job_info.job_name_));
           } else if (OB_ISNULL(result.get_result())) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("result is null", K(ret), K(sql), K(job_info.job_name_));
@@ -354,10 +361,12 @@ int ObDBMSSchedJobUtils::remove_dbms_sched_job(
     
     ObDMLSqlSplicer dml;
     if (OB_FAIL(dml.add_pk_column("job_name", job_name))) {
+      LOG_WARN("add column failed", KR(ret));
     } else {
       ObDMLExecHelper exec(sql_client);
       int64_t affected_rows = 0;
       if (OB_FAIL(exec.exec_delete(OB_ALL_SCHEDULER_JOB_TNAME, dml, affected_rows))) {
+        LOG_WARN("execute delete failed", KR(ret));
       } else if (is_zero_row(affected_rows) && !if_exists) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("execute delete failed", KR(ret), K(if_exists));
@@ -499,25 +508,34 @@ int ObDBMSSchedJobUtils::update_dbms_sched_job_info(common::ObISQLClient &sql_cl
       LOG_WARN("add column failed", KR(ret));
   } else if (0 == job_attribute_name.case_compare("job_name") && !from_pl_set_attr) {
     if (OB_FAIL(dml.add_column("job_name", job_attribute_value.get_string()))) {
+      LOG_WARN("add column failed", KR(ret), K(job_attribute_value.get_string()));
     }
   } else if (0 == job_attribute_name.case_compare("powner") && !from_pl_set_attr) {
     if (OB_FAIL(dml.add_column("powner", job_attribute_value.get_string()))) {
+      LOG_WARN("add column failed", KR(ret), K(job_attribute_value.get_string()));
     }
   } else if (0 == job_attribute_name.case_compare("user_id") && !from_pl_set_attr) {
     if (OB_FAIL(dml.add_column("user_id", job_attribute_value.get_int()))) {
+      LOG_WARN("add column failed", KR(ret), K(job_attribute_value.get_int()));
     }
   } else if (0 == job_attribute_name.case_compare("state") && !from_pl_set_attr) {
     if (OB_FAIL(check_is_valid_state(job_attribute_value.get_string()))) {
+      LOG_WARN("invalid state", KR(ret), K(job_attribute_value.get_string()));
     } else if (OB_FAIL(dml.add_column("state", job_attribute_value.get_string()))) {
+      LOG_WARN("add column failed", KR(ret), K(job_attribute_value.get_string()));
     }
   } else if (0 == job_attribute_name.case_compare("auto_drop") && !from_pl_set_attr) {
     if (OB_FAIL(dml.add_column("auto_drop", job_attribute_value.get_bool()))) {
+      LOG_WARN("add column failed", KR(ret), K(job_attribute_value.get_bool()));
     }
   } else if (0 == job_attribute_name.case_compare("enabled") && !from_pl_set_attr) {
     if (OB_FAIL(dml.add_column("enabled", job_attribute_value.get_bool()))) {
+      LOG_WARN("add column failed", KR(ret), K(job_attribute_value.get_bool()));
     } else if (job_attribute_value.get_bool() && (0 == job_info.state_.case_compare("BROKEN"))) {
       if (OB_FAIL(dml.add_column("state", "SCHEDULED"))) {
+        LOG_WARN("add state column failed", KR(ret), K(job_info.state_));
       } else if (OB_FAIL(dml.add_column("failures", 0))) {
+        LOG_WARN("add failures column failed", KR(ret), K(job_info.failures_));
       }
     }
   } else if (0 == job_attribute_name.case_compare("repeat_interval") && !from_pl_set_attr) {
@@ -527,15 +545,23 @@ int ObDBMSSchedJobUtils::update_dbms_sched_job_info(common::ObISQLClient &sql_cl
     calc_job_info.repeat_interval_ = job_attribute_value.get_string();
     calc_job_info.interval_ts_ = 0;
     if (OB_FAIL(check_is_valid_repeat_interval(job_attribute_value.get_string()))) {
+      LOG_WARN("invalid repeat_interval", KR(ret), K(job_attribute_value.get_string()));
     } else if (OB_FAIL(calc_dbms_sched_repeat_expr(calc_job_info, next_date))) {
+      LOG_WARN("invalid next_date", KR(ret), K(job_attribute_value.get_string()));
     } else if (OB_FAIL(dml.add_column("repeat_interval", job_attribute_value.get_string()))) {
+      LOG_WARN("add column failed", KR(ret), K(job_attribute_value.get_string()));
     } else if (OB_FAIL(dml.add_column("`interval#`", "null"))) {
+      LOG_WARN("add column failed", KR(ret), K(job_attribute_value.get_string()));
     } else if (OB_FAIL(dml.add_raw_time_column("next_date", next_date))) {
+      LOG_WARN("add next_date column failed", KR(ret), K(next_date));
     } else if (OB_FAIL(dml.add_column("interval_ts", 0))) {
+      LOG_WARN("add interval_ts column failed", KR(ret), K(job_info.interval_ts_));
     }
   } else if (0 == job_attribute_name.case_compare("job_action") && !from_pl_set_attr) {
     if (OB_FAIL(dml.add_column("job_action", job_attribute_value.get_string()))) {
+      LOG_WARN("add column failed", KR(ret), K(job_attribute_value.get_string()));
     } else if (OB_FAIL(dml.add_column("what", job_attribute_value.get_string()))) {
+      LOG_WARN("add column failed", KR(ret), K(job_attribute_value.get_string()));
     }
   } else if (0 == job_attribute_name.case_compare("max_run_duration") || 0 == job_attribute_name.case_compare("duration")) {
     const int MAX_RUN_DURATION_LEN = 16;
@@ -544,26 +570,34 @@ int ObDBMSSchedJobUtils::update_dbms_sched_job_info(common::ObISQLClient &sql_cl
     int64_t max_run_duration = atoll(max_run_duration_buf);
     max_run_duration = max_run_duration < 0 ? INT64_MAX : max_run_duration;
     if (OB_FAIL(dml.add_column("max_run_duration", max_run_duration))) {
+      LOG_WARN("add column failed", KR(ret), K(job_attribute_value.get_string()), K(max_run_duration));
     }
   } else if (0 == job_attribute_name.case_compare("start_date") && !from_pl_set_attr) {
     if (OB_FAIL(dml.add_raw_time_column("start_date", job_attribute_value.get_time()))) {
+      LOG_WARN("add column failed", KR(ret), K(job_attribute_value.get_time()));
     } else if (OB_FAIL(dml.add_raw_time_column("next_date", job_attribute_value.get_time()))) {
+      LOG_WARN("add column failed", KR(ret), K(job_attribute_value.get_time()));
     }
   } else if (0 == job_attribute_name.case_compare("end_date") && !from_pl_set_attr) {
     if (OB_FAIL(dml.add_raw_time_column("end_date", job_attribute_value.get_time()))) {
+      LOG_WARN("add column failed", KR(ret), K(job_attribute_value.get_time()));
     }
   } else if (0 == job_attribute_name.case_compare("comments") && !from_pl_set_attr) {
     if (OB_FAIL(dml.add_column("comments", job_attribute_value.get_string()))) {
+      LOG_WARN("add column failed", KR(ret), K(job_attribute_value.get_string()));
     }
   } else if (0 ==  job_attribute_name.case_compare("job_class")) {
     if (0 != job_attribute_value.get_string().case_compare("DEFAULT_JOB_CLASS") && OB_FAIL(job_class_check_impl(job_attribute_value.get_string()))) {
       LOG_WARN("failed to check job_class", K(ret), K(job_info), K(job_attribute_value.get_string()));
     } else if (OB_FAIL(dml.add_column("job_class", job_attribute_value.get_string()))) {
+      LOG_WARN("failed to set job_class", K(ret), K(job_info), K(job_attribute_value.get_string()));
     }
   } else if (0 == job_attribute_name.case_compare("max_failures")) {
     int64_t value = 0;
     if (OB_FAIL(get_max_failures_value(job_attribute_value.get_string(), value))) {
+      LOG_WARN("failed to get_max_failure_value", K(ret), K(job_info), K(job_attribute_value.get_string()));
     } else if (OB_FAIL(dml.add_column("max_failures", value))) {
+      LOG_WARN("failed to set job_class", K(ret), K(job_info), K(job_attribute_value.get_string()), K(value));
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
@@ -574,6 +608,7 @@ int ObDBMSSchedJobUtils::update_dbms_sched_job_info(common::ObISQLClient &sql_cl
     ObDMLExecHelper exec(sql_client);
     int64_t affected_rows = 0;
     if (OB_FAIL(exec.exec_update(OB_ALL_SCHEDULER_JOB_TNAME, dml, affected_rows))) {
+      LOG_WARN("execute update failed", KR(ret));
     } else if (is_zero_row(affected_rows)) {
       ret = OB_ENTRY_NOT_EXIST;
       LOG_WARN("not change", KR(ret), K(affected_rows));
@@ -602,9 +637,11 @@ int ObDBMSSchedJobUtils::get_dbms_sched_job_info(common::ObISQLClient &sql_clien
     if (OB_FAIL(sql.append_fmt("select * from %s where job_name = \'%.*s\' and job > 0",
                                                      OB_ALL_SCHEDULER_JOB_TNAME,
                                                      job_name.length(), job_name.ptr()))) {
+        LOG_WARN("failed to assign sql", K(ret));
     } else {
       SMART_VAR(ObMySQLProxy::MySQLResult, res) {
         if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
+          LOG_WARN("execute query failed", K(ret), K(sql));
         } else {
           if (res.get_result() != NULL && OB_SUCCESS == (ret = res.get_result()->next())) {
             ObDBMSSchedTableOperator table_operator;
@@ -761,6 +798,7 @@ int ObDBMSSchedJobUtils::reserve_user_with_minimun_id(ObIArray<const ObUserInfo 
     if (OB_SUCC(ret)) {
       user_infos.reset();
       if (OB_FAIL(user_infos.push_back(minimum_user_info))) {
+        LOG_WARN("failed to push back", K(ret));
       }
     }
   }

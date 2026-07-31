@@ -534,6 +534,7 @@ public:
       ret = OB_INVALID_ARGUMENT;
     } else {
       if (OB_FAIL(tx_ctx->on_tx_ctx_table_flushed())) {
+        TRANS_LOG(WARN, "fail to callback flushed", K(ret));
       }
     }
     if (OB_SUCCESS == ret) {
@@ -558,6 +559,7 @@ public:
       ret = OB_INVALID_ARGUMENT;
       TRANS_LOG(WARN, "invalid argument", KR(ret), K(tx_id), "ctx", OB_P(tx_ctx));
     } else if (OB_FAIL(tx_ctx->iterate_tx_obj_lock_op(iter_))) {
+      TRANS_LOG(WARN, "iterate tx obj lock op fail", KR(ret), K(tx_id));
     } else {
       // do nothing
     }
@@ -592,6 +594,7 @@ public:
         ret = OB_INVALID_ARGUMENT;
         TRANS_LOG(WARN, "tx_ctx is null", KR(ret));
       } else if (OB_FAIL(tx_ctx->get_memtable_key_arr(memtable_key_info_arr))) {
+        TRANS_LOG(WARN, "get memtable key arr fail", KR(ret), K(memtable_key_info_arr));
       } else {
         // If the row has been dumped into sstable, we can not get the
         // memtable key info since the callback of it has been dropped.
@@ -612,7 +615,10 @@ public:
                                         tx_id,
                                         tx_ctx->get_ctx_create_time(),
                                         tx_ctx->get_trans_expired_time()))) {
+            TRANS_LOG(WARN, "trans lock stat init fail", KR(ret),
+                      "tx_ctx", *(tx_ctx), K(tx_id), "memtable key info", memtable_key_info_arr.at(i));
           } else if (OB_FAIL(tx_lock_stat_iter_.push(tx_lock_stat))) {
+            TRANS_LOG(WARN, "tx_lock_stat_iter push item fail", KR(ret), K(tx_lock_stat));
           } else {
             //do nothing
           }
@@ -734,9 +740,11 @@ public:
       TRANS_LOG(WARN, "invalid argument", K(ret), K(tx_id), "ctx", OB_P(tx_ctx));
     } else if (ObTxSubmitLogFunctor::SUBMIT_REDO_LOG == action_) {
       if (OB_FAIL(tx_ctx->submit_redo_log_for_freeze(freeze_clock_))) {
+        TRANS_LOG(WARN, "failed to submit redo log", K(ret), K(tx_id));
       }
     } else if (ObTxSubmitLogFunctor::SUBMIT_NEXT_LOG == action_) {
       if (OB_FAIL(tx_ctx->try_submit_next_log())) {
+        TRANS_LOG(WARN, "failed to submit next log", K(ret), K(tx_id));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -813,6 +821,7 @@ public:
     } else {
       // logic for get min_start_scn
       if (tx_ctx->is_decided()) {
+        TRANS_LOG(DEBUG, "skip record committed tx", KPC(tx_ctx));
       } else if (tx_ctx->get_start_log_ts().is_valid()) {
         has_start_scn_ctx_cnt_++;
         min_start_scn_ = MIN(min_start_scn_, tx_ctx->get_start_log_ts());
@@ -821,6 +830,7 @@ public:
       // logic for gc tx ctx
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(tx_ctx->check_tx_status())) {
+        TRANS_LOG(WARN, "check transaction status error", KR(tmp_ret), "ctx", *tx_ctx);
       }
     }
 
@@ -852,6 +862,12 @@ public:
       }
     }
 
+    TRANS_LOG(DEBUG,
+              "get min start status",
+              K(first_err_code_),
+              K(has_start_scn_ctx_cnt_),
+              K(min_start_scn_),
+              K(start_status));
     return start_status;
   }
 

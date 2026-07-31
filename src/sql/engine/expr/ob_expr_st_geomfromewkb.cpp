@@ -85,6 +85,7 @@ int ObExprPrivSTGeomFromEWKB::eval_st_geomfromewkb(const ObExpr &expr, ObEvalCtx
   bool is_3d_geo = false;
   // get ewkb
   if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[0], ctx, datum))) {
+    LOG_WARN("failed to eval first argument", K(ret));
   } else if (datum->is_null()) {
     is_null_result = true;
   } else {
@@ -92,6 +93,7 @@ int ObExprPrivSTGeomFromEWKB::eval_st_geomfromewkb(const ObExpr &expr, ObEvalCtx
     ObGeoWkbHeader header;
     if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *datum,
         expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), ewkb))) {
+      LOG_WARN("fail to get real string data", K(ret), K(ewkb));
     } else if (OB_FAIL(get_header_info_from_ewkb(ewkb, header))) {
       LOG_WARN("fail to get ewkb header info from ewkb", K(ret), K(ewkb));
       ret = OB_ERR_GIS_INVALID_DATA;
@@ -101,6 +103,7 @@ int ObExprPrivSTGeomFromEWKB::eval_st_geomfromewkb(const ObExpr &expr, ObEvalCtx
       LOG_USER_ERROR(OB_ERR_GIS_DATA_WRONG_ENDIANESS);
       LOG_WARN("invalid byte order", K(ret), K(header.bo_));
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, header.srid_, srs))) {
+      LOG_WARN("fail to get srs item", K(ret), K(header.srid_));
     } else if (OB_FAIL(create_geo_by_ewkb(tmp_allocator, ewkb, header, srs, geo))) {
       LOG_WARN("fail to create geometry object with raw ewkb", K(ret));
       if (ret == OB_ERR_SRS_NOT_FOUND) {
@@ -119,13 +122,17 @@ int ObExprPrivSTGeomFromEWKB::eval_st_geomfromewkb(const ObExpr &expr, ObEvalCtx
   if (OB_SUCC(ret) && num_args > 1) {
     ObString axis_str;
     if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[1], ctx, datum))) {
+      LOG_WARN("failed to eval second argument", K(ret));
     } else if (datum->is_null()){
       // do nothing
     } else if (FALSE_IT(axis_str = datum->get_string())) {
     } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *datum,
               expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), axis_str))) {
+      LOG_WARN("fail to get real string data", K(ret), K(axis_str));
     } else if (OB_FAIL(ObGeoExprUtils::parse_axis_order(axis_str, N_PRIV_ST_GEOMFROMEWKB, axis_order))) {
+      LOG_WARN("failed to parse axis order option string", K(ret));
     } else if (OB_FAIL(ObGeoExprUtils::check_need_reverse(axis_order, need_reverse))) {
+      LOG_WARN("failed to check need reverse", K(ret));
     }
   }
 
@@ -136,6 +143,7 @@ int ObExprPrivSTGeomFromEWKB::eval_st_geomfromewkb(const ObExpr &expr, ObEvalCtx
 
     if (OB_SUCC(ret) && is_geographical) {
       if (OB_FAIL(ObGeoExprUtils::check_coordinate_range(srs, geo, N_PRIV_ST_GEOMFROMEWKB))) {
+        LOG_WARN("check geo coordinate range failed", K(ret));
       }
     }
   }
@@ -149,6 +157,7 @@ int ObExprPrivSTGeomFromEWKB::eval_st_geomfromewkb(const ObExpr &expr, ObEvalCtx
   } else {
     ObString res_wkb;
     if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*geo, expr, ctx, srs, res_wkb))) {
+      LOG_WARN("failed to write geometry to wkb", K(ret));
     } else {
       res.set_string(res_wkb);
     }
@@ -211,6 +220,7 @@ int ObExprPrivSTGeomFromEWKB::construct_ewkb_data(ObString &ewkb,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid ewkb length", K(ewkb.length()));
   } else if (OB_FAIL(get_header_info_from_ewkb(ewkb, header))) {
+    LOG_WARN("fail to get ewkb header info from ewkb", K(ret), K(ewkb));
   } else {
     char *ptr = const_cast<char *>(ewkb.ptr() + WKB_GEO_BO_SIZE);
     uint32_t wkb_type = ObGeoWkbByteOrderUtil::read<uint32_t>(ptr, header.bo_);
@@ -247,6 +257,7 @@ int ObExprPrivSTGeomFromEWKB::create_geo_by_ewkb(ObIAllocator &allocator,
     ObGeoCRS crs = ObGeoCRS::Cartesian;
     ObString ewkb_data;
     if (OB_FAIL(construct_ewkb_data(ewkb, ewkb_data))) {
+      LOG_WARN("fail to construct ewkb data", K(ret), K(ewkb));
     } else if (header.srid_ == 0) {
       crs = ObGeoCRS::Cartesian;
     } else if (OB_NOT_NULL(srs)) {
@@ -258,12 +269,14 @@ int ObExprPrivSTGeomFromEWKB::create_geo_by_ewkb(ObIAllocator &allocator,
       // do nothing
     } else if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(allocator, header.type_,
         crs == ObGeoCRS::Geographic, true, geo, header.srid_))) {
+      LOG_WARN("fail to create geo by type", K(ret), K(crs), K(header));
     } else {
       geo->set_data(ewkb_data);
       geo->set_srid(header.srid_);
       if (ObGeoTypeUtil::is_3d_geo_type(header.type_)) {
         ObGeometry3D *geo_3d = static_cast<ObGeometry3D *>(geo);
         if (OB_FAIL(geo_3d->check_wkb_valid())) {
+          LOG_WARN("fail to check geo 3d is valid", K(ret));
         }
       } else {
         ObGeoWkbCheckVisitor ewkb_check(ewkb_data, header.bo_);

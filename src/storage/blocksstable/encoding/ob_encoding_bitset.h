@@ -413,20 +413,26 @@ int ObBitMapMetaWriter<StoreClass>::write(char *buf)
     buf += sizeof(meta_);
 
     if (OB_FAIL(bitset_.init(reinterpret_cast<uint64_t *>(buf), row_cnt))) {
+      STORAGE_LOG(WARN, "failed to init bitset", K(ret), KP(buf), K(row_cnt));
     } else if (OB_FAIL(ext_bs_.init(reinterpret_cast<unsigned char *>(buf + meta_.ext_offset_), bs_len))) {
+      STORAGE_LOG(WARN, "failed to init bit stream", K(ret), KP(buf), K(bs_len));
     }
 
     // write exception data
     if (OB_SUCC(ret)) {
       if (bit_packing_) { // bit packing exc
         if (OB_FAIL(write_bit_packing_data(buf + meta_.data_offset_))) {
+          STORAGE_LOG(WARN, "write bit packing data failed", K(ret));
         }
       } else if (exc_fix_size_ < 0) { // var exc
         if (OB_FAIL(index_gen_.init(buf + meta_.index_offset_, index_byte_))) {
+          STORAGE_LOG(WARN, "init index gen failed", K(ret), KP(buf), K_(index_byte));
         } else if (OB_FAIL(write_var_data(buf + meta_.data_offset_))) {
+          STORAGE_LOG(WARN, "write var data failed", K(ret));
         }
       } else { // fix exc
         if (OB_FAIL(write_fix_data(buf + meta_.data_offset_))) {
+          STORAGE_LOG(WARN, "write bit packing data failed", K(ret));
         }
       }
     }
@@ -471,6 +477,7 @@ int ObBitMapMetaWriter<StoreClass>::write_bit_packing_data(char *buf)
       bitset_.set(rid);
       if (has_ext_val_) {
         if (OB_FAIL(ext_bs_.set(ref * EXT_VALUE_BITS, EXT_VALUE_BITS, ext_val))) {
+          STORAGE_LOG(WARN, "set ext bs failed", K(ret), K(ref), K(ext_val));
         }
       }
     }
@@ -507,6 +514,7 @@ int ObBitMapMetaWriter<StoreClass>::write_var_data(char *buf)
       bitset_.set(rid);
       if (has_ext_val_) {
         if (OB_FAIL(ext_bs_.set(ref * EXT_VALUE_BITS, EXT_VALUE_BITS, ext_val))) {
+          STORAGE_LOG(WARN, "set ext bs failed", K(ret), K(ref), K(ext_val));
         }
       }
     }
@@ -541,6 +549,7 @@ int ObBitMapMetaWriter<StoreClass>::write_fix_data(char *buf)
       bitset_.set(rid);
       if (has_ext_val_) {
         if (OB_FAIL(ext_bs_.set(ref * EXT_VALUE_BITS, EXT_VALUE_BITS, ext_val))) {
+          STORAGE_LOG(WARN, "set ext bs failed", K(ret), K(ref), K(ext_val));
         }
       }
     }
@@ -600,6 +609,7 @@ int ObBitMapMetaReader<StoreClass>::read(const char *buf, const int64_t row_coun
         if (OB_FAIL(ObBitStream::get(reinterpret_cast<unsigned char *>(
                   const_cast<char *>(buf + meta->ext_offset_)),
                 ref * EXT_VALUE_BITS, EXT_VALUE_BITS, ext_val))) {
+          STORAGE_LOG(WARN, "bitstream get failed", K(ret));
         }
       }
       // read data
@@ -612,6 +622,7 @@ int ObBitMapMetaReader<StoreClass>::read(const char *buf, const int64_t row_coun
         set_stored_ext_value(datum, static_cast<ObStoredExtValue>(ext_val));
       } else if (OB_FAIL(read_exc_cell(buf, meta, bit_packing, ref,
               len - sizeof(ObBitMapMetaHeader) - meta->data_offset_, datum, integer_mask, obj_type))) {
+        STORAGE_LOG(WARN, "read exc cell failed", K(ret));
       }
     }
   }
@@ -629,10 +640,12 @@ OB_INLINE int ObBitMapMetaReader<StoreClass>::read_exc_cell(const char *buf,
   if (OB_FAIL(get_uint_data_datum_len(
       common::ObDatum::get_obj_datum_map_type(obj_type),
       datum_len))){
+    STORAGE_LOG(WARN, "Failed to get datum len for int data", K(ret));
   } else if (bit_packing) {
     if (OB_FAIL(ObBitStream::get(reinterpret_cast<unsigned char *>
         (const_cast<char *>(buf + meta->data_offset_)),
         ref * meta->bit_packing_len_, meta->bit_packing_len_, v))) {
+      STORAGE_LOG(WARN, "bs get failed", K(ret), K(ref), K(*meta));
     } else {
       datum.pack_ = datum_len;
       MEMCPY(const_cast<char *>(datum.ptr_), &v, datum_len);
@@ -663,6 +676,7 @@ OB_INLINE int ObBitMapMetaReader<ObNumberSC>::read_exc_cell(const char *buf,
   } else {
     ObIntegerArrayGenerator index_gen;
     if (OB_FAIL(index_gen.init(buf + meta->index_offset_, meta->index_byte_))) {
+      STORAGE_LOG(WARN, "init index gen failed", K(ret));
     } else {
       if (0 != ref) {
         offset = index_gen.get_array().at(ref - 1);
@@ -698,6 +712,7 @@ OB_INLINE int ObBitMapMetaReader<ObDecimalIntSC>::read_exc_cell(const char *buf,
     const int64_t exc_cnt = meta->get_var_cnt();
     ObIntegerArrayGenerator index_gen;
     if (OB_FAIL(index_gen.init(buf + meta->index_offset_, meta->index_byte_))) {
+      STORAGE_LOG(WARN, "init index gen failed", K(ret));
     } else {
       if (0 != ref) {
         offset = index_gen.get_array().at(ref - 1);
@@ -731,6 +746,7 @@ OB_INLINE int ObBitMapMetaReader<ObStringSC>::read_exc_cell(const char *buf,
     const int64_t exc_cnt = meta->get_var_cnt();
     ObIntegerArrayGenerator index_gen;
     if (OB_FAIL(index_gen.init(buf + meta->index_offset_, meta->index_byte_))) {
+      STORAGE_LOG(WARN, "init index gen failed", K(ret));
     } else {
       if (0 != ref) {
         offset = index_gen.get_array().at(ref - 1);
@@ -761,6 +777,7 @@ OB_INLINE int ObBitMapMetaReader<ObOTimestampSC>::read_exc_cell(const char *buf,
   } else {
     ObIntegerArrayGenerator index_gen;
     if (OB_FAIL(index_gen.init(buf + meta->index_offset_, meta->index_byte_))) {
+      STORAGE_LOG(WARN, "init index gen failed", K(ret));
     } else {
       if (0 != ref) {
         offset = index_gen.get_array().at(ref - 1);
@@ -795,6 +812,7 @@ struct ObBitMapExcValReadCellFunc
       const int64_t exc_cnt = meta->get_var_cnt();
       ObIntegerArrayGenerator index_gen;
       if (OB_FAIL(index_gen.init(buf + meta->index_offset_, meta->index_byte_))) {
+        STORAGE_LOG(WARN, "init index gen failed", K(ret));
       } else {
         if (0 != ref) {
           offset = index_gen.get_array().at(ref - 1);
@@ -832,10 +850,12 @@ struct ObBitMapExcValReadCellFunc<VectorType, ObEncodingDecodeMetodType::D_INTEG
     uint32_t datum_len = 0;
     uint64_t unpacked_val = 0;
     if (OB_FAIL(get_uint_data_datum_len(common::ObDatum::get_obj_datum_map_type(store_type), datum_len))){
+      STORAGE_LOG(WARN, "Failed to get datum len for int data", K(ret));
     } else if (bitpacked) {
       if (OB_FAIL(ObBitStream::get(
           reinterpret_cast<unsigned char *>(const_cast<char *>(buf + meta->data_offset_)),
           ref * meta->bit_packing_len_, meta->bit_packing_len_, unpacked_val))) {
+        STORAGE_LOG(WARN, "failed to unpack data", K(ret), K(ref), KPC(meta));
       }
     } else {
       const int64_t cell_len = meta->get_fix_data_size(len);
@@ -874,6 +894,7 @@ struct ObBitMapExcValDecodeFunc
         if (OB_FAIL(ObBitStream::get(reinterpret_cast<unsigned char *>(
                   const_cast<char *>(store_data + meta->ext_offset_)),
                 ref * EXT_VALUE_BITS, EXT_VALUE_BITS, ext_val))) {
+          STORAGE_LOG(WARN, "Bitstream get failed", K(ret));
         }
       }
 
@@ -890,6 +911,7 @@ struct ObBitMapExcValDecodeFunc
         ret = ObBitMapExcValReadCellFunc<VectorType, DECODE_TYPE>::read_exc_cell(
             meta, store_data, ref, bitpacked, store_data_len, vec_offset, store_type, vector);
         if (OB_FAIL(ret)) {
+          STORAGE_LOG(WARN, "Failed to read exception cell", K(ret), KPC(meta), K(store_type));
         }
       }
     }

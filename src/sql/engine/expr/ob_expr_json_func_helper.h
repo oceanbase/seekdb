@@ -393,7 +393,9 @@ public:
     int ret = OB_SUCCESS;
     ObTextStringDatumResult text_result(expr.datum_meta_.type_, &expr, &ctx, &res);
     if (OB_FAIL(text_result.init(str.length(), allocator))) {
+      LOG_WARN("init lob result failed");
     } else if (OB_FAIL(text_result.append(str.ptr(), str.length()))) {
+      LOG_WARN("failed to append realdata", K(ret), K(str), K(text_result));
     } else {
       text_result.set_result();
     }

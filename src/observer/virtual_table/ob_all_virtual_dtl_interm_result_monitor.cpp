@@ -184,6 +184,7 @@ int ObAllDtlIntermResultMonitor::inner_get_next_row(ObNewRow *&row)
   ObObj *cells = cur_row_.cells_;
   if (!start_to_read_) {
     if (OB_FAIL(fill_scanner())) {
+      SERVER_LOG(WARN, "fill scanner failed", K(ret));
     } else {
       start_to_read_ = true;
     }
@@ -220,6 +221,7 @@ int ObAllDtlIntermResultMonitor::fill_scanner()
                                   cur_row_);
           SERVER_MODULE_SCOPE {
             if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDTLIntermResultManager>()->generate_monitor_info_rows(monitor_getter))) {
+              SERVER_LOG(WARN, "generate monitor info array failed", K(ret));
             }
           } else {
             // The server module set may not be ready during shutdown.

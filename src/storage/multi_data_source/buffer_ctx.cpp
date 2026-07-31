@@ -46,12 +46,14 @@ int BufferCtxNode::serialize(char *buf, const int64_t buf_len, int64_t &pos) con
     } else if (MDS_FAIL(ctx_->serialize(buf, buf_len, pos))) {
       MDS_LOG(ERROR, "serialize buffer ctx impl failed", KR(ret), K(type_id));
     } else {
+      MDS_LOG(DEBUG, "serialize buffer ctx impl success", KR(ret), K(type_id), K(buf_len), K(pos));
     }
   } else {
     int64_t type_id = INVALID_VALUE;
     if (MDS_FAIL(serialization::encode(buf, buf_len, pos, type_id))) {
       MDS_LOG(ERROR, "serialize invalid buffer ctx id failed", KR(ret), K(type_id));
     } else {
+      MDS_LOG(DEBUG, "serialize invalid buffer ctx id failed", KR(ret), K(type_id), K(buf_len), K(pos));
     }
   }
   return ret;
@@ -106,6 +108,7 @@ int BufferCtxNode::deserialize(const char *buf, const int64_t buf_len, int64_t &
   if (MDS_FAIL(serialization::decode(buf, buf_len, pos, ctx_type_idx))) {
     MDS_LOG(ERROR, "fail to deserialize buffer ctx id", KR(ret), K(ctx_type_idx));
   } else if (INVALID_VALUE == ctx_type_idx) {
+    MDS_LOG(DEBUG, "deserialized INVALD buffer ctx", KR(ret), K(ctx_type_idx), K(buf_len), K(pos));
   } else if (MDS_FAIL(deserialize_<0>(ctx_, ctx_type_idx, buf, buf_len, pos, allocator))) {
     MDS_LOG(WARN, "deserialized buffer ctx failed", KR(ret), K(ctx_type_idx));
   }

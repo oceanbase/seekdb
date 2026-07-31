@@ -322,13 +322,10 @@ public:
   {}
   virtual ~ObPluginVectorIndexService();
   int init(schema::ObMultiVersionSchemaService *schema_service,
-           storage::ObLSService *ls_service,
-           common::ObILobReadService *lob_read_service);
+           storage::ObLSService *ls_service);
   bool is_inited() { return is_inited_; }
   // Server module interfaces.
-  static int server_module_init(
-      ObPluginVectorIndexService *&service,
-      common::ObILobReadService *lob_read_service);
+  static int server_module_init(ObPluginVectorIndexService *&service);
   int start();
   void stop();
   void wait();
@@ -491,6 +488,7 @@ int ObPluginVectorIndexService::process_ivf_aux_info(
     ret = OB_NOT_INIT;
     OB_LOG(WARN, "LOB read service is not installed", KR(ret));
   } else if (OB_FAIL(generate_get_aux_info_sql(table_id, tablet_id, is_hidden_table, sql_string))) {
+    OB_LOG(WARN, "failed to generate sql", K(ret), K(table_id));
   } else {
     const common::ObLobReadOptions lob_read_options(*lob_read_service_);
     ObSessionParam session_param;
@@ -502,6 +500,7 @@ int ObPluginVectorIndexService::process_ivf_aux_info(
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
       if (OB_FAIL(sql_proxy_->read(res, sql_string.ptr(), &session_param))) {
+        OB_LOG(WARN, "failed to execute sql", K(ret), K(sql_string));
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         OB_LOG(WARN, "failed to execute sql", K(ret), K(sql_string));
@@ -513,7 +512,9 @@ int ObPluginVectorIndexService::process_ivf_aux_info(
           ObObj vec_obj;
           ObString blob_data;
           if (OB_FAIL(result->get_obj(cid_col_idx, cid_obj))) {
+            OB_LOG(WARN, "failed to get center id", K(ret));
           } else if (OB_FAIL(result->get_obj(vec_col_idx, vec_obj))) {
+            OB_LOG(WARN, "failed to get vid", K(ret));
           } else if (FALSE_IT(blob_data = vec_obj.get_string())) {
           } else if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(
               lob_read_options,
@@ -522,9 +523,11 @@ int ObPluginVectorIndexService::process_ivf_aux_info(
               CS_TYPE_BINARY,
               true,
               blob_data))) {
+            OB_LOG(WARN, "fail to get real data.", K(ret), K(blob_data));
           } else {
             int64_t dim = blob_data.length() / sizeof(float);
             if (OB_FAIL(callback_func(cid_obj.get_string(), dim, reinterpret_cast<float*>(blob_data.ptr())))) {
+              OB_LOG(WARN, "fail to do callback func", K(ret), K(dim));
             }
           }
         }

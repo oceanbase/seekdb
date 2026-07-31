@@ -79,7 +79,9 @@ int ObCommonSqlProxy::read(ReadResult &result, const char *sql, const int32_t gr
   int ret = OB_SUCCESS;
   ObISQLConnectionGuard conn;
   if (OB_FAIL(acquire(conn, group_id))) {
+    LOG_WARN("acquire connection failed", K(ret), KP(conn.get_ptr()));
   } else if (OB_FAIL(read(conn.get_ptr(), result, sql))) {
+    LOG_WARN("read failed", K(ret));
   }
   return ret;
 }
@@ -89,14 +91,17 @@ int ObCommonSqlProxy::read(ReadResult &result, const char *sql, const ObSessionP
   int ret = OB_SUCCESS;
   ObISQLConnectionGuard conn;
   if (OB_FAIL(acquire(conn, 0/*group_id*/))) {
+    LOG_WARN("acquire connection failed", K(ret), KP(conn.get_ptr()));
   } else if (nullptr != session_param) {
     conn->set_ddl_info(&session_param->ddl_info_);
     if (nullptr != session_param->sql_mode_) {
       if (OB_FAIL(conn->set_session_variable("sql_mode", *session_param->sql_mode_))) {
+        LOG_WARN("set inner connection sql mode failed", K(ret));
       }
     }
     if (OB_SUCC(ret) && nullptr != session_param && nullptr != session_param->tz_info_wrap_) {
       if (OB_FAIL(conn->set_tz_info_wrap(*session_param->tz_info_wrap_))) {
+        LOG_WARN("fail to set time zone info wrap", K(ret));
       }
     }
 
@@ -105,6 +110,7 @@ int ObCommonSqlProxy::read(ReadResult &result, const char *sql, const ObSessionP
   if (OB_FAIL(ret)) {
   } else if (FALSE_IT(conn->set_user_timeout(user_set_timeout))) {
   } else if (OB_FAIL(read(conn.get_ptr(), result, sql))) {
+    LOG_WARN("read failed", K(ret));
   }
   return ret;
 }
@@ -122,8 +128,10 @@ int ObCommonSqlProxy::read(ObISQLConnection *conn, ReadResult &result, const cha
     LOG_WARN("sql proxy stopped", K(ret), KCSTRING(sql));
   } else {
     if (OB_FAIL(conn->execute_read(sql, result))) {
+      LOG_WARN("query failed", K(ret), K(conn), K(start), KCSTRING(sql));
     }
   }
+  LOG_TRACE("execute sql", KCSTRING(sql), K(ret));
   return ret;
 }
 
@@ -136,6 +144,7 @@ int ObCommonSqlProxy::write(const char *sql, const int32_t group_id, int64_t &af
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("empty sql");
   } else if (OB_FAIL(acquire(conn, group_id))) {
+    LOG_WARN("acquire connection failed", K(ret), KP(conn.get_ptr()));
   } else if (!conn.is_valid()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("connection can not be NULL");
@@ -144,8 +153,10 @@ int ObCommonSqlProxy::write(const char *sql, const int32_t group_id, int64_t &af
     LOG_WARN("sql proxy stopped", K(ret), KCSTRING(sql));
   } else {
     if (OB_FAIL(conn->execute_write(sql, affected_rows))) {
+      LOG_WARN("execute sql failed", K(ret), K(conn), K(start), KCSTRING(sql));
     }
   }
+  LOG_TRACE("execute sql", KCSTRING(sql), K(ret));
   return ret;
 }
 
@@ -161,6 +172,7 @@ int ObCommonSqlProxy::write(const ObString sql,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("empty sql");
   } else if (OB_FAIL(acquire(conn, 0/*group_id*/))) {
+    LOG_WARN("acquire connection failed", K(ret), KP(conn.get_ptr()));
   } else if (!conn.is_valid()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("connection can not be NULL");
@@ -175,6 +187,7 @@ int ObCommonSqlProxy::write(const ObString sql,
       is_user_sql = true;
     }
     if (OB_FAIL(conn->set_ddl_info(&param->ddl_info_))) {
+      LOG_WARN("fail to set ddl info", K(ret));
     }
     if (param->ddl_info_.is_ddl()) {
     }
@@ -184,17 +197,22 @@ int ObCommonSqlProxy::write(const ObString sql,
   }
   if (OB_SUCC(ret) && nullptr != param && nullptr != param->sql_mode_) {
     if (OB_FAIL(conn->set_session_variable("sql_mode", *param->sql_mode_))) {
+      LOG_WARN("set inner connection sql mode failed", K(ret));
     }
   }
   if (OB_SUCC(ret) && nullptr != param && nullptr != param->tz_info_wrap_) {
     if (OB_FAIL(conn->set_tz_info_wrap(*param->tz_info_wrap_))) {
+      LOG_WARN("fail to set time zone info wrap", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(conn->execute_write(sql, affected_rows, is_user_sql))) {
+      LOG_WARN("execute sql failed", K(ret), K(conn), K(start), K(sql));
     } else {
+      LOG_TRACE("execute sql successfully", K(sql));
     }
   }
+  LOG_TRACE("execute sql", K(sql), K(ret));
   return ret;
 }
 
@@ -248,6 +266,7 @@ int ObCommonSqlProxy::acquire(sqlclient::ObISQLConnectionGuard &conn, const int3
     ret = OB_NOT_INIT;
     LOG_WARN("mysql proxy not inited", K(ret));
   } else if (OB_FAIL(acquire_connection(conn, group_id))) {
+    LOG_WARN("acquire connection failed", K(ret), KP(conn.get_ptr()));
   } else if (!conn.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("connection must not be null", K(ret));

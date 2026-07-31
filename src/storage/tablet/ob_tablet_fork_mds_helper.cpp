@@ -53,8 +53,10 @@ int ObTabletForkMdsArg::serialize(char *buf, const int64_t buf_len, int64_t &pos
   if (OB_SUCC(ret)) {
     bool has_truncate_arg = truncate_arg_.is_valid();
     if (OB_FAIL(serialization::encode_bool(buf, buf_len, pos, has_truncate_arg))) {
+      LOG_WARN("failed to encode has_truncate_arg", K(ret));
     } else if (has_truncate_arg) {
       if (OB_FAIL(truncate_arg_.serialize(buf, buf_len, pos))) {
+        LOG_WARN("failed to serialize truncate arg", K(ret));
       }
     }
   }
@@ -68,10 +70,12 @@ int ObTabletForkMdsArg::deserialize(const char *buf, const int64_t data_len, int
   if (OB_SUCC(ret)) {
     bool has_truncate_arg = false;
     if (OB_FAIL(serialization::decode_bool(buf, data_len, pos, &has_truncate_arg))) {
+      LOG_WARN("failed to decode has_truncate_arg", K(ret));
     } else if (has_truncate_arg) {
       truncate_arg_.destroy();
       allocator_.reset();
       if (OB_FAIL(truncate_arg_.deserialize(allocator_, buf, data_len, pos))) {
+        LOG_WARN("failed to deserialize truncate arg", K(ret));
       }
     } else {
       truncate_arg_.destroy();
@@ -133,11 +137,13 @@ int ObTabletForkMdsArg::set_truncate_arg(const ObTruncateTabletArg &arg)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail alloc memory", K(ret), K(buf_len));
     } else if (OB_FAIL(arg.serialize(buf, buf_len, pos))) {
+      LOG_WARN("fail to serialize", K(ret), K(arg));
     } else {
       truncate_arg_.destroy();
       allocator_.reset();
       pos = 0;
       if (OB_FAIL(truncate_arg_.deserialize(allocator_, buf, buf_len, pos))) {
+        LOG_WARN("fail to deserialize", K(ret), K(arg));
       }
     }
   }
@@ -169,8 +175,10 @@ int ObTabletForkMdsHelper::register_mds(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate buffer for tablet fork mds", KR(ret), K(size));
     } else if (OB_FAIL(arg.serialize(buf, size, pos))) {
+      LOG_WARN("failed to serialize tablet fork mds arg", KR(ret), K(size), K(pos));
     } else if (OB_FAIL(query::ObInnerSQLConnectionAccess::register_multi_data_source(
                    isql_conn, ObTxDataSourceType::TABLET_FORK, buf, pos, flag))) {
+      LOG_WARN("failed to register tablet fork mds", KR(ret), K(need_flush_redo), K(pos));
     }
   }
   return ret;
@@ -182,7 +190,9 @@ int ObTabletForkMdsHelper::on_register(const char* buf, const int64_t len, mds::
   int64_t pos = 0;
   ObTabletForkMdsArg arg;
   if (OB_FAIL(arg.deserialize(buf, len, pos))) {
+    LOG_WARN("failed to deserialize tablet fork mds arg", KR(ret), K(len), K(pos));
   } else if (OB_FAIL(modify(arg, SCN::invalid_scn(), ctx))) {
+    LOG_WARN("failed to apply tablet fork mds on_register", KR(ret), K(arg));
   }
   return ret;
 }
@@ -194,7 +204,9 @@ int ObTabletForkMdsHelper::on_replay(const char* buf, const int64_t len,
   int64_t pos = 0;
   ObTabletForkMdsArg arg;
   if (OB_FAIL(arg.deserialize(buf, len, pos))) {
+    LOG_WARN("failed to deserialize tablet fork mds arg", KR(ret), K(len), K(pos), K(scn));
   } else if (OB_FAIL(modify(arg, scn, ctx))) {
+    LOG_WARN("failed to apply tablet fork mds on_replay", KR(ret), K(scn), K(arg));
   }
   return ret;
 }
@@ -211,11 +223,14 @@ int ObTabletForkMdsHelper::modify(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(arg));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
+    LOG_WARN("fail to get ls", KR(ret), K(arg));
   }
 
   if (OB_SUCC(ret) && arg.autoinc_seq_arg_.is_valid()) {
     if (OB_FAIL(ObTabletAutoincSeqService::get_instance().batch_set_tablet_autoinc_seq_in_trans(
             *tenant_ls, arg.autoinc_seq_arg_.autoinc_params_, scn, ctx))) {
+      LOG_WARN("failed to batch set tablet autoinc seq", KR(ret), K(scn),
+          "param_cnt", arg.autoinc_seq_arg_.autoinc_params_.count());
     } else {
       LOG_INFO("fork table: successfully set autoinc seq", K(scn),
           "param_cnt", arg.autoinc_seq_arg_.autoinc_params_.count());
@@ -228,11 +243,13 @@ int ObTabletForkMdsHelper::modify(
     const ObTabletMapKey key(truncate_arg.index_tablet_id_);
 
     if (OB_FAIL(ObTabletCreateDeleteHelper::get_tablet(key, tablet_handle))) {
+      LOG_WARN("failed to get tablet for truncate info", K(ret), K(key));
     } else if (OB_FAIL(tablet_handle.get_obj()->set_truncate_info(
         truncate_arg.truncate_info_.key_,
         truncate_arg.truncate_info_,
         static_cast<mds::MdsCtx &>(ctx),
         0/*lock_timeout_us*/))) {
+      LOG_WARN("failed to set truncate info", KR(ret), K(scn), K(truncate_arg));
     } else {
       LOG_INFO("fork table: successfully set truncate info", K(scn),
           K(truncate_arg.index_tablet_id_), K(truncate_arg.truncate_info_.key_));
@@ -240,6 +257,7 @@ int ObTabletForkMdsHelper::modify(
   }
 
   if (OB_FAIL(ret)) {
+    LOG_WARN("failed to apply tablet fork mds", KR(ret), K(scn), K(arg));
   } else {
     LOG_DEBUG("tablet fork mds applied", K(scn),
         "has_autoinc", arg.autoinc_seq_arg_.is_valid(),

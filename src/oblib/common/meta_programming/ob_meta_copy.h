@@ -34,6 +34,7 @@ inline int copy_or_assign(const T &src,
                           T &dst,
                           ObIAllocator &alloc = DummyAllocator::get_instance())
 {
+  OCCAM_LOG(DEBUG, "call data assign method with allocator");
   return dst.assign(alloc, src);
 }
 
@@ -45,6 +46,7 @@ inline int copy_or_assign(const T &src,
                           ObIAllocator &alloc = DummyAllocator::get_instance())
 {
   UNUSED(alloc);
+  OCCAM_LOG(DEBUG, "call data assign method");
   return dst.assign(src);
 }
 
@@ -58,6 +60,7 @@ inline int copy_or_assign(const T &src,
                           ObIAllocator &alloc = DummyAllocator::get_instance())
 {
   UNUSED(alloc);
+  OCCAM_LOG(DEBUG, "call data assign operator");
   dst = src;
   return common::OB_SUCCESS;
 }
@@ -73,6 +76,7 @@ inline int copy_or_assign(const T &src,
                           ObIAllocator &alloc = DummyAllocator::get_instance())
 {
   UNUSED(alloc);
+  OCCAM_LOG(DEBUG, "call data copy construction");
   new (&dst) T (src);
   return common::OB_SUCCESS;
 }
@@ -109,6 +113,7 @@ inline int move_or_copy_or_assign(T &&src,
                                   ObIAllocator &alloc = DummyAllocator::get_instance())
 {
   UNUSED(alloc);
+  OCCAM_LOG(DEBUG, "call data move assign operator");
   dst = std::move(src);
   return common::OB_SUCCESS;
 }
@@ -123,6 +128,7 @@ inline int move_or_copy_or_assign(T &&src,
                                   ObIAllocator &alloc = DummyAllocator::get_instance())
 {
   UNUSED(alloc);
+  OCCAM_LOG(DEBUG, "call data copy move construction");
   new (&dst) T (std::move(src));
   return common::OB_SUCCESS;
 }

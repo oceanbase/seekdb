@@ -115,10 +115,14 @@ int ObIOManager::init(const ObIORuntimeOptions &runtime_options,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(runtime_options), K(memory_limit), K(schedule_queue_count));
   } else if (OB_FAIL(allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE, "IO_MGR", memory_limit))) {
+    LOG_WARN("init io allocator failed", K(ret));
   } else if (OB_FAIL(channel_map_.create(7, "IO_CHANNEL_MAP"))) {
+    LOG_WARN("create channel map failed", K(ret));
   } else if (OB_FAIL(fault_detector_.init())) {
+    LOG_WARN("init io fault detector failed", K(ret));
   } else if (OB_ISNULL(io_service_ = OB_NEW(ObIOService, ObMemAttr("IO_MGR")))) {
   } else if (OB_FAIL(io_service_->init(ObIOServiceConfig::default_instance()))) {
+    LOG_WARN("init server io service failed", K(ret));
   } else {
     ObMemAttr attr("IO_MGR");
     allocator_.set_attr(attr);
@@ -157,6 +161,7 @@ public:
     ObDeviceChannel *ch = entry.second;
     if (nullptr != ch) {
       if (OB_FAIL(ch->reload_config(conf_))) {
+        LOG_WARN("reload device channel config failed", K(ret), KPC(ch));
       }
     }
     return ret;
@@ -186,7 +191,9 @@ int ObIOManager::start()
     ret = OB_NOT_INIT;
     LOG_WARN("IO manager not init", K(ret), K(is_inited_));
   } else if (OB_FAIL(io_service_->start())) {
+    LOG_WARN("init server io service start failed", K(ret));
   } else if (OB_FAIL(fault_detector_.start())) {
+    LOG_WARN("start io fault detector failed", K(ret));
   } else {
     is_working_ = true;
   }
@@ -214,6 +221,7 @@ int ObIOManager::read(const ObIOInfo &info, ObIOHandle &handle)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(aio_read(info, handle))) {
+    LOG_WARN("aio read failed", K(ret), K(info));
   } else if (OB_FAIL(handle.wait())) {
     LOG_WARN("io handle wait failed", K(ret), K(info), K(info.timeout_us_));
     // io callback should be freed by caller
@@ -227,6 +235,7 @@ int ObIOManager::write(const ObIOInfo &info)
   int ret = OB_SUCCESS;
   ObIOHandle handle;
   if (OB_FAIL(aio_write(info, handle))) {
+    LOG_WARN("aio write failed", K(ret), K(info));
   } else if (OB_FAIL(handle.wait())) {
     LOG_WARN("io handle wait failed", K(ret), K(info), K(info.timeout_us_));
     // io callback should be freed by caller
@@ -248,6 +257,7 @@ int ObIOManager::aio_read(const ObIOInfo &info, ObIOHandle &handle)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(info), K(lbt()));
   } else if (OB_FAIL(dispatch_aio(info, handle))) {
+    LOG_WARN("inner aio failed", K(ret), K(info));
   }
   return ret;
 }
@@ -265,6 +275,7 @@ int ObIOManager::aio_write(const ObIOInfo &info, ObIOHandle &handle)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(info), K(lbt()));
   } else if (OB_FAIL(dispatch_aio(info, handle))) {
+    LOG_WARN("inner aio failed", K(ret), K(info));
   }
   return ret;
 }
@@ -288,6 +299,7 @@ int ObIOManager::pread(ObIOInfo &info, int64_t &read_size)
     info.timeout_us_ = MAX_IO_WAIT_TIME_MS * 1000;
     ObIOHandle handle;
     if (OB_FAIL(dispatch_aio(info, handle))) {
+      LOG_WARN("do inner aio failed", K(ret), K(info));
     } else {
       while (OB_SUCC(ret) || OB_TIMEOUT == ret || OB_IO_TIMEOUT == ret) { // wait to die
         if (OB_FAIL(handle.wait(MAX_IO_WAIT_TIME_MS))) {
@@ -326,6 +338,7 @@ int ObIOManager::pwrite(ObIOInfo &info, int64_t &write_size)
     info.timeout_us_ = MAX_IO_WAIT_TIME_MS * 1000;
     ObIOHandle handle;
     if (OB_FAIL(dispatch_aio(info, handle))) {
+      LOG_WARN("do inner aio failed", K(ret), K(info));
     } else {
       while (OB_SUCC(ret) || OB_TIMEOUT == ret || OB_IO_TIMEOUT == ret) { // wait to die
         if (OB_FAIL(handle.wait(MAX_IO_WAIT_TIME_MS))) {
@@ -358,8 +371,11 @@ int ObIOManager::detect_read(const ObIOInfo &info, ObIOHandle &handle)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(info), K(lbt()));
   } else if (OB_FAIL(get_io_service(service_holder))) {
+    LOG_WARN("get io service failed", K(ret));
   } else if (OB_FAIL(service_holder.get_ptr()->detect_aio(info, handle))) {
+    LOG_WARN("io service do aio failed", K(ret), K(info), KPC(service_holder.get_ptr()));
   } else if (OB_FAIL(handle.wait())) {
+    LOG_WARN("io handle wait failed", K(ret), K(info));
   }
   return ret;
 }
@@ -370,7 +386,9 @@ int ObIOManager::dispatch_aio(const ObIOInfo &info, ObIOHandle &handle)
   ObRefHolder<ObIOService> service_holder;
 
   if (OB_FAIL(get_io_service(service_holder))) {
+    LOG_WARN("get io service failed", K(ret));
   } else if (OB_FAIL(service_holder.get_ptr()->inner_aio(info, handle))) {
+    LOG_WARN("io service do aio failed", K(ret), K(info), KPC(service_holder.get_ptr()));
   }
   return ret;
 }
@@ -388,6 +406,7 @@ int ObIOManager::set_io_config(const ObIOConfig &conf)
     ObMutexGuard guard(mutex_);
     ReloadIOConfigFn fn(conf);
     if (OB_FAIL(channel_map_.foreach_refactored(fn))) {
+      LOG_WARN("reload io config failed", K(ret));
     } else {
       io_config_ = conf;
     }
@@ -435,7 +454,9 @@ int ObIOManager::add_device_channel(ObIODevice *device_handle,
                                           sync_channel_thread_count,
                                           max_io_depth,
                                           allocator_))) {
+    LOG_WARN("init device_channel failed", K(ret), K(async_channel_thread_count), K(sync_channel_thread_count));
   } else if (OB_FAIL(channel_map_.set_refactored(reinterpret_cast<int64_t>(device_handle), device_channel))) {
+    LOG_WARN("set channel map failed", K(ret), KP(device_handle));
   } else {
     LOG_INFO("add io device channel succ", KP(device_handle));
     device_channel = nullptr;
@@ -458,6 +479,7 @@ int ObIOManager::remove_device_channel(ObIODevice *device_handle)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(device_handle));
   } else if (OB_FAIL(channel_map_.erase_refactored(reinterpret_cast<int64_t>(device_handle), &device_channel))) {
+    LOG_WARN("remove from channel map failed", K(ret), KP(device_handle));
   } else if (nullptr != device_channel) {
     device_channel->~ObDeviceChannel();
     allocator_.free(device_channel);
@@ -478,6 +500,7 @@ int ObIOManager::get_device_channel(const ObIORequest &req, ObDeviceChannel *&de
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(device_handle));
   } else if (OB_FAIL(channel_map_.get_refactored(reinterpret_cast<int64_t>(device_handle), device_channel))) {
+    LOG_WARN("get device channel failed", K(ret), KP(device_handle));
   }
   return ret;
 }
@@ -493,7 +516,9 @@ int ObIOManager::refresh_io_resource_config(const ObIOServiceConfig::ResourceCon
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(io_resource_config));
   } else if (OB_FAIL(get_io_service(service_holder))) {
+    LOG_WARN("get io service failed", K(ret));
   } else if (OB_FAIL(service_holder.get_ptr()->update_basic_io_resource_config(io_resource_config))) {
+    LOG_WARN("update io config failed", K(ret), K(io_resource_config));
   }
   return ret;
 }
@@ -509,7 +534,9 @@ int ObIOManager::refresh_io_param_config(const ObIOServiceConfig::ParamConfig &i
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(io_param_config));
   } else if (OB_FAIL(get_io_service(service_holder))) {
+    LOG_WARN("get io service failed", K(ret));
   } else if (OB_FAIL(service_holder.get_ptr()->update_basic_io_param_config(io_param_config))) {
+    LOG_WARN("update io config failed", K(ret), K(io_param_config));
   }
   return ret;
 }
@@ -622,13 +649,22 @@ int ObIOService::init(const ObIOServiceConfig &io_config)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(io_config));
   } else if (OB_FAIL(init_memory_pool( io_config.param_config_.memory_limit_))) {
+    LOG_WARN("init io memory pool failed", K(ret), K(io_config), K(io_memory_limit_), K(request_count_), K(request_count_));
   } else if (OB_FAIL(io_usage_.init(io_config.group_configs_.count() / IO_MODE_CNT))) {
+    LOG_WARN("init io usage failed", K(ret), K(io_usage_), K(io_config.group_configs_.count()));
   } else if (OB_FAIL(io_sys_usage_.init(SYS_MODULE_CNT))) {
+    LOG_WARN("init io usage failed", K(ret), K(io_sys_usage_), K(SYS_MODULE_CNT), K(SYS_MODULE_CNT * 2));
   } else if (OB_FAIL(io_mem_stats_.init(SYS_MODULE_CNT , io_config.group_configs_.count() / IO_MODE_CNT))) {
+    LOG_WARN("init io usage failed", K(ret), K(io_mem_stats_), K(SYS_MODULE_CNT), K(io_config.group_configs_.count()));
   } else if (OB_FAIL(init_group_index_map(io_config))) {
+    LOG_WARN("init group map failed", K(ret));
   } else if (OB_FAIL(io_config_.deep_copy(io_config))) {
+    LOG_WARN("copy io config failed", K(ret), K(io_config_));
   } else if(OB_FAIL(io_config_.group_configs_.reserve(16L * IO_MODE_CNT))) {
+    //rerserve space for 16 groups to avoid concurrency problem
+    LOG_WARN("reserve group configs failed", K(ret));
   } else if (OB_FAIL(qsched_.init(io_config))) {
+    LOG_WARN("init qsched failed", K(ret), K(io_config));
   } else {
     
     inc_ref();
@@ -681,6 +717,7 @@ int ObIOService::start()
     // do nothing
   } else if (OB_FAIL(callback_mgr_.init(callback_thread_count,
                      callback_thread_count * DEFAULT_QUEUE_DEPTH))) {
+    LOG_WARN("init callback manager failed", K(ret), K(callback_thread_count));
   } else {
     is_working_ = true;
   }
@@ -740,7 +777,9 @@ int ObIOService::init_memory_pool(const int64_t memory)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid io argument", K(ret), K(memory));
   } else if (OB_FAIL(calc_io_memory( memory))) {
+    LOG_WARN("calc io memory failed", K(ret), K(memory), K(io_memory_limit_), K(request_count_), K(request_count_));
   } else if (OB_FAIL(io_allocator_.init(io_memory_limit_))) {
+    LOG_WARN("init io allocator failed", K(ret), K(io_memory_limit_));
   } else {
     LOG_INFO("init io memory pool success", K(memory), K(io_memory_limit_), K(request_count_), K(request_count_));
   }
@@ -754,7 +793,9 @@ int ObIOService::update_memory_pool(const int64_t memory)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid io argument", K(ret), K(memory));
   } else if (OB_FAIL(calc_io_memory( memory))) {
+    LOG_WARN("calc io memory failed", K(ret), K(memory), K(io_memory_limit_), K(request_count_), K(request_count_));
   } else if (OB_FAIL(io_allocator_.update_memory_limit(io_memory_limit_))) {
+    LOG_WARN("update io memory limit failed", K(ret), K(io_memory_limit_));
   } else {
     LOG_INFO("update io memory pool success", K(memory), K(io_memory_limit_), K(request_count_), K(request_count_));
   }
@@ -772,6 +813,7 @@ int ObIOService::alloc_and_init_result(const ObIOInfo &info, ObIOResult *&io_res
       //blocking foreground thread
       ret = OB_SUCCESS;
       if (OB_FAIL(try_alloc_result_until_timeout(ObTimeUtility::current_time() + info.timeout_us_, io_result))) {
+        LOG_WARN("retry alloc io result failed", K(ret));
       }
     } else {
       LOG_WARN("alloc io result failed", K(ret), KP(io_result));
@@ -782,12 +824,14 @@ int ObIOService::alloc_and_init_result(const ObIOInfo &info, ObIOResult *&io_res
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("io result is null", K(ret));
     } else if (OB_FAIL(io_result->basic_init())) {
+      LOG_WARN("basic init io result failed", K(ret));
     }
   }
 
   if (OB_FAIL(ret)) {
   } else if (FALSE_IT(io_result->io_callback_ = info.callback_)) {
   } else if (OB_FAIL(io_result->init(info))) {
+    LOG_WARN("init io result failed", K(ret), KPC(io_result));
   }
 
   if (OB_FAIL(ret) && OB_NOT_NULL(io_result)) {
@@ -802,16 +846,19 @@ int ObIOService::alloc_req_and_result(const ObIOInfo &info, ObIOHandle &handle, 
   int ret = OB_SUCCESS;
   ObIOResult *io_result = nullptr;
   if (OB_FAIL(alloc_and_init_result(info, io_result))) {
+    LOG_WARN("fail to alloc and init io result", K(ret));
   } else if (OB_ISNULL(io_result)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("io result is null", K(ret));
   } else if (OB_FAIL(handle.set_result(*io_result))) {
+    LOG_WARN("fail to set result to handle", K(ret), KPC(io_result));
   } else if (OB_FAIL(alloc_io_request(io_request))) {
     if (OB_ALLOCATE_MEMORY_FAILED == ret) {
       LOG_WARN("alloc io request failed, retry until timeout", K(ret));
       //blocking foreground thread
       ret = OB_SUCCESS;
       if (OB_FAIL(try_alloc_req_until_timeout(ObTimeUtility::current_time() + info.timeout_us_, io_request))) {
+        LOG_WARN("retry alloc io request failed", K(ret));
       }
     } else {
       LOG_WARN("alloc io request failed", K(ret), KP(io_request));
@@ -822,11 +869,13 @@ int ObIOService::alloc_req_and_result(const ObIOInfo &info, ObIOHandle &handle, 
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("io request is null", K(ret));
     } else if (OB_FAIL(io_request->basic_init())) {
+      LOG_WARN("basic init io request failed", K(ret));
     }
   } 
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(io_request->init(info, io_result))) {
+    LOG_WARN("init io request failed", K(ret), KP(io_request));
   }
 
   if (OB_FAIL(ret)) {
@@ -857,7 +906,9 @@ int ObIOService::inner_aio(const ObIOInfo &info, ObIOHandle &handle)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("device handle is null", K(ret), K(info));
   } else if (OB_FAIL(alloc_req_and_result(info, handle, req, req_holder))) {
+    LOG_WARN("pre set io args failed", K(ret), K(info));
   } else if (OB_FAIL(qsched_.schedule_request(*req))) {
+    LOG_WARN("schedule request failed", K(ret), KPC(req));
   }
   if (OB_FAIL(ret)) {
     // io callback should be freed by caller
@@ -886,9 +937,12 @@ int ObIOService::detect_aio(const ObIOInfo &info, ObIOHandle &handle)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("callback and user_data_bug should be nullptr", K(ret), K(info.callback_));
   } else if (OB_FAIL(alloc_req_and_result(info, handle, req, req_holder))) {
+    LOG_WARN("pre set io args failed", K(ret), K(info));
   } else if (OB_FAIL(req->prepare())) {
+    LOG_WARN("prepare io request failed", K(ret), K(req));
   } else if (FALSE_IT(time_guard.click("prepare_detect_req"))) {
   } else if (OB_FAIL(OB_IO_MANAGER.get_device_channel(*req, device_channel))) {
+    LOG_WARN("get device channel failed", K(ret), K(req));
   } else {
     if (OB_ISNULL(req->io_result_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -896,6 +950,7 @@ int ObIOService::detect_aio(const ObIOInfo &info, ObIOHandle &handle)
     } else {
       ObThreadCondGuard guard(req->io_result_->cond_);
       if (OB_FAIL(guard.get_ret())) {
+        LOG_ERROR("fail to guard master condition", K(ret));
       } else if (req->is_canceled()) {
         ret = OB_CANCELED;
       } else if (OB_FAIL(device_channel->submit(*req))) {
@@ -927,6 +982,7 @@ int ObIOService::enqueue_callback(ObIORequest &req)
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("io service not working", K(ret));
   } else if (OB_FAIL(callback_mgr_.enqueue_callback(req))) {
+    LOG_WARN("push io request into callback queue failed", K(ret), K(req));
   }
   return ret;
 }
@@ -950,6 +1006,7 @@ int ObIOService::update_basic_io_resource_config(const ObIOServiceConfig::Resour
       LOG_INFO("update io resource config", K(io_config_.resource_config_), K(io_resource_config));
       io_config_.resource_config_ =io_resource_config;
       if (OB_FAIL(qsched_.update_config(io_config_))) {
+        LOG_WARN("refresh io config failed", K(ret), K(io_config_));
       }
     }
   }
@@ -971,6 +1028,7 @@ int ObIOService::update_basic_io_param_config(const ObIOServiceConfig::ParamConf
     } else if (io_config_.param_config_.memory_limit_ != io_param_config.memory_limit_) {
       LOG_INFO("update io memory limit", K(io_param_config.memory_limit_), K(io_config_.param_config_.memory_limit_));
       if (OB_FAIL(update_memory_pool(io_param_config.memory_limit_))) {
+        LOG_WARN("fail to update io service memory pool", K(ret), K(io_memory_limit_), K(io_param_config.memory_limit_));
       } else {
         io_config_.param_config_.memory_limit_ = io_param_config.memory_limit_;
         need_adjust_callback = true;
@@ -986,6 +1044,7 @@ int ObIOService::update_basic_io_param_config(const ObIOServiceConfig::ParamConf
       int64_t callback_thread_count = io_config_.get_callback_thread_count();
       SERVER_MODULE_SCOPE {
         if (OB_FAIL(callback_mgr_.update_thread_count(callback_thread_count))) {
+          LOG_WARN("callback manager adjust thread failed", K(ret), K(io_param_config));
         }
       }
     }
@@ -1084,11 +1143,13 @@ int ObIOService::init_group_index_map(const ObIOServiceConfig &io_config)
   int ret = OB_SUCCESS;
   ObMemAttr attr("GROUP_INDEX_MAP");
   if (OB_FAIL(group_id_index_map_.create(7, attr, attr))) {
+    LOG_WARN("create group index map failed", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < io_config.group_configs_.count(); ++i) {
       const ObIOServiceConfig::GroupConfig &config = io_config.group_configs_.at(i);
       ObIOGroupKey key(config.group_id_, config.mode_);
       if (OB_FAIL(group_id_index_map_.set_refactored(key, i, 1 /*overwrite*/))) {
+        LOG_WARN("init group_index_map failed", K(ret), K(i));
       }
     }
   }

@@ -40,7 +40,6 @@
 
 
 #include "rootserver/ob_local_management_service.h"
-#include "rootserver/ob_debug_sync_broadcaster_adapter.h"
 #include "rootserver/freeze/ob_major_freeze_coordinator_adapter.h"
 
 #include "observer/mysql/ob_diag.h"
@@ -49,7 +48,6 @@
 #include "observer/omt/ob_worker_processor.h"
 #include "data_plane/memtable/ob_lock_wait_service.h"
 #include "query/ai/ob_ai_endpoint_resolver.h"
-#include "query/ai/ob_ai_endpoint_admin.h"
 #include "query/change_stream/ob_change_stream_service.h"
 #include "query/ddl/ob_ddl_execution_guard.h"
 #include "query/plan_cache/ob_plan_cache_access_service.h"
@@ -234,7 +232,6 @@ class ObSchemaRefreshSchedulerAdapter;
 class ObServer : public share::ObIMemstoreRuntime,
                  public data_plane::ObILockWaitService,
                  public data_plane::ObIMemoryPressureService,
-                 public query::ObIAiEndpointAdmin,
                  public query::ObIAiEndpointResolver,
                  public query::ObIChangeStreamService,
                  public query::ObIDdlExecutionLimiter,
@@ -463,7 +460,6 @@ private:
   // All operations and processing logic relating to ob server is
   // defined in oceanbase_service_.
   ObService ob_service_;
-  rootserver::ObDebugSyncBroadcasterAdapter debug_sync_broadcaster_;
 
   omt::ObServerRuntimeController server_runtime_controller_;
 
@@ -629,15 +625,6 @@ public:
   share::ObITabletAutoincrementService * tablet_autoincrement_service();
   share::ObITabletAutoincrementAdmin * tablet_autoincrement_admin();
   query::ObIAiEndpointResolver * ai_endpoint_resolver() { return this; }
-  int create_endpoint(
-      common::ObArenaAllocator &allocator,
-      const common::ObString &endpoint_name,
-      const common::ObIJsonBase &definition) override;
-  int alter_endpoint(
-      common::ObArenaAllocator &allocator,
-      const common::ObString &endpoint_name,
-      const common::ObIJsonBase &definition) override;
-  int drop_endpoint(const common::ObString &endpoint_name) override;
   int resolve_by_model_name(
       const common::ObString &model_name,
       common::ObIAllocator &allocator,

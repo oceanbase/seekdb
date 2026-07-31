@@ -51,6 +51,7 @@ int ObKVCacheHandle::assign(const ObKVCacheHandle& other)
   int ret = OB_SUCCESS;
   reset();
   if (OB_FAIL(this->hazptr_holder_.assign(other.hazptr_holder_))) {
+    COMMON_LOG(WARN, "Fail to assign hazptr_holder, ", K(ret));
   }
   return ret;
 }
@@ -189,13 +190,20 @@ int ObKVGlobalCache::init(
     COMMON_LOG(WARN, "Invalid argument, ", K(ret), K(bucket_num),
                K(max_cache_size), K(block_size), K(cache_wash_interval));
   } else if (OB_FAIL(hazard_domain_.init(ObKVCacheStore::compute_mb_handle_num(max_cache_size, block_size)))) {
+    COMMON_LOG(WARN, "Fail to init hazard domain, ", K(ret));
   } else if (OB_FAIL(store_.init(max_cache_size, block_size))) {
+    COMMON_LOG(WARN, "Fail to init store, ", K(ret));
   } else if (OB_FAIL(map_.init(hash::cal_next_prime(bucket_num), &store_))) {
+    COMMON_LOG(WARN, "Fail to init map, ", K(ret), K(bucket_num));
   } else if (OB_FAIL(insts_.init(MAX_CACHE_NUM, configs_, map_.get_node_allocator()))) {
+    COMMON_LOG(WARN, "Fail to init insts, ", K(ret));
   } else if (OB_FAIL(wash_timer_.init("KVCacheWash", ObMemAttr("KVCacheWash")))) {
+    COMMON_LOG(WARN, "Fail to init wash timer, ", K(ret));
   } else if (OB_FAIL(replace_timer_.init("KVCacheRep", ObMemAttr("KVCacheRep")))) {
+    COMMON_LOG(WARN, "Fail to init replace timer", K(ret));
   } else if (FALSE_IT(cache_wash_interval_ = cache_wash_interval)) {
   } else if (OB_FAIL(reload_config(runtime_options))) {
+    COMMON_LOG(WARN, "failed to reload wash interval", K(ret));
   } else {
     cache_num_ = 0;
     stopped_ = false;
@@ -290,6 +298,7 @@ int ObKVGlobalCache::put(
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid inst_key", K(inst_key), K(ret));
   } else if (OB_FAIL(insts_.get_cache_inst(inst_key, inst_handle))) {
+    COMMON_LOG(WARN, "Fail to get cache inst, ", K(ret));
   } else if (NULL == inst_handle.get_inst()) {
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(WARN, "The inst is NULL, ", K(ret));
@@ -306,6 +315,7 @@ int ObKVGlobalCache::put(
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(store.store(key, value, kvpair, hazptr_holder))) {
+    COMMON_LOG(WARN, "Fail to store kvpair to store, ", K(ret));
   } else {
     pvalue = kvpair->value_;
     if (OB_FAIL(map_.put(*inst_handle.get_inst(), key, kvpair, hazptr_holder, overwrite))) {
@@ -354,11 +364,13 @@ int ObKVGlobalCache::alloc(
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(WARN, "Cannot overwrite valid hazptr_holder", K(ret), K(hazptr_holder));
   } else if (OB_FAIL(insts_.get_cache_inst(inst_key, inst_handle))) {
+    COMMON_LOG(WARN, "Fail to get cache inst, ", K(ret));
   } else if (OB_ISNULL(inst_handle.get_inst())) {
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(WARN, "The inst is NULL, ", K(ret));
   } else if (OB_FAIL(store.alloc_kvpair(
           key_size, value_size, kvpair, hazptr_holder))) {
+    COMMON_LOG(WARN, "Fail to store kvpair, ", K(ret));
   }
   return ret;
 }
@@ -408,6 +420,7 @@ int ObKVGlobalCache::erase_cache()
   } else {
     store_.flush_washable_mbs(false);
     if (OB_FAIL(map_.erase_all())) {
+      COMMON_LOG(WARN, "fail to erase cache, ", K(ret));
     }
   }
   return ret;
@@ -432,6 +445,7 @@ int ObKVGlobalCache::erase_cache(const char *cache_name)
     if (-1 != cache_id) {
       store_.flush_washable_mbs(false);
       if (OB_FAIL(map_.erase_all(cache_id))) {
+        COMMON_LOG(WARN, "fail to erase cache, ", K(ret), K(cache_id));
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
@@ -556,6 +570,7 @@ int ObKVGlobalCache::reload_config(const ObKVCacheRuntimeOptions &runtime_option
     if (is_exist && OB_FAIL(wash_timer_.cancel_task(wash_task_))) {
       COMMON_LOG(WARN, "failed to cancel wash task", K(ret));
     } else if (OB_FAIL(wash_timer_.schedule(wash_task_, wash_interval, true))) {
+      COMMON_LOG(WARN, "failed to schedule wash task", K(ret));
     }
 
     is_exist = false;
@@ -564,14 +579,17 @@ int ObKVGlobalCache::reload_config(const ObKVCacheRuntimeOptions &runtime_option
     } else if (is_exist && OB_FAIL(replace_timer_.cancel_task(replace_task_))) {
       COMMON_LOG(WARN, "failed to cancel replace task", K(ret));
     } else if (OB_FAIL(replace_timer_.schedule(replace_task_, wash_interval, true))) {
+      COMMON_LOG(WARN, "failed to schedule replace task", K(ret));
     }
     if (OB_SUCC(ret)) {
       COMMON_LOG(INFO, "success to reload_wash_interval", K(wash_interval));
     }
   } else if (!inited_) {
     if (OB_FAIL(wash_timer_.schedule(wash_task_, cache_wash_interval_, true))) {
+      COMMON_LOG(WARN, "failed to schedule wash task", K(ret));
     } else if (OB_FAIL(replace_timer_.schedule(replace_task_,
                                                cache_wash_interval_, true))) {
+      COMMON_LOG(WARN, "failed to schedule replace task", K(ret));
     }
   }
   return ret;
@@ -584,6 +602,7 @@ int ObKVGlobalCache::get_washable_size(int64_t &washable_size)
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "not init", K(ret));
   } else if (OB_FAIL(store_.get_washable_size(washable_size))) {
+    COMMON_LOG(WARN, "get washable size failed", K(ret), K(washable_size));
   }
   return ret;
 }
@@ -625,6 +644,7 @@ int ObKVGlobalCache::get_cache_inst_info(ObIArray<ObKVCacheInstHandle> &inst_han
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "The ObKVGlobalCache has not been inited", K(ret));
   } else if (OB_FAIL(insts_.get_cache_info(inst_handles))) {
+    COMMON_LOG(WARN, "Fail to get all cache info", K(ret));
   }
 
   return ret;
@@ -637,6 +657,7 @@ int ObKVGlobalCache::get_memblock_info(ObIArray<ObKVCacheStoreMemblockInfo> &mem
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "The ObKVGlobalCache has not been inited", K(ret));
   } else if (OB_FAIL(store_.get_memblock_info(memblock_infos))) {
+    COMMON_LOG(WARN, "Fail to get all memblock info", K(ret));
   }
   return ret;
 }

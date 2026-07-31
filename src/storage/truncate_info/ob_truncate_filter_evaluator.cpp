@@ -134,6 +134,7 @@ struct ObTruncateFilterEvaluator::Impl
     }
     if (projected_index < 0) {
       if (OB_FAIL(referenced_columns_.push_back(row_index))) {
+        LOG_WARN("failed to record referenced truncate column", K(ret), K(row_index));
       } else {
         projected_index = static_cast<int32_t>(referenced_columns_.count() - 1);
       }
@@ -158,6 +159,7 @@ struct ObTruncateFilterEvaluator::Impl
     for (int64_t i = 0; OB_SUCC(ret) && i < key_count; ++i) {
       values[i].reuse();
       if (OB_FAIL(values[i].from_obj(rowkey.get_obj_ptr()[i]))) {
+        LOG_WARN("failed to compile truncate bound", K(ret), K(i), K(rowkey));
       } else if (OB_UNLIKELY(values[i].is_null_or_nop())) {
         ret = OB_INVALID_DATA;
         LOG_WARN("truncate range bound contains null or nop", K(ret), K(i), K(rowkey));
@@ -200,6 +202,7 @@ struct ObTruncateFilterEvaluator::Impl
         } else if (OB_FAIL(projected_index(
                        compiled.row_indexes_[i],
                        compiled.projected_indexes_[i]))) {
+          LOG_WARN("failed to project truncate partition column", K(ret), K(row_index));
         }
       }
     }
@@ -237,6 +240,7 @@ struct ObTruncateFilterEvaluator::Impl
           for (int64_t j = 0; OB_SUCC(ret) && j < compiled.key_count_; ++j, ++datum_index) {
             compiled.list_values_[datum_index].reuse();
             if (OB_FAIL(compiled.list_values_[datum_index].from_obj(rows[i].get_cell(j)))) {
+              LOG_WARN("failed to compile truncate list value", K(ret), K(i), K(j));
             } else if (OB_UNLIKELY(compiled.list_values_[datum_index].is_nop())) {
               ret = OB_INVALID_DATA;
               LOG_WARN("truncate list contains nop", K(ret), K(i), K(j));
@@ -269,6 +273,7 @@ struct ObTruncateFilterEvaluator::Impl
               } else {
                 uint64_t hash = 0;
                 if (OB_FAIL(compiled.hash_function_(datum, 0, hash, nullptr))) {
+                  LOG_WARN("failed to hash truncate list value", K(ret), K(i));
                 } else {
                   const int64_t bucket = hash & (bucket_count - 1);
                   compiled.hash_next_[i] = compiled.hash_bucket_heads_[bucket];
@@ -301,6 +306,7 @@ struct ObTruncateFilterEvaluator::Impl
       schema_rowkey_count_ = schema_rowkey_count;
       int32_t version_projected_index = -1;
       if (OB_FAIL(projected_index(static_cast<int32_t>(schema_rowkey_count), version_projected_index))) {
+        LOG_WARN("failed to project transaction version column", K(ret), K(schema_rowkey_count));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < truncate_infos.count(); ++i) {
         const ObTruncateInfo *source = truncate_infos.at(i);
@@ -317,10 +323,12 @@ struct ObTruncateFilterEvaluator::Impl
           compiled->version_projected_index_ = version_projected_index;
           compiled->has_subpartition_ = source->is_sub_part_;
           if (OB_FAIL(compile_partition(source->truncate_part_, columns, compiled->partition_))) {
+            LOG_WARN("failed to compile truncate partition", K(ret), K(i));
           } else if (compiled->has_subpartition_ &&
                      OB_FAIL(compile_partition(source->truncate_subpart_, columns, compiled->subpartition_))) {
             LOG_WARN("failed to compile truncate subpartition", K(ret), K(i));
           } else if (OB_FAIL(infos_.push_back(compiled))) {
+            LOG_WARN("failed to append compiled truncate info", K(ret));
           }
         }
       }
@@ -358,6 +366,7 @@ struct ObTruncateFilterEvaluator::Impl
         comparison = -1;
       } else if (OB_FAIL(partition.compare_functions_[i](
                      datum, values[i], comparison, nullptr))) {
+        LOG_WARN("failed to compare truncate key datum", K(ret), K(i));
       }
     }
     return ret;
@@ -401,12 +410,14 @@ struct ObTruncateFilterEvaluator::Impl
       } else {
         uint64_t hash = 0;
         if (OB_FAIL(partition.hash_function_(datum, 0, hash, nullptr))) {
+          LOG_WARN("failed to hash truncate list datum", K(ret));
         } else {
           int32_t entry = partition.hash_bucket_heads_[hash & (partition.hash_bucket_count_ - 1)];
           while (OB_SUCC(ret) && entry >= 0 && !matches) {
             int comparison = 0;
             if (OB_FAIL(partition.compare_functions_[0](
                     datum, partition.list_values_[entry], comparison, nullptr))) {
+              LOG_WARN("failed to compare hashed truncate list datum", K(ret), K(entry));
             } else {
               matches = 0 == comparison;
               entry = partition.hash_next_[entry];
@@ -434,6 +445,7 @@ struct ObTruncateFilterEvaluator::Impl
             int comparison = 0;
             if (OB_FAIL(partition.compare_functions_[key_index](
                     datum, value, comparison, nullptr))) {
+              LOG_WARN("failed to compare truncate list datum", K(ret), K(row_index), K(key_index));
             } else {
               matches = 0 == comparison;
             }
@@ -483,8 +495,10 @@ struct ObTruncateFilterEvaluator::Impl
           if (version <= info.commit_version_) {
             bool partition_matches = false;
             if (OB_FAIL(matches_partition(datums, info.partition_, projected, partition_matches))) {
+              LOG_WARN("failed to evaluate truncate partition", K(ret), K(i));
             } else if (partition_matches && info.has_subpartition_) {
               if (OB_FAIL(matches_partition(datums, info.subpartition_, projected, partition_matches))) {
+                LOG_WARN("failed to evaluate truncate subpartition", K(ret), K(i));
               }
             }
             if (OB_SUCC(ret)) {
@@ -553,6 +567,7 @@ int ObTruncateFilterEvaluator::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("truncate evaluator initialized twice", K(ret));
   } else if (OB_FAIL(rebuild(schema_rowkey_count, columns, truncate_infos))) {
+    LOG_WARN("failed to initialize truncate evaluator", K(ret));
   }
   return ret;
 }
@@ -579,6 +594,7 @@ int ObTruncateFilterEvaluator::filter(const ObDatumRow &row, bool &filtered) con
     LOG_WARN("truncate evaluator is not initialized", K(ret));
   } else if (row.row_flag_.is_delete() || row.row_flag_.is_lock()) {
   } else if (OB_FAIL(impl_->filter(row.storage_datums_, row.count_, false, filtered))) {
+    LOG_WARN("failed to evaluate truncate row", K(ret), K(row));
   }
   return ret;
 }
@@ -593,6 +609,7 @@ int ObTruncateFilterEvaluator::filter_projected(
     ret = OB_NOT_INIT;
     LOG_WARN("truncate evaluator is not initialized", K(ret));
   } else if (OB_FAIL(impl_->filter(datums, datum_count, true, filtered))) {
+    LOG_WARN("failed to evaluate projected truncate row", K(ret), K(datum_count));
   }
   return ret;
 }
@@ -622,6 +639,7 @@ int ObTruncateFilterEvaluator::execute(sql::ObExternalFilterExecutionContext &co
                  context.count(),
                  context.candidate_rows(),
                  context.result()))) {
+    LOG_WARN("failed to evaluate truncate micro block", K(ret));
   }
   return ret;
 }

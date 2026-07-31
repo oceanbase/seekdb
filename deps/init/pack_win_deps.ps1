@@ -50,16 +50,6 @@ $OutputDir = (Resolve-Path $OutputDir).Path
 
 # -- Auto-detect tools -----------------------------------------------
 
-# CMake
-$cmakeCmd = Get-Command cmake.exe -ErrorAction SilentlyContinue
-$CMakeDir = $null
-if ($cmakeCmd) {
-    $CMakeDir = Split-Path (Split-Path $cmakeCmd.Source) -Parent
-    Write-Log "CMake detected: $CMakeDir"
-} else {
-    Write-Err "cmake.exe not found in PATH. CMake will not be packaged."
-}
-
 # Ninja
 $ninjaCmd = Get-Command ninja.exe -ErrorAction SilentlyContinue
 $NinjaDir = $null
@@ -177,17 +167,7 @@ if (Test-Path $OpenSSLDir) {
     Write-Err "OpenSSL not found: $OpenSSLDir"
 }
 
-# 3. CMake
-if ($CMakeDir -and (Test-Path $CMakeDir)) {
-    $name = "obdevtools-cmake-$DateStamp.tar.gz"
-    Write-Log "Packing CMake from $CMakeDir ..."
-    $result = New-DepArchive -ArchiveName $name -TopDirName "obdevtools-cmake" -Mappings @{
-        "tools\cmake" = $CMakeDir
-    }
-    if ($result) { $toolsPackages += $result }
-}
-
-# 4. Ninja
+# 3. Ninja
 if ($NinjaDir -and (Test-Path $NinjaDir)) {
     $name = "obdevtools-ninja-$DateStamp.tar.gz"
     Write-Log "Packing Ninja from $NinjaDir ..."
@@ -197,7 +177,7 @@ if ($NinjaDir -and (Test-Path $NinjaDir)) {
     if ($result) { $toolsPackages += $result }
 }
 
-# 5. LLVM 18
+# 4. LLVM 18
 if (Test-Path $LLVMDir) {
     $name = "obdevtools-llvm-18.1.8-$DateStamp.tar.gz"
     Write-Log "Packing LLVM from $LLVMDir ..."
@@ -209,7 +189,7 @@ if (Test-Path $LLVMDir) {
     Write-Err "LLVM not found: $LLVMDir"
 }
 
-# 6. Flex & Bison
+# 5. Flex & Bison
 if ($FlexBisonDir -and (Test-Path $FlexBisonDir)) {
     $name = "obdevtools-win-flex-bison-$DateStamp.tar.gz"
     Write-Log "Packing Flex/Bison from $FlexBisonDir ..."
@@ -219,7 +199,7 @@ if ($FlexBisonDir -and (Test-Path $FlexBisonDir)) {
     if ($result) { $toolsPackages += $result }
 }
 
-# 7. vsag (vector search library)
+# 6. vsag (vector search library)
 if (Test-Path $VsagDir) {
     $name = "devdeps-vsag-$DateStamp.tar.gz"
     Write-Log "Packing vsag from $VsagDir ..."

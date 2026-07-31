@@ -1492,7 +1492,9 @@ int build_legacy_text_retrieval_query(
 struct ObDASLegacyTextRetrievalRegistration
 {
   ObDASLegacyTextRetrievalRegistration()
-    : ret_(install_legacy_das_text_retrieval_engine())
+    : ret_(install_das_text_retrieval_engine_factory(
+        create_legacy_text_retrieval_engine,
+        build_legacy_text_retrieval_query))
   {}
 
   int ret_;
@@ -1503,13 +1505,5 @@ struct ObDASLegacyTextRetrievalRegistration
 ObDASLegacyTextRetrievalRegistration g_text_retrieval_registration;
 
 } // namespace
-
-int install_legacy_das_text_retrieval_engine()
-{
-  return install_das_text_retrieval_engine_factory(
-      create_legacy_text_retrieval_engine,
-      build_legacy_text_retrieval_query);
-}
-
 } // namespace sql
 } // namespace oceanbase

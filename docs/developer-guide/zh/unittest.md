@@ -1,163 +1,62 @@
-# 编写与运行单元测试
+# 使用 Bazel 编译和运行单元测试
 
-本文档介绍如何在 OceanBase seekdb 项目中编写和运行单元测试。
+seekdb 的 C++ 单元测试由 Bazel 统一管理。`unittest` 下的每个测试都归属
+一个生产模块；每个模块生成一个测试二进制，并由 Bazel 对其中的 GTest
+用例分片并行执行。
 
-## 概述
-
-seekdb 使用 [Google Test](https://github.com/google/googletest) 作为单元测试框架。单元测试代码位于项目根目录下的 `unittest` 目录中。
-
-## 相关文档
-
-- [编译与运行](build-and-run.md) - 编译项目的基础
-- [编程惯例](coding-convention.md) - 了解 seekdb 的编程风格
-- [调试方法](debug.md) - 调试测试代码
-
-## 编译及运行所有单元测试
-
-seekdb 有两个单元测试目录：
-
-- `unittest`：主要的单元测试用例，测试 `src` 目录中的代码
-- `deps/oblib/unittest`：oblib 库的测试用例
-
-### 编译单元测试
-
-默认情况下，构建 seekdb 项目时不会自动编译单元测试。需要显式编译：
+运行全部单元测试：
 
 ```bash
-# 1. 首先编译项目（Debug 模式）
-bash build.sh debug --init --make
-
-# 2. 进入构建目录的 unittest 目录
-cd build_debug/unittest
-# 或者编译 oblib 的测试
-# cd build_debug/deps/oblib/unittest
-
-# 3. 编译单元测试
-make -j4
+./bazel.py test //unittest/...
 ```
 
-### 运行所有测试
-
-编译完成后，可以运行 `run_tests.sh` 脚本来运行所有测试用例：
+运行一个模块，例如 OBLib：
 
 ```bash
-./run_tests.sh
+./bazel.py test //unittest/oblib:oblib_tests
 ```
 
-## 编译并运行单个测试
-
-可以编译并运行单个测试用例，这对于调试特定的测试很有用。
-
-### 步骤
-
-1. **进入构建目录**（不要进入 `unittest` 目录）：
+只运行匹配的 GTest 用例：
 
 ```bash
-cd build_debug
+./bazel.py test //unittest/sql:sql_tests \
+  --test_arg='--gtest_filter=TestName.CaseName'
 ```
 
-2. **编译特定测试用例**：
+远程编译可照常传递 Bazel 参数：
 
 ```bash
-make -j4 test_chunk_row_store
+./bazel.py test //unittest/... \
+  --jobs=80 \
+  --remote-executor="${REMOTE_EXECUTOR}"
 ```
 
-3. **查找并运行测试二进制文件**：
+`unittest/run_tests.sh` 和 `unittest/oblib/run_tests.sh` 分别是全部测试和
+OBLib 测试的便捷入口；它们最终仍调用根目录的 `bazel.py`。
 
-```bash
-# 查找测试文件位置
-find . -name "test_chunk_row_store"
+## 测试构建模型
 
-# 运行测试（示例路径）
-./unittest/sql/engine/basic/test_chunk_row_store
-```
+- 每个测试源码只能归属一个模块，归属关系集中定义在
+  `bazel/architecture/module_policy.bzl`。
+- 每个模块只有一个测试入口 `unittest/all_tests_main.cpp`。测试源码不得
+  定义自己的 `main()`。
+- 模块测试只通过该模块的 `*_unit_test_interface` 访问生产头文件；
+  `liboceanbase.so` 只提供生产实现符号，不扩大源码可见范围。
+- 测试源码按 `unity_size` 合并编译。确实无法参加 Unity 的源码写入
+  `unity_exceptions`，并必须说明原因；它仍进入同一个模块测试二进制，
+  不会生成独立测试程序。
+- `shard_count` 控制同一模块测试二进制的 GTest 分片数，分片可并行执行。
 
-> **注意**：必须在 `build_debug` 目录下执行 `make` 命令，而不是在 `unittest` 目录下。
+## 新增或修改测试
 
-## 编写单元测试
+1. 将测试放入对应的 `unittest/<module>` 目录，不要新增 `main()`。
+2. 测试只应验证本模块。直接访问其他业务模块属于模块/集成测试，应改用
+   本模块的接口、fixture 或 fake，或者移出 C++ 单元测试套件。
+3. 将运行时数据显式加入模块 `BUILD.bazel` 的 `data`。
+4. 优先让源码参加普通 Unity 分组；只有已证实的宏污染或翻译单元符号冲突
+   才能加入带原因的 `unity_exceptions`。
+5. 性能、压力和 benchmark 程序不属于默认单元测试套件。
 
-### 测试文件命名
-
-seekdb 使用 `test_xxx.cpp` 作为单元测试文件名。创建测试文件后，需要将文件名添加到对应的 `CMakeLists.txt` 文件中。
-
-### 测试文件模板
-
-每个测试文件需要包含以下基本结构：
-
-1. **包含 Google Test 头文件**：
-
-```cpp
-#include <gtest/gtest.h>
-```
-
-2. **添加 main 函数**：
-
-```cpp
-int main(int argc, char **argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
-```
-
-接着可以添加一些函数来测试不同的场景。下面是 `test_ra_row_store_projector.cpp` 的一个例子。
-
-```cpp
-///
-/// TEST 是 google test 的一个宏。
-/// 用来添加一个新的测试函数。
-///
-/// RARowStore 是一个测试套件的名字，alloc_project_fail 是测试的名字。
-///
-TEST(RARowStore, alloc_project_fail)
-{
-  ObEmptyAlloc alloc;
-  ObRARowStore rs(&alloc, true);
-
-  ///
-  /// ASSERT_XXX 是一些测试宏，可以帮助我们判断结果是否符合预期，如果失败会终止测试。
-  ///
-  /// 还有一些其它的测试宏，以 `EXPECT_` 开头，如果失败不会终止测试。
-  ///
-  ASSERT_EQ(OB_SUCCESS, rs.init(100 << 20));
-  const int64_t OBJ_CNT = 3;
-  ObObj objs[OBJ_CNT];
-  ObNewRow r;
-  r.cells_ = objs;
-  r.count_ = OBJ_CNT;
-  int64_t val = 0;
-  for (int64_t i = 0; i < OBJ_CNT; i++) {
-    objs[i].set_int(val);
-    val++;
-  }
-
-  int32_t projector[] = {0, 2};
-  r.projector_ = projector;
-  r.projector_size_ = ARRAYSIZEOF(projector);
-
-  ASSERT_EQ(OB_ALLOCATE_MEMORY_FAILED, rs.add_row(r));
-}
-```
-
-### 更多信息
-
-- [Google Test 文档](https://google.github.io/googletest/) - 了解 `TEST`、`ASSERT` 和 `EXPECT` 等宏的详细用法
-- [编程惯例](coding-convention.md) - 了解 seekdb 的编程风格
-
-## CI 中的单元测试
-
-在合并拉取请求之前，GitHub CI 会自动运行测试。`Farm` 将测试 `mysqltest` 和 `unittest`。您可以查看下面的 `Details` 链接查看详细的测试结果。
-
-### 查看测试结果
-
-在 Pull Request 页面，可以看到 CI 测试的状态。点击 `Details` 链接可以查看：
-
-- 测试执行情况
-- 失败的测试用例
-- 测试覆盖率等信息
-
-![github ci](images/unittest-github-ci.png)
-
-![github ci farm 详情](images/unittest-ci-details.png)
-
-![Farm unittest](images/unittest-unittest.png)
+中央门禁会检查测试归属、跨模块依赖、遗留 `main()`、未纳入构建的测试
+源码以及性能/压力测试命名。修改架构关系时，应审查中央策略文件，而不是
+在单个 `BUILD.bazel` 中绕过约束。

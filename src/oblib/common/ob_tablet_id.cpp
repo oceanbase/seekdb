@@ -43,6 +43,7 @@ int ObTabletID::serialize(char* buf, const int64_t buf_len, int64_t& pos) const
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, static_cast<int64_t>(id_)))) {
+    LOG_WARN("serialize tablet ID failed", K(ret), KP(buf), K(buf_len), K(pos));
   }
   return ret;
 }
@@ -54,6 +55,7 @@ int ObTabletID::deserialize(const char* buf, const int64_t data_len, int64_t& po
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), KP(buf), K(data_len));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, reinterpret_cast<int64_t *>(&id_)))) {
+    LOG_WARN("deserialize tablet ID failed", K(ret), KP(buf), K(data_len), K(pos));
   }
   return ret;
 }

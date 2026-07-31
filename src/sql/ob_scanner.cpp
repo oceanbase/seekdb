@@ -93,6 +93,7 @@ int ObScanner::set_extend_info(const ObString &extend_info)
 {
   int ret = OB_SUCCESS;
   if OB_FAIL(ob_write_string(inner_allocator_, extend_info, extend_info_)) {
+    COMMON_LOG(WARN, "fail to write extend info", K(ret));
   }
   return ret;
 }
@@ -129,6 +130,7 @@ int ObScanner::init(int64_t mem_size_limit /*= DEFAULT_MAX_SERIALIZE_SIZE*/)
     LOG_WARN("user var map has been inited already", K(ret));
   } else if (OB_FAIL(datum_store_.init(UINT64_MAX,
                                        ObCtxIds::DEFAULT_CTX_ID, label_, false/*enable_dump*/))) {
+    LOG_WARN("fail to init datum store", K(ret));
   } else {
     //FIXME qianfu is too big, optimized away
 //    ret = user_var_map_.init(1024 * 1024 * 2, 256, NULL);
@@ -171,6 +173,7 @@ int ObScanner::add_row(const ObNewRow &row)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(row_store_.add_row(row))) {
+    LOG_WARN("fail to add_row to row store.", K(ret));
   } else if (row_store_.get_data_size() > mem_size_limit_) {
     LOG_WARN("row store data size", "rowstore_data_size", row_store_.get_data_size(), K_(mem_size_limit), K(ret));
     if (row_store_.get_row_count() == 1 && row_store_.get_data_size() <= DEFAULT_MAX_SERIALIZE_SIZE) {
@@ -186,6 +189,7 @@ int ObScanner::add_row(const ObNewRow &row)
        * */
       LOG_INFO("add a large row, exceeds the memory limit", "row_len", row_store_.get_data_size(), K_(mem_size_limit));
     } else if (OB_FAIL(row_store_.rollback_last_row())) {
+      LOG_WARN("fail to rollback last row", K(ret));
     } else {
       ret = OB_SIZE_OVERFLOW;
     }
@@ -200,6 +204,7 @@ int ObScanner::try_add_row(const common::ObIArray<sql::ObExpr *> &exprs,
   int ret = OB_SUCCESS;
   row_added = false;
   if (OB_FAIL(datum_store_.try_add_row(exprs, ctx, mem_size_limit_, row_added))) {
+    LOG_WARN("fail to add_row to chunk datum store.", K(ret));
   } else if (!row_added && datum_store_.get_row_cnt() <= 0) {
     /**
      * The default size of ObScanner is 64MB.
@@ -212,6 +217,7 @@ int ObScanner::try_add_row(const common::ObIArray<sql::ObExpr *> &exprs,
      * This allows the row to be written even if it exceeds the memory limit.
      * */
     if (OB_FAIL(datum_store_.try_add_row(exprs, ctx, DEFAULT_MAX_SERIALIZE_SIZE, row_added))) {
+      LOG_WARN("try to add row to chunk datum store failed", K(ret));
     }
   }
 
@@ -223,10 +229,12 @@ int ObScanner::assign(const ObScanner &other)
   int ret = OB_SUCCESS;
   if (other.get_datum_store().get_row_cnt() > 0) {
     if (OB_FAIL(datum_store_.assign(other.datum_store_))) {
+      LOG_WARN("fail to assign datum store", K(ret));
     }
   }
   if (other.get_row_count() > 0) {
     if (OB_FAIL(row_store_.assign(other.row_store_))) {
+      LOG_WARN("assign rowstore failed", K(ret));
     }
   }
   
@@ -242,7 +250,9 @@ int ObScanner::assign(const ObScanner &other)
 
   if (OB_SUCC(ret) && other.user_var_map_.size() > 0) {
     if (OB_FAIL(user_var_map_.init(1024 * 1024 * 2, 256, NULL))) {
+      LOG_WARN("init user_var_map failed", K(ret));
     } else if (OB_FAIL(user_var_map_.assign(other.user_var_map_))) {
+      LOG_WARN("assign user var failed", K(ret));
     }
   }
   is_inited_ = other.is_inited_;
@@ -393,12 +403,14 @@ OB_DEF_DESERIALIZE(ObScanner)
       // So here to judge, if there is no init, then init, the existing logic is not changed for the time being
       if (OB_FAIL(datum_store_.init(UINT64_MAX,
                                     ObCtxIds::DEFAULT_CTX_ID, label_, false/*enable_dump*/))) {
+        LOG_WARN("fail to init datum store", K(ret));
       }
     }
     OB_UNIS_DECODE(datum_store_);
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ob_write_string(inner_allocator_, extend_info, extend_info_))) {
+      LOG_WARN("fail to write string", K(ret));
     }
   }
   LST_DO_CODE(OB_UNIS_DECODE,

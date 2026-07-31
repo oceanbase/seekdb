@@ -36,11 +36,6 @@ class ObFtsEvalNode;
 class ObDASTextRetrievalIter;
 class ObDocIdExt;
 
-// Installs the legacy physical retrieval provider into SQL's query-owned
-// dispatcher.  Observer calls this composition entry point explicitly so a
-// static archive cannot discard the registration-only translation unit.
-int install_legacy_das_text_retrieval_engine();
-
 class ObDASLegacyTRMergeIter : public ObDASIter
 {
 public:

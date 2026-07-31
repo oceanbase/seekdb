@@ -46,6 +46,7 @@ int ObTabletAutoincSeq::assign(common::ObIAllocator &allocator, const ObTabletAu
 
     void *buf = nullptr;
     if (0 == other.intervals_count_) {
+      LOG_DEBUG("intervals count equals 0", K(ret));
     } else if (OB_ISNULL(buf = allocator.alloc(other.intervals_count_ * sizeof(ObTabletAutoincInterval)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("alloc memory failed", K(ret));
@@ -115,6 +116,7 @@ int ObTabletAutoincSeq::deep_copy(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid type", K(ret), K(src->type()), K(type()));
     } else if (0 == other->intervals_count_) {
+      LOG_DEBUG("intervals count equals 0");
     } else if (OB_ISNULL(buf = allocator->alloc(other->intervals_count_ * sizeof(ObTabletAutoincInterval)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("alloc memory failed", K(ret));
@@ -204,6 +206,7 @@ int ObTabletAutoincSeq::serialize(char *buf, const int64_t buf_len, int64_t &pos
     int64_t pos_bak = (pos += size_nbytes);
     if (OB_SUCC(ret)) {
       if (OB_FAIL(serialize_(buf, buf_len, pos))) {
+        LOG_WARN("fail to serialize", K(ret), KP(buf), K(buf_len), K(pos));
       }
     }
 
@@ -243,6 +246,7 @@ int ObTabletAutoincSeq::deserialize(
   if (OB_SUCC(ret)) {
     int64_t tmp_pos = 0;
     if (OB_FAIL(deserialize_(allocator, buf + pos, len, tmp_pos))) {
+      LOG_WARN("fail to deserialize", K(ret), "slen", len, K(pos));
     } else if (OB_UNLIKELY(len != tmp_pos)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("deserialize length is not correct", K(ret), K(len), K(pos));
@@ -258,7 +262,9 @@ int ObTabletAutoincSeq::deserialize_(common::ObIAllocator &allocator, const char
   int ret = OB_SUCCESS;
   void *ptr = nullptr;
   if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &intervals_count_))) {
+    LOG_WARN("fail to decode ob array count", K(ret));
   } else if (0 == intervals_count_) {
+    LOG_DEBUG("intervals count equals 0", K(ret), K_(intervals_count));
   } else if (OB_ISNULL(ptr = allocator.alloc(intervals_count_ * sizeof(ObTabletAutoincInterval)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc memory failed", K(ret), K(intervals_count_));
@@ -268,6 +274,7 @@ int ObTabletAutoincSeq::deserialize_(common::ObIAllocator &allocator, const char
     for (int64_t i = 0; OB_SUCC(ret) && i < intervals_count_; i++) {
       ObTabletAutoincInterval &item = intervals_[i];
       if (OB_FAIL(item.deserialize(buf, data_len, pos))) {
+        LOG_WARN("fail to decode array item", K(ret), K(i), K_(intervals_count), K(item));
       }
     }
   }

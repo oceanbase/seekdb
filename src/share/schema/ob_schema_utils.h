@@ -258,6 +258,7 @@ int ObSchemaUtils::alloc_schema(common::ObIAllocator &allocator,
     // will not reach here
   } else {
     if (OB_FAIL(copy_assign(*allocated_schema, schema))) {
+      SHARE_SCHEMA_LOG(WARN,"fail to assign schema", K(ret));
     }
   }
   return ret;
@@ -298,6 +299,7 @@ int ObSchemaUtils::deep_copy_schema(char *buf, const T &old_var, T *&new_var)
                              size - sizeof(old_var) - sizeof(common::ObDataBuffer));
     new_var = new (buf) T(databuf);
     if (OB_FAIL(copy_assign(*new_var, old_var))) {
+      SHARE_SCHEMA_LOG(WARN, "fail to assign schema", K(ret));
     }
   }
 
@@ -311,6 +313,7 @@ int ObSchemaUtils::serialize_partition_array(
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, partition_num))) {
+    SHARE_SCHEMA_LOG(WARN, "Fail to encode partition count", KR(ret));
   }
   if (OB_NOT_NULL(partition_array)) {
     for (int64_t i = 0; OB_SUCC(ret) && i < partition_num; i++) {
@@ -318,6 +321,7 @@ int ObSchemaUtils::serialize_partition_array(
         ret = OB_ERR_UNEXPECTED;
         SHARE_SCHEMA_LOG(WARN, "partition_array_ element is null", KR(ret));
       } else if (OB_FAIL(partition_array[i]->serialize(buf, buf_len, pos))) {
+        SHARE_SCHEMA_LOG(WARN, "Fail to serialize partition", KR(ret));
       }
     }
   }

@@ -45,6 +45,7 @@ void ObTabletCreateMdsCtx::on_abort(const share::SCN &abort_scn)
   ObLS *tenant_ls = nullptr;
 
   if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
+    LOG_WARN("fail to get ls", K(ret));
   } else {
     checkpoint::ObTabletEmptyShellHandler *handler =
         tenant_ls->get_tablet_empty_shell_handler();

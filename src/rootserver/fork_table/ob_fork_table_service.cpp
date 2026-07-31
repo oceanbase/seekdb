@@ -59,9 +59,14 @@ int ObDDLService::fork_single_table_in_trans_(const ObTableSchema &src_table_sch
             inner_allocator,
             OB_INVALID_ID, // define_user_id
             false /* delete_unused_columns */))) {
+      LOG_WARN("failed to rebuild table schema with new id", KR(ret),
+               K(src_table_schema.get_table_name()));
     } else if (OB_FAIL(
                    generate_object_id_for_partition_schemas(table_schemas))) {
+      LOG_WARN("fail to generate object_id for partition schema", KR(ret),
+               K(table_schemas));
     } else if (OB_FAIL(generate_tables_tablet_id(table_schemas))) {
+      LOG_WARN("failed to generate tables tablet id", KR(ret), K(table_schemas));
     } else if (table_schemas.count() > 0) {
       dst_table_schema = &table_schemas.at(0);
     }
@@ -71,16 +76,21 @@ int ObDDLService::fork_single_table_in_trans_(const ObTableSchema &src_table_sch
       // Main table mapping
       if (OB_FAIL(table_id_map->set_refactored(
               src_table_schema.get_table_id(), table_schemas.at(0).get_table_id()))) {
+        LOG_WARN("failed to insert main table id mapping", KR(ret),
+                 "src_id", src_table_schema.get_table_id(),
+                 "dst_id", table_schemas.at(0).get_table_id());
       }
       // Index table mappings: match by index name (strip data_table_id prefix)
       if (OB_SUCC(ret)) {
         ObSEArray<ObAuxTableMetaInfo, 16> src_index_infos;
         if (OB_FAIL(src_table_schema.get_simple_index_infos(src_index_infos))) {
+          LOG_WARN("failed to get src simple index infos", KR(ret));
         }
         for (int64_t idx = 0; OB_SUCC(ret) && idx < src_index_infos.count(); ++idx) {
           const uint64_t src_index_id = src_index_infos.at(idx).table_id_;
           const ObTableSchema *src_index_schema = nullptr;
           if (OB_FAIL(schema_guard.get_table_schema( src_index_id, src_index_schema))) {
+            LOG_WARN("failed to get src index schema", KR(ret), K(src_index_id));
           } else if (OB_ISNULL(src_index_schema)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("src index schema is null", KR(ret), K(src_index_id));
@@ -90,6 +100,7 @@ int ObDDLService::fork_single_table_in_trans_(const ObTableSchema &src_table_sch
                     src_table_schema.get_table_id(),
                     src_index_schema->get_table_name_str(),
                     src_index_name))) {
+              LOG_WARN("failed to get src index name", KR(ret));
             } else {
               bool found = false;
               for (int64_t k = 1; !found && OB_SUCC(ret) && k < table_schemas.count(); ++k) {
@@ -98,9 +109,12 @@ int ObDDLService::fork_single_table_in_trans_(const ObTableSchema &src_table_sch
                         table_schemas.at(0).get_table_id(),
                         table_schemas.at(k).get_table_name_str(),
                         dst_index_name))) {
+                  LOG_WARN("failed to get dst index name", KR(ret));
                 } else if (0 == src_index_name.compare(dst_index_name)) {
                   if (OB_FAIL(table_id_map->set_refactored(
                           src_index_id, table_schemas.at(k).get_table_id()))) {
+                    LOG_WARN("failed to insert index id mapping", KR(ret),
+                             K(src_index_id), "dst_index_id", table_schemas.at(k).get_table_id());
                   }
                   found = true;
                 }
@@ -114,6 +128,7 @@ int ObDDLService::fork_single_table_in_trans_(const ObTableSchema &src_table_sch
     // Copy table_schemas to out_table_schemas if requested.
     if (OB_SUCC(ret) && OB_NOT_NULL(out_table_schemas)) {
       if (OB_FAIL(out_table_schemas->assign(table_schemas))) {
+        LOG_WARN("failed to assign table schemas to output", KR(ret));
       }
     }
 
@@ -126,6 +141,8 @@ int ObDDLService::fork_single_table_in_trans_(const ObTableSchema &src_table_sch
               ddl_stmt_str, table_schemas,
               mock_fk_parent_table_schema_array, schema_guard, trans,
               fork_table_info))) {
+        LOG_WARN("failed to create tables for fork", KR(ret), "table_name",
+                 src_table_schema.get_table_name());
       }
     }
   }
@@ -155,12 +172,16 @@ int ObDDLService::fork_single_table_in_trans_(const ObTableSchema &src_table_sch
 
     if (OB_FAIL(
             ObSysDDLSchedulerUtil::create_ddl_task(param, trans, task_record))) {
+      LOG_WARN("submit ddl task failed", K(ret), "table_name",
+               src_table_schema.get_table_name());
     } else if (OB_FAIL(lock_owner.convert_from_value(
                    ObLockOwnerType::FORK_TABLE_OWNER_TYPE,
                    FORK_TABLE_LOCK_OWNER_ID))) {
+      LOG_WARN("failed to convert owner id", K(ret), K(task_record.task_id_));
     } else if (OB_FAIL(ObDDLLock::lock_for_fork_table(
                    schema_guard, src_table_schema, table_schemas, lock_owner,
                    trans))) {
+      LOG_WARN("failed to lock for fork table", K(ret), K(task_record.task_id_));
     } else {
       LOG_INFO("fork single table task created", "task_id",
                task_record.task_id_, "src_table_id",
@@ -185,6 +206,7 @@ int ObDDLService::create_tables_for_fork_(
   RS_TRACE(create_tables_in_trans_begin);
 
   if (OB_FAIL(check_inner_stat())) {
+    LOG_WARN("variable is not init");
   } else if (table_schemas.count() < 1) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table_schemas have no element", K(ret));
@@ -200,18 +222,22 @@ int ObDDLService::create_tables_for_fork_(
       ObTableSchema &table_schema = table_schemas.at(i);
       if (OB_FAIL(ObFtsIndexBuilderUtil::try_load_and_lock_dictionary_tables(
               table_schema, trans))) {
+        LOG_WARN("fail to try load and lock dictionary tables", K(ret));
       } else if (OB_FAIL(ddl_operator.create_table(
                      table_schema, trans, 0 == i ? &ddl_stmt_str : NULL,
                      i == table_schemas.count() - 1))) {
+        LOG_WARN("failed to create table schema, ", K(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ddl_operator.deal_with_mock_fk_parent_tables(
               trans, schema_guard, mock_fk_parent_table_schema_array))) {
+        LOG_WARN("fail to deal_with_mock_fk_parent_tables", K(ret));
       } else if (OB_FAIL(create_tablets_in_trans_(
                      table_schemas, ddl_operator, trans, schema_guard,
                      data_format_version, fork_table_info))) {
+        LOG_WARN("fail to create tablets in trans", KR(ret));
       }
     }
     RS_TRACE(operator_create_table_end);
@@ -232,7 +258,11 @@ int ObDDLService::create_tables_for_fork_(
                                           schema_guard,
                                           fork_table_info);
       if (OB_FAIL(fork_table_helper.init(table_schemas))) {
+        LOG_WARN("failed to init fork table helper", KR(ret),
+                 K(fork_table_info));
       } else if (OB_FAIL(fork_table_helper.execute())) {
+        LOG_WARN("failed to execute fork table helper", KR(ret),
+                 K(fork_table_info));
       }
     }
   }
@@ -244,6 +274,7 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
                              obcall::ObDDLRes &res) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
+    LOG_WARN("variable is not init");
   } else if (!fork_table_arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(fork_table_arg), K(ret));
@@ -271,12 +302,15 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
 
     if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(
             schema_guard))) {
+      LOG_WARN("get schema guard in inner table failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_schema_version(
                    refreshed_schema_version))) {
+      LOG_WARN("failed to get runtime schema version", KR(ret));
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(schema_guard.get_database_schema( fork_table_arg.src_database_name_, src_db_schema))) {
+        LOG_WARN("fail to get source database schema", K(ret));
       } else if (NULL == src_db_schema) {
         ret = OB_ERR_BAD_DATABASE;
         LOG_USER_ERROR(OB_ERR_BAD_DATABASE,
@@ -285,6 +319,8 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
         LOG_WARN("source database not exist", K(fork_table_arg), K(ret));
       } else if (OB_FAIL(schema_guard.check_database_in_recyclebin(src_db_schema->get_database_id(),
                      is_db_in_recyclebin))) {
+        LOG_WARN("check source database in recyclebin failed", K(ret),
+                 K(*src_db_schema));
       } else if (is_db_in_recyclebin || src_db_schema->is_in_recyclebin()) {
         ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
         LOG_WARN("can not fork table from database in recyclebin", K(ret),
@@ -292,11 +328,14 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
       } else if (OB_FAIL(schema_guard.get_table_schema( fork_table_arg.src_database_name_,
                      fork_table_arg.src_table_name_, false /* is_index */,
                      src_table_schema))) {
+        LOG_WARN("fail to get source table schema", K(ret));
       } else if (OB_ISNULL(src_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("source table not exist", K(ret), K(fork_table_arg));
       } else if (OB_FAIL(check_fork_table_supported(
                      *src_table_schema, schema_guard, &fork_table_arg))) {
+        LOG_WARN("fork table is not supported for source table", K(ret),
+                 K(fork_table_arg));
       }
     }
 
@@ -304,6 +343,7 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
       const share::schema::ObMockFKParentTableSchema *dst_mock_parent_schema =
           nullptr;
       if (OB_FAIL(schema_guard.get_database_schema( fork_table_arg.dst_database_name_, dst_db_schema))) {
+        LOG_WARN("fail to get destination database schema", K(ret));
       } else if (NULL == dst_db_schema) {
         ret = OB_ERR_BAD_DATABASE;
         LOG_USER_ERROR(OB_ERR_BAD_DATABASE,
@@ -316,6 +356,10 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
                  K(*dst_db_schema));
       } else if (OB_FAIL(schema_guard.get_mock_fk_parent_table_schema_with_name(dst_db_schema->get_database_id(),
                      fork_table_arg.dst_table_name_, dst_mock_parent_schema))) {
+        LOG_WARN("failed to get mock fk parent table schema for destination "
+                 "table name",
+                 K(ret), K(dst_db_schema->get_database_id()),
+                 K(fork_table_arg.dst_table_name_));
       } else if (OB_NOT_NULL(dst_mock_parent_schema)) {
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("fork table to mock parent table name is not supported",
@@ -327,6 +371,7 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
       } else if (OB_FAIL(schema_guard.get_table_schema( fork_table_arg.dst_database_name_,
                      fork_table_arg.dst_table_name_, false /* is_index */,
                      dst_table_schema))) {
+        LOG_WARN("fail to get destination table schema", K(ret));
       } else if (OB_NOT_NULL(dst_table_schema)) {
         ret = OB_ERR_TABLE_EXIST;
         LOG_USER_ERROR(OB_ERR_TABLE_EXIST,
@@ -339,6 +384,8 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
     if (OB_SUCC(ret)) {
       if (OB_FAIL(trans.start(&get_sql_proxy(), 
                               refreshed_schema_version))) {
+        LOG_WARN("start transaction failed", KR(ret),
+                 K(refreshed_schema_version));
       } else if (FALSE_IT(src_table_schemas.push_back(src_table_schema))) {
       }
 
@@ -349,6 +396,8 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
         bool has_async_vec_index = false;
         if (OB_FAIL(check_has_async_vector_index(*src_table_schema, schema_guard,
                                                  has_async_vec_index))) {
+          LOG_WARN("fail to check async vector index", KR(ret),
+                   "table_id", src_table_schema->get_table_id());
         } else if (has_async_vec_index) {
           common::sqlclient::ObISQLConnection *iconn = trans.get_connection();
           const int64_t lock_timeout_us = GCONF.internal_sql_execute_timeout;
@@ -358,11 +407,14 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
           } else if (OB_FAIL(transaction::tablelock::ObInnerConnectionLockUtil::lock_table(
                          src_table_schema->get_table_id(),
                          transaction::tablelock::SHARE, lock_timeout_us, iconn))) {
+            LOG_WARN("fail to lock source table for async index sync", KR(ret),
+                     "table_id", src_table_schema->get_table_id());
           } else if (OB_ISNULL(rootserver_local_runtime())) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("rootserver local runtime is null", KR(ret));
           } else if (OB_FAIL(rootserver_local_runtime()->wait_until_change_stream_refreshed(
                          get_sql_proxy(), lock_timeout_us))) {
+            LOG_WARN("fail to wait change stream refresh", KR(ret));
           } else {
             LOG_INFO("async index sync completed before fork snapshot",
                      "table_id", src_table_schema->get_table_id());
@@ -374,6 +426,7 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
       } else if (OB_FAIL(ObForkTableUtil::obtain_snapshot(
                      trans, schema_guard, src_table_schemas,
                      fork_snapshot_version))) {
+        LOG_WARN("fail to obtain snapshot", K(ret), K(fork_snapshot_version));
       } else if (fork_snapshot_version <= 0) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid snapshot version", K(ret), K(fork_snapshot_version));
@@ -388,6 +441,8 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
                 fork_table_arg.dst_table_name_, fork_snapshot_version,
                 fork_table_arg.session_id_, fork_table_arg.ddl_stmt_str_,
                 schema_guard, trans, allocator, task_record))) {
+          LOG_WARN("failed to fork single table in transaction", K(ret),
+                   K(fork_table_arg));
         }
       }
 
@@ -403,6 +458,7 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
       RS_TRACE(public_schema_begin);
       if (OB_SUCC(ret)) {
         if (OB_FAIL(publish_schema())) {
+          LOG_WARN("publish_schema failed", KR(ret));
         } else {
           RS_TRACE(public_schema_end);
         }
@@ -410,6 +466,7 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
 
       if (OB_SUCC(ret)) {
         if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
+          LOG_WARN("fail to schedule ddl task", K(ret), K(task_record));
         } else {
         
           

@@ -68,6 +68,7 @@ int ObAiModelEndpointInfo::parse_from_json_base(common::ObArenaAllocator &alloca
   reset();
   name_ = name;
   if (OB_FAIL(merge_delta_endpoint(allocator, params_jbase))) {
+    LOG_WARN("failed to merge delta endpoint", K(ret), K(params_jbase));
   }
   LOG_INFO("parse from json base", K(ret), K(params_jbase), K(params_jbase.json_type()), K(params_jbase.element_count()));
   return ret;
@@ -81,15 +82,25 @@ int ObAiModelEndpointInfo::deep_copy(
   reset();
   endpoint_id_ = other.endpoint_id_;
   if (OB_FAIL(ob_write_string(allocator, other.name_, name_))) {
+    LOG_WARN("copy endpoint name failed", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator, other.scope_, scope_))) {
+    LOG_WARN("copy endpoint scope failed", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator, other.ai_model_name_, ai_model_name_))) {
+    LOG_WARN("copy endpoint model name failed", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator, other.url_, url_))) {
+    LOG_WARN("copy endpoint url failed", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator, other.access_key_, access_key_))) {
+    LOG_WARN("copy endpoint access key failed", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator, other.provider_, provider_))) {
+    LOG_WARN("copy endpoint provider failed", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator, other.request_model_name_, request_model_name_))) {
+    LOG_WARN("copy endpoint request model name failed", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator, other.parameters_, parameters_))) {
+    LOG_WARN("copy endpoint parameters failed", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator, other.request_transform_fn_, request_transform_fn_))) {
+    LOG_WARN("copy endpoint request transform failed", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator, other.response_transform_fn_, response_transform_fn_))) {
+    LOG_WARN("copy endpoint response transform failed", K(ret));
   }
   return ret;
 }
@@ -165,6 +176,7 @@ int ObAiModelEndpointInfo::merge_delta_endpoint(common::ObArenaAllocator &alloca
   while (!iter.end() && OB_SUCC(ret)) {
     ObJsonObjPair elem;
     if (OB_FAIL(iter.get_elem(elem))) {
+      LOG_WARN("failed to get elem", K(ret));
     } else {
       EXTRACT_JSON_ELEM_STR("scope", scope_)
       EXTRACT_JSON_ELEM_STR("ai_model_name", ai_model_name_)
@@ -184,6 +196,7 @@ int ObAiModelEndpointInfo::merge_delta_endpoint(common::ObArenaAllocator &alloca
     if (has_api_key && !access_key_.empty() && OB_FAIL(encrypt_access_key_(allocator, access_key_, access_key_))) {
       LOG_WARN("failed to encrypt access key", K(ret));
     } else if (OB_FAIL(check_valid())) {
+      LOG_WARN("invalid endpoint", K(ret), K(delta_jbase));
     }
   }
 
@@ -195,6 +208,7 @@ int ObAiModelEndpointInfo::encrypt_access_key_(ObIAllocator &allocator, const Ob
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ob_write_string(allocator, access_key, encrypted_access_key))) {
+    LOG_WARN("failed to encrypt access key", K(ret));
   }
   return ret;
 }
@@ -203,6 +217,7 @@ int ObAiModelEndpointInfo::decrypt_access_key_(ObIAllocator &allocator, const Ob
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ob_write_string(allocator, encrypted_access_key, unencrypted_access_key))) {
+    LOG_WARN("failed to encrypt access key", K(ret));
   }
   return ret;
 }
@@ -232,6 +247,7 @@ int ObAiModelEndpointInfo::get_unencrypted_access_key(common::ObIAllocator &allo
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(decrypt_access_key_(allocator, access_key_, unencrypted_access_key))) {
+    LOG_WARN("failed to decrypt access key", K(ret));
   }
   return ret;
 }
@@ -246,6 +262,7 @@ int ObAiServiceModelInfo::parse_from_json_base(const ObString &name, const commo
   while (!iter.end() && OB_SUCC(ret)) {
     ObJsonObjPair elem;
     if (OB_FAIL(iter.get_elem(elem))) {
+      LOG_WARN("failed to get elem", K(ret));
     } else {
       EXTRACT_JSON_ELEM_STR("model_name", model_name_)
       EXTRACT_JSON_ELEM_STR_WITH_PROCESS("type", type_str, type_ = EndpointType::str_to_endpoint_type(type_str))
@@ -256,6 +273,7 @@ int ObAiServiceModelInfo::parse_from_json_base(const ObString &name, const commo
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(check_valid())) {
+      LOG_WARN("invalid model", K(ret), K(params_jbase));
     }
   }
 

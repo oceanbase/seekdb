@@ -375,6 +375,8 @@ int IFileAppender::create(const ObString &fname)
   this->add_create_flags_();
   this->add_excl_flags_();
   if (OB_SUCCESS != (ret = FileComponent::open(fname, *this, fd_))) {
+    _OB_LOG(WARN, "open file error:ret=%d,fname=%s,fd_=%d",
+              ret, fname.ptr(), fd_);
   } else {
     this->set_normal_flags_();
     this->set_file_pos_(0);
@@ -445,6 +447,8 @@ int BufferFileAppender::buffer_sync_()
                 fd_, buffer_, buffer_pos_, file_pos_, write_ret, errno);
       ret = OB_IO_ERROR;
     } else {
+      _OB_LOG(DEBUG, "write buffer succ fd=%d buffer_size=%ld file_pos=%ld", fd_, buffer_pos_,
+                file_pos_);
       file_pos_ += buffer_pos_;
       buffer_pos_ = 0;
     }
@@ -1311,6 +1315,7 @@ int ObFileAppender::open(const ObString &fname, const bool dio, const bool is_cr
     _OB_LOG(WARN, "construct file appender fail fname=[%.*s]", fname.length(), fname.ptr());
     ret = OB_ERROR;
   } else if (OB_FAIL(ret)) {
+    _OB_LOG(WARN, "set align_size=%ld fail", align_size);
   } else {
     ret = file_->open(fname, is_create, is_trunc);
   }
@@ -1339,6 +1344,7 @@ int ObFileAppender::create(const ObString &fname, const bool dio, const int64_t 
       _OB_LOG(WARN, "construct file appender fail fname=[%.*s]", fname.length(), fname.ptr());
       ret = OB_ERROR;
     } else if (OB_FAIL(ret)) {
+      _OB_LOG(WARN, "set align_size=%ld fail", align_size);
     } else {
       ret = file_->create(fname);
     }
@@ -1425,6 +1431,9 @@ int ObFileAsyncAppender::open(const ObString &fname,
     _OB_LOG(WARN, "invalid param dio=%s align_size=%ld", STR_BOOL(dio), align_size);
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_SUCCESS != (ret = FileComponent::open(fname, op, fd_))) {
+    _OB_LOG(WARN, "open file fail, ret=%d dio=%s is_create=%s is_trunc=%s is_excl=%s fname=[%.*s]",
+              ret, STR_BOOL(dio), STR_BOOL(is_create), STR_BOOL(is_trunc), STR_BOOL(is_excl), fname.length(),
+              fname.ptr());
   } else {
     file_pos_ = get_file_size(fd_);
     if (0 != (file_pos_ % align_size)) {
@@ -1453,6 +1462,9 @@ int ObFileAsyncAppender::create(const ObString &fname,
     _OB_LOG(WARN, "invalid param dio=%s align_size=%ld", STR_BOOL(dio), align_size);
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_SUCCESS != (ret = FileComponent::open(fname, op, fd_))) {
+    _OB_LOG(WARN, "open file fail, ret=%d dio=%s is_create=%s is_trunc=%s is_excl=%s fname=[%.*s]",
+              ret, STR_BOOL(dio), STR_BOOL(is_create), STR_BOOL(is_trunc), STR_BOOL(is_excl), fname.length(),
+              fname.ptr());
   } else {
     file_pos_ = 0;
     align_size_ = align_size;

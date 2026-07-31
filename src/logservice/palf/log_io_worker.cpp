@@ -64,9 +64,11 @@ int LogIOWorker::init(const LogIOWorkerConfig &config,
     PALF_LOG(ERROR, "invalid argument!!!", K(ret), K(config), KP(cb_thread_pool), KP(allocator),
         KP(throttle), KP(palf_env_impl));
   } else if (OB_FAIL(queue_.init(config.io_queue_capcity_, "IOWorkerLQ"))) {
+    PALF_LOG(ERROR, "io task queue init failed", K(ret), K(config));
   } else if (OB_FAIL(batch_io_task_mgr_.init(config.batch_depth_,
                                              allocator,
                                              &wait_cost_stat_))) {
+    PALF_LOG(ERROR, "BatchLogIOFlushLogTaskMgr init failed", K(ret), K(config));
   } else {
     share::ObThreadPool::set_run_wrapper(share::server_runtime());
     cb_thread_pool_ = cb_thread_pool;
@@ -142,8 +144,10 @@ int LogIOWorker::submit_io_task(LogIOTask *io_task)
       }
     } else {
       if (OB_FAIL(queue_.push(io_task))) {
+        PALF_LOG(WARN, "fail to push io task into queue", K(ret), KP(io_task));
       }
     }
+    PALF_LOG(TRACE, "after submit_io_task", KP(io_task));
   }
   return ret;
 }
@@ -176,6 +180,7 @@ int LogIOWorker::handle_io_task_with_throttling_(LogIOTask *io_task)
   }
   const int64_t submit_seq = io_task->get_submit_seq();
   if (OB_FAIL(io_task->do_task(cb_thread_pool_, palf_env_impl_))) {
+    PALF_LOG(WARN, "LogIOTask do_task falied");
   } else if (!need_ignoring_throttling_) {
     const int64_t handled_seq = ATOMIC_LOAD(&purge_throttling_task_handled_seq_);
     const int64_t submitted_seq = ATOMIC_LOAD(&purge_throttling_task_submitted_seq_);
@@ -191,6 +196,7 @@ int LogIOWorker::handle_io_task_with_throttling_(LogIOTask *io_task)
     if (OB_SUCCESS != (tmp_ret = throttle_->after_append_log(throttling_size))) {
       LOG_ERROR_RET(tmp_ret, "after_append failed", KP(io_task));
     }
+    PALF_LOG(TRACE, "handle_io_task_ success", K(submit_seq), KPC(this));
   }
   return ret;
 }
@@ -294,6 +300,7 @@ int LogIOWorker::reduce_io_task_(ObLink *task)
       // 2. there is full in each BatchLogIOFlushLogTask in 'batch_io_task_mgr_'.
       if (OB_SUCCESS != (tmp_ret = batch_io_task_mgr_.insert(flush_log_task))) {
         last_io_task_has_been_reduced = false;
+        PALF_LOG(TRACE, "batch_io_task_mgr_ insert failed", K(tmp_ret));
       } else if (OB_SUCCESS == (tmp_ret = queue_.pop(task))) {
       // When 'queue_' is empty, stop aggreating.
         update_throttling_options_();
@@ -303,11 +310,13 @@ int LogIOWorker::reduce_io_task_(ObLink *task)
   }
 
   if (OB_FAIL(batch_io_task_mgr_.handle(cb_thread_pool_, palf_env_impl_))) {
+    PALF_LOG(WARN, "batch_io_task_mgr_ handle failed", K(ret), K(batch_io_task_mgr_));
   }
 
   if (false == last_io_task_has_been_reduced && OB_NOT_NULL(io_task)) {
     ret = handle_io_task_(io_task);
   }
+  PALF_LOG(TRACE, "reduce_io_task_ finished", K(ret), K(tmp_ret), KPC(this));
   return ret;
 }
 
@@ -336,6 +345,7 @@ int LogIOWorker::BatchLogIOFlushLogTaskMgr::init(int64_t batch_depth,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(batch_io_task_.init(batch_depth, allocator))) {
+    PALF_LOG(ERROR, "BatchLogIOFlushLogTask init failed", K(ret));
   } else {
     wait_cost_stat_ = wait_cost_stat;
   }
@@ -356,6 +366,7 @@ int LogIOWorker::BatchLogIOFlushLogTaskMgr::insert(LogIOFlushLogTask *io_task)
 {
   int ret = batch_io_task_.push_back(io_task);
   if (OB_FAIL(ret)) {
+    PALF_LOG(TRACE, "push_back failed", K(ret), KPC(io_task));
   }
   return ret;
 }
@@ -366,11 +377,13 @@ int LogIOWorker::BatchLogIOFlushLogTaskMgr::handle(LogIOTaskCbThreadPool *cb_thr
   BatchLogIOFlushLogTask *io_task = &batch_io_task_;
   if (!empty()) {
     if (OB_FAIL(io_task->do_task(cb_thread_pool, palf_env_impl))) {
+      PALF_LOG(WARN, "do_task failed", K(ret), KP(io_task));
     } else {
       if (OB_NOT_NULL(wait_cost_stat_)) {
         wait_cost_stat_->stat(io_task->get_count(), io_task->get_accum_in_queue_time());
       }
       io_task->reset_accum_in_queue_time();
+      PALF_LOG(TRACE, "BatchLogIOFlushLogTaskMgr::handle success", K(ret), K(handle_count_), KP(io_task));
     }
     handle_count_ += io_task->get_count();
     io_task->reuse();

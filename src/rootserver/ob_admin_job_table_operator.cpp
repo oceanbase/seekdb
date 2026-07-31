@@ -107,6 +107,7 @@ int ObAdminJobTableOperator::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret), K(inited_));
   } else if (OB_FAIL(storage_.init(GCTX.meta_db_pool_))) {
+    LOG_WARN("fail to init storage", KR(ret));
   } else {
     inited_ = true;
     LOG_INFO("admin job table operator inited");
@@ -126,6 +127,7 @@ int ObAdminJobTableOperator::create_job(ObAdminJobType job_type, int64_t &job_id
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(alloc_job_id(job_id))) {
+    LOG_WARN("failed to alloc job id", K(ret), K(job_id));
   } else {
     share::ObAdminJobEntry entry;
     entry.job_id_ = job_id;
@@ -133,6 +135,7 @@ int ObAdminJobTableOperator::create_job(ObAdminJobType job_type, int64_t &job_id
     entry.job_status_ = common::ObString::make_string(job_status_str_array[JOB_STATUS_INPROGRESS]);
     entry.result_code_ = 0;
     if (OB_FAIL(storage_.create_job(entry))) {
+      LOG_WARN("failed to create admin job in sqlite", K(ret));
     } else {
       LOG_INFO("local DDL service job started", K(job_id), K(entry));
     }
@@ -155,6 +158,7 @@ int ObAdminJobTableOperator::find_job(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid job type", K(ret), K(job_type), K(job_type_str));
   } else if (OB_FAIL(storage_.find_job(common::ObString::make_string(job_type_str), job_id))) {
+    LOG_WARN("fail to find local DDL service job", KR(ret), K(job_type));
   }
   return ret;
 }
@@ -174,6 +178,7 @@ int ObAdminJobTableOperator::get_job_count(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid job type", K(ret), K(job_type), K(job_type_str));
   } else if (OB_FAIL(storage_.get_job_count(common::ObString::make_string(job_type_str), job_count))) {
+    LOG_WARN("fail to find local DDL service job", KR(ret), K(job_type));
   }
   return ret;
 }
@@ -186,6 +191,7 @@ int ObAdminJobTableOperator::complete_job(int64_t job_id, int result_code)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret), K(inited_));
   } else if (OB_FAIL(storage_.complete_job(job_id, common::ObString::make_string(status_str), result_code))) {
+    LOG_WARN("failed to complete admin job in sqlite", K(ret), K(job_id), K(result_code));
   }
   return ret;
 }
@@ -198,6 +204,7 @@ int ObAdminJobTableOperator::load_max_job_id(int64_t &max_job_id)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(storage_.get_max_job_id(max_job_id))) {
+    LOG_WARN("fail to load max job id and row count", KR(ret));
   }
   return ret;
 }

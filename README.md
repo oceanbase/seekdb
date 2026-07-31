@@ -388,7 +388,8 @@ Before building, please install the required toolchain and dependencies for your
 git clone https://github.com/oceanbase/seekdb.git
 cd seekdb
 source ~/.bashrc
-./build.sh release --init --make
+./build.sh release --init
+cd build_release && make -j"$(nproc)" && cd ..
 mkdir -p ~/seekdb/bin
 cp build_release/src/observer/seekdb ~/seekdb/bin
 cd ~/seekdb
@@ -420,3 +421,4 @@ If seekdb is useful to you, **a star helps others find it.** ⭐
 ## 📄 License
 
 seekdb is built by the [OceanBase](https://en.oceanbase.com/) team — the same database engine running in production at Alipay, Taobao, DiDi, Xiaomi, and more. Fully open-source under the [Apache License, Version 2.0](LICENSE).
+

@@ -32,6 +32,7 @@ DEFINE_SERIALIZE(ObString)
     LIB_LOG(WARN, "size overflow", K(ret),
         KP(buf), K(serialize_size), "remain", buf_len - pos);
   } else if (OB_FAIL(serialization::encode_vstr(buf, buf_len, pos, ptr_, data_length_))) {
+    LIB_LOG(WARN, "string serialize failed", K(ret));
   }
   return ret;
 }

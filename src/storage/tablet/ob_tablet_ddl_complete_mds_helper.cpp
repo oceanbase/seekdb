@@ -91,6 +91,7 @@ int ObTabletDDLCompleteArg::set_storage_schema(const ObStorageSchema &other)
   
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(storage_schema_->assign(allocator_, other))) {
+    LOG_WARN("failed to assign storage schema", K(ret));
   } else{
     for (int64_t i = 0; OB_SUCC(ret) && i < storage_schema_->column_array_.count(); ++i) {
       ObStorageColumnSchema &cs = storage_schema_->column_array_.at(i);
@@ -150,6 +151,7 @@ int ObTabletDDLCompleteArg::serialize(char *buf, const int64_t buf_len, int64_t 
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("storage schema should not be null", K(ret));
     } else if (OB_FAIL(storage_schema_->serialize(buf, buf_len, pos))) {
+      LOG_WARN("failed to serialize storage_schema", K(ret));
     }
   }
   return ret;
@@ -175,6 +177,7 @@ int ObTabletDDLCompleteArg::deserialize(const char *buf, const int64_t data_len,
   if (OB_FAIL(ret)) {
   } else if (!has_complete_) {
   } else if (OB_FAIL(storage_schema_->deserialize(allocator_, buf, data_len, pos))) {
+    LOG_WARN("failed to deserialize stroage_schema", K(ret), KPC(this));
   }
   return ret;
 }
@@ -186,7 +189,9 @@ int ObTabletDDLCompleteArg::from_mds_user_data(const ObTabletDDLCompleteMdsUserD
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(user_data));
   } else if (OB_FAIL(set_storage_schema(user_data.storage_schema_))) {
+    LOG_WARN("failed to set storage schema", K(ret));
   } else if (OB_FAIL(write_stat_.assign(user_data.write_stat_))) {
+    LOG_WARN("failed to set write stat", K(ret));
   } else {
     has_complete_ = user_data.has_complete_;
     direct_load_type_ = user_data.direct_load_type_;
@@ -207,6 +212,7 @@ int ObTabletDDLCompleteMdsHelper::process(const char* buf, const int64_t len, co
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(buf), K(len), K(for_replay), K(scn));
   } else if (OB_FAIL(arg.deserialize(buf,len, pos))) {
+    LOG_WARN("failed to deserialized from arg", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid arg", K(ret), K(arg));
@@ -220,9 +226,12 @@ int ObTabletDDLCompleteMdsHelper::process(const char* buf, const int64_t len, co
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ls_service is null", K(ret));
     } else if (OB_FAIL(ls_service->get_ls(tenant_ls))) {
+      LOG_WARN("failed to get ls", K(ret), K(arg));
     } else if (OB_FAIL(data.set_with_merge_arg(arg, allocator))) {
+      LOG_WARN("failed to set with merge arg", K(ret));
     } else {
       if (OB_FAIL(process_ddl(ctx, tenant_ls, arg.tablet_id_, data, scn, for_replay))) {
+        LOG_WARN("failed to process ddl", KR(ret), K(arg), K(data), K(scn), K(for_replay));
       }
     }
     FLOG_INFO("[DDL_REPLAY] schedule merge task on mds", K(ret), K(arg), K(for_replay));
@@ -248,7 +257,9 @@ int ObTabletDDLCompleteMdsHelper::process_ddl(
   } else if (!for_replay) {
     if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(tenant_ls, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
     } else if (OB_FAIL(ObTabletDDLCompleteReplayExecutor::freeze_ddl_kv(*tablet_handle.get_obj(), data))) {
+      LOG_WARN("failed to freeze ddl kv", K(ret));
     } else if (OB_FAIL(ObTabletDDLCompleteReplayExecutor::update_tablet_table_store(*tablet_handle.get_obj(), data))) {
+      LOG_WARN("failed to update tablet table store", K(ret));
     } else if (CLICK_FAIL(tenant_ls->get_tablet_svr()->set_ddl_complete(
             tablet_id, mds::DummyKey(), data, user_ctx, 0/*lock_timeout_us*/))) {
       if (OB_ERR_EXCLUSIVE_LOCK_CONFLICT == ret) {
@@ -259,6 +270,7 @@ int ObTabletDDLCompleteMdsHelper::process_ddl(
     } else {
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(ObTabletDDLCompleteReplayExecutor::schedule_merge(*tablet_handle.get_obj(), data))) {
+        LOG_WARN("failed to schedule merge", K(ret));
       }
     }
   } else {
@@ -300,6 +312,7 @@ int ObTabletDDLCompleteMdsHelper::record_ddl_complete_arg_to_mds(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate buf", KR(ret), K(buf_len));
   } else if (OB_FAIL(complete_arg.serialize(buf, buf_len, pos))) {
+    LOG_WARN("failed to serialize complete_arg", KR(ret), K(complete_arg));
   } else if (OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null sql proxy", KR(ret), KP(sql_proxy));
@@ -307,12 +320,15 @@ int ObTabletDDLCompleteMdsHelper::record_ddl_complete_arg_to_mds(
     ObMySQLTransaction trans;
     common::sqlclient::ObISQLConnection *conn = nullptr;
     if (OB_FAIL(trans.start(sql_proxy))) {
+      LOG_WARN("failed to start transaction", KR(ret));
     } else if (OB_ISNULL(conn = trans.get_connection())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null connection", KR(ret), KP(conn));
     } else if (OB_FAIL(query::ObInnerSQLConnectionAccess::register_multi_data_source(
                    conn, ObTxDataSourceType::DDL_COMPLETE_MDS, buf, buf_len))) {
+      LOG_WARN("failed to register multi data source", KR(ret));
     } else if (OB_FAIL(trans.end(OB_SUCC(ret)))) {
+      LOG_WARN("failed to end trans", KR(ret));
     } else {
       SERVER_EVENT_ADD("ddl", "ddl write complete mds",
                        "ret", ret,

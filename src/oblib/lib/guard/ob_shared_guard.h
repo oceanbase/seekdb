@@ -413,6 +413,7 @@ template<typename T,
 inline int ob_make_shared(ObSharedGuard<T> &guard, Args&& ...args) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ob_alloc_shared<T>(guard, DEFAULT_ALLOCATOR))) {
+    OCCAM_LOG(WARN, "allock memory failed", K(ret), K(lbt()));
   } else {
     new(guard.get_ptr()) T(std::forward<Args>(args)...);
   }

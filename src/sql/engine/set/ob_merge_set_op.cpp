@@ -52,6 +52,7 @@ int ObMergeSetOp::inner_open()
   } else {
     const ObMergeSetSpec &spec = static_cast<const ObMergeSetSpec&>(get_spec());
     if (OB_FAIL(cmp_.init(&spec.sort_collations_, &spec.sort_cmp_funs_))) {
+      LOG_WARN("failed to init compare function", K(ret));
     }
   }
   return ret;
@@ -70,6 +71,7 @@ int ObMergeSetOp::inner_rescan()
   need_skip_init_row_ = false;
   last_row_idx_ = -1;
   if (OB_FAIL(ObOperator::inner_rescan())) {
+    LOG_WARN("failed to rescan", K(ret));
   }
   return ret;
 }
@@ -100,6 +102,7 @@ int ObMergeSetOp::do_strict_distinct(
       }
     } else if (OB_FAIL(cmp_(
         compare_row, child_op.get_spec().output_, eval_ctx_, cmp))) {
+      LOG_WARN("strict compare with last_row failed", K(ret), K(compare_row));
     } else if (0 != cmp) {
       is_break = true;
     }
@@ -127,6 +130,7 @@ int ObMergeSetOp::convert_row(const common::ObIArray<ObExpr*> &src_exprs,
     batch_info_guard.set_batch_idx(src_idx);
     for (uint32_t i = 0; i < dst_exprs.count() && OB_SUCC(ret); ++i) {
       if (OB_FAIL(src_exprs.at(i)->eval(eval_ctx_, src_datum))) {
+        LOG_WARN("failed to eval expr", K(ret), K(i));
       } else {
         dst_exprs.at(i)->locate_expr_datum(eval_ctx_, dst_idx) = *src_datum;
         dst_exprs.at(i)->set_evaluated_flag(eval_ctx_);
@@ -167,12 +171,15 @@ int ObMergeSetOp::Compare::operator()(
   const ObDatum *lcells = l.cells();
   ObDatum *r_datum = nullptr;
   if (OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
   }
   for (int64_t i = 0; i < sort_collations_->count() && OB_SUCC(ret); i++) {
     int64_t idx = sort_collations_->at(i).field_idx_;
     if (OB_FAIL(r.at(idx)->eval(eval_ctx, r_datum))) {
+      LOG_WARN("failed to get expr value", K(ret), K(i));
     } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
                    lcells[idx], *r_datum, cmp, datum_access_ctx))) {
+      LOG_WARN("failed to compare", K(ret), K(i));
     } else {
       if (0 != cmp) {
         cmp = sort_collations_->at(i).is_ascending_ ? cmp : -cmp;
@@ -195,13 +202,16 @@ int ObMergeSetOp::Compare::operator()(
   ObDatum *l_datum = nullptr;
   ObDatum *r_datum = nullptr;
   if (OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
   }
   for (int64_t i = 0; i < sort_collations_->count() && OB_SUCC(ret); i++) {
     int64_t idx = sort_collations_->at(i).field_idx_;
     if (OB_FAIL(l.at(idx)->eval(eval_ctx, l_datum))) {
+      LOG_WARN("failed to get expr value", K(ret), K(i));
     } else if (OB_FAIL(r.at(idx)->eval(eval_ctx, r_datum))) {
     } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
                    *l_datum, *r_datum, cmp, datum_access_ctx))) {
+      LOG_WARN("failed to compare", K(ret), K(i));
     } else {
       LOG_DEBUG("debug compare merge set op", K(EXPR2STR(eval_ctx, *l.at(idx))),
         K(EXPR2STR(eval_ctx, *r.at(idx))), K(cmp));
@@ -228,15 +238,19 @@ int ObMergeSetOp::Compare::operator() (const common::ObIArray<ObExpr*> &l,
   ObDatum *r_datum = nullptr;
   ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx);
   if (OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
   }
   for (int64_t i = 0; i < sort_collations_->count() && OB_SUCC(ret); i++) {
     int64_t idx = sort_collations_->at(i).field_idx_;
     batch_info_guard.set_batch_idx(l_idx);
     if (OB_FAIL(l.at(idx)->eval(eval_ctx, l_datum))) {
+      LOG_WARN("failed to get expr value", K(ret), K(i));
     } else if (FALSE_IT(batch_info_guard.set_batch_idx(r_idx))) {
     } else if (OB_FAIL(r.at(idx)->eval(eval_ctx, r_datum))) {
+      LOG_WARN("failed to get expr value", K(ret), K(i));
     } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
                    *l_datum, *r_datum, cmp, datum_access_ctx))) {
+      LOG_WARN("failed to compare", K(ret), K(i));
     } else if (0 != cmp) {
       cmp = sort_collations_->at(i).is_ascending_ ? cmp : -cmp;
       break;
@@ -260,6 +274,7 @@ int ObMergeSetOp::Compare::operator() (const ObChunkDatumStore::StoredRow &l,
   ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx);
   batch_info_guard.set_batch_idx(r_idx);
   if (OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
   }
   for (int64_t i = 0; i < sort_collations_->count() && OB_SUCC(ret); i++) {
     int64_t idx = sort_collations_->at(i).field_idx_;
@@ -268,6 +283,7 @@ int ObMergeSetOp::Compare::operator() (const ObChunkDatumStore::StoredRow &l,
     if (OB_FAIL(r.at(idx)->eval(eval_ctx, r_datum))) {
     } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
                    *l_datum, *r_datum, cmp, datum_access_ctx))) {
+      LOG_WARN("failed to compare", K(ret), K(i));
     } else if (0 != cmp) {
       cmp = sort_collations_->at(i).is_ascending_ ? cmp : -cmp;
       break;
@@ -389,6 +405,7 @@ int ObMergeSetOp::locate_next_right(ObOperator &child_op,
   //first batch
   if (OB_ISNULL(child_brs) || child_brs->size_ == curr_idx/*last row in batch*/) {
     if (OB_FAIL(child_op.get_next_batch(batch_size, child_brs))) {
+      LOG_WARN("failed to get next batch", K(ret));
     } else if (child_brs->end_ && 0 == child_brs->size_) {
       ret = OB_ITER_END;
     } else {
@@ -410,6 +427,7 @@ int ObMergeSetOp::locate_next_right(ObOperator &child_op,
     }
     if (curr_idx == child_brs->size_) {
       if (OB_FAIL(child_op.get_next_batch(batch_size, child_brs))) {
+        LOG_WARN("failed to get next batch", K(ret));
       } else if (child_brs->end_ && 0 == child_brs->size_) {
         ret = OB_ITER_END;
       } else {

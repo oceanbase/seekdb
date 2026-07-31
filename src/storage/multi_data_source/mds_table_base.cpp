@@ -193,6 +193,7 @@ int MdsTableBase::merge(const int64_t construct_sequence, const share::SCN &flus
       MDS_LOG(ERROR, "failed to schedule mds table merge dag", K(ret), K(param));
     }
   } else {
+    MDS_LOG(DEBUG, "succeeded to schedule mds table merge dag", K(ret), K(param));
   }
   return ret;
 }

@@ -427,7 +427,9 @@ int ObVectorAllocator::init()
     ret = OB_ERR_UNEXPECTED;
     SHARE_LOG(WARN, "throttle tool is unexpected null", KP(throttle_tool_), KP(share_mem_alloc_mgr));
   } else if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(memory_context_, param))) {
+    SHARE_LOG(WARN, "create memory entity failed", K(ret));
   } else if (OB_FAIL(ObVectorMemContext::init(memory_context_, throttle_tool_))) {
+    SHARE_LOG(WARN, "vector mem context init failed", K(ret));
   } else {
     is_inited_ = true;
   }

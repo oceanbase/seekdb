@@ -58,13 +58,16 @@ int ObPLDDLOperator::create_routine(share::schema::ObRoutineInfo &routine_info,
     ret = OB_ERR_SYS;
     LOG_ERROR("schema_service must not null", K(ret));
   } else if (OB_FAIL(schema_service->fetch_new_sys_pl_object_id(new_routine_id))) {
+    LOG_WARN("failed to fetch new_routine_id", K(ret));
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
+    LOG_WARN("fail to gen new schema_version", K(ret));
   } else {
     routine_info.set_routine_id(new_routine_id);
     routine_info.set_schema_version(new_schema_version);
     if (OB_FAIL(schema_service->get_routine_sql_service().create_routine(routine_info,
                                                                          &trans,
                                                                          ddl_stmt_str))) {
+      LOG_WARN("insert routine info failed", K(routine_info), K(ret));
     }
   }
   OZ (ObDependencyInfo::insert_dependency_infos(trans, dep_infos, routine_info.get_routine_id(),
@@ -73,6 +76,7 @@ int ObPLDDLOperator::create_routine(share::schema::ObRoutineInfo &routine_info,
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(error_info.handle_error_info(trans, &routine_info))) {
+      LOG_WARN("insert create routine error info failed.", K(ret), K(error_info));
     }
   }
   return ret;
@@ -94,11 +98,13 @@ int ObPLDDLOperator::replace_routine(share::schema::ObRoutineInfo &routine_info,
   int64_t new_schema_version = OB_INVALID_VERSION;
   if (old_routine_info->get_routine_params().count() > 0) {
     if (OB_FAIL(schema_service_.gen_new_schema_version(del_param_schema_version))) {
+      LOG_WARN("fail to gen new schema_version", K(ret));
     }
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
+    LOG_WARN("fail to gen new schema_version", K(ret));
   } else {
     routine_info.set_routine_id(old_routine_info->get_routine_id());
     routine_info.set_schema_version(new_schema_version);
@@ -121,6 +127,7 @@ int ObPLDDLOperator::replace_routine(share::schema::ObRoutineInfo &routine_info,
                                 routine_info.get_owner_id()));
   if (OB_SUCC(ret)) {
     if (OB_FAIL(error_info.handle_error_info(trans, &routine_info))) {
+      LOG_WARN("replace routine error info failed.", K(ret), K(error_info));
     }
   }
   return ret;
@@ -134,6 +141,7 @@ int ObPLDDLOperator::alter_routine(const share::schema::ObRoutineInfo &routine_i
   int ret = OB_SUCCESS;
   UNUSEDx(ddl_stmt_str);
   if (OB_FAIL(error_info.handle_error_info(trans, &routine_info))) {
+    LOG_WARN("drop routine error info failed.", K(ret), K(error_info));
   }
   return ret;
 }
@@ -154,9 +162,12 @@ int ObPLDDLOperator::drop_routine(const share::schema::ObRoutineInfo &routine_in
   } else if (OB_FAIL(drop_obj_privs(routine_info.get_routine_id(),
                                     static_cast<uint64_t>(routine_info.get_routine_type()),
                                     trans))) {
+    LOG_WARN("fail to drop_obj_privs", K(ret));
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
+    LOG_WARN("fail to gen new schema_version", K(ret));
   } else if (OB_FAIL(schema_service->get_routine_sql_service().drop_routine(
                      routine_info, new_schema_version, trans, ddl_stmt_str))) {
+    LOG_WARN("drop routine info failed", K(routine_info), K(ret));
   }
   uint64_t rt_id = routine_info.get_routine_id();
   uint64_t db_id = routine_info.get_database_id();
@@ -167,6 +178,7 @@ int ObPLDDLOperator::drop_routine(const share::schema::ObRoutineInfo &routine_in
                                      routine_info.get_object_type()));
   if (OB_SUCC(ret)) {
     if (OB_FAIL(error_info.handle_error_info(trans, &routine_info))) {
+      LOG_WARN("drop routine error info failed.", K(ret), K(error_info));
     }
   }
 
@@ -202,15 +214,18 @@ int ObPLDDLOperator::create_package(const ObPackageInfo *old_package_info,
     } else {
       {
         if (OB_FAIL(schema_service->fetch_new_sys_pl_object_id(new_package_id))) {
+          LOG_WARN("failed to fetch new_package_id", K(ret));
         }
       }
     }
     if (OB_SUCC(ret)) {
       new_package_info.set_package_id(new_package_id);
       if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
+        LOG_WARN("fail to gen new schema_version", K(ret), K(1UL));
       } else if (FALSE_IT(new_package_info.set_schema_version(new_schema_version))) {
       } else if (OB_FAIL(schema_service->get_routine_sql_service().create_package(new_package_info,
           &trans, is_replace, ddl_stmt_str))) {
+        LOG_WARN("insert package info failed", K(new_package_info), K(ret));
       } else {
         ARRAY_FOREACH(public_routine_infos, routine_idx) {
           ObRoutineInfo &routine_info = public_routine_infos.at(routine_idx);
@@ -220,8 +235,10 @@ int ObPLDDLOperator::create_package(const ObPackageInfo *old_package_info,
                                             new_package_info.get_owner_id(),
                                             new_package_info.get_database_id(),
                                             routine_info.get_routine_id()))) {
+              LOG_WARN("failed to update routine info", K(ret));
             } else if (OB_FAIL(schema_service->get_routine_sql_service().create_routine(routine_info,
                                                                          &trans, NULL))) {
+              LOG_WARN("insert routine info failed", K(routine_info), K(ret));
             }
           } else if (OB_INVALID_ID == routine_info.get_routine_id()) {
             OZ (update_routine_info(routine_info,
@@ -251,6 +268,7 @@ int ObPLDDLOperator::create_package(const ObPackageInfo *old_package_info,
                                 new_package_info.get_owner_id()));
     if (OB_SUCC(ret)) {
       if (OB_FAIL(error_info.handle_error_info(trans, &new_package_info))) {
+        LOG_WARN("insert create package error info failed.", K(ret), K(error_info));
       }
     }
   }
@@ -293,11 +311,14 @@ int ObPLDDLOperator::drop_package(const ObPackageInfo &package_info,
       const ObPackageInfo *package_body_info = NULL;
       if (OB_FAIL(schema_guard.get_package_info( database_id, package_name, ObPackageType::PACKAGE_BODY_TYPE,
                                                 package_body_info))) {
+        LOG_WARN("get package body info failed", K(database_id), K(package_name), K(ret));
       } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
+        LOG_WARN("fail to gen new schema_version", K(ret));
       } else if (NULL != package_body_info) {
         if (OB_FAIL(schema_service_impl->get_routine_sql_service().drop_package(package_body_info->get_database_id(),
                                                                                 package_body_info->get_package_id(),
                                                                                 new_schema_version, trans))) {
+          LOG_WARN("drop package body info failed", K(package_body_info), K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -325,15 +346,18 @@ int ObPLDDLOperator::drop_package(const ObPackageInfo &package_info,
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
+      LOG_WARN("fail to gen new schema_version", K(ret), K(1UL));
     } else if (OB_FAIL(schema_service_impl->get_routine_sql_service().drop_package(package_info.get_database_id(),
                                                                                    package_info.get_package_id(),
                                                                                    new_schema_version,
                                                                                    trans,
                                                                                    ddl_stmt_str))) {
+      LOG_WARN("drop package info failed", K(package_info), K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(error_info.handle_error_info(trans, &package_info))) {
+      LOG_WARN("delete drop package error info failed", K(ret), K(error_info));
     }
   }
 
@@ -354,6 +378,7 @@ int ObPLDDLOperator::del_routines_in_package(const ObPackageInfo &package_info,
   } else {
     ObArray<const ObRoutineInfo *> routines;
     if (OB_FAIL(schema_guard.get_routine_infos_in_package(package_id, routines))) {
+      LOG_WARN("get routines in package failed", K(package_id), K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < routines.count(); ++i) {
         const ObRoutineInfo *routine_info = routines.at(i);
@@ -362,8 +387,10 @@ int ObPLDDLOperator::del_routines_in_package(const ObPackageInfo &package_info,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("routine info is NULL", K(ret));
         } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
+          LOG_WARN("fail to gen new schema_version", K(ret));
         } else if (OB_FAIL(schema_service_impl->get_routine_sql_service().drop_routine(
                            *routine_info, new_schema_version, trans))) {
+          LOG_WARN("drop routine failed", "routine_id", routine_info->get_routine_id(), K(ret));
         }
       }
     }
@@ -440,6 +467,7 @@ int ObPLDDLOperator::create_trigger(share::schema::ObTriggerInfo &trigger_info,
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(error_info.handle_error_info(trans, &trigger_info))) {
+      LOG_WARN("insert trigger error info failed.", K(ret), K(error_info));
     }
   }
   return ret;
@@ -486,6 +514,7 @@ int ObPLDDLOperator::drop_trigger(const share::schema::ObTriggerInfo &trigger_in
   if (OB_SUCC(ret)) {
     ObErrorInfo error_info;
     if (OB_FAIL(error_info.handle_error_info(trans, &trigger_info))) {
+      LOG_WARN("delete trigger error info failed.", K(ret), K(error_info));
     }
   }
   return ret;
@@ -691,13 +720,17 @@ int ObPLDDLOperator::drop_trigger_in_drop_database(const ObDatabaseSchema &db_sc
   const uint64_t database_id = db_schema.get_database_id();
   ObPLDDLOperator pl_operator(ddl_operator.get_multi_schema_service(), ddl_operator.get_sql_proxy());
   if (OB_FAIL(pl_operator.schema_service_.get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("failed to get schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_trigger_ids_in_database(database_id, trigger_ids))) {
+    LOG_WARN("get trigger infos in database failed", KR(ret), K(database_id));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < trigger_ids.count(); i++) {
       const ObTriggerInfo *tg_info = NULL;
       const uint64_t trigger_id = trigger_ids.at(i);
       if (OB_FAIL(pl_operator.schema_service_.get_runtime_schema_guard(schema_guard))) {
+        LOG_WARN("failed to get schema guard", KR(ret));
       } else if (OB_FAIL(schema_guard.get_trigger_info( trigger_id, tg_info))) {
+        LOG_WARN("fail to get trigger info", KR(ret), K(trigger_id));
       } else if (OB_ISNULL(tg_info)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("trigger info is NULL", K(ret));
@@ -764,6 +797,7 @@ int ObPLDDLOperator::update_routine_info(share::schema::ObRoutineInfo &routine_i
         && OB_FAIL(schema_service->fetch_new_sys_pl_object_id(new_routine_id))) {
     LOG_WARN("failed to fetch new_routine_id", K(ret));
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
+    LOG_WARN("fail to gen new schema_version", K(ret));
   } else {
     routine_info.set_database_id(database_id);
     routine_info.set_package_id(parent_id);

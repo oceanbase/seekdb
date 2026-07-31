@@ -47,6 +47,7 @@ struct MdsFactory
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(create_(p_obj, std::forward<Args>(args)...))) {
+      MDS_LOG(WARN, "fail to create object", KR(ret), K(typeid(T).name()), KP(p_obj), K(lbt()));
     }
     return ret;
   }

@@ -48,6 +48,7 @@ void ObServerDutyTask::update_runtime_settings()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(update_ctx_memory_throttle())) {
+    LOG_WARN("update context memory throttle failed", K(ret));
   }
 }
 
@@ -74,6 +75,7 @@ int ObServerDutyTask::update_ctx_memory_throttle()
         auto allocator = alloc->get_ctx_allocator(i);
         if (OB_NOT_NULL(allocator)) {
           if (OB_FAIL(allocator->set_limit(ctx_id == i ? limit : INT64_MAX))) {
+            LOG_ERROR("set_limit failed", K(ret), K(ctx_id), K(limit));
           }
         }
       }
@@ -98,6 +100,7 @@ void ObSqlMemoryTimerTask::runTimerTask()
       if (OB_UNLIKELY(nullptr == sql_mem_mgr)) {
         LOG_WARN("sql memory manager is null");
       } else if (OB_FAIL(sql_mem_mgr->calculate_global_bound_size())) {
+        LOG_WARN("failed to calculate global bound size", K(ret));
       }
     }
   }

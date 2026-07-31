@@ -105,6 +105,7 @@ int ObFreezeInfoMgr::server_module_init(ObFreezeInfoMgr* &freeze_info_mgr)
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "failed to get sql proxy from GCTX, cannot init FreezeInfoMgr", K(ret));
   } else if (OB_FAIL(freeze_info_mgr->init(*GCTX.sql_proxy_))) {
+    STORAGE_LOG(WARN, "failed to init freeze info mgr", K(ret));
   } else {
     STORAGE_LOG(INFO, "success to init freeze info manager");
   }
@@ -118,8 +119,11 @@ int ObFreezeInfoMgr::init(ObISQLClient &sql_proxy)
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "init twice", K(ret));
   } else if (OB_FAIL(freeze_info_mgr_.init(*GCTX.sql_proxy_))) {
+    STORAGE_LOG(WARN, "fail to init freeze info mgr", K(ret));
   } else if (OB_FAIL(reload_task_.init())) {
+    STORAGE_LOG(ERROR, "fail to init reload task", K(ret));
   } else if (OB_FAIL(reload_timer_.init("FreInfoReload", ObMemAttr("FreInfoReload")))) {
+    STORAGE_LOG(ERROR, "fail to init timer", K(ret));
   } else {
     inited_ = true;
   }
@@ -134,7 +138,9 @@ int ObFreezeInfoMgr::start()
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "not init", K(ret));
   } else if (OB_FAIL(reload_timer_.schedule(reload_task_, RELOAD_INTERVAL, true))) {
+    STORAGE_LOG(ERROR, "fail to schedule reload task", K(ret));
   } else if (OB_FAIL(reload_timer_.schedule(update_reserved_snapshot_task_, UPDATE_LS_RESERVED_SNAPSHOT_INTERVAL, true))) {
+    STORAGE_LOG(ERROR, "fail to schedule update reserved snapshot task", K(ret));
   }
   return ret;
 }
@@ -170,6 +176,7 @@ int ObFreezeInfoMgr::get_min_dependent_freeze_info(ObFreezeInfo &freeze_info)
   RLockGuardWithTimeout lock_guard(lock_, abs_timeout_us, ret);
 
   if (OB_FAIL(ret)) {
+    STORAGE_LOG(WARN, "get_lock failed", KR(ret));
   } else if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "not init", K(ret));
@@ -181,6 +188,7 @@ int ObFreezeInfoMgr::get_min_dependent_freeze_info(ObFreezeInfo &freeze_info)
     }
 
     if (OB_FAIL(freeze_info_mgr_.get_freeze_info_by_idx(idx, freeze_info))) {
+      STORAGE_LOG(WARN, "fail to get frozen status", K(ret), K(idx));
     } else {
       LOG_INFO("get min dependent freeze info", K(ret), K(freeze_info)); // diagnose code for issue 45841468
     }
@@ -198,6 +206,7 @@ int ObFreezeInfoMgr::get_freeze_info_behind_major_snapshot(
   RLockGuardWithTimeout lock_guard(lock_, abs_timeout_us, ret);
 
   if (OB_FAIL(ret)) {
+    STORAGE_LOG(WARN, "get_lock failed", KR(ret));
   } else if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "not init", K(ret));
@@ -221,6 +230,7 @@ int ObFreezeInfoMgr::get_freeze_info_by_snapshot_version(
   RLockGuardWithTimeout lock_guard(lock_, abs_timeout_us, ret);
 
   if (OB_FAIL(ret)) {
+    STORAGE_LOG(WARN, "get_lock failed", KR(ret));
   } else if (OB_UNLIKELY(snapshot_version <= 0 || INT64_MAX == snapshot_version)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "snapshot version is invalid", K(ret), K(snapshot_version));
@@ -228,6 +238,7 @@ int ObFreezeInfoMgr::get_freeze_info_by_snapshot_version(
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "not init", K(ret));
   } else if (OB_FAIL(freeze_info_mgr_.get_freeze_info_by_major_snapshot(snapshot_version, freeze_info))) {
+    STORAGE_LOG(WARN, "failed to get frozen status by snapshot", K(ret), K(snapshot_version));
   }
   return ret;
 }
@@ -238,7 +249,9 @@ int ObFreezeInfoMgr::get_lower_bound_freeze_info_before_snapshot_version(const i
   const int64_t abs_timeout_us = common::ObTimeUtility::current_time() + RLOCK_TIMEOUT_US;
   RLockGuardWithTimeout lock_guard(lock_, abs_timeout_us, ret);
   if (OB_FAIL(ret)) {
+    STORAGE_LOG(WARN, "get_lock failed", KR(ret));
   } else if (OB_FAIL(get_freeze_info_compare_with_snapshot_version_(snapshot_version, share::ObFreezeInfoManager::CmpType::LOWER_BOUND, freeze_info))) {
+    STORAGE_LOG(WARN, "failed to get freeze info before snapshot version", KR(ret), K(snapshot_version));
   }
   return ret;
 }
@@ -278,6 +291,7 @@ int ObFreezeInfoMgr::get_neighbour_major_freeze(
   RLockGuardWithTimeout lock_guard(lock_, abs_timeout_us, ret);
 
   if (OB_FAIL(ret)) {
+    STORAGE_LOG(WARN, "get_lock failed", KR(ret));
   } else if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "not init", K(ret));
@@ -360,10 +374,12 @@ int ObFreezeInfoMgr::get_min_reserved_snapshot(
   RLockGuardWithTimeout lock_guard(lock_, abs_timeout_us, ret);
   ObIArray<ObSnapshotInfo> &snapshots = snapshots_[cur_idx_];
   if (OB_FAIL(ret)) {
+    STORAGE_LOG(WARN, "get_lock failed", KR(ret));
   } else if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "not init", K(ret));
   } else if (OB_FAIL(get_multi_version_duration(duration))) {
+    STORAGE_LOG(WARN, "fail to get multi version duration", K(ret), K(tablet_id));
   } else {
     if (merged_version < 1) {
       freeze_info.frozen_scn_.set_min();
@@ -386,10 +402,13 @@ int ObFreezeInfoMgr::get_min_reserved_snapshot(
       bool related = false;
       const ObSnapshotInfo &snapshot = snapshots.at(i);
       if (OB_FAIL(is_snapshot_related_to_tablet(tablet_id, snapshot, related))) {
+        STORAGE_LOG(WARN, "fail to check snapshot relation", K(ret), K(tablet_id), K(snapshot));
       } else if (related) {
         snapshot_info.update_by_smaller_snapshot(snapshot.snapshot_type_, snapshot.snapshot_scn_.get_val_for_tx());
       }
     }
+    LOG_TRACE("check_freeze_info_mgr", K(ret), K(snapshot_info), K(duration), K(snapshot_for_undo_retention),
+      K(freeze_info), K(snapshot_gc_ts), K(snapshot_for_tx));
   }
   return ret;
 }
@@ -403,6 +422,7 @@ int ObFreezeInfoMgr::update_next_snapshots(const ObIArray<ObSnapshotInfo> &snaps
 
   for (int64_t i = 0; OB_SUCC(ret) && i < snapshots.count(); ++i) {
     if (OB_FAIL(next_snapshots.push_back(snapshots.at(i)))) {
+      STORAGE_LOG(WARN, "fail to push back snapshot", K(ret));
     }
   }
 
@@ -454,6 +474,7 @@ int ObFreezeInfoMgr::ReloadTask::refresh_merge_info()
   int64_t global_broadcast_version = 0;
 
   if (OB_FAIL(ObGlobalMergeTableOperator::load_global_merge_info(*GCTX.sql_proxy_, global_merge_info))) {
+    LOG_WARN("failed to load global merge info", KR(ret), K(global_merge_info));
   } else {
     // set merged version
     MERGE_SCHEDULER_PTR->set_inner_table_merged_scn(global_merge_info.last_merged_scn_.get_scn().get_val_for_tx());
@@ -473,7 +494,9 @@ int ObFreezeInfoMgr::ReloadTask::refresh_merge_info()
         if (global_broadcast_version > cur_broadcast_version) {
           FLOG_INFO("try to schedule merge", K(global_broadcast_version), K(cur_broadcast_version));
           if (OB_FAIL(MERGE_SCHEDULER_PTR->schedule_merge(global_broadcast_version))) {
+            LOG_WARN("fail to schedule merge", K(ret), K(global_broadcast_version));
           } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>()->update_frozen_scn(global_broadcast_version))) {
+            LOG_WARN("update frozen scn failed", K(ret), K(global_broadcast_version));
           }
         }
       }
@@ -481,6 +504,7 @@ int ObFreezeInfoMgr::ReloadTask::refresh_merge_info()
   }
 
   if (OB_SUCC(ret)) {
+    LOG_TRACE("refresh merge info", K(global_merge_info));
   }
   return ret;
 }
@@ -497,8 +521,11 @@ int ObFreezeInfoMgr::try_update_info()
 
   if (OB_FAIL(ObFreezeInfoManager::fetch_new_freeze_info(
         share::SCN::base_scn(), *GCTX.sql_proxy_, freeze_infos, new_snapshot_gc_scn))) {
+    STORAGE_LOG(WARN, "failed to load updated info", K(ret));
   } else if (OB_FAIL(snapshot_proxy.get_all_snapshots(*GCTX.sql_proxy_, snapshots))) {
+    STORAGE_LOG(WARN, "failed to get snapshots", K(ret));
   } else if (OB_FAIL(inner_update_info(new_snapshot_gc_scn, freeze_infos, snapshots))) {
+    STORAGE_LOG(WARN, "failed to update info", K(ret), K(freeze_infos), K(new_snapshot_gc_scn), K(snapshots));
   }
   return ret;
 }
@@ -513,11 +540,14 @@ int ObFreezeInfoMgr::inner_update_info(
   {
     WLockGuard lock_guard(lock_);
     if (OB_FAIL(freeze_info_mgr_.update_freeze_info(new_freeze_infos, new_snapshot_gc_scn))) {
+      STORAGE_LOG(WARN, "failed to reload freeze info mgr", K(ret));
     } else if (OB_FAIL(update_next_snapshots(new_snapshots))) {
+      STORAGE_LOG(WARN, "fail to update next snapshots", K(ret));
     } else {
       snapshot_gc_ts = freeze_info_mgr_.get_snapshot_gc_scn().get_val_for_tx();
     }
   }
+  STORAGE_LOG(DEBUG, "reload freeze info and snapshots", K(snapshot_gc_ts), K(new_snapshots));
 
   if (OB_SUCC(ret)) {
     if (REACH_THREAD_TIME_INTERVAL(20 * 1000 * 1000 /*20s*/)) {
@@ -569,6 +599,7 @@ int ObFreezeInfoMgr::try_update_reserved_snapshot()
       ret = OB_NOT_INIT;
       STORAGE_LOG(WARN, "ObFreezeInfoMgr not init", K(ret));
     } else if (OB_FAIL(get_multi_version_duration(duration))) {
+      STORAGE_LOG(WARN, "fail to get multi version duration", K(ret));
     } else {
       int64_t snapshot_gc_ts = freeze_info_mgr_.get_snapshot_gc_scn().get_val_for_tx();
       reserved_snapshot = std::max(static_cast<int64_t>(0), snapshot_gc_ts - duration * 1000L * 1000L * 1000L);
@@ -583,9 +614,11 @@ int ObFreezeInfoMgr::try_update_reserved_snapshot()
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "ls service is null", K(ret));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
+    LOG_WARN("failed to get single log stream", K(ret));
   } else {
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(ls->try_sync_reserved_snapshot(reserved_snapshot, true/*update_flag*/))) {
+      LOG_WARN("failed to update min reserved snapshot", K(tmp_ret), KPC(ls), K(reserved_snapshot));
     }
   }
   cost_ts = ObTimeUtility::fast_current_time() - cost_ts;

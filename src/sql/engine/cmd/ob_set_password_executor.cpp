@@ -72,12 +72,19 @@ int ObSetPasswordExecutor::execute(ObExecContext &ctx, ObSetPasswordStmt &stmt)
     ObSSLType ssl_type_enum = ObSSLType::SSL_TYPE_NOT_SPECIFIED;
 
     if (OB_FAIL(user_passwd->get_string(0, user_name))) {
+      LOG_WARN("Get user name failed", K(ret));
     } else if (OB_FAIL(user_passwd->get_string(1, host_name))) {
+      LOG_WARN("Get passwd failed", K(ret));
     } else if (OB_FAIL(user_passwd->get_string(2, passwd))) {
+      LOG_WARN("Get passwd failed", K(ret));
     } else if (OB_FAIL(user_passwd->get_string(3, ssl_type))) {
+      LOG_WARN("Get string from ObStrings error", K(ret));
     } else if (OB_FAIL(user_passwd->get_string(4, ssl_cipher))) {
+      LOG_WARN("Get string from ObStrings error", K(ret));
     } else if (OB_FAIL(user_passwd->get_string(5, x509_issuer))) {
+      LOG_WARN("Get string from ObStrings error", K(ret));
     } else if (OB_FAIL(user_passwd->get_string(6, x509_subject))) {
+      LOG_WARN("Get string from ObStrings error", K(ret));
     } else if (OB_UNLIKELY(ObSSLType::SSL_TYPE_MAX == (ssl_type_enum = get_ssl_type_from_string(ssl_type)))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("known ssl_type", K(ssl_type), K(ret));
@@ -97,6 +104,7 @@ int ObSetPasswordExecutor::execute(ObExecContext &ctx, ObSetPasswordStmt &stmt)
       arg.modify_max_connections_ = stmt.get_modify_max_connections();
       if (stmt.get_need_enc()) {
         if (OB_FAIL(ObCreateUserExecutor::encrypt_passwd(passwd, arg.passwd_, enc_buf, ENC_BUF_LEN))) {
+          LOG_WARN("Encrypt passwd failed", K(ret));
         }
       } else {
         arg.passwd_ = passwd;

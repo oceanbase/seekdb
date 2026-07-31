@@ -85,6 +85,7 @@ static int print_json_path(const ObString &path, ObStringBuffer &buf)
     if ((c == '"' || c == '\\') && OB_FAIL(buf.append("\\", 1))) {
       LOG_WARN("append slash fail", K(ret), K(i), K(c));
     } else if (OB_FAIL(buf.append(&c, 1))) {
+      LOG_WARN("append fail", K(ret), K(i), K(c));
     }
   }
   return ret;
@@ -94,16 +95,23 @@ int ObJsonDiff::print(ObStringBuffer &buffer)
 {
   INIT_SUCC(ret);
   if (OB_FAIL(buffer.append("{"))) {
+    LOG_WARN("buffer append fail", K(ret));
   } else if (OB_FAIL(buffer.append("\"op\": \""))) {
+    LOG_WARN("buffer append fail", K(ret));
   } else if (OB_FAIL(buffer.append(get_json_diff_op_str(op_)))) {
+    LOG_WARN("buffer append fail", K(ret));
   } else if (OB_FAIL(buffer.append("\", \"path\": \""))) {
+    LOG_WARN("buffer append fail", K(ret));
   } else if (OB_FAIL(print_json_path(path_, buffer))) {
+    LOG_WARN("buffer append fail", K(ret), K(path_));
   } else if (OB_FAIL(buffer.append("\""))) {
+    LOG_WARN("buffer append fail", K(ret));
   }
 
   if (OB_FAIL(ret)) {
   } else if (ObJsonDiffOp::REMOVE == op_) {
   } else if (OB_FAIL(buffer.append(", \"value\": "))) {
+    LOG_WARN("buffer append fail", K(ret));
   } else {
     ObJsonBinCtx bin_ctx;
     ObJsonBin j_bin;
@@ -114,12 +122,15 @@ int ObJsonDiff::print(ObStringBuffer &buffer)
         0,
         entry_var_type_,
         &bin_ctx))) {
+      LOG_WARN("reset json bin fail", K(ret), K(value_type_), K(value_));
     } else if (OB_FAIL(j_base->print(buffer, true))) {
+      LOG_WARN("json binary to string failed in mysql mode", K(ret), K(*j_base));
     }
   }
     
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(buffer.append("}"))) {
+    LOG_WARN("buffer append fail", K(ret));
   }
   return ret;
 }
@@ -147,6 +158,7 @@ int ObJsonBinUpdateCtx::record_inline_diff(ObJsonDiffOp op, uint8_t value_type, 
   json_diff.entry_var_type_ = entry_var_type;
   json_diff.value_ = value;
   if (OB_FAIL(json_diffs_.push_back(json_diff))) {
+    LOG_WARN("push_back json diff fail", K(ret), K(json_diff));
   }
   return ret;
 }
@@ -161,6 +173,7 @@ int ObJsonBinUpdateCtx::record_diff(ObJsonDiffOp op, uint8_t value_type, const O
   json_diff.path_ = path;
   json_diff.value_ = value;
   if (OB_FAIL(json_diffs_.push_back(json_diff))) {
+    LOG_WARN("push_back json diff fail", K(ret), K(json_diff));
   }
   return ret;
 }
@@ -171,6 +184,7 @@ int ObJsonBinUpdateCtx::record_remove_diff(const ObString &path) {
   json_diff.op_ = ObJsonDiffOp::REMOVE;
   json_diff.path_ = path;
   if (OB_FAIL(json_diffs_.push_back(json_diff))) {
+    LOG_WARN("push_back json diff fail", K(ret), K(json_diff));
   }
   return ret;
 }
@@ -182,6 +196,7 @@ int ObJsonBinUpdateCtx::record_binary_diff(int64_t offset, int64_t len)
   binary_diff.dst_offset_ = offset;
   binary_diff.dst_len_ = len;
   if (OB_FAIL(binary_diffs_.push_back(binary_diff))) {
+    LOG_WARN("push_back json diff fail", K(ret), K(binary_diff));
   }
   return ret; 
 }
@@ -203,7 +218,9 @@ DEFINE_SERIALIZE(ObJsonDiffHeader)
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("serialize failed", K(ret), K(pos), K(buf_len));
   } else if (OB_FAIL(serialization::encode_i8(buf, buf_len, new_pos, version_))) {
+    LOG_ERROR("serialize failed", K(ret), K(pos), K(buf_len));
   } else if (OB_FAIL(serialization::encode_i8(buf, buf_len, new_pos, cnt_))) {
+    LOG_ERROR("serialize failed", K(ret), K(pos), K(buf_len));
   } else {
     pos = new_pos;
   }
@@ -218,7 +235,9 @@ DEFINE_DESERIALIZE(ObJsonDiffHeader)
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("serialize failed", K(ret), K(pos), K(data_len));
   } else if (OB_FAIL(serialization::decode_i8(buf, data_len, new_pos, reinterpret_cast<int8_t*>(&version_)))) {
+    LOG_ERROR("serialize failed", K(ret), K(pos), K(data_len));
   } else if (OB_FAIL(serialization::decode_i8(buf, data_len, new_pos, reinterpret_cast<int8_t*>(&cnt_)))) {
+    LOG_ERROR("serialize failed", K(ret), K(pos), K(data_len));
   } else {
     pos = new_pos;
   }

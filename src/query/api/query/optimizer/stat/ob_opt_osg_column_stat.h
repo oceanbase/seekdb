@@ -100,7 +100,7 @@ public:
   int deep_copy(const ObOptOSGColumnStat &other);
   static ObOptOSGColumnStat* create_new_osg_col_stat(
       common::ObIAllocator &allocator,
-      const ObDatumAccessContext *datum_access_ctx);
+      const ObDatumAccessContext &datum_access_ctx);
   int get_min_obj(ObObj &obj);
   int get_max_obj(ObObj &obj);
   int set_min_max_datum_to_obj();

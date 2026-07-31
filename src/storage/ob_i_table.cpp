@@ -506,8 +506,11 @@ int ObTablesHandleArray::add_memtable(ObITable *table)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get invalid arguments", K(ret), KP(table));
   } else if (OB_FAIL(tablet_id_check(table->get_key().get_tablet_id()))) {
+    LOG_WARN("failed to check tablet id", K(ret), KPC(table));
   } else if (OB_FAIL(handle.set_table(table, ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>(), table->get_key().table_type_))) {
+    LOG_WARN("failed to set table to handle", K(ret));
   } else if (OB_FAIL(handles_array_.push_back(handle))) {
+    LOG_WARN("failed to add table handle", K(ret), K(handle));
   }
   return ret;
 }
@@ -516,7 +519,9 @@ int ObTablesHandleArray::add_table(const ObTableHandleV2 &handle)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tablet_id_check(handle.get_table()->get_key().get_tablet_id()))) {
+    LOG_WARN("failed  to add table handle to array", K(ret));
   } else if (OB_FAIL(handles_array_.push_back(handle))) {
+    STORAGE_LOG(WARN, "failed to add sstable", K(ret), K(handle));
   }
   return ret;
 }
@@ -530,11 +535,14 @@ int ObTablesHandleArray::add_sstable(ObITable *table, const ObStorageMetaHandle 
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid table type", K(ret), KPC(table));
   } else if (OB_FAIL(tablet_id_check(table->get_key().get_tablet_id()))) {
+    LOG_WARN("failed to check tablet id", K(ret), KPC(table));
   } else if (static_cast<ObSSTable *>(table)->is_loaded()) {
     if (!meta_handle.is_valid()) {
       if (OB_FAIL(table_handle.set_sstable_with_tablet(table))) {
+        LOG_WARN("fail to set sstable with tablet", K(ret), KPC(table));
       }
     } else if (OB_FAIL(table_handle.set_sstable(table, meta_handle))) {
+      LOG_WARN("fail to set table handle", K(ret), KPC(table));
     }
   } else {
     const ObMetaDiskAddr addr = static_cast<ObSSTable *>(table)->get_addr();
@@ -550,8 +558,11 @@ int ObTablesHandleArray::add_sstable(ObITable *table, const ObStorageMetaHandle 
       ObStorageMetaValue::MetaType meta_type = ObStorageMetaValue::MetaType::SSTABLE;
 
       if (OB_FAIL(meta_cache.get_meta(meta_type, meta_key, handle, nullptr))) {
+        LOG_WARN("fail to get sstable from meta cache", K(ret), K(addr));
       } else if (OB_FAIL(handle.get_sstable(sstable))) {
+        LOG_WARN("fail to get sstable", K(ret), K(handle));
       } else if (OB_FAIL(table_handle.set_sstable(sstable, handle))) {
+        LOG_WARN("fail to set table handle", K(ret), KPC(table), KPC(sstable));
       }
     }
   }
@@ -568,6 +579,7 @@ int ObTablesHandleArray::assign(const ObTablesHandleArray &other)
   reset();
   for (int64_t i = 0; OB_SUCC(ret) && i < other.get_count(); ++i) {
     if (OB_FAIL(add_table(other.handles_array_.at(i)))) {
+      LOG_WARN("fail to add table", K(ret), K(i), K(other));
     }
   }
   return ret;
@@ -604,6 +616,7 @@ int ObTablesHandleArray::get_table(const ObITable::TableKey &table_key, ObTableH
     } else if (table->get_key() == table_key) {
       found = true;
       if (OB_FAIL(get_table(i, table_handle))) {
+        STORAGE_LOG(WARN, "failed to get table by index", K(ret));
       }
     }
   }
@@ -622,6 +635,7 @@ int ObTablesHandleArray::get_tables(common::ObIArray<ObITable *> &tables) const
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "invalid table handle", K(ret), K(i), K_(handles_array));
     } else if (OB_FAIL(tables.push_back(handles_array_.at(i).table_))) {
+      STORAGE_LOG(WARN, "failed to add table", K(ret));
     }
   }
   return ret;
@@ -648,6 +662,7 @@ int ObTablesHandleArray::get_all_minor_sstables(common::ObIArray<ObITable *> &ta
   int ret = OB_SUCCESS;
   tables.reset();
   if (OB_FAIL(get_sstable_with_type_(ObITable::is_minor_sstable, tables))) {
+    STORAGE_LOG(WARN, "failed to get minor sstable", K(ret));
   }
   return ret;
 }
@@ -658,6 +673,7 @@ int ObTablesHandleArray::get_all_mds_sstables(common::ObIArray<ObITable *> &tabl
   int ret = OB_SUCCESS;
   tables.reset();
   if (OB_FAIL(get_sstable_with_type_(ObITable::is_mds_sstable, tables))) {
+    STORAGE_LOG(WARN, "failed to get mds sstable", K(ret));
   }
   return ret;
 }
@@ -673,6 +689,7 @@ int ObTablesHandleArray::get_sstable_with_type_(
     if (!is_right_sstable_type(table->get_key().table_type_)) {
       //do nothing
     } else if (OB_FAIL(tables.push_back(table))) {
+      STORAGE_LOG(WARN, "failed to add sstable", K(ret), K(i));
     }
   }
   return ret;

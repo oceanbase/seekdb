@@ -36,7 +36,9 @@ using namespace sql;
 namespace observer
 {
 
-ObMPStmtSendLongData::ObMPStmtSendLongData(const share::ObGlobalContext &gctx)
+ObMPStmtSendLongData::ObMPStmtSendLongData(
+    const share::ObGlobalContext &gctx,
+    ObVTIterCreator &vt_iter_creator)
     : ObMPBase(gctx),
       single_process_timestamp_(0),
       exec_start_timestamp_(0),
@@ -45,7 +47,8 @@ ObMPStmtSendLongData::ObMPStmtSendLongData(const share::ObGlobalContext &gctx)
       param_id_(OB_MAX_PARAM_ID),
       buffer_len_(0),
       buffer_(),
-      need_disconnect_(false)
+      need_disconnect_(false),
+      vt_iter_creator_(vt_iter_creator)
 {
   ctx_.exec_type_ = MpQuery;
 }
@@ -61,6 +64,7 @@ int ObMPStmtSendLongData::before_process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObMPBase::before_process())) {
+    LOG_WARN("failed to pre processing packet", K(ret));
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     if (OB_UNLIKELY(ObMySQLCommandLayout::LONG_DATA !=
@@ -69,6 +73,7 @@ int ObMPStmtSendLongData::before_process()
       LOG_WARN("unexpected stmt-long-data command layout", K(ret),
                K(pkt.get_command_layout()));
     } else if (OB_FAIL(pkt.get_command_field(0, buffer_))) {
+      LOG_WARN("get rust parsed stmt-long-data buffer failed", K(ret));
     } else {
       stmt_id_ = static_cast<int32_t>(pkt.get_command_scalar0());
       param_id_ = static_cast<uint16_t>(pkt.get_command_scalar1());
@@ -84,6 +89,7 @@ int ObMPStmtSendLongData::before_process()
     if (OB_SUCC(ret)) {
       LOG_INFO("resolve send_long_data protocol packet successfully",
                K(stmt_id_), K(param_id_), K(buffer_len_));
+      LOG_DEBUG("send_long_data packet content", K(buffer_));
     }
     LOG_INFO("resolve send_long_data protocol packet",
              K(ret), K(stmt_id_), K(param_id_), K(buffer_len_), K(buffer_.length()));
@@ -110,6 +116,7 @@ int ObMPStmtSendLongData::process()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid runtime", K_(stmt_id), K_(param_id), K(conn->runtime_), K(ret));
   } else if (OB_FAIL(get_session(sess))) {
+    LOG_WARN("get session fail", K_(stmt_id), K_(param_id), K(ret));
   } else if (OB_ISNULL(sess)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL or invalid", K_(stmt_id), K_(param_id), K(sess), K(ret));
@@ -136,11 +143,14 @@ int ObMPStmtSendLongData::process()
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
       LOG_WARN("packet too large than allowd for the session", K_(stmt_id), K_(param_id), K(ret));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
+      LOG_WARN("fail to get query timeout", K_(stmt_id), K_(param_id), K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(
                 runtime_version))) {
+      LOG_WARN("fail to get runtime broadcast version", K(ret));
     } else {
       THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
       if (OB_FAIL(process_send_long_data_stmt(session))) {
+        LOG_WARN("execute sql failed", K_(stmt_id), K_(param_id), K(ret));
       }
     }
 
@@ -182,6 +192,7 @@ int ObMPStmtSendLongData::process_send_long_data_stmt(ObSQLSessionInfo &session)
   bool need_response_error = true;
   setup_wb(session);
 
+  ObVirtualTableIteratorFactory vt_iter_factory(vt_iter_creator_);
   ObThreadLogLevelUtils::init(session.get_log_id_level_map());
   ret = do_process(session);
   ObThreadLogLevelUtils::clear();
@@ -209,7 +220,7 @@ int ObMPStmtSendLongData::do_process(ObSQLSessionInfo &session)
     }
     if (enable_sqlstat) {
       sqlstat_record.record_sqlstat_start_value(
-          ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
+          *session.get_query_runtime_environment());
       sqlstat_record.set_is_in_retry(session.get_is_in_retry());
       session.sql_sess_record_sql_stat_start_value(sqlstat_record);
     }
@@ -219,6 +230,7 @@ int ObMPStmtSendLongData::do_process(ObSQLSessionInfo &session)
       //nothing to do
     } else if (OB_FAIL(set_session_active(sql, session, ObTimeUtil::current_time(), 
                                           obmysql::ObMySQLCmd::COM_STMT_SEND_LONG_DATA))) {
+      LOG_WARN("fail to set session active", K(ret));
     } else if (OB_FAIL(store_piece(session))) {
       exec_start_timestamp_ = ObTimeUtility::current_time();
     } else {
@@ -243,7 +255,7 @@ int ObMPStmtSendLongData::do_process(ObSQLSessionInfo &session)
   }
   if (enable_sqlstat) {
     sqlstat_record.record_sqlstat_end_value(
-        ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
+        *session.get_query_runtime_environment());
   }
 
   // store the warning message from the most recent statement in the current session
@@ -269,8 +281,10 @@ int ObMPStmtSendLongData::store_piece(ObSQLSessionInfo &session)
   } else {
     ObPiece *piece = NULL;
     if (OB_FAIL(piece_cache->get_piece(stmt_id_, param_id_, piece))) {
+      LOG_WARN("get piece fail", K(stmt_id_), K(param_id_), K(ret) );
     } else if (NULL == piece) {
       if (OB_FAIL(piece_cache->make_piece(stmt_id_, param_id_, piece, session))) {
+        LOG_WARN("make piece fail.", K(ret), K(stmt_id_));
       }
     }
     if (OB_FAIL(ret) || NULL == piece) {
@@ -280,6 +294,7 @@ int ObMPStmtSendLongData::store_piece(ObSQLSessionInfo &session)
     } else if (OB_FAIL(piece_cache->add_piece_buffer(piece, 
                                                       ObPieceMode::ObInvalidPiece, 
                                                       &buffer_))) {
+      LOG_WARN("add piece buffer fail.", K(ret), K(stmt_id_));
     } else {
       // send long data do not response.
       LOG_INFO("store piece successfully", K(ret), K(session.get_server_sid()),

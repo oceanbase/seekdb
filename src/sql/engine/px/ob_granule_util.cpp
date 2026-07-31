@@ -94,6 +94,7 @@ int ObGranuleUtil::split_block_ranges(ObExecContext &exec_ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ranges/tablets is empty", K(in_ranges), K(tablets), K(ret));
   } else if (OB_FAIL(remove_empty_range(in_ranges, ranges, only_empty_range))) {
+    LOG_WARN("failed to remove empty range", K(ret));
   } else if (force_partition_granule
              || only_empty_range) {
     // partition granule iterator
@@ -102,8 +103,11 @@ int ObGranuleUtil::split_block_ranges(ObExecContext &exec_ctx,
     FOREACH_CNT_X(tablet, tablets, OB_SUCC(ret)) {
       FOREACH_CNT_X(range, ranges, OB_SUCC(ret)) {
         if (OB_FAIL(granule_tablets.push_back(*tablet))) {
+          LOG_WARN("push basck tablet failed", K(ret));
         } else if (OB_FAIL(granule_ranges.push_back(*range))) {
+          LOG_WARN("push back range failed", K(ret));
         } else if (OB_FAIL(granule_idx.push_back(pk_idx))) {
+          LOG_WARN("push back pk_idx failed", K(ret));
         } else if (range_independent) {
           pk_idx++;
         }
@@ -112,6 +116,7 @@ int ObGranuleUtil::split_block_ranges(ObExecContext &exec_ctx,
         pk_idx++;
       }
     }
+    LOG_TRACE("gi partition granule", K(range_independent));
   } else if (OB_FAIL(split_block_granule(exec_ctx,
                                          allocator,
                                          tsc,
@@ -123,6 +128,7 @@ int ObGranuleUtil::split_block_ranges(ObExecContext &exec_ctx,
                                          granule_ranges,
                                          granule_idx,
                                          range_independent))) {
+    LOG_WARN("failed to split block granule tasks", K(ret));
   } else {
     LOG_TRACE("get the splited results through the new gi split method",
       K(ret), K(granule_tablets.count()), K(granule_ranges.count()), K(granule_idx));
@@ -137,11 +143,13 @@ int ObGranuleUtil::remove_empty_range(const common::ObIArray<common::ObNewRange>
   for (int64_t i = 0; i < in_ranges.count() && OB_SUCC(ret); ++i) {
     if (!in_ranges.at(i).empty()) {
       if (OB_FAIL(ranges.push_back(in_ranges.at(i)))) {
+        LOG_WARN("fail to push back ranges", K(ret));
       }
     }
   }
   if (OB_SUCC(ret) && ranges.empty()) {
     if (OB_FAIL(ranges.assign(in_ranges))) {
+      LOG_WARN("failed to assign ranges", K(ret));
     } else {
       only_empty_range = true;
     }
@@ -198,6 +206,7 @@ int ObGranuleUtil::split_block_granule(ObExecContext &exec_ctx,
       } else if (OB_FAIL(ObDASSimpleUtils::get_multi_ranges_cost(exec_ctx, tablets.at(i),
                                                                  input_store_ranges,
                                                                  partition_size))) {
+        LOG_WARN("failed to get multi ranges cost", K(ret), K(tablet));
       } else {
         // B to KB
         partition_size = partition_size / 1024;
@@ -210,11 +219,13 @@ int ObGranuleUtil::split_block_granule(ObExecContext &exec_ctx,
           empty_partition_cnt++;
         }
         if (OB_FAIL(size_each_partitions.push_back(partition_size))) {
+          LOG_WARN("failed to push partition size", K(ret));
         } else {
           total_size += partition_size;
         }
       }
     }
+    LOG_TRACE("get multi ranges cost", K(empty_partition_cnt), K(size_each_partitions));
   }
 
   // 3. calc the total number of tasks for all partitions
@@ -225,6 +236,7 @@ int ObGranuleUtil::split_block_granule(ObExecContext &exec_ctx,
     params.expected_task_load_kb_ = tablet_size/1024;
     if (OB_FAIL(data_plane::ObParallelRangeTaskPlanner::compute_total_task_count(
         params, total_size, esti_task_cnt_by_data_size))) {
+      LOG_WARN("compute task count failed", K(ret));
     } else {
       esti_task_cnt_by_data_size += empty_partition_cnt;
       // Ensure total task count is greater than or equal to the number of partitions
@@ -241,6 +253,7 @@ int ObGranuleUtil::split_block_granule(ObExecContext &exec_ctx,
                                                   esti_task_cnt_by_data_size,
                                                   size_each_partitions,
                                                   task_cnt_each_partitions))) {
+      LOG_WARN("failed to compute task count for each partition", K(ret));
     }
   }
 
@@ -269,6 +282,7 @@ int ObGranuleUtil::split_block_granule(ObExecContext &exec_ctx,
                                                  granule_idx,
                                                  tablet_idx,
                                                  range_independent))) {
+        LOG_WARN("failed to get tasks for partition", K(ret));
       } else {
         LOG_TRACE("get tasks for partition",
           K(ret), KPC(tablet), K(granule_ranges.count()), K(granule_tablets), K(granule_idx));
@@ -300,8 +314,10 @@ int ObGranuleUtil::compute_task_count_each_partition(int64_t total_size,
     for (int i = 0; i < size_each_partition.count() && OB_SUCC(ret); i++) {
       // only one task for each partition
       if (OB_FAIL(task_cnt_each_partition.push_back(1))) {
+        LOG_WARN("failed to push back array", K(ret));
       }
     }
+    LOG_TRACE("compute task count for each partition, each partition has only one task", K(ret));
   } else {
     // allocate task count for each partition by the weight of partition data in the total data
     int64_t alloc_task_cnt = 0;
@@ -314,8 +330,11 @@ int ObGranuleUtil::compute_task_count_each_partition(int64_t total_size,
       }
       alloc_task_cnt += task_cnt;
       if (OB_FAIL(task_cnt_each_partition.push_back(task_cnt))) {
+        LOG_WARN("failed to push task cnt", K(ret));
       }
     }
+    LOG_TRACE("compute task count for partition, allocate task count",
+      K(ret), K(alloc_task_cnt), K(total_task_cnt));
   }
   // check the size of task_cnt_each_partition array
   if (OB_SUCC(ret) && task_cnt_each_partition.count() != size_each_partition.count()) {
@@ -356,8 +375,11 @@ int ObGranuleUtil::get_tasks_for_partition(ObExecContext &exec_ctx,
       ObNewRange new_range;
       input_storage_ranges.at(i).to_new_range(new_range);
       if (OB_FAIL(granule_tablets.push_back(&tablet))) {
+        LOG_WARN("failed to push back tablet", K(ret));
       } else if (OB_FAIL(granule_ranges.push_back(new_range))) {
+        LOG_WARN("failed to push back range", K(ret));
       } else if (OB_FAIL(granule_idx.push_back(tablet_idx))) {
+        LOG_WARN("failed to push back idx", K(ret));
       } else if (range_independent) {
         tablet_idx++;
       }
@@ -370,6 +392,7 @@ int ObGranuleUtil::get_tasks_for_partition(ObExecContext &exec_ctx,
                                                           input_storage_ranges,
                                                           expected_task_cnt,
                                                           multi_range_split_array))) {
+    LOG_WARN("failed to split multi ranges", K(ret), K(tablet), K(expected_task_cnt));
   } else {
     LOG_TRACE("split multi ranges",
       K(ret), K(tablet), K(input_storage_ranges),
@@ -384,8 +407,11 @@ int ObGranuleUtil::get_tasks_for_partition(ObExecContext &exec_ctx,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("invalid table id", K(ret), K(new_range), K(multi_range_split_array.at(i)));
         } else if (OB_FAIL(granule_tablets.push_back(&tablet))) {
+          LOG_WARN("failed to push back tablet", K(ret), K(tablet));
         } else  if (OB_FAIL(granule_ranges.push_back(new_range))) {
+          LOG_WARN("failed to push back new task range", K(ret), K(new_range));
         } else if (OB_FAIL(granule_idx.push_back(tablet_idx))) {
+          LOG_WARN("failed to push back idx", K(ret), K(tablet_idx));
         } else if (range_independent) {
           tablet_idx++;
         }
@@ -412,6 +438,7 @@ int ObGranuleUtil::convert_new_range_to_store_range(ObIAllocator &allocator,
   for (int64_t i = 0; OB_SUCC(ret) && i < input_ranges.count(); i++) {
     store_range.assign(input_ranges.at(i));
     if (OB_FAIL(input_store_ranges.push_back(store_range))) {
+      LOG_WARN("failed to push back input store range", K(ret));
     }
   }
   return ret;

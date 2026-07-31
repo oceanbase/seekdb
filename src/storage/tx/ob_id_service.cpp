@@ -72,6 +72,7 @@ int ObIDService::check_and_fill_ls()
     ObLS *ls = nullptr;
 
     if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
+      TRANS_LOG(WARN, "get id service storage failed", K(ret));
     } else {
       ls_ = ls;
       TRANS_LOG(INFO, "ls set success", KP(ls_));
@@ -105,6 +106,7 @@ int ObIDService::submit_log_(const int64_t last_id, const int64_t limited_id)
       TRANS_LOG(INFO, "no log required", K(limited_id), K(ATOMIC_LOAD(&limited_id_)));
     }
   } else if (OB_FAIL(check_and_fill_ls())) {
+    TRANS_LOG(WARN, "ls set fail", K(ret));
   } else {
     ObPresistIDLog ls_log(last_id, limited_id);
     palf::LSN lsn;
@@ -118,7 +120,9 @@ int ObIDService::submit_log_(const int64_t last_id, const int64_t limited_id)
       }
     }
     if (OB_FAIL(base_scn.convert_for_gts(base_ts))) {
+      TRANS_LOG(ERROR, "failed to convert scn", KR(ret), K(base_ts));
     } else if (OB_FAIL(cb_.serialize_ls_log(ls_log, service_type_))) {
+      TRANS_LOG(WARN, "serialize ls log error", KR(ret), K(cb_));
     } else {
       cb_.set_srv_type(service_type_);
       if (OB_FAIL(ls_->get_log_handler()->append(cb_.get_log_buf(), cb_.get_log_pos(), base_scn,
@@ -155,6 +159,7 @@ int ObIDService::handle_submit_callback(const bool success, const int64_t limite
     rec_log_ts_.atomic_set(log_ts);
     latest_log_ts_.atomic_set(log_ts);
     if (OB_FAIL(update_id_meta(false))) {
+      TRANS_LOG(WARN, "update id meta fail", K(ret), K(service_type_), K(limited_id), K(log_ts));
     }
   } else {
     // do nothing
@@ -177,8 +182,11 @@ int ObIDService::replay(const void *buffer, const int64_t buf_size,
   const char *log_buf = static_cast<const char *>(buffer);
   ObPresistIDLog ls_log;
   if (OB_FAIL(base_header.deserialize(log_buf, buf_size, tmp_pos))) {
+   TRANS_LOG(WARN, "log base header deserialize error", K(ret), KP(buffer), K(buf_size), K(lsn), K(log_scn));
   } else if (OB_FAIL(ls_log.deserialize((char *)buffer, buf_size, tmp_pos))) {
+    TRANS_LOG(WARN, "desrialize tx_log_body error", K(ret), KP(buffer), K(buf_size), K(lsn), K(log_scn));
   } else if (OB_FAIL(handle_replay_result(ls_log.get_last_id(), ls_log.get_limit_id(), log_scn))) {
+    TRANS_LOG(WARN, "handle replay result fail", K(ret), K(ls_log), K(log_scn));
   } else {
     // do nothing
   }
@@ -205,6 +213,7 @@ int ObIDService::handle_replay_result(const int64_t last_id, const int64_t limit
       rec_log_ts_.atomic_set(log_ts);
       latest_log_ts_.atomic_set(log_ts);
       if (OB_FAIL(update_id_meta(false))) {
+        TRANS_LOG(WARN, "update id meta fail", K(ret), K(service_type_), K(last_id), K(limited_id), K(log_ts));
       }
     }
   }
@@ -217,6 +226,7 @@ int ObIDService::update_id_meta(const bool write_slog)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(check_and_fill_ls())) {
+    TRANS_LOG(WARN, "ls set fail", K(ret));
   } else if (write_slog) {
     ret = ls_->update_id_meta(service_type_,
                               ATOMIC_LOAD(&limited_id_),
@@ -230,6 +240,7 @@ int ObIDService::update_id_meta(const bool write_slog)
   }
 
   if (OB_FAIL(ret)) {
+    TRANS_LOG(WARN, "update id meta fail", K(ret), K_(service_type));
   }
 
   return ret;
@@ -243,6 +254,7 @@ int ObIDService::flush(SCN &rec_scn)
   if (latest_rec_log_ts <= rec_scn) {
     latest_rec_log_ts = rec_log_ts_.atomic_get();
     if (OB_FAIL(update_id_meta(true))) {
+      TRANS_LOG(WARN, "update id meta fail", K(ret), K(service_type_));
     } else {
       rec_log_ts_.atomic_bcas(latest_rec_log_ts, SCN::max_scn());
     }
@@ -396,7 +408,9 @@ int ObIDService::update_id_service(const ObAllIDMeta &id_meta)
     int64_t limited_id = 0;
     SCN latest_log_ts = SCN::min_scn();
     if (OB_FAIL(id_meta.get_id_meta(i, limited_id, latest_log_ts))) {
+      TRANS_LOG(WARN, "get id meta fail", K(ret), K(id_meta));
     } else if (OB_FAIL(get_id_service(i, id_service))) {
+      TRANS_LOG(WARN, "get id service fail", K(ret), K(i));
     } else if (OB_ISNULL(id_service)) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(WARN, "id service is null", K(ret));
@@ -438,6 +452,7 @@ int ObPresistIDLogCb::serialize_ls_log(ObPresistIDLog &ls_log, int64_t service_t
                     logservice::ObReplayBarrierType::NO_NEED_BARRIER,
                     service_type);
       if (OB_FAIL(base_header.serialize(log_buf_, MAX_LOG_BUFF_SIZE, pos_))) {
+        TRANS_LOG(WARN, "ObPresistIDLogCb serialize base header error", KR(ret), KP(log_buf_), K(pos_));
       }
       break;
     }
@@ -447,6 +462,7 @@ int ObPresistIDLogCb::serialize_ls_log(ObPresistIDLog &ls_log, int64_t service_t
                     logservice::ObReplayBarrierType::NO_NEED_BARRIER,
                     service_type);
       if (OB_FAIL(base_header.serialize(log_buf_, MAX_LOG_BUFF_SIZE, pos_))) {
+        TRANS_LOG(WARN, "ObPresistIDLogCb serialize base header error", KR(ret), KP(log_buf_), K(pos_));
       }
       break;
     }
@@ -458,6 +474,7 @@ int ObPresistIDLogCb::serialize_ls_log(ObPresistIDLog &ls_log, int64_t service_t
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ls_log.serialize(log_buf_, MAX_LOG_BUFF_SIZE, pos_))) {
+      TRANS_LOG(WARN, "ObPresistIDLogCb serialize ls_log error", KR(ret), KP(log_buf_), K(pos_));
     }
   }
   return ret;
@@ -476,6 +493,7 @@ int ObPresistIDLogCb::on_success()
       } else {
         timestamp_service->test_lock();
         if (OB_FAIL(timestamp_service->handle_submit_callback(true, limited_id_, log_ts_))) {
+          TRANS_LOG(WARN, "timestamp service handle log callback fail", K(ret), K_(limited_id), K_(log_ts));
         }
         TRANS_LOG(INFO, "timestamp service handle log callback", K(ret), K_(limited_id), K_(log_ts));
       }
@@ -489,6 +507,7 @@ int ObPresistIDLogCb::on_success()
       } else {
         trans_id_service->test_lock();
         if (OB_FAIL(trans_id_service->handle_submit_callback(true, limited_id_, log_ts_))) {
+          TRANS_LOG(WARN, "trans id  service handle log callback fail", K(ret), K_(limited_id), K_(log_ts));
         }
         TRANS_LOG(INFO, "trans id service handle log callback", K(ret), K_(limited_id), K_(log_ts));
       }
@@ -516,6 +535,7 @@ int ObPresistIDLogCb::on_failure()
         TRANS_LOG(WARN, "timestamp service is null", K(ret));
       } else {
         if (OB_FAIL(timestamp_service->handle_submit_callback(false, limited_id_, log_ts_))) {
+          TRANS_LOG(WARN, "timestamp service handle log callback fail", K(ret), K_(limited_id), K_(log_ts));
         }
         TRANS_LOG(INFO, "timestamp service handle log callback", K(ret), K_(limited_id), K_(log_ts));
       }
@@ -528,6 +548,7 @@ int ObPresistIDLogCb::on_failure()
         TRANS_LOG(WARN, "trans id service is null", K(ret));
       } else {
         if (OB_FAIL(trans_id_service->handle_submit_callback(false, limited_id_, log_ts_))) {
+          TRANS_LOG(WARN, "trans id  service handle log callback fail", K(ret), K_(limited_id), K_(log_ts));
         }
         TRANS_LOG(INFO, "trans id service handle log callback", K(ret), K_(limited_id), K_(log_ts));
       }

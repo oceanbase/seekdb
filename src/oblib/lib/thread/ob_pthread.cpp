@@ -34,6 +34,7 @@ int ob_pthread_create(void **ptr, void *(*start_routine) (void *), void *arg)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     OB_LOG(WARN, "alloc memory failed", K(ret));
   } else if (OB_FAIL(thread->start())) {
+    OB_LOG(WARN, "failed to start thread", K(ret));
   }
   if (OB_FAIL(ret)) {
     if (OB_NOT_NULL(thread)) {

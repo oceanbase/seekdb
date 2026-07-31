@@ -194,7 +194,7 @@ public:
       v = ListHead::next(v);
     }
     if (NULL != (value = v)) {
-      ret = OB_SUCCESS;
+      ret = OB_SUCCESS;;
     }
     return ret;
   }

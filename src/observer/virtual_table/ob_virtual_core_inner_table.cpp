@@ -73,6 +73,7 @@ int ObVritualCoreInnerTable::inner_open()
     ret = OB_NOT_INIT;
     LOG_WARN("not init, allocator is null", KR(ret));
   } else if (OB_FAIL(schema_guard_->get_table_schema( table_id_, table_schema))) {
+    LOG_WARN("fail to get table schema", KR(ret), K_(table_id));
   } else if (NULL == table_schema) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("get_table_schema failed", KT_(table_id), KR(ret));
@@ -81,11 +82,13 @@ int ObVritualCoreInnerTable::inner_open()
       
       const ObSimpleServerRuntimeSchema *runtime_schema = NULL;
       if (OB_FAIL(schema_guard_->get_server_runtime_info(runtime_schema))) {
+        LOG_WARN("fail to get server runtime info", KR(ret));
       } else if (OB_ISNULL(runtime_schema) || !runtime_schema->is_normal()) {
         // skip
       } else {
         ObCoreTableProxy core_table(table_name_, *sql_proxy_);
         if (OB_FAIL(core_table.load())) {
+          LOG_WARN("core_table load failed", KR(ret));
         } else {
           struct CoreHistoryRowInfo
           {
@@ -105,6 +108,7 @@ int ObVritualCoreInnerTable::inner_open()
             int64_t schema_version = OB_INVALID_VERSION;
             int64_t deleted = 0;
             if (OB_FAIL(core_table.get_cur_row(row))) {
+              LOG_WARN("get current row failed", KR(ret));
             } else if (OB_ISNULL(row)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("current row is null", KR(ret));
@@ -126,6 +130,8 @@ int ObVritualCoreInnerTable::inner_open()
                   table_id, column_id, schema_version, row->get_row_id(), 0 != deleted
                 };
                 if (OB_FAIL(latest_rows.push_back(latest_row))) {
+                  LOG_WARN("save core history row failed", KR(ret), K(table_id),
+                           K(column_id), K(schema_version));
                 }
               } else if (schema_version > latest_rows.at(idx).schema_version_) {
                 CoreHistoryRowInfo &latest_row = latest_rows.at(idx);
@@ -145,6 +151,7 @@ int ObVritualCoreInnerTable::inner_open()
           while (OB_SUCC(ret) && OB_SUCC(core_table.next())) {
             const ObCoreTableProxy::Row *row = NULL;
             if (OB_FAIL(core_table.get_cur_row(row))) {
+              LOG_WARN("get current row failed", KR(ret));
             } else if (OB_ISNULL(row)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("current row is null", KR(ret));
@@ -157,8 +164,11 @@ int ObVritualCoreInnerTable::inner_open()
               } else {
                 columns.reuse();
                 if (OB_FAIL(get_full_row(table_schema, core_table, columns))) {
+                  LOG_WARN("get_full_row failed", K(table_schema), KR(ret));
                 } else if (OB_FAIL(project_row(columns, cur_row_))) {
+                  LOG_WARN("project_row failed", K(columns), KR(ret));
                 } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
+                  LOG_WARN("add_row failed", K_(cur_row), KR(ret));
                 }
               }
             }

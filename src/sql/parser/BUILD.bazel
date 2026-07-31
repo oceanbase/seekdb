@@ -48,7 +48,6 @@ genrule(
         "ftsparser.y",
         "gen_type_name.sh",
         "ob_item_type.h",
-        "//src/query:_sql_item_type_definition",
         "sql_parser_mysql_mode.l",
         "sql_parser_mysql_mode.y",
     ],
@@ -69,8 +68,7 @@ genrule(
         $(location @seekdb_3rd_headers//:devtools/bin/flex) \
         $$(dirname $(location @seekdb_3rd_headers//:devtools/share/bison/README)) \
         $(@D)/bazel_generated \
-        $$(dirname $(location :ftsparser.y)) \
-        $(location //src/query:_sql_item_type_definition)
+        $$(dirname $(location :ftsparser.y))
     """,
     tools = [
         "//tools/bazel_migration:generate_sql_parser.sh",

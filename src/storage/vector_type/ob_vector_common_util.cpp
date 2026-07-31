@@ -79,6 +79,7 @@ int ObVectorKmeansClusterHelper::get_nearest_probe_centers(
         LOG_WARN("failed to alloc norm vector", K(ret));
       } else if (FALSE_IT(MEMSET(norm_vector, 0, dim * sizeof(float)))) {
       } else if (OB_FAIL(norm_info->normalize_func_(dim, vector, norm_vector, nullptr))) {
+        LOG_WARN("failed to normalize vector", K(ret));
       }
     }
     // get the nearest nprobe centers
@@ -89,6 +90,7 @@ int ObVectorKmeansClusterHelper::get_nearest_probe_centers(
       distance = ObVectorL2Distance<float>::l2_square_flt_func(data, centers.at(i), dim);
       if (max_heap_.count() < nprobe) {
         if (OB_FAIL(max_heap_.push(HeapCenterItem(distance, i)))) {
+          LOG_WARN("failed to push center heap", K(ret), K(i), K(distance));
         }
       } else {
         const HeapCenterItem &top = max_heap_.top();
@@ -96,6 +98,7 @@ int ObVectorKmeansClusterHelper::get_nearest_probe_centers(
         if (max_compare_(tmp, top)) {
           HeapCenterItem tmp(distance, i);
           if (OB_FAIL(max_heap_.replace_top(tmp))) {
+            LOG_WARN("failed to replace top", K(ret), K(tmp));
           }
         }
       }
@@ -150,6 +153,7 @@ int ObVectorKmeansClusterHelper::get_center_vector(const int64_t idx, const ObIA
   } else {
     int64_t center_idx = max_heap_.at(idx).center_idx_;
     if (OB_FAIL(centers.at(center_idx, center_vector))) {
+      LOG_WARN("failed to get center vector", K(ret), K(center_idx), K(centers.count()));
     }
   }
   return ret;
@@ -304,6 +308,7 @@ int ObCentersBuffer<float>::divide(const int64_t idx, const int64_t count)
       }
     }
     if (OB_FAIL(ObVectorDiv::calc(raw_vector, static_cast<float>(count), dim_))) {
+      LOG_WARN("fail to div count", K(ret), K(count), K(dim_));
     }
   }
   return ret;
@@ -322,6 +327,7 @@ int ObCentersBuffer<float>::get_nearest_center(const int64_t dim, float *vector,
     double distance = DBL_MAX;
     for (int64_t i = 0; OB_SUCC(ret) && i < total_cnt_; ++i) {
       if (OB_FAIL(ObVectorL2Distance<float>::l2_square_func(vector, vectors_ + i * dim_, dim, distance))) {
+        SHARE_LOG(WARN, "failed to calc l2 square", K(ret));
       } else if (distance < min_distance) {
         min_distance = distance;
         center_idx = i;
@@ -339,6 +345,7 @@ int ObCentersBuffer<float>::add(const int64_t idx, const int64_t dim, float *vec
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "invalid argument", K(ret), K(dim), KP(vector), K(idx), K_(total_cnt));
   } else if (OB_FAIL(ObVectorAdd::calc(vectors_ + idx * dim_, vector, dim))) {
+    LOG_WARN("fail to calc vectors add", K(ret), K(dim), K(idx), K(total_cnt_));
   }
   return ret;
 }

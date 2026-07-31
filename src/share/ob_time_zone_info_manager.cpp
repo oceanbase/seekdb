@@ -56,6 +56,7 @@ int ObTimeZoneInfoManager::init()
   } else {
     ObMemAttr attr("TZInfoMgrMap");
     if (OB_FAIL(tz_info_map_.init(attr))) {
+      LOG_WARN("init tz info map failed", K(ret));
     } else {
       inited_ = true;
     }
@@ -73,6 +74,7 @@ bool ObTimeZoneInfoManager::FillRequestTZInfoResult::operator() (
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tz info is NULL", K(tz_info));
   } else if (OB_FAIL(tz_result_.tz_array_.push_back(*tz_info))) {
+    LOG_WARN("fail to serialize tz_info", KPC(tz_info), K(ret));
   }
   return OB_SUCCESS == ret;
 }
@@ -88,6 +90,7 @@ int ObTimeZoneInfoManager::response_time_zone_info(ObRequestTZInfoResult &tz_res
     tz_result.last_version_ = last_version_;
     FillRequestTZInfoResult fr_func(tz_result);
     if (OB_FAIL(tz_info_map_.id_map_->for_each(fr_func))) {
+      LOG_WARN("fail to call for_each", K(ret));
     }
   }
   return ret;
@@ -102,6 +105,7 @@ void ObTimeZoneInfoManager::TaskProcessThread::handle(void *task)
   } else {
     TZInfoTask *tz_info_task = static_cast<TZInfoTask *>(task);
     if (OB_FAIL(tz_info_task->run_task())) {
+      LOG_WARN("fail to run task", K(ret));
     }
   }
 }
@@ -117,6 +121,7 @@ int ObTimeZoneInfoManager::fetch_time_zone_info()
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
       if (OB_FAIL(sql_client_retry_weak.read(res, FETCH_LATEST_TZ_VERSION_SQL))) {
+        LOG_WARN("fail to execute sql", K(ret));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result", K(result), K(ret));
@@ -141,6 +146,7 @@ int ObTimeZoneInfoManager::fetch_time_zone_info()
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(refresh_time_zone_info(current_tz_version))) {
+      LOG_WARN("refresh timezone information failed", K(ret));
     }
   }
 
@@ -159,11 +165,14 @@ int ObTimeZoneInfoManager::refresh_time_zone_info(const int64_t current_tz_versi
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
       if (OB_FAIL(sql_client_retry_weak.read(res, FETCH_TZ_INFO_SQL))) {
+        LOG_WARN("fetch time zone data failed", K(ret));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result", K(result), K(ret));
       } else if (OB_FAIL(fill_tz_info_map(*result, tz_info_map_))) {
+        LOG_ERROR("fail to fill timezone information map", K(ret));
       } else if (OB_FAIL(calc_tz_info_offsets(tz_info_map_))) {
+        LOG_WARN("fail to calculate timezone offsets", K(ret));
       } else {
         last_version_ = current_tz_version;
         LOG_INFO("successfully refreshed timezone information", K(last_version_),
@@ -197,8 +206,10 @@ int ObTimeZoneInfoManager::set_tz_info_map(ObTimeZoneInfoPos *&stored_tz_info,
       LOG_ERROR("fail to alloc memory for ObTZNameIDInfo ", K(ret));
     } else if (FALSE_IT(tz_pos_value->set_tz_type_attr(attr1))) {
     } else if (OB_FAIL(tz_pos_value->assign(new_tz_info))) {
+      LOG_WARN("fail to assign ObTimeZoneInfoPos", K(new_tz_info), K(ret));
     } else if (FALSE_IT(name_id_value->set(new_tz_info.get_tz_id(), new_tz_info.get_tz_name()))) {
     } else if (OB_FAIL(tz_info_map.id_map_->insert_and_get(new_tz_info.get_tz_id(), tz_pos_value))) {
+      LOG_WARN("fail to insert new_tz_info to tz_info_id_map", KPC(tz_pos_value), K(ret));
     } else if (OB_FAIL(tz_info_map.name_map_->insert_and_get(new_tz_info.get_tz_name(), name_id_value))) {
       tz_info_map.id_map_->revert(tz_pos_value);
       tz_info_map.id_map_->del(new_tz_info.get_tz_id());
@@ -213,6 +224,7 @@ int ObTimeZoneInfoManager::set_tz_info_map(ObTimeZoneInfoPos *&stored_tz_info,
       name_id_value = NULL;
     }
   } else if (OB_FAIL(stored_tz_info->compare_upgrade(new_tz_info, is_equal))) {
+    LOG_WARN("fail to compare_upgrade", KPC(stored_tz_info), K(new_tz_info), K(ret));
   } else if (is_equal) {
     //do nothing
   } else {
@@ -220,7 +232,9 @@ int ObTimeZoneInfoManager::set_tz_info_map(ObTimeZoneInfoPos *&stored_tz_info,
     common::ObSArray<ObTZTransitionTypeInfo> &next_tz_tran_types = stored_tz_info->get_next_tz_tran_types();
     common::ObSArray<ObTZRevertTypeInfo> &next_tz_revt_types = stored_tz_info->get_next_tz_revt_types();
     if (OB_FAIL(next_tz_tran_types.assign(new_tz_info.get_tz_tran_types()))) {
+      LOG_WARN("fail to assign next_tz_tran_types", K(new_tz_info.get_tz_tran_types()), K(ret));
     } else if (OB_FAIL(next_tz_revt_types.assign(new_tz_info.get_tz_revt_types()))) {
+      LOG_WARN("fail to assign next_tz_revt_types", K(new_tz_info.get_tz_revt_types()), K(ret));
     } else {
       stored_tz_info->inc_curr_idx();
     }
@@ -244,7 +258,9 @@ int ObTimeZoneInfoManager::prepare_tz_info(const ObIArray<ObTZTransitionTypeInfo
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(calc_default_tran_type(types_with_null, type_info))) {
+    LOG_WARN("fail to calc default transition type", K(ret));
   } else if (OB_FAIL(type_info.calc_revt_types())) {
+    LOG_WARN("fail to calc revert types", K(ret));
   }
   return ret;
 }
@@ -262,6 +278,7 @@ int ObTimeZoneInfoManager::calc_default_tran_type(const ObIArray<ObTZTransitionT
     for (; i <type_count && types_with_null.at(i).is_dst(); ++i) { /*do nothing*/ }
     i = (type_count == i ? 0 : i);
     if (OB_FAIL(type_info.set_default_tran_type(types_with_null.at(i)))) {
+      LOG_WARN("fail to set default tran type", K(i), "default_tran_type", types_with_null.at(i), K(types_with_null),K(ret));
     }
   }
   return ret;
@@ -278,6 +295,7 @@ int ObTimeZoneInfoManager::calc_tz_info_offsets(ObTZInfoMap &tz_info_map)
     if (tz_info_map.offset_map_buf_.created()) {
       tz_info_map.offset_map_buf_.clear();
     } else if (OB_FAIL(tz_info_map.offset_map_buf_.create(ObTZInfoMap::TZ_OFFSET_BUCKET_NUM, attr))) {
+      LOG_WARN("fail to init offset map", K(ret));
     }
     tz_info_map.offset_map_ = &tz_info_map.offset_map_buf_;
     ObTZInfoIDPosMap::Iterator iter(*tz_info_map.id_map_);
@@ -301,12 +319,16 @@ int ObTimeZoneInfoManager::calc_tz_info_offsets(ObTZInfoMap &tz_info_map)
           int32_t off_diff_s = 0;
           int32_t off_diff_d = 0;
           if (OB_FAIL(inner_tz_pos->get_timezone_sub_offset(tmp_time, ObString(), off_diff_d, id_invalid, id_invalid))) {
+            LOG_WARN("fail to get_timezone_sub_offset", K(ret), K(tmp_time), K(inner_tz_pos->get_tz_name()));
           } else if (OB_FAIL(tz_pos->get_timezone_sub_offset(tmp_time, ObString(), off_diff_s, id_invalid, id_invalid))) {
+            LOG_WARN("fail to get_timezone_sub_offset", K(ret), K(tmp_time), K(tz_pos->get_tz_name()));
           }
           ObTZOffsetKey offset_key(tz_pos->get_tz_id(), inner_tz_pos->get_tz_id());
           offset_value.set(off_diff_d-off_diff_s);
           if (OB_FAIL(ret)) {
+            LOG_WARN("fail to get_timezone_sub_offset", K(ret), K(tmp_time), K(inner_tz_pos->get_tz_name()));
           } else if (OB_FAIL(tz_info_map.offset_map_buf_.set_refactored(offset_key, offset_value))) {
+            LOG_WARN("fail to set offset map", K(ret), K(offset_key), K(offset_value));
           }
         }
         if (NULL != inner_tz_pos) {
@@ -374,6 +396,7 @@ int ObTimeZoneInfoManager::fill_tz_info_map(sqlclient::ObMySQLResult &result,
       }
     }
 
+    LOG_DEBUG("succ to read one row", K(tz_tran_type), K(tz_id), K(inner_tz_id), K(tz_name_str), K(tz_abbr_str));
 
     //set tz_info_map and create new tz_info
     if (OB_FAIL(ret)) {
@@ -384,7 +407,9 @@ int ObTimeZoneInfoManager::fill_tz_info_map(sqlclient::ObMySQLResult &result,
     } else if (inner_tz_id != tz_info.get_tz_id()) {
       if (tz_info.is_valid()) {//not the first record
         if (OB_FAIL(prepare_tz_info(types_with_null, tz_info))) {
+          LOG_WARN("fail to prepare prepare time zone info", K(tz_info), K(ret));
         } else if (OB_FAIL(set_tz_info_map(stored_tz_info, tz_info, tz_info_map))) {
+          LOG_WARN("fail to set tz_info map", K(ret));
         } else {
           tz_info.reset();
           types_with_null.reset();
@@ -394,6 +419,7 @@ int ObTimeZoneInfoManager::fill_tz_info_map(sqlclient::ObMySQLResult &result,
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(tz_info.set_tz_name(tz_name_str.ptr(), tz_name_str.length()))) {
+        LOG_WARN("fail to set tz_name", K(ret));
       } else {
         tz_info.set_tz_id(inner_tz_id);
       }
@@ -404,6 +430,7 @@ int ObTimeZoneInfoManager::fill_tz_info_map(sqlclient::ObMySQLResult &result,
         LOG_WARN("stored_tz_info should be null here", K(ret));
       } else if (OB_FAIL(tz_info_map.get_tz_info_by_name(tz_name_str, stored_tz_info))) {
         if (OB_ERR_UNKNOWN_TIME_ZONE == ret) {
+          LOG_DEBUG("fail to get stored_tz_info, it is a new tz info", K(tz_name_str), K(ret));
           ret = OB_SUCCESS;
         } else {
           LOG_WARN("fail to get stored_tz_info", K(tz_name_str), K(ret));
@@ -417,18 +444,23 @@ int ObTimeZoneInfoManager::fill_tz_info_map(sqlclient::ObMySQLResult &result,
     //add transition_type to tz_info
     if (OB_SUCC(ret)) {
       if (OB_FAIL(types_with_null.push_back(tz_tran_type))) {
+        LOG_WARN("fail to push bak tz_tran_type", K(ret));
       } else if (!is_tran_time_null && OB_FAIL(tz_info.add_tran_type_info(tz_tran_type))) {
         LOG_WARN("fail to push bak tz_tran_type", K(ret));
       } else {
+        LOG_DEBUG("succ to add tz_tran_type", K(tz_name_str), K(tz_tran_type));
       }
     }
   }//while
   //set last tz_info
   ret = OB_ITER_END == ret ? OB_SUCCESS : ret;
   if (OB_FAIL(ret)) {
+    LOG_WARN("fail to get_next row", K(ret));
   } else if (tz_info.is_valid()) {
     if (OB_FAIL(prepare_tz_info(types_with_null, tz_info))) {
+      LOG_WARN("fail to prepare prepare time zone info", K(tz_info), K(ret));
     } else if (OB_FAIL(set_tz_info_map(stored_tz_info, tz_info, tz_info_map))) {
+      LOG_WARN("fail to set tz_info map", K(ret));
     }
   }
 

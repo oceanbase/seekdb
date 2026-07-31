@@ -87,6 +87,7 @@ int ObDDLMergePrepareTask::inner_process()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("dag should not be null", K(ret));
   } else if (OB_FAIL(merge_param_.get_tablet_param(tablet_id, tablet_param))) {
+    LOG_WARN("failed to get tablet param", K(ret));
   } else if (OB_ISNULL(tablet_param)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet param should not be nullptr", K(ret), K(merge_param_));
@@ -100,10 +101,12 @@ int ObDDLMergePrepareTask::inner_process()
   ObIDDLMergeHelper *merge_helper = nullptr;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(merge_param_.get_merge_helper(merge_helper))) {
+    LOG_WARN("failed to get merge helper", K(ret));
   } else if (OB_ISNULL(merge_helper)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("merge param is invalid", K(ret));
   } else if (OB_FAIL(merge_helper->check_need_merge(dag, merge_param_, need_merge))) {
+    LOG_WARN("failed to check need merge", KR(ret));
   }
 
   /* 
@@ -112,28 +115,39 @@ int ObDDLMergePrepareTask::inner_process()
   */
   if (OB_FAIL(ret) || !need_merge) {
   } else if (OB_FAIL(merge_helper->process_prepare_task(dag, merge_param_, slice_ranges))) {
+    LOG_WARN("failed to process prepare task", KR(ret), K(merge_param_));
   } else if (OB_FAIL(merge_helper->get_rec_scn(merge_param_))) {
+    LOG_WARN("failed to get rec scn", K(ret));
   }
 
   /* generate assemble table task */
   if (OB_FAIL(ret) || !need_merge) {
   } else if (OB_FAIL(dag->alloc_task(assemble_task))) {
+    LOG_WARN("failed alloc assemble task", K(ret));
   } else if (OB_ISNULL(assemble_task)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("assemble task should not be null", K(ret), K(merge_param_));
   } else if (OB_FAIL(assemble_task->init(merge_param_))) {
+    LOG_WARN("failed to init assemble", K(ret));
   } else if (OB_FAIL(assemble_task->deep_copy_children(get_child_nodes()))) {
+    LOG_WARN("fail to deep copy children", KR(ret));
   } else if (OB_FAIL(::ObITask::add_child(*assemble_task))) {
+    LOG_WARN("failed to add assemble task to prepare task", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < slice_ranges.count(); i++ ) {
       ObDDLMergeSliceTask *merge_slice_task = nullptr;
       const ObDDLSliceRange &slice_range = slice_ranges.at(i);
       if (OB_FAIL(dag->alloc_task(merge_slice_task))) {
+        LOG_WARN("failed to alloc merge slice task", K(ret));
       } else if (OB_FAIL(merge_slice_task->init(
           merge_param_, slice_range.start_slice_idx_, slice_range.end_slice_idx_))) {
+        LOG_WARN("failed to init merge slice task", K(ret));
       } else if (OB_FAIL(merge_slice_task->add_child(*assemble_task))) {
+        LOG_WARN("failed add child for merge slice task", K(ret));
       } else if (OB_FAIL(::ObITask::add_child(*merge_slice_task))) {
+        LOG_WARN("failed to add child to prepare task", K(ret));
       } else if (OB_FAIL(merge_slice_tasks.push_back(merge_slice_task))) {
+        LOG_WARN("failed to push back task", K(ret));
       }
     }
   }
@@ -145,10 +159,12 @@ int ObDDLMergePrepareTask::inner_process()
     if (OB_FAIL(ret)) {
     } else if (nullptr == assemble_task) {
     } else if (OB_FAIL(dag->add_task(*assemble_task))) {
+      LOG_WARN("failed to add assemble task to dag", K(ret));
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(dag->batch_add_task(merge_slice_tasks))) {
+        LOG_WARN("batch add task failed", K(ret));
       }
     }
   }
@@ -165,7 +181,9 @@ int ObDDLMergePrepareTask::process()
     ret = OB_NOT_INIT;
     LOG_WARN("task is not inited", K(ret), KPC(this));
   } else if (OB_FAIL(inner_process())) {
+    LOG_WARN("failed to inner process prepare task", K(ret));
   } else if (OB_FAIL(merge_param_.get_tablet_param(target_tablet_id, tablet_param))) {
+    LOG_WARN("failed to get tablet param", K(ret));
   }
 
   FLOG_INFO("[DDL_MERGE_TASK] finish merge prepare task", K(ret), K(merge_param_));
@@ -224,6 +242,7 @@ int ObDDLMergeSliceTask::process()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("merge helper should not be null", K(ret), K(merge_param_));
   } else if (OB_FAIL(merge_helper->merge_slice(dag, merge_param_, start_slice_idx_, end_slice_idx_))) {
+    LOG_WARN("failed to merge slice", K(ret));
   }
 
   FLOG_INFO("[DDL_MERGE_TASK] finish merge slice", K(ret), K(start_slice_idx_), K(end_slice_idx_), K(merge_param_));
@@ -276,7 +295,9 @@ int ObDDLMergeAssembleTask::process()
     ret = OB_NOT_INIT;
     LOG_WARN("assemble task has not been init", K(ret), KPC(this));
   } else if (OB_FAIL(merge_param_.get_tablet_param(target_tablet_id, tablet_param))) {
+    LOG_WARN("failed to get tablet param", K(ret));
   } else if (OB_FAIL(merge_param_.get_merge_helper(merge_helper))) {
+    LOG_WARN("failed to get merge helper", K(ret), K(merge_param_));
   } else if (OB_ISNULL(merge_helper)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("merge helper should not be null", K(ret), K(merge_param_));

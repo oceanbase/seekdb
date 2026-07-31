@@ -145,7 +145,9 @@ int ObJsonPathBasicNode::get_array_range(uint64_t array_length, ObArrayRange &ar
     ObJsonArrayIndex first;
     ObJsonArrayIndex last;
     if (OB_FAIL(get_first_array_index(array_length, first))) {
+      LOG_WARN("get first array index failed.", K(ret), K(array_length));
     } else if (OB_FAIL(get_last_array_index(array_length, last))) {
+      LOG_WARN("get last array index failed.", K(ret), K(array_length));
     } else {
       array_range.array_begin_ = first.get_array_index();
       // [begin, end)
@@ -607,6 +609,7 @@ int ObJsonPathBasicNode::add_multi_array(ObPathArrayRange* o_array)
 {
   INIT_SUCC(ret);
   if (OB_FAIL(node_content_.multi_array_.push_back(o_array))) {
+    LOG_WARN("add_multi_array failed.", K(ret));
   }
   return ret;
 }
@@ -768,6 +771,7 @@ int ObJsonPath::append(ObJsonPathNode* json_node)
     LOG_WARN("there may not have more than 100 path node", 
     K(ret), K(expression_), K(path_node_cnt()));
   } else if (OB_FAIL(path_nodes_.push_back(json_node))) {
+    LOG_WARN("fail to push back", K(ret));
   }
   return ret;
 }
@@ -829,6 +833,7 @@ int ObJsonPathCache::find_and_add_cache(ObJsonPath*& res_path, ObString& path_st
     if (OB_NOT_NULL(buf)) {
       ObJsonPath* path = new (buf) ObJsonPath(path_str, allocator_);
       if (OB_FAIL(path->parse_path())) {
+        LOG_WARN("wrong path expression, parse path failed or with wildcards", K(ret), K(path_str));
       } else {
         ret = set_path(path, path_str.length() == 0 ? OK_NULL : OK_NOT_NULL, arg_idx, arg_idx);
         res_path = path;
@@ -849,13 +854,17 @@ int ObJsonPathCache::fill_empty(size_t reserve_size)
   if (reserve_size > path_arr_ptr_.size()) {
     // fill element in vector
     if (OB_FAIL(path_arr_ptr_.reserve(reserve_size))) {
+      LOG_WARN("fail to reserve for path arr.", K(ret), K(reserve_size));
     } else if (OB_FAIL(stat_arr_.reserve(reserve_size))) {
+      LOG_WARN("fail to reserve for stat arr.", K(ret), K(reserve_size));
     } else if (path_arr_ptr_.size() != stat_arr_.size()) {
       LOG_WARN("Length is not equals.", K(ret), K(reserve_size));
     }
     for (size_t cur = path_arr_ptr_.size(); OB_SUCC(ret) && cur < reserve_size; ++cur) {
       if (OB_FAIL(path_arr_ptr_.push_back(NULL))) {
+        LOG_WARN("fail to push NUll to path arr", K(ret));
       } else if (OB_FAIL(stat_arr_.push_back(ObPathCacheStat()))) {
+        LOG_WARN("fail to push stat to stat arr", K(ret));
       }
     }
   }
@@ -895,6 +904,7 @@ int ObJsonPathCache::set_path(ObJsonPath* path, ObPathParseStat stat, int arg_id
 {
   INIT_SUCC(ret);
   if (OB_FAIL(fill_empty(arg_idx + 1))) {
+    LOG_WARN("fail to fill empty.", K(ret), K(arg_idx));
   } else if (index >= path_arr_ptr_.size()) {
     ret = OB_ERROR_OUT_OF_RANGE;
     LOG_WARN("index out of range.", K(ret), K(index), K(path_arr_ptr_.size()));
@@ -917,11 +927,13 @@ int ObJsonPathUtil::append_array_index(uint64_t index, bool from_end, ObJsonBuff
 
   if (from_end) {
     if (OB_FAIL(str.append("last"))) {
+      LOG_WARN("fail to append the 'last' ", K(ret));
     } else {
       // if index > 0, it should have '-' after 'last' 
       // such as: $[last-3 to last-1]
       if (index > 0) {
         if (OB_FAIL(str.append("-"))) {
+          LOG_WARN("fail to append the '-' ", K(ret));
         }
       }
     }// append last
@@ -939,6 +951,7 @@ int ObJsonPathUtil::append_array_index(uint64_t index, bool from_end, ObJsonBuff
           LOG_WARN("fail to transform the index(lltostr)", K(ret), K(index));
       } else {
         if (OB_FAIL(str.append(res_ptr, static_cast<int32_t>(ptr - res_ptr)))) {
+          LOG_WARN("fail to append the index", K(ret));
         }
       }
     }// from_end && index==0
@@ -952,6 +965,7 @@ int ObJsonPathUtil::pop_char_stack(ObCharArrayPointers& char_stack)
   INIT_SUCC(ret);
   uint64_t size = char_stack.size();
   if (OB_FAIL(char_stack.remove(size - 1))) {
+    LOG_WARN("fail to remove char top.",K(ret), K(char_stack[size - 1]));
   }
   return ret;
 }
@@ -961,6 +975,7 @@ int ObJsonPathUtil::pop_filter_stack(ObFilterArrayPointers& filter_stack)
   INIT_SUCC(ret);
   uint64_t size = filter_stack.size();
   if (OB_FAIL(filter_stack.remove(size - 1))) {
+    LOG_WARN("fail to remove filter top.",K(ret));
   }
   return ret;
 }
@@ -970,9 +985,11 @@ int ObJsonPathBasicNode::node_to_string(ObJsonBuffer& str, bool is_mysql, bool i
   INIT_SUCC(ret);
   if (is_mysql) {
     if (OB_FAIL(mysql_to_string(str))) {
+      LOG_WARN("fail to append JPN_WILDCARD_ELLIPSIS", K(ret));
     }
   } else {
     if (OB_FAIL(sql_json_to_string(str, is_next_array))) {
+      LOG_WARN("fail to append JPN_WILDCARD_ELLIPSIS", K(ret));
     }
   }
   return ret;
@@ -985,18 +1002,21 @@ int ObJsonPathBasicNode::mysql_to_string(ObJsonBuffer& str)
     // ** , do append
     case JPN_WILDCARD_ELLIPSIS: {
       if (OB_FAIL(str.append("**"))) {
+        LOG_WARN("fail to append JPN_WILDCARD_ELLIPSIS", K(ret));
       }
       break;
     }
     // .* , do append
     case JPN_MEMBER_WILDCARD: {
       if (OB_FAIL(str.append(".*"))) {
+        LOG_WARN("fail to append JPN_MEMBER_WILDCARD", K(ret));
       }
       break;
     }
     // [*] , do append
     case JPN_ARRAY_CELL_WILDCARD: {
       if (OB_FAIL(str.append("[*]"))) {
+        LOG_WARN("fail to append JPN_ARRAY_CELL_WILDCARD", K(ret));
       }
       break;
     }
@@ -1005,21 +1025,26 @@ int ObJsonPathBasicNode::mysql_to_string(ObJsonBuffer& str)
     // if check is_ecmascript_identifier false, should do double_quote 
     case JPN_MEMBER: {
       if (OB_FAIL(str.append("."))) {
+        LOG_WARN("fail to append BEGIN_MEMBER");
       } else {
         if (node_content_.member_.len_ == 0) {
           if (OB_FAIL(str.append("\"\""))) {
+            LOG_WARN("fail to append BEGIN_MEMBER");
           }
         } else {
           ObString object_name(node_content_.member_.len_, node_content_.member_.object_name_);
           ObJsonBuffer tmp_object_name(str.get_allocator());
           if (!ObJsonPathUtil::is_ecmascript_identifier(object_name.ptr(), object_name.length())) {
             if (OB_FAIL(ObJsonPathUtil::double_quote(object_name, &tmp_object_name))) {
+              LOG_WARN("fail to add ObJsonPathUtil::double_quote", K(ret));
             } else {
               if (OB_FAIL(str.append(tmp_object_name.ptr(), tmp_object_name.length()))) {
+                LOG_WARN("fail to append object_name", K(ret), K(tmp_object_name.length()));
               }
             }
           } else {
             if (OB_FAIL(str.append(object_name))) {
+              LOG_WARN("fail to append object_name", K(ret));
             }
           }
           tmp_object_name.reset();
@@ -1030,24 +1055,32 @@ int ObJsonPathBasicNode::mysql_to_string(ObJsonBuffer& str)
     // JPN_ARRAY_CELL, add [index]. If from_end is true, add last
     case JPN_ARRAY_CELL: {
       if (OB_FAIL(str.append("["))) {
+        LOG_WARN("fail to append BEGIN_ARRAY", K(ret));
       } else if (OB_FAIL(ObJsonPathUtil::append_array_index(node_content_.array_cell_.index_, 
                                                             node_content_.array_cell_.is_index_from_end_,
                                                             str))) {
+        LOG_WARN("fail to append ARRAY_INDEX.", K(ret));
       } else if (OB_FAIL(str.append("]"))) {
+        LOG_WARN("fail to append END_ARRAY", K(ret));
       }
       break;
     }
     // JPN_ARRAY_CELL, add [idx1 to idx2]. If from_end is true, add last
     case JPN_ARRAY_RANGE: {
       if (OB_FAIL(str.append("["))) {
+        LOG_WARN("fail to append BEGIN_ARRAY", K(ret));
       } else if (OB_FAIL(ObJsonPathUtil::append_array_index(node_content_.array_range_.first_index_, 
                                                             node_content_.array_range_.is_first_index_from_end_, 
                                                             str))) {
+        LOG_WARN("fail to append ARRAY_INDEX(from).", K(ret));
       } else if (OB_FAIL(str.append(" to "))) {
+        LOG_WARN("fail to append 'to'.", K(ret));
       } else if (OB_FAIL(ObJsonPathUtil::append_array_index(node_content_.array_range_.last_index_, 
                                                             node_content_.array_range_.is_last_index_from_end_, 
                                                             str))) {
+        LOG_WARN("fail to append ARRAY_INDEX(end).", K(ret));
       } else if (OB_FAIL(str.append("]"))) {
+        LOG_WARN("fail to append END_ARRAY", K(ret));
       }
       break;
     }
@@ -1069,9 +1102,11 @@ int ObJsonPathBasicNode::sql_json_to_string(ObJsonBuffer& str, bool is_next_arra
     case JPN_DOT_ELLIPSIS: {
       if (is_next_array) {
         if (OB_FAIL(str.append(".."))) {
+          LOG_WARN("fail to append JPN_WILDCARD_ELLIPSIS", K(ret));
         }
       } else {
         if (OB_FAIL(str.append("."))) {
+          LOG_WARN("fail to append JPN_WILDCARD_ELLIPSIS", K(ret));
         }
       }
       break;
@@ -1079,12 +1114,14 @@ int ObJsonPathBasicNode::sql_json_to_string(ObJsonBuffer& str, bool is_next_arra
     // .* , do append
     case JPN_MEMBER_WILDCARD: {
       if (OB_FAIL(str.append(".*"))) {
+        LOG_WARN("fail to append JPN_MEMBER_WILDCARD", K(ret));
       }
       break;
     }
     // [*] , do append
     case JPN_ARRAY_CELL_WILDCARD: {
       if (OB_FAIL(str.append("[*]"))) {
+        LOG_WARN("fail to append JPN_ARRAY_CELL_WILDCARD", K(ret));
       }
       break;
     }
@@ -1094,21 +1131,26 @@ int ObJsonPathBasicNode::sql_json_to_string(ObJsonBuffer& str, bool is_next_arra
     // if check is_ecmascript_identifier false, should do double_quote 
     case JPN_MEMBER: {
       if (OB_FAIL(str.append("."))) {
+        LOG_WARN("fail to append BEGIN_MEMBER");
       } else {
         if (node_content_.member_.len_ == 0) {
           if (OB_FAIL(str.append("\"\""))) {
+            LOG_WARN("fail to append BEGIN_MEMBER");
           }
         } else {
           ObString object_name(node_content_.member_.len_, node_content_.member_.object_name_);
           ObJsonBuffer tmp_object_name(str.get_allocator());
           if (!ObJsonPathUtil::is_sql_json_keyname(object_name.ptr(), object_name.length())) {
             if (OB_FAIL(ObJsonPathUtil::double_quote(object_name, &tmp_object_name))) {
+              LOG_WARN("fail to add ObJsonPathUtil::double_quote", K(ret));
             } else {
               if (OB_FAIL(str.append(tmp_object_name.ptr(), tmp_object_name.length()))) {
+                LOG_WARN("fail to append object_name", K(ret), K(tmp_object_name.length()));
               }
             }
           } else {
             if (OB_FAIL(str.append(object_name))) {
+              LOG_WARN("fail to append object_name", K(ret));
             }
           }
           tmp_object_name.reset();
@@ -1119,6 +1161,7 @@ int ObJsonPathBasicNode::sql_json_to_string(ObJsonBuffer& str, bool is_next_arra
     // JPN_ARRAY_CELL, add [idx1 to idx2]. If from_end is true, add last
     case JPN_MULTIPLE_ARRAY: {
       if (OB_FAIL(str.append("["))) {
+        LOG_WARN("fail to append BEGIN_ARRAY", K(ret));
       }
       int i = 0;
       int size = node_content_.multi_array_.size();
@@ -1131,16 +1174,20 @@ int ObJsonPathBasicNode::sql_json_to_string(ObJsonBuffer& str, bool is_next_arra
         } else if (OB_FAIL(ObJsonPathUtil::append_array_index(tmp->first_index_, 
                                                        tmp->is_first_index_from_end_,
                                                        str))) {
+          LOG_WARN("fail to append ARRAY_INDEX.", K(ret));
         } else if ((tmp->first_index_ != tmp->last_index_) 
                   || (tmp->is_first_index_from_end_ != tmp->is_last_index_from_end_)) {
           if (OB_FAIL(str.append(" to "))) {
+            LOG_WARN("fail to append 'to'.", K(ret));
           } else if ( OB_FAIL(ObJsonPathUtil::append_array_index(tmp->last_index_, 
                                                                    tmp->is_last_index_from_end_,
                                                                    str))) {
+            LOG_WARN("fail to append ARRAY_INDEX(end).", K(ret));
           }
         } 
         if (OB_SUCC(ret) && (i + 1 < size)) {
           if (OB_FAIL(str.append(", "))) {
+            LOG_WARN("fail to append ', '.", K(ret));
           }
         }
         
@@ -1148,6 +1195,7 @@ int ObJsonPathBasicNode::sql_json_to_string(ObJsonBuffer& str, bool is_next_arra
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(str.append("]"))) {
+          LOG_WARN("fail to append END_ARRAY", K(ret));
         }
       }
       break;
@@ -1186,9 +1234,12 @@ int ObJsonPathFuncNode::node_to_string(ObJsonBuffer& str, bool is_mysql, bool is
 {
   INIT_SUCC(ret);
   if (OB_FAIL(str.append("."))) {
+    LOG_WARN("fail to append '.'", K(ret));
   } else {
     if (node_type_ > JPN_BEGIN_FUNC_FLAG && node_type_ < JPN_END_FUNC_FLAG) {
       if (OB_FAIL(str.append(func_str_map[node_type_ - JPN_BEGIN_FUNC_FLAG - 1]))) {
+        LOG_WARN("fail to append function", K(node_type_),
+        K(func_str_map[node_type_ - JPN_BEGIN_FUNC_FLAG - 1]), K(ret));
       }
     }
   }
@@ -1212,15 +1263,18 @@ int ObJsonPathFilterNode::comp_half_to_string(ObJsonBuffer& str, bool is_left)
     case ObJsonPathNodeType::JPN_SCALAR: {
       ObString half_scalar(half_comp->path_scalar_.s_length_, half_comp->path_scalar_.scalar_);
       if (OB_FAIL(str.append(half_scalar))) {
+        LOG_WARN("fail to append half_scalar ", K(ret),K(half_scalar));
       }
       break;
     }
 
     case ObJsonPathNodeType::JPN_SQL_VAR: {
       if (OB_FAIL(str.append("$"))) {
+        LOG_WARN("fail to append '$'!", K(ret));
       } else {
         ObString half_var(half_comp->path_var_.v_length_, half_comp->path_var_.var_);
         if (OB_FAIL(str.append(half_var))) {
+          LOG_WARN("fail to append half_var ", K(ret),K(half_var));
         }
       }
       break;
@@ -1236,18 +1290,21 @@ int ObJsonPathFilterNode::comp_half_to_string(ObJsonBuffer& str, bool is_left)
 
     case ObJsonPathNodeType::JPN_BOOL_TRUE: {
       if (OB_FAIL(str.append("true"))) {
+        LOG_WARN("fail to append 'true' ", K(ret));
       }
       break;
     }
 
     case ObJsonPathNodeType::JPN_BOOL_FALSE: {
       if (OB_FAIL(str.append("false"))) {
+        LOG_WARN("fail to append 'false' ", K(ret));
       }
       break;
     }
 
     case ObJsonPathNodeType::JPN_NULL: {
       if (OB_FAIL(str.append("null"))) {
+        LOG_WARN("fail to append 'null' ", K(ret));
       }
       break;
     }
@@ -1285,12 +1342,15 @@ int ObJsonPathFilterNode::comp_to_string(ObJsonBuffer& str)
   bool is_left = true;
   if (node_type_ != ObJsonPathNodeType::JPN_EXISTS && node_type_ != ObJsonPathNodeType::JPN_NOT_EXISTS) {
     if (OB_FAIL(comp_half_to_string(str, is_left))) {
+      LOG_WARN("left comparison fail to_string", K(ret), K(node_type_));
     }
   }
   
   if (OB_SUCC(ret) 
   && node_type_ > JPN_BEGIN_FILTER_FLAG && node_type_ <= JPN_EXISTS) {
     if (OB_FAIL(str.append(comp_str_map[node_type_ - JPN_BEGIN_FILTER_FLAG - 1]))) {
+      LOG_WARN("fail to append function", K(node_type_),
+      K(comp_str_map[node_type_ - JPN_BEGIN_FILTER_FLAG - 1]), K(ret));
     }
   }
 
@@ -1298,9 +1358,11 @@ int ObJsonPathFilterNode::comp_to_string(ObJsonBuffer& str)
   is_left = false;
   if (OB_SUCC(ret)) {
     if (OB_FAIL(comp_half_to_string(str, is_left))) {
+      LOG_WARN("left comparison fail to_string", K(ret), K(node_type_));
     } else if (node_type_ == ObJsonPathNodeType::JPN_EXISTS 
       || node_type_ == ObJsonPathNodeType::JPN_NOT_EXISTS) {
       if (OB_FAIL(str.append(")"))) {
+        LOG_WARN("fail to append ')' for exists/!exists.", K(ret), K(node_type_));
       }
     }
   }
@@ -1318,6 +1380,7 @@ int ObJsonPathFilterNode::cond_to_string(ObJsonBuffer& str)
       LOG_WARN("argument is null", K(ret), K(node_type_));
     } else {
       if (OB_FAIL(node_content_.cond_.cond_left_->node_to_string(str, false, false))) {
+        LOG_WARN("fail to_string", K(ret), K(node_type_));
       }
     }
   }
@@ -1327,16 +1390,19 @@ int ObJsonPathFilterNode::cond_to_string(ObJsonBuffer& str)
     switch (node_type_) {
       case ObJsonPathNodeType::JPN_AND_COND: {
         if (OB_FAIL(str.append(ObJsonPathItem::COND_AND))) {
+          LOG_WARN("fail to append &&", K(ret));
         }
         break;
       }
       case ObJsonPathNodeType::JPN_OR_COND: {
         if (OB_FAIL(str.append(ObJsonPathItem::COND_OR))) {
+          LOG_WARN("fail to append ||", K(ret));
         }
         break;
       }
       case ObJsonPathNodeType::JPN_NOT_COND: {
         if (OB_FAIL(str.append(ObJsonPathItem::COND_NOT))) {
+          LOG_WARN("fail to append cond_not", K(ret));
         }
         break;
       }
@@ -1355,10 +1421,12 @@ int ObJsonPathFilterNode::cond_to_string(ObJsonBuffer& str)
       LOG_WARN("argument is null", K(ret), K(node_type_));
     } else {
       if (OB_FAIL(node_content_.cond_.cond_right_->node_to_string(str, false, false))) {
+        LOG_WARN("fail to_string", K(ret), K(node_type_));
       } else {
         // !(), should append ')'
         if (node_type_ == ObJsonPathNodeType::JPN_NOT_COND) {
           if (OB_FAIL(str.append(")"))) {
+            LOG_WARN("fail to append ')'", K(ret));
           }
         }
       }
@@ -1374,10 +1442,12 @@ int ObJsonPathFilterNode::node_to_string(ObJsonBuffer& str,  bool is_mysql, bool
     // comp type
   if (node_type_ >= ObJsonPathNodeType::JPN_EQUAL && node_type_ <= ObJsonPathNodeType::JPN_EXISTS) {
     if (OB_FAIL(comp_to_string(str))) {
+      LOG_WARN("fail to_string at comp_node", K(ret));
     }
     // cond type
   } else if (node_type_ >= ObJsonPathNodeType::JPN_AND_COND && node_type_ < ObJsonPathNodeType::JPN_MAX) {
     if (OB_FAIL(cond_to_string(str))) {
+      LOG_WARN("fail to_string at cond_node", K(ret));
     }
   }
 
@@ -1390,9 +1460,11 @@ int ObJsonPath::to_string(ObJsonBuffer& str)
 
   if (is_sub_path_ && !is_mysql_) {
     if (OB_FAIL(str.append("@"))) {
+      LOG_WARN("fail to append '@'", K(ret));
     }
   } else {
     if (OB_FAIL(str.append("$"))) {
+      LOG_WARN("fail to append '$'", K(ret));
     }
   }
 
@@ -1401,6 +1473,7 @@ int ObJsonPath::to_string(ObJsonBuffer& str)
   } else if (is_mysql_) {
     for (int i = 0; OB_SUCC(ret) && i < path_nodes_.size() ; ++i) {
       if (OB_FAIL(path_nodes_[i]->node_to_string(str, true, false))) {
+        LOG_WARN("parse node to string failed.", K(i));
       }
     }
   } else {
@@ -1421,15 +1494,19 @@ int ObJsonPath::to_string(ObJsonBuffer& str)
       // is_basic_node/fun_node tostring
       if (path_nodes_[i]->get_node_type() < ObJsonPathNodeType::JPN_END_FUNC_FLAG) {
         if (OB_FAIL(path_nodes_[i]->node_to_string(str, false, is_next_array))) {
+            LOG_WARN("parse node to string failed.", K(i));
         }
       // filter_node to string
       } else if ( (path_nodes_[i]->get_node_type() > ObJsonPathNodeType::JPN_BEGIN_FILTER_FLAG)
               && (path_nodes_[i]->get_node_type() < ObJsonPathNodeType::JPN_END_FILTER_FLAG)) {
         if (OB_FAIL(str.append("?("))) {
+          LOG_WARN("fail to append '?('", K(ret));
         } else {
           if (OB_FAIL(path_nodes_[i]->node_to_string(str, false, false))) {
+            LOG_WARN("parse node to string failed.", K(i));
           } else {
             if (OB_FAIL(str.append(")"))) {
+              LOG_WARN("fail to append ')'", K(ret));
             }
           }
         }
@@ -1449,9 +1526,11 @@ int ObJsonPath::parse_path()
   bad_index_ = -1;
   if (is_mysql_) {
     if (OB_FAIL(parse_mysql_path())) {
+      LOG_WARN("fail to parse mysql JSON Path Expression!", K(ret), K(index_));
     }
   } else {
     if (OB_FAIL(parse_sql_json_path())) {
+      LOG_WARN("fail to parse SQL/JSON Path Expression!", K(ret), K(index_));
     }
   }
   return ret;
@@ -1524,16 +1603,19 @@ int ObJsonPath::parse_mysql_path_node()
     switch (expression_[index_]) {
       case ObJsonPathItem::BEGIN_ARRAY: {
         if (OB_FAIL(parse_single_array_node())) {
+          LOG_WARN("fail to parse array node", K(ret), K(index_));
         }
         break;
       }
       case ObJsonPathItem::BEGIN_MEMBER: {
         if (OB_FAIL(parse_mysql_member_node())) {
+          LOG_WARN("fail to parse member node", K(ret), K(index_));
         }
         break;
       }
       case ObJsonPathItem::WILDCARD: {
         if (OB_FAIL(parse_wildcard_ellipsis_node())) {
+          LOG_WARN("fail to parse ellipsis node", K(ret), K(index_));
         }
         break;
       }
@@ -1603,7 +1685,9 @@ int ObJsonPath::parse_wildcard_ellipsis_node()
     } else {
       ellipsis_node = new (ellipsis_node) ObJsonPathBasicNode(allocator_);
       if (OB_FAIL(ellipsis_node->init(JPN_WILDCARD_ELLIPSIS, is_mysql_))) {
+        LOG_WARN("fail to init path basic node with type", K(ret), K(JPN_WILDCARD_ELLIPSIS));
       } else if (OB_FAIL(append(ellipsis_node))) {
+        LOG_WARN("fail to append JsonPathNode(JPN_WILDCARD_ELLIPSIS)!", K(ret), K(index_), K(expression_));
       } else {
         is_contained_wildcard_or_ellipsis_ = true;
       }
@@ -1703,12 +1787,14 @@ int ObJsonPath::parse_single_array_index(uint64_t& array_index, bool& from_end)
         ret = OB_ARRAY_OUT_OF_RANGE;
         LOG_WARN("index of path expression out of range.", K(ret), K(index_));
       } else if (OB_FAIL(ObJsonPathUtil::get_index_num(expression_, index_, array_index))) {
+        LOG_WARN("fail to get the index_num.", K(ret), K(index_), K(expression_));
       }
     } else {
       array_index = 0;
     } // end of '-'
   } else if (index_ < expression_.length()) {
     if (OB_FAIL(ObJsonPathUtil::get_index_num(expression_, index_, array_index))) {
+      LOG_WARN("fail to get the index_num.", K(ret), K(index_), K(expression_));
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
@@ -1761,6 +1847,7 @@ int ObJsonPath::parse_single_array_node()
 
       // 2. parse first arg
       if (OB_FAIL(parse_single_array_index(index1, from_end1))) {
+        LOG_WARN("fail to parse the index of array!", K(ret), K(index_), K(expression_));
       } else {
         // 3. check if has 'to'
         ObJsonPathUtil::skip_whitespace(expression_, index_);
@@ -1776,6 +1863,7 @@ int ObJsonPath::parse_single_array_node()
 
             // parse second arg
             if (OB_FAIL(parse_single_array_index(index2, from_end2))) {
+              LOG_WARN("fail to parse the index of array!", K(ret), K(index_), K(expression_));
             }
           } else {
             ret = OB_INVALID_ARGUMENT;
@@ -1793,6 +1881,7 @@ int ObJsonPath::parse_single_array_node()
             ++index_;
             // 6. init array node with is_cell_type
             if (OB_FAIL(add_single_array_node(is_cell_type, index1, index2, from_end1, from_end2))) {
+              LOG_WARN("fail to add array node!", K(ret), K(index_), K(expression_));
             }
           } else {
             ret = OB_INVALID_ARGUMENT;
@@ -1828,6 +1917,8 @@ int ObJsonPath::add_single_array_node(bool is_cell_type, uint64_t& index1, uint6
     } else {
       cell_node = new (cell_node) ObJsonPathBasicNode(allocator_, index1, from_end1);
       if (OB_FAIL(append(cell_node))) {
+        LOG_WARN("fail to append JsonPathNode(cell_node)!", 
+        K(ret) , K(index_), K(expression_));
       }
     }
   } else {
@@ -1848,6 +1939,7 @@ int ObJsonPath::add_single_array_node(bool is_cell_type, uint64_t& index1, uint6
       } else {
         range_node = new (range_node) ObJsonPathBasicNode(allocator_, index1, from_end1, index2, from_end2);
         if (OB_FAIL(append(range_node))) {
+          LOG_WARN("fail to append JsonPathNode!(range_node)", K(ret), K(index_), K(expression_));
         }
       }
     } 
@@ -1864,6 +1956,7 @@ int ObJsonPath::parse_name_with_rapidjson(char*& str, uint64_t& len)
   ObJsonNode* dom = nullptr;
 
   if (OB_FAIL(ObJsonParser::parse_json_text(allocator_, str, len, syntaxerr, offset, dom))) {
+    LOG_WARN("fail to parse_name_with_rapidjson.", K(ret), KCSTRING(str), KCSTRING(syntaxerr), K(offset));
   } else if (dom->json_type() != ObJsonNodeType::J_STRING) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected json type.", K(ret), KCSTRING(str), K(dom->json_type()));
@@ -1941,7 +2034,9 @@ int ObJsonPath::parse_member_wildcard_node()
   } else {
     member_wildcard_node = new (member_wildcard_node) ObJsonPathBasicNode(allocator_);
     if (OB_FAIL(member_wildcard_node->init(JPN_MEMBER_WILDCARD, is_mysql_))) {
+      LOG_WARN("fail to PathBasicNode init with type", K(ret), K(JPN_MEMBER_WILDCARD));
     } else if (OB_FAIL(append(member_wildcard_node))) {
+      LOG_WARN("fail to append JsonPathNode(member_wildcard_node)!", K(ret), K(index_), K(expression_));
     } else {
       is_contained_wildcard_or_ellipsis_ = true;
     }
@@ -1968,6 +2063,7 @@ int ObJsonPath::parse_array_wildcard_node()
         allocator_->free(cell_wildcard_node);
         LOG_WARN("fail to PathBasicNode init with type", K(ret), K(JPN_ARRAY_CELL_WILDCARD));
       } else if (OB_FAIL(append(cell_wildcard_node))) {
+        LOG_WARN("fail to append JsonPathNode(cell_wildcard_node)!", K(ret), K(expression_));
       } else {
         is_contained_wildcard_or_ellipsis_ = true;
       }
@@ -2000,6 +2096,7 @@ int ObJsonPath::parse_mysql_member_node()
       // JPN_MEMBER_WILDCARD
       if (expression_[index_] == ObJsonPathItem::WILDCARD) {
         if (OB_FAIL(parse_member_wildcard_node())) {
+          LOG_WARN("fail to parse member wildcard node!", K(ret), K(index_), K(expression_));
         }
       } else {
         bool is_quoted  = false;
@@ -2014,8 +2111,11 @@ int ObJsonPath::parse_mysql_member_node()
         // get name 
         // add double quote for rapidjson requires
         if (OB_FAIL(get_origin_key_name(name, name_len, is_quoted, is_func, with_escape))) {
+          LOG_WARN("fail to get keyname!", K(ret), K(index_), K(expression_));
         } else {
           if (OB_FAIL(parse_name_with_rapidjson(name, name_len))) {
+            LOG_WARN("fail to parse name with rapidjson",
+            K(ret), K(index_), K(expression_),KCSTRING(name));
           }
 
           if (OB_SUCC(ret) && !is_quoted) {
@@ -2034,6 +2134,8 @@ int ObJsonPath::parse_mysql_member_node()
             } else {
               member_node = new (member_node) ObJsonPathBasicNode(allocator_, name, name_len);
               if (OB_FAIL(append(member_node) )) {
+                LOG_WARN("fail to append JsonPathNode(member_node)!",
+                K(ret), K(index_), K(expression_));
               }
             }
           }
@@ -2450,6 +2552,7 @@ int ObJsonPathUtil::double_quote(ObString &name, ObJsonBuffer* tmp_name)
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("name_ptr is null", K(ret));
   } else if (OB_FAIL(ObJsonBaseUtil::add_double_quote(*tmp_name, name.ptr(), name.length()))) {
+    LOG_WARN("fail to add_double_quote.", K(ret));
   }
 
   return ret;
@@ -2572,6 +2675,7 @@ int ObJsonPath::parse_sql_json_path_node()
       case ObJsonPathItem::BEGIN_ARRAY: {
         ++index_;
         if (OB_FAIL(parse_multiple_array_node())) {
+          LOG_WARN("fail to parse array node", K(ret), K(index_));
         }
         break;
       }
@@ -2579,6 +2683,7 @@ int ObJsonPath::parse_sql_json_path_node()
       case ObJsonPathItem::BEGIN_MEMBER: {
         ++index_;
         if (OB_FAIL(parse_dot_node())) {
+          LOG_WARN("fail to parse member node", K(ret), K(index_));
         }
         break;
       }
@@ -2586,6 +2691,7 @@ int ObJsonPath::parse_sql_json_path_node()
       case ObJsonPathItem::FILTER_FLAG: {
         ++index_;
         if (OB_FAIL(parse_filter_node())) {
+          LOG_WARN("fail to parse filter node", K(ret), K(index_));
         }
         break;
       }
@@ -2627,6 +2733,7 @@ int ObJsonPath::parse_dot_ellipsis_node()
         allocator_->free(ellipsis_node);
         LOG_WARN("fail to init path basic node with type", K(ret), K(JPN_WILDCARD_ELLIPSIS));
       } else if (OB_FAIL(append(ellipsis_node))) {
+        LOG_WARN("fail to append JsonPathNode(JPN_WILDCARD_ELLIPSIS)!", K(ret), K(index_), K(expression_));
       } else {
         is_contained_wildcard_or_ellipsis_ = true;
       }
@@ -2653,6 +2760,7 @@ int ObJsonPath::parse_dot_node()
         // .* 
       if ((expression_[index_]) ==  ObJsonPathItem::WILDCARD) {
         if (OB_FAIL(parse_member_wildcard_node())) {
+          LOG_WARN("fail to parse member wildcard node!", K(ret), K(index_), K(expression_));
         }
       } else {
         // ..
@@ -2661,11 +2769,13 @@ int ObJsonPath::parse_dot_node()
         ObJsonPathUtil::skip_whitespace(expression_, index_);
         // parse dot ellipsis
         if (OB_FAIL(parse_dot_ellipsis_node())) {
+          LOG_WARN("fail to parse dot ellipsis node!", K(ret), K(index_), K(expression_));
         } else {
           // can only be member
           if (index_ < expression_.length() 
               && ObJsonPathUtil::is_begin_field_name(expression_[index_])) {
             if (OB_FAIL(parse_sql_json_member_node())) {
+              LOG_WARN("fail to parse member node!", K(ret), K(index_), K(expression_));
             }
           } else {
             ret = OB_INVALID_ARGUMENT;
@@ -2677,6 +2787,7 @@ int ObJsonPath::parse_dot_node()
       // only one '.' could be .member or .fun()
       // without '"' then must be fun()
       if (OB_FAIL(parse_sql_json_member_node())) {
+        LOG_WARN("fail to parse SQL/JSON member node!", K(ret), K(index_), K(expression_));
       }
     }
   } else {
@@ -2865,7 +2976,9 @@ int ObJsonPath::deal_with_escape(char* &str, uint64_t& len)
     if (OB_ISNULL(tmp)) {
     } else if (ObJsonPathUtil::is_escape(*tmp)) {
       if (OB_FAIL(buf.append("\\"))) {
+        LOG_WARN("fail to append \\.", K(i), K(ret));
       } else if (OB_FAIL(ObJsonPathUtil::append_character_of_escape(buf, *tmp))) {
+        LOG_WARN("fail to append_character_of_escape.", K(*tmp), K(i), K(ret));
       }
     } else {
       ret = buf.append(tmp, 1);
@@ -2898,8 +3011,11 @@ int ObJsonPath::parse_sql_json_member_node()
     // get name 
     // add double quote for rapidjson requires
     if (OB_FAIL(get_origin_key_name(name, name_len, is_quoted, is_func, with_escape))) {
+      LOG_WARN("fail to get keyname!", K(ret), K(index_), K(expression_));
     } else if (is_quoted || (!is_func)) {
       if (OB_FAIL(parse_name_with_rapidjson(name, name_len))) {
+        LOG_WARN("fail to parse name with rapidjson",
+        K(ret), K(index_), K(expression_),KCSTRING(name));
       } else if (!is_quoted) {
         if (!ObJsonPathUtil::is_ecmascript_identifier(name, name_len)) {
           LOG_WARN("the key name isn't ECMAScript identifier!",
@@ -2916,6 +3032,8 @@ int ObJsonPath::parse_sql_json_member_node()
         } else {
           member_node = new (member_node) ObJsonPathBasicNode(allocator_, name, name_len);
           if (OB_FAIL(append(member_node) )) {
+            LOG_WARN("fail to append JsonPathNode(member_node)!",
+            K(ret), K(index_), K(expression_));
           }
         }
       }
@@ -2924,6 +3042,8 @@ int ObJsonPath::parse_sql_json_member_node()
     // now , char* name == function_name, expressin[index] = '('
     // parse func_node
       if (OB_FAIL(parse_func_node(name, name_len))) {
+        LOG_WARN("fail to parse function node!",
+          K(ret), K(index_), K(expression_));
       }
     }
   } else {
@@ -2940,6 +3060,7 @@ int ObJsonPath::parse_multiple_array_index(uint64_t& index1, uint64_t& index2,
 
   // 2. parse first arg
   if (OB_FAIL(parse_single_array_index(index1, from_end1))) {
+    LOG_WARN("fail to parse the index of array!", K(ret), K(index_), K(expression_));
   } else {
     // 3. check if has 'to'
     ObJsonPathUtil::skip_whitespace(expression_, index_);
@@ -2954,6 +3075,7 @@ int ObJsonPath::parse_multiple_array_index(uint64_t& index1, uint64_t& index2,
 
       // parse second arg
         if (OB_FAIL(parse_single_array_index(index2, from_end2))) {
+          LOG_WARN("fail to parse the index of array!", K(ret), K(index_), K(expression_));
         }
       } else {
         ret = OB_INVALID_ARGUMENT;
@@ -3020,6 +3142,7 @@ int ObJsonPath::parse_multiple_array_node()
     if (expression_[index_] == ObJsonPathItem::WILDCARD) {
       ++index_;
       if ( OB_FAIL(parse_array_wildcard_node()) ) {
+        LOG_WARN("fail to parse the array_wildcard_node!", K(ret), K(index_), K(expression_));
       }  
     } else { 
       // range or cell
@@ -3050,6 +3173,7 @@ int ObJsonPath::parse_multiple_array_node()
             break;
           }
           if (OB_FAIL(parse_multiple_array_index(index1, index2, from_end1, from_end2))) {
+            LOG_WARN("fail to parse the index of array!", K(ret), K(index_), K(expression_));
           } else {
             ObPathArrayRange* o_array = 
             static_cast<ObPathArrayRange*> (allocator_->alloc(sizeof(ObPathArrayRange)));
@@ -3079,6 +3203,7 @@ int ObJsonPath::parse_multiple_array_node()
               ++index_;
               // 6. init array node with is_cell_type
               if (OB_FAIL(append(multi_array_node))) {
+                LOG_WARN("fail to append JsonPathNode(cell_node)!", K(ret) , K(index_), K(expression_));
               }
             } else {
               ret = OB_INVALID_ARGUMENT;
@@ -3207,9 +3332,11 @@ int ObJsonPath::get_char_comparison_type(ObJsonPathFilterNode* filter_comp_node)
         if (expression_[index_] == '=') {
           ++index_;
           if (OB_FAIL(filter_comp_node->init_comp_type(ObJsonPathNodeType::JPN_LARGGER_EQUAL))) {
+            LOG_WARN("fail to init comparison_type", K(ret), K(index_), K(expression_));
           }
         } else {
           if (OB_FAIL(filter_comp_node->init_comp_type(ObJsonPathNodeType::JPN_LARGGER))) {
+            LOG_WARN("fail to init comparison_type", K(ret), K(index_), K(expression_));
           }
         }
         break;
@@ -3219,9 +3346,11 @@ int ObJsonPath::get_char_comparison_type(ObJsonPathFilterNode* filter_comp_node)
         if (expression_[index_] == '=') {
           ++index_;
           if (OB_FAIL(filter_comp_node->init_comp_type(ObJsonPathNodeType::JPN_SMALLER_EQUAL))) {
+            LOG_WARN("fail to init comparison_type", K(ret), K(index_), K(expression_));
           }
         } else {
           if (OB_FAIL(filter_comp_node->init_comp_type(ObJsonPathNodeType::JPN_SMALLER))) {
+            LOG_WARN("fail to init comparison_type", K(ret), K(index_), K(expression_));
           }
         }
         break;
@@ -3231,6 +3360,7 @@ int ObJsonPath::get_char_comparison_type(ObJsonPathFilterNode* filter_comp_node)
         if (expression_[index_] == '=') {
           ++index_;
           if (OB_FAIL(filter_comp_node->init_comp_type(ObJsonPathNodeType::JPN_EQUAL))) {
+            LOG_WARN("fail to init comparison_type", K(ret), K(index_), K(expression_));
           }
         } else {
           ret = OB_INVALID_ARGUMENT;
@@ -3243,6 +3373,7 @@ int ObJsonPath::get_char_comparison_type(ObJsonPathFilterNode* filter_comp_node)
         if (expression_[index_] == '=') {
           ++index_;
           if (OB_FAIL(filter_comp_node->init_comp_type(ObJsonPathNodeType::JPN_UNEQUAL))) {
+            LOG_WARN("fail to init comparison_type", K(ret), K(index_), K(expression_));
           }
         } else {
           ret = OB_INVALID_ARGUMENT;
@@ -3271,9 +3402,11 @@ int ObJsonPath::get_comparison_type(ObJsonPathFilterNode* filter_comp_node, bool
     if (!not_exists && (expression_[index_] == '>' || expression_[index_] == '<'
       || expression_[index_] == '=' || expression_[index_] == '!')) {
       if (OB_FAIL(get_char_comparison_type(filter_comp_node))) {
+        LOG_WARN("fail to init char_comparison_type!", K(ret), K(index_), K(expression_));
       }
     } else {
       if (OB_FAIL(get_func_comparison_type(filter_comp_node))) {
+        LOG_WARN("fail to init char_comparison_type!", K(ret), K(index_), K(expression_));
       }
     }
   } else {
@@ -3321,6 +3454,7 @@ int ObJsonPath::jump_over_dot()
     // if '"' , jump
     if (expression_[index_] == ObJsonPathItem::DOUBLE_QUOTE) {
       if (OB_FAIL(jump_over_double_quote())) {
+        LOG_WARN("Wrong path in double_quote!", K(ret), K(index_), K(expression_));
       }           
     // without '"', could be .*/.. 
     // or else must be .keyname or .function_name         
@@ -3397,6 +3531,7 @@ int ObJsonPath::get_sub_path(char*& sub_path, uint64_t& sub_len)
         ++index_;
         ObJsonPathUtil::skip_whitespace(expression_, index_);
         if (OB_FAIL(jump_over_dot())) {
+          LOG_WARN("wrong sub path!", K(ret), K(index_), K(expression_));
         }
       // filter
       } else if (expression_[index_] ==  ObJsonPathItem::FILTER_FLAG) {
@@ -3409,6 +3544,7 @@ int ObJsonPath::get_sub_path(char*& sub_path, uint64_t& sub_len)
             while (index_ < len && brace > 0 ) {
               if (expression_[index_] == ObJsonPathItem::DOUBLE_QUOTE) {
                 if (OB_FAIL(jump_over_double_quote())) {
+                  LOG_WARN("Wrong path in double_quote!", K(ret), K(index_), K(expression_));
                 }
               } else if (expression_[index_] == ObJsonPathItem::BRACE_START) {
                 ++brace;
@@ -3588,6 +3724,7 @@ int ObJsonPath::parse_comp_var(ObJsonPathFilterNode* filter_comp_node, bool left
   char* val_name = nullptr;
   uint64_t val_len = 0;
   if (OB_FAIL(get_var_name(val_name, val_len))) {
+    LOG_WARN("fail to get the name of SQL/JSON variable!", K(ret), K(index_), K(expression_));
   } else {
     if (OB_ISNULL(val_name)) {
       ret = OB_BAD_NULL_ERROR;
@@ -3596,6 +3733,7 @@ int ObJsonPath::parse_comp_var(ObJsonPathFilterNode* filter_comp_node, bool left
       filter_comp_node->init_left_var(val_name, val_len);        
     } else {
       if (OB_FAIL(filter_comp_node->init_right_var(val_name, val_len))) {
+        LOG_WARN("fail to init left_val",K(ret), K(val_name));
       }
     }
   }
@@ -3612,6 +3750,7 @@ int ObJsonPath::parse_comp_string_num(ObJsonPathFilterNode* filter_comp_node, bo
     bool is_func = false;
     bool with_escape = false;
     if (OB_FAIL(get_origin_key_name(str, name_len, true, is_func, with_escape))) {
+      LOG_WARN("fail to get string scalar",K(ret), K(index_), K(expression_),K(str));
     } else {
       if (OB_ISNULL(str)) {
         ret = OB_INVALID_ARGUMENT;
@@ -3621,6 +3760,7 @@ int ObJsonPath::parse_comp_string_num(ObJsonPathFilterNode* filter_comp_node, bo
           filter_comp_node->init_left_scalar(str, name_len);
         } else {
           if (OB_FAIL(filter_comp_node->init_right_scalar(str, name_len))) {
+            LOG_WARN("fail to init left_val",K(ret), K(str));
           }
         }
       }            
@@ -3630,6 +3770,7 @@ int ObJsonPath::parse_comp_string_num(ObJsonPathFilterNode* filter_comp_node, bo
     char* num = nullptr;
     uint64_t num_len = 0;
     if (OB_FAIL(get_num_str(num, num_len))) {
+      LOG_WARN("fail to get string scalar",K(ret), K(index_), K(expression_),K(num));
     } else {
       if (OB_ISNULL(num)) {
         ret = OB_INVALID_ARGUMENT;
@@ -3639,6 +3780,7 @@ int ObJsonPath::parse_comp_string_num(ObJsonPathFilterNode* filter_comp_node, bo
           filter_comp_node->init_left_scalar(num, num_len);
         } else {
           if (OB_FAIL(filter_comp_node->init_right_scalar(num, num_len))) {
+            LOG_WARN("fail to init left_val",K(ret), K(num));
           }
         }
       }            
@@ -3674,6 +3816,7 @@ int ObJsonPath::parse_comp_exist(ObJsonPathFilterNode* filter_comp_node)
           ++brace;
         } else if (expression_[index_] == ObJsonPathItem::DOUBLE_QUOTE) {
           if (OB_FAIL(jump_over_double_quote())) {
+            LOG_WARN("wrong path!", K(ret), K(index_), K(expression_));
           }
         } else if (expression_[index_] == ObJsonPathItem::BRACE_END) {
           --brace;
@@ -3708,8 +3851,10 @@ int ObJsonPath::parse_comp_exist(ObJsonPathFilterNode* filter_comp_node)
           spath = new (spath) ObJsonPath(exist_subpath, allocator_);
           spath->set_subpath_arg(is_lax_);
           if (OB_FAIL(spath->parse_path())) {
+            LOG_WARN("fail to parse sub_path",K(ret), K(spath->bad_index_), K(exist_subpath));
           } else {
             if (OB_FAIL(filter_comp_node->init_right_comp_path(spath))) {
+              LOG_WARN("fail to init left_comp",K(ret), K(exist_subpath));
             }
           }
         }
@@ -3734,11 +3879,13 @@ int ObJsonPath::parse_comp_half(ObJsonPathFilterNode* filter_comp_node, bool lef
               || filter_comp_node->get_node_type() == ObJsonPathNodeType::JPN_EXISTS)) {
   // @
     if (OB_FAIL(parse_comp_exist(filter_comp_node))) {
+      LOG_WARN("fail to get exist/!exist arg!", K(ret), K(index_), K(expression_));
     }
   } else if (expression_[index_] == ObJsonPathItem::SUB_PATH) {
     char* sub_path = nullptr;
     uint64_t path_len = 0;
     if (OB_FAIL(get_sub_path(sub_path, path_len))) {
+      LOG_WARN("fail to get sub_path!", K(ret), K(index_), K(expression_));
     } else {
       ObString path_string(path_len, sub_path);
       ObJsonPath* spath = static_cast<ObJsonPath*> (allocator_->alloc(sizeof(ObJsonPath)));
@@ -3750,12 +3897,15 @@ int ObJsonPath::parse_comp_half(ObJsonPathFilterNode* filter_comp_node, bool lef
         spath = new (spath) ObJsonPath(path_string, allocator_);
         spath->set_subpath_arg(is_lax_);
         if (OB_FAIL(spath->parse_path())) {
+          LOG_WARN("fail to parse sub_path",K(ret), K(spath->bad_index_), K(path_string));
         } else {
           if (left) {
             if (OB_FAIL(filter_comp_node->init_left_comp_path(spath))) {
+              LOG_WARN("fail to init left_comp",K(ret), K(path_string));
             }
           } else {
             if (OB_FAIL(filter_comp_node->init_right_comp_path(spath))) {
+              LOG_WARN("fail to init left_comp",K(ret), K(path_string));
             }
           }
         }
@@ -3765,11 +3915,13 @@ int ObJsonPath::parse_comp_half(ObJsonPathFilterNode* filter_comp_node, bool lef
   } else if (expression_[index_] == ObJsonPathItem::ROOT) {
     ++index_;
     if (OB_FAIL(parse_comp_var(filter_comp_node, left))) {
+      LOG_WARN("fail to parse SQL/JSON variable!", K(ret), K(index_), K(expression_));
     }
   // scalar
   } else if ((expression_[index_] == ObJsonPathItem::DOUBLE_QUOTE) || (ObJsonPathUtil::is_digit(expression_[index_])) 
             ||(expression_[index_] == ObJsonPathItem::MINUS || expression_[index_] == ObJsonPathItem::BEGIN_MEMBER)) {
     if (OB_FAIL(parse_comp_string_num(filter_comp_node, left))) {
+      LOG_WARN("fail to parse SQL/JSON variable!", K(ret), K(index_), K(expression_));
     }
   // true, false, null 
   } else if (ObJsonPathUtil::letter_or_not(expression_[index_])) {
@@ -4008,6 +4160,7 @@ int ObJsonPath::parse_comparison(ObFilterArrayPointers& filter_stack, bool not_e
     if (!not_exists) {
       // parse left_arg
       if (OB_FAIL(parse_comp_half(filter_comp_node, true))) {
+        LOG_WARN("fail to parse the left part of comparission",K(ret), K(index_), K(expression_));
       }
     }
 
@@ -4015,13 +4168,18 @@ int ObJsonPath::parse_comparison(ObFilterArrayPointers& filter_stack, bool not_e
       // cmp
       ObJsonPathUtil::skip_whitespace(expression_, index_);
       if (OB_FAIL(get_comparison_type(filter_comp_node, not_exists))) {
+        LOG_WARN("fail to parse comparison_type",K(ret), K(index_), K(expression_));
       } else {
         // right
         ObJsonPathUtil::skip_whitespace(expression_, index_);
         if (OB_FAIL(parse_comp_half(filter_comp_node, false))) {
+          LOG_WARN("fail to parse the right part of comparission",K(ret), K(index_), K(expression_));
         } else if (OB_FAIL(is_legal_comparison(filter_comp_node))) {
+          // illegal
+          LOG_WARN("illegal comparission",K(ret), K(index_), K(expression_));
         } else {
           if (OB_FAIL(filter_stack.push_back(filter_comp_node))) {
+            LOG_WARN("fail to append node tu stack",K(ret));
           }
         }      
       } // end of get comparison
@@ -4044,15 +4202,18 @@ int ObJsonPath::parse_condition(ObFilterArrayPointers& filter_stack, ObCharArray
     char pri = ObJsonPathUtil::priority(top, in);
     if (pri == '<') {
       if (OB_FAIL(char_stack.push_back(in))) {
+        LOG_WARN("fail to push_back charactor", K(ret), K(index_), K(expression_), K(in));
       } 
       if (OB_SUCC(ret) && in == '!') {
         if (OB_FAIL(char_stack.push_back('('))) {
+          LOG_WARN("fail to push_back charactor", K(ret), K(index_), K(expression_), K("("));
         }
       }
       break;
     // == pop
     } else if (pri == '=') {
       if (OB_FAIL(ObJsonPathUtil::pop_char_stack(char_stack))) {
+        LOG_WARN("fail to remove",K(ret), K(index_), K(expression_), K(char_stack[size_c - 1]));
       }
       break;
     } else if (pri == '>') {
@@ -4068,6 +4229,7 @@ int ObJsonPath::parse_condition(ObFilterArrayPointers& filter_stack, ObCharArray
         ObJsonPathFilterNode* right_comp = filter_stack[size_f - 1];
         ObJsonPathFilterNode* left_comp = nullptr;
         if (OB_FAIL(ObJsonPathUtil::pop_filter_stack(filter_stack))) {
+          LOG_WARN("fail to remove",K(ret), K(index_), K(expression_));
         } else {
           size_f = filter_stack.size();
           // have left_arg or not
@@ -4075,6 +4237,7 @@ int ObJsonPath::parse_condition(ObFilterArrayPointers& filter_stack, ObCharArray
             if (size_f >= 1) {
               left_comp = filter_stack[size_f - 1];
               if (OB_FAIL(ObJsonPathUtil::pop_filter_stack(filter_stack))) {
+                LOG_WARN("fail to remove",K(ret), K(index_), K(expression_));
               } else {
                 size_f = filter_stack.size();
               }
@@ -4100,12 +4263,15 @@ int ObJsonPath::parse_condition(ObFilterArrayPointers& filter_stack, ObCharArray
             }
             if (OB_SUCC(ret)) {
               if (OB_FAIL(ObJsonPathUtil::pop_char_stack(char_stack))) {
+                LOG_WARN("fail to remove char_top!",K(ret), K(index_), K(expression_));
               } else {
                 size_c = char_stack.size();
                 if (OB_FAIL(filter_cond_node->init_cond_right(right_comp))) {
+                  LOG_WARN("fail to init the right side of condition!", K(top));
                 } else {
                 // cond_node parameters are correctly initialized, added to filter_stack
                   if (OB_FAIL(filter_stack.push_back(filter_cond_node))) {
+                    LOG_WARN("fail to append new filter_cond_node!", K(top));
                   } else {
                     size_f = filter_stack.size();
                   }
@@ -4198,14 +4364,17 @@ int ObJsonPath::push_filter_char_in(char in, ObFilterArrayPointers& filter_stack
       char pri = ObJsonPathUtil::priority(top, in);
       if (pri == '<') {
         if (OB_FAIL(char_stack.push_back(in))) {
+          LOG_WARN("fail to push_back charactor", K(ret), K(index_), K(expression_), K(in));
         } 
         if (OB_SUCC(ret) && in == '!') {
           if (OB_FAIL(char_stack.push_back('('))) {
+            LOG_WARN("fail to push_back charactor", K(ret), K(index_), K(expression_), K("("));
           }
         }
         
       } else if (pri == '>' || pri == '=') {
         if (OB_FAIL(parse_condition(filter_stack, char_stack, in))) {
+          LOG_WARN("fail to parse condition expression!", K(ret), K(index_), K(expression_));
         }
       } else {
         ret = OB_INVALID_ARGUMENT;
@@ -4231,6 +4400,7 @@ int ObJsonPath::parse_filter_node()
   if (index_ < expression_.length()) {
     if (expression_[index_] == ObJsonPathItem::BRACE_START) {
       if (OB_FAIL(char_stack.push_back('('))) {
+        LOG_WARN("fail to push_back charactor", K(ret), K(index_), K(expression_));
       } else {
         ++index_;
         ObJsonPathUtil::skip_whitespace(expression_, index_);
@@ -4251,6 +4421,7 @@ int ObJsonPath::parse_filter_node()
               || (expression_[index_] == ObJsonPathItem::MINUS || expression_[index_] == '.')
               || ObJsonPathUtil::letter_or_not(expression_[index_])) ) {
             if (OB_FAIL(parse_comparison(filter_stack, false))) {
+              LOG_WARN("fail to parse comparison node", K(ret), K(index_), K(expression_));
             } else {
               ObJsonPathUtil::skip_whitespace(expression_, index_);
             }
@@ -4265,6 +4436,7 @@ int ObJsonPath::parse_filter_node()
                   // back to '!'
                   index_ = tmp_idx; 
                   if (OB_FAIL(parse_comparison(filter_stack, true))) {
+                    LOG_WARN("fail to parse comparison node", K(ret), K(index_), K(expression_));
                   } else {
                     ObJsonPathUtil::skip_whitespace(expression_, index_);
                   }
@@ -4272,6 +4444,7 @@ int ObJsonPath::parse_filter_node()
                   // back to '!' and push
                   index_ = tmp_idx;
                   if (OB_FAIL(push_filter_char_in(expression_[index_], filter_stack, char_stack))) {
+                    LOG_WARN("fail to parse comparison node", K(ret), K(index_), K(expression_));
                   } else {
                     ObJsonPathUtil::skip_whitespace(expression_, index_);
                   }
@@ -4283,6 +4456,7 @@ int ObJsonPath::parse_filter_node()
             // && or ||, push directly
             } else {
               if (OB_FAIL(push_filter_char_in(expression_[index_], filter_stack, char_stack))) {
+                LOG_WARN("fail to parse comparison node", K(ret), K(index_), K(expression_));
               } else {
                 ObJsonPathUtil::skip_whitespace(expression_, index_);
               }
@@ -4298,6 +4472,7 @@ int ObJsonPath::parse_filter_node()
         if (OB_SUCC(ret)) {
           if (filter_stack.size() == 1 && char_stack.size() == 0) {
             if (OB_FAIL(append(filter_stack[0]))) {
+              LOG_WARN("fail to append filter node", K(ret), K(index_), K(expression_));
             } else {
               // the first node after filter_node can't be array node OR another filter_node
               // illegal: ?()[idx]

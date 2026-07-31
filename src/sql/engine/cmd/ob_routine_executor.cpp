@@ -40,6 +40,7 @@ int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &st
   ObString first_stmt;
   
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
+    LOG_WARN("fail to get first stmt" , K(ret));
   } else {
     crt_routine_arg.ddl_stmt_str_ = first_stmt;
   }
@@ -49,6 +50,7 @@ int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &st
     LOG_WARN("get task executor context failed", K(ret));
   } else if (OB_FAIL(query::serialize_root_service_call(
                  [&]{ return ctx.root_command_service().create_routine(crt_routine_arg); }))) {
+    LOG_WARN("rpc proxy create procedure failed", K(ret), "dst", GCTX.self_addr());
   }
   if(crt_routine_arg.with_if_not_exist_ && ret == OB_ERR_SP_ALREADY_EXISTS) {
     LOG_USER_WARN(OB_ERR_SP_ALREADY_EXISTS, "ROUTINE",  crt_routine_arg.routine_info_.get_routine_name().length(), crt_routine_arg.routine_info_.get_routine_name().ptr());
@@ -64,6 +66,7 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
   uint64_t package_id = OB_INVALID_ID;
   uint64_t routine_id = OB_INVALID_ID;
   ObCallProcedureInfo *call_proc_info = NULL;
+  LOG_DEBUG("call procedure execute", K(stmt));
   if (OB_ISNULL(ctx.get_pl_engine()) || OB_ISNULL(ctx.get_output_row())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("pl engine is NULL", K(ctx.get_pl_engine()), K(ret));
@@ -83,6 +86,7 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
   } else if (OB_FAIL(ob_write_string(ctx.get_allocator(),
                                      ctx.get_my_session()->get_current_query_string(),
                                      ctx.get_stmt_factory()->get_query_ctx()->get_sql_stmt()))) {
+    LOG_WARN("fail to set query string");
   } else if (OB_ISNULL(call_proc_info = stmt.get_call_proc_info())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("call procedure info is null", K(ret));
@@ -117,6 +121,7 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
           param.reset();
           param.ObObj::reset();
           if (OB_FAIL(ObSQLUtils::calc_sql_expression_without_row(ctx, *expr, param))) {
+            LOG_WARN("failed to calc exec param expr", K(i), K(*expr), K(ret));
           } else {
             if (expr->get_is_pl_mock_default_expr()) {
               param.set_is_pl_mock_default_param(true);
@@ -132,10 +137,12 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
             }
             if (OB_FAIL(ret)) {
             } else if (OB_FAIL(params.push_back(param))) {
+              LOG_WARN("push back error", K(i), K(*expr), K(ret));
             } else {
               params.at(params.count() - 1).set_param_meta();
               if (call_proc_info->get_output_count() > 0) {
                 if (OB_FAIL(null_params.push_back(param.is_null()))) {
+                  LOG_WARN("fail to push back", K(ret));
                 }
               }
             }
@@ -149,6 +156,7 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
       }
       exec_ctx_bak.restore(ctx);
     } else {
+      LOG_DEBUG("direct use params", K(ret), K(stmt));
       int64_t param_cnt = ctx.get_physical_plan_ctx()->get_param_store().count();
       if (call_proc_info->get_param_cnt() != param_cnt) {
         ret = OB_ERR_SP_WRONG_ARG_NUM;
@@ -158,8 +166,10 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
         LOG_DEBUG("params", "param", ctx.get_physical_plan_ctx()->get_param_store().at(i), K(i));
         ObObjParam param = ctx.get_physical_plan_ctx()->get_param_store().at(i);
         if (OB_FAIL(params.push_back(param))) {
+          LOG_WARN("push back error", K(i), K(ret));
         } else if (call_proc_info->get_output_count() > 0) {
           if (OB_FAIL(null_params.push_back(param.is_null()))) {
+            LOG_WARN("fail to push back", K(ret));
           }
         }
       }
@@ -179,6 +189,7 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
                                               path,
                                               params,
                                               result))) {
+        LOG_WARN("failed to execute pl",  K(ret), K(package_id), K(routine_id), K(pkg_id));
       }
       if (OB_FAIL(ret)) {
       } else if (call_proc_info->get_output_count() > 0) {
@@ -227,6 +238,7 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
                     ret = OB_ERR_UNEXPECTED;
                     LOG_WARN("Unexpected result expr", K(*expr), K(ret));
                   } else if (OB_FAIL(ObSQLUtils::wrap_expr_ctx(stmt.get_stmt_type(), ctx, ctx.get_allocator(), expr_ctx))) {
+                    LOG_WARN("Failed to wrap expr ctx", K(ret));
                   } else {
                     const ObString var_name = expr->get_expr_items().at(1).get_obj().get_string();
                     if (FAILEDx(ObVariableSetExecutor::set_user_variable(out_value, var_name, expr_ctx))) {
@@ -267,6 +279,7 @@ int ObDropRoutineExecutor::execute(ObExecContext &ctx, ObDropRoutineStmt &stmt)
   obcall::ObDropRoutineArg &drop_routine_arg = stmt.get_routine_arg();
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
+    LOG_WARN("fail to get first stmt" , K(ret));
   } else {
     drop_routine_arg.ddl_stmt_str_ = first_stmt;
   }
@@ -276,6 +289,7 @@ int ObDropRoutineExecutor::execute(ObExecContext &ctx, ObDropRoutineStmt &stmt)
     LOG_WARN("get task executor context failed", K(ret));
   } else if (OB_FAIL(query::serialize_root_service_call(
                  [&]{ return ctx.root_command_service().drop_routine(drop_routine_arg); }))) {
+    LOG_WARN("rpc proxy drop procedure failed", K(ret), "dst", GCTX.self_addr());
   }
   return ret;
 }
@@ -290,6 +304,7 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
   ObString first_stmt;
   if (need_create_routine) {
     if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
+      LOG_WARN("fail to get first stmt" , K(ret));
     } else {
       alter_routine_arg.ddl_stmt_str_ = first_stmt;
     }
@@ -299,6 +314,7 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
       LOG_WARN("get task executor context failed", K(ret));
     } else if (OB_FAIL(query::serialize_root_service_call(
                    [&]{ return ctx.root_command_service().alter_routine(alter_routine_arg); }))) {
+      LOG_WARN("rpc proxy alter procedure failed", K(ret), "dst", GCTX.self_addr());
     }
   } else {
     ObMySQLTransaction trans;

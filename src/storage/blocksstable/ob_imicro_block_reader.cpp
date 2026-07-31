@@ -52,11 +52,13 @@ int ObIMicroBlockReader::read_column_values(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid aggregate value row id", K(ret), K(row_id), K_(row_count));
     } else if (OB_FAIL(get_row(row_id, row))) {
+      LOG_WARN("failed to decode aggregate value row", K(ret), K(row_id));
     } else if (OB_UNLIKELY(col_offset >= row.get_column_count())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("aggregate value column is outside decoded row", K(ret), K(col_offset),
                K(row.get_column_count()));
     } else if (OB_FAIL(datums[i].deep_copy(row.storage_datums_[col_offset], allocator))) {
+      LOG_WARN("failed to own decoded aggregate value", K(ret), K(i), K(col_offset));
     }
   }
   return ret;
@@ -87,6 +89,7 @@ int ObIMicroBlockReader::locate_range(
     if (!is_left_border || range.get_start_key().is_min_rowkey()) {
       begin_idx = 0;
     } else if (OB_FAIL(find_bound(range, 0, begin_idx, equal, end_key_begin_idx, end_key_end_idx))) {
+      LOG_WARN("fail to get lower bound start key", K(ret));
     } else if (begin_idx == row_count_) {
       ret = OB_BEYOND_THE_RANGE;
     } else if (!range.get_border_flag().inclusive_start()) {
@@ -97,6 +100,8 @@ int ObIMicroBlockReader::locate_range(
         }
       }
     }
+    LOG_DEBUG("locate range for start key", K(is_left_border), K(is_right_border),
+              K(range), K(begin_idx), K(end_idx), K(equal), K(end_key_begin_idx), K(end_key_end_idx));
     if (OB_SUCC(ret)) {
       if (!is_right_border || range.get_end_key().is_max_rowkey()) {
         end_idx = row_count_ - 1;
@@ -111,6 +116,7 @@ int ObIMicroBlockReader::locate_range(
                                end_key_begin_idx > begin_idx ? end_key_begin_idx : begin_idx,
                                end_idx,
                                equal))) {
+          LOG_WARN("fail to get lower bound endkey", K(ret));
         } else if (end_idx == row_count_) {
           --end_idx;
         } else if (is_index_block && !(equal && range.get_border_flag().inclusive_end() && is_percise_rowkey)) {
@@ -124,6 +130,7 @@ int ObIMicroBlockReader::locate_range(
       }
     }
   }
+  LOG_DEBUG("locate range for end key", K(is_left_border), K(is_right_border), K(range), K(begin_idx), K(end_idx), K(equal));
   return ret;
 }
 
@@ -149,7 +156,9 @@ int ObIMicroBlockReader::locate_border_row_id(
   } else if (rowkey.is_max_rowkey()) {
     border_row_idx = end_idx;
   } else if (OB_FAIL(find_bound(rowkey, true, begin_idx, end_idx, border_row_idx, is_equal))) {
+    LOG_WARN("fail to get lower bound border key", K(ret), K(begin_idx), K(end_idx), K(rowkey));
   }
+  LOG_DEBUG("locate border key row id", K(ret), K(rowkey), K(begin_idx), K(end_idx), K(border_row_idx), K(is_equal));
   return ret;
 }
 

@@ -76,6 +76,7 @@ OB_INLINE int cosine_similarity_normal(const float *a, const float *b, const int
   double abs_dist_b = 0;
   similarity = 0;
   if (OB_FAIL(cosine_calculate_normal(a, b, len, ip, abs_dist_a, abs_dist_b))) {
+    LIB_LOG(WARN, "failed to cal cosine", K(ret), K(ip));
   } else if (0 == abs_dist_a || 0 == abs_dist_b) {
     ret = OB_ERR_NULL_VALUE;
   } else {
@@ -92,6 +93,7 @@ OB_INLINE int cosine_similarity_normal(const uint8_t *a, const uint8_t *b, const
   double abs_dist_b = 0;
   similarity = 0;
   if (OB_FAIL(cosine_calculate_normal(a, b, len, ip, abs_dist_a, abs_dist_b))) {
+    LIB_LOG(WARN, "failed to cal cosine", K(ret), K(ip));
   } else if (0 == abs_dist_a || 0 == abs_dist_b) {
     ret = OB_ERR_NULL_VALUE;
   } else {
@@ -171,6 +173,7 @@ OB_INLINE static int cosine_similarity_simd4_avx128(const float *a, const float 
   similarity = 0;
 
   if (OB_FAIL(cosine_calculate_simd4_avx128(a, b, len, ip, abs_dist_a, abs_dist_b))) {
+    LIB_LOG(WARN, "failed to cal cosine", K(ret), K(ip));
   } else if (0 == abs_dist_a || 0 == abs_dist_b) {
     ret = OB_ERR_NULL_VALUE;
   } else {
@@ -184,6 +187,7 @@ OB_INLINE static int cosine_calculate_simd4_avx128_extra(const float *a, const f
   int ret = OB_SUCCESS;
   int64_t dim = len >> 2 << 2;
   if (OB_FAIL(cosine_calculate_simd4_avx128(a, b, dim, ip, abs_dist_a, abs_dist_b))) {
+    LIB_LOG(WARN, "failed to cal cosine", K(ret), K(len), K(dim), K(ip));
   } else if (0 < len - dim && OB_FAIL(cosine_calculate_normal(a + dim, b + dim, len - dim, ip, abs_dist_a, abs_dist_b))) {
     LIB_LOG(WARN, "failed to cal cosine", K(ret), K(len), K(dim), K(ip));
   }
@@ -199,8 +203,10 @@ OB_INLINE static int cosine_similarity_avx128(const float *a, const float *b, co
   similarity = 0;
   if (4 < len) {
     if (OB_FAIL(cosine_calculate_simd4_avx128_extra(a, b, len, ip, abs_dist_a, abs_dist_b))) {
+      LIB_LOG(WARN, "failed to cal cosine extra", K(ret), K(ip));
     }
   } else if (OB_FAIL(cosine_calculate_normal(a, b, len, ip, abs_dist_a, abs_dist_b))) {
+    LIB_LOG(WARN, "failed to cal cosine normal", K(ret), K(ip));
   }
 
   if (OB_FAIL(ret)) {

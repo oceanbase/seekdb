@@ -50,13 +50,16 @@ int ObDDLInsertDag::init_by_param(const share::ObIDagInitParam *param)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(init_param));
   } else if (OB_FAIL(ObDDLIndependentDag::init_by_param(init_param))) {
+    LOG_WARN("init ddl independent dag failed", K(ret), KPC(init_param));
   } else {
     px_thread_count_ = init_param->px_thread_count_;
     is_inited_ = true;
 
     ObArray<ObITask *> write_macro_block_tasks;
     if (OB_FAIL(generate_write_macro_block_tasks(write_macro_block_tasks))) {
+      LOG_WARN("fail to generate write macro block tasks", KR(ret));
     } else if (OB_FAIL(batch_add_task(write_macro_block_tasks))) {
+      LOG_WARN("batch add task failed", K(ret), K(write_macro_block_tasks.count()));
     }
   }
   FLOG_INFO("ddl insert dag init", K(ret), KPC(this));
@@ -93,6 +96,7 @@ int ObDDLInsertDag::update_tablet_range_count()
       ObArray<data_plane::ObDDLTabletSliceCount> tablet_slice_counts;
       if (OB_FAIL(data_plane::load_idempotent_ddl_tablet_slice_counts(
               ddl_task_param_.ddl_task_id_, tablet_slice_counts))) {
+        LOG_WARN("fail to get schedule info", K(ret), K(ddl_task_param_));
       } else {
         total_slice_count_ = 0;
         if (0 == tablet_slice_counts.count()) {
@@ -108,6 +112,7 @@ int ObDDLInsertDag::update_tablet_range_count()
             total_slice_count_ = tablet_slice_counts.at(0).slice_count_;
             ObDDLTabletContext *tablet_context = nullptr;
             if (OB_FAIL(get_tablet_context(tablet_id, tablet_context))) {
+              LOG_WARN("get tablet context failed", K(ret), K(tablet_id));
             } else {
               tablet_context->slice_count_ = total_slice_count_;
               tablet_context->table_slice_offset_ = 0;

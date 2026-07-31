@@ -43,6 +43,7 @@ int ObDropPrimaryKeyTask::init(const ObTableSchema* src_table_schema, const ObTa
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableRedefinitionTask::init(src_table_schema, dst_table_schema, 0, task_id, ddl_type, parallelism,
                                             sub_task_trace_id, alter_table_arg, data_format_version, task_status, snapshot_version))) {
+    LOG_WARN("fail to init ObDropPrimaryKeyTask", K(ret));
   } else {
     set_gmt_create(ObTimeUtility::current_time());
     sub_task_trace_id_ = sub_task_trace_id;
@@ -58,42 +59,52 @@ int ObDropPrimaryKeyTask::process()
     ret = OB_NOT_INIT;
     LOG_WARN("ObDropPrimaryKeyTask has not been inited", K(ret));
   } else if (OB_FAIL(check_health())) {
+    LOG_WARN("check task health failed", K(ret));
   } else {
     switch(task_status_) {
       case ObDDLTaskStatus::PREPARE:
         if (OB_FAIL(prepare(ObDDLTaskStatus::WAIT_TRANS_END))) {
+          LOG_WARN("fail to prepare drop primary key task", K(ret));
         }
         break;
       case ObDDLTaskStatus::WAIT_TRANS_END:
         if (OB_FAIL(wait_trans_end(wait_trans_ctx_, ObDDLTaskStatus::OBTAIN_SNAPSHOT))) {
+          LOG_WARN("fail to wait trans end", K(ret));
         }
         break;
       case ObDDLTaskStatus::OBTAIN_SNAPSHOT:
         if (OB_FAIL(obtain_snapshot(ObDDLTaskStatus::REDEFINITION))) {
+          LOG_WARN("fail to wait trans end", K(ret));
         }
         break;
       case ObDDLTaskStatus::REDEFINITION:
         if (OB_FAIL(table_redefinition(ObDDLTaskStatus::COPY_TABLE_DEPENDENT_OBJECTS))) {
+          LOG_WARN("fail to do table redefinition", K(ret));
         }
         break;
       case ObDDLTaskStatus::COPY_TABLE_DEPENDENT_OBJECTS:
         if (OB_FAIL(copy_table_dependent_objects(ObDDLTaskStatus::MODIFY_AUTOINC))) {
+          LOG_WARN("fail to copy table dependent objects", K(ret));
         }
         break;
       case ObDDLTaskStatus::MODIFY_AUTOINC:
         if (OB_FAIL(modify_autoinc(ObDDLTaskStatus::TAKE_EFFECT))) {
+          LOG_WARN("fail to modify autoinc", K(ret));
         }
         break;
       case ObDDLTaskStatus::TAKE_EFFECT:
         if (OB_FAIL(take_effect(ObDDLTaskStatus::SUCCESS))) {
+          LOG_WARN("fail to take effect", K(ret));
         }
         break;
       case ObDDLTaskStatus::FAIL:
         if (OB_FAIL(fail())) {
+          LOG_WARN("fail to do clean up", K(ret));
         }
         break;
       case share::ObDDLTaskStatus::SUCCESS:
         if (OB_FAIL(success())) {
+          LOG_WARN("fail to success", K(ret));
         }
         break;
       default:

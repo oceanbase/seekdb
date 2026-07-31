@@ -198,6 +198,7 @@ private:
     int ret = common::OB_SUCCESS;
     if (NULL == cur_blk_ || mem_size > blk_buf_.remain()) {
       if (OB_FAIL(new_block(mem_size))) {
+        SQL_ENG_LOG(WARN, "fail to new block", K(ret), K(mem_size));
       } else {
         cur_blk_ = static_cast<ColumnBlock *>(blk_);
       }
@@ -317,6 +318,7 @@ inline int ObTempColumnStore::to_buf(const ObFixedLengthBase* vec,
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(to_buf(static_cast<const ObBitmapNullVectorBase*>(vec), selector, size, buf, pos))) {
+    SQL_ENG_LOG(WARN, "fail to convert null bitmap to buffer", K(ret));
   } else {
     const ObLength len = vec->get_length();
     *reinterpret_cast<ObLength *>(buf + pos) = len;
@@ -377,6 +379,7 @@ inline int ObTempColumnStore::to_buf(const ObContinuousBase* vec,
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(to_buf(static_cast<const ObBitmapNullVectorBase*>(vec), selector, size, buf, pos))) {
+    SQL_ENG_LOG(WARN, "fail to convert null bitmap to buffer", K(ret));
   } else {
     const uint32_t *src_offsets = vec->get_offsets();
     uint32_t *offsets = reinterpret_cast<uint32_t *>(buf + pos);
@@ -445,6 +448,7 @@ inline int ObTempColumnStore::to_buf(const ObDiscreteBase* vec,
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(to_buf(static_cast<const ObBitmapNullVectorBase*>(vec), selector, size, buf, pos))) {
+    SQL_ENG_LOG(WARN, "fail to convert null bitmap to buffer", K(ret));
   } else {
     uint32_t *offsets = reinterpret_cast<uint32_t *>(buf + pos);
     pos += (size + 1) * sizeof(uint32_t);

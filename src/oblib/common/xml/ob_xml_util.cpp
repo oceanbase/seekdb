@@ -122,11 +122,14 @@ int ObXmlUtil::append_newline_and_indent(ObStringBuffer &j_buf, uint64_t level, 
     ret = OB_ERR_JSON_OUT_OF_DEPTH;  // error code need change
     LOG_WARN("is_pretty level is too deep", K(ret), K(level));
   } else if (OB_FAIL(j_buf.append("\n"))) {
+    LOG_WARN("fail to append newline to buffer", K(ret), K(level), K(size));
   } else if (OB_FAIL(j_buf.reserve(level * size))) {
+    LOG_WARN("fail to reserve memory for buffer", K(ret), K(level), K(size));
   } else {
     char str[level * size];
     MEMSET(str, ' ', level * size);
     if (OB_FAIL(j_buf.append(str, level * size))) {
+      LOG_WARN("fail to append space to buffer", K(ret), K(level), K(size));
     }
   }
   
@@ -137,7 +140,9 @@ int ObXmlUtil::append_qname(ObStringBuffer &j_buf, const ObString& prefix, const
   INIT_SUCC(ret);
   if (!prefix.empty()) {
     if (OB_FAIL(j_buf.append(prefix))) {
+      LOG_WARN("fail to print prefix in attr", K(ret), K(prefix));
     } else if (OB_FAIL(j_buf.append(":"))) {
+      LOG_WARN("fail to print : in attr", K(ret));
     }
   }
   if (OB_SUCC(ret) && !localname.empty() && OB_FAIL(j_buf.append(localname))) {
@@ -193,9 +198,11 @@ int ObMulModeFactory::get_xml_base(ObMulModeMemCtx *ctx,
     LOG_WARN("xml input is empty", K(ret), KP(ptr), K(length));
   } else if (parse_type == ObMulModeNodeType::M_CONTENT) {
     if (OB_FAIL(ObXmlParserUtils::parse_content_text(ctx, xml, document))) {
+      LOG_WARN("failed to parse xml content", K(ret), K(length));
     }
   } else if (parse_type == ObMulModeNodeType::M_DOCUMENT) {
     if (OB_FAIL(ObXmlParserUtils::parse_document_text(ctx, xml, document))) {
+      LOG_WARN("failed to parse xml document", K(ret), K(length));
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
@@ -371,6 +378,7 @@ int ObXmlUtil::to_number(const char *in, const uint64_t length, double &out)
         endptr += ObCharset::scan_str(endptr, in + length, OB_SEQ_SPACES);
         if (endptr < in + length) {
           ret = OB_ERR_DATA_TRUNCATED; //1265
+          LOG_DEBUG("check_convert_str_err", K(length), K(in - endptr));
         }
       }
     }
@@ -391,6 +399,7 @@ int ObXmlUtil::to_number(ObPathStr *in, double &out)
     ret = OB_OP_NOT_ALLOW;
 	  LOG_WARN("ArgNodeContent check bool rule invalid value", K(ret), K(in));
   } else if (OB_FAIL(to_number(in->name_, in->len_, out))) {
+		LOG_WARN("to number failed", K(ret));
 	}
 	return ret;
 }
@@ -586,7 +595,9 @@ int ObXmlUtil::dfs_xml_text_node(ObMulModeMemCtx *ctx, ObIMulModeBase *xml_doc, 
   ObString default_ns; // unused
   ObIMulModeBase *result_node = NULL;
   if (OB_FAIL(xpath_iter.init(ctx, xpath_str, default_ns, xml_doc, NULL))) {
+    LOG_WARN("fail to init xpath iterator", K(xpath_str), K(default_ns), K(ret));
   } else if (OB_FAIL(xpath_iter.open())) {
+    LOG_WARN("fail to open xpath iterator", K(ret));
   }
 	
   while (OB_SUCC(ret)) {
@@ -602,7 +613,9 @@ int ObXmlUtil::dfs_xml_text_node(ObMulModeMemCtx *ctx, ObIMulModeBase *xml_doc, 
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid xml node type", K(ret), K(result_node->type()));
     } else if (OB_FAIL(result_node->get_value(content))) {
+      LOG_WARN("fail to get text node content", K(ret));
     } else if (OB_FAIL(buff.append(content))) {
+      LOG_WARN("fail to append text node content", K(ret), K(content));
     }
   }
 
@@ -630,8 +643,10 @@ int ObXmlUtil::get_array_from_mode_base(ObIMulModeBase *node, ObIArray<ObIMulMod
 			LOG_WARN("xml node null", K(ret));
   } else if (!is_container_tc(node->type())) {
     if (OB_FAIL(res.push_back(node))) {
+      LOG_WARN("get child failed", K(ret), K(node->type()));
     }
-  } else if (OB_FAIL(node->get_children(res))) {
+  } else if (OB_FAIL(node->get_children(res))) { // get children
+    LOG_WARN("get child failed", K(ret), K(node));
   }
 	return ret;
 }
@@ -691,10 +706,12 @@ int ObXmlUtil::revert_escape_character(ObIAllocator &allocator, ObString &input_
     if (*(ptr+idx) == '&' && ObXmlParserUtils::is_entity_ref(input_str, idx, ref, ref_len)) {
       // append entity ref and increment idx
       if (OB_FAIL(buff.append(ref))) {
+        LOG_WARN("fail to append ref char", K(ret));
       } else {
         idx += ref_len;
       }
     } else if (OB_FAIL(buff.append(ptr+idx, 1))) {
+      LOG_WARN("fail to append char", K(ret));
     } else {
       idx++;
     }
@@ -703,6 +720,7 @@ int ObXmlUtil::revert_escape_character(ObIAllocator &allocator, ObString &input_
   if (OB_SUCC(ret)) {
     ObString res(buff.length(), buff.ptr());
     if (OB_FAIL(ob_write_string(allocator, res, output_str))) {
+      LOG_WARN("fail to write string", K(ret), K(res));
     }
   }
 
@@ -735,8 +753,10 @@ int ObXmlUtil::delete_dup_ns_definition(ObIMulModeBase *data, ObNsSortedVector& 
         if (ret == OB_ENTRY_NOT_EXIST) { // didn't find, not duplicate ns, it's normal
           ret = OB_SUCCESS;
         }
-      } else if (OB_FAIL(delete_vec.push_back(*pos))) {
-      } else if (OB_FAIL(origin_vec.remove(pos))) {
+      } else if (OB_FAIL(delete_vec.push_back(*pos))) { // record ns that will be delete
+        LOG_WARN("failed to record", K(ret), K(i));
+      } else if (OB_FAIL(origin_vec.remove(pos))) { // remove duplicate ns
+        LOG_WARN("failed to remove duplicate", K(ret), K(i));
       }
     }
   }
@@ -766,6 +786,7 @@ int ObXmlUtil::add_ns_def_if_necessary(uint32_t format_flag, ObStringBuffer &x_b
       }
     } else if (OB_NOT_NULL(pos)) {
       if (OB_FAIL(x_buf.append(" "))) {
+        LOG_WARN("fail to print space in ns", K(ret));
       }
       // append default ns or prefix ns
       if (OB_FAIL(ret)) {
@@ -773,22 +794,30 @@ int ObXmlUtil::add_ns_def_if_necessary(uint32_t format_flag, ObStringBuffer &x_b
                 || (*pos)->key_.length() == 0 
                 || (*pos)->key_.case_compare("xmlns") == 0) {
         if (OB_FAIL(x_buf.append("xmlns"))) {
+          LOG_WARN("fail to append default ns", K(ret));
         }
       } else if (OB_FAIL(ObXmlUtil::append_qname(x_buf, "xmlns", (*pos)->key_))) {
+        LOG_WARN("fail to print prefix in ns", K(ret));
       }
       // append ns value
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(x_buf.append("=\""))) {
+        LOG_WARN("fail to print =\" in ns", K(ret));
       } else if (!(format_flag & NO_ENTITY_ESCAPE)) {
         if (OB_FAIL(ObXmlParserUtils::escape_xml_text((*pos)->value_, x_buf))) {
+          LOG_WARN("fail to print text with escape char", K(ret));
         }
       } else if (OB_FAIL(x_buf.append((*pos)->value_))) {
+        LOG_WARN("fail to print value in ns", K(ret), K((*pos)->value_));
       }
       // delete ns definition that already printed
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(x_buf.append("\""))) {
-      } else if (OB_FAIL(delete_ns_vec.push_back(*pos))) {
-      } else if (OB_FAIL(element_ns_vec->remove(pos))) {
+        LOG_WARN("fail to print \" in ns", K(ret));
+      } else if (OB_FAIL(delete_ns_vec.push_back(*pos))) { // record duplicate ns
+        LOG_WARN("failed to record duplicate", K(ret));
+      } else if (OB_FAIL(element_ns_vec->remove(pos))) { // remove duplicate ns
+        LOG_WARN("failed to remove duplicate", K(ret));
       }
     }
   }
@@ -813,6 +842,7 @@ int ObXmlUtil::add_attr_ns_def(ObIMulModeBase *cur, uint32_t format_flag, ObStri
         ObString prefix = attribute->get_prefix();
         if (prefix.empty()) {
         } else if (OB_FAIL(ObXmlUtil::add_ns_def_if_necessary(format_flag, buf, prefix, element_ns_vec, delete_ns_vec))) {
+          LOG_WARN("failed to add attribute ns.", K(ret));
         }
       }
     }
@@ -831,6 +861,7 @@ int ObXmlUtil::restore_ns_vec(ObNsSortedVector* element_ns_vec, ObVector<ObNsPai
     for (int i = 0; OB_SUCC(ret) && i < delete_ns_vec.size(); ++i) {
       ObNsSortedVector::iterator pos = element_ns_vec->end();
       if (OB_FAIL(element_ns_vec->insert_unique(delete_ns_vec[i], pos, cmp, unique))) {
+        LOG_WARN("failed to restore ns", K(ret), K(i));
       }
     }
   }

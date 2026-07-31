@@ -103,10 +103,12 @@ void ObReqQueue::loop()
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("invalid argument", K(qhandler_));
   } else if (OB_FAIL(qhandler_->onThreadCreated(nullptr))) {
+    LOG_ERROR("do thread created fail, thread will exit", K(ret));
   } else {
     // The main loop threads process tasks.
     while (!Thread::current().has_set_stop()) {
       if (OB_FAIL(queue_.pop(task, timeout))) {
+        LOG_DEBUG("queue pop task fail", K(&queue_));
       } else if (NULL != task) {
         process_task(task);  // ignore return code.
       } else {
@@ -123,6 +125,7 @@ void ObReqQueue::loop()
     ret = OB_SUCCESS;
     while (queue_.size() > 0 && OB_SUCC(ret)) {
       if (OB_FAIL(queue_.pop(task, timeout))) {
+        LOG_DEBUG("queue pop task fail", K(&queue_));
         if(OB_ENTRY_NOT_EXIST == ret) {
           // lightyqueue may return OB_ENTRY_NOT_EXIST when tasks existing
           ret = OB_SUCCESS;
@@ -137,6 +140,7 @@ void ObReqQueue::loop()
 
     // No matter error occurred before or not.
     if (OB_FAIL(qhandler_->onThreadDestroy(nullptr))) {
+      OB_LOG(ERROR, "handle thread destroy fail", K(ret));
     }
   }
 }

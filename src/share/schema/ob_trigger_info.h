@@ -276,8 +276,11 @@ public:
   {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(deep_copy_str(trigger_name, trigger_name_))) {
+      SHARE_SCHEMA_LOG(WARN, "failed to deep copy trigger name", K(ret), K(trigger_name));
     } else if (OB_FAIL(package_spec_info_.set_package_name(trigger_name))) {
+      SHARE_SCHEMA_LOG(WARN, "failed to set package name", K(ret), K(trigger_name));
     } else if (OB_FAIL(package_body_info_.set_package_name(trigger_name))) {
+      SHARE_SCHEMA_LOG(WARN, "failed to set package name", K(ret), K(trigger_name));
     }
     return ret;
   }
@@ -317,7 +320,9 @@ public:
   {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(package_spec_info_.set_exec_env(exec_env))) {
+      SHARE_SCHEMA_LOG(WARN, "failed to set package exec env", K(ret), K(exec_env));
     } else if (OB_FAIL(package_body_info_.set_exec_env(exec_env))) {
+      SHARE_SCHEMA_LOG(WARN, "failed to set package exec env", K(ret), K(exec_env));
     }
     return ret;
   }

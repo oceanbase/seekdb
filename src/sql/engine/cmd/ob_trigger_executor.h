@@ -29,7 +29,6 @@ namespace oceanbase
 namespace sql
 {
 class ObExecContext;
-class ObIPLSqlRuntime;
 class ObCreateTriggerStmt;
 class ObAlterTriggerStmt;
 class ObDropTriggerStmt;
@@ -42,9 +41,6 @@ public:
   int execute(ObExecContext &ctx, ObCreateTriggerStmt &stmt);
   int analyze_dependencies(share::schema::ObSchemaGetterGuard &schema_guard,
                            ObSQLSessionInfo *session_info,
-                           ObPlanCache &plan_cache,
-                           ObIPLSqlRuntime *pl_sql_runtime,
-                           pl::ObPL *pl_engine,
                            common::ObMySQLProxy *sql_proxy,
                            ObIAllocator &allocator,
                            obcall::ObCreateTriggerArg &arg);

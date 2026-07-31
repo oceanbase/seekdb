@@ -42,6 +42,7 @@ int ObShareUtil::get_server_ip(
     LOG_WARN("convert server IP to string failed", K(ret));
   } else if (OB_FAIL(ob_write_string(
                  allocator, ObString::make_string(ip_buffer), ip_string))) {
+    LOG_WARN("copy server IP failed", K(ret));
   } else if (ip_string.empty()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("server IP is empty", K(ret));
@@ -69,11 +70,15 @@ int ObShareUtil::set_default_timeout_ctx(ObTimeoutCtx &ctx, const int64_t defaul
     abs_timeout_ts = ObTimeUtility::current_time() + default_timeout;
   }
   if (OB_FAIL(ctx.set_abs_timeout(abs_timeout_ts))) {
+    LOG_WARN("set timeout failed", KR(ret), K(abs_timeout_ts), K(ctx_timeout_ts),
+        K(worker_timeout_ts), K(default_timeout));
   } else if (ctx.is_timeouted()) {
     ret = OB_TIMEOUT;
     LOG_WARN("timeouted", KR(ret), K(abs_timeout_ts), K(ctx_timeout_ts),
         K(worker_timeout_ts), K(default_timeout));
   } else {
+    LOG_TRACE("set_default_timeout_ctx success", K(abs_timeout_ts),
+        K(ctx_timeout_ts), K(worker_timeout_ts), K(default_timeout));
   }
   return ret;
 }
@@ -89,6 +94,7 @@ int ObShareUtil::get_rs_default_timeout_ctx(ObTimeoutCtx &ctx)
 #endif
 
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, DEFAULT_TIMEOUT_US))) {
+    LOG_WARN("fail to set default_timeout_ctx", KR(ret));
   }
   return ret;
 }
@@ -98,6 +104,7 @@ int ObShareUtil::get_abs_timeout(const int64_t default_timeout, int64_t &abs_tim
   int ret = OB_SUCCESS;
   ObTimeoutCtx ctx;
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
+    LOG_WARN("fail to set default timeout ctx", KR(ret), K(default_timeout));
   } else {
     abs_timeout = ctx.get_abs_timeout();
   }
@@ -109,6 +116,7 @@ int ObShareUtil::get_ctx_timeout(const int64_t default_timeout, int64_t &timeout
   int ret = OB_SUCCESS;
   ObTimeoutCtx ctx;
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
+    LOG_WARN("fail to set default timeout ctx", KR(ret), K(default_timeout));
   } else {
     timeout = ctx.get_timeout();
   }
@@ -135,10 +143,12 @@ int ObShareUtil::get_ora_rowscn(
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     ObMySQLResult *result = NULL;
     if (OB_FAIL(client.read(res, sql.ptr()))) {
+      LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (NULL == (result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get sql result", KR(ret));
     } else if (OB_FAIL(result->next())) {
+      LOG_WARN("fail to get next row", KR(ret));
     } else {
       EXTRACT_INT_FIELD_MYSQL(*result, "ORA_ROWSCN", ora_rowscn_val, int64_t);
       if (FAILEDx(ora_rowscn.convert_for_inner_table_field(ora_rowscn_val))) {
@@ -174,6 +184,7 @@ int ObShareUtil::check_if_server_role_is_primary(bool &is_primary)
   is_primary = false;
   ObServerRole::Role server_role;
   if (OB_FAIL(get_server_role(server_role))) {
+    LOG_WARN("fail to execute get_server_role", KR(ret));
   } else if (is_primary_role(server_role)) {
     is_primary = true;
   }
@@ -186,6 +197,7 @@ int ObShareUtil::check_if_server_role_is_standby(bool &is_standby)
   is_standby = false;
   ObServerRole::Role server_role;
   if (OB_FAIL(get_server_role(server_role))) {
+    LOG_WARN("fail to execute get_server_role", KR(ret));
   } else if (is_standby_role(server_role)) {
     is_standby = true;
   }
@@ -205,6 +217,7 @@ int ObShareUtil::check_if_server_role_state_is_primary(bool &is_primary)
   share::ObServerRole server_role;
   is_primary = false;
   if (OB_FAIL(get_server_role_state(server_role))) {
+    LOG_WARN("fail to execute get_server_role_state", KR(ret));
   } else if (server_role.is_primary()) {
     is_primary = true;
   }
@@ -216,6 +229,7 @@ int ObShareUtil::check_if_server_role_state_is_standby(bool &is_standby)
   share::ObServerRole server_role;
   is_standby = false;
   if (OB_FAIL(get_server_role_state(server_role))) {
+    LOG_WARN("fail to execute get_server_role_state", KR(ret));
   } else if (server_role.is_standby()) {
     is_standby = true;
   }
@@ -230,10 +244,13 @@ int ObShareUtil::gen_default_server_runtime_schema(
   runtime_schema.reset();
   int64_t schema_version = 0;
   if (OB_FAIL(runtime_schema.set_runtime_name(OB_SERVER_RUNTIME_NAME))) {
+    LOG_WARN("set_runtime_name failed", "runtime_name", OB_SERVER_RUNTIME_NAME, KR(ret));
   } else if (OB_FAIL(runtime_schema.set_comment("server runtime"))) {
+    LOG_WARN("set_comment failed", "comment", "server runtime", KR(ret));
   } else {
     ObGlobalStatProxy proxy(sql_client);
     if (OB_FAIL(proxy.get_baseline_schema_version(schema_version))) {
+      LOG_WARN("get_baseline_schema_version failed", KR(ret));
     } else if (-1 == schema_version) {
       LOG_INFO("use bootstrap schema version", KR(ret));
       schema_version = 1;

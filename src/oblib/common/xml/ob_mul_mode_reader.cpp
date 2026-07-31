@@ -93,6 +93,7 @@ int ObMulModeReader::attr_next(ObIMulModeBase*& node, ObMulModeNodeType filter_t
       } else if (OB_ISNULL(seek_info_.filter_)) {
         is_found = true;
       } else if (OB_FAIL((*seek_info_.filter_)(node, is_found))) {
+        LOG_WARN("failed to filter node.", K(ret));
       }
     }
   }
@@ -117,6 +118,7 @@ int ObMulModeReader::scan_next(ObIMulModeBase*& node)
       if (OB_ISNULL(seek_info_.filter_)) {
         is_found = true;
       } else if (OB_FAIL((*seek_info_.filter_)(node, is_found))) {
+        LOG_WARN("failed to filter node.", K(ret));
       }
     }
   }
@@ -134,11 +136,13 @@ int ObMulModeReader::next(ObIMulModeBase*& node)
   } else {
     if (!(flags_ & SEEK_FLAG)) {
       if (OB_FAIL(scan_next(node))) {
+        LOG_WARN("fail to filter next node.", K(ret));
       }
     } else if (seek_info_.type_ == KEY_TYPE) {
       if (get_mul_mode_tc(cur_->type()) != MulModeContainer) {
         ret = OB_ITER_END;
       } else if (OB_FAIL(scan_next(node))) {
+        LOG_WARN("fail to get key match children xnode.", K(ret));
       }
     } else if (seek_info_.type_ == INDEX_TYPE) {
       node = cur_->at(seek_info_.index_);
@@ -150,6 +154,7 @@ int ObMulModeReader::next(ObIMulModeBase*& node)
       if (get_mul_mode_tc(cur_->type()) != MulModeContainer) {
         ret = OB_ITER_END;
       } else if (OB_FAIL(scan_next(node))) {
+        LOG_WARN("fail to filter next node.", K(ret));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;

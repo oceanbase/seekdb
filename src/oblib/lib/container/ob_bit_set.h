@@ -169,6 +169,7 @@ int ObSegmentBitSet<N, BlockAllocatorT>::add_member(int64_t index)
     if (OB_UNLIKELY(pos >= bitset_word_array_.count())) {
       for (int64_t i = bitset_word_array_.count(); OB_SUCC(ret) && i <= pos; ++i) {
         if (OB_FAIL(bitset_word_array_.push_back(0))) {
+          LIB_LOG(WARN, "fail to push back element into array", K(index), K(ret));
         }
       }
     }
@@ -481,6 +482,7 @@ public:
       //make up elements
       for (int64_t i = this_count; OB_SUCC(ret) && i < other_count; ++i) {
         if (OB_FAIL(bitset_word_array_.push_back(0))) {
+          LIB_LOG(WARN, "fail to push back element into array", K(ret));
         }
       }
     }
@@ -608,6 +610,7 @@ int ObBitSet<N, BlockAllocatorT, auto_free>::add_member(int64_t index)
     if (OB_UNLIKELY(pos >= bitset_word_array_.count())) {
       for (int64_t i = bitset_word_array_.count(); OB_SUCC(ret) && i <= pos; ++i) {
         if (OB_FAIL(bitset_word_array_.push_back(0))) {
+          LIB_LOG(WARN, "fail to push back element into array", K(index), K(ret));
         }
       }
     }
@@ -691,6 +694,7 @@ int ObBitSet<N, BlockAllocatorT, auto_free>::add_members(const ObBitSet &other)
     //make up elements
     for (int64_t i = this_count; OB_SUCC(ret) && i < other_count; ++i) {
       if (OB_FAIL(bitset_word_array_.push_back(0))) {
+        LIB_LOG(WARN, "fail to push back element into array", K(ret));
       }
     }
   }
@@ -869,6 +873,7 @@ int ObBitSet<N, BlockAllocatorT, auto_free>::to_array(ObIArray<int64_t> &arr) co
   for (int64_t i = 0; OB_SUCC(ret) && count < num && i < max_bit_count; ++i) {
     if (has_member(i)) {
       if (OB_FAIL(arr.push_back(i))) {
+        LIB_LOG(WARN, "failed to push back i onto array", K(i), K(ret));
       } else {
         ++count;
       }

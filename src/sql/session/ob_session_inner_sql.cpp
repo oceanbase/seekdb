@@ -1,17 +1,6 @@
 /*
  * Copyright (c) 2025 OceanBase.
- *
  * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL
@@ -31,8 +20,9 @@ namespace oceanbase
 namespace query
 {
 
-ObSessionInnerSql::ObSessionInnerSql(void *native_session)
+ObSessionInnerSql::ObSessionInnerSql(void *native_session, void *native_sql_proxy)
   : native_session_(native_session),
+    native_sql_proxy_(native_sql_proxy),
     native_connection_(nullptr),
     connection_guard_(),
     owns_connection_(false),
@@ -46,7 +36,7 @@ ObSessionInnerSql::~ObSessionInnerSql()
 
 bool ObSessionInnerSql::is_valid() const
 {
-  return nullptr != native_session_;
+  return nullptr != native_session_ && nullptr != native_sql_proxy_;
 }
 
 uint32_t ObSessionInnerSql::server_session_id() const
@@ -61,8 +51,10 @@ int ObSessionInnerSql::open_()
   int ret = common::OB_SUCCESS;
   sql::ObSQLSessionInfo *session =
       static_cast<sql::ObSQLSessionInfo *>(native_session_);
+  common::ObMySQLProxy *sql_proxy =
+      static_cast<common::ObMySQLProxy *>(native_sql_proxy_);
   if (nullptr != native_connection_) {
-  } else if (OB_ISNULL(session)) {
+  } else if (OB_ISNULL(session) || OB_ISNULL(sql_proxy)) {
     ret = common::OB_NOT_INIT;
   } else if (nullptr != session->get_inner_conn()) {
     native_connection_ = session->get_inner_conn();
@@ -70,6 +62,8 @@ int ObSessionInnerSql::open_()
                  ObInnerSQLConnectionAccess::
                      create_connection_with_external_session(
                          session, connection_guard_))) {
+    LOG_WARN("acquire session inner SQL connection failed", KR(ret),
+             K(server_session_id()));
   } else if (OB_ISNULL(native_connection_ = connection_guard_.get_ptr())) {
     ret = common::OB_ERR_UNEXPECTED;
   } else {
@@ -101,6 +95,7 @@ int ObSessionInnerSql::execute_write(const common::ObSqlString &sql,
                                native_connection_))) {
     ret = common::OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(connection->execute_write(sql.ptr(), affected_rows))) {
+    LOG_WARN("execute session inner write failed", KR(ret), K(sql));
   }
   if (OB_FAIL(ret)) {
     last_error_ = ret;
@@ -119,6 +114,7 @@ int ObSessionInnerSql::execute_read(const common::ObSqlString &sql,
                                native_connection_))) {
     ret = common::OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(connection->execute_read(sql.ptr(), result))) {
+    LOG_WARN("execute session inner read failed", KR(ret), K(sql));
   }
   if (OB_FAIL(ret)) {
     last_error_ = ret;

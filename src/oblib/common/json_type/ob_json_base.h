@@ -18,11 +18,9 @@
 #define OCEANBASE_SQL_OB_JSON_BASE
 
 #include "ob_json_path.h"
-#include "common/mysqlclient/ob_mysql_global.h" // DOUBLE_TO_STRING_CONVERSION_BUFFER_SIZE
 #include "common/number/ob_number_v2.h" // for number::ObNumber
 #include "common/timezone/ob_time_convert.h" // for ObTime
 #include "common/timezone/ob_timezone_info.h"
-#include "lib/charset/ob_dtoa.h" // ob_gcvt
 
 namespace oceanbase {
 namespace common {
@@ -1267,22 +1265,7 @@ public:
   // @param [out] num   The result of change.
   // @return Returns OB_SUCCESS on success, error code otherwise.
   template<class T>
-  static int double_to_number(double d, T &allocator, number::ObNumber &num)
-  {
-    INIT_SUCC(ret);
-    char buf[DOUBLE_TO_STRING_CONVERSION_BUFFER_SIZE] = {0};
-    uint64_t length = ob_gcvt(d, ob_gcvt_arg_type::OB_GCVT_ARG_DOUBLE,
-                              sizeof(buf) - 1, buf, NULL);
-    ObString str(sizeof(buf), static_cast<int32_t>(length), buf);
-    ObPrecision res_precision = PRECISION_UNKNOWN_YET;
-    ObScale res_scale = NUMBER_SCALE_UNKNOWN_YET;
-
-    if (OB_FAIL(num.from_sci_opt(str.ptr(), str.length(), allocator,
-                                 &res_precision, &res_scale))) {
-    }
-
-    return ret;
-  }
+  static int double_to_number(double d, T &allocator, number::ObNumber &num);
 
   // Change number to uint
   //

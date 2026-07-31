@@ -569,6 +569,7 @@ bool ObNetUtil::is_in_white_list(const ObString &client_ip, ObString &orig_ip_wh
         if (ObNetUtil::is_match(client_ip, invited_ip)) {
           ret_bool = true;
         }
+        LOG_TRACE("match result", K(ret_bool), K(client_ip), K(invited_ip));
       }
     }
     if (!ret_bool) {
@@ -579,6 +580,7 @@ bool ObNetUtil::is_in_white_list(const ObString &client_ip, ObString &orig_ip_wh
         LOG_WARN_RET(OB_SUCCESS, "client ip is not in ip_white_list", K(client_ip), K(orig_ip_white_list));
       } else {
         ret_bool = true;
+        LOG_TRACE("match result", K(ret_bool), K(client_ip), K(ip_white_list));
       }
     }
   }

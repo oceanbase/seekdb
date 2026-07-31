@@ -58,6 +58,7 @@ public:
         LIB_LOG(WARN, "buffer is null", K(ret), K(stack_), K(heap_), K(capacity_));
       } else {
         if (OB_FAIL(copy_assign(obj, buffer[idx]))) {
+          LIB_LOG(WARN, "failed to copy data", K(ret));
         }
       }
     }
@@ -166,6 +167,7 @@ int ObFastArray<T, LOCAL_ARRAY_SIZE>::push_back(const T &obj)
       ret = OB_ERR_UNEXPECTED;
       LIB_LOG(WARN, "buffer is null", K(ret), K(capacity_), K(buffer));
     } else if (OB_FAIL(construct_assign(buffer[count_], obj))) {
+      LIB_LOG(WARN, "failed to construct obj", K(ret));
     } else {
       ++count_;
     }
@@ -190,7 +192,9 @@ int ObFastArray<T, LOCAL_ARRAY_SIZE>::push_back_when_full(const T &obj)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LIB_LOG(WARN, "allocate memory failed", K(ret), K(capacity_), K(count_), K(new_buffer));
     } else if (OB_FAIL(objects_copy(new_buffer, source, capacity_))) {
+      LIB_LOG(WARN, "failed to move memory space", K(ret));
     } else if (OB_FAIL(construct_assign(new_buffer[capacity_], obj))) {
+      LIB_LOG(WARN, "failed to construct obj", K(ret));
     } else {
       heap_ = new_buffer;
       capacity_ = 2 * capacity_;

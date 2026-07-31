@@ -35,6 +35,7 @@ ObReentrantThread::~ObReentrantThread()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(destroy())) {
+    LOG_WARN("destroy failed", K(ret));
   }
 }
 
@@ -49,6 +50,7 @@ int ObReentrantThread::create(const int64_t thread_cnt, const char* thread_name,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(thread_cnt));
   } else if (OB_FAIL(cond_.init(wait_event_id))) {
+    LOG_WARN("fail to init cond, ", K(ret));
   } else {
     thread_name_ = thread_name;
     ThreadPool::set_thread_count(thread_cnt);
@@ -68,6 +70,7 @@ int ObReentrantThread::destroy()
       created_ = false;
       int tmp_ret = cond_.broadcast();
       if (OB_SUCCESS != tmp_ret) {
+        LOG_WARN("condition broadcast failed", K(tmp_ret));
       }
     }
     ThreadPool::wait();
@@ -88,6 +91,7 @@ int ObReentrantThread::logical_start()
       stop_ = false;
       int tmp_ret = cond_.broadcast();
       if (OB_SUCCESS != tmp_ret) {
+        LOG_WARN("condition broadcast failed", K(tmp_ret));
       }
     }
   }
@@ -105,6 +109,7 @@ void ObReentrantThread::logical_stop()
     stop_ = true;
     int tmp_ret = cond_.broadcast();
     if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN("condition broadcast failed", K(tmp_ret));
     }
   }
 }
@@ -155,8 +160,11 @@ void ObReentrantThread::run1()
     }
   }
   if (OB_FAIL(before_blocking_run())) {
+    LOG_WARN("Failed to do before run", K(ret));
   } else if (OB_FAIL(blocking_run())) {
+    LOG_WARN("blocking run failed", K(ret));
   } else if (OB_FAIL(after_blocking_run())) {
+    LOG_WARN("Failed to do after run", K(ret));
   } else { }//do nothing
   LOG_INFO("reentrant thread exited", K(idx));
 }
@@ -188,6 +196,7 @@ int ObReentrantThread::blocking_run()
       running_cnt_--;
       int tmp_ret = cond_.broadcast();
       if (OB_SUCCESS != tmp_ret) {
+        LOG_WARN("condition broadcast failed", K(tmp_ret));
       }
     }
   }

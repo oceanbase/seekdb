@@ -62,6 +62,7 @@ int ObLogReader::read_log(LogCommand &cmd,
         SHARE_LOG(INFO, "reach the end of log", K(cur_log_file_id_));
         // Regardless of opening success or failure: cur_log_file_id++, log_file_reader_->pos will be set to zero,
         if (OB_FAIL(log_file_reader_->close())) {
+          SHARE_LOG(ERROR, "log_file_reader_ close error", K(ret));
         } else if (OB_FAIL(open_log_(++cur_log_file_id_, seq))
             && OB_READ_NOTHING != ret) {
           SHARE_LOG(WARN, "open log failed", K(cur_log_file_id_), K(seq), K(ret));
@@ -93,8 +94,10 @@ int ObLogReader::open_log_(const uint64_t log_file_id,
     ret = log_file_reader_->open(log_file_id, last_log_seq);
     if (is_wait_) {
       if (OB_FILE_NOT_EXIST == ret) {
+        SHARE_LOG(DEBUG, "log file doesnot exist", K(log_file_id));
         ret = OB_READ_NOTHING;
       } else if (OB_FAIL(ret)) {
+        SHARE_LOG(WARN, "log_file_reader_ open error", K(cur_log_file_id_), K(ret));
       }
     } else {
       if (OB_FAIL(ret)) {

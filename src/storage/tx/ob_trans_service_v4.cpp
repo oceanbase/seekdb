@@ -49,10 +49,12 @@ int ObTransService::create_ls(ObLS &ls,
                                                         *ls.get_tx_svr(),
                                                         param,
                                                         log_adapter))) {
+    TRANS_LOG(WARN, "create transaction context manager failed", K(ret), K(*this));
   } else {
     // do nothing
   }
   if (OB_FAIL(ret)) {
+    TRANS_LOG(WARN, "create transaction context manager failed", K(ret));
   } else {
     TRANS_LOG(INFO, "create transaction context manager success");
   }
@@ -71,6 +73,7 @@ int ObTransService::remove_ls(const bool graceful)
     ret = OB_NOT_RUNNING;
     TRANS_LOG(WARN, "ObTransService is not running", K(ret));
   } else if (OB_FAIL(tx_ctx_mgr_.remove_context_manager(graceful))) {
+    TRANS_LOG(WARN, "remove transaction context manager failed", K(ret), K(graceful));
   } else {
     TRANS_LOG(INFO, "remove transaction context manager success", K(graceful));
   }
@@ -85,6 +88,7 @@ int ObTransService::acquire_tx(const char* buf,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tx_desc_mgr_.alloc(tx))) {
+    TRANS_LOG(WARN, "alloc tx fail", K(ret), KPC(this));
   } else if (OB_FAIL(tx->deserialize(buf, len, pos))) {
     tx_desc_mgr_.revert(*tx);
     tx = NULL;
@@ -104,6 +108,7 @@ int ObTransService::acquire_tx(const char* buf,
                         OB_ID(addr), (void*)tx,
                         OB_ID(txid), tx->tx_id_);
   }
+  TRANS_LOG(TRACE, "acquire tx by deserialize", K(ret), K(*this), KP(buf), KPC(tx));
   return ret;
 }
 
@@ -136,6 +141,7 @@ int ObTransService::do_commit_tx_(ObTxDesc &tx,
   tx.set_commit_cb(&cb);
   tx.commit_expire_ts_ = expire_ts;
   if (OB_FAIL(tx.commit_task_.init(&tx, this))) {
+    TRANS_LOG(WARN, "init timeout task fail", K(ret), K(tx));
   } else if (OB_SUCC(local_ls_commit_tx_(tx.tx_id_,
                                          expire_ts,
                                          tx.op_sn_,
@@ -143,14 +149,19 @@ int ObTransService::do_commit_tx_(ObTxDesc &tx,
                                          commit_version))
              || !commit_need_retry_(ret)) {
     if (OB_FAIL(ret)) {
+      TRANS_LOG(WARN, "local ls commit tx fail", K(ret), K(tx));
     } else {
+      TRANS_LOG(TRACE, "local ls commit tx started", K(tx));
     }
   } else {
     // get gts cache as commit start scn
     if (OB_FAIL(ts_mgr_->get_gts(tx.commit_start_scn_))) {
+      TRANS_LOG(WARN, "get gts cache fail", K(ret));
     }
     if (OB_FAIL(do_commit_tx_slowpath_(tx))) {
+      TRANS_LOG(WARN, "commit tx slowpath fail", K(ret), K(tx));
     } else {
+      TRANS_LOG(TRACE, "commit retry started", K(tx), K_(self));
     }
   }
   // start commit fail
@@ -178,10 +189,12 @@ int ObTransService::do_commit_tx_slowpath_(ObTxDesc &tx)
     ++tx.commit_times_;
   } else if (commit_need_retry_(commit_ret)) {
     if (OB_FAIL(register_commit_retry_task_(tx, POST_COMMIT_REQ_RETRY_INTERVAL))) {
+      TRANS_LOG(WARN, "register retry commit task fail", K(ret), K(commit_ret), K(tx));
     }
   } else {
     ret = handle_tx_commit_result_(tx, commit_ret, commit_version);
   }
+  TRANS_LOG(TRACE, "retry local tx commit", K(ret), K(commit_ret), K(tx));
   return ret;
 }
 
@@ -200,6 +213,7 @@ int ObTransService::register_commit_retry_task_(ObTxDesc &tx, int64_t max_delay)
     delay = ObRandom::rand(MIN_DELAY, delay);
   }
   if (OB_FAIL(tx_desc_mgr_.acquire_tx_ref(tx.tx_id_))) {
+    TRANS_LOG(WARN, "acquire tx ref fail", KR(ret), K(tx));
   } else {
     if (OB_FAIL(timer_.register_timeout_task(tx.commit_task_, delay))) {
       TRANS_LOG(WARN, "register tx retry task fail", KR(ret), K(delay), K(tx));
@@ -215,6 +229,7 @@ int ObTransService::register_commit_retry_task_(ObTxDesc &tx, int64_t max_delay)
   TRANS_LOG(INFO, "register commit retry task", K(ret), K(delay), K(tx));
 #else
   if (OB_FAIL(ret)) {
+    TRANS_LOG(WARN, "register commit retry task fail", K(ret), K(delay), K(tx));
   }
 #endif
   ObTransTraceLog &tlog = tx.get_tlog();
@@ -238,10 +253,12 @@ int ObTransService::unregister_commit_retry_task_(ObTxDesc &tx)
     // task has been scheduled but hasn't ran and won't ran in the future
     // release ref of TxDesc hold by task.
     tx_desc_mgr_.revert(tx);
+    TRANS_LOG(TRACE, "timeout task deregistered", K(tx));
   } else if(OB_TIMER_TASK_HAS_NOT_SCHEDULED == ret) {
     // task has been scheduled and then was picked up to run
     // it must will run finally, its ref will handle by itself.
     ret = OB_SUCCESS;
+    TRANS_LOG(TRACE, "timeout task not scheduled, deregistered", K(tx));
   } else if (FALSE_IT(tx.commit_task_.set_registered(false))) {
   } else {
     TRANS_LOG(WARN, "deregister timeout task fail", K(ret), K(tx));
@@ -274,6 +291,7 @@ int ObTransService::handle_tx_commit_timeout(ObTxDesc &tx, const int64_t delay)
     if (!tx.commit_task_.is_registered()){
       TRANS_LOG(INFO, "task canceled", K(tx));
     } else if (OB_FAIL(unregister_commit_retry_task_(tx))) {
+      TRANS_LOG(ERROR, "deregister timeout task fail", K(tx), K(ret));
     } else if (tx.flags_.RELEASED_) {
       TRANS_LOG(INFO, "tx released, cancel commit retry", K(tx));
     } else if (tx.state_ != ObTxDesc::State::IN_TERMINATE) {
@@ -314,6 +332,7 @@ int ObTransService::handle_tx_commit_result(const ObTransID &tx_id,
   int ret = OB_SUCCESS;
   ObTxDesc *tx = NULL;
   if (OB_FAIL(tx_desc_mgr_.get(tx_id, tx))) {
+    TRANS_LOG(WARN, "cannot found tx by id", K(ret), K(tx_id), K(result));
   } else {
     bool need_cb = false;
     tx->lock_.lock();
@@ -364,6 +383,7 @@ int ObTransService::handle_tx_commit_result_(ObTxDesc &tx,
     commit_fin = false;
     if (tx.commit_task_.is_registered()) {
       if (OB_FAIL(unregister_commit_retry_task_(tx))) {
+        TRANS_LOG(ERROR, "deregister timeout task fail", K(tx));
       }
     }
     if (OB_SUCC(ret)) {
@@ -422,6 +442,7 @@ int ObTransService::handle_tx_commit_result_(ObTxDesc &tx,
     ATOMIC_STORE_REL((int*)&tx.state_, (int)state);
     if (tx.commit_task_.is_registered()) {
       if (OB_FAIL(unregister_commit_retry_task_(tx))) {
+        TRANS_LOG(ERROR, "deregister timeout task fail", K(tx));
       }
     }
     tx_post_terminate_(tx);
@@ -585,6 +606,7 @@ int ObTransService::find_write_state_after_savepoint_(ObTxDesc &tx,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tx.find_write_state_after(part, scn))) {
+    TRANS_LOG(WARN, "collect rollback write state failed", K(ret), K(tx), K(scn));
   }
   return ret;
 }
@@ -606,6 +628,7 @@ int ObTransService::get_read_store_ctx(const ObTxReadSnapshot &snapshot,
     if (OB_FAIL(validate_snapshot_version_(snapshot.core_.version_,
                                            store_ctx.timeout_,
                                            *store_ctx.ls_))) {
+      TRANS_LOG(WARN, "invalid speficied snapshot", K(ret), K(snapshot), K(store_ctx));
     }
   }
 
@@ -623,6 +646,7 @@ int ObTransService::get_read_store_ctx(const ObTxReadSnapshot &snapshot,
                     K(ret), K(store_ctx), K(snapshot), K(exist), K(read_latest));
         }
       } else if (OB_FAIL(tx_ctx->check_status())) {
+        TRANS_LOG(WARN, "check status fail", K(ret), K(store_ctx), KPC(tx_ctx));
       }
       if (OB_FAIL(ret) && OB_NOT_NULL(tx_ctx)) {
         revert_tx_ctx_(store_ctx.ls_, tx_ctx);
@@ -639,7 +663,9 @@ int ObTransService::get_read_store_ctx(const ObTxReadSnapshot &snapshot,
       int tmp_ret = OB_SUCCESS;
       bool exist = false;
       if (OB_TMP_FAIL(acquire_tx_ctx(*tx_desc, tx_ctx, store_ctx.ls_, false, false, exist))) {
+        TRANS_LOG(WARN, "try elr read fail, can not acquire tx ctx", K(tmp_ret), "tx_id", tx_desc->get_tx_id());
       } else {
+        TRANS_LOG(DEBUG, "use elr read, create tx ctx success", KPC(tx_desc), KPC(tx_ctx));
         create_tx_ctx = !exist;
       }
     }
@@ -668,6 +694,7 @@ int ObTransService::get_read_store_ctx(const ObTxReadSnapshot &snapshot,
     update_max_read_ts_(snapshot.core_.version_);
   }
 
+  TRANS_LOG(DEBUG, "get-read-store-ctx", K(ret), K(store_ctx), K(read_latest), K(snapshot));
   return ret;
 }
 
@@ -722,7 +749,9 @@ int ObTransService::get_write_store_ctx(ObTxDesc &tx,
              && OB_FAIL(acquire_local_snapshot_(snap.version_))) {
     TRANS_LOG(WARN, "acquire ls snapshot for mvcc write fail", K(ret));
   } else if (OB_FAIL(acquire_tx_ctx(tx, tx_ctx, store_ctx.ls_, special, snapshot.read_elr(), ctx_exist))) {
+    TRANS_LOG(WARN, "acquire tx ctx fail", K(ret), K(tx), KPC(this));
   } else if (OB_FAIL(tx_ctx->start_access(tx, data_scn, branch))) {
+    TRANS_LOG(WARN, "tx ctx start access fail", K(ret), K(tx_ctx), KPC(this));
   }
   if (OB_FAIL(ret)) {
   } else if (FALSE_IT(access_started = true)) {
@@ -738,6 +767,7 @@ int ObTransService::get_write_store_ctx(ObTxDesc &tx,
                                                         store_ctx.timeout_,
                                                         tx.lock_timeout_us_,
                                                         write_flag))) {
+    TRANS_LOG(WARN, "mvcc_acc_ctx init write fail", KR(ret), K(store_ctx), KPC(this));
   }
 
   // fail, rollback
@@ -786,8 +816,10 @@ int ObTransService::acquire_tx_ctx(const ObTxDesc &tx,
     }
   } else if (try_get && OB_SUCC(get_tx_ctx_(ls, tx.tx_id_, ctx))) {
   } else if (OB_FAIL(create_tx_ctx_(ls, tx, ctx, special, exist))) {
+      TRANS_LOG(WARN, "create tx ctx fail", K(ret), K(tx), K(special));
   }
 
+  TRANS_LOG(TRACE, "acquire tx ctx", K(ret), K(*this), K(try_get), K(exist), K(tx), KP(ctx), K(special));
   return ret;
 }
 
@@ -803,6 +835,7 @@ int ObTransService::get_tx_ctx_(ObLS *ls,
     ret = tx_ctx_mgr_.get_tx_ctx(tx_id, false, ctx);
   }
 
+  TRANS_LOG(TRACE, "get tx ctx", K(ret), K(tx_id), KP(ctx), KP(ls));
   return ret;
 }
 
@@ -819,6 +852,7 @@ int ObTransService::revert_tx_ctx_(ObLS* ls, ObTxCtx *ctx)
     ret = tx_ctx_mgr_.revert_tx_ctx(ctx);
   }
 
+  TRANS_LOG(DEBUG, "revert tx ctx", KP(ctx));
   return ret;
 }
 
@@ -857,6 +891,7 @@ int ObTransService::create_tx_ctx_(ObLS *ls,
     TRANS_LOG(WARN, "get tx ctx from mgr fail", K(ret), K(tx.tx_id_), K(exist), K(tx), K(arg));
     ctx = NULL;
   }
+  TRANS_LOG(TRACE, "create tx ctx", K(ret), K(exist), K(tx));
   return ret;
 }
 
@@ -878,6 +913,7 @@ int ObTransService::revert_store_ctx(storage::ObStoreCtx &store_ctx)
           ret = OB_ERR_UNEXPECTED;
           TRANS_LOG(ERROR, "tx desc is null", K(ret), K(store_ctx));
         } else if (OB_FAIL(tx_desc->init_clean_write_state_if_absent())) {
+          TRANS_LOG(WARN, "append part fail", K(ret), KPC(tx_ctx));
         }
       }
       acc_ctx.tx_ctx_ = NULL;
@@ -897,6 +933,7 @@ int ObTransService::revert_store_ctx(storage::ObStoreCtx &store_ctx)
       p.first_scn_  = tx_ctx->first_scn_;
       p.last_scn_   = tx_ctx->last_scn_;
       if (OB_FAIL(tx->merge_write_state(p))) {
+        TRANS_LOG(WARN, "append part fail", K(ret), K(p), KPC(tx_ctx));
       }
       tx_ctx->end_access();
       revert_tx_ctx_(store_ctx.ls_, tx_ctx);
@@ -936,6 +973,7 @@ int ObTransService::validate_snapshot_version_(const SCN snapshot,
           ob_usleep(100);
         }
       } else if (OB_FAIL(ret)) {
+        TRANS_LOG(WARN, "get gts fail", KR(ret));
       } else if (!gts.is_valid()) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "get gts fail", K(gts));
@@ -943,9 +981,12 @@ int ObTransService::validate_snapshot_version_(const SCN snapshot,
         ret = OB_INVALID_QUERY_TIMESTAMP;
         TRANS_LOG(WARN, "validate snapshot version fail", K(snapshot), K(gts));
       } else {
+        TRANS_LOG(DEBUG, "snapshot is valid", K(snapshot), K(gts));
       }
     } while (ret == OB_EAGAIN);
   }
+  TRANS_LOG(TRACE, "validate snapshot version",
+      K(ret), K(snapshot), K(expire_ts), K(ls_weak_read_ts));
   return ret;
 }
 
@@ -981,6 +1022,7 @@ int ObTransService::abort_write_state_(const ObTxDesc &tx_desc)
   int ret = OB_SUCCESS;
   const ObTxWriteState *part = NULL;
   if (OB_FAIL(tx_desc.get_abort_write_state(part))) {
+    TRANS_LOG(WARN, "get abort write state failed", K(ret), K(tx_desc));
   } else if (OB_NOT_NULL(part) && OB_FAIL(abort_write_ctx_(tx_desc))) {
     TRANS_LOG(WARN, "abort write context failed", K(ret), K(tx_desc), KPC(part));
   }
@@ -1018,7 +1060,9 @@ int ObTransService::abort_write_ctx_(const ObTxDesc &tx_desc)
   int ret = OB_SUCCESS;
   ObTxCtx *ctx = NULL;
   if (OB_FAIL(get_tx_ctx_(tx_desc.tx_id_, ctx))) {
+    TRANS_LOG(WARN, "get transaction context error", KR(ret), K_(tx_desc.tx_id));
   } else if (OB_FAIL(ctx->abort(tx_desc.abort_cause_))) {
+    TRANS_LOG(WARN, "abort local transaction context error", KR(ret), K(tx_desc));
   }
   if (OB_NOT_NULL(ctx)) {
     revert_tx_ctx_(ctx);
@@ -1067,6 +1111,7 @@ int ObTransService::local_ls_commit_tx_(const ObTransID &tx_id,
       }
     }
   } else if (OB_FAIL(ctx->commit(commit_time, expire_ts, request_id))) {
+    TRANS_LOG(WARN, "commit fail", K(ret), K(tx_id));
   }
   if (OB_NOT_NULL(ctx)) {
     revert_tx_ctx_(ctx);
@@ -1083,8 +1128,11 @@ int ObTransService::get_tx_state_from_tx_table_(const ObTransID &tx_id,
   ObTxTableGuard tx_table_guard;
   ObLS *tenant_ls = nullptr;
   if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
+    TRANS_LOG(WARN, "get ls fail", K(ret));
   } else if (OB_FAIL(tenant_ls->get_tx_table()->get_tx_table_guard(tx_table_guard))) {
+    TRANS_LOG(WARN, "get tx table guard failed", KR(ret), KPC(this));
   } else if (OB_FAIL(tx_table_guard.try_get_tx_state(tx_id, state, commit_version, recycled_scn))) {
+    TRANS_LOG(WARN, "get tx state failed", KR(ret), K(tx_id), KPC(this));
   }
   return ret;
 }
@@ -1101,6 +1149,7 @@ int ObTransService::update_max_read_ts_(const SCN ts)
 {
   int ret = OB_SUCCESS;
   tx_version_mgr_.update_max_read_ts(ts);
+  TRANS_LOG(TRACE, "update max read ts", K(ret), K(ts));
   return ret;
 }
 
@@ -1137,6 +1186,7 @@ int ObTransService::gen_trans_id(ObTransID &trans_id)
       trans_id = ObTransID(start_id);
     }
   }
+  TRANS_LOG(TRACE, "gen trans id", K(ret), K(trans_id), K(retry_times));
   return ret;
 }
 
@@ -1159,6 +1209,7 @@ int ObTransService::block_tx(bool &is_all_tx_cleaned_up)
     TRANS_LOG(WARN, "ObTransService is not running");
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(tx_ctx_mgr_.block_tx(is_all_tx_cleaned_up))) {
+    TRANS_LOG(WARN, "block transaction context manager failed", KR(ret));
   } else {
     TRANS_LOG(INFO, "block transaction context manager success", K(is_all_tx_cleaned_up));
   }
@@ -1177,6 +1228,7 @@ int ObTransService::get_tx_ctx_mgr_stat(ObLSTxCtxMgrStat &tx_ctx_mgr_stat)
     TRANS_LOG(WARN, "ObTransService is not running");
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(tx_ctx_mgr_.get_tx_ctx_mgr_stat(self_, tx_ctx_mgr_stat))) {
+    TRANS_LOG(WARN, "get_tx_ctx_mgr_stat error", KR(ret), K_(self));
   } else {
     // do nothing
   }
@@ -1197,6 +1249,7 @@ int ObTransService::iterate_all_observer_tx_stat(ObTxStatIterator &tx_stat_iter)
     TRANS_LOG(WARN, "ObTransService is not running");
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(tx_ctx_mgr_.iterate_all_observer_tx_stat(tx_stat_iter))) {
+      TRANS_LOG(WARN, "iterate tx stat error", KR(ret));
   } else {
     // do nothing
   }
@@ -1214,6 +1267,7 @@ int ObTransService::iterate_tx_scheduler_stat(ObTxSchedulerStatIterator &tx_sche
     TRANS_LOG(WARN, "ObTransService is not running");
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(tx_desc_mgr_.iterate_tx_scheduler_stat(tx_scheduler_stat_iter))) {
+    TRANS_LOG(WARN, "iterate tx stat error", KR(ret));
   } else {
     // do nothing
   }

@@ -319,6 +319,7 @@ public:
         STORAGE_LOG(WARN, "failed to ensure space", K(ret), K(value.get_serialize_size()));
       }
     } else if (OB_FAIL(value.serialize(data_, buffer_size_, len_))) {
+      STORAGE_LOG(WARN, "fail to serialize", K(ret), K(buffer_size_), K(len_));
     }
     return ret;
   }

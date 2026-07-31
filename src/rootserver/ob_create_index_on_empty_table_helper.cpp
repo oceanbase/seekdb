@@ -45,6 +45,7 @@ int ObCreateIndexOnEmptyTableHelper::check_create_index_on_empty_table_opt(
                                                   table_schema,
                                                   sql_mode,
                                                   is_create_index_on_empty_table_opt))) {
+    LOG_WARN("failed to check table empty", KR(ret), K(database_name), K(table_schema));
   } else if (!is_create_index_on_empty_table_opt) {
   } else if (OB_FAIL(ddl_service.lock_table(trans, table_schema))) {
     if (OB_TRY_LOCK_ROW_CONFLICT == ret || OB_ERR_EXCLUSIVE_LOCK_CONFLICT == ret || OB_EAGAIN == ret) {
@@ -57,6 +58,7 @@ int ObCreateIndexOnEmptyTableHelper::check_create_index_on_empty_table_opt(
                                                   table_schema,
                                                   sql_mode,
                                                   is_create_index_on_empty_table_opt))) {
+    LOG_WARN("failed to check table empty", KR(ret), K(database_name), K(table_schema));
   }
   LOG_TRACE("check_create_index_on_empty_table_opt", K(ret), K(is_create_index_on_empty_table_opt),
     "name_case_mode", sys_var_schema.get_name_case_mode(),
@@ -69,7 +71,9 @@ int ObCreateIndexOnEmptyTableHelper::get_major_frozen_scn(share::SCN &major_froz
   int ret = OB_SUCCESS;
   ObTimeoutCtx ctx;
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF.rpc_timeout))) {
+    LOG_WARN("fail to set timeout ctx", KR(ret));
   } else if (OB_FAIL(OB_TS_MGR.get_gts_sync(ctx.get_timeout(), major_frozen_scn))) {
+    LOG_WARN("fail to get gts sync", KR(ret), K(ctx.get_timeout()), K(major_frozen_scn));
   }
   return ret;
 }

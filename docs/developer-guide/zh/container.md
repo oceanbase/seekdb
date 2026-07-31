@@ -644,4 +644,4 @@ ObRbTree 是一个红黑树实现，支持插入、删除、查找等基本操�
 
 
 # 其它
-seekdb 还有很多基础容器的实现，比如一些队列（ObFixedQueue、ObLightyQueue、ObLinkQueue）、bitmap(ObBitmap)、tuple(ObTuple)等。如果常见的容器不能满足你的需求，可以在 `deps/oblib/src/lib` 目录下找到更多。
+seekdb 还有很多基础容器的实现，比如一些队列（ObFixedQueue、ObLightyQueue、ObLinkQueue）、bitmap(ObBitmap)、tuple(ObTuple)等。如果常见的容器不能满足你的需求，可以在 `src/oblib/lib` 目录下找到更多。

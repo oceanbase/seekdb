@@ -239,6 +239,7 @@ int MdsUnit<K, V>::get_row_from_list_(const K &key, KvPair<K, Row<K, V>> *&p_kv)
 {
   FindKeyOp<K, V> op(key, p_kv);
   multi_row_list_.for_each_node_from_head_to_tail_until_true(op);
+  MDS_LOG(DEBUG, "mds unit get p_kv", K(key), KPC(p_kv));
   return op.ret_;
 }
 

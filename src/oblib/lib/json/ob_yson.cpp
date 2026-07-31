@@ -60,9 +60,13 @@ template<class T>
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(databuff_decode_key(yson_buf, yson_buf_len, yson_pos, key))) {
+    LOG_WARN("failed to decode key", K(ret), K(yson_buf_len), K(yson_pos));
   } else if (OB_FAIL(databuff_decode_element_value(yson_buf, yson_buf_len, yson_pos, obj))) {
+    LOG_WARN("failed to decode value", K(ret), K(yson_buf_len), K(yson_pos), K(key));
   } else if (OB_FAIL(databuff_print_key(buf, buf_len, pos, key, in_array))) {
+    LOG_WARN("failed to print key", K(ret), K(buf_len), K(pos));
   } else if (OB_FAIL(databuff_print_obj(buf, buf_len, pos, obj))) {
+    LOG_WARN("failed to print obj", K(ret), K(buf_len), K(pos), K(key));
   }
   return ret;
 }
@@ -75,17 +79,22 @@ template<>
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(databuff_decode_key(yson_buf, yson_buf_len, yson_pos, key))) {
+    LOG_WARN("failed to decode key", K(ret), K(yson_buf_len), K(yson_pos));
   } else if (OB_FAIL(databuff_decode_element_value(yson_buf, yson_buf_len, yson_pos, obj))) {
+    LOG_WARN("failed to decode value", K(ret), K(yson_buf_len), K(yson_pos), K(key));
   } else if (OB_FAIL(databuff_print_key(buf, buf_len, pos, key, in_array))) {
+    LOG_WARN("failed to print key", K(ret), K(buf_len), K(pos));
   } else {
     // special case IP, improve the design later
     if (key == OB_ID(ip)) {
       unsigned char *bytes = (unsigned char *) &obj;
       if (OB_FAIL(databuff_printf(buf, buf_len, pos, "\"%d.%d.%d.%d\"",
                                   bytes[3], bytes[2], bytes[1], bytes[0]))) {
+        LOG_WARN("failed to print obj", K(ret), K(buf_len), K(pos), K(key));
       }
     } else {
       if (OB_FAIL(databuff_print_obj(buf, buf_len, pos, obj))) {
+        LOG_WARN("failed to print obj", K(ret), K(buf_len), K(pos), K(key));
       }
     }
   }
@@ -209,6 +218,7 @@ int databuff_print_elements(char *buf, const int64_t buf_len, int64_t &pos,
         break;
     }  // end switch
     if (OB_FAIL(ret)) {
+      LOG_WARN("failed to print YSON element", K(ret), K(yson_type));
     }
     if (OB_UNLIKELY(is_first)) {
       is_first = false;

@@ -88,6 +88,7 @@ public :
         uint32_t l_child_len = get_offsets()[i] - l_start;
         int cmp_ret = 0;
         if (OB_FAIL(get_child_array()->compare_at(l_start, l_child_len, 0, elem_ptr->size(), *elem_ptr, cmp_ret))) {
+          OB_LOG(WARN, "failed to do nested array contains", K(ret));
         } else if (cmp_ret == 0) {
           pos = i;
         }
@@ -116,6 +117,7 @@ public :
       OB_LOG(WARN, "elem except is null", K(ret));
     } else {
       if (OB_FAIL(clone_empty(alloc, output, false))) {
+        OB_LOG(WARN, "clone empty failed", K(ret));
       } else {
         ObArrayNested *arr_data = dynamic_cast<ObArrayNested *>(output);
         if (OB_ISNULL(arr_data)) {
@@ -125,6 +127,7 @@ public :
           ObIArrayType *inner_arr = get_child_array();
           ObIArrayType *child_obj = NULL;
           if (OB_FAIL(inner_arr->clone_empty(alloc, child_obj, false))) {
+            OB_LOG(WARN, "clone empty failed", K(ret));
           }
           for (uint32_t i = 0; i < this->length_ && OB_SUCC(ret); ++i) {
             if (is_null) {
@@ -132,19 +135,24 @@ public :
               if (this->is_null(i)) {
                 // do nothing
               } else if (OB_FAIL(at(i, *child_obj))) {
+                OB_LOG(WARN, "get element failed", K(ret), K(i), K(length_));
               } else if (OB_FAIL(arr_data->push_back(*child_obj))) {
+                OB_LOG(WARN, "push null failed", K(ret)); 
               } else {
                 child_obj->clear();
               }
             } else if (this->is_null(i)) {
               if (OB_FAIL(arr_data->push_null())) {
+                OB_LOG(WARN, "push null failed", K(ret)); 
               }
             } else if (OB_FAIL(at(i, *child_obj))) {
+              OB_LOG(WARN, "get element failed", K(ret), K(i), K(length_));
             } else if (FALSE_IT(elem_ptr = reinterpret_cast<const ObIArrayType *>(elem_except))) {
             } else if (*child_obj == *elem_ptr) {
               // do nothing
               child_obj->clear();
             } else if (OB_FAIL(arr_data->push_back(*child_obj))) {
+              OB_LOG(WARN, "failed to add element", K(ret));
             } else {
               child_obj->clear();
             }

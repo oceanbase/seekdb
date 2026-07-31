@@ -42,6 +42,7 @@ int ObDBMSJobExecutor::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("sql proxy or schema service is null", K(sql_proxy), K(ret));
   } else if (OB_FAIL(job_utils_.init(sql_proxy_))) {
+    LOG_WARN("fail to init action record", K(ret));
   } else {
     inited_ = true;
   }
@@ -80,6 +81,7 @@ int ObDBMSJobExecutor::run_dbms_job(uint64_t job_id)
                         ob_errpkt_strerror(ret));
     }
     if ((tmp_ret = job_utils_.update_for_end(job_info, ret, errmsg)) != OB_SUCCESS) {
+      LOG_WARN("update dbms job failed", K(tmp_ret), K(ret));
     }
     ret = OB_SUCCESS == ret ? tmp_ret : ret;
   }

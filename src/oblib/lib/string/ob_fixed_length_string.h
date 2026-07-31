@@ -79,6 +79,7 @@ ObFixedLengthString<N>::ObFixedLengthString(const char *str)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(assign(str))) {
+    LIB_LOG(WARN, "assign failed", KCSTRING(str), K(ret));
   }
 }
 
@@ -87,6 +88,7 @@ ObFixedLengthString<N>::ObFixedLengthString(const ObString &str)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(assign(str))) {
+    LIB_LOG(WARN, "assign failed", K(str), K(ret));
   }
 }
 
@@ -95,6 +97,7 @@ ObFixedLengthString<N>::ObFixedLengthString(const ObFixedLengthString &str)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(assign(str.buf_))) {
+    LIB_LOG(WARN, "assign failed", K(str), K(ret));
   }
 }
 
@@ -105,6 +108,7 @@ ObFixedLengthString<N> &ObFixedLengthString<N>::operator =(
   int ret = OB_SUCCESS;
   if (this != &str) {
     if (OB_FAIL(assign(str.buf_))) {
+      LIB_LOG(WARN, "assign failed", K(str), K(ret));
     }
   }
   return *this;
@@ -146,6 +150,7 @@ int ObFixedLengthString<N>::assign(const ObFixedLengthString &other)
   int ret = OB_SUCCESS;
   if (this != &other) {
     if (OB_FAIL(assign(other.buf_))) {
+      LIB_LOG(WARN, "assign failed", K(other), K(ret));
     }
   }
   return ret;

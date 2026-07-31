@@ -56,6 +56,7 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
     ret = OB_NOT_INIT;
     LOG_WARN("should have set plan to result set", K(ret));
   } else if (OB_FAIL(session_.get_autocommit(ac))) {
+    LOG_WARN("fail to get autocommit", K(ret));
   } else if (OB_FAIL(result.open())) {
     int cret = OB_SUCCESS;
     int cli_ret = OB_SUCCESS;
@@ -114,8 +115,10 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
       }
       int cret = result.close(ret);
       if (cret != OB_SUCCESS) {
+        LOG_WARN("close result set fail", K(cret));
       }
     } else if (OB_FAIL(result.close())) {
+      LOG_WARN("close result set fail", K(ret));
     } else {
       process_ok = true;
 
@@ -153,6 +156,7 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
     }
   } else {
     if (OB_FAIL(result.close())) {
+      LOG_WARN("close result set fail", K(ret));
     } else {
       if (!result.has_implicit_cursor()) {
         //no implicit cursor, send one ok packet to client
@@ -171,6 +175,7 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
         ok_param.has_more_result_ = result.has_more_result();
         process_ok = true;
         if (OB_FAIL(sender_.send_ok_packet(session_, ok_param))) {
+          LOG_WARN("send ok packet fail", K(ok_param), K(ret));
         }
       } else {
         //has implicit cursor, send ok packet to client by implicit cursor
@@ -184,12 +189,14 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
           ok_param.lii_ = result.get_last_insert_id_to_client();
           process_ok = true;
           if (OB_FAIL(sender_.send_ok_packet(session_, ok_param))) {
+            LOG_WARN("send ok packet failed", K(ret), K(ok_param));
           }
         }
         if (OB_ITER_END == ret) {
           ret = OB_SUCCESS;
         }
         if (OB_FAIL(ret)) {
+          LOG_WARN("send implicit cursor info to client failed", K(ret));
         }
       }
     }
@@ -211,6 +218,7 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
     } else {
       int sret = OB_SUCCESS;
       if (OB_SUCCESS != (sret = sender_.send_error_packet(ret, NULL))) {
+        LOG_WARN("send error packet fail", K(sret), K(ret));
       }
     }
   }

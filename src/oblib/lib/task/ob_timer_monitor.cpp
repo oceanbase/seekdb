@@ -48,6 +48,7 @@ int ObTimerMonitor::init()
     ret = OB_INIT_TWICE;
     OB_LOG(WARN, "init twice", K(ret));
   } else if (OB_FAIL(timer_.init())) {
+    OB_LOG(ERROR, "fail to init timer", K(ret));
   } else {
     inited_ = true;
   }
@@ -62,6 +63,7 @@ int ObTimerMonitor::start()
     ret = OB_NOT_INIT;
     OB_LOG(WARN, "not init", K(ret));
   } else if (OB_FAIL(timer_.schedule(monitor_task_, CHECK_INTERVAL, true))) {
+    OB_LOG(ERROR, "fail to schedule task", K(ret));
   }
 
   return ret;

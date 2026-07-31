@@ -35,8 +35,11 @@ int ObVectorIndexInfoIterator::open()
     ret = OB_INIT_TWICE;
     SERVER_LOG(WARN, "The ObVectorIndexInfoIterator has been opened", K(ret));
   } else if (OB_FAIL(service->get_snapshot_ids(complete_tablet_ids_, partial_tablet_ids_))) {
+    SERVER_LOG(WARN, "failed to get snapshot_ids", K(ret));
   } else if (OB_FAIL(ptr_set_.create(MAX_PTR_SET_VALUES, ObMemAttr("AdaptorSet")))) {
+    SERVER_LOG(WARN, "failed to create set", K(ret));
   } else if (OB_FAIL(service->get_cache_ids(cache_tablet_ids_))) {
+    SERVER_LOG(WARN, "failed to get cache_ids", K(ret));
   } else {
     index_idx_ = 0;
     cache_idx_ = 0;
@@ -59,7 +62,9 @@ int ObVectorIndexInfoIterator::get_next_info(ObVectorIndexInfo &info)
     ObTabletID tablet_id = cache_tablet_ids_.at(cache_idx_).tablet_id_;
     ObIvfCacheMgrGuard cache_mgr_guard;
     if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>()->acquire_ivf_cache_mgr_guard(tablet_id, cache_mgr_guard))) {
+      SERVER_LOG(WARN, "failed to get cache mgr guard", K(tablet_id), KR(ret));
     } else if (OB_FAIL(cache_mgr_guard.get_ivf_cache_mgr()->fill_cache_info(info))) {
+      SERVER_LOG(WARN, "failed to fill cache info", K(ret), K(tablet_id));
     }
     cache_idx_++;
   } else { // fill vector index info
@@ -79,7 +84,9 @@ int ObVectorIndexInfoIterator::get_next_info(ObVectorIndexInfo &info)
     } else if (OB_HASH_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
       if (OB_FAIL(ptr_set_.set_refactored(reinterpret_cast<int64_t>(adapter_guard.get_adatper())))) {
+        SERVER_LOG(WARN, "failed to set adapter check set", K(ret));
       } else if (OB_FAIL(adapter_guard.get_adatper()->fill_vector_index_info(info))) {
+        SERVER_LOG(WARN, "failed to fill vector index info", K(ret), K(tablet_id));
       }
     } else {
       SERVER_LOG(WARN, "failed to check adapter ptr", K(ret));

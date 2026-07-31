@@ -34,6 +34,7 @@ int ObDeadLockInnerTableService::init()
     ret = OB_NOT_INIT;
     DETECT_LOG(WARN, "meta_db_pool_ is not initialized", K(ret));
   } else if (OB_FAIL(storage_.init(GCTX.meta_db_pool_))) {
+    DETECT_LOG(WARN, "failed to init deadlock event history storage", K(ret));
   }
   return ret;
 }

@@ -43,7 +43,9 @@ int ForeignKeyHandle::do_handle(ObTableModifyOp &op,
     const bool save_in_ignore_cascading = op.get_exec_ctx().get_das_ctx().in_ignore_cascading_;
     op.get_exec_ctx().get_das_ctx().is_fk_cascading_ = true;
     op.get_exec_ctx().get_das_ctx().in_ignore_cascading_ = dml_ctdef.das_base_ctdef_.is_ignore_;
+    LOG_DEBUG("do foreign_key_handle", K(old_row), K(new_row));
     if (OB_FAIL(op.check_stack())) {
+      LOG_WARN("fail to check stack", K(ret));
     }
     for (int i = 0; OB_SUCC(ret) && i < dml_ctdef.fk_args_.count(); i++) {
       const ObForeignKeyArg &fk_arg = dml_ctdef.fk_args_.at(i);
@@ -60,7 +62,9 @@ int ForeignKeyHandle::do_handle(ObTableModifyOp &op,
 
           if (is_foreign_key_cascade && !in_ignore_cascading) {
             // nested update can not check parent row.
+            LOG_DEBUG("skip foreign_key_check_exist in nested session");
           } else if (OB_FAIL(check_exist(op, fk_arg, new_row, fk_checker, false, fk_arg.use_das_scan_))) {
+            LOG_WARN("failed to check exist", K(ret), K(fk_arg), K(new_row));
           }
         }
       }
@@ -69,18 +73,24 @@ int ForeignKeyHandle::do_handle(ObTableModifyOp &op,
           // update or delete.
           bool has_changed = false;
           if (OB_FAIL(value_changed(op, fk_arg.columns_, old_row, new_row, has_changed))) {
+            LOG_WARN("failed to check if foreign key value has changed",
+                     K(ret), K(fk_arg), K(old_row), K(new_row));
           } else if (!has_changed) {
             // nothing.
           } else if (OB_FAIL(check_exist(op, fk_arg, old_row, fk_checker, true, fk_arg.use_das_scan_))) {
+            LOG_WARN("failed to check exist", K(ret), K(fk_arg), K(old_row));
           }
         } else if (ACTION_CASCADE == fk_arg.ref_action_) {
           // update or delete.
           bool is_self_ref = false;
           if (OB_FAIL(is_self_ref_row(op.get_eval_ctx(), old_row, fk_arg, is_self_ref))) {
+            LOG_WARN("is_self_ref_row failed", K(ret), K(old_row), K(fk_arg));
           } else if (new_row.empty() && is_self_ref && op.is_fk_nested_session()) {
             // delete self refercnced row should not cascade delete.
           } else if (OB_FAIL(check_exist_inner_sql(op, fk_arg, old_row, true, true))) {
+            LOG_WARN("check exist before cascade failed", K(ret), K(fk_arg), K(old_row));
           } else if (OB_FAIL(cascade(op, fk_arg, old_row, new_row))) {
+            LOG_WARN("failed to cascade", K(ret), K(fk_arg), K(old_row), K(new_row));
           } else if (!new_row.empty() && is_self_ref) {
             // we got here only when:
             //  1. handling update operator and
@@ -107,7 +117,9 @@ int ForeignKeyHandle::do_handle(ObTableModifyOp &op,
           }
         } else if (ACTION_SET_NULL == fk_arg.ref_action_) {
           if (OB_FAIL(check_exist_inner_sql(op, fk_arg, old_row, true, true))) {
+            LOG_WARN("check exist before cascade failed", K(ret), K(fk_arg), K(old_row));
           } else if (OB_FAIL(set_null(op, fk_arg, old_row))) {
+            LOG_WARN("failed to perform set null for foreign key", K(ret));
           }
         }
       } // if (old_row.is_valid())
@@ -116,6 +128,7 @@ int ForeignKeyHandle::do_handle(ObTableModifyOp &op,
     op.get_exec_ctx().get_das_ctx().is_fk_cascading_ = false;
     op.get_exec_ctx().get_das_ctx().in_ignore_cascading_ = save_in_ignore_cascading;
   } else {
+    LOG_DEBUG("skip foreign_key_handle");
   }
   return ret;
 }
@@ -165,7 +178,9 @@ int ForeignKeyHandle::check_exist(ObTableModifyOp &modify_op, const ObForeignKey
     ret = check_exist_scan_task(modify_op, fk_arg, row, fk_checker);
   } else {
     if (OB_FAIL(check_exist_inner_sql(modify_op, fk_arg, row, expect_zero, true))) {
+      LOG_WARN("check exist and iter uncommmited row meet failed", K(ret));
     } else if (OB_FAIL(check_exist_inner_sql(modify_op, fk_arg, row, expect_zero, false))) {
+      LOG_WARN("check exist and iter commmited row meet failed", K(ret));
     }
   }
   return ret;
@@ -183,6 +198,7 @@ int ForeignKeyHandle::check_exist_scan_task(ObTableModifyOp &modify_op, const Ob
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("foreign key checker is nullptr", K(ret));
   } else if (OB_FAIL(fk_checker->do_fk_check_single_row(fk_arg.columns_, row, has_result))) {
+    LOG_WARN("failed to perform foreign key check by das scan tasks", K(ret));
   } else {
     if (!has_result) {
       ret = OB_ERR_NO_REFERENCED_ROW;
@@ -227,6 +243,7 @@ int ForeignKeyHandle::check_exist_inner_sql(ObTableModifyOp &op,
                                      database_name.length(), database_name.ptr(),
                                      table_name.length(), table_name.ptr(),
                                      static_cast<int>(where_pos), where_buf))) {
+    LOG_WARN("failed to print stmt", K(ret), K(table_name), K(where_buf));
   } else {
     stmt_buf[stmt_pos++] = 0;
   }
@@ -234,12 +251,15 @@ int ForeignKeyHandle::check_exist_inner_sql(ObTableModifyOp &op,
     if (iter_uncommitted_row) {
       op.get_exec_ctx().get_das_ctx().iter_uncommitted_row_ = true;
     }
+    LOG_DEBUG("foreign_key_check_exist", "stmt", stmt_buf, K(row), K(fk_arg));
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       if (OB_FAIL(op.begin_nested_session(fk_arg.is_self_ref_))) {
+        LOG_WARN("failed to begin nested session", K(ret), K(stmt_buf));
       } else {
         // must call end_nested_session() if begin_nested_session() success.
         bool is_zero = false;
         if (OB_FAIL(op.execute_read(stmt_buf, res))) {
+          LOG_WARN("failed to execute stmt", K(ret), K(stmt_buf));
         } else {
           // must call res.get_result()->close() if execute_read() success.
           if (OB_ISNULL(res.get_result())) {
@@ -281,6 +301,7 @@ int ForeignKeyHandle::check_exist_inner_sql(ObTableModifyOp &op,
                */
               if (!iter_uncommitted_row) {
                 if (OB_FAIL(is_self_ref_row(op.get_eval_ctx(), row, fk_arg, is_self_ref))) {
+                  LOG_WARN("is_self_ref_row failed", K(ret), K(row), K(fk_arg));
                 } else if (is_zero && !is_self_ref) {
                   ret = OB_ERR_NO_REFERENCED_ROW;
                   LOG_WARN("parent row is not exist", K(ret), K(fk_arg), K(row));
@@ -331,6 +352,7 @@ int ForeignKeyHandle::cascade(ObTableModifyOp &op,
   const ObString &database_name = fk_arg.database_name_;
   const ObString &table_name = fk_arg.table_name_;
   if (OB_FAIL(op.get_exec_ctx().check_status())) {
+    LOG_WARN("failed check status", K(ret));
   } else if (old_row.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("old row is invalid", K(ret));
@@ -352,11 +374,13 @@ int ForeignKeyHandle::cascade(ObTableModifyOp &op,
       int64_t set_pos = 0;
       if (OB_FAIL(gen_set(op.get_eval_ctx(), set_buf, set_len, set_pos,
                           fk_arg.columns_, new_row, alloc, op.get_obj_print_params()))) {
+        LOG_WARN("failed to gen foreign key set", K(ret), K(new_row), K(fk_arg.columns_));
       } else if (OB_FAIL(databuff_printf(stmt_buf, stmt_len, stmt_pos, alloc, update_fmt,
                                          database_name.length(), database_name.ptr(),
                                          table_name.length(), table_name.ptr(),
                                          static_cast<int>(set_pos), set_buf,
                                          static_cast<int>(where_pos), where_buf))) {
+        LOG_WARN("failed to print stmt", K(ret), K(table_name), K(set_buf), K(where_buf));
       } else {
         stmt_buf[stmt_pos++] = 0;
       }
@@ -367,15 +391,19 @@ int ForeignKeyHandle::cascade(ObTableModifyOp &op,
                                   database_name.length(), database_name.ptr(),
                                   table_name.length(), table_name.ptr(),
                                   static_cast<int>(where_pos), where_buf))) {
+        LOG_WARN("failed to print stmt", K(ret), K(table_name), K(where_buf));
       } else {
         stmt_buf[stmt_pos++] = 0;
       }
     }
   }
   if (OB_SUCC(ret) && stmt_pos > 0) {
+    LOG_DEBUG("foreign_key_cascade", "stmt", stmt_buf, K(old_row), K(new_row), K(fk_arg));
     if (OB_FAIL(op.begin_nested_session(fk_arg.is_self_ref_))) {
+      LOG_WARN("failed to begin nested session", K(ret));
     } else {
       if (OB_FAIL(op.execute_write(stmt_buf))) {
+        LOG_WARN("failed to execute stmt", K(ret), K(stmt_buf));
       }
       int end_ret = op.end_nested_session();
       if (OB_SUCCESS != end_ret) {
@@ -423,20 +451,25 @@ int ForeignKeyHandle::set_null(ObTableModifyOp &op,
     int64_t set_len = 0;
     int64_t set_pos = 0;
     if (OB_FAIL(gen_column_null_value(op.get_eval_ctx(), set_buf, set_len, set_pos, fk_arg.columns_, alloc, op.get_obj_print_params()))) {
+       LOG_WARN("failed to gen foreign key set null", K(ret), K(fk_arg.columns_));
     } else if (OB_FAIL(databuff_printf(stmt_buf, stmt_len, stmt_pos, alloc, update_fmt,
                                       database_name.length(), database_name.ptr(),
                                         table_name.length(), table_name.ptr(),
                                         static_cast<int>(set_pos), set_buf,
                                         static_cast<int>(where_pos), where_buf))) {
+      LOG_WARN("failed to print stmt", K(ret), K(table_name), K(set_buf), K(where_buf));
     } else {
       stmt_buf[stmt_pos++] = 0;
     }
   }
   
   if (OB_SUCC(ret) && stmt_pos > 0) {
+    LOG_DEBUG("foreign key cascade set null", "stmt", stmt_buf, K(old_row), K(fk_arg));
     if (OB_FAIL(op.begin_nested_session(fk_arg.is_self_ref_))) {
+      LOG_WARN("failed to begin nested session", K(ret));
     } else {
       if (OB_FAIL(op.execute_write(stmt_buf))) {
+        LOG_WARN("failed to execute stmt", K(ret), K(stmt_buf));
       }
       int end_ret = op.end_nested_session();
       if (OB_SUCCESS != end_ret) {
@@ -498,9 +531,13 @@ int ForeignKeyHandle::gen_column_value(ObEvalCtx &eval_ctx, char *&buf, int64_t 
         // NO LOG.
       } else if (OB_FAIL(databuff_printf(buf, len, pos, alloc, column_fmt,
                                         col_name.length(), col_name.ptr()))) {
+        LOG_WARN("failed to print column name", K(ret), K(col_name));
       } else if (OB_FAIL(col_datum->to_obj(col_obj, col_obj_meta))) {
+        LOG_WARN("to_obj failed", K(ret), K(*col_datum), K(col_obj_meta));
       } else if (OB_FAIL(col_obj.print_sql_literal(buf, len, pos, alloc, print_params))) {
+        LOG_WARN("failed to print column value", K(ret), K(*col_datum), K(col_obj));
       } else if (OB_FAIL(databuff_printf(buf, len, pos, alloc, "%s", delimiter))) {
+        LOG_WARN("failed to print delimiter", K(ret), K(delimiter));
       }
     }
   }
@@ -533,8 +570,11 @@ int  ForeignKeyHandle::gen_column_null_value(ObEvalCtx &ctx, char *&buf, int64_t
       const ObString &col_name = columns.at(i).name_;
       if (OB_FAIL(databuff_printf(buf, len, pos, alloc, column_fmt,
                                         col_name.length(), col_name.ptr()))) {
+        LOG_WARN("failed to print column name", K(ret), K(col_name));
       } else if (OB_FAIL(col_obj.print_sql_literal(buf, len, pos, alloc, print_params))) {
+        LOG_WARN("failed to print column value", K(ret), K(col_obj));
       } else if (OB_FAIL(databuff_printf(buf, len, pos, alloc, "%s", delimiter))) {
+        LOG_WARN("failed to print delimiter", K(ret), K(delimiter));
       }
     }
   }
@@ -556,6 +596,7 @@ int ForeignKeyHandle::is_self_ref_row(ObEvalCtx &eval_ctx,
   ObDatum *name_col = NULL;
   ObDatum *val_col = NULL;
   if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
+    LOG_WARN("failed to get datum access context", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && is_self_ref && i < fk_arg.columns_.count(); i++) {
     const int32_t name_idx = fk_arg.columns_.at(i).name_idx_;
@@ -568,6 +609,7 @@ int ForeignKeyHandle::is_self_ref_row(ObEvalCtx &eval_ctx,
     OZ(row.at(val_idx)->eval(eval_ctx, val_col));
     int cmp_ret = 0;
     if (OB_FAIL(cmp_func(*name_col, *val_col, cmp_ret, access_ctx))) {
+      LOG_WARN("cmp failed", K(ret), K(i));
     } else {
       is_self_ref = (0 == cmp_ret);
     }
@@ -653,13 +695,18 @@ int ObTableModifyOp::inner_open()
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *my_session = GET_MY_SESSION(ctx_);
   if (OB_FAIL(init_foreign_key_operation())) {
+    LOG_WARN("failed to init foreign key operation", K(ret));
   } else if (MY_SPEC.plan_->has_nested_sql() && OB_FAIL(open_inner_conn())) {
     LOG_WARN("failed to open inner conn", K(ret));
   } else if (OB_FAIL(calc_single_table_loc())) {
+    LOG_WARN("calc single table loc failed", K(ret));
   } else if (OB_FAIL(check_need_exec_single_row())) {
+    LOG_WARN("failed to perform single row execution check", K(ret));
   } else {
     init_das_dml_ctx();
   }
+  LOG_TRACE("table_modify_op", K(execute_single_row_), K(need_foreign_key_check_),
+                               K(MY_SPEC.need_foreign_key_check_), K(MY_SPEC.need_trigger_fire_));
   return ret;
 }
 
@@ -748,7 +795,10 @@ int ObTableModifyOp::replace_implict_cursor(int64_t affected_rows,
                                        matched_rows,
                                        duplicated_rows,
                                        implicit_cursor))) {
+      LOG_WARN("prepare implict cursor failed", K(ret),
+          K(affected_rows), K(found_rows), K(matched_rows), K(duplicated_rows));
     } else if (OB_FAIL(plan_ctx->replace_implicit_cursor_info(implicit_cursor))) {
+      LOG_WARN("merge implicit cursor info to plan ctx failed", K(ret), K(implicit_cursor));
     }
   }
   return ret;
@@ -763,6 +813,7 @@ int ObTableModifyOp::prepare_implict_cursor(int64_t affected_rows,
   int ret = OB_SUCCESS;
   ObDatum *stmt_id_datum = nullptr;
   if (OB_FAIL(MY_SPEC.ab_stmt_id_->eval(eval_ctx_, stmt_id_datum))) {
+    LOG_WARN("eval ab stmt id failed", K(ret));
   } else {
     ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
     int64_t stmt_id = stmt_id_datum->get_int();
@@ -772,6 +823,7 @@ int ObTableModifyOp::prepare_implict_cursor(int64_t affected_rows,
     implicit_cursor.affected_rows_ += affected_rows;
     implicit_cursor.duplicated_rows_ += duplicated_rows;
     implicit_cursor.last_insert_id_ = plan_ctx->get_autoinc_col_value();
+    LOG_DEBUG("merge implicit cursor", K(ret), K(implicit_cursor));
   }
   return ret;
 }
@@ -792,7 +844,10 @@ int ObTableModifyOp::merge_implict_cursor(int64_t affected_rows,
                                        matched_rows,
                                        duplicated_rows,
                                        implicit_cursor))) {
+      LOG_WARN("prepare implict cursor failed", K(ret),
+          K(affected_rows), K(found_rows), K(matched_rows), K(duplicated_rows));
     } else if (OB_FAIL(plan_ctx->merge_implicit_cursor_info(implicit_cursor))) {
+      LOG_WARN("merge implicit cursor info to plan ctx failed", K(ret), K(implicit_cursor));
     }
   }
   return ret;
@@ -802,6 +857,7 @@ int ObTableModifyOp::inner_switch_iterator()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOperator::inner_switch_iterator())) {
+    LOG_WARN("switch iterator failed", K(ret));
   }
 
   return ret;
@@ -822,6 +878,7 @@ int ObTableModifyOp::inner_close()
   close_inner_conn();
   if (dml_rtctx_.das_ref_.has_task()) {
     if (OB_FAIL(dml_rtctx_.das_ref_.close_all_task())) {
+      LOG_WARN("close all insert das task failed", K(ret));
     } else {
       dml_rtctx_.das_ref_.reset();
     }
@@ -850,10 +907,12 @@ int ObTableModifyOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOperator::inner_rescan())) {
+    LOG_WARN("rescan child operator failed", K(ret));
   } else {
     iter_end_ = false;
     if (dml_rtctx_.das_ref_.has_task()) {
       if (OB_FAIL(dml_rtctx_.das_ref_.close_all_task())) {
+        LOG_WARN("close all insert das task failed", K(ret));
       } else {
         dml_rtctx_.reuse();
       }
@@ -862,6 +921,7 @@ int ObTableModifyOp::inner_rescan()
   if (OB_SUCC(ret)) {
     dml_modify_rows_.clear();
     if (OB_FAIL(calc_single_table_loc())) {
+      LOG_WARN("calc single table loc failed", K(ret));
     }
   }
   return ret;
@@ -885,7 +945,9 @@ int ObTableModifyOp::get_gi_task()
   ObTableID ref_table_id = OB_INVALID_ID;
   ObTabletID tablet_id;
   if (OB_FAIL(MY_SPEC.get_single_table_loc_id(table_loc_id, ref_table_id))) {
+    LOG_WARN("get single table loc id failed", K(ret));
   } else if (OB_FAIL(ctx_.get_gi_task_map(gi_prepare_map))) {
+    LOG_WARN("Failed to get gi task map", K(ret));
   } else if (OB_FAIL(gi_prepare_map->get_refactored(MY_SPEC.id_, gi_task_info))) {
     if (ret != OB_HASH_NOT_EXIST) {
       LOG_WARN("failed to get prepare gi task", K(ret), K(MY_SPEC.get_id()));
@@ -918,8 +980,10 @@ int ObTableModifyOp::calc_single_table_loc()
     ObDASTableLoc *table_loc = nullptr;
     if (OB_UNLIKELY(MY_SPEC.gi_above_)) {
       if (OB_FAIL(get_gi_task())) {
+        LOG_WARN("get gi task failed", K(ret));
       }
     } else if (OB_FAIL(MY_SPEC.get_single_table_loc_id(table_loc_id, ref_table_id))) {
+      LOG_WARN("get single table loc id failed", K(ret));
     } else if (OB_ISNULL(table_loc = das_ctx.get_table_loc_by_id(table_loc_id, ref_table_id))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get table location by table id failed", K(ret),
@@ -948,6 +1012,7 @@ int ObTableModifyOp::open_inner_conn()
                  query::ObInnerSQLConnectionAccess::
                      create_connection_with_external_session(
                          session, inner_conn_guard_))) {
+    LOG_WARN("failed to acquire inner connection", K(ret));
   } else if (OB_ISNULL(inner_conn_guard_.get_ptr())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("inner SQL connection is null", K(ret));
@@ -1001,6 +1066,7 @@ int ObTableModifyOp::begin_nested_session(bool skip_cur_stmt_tables)
     LOG_WARN("inner connection is NULL", K(ret));
   } else if (OB_FAIL(inner_conn_->begin_nested_session(get_saved_session(), saved_conn_,
                                                        skip_cur_stmt_tables))) {
+    LOG_WARN("failed to begin nested session", K(ret));
   }
   return ret;
 }
@@ -1012,6 +1078,7 @@ int ObTableModifyOp::end_nested_session()
     ret = OB_NOT_INIT;
     LOG_WARN("inner connection is NULL", K(ret));
   } else if (OB_FAIL(inner_conn_->end_nested_session(get_saved_session(), saved_conn_))) {
+    LOG_WARN("failed to end nested session", K(ret));
   }
   return ret;
 }
@@ -1026,6 +1093,7 @@ int ObTableModifyOp::execute_write(const char *sql)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql is NULL");
   } else if (OB_FAIL(inner_conn_->execute_write(sql, affected_rows))) {
+    LOG_WARN("failed to execute sql", K(ret), K(sql));
   }
   return ret;
 }
@@ -1040,6 +1108,7 @@ int ObTableModifyOp::execute_read(const char *sql, ObMySQLProxy::MySQLResult &re
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql is NULL");
   } else if (OB_FAIL(inner_conn_->execute_read(sql, res))) {
+    LOG_WARN("failed to execute sql", K(ret), K(sql));
   }
  return ret;
 }
@@ -1057,6 +1126,7 @@ int ObTableModifyOp::check_stack()
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recursive", K(ret), K(max_stack_deep), K(session->get_nested_count()));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
+    LOG_WARN("fail to check stack overflow", K(ret), K(is_stack_overflow));
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
@@ -1091,8 +1161,11 @@ int ObTableModifyOp::submit_all_dml_task()
                 OB_FAIL(dml_rtctx_.das_ref_.pick_del_task_to_first())) {
       LOG_WARN("fail to pick delete das task to first", K(ret));
     } else if (OB_FAIL(dml_rtctx_.das_ref_.execute_all_task())) {
+      LOG_WARN("execute all dml das task failed", K(ret));
     } else if (OB_FAIL(dml_rtctx_.das_ref_.close_all_task())) {
+      LOG_WARN("close all das task failed", K(ret));
     } else if (OB_FAIL(ObDMLService::handle_after_row_processing(this, &get_dml_modify_row_list()))) {
+      LOG_WARN("perform batch foreign key constraints and after row trigger failed", K(ret));
     } else {
       dml_modify_rows_.clear();
       dml_rtctx_.reuse();
@@ -1114,6 +1187,7 @@ int ObTableModifyOp::discharge_das_write_buffer()
     ret = submit_all_dml_task();
   } else if (execute_single_row_) {
     if (REACH_COUNT_INTERVAL(100)) { // print log per 100 times.
+      LOG_TRACE("DML task excute single row", K(execute_single_row_));
     }
     ret = submit_all_dml_task();
   }
@@ -1138,11 +1212,13 @@ int ObTableModifyOp::inner_get_next_row()
 {
   int ret = OB_SUCCESS;
   if (iter_end_) {
+    LOG_DEBUG("can't get gi task, iter end", K(MY_SPEC.id_), K(iter_end_));
     ret = OB_ITER_END;
   } else {
     int64_t row_count = 0;
     while (OB_SUCC(ret)) {
       if (OB_FAIL(try_check_status())) {
+        LOG_WARN("check status failed", K(ret));
       } else if (OB_FAIL(get_next_row_from_child())) {
         if (OB_ITER_END != ret) {
           LOG_WARN("fail to get next row", K(ret));
@@ -1152,7 +1228,9 @@ int ObTableModifyOp::inner_get_next_row()
           break;
         }
       } else if (OB_FAIL(write_row_to_das_buffer())) {
+        LOG_WARN("write row to das failed", K(ret));
       } else if (OB_FAIL(discharge_das_write_buffer())) {
+        LOG_WARN("discharge das write buffer failed", K(ret));
       } else if (MY_SPEC.is_returning_) {
         break;
       }
@@ -1167,6 +1245,7 @@ int ObTableModifyOp::inner_get_next_row()
       //DML operator reach iter end,
       //now submit the remaining rows in the DAS Write Buffer to the storage
       if (OB_FAIL(submit_all_dml_task())) {
+        LOG_WARN("failed to submit the remaining dml tasks", K(ret));
       }
     }
     //to post process the DML info after writing all data to the storage or returning one row
@@ -1189,6 +1268,7 @@ int ObTableModifyOp::perform_batch_fk_check()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("foreign key checker is null", K(ret), K(i));
     } else if (OB_FAIL(fk_checker->do_fk_check_batch(all_has_result))) {
+      LOG_WARN("failed to perform batch foreign key check", K(ret));
     } else if (!all_has_result) {
       ret = OB_ERR_NO_REFERENCED_ROW;
     }

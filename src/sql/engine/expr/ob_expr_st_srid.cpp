@@ -106,6 +106,7 @@ int ObExprSTSRID::eval_st_srid_common(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
       ret = OB_ERR_INVALID_TYPE_FOR_OP;   
       LOG_WARN("invalid type", K(ret));
     } else if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[1], ctx, datum))) {
+      LOG_WARN("failed to eval second argument", K(ret));
     } else if (datum->is_null()) {
       is_null_result = true;
     } else if (datum->get_int() < 0 || datum->get_int() > UINT_MAX32) {
@@ -115,6 +116,7 @@ int ObExprSTSRID::eval_st_srid_common(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
     } else if (0 != (srid = datum->get_uint32())) {
       if (OB_FAIL(ObGeoExprUtils::get_srs_item(
               ctx, srs_guard, srid, srs))) {
+        LOG_WARN("failed to get srs item", K(ret));
       } else if (OB_ISNULL(srs)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null srs item", K(ret));
@@ -125,12 +127,14 @@ int ObExprSTSRID::eval_st_srid_common(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
   // get geometry
   if (OB_SUCC(ret)) {
     if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[0], ctx, datum))) {
+      LOG_WARN("failed to eval first argument", K(ret));
     } else if (datum->is_null()) {
       is_null_result = true;
     } else if (!is_null_result) { // srid might be null, fix 42538503
       wkb = datum->get_string();
       if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *datum,
                 expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
+        LOG_WARN("fail to get real string data", K(ret), K(wkb));
       } else if (num_args == 1) {
         if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb, srs, true, func_name))) {
           LOG_WARN("fail to get srs item", K(ret), K(wkb));
@@ -141,14 +145,18 @@ int ObExprSTSRID::eval_st_srid_common(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
         if (OB_FAIL(ret)) {
           // do nothing
         } else if (OB_FAIL(ObGeoExprUtils::build_geometry(tmp_allocator, wkb, geo, srs, func_name, ObGeoBuildFlag::GEO_CHECK_RANGE | GEO_NOT_COPY_WKB))) {
+          LOG_WARN("failed to parse geometry from wkb", K(ret));
         } else if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(wkb, srid))) {
+          LOG_WARN("failed to get srid from wkb", K(ret));
         } else if (ObGeoTypeUtil::need_get_srs(srid) && srs == NULL) {
           LOG_USER_WARN(OB_ERR_WARN_SRS_NOT_FOUND, srid);
           LOG_WARN("srs not found");
         }
       } else {
         if (OB_FAIL(ObGeoExprUtils::build_geometry(tmp_allocator, wkb, geo, srs, func_name, ObGeoBuildFlag::GEO_CHECK_RANGE | GEO_NOT_COPY_WKB))) {
+          LOG_WARN("fail to create geo", K(ret), K(wkb));
         } else if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*geo, expr, ctx, srs, res_wkb))) {
+          LOG_WARN("failed to write geometry to wkb", K(ret));
         }
       } 
     }

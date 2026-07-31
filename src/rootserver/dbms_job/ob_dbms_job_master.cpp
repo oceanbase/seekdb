@@ -48,6 +48,7 @@ int ObDBMSJobTask::init(ObDBMSJobQueue *ready_queue)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret), K(ready_queue));
   } else if (OB_FAIL(timer_.init())) {
+    LOG_WARN("fail to init timer", K(ret));
   } else {
     ready_queue_ = ready_queue;
     inited_ = true;
@@ -108,6 +109,7 @@ void ObDBMSJobTask::runTimerTask()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null ptr", K(ret), K(job_key_), K(ready_queue_));
   } else if (OB_FAIL(ready_queue_->push(job_key_, 0))) {
+    LOG_WARN("fail to push ready job to queue", K(ret), K(*job_key_));
   } else {
     job_key_ = NULL;
     if (wait_vector_.count() > 0) {
@@ -119,6 +121,7 @@ void ObDBMSJobTask::runTimerTask()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", K(ret), K(job_key_));
       } else if (OB_FAIL(timer_.schedule(*this, job_key_->get_adjust_delay()))) {
+        LOG_WARN("fail to schedule task", K(ret), K(*job_key_));
       }
     }
   }
@@ -127,6 +130,7 @@ void ObDBMSJobTask::runTimerTask()
   for (WaitVectorIterator iter = wait_vector_.begin();
           OB_SUCC(ret) && iter != wait_vector_.end(); ++iter, ++i) {
     ObDBMSJobKey *job = *iter;
+    LOG_DEBUG("JobKEYS INFO ELEMENT ====", K(i), KPC(job));
   }
   return;
 }
@@ -193,6 +197,7 @@ int ObDBMSJobTask::immediately(ObDBMSJobKey *job_key)
   } else {
     ObSpinLockGuard guard(lock_);
     if (OB_FAIL(ready_queue_->push(job_key, 0))) {
+      LOG_WARN("fail to push ready job to queue", K(ret), K(*job_key));
     }
   }
   return ret;
@@ -218,6 +223,7 @@ void ObDBMSJobThread::handle(void *task)
     LOG_ERROR("null ptr", K(ret), K(task));
   } else if (FALSE_IT(master = static_cast<ObDBMSJobMaster *>(task))) {
   } else if (OB_FAIL(master->scheduler())) {
+    LOG_ERROR("fail to run dbms job master", K(ret));
   }
   return;
 }
@@ -243,9 +249,13 @@ int ObDBMSJobMaster::init(ObISQLClient *sql_client,
   } else if (FALSE_IT(ready_queue_.set_limit(MAX_READY_JOBS_CAPACITY))) {
     // do-nothing
   } else if (OB_FAIL(scheduler_task_.init(&ready_queue_))) {
+    LOG_WARN("fail to init ready queue", K(ret));
   } else if (OB_FAIL(scheduler_thread_.init(1, 1))) {
+    LOG_WARN("fail to init scheduler pool", K(ret));
   } else if (OB_FAIL(job_utils_.init(sql_client))) {
+    LOG_WARN("fail to init action record", K(ret));
   } else if (OB_FAIL(alive_jobs_.create(1024))) {
+    LOG_WARN("failed to create job hash set", K(ret));
   } else if (OB_ISNULL(ObCurTraceId::get())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("trace id is null", K(ret));
@@ -266,8 +276,11 @@ int ObDBMSJobMaster::start()
   } else if (running_) {
     // alreay running , do nothing ...
   } else if (OB_FAIL(scheduler_thread_.push(static_cast<void *>(this)))) {
+    LOG_WARN("fail to start scheduler thread", K(ret));
   } else if (OB_FAIL(scheduler_task_.start())) {
+    LOG_WARN("fail to start ready queue", K(ret));
   } else if (OB_FAIL(load_and_register_new_jobs())) {
+    LOG_WARN("fail to load all dbms jobs", K(ret));
   }
   LOG_WARN("dbms job master started", K(ret));
   return ret;
@@ -321,6 +334,7 @@ int ObDBMSJobMaster::scheduler()
       } else {
         int tmp_ret = OB_SUCCESS;
         if (OB_SUCCESS != (tmp_ret = scheduler_job(job_key))) {
+          LOG_WARN("fail to scheduler single dbms job", K(ret), K(tmp_ret), KPC(job_key));
         } else {
           LOG_INFO("success to scheduler single dbms job", K(ret), K(tmp_ret), KPC(job_key));
         }
@@ -376,13 +390,16 @@ int ObDBMSJobMaster::scheduler_job(ObDBMSJobKey *job_key, bool is_retry)
       int tmp_ret = OB_SUCCESS;
       // always add job to queue. we need this to check job status changes.
       if (OB_SUCCESS != (tmp_ret = register_job(job_info, job_key, ignore_nextdate))) {
+        LOG_WARN("failed to register job to job queue", K(tmp_ret));
       }
     } else {
       int tmp = alive_jobs_.erase_refactored(job_info.get_job_id());
       if (tmp != OB_SUCCESS) {
+        LOG_INFO("failed delete valid job from hash set", K(ret), K(job_info));
       }
       allocator_.free(job_key); // job deleted!
     }
+    LOG_DEBUG("scheduler A real JOB!", K(ret), KPC(job_key));
   }
   return ret;
 }

@@ -55,7 +55,9 @@ struct ObGetAllOperatorStatOp
         for (int64_t i = 0; i < plan->op_stats_.count() && OB_SUCC(ret); i++) {
           if (OB_FAIL(plan->op_stats_.get_op_stat_accumulation(plan,
                                                                i, stat))) {
+            SERVER_LOG(WARN, "fail to get op stat accumulation", K(ret), K(i));
           } else if (OB_FAIL(key_array_->push_back(stat))) {
+            SERVER_LOG(WARN, "fail to push back plan_id", K(ret));
           }
         } // for end
       }
@@ -95,6 +97,7 @@ int ObVirtualSqlPlanStatistics::get_next_operator_stat_row(bool &is_end)
     plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
     ObGetAllOperatorStatOp operator_stat_op(&operator_stat_array_);
     if (OB_FAIL(plan_cache->foreach_cache_obj(operator_stat_op))) {
+      SERVER_LOG(WARN, "fail to traverse id2stat_map");
     } else {
       operator_stat_array_idx_ = 0;
     }
@@ -112,9 +115,13 @@ int ObVirtualSqlPlanStatistics::get_next_operator_stat_row(bool &is_end)
       ObOperatorStat &opstat = operator_stat_array_.at(operator_stat_array_idx_);
       ++operator_stat_array_idx_;
       if (OB_FAIL(fill_cells(opstat))) {
+        SERVER_LOG(WARN, "fail to fill cells", K(opstat));
       }
     }
   }
+  SERVER_LOG(DEBUG,
+             "add plan",
+             K(ret));
   return ret;
 }
 
@@ -201,6 +208,7 @@ int ObVirtualSqlPlanStatistics::inner_get_next_row(common::ObNewRow *&row)
   } else {
     SERVER_MODULE_SCOPE {
       if (OB_FAIL(get_next_operator_stat_row(is_sub_end))) {
+        SERVER_LOG(WARN, "fail to get plan statistics", K(ret));
       } else if (is_sub_end) {
         iter_end_ = true;
         ret = OB_ITER_END;

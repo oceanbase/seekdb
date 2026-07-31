@@ -41,6 +41,7 @@ int ObHashPartCols::equal_distinct(
     LOG_WARN("unexpected status: compare info is null",
       K(sort_collations), K(cmp_funcs), K(eval_ctx), K(exprs), K(ret));
   } else if (OB_FAIL(eval_ctx->get_datum_access_ctx(datum_access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
   } else if (use_expr_) {
     //for this situation, must be crash in a batch, need to get datum from expr
     ObDatum *l_cell = nullptr;
@@ -56,6 +57,7 @@ int ObHashPartCols::equal_distinct(
       r_cell = &exprs->at(idx)->locate_expr_datum(*eval_ctx);
       if (OB_FAIL(cmp_funcs->at(i).cmp_func_(
               *l_cell, *r_cell, cmp_result, datum_access_ctx))) {
+        LOG_WARN("do cmp failed", K(ret));
       }
     }
     //reset batch_idx before return 
@@ -70,6 +72,7 @@ int ObHashPartCols::equal_distinct(
       r_cell = &exprs->at(idx)->locate_expr_datum(*eval_ctx);
       if (OB_FAIL(cmp_funcs->at(i).cmp_func_(
               l_cells[idx], *r_cell, cmp_result, datum_access_ctx))) {
+        LOG_WARN("do cmp failed", K(ret));
       }
     }
     result = (0 == cmp_result);

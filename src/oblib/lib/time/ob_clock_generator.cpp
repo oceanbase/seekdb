@@ -45,6 +45,7 @@ int ObClockGenerator::init()
   } else {
     clock_generator_.ready_ = false;
     if (OB_FAIL(clock_generator_.start())) {
+      TRANS_LOG(ERROR, "create thread fail", K(ret));
     } else {
       ret = OB_SUCCESS;
       clock_generator_.cur_ts_ = clock_generator_.get_us();

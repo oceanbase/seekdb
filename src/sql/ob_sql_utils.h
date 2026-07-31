@@ -55,7 +55,6 @@ class ObISrsProvider;
 namespace sql
 {
 class ObRawExprFactory;  // fwd: previously re-exported through the share schema include chain
-class ObMaintainDepInfoTaskQueue;
 class RowDesc;
 class ObSQLSessionInfo;
 class ObRawExpr;
@@ -238,6 +237,7 @@ public:
     need_check = false;
     if (param.is_unknown()) {
       if (OB_FAIL(param.get_unknown(param_idx))) {
+        SQL_LOG(WARN, "get question mark value failed", K(param), K(ret));
       } else if (param_idx < 0 || param_idx >= params_array.count()) {
         ret = common::OB_ERR_ILLEGAL_INDEX;
         SQL_LOG(WARN, "Wrong index of question mark position", K(ret), K(param_idx));
@@ -256,6 +256,7 @@ public:
                                       ObEvalCtx &eval_ctx,
                                       int64_t check_size)
   {
+    SQL_LOG(TRACE, "enable datum ptr check", K(exprs), K(check_size));
     // TODO: add sanity check for vector formats
 
     // auto expr_idx = 0;
@@ -605,12 +606,10 @@ public:
                                   ObSelectStmt *select_stmt,
                                   bool reset_column_infos,
                                   common::ObIAllocator &alloc,
-                                  sql::ObSQLSessionInfo &session_info,
-                                  ObMaintainDepInfoTaskQueue &dependency_info_queue);
+                                  sql::ObSQLSessionInfo &session_info);
   static int check_sys_view_changed(const share::schema::ObTableSchema &old_view_schema,
                                     const share::schema::ObTableSchema &new_view_schema,
-                                    bool &changed,
-                                    ObMaintainDepInfoTaskQueue &dependency_info_queue);
+                                    bool &changed);
   static bool check_need_disconnect_parser_err(const int ret_code);
   static bool check_json_expr(const ObRawExpr &expr);
 

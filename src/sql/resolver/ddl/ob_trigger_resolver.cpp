@@ -85,6 +85,7 @@ int ObTriggerResolver::get_drop_trigger_stmt_table_name(ObDropTriggerStmt *stmt)
     OX (schema_guard = schema_checker_->get_schema_guard());
     if (OB_SUCC(ret)) {
       if(OB_FAIL(schema_guard->get_database_schema( trigger_database, db_schema))) {
+        LOG_WARN("get database schema failed", K(ret));
       } else if (NULL == db_schema) {
         ret = OB_ERR_BAD_DATABASE;
         LOG_USER_ERROR(OB_ERR_BAD_DATABASE, trigger_database.length(), trigger_database.ptr());
@@ -98,6 +99,7 @@ int ObTriggerResolver::get_drop_trigger_stmt_table_name(ObDropTriggerStmt *stmt)
                  K(trigger_database), K(trigger_database_id), K(*db_schema), K(ret));
       } else if (OB_FAIL(schema_guard->get_trigger_info( trigger_database_id,
                                                        trigger_name, trigger_info))) {
+        LOG_WARN("get trigger info failed", K(ret), K(trigger_database), K(trigger_name));
       } else if (OB_ISNULL(trigger_info)) {
         ret = OB_ERR_TRIGGER_NOT_EXIST;
       } else if (trigger_info->is_in_recyclebin()) {
@@ -107,6 +109,8 @@ int ObTriggerResolver::get_drop_trigger_stmt_table_name(ObDropTriggerStmt *stmt)
       } else if (OB_FAIL(schema_guard->get_table_schema(
                                                   trigger_info->get_base_object_id(),
                                                   table))) {
+       LOG_WARN("Failed to get table schema",
+                   K(trigger_info->get_base_object_id()), K(ret));
       } else if (OB_ISNULL(table)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Table schema should not be NULL", K(ret));
@@ -196,7 +200,9 @@ int ObTriggerResolver::resolve_sp_definer(const ParseNode *parse_node,
     ObString priv_user(tmp_buf);
     if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
               *allocator_, session_info_->get_dtc_params(), priv_user))) {
+      LOG_WARN("fail to convert charset", K(ret));
     } else if (OB_FAIL(trigger_arg.trigger_info_.set_trigger_priv_user(priv_user))) {
+      LOG_WARN("failed to set priv user", K(ret));
     }
   }
 
@@ -415,6 +421,7 @@ int ObTriggerResolver::resolve_trigger_body(const ParseNode &parse_node,
         bool saved_trigger_flag = session_info_->is_for_trigger_package();
         session_info_->set_for_trigger_package(true);
         if (OB_FAIL(resolver.resolve(*parse_tree->children_[0]))) {
+          LOG_WARN("resolve trigger procedure failed", K(parse_tree->children_[0]->type_), K(ret));
         }
         // Regardless of whether the execution is successful, restore the original value of this variable
         session_info_->set_for_trigger_package(saved_trigger_flag);
@@ -536,6 +543,7 @@ int ObTriggerResolver::resolve_base_object(ObCreateTriggerArg &tg_arg,
 int ObTriggerResolver::resolve_order_clause(const ParseNode *parse_node, ObCreateTriggerArg &trigger_arg)
 {
   int ret = OB_SUCCESS;
+  LOG_DEBUG("resolve trigger order clause start", K(ret));
   if (OB_NOT_NULL(parse_node)) {
     ObTriggerInfo &trg_info = trigger_arg.trigger_info_;
     OV (T_TG_ORDER == parse_node->type_ && 1 == parse_node->num_child_ && NULL != parse_node->children_[0]);
@@ -567,14 +575,12 @@ int ObTriggerResolver::resolve_order_clause(const ParseNode *parse_node, ObCreat
       }
     }
   }
+  LOG_DEBUG("resolve trigger order clause end", K(ret));
   return ret;
 }
 
 int ObTriggerResolver::analyze_trigger(ObSchemaGetterGuard &schema_guard,
                                        ObSQLSessionInfo *session_info,
-                                       ObPlanCache &plan_cache,
-                                       ObIPLSqlRuntime *pl_sql_runtime,
-                                       pl::ObPL *pl_engine,
                                        ObMySQLProxy *sql_proxy,
                                        ObIAllocator &allocator,
                                        const ObTriggerInfo &trigger_info,
@@ -590,9 +596,7 @@ int ObTriggerResolver::analyze_trigger(ObSchemaGetterGuard &schema_guard,
       ObPLPackageGuard package_guard{};
       const ObString &pkg_name = trigger_info.get_package_body_info().get_package_name();
       ObString source;
-      ObPLBuilder builder(
-          allocator, *session_info, plan_cache, pl_sql_runtime, pl_engine, nullptr, nullptr,
-          schema_guard, package_guard, *sql_proxy);
+      ObPLBuilder builder(allocator, *session_info, schema_guard, package_guard, *sql_proxy);
       const ObPackageInfo &package_spec_info = trigger_info.get_package_spec_info();
       OZ (package_spec_ast.init(db_name,
                                 package_spec_info.get_package_name(),
@@ -757,6 +761,7 @@ int ObTriggerSourceBuilder::fill_package_body(const ObTriggerInfo &trigger_info,
   }
   OZ (BUF_PRINTF(BODY_END_MYSQL));
   OX (body_source.assign_ptr(buf, static_cast<int32_t>(pos)));
+  LOG_DEBUG("TRIGGER", K(body_source));
   return ret;
 }
 
@@ -1035,6 +1040,7 @@ int ObTriggerSourceBuilder::build_procedure_source(
                    delimiter, base_object_name.length(), base_object_name.ptr(), delimiter,
                    tg_body.length(), tg_body.ptr()));
     OX (procedure_source.assign_ptr(buf, static_cast<int32_t>(pos)));
+    LOG_DEBUG("TRIGGER PROCEDURE", K(procedure_source));
   }
   return ret;
 }

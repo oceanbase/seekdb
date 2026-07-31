@@ -57,6 +57,7 @@ int ObBucketQSyncLock::rdlock(const uint64_t bucket_idx)
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "Invalid argument, ", K(bucket_idx), K_(bucket_cnt), K(ret));
   } else if (OB_FAIL(locks_[bucket_idx].rdlock())) {
+    SHARE_LOG(WARN, "Fail to read lock latch, ", K(bucket_idx), K(ret));
   }
   return ret;
 }
@@ -71,6 +72,7 @@ int ObBucketQSyncLock::wrlock(const uint64_t bucket_idx)
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "Invalid argument, ", K(bucket_idx), K_(bucket_cnt), K(ret));
   } else if (OB_FAIL(locks_[bucket_idx].wrlock())) {
+    SHARE_LOG(WARN, "Fail to write lock latch, ", K(bucket_idx), K(ret));
   }
   return ret;
 }
@@ -133,6 +135,7 @@ int ObBucketQSyncLock::wrlock_all()
   }
 
   const int64_t cost_ts = ObClockGenerator::getClock() - start_ts;
+  SHARE_LOG(DEBUG, "wrlock all", K(bucket_cnt_), K(cost_ts), K(ret));
   return ret;
 }
 
@@ -150,6 +153,7 @@ int ObBucketQSyncLock::wrunlock_all()
     }
   }
   const int64_t cost_ts = ObClockGenerator::getClock() - start_ts;
+  SHARE_LOG(DEBUG, "unlock all", K(bucket_cnt_), K(cost_ts), K(ret));
   return ret;
 }
 
@@ -179,6 +183,7 @@ int ObBucketQSyncLock::try_rdlock_all()
     }
   }
   const int64_t cost_ts = ObClockGenerator::getClock() - start_ts;
+  SHARE_LOG(DEBUG, "try lock all", K(bucket_cnt_), K(cost_ts), K(ret));
   return ret;
 }
 
@@ -196,6 +201,7 @@ int ObBucketQSyncLock::rdunlock_all()
     }
   }
   const int64_t cost_ts = ObClockGenerator::getClock() - start_ts;
+  SHARE_LOG(DEBUG, "unlock all", K(bucket_cnt_), K(cost_ts), K(ret));
   return ret;
 }
 } //namespace common

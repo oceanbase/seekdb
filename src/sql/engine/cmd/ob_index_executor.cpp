@@ -59,6 +59,7 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
   ObArenaAllocator allocator("CreateIndexExec");
 
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
+    LOG_WARN("fail to get first stmt" , K(ret));
   } else {
     create_index_arg.ddl_stmt_str_ = first_stmt;
   }
@@ -70,6 +71,7 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(ObPartitionExecutorUtils::calc_values_exprs(ctx, stmt))) {
+    LOG_WARN("fail to compare range partition expr", K(ret));
   } else if (OB_INVALID_ID == create_index_arg.session_id_
              && FALSE_IT(create_index_arg.session_id_ = my_session->get_sessid_for_table())) {
     //impossible
@@ -77,6 +79,7 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
     create_index_arg.is_inner_ = my_session->is_inner();
     create_index_arg.parallelism_ = stmt.get_parallelism();
     if (OB_FAIL(index_arg_list.push_back(&create_index_arg))) {
+      LOG_WARN("fail to push back create index arg", KR(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -85,12 +88,15 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
     bool is_parallel_ddl = true;
     if (OB_FAIL(ObParallelDDLControlMode::is_parallel_ddl_enable(
                 ObParallelDDLControlMode::CREATE_INDEX, is_parallel_ddl))) {
+      LOG_WARN("fail to get whether create index is parallel", KR(ret), K(1UL));
     } else if (!is_parallel_ddl
               || share::schema::is_fts_or_multivalue_index(create_index_arg.index_type_)
               || share::schema::is_vec_index(create_index_arg.index_type_)) {
       start_time = ObTimeUtility::current_time();
       if (OB_FAIL(query::serialize_root_service_call(
           [&]{ return ctx.root_command_service().create_index(create_index_arg, res); }))) {
+        LOG_WARN("rpc proxy create index failed", K(create_index_arg),
+                 "dst", GCTX.self_addr(), K(ret));
       }
       refresh_time = ObTimeUtility::current_time();
       ddl_task_time = refresh_time;
@@ -100,12 +106,15 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
       create_index_arg.is_parallel_ = true;
       const int64_t rpc_timeout = THIS_WORKER.get_timeout_remain();
       if (OB_FAIL(timeout_ctx.set_timeout(rpc_timeout))) {
+        LOG_WARN("fail to set timeout ctx", KR(ret));
       } else if (OB_FAIL(ctx.root_command_service().parallel_create_index(
           create_index_arg, res))) {
+        LOG_WARN("fail to parallel create index", KR(ret), "dst", GCTX.self_addr());
       } else {
         refresh_time = ObTimeUtility::current_time();
         if (OB_FAIL(ObDDLExecutorUtil::wait_local_schema_visible(
             timeout_ctx, my_session, res.schema_version_))) {
+          LOG_WARN("fail to wait for local schema visibility", KR(ret), K(res));
         }
         ddl_task_time = ObTimeUtility::current_time();
       }
@@ -121,9 +130,8 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
         ret = OB_ERR_ADD_INDEX;
         LOG_WARN("index table id is invalid", KR(ret));
       }
-    } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(
-        res.task_id_, res.ddl_need_retry_at_executor_, my_session,
-        *ctx.get_query_runtime_environment(), ctx.local_command_service()))) {
+    } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(res.task_id_, res.ddl_need_retry_at_executor_, my_session))) {
+      LOG_WARN("failed to wait ddl finish", K(ret));
     }
   }
   SERVER_EVENT_ADD("ddl", "create index execute finish",
@@ -164,6 +172,7 @@ int ObCreateIndexExecutor::set_drop_index_stmt_str(
                         drop_index_arg.table_name_.ptr(),
                         drop_index_arg.index_name_.length(),
                         drop_index_arg.index_name_.ptr()))) {
+    LOG_WARN("fail to print ddl_stmt_str for rollback", K(ret));
   } else {
     drop_index_arg.ddl_stmt_str_.assign_ptr(buf, static_cast<int32_t>(pos));
   }
@@ -174,13 +183,14 @@ int ObCreateIndexExecutor::set_drop_index_stmt_str(
 // is_update_global_indexes = true: drop/truncate partition will trigger index building, no need delete failed index at exception
 // is_update_global_indexes = false: create index/alter table add index will trigger index building, need delete failed index at exception
 int ObCreateIndexExecutor::sync_check_index_status(sql::ObSQLSessionInfo &my_session,
-    query::ObIRootCommandService &root_commands,
     const obcall::ObCreateIndexArg &create_index_arg,
     const obcall::ObAlterTableRes &res,
     common::ObIAllocator &allocator,
     bool is_update_global_indexes)
 {
   int ret = OB_SUCCESS;
+  query::ObIRootCommandService *root_commands =
+      my_session.get_root_command_service();
   // Force refresh schema version, ensure observer version is latest
   THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + OB_MAX_USER_SPECIFIED_TIMEOUT);
   bool is_finish = false;
@@ -191,7 +201,10 @@ int ObCreateIndexExecutor::sync_check_index_status(sql::ObSQLSessionInfo &my_ses
   const uint64_t index_table_id = create_index_arg.index_schema_.get_table_id();
   ObSqlString           drop_index_sql;
 
-  if (!is_update_global_indexes) {
+  if (OB_ISNULL(root_commands)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("root command service is not bound", KR(ret));
+  } else if (!is_update_global_indexes) {
     ret = drop_index_sql.append_fmt("drop index `%.*s` on `%.*s`",
                                     create_index_arg.index_name_.length(),
                                     create_index_arg.index_name_.ptr(),
@@ -240,8 +253,11 @@ int ObCreateIndexExecutor::sync_check_index_status(sql::ObSQLSessionInfo &my_ses
         int tmp_ret = OB_SUCCESS;
         ObDropIndexRes drop_index_res;
         if (OB_SUCCESS != (tmp_ret = set_drop_index_stmt_str(drop_index_arg, allocator))) {
+          LOG_WARN("fail to set drop index ddl_stmt_str", K(tmp_ret));
         } else if (OB_SUCCESS != (tmp_ret = query::serialize_root_service_call(
-            [&]{ return root_commands.drop_index(drop_index_arg, drop_index_res); }))) {
+            [&]{ return root_commands->drop_index(drop_index_arg, drop_index_res); }))) {
+          LOG_WARN("drop index failed", "dst", GCTX.self_addr(), K(tmp_ret),
+              K(drop_index_arg.table_name_), K(drop_index_arg.index_name_));
         }
       } else {
         LOG_WARN("failed to handle_session_exception", KR(ret));
@@ -251,6 +267,7 @@ int ObCreateIndexExecutor::sync_check_index_status(sql::ObSQLSessionInfo &my_ses
     // Subsequent standby database will handle this index;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObDDLExecutorUtil::wait_build_index_finish( res.task_id_, is_finish))) {
+      LOG_WARN("wait build index finish failed", K(ret), K(res.task_id_));
     } else if (!is_finish) {
       ob_usleep(CHECK_INTERVAL);
       LOG_INFO("index status is not final", K(index_table_id));
@@ -301,6 +318,7 @@ int ObDropIndexExecutor::wait_drop_index_finish(
       } else {
         if (OB_FAIL(ret)) {
         } else if (OB_TMP_FAIL(ObShareUtil::is_primary_server(is_primary_server))) {
+          LOG_WARN("fail to check whether is primary server", KR(ret), K(is_primary_server));
         } else if (!is_primary_server) {
           ret = OB_STANDBY_DATABASE_READ_ONLY;
           FORWARD_USER_ERROR(ret, "DDL not finish, need check");
@@ -308,6 +326,7 @@ int ObDropIndexExecutor::wait_drop_index_finish(
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(session.check_session_status())) {
+          LOG_WARN("session exception happened", K(ret));
         } else {
           ob_usleep(retry_interval);
         }
@@ -328,6 +347,7 @@ int ObDropIndexExecutor::execute(ObExecContext &ctx, ObDropIndexStmt &stmt)
   ObDropIndexRes res;
   tmp_arg.is_add_to_scheduler_ = true;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
+    LOG_WARN("fail to get first stmt" , K(ret));
   } else {
     tmp_arg.ddl_stmt_str_ = first_stmt;
 
@@ -344,7 +364,9 @@ int ObDropIndexExecutor::execute(ObExecContext &ctx, ObDropIndexStmt &stmt)
     //impossible
   } else if (OB_FAIL(query::serialize_root_service_call(
       [&]{ return ctx.root_command_service().drop_index(drop_index_arg, res); }))) {
+    LOG_WARN("rpc proxy drop index failed", "dst", GCTX.self_addr(), K(ret));
   } else if (OB_FAIL(wait_drop_index_finish(res.task_id_, *my_session))) {
+    LOG_WARN("wait drop index finish failed", K(ret));
   }
   SERVER_EVENT_ADD("ddl", "drop index execute finish",
     "ret", ret,
@@ -363,6 +385,7 @@ int ObPurgeIndexExecutor::execute(ObExecContext &ctx, ObPurgeIndexStmt &stmt) {
   const obcall::ObPurgeIndexArg &purge_index_arg = stmt.get_purge_index_arg();
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
+    LOG_WARN("fail to get first stmt" , K(ret));
   } else {
     const_cast<obcall::ObPurgeIndexArg&>(purge_index_arg).ddl_stmt_str_ = first_stmt;
   }
@@ -372,6 +395,7 @@ int ObPurgeIndexExecutor::execute(ObExecContext &ctx, ObPurgeIndexStmt &stmt) {
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(query::serialize_root_service_call(
       [&]{ return ctx.root_command_service().purge_index(purge_index_arg); }))) {
+    LOG_WARN("purge index failed", "dst", GCTX.self_addr(), K(ret));
   }
   SERVER_EVENT_ADD("ddl", "purge index execute finish",
     "ret", ret,

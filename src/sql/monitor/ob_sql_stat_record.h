@@ -143,8 +143,6 @@ public:
   // It is forbidden to use the cur_plan_ pointer on sql_ctx_, 
   // which can be modified and risks CORE. It is only safe to use the result_set pointer.
   int move_to_sqlstat_cache(ObSQLSessionInfo &session_info,
-                            ObPlanCache &plan_cache,
-                            query::ObIPlanCacheAccessService &access_service,
                             ObString &cur_sql,
                             const ObPhysicalPlan *plan = nullptr);
 

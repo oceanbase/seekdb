@@ -273,17 +273,6 @@
   https://www.python.org*
   https://visualstudio.microsoft.com*
   http://www.w3.org*
-**/MODULE.bazel.lock
-  https://bcr.bazel.build/*
-  https://github.com/bazelbuild/*
-**/tools/bazel_registry.py
-  https://github.com/bazelbuild/*
-CMakeLists.txt
-  https://www.oceanbase.ai*
-rpm/seekdb-build.sh
-  https://www.oceanbase.ai/*
-tools/systemd/profile/post_install.sh.template
-  https://www.oceanbase.ai/*
 **/README.md
   https://img.shields.io*
   https://en.oceanbase.com*

@@ -38,9 +38,7 @@ public:
 
   virtual bool is_valid() const override
   {
-    return ObDASIterParam::is_valid()
-        && iter_count_ >= 1
-        && nullptr != tr_merge_iters_;
+    return iter_count_ >= 1 && nullptr != tr_merge_iters_;
   }
 public:
   ObDASIter **tr_merge_iters_;
@@ -85,6 +83,7 @@ public:
     int ret = OB_SUCCESS;
     int64_t idx = doc_ids_.count();
     if (OB_FAIL(doc_ids_.push_back(std::make_pair(doc_id, idx)))) {
+      LOG_WARN("fail to push back doc id", K(ret));
     }
     return ret;
   }
@@ -135,6 +134,7 @@ private:
       if (OB_FAIL(cmp_func_(
               a.first.get_datum(), b.first.get_datum(), tmp_ret,
               datum_access_ctx_))) {
+        LOG_WARN("failed to compare doc id by datum", K(ret));
       }
       *err_code_ = *err_code_ == OB_SUCCESS ? ret : *err_code_;
       return tmp_ret < 0;

@@ -188,9 +188,11 @@ int ObJsonNode::object_add(const common::ObString &key, ObIJsonBase *value)
   INIT_SUCC(ret);
 
   if (OB_FAIL(check_valid_object_op(value))) {
+    LOG_WARN("invalid json object operation", K(ret), K(key));
   } else {
     ObJsonObject *j_obj = static_cast<ObJsonObject *>(this);
     if (OB_FAIL(j_obj->add(key, static_cast<ObJsonNode *>(value)))) {
+      LOG_WARN("fail to add value to object by key", K(ret), K(key));
     }
   }
 
@@ -202,9 +204,11 @@ int ObJsonNode::array_insert(uint64_t index, ObIJsonBase *value)
   INIT_SUCC(ret);
 
   if (OB_FAIL(check_valid_array_op(value))) {
+    LOG_WARN("invalid json array operation", K(ret), K(index));
   } else {
     ObJsonArray *j_arr = static_cast<ObJsonArray *>(this);
     if (OB_FAIL(j_arr->insert(index, static_cast<ObJsonNode *>(value)))) {
+      LOG_WARN("fail to insert value to array", K(ret), K(index));
     }
   }
   
@@ -216,9 +220,11 @@ int ObJsonNode::array_append(ObIJsonBase *value)
   INIT_SUCC(ret);
 
   if (OB_FAIL(check_valid_array_op(value))) {
+    LOG_WARN("invalid json array operation", K(ret));
   } else {
     ObJsonArray *j_arr = static_cast<ObJsonArray *>(this);
     if (OB_FAIL(j_arr->append(static_cast<ObJsonNode *>(value)))) {
+      LOG_WARN("fail to append value to array", K(ret));
     }
   }
 
@@ -236,6 +242,7 @@ int ObJsonNode::merge_tree(ObIAllocator *allocator, ObIJsonBase *other, ObIJsonB
     ObJsonObject *this_obj = static_cast<ObJsonObject *>(this);
     ObJsonObject *other_obj = static_cast<ObJsonObject *>(other);
     if (OB_FAIL(this_obj->consume(allocator, other_obj))) {
+      LOG_WARN("fail to consume object", K(ret), K(*this_obj), K(*other_obj));
     } else {
       result = this_obj;
     }
@@ -251,6 +258,7 @@ int ObJsonNode::merge_tree(ObIAllocator *allocator, ObIJsonBase *other, ObIJsonB
       } else {
         this_arr = new (buf) ObJsonArray(allocator);
         if (OB_FAIL(this_arr->append(this))) {
+          LOG_WARN("fail to append this array element", K(ret), K(json_type()));
         }
       }
     }
@@ -263,12 +271,14 @@ int ObJsonNode::merge_tree(ObIAllocator *allocator, ObIJsonBase *other, ObIJsonB
       } else {
         other_arr = new (buf) ObJsonArray (allocator);
         if (OB_FAIL(other_arr->append(static_cast<ObJsonNode *>(other)))) {
+          LOG_WARN("fail to append other array element", K(ret), K(other->json_type()));
         }
       }
     }
     
     if (OB_SUCC(ret)) {
       if (OB_FAIL(this_arr->consume(allocator, other_arr))) {
+        LOG_WARN("fail to consume array", K(ret), K(*this_arr), K(*other_arr));
       } else {
         result = this_arr;
       }
@@ -285,6 +295,7 @@ int ObJsonNode::get_location(ObJsonBuffer &path) const
   if (OB_ISNULL(parent_)) {
     ret = path.append("$");
   } else if (OB_FAIL(parent_->get_location(path))) {
+    LOG_WARN("failed to get parent location", K(ret));
   } else if (parent_->json_type() == ObJsonNodeType::J_OBJECT) {
     ObJsonObject *j_obj = static_cast<ObJsonObject *>(parent_);
     uint64_t size = j_obj->element_count();
@@ -294,8 +305,11 @@ int ObJsonNode::get_location(ObJsonBuffer &path) const
         is_found = true;
         ObString key;
         if (OB_FAIL(j_obj->get_key(i, key))) {
+          LOG_WARN("get key failed", K(ret), K(i));
         } else if (OB_FAIL(path.append("."))) {
+          LOG_WARN("path append . failed", K(ret));
         } else if (OB_FAIL(path.append(key))) {
+          LOG_WARN("path append key failed", K(ret));
         }
       }
     }
@@ -316,8 +330,11 @@ int ObJsonNode::get_location(ObJsonBuffer &path) const
           ret = OB_BAD_NULL_ERROR;
           LOG_WARN("fail to transform the index(lltostr)", K(ret));
         } else if (OB_FAIL(path.append("["))) {
+          LOG_WARN("path append [ failed", K(ret));
         } else if (OB_FAIL(path.append(res_ptr, static_cast<int32_t>(ptr - res_ptr)))) {
+          LOG_WARN("fail to append the index", K(ret));
         } else if (OB_FAIL(path.append("]"))) {
+          LOG_WARN("path append ] failed", K(ret));
         }
       }
     }
@@ -352,10 +369,12 @@ int ObJsonNode::replace(const ObIJsonBase *old_node, ObIJsonBase *new_node)
     if (json_type() == ObJsonNodeType::J_OBJECT) {
       ObJsonObject *j_obj = static_cast<ObJsonObject *>(this);
       if (OB_FAIL(j_obj->replace(j_old_node, j_new_node))) {
+        LOG_WARN("fail to replace in json object", K(ret), K(j_old_node), K(j_new_node));
       }
     } else { // ObJsonNodeType::J_ARRAY
       ObJsonArray *j_arr = static_cast<ObJsonArray *>(this);
       if (OB_FAIL(j_arr->replace(j_old_node, j_new_node))) {
+        LOG_WARN("fail to replace in json array", K(ret), K(j_old_node), K(j_new_node));
       }
     }
   } 
@@ -373,6 +392,7 @@ int ObJsonNode::object_remove(const common::ObString &key)
   } else {
     ObJsonObject *j_obj = static_cast<ObJsonObject *>(this);
     if (OB_FAIL(j_obj->remove(key))) {
+      LOG_WARN("fail to remove value in object", K(ret), K(key));
     }
   }
 
@@ -384,9 +404,11 @@ int ObJsonNode::array_remove(uint64_t index)
   INIT_SUCC(ret);
 
   if (OB_FAIL(check_valid_array_op(index))) {
+    LOG_WARN("invalid json array operation", K(ret), K(index));
   } else {
     ObJsonArray *j_arr = static_cast<ObJsonArray *>(this);
     if (OB_FAIL(j_arr->remove(index))) {
+      LOG_WARN("fail to remove value in array", K(ret), K(index));
     }
   }
 
@@ -398,9 +420,11 @@ int ObJsonNode::get_key(uint64_t index, common::ObString &key_out) const
   INIT_SUCC(ret);
 
   if (OB_FAIL(check_valid_object_op(index))) {
+    LOG_WARN("invalid json object operation", K(ret), K(index));
   } else {
     const ObJsonObject *j_obj = static_cast<const ObJsonObject *>(this);
     if (OB_FAIL(j_obj->get_key(index, key_out))) {
+      LOG_WARN("fail to get object key", K(ret), K(index));
     }
   }
 
@@ -413,6 +437,7 @@ int ObJsonNode::get_array_element(uint64_t index, ObIJsonBase *&value) const
   value = NULL;
 
   if (OB_FAIL(check_valid_array_op(index))) {
+    LOG_WARN("invalid json array operation", K(ret), K(index));
   } else {
     const ObJsonArray *j_arr = static_cast<const ObJsonArray *>(this);
     value = (*j_arr)[index];
@@ -427,6 +452,7 @@ int ObJsonNode::get_object_value(uint64_t index, ObIJsonBase *&value) const
   value = NULL;
 
   if (OB_FAIL(check_valid_object_op(index))) {
+    LOG_WARN("invalid json object operation", K(ret), K(index));
   } else {
     const ObJsonObject *j_obj = static_cast<const ObJsonObject *>(this);
     if (OB_ISNULL(value = j_obj->get_value(index))) { // maybe not found.
@@ -444,10 +470,12 @@ int ObJsonNode::get_object_value(uint64_t index, ObString &key, ObIJsonBase *&va
   value = NULL;
 
   if (OB_FAIL(check_valid_object_op(index))) {
+    LOG_WARN("invalid json object operation", K(ret), K(index));
   } else {
     const ObJsonObject *j_obj = static_cast<const ObJsonObject *>(this);
     ObJsonNode* node  = nullptr;
     if (OB_FAIL(j_obj->get_value_by_idx(index, key, node))) {
+      LOG_WARN("fail to find value by index", K(ret), K(index));
     } else if (OB_ISNULL(value = node)) { // maybe not found.
       ret = OB_SEARCH_NOT_FOUND;
       LOG_WARN("not found value by index", K(ret), K(index));
@@ -469,6 +497,7 @@ int ObJsonNode::get_object_value(const ObString &key, ObIJsonBase *&value) const
     const ObJsonObject *j_obj = static_cast<const ObJsonObject *>(this);
     if (OB_ISNULL(value = j_obj->get_value(key))) { // maybe not found.
       ret = OB_SEARCH_NOT_FOUND;
+      LOG_DEBUG("not found value by key", K(ret), K(key));
     }
   }
 
@@ -566,6 +595,7 @@ ObJsonNode *ObJsonObject::clone(ObIAllocator* allocator, bool is_deep_copy) cons
       if (OB_SUCC(ret)) {
         ObJsonNode *old_value = object_array_[i].get_value();
         if (OB_FAIL(new_obj->add(key_str, old_value->clone(allocator, is_deep_copy)))) {
+          LOG_WARN("add obj failed", K(ret), K(object_array_[i].get_key()));
         }
       }
     }
@@ -649,6 +679,7 @@ int ObJsonObject::remove(const common::ObString &key)
   if (low_iter != object_array_.end() && low_iter->get_key() == key) {
     int64_t delta_size = low_iter->get_value()->get_serialize_size();
     if (OB_FAIL(object_array_.remove(low_iter - object_array_.begin()))) {
+      LOG_WARN("fail to remove json node", K(ret), K(key));
     } else {
       children_serialize_size_ -= delta_size;
       set_serialize_delta_size(-1 * delta_size);
@@ -706,6 +737,7 @@ int ObJsonObject::add(const common::ObString &key, ObJsonNode *value, bool with_
       if (low_iter != object_array_.end() && low_iter->get_key() == key) { // Found and covered
         // do nothing
       } else if (OB_FAIL(object_array_.push_back(pair))) {
+        LOG_WARN("failed to store in object array.", K(ret));
       } else {
         sort();
       }
@@ -721,10 +753,12 @@ int ObJsonObject::add(const common::ObString &key, ObJsonNode *value, bool with_
           low_iter->set_value(value);
         }
       } else if (OB_FAIL(object_array_.push_back(pair))) {
+        LOG_WARN("failed to store in object array.", K(ret));
       } else if (!is_lazy_sort) {
         sort();
       }
-    } else if (OB_FAIL(object_array_.push_back(pair))) {
+    } else if (OB_FAIL(object_array_.push_back(pair))) {  // if don't check unique key, push directly
+      LOG_WARN("failed to store in object array.", K(ret));
     } else if (!is_lazy_sort) {
       sort();
     }
@@ -827,16 +861,20 @@ int ObJsonObject::consume(ObIAllocator *allocator, ObJsonObject *other)
     ObJsonNode *this_value = NULL;
     for (uint64_t i = 0; i < count && OB_SUCC(ret); i++) {
       if (OB_FAIL(other->get_key(i, other_key))) {
+        LOG_WARN("fail to get other key", K(ret), K(i));
       } else if (OB_NOT_NULL(this_value = get_value(other_key))) { // Duplicate key. Merge the values.
         ObIJsonBase *res = NULL;
         other_value = other->get_value(other_key);
         if (OB_FAIL(this_value->merge_tree(allocator, other_value, res))) {
+          LOG_WARN("fail to merge tree", K(ret), K(*this_value), K(*other_value));
         } else if (OB_FAIL(replace(this_value, static_cast<ObJsonNode *>(res)))) {
+          LOG_WARN("fail to replace json node", K(ret), K(*this_value), K(*res));
         }
       } else {
         other_value = other->get_value(other_key);
         if (OB_NOT_NULL(other_value)) {
           if (OB_FAIL(add(other_key, other_value))) {
+            LOG_WARN("fail to add object", K(ret), K(other_key), K(*other_value));
           }
         }
       }
@@ -867,11 +905,14 @@ int ObJsonObject::merge_patch(ObIAllocator *allocator, ObJsonObject *patch_obj)
         ret = OB_ERR_NULL_VALUE;
         LOG_WARN("json node is null", K(ret), K(i));
       } else if (OB_FAIL(patch_obj->get_key(i, key))) {
+        LOG_WARN("fail to get key", K(ret), K(i));
       } else if (j_patch_node->json_type() == ObJsonNodeType::J_NULL) {
         if (OB_FAIL(remove(key))) {
+          LOG_WARN("fail to remove element", K(ret), K(key));
         }
       } else if (j_patch_node->json_type() != ObJsonNodeType::J_OBJECT) {
         if (OB_FAIL(add(key, j_patch_node))) {
+          LOG_WARN("fail to add patch node to current object", K(ret), K(key), K(*j_patch_node));
         }
       } else { // j_patch_node->json_type() == ObJsonNodeType::J_OBJECT
         bool need_new_object = false;
@@ -898,7 +939,9 @@ int ObJsonObject::merge_patch(ObIAllocator *allocator, ObJsonObject *patch_obj)
         if (OB_SUCC(ret)) {
           if (OB_FAIL(static_cast<ObJsonObject *>(j_node)->merge_patch(allocator, 
               static_cast<ObJsonObject *>(j_patch_node)))) {
+            LOG_WARN("fail to merge path", K(ret), K(key));
           } else if (OB_FAIL(add(key, j_node))) {
+            LOG_WARN("fail to add object", K(ret), K(key));
           }
         }
       }
@@ -964,6 +1007,7 @@ ObJsonNode *ObJsonArray::clone(ObIAllocator* allocator, bool is_deep_copy) const
     uint64_t size = element_count();
     for (uint64_t i = 0; i < size && OB_SUCC(ret); i++) {
       if (OB_FAIL(new_array->append(node_vector_[i]->clone(allocator, is_deep_copy)))) {
+        LOG_WARN("array append clone failed", K(ret), K(i), K(size));
       }
     }
   }
@@ -977,6 +1021,7 @@ int ObJsonArray::remove(uint64_t index)
   if (index < node_vector_.size()) {
     int64_t delta_size = node_vector_[index]->get_serialize_size();
     if (OB_FAIL(node_vector_.remove(index))) {
+      LOG_WARN("fail to remove json node from array", K(ret), K(index));
     } else {
       children_serialize_size_ -= delta_size;
       set_serialize_delta_size(-1 * delta_size);
@@ -1036,6 +1081,7 @@ int ObJsonArray::append(ObJsonNode *value)
   } else {
     value->set_parent(this);
     if (OB_FAIL(node_vector_.push_back(value))) {
+      LOG_WARN("fail to push back value", K(ret));
     } else {
       uint64_t child_serialize_size = value->get_serialize_size();
       children_serialize_size_ += child_serialize_size;
@@ -1058,6 +1104,7 @@ int ObJsonArray::insert(uint64_t index, ObJsonNode *value)
                                      node_vector_.end() : node_vector_.begin() + index;
     value->set_parent(this);
     if (OB_FAIL(node_vector_.insert(pos, value))) {
+      LOG_WARN("fail to insert node to json array", K(ret), K(pos));
     } else {
       uint64_t child_serialize_size = value->get_serialize_size();
       children_serialize_size_ += child_serialize_size;
@@ -1082,6 +1129,7 @@ int ObJsonArray::consume(ObIAllocator *allocator, ObJsonArray *other)
 
   for (uint64_t i = 0; i < size && OB_SUCC(ret); i++){
     if (OB_FAIL(append((*other)[i]))) {
+      LOG_WARN("fail to append value", K(ret), K(size), K(i), K((*other)[i]));
     }
   }
 

@@ -179,6 +179,7 @@ public :
       int64_t curr_pos = data_container_->null_bitmaps_.size();
       int64_t capacity = curr_pos + length;
       if (OB_FAIL(data_container_->null_bitmaps_.prepare_allocate(capacity))) {
+        OB_LOG(WARN, "allocate memory failed", K(ret), K(capacity));
       } else {
         uint8_t *cur_null_bitmap = data_container_->null_bitmaps_.get_data() + curr_pos;
         MEMCPY(cur_null_bitmap, nulls, length * sizeof(uint8_t));
@@ -198,6 +199,7 @@ public :
       int64_t curr_pos = data_container_->offsets_.size();
       int64_t capacity = curr_pos + length;
       if (OB_FAIL(data_container_->offsets_.prepare_allocate(capacity))) {
+        OB_LOG(WARN, "allocate memory failed", K(ret), K(capacity));
       } else {
         char *cur_offsets =  reinterpret_cast<char *>(data_container_->offsets_.get_data() + curr_pos * sizeof(uint32_t));
         MEMCPY(cur_offsets, offsets, length * sizeof(uint32_t));
@@ -215,6 +217,7 @@ public :
       int64_t curr_pos = data_container_->raw_data_.size();
       int64_t capacity = curr_pos + length;
       if (OB_FAIL(data_container_->raw_data_.prepare_allocate(capacity))) {
+        OB_LOG(WARN, "allocate memory failed", K(ret), K(capacity));
       } else {
         data = reinterpret_cast<T *>(data_container_->raw_data_.get_data() + curr_pos);
       }

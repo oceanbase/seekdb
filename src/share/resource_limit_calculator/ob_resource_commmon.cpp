@@ -155,6 +155,7 @@ int ObResoureConstraintValue::set_type_value(const int64_t type, const int64_t v
     int64_t count = constraint_values_.count();
     while (OB_SUCC(ret) && count < MAX_CONSTRAINT) {
       if (OB_FAIL(constraint_values_.push_back(INT64_MAX))) {
+        LOG_WARN("set type value failed", K(ret));
       } else {
         count = constraint_values_.count();
       }
@@ -202,6 +203,7 @@ int ObMinPhyResourceResult::set_type_value(const int64_t type, const int64_t val
     int64_t count = min_phy_resource_value_.count();
     while (OB_SUCC(ret) && count < MAX_PHY_RESOURCE) {
       if (OB_FAIL(min_phy_resource_value_.push_back(0))) {
+        LOG_WARN("set type value failed", K(ret));
       } else {
         count = min_phy_resource_value_.count();
       }

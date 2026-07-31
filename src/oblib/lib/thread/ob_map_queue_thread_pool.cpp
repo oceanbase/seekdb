@@ -51,6 +51,7 @@ int ObMapQueueThreadPool::init(const int64_t thread_num, const char *label)
 
     for (int64_t index = 0; OB_SUCC(ret) && index < thread_num; index++) {
       if (OB_FAIL(tc_[index].init(label, index, this))) {
+        LIB_LOG(ERROR, "init queue fail", K(ret), K(index), K(label));
       }
     }
 
@@ -85,6 +86,7 @@ int ObMapQueueThreadPool::start()
     LIB_LOG(ERROR, "not inited", K(ret));
   } else {
     if (OB_FAIL(lib::ThreadPool::start())) {
+      LIB_LOG(ERROR, "ThreadPool start failed", K(ret));
     }
   }
 
@@ -181,6 +183,7 @@ int ObMapQueueThreadPool::push(void *data, const uint64_t hash_val)
     ThreadConf &tc = tc_[target_index];
 
     if (OB_FAIL(tc.queue_.push(data))) {
+      LIB_LOG(ERROR, "push data fail", K(ret), K(data), K(target_index));
     } else {
       tc.cond_.signal();
     }
@@ -214,6 +217,7 @@ int ObMapQueueThreadPool::ThreadConf::init(
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(ERROR, "invalid argument", K(ret), K(thread_index), K(host));
   } else if (OB_FAIL(queue_.init(label))) {
+    LIB_LOG(ERROR, "init queue fail", K(ret), K(label));
   } else {
     host_ = host;
     thread_index_ = thread_index;

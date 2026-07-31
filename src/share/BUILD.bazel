@@ -333,6 +333,17 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "tenant_mem_limit_interface",
+    hdrs = ["ob_i_server_mem_limit_getter.h"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
 # Low-level config parsing vocabulary.  This interface intentionally excludes
 # server and tenant config state so lower modules can parse config-shaped
 # values without depending on GCONF or Config runtime ownership.
@@ -1041,6 +1052,7 @@ seekdb_semantic_unity_cc_library(
     deps = [
         ":core_types",
         ":delegate_interface",
+        ":tenant_mem_limit_interface",
         "//src/oblib/easy:easy",
         "//src/oblib:oblib_db_meta_runtime",
         "//src/oblib:oblib_foundation",
@@ -1610,6 +1622,7 @@ _SHARE_RUNTIME_DEPS = [
     ":tablet_autoincrement_types",
     ":tablet_replica_types",
     ":task_control",
+    ":tenant_mem_limit_interface",
     ":tenant_module_init",
     ":tenant_runtime",
     ":text_analysis",

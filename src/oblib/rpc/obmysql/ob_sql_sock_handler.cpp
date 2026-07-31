@@ -60,6 +60,7 @@ int ObSqlSockHandler::on_connect(void* udata, int fd, bool is_unix_socket)
   if (OB_UNLIKELY(is_unix_socket)) {
     sess->client_addr_.set_unix_addr("");
   } else if (OB_FAIL(get_client_addr_for_sql_sock_session(fd, sess->client_addr_))) {
+    LOG_WARN("sql nio get_client_addr_for_sql_sock_session failed", K(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(sess->init())) {
     LOG_WARN("sess init failed", K(ret));
@@ -87,6 +88,7 @@ int ObSqlSockHandler::build_sql_req(ObSqlSockSession& sess,
   ret_req->set_nio_request_generation(generation);
   ret_req->set_receive_timestamp(common::ObTimeUtility::current_time());
   ret_req->set_connection_phase(sess.conn_.connection_phase_);
+  LOG_DEBUG("build_sql_req", KP(ret_req), K(sess.conn_.connection_phase_));
   sql_req = ret_req;
   return ret;
 }
@@ -133,13 +135,18 @@ int ObSqlSockHandler::on_readable(void *udata, char *body, int64_t body_len,
     }
   }
   if (OB_FAIL(ret)) {
+    LOG_WARN("invalid rust mysql packet delivery", K(ret), KP(sess), KP(body),
+             K(body_len), K(packet_kind), K(generation));
   } else if (OB_FAIL(build_mysql_raw_packet_view(sess->pool_, body, body_len,
                                                  wire_bytes, mode, command_view,
                                                  pkt))) {
+    LOG_WARN("build mysql raw packet view fail", K(ret), K(body_len), K(packet_kind));
   } else if (OB_FAIL(build_sql_req(*sess, pkt, generation, sql_req))) {
+    LOG_WARN("build sql req fail", K(ret), K(sess->sql_session_id_));
   } else if (NULL == sql_req) {
     // nothing to deliver
   } else if (OB_FAIL(deliver_->deliver(*sql_req))) {
+    LOG_WARN("deliver sql request fail", K(ret), K(sess->sql_session_id_));
   }
   return ret;
 }

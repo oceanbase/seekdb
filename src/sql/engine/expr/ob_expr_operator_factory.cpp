@@ -1070,6 +1070,7 @@ int ObExprOperatorFactory::alloc(ObExprOperatorType type, ObExprOperator *&expr_
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "unexpectd expr item type", K(ret), K(type));
   } else if (OB_FAIL(OP_ALLOC[type](alloc_, expr_op))) {
+    OB_LOG(WARN, "fail to alloc expr_op", K(ret), K(type));
   } else if (OB_ISNULL(expr_op)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     OB_LOG(ERROR, "fail to alloc expr_op", K(ret), K(type));

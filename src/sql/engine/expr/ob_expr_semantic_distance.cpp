@@ -119,6 +119,7 @@
    } else {
      ObDatum *datum = NULL;
      if (OB_FAIL(expr.args_[2]->eval(ctx, datum))) {
+       LOG_WARN("eval distance_type failed", K(ret));
      } else if (datum->is_null()) {
        ret = OB_INVALID_ARGUMENT;
        LOG_WARN("distance_type is null", K(ret));
@@ -129,6 +130,7 @@
    
    if (OB_SUCC(ret)) {
      if (OB_FAIL(ObExprVectorDistance::calc_distance(expr, ctx, res_datum, dis_type))) {
+      LOG_WARN("failed to calc distance", K(ret), K(dis_type));
      }
    }
    

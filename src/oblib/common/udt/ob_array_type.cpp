@@ -142,7 +142,9 @@ int ObArrayTypeObjFactory::construct(common::ObIAllocator &alloc, const ObCollec
         ret = OB_INVALID_ARGUMENT;
         OB_LOG(WARN, "map key and value should be array type", K(ret), K(map_type->key_type_->type_id_), K(map_type->value_type_->type_id_));
       } else if (OB_FAIL(construct(alloc, *map_type->key_type_, map_key, read_only))) {
+        OB_LOG(WARN, "failed to construct map key", K(ret), K(array_meta.type_id_));
       } else if (OB_FAIL(construct(alloc, *map_type->value_type_, map_value, read_only))) {
+        OB_LOG(WARN, "failed to construct map value", K(ret), K(array_meta.type_id_));
       }
       if (OB_SUCC(ret)) {
         arr_obj->set_element_type(static_cast<int32_t>(ObCollectionSQLType));

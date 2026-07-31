@@ -60,7 +60,9 @@ int ObDDLMacroHandle::set_block_id(const blocksstable::MacroBlockId &block_id)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(reset_macro_block_ref())) {
+    LOG_WARN("reset macro block reference failed", K(ret), K(block_id_));
   } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.inc_ref(block_id))) {
+    LOG_ERROR("failed to increase macro block ref cnt", K(ret), K(block_id));
   } else {
     block_id_ = block_id;
   }
@@ -72,6 +74,7 @@ int ObDDLMacroHandle::reset_macro_block_ref()
   int ret = OB_SUCCESS;
   if (block_id_.is_valid()) {
     if (OB_FAIL(OB_STORAGE_OBJECT_MGR.dec_ref(block_id_))) {
+      LOG_ERROR("failed to dec macro block ref cnt", K(ret), K(block_id_));
     } else {
       block_id_.reset();
     }
@@ -109,6 +112,7 @@ int ObDDLMacroBlock::set_data_macro_meta(const MacroBlockId &macro_id, const cha
     LOG_WARN("invalid argument", K(ret), KP(macro_block_buf), K(size));
   } else {
     if (OB_FAIL(ObIndexBlockRebuilder::get_macro_meta(macro_block_buf, size, macro_id, allocator_, data_macro_meta_))) {
+      LOG_WARN("failed to set macro meta", K(ret),  K(macro_id), KP(macro_block_buf), K(size));
     }
   }
   return ret;
@@ -207,13 +211,17 @@ ObDDLKVPendingGuard::ObDDLKVPendingGuard(
     LOG_WARN("only support DDL direct load type", KR(ret), K(direct_load_type));
   } else if (ObDDLUtil::use_idempotent_mode()) {
     if (OB_FAIL(tablet->get_ddl_kv_mgr(ddl_kv_mgr_handle, true/*try_create*/))) {
+      LOG_WARN("get ddl kv mgr failed", K(ret));
     } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->get_or_create_idem_ddl_kv(
         scn, start_scn, snapshot_version, data_format_version, kv_handle_))) {
+      LOG_WARN("acquire ddl kv failed", K(ret));
     }
   } else {
     if (OB_FAIL(tablet->get_ddl_kv_mgr(ddl_kv_mgr_handle, true /*try_create*/))) {
+      LOG_WARN("get ddl kv mgr failed", K(ret));
     } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->get_or_create_local_ddl_kv(
         scn, start_scn, direct_load_mgr_handle, kv_handle_))) {
+      LOG_WARN("acquire ddl kv failed", K(ret));
     }
   }
 
@@ -280,10 +288,12 @@ int ObDDLKVPendingGuard::set_macro_block(
           snapshot_version, data_format_version, direct_load_mgr_handle,
           direct_load_type);
       if (OB_FAIL(guard.get_ddl_kv(ddl_kv))) {
+        LOG_WARN("get ddl kv failed", K(ret));
       } else if (OB_ISNULL(ddl_kv)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("ddl kv is null", K(ret), KP(ddl_kv), K(guard));
       } else if (OB_FAIL(ddl_kv->set_macro_block(*tablet, macro_block, snapshot_version, data_format_version, guard.can_freeze()))) {
+        LOG_WARN("fail to set macro block info", K(ret), K(macro_block), K(snapshot_version), K(data_format_version));
       } else {
         break;
       }
@@ -434,6 +444,7 @@ int ObTabletDirectLoadMgrHandle::assign(const ObTabletDirectLoadMgrHandle &other
   reset();
   if (OB_LIKELY(other.is_valid())) {
     if (OB_FAIL(set_obj(other.tablet_mgr_))) {
+      LOG_WARN("set obj failed", K(ret));
     }
   }
   return ret;
@@ -494,10 +505,12 @@ int ObDDLTableSchema::fill_vector_index_schema_item(ObSchemaGetterGuard &schema_
   const ObTableSchema *with_param_table_schema = nullptr;
   // get data schema
   if (OB_FAIL(schema_guard.get_table_schema( table_schema->get_data_table_id(), data_table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(table_schema->get_data_table_id()));
   } else if (OB_ISNULL(data_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not exist", K(ret), K(table_schema->get_data_table_id()));
   } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_id(*data_table_schema, *table_schema, col_ids))) {
+    LOG_WARN("fail to get vector index id", K(ret));
   } else if (col_ids.count() != 1) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get invalid col id array", K(ret), K(col_ids));
@@ -505,12 +518,14 @@ int ObDDLTableSchema::fill_vector_index_schema_item(ObSchemaGetterGuard &schema_
     if (index_type == INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL) {
       ObString index_prefix;
       if (OB_FAIL(ObVectorIndexUtil::get_vector_index_prefix(*table_schema, index_prefix))) {
+        LOG_WARN("failed to get index prefix", K(ret));
       } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_tid_with_index_prefix(&schema_guard,
                                                                                    *data_table_schema,
                                                                                    index_type,
                                                                                    col_ids.at(0),
                                                                                    index_prefix,
                                                                                    with_param_table_tid))) {
+        LOG_WARN("failed to get index prefix", K(ret), K(index_prefix));
       }
     } else { // ivf centroid tables
       if (OB_FAIL(ObVectorIndexUtil::get_vector_index_tid(&schema_guard,
@@ -518,20 +533,24 @@ int ObDDLTableSchema::fill_vector_index_schema_item(ObSchemaGetterGuard &schema_
                                                           index_type,
                                                           col_ids.at(0),
                                                           with_param_table_tid))) {
+        LOG_WARN("fail to get spec vector delta buffer table id", K(ret), K(col_ids), KPC(data_table_schema));
       }
     }
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(schema_guard.get_table_schema( with_param_table_tid, with_param_table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(with_param_table_tid));
   } else if (OB_ISNULL(with_param_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not exist", K(ret), K(with_param_table_tid));
   } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_dim(*with_param_table_schema, *data_table_schema, schema_item.vec_dim_))) {
+    LOG_WARN("fail to get vector col dim", K(ret));
   } else if (schema_item.vec_dim_ == 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get vector dim is zero, fail to calc", K(ret), K(schema_item.vec_dim_), KPC(with_param_table_schema));
   } else if (OB_FAIL(ob_write_string(allocator, with_param_table_schema->get_index_params(), schema_item.vec_idx_param_))) {
+    LOG_WARN("fail to write string", K(ret), K(with_param_table_schema->get_index_params()));
   } else {
     schema_item.lob_inrow_threshold_ = data_table_schema->get_lob_inrow_threshold();
     ObIArray<ObColumnSchemaItem> &column_items = ddl_table_schema.column_items_;
@@ -567,11 +586,14 @@ int ObDDLTableSchema::fill_ddl_table_schema(const uint64_t table_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(table_id));
   } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("get runtime schema failed", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not exist", K(ret), K(table_id));
   } else if (OB_FAIL(table_schema->get_multi_version_column_descs(column_descs))) {
+    LOG_WARN("get column desc array failed", K(ret));
   } else {
     ddl_table_schema.table_id_ = table_id;
     ddl_table_schema.table_item_.is_index_table_ = table_schema->is_index_table();
@@ -582,19 +604,24 @@ int ObDDLTableSchema::fill_ddl_table_schema(const uint64_t table_id,
     ddl_table_schema.table_item_.index_type_ = table_schema->get_index_type();
 
     if (OB_FAIL(ddl_table_schema.column_descs_.assign(column_descs))) {
+      LOG_WARN("assign column descs failed", K(ret));
     } else if (OB_FAIL(ObDDLStorageUtil::convert_to_storage_schema(table_schema, allocator, ddl_table_schema.storage_schema_))) {
+      LOG_WARN("fail to convert to storage schema", KR(ret), KPC(table_schema));
     } else if (OB_INVALID_ID != table_schema->get_aux_lob_meta_tid()) {
       const uint64_t lob_meta_table_id = table_schema->get_aux_lob_meta_tid();
       const ObTableSchema *lob_meta_table_schema = nullptr;
       if (OB_FAIL(schema_guard.get_table_schema( lob_meta_table_id, lob_meta_table_schema))) {
+        LOG_WARN("get table schema failed", K(ret), K(lob_meta_table_id));
       } else if (OB_ISNULL(lob_meta_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("table not exist", K(ret), K(lob_meta_table_id));
       } else if (OB_FAIL(ObDDLStorageUtil::convert_to_storage_schema(lob_meta_table_schema, allocator, ddl_table_schema.lob_meta_storage_schema_))) {
+        LOG_WARN("fail to convert to storage schema", KR(ret), KPC(lob_meta_table_schema));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ddl_table_schema.column_items_.reserve(column_descs.count()))) {
+      LOG_WARN("reserve column schema array failed", K(ret), K(column_descs.count()), K(ddl_table_schema.column_items_));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < column_descs.count(); ++i) {
       const ObColDesc &col_desc = column_descs.at(i);
@@ -619,13 +646,16 @@ int ObDDLTableSchema::fill_ddl_table_schema(const uint64_t table_id,
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(ddl_table_schema.column_items_.push_back(column_item))) {
+          LOG_WARN("push back null column schema failed", K(ret));
         } else if (column_item.col_type_.is_lob_storage()) {
           if (OB_FAIL(ddl_table_schema.lob_column_idxs_.push_back(i))) {
+            LOG_WARN("push back lob column idx failed", K(ret), K(i));
           } else if (i < ddl_table_schema.table_item_.rowkey_column_num_) {
             ddl_table_schema.table_item_.has_lob_rowkey_ = true;
           }
         } else if (ObDDLUtil::need_reshape(column_item.col_type_)) {
           if (OB_FAIL(ddl_table_schema.reshape_column_idxs_.push_back(i))) {
+            LOG_WARN("push back lob column idx failed", K(ret), K(i));
           }
         }
       }
@@ -660,9 +690,13 @@ int ObDDLTableSchema::assign(const ObDDLTableSchema &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(column_items_.assign(other.column_items_))) {
+    LOG_WARN("assign column items failed", K(ret));
   } else if (OB_FAIL(reshape_column_idxs_.assign(other.reshape_column_idxs_))) {
+    LOG_WARN("assign reshape column idx failed", K(ret));
   } else if (OB_FAIL(lob_column_idxs_.assign(other.lob_column_idxs_))) {
+    LOG_WARN("assign lob column idx failed", K(ret));
   } else if (OB_FAIL(column_descs_.assign(other.column_descs_))) {
+    LOG_WARN("assign column descs failed", K(ret));
   } else {
     table_id_ = other.table_id_;
     table_item_ = other.table_item_;

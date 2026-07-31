@@ -63,11 +63,6 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
                             *(params_.schema_checker_->get_schema_mgr()),
                             package_guard,
                             *params_.sql_proxy_,
-                            params_.plan_cache_,
-                            params_.pl_sql_runtime_,
-                            params_.pl_engine_,
-                            params_.srs_provider_,
-                            params_.lob_read_service_,
                             *params_.expr_factory_,
                             NULL,
                             false) {
@@ -172,8 +167,11 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
           }
           if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
                         *allocator_, session_info_->get_dtc_params(), package_block))) {
+            LOG_WARN("fail to convert package block", K(ret));
           } else if (OB_FAIL(package_info.set_package_name(package_name))) {
+            LOG_WARN("set package name failed", K(ret), K(package_name));
           } else if (OB_FAIL(package_info.set_source(package_block))) {
+            LOG_WARN("set package source failed", K(ret));
           } else {
             // Built-in package exec environment defaults.
             // sql_mode = "PIPES_AS_CONCAT,STRICT_ALL_TABLES,PAD_CHAR_TO_FULL_LENGTH"
@@ -210,11 +208,6 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
           ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_mgr();
           ObPLBuilder builder(*params_.allocator_,
                                 *params_.session_info_,
-                                *params_.plan_cache_,
-                                params_.pl_sql_runtime_,
-                                params_.pl_engine_,
-                                params_.srs_provider_,
-                                params_.lob_read_service_,
                                 *schema_guard,
                                 package_guard,
                                 *params_.sql_proxy_);
@@ -349,7 +342,9 @@ int ObCreatePackageResolver::resolve_functions_spec(const ObPackageInfo &package
     routine_info.set_subprogram_id(i);
     routine_info.set_exec_env(package_info.get_exec_env());
     if (OB_FAIL(routine_table.get_routine_info(i, pl_routine_info))) {
+      LOG_WARN("get package routine info failed", K(package_info.get_package_name()), K(ret));
     } else if (OB_FAIL(routine_info.set_routine_name(pl_routine_info->get_name()))) {
+      LOG_WARN("set routine name failed", "routine name", pl_routine_info->get_name(), K(ret));
     } /*else if (i > ObPLRoutineTable::NORMAL_ROUTINE_START_IDX) {
                // && OB_FAIL(check_overload_out_argument(routine_table, i))) {
       LOG_WARN("failed to check overload out argument", K(ret));
@@ -430,6 +425,7 @@ int ObCreatePackageResolver::resolve_functions_spec(const ObPackageInfo &package
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("rountine param is null", K(ret), K(idx));
             } else if (OB_FAIL(rountine_param->set_default_value(param->get_default_value()))) {
+              LOG_WARN("failed to set default value", K(ret));
             }
           }
         }
@@ -525,11 +521,6 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
           ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_mgr();
           ObPLBuilder builder(tmp_allocator,
                                 *params_.session_info_,
-                                *params_.plan_cache_,
-                                params_.pl_sql_runtime_,
-                                params_.pl_engine_,
-                                params_.srs_provider_,
-                                params_.lob_read_service_,
                                 *schema_guard,
                                 package_guard,
                                 *params_.sql_proxy_);

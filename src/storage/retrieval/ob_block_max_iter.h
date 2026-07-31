@@ -229,7 +229,9 @@ int ObBlockMaxScoreIterator::init(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(inner_init(block_max_scan_param, scan_param))) {
+    STORAGE_LOG(WARN, "fail to init", K(ret));
   } else if (OB_FAIL(check_ranking_param(ranking_param, block_max_scan_param))) {
+    STORAGE_LOG(WARN, "fail to check ranking param", K(ret));
   } else if (OB_ISNULL(scorer_ = new (scorer_buf_) ObBlockMaxScoreCalc<RankingParam>(ranking_param))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_LOG(WARN, "fail to allocate memory", K(ret));

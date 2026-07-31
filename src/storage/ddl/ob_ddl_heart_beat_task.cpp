@@ -37,6 +37,7 @@ int ObRedefTableHeartBeatTask::init(common::ObTimer &timer)
     ret = OB_INIT_TWICE;
     LOG_WARN("ObReDefTableHeartBeatTask has a already been inited", K(ret));
   } else if (OB_FAIL(timer.schedule(*this, HEARTBEAT_INTERVAL, true))) {
+    LOG_WARN("fail to schedule task ObReDefTableHeartBeatTask", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -50,6 +51,7 @@ void ObRedefTableHeartBeatTask::runTimerTask()
     ret = OB_NOT_INIT;
     LOG_WARN("ObReDefTableHeartBeatTask has not been inited", K(ret));
   } else if (OB_FAIL(send_task_status_to_rs())) {
+    LOG_WARN("send to rs all task status failed", KR(ret));
   } else {
     LOG_INFO("send to rs all task status succeed");
   }
@@ -59,6 +61,7 @@ int ObRedefTableHeartBeatTask::send_task_status_to_rs()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(OB_DDL_HEART_BEAT_TASK_CONTAINER.send_task_status_to_rs())) {
+    LOG_WARN("failed to send task status to RS", K(ret));
   }
   return ret;
 }
@@ -117,6 +120,7 @@ int ObDDLHeartBeatTaskContainer::remove_register_task_id(const int64_t task_id)
     for (int64_t i = 0; OB_SUCC(ret) && i < register_tasks_.count(); ++i) {
       if (register_tasks_.at(i) == task_id) {
         if (OB_FAIL(register_tasks_.remove(i))) {
+          LOG_WARN("remove register task id failed", KR(ret), K(task_id));
         }
         break;
       }
@@ -137,6 +141,7 @@ int ObDDLHeartBeatTaskContainer::send_task_status_to_rs()
       common::ObSpinLockGuard guard(lock_);
       for (int64_t i = 0; OB_SUCC(ret) && i < register_tasks_.count(); ++i) {
         if (OB_FAIL(task_ids.push_back(register_tasks_.at(i)))) {
+          LOG_WARN("task_ids push back failed", K(ret));
         }
       }
     }
@@ -145,6 +150,7 @@ int ObDDLHeartBeatTaskContainer::send_task_status_to_rs()
       for (int64_t i = 0; OB_SUCC(ret) && i < task_ids.count(); ++i) {
         const int64_t task_id = task_ids.at(i);
         if (OB_FAIL(data_plane::renew_ddl_task_lease(task_id))) {
+          LOG_WARN("send to task status fail", K(ret), K(task_id));
         }
       }
     }

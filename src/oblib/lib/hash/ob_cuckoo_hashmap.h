@@ -356,6 +356,7 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::create(
     buckets_ = new (buf) Bucket[bucket_num_];
     allocator_ = allocator;
     is_inited_ = true;
+    OB_LOG(DEBUG, "create hash map", K(bucket_num));
   }
   if (OB_FAIL(ret)) {
     if (nullptr != buf) {
@@ -493,6 +494,7 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::erase_impl(
             }
           }
           if (OB_SUCC(ret)) {
+            OB_LOG(DEBUG, "erase element", "occupied_count", occupied_count_ - 1, K(overflow_count_), K(pair));
             pair.~pair_type();
             new (&pair) pair_type();
             b.occupied_[i] = false;
@@ -615,6 +617,7 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::erase(
             if (OB_SUCC(ret)) {
               pair.~pair_type();
               new (&pair) pair_type();
+              OB_LOG(DEBUG, "swap element", K(overflow_array_[overflow_count_ - 1]), K(i));
               if (i != overflow_count_ - 1) {
                 if (OB_FAIL(copy_assign(pair, overflow_array_[overflow_count_ - 1]))) {
                   OB_LOG(WARN, "fail to copy assign", K(ret));
@@ -625,6 +628,7 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::erase(
                 }
               }
               --overflow_count_;
+              OB_LOG(DEBUG, "erase element", K(occupied_count_), K(overflow_count_), K(key), K(i));
             }
           }
         }
@@ -676,6 +680,7 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::cuckoo_set_impl(
           b.occupied_[i] = true;
           finished = true;
           ++occupied_count_;
+          OB_LOG(DEBUG, "cuckoo set end", K(pair.first), K(bucket_pos), K(is_first_hash), "slot_idx", i);
           break;
         }
       }
@@ -856,6 +861,7 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::rehash()
     const int64_t bucket_num = bucket_num_;
     const int64_t new_bucket_num = std::max(11 * bucket_num_ / 10, bucket_num_ + 1) * BUCKET_SLOT_COUNT;
     self_t new_hash_map;
+    OB_LOG(DEBUG, "begin rehash", K(occupied_count_), K(new_bucket_num));
     if (OB_FAIL(new_hash_map.create(new_bucket_num, allocator_))) {
       OB_LOG(WARN, "fail to create new hash map", K(ret));
     }
@@ -885,6 +891,7 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::rehash()
       std::swap(overflow_capacity_, new_hash_map.overflow_capacity_);
       std::swap(overflow_count_, new_hash_map.overflow_count_);
     }
+    OB_LOG(DEBUG, "end rehash", K(new_bucket_num), K(ret), K(occupied_count_), K(overflow_count_));
   }
   return ret;
 }
@@ -923,6 +930,7 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::overflow_set(
             OB_LOG(WARN, "fail to copy data", K(ret));
           } else {
             ++overflow_count_;
+            OB_LOG(DEBUG, "overflow set", K(key), K(overflow_count_), K(occupied_count_));
           }
         }
 
@@ -946,6 +954,7 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::overflow_set(
         OB_LOG(WARN, "fail to copy data", K(ret));
       } else {
         ++overflow_count_;
+        OB_LOG(DEBUG, "overflow set", K(key), K(overflow_count_), K(occupied_count_));
         done = true;
       }
     }
@@ -1027,6 +1036,7 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::set(
           pkey = &old_pair.first;
           pvalue = &old_pair.second;
           if (occupied_count_ > 0 && bucket_num_ * BUCKET_SLOT_COUNT / occupied_count_ >= MIN_REQUIRED_LOAD_FACTOR) {
+            OB_LOG(DEBUG, "do not need rehash", K(bucket_num_), K(occupied_count_), K(bucket_num_ * BUCKET_SLOT_COUNT / occupied_count_));
             break;
           } else if (OB_FAIL(rehash())) {
             OB_LOG(WARN, "fail to rehash", K(ret));

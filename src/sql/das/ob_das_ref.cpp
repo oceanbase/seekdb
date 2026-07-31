@@ -83,12 +83,15 @@ int DASRefCountContext::acquire_task_execution_resource(int64_t timeout_ts)
   } else if (FALSE_IT(is_inited_ = true)) {
     // do nothing
   } else if (OB_FAIL(dec_concurrency_limit())) {
+    LOG_WARN("failed to acquire das execution resource", K(ret), K(get_current_concurrency()));
   }
   if (OB_UNLIKELY(OB_SIZE_OVERFLOW == ret)) {
     ret = OB_SUCCESS;
     ObThreadCondGuard guard(cond_);
     if (OB_FAIL(cond_.wait(timeout_ts - ObTimeUtility::current_time()))) {
+      LOG_WARN("failed to acquire das task execution resource", K(ret), K(get_current_concurrency()));
     } else if (OB_FAIL(dec_concurrency_limit())) {
+      LOG_WARN("failed to acquire das execution resource", K(ret), K(get_current_concurrency()));
     }
   }
   return ret;
@@ -180,6 +183,7 @@ int ObDASRef::create_task_map()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("task map was already created", KR(ret), K(task_map_.created()));
   } else if (OB_FAIL(task_map_.create(DAS_REF_MAP_BUCKET_SIZE, ObModIds::OB_HASH_BUCKET))) {
+    LOG_WARN("create task map failed", KR(ret));
   } else {
     DASTaskIter task_iter(batched_tasks_.get_header_node()->get_next(), batched_tasks_.get_header_node());
     for (; OB_SUCC(ret) && !task_iter.is_end(); ++task_iter) {
@@ -189,9 +193,11 @@ int ObDASRef::create_task_map()
         LOG_WARN("task is null", KR(ret), KP(task));
       } else if (task->is_write_buff_full() ||
           task->get_agg_task()->start_status_ != DAS_AGG_TASK_UNSTART) {
+        LOG_TRACE("this task is submitted or write_buffer is full", K(ret));
       } else {
         DasRefKey key(task->get_tablet_loc(), task->get_type());
         if (OB_FAIL(task_map_.set_refactored(key, task))) {
+          LOG_WARN("insert into task map failed", KR(ret), K(key), KP(task));
         }
       }
     }
@@ -206,9 +212,11 @@ int ObDASRef::add_batched_task(ObIDASTaskOp *das_task)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(batched_tasks_.store_obj(das_task))) {
+    LOG_WARN("store das task failed", KR(ret));
   } else if (task_map_.created()) {
     DasRefKey key(das_task->get_tablet_loc(), das_task->get_type());
     if (OB_FAIL(task_map_.set_refactored(key, das_task))) {
+      LOG_WARN("insert into task map failed", KR(ret), K(key), KP(das_task));
     }
   }
   if (OB_SUCC(ret)) {
@@ -296,8 +304,11 @@ int ObDASRef::parallel_submit_agg_task(ObDasAggregatedTask *agg_task)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null ptr", K(ret));
   } else if (OB_FAIL(get_das_parallel_ctx().refresh_tx_desc_bak(get_das_alloc(), session->get_tx_desc()))) {
+    LOG_WARN("fail to check and refresh tx_desc", K(ret));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->parallel_submit_das_task(*this, *agg_task))) {
+    LOG_WARN("fail to execute parallel_das_task", K(ret));
   } else {
+    LOG_TRACE("succeed submit parallel task", K(ret), K(agg_task));
   }
   return ret;
 }
@@ -306,7 +317,9 @@ int ObDASRef::execute_all_task()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(execute_all_task(del_aggregated_tasks_))) {
+    LOG_WARN("fail to execute all delete agg_tasks", K(ret));
   } else if (OB_FAIL(execute_all_task(aggregated_tasks_))) {
+    LOG_WARN("fail to execute all agg_tasks", K(ret));
   } else {
     DASTaskIter task_iter = begin_task_iter();
     while (OB_SUCC(ret) && !task_iter.is_end()) {
@@ -316,6 +329,7 @@ int ObDASRef::execute_all_task()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null ptr", K(ret));
       } else if (OB_FAIL(das_op->record_task_result_to_rtdef())) {
+        LOG_WARN("fail to record task result", K(ret), KPC(das_op));
       } else {
         ++task_iter;
       }
@@ -335,6 +349,7 @@ int ObDASRef::retry_all_fail_tasks(common::ObIArray<ObIDASTaskOp *> &failed_task
       ret = failed_task->errcode_;
       LOG_WARN("can't do task level retry", K(ret), KPC(failed_task));
     } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->retry_das_task(*this, *failed_tasks.at(i)))) {
+      LOG_WARN("Failed to retry das task", K(ret));
     }
   }
   return ret;
@@ -352,11 +367,15 @@ int ObDASRef::execute_all_task(DasAggregatedTaskList &agg_task_list)
       if (agg_task->has_unstart_tasks() && !agg_task->has_parallel_submiitted()) {
         if (get_parallel_type() == DAS_SERIALIZATION) {
           if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->execute_das_task(*this, *agg_task))) {
+            LOG_WARN("failed to execute aggregated das task", K(ret), KPC(agg_task));
           } else {
+            LOG_DEBUG("successfully executing aggregated task", KPC(agg_task));
           }
         } else {
           if (OB_FAIL(parallel_submit_agg_task(agg_task))) {
+            LOG_WARN("failed to execute aggregated das task", K(ret), KPC(agg_task));
           } else {
+            LOG_DEBUG("successfully parallel submit agg_task", KPC(agg_task));
           }
         }
       }
@@ -365,6 +384,7 @@ int ObDASRef::execute_all_task(DasAggregatedTaskList &agg_task_list)
     // wait all existing tasks to be finished
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(wait_all_executing_tasks())) {
+      LOG_WARN("failed to wait for concurrent DAS tasks", K(tmp_ret));
     }
     ret = COVER_SUCC(tmp_ret);
     if (OB_FAIL(ret) && check_rcode_can_retry(ret)) {
@@ -385,10 +405,12 @@ int ObDASRef::execute_all_task(DasAggregatedTaskList &agg_task_list)
           common::ObSEArray<ObIDASTaskOp *, 2> failed_tasks;
           int tmp_ret = OB_SUCCESS;
           if (OB_TMP_FAIL(aggregated_task->get_failed_tasks(failed_tasks))) {
+            LOG_WARN("failed to get failed tasks", K(ret));
           } else if (failed_tasks.count() == 0) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("failed to get failed tasks");
           } else if (OB_FAIL(retry_all_fail_tasks(failed_tasks))) {
+            LOG_WARN("fail to retry das tasks", K(ret), K(failed_tasks));
           }
         }
       } else {
@@ -407,6 +429,7 @@ bool ObDASRef::check_rcode_can_retry(int ret)
 
   int tmp_ret = OB_SUCCESS;
   if (OB_TMP_FAIL(ObQueryRetryCtrl::get_das_retry_func(ret, retry_func))) {
+    LOG_WARN("get das retry func failed", KR(tmp_ret), KR(ret));
   } else if (retry_func != nullptr) {
     bret = true;
   }
@@ -469,6 +492,7 @@ int ObDASRef::close_all_task()
     if (get_parallel_type() != DAS_SERIALIZATION) {
       // A concurrently submitted DAS task may still be executing.
       if (OB_SUCCESS != (wait_ret = wait_all_executing_tasks())) {
+        LOG_WARN("fail to wait all executing tasks", K(wait_ret));
       }
     }
     ret = COVER_SUCC(wait_ret);
@@ -476,6 +500,7 @@ int ObDASRef::close_all_task()
     while (!task_iter.is_end()) {
       int end_ret = OB_SUCCESS;
       if (OB_SUCCESS != (end_ret = ::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->end_das_task(*this, **task_iter))) {
+        LOG_WARN("execute das task failed", K(end_ret));
       }
       ++task_iter;
       last_end_ret = (last_end_ret == OB_SUCCESS ? end_ret : last_end_ret);
@@ -517,7 +542,9 @@ int ObDASRef::create_das_task(const ObDASTabletLoc *tablet_loc,
   ObSQLSessionInfo *session = get_exec_ctx().get_my_session();
   int64_t task_id = 0;
   if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->get_das_task_id(task_id))) {
+    LOG_WARN("get das task id failed", KR(ret));
   } else if (OB_FAIL(das_factory.create_das_task_op(op_type, task_op))) {
+    LOG_WARN("create das task op failed", K(ret), KPC(task_op));
   } else {
     task_op->set_trans_desc(session->get_tx_desc());
     task_op->set_snapshot(&get_exec_ctx().get_das_ctx().get_snapshot());
@@ -530,6 +557,7 @@ int ObDASRef::create_das_task(const ObDASTabletLoc *tablet_loc,
     if (is_snapshot_opt_enabled() && OB_FAIL(task_op->init_das_snapshot_opt_info(session->get_tx_isolation()))) {
       LOG_WARN("fail to init snapshot opt info", K(ret), K(session->get_tx_isolation()));
     } else if (OB_FAIL(add_aggregated_task(task_op, op_type))) {
+      LOG_WARN("failed to add aggregated task", K(ret));
     }
   }
   return ret;
@@ -589,13 +617,17 @@ int ObDASRef::add_aggregated_task(ObIDASTaskOp *das_task, ObDASOpType op_type)
   ObDasAggregatedTask *agg_task = nullptr;
 
   if (OB_FAIL(find_agg_task(op_type, agg_task))) {
+    LOG_WARN("fail to find agg_task", K(ret), K(op_type));
   } else if (OB_NOT_NULL(agg_task)) {
     if (OB_FAIL(OB_FAIL(agg_task->push_back_task(das_task)))) {
+      LOG_WARN("fail to push back das_task", K(ret), KPC(das_task));
     }
   } else {
     // create agg_task
     if (OB_FAIL(create_agg_task(op_type, agg_task))) {
+      LOG_WARN("fail to create agg_task", K(ret), K(op_type));
     } else if (OB_FAIL(agg_task->push_back_task(das_task))) {
+      LOG_WARN("fail to push back das_task", K(ret), KPC(das_task));
     }
   }
 
@@ -700,6 +732,7 @@ int ObDasAggregatedTask::get_aggregated_tasks(common::ObIArray<ObIDASTaskOp *> &
       OB_ASSERT(cur_task->get_cur_agg_list() == &tasks_);
       OB_ASSERT(ObDasTaskStatus::UNSTART == cur_task->get_task_status());
       if (OB_FAIL(tasks.push_back(cur_task))) {
+        LOG_WARN("failed to push back high prio tasks", KR(ret), K(cur_task));
       }
     }
   }
@@ -741,6 +774,7 @@ int ObDasAggregatedTask::get_failed_tasks(common::ObSEArray<ObIDASTaskOp *, 2> &
     OB_ASSERT(cur_task != nullptr);
     OB_ASSERT(ObDasTaskStatus::FAILED == cur_task->get_task_status());
     if (OB_FAIL(tasks.push_back(cur_task))) {
+      LOG_WARN("failed to push back high prio tasks", KR(ret), K(cur_task));
     }
   }
   return ret;
@@ -756,6 +790,7 @@ int DASParallelContext::deep_copy_tx_desc(ObIAllocator &alloc, transaction::ObTx
 {
   int ret = data_plane::clone_tx_desc(alloc, src_tx_desc, tx_desc_bak_);
   if (OB_FAIL(ret)) {
+    LOG_WARN("failed to clone transaction descriptor", K(ret));
   }
   return ret;
 }
@@ -772,12 +807,16 @@ int DASParallelContext::refresh_tx_desc_bak(ObIAllocator &alloc, transaction::Ob
   int ret = OB_SUCCESS;
   if (OB_ISNULL(tx_desc_bak_)) {
     if (OB_FAIL(deep_copy_tx_desc(alloc, src_tx_desc))) {
+      LOG_WARN("fail to deep_copy tx_desc", K(ret));
     }
   } else if (data_plane::tx_desc_operation_sequence(tx_desc_bak_)
              != data_plane::tx_desc_operation_sequence(src_tx_desc)) {
     if (!has_refreshed_tx_desc_scn_) {
       if (OB_FAIL(release_tx_desc())) {
+        LOG_WARN("fail to release tx_desc", K(ret));
       } else if (OB_FAIL(deep_copy_tx_desc(alloc, src_tx_desc))) {
+        LOG_WARN("fail to deep copy tx_desc", K(ret),
+                 "src_tx_desc", data_plane::ObTxDescLogView(src_tx_desc));
       } else {
         has_refreshed_tx_desc_scn_ = true;
       }

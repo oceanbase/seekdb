@@ -172,6 +172,7 @@ private:
   inline int get_compare_result(int64_t col_idx, ObDatum &datum, int &cmp_res) {
     int ret = OB_SUCCESS;
     if (OB_FAIL(compare(col_idx, datum, cmp_res))) {
+      SQL_LOG(WARN, "fail to compare", K(ret));
     } else if (cmp_res == 0) {
       if (is_fetch_with_ties_) {
         // still need output duplicate rows

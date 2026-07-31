@@ -128,6 +128,7 @@ struct ObSysVarInPC
     }
     for (int64_t i = 0; common::OB_SUCCESS == ret && i < system_variables_.count(); i ++) {
       if OB_FAIL(obj.deep_copy(system_variables_.at(i), buf_, buf_size_, pos)) {
+        SQL_PC_LOG(WARN, "fail to deep copy obj", K(buf_size_), K(pos), K(ret));
       } else {
         system_variables_.at(i) = obj;
       }
@@ -146,7 +147,9 @@ struct ObSysVarInPC
     }
     for (int64_t i = 0; common::OB_SUCCESS == ret && i < other.system_variables_.count(); i ++) {
       if (OB_FAIL(obj.deep_copy(other.system_variables_.at(i), buf_, buf_size_, pos))) {
+        SQL_PC_LOG(WARN, "fail to deep copy obj", K(buf_size_), K(pos), K(ret));
       } else if (OB_FAIL(system_variables_.push_back(obj))) {
+        SQL_PC_LOG(WARN, "fail to push sys value", K(ret));
       }
     }
     return ret;
@@ -195,6 +198,7 @@ struct ObSysVarInPC
     for (int32_t i = 0; OB_SUCC(ret) && i < sys_var_cnt; ++i) {
       size = 0;
       if (OB_FAIL(system_variables_.at(i).print_plain_str_literal(buf + pos, buf_len - pos, size))) {
+        SQL_PC_LOG(WARN, "fail to encode obj", K(i), K(buf + pos), K(buf_len), K(pos), K(system_variables_.at(i)), K(ret));
       } else {
         pos += size;
         if (i != sys_var_cnt - 1) { // output separator
@@ -797,6 +801,7 @@ struct ObPlanStat
       ATOMIC_AAF(&fuse_row_cache_miss_cnt_, stat.fuse_row_cache_miss_cnt_);
       ATOMIC_AAF(&row_cache_hit_cnt_, stat.row_cache_hit_cnt_);
       ATOMIC_AAF(&row_cache_miss_cnt_, stat.row_cache_miss_cnt_);
+      SQL_PC_LOG(DEBUG, "[ROW_CACHE_ADJUST] update cache stat", K(plan_id_), K(update_times), K(fuse_row_cache_hit_cnt_), K(fuse_row_cache_miss_cnt_), K(row_cache_hit_cnt_), K(row_cache_miss_cnt_));
       if (0 == (update_times & CACHE_POLICY_UDPATE_THRESHOLD)) {
         if (bf_access_cnt_ > CACHE_ACCESS_THRESHOLD) {
           if (static_cast<double>(bf_filter_cnt_) / static_cast<double>(bf_access_cnt_)
@@ -826,6 +831,11 @@ struct ObPlanStat
             enable_fuse_row_cache_ = true;
           }
         }
+        SQL_PC_LOG(DEBUG, "[ROW_CACHE_ADJUST] update cache policy", K(sql_id_), K(exact_mode_sql_id_),
+            K(enable_bf_cache_), K(enable_row_cache_), K(enable_fuse_row_cache_),
+            K(bf_filter_cnt_), K(bf_access_cnt_), K(in_row_cache_threshold_),
+            K(row_cache_hit_cnt_), K(row_cache_access_cnt),
+            K(fuse_row_cache_hit_cnt_), K(fuse_row_cache_access_cnt));
         row_cache_hit_cnt_ = 0;
         row_cache_miss_cnt_ = 0;
         bf_access_cnt_ = 0;
@@ -967,6 +977,7 @@ public:
 
   ObConfigInfoInPC()
   : pushdown_storage_level_(DEFAULT_PUSHDOWN_STORAGE_LEVEL),
+    rowsets_enabled_(false),
     enable_px_batch_rescan_(true),
     bloom_filter_enabled_(true),
     enable_newsort_(true),
@@ -1017,6 +1028,7 @@ public:
   // here to add config values
   //
   int pushdown_storage_level_;
+  bool rowsets_enabled_;
   bool enable_px_batch_rescan_;
   bool enable_px_ordered_coord_;
   bool bloom_filter_enabled_;

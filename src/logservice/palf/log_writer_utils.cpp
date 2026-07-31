@@ -68,6 +68,7 @@ int LogWriteBuf::merge(const LogWriteBuf &rhs, bool &has_merged)
   } else {
     write_buf_[0].buf_len_ += rhs_size;
     has_merged = true;
+    PALF_LOG(TRACE, "merge success", KPC(this), K(rhs), K(has_merged));
   }
   return ret;
 }
@@ -149,6 +150,7 @@ DEFINE_SERIALIZE(LogWriteBuf)
   if (NULL == buf || 0 >= buf_len || 0 > pos) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, total_size))) {
+    PALF_LOG(ERROR, "LogWriteBuf serialize failed", K(ret), K(pos), K(new_pos), K(buf_len));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < write_buf_.count(); i++) {
       const int64_t tmp_buf_len = write_buf_[i].buf_len_;
@@ -169,11 +171,13 @@ DEFINE_DESERIALIZE(LogWriteBuf)
   if (NULL == buf || 0 >= data_len || 0 > pos) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &total_size))) {
+    PALF_LOG(ERROR, "LogWriteBuf deserialize failed", K(ret), K(pos), K(new_pos), K(data_len));
   } else {
     InnerStruct inner_struct;
     inner_struct.buf_ = buf + new_pos;
     inner_struct.buf_len_ = total_size;
     if (OB_FAIL(write_buf_.push_back(inner_struct))){
+      PALF_LOG(ERROR, "LogWriteBuf push_back failed", K(ret));
     } else {
       pos = new_pos + total_size;
     }

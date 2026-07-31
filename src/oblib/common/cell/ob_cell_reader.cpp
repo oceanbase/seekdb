@@ -99,7 +99,9 @@ int ObCellReader::read_decimal_int(ObObj &obj)
   const uint32_t *len = NULL;
   const int16_t *scale = NULL;
   if (OB_FAIL(read<int16_t>(scale))) {
+    COMMON_LOG(WARN, "failed to read uint32_t", K(ret));
   } else if (OB_FAIL(read<uint32_t>(len))) {
+    COMMON_LOG(WARN, "failed to read int16_t", K(ret));
   } else if (OB_UNLIKELY(pos_ + *len > buf_size_)) {
     ret = OB_BUF_NOT_ENOUGH;
     COMMON_LOG(WARN, "buffer not enough", K(ret), K(pos_), K(*len), K(buf_size_));
@@ -261,9 +263,11 @@ int ObCellReader::next_cell()
     COMMON_LOG(WARN, "ObCellReader should be inited first, ", K(ret));
   } else if (SPARSE == store_type_) {
     if (OB_FAIL(parse(&column_id_))) {
+      COMMON_LOG(WARN, "cell reader fail to parse.", K(ret));
     }
   } else if (DENSE == store_type_) {
     if (OB_FAIL(parse(NULL))) {
+      COMMON_LOG(WARN, "cell reader fail to parse.", K(ret));
     }
   } else {
     ret = OB_NOT_SUPPORTED;
@@ -282,6 +286,7 @@ int ObCellReader::get_cell(uint64_t &column_id, ObObj &obj, bool *is_row_finishe
     ret = OB_NOT_INIT;
      COMMON_LOG(WARN, "ObCellReader should be inited first, ", K(ret));
   } else if (OB_FAIL(get_cell(column_id, cell, is_row_finished, row))) {
+    COMMON_LOG(WARN, "get cell fail", K(ret));
   } else {
     obj = *cell;
   }
@@ -296,6 +301,7 @@ int ObCellReader::get_cell(const ObObj *&obj, bool *is_row_finished, ObString *r
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "ObCellReader should be inited first, ", K(ret));
   } else if (OB_FAIL(is_es_end_object(obj_, is_end_obj))) {
+    COMMON_LOG(WARN, "fail to get is_end_obj, ", K(ret), K_(obj));
   } else {
     obj = &obj_;
     if (NULL != is_row_finished) {
@@ -321,6 +327,7 @@ int ObCellReader::get_cell(uint64_t &column_id,
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "ObCellReader should be inited first, ", K(ret));
   } else if (OB_FAIL(is_es_end_object(obj_, is_end_obj))) {
+    COMMON_LOG(WARN, "fail to get is_end_obj, ", K(ret), K_(obj));
   } else {
     obj = &obj_;
     column_id = column_id_;
@@ -344,6 +351,7 @@ int ObCellReader::parse(uint64_t *column_id)
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "ObCellReader should be inited first, ", K(ret));
   } else if (OB_FAIL(read<ObCellWriter::CellMeta>(meta))) {
+    COMMON_LOG(WARN, "cell reader fail to read meta, ", K(ret));
   } else {
     switch (meta->type_) {
       case ObNullType:
@@ -461,6 +469,7 @@ int ObCellReader::parse(uint64_t *column_id)
     if (ObExtendType != meta->type_ || obj_.is_min_value() || obj_.is_max_value()) {
       const uint32_t *tmp_column_id = NULL;
       if (OB_FAIL(read<uint32_t>(tmp_column_id))) {
+        COMMON_LOG(WARN, "cell reader fail to read column id.", K(ret));
       } else {
         *column_id = *tmp_column_id;
       }
