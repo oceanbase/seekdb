@@ -2739,6 +2739,18 @@ int ObDASIterUtils::create_gis_lookup_tree(ObTableScanParam &scan_param,
                                            ObDASIter *&iter_tree,
                                            const bool in_vec_pre_filter)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSED(scan_param);
+  UNUSED(alloc);
+  UNUSED(attach_ctdef);
+  UNUSED(attach_rtdef);
+  UNUSED(related_tablet_ids);
+  UNUSED(trans_desc);
+  UNUSED(snapshot);
+  UNUSED(iter_tree);
+  UNUSED(in_vec_pre_filter);
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
 
   const ObDASTableLookupCtDef *lookup_ctdef = nullptr;
@@ -2778,6 +2790,7 @@ int ObDASIterUtils::create_gis_lookup_tree(ObTableScanParam &scan_param,
   }
 
   return ret;
+#endif
 }
 
 int ObDASIterUtils::create_sort_sub_tree(common::ObIAllocator &alloc,

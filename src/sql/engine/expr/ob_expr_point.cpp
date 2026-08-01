@@ -16,7 +16,13 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_point.h"
+#if SEEKDB_ENABLE_CORE_GIS
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#endif
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#include "seekdb/plugin/execution_spi.h"
+#include "seekdb/plugin/extension_spi.h"
+#include "share/rc/ob_module_provider.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -25,6 +31,44 @@ namespace oceanbase
 {
 namespace sql
 {
+
+namespace
+{
+
+struct PointPluginSink
+{
+  const ObExpr *expr_;
+  ObEvalCtx *ctx_;
+  ObDatum *result_;
+};
+
+seekdb_plugin_status_t SEEKDB_PLUGIN_CALL emit_point_plugin_result(
+    seekdb_plugin_host_handle_t *host,
+    const seekdb_plugin_execution_result_v1_t *result)
+{
+  if (nullptr == host || nullptr == result ||
+      result->struct_size < sizeof(*result) || nullptr == result->data ||
+      result->data_size == 0 || result->is_null != 0) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  PointPluginSink *sink = reinterpret_cast<PointPluginSink *>(host);
+  if (nullptr == sink->expr_ || nullptr == sink->ctx_ || nullptr == sink->result_) {
+    return SEEKDB_PLUGIN_STATUS_FAILED_PRECONDITION;
+  }
+  const int ret = pack_plugin_expr_result(
+      *sink->expr_, *sink->ctx_, *sink->result_,
+      reinterpret_cast<const char *>(result->data),
+      static_cast<int64_t>(result->data_size));
+  switch (ret) {
+    case OB_SUCCESS: return SEEKDB_PLUGIN_STATUS_OK;
+    case OB_ALLOCATE_MEMORY_FAILED: return SEEKDB_PLUGIN_STATUS_NO_MEMORY;
+    case OB_INVALID_ARGUMENT: return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+    default: return SEEKDB_PLUGIN_STATUS_INTERNAL;
+  }
+}
+
+} // namespace
+
 ObExprPoint::ObExprPoint(common::ObIAllocator &alloc)
     : ObFuncExprOperator(alloc,
                          T_FUN_SYS_POINT,
@@ -73,6 +117,13 @@ int ObExprPoint::calc_result2(common::ObObj &result,
                               const common::ObObj &obj2,
                               common::ObExprCtx &expr_ctx) const
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSED(result);
+  UNUSED(obj1);
+  UNUSED(obj2);
+  UNUSED(expr_ctx);
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   bool is_null_result = false;
   ObIAllocator *allocator = expr_ctx.calc_buf_;
@@ -126,6 +177,7 @@ int ObExprPoint::calc_result2(common::ObObj &result,
   }
 
   return ret;
+#endif
 }
 
 int ObExprPoint::eval_point(const ObExpr &expr,
@@ -142,7 +194,9 @@ int ObExprPoint::eval_point(const ObExpr &expr,
   ObObjType type_y = arg_y->datum_meta_.type_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
+#if SEEKDB_ENABLE_CORE_GIS
   ObWkbBuffer res_wkb_buf(tmp_allocator);
+#endif
 
   if (ob_is_null(type_x) || ob_is_null(type_y)) {
     is_null_result = true;
@@ -155,6 +209,33 @@ int ObExprPoint::eval_point(const ObExpr &expr,
   } else {
     double x = datum_x->get_double();
     double y = datum_y->get_double();
+
+    // Prefer the active GIS function service.  The byte-oriented ABI keeps
+    // ObDatum and execution state inside the host; the callback copies the
+    // plugin-owned result into the normal geometry datum.  A missing or
+    // incompatible plugin remains compatible with the legacy in-core path
+    // until the complete GIS surface has been migrated.
+    PointPluginSink sink{&expr, &ctx, &res};
+    seekdb_plugin_execution_context_v1_t plugin_ctx = {};
+    plugin_ctx.struct_size = sizeof(plugin_ctx);
+    plugin_ctx.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink);
+    plugin_ctx.emit_result = emit_point_plugin_result;
+    seekdb_plugin_execution_value_v1_t arguments[2] = {};
+    arguments[0].struct_size = sizeof(arguments[0]);
+    arguments[0].type_id = "org.seekdb.gis.scalar.float64";
+    arguments[0].data = reinterpret_cast<const uint8_t *>(&x);
+    arguments[0].data_size = sizeof(x);
+    arguments[1] = arguments[0];
+    arguments[1].data = reinterpret_cast<const uint8_t *>(&y);
+    if (nullptr != share::g_mp) {
+      const int plugin_ret = share::g_mp->execute_plugin_extension(
+          SEEKDB_PLUGIN_EXTENSION_FUNCTION, "st_point", &plugin_ctx, arguments, 2);
+      if (OB_SUCCESS == plugin_ret) {
+        return OB_SUCCESS;
+      }
+    }
+
+#if SEEKDB_ENABLE_CORE_GIS
     uint32_t srid = 0;
     if (OB_FAIL(res_wkb_buf.append(srid))) {
       LOG_WARN("fail to append srid to point wkb buf", K(ret), K(srid));
@@ -169,13 +250,20 @@ int ObExprPoint::eval_point(const ObExpr &expr,
     } else if (OB_FAIL(res_wkb_buf.append(y))) {
       LOG_WARN("fail to append y to point wkb buf", K(ret), K(y));
     }
+#else
+    ret = OB_NOT_SUPPORTED;
+#endif
   }
 
   if (OB_SUCC(ret)) {
     if (is_null_result) {
       res.set_null();
-    } else if (OB_FAIL(ObGeoExprUtils::pack_geo_res(expr, ctx, res, res_wkb_buf.string()))) {
+#if SEEKDB_ENABLE_CORE_GIS
+    } else if (OB_FAIL(pack_plugin_expr_result(expr, ctx, res,
+                                                res_wkb_buf.string().ptr(),
+                                                res_wkb_buf.string().length()))) {
       LOG_WARN("fail to pack geo res", K(ret));
+#endif
     }
   }
 

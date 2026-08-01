@@ -22,6 +22,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "sql/das/ob_das_attach_define.h"
 #include "sql/das/ob_das_vec_define.h"
+#include "sql/executor/ob_task_spliter.h"
 #include "share/geo/ob_geo_utils.h"
 #include "share/ob_ddl_checksum.h"
 #include "observer/omt/ob_srs_service.h"
@@ -421,6 +422,24 @@ OB_DEF_DESERIALIZE(ObTableScanOpInput)
     }
     if (OB_SUCC(ret)) {
       LST_DO_CODE(OB_UNIS_DECODE, not_need_extract_query_range_);
+    }
+  }
+  return ret;
+}
+
+int ObTableScanOpInput::init(ObTaskInfo &task_info)
+{
+  int ret = OB_SUCCESS;
+  if (PHY_FAKE_CTE_TABLE == MY_SPEC.type_) {
+    LOG_DEBUG("CTE TABLE do not need init", K(ret));
+  } else if (ObTaskSpliter::INVALID_SPLIT == task_info.get_task_split_type()) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("exec type is INVALID_SPLIT", K(ret));
+  } else {
+    if (1 == task_info.get_range_location().part_locs_.count()  // only one table
+               && 0 < task_info.get_range_location().part_locs_.at(0).scan_ranges_.count()) {
+      // multi-range
+      ret = key_ranges_.assign(task_info.get_range_location().part_locs_.at(0).scan_ranges_);
     }
   }
   return ret;
@@ -1152,7 +1171,7 @@ OB_INLINE int ObTableScanOp::init_das_scan_rtdef(const ObDASScanCtDef &das_ctdef
       !MY_CTDEF.lookup_ctdef_->pd_expr_spec_.pushdown_filters_.empty();
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
   ObSQLSessionInfo *my_session = GET_MY_SESSION(ctx_);
-  ObSqlExecutorCtx &task_exec_ctx = ctx_.get_sql_exec_ctx();
+  ObTaskExecutorCtx &task_exec_ctx = ctx_.get_task_exec_ctx();
   das_rtdef.ctdef_ = &das_ctdef;
   das_rtdef.timeout_ts_ = plan_ctx->get_ps_timeout_timestamp();
   das_rtdef.tx_lock_timeout_ = my_session->get_trx_lock_timeout();
@@ -3792,6 +3811,9 @@ int ObTableScanOp::inner_get_next_spiv_index_row()
 
 int ObTableScanOp::inner_get_next_spatial_index_row()
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   bool need_ignore_null = false;
   if (OB_ISNULL(domain_index_.dom_rows_)) {
@@ -3878,6 +3900,7 @@ int ObTableScanOp::inner_get_next_spatial_index_row()
     }
   }
   return ret;
+#endif
 }
 
 int ObTableScanOp::init_spatial_index_rows()

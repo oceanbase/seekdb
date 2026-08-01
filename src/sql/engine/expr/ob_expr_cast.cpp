@@ -499,6 +499,7 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
           // to string in ObRawExprWrapEnumSet::visit(ObSysFunRawExpr &expr) later.
         } else {
           if (ob_is_geometry_tc(dst_type.get_type())) {
+#if SEEKDB_ENABLE_CORE_GIS
             ObCastMode cast_mode = cast_raw_expr->get_cast_mode();
             const ObObj &param = type2.get_param();
             ParseNode parse_node;
@@ -509,6 +510,9 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
             } else {
               cast_raw_expr->set_cast_mode(cast_mode);
             }
+#else
+            ret = OB_NOT_SUPPORTED;
+#endif
           }
           if (OB_SUCC(ret)) {
             // need_wrap is false, set calc_type to type1 itself.
@@ -614,6 +618,43 @@ int ObExprCast::get_cast_type(const bool enable_decimal_int,
   return ret;
 }
 
+int ObExprCast::eval_cast_multiset(const sql::ObExpr &expr,
+                                   sql::ObEvalCtx &ctx,
+                                   sql::ObDatum &res_datum)
+{
+  int ret = OB_SUCCESS;
+  ret = OB_NOT_SUPPORTED;
+  LOG_USER_ERROR(OB_NOT_SUPPORTED, "eval cast multiset");
+  return ret;
+}
+
+int ObExprCast::cg_cast_multiset(ObExprCGCtx &op_cg_ctx,
+                                 const ObRawExpr &raw_expr,
+                                 ObExpr &rt_expr) const
+{
+  int ret = OB_SUCCESS;
+  ret = OB_NOT_SUPPORTED;
+  LOG_USER_ERROR(OB_NOT_SUPPORTED, "cast multiset");
+  return ret;
+}
+
+OB_SERIALIZE_MEMBER(ObExprCast::CastMultisetExtraInfo,
+                    pl_type_, not_null_, elem_type_, capacity_, udt_id_);
+
+int ObExprCast::CastMultisetExtraInfo::deep_copy(common::ObIAllocator &allocator,
+                                                    const ObExprOperatorType type,
+                                                    ObIExprExtraInfo *&copied_info) const
+{
+  int ret = OB_SUCCESS;
+  OZ(ObExprExtraInfoFactory::alloc(allocator, type, copied_info));
+  CastMultisetExtraInfo &other = *static_cast<CastMultisetExtraInfo *>(copied_info);
+  if (OB_SUCC(ret)) {
+    other = *this;
+  }
+  return ret;
+}
+
+
 int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
                         const ObRawExpr &raw_expr,
                         ObExpr &rt_expr) const
@@ -686,6 +727,10 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
       if (OB_ISNULL(src_raw_expr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null", K(ret));
+      } else if (src_raw_expr->is_multiset_expr()) {
+        if (OB_FAIL(cg_cast_multiset(op_cg_ctx, raw_expr, rt_expr))) {
+          LOG_WARN("failed to cg cast multiset", K(ret));
+        }
       } else if (fast_cast_decint) {
         if (CM_IS_EXPLICIT_CAST(cast_mode)) {
           ObDatumCast::get_decint_cast(ob_obj_type_class(in_type), in_prec, in_scale, out_prec,

@@ -30,8 +30,33 @@ if (SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
   ob_unittest(test_plugin_registry)
   ob_unittest(test_plugin_loader)
   ob_unittest(test_plugin_catalog)
+  ob_unittest(test_gis_plugin)
   target_link_libraries(test_plugin_registry PRIVATE seekdb_plugin_sdk)
   target_link_libraries(test_plugin_catalog PRIVATE seekdb_plugin_sdk)
+  add_dependencies(test_gis_plugin seekdb_gis_plugin)
+  target_link_libraries(test_gis_plugin PRIVATE seekdb_plugin_sdk ${CMAKE_DL_LIBS})
+  target_compile_definitions(test_gis_plugin PRIVATE
+    SEEKDB_TEST_GIS_PLUGIN_DIR="$<TARGET_FILE_DIR:seekdb_gis_plugin>"
+    SEEKDB_TEST_GIS_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_gis_plugin>")
+
+  # The GIS ABI test only exercises the public plugin SDK and the dynamic
+  # loader.  Keep a standalone variant so it can run in core-only builds
+  # without pulling the multi-gigabyte observer shared library into the link.
+  add_executable(gis_plugin_abi_smoke test_gis_plugin.cpp)
+  find_package(Threads REQUIRED)
+  add_test(NAME gis_plugin_abi_smoke COMMAND gis_plugin_abi_smoke)
+  set_tests_properties(gis_plugin_abi_smoke PROPERTIES TIMEOUT 300)
+  add_dependencies(gis_plugin_abi_smoke seekdb_gis_plugin)
+  target_link_libraries(gis_plugin_abi_smoke PRIVATE
+    seekdb_plugin_sdk gtest gmock Threads::Threads ${CMAKE_DL_LIBS})
+  target_link_directories(gis_plugin_abi_smoke PRIVATE
+    ${DEP_DIR}/lib64 ${DEP_DIR}/lib)
+  target_include_directories(gis_plugin_abi_smoke PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/unittest
+    ${CMAKE_SOURCE_DIR}/deps/oblib/unittest ${DEP_DIR}/include)
+  target_compile_definitions(gis_plugin_abi_smoke PRIVATE
+    SEEKDB_TEST_GIS_PLUGIN_DIR="$<TARGET_FILE_DIR:seekdb_gis_plugin>"
+    SEEKDB_TEST_GIS_PLUGIN_FILE="$<TARGET_FILE_NAME:seekdb_gis_plugin>")
   add_dependencies(test_plugin_loader
     seekdb_reference_plugin seekdb_reference_blocked_plugin
     seekdb_reference_invalid_extensions_plugin

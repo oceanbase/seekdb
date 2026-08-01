@@ -35,6 +35,7 @@
 #include "share/storage/ob_sqlite_connection_pool.h"
 
 #if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+#include "seekdb/plugin/execution_spi.h"
 #include "share/plugin/ob_plugin_catalog.h"
 #include "share/plugin/ob_plugin_loader.h"
 #include "share/plugin/ob_plugin_registry.h"
@@ -372,6 +373,55 @@ int ObServerPluginRuntime::recover_before_server_ready(std::string &error)
         error, "unexpected plugin server-ready bridge failure");
   }
   return ret;
+}
+
+int ObServerPluginRuntime::execute_function(
+    const char *service_id,
+    const uint32_t abi_major,
+    const uint32_t required_minor,
+    const seekdb_plugin_execution_context_v1 *context,
+    const seekdb_plugin_execution_value_v1 *arguments,
+    const uint32_t argument_count)
+{
+  if (!impl_ || !impl_->initialized_) return OB_NOT_INIT;
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  if (!impl_->loader_) return OB_NOT_INIT;
+  return impl_->loader_->execute_function(service_id, abi_major, required_minor,
+                                          context, arguments, argument_count);
+#else
+  UNUSED(service_id);
+  UNUSED(abi_major);
+  UNUSED(required_minor);
+  UNUSED(context);
+  UNUSED(arguments);
+  UNUSED(argument_count);
+  return OB_NOT_SUPPORTED;
+#endif
+}
+
+int ObServerPluginRuntime::execute_extension(
+    const seekdb_plugin_extension_kind_t kind,
+    const char *sql_name,
+    const seekdb_plugin_execution_context_v1 *context,
+    const seekdb_plugin_execution_value_v1 *arguments,
+    const uint32_t argument_count)
+{
+  if (!impl_ || !impl_->initialized_) return OB_NOT_INIT;
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  if (!impl_->loader_) return OB_NOT_INIT;
+  return impl_->loader_->execute_extension(
+      kind, sql_name,
+      reinterpret_cast<const seekdb_plugin_execution_context_v1_t *>(context),
+      reinterpret_cast<const seekdb_plugin_execution_value_v1_t *>(arguments),
+      argument_count);
+#else
+  UNUSED(kind);
+  UNUSED(sql_name);
+  UNUSED(context);
+  UNUSED(arguments);
+  UNUSED(argument_count);
+  return OB_NOT_SUPPORTED;
+#endif
 }
 
 void ObServerPluginRuntime::destroy() noexcept

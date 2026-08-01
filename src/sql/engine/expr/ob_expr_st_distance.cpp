@@ -16,9 +16,18 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include <cstring>
+#if SEEKDB_ENABLE_CORE_GIS
 #include "share/geo/ob_geo_func_register.h"
 #include "ob_expr_st_distance.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#else
+#include "ob_expr_st_distance.h"
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#include "seekdb/plugin/execution_spi.h"
+#include "seekdb/plugin/extension_spi.h"
+#include "share/rc/ob_module_provider.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -27,6 +36,30 @@ namespace oceanbase
 {
 namespace sql
 {
+
+#if !SEEKDB_ENABLE_CORE_GIS
+namespace
+{
+struct DistancePluginSink { ObDatum *result_; };
+seekdb_plugin_status_t SEEKDB_PLUGIN_CALL emit_distance_plugin_result(
+    seekdb_plugin_host_handle_t *host,
+    const seekdb_plugin_execution_result_v1_t *result)
+{
+  if (nullptr == host || nullptr == result || result->struct_size != sizeof(*result) ||
+      result->is_null != 0 || result->data_size != sizeof(double) || nullptr == result->data ||
+      nullptr == result->type_id ||
+      0 != std::strcmp(result->type_id, "org.seekdb.gis.scalar.float64")) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  DistancePluginSink *sink = reinterpret_cast<DistancePluginSink *>(host);
+  if (nullptr == sink->result_) return SEEKDB_PLUGIN_STATUS_FAILED_PRECONDITION;
+  double value = 0.0;
+  std::memcpy(&value, result->data, sizeof(value));
+  sink->result_->set_double(value);
+  return SEEKDB_PLUGIN_STATUS_OK;
+}
+}
+#endif
 
 ObExprSTDistance::ObExprSTDistance(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_ST_DISTANCE, N_ST_DISTANCE, TWO_OR_THREE, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
@@ -72,6 +105,36 @@ int ObExprSTDistance::calc_result_typeN(ObExprResType& type,
 
 int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  int ret = OB_SUCCESS;
+  ObDatum *first = nullptr;
+  ObDatum *second = nullptr;
+  if (OB_FAIL(expr.args_[0]->eval(ctx, first)) || OB_FAIL(expr.args_[1]->eval(ctx, second))) {
+  } else if (first->is_null() || second->is_null()) {
+    res.set_null();
+  } else if (expr.arg_cnt_ != 2 || nullptr == share::g_mp) {
+    ret = OB_NOT_SUPPORTED;
+  } else {
+    DistancePluginSink sink{&res};
+    seekdb_plugin_execution_context_v1_t plugin_ctx = {};
+    plugin_ctx.struct_size = sizeof(plugin_ctx);
+    plugin_ctx.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink);
+    plugin_ctx.emit_result = emit_distance_plugin_result;
+    seekdb_plugin_execution_value_v1_t arguments[2] = {};
+    const ObDatum *datums[2] = {first, second};
+    for (int i = 0; i < 2; ++i) {
+      const ObString geometry = datums[i]->get_string();
+      arguments[i].struct_size = sizeof(arguments[i]);
+      arguments[i].type_id = "org.seekdb.gis.geometry";
+      arguments[i].data = reinterpret_cast<const uint8_t *>(geometry.ptr());
+      arguments[i].data_size = static_cast<uint64_t>(geometry.length());
+    }
+    const int plugin_ret = share::g_mp->execute_plugin_extension(
+        SEEKDB_PLUGIN_EXTENSION_FUNCTION, "st_distance", &plugin_ctx, arguments, 2);
+    if (OB_SUCCESS != plugin_ret) ret = OB_NOT_SUPPORTED;
+  }
+  return ret;
+#else
   int ret = OB_SUCCESS;
   ObDatum *gis_datum1 = NULL;
   ObDatum *gis_datum2 = NULL;
@@ -174,6 +237,7 @@ int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     }
   }
   return ret;
+#endif
 }
 
 int ObExprSTDistance::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,

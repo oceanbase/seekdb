@@ -20,6 +20,10 @@
 #include <memory>
 #include <string>
 
+struct seekdb_plugin_execution_context_v1;
+struct seekdb_plugin_execution_value_v1;
+typedef int32_t seekdb_plugin_extension_kind_t;
+
 namespace oceanbase
 {
 namespace share
@@ -50,6 +54,17 @@ public:
   int init(share::ObSQLiteConnectionPool *meta_db_pool,
            const std::string &trusted_directory = std::string());
   int recover_before_server_ready(std::string &error);
+  int execute_function(const char *service_id,
+                       uint32_t abi_major,
+                       uint32_t required_minor,
+                       const seekdb_plugin_execution_context_v1 *context,
+                       const seekdb_plugin_execution_value_v1 *arguments,
+                       uint32_t argument_count);
+  int execute_extension(seekdb_plugin_extension_kind_t kind,
+                        const char *sql_name,
+                        const seekdb_plugin_execution_context_v1 *context,
+                        const seekdb_plugin_execution_value_v1 *arguments,
+                        uint32_t argument_count);
   void destroy() noexcept;
 
 private:

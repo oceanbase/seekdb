@@ -1650,6 +1650,11 @@ int ObRangeGenerator::final_not_in_range_node(const ObRangeNode &node,
 int ObRangeGenerator::generate_tmp_geo_param(const ObRangeNode &node,
                                              ObTmpGeoParam *&tmp_geo_param)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSED(node);
+  tmp_geo_param = nullptr;
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   uint32_t input_srid;
   ObObj objs_ptr[2];
@@ -1723,6 +1728,7 @@ int ObRangeGenerator::generate_tmp_geo_param(const ObRangeNode &node,
     }
   }
   return ret;
+#endif
 }
 
 int ObRangeGenerator::get_intersects_tmp_geo_param(uint32_t input_srid,
@@ -1731,6 +1737,14 @@ int ObRangeGenerator::get_intersects_tmp_geo_param(uint32_t input_srid,
                                                    const double &distance,
                                                    ObTmpGeoParam *geo_param)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSED(input_srid);
+  UNUSED(wkb_str);
+  UNUSED(op_type);
+  UNUSED(distance);
+  UNUSED(geo_param);
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   common::ObArenaAllocator tmp_alloc(lib::ObLabel("GisIndex"), OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObS2Cellids cells;
@@ -1851,6 +1865,7 @@ int ObRangeGenerator::get_intersects_tmp_geo_param(uint32_t input_srid,
   }
 
   return ret;
+#endif
 }
 
 int ObRangeGenerator::get_coveredby_tmp_geo_param(uint32_t input_srid,
@@ -1858,6 +1873,13 @@ int ObRangeGenerator::get_coveredby_tmp_geo_param(uint32_t input_srid,
                                                   const common::ObDomainOpType op_type,
                                                   ObTmpGeoParam *geo_param)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSED(input_srid);
+  UNUSED(wkb_str);
+  UNUSED(op_type);
+  UNUSED(geo_param);
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   common::ObArenaAllocator tmp_alloc(lib::ObLabel("GisIndex"), OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObS2Cellids cells;
@@ -1969,6 +1991,7 @@ int ObRangeGenerator::get_coveredby_tmp_geo_param(uint32_t input_srid,
     s2object->~ObS2Adapter();
   }
   return ret;
+#endif
 }
 
 int ObRangeGenerator::final_geo_range_node(const ObRangeNode &node,
@@ -1976,6 +1999,13 @@ int ObRangeGenerator::final_geo_range_node(const ObRangeNode &node,
                                            const uint64_t end,
                                            ObTmpRange *&range)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSED(node);
+  UNUSED(start);
+  UNUSED(end);
+  range = nullptr;
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   range = all_tmp_ranges_.at(node.node_id_);
   if (range == nullptr) {
@@ -1993,6 +2023,7 @@ int ObRangeGenerator::final_geo_range_node(const ObRangeNode &node,
     }
   }
   return ret;
+#endif
 }
 
 int ObRangeGenerator::check_need_merge_range_nodes(const ObRangeNode *node,
@@ -2199,6 +2230,10 @@ int ObRangeGenerator::get_spatial_relationship_by_mask(const ObObj& extra, ObDom
 
 bool ObRangeGenerator::is_geo_type(const ObDomainOpType& op_type)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSED(op_type);
+  return false;
+#else
   bool bret = false;
   if (op_type == ObDomainOpType::T_GEO_COVERS ||
       op_type == ObDomainOpType::T_GEO_INTERSECTS ||
@@ -2208,6 +2243,7 @@ bool ObRangeGenerator::is_geo_type(const ObDomainOpType& op_type)
     bret = true;
   }
   return bret;
+#endif
 }
 
 int ObRangeGenerator::final_json_member_of_range_node(const ObRangeNode *node, 

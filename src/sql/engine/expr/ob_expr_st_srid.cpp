@@ -16,7 +16,15 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_st_srid.h"
+#include <cstring>
+#if SEEKDB_ENABLE_CORE_GIS
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#include "seekdb/plugin/execution_spi.h"
+#include "seekdb/plugin/extension_spi.h"
+#include "share/rc/ob_module_provider.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -26,6 +34,64 @@ namespace oceanbase
 {
 namespace sql
 {
+
+#if !SEEKDB_ENABLE_CORE_GIS
+namespace
+{
+struct SridPluginSink
+{
+  ObDatum *result_;
+};
+
+struct SetSridPluginSink
+{
+  const ObExpr *expr_;
+  ObEvalCtx *ctx_;
+  ObDatum *result_;
+};
+
+seekdb_plugin_status_t SEEKDB_PLUGIN_CALL emit_srid_plugin_result(
+    seekdb_plugin_host_handle_t *host,
+    const seekdb_plugin_execution_result_v1_t *result)
+{
+  if (nullptr == host || nullptr == result || result->struct_size != sizeof(*result) ||
+      result->is_null != 0 || result->data_size != sizeof(uint32_t) ||
+      nullptr == result->data || nullptr == result->type_id ||
+      0 != std::strcmp(result->type_id, "org.seekdb.gis.scalar.uint32")) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  SridPluginSink *sink = reinterpret_cast<SridPluginSink *>(host);
+  if (nullptr == sink->result_) {
+    return SEEKDB_PLUGIN_STATUS_FAILED_PRECONDITION;
+  }
+  uint32_t srid = 0;
+  std::memcpy(&srid, result->data, sizeof(srid));
+  sink->result_->set_int32(static_cast<int32_t>(srid));
+  return SEEKDB_PLUGIN_STATUS_OK;
+}
+
+seekdb_plugin_status_t SEEKDB_PLUGIN_CALL emit_set_srid_plugin_result(
+    seekdb_plugin_host_handle_t *host,
+    const seekdb_plugin_execution_result_v1_t *result)
+{
+  if (nullptr == host || nullptr == result || result->struct_size != sizeof(*result) ||
+      result->is_null != 0 || result->data_size == 0 || nullptr == result->data ||
+      nullptr == result->type_id ||
+      0 != std::strcmp(result->type_id, "org.seekdb.gis.geometry")) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  SetSridPluginSink *sink = reinterpret_cast<SetSridPluginSink *>(host);
+  if (nullptr == sink->expr_ || nullptr == sink->ctx_ || nullptr == sink->result_) {
+    return SEEKDB_PLUGIN_STATUS_FAILED_PRECONDITION;
+  }
+  const int ret = pack_plugin_expr_result(
+      *sink->expr_, *sink->ctx_, *sink->result_,
+      reinterpret_cast<const char *>(result->data),
+      static_cast<int64_t>(result->data_size));
+  return ret == OB_SUCCESS ? SEEKDB_PLUGIN_STATUS_OK : SEEKDB_PLUGIN_STATUS_INTERNAL;
+}
+}
+#endif
 ObExprSTSRID::ObExprSTSRID(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_ST_SRID, N_ST_SRID, ONE_OR_TWO, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
 {
@@ -84,6 +150,62 @@ int ObExprSTSRID::eval_st_srid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 
 int ObExprSTSRID::eval_st_srid_common(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, const char *func_name)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSED(func_name);
+  int ret = OB_SUCCESS;
+  if (expr.arg_cnt_ != 1 && expr.arg_cnt_ != 2) {
+    return OB_NOT_SUPPORTED;
+  }
+  ObDatum *datum = nullptr;
+  if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) {
+    return ret;
+  } else if (datum->is_null()) {
+    res.set_null();
+    return OB_SUCCESS;
+  } else if (nullptr == share::g_mp) {
+    return OB_NOT_SUPPORTED;
+  }
+  ObString wkb = datum->get_string();
+  const char *service_id = "st_srid";
+  seekdb_plugin_execution_value_v1_t arguments[2] = {};
+  uint32_t srid = 0;
+  uint32_t argument_count = 1;
+  if (expr.arg_cnt_ == 2) {
+    if (OB_FAIL(expr.args_[1]->eval(ctx, datum))) {
+      return ret;
+    } else if (datum->is_null()) {
+      res.set_null();
+      return OB_SUCCESS;
+    }
+    srid = datum->get_uint32();
+    service_id = "_st_setsrid";
+    arguments[1].struct_size = sizeof(arguments[1]);
+    arguments[1].type_id = "org.seekdb.gis.scalar.uint32";
+    arguments[1].data = reinterpret_cast<const uint8_t *>(&srid);
+    arguments[1].data_size = sizeof(srid);
+    argument_count = 2;
+  }
+  arguments[0].struct_size = sizeof(arguments[0]);
+  arguments[0].type_id = "org.seekdb.gis.geometry";
+  arguments[0].data = reinterpret_cast<const uint8_t *>(wkb.ptr());
+  arguments[0].data_size = static_cast<uint64_t>(wkb.length());
+  SetSridPluginSink set_sink{&expr, &ctx, &res};
+  SridPluginSink get_sink{&res};
+  seekdb_plugin_host_handle_t *host = nullptr;
+  seekdb_plugin_execution_context_v1_t plugin_ctx = {};
+  plugin_ctx.struct_size = sizeof(plugin_ctx);
+  if (expr.arg_cnt_ == 1) {
+    host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&get_sink);
+    plugin_ctx.emit_result = emit_srid_plugin_result;
+  } else {
+    host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&set_sink);
+    plugin_ctx.emit_result = emit_set_srid_plugin_result;
+  }
+  plugin_ctx.host = host;
+  const int plugin_ret = share::g_mp->execute_plugin_extension(
+      SEEKDB_PLUGIN_EXTENSION_FUNCTION, service_id, &plugin_ctx, arguments, argument_count);
+  return OB_SUCCESS == plugin_ret ? OB_SUCCESS : OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
@@ -176,6 +298,7 @@ int ObExprSTSRID::eval_st_srid_common(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
   }
 
   return ret;
+#endif
 }
 
 int ObExprSTSRID::cg_expr(ObExprCGCtx &expr_cg_ctx,
