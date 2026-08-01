@@ -37,29 +37,19 @@
 #include "sql/session/ob_session_val_map.h"
 #include "sql/session/ob_basic_session_info.h"
 #include "sql/monitor/ob_exec_stat.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/rc/ob_context.h"
 #include "sql/ob_optimizer_trace_impl.h"
+#include "observer/dbms_scheduler/ob_dbms_sched_job_utils.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
 
 namespace oceanbase
 {
-namespace common
-{
-class ObISrsProvider;
-class ObILobReadService;
-struct ObObjCastParams;
-namespace sqlclient
-{
-class ObISQLConnection;
-}
-}
 namespace observer
 {
+class ObQueryDriver;
 class ObSqlEndTransCb;
-}
-namespace dbms_scheduler
-{
-class ObDBMSSchedJobInfo;
+class ObPieceCache;
 }
 namespace pl
 {
@@ -73,21 +63,10 @@ class ObPLServerCursorInfo;
 
 } // namespace pl
 
-namespace query
-{
-class ObIChangeStreamService;
-class ObIDdlExecutionLimiter;
-class ObILocalCommandService;
-class ObIRootCommandService;
-class ObIQueryRuntimeEnvironment;
-class ObIPlanCacheAccessService;
-}
+namespace memtable { class ObBtreeIterCache; }
 using common::ObPsStmtId;
 namespace sql
 {
-class ObConnectResourceMgr;
-class ObIVirtualTableFactoryProvider;
-class ObSQLSessionMgr;
 class ObResultSet;
 class ObPlanCache;
 class ObPsCache;
@@ -95,8 +74,6 @@ class ObPsSessionInfo;
 class ObPsStmtInfo;
 class ObStmt;
 class ObSQLSessionInfo;
-class ObPieceCache;
-class ObIQueryResultSender;
 class ObPlanItemMgr;
 
 class SessionInfoKey
@@ -244,6 +221,7 @@ public:
         int ret = OB_SUCCESS;
         if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mem_context_,
             lib::ContextParam().set_mem_attr(ObModIds::OB_PL)))) {
+          SQL_ENG_LOG(WARN, "create memory entity failed");
         } else if (OB_ISNULL(mem_context_)) {
           ret = OB_ERR_UNEXPECTED;
           SQL_ENG_LOG(WARN, "null memory entity returned");
@@ -289,6 +267,7 @@ public:
               break;
             }
           } else if (OB_FAIL(session.close_cursor(cursor->get_id()))) {
+            SQL_ENG_LOG(WARN, "failed to close session cursor", K(ret), K(cursor->get_id()));
           } else {
             SQL_ENG_LOG(INFO, "clsoe session cursor implicit successed!", K(cursor->get_id()));
           }
@@ -410,9 +389,11 @@ public:
   //for test
   int test_init(uint32_t version, uint32_t sessid,
            common::ObIAllocator *bucket_allocator);
-  void destroy(bool skip_sys_var = false);
-  void reset(bool skip_sys_var);
+  void destroy() override;
+  void reset() override;
   void clean_status();
+  void set_plan_cache(ObPlanCache *cache) { plan_cache_ = cache; }
+  void set_ps_cache(ObPsCache *cache) { ps_cache_ = cache; }
   const common::ObWarningBuffer &get_show_warnings_buffer() const { return show_warnings_buf_; }
   const common::ObWarningBuffer &get_warnings_buffer() const { return warnings_buf_; }
   common::ObWarningBuffer &get_warnings_buffer() { return warnings_buf_; }
@@ -425,7 +406,10 @@ public:
   void reset_show_warnings_buf() { show_warnings_buf_.reset(); }
   ObPrivSet get_user_priv_set() const { return user_priv_set_; }
   ObPrivSet get_db_priv_set() const { return db_priv_set_; }
-  void *get_btree_iter_cache() { return btree_iter_cache_; }
+  ObPlanCache *get_plan_cache();
+  ObPlanCache *get_plan_cache_directly() const { return plan_cache_; };
+  ObPsCache *get_ps_cache();
+  memtable::ObBtreeIterCache *get_btree_iter_cache() { return btree_iter_cache_; }
   void set_user_priv_set(const ObPrivSet priv_set) { user_priv_set_ = priv_set; }
   void set_db_priv_set(const ObPrivSet priv_set) { db_priv_set_ = priv_set; }
   void set_show_warnings_buf(int error_code);
@@ -453,10 +437,6 @@ public:
   {
     config_provider_ = config_provider;
   }
-  void configure_obj_cast(
-      common::ObObjCastParams &params,
-      common::ObISrsProvider *srs_provider,
-      common::ObILobReadService *lob_read_service) const;
   bool is_read_only() const { return config_provider_->is_read_only(); };
   int64_t get_nlj_cache_limit() const { return config_provider_->get_nlj_cache_limit(); };
   bool is_terminate(int &ret) const;
@@ -537,6 +517,8 @@ public:
     return ret;
   }
   int64_t get_ps_session_info_size() const { return ps_session_info_map_.size(); }
+  inline pl::ObPL *get_pl_engine() const { return GCTX.pl_engine_; }
+
   pl::ObPLCursorInfo *get_pl_implicit_cursor();
 
   pl::ObPLSqlCodeInfo *get_pl_sqlcode_info();
@@ -552,8 +534,8 @@ public:
     pl_context_ = pl_stack_ctx;
   }
 
-  inline void set_pl_query_sender(ObIQueryResultSender *sender) { pl_query_sender_ = sender; }
-  inline ObIQueryResultSender* get_pl_query_sender() { return pl_query_sender_; }
+  inline void set_pl_query_sender(observer::ObQueryDriver *driver) { pl_query_sender_ = driver; }
+  inline observer::ObQueryDriver* get_pl_query_sender() { return pl_query_sender_; }
 
   inline void set_ps_protocol(bool is_ps_protocol) { pl_ps_protocol_ = is_ps_protocol; }
   inline bool is_ps_protocol() { return pl_ps_protocol_; }
@@ -588,8 +570,8 @@ public:
                          uint64_t id = OB_INVALID_ID);
   int print_all_cursor();
 
-  inline common::sqlclient::ObISQLConnection *get_inner_conn() { return inner_conn_; }
-  inline void set_inner_conn(common::sqlclient::ObISQLConnection *inner_conn)
+  inline void *get_inner_conn() { return inner_conn_; }
+  inline void set_inner_conn(void *inner_conn)
   {
     inner_conn_ = inner_conn;
   }
@@ -687,7 +669,7 @@ public:
                       bool &already_exists,
                       bool is_inner_sql);
   int get_inner_ps_stmt_id(ObPsStmtId cli_stmt_id, ObPsStmtId &inner_stmt_id);
-  int close_ps_stmt(ObPsCache &ps_cache, ObPsStmtId stmt_id);
+  int close_ps_stmt(ObPsStmtId stmt_id);
   void reset_ps_session_info() { ps_session_info_map_.reuse(); }
   void reset_ps_name() 
   {
@@ -815,8 +797,8 @@ public:
   bool is_ignore_stmt() const { return is_ignore_stmt_; }
 
   // piece
-  ObPieceCache *get_piece_cache(bool need_init = false);
-  void set_piece_cache(void* piece_cache) { piece_cache_ = reinterpret_cast<ObPieceCache*>(piece_cache); }
+  observer::ObPieceCache *get_piece_cache(bool need_init = false);
+  void set_piece_cache(void* piece_cache) { piece_cache_ = reinterpret_cast<observer::ObPieceCache*>(piece_cache); }
 
   share::schema::ObUserLoginInfo get_login_info () { return login_info_; }
   int set_login_info(const share::schema::ObUserLoginInfo &login_info);
@@ -828,6 +810,7 @@ public:
     if (OB_UNLIKELY(!ps_session_info_map_.created())) {
       // do nothing
     } else if (OB_FAIL(ps_session_info_map_.foreach_refactored(fn))) {
+      SQL_ENG_LOG(WARN, "failed to read each ps session info", K(ret));
     }
     return ret;
   }
@@ -840,18 +823,6 @@ public:
   bool has_got_user_conn_res() const { return got_user_conn_res_; }
   void set_conn_res_user_id(uint64_t v) { conn_res_user_id_ = v; }
   uint64_t get_conn_res_user_id() const { return conn_res_user_id_; }
-  void set_connect_resource_manager(ObConnectResourceMgr *conn_res_mgr)
-  {
-    conn_res_mgr_ = conn_res_mgr;
-  }
-  void set_session_manager(ObSQLSessionMgr *session_mgr)
-  {
-    session_mgr_ = session_mgr;
-  }
-  ObSQLSessionMgr *get_session_manager() const
-  {
-    return session_mgr_;
-  }
   int on_user_connect(share::schema::ObSessionPrivInfo &priv_info, const ObUserInfo *user_info);
   int on_user_disconnect();
   virtual void reset_tx_variable(bool reset_next_scope = true);
@@ -863,14 +834,12 @@ public:
   void update_pure_sql_exec_time(int64_t elapsed_time);
   int64_t get_tx_id_with_thread_data_lock() { 
     ObSQLSessionInfo::LockGuard guard(get_thread_data_lock());
-    return data_plane::tx_desc_id(tx_desc_).get_id();
+    return tx_desc_ != NULL ? tx_desc_->get_tx_id().get_id() : transaction::ObTransID().get_id();
   }
 public:
-  bool has_tx_level_temp_table() const
-  { return data_plane::tx_desc_has_temporary_tables(tx_desc_); }
-  int close_all_ps_stmt(ObPsCache &ps_cache);
+  bool has_tx_level_temp_table() const { return tx_desc_ && tx_desc_->with_temporary_table(); }
+  int close_all_ps_stmt();
 private:
-  void release_all_ps_session_info();
   void set_cur_exec_ctx(ObExecContext *cur_exec_ctx) { cur_exec_ctx_ = cur_exec_ctx; }
 
   static const int64_t MAX_STORED_PLANS_COUNT = 10240;
@@ -895,6 +864,8 @@ private:
   transaction::ObTxClass trans_type_;
   const common::ObVersionProvider *version_provider_;
   const ObSQLConfigProvider *config_provider_;
+  ObPlanCache *plan_cache_;
+  ObPsCache *ps_cache_;
   // Record the number of rows scanned in the select stmt result set for use with found_row() when setting sql_calc_found_row;
   int64_t found_rows_;
   // Record affected_row in dml operations, for use by row_count()
@@ -965,10 +936,10 @@ private:
   int64_t plsql_exec_time_;
   int64_t plsql_compile_time_;
 
-  ObIQueryResultSender *pl_query_sender_; // send query result in mysql pl
+  observer::ObQueryDriver *pl_query_sender_; // send query result in mysql pl
   bool pl_ps_protocol_; // send query result use this protocol
 
-  common::sqlclient::ObISQLConnection *inner_conn_;
+  void *inner_conn_;  // ObInnerSQLConnection * will cause .h included from each other.
 
   ObSessionStat session_stat_;
 
@@ -985,7 +956,7 @@ private:
   bool is_ignore_stmt_;
   ObSessionDDLInfo ddl_info_;
   bool is_table_name_hidden_;
-  ObPieceCache* piece_cache_;
+  observer::ObPieceCache* piece_cache_;
   bool is_load_data_exec_session_;
   ObSqlString pl_exact_err_msg_;
   bool is_varparams_sql_prepare_;
@@ -996,8 +967,6 @@ private:
   bool got_server_conn_res_;
   bool got_user_conn_res_;
   uint64_t conn_res_user_id_;
-  ObConnectResourceMgr *conn_res_mgr_;
-  ObSQLSessionMgr *session_mgr_;
   bool tx_level_temp_table_;
   ApplicationInfo client_app_info_;
   char module_buf_[common::OB_MAX_MOD_NAME_LENGTH];
@@ -1025,7 +994,7 @@ private:
   int64_t out_bytes_;
   share::schema::ObUserLoginInfo login_info_;
   dbms_scheduler::ObDBMSSchedJobInfo *job_info_; // dbms_scheduler related.
-  void *btree_iter_cache_;
+  memtable::ObBtreeIterCache *btree_iter_cache_;
   common::ObString audit_filter_name_;
   ObExecutingSqlStatRecord executing_sql_stat_record_;
 };

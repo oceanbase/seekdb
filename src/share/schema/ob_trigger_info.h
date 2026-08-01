@@ -168,6 +168,12 @@ public:
     RT_PARENT,
     RT_MAX,
   };
+  enum PackageSouceType
+  {
+    SPEC_AND_BODY = 0,
+    SPEC_ONLY,
+    BODY_ONLY
+  };
   enum OrderType
   {
     OT_INVALID = 0,
@@ -219,7 +225,7 @@ public:
   ObTriggerInfo &operator=(const ObTriggerInfo &trigger_info);
   int assign(const ObTriggerInfo &other);
 
-
+  
   virtual void set_trigger_id(uint64_t trigger_id)
   {
     trigger_id_ = trigger_id;
@@ -276,8 +282,11 @@ public:
   {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(deep_copy_str(trigger_name, trigger_name_))) {
+      SHARE_SCHEMA_LOG(WARN, "failed to deep copy trigger name", K(ret), K(trigger_name));
     } else if (OB_FAIL(package_spec_info_.set_package_name(trigger_name))) {
+      SHARE_SCHEMA_LOG(WARN, "failed to set package name", K(ret), K(trigger_name));
     } else if (OB_FAIL(package_body_info_.set_package_name(trigger_name))) {
+      SHARE_SCHEMA_LOG(WARN, "failed to set package name", K(ret), K(trigger_name));
     }
     return ret;
   }
@@ -317,7 +326,9 @@ public:
   {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(package_spec_info_.set_exec_env(exec_env))) {
+      SHARE_SCHEMA_LOG(WARN, "failed to set package exec env", K(ret), K(exec_env));
     } else if (OB_FAIL(package_body_info_.set_exec_env(exec_env))) {
+      SHARE_SCHEMA_LOG(WARN, "failed to set package exec env", K(ret), K(exec_env));
     }
     return ret;
   }
@@ -449,6 +460,24 @@ public:
     return left.get_timing_points() == right.get_timing_points()
            && left.get_trigger_events() == right.get_trigger_events();
   }
+  static int gen_package_source(const uint64_t tg_package_id,
+                                common::ObString &source,
+                                bool is_header,
+                                share::schema::ObSchemaGetterGuard &schema_guard,
+                                common::ObIAllocator &alloc);
+  int gen_package_source(const common::ObString &base_object_database,
+                         const common::ObString &base_object_name,
+                         const ParseNode &parse_node,
+                         const common::ObDataTypeCastParams &dtc_params);
+  int gen_procedure_source(const common::ObString &base_object_database,
+                           const common::ObString &base_object_name,
+                           const ParseNode &parse_node,
+                           const ObDataTypeCastParams &dtc_params,
+                           ObString &procedure_source);
+  static int replace_table_name_in_body(ObTriggerInfo &trigger_info,
+                                        common::ObIAllocator &alloc,
+                                        const common::ObString &base_object_database,
+                                        const common::ObString &base_object_name);
   TO_STRING_KV(K(trigger_id_),
                K(owner_id_),
                K(database_id_),
@@ -475,6 +504,45 @@ public:
                K(ref_trg_name_),
                K(action_order_),
                K(analyze_flag_));
+protected:
+  static int gen_package_source_simple(const ObTriggerInfo &trigger_info,
+                                       const common::ObString &base_object_database,
+                                       const common::ObString &base_object_name,
+                                       const ParseNode &parse_node,
+                                       const common::ObDataTypeCastParams &dtc_params,
+                                       common::ObString &spec_source,
+                                       common::ObString &body_source,
+                                       common::ObIAllocator &alloc,
+                                       const PackageSouceType type = SPEC_AND_BODY);
+  static void calc_package_source_size(const ObTriggerInfo &trigger_info,
+                                       const common::ObString &base_object_database,
+                                       const common::ObString &base_object_name,
+                                       int64_t &spec_size, int64_t &body_size);
+  static int fill_package_spec_source(const ObTriggerInfo &trigger_info,
+                                      const common::ObString &base_object_database,
+                                      const common::ObString &base_object_name,
+                                      const int64_t spec_size,
+                                      common::ObString &spec_source,
+                                      common::ObIAllocator &alloc);
+  static int fill_package_body_source(const ObTriggerInfo &trigger_info,
+                                      const common::ObString &base_object_database,
+                                      const common::ObString &base_object_name,
+                                      const int64_t body_size,
+                                      const TriggerContext &trigger_ctx,
+                                      common::ObString &body_source,
+                                      common::ObIAllocator &alloc);
+  static int fill_row_routine_spec(const char *spec_fmt,
+                                   const ObTriggerInfo &trigger_info,
+                                   const common::ObString &base_object_database,
+                                   const common::ObString &base_object_name,
+                                   char *buf, int64_t buf_len, int64_t &pos,
+                                   const bool is_before_row);
+  static int fill_row_routine_body(const ObTriggerInfo &trigger_info,
+                                   const common::ObString &base_object_database,
+                                   const common::ObString &base_object_name,
+                                   const TriggerContext &trigger_ctx,
+                                   char *buf, int64_t buf_len, int64_t &pos,
+                                   const bool is_before_row);
 protected:
 //// set by user
 //uint64_t trigger_id_;                           // set by sys

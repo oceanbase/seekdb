@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_aggregate_processor.h"
 #include "share/ob_lob_access_utils.h"
-#include "sql/engine/expr/ob_expr_add.h"
 #include "sql/engine/expr/ob_expr_minus.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/expr/ob_expr_estimate_ndv.h"
@@ -30,7 +29,7 @@
 #include "sql/engine/expr/ob_expr_sys_op_opnsize.h"
 #include "common/xml/ob_binary_aggregate.h"
 #include "sql/engine/expr/ob_expr_xml_func_helper.h"
-#include "sql/pl/ob_pl.h"
+#include "pl/ob_pl.h"
 
 namespace oceanbase
 {
@@ -695,7 +694,7 @@ int ObAggregateProcessor::HashBasedDistinctExtraResult::init_distinct_set(
   hp_infras_mgr_ = &hp_infras_mgr;
   aggr_info_ = &aggr_info;
   need_rewind_ = need_rewind;
-
+  
   if (!hp_infras_mgr.is_inited()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("hash part infras group not initialized", K(ret));
@@ -1145,7 +1144,7 @@ void ObAggregateProcessor::HybridHistExtraResult::reuse()
   ExtraResult::reuse();
 }
 
-int ObAggregateProcessor::HybridHistExtraResult::init(const ObAggrInfo &aggr_info, ObEvalCtx &eval_ctx, const bool need_rewind,
+int ObAggregateProcessor::HybridHistExtraResult::init(const ObAggrInfo &aggr_info, ObEvalCtx &eval_ctx, const bool need_rewind, 
     ObIOEventObserver *io_event_observer,
     ObMonitorNode &op_monitor_info)
 {
@@ -1379,7 +1378,6 @@ ObAggregateProcessor::ObAggregateProcessor(ObEvalCtx &eval_ctx,
       in_window_func_(false),
       has_extra_(false),
       eval_ctx_(eval_ctx),
-      datum_access_ctx_(nullptr),
       aggr_alloc_(label,
                   common::OB_MALLOC_MIDDLE_BLOCK_SIZE,
                   ObCtxIds::WORK_AREA),
@@ -1420,14 +1418,12 @@ int ObAggregateProcessor::init()
   distinct_count_ = 0;
   removal_info_.reset();
   (void)0;
-
+  
   group_rows_.set_ctx_id(ObCtxIds::DEFAULT_CTX_ID);
 
   if (OB_ISNULL(eval_ctx_.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
-  } else if (OB_FAIL(eval_ctx_.get_datum_access_ctx(datum_access_ctx_))) {
-    LOG_WARN("get datum access context failed", K(ret));
   } else if (OB_FAIL(group_rows_.reserve(1))) {
     LOG_WARN("failed to reserve", K(ret));
   } else if (OB_FAIL(aggr_func_ctxs_.prepare_allocate(aggr_infos_.count()))) {
@@ -3127,8 +3123,7 @@ int ObAggregateProcessor::rollup_aggregation(AggrCell &aggr_cell, AggrCell &roll
             //need update origin aggr separator expr
             if (OB_FAIL(aggr_info.separator_expr_->basic_funcs_->null_first_cmp_(*separator_result,
                                                                                  *aggr_extra->get_separator_datum(),
-                                                                                 cmp_ret,
-                                                                                 datum_access_ctx_))) {
+                                                                                 cmp_ret))) {
               LOG_WARN("compare failed", K(ret));
             } else if (0 != cmp_ret) {
               char *buf = (char*)aggr_alloc_.alloc(len);
@@ -3523,14 +3518,13 @@ int ObAggregateProcessor::prepare_aggr_result(const ObChunkDatumStore::StoredRow
                    OB_FAIL(ObHybridHistograms::build_prefix_str_datum_for_lob(tmp_alloctor,
                                                                               obj_meta,
                                                                               stored_row.cells()[0],
-                                                                              new_prev_datum,
-                                                                              datum_access_ctx_))) {
+                                                                              new_prev_datum))) {
           LOG_WARN("failed to build prefix str datum for lob", K(ret));
         } else {
           const ObDatum &datum = obj_meta.is_lob_storage() ? new_prev_datum : stored_row.cells()[0];
           ObExprHashFuncType hash_func = aggr_info.param_exprs_.at(0)->basic_funcs_->murmur_hash_;
           uint64_t datum_value = 0;
-          if (OB_FAIL(hash_func(datum, datum_value, datum_value, datum_access_ctx_))) {
+          if (OB_FAIL(hash_func(datum, datum_value, datum_value))) {
             LOG_WARN("fail to do hash", K(ret));
           } else if (OB_FAIL(extra->topk_fre_hist_.add_top_k_frequency_item(datum_value, datum))) {
             LOG_WARN("failed to process row", K(ret));
@@ -3988,14 +3982,13 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
                    OB_FAIL(ObHybridHistograms::build_prefix_str_datum_for_lob(tmp_alloctor,
                                                                               obj_meta,
                                                                               stored_row.cells()[0],
-                                                                              new_prev_datum,
-                                                                              datum_access_ctx_))) {
+                                                                              new_prev_datum))) {
           LOG_WARN("failed to build prefix str datum for lob", K(ret));
         } else {
           const ObDatum &datum = obj_meta.is_lob_storage() ? new_prev_datum : stored_row.cells()[0];
           ObExprHashFuncType hash_func = aggr_info.param_exprs_.at(0)->basic_funcs_->murmur_hash_;
           uint64_t datum_value = 0;
-          if (OB_FAIL(hash_func(datum, datum_value, datum_value, datum_access_ctx_))) {
+          if (OB_FAIL(hash_func(datum, datum_value, datum_value))) {
             LOG_WARN("fail to do hash", K(ret));
           } else if (OB_FAIL(extra->topk_fre_hist_.add_top_k_frequency_item(datum_value, datum))) {
             LOG_WARN("failed to process row", K(ret));
@@ -4791,7 +4784,7 @@ int ObAggregateProcessor::max_calc(AggrCell &aggr_cell, ObDatum &base, const ObD
     LOG_WARN("cmp_func is NULL", K(ret));
   } else if (!base.is_null() && !other.is_null()) {
     int cmp_ret = 0;
-    if (OB_FAIL(cmp_func(base, other, cmp_ret, datum_access_ctx_))) {
+    if (OB_FAIL(cmp_func(base, other, cmp_ret))) {
       LOG_WARN("failed to compare", K(ret));
     } else if (cmp_ret < 0) {
       ret = clone_aggr_cell(aggr_cell, other, is_number);
@@ -4817,7 +4810,7 @@ int ObAggregateProcessor::min_calc(AggrCell &aggr_cell, ObDatum &base, const ObD
     LOG_WARN("cmp_func is NULL", K(ret));
   } else if (!base.is_null() && !other.is_null()) {
     int cmp_ret = 0;
-    if (OB_FAIL(cmp_func(base, other, cmp_ret, datum_access_ctx_))) {
+    if (OB_FAIL(cmp_func(base, other, cmp_ret))) {
       LOG_WARN("failed to compare", K(ret));
     } else if (cmp_ret > 0) {
       ret = clone_aggr_cell(aggr_cell, other, is_number);
@@ -4854,7 +4847,7 @@ int ObAggregateProcessor::max_calc_batch(
     for (auto it = selector.begin(); OB_SUCC(ret) && it < selector.end(); selector.next(it)) {
       i = selector.get_batch_index(it);
       if (max && !src.at(i)->is_null()) {
-        if (OB_FAIL(cmp_func(*max, *src.at(i), cmp_ret, datum_access_ctx_))) {
+        if (OB_FAIL(cmp_func(*max, *src.at(i), cmp_ret))) {
           LOG_WARN("failed to compare", K(ret));
         } else if (cmp_ret < 0) {
           max = src.at(i);
@@ -4862,7 +4855,7 @@ int ObAggregateProcessor::max_calc_batch(
       } else if (!src.at(i)->is_null()) {
         if (dst.is_null()) {
           max = src.at(i);
-        } else if (OB_FAIL(cmp_func(dst, *src.at(i), cmp_ret, datum_access_ctx_))) {
+        } else if (OB_FAIL(cmp_func(dst, *src.at(i), cmp_ret))) {
           LOG_WARN("failed to compare", K(ret));
         } else if (cmp_ret < 0) {
           max = src.at(i);
@@ -4896,7 +4889,7 @@ int ObAggregateProcessor::min_calc_batch(
     for (auto it = selector.begin(); OB_SUCC(ret) && it < selector.end(); selector.next(it)) {
       i = selector.get_batch_index(it);
       if (min && !src.at(i)->is_null()) {
-        if (OB_FAIL(cmp_func(*min, *src.at(i), cmp_ret, datum_access_ctx_))) {
+        if (OB_FAIL(cmp_func(*min, *src.at(i), cmp_ret))) {
           LOG_WARN("failed to compare", K(ret));
         } else if (cmp_ret > 0) {
           min = src.at(i);
@@ -4904,7 +4897,7 @@ int ObAggregateProcessor::min_calc_batch(
       } else if (!src.at(i)->is_null()) {
         if (dst.is_null()) {
           min = src.at(i);
-        } else if (OB_FAIL(cmp_func(dst, *src.at(i), cmp_ret, datum_access_ctx_))) {
+        } else if (OB_FAIL(cmp_func(dst, *src.at(i), cmp_ret))) {
           LOG_WARN("failed to compare", K(ret));
         } else if (cmp_ret > 0) {
           min = src.at(i);
@@ -5124,8 +5117,7 @@ int ObAggregateProcessor::add_calc(
         ObLobLocatorV2 locator(blob_res, true/*has_lob_header*/);
         bool is_outrow = !locator.has_inrow_data();
         ObDatum tmp_datum;
-        if (OB_FAIL(ObArrayExprUtils::vector_datum_add(eval_ctx_.exec_ctx_,
-            result_datum, iter_value, aggr_alloc_,
+        if (OB_FAIL(ObArrayExprUtils::vector_datum_add(result_datum, iter_value, aggr_alloc_, 
             is_outrow ? &tmp_datum : nullptr))) {
           LOG_WARN("failed to add vector", K(ret));
         } else if (is_outrow) {
@@ -5308,8 +5300,7 @@ int ObAggregateProcessor::sub_calc(
         ObLobLocatorV2 locator(blob_res, true/*has_lob_header*/);
         bool is_outrow = !locator.has_inrow_data();
         ObDatum tmp_datum;
-        if (OB_FAIL(ObArrayExprUtils::vector_datum_add(eval_ctx_.exec_ctx_,
-            result_datum, iter_value, aggr_alloc_,
+        if (OB_FAIL(ObArrayExprUtils::vector_datum_add(result_datum, iter_value, aggr_alloc_, 
             is_outrow ? &tmp_datum : nullptr, true /*negative*/))) {
           LOG_WARN("failed to add vector", K(ret));
         } else if (is_outrow) {
@@ -5559,14 +5550,13 @@ int ObAggregateProcessor::top_fre_hist_calc_batch(
                OB_FAIL(ObHybridHistograms::build_prefix_str_datum_for_lob(tmp_alloctor,
                                                                           obj_meta,
                                                                           *datum,
-                                                                          new_prev_datum,
-                                                                          datum_access_ctx_))) {
+                                                                          new_prev_datum))) {
       LOG_WARN("failed to build prefix str datum for lob", K(ret));
     } else {
       datum = obj_meta.is_lob_storage() ? &new_prev_datum : datum;
       ObExprHashFuncType hash_func = aggr_info.param_exprs_.at(0)->basic_funcs_->murmur_hash_;
       uint64_t datum_value = 0;
-      if (OB_FAIL(hash_func(*datum, datum_value, datum_value, datum_access_ctx_))) {
+      if (OB_FAIL(hash_func(*datum, datum_value, datum_value))) {
         LOG_WARN("fail to do hash", K(ret));
       } else if (OB_FAIL(extra_info->topk_fre_hist_.add_top_k_frequency_item(datum_value, *datum))) {
         LOG_WARN("failed to process row", K(ret));
@@ -5657,8 +5647,7 @@ int ObAggregateProcessor::approx_count_calc_batch(
       }
       OB_ASSERT(NULL != expr->basic_funcs_);
       ObExprHashFuncType hash_func = expr->basic_funcs_->murmur_hash_;
-      if (OB_FAIL(hash_func(
-              *arg_datums.at(nth_row), hash_value, hash_value, datum_access_ctx_))) {
+      if (OB_FAIL(hash_func(*arg_datums.at(nth_row), hash_value, hash_value))) {
         LOG_WARN("fail to do hash", K(ret));
       }
     }
@@ -5870,8 +5859,7 @@ int ObAggregateProcessor::add_calc_batch(
           ObLobLocatorV2 locator(blob_res, true/*has_lob_header*/);
           bool is_outrow = !locator.has_inrow_data();
           ObDatum tmp_datum;
-          if (OB_FAIL(ObArrayExprUtils::vector_datum_add(eval_ctx_.exec_ctx_,
-              result_datum, *src.at(i), aggr_alloc_,
+          if (OB_FAIL(ObArrayExprUtils::vector_datum_add(result_datum, *src.at(i), aggr_alloc_, 
               is_outrow ? &tmp_datum : nullptr))) {
             LOG_WARN("failed to add vector", K(ret));
           } else if (is_outrow) {
@@ -6303,7 +6291,7 @@ int ObAggregateProcessor::llc_calc_hash_value(const ObChunkDatumStore::StoredRow
     } else {
       OB_ASSERT(NULL != expr.basic_funcs_);
       ObExprHashFuncType hash_func = expr.basic_funcs_->murmur_hash_;
-      if (OB_FAIL(hash_func(datum, hash_value, hash_value, datum_access_ctx_))) {
+      if (OB_FAIL(hash_func(datum, hash_value, hash_value))) {
         LOG_WARN("failed to do hash", K(ret));
       }
     }
@@ -6337,8 +6325,7 @@ int ObAggregateProcessor::check_rows_equal(const ObChunkDatumStore::LastStoredRo
         int cmp_ret = 0;
         if (OB_FAIL(aggr_info.sort_cmp_funcs_.at(i).cmp_func_(prev_row.store_row_->cells()[index],
                                                               cur_row.cells()[index],
-                                                              cmp_ret,
-                                                              datum_access_ctx_))) {
+                                                              cmp_ret))) {
           LOG_WARN("failed to cmp", K(ret), K(index));
         } else {
           is_equal = 0 == cmp_ret;
@@ -6611,8 +6598,7 @@ int ObAggregateProcessor::get_wm_concat_result(const ObAggrInfo &aggr_info,
           const bool has_lob_header = aggr_info.expr_->args_[0]->obj_meta_.has_lob_header();
           ObString cell_string;
           ObTextStringIter text_iter(datum_meta.type_, datum_meta.cs_type_, datum.get_string(), has_lob_header);
-          if (OB_FAIL(ObTextStringHelper::build_text_iter(
-                  text_iter, eval_ctx_.exec_ctx_, &tmp_alloc))) {
+          if (OB_FAIL(text_iter.init(0, NULL, &tmp_alloc))) {
             LOG_WARN("fail to init text reader", K(ret), K(text_iter));
           } else if (OB_FAIL(text_iter.get_full_data(cell_string))) {
             LOG_WARN("fail to get full data", K(ret), K(text_iter));
@@ -6789,8 +6775,7 @@ int ObAggregateProcessor::get_pl_agg_udf_result(const ObAggrInfo &aggr_info,
       } else if (OB_FAIL(result.from_obj(result_obj, aggr_info.expr_->obj_datum_map_))) {
         LOG_WARN("failed to convert obj to ObDatum", K(ret), K(result_obj));
       } else if (is_lob_storage(result_obj.get_type()) &&
-                 OB_FAIL(ob_adjust_lob_datum(eval_ctx_.exec_ctx_, result_obj,
-                                             aggr_info.expr_->obj_meta_,
+                 OB_FAIL(ob_adjust_lob_datum(result_obj, aggr_info.expr_->obj_meta_,
                                              aggr_info.expr_->obj_datum_map_,
                                              eval_ctx_.exec_ctx_.get_allocator(), result))) {
         LOG_WARN("adjust lob datum failed", K(ret), K(result_obj.get_meta()),
@@ -7012,8 +6997,7 @@ int ObAggregateProcessor::compute_hybrid_hist_result(const ObAggrInfo &aggr_info
         LOG_WARN("failed to finish add material row", K(ret));
       } else if (OB_FAIL(hybrid_hist.build_hybrid_hist(extra, &aggr_alloc_, bucket_num, total_count,
                                                        num_distinct, pop_count, pop_freq,
-                                                       aggr_info.param_exprs_.at(0)->obj_meta_,
-                                                       datum_access_ctx_))) {
+                                                       aggr_info.param_exprs_.at(0)->obj_meta_))) {
         LOG_WARN("failed to build hybrid hist", K(ret), K(&aggr_alloc_));
       } else if (OB_FAIL(get_hybrid_hist_result(&hybrid_hist, has_lob_header, result))) {
         LOG_WARN("failed to get hybrid hist result", K(ret));
@@ -7091,10 +7075,7 @@ int ObAggregateProcessor::get_json_arrayagg_result(const ObAggrInfo &aggr_info,
   common::ObArenaAllocator res_alloc_back(ObModIds::OB_SQL_AGGR_FUNC, OB_MALLOC_NORMAL_BLOCK_SIZE);
   common::ObArenaAllocator res_alloc_arr(ObModIds::OB_SQL_AGGR_FUNC, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObStringBuffer value(&res_alloc_arr);
-  const common::ObLobReadOptions *lob_options = nullptr;
-  if (OB_FAIL(eval_ctx_.exec_ctx_.get_lob_read_options(lob_options))) {
-    LOG_WARN("get LOB read options failed", K(ret));
-  } else if (OB_ISNULL(extra) || OB_UNLIKELY(extra->empty())) {
+  if (OB_ISNULL(extra) || OB_UNLIKELY(extra->empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unpexcted null", K(ret), K(extra));
   } else if (extra->is_iterated() && OB_FAIL(extra->rewind())) {
@@ -7139,8 +7120,7 @@ int ObAggregateProcessor::get_json_arrayagg_result(const ObAggrInfo &aggr_info,
               && (ObCharset::charset_type_by_coll(cs_type) != CHARSET_UTF8MB4)) {
             ObString origin_str = converted_datum.get_string();
             ObString converted_str;
-            if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(
-              eval_ctx_.exec_ctx_, &tmp_alloc,
+            if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&tmp_alloc,
               val_type, cs_type, tmp_obj->has_lob_header(), origin_str))) {
               LOG_WARN("fail to get real data.", K(ret), K(origin_str));
             } else if (OB_FAIL(ObExprUtil::convert_string_collation(origin_str, cs_type, converted_str, 
@@ -7172,8 +7152,7 @@ int ObAggregateProcessor::get_json_arrayagg_result(const ObAggrInfo &aggr_info,
                                                                           &tmp_alloc, cs_type,
                                                                           json_val, ObConv2JsonParam(true,
                                                                           has_lob_header,
-                                                                          true),
-                                                                          lob_options))) {
+                                                                          true)))) {
               LOG_WARN("failed: parse value to jsonBase", K(ret), K(val_type));
             }
           } else {
@@ -7236,10 +7215,7 @@ int ObAggregateProcessor::get_ora_json_arrayagg_result(const ObAggrInfo &aggr_in
   common::ObArenaAllocator res_alloc_back(ObModIds::OB_SQL_AGGR_FUNC, OB_MALLOC_NORMAL_BLOCK_SIZE);
   common::ObArenaAllocator res_alloc_arr(ObModIds::OB_SQL_AGGR_FUNC, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObStringBuffer value(&res_alloc_arr);
-  const common::ObLobReadOptions *lob_options = nullptr;
-  if (OB_FAIL(eval_ctx_.exec_ctx_.get_lob_read_options(lob_options))) {
-    LOG_WARN("get LOB read options failed", K(ret));
-  } else if (OB_ISNULL(extra) || OB_UNLIKELY(extra->empty())) {
+  if (OB_ISNULL(extra) || OB_UNLIKELY(extra->empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unpexcted null", K(ret), K(extra));
   } else if (extra->is_iterated() && OB_FAIL(extra->rewind())) {
@@ -7272,8 +7248,7 @@ int ObAggregateProcessor::get_ora_json_arrayagg_result(const ObAggrInfo &aggr_in
         ObString key;
 
         if (OB_FAIL(ObJsonExprHelper::datum_to_json_val(&datum, data_meta, &tmp_alloc,
-            eval_ctx_.exec_ctx_.get_my_session(), json_val, false, is_format_json, is_strict, true,
-            lob_options))) {
+            eval_ctx_.exec_ctx_.get_my_session(), json_val, false, is_format_json, is_strict, true))) {
           LOG_WARN("failed to eval json val node.", K(ret), K(is_format_json), K(is_strict), K(data_meta));
         } else if (is_absent_on_null 
                    && (val_type == ObNullType || json_val->json_type() == ObJsonNodeType::J_NULL)) {
@@ -7361,10 +7336,7 @@ int ObAggregateProcessor::get_json_objectagg_result(const ObAggrInfo &aggr_info,
   common::ObArenaAllocator res_alloc_back(ObModIds::OB_SQL_AGGR_FUNC, OB_MALLOC_NORMAL_BLOCK_SIZE);
   common::ObArenaAllocator res_alloc_arr(ObModIds::OB_SQL_AGGR_FUNC, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObStringBuffer value(&res_alloc_arr);
-  const common::ObLobReadOptions *lob_options = nullptr;
-  if (OB_FAIL(eval_ctx_.exec_ctx_.get_lob_read_options(lob_options))) {
-    LOG_WARN("get LOB read options failed", K(ret));
-  } else if (OB_ISNULL(extra) || OB_UNLIKELY(extra->empty())) {
+  if (OB_ISNULL(extra) || OB_UNLIKELY(extra->empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unpexcted null", K(ret), K(extra));
   } else if (extra->is_iterated() && OB_FAIL(extra->rewind())) {
@@ -7413,8 +7385,7 @@ int ObAggregateProcessor::get_json_objectagg_result(const ObAggrInfo &aggr_info,
           scale1 = (val_type1 == ObBitType) ? aggr_info.param_exprs_.at(1)->datum_meta_.length_semantics_ : scale1;
           ObCollationType cs_type1 = tmp_obj[1].get_collation_type();
           ObString key_string = tmp_obj[0].get_string();
-          if (OB_FAIL(ObTextStringHelper::read_real_string_data(
-                  eval_ctx_.exec_ctx_, &tmp_alloc, tmp_obj[0], key_string))) {
+          if (OB_FAIL(ObTextStringHelper::read_real_string_data(&tmp_alloc, tmp_obj[0], key_string))) {
             LOG_WARN("fail to read key string", K(ret), K(tmp_obj[0]));
           } else if (ObCharset::charset_type_by_coll(cs_type0) != CHARSET_UTF8MB4) {
             ObString converted_key_str;
@@ -7439,9 +7410,7 @@ int ObAggregateProcessor::get_json_objectagg_result(const ObAggrInfo &aggr_info,
             && (ObCharset::charset_type_by_coll(cs_type1) != CHARSET_UTF8MB4)) {
               ObString origin_str = converted_datum.get_string();
               ObString converted_str;
-              if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(
-                                                                          eval_ctx_.exec_ctx_,
-                                                                          &tmp_alloc,
+              if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&tmp_alloc,
                                                                           val_type1, 
                                                                           cs_type1,
                                                                           tmp_obj->has_lob_header(), 
@@ -7474,8 +7443,7 @@ int ObAggregateProcessor::get_json_objectagg_result(const ObAggrInfo &aggr_info,
               if (OB_FAIL(ObJsonExprHelper::transform_convertible_2jsonBase(converted_datum, val_type1,
                                                                             &tmp_alloc, cs_type1,
                                                                             json_val, ObConv2JsonParam(true,
-                                                                            has_lob_header1, true),
-                                                                            lob_options))) {
+                                                                            has_lob_header1, true)))) {
                 LOG_WARN("failed: parse value to jsonBase", K(ret), K(val_type1));
               }
             } else {
@@ -7545,11 +7513,8 @@ int ObAggregateProcessor::get_ora_json_objectagg_result(const ObAggrInfo &aggr_i
   common::ObArenaAllocator res_alloc_back(ObModIds::OB_SQL_AGGR_FUNC, OB_MALLOC_NORMAL_BLOCK_SIZE);
   common::ObArenaAllocator res_alloc_arr(ObModIds::OB_SQL_AGGR_FUNC, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObStringBuffer value(&res_alloc_arr);
-  const common::ObLobReadOptions *lob_options = nullptr;
-
-  if (OB_FAIL(eval_ctx_.exec_ctx_.get_lob_read_options(lob_options))) {
-    LOG_WARN("get LOB read options failed", K(ret));
-  } else if (OB_ISNULL(extra) || OB_UNLIKELY(extra->empty())) {
+  
+  if (OB_ISNULL(extra) || OB_UNLIKELY(extra->empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unpexcted null", K(ret), K(extra));
   } else if (extra->is_iterated() && OB_FAIL(extra->rewind())) {
@@ -7614,8 +7579,7 @@ int ObAggregateProcessor::get_ora_json_objectagg_result(const ObAggrInfo &aggr_i
           } else if (!need_key_string_convert && OB_FAIL(deep_copy_ob_string(tmp_alloc, key_string, key_string))) {
             LOG_WARN("fail to deep copy string.", K(ret), K(key_string));
           } else if (OB_FAIL(ObJsonExprHelper::datum_to_json_val(&datum_value, meta_value, &tmp_alloc,
-              eval_ctx_.exec_ctx_.get_my_session(), json_val, false, is_format_json, is_strict, true,
-              lob_options))) {
+              eval_ctx_.exec_ctx_.get_my_session(), json_val, false, is_format_json, is_strict, true))) {
             LOG_WARN("failed to eval json val node.", K(ret), K(is_format_json), K(is_strict), K(meta_value));
           } else if (is_absent_on_null && json_val->json_type() == ObJsonNodeType::J_NULL) {
             // do nothing , continue
@@ -8009,12 +7973,7 @@ int ObAggregateProcessor::get_asmvt_result(const ObAggrInfo &aggr_info,
 {
   int ret = OB_SUCCESS;
   common::ObArenaAllocator tmp_alloc(ObModIds::OB_SQL_AGGR_FUNC, OB_MALLOC_NORMAL_BLOCK_SIZE);
-  common::ObILobReadService *lob_read_service =
-      eval_ctx_.exec_ctx_.get_lob_read_service();
-  if (OB_ISNULL(lob_read_service)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("lob read service is not configured", K(ret));
-  } else if (OB_ISNULL(extra) || OB_UNLIKELY(extra->empty())) {
+  if (OB_ISNULL(extra) || OB_UNLIKELY(extra->empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unpexcted null", K(ret), K(extra));
   } else if (extra->is_iterated() && OB_FAIL(extra->rewind())) {
@@ -8026,7 +7985,7 @@ int ObAggregateProcessor::get_asmvt_result(const ObAggrInfo &aggr_info,
     const ObChunkDatumStore::StoredRow *storted_row = NULL;
     bool inited_tmp_obj = false;
     ObObj *tmp_obj = NULL;
-    mvt_agg_result mvt_res(tmp_alloc, *lob_read_service);
+    mvt_agg_result mvt_res(tmp_alloc);
     while (OB_SUCC(ret) && OB_SUCC(extra->get_next_row(storted_row))) {
       if (OB_ISNULL(storted_row)) {
         ret = OB_ERR_UNEXPECTED;
@@ -8322,20 +8281,17 @@ int ObAggregateProcessor::check_rows_prefix_str_equal_for_hybrid_hist(const ObCh
       } else if (OB_FAIL(ObHybridHistograms::build_prefix_str_datum_for_lob(tmp_alloctor,
                                                                             obj_meta,
                                                                             prev_row.store_row_->cells()[index],
-                                                                            new_prev_datum,
-                                                                            datum_access_ctx_)) ||
+                                                                            new_prev_datum)) ||
                  OB_FAIL(ObHybridHistograms::build_prefix_str_datum_for_lob(tmp_alloctor,
                                                                             obj_meta,
                                                                             cur_row.cells()[index],
-                                                                            new_cur_datum,
-                                                                            datum_access_ctx_))) {
+                                                                            new_cur_datum))) {
         LOG_WARN("failed to build prefix str datum for lob", K(ret));
       } else {
         int cmp_ret = 0;
         if (OB_FAIL(aggr_info.sort_cmp_funcs_.at(i).cmp_func_(new_prev_datum,
                                                               new_cur_datum,
-                                                              cmp_ret,
-                                                              datum_access_ctx_))) {
+                                                              cmp_ret))) {
           LOG_WARN("failed to cmp", K(ret), K(index));
         } else {
           is_equal = 0 == cmp_ret;
@@ -8355,25 +8311,7 @@ int ObAggregateProcessor::DecIntAggFuncCtx::init(const ObAggrInfo &aggr_info,
 {
   int ret = OB_SUCCESS;
   const int16_t arg_prec = aggr_info.get_first_child_datum_precision();
-  const int16_t declared_res_prec = aggr_info.expr_->datum_meta_.precision_;
-  // The declared result precision of an aggregate may be inconsistent with the
-  // precision of its physically produced input. E.g. for SUM over EXISTS the
-  // declared precision is inflated from the integer type max at deduce time,
-  // while the materialized partial column of a three-stage aggregation keeps
-  // the small boolean precision, so the declared precision (55) exceeds
-  // arg_prec (26) by more than OB_DECIMAL_LONGLONG_DIGITS. Such metadata drift
-  // only affects the display width: a sum over at most 2^63 input values always
-  // fits into arg_prec + OB_DECIMAL_LONGLONG_DIGITS digits. Clamp the effective
-  // precision into that range instead of failing the whole query.
-  int16_t res_prec = declared_res_prec;
-  if (arg_prec >= 0 && (declared_res_prec < arg_prec
-                        || declared_res_prec - arg_prec > OB_DECIMAL_LONGLONG_DIGITS)) {
-    res_prec = declared_res_prec < arg_prec ? arg_prec
-                                            : arg_prec + OB_DECIMAL_LONGLONG_DIGITS;
-    LOG_WARN("declared aggregate result precision is inconsistent with the input "
-             "precision, clamp it and continue",
-             K(arg_prec), K(declared_res_prec), K(res_prec));
-  }
+  const int16_t res_prec = aggr_info.expr_->datum_meta_.precision_;
   const int arg_type = static_cast<int>(get_decimalint_type(arg_prec));
   const int16_t buffer_prec = get_max_decimalint_precision(arg_prec) - arg_prec;
   const bool need_cast = (buffer_prec < MAX_PRECISION_DECIMAL_INT_64) &&

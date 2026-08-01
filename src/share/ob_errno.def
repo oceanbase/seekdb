@@ -406,7 +406,7 @@ DEFINE_ERROR_EXT(OB_DUPLICATE_OPTION, -4679, -1, "HY000", "duplicate specificati
 DEFINE_ERROR_EXT(OB_INVALID_OPTION, -4680, -1, "HY000", "invalid specifications", "%s");
 DEFINE_ERROR_EXT(OB_RPC_NEED_RECONNECT, -4681, -1, "HY000", "rpc need reconnect", "%s");
 DEFINE_ERROR(OB_ACTIVE_MEMTBALE_NOT_EXSIT, -4685, -1, "HY000", "active memtable not exist");
-DEFINE_ERROR(OB_STANDBY_DATABASE_READ_ONLY, -4688, -1, "HY000", "standby tenant is read only");
+DEFINE_ERROR(OB_STANDBY_DATABASE_READ_ONLY, -4688, -1, "HY000", "standby database is read only");
 DEFINE_ERROR(OB_ARRAY_BINDING_SWITCH_ITERATOR, -4691, -1, "HY000", "array binding needs to switch iterator");
 DEFINE_ERROR(OB_ERR_CHECK_DROP_COLUMN_FAILED, -4694, -1, "HY000", "check drop column failed");
 DEFINE_ERROR(OB_ERR_PARAM_INVALID, -4701, -1, "HY000", "parameter cannot be modified because specified value is invalid");

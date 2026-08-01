@@ -19,7 +19,7 @@
 #include "common/object/ob_object.h"
 #include "lib/container/ob_se_array.h"
 #include "common/sql_mode/ob_sql_mode.h"
-#include "share/statement/ob_stmt_type.h"
+#include "sql/resolver/ob_stmt_type.h"
 #include "sql/engine/expr/ob_expr_res_type.h"
 #include "sql/resolver/ddl/ob_table_stmt.h"
 namespace oceanbase

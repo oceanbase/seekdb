@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "ob_mysql_result_set.h"
-#include "query/protocol/ob_mysql_protocol_util.h"
+#include "observer/mysql/obsm_utils.h"
 #include "observer/ob_server.h"
 
 using namespace oceanbase::common;
@@ -64,6 +64,7 @@ int ObMySQLResultSet::to_mysql_field(const ObField &field, ObMySQLField &mfield)
         field.default_value_.get_type(), mfield.default_value_, flags, num_decimals);
     }
   }
+  LOG_TRACE("to mysql field", K(ret), K(mfield), K(field));
   return ret;
 }
 

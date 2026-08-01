@@ -21,7 +21,7 @@
 #include "lib/container/ob_iarray.h"
 #include "common/udt/ob_collection_type.h"
 #include "common/ob_accuracy.h"
-#include "query/engine/expr/ob_sql_expression.h"
+#include "share/ob_i_sql_expression.h"
 #include "ob_raw_expr_util.h"
 #include "share/ob_define.h"
 
@@ -224,6 +224,7 @@ int ObRawExprDeduceType::try_add_cast_expr(RawExprType &parent,
 #endif
       if (OB_FAIL(ret) && my_session_->is_varparams_sql_prepare()) {
         ret = OB_SUCCESS;
+        SQL_RESV_LOG(DEBUG, "ps prepare phase ignores type deduce error");
       }
       //add local vars to cast expr
       if (OB_SUCC(ret)) {

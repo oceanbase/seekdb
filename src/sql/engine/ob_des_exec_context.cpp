@@ -24,8 +24,9 @@ namespace sql
 {
 
 ObDesExecContext::ObDesExecContext(ObIAllocator &allocator, ObSQLSessionMgr *session_mgr)
-    : ObExecContext(allocator, session_mgr)
+    : ObExecContext(allocator)
 {
+  UNUSED(session_mgr);
   free_session_ctx_.sessid_ = ObSQLSessionInfo::INVALID_SESSID;
   set_sql_ctx(&sql_ctx_);
 }
@@ -41,16 +42,15 @@ ObDesExecContext::~ObDesExecContext()
 
 void ObDesExecContext::cleanup_session()
 {
-  ObSQLSessionMgr *session_mgr = get_session_mgr();
   if (NULL != my_session_) {
     if (ObSQLSessionInfo::INVALID_SESSID == free_session_ctx_.sessid_) {
       my_session_->set_session_sleep();
       my_session_->~ObSQLSessionInfo();
       my_session_ = NULL;
-    } else if (NULL != session_mgr) {
+    } else if (NULL != GCTX.session_mgr_) {
       my_session_->set_session_sleep();
-      session_mgr->revert_session(my_session_);
-      session_mgr->free_session(free_session_ctx_);
+      GCTX.session_mgr_->revert_session(my_session_);
+      GCTX.session_mgr_->free_session(free_session_ctx_);
       my_session_ = NULL;
     }
   }
@@ -74,17 +74,17 @@ int ObDesExecContext::create_my_session()
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *local_session = NULL;
-  ObSQLSessionMgr *session_mgr = get_session_mgr();
   if (OB_UNLIKELY(my_session_ != NULL)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("my_session is not null.");
-  } else if (NULL == session_mgr) {
+  } else if (NULL == GCTX.session_mgr_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session manager is NULL", K(ret));
   } else {
     uint32_t sid = ObSQLSessionInfo::INVALID_SESSID;
-    if (OB_FAIL(session_mgr->create_sessid(sid))) {
-    } else if (OB_FAIL(session_mgr->create_session(sid, my_session_))) {
+    if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
+      LOG_WARN("alloc session id failed", K(ret));
+    } else if (OB_FAIL(GCTX.session_mgr_->create_session(sid, my_session_))) {
       LOG_WARN("create session failed", K(ret), K(sid));
       my_session_ = NULL;
     } else {
@@ -100,12 +100,12 @@ int ObDesExecContext::create_my_session()
       } else {
         local_session = new (local_session) ObSQLSessionInfo();
         uint32_t tmp_sid = 0;
-        if (OB_FAIL(session_mgr->create_sessid(tmp_sid))) {
+        if (OB_FAIL(GCTX.session_mgr_->create_sessid(tmp_sid))) {
+          LOG_WARN("failed to mock session id", K(ret));
         } else if (OB_FAIL(local_session->init(tmp_sid, NULL))) {
           LOG_WARN("my session init failed", K(ret));
           local_session->~ObSQLSessionInfo();
         } else {
-          local_session->set_session_manager(session_mgr);
           my_session_ = local_session;
         }
       }
@@ -133,10 +133,12 @@ DEFINE_DESERIALIZE(ObDesExecContext)
   //now to init ObExecContext container
   if (OB_SUCC(ret)) {
     if (OB_FAIL(create_physical_plan_ctx())) {
+      LOG_WARN("create physical plan context failed", K(ret));
     } else if (OB_ISNULL(phy_plan_ctx_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("succ to create phy plan ctx, but phy plan ctx is NULL", K(ret));
     } else if (OB_FAIL(create_my_session())) {
+      LOG_WARN("create my session failed", K(ret));
     } else if (OB_ISNULL(my_session_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("succ to create session, but session is NULL", K(ret));
@@ -147,13 +149,15 @@ DEFINE_DESERIALIZE(ObDesExecContext)
       OB_UNIS_DECODE(*my_session_);
       my_session_->set_session_type_with_flag();
       if (OB_FAIL(ret)) {
+        LOG_WARN("session deserialize failed", K(ret));
       } else if (OB_FAIL(my_session_->set_session_active(
           ObString::make_string("DISTRIBUTED PLAN EXECUTING"),
           obmysql::COM_QUERY))) {
+        LOG_WARN("set distributed session active failed", K(ret));
       }
       // alloc from session manager, increase active session number
       if (OB_SUCC(ret) && free_session_ctx_.sessid_ != ObSQLSessionInfo::INVALID_SESSID) {
-
+        
         free_session_ctx_.has_inc_active_num_ = true;
       }
     }
@@ -163,6 +167,7 @@ DEFINE_DESERIALIZE(ObDesExecContext)
     set_mem_attr(ObMemAttr(ObModIds::OB_SQL_EXEC_CONTEXT, ObCtxIds::EXECUTE_CTX_ID));
     // init operator context need session info, initialized after session deserialized.
     if (OB_FAIL(init_phy_op(phy_op_size))) {
+      LOG_WARN("init exec context phy op failed", K(ret), K_(phy_op_size));
     }
   }
 
@@ -171,6 +176,7 @@ DEFINE_DESERIALIZE(ObDesExecContext)
   OB_UNIS_DECODE(sql_ctx_);
   if (OB_SUCC(ret)) {
     if (OB_FAIL(init_expr_op(phy_plan_ctx_->get_expr_op_size()))) {
+      LOG_WARN("init exec context expr op failed", K(ret));
     } else {
       das_ctx_.set_retry_info(&my_session_->get_retry_info());
     }

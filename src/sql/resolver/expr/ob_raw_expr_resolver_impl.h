@@ -224,7 +224,9 @@ int ObRawExprResolverImpl::process_node_with_children(const ParseNode *node,
     ret = common::OB_INVALID_ARGUMENT;
     SQL_RESV_LOG(WARN, "invalid argument", K(node), K(children_num));
   } else if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(node->type_, raw_expr))) {
+    SQL_RESV_LOG(WARN, "fail to create raw expr", K(ret));
   } else if (OB_FAIL(raw_expr->init_param_exprs(children_num))) {
+    SQL_RESV_LOG(WARN, "fail to init param exprs", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < children_num; i++) {
       ObRawExpr *sub_expr = NULL;
@@ -232,7 +234,9 @@ int ObRawExprResolverImpl::process_node_with_children(const ParseNode *node,
         ret = common::OB_ERR_UNEXPECTED;
         SQL_RESV_LOG(ERROR, "invalid node children", K(ret), K(i), K(node));
       } else if (OB_FAIL(recursive_resolve(node->children_[i], sub_expr, is_root_expr))) {
+        SQL_RESV_LOG(WARN, "resolve left child failed", K(ret));
       } else if (OB_FAIL(raw_expr->add_param_expr(sub_expr))) {
+        SQL_RESV_LOG(WARN, "fail to set param expr", K(ret), K(sub_expr));
       }
     }
   }

@@ -38,18 +38,29 @@ int ObCallProcedureInfo::add_out_param(int64_t i,
   ObString store_out_type_owner;
   pl::ObPLDataType pl_data_type;
   if (OB_FAIL(out_bitmap_.add_member(i))) {
+    LOG_WARN("failed to add out index", K(i), K(name), K(type), K(ret));
   } else if (OB_FAIL(out_mode_.push_back(mode))) {
+    LOG_WARN("failed to push mode", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator_, name, store_name))) {
+    LOG_WARN("failed to deep copy name", K(ret), K(name));
   } else if (OB_FAIL(out_name_.push_back(store_name))) {
+    LOG_WARN("push back error", K(i), K(name), K(type), K(ret));
   } else if (OB_FAIL(pl_data_type.deep_copy(enum_set_ctx_, type))) {
+    LOG_WARN("fail to deep copy pl data type", K(type), K(ret));
   } else if (OB_FAIL(out_type_.push_back(pl_data_type))) {
+    LOG_WARN("push back error", K(i), K(name), K(type), K(ret));
   } else if (OB_FAIL(ob_write_string(allocator_, out_type_name, store_out_type_name))) {
+    LOG_WARN("failed to deep copy name", K(ret), K(name));
   } else if (OB_FAIL(out_type_name_.push_back(store_out_type_name))) {
+    LOG_WARN("push back error", K(i), K(name), K(type), K(out_type_name), K(ret));
   } else if (OB_FAIL(ob_write_string(allocator_, out_type_owner, store_out_type_owner))) {
+    LOG_WARN("failed to deep copy name", K(ret), K(name));
   } else if (OB_FAIL(out_type_owner_.push_back(store_out_type_owner))) {
+    LOG_WARN("push back error", K(i), K(name), K(out_type_name), K(out_type_owner), K(ret));
   } else if (is_client_out_param && OB_FAIL(out_client_params_.add_member(i))) {
     LOG_WARN("push back error", K(i), K(name), K(is_client_out_param), K(ret));
   } else if (OB_FAIL(out_param_id_.push_back(i))) {
+    LOG_WARN("push back error", K(i), K(name), K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -61,10 +72,12 @@ int ObCallProcedureInfo::prepare_expression(const common::ObIArray<sql::ObRawExp
   for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
     ObSqlExpression *expr = NULL;
     if (OB_FAIL(sql_expression_factory_.alloc(expr))) {
+      LOG_WARN("failed to alloc expr", K(ret));
     } else if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to create expr", K(ret));
     } else if (OB_FAIL(array.push_back(expr))) {
+      LOG_WARN("push back error", K(ret));
     } else { /*do nothing*/ }
   }
 
@@ -104,6 +117,7 @@ int ObCallProcedureInfo::final_expression(const common::ObIArray<sql::ObRawExpr*
       LOG_WARN("Invalid arguments", K(i), K(raw_expr), K(expression), K(ret));
     } else {
       if (OB_FAIL(expr_generator.generate(*raw_expr, *expression))) {
+        SQL_LOG(WARN, "Generate post_expr error", K(ret), KPC(raw_expr));
       } else {
         expression->set_expr(raw_expr->rt_expr_);
       }

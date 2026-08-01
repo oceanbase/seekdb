@@ -405,7 +405,7 @@ private:
                                const common::ObIArray<uint64_t>& domain_tids,
                                const ObTableSchema *table_schema,
                                ObSqlSchemaGuard *schema_guard,
-                               common::ObIArray<share::DomainIdxs>& domain_id_col_ids,
+                               common::ObIArray<DomainIdxs>& domain_id_col_ids,
                                common::ObIArray<uint64_t> &flatten_domain_id_col_ids);
   int generate_scan_with_doc_id_ctdef(ObLogInsert &op,
                                       const IndexDMLInfo &index_dml_info,

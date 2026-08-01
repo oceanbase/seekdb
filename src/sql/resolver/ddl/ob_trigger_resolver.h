@@ -46,9 +46,6 @@ public:
   virtual int resolve(const ParseNode &parse_tree);
   static int analyze_trigger(ObSchemaGetterGuard &schema_guard,
                              ObSQLSessionInfo *session_info,
-                             ObPlanCache &plan_cache,
-                             ObIPLSqlRuntime *pl_sql_runtime,
-                             pl::ObPL *pl_engine,
                              ObMySQLProxy *sql_proxy,
                              ObIAllocator &allocator,
                              const ObTriggerInfo &trigger_info,

@@ -25,7 +25,7 @@
 #include "sql/parser/parse_node.h"
 #include "sql/resolver/cmd/ob_cmd_stmt.h"
 #include "sql/plan_cache/ob_prepare_stmt_struct.h"
-#include "sql/pl/pl_cache/ob_pl_cache_object.h"
+#include "pl/pl_cache/ob_pl_cache_object.h"
 
 namespace oceanbase
 {

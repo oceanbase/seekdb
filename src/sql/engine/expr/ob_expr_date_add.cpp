@@ -141,11 +141,14 @@ int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, date, interval, unit))) {
+    LOG_WARN("eval param value failed");
   } else if (OB_UNLIKELY(date->is_null() || interval->is_null())
              || ObNullType == res_type) {
     expr_datum.set_null();
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
+    LOG_WARN("get sql mode failed", K(ret));
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
+    LOG_WARN("get tz info failed", K(ret));
   } else {
     int64_t dt_val = 0;
     ObString interval_val = interval->get_string();
@@ -169,7 +172,7 @@ int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDat
         }
       }
       bool need_check_date = ob_is_mysql_compact_dates_type(date_type);
-      if (OB_FAIL(ob_datum_to_ob_time_with_date(ctx.exec_ctx_, *date, date_type, expr.args_[0]->datum_meta_.scale_,
+      if (OB_FAIL(ob_datum_to_ob_time_with_date(*date, date_type, expr.args_[0]->datum_meta_.scale_,
                                             tz_info,
                                             ob_time,
                                             get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()),
@@ -192,6 +195,7 @@ int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDat
         ret = OB_SUCCESS;
         dt_val = ObTimeConverter::ZERO_DATETIME;
       } else if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ob_time, cvrt_ctx, dt_val))) {
+        LOG_WARN("ob time to datetime failed", K(ret));
       }
     }
 
@@ -212,6 +216,7 @@ int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDat
       } else if (ObDateType == res_type) {
         int32_t d_val = 0;
         if (OB_FAIL(ObTimeConverter::datetime_to_date(res_dt_val, NULL, d_val))) {
+          LOG_WARN("failed to cast datetime  to date ", K(res_dt_val), K(ret));
         } else {
           expr_datum.set_date(d_val);
         }
@@ -231,12 +236,14 @@ int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDat
       } else if (ObMySQLDateType == res_type) {
         ObMySQLDate mdate = 0;
         if (OB_FAIL(ObTimeConverter::datetime_to_mdate(res_dt_val, NULL, mdate))) {
+          LOG_WARN("failed to cast datetime  to date ", K(res_dt_val), K(ret));
         } else {
           expr_datum.set_mysql_date(mdate);
         }
       } else if (ObMySQLDateTimeType == res_type) {
         ObMySQLDateTime mdatetime = 0;
         if (OB_FAIL(ObTimeConverter::datetime_to_mdatetime(res_dt_val, mdatetime))) {
+          LOG_WARN("failed to cast datetime  to date ", K(res_dt_val), K(ret));
         } else {
           expr_datum.set_mysql_datetime(mdatetime);
         }
@@ -273,6 +280,7 @@ int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDat
               || DATE_UNIT_WEEK == unit_val || DATE_UNIT_QUARTER == unit_val)) {
             int32_t d_val = 0;
             if (OB_FAIL(ObTimeConverter::datetime_to_date(res_dt_val, NULL, d_val))) {
+              LOG_WARN("failed to cast datetime  to date ", K(res_dt_val), K(ret));
             } else {
               ObTime ob_time;
               const int64_t date_buf_len = DATETIME_MAX_LENGTH + 1;
@@ -282,8 +290,10 @@ int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDat
                 ret = OB_ALLOCATE_MEMORY_FAILED;
                 LOG_WARN("allocate memory failed", K(ret));
               } else if (OB_FAIL(ObTimeConverter::date_to_ob_time(d_val, ob_time))) {
+                LOG_WARN("failed to convert days to ob time", K(ret));
               } else if (OB_FAIL(ObTimeConverter::ob_time_to_str(ob_time, DT_TYPE_DATE, 0, buf,
                                                                 date_buf_len, pos, true))) {
+                LOG_WARN("failed to convert ob time to string", K(ret));
               } else {
                 expr_datum.ptr_ = buf;
                 expr_datum.pack_ = static_cast<uint32_t>(pos);
@@ -299,6 +309,7 @@ int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDat
             } else if (OB_FAIL(ObTimeConverter::datetime_to_str(res_dt_val, NULL,
                                               -1, buf,
                                               datetime_buf_len, pos, true))) {
+              LOG_WARN("failed to cast object to ObVarcharType ", K(ret));
             } else {
               expr_datum.ptr_ = buf;
               expr_datum.pack_ = static_cast<uint32_t>(pos);
@@ -436,9 +447,11 @@ int ObExprLastDay::calc_last_day(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &ex
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
+    LOG_WARN("eval first param value failed");
   } else if (param1->is_null()) {
     expr_datum.set_null();
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
+    LOG_WARN("get sql mode failed", K(ret));
   } else {
     const ObObjType res_type = expr.datum_meta_.type_;
     ObDateSqlMode date_sql_mode;
@@ -449,6 +462,7 @@ int ObExprLastDay::calc_last_day(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &ex
       ObMySQLDate res_date;
       if (OB_FAIL(ObTimeConverter::calc_last_mdate_of_the_month(param1->get_mysql_datetime(),
                                                                 res_date, date_sql_mode))) {
+        LOG_WARN("fail to calc last mday", K(ret), K(param1->get_mysql_datetime()));
       } else {
         expr_datum.set_mysql_date(res_date);
       }
@@ -457,6 +471,7 @@ int ObExprLastDay::calc_last_day(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &ex
       int64_t res_date_utc = 0;
       if (OB_FAIL(ObTimeConverter::calc_last_date_of_the_month(ori_date_utc, res_date_utc,
                   res_type, date_sql_mode))) {
+        LOG_WARN("fail to calc last mday", K(ret), K(ori_date_utc), K(res_date_utc));
       } else {
         expr_datum.set_date(static_cast<int32_t>(res_date_utc));
       }

@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_SQL_OB_LOGICAL_OPERATOR_H
 #define OCEANBASE_SQL_OB_LOGICAL_OPERATOR_H
 
-#include <limits>
 #include "lib/allocator/page_arena.h"
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_array_iterator.h"
@@ -289,26 +288,14 @@ struct FilterCompare
   common::ObIArray<ObExprSelPair> &predicate_selectivities_;
 };
 
-struct ObExprRankPair
-{
-  ObExprRankPair() : rank_(0), original_pos_(0), expr_(NULL) {}
-  ObExprRankPair(double rank, int64_t original_pos, ObRawExpr *expr)
-      : rank_(rank), original_pos_(original_pos), expr_(expr)
-  {}
-
-  double rank_;
-  int64_t original_pos_;
-  ObRawExpr *expr_;
-  TO_STRING_KV(K_(rank), K_(original_pos), KP_(expr));
-};
+typedef std::pair<double, ObRawExpr *> ObExprRankPair;
 
 struct ObExprRankPairCompare
 {
   ObExprRankPairCompare() {};
-  bool operator()(const ObExprRankPair &left, const ObExprRankPair &right)
+  bool operator()(ObExprRankPair &left, ObExprRankPair &right)
   {
-    return left.rank_ < right.rank_
-        || (left.rank_ == right.rank_ && left.original_pos_ < right.original_pos_);
+    return left.first < right.first;
   }
 };
 
@@ -1927,6 +1914,7 @@ int ObLogicalOperator::init_all_traverse_ctx(Allocator &alloc)
       ret = OB_ERR_UNEXPECTED;
       SQL_OPT_LOG(WARN, "NULL child", K(ret));
     } else if (OB_FAIL(get_child(i)->init_all_traverse_ctx(alloc))) {
+      SQL_OPT_LOG(WARN, "init all traverse ctx failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {

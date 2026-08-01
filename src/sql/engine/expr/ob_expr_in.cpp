@@ -19,7 +19,7 @@
 #include "ob_expr_in.h"
 #include "sql/engine/expr/ob_expr_subquery_ref.h"
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
-#include "sql/pl/ob_pl.h"
+#include "src/pl/ob_pl.h"
 
 
 namespace oceanbase
@@ -52,11 +52,7 @@ static unsigned last(unsigned int cur_num, unsigned int max)
 }
 
 template <>
-bool Row<ObDatum>::equal_key(
-    const Row<ObDatum> &other,
-    void **cmp_funcs,
-    const int idx,
-    const common::ObDatumAccessContext *datum_access_ctx) const
+bool Row<ObDatum>::equal_key(const Row<ObDatum> &other, void **cmp_funcs, const int idx) const
 {
   bool equal_ret = false;
   if (OB_ISNULL(other.elems_) || OB_ISNULL(elems_)) {
@@ -74,8 +70,7 @@ bool Row<ObDatum>::equal_key(
         } else {
           int cmp_ret = 0;
           // lob type will not use in expr with hash, can ignore ret here
-          (void)((DatumCmpFunc)cmp_funcs[i])(
-              elems_[i], other.elems_[i], cmp_ret, datum_access_ctx);
+          (void)((DatumCmpFunc)cmp_funcs[i])(elems_[i], other.elems_[i], cmp_ret);
           if (0 != cmp_ret) {
             is_equal = false;
           } else {
@@ -90,12 +85,7 @@ bool Row<ObDatum>::equal_key(
 }
 
 template <>
-int Row<ObDatum>::hash_key(
-    void **hash_funcs,
-    const int idx,
-    uint64_t seed,
-    uint64_t &hash_val,
-    const common::ObDatumAccessContext *datum_access_ctx) const
+int Row<ObDatum>::hash_key(void **hash_funcs, const int idx, uint64_t seed, uint64_t &hash_val) const
 {
   int ret = OB_SUCCESS;
   hash_val = 0;
@@ -104,8 +94,7 @@ int Row<ObDatum>::hash_key(
     int curr_idx = idx;
     for (int i = 0; 0 != curr_idx && OB_SUCC(ret); ++i, curr_idx = curr_idx >> 1) {
       if (1 == (curr_idx & 1)) {
-        ret = ((ObExprHashFuncType)hash_funcs[i])(
-            elems_[i], seed, seed, datum_access_ctx);
+        ret = ((ObExprHashFuncType)hash_funcs[i])(elems_[i], seed, seed);
       } else {
         continue;
       }
@@ -119,8 +108,7 @@ template <>
 int Row<ObDatum>::compare_with_null(const Row<ObDatum> &other,
                                     void **cmp_funcs,
                                     const int64_t row_dimension,
-                                    int &exist_ret,
-                                    const common::ObDatumAccessContext *datum_access_ctx) const
+                                    int &exist_ret) const
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(other.elems_) || OB_ISNULL(elems_) || OB_ISNULL(cmp_funcs)) {
@@ -134,8 +122,7 @@ int Row<ObDatum>::compare_with_null(const Row<ObDatum> &other,
         exist_ret = ObExprInHashMap<ObDatum>::HASH_CMP_UNKNOWN;
       } else {
         int cmp_ret = 0;
-        if (OB_FAIL(((DatumCmpFunc)cmp_funcs[i])(
-                elems_[i], other.elems_[i], cmp_ret, datum_access_ctx))) {
+        if (OB_FAIL(((DatumCmpFunc)cmp_funcs[i])(elems_[i], other.elems_[i], cmp_ret))) {
           LOG_WARN("failed to compare", K(ret));
         } else if (0 != cmp_ret) {
           exist_ret = ObExprInHashMap<ObDatum>::HASH_CMP_FALSE;
@@ -164,8 +151,7 @@ int Row<T>::set_elem(T *elems)
 template <class T>
 bool RowKey<T>::operator==(const RowKey<T> &other) const
 {
-  return row_.equal_key(other.row_, meta_->cmp_funcs_, meta_->idx_,
-                        meta_->datum_access_ctx_);
+  return row_.equal_key(other.row_, meta_->cmp_funcs_, meta_->idx_);
 }
 
 template <class T>
@@ -175,8 +161,7 @@ int RowKey<T>::hash(uint64_t &hash_val, uint64_t seed) const
   if (hash_val_) {
     hash_val = hash_val_;
   } else {
-    if (OB_FAIL(row_.hash_key(meta_->hash_funcs_, meta_->idx_, seed, hash_val,
-                              meta_->datum_access_ctx_))) {
+    if (OB_FAIL(row_.hash_key(meta_->hash_funcs_, meta_->idx_, seed, hash_val))) {
       LOG_WARN("failed to hash key", K(ret));
     }
   }
@@ -198,7 +183,7 @@ int ObExprInHashMap<T>::set_refactored(const Row<T> &row)
       arr_ptr = const_cast<ObArray<Row<T>> *> (map_.get(tmp_row_key));
       CK (OB_NOT_NULL(arr_ptr));
       if (OB_SUCC(ret)) {
-
+        
         if (OB_FAIL(arr_ptr->push_back(row))) {
           LOG_WARN("failed to push row", K(ret));
         }
@@ -213,8 +198,7 @@ int ObExprInHashMap<T>::set_refactored(const Row<T> &row)
       if (OB_FAIL((*arr_ptr)[i].compare_with_null(row,
                                                   meta_.cmp_funcs_,
                                                   meta_.row_dimension_,
-                                                  exist,
-                                                  meta_.datum_access_ctx_))) {
+                                                  exist))) {
         LOG_WARN("compare with null failed", K(ret));
       }
     }
@@ -241,8 +225,7 @@ int ObExprInHashMap<T>::exist_refactored(const Row<T> &row, int &exist_ret)
       if (OB_FAIL((*arr_ptr)[i].compare_with_null(row,
                                                   meta_.cmp_funcs_,
                                                   meta_.row_dimension_,
-                                                  exist,
-                                                  meta_.datum_access_ctx_))) {
+                                                  exist))) {
         LOG_WARN("compare with null failed", K(ret));
       } else if (ObExprInHashMap<T>::HASH_CMP_UNKNOWN == exist
                  || ObExprInHashMap<T>::HASH_CMP_TRUE == exist) {
@@ -293,11 +276,9 @@ int ObExprInOrNotIn::ObExprInCtx::init_static_engine_hashset(int64_t param_num)
 
 int ObExprInOrNotIn::ObExprInCtx::init_static_engine_hashset_vecs(int64_t param_num,
                                                                   int64_t row_dimension,
-                                                                  ObExecContext *exec_ctx,
-                                                                  const common::ObDatumAccessContext *datum_access_ctx)
+                                                                  ObExecContext *exec_ctx)
 {
   int ret = OB_SUCCESS;
-  datum_access_ctx_ = datum_access_ctx;
   static_engine_hashset_vecs_ = NULL;
   int64_t vecs_buf_size = sizeof(ObExprInHashMap<ObDatum> ) * (1 << row_dimension);
   if (OB_ISNULL(static_engine_hashset_vecs_ =
@@ -312,7 +293,6 @@ int ObExprInOrNotIn::ObExprInCtx::init_static_engine_hashset_vecs(int64_t param_
     for (int64_t i = 0; OB_SUCC(ret) && i < (1 << row_dimension); ++i) {
       static_engine_hashset_vecs_[i].set_meta_idx(i);
       static_engine_hashset_vecs_[i].set_meta_dimension(row_dimension);
-      static_engine_hashset_vecs_[i].set_meta_access_ctx(datum_access_ctx);
       if (OB_FAIL(static_engine_hashset_vecs_[i].create(param_num))) {
         LOG_WARN("create static_engine_hashset_vecs failed", K(ret), K(i));
       }
@@ -506,8 +486,7 @@ static int eval_composite_comparison(ObExecContext &exec_ctx,
                                      ObBitSet<> &out_args)
 {
   int ret = OB_SUCCESS;
-  pl::ObPL *pl_engine = exec_ctx.get_pl_engine();
-  CK (OB_NOT_NULL(pl_engine));
+  CK (OB_NOT_NULL(GCTX.pl_engine_));
   CK (OB_NOT_NULL(exec_ctx.get_sql_ctx()));
   if (OB_SUCC(ret)) {
     bool is_inner_mock_backup = false;
@@ -530,7 +509,7 @@ static int eval_composite_comparison(ObExecContext &exec_ctx,
       char old_sql_id[common::OB_MAX_SQL_ID_LENGTH + 1];
       MEMCPY(old_sql_id, exec_ctx.get_sql_ctx()->sql_id_, sizeof(old_sql_id));
       MEMSET(exec_ctx.get_sql_ctx()->sql_id_, '\0', sizeof(exec_ctx.get_sql_ctx()->sql_id_));
-      if (OB_FAIL(pl_engine->execute(exec_ctx, params, OB_INVALID_ID, pl, out_args))) {
+      if (OB_FAIL(GCTX.pl_engine_->execute(exec_ctx, params, OB_INVALID_ID, pl, out_args))) {
         LOG_WARN("failed to execute composite comparison block", K(ret), K(pl), K(params), K(out_args));
       }
       MEMCPY(exec_ctx.get_sql_ctx()->sql_id_, old_sql_id, sizeof(old_sql_id));
@@ -566,7 +545,7 @@ int ObExprInOrNotIn::eval_pl_udt_in(const ObExpr &expr,
   bool is_equal = false;
   bool has_null = false;
 
-  CK (OB_NOT_NULL(ctx.exec_ctx_.get_pl_engine()));
+  CK (OB_NOT_NULL(GCTX.pl_engine_));
   CK (2 == expr.arg_cnt_);
   CK (OB_NOT_NULL(expr.args_[0]));
   OZ (expr.args_[0]->eval(ctx, val));
@@ -930,10 +909,7 @@ int ObExprInOrNotIn::eval_in_without_row_fallback(const ObExpr &expr,
   ObDatum *right = NULL;
   bool cnt_null = false;
   bool is_equal = false;
-  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
-  if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
-    LOG_WARN("get datum access context failed", K(ret));
-  } else if (OB_FAIL(expr.args_[0]->eval(ctx, left))) {
+  if (OB_FAIL(expr.args_[0]->eval(ctx, left))) {
     LOG_WARN("failed to eval left", K(ret));
   } else if (left->is_null()) {
     cnt_null = true;
@@ -949,8 +925,7 @@ int ObExprInOrNotIn::eval_in_without_row_fallback(const ObExpr &expr,
       } else if (right->is_null()) {
         cnt_null = true;
       } else {
-        if (OB_FAIL(((DatumCmpFunc)expr.inner_functions_[0])(
-                *right, *left, cmp_ret, datum_access_ctx))) {
+        if (OB_FAIL(((DatumCmpFunc)expr.inner_functions_[0])(*right, *left, cmp_ret))) {
           LOG_WARN("failed to compare", K(ret));
         } else if (0 == cmp_ret) {
           is_equal = true;
@@ -972,14 +947,11 @@ int ObExprInOrNotIn::eval_batch_in_without_row_fallback(const ObExpr &expr,
                                                         const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
   LOG_DEBUG("eval_batch_in start: batch mode", K(batch_size));
   ObDatum *results = expr.locate_batch_datums(ctx);
   if (OB_ISNULL(results)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("results frame is not init", K(ret));
-  } else if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
-    LOG_WARN("get datum access context failed", K(ret));
   } else {
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     ObDatum* input_left;
@@ -1054,8 +1026,7 @@ int ObExprInOrNotIn::eval_batch_in_without_row_fallback(const ObExpr &expr,
             for (int64_t j = 0; OB_SUCC(ret) && j < expr.inner_func_cnt_; ++j) {
               right = right_store[j];
               if (!left->is_null() && !right->is_null()) {
-                if (OB_FAIL(((DatumCmpFunc)expr.inner_functions_[0])(
-                        *right, *left, cmp_ret, datum_access_ctx))) {
+                if (OB_FAIL(((DatumCmpFunc)expr.inner_functions_[0])(*right, *left, cmp_ret))) {
                   LOG_WARN("failed to compare", K(ret));
                 } else {
                   is_equal |= !(cmp_ret);
@@ -1084,7 +1055,6 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
   ObDatum *right = NULL;
   ObExprInCtx *in_ctx = NULL;
   ObExecContext *exec_ctx = &ctx.exec_ctx_;
-  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
   uint64_t in_id = static_cast<uint64_t>(expr.expr_ctx_id_);
   bool is_completely_cmp = false;//complete match, in returns true, not in returns false
   bool is_null_cmp = false;//Second round null value match, match at least return null
@@ -1100,9 +1070,7 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
   #define RIGHT_ROW_ELE(i, j) expr.args_[1]->args_[i]->args_[j]
   int64_t right_param_num = expr.args_[1]->arg_cnt_;
   int64_t row_dimension = expr.inner_func_cnt_;
-  if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
-    LOG_WARN("get datum access context failed", K(ret));
-  } else if (row_dimension > 3) {
+  if (row_dimension > 3) {
     fallback = true;
   }
   if (!fallback &&
@@ -1112,8 +1080,7 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
       LOG_WARN("failed to create operator ctx", K(ret));
     } else if (OB_FAIL(in_ctx->init_static_engine_hashset_vecs(right_param_num,
                                                                row_dimension,
-                                                               exec_ctx,
-                                                               datum_access_ctx))) { //hashset set
+                                                               exec_ctx))) { //hashset set
       LOG_WARN("failed to init hashset", K(ret));
     } else if (OB_FAIL(in_ctx->init_hashset_vecs_all_null(row_dimension, exec_ctx))) {
       LOG_WARN("failed to init hashset_vecs_all_null", K(ret));
@@ -1568,13 +1535,9 @@ int ObExprInOrNotIn::calc_for_row_static_engine(const ObExpr &expr,
   ObDatum *right = NULL;
   bool set_cnt_null = false;
   bool set_cnt_equal = false;
-  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
 
 #define RIGHT_ROW(i) expr.args_[1]->args_[i]
 #define RIGHT_ROW_ELE(i, j) expr.args_[1]->args_[i]->args_[j]
-  if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
-    LOG_WARN("get datum access context failed", K(ret));
-  }
   for (int i = 0; OB_SUCC(ret) && ! set_cnt_equal && i < expr.args_[1]->arg_cnt_; ++i) {
     if (OB_ISNULL(RIGHT_ROW(i))) {
       ret = OB_INVALID_ARGUMENT;
@@ -1605,8 +1568,7 @@ int ObExprInOrNotIn::calc_for_row_static_engine(const ObExpr &expr,
           row_cnt_null = true;
         } else {
           int cmp_ret = 0;
-          if (OB_FAIL(((DatumCmpFunc)expr.inner_functions_[j])(
-                  *right, *left, cmp_ret, datum_access_ctx))) {
+          if (OB_FAIL(((DatumCmpFunc)expr.inner_functions_[j])(*right, *left, cmp_ret))) {
             LOG_WARN("failed to compare", K(ret));
           } else if (0 != cmp_ret) {
             // If there is a clear false in the vector comparison, it indicates that this vector does not hold, so has_null should be set to false
@@ -1713,11 +1675,8 @@ int ObExprInOrNotIn::build_right_hash_without_row(const int64_t in_id,
 {
   int ret = OB_SUCCESS;
   int64_t row_dimension = 1;
-  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
 
-  if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
-    LOG_WARN("get datum access context failed", K(ret));
-  } else if (OB_ISNULL(in_ctx = static_cast<ObExprInCtx *> (exec_ctx->get_expr_op_ctx(in_id)))) {
+  if (OB_ISNULL(in_ctx = static_cast<ObExprInCtx *> (exec_ctx->get_expr_op_ctx(in_id)))) {
     if (OB_FAIL(exec_ctx->create_expr_op_ctx(in_id, in_ctx))) {
       LOG_WARN("failed to create operator ctx", K(ret));
     } else if (OB_FAIL(in_ctx->init_static_engine_hashset(right_param_num))) {

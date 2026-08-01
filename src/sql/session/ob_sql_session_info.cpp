@@ -16,22 +16,18 @@
 
 #define USING_LOG_PREFIX SQL_SESSION
 
-#include <new>
-#include "data_plane/memtable/ob_btree_iter_cache_api.h"
-#include "data_plane/transaction/ob_i_read_timestamp_service.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
-#include "query/command/ob_root_command_service.h"
-#include "query/session/ob_session_access.h"
 #include "ob_sql_session_info.h"
-#include "share/object/ob_obj_cast.h"
-#include "share/ob_rpc_struct.h"
-#include "query/command/ob_root_service_serialization.h"
-#include "sql/pl/ob_pl_package.h"
-#include "sql/pl/ob_pl_server_cursor.h"
-#include "share/ob_server_struct.h"
+#include "share/rc/ob_module_provider.h"
+#include "storage/memtable/mvcc/ob_btree_iter_cache.h"
+#include "storage/tx/ob_ts_mgr.h"
+#include "rootserver/ob_local_ddl_serial_call.h"
+#include "pl/ob_pl_package.h"
+#include "pl/ob_pl_server_cursor.h"
+#include "observer/mysql/obmp_stmt_send_piece_data.h"
+#include "observer/ob_server.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h" // for ObOptStatManager
-#include "sql/session/ob_user_resource_mgr.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -57,6 +53,7 @@ static int create_tmp_sys_var(oceanbase::share::ObSysVarClassType sys_var_id,
   int ret = OB_SUCCESS;
   ObBasicSysVar *sys_var_ptr = nullptr;
   if (OB_FAIL(ObSysVarFactory::create_sys_var(allocator, sys_var_id, sys_var_ptr))) {
+    LOG_WARN("failed to create a temporary system variable", K(ret), K(sys_var_id));
   } else if (OB_ISNULL(sys_var_ptr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("system variable factory returned a null variable", K(ret), K(sys_var_id));
@@ -81,8 +78,10 @@ int ObCachedSchemaGuardInfo::refresh_runtime_schema_guard()
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard_))) {
+  if (OB_FAIL(OBSERVER.get_gctx().schema_service_->get_runtime_schema_guard(schema_guard_))) {
+    LOG_WARN("get schema guard failed", K(ret));
   } else if (OB_FAIL(schema_guard_.get_schema_version(schema_version_))) {
+    LOG_WARN("fail get schema version", K(ret));
   } else {
     ref_ts_ = ObClockGenerator::getClock();
   }
@@ -121,6 +120,8 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
       trans_type_(transaction::ObTxClass::USER),
       version_provider_(NULL),
       config_provider_(NULL),
+      plan_cache_(NULL),
+      ps_cache_(NULL),
       found_rows_(1),
       affected_rows_(-1),
       global_sessid_(0),
@@ -152,8 +153,6 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
       got_server_conn_res_(false),
       got_user_conn_res_(false),
       conn_res_user_id_(OB_INVALID_ID),
-      conn_res_mgr_(nullptr),
-      session_mgr_(nullptr),
       cur_exec_ctx_(nullptr),
       in_bytes_(0),
       out_bytes_(0),
@@ -165,19 +164,8 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
 
 ObSQLSessionInfo::~ObSQLSessionInfo()
 {
-  destroy(false);
-}
-
-void ObSQLSessionInfo::configure_obj_cast(
-    common::ObObjCastParams &params,
-    common::ObISrsProvider *srs_provider,
-    common::ObILobReadService *lob_read_service) const
-{
-  params.srs_provider_ = srs_provider;
-  params.lob_read_service_ = lob_read_service;
-  const int32_t max_depth = GCONF.json_document_max_depth;
-  params.json_max_depth_ =
-      max_depth < 100 || max_depth > 1024 ? 100 : max_depth;
+  plan_cache_ = NULL;
+  destroy();
 }
 
 int ObSQLSessionInfo::init(uint32_t sessid,
@@ -186,16 +174,18 @@ int ObSQLSessionInfo::init(uint32_t sessid,
   int ret = OB_SUCCESS;
   static const int64_t PS_BUCKET_NUM = 64;
   if (OB_FAIL(ObBasicSessionInfo::init(sessid, bucket_allocator, tz_info))) {
-  } else if (!is_acquire_from_pool() &&
-             OB_FAIL(package_state_map_.create(hash::cal_next_prime(4),
+    LOG_WARN("fail to init basic session info", K(ret));
+  } else if (OB_FAIL(package_state_map_.create(hash::cal_next_prime(4),
                                                ObMemAttr("PackStateMap")))) {
     LOG_WARN("create package state map failed", K(ret));
   } else {
     sess_create_time_ = ObTimeUtility::current_time();
     is_inited_ = true;
     if (OB_ISNULL(btree_iter_cache_)) {
-      btree_iter_cache_ =
-          data_plane::create_btree_iter_cache(get_session_allocator());
+      void *buf = get_session_allocator().alloc(sizeof(memtable::ObBtreeIterCache));
+      if (OB_NOT_NULL(buf)) {
+        btree_iter_cache_ = new (buf) memtable::ObBtreeIterCache();
+      }
     }
   }
   if (OB_FAIL(ret)) {
@@ -211,13 +201,14 @@ int ObSQLSessionInfo::test_init(uint32_t version, uint32_t sessid,
   int ret = OB_SUCCESS;
   UNUSED(version);
   if (OB_FAIL(ObBasicSessionInfo::test_init(sessid, bucket_allocator))) {
+    LOG_WARN("fail to init basic session info", K(ret));
   } else {
     is_inited_ = true;
   }
   return ret;
 }
 
-void ObSQLSessionInfo::reset(bool skip_sys_var)
+void ObSQLSessionInfo::reset()
 {
   if (is_inited_) {
     // ObVersionProvider::reset();
@@ -236,6 +227,7 @@ void ObSQLSessionInfo::reset(bool skip_sys_var)
     trans_type_ = transaction::ObTxClass::USER;
     version_provider_ = NULL;
     config_provider_ = NULL;
+    ps_cache_ = NULL;
     found_rows_ = 1;
     affected_rows_ = -1;
     global_sessid_ = 0;
@@ -270,15 +262,12 @@ void ObSQLSessionInfo::reset(bool skip_sys_var)
     prelock_ = false;
     ddl_info_.reset();
     cur_exec_ctx_ = nullptr;
-    // Process-lifetime dependencies are construction state, not connection
-    // state. COM_RESET_CONNECTION must not silently detach them. These
-    // compatibility fields are removed as their consumers move to the
-    // resolver/execution contexts owned by ObSql.
+    plan_cache_ = NULL;
     client_app_info_.reset();
     int temp_ret = OB_SUCCESS;
     optimizer_tracer_.reset();
     //call at last time
-    ObBasicSessionInfo::reset(skip_sys_var);
+    ObBasicSessionInfo::reset();
   }
   in_bytes_ = 0;
   out_bytes_ = 0;
@@ -297,7 +286,7 @@ int ObSQLSessionInfo::is_force_temp_table_inline(bool &force_inline) const
   int ret = OB_SUCCESS;
   int64_t with_subquery_policy = 0;
   force_inline = false;
-
+  
   {
     int64_t with_subquery_policy = GCONF._with_subquery;
     if (2 == with_subquery_policy) {
@@ -312,7 +301,7 @@ int ObSQLSessionInfo::is_force_temp_table_materialize(bool &force_materialize) c
   int ret = OB_SUCCESS;
   int64_t with_subquery_policy = 0;
   force_materialize = false;
-
+  
   {
     int64_t with_subquery_policy = GCONF._with_subquery;
     if (1 == with_subquery_policy) {
@@ -326,7 +315,7 @@ int ObSQLSessionInfo::is_groupby_placement_transformation_enabled(bool &transfor
 {
   int ret = OB_SUCCESS;
   transformation_enabled = false;
-
+  
   {
     transformation_enabled = GCONF._optimizer_group_by_placement;
   }
@@ -336,7 +325,7 @@ int ObSQLSessionInfo::is_groupby_placement_transformation_enabled(bool &transfor
 bool ObSQLSessionInfo::is_in_range_optimization_enabled() const
 {
   bool bret = false;
-
+  
   {
     bret = GCONF._enable_in_range_optimization;
   }
@@ -346,7 +335,7 @@ bool ObSQLSessionInfo::is_in_range_optimization_enabled() const
 int64_t ObSQLSessionInfo::get_inlist_rewrite_threshold() const
 {
   int64_t threshold = 1000;
-
+  
   {
     threshold = GCONF._inlist_rewrite_threshold;
   }
@@ -357,7 +346,7 @@ int ObSQLSessionInfo::is_better_inlist_enabled(bool &enabled) const
 {
   int ret = OB_SUCCESS;
   enabled = false;
-
+  
   {
     enabled = GCONF._optimizer_better_inlist_costing;
   }
@@ -368,7 +357,7 @@ int ObSQLSessionInfo::is_preserve_order_for_pagination_enabled(bool &enabled) co
 {
   int ret = OB_SUCCESS;
   enabled = false;
-
+  
   {
     enabled = GCONF._preserve_order_for_pagination;
   }
@@ -379,7 +368,7 @@ int ObSQLSessionInfo::is_preserve_order_for_groupby_enabled(bool &enabled) const
 {
   int ret = OB_SUCCESS;
   enabled = false;
-
+  
   {
     enabled = GCONF._preserve_order_for_groupby;
   }
@@ -398,7 +387,7 @@ bool ObSQLSessionInfo::is_pl_prepare_stage() const
 bool ObSQLSessionInfo::is_qualify_filter_enabled() const
 {
   bool bret = false;
-
+  
   {
     bret = GCONF._enable_optimizer_qualify_filter;
   }
@@ -409,7 +398,7 @@ int ObSQLSessionInfo::is_enable_range_extraction_for_not_in(bool &enabled) const
 {
   int ret = OB_SUCCESS;
   enabled = true;
-
+  
   {
     enabled = GCONF._enable_range_extraction_for_not_in;
   }
@@ -419,7 +408,7 @@ int ObSQLSessionInfo::is_enable_range_extraction_for_not_in(bool &enabled) const
 bool ObSQLSessionInfo::is_var_assign_use_das_enabled() const
 {
   bool bret = false;
-
+  
   {
     bret = GCONF._enable_var_assign_use_das;
   }
@@ -431,7 +420,7 @@ int ObSQLSessionInfo::is_adj_index_cost_enabled(bool &enabled, int64_t &stats_co
   int ret = OB_SUCCESS;
   enabled = false;
   stats_cost_percent = 0;
-
+  
   {
     stats_cost_percent = GCONF.optimizer_index_cost_adj;
     enabled = (0 != stats_cost_percent);
@@ -443,7 +432,7 @@ int ObSQLSessionInfo::is_adj_index_cost_enabled(bool &enabled, int64_t &stats_co
 bool ObSQLSessionInfo::is_spf_mlj_group_rescan_enabled() const
 {
   bool bret = false;
-
+  
   {
     bret = GCONF._enable_spf_batch_rescan;
   }
@@ -453,7 +442,7 @@ bool ObSQLSessionInfo::is_spf_mlj_group_rescan_enabled() const
 bool ObSQLSessionInfo::enable_parallel_das_dml() const
 {
   bool bret = false;
-
+  
   {
     bret = GCONF._enable_parallel_das_dml;
   }
@@ -467,7 +456,7 @@ bool ObSQLSessionInfo::is_sqlstat_enabled()
   return bret;
 }
 
-void ObSQLSessionInfo::destroy(bool skip_sys_var)
+void ObSQLSessionInfo::destroy()
 {
   if (is_inited_) {
     int ret = OB_SUCCESS;
@@ -475,7 +464,7 @@ void ObSQLSessionInfo::destroy(bool skip_sys_var)
     // bug: 
     if (false == get_is_deserialized()) {
       {
-        // session disconnects, call data_plane::ObITransactionService::end_trans to roll back the transaction,
+        // session disconnects, call ObTransService::end_trans to roll back the transaction,
         // Here stmt_timeout = current time + statement query timeout, not the start_time of the last sql, related bug_id : 7961445
         set_query_start_time(ObTimeUtility::current_time());
         // Here calling end_trans does not require locking, because calling reclaim_value means there is no query concurrently using the session
@@ -483,11 +472,11 @@ void ObSQLSessionInfo::destroy(bool skip_sys_var)
         bool need_disconnect = false;
         // NOTE: only rollback trans if it is started on this node
         // otherwise the transaction maybe rollbacked by idle session disconnect
-        if (is_in_transaction()
-            && data_plane::tx_desc_session_id(tx_desc_) == get_server_sid()) {
+        if (is_in_transaction() && (tx_desc_->get_session_id() == get_server_sid())) {
           transaction::ObTransID tx_id = get_tx_id();
           if (OB_SUCCESS == share::check_server_runtime_ready()) {
             if (OB_FAIL(ObSqlTransControl::rollback_trans(this, need_disconnect))) {
+              LOG_WARN("fail to rollback transaction", K(get_server_sid()), K(ret));
             } else if (false == inner_flag_) {
               LOG_INFO("end trans successfully",
                        "sessid", get_server_sid(),
@@ -503,28 +492,28 @@ void ObSQLSessionInfo::destroy(bool skip_sys_var)
     if (false == get_is_deserialized()) {
       int temp_ret = drop_temp_tables();
       if (OB_UNLIKELY(OB_SUCCESS != temp_ret)) {
+        LOG_WARN("fail to drop temp tables", K(temp_ret));
       }
     }
-    // Cache references must be released explicitly by the lifecycle owner
-    // before session destruction. Do not recover a process service here.
-    if (OB_UNLIKELY(ps_session_info_map_.created()
-                    && ps_session_info_map_.size() > 0)) {
-      LOG_ERROR("prepared statements were not closed before session destruction",
-                "session_id", get_server_sid(),
-                "statement_count", ps_session_info_map_.size());
-      release_all_ps_session_info();
+    // slave session ps_session_info_map_ is empty, calling close will have no side effects
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(close_all_ps_stmt())) {
+        LOG_WARN("failed to close all stmt", K(ret));
+      }
     }
 
     //close all cursor
     if (pl_cursor_cache_.is_inited()) {
       int temp_ret = pl_cursor_cache_.close_all(*this);
       if (temp_ret != OB_SUCCESS) {
+        LOG_WARN("failed to close all cursor", K(ret));
       }
     }
 
     if (NULL != piece_cache_) {
       int temp_ret = piece_cache_->close_all(*this);
       if (temp_ret != OB_SUCCESS) {
+        LOG_WARN("failed to close all piece", K(ret));
       }
       piece_cache_->~ObPieceCache();
       get_session_allocator().free(piece_cache_);
@@ -533,21 +522,22 @@ void ObSQLSessionInfo::destroy(bool skip_sys_var)
     // Non-distributed needs it, distributed also needs it, used for cleaning up the global variable values of package
     reset_all_package_state();
     if (OB_NOT_NULL(btree_iter_cache_)) {
-      data_plane::destroy_btree_iter_cache(
-          get_session_allocator(), btree_iter_cache_);
+      btree_iter_cache_->destroy();
+      btree_iter_cache_->~ObBtreeIterCache();
+      get_session_allocator().free(btree_iter_cache_);
+      btree_iter_cache_ = nullptr;
     }
-    reset(skip_sys_var);
+    reset();
     is_inited_ = false;
   }
 }
 
-int ObSQLSessionInfo::close_ps_stmt(
-    ObPsCache &ps_cache,
-    ObPsStmtId client_stmt_id)
+int ObSQLSessionInfo::close_ps_stmt(ObPsStmtId client_stmt_id)
 {
   int ret = OB_SUCCESS;
   ObPsSessionInfo *ps_sess_info = NULL;
   if (OB_FAIL(get_ps_session_info(client_stmt_id, ps_sess_info))) {
+    LOG_WARN("fail to get ps session info", K(client_stmt_id), "session_id", get_server_sid(), K(ret));
   } else if (OB_ISNULL(ps_sess_info)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("ps session info is null", K(client_stmt_id), "session_id", get_server_sid(), K(ret));
@@ -555,7 +545,11 @@ int ObSQLSessionInfo::close_ps_stmt(
     ObPsStmtId inner_stmt_id = ps_sess_info->get_inner_stmt_id();
     ps_sess_info->dec_ref_count();
     if (ps_sess_info->need_erase()) {
-      if (OB_FAIL(ps_cache.deref_ps_stmt(inner_stmt_id))) {
+      if (OB_ISNULL(ps_cache_)) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("ps cache is null", K(ret));
+      } else if (OB_FAIL(ps_cache_->deref_ps_stmt(inner_stmt_id))) {
+        LOG_WARN("close ps stmt failed", K(ret), "session_id", get_server_sid(), K(ret));
       }
       // Regardless of whether the above was successful, the session info resource needs to be released
       int tmp_ret = OB_SUCCESS;
@@ -570,10 +564,12 @@ int ObSQLSessionInfo::close_ps_stmt(
   return ret;
 }
 
-int ObSQLSessionInfo::close_all_ps_stmt(ObPsCache &ps_cache)
+int ObSQLSessionInfo::close_all_ps_stmt()
 {
   int ret = OB_SUCCESS;
-  if (!ps_session_info_map_.created()) {
+  if (OB_ISNULL(ps_cache_)) {
+    // do nothing, session no ps
+  } else if (!ps_session_info_map_.created()) {
     // do nothing, no ps added to map
   } else {
     PsSessionInfoMap::iterator iter = ps_session_info_map_.begin();
@@ -581,7 +577,9 @@ int ObSQLSessionInfo::close_all_ps_stmt(ObPsCache &ps_cache)
     for (; iter != ps_session_info_map_.end(); ++iter) { //ignore ret
       const ObPsStmtId client_stmt_id = iter->first;
       if (OB_FAIL(get_inner_ps_stmt_id(client_stmt_id, inner_stmt_id))) {
-      } else if (OB_FAIL(ps_cache.deref_ps_stmt(inner_stmt_id))) {
+        LOG_WARN("get_inner_ps_stmt_id failed", K(ret), K(client_stmt_id), K(inner_stmt_id));
+      } else if (OB_FAIL(ps_cache_->deref_ps_stmt(inner_stmt_id))) {
+        LOG_WARN("close ps stmt failed", K(ret), K(client_stmt_id), K(inner_stmt_id));
       } else if (OB_ISNULL(iter->second)) {
         // do nothing
       } else {
@@ -594,23 +592,6 @@ int ObSQLSessionInfo::close_all_ps_stmt(ObPsCache &ps_cache)
     ps_session_info_map_.reuse();
   }
   return ret;
-}
-
-void ObSQLSessionInfo::release_all_ps_session_info()
-{
-  if (ps_session_info_map_.created()) {
-    for (PsSessionInfoMap::iterator iter = ps_session_info_map_.begin();
-         iter != ps_session_info_map_.end();
-         ++iter) {
-      if (OB_NOT_NULL(iter->second)) {
-        iter->second->~ObPsSessionInfo();
-        ps_session_info_allocator_.free(iter->second);
-        iter->second = NULL;
-      }
-    }
-    ps_session_info_allocator_.reset();
-    ps_session_info_map_.reuse();
-  }
 }
 // If the session created temporary tables in direct connection mode, drop them when
 // the session disconnects. Commit-time cleanup only clears transaction-level
@@ -625,6 +606,7 @@ int ObSQLSessionInfo::drop_temp_tables(const bool is_disconn,
   bool ac = false;
   bool is_sess_disconn = is_disconn;
   if (OB_FAIL(get_autocommit(ac))) {
+    LOG_WARN("get autocommit error", K(ret), K(ac));
   } else if (!(is_inner() && !is_user_session())
              && (get_has_temp_table_flag()
                  || has_accessed_session_level_temp_table()
@@ -649,13 +631,17 @@ int ObSQLSessionInfo::drop_temp_tables(const bool is_disconn,
       drop_table_arg.to_recyclebin_ = false;
       drop_table_arg.table_type_ = share::schema::TMP_TABLE;
       drop_table_arg.session_id_ = get_sessid_for_table();
-
-
-
+      
+      
+      
         LOG_INFO("temporary tables dropped due to connection disconnected", K(is_sess_disconn), K(drop_table_arg));
     }
   }
   if (OB_FAIL(ret)) {
+    LOG_WARN("fail to drop temp tables", K(ret),
+             K(1UL), K(get_server_sid()),
+             K(has_accessed_session_level_temp_table()),
+             K(lbt()));
   }
   return ret;
 }
@@ -693,7 +679,7 @@ void ObSQLSessionInfo::update_show_warnings_buf()
 int ObSQLSessionInfo::get_session_priv_info(share::schema::ObSessionPrivInfo &session_priv) const
 {
   int ret = OB_SUCCESS;
-
+  
   session_priv.user_id_ = get_priv_user_id();
   session_priv.user_name_ = get_user_name();
   session_priv.host_name_ = get_host_name();
@@ -702,6 +688,63 @@ int ObSQLSessionInfo::get_session_priv_info(share::schema::ObSessionPrivInfo &se
   session_priv.db_priv_set_ = db_priv_set_;
   return ret;
 }
+
+ObPlanCache *ObSQLSessionInfo::get_plan_cache()
+{
+  if (OB_NOT_NULL(plan_cache_)) {
+    // do nothing
+  } else {
+    //release old plancache and get new
+    ObPCMemPctConf pc_mem_conf;
+    if (OB_SUCCESS != get_pc_mem_conf(pc_mem_conf)) {
+      LOG_ERROR_RET(OB_ERR_UNEXPECTED, "fail to get pc mem conf");
+      plan_cache_ = NULL;
+    } else {
+      plan_cache_ = share::g_mp->plan_cache();
+      if (OB_ISNULL(plan_cache_)) {
+        LOG_WARN_RET(OB_ERR_UNEXPECTED, "failed to get plan cache");
+      } else if (plan_cache_->is_inited()) {
+        // skip update mem conf
+      } else if (OB_SUCCESS != plan_cache_->set_mem_conf(pc_mem_conf)) {
+        LOG_ERROR_RET(OB_ERR_UNEXPECTED, "fail to set plan cache memory conf");
+      }
+    }
+  }
+  return plan_cache_;
+}
+
+ObPsCache *ObSQLSessionInfo::get_ps_cache()
+{
+  if (OB_NOT_NULL(ps_cache_)) {
+    //do nothing
+  } else {
+    int ret = OB_SUCCESS;
+    
+    ObPCMemPctConf pc_mem_conf;
+    ObMemAttr mem_attr;
+    mem_attr.label_ = "PsSessionInfo";
+    
+    mem_attr.ctx_id_ = ObCtxIds::DEFAULT_CTX_ID;
+    if (OB_FAIL(get_pc_mem_conf(pc_mem_conf))) {
+      LOG_ERROR("failed to get pc mem conf");
+      ps_cache_ = NULL;
+    } else {
+      ps_cache_ = share::g_mp->ps_cache();
+      if (OB_ISNULL(ps_cache_)) {
+        // ignore ret
+        LOG_WARN("failed to get ps cache");
+      } else if (!ps_cache_->is_inited() &&
+                  OB_FAIL(ps_cache_->init(common::calculate_scaled_value_by_memory(common::OB_PLAN_CACHE_BUCKET_NUMBER_MIN,
+                                          common::OB_PLAN_CACHE_BUCKET_NUMBER)))) {
+        LOG_WARN("failed to init ps cache");
+      } else {
+        ps_session_info_allocator_.set_attr(mem_attr);
+      }
+    }
+  }
+  return ps_cache_;
+}
+
 
 //whether the user has the super privilege
 bool ObSQLSessionInfo::has_user_super_privilege() const
@@ -746,8 +789,7 @@ int ObSQLSessionInfo::check_global_read_only_privilege(const bool read_only,
        *                      set @@global.read_only = 1;
        *  commit; (should fail)                           commit; (should success)
        */
-      if (sql_traits.is_commit_stmt_ && is_in_transaction()
-          && !data_plane::tx_desc_is_clean(tx_desc_)) {
+      if (sql_traits.is_commit_stmt_ && is_in_transaction() && !tx_desc_->is_clean()) {
         ret = OB_ERR_OPTION_PREVENTS_STATEMENT;
         LOG_WARN("the server is running with read_only, cannot execute stmt");
       }
@@ -764,6 +806,7 @@ int ObSQLSessionInfo::remove_prepare(const ObString &ps_name)
     ret = OB_HASH_NOT_EXIST;
     LOG_WARN("map not created before insert any element", K(ret));
   } else if (OB_FAIL(ps_name_id_map_.erase_refactored(ps_name, &ps_id))) {
+    LOG_WARN("ps session info not exist", K(ps_name));
   } else if (OB_INVALID_ID == ps_id) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session_info is null", K(ret));
@@ -778,6 +821,7 @@ int ObSQLSessionInfo::get_prepare_id(const ObString &ps_name, ObPsStmtId &ps_id)
   if (OB_UNLIKELY(!ps_name_id_map_.created())) {
     ret = OB_HASH_NOT_EXIST;
   } else if (OB_FAIL(ps_name_id_map_.get_refactored(ps_name, ps_id))) {
+    LOG_WARN("get ps session info failed", K(ps_name));
   } else if (OB_INVALID_ID == ps_id) {
     ret = OB_HASH_NOT_EXIST;
     LOG_WARN("ps info is null", K(ret), K(ps_name));
@@ -795,18 +839,25 @@ int ObSQLSessionInfo::add_prepare(const ObString &ps_name, ObPsStmtId ps_id)
   ObString stored_name;
   ObPsStmtId exist_ps_id = OB_INVALID_ID;
   if (OB_FAIL(conn_level_name_pool_.write_string(ps_name, &stored_name))) {
+    LOG_WARN("failed to copy name", K(ps_name), K(ps_id), K(ret));
   } else if (OB_FAIL(try_create_ps_name_id_map())) {
+    LOG_WARN("fail create ps name id map", K(ret));
   } else if (OB_FAIL(ps_name_id_map_.get_refactored(stored_name, exist_ps_id))) {
     if (OB_HASH_NOT_EXIST == ret) {
       if (OB_FAIL(ps_name_id_map_.set_refactored(stored_name, ps_id))) {
+        LOG_WARN("fail insert ps id to hash map", K(stored_name), K(ps_id), K(ret));
       }
     } else {
       LOG_WARN("fail to search ps name hash id map", K(stored_name), K(ret));
     }
   } else if (ps_id != exist_ps_id) {
+    LOG_DEBUG("exist ps id is diff", K(ps_id), K(exist_ps_id), K(ps_name), K(stored_name));
     if (OB_FAIL(remove_prepare(stored_name))) {
+      LOG_WARN("failed to remove prepare", K(stored_name), K(ret));
     } else if (OB_FAIL(remove_ps_session_info(exist_ps_id))) {
+      LOG_WARN("failed to remove prepare sesion info", K(exist_ps_id), K(stored_name), K(ret));
     } else if (OB_FAIL(ps_name_id_map_.set_refactored(stored_name, ps_id))) {
+      LOG_WARN("fail insert ps id to hash map", K(stored_name), K(ps_id), K(ret));
     }
   }
   return ret;
@@ -841,6 +892,7 @@ int ObSQLSessionInfo::remove_ps_session_info(const ObPsStmtId stmt_id)
     ret = OB_HASH_NOT_EXIST;
     LOG_WARN("map not created before insert any element", K(ret));
   } else if (OB_FAIL(ps_session_info_map_.erase_refactored(stmt_id, &session_info))) {
+    LOG_WARN("ps session info not exist", K(stmt_id));
   } else if (OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session_info is null", K(ret));
@@ -873,6 +925,7 @@ int ObSQLSessionInfo::add_ps_stmt_id_in_use(const ObPsStmtId stmt_id) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("set not created before insert any element", K(ret));
   } else if (OB_FAIL(in_use_ps_stmt_id_set_.set_refactored(stmt_id))) {
+    LOG_WARN("add ps stmt id failed", K(ret), K(stmt_id));
   }
   return ret;
 }
@@ -883,6 +936,7 @@ int ObSQLSessionInfo::earse_ps_stmt_id_in_use(const ObPsStmtId stmt_id) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("set not created before insert any element", K(ret));
   } else if (OB_FAIL(in_use_ps_stmt_id_set_.erase_refactored(stmt_id))) {
+    LOG_WARN("ps stmt id not exist", K(stmt_id));
   }
   return ret;
 }
@@ -904,9 +958,16 @@ int ObSQLSessionInfo::prepare_ps_stmt(const ObPsStmtId inner_stmt_id,
   }
   already_exists = false;
   if (is_inner_sql) {
+    LOG_TRACE("is inner sql no need to add session info", K(inner_stmt_id),
+              K(client_stmt_id), K(next_client_ps_stmt_id_), K(is_inner_sql));
   } else {
+    LOG_TRACE("will add session info",
+              K(inner_stmt_id), K(client_stmt_id), K(next_client_ps_stmt_id_),
+              K(ret), K(is_inner_sql));
     if(OB_FAIL(try_create_in_use_ps_stmt_id_set())) {
+      LOG_WARN("fail create in use ps stmt id", K(ret));
     } else if (OB_FAIL(try_create_ps_session_info_map())) {
+      LOG_WARN("fail create map", K(ret));
     } else {
       ret = ps_session_info_map_.get_refactored(client_stmt_id, session_info);
     }
@@ -934,6 +995,14 @@ int ObSQLSessionInfo::prepare_ps_stmt(const ObPsStmtId inner_stmt_id,
         session_info->set_ps_stmt_checksum(stmt_info->get_ps_stmt_checksum());
         session_info->set_inner_stmt_id(inner_stmt_id);
         if (OB_FAIL(session_info->fill_param_types_with_null_type())) {
+          LOG_WARN("fill param types failed", K(ret),
+                                        K(stmt_info->get_ps_sql()),
+                                        K(stmt_info->get_ps_stmt_checksum()),
+                                        K(client_stmt_id),
+                                        K(inner_stmt_id),
+                                        K(get_server_sid()),
+                                        K(stmt_info->get_num_of_param()),
+                                        K(*stmt_info));
         }
         LOG_TRACE("add ps session info", K(stmt_info->get_ps_sql()),
                                         K(stmt_info->get_ps_stmt_checksum()),
@@ -947,6 +1016,8 @@ int ObSQLSessionInfo::prepare_ps_stmt(const ObPsStmtId inner_stmt_id,
       if (OB_SUCC(ret)) {
         session_info->inc_ref_count();
         if (OB_FAIL(ps_session_info_map_.set_refactored(client_stmt_id, session_info))) {
+          // OB_HASH_EXIST cannot be here, no need to handle
+          LOG_WARN("push back ps_session info failed", K(ret), K(client_stmt_id));
         } else {
           LOG_TRACE("add ps session info success", K(client_stmt_id), K(get_server_sid()));
         }
@@ -972,6 +1043,7 @@ int ObSQLSessionInfo::get_inner_ps_stmt_id(ObPsStmtId cli_stmt_id, ObPsStmtId &i
     ret = OB_HASH_NOT_EXIST;
     LOG_WARN("map not created before insert any element", K(ret));
   } else if (OB_FAIL(ps_session_info_map_.get_refactored(cli_stmt_id, ps_session_info))) {
+    LOG_WARN("get inner ps stmt id failed", K(ret), K(cli_stmt_id), K(lbt()));
   } else if (OB_ISNULL(ps_session_info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ps session info is null", K(cli_stmt_id), "session_id", get_server_sid(), K(ret));
@@ -985,6 +1057,7 @@ ObPLCursorInfo *ObSQLSessionInfo::get_cursor(int64_t cursor_id)
 {
   ObPLCursorInfo *cursor = NULL;
   if (OB_SUCCESS != pl_cursor_cache_.pl_cursor_map_.get_refactored(cursor_id, cursor)) {
+    LOG_TRACE("get cursor info failed", K(cursor_id), K(get_server_sid()));
   }
   return cursor;
 }
@@ -1019,6 +1092,7 @@ int ObSQLSessionInfo::add_cursor(pl::ObPLCursorInfo *cursor)
       // so we need get_thread_data_lock there
       ObSQLSessionInfo::LockGuard lock_guard(get_thread_data_lock());
       if (OB_FAIL(pl_cursor_cache_.pl_cursor_map_.set_refactored(id, cursor))) {
+        LOG_WARN("fail insert ps id to hash map", K(id), K(*cursor), K(ret));
       } else {
         cursor->set_id(id);
         add_cursor_success = true;
@@ -1032,6 +1106,7 @@ int ObSQLSessionInfo::add_cursor(pl::ObPLCursorInfo *cursor)
     int tmp_ret = close_cursor(cursor);
     ret = OB_SUCCESS == ret ? tmp_ret : ret;
     if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN("close cursor fail when add cursor to sesssion.", K(ret), K(id), K(get_server_sid()));
     }
   }
   return ret;
@@ -1062,6 +1137,7 @@ int ObSQLSessionInfo::close_cursor(int64_t cursor_id)
   // so we need get_thread_data_lock there
   ObSQLSessionInfo::LockGuard lock_guard(get_thread_data_lock());
   if (OB_FAIL(pl_cursor_cache_.pl_cursor_map_.erase_refactored(cursor_id, &cursor))) {
+    LOG_WARN("cursor info not exist", K(cursor_id));
   } else if (OB_ISNULL(cursor)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session_info is null", K(ret));
@@ -1083,6 +1159,7 @@ int ObSQLSessionInfo::add_non_session_cursor(pl::ObPLCursorInfo *cursor)
   // so we need get_thread_data_lock there
   ObSQLSessionInfo::LockGuard lock_guard(get_thread_data_lock());
   if (OB_FAIL(pl_cursor_cache_.pl_non_session_cursor_map_.set_refactored((int64_t)cursor, cursor))) {
+    LOG_WARN("fail insert non session cursor to hash map", K(cursor), K(*cursor), K(ret));
   } else {
     EVENT_INC(SQL_OPEN_CURSORS_CURRENT);
     EVENT_INC(SQL_OPEN_CURSORS_CUMULATIVE);
@@ -1122,9 +1199,11 @@ int ObSQLSessionInfo::print_all_cursor()
     } else {
       if (cursor_info->isopen()) {
         open_cnt++;
+        LOG_DEBUG("CURSOR DEBUG: found open cursor", K(*cursor_info));
       }
     }
   }
+  LOG_DEBUG("CURSOR DEBUG: open cursors in cursor map", K(open_cnt));
   return ret;
 }
 
@@ -1187,7 +1266,9 @@ int ObSQLSessionInfo::check_read_only_privilege(const bool read_only,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_global_read_only_privilege(read_only, sql_traits))) {
+    LOG_WARN("failed to check global read_only privilege!", K(ret));
   } else if (OB_FAIL(check_tx_read_only_privilege(sql_traits))){
+    LOG_WARN("failed to check tx_read_only privilege!", K(ret));
   }
   return ret;
 }
@@ -1297,6 +1378,7 @@ int ObSQLSessionInfo::get_collation_type_of_names(
   cs_type = CS_TYPE_INVALID;
   if (OB_TABLE_NAME_CLASS == type_class) {
     if (OB_FAIL(get_name_case_mode(case_mode))) {
+      LOG_WARN("fail to get name case mode", K(ret));
     } else if (OB_ORIGIN_AND_SENSITIVE == case_mode) {
       cs_type = CS_TYPE_UTF8MB4_BIN;
     } else if (OB_ORIGIN_AND_INSENSITIVE == case_mode || OB_LOWERCASE_AND_INSENSITIVE == case_mode) {
@@ -1467,6 +1549,7 @@ int ObSQLSessionInfo::set_client_id(const common::ObString &client_identifier)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObBasicSessionInfo::set_client_identifier(client_identifier))) {
+    LOG_WARN("failed to set client id", K(ret));
   }
   return ret;
 }
@@ -1522,6 +1605,7 @@ int ObSQLSessionInfo::begin_nested_session(StmtSavedValue &saved_value, bool ski
   OZ (ObBasicSessionInfo::begin_nested_session(saved_value, skip_cur_stmt_tables));
   OZ (save_sql_session(saved_value));
   OX (nested_count_++);
+  LOG_DEBUG("begin_nested_session", K(ret), K_(nested_count));
   return ret;
 }
 
@@ -1613,7 +1697,7 @@ int ObSQLSessionInfo::ps_use_stream_result_set(bool &use_stream) {
   return ret;
 }
 
-ObPieceCache* ObSQLSessionInfo::get_piece_cache(bool need_init) {
+::oceanbase::observer::ObPieceCache* ObSQLSessionInfo::get_piece_cache(bool need_init) {
   if (NULL == piece_cache_ && need_init) {
     void *buf = get_session_allocator().alloc(sizeof(ObPieceCache));
     if (NULL != buf) {
@@ -1681,31 +1765,34 @@ int ObSQLSessionInfo::on_user_connect(share::schema::ObSessionPrivInfo &priv_inf
                                       const ObUserInfo *user_info)
 {
   int ret = OB_SUCCESS;
+  ObConnectResourceMgr *conn_res_mgr = GCTX.conn_res_mgr_;
   if (get_is_deserialized()) {
     // do nothing
-  } else if (OB_ISNULL(conn_res_mgr_) || OB_ISNULL(user_info)) {
+  } else if (OB_ISNULL(conn_res_mgr) || OB_ISNULL(user_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN(
-        "connect resource mgr or user info is null", K(ret), KP(conn_res_mgr_));
+    LOG_WARN("connect resource mgr or user info is null", K(ret), K(conn_res_mgr));
   } else {
     const ObPrivSet &priv = priv_info.user_priv_set_;
     const ObString &user_name = priv_info.user_name_;
-
+    
     const uint64_t user_id = priv_info.user_id_;
     uint64_t max_connections_per_hour = user_info->get_max_connections();
     uint64_t max_user_connections = user_info->get_max_user_connections();
     uint64_t max_server_connections = 0;
     if (OB_FAIL(get_sys_variable(SYS_VAR_MAX_CONNECTIONS, max_server_connections))) {
+      LOG_WARN("get system variable SYS_VAR_MAX_CONNECTIONS failed", K(ret));
     } else if (0 == max_user_connections) {
       if (OB_FAIL(get_sys_variable(SYS_VAR_MAX_USER_CONNECTIONS, max_user_connections))) {
+        LOG_WARN("get system variable SYS_VAR_MAX_USER_CONNECTIONS failed", K(ret));
       }
     } else {
       ObObj val;
       val.set_uint64(max_user_connections);
       if (OB_FAIL(update_sys_variable(SYS_VAR_MAX_USER_CONNECTIONS, val))) {
+        LOG_WARN("set system variable SYS_VAR_MAX_USER_CONNECTIONS failed", K(ret), K(val));
       }
     }
-    if (OB_SUCC(ret) && OB_FAIL(conn_res_mgr_->on_user_connect(
+    if (OB_SUCC(ret) && OB_FAIL(conn_res_mgr->on_user_connect(
                 user_id, priv, user_name,
                 max_connections_per_hour,
                 max_user_connections,
@@ -1719,10 +1806,12 @@ int ObSQLSessionInfo::on_user_connect(share::schema::ObSessionPrivInfo &priv_inf
 int ObSQLSessionInfo::on_user_disconnect()
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(conn_res_mgr_)) {
+  ObConnectResourceMgr *conn_res_mgr = GCTX.conn_res_mgr_;
+  if (OB_ISNULL(conn_res_mgr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("connect resource mgr is null", K(ret));
-  } else if (OB_FAIL(conn_res_mgr_->on_user_disconnect(*this))) {
+  } else if (OB_FAIL(conn_res_mgr->on_user_disconnect(*this))) {
+    LOG_WARN("user disconnect failed", K(ret));
   }
   return ret;
 }
@@ -1762,210 +1851,7 @@ int ObSQLSessionInfo::sql_sess_record_sql_stat_start_value(ObExecutingSqlStatRec
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(executing_sql_stat_record_.assign(executing_sqlstat))) {
+    LOG_WARN("failed to assign executing sql stat record");
   }
   return ret;
 }
-namespace oceanbase
-{
-namespace query
-{
-
-int64_t ObSessionAccess::get_query_timeout_ts(
-    const sql::ObBasicSessionInfo *session)
-{
-  return nullptr == session ? 0 : session->get_query_timeout_ts();
-}
-
-int ObSessionAccess::get_autocommit(
-    const sql::ObSQLSessionInfo *session, bool &autocommit)
-{
-  return nullptr == session
-      ? common::OB_INVALID_ARGUMENT
-      : session->get_autocommit(autocommit);
-}
-
-int ObSessionAccess::set_autocommit(
-    sql::ObSQLSessionInfo *session, const bool autocommit)
-{
-  return nullptr == session
-      ? common::OB_INVALID_ARGUMENT
-      : session->set_autocommit(autocommit);
-}
-
-bool ObSessionAccess::is_inner(const sql::ObSQLSessionInfo *session)
-{
-  return nullptr != session && session->is_inner();
-}
-
-bool ObSessionAccess::is_in_transaction(const sql::ObSQLSessionInfo *session)
-{
-  return nullptr != session && session->is_in_transaction();
-}
-
-void ObSessionAccess::set_inner_session(sql::ObSQLSessionInfo *session)
-{
-  if (nullptr != session) {
-    session->set_inner_session();
-  }
-}
-
-void ObSessionAccess::set_user_session(sql::ObSQLSessionInfo *session)
-{
-  if (nullptr != session) {
-    session->set_user_session();
-  }
-}
-
-common::ObString ObSessionAccess::get_database_name(
-    const sql::ObSQLSessionInfo *session)
-{
-  return nullptr == session ? common::ObString() : session->get_database_name();
-}
-
-uint64_t ObSessionAccess::get_database_id(const sql::ObSQLSessionInfo *session)
-{
-  return nullptr == session ? common::OB_INVALID_ID : session->get_database_id();
-}
-
-void ObSessionAccess::set_database_id(
-    sql::ObSQLSessionInfo *session, const uint64_t id)
-{
-  if (nullptr != session) {
-    session->set_database_id(id);
-  }
-}
-
-int ObSessionAccess::set_default_database(
-    sql::ObSQLSessionInfo *session, const common::ObString &name)
-{
-  return nullptr == session
-      ? common::OB_INVALID_ARGUMENT
-      : session->set_default_database(name);
-}
-
-int ObSessionAccess::get_collation_connection(
-    const sql::ObSQLSessionInfo *session, common::ObObj &value)
-{
-  return nullptr == session
-      ? common::OB_INVALID_ARGUMENT
-      : session->get_sys_variable(
-            share::ObSysVarClassType::SYS_VAR_COLLATION_CONNECTION, value);
-}
-
-int ObSessionAccess::set_collation_connection(
-    sql::ObSQLSessionInfo *session, const common::ObObj &value)
-{
-  return nullptr == session
-      ? common::OB_INVALID_ARGUMENT
-      : session->update_sys_variable(
-            share::ObSysVarClassType::SYS_VAR_COLLATION_CONNECTION, value);
-}
-
-void ObSessionAccess::set_dummy_ddl_visibility(
-    sql::ObSQLSessionInfo *session, const bool enabled)
-{
-  if (nullptr != session) {
-    session->get_ddl_info().set_is_dummy_ddl_for_inner_visibility(enabled);
-  }
-}
-
-int ObSessionAccess::get_name_case_mode(
-    const sql::ObSQLSessionInfo *session,
-    common::ObNameCaseMode &case_mode)
-{
-  return nullptr == session
-      ? common::OB_INVALID_ARGUMENT
-      : session->get_name_case_mode(case_mode);
-}
-
-int ObSessionAccess::get_connection_collation(
-    const sql::ObSQLSessionInfo *session,
-    common::ObCollationType &collation)
-{
-  return nullptr == session
-      ? common::OB_INVALID_ARGUMENT
-      : session->get_collation_connection(collation);
-}
-
-uint32_t ObSessionAccess::get_server_session_id(
-    const sql::ObSQLSessionInfo *session)
-{
-  return nullptr == session ? 0 : session->get_server_sid();
-}
-
-void *ObSessionAccess::get_btree_iter_cache(sql::ObSQLSessionInfo *session)
-{
-  return nullptr == session ? nullptr : session->get_btree_iter_cache();
-}
-
-void ObSessionAccess::get_current_sql_id(
-    const sql::ObSQLSessionInfo *session,
-    char *buffer,
-    const int64_t buffer_size)
-{
-  if (nullptr != session && nullptr != buffer && buffer_size > 0) {
-    session->get_cur_sql_id(buffer, buffer_size);
-  }
-}
-
-void ObSessionAccess::set_query_command(sql::ObSQLSessionInfo *session)
-{
-  if (nullptr != session) {
-    session->set_mysql_cmd(obmysql::COM_QUERY);
-  }
-}
-
-int ObSessionAccess::get_force_parallel_dml_dop(
-    const sql::ObSQLSessionInfo *session,
-    uint64_t &dop)
-{
-  return nullptr == session
-      ? common::OB_INVALID_ARGUMENT
-      : session->get_force_parallel_dml_dop(dop);
-}
-
-int ObSessionAccess::save_statement_state(
-    sql::ObSQLSessionInfo *session,
-    common::ObIAllocator &allocator,
-    void *&saved_state)
-{
-  int ret = common::OB_SUCCESS;
-  typedef sql::ObSQLSessionInfo::StmtSavedValue SavedValue;
-  SavedValue *value = nullptr;
-  if (nullptr == session || nullptr != saved_state) {
-    ret = common::OB_INVALID_ARGUMENT;
-  } else if (nullptr == (value = static_cast<SavedValue *>(
-                         allocator.alloc(sizeof(SavedValue))))) {
-    ret = common::OB_ALLOCATE_MEMORY_FAILED;
-  } else {
-    value = new (value) SavedValue();
-    if (common::OB_SUCCESS != (ret = session->save_session(*value))) {
-      value->~SavedValue();
-      allocator.free(value);
-    } else {
-      saved_state = value;
-    }
-  }
-  return ret;
-}
-
-int ObSessionAccess::restore_statement_state(
-    sql::ObSQLSessionInfo *session,
-    common::ObIAllocator &allocator,
-    void *&saved_state)
-{
-  int ret = common::OB_SUCCESS;
-  typedef sql::ObSQLSessionInfo::StmtSavedValue SavedValue;
-  SavedValue *value = static_cast<SavedValue *>(saved_state);
-  if (nullptr == session || nullptr == value) {
-    ret = common::OB_INVALID_ARGUMENT;
-  } else if (common::OB_SUCCESS == (ret = session->restore_session(*value))) {
-    value->~SavedValue();
-    allocator.free(value);
-    saved_state = nullptr;
-  }
-  return ret;
-}
-
-} // namespace query
-} // namespace oceanbase

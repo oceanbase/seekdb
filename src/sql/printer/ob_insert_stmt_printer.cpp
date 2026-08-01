@@ -38,6 +38,7 @@ int ObInsertStmtPrinter::do_print()
                        print_params_,
                        param_store_);
     if (OB_FAIL(print())) {
+      LOG_WARN("fail to print stmt", K(ret));
     }
   }
 
@@ -56,6 +57,7 @@ int ObInsertStmtPrinter::print()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Not a valid insert stmt", K(stmt_->get_stmt_type()),K(ret));
   } else if (OB_FAIL(print_basic_stmt())) {
+    LOG_WARN("fail to print basic stmt", K(ret), K(*stmt_));
   } else { /*do nothing*/ }
 
   return ret;
@@ -69,9 +71,13 @@ int ObInsertStmtPrinter::print_basic_stmt()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt_ should not be NULL", K(ret));
   } else if (OB_FAIL(print_temp_table_as_cte())) {
+    LOG_WARN("failed to print cte", K(ret));
   } else if (OB_FAIL(print_insert())) {
+    LOG_WARN("fail to print select", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_into())) {
+    LOG_WARN("fail to print into", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_values())) {
+    LOG_WARN("fail to print values", K(ret), K(*stmt_));
   } else {
     // do-nothing
   }
@@ -94,7 +100,8 @@ int ObInsertStmtPrinter::print_insert()
       DATA_PRINTF("insert ");
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(print_hint())) {
+      if (OB_FAIL(print_hint())) { // hint
+        LOG_WARN("fail to print hint", K(ret), K(*stmt_));
       } else {
         DATA_PRINTF("into ");
       }
@@ -117,6 +124,7 @@ int ObInsertStmtPrinter::print_into()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Invalid table item", K(stmt_->get_table_size()), K(ret));
     } else if (OB_FAIL(print_table(table_item, true))) {
+      LOG_WARN("failed to print table", K(*table_item), K(ret));
     } else {
       DATA_PRINTF("(");
       for (int64_t i = 0; OB_SUCC(ret) && i < insert_stmt->get_values_desc().count(); ++i) {
@@ -157,6 +165,7 @@ int ObInsertStmtPrinter::print_values()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("sub select stmt is null", K(ret), K(sub_select_stmt));
       } else if (OB_FAIL(print_subquery(sub_select_stmt, PRINT_CTE))) {
+        LOG_WARN("failed to print subquery", K(ret));
       }
     } else {
       if (insert_stmt->get_values_desc().empty()) {
@@ -177,6 +186,7 @@ int ObInsertStmtPrinter::print_values()
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("unexpect values vector", K(ret));
             } else if (OB_FAIL(expr_printer_.do_print(insert_stmt->get_values_vector().at(i * column_count + j), T_INSERT_SCOPE))) {
+              LOG_WARN("fail to print where expr", K(ret));
             } else {
               DATA_PRINTF(",");
             }

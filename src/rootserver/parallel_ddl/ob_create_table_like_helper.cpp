@@ -74,14 +74,18 @@ int ObCreateTableLikeHelper::check_schema_valid_(const ObTableSchema *&orig_tabl
   uint64_t new_table_id = OB_INVALID_ID;
   uint64_t orig_database_id = OB_INVALID_ID;
   if (OB_FAIL(check_inner_stat_())) {
+    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(check_database_legitimacy_(arg_.origin_db_name_, orig_database_id))) {
+    LOG_WARN("fail to check database legitimacy", KR(ret), K(arg_.origin_db_name_));
   } else if (OB_FAIL(schema_guard_wrapper_.get_table_id(orig_database_id, arg_.session_id_, arg_.origin_table_name_, orig_table_id_, table_type, orig_schema_version))) {
+    LOG_WARN("fail to get table id", KR(ret), K(orig_database_id), K_(arg_.session_id), K_(arg_.origin_table_name));
   } else if (OB_INVALID_ID == orig_table_id_) {
     ret = OB_TABLE_NOT_EXIST;
     ObCStringHelper helper;
     LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(arg_.origin_db_name_),
                                        helper.convert(arg_.origin_table_name_));
   } else if (OB_FAIL(schema_guard_wrapper_.get_table_schema(orig_table_id_, orig_table_schema))) {
+    LOG_WARN("fail to get orig table schema", KR(ret), K_(orig_table_id));
   } else if (OB_ISNULL(orig_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("orig table schema is null", KR(ret));
@@ -103,7 +107,9 @@ int ObCreateTableLikeHelper::check_schema_valid_(const ObTableSchema *&orig_tabl
                    "BASE TABLE");
     LOG_WARN("create table like inner table not allowed", KR(ret), K_(arg));
   } else if (OB_FAIL(check_database_legitimacy_(arg_.new_db_name_, new_database_id))) {
+    LOG_WARN("fail to check database legitimacy", KR(ret), K(arg_.origin_db_name_));
   } else if (OB_FAIL(schema_guard_wrapper_.get_table_id(new_database_id, arg_.session_id_, arg_.new_table_name_, new_table_id, table_type, new_schema_version))) {
+    LOG_WARN("fail to get table id", KR(ret), K(new_database_id), K_(arg_.session_id), K_(arg_.origin_table_name));
   } else if (OB_INVALID_ID != new_table_id) {
     ret = OB_ERR_TABLE_EXIST;
     if (arg_.if_not_exist_) {
@@ -122,7 +128,9 @@ int ObCreateTableLikeHelper::generate_table_schema_()
   uint64_t new_database_id = OB_INVALID_ID;
   uint64_t new_table_id = OB_INVALID_ID;
   if (OB_FAIL(check_inner_stat_())) {
+    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(check_schema_valid_(orig_table_schema, new_database_id))) {
+    LOG_WARN("fail to check schema valid", KR(ret));
   } else if (OB_ISNULL(orig_table_schema) || OB_INVALID_ID == new_database_id) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("orig_table_schema is null or new_database_id invalid", KR(ret), KP(orig_table_schema), K(new_database_id));
@@ -131,11 +139,15 @@ int ObCreateTableLikeHelper::generate_table_schema_()
     ObIDGenerator id_generator;
     int obj_cnt = orig_table_schema->get_constraint_count() + 1;
     if (OB_FAIL(new_table_schema.assign(*orig_table_schema))) {
+      LOG_WARN("fail to assign schema", KR(ret));
     } else if (OB_FAIL(ddl_service_->delete_unused_columns_and_redistribute_schema(*orig_table_schema,
                        false/*need_redistribute_column_id, to avoid column_id mismatched between data table and index ones.*/,
                        new_table_schema))) {
+      LOG_WARN("fail to delete unused columns and redistribute schema", KR(ret), K(*orig_table_schema));
     } else if (OB_FAIL(gen_object_ids_(obj_cnt, id_generator))) {
+      LOG_WARN("fail to gen object ids", KR(ret));
     } else if (OB_FAIL(id_generator.next(new_table_id))) {
+      LOG_WARN("fail to get next object_id", KR(ret));
     } else {
       new_table_schema.set_table_id(new_table_id);
       new_table_schema.set_table_name(arg_.new_table_name_);
@@ -155,14 +167,17 @@ int ObCreateTableLikeHelper::generate_table_schema_()
             if (OB_FAIL(ObTableSchema::create_cons_name_automatically(
                         new_constraint_name, arg_.new_table_name_, allocator_,
                         (*iter)->get_constraint_type()))) {
+              SQL_RESV_LOG(WARN, "create cons name automatically failed", KR(ret));
             } else if (OB_UNLIKELY(0 == new_constraint_name.case_compare((*iter_last)->get_constraint_name_str()))) {
               is_constraint_name_exist = true;
             } else if (OB_FAIL(check_constraint_name_exist_(
                                new_table_schema, new_constraint_name, false /*is_foreign_key*/, is_constraint_name_exist))) {
+              LOG_WARN("fail to check check constraint name is exist or not", KR(ret), K(new_constraint_name));
             }
           } while (OB_SUCC(ret) && is_constraint_name_exist);
           if (OB_SUCC(ret)) {
             if (OB_FAIL(id_generator.next(object_id))) {
+              LOG_WARN("fail to get next object_id", KR(ret));
             } else {
               (*iter)->set_constraint_name(new_constraint_name);
               (*iter)->set_name_generated_type(GENERATED_TYPE_SYSTEM);
@@ -186,6 +201,7 @@ int ObCreateTableLikeHelper::generate_table_schema_()
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(new_tables_.push_back(new_table_schema))) {
+      LOG_WARN("failed to add table schema!", KR(ret));
     }
     } // end heap var
   }
@@ -197,6 +213,7 @@ int ObCreateTableLikeHelper::generate_aux_table_schemas_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
+    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_UNLIKELY(new_tables_.count() <= 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table cnt not match", KR(ret), "table_cnt", new_tables_.count());
@@ -214,6 +231,7 @@ int ObCreateTableLikeHelper::generate_aux_table_schemas_()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("new table scheam is null", KR(ret));
     } else if (OB_FAIL(new_table_schema->get_simple_index_infos(simple_index_infos))) {
+      LOG_WARN("get simple_index_infos failed", KR(ret));
     } else {
       obj_cnt= simple_index_infos.count();
       if (new_table_schema->has_lob_column(true/*ignore_unused_column*/)) {
@@ -230,6 +248,7 @@ int ObCreateTableLikeHelper::generate_aux_table_schemas_()
       const ObTableSchema *index_table_schema = nullptr;
       new_index_schema.reset();
       if (OB_FAIL(schema_guard_wrapper_.get_table_schema(simple_index_infos.at(i).table_id_, index_table_schema))) {
+        LOG_WARN("fail to get index table schema", KR(ret), K_(simple_index_infos.at(i).table_id));
       } else if (OB_ISNULL(index_table_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table schema should not be null", KR(ret));
@@ -241,10 +260,14 @@ int ObCreateTableLikeHelper::generate_aux_table_schemas_()
         ObString new_index_table_name;
         uint64_t new_index_id = OB_INVALID_ID;
         if (OB_FAIL(new_index_schema.assign(*index_table_schema))) {
+          LOG_WARN("fail to assign schema", KR(ret));
         } else if (OB_FAIL(ObTableSchema::get_index_name(allocator_, orig_table_id_,
                            index_table_schema->get_table_name_str(), index_name))) {
+          LOG_WARN("fail to get index name", KR(ret), K(orig_table_id_), K(index_table_schema->get_table_name_str()));
         } else if (OB_FAIL(ObTableSchema::build_index_table_name(allocator_, new_table_id, index_name, new_index_table_name))) {
+          LOG_WARN("fail to build new index table name", KR(ret), K(new_table_id), K(new_index_table_name));
         } else if (OB_FAIL(id_generator.next(new_index_id))) {
+          LOG_WARN("fail to get next object_id", KR(ret));
         } else {
           new_index_schema.set_table_id(new_index_id);
           new_index_schema.set_data_table_id(new_table_id);
@@ -258,19 +281,23 @@ int ObCreateTableLikeHelper::generate_aux_table_schemas_()
               new_index_schema.is_vec_rowkey_vid_type() ||
               new_index_schema.is_vec_vid_rowkey_type()) {
             if (OB_FAIL(shared_schema_array.push_back(new_index_schema))) {
+              LOG_WARN("fail to add shared schema array", KR(ret));
             }
           } else if (new_index_schema.is_fts_index_aux() ||
                      new_index_schema.is_multivalue_index_aux() ||
                      new_index_schema.is_vec_domain_index()) {
             if (OB_FAIL(domain_schema_array.push_back(new_index_schema))) {
+              LOG_WARN("fail to add domain schema", KR(ret));
             }
           } else if (share::schema::is_fts_doc_word_aux(index_type) ||
                      share::schema::is_vec_index_id_type(index_type) ||
                      share::schema::is_vec_index_snapshot_data_type(index_type) ||
                      share::schema::is_built_in_vec_ivf_index(index_type)) {
             if (OB_FAIL(aux_schema_array.push_back(new_index_schema))) {
+              LOG_WARN("fail to add aux schema", KR(ret));
             }
           } else if (OB_FAIL(new_tables_.push_back(new_index_schema))) {
+            LOG_WARN("fail to add index schema", KR(ret));
           }
         }
       }
@@ -284,7 +311,9 @@ int ObCreateTableLikeHelper::generate_aux_table_schemas_()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("new table schema is null", KR(ret), K(new_table_schema));
       } else if (OB_FAIL(ObFtsIndexBuilderUtil::check_need_doc_id(*new_table_schema, need_doc_id))) {
+        LOG_WARN("fail to check need doc id", K(ret));
       } else if (OB_FAIL(ObVectorIndexUtil::check_need_vid(*new_table_schema, need_vid))) {
+        LOG_WARN("fail to check need vid", K(ret));
       } else if (OB_FAIL(ObDomainIndexBuilderUtil::retrieve_complete_domain_index(shared_schema_array,
                                                                                   domain_schema_array,
                                                                                   aux_schema_array,
@@ -293,6 +322,7 @@ int ObCreateTableLikeHelper::generate_aux_table_schemas_()
                                                                                   new_tables_,
                                                                                   need_doc_id,
                                                                                   need_vid))) {
+        LOG_WARN("fail to retrieve complete index", KR(ret));
       }
     }
     new_table_schema = &(new_tables_.at(0));
@@ -307,13 +337,19 @@ int ObCreateTableLikeHelper::generate_aux_table_schemas_()
       bool need_object_id = false;
       uint64_t object_id = OB_INVALID_ID;
       if (OB_FAIL(id_generator.next(object_id))) {
+        LOG_WARN("fail to get next object_id", KR(ret));
       } else if (OB_FAIL(lob_meta_builder.generate_aux_lob_meta_schema(
         schema_service_->get_schema_service(), *new_table_schema, object_id, lob_meta_schema, need_object_id))) {
+        LOG_WARN("generate lob meta table failed", KR(ret), K(new_table_schema));
       } else if (OB_FAIL(id_generator.next(object_id))) {
+        LOG_WARN("fail to get next object_id", KR(ret));
       } else if (OB_FAIL(lob_piece_builder.generate_aux_lob_piece_schema(
         schema_service_->get_schema_service(), *new_table_schema, object_id, lob_piece_schema, need_object_id))) {
+        LOG_WARN("generate_schema for lob data table failed", KR(ret), K(new_table_schema));
       } else if (OB_FAIL(new_tables_.push_back(lob_meta_schema))) {
+        LOG_WARN("push_back lob meta table failed", KR(ret));
       } else if (OB_FAIL(new_tables_.push_back(lob_piece_schema))) {
+        LOG_WARN("push_back lob piece table failed", KR(ret));
       } else {
         new_table_schema = &new_tables_.at(0); // memory of data table may change after add table to new_tables_
         if (OB_ISNULL(new_table_schema)) {
@@ -335,12 +371,16 @@ int ObCreateTableLikeHelper::generate_foreign_keys_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
+    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(schema_guard_wrapper_.get_mock_fk_parent_table_id(
     new_tables_.at(0).get_database_id(), arg_.new_table_name_, replace_mock_fk_parent_table_id_))) {
+    LOG_WARN("fail to ge mock fk parent table id",
+              KR(ret), K(new_tables_.at(0).get_database_id()), K_(arg_.new_table_name));
   } else if (OB_INVALID_ID != replace_mock_fk_parent_table_id_) {
     ObMockFKParentTableSchema *new_mock_fk_parent_table = nullptr;
     if (OB_FAIL(try_replace_mock_fk_parent_table_(replace_mock_fk_parent_table_id_,
                                                   new_mock_fk_parent_table))) {
+      LOG_WARN("replace mock fk parent table failed", KR(ret));
     } else if (OB_NOT_NULL(new_mock_fk_parent_table)
                && OB_FAIL(new_mock_fk_parent_tables_.push_back(new_mock_fk_parent_table))) {
       LOG_WARN("fail to push back mock fk parent table", KR(ret), K(new_mock_fk_parent_table));
@@ -353,8 +393,10 @@ int ObCreateTableLikeHelper::generate_foreign_keys_()
 int ObCreateTableLikeHelper::operate_schemas_() {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
+    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(inner_create_table_(&arg_.ddl_stmt_str_,
                                          replace_mock_fk_parent_table_id_))) {
+    LOG_WARN("fail create table", KR(ret));
   }
   return ret;
 }
@@ -376,6 +418,7 @@ int ObCreateTableLikeHelper::construct_and_adjust_result_(int &return_ret) {
   if (FAILEDx(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(get_current_version_(res_.schema_version_))) {
+    LOG_WARN("fail to get current version", KR(ret));
   }
   if (OB_ERR_TABLE_EXIST == ret) {
     adjust_create_if_not_exist_(ret, arg_.if_not_exist_, res_.do_nothing_);

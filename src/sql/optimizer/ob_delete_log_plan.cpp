@@ -57,12 +57,14 @@ int ObDeleteLogPlan::generate_normal_raw_plan()
     LOG_TRACE("start to allocate operators for ", "sql", get_optimizer_context().get_query_ctx()->get_sql_stmt());
     OPT_TRACE("generate plan for ", get_stmt());
     if (OB_FAIL(generate_plan_tree())) {
+      LOG_WARN("failed to generate plan tree for plain select", K(ret));
     } else {
       LOG_TRACE("succeed to generate plan tree", K(candidates_.candidate_plans_.count()));
     }
 
     if (OB_SUCC(ret) && get_subquery_filters().count() > 0) {
       if (OB_FAIL(candi_allocate_subplan_filter_for_where())) {
+        LOG_WARN("failed to allocate subplan filter for where statement", K(ret));
       } else {
         LOG_TRACE("succeed to allocate subplan filter for where statement",
             K(candidates_.candidate_plans_.count()));
@@ -72,6 +74,7 @@ int ObDeleteLogPlan::generate_normal_raw_plan()
     // 2 allocate 'order-by' if needed
     if (OB_SUCC(ret) && delete_stmt->has_order_by()) {
       if (OB_FAIL(candi_allocate_order_by(need_limit, order_items))) {
+        LOG_WARN("failed to allocate order by operator", K(ret));
       } else {
         LOG_TRACE("succeed to allocate order by operator", K(candidates_.candidate_plans_.count()));
       }
@@ -80,6 +83,7 @@ int ObDeleteLogPlan::generate_normal_raw_plan()
     // 3. allocate 'limit' if needed
     if (OB_SUCC(ret) && delete_stmt->has_limit() && need_limit) {
       if (OB_FAIL(candi_allocate_limit(order_items))) {
+        LOG_WARN("failed to allocate limit operator", K(ret));
       } else {
         LOG_TRACE("succeed to allocate limit operator", K(candidates_.candidate_plans_.count()));
       }
@@ -87,20 +91,25 @@ int ObDeleteLogPlan::generate_normal_raw_plan()
     
     if (OB_SUCC(ret) && delete_stmt->has_for_update()) {
       if (OB_FAIL(candi_allocate_for_update())) {
+        LOG_WARN("failed to allocate for update operator", K(ret));
       }
     }
     
     // 4. allocate delete operator
     if (OB_SUCC(ret)) {
       if (OB_FAIL(prepare_dml_infos())) {
+        LOG_WARN("failed to prepare dml infos", K(ret));
       } else if (OB_FAIL(compute_dml_parallel())) {
+        LOG_WARN("failed to compute dml parallel", K(ret));
       } else if (use_pdml()) {
         if (OB_FAIL(candi_allocate_pdml_delete())) {
+          LOG_WARN("failed to allocate pdml as top", K(ret));
         } else {
           LOG_TRACE("succeed to allocate pdml operator", K(candidates_.candidate_plans_.count()));
         }
       } else {
         if (OB_FAIL(candi_allocate_delete())) {
+          LOG_WARN("failed to allocate delete operator", K(ret));
         } else {
           LOG_TRACE("succeed to allocate delete operator",
               K(candidates_.candidate_plans_.count()));
@@ -111,6 +120,7 @@ int ObDeleteLogPlan::generate_normal_raw_plan()
     //allocate temp-table transformation if needed.
     if (OB_SUCC(ret) && !get_optimizer_context().get_temp_table_infos().empty() && is_final_root_plan()) {
       if (OB_FAIL(candi_allocate_temp_table_transformation())) {
+        LOG_WARN("failed to allocate transformation operator", K(ret));
       } else {
         LOG_TRACE("succeed to allocate temp-table transformation",
             K(candidates_.candidate_plans_.count()));
@@ -120,6 +130,7 @@ int ObDeleteLogPlan::generate_normal_raw_plan()
     // allocate root exchange
     if (OB_SUCC(ret)) {
       if (OB_FAIL(candi_allocate_root_exchange())) {
+        LOG_WARN("failed to allocate root exchange", K(ret));
       } else if (!delete_stmt->has_limit() &&
                  OB_FAIL(check_fullfill_safe_update_mode(get_plan_root()))) {
         LOG_WARN("failed to check fullfill safe update mode", K(ret));
@@ -147,19 +158,24 @@ int ObDeleteLogPlan::candi_allocate_delete()
   OPT_TRACE("force no multi part:", force_no_multi_part);
   OPT_TRACE("force multi part:", force_multi_part);
   if (OB_FAIL(check_table_rowkey_distinct(index_dml_infos_, need_duplicate_date))) {
+    LOG_WARN("failed to check table rowkey distinct", K(ret));
   } else if (OB_FAIL(get_minimal_cost_candidates(candidates_.candidate_plans_, candi_plans))) {
+    LOG_WARN("failed to get minimal cost candidates", K(ret));
   } else if (OB_FAIL(create_delete_plans(candi_plans,
                                          force_no_multi_part,
                                          force_multi_part,
                                          delete_plans))) {
+    LOG_WARN("failed to create delete plans", K(ret));
   } else if (!delete_plans.empty()) {
     LOG_TRACE("succeed to create delete plan using hint", K(delete_plans.count()));
   } else if (OB_FAIL(create_delete_plans(candi_plans, false, false, delete_plans))) {
+    LOG_WARN("failed to create delete plans", K(ret));
   } else {
     LOG_TRACE("succeed to create delete plan ignore hint", K(delete_plans.count()));
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(prune_and_keep_best_plans(delete_plans))) {
+      LOG_WARN("failed to prune and keep best plans", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -199,7 +215,9 @@ int ObDeleteLogPlan::create_delete_plans(ObIArray<CandidatePlan> &candi_plans,
                OB_FAIL(allocate_exchange_as_top(candi_plan.plan_tree_, exch_info))) {
       LOG_WARN("failed to allocate exchange as top", K(ret));
     } else if (OB_FAIL(allocate_delete_as_top(candi_plan.plan_tree_, is_multi_part_dml))) {
+      LOG_WARN("failed to allocate delete as top", K(ret));
     } else if (OB_FAIL(delete_plans.push_back(candi_plan))) {
+      LOG_WARN("failed to push back", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -225,7 +243,9 @@ int ObDeleteLogPlan::allocate_delete_as_top(ObLogicalOperator *&top,
       delete_op->set_das_dop(max_dml_parallel_);
     }
     if (OB_FAIL(delete_op->assign_dml_infos(index_dml_infos_))) {
+      LOG_WARN("failed to assign dml infos", K(ret));
     } else if (OB_FAIL(delete_op->compute_property())) {
+      LOG_WARN("failed to compute property", K(ret));
     } else {
       top = delete_op;
     }
@@ -244,7 +264,9 @@ int ObDeleteLogPlan::candi_allocate_pdml_delete()
                                                (i == gidx_cnt - 1),
                                                is_pdml_update_split,
                                                index_dml_infos_.at(i)))) {
+      LOG_WARN("failed to allocate one pdml delete", K(ret));
     } else {
+      LOG_TRACE("succeed to allocate one pdml delete");
     }
   }
   return ret;
@@ -269,10 +291,12 @@ int ObDeleteLogPlan::prepare_dml_infos()
       } else if (OB_FAIL(prepare_table_dml_info_basic(*table_info,
                                                       table_dml_info,
                                                       index_dml_infos))) {
+        LOG_WARN("failed to prepare table dml info basic", K(ret));
       } else if (OB_FAIL(prepare_table_dml_info_special(*table_info,
                                                         table_dml_info,
                                                         index_dml_infos,
                                                         index_dml_infos_))) {
+        LOG_WARN("failed to prepare table dml info special", K(ret));
       }
     }
   }
@@ -302,6 +326,7 @@ int ObDeleteLogPlan::prepare_table_dml_info_special(const ObDmlTableInfo& table_
     } else if (OB_FAIL(schema_guard->get_table_schema(
                                                       index_dml_info->ref_table_id_,
                                                       index_schema))) {
+      LOG_WARN("failed to get table schema", K(ret));
     } else if (OB_ISNULL(index_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get table schema", KPC(index_dml_info), K(ret));
@@ -309,6 +334,7 @@ int ObDeleteLogPlan::prepare_table_dml_info_special(const ObDmlTableInfo& table_
                                                    *index_schema,
                                                    empty_assignments,
                                                    index_dml_info->column_exprs_))) {
+      LOG_WARN("resolve index related column exprs failed", K(ret), K(table_info));
     }
   }
   

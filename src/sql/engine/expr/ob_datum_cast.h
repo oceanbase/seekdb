@@ -33,17 +33,7 @@ namespace oceanbase
 {
 namespace sql
 {
-int ob_obj_to_ob_time_with_date(
-    const common::ObObj &obj,
-    const common::ObTimeZoneInfo *tz_info,
-    common::ObTime &ob_time,
-    int64_t cur_ts_value,
-    common::ObDateSqlMode date_sql_mode = 0);
-int ob_obj_to_ob_time_without_date(
-    const common::ObObj &obj,
-    const common::ObTimeZoneInfo *tz_info,
-    common::ObTime &ob_time);
-
+// demoted from common::ObObjCaster::get_zero_value: builds a zero-value ObObj for a type(uses this file's SET_RES macro)
 int get_obj_zero_value(const common::ObObjType expect_type, common::ObCollationType expect_cs_type, common::ObObj &zero_obj);
 
 class ObPhysicalPlanCtx;
@@ -191,8 +181,7 @@ int string_collation_check(const bool is_strict_mode,
                            common::ObString &str);
 // Convert the value in T to ob_time structure
 template<typename T>
-int ob_datum_to_ob_time_with_date(ObExecContext &exec_ctx,
-                                  const T &datum,
+int ob_datum_to_ob_time_with_date(const T &datum,
                                   const common::ObObjType type,
                                   const ObScale scale,
                                   const common::ObTimeZoneInfo* tz_info,
@@ -226,6 +215,7 @@ int ob_datum_to_ob_time_with_date(ObExecContext &exec_ctx,
     case ObTimeTC: {
       int64_t dt_value = 0;
       if (OB_FAIL(ObTimeConverter::timestamp_to_datetime(cur_ts_value, tz_info, dt_value))) {
+        SQL_ENG_LOG(WARN, "convert timestamp to datetime failed", K(ret));
       } else {
         const int64_t usec_per_day = 3600 * 24 * USECS_PER_SEC;
         // Extract the date from datetime, then convert to microseconds
@@ -240,8 +230,9 @@ int ob_datum_to_ob_time_with_date(ObExecContext &exec_ctx,
       ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER,
                                      OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObString str = datum.get_string();
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(exec_ctx,
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(
               &lob_allocator, type, CS_TYPE_BINARY, has_lob_header, str))) {
+        SQL_ENG_LOG(WARN, "fail to get real string data", K(ret), K(datum));
       } else {
         ret = ObTimeConverter::str_to_ob_time_with_date(str, ob_time, &res_scale, date_sql_mode);
       }
@@ -257,6 +248,7 @@ int ob_datum_to_ob_time_with_date(ObExecContext &exec_ctx,
         if (OB_FAIL(wide::to_number(datum.get_decimal_int(),
                                     datum.get_int_bytes(), scale, tmp_alloc,
                                     num))) {
+          SQL_ENG_LOG(WARN, "failed to cast decimal int to number", K(ret));
         }
       } else {
         num = datum.get_number();
@@ -292,11 +284,12 @@ int ob_datum_to_ob_time_with_date(ObExecContext &exec_ctx,
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "cast to time with date");
     }
   }
+  SQL_ENG_LOG(DEBUG, "end ob_datum_to_ob_time_with_date", K(type),
+              K(cur_ts_value), K(ob_time), K(ret));
   return ret;
 }
 template<typename T>
-int ob_datum_to_ob_time_without_date(ObExecContext &exec_ctx,
-                                    const T &datum,
+int ob_datum_to_ob_time_without_date(const T &datum,
                                     const common::ObObjType type,
                                     const ObScale scale,
                                     const common::ObTimeZoneInfo *tz_info,
@@ -309,6 +302,7 @@ int ob_datum_to_ob_time_without_date(ObExecContext &exec_ctx,
       // fallthrough.
     case ObUIntTC: {
       if (OB_FAIL(ObTimeConverter::int_to_ob_time_without_date(datum.get_int(), ob_time))) {
+        SQL_ENG_LOG(WARN, "int to ob time without date failed", K(ret));
       } else {
         // When converting intTC to time in mysql, if hour exceeds 838, then time should be null, rather than the maximum value.
         const int64_t time_max_val = TIME_MAX_VAL;    // 838:59:59.
@@ -341,8 +335,9 @@ int ob_datum_to_ob_time_without_date(ObExecContext &exec_ctx,
     case ObStringTC: {
       ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObString str = datum.get_string();
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(exec_ctx,
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(
               &lob_allocator, type, CS_TYPE_BINARY, has_lob_header, str))) {
+        SQL_ENG_LOG(WARN, "fail to get real string data", K(ret), K(datum));
       } else {
         ret = ObTimeConverter::str_to_ob_time_without_date(str, ob_time);
         if (OB_SUCC(ret)) {
@@ -366,6 +361,7 @@ int ob_datum_to_ob_time_without_date(ObExecContext &exec_ctx,
         if (OB_FAIL(wide::to_number(datum.get_decimal_int(),
                                     datum.get_int_bytes(), scale, tmp_alloc,
                                     num))) {
+          SQL_ENG_LOG(WARN, "failed to cast decimal int to number", K(ret));
         }
       } else {
         num = datum.get_number();
@@ -377,6 +373,7 @@ int ob_datum_to_ob_time_without_date(ObExecContext &exec_ctx,
         SQL_ENG_LOG(WARN, "invalid date format", K(ret), K(num));
       } else {
         if (OB_FAIL(ObTimeConverter::int_to_ob_time_without_date(int_part, ob_time, dec_part))) {
+          SQL_ENG_LOG(WARN, "int to ob time without date failed", K(ret));
         } else {
           if ((!ob_time.parts_[DT_YEAR]) && (!ob_time.parts_[DT_MON]) &&
               (!ob_time.parts_[DT_MDAY])) {
@@ -405,6 +402,7 @@ int ob_datum_to_ob_time_without_date(ObExecContext &exec_ctx,
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "cast to time without date");
     }
   }
+  SQL_ENG_LOG(DEBUG, "end ob_datum_to_ob_time_without_date", K(type), K(ob_time), K(ret));
   return ret;
 }
 

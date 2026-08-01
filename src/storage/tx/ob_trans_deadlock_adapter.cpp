@@ -15,18 +15,50 @@
  */
 
 #include "ob_trans_deadlock_adapter.h"
-#include "data_plane/transaction/ob_deadlock.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
+#include "sql/engine/ob_exec_context.h"
 
 namespace oceanbase
 {
+using namespace sql;
 using namespace common;
 using namespace share::detector;
 
 namespace transaction
 {
+
+SessionGuard::SessionGuard() : sess_ptr_(nullptr) {}
+
+SessionGuard::~SessionGuard()
+{
+  revert_session_();
+}
+
+void SessionGuard::set_session(sql::ObSQLSessionInfo *session_ptr)
+{
+  revert_session_();
+  sess_ptr_ = session_ptr;
+}
+
+bool SessionGuard::is_valid() const { return nullptr != sess_ptr_; }
+
+sql::ObSQLSessionInfo *SessionGuard::operator->() const { return sess_ptr_; }
+
+sql::ObSQLSessionInfo &SessionGuard::get_session() const { return *sess_ptr_; };
+
+void SessionGuard::revert_session_()
+{
+  if (nullptr != sess_ptr_) {
+    if (OB_ISNULL(GCTX.session_mgr_)) {
+      DETECT_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "GCTX.session_mgr is NULL, session will leak", K_(sess_ptr));
+    } else {
+      GCTX.session_mgr_->revert_session(sess_ptr_);
+    }
+  }
+  sess_ptr_ = nullptr;
+}
 
 #define CHECK_DEADLOCK_ENABLED() \
 do {\
@@ -57,70 +89,100 @@ void ObTransDeadlockDetectorAdapter::copy_str_and_translate_apostrophe(const cha
   }
 };
 
-int ObTransDeadlockDetectorAdapter::kill_tx(
-    query::ObIDeadlockSessionService &session_service,
-    const uint32_t sess_id)
-{
+int ObTransDeadlockDetectorAdapter::get_session_info(const uint32_t session_id, SessionGuard &guard) {
   int ret = OB_SUCCESS;
-  memtable::ObLockWaitMgr *mgr = nullptr;
-  if (OB_UNLIKELY(sess_id == 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    DETECT_LOG(WARN, "invalid argument", K(ret), K(sess_id));
-  } else if (OB_ISNULL(mgr = ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>())) {
+  sql::ObSQLSessionInfo *session_info = nullptr;
+  if (OB_ISNULL(GCTX.session_mgr_)) {
     ret = OB_ERR_UNEXPECTED;
-    DETECT_LOG(WARN, "can't get lock wait mgr", K(ret), K(sess_id));
+    DETECT_LOG(WARN, "GCTX.session_mgr is NULL",
+                     KR(ret), K(session_id), KP(GCTX.session_mgr_), K(lbt()));
+  } else if (OB_FAIL(GCTX.session_mgr_->get_session(session_id, session_info))) {
+    DETECT_LOG(WARN, "get session info failed", KR(ret), K(session_id), K(lbt()));
   } else {
-    query::ObDeadlockSessionGuard session_guard(session_service);
-    if (OB_FAIL(session_guard.acquire(sess_id))) {
-    } else if (OB_FAIL(session_guard.mark_transaction_victim())) {
-    } else {
-      mgr->notify_deadlocked_session(sess_id);
-      DETECT_LOG(INFO, "set query deadlocked success in mysql mode",
-                 K(ret), K(sess_id));
-    }
+    guard.set_session(session_info);
   }
   return ret;
 }
 
-int ObTransDeadlockDetectorAdapter::kill_stmt(
-    query::ObIDeadlockSessionService &session_service,
-    const uint32_t sess_id)
+
+int ObTransDeadlockDetectorAdapter::kill_tx(const uint32_t sess_id)
 {
   int ret = OB_SUCCESS;
   memtable::ObLockWaitMgr *mgr = nullptr;
+  SessionGuard session_guard;
+  sql::ObSQLSessionInfo *session_info = nullptr;
   if (OB_UNLIKELY(sess_id == 0)) {
     ret = OB_INVALID_ARGUMENT;
     DETECT_LOG(WARN, "invalid argument", K(ret), K(sess_id));
-  } else if (OB_ISNULL(mgr = ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>())) {
+  } else if (OB_FAIL(get_session_info(sess_id, session_guard))) {
+    DETECT_LOG(WARN, "get session guard failed", K(ret), K(sess_id));
+  } else if (!session_guard.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    DETECT_LOG(WARN, "can't get lock wait mgr", K(ret), K(sess_id));
+    DETECT_LOG(WARN, "session guard invalid", K(ret), K(sess_id));
+  } else if (FALSE_IT(session_info = &session_guard.get_session())) {
+  } else if (OB_ISNULL(GCTX.session_mgr_)) {
+    ret = OB_ERR_UNEXPECTED;
+    DETECT_LOG(WARN, "can't get session mgr", K(ret), K(sess_id), K(*session_info));
+  } else if (OB_ISNULL(mgr = share::g_mp->lock_wait_mgr())) {
+    ret = OB_ERR_UNEXPECTED;
+    DETECT_LOG(WARN, "can't get lock wait mgr", K(ret), K(sess_id), K(*session_info));
+  } else if (OB_FAIL(GCTX.session_mgr_->kill_deadlock_tx(session_info))) {
+    DETECT_LOG(WARN, "fail to kill transaction", K(ret), K(sess_id), K(*session_info));
+  } else if (OB_FAIL(GCTX.session_mgr_->set_query_deadlocked(*session_info))) {
+    DETECT_LOG(WARN, "set query dealocked failed", K(ret), K(sess_id), K(*session_info));
   } else {
-    query::ObDeadlockSessionGuard session_guard(session_service);
-    if (OB_FAIL(session_guard.acquire(sess_id))) {
-    } else if (OB_FAIL(session_guard.mark_statement_victim())) {
-    } else {
-      mgr->notify_deadlocked_session(sess_id);
-      TRANS_LOG(INFO, "set query deadlocked success", K(ret), K(sess_id));
-    }
+    session_info->reset_tx_variable();
+    mgr->notify_deadlocked_session(sess_id);
+    DETECT_LOG(INFO, "set query dealocked success in mysql mode", K(ret), K(sess_id), K(*session_info));
   }
   return ret;
 }
 
-// Remote execution retries each time when the lock needed is held by others.
-// Before each retry, the remote execution will rollback previous operations
+int ObTransDeadlockDetectorAdapter::kill_stmt(const uint32_t sess_id)
+{
+  int ret = OB_SUCCESS;
+  memtable::ObLockWaitMgr *mgr = nullptr;
+  SessionGuard session_guard;
+  sql::ObSQLSessionInfo *session_info = nullptr;
+  if (OB_UNLIKELY(sess_id == 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    DETECT_LOG(WARN, "invalid argument", K(ret), K(sess_id));
+  } else if (OB_FAIL(get_session_info(sess_id, session_guard))) {
+    DETECT_LOG(WARN, "get session guard failed", K(ret), K(sess_id));
+  } else if (!session_guard.is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    DETECT_LOG(WARN, "session guard invalid", K(ret), K(sess_id));
+  } else if (FALSE_IT(session_info = &session_guard.get_session())) {
+  } else if (OB_ISNULL(GCTX.session_mgr_)) {
+    ret = OB_ERR_UNEXPECTED;
+    DETECT_LOG(WARN, "can't get session mgr", K(ret), K(sess_id), K(*session_info));
+  } else if (OB_ISNULL(mgr = share::g_mp->lock_wait_mgr())) {
+    ret = OB_ERR_UNEXPECTED;
+    DETECT_LOG(WARN, "can't get lock wait mgr", K(ret), K(sess_id), K(*session_info));
+  } else if (OB_FAIL(GCTX.session_mgr_->set_query_deadlocked(*session_info))) {
+    TRANS_LOG(WARN, "set query dealocked failed", K(ret), K(sess_id), K(*session_info));
+  } else {
+    mgr->notify_deadlocked_session(sess_id);
+    TRANS_LOG(INFO, "set query dealocked success", K(ret), K(sess_id), K(*session_info));
+  }
+  return ret;
+}
+
+// Statement execution retries each time when the lock needed is held by others.
+// Before each retry, execution rolls back previous operations
 // through end_stmt.
 //
 // So we register the lock dependency when the retry is needed. The conflicts
-// are detected and passed through trans_result during remote execution. NB:
+// are detected and passed through trans_result during statement execution. NB:
 // what we need pay special attention to is how to handle different conflicts in
-// different reties. If the deadlock detector just activate all previous
+// different retries. If the deadlock detector just activates all previous
 // conflicts and block on all new conflicts, the liveness may be broken because
 // each retry will push the private label and cause the cycle to be unstable.
 // Current solution is to use the primitive interface, replace_block_list,
-// which keeps the unchanged conflicts, activates disappearred conflicts and
+// which keeps the unchanged conflicts, activates disappeared conflicts and
 // blocks on new conflicts.
 //
-// The dependency is unregisterred when no conflicts appear in trans_result.
+// The dependency is unregistered when no conflicts appear in trans_result.
 
 int ObTransOnDetectOperation::operator()(
     const common::ObIArray<share::detector::ObDetectorInnerReportInfo> &info,
@@ -128,18 +190,19 @@ int ObTransOnDetectOperation::operator()(
   CHECK_DEADLOCK_ENABLED();
   UNUSED(info);
   UNUSED(self_idx);
+  SessionGuard session_guard;
   int ret = OB_SUCCESS;
   int step = 0;
 
-  if (++step && OB_UNLIKELY(nullptr == session_service_
-                           || sess_id_ == 0
-                           || !trans_id_.is_valid())) {
+  if (++step && OB_UNLIKELY(sess_id_ == 0 || !trans_id_.is_valid())) {
     ret = OB_NOT_INIT;
+  } else if (++step && OB_FAIL(ObTransDeadlockDetectorAdapter::get_session_info(sess_id_, session_guard))) {
+  } else if (++step && !session_guard.is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
   } else if (FALSE_IT(step++)) {
     // seekdb is MySQL-only; always kill_tx path
   } else {
-    ret = ObTransDeadlockDetectorAdapter::kill_tx(
-        *session_service_, sess_id_);
+    ret = ObTransDeadlockDetectorAdapter::kill_tx(sess_id_);
   }
 
   if (!OB_SUCC(ret)) {
@@ -149,14 +212,11 @@ int ObTransOnDetectOperation::operator()(
   return ret;
 }
 
-/******************************[FOR REMOTE EXECUTION]******************************/
+/******************************[FOR STATEMENT RETRY]******************************/
 
-class RemoteDeadLockCollectCallBack {
+class StatementDeadLockCollectCallBack {
 public:
-  RemoteDeadLockCollectCallBack(
-      query::ObIDeadlockSessionService &session_service,
-      const uint32_t &sess_id)
-    : session_service_(&session_service), sess_id_(sess_id) {}
+  StatementDeadLockCollectCallBack(const uint32_t &sess_id) : sess_id_(sess_id) {}
   int operator()(ObDetectorUserReportInfo &info) {
     CHECK_DEADLOCK_ENABLED();
     int ret = OB_SUCCESS;
@@ -173,34 +233,34 @@ public:
       ret = OB_ALLOCATE_MEMORY_FAILED;
       DETECT_LOG(WARN, "alloc memory failed", KR(ret));
     } else {
-      query::ObDeadlockSessionGuard session_guard(*session_service_);
-      query::ObDeadlockSessionFacts session_facts;
-      ObTransID session_tx_id;
-      if (OB_FAIL(session_guard.acquire(sess_id_))) {
-      } else if (OB_FAIL(session_guard.get_deadlock_facts(session_facts))) {
-      } else if (!session_facts.has_transaction_) {
+      SessionGuard session_guard;
+      ObTransID self_trans_id;
+      if (OB_FAIL(ObTransDeadlockDetectorAdapter::get_session_info(sess_id_, session_guard))) {
+        DETECT_LOG(WARN, "got session info is NULL", KR(ret), K(session_guard), K(sess_id_));
+      } else if (!session_guard.is_valid()) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_ISNULL(session_guard->get_tx_desc())) {
         ret = OB_ERR_UNEXPECTED;
         DETECT_LOG(WARN, "desc on session is not valid", KR(ret));
-      } else if (FALSE_IT(session_tx_id = session_facts.transaction_id_)) {
-      } else if (!session_tx_id.is_valid()) {
+      } else if (!(session_guard->get_tx_desc()->get_tx_id().is_valid())) {
         ret = OB_ERR_UNEXPECTED;
         DETECT_LOG(WARN, "trans id on desc on session is not valid", KR(ret));
       } else {
         ObSharedGuard<char> temp_guard;
-        const ObString &cur_query_str = session_facts.current_query_;
+        const ObString &cur_query_str = session_guard->get_current_query_string();
         if (cur_query_str.empty()) {
-          DETECT_LOG(WARN, "cur_query_str on session is empty", K(cur_query_str), K(sess_id_));
+          DETECT_LOG(WARN, "cur_query_str on session is empty", K(cur_query_str), K(session_guard.get_session()));
         } else {
-          DETECT_LOG(WARN, "cur_query_str on session is not empty", K(cur_query_str), K(sess_id_));
+          DETECT_LOG(WARN, "cur_query_str on session is not empty", K(cur_query_str), K(session_guard.get_session()));
         }
         ObTransDeadlockDetectorAdapter::copy_str_and_translate_apostrophe(cur_query_str.ptr(),
                                                                           cur_query_str.length(),
                                                                           buffer_current_sql,
                                                                           current_sql_str_len);
-        (void) session_tx_id.to_string(buffer_trans_id, trans_id_str_len);
+        (void) session_guard->get_tx_desc()->get_tx_id().to_string(buffer_trans_id, trans_id_str_len);
         if (++step && OB_FAIL(temp_guard.assign((char*)"transaction", [](char*){}))) {
         } else if (++step && OB_FAIL(info.set_module_name(temp_guard))) {
-        } else if (++step && OB_FAIL(temp_guard.assign((char*)"remote row", [](char*){}))) {
+        } else if (++step && OB_FAIL(temp_guard.assign((char*)"row", [](char*){}))) {
         } else if (++step && OB_FAIL(info.set_resource(temp_guard))) {
         } else if (++step && OB_FAIL(temp_guard.assign(buffer_trans_id, [](char *ptr){ ob_free(ptr); }))) {
         } else if (FALSE_IT(buffer_trans_id = nullptr)) {
@@ -223,7 +283,6 @@ public:
     return ret;
   }
 private:
-  query::ObIDeadlockSessionService *session_service_;
   const uint32_t sess_id_;
 };
 
@@ -238,47 +297,50 @@ int ObTransDeadlockDetectorAdapter::gen_dependency_resource_array_(const ObIArra
       ret = OB_ERR_UNEXPECTED;
       DETECT_LOG(ERROR, "invalid trans id");
     } else if (OB_FAIL(binary_key.set_user_key(blocked_trans_ids.at(idx)))) {
+      DETECT_LOG(ERROR, "fail to create key");
     } else if (OB_FAIL(resource.set_args(binary_key))) {
+      DETECT_LOG(ERROR, "fail to create resource");
     } else if (OB_FAIL(dependency_resources.push_back(resource))) {
+      DETECT_LOG(ERROR, "fail to push resource");
     }
   }
   return ret;
 }
 
-int ObTransDeadlockDetectorAdapter::register_to_deadlock_detector_(
-                                                                   query::ObIDeadlockSessionService &session_service,
-                                                                   const ObTransID self_tx_id,
+int ObTransDeadlockDetectorAdapter::register_to_deadlock_detector_(const ObTransID self_tx_id,
                                                                    const uint32_t self_session_id,
                                                                    const ObIArray<ObTransID> &conflict_tx_ids,
-                                                                   const query::ObDeadlockSessionFacts &session_facts)
+                                                                   SessionGuard &session_guard)
 {
   #define PRINT_WRAPPER KR(ret), K(self_tx_id), K(self_session_id), K(conflict_tx_ids), K(query_timeout)
   int ret = OB_SUCCESS;
   int64_t query_timeout = 0;
-  RemoteDeadLockCollectCallBack on_collect_op(
-      session_service, self_session_id);
-  ObTransOnDetectOperation on_detect_op(
-      session_service, self_session_id, self_tx_id);
+  StatementDeadLockCollectCallBack on_collect_op(self_session_id);
+  ObTransOnDetectOperation on_detect_op(self_session_id, self_tx_id);
   ObSEArray<ObDependencyResource, DEFAULT_BLOCKED_TRANS_ID_COUNT> blocked_resources;
   if (OB_UNLIKELY(conflict_tx_ids.empty())) {
     DETECT_LOG(INFO, "conflict tx idx is empty", PRINT_WRAPPER);
-  } else if (!session_facts.has_transaction_) {
+  } else if (OB_FAIL(session_guard->get_query_timeout(query_timeout))) {
+    DETECT_LOG(ERROR, "get query timeout ts failed", PRINT_WRAPPER);
+  } else if (OB_ISNULL(session_guard->get_tx_desc())) {
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(ERROR, "tx desc on session is NULL", PRINT_WRAPPER);
-  } else if (FALSE_IT(query_timeout = session_facts.query_timeout_us_)) {
   } else if (OB_FAIL(gen_dependency_resource_array_(conflict_tx_ids, blocked_resources))) {
-  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>())) {
+    DETECT_LOG(WARN, "fail to generate block resource", PRINT_WRAPPER);
+  } else if (OB_ISNULL(share::g_mp->dead_lock_detector_mgr())) {
     ret = OB_ERR_UNEXPECTED;
-    DETECT_LOG(ERROR, "mtl deadlock detector mgr is null", PRINT_WRAPPER);
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->register_key(self_tx_id,
+    DETECT_LOG(ERROR, "runtime deadlock detector mgr is null", PRINT_WRAPPER);
+  } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->register_key(self_tx_id,
                                                                on_detect_op,
                                                                on_collect_op,
-                                                               ~session_facts.transaction_start_ts_,
+                                                               ~session_guard->get_tx_desc()->get_active_ts(),
                                                                3_s,
                                                                10))) {
+    DETECT_LOG(WARN, "fail to register deadlock", PRINT_WRAPPER);
   } else {
-    ::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->set_timeout(self_tx_id, query_timeout);
-    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->block(self_tx_id, blocked_resources))) {
+    share::g_mp->dead_lock_detector_mgr()->set_timeout(self_tx_id, query_timeout);
+    if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->block(self_tx_id, blocked_resources))) {
+      DETECT_LOG(WARN, "block on resource failed", PRINT_WRAPPER);
     } else {
       DETECT_LOG(INFO, "register to deadlock detector success", PRINT_WRAPPER);
     }
@@ -288,7 +350,8 @@ int ObTransDeadlockDetectorAdapter::register_to_deadlock_detector_(
 }
 
 int ObTransDeadlockDetectorAdapter::replace_conflict_trans_ids_(const ObTransID self_tx_id,
-                                                                const ObIArray<ObTransID> &conflict_tx_ids)
+                                                                const ObIArray<ObTransID> &conflict_tx_ids,
+                                                                SessionGuard &session_guard)
 {
   #define PRINT_WRAPPER KR(ret), K(self_tx_id), K(conflict_tx_ids), K(current_blocked_resources)
   int ret = OB_SUCCESS;
@@ -307,15 +370,18 @@ int ObTransDeadlockDetectorAdapter::replace_conflict_trans_ids_(const ObTransID 
     return has_same_holder;
   };
   if (OB_UNLIKELY(!conflict_tx_ids.empty())) {
-    if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>())) {
+    if (OB_ISNULL(share::g_mp->dead_lock_detector_mgr())) {
       ret = OB_ERR_UNEXPECTED;
-      DETECT_LOG(ERROR, "mtl deadlock detector mgr is null", PRINT_WRAPPER);
+      DETECT_LOG(ERROR, "runtime deadlock detector mgr is null", PRINT_WRAPPER);
     } else if (OB_FAIL(gen_dependency_resource_array_(conflict_tx_ids, blocked_resources))) {
-    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->get_block_list(self_tx_id, current_blocked_resources))) {
+      DETECT_LOG(ERROR, "generate dependency array failed", PRINT_WRAPPER);
+    } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->get_block_list(self_tx_id, current_blocked_resources))) {
+      DETECT_LOG(WARN, "generate dependency array failed", PRINT_WRAPPER);
     } else if (check_at_least_one_holder_same(current_blocked_resources, blocked_resources)) {
-      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->replace_block_list(self_tx_id, blocked_resources))) {
+      if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->replace_block_list(self_tx_id, blocked_resources))) {
+        DETECT_LOG(WARN, "replace block list failed", PRINT_WRAPPER);
       }
-      (void) ::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->dec_count_down_allow_detect(self_tx_id);
+      (void) share::g_mp->dead_lock_detector_mgr()->dec_count_down_allow_detect(self_tx_id);
     } else {
       unregister_from_deadlock_detector(self_tx_id,
                                         UnregisterPath::REPLACE_MEET_TOTAL_DIFFERENT_LIST);
@@ -326,17 +392,14 @@ int ObTransDeadlockDetectorAdapter::replace_conflict_trans_ids_(const ObTransID 
   #undef PRINT_WRAPPER
 }
 
-int ObTransDeadlockDetectorAdapter::register_or_replace_conflict_trans_ids(
-                                                                                            query::ObIDeadlockSessionService &session_service,
-                                                                                            const ObTransID self_tx_id,
+int ObTransDeadlockDetectorAdapter::register_or_replace_conflict_trans_ids(const ObTransID self_tx_id,
                                                                                             const uint32_t self_session_id,
                                                                                             const ObArray<ObTransID> &conflict_tx_ids)
 {
   #define PRINT_WRAPPER KR(ret), K(self_tx_id), K(self_session_id), K(conflict_tx_ids)
   CHECK_DEADLOCK_ENABLED();
   int ret = OB_SUCCESS;
-  query::ObDeadlockSessionGuard session_guard(session_service);
-  query::ObDeadlockSessionFacts session_facts;
+  SessionGuard session_guard;
   bool is_detector_exist = false;
   if (self_session_id == 1) {
     DETECT_LOG(INFO, "inner session no need register to deadlock", PRINT_WRAPPER);
@@ -344,56 +407,75 @@ int ObTransDeadlockDetectorAdapter::register_or_replace_conflict_trans_ids(
     DETECT_LOG(ERROR, "invalid session id", PRINT_WRAPPER);
   } else if (conflict_tx_ids.empty()) {
     DETECT_LOG(WARN, "empty conflict tx ids", PRINT_WRAPPER);
-  } else if (OB_FAIL(session_guard.acquire(self_session_id))) {
-  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>())) {
+  } else if (OB_FAIL(get_session_info(self_session_id, session_guard))) {
+    DETECT_LOG(ERROR, "fail to get session info", PRINT_WRAPPER);
+  } else if (!session_guard.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    DETECT_LOG(ERROR, "MTL ObDeadLockDetectorMgr is NULL", PRINT_WRAPPER);
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->check_detector_exist(self_tx_id, is_detector_exist))) {
+    DETECT_LOG(ERROR, "fail to get session info", PRINT_WRAPPER);
+  } else if (OB_ISNULL(share::g_mp->dead_lock_detector_mgr())) {
+    ret = OB_ERR_UNEXPECTED;
+    DETECT_LOG(ERROR, "server ObDeadLockDetectorMgr is NULL", PRINT_WRAPPER);
+  } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->check_detector_exist(self_tx_id, is_detector_exist))) {
+    DETECT_LOG(WARN, "fail to get detector exist status", PRINT_WRAPPER);
   } else if (!is_detector_exist) {
-    if (OB_FAIL(session_guard.get_deadlock_facts(session_facts))) {
-    } else if (OB_FAIL(register_to_deadlock_detector_(
-                   session_service,
-                   self_tx_id,
-                   self_session_id,
-                   conflict_tx_ids,
-                   session_facts))) {
+    if (OB_FAIL(register_to_deadlock_detector_(self_tx_id, self_session_id, conflict_tx_ids, session_guard))) {
+      DETECT_LOG(WARN, "register new detector for statement retry failed", PRINT_WRAPPER);
     } else {
-      DETECT_LOG(INFO, "register new detector in remote execution", PRINT_WRAPPER);
+      DETECT_LOG(INFO, "register new detector for statement retry", PRINT_WRAPPER);
     }
   } else {
-    if (OB_FAIL(replace_conflict_trans_ids_(self_tx_id, conflict_tx_ids))) {
+    if (OB_FAIL(replace_conflict_trans_ids_(self_tx_id, conflict_tx_ids, session_guard))) {
+      DETECT_LOG(INFO, "replace block list for statement retry", PRINT_WRAPPER);
     }
   }
   return ret;
   #undef PRINT_WRAPPER
 }
 
-int ObTransDeadlockDetectorAdapter::create_detector_node_and_set_parent_if_needed_(CollectCallBack &on_collect_op,
+int ObTransDeadlockDetectorAdapter::get_session_related_info_(const uint32_t sess_id,
+                                                             int64_t &query_timeout)
+{
+  int ret = OB_SUCCESS;
+  SessionGuard session_guard;
+  if (OB_FAIL(get_session_info(sess_id, session_guard))) {
+    DETECT_LOG(WARN, "get session failed", KR(ret), K(sess_id));
+  } else if (!session_guard.is_valid()) {
+    DETECT_LOG(WARN, "get session failed", K(sess_id), K(session_guard));
+  } else if (OB_FAIL(session_guard.get_session().get_query_timeout(query_timeout))) {
+    DETECT_LOG(WARN, "get query timeout failed", K(sess_id));
+  }
+  return ret;
+}
+
+
+int ObTransDeadlockDetectorAdapter::create_detector_node_(CollectCallBack &on_collect_op,
                                                                                   const ObTransID &self_trans_id,
-                                                                                  const uint32_t sess_id,
-                                                                                  query::ObIDeadlockSessionService &session_service)
+                                                                                  const uint32_t sess_id)
 {
   #define PRINT_WRAPPER KR(ret), K(self_trans_id), K(sess_id), K(query_timeout), K(trans_begin_ts)
   int ret = OB_SUCCESS;
   int64_t query_timeout = 0;
   int64_t trans_begin_ts = 0;
-  ObTransOnDetectOperation on_detect_op(
-      session_service, sess_id, self_trans_id);
-  query::ObDeadlockSessionGuard guard(session_service);
-  query::ObDeadlockSessionFacts session_facts;
-  if (OB_FAIL(guard.acquire(sess_id))) {
-  } else if (OB_FAIL(guard.get_deadlock_facts(session_facts))) {
-  } else if (!session_facts.has_transaction_) {
+  ObTransOnDetectOperation on_detect_op(sess_id, self_trans_id);
+  SessionGuard guard;
+  if (OB_FAIL(get_session_related_info_(sess_id, query_timeout))) {
+    DETECT_LOG(WARN, "fail to get session related info", PRINT_WRAPPER);
+  } else if (OB_FAIL(ObTransDeadlockDetectorAdapter::get_session_info(sess_id, guard))) {
+    DETECT_LOG(WARN, "fail to get session related info", PRINT_WRAPPER);
+  } else if (!guard.is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    DETECT_LOG(ERROR, "get session failed", PRINT_WRAPPER);
+  } else if (OB_ISNULL(guard->get_tx_desc())) {
     ret = OB_BAD_NULL_ERROR;
     DETECT_LOG(WARN, "tx desc is NULL", PRINT_WRAPPER);
-  } else if (FALSE_IT(query_timeout = session_facts.query_timeout_us_)) {
-  } else if (FALSE_IT(trans_begin_ts = session_facts.transaction_start_ts_)) {
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->register_key(self_trans_id,
+  } else if (FALSE_IT(trans_begin_ts = guard->get_tx_desc()->get_active_ts())) {
+  } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->register_key(self_trans_id,
                                                                on_detect_op,
                                                                on_collect_op,
                                                                ~trans_begin_ts))) {
+    DETECT_LOG(WARN, "fail to register key", PRINT_WRAPPER);
   } else {
-    ::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->set_timeout(self_trans_id, query_timeout);
+    share::g_mp->dead_lock_detector_mgr()->set_timeout(self_trans_id, query_timeout);
   }
   return ret;
   #undef PRINT_WRAPPER
@@ -409,51 +491,58 @@ int ObTransDeadlockDetectorAdapter::create_detector_node_and_set_parent_if_neede
 // @param [in] self_trans_id who am i.
 // @param [in] sess_id which session to kill if this node is killed.
 // @return the error code.
-int ObTransDeadlockDetectorAdapter::maintain_deadlock_info_when_end_stmt(
-    ObTxDesc &tx_desc,
-    query::ObIDeadlockSessionService &session_service,
-    const data_plane::ObStatementDeadlockContext &context)
+int ObTransDeadlockDetectorAdapter::maintain_deadlock_info_when_end_stmt(sql::ObExecContext &exec_ctx,
+                                                                         const bool is_rollback)
 {
-  #define PRINT_WRAPPER K(step), KR(ret), K(context.exec_error_), \
-                        K(context.is_rollback_), K(tx_desc), K(conflict_txs)
+  #define PRINT_WRAPPER K(step), KR(ret), KR(exec_ctx.get_errcode()), KPC(session),\
+                        KPC(desc), K(is_rollback), K(conflict_txs)
   int ret = OB_SUCCESS;
   int step = 0;
   CHECK_DEADLOCK_ENABLED();
+  memtable::ObLockWaitMgr::Node *node = nullptr;
+  ObSQLSessionInfo *session = nullptr;
+  ObTxDesc *desc = nullptr;
   ObArray<ObTransID> conflict_txs;
-  if (++step && context.is_inner_session_) {
-  } else if (++step && OB_FAIL(tx_desc.fetch_conflict_txs(conflict_txs))) {
+  if (++step && OB_ISNULL(session = GET_MY_SESSION(exec_ctx))) {
+    ret = OB_BAD_NULL_ERROR;
+    DETECT_LOG(ERROR, "session is NULL", PRINT_WRAPPER);
+  } else if (++step && session->is_inner()) {
+    DETECT_LOG(TRACE, "inner session no need register to deadlock", PRINT_WRAPPER);
+  } else if (++step && OB_ISNULL(desc = session->get_tx_desc())) {
+    ret = OB_BAD_NULL_ERROR;
+    DETECT_LOG(ERROR, "desc in session is NULL", PRINT_WRAPPER);
+  } else if (++step && OB_FAIL(desc->fetch_conflict_txs(conflict_txs))) {
     DETECT_LOG(WARN, "fail to get conflict txs from desc", PRINT_WRAPPER);
-  } else if (++step && !tx_desc.is_valid()) {
+  } else if (++step && !desc->is_valid()) {
     DETECT_LOG(INFO, "invalid tx desc no need register to deadlock", PRINT_WRAPPER);
-  } else if (++step && context.is_rollback_) {// statment is failed, maybe will try again, check if need register to deadlock detector
-    if (++step && context.query_timeout_ts_ < ObClockGenerator::getClock()) {
-      unregister_from_deadlock_detector(tx_desc.tid(), UnregisterPath::END_STMT_TIMEOUT);
+  } else if (++step && is_rollback) {// statment is failed, maybe will try again, check if need register to deadlock detector
+    if (++step && session->get_query_timeout_ts() < ObClockGenerator::getClock()) {
+      unregister_from_deadlock_detector(desc->tid(), UnregisterPath::END_STMT_TIMEOUT);
       DETECT_LOG(INFO, "query timeout, no need register to deadlock", PRINT_WRAPPER);
     } else if (++step && conflict_txs.empty()) {
-      unregister_from_deadlock_detector(tx_desc.tid(), UnregisterPath::END_STMT_NO_CONFLICT);
+      unregister_from_deadlock_detector(desc->tid(), UnregisterPath::END_STMT_NO_CONFLICT);
       DETECT_LOG(INFO, "try unregister deadlock detecotr cause conflict array is empty", PRINT_WRAPPER);
-    } else if (++step && context.exec_error_ != OB_TRY_LOCK_ROW_CONFLICT) {
-      unregister_from_deadlock_detector(tx_desc.tid(), UnregisterPath::END_STMT_OTHER_ERR);
+    } else if (++step && exec_ctx.get_errcode() != OB_TRY_LOCK_ROW_CONFLICT) {
+      unregister_from_deadlock_detector(desc->tid(), UnregisterPath::END_STMT_OTHER_ERR);
       DETECT_LOG(INFO, "try unregister deadlock detecotr cause meet non-lock error", PRINT_WRAPPER);
-    } else if (++step && OB_FAIL(register_or_replace_conflict_trans_ids(
-        session_service,
-        tx_desc.tid(),
-        context.session_id_,
-        conflict_txs))) {
+    } else if (++step && OB_FAIL(register_or_replace_conflict_trans_ids(desc->tid(), session->get_server_sid(), conflict_txs))) {
       DETECT_LOG(WARN, "register or replace list failed", PRINT_WRAPPER);
     } else {
       // do nothing, register success or keep retrying
     }
   } else {// statment is done, will not try again, all related deadlock info should be resetted
-    unregister_from_deadlock_detector(tx_desc.tid(), UnregisterPath::END_STMT_DONE);
-    DETECT_LOG(TRACE, "try unregister from deadlock detector", KR(ret), K(tx_desc.tid()));
+    unregister_from_deadlock_detector(desc->tid(), UnregisterPath::END_STMT_DONE);
+    DETECT_LOG(TRACE, "try unregister from deadlock detector", KR(ret), K(desc->tid()));
   }
-  tx_desc.reset_conflict_txs();
+  if (OB_NOT_NULL(desc)) {// whether registered or not, clean conflict info anyway
+    desc->reset_conflict_txs();
+  }
+  int exec_ctx_err_code = exec_ctx.get_errcode();
   if (OB_SUCC(ret)) {
-    if (OB_SUCCESS != context.exec_error_) {
-      if ((OB_ITER_END != context.exec_error_)) {
-        if (context.retry_count_ <= 1 ||// first time lock conflict or other error
-            context.retry_count_ % 10 == 0) {// other wise, control log print frequency
+    if (OB_SUCCESS != exec_ctx_err_code) {
+      if ((OB_ITER_END != exec_ctx_err_code)) {
+        if (session->get_retry_info().get_retry_cnt() <= 1 ||// first time lock conflict or other error
+            session->get_retry_info().get_retry_cnt() % 10 == 0) {// other wise, control log print frequency
           DETECT_LOG(INFO, "maintain deadlock info", PRINT_WRAPPER);
         }
       }
@@ -473,8 +562,7 @@ int ObTransDeadlockDetectorAdapter::maintain_deadlock_info_when_end_stmt(
 int ObTransDeadlockDetectorAdapter::lock_wait_mgr_reconstruct_detector_waiting_for_row(CollectCallBack &on_collect_op,
                                                                                        const BlockCallBack &func,
                                                                                        const ObTransID &self_trans_id,
-                                                                                       const uint32_t sess_id,
-                                                                                       query::ObIDeadlockSessionService &session_service)
+                                                                                       const uint32_t sess_id)
 {
   #define PRINT_WRAPPER KR(ret), K(self_trans_id), K(sess_id), K(exist)
   CHECK_DEADLOCK_ENABLED();
@@ -482,20 +570,25 @@ int ObTransDeadlockDetectorAdapter::lock_wait_mgr_reconstruct_detector_waiting_f
   bool exist = false;
   if (sess_id == 0) {
     DETECT_LOG(ERROR, "invalid session id", PRINT_WRAPPER);
-  } else if (nullptr == ::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()) {
+  } else if (nullptr == (share::g_mp->dead_lock_detector_mgr())) {
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(WARN, "fail to get ObDeadLockDetectorMgr", PRINT_WRAPPER);
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->check_detector_exist(self_trans_id, exist))) {
+  } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->check_detector_exist(self_trans_id, exist))) {
+    DETECT_LOG(WARN, "fail to check detector exist", PRINT_WRAPPER);
   } else if (exist) {
     int tmp_ret = OB_SUCCESS;
-    if (OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->unregister_key(self_trans_id))) {
+    if (OB_TMP_FAIL(share::g_mp->dead_lock_detector_mgr()->unregister_key(self_trans_id))) {
+      DETECT_LOG(WARN, "fail to unregister key", K(tmp_ret), PRINT_WRAPPER);
     }
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(create_detector_node_and_set_parent_if_needed_(
-                 on_collect_op, self_trans_id, sess_id, session_service))) {
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->block(self_trans_id, func))) {
+    DETECT_LOG(WARN, "local execution register to deadlock detector waiting for row failed", PRINT_WRAPPER);
+  } else if (OB_FAIL(create_detector_node_(on_collect_op, self_trans_id, sess_id))) {
+    DETECT_LOG(WARN, "fail to create detector node", PRINT_WRAPPER);
+  } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->block(self_trans_id, func))) {
+    DETECT_LOG(WARN, "fail to block on call back function", PRINT_WRAPPER);
   } else {
+    DETECT_LOG(TRACE, "local execution register to deadlock detector waiting for row success", PRINT_WRAPPER);
   }
   return ret;
   #undef PRINT_WRAPPER
@@ -511,27 +604,31 @@ int ObTransDeadlockDetectorAdapter::lock_wait_mgr_reconstruct_detector_waiting_f
 int ObTransDeadlockDetectorAdapter::lock_wait_mgr_reconstruct_detector_waiting_for_trans(CollectCallBack &on_collect_op,
                                                                                          const ObTransID &conflict_trans_id,
                                                                                          const ObTransID &self_trans_id,
-                                                                                         const uint32_t sess_id,
-                                                                                         query::ObIDeadlockSessionService &session_service)
+                                                                                         const uint32_t sess_id)
 {
   #define PRINT_WRAPPER KR(ret), K(self_trans_id), K(sess_id), K(exist)
   CHECK_DEADLOCK_ENABLED();
   int ret = OB_SUCCESS;
   bool exist = false;
-  if (nullptr == ::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()) {
+  if (nullptr == (share::g_mp->dead_lock_detector_mgr())) {
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(WARN, "fail to get ObDeadLockDetectorMgr", PRINT_WRAPPER);
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->check_detector_exist(self_trans_id, exist))) {
+  } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->check_detector_exist(self_trans_id, exist))) {
+    DETECT_LOG(WARN, "fail to check detector exist", PRINT_WRAPPER);
   } else if (exist) {
     int tmp_ret = OB_SUCCESS;
-    if (OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->unregister_key(self_trans_id))) {
+    if (OB_TMP_FAIL(share::g_mp->dead_lock_detector_mgr()->unregister_key(self_trans_id))) {
+      DETECT_LOG(WARN, "fail to unregister key", K(tmp_ret), PRINT_WRAPPER);
     }
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(create_detector_node_and_set_parent_if_needed_(
-                 on_collect_op, self_trans_id, sess_id, session_service))) {
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->block(self_trans_id, conflict_trans_id))) {
+    DETECT_LOG(WARN, "local execution register to deadlock detector waiting for row failed", PRINT_WRAPPER);
+  } else if (OB_FAIL(create_detector_node_(on_collect_op, self_trans_id, sess_id))) {
+    DETECT_LOG(WARN, "fail to create detector node", PRINT_WRAPPER);
+  } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->block(self_trans_id, conflict_trans_id))) {
+    DETECT_LOG(WARN, "fail to block on conflict trans", PRINT_WRAPPER);
   } else {
+    DETECT_LOG(TRACE, "local execution register to deadlock detector waiting for trans success", PRINT_WRAPPER);
   }
   return ret;
   #undef PRINT_WRAPPER
@@ -543,19 +640,21 @@ int ObTransDeadlockDetectorAdapter::change_detector_waiting_obj_from_row_to_tran
   #define PRINT_WRAPPER KR(ret), K(self_trans_id), K(conflict_trans_id)
   CHECK_DEADLOCK_ENABLED();
   int ret = OB_SUCCESS;
-  if (nullptr == ::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()) {
+  if (nullptr == (share::g_mp->dead_lock_detector_mgr())) {
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(WARN, "fail to get ObDeadLockDetectorMgr", PRINT_WRAPPER);
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->activate_all(self_trans_id))) {
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->block(self_trans_id, conflict_trans_id))) {
+  } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->activate_all(self_trans_id))) {
+    DETECT_LOG(WARN, "fail to activate all", PRINT_WRAPPER);
+  } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->block(self_trans_id, conflict_trans_id))) {
+    DETECT_LOG(WARN, "fail to block on conflict trans", PRINT_WRAPPER);
   } else {
-    DETECT_LOG(INFO, "change denpendency relationship from row to trnas", PRINT_WRAPPER);
+    DETECT_LOG(INFO, "change dependency relationship from row to transaction", PRINT_WRAPPER);
   }
   return ret;
   #undef PRINT_WRAPPER
 }
 
-// Register autonomous trans dependency relationship, no need session id here, cause this trans should not be killed
+// Register the dependency between a parent transaction and a temporary inner transaction.
 // 
 // @param [in] last_trans_id who is the trans before start autonomous trans.
 // @param [in] now_trans_id who is the trans after start autonomous trans.
@@ -568,10 +667,10 @@ int ObTransDeadlockDetectorAdapter::inner_tx_register_to_deadlock(const ObTransI
   #define PRINT_WRAPPER KR(ret), K(last_trans_id), K(now_trans_id), K(query_timeout)
   CHECK_DEADLOCK_ENABLED();
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>())) {
+  if (OB_ISNULL(share::g_mp->dead_lock_detector_mgr())) {
     ret = OB_ERR_UNEXPECTED;
-    DETECT_LOG(ERROR, "tenant deadlock detector mgr is null", PRINT_WRAPPER);
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->register_key(last_trans_id,
+    DETECT_LOG(ERROR, "deadlock detector manager is null", PRINT_WRAPPER);
+  } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->register_key(last_trans_id,
                                                   [](const common::ObIArray<ObDetectorInnerReportInfo> &,
                                                     const int64_t) { DETECT_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "should not kill inner node");
                                                                       return common::OB_ERR_UNEXPECTED; },
@@ -594,9 +693,11 @@ int ObTransDeadlockDetectorAdapter::inner_tx_register_to_deadlock(const ObTransI
                                                     return common::OB_SUCCESS;
                                                   },
                                                   ObDetectorPriority(PRIORITY_RANGE::EXTREMELY_HIGH, 0)))) {
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->block(last_trans_id, now_trans_id))) {
+    DETECT_LOG(WARN, "register key failed", PRINT_WRAPPER);
+  } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->block(last_trans_id, now_trans_id))) {
+    DETECT_LOG(WARN, "block resource failed", PRINT_WRAPPER);
   } else {
-    ::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->set_timeout(last_trans_id, query_timeout);
+    share::g_mp->dead_lock_detector_mgr()->set_timeout(last_trans_id, query_timeout);
     DETECT_LOG(INFO, "register autonomous deadlock dependency success", PRINT_WRAPPER);
   }
   return ret;
@@ -612,7 +713,7 @@ void ObTransDeadlockDetectorAdapter::unregister_from_deadlock_detector(const ObT
 {
   int ret = common::OB_SUCCESS;
   ObDeadLockDetectorMgr *mgr = nullptr;
-  if (nullptr == (mgr = ::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>())) {
+  if (nullptr == (mgr = share::g_mp->dead_lock_detector_mgr())) {
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(WARN, "fail to get ObDeadLockDetectorMgr", K(self_trans_id), K(to_string(path)));
   } else if (OB_FAIL(mgr->unregister_key(self_trans_id))) {
@@ -627,53 +728,4 @@ void ObTransDeadlockDetectorAdapter::unregister_from_deadlock_detector(const ObT
 }
 
 } // namespace transaction
-
-namespace data_plane
-{
-
-int maintain_deadlock_after_statement(
-    transaction::ObTxDesc &tx,
-    query::ObIDeadlockSessionService &session_service,
-    const ObStatementDeadlockContext &context)
-{
-  return transaction::ObTransDeadlockDetectorAdapter::
-      maintain_deadlock_info_when_end_stmt(
-          tx, session_service, context);
-}
-
-int register_autonomous_transaction_dependency(
-    const transaction::ObTransID &suspended_tx_id,
-    const transaction::ObTransID &autonomous_tx_id,
-    int64_t timeout_us)
-{
-  int ret = common::OB_SUCCESS;
-  if (!suspended_tx_id.is_valid()
-      || !autonomous_tx_id.is_valid()
-      || suspended_tx_id == autonomous_tx_id) {
-    ret = common::OB_INVALID_ARGUMENT;
-    DETECT_LOG(WARN, "invalid autonomous transaction dependency",
-               K(ret), K(suspended_tx_id), K(autonomous_tx_id), K(timeout_us));
-  } else {
-    ret = transaction::ObTransDeadlockDetectorAdapter::
-        inner_tx_register_to_deadlock(
-            suspended_tx_id, autonomous_tx_id, timeout_us);
-  }
-  return ret;
-}
-
-void finish_transaction_deadlock(const transaction::ObTransID &tx_id)
-{
-  transaction::ObTransDeadlockDetectorAdapter::unregister_from_deadlock_detector(
-      tx_id,
-      transaction::ObTransDeadlockDetectorAdapter::UnregisterPath::DO_END_TRANS);
-}
-
-void rollback_statement_deadlock(const transaction::ObTransID &tx_id)
-{
-  transaction::ObTransDeadlockDetectorAdapter::unregister_from_deadlock_detector(
-      tx_id,
-      transaction::ObTransDeadlockDetectorAdapter::UnregisterPath::TX_ROLLBACK_IN_END_STMT);
-}
-
-} // namespace data_plane
 } // namespace oceanbase

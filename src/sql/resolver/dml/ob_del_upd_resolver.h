@@ -183,7 +183,7 @@ protected:
                               bool& is_all_default);
   int build_row_for_empty_brackets(common::ObArray<ObRawExpr*> &value_row,
                                    ObInsertTableInfo& table_info);
-
+  
   int check_vec_hnsw_index_vid_opt(const ObTableAssignment &ta,
                                    const ObTableSchema *table_schema,
                                    bool &is_vec_hnsw_index_vid_opt);
@@ -229,7 +229,7 @@ protected:
       const ObTableSchema *table_schema,
       const ObColumnSchemaV2 *column_schema,
       const int64_t auto_increment_cache_size,
-      share::AutoincParam &param);
+      AutoincParam &param);
   int resolve_json_partial_update_flag(ObIArray<ObTableAssignment> &table_assigns, ObStmtScope scope);
   int mark_json_partial_update_flag(const ObColumnRefRawExpr *ref_expr, ObRawExpr *expr, int depth, bool &allow_json_partial_update);
   int add_select_item_func(ObSelectStmt &select_stmt, ColumnItem &col);

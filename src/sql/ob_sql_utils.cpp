@@ -1040,9 +1040,6 @@ bool ObSQLUtils::cause_implicit_commit(ParseResult &result)
         || T_CREATE_DATABASE == type
         || T_CREATE_INDEX == type
         /* pl item type*/
-        || T_SP_CREATE_TYPE == type
-        || T_SP_DROP_TYPE == type
-        || T_SP_CREATE_TYPE_BODY == type
         || T_PACKAGE_CREATE == type
         || T_PACKAGE_CREATE_BODY == type
         || T_PACKAGE_DROP == type
@@ -3539,7 +3536,6 @@ bool ObSQLUtils::is_support_batch_exec(ObItemType type)
   return is_support;
 }
 //this sql is triggered by pl(trigger, procedure, pl udf etc.)
-//and the transaction is not autonomous, otherwise this SQL is controlled by a independent transaction
 bool ObSQLUtils::is_pl_nested_sql(ObExecContext *cur_ctx)
 {
   bool bret = false;
@@ -3547,8 +3543,7 @@ bool ObSQLUtils::is_pl_nested_sql(ObExecContext *cur_ctx)
     ObExecContext *parent_ctx = cur_ctx->get_parent_ctx();
     //parent_sql = is_dml_stmt means this sql is triggered by a sql, not pl procedure
     if (OB_NOT_NULL(parent_ctx->get_sql_ctx())
-        && parent_ctx->get_pl_stack_ctx() != nullptr
-        && !parent_ctx->get_pl_stack_ctx()->in_autonomous()) {
+        && parent_ctx->get_pl_stack_ctx() != nullptr) {
       if (ObStmt::is_dml_stmt(parent_ctx->get_sql_ctx()->stmt_type_)) {
         bret = true;
       } else if (stmt::T_ANONYMOUS_BLOCK == parent_ctx->get_sql_ctx()->stmt_type_
@@ -3567,8 +3562,7 @@ bool ObSQLUtils::is_pl_nested_sql(ObExecContext *cur_ctx)
         if (OB_NOT_NULL(parent_ctx) &&
             OB_NOT_NULL(parent_ctx->get_sql_ctx()) &&
             OB_NOT_NULL(parent_ctx->get_pl_stack_ctx()) &&
-            ObStmt::is_dml_stmt(parent_ctx->get_sql_ctx()->stmt_type_) &&
-            !parent_ctx->get_pl_stack_ctx()->in_autonomous()) {
+            ObStmt::is_dml_stmt(parent_ctx->get_sql_ctx()->stmt_type_)) {
           bret = true;
         }
       }
@@ -3612,28 +3606,10 @@ bool ObSQLUtils::is_iter_uncommitted_row(ObExecContext *cur_ctx)
   return bret;
 }
 
-//notice: if a SQL is triggered by a PL defined as an autonomous transaction,
-//then it is not nested sql, nor is it restricted by the constraints of nested sql
 bool ObSQLUtils::is_nested_sql(ObExecContext *cur_ctx)
 {
   return is_pl_nested_sql(cur_ctx) || is_fk_nested_sql(cur_ctx) || is_online_stat_gathering_nested_sql(cur_ctx);
 }
-
-bool ObSQLUtils::is_in_autonomous_block(ObExecContext *cur_ctx)
-{
-  bool bret = false;
-  pl::ObPLContext *pl_context = nullptr;
-  if (cur_ctx != nullptr) {
-    pl_context = cur_ctx->get_pl_stack_ctx();
-    for (; !bret && pl_context != nullptr; pl_context = pl_context->get_parent_stack_ctx()) {
-      if (pl_context->in_autonomous()) {
-        bret = true;
-      }
-    }
-  }
-  return bret;
-}
-
 
 //bind current execute context to my session,
 //in order to access exec_ctx of the current statement through the session
@@ -3813,125 +3789,6 @@ int ObSQLUtils::create_multi_stmt_param_store(common::ObIAllocator &allocator,
   return ret;
 }
 
-int ObSQLUtils::get_one_group_params(int64_t &actual_pos, ParamStore &src, ParamStore &obj_params)
-{
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < src.count(); ++i) {
-    ObObjParam &obj = src.at(i);
-    pl::ObPLCollection *coll = NULL;
-    ObObj *data = NULL;
-    if (OB_UNLIKELY(!obj.is_ext())) {
-      OZ (ObSql::add_param_to_param_store(obj, obj_params));
-    } else {
-      CK (OB_NOT_NULL(coll = reinterpret_cast<pl::ObPLCollection*>(obj.get_ext())));
-      CK (coll->get_count() > actual_pos);
-      CK (1 == coll->get_column_count());
-      CK (OB_NOT_NULL(data = reinterpret_cast<ObObj*>(coll->get_data())));
-      if (OB_SUCC(ret)) {
-        bool is_del = true;
-        for (; OB_SUCC(ret) && is_del;) {
-          OZ (coll->is_elem_deleted(actual_pos, is_del));
-          if (is_del) {
-            ++actual_pos;
-          }
-        }
-        OZ (ObSql::add_param_to_param_store(*(data + actual_pos), obj_params));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObSQLUtils::copy_params_to_array_params(int64_t query_pos, ParamStore &src, ParamStore &dst,
-                                            ObIAllocator &alloc, bool is_forall)
-{
-  int ret = OB_SUCCESS;
-  for (int64_t j = 0; OB_SUCC(ret) && j < dst.count(); j++) {
-    ObSqlArrayObj *array_params = nullptr;
-    if (OB_UNLIKELY(!dst.at(j).is_ext_sql_array())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("param object is invalid", K(ret), K(dst.at(j)));
-    } else if (OB_ISNULL(array_params =
-        reinterpret_cast<ObSqlArrayObj*>(dst.at(j).get_ext()))
-        || OB_ISNULL(array_params->data_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), KPC(array_params));
-    } else {
-      ObObjParam new_param = src.at(j);
-      if (is_forall) {
-        OZ (deep_copy_obj(alloc, src.at(j), new_param));
-      }
-      array_params->data_[query_pos] = new_param;
-    }
-  }
-  return ret;
-}
-
-int ObSQLUtils::init_elements_info(ParamStore &src, ParamStore &dst)
-{
-  int ret = OB_SUCCESS;
-  CK (dst.count() == src.count())
-  for (int64_t i = 0; OB_SUCC(ret) && i < src.count(); ++i) {
-    ObSqlArrayObj *array_params = nullptr;
-    ObObjParam &obj = src.at(i);
-    pl::ObPLCollection *coll = NULL;
-    ObObj *data = NULL;
-    CK (dst.at(i).is_ext_sql_array());
-    CK (OB_NOT_NULL(array_params = reinterpret_cast<ObSqlArrayObj*>(dst.at(i).get_ext())));
-    if (OB_FAIL(ret)) {
-    } else if (OB_UNLIKELY(!obj.is_ext())) {
-      array_params->element_.set_meta_type(obj.get_meta());
-      array_params->element_.set_accuracy(obj.get_accuracy());
-    } else {
-      CK (OB_NOT_NULL(coll = reinterpret_cast<pl::ObPLCollection*>(obj.get_ext())));
-      if (OB_SUCC(ret)) {
-        array_params->element_ = coll->get_element_type();
-      }
-    }
-  }
-  return ret;
-}
-
-int ObSQLUtils::transform_pl_ext_type(
-    ParamStore &src, int64_t array_binding_size, ObIAllocator &alloc, ParamStore *&dst, bool is_forall)
-{
-  int ret = OB_SUCCESS;
-  ParamStore *ps_ab_params = NULL;
-  // Fold batch parameter to SQL recognizable type
-  if (OB_ISNULL(ps_ab_params = static_cast<ParamStore *>(alloc.alloc(sizeof(ParamStore))))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", K(ret));
-  } else if (FALSE_IT(dst = new(ps_ab_params)ParamStore(ObWrapperAllocator(alloc)))) {
-    // do nothing
-  } else if (OB_FAIL(ObSQLUtils::create_multi_stmt_param_store(alloc,
-                                                               array_binding_size,
-                                                               src.count(),
-                                                               *dst))) {
-    LOG_WARN("fail to do create param store", K(ret));
-  } else {
-    ObArenaAllocator tmp_alloc;
-    ParamStore temp_obj_params((ObWrapperAllocator(tmp_alloc)));
-    int64_t N = src.count();
-    int64_t actual_pos = 0;
-    for (int64_t query_pos = 0; OB_SUCC(ret) && query_pos < array_binding_size; ++query_pos, ++actual_pos) {
-      temp_obj_params.reuse();
-      if (OB_FAIL(temp_obj_params.reserve(N))) {
-        LOG_WARN("fail to reverse params_store", K(ret));
-      } else if (OB_FAIL(get_one_group_params(actual_pos, src, temp_obj_params))) {
-        LOG_WARN("get one group params failed", K(ret), K(actual_pos));
-      } else if (OB_FAIL(copy_params_to_array_params(query_pos, temp_obj_params, *dst, alloc, is_forall))) {
-        LOG_WARN("copy params to array params failed", K(ret), K(query_pos));
-      } else if (query_pos == 0) {
-        if (OB_FAIL(init_elements_info(src, *dst))) {
-          LOG_WARN("copy params to array params failed", K(ret), K(query_pos));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-
 void ObSQLUtils::adjust_time_by_ntp_offset(int64_t &dst_timeout_ts)
 {
   dst_timeout_ts += THIS_WORKER.get_ntp_offset();
@@ -4064,16 +3921,11 @@ bool ObSQLUtils::check_need_disconnect_parser_err(const int ret_code)
                 || OB_ERR_EMPTY_QUERY == ret_code
                 || OB_SIZE_OVERFLOW == ret_code
                 || OB_ERR_ILLEGAL_NAME == ret_code
-                || OB_ERR_STR_LITERAL_TOO_LONG == ret_code
                 || OB_ERR_NOT_VALID_ROUTINE_NAME == ret_code
-                || OB_ERR_CONSTRUCT_MUST_RETURN_SELF == ret_code
-                || OB_ERR_NO_ATTR_FOUND == ret_code
                 || OB_ERR_VIEW_SELECT_CONTAIN_QUESTIONMARK == ret_code
-                || OB_ERR_NON_INT_LITERAL == ret_code
                 || OB_ERR_PARSER_INIT == ret_code
                 || OB_NOT_SUPPORTED == ret_code
-                || OB_ALLOCATE_MEMORY_FAILED == ret_code
-                || OB_ERR_MALFORMED_WRAPPED_UNIT == ret_code)) {
+                || OB_ALLOCATE_MEMORY_FAILED == ret_code)) {
     bret = false;
   }
   return bret;

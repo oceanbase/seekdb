@@ -28,8 +28,6 @@ namespace oceanbase
 namespace sql
 {
 
-class ObInsertStmt;
-
 typedef std::pair<uint64_t, uint64_t> JoinTableIdPair;
 
 struct DistinctObjMeta
@@ -252,7 +250,7 @@ private:
   int create_embedded_table_vector_col_ref(ObDMLStmt *stmt, TableItem *table_item, const share::schema::ObTableSchema *data_table_schema,
     ObColumnRefRawExpr *chunk_col_ref, ObColumnRefRawExpr *&vector_col_ref);
   int create_cast_query_vector_expr(ObRawExpr *query_vector, ObRawExpr *vector_col_ref, ObRawExpr *&cast_query_vector);
-  int create_distance_type_const_expr(ObDMLStmt *stmt, const share::schema::ObTableSchema *data_table_schema,
+  int create_distance_type_const_expr(ObDMLStmt *stmt, const share::schema::ObTableSchema *data_table_schema, 
     ObColumnRefRawExpr *chunk_col_ref, ObRawExpr *&dis_type);
 
 

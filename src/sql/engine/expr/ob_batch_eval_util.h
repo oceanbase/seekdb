@@ -130,6 +130,7 @@ int def_batch_arith_op(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(binary_operand_batch_eval(expr, ctx, skip, size, false))) {
+    SQL_LOG(WARN, "bianry operand batch evaluate failed", K(ret), K(expr));
   } else {
     ret = call_functor_with_arg_iter<ArithOp>(expr, ctx, skip, size, args...);
   }
@@ -249,8 +250,11 @@ struct ObNestedArithOpWrap : public Base
     ObString res_str;
     if (OB_FAIL(Base::construct_params(tmp_allocator, ctx, left_meta_id, right_meta_id, res_meta_id,
                                           left, right, left_obj, right_obj, res_obj))) {
+      SQL_ENG_LOG(WARN, "get array failed", K(ret));
     } else if (OB_FAIL(Base()(*res_obj, *left_obj, *right_obj))) {
+      SQL_ENG_LOG(WARN, "exec calculate func failed", K(ret)); 
     } else if (OB_FAIL(Base::get_res(ctx, res_obj, expr, res_str))) {
+      SQL_ENG_LOG(WARN, "get array binary string failed", K(ret));
     } else {
       res.set_string(res_str);
     }

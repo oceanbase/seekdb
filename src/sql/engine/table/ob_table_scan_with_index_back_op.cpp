@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/table/ob_table_scan_with_index_back_op.h"
-#include "data_plane/access/ob_table_scan_access.h"
+#include "storage/access/ob_table_scan_iterator.h"
 namespace oceanbase
 {
 using namespace common;
@@ -69,7 +69,10 @@ int ObTableScanWithIndexBackOp::inner_rescan()
     ret = OB_NOT_INIT;
     LOG_WARN("index scan tree is null");
   } else if (OB_FAIL(index_scan_tree_->rescan())) {
+    LOG_WARN("rescan index scan tree failed", K(ret));
+
   } else if (OB_FAIL(ObTableScanOp::inner_rescan())) {
+    LOG_WARN("rescan no children physical operator failed", K(ret));
   } else {
     is_index_end_ = false;
     if (OB_ISNULL(result_)) {
@@ -170,14 +173,16 @@ int ObTableScanWithIndexBackOp::do_table_scan_with_index()
 int ObTableScanWithIndexBackOp::do_table_rescan_with_index()
 {
   int ret = OB_SUCCESS;
+  storage::ObTableScanIterator *table_iter = NULL;
   if (OB_FAIL(extract_range_from_index())) {
+    LOG_WARN("extract range from index failed", K(ret));
   } else if (scan_param_.key_ranges_.count() <= 0) {
     //do nothing
     read_action_ = READ_ITER_END;
-  } else if (OB_ISNULL(result_)) {
+  } else if (OB_ISNULL(table_iter = static_cast<storage::ObTableScanIterator*>(result_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table iterator is null");
-  } else if (OB_FAIL(data_plane::table_scan_rescan(result_, scan_param_))) {
+  } else if (OB_FAIL(table_iter->rescan(scan_param_))) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
       LOG_WARN("failed to rescan", K(ret), "scan_param", scan_param_);
     }
@@ -193,6 +198,7 @@ int ObTableScanWithIndexBackOp::inner_get_next_row()
   ObNewRow *cur_row = NULL;
   bool need_continue = true;
   if (OB_FAIL(try_check_status())) {
+    LOG_WARN("check physical plan status failed", K(ret));
   }
   while (OB_SUCC(ret) && need_continue) {
     switch (read_action_) {
@@ -216,6 +222,7 @@ int ObTableScanWithIndexBackOp::inner_get_next_row()
       } else {
         output_row_cnt_++;
         need_continue = false;
+        LOG_DEBUG("get next row from domain index look up");
       }
       break;
     }
@@ -240,10 +247,13 @@ int ObTableScanWithIndexBackOp::inner_close()
   int tmp_ret = OB_SUCCESS;
   if (index_scan_tree_ != NULL) {
     if (OB_FAIL(index_scan_tree_->close())) {
+      LOG_WARN("close index scan tree failed", K(ret));
     }
   }
   tmp_ret = ret;
   if (OB_FAIL(ObTableScanOp::inner_close())) {
+    // overwrite ret
+    LOG_WARN("inner close ooerator failed", K(ret));
   }
   ret = (OB_SUCCESS == ret) ? tmp_ret : ret;
   return ret;

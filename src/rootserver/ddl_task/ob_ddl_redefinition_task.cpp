@@ -15,20 +15,17 @@
  */
 
 #define USING_LOG_PREFIX RS
-#include "common/ob_timeout_ctx.h"
-#include "common/mysqlclient/ob_isql_connection.h"
 #include "ob_ddl_redefinition_task.h"
-#include "rootserver/ddl_task/ob_ddl_task_util.h"
+#include "common/mysqlclient/ob_isql_connection.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "rootserver/ob_local_management_service.h"
-#include "share/autoincrement/ob_i_tablet_autoincrement_admin.h"
 #include "share/ob_autoincrement_service.h"
 #include "share/ob_ddl_checksum.h"
 #include "share/ob_ddl_sim_point.h"
-#include "share/rc/ob_server_runtime.h"
 #include "pl/sys_package/ob_dbms_stats.h"
+#include "storage/ob_tablet_autoinc_seq_service.h"
 #include "share/ob_ex_rpc.h"
 #include "share/system_variable/ob_system_variable_alias.h"
 
@@ -40,14 +37,10 @@ using namespace oceanbase::share::schema;
 using namespace oceanbase::rootserver;
 using namespace oceanbase::transaction::tablelock;
 
-namespace oceanbase
-{
-namespace rootserver
-{
-namespace ddl_redefinition
+namespace
 {
 const int64_t DDL_STATS_SYNC_TRX_LOCK_TIMEOUT_US = 0L;
-const int64_t DDL_STATS_SYNC_LOCK_CONFLICT_RETRY_DELAY_US = 3L * 1000L * 1000L;
+const int64_t DDL_STATS_SYNC_LOCK_CONFLICT_RETRY_DELAY_US = 3L * 1000L * 1000L; // 3s
 
 class ObDDLStatsSyncTrxLockTimeoutGuard final
 {
@@ -72,7 +65,7 @@ public:
                                                   old_trx_lock_timeout_))) {
       LOG_WARN("fail to get ddl stats sync trx lock timeout", K(ret));
     } else if (OB_FAIL(conn->set_session_variable(oceanbase::share::OB_SV_TRX_LOCK_TIMEOUT,
-                                                  DDL_STATS_SYNC_TRX_LOCK_TIMEOUT_US))) {
+                                                 DDL_STATS_SYNC_TRX_LOCK_TIMEOUT_US))) {
       LOG_WARN("fail to set ddl stats sync trx lock timeout", K(ret),
                K(DDL_STATS_SYNC_TRX_LOCK_TIMEOUT_US));
     } else {
@@ -102,11 +95,7 @@ private:
   int64_t old_trx_lock_timeout_;
   bool need_restore_;
 };
-} // namespace ddl_redefinition
-} // namespace rootserver
-} // namespace oceanbase
-
-using namespace oceanbase::rootserver::ddl_redefinition;
+}
 
 ObDDLRedefinitionSSTableBuildTask::ObDDLRedefinitionSSTableBuildTask(
     const int64_t task_id,
@@ -160,7 +149,7 @@ int ObDDLRedefinitionSSTableBuildTask::process()
   int tmp_ret = OB_SUCCESS;
   ObTabletID unused_tablet_id;
   ObTraceIdGuard trace_id_guard(trace_id_);
-  ObDDLEventInfo ddl_event_info(GCTX.self_addr());
+  ObDDLEventInfo ddl_event_info;
   ddl_event_info.set_inner_sql_id(execution_id_);
   ObSqlString sql_string;
   ObSchemaGetterGuard schema_guard;
@@ -173,7 +162,7 @@ int ObDDLRedefinitionSSTableBuildTask::process()
     LOG_WARN("ddl redefinition sstable build task not inited", K(ret));
   } else if (OB_FAIL(DDL_SIM(task_id_, BUILD_LOCAL_ASYNC_TASK_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(task_id_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
       schema_guard))) {
     LOG_WARN("fail to get runtime schema guard", K(ret), K(data_table_id_));
   } else if (OB_FAIL(schema_guard.check_formal_guard())) {
@@ -185,7 +174,7 @@ int ObDDLRedefinitionSSTableBuildTask::process()
     LOG_WARN("error unexpected, table schema must not be nullptr", K(ret), K(data_table_id_));
   } else {
     ObString partition_names;
-    if (OB_FAIL(ObDDLTaskUtil::generate_build_replica_sql(data_table_id_,
+    if (OB_FAIL(ObDDLUtil::generate_local_build_sql(data_table_id_,
                                                     dest_table_id_,
                                                     data_table_schema->get_schema_version(),
                                                     snapshot_version_,
@@ -215,7 +204,7 @@ int ObDDLRedefinitionSSTableBuildTask::process()
       user_sql_proxy = GCTX.ddl_sql_proxy_;
       add_event_info(ret, "ddl redefinition sstable build task generate innersql");
       LOG_INFO("execute sql" , K(sql_string), K(data_table_id_),
-              "is_strict_mode", is_strict_mode(sql_mode_), K(sql_mode_), K(parallelism_), K(DDL_INNER_SQL_EXECUTE_TIMEOUT), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
+              "is_strict_mode", is_strict_mode(sql_mode_), K(sql_mode_), K(parallelism_), K(DDL_INNER_SQL_EXECUTE_TIMEOUT), "ddl_event_info", ObDDLEventInfo());
       if (OB_FAIL(timeout_ctx.set_trx_timeout_us(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
         LOG_WARN("set trx timeout failed", K(ret));
       } else if (OB_FAIL(timeout_ctx.set_timeout(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
@@ -226,9 +215,7 @@ int ObDDLRedefinitionSSTableBuildTask::process()
         } else if (OB_FAIL(user_sql_proxy->write(sql_string.ptr(), affected_rows,
                                                  &session_param))) {
           LOG_WARN("fail to execute local build sql", K(ret));
-        } else if (OB_FAIL(ObCheckTabletDataComplementOp::check_finish_report_checksum(
-            *GCTX.schema_service_, *GCTX.sql_proxy_,
-            dest_table_id_, execution_id_, task_id_))) {
+        } else if (OB_FAIL(ObCheckTabletDataComplementOp::check_finish_report_checksum(dest_table_id_, execution_id_, task_id_))) {
           LOG_WARN("fail to check sstable checksum_report_finish",
             K(ret), K(dest_table_id_), K(execution_id_), K(task_id_));
         }
@@ -236,7 +223,7 @@ int ObDDLRedefinitionSSTableBuildTask::process()
     }
   }
   if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::on_sstable_complement_job_reply(unused_tablet_id, task_key, snapshot_version_, execution_id_, ret, info))) {
-    LOG_WARN("fail to finish sstable complement", KR(tmp_ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
+    LOG_WARN("fail to finish sstable complement", KR(tmp_ret), "ddl_event_info", ObDDLEventInfo());
   }
   add_event_info(ret, "ddl redefinition sstable build task finish");
   return ret;
@@ -313,7 +300,7 @@ int ObDDLRedefinitionTask::check_table_empty(const ObDDLTaskStatus next_task_sta
   int ret = OB_SUCCESS;
   bool need_check_table_empty = false;
   bool is_local_check_end = false;
-  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = GCTX.local_management_service_;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableRedefinitionTask has not been inited", K(ret));
@@ -365,7 +352,7 @@ int ObDDLRedefinitionTask::obtain_snapshot(const ObDDLTaskStatus next_task_statu
     if (OB_FAIL(switch_status(next_task_status, true, ret))) {
       LOG_WARN("fail to switch task status", K(ret));
     }
-  } else if (OB_FAIL(ObDDLTaskUtil::obtain_snapshot(next_task_status, object_id_, target_object_id_,
+  } else if (OB_FAIL(ObDDLUtil::obtain_snapshot(next_task_status, object_id_, target_object_id_,
                                                 snapshot_version_, this))) {
     LOG_WARN("fail to obtain_snapshot", K(ret), K(snapshot_version_));
   }
@@ -542,11 +529,9 @@ int ObDDLRedefinitionTask::send_local_build_request()
       param.parallelism_ = std::max(alter_table_arg_.parallelism_, static_cast<int64_t>(1));
       param.execution_id_ = execution_id_;
       param.data_format_version_ = data_format_version_;
-      if (OB_FAIL(ObDDLUtil::get_tablets(
-              *GCTX.schema_service_, object_id_, param.source_tablet_ids_))) {
+      if (OB_FAIL(ObDDLUtil::get_tablets(object_id_, param.source_tablet_ids_))) {
         LOG_WARN("fail to get tablets", K(ret), K(object_id_));
-      } else if (OB_FAIL(ObDDLUtil::get_tablets(
-                     *GCTX.schema_service_, target_object_id_, param.dest_tablet_ids_))) {
+      } else if (OB_FAIL(ObDDLUtil::get_tablets(target_object_id_, param.dest_tablet_ids_))) {
         LOG_WARN("fail to get tablets", K(ret), K(target_object_id_));
       }
       const int64_t src_tablet_cnt = param.source_tablet_ids_.count();
@@ -612,8 +597,7 @@ int ObDDLRedefinitionTask::check_data_dest_tables_columns_checksum(const int64_t
     LOG_WARN("ObDDLRedefinitionTask has not been inited", K(ret));
   } else if (OB_FAIL(DDL_SIM(task_id_, DDL_REDEF_TASK_CHECK_COLUMN_CHECKSUM_FAILED))) {
     LOG_WARN("ddl sim failure", K(task_id_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
-                 runtime_schema_guard))) {
+  } else if (OB_FAIL(ObDDLUtil::get_runtime_schema_guard(runtime_schema_guard))) {
     LOG_WARN("get runtime schema guard failed", K(ret));
   } else if (OB_FAIL(runtime_schema_guard.get_table_schema( object_id_, data_table_schema))) {
     LOG_WARN("get data table schema failed", K(ret), K(object_id_));
@@ -690,12 +674,12 @@ int ObDDLRedefinitionTask::add_constraint_ddl_task(const int64_t constraint_id)
   SMART_VAR(obcall::ObAlterTableArg, alter_table_arg) {
     ObTraceIdGuard trace_id_guard(get_trace_id());
     ATOMIC_INC(&sub_task_trace_id_);
-    ObDDLEventInfo ddl_event_info(GCTX.self_addr(), sub_task_trace_id_);
+    ObDDLEventInfo ddl_event_info(sub_task_trace_id_);
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *table_schema = nullptr;
     AlterTableSchema &alter_table_schema = alter_table_arg.alter_table_schema_;
     const ObConstraint *constraint = nullptr;
-    ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+    ObLocalManagementService *local_management_service = GCTX.local_management_service_;
     const ObDatabaseSchema *database_schema = nullptr;
     if (OB_UNLIKELY(!is_inited_)) {
       ret = OB_NOT_INIT;
@@ -788,10 +772,10 @@ int ObDDLRedefinitionTask::add_fk_ddl_task(const int64_t fk_id)
   SMART_VAR(obcall::ObAlterTableArg, alter_table_arg) {
     ObTraceIdGuard trace_id_guard(get_trace_id());
     ATOMIC_INC(&sub_task_trace_id_);
-    ObDDLEventInfo ddl_event_info(GCTX.self_addr(), sub_task_trace_id_);
+    ObDDLEventInfo ddl_event_info(sub_task_trace_id_);
     AlterTableSchema &alter_table_schema = alter_table_arg.alter_table_schema_;
     ObConstraint *constraint = nullptr;
-    ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+    ObLocalManagementService *local_management_service = GCTX.local_management_service_;
     const ObDatabaseSchema *database_schema = nullptr;
     if (OB_UNLIKELY(!is_inited_)) {
       ret = OB_NOT_INIT;
@@ -931,7 +915,7 @@ int ObDDLRedefinitionTask::on_child_task_finish(
       LOG_WARN("set dependent_task_result_map failed", K(ret), K(child_task_key));
     } else {
       add_event_info("ddl redefinition task finish child task finish");
-      LOG_INFO("child task finish", K(child_task_key), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
+      LOG_INFO("child task finish", K(child_task_key), "ddl_event_info", ObDDLEventInfo());
     }
   }
   return ret;
@@ -950,7 +934,7 @@ int ObDDLRedefinitionTask::sync_auto_increment_position()
     LOG_WARN("ddl sim failure", K(ret), K(task_id_));
   } else if (has_synced_autoincrement_) {
     // do nothing
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(runtime_schema_guard))) {
+  } else if (OB_FAIL(ObDDLUtil::get_runtime_schema_guard(runtime_schema_guard))) {
     LOG_WARN("get runtime schema guard failed", K(ret));
   } else if (OB_FAIL(runtime_schema_guard.get_table_schema( object_id_, data_table_schema))) {
     LOG_WARN("get data table schema failed", K(ret), K(object_id_));
@@ -1026,7 +1010,7 @@ int ObDDLRedefinitionTask::sync_auto_increment_position()
 int ObDDLRedefinitionTask::modify_autoinc(const ObDDLTaskStatus next_task_status)
 {
   int ret = OB_SUCCESS;
-  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = GCTX.local_management_service_;
   bool is_update_autoinc_end = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -1045,7 +1029,7 @@ int ObDDLRedefinitionTask::modify_autoinc(const ObDDLTaskStatus next_task_status
     const ObTableSchema *new_table_schema = nullptr;
     uint64_t alter_autoinc_column_id = 0;
     ObColumnNameMap col_name_map;
-    if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(runtime_schema_guard))) {
+    if (OB_FAIL(ObDDLUtil::get_runtime_schema_guard(runtime_schema_guard))) {
       LOG_WARN("get runtime schema guard failed", K(ret));
     } else if (OB_FAIL(runtime_schema_guard.get_table_schema( object_id_, orig_table_schema))) {
       LOG_WARN("get data table schema failed", K(ret), K(object_id_));
@@ -1177,10 +1161,9 @@ int ObDDLRedefinitionTask::finish()
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(DDL_SIM(task_id_, REDEF_TASK_FINISH_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(task_id_));
-  } else if (snapshot_version_ > 0 && OB_FAIL(ObDDLTaskUtil::release_snapshot(
-                 this, object_id_, target_object_id_, snapshot_version_))) {
+  } else if (snapshot_version_ > 0 && OB_FAIL(ObDDLUtil::release_snapshot(this, object_id_, target_object_id_, snapshot_version_))) {
     LOG_WARN("release snapshot failed", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("get schema guard failed", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, data_table_schema))) {
     LOG_WARN("get data table schema failed", K(ret), K(object_id_));
@@ -1190,7 +1173,7 @@ int ObDDLRedefinitionTask::finish()
     } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(max(all_orig_index_tablet_count, data_table_schema->get_all_part_num()), rpc_timeout))) {
       LOG_WARN("get ddl rpc timeout failed", K(ret));
     } else if (data_table_schema->get_association_table_id() != OB_INVALID_ID &&
-        OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->                  execute_ddl_task(alter_table_arg_, objs); }))) {
+        OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->                  execute_ddl_task(alter_table_arg_, objs); }))) {
       LOG_WARN("cleanup garbage failed", K(ret));
     }
   }
@@ -1302,7 +1285,7 @@ int ObDDLRedefinitionTask::check_health()
     ObSchemaGetterGuard runtime_schema_guard;
     bool is_source_table_exist = false;
     bool is_dest_table_exist = false;
-    if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(runtime_schema_guard))) {
+    if (OB_FAIL(ObDDLUtil::get_runtime_schema_guard(runtime_schema_guard))) {
       LOG_WARN("get runtime schema guard failed", K(ret));
     } else if (OB_FAIL(runtime_schema_guard.check_table_exist(object_id_, is_source_table_exist))) {
       LOG_WARN("check data table exist failed", K(ret), K(object_id_));
@@ -1399,7 +1382,7 @@ int ObDDLRedefinitionTask::sync_stats_info()
     const int64_t start_time = ObTimeUtility::current_time();
     if (OB_FAIL(DDL_SIM(task_id_, REDEF_TASK_SYNC_STATS_INFO_FAILED))) {
       LOG_WARN("ddl sim failure", K(ret), K(task_id_));
-    } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(runtime_schema_guard))) {
+    } else if (OB_FAIL(ObDDLUtil::get_runtime_schema_guard(runtime_schema_guard))) {
       LOG_WARN("get runtime schema guard failed", K(ret));
     } else if (OB_FAIL(runtime_schema_guard.get_table_schema( object_id_, data_table_schema))) {
       LOG_WARN("fail to get data table schema", K(ret), K(object_id_));
@@ -1460,7 +1443,15 @@ int ObDDLRedefinitionTask::sync_stats_info_local(common::ObMySQLTransaction &tra
   } else if (OB_FAIL(sync_table_prefs(trans))) {
     LOG_WARN("fail to sync table prefs", K(ret));
   } else if (check_need_sync_stats()) {
-    if (OB_FAIL(sync_table_level_stats_info(trans, data_table_schema, new_table_schema, need_sync_history))) {
+    // DDL stats sync is opportunistic.  Gather stats may hold __all_*_stat row
+    // locks across batches.  DDL must not queue behind those locks while holding
+    // its own stats locks, otherwise both flows can block each other.  The
+    // transaction lock timeout above makes stats sync fail fast; take_effect keeps
+    // the task in TAKE_EFFECT and retries after gather releases its transaction.
+    if (OB_FAIL(sync_table_level_stats_info(trans,
+                                           data_table_schema,
+                                           new_table_schema,
+                                           need_sync_history))) {
       LOG_WARN("fail to sync table level stats", K(ret));
     } else if (DDL_ALTER_PARTITION_BY != task_type_
                 && OB_FAIL(sync_partition_level_stats_info(trans,
@@ -1476,7 +1467,6 @@ int ObDDLRedefinitionTask::sync_stats_info_local(common::ObMySQLTransaction &tra
       LOG_WARN("fail to sync column level stats", K(ret));
     }
   }
-
   int tmp_ret = trx_lock_timeout_guard.restore();
   if (OB_SUCCESS != tmp_ret) {
     LOG_WARN("fail to restore stats sync trx lock timeout", K(ret), K(tmp_ret));
@@ -2069,11 +2059,11 @@ int ObSyncTabletAutoincSeqCtx::init(
   if (OB_UNLIKELY(src_table_id == OB_INVALID_ID || dest_table_id == OB_INVALID_ID)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(src_table_id), K(dest_table_id));
-  } else if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, src_table_id, orig_src_tablet_ids_))) {
+  } else if (OB_FAIL(ObDDLUtil::get_tablets(src_table_id, orig_src_tablet_ids_))) {
     LOG_WARN("failed to get data table snapshot", K(ret));
   } else if (OB_FAIL(src_tablet_ids_.assign(orig_src_tablet_ids_))) {
     LOG_WARN("failed to assign src_tablet_ids", K(ret));
-  } else if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, dest_table_id, dest_tablet_ids_))) {
+  } else if (OB_FAIL(ObDDLUtil::get_tablets(dest_table_id, dest_tablet_ids_))) {
     LOG_WARN("failed to get dest table snapshot", K(ret));
   } else {
 
@@ -2130,19 +2120,19 @@ int ObSyncTabletAutoincSeqCtx::call_and_process_all_tablet_autoinc_seqs(const bo
     LOG_WARN("failed to assign request params", K(ret), K(autoinc_params_));
   }
 
-  ObITabletAutoincrementAdmin *service =
-      ::oceanbase::share::server_service<::oceanbase::share::ObITabletAutoincrementAdmin>();
+  storage::ObTabletAutoincSeqService &service =
+      storage::ObTabletAutoincSeqService::get_instance();
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(service)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet autoincrement admin is null", K(ret));
   } else {
     int rpc_ret_code = OB_SUCCESS;
     common::ObSArray<ObTabletAutoincSeqCopyParam> result_params;
     if (is_get) {
-      rpc_ret_code = service->read_migration_sequences(request_params, result_params);
+      rpc_ret_code = service.batch_get_tablet_autoinc_seq(request_params);
     } else {
-      rpc_ret_code = service->write_migration_sequences(request_params, result_params);
+      rpc_ret_code = service.batch_set_tablet_autoinc_seq(request_params);
+    }
+    if (OB_SUCCESS == rpc_ret_code && OB_FAIL(result_params.assign(request_params))) {
+      LOG_WARN("failed to assign result params", K(ret), K(request_params));
     }
     if (is_get) {
       if (OB_FAIL(autoinc_params_.reserve(orig_src_tablet_ids_.count()))) {
@@ -2244,7 +2234,8 @@ int ObDDLRedefinitionTask::reap_old_local_build_task(bool &need_exec_new_inner_s
     LOG_WARN("ObIndexBuildTask has not been inited", K(ret));
   } else if (OB_FAIL(DDL_SIM(task_id_, REAP_OLD_LOCAL_BUILD_TASK_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(task_id_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
+      schema_guard))) {
     LOG_WARN("fail to get runtime schema guard", K(ret), K(data_table_id));
   } else if (OB_FAIL(schema_guard.get_table_schema( data_table_id, table_schema))) {
     LOG_WARN("get table schema failed", K(ret), K(data_table_id));
@@ -2258,8 +2249,7 @@ int ObDDLRedefinitionTask::reap_old_local_build_task(bool &need_exec_new_inner_s
     const int old_ret_code = OB_SUCCESS;
     if (old_execution_id < 0) {
       need_exec_new_inner_sql = true;
-    } else if (OB_FAIL(ObCheckTabletDataComplementOp::check_and_wait_old_complement_task(
-        *GCTX.schema_service_, *GCTX.sql_proxy_, dest_table_id,
+    } else if (OB_FAIL(ObCheckTabletDataComplementOp::check_and_wait_old_complement_task(dest_table_id,
         task_id_, old_execution_id, trace_id_,
         table_schema->get_schema_version(), snapshot_version_, need_exec_new_inner_sql))) {
       if (OB_EAGAIN != ret) {
@@ -2287,7 +2277,7 @@ int ObDDLRedefinitionTask::check_and_cancel_complement_data_dag(bool &all_comple
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(ObDDLTaskUtil::check_and_cancel_single_replica_dag(this, object_id_, target_object_id_,
+  } else if (OB_FAIL(ObDDLUtil::check_and_cancel_local_build_dag(this, object_id_, target_object_id_,
             check_dag_exit_tablets_map_, data_format_version_, check_dag_exit_retry_cnt_, true /*is_complement_data_dag*/, all_complement_dag_exit))) {
     LOG_WARN("failed to check and cancel complement data dag", K(ret));
   }

@@ -18,7 +18,6 @@
 
 #include "ob_execute_result.h"
 #include "sql/engine/ob_exec_context.h"
-#include "sql/engine/ob_physical_plan.h"
 
 using namespace oceanbase::common;
 namespace oceanbase
@@ -62,8 +61,10 @@ int ObExecuteResult::get_next_row(ObExecContext &ctx, const common::ObNewRow *&r
         ObDatum *datum = NULL;
         ObExpr *expr = spec.output_.at(i);
         if (OB_FAIL(expr->eval(static_engine_root_->get_eval_ctx(), datum))) {
+          LOG_WARN("expr evaluate failed", K(ret));
         } else if (OB_FAIL(datum->to_obj(
                     row_.cells_[i], expr->obj_meta_, expr->obj_datum_map_))) {
+          LOG_WARN("convert datum to obj failed", K(ret));
         }
       }
     }
@@ -78,6 +79,7 @@ int ObExecuteResult::get_next_row(ObExecContext &ctx, const common::ObNewRow *&r
             static_engine_root_->get_eval_ctx()) + (expr->is_batch_result() ? idx : 0);
         if (OB_FAIL(datum->to_obj(
                     row_.cells_[i], expr->obj_meta_, expr->obj_datum_map_))) {
+          LOG_WARN("convert datum to obj failed", K(ret));
         }
       }
     }
@@ -111,6 +113,7 @@ int ObExecuteResult::open() const
       ObDatum *datum = NULL;
       ObExpr *expr = var_init_exprs.at(i);
       if (OB_FAIL(expr->eval(static_engine_root_->get_eval_ctx(), datum))) {
+        LOG_WARN("expr evaluate failed", K(ret));
       }
     }
   }
@@ -136,6 +139,7 @@ int ObExecuteResult::close() const
   int ret = OB_SUCCESS;
   if (NULL != static_engine_root_) {
     if (OB_FAIL(static_engine_root_->close())) {
+      LOG_WARN("close failed", K(ret));
     }
   }
   return ret;

@@ -357,6 +357,7 @@ public:
                                        const ObExprFrameInfo &expr_frame_info)
   {
     int ret = OB_SUCCESS;
+    SQL_LOG(TRACE, "trace start ser expr frame info", K(ret), K(buf_len), K(pos));
     if (SERIALIZE_PLAN_PART) {
       int64_t need_ctx_cnt = expr_frame_info.need_ctx_cnt_;
       OB_UNIS_ENCODE(need_ctx_cnt);
@@ -378,13 +379,16 @@ public:
       ObExpr::get_serialize_array() = &(const_cast<ObIArray<ObExpr> &>(exprs));
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, expr_cnt))) {
+        SQL_LOG(WARN, "fail to encode op type", K(ret));
       } else if (nullptr == ObExpr::get_serialize_array()) {
         ret = OB_ERR_UNEXPECTED;
         SQL_LOG(WARN, "serialize array is null", K(ret), K(pos), K(expr_cnt));
       } else {
         if (!expr_frame_info.is_mark_serialize()) {
+          SQL_LOG(TRACE, "exprs normal serialization", K(expr_cnt));
           for (int64_t i = 0; i < expr_cnt && OB_SUCC(ret); ++i) {
             if (OB_FAIL(exprs.at(i).serialize(buf, buf_len, pos))) {
+              SQL_LOG(WARN, "failed to serialize expr", K(ret), K(i), K(exprs.at(i)));
             }
           }
         } else {
@@ -392,8 +396,10 @@ public:
           for (int64_t i = 0; i < expr_cnt && OB_SUCC(ret); ++i) {
             if (expr_frame_info.ser_expr_marks_.at(i)) {
               if (OB_FAIL(exprs.at(i).serialize(buf, buf_len, pos))) {
+                SQL_LOG(WARN, "failed to serialize expr", K(ret), K(i), K(exprs.at(i)));
               }
             } else if (OB_FAIL(ObEmptyExpr::instance().serialize(buf, buf_len, pos))) {
+              SQL_LOG(WARN, "serialize empty expr failed", K(ret), K(i));
             }
           }
         }
@@ -412,11 +418,16 @@ public:
     OB_UNIS_ENCODE(frame_count);
     if (OB_SUCC(ret)) {
       if (OB_FAIL(serialize_frame_info<SERIALIZE_PLAN_PART>(buf, buf_len, pos, expr_frame_info.const_frame_, frames, frame_count))) {
+        SQL_LOG(WARN, "serialize const frame failed", K(ret));
       } else if (OB_FAIL(serialize_frame_info<SERIALIZE_PLAN_PART>(buf, buf_len, pos, expr_frame_info.param_frame_, frames, frame_count))) {
+        SQL_LOG(WARN, "serialize param frame failed", K(ret));
       } else if (OB_FAIL(serialize_frame_info<SERIALIZE_PLAN_PART>(buf, buf_len, pos, expr_frame_info.dynamic_frame_, frames, frame_count))) {
+        SQL_LOG(WARN, "serialize dynamic frame failed", K(ret));
       } else if (OB_FAIL(serialize_frame_info<SERIALIZE_PLAN_PART>(buf, buf_len, pos, expr_frame_info.datum_frame_, frames, frame_count, true))) {
+        SQL_LOG(WARN, "serialize datum frame failed", K(ret));
       }
     }
+    SQL_LOG(DEBUG, "trace end ser expr frame info", K(ret), K(buf_len), K(pos));
     return ret;
   }
 
@@ -521,11 +532,14 @@ public:
       ObExpr::get_serialize_array() = &(const_cast<ObIArray<ObExpr> &>(exprs));
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &expr_cnt))) {
+        SQL_LOG(WARN, "fail to encode op type", K(ret));
       } else if (OB_FAIL(exprs.prepare_allocate(expr_cnt))) {
+        SQL_LOG(WARN, "failed to prepare allocator expr", K(ret));
       } else {
         for (int64_t i = 0; i < expr_cnt && OB_SUCC(ret); ++i) {
           ObExpr &expr = exprs.at(i);
           if (OB_FAIL(expr.deserialize(buf, data_len, pos))) {
+            SQL_LOG(WARN, "failed to serialize expr", K(ret));
           }
         }
       }
@@ -548,15 +562,19 @@ public:
     } else if (OB_FAIL(deserialize_frame_info<DESERIALIZE_PLAN_PART>(
         buf, data_len, pos, ctx.get_allocator(), expr_frame_info.const_frame_,
         const_char_ptrs, frames, frame_cnt))) {
+      SQL_LOG(WARN, "failed to deserialize const frame", K(ret));
     } else if (OB_FAIL(deserialize_frame_info<DESERIALIZE_PLAN_PART>(
         buf, data_len, pos, ctx.get_allocator(), expr_frame_info.param_frame_,
         const_cast<ObIArray<char*>*>(param_frame_ptrs), frames, frame_cnt))) {
+      SQL_LOG(WARN, "failed to deserialize const frame", K(ret));
     } else if (OB_FAIL(deserialize_frame_info<DESERIALIZE_PLAN_PART>(
         buf, data_len, pos, ctx.get_allocator(),expr_frame_info.dynamic_frame_,
         nullptr, frames, frame_cnt))) {
+      SQL_LOG(WARN, "failed to deserialize const frame", K(ret));
     } else if (OB_FAIL(deserialize_frame_info<DESERIALIZE_PLAN_PART>(
         buf, data_len, pos, ctx.get_allocator(),expr_frame_info.datum_frame_,
         nullptr, frames, frame_cnt, true))) {
+      SQL_LOG(WARN, "failed to deserialize const frame", K(ret));
     } else {
       ctx.set_frames(frames);
       ctx.set_frame_cnt(frame_cnt);
@@ -581,11 +599,13 @@ public:
       ObIArray<ObFrameInfo> &non_const_all_frames = const_cast<ObIArray<ObFrameInfo> &>(all_frames);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(non_const_all_frames.reserve(frame_info_cnt))) {
+        SQL_LOG(WARN, "failed to reserve const frame", K(ret));
       } else {
         ObFrameInfo frame_info;
         for (int64_t i = 0; i < frame_info_cnt && OB_SUCC(ret); ++i) {
           OB_UNIS_DECODE(frame_info);
           if (OB_FAIL(non_const_all_frames.push_back(frame_info))) {
+            SQL_LOG(WARN, "failed to push back frame", K(ret), K(i));
           }
         }
       }
@@ -715,6 +735,7 @@ public:
     len += get_serialize_frame_info_size<SERIALIZE_PLAN_PART>(expr_frame_info.param_frame_, frames, frame_count);
     len += get_serialize_frame_info_size<SERIALIZE_PLAN_PART>(expr_frame_info.dynamic_frame_, frames, frame_count);
     len += get_serialize_frame_info_size<SERIALIZE_PLAN_PART>(expr_frame_info.datum_frame_, frames, frame_count, true);
+    SQL_LOG(DEBUG, "trace end get ser expr frame info size", K(ret), K(len));
     return len;
   }
   template <bool SERIALIZE_PLAN_PART>
@@ -950,6 +971,7 @@ public:
     // **append** warning msg
     for (int i = 0; i < from.warnings_.count(); ++i) {
       if (OB_FAIL(to.warnings_.push_back(from.warnings_.at(i)))) {
+        SQL_LOG(WARN, "Failed to add warning. ignore error & continue", K(ret));
       }
     }
   }

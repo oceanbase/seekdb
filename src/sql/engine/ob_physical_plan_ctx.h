@@ -21,7 +21,7 @@
 #include "common/sql_mode/ob_sql_mode.h"
 #include "common/ob_field.h"
 #include "lib/time/ob_clock_generator.h"
-#include "data_plane/transaction/ob_tx_options.h"
+#include "storage/tx/ob_trans_define.h"
 #include "lib/container/ob_fixed_array.h"
 #include "lib/container/ob_2d_array.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
@@ -85,7 +85,7 @@ public:
     subschema_ctx_.destroy();
     all_local_session_vars_.destroy();
   }
-
+  
   inline void set_runtime_schema_version(const int64_t version) { runtime_schema_version_ = version; }
   inline int64_t get_runtime_schema_version() const { return runtime_schema_version_; }
   /**
@@ -414,9 +414,6 @@ public:
   void set_ignore_stmt(bool is_ignore) { is_ignore_stmt_ = is_ignore; }
   bool is_ignore_stmt() const { return is_ignore_stmt_; }
   bool is_plain_select_stmt() const;
-  bool can_partition_retry() const;
-  bool has_for_update() const;
-  int64_t get_ddl_task_id() const;
   ObTableScanStat &get_table_scan_stat()
   {
     return table_scan_stat_;
@@ -512,7 +509,7 @@ private:
   /**
    * @note these member need serialize
    */
-
+  
   // used for TRANSACTION SET CONSISTENCY check
   int64_t tsc_snapshot_timestamp_;
   // only used when the sql contains fun like current_time

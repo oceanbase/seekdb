@@ -147,12 +147,12 @@ constexpr int OB_ERR_SQL_START = -5000;
 constexpr int OB_ERR_SQL_END = -5999;
 ";
   for my $oberr (@errors_share) {
-    if (system "grep $oberr ../../src/oblib/lib/ob_errno.h >/dev/null") {
+    if (system "grep $oberr ../../deps/oblib/src/lib/ob_errno.h >/dev/null") {
       print $fh_header "constexpr int $oberr = $map_share{$oberr}->[0];\n";
     }
   }
   foreach my $oberr (sort keys %other_map){
-    if (system "grep $oberr ../../src/oblib/lib/ob_errno.h >/dev/null") {
+    if (system "grep $oberr ../../deps/oblib/src/lib/ob_errno.h >/dev/null") {
       my $errno;
       if (exists($map{$other_map{$oberr}->[0]})){
         $errno = $map{$other_map{$oberr}->[0]}->[0];
@@ -196,7 +196,7 @@ constexpr int OB_ERR_SQL_END = -5999;
 ';
 
 #generate dep/ob_errno.h
-open my $fh_header_dep, '>', "../../src/oblib/lib/ob_errno.h";
+open my $fh_header_dep, '>', "../../deps/oblib/src/lib/ob_errno.h";
 print $fh_header_dep '/*
  * Copyright (c) 2025 OceanBase.
  *

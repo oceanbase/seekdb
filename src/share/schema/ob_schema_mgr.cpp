@@ -88,6 +88,7 @@ ObSimpleServerRuntimeSchema &ObSimpleServerRuntimeSchema::operator =(const ObSim
     status_ = other.status_;
     in_recyclebin_ = other.in_recyclebin_;
     if (OB_FAIL(deep_copy_str(other.runtime_name_, runtime_name_))) {
+      LOG_WARN("Fail to deep copy runtime_name", K(ret));
     }
     if (OB_FAIL(ret)) {
       error_ret_ = ret;
@@ -160,12 +161,14 @@ ObSimpleUserSchema &ObSimpleUserSchema::operator =(const ObSimpleUserSchema &oth
     reset();
     int ret = OB_SUCCESS;
     error_ret_ = other.error_ret_;
-
+    
     user_id_ = other.user_id_;
     type_ = other.type_;
     schema_version_ = other.schema_version_;
     if (OB_FAIL(deep_copy_str(other.user_name_, user_name_))) {
+      LOG_WARN("Fail to deep copy user_name", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.host_name_, host_name_))) {
+      LOG_WARN("Fail to deep copy host_name", K(ret));
     }
     if (OB_FAIL(ret)) {
       error_ret_ = ret;
@@ -179,7 +182,7 @@ ObSimpleUserSchema &ObSimpleUserSchema::operator =(const ObSimpleUserSchema &oth
 void ObSimpleUserSchema::reset()
 {
   ObSchema::reset();
-
+  
   user_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_VERSION;
   user_name_.reset();
@@ -236,11 +239,12 @@ ObSimpleDatabaseSchema &ObSimpleDatabaseSchema::operator =(const ObSimpleDatabas
     reset();
     int ret = OB_SUCCESS;
     error_ret_ = other.error_ret_;
-
+    
     database_id_ = other.database_id_;
     schema_version_ = other.schema_version_;
     name_case_mode_ = other.name_case_mode_;
     if (OB_FAIL(deep_copy_str(other.database_name_, database_name_))) {
+      LOG_WARN("Fail to deep copy database_name", K(ret));
     }
     if (OB_FAIL(ret)) {
       error_ret_ = ret;
@@ -254,7 +258,7 @@ ObSimpleDatabaseSchema &ObSimpleDatabaseSchema::operator =(const ObSimpleDatabas
 void ObSimpleDatabaseSchema::reset()
 {
   ObSchema::reset();
-
+  
   database_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_VERSION;
   database_name_.reset();
@@ -355,23 +359,39 @@ int ObSchemaMgr::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(database_name_map_.init())) {
+    LOG_WARN("init database name map failed", K(ret));
   } else if (OB_FAIL(table_id_map_.init())) {
+    LOG_WARN("init table id map failed", K(ret));
   } else if (OB_FAIL(table_name_map_.init())) {
+    LOG_WARN("init table name map failed", K(ret));
   } else if (OB_FAIL(normal_index_name_map_.init())) {
+    LOG_WARN("init index name map failed", K(ret));
   } else if (OB_FAIL(foreign_key_name_map_.init())) {
+    LOG_WARN("init foreign key name map failed", K(ret));
   } else if (OB_FAIL(constraint_name_map_.init())) {
+    LOG_WARN("init constraint name map failed", K(ret));
   } else if (OB_FAIL(outline_mgr_.init())) {
+    LOG_WARN("init outline mgr failed", K(ret));
   } else if (OB_FAIL(routine_mgr_.init())) {
+    LOG_WARN("init procedure mgr failed", K(ret));
   } else if (OB_FAIL(priv_mgr_.init())) {
+    LOG_WARN("init priv mgr failed", K(ret));
   } else if (OB_FAIL(package_mgr_.init())) {
+    LOG_WARN("init package mgr failed", K(ret));
   } else if (OB_FAIL(trigger_mgr_.init())) {
+    LOG_WARN("init trigger mgr failed", K(ret));
   } else if (OB_FAIL(sys_variable_mgr_.init())) {
+    LOG_WARN("init sys variable mgr failed", K(ret));
   } else if (OB_FAIL(hidden_table_name_map_.init())) {
+    LOG_WARN("init hidden table name map failed", K(ret));
   } else if (OB_FAIL(built_in_index_name_map_.init())) {
+    LOG_WARN("init built in index name map failed", K(ret));
   } else if (OB_FAIL(mock_fk_parent_table_mgr_.init())) {
+    LOG_WARN("init mock_fk_parent_table_mgr_ failed", K(ret));
   } else if (OB_FAIL(ai_model_mgr_.init())) {
+    LOG_WARN("init ai_model_mgr_ failed", K(ret));
   } else {
-
+    
   }
 
   return ret;
@@ -428,7 +448,7 @@ int ObSchemaMgr::assign(const ObSchemaMgr &other)
   } else if (this != &other) {
     reset();
     schema_version_ = other.schema_version_;
-
+    
     is_consistent_ = other.is_consistent_;
     #define ASSIGN_FIELD(x)                        \
       if (OB_SUCC(ret)) {                          \
@@ -445,6 +465,7 @@ int ObSchemaMgr::assign(const ObSchemaMgr &other)
     // System variables need to be assigned first
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sys_variable_mgr_.assign(other.sys_variable_mgr_))) {
+        LOG_WARN("assign sys variable mgr failed", K(ret));
       }
     }
     ASSIGN_FIELD(user_infos_);
@@ -464,12 +485,19 @@ int ObSchemaMgr::assign(const ObSchemaMgr &other)
     #undef ASSIGN_FIELD
     if (OB_SUCC(ret)) {
       if (OB_FAIL(outline_mgr_.assign(other.outline_mgr_))) {
+        LOG_WARN("assign outline mgr failed", K(ret));
       } else if (OB_FAIL(priv_mgr_.assign(other.priv_mgr_))) {
+        LOG_WARN("assign priv mgr failed", K(ret));
       } else if (OB_FAIL(routine_mgr_.assign(other.routine_mgr_))) {
+        LOG_WARN("assign procedure mgr failed", K(ret));
       } else if (OB_FAIL(package_mgr_.assign(other.package_mgr_))) {
+        LOG_WARN("assign package mgr failed", K(ret));
       } else if (OB_FAIL(trigger_mgr_.assign(other.trigger_mgr_))) {
+        LOG_WARN("assign trigger mgr failed", K(ret));
       } else if (OB_FAIL(mock_fk_parent_table_mgr_.assign(other.mock_fk_parent_table_mgr_))) {
+        LOG_WARN("assign mock_fk_parent_table_mgr_ failed", K(ret));
       } else if (OB_FAIL(ai_model_mgr_.assign(other.ai_model_mgr_))) {
+        LOG_WARN("assign ai_model_mgr_ failed", K(ret));
       }
     }
   }
@@ -487,7 +515,7 @@ int ObSchemaMgr::deep_copy(const ObSchemaMgr &other)
   } else if (this != &other) {
     reset();
     schema_version_ = other.schema_version_;
-
+    
     is_consistent_ = other.is_consistent_;
     #define ADD_SCHEMA(SCHEMA, SCHEMA_TYPE, SCHEMA_ITER)  \
       if (OB_SUCC(ret)) {                                 \
@@ -510,11 +538,13 @@ int ObSchemaMgr::deep_copy(const ObSchemaMgr &other)
     // semantics: add_runtime_schema() does an alloc_schema deep copy of the pointee.
     if (OB_SUCC(ret) && OB_NOT_NULL(other.runtime_info_)) {
       if (OB_FAIL(add_runtime_schema(*other.runtime_info_))) {
+        LOG_WARN("add runtime schema failed", K(ret), KPC(other.runtime_info_));
       }
     }
     // System variables need to be copied first
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sys_variable_mgr_.deep_copy(other.sys_variable_mgr_))) {
+        LOG_WARN("deep copy sys variable mgr failed", K(ret));
       }
     }
     ADD_SCHEMA(user, ObSimpleUserSchema, ConstUserIterator);
@@ -523,12 +553,19 @@ int ObSchemaMgr::deep_copy(const ObSchemaMgr &other)
     #undef ADD_SCHEMA
     if (OB_SUCC(ret)) {
       if (OB_FAIL(outline_mgr_.deep_copy(other.outline_mgr_))) {
+        LOG_WARN("deep copy outline mgr failed", K(ret));
       } else if (OB_FAIL(priv_mgr_.deep_copy(other.priv_mgr_))) {
+        LOG_WARN("deep copy priv mgr failed", K(ret));
       } else if (OB_FAIL(routine_mgr_.deep_copy(other.routine_mgr_))) {
+        LOG_WARN("deep copy procedure mgr failed", K(ret));
       } else if (OB_FAIL(package_mgr_.deep_copy(other.package_mgr_))) {
+        LOG_WARN("deep copy package mgr failed", K(ret));
       } else if (OB_FAIL(trigger_mgr_.deep_copy(other.trigger_mgr_))) {
+        LOG_WARN("deep copy trigger mgr failed", K(ret));
       } else if (OB_FAIL(mock_fk_parent_table_mgr_.deep_copy(other.mock_fk_parent_table_mgr_))) {
+        LOG_WARN("deep copy mock_fk_parent_table_mgr_ failed", K(ret));
       } else if (OB_FAIL(ai_model_mgr_.deep_copy(other.ai_model_mgr_))) {
+        LOG_WARN("deep copy ai_model mgr failed", K(ret));
       }
     }
   }
@@ -641,6 +678,8 @@ int ObSchemaMgr::add_runtime_schemas(const ObIArray<ObSimpleServerRuntimeSchema>
   } else {
     FOREACH_CNT_X(runtime_schema, runtime_schemas, OB_SUCC(ret)) {
       if (OB_FAIL(add_runtime_schema(*runtime_schema))) {
+        LOG_WARN("add runtime schema failed", K(ret),
+                 "runtime_schema", *runtime_schema);
       }
     }
   }
@@ -661,6 +700,7 @@ int ObSchemaMgr::add_runtime_schema(const ObSimpleServerRuntimeSchema &runtime_s
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(runtime_schema));
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_, runtime_schema, new_runtime_schema))) {
+    LOG_WARN("alloc schema failed", K(ret));
   } else if (OB_ISNULL(new_runtime_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret), K(new_runtime_schema));
@@ -754,6 +794,8 @@ int ObSchemaMgr::add_users(const ObIArray<ObSimpleUserSchema> &user_schemas)
   } else {
     FOREACH_CNT_X(user_schema, user_schemas, OB_SUCC(ret)) {
       if (OB_FAIL(add_user(*user_schema))) {
+        LOG_WARN("add user failed", K(ret),
+            "user_schema", *user_schema);
       }
     }
   }
@@ -777,10 +819,12 @@ int ObSchemaMgr::add_user(const ObSimpleUserSchema &user_schema)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(user_schema));
   } else if (OB_FAIL(get_server_runtime_schema( runtime_schema))) {
+    LOG_WARN("get runtime schema failed", K(ret));
   } else if (OB_ISNULL(runtime_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret), K(runtime_schema));
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_, user_schema, new_user_schema))) {
+    LOG_WARN("alloc schema failed", K(ret));
   } else if (OB_ISNULL(new_user_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret), K(new_user_schema));
@@ -789,6 +833,7 @@ int ObSchemaMgr::add_user(const ObSimpleUserSchema &user_schema)
                                          compare_user,
                                          equal_user,
                                          replaced_user))) {
+    LOG_WARN("failed to add user schema", K(ret));
   } else {
   }
 
@@ -808,6 +853,7 @@ int ObSchemaMgr::del_user(const ObUserId user)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(user));
   } else if (OB_FAIL(get_server_runtime_schema( runtime_schema))) {
+    LOG_WARN("get runtime schema failed", K(ret));
   } else if (OB_ISNULL(runtime_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret), K(runtime_schema));
@@ -815,6 +861,10 @@ int ObSchemaMgr::del_user(const ObUserId user)
                                            compare_with_user_id,
                                            equal_with_user_id,
                                            schema_to_del))) {
+    LOG_WARN("failed to remove user schema, ",
+             "user_id",
+             user.user_id_,
+             K(ret));
   } else if (OB_ISNULL(schema_to_del)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("removed user schema return NULL, ",
@@ -913,6 +963,7 @@ int ObSchemaMgr::get_user_schema(
       } else if (tmp_schema->get_user_name_str() != user_name) {
         // do-nothing
       } else if (OB_FAIL(users_schema.push_back(tmp_schema))) {
+        LOG_WARN("failed to push back user schema", K(tmp_schema), K(ret));
       } else {
         tmp_schema = NULL;;
       }
@@ -932,6 +983,8 @@ int ObSchemaMgr::add_databases(const ObIArray<ObSimpleDatabaseSchema> &database_
   } else {
     FOREACH_CNT_X(database_schema, database_schemas, OB_SUCC(ret)) {
       if (OB_FAIL(add_database(*database_schema))) {
+        LOG_WARN("add database failed", K(ret),
+                 "database_schema", *database_schema);
       }
     }
   }
@@ -955,6 +1008,7 @@ int ObSchemaMgr::add_database(const ObSimpleDatabaseSchema &db_schema)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(db_schema));
   } else if (OB_FAIL(get_server_runtime_schema( runtime_schema))) {
+    LOG_WARN("get runtime schema failed", K(ret));
   } else if (OB_ISNULL(runtime_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret), K(runtime_schema));
@@ -963,6 +1017,7 @@ int ObSchemaMgr::add_database(const ObSimpleDatabaseSchema &db_schema)
   ObNameCaseMode mode = OB_NAME_CASE_INVALID;
   if (OB_SUCC(ret)) {
     if (OB_FAIL(get_runtime_name_case_mode(mode))) {
+      LOG_WARN("fail to get_runtime_name_case_mode", K(ret));
     } else if (OB_NAME_CASE_INVALID == mode) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid case mode", K(ret), K(mode));
@@ -971,6 +1026,7 @@ int ObSchemaMgr::add_database(const ObSimpleDatabaseSchema &db_schema)
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_, db_schema, new_db_schema))) {
+    LOG_WARN("alloc schema failed", K(ret));
   } else if (OB_ISNULL(new_db_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret), K(new_db_schema));
@@ -981,11 +1037,13 @@ int ObSchemaMgr::add_database(const ObSimpleDatabaseSchema &db_schema)
                                              compare_database,
                                              equal_database,
                                              replaced_db))) {
+    LOG_WARN("failed to add db schema", K(ret));
   }
   if (OB_FAIL(ret)) {
   } else if (NULL == replaced_db) {
     //do-nothing
   } else if (OB_FAIL(deal_with_db_rename(*replaced_db, *new_db_schema))) {
+    LOG_WARN("failed to deal with rename", K(ret));
   }
   if (OB_SUCC(ret)) {
     ObDatabaseSchemaHashWrapper database_name_wrapper(new_db_schema->get_name_case_mode(),
@@ -1015,6 +1073,7 @@ int ObSchemaMgr::del_database(const ObDatabaseId database)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(database));
   } else if (OB_FAIL(get_server_runtime_schema( runtime_schema))) {
+    LOG_WARN("get runtime schema failed", K(ret));
   } else if (OB_ISNULL(runtime_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret), K(runtime_schema));
@@ -1023,6 +1082,7 @@ int ObSchemaMgr::del_database(const ObDatabaseId database)
   ObNameCaseMode mode = OB_NAME_CASE_INVALID;
   if (OB_SUCC(ret)) {
     if (OB_FAIL(get_runtime_name_case_mode(mode))) {
+      LOG_WARN("fail to get_runtime_name_case_mode", K(ret));
     } else if (OB_NAME_CASE_INVALID == mode) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid case mode", K(ret), K(mode));
@@ -1034,6 +1094,10 @@ int ObSchemaMgr::del_database(const ObDatabaseId database)
                                                compare_with_database_id,
                                                equal_with_database_id,
                                                schema_to_del))) {
+    LOG_WARN("failed to remove db schema, ",
+             "database_id",
+             database.database_id_,
+             K(ret));
   } else if (OB_ISNULL(schema_to_del)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("removed db schema return NULL, ",
@@ -1119,6 +1183,7 @@ int ObSchemaMgr::get_database_schema(
     ObNameCaseMode mode = OB_NAME_CASE_INVALID;
     if (OB_SUCC(ret)) {
       if (OB_FAIL(get_runtime_name_case_mode(mode))) {
+        LOG_WARN("fail to get_runtime_name_case_mode", K(ret));
       } else if (OB_NAME_CASE_INVALID == mode) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid case mode", K(ret), K(mode));
@@ -1178,6 +1243,7 @@ int ObSchemaMgr::add_tables(
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("table is null", KR(ret), K(i));
           } else if (OB_FAIL(add_table(*table, &cost_array))) {
+            LOG_WARN("add table failed", KR(ret), KPC(table));
           }
         } // end for
       } else {
@@ -1187,6 +1253,7 @@ int ObSchemaMgr::add_tables(
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("table is null", KR(ret), K(i));
           } else if (OB_FAIL(add_table(*table, &cost_array))) {
+            LOG_WARN("add table failed", KR(ret), KPC(table));
           }
         } // end for
       }
@@ -1216,6 +1283,7 @@ int ObSchemaMgr::reserved_mem_for_tables_(
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
   } else if (OB_FAIL(table_infos_.reserve(table_cnt))) {
+    LOG_WARN("fail to reserved array", KR(ret), K(table_cnt));
   } else {
     //(void) table_id_map_.set_sub_map_mem_size(table_cnt * OBJECT_SIZE);
 
@@ -1252,6 +1320,7 @@ int ObSchemaMgr::reserved_mem_for_tables_(
 
     if (OB_SUCC(ret) && index_cnt > 0) {
       if (OB_FAIL(index_infos_.reserve(index_cnt))) {
+        LOG_WARN("fail to reserved array", KR(ret), K(index_cnt));
       } else {
         //(void) index_name_map_.set_sub_map_mem_size(index_cnt * OBJECT_SIZE);
       }
@@ -1259,11 +1328,13 @@ int ObSchemaMgr::reserved_mem_for_tables_(
 
     if (OB_SUCC(ret) && lob_meta_cnt > 0) {
       if (OB_FAIL(lob_meta_infos_.reserve(lob_meta_cnt))) {
+        LOG_WARN("fail to reserved array", KR(ret), K(lob_meta_cnt));
       }
     }
 
     if (OB_SUCC(ret) && lob_piece_cnt > 0) {
       if (OB_FAIL(lob_piece_infos_.reserve(lob_piece_cnt))) {
+        LOG_WARN("fail to reserved array", KR(ret), K(lob_piece_cnt));
       }
     }
 
@@ -1315,6 +1386,7 @@ int ObSchemaMgr::add_table(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(table_schema));
   } else if (OB_FAIL(get_server_runtime_schema( runtime_schema))) {
+    LOG_WARN("get runtime schema failed", K(ret));
   } else if (OB_ISNULL(runtime_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret), K(runtime_schema));
@@ -1323,7 +1395,9 @@ int ObSchemaMgr::add_table(
   ObNameCaseMode mode = OB_NAME_CASE_INVALID;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObSysTableChecker::is_runtime_space_table_id(table_id, is_runtime_space_table))) {
+    LOG_WARN("fail to check if table_id is in runtime space", K(ret), K(table_id));
   } else if (OB_FAIL(get_runtime_name_case_mode(mode))) {
+    LOG_WARN("fail to get_runtime_name_case_mode",  K(ret));
   } else if (OB_NAME_CASE_INVALID == mode) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid case mode", K(ret), K(mode));
@@ -1332,6 +1406,7 @@ int ObSchemaMgr::add_table(
   int64_t start_time = ObTimeUtility::current_time();
   if (OB_FAIL(ret)){
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_, table_schema, new_table_schema))) {
+    LOG_WARN("alloc schema failed", K(ret));
   } else if (OB_ISNULL(new_table_schema) || !new_table_schema->is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret), K(new_table_schema));
@@ -1349,6 +1424,7 @@ int ObSchemaMgr::add_table(
                                           compare_table,
                                           equal_table,
                                           replaced_table))) {
+    LOG_WARN("failed to add table schema", K(ret));
   } else if (new_table_schema->is_index_table()) {
     ObSimpleTableSchemaV2 *replaced_index_table = NULL;
     if (OB_FAIL(index_infos_.replace(new_table_schema,
@@ -1356,6 +1432,7 @@ int ObSchemaMgr::add_table(
                                      compare_aux_table,
                                      equal_table,
                                      replaced_index_table))) {
+      LOG_WARN("failed to add index schema", K(ret));
     }
   } else if (new_table_schema->is_aux_lob_meta_table()) {
     ObSimpleTableSchemaV2 *replaced_lob_meta_table = NULL;
@@ -1364,6 +1441,7 @@ int ObSchemaMgr::add_table(
                                         compare_aux_table,
                                         equal_table,
                                         replaced_lob_meta_table))) {
+      LOG_WARN("failed to add lob meta schema", K(ret));
     }
   } else if (new_table_schema->is_aux_lob_piece_table()) {
     ObSimpleTableSchemaV2 *replaced_lob_piece_table = NULL;
@@ -1372,6 +1450,7 @@ int ObSchemaMgr::add_table(
                                          compare_aux_table,
                                          equal_table,
                                          replaced_lob_piece_table))) {
+      LOG_WARN("failed to add lob piece schema", K(ret));
     }
   }
   if (OB_NOT_NULL(cost_array) && idx < cost_array->count()) {
@@ -1383,7 +1462,9 @@ int ObSchemaMgr::add_table(
     if (NULL == replaced_table) {
       // do-nothing
     } else if (OB_FAIL(deal_with_table_rename(*replaced_table, *new_table_schema))) {
+      LOG_WARN("failed to deal with rename", K(ret));
     } else if (OB_FAIL(deal_with_change_table_state(*replaced_table, *new_table_schema))) {
+      LOG_WARN("failed to deal with change table state", K(ret));
     }
   }
   if (OB_NOT_NULL(cost_array) && idx < cost_array->count()) {
@@ -1435,6 +1516,7 @@ int ObSchemaMgr::add_table(
           }
         } else { // index is not in recyclebin
           if (OB_FAIL(new_table_schema->generate_origin_index_name())) {
+            LOG_WARN("generate origin index name failed", K(ret), K(new_table_schema->get_table_name_str()));
           } else {
             ObIndexSchemaHashWrapper cutted_index_name_wrapper(new_table_schema->get_database_id(),
                                                                new_table_schema->get_data_table_id(),
@@ -1469,16 +1551,20 @@ int ObSchemaMgr::add_table(
           if (!replaced_table->is_user_hidden_table()
               && new_table_schema->is_user_hidden_table()) {
             if (OB_FAIL(delete_foreign_keys_in_table(*replaced_table))) {
+              LOG_WARN("delete foreign keys info from a hash map failed",
+              K(ret), K(*replaced_table));
             }
           // deal with the situation that alter table drop fk and truncate table enter the recycle bin,
           // and delete the foreign key information dropped from the hash map
           // First delete the foreign key information on the table from the hash map when truncate table,
           // and add it back when rebuild_table_hashmap
           } else if (OB_FAIL(check_and_delete_given_fk_in_table(replaced_table, new_table_schema))) {
+            LOG_WARN("check and delete given fk in table failed", K(ret), K(*replaced_table), K(*new_table_schema));
           }
         }
         if (OB_SUCC(ret) && !new_table_schema->is_user_hidden_table()) {
           if (OB_FAIL(add_foreign_keys_in_table(new_table_schema->get_simple_foreign_key_info_array(), 1 /*over_write*/))) {
+            LOG_WARN("add foreign keys info to a hash map failed", K(ret), K(*new_table_schema));
           } else {
             // do nothing
           }
@@ -1490,16 +1576,20 @@ int ObSchemaMgr::add_table(
           if (!replaced_table->is_user_hidden_table()
               && new_table_schema->is_user_hidden_table()) {
             if (OB_FAIL(delete_constraints_in_table(*replaced_table))) {
+              LOG_WARN("delete constraint info from a hash map failed",
+              K(ret), K(*replaced_table));
             }
           // deal with the situation that alter table drop cst and truncate table enter the recycle bin,
           // delete the constraint information dropped from the hash map
           // When truncate table, delete the constraint information on the table from the hash map first,
           // and add it back when rebuild_table_hashmap
           } else if (OB_FAIL(check_and_delete_given_cst_in_table(replaced_table, new_table_schema))) {
+            LOG_WARN("check and delete given cst in table failed", K(ret), K(*replaced_table), K(*new_table_schema));
           }
         }
         if (OB_SUCC(ret) && !new_table_schema->is_user_hidden_table()) {
           if (OB_FAIL(add_constraints_in_table(new_table_schema, 1 /*over_write*/))) {
+            LOG_WARN("add foreign keys info to a hash map failed", K(ret), K(*new_table_schema));
           } else {
             // do nothing
           }
@@ -1593,6 +1683,7 @@ int ObSchemaMgr::check_and_delete_given_fk_in_table(const ObSimpleTableSchemaV2 
       const ObSimpleForeignKeyInfo & fk_info = replaced_fk_info_array.at(i);
       if (!has_exist_in_array(new_fk_info_array, fk_info)) {
         if (OB_FAIL(delete_given_fk_from_mgr(fk_info))) {
+          LOG_WARN("fail to delete fk from fk name hashmap", K(ret));
         }
       }
     }
@@ -1613,6 +1704,7 @@ int ObSchemaMgr::delete_foreign_keys_in_table(const ObSimpleTableSchemaV2 &table
   } else {
     FOREACH_CNT_X(simple_foreign_key_info, fk_info_array, OB_SUCC(ret)) {
       if (OB_FAIL(delete_given_fk_from_mgr(*simple_foreign_key_info))) {
+        LOG_WARN("fail to delete fk from table name hashmap", K(ret));
       }
     }
   }
@@ -1781,6 +1873,7 @@ int ObSchemaMgr::check_and_delete_given_cst_in_table(const ObSimpleTableSchemaV2
       const ObSimpleConstraintInfo & cst_info = replaced_cst_info_array.at(i);
       if (!has_exist_in_array(new_cst_info_array, cst_info)) {
         if (OB_FAIL(delete_given_cst_from_mgr(cst_info))) {
+          LOG_WARN("fail to delete cst from cst name hashmap", K(ret));
         }
       }
     }
@@ -1802,6 +1895,7 @@ int ObSchemaMgr::delete_constraints_in_table(const ObSimpleTableSchemaV2 &table_
   } else {
     FOREACH_CNT_X(simple_constraint_info, cst_info_array, OB_SUCC(ret)) {
       if (OB_FAIL(delete_given_cst_from_mgr(*simple_constraint_info))) {
+        LOG_WARN("fail to delete cst from table name hashmap", K(ret));
       }
     }
   }
@@ -1930,7 +2024,9 @@ int ObSchemaMgr::rebuild_schema_meta_if_not_consistent()
     LOG_WARN("schema meta is not consistent, need rebuild", K(ret));
     // 
     if (OB_FAIL(rebuild_table_hashmap(fk_cnt, cst_cnt))) {
+      LOG_WARN("rebuild table hashmap failed", K(ret));
     } else if (OB_FAIL(rebuild_db_hashmap())) {
+      LOG_WARN("rebuild db hashmap failed", K(ret));
     }
   }
 
@@ -1967,6 +2063,7 @@ int ObSchemaMgr::rebuild_schema_meta_if_not_consistent()
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(trigger_mgr_.try_rebuild_trigger_hashmap())) {
+      LOG_WARN("rebuild trigger hashmap failed", K(ret));
     }
   }
   return ret;
@@ -1987,6 +2084,7 @@ int ObSchemaMgr::del_table(const ObTableId table)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(table));
   } else if (OB_FAIL(get_server_runtime_schema( runtime_schema))) {
+    LOG_WARN("get runtime schema failed", K(ret));
   } else if (OB_ISNULL(runtime_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret), K(runtime_schema));
@@ -1995,7 +2093,9 @@ int ObSchemaMgr::del_table(const ObTableId table)
   ObNameCaseMode mode = OB_NAME_CASE_INVALID;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObSysTableChecker::is_runtime_space_table_id(table_id, is_runtime_space_table))) {
+    LOG_WARN("fail to check if table_id is in runtime space", K(ret), K(table_id));
   } else if (OB_FAIL(get_runtime_name_case_mode(mode))) {
+    LOG_WARN("fail to get_runtime_name_case_mode",  K(ret));
   } else if (OB_NAME_CASE_INVALID == mode) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid case mode", K(ret), K(mode));
@@ -2006,6 +2106,10 @@ int ObSchemaMgr::del_table(const ObTableId table)
                                             compare_with_table_id,
                                             equal_with_table_id,
                                             schema_to_del))) {
+    LOG_WARN("failed to remove table schema, ",
+             "table_id",
+             table.table_id_,
+             K(ret));
   } else if (OB_ISNULL(schema_to_del)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("removed table schema return NULL, ",
@@ -2015,12 +2119,15 @@ int ObSchemaMgr::del_table(const ObTableId table)
   } else {
     if (schema_to_del->is_index_table()) {
       if (OB_FAIL(remove_aux_table(*schema_to_del))) {
+        LOG_WARN("failed to remove aux table schema", K(ret), K(*schema_to_del));
       }
     } else if (schema_to_del->is_aux_lob_meta_table()) {
       if (OB_FAIL(remove_aux_table(*schema_to_del))) {
+        LOG_WARN("failed to remove aux table schema", K(ret), K(*schema_to_del));
       }
     } else if (schema_to_del->is_aux_lob_piece_table()) {
       if (OB_FAIL(remove_aux_table(*schema_to_del))) {
+        LOG_WARN("failed to remove aux table schema", K(ret), K(*schema_to_del));
       }
     }
   }
@@ -2074,6 +2181,7 @@ int ObSchemaMgr::del_table(const ObTableId table)
           }
         } else { // index is not in recyclebin
           if (OB_FAIL(schema_to_del->generate_origin_index_name())) {
+            LOG_WARN("generate origin index name failed", K(ret), K(schema_to_del->get_table_name_str()));
           } else {
             int hash_ret = OB_SUCCESS;
             ObIndexSchemaHashWrapper cutted_index_name_wrapper(schema_to_del->get_database_id(),
@@ -2114,10 +2222,12 @@ int ObSchemaMgr::del_table(const ObTableId table)
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(delete_foreign_keys_in_table(*schema_to_del))) {
+            LOG_WARN("delete foreign keys info from a hash map failed", K(ret), K(*schema_to_del));
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(delete_constraints_in_table(*schema_to_del))) {
+            LOG_WARN("delete constraint info from a hash map failed", K(ret), K(*schema_to_del));
           }
         }
       }
@@ -2197,6 +2307,8 @@ int ObSchemaMgr::remove_aux_table(const ObSimpleTableSchemaV2 &schema_to_del)
       LOG_WARN("dst_iter or aux_schema_to_del is NULL",
         K(dst_iter), K(aux_schema_to_del), K(ret));
     } else if (OB_FAIL(infos->remove(dst_iter, dst_iter + 1))) {
+      LOG_WARN("failed to remove aux schema, ",
+          "table_id", table_id.table_id_, K(ret));
     }
   }
   return ret;
@@ -2261,6 +2373,7 @@ int ObSchemaMgr::get_table_schema(
     ObSimpleTableSchemaV2 *tmp_schema = NULL;
     ObNameCaseMode mode = OB_NAME_CASE_INVALID;
     if (OB_FAIL(get_runtime_name_case_mode(mode))) {
+      LOG_WARN("fail to get_runtime_name_case_mode", KR(ret));
     } else if (OB_NAME_CASE_INVALID == mode) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid case mode", KR(ret), K(mode));
@@ -2313,6 +2426,7 @@ int ObSchemaMgr::get_hidden_table_schema(
     ObSimpleTableSchemaV2 *tmp_schema = NULL;
     ObNameCaseMode mode = OB_NAME_CASE_INVALID;
     if (OB_FAIL(get_runtime_name_case_mode(mode))) {
+      LOG_WARN("fail to get_runtime_name_case_mode", K(ret));
     } else if (OB_NAME_CASE_INVALID == mode) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid case mode", K(ret), K(mode));
@@ -2411,6 +2525,7 @@ int ObSchemaMgr::deep_copy_index_name_map(
     // to reduce dynamic memory allocation and avoid error.
     (void) index_name_cache.set_sub_map_mem_size(normal_index_name_map_.get_sub_map_mem_size());
     if (OB_FAIL(index_name_cache.init())) {
+      LOG_WARN("init index name cache failed", KR(ret));
     }
   }
   for (int64_t sub_map_id = 0;
@@ -2438,6 +2553,7 @@ int ObSchemaMgr::deep_copy_index_name_map(
         LOG_WARN("fail to alloc index name info", KR(ret));
       } else if (FALSE_IT(index_name_info = new (buf) ObIndexNameInfo())) {
       } else if (OB_FAIL(index_name_info->init(allocator, *index_schema))) {
+        LOG_WARN("fail to init index name info", KR(ret), KPC(index_schema));
       } else if (is_recyclebin_database_id(database_id)) {
         data_table_id = OB_INVALID_ID;
         index_name = index_name_info->get_index_name();
@@ -2500,6 +2616,7 @@ int ObSchemaMgr::get_runtime_schemas(
     LOG_WARN("not init", K(ret));
   } else if (NULL != runtime_info_) {
     if (OB_FAIL(runtime_schemas.push_back(runtime_info_))) {
+      LOG_WARN("push_back failed", K(ret));
     }
   }
 
@@ -2591,6 +2708,7 @@ int ObSchemaMgr::get_table_schemas_in_runtime(ObIArray<const ObSimpleTableSchema
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr",  K(ret), KP(schema));
       } else if (OB_FAIL(schema_array.push_back(schema))) {
+        LOG_WARN("failed to push back SCHEMA schema", K(ret));
       }
     }
   }
@@ -2660,6 +2778,7 @@ int ObSchemaMgr::get_aux_schemas(
         } else if (!(aux_schema->get_data_table_key() == data_table_key)) {
           will_break = true;
         } else if (OB_FAIL(aux_schemas.push_back(aux_schema))) {
+          LOG_WARN("push back auxiliary schema failed", K(ret));
         }
       }
     }
@@ -2692,6 +2811,7 @@ int ObSchemaMgr::get_non_sys_table_ids(ObIArray<uint64_t> &non_sys_table_ids) co
         is_stop = true;
       } else if (is_inner_table(table_id) && !is_sys_table(table_id)) {
         if (OB_FAIL(non_sys_table_ids.push_back(table_id))) {
+          LOG_WARN("failed to push back table id", KR(ret), K(table_id));
         }
       }
     } // end for
@@ -2720,13 +2840,21 @@ int ObSchemaMgr::get_schema_count(int64_t &schema_count) const
     int64_t mock_fk_parent_table_schema_count = 0;
     int64_t ai_model_schema_count = 0;
     if (OB_FAIL(outline_mgr_.get_outline_schema_count(outline_schema_count))) {
+      LOG_WARN("get_outline_schema_count failed", K(ret));
     } else if (OB_FAIL(routine_mgr_.get_routine_schema_count(routine_schema_count))) {
+      LOG_WARN("get_routine_schema_count failed", K(ret));
     } else if (OB_FAIL(priv_mgr_.get_priv_schema_count(priv_schema_count))) {
+      LOG_WARN("get_priv_schema_count failed", K(ret));
     } else if (OB_FAIL(package_mgr_.get_package_schema_count(package_schema_count))) {
+      LOG_WARN("get_package_mgr_count failed", K(ret));
     } else if (OB_FAIL(trigger_mgr_.get_trigger_schema_count(trigger_schema_count))) {
+      LOG_WARN("get_trigger_mgr_count failed", K(ret));
     } else if (OB_FAIL(sys_variable_mgr_.get_sys_variable_schema_count(sys_variable_schema_count))) {
+      LOG_WARN("get_sys_variable_mgr_count failed", K(ret));
     } else if (OB_FAIL(mock_fk_parent_table_mgr_.get_mock_fk_parent_table_schema_count(mock_fk_parent_table_schema_count))) {
+      LOG_WARN("get mock_fk_parent_table schema count failed", K(ret));
     } else if (OB_FAIL(ai_model_mgr_.get_ai_model_schema_count(ai_model_schema_count))) {
+      LOG_WARN("get ai_model schema count failed", K(ret));
     } else {
       schema_count += (outline_schema_count + routine_schema_count + priv_schema_count
                        + package_schema_count
@@ -2750,6 +2878,7 @@ int ObSchemaMgr::get_runtime_name_case_mode(ObNameCaseMode &mode) const
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(sys_variable_mgr_.get_sys_variable_schema( sys_variable))) {
+    LOG_WARN("get sys variable schema failed", K(ret));
   } else if (NULL == sys_variable) {
     // do-nothing
   } else {
@@ -2769,6 +2898,7 @@ int ObSchemaMgr::get_runtime_read_only(bool &read_only) const
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(sys_variable_mgr_.get_sys_variable_schema( sys_variable))) {
+    LOG_WARN("get sys variable schema failed", K(ret));
   } else if (NULL == sys_variable) {
     ret = OB_ENTRY_NOT_EXIST;
   } else {
@@ -2813,7 +2943,10 @@ int ObSchemaMgr::deal_with_change_table_state(const ObSimpleTableSchemaV2 &old_t
   ObNameCaseMode mode = OB_NAME_CASE_INVALID;
   if (OB_FAIL(ObSysTableChecker::is_runtime_space_table_id(
                       old_table_schema.get_table_id(), is_runtime_space_table))) {
+    LOG_WARN("fail to check if table_id is in runtime space",
+              K(ret), "table_id", old_table_schema.get_table_id());
   } else if (OB_FAIL(get_runtime_name_case_mode(mode))) {
+    LOG_WARN("fail to get_runtime_name_case_mode",  K(ret));
   } else if (OB_NAME_CASE_INVALID == mode) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid case mode", K(ret), K(mode));
@@ -2852,6 +2985,7 @@ int ObSchemaMgr::deal_with_change_table_state(const ObSimpleTableSchemaV2 &old_t
       } else { // index is in not recyclebin
         ObString cutted_index_name;
         if (OB_FAIL(old_table_schema.get_index_name(cutted_index_name))) {
+          LOG_WARN("fail to get index name", K(ret));
         } else {
           ObIndexSchemaHashWrapper cutted_index_name_wrapper(old_table_schema.get_database_id(),
                                                              old_table_schema.get_data_table_id(),
@@ -2935,6 +3069,7 @@ int ObSchemaMgr::deal_with_table_rename(
         } else { // index is not in recyclebin
           ObString cutted_index_name;
           if (OB_FAIL(old_table_schema.get_index_name(cutted_index_name))) {
+            LOG_WARN("fail to get index name", K(ret));
           } else {
             ObIndexSchemaHashWrapper cutted_index_name_wrapper(old_table_schema.get_database_id(),
                                                                old_table_schema.get_data_table_id(),
@@ -2955,7 +3090,10 @@ int ObSchemaMgr::deal_with_table_rename(
         ObNameCaseMode mode = OB_NAME_CASE_INVALID;
         if (OB_FAIL(ObSysTableChecker::is_runtime_space_table_id(
                            old_table_schema.get_table_id(), is_runtime_space_table))) {
+          LOG_WARN("fail to check if table_id is in runtime space",
+                   K(ret), "table_id", old_table_schema.get_table_id());
         } else if (OB_FAIL(get_runtime_name_case_mode(mode))) {
+          LOG_WARN("fail to get_runtime_name_case_mode",  K(ret));
         } else if (OB_NAME_CASE_INVALID == mode) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("invalid case mode", K(ret), K(mode));
@@ -3102,6 +3240,7 @@ int ObSchemaMgr::rebuild_table_hashmap(uint64_t &fk_cnt, uint64_t &cst_cnt)
               }
             } else { // index is not in recyclebin
               if (OB_FAIL(table_schema->generate_origin_index_name())) {
+                LOG_WARN("generate origin index name failed", K(ret), K(table_schema->get_table_name_str()));
               } else {
                 ObIndexSchemaHashWrapper cutted_index_name_wrapper(table_schema->get_database_id(),
                                                                    table_schema->get_data_table_id(),
@@ -3150,6 +3289,7 @@ int ObSchemaMgr::rebuild_table_hashmap(uint64_t &fk_cnt, uint64_t &cst_cnt)
             }
             if (OB_SUCC(ret)) {
               if (OB_FAIL(add_foreign_keys_in_table(table_schema->get_simple_foreign_key_info_array(), over_write))) {
+                LOG_WARN("add foreign keys info to a hash map failed", K(ret), K(table_schema->get_table_name_str()));
               } else {
                 fk_cnt += table_schema->get_simple_foreign_key_info_array().count();
               }
@@ -3158,6 +3298,7 @@ int ObSchemaMgr::rebuild_table_hashmap(uint64_t &fk_cnt, uint64_t &cst_cnt)
               if (table_schema->is_mysql_tmp_table()) {
                 // check constraints in non-temporary tables don't share namespace with constraints in temporary tables, do nothing
               } else if (OB_FAIL(add_constraints_in_table(table_schema, over_write))) {
+                LOG_WARN("add constraint info to a hash map failed", K(ret), K(table_schema->get_table_name_str()));
               } else {
                 cst_cnt += table_schema->get_simple_constraint_info_array().count();
               }
@@ -3203,7 +3344,7 @@ void ObSchemaMgr::dump() const
   tmp_ret = get_schema_size(schema_size);
   LOG_INFO("[SCHEMA_STATISTICS] dump schema_mgr",
            K(tmp_ret),
-
+           
            K_(schema_version),
            K(schema_count),
            K(schema_size));
@@ -3236,6 +3377,7 @@ int ObSchemaMgr::get_schema_size(int64_t &total_size) const
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(get_schema_statistics(schema_infos))) {
+    LOG_WARN("fail to get schema size", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < schema_infos.size(); i++) {
       ObSchemaStatisticsInfo &schema_statistics = schema_infos.at(i);
@@ -3260,43 +3402,81 @@ int ObSchemaMgr::get_schema_statistics(common::ObIArray<ObSchemaStatisticsInfo> 
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(get_runtime_statistics(schema_info))) {
+    LOG_WARN("fail to get runtime statistics", K(ret));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(get_user_statistics(schema_info))) {
+    LOG_WARN("fail to get user statistics", K(ret));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(get_database_statistics(schema_info))) {
+    LOG_WARN("fail to get database statistics", K(ret));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(get_table_statistics(schema_info))) {
+    LOG_WARN("fail to get table statistics", K(ret));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(outline_mgr_.get_schema_statistics(schema_info))) {
+    LOG_WARN("fail to get outline statistics", K(ret));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(routine_mgr_.get_schema_statistics(schema_info))) {
+    LOG_WARN("fail to get routine statistics", K(ret));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(priv_mgr_.get_schema_statistics(TABLE_PRIV, schema_info))) {
+    LOG_WARN("fail to get table priv statistics", K(ret));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(priv_mgr_.get_schema_statistics(ROUTINE_PRIV, schema_info))) {
+    LOG_WARN("fail to get table priv statistics", K(ret));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(priv_mgr_.get_schema_statistics(DATABASE_PRIV, schema_info))) {
+    LOG_WARN("fail to get database priv statistics", K(ret));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(package_mgr_.get_schema_statistics(schema_info))) {
+    LOG_WARN("fail to get package statistics", K(ret));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(trigger_mgr_.get_schema_statistics(schema_info))) {
+    LOG_WARN("fail to get trigger statistics", K(ret));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(sys_variable_mgr_.get_schema_statistics(schema_info))) {
+    LOG_WARN("fail to get sys variable statistics", K(ret));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(priv_mgr_.get_schema_statistics(SYS_PRIV, schema_info))) {
+    LOG_WARN("fail to get system priv statistics", K(ret));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(priv_mgr_.get_schema_statistics(OBJ_PRIV, schema_info))) {
+    LOG_WARN("fail to get obj priv statistics", K(ret));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(priv_mgr_.get_schema_statistics(COLUMN_PRIV, schema_info))) {
+    LOG_WARN("fail to get column priv statistics", K(ret));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(mock_fk_parent_table_mgr_.get_schema_statistics(schema_info))) {
+    LOG_WARN("fail to get mock_fk_parent_table statistics", K(ret));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   } else if (OB_FAIL(ai_model_mgr_.get_schema_statistics(schema_info))) {
+    LOG_WARN("failed to get ai_model statistics", K(ret));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
   }
   return ret;
 }
@@ -3426,6 +3606,7 @@ int ObSchemaMgr::add_ai_models(const common::ObIArray<ObAiModelSchema> &ai_model
   int ret = OB_SUCCESS;
   for (int64_t i = 0; i < ai_model_schemas.count() && OB_SUCC(ret); ++i) {
     if (OB_FAIL(add_ai_model(ai_model_schemas.at(i)))) {
+      LOG_WARN("push schema failed", K(ret));
     }
   }
   return ret;
@@ -3436,6 +3617,7 @@ int ObSchemaMgr::add_ai_model(const ObAiModelSchema &ai_model_schema)
   int ret = OB_SUCCESS;
   ObNameCaseMode mode = OB_NAME_CASE_INVALID;
   if (OB_FAIL(get_runtime_name_case_mode(mode))) {
+    LOG_WARN("fail to get_runtime_name_case_mode", K(ret));
   } else if (OB_NAME_CASE_INVALID == mode) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid case mode", K(ret), K(mode));
@@ -3451,6 +3633,7 @@ int ObSchemaMgr::del_ai_model(const ObAiModelId &ai_model_id)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ai_model_mgr_.del_ai_model(ai_model_id))) {
+    LOG_WARN("fail to del ai model", K(ret));
   }
   return ret;
 }

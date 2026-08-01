@@ -81,8 +81,11 @@ int ObDeleteResolver::resolve(const ParseNode &parse_tree)
 //      session_info_->set_ignore_stmt(true);
 //    }
     if (OB_FAIL(resolve_outline_data_hints())) {
+      LOG_WARN("resolve outline data hints failed", K(ret));
     } else if (OB_FAIL(resolve_with_clause(parse_tree.children_[WITH_MYSQL]))) {
+      LOG_WARN("resolve with clause failed", K(ret));
     } else if (OB_FAIL(resolve_table_list(*parse_tree.children_[TABLE], is_multi_table_delete))) {
+      LOG_WARN("resolve table failed", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < delete_tables_.count(); ++i) {
         const TableItem *table_item = delete_tables_.at(i);
@@ -90,30 +93,42 @@ int ObDeleteResolver::resolve(const ParseNode &parse_tree)
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected null", K(ret));
         } else if (OB_FAIL(generate_delete_table_info(*table_item))) {
+          LOG_WARN("failed to generate delete table info", K(ret));
         } else { /*do nothing*/ }
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(check_multi_delete_table_conflict())) {
+        LOG_WARN("failed to check multi-delete table conflict", K(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(resolve_hints(parse_tree.children_[HINT]))) {
+        LOG_WARN("resolve hints failed", K(ret));
       } else if (OB_FAIL(resolve_where_clause(parse_tree.children_[WHERE]))) {
+        LOG_WARN("resolve delete where clause failed", K(ret));
       } else if (OB_FAIL(resolve_order_clause(parse_tree.children_[ORDER_BY]))) {
+        LOG_WARN("resolve delete order clause failed", K(ret));
       } else if (OB_FAIL(resolve_limit_clause(parse_tree.children_[LIMIT], true))) {
+        LOG_WARN("resolve delete limit clause failed", K(ret));
       } else if (OB_FAIL(delete_stmt->formalize_stmt(session_info_))) {
+        LOG_WARN("pull stmt all expr relation ids failed", K(ret));
       } else { /*do nothing*/ }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(view_pullup_part_exprs())) {
+        LOG_WARN("view pull up part exprs failed", K(ret));
       } else if (OB_FAIL(check_view_deletable())) {
+        LOG_WARN("failed to check view deletable", K(ret));
       } else if (OB_FAIL(delete_stmt->check_dml_need_filter_null())) {
+        LOG_WARN("failed to check dml need filter null", K(ret));
       } else if (OB_FAIL(delete_stmt->check_dml_source_from_join())) {
+        LOG_WARN("failed to check dml source from join");
       } else if (OB_FAIL(check_safe_update_mode(delete_stmt, is_multi_table_delete))) {
+        LOG_WARN("failed to check safe update mode", K(ret));
       } else { /*do nothing */ }
     }
   }
@@ -128,6 +143,7 @@ int ObDeleteResolver::check_safe_update_mode(ObDeleteStmt *delete_stmt, bool is_
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected", K(ret), K(params_.session_info_), K(delete_stmt));
   } else if (OB_FAIL(params_.session_info_->get_sql_safe_updates(is_sql_safe_updates))) {
+    LOG_WARN("failed to get is safe update mode", K(ret));
   } else if (is_sql_safe_updates) {
     /*Update table values in mysql safe mode, needs to meet:
     * Precondition: single table delete, cannot be multi-table delete, must contain where condition;
@@ -219,17 +235,21 @@ int ObDeleteResolver::resolve_table_list(const ParseNode &table_list, bool &is_m
     CK(OB_NOT_NULL(table_node));
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObDMLResolver::resolve_table(*table_node, table_item))) {
+        LOG_WARN("failed to resolve table", K(ret));
       } else if (table_item->is_function_table() || table_item->is_json_table()) { // invalid delete target
         ret = OB_WRONG_TABLE_NAME;
         LOG_WARN("invalid table name", K(ret));
       } else if (OB_FAIL(column_namespace_checker_.add_reference_table(table_item))) {
+        LOG_WARN("add reference table to namespace checker failed", K(ret));
       } else if (OB_FAIL(delete_stmt->add_from_item(table_item->table_id_,
                                                     table_item->is_joined_table()))) {
+        LOG_WARN("failed to add from item", K(ret));
       } else {
         /*
           In order to share the same logic with 'select' to generate access path costly, we
           add the table in the udpate stmt in the from_item list as well.
          */
+        LOG_DEBUG("succ to add from item", KPC(table_item));
       }
     }
   }
@@ -252,7 +272,9 @@ int ObDeleteResolver::resolve_table_list(const ParseNode &table_list, bool &is_m
         table_item = NULL;
         const ParseNode *table_node = delete_list->children_[i];
         if (OB_FAIL(resolve_table_relation_node(table_node, table_name, db_name, true))) {
+          LOG_WARN("failed to resolve table relation node", K(ret));
         } else if (OB_FAIL(find_delete_table_with_mysql_rule(db_name, table_name, table_item))) {
+          LOG_WARN("failed to find delete table with mysql rule", K(ret));
         } else if (OB_ISNULL(table_item)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get null table item", K(ret));
@@ -261,7 +283,9 @@ int ObDeleteResolver::resolve_table_list(const ParseNode &table_list, bool &is_m
           LOG_USER_ERROR(OB_ERR_NONUNIQ_TABLE, table_item->table_name_.length(),
                       table_item->table_name_.ptr());
         } else if (OB_FAIL(check_need_fired_trigger(table_item))) {
+          LOG_WARN("failed to check need fired trigger", K(ret));
         } else if (OB_FAIL(delete_tables_.push_back(table_item))) {
+          LOG_WARN("failed to push back table item", K(ret));
         }
       }
     }
@@ -280,7 +304,9 @@ int ObDeleteResolver::resolve_table_list(const ParseNode &table_list, bool &is_m
           LOG_WARN("table is not updatable", K(ret));
         } else if ((*table_item)->is_generated_table() || (*table_item)->is_temp_table()) {
           if (OB_FAIL(set_base_table_for_view(**table_item))) {
+            LOG_WARN("set base table for delete view failed", K(ret));
           } else if (OB_FAIL(add_all_column_to_updatable_view(*delete_stmt, **table_item))) {
+            LOG_WARN("add all column to updatable view failed", K(ret));
           }
         }
       }
@@ -362,27 +388,35 @@ int ObDeleteResolver::generate_delete_table_info(const TableItem &table_item)
   } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        base_table_item.ref_id_,
                                                        table_schema))) {
+    LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(schema_checker_->get_can_write_index_array(base_table_item.ref_id_,
                                                                 index_tid, gindex_cnt, true))) {
+    LOG_WARN("failed to get global index", K(ret));
   } else if (OB_FAIL(params_.session_info_->get_binlog_row_image(binlog_row_image))) {
+    LOG_WARN("fail to get binlog row image", K(ret));
   } else if (NULL == (ptr = allocator_->alloc(sizeof(ObDeleteTableInfo)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate table info", K(ret));
   } else {
     table_info = new(ptr) ObDeleteTableInfo();
     if (OB_FAIL(table_info->part_ids_.assign(base_table_item.part_ids_))) {
+      LOG_WARN("failed to assign part ids", K(ret));
     } else {
       // todo @zimiao error logging also need all columns ?
       if (OB_FAIL(add_all_rowkey_columns_to_stmt(table_item, table_info->column_exprs_))) {
+        LOG_WARN("add all rowkey columns to stmt failed", K(ret));
       } else if (need_all_columns(*table_schema, binlog_row_image)) {
         if (OB_FAIL(add_all_columns_to_stmt(table_item, table_info->column_exprs_))) {
+          LOG_WARN("fail to add all column to stmt", K(ret), K(table_item));
         }
       } else if (OB_FAIL(add_all_index_rowkey_to_stmt(table_item,
                                                       table_info->column_exprs_))) {
+        LOG_WARN("fail to add relate column to stmt", K(ret), K(table_item));
       } else if (OB_FAIL(add_all_lob_columns_to_stmt(table_item, table_info->column_exprs_))) {
+        LOG_WARN("fail to add lob column to stmt", K(ret), K(table_item));
       }
       if (OB_SUCC(ret)) {
         table_info->table_id_ = table_item.table_id_;
@@ -394,6 +428,7 @@ int ObDeleteResolver::generate_delete_table_info(const TableItem &table_item)
     if (OB_SUCC(ret)) {
       TableItem *rowkey_doc = NULL;
       if (OB_FAIL(delete_stmt->get_delete_table_info().push_back(table_info))) {
+        LOG_WARN("failed to push back table info", K(ret));
       } else if (gindex_cnt > 0) {
         delete_stmt->set_has_global_index(true);
       } else { /*do nothing*/ }
@@ -425,7 +460,10 @@ int ObDeleteResolver::check_view_deletable()
         bool ref_update_table = false;
         if (OB_FAIL(ObResolverUtils::uv_check_select_item_subquery(
             *table, has_subquery, has_dependent_subquery, ref_update_table))) {
+          LOG_WARN("updatable view check select table failed", K(ret));
         } else {
+          LOG_DEBUG("update view check",
+              K(has_subquery), K(has_dependent_subquery), K(ref_update_table));
           ret = (has_dependent_subquery || ref_update_table) ? OB_ERR_NON_UPDATABLE_TABLE : OB_SUCCESS;
         }
       }

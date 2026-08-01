@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_temp_table_access_op.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -85,9 +85,11 @@ OB_DEF_SERIALIZE(ObTempTableAccessOpInput)
   LST_DO_CODE(OB_UNIS_ENCODE, unfinished_count_ptr_);
   if (OB_SUCC(ret)) {
     if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, interm_result_ids_.count()))) {
+      LOG_WARN("fail to encode key ranges count", K(ret), K(interm_result_ids_));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < interm_result_ids_.count(); ++i) {
       if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, interm_result_ids_.at(i)))) {
+        LOG_WARN("fail to serialize key range", K(ret), K(i));
       }
     }
   }
@@ -104,6 +106,7 @@ OB_DEF_DESERIALIZE(ObTempTableAccessOpInput)
     int64_t count = 0;
     interm_result_ids_.reset();
     if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
+      LOG_WARN("fail to decode key ranges count", K(ret));
     } else { /*do nothing.*/ }
     for (int64_t i = 0; OB_SUCC(ret) && i < count; i ++) {
       int64_t interm_result_id = 0;
@@ -111,7 +114,9 @@ OB_DEF_DESERIALIZE(ObTempTableAccessOpInput)
         ret = OB_NOT_INIT;
         LOG_WARN("deserialize allocator is NULL", K(ret));
       } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &interm_result_id))) {
+        LOG_WARN("failed to decode vi64.", K(ret));
       } else if (OB_FAIL(interm_result_ids_.push_back(interm_result_id))) {
+        LOG_WARN("failed to push back into interm result ids.", K(ret));
       } else { /*do nothing.*/ }
     }
   }
@@ -162,18 +167,23 @@ int ObTempTableAccessOp::inner_rescan()
   if (!MY_SPEC.is_distributed_) {
     interm_result_ids_.reuse();
     if (OB_FAIL(get_local_interm_result_id(result_id))) {
+      LOG_WARN("failed to get local result id", K(ret));
     } else if (OB_FAIL(interm_result_ids_.push_back(result_id))) {
+      LOG_WARN("failed to push back result id", K(ret));
     }
   } else {
     int64_t index = 0;
     bool is_end = false;
     while (!is_end && OB_SUCC(ret)) {
       if (OB_FAIL(check_status())) {
+        LOG_WARN("check status failed", K(ret));
       } else 
       if (OB_FAIL(MY_INPUT.check_finish(is_end, index))) {
+        LOG_WARN("failed to check finish.", K(ret));
       } else if (!is_end) {
         result_id = MY_INPUT.interm_result_ids_.at(index);
         if (OB_FAIL(interm_result_ids_.push_back(result_id))) {
+          LOG_WARN("failed to push back result id", K(ret));
         }
       }
     }
@@ -223,6 +233,7 @@ int ObTempTableAccessOp::inner_get_next_row()
   bool is_end = false;
   const ObChunkDatumStore::StoredRow *tmp_sr = NULL;
   if (OB_FAIL(THIS_WORKER.check_status())) {
+    LOG_WARN("check physical plan status failed", K(ret));
   } else if (!is_started_ && OB_FAIL(locate_next_interm_result(is_end))) {
     LOG_WARN("failed to locate next interm result.", K(ret));
   }
@@ -231,6 +242,7 @@ int ObTempTableAccessOp::inner_get_next_row()
       if (OB_ITER_END != ret) {
         LOG_WARN("failed to get next row", K(ret));
       } else if (OB_FAIL(locate_next_interm_result(is_end))) {
+        LOG_WARN("failed to locate next interm result.", K(ret));
       }
     } else {
       break;
@@ -272,6 +284,7 @@ int ObTempTableAccessOp::inner_get_next_batch(const int64_t max_row_cnt)
   bool is_end = false;
   int64_t read_rows = -1;
   if (OB_FAIL(THIS_WORKER.check_status())) {
+    LOG_WARN("check physical plan status failed", K(ret));
   } else if (!is_started_ && OB_FAIL(locate_next_interm_result(is_end))) {
     LOG_WARN("failed to locate next interm result.", K(ret));
   }
@@ -281,6 +294,7 @@ int ObTempTableAccessOp::inner_get_next_batch(const int64_t max_row_cnt)
       if (OB_ITER_END != ret) {
         LOG_WARN("failed to get next row", K(ret));
       } else if (OB_FAIL(locate_next_interm_result(is_end))) {
+        LOG_WARN("failed to locate next interm result.", K(ret));
       }
     } else {
       for (auto i = 0; OB_SUCC(ret) && i < MY_SPEC.output_indexs_.count(); ++i) {
@@ -325,6 +339,7 @@ int ObTempTableAccessOp::locate_next_interm_result(bool &is_end)
       result_id = interm_result_ids_.at(cur_idx_);
       ++cur_idx_;
       if (OB_FAIL(locate_interm_result(result_id))) {
+        LOG_WARN("failed to get interm reuslt", K(ret));
       }
     }
   } else if (!MY_SPEC.is_distributed_) {
@@ -332,17 +347,23 @@ int ObTempTableAccessOp::locate_next_interm_result(bool &is_end)
     if (is_started_) {
       is_end = true;
     } else if (OB_FAIL(get_local_interm_result_id(result_id))) {
+      LOG_WARN("failed to get local result id", K(ret));
     } else if (OB_FAIL(locate_interm_result(result_id))) {
+      LOG_WARN("failed to get interm reuslt", K(ret));
     } else if (OB_FAIL(interm_result_ids_.push_back(result_id))) {
+      LOG_WARN("failed to push back result id", K(ret));
     }
   } else {
     // Distributed result set grabs result id from the task pool and caches it down
     int64_t index = 0;
     if (OB_FAIL(MY_INPUT.check_finish(is_end, index))) {
+      LOG_WARN("failed to check finish.", K(ret));
     } else if (!is_end) {
       result_id = MY_INPUT.interm_result_ids_.at(index);
       if (OB_FAIL(locate_interm_result(result_id))) {
+        LOG_WARN("failed to get interm reuslt", K(ret));
       } else if (OB_FAIL(interm_result_ids_.push_back(result_id))) {
+        LOG_WARN("failed to push back result id", K(ret));
       }
     }
   }
@@ -362,8 +383,9 @@ int ObTempTableAccessOp::locate_interm_result(int64_t result_id)
   // The current operation of obtaining intermediate results and
   // the operation of the background thread of dumping intermediate results
   // are mutually exclusive
-  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDTLIntermResultManager>()->atomic_get_interm_result_info(
+  if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->atomic_get_interm_result_info(
        dtl_int_key, result_info_guard_))) {
+    LOG_WARN("failed to create row store.", K(ret));
   } else if (FALSE_IT(result_info = result_info_guard_.result_info_)) {
   // After getting the intermediate result, need to judge whether the result is readable.
   } else if (OB_SUCCESS != result_info->ret_) {
@@ -376,6 +398,7 @@ int ObTempTableAccessOp::locate_interm_result(int64_t result_id)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("datum store is null.", K(ret));
   } else if (OB_FAIL(result_info->datum_store_->begin(datum_store_it_))) {
+    LOG_WARN("failed to begin chunk row store.", K(ret));
   } else { /*do nothing.*/ }
   return ret;
 }

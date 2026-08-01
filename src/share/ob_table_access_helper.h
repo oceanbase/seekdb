@@ -16,7 +16,6 @@
 
 #ifndef SHARE_OB_TABLE_ACCESS_HELPER_H
 #define SHARE_OB_TABLE_ACCESS_HELPER_H
-#include "lib/literals/ob_literals.h"
 #include "share/ob_occam_time_guard.h"
 #include "common/ob_range.h"
 #include "lib/function/ob_function.h"
@@ -30,6 +29,7 @@
 #include "share/ob_define.h"
 #include "lib/net/ob_addr.h"
 #include "share/ob_errno.h"
+#include "share/ob_server_struct.h"
 #include <cstdio>
 #include <cstring>
 #include <type_traits>
@@ -41,6 +41,13 @@
 
 namespace oceanbase
 {
+namespace logservice
+{
+namespace coordinator
+{
+class LsElectionReferenceInfoRow;
+}
+}
 namespace common
 {
 
@@ -48,6 +55,7 @@ constexpr int STACK_BUFFER_SIZE = 512;
 #define OB_LOG_(args...) OB_LOG(args, PRINT_WRAPPER)
 class ObTableAccessHelper
 {
+  friend class logservice::coordinator::LsElectionReferenceInfoRow;
 public:
   static int split_string_by_char(const ObStringHolder &arg_str, const char character, ObIArray<ObStringHolder> &result)
   {
@@ -144,7 +152,6 @@ public:
   // Get single line information
   template <int N, typename ...T>
   static int read_single_row(
-                             ObISQLClient &sql_client,
                              const char* (&columns)[N],
                              const ObString &table,
                              const ObString &where_condition,
@@ -153,7 +160,6 @@ public:
     static_assert(N > 0, "columns size must greater than 0");
     static_assert(sizeof...(T) == N, "number of value size must equal than N");
     return read_and_convert_to_values_(
-                                       sql_client,
                                        columns,
                                        N,
                                        table,
@@ -162,7 +168,6 @@ public:
   }
   template <typename ...T>
   static int read_single_row(
-                             ObISQLClient &sql_client,
                              const std::initializer_list<const char *> &columns,
                              const ObString &table,
                              const ObString &where_condition,
@@ -180,7 +185,6 @@ public:
         columns_array[idx] = *iter;
       }
       if (OB_FAIL(read_and_convert_to_values_(
-                                              sql_client,
                                               columns_array,
                                               columns.size(),
                                               table,
@@ -195,7 +199,6 @@ public:
   // Get multi-line information
   template <int N, typename ...T>
   static int read_multi_row(
-                            ObISQLClient &sql_client,
                             const char* (&columns)[N],
                             const ObString &table,
                             const ObString &condition,
@@ -204,7 +207,6 @@ public:
     static_assert(N > 0, "columns size must greater than 0");
     static_assert(sizeof...(T) == N, "number of value size must equal than N");
     return read_and_convert_to_tuples_(
-                                       sql_client,
                                        columns,
                                        N,
                                        table,
@@ -213,7 +215,6 @@ public:
   }
   template <typename ...T>
   static int read_multi_row(
-                            ObISQLClient &sql_client,
                             const std::initializer_list<const char *> &columns,
                             const ObString &table,
                             const ObString &condition,
@@ -231,7 +232,6 @@ public:
         columns_array[idx] = *iter;
       }
       if (OB_FAIL(read_and_convert_to_tuples_(
-                                              sql_client,
                                               columns_array,
                                               columns.size(),
                                               table,
@@ -243,8 +243,7 @@ public:
     return ret;
     #undef PRINT_WRAPPER
   }
-  static int insert_row(ObISQLClient &sql_client,
-                        const ObString &table,
+  static int insert_row(const ObString &table,
                         const ObString &value)
   {
     TIMEGUARD_INIT(OCCAM, 1_s);
@@ -262,17 +261,19 @@ public:
       ret = OB_ERR_NULL_VALUE;
       OB_LOG_(WARN, "failed to convert value");
     } else if (CLICK_FAIL(sql.append_fmt("INSERT INTO %s VALUES %s", table_str, value_str))) {
-    } else if (CLICK_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      OB_LOG_(WARN, "insert row failed");
+    } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+      ret = OB_ERR_UNEXPECTED;
+      OB_LOG_(WARN, "GCTX.sql_proxy_ is nullptr");
+    } else if (CLICK_FAIL(GCTX.sql_proxy_->write(sql.ptr(), affected_rows))) {
+      OB_LOG_(WARN, "GCTX.sql_proxy_ insert row failed");
     } else {
-      OB_LOG_(INFO, "insert row success");
+      OB_LOG_(INFO, "GCTX.sql_proxy_ insert row success");
     }
     return ret;
     #undef PRINT_WRAPPER
   }
   template <int N, typename ...T>
   static int insert_row(
-                        ObISQLClient &sql_client,
                         const ObString &table,
                         const char* (&columns)[N],
                         T &&...value)
@@ -301,17 +302,19 @@ public:
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (CLICK_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      OB_LOG_(WARN, "insert row failed");
+    } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+      ret = OB_ERR_UNEXPECTED;
+      OB_LOG_(WARN, "GCTX.sql_proxy_ is nullptr");
+    } else if (CLICK_FAIL(GCTX.sql_proxy_->write(sql.ptr(), affected_rows))) {
+      OB_LOG_(WARN, "GCTX.sql_proxy_ insert row failed");
     } else {
-      OB_LOG_(INFO, "insert row success");
+      OB_LOG_(INFO, "GCTX.sql_proxy_ insert row success");
     }
     return ret;
     #undef PRINT_WRAPPER
   }
 
-  static int delete_row(ObISQLClient &sql_client,
-                        const ObString &table,
+  static int delete_row(const ObString &table,
                         const ObString &value)
   {
     TIMEGUARD_INIT(OCCAM, 1_s);
@@ -327,16 +330,19 @@ public:
     } else if (CLICK_FAIL(helper.convert(value, value_str))) {
       OB_LOG_(WARN, "convert cstring failed", K(ret));
     } else if (CLICK_FAIL(sql.append_fmt("DELETE FROM %s WHERE %s", table_str, value_str))) {
-    } else if (CLICK_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      OB_LOG_(WARN, "delete row failed");
+    } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+      ret = OB_ERR_UNEXPECTED;
+      OB_LOG_(WARN, "GCTX.sql_proxy_ is nullptr");
+    } else if (CLICK_FAIL(GCTX.sql_proxy_->write(sql.ptr(), affected_rows))) {
+      OB_LOG_(WARN, "GCTX.sql_proxy_ delete row failed");
     } else {
-      OB_LOG_(INFO, "delete row success");
+      OB_LOG_(INFO, "GCTX.sql_proxy_ delete row success");
     }
     return ret;
     #undef PRINT_WRAPPER
   }
 
-  static int set_parameter(ObISQLClient &sql_client, const ObString &value)
+  static int set_parameter(const ObString &value)
   {
     TIMEGUARD_INIT(OCCAM, 1_s);
     #define PRINT_WRAPPER KR(ret), K(value), K(sql)
@@ -349,10 +355,13 @@ public:
       ret = OB_ERR_NULL_VALUE;
       OB_LOG_(WARN, "convert value failed");
     } else if (CLICK_FAIL(sql.append_fmt("ALTER SYSTEM %s", value_str))) {
-    } else if (CLICK_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      OB_LOG_(WARN, "execute alter system failed");
+    } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+      ret = OB_ERR_UNEXPECTED;
+      OB_LOG_(WARN, "GCTX.sql_proxy_ is nullptr");
+    } else if (CLICK_FAIL(GCTX.sql_proxy_->write(sql.ptr(), affected_rows))) {
+      OB_LOG_(WARN, "GCTX.sql_proxy_ execute alter system failed");
     } else {
-      OB_LOG_(INFO, "execute alter system success");
+      OB_LOG_(INFO, "GCTX.sql_proxy_ execute alter system success");
     }
     return ret;
     #undef PRINT_WRAPPER
@@ -360,7 +369,6 @@ public:
 private:
   template <typename ...T>
   static int read_and_convert_to_values_(
-                                         ObISQLClient &sql_client,
                                          const char **columns,
                                          const int64_t culumn_size,
                                          const ObString &table,
@@ -369,34 +377,39 @@ private:
   {
     TIMEGUARD_INIT(OCCAM, 1_s);
     #define PRINT_WRAPPER KR(ret), K(table), K(condition)
-    int ret = common::OB_SUCCESS;
-    HEAP_VAR(ObMySQLProxy::MySQLResult, res) {
-      common::sqlclient::ObMySQLResult *result = nullptr;
-      if (OB_FAIL(get_my_sql_result_(columns, culumn_size, table, condition, sql_client, res, result))) {
-        OB_LOG_(WARN, "fail to get ObMySQLResult");
-      } else if (OB_NOT_NULL(result)) {
-        int64_t iter_times = 0;
-        while (OB_SUCC(ret) && OB_SUCC(result->next())) {
-          if (++iter_times > 1) {
-            ret = OB_ERR_MORE_THAN_ONE_ROW;
-            OB_LOG_(WARN, "there are more than one row been selected");
-            break;
-          } else if (CLICK_FAIL(get_values_from_row_<0>(result, columns, values...))) {
-            OB_LOG_(WARN, "failed to get column from row");
+    int ret = common::OB_SUCCESS; 
+    if (OB_ISNULL(GCTX.sql_proxy_)) {
+      ret = OB_ERR_UNEXPECTED;
+      OB_LOG_(WARN, "GCTX.sql_proxy_ is null", K(ret));
+    } else {
+      HEAP_VAR(ObMySQLProxy::MySQLResult, res) {
+        common::sqlclient::ObMySQLResult *result = nullptr;
+        if (OB_FAIL(get_my_sql_result_(columns, culumn_size, table, condition, *GCTX.sql_proxy_, res, result))) {
+          OB_LOG_(WARN, "fail to get ObMySQLResult");
+        } else if (OB_NOT_NULL(result)) {
+          int64_t iter_times = 0;
+          while (OB_SUCC(ret) && OB_SUCC(result->next())) {
+            if (++iter_times > 1) {
+              ret = OB_ERR_MORE_THAN_ONE_ROW;
+              OB_LOG_(WARN, "there are more than one row been selected");
+              break;
+            } else if (CLICK_FAIL(get_values_from_row_<0>(result, columns, values...))) {
+              OB_LOG_(WARN, "failed to get column from row");
+            }
           }
-        }
-        if (OB_ITER_END == ret) {
-          if (1 == iter_times) {
-            ret = OB_SUCCESS;
-          } else if (0 == iter_times) {
-            ret = OB_EMPTY_RESULT;
+          if (OB_ITER_END == ret) {
+            if (1 == iter_times) {
+              ret = OB_SUCCESS;
+            } else if (0 == iter_times) {
+              ret = OB_EMPTY_RESULT;
+            }
+          } else {
+            OB_LOG_(WARN, "iter failed", K(iter_times));
           }
         } else {
-          OB_LOG_(WARN, "iter failed", K(iter_times));
+          ret = OB_ERR_UNEXPECTED;
+          OB_LOG_(WARN, "get mysql result failed");
         }
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        OB_LOG_(WARN, "get mysql result failed");
       }
     }
     return ret;
@@ -404,7 +417,6 @@ private:
   }
   template <typename ...T>
   static int read_and_convert_to_tuples_(
-                                         ObISQLClient &sql_client,
                                          const char **columns,
                                          const int64_t culumn_size,
                                          const ObString &table,
@@ -414,29 +426,34 @@ private:
     TIMEGUARD_INIT(OCCAM, 1_s);
     #define PRINT_WRAPPER KR(ret), K(table), K(condition)
     int ret = common::OB_SUCCESS;
-    HEAP_VAR(ObMySQLProxy::MySQLResult, res) {
-      common::sqlclient::ObMySQLResult *result = nullptr;
-      if (OB_FAIL(get_my_sql_result_(columns, culumn_size, table, condition, sql_client, res, result))) {
-        OB_LOG_(WARN, "fail to get ObMySQLResult");
-      } else if (OB_NOT_NULL(result)) {
-        int64_t iter_times = 0;
-        while (OB_SUCC(ret) && OB_SUCC(result->next())) {
-          if (CLICK_FAIL(output_array.push_back(ObTuple<T...>()))) {
-            OB_LOG_(WARN, "push new tuple to array failed", K(iter_times));
-          } else if (OB_SUCCESS != (ret = AccessHelper<sizeof...(T) - 1, T...>::
-                      get_values_to_tuple_from_row(result, columns, output_array.at(iter_times)))) {
-            OB_LOG_(WARN, "failed to get values from row", K(iter_times));
+    if (OB_ISNULL(GCTX.sql_proxy_)) {
+      ret = OB_ERR_UNEXPECTED;
+      OB_LOG_(WARN, "GCTX.sql_proxy_ is null");
+    } else {
+      HEAP_VAR(ObMySQLProxy::MySQLResult, res) {
+        common::sqlclient::ObMySQLResult *result = nullptr;
+        if (OB_FAIL(get_my_sql_result_(columns, culumn_size, table, condition, *GCTX.sql_proxy_, res, result))) {
+          OB_LOG_(WARN, "fail to get ObMySQLResult");
+        } else if (OB_NOT_NULL(result)) {
+          int64_t iter_times = 0;
+          while (OB_SUCC(ret) && OB_SUCC(result->next())) {
+            if (CLICK_FAIL(output_array.push_back(ObTuple<T...>()))) {
+              OB_LOG_(WARN, "push new tuple to array failed", K(iter_times));
+            } else if (OB_SUCCESS != (ret = AccessHelper<sizeof...(T) - 1, T...>::
+                        get_values_to_tuple_from_row(result, columns, output_array.at(iter_times)))) {
+              OB_LOG_(WARN, "failed to get values from row", K(iter_times));
+            }
+            iter_times++;
           }
-          iter_times++;
-        }
-        if (OB_ITER_END == ret && iter_times > 0) {
-          ret = OB_SUCCESS;
+          if (OB_ITER_END == ret && iter_times > 0) {
+            ret = OB_SUCCESS;
+          } else {
+            OB_LOG_(WARN, "iter failed", K(iter_times));
+          }
         } else {
-          OB_LOG_(WARN, "iter failed", K(iter_times));
+          ret = OB_ERR_UNEXPECTED;
+          OB_LOG_(WARN, "get mysql result failed");
         }
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        OB_LOG_(WARN, "get mysql result failed");
       }
     }
     return ret;
@@ -480,7 +497,7 @@ private:
       } else if (CLICK_FAIL(sql.append_fmt("SELECT %s FROM %s %s", columns_str, table_str, condition_str))) {
         OB_LOG_(WARN, "failed to append sql");
       } else if (CLICK_FAIL(proxy.read(res, sql.ptr()))) {
-        OB_LOG_(WARN, "read failed");
+        OB_LOG_(WARN, "GCTX.sql_proxy_ read failed");
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         OB_LOG_(WARN, "failed to get result");
@@ -576,6 +593,7 @@ private:
       OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(column));
     } else {
       tablet_id = common::ObTabletID(value);
+      OB_LOG(TRACE, "get_column_from_signle_row success", KR(ret), K(column), K(value));
     }
     return ret;
   }
@@ -588,6 +606,7 @@ private:
     if (CLICK_FAIL(row->get_int(column, value))) {
       OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(column));
     } else {
+      OB_LOG(TRACE, "get_column_from_signle_row success", KR(ret), K(column), K(value));
     }
     return ret;
   }
@@ -600,6 +619,7 @@ private:
     if (CLICK_FAIL(row->get_uint(column, value))) {
       OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(column));
     } else {
+      OB_LOG(TRACE, "get_column_from_signle_row success", KR(ret), K(column), K(value));
     }
     return ret;
   }
@@ -626,6 +646,7 @@ private:
     if (CLICK_FAIL(row->get_bool(column, value))) {
       OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(column));
     } else {
+      OB_LOG(TRACE, "get_column_from_signle_row success", KR(ret), K(column), K(value));
     }
     return ret;
   }
@@ -651,7 +672,7 @@ private:
     } else if (CLICK_FAIL(get_values_from_row_<FLOOR + 1>(row, columns, others...))) {
       OB_LOG(WARN, "get others value failed", KR(ret), K(FLOOR), K(columns[FLOOR]));
     } else {
-      // DUBUG
+      OB_LOG(TRACE, "get value success", KR(ret), K(FLOOR), K(columns[FLOOR]), K(value));// DUBUG
     }
     return ret;
   }

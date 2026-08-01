@@ -25,8 +25,6 @@
 #include "share/ob_lob_access_utils.h"
 #include "share/ob_json_access_utils.h"
 #include "sql/engine/expr/ob_datum_cast.h"
-#include "sql/engine/expr/ob_obj_cast_runtime.h"
-#include "query/engine/expr/ob_decimal_int_scale.h"
 #include "share/object/ob_array_cast.h"
 #include "sql/engine/expr/ob_expr_json_func_helper.h"
 #include "share/geo/ob_geometry_cast.h"
@@ -36,7 +34,7 @@
 #include "sql/engine/expr/ob_expr_xml_func_helper.h"
 #include "common/enumset/ob_enum_set_meta.h"
 #include "sql/engine/expr/ob_expr_type_to_str.h"
-#include "share/geo/ob_srs_provider.h"
+#include "observer/omt/ob_srs_service.h"
 namespace oceanbase
 {
 namespace sql
@@ -943,7 +941,7 @@ static OB_INLINE int common_string_date(const ObExpr &expr,
   } else if (CM_IS_ERROR_ON_SCALE_OVER(expr.extra_) && out_val == ObTimeConverter::ZERO_DATE) {
     // check zero date for scale over mode
     ret = OB_INVALID_DATE_VALUE;
-    LOG_USER_ERROR(OB_INVALID_DATE_VALUE, in_str.length(), in_str.ptr(), "");
+    LOG_USER_ERROR(OB_INVALID_DATE_VALUE, in_str.length(), in_str.ptr(), "");    
   } else {
     SET_RES_DATE(out_val);
   }
@@ -967,7 +965,7 @@ static OB_INLINE int common_string_mdate(const ObExpr &expr,
   } else if (CM_IS_ERROR_ON_SCALE_OVER(expr.extra_) && out_val == ObTimeConverter::MYSQL_ZERO_DATE) {
     // check zero date for scale over mode
     ret = OB_INVALID_DATE_VALUE;
-    LOG_USER_ERROR(OB_INVALID_DATE_VALUE, in_str.length(), in_str.ptr(), "");
+    LOG_USER_ERROR(OB_INVALID_DATE_VALUE, in_str.length(), in_str.ptr(), "");    
   } else {
     SET_RES_DATE(out_val.date_);
   }
@@ -1209,7 +1207,7 @@ static int common_string_decimalint(const ObExpr &expr, const ObString &in_str,
     ret = OB_SUCCESS;
     if (decint != nullptr && int_bytes != 0) {
       // Decimal int not null means a valid decimal int was parsed regardless of wether there's
-      // error or not.We then do scale and calculate res_datum as normal in order to be compatible
+      // error or not.We then do scale and calculate res_datum as normal in order to be compatible 
       // with mysql.
       // e.g.
       //  OceanBase(root@test)>set sql_mode = '';
@@ -1701,10 +1699,10 @@ static OB_INLINE int common_enumset_string(const ObExpr &enumset_expr,
   return ret;
 }
 
-static int get_text_full_data(const sql::ObExpr &expr,
+static int get_text_full_data(const sql::ObExpr &expr, 
                               sql::ObEvalCtx &ctx,
-                              ObIAllocator *allocator,
-                              ObDatum* in_datum,
+                              ObIAllocator *allocator, 
+                              ObDatum* in_datum, 
                               ObString &data)
 {
   int ret = OB_SUCCESS;
@@ -1713,8 +1711,7 @@ static int get_text_full_data(const sql::ObExpr &expr,
   if (ob_is_text_tc(in_type)) {
     bool has_lob_header = expr.args_[0]->obj_meta_.has_lob_header();
     ObTextStringIter instr_iter(in_type, in_cs_type, in_datum->get_string(), has_lob_header);
-    if (OB_FAIL(ObTextStringHelper::build_text_iter(
-            instr_iter, ctx.exec_ctx_, allocator))) {
+    if (OB_FAIL(ObTextStringHelper::build_text_iter(instr_iter, &ctx.exec_ctx_, ctx.exec_ctx_.get_my_session(), allocator))) {
       LOG_WARN("Lob: init lob str iter failed", K(ret), K(in_type), K(*in_datum));
     } else if (OB_FAIL(instr_iter.get_full_data(data))) {
       LOG_WARN("Lob: get lob str iter full data failed ", K(ret), K(in_type), K(*in_datum));
@@ -1726,7 +1723,7 @@ static int get_text_full_data(const sql::ObExpr &expr,
 static int common_copy_string_to_text_result(const ObExpr &expr,
                                              const ObString &src,
                                              ObEvalCtx &ctx,
-                                             ObDatum &res_datum,
+                                             ObDatum &res_datum, 
                                              const int64_t align_offset = 0)
 {
   int ret = OB_SUCCESS;
@@ -1954,9 +1951,14 @@ int ObDatumCast::common_scale_decimalint(const ObDecimalInt *decint, const int32
                                          ObDecimalIntBuilder &val,
                                          const ObUserLoggingCtx *user_logging_ctx)
 {
-  ObSqlObjCastRuntime runtime(user_logging_ctx);
+  // implementation moved down to share/object/ob_decint_scale_util(single implementation);this site forwards and adapts warnings
   return common::decint_scale::scale_decimalint(
-      decint, int_bytes, in_scale, out_scale, out_prec, cast_mode, val, &runtime);
+      decint, int_bytes, in_scale, out_scale, out_prec, cast_mode, val, user_logging_ctx,
+      [](const void *payload, const int64_t code, const common::ObString &ts,
+         const common::ObString &input, const common::ObCastMode cm) {
+        ObDataTypeCastUtil::log_user_error_warning(
+            static_cast<const ObUserLoggingCtx *>(payload), code, ts, input, cm);
+      });
 }
 int check_decimalint_accuracy(const ObCastMode cast_mode,
                               const ObDecimalInt *res_decint, const int32_t int_bytes,
@@ -2007,9 +2009,9 @@ static int common_json_string(const ObExpr &expr,
   int warning = OB_SUCCESS;
   ObCastMode cast_mode = expr.extra_;
   ObString j_bin_str = in.get_string();
-  if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, allocator, in,
+  if (OB_FAIL(ObTextStringHelper::read_real_string_data(allocator, in,
       expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(),
-      j_bin_str))) {
+      j_bin_str, &ctx.exec_ctx_))) {
     LOG_WARN("fail to get real data.", K(ret), K(j_bin_str));
   } else {
     ObJsonBin j_bin(j_bin_str.ptr(), j_bin_str.length(), &allocator);
@@ -2290,7 +2292,7 @@ int common_datetime_string(const ObExpr &expr, const ObObjType in_type, const Ob
     if (OB_FAIL(helper.get_time_zone_info(tz_info_local))) {
       LOG_WARN("get time zone info failed", K(ret));
     } else {
-      const ObTimeZoneInfo *tz_info = (ObTimestampType == in_type) ?  tz_info_local : NULL;
+      const ObTimeZoneInfo *tz_info = (ObTimestampType == in_type) ?  tz_info_local : NULL;      
       ObTime ob_time;
       if (ObMySQLDateTimeType == in_type) {
         ObMySQLDateTime mdt_val = in_val;
@@ -2313,7 +2315,7 @@ int common_datetime_string(const ObExpr &expr, const ObObjType in_type, const Ob
             LOG_WARN("failed to convert ob time to string", K(ret));
           }
         }
-      }
+      }    
     }
   }
   return ret;
@@ -2335,7 +2337,7 @@ int common_datetime_geometry(const ObExpr &expr, const ObDatum *child_res, ObDat
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
     ObGeometry *geo = NULL;
-    common::ObSrsCacheGuard srs_guard;
+    omt::ObSrsCacheGuard srs_guard;
     const ObSrsItem *srs = NULL;
     ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(expr.extra_);
     const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
@@ -2896,7 +2898,7 @@ CAST_FUNC_NAME(int, json)
     }
 
     ObString raw_bin;
-    if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+    if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
       LOG_WARN("fail to get int json binary", K(ret), K(in_type), K(in_val));
     } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
       LOG_WARN("fail to fill json bin lob locator", K(ret));
@@ -2947,7 +2949,7 @@ CAST_FUNC_NAME(int, geometry)
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
     ObGeometry *geo = NULL;
-    common::ObSrsCacheGuard srs_guard;
+    omt::ObSrsCacheGuard srs_guard;
     const ObSrsItem *srs = NULL;
     int64_t in_val = child_res->get_int();
     ObFastFormatInt ffi(in_val);
@@ -3181,7 +3183,7 @@ CAST_FUNC_NAME(uint, json)
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
     ObString raw_bin;
 
-    if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+    if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
       LOG_WARN("fail to get uint json binary", K(ret), K(in_type), K(in_val));
     } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
       LOG_WARN("fail to fill json bin lob locator", K(ret));
@@ -3232,7 +3234,7 @@ CAST_FUNC_NAME(uint, geometry)
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
     ObGeometry *geo = NULL;
-    common::ObSrsCacheGuard srs_guard;
+    omt::ObSrsCacheGuard srs_guard;
     const ObSrsItem *srs = NULL;
     uint64_t in_val = child_res->get_uint();
     ObFastFormatInt ffi(in_val);
@@ -3453,13 +3455,13 @@ static int common_string_json(const ObExpr &expr,
   ObCollationType out_cs_type = expr.datum_meta_.cs_type_;
   bool has_set_res = false;
   // binary type will convert to json opaque, other types need convert charset to utf8
-  bool is_need_charset_convert = ((CS_TYPE_BINARY != in_cs_type) &&
-                                  (ObCharset::charset_type_by_coll(in_cs_type) !=
+  bool is_need_charset_convert = ((CS_TYPE_BINARY != in_cs_type) && 
+                                  (ObCharset::charset_type_by_coll(in_cs_type) != 
                                    ObCharset::charset_type_by_coll(out_cs_type)));
   if (out_cs_type != CS_TYPE_UTF8MB4_BIN) {
     ret = OB_ERR_INVALID_JSON_CHARSET;
     LOG_WARN("fail to cast string to json invalid outtype", K(ret), K(out_cs_type));
-  } else if (is_need_charset_convert &&
+  } else if (is_need_charset_convert && 
     OB_FAIL(common_string_string(expr, in_type, in_cs_type, out_type,
                                  out_cs_type, in_str, ctx, res_datum, has_set_res))) {
     LOG_WARN("fail to cast string to longtext", K(ret), K(in_str), K(expr));
@@ -3482,7 +3484,7 @@ static int common_string_json(const ObExpr &expr,
       ObJsonNull j_null;
       ObJsonNode *j_tree = NULL;
       bool is_null_res = false;
-      bool is_scalar = (j_text.length()
+      bool is_scalar = (j_text.length() 
                         && ((j_text[0] == '\'' && j_text[j_text.length() - 1] == '\'')
                             || (j_text[0] == '\"' && j_text[j_text.length() - 1] == '\"')));
 
@@ -3492,26 +3494,26 @@ static int common_string_json(const ObExpr &expr,
       ADD_FLAG_IF_NEED(relaxed_json, parse_flag, ObJsonParser::JSN_RELAXED_FLAG);
       ADD_FLAG_IF_NEED(false, parse_flag, ObJsonParser::JSN_UNIQUE_FLAG);
 
-      bool is_convert_jstr_type = (in_type == ObTinyTextType
+      bool is_convert_jstr_type = (in_type == ObTinyTextType 
                                  || in_type == ObTextType
                                  || in_type == ObMediumTextType
                                  || in_type == ObLongTextType);
-
+      
       if (in_cs_type == CS_TYPE_BINARY) {
         j_base = &j_opaque;
-      } else if (is_enumset_to_str
+      } else if (is_enumset_to_str 
                       || (CM_IS_SQL_AS_JSON_SCALAR(expr.extra_) && ob_is_string_type(in_type))
-                      || (CM_IS_IMPLICIT_CAST(expr.extra_)
-                          && !CM_IS_COLUMN_CONVERT(expr.extra_)
-                          && !CM_IS_JSON_VALUE(expr.extra_)
+                      || (CM_IS_IMPLICIT_CAST(expr.extra_) 
+                          && !CM_IS_COLUMN_CONVERT(expr.extra_) 
+                          && !CM_IS_JSON_VALUE(expr.extra_) 
                           && is_convert_jstr_type)) {
         // consistent with mysql: TINYTEXT, TEXT, MEDIUMTEXT, and LONGTEXT. We want to treat them like strings
         j_base = &j_string;
         if ((CM_IS_SQL_AS_JSON_SCALAR(expr.extra_) && ob_is_string_type(in_type)) && j_text.compare("null") == 0) {
           j_base = &j_null;
         }
-      } else if (OB_FAIL(ObJsonParser::get_tree(&temp_allocator, j_text, j_tree,
-                                                parse_flag,
+      } else if (OB_FAIL(ObJsonParser::get_tree(&temp_allocator, j_text, j_tree, 
+                                                parse_flag, 
                                                 ObJsonExprHelper::get_json_max_depth_config()))) {
         if (CM_IS_IMPLICIT_CAST(expr.extra_) && !CM_IS_COLUMN_CONVERT(expr.extra_)) {
           ret = OB_SUCCESS;
@@ -3532,7 +3534,7 @@ static int common_string_json(const ObExpr &expr,
 
       if (OB_SUCC(ret) && !is_null_res) {
         ObString raw_bin;
-        if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+        if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
           LOG_WARN("fail to get string json binary", K(ret), K(in_type), K(raw_bin));
         } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
           LOG_WARN("fail to fill json bin lob locator", K(ret));
@@ -3554,8 +3556,9 @@ CAST_FUNC_NAME(string, json)
       ObString in_str = child_res->get_string();
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str))) {
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res, 
+                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str,
+                  &ctx.exec_ctx_))) {
         LOG_WARN("fail to get real data.", K(ret), K(in_str));
       } else {
         ret = common_string_json(expr, expr.args_[0]->datum_meta_.type_, in_str, ctx, res_datum);
@@ -3770,7 +3773,7 @@ CAST_FUNC_NAME(text, string)
     if (has_lob_header && child_res->len_ != 0 && ! child_res->get_lob_data().is_mem_loc_ && child_res->get_lob_data().in_row_) {
       const ObLobCommon& lob = child_res->get_lob_data();
       data.assign_ptr(lob.get_inrow_data_ptr(), static_cast<int32_t>(lob.get_byte_size(child_res->len_)));
-    } else if (OB_FAIL(ObTextStringHelper::build_text_iter(instr_iter, ctx.exec_ctx_,
+    } else if (OB_FAIL(ObTextStringHelper::build_text_iter(instr_iter, &ctx.exec_ctx_, ctx.exec_ctx_.get_my_session(),
                                 is_same_charset ? reinterpret_cast<ObIAllocator *>(&res_alloc) : &temp_allocator,
                                 &temp_allocator))) {
       LOG_WARN("init lob str iter failed ", K(ret), K(in_type));
@@ -3820,8 +3823,7 @@ CAST_FUNC_NAME(text, text)
       res_datum.set_string(in_str.ptr(), in_str.length());
     } else {
       ObTextStringIter instr_iter(in_type, in_cs_type, in_str, has_lob_header);
-      if (OB_FAIL(ObTextStringHelper::build_text_iter(
-              instr_iter, ctx.exec_ctx_, &temp_allocator))) {
+      if (OB_FAIL(ObTextStringHelper::build_text_iter(instr_iter, &ctx.exec_ctx_, ctx.exec_ctx_.get_my_session(), &temp_allocator))) {
         LOG_WARN("init lob str iter failed ", K(ret), K(in_type));
       } else if (OB_FAIL(instr_iter.get_full_data(data))) {
         LOG_WARN("init lob str iter failed ", K(ret), K(in_type));
@@ -3866,10 +3868,11 @@ CAST_FUNC_NAME(string, geometry)
     ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(expr.extra_);
     const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
     ObGeometry *geo = NULL;
-    common::ObSrsCacheGuard srs_guard;
+    omt::ObSrsCacheGuard srs_guard;
     const ObSrsItem *srs = NULL;
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str))) {
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res, 
+                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str,
+                  &ctx.exec_ctx_))) {
         LOG_WARN("fail to get real data.", K(ret), K(in_str));
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, in_str, srs, true, cast_name))) {
       LOG_WARN("fail to get srs item", K(ret), K(in_str));
@@ -4170,7 +4173,7 @@ static int common_number_json(const number::ObNumber &nmb, const ObObjType in_ty
   ObString raw_bin;
   if (OB_FAIL(tmp_num.from(nmb, temp_allocator))) {
     LOG_WARN("copy number failed", K(ret));
-  } else if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+  } else if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
     LOG_WARN("fail to get number json binary", K(ret), K(in_type), K(nmb));
   } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
     LOG_WARN("fail to fill json bin lob locator", K(ret));
@@ -4195,7 +4198,7 @@ static int common_string_geometry(const char *buf, int64_t length, const sql::Ob
                                   sql::ObEvalCtx &ctx, ObDatum &res_datum)
 {
   int ret = OB_SUCCESS;
-  common::ObSrsCacheGuard srs_guard;
+  omt::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = NULL;
   ObGeometry *geo = NULL;
   ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(expr.extra_);
@@ -4452,8 +4455,8 @@ CAST_FUNC_NAME(float, json)
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
     ObString raw_bin;
-
-    if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+    
+    if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
       LOG_WARN("fail to get float json binary", K(ret), K(in_type), K(in_val));
     } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
       LOG_WARN("fail to fill json bin lob locator", K(ret));
@@ -4469,7 +4472,7 @@ CAST_FUNC_NAME(float, geometry)
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
     ObGeometry *geo = NULL;
-    common::ObSrsCacheGuard srs_guard;
+    omt::ObSrsCacheGuard srs_guard;
     const ObSrsItem *srs = NULL;
     float in_val = child_res->get_float();
     char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
@@ -4821,7 +4824,7 @@ CAST_FUNC_NAME(double, json)
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
     ObString raw_bin;
-    if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+    if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
       LOG_WARN("fail to get double json binary", K(ret), K(in_type), K(in_val));
     } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
       LOG_WARN("fail to fill json bin lob locator", K(ret));
@@ -4837,7 +4840,7 @@ CAST_FUNC_NAME(double, geometry)
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
     ObGeometry *geo = NULL;
-    common::ObSrsCacheGuard srs_guard;
+    omt::ObSrsCacheGuard srs_guard;
     const ObSrsItem *srs = NULL;
     double in_val = child_res->get_double();
     char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
@@ -5618,7 +5621,7 @@ CAST_FUNC_NAME(datetime, json)
         if (OB_FAIL(ObTimeConverter::datetime_to_ob_time(in_val, tz_info, ob_time))) {
           LOG_WARN("fail to create datetime from int failed", K(ret), K(in_type), K(in_val));
         } else {
-          ObJsonNodeType node_type = (ObTimestampType == in_type)
+          ObJsonNodeType node_type = (ObTimestampType == in_type) 
                                       ? ObJsonNodeType::J_TIMESTAMP
                                       : ObJsonNodeType::J_DATETIME;
           ObJsonDatetime j_datetime(node_type, ob_time);
@@ -5627,7 +5630,7 @@ CAST_FUNC_NAME(datetime, json)
           common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
           ObString raw_bin;
 
-          if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+          if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
             LOG_WARN("fail to get datetime json binary", K(ret), K(in_type), K(in_val));
           } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
             LOG_WARN("fail to fill json bin lob locator", K(ret));
@@ -5746,7 +5749,7 @@ CAST_FUNC_NAME(mdatetime, json)
         common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
         ObString raw_bin;
 
-        if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+        if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
           LOG_WARN("fail to get datetime json binary", K(ret), K(in_type), K(in_val));
         } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
           LOG_WARN("fail to fill json bin lob locator", K(ret));
@@ -5988,7 +5991,7 @@ CAST_FUNC_NAME(date, mdatetime)
       ObTimeConvertCtx cvrt_ctx(NULL, false);
       int32_t in_val = child_res->get_date();
       ObMySQLDateTime out_val = 0;
-      if (OB_FAIL(ObTimeConverter::date_to_mdatetime(in_val, out_val))) {
+      if (OB_FAIL(ObTimeConverter::date_to_mdatetime(in_val, out_val))) { 
         LOG_WARN("date_to_datetime failed", K(ret), K(in_val), K(in_type));
       } else {
         res_datum.set_mysql_datetime(out_val);
@@ -6036,7 +6039,7 @@ CAST_FUNC_NAME(mdate, mdatetime)
       ObObjType in_type = expr.args_[0]->datum_meta_.type_;
       ObMySQLDate in_val = child_res->get_mysql_date();
       ObMySQLDateTime out_val = 0;
-      if (OB_FAIL(ObTimeConverter::mdate_to_mdatetime(in_val, out_val))) {
+      if (OB_FAIL(ObTimeConverter::mdate_to_mdatetime(in_val, out_val))) { 
         LOG_WARN("date_to_datetime failed", K(ret), K(in_val));
       } else {
         res_datum.set_mysql_datetime(out_val);
@@ -6262,7 +6265,7 @@ CAST_FUNC_NAME(date, json)
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
       ObString raw_bin;
 
-      if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+      if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
         LOG_WARN("fail to get date json binary", K(ret), K(in_type), K(in_val));
       } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
         LOG_WARN("fail to fill json bin lob locator", K(ret));
@@ -6358,7 +6361,7 @@ CAST_FUNC_NAME(mdate, json)
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
       ObString raw_bin;
 
-      if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+      if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
         LOG_WARN("fail to get date json binary", K(ret), K(in_type), K(in_val));
       } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
         LOG_WARN("fail to fill json bin lob locator", K(ret));
@@ -6382,7 +6385,7 @@ CAST_FUNC_NAME(date, geometry)
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
       ObGeometry *geo = NULL;
-      common::ObSrsCacheGuard srs_guard;
+      omt::ObSrsCacheGuard srs_guard;
       const ObSrsItem *srs = NULL;
       ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(expr.extra_);
       const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
@@ -6423,7 +6426,7 @@ CAST_FUNC_NAME(mdate, geometry)
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
       ObGeometry *geo = NULL;
-      common::ObSrsCacheGuard srs_guard;
+      omt::ObSrsCacheGuard srs_guard;
       const ObSrsItem *srs = NULL;
       ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(expr.extra_);
       const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
@@ -6680,8 +6683,8 @@ CAST_FUNC_NAME(year, json)
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
       ObString raw_bin;
-
-      if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+      
+      if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
         LOG_WARN("fail to get year json binary", K(ret), K(in_type), K(in_val));
       } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
         LOG_WARN("fail to fill json bin lob locator", K(ret));
@@ -6737,7 +6740,7 @@ CAST_FUNC_NAME(year, geometry)
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
       ObGeometry *geo = NULL;
-      common::ObSrsCacheGuard srs_guard;
+      omt::ObSrsCacheGuard srs_guard;
       const ObSrsItem *srs = NULL;
       ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(expr.extra_);
       const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
@@ -7039,8 +7042,8 @@ CAST_FUNC_NAME(bit, json)
       ObJsonOpaque j_opaque(j_value, ObBitType);
       ObIJsonBase *j_base = &j_opaque;
       ObString raw_bin;
-
-      if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+        
+      if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
         LOG_WARN("fail to get int json binary", K(ret), K(in_val), KP(buf), K(BUF_LEN));
       } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
         LOG_WARN("fail to fill json bin lob locator", K(ret));
@@ -7087,7 +7090,7 @@ CAST_FUNC_NAME(bit, geometry)
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
     ObGeometry *geo = NULL;
-    common::ObSrsCacheGuard srs_guard;
+    omt::ObSrsCacheGuard srs_guard;
     const ObSrsItem *srs = NULL;
     uint64_t in_val = child_res->get_uint();
     ObFastFormatInt ffi(in_val);
@@ -7340,8 +7343,8 @@ CAST_FUNC_NAME(enumset, json)
     if (OB_FAIL(common_enumset_string(enumset_expr, in_val, ctx, text_result))) {
       LOG_WARN("common_enumset_string failed", K(ret), K(in_val));
     } else if (FALSE_IT(text_result.get_result_buffer(es_str))) {
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_,
-        &temp_allocator, ObVarcharType, false, es_str))) {
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+        &temp_allocator, ObVarcharType, false, es_str, &ctx.exec_ctx_))) {
       LOG_WARN("fail to get real data.", K(ret), K(es_str));
     } else if (OB_FAIL(common_string_json(expr, ObVarcharType, es_str, ctx, res_datum))) {
       LOG_WARN("common_string_json failed", K(ret), K(es_str));
@@ -7908,7 +7911,7 @@ CAST_FUNC_NAME(time, json)
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
       ObString raw_bin;
 
-      if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+      if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
         LOG_WARN("fail to get time json binary", K(ret), K(in_type), K(in_val));
       } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
         LOG_WARN("fail to fill json bin lob locator", K(ret));
@@ -7961,7 +7964,7 @@ CAST_FUNC_NAME(time, geometry)
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
     ObGeometry *geo = NULL;
-    common::ObSrsCacheGuard srs_guard;
+    omt::ObSrsCacheGuard srs_guard;
     const ObSrsItem *srs = NULL;
     ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(expr.extra_);
     const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
@@ -8298,8 +8301,9 @@ CAST_FUNC_NAME(json, int)
     ObString j_bin_str = child_res->get_string();
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str))) {
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str,
+                &ctx.exec_ctx_))) {
       LOG_WARN("fail to get real data.", K(ret), K(j_bin_str));
     } else {
       ObJsonBin j_bin(j_bin_str.ptr(), j_bin_str.length(), &temp_allocator);
@@ -8317,7 +8321,7 @@ CAST_FUNC_NAME(json, int)
         SET_RES_INT(out_val);
       }
     }
-
+    
   }
   return ret;
 }
@@ -8332,8 +8336,9 @@ CAST_FUNC_NAME(json, uint)
     ObString j_bin_str = child_res->get_string();
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str))) {
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str,
+                &ctx.exec_ctx_))) {
       LOG_WARN("fail to get real data.", K(ret), K(j_bin_str));
     } else {
       ObJsonBin j_bin(j_bin_str.ptr(), j_bin_str.length(), &temp_allocator);
@@ -8346,7 +8351,7 @@ CAST_FUNC_NAME(json, uint)
         ret = OB_ERR_INVALID_JSON_VALUE_FOR_CAST;
         LOG_USER_ERROR(OB_ERR_INVALID_JSON_VALUE_FOR_CAST);
       } else if (out_type < ObUInt64Type
-                && CM_NEED_RANGE_CHECK(expr.extra_)
+                && CM_NEED_RANGE_CHECK(expr.extra_) 
                 && CAST_FAIL(uint_upper_check(out_type, out_val))) {
         LOG_WARN("uint_upper_check failed", K(ret), K(out_type), K(out_val));
       } else {
@@ -8367,8 +8372,9 @@ CAST_FUNC_NAME(json, double)
     ObString j_bin_str = child_res->get_string();
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str))) {
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str,
+                &ctx.exec_ctx_))) {
       LOG_WARN("fail to get real data.", K(ret), K(j_bin_str));
     } else {
       ObJsonBin j_bin(j_bin_str.ptr(), j_bin_str.length(), &temp_allocator);
@@ -8401,8 +8407,9 @@ CAST_FUNC_NAME(json, float)
     ObString j_bin_str = child_res->get_string();
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str))) {
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str,
+                &ctx.exec_ctx_))) {
       LOG_WARN("fail to get real data.", K(ret), K(j_bin_str));
     } else {
       ObJsonBin j_bin(j_bin_str.ptr(), j_bin_str.length(), &temp_allocator);
@@ -8433,9 +8440,9 @@ static int common_json_number(common::ObDatum &child_res, const ObExpr &expr,
   int ret = OB_SUCCESS;
   int warning = ret;
   ObString j_bin_str = child_res.get_string();
-  if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_,
+  if (OB_FAIL(ObTextStringHelper::read_real_string_data(
         alloc, child_res, expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(),
-        j_bin_str))) {
+        j_bin_str, &ctx.exec_ctx_))) {
     LOG_WARN("fail to get real data", K(ret), K(j_bin_str));
   } else {
     ObJsonBin j_bin(j_bin_str.ptr(), j_bin_str.length(), &alloc);
@@ -8486,8 +8493,9 @@ CAST_FUNC_NAME(json, datetime)
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
       ObTimeConvertCtx cvrt_ctx(session->get_timezone_info(), ObTimestampType == out_type);
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str))) {
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str,
+                  &ctx.exec_ctx_))) {
         LOG_WARN("fail to get real data.", K(ret), K(j_bin_str));
       } else {
         ObJsonBin j_bin(j_bin_str.ptr(), j_bin_str.length(), &temp_allocator);
@@ -8525,8 +8533,9 @@ CAST_FUNC_NAME(json, mdatetime)
       CM_IS_EXPLICIT_CAST(expr.extra_) ? false : CM_IS_NO_ZERO_DATE(expr.extra_);
     cvrt_ctx.date_sql_mode_.no_zero_in_date_ =
       CM_IS_EXPLICIT_CAST(expr.extra_) ? false : CM_IS_NO_ZERO_IN_DATE(expr.extra_);
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str))) {
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str,
+                &ctx.exec_ctx_))) {
       LOG_WARN("fail to get real data.", K(ret), K(j_bin_str));
     } else {
       ObJsonBin j_bin(j_bin_str.ptr(), j_bin_str.length(), &temp_allocator);
@@ -8556,8 +8565,9 @@ CAST_FUNC_NAME(json, date)
     ObString j_bin_str = child_res->get_string();
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str))) {
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str,
+                &ctx.exec_ctx_))) {
       LOG_WARN("fail to get real data.", K(ret), K(j_bin_str));
     } else {
       ObJsonBin j_bin(j_bin_str.ptr(), j_bin_str.length(), &temp_allocator);
@@ -8587,8 +8597,9 @@ CAST_FUNC_NAME(json, mdate)
     ObString j_bin_str = child_res->get_string();
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str))) {
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str,
+                &ctx.exec_ctx_))) {
       LOG_WARN("fail to get real data.", K(ret), K(j_bin_str));
     } else {
       ObJsonBin j_bin(j_bin_str.ptr(), j_bin_str.length(), &temp_allocator);
@@ -8624,8 +8635,9 @@ CAST_FUNC_NAME(json, time)
     ObString j_bin_str = child_res->get_string();
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str))) {
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str,
+                &ctx.exec_ctx_))) {
       LOG_WARN("fail to get real data.", K(ret), K(j_bin_str));
     } else {
       ObJsonBin j_bin(j_bin_str.ptr(), j_bin_str.length(), &temp_allocator);
@@ -8656,8 +8668,9 @@ CAST_FUNC_NAME(json, year)
     ObString j_bin_str = child_res->get_string();
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str))) {
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str,
+                &ctx.exec_ctx_))) {
       LOG_WARN("fail to get real data.", K(ret), K(j_bin_str));
     } else {
       ObJsonBin j_bin(j_bin_str.ptr(), j_bin_str.length(), &temp_allocator);
@@ -8677,7 +8690,7 @@ CAST_FUNC_NAME(json, year)
             out_val = 0;
             SET_RES_YEAR(out_val);
           } else {
-            res_datum.set_null(); // not change the behavior of int_year
+            res_datum.set_null(); // not change the behavior of int_year  
           }
         } else {
           SET_RES_YEAR(out_val);
@@ -8697,8 +8710,9 @@ CAST_FUNC_NAME(json, string)
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
     ObString j_bin_str = child_res->get_string();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str))) {
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str,
+                &ctx.exec_ctx_))) {
       LOG_WARN("fail to get real data.", K(ret), K(j_bin_str));
     } else {
       ObJsonBin j_bin(j_bin_str.ptr(), j_bin_str.length(), &temp_allocator);
@@ -8752,8 +8766,9 @@ CAST_FUNC_NAME(json, bit)
     ObString j_bin_str = child_res->get_string();
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str))) {
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str,
+                &ctx.exec_ctx_))) {
       LOG_WARN("fail to get real data.", K(ret), K(j_bin_str));
     } else {
       ObJsonBin j_bin(j_bin_str.ptr(), j_bin_str.length(), &temp_allocator);
@@ -8785,8 +8800,9 @@ CAST_FUNC_NAME(json, otimestamp)
     ObString j_bin_str = child_res->get_string();
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str))) {
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), j_bin_str,
+                &ctx.exec_ctx_))) {
       LOG_WARN("fail to get real data.", K(ret), K(j_bin_str));
     } else {
       ObJsonBin j_bin(j_bin_str.ptr(), j_bin_str.length(), &temp_allocator);
@@ -8916,8 +8932,9 @@ CAST_FUNC_NAME(geometry, int)
       ObString in_str = child_res->get_string();
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str))) {
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str,
+                  &ctx.exec_ctx_))) {
         LOG_WARN("fail to get real data.", K(ret), K(in_str));
       } else if (OB_FAIL(common_string_int(expr, expr.extra_, in_str, true, res_datum))) {
         LOG_WARN("fail to cast string to int", K(ret));
@@ -8938,8 +8955,9 @@ CAST_FUNC_NAME(geometry, uint)
       ObString in_str = child_res->get_string();
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str))) {
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str,
+                  &ctx.exec_ctx_))) {
         LOG_WARN("fail to get real data.", K(ret), K(in_str));
       } else if (OB_FAIL(common_string_uint(expr, in_str, true, res_datum))) {
         LOG_WARN("fail to cast string to uint", K(ret));
@@ -8962,8 +8980,9 @@ CAST_FUNC_NAME(geometry, double)
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
       DEF_IN_OUT_TYPE();
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str))) {
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str,
+                  &ctx.exec_ctx_))) {
         LOG_WARN("fail to get real data.", K(ret), K(in_str));
       } else if (OB_FAIL(common_string_double(expr, in_type, expr.args_[0]->datum_meta_.cs_type_, out_type, in_str, res_datum))) {
         LOG_WARN("fail to cast string to double", K(ret));
@@ -8985,8 +9004,9 @@ CAST_FUNC_NAME(geometry, float)
       ObString in_str = child_res->get_string();
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str))) {
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str,
+                  &ctx.exec_ctx_))) {
         LOG_WARN("fail to get real data.", K(ret), K(in_str));
       } else if (OB_FAIL(common_string_float(expr, in_str, out_val))) {
         LOG_WARN("fail to cast string to float", K(ret));
@@ -9011,8 +9031,9 @@ CAST_FUNC_NAME(geometry, number)
       ObString in_str = child_res->get_string();
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str))) {
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str,
+                  &ctx.exec_ctx_))) {
         LOG_WARN("fail to get real data.", K(ret), K(in_str));
       } else if (OB_FAIL(common_string_number(expr, in_str, ctx.exec_ctx_.get_user_logging_ctx(),
                                               tmp_alloc, nmb))) {
@@ -9038,8 +9059,9 @@ CAST_FUNC_NAME(geometry, datetime)
       ObString in_str = child_res->get_string();
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str))) {
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str,
+                  &ctx.exec_ctx_))) {
         LOG_WARN("fail to get real data.", K(ret), K(in_str));
       } else if (OB_FAIL(common_string_datetime(expr, in_str, ctx, res_datum))) {
         LOG_WARN("fail to cast string to datetime", K(ret));
@@ -9059,8 +9081,9 @@ CAST_FUNC_NAME(geometry, mdatetime)
       ObString in_str = child_res->get_string();
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str))) {
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str,
+                  &ctx.exec_ctx_))) {
         LOG_WARN("fail to get real data.", K(ret), K(in_str));
       } else if (OB_FAIL(common_string_mdatetime(expr, in_str, ctx, res_datum))) {
         LOG_WARN("fail to cast string to datetime", K(ret));
@@ -9080,8 +9103,9 @@ CAST_FUNC_NAME(geometry, date)
       ObString in_str = child_res->get_string();
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str))) {
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str,
+                  &ctx.exec_ctx_))) {
         LOG_WARN("fail to get real data.", K(ret), K(in_str));
       } else if (OB_FAIL(common_string_date(expr, in_str, res_datum))) {
         LOG_WARN("fail to cast string to date", K(ret));
@@ -9101,8 +9125,9 @@ CAST_FUNC_NAME(geometry, mdate)
       ObString in_str = child_res->get_string();
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str))) {
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str,
+                  &ctx.exec_ctx_))) {
         LOG_WARN("fail to get real data.", K(ret), K(in_str));
       } else if (OB_FAIL(common_string_mdate(expr, in_str, res_datum))) {
         LOG_WARN("fail to cast string to date", K(ret));
@@ -9126,8 +9151,9 @@ CAST_FUNC_NAME(geometry, time)
       ObString in_str = child_res->get_string();
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str))) {
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str,
+                  &ctx.exec_ctx_))) {
         LOG_WARN("fail to get real data.", K(ret), K(in_str));
       } else if (OB_FAIL(common_string_time(expr, in_str, res_datum))) {
         LOG_WARN("fail to cast string to time", K(ret));
@@ -9147,8 +9173,9 @@ CAST_FUNC_NAME(geometry, year)
       ObString in_str = child_res->get_string();
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str))) {
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str,
+                  &ctx.exec_ctx_))) {
         LOG_WARN("fail to get real data.", K(ret), K(in_str));
       } else if (OB_FAIL(common_string_year(expr, in_str, res_datum))) {
         LOG_WARN("fail to cast string to year", K(ret));
@@ -9169,8 +9196,9 @@ CAST_FUNC_NAME(geometry, bit)
       ObString in_str = child_res->get_string();
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str))) {
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str,
+                  &ctx.exec_ctx_))) {
         LOG_WARN("fail to get real data.", K(ret), K(in_str));
       } else if (OB_FAIL(common_string_bit(expr, in_str, ctx, res_datum))) {
         LOG_WARN("fail to cast string to bit", K(ret));
@@ -9195,8 +9223,9 @@ CAST_FUNC_NAME(geometry, otimestamp)
       ObString in_str = child_res->get_string();
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str))) {
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str,
+                  &ctx.exec_ctx_))) {
         LOG_WARN("fail to get real data.", K(ret), K(in_str));
       } else if (OB_FAIL(common_string_otimestamp(expr, in_str, ctx, res_datum))) {
         LOG_WARN("fail to cast string to otimestamp", K(ret));
@@ -9222,8 +9251,8 @@ CAST_FUNC_NAME(geometry, decimalint)
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
       ObDecimalIntBuilder res_val;
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-          expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str))) {
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res, 
+          expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str, &ctx.exec_ctx_))) {
         LOG_WARN("failed to get real data", K(ret), K(in_str));
       } else if (OB_FAIL(common_string_decimalint(expr, in_str,
                                                   ctx.exec_ctx_.get_user_logging_ctx(), res_val))) {
@@ -9293,8 +9322,9 @@ CAST_FUNC_NAME(geometry, string)
     ObString wkb = child_res->get_string();
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb,
+                &ctx.exec_ctx_))) {
       LOG_WARN("fail to get real data.", K(ret), K(wkb));
     } else if (OB_FAIL(geom_copy_string(expr, wkb, ctx, res_datum))){
       LOG_WARN("fail to copy string", K(ret));
@@ -9326,7 +9356,7 @@ CAST_FUNC_NAME(geometry, geometry)
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
     ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(expr.extra_);
     const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
-    common::ObSrsCacheGuard srs_guard;
+    omt::ObSrsCacheGuard srs_guard;
     const ObSrsItem *srs = NULL;
     ObGeometryTypeCast *geo_cast = NULL;
     ObGeoErrLogInfo log_info;
@@ -9334,8 +9364,9 @@ CAST_FUNC_NAME(geometry, geometry)
     if (ObGeoType::GEOMETRY == dst_geo_type) {
       res_datum.set_string(wkb);
     } else {
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
-                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res,
+                  expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb,
+                  &ctx.exec_ctx_))) {
         LOG_WARN("fail to get real data.", K(ret), K(wkb));
       } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb, srs, true, cast_name))) {
         LOG_WARN("fail to get srs item", K(ret), K(wkb));
@@ -9449,7 +9480,7 @@ CAST_FUNC_NAME(collection, collection)
     const uint16_t dst_subschema_id = expr.datum_meta_.get_subschema_id();
     ObSubSchemaValue src_meta;
     ObSubSchemaValue dst_meta;
-
+    
     if (OB_FAIL(ctx.exec_ctx_.get_sqludt_meta_by_subschema_id(src_subschema_id, src_meta))) {
       LOG_WARN("failed to get subschema meta", K(ret), K(src_subschema_id));
     } else if (OB_FAIL(ctx.exec_ctx_.get_sqludt_meta_by_subschema_id(dst_subschema_id, dst_meta))) {
@@ -9475,7 +9506,7 @@ CAST_FUNC_NAME(collection, collection)
       ObArrayTypeCast *arr_cast = NULL;
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, &temp_allocator,
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(&temp_allocator,
                                                             ObLongTextType,
                                                             CS_TYPE_BINARY,
                                                             true,
@@ -9489,7 +9520,7 @@ CAST_FUNC_NAME(collection, collection)
         LOG_WARN("construct collection obj failed", K(ret), K(dst_coll_type));
       } else if (OB_FAIL(ObArrayTypeCastFactory::alloc(temp_allocator, *src_coll_type, *dst_coll_type, arr_cast))) {
         LOG_WARN("alloc collection cast failed", K(ret), K(src_coll_info));
-      } else if (OB_FAIL(arr_cast->cast(temp_allocator, src_coll_obj, src_coll_type,
+      } else if (OB_FAIL(arr_cast->cast(temp_allocator, src_coll_obj, src_coll_type, 
                                         dst_coll_obj, dst_coll_type, expr.extra_))) {
         LOG_WARN("array element cast failed", K(ret), K(*src_coll_info), K(*dst_coll_info));
       } else if (OB_FAIL(dst_coll_obj->check_validity(*dst_coll_type, *dst_coll_obj))) {
@@ -9521,7 +9552,7 @@ CAST_FUNC_NAME(string, collection)
       ObString res_str;
       const ObSqlCollectionInfo *dst_coll_info = reinterpret_cast<const ObSqlCollectionInfo *>(dst_meta.value_);
       ObCollectionTypeBase *dst_coll_type = dst_coll_info->collection_meta_;
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *child_res,
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *child_res, 
                   expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), in_str))) {
         LOG_WARN("fail to get real data.", K(ret), K(in_str));
       } else if (dst_coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE && OB_FAIL(ObArrayTypeObjFactory::construct(temp_allocator, *dst_coll_type, arr_dst))) {
@@ -9560,7 +9591,7 @@ CAST_FUNC_NAME(string, collection)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected coll type", K(ret), K(dst_coll_type->type_id_));
       }
-
+      
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(arr_dst->check_validity(*dst_coll_type, *arr_dst))) {
         LOG_WARN("check array validty failed", K(ret), K(dst_coll_info));
@@ -13709,10 +13740,6 @@ int ObDatumCast::cast_obj(ObEvalCtx &ctx, ObIAllocator &alloc, const ObObjType &
     } else {
       ObCastCtx cast_ctx(&alloc, &dtc_params, get_cur_time(phy_plan_ctx), def_cm,
                          dst_cs_type, NULL, &dst_acc);
-      session->configure_obj_cast(
-          cast_ctx,
-          ctx.exec_ctx_.get_srs_provider(),
-          ctx.exec_ctx_.get_lob_read_service());
       if (OB_FAIL(ObObjCaster::to_type(dst_type, cast_ctx, src_obj, dst_obj))) {
         LOG_WARN("failed to cast object to ", K(ret), K(src_obj), K(dst_type));
       }
@@ -14231,12 +14258,129 @@ DEF_BATCH_CAST_FUNC(ObDecimalIntTC, ObNumberTC)
 #undef DO_IMPLICIT_CAST
 #undef DO_CONST_CAST
 
-#include "data_plane/lob/ob_lob_value.h"
+
+// ── share decint_scale exec_ctx warning adapter registration(used by obj_cast)──
+namespace oceanbase {
+namespace sql {
+static void decint_warn_from_exec_ctx(const void *payload, const int64_t code,
+                                      const common::ObString &ts, const common::ObString &input,
+                                      const common::ObCastMode cm)
+{
+  const ObExecContext *ec = static_cast<const ObExecContext *>(payload);
+  ObDataTypeCastUtil::log_user_error_warning(
+      (nullptr == ec) ? nullptr : const_cast<ObExecContext *>(ec)->get_user_logging_ctx(),
+      code, ts, input, cm);
+}
+static const bool g_reg_decint_warn =
+    (common::decint_scale::g_warn_from_exec_ctx = decint_warn_from_exec_ctx, true);
+}  // namespace sql
+}  // namespace oceanbase
+
+#include "share/object/ob_obj_cast_util.h"  // OB_JSON_ZERO
+#include "share/object/ob_enumset_str_util.h"  // enumset_str
+// obj_cast macro DSL copied with the relocated block(same-named macros in this file have different semantics, push/pop isolation)
+namespace oceanbase { namespace common {
+static const ObJsonZeroVal &ob_objcast_json_zero_() { static const ObJsonZeroVal v = ObJsonZeroVal(); return v; }
+} }
+#pragma push_macro("CAST_FAIL")
+#undef CAST_FAIL
+#pragma push_macro("CAST_RET")
+#undef CAST_RET
+#pragma push_macro("SET_RES_OBJ")
+#undef SET_RES_OBJ
+#pragma push_macro("COMMA")
+#undef COMMA
+#pragma push_macro("SET_RES_INT")
+#undef SET_RES_INT
+#pragma push_macro("SET_RES_UINT")
+#undef SET_RES_UINT
+#pragma push_macro("SET_RES_FLOAT")
+#undef SET_RES_FLOAT
+#pragma push_macro("SET_RES_DOUBLE")
+#undef SET_RES_DOUBLE
+#pragma push_macro("SET_RES_NUMBER")
+#undef SET_RES_NUMBER
+#pragma push_macro("SET_RES_DATETIME")
+#undef SET_RES_DATETIME
+#pragma push_macro("SET_RES_MDATETIME")
+#undef SET_RES_MDATETIME
+#pragma push_macro("SET_RES_DATE")
+#undef SET_RES_DATE
+#pragma push_macro("SET_RES_MDATE")
+#undef SET_RES_MDATE
+#pragma push_macro("SET_RES_TIME")
+#undef SET_RES_TIME
+#pragma push_macro("SET_RES_YEAR")
+#undef SET_RES_YEAR
+#pragma push_macro("SET_RES_BIT")
+#undef SET_RES_BIT
+#pragma push_macro("SET_RES_ENUM")
+#undef SET_RES_ENUM
+#pragma push_macro("SET_RES_SET")
+#undef SET_RES_SET
+#pragma push_macro("SET_RES_OTIMESTAMP")
+#undef SET_RES_OTIMESTAMP
+#pragma push_macro("SET_RES_ACCURACY")
+#undef SET_RES_ACCURACY
+#define CAST_FAIL(stmt) \
+  (OB_UNLIKELY((OB_SUCCESS != (ret = get_cast_ret(cast_mode, (stmt), params.warning_)))))
+
+#define CAST_RET(stmt) \
+  (ret = get_cast_ret(cast_mode, (stmt), params.warning_))
+
+#define SET_RES_OBJ(res, func_val, obj_type, comma, val, zero_val)        \
+  do {                                                                    \
+    if (OB_SUCC(ret)) {                                                   \
+      if (OB_SUCCESS == params.warning_                                   \
+          || OB_ERR_TRUNCATED_WRONG_VALUE == params.warning_              \
+          || OB_DATA_OUT_OF_RANGE == params.warning_                      \
+          || OB_ERR_DATA_TRUNCATED == params.warning_                     \
+          || OB_ERR_DOUBLE_TRUNCATED == params.warning_                   \
+          || OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD == params.warning_) { \
+        res.set_##func_val(obj_type comma val);                           \
+      } else if (CM_IS_ZERO_ON_WARN(cast_mode)) {                         \
+        res.set_##func_val(obj_type comma zero_val);                      \
+      } else {                                                            \
+        res.set_null();                                                   \
+      }                                                                   \
+    } else {                                                              \
+      res.set_##func_val(obj_type comma val);                             \
+    }                                                                     \
+  } while (0)
+
+#define COMMA ,
+#define SET_RES_INT(res)          SET_RES_OBJ(res, int, expect_type, COMMA, value, 0)
+#define SET_RES_UINT(res)         SET_RES_OBJ(res, uint, expect_type, COMMA, value, 0)
+#define SET_RES_FLOAT(res)        SET_RES_OBJ(res, float, expect_type, COMMA, value, 0.0)
+#define SET_RES_DOUBLE(res)       SET_RES_OBJ(res, double, expect_type, COMMA, value, 0.0)
+#define SET_RES_NUMBER(res)       SET_RES_OBJ(res, number, expect_type, COMMA, value, (value.set_zero(), value))
+#define SET_RES_DATETIME(res)     SET_RES_OBJ(res, datetime, expect_type, COMMA, value, ObTimeConverter::ZERO_DATETIME)
+#define SET_RES_MDATETIME(res)     SET_RES_OBJ(res, mysql_datetime, , , mdt_value, ObTimeConverter::MYSQL_ZERO_DATETIME)
+#define SET_RES_DATE(res)         SET_RES_OBJ(res, date, , , value, ObTimeConverter::ZERO_DATE)
+#define SET_RES_MDATE(res)         SET_RES_OBJ(res, mysql_date, , , md_value, ObTimeConverter::MYSQL_ZERO_DATE)
+#define SET_RES_TIME(res)         SET_RES_OBJ(res, time, , , value, ObTimeConverter::ZERO_TIME)
+#define SET_RES_YEAR(res)         SET_RES_OBJ(res, year, , , value, ObTimeConverter::ZERO_YEAR)
+#define SET_RES_BIT(res)          SET_RES_OBJ(res, bit, , , value, 0)
+#define SET_RES_ENUM(res)         SET_RES_OBJ(res, enum, , , value, 0)
+#define SET_RES_SET(res)          SET_RES_OBJ(res, set, , , value, 0)
+#define SET_RES_OTIMESTAMP(res)   SET_RES_OBJ(res, otimestamp_value, expect_type, COMMA, value, ObOTimestampData())
+//Here the macro corresponding to SET_RES_XXXTYPE has been added and needs to be included in the ObObjCaster::get_zero_value() interface to obtain the zero value for the corresponding type
+
+
+#define SET_RES_ACCURACY(res_precision, res_scale, res_length) \
+  if (params.res_accuracy_ != NULL && OB_SUCCESS == ret) {\
+    params.res_accuracy_->set_scale(res_scale);\
+    params.res_accuracy_->set_precision(res_precision);\
+    params.res_accuracy_->set_length(static_cast<int32_t>(res_length));\
+  }
+
+// ===== definition moved from share/object/ob_obj_cast.cpp(exec_ctx/subschema/lob/expr_op real-user hidden dependency; two static functions remove static, rename, and export) =====
+#include "sql/engine/expr/ob_expr_util.h"
+#include "storage/lob/ob_lob_manager.h"
 namespace oceanbase
 {
-namespace sql
+namespace common
 {
-using namespace common;
 
 int ob_obj_to_ob_time_with_date(const ObObj& obj,
                                 const ObTimeZoneInfo* tz_info,
@@ -14289,8 +14433,7 @@ int ob_obj_to_ob_time_with_date(const ObObj& obj,
     case ObTextTC: {
       ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObString val;
-      if (OB_FAIL(common::lob_helper::read_real_string_data(
-              &lob_allocator, obj, val, nullptr))) {
+      if (OB_FAIL(common::lob_helper::read_real_string_data(&lob_allocator, obj, val))) {
         LOG_WARN("fail to get real data.", K(ret), K(val));
       } else if (OB_FAIL(ObTimeConverter::str_to_ob_time_with_date(val, ob_time,
                          NULL, date_sql_mode))) {
@@ -14394,8 +14537,7 @@ int ob_obj_to_ob_time_without_date(const ObObj &obj, const ObTimeZoneInfo *tz_in
     case ObTextTC: {
       ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObString val;
-      if (OB_FAIL(common::lob_helper::read_real_string_data(
-              &lob_allocator, obj, val, nullptr))) {
+      if (OB_FAIL(common::lob_helper::read_real_string_data(&lob_allocator, obj, val))) {
         LOG_WARN("fail to get real data.", K(ret), K(val));
       } else if (OB_FAIL(ObTimeConverter::str_to_ob_time_without_date(val, ob_time))) {
         LOG_WARN("str to time failed", K(ret), K(val));
@@ -14464,99 +14606,278 @@ int ob_obj_to_ob_time_without_date(const ObObj &obj, const ObTimeZoneInfo *tz_in
 }
 
 
+}  // namespace common(temporarily closed, sql free function below)
+namespace sql
+{
+// zero-value helper demoted from common::ObObjCaster::get_zero_value(kept in sql because it uses the SET_RES macro; A-set member-split cleanup)
 int get_obj_zero_value(const ObObjType expect_type, ObCollationType expect_cs_type, ObObj &zero_obj)
 {
   int ret = OB_SUCCESS;
+  ObObjCastParams params; //Construct an empty cast_param object, compatible with SET_RES_XXX macro definitions
+  ObCastMode cast_mode = CM_WARN_ON_FAIL;
+  params.warning_ = 1; // set warning code to 1, avoid SET_RES_XXX macro treating it as a real warning
   if (ob_is_string_tc(expect_type)) {
     zero_obj.set_string(expect_type, "");
   } else if (ob_is_text_tc(expect_type)) {
     if (ob_is_large_text(expect_type)) {
-      data_plane::set_zero_lob_value(expect_type, zero_obj);
+      zero_obj.set_lob_value(expect_type, reinterpret_cast<const char *>(&ObLobManager::ZERO_LOB), sizeof(ObLobCommon));
+      zero_obj.set_has_lob_header();
     } else { // tinytext
       zero_obj.set_string(expect_type, "");
     }
   } else if (ob_is_int_tc(expect_type)) {
-    zero_obj.set_int(expect_type, 0);
+    int64_t value = 0;
+    SET_RES_INT(zero_obj);
   } else if (ob_is_uint_tc(expect_type)) {
-    zero_obj.set_uint(expect_type, 0);
+    uint64_t value = 0;
+    SET_RES_UINT(zero_obj);
   } else if (ob_is_float_tc(expect_type)) {
-    zero_obj.set_float(expect_type, 0.0);
+    double value = 0.0;
+    SET_RES_FLOAT(zero_obj);
   } else if (ob_is_double_tc(expect_type)) {
-    zero_obj.set_double(expect_type, 0.0);
+    double value = 0.0;
+    SET_RES_DOUBLE(zero_obj);
   } else if (ob_is_number_tc(expect_type)) {
     number::ObNumber value;
     value.set_zero();
-    zero_obj.set_number(expect_type, value);
+    SET_RES_NUMBER(zero_obj);
   } else if (ob_is_datetime_tc(expect_type)) {
-    zero_obj.set_datetime(expect_type, ObTimeConverter::ZERO_DATETIME);
+    int64_t value = 0;
+    SET_RES_DATETIME(zero_obj);
   } else if (ob_is_date_tc(expect_type)) {
-    zero_obj.set_date(ObTimeConverter::ZERO_DATE);
+    int32_t value = 0;
+    SET_RES_DATE(zero_obj);
   } else if (ob_is_time_tc(expect_type)) {
-    zero_obj.set_time(ObTimeConverter::ZERO_TIME);
+    int32_t value = 0;
+    SET_RES_TIME(zero_obj);
   } else if (ob_is_year_tc(expect_type)) {
-    zero_obj.set_year(ObTimeConverter::ZERO_YEAR);
+    int64_t value = 0;
+    SET_RES_YEAR(zero_obj);
   } else if (ob_is_bit_tc(expect_type)) {
-    zero_obj.set_bit(0);
+    uint64_t value = 0;
+    SET_RES_BIT(zero_obj);
   } else if (ObEnumType == expect_type) {
-    zero_obj.set_enum(0);
+    uint64_t value = 0;
+    SET_RES_ENUM(zero_obj);
   } else if (ObSetType == expect_type) {
-    zero_obj.set_set(0);
+    uint64_t value = 0;
+    SET_RES_SET(zero_obj);
   } else if (ob_is_otimestampe_tc(expect_type)) {
-    zero_obj.set_otimestamp_value(expect_type, ObOTimestampData());
+    ObOTimestampData value;
+    SET_RES_OTIMESTAMP(zero_obj);
   } else if (expect_type == ObJsonType) {
-    static const ObJsonZeroVal JSON_ZERO;
-    zero_obj.set_json_value(
-        expect_type,
-        reinterpret_cast<const char *>(&JSON_ZERO),
-        ObJsonZeroVal::OB_JSON_ZERO_VAL_LENGTH);
+    zero_obj.set_json_value(expect_type, reinterpret_cast<const char *>(&ob_objcast_json_zero_()), ObJsonZeroVal::OB_JSON_ZERO_VAL_LENGTH);
     zero_obj.set_has_lob_header();
   } else if (expect_type == ObDecimalIntType) {
     zero_obj.set_decimal_int(0, 0, nullptr);
   } else if (ob_is_mysql_date_tc(expect_type)) {
-    zero_obj.set_mysql_date(ObTimeConverter::MYSQL_ZERO_DATE);
+    ObMySQLDate md_value = 0;
+    SET_RES_MDATE(zero_obj);
   } else if (ob_is_mysql_datetime_tc(expect_type)) {
-    zero_obj.set_mysql_datetime(ObTimeConverter::MYSQL_ZERO_DATETIME);
+    ObMySQLDateTime mdt_value = 0;
+    SET_RES_MDATETIME(zero_obj);
   }
   if (OB_SUCC(ret)) {
     zero_obj.set_collation_type(expect_cs_type);
   }
   return ret;
 }
-
-
-
-
 }  // namespace sql
+namespace common
+{
+
+
+
+
+int ObObjCaster::is_order_consistent(const ObObjMeta &from,
+                                     const ObObjMeta &to,
+                                     bool &result)
+{
+  int ret = OB_SUCCESS;
+  result = false;
+  ObObjTypeClass tc1 = from.get_type_class();
+  ObObjTypeClass tc2 = to.get_type_class();
+  if (OB_UNLIKELY(ob_is_invalid_obj_tc(tc1) || ob_is_invalid_obj_tc(tc2))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected obj type class", K(ret), K(from), K(to));
+  } else if (from.is_string_or_lob_locator_type() && to.is_string_or_lob_locator_type()) {
+    ObCollationType res_cs_type = CS_TYPE_INVALID;
+    ObCollationLevel res_cs_level = CS_LEVEL_INVALID;
+    ObCollationType from_cs_type = from.get_collation_type();
+    ObCollationType to_cs_type = to.get_collation_type();
+    uint32_t flags = OB_COLL_ALLOW_SUPERSET_CONV | OB_COLL_ALLOW_COERCIBLE_CONV |
+                     OB_COLL_ALLOW_NUMERIC_CONV;
+    if (OB_FAIL(sql::ObExprOperator::aggregate_two_collation(from.get_collation_level(),
+                                                        from_cs_type,
+                                                        to.get_collation_level(),
+                                                        to_cs_type,
+                                                        res_cs_level,
+                                                        res_cs_type,
+                                                        flags))) {
+      LOG_WARN("fail to aggregate collation", K(ret), K(from), K(to));
+    } else {
+      int64_t idx_from = get_idx_of_collate(from_cs_type);
+      int64_t idx_to = get_idx_of_collate(to_cs_type);
+      int64_t idx_res = get_idx_of_collate(res_cs_type);
+      if (idx_from >= 0 && idx_from < VALID_OC_COLLATION_TYPES &&
+          idx_to   >= 0 && idx_to   < VALID_OC_COLLATION_TYPES &&
+          idx_res  >= 0 && idx_res  < VALID_OC_COLLATION_TYPES) {
+        result = ORDER_CONSISTENT_WITH_BOTH_STRING[idx_from][idx_to][idx_res];
+      } else {
+        result = (from_cs_type == to_cs_type) && (from_cs_type == res_cs_type);
+      }
+    }
+  } else {
+    result = ORDER_CONSISTENT[tc1][tc2];
+  }
+  return ret;
+}
+
+
+bool ob_objcast_is_enum_set_with_subschema(const ObObj &in)
+{
+  return in.get_scale() == ObEnumSetMeta::MetaState::SQL;
+}
+
+
+int ob_objcast_string_collection(const ObObjType expect_type, ObObjCastParams &params,
+                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+{
+  int ret = OB_SUCCESS;
+  if (in.is_null()) {
+    out.set_null();
+  } else {
+    const uint16_t dst_subschema_id = out.get_meta().get_subschema_id();
+    sql::ObSubSchemaValue dst_meta;
+    if (OB_ISNULL(params.exec_ctx_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("exec ctx is null", K(ret), K(lbt()));
+    } else if (OB_FAIL(params.exec_ctx_->get_sqludt_meta_by_subschema_id(dst_subschema_id, dst_meta))) {
+      LOG_WARN("Failed to get subshcema_meta_info", K(ret), K(dst_subschema_id));
+    } else {
+      ObString in_str = in.get_string();
+      ObCollationType cs_type = in.meta_.get_collation_type();
+      ObIAllocator &temp_allocator = *params.allocator_v2_;
+      ObIArrayType *arr_dst = NULL;
+      ObString res_str;
+      const ObSqlCollectionInfo *dst_coll_info = reinterpret_cast<const ObSqlCollectionInfo *>(dst_meta.value_);
+      ObCollectionArrayType *dst_arr_type = static_cast<ObCollectionArrayType *>(dst_coll_info->collection_meta_);
+      if (dst_coll_info->collection_meta_->type_id_ != ObNestedType::OB_VECTOR_TYPE && OB_FAIL(ObArrayTypeObjFactory::construct(temp_allocator, *dst_arr_type, arr_dst))) {
+        LOG_WARN("construct array obj failed", K(ret), K(dst_coll_info));
+      } else if (dst_coll_info->collection_meta_->type_id_ == ObNestedType::OB_VECTOR_TYPE) {
+        bool is_binary = cs_type == CS_TYPE_BINARY;
+        if (OB_FAIL(ObArrayTypeObjFactory::construct(temp_allocator, *dst_arr_type, arr_dst, is_binary))) {
+          LOG_WARN("construct array obj failed", K(ret), K(dst_coll_info));
+        } else if (OB_FAIL(sql::ObArrayCastUtils::string_cast_vector(temp_allocator, in_str, arr_dst, dst_arr_type, is_binary))) {
+          LOG_WARN("array element cast failed", K(ret), K(dst_coll_info));
+        }
+      } else if (dst_coll_info->collection_meta_->type_id_ == ObNestedType::OB_ARRAY_TYPE) {
+        if (cs_type != CS_TYPE_BINARY) {
+          if (OB_FAIL(sql::ObArrayCastUtils::string_cast(temp_allocator, in_str, arr_dst, dst_arr_type->element_type_))) {
+            LOG_WARN("array element cast failed", K(ret), K(dst_coll_info));
+          }
+        } else {
+          if (OB_FAIL(sql::ObArrayCastUtils::string_cast_array(in_str, arr_dst, dst_arr_type->element_type_))) {
+            LOG_WARN("array element cast failed", K(ret), K(dst_coll_info));
+          }
+        }
+      } else if (dst_coll_info->collection_meta_->type_id_ == ObNestedType::OB_MAP_TYPE
+                 || dst_coll_info->collection_meta_->type_id_ == ObNestedType::OB_SPARSE_VECTOR_TYPE) {
+        bool is_sparse_vector = dst_coll_info->collection_meta_->type_id_ == ObNestedType::OB_SPARSE_VECTOR_TYPE;
+        if (is_sparse_vector) {
+          // Use fast parser for sparse vector (optimized, avoids regex and JSON parsing)
+          if (OB_FAIL(sql::ObArrayCastUtils::string_cast_sparse_vector_fast(temp_allocator, in_str, arr_dst, static_cast<ObCollectionMapType *>(dst_coll_info->collection_meta_)))) {
+            LOG_WARN("sparse vector cast failed", K(ret), K(dst_coll_info));
+          }
+        } else {
+          // Use standard parser for regular map
+          if (OB_FAIL(sql::ObArrayCastUtils::string_cast_map(temp_allocator, in_str, arr_dst, static_cast<ObCollectionMapType *>(dst_coll_info->collection_meta_), cast_mode, false))) {
+            LOG_WARN("map cast failed", K(ret), K(dst_coll_info));
+          }
+        }
+      } else {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected coll type", K(ret), K(dst_coll_info->collection_meta_->type_id_));
+      }
+
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(arr_dst->check_validity(*dst_arr_type, *arr_dst))) {
+        LOG_WARN("check array validty failed", K(ret), K(dst_coll_info));
+        if (ret == OB_ERR_INVALID_VECTOR_DIM) {
+          LOG_USER_ERROR(OB_ERR_INVALID_VECTOR_DIM, static_cast<uint32_t>(dst_arr_type->dim_cnt_), arr_dst->size());
+        }
+      } else if (OB_FAIL(sql::ObArrayCastUtils::set_array_obj_res(arr_dst, &params, &out))) {
+        LOG_WARN("get array binary string failed", K(ret), K(dst_coll_info));
+      }
+    }
+  }
+
+  return ret;
+}
+
+
+}  // namespace common
 }  // namespace oceanbase
 
+// ===== definition moved from share/object/ob_obj_cast.cpp(common_enumset_string, real exec_ctx hidden dependency) =====
 namespace oceanbase
 {
-namespace query
+namespace common
 {
 
-bool ObDecimalIntScale::is_needed(
-    common::ObScale input_scale,
-    int32_t input_bytes,
-    common::ObScale output_scale,
-    int32_t output_bytes)
+int ob_objcast_common_enumset_string(const ObObj &in,
+                                           ObObjCastParams &params,
+                                           ObTextStringResult &text_result)
 {
-  return sql::ObDatumCast::need_scale_decimalint(
-      input_scale, input_bytes, output_scale, output_bytes);
+  int ret = OB_SUCCESS;
+  const ObEnumSetMeta *meta = NULL;
+  const ObObjType in_type = in.get_type();
+  if (0 == in.get_uint64()) {
+    // empty string, do nothing
+  } else {
+    const uint16_t subschema_id = in.get_meta().get_subschema_id();
+    if (OB_ISNULL(params.exec_ctx_)) {
+      ret = OB_ERR_UNDEFINED;
+      LOG_WARN("exec ctx is null", K(ret));
+    } else if (OB_FAIL(params.exec_ctx_->get_enumset_meta_by_subschema_id(subschema_id, false, meta))) {
+      LOG_WARN("failed to get udt meta", K(ret), K(subschema_id));
+    } else if (OB_ISNULL(meta) || OB_ISNULL(meta->get_str_values())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("fail to get meta", K(ret));
+    } else if (ObEnumType == in_type) {
+      ret = common::enumset_str::enum_to_str(in.get_uint64(), *meta->get_str_values(), text_result);
+    } else if (ObSetType == in_type) {
+      ret = common::enumset_str::set_to_str(meta->get_collation_type(), in.get_uint64(),
+                                          *meta->get_str_values(), text_result);
+    } else {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected expr type", K(ret), K(in_type));
+    }
+  }
+
+  return ret;
 }
 
-int ObDecimalIntScale::scale(
-    const common::ObDecimalInt *value,
-    int32_t value_bytes,
-    common::ObScale input_scale,
-    common::ObScale output_scale,
-    common::ObPrecision output_precision,
-    common::ObCastMode cast_mode,
-    common::ObDecimalIntBuilder &result)
-{
-  return sql::ObDatumCast::common_scale_decimalint(
-      value, value_bytes, input_scale, output_scale,
-      output_precision, cast_mode, result);
-}
 
-} // namespace query
-} // namespace oceanbase
+}  // namespace common
+}  // namespace oceanbase
+#pragma pop_macro("CAST_FAIL")
+#pragma pop_macro("CAST_RET")
+#pragma pop_macro("SET_RES_OBJ")
+#pragma pop_macro("COMMA")
+#pragma pop_macro("SET_RES_INT")
+#pragma pop_macro("SET_RES_UINT")
+#pragma pop_macro("SET_RES_FLOAT")
+#pragma pop_macro("SET_RES_DOUBLE")
+#pragma pop_macro("SET_RES_NUMBER")
+#pragma pop_macro("SET_RES_DATETIME")
+#pragma pop_macro("SET_RES_MDATETIME")
+#pragma pop_macro("SET_RES_DATE")
+#pragma pop_macro("SET_RES_MDATE")
+#pragma pop_macro("SET_RES_TIME")
+#pragma pop_macro("SET_RES_YEAR")
+#pragma pop_macro("SET_RES_BIT")
+#pragma pop_macro("SET_RES_ENUM")
+#pragma pop_macro("SET_RES_SET")
+#pragma pop_macro("SET_RES_OTIMESTAMP")
+#pragma pop_macro("SET_RES_ACCURACY")

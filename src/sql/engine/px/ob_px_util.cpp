@@ -43,6 +43,7 @@ ObBaseOrderMap::~ObBaseOrderMap()
   int ret = OB_SUCCESS;
   ClearMapFunc clear_func;
   if (OB_FAIL(map_.foreach_refactored(clear_func))) {
+    LOG_WARN("failed to clear");
   }
   map_.destroy();
   allocator_.reset();
@@ -52,6 +53,7 @@ int ObBaseOrderMap::init(int64_t count)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(map_.create(count, ObModIds::OB_SQL_PX))) {
+    SQL_LOG(WARN, "Failed to create hash table", K(count));
   }
   return ret;
 }
@@ -69,6 +71,7 @@ int ObBaseOrderMap::add_base_partition_order(int64_t pwj_group_id,
     LOG_WARN("failed to allocate memory");
   } else if (FALSE_IT(base_order = new(buf) ObTMArray<int64_t>())) {
   } else if (OB_FAIL(base_order->reserve(dst_locations.count()))) {
+    LOG_WARN("fail reserve base order", K(ret), K(dst_locations.count()));
   } else if (OB_FAIL(map_.set_refactored(pwj_group_id, std::make_pair(base_order, asc)))) {
     base_order->destroy();
     LOG_WARN("failed to set", K(pwj_group_id));
@@ -77,6 +80,7 @@ int ObBaseOrderMap::add_base_partition_order(int64_t pwj_group_id,
       for (int j = 0; j < tablet_id_array.count() && OB_SUCC(ret); ++j) {
         if (dst_locations.at(i)->tablet_id_.id() == tablet_id_array.at(j)) {
           if (OB_FAIL(base_order->push_back(j))) {
+            LOG_WARN("fail to push idx into base order", K(ret));
           }
           break;
         }
@@ -94,6 +98,7 @@ int ObBaseOrderMap::reorder_partition_as_base_order(int64_t pwj_group_id,
   std::pair<ObIArray<int64_t> *, bool> base_order;
   ObIArray<int64_t> *base_order_arr = nullptr;
   if (OB_FAIL(map_.get_refactored(pwj_group_id, base_order))) {
+    LOG_WARN("hash not found", K(pwj_group_id));
   } else if (FALSE_IT(base_order_arr = base_order.first)) {
   } else {
     int index = 0;
@@ -118,6 +123,7 @@ int ObPxSqcDistributionUtil::alloc_by_data_distribution(const ObIArray<ObTableLo
   int ret = OB_SUCCESS;
   if (nullptr != dfo.get_root_op_spec()) {
     if (OB_FAIL(alloc_by_data_distribution_inner(table_locations, ctx, dfo))) {
+      LOG_WARN("failed to alloc data distribution", K(ret));
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
@@ -143,6 +149,7 @@ int ObPxSqcDistributionUtil::build_dynamic_partition_table_location(common::ObIA
           ObIArray<ObPxSqcMeta> &sqcs = dfo.get_sqcs();
           for (int k = 0; k < sqcs.count() && OB_SUCC(ret); ++k) {
             if (OB_FAIL(sqcs.at(k).get_pruning_table_locations().push_back(table_locations->at(j)))) {
+              LOG_WARN("fail to push back pruning table locations", K(ret));
             }
           }
         }
@@ -175,7 +182,9 @@ int ObPxSqcDistributionUtil::alloc_by_data_distribution_inner(
      */
     LOG_TRACE("this dfo has been built", K(dfo.get_dfo_id()));
   } else if (OB_FAIL(find_scan_ops(scan_ops, *root_op))) {
+    LOG_WARN("fail find scan ops in dfo", K(dfo), K(ret));
   } else if (OB_FAIL(ObPxSqcDistributionUtil::find_dml_ops(dml_ops, *root_op))) {
+    LOG_WARN("failed find insert op in dfo", K(ret), K(dfo));
   } else if (1 < dml_ops.count()) { // Currently, there is at most one DML operator in one DFO
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("the count of insert ops is not right", K(ret), K(dml_ops.count()));
@@ -184,6 +193,7 @@ int ObPxSqcDistributionUtil::alloc_by_data_distribution_inner(
      * some dfo may not contain tsc and dml. for example, select 8 from union all select t1.c1 from t1.
      */
     if (OB_FAIL(alloc_by_local_distribution(ctx, dfo))) {
+      LOG_WARN("alloc SQC on local failed", K(ret));
     }
   } else {
     ObDASTableLoc *table_loc = NULL;
@@ -199,6 +209,7 @@ int ObPxSqcDistributionUtil::alloc_by_data_distribution_inner(
       if (dml_ops.count() > 0) {
         dml_op = dml_ops.at(0);
         if (OB_FAIL(dml_op->get_single_table_loc_id(table_location_key, ref_table_id))) {
+          LOG_WARN("get single table loc id failed", K(ret));
         }
       }
     }
@@ -235,11 +246,15 @@ int ObPxSqcDistributionUtil::alloc_by_data_distribution_inner(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("the location array is empty", K(locations.size()), K(ret));
       } else if (OB_FAIL(build_dfo_sqc(ctx, locations, dfo))) {
+        LOG_WARN("fail fill dfo with sqc infos", K(dfo), K(ret));
       } else if (OB_FAIL(set_dfo_accessed_location(ctx, table_location_key, dfo, scan_ops, dml_op, dml_full_loc))) {
+        LOG_WARN("fail to set all table partition for tsc", K(ret), K(scan_ops.count()), K(dml_op),
+                 K(table_location_key), K(ref_table_id), K(locations));
       } else if (OB_NOT_NULL(table_locations) && !table_locations->empty() &&
             OB_FAIL(build_dynamic_partition_table_location(scan_ops, table_locations, dfo))) {
         LOG_WARN("fail to build dynamic partition pruning table", K(ret));
       }
+      LOG_TRACE("allocate sqc by data distribution", K(dfo), K(locations));
     }
   }
   return ret;
@@ -268,6 +283,8 @@ int ObPxSqcDistributionUtil::find_scan_ops_inner(
       if (OB_ISNULL(child_op)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(find_scan_ops(scan_ops, *child_op))) {
+        LOG_WARN("fail to find child scan ops",
+                 K(ret), K(i), "op_id", op.get_id(), "child_id", child_op->get_id());
       }
     }
   }
@@ -301,6 +318,7 @@ int ObPxSqcDistributionUtil::find_dml_ops_inner(common::ObIArray<const ObTableMo
   if (IS_DML(op.get_type())) {
     if (!check_build_dfo_with_dml(op)) {
     } else if (OB_FAIL(insert_ops.push_back(static_cast<const ObTableModifySpec *>(&op)))) {
+      LOG_WARN("fail to push back table insert op", K(ret));
     }
   }
   if (OB_SUCC(ret) && !IS_RECEIVE(op.get_type())) {
@@ -309,6 +327,8 @@ int ObPxSqcDistributionUtil::find_dml_ops_inner(common::ObIArray<const ObTableMo
       if (OB_ISNULL(child_op)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(find_dml_ops(insert_ops, *child_op))) {
+        LOG_WARN("fail to find child insert ops",
+                 K(ret), K(i), "op_id", op.get_id(), "child_id", child_op->get_id());
       }
     }
   }
@@ -346,6 +366,7 @@ int ObPxSqcDistributionUtil::build_dfo_sqc(ObExecContext &ctx,
       sqc.get_monitoring_info().init(dfo);
       sqc.set_partition_random_affinitize(dfo.partition_random_affinitize());
       if (OB_FAIL(dfo.add_sqc(sqc))) {
+        LOG_WARN("failed to add local sqc", K(ret), K(sqc));
       }
     }
   }
@@ -359,6 +380,7 @@ int ObPxSqcDistributionUtil::alloc_by_temp_child_distribution(ObExecContext &exe
   int ret = OB_SUCCESS;
   if (nullptr != dfo.get_root_op_spec()) {
     if (OB_FAIL(alloc_by_temp_child_distribution_inner(exec_ctx, dfo))) {
+      LOG_WARN("failed to alloc temp child distribution", K(ret));
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
@@ -380,6 +402,7 @@ int ObPxSqcDistributionUtil::alloc_by_temp_child_distribution_inner(ObExecContex
   int64_t parallel = child.get_assigned_worker_count();
   if (0 >= parallel) {
     parallel = 1;
+    LOG_TRACE("parallel not set in query hint. set default to 1");
   }
   for (int64_t i = 0; NULL == ctx && i < temp_ctx.count(); i++) {
     if (child.get_temp_table_id() == temp_ctx.at(i).temp_table_id_) {
@@ -408,6 +431,7 @@ int ObPxSqcDistributionUtil::alloc_by_temp_child_distribution_inner(ObExecContex
       sqc.get_monitoring_info().init(child);
       sqc.set_partition_random_affinitize(child.partition_random_affinitize());
       if (OB_FAIL(child.add_sqc(sqc))) {
+        LOG_WARN("failed to add local temp-table sqc", K(ret), K(sqc));
       }
     }
   } else if (OB_ISNULL(ctx)) {
@@ -420,10 +444,12 @@ int ObPxSqcDistributionUtil::alloc_by_temp_child_distribution_inner(ObExecContex
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr or sqc is not empty", K(ret), K(child));
     } else if (OB_FAIL(find_scan_ops(scan_ops, *root_op))) {
+      LOG_WARN("fail find scan ops in dfo", K(child), K(ret));
     } else if (scan_ops.empty()) {
     } else if (FALSE_IT(base_table_location_key = scan_ops.at(0)->get_table_loc_id())) {
     } else if (OB_FAIL(set_dfo_accessed_location(exec_ctx,
           base_table_location_key, child, scan_ops, NULL, NULL))) {
+      LOG_WARN("fail to set all table partition for tsc", K(ret));
     }
   }
   return ret;
@@ -451,8 +477,10 @@ int ObPxSqcDistributionUtil::alloc_by_child_distribution(const ObDfo &child, ObD
         sqc.get_monitoring_info().assign(child_sqc.get_monitoring_info());
         sqc.set_partition_random_affinitize(child.partition_random_affinitize());
         if (OB_FAIL(parent.add_sqc(sqc))) {
+          LOG_WARN("fail add sqc", K(sqc), K(ret));
         }
     }
+    LOG_TRACE("allocate by child distribution", K(sqcs));
   }
   return ret;
 }
@@ -511,10 +539,12 @@ int ObPxSqcDistributionUtil::alloc_by_reference_child_distribution(
   int ret = OB_SUCCESS;
   ObDfo *reference_child = nullptr;
   if (OB_FAIL(find_reference_child(parent, reference_child))) {
+    LOG_WARN("find reference child failed", K(ret));
   } else if (OB_ISNULL(reference_child)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null child", K(ret));
   } else if (OB_FAIL(alloc_by_child_distribution(*reference_child, parent))) {
+    LOG_WARN("failed to alloc by child distribution", K(ret));
   }
   return ret;
 }
@@ -527,10 +557,12 @@ int ObPxSqcDistributionUtil::alloc_distribution_of_reference_child(
   int ret = OB_SUCCESS;
   ObDfo *reference_child = nullptr;
   if (OB_FAIL(find_reference_child(parent, reference_child))) {
+    LOG_WARN("find reference child failed", K(ret));
   } else if (OB_ISNULL(reference_child)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null child", K(ret));
   } else if (OB_FAIL(alloc_by_data_distribution(table_locations, exec_ctx, *reference_child))) {
+    LOG_WARN("failed to alloc by data distribution", K(ret));
   }
   return ret;
 }
@@ -544,6 +576,7 @@ int ObPxSqcDistributionUtil::find_reference_child(ObDfo &parent, ObDfo *&referen
        ++i) {
     ObDfo *candi_child = nullptr;
     if (OB_FAIL(parent.get_child_dfo(i, candi_child))) {
+      LOG_WARN("failed to get dfo", K(ret));
     } else if (OB_ISNULL(candi_child)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null child", K(ret));
@@ -568,6 +601,7 @@ int ObPxSqcDistributionUtil::get_access_partition_order(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get root phy op", K(ret));
   } else if (OB_FAIL(get_access_partition_order_recursively(root, phy_op, asc_order))) {
+    LOG_WARN("fail to get table scan partition", K(ret));
   }
   return ret;
 }
@@ -583,10 +617,12 @@ int ObPxSqcDistributionUtil::get_access_partition_order_recursively (
     LOG_WARN("the root or phy op is null", K(ret), K(root), K(phy_op));
   } else if (root == phy_op) { // No GI case, default ASC access
     asc_order = true;
+    LOG_DEBUG("No GI in this dfo");
   } else if (PHY_GRANULE_ITERATOR == phy_op->get_type()) {
     const ObGranuleIteratorSpec *gi = static_cast<const ObGranuleIteratorSpec*>(phy_op);
     asc_order = !ObGranuleUtil::desc_order(gi->gi_attri_flag_);
   } else if (OB_FAIL(get_access_partition_order_recursively(root, phy_op->get_parent(), asc_order))) {
+    LOG_WARN("fail to access partition order", K(ret));
   }
   return ret;
 }
@@ -605,6 +641,7 @@ int ObPxSqcDistributionUtil::set_dfo_accessed_location(ObExecContext &ctx,
   ObBaseOrderMap base_order_map;
   ObSEArray<std::pair<int64_t, bool>, 18> locations_order;
   if (OB_FAIL(base_order_map.init(max(1, scan_ops.count())))) {
+    LOG_WARN("Failed to init base_order_map");
   }
   // process insert op corresponding partition location information
   if (OB_FAIL(ret) || OB_ISNULL(dml_op)) {
@@ -614,6 +651,7 @@ int ObPxSqcDistributionUtil::set_dfo_accessed_location(ObExecContext &ctx,
     ObTableID table_location_key = OB_INVALID_ID;
     ObTableID ref_table_id = OB_INVALID_ID;
     if (OB_FAIL(dml_op->get_single_table_loc_id(table_location_key, ref_table_id))) {
+      LOG_WARN("get single table location id failed", K(ret));
     } else {
       if (dml_op->is_table_location_uncertain()) {
         if (OB_ISNULL(dml_loc)) {
@@ -638,6 +676,7 @@ int ObPxSqcDistributionUtil::set_dfo_accessed_location(ObExecContext &ctx,
       LOG_WARN("table loc is null", K(ret));
     } else if (OB_FAIL(set_sqcs_accessed_location(ctx, base_table_location_key,
         dfo, base_order_map, table_loc, dml_op, locations_order))) {
+      LOG_WARN("failed to set sqc accessed location", K(ret));
     }
     dml_table_loc = table_loc;
     dml_table_location_key = table_location_key;
@@ -663,6 +702,8 @@ int ObPxSqcDistributionUtil::set_dfo_accessed_location(ObExecContext &ctx,
           // table scan does not need to be set again
           OB_ISNULL(dml_op) ? base_table_location_key : OB_INVALID_ID,
           dfo, base_order_map, table_loc, scan_op, locations_order))) {
+      LOG_WARN("failed to set sqc accessed location", K(ret), K(table_location_key),
+               K(ref_table_id), KPC(table_loc));
     }
   } // end for
   if (OB_FAIL(ret)) {
@@ -677,6 +718,7 @@ int ObPxSqcDistributionUtil::set_dfo_accessed_location(ObExecContext &ctx,
     ARRAY_FOREACH_X(dfo.get_sqcs(), sqc_idx, sqc_cnt, OB_SUCC(ret)) {
       ObPxSqcMeta &sqc_meta = dfo.get_sqcs().at(sqc_idx);
       if (OB_FAIL(sqc_meta.get_locations_order().assign(locations_order))) {
+        LOG_WARN("assign failed", K(ret));
       }
     }
   }
@@ -704,10 +746,15 @@ int ObPxSqcDistributionUtil::set_sqcs_accessed_location(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("the locations can not be zero", K(ret), K(locations.size()));
     } else if (OB_FAIL(get_access_partition_order(dfo, phy_op, asc_order))) {
+      LOG_WARN("fail to get table scan partition order", K(ret));
     } else if (OB_FAIL(ObPxSqcDistributionUtil::reorder_all_partitions(table_location_key,
         table_loc->get_ref_table_id(), locations,
         temp_locations, asc_order, ctx, base_order_map, phy_op->get_id(), locations_order))) {
+      // Sort the partitions involved in the current SQC according to the access order required by GI
+      // If it is a partition wise join scenario, need to sort in asc/desc order according to partition_wise_join requirements combined with GI requirements
+      LOG_WARN("fail to reorder all partitions", K(ret));
     } else {
+      LOG_TRACE("sqc partition order is", K(asc_order), K(locations), K(temp_locations), KPC(table_loc->loc_meta_));
     }
   }
   if (OB_SUCC(ret) && 1 != sqcs.count()) {
@@ -722,6 +769,7 @@ int ObPxSqcDistributionUtil::set_sqcs_accessed_location(
     int64_t location_end_pos = sqc_locations.count();
     ARRAY_FOREACH_X(temp_locations, idx, cnt, OB_SUCC(ret)) {
       if (OB_FAIL(sqc_locations.push_back(temp_locations.at(idx)))) {
+        LOG_WARN("sqc push back table location failed", K(ret));
       } else if (OB_FAIL(sqc_location_keys.push_back(ObSqcTableLocationKey(
             table_loc->get_table_location_key(),
             table_loc->get_ref_table_id(),
@@ -740,6 +788,7 @@ int ObPxSqcDistributionUtil::set_sqcs_accessed_location(
           table_loc->get_table_location_key(),
           location_start_pos,
           location_end_pos - 1)))) {
+        LOG_WARN("fail to push back table location index", K(ret));
       }
     }
   }
@@ -764,11 +813,14 @@ int ObPxSqcDistributionUtil::build_tablet_idx_map(ObSqlExecutorCtx &task_exec_ct
   const share::schema::ObTableSchema *table_schema = NULL;
   if (OB_ISNULL(task_exec_ctx.schema_service_)) {
   } else if (OB_FAIL(task_exec_ctx.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("fail get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( ref_table_id, table_schema))) {
+    LOG_WARN("fail get table schema", K(ref_table_id), K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("fail get schema", K(ref_table_id), K(ret));
   } else if (OB_FAIL(build_tablet_idx_map(table_schema, idx_map))) {
+    LOG_WARN("fail create index map", K(ret), "cnt", table_schema->get_all_part_num());
   }
   return ret;
 }
@@ -812,6 +864,10 @@ int ObPxSqcDistributionUtil::reorder_all_partitions(
   if (src_locations.size() > 1) {
     ObTabletIdxMap tablet_order_map;
     if (OB_FAIL(dst_locations.reserve(src_locations.size()))) {
+      LOG_WARN("fail reserve locations", K(ret), K(src_locations.size()));
+    // virtual table is list partition now,
+    // no actual partition define, can't traverse
+    // table schema for partition info
     } else if (!is_virtual_table(ref_table_id) &&
         OB_FAIL(build_tablet_idx_map(exec_ctx.get_sql_exec_ctx(),
                                      ref_table_id, tablet_order_map))) {
@@ -819,6 +875,7 @@ int ObPxSqcDistributionUtil::reorder_all_partitions(
     }
     for (auto iter = src_locations.begin(); iter != src_locations.end() && OB_SUCC(ret); ++iter) {
         if (OB_FAIL(dst_locations.push_back(*iter))) {
+        LOG_WARN("fail to push dst locations", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -836,6 +893,7 @@ int ObPxSqcDistributionUtil::reorder_all_partitions(
       }
       GroupPWJTabletIdMap *group_pwj_map = nullptr;
       if (OB_FAIL(ret)) {
+        LOG_WARN("fail to sort  locations", K(ret));
       } else if (OB_NOT_NULL(group_pwj_map = exec_ctx.get_group_pwj_map())) {
         GroupPWJTabletIdInfo group_pwj_tablet_id_info;
         TabletIdArray &tablet_id_array = group_pwj_tablet_id_info.tablet_id_array_;
@@ -855,15 +913,19 @@ int ObPxSqcDistributionUtil::reorder_all_partitions(
               ret = base_order_map.add_base_partition_order(pwj_group_id, tablet_id_array,
                                                             dst_locations, asc);
               if (ret != OB_SUCCESS) {
+                LOG_WARN("failed to add_base_partition_order");
               } else {
+                LOG_TRACE("succ to add_base_partition_order", K(pwj_group_id), K(table_location_key));
               }
             } else {
               LOG_WARN("failed to get_refactored");
             }
           } else if (OB_FAIL(base_order_map.reorder_partition_as_base_order(
                   pwj_group_id, tablet_id_array, dst_locations))) {
+            LOG_WARN("failed to reorder_partition_as_base_order");
           } else {
             asc = base_order.second;
+            LOG_TRACE("succ to reorder_partition_as_base_order", K(pwj_group_id), K(table_location_key));
           }
         }
       }
@@ -874,6 +936,7 @@ int ObPxSqcDistributionUtil::reorder_all_partitions(
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(locations_order.push_back(std::make_pair(op_id, asc)))) {
+      LOG_WARN("push back failed", K(ret));
     }
   }
   return ret;
@@ -883,6 +946,7 @@ int ObPxOperatorVisitor::visit(ObExecContext &ctx, const ObOpSpec &root, ApplyFu
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(func.apply(ctx, root))) {
+    LOG_WARN("fail apply func to input", "op_id", root.id_, K(ret));
   } else if (!IS_PX_RECEIVE(root.type_)) {
     for (int32_t i = 0; OB_SUCC(ret) && i < root.get_child_cnt(); ++i) {
       const ObOpSpec *child_op = root.get_child(i);
@@ -890,6 +954,7 @@ int ObPxOperatorVisitor::visit(ObExecContext &ctx, const ObOpSpec &root, ApplyFu
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("null child operator", K(i), K(root.type_));
       } else if (OB_FAIL(visit(ctx, *child_op, func))) {
+        LOG_WARN("fail to apply func", K(ret));
       }
     }
   }
@@ -909,11 +974,13 @@ int ObPxSqcDistributionUtil::build_tablet_idx_map(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table schema is null", K(ret));
   } else if (OB_FAIL(idx_map.create(table_schema->get_all_part_num(), "TabletOrderIdx"))) {
+    LOG_WARN("fail create index map", K(ret), "cnt", table_schema->get_all_part_num());
   } else if (is_virtual_table(table_schema->get_table_id())) {
     // Distributed virtual tables expose a single schema partition while workers may use
     // distinct logical partition ids. Map each logical id directly to its array position.
     for (int i = 0; OB_SUCC(ret) && i < table_schema->get_all_part_num(); ++i) {
       if (OB_FAIL(idx_map.set_refactored(i + 1, tablet_idx++))) {
+        LOG_WARN("fail set value to hashmap", K(ret));
       }
     }
   } else {
@@ -928,7 +995,9 @@ int ObPxSqcDistributionUtil::build_tablet_idx_map(
           break;
         }
       } else if (OB_FAIL(idx_map.set_refactored(info.tablet_id_.id(), tablet_idx++))) {
+        LOG_WARN("fail set value to hashmap", K(ret));
       }
+      LOG_DEBUG("table item info", K(info));
     } while (OB_SUCC(ret));
   }
   return ret;
@@ -950,11 +1019,13 @@ int ObPxPartitionLocationUtil::get_all_tables_tablets(
       if (dml_location_key.table_location_key_ == table_location_keys.at(idx).table_location_key_
           && table_location_keys.at(idx).is_dml_) {
         if (OB_FAIL(tablets.push_back(all_locations.at(idx)))) {
+          LOG_WARN("fail to push back pkey", K(ret));
         }
       }
     }
     if (OB_SUCC(ret) && !tablets.empty()) {
       if (OB_FAIL(all_tablets.push_back(tablets))) {
+        LOG_WARN("push back tsc partitions failed", K(ret));
       }
     }
   }
@@ -964,14 +1035,17 @@ int ObPxPartitionLocationUtil::get_all_tables_tablets(
       if (scan_ops.at(i)->get_table_loc_id() == table_location_keys.at(j).table_location_key_
           && !table_location_keys.at(j).is_dml_) {
         if (OB_FAIL(tablets.push_back(all_locations.at(j)))) {
+          LOG_WARN("fail to push back pkey", K(ret));
         }
       }
     }
     if (OB_SUCC(ret) && !tablets.empty()) {
       if (OB_FAIL(all_tablets.push_back(tablets))) {
+        LOG_WARN("push back tsc partitions failed", K(ret));
       }
     }
   }
+  LOG_TRACE("add partition in table by tscs", K(ret), K(all_locations), K(all_tablets));
   return ret;
 }
 
@@ -992,7 +1066,9 @@ int ObPxTreeSerializer::serialize_tree(char *buf,
   is_fulltree = is_fulltree || IS_PX_COORD(root.type_);
   int32_t child_cnt = (!is_fulltree && IS_RECEIVE(root.type_)) ? 0 : root.get_child_cnt();
   if (OB_FAIL(serialization::encode_vi32(buf, buf_len, pos, root.type_))) {
+    LOG_WARN("fail to encode op type", K(ret));
   } else if (OB_FAIL(serialization::encode(buf, buf_len, pos, child_cnt))) {
+    LOG_WARN("fail to encode op type", K(ret));
   } else if (OB_FAIL((seri_ctx == NULL ? root.serialize(buf, buf_len, pos) :
       root.serialize(buf, buf_len, pos, *seri_ctx)))) {
     ObCStringHelper helper;
@@ -1008,8 +1084,10 @@ int ObPxTreeSerializer::serialize_tree(char *buf,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null child operator", K(i), K(root.type_));
     } else if (OB_FAIL(serialize_tree(buf, buf_len, pos, *child_op, is_fulltree, seri_ctx))) {
+      LOG_WARN("fail to serialize tree", K(ret));
     }
   }
+  LOG_DEBUG("end trace serialize tree", K(pos), K(buf_len));
   return ret;
 }
 
@@ -1025,7 +1103,9 @@ int ObPxTreeSerializer::deserialize_tree(const char *buf,
   uint32_t child_cnt = 0;
   ObOpSpec *op = NULL;
   if (OB_FAIL(serialization::decode_vi32(buf, data_len, pos, &phy_operator_type))) {
+    LOG_WARN("fail to decode phy operator type", K(ret));
   } else if (OB_FAIL(serialization::decode(buf, data_len, pos, child_cnt))) {
+    LOG_WARN("fail to encode op type", K(ret));
   } else {
     LOG_DEBUG("deserialize phy_operator", K(phy_operator_type),
               "type_str", ob_phy_operator_type_str(static_cast<ObPhyOperatorType>(phy_operator_type)), K(pos));
@@ -1034,8 +1114,10 @@ int ObPxTreeSerializer::deserialize_tree(const char *buf,
   if (OB_SUCC(ret)) {
     if (OB_FAIL(phy_plan.alloc_op_spec(
         static_cast<ObPhyOperatorType>(phy_operator_type), child_cnt, op, 0))) {
+      LOG_WARN("alloc physical operator failed", K(ret));
     } else {
       if (OB_FAIL(op->deserialize(buf, data_len, pos))) {
+        LOG_WARN("fail to deserialize operator", K(ret), N_TYPE, phy_operator_type, K(op->id_));
       } else if ((PHY_TABLE_SCAN_WITH_DOMAIN_INDEX == op->type_)
                  && OB_FAIL(deserialize_sub_plan(buf, data_len, pos, phy_plan, op))) {
         LOG_WARN("fail to deserialize sub plan", K(ret));
@@ -1056,6 +1138,7 @@ int ObPxTreeSerializer::deserialize_tree(const char *buf,
     } else if (PHY_TABLE_SCAN == op->type_) {
       ObTableScanSpec *tsc_spec = static_cast<ObTableScanSpec *>(op);
       if (OB_FAIL(tsc_ops.push_back(tsc_spec))) {
+        LOG_WARN("Failed to push back table scan operator", K(ret));
       }
     }
   }
@@ -1065,7 +1148,9 @@ int ObPxTreeSerializer::deserialize_tree(const char *buf,
     for (int32_t i = 0; OB_SUCC(ret) && i < child_cnt; i++) {
       ObOpSpec *child = NULL;
       if (OB_FAIL(deserialize_tree(buf, data_len, pos, phy_plan, child, tsc_ops))) {
+        LOG_WARN("fail to deserialize tree", K(ret));
       } else if (OB_FAIL(op->set_child(i, child))) {
+        LOG_WARN("fail to set child", K(ret));
       }
     }
   }
@@ -1185,6 +1270,7 @@ int ObPxTreeSerializer::deserialize_op_input(
   int ret = OB_SUCCESS;
   int32_t real_input_count = 0;
   if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &real_input_count))) {
+    LOG_WARN("decode int32_t", K(ret), K(data_len), K(pos));
   }
   ObOperatorKit *kit = nullptr;
   ObPhyOperatorType phy_op_type;
@@ -1347,6 +1433,7 @@ int ObPxTreeSerializer::serialize_op_input_tree(
         LOG_WARN("null child operator", K(i), K(op_spec.type_));
       } else if (OB_FAIL(serialize_op_input_tree(
           buf, buf_len, pos, *child_op, op_kit_store, is_fulltree, real_input_count))) {
+        LOG_WARN("fail to serialize tree", K(ret));
       }
     }
   }
@@ -1367,11 +1454,16 @@ int ObPxTreeSerializer::serialize_op_input(
   // Here we do not serialize input, later it will be done via copy, because the input required for deserialization is not available here, this is different from the old way
   if (OB_FAIL(serialize_op_input_tree(
       buf, buf_len, pos, op_spec, op_kit_store, false /* is_fulltree */, real_input_count))) {
+    LOG_WARN("failed to serialize spec tree", K(ret));
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(serialization::encode_i32(buf, buf_len, input_start_pos, real_input_count))) {
+      LOG_WARN("encode int32_t", K(buf_len), K(input_start_pos), K(real_input_count));
     }
+    LOG_TRACE("trace end ser input cnt", K(ret), K(real_input_count), K(op_kit_store.size_),
+      K(pos), K(input_start_pos));
   }
+  LOG_DEBUG("end trace ser kit store", K(buf_len), K(pos));
   return ret;
 }
 
@@ -1479,6 +1571,7 @@ int ObPxChannelUtil::flush_rows(common::ObIArray<dtl::ObDtlChannel*> &channels)
       LOG_ERROR("unexpected NULL ptr", K(ret));
     } else {
       if (OB_FAIL(ch->flush())) {
+        LOG_WARN("fail to flush row to slice channel", K(slice_idx), K(ret));
       }
     }
   }
@@ -1495,6 +1588,7 @@ int ObPxChannelUtil::sqcs_channles_asyn_wait(ObIArray<ObPxSqcMeta> &sqcs)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected status: channel is null", K(ret), K(idx));
     } else if (OB_FAIL(ch->flush())) {
+      LOG_WARN("failed to wait for channel", K(ret), K(idx));
     }
   }
   return ret;
@@ -1506,6 +1600,7 @@ int ObPxAffinityByRandom::add_partition(int64_t tablet_id,
                                         ObPxTabletInfo &partition_row_info)
 {
   int ret = OB_SUCCESS;
+  LOG_TRACE("add partition", K(tablet_id), K(tablet_idx), K(worker_cnt), K(this), K(order_partitions_));
   if (0 >= worker_cnt) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("The worker cnt is invalid", K(ret), K(worker_cnt));
@@ -1522,6 +1617,7 @@ int ObPxAffinityByRandom::add_partition(int64_t tablet_id,
     part_hash_value.partition_info_ = partition_row_info;
     worker_cnt_ = worker_cnt;
     if (OB_FAIL(tablet_hash_values_.push_back(part_hash_value))) {
+      LOG_WARN("Failed to push back item", K(ret));
     }
   }
   return ret;
@@ -1532,6 +1628,7 @@ int ObPxAffinityByRandom::do_random(bool use_partition_info)
   int ret = OB_SUCCESS;
   common::ObArray<int64_t> workers_load;
   if (OB_FAIL(workers_load.prepare_allocate(worker_cnt_))) {
+    LOG_WARN("Failed to do prepare allocate", K(ret));
   } else if (!tablet_hash_values_.empty()) {
     ARRAY_FOREACH(workers_load, idx) {
       workers_load.at(idx) = 0;
@@ -1574,6 +1671,7 @@ int ObPxAffinityByRandom::do_random(bool use_partition_info)
     lib::ob_sort(tablet_hash_values_.begin(),
               tablet_hash_values_.end(),
               compare_fun);
+    LOG_TRACE("after sort partition_hash_values randomly", K(tablet_hash_values_), K(this), K(order_partitions_));
     } else {
       // donoting
     }
@@ -1600,6 +1698,7 @@ int ObPxAffinityByRandom::do_random(bool use_partition_info)
         // +1 handling is to prevent all partition statistics being 0
         workers_load.at(min_load_index) += tablet_hash_values_.at(idx).partition_info_.physical_row_count_ + 1;
       }
+      LOG_DEBUG("Workers load", K(workers_load));
     }
     // Keep order
     if (asc_order) {
@@ -1647,6 +1746,7 @@ double ObPxSqcUtil::get_sqc_partition_ratio(ObExecContext *exec_ctx)
     if (0 < total_part_cnt && 0 < sqc_part_cnt) {
       ratio = sqc_part_cnt * 1.0 / total_part_cnt;
     }
+    LOG_TRACE("trace sqc partition ratio", K(total_part_cnt), K(sqc_part_cnt));
   }
   return ratio;
 }
@@ -1662,6 +1762,7 @@ double ObPxSqcUtil::get_sqc_est_worker_ratio(ObExecContext *exec_ctx)
     if (0 < est_total_task_cnt && 0 < est_sqc_task_cnt) {
       ratio = est_sqc_task_cnt * 1.0 / est_total_task_cnt;
     }
+    LOG_TRACE("trace sqc estimate worker ratio", K(est_sqc_task_cnt), K(est_total_task_cnt));
   }
   return ratio;
 }
@@ -1788,6 +1889,8 @@ int ObPxEstimateSizeUtil::get_px_size(
   if (0 >= ret_size) {
     ret_size = 1;
   }
+  LOG_DEBUG("trace get px size", K(ret_size), K(total_size), K(factor), K(actual_worker),
+    K(sqc_part_ratio), K(total_part_cnt), K(sqc_est_worker_ratio), K(total_actual_worker_cnt));
   return ret;
 }
 
@@ -1832,7 +1935,9 @@ int ObSlaveMapUtil::build_pwj_slave_map_mn_group(ObDfo &parent, ObDfo &child)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("pwj must have the same sqc count", K(ret), K(parent.get_sqcs_count()), K(child.get_sqcs_count()));
   } else if (OB_FAIL(ObDfo::check_dfo_pair(parent, child, child_dfo_idx))) {
+    LOG_WARN("failed to check dfo pair", K(ret));
   } else if (OB_FAIL(build_mn_channel(dfo_ch_total_infos, child, parent))) {
+    LOG_WARN("failed to build local channel", K(ret));
   } else {
     LOG_DEBUG("build pwj slave map group", K(child.get_dfo_id()));
   }
@@ -1855,6 +1960,7 @@ int ObSlaveMapUtil::build_partition_map_by_sqcs(
     locations.reset();
     if (OB_FAIL(get_pkey_table_locations(child.get_pkey_table_loc_id(),
         sqc, locations))) {
+      LOG_WARN("fail to get pkey table locations", K(ret));
     }
     ARRAY_FOREACH_X(locations, loc_idx, loc_cnt, OB_SUCC(ret)) {
       const ObDASTabletLoc &location = *locations.at(loc_idx);
@@ -1864,6 +1970,7 @@ int ObSlaveMapUtil::build_partition_map_by_sqcs(
       LOG_DEBUG("debug push partition map", K(tablet_id), K(i), K(sqc.get_sqc_id()));
     }
   }
+  LOG_DEBUG("debug push partition map", K(map));
   return ret;
 }
 
@@ -1911,6 +2018,7 @@ int ObSlaveMapUtil::build_affinitized_partition_map_by_sqcs(
     locations.reset();
     if (OB_FAIL(get_pkey_table_locations(child.get_pkey_table_loc_id(),
         sqc, locations))) {
+      LOG_WARN("fail to get pkey table locations", K(ret));
     }
     if (locations.count() <= 0 || sqc_task_count <= 0) {
       ret = OB_ERR_UNEXPECTED;
@@ -1934,6 +2042,7 @@ int ObSlaveMapUtil::build_affinitized_partition_map_by_sqcs(
         for (int64_t loop = 0; OB_SUCC(ret) && loop < next; ++loop) {
           // first：tablet id, second: prefix_task_count, third: sqc_task_idx
           OZ(map.push_back(ObPxPartChMapItem(tablet_id, 0, t)));
+          LOG_DEBUG("t>p: push partition map", K(tablet_id), "g_t", t, K(t));
           t++;
         }
       }
@@ -1946,9 +2055,11 @@ int ObSlaveMapUtil::build_affinitized_partition_map_by_sqcs(
         // Specific meaning, reference ObPxPartChMapItem:
         // first：tablet_id, second: prefix_task_count, third: sqc_task_idx
         OZ(map.push_back(ObPxPartChMapItem(tablet_id, 0, t)));
+        LOG_DEBUG("t<=p: push partition map", K(tablet_id), "g_t", t, K(t));
       }
     }
   }
+  LOG_DEBUG("debug push partition map", K(map));
   return ret;
 }
 
@@ -1965,11 +2076,14 @@ int ObSlaveMapUtil::build_ppwj_bcast_slave_mn_map(ObDfo &parent, ObDfo &child)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("the count of sqc is unexpected", K(ret), K(sqcs.count()));
   } else if (OB_FAIL(ObDfo::check_dfo_pair(parent, child, child_dfo_idx))) {
+    LOG_WARN("failed to check dfo pair", K(ret));
   } else if (OB_FAIL(build_mn_channel(dfo_ch_total_infos, child, parent))) {
+    LOG_WARN("failed to build mn channels", K(ret));
   } else if (OB_ISNULL(dfo_ch_total_infos) || 1 != dfo_ch_total_infos->count()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected status: receive ch info is error", K(ret), KP(dfo_ch_total_infos));
   } else if (OB_FAIL(build_partition_map_by_sqcs(sqcs, child, map))) {
+    LOG_WARN("failed to build channel map by sqc", K(ret));
   } else if (map.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("the size of channel map is unexpected", K(ret), K(map.count()));
@@ -1986,11 +2100,14 @@ int ObSlaveMapUtil::build_ppwj_slave_mn_map(ObDfo &parent, ObDfo &child)
     ObPxChTotalInfos *dfo_ch_total_infos = &child.get_dfo_ch_total_infos();
     ObPxPartChMapArray &map = child.get_part_ch_map();
     if (OB_FAIL(ObPxSqcDistributionUtil::find_reference_child(parent, reference_child))) {
+      LOG_WARN("find reference child", K(ret));
     } else if (OB_ISNULL(reference_child)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null child", K(ret));
     } else if (OB_FAIL(ObDfo::check_dfo_pair(parent, child, child_dfo_idx))) {
+      LOG_WARN("failed to check dfo pair", K(ret));
     } else if (OB_FAIL(build_mn_channel(dfo_ch_total_infos, child, parent))) {
+      LOG_WARN("failed to build mn channels", K(ret));
     } else if (OB_ISNULL(dfo_ch_total_infos) || 1 != dfo_ch_total_infos->count()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected status: receive ch info is error", K(ret), KP(dfo_ch_total_infos));
@@ -1999,8 +2116,10 @@ int ObSlaveMapUtil::build_ppwj_slave_mn_map(ObDfo &parent, ObDfo &child)
       LOG_WARN("the count of sqc is unexpected", K(ret));
     } else if (OB_FAIL(build_partition_map_by_sqcs(
         reference_child->get_sqcs(), child, map))) {
+      LOG_WARN("failed to build channel map by sqc", K(ret));
     }
   } else if (OB_FAIL(build_pwj_slave_map_mn_group(parent, child))) {
+    LOG_WARN("failed to build ppwj slave map", K(ret));
   }
   return ret;
 }
@@ -2035,7 +2154,9 @@ int ObSlaveMapUtil::build_pkey_affinitized_ch_mn_map(ObDfo &parent,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("the count of sqc is unexpected", K(ret), K(sqcs.count()));
       } else if (OB_FAIL(ObDfo::check_dfo_pair(parent, child, child_dfo_idx))) {
+        LOG_WARN("failed to check dfo pair", K(ret));
       } else if (OB_FAIL(build_mn_channel(dfo_ch_total_infos, child, parent))) {
+        LOG_WARN("failed to build mn channels", K(ret));
       } else if (OB_ISNULL(dfo_ch_total_infos) || 1 != dfo_ch_total_infos->count()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected status: receive ch info is error", K(ret), KP(dfo_ch_total_infos));
@@ -2043,6 +2164,7 @@ int ObSlaveMapUtil::build_pkey_affinitized_ch_mn_map(ObDfo &parent,
           sqcs,
           child,
           map))) {
+        LOG_WARN("failed to build channel map by sqc", K(ret));
       } else if (map.count() <= 0) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("the size of channel map is unexpected",
@@ -2080,11 +2202,14 @@ int ObSlaveMapUtil::build_pkey_random_ch_mn_map(ObDfo &parent, ObDfo &child)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("the count of sqc is unexpected", K(ret), K(sqcs.count()));
       } else if (OB_FAIL(ObDfo::check_dfo_pair(parent, child, child_dfo_idx))) {
+        LOG_WARN("failed to check dfo pair", K(ret));
       } else if (OB_FAIL(build_mn_channel(dfo_ch_total_infos, child, parent))) {
+        LOG_WARN("failed to build mn channels", K(ret));
       } else if (OB_ISNULL(dfo_ch_total_infos) || 1 != dfo_ch_total_infos->count()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected status: receive ch info is error", K(ret), KP(dfo_ch_total_infos));
       } else if (OB_FAIL(build_partition_map_by_sqcs(sqcs, child, map))) {
+        LOG_WARN("failed to build channel map by sqc", K(ret));
       } else if (map.count() <= 0) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("the size of channel map is unexpected",
@@ -2112,8 +2237,11 @@ int ObSlaveMapUtil::build_ppwj_ch_mn_map(ObExecContext &ctx, ObDfo &parent, ObDf
   int64_t child_dfo_idx = -1;
   ObPxChTotalInfos *dfo_ch_total_infos = &child.get_dfo_ch_total_infos();
   if (OB_FAIL(map.reserve(parent.get_total_task_count()))) {
+    LOG_WARN("fail reserve memory for map", K(ret), K(parent.get_total_task_count()));
   } else if (OB_FAIL(ObDfo::check_dfo_pair(parent, child, child_dfo_idx))) {
+    LOG_WARN("failed to check dfo pair", K(ret));
   } else if (OB_FAIL(build_mn_channel(dfo_ch_total_infos, child, parent))) {
+    LOG_WARN("failed to build mn channels", K(ret));
   } else if (OB_ISNULL(dfo_ch_total_infos) || 1 != dfo_ch_total_infos->count()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected status: receive ch info is error", K(ret), KP(dfo_ch_total_infos));
@@ -2133,10 +2261,13 @@ int ObSlaveMapUtil::build_ppwj_ch_mn_map(ObExecContext &ctx, ObDfo &parent, ObDf
       ObPxSqcMeta &sqc = sqcs.at(idx);
       ObPxAffinityByRandom affinitize_rule(sqc.sqc_order_gi_tasks(),
                                            sqc.partition_random_affinitize());
+      LOG_TRACE("build ppwj_ch_mn_map", K(sqc));
       ObPxTabletInfo partition_row_info;
       locations.reset();
       if (OB_FAIL(get_pkey_table_locations(child.get_pkey_table_loc_id(), sqc, locations))) {
+        LOG_WARN("fail to get pkey table locations", K(ret));
       } else if (OB_FAIL(affinitize_rule.reserve(locations.count()))) {
+        LOG_WARN("fail reserve memory", K(ret), K(locations.count()));
       }
       int64_t tablet_idx = OB_INVALID_ID;
       ARRAY_FOREACH_X(locations, loc_idx, loc_cnt, OB_SUCC(ret)) {
@@ -2145,12 +2276,15 @@ int ObSlaveMapUtil::build_ppwj_ch_mn_map(ObExecContext &ctx, ObDfo &parent, ObDf
           uint64_t table_id = location.loc_meta_->ref_table_id_;
           if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
                       schema_guard))) {
+            LOG_WARN("faile to get schema guard", K(ret));
           } else if (OB_FAIL(schema_guard.get_table_schema(
                      table_id, table_schema))) {
+            LOG_WARN("faile to get table schema", K(ret), K(table_id));
           } else if (OB_ISNULL(table_schema)) {
             ret = OB_TABLE_NOT_EXIST;
             LOG_WARN("table schema is null", K(ret), K(table_id));
           } else if (OB_FAIL(ObPxSqcDistributionUtil::build_tablet_idx_map(table_schema, idx_map))) {
+            LOG_WARN("fail to build tablet idx map", K(ret));
           }
         }
         if (OB_FAIL(ret)) {
@@ -2161,14 +2295,17 @@ int ObSlaveMapUtil::build_ppwj_ch_mn_map(ObExecContext &ctx, ObDfo &parent, ObDf
         } else if (OB_FAIL(ObPxAffinityByRandom::get_tablet_info(location.tablet_id_.id(),
                                                                  sqc.get_partitions_info(),
                                                                  partition_row_info))) {
+          LOG_WARN("Failed to get partition info", K(ret));
         } else if (OB_FAIL(affinitize_rule.add_partition(location.tablet_id_.id(),
                 tablet_idx,
                 sqc.get_task_count(),
                 partition_row_info))) {
+          LOG_WARN("fail calc task_id", K(location.tablet_id_), K(sqc), K(ret));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(affinitize_rule.do_random(!sqc.get_partitions_info().empty()))) {
+        LOG_WARN("failed to do random", K(ret));
       } else {
         const ObIArray<ObPxAffinityByRandom::TabletHashValue> &partition_worker_pairs =
           affinitize_rule.get_result();
@@ -2176,6 +2313,7 @@ int ObSlaveMapUtil::build_ppwj_ch_mn_map(ObExecContext &ctx, ObDfo &parent, ObDf
           int64_t tablet_id = partition_worker_pairs.at(idx).tablet_id_;
           int64_t task_id = partition_worker_pairs.at(idx).worker_id_;
           OZ(map.push_back(ObPxPartChMapItem(tablet_id, 0, task_id)));
+          LOG_DEBUG("debug push partition map", K(tablet_id), K(task_id));
         }
         LOG_DEBUG("Get all partition rows info", K(ret), K(sqc.get_partitions_info()));
       }
@@ -2191,17 +2329,20 @@ int ObSlaveMapUtil::build_slave_mapping_mn_ch_map(ObExecContext &ctx, ObDfo &chi
   switch(slave_type) {
   case SlaveMappingType::SM_PWJ_HASH_HASH : {
     if (OB_FAIL(build_pwj_slave_map_mn_group(parent, child))) {
+      LOG_WARN("fail to build pwj slave map", K(ret));
     }
     break;
   }
   case SlaveMappingType::SM_PPWJ_BCAST_NONE :
   case SlaveMappingType::SM_PPWJ_NONE_BCAST : {
     if (OB_FAIL(build_ppwj_bcast_slave_mn_map(parent, child))) {
+      LOG_WARN("fail to build pwj slave map", K(ret));
     }
     break;
   }
   case SlaveMappingType::SM_PPWJ_HASH_HASH : {
     if (OB_FAIL(build_ppwj_slave_mn_map(parent, child))) {
+      LOG_WARN("fail to build pwj slave map", K(ret));
     }
     break;
   }
@@ -2223,18 +2364,21 @@ int ObSlaveMapUtil::build_pkey_mn_ch_map(ObExecContext &ctx, ObDfo &child, ObDfo
   case ObPQDistributeMethod::Type::PARTITION : {
     // for normal pkey
     if (OB_FAIL(build_ppwj_ch_mn_map(ctx, parent, child))) {
+      LOG_WARN("failed to build partial partition wise join channel map", K(ret));
     }
     break;
   }
   case ObPQDistributeMethod::Type::PARTITION_HASH:
   case ObPQDistributeMethod::Type::PARTITION_RANGE: {
     if (OB_FAIL(build_pkey_affinitized_ch_mn_map(parent, child))) {
+      LOG_WARN("failed to build pkey random channel map", K(ret));
     }
     break;
   }
   case ObPQDistributeMethod::Type::PARTITION_RANDOM: {
     // PDML: shuffle to any worker in parent dfo
     if (OB_FAIL(build_pkey_random_ch_mn_map(parent, child))) {
+      LOG_WARN("failed to build pkey random channel map", K(ret));
     }
     break;
   }
@@ -2300,6 +2444,8 @@ int ObDtlChannelUtil::get_receive_dtl_channel_set(
     ObIArray<int64_t> &prefix_task_counts = ch_total_info.transmit_task_layout_.prefix_task_counts_;
     int64_t pre_prefix_task_count = 0;
     if (OB_FAIL(ch_set.reserve(ch_total_info.transmit_task_layout_.total_task_cnt_))) {
+      LOG_WARN("fail reserve memory for channels", K(ret),
+               "channels", ch_total_info.transmit_task_layout_.total_task_cnt_);
     }
     // Traverse all servers of transmit, and construct the channel between this receive task and each of them
     for (int64_t i = 0; i < prefix_task_counts.count() && OB_SUCC(ret); ++i) {
@@ -2316,6 +2462,8 @@ int ObDtlChannelUtil::get_receive_dtl_channel_set(
         chid = base_chid + receive_task_cnt * j;
         ObDtlChannelGroup::make_receive_channel(chid, ch_info);
         OZ(ch_set.add_channel_info(ch_info));
+        LOG_DEBUG("debug receive channel", KP(chid), K(ch_info), K(sqc_id), K(task_id),
+          K(ch_total_info.start_channel_id_));
         ++ch_cnt;
       }
       pre_prefix_task_count = prefix_task_count;
@@ -2327,6 +2475,7 @@ int ObDtlChannelUtil::get_receive_dtl_channel_set(
         K(ch_total_info.transmit_task_layout_.total_task_cnt_), K(sqc_id), K(task_id));
     }
   }
+  LOG_DEBUG("get mn receive dtl channel set", K(sqc_id), K(task_id), K(ch_total_info), K(ch_set));
   return ret;
 }
 
@@ -2350,6 +2499,8 @@ int ObDtlChannelUtil::get_transmit_dtl_channel_set(
     int64_t pre_prefix_task_count = 0;
     int64_t chid = 0;
     if (OB_FAIL(ch_set.reserve(ch_total_info.receive_task_layout_.total_task_cnt_))) {
+      LOG_WARN("fail reserve memory for channels", K(ret),
+               "channels", ch_total_info.receive_task_layout_.total_task_cnt_);
     }
     for (int64_t i = 0; i < prefix_task_counts.count() && OB_SUCC(ret); ++i) {
       int64_t prefix_task_count = 0;
@@ -2364,6 +2515,8 @@ int ObDtlChannelUtil::get_transmit_dtl_channel_set(
         ObDtlChannelGroup::make_transmit_channel(chid, ch_info);
         OZ(ch_set.add_channel_info(ch_info));
         ++ch_cnt;
+        LOG_DEBUG("debug transmit channel", KP(chid), K(ch_info), K(sqc_id), K(task_id),
+          K(ch_total_info.start_channel_id_));
       }
       pre_prefix_task_count = prefix_task_count;
     }
@@ -2373,6 +2526,7 @@ int ObDtlChannelUtil::get_transmit_dtl_channel_set(
         K(ch_total_info.transmit_task_layout_.total_task_cnt_));
     }
   }
+  LOG_DEBUG("get transmit dtl channel set", K(sqc_id), K(task_id), K(ch_total_info), K(ch_set));
   return ret;
 }
 
@@ -2402,6 +2556,7 @@ int LowestCommonAncestorFinder::find_op_common_ancestor(
   const ObOpSpec *parent = left;
   while (OB_NOT_NULL(parent) && OB_SUCC(ret)) {
     if (OB_FAIL(ancestors.push_back(parent))) {
+      LOG_WARN("failed to push back");
     } else {
       parent = parent->get_parent();
     }
@@ -2441,6 +2596,7 @@ int LowestCommonAncestorFinder::get_op_dfo(const ObOpSpec *op, ObDfo *root_dfo, 
   ObSEArray<ObDfo *, 16> dfo_queue;
   int64_t cur_que_front = 0;
   if (OB_FAIL(dfo_queue.push_back(root_dfo))) {
+    LOG_WARN("failed to push back");
   }
 
   while (cur_que_front < dfo_queue.count() && !find && OB_SUCC(ret)) {
@@ -2455,6 +2611,7 @@ int LowestCommonAncestorFinder::get_op_dfo(const ObOpSpec *op, ObDfo *root_dfo, 
         // push child into the queue
         for (int64_t child_idx = 0; OB_SUCC(ret) && child_idx < dfo->get_child_count(); ++child_idx) {
           if (OB_FAIL(dfo_queue.push_back(dfo->get_child_dfos().at(child_idx)))) {
+            LOG_WARN("failed to push back child dfo");
           }
         }
       }

@@ -17,20 +17,21 @@
 #ifndef OCEANBASE_SRC_SQL_OB_SPI_H_
 #define OCEANBASE_SRC_SQL_OB_SPI_H_
 
-#include "sql/pl/ob_pl.h"
-#include "sql/pl/ob_pl_stmt.h"
-#include "sql/pl/ob_pl_user_type.h"
+#include "pl/ob_pl.h"
+#include "pl/ob_pl_stmt.h"
+#include "pl/ob_pl_user_type.h"
 #include "ob_sql_utils.h"
 #include "sql/engine/basic/ob_ra_row_store.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/ob_result_set.h"
-#include "sql/pl/ob_pl_allocator.h"
+#include "pl/ob_pl_allocator.h"
 
 namespace oceanbase
 {
 namespace observer
 {
 class ObITimeRecord;
+class ObQueryRetryCtrl;
 }
 using common::ObPsStmtId;
 
@@ -43,8 +44,6 @@ class ObPLSqlCodeInfo;
 namespace sql
 {
 class ObExprObjAccess;
-class ObQueryRetryCtrl;
-class ObIPLSqlRuntime;
 
 struct ObPLSPITraceIdGuard
 {
@@ -67,7 +66,7 @@ class ObSPIRetryCtrlGuard
 {
 public:
   ObSPIRetryCtrlGuard(
-    ObQueryRetryCtrl &retry_ctrl,
+    observer::ObQueryRetryCtrl &retry_ctrl,
     ObSPIResultSet &spi_result,
     ObSQLSessionInfo &session_info,
     int &ret,
@@ -77,7 +76,7 @@ public:
   void test();
 
 private:
-  ObQueryRetryCtrl &retry_ctrl_;
+  observer::ObQueryRetryCtrl &retry_ctrl_;
   ObSPIResultSet &spi_result_;
   ObSQLSessionInfo &session_info_;
   pl::ObPLSqlCodeInfo save_sqlcode_info_;
@@ -105,9 +104,9 @@ struct ObSPICursor
     row_store_(), row_desc_(), allocator_(&allocator), cur_(0), fields_(allocator), complex_objs_(),
     session_info_(session_info)
   {
-
+    
     complex_objs_.reset();
-
+    
   }
 
   ~ObSPICursor()
@@ -168,7 +167,6 @@ public:
       mem_context_destroy_guard_(mem_context_),
       allocator_(ObModIds::OB_PL_TEMP, OB_MALLOC_NORMAL_BLOCK_SIZE),
       result_set_(NULL),
-      plan_cache_access_service_(NULL),
       sql_ctx_(),
       schema_guard_(share::schema::ObSchemaMgrItem::MOD_SPI_RESULT_SET),
       orign_nested_count_(-1),
@@ -180,9 +178,7 @@ public:
       exec_params_str_() {
       }
   ~ObSPIResultSet() { reset(); }
-  int init(
-      sql::ObSQLSessionInfo &session_info,
-      query::ObIPlanCacheAccessService &plan_cache_access_service);
+  int init(sql::ObSQLSessionInfo &session_info);
   int close_result_set();
   void reset()
   {
@@ -223,11 +219,7 @@ public:
     exec_params_str_.reset();
     //allocator_.reset();
     mem_context_->get_arena_allocator().reset();
-    OB_ASSERT_MSG(NULL != plan_cache_access_service_,
-                  "SPI result set is not initialized with plan-cache access");
-    result_set_ = new (buf_) ObResultSet(
-        session_info, mem_context_->get_arena_allocator(),
-        *plan_cache_access_service_);
+    result_set_ = new (buf_) ObResultSet(session_info, mem_context_->get_arena_allocator());
   }
 
   lib::MemoryContext &get_memory_ctx() { return mem_context_; }
@@ -281,7 +273,6 @@ private:
   //ObMySQLProxy::MySQLResult mysql_result_;
   char buf_[sizeof(sql::ObResultSet)] __attribute__ ((aligned (16)));
   sql::ObResultSet *result_set_;
-  query::ObIPlanCacheAccessService *plan_cache_access_service_;
   sql::ObSqlCtx sql_ctx_; // life period follow result_set_
   share::schema::ObSchemaGetterGuard schema_guard_;
   int64_t orign_nested_count_;
@@ -367,9 +358,7 @@ public:
         schema_guard_(share::schema::ObSchemaMgrItem::MOD_PL_PREPARE_RESULT),
         question_mark_cnt_(0) {}
     ~PLPrepareResult() { reset(); }
-    int init(
-        sql::ObSQLSessionInfo &session_info,
-        query::ObIPlanCacheAccessService &plan_cache_access_service);
+    int init(sql::ObSQLSessionInfo &session_info);
     void reset()
     {
       //result_set_.reset();
@@ -441,14 +430,10 @@ public:
                            ObObjParam *result);
   static int spi_convert(ObSQLSessionInfo &session, ObIAllocator &allocator,
                          ObObj &src, const ObExprResType &result_type, ObObj &dst,
-                         common::ObISrsProvider *srs_provider,
-                         common::ObILobReadService *lob_read_service,
                          bool ignore_fail = false,
                          const ObIArray<ObString> *type_info = nullptr);
   static int spi_convert(ObSQLSessionInfo *session, ObIAllocator *allocator,
                          ObObjParam &src, const ObExprResType &result_type, ObObjParam &result,
-                         common::ObISrsProvider *srs_provider,
-                         common::ObILobReadService *lob_read_service,
                          const ObIArray<ObString> *type_info = nullptr);
   static int spi_convert_objparam(pl::ObPLExecCtx *ctx, ObObjParam *src, const int64_t result_idx, ObObjParam *result, bool need_set);
   static int spi_convert_anonymous_array(pl::ObPLExecCtx *ctx, ObObjParam *param, uint64_t user_type_id);
@@ -502,7 +487,6 @@ public:
                          ObMySQLProxy &sql_proxy,
                          share::schema::ObSchemaGetterGuard &schema_guard,
                          sql::ObRawExprFactory &expr_factory,
-                         ObIPLSqlRuntime *pl_sql_runtime,
                          const ObString &sql,
                          bool is_cursor,
                          pl::ObPLBlockNS *secondary_namespace,
@@ -892,7 +876,6 @@ private:
                                ObMySQLProxy &sql_proxy,
                                share::schema::ObSchemaGetterGuard &schema_guard,
                                sql::ObRawExprFactory &expr_factory,
-                               ObIPLSqlRuntime *pl_sql_runtime,
                                const ObString &sql,
                                pl::ObPLBlockNS *secondary_namespace,
                                ObSPIPrepareResult &prepare_result);
@@ -1155,29 +1138,6 @@ private:
 
   static int setup_cursor_snapshot_verify_(pl::ObPLCursorInfo *cursor, ObSPIResultSet *spi_result);
   static int save_unstreaming_cursor_sql(pl::ObPLCursorInfo &cursor, const ObString &sql_text);
-};
-
-// Narrow seam used by PL to prepare and execute embedded SQL statements.  The
-// adapter owns SQL-engine-specific setup (including result-set/plan-cache
-// wiring), so PL callers neither locate ObSql globally nor depend on its wider
-// interface.
-class ObIPLSqlRuntime
-{
-public:
-  virtual ~ObIPLSqlRuntime() {}
-  virtual int prepare_pl_sql(
-      const ObString &sql,
-      ObSPIService::PLPrepareCtx &prepare_ctx,
-      ObSPIService::PLPrepareResult &prepare_result,
-      ParamStore *params = nullptr) = 0;
-  virtual int execute_pl_sql(
-      const ObString &sql,
-      ObSQLSessionInfo &session_info,
-      ParamStore &params,
-      ObResultSet &result,
-      ObSqlCtx &context,
-      bool is_prepare_protocol,
-      bool is_dynamic_sql) = 0;
 };
 
 struct ObPLSubPLSqlTimeGuard

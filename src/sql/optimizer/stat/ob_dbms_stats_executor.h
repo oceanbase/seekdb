@@ -21,6 +21,7 @@
 #include "sql/engine/ob_exec_context.h"
 #include "sql/optimizer/stat/ob_stat_item.h"
 #include "sql/optimizer/stat/ob_opt_stat_gather_stat.h"
+#include "common/mysqlclient/ob_isql_client.h"
 
 namespace oceanbase {
 namespace observer
@@ -63,7 +64,7 @@ struct GatherHelper
   uint64_t sepcify_scn_;
 
   ObSEArray<PartInfo, 4> lasted_collect_parts_; // need recollect stats if timeout
-
+  
   TO_STRING_KV(K(is_split_gather_),
                K(maximum_gather_part_cnt_),
                K(maximum_gather_col_cnt_),
@@ -79,13 +80,13 @@ struct GatherHelper
 };
 
 struct GatherPartInfos {
-  explicit GatherPartInfos() :
-    sub_part_infos_(),
+  explicit GatherPartInfos() : 
+    sub_part_infos_(),  
     part_infos_(),
-    approx_gather_(false),
-    gather_global_(false)
+    approx_gather_(false), 
+    gather_global_(false) 
   {}
-
+  
   ObSEArray<PartInfo, 4> sub_part_infos_;
   ObSEArray<PartInfo, 4> part_infos_;
 
@@ -105,7 +106,7 @@ struct GatherPartInfos {
 struct TaskColumnParam {
   TaskColumnParam() : column_params_(), start(0), end(0)
   {}
-
+  
   // [start, end)
   const ObIArray<oceanbase::common::ObColumnStatParam> *column_params_;
   int32_t start;
@@ -121,8 +122,7 @@ public:
 
   static int gather_table_stats(ObExecContext &ctx,
                                 const ObTableStatParam &param,
-                                ObOptStatRunningMonitor &running_monitor,
-                                bool *need_refresh_schema = NULL);
+                                ObOptStatRunningMonitor &running_monitor);
 
   static int gather_index_stats(ObExecContext &ctx,
                                 const ObTableStatParam &param);
@@ -195,8 +195,7 @@ private:
                                       const ObIArray<int64_t> &no_stats_partition_ids,
                                       const ObIArray<uint64_t> &part_stattypes);
 
-  static int check_need_split_gather(ObExecContext &ctx,
-                                     const ObTableStatParam &param,
+  static int check_need_split_gather(const ObTableStatParam &param,
                                      GatherHelper &gather_helper);
 
   static int prepare_conn_and_store_session_for_online_stats(sql::ObSQLSessionInfo *session,
@@ -220,14 +219,14 @@ private:
                                               uint64_t &current_scn);
 
   static int determine_auto_sample_table(ObExecContext &ctx, ObTableStatParam &param);
-
+  
   static int try_use_prefix_index_refine_min_max(ObExecContext &ctx, ObTableStatParam &param);
 
   static int check_use_single_partition_gather(const PartitionIdBlockMap &partition_id_block_map,
                                                const ObTableStatParam &param,
                                                bool &need_split_part);
 
-
+                                        
   static int collect_executed_part_ids(const ObTableStatParam &stat_param, ObIArray<int64_t> &part_ids);
   static int update_dml_modified_info(sqlclient::ObISQLConnection *conn, const ObTableStatParam &param);
 
@@ -238,7 +237,7 @@ private:
                                     bool need_collect_global,
                                     const hash::ObHashMap<int64_t, PartInfo*> &part_id_to_approx_part_map,
                                     GatherPartInfos &gather_info);
-
+                                    
   static int construct_part_to_subpart_map(const ObTableStatParam &stat_param,
                                            hash::ObHashMap<int64_t, PartInfo*> &part_id_to_approx_part_map,
                                            hash::ObHashMap<int64_t, ObArray<PartInfo*>> &part_id_to_subpart_map);

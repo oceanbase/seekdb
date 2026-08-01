@@ -4,19 +4,8 @@ set(CPACK_PACKAGE_VENDOR "OceanBase Inc.")
 set(CPACK_PACKAGE_DESCRIPTION "OceanBase is a distributed relational database")
 set(CPACK_COMPONENTS_ALL server)
 
-if(NOT DEFINED SEEKDB_PACKAGE_VERSION OR SEEKDB_PACKAGE_VERSION STREQUAL "")
-  set(SEEKDB_PACKAGE_VERSION "${OceanBase_VERSION}")
-endif()
-if(NOT DEFINED OB_RELEASEID OR OB_RELEASEID STREQUAL "")
-  set(OB_RELEASEID "1")
-endif()
-set(SEEKDB_PACKAGE_NAME "seekdb")
-set(SEEKDB_PACKAGE_RELEASE "${OB_RELEASEID}")
-set(SEEKDB_PACKAGE_PROFILE_DIR "${CMAKE_BINARY_DIR}/package/profile")
-file(MAKE_DIRECTORY "${SEEKDB_PACKAGE_PROFILE_DIR}")
-
-set(CPACK_PACKAGE_NAME "${SEEKDB_PACKAGE_NAME}")
-set(CPACK_PACKAGE_VERSION "${SEEKDB_PACKAGE_VERSION}")
+set(CPACK_PACKAGE_NAME "seekdb")
+set(CPACK_PACKAGE_VERSION "${OceanBase_VERSION}")
 set(CPACK_PACKAGE_VERSION_MAJOR "${OceanBase_VERSION_MAJOR}")
 set(CPACK_PACKAGE_VERSION_MINOR "${OceanBase_VERSION_MINOR}")
 set(CPACK_PACKAGE_VERSION_PATCH "${OceanBase_VERSION_PATCH}")
@@ -204,10 +193,9 @@ else()
   #   usr/share/seekdb/             - admin, timezone, srs, help
   ##############################################################################
 
-  configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/telemetry.sh.template
-    ${SEEKDB_PACKAGE_PROFILE_DIR}/telemetry.sh
-    @ONLY)
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/telemetry.sh.template
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/telemetry.sh
+  @ONLY)
 
   set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
       "/usr" "/usr/lib" "/usr/lib/systemd" "/usr/lib/systemd/system" "/usr/libexec" "/etc"
@@ -236,7 +224,7 @@ else()
   install(PROGRAMS
     tools/systemd/profile/seekdb_systemd_start
     tools/systemd/profile/seekdb_systemd_stop
-    ${SEEKDB_PACKAGE_PROFILE_DIR}/telemetry.sh
+    tools/systemd/profile/telemetry.sh
     DESTINATION usr/libexec/seekdb/scripts
     COMPONENT server)
 

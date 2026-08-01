@@ -18,8 +18,8 @@
 #include "ob_sql_context.h"
 
 #include "sql/optimizer/ob_log_plan.h"
-#include "sql/optimizer/ob_table_partition_info.h"
 #include "share/schema/ob_schema_getter_guard.h"
+#include "src/storage/tx/ob_trans_define_v4.h"
 
 using namespace ::oceanbase::common;
 namespace oceanbase
@@ -132,8 +132,6 @@ ObSqlCtx::ObSqlCtx()
     is_cursor_(false),
     statement_id_(common::OB_INVALID_ID),
     stmt_type_(stmt::T_NONE),
-    partition_infos_(NULL),
-    partition_infos_allocator_(NULL),
     is_restore_(false),
     all_plan_const_param_constraints_(nullptr),
     all_possible_const_param_constraints_(nullptr),
@@ -210,15 +208,7 @@ void ObSqlCtx::reset()
 //release dynamic allocated memory
 void ObSqlCtx::clear()
 {
-  if (OB_NOT_NULL(partition_infos_)) {
-    typedef common::ObFixedArray<ObTablePartitionInfo *, common::ObIAllocator>
-        PartitionInfoStorage;
-    PartitionInfoStorage *storage = static_cast<PartitionInfoStorage *>(partition_infos_);
-    storage->~PartitionInfoStorage();
-    partition_infos_allocator_->free(storage);
-    partition_infos_ = NULL;
-    partition_infos_allocator_ = NULL;
-  }
+  partition_infos_.reset();
   related_user_var_names_.reset();
   base_constraints_.reset();
   strict_constraints_.reset();
@@ -248,6 +238,7 @@ int ObSqlSchemaGuard::get_table_schema(uint64_t table_id,
     ret = OB_INVALID_ARGUMENT;;
     LOG_WARN("get unexpected null", K(ret), K(stmt));
   } else if (OB_FAIL(get_table_schema(ref_table_id, table_schema))) {
+    LOG_WARN("failed to get table schema", K(table_id), K(ref_table_id), K(ret));
   }
   return ret;
 }
@@ -261,6 +252,7 @@ int ObSqlSchemaGuard::get_table_schema(uint64_t table_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get unexpected null", K(ret), K(table_item));
   } else if (OB_FAIL(get_table_schema(table_id, table_schema))) {
+    LOG_WARN("failed to get table schema", K(table_id), K(ret));
   }
   return ret;
 }
@@ -335,7 +327,7 @@ int ObSqlSchemaGuard::get_table_schema_version(const uint64_t table_id,
                                                int64_t &schema_version) const
 {
   int ret = OB_SUCCESS;
-
+  
   OV (OB_NOT_NULL(schema_guard_));
   OZ (schema_guard_->get_schema_version(TABLE_SCHEMA, table_id, schema_version), table_id);
   return ret;
@@ -350,7 +342,7 @@ int ObSqlSchemaGuard::get_can_read_index_array(uint64_t table_id,
                                                  bool with_vector_index)
 {
   int ret = OB_SUCCESS;
-
+  
   OV (OB_NOT_NULL(schema_guard_));
   OZ (schema_guard_->get_can_read_index_array(table_id,
                                               index_tid_array, size,
@@ -363,57 +355,20 @@ int ObSqlCtx::set_partition_infos(const ObTablePartitionInfoArray &info, ObIAllo
 {
   int ret = OB_SUCCESS;
   int64_t count = info.count();
-  if (OB_NOT_NULL(partition_infos_)) {
-    typedef common::ObFixedArray<ObTablePartitionInfo *, common::ObIAllocator>
-        PartitionInfoStorage;
-    PartitionInfoStorage *storage = static_cast<PartitionInfoStorage *>(partition_infos_);
-    storage->~PartitionInfoStorage();
-    partition_infos_allocator_->free(storage);
-    partition_infos_ = NULL;
-    partition_infos_allocator_ = NULL;
-  }
+  partition_infos_.reset();
   if (count > 0) {
-    typedef common::ObFixedArray<ObTablePartitionInfo *, common::ObIAllocator>
-        PartitionInfoStorage;
-    void *buf = allocator.alloc(sizeof(PartitionInfoStorage));
-    PartitionInfoStorage *storage = NULL;
-    if (OB_ISNULL(buf)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate partition info storage failed", K(ret), K(count));
-    } else if (FALSE_IT(storage = new (buf) PartitionInfoStorage(&allocator))) {
-    } else if (OB_FAIL(storage->init(count))) {
+    partition_infos_.set_allocator(&allocator);
+    if (OB_FAIL(partition_infos_.init(count))) {
+      LOG_WARN("init partition info failed", K(ret), K(count));
     } else {
-      partition_infos_ = storage;
-      partition_infos_allocator_ = &allocator;
       for (int64_t i = 0; i < count && OB_SUCC(ret); ++i) {
-        if (OB_FAIL(storage->push_back(info.at(i)))) {
+        if (OB_FAIL(partition_infos_.push_back(info.at(i)))) {
+          LOG_WARN("push partition info failed", K(ret), K(count));
         }
       }
     }
-    if (OB_FAIL(ret) && OB_NOT_NULL(storage)) {
-      storage->~PartitionInfoStorage();
-      allocator.free(storage);
-      partition_infos_ = NULL;
-      partition_infos_allocator_ = NULL;
-    }
   }
   return ret;
-}
-
-const ObTablePartitionInfoArray &ObSqlCtx::get_partition_infos() const
-{
-  typedef common::ObSEArray<ObTablePartitionInfo *, 1> EmptyPartitionInfoArray;
-  static const EmptyPartitionInfoArray EMPTY_PARTITION_INFOS;
-  if (OB_NOT_NULL(partition_infos_)) {
-    return *partition_infos_;
-  } else {
-    return EMPTY_PARTITION_INFOS;
-  }
-}
-
-int64_t ObSqlCtx::get_partition_info_count() const
-{
-  return OB_NOT_NULL(partition_infos_) ? partition_infos_->count() : 0;
 }
 
 int ObSqlCtx::set_related_user_var_names(const ObIArray<ObString> &user_var_names,
@@ -424,9 +379,11 @@ int ObSqlCtx::set_related_user_var_names(const ObIArray<ObString> &user_var_name
     related_user_var_names_.reset();
     related_user_var_names_.set_allocator(&allocator);
     if (OB_FAIL(related_user_var_names_.init(user_var_names.count()))) {
+      LOG_WARN("failed to init related_user_var_names", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < user_var_names.count(); i++) {
         if (OB_FAIL(related_user_var_names_.push_back(user_var_names.at(i)))) {
+          LOG_WARN("failed to push back user var names", K(ret));
         }
       }
     }
@@ -450,9 +407,11 @@ int ObSqlCtx::set_location_constraints(const ObLocationConstraintContext &locati
   if (base_constraints.count() > 0) {
     base_constraints_.set_allocator(&allocator);
     if (OB_FAIL(base_constraints_.init(base_constraints.count()))) {
+      LOG_WARN("init base constraints failed", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < base_constraints.count(); i++) {
         if (OB_FAIL(base_constraints_.push_back(base_constraints.at(i)))) {
+          LOG_WARN("failed to push back base constraint", K(ret));
         } else {
           // table_partition_info_ is only used during the plan generation phase
           base_constraints_.at(i).table_partition_info_ = NULL;
@@ -464,9 +423,11 @@ int ObSqlCtx::set_location_constraints(const ObLocationConstraintContext &locati
   if (OB_SUCC(ret) && strict_constraints.count() > 0) {
     strict_constraints_.set_allocator(&allocator);
     if (OB_FAIL(strict_constraints_.init(strict_constraints.count()))) {
+      LOG_WARN("init strict constraints failed", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < strict_constraints.count(); i++) {
         if (OB_FAIL(strict_constraints_.push_back(strict_constraints.at(i)))) {
+          LOG_WARN("failed to push back location constraint", K(ret));
         }
       }
       LOG_DEBUG("set strict constraints", K(strict_constraints.count()));
@@ -475,9 +436,11 @@ int ObSqlCtx::set_location_constraints(const ObLocationConstraintContext &locati
   if (OB_SUCC(ret) && non_strict_constraints.count() > 0) {
     non_strict_constraints_.set_allocator(&allocator);
     if (OB_FAIL(non_strict_constraints_.init(non_strict_constraints.count()))) {
+      LOG_WARN("init non strict constraints failed", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < non_strict_constraints.count(); i++) {
         if (OB_FAIL(non_strict_constraints_.push_back(non_strict_constraints.at(i)))) {
+          LOG_WARN("failed to push back location constraint", K(ret));
         }
       }
       LOG_DEBUG("set non strict constraints", K(non_strict_constraints.count()));
@@ -493,7 +456,9 @@ int ObSqlCtx::set_multi_stmt_rowkey_pos(const common::ObIArray<int64_t> &multi_s
   if (!multi_stmt_rowkey_pos.empty()) {
     multi_stmt_rowkey_pos_.set_allocator(&alloctor);
     if (OB_FAIL(multi_stmt_rowkey_pos_.init(multi_stmt_rowkey_pos.count()))) {
+      LOG_WARN("failed to init rowkey count", K(ret));
     } else if (OB_FAIL(append(multi_stmt_rowkey_pos_, multi_stmt_rowkey_pos))) {
+      LOG_WARN("failed to append multi stmt rowkey pos", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -502,11 +467,13 @@ int ObSqlCtx::set_multi_stmt_rowkey_pos(const common::ObIArray<int64_t> &multi_s
 int ObQueryCtx::add_local_session_vars(ObIAllocator *alloc, const ObLocalSessionVar &local_session_var, int64_t &idx) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(all_local_session_vars_.push_back(ObLocalSessionVar()))) {
+    LOG_WARN("push back local session var failed", K(ret));
   } else {
     idx = all_local_session_vars_.count() - 1;
     ObLocalSessionVar &local_var = all_local_session_vars_.at(idx);
     local_var.set_allocator(alloc);
     if (OB_FAIL(local_var.deep_copy(local_session_var))) {
+      LOG_WARN("deep copy local session var failed", K(ret));
     }
   }
   return ret;

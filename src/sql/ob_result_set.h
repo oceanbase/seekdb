@@ -32,13 +32,14 @@
 #include "common/ob_string_buf.h"
 #include "common/ob_field.h"
 #include "sql/ob_scanner.h"
+#include "sql/optimizer/ob_log_plan_factory.h"
 #include "sql/executor/ob_executor.h"
 #include "sql/executor/ob_execute_result.h"
 #include "sql/executor/ob_cmd_executor.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/ob_sql_trans_control.h"
 #include "sql/plan_cache/ob_cache_object_factory.h"
-#include "query/plan_cache/ob_plan_cache_access_service.h"
+#include "observer/ob_req_time_service.h"
 #include "sql/resolver/tcl/ob_end_trans_stmt.h"
 
 namespace oceanbase
@@ -105,10 +106,7 @@ public:
 
   typedef common::ObFastArray<ObPhysicalPlan*, 8> CandidatePlanArray;
 public:
-  explicit ObResultSet(
-      ObSQLSessionInfo &session,
-      common::ObIAllocator &allocator,
-      query::ObIPlanCacheAccessService &plan_cache_access_service);
+  explicit ObResultSet(ObSQLSessionInfo &session, common::ObIAllocator &allocator);
   virtual ~ObResultSet();
 
   static ObResultSet *alloc(ObSQLSessionInfo &session, common::ObIAllocator &allocator);
@@ -292,10 +290,13 @@ public:
   int copy_field_columns(const ObPhysicalPlan &plan);
   bool has_implicit_cursor() const;
   int switch_implicit_cursor(int64_t &affected_rows);
-  void reset_implicit_cursor_idx();
+  void reset_implicit_cursor_idx()
+  {
+    if (get_exec_context().get_physical_plan_ctx() != nullptr)
+      get_exec_context().get_physical_plan_ctx()->set_cur_stmt_id(0);
+  }
   bool is_cursor_end() const;
 
-  bool can_execute_async() const;
   void set_is_com_filed_list() { is_com_filed_list_ = true; }
   bool get_is_com_filed_list() { return is_com_filed_list_; }
   void set_wildcard_string(common::ObString string) { wild_str_ = string; }
@@ -353,7 +354,6 @@ private:
   int store_last_insert_id(ObExecContext &ctx);
   int drive_dml_query();
   int inner_get_next_row(const common::ObNewRow *&row);
-  static int clear_ddl_checksum(ObPhysicalPlan *physical_plan);
 
   // make final field name
   int make_final_field_name(char *src, int64_t len, common::ObString &field_name);
@@ -361,12 +361,14 @@ private:
   // Always called in the ObResultSet constructor
   void update_start_time() const
   {
-    query::begin_plan_cache_access(plan_cache_access_service_);
+    oceanbase::observer::ObReqTimeInfo &req_timeinfo = observer::ObReqTimeInfo::get_thread_local_instance();
+    req_timeinfo.update_start_time();
   }
   // Always called at the end of the ObResultSet destructor
   void update_end_time() const
   {
-    query::end_plan_cache_access(plan_cache_access_service_);
+    oceanbase::observer::ObReqTimeInfo &req_timeinfo = observer::ObReqTimeInfo::get_thread_local_instance();
+    req_timeinfo.update_end_time();
   }
   bool is_will_retry_() const { return will_retry_; }
 protected:
@@ -409,7 +411,6 @@ private:
    */
   int errcode_;
   ObSQLSessionInfo &my_session_; // The session who owns this result set
-  query::ObIPlanCacheAccessService &plan_cache_access_service_;
   int64_t begin_timestamp_;
   ObIExecuteResult *exec_result_;
   ObICmd *cmd_;
@@ -461,10 +462,7 @@ private:
 //  return other;
 //}
 
-inline ObResultSet::ObResultSet(
-    ObSQLSessionInfo &session,
-    common::ObIAllocator &allocator,
-    query::ObIPlanCacheAccessService &plan_cache_access_service)
+inline ObResultSet::ObResultSet(ObSQLSessionInfo &session, common::ObIAllocator &allocator)
     : is_user_sql_(false),
       cache_obj_guard_(),
       inner_mem_pool_(),
@@ -489,7 +487,6 @@ inline ObResultSet::ObResultSet(
       has_global_variable_(false),
       errcode_(0),
       my_session_(session),
-      plan_cache_access_service_(plan_cache_access_service),
       begin_timestamp_(0),
       exec_result_(nullptr),
       cmd_(NULL),
@@ -809,6 +806,13 @@ inline bool ObResultSet::is_calc_found_rows() const
 {
   return is_calc_found_rows_;
 }
+
+inline ObPhysicalPlan *ObResultSet::get_physical_plan()
+{
+  return static_cast<ObPhysicalPlan*>(cache_obj_guard_.get_cache_obj());
+}
+
+
 
 } // end namespace sql
 } // end namespace oceanbase

@@ -41,8 +41,6 @@ ObPsCache::ObPsCache()
     mutex_(common::ObLatchIds::PS_CACHE_EVICT_MUTEX_LOCK),
     mem_context_(NULL),
     inner_allocator_(NULL),
-    managed_used_(0),
-    bucket_charge_(0),
     evict_timer_()
 {
 }
@@ -55,14 +53,6 @@ void ObPsCache::destroy()
     // Now PsCache is being destructed, decrement the reference count for all internal objects, if the reference count reaches 0, memory will be explicitly freed
     cache_evict_all_ps();
     inited_ = false;
-  }
-  release_managed_memory(bucket_charge_);
-  bucket_charge_ = 0;
-  if (stmt_id_map_.created()) {
-    stmt_id_map_.destroy();
-  }
-  if (stmt_info_map_.created()) {
-    stmt_info_map_.destroy();
   }
   if (NULL != mem_context_) {
     DESTROY_CONTEXT(mem_context_);
@@ -80,14 +70,9 @@ ObPsCache::~ObPsCache()
 int ObPsCache::server_module_init(ObPsCache* &ps_cache)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(ps_cache)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("PS cache is null", K(ret));
-  } else if (OB_FAIL(ps_cache->init(
-                 common::calculate_scaled_value_by_memory(
-                     common::OB_PLAN_CACHE_BUCKET_NUMBER_MIN,
-                     common::OB_PLAN_CACHE_BUCKET_NUMBER)))) {
-  }
+  
+  int64_t mem_limit = lib::get_allocator_memory_limit();
+  ps_cache->inited_ = false;
   return ret;
 }
 
@@ -106,7 +91,7 @@ int ObPsCache::init(const int64_t hash_bucket)
   if (!inited_) {
     ObMemAttr attr;
     attr.label_ = ObModIds::OB_SQL_PS_CACHE;
-
+    
     lib::ContextParam param;
     param.set_properties(lib::ALLOC_THREAD_SAFE |
                         lib::RETURN_MALLOC_DEFAULT)
@@ -115,130 +100,43 @@ int ObPsCache::init(const int64_t hash_bucket)
     if (OB_FAIL(stmt_id_map_.create(hash::cal_next_prime(hash_bucket),
                                     ObModIds::OB_HASH_BUCKET_PS_CACHE,
                                     ObModIds::OB_HASH_NODE_PS_CACHE))) {
+      LOG_WARN("failed to init sql_id_map", K(ret));
     } else if (OB_FAIL(stmt_info_map_.create(hash::cal_next_prime(hash_bucket),
                                              ObModIds::OB_HASH_BUCKET_PS_INFO,
                                              ObModIds::OB_HASH_NODE_PS_INFO))) {
+      LOG_WARN("FAILED TO INIT sql_plan_map", K(ret));
     } else if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(
         mem_context_,
         param))) {
+      LOG_WARN("create memory entity failed", K(ret));
     } else if (FALSE_IT(evict_task_.ps_cache_ = this)) {
     } else if (OB_FAIL(evict_timer_.init("PsCacheEvict", ObMemAttr("PsCacheEvict")))) {
+      LOG_WARN("failed to init ps cache evict timer", K(ret));
     } else if (OB_FAIL(evict_timer_.schedule(evict_task_, GCONF.plan_cache_evict_interval, true))) {
+      LOG_WARN("failed to schedule refresh task", K(ret));
+
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL memory entity returned", K(ret));
     } else {
       inner_allocator_ = &mem_context_->get_allocator();
-      bucket_charge_ = stmt_id_bucket_charge(stmt_id_map_.bucket_count())
-          + stmt_info_bucket_charge(stmt_info_map_.bucket_count());
-      add_managed_memory(bucket_charge_);
+      
       host_ = const_cast<ObAddr &>(GCTX.self_addr());
       inited_ = true;
       LOG_INFO("init ps cache success", K(GCTX.self_addr()), K(hash_bucket));
     }
   }
-  if (OB_FAIL(ret)) {
-    if (stmt_id_map_.created()) {
-      stmt_id_map_.destroy();
-    }
-    if (stmt_info_map_.created()) {
-      stmt_info_map_.destroy();
-    }
-    if (NULL != mem_context_) {
-      DESTROY_CONTEXT(mem_context_);
-      mem_context_ = NULL;
-    }
-    inner_allocator_ = NULL;
-    bucket_charge_ = 0;
-  }
   return ret;
-}
-
-namespace
-{
-typedef hash::HashMapPair<ObPsSqlKey, ObPsStmtItem *> PsStmtItemPair;
-typedef hash::HashMapPair<ObPsStmtId, ObPsStmtInfo *> PsStmtInfoPair;
-typedef hash::ObHashTableBucket<PsStmtItemPair,
-    hash::SpinReadWriteDefendMode::lock_type,
-    hash::SpinReadWriteDefendMode::cond_type> PsStmtItemBucket;
-typedef hash::ObHashTableBucket<PsStmtInfoPair,
-    hash::SpinReadWriteDefendMode::lock_type,
-    hash::SpinReadWriteDefendMode::cond_type> PsStmtInfoBucket;
-}
-
-int64_t ObPsCache::stmt_id_entry_charge()
-{
-  return sizeof(hash::ObHashTableNode<PsStmtItemPair>);
-}
-
-int64_t ObPsCache::stmt_info_entry_charge()
-{
-  return sizeof(hash::ObHashTableNode<PsStmtInfoPair>);
-}
-
-int64_t ObPsCache::stmt_id_bucket_charge(const int64_t bucket_count)
-{
-  return bucket_count * sizeof(PsStmtItemBucket);
-}
-
-int64_t ObPsCache::stmt_info_bucket_charge(const int64_t bucket_count)
-{
-  return bucket_count * sizeof(PsStmtInfoBucket);
-}
-
-void ObPsCache::add_managed_memory(const int64_t size)
-{
-  if (size > 0) {
-    ATOMIC_FAA(&managed_used_, size);
-  }
-}
-
-void ObPsCache::release_managed_memory(const int64_t size)
-{
-  if (size > 0) {
-    int64_t old_value = 0;
-    int64_t new_value = 0;
-    do {
-      old_value = ATOMIC_LOAD(&managed_used_);
-      new_value = old_value > size ? old_value - size : 0;
-    } while (!ATOMIC_BCAS(&managed_used_, old_value, new_value));
-    if (OB_UNLIKELY(old_value < size)) {
-      LOG_ERROR_RET(OB_ERR_UNEXPECTED,
-          "ps cache managed memory accounting underflow", K(size), K(old_value));
-    }
-  }
-}
-
-void ObPsCache::account_stmt_item(ObPsStmtItem &item, const int64_t size)
-{
-  item.set_memory_account(this, size);
-  add_managed_memory(size + stmt_id_entry_charge());
-}
-
-void ObPsCache::account_stmt_info(ObPsStmtInfo &info, const int64_t size)
-{
-  info.set_memory_account(this, size);
-  add_managed_memory(size + stmt_info_entry_charge());
-}
-
-void ObPsCache::rollback_stmt_item(ObPsStmtItem &item)
-{
-  release_managed_memory(stmt_id_entry_charge());
-  item.release_memory_account();
-}
-
-void ObPsCache::rollback_stmt_info(ObPsStmtInfo &info)
-{
-  release_managed_memory(stmt_info_entry_charge());
-  info.release_memory_account();
 }
 
 //only for close a session explicitly
 int ObPsCache::deref_ps_stmt(const ObPsStmtId stmt_id)
 {
   int ret = OB_SUCCESS;
+  LOG_DEBUG("close ps stmt", K(stmt_id));
   ObPsStmtInfo *ps_info = nullptr;
   if (OB_FAIL(stmt_info_map_.get_refactored(stmt_id, ps_info))) {
+     LOG_WARN("get stmt info guard failed", K(ret), K(stmt_id));
   } else {
     const ObPsSqlKey ps_sql_key = ps_info->get_sql_key();
     int tmp_ret = OB_SUCCESS;
@@ -286,6 +184,7 @@ int ObPsCache::get_stmt_info_guard(const ObPsStmtId ps_stmt_id,
   int ret = OB_SUCCESS;
   ObPsStmtInfo *stmt_info = NULL;
   if (OB_FAIL(ref_stmt_info(ps_stmt_id, stmt_info))) {
+    LOG_WARN("ref stmt info failed", K(ret), K(ps_stmt_id));
   } else if (OB_ISNULL(stmt_info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt_info should not be null", K(ps_stmt_id));
@@ -293,6 +192,7 @@ int ObPsCache::get_stmt_info_guard(const ObPsStmtId ps_stmt_id,
     guard.set_ps_cache(*this);
     guard.set_stmt_info(*stmt_info);
     guard.set_ps_stmt_id(ps_stmt_id);
+    LOG_TRACE("success to get stmt info guard", K(ps_stmt_id), K(*stmt_info));
   }
   return ret;
 }
@@ -319,23 +219,12 @@ int ObPsCache::get_or_add_stmt_item(const ObPsSqlKey &ps_key,
   } else {
     WITH_CONTEXT(mem_context_) {
       if (OB_FAIL(ObPsSqlUtils::alloc_new_var(*inner_allocator_, tmp_item_value, new_item_value))) {
+        LOG_WARN("alloc new var failed", K(ret));
       } else if (OB_ISNULL(new_item_value)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("new_ps_item_value should not be null");
       }
     }
-  }
-  if (OB_SUCC(ret)) {
-    int64_t accounted_size = 0;
-    if (OB_FAIL(ObPsSqlUtils::get_var_mem_total(*new_item_value, accounted_size))) {
-    } else {
-      account_stmt_item(*new_item_value, accounted_size);
-    }
-  }
-  if (OB_FAIL(ret) && OB_NOT_NULL(new_item_value)) {
-    new_item_value->~ObPsStmtItem();
-    inner_allocator_->free(new_item_value);
-    new_item_value = NULL;
   }
   if (OB_SUCC(ret)) {
     const ObPsSqlKey inner_ps_key = new_item_value->get_sql_key();
@@ -354,6 +243,7 @@ int ObPsCache::get_or_add_stmt_item(const ObPsSqlKey &ps_key,
         LOG_WARN("get stmt item failed", K(ret));
         if (OB_HASH_NOT_EXIST == ret) {//stmt item was deleted, need to recreate}
           if (OB_FAIL(get_or_add_stmt_item(ps_key, is_contain_tmp_tbl, ps_item_value))) {
+            LOG_WARN("fail to get or add stmt item", K(ret));
           }
         } else {
           LOG_WARN("unexpected error", K(ret), K(inner_ps_key));
@@ -367,12 +257,10 @@ int ObPsCache::get_or_add_stmt_item(const ObPsSqlKey &ps_key,
         }
       }
       //no matter succ or not release
-      rollback_stmt_item(*new_item_value);
       new_item_value->~ObPsStmtItem();
       inner_allocator_->free(new_item_value);
     } else {
       LOG_WARN("unexpected error", K(ret), K(new_stmt_id));
-      rollback_stmt_item(*new_item_value);
       new_item_value->~ObPsStmtItem();
       inner_allocator_->free(new_item_value);
     }
@@ -419,6 +307,7 @@ int ObPsCache::inner_ref_stmt_item(const ObPsSqlKey &ps_sql_key,
             ob_usleep(static_cast<uint32_t>(500)); //sleep 500us
           }
         } else if (OB_FAIL(op.get_value(ps_stmt_item))) {
+          LOG_WARN("failed to get ps stmt item", K(ret), K(ps_sql_key));
         }
         break;
       }
@@ -486,15 +375,21 @@ int ObPsCache::get_or_add_stmt_info(const PsCacheInfoCtx &info_ctx,
                                            info_ctx.normalized_sql_.length()); // actual is crc32
       tmp_stmt_info.set_ps_stmt_checksum(ps_stmt_checksum);
       if (OB_FAIL(schema_guard.get_schema_version(runtime_schema_version))) {
+        LOG_WARN("fail to get runtime schema version", K(ret));
       } else if (FALSE_IT(tmp_stmt_info.set_runtime_schema_version(runtime_schema_version))) {
         // do nothing
       } else if (OB_FAIL(tmp_stmt_info.assign_no_param_sql(info_ctx.no_param_sql_))) {
+        LOG_WARN("fail to assign no param sql", K(ret), K(info_ctx.no_param_sql_));
       } else if (OB_FAIL(tmp_stmt_info.assign_raw_sql(info_ctx.raw_sql_))) {
+        LOG_WARN("fail to assign rule name", K(ret), K(info_ctx.raw_sql_));
       } else if (OB_FAIL(tmp_stmt_info.assign_fixed_raw_params(*info_ctx.fixed_param_idx_,
                                                                *info_ctx.raw_params_))) {
+        LOG_WARN("fail to assign raw params failed", KPC(info_ctx.fixed_param_idx_), K(ret));
       } else if (OB_FAIL(fill_ps_stmt_info(result, info_ctx.param_cnt_,
                                            tmp_stmt_info))) {
+        LOG_WARN("fill ps stmt info failed", K(ret));
       } else if (OB_FAIL(add_stmt_info(*ps_item, tmp_stmt_info, ref_ps_info))) {
+        LOG_WARN("add stmt info failed", K(ret), K(*ps_item), K(tmp_stmt_info));
       }
     } else {
       LOG_WARN("fail to get stmt info", K(ret), K(*ps_item));
@@ -544,7 +439,6 @@ int ObPsCache::erase_stmt_item(ObPsStmtId stmt_id, const ObPsSqlKey &ps_key)
         LOG_WARN("fail to erase stmt info", K(ps_key), K(ret));
       }
     } else {
-      release_managed_memory(stmt_id_entry_charge());
       ps_item->dec_ref_count();
     }
   }
@@ -562,7 +456,9 @@ int ObPsCache::get_all_stmt_id(ObIArray<ObPsStmtId> *id_array)
     ret = OB_NOT_INIT;
     LOG_WARN("ps_cache is not init yet", K(ret));
   } else if (OB_FAIL(stmt_info_map_.foreach_refactored(op))) {
+    LOG_WARN("traverse stmt_info_map_ failed", K(ret));
   } else if (OB_FAIL(op.get_callback_ret())) {
+    LOG_WARN("traverse stmt_info_map_ failed", K(ret));
   }
   return ret;
 }
@@ -581,13 +477,16 @@ int ObPsCache::fill_ps_stmt_info(const ObResultSet &result,
     LOG_WARN("invalid argument", K(params), K(columns), K(sql_ctx), K(ret));
   } else if (OB_FAIL(ps_stmt_info.reserve_ps_meta_fields(params->count(),
                                                          columns->count()))) {
+    LOG_WARN("fail to reserve ps meta field", K(ret));
   }
   for (int i = 0; OB_SUCC(ret) && i < params->count(); ++i) {
     if (OB_FAIL(ps_stmt_info.add_param_field(params->at(i)))) {
+      LOG_WARN("add param field failed", K(ret), K(i));
     }
   }
   for (int i = 0; OB_SUCC(ret) && i < columns->count(); ++i) {
     if (OB_FAIL(ps_stmt_info.add_column_field(columns->at(i)))) {
+      LOG_WARN("add filed column failed", K(ret), K(i));
     }
   }
   if (OB_SUCC(ret) && result.get_ref_objects().count() > 0) {
@@ -618,6 +517,7 @@ int ObPsCache::fill_ps_stmt_info(const ObResultSet &result,
   if (OB_SUCC(ret)) {
     int64_t info_size = 0;
     if (OB_FAIL(ps_stmt_info.get_convert_size(info_size))) {
+      LOG_WARN("fail to get convert size", K(ret));
     } else {
       int64_t item_size = ps_stmt_info.get_ps_sql().length() + sizeof(ObPsStmtItem) + 1
                           + ps_stmt_info.get_no_param_sql().length() + 1;
@@ -643,24 +543,13 @@ int ObPsCache::add_stmt_info(const ObPsStmtItem &ps_item,
   } else {
     //will deep copy
     WITH_CONTEXT(mem_context_) {
-      if (OB_FAIL(ObPsSqlUtils::alloc_new_var(*inner_allocator_, ps_info, new_info_value))) {
+      if (OB_FAIL(ObPsSqlUtils::alloc_new_var(*inner_allocator_, ps_info, new_info_value))) { // ref_count == 1
+        LOG_WARN("alloc new var failed", K(ret));
       } else if (OB_ISNULL(new_info_value)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("new_ps_item_value should not be null");
       }
     }
-  }
-  if (OB_SUCC(ret)) {
-    int64_t accounted_size = 0;
-    if (OB_FAIL(ObPsSqlUtils::get_var_mem_total(*new_info_value, accounted_size))) {
-    } else {
-      account_stmt_info(*new_info_value, accounted_size);
-    }
-  }
-  if (OB_FAIL(ret) && OB_NOT_NULL(new_info_value)) {
-    new_info_value->~ObPsStmtInfo();
-    inner_allocator_->free(new_info_value);
-    new_info_value = NULL;
   }
   if (OB_SUCC(ret)) {
     const ObPsStmtId stmt_id = ps_item.get_ps_stmt_id();
@@ -677,6 +566,7 @@ int ObPsCache::add_stmt_info(const ObPsStmtItem &ps_item,
         LOG_INFO("fail to ref stmt info, set again", K(ret), K(ps_item));
         if (OB_HASH_NOT_EXIST == ret) {
           if (OB_FAIL(add_stmt_info(ps_item, ps_info, ref_ps_info))) {
+            LOG_WARN("fail to add stmt info", K(ret));
           }
         } else {
           LOG_WARN("fail to add stmt info", K(ret), K(ps_item), K(ps_info));
@@ -690,12 +580,10 @@ int ObPsCache::add_stmt_info(const ObPsStmtItem &ps_item,
           LOG_INFO("succ to ref stmt info", K(ps_item), K(*tmp_stmt_info), K(ret));
         }
       }
-      rollback_stmt_info(*new_info_value);
       new_info_value->~ObPsStmtInfo();
       inner_allocator_->free(new_info_value);
     } else {
       LOG_WARN("add new stmt info failed", K(ret), K(ps_item), K(*new_info_value));
-      rollback_stmt_info(*new_info_value);
       new_info_value->~ObPsStmtInfo();
       inner_allocator_->free(new_info_value);
     }
@@ -722,6 +610,7 @@ int ObPsCache::ref_stmt_info(const ObPsStmtId stmt_id, ObPsStmtInfo *&ps_stmt_in
             ob_usleep(static_cast<uint32_t>(500)); //sleep 500us
           }
         } else if (OB_FAIL(op.get_value(ps_stmt_info))) {
+          LOG_WARN("failed to get ps_stmt_info", K(ret), K(ps_stmt_info));
         }
         break;
       }
@@ -750,6 +639,7 @@ int ObPsCache::deref_stmt_info(const ObPsStmtId stmt_id)
   ObPsStmtInfo *ps_info = NULL;
   ObIAllocator *allocator = NULL;
   if (OB_FAIL(stmt_info_map_.read_atomic(stmt_id, op))) {
+    LOG_WARN("deref stmt info failed", K(stmt_id), K(ret));
   } else if (op.get_ret() != OB_SUCCESS) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("deref stmt info failed", K(ret));
@@ -792,13 +682,11 @@ struct ObDumpPsInfo
 class PsTimeCmp
 {
 public:
-  bool operator() (const PsClosedStmt &left, const PsClosedStmt &right)
+  bool operator() (std::pair<ObPsStmtId, int64_t> left, std::pair<ObPsStmtId, int64_t> right)
   {
-    return left.closed_timestamp_ < right.closed_timestamp_;
+    return left.second < right.second;
   }
 };
-
-typedef common::ObSEArray<PsClosedStmt, 1024> PsClosedStmtArray;
 
 int ObPsCache::cache_evict()
 {
@@ -819,49 +707,49 @@ int ObPsCache::inner_cache_evict(bool is_evict_all)
   // The same ps stmt may be added to the closed list by different ps cache evict tasks
   // at the same time, so mutex is used here to make all flush ps cache evict tasks execute serially
   lib::ObMutexGuard guard(mutex_);
-  SMART_VARS_2((PsClosedStmtArray, expired_stmt_ids),
-               (PsClosedStmtArray, closed_stmt_ids)) {
-    ObGetClosedStmtIdOp op(&expired_stmt_ids, &closed_stmt_ids,
-                           stmt_id_entry_charge() + stmt_info_entry_charge());
+  SMART_VARS_2((PsIdClosedTimePairs, expired_stmt_ids),
+               (PsIdClosedTimePairs, closed_stmt_ids)) {
+    ObGetClosedStmtIdOp op(&expired_stmt_ids, &closed_stmt_ids);
     if (!is_inited()) {
       ret = OB_NOT_INIT;
       LOG_WARN("ps_cache is not init yet", K(ret));
     } else if (OB_FAIL(stmt_info_map_.foreach_refactored(op))) {
+      LOG_WARN("traverse stmt_info_map_ failed", K(ret));
     } else if (OB_FAIL(op.get_callback_ret())) {
+      LOG_WARN("traverse stmt_info_map_ failed", K(ret));
     } else {
       LOG_INFO("ps cache evict", K(stmt_id_map_.size()), K(stmt_info_map_.size()),
                                 K(op.get_used_size()), K(get_mem_high()), K(expired_stmt_ids.count()),
                                 K(closed_stmt_ids.count()));
       // evict expired ps
       for (int64_t i = 0; i < expired_stmt_ids.count(); ++i) { //ignore ret
-        LOG_TRACE("ps close time", K(i), K(expired_stmt_ids.at(i).stmt_id_),
-                  K(expired_stmt_ids.at(i).closed_timestamp_));
-        if (OB_FAIL(destroy_cached_ps(expired_stmt_ids.at(i).stmt_id_))) {
+        LOG_TRACE("ps close time", K(i), K(expired_stmt_ids.at(i).first), K(expired_stmt_ids.at(i).second));
+        if (OB_FAIL(destroy_cached_ps(expired_stmt_ids.at(i).first))) {
+          LOG_WARN("fail to evict ps stmt", K(ret),
+                  K(expired_stmt_ids.at(i).first), K(expired_stmt_ids.count()));
         }
       }
       if (is_evict_all) {
         for (int64_t i = 0; i < closed_stmt_ids.count(); ++i) { //ignore ret
-            LOG_TRACE("ps close time", K(i), K(closed_stmt_ids.at(i).stmt_id_),
-                      K(closed_stmt_ids.at(i).closed_timestamp_));
-            if (OB_FAIL(destroy_cached_ps(closed_stmt_ids.at(i).stmt_id_))) {
+            LOG_TRACE("ps close time", K(i), K(closed_stmt_ids.at(i).first), K(closed_stmt_ids.at(i).second));
+            if (OB_FAIL(destroy_cached_ps(closed_stmt_ids.at(i).first))) {
+              LOG_WARN("fail to evict ps stmt", K(ret),
+                      K(closed_stmt_ids.at(i).first), K(closed_stmt_ids.count()));
             }
           }
       } else {
-        if (get_managed_used() > get_mem_high()) {
+        if (op.get_used_size() > get_mem_high()) {
           lib::ob_sort(closed_stmt_ids.begin(), closed_stmt_ids.end(), PsTimeCmp());
-          int64_t reclaim_target = MAX(get_managed_used() - get_mem_low(), 0);
-          int64_t reclaimed_size = 0;
-          for (int64_t i = 0; i < closed_stmt_ids.count() && reclaimed_size < reclaim_target; ++i) {
-            LOG_TRACE("ps close time", K(i), K(closed_stmt_ids.at(i).stmt_id_),
-                      K(closed_stmt_ids.at(i).closed_timestamp_));
-            const int64_t used_before = get_managed_used();
-            if (OB_FAIL(destroy_cached_ps(closed_stmt_ids.at(i).stmt_id_))) {
-            } else {
-              reclaimed_size += MAX(used_before - get_managed_used(), 0);
+          for (int64_t i = 0; i < closed_stmt_ids.count() / 2; ++i) { //ignore ret
+            LOG_TRACE("ps close time", K(i), K(closed_stmt_ids.at(i).first), K(closed_stmt_ids.at(i).second));
+            if (OB_FAIL(destroy_cached_ps(closed_stmt_ids.at(i).first))) {
+              LOG_WARN("fail to evict ps stmt", K(ret),
+                      K(closed_stmt_ids.at(i).first), K(closed_stmt_ids.count()));
             }
           }
         }
       }
+      LOG_TRACE("ps cache evict end");
     }
   }
   return ret;
@@ -882,16 +770,17 @@ int ObPsCache::destroy_cached_ps(const ObPsStmtId inner_stmt_id)
       LOG_WARN("failed to get ps stmt info from stmt_info_map_", K(ret), K(inner_stmt_id));
     }
   } else if (OB_FAIL(op.get_ret())) {
+    LOG_WARN("failed to get ps stmt info from stmt_info_map_", K(ret), K(inner_stmt_id));
   } else if (!op.marked_erase()) {
+    LOG_TRACE("can not be destroy", K(inner_stmt_id));
   } else {
     if (OB_FAIL(stmt_info_map_.erase_refactored(inner_stmt_id, &stmt_info))) {
+      LOG_WARN("failed to erase ps stmt info from stmt_info_map_", K(ret), K(inner_stmt_id));
     } else if (OB_ISNULL(stmt_info)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ps stmt info is NULL", K(ret), K(inner_stmt_id));
-    } else {
-      release_managed_memory(stmt_info_entry_charge());
-      if (OB_SUCCESS != (tmp_ret = erase_stmt_item(inner_stmt_id, stmt_info->get_sql_key()))) {
-      }
+    } else if (OB_SUCCESS != (tmp_ret = erase_stmt_item(inner_stmt_id, stmt_info->get_sql_key()))){
+      LOG_WARN("failed to erase stmt item", K(tmp_ret), K(inner_stmt_id));
     }
     if (OB_SUCC(ret)) {
       ObIAllocator *info_alloc = nullptr;
@@ -899,8 +788,6 @@ int ObPsCache::destroy_cached_ps(const ObPsStmtId inner_stmt_id)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("allocator of ps stmt info is NULL", K(ret), K(inner_stmt_id));
       } else {
-        stmt_info->release_memory_account();
-        stmt_info->~ObPsStmtInfo();
         info_alloc->free(stmt_info);
       }
     }
@@ -918,7 +805,7 @@ int ObPsCache::mem_total(int64_t &mem_total) const
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("inner_allocator_ is NULL", K(ret));
     } else {
-      mem_total = get_managed_used();
+      mem_total = inner_allocator_->total();
     }
   } else {
     LOG_DEBUG("ps cache is not init", K(ret), K(is_inited()));
@@ -934,13 +821,16 @@ int ObPsCache::check_schema_version(ObSchemaGetterGuard &schema_guard,
   is_expired = false;
   int64_t new_runtime_schema_version = OB_INVALID_VERSION;
   if (OB_FAIL(schema_guard.get_schema_version(new_runtime_schema_version))) {
+    LOG_WARN("fail to get runtime schema version", K(ret));
   } else if (new_runtime_schema_version != stmt_info.get_runtime_schema_version()) {
+    LOG_TRACE("runtime schema version changed", K(stmt_info), K(new_runtime_schema_version));
     for (int64_t i = 0; OB_SUCC(ret) && !is_expired && i < stmt_info.get_dep_objs_cnt(); i++) {
       ObSchemaObjVersion &obj_version = stmt_info.get_dep_objs()[i];
       int64_t new_version = OB_INVALID_VERSION;
       if (OB_FAIL(schema_guard.get_schema_version(obj_version.get_schema_type(),
                                                   obj_version.object_id_,
                                                   new_version))) {
+        LOG_WARN("fail to get schema version", K(ret), K(1UL), K(obj_version));
       } else if (new_version != obj_version.version_) {
         LOG_INFO("ps cache is expired", K(ret), K(stmt_info), K(1UL),
                  K(new_version), K(obj_version), KP(&stmt_info));
@@ -983,6 +873,7 @@ int ObPsCache::update_memory_conf()
                                                             ObDataTypeCastParams(),
                                                             ObString(conf_names[i]), obj_val))) {
       } else if (OB_FAIL(obj_val.get_int(*conf_values[i]))) {
+        LOG_WARN("failed to get int", K(ret), K(obj_val));
       } else if (*conf_values[i] < 0 || *conf_values[i] > 100) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid value of plan cache conf", K(obj_val));
@@ -991,10 +882,15 @@ int ObPsCache::update_memory_conf()
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(set_mem_conf(pc_mem_conf))) {
+        SQL_PC_LOG(WARN, "fail to update plan cache mem conf", K(ret));
       }
     }
   }
 
+  LOG_TRACE("update plan cache memory config",
+            "ob_plan_cache_percentage", pc_mem_conf.limit_pct_,
+            "ob_plan_cache_evict_high_percentage", pc_mem_conf.high_pct_,
+            "ob_plan_cache_evict_low_percentage", pc_mem_conf.low_pct_);
 
   return ret;
 }

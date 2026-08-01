@@ -2921,8 +2921,8 @@ static const _error _error_OB_STANDBY_DATABASE_READ_ONLY = {
       .error_solution        = "Contact OceanBase Support",
       .mysql_errno           = -1,
       .sqlstate              = "HY000",
-      .str_error             = "standby tenant is read only",
-      .str_user_error        = "standby tenant is read only"
+      .str_error             = "standby database is read only",
+      .str_user_error        = "standby database is read only"
 };
 static const _error _error_OB_ARRAY_BINDING_SWITCH_ITERATOR = {
       .error_name            = "OB_ARRAY_BINDING_SWITCH_ITERATOR",

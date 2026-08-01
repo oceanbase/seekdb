@@ -19,7 +19,6 @@
 #include "share/system_variable/ob_system_variable_alias.h"  // OB_SV_READ_ONLY, previously hidden behind a removed sql include chain, make the dependency explicit
 #include "share/ob_timezone_mgr.h"
 #include "share/schema/ob_part_mgr_util.h"
-#include "share/object/ob_obj_cast.h"
 
 namespace oceanbase
 {
@@ -28,6 +27,8 @@ namespace share
 namespace schema
 {
 using namespace common;
+using namespace sql;
+using namespace rootserver;
 
 
 bool is_hidden_partition(const PartitionType partition_type)
@@ -118,6 +119,7 @@ int ObSchemaVersionGenerator::init(
   } else if (OB_FAIL(ObIDGenerator::init(SCHEMA_VERSION_INC_STEP,
                                          static_cast<uint64_t>(start_version),
                                          static_cast<uint64_t>(end_version)))) {
+    LOG_WARN("fail to init id generator", KR(ret), K(start_version), K(end_version));
   }
   return ret;
 }
@@ -127,6 +129,7 @@ int ObSchemaVersionGenerator::next_version(int64_t &current_version)
   int ret = OB_SUCCESS;
   uint64_t id = OB_INVALID_ID;
   if (OB_FAIL(ObIDGenerator::next(id))) {
+    LOG_WARN("fail to get next id", KR(ret));
   } else {
     current_version = static_cast<int64_t>(id);
   }
@@ -138,6 +141,7 @@ int ObSchemaVersionGenerator::get_start_version(int64_t &start_version) const
   int ret = OB_SUCCESS;
   uint64_t id = OB_INVALID_ID;
   if (OB_FAIL(ObIDGenerator::get_start_id(id))) {
+    LOG_WARN("fail to get start id", KR(ret));
   } else {
     start_version = static_cast<int64_t>(id);
   }
@@ -149,6 +153,7 @@ int ObSchemaVersionGenerator::get_current_version(int64_t &current_version) cons
   int ret = OB_SUCCESS;
   uint64_t id = OB_INVALID_ID;
   if (OB_FAIL(ObIDGenerator::get_current_id(id))) {
+    LOG_WARN("fail to get current id", KR(ret));
   } else {
     current_version = static_cast<int64_t>(id);
   }
@@ -160,6 +165,7 @@ int ObSchemaVersionGenerator::get_end_version(int64_t &end_version) const
   int ret = OB_SUCCESS;
   uint64_t id = OB_INVALID_ID;
   if (OB_FAIL(ObIDGenerator::get_end_id(id))) {
+    LOG_WARN("fail to get end id", KR(ret));
   } else {
     end_version = static_cast<int64_t>(id);
   }
@@ -171,6 +177,7 @@ int ObSchemaVersionGenerator::get_version_cnt(int64_t &version_cnt) const
   int ret = OB_SUCCESS;
   uint64_t id_cnt = OB_INVALID_ID;
   if (OB_FAIL(ObIDGenerator::get_id_cnt(id_cnt))) {
+    LOG_WARN("fail to get id cnt", KR(ret));
   } else {
     version_cnt = static_cast<int64_t>(id_cnt);
   }
@@ -242,11 +249,15 @@ int ObSysTableChecker::init()
   } else if (OB_FAIL(runtime_space_table_id_map_.create(TABLE_BUCKET_NUM,
                                                  ObModIds::OB_RUNTIME_SPACE_TABLE_ID_SET,
                                                  ObModIds::OB_RUNTIME_SPACE_TABLE_ID_SET))) {
+    LOG_WARN("fail to create runtime_space_table_id_map", K(ret));
   } else if (OB_FAIL(sys_table_name_map_.create(TABLE_BUCKET_NUM,
                                                 ObModIds::OB_SYS_TABLE_NAME_MAP,
                                                 ObModIds::OB_SYS_TABLE_NAME_MAP))) {
+    LOG_WARN("fail to create sys_table_name_map", K(ret));
   } else if (OB_FAIL(init_runtime_space_table_id_map())) {
+    LOG_WARN("fail to init table id map", K(ret));
   } else if (OB_FAIL(init_sys_table_name_map())) {
+    LOG_WARN("fail to init table name map", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -259,6 +270,7 @@ int ObSysTableChecker::init_runtime_space_table_id_map()
   runtime_space_sys_table_num_ = 0;
   for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(runtime_space_tables); ++i) {
     if (OB_FAIL(runtime_space_table_id_map_.set_refactored(runtime_space_tables[i]))) {
+      LOG_WARN("fail to set runtime space table_id", K(ret), K(runtime_space_tables[i]));
     } else if (is_sys_table(runtime_space_tables[i])) {
       // Include runtime-space system-table indexes.
       runtime_space_sys_table_num_++;
@@ -286,7 +298,9 @@ int ObSysTableChecker::init_sys_table_name_map()
         OB_SUCCESS == ret && NULL != *creator_ptr; ++creator_ptr) {
       table_schema.reset();
       if (OB_FAIL((*creator_ptr)(table_schema))) {
+        LOG_WARN("create table schema failed", K(ret));
       } else if (OB_FAIL(ob_write_string(table_schema.get_table_name(), table_name))) {
+        LOG_WARN("fail to write table name", K(ret), K(table_schema));
       } else {
         uint64_t database_id = table_schema.get_database_id();
         TableNameWrapper table(database_id, mode, table_name);
@@ -301,7 +315,9 @@ int ObSysTableChecker::init_sys_table_name_map()
           } else if (FALSE_IT(value = new (buffer) TableNameWrapperArray(
                               ObModIds::OB_TABLE_NAME_WRAPPER_ARRAY, OB_MALLOC_NORMAL_BLOCK_SIZE))) {
           } else if (OB_FAIL(value->push_back(table))) {
+            LOG_WARN("fail to push back tables", K(ret), K(key), K(table));
           } else if (OB_FAIL(sys_table_name_map_.set_refactored(key, value))) {
+            LOG_WARN("fail to set table name array", K(ret), K(key), K(table));
           } else {
             LOG_INFO("set system table name", K(key), K(table), "strlen", table_name.length());
           }
@@ -313,6 +329,7 @@ int ObSysTableChecker::init_sys_table_name_map()
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("num not match", K(ret), K(key), K(table));
           } else if (OB_FAIL(value->push_back(table))) {
+            LOG_WARN("fail to push back tables", K(ret), K(key), K(table));
           } else {
             LOG_INFO("duplicate system table name", K(key), K(table));
           }
@@ -330,6 +347,7 @@ int ObSysTableChecker::destroy()
   int ret = OB_SUCCESS;
   if (is_inited_) {
   } else if (OB_FAIL(runtime_space_table_id_map_.destroy())) {
+    LOG_ERROR("fail to destroy runtime_space_table_id_map", K(ret));
   } else {
     FOREACH(it, sys_table_name_map_) {
       TableNameWrapperArray *array = it->second;
@@ -340,6 +358,7 @@ int ObSysTableChecker::destroy()
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(sys_table_name_map_.destroy())) {
+      LOG_ERROR("fail to destroy sys_table_name_map", K(ret));
     }
   }
   return ret;
@@ -425,6 +444,7 @@ int ObSysTableChecker::check_inner_table_exist(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid table id", KR(ret), K(table_id), K(database_id));
   } else if (OB_FAIL(ObSysTableChecker::is_runtime_space_table_id(table_id, is_runtime_table))) {
+    LOG_WARN("fail to check if table_id is in runtime space", KR(ret), K(table_id));
   } else if (!is_runtime_table) {
     // System-only inner tables always exist in a system database.
     exist = true;
@@ -486,6 +506,7 @@ int ObSysTableChecker::fill_sys_index_infos(ObTableSchema &table)
       && table.get_index_tid_count() <= 0) {
     ObArray<uint64_t> index_tids;
     if (OB_FAIL(get_sys_table_index_tids(table_id, index_tids))) {
+      LOG_WARN("fail to get index tids", KR(ret), K(table_id));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < index_tids.count(); i++) {
       const int64_t index_id = index_tids.at(i);
@@ -496,6 +517,7 @@ int ObSysTableChecker::fill_sys_index_infos(ObTableSchema &table)
                          index_id,
                          USER_INDEX,
                          INDEX_TYPE_NORMAL_LOCAL)))) {
+        LOG_WARN("fail to add simple_index_info", KR(ret), K(table_id), K(index_id));
       }
     } // end for
   }
@@ -550,6 +572,7 @@ int ObSysTableChecker::append_table_(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tables.push_back(index_schema))) {
+    LOG_WARN("fail to push back index", KR(ret), "data_table_id", index_schema.get_data_table_id());
   }
   return ret;
 }
@@ -668,8 +691,9 @@ int ObRefreshSchemaInfo::assign(const ObRefreshSchemaInfo &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(sequence_id_.assign(other.sequence_id_))) {
+    LOG_WARN("fail to assign sequence_id", KR(ret));
   } else {
-
+    
     schema_version_ = other.schema_version_;
   }
   return ret;
@@ -677,7 +701,7 @@ int ObRefreshSchemaInfo::assign(const ObRefreshSchemaInfo &other)
 
 void ObRefreshSchemaInfo::reset()
 {
-
+  
   schema_version_ = common::OB_INVALID_VERSION;
   sequence_id_.reset();
 }
@@ -709,7 +733,7 @@ int ObSysParam::init(const ObString &name,
                      int64_t flags)
 {
   int ret = OB_SUCCESS;
-
+  
   data_type_ = data_type;
   flags_ = flags;
   int64_t pos = 0;
@@ -718,25 +742,30 @@ int ObSysParam::init(const ObString &name,
     LOG_WARN("system parameter name is empty", K(name), K(ret));
   } else if (OB_FAIL(databuff_printf(name_, OB_MAX_SYS_PARAM_NAME_LENGTH, pos, "%.*s", name.length(),
                                     name.ptr()))) {
+    LOG_WARN("failed to print name", K(name), K(ret));
   } else if (FALSE_IT(pos = 0)) {
   } else if (OB_FAIL(databuff_printf(value_, OB_MAX_SYS_PARAM_VALUE_LENGTH, pos, "%.*s", value.length(),
                                     value.ptr()))) {
+    LOG_WARN("failed to print value", K(value), K(ret));
   } else if (FALSE_IT(pos = 0)) {
   } else if (OB_FAIL(databuff_printf(min_val_, OB_MAX_SYS_PARAM_VALUE_LENGTH, pos, "%.*s", min_val.length(),
                                     min_val.ptr()))) {
+    LOG_WARN("failed to print min_val", K(min_val), K(ret));
   } else if (FALSE_IT(pos = 0)) {
   } else if (OB_FAIL(databuff_printf(max_val_, OB_MAX_SYS_PARAM_VALUE_LENGTH, pos, "%.*s", max_val.length(),
                                     max_val.ptr()))) {
+    LOG_WARN("failed to print max_val", K(max_val), K(ret));
   } else if (FALSE_IT(pos = 0)) {
   } else if (OB_FAIL(databuff_printf(info_, OB_MAX_SYS_PARAM_INFO_LENGTH, pos, "%.*s", info.length(),
                                     info.ptr()))) {
+    LOG_WARN("failed to print info", K(info), K(ret));
   } else {/*do nothing*/}
   return ret;
 }
 
 void ObSysParam::reset()
 {
-
+  
   MEMSET(name_, 0, sizeof(name_));
   data_type_ = 0;
   MEMSET(value_, 0, sizeof(value_));
@@ -780,7 +809,7 @@ int ObSysVariableSchema::assign(const ObSysVariableSchema &src_schema)
   if (this != &src_schema) {
     reset();
     error_ret_ = src_schema.error_ret_;
-
+    
     schema_version_ = src_schema.schema_version_;
     read_only_ = src_schema.read_only_;
     name_case_mode_ = src_schema.name_case_mode_;
@@ -788,6 +817,7 @@ int ObSysVariableSchema::assign(const ObSysVariableSchema &src_schema)
       const ObSysVarSchema *sysvar = src_schema.get_sysvar_schema(i);
       if (sysvar != NULL) {
         if (OB_FAIL(add_sysvar_schema(*sysvar))) {
+          LOG_WARN("add sysvar schema failed", K(ret), K(*sysvar));
         }
       }
     }
@@ -806,7 +836,7 @@ bool ObSysVariableSchema::is_valid() const
 
 void ObSysVariableSchema::reset()
 {
-
+  
   schema_version_ = OB_INVALID_VERSION;
   read_only_ = false;
   name_case_mode_ = OB_NAME_CASE_INVALID;
@@ -840,12 +870,15 @@ OB_DEF_DESERIALIZE(ObSysVariableSchema)
     } else if (pos == data_len) {
       //do nothing
     } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
+      LOG_WARN("Fail to decode sys var count", K(ret));
     } else {
       ObSysVarSchema sys_var;
       for (int64_t i = 0; OB_SUCC(ret) && i < count; i++) {
         sys_var.reset();
         if (OB_FAIL(sys_var.deserialize(buf, data_len, pos))) {
+          LOG_WARN("Fail to deserialize sys var", K(ret));
         } else if (OB_FAIL(add_sysvar_schema(sys_var))) {
+          LOG_WARN("Fail to add sys var", K(ret));
         }
       }
     }
@@ -874,7 +907,7 @@ OB_DEF_SERIALIZE(ObSysVariableSchema)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE,
-
+              
               schema_version_,
               read_only_,
               name_case_mode_);
@@ -882,12 +915,14 @@ OB_DEF_SERIALIZE(ObSysVariableSchema)
   if (OB_SUCC(ret)) {
     int64_t var_amount = share::ObSysVarMeta::ALL_SYS_VARS_COUNT;
     if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, var_amount))) {
+      LOG_WARN("Fail to encode sys var count", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < var_amount; i++) {
       if (OB_ISNULL(sysvar_array_[i])) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("sysvar_array_ element is null", K(ret));
       } else if (OB_FAIL(sysvar_array_[i]->serialize(buf, buf_len, pos))) {
+        LOG_WARN("Fail to serialize sys var", K(ret));
       }
     }
   }
@@ -903,6 +938,7 @@ int ObSysVariableSchema::add_sysvar_schema(const ObSysVarSchema &sysvar_schema)
   int64_t var_idx = OB_INVALID_INDEX;
   if (OB_UNLIKELY(SYS_VAR_INVALID == var_id)) {
     ret = OB_ERR_SYS_VARIABLE_UNKNOWN;
+    LOG_TRACE("system variable is unknown", K(sysvar_schema));
   } else if (OB_FAIL(share::ObSysVarMeta::calc_sys_var_store_idx(var_id, var_idx))) {
     if (ret != OB_SYS_VARS_MAYBE_DIFF_VERSION) { // If the error is caused by a different version, just ignore it
       LOG_WARN("calc system variable store index failed", K(ret));
@@ -919,6 +955,7 @@ int ObSysVariableSchema::add_sysvar_schema(const ObSysVarSchema &sysvar_schema)
   } else {
     tmp_sysvar_schema = new(ptr) ObSysVarSchema(allocator_);
     if (OB_FAIL(tmp_sysvar_schema->assign(sysvar_schema))) {
+      LOG_WARN("fail to assign sysvar", KR(ret), K(sysvar_schema));
     }
   }
   if (OB_SUCC(ret)) {
@@ -954,16 +991,22 @@ int ObSysVariableSchema::load_default_system_variable()
     } else {
       value = ObSysVariables::get_value(i);
     }
-
+    
     sysvar.set_data_type(ObSysVariables::get_type(i));
     sysvar.set_flags(ObSysVariables::get_flags(i));
     sysvar.set_schema_version(get_schema_version());
     if (OB_FAIL(sysvar.set_name(ObSysVariables::get_name(i)))) {
+      LOG_WARN("set sysvar schema name failed", K(ObSysVariables::get_name(i)), K(ret));
     } else if (OB_FAIL(sysvar.set_value(value))) {
+      LOG_WARN("set sysvar value failed", K(ret), K(value));
     } else if (OB_FAIL(sysvar.set_min_val(ObSysVariables::get_min(i)))) {
+      LOG_WARN("set sysvar schema min value failed", K(ret), K(ObSysVariables::get_min(i)));
     } else if (OB_FAIL(sysvar.set_max_val(ObSysVariables::get_max(i)))) {
+      LOG_WARN("set sysvar schema max value failed", K(ret), K(ObSysVariables::get_max(i)));
     } else if (OB_FAIL(sysvar.set_info(ObSysVariables::get_info(i)))) {
+      LOG_WARN("set sysvar schema info failed", K(ret), K(ObSysVariables::get_info(i)));
     } else if (OB_FAIL(add_sysvar_schema(sysvar))) {
+      LOG_WARN("add sysvar schema failed", K(ret));
     }
   }
   return ret;
@@ -997,6 +1040,7 @@ int ObSysVariableSchema::get_sysvar_schema(ObSysVarClassType var_id, const ObSys
   int ret = OB_SUCCESS;
   int64_t var_idx = OB_INVALID_INDEX;
   if (OB_FAIL(share::ObSysVarMeta::calc_sys_var_store_idx(var_id, var_idx))) {
+    LOG_WARN("calc system variable store index failed", K(ret));
   } else if (OB_UNLIKELY(var_idx < 0) || OB_UNLIKELY(var_idx >= get_sysvar_count())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("system variable index is invalid", K(var_idx));
@@ -1124,6 +1168,7 @@ int ObSchema::str2string_array(const char *str,
     item_str = strtok_r((NULL == item_str ? const_cast<char *>(str) : NULL), ";", &save_ptr);
     if (NULL != item_str) {
       if (OB_FAIL(string_array.push_back(ObString::make_string(item_str)))) {
+        LOG_WARN("push_back failed", K(ret));
       }
     } else {
       break;
@@ -1221,6 +1266,7 @@ int ObSchema::deep_copy_obj(const ObObj &src, ObObj &dest)
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("Fail to allocate memory, ", K(size), K(ret));
       } else if (OB_FAIL(dest.deep_copy(src, buf, size, pos))){
+        LOG_WARN("Fail to deep copy obj, ", K(ret));
       }
     } else {
       dest = src;
@@ -1250,6 +1296,7 @@ int ObSchema::deep_copy_string_array(const ObIArray<ObString> &src_array,
     for (int64_t i = 0; OB_SUCC(ret) && i < src_array.count(); ++i) {
       ObString str;
       if (OB_FAIL(deep_copy_str(src_array.at(i), str))) {
+        LOG_WARN("deep_copy_str failed", K(ret));
       } else if (OB_FAIL(dst_array.push_back(str))) {
         LOG_WARN("push_back failed", K(ret));
         // free memory avoid memory leak
@@ -1288,6 +1335,7 @@ int ObSchema::add_string_to_array(const ObString &str,
   if (OB_SUCC(ret)) {
     ObString temp_str;
     if (OB_FAIL(deep_copy_str(str, temp_str))) {
+      LOG_WARN("deep_copy_str failed", K(ret));
     } else {
       // if full, extend it
       if (str_array.capacity() == str_array.count()) {
@@ -1299,6 +1347,7 @@ int ObSchema::add_string_to_array(const ObString &str,
           ObArrayHelper<ObString> new_array(
               str_array.count() + extend_cnt, static_cast<ObString *>(buf));
           if (OB_FAIL(new_array.assign(str_array))) {
+            LOG_WARN("assign failed", K(ret));
           } else {
             free(str_array.get_base_address());
             str_array = new_array;
@@ -1329,9 +1378,11 @@ int ObSchema::serialize_string_array(char *buf, const int64_t buf_len, int64_t &
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("buf should not be null", K(buf), K(buf_len), K(pos), K(ret));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, count))) {
+    LOG_WARN("serialize count failed", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < str_array.count(); ++i) {
       if (OB_FAIL(str_array.at(i).serialize(buf, buf_len, pos))) {
+        LOG_WARN("serialize string failed", K(ret));
       }
     }
   }
@@ -1358,6 +1409,7 @@ int ObSchema::deserialize_string_array(const char *buf, const int64_t data_len, 
   } else if (pos == data_len) {
     //do nothing
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
+    LOG_WARN("deserialize count failed", K(ret));
   } else if (0 == count) {
     //do nothing
   } else {
@@ -1372,8 +1424,11 @@ int ObSchema::deserialize_string_array(const char *buf, const int64_t data_len, 
         ObString str;
         ObString copy_str;
         if (OB_FAIL(str.deserialize(buf, data_len, pos))) {
+          LOG_WARN("string deserialize failed", K(ret));
         } else if (OB_FAIL(deep_copy_str(str, copy_str, *alloc))) {
+          LOG_WARN("deep_copy_str failed", K(ret));
         } else if (OB_FAIL(str_array.push_back(copy_str))) {
+          LOG_WARN("push_back failed", K(ret));
         }
       }
     }
@@ -1562,7 +1617,9 @@ ObServerRuntimeSchema& ObServerRuntimeSchema::operator =(const ObServerRuntimeSc
     set_status(src_schema.status_);
     set_in_recyclebin(src_schema.in_recyclebin_);
     if (OB_FAIL(set_runtime_name(src_schema.runtime_name_))) {
+      LOG_WARN("set_runtime_name failed", K(ret));
     } else if (OB_FAIL(set_comment(src_schema.comment_))) {
+      LOG_WARN("set_comment failed", K(ret));
     }
     if (OB_FAIL(ret)) {
       error_ret_ = ret;
@@ -1638,8 +1695,11 @@ OB_DEF_DESERIALIZE(ObServerRuntimeSchema)
               in_recyclebin_);
 
   if (OB_FAIL(ret)) {
+    LOG_WARN("Fail to deserialize data", K(ret));
   } else if (OB_FAIL(set_runtime_name(runtime_name_))) {
+    LOG_WARN("set_runtime_name failed", K(ret));
   } else if (OB_FAIL(set_comment(comment_))) {
+    LOG_WARN("set_comment failed", K(ret));
   }
   return ret;
 }
@@ -1656,7 +1716,7 @@ OB_DEF_SERIALIZE_SIZE(ObServerRuntimeSchema)
 
 void ObSysVarSchema::reset()
 {
-
+  
   name_.reset();
   data_type_ = ObNullType;
   value_.reset();
@@ -1694,10 +1754,15 @@ int ObSysVarSchema::assign(const ObSysVarSchema &src_schema)
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("src schema is invalid", K(ret));
     } else if (OB_FAIL(set_name(src_schema.get_name()))) {
+      LOG_WARN("set sysvar name failed", K(ret));
     } else if (OB_FAIL(set_value(src_schema.get_value()))) {
+      LOG_WARN("set sysvar value failed", K(ret));
     } else if (OB_FAIL(set_min_val(src_schema.get_min_val()))) {
+      LOG_WARN("set sysvar min val failed", K(ret));
     } else if (OB_FAIL(set_max_val(src_schema.get_max_val()))) {
+      LOG_WARN("set sysvar max val failed", K(ret));
     } else if (OB_FAIL(set_info(src_schema.get_info()))) {
+      LOG_WARN("set sysvar info failed", K(ret));
     } else {
       set_data_type(src_schema.get_data_type());
       set_schema_version(src_schema.get_schema_version());
@@ -1738,7 +1803,7 @@ int ObSysVarSchema::get_value(ObIAllocator *allocator, const ObDataTypeCastParam
 }
 
 OB_SERIALIZE_MEMBER(ObSysVarSchema,
-
+                    
                     name_,
                     data_type_,
                     value_,
@@ -1816,7 +1881,9 @@ ObDatabaseSchema &ObDatabaseSchema::operator =(const ObDatabaseSchema &src_schem
     set_in_recyclebin(src_schema.is_in_recyclebin());
 
     if (OB_FAIL(set_database_name(src_schema.database_name_))) {
+      LOG_WARN("set_database_name failed", K(ret));
     } else if (OB_FAIL(set_comment(src_schema.comment_))) {
+      LOG_WARN("set_comment failed", K(ret));
     } else {} // no more to do
 
     if (OB_FAIL(ret)) {
@@ -1849,7 +1916,7 @@ bool ObDatabaseSchema::is_valid() const
 
 void ObDatabaseSchema::reset()
 {
-
+  
   database_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_VERSION;
   reset_string(database_name_);
@@ -1869,6 +1936,7 @@ OB_DEF_SERIALIZE(ObDatabaseSchema)
               database_id_, schema_version_, database_name_,
               comment_, charset_type_, collation_type_, name_case_mode_, read_only_, in_recyclebin_);
   if (OB_FAIL(ret)) {
+    LOG_WARN("func_SERIALIZE failed", K(ret));
   } else {} // no more to do
   return ret;
 }
@@ -1882,8 +1950,11 @@ OB_DEF_DESERIALIZE(ObDatabaseSchema)
               database_id_, schema_version_, database_name,
               comment, charset_type_, collation_type_, name_case_mode_, read_only_, in_recyclebin_);
   if (OB_FAIL(ret)) {
+    LOG_WARN("Fail to deserialize data", K(ret));
   } else if (OB_FAIL(set_database_name(database_name))) {
+    LOG_WARN("set_database_name failed", K(ret));
   } else if (OB_FAIL(set_comment(comment))) {
+    LOG_WARN("set_comment failed", K(ret));
   } else {} // no more to do
   return ret;
 }
@@ -1936,6 +2007,7 @@ ObPartitionSchema &ObPartitionSchema::operator =(const ObPartitionSchema &src_sc
     int ret = OB_SUCCESS;
     error_ret_ = src_schema.error_ret_;
     if (OB_FAIL(assign_partition_schema(src_schema))) {
+      LOG_WARN("failed to assign partition schema", K(ret));
     }
     if (OB_FAIL(ret)) {
       error_ret_ = ret;
@@ -1980,12 +2052,16 @@ int ObPartitionSchema::assign_partition_schema(const ObPartitionSchema &src_sche
     if (OB_SUCC(ret)) {
       part_option_ = src_schema.part_option_;
       if (OB_FAIL(part_option_.get_err_ret())) {
+        LOG_WARN("fail to assign part_option", K(ret),
+                 K_(part_option), K(src_schema.part_option_));
       }
     }
 
     if (OB_SUCC(ret)) {
       sub_part_option_ = src_schema.sub_part_option_;
       if (OB_FAIL(sub_part_option_.get_err_ret())) {
+        LOG_WARN("fail to assign sub_part_option", K(ret),
+                 K_(sub_part_option), K(src_schema.sub_part_option_));
       }
     }
 
@@ -2019,6 +2095,7 @@ int ObPartitionSchema::assign_partition_schema(const ObPartitionSchema &src_sche
       int64_t def_subpartition_num = src_schema.def_subpartition_num_;
       if (def_subpartition_num > 0) {
         if(OB_FAIL(preserve_array(def_subpartition_array_, def_subpartition_array_capacity_, def_subpartition_num))) {
+          LOG_WARN("fail to preserve def_subpartition_array", KR(ret), KP(def_subpartition_array_), K(def_subpartition_array_capacity_), K(def_subpartition_num));
         } else if (OB_ISNULL(src_schema.def_subpartition_array_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("src_schema.def_subpartition_array_ is null", K(ret));
@@ -2031,6 +2108,7 @@ int ObPartitionSchema::assign_partition_schema(const ObPartitionSchema &src_sche
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("the partition is null", K(ret));
         } else if (OB_FAIL(add_def_subpartition(*subpartition))) {
+          LOG_WARN("Fail to add partition", K(ret), K(i));
         }
       }
     }
@@ -2061,6 +2139,7 @@ int ObPartitionSchema::try_assign_def_subpart_array(
   part_level_ = that.get_part_level();
   sub_part_option_ = that.get_sub_part_option();
   if (OB_FAIL(sub_part_option_.get_err_ret())) {
+    LOG_WARN("fail to assign part option", K(ret), K(sub_part_option_));
   } else {
     int64_t def_subpartition_num = that.get_def_subpartition_num();
     if (def_subpartition_num > 0) {
@@ -2083,6 +2162,7 @@ int ObPartitionSchema::try_assign_def_subpart_array(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("the partition is null", K(ret));
       } else if (OB_FAIL(add_def_subpartition(*subpartition))) {
+        LOG_WARN("Fail to add partition", K(ret));
       }
     }
   }
@@ -2107,6 +2187,7 @@ int ObPartitionSchema::try_generate_hash_part()
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("part_option is invalid", KR(ret), KPC(this));
     } else if (OB_FAIL(preserve_array(partition_array_, partition_array_capacity_, first_part_num))) {
+      LOG_WARN("fail to preserve partition array", KR(ret), KP(partition_array_), K(partition_array_capacity_), K(first_part_num));
     } else {
       ObPartition part;
       for (int64_t i = 0; OB_SUCC(ret) && i < first_part_num; i++) {
@@ -2115,9 +2196,12 @@ int ObPartitionSchema::try_generate_hash_part()
         MEMSET(buf, 0, BUF_SIZE);
         if (OB_FAIL(ObPartitionSchema::gen_hash_part_name(
             i, FIRST_PART, false, buf, BUF_SIZE, NULL, NULL))) {
+          LOG_WARN("fail to get part name", KR(ret), K(i));
         } else if (FALSE_IT(part_name.assign_ptr(buf, static_cast<int32_t>(strlen(buf))))) {
         } else if (OB_FAIL(part.set_part_name(part_name))) {
+          LOG_WARN("fail to set part name", KR(ret), K(part_name));
         } else if (OB_FAIL(add_partition(part))) {
+          LOG_WARN("fail to add partition", KR(ret), K(ret));
         }
       } // end for
     }
@@ -2142,6 +2226,7 @@ int ObPartitionSchema::try_generate_hash_subpart(bool &generated)
     // skip
   } else if (OB_FAIL(get_all_partition_num(
              ObCheckPartitionMode::CHECK_PARTITION_MODE_NORMAL, all_partition_num))) {
+    LOG_WARN("fail to get partition num", KR(ret), K(all_partition_num));
   } else if (all_partition_num > 0) {
     // skip, this means each part has no subpartitions.
   } else if (OB_ISNULL(part_array) || part_num <= 0) {
@@ -2158,6 +2243,7 @@ int ObPartitionSchema::try_generate_hash_subpart(bool &generated)
     // 1. try generate def_sub_part_array()
     if (OB_ISNULL(get_def_subpart_array())) {
       if (OB_FAIL(preserve_array(def_subpartition_array_, def_subpartition_array_capacity_, def_subpart_num))) {
+        LOG_WARN("fail to preserve def subpartition array", KR(ret), KP(def_subpartition_array_), K(def_subpartition_array_capacity_), K(def_subpart_num));
       }
       for (int64_t j = 0; j < def_subpart_num && OB_SUCC(ret); j++) {
         MEMSET(buf, 0, BUF_SIZE);
@@ -2165,9 +2251,12 @@ int ObPartitionSchema::try_generate_hash_subpart(bool &generated)
         subpart.reset();
         if (OB_FAIL(gen_hash_part_name(j, TEMPLATE_SUB_PART,
                     false, buf, BUF_SIZE, NULL, NULL))) {
+          LOG_WARN("fail to get def subpart name", KR(ret), K(j));
         } else if (FALSE_IT(sub_part_name.assign_ptr(buf, static_cast<int32_t>(strlen(buf))))) {
         } else if (OB_FAIL(subpart.set_part_name(sub_part_name))) {
+          LOG_WARN("set subpart name failed", KR(ret), K(sub_part_name), KPC(this));
         } else if (OB_FAIL(add_def_subpartition(subpart))) {
+          LOG_WARN("failed to add partition", KR(ret), K(subpart));
         } else {
           generated = true;
         }
@@ -2194,6 +2283,7 @@ int ObPartitionSchema::try_generate_subpart_by_template(bool &generated)
     // skip
   } else if (OB_FAIL(get_all_partition_num(
              ObCheckPartitionMode::CHECK_PARTITION_MODE_NORMAL, all_partition_num))) {
+    LOG_WARN("fail to get partition num", KR(ret), K(all_partition_num));
   } else if (all_partition_num > 0) {
     // skip, this means each part has no subpartitions.
   } else if (OB_ISNULL(part_array) || part_num <= 0) {
@@ -2216,6 +2306,7 @@ int ObPartitionSchema::try_generate_subpart_by_template(bool &generated)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("subpartition num should be 0", KR(ret), KPC(part));
       } else if (OB_FAIL(part->preserve_subpartition(def_subpart_num))) {
+        LOG_WARN("fail to preserve subpartition", KR(ret), K(def_subpart_num));
       } else {
         part->set_sub_part_num(def_subpart_num);
         for (int64_t j = 0; j < def_subpart_num && OB_SUCC(ret); j++) {
@@ -2227,12 +2318,16 @@ int ObPartitionSchema::try_generate_subpart_by_template(bool &generated)
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("partition is null", KR(ret), K(i), K(j), K(def_subpart_num), KPC(this));
           } else if (OB_FAIL(subpart.assign(*def_subpart_array[j]))) {
+            LOG_WARN("fail to assign subpart", KR(ret));
           } else if (OB_FAIL(databuff_printf(buf, BUF_SIZE, pos, "%s%s%s",
                      part->get_part_name().ptr(), "s",
                      def_subpart_array[j]->get_part_name().ptr()))) {
+            LOG_WARN("part name is too long", KR(ret), KPC(part), K(subpart));
           } else if (FALSE_IT(sub_part_name.assign_ptr(buf, static_cast<int32_t>(strlen(buf))))) {
           } else if (OB_FAIL(subpart.set_part_name(sub_part_name))) {
+            LOG_WARN("set subpart name failed", KR(ret), K(sub_part_name), KPC(this));
           } else if (OB_FAIL(part->add_partition(subpart))) {
+            LOG_WARN("failed to add partition", KR(ret), K(subpart));
           } else {
             generated = true;
           }
@@ -2502,10 +2597,12 @@ int ObPartitionSchema::add_def_subpartition(const ObSubPartition &subpartition)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory", K(ret));
   } else if (OB_FAIL(local->assign(subpartition))) {
+    LOG_WARN("failed to assign partition", K(ret));
   } else if (OB_FAIL(inner_add_partition(*local,
                      def_subpartition_array_,
                      def_subpartition_array_capacity_,
                      def_subpartition_num_))) {
+    LOG_WARN("add subpartition failed", K(subpartition), K(ret));
   }
   return ret;
 }
@@ -2533,8 +2630,11 @@ int ObPartitionSchema::add_partition(const ObPartition &partition)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to allocate memory", K(ret));
   } else if (OB_FAIL(new_part->assign(partition))) {
+    LOG_WARN("failed to assign partition", K(ret));
   } else if (OB_FAIL(inner_add_partition(*new_part))) {
+    LOG_WARN("add partition failed", KPC(new_part), K(ret));
   } else {
+    LOG_TRACE("add partition succ", K(ret), K(partition), KPC(new_part));
   }
   return ret;
 }
@@ -2547,12 +2647,14 @@ int ObPartitionSchema::inner_add_partition(const ObPartition &part)
                                     hidden_partition_array_,
                                     hidden_partition_array_capacity_,
                                     hidden_partition_num_))) {
+      LOG_WARN("add hidden partition failed", K(ret), K(part));
     }
   } else {
     if (OB_FAIL(inner_add_partition(part,
                                     partition_array_,
                                     partition_array_capacity_,
                                     partition_num_))) {
+      LOG_WARN("add partition failed", K(ret), K(part));
     }
   }
   return ret;
@@ -2605,12 +2707,15 @@ int ObPartitionSchema::deserialize_partitions(const char *buf,
   } else if (pos == data_len) {
     //do nothing
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
+    LOG_WARN("Fail to decode partition count", K(ret));
   } else {
     ObPartition partition;
     for (int64_t i = 0; OB_SUCC(ret) && i < count; i++) {
       partition.reset();
       if (OB_FAIL(partition.deserialize(buf, data_len, pos))) {
+        LOG_WARN("Fail to deserialize partition", K(ret));
       } else if (OB_FAIL(add_partition(partition))) {
+        LOG_WARN("Fail to add partition", K(ret));
       }
     }
   }
@@ -2628,12 +2733,15 @@ int ObPartitionSchema::deserialize_def_subpartitions(const char *buf,
   } else if (pos == data_len) {
     //do nothing
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
+    LOG_WARN("Fail to decode partition count", K(ret));
   } else {
     ObSubPartition subpartition;
     for (int64_t i = 0; OB_SUCC(ret) && i < count; i++) {
       subpartition.reset();
       if (OB_FAIL(subpartition.deserialize(buf, data_len, pos))) {
+        LOG_WARN("Fail to deserialize subpartition", K(ret));
       } else if (OB_FAIL(add_def_subpartition(subpartition))) {
+        LOG_WARN("Fail to add subpartition", K(ret));
       }
     }
   }
@@ -2701,6 +2809,7 @@ int ObPartitionSchema::get_tablet_and_object_id_by_index(
     LOG_WARN("There are no tablets in virtual table and view", KR(ret));
   } else if (OB_FAIL(get_partition_by_partition_index(
              part_idx, CHECK_PARTITION_MODE_NORMAL, partition))) {
+    LOG_WARN("fail to get partition by part_idx", KR(ret), K(part_idx));
   } else if (OB_ISNULL(partition)){
     ret = OB_ENTRY_NOT_EXIST;
     LOG_WARN("partition not exist", KR(ret), K(part_idx));
@@ -2810,12 +2919,15 @@ int ObPartitionSchema::get_partition_by_part_id(
                                                partition_index))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
+      LOG_TRACE("partition not exist", KR(ret), K(part_id), K(check_partition_mode));
     } else {
       LOG_WARN("failed to get partition index by id", K(ret), K(part_id));
     }
   } else if (OB_FAIL(get_partition_by_partition_index(partition_index,
                                                       check_partition_mode,
                                                       partition))) {
+    LOG_WARN("fail to get partition by partition_index",
+             KR(ret), K(part_id), K(check_partition_mode), K(partition_index));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_NOT_NULL(partition) && partition->get_part_id() != part_id) {
@@ -2931,6 +3043,7 @@ int ObPartitionSchema::get_subpart_info(
   const ObCheckPartitionMode mode = CHECK_PARTITION_MODE_NORMAL;
   if (OB_FAIL(get_partition_by_part_id(
               part_id, mode, part))) {
+    LOG_WARN("fail to get partition", K(ret), K(part_id));
   } else if (OB_ISNULL(part)) {
     ret = OB_ENTRY_NOT_EXIST;
     LOG_WARN("fail to get partition", K(ret), K(part_id));
@@ -2994,6 +3107,7 @@ int ObPartitionSchema::get_partition_index_by_id(
     if (OB_FAIL(get_partition_index_loop(part_id,
                                          check_partition_mode,
                                          partition_index))) {
+      LOG_WARN("failed to get partition index loop", KR(ret), K(part_id));
     }
   }
   return ret;
@@ -3020,12 +3134,13 @@ int ObPartitionSchema::mock_list_partition_array()
     const char* part_name_str  = MYSQL_NON_PARTITIONED_TABLE_PART_NAME;
     ObString part_name(strlen(part_name_str), part_name_str);
 
-
+    
     partition.set_table_id(table_id);
     partition.set_part_id(part_id);
     partition.set_schema_version(get_schema_version());
     // part_name
     if (OB_FAIL(partition.set_part_name(part_name))) {
+      LOG_WARN("fail to set part name", KR(ret), K(table_id), K(part_name));
     }
     // list_row_values
     if (OB_SUCC(ret)) {
@@ -3034,7 +3149,9 @@ int ObPartitionSchema::mock_list_partition_array()
       obj.set_max_value();
       row.assign(&obj, 1);
       if (OB_FAIL(partition.add_list_row(row))) {
+        LOG_WARN("add row failed", KR(ret), K(table_id));
       } else if (OB_FAIL(add_partition(partition))) {
+        LOG_WARN("fail to add partition", KR(ret), K(partition));
       }
     }
   }
@@ -3092,6 +3209,7 @@ int ObPartitionSchema::get_partition_by_name(const ObString &name, const ObParti
     ret = OB_UNKNOWN_PARTITION;
     LOG_WARN("could not get partition on nonpartitioned table", KR(ret), K(part_level));
   } else if (OB_FAIL(find_partition_by_name(name, PARTITION_LEVEL_ONE/*find_part_level*/, iter, info))) {
+    LOG_WARN("failed to get partition by name", KR(ret), K(name));
   } else {
     part = info.part_;
   }
@@ -3110,6 +3228,7 @@ int ObPartitionSchema::get_subpartition_by_name(const ObString &name, const ObPa
     ret = OB_UNKNOWN_SUBPARTITION;
     LOG_WARN("could not get subpartition on not composite partition table", KR(ret), K(part_level));
   } else if (OB_FAIL(find_partition_by_name(name, PARTITION_LEVEL_TWO/*find_part_level*/, iter, info))) {
+    LOG_WARN("failed to get partition by name", KR(ret), K(name));
   } else {
     part = info.part_;
     subpart = static_cast<const ObSubPartition*>(info.partition_);
@@ -3135,6 +3254,7 @@ int ObPartitionSchema::get_partition_and_prev_by_name(
     ret = OB_UNKNOWN_PARTITION;
     SHARE_SCHEMA_LOG(WARN, "could not get partition on cur table", KR(ret), K(part_level), K(find_part_level));
   } else if (OB_FAIL(find_partition_by_name(name, find_part_level, iter, info))) {
+    SHARE_SCHEMA_LOG(WARN, "failed to get partition by name", KR(ret), K(name), K(find_part_level));
   } else if (PARTITION_LEVEL_ONE == find_part_level) {
     part = info.part_;
     if (info.part_idx_ > 0) {
@@ -3177,6 +3297,7 @@ int ObPartitionSchema::get_other_part_by_name(
     ret = OB_INVALID_ARGUMENT;
     SHARE_SCHEMA_LOG(WARN, "invalid part level", KR(ret), K(part_level), K(find_part_level));
   } else if (OB_FAIL(find_partition_by_name(name, find_part_level, iter, info))) {
+    SHARE_SCHEMA_LOG(WARN, "failed to get partition by name", KR(ret), K(name), K(find_part_level));
   } else if (PARTITION_LEVEL_ONE == find_part_level) {
     for (int64_t idx = 0; OB_SUCC(ret) && idx < partition_num_; ++idx) {
       if (info.part_idx_ == idx) { // skip
@@ -3184,6 +3305,7 @@ int ObPartitionSchema::get_other_part_by_name(
         ret = OB_INVALID_DATA;
         LOG_WARN("invalid nullptr in part array", KR(ret), K(idx), KP(partition_array_[idx]));
       } else if (OB_FAIL(other_part_array.push_back(partition_array_[idx]))) {
+        LOG_WARN("failed to push into part array", KR(ret), K(idx), KP(partition_array_[idx]));
       }
     }
   } else if (OB_UNLIKELY(PARTITION_LEVEL_TWO != find_part_level)) {
@@ -3205,6 +3327,7 @@ int ObPartitionSchema::get_other_part_by_name(
         ret = OB_INVALID_DATA;
         LOG_WARN("invalid nullptr in subpart array", KR(ret), K(idx), KP(partition_array_[idx]));
       } else if (OB_FAIL(other_part_array.push_back(subpart_array[idx]))) {
+        LOG_WARN("failed to push into part array", KR(ret), K(idx), KP(partition_array_[idx]));
       }
     }
   }
@@ -3316,6 +3439,7 @@ ObPartitionOption &ObPartitionOption::operator =(const ObPartitionOption &expr)
     part_num_ = expr.part_num_;
     part_func_type_ = expr.part_func_type_;
     if (OB_FAIL(deep_copy_str(expr.part_func_expr_, part_func_expr_))) {
+      LOG_WARN("Fail to deep copy part func expr, ", K(ret));
     }
 
     if (OB_FAIL(ret)) {
@@ -3385,7 +3509,9 @@ OB_DEF_DESERIALIZE(ObPartitionOption)
               part_func_expr, part_num_);
 
   if (OB_FAIL(ret)) {
+    LOG_WARN("Fail to deserialize data, ", K(ret));
   } else if (OB_FAIL(deep_copy_str(part_func_expr, part_func_expr_))) {
+    LOG_WARN("Fail to deep copy part_func_expr, ", K(ret));
   }
 
   return ret;
@@ -3498,7 +3624,7 @@ ObBasePartition::ObBasePartition(common::ObIAllocator *allocator)
 
 void ObBasePartition::reset()
 {
-
+  
   table_id_ = OB_INVALID_ID;
   part_id_ = -1;
   tablet_id_.reset();
@@ -3522,7 +3648,7 @@ int ObBasePartition::assign(const ObBasePartition & src_part)
   int ret = OB_SUCCESS;
   if (this != &src_part) {
     reset();
-
+    
     table_id_ = src_part.table_id_;
     tablet_id_ = src_part.tablet_id_;
     part_id_ = src_part.part_id_;
@@ -3532,9 +3658,13 @@ int ObBasePartition::assign(const ObBasePartition & src_part)
     is_empty_partition_name_ = src_part.is_empty_partition_name_;
     partition_type_ = src_part.partition_type_;
     if (OB_FAIL(deep_copy_str(src_part.name_, name_))) {
+      LOG_WARN("Fail to deep copy name", K(ret));
     } else if (OB_FAIL(set_high_bound_val(src_part.high_bound_val_))) {
+      LOG_WARN("Fail to deep copy high_bound_val_", K(ret));
     } else if (OB_FAIL(set_low_bound_val(src_part.low_bound_val_))) {
+      LOG_WARN("Fail to deep copy low_bound_val_", K(ret));
     } else if (OB_FAIL(list_row_values_.assign(*get_allocator(), src_part.list_row_values_))) {
+      LOG_WARN("fail to assign list row value", K(ret), K(src_part));
     }
   }
   return ret;
@@ -3592,6 +3722,7 @@ int ObBasePartition::set_low_bound_val(const ObRowkey &low_bound_val)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Allocator is NULL", K(ret));
   } else if (OB_FAIL(low_bound_val.deep_copy(low_bound_val_, *allocator))) {
+    LOG_WARN("Fail to deep copy low_bound_val_", K(ret));
   } else { }
   return ret;
 }
@@ -3604,6 +3735,7 @@ int ObBasePartition::set_high_bound_val(const ObRowkey &high_bound_val)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Allocator is NULL", K(ret));
   } else if (OB_FAIL(high_bound_val.deep_copy(high_bound_val_, *allocator))) {
+    LOG_WARN("Fail to deep copy high_bound_val_", K(ret));
   } else { }
   return ret;
 }
@@ -3628,7 +3760,9 @@ int ObBasePartition::set_list_vector_values_with_hex_str(
       ret = OB_BUF_NOT_ENOUGH;
       LOG_WARN("Failed to get hex_str buf", K(ret));
     } else if (OB_FAIL(list_row_values_.deserialize(*allocator, serialize_buf, hex_length, pos))) {
+      LOG_WARN("failed to deserialize from hex buf", KR(ret), K(hex_length), K(pos));
     } else if (OB_FAIL(list_row_values_.sort_array())) {
+      LOG_WARN("failed to sort", KR(ret), K(list_row_values_));
     }
   }
 
@@ -3660,6 +3794,7 @@ int ObBasePartition::set_high_bound_val_with_hex_str(
     ret = OB_BUF_NOT_ENOUGH;
     LOG_WARN("Failed to get hex_str buf", K(ret));
   } else if (OB_FAIL(high_bound_val_.deserialize(*allocator, serialize_buf, seri_length, pos))) {
+    LOG_WARN("Failed to deserialize high bound val", K(ret));
   } else { }//do nothing
   return ret;
 }
@@ -3669,6 +3804,7 @@ int ObBasePartition::get_part_column_schema(const ObTableSchema &table_schema, i
   int ret = OB_SUCCESS;
   uint64_t column_id = 0;
   if (OB_FAIL(info.get_column_id(idx, column_id))) {
+    LOG_WARN("failed to get part column id", K(ret), K(idx));
   } else if (OB_ISNULL(part_column_schema = table_schema.get_column_schema(column_id))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get null column schema", K(ret));
@@ -3696,6 +3832,7 @@ int ObBasePartition::convert_character_for_range_columns_part(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected err, lob column can not be part key", K(ret), K(obj_meta));
       } else if (OB_FAIL(get_part_column_schema(table_schema, i, info, part_column_schema))) {
+        LOG_WARN("failed to get part column schema", K(ret));
       } else if (OB_ISNULL(part_column_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get null column schema", K(ret));
@@ -3703,6 +3840,7 @@ int ObBasePartition::convert_character_for_range_columns_part(
         ObString dst_string;
         if (OB_FAIL(ObCharset::charset_convert(*allocator, obj.get_string(), obj.get_collation_type(),
                                                to_collation, dst_string))) {
+          LOG_WARN("charset convert failed", K(ret), K(obj), K(to_collation));
         } else {
           obj.set_string(obj.get_type(), dst_string);
           obj.set_collation_type(to_collation);
@@ -3732,6 +3870,7 @@ int ObBasePartition::convert_character_for_list_columns_part(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected err, lob column can not be part key", K(ret), K(obj_meta));
         } else if (OB_FAIL(get_part_column_schema(table_schema, j, info, part_column_schema))) {
+          LOG_WARN("failed to get part column schema", K(ret));
         } else if (OB_ISNULL(part_column_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get null column schema", K(ret));
@@ -3739,6 +3878,7 @@ int ObBasePartition::convert_character_for_list_columns_part(
           ObString dst_string;
           if (OB_FAIL(ObCharset::charset_convert(*allocator, obj.get_string(), obj.get_collation_type(),
                                                to_collation, dst_string))) {
+          LOG_WARN("charset convert failed", K(ret), K(obj), K(to_collation));
           } else {
             obj.set_string(obj.get_type(), dst_string);
             obj.set_collation_type(to_collation);
@@ -3796,9 +3936,13 @@ OB_DEF_DESERIALIZE(ObBasePartition)
   }
   LST_DO_CODE(OB_UNIS_DECODE, status_);
   if (OB_FAIL(ret)) {
+    LOG_WARN("Fail to deserialize data, ", K(ret));
   } else if (OB_FAIL(deep_copy_str(name, name_))) {
+    LOG_WARN("Fail to deep copy name, ", K(ret), K_(name));
   } else if (OB_FAIL(set_high_bound_val(high_bound_val))) {
+    LOG_WARN("Fail to deep copy high_bound_val", K(ret), K(high_bound_val));
   } else if (OB_FAIL(list_row_values_.deserialize(*get_allocator(), buf, data_len, pos))) {
+    LOG_WARN("Fail to deserialize list row val", K(ret), K(data_len), K(pos));
   }
 
   LST_DO_CODE(OB_UNIS_DECODE,
@@ -3941,6 +4085,7 @@ int ObPartition::clone(common::ObIAllocator &allocator, ObPartition *&dst) const
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("Fail to allocate memory", K(ret));
   } else if (OB_FAIL(new_part->assign(*this))) {
+    LOG_ERROR("assign failed", K(ret));
   } else {
     dst = new_part;
   }
@@ -3954,8 +4099,11 @@ int ObPartition::assign(const ObPartition & src_part)
   if (this != &src_part) {
     reset();
     if (OB_FAIL(ObBasePartition::assign(src_part))) {
+      LOG_WARN("Failed to assign ObBasePartition", K(ret));
     } else if (OB_FAIL(deep_copy_obj(src_part.sub_interval_start_, sub_interval_start_))) {
+      LOG_WARN("Fail to deep copy sub_interval_start_", K(ret));
     } else if (OB_FAIL(deep_copy_obj(src_part.sub_part_interval_, sub_part_interval_))) {
+      LOG_WARN("Fail to deep copy sub_part_interval_", K(ret));
     } else {
       sub_part_num_ = src_part.sub_part_num_;
 #define ASSIGN_SUBPARTITION_ARRAY(SUBPART_NAME) \
@@ -4003,6 +4151,7 @@ OB_DEF_SERIALIZE(ObPartition)
                      hidden_subpartition_array_,
                      hidden_subpartition_num_,
                      buf, buf_len, pos))) {
+    LOG_WARN("fail to seriablize hidden subpartition array", KR(ret));
   }
   return ret;
 }
@@ -4018,10 +4167,15 @@ OB_DEF_DESERIALIZE(ObPartition)
               sub_interval_start,
               sub_part_interval);
   if (OB_FAIL(ret)) {
+    LOG_WARN("Fail to deserialize data, ", K(ret));
   } else if (OB_FAIL(deep_copy_obj(sub_interval_start, sub_interval_start_))) {
+    LOG_WARN("Fail to deep copy sub_interval_start", K(ret), K(sub_interval_start));
   } else if (OB_FAIL(deep_copy_obj(sub_part_interval, sub_part_interval_))) {
-  } else if (OB_FAIL(deserialize_subpartition_array(buf, data_len, pos))) {
-  } else if (OB_FAIL(deserialize_subpartition_array(buf, data_len, pos))) {
+    LOG_WARN("Fail to deep copy sub_part_interval", K(ret), K(sub_part_interval));
+  } else if (OB_FAIL(deserialize_subpartition_array(buf, data_len, pos))) { // subpartition_array_
+    LOG_WARN("fail to deserialize subpartition_array", KR(ret));
+  } else if (OB_FAIL(deserialize_subpartition_array(buf, data_len, pos))) { // hidden_subpartition_array_
+    LOG_WARN("fail to deserialize hidden_subpartition_array", KR(ret));
   } else {}//do nothing
   return ret;
 }
@@ -4035,12 +4189,15 @@ int ObPartition::deserialize_subpartition_array(
   if (data_len > 0) {
     int64_t count = 0;
     if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
+      LOG_WARN("Fail to decode partition count", K(ret));
     } else {
       ObSubPartition subpartition;
       for (int64_t i = 0; OB_SUCC(ret) && i < count; i++) {
         subpartition.reset();
         if (OB_FAIL(subpartition.deserialize(buf, data_len, pos))) {
+          LOG_WARN("Fail to deserialize subpartition", K(ret));
         } else if (OB_FAIL(add_partition(subpartition))) {
+          LOG_WARN("Fail to add subpartition", K(ret));
         }
       }
     }
@@ -4084,17 +4241,20 @@ int ObPartition::add_partition(const ObSubPartition &subpartition)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory", K(ret));
   } else if (OB_FAIL(local->assign(subpartition))) {
+    LOG_WARN("failed to assign partition", K(ret));
   } else if (subpartition.is_hidden_partition()) {
     if (OB_FAIL(inner_add_partition(*local,
                                     hidden_subpartition_array_,
                                     hidden_subpartition_array_capacity_,
                                     hidden_subpartition_num_))) {
+      LOG_WARN("add subpartition failed", K(subpartition), K(ret));
     }
   } else {
     if (OB_FAIL(inner_add_partition(*local,
                                     subpartition_array_,
                                     subpartition_array_capacity_,
                                     subpartition_num_))) {
+      LOG_WARN("add subpartition failed", K(subpartition), K(ret));
     }
   }
   return ret;
@@ -4171,6 +4331,7 @@ int ObPartition::get_max_sub_part_idx(int64_t &sub_part_idx) const
 int ObPartition::preserve_subpartition(const int64_t &capacity) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(preserve_array(subpartition_array_, subpartition_array_capacity_, capacity))) {
+    LOG_WARN("fail to preserve subpartition array", KR(ret), KP(subpartition_array_), K(subpartition_array_capacity_), K(capacity));
   }
   return ret;
 }
@@ -4254,6 +4415,7 @@ int ObSubPartition::clone(common::ObIAllocator &allocator, ObSubPartition *&dst)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("Fail to allocate memory", K(ret));
   } else if (OB_FAIL(new_part->assign(*this))) {
+    LOG_ERROR("assign failed", K(ret));
   } else {
     dst = new_part;
   }
@@ -4294,7 +4456,8 @@ int ObSubPartition::assign(const ObSubPartition &src_part)
   int ret = OB_SUCCESS;
   if (this != &src_part) {
     reset();
-    if (OB_FAIL(ObBasePartition::assign(src_part))) {
+    if (OB_FAIL(ObBasePartition::assign(src_part))) {//Must assign base class first
+      LOG_WARN("Failed to assign ObBasePartition", K(ret));
     } else {
       subpart_id_ = src_part.subpart_id_;
       subpart_idx_ = src_part.subpart_idx_;
@@ -4368,7 +4531,7 @@ int ObPartitionUtils::check_param_valid_(
     RelatedTableInfo *related_table)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t table_id = table_schema.get_table_id();
   if (!table_schema.has_tablet()) {
     ret = OB_INVALID_ARGUMENT;
@@ -4464,7 +4627,7 @@ int ObPartitionUtils::fill_tablet_and_object_ids_(
     common::ObIArray<common::ObObjectID> &object_ids)
 {
   int ret = OB_SUCCESS;
-
+  
   for (int64_t i = 0; OB_SUCC(ret) && i < partition_indexes.count(); i++) {
     const PartitionIndex &index =  partition_indexes.at(i);
     const uint64_t src_table_id = table_schema.get_table_id();
@@ -4477,9 +4640,11 @@ int ObPartitionUtils::fill_tablet_and_object_ids_(
     if (OB_FAIL(table_schema.get_tablet_and_object_id_by_index(
         actual_part_idx, actual_subpart_idx,
         src_tablet_id, src_object_id, src_first_level_part_id))) {
+      LOG_WARN("fail to get tablet and object id", KR(ret), K(part_idx), K(index));
     } else if (fill_tablet_id && OB_FAIL(tablet_ids.push_back(src_tablet_id))) {
       LOG_WARN("fail to push back tablet_id", KR(ret), K(src_tablet_id));
     } else if (OB_FAIL(object_ids.push_back(src_object_id))) {
+      LOG_WARN("fail to push back tablet_id", KR(ret), K(src_object_id));
     } else if (OB_NOT_NULL(related_table) && fill_tablet_id) {
       ObSchemaGetterGuard *guard = related_table->guard_;
       // Won't set related_table if dealing with first part in composited-partitioned tables.
@@ -4490,14 +4655,19 @@ int ObPartitionUtils::fill_tablet_and_object_ids_(
         ObObjectID related_first_level_part_id;
         const ObSimpleTableSchemaV2 *related_schema = NULL;
         if (OB_FAIL(guard->get_simple_table_schema( related_table_id, related_schema))) {
+          LOG_WARN("fail to get simple table schema", KR(ret), K(related_table_id));
         } else if (OB_ISNULL(related_schema)) {
           ret = OB_TABLE_NOT_EXIST;
           LOG_WARN("table not exist", KR(ret), K(related_table_id));
         } else if (OB_FAIL(related_schema->get_tablet_and_object_id_by_index(
                    actual_part_idx, actual_subpart_idx,
                    related_tablet_id, related_object_id, related_first_level_part_id))) {
+          LOG_WARN("fail to get tablet and object id", KR(ret), K(part_idx), K(index));
         } else if (OB_FAIL(related_table->related_map_->add_related_tablet_id(
                    src_tablet_id, related_table_id, related_tablet_id, related_object_id, related_first_level_part_id))) {
+          LOG_WARN("fail to add related tablet info", KR(ret),
+                   K(src_table_id), K(src_tablet_id), K(src_object_id),
+                   K(related_table_id), K(related_tablet_id), K(related_object_id));
         }
       } // end for related tids
     }
@@ -4513,10 +4683,12 @@ int ObPartitionUtils::get_tablet_and_object_id(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_param_valid_(table_schema, related_table))) {
+    LOG_WARN("fail to check param", KR(ret), K(table_schema), KP(related_table));
   } else if (OB_FAIL(table_schema.get_tablet_and_object_id(tablet_id, object_id))) {
+    LOG_WARN("fail to get tablet id and object id", KR(ret), K(table_schema));
   } else if (OB_NOT_NULL(related_table)) {
     ObSchemaGetterGuard *guard = related_table->guard_;
-
+    
     for (int64_t i = 0; OB_SUCC(ret) && i < related_table->related_tids_->count(); i++) {
       const uint64_t related_table_id = related_table->related_tids_->at(i);
       const ObSimpleTableSchemaV2 *related_schema = NULL;
@@ -4524,13 +4696,19 @@ int ObPartitionUtils::get_tablet_and_object_id(
       ObObjectID related_object_id;
       if (OB_FAIL(guard->get_simple_table_schema(
                   related_table_id, related_schema))) {
+        LOG_WARN("fail to get table schema", KR(ret), K(related_table_id));
       } else if (OB_ISNULL(related_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("table not exist", KR(ret), K(related_table_id));
       } else if (OB_FAIL(related_schema->get_tablet_and_object_id(
                  related_tablet_id, related_object_id))) {
+        LOG_WARN("fail to get tablet id and object id", KR(ret), K(related_table_id));
       } else if (OB_FAIL(related_table->related_map_->add_related_tablet_id(
                  tablet_id, related_table_id, related_tablet_id, related_object_id, OB_INVALID_ID))) {
+        LOG_WARN("fail to add related tablet info", KR(ret),
+                 "src_table_id", table_schema.get_table_id(),
+                 "src_tablet_id", tablet_id, "src_object_id", object_id,
+                 K(related_table_id), K(related_tablet_id), K(related_object_id));
       }
     } // end for
   }
@@ -4549,6 +4727,7 @@ int ObPartitionUtils::get_tablet_and_part_id(
   ObPartitionLevel part_level = table_schema.get_part_level();
   const uint64_t table_id = table_schema.get_table_id();
   if (OB_FAIL(check_param_valid_(table_schema, related_table))) {
+    LOG_WARN("fail to check param", KR(ret), K(table_schema), KP(related_table));
   } else if (PARTITION_LEVEL_ONE == part_level
              || PARTITION_LEVEL_TWO == part_level) {
     ObPartition * const* part_array = table_schema.get_part_array();
@@ -4556,14 +4735,20 @@ int ObPartitionUtils::get_tablet_and_part_id(
     if (table_schema.is_hash_like_part()) {
       if (OB_FAIL(ObPartitionUtils::get_hash_tablet_and_part_id_(
                   range, part_array, part_num, partition_indexes))) {
+        LOG_WARN("fail to fill hash tablet_id and part_id",
+                 KR(ret), K(range), K(table_id));
       }
     } else if (table_schema.is_range_part()) {
       if (OB_FAIL(ObPartitionUtils::get_range_tablet_and_part_id_(
                   range, part_array, part_num, partition_indexes))) {
+        LOG_WARN("fail to fill range tablet_id and part_id",
+                 KR(ret), K(range), K(table_id));
       }
     } else if (table_schema.is_list_part()) {
       if (OB_FAIL(ObPartitionUtils::get_list_tablet_and_part_id_(
                   range, part_array, part_num, partition_indexes))) {
+        LOG_WARN("fail to fill list tablet_id and part_id",
+                 KR(ret), K(range), K(table_id));
       }
     } else {
       ret = OB_NOT_SUPPORTED;
@@ -4582,6 +4767,7 @@ int ObPartitionUtils::get_tablet_and_part_id(
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not supported part level", KR(ret), K(table_id), K(part_level));
   }
+  LOG_TRACE("table schema get tablet and part id", K(table_id), K(tablet_ids), K(part_ids), K(partition_indexes));
   return ret;
 }
 
@@ -4601,6 +4787,7 @@ int ObPartitionUtils::get_tablet_and_part_id(
   tablet_id.reset();
   part_id = OB_INVALID_ID;
   if (OB_FAIL(check_param_valid_(table_schema, related_table))) {
+    LOG_WARN("fail to check param", KR(ret), K(table_schema), KP(related_table));
   } else if (PARTITION_LEVEL_ONE == part_level
              || PARTITION_LEVEL_TWO == part_level) {
     ObPartition * const* part_array = table_schema.get_part_array();
@@ -4608,14 +4795,20 @@ int ObPartitionUtils::get_tablet_and_part_id(
     if (table_schema.is_hash_like_part()) {
       if (OB_FAIL(ObPartitionUtils::get_hash_tablet_and_part_id_(
                   row, part_array, part_num, partition_indexes))) {
+        LOG_WARN("fail to fill hash tablet_id and part_id",
+                 KR(ret), K(row), K(table_id));
       }
     } else if (table_schema.is_range_part()) {
       if (OB_FAIL(ObPartitionUtils::get_range_tablet_and_part_id_(
                   row, part_array, part_num, partition_indexes))) {
+        LOG_WARN("fail to fill range tablet_id and part_id",
+                 KR(ret), K(row), K(table_id));
       }
     } else if (table_schema.is_list_part()) {
       if (OB_FAIL(ObPartitionUtils::get_list_tablet_and_part_id_(
                   row, part_array, part_num, partition_indexes))) {
+        LOG_WARN("fail to fill list tablet_id and part_id",
+                 KR(ret), K(row), K(table_id));
       }
     } else {
       ret = OB_NOT_SUPPORTED;
@@ -4647,6 +4840,7 @@ int ObPartitionUtils::get_tablet_and_part_id(
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not supported part level", KR(ret), K(table_id), K(part_level));
   }
+  LOG_TRACE("table schema get tablet and part id", K(table_id), K(tablet_ids), K(part_ids), K(partition_indexes));
   return ret;
 }
 
@@ -4667,15 +4861,18 @@ int ObPartitionUtils::get_tablet_and_part_id(
   tablet_id.reset();
   part_id = OB_INVALID_ID;
   if (OB_FAIL(check_param_valid_(table_schema, related_table))) {
+    LOG_WARN("fail to check param", KR(ret), K(table_schema), KP(related_table));
   } else if (PARTITION_LEVEL_ONE == part_level
              || PARTITION_LEVEL_TWO == part_level) {
     int64_t part_idx = OB_INVALID_ID;
     if (OB_FAIL(table_schema.get_partition_index_by_id(
               target_part_id, CHECK_PARTITION_MODE_NORMAL, part_idx))) {
+      LOG_WARN("fail to get part_idx by part_id", KR(ret), K(target_part_id));
     } else if (OB_UNLIKELY(OB_INVALID_ID == part_idx)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("partition not exist", KR(ret), K(target_part_id), K(part_idx));
     } else if (OB_FAIL(partition_indexes.push_back(PartitionIndex(part_idx, OB_INVALID_INDEX)))) {
+      LOG_WARN("failed to push back part idx");
     }
 
     const bool fill_tablet_id = (PARTITION_LEVEL_ONE == part_level);
@@ -4703,6 +4900,7 @@ int ObPartitionUtils::get_tablet_and_part_id(
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not supported part level", KR(ret), K(table_id), K(part_level));
   }
+  LOG_TRACE("table schema get tablet and part id", K(table_id), K(tablet_ids), K(part_ids), K(partition_indexes));
   return ret;
 }
 
@@ -4722,13 +4920,16 @@ int ObPartitionUtils::get_tablet_and_subpart_id(
   const ObPartition *partition = NULL;
   int64_t part_idx = OB_INVALID_ID;
   if (OB_FAIL(check_param_valid_(table_schema, related_table))) {
+    LOG_WARN("fail to check param", KR(ret), K(table_schema), KP(related_table));
   } else if (PARTITION_LEVEL_TWO != part_level) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not supported part level", KR(ret), K(part_level));
   } else if (OB_FAIL(table_schema.get_partition_index_by_id(
              part_id, CHECK_PARTITION_MODE_NORMAL, part_idx))) {
+    LOG_WARN("fail to get part_idx by part_id", KR(ret), K(part_id));
   } else if (OB_FAIL(table_schema.get_partition_by_partition_index(
              part_idx, CHECK_PARTITION_MODE_NORMAL, partition))) {
+    LOG_WARN("fail to get partition by part_idx", KR(ret), K(part_idx));
   } else if (OB_ISNULL(partition)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("partition not exist", KR(ret), K(part_id), K(part_idx));
@@ -4740,18 +4941,24 @@ int ObPartitionUtils::get_tablet_and_subpart_id(
                   part_id, range,
                   subpartition_array, subpartition_num,
                   partition_indexes))) {
+        LOG_WARN("fail to fill hash tablet_id and subpart_id",
+                 KR(ret), K(part_id), K(range), K(table_id));
       }
     } else if (table_schema.is_range_subpart()) {
       if (OB_FAIL(ObPartitionUtils::get_range_tablet_and_subpart_id_(
                   part_id, range,
                   subpartition_array, subpartition_num,
                   partition_indexes))) {
+        LOG_WARN("fail to fill range tablet_id and subpart_id",
+                 KR(ret), K(part_id), K(range), K(table_id));
       }
     } else if (table_schema.is_list_subpart()) {
       if (OB_FAIL(ObPartitionUtils::get_list_tablet_and_subpart_id_(
                   part_id, range,
                   subpartition_array, subpartition_num,
                   partition_indexes))) {
+        LOG_WARN("fail to fill list tablet_id and subpart_id",
+                 KR(ret), K(part_id), K(range), K(table_id));
       }
     } else {
       ret = OB_NOT_SUPPORTED;
@@ -4765,6 +4972,8 @@ int ObPartitionUtils::get_tablet_and_subpart_id(
       LOG_WARN("fail to fill tablet and subpart_ids", KR(ret),
                K(fill_tablet_id), K(table_id), K(partition_indexes));
     }
+    LOG_TRACE("table schema get tablet and subpart id",
+               K(table_id), K(tablet_ids), K(subpart_ids));
   }
   return ret;
 }
@@ -4788,13 +4997,16 @@ int ObPartitionUtils::get_tablet_and_subpart_id(
   const ObPartition *partition = NULL;
   int64_t part_idx = OB_INVALID_ID;
   if (OB_FAIL(check_param_valid_(table_schema, related_table))) {
+    LOG_WARN("fail to check param", KR(ret), K(table_schema), KP(related_table));
   } else if (PARTITION_LEVEL_TWO != part_level) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not supported part level", KR(ret), K(part_level));
   } else if (OB_FAIL(table_schema.get_partition_index_by_id(
              part_id, CHECK_PARTITION_MODE_NORMAL, part_idx))) {
+    LOG_WARN("fail to get part_idx by part_id", KR(ret), K(part_id));
   } else if (OB_FAIL(table_schema.get_partition_by_partition_index(
              part_idx, CHECK_PARTITION_MODE_NORMAL, partition))) {
+    LOG_WARN("fail to get partition by part_idx", KR(ret), K(part_idx));
   } else if (OB_ISNULL(partition)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("partition not exist", KR(ret), K(part_id), K(part_idx));
@@ -4806,18 +5018,24 @@ int ObPartitionUtils::get_tablet_and_subpart_id(
                   part_id, row,
                   subpartition_array, subpartition_num,
                   partition_indexes))) {
+        LOG_WARN("fail to fill hash tablet_id and subpart_id",
+                 KR(ret), K(part_id), K(row), K(table_id));
       }
     } else if (table_schema.is_range_subpart()) {
       if (OB_FAIL(ObPartitionUtils::get_range_tablet_and_subpart_id_(
                   part_id, row,
                   subpartition_array, subpartition_num,
                   partition_indexes))) {
+        LOG_WARN("fail to fill range tablet_id and subpart_id",
+                 KR(ret), K(part_id), K(row), K(table_id));
       }
     } else if (table_schema.is_list_subpart()) {
       if (OB_FAIL(ObPartitionUtils::get_list_tablet_and_subpart_id_(
                   part_id, row,
                   subpartition_array, subpartition_num,
                   partition_indexes))) {
+        LOG_WARN("fail to fill list tablet_id and subpart_id",
+                 KR(ret), K(part_id), K(row), K(table_id));
       }
     } else {
       ret = OB_NOT_SUPPORTED;
@@ -4839,6 +5057,8 @@ int ObPartitionUtils::get_tablet_and_subpart_id(
       subpart_id = subpart_ids.at(0);
       tablet_id = tablet_ids.at(0);
     }
+    LOG_TRACE("table schema get tablet and subpart id",
+               K(table_id), K(tablet_ids), K(subpart_ids));
   }
   return ret;
 }
@@ -4862,13 +5082,16 @@ int ObPartitionUtils::get_tablet_and_subpart_id(
   const ObPartition *partition = NULL;
   int64_t part_idx = OB_INVALID_ID;
   if (OB_FAIL(check_param_valid_(table_schema, related_table))) {
+    LOG_WARN("fail to check param", KR(ret), K(table_schema), KP(related_table));
   } else if (PARTITION_LEVEL_TWO != part_level) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not supported part level", KR(ret), K(part_level));
   } else if (OB_FAIL(table_schema.get_partition_index_by_id(
              part_id, CHECK_PARTITION_MODE_NORMAL, part_idx))) {
+    LOG_WARN("fail to get part_idx by part_id", KR(ret), K(part_id));
   } else if (OB_FAIL(table_schema.get_partition_by_partition_index(
              part_idx, CHECK_PARTITION_MODE_NORMAL, partition))) {
+    LOG_WARN("fail to get partition by part_idx", KR(ret), K(part_idx));
   } else if (OB_ISNULL(partition)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("partition not exist", KR(ret), K(part_id), K(part_idx));
@@ -4878,6 +5101,7 @@ int ObPartitionUtils::get_tablet_and_subpart_id(
     for (int64_t i = 0; OB_SUCC(ret) && i < subpartition_num; ++i) {
       if (target_part_id == subpartition_array[i]->get_sub_part_id()) {
         if (OB_FAIL(partition_indexes.push_back(PartitionIndex(OB_INVALID_INDEX, i)))) {
+          LOG_WARN("failed to push back partition index");
         } else {
           break;
         }
@@ -4892,6 +5116,8 @@ int ObPartitionUtils::get_tablet_and_subpart_id(
     } else if (OB_FAIL(fill_tablet_and_object_ids_(
         fill_tablet_id, part_idx, partition_indexes, table_schema,
         related_table, tablet_ids, subpart_ids))) {
+      LOG_WARN("fail to fill tablet and subpart_ids", KR(ret),
+               K(fill_tablet_id), K(table_id), K(partition_indexes));
     } else if (1 < subpart_ids.count()
                || subpart_ids.count() != tablet_ids.count()) {
       ret = OB_ERR_UNEXPECTED;
@@ -4901,6 +5127,8 @@ int ObPartitionUtils::get_tablet_and_subpart_id(
       subpart_id = subpart_ids.at(0);
       tablet_id = tablet_ids.at(0);
     }
+    LOG_TRACE("table schema get tablet and subpart id",
+               K(table_id), K(tablet_ids), K(subpart_ids));
   }
   return ret;
 }
@@ -4925,6 +5153,7 @@ int ObPartitionUtils::get_all_tablet_and_part_id_(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("partition is null", KR(ret), K(part_idx));
       } else if (OB_FAIL(indexes.push_back(PartitionIndex(part_idx, OB_INVALID_INDEX)))) {
+        LOG_WARN("fail to push back part_idx", KR(ret), K(part_idx));
       }
     } // end for
   }
@@ -4957,6 +5186,7 @@ int ObPartitionUtils::get_all_tablet_and_subpart_id_(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid tablet_id", KR(ret), KPC(subpartition), K(part_id));
       } else if (OB_FAIL(indexes.push_back(PartitionIndex(OB_INVALID_INDEX, subpart_idx)))) {
+        LOG_WARN("fail to push back subpart_idx", KR(ret), K(subpart_idx));
       }
     } // end for
   }
@@ -4982,7 +5212,9 @@ int ObPartitionUtils::get_range_tablet_and_part_id_(
     LOG_WARN("partition_array is null or partition_num is invalid",
              KR(ret), KP(partition_array), K(partition_num));
   } else if (OB_FAIL(get_start_(partition_array, partition_num, start_bound, start_idx))) {
+    LOG_WARN("fail to get start idx", KR(ret), K(start_bound), K(partition_num));
   } else if (OB_FAIL(get_end_(partition_array, partition_num, border_flag, end_bound, end_idx))) {
+    LOG_WARN("fail to get end idx", KR(ret), K(end_bound), K(border_flag), K(partition_num));
   } else if (OB_UNLIKELY(
              start_idx < 0
              || end_idx >= partition_num)) {
@@ -4996,6 +5228,7 @@ int ObPartitionUtils::get_range_tablet_and_part_id_(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("partition is null", KR(ret), K(i));
       } else if (OB_FAIL(indexes.push_back(PartitionIndex(i, OB_INVALID_INDEX)))) {
+        LOG_WARN("fail to push back part_idx", KR(ret), K(i));
       }
     } // end for
   }
@@ -5022,7 +5255,9 @@ int ObPartitionUtils::get_range_tablet_and_subpart_id_(
     LOG_WARN("subpartition_array is null or subpartition_num is invalid",
              KR(ret), KP(subpartition_array), K(subpartition_num));
   } else if (OB_FAIL(get_start_(subpartition_array, subpartition_num, start_bound, start_idx))) {
+    LOG_WARN("fail to get start idx", KR(ret), K(start_bound), K(subpartition_num));
   } else if (OB_FAIL(get_end_(subpartition_array, subpartition_num, border_flag, end_bound, end_idx))) {
+    LOG_WARN("fail to get end idx", KR(ret), K(end_bound), K(border_flag), K(subpartition_num));
   } else if (OB_UNLIKELY(
              start_idx < 0
              || end_idx >= subpartition_num)) {
@@ -5042,6 +5277,7 @@ int ObPartitionUtils::get_range_tablet_and_subpart_id_(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("tablet_id is invalid", KR(ret), KPC(subpartition));
       } else if (OB_FAIL(indexes.push_back(PartitionIndex(OB_INVALID_INDEX, i)))) {
+        LOG_WARN("fail to push back subpart_idx", KR(ret), K(i));
       }
     } // end for
   }
@@ -5068,16 +5304,19 @@ int ObPartitionUtils::get_hash_tablet_and_part_id_(
              || ObIntType != start_key.get_obj_ptr()[0].get_type()) {
     if (OB_FAIL(get_all_tablet_and_part_id_(
         partition_array, partition_num, indexes))) {
+      LOG_WARN("fail to get all tablet and part_id", KR(ret));
     }
   } else {
     int64_t val = 0;
     int64_t part_idx = OB_INVALID_INDEX;
     const ObPartition *partition = NULL;
     if (OB_FAIL(start_key.get_obj_ptr()[0].get_int(val))) {
+      LOG_WARN("Failed to get int val", KR(ret), K(start_key));
     } else if (OB_UNLIKELY(val < 0)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("val is invalid", KR(ret), K(val), K(partition_num));
     } else if (OB_FAIL(calc_hash_part_idx(val, partition_num, part_idx))) {
+      LOG_WARN("failed to calc hash part idx", KR(ret), K(val), K(partition_num));
     } else if (OB_UNLIKELY(part_idx >= partition_num)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid", KR(ret), K(val), K(part_idx), K(partition_num));
@@ -5088,6 +5327,7 @@ int ObPartitionUtils::get_hash_tablet_and_part_id_(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("part_idx not match", KR(ret), KPC(partition), K(part_idx));
     } else if (OB_FAIL(indexes.push_back(PartitionIndex(part_idx, OB_INVALID_INDEX)))) {
+      LOG_WARN("fail to push back index", KR(ret), K(part_idx));
     }
   }
   return ret;
@@ -5130,6 +5370,7 @@ int ObPartitionUtils::get_list_tablet_and_part_id_(
   } else if (!range.is_single_rowkey()) {
     if (OB_FAIL(get_all_tablet_and_part_id_(
         partition_array, partition_num, indexes))) {
+      LOG_WARN("fail to get all tablet and part_id", KR(ret));
     }
   } else {
     ObNewRow row;
@@ -5137,6 +5378,7 @@ int ObPartitionUtils::get_list_tablet_and_part_id_(
     row.count_ = range.start_key_.get_obj_cnt();
     if (OB_FAIL(get_list_tablet_and_part_id_(
         row, partition_array, partition_num, indexes))) {
+      LOG_WARN("fail to get list tablet and part_id", KR(ret), K(row));
     }
   }
   return ret;
@@ -5173,6 +5415,7 @@ int ObPartitionUtils::get_hash_tablet_and_part_id_(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("val is invalid", KR(ret), K(val), K(partition_num));
     } else if (OB_FAIL(calc_hash_part_idx(val, partition_num, part_idx))) {
+      LOG_WARN("failed to calc hash part idx", KR(ret), K(partition_num), K(val));
     } else if (OB_UNLIKELY(part_idx >= partition_num)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("part_idx is invalid", KR(ret), K(val), K(part_idx), K(partition_num));
@@ -5183,6 +5426,7 @@ int ObPartitionUtils::get_hash_tablet_and_part_id_(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("part_idx not match", KR(ret), KPC(partition), K(part_idx));
     } else if (OB_FAIL(indexes.push_back(PartitionIndex(part_idx, OB_INVALID_INDEX)))) {
+      LOG_WARN("fail to push back index", KR(ret), K(part_idx));
     }
   }
   return ret;
@@ -5213,6 +5457,8 @@ int ObPartitionUtils::get_range_tablet_and_part_id_(
                                             border_flag,
                                             partition_array, partition_num,
                                             indexes))) {
+    LOG_WARN("fail to get range tablet and part_id",
+             KR(ret), K(start_tmp), K(end_tmp), K(border_flag));
   }
   return ret;
 }
@@ -5254,10 +5500,12 @@ int ObPartitionUtils::get_list_tablet_and_part_id_(
       part_idx = OB_INVALID_INDEX == part_idx ? default_value_idx : part_idx;
       if (OB_UNLIKELY(OB_INVALID_INDEX == part_idx)) {
         // return invalid part_id/tablet_id if partition not found.
+        LOG_TRACE("partition not found", KR(ret), K(row));
       } else if (OB_ISNULL(partition = partition_array[part_idx])) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("partition is null", KR(ret), K(part_idx));
       } else if (OB_FAIL(indexes.push_back(PartitionIndex(part_idx, OB_INVALID_INDEX)))) {
+        LOG_WARN("fail to push back part_idx", KR(ret), K(part_idx));
       }
     }
   }
@@ -5286,16 +5534,19 @@ int ObPartitionUtils::get_hash_tablet_and_subpart_id_(
              || ObIntType != start_key.get_obj_ptr()[0].get_type())) {
     if (OB_FAIL(get_all_tablet_and_subpart_id_(
         part_id, subpartition_array, subpartition_num, indexes))) {
+      LOG_WARN("fail to get all tablet and subpart_id", KR(ret), K(part_id));
     }
   } else {
     int64_t val = 0;
     int64_t subpart_idx = OB_INVALID_INDEX;
     const ObSubPartition *subpartition = NULL;
     if (OB_FAIL(start_key.get_obj_ptr()[0].get_int(val))) {
+      LOG_WARN("Failed to get int val", KR(ret), K(start_key));
     } else if (OB_UNLIKELY(val < 0)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("val is invalid", KR(ret), K(val), K(subpartition_num));
     } else if (OB_FAIL(calc_hash_part_idx(val, subpartition_num, subpart_idx))) {
+      LOG_WARN("failed to calc hash subpart idx", KR(ret), K(val), K(subpartition_num));
     } else if (OB_UNLIKELY(subpart_idx >= subpartition_num)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("subpart_idx is invalid", KR(ret), K(val), K(subpart_idx), K(subpartition_num));
@@ -5311,6 +5562,7 @@ int ObPartitionUtils::get_hash_tablet_and_subpart_id_(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid tablet_id", KR(ret), KPC(subpartition), K(subpart_idx));
     } else if (OB_FAIL(indexes.push_back(PartitionIndex(OB_INVALID_INDEX, subpart_idx)))) {
+      LOG_WARN("fail to push back subpart_idx", KR(ret), K(subpart_idx));
     }
   }
   return ret;
@@ -5356,6 +5608,7 @@ int ObPartitionUtils::get_list_tablet_and_subpart_id_(
   } else if (!range.is_single_rowkey()) {
     if (OB_FAIL(get_all_tablet_and_subpart_id_(
         part_id, subpartition_array, subpartition_num, indexes))) {
+      LOG_WARN("fail to get all tablet and subpart_id", KR(ret), K(part_id));
     }
   } else {
     ObTabletID tablet_id;
@@ -5366,6 +5619,7 @@ int ObPartitionUtils::get_list_tablet_and_subpart_id_(
     if (OB_FAIL(get_list_tablet_and_subpart_id_(part_id, row,
                                                 subpartition_array, subpartition_num,
                                                 indexes))) {
+      LOG_WARN("fail to get list tablet and part_id", KR(ret), K(row));
     }
   }
   return ret;
@@ -5400,6 +5654,7 @@ int ObPartitionUtils::get_hash_tablet_and_subpart_id_(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("val is invalid", KR(ret), K(val), K(subpartition_num));
     } else if (OB_FAIL(calc_hash_part_idx(val, subpartition_num, subpart_idx))) {
+      LOG_WARN("failed to calc hash subpart idx", KR(ret), K(subpartition_num), K(val));
     } else if (OB_UNLIKELY(subpart_idx >= subpartition_num)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("subpart_idx is invalid", KR(ret), K(val), K(subpart_idx), K(subpartition_num));
@@ -5415,6 +5670,7 @@ int ObPartitionUtils::get_hash_tablet_and_subpart_id_(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid tablet_id", KR(ret), KPC(subpartition), K(subpart_idx));
     } else if (OB_FAIL(indexes.push_back(PartitionIndex(OB_INVALID_INDEX, subpart_idx)))) {
+      LOG_WARN("fail to push back subpart_idx", KR(ret), K(subpart_idx));
     }
   }
   return ret;
@@ -5448,6 +5704,8 @@ int ObPartitionUtils::get_range_tablet_and_subpart_id_(
                                                border_flag, part_id,
                                                subpartition_array, subpartition_num,
                                                indexes))) {
+    LOG_WARN("fail to get range tablet and subpart_id",
+             KR(ret), K(start_tmp), K(end_tmp), K(border_flag));
   }
   return ret;
 }
@@ -5491,6 +5749,7 @@ int ObPartitionUtils::get_list_tablet_and_subpart_id_(
       subpart_idx = OB_INVALID_INDEX == subpart_idx ? default_value_idx : subpart_idx;
       if (OB_UNLIKELY(OB_INVALID_INDEX == subpart_idx)) {
         // return invalid subpart_id/tablet_id if subpartition not found.
+        LOG_TRACE("subpartition not found", KR(ret), K(row));
       } else if (OB_ISNULL(subpartition = subpartition_array[subpart_idx])) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("subpartition is null", KR(ret), K(subpart_idx));
@@ -5501,6 +5760,7 @@ int ObPartitionUtils::get_list_tablet_and_subpart_id_(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid tablet_id", KR(ret), KPC(subpartition), K(subpart_idx));
       } else if (OB_FAIL(indexes.push_back(PartitionIndex(OB_INVALID_INDEX, subpart_idx)))) {
+        LOG_WARN("fail to push back subpart_idx", KR(ret), K(subpart_idx));
       }
     }
   }
@@ -5565,17 +5825,20 @@ int ObPartitionUtils::convert_rows_to_sql_literal(
   for (int64_t j = 0; OB_SUCC(ret) && j < rows.count(); j ++) {
     if (0 != j) {
       if (OB_FAIL(BUF_PRINTF(","))) {
+        LOG_WARN("Failed to add comma", K(ret));
       }
     }
     const common::ObNewRow &row = rows.at(j);
     if (OB_SUCC(ret) && row.get_count() > 1) {
       if (OB_FAIL(BUF_PRINTF("("))) {
+        LOG_WARN("Failed to add comma", K(ret));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < row.get_count(); ++i) {
       const ObObj &tmp_obj = row.get_cell(i);
       if (0 != i) {
         if (OB_FAIL(BUF_PRINTF(","))) {
+          LOG_WARN("Failed to add comma", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -5583,18 +5846,23 @@ int ObPartitionUtils::convert_rows_to_sql_literal(
         BUF_PRINTF("%s", "DEFAULT");
       } else if (tmp_obj.is_string_type()) {
         if (OB_FAIL(tmp_obj.print_varchar_literal(buf, buf_len, pos))) {
+          LOG_WARN("Failed to print sql literal", K(ret));
         } else if (!print_collation) {
         } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, " collate %s",
                            ObCharset::collation_name(tmp_obj.get_collation_type())))) {
+          LOG_WARN("Failed to print collation", K(ret), K(tmp_obj));
         }
       } else if (tmp_obj.is_year()) {
         if (OB_FAIL(ObTimeConverter::year_to_str(tmp_obj.get_year(), buf, buf_len, pos))) {
+          LOG_WARN("Failed to year_to_str", K(tmp_obj), K(ret));
         }
       } else if (OB_FAIL(tmp_obj.print_sql_literal(buf, buf_len, pos, tz_info))) {
+        LOG_WARN("Failed to print sql literal", K(ret));
       } else { }
     }
     if (OB_SUCC(ret) && row.get_count() > 1) {
       if (OB_FAIL(BUF_PRINTF(")"))) {
+        LOG_WARN("Failed to add comma", K(ret));
       }
     }
   }
@@ -5624,6 +5892,7 @@ int ObPartitionUtils::convert_rowkey_to_sql_literal(
       const ObObj &tmp_obj = objs[i];
       if (0 != i) {
         if (OB_FAIL(BUF_PRINTF(","))) {
+          LOG_WARN("Failed to add comma", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -5631,14 +5900,18 @@ int ObPartitionUtils::convert_rowkey_to_sql_literal(
         BUF_PRINTF("%s", "MAXVALUE");
       } else if (tmp_obj.is_string_type()) {
         if (OB_FAIL(tmp_obj.print_varchar_literal(buf, buf_len, pos))) {
+          LOG_WARN("Failed to print sql literal", K(ret));
         } else if (!print_collation) {
         } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, " collate %s",
                            ObCharset::collation_name(tmp_obj.get_collation_type())))) {
+          LOG_WARN("Failed to print collation", K(ret), K(tmp_obj));
         }
       } else if (tmp_obj.is_year()) {
         if (OB_FAIL(ObTimeConverter::year_to_str(tmp_obj.get_year(), buf, buf_len, pos))) {
+          LOG_WARN("Failed to year_to_str", K(tmp_obj), K(ret));
         }
       } else if (OB_FAIL(tmp_obj.print_sql_literal(buf, buf_len, pos, tz_info))) {
+        LOG_WARN("Failed to print sql literal", K(ret));
       }
     }
   }
@@ -5665,13 +5938,16 @@ int ObPartitionUtils::convert_rows_to_hex(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc buf", KR(ret), K(seri_length));
   } else if (OB_FAIL(serialization::encode_vi64(serialize_buf, seri_length, seri_pos, rows.count()))) {
+    LOG_WARN("fail to encode count", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < rows.count(); i ++) {
     if (OB_FAIL(rows.at(i).serialize(serialize_buf, seri_length, seri_pos))) {
+      LOG_WARN("fail to encode row", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(hex_print(serialize_buf, seri_pos, buf, buf_len, pos))) {
+      LOG_WARN("Failed to print hex", K(ret), K(seri_pos), K(buf_len));
     } else { }//do nothing
   }
   return ret;
@@ -5692,7 +5968,9 @@ int ObPartitionUtils::convert_rowkey_to_hex(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc buf", KR(ret), K(seri_length));
   } else if (OB_FAIL(rowkey.serialize(serialize_buf, seri_length, seri_pos))) {
+    LOG_WARN("Failed to serialize rowkey", K(rowkey), K(ret));
   } else if (OB_FAIL(hex_print(serialize_buf, seri_pos, buf, buf_len, pos))) {
+    LOG_WARN("Failed to print hex", K(ret), K(seri_pos), K(buf_len));
   } else { }//do nothing
   return ret;
 }
@@ -5751,6 +6029,7 @@ ObViewSchema &ObViewSchema::operator =(const ObViewSchema &src_schema)
     collation_connection_ = src_schema.collation_connection_;
 
     if (OB_FAIL(deep_copy_str(src_schema.view_definition_, view_definition_))) {
+      LOG_WARN("Fail to deep copy view definition, ", K(ret));
     }
 
     if (OB_FAIL(ret)) {
@@ -5826,7 +6105,9 @@ OB_DEF_DESERIALIZE(ObViewSchema)
               collation_connection_);
 
   if (OB_FAIL(ret)) {
+    LOG_WARN("Fail to deserialize data, ", K(ret));
   } else if (OB_FAIL(deep_copy_str(definition, view_definition_))) {
+    LOG_WARN("Fail to deep copy view definition, ", K(ret));
   }
   return ret;
 }
@@ -5877,12 +6158,12 @@ const char *ob_index_status_str(ObIndexStatus status)
 /*************************For managing Privileges****************************/
 //ObUserId
 OB_SERIALIZE_MEMBER(ObUserId,
-
+                    
                     user_id_);
 
 //ObUrObjId
 OB_SERIALIZE_MEMBER(ObUrObjId,
-
+                    
                     grantee_id_,
                     obj_id_,
                     obj_type_,
@@ -6049,11 +6330,12 @@ int ObPriv::assign(const ObPriv &other)
   int ret = OB_SUCCESS;
   if (this != &other) {
     reset();
-
+    
     user_id_ = other.user_id_;
     schema_version_ = other.schema_version_;
     priv_set_ = other.priv_set_;
     if (OB_FAIL(set_priv_array(other.priv_array_))) {
+      LOG_WARN("assgin priv array failed", K(ret));
     }
   }
   return ret;
@@ -6061,7 +6343,7 @@ int ObPriv::assign(const ObPriv &other)
 
 void ObPriv::reset()
 {
-
+  
   user_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_VERSION;
   priv_set_ = 0;
@@ -6076,7 +6358,7 @@ int64_t ObPriv::get_convert_size() const
 }
 
 OB_SERIALIZE_MEMBER(ObPriv,
-
+                    
                     user_id_,
                     schema_version_,
                     priv_set_,
@@ -6118,18 +6400,29 @@ ObUserInfo& ObUserInfo::operator=(const ObUserInfo &other)
     int ret = OB_SUCCESS;
     error_ret_ = other.error_ret_;
     if (OB_FAIL(ObPriv::assign(other))) {
+      LOG_WARN("assign failed", K(ret));
     } else if (OB_FALSE_IT(locked_ = other.locked_)) {
     } else if (OB_FALSE_IT(ssl_type_ = other.ssl_type_)) {
     } else if (OB_FAIL(deep_copy_str(other.user_name_, user_name_))) {
+      LOG_WARN("Fail to deep copy user_name", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.host_name_, host_name_))) {
+      LOG_WARN("Fail to deep copy host_name", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.passwd_, passwd_))) {
+      LOG_WARN("Fail to deep copy passwd", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.info_, info_))) {
+      LOG_WARN("Fail to deep copy info", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.ssl_cipher_, ssl_cipher_))) {
+      LOG_WARN("Fail to deep copy ssl_cipher", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.x509_issuer_, x509_issuer_))) {
+      LOG_WARN("Fail to deep copy x509_issuer", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.x509_subject_, x509_subject_))) {
+      LOG_WARN("Fail to deep copy ssl_subject", K(ret));
     } else if (OB_FAIL(grantee_id_array_.assign(other.grantee_id_array_))) {
+      LOG_WARN("Fail to assign grantee_id_array ", K(ret));
     } else if (OB_FAIL(role_id_array_.assign(other.role_id_array_))) {
+      LOG_WARN("Fail to assign role_id_array", K(ret));
     } else if (OB_FAIL(role_id_option_array_.assign(other.role_id_option_array_))) {
+      LOG_WARN("Fail to assign role_id_option_array", K(ret));
     } else {
       type_ = other.type_;
       password_last_changed_timestamp_ = other.password_last_changed_timestamp_;
@@ -6153,18 +6446,29 @@ int ObUserInfo::assign(const ObUserInfo &other)
     reset();
     error_ret_ = other.error_ret_;
     if (OB_FAIL(ObPriv::assign(other))) {
+      LOG_WARN("assign failed", K(ret));
     } else if (OB_FALSE_IT(locked_ = other.locked_)) {
     } else if (OB_FALSE_IT(ssl_type_ = other.ssl_type_)) {
     } else if (OB_FAIL(deep_copy_str(other.user_name_, user_name_))) {
+      LOG_WARN("Fail to deep copy user_name", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.host_name_, host_name_))) {
+      LOG_WARN("Fail to deep copy host_name", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.passwd_, passwd_))) {
+      LOG_WARN("Fail to deep copy passwd", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.info_, info_))) {
+      LOG_WARN("Fail to deep copy info", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.ssl_cipher_, ssl_cipher_))) {
+      LOG_WARN("Fail to deep copy ssl_cipher", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.x509_issuer_, x509_issuer_))) {
+      LOG_WARN("Fail to deep copy x509_issuer", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.x509_subject_, x509_subject_))) {
+      LOG_WARN("Fail to deep copy ssl_subject", K(ret));
     } else if (OB_FAIL(grantee_id_array_.assign(other.grantee_id_array_))) {
+      LOG_WARN("Fail to assign grantee_id_array ", K(ret));
     } else if (OB_FAIL(role_id_array_.assign(other.role_id_array_))) {
+      LOG_WARN("Fail to assign role_id_array", K(ret));
     } else if (OB_FAIL(role_id_option_array_.assign(other.role_id_option_array_))) {
+      LOG_WARN("Fail to assign role_id_option_array", K(ret));
     } else {
       type_ = other.type_;
       password_last_changed_timestamp_ = other.password_last_changed_timestamp_;
@@ -6279,13 +6583,21 @@ OB_DEF_DESERIALIZE(ObUserInfo)
               x509_subject);
 
   if (OB_FAIL(ret)) {
+    LOG_WARN("Fail to deserialize data", K(ret));
   } else if (OB_FAIL(deep_copy_str(user_name, user_name_))) {
+    LOG_WARN("Fail to deep copy", K(user_name), K(ret));
   } else if (OB_FAIL(deep_copy_str(host_name, host_name_))) {
+    LOG_WARN("Fail to deep copy", K(host_name), K(ret));
   } else if (OB_FAIL(deep_copy_str(passwd, passwd_))) {
+    LOG_WARN("Fail to deep copy", K(passwd), K(ret));
   } else if (OB_FAIL(deep_copy_str(info, info_))) {
+    LOG_WARN("Fail to deep copy", K(passwd), K(ret));
   } else if (OB_FAIL(deep_copy_str(ssl_cipher, ssl_cipher_))) {
+    LOG_WARN("Fail to deep copy", K(ssl_cipher), K(ret));
   } else if (OB_FAIL(deep_copy_str(x509_issuer, x509_issuer_))) {
+    LOG_WARN("Fail to deep copy", K(x509_issuer), K(ret));
   } else if (OB_FAIL(deep_copy_str(x509_subject, x509_subject_))) {
+    LOG_WARN("Fail to deep copy", K(x509_subject), K(ret));
   } else if (OB_SUCC(ret) && pos < data_len) {
     LST_DO_CODE(OB_UNIS_DECODE,
         type_,
@@ -6366,7 +6678,9 @@ ObDBPriv& ObDBPriv::operator=(const ObDBPriv &other)
     int ret = OB_SUCCESS;
     error_ret_ = other.error_ret_;
     if (OB_FAIL(ObPriv::assign(other))) {
+      LOG_WARN("assign failed", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.db_, db_))) {
+      LOG_WARN("Fail to deep copy db", K(ret));
     } else {
       sort_ = other.sort_;
     }
@@ -6414,7 +6728,9 @@ OB_DEF_DESERIALIZE(ObDBPriv)
   BASE_DESER((, ObPriv));
   LST_DO_CODE(OB_UNIS_DECODE, db, sort_);
   if (OB_FAIL(ret)) {
+    LOG_WARN("Fail to deserialize data", K(ret));
   } else if (OB_FAIL(deep_copy_str(db, db_))) {
+    LOG_WARN("Fail to deep copy user_name", K(db), K(ret));
   } else {}
   return ret;
 }
@@ -6434,8 +6750,11 @@ ObTablePriv& ObTablePriv::operator=(const ObTablePriv &other)
     int ret = OB_SUCCESS;
     error_ret_ = other.error_ret_;
     if (OB_FAIL(ObPriv::assign(other))) {
+      LOG_WARN("assign failed", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.db_, db_))) {
+      LOG_WARN("Fail to deep copy db", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.table_, table_))) {
+      LOG_WARN("Fail to deep copy table", K(ret));
     }
     if (OB_FAIL(ret)) {
       error_ret_ = ret;
@@ -6483,8 +6802,11 @@ OB_DEF_DESERIALIZE(ObTablePriv)
   BASE_DESER((, ObPriv));
   LST_DO_CODE(OB_UNIS_DECODE, db, table);
   if (OB_FAIL(ret)) {
+    LOG_WARN("Fail to deserialize data", K(ret));
   } else if (OB_FAIL(deep_copy_str(db, db_))) {
+    LOG_WARN("Fail to deep copy user_name", K(db), K(ret));
   } else if (OB_FAIL(deep_copy_str(table, table_))) {
+    LOG_WARN("Fail to deep copy user_name", K(table), K(ret));
   } else {}
   return ret;
 }
@@ -6504,8 +6826,11 @@ int ObRoutinePriv::assign(const ObRoutinePriv &other)
   if (this != &other) {
     reset();
     if (OB_FAIL(ObPriv::assign(other))) {
+      LOG_WARN("assign failed", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.db_, db_))) {
+      LOG_WARN("Fail to deep copy db", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.routine_, routine_))) {
+      LOG_WARN("Fail to deep copy table", K(ret));
     } else {
       routine_type_ = other.routine_type_;
       error_ret_ = other.error_ret_;
@@ -6558,8 +6883,11 @@ OB_DEF_DESERIALIZE(ObRoutinePriv)
   BASE_DESER((, ObPriv));
   LST_DO_CODE(OB_UNIS_DECODE, db, routine, routine_type);
   if (OB_FAIL(ret)) {
+    LOG_WARN("Fail to deserialize data", K(ret));
   } else if (OB_FAIL(deep_copy_str(db, db_))) {
+    LOG_WARN("Fail to deep copy user_name", K(db), K(ret));
   } else if (OB_FAIL(deep_copy_str(routine, routine_))) {
+    LOG_WARN("Fail to deep copy user_name", K(routine_), K(ret));
   } else {}
   return ret;
 }
@@ -6577,9 +6905,13 @@ int ObColumnPriv::assign(const ObColumnPriv &other)
   if (this != &other) {
     reset();
     if (OB_FAIL(ObPriv::assign(other))) {
+      LOG_WARN("assign failed", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.db_, db_))) {
+      LOG_WARN("Fail to deep copy db", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.table_, table_))) {
+      LOG_WARN("Fail to deep copy table", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.column_, column_))) {
+      LOG_WARN("Fail to deep copy table", K(ret));
     } else {
       priv_id_ = other.priv_id_;
       error_ret_ = other.error_ret_;
@@ -6635,9 +6967,13 @@ OB_DEF_DESERIALIZE(ObColumnPriv)
   BASE_DESER((, ObPriv));
   LST_DO_CODE(OB_UNIS_DECODE, db, table, column, priv_id);
   if (OB_FAIL(ret)) {
+    LOG_WARN("Fail to deserialize data", K(ret));
   } else if (OB_FAIL(deep_copy_str(db, db_))) {
+    LOG_WARN("Fail to deep copy user_name", K(db), K(ret));
   } else if (OB_FAIL(deep_copy_str(table, table_))) {
+    LOG_WARN("Fail to deep copy user_name", K(table), K(ret));
   } else if (OB_FAIL(deep_copy_str(column, column_))) {
+    LOG_WARN("Fail to deep copy user_name", K(column), K(ret));
   } else {
     priv_id_ = priv_id;
   }
@@ -6658,6 +6994,7 @@ ObObjPriv& ObObjPriv::operator=(const ObObjPriv &other)
     reset();
     int ret = OB_SUCCESS;
     if (OB_FAIL(ObPriv::assign(other))) {
+      LOG_WARN("assign failed", K(ret));
     } else {
       error_ret_ = other.error_ret_;
       obj_id_ = other.obj_id_;
@@ -6726,6 +7063,7 @@ ObSysPriv& ObSysPriv::operator=(const ObSysPriv &other)
     reset();
     int ret = OB_SUCCESS;
     if (OB_FAIL(ObPriv::assign(other))) {
+      LOG_WARN("assign failed", K(ret));
     }
     error_ret_ = other.error_ret_;
     grantee_id_= other.grantee_id_;
@@ -6769,6 +7107,7 @@ OB_DEF_DESERIALIZE(ObSysPriv)
   BASE_DESER((, ObPriv));
   LST_DO_CODE(OB_UNIS_DECODE, grantee_id_);
   if (OB_FAIL(ret)) {
+    LOG_WARN("Fail to deserialize data", K(ret));
   }
   return ret;
 }
@@ -6791,12 +7130,16 @@ int ObNeedPriv::deep_copy(const ObNeedPriv &other, common::ObIAllocator &allocat
   obj_type_ = other.obj_type_;
   check_any_column_priv_ = other.check_any_column_priv_;
   if (OB_FAIL(ob_write_string(allocator, other.db_, db_))) {
+    LOG_WARN("Fail to deep copy db", K_(db), K(ret));
   } else if (OB_FAIL(ob_write_string(allocator, other.table_, table_))) {
+    LOG_WARN("Fail to deep copy table", K_(table), K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < other.columns_.count(); i++) {
       ObString tmp_column;
       if (OB_FAIL(ob_write_string(allocator, other.columns_.at(i), tmp_column))) {
+        LOG_WARN("ob write string failed", K(ret));
       } else if (OB_FAIL(columns_.push_back(tmp_column))) {
+        LOG_WARN("push back failed", K(ret));
       }
     }
   }
@@ -6808,11 +7151,13 @@ int ObStmtNeedPrivs::deep_copy(const ObStmtNeedPrivs &other, common::ObIAllocato
   int ret = OB_SUCCESS;
   need_privs_.reset();
   if (OB_FAIL(need_privs_.reserve(other.need_privs_.count()))) {
+    LOG_WARN("fail to reserve need prives size", K(ret), K(other.need_privs_.count()));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < other.need_privs_.count(); ++i) {
     const ObNeedPriv &priv_other = other.need_privs_.at(i);
     ObNeedPriv priv_new;
     if (OB_FAIL(priv_new.deep_copy(priv_other, allocator))) {
+      LOG_WARN("Fail to deep copy ObNeedPriv", K(priv_new), K(ret));
     } else {
       need_privs_.push_back(priv_new);
     }
@@ -7086,15 +7431,25 @@ ObOutlineInfo &ObOutlineInfo::operator=(const ObOutlineInfo &src_info)
     format_ = src_info.format_;
     format_outline_ = src_info.format_outline_;
     if (OB_FAIL(deep_copy_str(src_info.name_, name_))) {
+      LOG_WARN("Fail to deep copy name", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_info.signature_, signature_))) {
+      LOG_WARN("Fail to deep copy signature", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_info.sql_id_, sql_id_))) {
+      LOG_WARN("Fail to deep copy signature", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_info.outline_content_, outline_content_))) {
+      LOG_WARN("Fail to deep copy outline_content", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_info.sql_text_, sql_text_))) {
+      LOG_WARN("Fail to deep copy sql_text", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_info.format_sql_text_, format_sql_text_))) {
+      LOG_WARN("Fail to deep copy sql_text", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_info.format_sql_id_, format_sql_id_))) {
+      LOG_WARN("Fail to deep copy signature", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_info.outline_target_, outline_target_))) {
+      LOG_WARN("Fail to deep copy outline target", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_info.owner_, owner_))) {
+      LOG_WARN("Fail to deep copy owner", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_info.version_, version_))) {
+      LOG_WARN("Fail to deep copy version", K(ret));
     } else {/*do nothing*/}
 
     if (OB_FAIL(ret)) {
@@ -7236,6 +7591,7 @@ int ObOutlineInfo::get_visible_signature(ObString &visiable_signature) const
   if (signature_.empty()) {
     // do nothing
   } else if (OB_FAIL(visiable_signature.deserialize(signature_.ptr(), signature_.length(), pos))) {
+    LOG_WARN("fail to deserialize signature", K(ret), K(signature_));
   }
   return ret;
 }
@@ -7270,24 +7626,37 @@ OB_DEF_DESERIALIZE(ObOutlineInfo)
               version, compatible_, enabled_, format_);
 
   if (OB_FAIL(ret)) {
+    LOG_WARN("Fail to deserialize data", K(ret));
   } else if (OB_FAIL(deep_copy_str(name, name_))) {
+    LOG_WARN("Fail to deep copy outline name", K(ret));
   } else if (OB_FAIL(deep_copy_str(signature, signature_))) {
+    LOG_WARN("Fail to deep copy signature", K(ret));
   } else if (OB_FAIL(deep_copy_str(outline_content, outline_content_))) {
+    LOG_WARN("Fail to deep copy outline_content", K(ret));
   } else if (OB_FAIL(deep_copy_str(sql_text, sql_text_))) {
+    LOG_WARN("Fail to deep copy sql_text", K(ret));
+
   } else if (OB_FAIL(deep_copy_str(outline_target, outline_target_))) {
+    LOG_WARN("Fail to deep copy outline target", K(ret));
   } else if (OB_FAIL(deep_copy_str(owner, owner_))) {
+    LOG_WARN("Fail to deep copy owner", K(ret));
   } else if (OB_FAIL(deep_copy_str(version, version_))) {
+    LOG_WARN("Fail to deep copy owner", K(ret));
   } else {
     if (pos < data_len) {
       if (OB_FAIL(sql_id.deserialize(buf, data_len, pos))) {
+        LOG_WARN("fail to desrialize sql_id", K(ret));
       } else if (OB_FAIL(deep_copy_str(sql_id, sql_id_))) {
+        LOG_WARN("Fail to deep copy sql_id", K(ret));
       } else {
         if (pos < data_len) {
           LST_DO_CODE(OB_UNIS_DECODE, owner_id_, format_sql_text, format_sql_id, format_outline_);
           if (OB_FAIL(ret)){
             // do nothing
           }else if (OB_FAIL(deep_copy_str(format_sql_text, format_sql_text_))) {
+            LOG_WARN("Fail to deep copy sql_text", K(ret));
           } else if (OB_FAIL(deep_copy_str(format_sql_id, format_sql_id_))) {
+            LOG_WARN("Fail to deep copy sql_id", K(ret));
           }
         } else {
           owner_id_ = OB_INVALID_ID;
@@ -7329,7 +7698,7 @@ ObRecycleObject::ObRecycleObject(const ObRecycleObject &src)
 
 void ObRecycleObject::reset()
 {
-
+  
   database_id_ = OB_INVALID_ID;
   table_id_ = OB_INVALID_ID;
   reset_string(object_name_);
@@ -7350,8 +7719,11 @@ ObRecycleObject &ObRecycleObject::operator=(const ObRecycleObject &src)
     set_table_id(src.get_table_id());
     set_type(src.get_type());
     if (OB_FAIL(set_object_name(src.get_object_name()))) {
+      LOG_WARN("set_object_name failed", K(ret));
     } else if (OB_FAIL(set_original_name(src.get_original_name()))) {
+      LOG_WARN("set_original_name failed", K(ret));
     } else if (OB_FAIL(set_database_name(src.get_database_name()))) {
+      LOG_WARN("set database name failed", K(ret));
     }
     if (OB_FAIL(ret)) {
       error_ret_ = ret;
@@ -7432,7 +7804,9 @@ int ObForeignKeyInfo::assign(const ObForeignKeyInfo &other)
   int ret = OB_SUCCESS;
   reset();
   if (OB_FAIL(child_column_ids_.assign(other.child_column_ids_))) {
+    LOG_WARN("fail to assign array", K(ret));
   } else if (OB_FAIL(parent_column_ids_.assign(other.parent_column_ids_))) {
+    LOG_WARN("fail to assign array", K(ret));
   } else {
     table_id_ = other.table_id_;
     foreign_key_id_ = other.foreign_key_id_;
@@ -7507,14 +7881,14 @@ OB_SERIALIZE_MEMBER(ObForeignKeyInfo,
                     name_generated_type_);
 
 OB_SERIALIZE_MEMBER(ObSimpleForeignKeyInfo,
-
+                    
                     database_id_,
                     table_id_,
                     foreign_key_name_,
                     foreign_key_id_);
 
 OB_SERIALIZE_MEMBER(ObSimpleConstraintInfo,
-
+                    
                     database_id_,
                     table_id_,
                     constraint_name_,
@@ -7690,6 +8064,7 @@ int ObSimpleMockFKParentTableSchema::assign(const ObSimpleMockFKParentTableSchem
     set_mock_fk_parent_table_id(src_schema.mock_fk_parent_table_id_);
     set_schema_version(src_schema.schema_version_);
     if (OB_FAIL(set_mock_fk_parent_table_name(src_schema.mock_fk_parent_table_name_))) {
+      LOG_WARN("failed to set mock_fk_parent_table_name", K(ret));
     }
   }
   return ret;
@@ -7697,7 +8072,7 @@ int ObSimpleMockFKParentTableSchema::assign(const ObSimpleMockFKParentTableSchem
 
 void ObSimpleMockFKParentTableSchema::reset()
 {
-
+  
   database_id_ = OB_INVALID_ID;
   mock_fk_parent_table_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_VERSION;
@@ -7747,8 +8122,11 @@ int ObMockFKParentTableSchema::assign(const ObMockFKParentTableSchema &src_schem
   if (this != &src_schema) {
     reset();
     if (OB_FAIL(ObSimpleMockFKParentTableSchema::assign(src_schema))) {
+      LOG_WARN("failed to assign ObSimpleMockFKParentTableSchema", K(ret), K(src_schema));
     } else if (OB_FAIL(set_foreign_key_infos(src_schema.get_foreign_key_infos()))) {
+      LOG_WARN("failed to assign column_array", K(ret));
     } else if (OB_FAIL(set_column_array(src_schema.get_column_array()))) {
+      LOG_WARN("failed to set column_array", K(ret), K(src_schema.get_column_array()));
     } else if (FALSE_IT(set_operation_type(src_schema.operation_type_))) {
     }
   }
@@ -7798,9 +8176,11 @@ int ObMockFKParentTableSchema::set_foreign_key_infos(const ObIArray<ObForeignKey
   foreign_key_infos_.reset();
   int64_t count = foreign_key_infos.count();
   if (OB_FAIL(foreign_key_infos_.reserve(count))) {
+    LOG_WARN("fail to reserve array", K(ret), K(count));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
       if (OB_FAIL(add_foreign_key_info(foreign_key_infos.at(i)))) {
+        LOG_WARN("failed to add foreign_key_info", K(ret));
       }
     }
   }
@@ -7812,6 +8192,7 @@ int ObMockFKParentTableSchema::add_foreign_key_info(const ObForeignKeyInfo &fore
   int ret = OB_SUCCESS;
   int64_t new_fk_idx = foreign_key_infos_.count();
   if (OB_FAIL(foreign_key_infos_.push_back(ObForeignKeyInfo()))) {
+    LOG_WARN("fail to push back empty element", K(ret), K(new_fk_idx));
   } else {
     const ObString &foreign_key_name = foreign_key_info.foreign_key_name_;
     ObForeignKeyInfo &foreign_info = foreign_key_infos_.at(new_fk_idx);
@@ -7819,6 +8200,7 @@ int ObMockFKParentTableSchema::add_foreign_key_info(const ObForeignKeyInfo &fore
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("placement new return nullptr", K(ret));
     } else if (OB_FAIL(foreign_info.assign(foreign_key_info))) {
+      LOG_WARN("fail to assign foreign key info", K(ret), K(foreign_key_info));
     } else if (!foreign_key_name.empty()
                && OB_FAIL(deep_copy_str(foreign_key_name, foreign_info.foreign_key_name_))) {
       LOG_WARN("failed to deep copy foreign key name", K(ret), K(foreign_key_name));
@@ -7832,9 +8214,11 @@ int ObMockFKParentTableSchema::set_column_array(const ObMockFKParentTableColumnA
   int ret = OB_SUCCESS;
   column_array_.reset();
   if (OB_FAIL(column_array_.reserve(other.count()))) {
+    LOG_WARN("fail to reserve array", K(ret), K(other.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < other.count(); ++i) {
       if (OB_FAIL(add_column_info_to_column_array(other.at(i)))) {
+        LOG_WARN("failed to add_column_info_to_column_array", K(ret), K(i), K(other.at(i).first), K(other.at(i).second));
       }
     }
   }
@@ -7846,6 +8230,7 @@ int ObMockFKParentTableSchema::add_column_info_to_column_array(const std::pair<u
   int ret = OB_SUCCESS;
   ObString column_name;
   if (OB_FAIL(column_array_.push_back(std::make_pair(column_info.first, column_info.second)))) {
+    LOG_WARN("failed to push_back to column_array_", K(ret), K(column_info.first), K(column_info.second));
   } else if (!column_info.second.empty()
              && OB_FAIL(deep_copy_str(column_info.second, column_array_.at(column_array_.count() - 1).second))) {
     LOG_WARN("failed to deep copy column name", K(ret), K(column_info.first), K(column_info.second));
@@ -7896,6 +8281,7 @@ int ObMockFKParentTableSchema::reconstruct_column_array_by_foreign_key_infos(con
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("column is not exist", K(ret), K(foreign_key_infos_.at(i).parent_column_ids_.at(j)), KPC(orig_mock_fk_parent_table_ptr));
           } else if (OB_FAIL(add_column_info_to_column_array(std::make_pair(foreign_key_infos_.at(i).parent_column_ids_.at(j), column_name)))) {
+            LOG_WARN("add_column_info_to_column_array failed", K(ret), K(foreign_key_infos_.at(i).parent_column_ids_.at(j)), K(column_name));
           }
         }
       }
@@ -8049,7 +8435,7 @@ ObIndexNameInfo::ObIndexNameInfo()
 
 void ObIndexNameInfo::reset()
 {
-
+  
   database_id_ = OB_INVALID_ID;
   data_table_id_ = OB_INVALID_ID;
   index_id_ = OB_INVALID_ID;
@@ -8066,8 +8452,9 @@ int ObIndexNameInfo::init(
   const bool c_style = true;
   if (OB_FAIL(ob_write_string(allocator,
       index_schema.get_table_name_str(), index_name_, c_style))) {
+    LOG_WARN("fail to write string", KR(ret), K(index_schema));
   } else {
-
+    
     database_id_ = index_schema.get_database_id();
     data_table_id_ = index_schema.get_data_table_id();
     index_id_ = index_schema.get_table_id();
@@ -8076,6 +8463,7 @@ int ObIndexNameInfo::init(
       original_index_name_ = index_name_;
     } else {
       if (OB_FAIL(ObSimpleTableSchemaV2::get_index_name(index_name_, original_index_name_))) {
+        LOG_WARN("fail to generate index name", KR(ret), K_(index_name));
       }
     }
   }

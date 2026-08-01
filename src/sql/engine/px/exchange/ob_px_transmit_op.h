@@ -249,6 +249,7 @@ int ObPxTransmitOp::send_rows_one_by_one(ObSliceIdxCalc &slice_calc)
         // iter end
         const ObPxTransmitSpec &spec = static_cast<const ObPxTransmitSpec &>(get_spec());
         if (OB_FAIL(try_wait_channel())) {
+          LOG_WARN("failed to wait channel init", K(ret));
         } else if (batch_param_remain_) {
           ret = OB_SUCCESS;
           ObPxNewRow px_eof_row;
@@ -257,10 +258,13 @@ int ObPxTransmitOp::send_rows_one_by_one(ObSliceIdxCalc &slice_calc)
           for (int i = 0; i < task_channels_.count() && OB_SUCC(ret); i++) {
             dtl::ObDtlChannel *ch = task_channels_.at(i);
             if (OB_FAIL(ch->send(px_eof_row, phy_plan_ctx->get_timeout_timestamp(), &eval_ctx_, false))) {
+              LOG_WARN("fail send eof row to slice channel", K(px_eof_row), K(ret));
             } else if (OB_FAIL(ch->push_buffer_batch_info())) {
+              LOG_WARN("channel push back batch failed", K(ret));
             }
           }
-        } else if (OB_FAIL(send_eof_row())) {
+        } else if (OB_FAIL(send_eof_row())) { // overwrite err code
+          LOG_WARN("fail send eof rows to channels", K(ret));
         }
         break;
       }
@@ -268,14 +272,19 @@ int ObPxTransmitOp::send_rows_one_by_one(ObSliceIdxCalc &slice_calc)
     row_count++;
     metric_.count();
     if (OB_FAIL(ret)) {
+      LOG_WARN("fail to get next row", K(ret));
     } else if (OB_FAIL(set_wf_hybrid_slice_id_calc_type(slice_calc))) {
+      LOG_WARN("failed to set window function hybrid distribution", K(ret));
     } else if (OB_FAIL((slice_calc.get_slice_indexes<CALC_TYPE>(
                        get_spec().output_, eval_ctx_, slice_idx_array)))) {
+      LOG_WARN("fail get slice idx", K(ret));
     } else if (dfc_.all_ch_drained()) {
       int tmp_ret = child_->drain_exch();
       if (OB_SUCCESS != tmp_ret) {
+        LOG_WARN("drain exchange data failed", K(tmp_ret));
       }
       ret = OB_ITER_END;
+      LOG_DEBUG("all channel has been drained");
     } else if (NULL != spec.tablet_id_expr_
                && OB_FAIL(slice_calc.get_previous_row_tablet_id(tablet_id))) {
       LOG_WARN("failed to get previous row tablet_id", K(ret));
@@ -290,7 +299,9 @@ int ObPxTransmitOp::send_rows_one_by_one(ObSliceIdxCalc &slice_calc)
   }
   if (OB_ITER_END == ret) {
     ret = OB_SUCCESS;
+    LOG_TRACE("transmit meet a iter end");
   }
+  LOG_TRACE("Transmit time record", K(row_count), K(ret));
   return ret;
 }
 
@@ -311,7 +322,9 @@ int ObPxTransmitOp::send_rows_in_batch(ObSliceIdxCalc &slice_calc)
     if (dfc_.all_ch_drained()) {
       int tmp_ret = child_->drain_exch();
       if (OB_SUCCESS != tmp_ret) {
+        LOG_WARN("drain exchange data failed", K(tmp_ret));
       }
+      LOG_TRACE("all channel has been drained");
       break;
     }
     const ObPxTransmitSpec &spec = static_cast<const ObPxTransmitSpec &>(get_spec());
@@ -326,7 +339,9 @@ int ObPxTransmitOp::send_rows_in_batch(ObSliceIdxCalc &slice_calc)
         row_count += 1;
         metric_.count();
         if (OB_FAIL(set_wf_hybrid_slice_id_calc_type(slice_calc))) {
+          LOG_WARN("failed to set wf hybrid keys", K(ret));
         } else if (OB_FAIL((slice_calc.get_slice_indexes<CALC_TYPE>(get_spec().output_, eval_ctx_, slice_idx_array)))) {
+          LOG_WARN("fail get slice idx", K(ret));
         } else if (NULL != spec.tablet_id_expr_
                    && OB_FAIL(slice_calc.get_previous_row_tablet_id(tablet_id))) {
           LOG_WARN("failed to get previous row tablet_id", K(ret));
@@ -334,6 +349,7 @@ int ObPxTransmitOp::send_rows_in_batch(ObSliceIdxCalc &slice_calc)
         LOG_DEBUG("send rows batch without prefetch", K(i), K(slice_idx_array), K(tablet_id.get_int()));
         FOREACH_CNT_X(slice_idx, slice_idx_array, OB_SUCC(ret)) {
           if (OB_FAIL(send_row(*slice_idx, send_row_time_recorder, tablet_id.get_int()))) {
+            LOG_WARN("fail emit row to interm result", K(ret), K(slice_idx_array));
           }
         }
       }
@@ -342,6 +358,7 @@ int ObPxTransmitOp::send_rows_in_batch(ObSliceIdxCalc &slice_calc)
       if (OB_FAIL((slice_calc.get_slice_idx_batch<CALC_TYPE>(spec_.output_, eval_ctx_,
                                                *brs_.skip_, brs_.size_,
                                                indexes)))) {
+        LOG_WARN("calc slice indexes failed", K(ret));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < brs_.size_; i++) {
           if (brs_.skip_->at(i) || indexes[i] < 0) { continue; }
@@ -367,12 +384,14 @@ int ObPxTransmitOp::send_rows_in_batch(ObSliceIdxCalc &slice_calc)
           row_count += 1;
           metric_.count();
           if (OB_FAIL(send_row(indexes[i], send_row_time_recorder, tablet_id.get_int()))) {
+            LOG_WARN("fail emit row to interm result", K(ret), K(indexes[i]));
           }
         }
       }
     }
     if (OB_SUCC(ret) && brs_.end_) {
       if (OB_FAIL(try_wait_channel())) {
+        LOG_WARN("failed to wait channel init", K(ret));
       } else if (batch_param_remain_) {
         ObPxNewRow px_eof_row;
         px_eof_row.set_eof_row();
@@ -385,15 +404,19 @@ int ObPxTransmitOp::send_rows_in_batch(ObSliceIdxCalc &slice_calc)
         for (int i = 0; i < task_channels_.count() && OB_SUCC(ret); i++) {
           dtl::ObDtlChannel *ch = task_channels_.at(i);
           if (OB_FAIL(ch->send(px_eof_row, phy_plan_ctx->get_timeout_timestamp(), &eval_ctx_, false))) {
+            LOG_WARN("fail send eof row to slice channel", K(px_eof_row), K(ret));
           } else if (OB_FAIL(ch->push_buffer_batch_info())) {
+            LOG_WARN("channel push back batch failed", K(ret));
           }
         }
       } else if (OB_FAIL(send_eof_row())) {
+        LOG_WARN("fail send eof rows to channels", K(ret));
       }
       break;
     }
     // for those break out ops
   }
+  LOG_TRACE("Transmit time record", K(row_count), K(ret));
   return ret;
 }
 
@@ -426,9 +449,12 @@ inline int ObPxTransmitOp::broadcast_rows(ObSliceIdxCalc &slice_calc)
     row_count++;
     metric_.count();
     if (OB_FAIL(ret)) {
+      LOG_WARN("fail to get next row", K(ret));
     } else if (dfc_.all_ch_drained()) {
+      LOG_DEBUG("all channel has been drained");
       break;
     } else if (OB_FAIL(try_wait_channel())) {
+      LOG_WARN("failed to wait channel", K(ret));
     } else {
       ObPxNewRow px_row(get_spec().output_, data_msg_type_);
       ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx_);
@@ -446,11 +472,14 @@ inline int ObPxTransmitOp::broadcast_rows(ObSliceIdxCalc &slice_calc)
 
     if (OB_SUCC(ret) && reach_end) {
       if (OB_FAIL(try_wait_channel())) {
+        LOG_WARN("failed to wait channel", K(ret));
       } else if (OB_FAIL(broadcast_eof_row())) {
+        LOG_WARN("fail send eof rows to channels", K(ret));
       }
       break;
     }
   }
+  LOG_TRACE("Transmit time record", K(row_count), K(ret));
   return ret;
 }
 

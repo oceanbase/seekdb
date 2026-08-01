@@ -45,10 +45,12 @@ int ObUpdateStmt::deep_copy_stmt_struct(ObIAllocator &allocator,
   } else if (OB_FAIL(ObDelUpdStmt::deep_copy_stmt_struct(allocator,
                                                          expr_copier,
                                                          input))) {
+    LOG_WARN("failed to deep copy stmt struct", K(ret));
   } else if (OB_FAIL(deep_copy_stmt_objects<ObUpdateTableInfo>(allocator,
                                                                expr_copier,
                                                                other.table_info_,
                                                                table_info_))) {
+    LOG_WARN("failed do deep copy table info", K(ret));
   } else { /*do nothing*/ }
 
   return ret;
@@ -58,7 +60,9 @@ int ObUpdateStmt::assign(const ObUpdateStmt &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDelUpdStmt::assign(other))) {
+    LOG_WARN("failed to copy stmt", K(ret));
   } else if (OB_FAIL(table_info_.assign(other.table_info_))) {
+    LOG_WARN("failed to assign exprs", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -91,6 +95,7 @@ int ObUpdateStmt::get_assign_values(ObIArray<ObRawExpr *> &exprs,
         } else if (assign.expr_->has_flag(CNT_ALIAS) && !with_vector_assgin) {
           /* do nothing */
         } else if (OB_FAIL(exprs.push_back(assign.expr_))) {
+          LOG_WARN("failed to push back assign value expr", K(ret));
         }
       }
     }
@@ -117,6 +122,7 @@ int ObUpdateStmt::get_vector_assign_values(ObQueryRefRawExpr *query_ref,
           const ObAssignment &assign = table_info_.at(i)->assignments_.at(j);
           ObAliasRefRawExpr *alias = NULL;
           if (OB_FAIL(ObRawExprUtils::find_alias_expr(assign.expr_, alias))) {
+            LOG_WARN("failed to find alias expr", K(ret));
           } else if (alias == NULL) {
             // do nothing
           } else if (alias->get_param_expr(0) == query_ref) {
@@ -148,6 +154,7 @@ int ObUpdateStmt::part_key_is_updated(bool &is_updated) const
       LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(check_part_key_is_updated(table_info_.at(i)->assignments_,
                                                  is_updated))) {
+      LOG_WARN("failed to check partition key is updated", K(ret));
     } else { /*do nothing*/ }
   }
   return  ret;
@@ -164,6 +171,7 @@ int ObUpdateStmt::get_assignments_exprs(ObIArray<ObRawExpr*> &exprs) const
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < table_info->assignments_.count(); ++j) {
       if (OB_FAIL(exprs.push_back(table_info->assignments_.at(j).expr_))) {
+        LOG_WARN("failed to push back expr", K(ret));
       }
     }
   }
@@ -174,6 +182,7 @@ int ObUpdateStmt::get_dml_table_infos(ObIArray<ObDmlTableInfo*>& dml_table_info)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(append(dml_table_info, table_info_))) {
+    LOG_WARN("failed to append table info", K(ret));
   }
   return ret;
 }
@@ -182,6 +191,7 @@ int ObUpdateStmt::get_dml_table_infos(ObIArray<const ObDmlTableInfo*>& dml_table
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(append(dml_table_info, table_info_))) {
+    LOG_WARN("failed to append table info", K(ret));
   }
   return ret;
 }
@@ -195,6 +205,7 @@ int ObUpdateStmt::get_view_check_exprs(ObIArray<ObRawExpr*>& view_check_exprs) c
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get null table info", K(ret));
     } else if (OB_FAIL(append(view_check_exprs, table_info->view_check_exprs_))) {
+      LOG_WARN("failed to append view check exprs", K(ret));
     }
   }
   return ret;
@@ -222,6 +233,7 @@ int ObUpdateStmt::remove_table_item_dml_info(const TableItem* table)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("can not remove all dml table", K(ret));
     } else if (OB_FAIL(table_info_.remove(idx))) {
+      LOG_WARN("failed to remove dml table info", K(ret));
     }
   }
   return ret;
@@ -244,6 +256,7 @@ int ObUpdateStmt::remove_invalid_assignment()
         } else if (!assign.column_expr_->is_const_expr()) {
           // do nothing
         } else if (OB_FAIL(table_info->assignments_.remove(j))) {
+          LOG_WARN("failed to remove assignment", K(ret));
         }
       }
     }

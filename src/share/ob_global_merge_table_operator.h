@@ -31,14 +31,13 @@ namespace share
 {
 struct ObGlobalMergeInfo;
 class ObMergeInfoTableStorage;
-class ObSQLiteConnectionPool;
 
 // CRUD operation to __all_merge_info table
 class ObGlobalMergeTableOperator
 {
 public:
   // Initialize SQLite storage (called once at startup)
-  static int init(ObSQLiteConnectionPool &meta_db_pool);
+  static int init();
   static int load_global_merge_info(common::ObISQLClient &sql_client,
                                     share::ObGlobalMergeInfo &info,
                                     const bool print_sql = false);

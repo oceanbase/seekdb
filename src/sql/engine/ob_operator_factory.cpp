@@ -305,6 +305,8 @@ struct GenSpecHelper
                K(ret), KP(derived_op), KP(derived_spec),
                K(log_op.get_name()), K(ob_phy_operator_type_str(spec.type_)));
     } else if (OB_FAIL(cg.generate_spec(*derived_op, *derived_spec, in_root_job))) {
+      LOG_WARN("generate operator specification failed",
+               K(ret), K(log_op.get_name()), K(ob_phy_operator_type_str(spec.type_)));
     }
 
     return ret;
@@ -355,6 +357,7 @@ int ObOperatorFactory::alloc_op_spec(ObIAllocator &alloc, const ObPhyOperatorTyp
     LOG_WARN("invalid child cnt", K(ret), K(child_cnt), K(type));
   } else if (OB_FAIL(G_ALLOC_FUNCTION_ARRAY[type].spec_func_(
               alloc, type, child_cnt, spec))) {
+    LOG_WARN("allocate operator specification failed", K(ret));
   }
   return ret;
 }
@@ -372,6 +375,7 @@ int ObOperatorFactory::alloc_operator(ObIAllocator &alloc, ObExecContext &exec_c
              K(ret), K(child_cnt), K(type));
   } else if (OB_FAIL(G_ALLOC_FUNCTION_ARRAY[type].op_func_(
               alloc, exec_ctx, spec, input, child_cnt, op))) {
+    LOG_WARN("allocate operator failed", K(ret));
   }
 
   return ret;
@@ -390,6 +394,7 @@ int ObOperatorFactory::alloc_op_input(ObIAllocator &alloc, ObExecContext &exec_c
              K(ret), K(type));
   } else if (OB_FAIL(G_ALLOC_FUNCTION_ARRAY[type].input_func_(
               alloc, exec_ctx, spec, input))) {
+    LOG_WARN("allocate operator input failed", K(ret));
   }
   return ret;
 }
@@ -407,6 +412,7 @@ int ObOperatorFactory::generate_spec(ObStaticEngineCG &cg,
              K(ret), K(type));
   } else if (OB_FAIL(G_ALLOC_FUNCTION_ARRAY[type].gen_spec_func_(
               cg, log_op, spec, in_root_job))) {
+    LOG_WARN("generate operator spec failed", K(type), K(ret));
   }
 
   return ret;

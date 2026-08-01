@@ -18,7 +18,6 @@
 #define OCEANBASE_SHARE_OB_MAX_ID_FETCHER_H_
 
 #include "share/ob_define.h"
-#include "share/ob_i_max_id_cache.h"
 
 namespace oceanbase
 {
@@ -31,7 +30,7 @@ class ObString;
 namespace share
 {
 // represent the different max_used_xxx_id type in __all_sys_stat table
-enum ObMaxIdType : int
+enum ObMaxIdType
 {
   OB_MAX_USED_SERVER_ID_TYPE = 4,
   OB_MAX_USED_DDL_TASK_ID_TYPE,
@@ -64,7 +63,6 @@ class ObMaxIdFetcher
 {
 public:
   explicit ObMaxIdFetcher(common::ObMySQLProxy &proxy);
-  ObMaxIdFetcher(common::ObMySQLProxy &proxy, ObIMaxIdCache *max_id_cache);
   explicit ObMaxIdFetcher(common::ObMySQLProxy &proxy, const int32_t group_id);
   virtual ~ObMaxIdFetcher();
 
@@ -90,7 +88,7 @@ public:
   static int str_to_uint(const common::ObString &str, uint64_t &value);
 private:
   // (max_id - size, max_id] is valid
-  int fetch_max_id_from_cache_(ObMaxIdType id_type,
+  static int fetch_max_id_from_cache_(ObMaxIdType id_type,
       uint64_t &max_id, const uint64_t size);
   int fetch_new_max_id_from_inner_table_(const ObMaxIdType max_id_type,
       uint64_t &max_id, const uint64_t initial, const uint64_t size);
@@ -114,7 +112,6 @@ private:
 
 private:
   common::ObMySQLProxy &proxy_;
-  ObIMaxIdCache *max_id_cache_;
   static lib::ObMutex mutex_;
   int32_t group_id_;
 

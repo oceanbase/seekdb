@@ -38,6 +38,7 @@ int ObUpdateStmtPrinter::do_print()
                        print_params_,
                        param_store_);
     if (OB_FAIL(print())) {
+      LOG_WARN("fail to print stmt", K(ret));
     }
   }
 
@@ -53,6 +54,7 @@ int ObUpdateStmtPrinter::print()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt_ should not be NULL", K(ret));
   } else if (OB_FAIL(print_basic_stmt())) {
+    LOG_WARN("fail to print basic stmt", K(ret), K(*stmt_));
   } else { /*do nothing*/ }
 
   return ret;
@@ -66,13 +68,21 @@ int ObUpdateStmtPrinter::print_basic_stmt()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt_ should not be NULL", K(ret));
   } else if (OB_FAIL(print_with())) {
+    LOG_WARN("failed to print with", K(ret));
   } else if (OB_FAIL(print_temp_table_as_cte())) {
+    LOG_WARN("failed to print cte", K(ret));
   } else if (OB_FAIL(print_update())) {
+    LOG_WARN("fail to print select", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_from(false/*not need from, only print table name*/))) {
+    LOG_WARN("fail to print from", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_set())) {
+    LOG_WARN("fail to print from", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_where())) {
+    LOG_WARN("fail to print where", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_order_by())) {
+    LOG_WARN("fail to print order by", K(ret), K(*stmt_));
   } else if (OB_FAIL(print_limit())) {
+    LOG_WARN("fail to print limit", K(ret), K(*stmt_));
   } else {
     // do-nothing
   }
@@ -93,7 +103,8 @@ int ObUpdateStmtPrinter::print_update()
   } else {
     DATA_PRINTF("update ");
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(print_hint())) {
+      if (OB_FAIL(print_hint())) { // hint
+        LOG_WARN("fail to print hint", K(ret), K(*stmt_));
       }
     }
   }
@@ -132,13 +143,16 @@ int ObUpdateStmtPrinter::print_set()
           } else if (assign.is_implicit_) {
             continue;
           } else if (OB_FAIL(ObRawExprUtils::find_alias_expr(assign.expr_, alias))) {
+            LOG_WARN("failed to find alias expr", K(ret));
           } else if (alias == NULL) {
             if (OB_FAIL(print_simple_assign(assign))) {
+              LOG_WARN("failed to print simple assign expr", K(ret));
             } else {
               DATA_PRINTF(",");
             }
           } else if (alias->get_project_index() == 0) {
             if (OB_FAIL(print_vector_assign(table_info->assignments_, alias->get_param_expr(0)))) {
+              LOG_WARN("failed to print vector assign", K(ret));
             } else if (OB_SUCC(ret)) {
               DATA_PRINTF(",");
             }
@@ -160,16 +174,19 @@ int ObUpdateStmtPrinter::print_simple_assign(const ObAssignment &assign)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("assign is invalid", K(ret), K(assign.expr_), K(assign.column_expr_));
   } else if (OB_FAIL(expr_printer_.do_print(assign.column_expr_, T_FIELD_LIST_SCOPE))) {
+    LOG_WARN("fail to print target column", K(ret));
   } else {
     DATA_PRINTF(" = ");
   }
   if (OB_SUCC(ret)) {
     ObRawExpr *tmp_expr = NULL;
     if (OB_FAIL(ObRawExprUtils::erase_inner_added_exprs(assign.expr_, tmp_expr))) {
+      LOG_WARN("erase inner cast expr failed", K(ret));
     } else if (OB_ISNULL(tmp_expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("expr is null");
     } else if (OB_FAIL(expr_printer_.do_print(tmp_expr, T_FIELD_LIST_SCOPE))) {
+      LOG_WARN("fail to print select expr", K(ret));
     }
   }
   return ret;
@@ -187,6 +204,7 @@ int ObUpdateStmtPrinter::print_vector_assign(const ObAssignments &assignments,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("query ref expr is null", K(ret), K(query_ref_expr), K(stmt));
   } else if (OB_FAIL(left_columns.prepare_allocate(stmt->get_select_item_size()))) {
+    LOG_WARN("failed to prepare allocate select item size", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < assignments.count(); ++i) {
     ObColumnRefRawExpr *col = NULL;
@@ -199,6 +217,7 @@ int ObUpdateStmtPrinter::print_vector_assign(const ObAssignments &assignments,
     } else if (col->is_generated_column()) {
       // skip
     } else if (OB_FAIL(ObRawExprUtils::find_alias_expr(value_expr, alias))) {
+      LOG_WARN("failed to find alias expr", K(ret));
     } else if (alias == NULL) {
       // do nothing
     } else if (alias->get_param_expr(0) == query_ref_expr) {
@@ -215,6 +234,7 @@ int ObUpdateStmtPrinter::print_vector_assign(const ObAssignments &assignments,
     DATA_PRINTF("%c", (i == 0 ? '(' : ' '));
     if (OB_SUCC(ret)) {
       if (OB_FAIL(expr_printer_.do_print(left_columns.at(i), T_FIELD_LIST_SCOPE))) {
+        LOG_WARN("fail to print target column", K(ret));
       } else {
         DATA_PRINTF("%c", (i == left_columns.count() - 1 ? ')' : ','));
       }
@@ -225,6 +245,7 @@ int ObUpdateStmtPrinter::print_vector_assign(const ObAssignments &assignments,
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(expr_printer_.do_print(query_ref_expr, T_FIELD_LIST_SCOPE))) {
+      LOG_WARN("failed to print query ref expr", K(ret));
     }
   }
   return ret;

@@ -17,16 +17,18 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/cmd/ob_alter_system_executor.h"
-#include "query/command/ob_local_command_service.h"
-#include "query/command/ob_root_command_service.h"
-#include "share/rc/ob_server_runtime.h"
-#include "share/ob_tenant_role_transition_service.h"
+#include "share/rc/ob_module_provider.h"
+#include "rootserver/ob_local_ddl_serial_call.h"
 #include "share/ob_ex_rpc.h"
 #include "share/io/ob_io_manager.h"
 #include "share/io/ob_io_calibration.h"
-#include "share/ob_server_struct.h"
-#include "data_plane/scheduler/ob_dag_warning_history.h"
-#include "sql/pl/pl_cache/ob_pl_cache_mgr.h"
+#include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "storage/meta_store/ob_local_storage_meta_service.h"
+#include "observer/ob_server.h"
+#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "observer/omt/ob_server_runtime.h" //ObServerRuntime
+#include "rootserver/freeze/ob_major_freeze_helper.h" //ObMajorFreezeHelper
+#include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 
 namespace oceanbase
@@ -49,14 +51,19 @@ int ObFreezeExecutor::execute(ObExecContext &ctx, ObFreezeStmt &stmt)
     if (!stmt.is_major_freeze()) {
       ObMinorFreezeArg arg;
       arg.tablet_id_ = stmt.get_tablet_id();
-      if (OB_FAIL(ctx.root_command_service().root_minor_freeze(arg))) {
+      if (OB_FAIL(GCTX.local_management_service_->root_minor_freeze(arg))) {
+        LOG_WARN("minor freeze failed", K(arg), K(ret), "dst", GCTX.self_addr());
       }
     } else if (stmt.get_tablet_id().is_valid()) {
-      if (OB_FAIL(ctx.root_command_service().tablet_major_freeze(
-              stmt.get_tablet_id()))) {
+      rootserver::ObTabletMajorFreezeParam param;
+      param.tablet_id_ = stmt.get_tablet_id();
+      if (OB_FAIL(rootserver::ObMajorFreezeHelper::tablet_major_freeze(param))) {
+        LOG_WARN("failed to schedule tablet major freeze", K(ret), K(param));
       }
     } else {
-      if (OB_FAIL(ctx.root_command_service().major_freeze())) {
+      rootserver::ObMajorFreezeParam param;
+      param.freeze_reason_ = rootserver::MF_USER_REQUEST;
+      if (OB_FAIL(rootserver::ObMajorFreezeHelper::major_freeze(param))) {
         if (OB_FROZEN_INFO_ALREADY_EXIST == ret
             || OB_MAJOR_FREEZE_NOT_FINISHED == ret) {
           const char *warn_buf =
@@ -64,10 +71,10 @@ int ObFreezeExecutor::execute(ObExecContext &ctx, ObFreezeStmt &stmt)
           LOG_USER_WARN(OB_FROZEN_INFO_ALREADY_EXIST, warn_buf);
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("failed to launch major freeze", KR(ret));
+          LOG_WARN("failed to launch major freeze", KR(ret), K(param));
         }
       }
-      LOG_INFO("major freeze request finished", KR(ret));
+      LOG_INFO("major freeze request finished", KR(ret), K(param));
     }
   }
   return ret;
@@ -82,7 +89,7 @@ int ObFlushCacheExecutor::execute(ObExecContext &ctx, ObFlushCacheStmt &stmt)
   switch (stmt.flush_cache_arg_.cache_type_) {
       case CACHE_TYPE_LIB_CACHE: {
         SERVER_MODULE_SCOPE {
-          ObPlanCache *plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
+          ObPlanCache *plan_cache = share::g_mp->plan_cache();
           if (OB_ISNULL(plan_cache)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("plan cache is null", K(ret));
@@ -96,7 +103,7 @@ int ObFlushCacheExecutor::execute(ObExecContext &ctx, ObFlushCacheStmt &stmt)
       }
       case CACHE_TYPE_PLAN: {
         SERVER_MODULE_SCOPE {
-          ObPlanCache *plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
+          ObPlanCache *plan_cache = share::g_mp->plan_cache();
           if (OB_ISNULL(plan_cache)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("plan cache is null", K(ret));
@@ -115,7 +122,7 @@ int ObFlushCacheExecutor::execute(ObExecContext &ctx, ObFlushCacheStmt &stmt)
       }
       case CACHE_TYPE_PL_OBJ: {
         SERVER_MODULE_SCOPE {
-          ObPlanCache *plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
+          ObPlanCache *plan_cache = share::g_mp->plan_cache();
           const bool by_schema_id =
               common::OB_INVALID_ID != stmt.flush_cache_arg_.schema_id_;
           if (OB_ISNULL(plan_cache)) {
@@ -154,7 +161,7 @@ int ObFlushCacheExecutor::execute(ObExecContext &ctx, ObFlushCacheStmt &stmt)
       }
       case CACHE_TYPE_PS_OBJ: {
         SERVER_MODULE_SCOPE {
-          ObPsCache *ps_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPsCache>();
+          ObPsCache *ps_cache = share::g_mp->ps_cache();
           if (OB_ISNULL(ps_cache)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("ps cache is null", K(ret));
@@ -178,11 +185,13 @@ int ObFlushKVCacheExecutor::execute(ObExecContext &ctx, ObFlushKVCacheStmt &stmt
   int ret = OB_SUCCESS;
   if (stmt.cache_name_.is_empty()) {
     if (OB_FAIL(common::ObKVGlobalCache::get_instance().erase_cache())) {
+      LOG_WARN("clear kv cache failed", K(ret));
     } else {
       LOG_INFO("success erase all kvcache");
     }
   } else if (OB_FAIL(common::ObKVGlobalCache::get_instance().erase_cache(
                  stmt.cache_name_.ptr()))) {
+    LOG_WARN("clear kv cache failed", K(ret), K(stmt.cache_name_));
   } else {
     LOG_INFO("success erase kvcache", K(stmt.cache_name_));
   }
@@ -205,7 +214,7 @@ int ObFlushDagWarningsExecutor::execute(ObExecContext &ctx, ObFlushDagWarningsSt
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else {
-    share::clear_dag_warning_history();
+    share::g_mp->dag_warning_history_manager()->clear();
   }
   return ret;
 }
@@ -220,11 +229,13 @@ int ObAdminMergeExecutor::execute(ObExecContext &ctx, ObAdminMergeStmt &stmt)
   } else {
     switch (stmt.get_merge_type()) {
       case ObAdminMergeStmt::MergeType::SUSPEND:
-        if (OB_FAIL(ctx.root_command_service().suspend_merge())) {
+        if (OB_FAIL(rootserver::ObMajorFreezeHelper::suspend_merge())) {
+          LOG_WARN("fail to suspend merge", KR(ret));
         }
         break;
       case ObAdminMergeStmt::MergeType::RESUME:
-        if (OB_FAIL(ctx.root_command_service().resume_merge())) {
+        if (OB_FAIL(rootserver::ObMajorFreezeHelper::resume_merge())) {
+          LOG_WARN("fail to resume merge", KR(ret));
         }
         break;
       default:
@@ -247,10 +258,11 @@ int ObRefreshMemStatExecutor::execute(ObExecContext &ctx, ObRefreshMemStatStmt &
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_ISNULL(ctx.get_local_command_service())) {
+  } else if (OB_ISNULL(GCTX.ob_service_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("local command service is null", K(ret));
-  } else if (OB_FAIL(ctx.local_command_service().refresh_memory_stat())) {
+    LOG_WARN("ob service is null", K(ret));
+  } else if (OB_FAIL(GCTX.ob_service_->refresh_memory_stat())) {
+    LOG_WARN("refresh memory stat failed", K(ret));
   }
   return ret;
 }
@@ -271,6 +283,7 @@ int ObRefreshIOCalibraitonExecutor::execute(ObExecContext &ctx, ObRefreshIOCalib
     for (int64_t i = 0; OB_SUCC(ret) && i < param.calibration_list_.count(); ++i) {
       const ObIOBenchResult &item = param.calibration_list_.at(i);
       if (OB_FAIL(io_ability.add_measure_item(item))) {
+        LOG_WARN("add io calibration item failed", K(ret), K(item));
       }
     }
     if (OB_SUCC(ret) && param.calibration_list_.count() > 0 && !io_ability.is_valid()) {
@@ -285,34 +298,6 @@ int ObRefreshIOCalibraitonExecutor::execute(ObExecContext &ctx, ObRefreshIOCalib
   return ret;
 }
 
-int ObSwitchRoleExecutor::execute(ObExecContext &ctx, ObSwitchRoleStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(ctx);
-  share::ObTenantRoleTransitionOp op = share::ObTenantRoleTransitionOp::INVALID;
-  share::ObITenantRoleTransitionService *transition_service = nullptr;
-  if (stmt::T_SWITCHOVER_TO_STANDBY == stmt.get_stmt_type()) {
-    op = share::ObTenantRoleTransitionOp::SWITCHOVER_TO_STANDBY;
-  } else if (stmt::T_SWITCHOVER_TO_PRIMARY == stmt.get_stmt_type()) {
-    op = share::ObTenantRoleTransitionOp::SWITCHOVER_TO_PRIMARY;
-  } else if (stmt::T_ACTIVATE_STANDBY == stmt.get_stmt_type()) {
-    op = share::ObTenantRoleTransitionOp::FAILOVER_TO_PRIMARY;
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected switch role statement", KR(ret), K(stmt));
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(transition_service =
-      share::server_service<share::ObITenantRoleTransitionService>())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("server role transition service is not initialized", KR(ret), K(stmt));
-  } else if (OB_FAIL(transition_service->execute(op, stmt.is_verify()))) {
-    LOG_WARN("failed to execute server role transition", KR(ret), K(op), K(stmt));
-  }
-  return ret;
-}
-
 int ObSetConfigExecutor::execute(ObExecContext &ctx, ObSetConfigStmt &stmt)
 {
   int ret = OB_SUCCESS;
@@ -322,8 +307,8 @@ int ObSetConfigExecutor::execute(ObExecContext &ctx, ObSetConfigStmt &stmt)
   } else if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(ctx.root_command_service().admin_set_config(
-                 stmt.get_rpc_arg()))) {
+  } else if (OB_FAIL(GCTX.local_management_service_->admin_set_config(stmt.get_rpc_arg()))) {
+    LOG_WARN("set config rpc failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
   }
   return ret;
 }
@@ -331,11 +316,12 @@ int ObSetConfigExecutor::execute(ObExecContext &ctx, ObSetConfigStmt &stmt)
 int ObSetTPExecutor::execute(ObExecContext &ctx, ObSetTPStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(ctx.get_local_command_service())) {
+  UNUSED(ctx);
+  if (OB_ISNULL(GCTX.ob_service_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("local command service is null", K(ret));
-  } else if (OB_FAIL(ctx.local_command_service().set_tracepoint(
-                 stmt.get_param()))) {
+    LOG_WARN("ob_service_ is null", K(ret));
+  } else if (OB_FAIL(GCTX.ob_service_->set_tracepoint(stmt.get_param()))) {
+    LOG_WARN("set tracepoint failed", K(ret), K(stmt.get_param()));
   } else {
     LOG_INFO("set tracepoint locally", K(stmt.get_param()));
   }
@@ -350,7 +336,8 @@ int ObClearMergeErrorExecutor::execute(ObExecContext &ctx, ObClearMergeErrorStmt
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(ctx.root_command_service().clear_merge_error())) {
+  } else if (OB_FAIL(rootserver::ObMajorFreezeHelper::clear_merge_error())) {
+    LOG_WARN("clear merge error failed", K(ret));
   }
   return ret;
 }
@@ -366,15 +353,15 @@ int ObCancelTaskExecutor::execute(ObExecContext &ctx, ObCancelTaskStmt &stmt)
 
   LOG_INFO("cancel sys task log", K(stmt.get_task_id()), K(stmt.get_cmd_type()));
 
-  query::ObILocalCommandService *local_commands =
-      ctx.get_local_command_service();
-  if (OB_ISNULL(local_commands)) {
+  if (NULL == GCTX.ob_service_) {
     ret = OB_ERR_SYS;
-    LOG_ERROR("local command service is not bound", K(ret));
+    LOG_ERROR("GCTX must not inited", K(ret), KP(GCTX.ob_service_));
   } else if (OB_FAIL(parse_task_id(stmt.get_task_id(), task_id))) {
+    LOG_WARN("failed to parse task id", K(ret), K(stmt.get_task_id()));
   } else if (OB_FAIL(ex_rpc::sync_call([&]{
-    return local_commands->cancel_sys_task(task_id);
+    return GCTX.ob_service_->cancel_sys_task(task_id);
   }))) {
+    LOG_WARN("failed to cancel sys task", K(ret), K(task_id));
   }
   return ret;
 }
@@ -404,7 +391,9 @@ int ObCancelTaskExecutor::fetch_sys_task_info(
 	  	ret = OB_ERR_UNEXPECTED;
 	  	LOG_WARN("sql proxy or session from exec context is NULL", K(ret), K(sql_proxy), K(cur_sess));
 	  } else if (OB_FAIL(read_sql.append_fmt(sql_str, task_id.length(), task_id.ptr()))) {
+	  	LOG_WARN("fail to generate sql", K(ret), K(read_sql), K(*cur_sess), K(task_id));
 	  } else if (OB_FAIL(sql_proxy->read(res, read_sql.ptr()))) {
+	  	LOG_WARN("fail to read by sql proxy", K(ret), K(read_sql));
 	  } else if (OB_ISNULL(result_set = res.get_result())) {
 	  	ret = OB_ERR_UNEXPECTED;
 	  	LOG_WARN("result set is NULL", K(ret), K(read_sql));
@@ -472,8 +461,8 @@ int ObResetConfigExecutor::execute(ObExecContext &ctx, ObResetConfigStmt &stmt)
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(ctx.root_command_service().admin_set_config(
-                 stmt.get_rpc_arg()))) {
+  } else if (OB_FAIL(GCTX.local_management_service_->admin_set_config(stmt.get_rpc_arg()))) {
+    LOG_WARN("set config rpc failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
   }
   return ret;
 }

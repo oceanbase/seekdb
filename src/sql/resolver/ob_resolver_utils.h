@@ -29,8 +29,8 @@
 #include "sql/resolver/dml/ob_del_upd_stmt.h"
 #include "sql/parser/parse_node.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "sql/pl/ob_pl.h"
-#include "sql/pl/ob_pl_stmt.h"
+#include "pl/ob_pl.h"
+#include "pl/ob_pl_stmt.h"
 
 #define LOG_WARN_IGNORE_COL_NOTFOUND(ret, fmt, args...) \
   do {\
@@ -131,7 +131,6 @@ public:
   static int resolve_local_runtime_selector(const ParseNode *runtime_selector);
   static int get_user_type(common::ObIAllocator *allocator,
                            ObSQLSessionInfo *session_info,
-                           ObPlanCache *plan_cache,
                            common::ObMySQLProxy *sql_proxy,
                            share::schema::ObSchemaGetterGuard *schema_guard,
                            pl::ObPLPackageGuard &package_guard,

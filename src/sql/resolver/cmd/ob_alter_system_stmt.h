@@ -20,7 +20,7 @@
 #include "sql/resolver/cmd/ob_system_cmd_stmt.h"
 #include "share/ob_rpc_struct.h"
 #include "share/io/ob_io_calibration.h"
-#include "data_plane/scheduler/ob_sys_task_stat.h"
+#include "observer/scheduler/ob_sys_task_stat.h"
 namespace oceanbase
 {
 namespace sql
@@ -173,20 +173,6 @@ public:
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(param));
 private:
   ObRefreshIOCalibrationParam param_;
-};
-
-class ObSwitchRoleStmt : public ObSystemCmdStmt
-{
-public:
-  explicit ObSwitchRoleStmt(stmt::StmtType stmt_type = stmt::T_NONE)
-    : ObSystemCmdStmt(stmt_type), is_verify_(false)
-  {}
-  virtual ~ObSwitchRoleStmt() {}
-  void set_verify(const bool is_verify) { is_verify_ = is_verify; }
-  bool is_verify() const { return is_verify_; }
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(is_verify));
-private:
-  bool is_verify_;
 };
 
 class ObSetConfigStmt : public ObSystemCmdStmt

@@ -1540,7 +1540,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_INVALID_OPTION__USER_ERROR_MSG "%s"
 #define OB_RPC_NEED_RECONNECT__USER_ERROR_MSG "%s"
 #define OB_ACTIVE_MEMTBALE_NOT_EXSIT__USER_ERROR_MSG "active memtable not exist"
-#define OB_STANDBY_DATABASE_READ_ONLY__USER_ERROR_MSG "standby tenant is read only"
+#define OB_STANDBY_DATABASE_READ_ONLY__USER_ERROR_MSG "standby database is read only"
 #define OB_ARRAY_BINDING_SWITCH_ITERATOR__USER_ERROR_MSG "array binding needs to switch iterator"
 #define OB_ERR_CHECK_DROP_COLUMN_FAILED__USER_ERROR_MSG "check drop column failed"
 #define OB_ERR_PARAM_INVALID__USER_ERROR_MSG "parameter cannot be modified because specified value is invalid"

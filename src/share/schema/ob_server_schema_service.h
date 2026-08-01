@@ -34,7 +34,6 @@
 #include "share/schema/ob_trigger_mgr.h"
 #include "share/schema/ob_mock_fk_parent_table_mgr.h"
 #include "share/schema/ob_ai_model_mgr.h"
-#include "share/ob_server_status.h"
 
 namespace oceanbase
 {
@@ -49,7 +48,6 @@ class ObTimeoutCtx;
 }
 namespace share
 {
-class ObSchemaStatusProxy;
 typedef int (*schema_create_func)(share::schema::ObTableSchema &table_schema);
 namespace schema
 {
@@ -62,7 +60,7 @@ enum NewVersionType {
 
 struct SchemaKey
 {
-
+  
   union {
     uint64_t user_id_;
     uint64_t grantee_id_;
@@ -185,7 +183,7 @@ struct SchemaKey
   }
   ObObjPrivSortKey get_obj_priv_key() const
   {
-    return ObObjPrivSortKey(table_id_,
+    return ObObjPrivSortKey(table_id_, 
                             obj_type_,
                             col_id_,
                             grantor_id_,
@@ -235,7 +233,7 @@ struct VersionHisKey
            && common::OB_INVALID_ID != schema_id_;
   }
   ObSchemaType schema_type_;
-
+  
   int64_t schema_id_;
   TO_STRING_KV(K_(schema_type), K_(schema_id));
 };
@@ -455,7 +453,7 @@ public:
   {
     bool operator()(const SchemaKey &a, const SchemaKey &b) const
     {
-      return true
+      return true 
           && a.table_id_ == b.table_id_ 
           && a.obj_type_ == b.obj_type_ 
           && a.col_id_ == b.col_id_ 
@@ -666,11 +664,7 @@ public:
 
 public:
   int init(common::ObMySQLProxy *sql_proxy,
-           const common::ObCommonConfig *config,
-           ObSchemaStatusProxy &schema_status_proxy,
-           const ObServiceStatus &service_status,
-           bool &in_bootstrap,
-           ObSchemaService &schema_backend);
+           const common::ObCommonConfig *config);
   explicit ObServerSchemaService();
   virtual ~ObServerSchemaService();
   //get full schema instead of using patch, we call this automatically and do not expect user to
@@ -682,8 +676,6 @@ public:
   //the schema service should be thread safe
   ObSchemaService *get_schema_service(void) const;
   common::ObMySQLProxy *get_sql_proxy(void) const { return sql_proxy_; }
-  ObSchemaStatusProxy *get_schema_status_proxy() const { return schema_status_proxy_; }
-  bool is_in_bootstrap() const { return nullptr != in_bootstrap_ && *in_bootstrap_; }
   void dump_schema_manager() const;
 
   // public utils
@@ -959,9 +951,6 @@ protected:
   ObSchemaService *schema_service_;
   common::ObMySQLProxy *sql_proxy_;
   const common::ObCommonConfig *config_;
-  ObSchemaStatusProxy *schema_status_proxy_;
-  const ObServiceStatus *service_status_;
-  bool *in_bootstrap_;
   const static int VERSION_HIS_MAP_BUCKET_NUM_MAX = 16 * 1024;
   const static int VERSION_HIS_MAP_BUCKET_NUM_MIN = 4 * 1024;
   common::hash::ObHashMap<VersionHisKey, VersionHisVal, common::hash::ReadWriteDefendMode> version_his_map_;
@@ -995,6 +984,7 @@ int ObServerSchemaService::convert_schema_keys_to_array(
        OB_SUCC(ret) && it != key_set.end(); it++) {
     const SchemaKey &key = it->first;
     if (OB_FAIL(key_array.push_back(key))) {
+      SHARE_SCHEMA_LOG(WARN, "fail to push back schema key", KR(ret), K(key));
     }
   }
   return ret;

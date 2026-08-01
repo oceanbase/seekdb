@@ -137,7 +137,7 @@ private:
   int update_index_status_in_schema(
       const share::schema::ObTableSchema &index_schema,
       const share::schema::ObIndexStatus new_status,
-      share::schema::ObSchemaGetterGuard &schema_guard);
+      ObSchemaGetterGuard &schema_guard);
   int check_health();
   int reap_old_local_build_task(bool &need_exec_new_inner_sql);
   int send_local_build_request(const bool &is_partitioned_local_index_task,

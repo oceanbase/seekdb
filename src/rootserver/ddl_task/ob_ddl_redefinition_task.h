@@ -17,8 +17,8 @@
 #ifndef OCEANBASE_ROOTSERVER_OB_DDL_REDEFINITION_TASK_H
 #define OCEANBASE_ROOTSERVER_OB_DDL_REDEFINITION_TASK_H
 
-#include "rootserver/ddl_task/ob_ddl_local_build_executor.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h"
 
 namespace oceanbase
 {
@@ -46,7 +46,7 @@ public:
   int init(
       const ObTableSchema &orig_table_schema,
       const ObTableSchema &hidden_table_schema,
-      const share::schema::AlterTableSchema &alter_table_schema,
+      const AlterTableSchema &alter_table_schema,
       const ObTimeZoneInfoWrap &tz_info_wrap);
   ObDDLTaskID get_ddl_task_id() { return ObDDLTaskID(task_id_); }
   virtual ~ObDDLRedefinitionSSTableBuildTask() = default;
@@ -163,7 +163,7 @@ protected:
   bool is_stats_sync_lock_conflict(const int ret) const;
   void delay_take_effect_after_stats_sync_lock_conflict(const int ret);
   int sync_stats_info_local(common::ObMySQLTransaction &trans,
-                            share::schema::ObSchemaGetterGuard *runtime_schema_guard,
+                            ObSchemaGetterGuard *runtime_schema_guard,
                             const ObTableSchema &data_table_schema,
                             const ObTableSchema &new_table_schema);
 
@@ -178,7 +178,7 @@ protected:
   int sync_column_level_stats_info(common::ObMySQLTransaction &trans,
                                    const ObTableSchema &data_table_schema,
                                    const ObTableSchema &new_table_schema,
-                                   share::schema::ObSchemaGetterGuard &schema_guard,
+                                   ObSchemaGetterGuard &schema_guard,
                                    const bool need_sync_history = true);
   int sync_one_column_table_level_stats_info(common::ObMySQLTransaction &trans,
                                              const ObTableSchema &data_table_schema,
@@ -210,8 +210,7 @@ protected:
   bool check_need_sync_stats_history();
   bool check_need_sync_stats();
   int sync_table_prefs(common::ObMySQLTransaction &trans);
-  int check_and_do_sync_tablet_autoinc_seq(
-      share::schema::ObSchemaGetterGuard &new_schema_guard);
+  int check_and_do_sync_tablet_autoinc_seq(ObSchemaGetterGuard &new_schema_guard);
   int sync_tablet_autoinc_seq();
   int check_need_rebuild_constraint(const ObTableSchema &table_schema,
                                     ObIArray<uint64_t> &constraint_ids,
@@ -219,12 +218,10 @@ protected:
   int check_need_check_table_empty(bool &need_check_table_empty);
   int get_child_task_ids(char *buf, int64_t len);
   int get_estimated_timeout(const share::schema::ObTableSchema *dst_table_schema, int64_t &estimated_timeout);
-  int get_orig_all_index_tablet_count(
-      share::schema::ObSchemaGetterGuard &schema_guard,
-      int64_t &all_tablet_count);
+  int get_orig_all_index_tablet_count(ObSchemaGetterGuard &schema_guard, int64_t &all_tablet_count);
 
   int generate_rebuild_index_arg_list(const int64_t table_id,
-                                      share::schema::ObSchemaGetterGuard &schema_guard,
+                                      ObSchemaGetterGuard &schema_guard, 
                                       obcall::ObAlterTableArg &alter_table_arg);
   int64_t get_local_build_request_time();
 private:

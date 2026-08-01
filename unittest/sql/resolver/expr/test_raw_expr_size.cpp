@@ -22,7 +22,6 @@
 #define private public
 #define protected public
 #include "sql/resolver/expr/ob_raw_expr.h"
-#include "unittest/sql/sql_test_paths.h"
 #undef protected
 #undef private
 
@@ -33,7 +32,7 @@ namespace test
 
 #define PRINT_SIZE(out, type) out << "| " << #type << " | " << sizeof(type) << " |" << std::endl;
 
-static void verify_results(const char* result_file, const char* tmp_file) {
+void verify_results(const char* result_file, const char* tmp_file) {
   fprintf(stderr, "If tests failed, use `diff %s %s' to see the differences. \n", result_file, tmp_file);
   std::ifstream if_result(tmp_file);
   ASSERT_TRUE(if_result.is_open());
@@ -47,9 +46,8 @@ static void verify_results(const char* result_file, const char* tmp_file) {
 
 TEST(TestRawExprSize, expr_size)
 {
-  const std::string tmp_file = sql_test_tmp_path("test_raw_expr_size.tmp");
-  const std::string result_file =
-      sql_test_data_path("resolver/expr/test_raw_expr_size.result");
+  static const char* tmp_file = "./expr/test_raw_expr_size.tmp";
+  static const char* result_file = "./expr/test_raw_expr_size.result";
 
   std::ofstream of_result(tmp_file);
   ASSERT_TRUE(of_result.is_open());
@@ -86,14 +84,13 @@ TEST(TestRawExprSize, expr_size)
   PRINT_SIZE(of_result, ObMatchFunRawExpr)
   PRINT_SIZE(of_result, ObPlQueryRefRawExpr)
   of_result.close();
-  verify_results(result_file.c_str(), tmp_file.c_str());
+  verify_results(result_file, tmp_file);
 }
 
 TEST(TestRawExprSize, expr_member_size)
 {
-  const std::string tmp_file = sql_test_tmp_path("test_raw_expr_member_size.tmp");
-  const std::string result_file =
-      sql_test_data_path("resolver/expr/test_raw_expr_member_size.result");
+  static const char* tmp_file = "./expr/test_raw_expr_member_size.tmp";
+  static const char* result_file = "./expr/test_raw_expr_member_size.result";
 
   std::ofstream of_result(tmp_file);
   ASSERT_TRUE(of_result.is_open());
@@ -247,7 +244,14 @@ TEST(TestRawExprSize, expr_member_size)
     of_result << std::endl;
   }
   of_result.close();
-  verify_results(result_file.c_str(), tmp_file.c_str());
+  verify_results(result_file, tmp_file);
 }
 
+}
+
+int main(int argc, char **argv)
+{
+  oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
+  ::testing::InitGoogleTest(&argc,argv);
+  return RUN_ALL_TESTS();
 }

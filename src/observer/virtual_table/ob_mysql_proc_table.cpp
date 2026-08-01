@@ -55,6 +55,7 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
       }  else {
         ObArray<const ObRoutineInfo *> routine_array;
         if (OB_FAIL(schema_guard_->get_routine_infos_in_runtime(routine_array))) {
+          SERVER_LOG(WARN, "get routine info failed", K(ret));
         } else {
           const ObRoutineInfo *routine_info = NULL;
           sql::ObExecEnv exec_env;
@@ -69,6 +70,7 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
               continue;
             } else if (OB_FAIL(schema_guard_->get_database_schema(
                         routine_info->get_database_id(), db_schema))) {
+              SERVER_LOG(WARN, "Failed to get database schema", K(routine_info->get_database_id()), K(ret));
             } else if (OB_ISNULL(db_schema)) {
               ret = OB_ERR_UNEXPECTED;
               SERVER_LOG(WARN, "Database schema should not be NULL", K(ret));
@@ -76,6 +78,7 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
               // ignore is_in_recyclebin routine
               continue;
             } else if (OB_FAIL(exec_env.init(routine_info->get_exec_env()))) {
+              SERVER_LOG(ERROR, "fail to load exec env", K(ret));
             } else {
               ObString user_name;
               const int64_t USERNAME_AUX_LEN = 6;// "''@''" + '\0'
@@ -94,6 +97,8 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
                                                   pos, "'%.*s'@'%.*s'",
                                                   routine_user_name.length(), routine_user_name.ptr(),
                                                   routine_host_name.length(), routine_host_name.ptr()))) {
+                SERVER_LOG(WARN, "databuff_printf failed", K(ret), K(buf_size), K(pos),
+                          "user_name", routine_info->get_priv_user());
               } else {
                 user_name.assign_ptr(username_buf, static_cast<int32_t>(buf_size - 1));
               }
@@ -107,6 +112,8 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
                          || routine_info->get_routine_body().prefix_match_ci("function")) {
                 if (OB_FAIL(extract_create_node_from_routine_info(
                               local_allocator, *routine_info, exec_env, create_node))) {
+                  SERVER_LOG(WARN, "failed to extract create node from routine info",
+                             K(ret), K(*routine_info), K(exec_env), K(create_node));
                 }
               }
 
@@ -152,6 +159,11 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
                                           ObString(min(OB_MAX_VARCHAR_LENGTH, param_node->str_len_),
                                           param_node->str_value_),
                                           value_str))) {
+                            SERVER_LOG(WARN, "failed to ob_write_string",
+                                       K(ret),
+                                       K(param_node->str_len_),
+                                       K(param_node->str_value_),
+                                       K(value_str));
                           }
                         }
                         if (OB_FAIL(ret)) {
@@ -185,6 +197,7 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
                                                                                   OB_MAX_VARCHAR_LENGTH,
                                                                                   pos,
                                                                                   TZ_INFO(session_)))) {
+                          SERVER_LOG(WARN, "Generate table definition failed");
                         } else {
                           ObString value_str(static_cast<int32_t>(pos), static_cast<int32_t>(pos), param_list_buf);
 
@@ -238,6 +251,7 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
                                                               routine_info->get_ret_type()->get_scale(),
                                                               routine_info->get_ret_type()->get_collation_type(),
                                                               *routine_info->get_ret_type_info()))) {
+                          SHARE_SCHEMA_LOG(WARN, "fail to get data type str with coll", KPC(routine_info->get_ret_type()));
                         }
                       } else {
                         // proc no returns, fill empty.
@@ -265,6 +279,7 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
                     ObObj int_value;
                     int_value.set_int(exec_env.get_sql_mode());
                     if (OB_FAIL(ob_sql_mode_to_str(int_value, cells[col_idx], allocator_))) {
+                      SERVER_LOG(ERROR, "fail to convert sqlmode to string", K(int_value), K(ret));
                     } else {
                       cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                     }
@@ -315,6 +330,7 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
                         if (OB_FAIL(ob_write_string(*allocator_,
                                                     ObString(min(OB_MAX_VARCHAR_LENGTH, body_node->text_len_), body_node->raw_text_),
                                                     value_str))) {
+                          SERVER_LOG(WARN, "failed to ob_write_string", K(ret), K(ObString(body_node->text_len_, body_node->raw_text_)));
                         } else {
                           cells[col_idx].set_varchar(value_str);
                           cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -361,6 +377,7 @@ case (COL_NAME): {    \
               } //end of for col_count
               if (OB_SUCC(ret)) {
                 if (OB_FAIL(scanner_.add_row(cur_row_))) {
+                  SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
                 }
               }
             } //end of else
@@ -414,6 +431,8 @@ int ObMySQLProcTable::extract_create_node_from_routine_info(ObIAllocator &alloc,
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(parser.parse(routine_stmt, routine_stmt, parse_result, true))) {
+    SERVER_LOG(WARN, "failed to parse mysql routine body",
+               K(ret), K(routine_info), K(routine_body));
   }
 
   if OB_SUCC(ret) {
@@ -440,7 +459,7 @@ int ObMySQLProcTable::get_info_from_all_routine(const uint64_t col_id,
   if (OB_NOT_NULL(routine_info)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       common::sqlclient::ObMySQLResult *result = NULL;
-
+      
       ObString col_name = col_id == CREATED ? "GMT_CREATE" : "GMT_MODIFIED";
       const char *sql_str = "select %.*s from oceanbase.__all_routine where "
                             " database_id = %ld and package_id = %ld "
@@ -451,10 +470,13 @@ int ObMySQLProcTable::get_info_from_all_routine(const uint64_t col_id,
                                 routine_info->get_package_id(),
                                 routine_info->get_routine_id() & 0xFFFFFFFF,
                                 routine_info->get_subprogram_id()))) {
+        SERVER_LOG(WARN, "fail to append sql", K(sql_str), K(routine_info->get_database_id()), 
+          K(routine_info->get_routine_id()), K(ret));
       } else if (OB_ISNULL(sql_proxy)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "data member is not init", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res, sql.ptr()))) {
+        SERVER_LOG(WARN, "fail to read result", K(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "result set from read is NULL", K(ret));

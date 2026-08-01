@@ -48,7 +48,7 @@ int ObSimpleRoutineSchema::assign(const ObSimpleRoutineSchema &other)
   if (this != &other) {
     reset();
     error_ret_ = other.error_ret_;
-
+    
     database_id_ = other.database_id_;
     package_id_ = other.package_id_;
     routine_id_ = other.routine_id_;
@@ -56,7 +56,9 @@ int ObSimpleRoutineSchema::assign(const ObSimpleRoutineSchema &other)
     schema_version_ = other.schema_version_;
     routine_type_ = other.routine_type_;
     if (OB_FAIL(deep_copy_str(other.routine_name_, routine_name_))) {
+      LOG_WARN("Fail to deep copy routine name", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.priv_user_, priv_user_))) {
+      LOG_WARN("Fail to deep copy priv user name", K(ret));
     }
     if (OB_FAIL(ret)) {
       error_ret_ = ret;
@@ -106,7 +108,9 @@ int ObRoutineMgr::init()
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(routine_id_map_.init())) {
+    LOG_WARN("init procedure id map failed", K(ret));
   } else if (OB_FAIL(routine_name_map_.init())) {
+    LOG_WARN("init procedure name map failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -170,6 +174,7 @@ int ObRoutineMgr::deep_copy(const ObRoutineMgr &other)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", K(routine), K(ret));
       } else if (OB_FAIL(add_routine(*routine))) {
+        LOG_WARN("add procedure failed", K(*routine), K(ret));
       }
     }
   }
@@ -213,6 +218,7 @@ int ObRoutineMgr::add_routines(const ObIArray<ObSimpleRoutineSchema> &routine_sc
   } else {
     FOREACH_CNT_X(routine_schema, routine_schemas, OB_SUCC(ret)) {
       if (OB_FAIL(add_routine(*routine_schema))) {
+        LOG_WARN("add routine failed", K(ret), "routine_schema", *routine_schema);
       }
     }
   }
@@ -237,6 +243,7 @@ int ObRoutineMgr::add_routine(const ObSimpleRoutineSchema &routine_schema)
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_,
                                                  routine_schema,
                                                  new_routine_schema))) {
+    LOG_WARN("alloc schema failed", K(ret));
   } else if (OB_ISNULL(new_routine_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret), K(new_routine_schema));
@@ -245,6 +252,7 @@ int ObRoutineMgr::add_routine(const ObSimpleRoutineSchema &routine_schema)
                                             compare_routine,
                                             equal_routine,
                                             replaced_routine))) {
+    LOG_WARN("failed to add routine schema", K(ret));
   } else {
     int over_write = 1;
     int hash_ret = routine_id_map_.set_refactored(new_routine_schema->get_routine_id(),
@@ -281,6 +289,7 @@ int ObRoutineMgr::add_routine(const ObSimpleRoutineSchema &routine_schema)
              "routine_name", routine_schema.get_routine_name());
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = rebuild_routine_hashmap())) {
+      LOG_WARN("rebuild routine hashmap failed", K(tmp_ret));
     }
   }
   return ret;
@@ -316,6 +325,7 @@ int ObRoutineMgr::del_routine(const ObRoutineId &routine_id)
   } else if (OB_FAIL(routine_infos_.remove_if(routine_id, compare_with_routine_id,
                                               equal_with_routine_id,
                                               schema_to_del))) {
+    LOG_WARN("failed to remove routine schema, ", K(routine_id), K(ret));
   } else if (OB_ISNULL(schema_to_del)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("removed procedure schema return NULL, ", K(routine_id), K(ret));
@@ -353,6 +363,7 @@ int ObRoutineMgr::del_routine(const ObRoutineId &routine_id)
              "routine_id", routine_id.get_routine_id());
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = rebuild_routine_hashmap())){
+      LOG_WARN("rebuild routine hashmap failed", K(tmp_ret));
     }
   }
 
@@ -431,6 +442,7 @@ int ObRoutineMgr::get_routine_schemas_in_runtime(ObIArray<const ObSimpleRoutineS
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(routine));
     } else if (OB_FAIL(routine_schemas.push_back(routine))) {
+      LOG_WARN("push back routine failed", K(ret));
     }
   }
 
@@ -455,6 +467,7 @@ int ObRoutineMgr::get_routine_schemas_in_database(uint64_t database_id,
     } else if (routine->get_database_id() != database_id) {
       // do-nothing
     } else if (OB_FAIL(routine_schemas.push_back(routine))) {
+      LOG_WARN("push back procedure failed", K(ret));
     }
   }
 
@@ -480,6 +493,7 @@ int ObRoutineMgr::get_routine_schemas_in_package(uint64_t package_id,
                || routine->get_routine_type() != ROUTINE_PACKAGE_TYPE) {
       // do nothing
     } else if (OB_FAIL(routine_schemas.push_back(routine))) {
+      LOG_WARN("push back procedure failed", K(ret));
     }
   }
 

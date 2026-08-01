@@ -166,13 +166,16 @@ int ObRawExprUniqueSet::append(RawExprType *expr)
   int ret = OB_SUCCESS;
   if (!need_unique_) {
     if (OB_FAIL(expr_array_.push_back(expr))) {
+      SQL_LOG(WARN, "fail to append expr", K(ret));
     }
   } else {
     if (expr->has_flag(IS_MARKED)) {
       // do nothing
     } else {
       if (OB_FAIL(expr_array_.push_back(expr))) {
+        SQL_LOG(WARN, "fail to append expr", K(ret));
       } else if (OB_FAIL(expr->add_flag(IS_MARKED))) {
+        SQL_LOG(WARN, "fail to add flag", K(ret));
       }
     }
   }
@@ -186,6 +189,7 @@ int ObRawExprUniqueSet::append(const ObIArray<RawExprType *> &exprs)
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
     if (OB_FAIL(append(exprs.at(i)))) {
+      SQL_LOG(WARN, "fail to append expr", K(ret));
     }
   }
   return ret;
@@ -488,14 +492,17 @@ public:
                               RawExprType* &attr_expr) {
     int ret = OB_SUCCESS;
     if (OB_FAIL(expr_factory->create_raw_expr(expr_type, attr_expr))) {
+      LOG_WARN("create raw expr failed", K(ret));
     } else if (OB_ISNULL(attr_expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("attr expr is null");
     } else if (OB_FAIL(attr_expr->add_flag(IS_ATTR_EXPR))) {
+      LOG_WARN("attr expr add flag failed");
     } else if (attr_type == ArrayAttr::ATTR_LENGTH && FALSE_IT(attr_expr->set_data_type(ObUInt32Type))) {
     } else if ((attr_type == ArrayAttr::ATTR_NULL_BITMAP || attr_type == ArrayAttr::ATTR_OFFSETS ||attr_type == ArrayAttr::ATTR_DATA) &&
               FALSE_IT(attr_expr->set_data_type(ObVarcharType))) {
     } else if (OB_FAIL(attr_expr->formalize(session))) {
+      LOG_WARN("failed to formalize expr", K(ret));
     }
     return ret;
   }

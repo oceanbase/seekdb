@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_obj_access.h"
-#include "sql/pl/ob_pl_resolver.h"
+#include "pl/ob_pl_resolver.h"
 #include "src/sql/engine/expr/ob_expr_lob_utils.h"
 
 namespace oceanbase
@@ -114,6 +114,7 @@ int ObExprObjAccess::assign(const ObExprOperator &other)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expr operator is mismatch", K(other.get_type()));
   } else if (OB_FAIL(ObExprOperator::assign(other))) {
+    LOG_WARN("assign parent expr failed", K(ret));
   } else {
     const ObExprObjAccess &other_expr = static_cast<const ObExprObjAccess &>(other);
     OZ(info_.assign(other_expr.info_));
@@ -316,11 +317,6 @@ int ObExprObjAccess::ExtraInfo::get_record_attr(const pl::ObObjAccessIdx &curren
                                     *package_guard,
                                     *ctx.exec_ctx_.get_sql_proxy(),
                                     false);
-      resolve_ctx.params_.plan_cache_ = ctx.exec_ctx_.get_plan_cache();
-      resolve_ctx.params_.pl_sql_runtime_ = ctx.exec_ctx_.get_pl_sql_runtime();
-      resolve_ctx.params_.pl_engine_ = ctx.exec_ctx_.get_pl_engine();
-      resolve_ctx.params_.srs_provider_ = ctx.exec_ctx_.get_srs_provider();
-      resolve_ctx.params_.lob_read_service_ = ctx.exec_ctx_.get_lob_read_service();
       OZ (resolve_ctx.get_user_type(udt_id, user_type));
     }
   }
@@ -481,8 +477,10 @@ int ObExprObjAccess::ExtraInfo::calc(ObObj &result,
         ObCastCtx cast_ctx(&alloc, NULL, CM_NONE, res_type.get_collation_type(), NULL);
         const ObObj *res_obj = nullptr;
         if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, *datum, result, res_obj))) {
+          LOG_WARN("failed to cast decimal int to number", K(ret));
         }
       } else if (OB_FAIL(result.apply(*datum))) {
+        LOG_WARN("apply failed", K(ret), KPC(datum), K(result), K(res_type));
       }
       if (OB_SUCC(ret)) {
        if (!result.is_null()
@@ -579,8 +577,7 @@ int ObExprObjAccess::eval_obj_access(const ObExpr &expr,
 
   OZ(expr_datum.from_obj(result, expr.obj_datum_map_));
   if (is_lob_storage(result.get_type())) {
-    OZ (ob_adjust_lob_datum(ctx.exec_ctx_, result, expr.obj_meta_,
-                            ctx.exec_ctx_.get_allocator(), expr_datum));
+    OZ (ob_adjust_lob_datum(result, expr.obj_meta_, ctx.exec_ctx_.get_allocator(), expr_datum));
   }
   return ret;
 }

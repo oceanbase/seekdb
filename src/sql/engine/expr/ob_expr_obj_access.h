@@ -19,7 +19,7 @@
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "lib/container/ob_fast_array.h"
 #include "lib/container/ob_2d_array.h"
-#include "sql/pl/ob_pl_user_type.h"
+#include "pl/ob_pl_user_type.h"
 #include "sql/engine/expr/ob_i_expr_extra_info.h"
 
 namespace oceanbase

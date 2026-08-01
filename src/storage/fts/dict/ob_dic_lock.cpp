@@ -17,8 +17,6 @@
 #define USING_LOG_PREFIX STORAGE_FTS
 
 #include "src/storage/fts/dict/ob_dic_lock.h"
-#include "data_plane/fts/dict/ob_dic_loader.h"
-#include "data_plane/fts/dict/ob_dic_lock_service.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 
 namespace oceanbase
@@ -39,7 +37,9 @@ int ObDicLock::lock_dic_tables_out_trans(const ObDicLoader &dic_loader,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", K(ret));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+     LOG_WARN("failed to start trans", K(ret));
   } else if (OB_FAIL(lock_dic_tables_out_trans(dic_loader, lock_mode, lock_owner, trans))) {
+    LOG_WARN("fail to lock dic tables", K(ret));
   }
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
@@ -52,7 +52,7 @@ int ObDicLock::lock_dic_tables_out_trans(const ObDicLoader &dic_loader,
 }
 
 int ObDicLock::lock_dic_tables_out_trans(const ObDicLoader &dic_loader,
-    const transaction::tablelock::ObTableLockMode lock_mode,
+    const transaction::tablelock::ObTableLockMode lock_mode, 
     const transaction::tablelock::ObTableLockOwnerID &lock_owner,
     ObMySQLTransaction &trans)
 {
@@ -65,6 +65,7 @@ int ObDicLock::lock_dic_tables_out_trans(const ObDicLoader &dic_loader,
     for (int64_t i = 0; OB_SUCC(ret) && i < dic_tables_info.count(); ++i) {
       const uint64_t table_id = dic_tables_info.at(i).table_id_;
       if (OB_FAIL(do_table_lock(table_id, lock_mode, lock_owner, DEFAULT_TIMEOUT, true/*is_lock*/, trans))) {
+          LOG_WARN("fail to do lock table", K(ret));
       }
     }
   }
@@ -85,6 +86,7 @@ int ObDicLock::unlock_dic_tables(const ObDicLoader &dic_loader,
     for (int64_t i = 0; OB_SUCC(ret) && i < dic_tables_info.count(); ++i) {
       const uint64_t table_id = dic_tables_info.at(i).table_id_;
       if (OB_FAIL(do_table_lock(table_id, lock_mode, lock_owner, DEFAULT_TIMEOUT, false/*is_lock*/, trans))) {
+        LOG_WARN("fail to do unlock table", K(ret));
       }
     }
   }
@@ -97,12 +99,12 @@ int ObDicLock::lock_dic_tables_in_trans(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  common::sqlclient::ObISQLConnection *conn = nullptr;
+  observer::ObInnerSQLConnection *conn = NULL;
   const ObArray<ObDicLoader::ObDicTableInfo> &dic_tables_info = dic_loader.get_dic_tables_info();
   if (OB_UNLIKELY(dic_tables_info.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("dic loader is invalid", K(ret), K(dic_tables_info));
-  } else if (OB_ISNULL(conn = trans.get_connection())) {
+  } else if (OB_ISNULL(conn = dynamic_cast<observer::ObInnerSQLConnection *>(trans.get_connection()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn_ is NULL", KR(ret));
   } else {
@@ -110,43 +112,11 @@ int ObDicLock::lock_dic_tables_in_trans(
       const uint64_t table_id = dic_tables_info.at(i).table_id_;
       LOG_INFO("lock table", KR(ret), K(table_id), KP(conn));
       if (OB_FAIL(transaction::tablelock::ObInnerConnectionLockUtil::lock_table(table_id, lock_mode, DEFAULT_TIMEOUT, conn))) {
+        LOG_WARN("lock dest table failed", KR(ret), K(table_id));
       }
     }
   }
   return ret;
 }
 } // end storage
-
-namespace data_plane
-{
-
-int ObDictionaryLockService::lock_tables_shared_in_transaction(
-    const storage::ObDicLoader &loader,
-    common::ObMySQLTransaction &trans)
-{
-  int ret = common::OB_SUCCESS;
-  common::sqlclient::ObISQLConnection *conn = trans.get_connection();
-  const common::ObArray<storage::ObDicLoader::ObDicTableInfo>
-      &table_infos = loader.get_dic_tables_info();
-  if (OB_UNLIKELY(table_infos.empty())) {
-    ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("dictionary loader has no tables", K(ret));
-  } else if (OB_ISNULL(conn)) {
-    ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("inner SQL connection is null", K(ret));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < table_infos.count(); ++i) {
-      if (OB_FAIL(
-              transaction::tablelock::ObInnerConnectionLockUtil::lock_table(
-                  table_infos.at(i).table_id_,
-                  transaction::tablelock::SHARE,
-                  0 /* timeout_us */,
-                  conn))) {
-      }
-    }
-  }
-  return ret;
-}
-
-} // namespace data_plane
 } // end oceanbase

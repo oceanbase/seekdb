@@ -73,13 +73,13 @@ ObInfoSchemaUserPrivilegesTable::StaticInit::StaticInit()
                                                    "CREATE ROLE";
   ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_DROP_ROLE_SHIFT] =
                                                    "DROP ROLE";
-  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_CREATE_AI_MODEL_SHIFT] =
+  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_CREATE_AI_MODEL_SHIFT] = 
                                                    "CREATE AI MODEL";
-  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_ALTER_AI_MODEL_SHIFT] =
+  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_ALTER_AI_MODEL_SHIFT] = 
                                                    "ALTER AI MODEL";
-  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_DROP_AI_MODEL_SHIFT] =
+  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_DROP_AI_MODEL_SHIFT] = 
                                                    "DROP AI MODEL";
-  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_ACCESS_AI_MODEL_SHIFT] =
+  ObInfoSchemaUserPrivilegesTable::priv_type_strs[OB_PRIV_ACCESS_AI_MODEL_SHIFT] = 
                                                    "ACCESS AI MODEL";
 }
 
@@ -116,6 +116,7 @@ int ObInfoSchemaUserPrivilegesTable::inner_get_next_row(common::ObNewRow *&row)
     if (!start_to_read_) {
       ObArray<const ObUserInfo *> user_info_array;
       if (OB_FAIL(get_user_infos(user_id_, user_info_array))) {
+        SERVER_LOG(WARN, "Failed to get user infos");
       } else {
         for (int64_t user_id = 0; OB_SUCC(ret) && user_id < user_info_array.count(); ++user_id) {
           const ObUserInfo *user_info = user_info_array.at(user_id);
@@ -123,6 +124,7 @@ int ObInfoSchemaUserPrivilegesTable::inner_get_next_row(common::ObNewRow *&row)
             ret = OB_ERR_UNEXPECTED;
             SERVER_LOG(WARN, "Failed to get user info");
           } else if (OB_FAIL(fill_row_with_user_info(*user_info))) {
+            SERVER_LOG(WARN, "Failed to fill row");
           }// get user info success
         }// traverse userinfo
       }// get user info array success
@@ -160,10 +162,12 @@ int ObInfoSchemaUserPrivilegesTable::get_user_infos(const uint64_t user_id,
     ObPrivSet db_priv_set = OB_PRIV_SET_EMPTY;
     ObOriginalDBKey db_priv_key(user_id, ObString::make_string("mysql"));
     if (OB_FAIL(schema_guard_->get_db_priv_set(db_priv_key, db_priv_set))) {
+      LOG_WARN("get db priv set failed", K(ret));
     } else {
       user_db_priv_set |= db_priv_set;
       if (OB_PRIV_HAS_ANY(user_db_priv_set, OB_PRIV_SELECT)) {
         if (OB_FAIL(schema_guard_->get_user_infos_by_id(user_infos))) {
+          SERVER_LOG(WARN, "get user infos failed", K(ret));
         }
       } else {
         const share::schema::ObUserInfo *user_info = NULL;
@@ -171,6 +175,7 @@ int ObInfoSchemaUserPrivilegesTable::get_user_infos(const uint64_t user_id,
           // ignore ret
           SERVER_LOG(WARN, "get user info failed", K(ret));
         } else if (OB_FAIL(user_infos.push_back(user_info))) {
+          SERVER_LOG(WARN, "Failed to add user info", K(ret));
         }
       }
     }
@@ -196,6 +201,8 @@ int ObInfoSchemaUserPrivilegesTable::fill_row_with_user_info(
     memset(username_buf, 0, sizeof(username_buf));
     if (OB_FAIL(databuff_printf(username_buf, sizeof(username_buf),
         pos, "'%s'@'%s'", user_info.get_user_name(), user_info.get_host_name()))) {
+      SERVER_LOG(WARN, "databuff_printf failed", K(ret), K(buf_size), K(pos),
+          "user_name", user_info.get_user_name());
     } else {
       ObString user_name;
       user_name.assign_ptr(username_buf, static_cast<int32_t>(buf_size - 1));
@@ -245,6 +252,7 @@ int ObInfoSchemaUserPrivilegesTable::fill_row_with_user_info(
           }// traverse column
           if (OB_SUCC(ret)) {
             if (OB_FAIL(scanner_.add_row(cur_row_))) {
+              SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
             }
           }
         } else {

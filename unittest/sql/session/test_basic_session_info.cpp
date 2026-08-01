@@ -18,9 +18,7 @@
 #include <gtest/gtest.h>
 #define private public
 #define protected public
-#include "sql/session/ob_sql_session_info.h"
-#undef protected
-#undef private
+#include "observer/ob_server.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -32,6 +30,8 @@ namespace sql
 
 TEST(test_basic_session_info, init_set_get)
 {
+  OBSERVER.init_schema();
+  OBSERVER.init_tz_info_mgr();
   common::ObArenaAllocator allocator(ObModIds::OB_SQL_SESSION);
   ObBasicSessionInfo session_info;
   easy_connection_t conn;
@@ -42,7 +42,7 @@ TEST(test_basic_session_info, init_set_get)
   {
     ObString runtime_name = ObString::make_string("yyy");
     ObString user_name = ObString::make_string("aaa");
-    ASSERT_EQ(OB_SUCCESS, session_info.set_runtime(runtime_name));
+    ASSERT_EQ(OB_SUCCESS, session_info.init_runtime(runtime_name));
     session_info.set_user(user_name, OB_DEFAULT_HOST_NAME, 1);
     ObObj autocommit_obj, min_val, max_val;
     ObObj autocommit_type;
@@ -70,11 +70,14 @@ TEST(test_basic_session_info, init_set_get)
   session_info.log_id_level_map_valid_ = true;
   ASSERT_EQ(&session_info.log_id_level_map_, session_info.get_log_id_level_map());
   ObBasicSessionInfo::LockGuard lock_guard(session_info.get_query_lock());
+  sleep(1);
 }
 
 TEST(test_basic_session_info, load_variables)
 {
   int ret = OB_SUCCESS;
+  OBSERVER.init_schema();
+  OBSERVER.init_tz_info_mgr();
   common::ObArenaAllocator allocator(ObModIds::OB_SQL_SESSION);
   SMART_VAR(sql::ObSQLSessionInfo, session_info) {
     ObBasicSessionInfo::LockGuard lock_guard(session_info.get_query_lock());
@@ -202,10 +205,18 @@ TEST(test_basic_session_info, load_variables)
     re_type = session_info.get_sys_variable_type(name);
     ASSERT_EQ(re_type, ObIntType);
     LOG_WARN("session_info:", K(session_info));
-    session_info.reset(false);
+    session_info.reset();
   }
 }
 
 
 }
+}
+
+
+int main(int argc, char **argv)
+{
+  OB_LOGGER.set_log_level("WARN");
+  ::testing::InitGoogleTest(&argc,argv);
+  return RUN_ALL_TESTS();
 }

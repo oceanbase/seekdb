@@ -257,7 +257,7 @@ public:
   { return OPEN_SELF_FIRST; }
   int get_next_granule_task(bool prepare = false, bool round_robin = false);
   int64_t get_worker_id() const { return worker_id_; }
-  storage::ScanResumePoint &get_resume_point() { return scan_resume_point_; }
+  ScanResumePoint &get_resume_point() { return scan_resume_point_; }
   inline void set_paused() { scan_resume_point_.set_paused(); }
   inline bool is_paused() const { return scan_resume_point_.is_paused(); }
   inline void clear_paused() { scan_resume_point_.clear_paused(); }
@@ -375,7 +375,7 @@ private:
   // worker may enter gi pause sync point multiple times, use has_add_to_finished_worker_ to
   // distinguish whether the counter has record it.
   bool has_add_to_finished_worker_;
-  storage::ScanResumePoint scan_resume_point_;
+  ScanResumePoint scan_resume_point_;
   int64_t latest_pause_output_;
   ObGranulePumpArgs *pump_arg_;
 };

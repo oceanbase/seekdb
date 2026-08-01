@@ -24,7 +24,6 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/container/ob_array.h"
 #include "lib/hash/ob_placement_hashset.h"
-#include "query/ddl/ob_ddl_schema_service.h"
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "rootserver/ob_ddl_operator.h"
@@ -85,9 +84,10 @@ class ObDDLSQLTransaction;
 class ObSnapshotInfoManager;
 struct ObTruncateInfoService;
 class ObPLDDLService;
-class ObDDLService : public query::ObIAuxIndexSchemaChecker
+class ObDDLService
 {
 public:
+  friend class ObStandbyClusterSchemaProcessor;
   friend class ObPLDDLService;
   ObDDLService();
   virtual ~ObDDLService() {}
@@ -1648,7 +1648,7 @@ public:
       ObSchemaGetterGuard &schema_guard,
       const ObTableSchema *data_schema,
       bool &is_exist,
-      const ObTableSchema *&index_schema) override;
+      const ObTableSchema *&index_schema);
   int check_parallel_ddl_conflict(
     share::schema::ObSchemaGetterGuard &schema_guard,
     const obcall::ObDDLArg &arg);
@@ -2060,7 +2060,7 @@ public:
                       const bool enable_check_newest_schema = true)
                       : common::ObMySQLTransaction(enable_query_stash),
                         schema_service_(schema_service),
-
+                        
                         start_operation_schema_version_(OB_INVALID_VERSION),
                         need_end_signal_(need_end_signal),
                         enable_ddl_parallel_(enable_ddl_parallel),
@@ -2099,7 +2099,7 @@ private:
   share::schema::ObMultiVersionSchemaService *schema_service_;
   // Filter out only one 1503 DDL transaction to prevent the schema from being invalidly pushed up
   int64_t start_operation_schema_version_;
-
+  
   //no need to set end_signal while ddl end transaction
   bool need_end_signal_;
   // enable ddl parallel
@@ -2142,6 +2142,7 @@ int ObDDLService::fill_part_name(const SCHEMA &orig_schema,
       char part_name[OB_MAX_PARTITION_NAME_LENGTH];
       int64_t pos = 0;
       if (OB_FAIL(databuff_printf(part_name, OB_MAX_PARTITION_NAME_LENGTH, pos, "P%ld", max_part_id))) {
+        RS_LOG(WARN, "failed to constrate partition name", K(ret), K(max_part_id));
       } else {
         part_name_str.assign(part_name, static_cast<int32_t>(pos));
         bool is_valid = false;
@@ -2151,6 +2152,7 @@ int ObDDLService::fill_part_name(const SCHEMA &orig_schema,
           // If the partition name is reasonable, can add it to the partition, prepare to process
           // the next empty partition name
           if (OB_FAIL(part_array[i]->set_part_name(part_name_str))) {
+            RS_LOG(WARN, "failed to set partition name", K(ret), K(part_name_str));
           }
           max_part_id++;
           break;

@@ -27,7 +27,6 @@
 #include "share/schema/ob_outline_mgr.h"
 #include "share/schema/ob_ai_model_mgr.h"
 #include "share/schema/ob_objpriv_mysql_schema_struct.h"
-#include "lib/net/ob_sql_tls_info.h"
 
 namespace oceanbase
 {
@@ -96,7 +95,7 @@ public:
 	ObSchemaMgrInfo &operator=(const ObSchemaMgrInfo &other);
 	explicit ObSchemaMgrInfo(const ObSchemaMgrInfo &other);
 	virtual ~ObSchemaMgrInfo();
-
+	
 	int64_t get_snapshot_version() const { return snapshot_version_; }
 	void set_schema_mgr(const ObSchemaMgr* schema_mgr) { schema_mgr_ = schema_mgr; }
 	const ObSchemaMgr *get_schema_mgr() const { return schema_mgr_; }
@@ -105,7 +104,7 @@ public:
 	void reset();
 	TO_STRING_KV(K_(snapshot_version), KP_(schema_mgr), K_(schema_status));
 private:
-
+  
 	int64_t snapshot_version_;
 	const ObSchemaMgr *schema_mgr_;
 	ObSchemaMgrHandle mgr_handle_;
@@ -306,7 +305,7 @@ public:
   int check_user_access(const ObUserLoginInfo &login_info,
                         ObSessionPrivInfo &s_priv,
                         common::ObIArray<uint64_t> &enable_role_id_array,
-                        const common::ObSqlTlsInfo *tls_info,
+                        SSL *ssl_st,
                         const ObUserInfo *&sel_user_info);
   int check_db_access(ObSessionPrivInfo &s_priv,
                       const common::ObIArray<uint64_t> &enable_role_id_array,
@@ -616,6 +615,9 @@ public:
                          const ObNeedPriv &routine_need_priv);
 
   int check_routine_definer_existed(const ObString &user_name, bool &existed);
+  int check_obj_mysql_priv(const ObSessionPrivInfo &session_priv,
+                           const common::ObIArray<uint64_t> &enable_role_id_array,
+                           const ObNeedPriv &obj_mysql_need_priv);
   int get_obj_mysql_priv_with_obj_name(const ObString &obj_name,
                                        const uint64_t obj_type,
                                        ObIArray<const ObObjMysqlPriv *> &obj_privs,
@@ -631,8 +633,8 @@ public:
                           const ObAiModelSchema *&ai_model_schema);
 private:
   int check_ssl_access(const ObUserInfo &user_info,
-                       const common::ObSqlTlsInfo *tls_info);
-  int check_ssl_invited_cn(const common::ObSqlTlsInfo *tls_info);
+                       SSL *ssl_st);
+  int check_ssl_invited_cn(SSL *ssl_st);
   int check_db_priv(const ObSessionPrivInfo &session_priv,
                     const common::ObIArray<uint64_t> &enable_role_id_array,
                     const common::ObString &db,

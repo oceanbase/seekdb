@@ -57,14 +57,15 @@ int ObAlterUserRoleResolver::resolve_set_role(const ParseNode &parse_tree)
     uint64_t session_user_id = params_.session_info_->get_priv_user_id();
     const ObUserInfo *user_info = NULL;
     if (OB_FAIL(params_.schema_checker_->get_user_info(session_user_id, user_info))) {
+      LOG_WARN("get user info failed", K(ret));
     } else if (NULL == user_info) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("current user info is null", K(ret));
     } else {
       
       obcall::ObAlterUserRoleArg &arg = stmt->get_ddl_arg();
-
-
+      
+      
       stmt->set_set_role_flag(ObAlterUserRoleStmt::SET_ROLE);
 
       /* 1. resolve default role */
@@ -238,7 +239,7 @@ int ObAlterUserRoleResolver::resolve_default_role(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
   ObAlterUserRoleStmt *stmt = NULL;
-
+  
 
   if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -261,8 +262,8 @@ int ObAlterUserRoleResolver::resolve_default_role(const ParseNode &parse_tree)
     stmt->set_set_role_flag(ObAlterUserRoleStmt::SET_DEFAULT_ROLE);
 
     /* 1. resolve user */
-
-
+    
+    
     if (T_USER_WITH_HOST_NAME == parse_tree.children_[0]->type_) {
       ParseNode *user_with_host_name = parse_tree.children_[0];
       // Get user_name and host_name

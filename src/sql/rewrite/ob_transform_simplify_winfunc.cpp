@@ -36,7 +36,9 @@ int ObTransformSimplifyWinfunc::transform_one_stmt(common::ObIArray<ObParentDMLS
   } else if (!sel_stmt->is_select_stmt()) {
     // do nothing
   } else if (OB_FAIL(remove_stmt_win(sel_stmt, is_removed))) {
+    LOG_WARN("failed to remove stmt win", K(ret));
   } else if (OB_FAIL(simplify_win_exprs(sel_stmt, is_simplified))) {
+    LOG_WARN("failed to simplify win exprs", K(ret));
   } else {
     trans_happened = is_removed || is_simplified;
     OPT_TRACE("remove stmt win func:", is_removed);
@@ -44,6 +46,7 @@ int ObTransformSimplifyWinfunc::transform_one_stmt(common::ObIArray<ObParentDMLS
   }
   if (OB_SUCC(ret) && trans_happened) {
     if (OB_FAIL(add_transform_hint(*stmt))) {
+      LOG_WARN("failed to add transform hint", K(ret));
     }
   }
   return ret;
@@ -71,13 +74,16 @@ int ObTransformSimplifyWinfunc::remove_stmt_win(ObSelectStmt *select_stmt, bool 
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null window func", K(ret));
     } else if (OB_FAIL(check_stmt_win_can_be_removed(select_stmt, win_expr, can_be))) {
+      LOG_WARN("check stmt window func can be removed failed", K(ret));
     } else if (!can_be) {
       /*do nothing*/
     } else if (OB_FAIL(win_exprs.push_back(win_expr))) {
+      LOG_WARN("failed to push back expr", K(ret));
     }
   }
   if (OB_SUCC(ret) && !win_exprs.empty()) {
     if (OB_FAIL(do_remove_stmt_win(select_stmt, win_exprs))) {
+      LOG_WARN("do transform remove group by failed", K(ret));
     } else {
       trans_happened = true;
     }
@@ -151,6 +157,7 @@ int ObTransformSimplifyWinfunc::check_aggr_win_can_be_removed(const ObDMLStmt *s
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected func", K(ret));
       } else if (OB_FAIL(get_param_value(stmt, expr, is_valid, bucket_num))) {
+        LOG_WARN("failed to get param value", K(ret));
       } else if (!is_valid) {
         can_remove = false;
       } else if (OB_UNLIKELY(bucket_num <= 0)) {
@@ -172,6 +179,7 @@ int ObTransformSimplifyWinfunc::check_aggr_win_can_be_removed(const ObDMLStmt *s
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected func", K(ret));
       } else if (OB_FAIL(get_param_value(stmt, nth_expr, is_valid, value))) {
+        LOG_WARN("failed to get param value", K(ret));
       } else if (!is_valid) {
         can_remove = false;
       } else if (OB_UNLIKELY(value <= 0)) {
@@ -207,6 +215,7 @@ int ObTransformSimplifyWinfunc::check_aggr_win_can_be_removed(const ObDMLStmt *s
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected NULL", K(ret));
       } else if (OB_FAIL(get_param_value(stmt, expr, is_valid, value))) {
+        LOG_WARN("failed to get param value", K(ret));
       } else if (!is_valid) {
         can_remove = false;
       } else if (OB_UNLIKELY(value < 0)) {
@@ -299,14 +308,18 @@ int ObTransformSimplifyWinfunc::transform_aggr_win_to_common_expr(ObSelectStmt *
         LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(ObTransformUtils::build_const_expr_for_count(*ctx_->expr_factory_, 1,
                                                                       const_one))) {
+        LOG_WARN("failed to build const expr for count", K(ret));
       } else if (0 == aggr->get_real_param_count()) { // count(*) --> 1
         param_expr = const_one;
       } else if (OB_FAIL(ObTransformUtils::build_const_expr_for_count(*ctx_->expr_factory_, 0,
                                                                       const_zero))) {
+        LOG_WARN("failed to build const expr for count", K(ret));
+        // count(c1) --> case when
       } else if (OB_FAIL(ObTransformUtils::build_case_when_expr(*select_stmt,
                                                                 expr->get_param_expr(0),
                                                                 const_one, const_zero,
                                                                 param_expr, ctx_))) {
+        LOG_WARN("failed to build case when expr", K(ret));
       }
       break;
     }
@@ -316,6 +329,7 @@ int ObTransformSimplifyWinfunc::transform_aggr_win_to_common_expr(ObSelectStmt *
       ObConstRawExpr *const_one = NULL;
       if (OB_FAIL(ObRawExprUtils::build_const_int_expr(*ctx_->expr_factory_, ObIntType,
                                                        1, const_one))) {
+        LOG_WARN("failed to build const int expr", K(ret));
       } else {
         param_expr = const_one;
       }
@@ -328,9 +342,11 @@ int ObTransformSimplifyWinfunc::transform_aggr_win_to_common_expr(ObSelectStmt *
         LOG_WARN("get unexpected func", K(ret), K(win_func));
       } else if (OB_FAIL(ObRawExprUtils::build_const_int_expr(*ctx_->expr_factory_, ObIntType,
                                                               1, const_one))) {
+        LOG_WARN("failed to build const int expr", K(ret));
       } else if (OB_FAIL(ObTransformUtils::add_const_param_constraints(
                            win_func->get_func_params().at(0),
                            ctx_))) {
+        LOG_WARN("failed to add const param constraints", K(ret));
       } else {
         param_expr = const_one;
       }
@@ -341,6 +357,7 @@ int ObTransformSimplifyWinfunc::transform_aggr_win_to_common_expr(ObSelectStmt *
       if (OB_FAIL(ObRawExprUtils::build_const_number_expr(*ctx_->expr_factory_, ObNumberType,
                                                           number::ObNumber::get_positive_one(),
                                                           const_one))) {
+        LOG_WARN("failed to build const number expr", K(ret));
       } else {
         param_expr = const_one;
       }
@@ -351,6 +368,7 @@ int ObTransformSimplifyWinfunc::transform_aggr_win_to_common_expr(ObSelectStmt *
       if (OB_FAIL(ObRawExprUtils::build_const_number_expr(*ctx_->expr_factory_, ObNumberType,
                                                           number::ObNumber::get_zero(),
                                                           const_zero))) {
+        LOG_WARN("failed to build const number expr", K(ret));
       } else {
         param_expr = const_zero;
       }
@@ -366,10 +384,12 @@ int ObTransformSimplifyWinfunc::transform_aggr_win_to_common_expr(ObSelectStmt *
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected func", K(ret));
       } else if (OB_FAIL(get_param_value(select_stmt, nth_expr, is_valid, value))) {
+        LOG_WARN("failed to get param value", K(ret));
       } else if (OB_UNLIKELY(!is_valid || value <= 0)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected func", K(ret), K(*win_func));
       } else if (OB_FAIL(ObTransformUtils::add_const_param_constraints(nth_expr, ctx_))) {
+        LOG_WARN("failed to add const param constraints", K(ret));
       } else if (1 == value) { // return expr
         param_expr = win_func->get_func_params().at(0);
       } else { //return null
@@ -391,10 +411,12 @@ int ObTransformSimplifyWinfunc::transform_aggr_win_to_common_expr(ObSelectStmt *
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected NULL", K(ret));
       } else if (OB_FAIL(get_param_value(select_stmt, expr, is_valid, value))) {
+        LOG_WARN("failed to get param value", K(ret));
       } else if (OB_UNLIKELY(!is_valid || value < 0)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected func", K(ret), K(*win_func));
       } else if (OB_FAIL(ObTransformUtils::add_const_param_constraints(expr, ctx_))) {
+        LOG_WARN("failed to add const param constraints", K(ret));
       }
 
       if (OB_FAIL(ret)) {
@@ -403,6 +425,7 @@ int ObTransformSimplifyWinfunc::transform_aggr_win_to_common_expr(ObSelectStmt *
       } else if (2 < win_func->get_func_params().count()) { // return default value
         param_expr = win_func->get_func_params().at(2);
       } else if (OB_FAIL(ObRawExprUtils::build_null_expr(*ctx_->expr_factory_, param_expr))) {
+        LOG_WARN("failed to build null expr", K(ret));
       }
       break;
     }
@@ -410,6 +433,7 @@ int ObTransformSimplifyWinfunc::transform_aggr_win_to_common_expr(ObSelectStmt *
     case T_FUN_SYS_BIT_OR:
     case T_FUN_SYS_BIT_XOR: {
       if (OB_FAIL(ObTransformUtils::transform_bit_aggr_to_common_expr(*select_stmt, aggr, ctx_, param_expr))) {
+        LOG_WARN("transform bit aggr to common expr failed", KR(ret), K(aggr), K(func_type), K(*select_stmt));
       }
       break;
     }
@@ -427,10 +451,12 @@ int ObTransformSimplifyWinfunc::transform_aggr_win_to_common_expr(ObSelectStmt *
       LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(ObTransformUtils::add_cast_for_replace_if_need(*ctx_->expr_factory_, expr, 
                                                                       new_expr, ctx_->session_info_))) {
+      LOG_WARN("add cast for replace if need failed", K(ret));
     } else if (OB_ISNULL(new_expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(new_expr->formalize(ctx_->session_info_))) {
+      LOG_WARN("formalize expr failed", K(ret));
     }
   }
   return ret;
@@ -460,6 +486,7 @@ int ObTransformSimplifyWinfunc::get_param_value(const ObDMLStmt *stmt,
                                                           param, obj_value,
                                                           got_result,
                                                           *ctx_->allocator_))) {
+      LOG_WARN("failed to calc const or calculable expr", K(ret));
     } else if (!got_result) {
       is_valid = false;
     }
@@ -475,6 +502,7 @@ int ObTransformSimplifyWinfunc::get_param_value(const ObDMLStmt *stmt,
     } else if (!obj_value.is_number()) {
       is_valid = false;
     } else if (OB_FAIL(obj_value.get_number(number))) {
+      LOG_WARN("unexpected value type", K(ret), K(obj_value));
     } else if (OB_UNLIKELY(!number.is_valid_int64(value))) {
       is_valid = false;
     }
@@ -501,6 +529,7 @@ int ObTransformSimplifyWinfunc::check_stmt_win_can_be_removed(ObSelectStmt *sele
                                                          true,
                                                          is_unique,
                                                          FLAGS_IGNORE_DISTINCT))) {
+    LOG_WARN("failed to check stmt unique", K(ret));
   } else if (!is_unique) {
     /*do nothing*/
   } else if (BoundType::BOUND_CURRENT_ROW != win_expr->get_lower().type_
@@ -509,6 +538,7 @@ int ObTransformSimplifyWinfunc::check_stmt_win_can_be_removed(ObSelectStmt *sele
     // upper and lower are both not BOUND_CURRENT_ROW and is_preceding are the same, a window that does not include the current row may appear, prohibit elimination
   // Elimination is prohibited
   } else if (OB_FAIL(check_aggr_win_can_be_removed(select_stmt, win_expr, can_remove))) {
+    LOG_WARN("failed to check win can be removed", K(ret));
   } else if (!can_remove) {
     can_be = false;
   } else if (select_stmt->is_scala_group_by() &&
@@ -581,9 +611,12 @@ int ObTransformSimplifyWinfunc::do_remove_stmt_win(ObSelectStmt *select_stmt,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected win expr", K(ret), K(exprs.at(i)));
       } else if (OB_FAIL(transform_aggr_win_to_common_expr(select_stmt, exprs.at(i), new_expr))) {
+        LOG_WARN("transform aggr to common expr failed", K(ret));
       } else if (OB_FAIL(new_exprs.push_back(new_expr))) {
+        LOG_WARN("failed to push back expr", K(ret));
       } else if (OB_FAIL(select_stmt->remove_window_func_expr(
                            static_cast<ObWinFunRawExpr*>(exprs.at(i))))) {
+        LOG_WARN("failed to remove window func expr", K(ret));
       } else if (new_expr->is_win_func_expr()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected nested win expr", K(ret), K(new_expr));
@@ -595,6 +628,7 @@ int ObTransformSimplifyWinfunc::do_remove_stmt_win(ObSelectStmt *select_stmt,
     if (OB_SUCC(ret)) {
       //check qualify filters
       if (OB_FAIL(ObTransformUtils::pushdown_qualify_filters(select_stmt))) {
+        LOG_WARN("check pushdown qualify filters failed", K(ret));
       }
     }
   }
@@ -619,6 +653,7 @@ int ObTransformSimplifyWinfunc::simplify_win_exprs(ObSelectStmt *stmt,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("window function expr is null", K(ret));
     } else if (OB_FAIL(simplify_win_expr(*win_expr, is_happened))) {
+      LOG_WARN("failed to simplify win expr", K(ret));
     } else {
       trans_happened |= is_happened;
       if (is_happened && OB_FAIL(win_expr->formalize(ctx_->session_info_))) {
@@ -644,7 +679,9 @@ int ObTransformSimplifyWinfunc::simplify_win_expr(ObWinFunRawExpr &win_expr,
     if (part_expr->is_const_expr()) {
     } else if (ObRawExprUtils::find_expr(added_expr, part_expr)) {
     } else if (OB_FAIL(new_partition_exprs.push_back(part_expr))) {
+      LOG_WARN("failed to push back expr", K(ret));
     } else if (OB_FAIL(added_expr.push_back(part_expr))) {
+      LOG_WARN("failed to push back expr", K(ret));
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < order_items.count(); ++i) {
@@ -652,7 +689,9 @@ int ObTransformSimplifyWinfunc::simplify_win_expr(ObWinFunRawExpr &win_expr,
     if (order_expr->is_const_expr()) {
     } else if (ObRawExprUtils::find_expr(added_expr, order_expr)) {
     } else if (OB_FAIL(new_order_items.push_back(order_items.at(i)))) {
+      LOG_WARN("failed to push back expr", K(ret));
     } else if (OB_FAIL(added_expr.push_back(order_expr))) {
+      LOG_WARN("failed to push back expr", K(ret));
     }
   }
   if (OB_SUCC(ret)
@@ -668,7 +707,9 @@ int ObTransformSimplifyWinfunc::simplify_win_expr(ObWinFunRawExpr &win_expr,
     trans_happened = (new_partition_exprs.count() < partition_exprs.count()
                       || new_order_items.count() < order_items.count());
     if (OB_FAIL(partition_exprs.assign(new_partition_exprs))) {
+      LOG_WARN("failed to assign partition exprs", K(ret));
     } else if (OB_FAIL(order_items.assign(new_order_items))) {
+      LOG_WARN("failed to assign order items", K(ret));
     }
   }
   return ret;

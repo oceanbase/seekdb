@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SERVER_OMT
 #include "ob_timezone_mgr.h"
+#include "share/rc/ob_module_provider.h"
+#include "share/ob_internal_table_change_notifier.h"
 
 using namespace oceanbase::common;
 
@@ -60,6 +62,17 @@ int ObTimezoneMgr::init(ObMySQLProxy &sql_proxy)
     LOG_WARN("init timezone info failed", K(ret));
   } else if (OB_FAIL(timer_.init("TimezoneMgr", ObMemAttr("TimezoneMgr")))) {
     LOG_WARN("init timezone timer failed", K(ret));
+  } else {
+    // Register with notifier. Role-change-driven switch_to_leader will
+    // trigger the initial refresh after LS promotion; import path triggers
+    // via notify().
+    share::ObInternalTableChangeNotifier::get_instance().register_module(
+        share::ObInternalTableChangeNotifier::Module::TIMEZONE,
+        []() -> int {
+          LOG_INFO("[TIMEZONE_NOTIFIER] scheduling async refresh");
+          OTTZ_MGR.schedule_retry();
+          return OB_SUCCESS;
+        });
   }
   return ret;
 }

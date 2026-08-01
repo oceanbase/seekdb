@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_user_cmd_executor.h"
-#include "query/command/ob_root_service_serialization.h"
-#include "query/command/ob_root_command_service.h"
+#include "rootserver/ob_local_ddl_serial_call.h"
+#include "rootserver/ob_local_management_service.h"
 
 #include "lib/encrypt/ob_encrypted_helper.h"
 #include "sql/resolver/dcl/ob_create_user_stmt.h"
@@ -49,6 +49,7 @@ int ObCreateUserExecutor::encrypt_passwd(const common::ObString& pwd,
   } else {
     encrypted_pwd.assign_ptr(enc_buf, ENC_STRING_BUF_LEN);
     if (OB_FAIL(ObEncryptedHelper::encrypt_passwd_to_stage2(pwd, encrypted_pwd))) {
+      SQL_ENG_LOG(WARN, "failed to encrypt passwd", K(ret));
     }
   }
   return ret;
@@ -65,7 +66,9 @@ int ObCreateUserExecutor::check_user_valid(ObSchemaGetterGuard& schema_guard,
   bool existed = false;
   if (OB_FAIL(full_user_name.append_fmt("%.*s@%.*s", user_name.length(), user_name.ptr(),
                                                 host_name.length(), host_name.ptr()))) {
+    LOG_WARN("append fmt failed", K(ret));
   } else if (OB_FAIL(schema_guard.check_routine_definer_existed(full_user_name.string(), existed))) {
+    LOG_WARN("check routine definer existed failed", K(ret));
   } else if (existed) {
     if ((priv_set & OB_PRIV_SUPER) != 0) {
       LOG_USER_WARN(OB_ERR_USER_REFFERD_AS_DEFINER, user_name.length(), user_name.ptr(), host_name.length(), host_name.ptr());
@@ -76,6 +79,7 @@ int ObCreateUserExecutor::check_user_valid(ObSchemaGetterGuard& schema_guard,
                         user_name.length(), user_name.ptr(), host_name.length(), host_name.ptr());
     }
   }
+  LOG_DEBUG("check user valid status", K(priv_set), K(ret));
   return ret;
 }
 
@@ -94,7 +98,9 @@ int ObCreateUserExecutor::userinfo_extract_user_name(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("Userinfo index out of range", K(user_infos), K(index), K(in));
     } else if (OB_FAIL(users.push_back(user_infos.at(in).get_user_name_str()))) {
+      LOG_WARN("Failed to add username", K(user_infos), K(index));
     } else if (OB_FAIL(hosts.push_back(user_infos.at(in).get_host_name_str()))) {
+      LOG_WARN("Failed to add username", K(user_infos), K(index));
     }
   }
   return ret;
@@ -104,7 +110,7 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObSqlExecutorCtx *task_exec_ctx = NULL;
-
+  
   const ObStrings &users = stmt.get_users();
   const bool if_not_exist = stmt.get_if_not_exists();
   const int64_t FIX_MEMBER_CNT = 4;
@@ -131,15 +137,19 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
     ObString x509_subject;
     ObSSLType ssl_type_enum = ObSSLType::SSL_TYPE_NOT_SPECIFIED;
     ObCreateUserArg &arg = static_cast<ObCreateUserArg &>(stmt.get_ddl_arg());
-
+    
     arg.user_infos_.reset();
     arg.if_not_exist_ = if_not_exist;
     const int64_t users_cnt = users.count() - FIX_MEMBER_CNT;
 
     if (OB_FAIL(users.get_string(users_cnt, ssl_type))) {
+      LOG_WARN("Get string from ObStrings error", K(ret));
     } else if (OB_FAIL(users.get_string(users_cnt + 1, ssl_cipher))) {
+      LOG_WARN("Get string from ObStrings error", K(ret));
     } else if (OB_FAIL(users.get_string(users_cnt + 2, x509_issuer))) {
+      LOG_WARN("Get string from ObStrings error", K(ret));
     } else if (OB_FAIL(users.get_string(users_cnt + 3, x509_subject))) {
+      LOG_WARN("Get string from ObStrings error", K(ret));
     } else if (OB_UNLIKELY(ObSSLType::SSL_TYPE_MAX == (ssl_type_enum = get_ssl_type_from_string(ssl_type)))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("known ssl_type", K(ssl_type), K(ret));
@@ -147,9 +157,17 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
 
     for (int64_t i = 0; OB_SUCC(ret) && i < users_cnt; i += FIX_MEMBER_CNT) {
       if (OB_FAIL(users.get_string(i, user_name))) {
+        LOG_WARN("Get string from ObStrings error",
+            "count", users.count(), K(i), K(ret));
       } else if (OB_FAIL(users.get_string(i + 1, host_name))) {
+        LOG_WARN("Get string from ObStrings error",
+            "count", users.count(), K(i), K(ret));
       } else if (OB_FAIL(users.get_string(i + 2, pwd))) {
+        LOG_WARN("Get string from ObStrings error",
+            "count", users.count(), K(i), K(ret));
       } else if (OB_FAIL(users.get_string(i + 3, need_enc))) {
+        LOG_WARN("Get string from ObStrings error",
+            "count", users.count(), K(i), K(ret));
       } else {
         ObUserInfo user_info;
         if (ObString::make_string("YES") == need_enc) {
@@ -157,37 +175,49 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
             ObString pwd_enc;
             char enc_buf[ENC_BUF_LEN] = {0};
             if (OB_FAIL(encrypt_passwd(pwd, pwd_enc, enc_buf, ENC_BUF_LEN))) {
+              LOG_WARN("Encrypt password failed", K(ret));
             } else if (OB_FAIL(user_info.set_passwd(pwd_enc))) {
+              LOG_WARN("set password failed", K(ret));
             }
           }
         } else {
           if (OB_FAIL(user_info.set_passwd(pwd))) {
+            LOG_WARN("Failed to set password", K(ret));
           }
         }
 
         if (OB_SUCC(ret)) {
           ObSchemaGetterGuard schema_guard;
           if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+            LOG_WARN("get runtime schema guard failed", K(ret));
           } else if (OB_FAIL(ObCreateUserExecutor::check_user_valid(schema_guard, ctx.get_my_session()->get_user_priv_set(),
                                                                     user_name, host_name, "CREATE USER"))) {
+            LOG_WARN("check user valid failed", K(ret));
           } else if (OB_FAIL(user_info.set_user_name(user_name))) {
+            LOG_WARN("set user name failed", K(ret));
           } else if (OB_FAIL(user_info.set_host(host_name))) {
+            LOG_WARN("set host name failed", K(ret));
           } else if (FALSE_IT(user_info.set_ssl_type(ssl_type_enum))) {
             LOG_WARN("set ssl_type failed", K(ret));
           } else if (OB_FAIL(user_info.set_ssl_cipher(ssl_cipher))) {
+            LOG_WARN("set ssl_cipher failed", K(ret));
           } else if (OB_FAIL(user_info.set_x509_issuer(x509_issuer))) {
+            LOG_WARN("set x509_issuer failed", K(ret));
           } else if (OB_FAIL(user_info.set_x509_subject(x509_subject))) {
+            LOG_WARN("set x509_subject failed", K(ret));
           } else if (FALSE_IT(user_info.set_password_last_changed(ObTimeUtility::current_time()))) {
             LOG_WARN("set set_password_last_changed failed", K(ret));
           } else {
-
+            
             if (user_name.empty()) {
               user_info.set_user_id(OB_EMPTY_USER_ID);
             }
             user_info.set_max_connections(stmt.get_max_connections_per_hour());
             user_info.set_max_user_connections(stmt.get_max_user_connections());
             if (OB_FAIL(arg.user_infos_.push_back(user_info))) {
+              LOG_WARN("Add user info to array error", K(ret));
             } else {
+              LOG_DEBUG("Add user info to array", K(user_info));
             }
           }
         }
@@ -195,27 +225,29 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(create_user(arg, ctx.root_command_service()))) {
+      if (OB_FAIL(create_user(arg))) {
+        LOG_WARN("Create user rpc failed", K(ret));
       }
     }
   }
   return ret;
 }
 
-int ObCreateUserExecutor::create_user(
-    const obcall::ObCreateUserArg& arg,
-    query::ObIRootCommandService &root_commands) const
+int ObCreateUserExecutor::create_user(const obcall::ObCreateUserArg& arg) const
 {
   int ret = OB_SUCCESS;
   ObSArray<int64_t> failed_index;
   ObSqlString fail_msg;
   obcall::ObCreateUserArg user_arg = arg;
-  if (OB_FAIL(query::serialize_root_service_call([&]{ return root_commands.create_user(user_arg, failed_index); }))) {
+  if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_user(user_arg, failed_index); }))) {
+    LOG_WARN("Create user error", K(ret));
   } else if (0 != failed_index.count()) {
     ObSArray<ObString> failed_users;
     ObSArray<ObString> failed_hosts;
     if (OB_FAIL(userinfo_extract_user_name(arg.user_infos_, failed_index, failed_users, failed_hosts))) {
+      LOG_WARN("Failed to extract user name", K(arg.user_infos_), K(failed_index), K(ret));
     } else if (OB_FAIL(ObDropUserExecutor::build_fail_msg(failed_users, failed_hosts, fail_msg))) {
+      LOG_WARN("Build fail msg error", K(ret));
     } else {
       ret = OB_CANNOT_USER;
       LOG_USER_ERROR(OB_CANNOT_USER, (int)strlen("CREATE USER"), "CREATE USER",
@@ -233,6 +265,7 @@ int ObDropUserExecutor::build_fail_msg_for_one(const ObString &user, const ObStr
   if (OB_FAIL(msg.append_fmt("'%.*s'@'%.*s'",
                                     user.length(), user.ptr(),
                                     host.length(), host.ptr()))) {
+    LOG_WARN("Build msg fail", K(user), K(host), K(ret));
   }
   return ret;
 }
@@ -253,6 +286,7 @@ int ObDropUserExecutor::build_fail_msg(const common::ObIArray<common::ObString> 
         const ObString &user = users.at(i);
         const ObString &host = hosts.at(i);
         if (OB_FAIL(build_fail_msg_for_one(user, host, msg))) {
+          LOG_WARN("Build fail msg fail", K(user), K(host), K(ret));
         }
       }
     }
@@ -274,7 +308,10 @@ int ObDropUserExecutor::string_array_index_extract(const common::ObIArray<common
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("String index out of range", K(ret), K(in), K(src_users.count()));
     } else if (OB_FAIL(dst_users.push_back(src_users.at(in)))) {
+      LOG_WARN("Failed to push back user", K(ret));
     } else if (OB_FAIL(dst_hosts.push_back(src_hosts.at(in)))) {
+      LOG_WARN("Failed to push back host", K(ret));
+      //do nothing
     }
   }
   return ret;
@@ -284,7 +321,7 @@ int ObDropUserExecutor::execute(ObExecContext &ctx, ObDropUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObSqlExecutorCtx *task_exec_ctx = NULL;
-
+  
   const ObStrings *user_names = NULL;
 
   if (OB_ISNULL(GCTX.schema_service_)) {
@@ -306,23 +343,30 @@ int ObDropUserExecutor::execute(ObExecContext &ctx, ObDropUserStmt &stmt)
     ObString user_name;
     ObString host_name;
     ObDropUserArg &arg = static_cast<ObDropUserArg &>(stmt.get_ddl_arg());
-
+    
     {
       ObSchemaGetterGuard schema_guard;
       if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+        LOG_WARN("get schema guard failed", K(ret));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < user_names->count(); i += 2) {
         if (OB_FAIL(user_names->get_string(i, user_name))) {
+          LOG_WARN("Get user name failed", K(ret));
         } else if (OB_FAIL(user_names->get_string(i + 1, host_name))) {
+          LOG_WARN("Get host name failed", K(ret));
         } else if (OB_FAIL(arg.users_.push_back(user_name))) {
+          LOG_WARN("Add user name failed", K(ret));
         } else if (OB_FAIL(arg.hosts_.push_back(host_name))) {
+          LOG_WARN("Add host name failed", K(ret));
         } else if (OB_FAIL(ObCreateUserExecutor::check_user_valid(schema_guard, ctx.get_my_session()->get_user_priv_set(),
                                                                   user_name, host_name, "DROP USER"))) {
+          LOG_WARN("check user valid failed", K(ret));
         }
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(drop_user(arg, stmt.get_if_exists(), ctx.root_command_service()))) {
+      if (OB_FAIL(drop_user(arg, stmt.get_if_exists()))) {
+        LOG_WARN("Drop user completely failed", K(ret));
       } else {
         //do nothing
       }
@@ -332,8 +376,7 @@ int ObDropUserExecutor::execute(ObExecContext &ctx, ObDropUserStmt &stmt)
 }
 
 int ObDropUserExecutor::drop_user(const obcall::ObDropUserArg &arg,
-                                  bool if_exist_stmt,
-                                  query::ObIRootCommandService &root_commands)
+                                  bool if_exist_stmt)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
@@ -345,7 +388,8 @@ int ObDropUserExecutor::drop_user(const obcall::ObDropUserArg &arg,
   } else {
     ObSArray<int64_t> failed_index;
     ObSqlString fail_msg;
-    if (OB_FAIL(query::serialize_root_service_call([&]{ return root_commands.drop_user(arg, failed_index); }))) {
+    if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_user(arg, failed_index); }))) {
+      LOG_WARN("Lock user failed", K(ret));
     }
     if (0 != failed_index.count()) {
       ObSArray<ObString> failed_users;
@@ -353,6 +397,7 @@ int ObDropUserExecutor::drop_user(const obcall::ObDropUserArg &arg,
       if (OB_FAIL(ObDropUserExecutor::string_array_index_extract(arg.users_, arg.hosts_,
                                                                  failed_index, failed_users,
                                                                  failed_hosts))) {
+        LOG_WARN("Failed to extract user name", K(arg), K(ret));
       } else if (if_exist_stmt) {
         if (OB_UNLIKELY(failed_users.count() < 1) || OB_UNLIKELY(failed_users.count() != failed_users.count())) {
           ret = OB_INVALID_ARGUMENT;
@@ -361,6 +406,7 @@ int ObDropUserExecutor::drop_user(const obcall::ObDropUserArg &arg,
           for (int i = 0; OB_SUCC(ret) && i < failed_users.count(); ++i) {
             ObSqlString fail_msg_one;
             if (OB_FAIL(ObDropUserExecutor::build_fail_msg_for_one(failed_users.at(i), failed_hosts.at(i), fail_msg_one))) {
+              LOG_WARN("Build fail msg error", K(arg), K(ret));
             } else {
               LOG_USER_WARN(OB_CANNOT_USER_IF_EXISTS, (int)fail_msg_one.length(), fail_msg_one.ptr());
             }
@@ -368,6 +414,7 @@ int ObDropUserExecutor::drop_user(const obcall::ObDropUserArg &arg,
         }
       } else if (!if_exist_stmt) {
         if (OB_FAIL(ObDropUserExecutor::build_fail_msg(failed_users, failed_hosts, fail_msg))) {
+          LOG_WARN("Build fail msg error", K(arg), K(ret));
         } else {
           const char *ERR_CMD = (arg.is_role_) ? "DROP ROLE" : "DROP USER";
           ret = OB_CANNOT_USER;
@@ -383,7 +430,7 @@ int ObLockUserExecutor::execute(ObExecContext &ctx, ObLockUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObSqlExecutorCtx *task_exec_ctx = NULL;
-
+  
   const ObStrings *user_names = NULL;
   if (OB_ISNULL(user_names = stmt.get_users())) {
     ret = OB_INVALID_ARGUMENT;
@@ -398,19 +445,24 @@ int ObLockUserExecutor::execute(ObExecContext &ctx, ObLockUserStmt &stmt)
     ObString user_name;
     ObString host_name;
     ObLockUserArg &arg = static_cast<ObLockUserArg &>(stmt.get_ddl_arg());
-
+    
     arg.locked_ = stmt.is_locked();
     for (int64_t i = 0; OB_SUCC(ret) && i < user_names->count(); i += 2) {
       if (OB_FAIL(user_names->get_string(i, user_name))) {
+        LOG_WARN("Get user name failed", K(ret));
       } else if (OB_FAIL(user_names->get_string(i + 1, host_name))) {
+        LOG_WARN("Get host name failed", K(ret));
       } else if (OB_FAIL(arg.users_.push_back(user_name))) {
+        LOG_WARN("Add user name failed", K(ret));
       } else if (OB_FAIL(arg.hosts_.push_back(host_name))) {
+        LOG_WARN("Add host name failed", K(ret));
       } else {
         //do nothing
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(lock_user(arg, ctx.root_command_service()))) {
+      if (OB_FAIL(lock_user(arg))) {
+        LOG_WARN("Rename user completely failed", K(arg), K(ret));
       } else {
         //do nothing
       }
@@ -419,9 +471,7 @@ int ObLockUserExecutor::execute(ObExecContext &ctx, ObLockUserStmt &stmt)
   return ret;
 }
 
-int ObLockUserExecutor::lock_user(
-    const obcall::ObLockUserArg &arg,
-    query::ObIRootCommandService &root_commands)
+int ObLockUserExecutor::lock_user(const obcall::ObLockUserArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
@@ -433,9 +483,10 @@ int ObLockUserExecutor::lock_user(
   } else {
     ObSArray<int64_t> failed_index;
     ObSqlString fail_msg;
-    if (OB_FAIL(query::serialize_root_service_call([&]{ return root_commands.lock_user(arg, failed_index); }))) {
+    if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->lock_user(arg, failed_index); }))) {
       LOG_WARN("Lock user failed", K(ret));
       if (OB_FAIL(ObDropUserExecutor::build_fail_msg(arg.users_, arg.hosts_, fail_msg))) {
+        LOG_WARN("Build fail msg error", K(arg), K(ret));
       } else {
         ret = OB_CANNOT_USER;
         LOG_USER_ERROR(OB_CANNOT_USER, (int)strlen("LOCK USER"), "LOCK USER", (int)fail_msg.length(), fail_msg.ptr());
@@ -445,8 +496,10 @@ int ObLockUserExecutor::lock_user(
       ObSArray<ObString> failed_hosts;
       if (OB_FAIL(ObDropUserExecutor::string_array_index_extract(
           arg.users_, arg.hosts_, failed_index, failed_users, failed_hosts))) {
+        LOG_WARN("Failed to extract user name", K(arg), K(ret));
       } else {
         if (OB_FAIL(ObDropUserExecutor::build_fail_msg(failed_users, failed_hosts, fail_msg))) {
+          LOG_WARN("Build fail msg error", K(arg), K(ret));
         } else {
           ret = OB_CANNOT_USER;
           LOG_USER_ERROR(OB_CANNOT_USER, (int)strlen("LOCK USER"), "LOCK USER", (int)fail_msg.length(), fail_msg.ptr());
@@ -535,10 +588,14 @@ int ObAlterUserRoleExecutor::execute(ObExecContext &ctx, ObAlterUserRoleStmt &st
   } else if (ObAlterUserRoleStmt::SET_ROLE == stmt.get_set_role_flag()) {
     OZ (set_role_exec(ctx, stmt));
   } else if (ObAlterUserRoleStmt::SET_DEFAULT_ROLE == stmt.get_set_role_flag()) {
-    if (OB_FAIL(query::serialize_root_service_call([&] {
-          return ctx.root_command_service().alter_user_default_role(
-              stmt.get_ddl_arg());
-        }))) {
+    if (OB_ISNULL(GCTX.local_management_service_)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("local management service is null", K(ret));
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&] {
+                 return GCTX.local_management_service_->get_ddl_service()
+                     .alter_user_default_role(stmt.get_ddl_arg());
+               }))) {
+      LOG_WARN("alter user default role failed", K(ret));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -551,7 +608,7 @@ int ObRenameUserExecutor::execute(ObExecContext &ctx, ObRenameUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObSqlExecutorCtx *task_exec_ctx = NULL;
-
+  
   const ObStrings *rename_infos = NULL;
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -577,39 +634,49 @@ int ObRenameUserExecutor::execute(ObExecContext &ctx, ObRenameUserStmt &stmt)
     ObString new_username;
     ObString new_hostname;
     ObRenameUserArg &arg = static_cast<ObRenameUserArg &>(stmt.get_ddl_arg());
-
+    
     {
       ObSchemaGetterGuard schema_guard;
       if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+        LOG_WARN("get schema guard failed", K(ret));
       }
       //rename_infos arr contains old names and new names in pairs, so step is 2
       for (int64_t i = 0; OB_SUCC(ret) && i < rename_infos->count(); i += 4) {
         if (OB_FAIL(rename_infos->get_string(i, old_username))) {
+          LOG_WARN("Get origin name failed", K(ret));
         } else if (OB_FAIL(rename_infos->get_string(i + 1, old_hostname))) {
+          LOG_WARN("Get to name failed", K(ret));
         } else if (OB_FAIL(rename_infos->get_string(i + 2, new_username))) {
+          LOG_WARN("Get to name failed", K(ret));
         } else if (OB_FAIL(rename_infos->get_string(i + 3, new_hostname))) {
+          LOG_WARN("Get to name failed", K(ret));
         } else if (OB_FAIL(arg.old_users_.push_back(old_username))) {
+          LOG_WARN("Add origin user name failed", K(ret));
         } else if (OB_FAIL(arg.old_hosts_.push_back(old_hostname))) {
+          LOG_WARN("Add origin host name failed", K(ret));
         } else if (OB_FAIL(arg.new_users_.push_back(new_username))) {
+          LOG_WARN("Add new user name failed", K(ret));
         } else if (OB_FAIL(arg.new_hosts_.push_back(new_hostname))) {
+          LOG_WARN("Add new host name failed", K(ret));
         } else if (OB_FAIL(ObCreateUserExecutor::check_user_valid(schema_guard, ctx.get_my_session()->get_user_priv_set(),
                                                                   old_username, old_hostname, "RENAME USER"))) {
+          LOG_WARN("check user valid failed", K(ret));
         } else if (OB_FAIL(ObCreateUserExecutor::check_user_valid(schema_guard, ctx.get_my_session()->get_user_priv_set(),
                                                                   new_username, new_hostname, "RENAME USER"))) {
+          LOG_WARN("check user valid failed", K(ret));
         }
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(rename_user(arg, ctx.root_command_service()))) {
+      if (OB_FAIL(rename_user(arg))) {
+        LOG_WARN("Rename user completely failed", K(arg), K(ret));
       }
     }
   }
   return ret;
 }
 
-int ObRenameUserExecutor::rename_user(
-    const obcall::ObRenameUserArg &arg,
-    query::ObIRootCommandService &root_commands)
+int ObRenameUserExecutor::rename_user(const obcall::ObRenameUserArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
@@ -621,9 +688,10 @@ int ObRenameUserExecutor::rename_user(
   } else {
     ObSArray<int64_t> failed_index;
     ObSqlString fail_msg;
-    if (OB_FAIL(query::serialize_root_service_call([&]{ return root_commands.rename_user(arg, failed_index); }))) {
+    if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->rename_user(arg, failed_index); }))) {
       LOG_WARN("Rename user failed", K(ret));
       if (OB_FAIL(ObDropUserExecutor::build_fail_msg(arg.old_users_, arg.old_hosts_, fail_msg))) {
+        LOG_WARN("Build fail msg error", K(arg), K(ret));
       } else {
         ret = OB_CANNOT_USER;
         LOG_USER_ERROR(OB_CANNOT_USER, (int)strlen("RENAME USER"), "RENAME USER", (int)fail_msg.length(), fail_msg.ptr());
@@ -633,8 +701,10 @@ int ObRenameUserExecutor::rename_user(
       ObSArray<ObString> failed_hosts;
       if (OB_FAIL(ObDropUserExecutor::string_array_index_extract(
           arg.old_users_, arg.old_hosts_, failed_index, failed_users, failed_hosts))) {
+        LOG_WARN("Failed to extract user name", K(arg), K(ret));
       } else {
         if (OB_FAIL(ObDropUserExecutor::build_fail_msg(failed_users, failed_hosts, fail_msg))) {
+          LOG_WARN("Build fail msg error", K(arg), K(ret));
         } else {
           ret = OB_CANNOT_USER;
           LOG_USER_ERROR(OB_CANNOT_USER, (int)strlen("RENAME USER"), "RENAME USER", (int)fail_msg.length(), fail_msg.ptr());
