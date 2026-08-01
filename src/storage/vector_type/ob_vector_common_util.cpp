@@ -15,7 +15,7 @@
  */
 #define USING_LOG_PREFIX SHARE
 #include "ob_vector_common_util.h"
-#include "observer/ob_inner_sql_connection_pool.h"
+#include "observer/ob_inner_sql_connection.h"
 
 namespace {
 // Vector centroid ids are persisted in network byte order.  Keep the

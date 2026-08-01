@@ -24,7 +24,6 @@
 #include "sql/das/ob_das_lock_op.h"
 #include "sql/das/ob_das_utils.h"
 #include "sql/engine/dml/ob_trigger_handler.h"
-#include "sql/engine/dml/ob_err_log_service.h"
 #include "storage/ob_tablet_autoincrement_service.h"
 #include "pl/ob_pl.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
@@ -628,62 +627,10 @@ int ObDMLService::filter_row_for_view_check(const ExprFixedArray &cst_exprs,
   return ret;
 }
 
-int ObDMLService::process_before_stmt_trigger(const ObDMLBaseCtDef &dml_ctdef,
-                                              ObDMLBaseRtDef &dml_rtdef,
-                                              ObDMLRtCtx &dml_rtctx,
-                                              const ObDmlEventType &dml_event)
-{
-  int ret = OB_SUCCESS;
-  dml_rtctx.get_exec_ctx().set_dml_event(dml_event);
-  if (dml_ctdef.is_primary_index_ && !dml_ctdef.trig_ctdef_.tg_args_.empty()) {
-    if (!dml_rtctx.op_.get_spec().use_dist_das()
-        || dml_rtctx.get_exec_ctx().get_my_session()->get_is_deserialized()) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "Do before stmt trigger without DAS");
-      LOG_WARN("Do before stmt trigger without DAS not supported", K(ret),
-               K(dml_rtctx.op_.get_spec().use_dist_das()),
-               K(dml_rtctx.get_exec_ctx().get_my_session()->get_is_deserialized()));
-    } else if (OB_FAIL(TriggerHandle::do_handle_before_stmt(dml_rtctx.op_,
-                                                            dml_ctdef.trig_ctdef_,
-                                                            dml_rtdef.trig_rtdef_,
-                                                            dml_event))) {
-      LOG_WARN("failed to handle before stmt trigger", K(ret));
-    } else if (OB_FAIL(ObSqlTransControl::stmt_refresh_snapshot(dml_rtctx.get_exec_ctx()))) {
-      LOG_WARN("failed to get new snapshot after before stmt trigger evaluated", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObDMLService::process_after_stmt_trigger(const ObDMLBaseCtDef &dml_ctdef,
-                                             ObDMLBaseRtDef &dml_rtdef,
-                                             ObDMLRtCtx &dml_rtctx,
-                                             const ObDmlEventType &dml_event)
-{
-  int ret = OB_SUCCESS;
-  dml_rtctx.get_exec_ctx().set_dml_event(dml_event);
-  if (dml_ctdef.is_primary_index_ && !dml_ctdef.trig_ctdef_.tg_args_.empty()) {
-    if (!dml_rtctx.op_.get_spec().use_dist_das()
-        || dml_rtctx.get_exec_ctx().get_my_session()->get_is_deserialized()) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "Do after stmt trigger without DAS");
-      LOG_WARN("Do after stmt trigger without DAS not supported", K(ret),
-               K(dml_rtctx.op_.get_spec().use_dist_das()),
-               K(dml_rtctx.get_exec_ctx().get_my_session()->get_is_deserialized()));
-    } else if (OB_FAIL(TriggerHandle::do_handle_after_stmt(dml_rtctx.op_,
-                                                           dml_ctdef.trig_ctdef_,
-                                                           dml_rtdef.trig_rtdef_,
-                                                           dml_event))) {
-      LOG_WARN("failed to handle after stmt trigger", K(ret));
-    }
-  }
-  return ret;
-}
-
 int ObDMLService::init_heap_table_pk_for_ins(const ObInsCtDef &ins_ctdef, ObEvalCtx &eval_ctx)
 {
   int ret = OB_SUCCESS;
-  if (ins_ctdef.is_primary_index_ && ins_ctdef.is_table_without_pk_ && !ins_ctdef.has_instead_of_trigger_) {
+  if (ins_ctdef.is_primary_index_ && ins_ctdef.is_table_without_pk_) {
     ObExpr *auto_inc_expr = ins_ctdef.new_row_.at(0);
     if (OB_ISNULL(auto_inc_expr)) {
       ret = OB_ERR_UNEXPECTED;
@@ -712,7 +659,6 @@ int ObDMLService::process_insert_row(const ObInsCtDef &ins_ctdef,
     ObEvalCtx &eval_ctx = dml_op.get_eval_ctx();
     uint64_t ref_table_id = ins_ctdef.das_base_ctdef_.index_tid_;
     ObSQLSessionInfo *my_session = NULL;
-    bool has_instead_of_trg = ins_ctdef.has_instead_of_trigger_;
     //first, check insert value whether matched column type
     if (OB_FAIL(check_column_type(ins_ctdef.new_row_,
                                   ins_rtdef.cur_row_num_,
@@ -732,8 +678,6 @@ int ObDMLService::process_insert_row(const ObInsCtDef &ins_ctdef,
       LOG_WARN("failed to handle before trigger", K(ret));
     }
     if (OB_FAIL(ret)) {
-    } else if (has_instead_of_trg) {
-      is_skipped = true;
     } else if (OB_FAIL(check_row_null(ins_ctdef.new_row_,
                                       dml_op.get_eval_ctx(),
                                       ins_rtdef.cur_row_num_,
@@ -746,17 +690,7 @@ int ObDMLService::process_insert_row(const ObInsCtDef &ins_ctdef,
       LOG_WARN("failed to check filter row", KR(ret));
     }
 
-    if (OB_FAIL(ret)) {
-      int tmp_ret = OB_SUCCESS;
-      if (OB_TMP_FAIL(check_error_ret_by_row(ins_ctdef, dml_op, ret))) {
-        LOG_WARN("failed to check error ret by row", KR(ret));
-      }
-      // overwrite the ret
-      ret = tmp_ret;
-    }
   }
-  ret = (ret == OB_SUCCESS ? dml_op.err_log_rt_def_.first_err_ret_ : ret);
-  // If any error occurred before, the error code here is not OB_SUCCESS;
   return ret;
 }
 
@@ -786,34 +720,6 @@ int ObDMLService::check_filter_row(
     } else {
       ret = OB_ERR_CHECK_CONSTRAINT_VIOLATED;
       LOG_WARN("column constraint check failed", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObDMLService::check_error_ret_by_row(
-    const ObInsCtDef &ins_ctdef,
-    ObTableModifyOp &dml_op,
-    const int errcode)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(errcode)
-      && dml_op.is_error_logging_
-      && should_catch_err(errcode)
-      && !ins_ctdef.has_instead_of_trigger_) {
-    dml_op.err_log_rt_def_.first_err_ret_ = errcode;
-    // cover the err_ret  by design
-    ret = OB_SUCCESS;
-    for (int64_t i = 0; OB_SUCC(ret) && i < ins_ctdef.new_row_.count(); ++i) {
-      ObExpr *expr = ins_ctdef.new_row_.at(i);
-      ObDatum *datum = nullptr;
-      if (OB_FAIL(expr->eval(dml_op.get_eval_ctx(), datum))) {
-        if (should_catch_err(ret) && !(IS_CONST_TYPE(expr->type_))) {
-          expr->locate_datum_for_write(dml_op.get_eval_ctx()).set_null();
-          expr->set_evaluated_flag(dml_op.get_eval_ctx());
-          ret = OB_SUCCESS;
-        }
-      }
     }
   }
   return ret;
@@ -851,14 +757,13 @@ int ObDMLService::process_delete_row(const ObDelCtDef &del_ctdef,
   if (del_ctdef.is_primary_index_) {
     uint64_t ref_table_id = del_ctdef.das_base_ctdef_.index_tid_;
     ObSQLSessionInfo *my_session = NULL;
-    bool has_instead_of_trg = del_ctdef.has_instead_of_trigger_;
     if (OB_ISNULL(my_session = dml_op.get_exec_ctx().get_my_session())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("session is NULL", K(ret));
     } else if (OB_FAIL(check_nested_sql_legality(dml_op.get_exec_ctx(), del_ctdef.das_ctdef_.index_tid_))) {
       LOG_WARN("failed to check stmt table", K(ret), K(ref_table_id));
     }
-    if (OB_SUCC(ret) && del_ctdef.need_check_filter_null_ && !has_instead_of_trg) {
+    if (OB_SUCC(ret) && del_ctdef.need_check_filter_null_) {
       bool is_null = false;
       if (OB_FAIL(check_rowkey_is_null(del_ctdef.old_row_,
                                        del_ctdef.das_ctdef_.rowkey_cnt_,
@@ -870,7 +775,7 @@ int ObDMLService::process_delete_row(const ObDelCtDef &del_ctdef,
       }
     }
 
-    if (OB_SUCC(ret) && !is_skipped && OB_NOT_NULL(del_rtdef.se_rowkey_dist_ctx_) && !has_instead_of_trg) {
+    if (OB_SUCC(ret) && !is_skipped && OB_NOT_NULL(del_rtdef.se_rowkey_dist_ctx_)) {
       bool is_distinct = false;
       ObExecContext *root_ctx = nullptr;
       if (OB_FAIL(get_root_exec_ctx_for_fk_cascading(&dml_op.get_exec_ctx(), root_ctx))) {
@@ -899,15 +804,8 @@ int ObDMLService::process_delete_row(const ObDelCtDef &del_ctdef,
       } else if (OB_FAIL(TriggerHandle::do_handle_before_row(
           dml_op, del_ctdef.das_base_ctdef_, del_ctdef.trig_ctdef_, del_rtdef.trig_rtdef_))) {
         LOG_WARN("failed to handle before trigger", K(ret));
-      } else if (has_instead_of_trg) {
-        is_skipped = true;
       }
     }
-    // here only catch foreign key execption
-    if (OB_FAIL(ret) && dml_op.is_error_logging_ && should_catch_err(ret) && !has_instead_of_trg) {
-      dml_op.err_log_rt_def_.first_err_ret_ = ret;
-    }
-
     LOG_DEBUG("process delete row", K(ret), K(is_skipped),
                "old_row", ROWEXPR2STR(dml_op.get_eval_ctx(), del_ctdef.old_row_));
   }
@@ -922,11 +820,10 @@ int ObDMLService::process_update_row(const ObUpdCtDef &upd_ctdef,
 {
   int ret = OB_SUCCESS;
   is_skipped = false;
-  bool has_instead_of_trg = upd_ctdef.has_instead_of_trigger_;
   if (upd_ctdef.is_primary_index_) {
     uint64_t ref_table_id = upd_ctdef.das_base_ctdef_.index_tid_;
     ObSQLSessionInfo *my_session = NULL;
-    if (OB_SUCC(ret) && upd_ctdef.need_check_filter_null_ && !has_instead_of_trg) {
+    if (OB_SUCC(ret) && upd_ctdef.need_check_filter_null_) {
       bool is_null = false;
       if (OB_FAIL(check_rowkey_is_null(upd_ctdef.old_row_,
                                        upd_ctdef.dupd_ctdef_.rowkey_cnt_,
@@ -945,7 +842,7 @@ int ObDMLService::process_update_row(const ObUpdCtDef &upd_ctdef,
       }
     }
 
-    if (OB_SUCC(ret) && !is_skipped && !has_instead_of_trg) {
+    if (OB_SUCC(ret) && !is_skipped) {
       bool is_distinct = false;
       if (OB_FAIL(check_rowkey_whether_distinct(upd_ctdef.distinct_key_,
                                                 upd_ctdef.distinct_algo_,
@@ -981,8 +878,6 @@ int ObDMLService::process_update_row(const ObUpdCtDef &upd_ctdef,
         LOG_WARN("failed to handle before trigger", K(ret));
       }
       if (OB_FAIL(ret)) {
-      } else if (has_instead_of_trg) {
-        is_skipped = true;
       } else if (OB_FAIL(check_row_null(upd_ctdef.new_row_,
                                         dml_op.get_eval_ctx(),
                                         upd_rtdef.cur_row_num_,
@@ -1026,24 +921,6 @@ int ObDMLService::process_update_row(const ObUpdCtDef &upd_ctdef,
     LOG_WARN("A cycle reference is detected in foreign key cascade update.", K(ret));
   }
 
-  if (OB_FAIL(ret) && dml_op.is_error_logging_ && should_catch_err(ret) && !has_instead_of_trg) {
-    dml_op.err_log_rt_def_.first_err_ret_ = ret;
-    // cover the err_ret  by design
-    ret = OB_SUCCESS;
-    //todo @kaizhan.dkz expr.set_null() must skip const expr
-    for (int64_t i = 0; OB_SUCC(ret) && i < upd_ctdef.full_row_.count(); ++i) {
-      ObExpr *expr = upd_ctdef.full_row_.at(i);
-      ObDatum *datum = nullptr;
-      if (OB_FAIL(expr->eval(dml_op.get_eval_ctx(), datum))) {
-        if (should_catch_err(ret) && !(IS_CONST_TYPE(expr->type_))) {
-          expr->locate_datum_for_write(dml_op.get_eval_ctx()).set_null();
-          expr->set_evaluated_flag(dml_op.get_eval_ctx());
-          ret = OB_SUCCESS;
-        }
-      }
-    }
-  }
-  ret = (ret == OB_SUCCESS ? dml_op.err_log_rt_def_.first_err_ret_ : ret);
   if (OB_SUCC(ret) && !is_skipped) {
     LOG_DEBUG("process update row", K(ret), K(is_skipped), K(upd_ctdef), K(upd_rtdef),
                 "old_row", ROWEXPR2STR(dml_op.get_eval_ctx(), upd_ctdef.old_row_),
@@ -2103,73 +1980,6 @@ int ObDMLService::add_related_index_info(const ObDASTabletLoc &tablet_loc,
 }
 
 
-int ObDMLService::catch_violate_error(int err_ret,
-                                      transaction::ObTxSEQ savepoint_no,
-                                      ObDMLRtCtx &dml_rtctx,
-                                      ObErrLogRtDef &err_log_rt_def,
-                                      ObErrLogCtDef &error_logging_ctdef,
-                                      ObErrLogService &err_log_service,
-                                      ObDASOpType type)
-{
-  int ret = OB_SUCCESS;
-  int rollback_ret = OB_SUCCESS;
-  // 1. if there is no exception in the previous processing, then write this row to storage layer
-  if (OB_SUCC(err_ret) &&
-      err_log_rt_def.first_err_ret_ == OB_SUCCESS) {
-    if (OB_FAIL(write_one_row_post_proc(dml_rtctx))) {
-      if (OB_ERR_PRIMARY_KEY_DUPLICATE == ret) {
-        err_log_rt_def.first_err_ret_ = ret;
-        if (OB_SUCCESS != (rollback_ret = ObSqlTransControl::rollback_savepoint(dml_rtctx.get_exec_ctx(), savepoint_no))) {
-          ret = rollback_ret;
-          LOG_WARN("fail to rollback save point", K(rollback_ret));
-        }
-      } else {
-        LOG_WARN("fail to insert row ", K(ret));
-      }
-    }
-  }
-
-  // 2. if cache some err, must write err info to error logging table
-  // if need write error logging table, will cover error_code
-  // 3. should_catch_err(ret) == true -> write_one_row_post_proc throw some err
-  // 4. should_catch_err(err_ret) == true -> some error occur before write storage
-  if (OB_SUCCESS == rollback_ret &&
-      OB_SUCCESS != err_log_rt_def.first_err_ret_ &&
-      (should_catch_err(ret) || should_catch_err(err_ret))) {
-    if (OB_FAIL(err_log_service.insert_err_log_record(GET_MY_SESSION(dml_rtctx.get_exec_ctx()),
-                                                      error_logging_ctdef,
-                                                      err_log_rt_def,
-                                                      type))) {
-      LOG_WARN("fail to insert_err_log_record", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObDMLService::write_one_row_post_proc(ObDMLRtCtx &dml_rtctx)
-{
-  int ret = OB_SUCCESS;
-  int close_ret = OB_SUCCESS;
-  if (dml_rtctx.das_ref_.has_task()) {
-    if (OB_FAIL(dml_rtctx.das_ref_.execute_all_task())) {
-      LOG_WARN("execute all update das task failed", K(ret));
-    }
-
-    // whether execute result is success or fail , must close all task
-    if (OB_SUCCESS != (close_ret = (dml_rtctx.das_ref_.close_all_task()))) {
-      LOG_WARN("close all das task failed", K(ret));
-    } else {
-      dml_rtctx.reuse();
-    }
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("must have das task");
-  }
-
-  ret = (ret == OB_SUCCESS ? close_ret : ret);
-  return ret;
-}
-
 int ObDMLService::copy_heap_table_hidden_pk(ObEvalCtx &eval_ctx,
                                             const ObUpdCtDef &upd_ctdef)
 {
@@ -2277,12 +2087,11 @@ int ObDMLService::check_nested_sql_legality(ObExecContext &ctx, common::ObTableI
   if (session->get_is_deserialized() && ctx.get_parent_ctx() != nullptr) {
     // Nested SQL in a distributed worker lacks transaction scheduler control.
     pl::ObPLContext *pl_ctx = ctx.get_parent_ctx()->get_pl_stack_ctx();
-    if (pl_ctx == nullptr || !pl_ctx->in_autonomous()) {
-      //this nested sql require transaction scheduler control
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "Perform a DML operation inside a distributed query worker");
-      LOG_WARN("check nested sql legality failed", K(ret), K(pl_ctx));
-    }
+    //this nested sql require transaction scheduler control
+    //but the session is remote, means this sql executing without transaction scheduler control
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Perform a DML operation inside a query or remote/distributed sql");
+    LOG_WARN("check nested sql legality failed", K(ret), K(pl_ctx));
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ObDASUtils::check_nested_sql_mutating(ref_table_id, ctx))) {

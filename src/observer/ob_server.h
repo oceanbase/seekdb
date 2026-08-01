@@ -50,7 +50,6 @@
 
 #include "observer/ob_signal_handle.h"
 #include "observer/ob_server_duty_task.h"
-#include "observer/ob_inner_sql_connection_pool.h"
 #include "observer/ob_srv_network_frame.h"
 #include "observer/ob_service.h"
 #include "observer/ob_server_reload_config.h"
@@ -264,8 +263,6 @@ private:
   ObSrvNetworkFrame net_frame_;
 
 
-  ObInnerSQLConnectionPool sql_conn_pool_;
-  ObInnerSQLConnectionPool ddl_conn_pool_;
   common::ObMySQLProxy sql_proxy_;
   common::ObMySQLProxy ddl_sql_proxy_;
 

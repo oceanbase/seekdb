@@ -18,6 +18,7 @@
 
 
 #include "obmp_stmt_execute.h"
+#include "lib/ob_running_mode.h"
 #include "observer/mysql/ob_mysql_result_set.h"
 #include "lib/trace/ob_trace.h"
 #include "observer/mysql/obsm_utils.h"
@@ -1397,7 +1398,8 @@ OB_NOINLINE int ObMPStmtExecute::process_retry(ObSQLSessionInfo &session,
   lib::ContextParam param;
   param.set_mem_attr(ObModIds::OB_SQL_EXECUTOR, ObCtxIds::DEFAULT_CTX_ID)
     .set_properties(lib::USE_TL_PAGE_OPTIONAL)
-    .set_page_size(OB_MALLOC_BIG_BLOCK_SIZE)
+    .set_page_size(!lib::is_mini_mode() ? OB_MALLOC_BIG_BLOCK_SIZE
+                                        : OB_MALLOC_MIDDLE_BLOCK_SIZE)
     .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
   CREATE_WITH_TEMP_CONTEXT(param) {
     ret = do_process(session,
