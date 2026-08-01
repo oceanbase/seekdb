@@ -11,12 +11,18 @@ project("OceanBase"
 
 include(cmake/Plugin.cmake)
 
-# The plugin runtime remains opt-in while the broader GIS SPI and management
-# surface are still being migrated. Phase 1 provides a local catalog-identity
-# verifier/loader (without signature trust) and keeps it off in the lightweight
-# default build.
+# The plugin runtime is the default execution path for optional extensions.
+# Phase 1 intentionally uses the local trusted verifier/loader without
+# signature trust; the runtime remains independently switchable for minimal
+# embedders that do not load any plugins.
 option(SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS
-  "Build the experimental in-process plugin runtime" OFF)
+  "Build the in-process plugin runtime" ON)
+
+# GIS algorithms and codecs live in plugins/gis by default.  Enabling this
+# option is a compatibility profile for deployments that still need the old
+# in-core implementation; it must not be used by the lightweight default.
+option(SEEKDB_ENABLE_CORE_GIS
+  "Build the legacy GIS algorithms and codecs inside the core" OFF)
 
 if(WIN32)
   find_program(LLVM_LIB_PROGRAM llvm-lib)
@@ -86,7 +92,7 @@ add_subdirectory(deps/oblib)
 add_subdirectory(src)
 # The SDK reference module is visible as an explicit target but excluded from
 # normal server/package builds.
-add_subdirectory(plugins EXCLUDE_FROM_ALL)
+add_subdirectory(plugins)
 
 include(CMakeDependentOption)
 # OB_BUILD_PACKAGE => include tools and build them.

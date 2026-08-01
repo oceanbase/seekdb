@@ -16,11 +16,15 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "share/geo/ob_geo_func_register.h"
 #include "ob_expr_st_covers.h"
+#if SEEKDB_ENABLE_CORE_GIS
+#include "share/geo/ob_geo_func_register.h"
 #include "share/geo/ob_geo_cache.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
 #include "share/geo/ob_geo_utils.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -63,6 +67,7 @@ int ObExprPrivSTCovers::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
+#if SEEKDB_ENABLE_CORE_GIS
 template<typename ResType>
 int ObExprPrivSTCovers::eval_st_covers_common(const ObExpr &expr, ObEvalCtx &ctx,
                                               MultimodeAlloctor &temp_allocator,
@@ -79,7 +84,7 @@ int ObExprPrivSTCovers::eval_st_covers_common(const ObExpr &expr, ObEvalCtx &ctx
   uint32_t srid2;
   bool is_geo1_empty = false;
   bool is_geo2_empty = false;
-  common::ObSrsCacheGuard srs_guard;
+  omt::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = NULL;
   bool is_geo1_cached = false;
   bool is_geo2_cached = false;
@@ -87,7 +92,7 @@ int ObExprPrivSTCovers::eval_st_covers_common(const ObExpr &expr, ObEvalCtx &ctx
   ObExpr *gis_arg2 = expr.args_[1];
   ObGeoConstParamCache* const_param_cache = ObGeoExprUtils::get_geo_constParam_cache(expr.expr_ctx_id_, &ctx.exec_ctx_);
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
-
+  
   ObGeoBoostAllocGuard guard{};
   lib::MemoryContext *mem_ctx = nullptr;
   if (OB_NOT_NULL(const_param_cache) && gis_arg1->is_static_const_) {
@@ -106,7 +111,9 @@ int ObExprPrivSTCovers::eval_st_covers_common(const ObExpr &expr, ObEvalCtx &ctx
   }
 
   if (OB_FAIL(ObGeoTypeUtil::get_type_srid_from_wkb(wkb1, type1, srid1))) {
+    LOG_WARN("get type and srid from wkb failed", K(wkb1), K(ret));
   } else if (OB_FAIL(ObGeoTypeUtil::get_type_srid_from_wkb(wkb2, type2, srid2))) {
+    LOG_WARN("get type and srid from wkb failed", K(wkb2), K(ret));
   } else if (srid1 != srid2) {
     LOG_WARN("srid not the same", K(srid1), K(srid2));
     ret = OB_ERR_GIS_DIFFERENT_SRIDS;
@@ -114,7 +121,7 @@ int ObExprPrivSTCovers::eval_st_covers_common(const ObExpr &expr, ObEvalCtx &ctx
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get session", K(ret));
-  } else if (!is_geo1_cached && !is_geo2_cached && OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, srid1, srs))) {
+  } else if (!is_geo1_cached && !is_geo2_cached && OB_FAIL(ObGeoExprUtils::get_srs_item(srs_guard, srid1, srs))) {
     LOG_WARN("fail to get srs item", K(ret), K(srid1));
   } else if (ObGeoTypeUtil::is_geo1_dimension_higher_than_geo2(type2, type1)) {
     res.set_bool(false);
@@ -130,7 +137,9 @@ int ObExprPrivSTCovers::eval_st_covers_common(const ObExpr &expr, ObEvalCtx &ctx
   } else if (is_geo1_empty || is_geo2_empty) {
     res.set_null();
   } else if (OB_FAIL(ObGeoExprUtils::zoom_in_geos_for_relation(srs, *geo1, *geo2, is_geo1_cached, is_geo2_cached))) {
+    LOG_WARN("zoom in geos failed", K(ret));
   } else if (OB_FAIL(guard.init())) {
+    LOG_WARN("fail to init geo allocator guard", K(ret));
   } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("fail to get mem ctx", K(ret));
@@ -176,12 +185,14 @@ int ObExprPrivSTCovers::eval_st_covers_common(const ObExpr &expr, ObEvalCtx &ctx
         if (OB_FAIL(ret)) {
         } else if (OB_NOT_NULL(cache_geo)) {
           if (OB_FAIL(cache_geo->cover(*geo, gis_context, result))) {
+            LOG_WARN("get contains result failed", K(ret));
           } else {
             res.set_bool(result);
           }
-        } else if (ObGeoTypeUtil::use_point_polygon_short_circuit(*geo1, *geo2, ObGeoPredicate::COVERS)) {
+        } else if (ObGeoTypeUtil::use_point_polygon_short_circuit(*geo1, *geo2, T_FUN_SYS_ST_COVERS)) {
           bool result = false;
-          if (OB_FAIL(ObGeoTypeUtil::get_point_polygon_res(geo1, geo2, ObGeoPredicate::COVERS, result))) {
+          if (OB_FAIL(ObGeoTypeUtil::get_point_polygon_res(geo1, geo2, T_FUN_SYS_ST_COVERS, result))) {
+            LOG_WARN("fail to get res.", K(ret));
           } else {
             res.set_bool(result);
           }
@@ -196,9 +207,13 @@ int ObExprPrivSTCovers::eval_st_covers_common(const ObExpr &expr, ObEvalCtx &ctx
   }
   return ret;
 }
+#endif
 
 int ObExprPrivSTCovers::eval_st_covers(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  return execute_plugin_geometry_relation("st_covers", expr, ctx, res);
+#else
   int ret = OB_SUCCESS;
   ObDatum *gis_datum1 = NULL;
   ObDatum *gis_datum2 = NULL;
@@ -209,7 +224,7 @@ int ObExprPrivSTCovers::eval_st_covers(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObObjType input_type1 = gis_arg1->datum_meta_.type_;
   ObObjType input_type2 = gis_arg2->datum_meta_.type_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   if (OB_FAIL(temp_allocator.eval_arg(gis_arg1, ctx, gis_datum1)) || OB_FAIL(temp_allocator.eval_arg(gis_arg2, ctx, gis_datum2))) {
     LOG_WARN("eval geo args failed", K(ret));
@@ -217,17 +232,21 @@ int ObExprPrivSTCovers::eval_st_covers(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     res.set_null();
   } else if (FALSE_IT(wkb1 = gis_datum1->get_string())) {
   } else if (FALSE_IT(wkb2 = gis_datum2->get_string())) {
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *gis_datum1,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *gis_datum1,
             gis_arg1->datum_meta_, gis_arg1->obj_meta_.has_lob_header(), wkb1))) {
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *gis_datum2,
+    LOG_WARN("fail to get real string data", K(ret), K(wkb1));
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *gis_datum2,
             gis_arg2->datum_meta_, gis_arg2->obj_meta_.has_lob_header(), wkb2))) {
+    LOG_WARN("fail to get real string data", K(ret), K(wkb2));
   } else if (OB_FAIL(ObExprPrivSTCovers::eval_st_covers_common(expr, ctx,
                                                                temp_allocator,
                                                                wkb1,
                                                                wkb2,
                                                                res))) {
+    LOG_WARN("eval st covers failed", K(ret));
   }
   return ret;
+#endif
 }
 
 int ObExprPrivSTCovers::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,

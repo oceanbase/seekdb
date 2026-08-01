@@ -16,8 +16,14 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_priv_st_makeenvelope.h"
+#if SEEKDB_ENABLE_CORE_GIS
 #include "share/object/ob_obj_cast_util.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#endif
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#include "seekdb/plugin/execution_spi.h"
+#include "seekdb/plugin/extension_spi.h"
+#include "share/rc/ob_module_provider.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -26,6 +32,36 @@ namespace oceanbase
 {
 namespace sql
 {
+
+namespace
+{
+struct EnvelopePluginSink
+{
+  const ObExpr *expr_;
+  ObEvalCtx *ctx_;
+  ObDatum *result_;
+};
+
+seekdb_plugin_status_t SEEKDB_PLUGIN_CALL emit_envelope_plugin_result(
+    seekdb_plugin_host_handle_t *host,
+    const seekdb_plugin_execution_result_v1_t *result)
+{
+  if (nullptr == host || nullptr == result || result->struct_size < sizeof(*result) ||
+      nullptr == result->data || result->data_size == 0 || result->is_null != 0) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  EnvelopePluginSink *sink = reinterpret_cast<EnvelopePluginSink *>(host);
+  if (nullptr == sink->expr_ || nullptr == sink->ctx_ || nullptr == sink->result_) {
+    return SEEKDB_PLUGIN_STATUS_FAILED_PRECONDITION;
+  }
+  const int ret = pack_plugin_expr_result(
+      *sink->expr_, *sink->ctx_, *sink->result_,
+      reinterpret_cast<const char *>(result->data),
+      static_cast<int64_t>(result->data_size));
+  return ret == OB_SUCCESS ? SEEKDB_PLUGIN_STATUS_OK : SEEKDB_PLUGIN_STATUS_INTERNAL;
+}
+} // namespace
+
 ObExprPrivSTMakeEnvelope::ObExprPrivSTMakeEnvelope(common::ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_PRIV_ST_MAKEENVELOPE, N_PRIV_ST_MAKEENVELOPE, MORE_THAN_TWO,
         NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
@@ -78,7 +114,8 @@ int ObExprPrivSTMakeEnvelope::calc_result_typeN(
   return ret;
 }
 
-int ObExprPrivSTMakeEnvelope::read_args(common::ObSrsCacheGuard &srs_guard, const ObExpr &expr, ObEvalCtx &ctx, ObSEArray<double, 4> &coords,
+#if SEEKDB_ENABLE_CORE_GIS
+int ObExprPrivSTMakeEnvelope::read_args(omt::ObSrsCacheGuard &srs_guard, const ObExpr &expr, ObEvalCtx &ctx, ObSEArray<double, 4> &coords,
     ObGeoSrid &srid, bool &is_null_result, const ObSrsItem *&srs_item)
 {
   int ret = OB_SUCCESS;
@@ -97,15 +134,18 @@ int ObExprPrivSTMakeEnvelope::read_args(common::ObSrsCacheGuard &srs_guard, cons
     } else if (ob_is_null(type)) {
       is_null_result = true;
     } else if (OB_FAIL(arg->eval(ctx, datum))) {
+      LOG_WARN("fail to eval arg", K(ret), K(i), K(type));
     } else if (datum->is_null()) {
       is_null_result = true;
     } else if (!ob_is_string_type(type)) {
       coord = type == ObTinyIntType ? datum->get_tinyint() : datum->get_double();
     } else if (OB_FAIL(ObGeoExprUtils::string_to_double(datum->get_string(), arg->datum_meta_.cs_type_, coord))) {
+      LOG_WARN("fail to get x", K(ret), K(datum->get_string()), K(arg->datum_meta_.cs_type_));
     }
 
     if (OB_SUCC(ret) && !is_null_result) {
       if (OB_FAIL(coords.push_back(coord))) {
+        LOG_WARN("failed to read point params", K(ret), K(i), K(coord));
       }
     }
   }
@@ -116,6 +156,7 @@ int ObExprPrivSTMakeEnvelope::read_args(common::ObSrsCacheGuard &srs_guard, cons
       ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
       LOG_WARN("invalid type", K(ret));
     } else if (OB_FAIL(expr.args_[4]->eval(ctx, datum))) {
+      LOG_WARN("fail to eval second argument", K(ret));
     } else if (datum->is_null()) {
       is_null_result = true;
     } else if (datum->get_int() < 0 || datum->get_int() > INT_MAX32) {
@@ -123,8 +164,10 @@ int ObExprPrivSTMakeEnvelope::read_args(common::ObSrsCacheGuard &srs_guard, cons
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "SRID", N_PRIV_ST_MAKEENVELOPE);
       LOG_WARN("srid input value out of range", K(ret), K(srid));
     } else if (0 != (srid = datum->get_uint32())) {
-      if (OB_FAIL(ObGeoExprUtils::get_srs_item(
-              ctx, srs_guard, srid, srs_item))) {
+      if (OB_FAIL(SRS_SERVICE->get_srs_guard(srs_guard))) {
+        LOG_WARN("fail to get srs guard", K(ret));
+      } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs_item))) {
+        LOG_WARN("fail to get srs item", K(ret));
       } else if (OB_ISNULL(srs_item)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null srs item", K(ret));
@@ -145,20 +188,80 @@ int ObExprPrivSTMakeEnvelope::eval_priv_st_makeenvelope(const ObExpr &expr, ObEv
   ObWkbBuffer wkb_buf(tmp_allocator);
   ObWkbBuffer res_wkb_buf(tmp_allocator);
   ObGeometry *geo = NULL;
-  common::ObSrsCacheGuard srs_guard;
+  omt::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs_item = NULL;
   // rectangle point -> polygon ewkb
   if (OB_FAIL(read_args(srs_guard, expr, ctx, coords, srid, is_null_result, srs_item))) {
+    LOG_WARN("fail to read args", K(ret));
   } else if (is_null_result) {
     res.set_null();
   } else {
+    if (expr.arg_cnt_ == 4 && coords.count() == 4 && nullptr != share::g_mp) {
+      EnvelopePluginSink sink{&expr, &ctx, &res};
+      seekdb_plugin_execution_context_v1_t plugin_ctx = {};
+      plugin_ctx.struct_size = sizeof(plugin_ctx);
+      plugin_ctx.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink);
+      plugin_ctx.emit_result = emit_envelope_plugin_result;
+      seekdb_plugin_execution_value_v1_t arguments[4] = {};
+      for (int i = 0; i < 4; ++i) {
+        arguments[i].struct_size = sizeof(arguments[i]);
+        arguments[i].type_id = "org.seekdb.gis.scalar.float64";
+        arguments[i].data = reinterpret_cast<const uint8_t *>(&coords[i]);
+        arguments[i].data_size = sizeof(double);
+      }
+      const int plugin_ret = share::g_mp->execute_plugin_extension(
+          SEEKDB_PLUGIN_EXTENSION_FUNCTION, "st_makeenvelope", &plugin_ctx,
+          arguments, 4);
+      if (OB_SUCCESS == plugin_ret) return OB_SUCCESS;
+    }
     if (OB_FAIL(ObGeoTypeUtil::rectangle_to_swkb(coords[0], coords[1], coords[2], coords[3], srid, true, res_wkb_buf))) {
+      LOG_WARN("fail to transform rectangle point to ewkb", K(ret), K(srid));
     } else if (OB_FAIL(ObGeoExprUtils::pack_geo_res(expr, ctx, res, res_wkb_buf.string()))) {
+      LOG_WARN("fail to pack geo res", K(ret));
     }
   }
 
   return ret;
 }
+#else
+int ObExprPrivSTMakeEnvelope::eval_priv_st_makeenvelope(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+{
+  int ret = OB_SUCCESS;
+  ObDatum *datum = nullptr;
+  double values[4] = {0, 0, 0, 0};
+  bool is_null = false;
+  for (int i = 0; OB_SUCC(ret) && i < 4; ++i) {
+    if (OB_FAIL(expr.args_[i]->eval(ctx, datum))) {
+    } else if (datum->is_null()) {
+      is_null = true;
+    } else {
+      values[i] = datum->get_double();
+    }
+  }
+  if (OB_SUCC(ret) && is_null) {
+    res.set_null();
+  } else if (OB_SUCC(ret) && nullptr != share::g_mp) {
+    EnvelopePluginSink sink{&expr, &ctx, &res};
+    seekdb_plugin_execution_context_v1_t plugin_ctx = {};
+    plugin_ctx.struct_size = sizeof(plugin_ctx);
+    plugin_ctx.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink);
+    plugin_ctx.emit_result = emit_envelope_plugin_result;
+    seekdb_plugin_execution_value_v1_t arguments[4] = {};
+    for (int i = 0; i < 4; ++i) {
+      arguments[i].struct_size = sizeof(arguments[i]);
+      arguments[i].type_id = "org.seekdb.gis.scalar.float64";
+      arguments[i].data = reinterpret_cast<const uint8_t *>(&values[i]);
+      arguments[i].data_size = sizeof(values[i]);
+    }
+    ret = share::g_mp->execute_plugin_extension(
+        SEEKDB_PLUGIN_EXTENSION_FUNCTION, "st_makeenvelope", &plugin_ctx,
+        arguments, 4);
+  } else if (OB_SUCC(ret)) {
+    ret = OB_NOT_SUPPORTED;
+  }
+  return ret;
+}
+#endif
 
 int ObExprPrivSTMakeEnvelope::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const
 {

@@ -20,6 +20,7 @@ if (NOT TARGET seekdb_plugin_sdk)
   install(FILES
     "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/seekdb_plugin_abi.h"
     "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/extension_spi.h"
+    "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/execution_spi.h"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/seekdb/plugin"
     COMPONENT plugin-sdk)
   install(TARGETS seekdb_plugin_sdk
@@ -351,10 +352,27 @@ function(_seekdb_validate_all_marked_plugin_targets)
     get_target_property(_plugin_link_options "${_plugin_target}" LINK_OPTIONS)
     if (_plugin_link_options AND NOT _plugin_link_options MATCHES "-NOTFOUND$")
       foreach(_option IN LISTS _plugin_link_options)
-        if (NOT _option STREQUAL "-Wl,-z,defs")
-          message(FATAL_ERROR
-            "managed plugin ${_plugin_target} gained an unreviewable link option: ${_option}")
+        if (_option STREQUAL "-Wl,-z,defs" OR
+            _option STREQUAL "-static-libstdc++" OR
+            _option STREQUAL "-static-libgcc")
+          continue()
         endif()
+        # A plugin may provide a local export map to hide implementation
+        # symbols (for example C++ standard-library template instantiations).
+        # The map is auditable only when it is a real file below that plugin's
+        # source tree; arbitrary linker scripts remain forbidden.
+        if (_option MATCHES "^-Wl,--version-script=(.+)$")
+          set(_version_script "${CMAKE_MATCH_1}")
+          if (EXISTS "${_version_script}")
+            file(REAL_PATH "${_version_script}" _version_script_real)
+            string(FIND "${_version_script_real}" "${_plugin_root}/" _version_script_prefix)
+            if (_version_script_prefix EQUAL 0)
+              continue()
+            endif()
+          endif()
+        endif()
+        message(FATAL_ERROR
+          "managed plugin ${_plugin_target} gained an unreviewable link option: ${_option}")
       endforeach()
     endif()
 
@@ -577,7 +595,7 @@ function(seekdb_add_plugin target)
     set(_plugin_install_dir
       "${CMAKE_INSTALL_LIBDIR}/seekdb/plugins/${target}")
     install(TARGETS ${target}
-      LIBRARY DESTINATION "${_plugin_install_dir}"
+      LIBRARY DESTINATION "${_plugin_install_dir}" COMPONENT plugins
       RUNTIME DESTINATION "${_plugin_install_dir}"
       COMPONENT plugins)
     install(FILES "${_plugin_manifest_real}"

@@ -16,7 +16,11 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_priv_st_numinteriorrings.h"
+#if SEEKDB_ENABLE_CORE_GIS
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -56,19 +60,26 @@ int ObExprPrivSTNumInteriorRings::calc_result_type1(
 int ObExprPrivSTNumInteriorRings::eval_priv_st_numinteriorrings(
     const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  PluginInt32ResultSink sink{&res};
+  return execute_plugin_geometry_scalar("st_numinteriorrings", expr, ctx, res,
+                                       emit_plugin_int32_result,
+                                       reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink));
+#else
   int ret = OB_SUCCESS;
   bool is_null_res = false;
   ObDatum *datum1 = nullptr;
   ObExpr *arg1 = expr.args_[0];
   ObObjType type1 = arg1->datum_meta_.type_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   uint32_t res_num = 0;
 
   if (ob_is_null(type1)) {
     is_null_res = true;
   } else if (OB_FAIL(temp_allocator.eval_arg(arg1, ctx, datum1))) {
+    LOG_WARN("fail to eval args", K(ret));
   } else if (datum1->is_null()) {
     is_null_res = true;
   } else {
@@ -77,14 +88,15 @@ int ObExprPrivSTNumInteriorRings::eval_priv_st_numinteriorrings(
     ObGeometry *geo = nullptr;
 
     if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
-            ctx.exec_ctx_, temp_allocator, *datum1, arg1->datum_meta_,
-            arg1->obj_meta_.has_lob_header(), wkb))) {
+            temp_allocator, *datum1, arg1->datum_meta_, arg1->obj_meta_.has_lob_header(), wkb))) {
+      LOG_WARN("fail to read real string data", K(ret), K(arg1->obj_meta_.has_lob_header()));
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator,
                    wkb,
                    geo,
                    nullptr,
                    N_PRIV_ST_NUMINTERIORRINGS,
-                   GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {
+                   GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {  // ObIWkbGeom
+      LOG_WARN("fail to build geometry from wkb", K(ret), K(wkb));
     } else if (geo->type() != ObGeoType::POLYGON) {
       is_null_res = true;
     } else {
@@ -104,6 +116,7 @@ int ObExprPrivSTNumInteriorRings::eval_priv_st_numinteriorrings(
   }
 
   return ret;
+#endif
 }
 
 int ObExprPrivSTNumInteriorRings::cg_expr(

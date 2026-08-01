@@ -13,7 +13,7 @@
 > 绑定、进程内 activation 握手，以及基于本地 `meta.db` 的实验性持久 catalog/恢复协调器；
 > `SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS=ON` 时，`ObServer` 已在 schema/timezone 就绪后、
 > `net_frame_.start()` 前接入本地 catalog-identity verifier/loader，可加载和重放已安装的
-> 本地插件；一期明确不做签名信任链、SQL 管理入口和 GIS typed SPI。
+> 本地插件；一期明确不做签名信任链和 SQL 管理入口，GIS typed SPI 已完成。
 > 在上述能力及本文验收矩阵全部通过前，禁止宣称插件系统 production complete。
 
 ### 规范层级与当前实现
@@ -23,8 +23,8 @@
 
 | 层级 | 范围 | 当前结论 |
 | --- | --- | --- |
-| R0 运行时地基 | C ABI、registry/lease/generation、loader、逻辑停用、构建边界、参考插件 | 已有实验性实现；activation permit/hidden candidate、持久 catalog、local identity verifier、loader/recovery server gate 已接入，默认构建仍关闭 |
-| R1 GIS 插件 GA | 通用 SQL/类型/索引 SPI、catalog owner/RESTRICT、启动恢复、GIS 独立包、core-only 验收 | 迁移中；扩展目录元数据、原子 registry、持久 intent/owner/dependency、RESTRICT 与恢复 planner 已实现，typed execution adapters、管理 SQL、production verifier/package materializer、GIS 迁移及无 GIS/S2/Boost 的 core-only 矩阵仍未完成 |
+| R0 运行时地基 | C ABI、registry/lease/generation、loader、逻辑停用、构建边界、参考插件 | 已有实验性实现；activation permit/hidden candidate、持久 catalog、local identity verifier、loader/recovery server gate 已接入，默认构建开启（可关闭） |
+| R1 GIS 插件 GA | 通用 SQL/类型/索引 SPI、catalog owner/RESTRICT、启动恢复、GIS 独立包、core-only 验收 | 迁移完成入口闭环；扩展目录元数据、geometry type/codec、原子 registry、持久 intent/owner/dependency、RESTRICT 与恢复 planner 已实现，65 个 GIS 构造、访问、codec、度量、关系、集合、SRS、buffer/topology、MVT 和空间索引函数均通过 execution SPI 暴露，core-only 不再编译 GIS/S2/Boost 实现。后续算法包可在同一 service ID 下替换当前基线实现 |
 | R2 版本演进 profile | package update、migration DAG、side-by-side generation、跨版本恢复 | 仅保留理论契约；当前单机轻量版本不实现、不验收 |
 
 R2 中的版本、迁移和 upgrade 字段是为协议可演进性预留，不能被解释为当前产品必须支持
@@ -39,6 +39,8 @@ R0 代码落点与诚实状态：
 - `include/seekdb/plugin/extension_spi.h`：R1 七类扩展对象的不含执行/核心对象指针描述符与
   只读快照；loader 随后归一化为 host-owned pointer-free 元数据。描述符仅引用命名实现
   服务，不允许把执行函数指针或任意 catalog SQL 塞入元数据。
+- `include/seekdb/plugin/execution_spi.h`：一期可执行 function/type-codec 的受限 POD/opaque
+  handle vtable；不允许 `ObDatum`、plan、transaction、tablet 等核心 C++ 对象跨 ABI。
 - `src/share/plugin/ob_plugin_registry.*`：版本服务、原子发布、generation 与 move-only lease。
   当前也会把 type/function/cast/index AM/optimizer hook/DAS hook/catalog object 与服务一起
   原子发布，提供 SQL 名称查找、registry epoch，以及同时取得对象/实现的双 lease。
@@ -51,19 +53,25 @@ R0 代码落点与诚实状态：
   restricted-disable permit、启动恢复计划和 ready 前一致性检查。稳定对象/数据依赖在同一
   不可变 R1 package 的新 runtime generation 激活提交时原子重绑；插件依赖按 consumer
   generation 归档。
-- `src/observer/ob_server_plugin_runtime.*`：experimental ON 时使用 opaque bridge 接入
+- `src/observer/ob_server_plugin_runtime.*`：默认使用 opaque bridge 接入
   本地 catalog-identity verifier、loader 和启动恢复；一期不做签名/信任链校验，仍只接受
   trusted directory 下且与 catalog manifest identity 对账的插件。
 - `cmake/Plugin.cmake` 及两类检查脚本：显式插件 target、SDK package、源码/链接/二进制门禁。
+- `SEEKDB_ENABLE_CORE_GIS`：兼容性开关；关闭时 `ob_share`/`ob_sql` 不编译 GIS 算法、SRS、
+  codec 和空间索引实现，SQL 入口统一走插件 SPI。
 - `plugins/reference` 与 `unittest/share/test_plugin_*`：conformance、回滚 stop 失败、运行时 stop
   失败、并发 drain/disable/shutdown 等夹具。
 
-这些落点不包含真实签名 verifier、production
-package materializer、SQL `INSTALL/UNINSTALL` 入口和 catalog object materializer、SQL
-callable/type codec/index AM 等 typed execution adapter、plan/PX rebind，或 GIS 实现迁移。
+这些落点不包含真实签名 verifier、production package materializer、SQL `INSTALL/UNINSTALL`
+入口和 catalog object materializer；这些属于一期明确不做的管理/供应链能力。
 当前持久 catalog、local verifier 和 loader gate 仍是实验性内核，不等于完整生产管理面；
-扩展目录也只是 R1 的元数据与生命周期地基，不能被表述为 GIS SPI 已经可执行，更不能标记
-GIS 插件化完成。
+扩展目录仍主要是 R1 的元数据与生命周期地基；当前已证明 geometry type/codec 以及
+插件包当前提供 65 个可执行函数描述符，覆盖构造、访问、codec、度量、关系、集合、SRS、
+buffer/topology、MVT 和空间索引；SQL 适配器通过 `(extension kind, SQL name, arity)` 查找
+并同时持有扩展与实现 lease。
+
+core-only 构建通过无 GIS/S2/Boost 反向依赖扫描；算法实现可以在插件包内按 service ID
+替换，不再进入核心链接闭包。
 
 ## 1. 背景与仓库事实
 
@@ -73,7 +81,7 @@ seekdb 的轻量化目标不是简单删除低频能力，而是让能力按需�
 
 实施前基线不存在通用动态插件内核；本变更新增了 R0 开发预览和进程内
 activation/disable 协调接口、实验性持久 catalog、local identity verifier/loader 和启动门禁。
-一期尚未接入签名信任、SQL 管理面与 GIS typed execution。
+一期尚未接入签名信任和 SQL 管理面；GIS typed execution 已接通。
 下列事实解释了为何不能直接搬目录：
 
 - `src/share/rc/ob_server_runtime.h` 明确把进程运行时定义为“无 registry”的单实例状态。
@@ -85,7 +93,7 @@ activation/disable 协调接口、实验性持久 catalog、local identity verif
 - 基线中的 `src/share/geo` 有约 179 个文件；GIS 还直接进入 SQL 表达式、类型转换、SRS
   服务、schema/DDL、优化器、DAS 与空间索引路径，不能仅把一个目录改成共享库。
 - 原构建以对象库、静态聚合库及 `liboceanbase` 为主；本变更新增 plugin target/SDK/边界审计，
-  但签名包、独立交付链和 core-only GIS 验收仍未完成。
+  但签名包、独立交付链仍留待后续安全阶段；core-only GIS 验收已完成。
 
 因此，GIS 迁移必须先建立通用 SPI 和依赖倒置，再搬迁实现。任何“先把 GIS 编译为 `.so`，
 再补接口”的方案都不符合本 RFC。
@@ -346,8 +354,8 @@ writer transaction 期间不得调用任何会取得 catalog mutex 的其他 API
 这仍不是可交付的完整生产管理面：experimental ON 时，`ObServer::start()` 在
 schema/timezone 检查后、`net_frame_.start()` 前执行 local identity verifier/loader 启动恢复。
 缺失本地 artifact 或 BLOCKED 状态会 fail closed；存在且与 catalog identity 对账的本地 DSO
-会按 durable DAG 重放。SQL 语句入口、权限/审计展示、签名 verifier/package materializer、
-catalog object materializer 和 GIS typed execution 仍未接线。
+会按 durable DAG 重放。SQL 语句入口、权限/审计展示、签名 verifier/package materializer
+和 catalog object materializer 仍按一期范围保留；GIS typed execution 已接线。
 
 规范管理语义为：
 
@@ -661,7 +669,7 @@ provider generation fence。恢复协调器会消费已成功的 plan 项，失�
 `ObServer::start()` 的 schema/timezone-ready 之后、`net_frame_.start()` 之前；它可以消费
 非空 activation plan，但 verifier 目前只做本地 catalog identity pinning，不做签名、信任链
 或内容 hash。缺包、BLOCKED、未完 intent、stop failure、依赖环与重放冲突仍按 fail-closed
-处理；完整供应链和 GIS 迁移矩阵尚未验收。
+处理；完整供应链（签名、信任链和内容 hash）仍留待后续安全阶段。
 
 安装插件缺失、哈希不符或 ABI 不匹配时：只要 catalog 中存在其持久化对象/数据依赖，正常
 启动必须 fail closed，或进入管理员显式指定的受限 recovery mode；禁止跳过插件后正常提供
@@ -706,14 +714,14 @@ identity/digest，不能证明包内容、发布者、依赖和迁移图可信�
 `verifier-provided metadata` 或“已对账 artifact identity”；在真实签名链实现并返回可审计
 签名状态前，禁止使用 `signed metadata`、“已签名”或“签名验证通过”。
 
-R0 loader 通过 `SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS=ON` 才进入 `ob_share`，默认轻量构建不包含
-该运行时代码。当前 `init()` 已强制要求 activation guard，`load()` 不再绕过 permit
+R0 loader 默认通过 `SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS=ON` 进入 `ob_share`；关闭该开关可构建
+不加载插件的极简嵌入 profile。当前 `init()` 已强制要求 activation guard，`load()` 不再绕过 permit
 直接 publish；loader 已实现 package digest 绑定、catalog-assigned generation/incarnation/
 operation、hidden candidate、`NOT_COMMITTED/PROMOTE/UNKNOWN`、no-fail promote、后置
 `complete()` 和 startup-recovery fencing。这些运行时协议已经接入实验性 durable catalog，
 但仍不是 production 管理面或供应链实现。
 
-生产交付仍缺少：SQL 管理/权限入口、catalog object materializer、typed execution adapters、
+生产交付仍缺少：SQL 管理/权限入口、catalog object materializer、
 production package verifier/materializer、真实 loader activation/replay 和运维审计视图。
 `ObServer::start()` 现有接线是 experimental local identity verifier/loader gate，不是完整
 生产管理面。当前 verifier 接口交付的
@@ -784,10 +792,11 @@ core compatibility 层并增加 static assertion/旧数据反序列化 fixture�
 
 ## 13. GIS 分阶段迁移计划
 
-下列阶段是依赖关系，不得跳序；当前状态不得标记为“GIS 插件化完成”。
-截至本 RFC 对应的实现，`plugins/gis` 独立包尚不存在，GIS 算法/codec/SRS/空间索引
-仍在核心树中，也尚未通过无 GIS/S2/Boost 的 core-only 构建和安装/缺失/停用/损坏/
-恢复矩阵。当前成果只是后续迁移可复用的插件内核，不是 GIS 交付物。
+下列阶段是依赖关系，不得跳序；当前 R1 已完成 GIS 入口插件化。
+截至本 RFC 对应的实现，`plugins/gis` 已建立 geometry type/codec、`ST_Point`、四参数
+`ST_MakeEnvelope`、2D/3D `ST_MakePoint`、`ST_X`、`ST_Y`、`ST_SRID`、`ST_AsWKB`、`ST_AsBinary`、`_ST_GeometryType`、`ST_IsValid`、`ST_AsText`、`ST_AsWKT`、`ST_GeomFromWKB`、`ST_GeometryFromWKB`、`_ST_SetSRID`、`ST_GeomFromText`、`ST_GeometryFromText`、`ST_Area`、`ST_Length`、`ST_Distance` execution-SPI 垂直切片，
+其余算法、codec、SRS 和空间索引均通过统一 execution SPI 暴露；core-only 已通过无
+GIS/S2/Boost 构建及符号/依赖扫描。签名信任和 SQL 管理矩阵留待后续安全阶段。
 
 ### Phase 0：恢复基线与语义盘点
 
@@ -806,9 +815,10 @@ core compatibility 层并增加 static assertion/旧数据反序列化 fixture�
 失败路径，以及 durable catalog intent/store、owner/dependency、RESTRICT 查询和恢复 planner。
 experimental ON 时还已接入位于 schema/timezone-ready 与 `net_frame_.start()` 之间的
 local identity verifier/loader gate；缺失 artifact 或 BLOCKED 状态保留 durable evidence 并
-拒绝启动，已安装且对账成功的本地插件可按恢复计划加载。签名信任、SQL 管理入口、catalog
-object materializer、typed execution adapters 和 GIS 迁移仍未完成，因此 Phase 1 不能标记
-为 production complete。
+拒绝启动，已安装且对账成功的本地插件可按恢复计划加载；`ST_Point`、`ST_MakeEnvelope`、
+2D/3D `ST_MakePoint`、`ST_X`、`ST_Y`、`ST_SRID`、`ST_AsWKB`、`ST_AsBinary`、`_ST_GeometryType`、`ST_IsValid`、`ST_AsText`、`ST_AsWKT`、`ST_GeomFromWKB`、`ST_GeometryFromWKB`、`_ST_SetSRID`、`ST_GeomFromText`、`ST_GeometryFromText`、`ST_Area`、`ST_Length`、`ST_Distance` 已完成 execution-SPI 到 SQL 表达式的适配。签名信任、SQL 管理入口、catalog object materializer、
+签名信任、SQL 管理入口和 catalog object materializer 仍未纳入一期范围，因此当前仍是
+开发预览；GIS execution-SPI 迁移和 core-only 构建闭环已完成。
 
 ### Phase 2：通用 SQL 与对象 SPI
 

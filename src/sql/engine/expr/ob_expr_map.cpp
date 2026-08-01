@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_map.h"
+#include <map>
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/ob_exec_context.h"
@@ -67,7 +68,9 @@ int ObExprMap::calc_result_typeN(ObExprResType& type,
     ret = OB_SIZE_OVERFLOW;
     OB_LOG(WARN, "array element size exceed max", K(ret), K(param_num), K(MAX_ARRAY_ELEMENT_SIZE));
   } else if (OB_FAIL(deduce_element_type(exec_ctx, types_stack, param_num, key_subid, value_subid))) {
+    LOG_WARN("failed to deduce map element type", K(ret));
   } else if (OB_FAIL(ObArrayExprUtils::deduce_map_subschema_id(exec_ctx, key_subid, value_subid, subschema_id))) {
+    LOG_WARN("failed to get collection subschema id", K(ret));
   } else {
     type.set_collection(subschema_id);
   }
@@ -86,6 +89,7 @@ int ObExprMap::eval_map(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
   ObIArrayType *map_obj = NULL;
 
   if (OB_FAIL(ctx.exec_ctx_.get_sqludt_meta_by_subschema_id(subschema_id, value))) {
+    LOG_WARN("failed to get subschema ctx", K(ret));
   } else if (value.type_ >= OB_SUBSCHEMA_MAX_TYPE) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid subschema type", K(ret), K(value));
@@ -96,6 +100,7 @@ int ObExprMap::eval_map(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("map type is null", K(ret), K(subschema_id));
   } else if (OB_FAIL(ObArrayTypeObjFactory::construct(tmp_allocator, *map_type, map_obj))) {
+    LOG_WARN("construct array obj failed", K(ret), K(subschema_id), K(coll_info));
   } else {
     ObCollectionArrayType *key_type = dynamic_cast<ObCollectionArrayType *>(map_type->key_type_);
     ObCollectionArrayType *value_type = dynamic_cast<ObCollectionArrayType *>(map_type->value_type_);
@@ -112,14 +117,18 @@ int ObExprMap::eval_map(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
       ret = OB_ERR_NULL_VALUE;
       LOG_WARN("key_elem_type is null", K(ret), K(key_type));
     } else if (OB_FAIL(key_arr->clone_empty(tmp_allocator, full_key_arr, false))) {
+      OB_LOG(WARN, "clone empty failed", K(ret));
     } else if (OB_ISNULL(idx_arr = static_cast<uint32_t *>(tmp_allocator.alloc(expr.arg_cnt_ / 2 * sizeof(uint32_t))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc memory for tmpbuf", K(ret), K(expr.arg_cnt_ / 2 * sizeof(uint32_t)));
     } else if (OB_FAIL(construct_key_array(ctx, expr, key_elem->basic_meta_.get_obj_type(), full_key_arr, idx_arr, idx_count))) {
+      LOG_WARN("construct key array failed", K(ret));
     }
     for (int i = 0; i < idx_count && OB_SUCC(ret); i++) {
       if (OB_FAIL(key_arr->insert_from(*full_key_arr, idx_arr[i] / 2))) {
+        OB_LOG(WARN, "append key element failed", K(ret), K(i));
       } else if (OB_FAIL(ObArrayExprUtils::add_elem_to_array(expr, ctx, tmp_allocator, value_type, value_arr, idx_arr[i] + 1))) {
+        OB_LOG(WARN, "failed to add elem to value array", K(ret), K(i));
       }
     } // end for
     if (OB_FAIL(ret)) {
@@ -130,6 +139,7 @@ int ObExprMap::eval_map(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
       dynamic_cast<ObMapType *>(map_obj)->set_size(key_arr->size());
       ObString res_str;
       if (OB_FAIL(ObArrayExprUtils::set_array_res(map_obj, map_obj->get_raw_binary_len(), expr, ctx, res_str))) {
+        LOG_WARN("get array binary string failed", K(ret), K(*coll_info));
       } else {
         res.set_string(res_str);
       }
@@ -167,6 +177,7 @@ int ObExprMap::deduce_element_type(ObExecContext *exec_ctx, ObExprResType* types
         LOG_WARN("array element in binary type isn't supported", K(ret));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "array element in binary type");
       } else if (OB_FAIL(ObExprResultTypeUtil::get_deduce_element_type(types_stack[i], key_type))) {
+        LOG_WARN("get deduce type failed", K(ret), K(types_stack[i].get_type()), K(key_type.get_obj_type()), K(i));
       }
     } else {
       // value param
@@ -183,6 +194,7 @@ int ObExprMap::deduce_element_type(ObExecContext *exec_ctx, ObExprResType* types
         } else if (value_elem_subid != types_stack[i].get_subschema_id()) {
           ObExprResType tmp_calc_type;
           if (OB_FAIL(ObExprResultTypeUtil::get_array_calc_type(exec_ctx, coll_calc_type, types_stack[i], tmp_calc_type))) {
+            LOG_WARN("failed to check array compatibilty", K(ret));
           } else {
             value_elem_subid = tmp_calc_type.get_subschema_id();
             coll_calc_type = tmp_calc_type;
@@ -201,6 +213,7 @@ int ObExprMap::deduce_element_type(ObExecContext *exec_ctx, ObExprResType* types
         LOG_WARN("array element in binary type isn't supported", K(ret));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "array element in binary type");
       } else if (OB_FAIL(ObExprResultTypeUtil::get_deduce_element_type(types_stack[i], value_type))) {
+        LOG_WARN("get deduce type failed", K(ret), K(types_stack[i].get_type()), K(value_type.get_obj_type()), K(i));
       } else {
         is_first_value_elem = false;
       }
@@ -237,12 +250,15 @@ int ObExprMap::deduce_element_type(ObExecContext *exec_ctx, ObExprResType* types
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(exec_ctx->get_subschema_id_by_collection_elem_type(ObNestedType::OB_ARRAY_TYPE,
                                                                         key_type, key_subid))) {
+    LOG_WARN("failed to get key subschema id", K(ret));
   } else if (value_elem_subid == ObInvalidSqlType) {
     if (OB_FAIL(exec_ctx->get_subschema_id_by_collection_elem_type(ObNestedType::OB_ARRAY_TYPE,
                                                                    value_type, value_subid))) {
+    LOG_WARN("failed to get value subschema id", K(ret));
     }
   } else {
     if (OB_FAIL(ObArrayExprUtils::deduce_nested_array_subschema_id(exec_ctx, value_type, value_subid))) {
+      LOG_WARN("failed to deduce nested array subschema id", K(ret));
     }
   }
   return ret;

@@ -16,9 +16,13 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "share/geo/ob_geo_func_register.h"
 #include "ob_expr_priv_st_touches.h"
+#if SEEKDB_ENABLE_CORE_GIS
+#include "share/geo/ob_geo_func_register.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -71,18 +75,19 @@ int ObExprPrivSTTouches::calc_result_type2(ObExprResType &type, ObExprResType &t
   return ret;
 }
 
-int ObExprPrivSTTouches::get_input_geometry(common::ObSrsCacheGuard &srs_guard, MultimodeAlloctor &temp_allocator, ObEvalCtx &ctx, ObExpr *gis_arg,
+int ObExprPrivSTTouches::get_input_geometry(omt::ObSrsCacheGuard &srs_guard, MultimodeAlloctor &temp_allocator, ObEvalCtx &ctx, ObExpr *gis_arg,
     ObDatum *gis_datum, const ObSrsItem *&srs, ObGeometry *&geo, bool &is_geo_empty)
 {
   int ret = OB_SUCCESS;
   ObString wkb = gis_datum->get_string();
   ObGeoType type = ObGeoType::GEOTYPEMAX;
   uint32_t srid = -1;
-  if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator,
+  if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator,
           *gis_datum,
           gis_arg->datum_meta_,
           gis_arg->obj_meta_.has_lob_header(),
           wkb))) {
+    LOG_WARN("fail to get real string data", K(ret), K(wkb));
   } else if (OB_FAIL(ObGeoTypeUtil::get_type_srid_from_wkb(wkb, type, srid))) {
     if (ret == OB_ERR_GIS_INVALID_DATA) {
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_TOUCHES);
@@ -90,19 +95,25 @@ int ObExprPrivSTTouches::get_input_geometry(common::ObSrsCacheGuard &srs_guard, 
     LOG_WARN("get type and srid from wkb failed", K(wkb), K(ret));
   } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(
                   ctx, srs_guard, wkb, srs, true, N_PRIV_ST_TOUCHES))) {
+    LOG_WARN("fail to get srs item", K(ret), K(wkb));
   } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator,
                   wkb,
                   geo,
                   srs,
                   N_PRIV_ST_TOUCHES,
                   GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {
+    LOG_WARN("get first geo by wkb failed", K(ret));
   } else if (OB_FAIL(ObGeoExprUtils::check_empty(geo, is_geo_empty))) {
+    LOG_WARN("check geo empty failed", K(ret));
   }
   return ret;
 }
 
 int ObExprPrivSTTouches::eval_priv_st_touches(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  return execute_plugin_geometry_relation("st_touches", expr, ctx, res);
+#else
   int ret = OB_SUCCESS;
   ObExpr *gis_arg1 = expr.args_[0];
   ObExpr *gis_arg2 = expr.args_[1];
@@ -112,11 +123,11 @@ int ObExprPrivSTTouches::eval_priv_st_touches(const ObExpr &expr, ObEvalCtx &ctx
   bool is_geo2_null = false;
   ObGeometry *geo1 = nullptr;
   ObGeometry *geo2 = nullptr;
-  common::ObSrsCacheGuard srs_guard;
+  omt::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs1 = nullptr;
   const ObSrsItem *srs2 = nullptr;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObDatum *gis_datum1 = nullptr;
   ObDatum *gis_datum2 = nullptr;
@@ -126,6 +137,7 @@ int ObExprPrivSTTouches::eval_priv_st_touches(const ObExpr &expr, ObEvalCtx &ctx
     res.set_null();
   } else if (OB_FAIL(get_input_geometry(
                  srs_guard, temp_allocator, ctx, gis_arg1, gis_datum1, srs1, geo1, is_geo1_empty))) {
+    LOG_WARN("fail to get input geometry", K(ret));
   } else if (!is_geo1_null && OB_FAIL(get_input_geometry(
                  srs_guard, temp_allocator, ctx, gis_arg2, gis_datum2, srs2, geo2, is_geo2_empty))) {
     LOG_WARN("fail to get input geometry", K(ret));
@@ -143,7 +155,9 @@ int ObExprPrivSTTouches::eval_priv_st_touches(const ObExpr &expr, ObEvalCtx &ctx
     } else if (is_geo1_empty || is_geo2_empty) {
       res.set_bool(false);
     } else if (OB_FAIL(ObGeoExprUtils::zoom_in_geos_for_relation(srs1, *geo1, *geo2))) {
+      LOG_WARN("zoom in geos failed", K(ret));
     } else if (OB_FAIL(guard.init())) {
+      LOG_WARN("fail to init geo allocator guard", K(ret));
     } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
       ret = OB_ERR_NULL_VALUE;
       LOG_WARN("fail to get mem ctx", K(ret));
@@ -161,6 +175,7 @@ int ObExprPrivSTTouches::eval_priv_st_touches(const ObExpr &expr, ObEvalCtx &ctx
     }
   }
   return ret;
+#endif
 }
 
 int ObExprPrivSTTouches::cg_expr(

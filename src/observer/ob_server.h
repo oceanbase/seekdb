@@ -413,6 +413,19 @@ public:
   rootserver::ObDDLScheduler * ddl_scheduler() override { return mods_ddl_scheduler_; }
   omt::ObAiService * ai_service() override { return mods_ai_service_; }
   share::ObChangeStreamMgr * change_stream_mgr() override { return mods_change_stream_mgr_; }
+  int execute_plugin_function(
+      const char *service_id,
+      uint32_t abi_major,
+      uint32_t required_minor,
+      const seekdb_plugin_execution_context_v1 *context,
+      const seekdb_plugin_execution_value_v1 *arguments,
+      uint32_t argument_count) override;
+  int execute_plugin_extension(
+      seekdb_plugin_extension_kind_t kind,
+      const char *sql_name,
+      const seekdb_plugin_execution_context_v1 *context,
+      const seekdb_plugin_execution_value_v1 *arguments,
+      uint32_t argument_count) override;
   // Explicit module lifecycle (ObServer owns modules; defined in ob_server_runtime_controller.cpp).
   int obs_construct_modules();
   int obs_init_modules();

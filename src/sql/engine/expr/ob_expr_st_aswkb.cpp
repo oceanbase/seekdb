@@ -16,7 +16,15 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_st_aswkb.h"
+#include <cstring>
+#if SEEKDB_ENABLE_CORE_GIS
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#include "seekdb/plugin/execution_spi.h"
+#include "seekdb/plugin/extension_spi.h"
+#include "share/rc/ob_module_provider.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -25,6 +33,39 @@ namespace oceanbase
 {
 namespace sql
 {
+
+#if !SEEKDB_ENABLE_CORE_GIS
+namespace
+{
+struct WkbPluginSink
+{
+  const ObExpr *expr_;
+  ObEvalCtx *ctx_;
+  ObDatum *result_;
+};
+
+seekdb_plugin_status_t SEEKDB_PLUGIN_CALL emit_wkb_plugin_result(
+    seekdb_plugin_host_handle_t *host,
+    const seekdb_plugin_execution_result_v1_t *result)
+{
+  if (nullptr == host || nullptr == result || result->struct_size != sizeof(*result) ||
+      result->is_null != 0 || result->data_size == 0 || nullptr == result->data ||
+      nullptr == result->type_id ||
+      0 != std::strcmp(result->type_id, "org.seekdb.gis.scalar.bytes")) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  WkbPluginSink *sink = reinterpret_cast<WkbPluginSink *>(host);
+  if (nullptr == sink->expr_ || nullptr == sink->ctx_ || nullptr == sink->result_) {
+    return SEEKDB_PLUGIN_STATUS_FAILED_PRECONDITION;
+  }
+  const int ret = pack_plugin_expr_result(
+      *sink->expr_, *sink->ctx_, *sink->result_,
+      reinterpret_cast<const char *>(result->data),
+      static_cast<int64_t>(result->data_size));
+  return ret == OB_SUCCESS ? SEEKDB_PLUGIN_STATUS_OK : SEEKDB_PLUGIN_STATUS_INTERNAL;
+}
+}
+#endif
 ObExprGeomWkb::ObExprGeomWkb(common::ObIAllocator &alloc,
                              ObExprOperatorType type, 
                              const char *name,
@@ -101,13 +142,46 @@ int ObExprGeomWkb::eval_geom_wkb(const ObExpr &expr,
                                  ObEvalCtx &ctx,
                                  ObDatum &res)
 {
+
+#if !SEEKDB_ENABLE_CORE_GIS
+  if (expr.arg_cnt_ != 1) {
+    return OB_NOT_SUPPORTED;
+  }
+  ObDatum *datum = nullptr;
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) {
+  } else if (datum->is_null()) {
+    res.set_null();
+  } else if (nullptr == share::g_mp) {
+    ret = OB_NOT_SUPPORTED;
+  } else {
+    const ObString geometry = datum->get_string();
+    WkbPluginSink sink{&expr, &ctx, &res};
+    seekdb_plugin_execution_context_v1_t plugin_ctx = {};
+    plugin_ctx.struct_size = sizeof(plugin_ctx);
+    plugin_ctx.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink);
+    plugin_ctx.emit_result = emit_wkb_plugin_result;
+    seekdb_plugin_execution_value_v1_t argument = {};
+    argument.struct_size = sizeof(argument);
+    argument.type_id = "org.seekdb.gis.geometry";
+    argument.data = reinterpret_cast<const uint8_t *>(geometry.ptr());
+    argument.data_size = static_cast<uint64_t>(geometry.length());
+    const int plugin_ret = share::g_mp->execute_plugin_extension(
+        SEEKDB_PLUGIN_EXTENSION_FUNCTION, get_func_name(),
+        &plugin_ctx, &argument, 1);
+    if (OB_SUCCESS != plugin_ret) {
+      ret = OB_NOT_SUPPORTED;
+    }
+  }
+  return ret;
+#else
 	int ret = OB_SUCCESS;
   uint32_t arg_num = expr.arg_cnt_;
   bool is_null_result = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
-  common::ObSrsCacheGuard srs_guard;
+  omt::ObSrsCacheGuard srs_guard;
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   const ObSrsItem *srs = NULL;
   bool is_geog = false;
@@ -120,13 +194,16 @@ int ObExprGeomWkb::eval_geom_wkb(const ObExpr &expr,
   ObGeoAxisOrder axis_order = ObGeoAxisOrder::INVALID;
 
   if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[0], ctx, wkb_datum))) {
+    LOG_WARN("fail to eval wkb datum", K(ret));
   } else if (wkb_datum->is_null()) {
     is_null_result = true;
   } else if (FALSE_IT(wkb = wkb_datum->get_string())) {
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *wkb_datum,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *wkb_datum,
              expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
-  } else if (OB_FAIL(ObGeoExprUtils::construct_geometry(ctx, tmp_allocator,
+    LOG_WARN("fail to get real string data", K(ret), K(wkb));
+  } else if (OB_FAIL(ObGeoExprUtils::construct_geometry(tmp_allocator,
       wkb, srs_guard, srs, geo, get_func_name(), true, false))) {
+    LOG_WARN("fail to create geo bin", K(ret), K(wkb));
   } else if (OB_NOT_NULL(srs)) {
     is_geog = srs->is_geographical_srs();
     is_lat_long_order = srs->is_lat_long_order();
@@ -136,12 +213,14 @@ int ObExprGeomWkb::eval_geom_wkb(const ObExpr &expr,
   if (OB_SUCC(ret) && !is_null_result && arg_num == 2) {
     ObDatum *option_datum = NULL;
     ObString option_str;
-    if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[1], ctx, option_datum))) {
+    if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[1], ctx, option_datum))) { 
+      LOG_WARN("fail to eval option datum", K(ret));
     } else if (option_datum->is_null()){
       is_null_result = true;
     } else if (FALSE_IT(option_str = option_datum->get_string())) {
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *option_datum,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *option_datum,
               expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), option_str))) {
+      LOG_WARN("fail to get real string data", K(ret), K(option_str));
     } else if (is_blank_string(expr.args_[1]->datum_meta_.cs_type_, option_str)) {
       // do nothing ====> select st_aswkb(point(1,1), '   '); ignore '   '
     } else if (OB_FAIL(ObGeoExprUtils::parse_axis_order(option_str, get_func_name(),
@@ -154,6 +233,7 @@ int ObExprGeomWkb::eval_geom_wkb(const ObExpr &expr,
       MEMCPY(err_str, option_str.ptr(), (len >= STR_LEN_MAX ? (STR_LEN_MAX - 1) : len));
       LOG_USER_ERROR(OB_ERR_INVALID_OPTION_KEY_VALUE_PAIR, err_str, '=', get_func_name());
     } else if (OB_FAIL(ObGeoExprUtils::check_need_reverse(axis_order, need_reverse))) {
+      LOG_WARN("fail to check need reverse", K(ret), K(axis_order));
     }
   }
 
@@ -176,10 +256,13 @@ int ObExprGeomWkb::eval_geom_wkb(const ObExpr &expr,
     if (is_null_result) {
       res.set_null();
     } else if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*geo, expr, ctx, srs, res_wkb))) {
+      LOG_WARN("failed to write geometry to wkb", K(ret));
     } else {
       ObLobLocatorV2 lob(res_wkb, expr.obj_meta_.has_lob_header());
       if (OB_FAIL(lob.get_inrow_data(res_wkb))) {
+        LOG_WARN("failed to get inrow data", K(ret), K(lob));
       } else if (OB_FAIL(ObGeoTypeUtil::get_wkb_from_swkb(res_wkb, wkb, offset))) {
+        LOG_WARN("failed to get wkb from swkb", K(ret));
       } else {
         MEMMOVE(res_wkb.ptr(), res_wkb.ptr() + offset, res_wkb.length() - offset);
         res.set_string(lob.ptr_, lob.size_ - offset); // skip srid + version
@@ -188,6 +271,7 @@ int ObExprGeomWkb::eval_geom_wkb(const ObExpr &expr,
   }
 
   return ret;
+#endif
 }
 
 ObExprSTAsWkb::ObExprSTAsWkb(common::ObIAllocator &alloc)

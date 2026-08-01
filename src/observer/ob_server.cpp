@@ -31,6 +31,33 @@
 #include "share/ob_freeze_info_proxy.h"
 namespace oceanbase { namespace observer { common::ObILobReadService * ObServer::lob_read_service() { return mods_lob_manager_; }
 int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share::ObFreezeInfo &freeze_info) { return OB_ISNULL(mods_freeze_info_mgr_) ? common::OB_NOT_INIT : mods_freeze_info_mgr_->get_lower_bound_freeze_info_before_snapshot_version(snapshot_version, freeze_info); } } }
+namespace oceanbase { namespace observer {
+int ObServer::execute_plugin_function(
+    const char *service_id,
+    const uint32_t abi_major,
+    const uint32_t required_minor,
+    const seekdb_plugin_execution_context_v1 *context,
+    const seekdb_plugin_execution_value_v1 *arguments,
+    const uint32_t argument_count)
+{
+  return nullptr == plugin_runtime_
+      ? common::OB_NOT_INIT
+      : plugin_runtime_->execute_function(service_id, abi_major, required_minor,
+                                           context, arguments, argument_count);
+}
+int ObServer::execute_plugin_extension(
+    const seekdb_plugin_extension_kind_t kind,
+    const char *sql_name,
+    const seekdb_plugin_execution_context_v1 *context,
+    const seekdb_plugin_execution_value_v1 *arguments,
+    const uint32_t argument_count)
+{
+  return nullptr == plugin_runtime_
+      ? common::OB_NOT_INIT
+      : plugin_runtime_->execute_extension(kind, sql_name, context, arguments,
+                                            argument_count);
+}
+} }
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "lib/alloc/memory_dump.h"
 #include "lib/oblog/ob_log_compressor.h"

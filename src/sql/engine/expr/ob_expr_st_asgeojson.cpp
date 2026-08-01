@@ -15,9 +15,13 @@
  */
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_st_asgeojson.h"
+#if SEEKDB_ENABLE_CORE_GIS
 #include "sql/engine/expr/ob_geo_expr_utils.h"
 #include "share/geo/ob_wkb_to_json_bin_visitor.h"
 #include "sql/engine/expr/ob_expr_json_func_helper.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#endif
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 namespace oceanbase
@@ -51,8 +55,8 @@ int ObExprSTAsGeoJson::calc_result_typeN(ObExprResType &type, ObExprResType *typ
           LOG_WARN("invalid type for geometry", K(ret), K(type));
         }
       } else {
-        if (!ob_is_integer_type(type) && !ob_is_null(type)
-            && !ob_is_varchar_char_type(type, types_stack[i].get_collation_type())
+        if (!ob_is_integer_type(type) && !ob_is_null(type) 
+            && !ob_is_varchar_char_type(type, types_stack[i].get_collation_type()) 
             && !ob_is_enum_or_set_type(type)) {
           ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
           LOG_WARN("invalid type", K(ret), K(type));
@@ -74,26 +78,33 @@ int ObExprSTAsGeoJson::process_input_params(const ObExpr &expr, ObEvalCtx &ctx,
     MultimodeAlloctor &allocator, ObGeometry *&geo, bool &is_null_res, ObGeoSrid& srid,
     uint32_t &max_dec_digits, uint8_t &flag)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSEDx(expr, ctx, allocator, geo, is_null_res, srid, max_dec_digits, flag);
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   // geometry
   ObDatum *datum = nullptr;
   ObExpr *arg1 = expr.args_[0];
   ObObjType type1 = arg1->datum_meta_.type_;
   is_null_res = false;
-  common::ObSrsCacheGuard srs_guard;
+  omt::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = nullptr;
   if (ob_is_null(type1)) {
     is_null_res = true;
   } else if (OB_FAIL(allocator.eval_arg(arg1, ctx, datum))) {
+    LOG_WARN("fail to eval args", K(ret));
   } else if (datum->is_null()) {
     is_null_res = true;
   } else {
     // construct geometry
     ObString wkb = datum->get_string();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
             allocator, *datum, arg1->datum_meta_, arg1->obj_meta_.has_lob_header(), wkb))) {
+      LOG_WARN("fail to read real string data", K(ret), K(arg1->obj_meta_.has_lob_header()));
     } else if (OB_FAIL(ObGeoExprUtils::construct_geometry(
-                   ctx, allocator, wkb, srs_guard, srs, geo, N_ST_ASGEOJSON, true, false))) {
+                   allocator, wkb, srs_guard, srs, geo, N_ST_ASGEOJSON, true, false))) {
+      LOG_WARN("fail to build geometry from wkb", K(ret), K(wkb));
     } else {
       srid = ObGeoWkbByteOrderUtil::read<uint32_t>(wkb.ptr(), ObGeoWkbByteOrder::LittleEndian);
     }
@@ -101,6 +112,7 @@ int ObExprSTAsGeoJson::process_input_params(const ObExpr &expr, ObEvalCtx &ctx,
   // max_dec_digits
   if (!is_null_res && OB_SUCC(ret) && expr.arg_cnt_ > 1) {
     if (OB_FAIL(allocator.eval_arg(expr.args_[1], ctx, datum))) {
+      LOG_WARN("failed to eval second argument", K(ret));
     } else if (datum->is_null()) {
       is_null_res = true;
     } else if (datum->get_int() < 0 || datum->get_int() > INT_MAX32) {
@@ -125,6 +137,7 @@ int ObExprSTAsGeoJson::process_input_params(const ObExpr &expr, ObEvalCtx &ctx,
   flag = 0;
   if (!is_null_res && OB_SUCC(ret) && expr.arg_cnt_ > 2) {
     if (OB_FAIL(allocator.eval_arg(expr.args_[2], ctx, datum))) {
+      LOG_WARN("failed to eval second argument", K(ret));
     } else if (datum->is_null()) {
       is_null_res = true;
     } else if (datum->get_int() < 0 || datum->get_int() > 7) {
@@ -146,14 +159,18 @@ int ObExprSTAsGeoJson::process_input_params(const ObExpr &expr, ObEvalCtx &ctx,
     }
   }
   return ret;
+#endif
 }
 
 int ObExprSTAsGeoJson::eval_st_asgeojson(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  return execute_plugin_geometry_bytes("st_asgeojson", expr, ctx, res, true);
+#else
   int ret = OB_SUCCESS;
   bool is_null_res = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   uint32_t max_dec_digits = INT_MAX32;
   uint8_t flag = 0;
@@ -162,10 +179,12 @@ int ObExprSTAsGeoJson::eval_st_asgeojson(const ObExpr &expr, ObEvalCtx &ctx, ObD
   ObGeoSrid srid = 0;
   if (OB_FAIL(process_input_params(
           expr, ctx, temp_allocator, geo, is_null_res, srid, max_dec_digits, flag))) {
+    LOG_WARN("fail to process input geometry", K(ret));
   } else if (!is_null_res) {
     // cal asgeojson
     ObWkbToJsonBinVisitor visitor(&temp_allocator, max_dec_digits, flag, srid);
     if (OB_FAIL(visitor.to_jsonbin(geo, json_res))) {
+      LOG_WARN("fail to convert geo to jsonbin", K(ret));
     }
   }
   // set result
@@ -174,9 +193,11 @@ int ObExprSTAsGeoJson::eval_st_asgeojson(const ObExpr &expr, ObEvalCtx &ctx, ObD
   } else if (is_null_res) {
     res.set_null();
   } else if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, res, json_res))) {
+    LOG_WARN("fail to pack json result", K(ret));
   }
 
   return ret;
+#endif
 }
 
 int ObExprSTAsGeoJson::cg_expr(

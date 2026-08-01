@@ -1559,6 +1559,50 @@ struct ObPluginLoader::Impl
     }
   }
 
+  int execute_lease(
+      ObPluginLease &lease,
+      const seekdb_plugin_execution_context_v1_t *context,
+      const seekdb_plugin_execution_value_v1_t *arguments,
+      const uint32_t argument_count)
+  {
+    if (!lease.is_valid() || nullptr == lease.service() ||
+        lease.service_minor() < SEEKDB_PLUGIN_EXECUTION_SPI_MINOR) {
+      return OB_STATE_NOT_MATCH;
+    }
+    const seekdb_plugin_function_service_v1_t *service =
+        reinterpret_cast<const seekdb_plugin_function_service_v1_t *>(lease.service());
+    if (service->struct_size < sizeof(*service) ||
+        service->spi_major != SEEKDB_PLUGIN_EXECUTION_SPI_MAJOR ||
+        service->spi_minor < SEEKDB_PLUGIN_EXECUTION_SPI_MINOR ||
+        nullptr == service->execute || service->reserved_word != 0 ||
+        !all_zero(service->reserved,
+                  sizeof(service->reserved) / sizeof(service->reserved[0]))) {
+      return OB_NOT_SUPPORTED;
+    }
+
+    seekdb_plugin_instance_handle_t *instance = nullptr;
+    {
+      std::lock_guard<std::mutex> guard(mutex_);
+      const char *owner_plugin_id = lease.owner_plugin_id();
+      for (const std::unique_ptr<Module> &module : modules_) {
+        if (module->plugin_id_ == (nullptr == owner_plugin_id ? "" : owner_plugin_id) &&
+            module->generation_ == lease.owner_generation()) {
+          instance = module->instance_;
+          break;
+        }
+      }
+    }
+    if (nullptr == instance) return OB_ENTRY_NOT_EXIST;
+
+    int ret = OB_SUCCESS;
+    try {
+      ret = from_plugin_status(service->execute(instance, context, arguments, argument_count));
+    } catch (...) {
+      ret = OB_ERR_UNEXPECTED;
+    }
+    return ret;
+  }
+
   int validate_manifest(const seekdb_plugin_manifest_v1_t *manifest,
                         std::vector<StagedService> &services,
                         std::string &error) const
@@ -2917,6 +2961,83 @@ int ObPluginLoader::shutdown_for_process_exit(const int64_t drain_timeout_us)
     impl_->shutdown_running_ = false;
   }
   return ret;
+}
+
+int ObPluginLoader::execute_function(
+    const char *service_id,
+    const uint32_t abi_major,
+    const uint32_t required_minor,
+    const seekdb_plugin_execution_context_v1_t *context,
+    const seekdb_plugin_execution_value_v1_t *arguments,
+    const uint32_t argument_count)
+{
+  if (!impl_) return OB_ALLOCATE_MEMORY_FAILED;
+  if (nullptr == service_id || nullptr == context ||
+      (argument_count != 0 && nullptr == arguments) ||
+      argument_count > SEEKDB_PLUGIN_MAX_ARGUMENTS) {
+    return OB_INVALID_ARGUMENT;
+  }
+
+  if (!impl_->registry_) return OB_NOT_INIT;
+  ObPluginLease lease;
+  int ret = impl_->registry_->acquire(service_id, abi_major, required_minor, lease);
+  if (OB_SUCCESS != ret) return ret;
+
+  return impl_->execute_lease(lease, context, arguments, argument_count);
+}
+
+int ObPluginLoader::execute_extension(
+    const seekdb_plugin_extension_kind_t kind,
+    const char *sql_name,
+    const seekdb_plugin_execution_context_v1_t *context,
+    const seekdb_plugin_execution_value_v1_t *arguments,
+    const uint32_t argument_count)
+{
+  if (!impl_) return OB_ALLOCATE_MEMORY_FAILED;
+  if (nullptr == sql_name || nullptr == context ||
+      (argument_count != 0 && nullptr == arguments) ||
+      argument_count > SEEKDB_PLUGIN_MAX_ARGUMENTS || !impl_->registry_) {
+    return OB_INVALID_ARGUMENT;
+  }
+  std::vector<ObPluginExtensionInfo> candidates;
+  uint64_t ignored_epoch = 0;
+  int ret = impl_->registry_->find_extensions_by_sql_name(
+      kind, sql_name, candidates, ignored_epoch);
+  if (OB_SUCCESS != ret) return ret;
+  if (candidates.empty()) return OB_ENTRY_NOT_EXIST;
+
+  // SQL names may represent overload sets.  Bind only descriptors whose
+  // declared arity accepts this call, then use the stable catalog ordering
+  // (priority, cost, object id) to make selection deterministic.
+  candidates.erase(
+      std::remove_if(candidates.begin(), candidates.end(),
+          [argument_count](const ObPluginExtensionInfo &candidate) {
+            return argument_count < candidate.spec_.minimum_arity_ ||
+                   argument_count > candidate.spec_.maximum_arity_;
+          }),
+      candidates.end());
+  if (candidates.empty()) return OB_INVALID_ARGUMENT;
+  std::sort(candidates.begin(), candidates.end(),
+      [](const ObPluginExtensionInfo &left,
+         const ObPluginExtensionInfo &right) {
+        if (left.spec_.priority_ != right.spec_.priority_) {
+          return left.spec_.priority_ > right.spec_.priority_;
+        }
+        if (left.spec_.cost_ != right.spec_.cost_) {
+          return left.spec_.cost_ < right.spec_.cost_;
+        }
+        if (left.spec_.object_id_ != right.spec_.object_id_) {
+          return left.spec_.object_id_ < right.spec_.object_id_;
+        }
+        return left.owner_plugin_id_ < right.owner_plugin_id_;
+      });
+
+  ObPluginExtensionLease extension_lease;
+  ObPluginLease implementation_lease;
+  ret = impl_->registry_->acquire_extension_with_implementation(
+      candidates.front(), extension_lease, implementation_lease);
+  if (OB_SUCCESS != ret) return ret;
+  return impl_->execute_lease(implementation_lease, context, arguments, argument_count);
 }
 
 int ObPluginLoader::get_status(const std::string &plugin_id,

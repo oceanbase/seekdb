@@ -318,6 +318,7 @@ ob_set_subtarget(ob_share semistruct
   semistruct/ob_sub_column_path.cpp
 )
 
+if (SEEKDB_ENABLE_CORE_GIS)
 ob_set_subtarget(ob_share geo
   geo/ob_geo_common.cpp
   geo/ob_geo_bin.cpp
@@ -412,6 +413,11 @@ ob_set_subtarget(ob_share ALONE
   geo/ob_geo_func_overlaps2.cpp
   geo/ob_geo_func_overlaps3.cpp
 )
+else()
+ob_set_subtarget(ob_share geo_plugin_stubs
+  geo/ob_geo_plugin_stubs.cpp
+)
+endif()
 
 ob_add_new_object_target(ob_share ob_share)
 ob_add_new_object_target(ob_share_extra ob_share_extra)
@@ -419,6 +425,8 @@ ob_add_new_object_target(ob_share_extra ob_share_extra)
 target_compile_options(ob_share PRIVATE)
 #target_compile_options(ob_share PRIVATE -Wshorten-64-to-32)
 target_link_libraries(ob_share PUBLIC ob_base)
+target_compile_definitions(ob_share PRIVATE
+  SEEKDB_ENABLE_CORE_GIS=$<BOOL:${SEEKDB_ENABLE_CORE_GIS}>)
 if (SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
   target_link_libraries(ob_share PUBLIC seekdb_plugin_sdk)
 endif()

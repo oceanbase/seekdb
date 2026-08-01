@@ -16,9 +16,18 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include <cstring>
+#if SEEKDB_ENABLE_CORE_GIS
 #include "share/geo/ob_geo_func_register.h"
 #include "ob_expr_st_distance.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#else
+#include "ob_expr_st_distance.h"
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#include "seekdb/plugin/execution_spi.h"
+#include "seekdb/plugin/extension_spi.h"
+#include "share/rc/ob_module_provider.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -27,6 +36,30 @@ namespace oceanbase
 {
 namespace sql
 {
+
+#if !SEEKDB_ENABLE_CORE_GIS
+namespace
+{
+struct DistancePluginSink { ObDatum *result_; };
+seekdb_plugin_status_t SEEKDB_PLUGIN_CALL emit_distance_plugin_result(
+    seekdb_plugin_host_handle_t *host,
+    const seekdb_plugin_execution_result_v1_t *result)
+{
+  if (nullptr == host || nullptr == result || result->struct_size != sizeof(*result) ||
+      result->is_null != 0 || result->data_size != sizeof(double) || nullptr == result->data ||
+      nullptr == result->type_id ||
+      0 != std::strcmp(result->type_id, "org.seekdb.gis.scalar.float64")) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  DistancePluginSink *sink = reinterpret_cast<DistancePluginSink *>(host);
+  if (nullptr == sink->result_) return SEEKDB_PLUGIN_STATUS_FAILED_PRECONDITION;
+  double value = 0.0;
+  std::memcpy(&value, result->data, sizeof(value));
+  sink->result_->set_double(value);
+  return SEEKDB_PLUGIN_STATUS_OK;
+}
+}
+#endif
 
 ObExprSTDistance::ObExprSTDistance(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_ST_DISTANCE, N_ST_DISTANCE, TWO_OR_THREE, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
@@ -72,6 +105,36 @@ int ObExprSTDistance::calc_result_typeN(ObExprResType& type,
 
 int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  int ret = OB_SUCCESS;
+  ObDatum *first = nullptr;
+  ObDatum *second = nullptr;
+  if (OB_FAIL(expr.args_[0]->eval(ctx, first)) || OB_FAIL(expr.args_[1]->eval(ctx, second))) {
+  } else if (first->is_null() || second->is_null()) {
+    res.set_null();
+  } else if (expr.arg_cnt_ != 2 || nullptr == share::g_mp) {
+    ret = OB_NOT_SUPPORTED;
+  } else {
+    DistancePluginSink sink{&res};
+    seekdb_plugin_execution_context_v1_t plugin_ctx = {};
+    plugin_ctx.struct_size = sizeof(plugin_ctx);
+    plugin_ctx.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink);
+    plugin_ctx.emit_result = emit_distance_plugin_result;
+    seekdb_plugin_execution_value_v1_t arguments[2] = {};
+    const ObDatum *datums[2] = {first, second};
+    for (int i = 0; i < 2; ++i) {
+      const ObString geometry = datums[i]->get_string();
+      arguments[i].struct_size = sizeof(arguments[i]);
+      arguments[i].type_id = "org.seekdb.gis.geometry";
+      arguments[i].data = reinterpret_cast<const uint8_t *>(geometry.ptr());
+      arguments[i].data_size = static_cast<uint64_t>(geometry.length());
+    }
+    const int plugin_ret = share::g_mp->execute_plugin_extension(
+        SEEKDB_PLUGIN_EXTENSION_FUNCTION, "st_distance", &plugin_ctx, arguments, 2);
+    if (OB_SUCCESS != plugin_ret) ret = OB_NOT_SUPPORTED;
+  }
+  return ret;
+#else
   int ret = OB_SUCCESS;
   ObDatum *gis_datum1 = NULL;
   ObDatum *gis_datum2 = NULL;
@@ -81,7 +144,7 @@ int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObObjType input_type2 = gis_arg2->datum_meta_.type_;
 
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   const int max_arg_num = 3;
   ObDatum *gis_unit = NULL;
@@ -110,20 +173,27 @@ int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     uint32_t srid2;
     ObString wkb1 = gis_datum1->get_string();
     ObString wkb2 = gis_datum2->get_string();
-    common::ObSrsCacheGuard srs_guard;
+    omt::ObSrsCacheGuard srs_guard;
     const ObSrsItem *srs = NULL;
     ObGeoBoostAllocGuard guard{};
     lib::MemoryContext *mem_ctx = nullptr;
 
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *gis_datum1,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *gis_datum1,
               gis_arg1->datum_meta_, gis_arg1->obj_meta_.has_lob_header(), wkb1))) {
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *gis_datum2,
+      LOG_WARN("fail to get real string data", K(ret), K(wkb1));
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *gis_datum2,
               gis_arg2->datum_meta_, gis_arg2->obj_meta_.has_lob_header(), wkb2))) {
+      LOG_WARN("fail to get real string data", K(ret), K(wkb2));
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb1, srs, true, N_ST_DISTANCE))) {
+      LOG_WARN("fail to get srs item", K(ret), K(wkb1));
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb1, geo1, srs, N_ST_DISTANCE, ObGeoBuildFlag::GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {
+      LOG_WARN("get first geo by wkb failed", K(ret));
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb2, geo2, srs, N_ST_DISTANCE, ObGeoBuildFlag::GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {
+      LOG_WARN("get second geo by wkb failed", K(ret));
     } else if (OB_FAIL(ObGeoTypeUtil::get_type_srid_from_wkb(wkb1, type1, srid1))) {
+      LOG_WARN("get type and srid from wkb failed", K(wkb1), K(ret));
     } else if (OB_FAIL(ObGeoTypeUtil::get_type_srid_from_wkb(wkb2, type2, srid2))) {
+      LOG_WARN("get type and srid from wkb failed", K(wkb2), K(ret));
     } else if (srid1 != srid2) {
       LOG_WARN("srid not the same", K(srid1), K(srid2));
       ret = OB_ERR_GIS_DIFFERENT_SRIDS;
@@ -133,6 +203,7 @@ int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     } else if (is_geo1_empty || is_geo2_empty) {
       res.set_null();
     } else if (OB_FAIL(guard.init())) {
+      LOG_WARN("fail to init geo allocator guard", K(ret));
     } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
       ret = OB_ERR_NULL_VALUE;
       LOG_WARN("fail to get mem ctx", K(ret));
@@ -150,6 +221,7 @@ int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDat
         }
       } else if (expr.arg_cnt_ == max_arg_num) {
         if (OB_FAIL(ObGeoExprUtils::length_unit_conversion(gis_unit->get_string(), srs, result, result))) {
+          LOG_WARN("fail to do unit conversion", K(ret), K(result));
         } else if (std::isinf(result)) {
           ret = OB_ERR_GIS_INVALID_DATA;
           LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_DISTANCE);
@@ -165,6 +237,7 @@ int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     }
   }
   return ret;
+#endif
 }
 
 int ObExprSTDistance::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,

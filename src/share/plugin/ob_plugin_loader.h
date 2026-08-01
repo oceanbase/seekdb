@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "seekdb/plugin/seekdb_plugin_abi.h"
+#include "seekdb/plugin/execution_spi.h"
 #include "share/plugin/ob_plugin_registry.h"
 
 namespace oceanbase
@@ -408,6 +409,27 @@ public:
   // successful call permanently consumes this loader object: init() cannot be
   // used to start a second runtime domain afterward.
   int shutdown_for_process_exit(int64_t drain_timeout_us);
+
+  // Invoke one executable function service while holding a registry lease.
+  // The lease pins the provider generation for the complete callback, so a
+  // concurrent logical disable cannot unmap or stop the implementation under
+  // an executing SQL expression.
+  int execute_function(const char *service_id,
+                       uint32_t abi_major,
+                       uint32_t required_minor,
+                       const seekdb_plugin_execution_context_v1_t *context,
+                       const seekdb_plugin_execution_value_v1_t *arguments,
+                       uint32_t argument_count);
+
+  // Resolve a catalog function extension by SQL name, atomically acquire its
+  // extension/implementation leases, and invoke the same execution SPI. This
+  // is the generic path used by SQL adapters; callers need not embed a
+  // plugin-specific service id in core code.
+  int execute_extension(seekdb_plugin_extension_kind_t kind,
+                        const char *sql_name,
+                        const seekdb_plugin_execution_context_v1_t *context,
+                        const seekdb_plugin_execution_value_v1_t *arguments,
+                        uint32_t argument_count);
 
   int get_status(const std::string &plugin_id, ObPluginStatusSnapshot &status) const;
   int list_status(std::vector<ObPluginStatusSnapshot> &statuses) const;

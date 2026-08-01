@@ -16,8 +16,12 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_priv_st_pointonsurface.h"
+#if SEEKDB_ENABLE_CORE_GIS
 #include "sql/engine/expr/ob_geo_expr_utils.h"
 #include "share/geo/ob_geo_interior_point_visitor.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -36,7 +40,7 @@ ObExprPrivSTPointOnSurface::~ObExprPrivSTPointOnSurface()
 
 int ObExprPrivSTPointOnSurface::calc_result_type1(
     ObExprResType &type, ObExprResType &type1, common::ObExprTypeCtx &type_ctx) const
-{
+{ 
   int ret = OB_SUCCESS;
   ObObjType obj_type1 = type1.get_type();
 
@@ -58,6 +62,10 @@ int ObExprPrivSTPointOnSurface::calc_result_type1(
 int ObExprPrivSTPointOnSurface::process_input_geometry(
     const ObExpr &expr, ObEvalCtx &ctx, MultimodeAlloctor &allocator, bool &is_null_res, ObGeometry *&geo1)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSEDx(expr, ctx, allocator, is_null_res, geo1);
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   ObDatum *datum1 = nullptr;
   ObExpr *arg1 = expr.args_[0];
@@ -66,55 +74,66 @@ int ObExprPrivSTPointOnSurface::process_input_geometry(
   if (ob_is_null(type1)) {
     is_null_res = true;
   } else if (OB_FAIL(allocator.eval_arg(arg1, ctx, datum1))) {
+    LOG_WARN("fail to eval args", K(ret));
   } else if (datum1->is_null()) {
     is_null_res = true;
   } else {
     ObString wkb1 = datum1->get_string();
-    common::ObSrsCacheGuard srs_guard;
+    omt::ObSrsCacheGuard srs_guard;
     const ObSrsItem *srs1 = nullptr;
 
     if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
-            ctx.exec_ctx_, allocator, *datum1, arg1->datum_meta_,
-            arg1->obj_meta_.has_lob_header(), wkb1))) {
+            allocator, *datum1, arg1->datum_meta_, arg1->obj_meta_.has_lob_header(), wkb1))) {
+      LOG_WARN("fail to read real string data", K(ret), K(arg1->obj_meta_.has_lob_header()), K(wkb1));
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb1, srs1, true, N_PRIV_ST_POINTONSURFACE))) {
+      LOG_WARN("fail to get srs item", K(ret), K(wkb1));
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(
-                   allocator, wkb1, geo1, nullptr, N_PRIV_ST_POINTONSURFACE, GEO_DEFAULT | GEO_NOT_COPY_WKB))) {
+                   allocator, wkb1, geo1, nullptr, N_PRIV_ST_POINTONSURFACE, GEO_DEFAULT | GEO_NOT_COPY_WKB))) {  // ObIWkbGeom
+      LOG_WARN("fail to build geometry from wkb", K(ret), K(wkb1));
     } else if (OB_NOT_NULL(srs1) && srs1->is_geographical_srs()) {
       ret = OB_ERR_NOT_IMPLEMENTED_FOR_GEOGRAPHIC_SRS;
       LOG_USER_ERROR(OB_ERR_NOT_IMPLEMENTED_FOR_GEOGRAPHIC_SRS, N_PRIV_ST_ASMVTGEOM,
                   ObGeoTypeUtil::get_geo_name_by_type(geo1->type()));
       LOG_WARN("Geometry in geographical srs can not be input", K(ret), K(srs1));
-    }
+    } 
   }
 
   return ret;
+#endif
 }
 
 int ObExprPrivSTPointOnSurface::eval_priv_st_pointonsurface(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  return execute_plugin_geometry_bytes("st_pointonsurface", expr, ctx, res, true);
+#else
   int ret = OB_SUCCESS;
   bool is_null_res = false;
   ObGeometry *geo1 = nullptr;
   ObGeometry *res_geo = NULL;
   ObGeometry *interior_point = nullptr;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-
+  
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObString res_wkb;
 
   if (OB_FAIL(process_input_geometry(expr, ctx, temp_allocator, is_null_res, geo1))) {
+    LOG_WARN("fail to process input geometry", K(ret), K(geo1), K(is_null_res));
   } 
   ObGeoBoostAllocGuard guard{};
   lib::MemoryContext *mem_ctx = nullptr;
   if (OB_FAIL(ret) || is_null_res) {
   } else if (OB_FAIL(guard.init())) {
+    LOG_WARN("fail to init geo allocator guard", K(ret));
   } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("fail to get mem ctx", K(ret));
   } else {
     ObGeoInteriorPointVisitor inter_point_visitor(*mem_ctx);
     if (OB_FAIL(geo1->do_visit(inter_point_visitor))) {
+      LOG_WARN("fail to do interior point visitor", K(ret));
     } else if (OB_FAIL(inter_point_visitor.get_interior_point(interior_point))) {
+      LOG_WARN("fail to get interior point", K(ret));
     }
   }
 
@@ -123,6 +142,7 @@ int ObExprPrivSTPointOnSurface::eval_priv_st_pointonsurface(const ObExpr &expr, 
       res.set_null();
     } else {
       if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*interior_point, expr, ctx, nullptr, res_wkb, geo1->get_srid()))) {
+        LOG_WARN("fail to get wkb from geometry", K(ret));
       } else {
         res.set_string(res_wkb);
       }
@@ -130,6 +150,7 @@ int ObExprPrivSTPointOnSurface::eval_priv_st_pointonsurface(const ObExpr &expr, 
   }
 
   return ret;
+#endif
 }
 
 int ObExprPrivSTPointOnSurface::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const
