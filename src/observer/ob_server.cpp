@@ -39,6 +39,7 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "lib/task/ob_timer_service.h" // ObTimerService
 #include "observer/ob_server_utils.h"
 #include "observer/ob_server_options.h"
+#include "share/ob_internal_table_change_notifier.h"
 #include "share/ob_timezone_mgr.h"
 #include "share/ob_standby_source_util.h"
 #include "logservice/ob_log_allocator_mgr.h"
@@ -245,6 +246,8 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init queue_thread dynamic mgr failed", KR(ret));
     } else if (OB_FAIL(ObTimerService::get_instance().start())) {
       LOG_ERROR("start timer service failed", KR(ret));
+    } else if (OB_FAIL(ObInternalTableChangeNotifier::get_instance().init())) {
+      LOG_ERROR("init internal table change notifier failed", KR(ret));
     }
   }
 
@@ -563,6 +566,10 @@ void ObServer::destroy()
     FLOG_INFO("begin to destroy server runtime");
     server_runtime_controller_.destroy();
     FLOG_INFO("server runtime destroyed");
+
+    FLOG_INFO("begin to destroy internal table change notifier");
+    ObInternalTableChangeNotifier::get_instance().destroy();
+    FLOG_INFO("internal table change notifier destroyed");
 
     FLOG_INFO("begin to destroy query retry ctrl");
     ObQueryRetryCtrl::destroy();
@@ -958,7 +965,6 @@ bool ObServer::is_stopped()
 
 void ObServer::set_stop()
 {
-  net_frame_.sql_nio_stop();
   stop_ = true;
   ob_service_.set_stop();
   gctx_.status_ = SS_STOPPING;
@@ -1118,7 +1124,6 @@ int ObServer::wait_no_client()
                  LOCKFILE_EXCLUSIVE_LOCK,
                  0, MAXDWORD, MAXDWORD, &ov)) {
     FLOG_INFO("no clients remaining, exiting");
-    net_frame_.sql_nio_stop();
     _Exit(0);
   } else {
     ret = OB_ERROR;
@@ -1127,7 +1132,6 @@ int ObServer::wait_no_client()
 #else
   if (flock(clients_fd_, LOCK_EX) == 0) {
     FLOG_INFO("no clients remaining, exiting");
-    net_frame_.sql_nio_stop();
     _Exit(0);
   } else {
     ret = OB_ERROR;

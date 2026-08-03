@@ -69,9 +69,9 @@ public:
   void destroy();
 
   int refresh_timezone_info();
-  int schedule_retry();
 private:
   int init_timezone(common::ObMySQLProxy &sql_proxy);
+  int refresh_timezone_info_if_changed_();
 private:
   ObTimezoneMgr();
   bool is_inited_;
@@ -79,6 +79,10 @@ private:
   common::ObTimer timer_;
   common::ObTimeZoneInfoManager *tz_info_mgr_ = nullptr;
   bool usable_;
+  uint64_t sys_stat_change_seq_;
+  uint64_t timezone_name_change_seq_;
+  uint64_t timezone_transition_change_seq_;
+  uint64_t timezone_transition_type_change_seq_;
 public:
   const uint64_t SLEEP_USECONDS = 5000000;
 };
