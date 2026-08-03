@@ -3679,14 +3679,6 @@ id	field	type	length	precision	nullable
 26	running_table_duration_time	5	0	20	0
 27	spare1	5	0	20	1
 28	spare2	22	4096	-1	1
-table oceanbase.__all_virtual_thread column_count 5 table_id 12384
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12384 order by column_id;
-id	field	type	length	precision	nullable
-16	tid	5	0	20	0
-17	tname	22	16	-1	0
-18	latch_wait	22	16	-1	0
-19	latch_hold	22	256	-1	0
-20	trace_id	22	40	-1	0
 table oceanbase.__all_virtual_timestamp_service column_count 2 table_id 12395
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12395 order by column_id;
 id	field	type	length	precision	nullable

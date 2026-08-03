@@ -143,7 +143,6 @@
 #include "observer/virtual_table/ob_all_virtual_mds_node_stat.h"
 #include "observer/virtual_table/ob_all_virtual_mds_event_history.h"
 #include "observer/virtual_table/ob_all_virtual_opt_stat_gather_monitor.h"
-#include "observer/virtual_table/ob_all_virtual_thread.h"
 #include "observer/virtual_table/ob_all_virtual_px_p2p_datahub.h"
 #include "observer/virtual_table/ob_all_virtual_tablet_buffer_info.h"
 #include "observer/virtual_table/ob_all_virtual_activity_metrics.h"
@@ -1734,13 +1733,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualSqlPlan, sql_plan_table))) {
               sql_plan_table->set_allocator(&allocator);
               vt_iter = static_cast<ObVirtualTableIterator *>(sql_plan_table);
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_THREAD_TID: {
-            ObAllVirtualThread *all_virtual_thread = NULL;
-            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualThread, all_virtual_thread))) {
-              vt_iter = static_cast<ObVirtualTableIterator *>(all_virtual_thread);
             }
             break;
           }

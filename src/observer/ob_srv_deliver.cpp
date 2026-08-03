@@ -53,7 +53,7 @@ int dispatch_req(ObRequest &req)
         LOG_DBA_ERROR_V2(OB_SERVER_REQUEST_QUEUE_FULL, ret,
           "deliver mysql request to runtime: ", runtime->id(), " queue failed, the queue is full. ",
           "[suggestion] check T", runtime->id(), "_L0_G0 thread stack to see which "
-          "procedure is taking too long or is blocked or check __all_virtual_thread view.");
+          "procedure is taking too long or is blocked.");
       }
     }
   } else {
@@ -150,7 +150,7 @@ int ObSrvDeliver::deliver_mysql_request(ObRequest &req)
           LOG_DBA_ERROR_V2(OB_SERVER_REQUEST_QUEUE_FULL, ret,
             "deliver mysql request to runtime: ", runtime->id(), " queue failed, the queue is full. ",
             "[suggestion] check T", runtime->id(), "_L0_G0 thread stack to see which "
-            "procedure is taking too long or is blocked or check __all_virtual_thread view.");
+            "procedure is taking too long or is blocked.");
         }
       }
     }

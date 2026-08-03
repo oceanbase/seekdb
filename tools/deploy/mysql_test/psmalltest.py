@@ -485,7 +485,6 @@ psmall_test=[
 'view',
 'view_2',
 'view.check_privilege',
-'virtual_thread',
 'window_function.farm',
 'yonyou_test.yonyou',
 'yonyou_test.yonyou_online_ddl'
