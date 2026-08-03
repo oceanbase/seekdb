@@ -830,7 +830,11 @@ int ObTableRedefinitionTask::take_effect(const ObDDLTaskStatus next_task_status)
       LOG_WARN("sync auto increment position failed", K(ret), K(object_id_), K(target_object_id_));
     }
   } else if (OB_FAIL(sync_stats_info())) {
-    LOG_WARN("fail to sync stats info", K(ret), K(object_id_), K(target_object_id_));
+    if (is_stats_sync_lock_conflict(ret)) {
+      delay_take_effect_after_stats_sync_lock_conflict(ret);
+    } else {
+      LOG_WARN("fail to sync stats info", K(ret), K(object_id_), K(target_object_id_));
+    }
   } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(target_object_id_, ddl_rpc_timeout))) {
             LOG_WARN("get ddl rpc timeout fail", K(ret));
   } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->      execute_ddl_task(alter_table_arg_, objs); }))) {

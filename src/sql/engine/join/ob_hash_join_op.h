@@ -72,13 +72,6 @@ public:
       task_id_(0)
   {}
   virtual ~ObHashJoinInput() {}
-  virtual int init(ObTaskInfo &task_info)
-  {
-    int ret = OB_SUCCESS;
-    UNUSED(task_info);
-    return ret;
-  }
-
   int sync_wait(ObExecContext &ctx, int64_t &sys_event, EventPred pred, bool ignore_interrupt = false, bool is_open = false);
   int64_t get_sync_val()
   {

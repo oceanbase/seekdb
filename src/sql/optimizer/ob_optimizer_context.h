@@ -303,10 +303,10 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   inline ObSQLSessionInfo *get_session_info() { return session_info_; }
   inline ObExecContext *get_exec_ctx() const { return exec_ctx_; }
   inline ObQueryCtx *get_query_ctx() const { return query_ctx_; }
-  inline ObTaskExecutorCtx *get_task_exec_ctx() const {
-    ObTaskExecutorCtx *ctx = NULL;
+  inline ObSqlExecutorCtx *get_sql_exec_ctx() const {
+    ObSqlExecutorCtx *ctx = NULL;
     if (NULL != exec_ctx_) {
-      ctx = exec_ctx_->get_task_executor_ctx();
+      ctx = exec_ctx_->get_sql_executor_ctx();
     }
     return ctx;
   }

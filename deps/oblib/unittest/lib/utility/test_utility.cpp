@@ -506,22 +506,36 @@ TEST(utility, ob_localtime)
     EXPECT_EQ(std_tm.tm_year, last_tm.tm_year);
   }
 
-  ob_tm.tm_sec = 0;
-  ob_tm.tm_min = 0;
-  ob_tm.tm_hour = 0;
-  ob_tm.tm_mday = 0;
-  ob_tm.tm_mon = 0;
-  ob_tm.tm_year = 0;
-
+  // ob_localtime only supports unix_sec >= 0 (cf. "only support time >= 1970/1/1 8:0:0").
+  // special_value[14] == 0 is the epoch second and is now converted; validate it against
+  // the libc reference like the loop above. The remaining pre-epoch values are still
+  // unsupported: the struct is left untouched, so reset it first and expect zeros.
   for (int64_t i = 14; i < 18; ++i) {
+    ob_tm.tm_sec = 0;
+    ob_tm.tm_min = 0;
+    ob_tm.tm_hour = 0;
+    ob_tm.tm_mday = 0;
+    ob_tm.tm_mon = 0;
+    ob_tm.tm_year = 0;
+
     ob_localtime((const time_t *)(special_value + i), &ob_tm);
 
-    EXPECT_EQ(0, ob_tm.tm_sec);
-    EXPECT_EQ(0, ob_tm.tm_min);
-    EXPECT_EQ(0, ob_tm.tm_hour);
-    EXPECT_EQ(0, ob_tm.tm_mday);
-    EXPECT_EQ(0, ob_tm.tm_mon);
-    EXPECT_EQ(0, ob_tm.tm_year);
+    if (special_value[i] >= 0) {
+      ::localtime_r((const time_t *)(special_value + i), &std_tm);
+      EXPECT_EQ(std_tm.tm_sec, ob_tm.tm_sec);
+      EXPECT_EQ(std_tm.tm_min, ob_tm.tm_min);
+      EXPECT_EQ(std_tm.tm_hour, ob_tm.tm_hour);
+      EXPECT_EQ(std_tm.tm_mday, ob_tm.tm_mday);
+      EXPECT_EQ(std_tm.tm_mon, ob_tm.tm_mon);
+      EXPECT_EQ(std_tm.tm_year, ob_tm.tm_year);
+    } else {
+      EXPECT_EQ(0, ob_tm.tm_sec);
+      EXPECT_EQ(0, ob_tm.tm_min);
+      EXPECT_EQ(0, ob_tm.tm_hour);
+      EXPECT_EQ(0, ob_tm.tm_mday);
+      EXPECT_EQ(0, ob_tm.tm_mon);
+      EXPECT_EQ(0, ob_tm.tm_year);
+    }
   }
 }
 

@@ -815,6 +815,7 @@ ob_set_subtarget(ob_sql engine_px
   engine/px/ob_dfo_scheduler.cpp
   engine/px/ob_granule_iterator_op.cpp
   engine/px/ob_granule_pump.cpp
+  engine/px/ob_granule_task_info.cpp
   engine/px/ob_granule_util.cpp
   engine/px/ob_px_admission.cpp
   engine/px/ob_px_bloom_filter.cpp
@@ -893,18 +894,10 @@ ob_set_subtarget(ob_sql engine_table
 ob_set_subtarget(ob_sql executor
   executor/ob_cmd_executor.cpp
   executor/ob_execute_result.cpp
-  executor/ob_execution_id.cpp
   executor/ob_executor.cpp
   executor/ob_worker_session_guard.cpp
-  executor/ob_job_id.cpp
   executor/ob_maintain_dependency_info_task.cpp
-  executor/ob_slice_id.cpp
-  executor/ob_task_event.cpp
-  executor/ob_task_executor_ctx.cpp
-  executor/ob_task_id.cpp
-  executor/ob_task_info.cpp
-  executor/ob_task_location.cpp
-  executor/ob_task_spliter.cpp
+  executor/ob_sql_executor_ctx.cpp
   executor/ob_memory_tracker.cpp
   executor/ob_memory_tracker_wrapper.cpp
 )

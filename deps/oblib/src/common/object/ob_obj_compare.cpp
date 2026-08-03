@@ -30,6 +30,153 @@ namespace common
     right_to_die_or_duty_to_live();\
   }
 
+namespace
+{
+
+// Keep the type-pair comparison in one out-of-line function and leave only a
+// small operator adapter at each address stored in cmp_funcs.
+OB_NOINLINE int apply_cmp_op(const int cmp_res, const ObCmpOp op)
+{
+  int result = ObObjCmpFuncs::CR_OB_ERROR;
+  if (OB_UNLIKELY(cmp_res < ObObjCmpFuncs::CR_LT
+                  || cmp_res > ObObjCmpFuncs::CR_GT)) {
+    // CR_NULL, CR_OB_ERROR, and any legacy error code are not boolean values.
+    result = cmp_res;
+  } else {
+    switch (op) {
+      case CO_EQ: result = (ObObjCmpFuncs::CR_EQ == cmp_res); break;
+      case CO_LE: result = (ObObjCmpFuncs::CR_GT != cmp_res); break;
+      case CO_LT: result = (ObObjCmpFuncs::CR_LT == cmp_res); break;
+      case CO_GE: result = (ObObjCmpFuncs::CR_LT != cmp_res); break;
+      case CO_GT: result = (ObObjCmpFuncs::CR_GT == cmp_res); break;
+      case CO_NE: result = (ObObjCmpFuncs::CR_EQ != cmp_res); break;
+      default:
+        OB_ASSERT(false);
+        break;
+    }
+  }
+  return result;
+}
+
+OB_INLINE int reverse_cmp_result(const int cmp_res)
+{
+  int result = ObObjCmpFuncs::CR_OB_ERROR;
+  switch (cmp_res) {
+    case ObObjCmpFuncs::CR_LT: result = ObObjCmpFuncs::CR_GT; break;
+    case ObObjCmpFuncs::CR_EQ: result = ObObjCmpFuncs::CR_EQ; break;
+    case ObObjCmpFuncs::CR_GT: result = ObObjCmpFuncs::CR_LT; break;
+    case ObObjCmpFuncs::CR_NULL: result = ObObjCmpFuncs::CR_NULL; break;
+    case ObObjCmpFuncs::CR_OB_ERROR: result = ObObjCmpFuncs::CR_OB_ERROR; break;
+    default:
+      OB_ASSERT(false);
+      break;
+  }
+  return result;
+}
+
+OB_NOINLINE int compare_decimalint_views(const ObDecimalInt *lhs,
+                                          const int32_t lhs_bytes,
+                                          const ObScale lhs_scale,
+                                          const ObDecimalInt *rhs,
+                                          const int32_t rhs_bytes,
+                                          const ObScale rhs_scale,
+                                          int &cmp_res)
+{
+  int ret = OB_SUCCESS;
+  int raw_cmp = 0;
+  ObDecimalIntBuilder lhs_value;
+  ObDecimalIntBuilder rhs_value;
+  if (lhs_scale < rhs_scale) {
+    if (OB_FAIL(wide::common_scale_decimalint(
+          lhs, lhs_bytes, lhs_scale, rhs_scale, lhs_value))) {
+      LOG_WARN("scale lhs decimal int failed", K(ret), K(lhs_scale), K(rhs_scale));
+    } else {
+      rhs_value.from(rhs, rhs_bytes);
+    }
+  } else if (lhs_scale > rhs_scale) {
+    if (OB_FAIL(wide::common_scale_decimalint(
+          rhs, rhs_bytes, rhs_scale, lhs_scale, rhs_value))) {
+      LOG_WARN("scale rhs decimal int failed", K(ret), K(lhs_scale), K(rhs_scale));
+    } else {
+      lhs_value.from(lhs, lhs_bytes);
+    }
+  } else {
+    lhs_value.from(lhs, lhs_bytes);
+    rhs_value.from(rhs, rhs_bytes);
+  }
+  if (OB_SUCC(ret) && OB_FAIL(wide::compare(lhs_value, rhs_value, raw_cmp))) {
+    LOG_WARN("compare decimal int failed", K(ret));
+  }
+  if (OB_SUCC(ret)) {
+    cmp_res = raw_cmp < 0 ? ObObjCmpFuncs::CR_LT
+                          : raw_cmp > 0 ? ObObjCmpFuncs::CR_GT
+                                        : ObObjCmpFuncs::CR_EQ;
+  }
+  return ret;
+}
+
+template <typename IntegerType>
+OB_NOINLINE int compare_decimalint_integer(const ObObj &decimal_obj,
+                                            const IntegerType integer,
+                                            int &cmp_res)
+{
+  int ret = OB_SUCCESS;
+  ObDecimalIntBuilder allocator;
+  ObDecimalInt *integer_value = nullptr;
+  int32_t integer_bytes = 0;
+  if (OB_FAIL(wide::from_integer(integer, allocator, integer_value, integer_bytes))) {
+    LOG_WARN("convert integer to decimal int failed", K(ret));
+  } else if (OB_FAIL(compare_decimalint_views(decimal_obj.get_decimal_int(),
+                                              decimal_obj.get_int_bytes(),
+                                              decimal_obj.get_scale(),
+                                              integer_value,
+                                              integer_bytes,
+                                              0,
+                                              cmp_res))) {
+    LOG_WARN("compare decimal int with integer failed", K(ret));
+  }
+  return ret;
+}
+
+OB_NOINLINE int compare_decimalint_number(const ObObj &decimal_obj,
+                                           const ObObj &number_obj,
+                                           int &cmp_res)
+{
+  int ret = OB_SUCCESS;
+  number::ObNumber number = number_obj.get_number();
+  ObScale number_scale = number.get_scale();
+  ObDecimalIntBuilder allocator;
+  ObDecimalInt *number_value = nullptr;
+  int32_t number_bytes = 0;
+  if (OB_FAIL(wide::from_number(
+        number, allocator, number_scale, number_value, number_bytes))) {
+    LOG_WARN("convert number to decimal int failed", K(ret));
+  } else if (OB_FAIL(compare_decimalint_views(decimal_obj.get_decimal_int(),
+                                              decimal_obj.get_int_bytes(),
+                                              decimal_obj.get_scale(),
+                                              number_value,
+                                              number_bytes,
+                                              number_scale,
+                                              cmp_res))) {
+    LOG_WARN("compare decimal int with number failed", K(ret));
+  }
+  return ret;
+}
+
+} // namespace
+
+template <ObObjTypeClass tc1, ObObjTypeClass tc2, ObCmpOp op>
+inline int ObObjCmpFuncs::cmp_op_func(const ObObj &obj1,
+                                      const ObObj &obj2,
+                                      const ObCompareCtx &cmp_ctx)
+{
+  // Type pairs with different boolean semantics (for example, unordered NaN,
+  // legacy Extend/JSON behavior, and geometry) keep explicit specializations
+  // below and therefore never instantiate this adapter.
+  static_assert(CO_EQ <= op && op < CO_CMP, "boolean comparison operator expected");
+  return apply_cmp_op(ObObjCmpFuncs::cmp_func<tc1, tc2>(obj1, obj2, cmp_ctx), op);
+}
+
 #define DEFINE_CMP_OP_FUNC(tc, type, op, op_str) \
   template <> inline \
   int ObObjCmpFuncs::cmp_op_func<tc, tc, op>(const ObObj &obj1, \
@@ -1521,58 +1668,6 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   return cmp_ret;\
 }
 
-#define DEFINE_CMP_OP_FUNC_ENUMSETINNER_DECIMALINT(op, op_str)                                     \
-  template <>                                                                                      \
-  int ObObjCmpFuncs::cmp_op_func<ObEnumSetInnerTC, ObDecimalIntTC, op>(                            \
-    const ObObj &obj1, const ObObj &obj2, const ObCompareCtx &)                                    \
-  {                                                                                                \
-    OBJ_TYPE_CLASS_CHECK(obj1, ObEnumSetInnerTC);                                                  \
-    OBJ_TYPE_CLASS_CHECK(obj2, ObDecimalIntTC);                                                    \
-    ObEnumSetInnerValue inner_value;                                                               \
-    int cmp_res = 0;                                                                               \
-    int ret_val = 0;                                                                               \
-    int ret = OB_SUCCESS;                                                                          \
-    ObScale lh_scale = 0, rh_scale = obj2.get_scale();                                             \
-    ObDecimalIntBuilder lh_val, rh_val;                                                            \
-    ObDecimalIntBuilder tmp_alloc;                                                                 \
-    ObDecimalInt *decint = nullptr;                                                                \
-    uint64_t obj1_value = 0;                                                                       \
-    int32_t int_bytes = 0;                                                                         \
-    if (OB_FAIL(obj1.get_enumset_inner_value(inner_value))) {                                      \
-      ret_val = CR_OB_ERROR;                                                                       \
-    } else if (FALSE_IT(obj1_value = inner_value.numberic_value_)) {                               \
-    } else if (OB_FAIL(wide::from_integer(obj1_value, tmp_alloc, decint, int_bytes))) {            \
-      LOG_ERROR("cast integer to decimal int failed", K(ret));                                     \
-      ret_val = CR_OB_ERROR;                                                                       \
-    } else if (lh_scale > rh_scale) {                                                              \
-      if (OB_FAIL(wide::common_scale_decimalint(obj2.get_decimal_int(), obj2.get_int_bytes(),      \
-                                                rh_scale, lh_scale, rh_val))) {                    \
-        LOG_ERROR("scale decimal int failed", K(ret));                                             \
-        ret_val = CR_OB_ERROR;                                                                     \
-      } else {                                                                                     \
-        rh_val.from(decint, int_bytes);                                                            \
-      }                                                                                            \
-    } else if (lh_scale < rh_scale) {                                                              \
-      if (OB_FAIL(wide::common_scale_decimalint(decint, int_bytes, lh_scale, rh_scale, lh_val))) { \
-        LOG_ERROR("scale decimal int failed", K(ret));                                             \
-      } else {                                                                                     \
-        rh_val.from(obj2.get_decimal_int(), obj2.get_int_bytes());                                 \
-      }                                                                                            \
-    } else {                                                                                       \
-      lh_val.from(decint, int_bytes);                                                              \
-      rh_val.from(obj2.get_decimal_int(), obj2.get_int_bytes());                                   \
-    }                                                                                              \
-    if (OB_SUCC(ret)) {                                                                            \
-      if (OB_FAIL(wide::compare(lh_val, rh_val, cmp_res))) {                                       \
-        LOG_ERROR("compare failed", K(ret));                                                       \
-        ret_val = CR_OB_ERROR;                                                                     \
-      } else {                                                                                     \
-        ret_val = (cmp_res op_str 0);                                                              \
-      }                                                                                            \
-    }                                                                                              \
-    return ret_val;                                                                                \
-  }
-
 #define DEFINE_CMP_FUNC_ENUMSETINNER_DECIMALINT()                                                  \
   template <>                                                                                      \
   int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, ObDecimalIntTC>(                                   \
@@ -1581,158 +1676,58 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
     OBJ_TYPE_CLASS_CHECK(obj1, ObEnumSetInnerTC);                                                  \
     OBJ_TYPE_CLASS_CHECK(obj2, ObDecimalIntTC);                                                    \
     ObEnumSetInnerValue inner_value;                                                               \
-    int cmp_res = 0;                                                                               \
+    int cmp_res = CR_OB_ERROR;                                                                     \
     int ret = OB_SUCCESS;                                                                          \
-    ObScale lh_scale = 0, rh_scale = obj2.get_scale();                                             \
-    ObDecimalIntBuilder lh_val, rh_val;                                                            \
-    ObDecimalIntBuilder tmp_alloc;                                                                 \
-    ObDecimalInt *decint = nullptr;                                                                \
-    uint64_t obj1_value = 0;                                                                       \
-    int32_t int_bytes = 0;                                                                         \
     if (OB_FAIL(obj1.get_enumset_inner_value(inner_value))) {                                      \
-      LOG_ERROR("get enumset inner value failed", K(ret));                                         \
-    } else if (FALSE_IT(obj1_value = inner_value.numberic_value_)) {                               \
-    } else if (OB_FAIL(wide::from_integer(obj1_value, tmp_alloc, decint, int_bytes))) {            \
-      LOG_ERROR("cast integer to decimal int failed", K(ret));                                     \
-    } else if (lh_scale > rh_scale) {                                                              \
-      if (OB_FAIL(wide::common_scale_decimalint(obj2.get_decimal_int(), obj2.get_int_bytes(),      \
-                                                rh_scale, lh_scale, rh_val))) {                    \
-        LOG_ERROR("scale decimal int failed", K(ret));                                             \
-      } else {                                                                                     \
-        rh_val.from(decint, int_bytes);                                                            \
-      }                                                                                            \
-    } else if (lh_scale < rh_scale) {                                                              \
-      if (OB_FAIL(wide::common_scale_decimalint(decint, int_bytes, lh_scale, rh_scale, lh_val))) { \
-        LOG_ERROR("scale decimal int failed", K(ret));                                             \
-      } else {                                                                                     \
-        rh_val.from(obj2.get_decimal_int(), obj2.get_int_bytes());                                 \
-      }                                                                                            \
+      LOG_WARN("get enumset inner value failed", K(ret));                                         \
     } else {                                                                                       \
-      lh_val.from(decint, int_bytes);                                                              \
-      rh_val.from(obj2.get_decimal_int(), obj2.get_int_bytes());                                   \
-    }                                                                                              \
-    if (OB_SUCC(ret)) {                                                                            \
-      if (OB_FAIL(wide::compare(lh_val, rh_val, cmp_res))) {                                       \
-        LOG_ERROR("compare failed", K(ret));                                                       \
+      int reverse_cmp = CR_OB_ERROR;                                                               \
+      if (OB_FAIL(compare_decimalint_integer(                                                      \
+            obj2, inner_value.numberic_value_, reverse_cmp))) {                                   \
+        LOG_WARN("compare enumset inner with decimal int failed", K(ret));                         \
+      } else {                                                                                     \
+        cmp_res = reverse_cmp_result(reverse_cmp);                                                 \
       }                                                                                            \
     }                                                                                              \
     return cmp_res;                                                                                \
   }
 
-#define DEFINE_CMP_OP_FUNC_DECIMALINT_DECIMALINT(op, op_str)                                       \
+#define DEFINE_CMP_FUNC_DECIMALINT_DECIMALINT()                                                    \
   template <>                                                                                      \
-  inline int ObObjCmpFuncs::cmp_op_func<ObDecimalIntTC, ObDecimalIntTC, op>(                       \
+  inline int ObObjCmpFuncs::cmp_func<ObDecimalIntTC, ObDecimalIntTC>(                              \
     const ObObj &obj1, const ObObj &obj2, const ObCompareCtx &)                                    \
   {                                                                                                \
     OBJ_TYPE_CLASS_CHECK(obj1, ObDecimalIntTC);                                                    \
     OBJ_TYPE_CLASS_CHECK(obj2, ObDecimalIntTC);                                                    \
-    int ret = OB_SUCCESS;                                                                          \
-    int val = 0;                                                                                   \
-    int cmp_res = 0;                                                                               \
-    int16_t lh_scale = obj1.get_scale(), rh_scale = obj2.get_scale();                              \
-    ObDecimalIntBuilder lh_val, rh_val;                                                            \
-    if (lh_scale < rh_scale) {                                                                     \
-      if (OB_FAIL(wide::common_scale_decimalint(obj1.get_decimal_int(), obj1.get_int_bytes(),      \
-                                                lh_scale, rh_scale, lh_val))) {                    \
-        LOG_WARN("scale decimal int failed", K(ret));                                              \
-      } else {                                                                                     \
-        rh_val.from(obj2.get_decimal_int(), obj2.get_int_bytes());                                 \
-      }                                                                                            \
-    } else if (lh_scale > rh_scale) {                                                              \
-      if (OB_FAIL(wide::common_scale_decimalint(obj2.get_decimal_int(), obj2.get_int_bytes(),      \
-                                                rh_scale, lh_scale, rh_val))) {                    \
-        LOG_WARN("scale decimal int failed", K(ret));                                              \
-      } else {                                                                                     \
-        lh_val.from(obj1.get_decimal_int(), obj1.get_int_bytes());                                 \
-      }                                                                                            \
-    } else {                                                                                       \
-      lh_val.from(obj1.get_decimal_int(), obj1.get_int_bytes());                                   \
-      rh_val.from(obj2.get_decimal_int(), obj2.get_int_bytes());                                   \
-    }                                                                                              \
+    int cmp_res = CR_OB_ERROR;                                                                     \
+    int ret = compare_decimalint_views(obj1.get_decimal_int(),                                    \
+                                       obj1.get_int_bytes(),                                      \
+                                       obj1.get_scale(),                                          \
+                                       obj2.get_decimal_int(),                                    \
+                                       obj2.get_int_bytes(),                                      \
+                                       obj2.get_scale(),                                          \
+                                       cmp_res);                                                   \
     if (OB_FAIL(ret)) {                                                                            \
-    } else if (OB_FAIL(wide::compare(lh_val, rh_val, cmp_res))) {                                  \
-      LOG_ERROR("compare error", K(ret));                                                          \
-    } else if (op == CO_CMP) {                                                                     \
-      val = cmp_res;                                                                               \
-    } else {                                                                                       \
-      val = (cmp_res op_str 0);                                                                    \
+      LOG_WARN("compare decimal ints failed", K(ret));                                            \
+      cmp_res = CR_OB_ERROR;                                                                       \
     }                                                                                              \
-    return val;                                                                                    \
-  }
-
-#define DEFINE_CMP_FUNC_DECIMALINT_DECIMALINT()                                                    \
-  template <>                                                                                      \
-  inline int ObObjCmpFuncs::cmp_func<ObDecimalIntTC, ObDecimalIntTC>(                              \
-    const ObObj &obj1, const ObObj &obj2, const ObCompareCtx &ctx)                                 \
-  {                                                                                                \
-    int cmp_res =                                                                                  \
-      ObObjCmpFuncs::cmp_op_func<ObDecimalIntTC, ObDecimalIntTC, CO_CMP>(obj1, obj2, ctx);         \
-    return INT_TO_CR(cmp_res);                                                                     \
-  }
-
-#define DEFINE_CMP_OP_FUNC_DECIMALINT_INTEGER(op, op_str, tc, val_type, val_func)                  \
-  template <>                                                                                      \
-  inline int ObObjCmpFuncs::cmp_op_func<ObDecimalIntTC, tc, op>(                                   \
-    const ObObj &obj1, const ObObj &obj2, const ObCompareCtx &)                                    \
-  {                                                                                                \
-    OBJ_TYPE_CLASS_CHECK(obj1, ObDecimalIntTC);                                                    \
-    OBJ_TYPE_CLASS_CHECK(obj2, tc);                                                                \
-    int ret = OB_SUCCESS;                                                                          \
-    int cmp_res = 0;                                                                               \
-    int ret_val = 0;                                                                               \
-    val_type val = obj2.get_##val_func();                                                          \
-    ObDecimalIntBuilder tmp_alloc;                                                                 \
-    ObDecimalInt *rh_decint = nullptr;                                                             \
-    int32_t rh_int_bytes = 0;                                                                      \
-    int16_t lh_scale = obj1.get_scale(), rh_scale = 0;                                             \
-    ObDecimalIntBuilder lh_val, rh_val;                                                            \
-    if (OB_FAIL(wide::from_integer(val, tmp_alloc, rh_decint, rh_int_bytes))) {                    \
-      LOG_ERROR("from_integer failed", K(ret));                                                    \
-    } else if (lh_scale < rh_scale) {                                                              \
-      if (OB_FAIL(wide::common_scale_decimalint(obj1.get_decimal_int(), obj1.get_int_bytes(),      \
-                                                lh_scale, rh_scale, lh_val))) {                    \
-        LOG_WARN("scale decimal int failed", K(ret));                                              \
-      } else {                                                                                     \
-        rh_val.from(rh_decint, rh_int_bytes);                                                      \
-      }                                                                                            \
-    } else if (lh_scale > rh_scale) {                                                              \
-      if (OB_FAIL(                                                                                 \
-            wide::common_scale_decimalint(rh_decint, rh_int_bytes, rh_scale, lh_scale, rh_val))) { \
-        LOG_WARN("scale decimal int failed", K(ret));                                              \
-      } else {                                                                                     \
-        lh_val.from(obj1.get_decimal_int(), obj1.get_int_bytes());                                 \
-      }                                                                                            \
-    } else {                                                                                       \
-      lh_val.from(obj1.get_decimal_int(), obj1.get_int_bytes());                                   \
-      rh_val.from(rh_decint, rh_int_bytes);                                                        \
-    }                                                                                              \
-    if (OB_FAIL(ret)) {                                                                            \
-    } else if (OB_FAIL(wide::compare(lh_val, rh_val, cmp_res))) {                                  \
-      LOG_WARN("compare failed", K(ret));                                                          \
-    } else if (op == CO_CMP) {                                                                     \
-      ret_val = cmp_res;                                                                           \
-    } else {                                                                                       \
-      ret_val = (cmp_res op_str 0);                                                                \
-    }                                                                                              \
-    return ret_val;                                                                                \
+    return cmp_res;                                                                                \
   }
 
 #define DEFINE_CMP_FUNC_DECIMALINT_INTEGER(tc, val_type, val_func)                                 \
   template <>                                                                                      \
   inline int ObObjCmpFuncs::cmp_func<ObDecimalIntTC, tc>(const ObObj &obj1, const ObObj &obj2,     \
-                                                         const ObCompareCtx &ctx)                  \
+                                                         const ObCompareCtx &)                    \
   {                                                                                                \
-    int cmp_ret = ObObjCmpFuncs::cmp_op_func<ObDecimalIntTC, tc, CO_CMP>(obj1, obj2, ctx);         \
-    return cmp_ret;                                                                                \
-  }
-
-#define DEFINE_CMP_OP_FUNC_INTEGER_DECIMALINT(op, op_str, tc)                                      \
-  template <>                                                                                      \
-  inline int ObObjCmpFuncs::cmp_op_func<tc, ObDecimalIntTC, op>(                                   \
-    const ObObj &obj1, const ObObj &obj2, const ObCompareCtx &ctx)                                 \
-  {                                                                                                \
-    int ret = ObObjCmpFuncs::cmp_op_func<ObDecimalIntTC, tc, op>(obj2, obj1, ctx);                 \
-    return -ret;                                                                                   \
+    OBJ_TYPE_CLASS_CHECK(obj1, ObDecimalIntTC);                                                    \
+    OBJ_TYPE_CLASS_CHECK(obj2, tc);                                                                \
+    int cmp_res = CR_OB_ERROR;                                                                     \
+    int ret = compare_decimalint_integer<val_type>(obj1, obj2.get_##val_func(), cmp_res);          \
+    if (OB_FAIL(ret)) {                                                                            \
+      LOG_WARN("compare decimal int with integer failed", K(ret));                                \
+      cmp_res = CR_OB_ERROR;                                                                       \
+    }                                                                                              \
+    return cmp_res;                                                                                \
   }
 
 #define DEFINE_CMP_FUNC_INTEGER_DECIMALINT(tc)                                                     \
@@ -1740,51 +1735,7 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   inline int ObObjCmpFuncs::cmp_func<tc, ObDecimalIntTC>(const ObObj &obj1, const ObObj &obj2,     \
                                                          const ObCompareCtx &ctx)                  \
   {                                                                                                \
-    return -ObObjCmpFuncs::cmp_func<ObDecimalIntTC, tc>(obj2, obj1, ctx);                          \
-  }
-
-#define DEFINE_CMP_OP_FUNC_DECIMALINT_NUMBER(op, op_str)                                           \
-  template <>                                                                                      \
-  inline int ObObjCmpFuncs::cmp_op_func<ObDecimalIntTC, ObNumberTC, op>(                           \
-    const ObObj &obj1, const ObObj &obj2, const ObCompareCtx &)                                    \
-  {                                                                                                \
-    OBJ_TYPE_CLASS_CHECK(obj1, ObDecimalIntTC);                                                    \
-    OBJ_TYPE_CLASS_CHECK(obj2, ObNumberTC);                                                        \
-    int ret = OB_SUCCESS;                                                                          \
-    int cmp_res = 0;                                                                               \
-    int ret_val = 0;                                                                               \
-    ObDecimalInt *decint = nullptr;                                                                \
-    int32_t int_bytes = 0;                                                                         \
-    number::ObNumber nmb = obj2.get_number();                                                      \
-    int16_t lh_scale = obj1.get_scale(), rh_scale = nmb.get_scale();                               \
-    ObDecimalIntBuilder tmp_alloc;                                                                 \
-    ObDecimalIntBuilder lh_val;                                                                    \
-    ObDecimalIntBuilder rh_val;                                                                    \
-    if (OB_FAIL(wide::from_number(nmb, tmp_alloc, rh_scale, decint, int_bytes))) {                 \
-      LOG_ERROR("cast number to decimal int failed", K(ret));                                      \
-    } else if (lh_scale < rh_scale) {                                                              \
-      if (OB_FAIL(wide::common_scale_decimalint(obj1.get_decimal_int(), obj1.get_int_bytes(),      \
-                                                lh_scale, rh_scale, lh_val))) {                    \
-        LOG_ERROR("scale decimal int failed", K(ret), K(lh_scale), K(rh_scale));                   \
-      } else if (FALSE_IT(rh_val.from(decint, int_bytes))) {                                       \
-      }                                                                                            \
-    } else if (lh_scale > rh_scale) {                                                              \
-      if (OB_FAIL(wide::common_scale_decimalint(decint, int_bytes, rh_scale, lh_scale, rh_val))) { \
-        LOG_ERROR("scale decimal int failed", K(ret), K(rh_scale), K(lh_scale));                   \
-      } else if (FALSE_IT(lh_val.from(obj1.get_decimal_int(), obj1.get_int_bytes()))) {            \
-      }                                                                                            \
-    } else {                                                                                       \
-      lh_val.from(obj1.get_decimal_int(), obj1.get_int_bytes());                                   \
-      rh_val.from(decint, int_bytes);                                                              \
-    }                                                                                              \
-    if (OB_SUCC(ret)) {                                                                            \
-      if (OB_FAIL(wide::compare(lh_val, rh_val, cmp_res))) {                                       \
-        LOG_ERROR("compare failed", K(ret));                                                       \
-      } else {                                                                                     \
-        ret_val = (cmp_res op_str 0);                                                              \
-      }                                                                                            \
-    }                                                                                              \
-    return ret_val;                                                                                \
+    return reverse_cmp_result(ObObjCmpFuncs::cmp_func<ObDecimalIntTC, tc>(obj2, obj1, ctx));       \
   }
 
 #define DEFINE_CMP_FUNC_DECIMALINT_NUMBER()                                                        \
@@ -1794,45 +1745,13 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   {                                                                                                \
     OBJ_TYPE_CLASS_CHECK(obj1, ObDecimalIntTC);                                                    \
     OBJ_TYPE_CLASS_CHECK(obj2, ObNumberTC);                                                        \
-    int ret = OB_SUCCESS;                                                                          \
-    int cmp_res = 0;                                                                               \
-    ObDecimalInt *decint = nullptr;                                                                \
-    int32_t int_bytes = 0;                                                                         \
-    ObDecimalIntBuilder lh_val, rh_val;                                                            \
-    number::ObNumber nmb = obj2.get_number();                                                      \
-    ObScale lh_scale = obj1.get_scale(), rh_scale = nmb.get_scale();                               \
-    ObDecimalIntBuilder tmp_alloc;                                                                 \
-    if (OB_FAIL(wide::from_number(nmb, tmp_alloc, rh_scale, decint, int_bytes))) {                 \
-      LOG_ERROR("scale decimal int failed", K(ret));                                               \
-    } else if (lh_scale < rh_scale) {                                                              \
-      if (OB_FAIL(wide::common_scale_decimalint(obj1.get_decimal_int(), obj1.get_int_bytes(),      \
-                                                lh_scale, rh_scale, lh_val))) {                    \
-        LOG_ERROR("scale decimal int failed", K(ret), K(lh_scale), K(rh_scale));                   \
-      } else if (FALSE_IT(rh_val.from(decint, int_bytes))) {                                       \
-      }                                                                                            \
-    } else if (lh_scale > rh_scale) {                                                              \
-      if (OB_FAIL(wide::common_scale_decimalint(decint, int_bytes, rh_scale, lh_scale, rh_val))) { \
-        LOG_ERROR("scale decimal int failed", K(ret), K(rh_scale), K(lh_scale));                   \
-      } else if (FALSE_IT(lh_val.from(obj1.get_decimal_int(), obj1.get_int_bytes()))) {            \
-      }                                                                                            \
-    } else {                                                                                       \
-      lh_val.from(obj1.get_decimal_int(), obj1.get_int_bytes());                                   \
-      rh_val.from(decint, int_bytes);                                                              \
-    }                                                                                              \
+    int cmp_res = CR_OB_ERROR;                                                                     \
+    int ret = compare_decimalint_number(obj1, obj2, cmp_res);                                      \
     if (OB_FAIL(ret)) {                                                                            \
-    } else if (OB_FAIL(wide::compare(lh_val, rh_val, cmp_res))) {                                  \
-      LOG_ERROR("compare failed", K(ret));                                                         \
+      LOG_WARN("compare decimal int with number failed", K(ret));                                 \
+      cmp_res = CR_OB_ERROR;                                                                       \
     }                                                                                              \
     return cmp_res;                                                                                \
-  }
-
-#define DEFINE_CMP_OP_FUNC_NUMBER_DECIMALINT(op, op_str)                                           \
-  template <>                                                                                      \
-  inline int ObObjCmpFuncs::cmp_op_func<ObNumberTC, ObDecimalIntTC, op>(                           \
-    const ObObj &obj1, const ObObj &obj2, const ObCompareCtx &ctx)                                 \
-  {                                                                                                \
-    int ret = ObObjCmpFuncs::cmp_op_func<ObDecimalIntTC, ObNumberTC, op>(obj2, obj1, ctx);         \
-    return -ret;                                                                                   \
   }
 
 #define DEFINE_CMP_FUNC_NUMBER_DECIMALINT()                                                        \
@@ -1840,7 +1759,8 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   inline int ObObjCmpFuncs::cmp_func<ObNumberTC, ObDecimalIntTC>(                                  \
     const ObObj &obj1, const ObObj &obj2, const ObCompareCtx &ctx)                                 \
   {                                                                                                \
-    return -ObObjCmpFuncs::cmp_func<ObDecimalIntTC, ObNumberTC>(obj2, obj1, ctx);                  \
+    return reverse_cmp_result(                                                                     \
+      ObObjCmpFuncs::cmp_func<ObDecimalIntTC, ObNumberTC>(obj2, obj1, ctx));                       \
   }
 
 // ObUserDefinedSQLTC vs ObUserDefinedSQLTC
@@ -1966,12 +1886,6 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
 //==============================
 
 #define DEFINE_CMP_FUNCS(tc, type) \
-  DEFINE_CMP_OP_FUNC(tc, type, CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC(tc, type, CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC(tc, type, CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC(tc, type, CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC(tc, type, CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC(tc, type, CO_NE, !=); \
   DEFINE_CMP_FUNC(tc, type)
 
 #define DEFINE_CMP_FUNCS_XXX_REAL(tc, type, real_tc, real_type) \
@@ -1993,98 +1907,35 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNC_REAL_XXX(real_tc, real_type, tc, type); \
 
 #define DEFINE_CMP_FUNCS_XXX_NUMBER(tc, type) \
-  DEFINE_CMP_OP_FUNC_XXX_NUMBER(tc, type, CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_XXX_NUMBER(tc, type, CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_XXX_NUMBER(tc, type, CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_XXX_NUMBER(tc, type, CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_XXX_NUMBER(tc, type, CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_XXX_NUMBER(tc, type, CO_NE, !=); \
   DEFINE_CMP_FUNC_XXX_NUMBER(tc, type); \
 
 #define DEFINE_CMP_FUNCS_NUMBER_XXX(tc, type) \
-  DEFINE_CMP_OP_FUNC_NUMBER_XXX(tc, type, CO_EQ, CO_EQ); \
-  DEFINE_CMP_OP_FUNC_NUMBER_XXX(tc, type, CO_LE, CO_GE); \
-  DEFINE_CMP_OP_FUNC_NUMBER_XXX(tc, type, CO_LT, CO_GT); \
-  DEFINE_CMP_OP_FUNC_NUMBER_XXX(tc, type, CO_GE, CO_LE); \
-  DEFINE_CMP_OP_FUNC_NUMBER_XXX(tc, type, CO_GT, CO_LT); \
-  DEFINE_CMP_OP_FUNC_NUMBER_XXX(tc, type, CO_NE, CO_NE); \
   DEFINE_CMP_FUNC_NUMBER_XXX(tc, type); \
 
 #define DEFINE_CMP_FUNCS_REAL_REAL(real1_tc, real1_type, real2_tc, real2_type) \
-  DEFINE_CMP_OP_FUNC_REAL_REAL_EQ(real1_tc, real1_type, real2_tc, real2_type); \
-  DEFINE_CMP_OP_FUNC_REAL_REAL_LE(real1_tc, real1_type, real2_tc, real2_type); \
-  DEFINE_CMP_OP_FUNC_REAL_REAL_LT(real1_tc, real1_type, real2_tc, real2_type); \
-  DEFINE_CMP_OP_FUNC_REAL_REAL_GE(real1_tc, real1_type, real2_tc, real2_type); \
-  DEFINE_CMP_OP_FUNC_REAL_REAL_GT(real1_tc, real1_type, real2_tc, real2_type); \
-  DEFINE_CMP_OP_FUNC_REAL_REAL_NE(real1_tc, real1_type, real2_tc, real2_type); \
   DEFINE_CMP_FUNC_REAL_REAL(real1_tc, real1_type, real2_tc, real2_type)
 
 #define DEFINE_CMP_FUNCS_DECIMALINT_DECIMALINT()                                                   \
-  DEFINE_CMP_OP_FUNC_DECIMALINT_DECIMALINT(CO_EQ, ==);                                             \
-  DEFINE_CMP_OP_FUNC_DECIMALINT_DECIMALINT(CO_LE, <=);                                             \
-  DEFINE_CMP_OP_FUNC_DECIMALINT_DECIMALINT(CO_LT, <);                                              \
-  DEFINE_CMP_OP_FUNC_DECIMALINT_DECIMALINT(CO_GE, >=);                                             \
-  DEFINE_CMP_OP_FUNC_DECIMALINT_DECIMALINT(CO_GT, >);                                              \
-  DEFINE_CMP_OP_FUNC_DECIMALINT_DECIMALINT(CO_NE, !=);                                             \
-  DEFINE_CMP_OP_FUNC_DECIMALINT_DECIMALINT(CO_CMP, =);                                             \
   DEFINE_CMP_FUNC_DECIMALINT_DECIMALINT()
 
 #define DEFINE_CMP_FUNCS_DECIMALINT_INTEGER(int_tc, val_type, val_func)                            \
-  DEFINE_CMP_OP_FUNC_DECIMALINT_INTEGER(CO_EQ, ==, int_tc, val_type, val_func);                    \
-  DEFINE_CMP_OP_FUNC_DECIMALINT_INTEGER(CO_LE, <=, int_tc, val_type, val_func);                    \
-  DEFINE_CMP_OP_FUNC_DECIMALINT_INTEGER(CO_LT, <, int_tc, val_type, val_func);                     \
-  DEFINE_CMP_OP_FUNC_DECIMALINT_INTEGER(CO_GE, >=, int_tc, val_type, val_func);                    \
-  DEFINE_CMP_OP_FUNC_DECIMALINT_INTEGER(CO_GT, >, int_tc, val_type, val_func);                     \
-  DEFINE_CMP_OP_FUNC_DECIMALINT_INTEGER(CO_NE, !=, int_tc, val_type, val_func);                    \
-  DEFINE_CMP_OP_FUNC_DECIMALINT_INTEGER(CO_CMP, =, int_tc, val_type, val_func);                    \
   DEFINE_CMP_FUNC_DECIMALINT_INTEGER(int_tc, val_type, val_func)
 
 #define DEFINE_CMP_FUNCS_INTEGER_DECIMALINT(int_tc)                                                \
-  DEFINE_CMP_OP_FUNC_INTEGER_DECIMALINT(CO_EQ, ==, int_tc);                                        \
-  DEFINE_CMP_OP_FUNC_INTEGER_DECIMALINT(CO_LE, <=, int_tc);                                        \
-  DEFINE_CMP_OP_FUNC_INTEGER_DECIMALINT(CO_LT, <, int_tc);                                         \
-  DEFINE_CMP_OP_FUNC_INTEGER_DECIMALINT(CO_GE, >=, int_tc);                                        \
-  DEFINE_CMP_OP_FUNC_INTEGER_DECIMALINT(CO_GT, >, int_tc);                                         \
-  DEFINE_CMP_OP_FUNC_INTEGER_DECIMALINT(CO_NE, !=, int_tc);                                        \
-  DEFINE_CMP_OP_FUNC_INTEGER_DECIMALINT(CO_CMP, =, int_tc);                                        \
   DEFINE_CMP_FUNC_INTEGER_DECIMALINT(int_tc)
 
 #define DEFINE_CMP_FUNCS_DECIMALINT_NUMBER()                                                       \
-  DEFINE_CMP_OP_FUNC_DECIMALINT_NUMBER(CO_EQ, ==);                                                 \
-  DEFINE_CMP_OP_FUNC_DECIMALINT_NUMBER(CO_LE, <=);                                                 \
-  DEFINE_CMP_OP_FUNC_DECIMALINT_NUMBER(CO_LT, <);                                                  \
-  DEFINE_CMP_OP_FUNC_DECIMALINT_NUMBER(CO_GE, >=);                                                 \
-  DEFINE_CMP_OP_FUNC_DECIMALINT_NUMBER(CO_GT, >);                                                  \
-  DEFINE_CMP_OP_FUNC_DECIMALINT_NUMBER(CO_NE, !=);                                                 \
   DEFINE_CMP_FUNC_DECIMALINT_NUMBER()
 
 #define DEFINE_CMP_FUNCS_NUMBER_DECIMALINT()                                                       \
-  DEFINE_CMP_OP_FUNC_NUMBER_DECIMALINT(CO_EQ, ==);                                                 \
-  DEFINE_CMP_OP_FUNC_NUMBER_DECIMALINT(CO_LE, <=);                                                 \
-  DEFINE_CMP_OP_FUNC_NUMBER_DECIMALINT(CO_LT, <);                                                  \
-  DEFINE_CMP_OP_FUNC_NUMBER_DECIMALINT(CO_GE, >=);                                                 \
-  DEFINE_CMP_OP_FUNC_NUMBER_DECIMALINT(CO_GT, >);                                                  \
-  DEFINE_CMP_OP_FUNC_NUMBER_DECIMALINT(CO_NE, !=);                                                 \
   DEFINE_CMP_FUNC_NUMBER_DECIMALINT()
 
 //==============================
 
 #define DEFINE_CMP_FUNCS_NULL_NULL() \
-  DEFINE_CMP_OP_FUNC_NULL_NULL(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_NULL_NULL(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_NULL_NULL(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_NULL_NULL(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_NULL_NULL(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_NULL_NULL(CO_NE, !=); \
   DEFINE_CMP_FUNC_NULL_NULL()
 
 #define DEFINE_CMP_FUNCS_NULL_EXT() \
-  DEFINE_CMP_OP_FUNC_NULL_EXT(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_NULL_EXT(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_NULL_EXT(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_NULL_EXT(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_NULL_EXT(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_NULL_EXT(CO_NE, !=); \
   DEFINE_CMP_FUNC_NULL_EXT()
 
 #define DEFINE_CMP_FUNCS_INT_INT() \
@@ -2102,12 +1953,6 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
 // float/double comparison using "==" or "!=" matches MySQL
 // raw float/double follows direct comparison semantics
 #define DEFINE_CMP_FUNCS_INT_UINT() \
-  DEFINE_CMP_OP_FUNC_INT_UINT(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_INT_UINT(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_INT_UINT(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_INT_UINT(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_INT_UINT(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_INT_UINT(CO_NE, !=); \
   DEFINE_CMP_FUNC_INT_UINT()
 
 // float/double comparison using "==" or "!=" matches MySQL
@@ -2122,21 +1967,9 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNCS_XXX_NUMBER(ObIntTC, int);
 
 #define DEFINE_CMP_FUNCS_INT_ENUMSET() \
-  DEFINE_CMP_OP_FUNC_INT_ENUMSET(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_INT_ENUMSET(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_INT_ENUMSET(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_INT_ENUMSET(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_INT_ENUMSET(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_INT_ENUMSET(CO_NE, !=); \
   DEFINE_CMP_FUNC_INT_ENUMSET()
 
 #define DEFINE_CMP_FUNCS_UINT_INT() \
-  DEFINE_CMP_OP_FUNC_UINT_INT(CO_EQ, CO_EQ); \
-  DEFINE_CMP_OP_FUNC_UINT_INT(CO_LE, CO_GE); \
-  DEFINE_CMP_OP_FUNC_UINT_INT(CO_LT, CO_GT); \
-  DEFINE_CMP_OP_FUNC_UINT_INT(CO_GE, CO_LE); \
-  DEFINE_CMP_OP_FUNC_UINT_INT(CO_GT, CO_LT); \
-  DEFINE_CMP_OP_FUNC_UINT_INT(CO_NE, CO_NE); \
   DEFINE_CMP_FUNC_UINT_INT()
 
 // float/double comparison using "==" or "!=" matches MySQL
@@ -2156,12 +1989,6 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNCS_XXX_NUMBER(ObUIntTC, uint64);
 
 #define DEFINE_CMP_FUNCS_UINT_ENUMSET() \
-  DEFINE_CMP_OP_FUNC_UINT_ENUMSET(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_UINT_ENUMSET(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_UINT_ENUMSET(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_UINT_ENUMSET(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_UINT_ENUMSET(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_UINT_ENUMSET(CO_NE, !=); \
   DEFINE_CMP_FUNC_UINT_ENUMSET()
 
 // float/double comparison using "==" or "!=" matches MySQL
@@ -2252,48 +2079,18 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNCS(ObMySQLDateTimeTC, mysql_datetime);
 
 #define DEFINE_CMP_FUNCS_DATETIME_OTIMESTAMP() \
-    DEFINE_CMP_OP_FUNC_DT_OT(CO_EQ, ==); \
-    DEFINE_CMP_OP_FUNC_DT_OT(CO_LE, <=); \
-    DEFINE_CMP_OP_FUNC_DT_OT(CO_LT, < ); \
-    DEFINE_CMP_OP_FUNC_DT_OT(CO_GE, >=); \
-    DEFINE_CMP_OP_FUNC_DT_OT(CO_GT, > ); \
-    DEFINE_CMP_OP_FUNC_DT_OT(CO_NE, !=); \
     DEFINE_CMP_FUNC_DT_OT(); \
 
 #define DEFINE_CMP_FUNCS_OTIMESTAMP_DATETIME() \
-    DEFINE_CMP_OP_FUNC_OT_DT(CO_EQ, ==); \
-    DEFINE_CMP_OP_FUNC_OT_DT(CO_LE, <=); \
-    DEFINE_CMP_OP_FUNC_OT_DT(CO_LT, < ); \
-    DEFINE_CMP_OP_FUNC_OT_DT(CO_GE, >=); \
-    DEFINE_CMP_OP_FUNC_OT_DT(CO_GT, > ); \
-    DEFINE_CMP_OP_FUNC_OT_DT(CO_NE, !=); \
     DEFINE_CMP_FUNC_OT_DT(); \
 
 #define DEFINE_CMP_FUNCS_OTIMESTAMP_OTIMESTAMP() \
-    DEFINE_CMP_OP_FUNC_OT_OT(CO_EQ, ==); \
-    DEFINE_CMP_OP_FUNC_OT_OT(CO_LE, <=); \
-    DEFINE_CMP_OP_FUNC_OT_OT(CO_LT, < ); \
-    DEFINE_CMP_OP_FUNC_OT_OT(CO_GE, >=); \
-    DEFINE_CMP_OP_FUNC_OT_OT(CO_GT, > ); \
-    DEFINE_CMP_OP_FUNC_OT_OT(CO_NE, !=); \
     DEFINE_CMP_FUNC_OT_OT(); \
 
 #define DEFINE_CMP_FUNCS_STRING_STRING() \
-  DEFINE_CMP_OP_FUNC_STRING_STRING(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_STRING_STRING(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_STRING_STRING(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_STRING_STRING(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_STRING_STRING(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_STRING_STRING(CO_NE, !=); \
   DEFINE_CMP_FUNC_STRING_STRING()
 
 #define DEFINE_CMP_FUNCS_RAW_RAW() \
-  DEFINE_CMP_OP_FUNC_RAW_RAW(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_RAW_RAW(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_RAW_RAW(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_RAW_RAW(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_RAW_RAW(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_RAW_RAW(CO_NE, !=); \
   DEFINE_CMP_FUNC_RAW_RAW()
 
 #define DEFINE_CMP_FUNCS_ENUMSETINNER_REAL(real_tc, real_type) \
@@ -2306,44 +2103,20 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNC_ENUMSETINNER_REAL(real_tc, real_type);
 
 #define DEFINE_CMP_FUNCS_ENUMSET_INT();\
-  DEFINE_CMP_OP_FUNC_ENUMSET_INT(CO_EQ, CO_EQ); \
-  DEFINE_CMP_OP_FUNC_ENUMSET_INT(CO_LE, CO_GE); \
-  DEFINE_CMP_OP_FUNC_ENUMSET_INT(CO_LT, CO_GT); \
-  DEFINE_CMP_OP_FUNC_ENUMSET_INT(CO_GE, CO_LE); \
-  DEFINE_CMP_OP_FUNC_ENUMSET_INT(CO_GT, CO_LT); \
-  DEFINE_CMP_OP_FUNC_ENUMSET_INT(CO_NE, CO_NE); \
   DEFINE_CMP_FUNC_ENUMSET_INT();
 
 // float/double comparison using "==" or "!=" matches MySQL
 // raw float/double follows direct comparison semantics
 #define DEFINE_CMP_FUNCS_ENUMSET_UINT();\
-  DEFINE_CMP_OP_FUNC_ENUMSET_UINT(CO_EQ, CO_EQ); \
-  DEFINE_CMP_OP_FUNC_ENUMSET_UINT(CO_LE, CO_GE); \
-  DEFINE_CMP_OP_FUNC_ENUMSET_UINT(CO_LT, CO_GT); \
-  DEFINE_CMP_OP_FUNC_ENUMSET_UINT(CO_GE, CO_LE); \
-  DEFINE_CMP_OP_FUNC_ENUMSET_UINT(CO_GT, CO_LT); \
-  DEFINE_CMP_OP_FUNC_ENUMSET_UINT(CO_NE, CO_NE); \
   DEFINE_CMP_FUNC_ENUMSET_UINT();
 
 
 #define DEFINE_CMP_FUNCS_ENUMSETINNER_INT()\
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_INT(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_INT(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_INT(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_INT(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_INT(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_INT(CO_NE, !=); \
   DEFINE_CMP_FUNC_ENUMSETINNER_INT();
 
 // float/double comparison using "==" or "!=" matches MySQL
 // raw float/double follows direct comparison semantics
 #define DEFINE_CMP_FUNCS_ENUMSETINNER_UINT() \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_UINT(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_UINT(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_UINT(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_UINT(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_UINT(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_UINT(CO_NE, !=); \
   DEFINE_CMP_FUNC_ENUMSETINNER_UINT();
 
 // float/double comparison using "==" or "!=" matches MySQL
@@ -2355,39 +2128,15 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNCS_ENUMSETINNER_REAL(ObDoubleTC, double);
 
 #define DEFINE_CMP_FUNCS_ENUMSETINNER_NUMBER() \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_NUMBER(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_NUMBER(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_NUMBER(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_NUMBER(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_NUMBER(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_NUMBER(CO_NE, !=); \
   DEFINE_CMP_FUNC_ENUMSETINNER_NUMBER()
 
 #define DEFINE_CMP_FUNCS_ENUMSETINNER_DECIMALINT()                                                 \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_DECIMALINT(CO_EQ, ==);                                           \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_DECIMALINT(CO_LE, <=);                                           \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_DECIMALINT(CO_LT, <);                                            \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_DECIMALINT(CO_GE, >=);                                           \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_DECIMALINT(CO_GT, >);                                            \
-  DEFINE_CMP_OP_FUNC_ENUMSETINNER_DECIMALINT(CO_NE, !=);                                           \
   DEFINE_CMP_FUNC_ENUMSETINNER_DECIMALINT();
 
 #define DEFINE_CMP_FUNCS_TEXT_TEXT() \
-  DEFINE_CMP_OP_FUNC_TEXT_TEXT(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_TEXT_TEXT(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_TEXT_TEXT(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_TEXT_TEXT(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_TEXT_TEXT(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_TEXT_TEXT(CO_NE, !=); \
   DEFINE_CMP_FUNC_TEXT_TEXT()
 
 #define DEFINE_CMP_FUNCS_JSON_JSON() \
-  DEFINE_CMP_OP_FUNC_JSON_JSON(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_JSON_JSON(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_JSON_JSON(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_JSON_JSON(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_JSON_JSON(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_JSON_JSON(CO_NE, !=); \
   DEFINE_CMP_FUNC_JSON_JSON()
 
 #define DEFINE_CMP_FUNCS_GEOMETRY_GEOMETRY() \
@@ -2400,30 +2149,12 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNC_GEOMETRY_GEOMETRY()
 
 #define DEFINE_CMP_FUNCS_UDT_UDT() \
-  DEFINE_CMP_OP_FUNC_UDT_UDT(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_UDT_UDT(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_UDT_UDT(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_UDT_UDT(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_UDT_UDT(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_UDT_UDT(CO_NE, !=); \
   DEFINE_CMP_FUNC_UDT_UDT()
 
 #define DEFINE_CMP_FUNCS_COLLECTION_COLLECTION() \
-  DEFINE_CMP_OP_FUNC_COLLECTION_COLLECTION(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_COLLECTION_COLLECTION(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_COLLECTION_COLLECTION(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_COLLECTION_COLLECTION(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_COLLECTION_COLLECTION(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_COLLECTION_COLLECTION(CO_NE, !=); \
   DEFINE_CMP_FUNC_COLLECTION_COLLECTION()
 
 #define DEFINE_CMP_FUNCS_STRING_TEXT() \
-  DEFINE_CMP_OP_FUNC_STRING_TEXT(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_STRING_TEXT(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_STRING_TEXT(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_STRING_TEXT(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_STRING_TEXT(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_STRING_TEXT(CO_NE, !=); \
   DEFINE_CMP_FUNC_STRING_TEXT()
 
 #define DEFINE_CMP_FUNCS_TEXT_STRING() \
@@ -2438,12 +2169,6 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
 //==============================
 
 #define DEFINE_CMP_FUNCS_EXT_NULL() \
-  DEFINE_CMP_OP_FUNC_EXT_NULL(CO_EQ, CO_EQ); \
-  DEFINE_CMP_OP_FUNC_EXT_NULL(CO_LE, CO_GE); \
-  DEFINE_CMP_OP_FUNC_EXT_NULL(CO_LT, CO_GT); \
-  DEFINE_CMP_OP_FUNC_EXT_NULL(CO_GE, CO_LE); \
-  DEFINE_CMP_OP_FUNC_EXT_NULL(CO_GT, CO_LT); \
-  DEFINE_CMP_OP_FUNC_EXT_NULL(CO_NE, CO_NE); \
   DEFINE_CMP_FUNC_EXT_NULL()
 
 #define DEFINE_CMP_FUNCS_EXT_EXT() \
@@ -2456,39 +2181,15 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNC_EXT_EXT()
 
 #define DEFINE_CMP_FUNCS_NULL_XXX() \
-  DEFINE_CMP_OP_FUNC_NULL_XXX(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_NULL_XXX(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_NULL_XXX(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_NULL_XXX(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_NULL_XXX(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_NULL_XXX(CO_NE, !=); \
   DEFINE_CMP_FUNC_NULL_XXX()
 
 #define DEFINE_CMP_FUNCS_XXX_NULL() \
-  DEFINE_CMP_OP_FUNC_XXX_NULL(CO_EQ, CO_EQ); \
-  DEFINE_CMP_OP_FUNC_XXX_NULL(CO_LE, CO_GE); \
-  DEFINE_CMP_OP_FUNC_XXX_NULL(CO_LT, CO_GT); \
-  DEFINE_CMP_OP_FUNC_XXX_NULL(CO_GE, CO_LE); \
-  DEFINE_CMP_OP_FUNC_XXX_NULL(CO_GT, CO_LT); \
-  DEFINE_CMP_OP_FUNC_XXX_NULL(CO_NE, CO_NE); \
   DEFINE_CMP_FUNC_XXX_NULL()
 
 #define DEFINE_CMP_FUNCS_XXX_EXT() \
-  DEFINE_CMP_OP_FUNC_XXX_EXT(CO_EQ, ==); \
-  DEFINE_CMP_OP_FUNC_XXX_EXT(CO_LE, <=); \
-  DEFINE_CMP_OP_FUNC_XXX_EXT(CO_LT, < ); \
-  DEFINE_CMP_OP_FUNC_XXX_EXT(CO_GE, >=); \
-  DEFINE_CMP_OP_FUNC_XXX_EXT(CO_GT, > ); \
-  DEFINE_CMP_OP_FUNC_XXX_EXT(CO_NE, !=); \
   DEFINE_CMP_FUNC_XXX_EXT()
 
 #define DEFINE_CMP_FUNCS_EXT_XXX() \
-  DEFINE_CMP_OP_FUNC_EXT_XXX(CO_EQ, CO_EQ); \
-  DEFINE_CMP_OP_FUNC_EXT_XXX(CO_LE, CO_GE); \
-  DEFINE_CMP_OP_FUNC_EXT_XXX(CO_LT, CO_GT); \
-  DEFINE_CMP_OP_FUNC_EXT_XXX(CO_GE, CO_LE); \
-  DEFINE_CMP_OP_FUNC_EXT_XXX(CO_GT, CO_LT); \
-  DEFINE_CMP_OP_FUNC_EXT_XXX(CO_NE, CO_NE); \
   DEFINE_CMP_FUNC_EXT_XXX()
 
 #define DEFINE_CMP_FUNCS_JSON_EXTEND() \

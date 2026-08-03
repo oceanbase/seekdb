@@ -43,7 +43,7 @@ namespace sql
 int ObFreezeExecutor::execute(ObExecContext &ctx, ObFreezeStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  ObSqlExecutorCtx *task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx);
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
@@ -209,7 +209,7 @@ int ObFlushDagWarningsExecutor::execute(ObExecContext &ctx, ObFlushDagWarningsSt
 {
   UNUSED(stmt);
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  ObSqlExecutorCtx *task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx);
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
@@ -222,7 +222,7 @@ int ObFlushDagWarningsExecutor::execute(ObExecContext &ctx, ObFlushDagWarningsSt
 int ObAdminMergeExecutor::execute(ObExecContext &ctx, ObAdminMergeStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  ObSqlExecutorCtx *task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx);
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
@@ -254,7 +254,7 @@ int ObRefreshMemStatExecutor::execute(ObExecContext &ctx, ObRefreshMemStatStmt &
 {
   int ret = OB_SUCCESS;
   UNUSED(stmt);
-  ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  ObSqlExecutorCtx *task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx);
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
@@ -271,7 +271,7 @@ int ObRefreshIOCalibraitonExecutor::execute(ObExecContext &ctx, ObRefreshIOCalib
 {
   int ret = OB_SUCCESS;
   const ObRefreshIOCalibrationParam &param = stmt.get_param();
-  ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  ObSqlExecutorCtx *task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx);
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
@@ -301,7 +301,7 @@ int ObRefreshIOCalibraitonExecutor::execute(ObExecContext &ctx, ObRefreshIOCalib
 int ObSetConfigExecutor::execute(ObExecContext &ctx, ObSetConfigStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  ObSqlExecutorCtx *task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx);
 
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx)) {
@@ -332,7 +332,7 @@ int ObClearMergeErrorExecutor::execute(ObExecContext &ctx, ObClearMergeErrorStmt
 {
   UNUSED(stmt);
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  ObSqlExecutorCtx *task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx);
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
@@ -456,7 +456,7 @@ int ObCancelTaskExecutor::parse_task_id(
 int ObResetConfigExecutor::execute(ObExecContext &ctx, ObResetConfigStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  ObSqlExecutorCtx *task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx);
 
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;

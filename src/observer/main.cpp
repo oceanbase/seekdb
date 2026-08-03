@@ -73,6 +73,7 @@ static void seekdb_cov_init_profile_file(int argc, char **argv)
 #endif
 #if defined(__linux__)
 #include <limits.h>
+#include <sys/prctl.h>
 #endif
 #include <locale.h>
 #ifdef __APPLE__
@@ -355,6 +356,44 @@ static int dl_iterate_phdr(int (*callback)(struct dl_phdr_info *info, size_t siz
 #else
 #include <link.h>
 #include <dlfcn.h>
+#endif
+
+#if defined(__linux__)
+#ifndef PR_SET_THP_DISABLE
+#define PR_SET_THP_DISABLE 41
+#endif
+
+static void disable_hugepage_for_self_text()
+{
+  (void)prctl(PR_SET_THP_DISABLE, 1, 0, 0, 0);
+
+  char exe_path[PATH_MAX] = {0};
+  const ssize_t exe_len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+  if (exe_len <= 0) {
+    return;
+  }
+  exe_path[exe_len] = '\0';
+
+  FILE *maps = fopen("/proc/self/maps", "r");
+  if (maps == nullptr) {
+    return;
+  }
+
+  char line[4096];
+  while (fgets(line, sizeof(line), maps) != nullptr) {
+    unsigned long start = 0;
+    unsigned long end = 0;
+    char perms[8] = {0};
+    char path[PATH_MAX] = {0};
+    const int fields = sscanf(line, "%lx-%lx %7s %*s %*s %*s %4095[^\n]",
+                              &start, &end, perms, path);
+    if (fields == 4 && start < end && perms[0] == 'r' && perms[2] == 'x'
+        && 0 == strcmp(path, exe_path)) {
+      (void)madvise(reinterpret_cast<void *>(start), end - start, MADV_NOHUGEPAGE);
+    }
+  }
+  fclose(maps);
+}
 #endif
 
 using namespace oceanbase::obsys;
@@ -801,6 +840,9 @@ static const char *get_arg_value(int argc, char *argv[], const char *name)
 
 int main(int argc, char *argv[])
 {
+#if defined(__linux__)
+  disable_hugepage_for_self_text();
+#endif
 #ifdef _WIN32
   ::oceanbase::common::g_ob_log_main_entered = true;
 #endif

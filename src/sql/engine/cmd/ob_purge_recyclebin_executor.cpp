@@ -34,7 +34,7 @@ int ObPurgeRecycleBinExecutor::execute(ObExecContext &ctx, ObPurgeRecycleBinStmt
 {
   int ret = OB_SUCCESS;
   //use to test purge recyclebin objects
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   const obcall::ObPurgeRecycleBinArg &purge_recyclebin_arg = stmt.get_purge_recyclebin_arg();
 
 //  int64_t current_time = ObTimeUtility::current_time();
@@ -47,7 +47,7 @@ int ObPurgeRecycleBinExecutor::execute(ObExecContext &ctx, ObPurgeRecycleBinStmt
     const_cast<obcall::ObPurgeRecycleBinArg&>(purge_recyclebin_arg).ddl_stmt_str_ = first_stmt;
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else {

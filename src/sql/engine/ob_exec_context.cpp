@@ -143,7 +143,7 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     phy_plan_ctx_(NULL),
     expr_op_size_(0),
     expr_op_ctx_store_(NULL),
-    task_executor_ctx_(*this),
+    sql_executor_ctx_(),
     my_session_(NULL),
     exec_stat_collector_(NULL),
     stmt_factory_(NULL),
@@ -1036,7 +1036,7 @@ DEFINE_SERIALIZE(ObExecContext)
     OB_UNIS_ENCODE(*phy_plan_ctx_);
     OB_UNIS_ENCODE(*my_session_);
 
-    OB_UNIS_ENCODE(task_executor_ctx_);
+    OB_UNIS_ENCODE(sql_executor_ctx_);
     OB_UNIS_ENCODE(das_ctx_);
     OB_UNIS_ENCODE(*sql_ctx_);
   }
@@ -1063,7 +1063,7 @@ DEFINE_GET_SERIALIZE_SIZE(ObExecContext)
     OB_UNIS_ADD_LEN(phy_op_size_);
     OB_UNIS_ADD_LEN(*phy_plan_ctx_);
     OB_UNIS_ADD_LEN(*my_session_);
-    OB_UNIS_ADD_LEN(task_executor_ctx_);
+    OB_UNIS_ADD_LEN(sql_executor_ctx_);
     OB_UNIS_ADD_LEN(das_ctx_);
     OB_UNIS_ADD_LEN(*sql_ctx_);
   }

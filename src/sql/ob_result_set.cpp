@@ -408,7 +408,7 @@ OB_INLINE int ObResultSet::do_open_plan(ObExecContext &ctx)
   NG_TRACE_EXT(do_open_plan_begin, OB_ID(plan_id), physical_plan_->get_plan_id());
   int ret = OB_SUCCESS;
   ctx.reset_op_env();
-  exec_result_ = &(ctx.get_task_exec_ctx().get_execute_result());
+  exec_result_ = &(ctx.get_sql_exec_ctx().get_execute_result());
   if (stmt::T_PREPARE != stmt_type_) {
     if (OB_FAIL(ctx.init_phy_op(physical_plan_->get_phy_operator_size()))) {
       LOG_WARN("fail init exec phy op ctx", K(ret));

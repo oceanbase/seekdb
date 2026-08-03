@@ -4180,10 +4180,10 @@ int ObJoinOrder::compute_cost_and_prune_access_path(PathHelper &helper,
 {
   int ret = OB_SUCCESS;
   ObSqlCtx *sql_ctx = NULL;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   if (OB_ISNULL(get_plan()) ||
       OB_ISNULL(get_plan()->get_optimizer_context().get_exec_ctx()) ||
-      OB_ISNULL(task_exec_ctx = get_plan()->get_optimizer_context().get_task_exec_ctx()) ||
+      OB_ISNULL(task_exec_ctx = get_plan()->get_optimizer_context().get_sql_exec_ctx()) ||
       OB_ISNULL(sql_ctx = get_plan()->get_optimizer_context().get_exec_ctx()->get_sql_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(get_plan()), K(sql_ctx), K(ret));

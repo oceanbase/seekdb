@@ -19,7 +19,6 @@
 #include "ob_sql_trans_control.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/tablelock/ob_table_lock_service.h"
-#include "sql/executor/ob_task_spliter.h"
 #include "observer/ob_server.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"

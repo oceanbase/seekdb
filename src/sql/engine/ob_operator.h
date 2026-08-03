@@ -43,7 +43,6 @@ class ObPhysicalPlan;
 class ObOpSpec;
 class ObOperator;
 class ObOpInput;
-class ObTaskInfo;
 class ObExecFeedbackNode;
 
 struct ObPhyOpSeriCtx
@@ -645,13 +644,6 @@ protected:
   DISALLOW_COPY_AND_ASSIGN(ObOperator);
 };
 
-// Operator input is information of task execution. Some operator need the to get information
-// from task executor.
-//
-// e.g.:
-//    table scan need this to get scan partition.
-//    exchange operator need this to get DTL channels
-//
 class ObOpInput
 {
   OB_UNIS_VERSION_PV();
@@ -659,7 +651,6 @@ public:
   ObOpInput(ObExecContext &ctx, const ObOpSpec &spec): exec_ctx_(ctx), spec_(spec) {}
   virtual ~ObOpInput() {}
 
-  virtual int init(ObTaskInfo &task_info) = 0;
   virtual void set_deserialize_allocator(common::ObIAllocator *allocator) { UNUSED(allocator); }
   virtual void reset() = 0;
 

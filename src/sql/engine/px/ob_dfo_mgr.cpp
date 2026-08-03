@@ -172,8 +172,8 @@ int ObDfoWorkerAssignment::calc_admited_worker_count(const ObIArray<ObDfo*> &dfo
 {
   int ret = OB_SUCCESS;
   px_admited = 0;
-  const ObTaskExecutorCtx *task_exec_ctx = NULL;
-  if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(exec_ctx))) {
+  const ObSqlExecutorCtx *task_exec_ctx = NULL;
+  if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(exec_ctx))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("task exec ctx NULL", K(ret));
   } else if (OB_FAIL(ObDfoWorkerAssignment::get_dfos_worker_count(dfos, true, px_minimal))) {

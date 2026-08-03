@@ -142,7 +142,7 @@ int ObPxAdmission::enter_query_admission(ObSQLSessionInfo &session,
                 K(plan.get_plan_id()),
                 K(ret));
       } else {
-        ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(exec_ctx);
+        ObSqlExecutorCtx *task_exec_ctx = GET_SQL_EXECUTOR_CTX(exec_ctx);
         if (OB_ISNULL(task_exec_ctx)) {
           ret = OB_ERR_UNEXPECTED;
         } else {
@@ -175,7 +175,7 @@ void ObPxAdmission::exit_query_admission(ObSQLSessionInfo &session,
       && 1 != plan.get_px_dop()
       && exec_ctx.get_admission_acquired()) {
     int ret = OB_SUCCESS;
-    ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(exec_ctx);
+    ObSqlExecutorCtx *task_exec_ctx = GET_SQL_EXECUTOR_CTX(exec_ctx);
     if (OB_ISNULL(task_exec_ctx)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("task executor ctx is null", K(ret));

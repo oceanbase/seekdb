@@ -109,7 +109,6 @@ public:
   {}
   virtual ~ObJoinFilterOpInput() {}
 
-  virtual int init(ObTaskInfo &task_info);
   virtual void reset() override
   {
     auto &ctx = exec_ctx_;

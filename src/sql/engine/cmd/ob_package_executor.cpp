@@ -32,7 +32,7 @@ using namespace share::schema;
 int ObCreatePackageExecutor::execute(ObExecContext &ctx, ObCreatePackageStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   obcall::UInt64 table_id;
   obcall::ObCreatePackageArg &arg = stmt.get_create_package_arg();
   
@@ -43,7 +43,7 @@ int ObCreatePackageExecutor::execute(ObExecContext &ctx, ObCreatePackageStmt &st
     arg.ddl_stmt_str_ = first_stmt;
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
   } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_package(arg); }))) {
@@ -56,7 +56,7 @@ int ObCreatePackageExecutor::execute(ObExecContext &ctx, ObCreatePackageStmt &st
 int ObDropPackageExecutor::execute(ObExecContext &ctx, ObDropPackageStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   obcall::UInt64 table_id;
   obcall::ObDropPackageArg &arg = stmt.get_drop_package_arg();
   ObString first_stmt;
@@ -66,7 +66,7 @@ int ObDropPackageExecutor::execute(ObExecContext &ctx, ObDropPackageStmt &stmt)
     arg.ddl_stmt_str_ = first_stmt;
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
   } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_package(arg); }))) {

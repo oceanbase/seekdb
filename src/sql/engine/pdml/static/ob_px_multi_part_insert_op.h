@@ -33,10 +33,6 @@ public:
     : ObPxMultiPartModifyOpInput(ctx, spec),
       error_code_(OB_SUCCESS)
   {}
-  int init(ObTaskInfo &task_info) override
-  {
-    return ObPxMultiPartModifyOpInput::init(task_info);
-  }
   void reset() override
   {
     ObPxMultiPartModifyOpInput::reset();

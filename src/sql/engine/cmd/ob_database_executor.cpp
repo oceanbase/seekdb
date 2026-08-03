@@ -116,7 +116,7 @@ ObAlterDatabaseExecutor::~ObAlterDatabaseExecutor()
 int ObAlterDatabaseExecutor::execute(ObExecContext &ctx, ObAlterDatabaseStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   const obcall::ObAlterDatabaseArg &alter_database_arg = stmt.get_alter_database_arg();
   obcall::ObAlterDatabaseArg &tmp_arg = const_cast<obcall::ObAlterDatabaseArg&>(alter_database_arg);
   ObString first_stmt;
@@ -130,7 +130,7 @@ int ObAlterDatabaseExecutor::execute(ObExecContext &ctx, ObAlterDatabaseStmt &st
     tmp_arg.ddl_stmt_str_ = first_stmt;
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     SQL_ENG_LOG(WARN, "get task executor context failed");
   } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->alter_database(alter_database_arg); }))) {
@@ -168,7 +168,7 @@ ObDropDatabaseExecutor::~ObDropDatabaseExecutor()
 int ObDropDatabaseExecutor::execute(ObExecContext &ctx, ObDropDatabaseStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   const obcall::ObDropDatabaseArg &drop_database_arg = stmt.get_drop_database_arg();
   obcall::ObDropDatabaseArg &tmp_arg = const_cast<obcall::ObDropDatabaseArg&>(drop_database_arg);
   ObString first_stmt;
@@ -179,7 +179,7 @@ int ObDropDatabaseExecutor::execute(ObExecContext &ctx, ObDropDatabaseStmt &stmt
     tmp_arg.ddl_stmt_str_ = first_stmt;
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     SQL_ENG_LOG(WARN, "get task executor context failed");
   } else if (OB_ISNULL(ctx.get_my_session())) {
@@ -233,7 +233,7 @@ int ObRecyclebinRestoreDatabaseExecutor::execute(ObExecContext &ctx, ObRecyclebi
   int ret = OB_SUCCESS;
   const obcall::ObRecyclebinRestoreDatabaseArg &restore_database_arg = stmt.get_restore_database_arg();
   obcall::ObRecyclebinRestoreDatabaseArg &tmp_arg = const_cast<obcall::ObRecyclebinRestoreDatabaseArg&>(restore_database_arg);
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
      SQL_ENG_LOG(WARN, "fail to get first stmt" , K(ret));
@@ -241,7 +241,7 @@ int ObRecyclebinRestoreDatabaseExecutor::execute(ObExecContext &ctx, ObRecyclebi
     tmp_arg.ddl_stmt_str_ = first_stmt;
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     SQL_ENG_LOG(WARN, "get task executor context failed");
   } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->restore_database(restore_database_arg); }))) {
@@ -263,7 +263,7 @@ int ObPurgeDatabaseExecutor::execute(ObExecContext &ctx, ObPurgeDatabaseStmt &st
   int ret = OB_SUCCESS;
   const obcall::ObPurgeDatabaseArg &purge_database_arg = stmt.get_purge_database_arg();
   obcall::ObPurgeDatabaseArg &tmp_arg = const_cast<obcall::ObPurgeDatabaseArg&>(purge_database_arg);
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
      SQL_ENG_LOG(WARN, "fail to get first stmt" , K(ret));
@@ -271,7 +271,7 @@ int ObPurgeDatabaseExecutor::execute(ObExecContext &ctx, ObPurgeDatabaseStmt &st
     tmp_arg.ddl_stmt_str_ = first_stmt;
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     SQL_ENG_LOG(WARN, "get task executor context failed");
   } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->purge_database(purge_database_arg); }))) {
@@ -306,9 +306,9 @@ int ObForkDatabaseExecutor::execute(ObExecContext &ctx, ObForkDatabaseStmt &stmt
     tmp_arg.ddl_stmt_str_ = first_stmt;
     tmp_arg.session_id_ = my_session->get_sessid_for_table();
 
-    ObTaskExecutorCtx *task_exec_ctx = NULL;
+    ObSqlExecutorCtx *task_exec_ctx = NULL;
 
-    if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+    if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       SQL_ENG_LOG(WARN, "get task executor context failed");
     } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->fork_database(fork_database_arg, res); }))) {

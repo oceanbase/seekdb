@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_table_modify_op.h"
+#include "share/ob_autoincrement_service.h"
 #include "sql/engine/dml/ob_dml_service.h"
 #include "observer/ob_inner_sql_connection.h"
 

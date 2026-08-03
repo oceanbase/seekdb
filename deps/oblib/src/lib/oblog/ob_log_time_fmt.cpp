@@ -17,6 +17,7 @@
 #include "ob_log_time_fmt.h"
 #include <time.h>
 #include <stdio.h>
+#include "lib/utility/utility.h"
 #include "lib/utility/ob_macro_utils.h"
 
 namespace oceanbase
@@ -40,28 +41,23 @@ using TimestampStrBuffer_ = char[TIME_BUFFER_SIZE];
 using TimestampStrBuffer = TimestampStrBuffer_[MAX_TIMESTAMP_BUFFER];
 TLOCAL(TimestampStrBuffer, timestamp_str_buffer);
 TLOCAL(int, buffer_idx) = 0;
+TLOCAL(time_t, last_timestamp_unix_sec);
+TLOCAL(struct tm, last_timestamp_localtime);
 
 const char *ObTime2Str::ob_timestamp_str(const int64_t ts)
 {
   struct tm t;
   time_t ts_s = ts / 1000000;// convert to second precision
   TimestampStrBuffer_ &buffer = timestamp_str_buffer[buffer_idx++ & IDX_MASK];
+  ob_fast_localtime(last_timestamp_unix_sec, last_timestamp_localtime, ts_s, &t);
 #ifdef _WIN32
-  if (ts_s < 0) ts_s = 0;
-  errno_t err = localtime_s(&t, &ts_s);
-  if (err != 0) {
-    memset(&t, 0, sizeof(t));
-    t.tm_year = 70;
-    t.tm_mday = 1;
-  }
-  size_t idx = strftime(&buffer[0], sizeof(buffer), "%F %T", &t);
-  idx += snprintf(&buffer[idx], TIME_BUFFER_SIZE - idx, ".%lld", ts % 1000000);
+  int idx = snprintf(&buffer[0], sizeof(buffer), "%04d-%02d-%02d %02d:%02d:%02d",
+                     t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
+  idx += snprintf(&buffer[idx], TIME_BUFFER_SIZE - idx, ".%lld", static_cast<long long>(ts % 1000000));
 #else
-  size_t idx = strftime(&buffer[0],
-                        sizeof(buffer),
-                        "%F %T",
-                        localtime_r(&ts_s, &t));
-  idx += snprintf(&buffer[idx], TIME_BUFFER_SIZE - idx, ".%ld", ts % 1000000);
+  int idx = snprintf(&buffer[0], sizeof(buffer), "%04d-%02d-%02d %02d:%02d:%02d",
+                     t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
+  idx += snprintf(&buffer[idx], TIME_BUFFER_SIZE - idx, ".%ld", static_cast<long>(ts % 1000000));
 #endif
   buffer[idx] = '\0';
   return buffer;

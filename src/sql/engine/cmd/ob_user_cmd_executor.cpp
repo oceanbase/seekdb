@@ -109,7 +109,7 @@ int ObCreateUserExecutor::userinfo_extract_user_name(
 int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   
   const ObStrings &users = stmt.get_users();
   const bool if_not_exist = stmt.get_if_not_exists();
@@ -120,7 +120,7 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
   } else if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret));
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (OB_UNLIKELY(users.count() <= FIX_MEMBER_CNT) || OB_UNLIKELY(0 != users.count() % FIX_MEMBER_CNT)) {
@@ -320,7 +320,7 @@ int ObDropUserExecutor::string_array_index_extract(const common::ObIArray<common
 int ObDropUserExecutor::execute(ObExecContext &ctx, ObDropUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   
   const ObStrings *user_names = NULL;
 
@@ -336,7 +336,7 @@ int ObDropUserExecutor::execute(ObExecContext &ctx, ObDropUserStmt &stmt)
   } else if (OB_UNLIKELY(user_names->count() % 2 != 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("user not specified", K(ret));
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
   } else {
@@ -429,7 +429,7 @@ int ObDropUserExecutor::drop_user(const obcall::ObDropUserArg &arg,
 int ObLockUserExecutor::execute(ObExecContext &ctx, ObLockUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   
   const ObStrings *user_names = NULL;
   if (OB_ISNULL(user_names = stmt.get_users())) {
@@ -438,7 +438,7 @@ int ObLockUserExecutor::execute(ObExecContext &ctx, ObLockUserStmt &stmt)
   } else if (OB_UNLIKELY(user_names->count() % 2 != 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("user not specified", K(ret));
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
   } else {
@@ -580,9 +580,9 @@ int ObAlterUserRoleExecutor::set_role_exec(ObExecContext &ctx, ObAlterUserRoleSt
 int ObAlterUserRoleExecutor::execute(ObExecContext &ctx, ObAlterUserRoleStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
 
-  if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
   } else if (ObAlterUserRoleStmt::SET_ROLE == stmt.get_set_role_flag()) {
@@ -607,7 +607,7 @@ int ObAlterUserRoleExecutor::execute(ObExecContext &ctx, ObAlterUserRoleStmt &st
 int ObRenameUserExecutor::execute(ObExecContext &ctx, ObRenameUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   
   const ObStrings *rename_infos = NULL;
   if (OB_ISNULL(GCTX.schema_service_)) {
@@ -625,7 +625,7 @@ int ObRenameUserExecutor::execute(ObExecContext &ctx, ObRenameUserStmt &stmt)
   } else if (rename_infos->count() % 4 != 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("old and new names count not match", K(ret));
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
   } else {

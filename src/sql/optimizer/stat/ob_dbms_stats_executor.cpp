@@ -823,6 +823,7 @@ int ObDbmsStatsExecutor::do_gather_stats(ObExecContext &ctx,
   } else if (OB_FAIL(ObDbmsStatsUtils::split_batch_write(
                  ctx, trans.get_connection(), is_all_columns_gather ? all_tstats : tmp_all_tstats, all_cstats))) {
     LOG_WARN("failed to split batch write", K(ret));
+  } else if (OB_FALSE_IT(DEBUG_SYNC(GATHER_STATS_AFTER_BATCH_WRITE))) {
   } else if (OB_FAIL(audit.add_flush_stats_audit(ObTimeUtility::current_time() - start_time))) {
     LOG_WARN("failed to add flush stats audit", K(ret));
   } else { /*do nothing*/

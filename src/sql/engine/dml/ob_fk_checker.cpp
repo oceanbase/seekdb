@@ -298,7 +298,7 @@ int ObForeignKeyChecker::init_das_scan_rtdef()
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *plan_ctx = eval_ctx_.exec_ctx_.get_physical_plan_ctx();
   ObSQLSessionInfo *my_session = eval_ctx_.exec_ctx_.get_my_session();
-  ObTaskExecutorCtx &task_exec_ctx = eval_ctx_.exec_ctx_.get_task_exec_ctx();
+  ObSqlExecutorCtx &task_exec_ctx = eval_ctx_.exec_ctx_.get_sql_exec_ctx();
   das_scan_rtdef_.timeout_ts_ = plan_ctx->get_ps_timeout_timestamp();
   das_scan_rtdef_.sql_mode_ = my_session->get_sql_mode();
   das_scan_rtdef_.stmt_allocator_.set_alloc(&das_ref_.get_das_alloc());

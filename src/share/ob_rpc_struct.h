@@ -37,7 +37,6 @@
 #include "share/schema/ob_dependency_info.h"
 #include "share/schema/ob_trigger_info.h"
 #include "share/io/ob_io_calibration.h"
-#include "sql/executor/ob_task_id.h"
 #include "sql/plan_cache/ob_lib_cache_register.h"
 #include "objit/common/ob_item_type.h"
 #include "ob_i_tablet_scan.h"

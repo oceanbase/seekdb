@@ -15,6 +15,7 @@
  */
 
 #include "ob_ls_adapter.h"
+#include "lib/ob_running_mode.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -97,7 +98,8 @@ int ObLSAdapter::replay(ObLogReplayTask *replay_task)
   replay_task->replay_cost_ = ObTimeUtility::fast_current_time() - start_ts;
   if (replay_task->replay_cost_ > MAX_SINGLE_REPLAY_WARNING_TIME_THRESOLD) {
     if (replay_task->replay_cost_ > MAX_SINGLE_REPLAY_ERROR_TIME_THRESOLD
-        && !get_replay_is_writing_throttling()) {
+        && !get_replay_is_writing_throttling()
+        && !lib::is_mini_mode()) {
       CLOG_LOG_RET(ERROR, OB_ERR_TOO_MUCH_TIME, "single replay task cost too much time. replay may be delayed", KPC(replay_task));
     } else {
       CLOG_LOG_RET(WARN, OB_ERR_TOO_MUCH_TIME, "single replay task cost too much time", KPC(replay_task));

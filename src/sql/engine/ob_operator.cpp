@@ -224,7 +224,7 @@ int ObOpSpec::create_op_input(ObExecContext &exec_ctx) const
   // we no longer need to check the validity of those pointers in ObOperator.
   if (OB_ISNULL(GET_MY_SESSION(exec_ctx))
       || OB_ISNULL(GET_PHY_PLAN_CTX(exec_ctx))
-      || OB_ISNULL(GET_TASK_EXECUTOR_CTX(exec_ctx))) {
+      || OB_ISNULL(GET_SQL_EXECUTOR_CTX(exec_ctx))) {
   } else if (OB_FAIL(create_op_input_recursive(exec_ctx))) {
     LOG_WARN("create operator recursive failed", K(ret));
   }
@@ -288,7 +288,7 @@ int ObOpSpec::create_operator(ObExecContext &exec_ctx, ObOperator *&op) const
   // we no longer need to check the validity of those pointers in ObOperator.
   if (OB_ISNULL(GET_MY_SESSION(exec_ctx))
       || OB_ISNULL(GET_PHY_PLAN_CTX(exec_ctx))
-      || OB_ISNULL(GET_TASK_EXECUTOR_CTX(exec_ctx))) {
+      || OB_ISNULL(GET_SQL_EXECUTOR_CTX(exec_ctx))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(create_operator_recursive(exec_ctx, op))) {

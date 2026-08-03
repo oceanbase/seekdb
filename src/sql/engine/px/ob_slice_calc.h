@@ -17,7 +17,6 @@
 #ifndef _OB_SQ_OB_SLICE_IDX_CALC_H_
 #define _OB_SQ_OB_SLICE_IDX_CALC_H_
 
-#include "sql/executor/ob_task_event.h"
 #include "sql/engine/expr/ob_sql_expression.h"
 #include "lib/container/ob_fixed_array.h"
 #include "share/schema/ob_schema_struct.h"

@@ -40,19 +40,29 @@ using namespace common;
   SCALE_UNKNOWN_YET < scale1 && SCALE_UNKNOWN_YET < scale2 &&   \
   MAX(scale1, scale2) <= OB_MAX_DOUBLE_FLOAT_SCALE              \
 
-template<ObCmpOp cmp_op>
-constexpr int get_cmp_ret(const int)
-{
-  return 0;
+static constexpr int CMP_BOOL_RET[CO_CMP][3] = {
+  // comparator result: negative, zero, positive
+  {0, 1, 0}, // CO_EQ
+  {1, 1, 0}, // CO_LE
+  {1, 0, 0}, // CO_LT
+  {0, 1, 1}, // CO_GE
+  {0, 0, 1}, // CO_GT
+  {1, 0, 1}, // CO_NE
 };
 
-template <> constexpr int get_cmp_ret<CO_EQ> (const int ret) { return ret == 0; }
-template <> constexpr int get_cmp_ret<CO_LE> (const int ret) { return ret <= 0; }
-template <> constexpr int get_cmp_ret<CO_LT> (const int ret) { return ret < 0; }
-template <> constexpr int get_cmp_ret<CO_GE> (const int ret) { return ret >= 0; }
-template <> constexpr int get_cmp_ret<CO_GT> (const int ret) { return ret > 0; }
-template <> constexpr int get_cmp_ret<CO_NE> (const int ret) { return ret != 0; }
-template <> constexpr int get_cmp_ret<CO_CMP> (const int ret) { return ret; }
+OB_INLINE int get_cmp_ret(const ObCmpOp cmp_op, const int ret)
+{
+  int cmp_ret = 0;
+  if (OB_UNLIKELY(ob_is_invalid_cmp_op(cmp_op))) {
+    OB_ASSERT(false);
+  } else if (CO_CMP == cmp_op) {
+    cmp_ret = ret;
+  } else {
+    const int sign_idx = static_cast<int>(ret > 0) - static_cast<int>(ret < 0) + 1;
+    cmp_ret = CMP_BOOL_RET[cmp_op][sign_idx];
+  }
+  return cmp_ret;
+}
 
 template <typename DatumFunc, typename... Args>
 int def_relational_eval_func(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum, Args &...args)
@@ -83,22 +93,22 @@ int def_relational_eval_batch_func(BATCH_EVAL_FUNC_ARG_DECL, Args &...args)
   if (OB_FAIL(binary_operand_batch_eval(expr, ctx, skip, size, short_circuit))) {
     LOG_WARN("binary operand batch evaluate failed", K(ret), K(expr));
   } else {
-    ret = call_functor_with_arg_iter<
-        ObWrapArithOpNullCheck<DatumFunc>,
-        ObDoArithBatchEval>(BATCH_EVAL_FUNC_ARG_LIST, args...);
+    ret = call_functor_with_arg_iter<ObWrapArithOpNullCheck<DatumFunc>>(
+        BATCH_EVAL_FUNC_ARG_LIST, args...);
   }
   return ret;
 }
 
-template <typename DatumFunc, ObCmpOp CMP_OP>
-int def_oper_cmp_func(ObDatum &res, const ObDatum &l, const ObDatum &r)
+template <typename DatumFunc>
+int def_oper_cmp_func(ObDatum &res, const ObDatum &l, const ObDatum &r,
+                      const ObCmpOp cmp_op)
 {
   int cmp_ret = 0;
   int ret = DatumFunc::cmp(l, r, cmp_ret);
   if (OB_FAIL(ret)) {
     LOG_WARN("fail to compare", K(ret));
   } else {
-    res.set_int(get_cmp_ret<CMP_OP>(cmp_ret));
+    res.set_int(get_cmp_ret(cmp_op, cmp_ret));
   }
   return ret;
 }
@@ -113,117 +123,73 @@ struct ObDummyRelationalFunc
   }
 };
 
-template<bool, ObObjType L_T, ObObjType R_T, ObCmpOp CMP_OP>
+template<bool, ObObjType L_T, ObObjType R_T>
 struct ObRelationalTypeFunc {};
 
-template<ObObjType L_T, ObObjType R_T, ObCmpOp CMP_OP>
-struct ObRelationalTypeFunc<false, L_T, R_T, CMP_OP> : public ObDummyRelationalFunc {};
+template<ObObjType L_T, ObObjType R_T>
+struct ObRelationalTypeFunc<false, L_T, R_T> : public ObDummyRelationalFunc {};
 
-template<ObObjType L_T, ObObjType R_T, ObCmpOp CMP_OP>
-struct ObRelationalTypeFunc<true, L_T, R_T, CMP_OP>
+template<ObObjType L_T, ObObjType R_T>
+struct ObRelationalTypeFunc<true, L_T, R_T>
 {
   struct DatumCmp
   {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r) const
+    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
+                   const ObCmpOp cmp_op) const
     {
-      return def_oper_cmp_func<datum_cmp::ObDatumTypeCmp<L_T, R_T>, CMP_OP>(res, l, r);
+      return def_oper_cmp_func<datum_cmp::ObDatumTypeCmp<L_T, R_T>>(res, l, r, cmp_op);
     }
   };
 
   inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   {
-    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum);
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum, cmp_op);
   }
 
 
   inline static int eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
-    return def_relational_eval_batch_func<DatumCmp>(BATCH_EVAL_FUNC_ARG_LIST);
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    return def_relational_eval_batch_func<DatumCmp>(BATCH_EVAL_FUNC_ARG_LIST, cmp_op);
   }
 };
 
-template<bool, ObObjTypeClass L_TC, ObObjTypeClass R_TC, ObCmpOp CMP_OP>
-struct ObRelationalTCFunc {};
-
-template<ObObjTypeClass L_TC, ObObjTypeClass R_TC, ObCmpOp CMP_OP>
-struct ObRelationalTCFunc<false, L_TC, R_TC, CMP_OP> : public ObDummyRelationalFunc {};
-
-template<ObObjTypeClass L_TC, ObObjTypeClass R_TC, ObCmpOp CMP_OP>
-struct ObRelationalTCFunc<true, L_TC, R_TC, CMP_OP>
+struct ObTCRelationFunc
 {
-  struct DatumCmp
-  {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r) const
-    {
-      return def_oper_cmp_func<datum_cmp::ObDatumTCCmp<L_TC, R_TC>, CMP_OP>(res, l, r);
-    }
-  };
-
-  inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
-  {
-    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum);
-  }
-
-
-  inline static int eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
-  {
-    return def_relational_eval_batch_func<DatumCmp>(BATCH_EVAL_FUNC_ARG_LIST);
-  }
+  static OB_NOINLINE int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static OB_NOINLINE int eval_batch(BATCH_EVAL_FUNC_ARG_DECL);
 };
 
-template<bool, ObDecimalIntWideType l, ObDecimalIntWideType r, ObCmpOp cmp_op>
-struct ObRelationalDecintFunc{};
-
-template<ObDecimalIntWideType l, ObDecimalIntWideType r, ObCmpOp cmp_op>
-struct ObRelationalDecintFunc<false, l, r, cmp_op>: ObDummyRelationalFunc {};
-
-template<ObDecimalIntWideType lw, ObDecimalIntWideType rw, ObCmpOp cmp_op>
-struct ObRelationalDecintFunc<true, lw, rw, cmp_op>
+struct ObDecintRelationFunc
 {
-  struct ObDatumCmp
-  {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r) const
-    {
-      int cmp_ret = 0;
-      int ret = datum_cmp::ObDecintCmp<lw, rw>::cmp(l, r, cmp_ret);
-      if (OB_SUCC(ret)) {
-        res.set_int(get_cmp_ret<cmp_op>(cmp_ret));
-      }
-      return ret;
-    }
-  };
-
-  inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
-  {
-    return def_relational_eval_func<ObDatumCmp>(expr, ctx, expr_datum);
-  }
-
-  inline static int eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
-  {
-    return def_relational_eval_batch_func<ObDatumCmp>(BATCH_EVAL_FUNC_ARG_LIST);
-  }
+  static OB_NOINLINE int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static OB_NOINLINE int eval_batch(BATCH_EVAL_FUNC_ARG_DECL);
 };
 
-template<bool, ObCollationType CS_TYPE, bool WITH_END_SPACE, ObCmpOp CMP_OP>
+template<bool, ObCollationType CS_TYPE, bool WITH_END_SPACE>
 struct ObRelationalStrFunc{};
 
-template<ObCollationType CS_TYPE, bool WITH_END_SPACE, ObCmpOp CMP_OP>
-struct ObRelationalStrFunc<false, CS_TYPE, WITH_END_SPACE, CMP_OP> : ObDummyRelationalFunc {};
+template<ObCollationType CS_TYPE, bool WITH_END_SPACE>
+struct ObRelationalStrFunc<false, CS_TYPE, WITH_END_SPACE> : ObDummyRelationalFunc {};
 
-template<ObCollationType CS_TYPE, bool WITH_END_SPACE, ObCmpOp CMP_OP>
-struct ObRelationalStrFunc<true, CS_TYPE, WITH_END_SPACE, CMP_OP>
+template<ObCollationType CS_TYPE, bool WITH_END_SPACE>
+struct ObRelationalStrFunc<true, CS_TYPE, WITH_END_SPACE>
 {
   struct DatumCmp
   {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r) const
+    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
+                   const ObCmpOp cmp_op) const
     {
-      return def_oper_cmp_func<datum_cmp::ObDatumStrCmp<CS_TYPE, WITH_END_SPACE>, CMP_OP>(res, l, r);
+      return def_oper_cmp_func<datum_cmp::ObDatumStrCmp<CS_TYPE, WITH_END_SPACE>>(
+          res, l, r, cmp_op);
     }
   };
 
   inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   {
-    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum);
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum, cmp_op);
   }
 
 
@@ -234,7 +200,7 @@ struct ObRelationalStrFunc<true, CS_TYPE, WITH_END_SPACE, CMP_OP>
   // }
 };
 
-template<typename T, bool WITH_END_SPACE, ObCmpOp CMP_OP>
+template<typename T, bool WITH_END_SPACE>
 struct ObNewRelationalStrFunc
 {
   static OB_NOINLINE int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
@@ -255,211 +221,201 @@ struct ObNewRelationalStrFunc
                                 expr.args_[0]->datum_meta_.cs_type_, WITH_END_SPACE))) {
         LOG_WARN("datum compare failed", K(*l), K(*r));
       } else {
-        expr_datum.set_int(get_cmp_ret<CMP_OP>(cmp_ret));
+        expr_datum.set_int(get_cmp_ret(ObExprCmpFuncsHelper::get_cmp_op(expr.type_), cmp_ret));
       }
     }
     return ret;
   }
 };
 
-template <ObCollationType cs, bool WITH_END_SPACE, ObCmpOp CMP_OP>
+template <bool WITH_END_SPACE>
 struct ObStrRelationEvalWrap {
   static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   {
     return ObNewRelationalStrFunc<datum_cmp::ObDatumStrCmpImpl,
-           WITH_END_SPACE,
-           CMP_OP>::eval(expr, ctx, expr_datum);
+           WITH_END_SPACE>::eval(expr, ctx, expr_datum);
   }
 };
 
-template<bool, ObScale SCALE, ObCmpOp CMP_OP>
-struct ObRelationFixedDoubleFunc{};
-
-template<ObScale SCALE, ObCmpOp CMP_OP>
-struct ObRelationFixedDoubleFunc<false, SCALE, CMP_OP> : ObDummyRelationalFunc {};
-
-template<ObScale SCALE, ObCmpOp CMP_OP>
-struct ObRelationFixedDoubleFunc<true, SCALE, CMP_OP>
+struct ObFixedDoubleRelationFunc
 {
-  struct DatumCmp
-  {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r) const
-    {
-      return def_oper_cmp_func<datum_cmp::ObFixedDoubleCmp<SCALE>, CMP_OP>(res, l, r);
-    }
-  };
-
-  inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
-  {
-    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum);
-  }
-
-  inline static int eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
-  {
-    return def_relational_eval_batch_func<DatumCmp>(BATCH_EVAL_FUNC_ARG_LIST);
-  }
+  static OB_NOINLINE int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static OB_NOINLINE int eval_batch(BATCH_EVAL_FUNC_ARG_DECL);
 };
 
-template<bool, ObCollationType CS_TYPE, bool WITH_END_SPACE, ObCmpOp CMP_OP>
+template<bool, ObCollationType CS_TYPE, bool WITH_END_SPACE>
 struct ObRelationalTextFunc{};
 
-template<ObCollationType CS_TYPE, bool WITH_END_SPACE, ObCmpOp CMP_OP>
-struct ObRelationalTextFunc<false, CS_TYPE, WITH_END_SPACE, CMP_OP> : ObDummyRelationalFunc {};
+template<ObCollationType CS_TYPE, bool WITH_END_SPACE>
+struct ObRelationalTextFunc<false, CS_TYPE, WITH_END_SPACE> : ObDummyRelationalFunc {};
 
-template<ObCollationType CS_TYPE, bool WITH_END_SPACE, ObCmpOp CMP_OP>
-struct ObRelationalTextFunc<true, CS_TYPE, WITH_END_SPACE, CMP_OP>
+template<ObCollationType CS_TYPE, bool WITH_END_SPACE>
+struct ObRelationalTextFunc<true, CS_TYPE, WITH_END_SPACE>
 {
   struct DatumCmp
   {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r) const
+    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
+                   const ObCmpOp cmp_op) const
     {
-      return def_oper_cmp_func<datum_cmp::ObDatumTextCmp<CS_TYPE, WITH_END_SPACE>, CMP_OP>(res, l, r);
+      return def_oper_cmp_func<datum_cmp::ObDatumTextCmp<CS_TYPE, WITH_END_SPACE>>(
+          res, l, r, cmp_op);
     }
   };
 
   inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   {
-    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum);
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum, cmp_op);
   }
 };
 
-template <ObCollationType cs, bool WITH_END_SPACE, ObCmpOp CMP_OP>
+template <bool WITH_END_SPACE>
 struct ObTextRelationEvalWrap {
   static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   {
     return ObNewRelationalStrFunc<datum_cmp::ObDatumTextCmpImpl,
-           WITH_END_SPACE,
-           CMP_OP>::eval(expr, ctx, expr_datum);
+           WITH_END_SPACE>::eval(expr, ctx, expr_datum);
   }
 };
 
-template<bool, ObCollationType CS_TYPE, bool WITH_END_SPACE, ObCmpOp CMP_OP>
+template<bool, ObCollationType CS_TYPE, bool WITH_END_SPACE>
 struct ObRelationalTextStrFunc{};
 
-template<ObCollationType CS_TYPE, bool WITH_END_SPACE, ObCmpOp CMP_OP>
-struct ObRelationalTextStrFunc<false, CS_TYPE, WITH_END_SPACE, CMP_OP> : ObDummyRelationalFunc {};
+template<ObCollationType CS_TYPE, bool WITH_END_SPACE>
+struct ObRelationalTextStrFunc<false, CS_TYPE, WITH_END_SPACE> : ObDummyRelationalFunc {};
 
-template<ObCollationType CS_TYPE, bool WITH_END_SPACE, ObCmpOp CMP_OP>
-struct ObRelationalTextStrFunc<true, CS_TYPE, WITH_END_SPACE, CMP_OP>
+template<ObCollationType CS_TYPE, bool WITH_END_SPACE>
+struct ObRelationalTextStrFunc<true, CS_TYPE, WITH_END_SPACE>
 {
   struct DatumCmp
   {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r) const
+    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
+                   const ObCmpOp cmp_op) const
     {
-      return def_oper_cmp_func<datum_cmp::ObDatumTextStringCmp<CS_TYPE, WITH_END_SPACE>, CMP_OP>(res, l, r);
+      return def_oper_cmp_func<datum_cmp::ObDatumTextStringCmp<CS_TYPE, WITH_END_SPACE>>(
+          res, l, r, cmp_op);
     }
   };
 
   inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   {
-    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum);
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum, cmp_op);
   }
 };
 
-template <ObCollationType cs, bool WITH_END_SPACE, ObCmpOp CMP_OP>
+template <bool WITH_END_SPACE>
 struct ObTextStrRelationEvalWrap {
   static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   {
     return ObNewRelationalStrFunc<datum_cmp::ObDatumTextStringCmpImpl,
-           WITH_END_SPACE,
-           CMP_OP>::eval(expr, ctx, expr_datum);
+           WITH_END_SPACE>::eval(expr, ctx, expr_datum);
   }
 };
 
 
-template<bool, ObCollationType CS_TYPE, bool WITH_END_SPACE, ObCmpOp CMP_OP>
+template<bool, ObCollationType CS_TYPE, bool WITH_END_SPACE>
 struct ObRelationalStrTextFunc{};
 
-template<ObCollationType CS_TYPE, bool WITH_END_SPACE, ObCmpOp CMP_OP>
-struct ObRelationalStrTextFunc<false, CS_TYPE, WITH_END_SPACE, CMP_OP> : ObDummyRelationalFunc {};
+template<ObCollationType CS_TYPE, bool WITH_END_SPACE>
+struct ObRelationalStrTextFunc<false, CS_TYPE, WITH_END_SPACE> : ObDummyRelationalFunc {};
 
-template<ObCollationType CS_TYPE, bool WITH_END_SPACE, ObCmpOp CMP_OP>
-struct ObRelationalStrTextFunc<true, CS_TYPE, WITH_END_SPACE, CMP_OP>
+template<ObCollationType CS_TYPE, bool WITH_END_SPACE>
+struct ObRelationalStrTextFunc<true, CS_TYPE, WITH_END_SPACE>
 {
   struct DatumCmp
   {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r) const
+    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
+                   const ObCmpOp cmp_op) const
     {
-      return def_oper_cmp_func<datum_cmp::ObDatumStringTextCmp<CS_TYPE, WITH_END_SPACE>, CMP_OP>(res, l, r);
+      return def_oper_cmp_func<datum_cmp::ObDatumStringTextCmp<CS_TYPE, WITH_END_SPACE>>(
+          res, l, r, cmp_op);
     }
   };
 
   inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   {
-    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum);
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum, cmp_op);
   }
 };
 
-template <ObCollationType cs, bool WITH_END_SPACE, ObCmpOp CMP_OP>
+template <bool WITH_END_SPACE>
 struct ObStrTextRelationEvalWrap {
   static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   {
     return ObNewRelationalStrFunc<datum_cmp::ObDatumStringTextCmpImpl,
-           WITH_END_SPACE,
-           CMP_OP>::eval(expr, ctx, expr_datum);
+           WITH_END_SPACE>::eval(expr, ctx, expr_datum);
   }
 };
 
 
-template<bool, bool HAS_LOB_HEADER, ObCmpOp CMP_OP>
+template<bool, bool HAS_LOB_HEADER>
 struct ObRelationalJsonFunc{};
 
-template<bool HAS_LOB_HEADER, ObCmpOp CMP_OP>
-struct ObRelationalJsonFunc<false, HAS_LOB_HEADER, CMP_OP> : ObDummyRelationalFunc {};
+template<bool HAS_LOB_HEADER>
+struct ObRelationalJsonFunc<false, HAS_LOB_HEADER> : ObDummyRelationalFunc {};
 
-template<bool HAS_LOB_HEADER, ObCmpOp CMP_OP>
-struct ObRelationalJsonFunc<true, HAS_LOB_HEADER, CMP_OP>
+template<bool HAS_LOB_HEADER>
+struct ObRelationalJsonFunc<true, HAS_LOB_HEADER>
 {
   struct DatumCmp
   {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r) const
+    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
+                   const ObCmpOp cmp_op) const
     {
-      return def_oper_cmp_func<datum_cmp::ObDatumJsonCmp<HAS_LOB_HEADER>, CMP_OP>(res, l, r);
+      return def_oper_cmp_func<datum_cmp::ObDatumJsonCmp<HAS_LOB_HEADER>>(
+          res, l, r, cmp_op);
     }
   };
 
   inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   {
-    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum);
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum, cmp_op);
   }
 };
 
-template<bool, bool HAS_LOB_HEADER, ObCmpOp CMP_OP>
+template<bool, bool HAS_LOB_HEADER>
 struct ObRelationalGeoFunc{};
 
-template<bool HAS_LOB_HEADER, ObCmpOp CMP_OP>
-struct ObRelationalGeoFunc<false, HAS_LOB_HEADER, CMP_OP> : ObDummyRelationalFunc {};
+template<bool HAS_LOB_HEADER>
+struct ObRelationalGeoFunc<false, HAS_LOB_HEADER> : ObDummyRelationalFunc {};
 
-template<bool HAS_LOB_HEADER, ObCmpOp CMP_OP>
-struct ObRelationalGeoFunc<true, HAS_LOB_HEADER, CMP_OP>
+template<bool HAS_LOB_HEADER>
+struct ObRelationalGeoFunc<true, HAS_LOB_HEADER>
 {
   struct DatumCmp
   {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r) const
+    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
+                   const ObCmpOp cmp_op) const
     {
-      return def_oper_cmp_func<datum_cmp::ObDatumGeoCmp<HAS_LOB_HEADER>, CMP_OP>(res, l, r);
+      return def_oper_cmp_func<datum_cmp::ObDatumGeoCmp<HAS_LOB_HEADER>>(
+          res, l, r, cmp_op);
     }
   };
 
   inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   {
-    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum);
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum, cmp_op);
   }
 };
 
 // cmp for collection
-template<bool, bool HAS_LOB_HEADER, ObCmpOp CMP_OP>
+template<bool, bool HAS_LOB_HEADER>
 struct ObRelationalCollectionFunc{};
 
-template<bool HAS_LOB_HEADER, ObCmpOp CMP_OP>
-struct ObRelationalCollectionFunc<false, HAS_LOB_HEADER, CMP_OP> : ObDummyRelationalFunc {};
+template<bool HAS_LOB_HEADER>
+struct ObRelationalCollectionFunc<false, HAS_LOB_HEADER> : ObDummyRelationalFunc {};
 
-template<bool HAS_LOB_HEADER, ObCmpOp CMP_OP>
-struct ObRelationalCollectionFunc<true, HAS_LOB_HEADER, CMP_OP>
+template<bool HAS_LOB_HEADER>
+struct ObRelationalCollectionFunc<true, HAS_LOB_HEADER>
 {
   struct DatumCmp
   {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const ObExpr &expr, ObEvalCtx &ctx) const
+    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const ObExpr &expr,
+                   ObEvalCtx &ctx, const ObCmpOp cmp_op) const
     {
       int ret = OB_SUCCESS;
       int cmp_ret = 0;
@@ -478,7 +434,7 @@ struct ObRelationalCollectionFunc<true, HAS_LOB_HEADER, CMP_OP>
       } else if (OB_FAIL(left_obj->compare(*right_obj, cmp_ret))) {
         LOG_WARN("array do compare failed", K(ret), K(left_meta_id), K(right_meta_id));
       } else {
-        res.set_int(get_cmp_ret<CMP_OP>(cmp_ret));
+        res.set_int(get_cmp_ret(cmp_op, cmp_ret));
       }
       return ret;
     }
@@ -486,22 +442,26 @@ struct ObRelationalCollectionFunc<true, HAS_LOB_HEADER, CMP_OP>
 
   inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   {
-    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum, expr, ctx);
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum, expr, ctx, cmp_op);
   }
 
   inline static int eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
-    return def_relational_eval_batch_func<DatumCmp>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx);
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    return def_relational_eval_batch_func<DatumCmp>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx, cmp_op);
   }
 };
 
-// define null, extend, string evaluate batch functions.
-template<ObCmpOp CMP_OP>
+// Define null, extend and string batch evaluators once.  The comparison
+// operation is carried by ObExpr::type_ and must not multiply these large
+// batch loops.
 struct ObRelationalExtraFunc
 {
   struct NullExtendCmp
   {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const ObExpr &expr) const
+    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const ObExpr &expr,
+                   const ObCmpOp cmp_op) const
     {
       int ret = OB_SUCCESS;
       ObObjType lt = expr.args_[0]->datum_meta_.type_;
@@ -518,7 +478,7 @@ struct ObRelationalExtraFunc
         LOG_WARN("only extend type should reach here", K(ret));
       }
       if (OB_SUCC(ret)) {
-        res.set_int(get_cmp_ret<CMP_OP>(cmp_ret));
+        res.set_int(get_cmp_ret(cmp_op, cmp_ret));
       }
       return ret;
     }
@@ -526,17 +486,19 @@ struct ObRelationalExtraFunc
 
   inline static int null_extend_eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
-    return def_relational_eval_batch_func<NullExtendCmp>(BATCH_EVAL_FUNC_ARG_LIST, expr);
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    return def_relational_eval_batch_func<NullExtendCmp>(BATCH_EVAL_FUNC_ARG_LIST, expr, cmp_op);
   }
 
   struct StrCmp
   {
     int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
-                   const ObCollationType cs_type, bool with_end_space) const
+                   const ObCollationType cs_type, bool with_end_space,
+                   const ObCmpOp cmp_op) const
     {
       int ret = OB_SUCCESS;
       int cmp_ret = ObCharset::strcmpsp(cs_type, l.ptr_, l.len_, r.ptr_, r.len_, with_end_space);
-      res.set_int(get_cmp_ret<CMP_OP>(cmp_ret > 0 ? 1 : (cmp_ret < 0 ? -1 : 0)));
+      res.set_int(get_cmp_ret(cmp_op, cmp_ret > 0 ? 1 : (cmp_ret < 0 ? -1 : 0)));
       return ret;
     }
   };
@@ -544,15 +506,18 @@ struct ObRelationalExtraFunc
   inline static int str_eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
     bool with_end_space = false;
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
     return def_relational_eval_batch_func<StrCmp>(BATCH_EVAL_FUNC_ARG_LIST,
                                                   expr.args_[0]->datum_meta_.cs_type_,
-                                                  with_end_space);
+                                                  with_end_space,
+                                                  cmp_op);
   }
 
   struct TextCmp
   {
     int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
-                   const ObCollationType cs_type, bool with_end_space) const
+                   const ObCollationType cs_type, bool with_end_space,
+                   const ObCmpOp cmp_op) const
     {
       int ret = OB_SUCCESS;
       ObString l_data;
@@ -571,7 +536,7 @@ struct ObRelationalExtraFunc
       } else {
         int cmp_ret = ObCharset::strcmpsp(cs_type, l_data.ptr(), l_data.length(), 
                                           r_data.ptr(), r_data.length(), with_end_space);
-        res.set_int(get_cmp_ret<CMP_OP>(cmp_ret > 0 ? 1 : (cmp_ret < 0 ? -1 : 0)));
+        res.set_int(get_cmp_ret(cmp_op, cmp_ret > 0 ? 1 : (cmp_ret < 0 ? -1 : 0)));
       }
       return ret;
     }
@@ -580,15 +545,18 @@ struct ObRelationalExtraFunc
   inline static int text_eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
     bool with_end_space = false;
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
     return def_relational_eval_batch_func<TextCmp>(BATCH_EVAL_FUNC_ARG_LIST,
                                                    expr.args_[0]->datum_meta_.cs_type_,
-                                                   with_end_space);
+                                                   with_end_space,
+                                                   cmp_op);
   }
 
   struct TextStrCmp
   {
     int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
-                   const ObCollationType cs_type, bool with_end_space) const
+                   const ObCollationType cs_type, bool with_end_space,
+                   const ObCmpOp cmp_op) const
     {
       int ret = OB_SUCCESS;
       ObString l_data;
@@ -601,7 +569,7 @@ struct ObRelationalExtraFunc
       } else {
         int cmp_ret = ObCharset::strcmpsp(cs_type, l_data.ptr(), l_data.length(), 
                                           r.ptr_, r.len_, with_end_space);
-        res.set_int(get_cmp_ret<CMP_OP>(cmp_ret > 0 ? 1 : (cmp_ret < 0 ? -1 : 0)));
+        res.set_int(get_cmp_ret(cmp_op, cmp_ret > 0 ? 1 : (cmp_ret < 0 ? -1 : 0)));
       }
       return ret;
     }
@@ -610,15 +578,18 @@ struct ObRelationalExtraFunc
   inline static int text_str_eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
     bool with_end_space = false;
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
     return def_relational_eval_batch_func<TextStrCmp>(BATCH_EVAL_FUNC_ARG_LIST,
                                                       expr.args_[0]->datum_meta_.cs_type_,
-                                                      with_end_space);
+                                                      with_end_space,
+                                                      cmp_op);
   }
 
   struct StrTextCmp
   {
     int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
-                   const ObCollationType cs_type, bool with_end_space) const
+                   const ObCollationType cs_type, bool with_end_space,
+                   const ObCmpOp cmp_op) const
     {
       int ret = OB_SUCCESS;
       ObString r_data;
@@ -631,7 +602,7 @@ struct ObRelationalExtraFunc
       } else {
         int cmp_ret = ObCharset::strcmpsp(cs_type, l.ptr_, l.len_, 
                                           r_data.ptr(), r_data.length(), with_end_space);
-        res.set_int(get_cmp_ret<CMP_OP>(cmp_ret > 0 ? 1 : (cmp_ret < 0 ? -1 : 0)));
+        res.set_int(get_cmp_ret(cmp_op, cmp_ret > 0 ? 1 : (cmp_ret < 0 ? -1 : 0)));
       }
       return ret;
     }
@@ -640,15 +611,17 @@ struct ObRelationalExtraFunc
   inline static int str_text_eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
     bool with_end_space = false;
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
     return def_relational_eval_batch_func<StrTextCmp>(BATCH_EVAL_FUNC_ARG_LIST,
                                                       expr.args_[0]->datum_meta_.cs_type_,
-                                                      with_end_space);
+                                                      with_end_space,
+                                                      cmp_op);
   }
 
   struct JsonCmp
   {
     int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
-                   bool has_lob_header) const
+                   bool has_lob_header, const ObCmpOp cmp_op) const
     {
       int ret = OB_SUCCESS;
       int result = 0;
@@ -678,7 +651,7 @@ struct ObRelationalExtraFunc
         } else if (OB_FAIL(j_base_l->compare(*j_base_r, result))) {
           COMMON_LOG(WARN, "fail to compare json", K(ret), K(*j_base_l), K(*j_base_r));
         } else {
-          res.set_int(get_cmp_ret<CMP_OP>(result > 0 ? 1 : (result < 0 ? -1 : 0)));
+          res.set_int(get_cmp_ret(cmp_op, result > 0 ? 1 : (result < 0 ? -1 : 0)));
         }
       }
       return ret;
@@ -688,14 +661,16 @@ struct ObRelationalExtraFunc
   inline static int json_eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
     bool has_lob_header = expr.args_[0]->obj_meta_.has_lob_header();
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
     return def_relational_eval_batch_func<JsonCmp>(BATCH_EVAL_FUNC_ARG_LIST,
-                                                   has_lob_header);
+                                                   has_lob_header,
+                                                   cmp_op);
   }
 
   struct GeoCmp
   {
     int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
-                   bool has_lob_header) const
+                   bool has_lob_header, const ObCmpOp cmp_op) const
     {
       int ret = OB_SUCCESS;
       int result = 0;
@@ -714,7 +689,7 @@ struct ObRelationalExtraFunc
         COMMON_LOG(WARN, "LobDebug: get right lob str iter full data failed ", K(ret), K(r_instr_iter));
       } else {
         result = ObCharset::strcmpsp(CS_TYPE_BINARY, l_data.ptr(), l_data.length(), r_data.ptr(), r_data.length(), false);
-        res.set_int(get_cmp_ret<CMP_OP>(result > 0 ? 1 : (result < 0 ? -1 : 0)));
+        res.set_int(get_cmp_ret(cmp_op, result > 0 ? 1 : (result < 0 ? -1 : 0)));
       }
       return ret;
     }
@@ -723,17 +698,19 @@ struct ObRelationalExtraFunc
   inline static int geo_eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
     bool has_lob_header = expr.args_[0]->obj_meta_.has_lob_header();
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
     return def_relational_eval_batch_func<GeoCmp>(BATCH_EVAL_FUNC_ARG_LIST,
-                                                  has_lob_header);
+                                                  has_lob_header,
+                                                  cmp_op);
   }
 };
 
-template<ObCmpOp CMP_OP>
 struct ObRelationalVecFunc
 {
   struct DatumCmp
   {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const ObExpr &expr, ObEvalCtx &ctx) const
+    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const ObExpr &expr,
+                   ObEvalCtx &ctx, const ObCmpOp cmp_op) const
     {
       int ret = OB_SUCCESS;
       int cmp_ret = 0;
@@ -775,7 +752,7 @@ struct ObRelationalVecFunc
             cmp_ret = data_l[i] == data_r[i] ? 0 : (data_l[i] < data_r[i] ? -1 : 1);
           }
         }
-        res.set_int(get_cmp_ret<CMP_OP>(cmp_ret));
+        res.set_int(get_cmp_ret(cmp_op, cmp_ret));
       }
       return ret;
     }
@@ -795,14 +772,16 @@ struct ObRelationalVecFunc
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid operands", K(ret), K(l), K(r));
       } else {
-        ret = DatumCmp()(expr_datum, *l, *r, expr, ctx);
+        ret = DatumCmp()(expr_datum, *l, *r, expr, ctx,
+                         ObExprCmpFuncsHelper::get_cmp_op(expr.type_));
       }
     }
     return ret;
   }
   inline static int eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
-    return def_relational_eval_batch_func<DatumCmp>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx);
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    return def_relational_eval_batch_func<DatumCmp>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx, cmp_op);
   }
 };
 
@@ -852,12 +831,28 @@ extern ObDatumCmpFuncType DATUM_DECINT_CMP_FUNCS[DECIMAL_INT_MAX][DECIMAL_INT_MA
 extern ObExpr::EvalFunc EVAL_VEC_CMP_FUNCS[CO_MAX];
 extern ObExpr::EvalBatchFunc EVAL_BATCH_VEC_CMP_FUNCS[CO_MAX];
 
+// Keep the compile-time type axes only where they select a datum comparator.
+// Filling the operation slots is identical for every type pair and is kept in
+// one out-of-line helper so that each generated initializer stays small.
+OB_NOINLINE void init_expr_cmp_func_array(ObExpr::EvalFunc *eval_funcs,
+                              ObExpr::EvalBatchFunc *batch_eval_funcs,
+                              ObDatumCmpFuncType &datum_cmp_func,
+                              ObExpr::EvalFunc eval_func,
+                              ObExpr::EvalBatchFunc batch_eval_func,
+                              ObDatumCmpFuncType datum_func,
+                              const ObExpr::EvalBatchFunc *batch_eval_overrides);
+
+// String scalar evaluators get both the operation and collation from ObExpr at
+// runtime.  This helper also clears the datum slots; supported collations fill
+// those slots with the compile-time-bound functions below.
+OB_NOINLINE void init_str_cmp_func_array(ObCollationType cs_type);
+
 template<int X>
 struct ExtraExprCmpIniter
 {
   static void init_array()
   {
-    using Func = ObRelationalExtraFunc<static_cast<ObCmpOp>(X)>;
+    using Func = ObRelationalExtraFunc;
     EVAL_BATCH_NULL_EXTEND_CMP_FUNCS[X] = Func::null_extend_eval_batch;
     EVAL_BATCH_STR_CMP_FUNCS[X] = Func::str_eval_batch;
     EVAL_BATCH_TEXT_CMP_FUNCS[X] = Func::text_eval_batch;
@@ -880,31 +875,17 @@ struct TypeExprCmpFuncIniter
       static_cast<ObObjType>(X),
       static_cast<ObObjType>(Y)>;
 
-  template<ObCmpOp cmp_op>
   using EvalCmp = ObRelationalTypeFunc<Def::defined_,
-        static_cast<ObObjType>(X), static_cast<ObObjType>(Y), cmp_op>;
+        static_cast<ObObjType>(X), static_cast<ObObjType>(Y)>;
   static void init_array()
   {
-    auto &funcs = EVAL_TYPE_CMP_FUNCS;
-    funcs[X][Y][CO_LE] = Def::defined_ ? &EvalCmp<CO_LE>::eval : NULL;
-    funcs[X][Y][CO_LT] = Def::defined_ ? &EvalCmp<CO_LT>::eval : NULL;
-    funcs[X][Y][CO_EQ] = Def::defined_ ? &EvalCmp<CO_EQ>::eval : NULL;
-    funcs[X][Y][CO_GE] = Def::defined_ ? &EvalCmp<CO_GE>::eval : NULL;
-    funcs[X][Y][CO_GT] = Def::defined_ ? &EvalCmp<CO_GT>::eval : NULL;
-    funcs[X][Y][CO_NE] = Def::defined_ ? &EvalCmp<CO_NE>::eval : NULL;
-    funcs[X][Y][CO_CMP] = Def::defined_ ? &EvalCmp<CO_CMP>::eval : NULL;
-
-    auto &batch_funcs = EVAL_BATCH_TYPE_CMP_FUNCS;
-    batch_funcs[X][Y][CO_LE] = Def::defined_ ? &EvalCmp<CO_LE>::eval_batch : NULL;
-    batch_funcs[X][Y][CO_LT] = Def::defined_ ? &EvalCmp<CO_LT>::eval_batch : NULL;
-    batch_funcs[X][Y][CO_EQ] = Def::defined_ ? &EvalCmp<CO_EQ>::eval_batch : NULL;
-    batch_funcs[X][Y][CO_GE] = Def::defined_ ? &EvalCmp<CO_GE>::eval_batch : NULL;
-    batch_funcs[X][Y][CO_GT] = Def::defined_ ? &EvalCmp<CO_GT>::eval_batch : NULL;
-    batch_funcs[X][Y][CO_NE] = Def::defined_ ? &EvalCmp<CO_NE>::eval_batch : NULL;
-    // CO_CMP only used in T_FUN_SYS_STRCMP, set to NULL
-    batch_funcs[X][Y][CO_CMP] = NULL;
-
-    DATUM_TYPE_CMP_FUNCS[X][Y] = Def::defined_ ? &Def::cmp : NULL;
+    init_expr_cmp_func_array(EVAL_TYPE_CMP_FUNCS[X][Y],
+                             EVAL_BATCH_TYPE_CMP_FUNCS[X][Y],
+                             DATUM_TYPE_CMP_FUNCS[X][Y],
+                             Def::defined_ ? &EvalCmp::eval : NULL,
+                             Def::defined_ ? &EvalCmp::eval_batch : NULL,
+                             Def::defined_ ? &Def::cmp : NULL,
+                             NULL);
   }
 };
 
@@ -921,42 +902,18 @@ struct TCExprCmpFuncIniter
       static_cast<ObObjTypeClass>(X),
       static_cast<ObObjTypeClass>(Y)>;
 
-  template<ObCmpOp cmp_op>
-  using EvalCmp = ObRelationalTCFunc<Def::defined_,
-        static_cast<ObObjTypeClass>(X), static_cast<ObObjTypeClass>(Y), cmp_op>;
   static void init_array()
   {
-    auto &funcs = EVAL_TC_CMP_FUNCS;
-    funcs[X][Y][CO_LE] = Def::defined_ ? &EvalCmp<CO_LE>::eval : NULL;
-    funcs[X][Y][CO_LT] = Def::defined_ ? &EvalCmp<CO_LT>::eval : NULL;
-    funcs[X][Y][CO_EQ] = Def::defined_ ? &EvalCmp<CO_EQ>::eval : NULL;
-    funcs[X][Y][CO_GE] = Def::defined_ ? &EvalCmp<CO_GE>::eval : NULL;
-    funcs[X][Y][CO_GT] = Def::defined_ ? &EvalCmp<CO_GT>::eval : NULL;
-    funcs[X][Y][CO_NE] = Def::defined_ ? &EvalCmp<CO_NE>::eval : NULL;
-    funcs[X][Y][CO_CMP] = Def::defined_ ? &EvalCmp<CO_CMP>::eval : NULL;
-
-    auto &batch_funcs = EVAL_BATCH_TC_CMP_FUNCS;
-    if (X == ObNullTC || X == ObExtendTC
-        || Y == ObNullTC || Y == ObExtendTC) {
-      batch_funcs[X][Y][CO_LE] = EVAL_BATCH_NULL_EXTEND_CMP_FUNCS[CO_LE];
-      batch_funcs[X][Y][CO_LT] = EVAL_BATCH_NULL_EXTEND_CMP_FUNCS[CO_LT];
-      batch_funcs[X][Y][CO_EQ] = EVAL_BATCH_NULL_EXTEND_CMP_FUNCS[CO_EQ];
-      batch_funcs[X][Y][CO_GE] = EVAL_BATCH_NULL_EXTEND_CMP_FUNCS[CO_GE];
-      batch_funcs[X][Y][CO_GT] = EVAL_BATCH_NULL_EXTEND_CMP_FUNCS[CO_GT];
-      batch_funcs[X][Y][CO_NE] = EVAL_BATCH_NULL_EXTEND_CMP_FUNCS[CO_NE];
-      batch_funcs[X][Y][CO_CMP] = EVAL_BATCH_NULL_EXTEND_CMP_FUNCS[CO_CMP];
-    } else {
-      batch_funcs[X][Y][CO_LE] = Def::defined_ ? &EvalCmp<CO_LE>::eval_batch : NULL;
-      batch_funcs[X][Y][CO_LT] = Def::defined_ ? &EvalCmp<CO_LT>::eval_batch : NULL;
-      batch_funcs[X][Y][CO_EQ] = Def::defined_ ? &EvalCmp<CO_EQ>::eval_batch : NULL;
-      batch_funcs[X][Y][CO_GE] = Def::defined_ ? &EvalCmp<CO_GE>::eval_batch : NULL;
-      batch_funcs[X][Y][CO_GT] = Def::defined_ ? &EvalCmp<CO_GT>::eval_batch : NULL;
-      batch_funcs[X][Y][CO_NE] = Def::defined_ ? &EvalCmp<CO_NE>::eval_batch : NULL;
-      // CO_CMP only used in T_FUN_SYS_STRCMP, set to NULL
-      batch_funcs[X][Y][CO_CMP] = NULL;
-    }
-
-    DATUM_TC_CMP_FUNCS[X][Y] = Def::defined_ ? &Def::cmp : NULL;
+    const ObExpr::EvalBatchFunc *batch_eval_overrides =
+        (X == ObNullTC || X == ObExtendTC || Y == ObNullTC || Y == ObExtendTC)
+        ? EVAL_BATCH_NULL_EXTEND_CMP_FUNCS : NULL;
+    init_expr_cmp_func_array(EVAL_TC_CMP_FUNCS[X][Y],
+                             EVAL_BATCH_TC_CMP_FUNCS[X][Y],
+                             DATUM_TC_CMP_FUNCS[X][Y],
+                             &ObTCRelationFunc::eval,
+                             &ObTCRelationFunc::eval_batch,
+                             &Def::cmp,
+                             batch_eval_overrides);
   }
 };
 
@@ -966,161 +923,48 @@ struct TCExprCmpFuncIniter<X, Y, false>: public ExprDummyIniter{};
 template<int X, int Y>
 using TCExprCmpIniter = TCExprCmpFuncIniter<X, Y, datum_cmp::ObDatumTCCmp<static_cast<ObObjTypeClass>(X),static_cast<ObObjTypeClass>(Y)>::defined_>;
 
-template<int X, int Y>
-struct StrExprFuncIniter
+template<int X, bool defined =
+    datum_cmp::SupportedCollection<static_cast<ObCollationType>(X)>::defined_>
+struct StrCmpFuncIniter
 {
-  template<bool WITH_END_SPACE>
-  using EvalCmp = ObStrRelationEvalWrap<static_cast<ObCollationType>(X),
-        WITH_END_SPACE,
-        static_cast<ObCmpOp>(Y)>;
   static void init_array()
   {
-    EVAL_STR_CMP_FUNCS[X][Y][0] = EvalCmp<0>::eval;
-    EVAL_STR_CMP_FUNCS[X][Y][1] = EvalCmp<1>::eval;
+    init_str_cmp_func_array(static_cast<ObCollationType>(X));
   }
-};
-
-template<int Y>
-struct StrExprFuncIniter<CS_TYPE_MAX, Y>
-{
-  static void init_array() {}
-};
-
-template<int X, int Y>
-struct TextExprFuncIniter
-{
-  template<bool WITH_END_SPACE>
-  using EvalCmp = ObTextRelationEvalWrap<static_cast<ObCollationType>(X),
-        WITH_END_SPACE,
-        static_cast<ObCmpOp>(Y)>;
-  static void init_array()
-  {
-    EVAL_TEXT_CMP_FUNCS[X][Y][0] = EvalCmp<0>::eval;
-    EVAL_TEXT_CMP_FUNCS[X][Y][1] = EvalCmp<1>::eval;
-  }
-};
-
-template<int Y>
-struct TextExprFuncIniter<CS_TYPE_MAX, Y>
-{
-  static void init_array() {}
-};
-
-template<int X, int Y>
-struct TextStrExprFuncIniter
-{
-  template<bool WITH_END_SPACE>
-  using EvalCmp = ObTextStrRelationEvalWrap<static_cast<ObCollationType>(X),
-        WITH_END_SPACE,
-        static_cast<ObCmpOp>(Y)>;
-  static void init_array()
-  {
-    EVAL_TEXT_STR_CMP_FUNCS[X][Y][0] = EvalCmp<0>::eval;
-    EVAL_TEXT_STR_CMP_FUNCS[X][Y][1] = EvalCmp<1>::eval;
-  }
-};
-
-template<int Y>
-struct TextStrExprFuncIniter<CS_TYPE_MAX, Y>
-{
-  static void init_array() {}
-};
-
-template<int X, int Y>
-struct StrTextExprFuncIniter
-{
-  template<bool WITH_END_SPACE>
-  using EvalCmp = ObStrTextRelationEvalWrap<static_cast<ObCollationType>(X),
-        WITH_END_SPACE,
-        static_cast<ObCmpOp>(Y)>;
-  static void init_array()
-  {
-    EVAL_STR_TEXT_CMP_FUNCS[X][Y][0] = EvalCmp<0>::eval;
-    EVAL_STR_TEXT_CMP_FUNCS[X][Y][1] = EvalCmp<1>::eval;
-  }
-};
-
-template<int Y>
-struct StrTextExprFuncIniter<CS_TYPE_MAX, Y>
-{
-  static void init_array() {}
 };
 
 template<int X>
-struct DatumStrExprCmpIniter
+struct StrCmpFuncIniter<X, true>
 {
   template<bool WITH_END_SPACE>
-  using DatumCmp = datum_cmp::ObDatumStrCmp<static_cast<ObCollationType>(X), WITH_END_SPACE>;
-  using Def = datum_cmp::ObDatumStrCmp<static_cast<ObCollationType>(X), false>;
+  using StrDatumCmp = datum_cmp::ObDatumStrCmp<
+      static_cast<ObCollationType>(X), WITH_END_SPACE>;
+  template<bool WITH_END_SPACE>
+  using TextDatumCmp = datum_cmp::ObDatumTextCmp<
+      static_cast<ObCollationType>(X), WITH_END_SPACE>;
+  template<bool WITH_END_SPACE>
+  using TextStrDatumCmp = datum_cmp::ObDatumTextStringCmp<
+      static_cast<ObCollationType>(X), WITH_END_SPACE>;
+  template<bool WITH_END_SPACE>
+  using StrTextDatumCmp = datum_cmp::ObDatumStringTextCmp<
+      static_cast<ObCollationType>(X), WITH_END_SPACE>;
+
   static void init_array()
   {
-    DATUM_STR_CMP_FUNCS[X][0] = Def::defined_ ? DatumCmp<0>::cmp : NULL;
-    DATUM_STR_CMP_FUNCS[X][1] = Def::defined_ ? DatumCmp<1>::cmp : NULL;
+    init_str_cmp_func_array(static_cast<ObCollationType>(X));
+    DATUM_STR_CMP_FUNCS[X][0] = &StrDatumCmp<false>::cmp;
+    DATUM_STR_CMP_FUNCS[X][1] = &StrDatumCmp<true>::cmp;
+    DATUM_TEXT_CMP_FUNCS[X][0] = &TextDatumCmp<false>::cmp;
+    DATUM_TEXT_CMP_FUNCS[X][1] = &TextDatumCmp<true>::cmp;
+    DATUM_TEXT_STR_CMP_FUNCS[X][0] = &TextStrDatumCmp<false>::cmp;
+    DATUM_TEXT_STR_CMP_FUNCS[X][1] = &TextStrDatumCmp<true>::cmp;
+    DATUM_STR_TEXT_CMP_FUNCS[X][0] = &StrTextDatumCmp<false>::cmp;
+    DATUM_STR_TEXT_CMP_FUNCS[X][1] = &StrTextDatumCmp<true>::cmp;
   }
 };
 
 template<>
-struct DatumStrExprCmpIniter<CS_TYPE_MAX>
-{
-  static void init_array() {}
-};
-
-template<int X>
-struct DatumTextExprCmpIniter
-{
-  template<bool WITH_END_SPACE>
-  using DatumCmp = datum_cmp::ObDatumTextCmp<static_cast<ObCollationType>(X), WITH_END_SPACE>;
-  using Def = datum_cmp::ObDatumTextCmp<static_cast<ObCollationType>(X), false>;
-  static void init_array()
-  {
-    DATUM_TEXT_CMP_FUNCS[X][0] = Def::defined_ ? DatumCmp<0>::cmp : NULL;
-    DATUM_TEXT_CMP_FUNCS[X][1] = Def::defined_ ? DatumCmp<1>::cmp : NULL;
-  }
-};
-
-template<>
-struct DatumTextExprCmpIniter<CS_TYPE_MAX>
-{
-  static void init_array() {}
-};
-
-template<int X>
-struct DatumTextStrExprCmpIniter
-{
-  template<bool WITH_END_SPACE>
-  using DatumCmp = datum_cmp::ObDatumTextStringCmp<static_cast<ObCollationType>(X), WITH_END_SPACE>;
-  using Def = datum_cmp::ObDatumTextStringCmp<static_cast<ObCollationType>(X), false>;
-  static void init_array()
-  {
-    DATUM_TEXT_STR_CMP_FUNCS[X][0] = Def::defined_ ? DatumCmp<0>::cmp : NULL;
-    DATUM_TEXT_STR_CMP_FUNCS[X][1] = Def::defined_ ? DatumCmp<1>::cmp : NULL;
-  }
-};
-
-template<>
-struct DatumTextStrExprCmpIniter<CS_TYPE_MAX>
-{
-  static void init_array() {}
-};
-
-template<int X>
-struct DatumStrTextExprCmpIniter
-{
-  template<bool WITH_END_SPACE>
-  using DatumCmp = datum_cmp::ObDatumStringTextCmp<static_cast<ObCollationType>(X), WITH_END_SPACE>;
-  using Def = datum_cmp::ObDatumStringTextCmp<static_cast<ObCollationType>(X), false>;
-  static void init_array()
-  {
-    DATUM_STR_TEXT_CMP_FUNCS[X][0] = Def::defined_ ? DatumCmp<0>::cmp : NULL;
-    DATUM_STR_TEXT_CMP_FUNCS[X][1] = Def::defined_ ? DatumCmp<1>::cmp : NULL;
-  }
-};
-
-template<>
-struct DatumStrTextExprCmpIniter<CS_TYPE_MAX>
-{
-  static void init_array() {}
-};
+struct StrCmpFuncIniter<CS_TYPE_MAX, false> : public ExprDummyIniter {};
 
 template<int Y>
 struct JsonExprFuncIniter
@@ -1128,8 +972,7 @@ struct JsonExprFuncIniter
   using Def = datum_cmp::ObDatumJsonCmp<false>;
   template<bool HAS_LOB_HEADER>
   using EvalCmp = ObRelationalJsonFunc<Def::defined_,
-        HAS_LOB_HEADER,
-        static_cast<ObCmpOp>(Y)>;
+        HAS_LOB_HEADER>;
   static void init_array()
   {
     EVAL_JSON_CMP_FUNCS[Y][0] = Def::defined_ ? EvalCmp<0>::eval : NULL;
@@ -1156,8 +999,7 @@ struct GeoExprFuncIniter
   using Def = datum_cmp::ObDatumGeoCmp<false>;
   template<bool HAS_LOB_HEADER>
   using EvalCmp = ObRelationalGeoFunc<Def::defined_,
-        HAS_LOB_HEADER,
-        static_cast<ObCmpOp>(Y)>;
+        HAS_LOB_HEADER>;
   static void init_array()
   {
     EVAL_GEO_CMP_FUNCS[Y][0] = Def::defined_ ? EvalCmp<0>::eval : NULL;
@@ -1183,8 +1025,7 @@ struct CollectionExprFuncIniter
 {
   template<bool HAS_LOB_HEADER>
   using EvalCmp = ObRelationalCollectionFunc<true,
-        HAS_LOB_HEADER,
-        static_cast<ObCmpOp>(Y)>;
+        HAS_LOB_HEADER>;
   static void init_array()
   {
     EVAL_COLLECTION_CMP_FUNCS[Y][0] = EvalCmp<0>::eval;
@@ -1210,31 +1051,15 @@ template<int X>
 struct FixedDoubleCmpFuncIniter
 {
   using Def = datum_cmp::ObFixedDoubleCmp<static_cast<ObScale>(X)>;
-
-  template<ObCmpOp cmp_op>
-  using EvalCmp = ObRelationFixedDoubleFunc<Def::defined_, static_cast<ObScale>(X), cmp_op>;
   static void init_array()
   {
-    auto &funcs = EVAL_FIXED_DOUBLE_CMP_FUNCS;
-    funcs[X][CO_LE] = Def::defined_ ? &EvalCmp<CO_LE>::eval : NULL;
-    funcs[X][CO_LT] = Def::defined_ ? &EvalCmp<CO_LT>::eval : NULL;
-    funcs[X][CO_EQ] = Def::defined_ ? &EvalCmp<CO_EQ>::eval : NULL;
-    funcs[X][CO_GE] = Def::defined_ ? &EvalCmp<CO_GE>::eval : NULL;
-    funcs[X][CO_GT] = Def::defined_ ? &EvalCmp<CO_GT>::eval : NULL;
-    funcs[X][CO_NE] = Def::defined_ ? &EvalCmp<CO_NE>::eval : NULL;
-    funcs[X][CO_CMP] = Def::defined_ ? &EvalCmp<CO_CMP>::eval : NULL;
-
-    auto &batch_funcs = EVAL_BATCH_FIXED_DOUBLE_CMP_FUNCS;
-    batch_funcs[X][CO_LE] = Def::defined_ ? &EvalCmp<CO_LE>::eval_batch : NULL;
-    batch_funcs[X][CO_LT] = Def::defined_ ? &EvalCmp<CO_LT>::eval_batch : NULL;
-    batch_funcs[X][CO_EQ] = Def::defined_ ? &EvalCmp<CO_EQ>::eval_batch : NULL;
-    batch_funcs[X][CO_GE] = Def::defined_ ? &EvalCmp<CO_GE>::eval_batch : NULL;
-    batch_funcs[X][CO_GT] = Def::defined_ ? &EvalCmp<CO_GT>::eval_batch : NULL;
-    batch_funcs[X][CO_NE] = Def::defined_ ? &EvalCmp<CO_NE>::eval_batch : NULL;
-    // CO_CMP only used in T_FUN_SYS_STRCMP, set to NULL
-    batch_funcs[X][CO_CMP] = NULL;
-
-    DATUM_FIXED_DOUBLE_CMP_FUNCS[X] = Def::defined_ ? &Def::cmp : NULL;
+    init_expr_cmp_func_array(EVAL_FIXED_DOUBLE_CMP_FUNCS[X],
+                             EVAL_BATCH_FIXED_DOUBLE_CMP_FUNCS[X],
+                             DATUM_FIXED_DOUBLE_CMP_FUNCS[X],
+                             Def::defined_ ? &ObFixedDoubleRelationFunc::eval : NULL,
+                             Def::defined_ ? &ObFixedDoubleRelationFunc::eval_batch : NULL,
+                             Def::defined_ ? &Def::cmp : NULL,
+                             NULL);
   }
 };
 
@@ -1243,31 +1068,15 @@ struct DecintCmpFuncIniter
 {
   using Def = datum_cmp::ObDecintCmp<static_cast<ObDecimalIntWideType>(X),
                                      static_cast<ObDecimalIntWideType>(Y)>;
-  template <ObCmpOp cmp_op>
-  using EvalCmp = ObRelationalDecintFunc<Def::defined_, static_cast<ObDecimalIntWideType>(X),
-                                         static_cast<ObDecimalIntWideType>(Y), cmp_op>;
   static void init_array()
   {
-    auto &funcs = EVAL_DECINT_CMP_FUNCS;
-    funcs[X][Y][CO_LE] = Def::defined_ ? &EvalCmp<CO_LE>::eval : NULL;
-    funcs[X][Y][CO_LT] = Def::defined_ ? &EvalCmp<CO_LT>::eval : NULL;
-    funcs[X][Y][CO_GE] = Def::defined_ ? &EvalCmp<CO_GE>::eval : NULL;
-    funcs[X][Y][CO_GT] = Def::defined_ ? &EvalCmp<CO_GT>::eval : NULL;
-    funcs[X][Y][CO_NE] = Def::defined_ ? &EvalCmp<CO_NE>::eval : NULL;
-    funcs[X][Y][CO_EQ] = Def::defined_ ? &EvalCmp<CO_EQ>::eval : NULL;
-    funcs[X][Y][CO_CMP] = Def::defined_ ? &EvalCmp<CO_CMP>::eval : NULL;
-
-    auto &batch_funcs = EVAL_BATCH_DECINT_CMP_FUNCS;
-    batch_funcs[X][Y][CO_LE] = Def::defined_ ? &EvalCmp<CO_LE>::eval_batch : NULL;
-    batch_funcs[X][Y][CO_LT] = Def::defined_ ? &EvalCmp<CO_LT>::eval_batch : NULL;
-    batch_funcs[X][Y][CO_GE] = Def::defined_ ? &EvalCmp<CO_GE>::eval_batch : NULL;
-    batch_funcs[X][Y][CO_GT] = Def::defined_ ? &EvalCmp<CO_GT>::eval_batch : NULL;
-    batch_funcs[X][Y][CO_NE] = Def::defined_ ? &EvalCmp<CO_NE>::eval_batch : NULL;
-    batch_funcs[X][Y][CO_EQ] = Def::defined_ ? &EvalCmp<CO_EQ>::eval_batch : NULL;
-
-    batch_funcs[X][Y][CO_CMP] = NULL;
-
-    DATUM_DECINT_CMP_FUNCS[X][Y] = Def::defined_ ? Def::cmp : NULL;
+    init_expr_cmp_func_array(EVAL_DECINT_CMP_FUNCS[X][Y],
+                             EVAL_BATCH_DECINT_CMP_FUNCS[X][Y],
+                             DATUM_DECINT_CMP_FUNCS[X][Y],
+                             Def::defined_ ? &ObDecintRelationFunc::eval : NULL,
+                             Def::defined_ ? &ObDecintRelationFunc::eval_batch : NULL,
+                             Def::defined_ ? &Def::cmp : NULL,
+                             NULL);
   }
 };
 

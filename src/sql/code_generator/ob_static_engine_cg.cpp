@@ -77,7 +77,6 @@
 #include "sql/engine/aggregate/ob_hash_groupby_op.h"
 #include "sql/engine/join/ob_merge_join_op.h"
 #include "sql/engine/basic/ob_topk_op.h"
-#include "sql/executor/ob_task_spliter.h"
 #include "sql/engine/dml/ob_table_delete_op.h"
 #include "sql/engine/dml/ob_table_update_op.h"
 #include "sql/engine/dml/ob_table_lock_op.h"

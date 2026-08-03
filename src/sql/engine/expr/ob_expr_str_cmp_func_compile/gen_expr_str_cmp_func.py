@@ -1,8 +1,14 @@
-#!/usr/bin/env
+#!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
 
-import os
+import argparse
+import sys
+import tempfile
+from pathlib import Path
 
+# Scalar evaluators are runtime-collation-aware, so preserve the full set of
+# table entries.  Datum comparator instantiation is independently limited by
+# SupportedCollection in ob_expr_cmp_func.ipp.
 DEFINED_COLLS = [
     "CS_TYPE_GBK_CHINESE_CI",
     "CS_TYPE_UTF8MB4_GENERAL_CI",
@@ -173,7 +179,7 @@ DEFINED_COLLS = [
     "CS_TYPE_SWE7_BIN",
   ]
 
-compile_template = '''/*
+LICENSE_HEADER = '''/*
  * Copyright (c) 2025 OceanBase.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -188,85 +194,132 @@ compile_template = '''/*
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+'''
+
+COMPILE_UNIT_CNT = 8
+SCRIPT_DIR = Path(__file__).resolve().parent
+SOURCE_MODE = 0o644
+PART_GLOB = "ob_expr_str_cmp_func_part_*.cpp"
+
+
+def render_compile_part(part_idx, collations):
+  init_lines = "\n".join(
+      "  INIT_COMPILE_STR_FUNC(%s);" % collation for collation in collations)
+  return '''{license}
 
 #include "ob_expr_str_cmp_func_common.ipp"
 
 namespace oceanbase
-{
+{{
 namespace sql
-{
-%COMPILE_FUN_LIST%
-} // end sql
-} // end oceanbase'''
-
-COMPILE_UNIT_CNT = 8
-
-def rm_compile_part():
-  rm_str = "rm -rf ob_expr_str_cmp_func_part_*.cpp"
-  rm_str2 = "rm -rf ob_expr_str_cmp_func_all.cpp"
-  os.system(rm_str)
-  os.system(rm_str2)
+{{
+void __init_str_expr_cmp_func_part_{part_idx}()
+{{
+{init_lines}
+}}
+}} // end sql
+}} // end oceanbase
+'''.format(license=LICENSE_HEADER.rstrip(), part_idx=part_idx, init_lines=init_lines)
 
 
-def generate_compile_parts():
-  fname_temp = "ob_expr_str_cmp_func_part_%d.cpp"
-  fn_cnt = int((len(DEFINED_COLLS) + COMPILE_UNIT_CNT  - 1) / COMPILE_UNIT_CNT)
-  fn_list_text = ""
-  for i in range(fn_cnt):
-    fn_list_text += "DEF_COMPILE_STR_FUNC_INIT(%COLL_NAME" + str(i) + "%, %unit_idx" + str(i) + "%);\n" 
-  for start in range(0, len(DEFINED_COLLS), fn_cnt):
-    text = compile_template.replace("%COMPILE_FUN_LIST%", fn_list_text)
-    for i in range(fn_cnt):
-      coll_temp = "%COLL_NAME" + str(i) + "%"
-      idx_temp = "%unit_idx" + str(i) + "%"
-      if start + i >= len(DEFINED_COLLS):
-        text = text.replace(coll_temp, "CS_TYPE_MAX")
-      else:
-        text = text.replace(coll_temp, DEFINED_COLLS[start + i])
-      text = text.replace(idx_temp, str(start + i))
-    f_name = fname_temp % (start / fn_cnt)
-    with open(f_name, 'a') as f:
-      f.write(text)
+def render_ctrl_part():
+  declarations = "\n".join(
+      "extern void __init_str_expr_cmp_func_part_%d();" % i
+      for i in range(COMPILE_UNIT_CNT))
+  calls = "\n".join(
+      "  __init_str_expr_cmp_func_part_%d();" % i
+      for i in range(COMPILE_UNIT_CNT))
+  return '''{license}
 
-
-def generate_ctrl_part():
-  ctrl_text = '''/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-#include "lib/charset/ob_charset.h"
 namespace oceanbase
-{
+{{
 namespace sql
-{
-'''
-  for i in range(0, len(DEFINED_COLLS)):
-    ctrl_text += "extern void __init_str_expr_cmp_func%d();\n" % i
+{{
+{declarations}
 
-  ctrl_text += "void __init_all_str_expr_cmp_func() {\n"
+void __init_all_str_expr_cmp_func()
+{{
+{calls}
+}}
+}} // end sql
+}} // end oceanbase
+'''.format(license=LICENSE_HEADER.rstrip(), declarations=declarations, calls=calls)
 
-  for i in range(0, len(DEFINED_COLLS)):
-    ctrl_text += "  __init_str_expr_cmp_func%d();\n" % i
-  
-  ctrl_text += '''}
-} // end sql
-} // end oceanbase'''
 
-  with open("ob_expr_str_cmp_func_all.cpp", 'a') as f:
-    f.write(ctrl_text)
+def generate_sources():
+  sources = {}
+  unit_size = (len(DEFINED_COLLS) + COMPILE_UNIT_CNT - 1) // COMPILE_UNIT_CNT
+  for part_idx in range(COMPILE_UNIT_CNT):
+    start = part_idx * unit_size
+    collations = DEFINED_COLLS[start:start + unit_size]
+    name = "ob_expr_str_cmp_func_part_%d.cpp" % part_idx
+    sources[name] = render_compile_part(part_idx, collations)
+  sources["ob_expr_str_cmp_func_all.cpp"] = render_ctrl_part()
+  return sources
+
+
+def write_atomic(path, content):
+  if path.exists() and path.read_text(encoding="utf-8") == content:
+    path.chmod(SOURCE_MODE)
+    return
+  temp_path = None
+  try:
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=str(path.parent),
+        prefix=".gen_expr_str_cmp_func.", suffix=".tmp", delete=False) as output:
+      temp_path = Path(output.name)
+      output.write(content)
+    temp_path.chmod(SOURCE_MODE)
+    temp_path.replace(path)
+  except BaseException:
+    if temp_path is not None and temp_path.exists():
+      temp_path.unlink()
+    raise
+
+
+def unexpected_part_paths(output_dir, sources):
+  expected_names = set(sources)
+  return sorted(
+      path for path in output_dir.glob(PART_GLOB)
+      if path.name not in expected_names)
+
+
+def check_sources(output_dir, sources):
+  stale = []
+  for name, content in sources.items():
+    path = output_dir / name
+    if (not path.exists()
+        or path.read_text(encoding="utf-8") != content
+        or path.stat().st_mode & 0o777 != SOURCE_MODE):
+      stale.append(name)
+  stale.extend(path.name for path in unexpected_part_paths(output_dir, sources))
+  if stale:
+    print("generated string comparison sources are stale: %s" % ", ".join(stale),
+          file=sys.stderr)
+    return 1
+  return 0
+
+
+def main():
+  parser = argparse.ArgumentParser(
+      description="Generate sharded string comparison initializers.")
+  parser.add_argument("--output-dir", type=Path, default=SCRIPT_DIR)
+  parser.add_argument("--check", action="store_true",
+                      help="check generated files without changing them")
+  args = parser.parse_args()
+
+  output_dir = args.output_dir.resolve()
+  sources = generate_sources()
+  if args.check:
+    return check_sources(output_dir, sources)
+
+  output_dir.mkdir(parents=True, exist_ok=True)
+  for path in unexpected_part_paths(output_dir, sources):
+    path.unlink()
+  for name, content in sources.items():
+    write_atomic(output_dir / name, content)
+  return 0
+
 
 if __name__ == "__main__":
-  rm_compile_part()
-  generate_compile_parts()
-  generate_ctrl_part()
+  sys.exit(main())

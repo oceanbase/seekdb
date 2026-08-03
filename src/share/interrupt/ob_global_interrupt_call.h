@@ -249,6 +249,7 @@ class ObGlobalInterruptManager
 private:
   /// Use 100W as the bucket initialization parameter of Map
   static const int64_t DEFAULT_HASH_MAP_BUCKETS_COUNT = 250000; //25w
+  static const int64_t MINI_MODE_HASH_MAP_BUCKETS_COUNT = 10000; //1w
   static const int64_t DEFAULT_NODE_NUM = 20000; //2w, SimpleAllocer holds each block with memory less than 2M
 public:
   /// Hashmap with SpinLock, because the coroutine interrupt signal lock time is short, and there is almost no resource conflict, so SpinLock is used

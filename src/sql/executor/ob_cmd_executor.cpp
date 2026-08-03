@@ -562,7 +562,7 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
     if (OB_ISNULL(my_session)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("session is null", K(ret));
-    } else if (OB_ISNULL(ctx.get_task_exec_ctx().schema_service_)) {
+    } else if (OB_ISNULL(ctx.get_sql_exec_ctx().schema_service_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema_service_ is null", K(ret));
     } else if (OB_FAIL(my_session->update_sys_variable(
@@ -575,7 +575,7 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
                        ori_trx_timeout_obj))) {
       LOG_WARN("set sys variable failed", K(ret),
                                           K(ori_trx_timeout_obj.get_int()));
-    } else if (OB_FAIL(ctx.get_task_exec_ctx().schema_service_->get_runtime_schema_guard(
+    } else if (OB_FAIL(ctx.get_sql_exec_ctx().schema_service_->get_runtime_schema_guard(
                        *(ctx.get_sql_ctx()->schema_guard_)))) {
       LOG_WARN("failed to get schema guard", K(ret));
     }

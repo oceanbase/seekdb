@@ -47,12 +47,6 @@ public:
       init_channel_count_(0)
   {}
   virtual ~ObPxReceiveOpInput() {}
-  virtual int init(ObTaskInfo &task_info)
-  {
-    int ret = OB_SUCCESS;
-    UNUSED(task_info);
-    return ret;
-  }
   void set_child_dfo_id(int64_t child_dfo_id) { child_dfo_id_ = child_dfo_id; }
   int64_t get_child_dfo_id() const { return child_dfo_id_; }
   // Set up by sqc and sent to task, this pointer will be serialized to task

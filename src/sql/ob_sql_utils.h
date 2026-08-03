@@ -50,7 +50,7 @@ class ObStmt;
 class ObDMLStmt;
 class ObOpRawExpr;
 class OrderItem;
-class ObTaskExecutorCtx;
+class ObSqlExecutorCtx;
 class ObTableLocation;
 class ObQueryRange;
 class ObSqlExpression;

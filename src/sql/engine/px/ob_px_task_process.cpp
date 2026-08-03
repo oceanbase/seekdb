@@ -372,7 +372,7 @@ int ObPxTaskProcess::do_process()
     LOG_DEBUG("async task physical plan", "phy_plan", arg_.des_phy_plan_);
 
     if (OB_SUCC(ret)) {
-      ObTaskExecutorCtx *executor_ctx = NULL;
+      ObSqlExecutorCtx *executor_ctx = NULL;
       if (OB_ISNULL(gctx_.schema_service_) || OB_ISNULL(gctx_.sql_engine_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", K(ret),
@@ -392,7 +392,7 @@ int ObPxTaskProcess::do_process()
         exec_ctx.get_sql_ctx()->schema_guard_ = &schema_guard_;
         exec_ctx.set_sql_proxy(gctx_.sql_proxy_);
         exec_ctx.set_virtual_table_ctx(vt_ctx);
-        if (OB_ISNULL(executor_ctx = exec_ctx.get_task_executor_ctx())) {
+        if (OB_ISNULL(executor_ctx = exec_ctx.get_sql_executor_ctx())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("task executor ctx is NULL", K(ret));
         }

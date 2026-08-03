@@ -25,7 +25,6 @@
 #include "sql/engine/join/ob_hash_join_op.h"
 #include "sql/engine/basic/ob_temp_table_access_op.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
-#include "sql/executor/ob_task_spliter.h"
 #include "storage/ddl/ob_direct_insert_sstable_ctx.h"
 #include "sql/engine/window_function/ob_window_function_op.h"
 #include "sql/engine/basic/ob_select_into_op.h"
@@ -173,7 +172,7 @@ int ObPxSubCoord::get_tsc_or_dml_op_tablets(
 {
   int ret = OB_SUCCESS;
   ObArray<const ObTableModifySpec*> dml_ops;
-  if (OB_FAIL(ObTaskSpliter::find_scan_ops(scan_ops, root))) {
+  if (OB_FAIL(ObPxSqcDistributionUtil::find_scan_ops(scan_ops, root))) {
     LOG_WARN("fail get scan ops", K(ret));
   } else if (OB_FAIL(ObPxSqcDistributionUtil::find_dml_ops(dml_ops, root))) {
     LOG_WARN("fail to find dml ops", K(ret));

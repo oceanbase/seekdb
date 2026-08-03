@@ -19,7 +19,6 @@
 #include "ob_px_util.h"
 #include "sql/dtl/ob_dtl_channel_group.h"
 #include "sql/engine/px/ob_px_scheduler.h"
-#include "sql/executor/ob_task_spliter.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
 #include "share/schema/ob_part_mgr_util.h"
 #include "sql/engine/px/ob_dfo_scheduler.h"
@@ -182,7 +181,7 @@ int ObPxSqcDistributionUtil::alloc_by_data_distribution_inner(
      * this dfo has been built. do nothing.
      */
     LOG_TRACE("this dfo has been built", K(dfo.get_dfo_id()));
-  } else if (OB_FAIL(ObTaskSpliter::find_scan_ops(scan_ops, *root_op))) {
+  } else if (OB_FAIL(find_scan_ops(scan_ops, *root_op))) {
     LOG_WARN("fail find scan ops in dfo", K(dfo), K(ret));
   } else if (OB_FAIL(ObPxSqcDistributionUtil::find_dml_ops(dml_ops, *root_op))) {
     LOG_WARN("failed find insert op in dfo", K(ret), K(dfo));
@@ -265,6 +264,37 @@ int ObPxSqcDistributionUtil::find_dml_ops(common::ObIArray<const ObTableModifySp
                              const ObOpSpec &op)
 {
   return find_dml_ops_inner(insert_ops, op);
+}
+
+int ObPxSqcDistributionUtil::find_scan_ops(common::ObIArray<const ObTableScanSpec *> &scan_ops,
+                                           const ObOpSpec &op)
+{
+  return find_scan_ops_inner(scan_ops, op);
+}
+
+int ObPxSqcDistributionUtil::find_scan_ops_inner(
+    common::ObIArray<const ObTableScanSpec *> &scan_ops,
+    const ObOpSpec &op)
+{
+  int ret = OB_SUCCESS;
+  if (!IS_RECEIVE(op.get_type())) {
+    for (int32_t i = 0; OB_SUCC(ret) && i < op.get_child_num(); ++i) {
+      const ObOpSpec *child_op = op.get_child(i);
+      if (OB_ISNULL(child_op)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(find_scan_ops(scan_ops, *child_op))) {
+        LOG_WARN("fail to find child scan ops",
+                 K(ret), K(i), "op_id", op.get_id(), "child_id", child_op->get_id());
+      }
+    }
+  }
+  if (OB_SUCC(ret) && op.is_table_scan() && op.get_type() != PHY_FAKE_CTE_TABLE) {
+    const ObTableScanSpec &scan_op = static_cast<const ObTableScanSpec &>(op);
+    if (!scan_op.use_dist_das() && OB_FAIL(scan_ops.push_back(&scan_op))) {
+      LOG_WARN("fail to push back table scan op", K(ret));
+    }
+  }
+  return ret;
 }
 
 bool ObPxSqcDistributionUtil::check_build_dfo_with_dml(const ObOpSpec &op)
@@ -413,7 +443,7 @@ int ObPxSqcDistributionUtil::alloc_by_temp_child_distribution_inner(ObExecContex
     if (OB_ISNULL(root_op)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr or sqc is not empty", K(ret), K(child));
-    } else if (OB_FAIL(ObTaskSpliter::find_scan_ops(scan_ops, *root_op))) {
+    } else if (OB_FAIL(find_scan_ops(scan_ops, *root_op))) {
       LOG_WARN("fail find scan ops in dfo", K(child), K(ret));
     } else if (scan_ops.empty()) {
     } else if (FALSE_IT(base_table_location_key = scan_ops.at(0)->get_table_loc_id())) {
@@ -774,7 +804,7 @@ int ObPxSqcDistributionUtil::set_sqcs_accessed_location(
 // used to fast lookup from phy partition id to partition order(index)
 // for a range partition, the greater the range, the greater the partition_index
 // for a hash partition, the index means nothing
-int ObPxSqcDistributionUtil::build_tablet_idx_map(ObTaskExecutorCtx &task_exec_ctx,
+int ObPxSqcDistributionUtil::build_tablet_idx_map(ObSqlExecutorCtx &task_exec_ctx,
                                               uint64_t ref_table_id,
                                               ObTabletIdxMap &idx_map)
 {
@@ -839,7 +869,7 @@ int ObPxSqcDistributionUtil::reorder_all_partitions(
     // no actual partition define, can't traverse
     // table schema for partition info
     } else if (!is_virtual_table(ref_table_id) &&
-        OB_FAIL(build_tablet_idx_map(exec_ctx.get_task_exec_ctx(),
+        OB_FAIL(build_tablet_idx_map(exec_ctx.get_sql_exec_ctx(),
                                      ref_table_id, tablet_order_map))) {
       LOG_WARN("fail build index lookup map", K(ret));
     }

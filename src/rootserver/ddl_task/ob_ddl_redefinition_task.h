@@ -160,6 +160,8 @@ protected:
   int check_update_autoinc_end(bool &is_end);
   int check_check_table_empty_end(bool &is_end);
   int sync_stats_info();
+  bool is_stats_sync_lock_conflict(const int ret) const;
+  void delay_take_effect_after_stats_sync_lock_conflict(const int ret);
   int sync_stats_info_local(common::ObMySQLTransaction &trans,
                             ObSchemaGetterGuard *runtime_schema_guard,
                             const ObTableSchema &data_table_schema,

@@ -68,16 +68,320 @@ ObDatumCmpFuncType DATUM_DECINT_CMP_FUNCS[DECIMAL_INT_MAX][DECIMAL_INT_MAX];
 ObExpr::EvalFunc EVAL_VEC_CMP_FUNCS[CO_MAX];
 ObExpr::EvalBatchFunc EVAL_BATCH_VEC_CMP_FUNCS[CO_MAX];
 
-// int g_init_type_ret = Ob2DArrayConstIniter<ObMaxType, ObMaxType, TypeExprCmpFuncIniter>::init();
-// int g_init_tc_ret = Ob2DArrayConstIniter<ObMaxTC, ObMaxTC, TCExprCmpFuncIniter>::init();
-// int g_init_str_ret = Ob2DArrayConstIniter<CS_TYPE_MAX, CO_MAX, StrExprFuncIniter>::init();
-// int g_init_datum_str_ret = ObArrayConstIniter<CS_TYPE_MAX, DatumStrExprCmpIniter>::init();
-// int g_init_text_ret = Ob2DArrayConstIniter<CS_TYPE_MAX, CO_MAX, TextExprFuncIniter>::init();
-// int g_init_datum_text_ret = ObArrayConstIniter<CS_TYPE_MAX, DatumTextExprCmpIniter>::init();
-// int g_init_text_str_ret = Ob2DArrayConstIniter<CS_TYPE_MAX, CO_MAX, TextStrExprFuncIniter>::init();
-// int g_init_datum_text_str_ret = ObArrayConstIniter<CS_TYPE_MAX, DatumTextStrExprCmpIniter>::init();
-// int g_init_str_text_ret = Ob2DArrayConstIniter<CS_TYPE_MAX, CO_MAX, StrTextExprFuncIniter>::init();
-// int g_init_str_datum_text_ret = ObArrayConstIniter<CS_TYPE_MAX, DatumStrTextExprCmpIniter>::init();
+namespace
+{
+
+// Keep the exact constants used by ObFixedDoubleCmp<SCALE>::P.  Looking the
+// tolerance up once per evaluator avoids making SCALE a template axis while
+// preserving fixed-double comparison semantics bit for bit.
+constexpr double FIXED_DOUBLE_CMP_TOLERANCE[] = {
+  5 / 1e001, 5 / 1e002, 5 / 1e003, 5 / 1e004,
+  5 / 1e005, 5 / 1e006, 5 / 1e007, 5 / 1e008,
+  5 / 1e009, 5 / 1e010, 5 / 1e011, 5 / 1e012,
+  5 / 1e013, 5 / 1e014, 5 / 1e015, 5 / 1e016,
+  5 / 1e017, 5 / 1e018, 5 / 1e019, 5 / 1e020,
+  5 / 1e021, 5 / 1e022, 5 / 1e023, 5 / 1e024,
+  5 / 1e025, 5 / 1e026, 5 / 1e027, 5 / 1e028,
+  5 / 1e029, 5 / 1e030, 5 / 1e031,
+};
+static_assert(ARRAYSIZEOF(FIXED_DOUBLE_CMP_TOLERANCE) == OB_NOT_FIXED_SCALE,
+              "fixed-double tolerance table must cover every supported scale");
+
+int get_fixed_double_tolerance(const ObExpr &expr, double &tolerance)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(2 != expr.arg_cnt_)
+      || OB_ISNULL(expr.args_)
+      || OB_ISNULL(expr.args_[0])
+      || OB_ISNULL(expr.args_[1])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid fixed-double comparison expression", K(ret), K(expr.arg_cnt_));
+  } else {
+    const ObDatumMeta &left_meta = expr.args_[0]->datum_meta_;
+    const ObDatumMeta &right_meta = expr.args_[1]->datum_meta_;
+    const ObScale left_scale = left_meta.scale_;
+    const ObScale right_scale = right_meta.scale_;
+    if (OB_UNLIKELY(!ob_is_double_type(left_meta.type_)
+                    || !ob_is_double_type(right_meta.type_)
+                    || left_scale <= SCALE_UNKNOWN_YET
+                    || left_scale >= OB_NOT_FIXED_SCALE
+                    || right_scale <= SCALE_UNKNOWN_YET
+                    || right_scale >= OB_NOT_FIXED_SCALE)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid fixed-double comparison metadata",
+               K(ret), K(left_meta), K(right_meta));
+    } else {
+      const ObScale scale = MAX(left_scale, right_scale);
+      tolerance = FIXED_DOUBLE_CMP_TOLERANCE[scale];
+    }
+  }
+  return ret;
+}
+
+struct RuntimeFixedDoubleCmp
+{
+  int operator()(ObDatum &res,
+                 const ObDatum &l_datum,
+                 const ObDatum &r_datum,
+                 const double &tolerance,
+                 const ObCmpOp &cmp_op) const
+  {
+    int cmp_ret = 0;
+    const double l = l_datum.get_double();
+    const double r = r_datum.get_double();
+    if (isnan(l) || isnan(r)) {
+      if (isnan(l) && isnan(r)) {
+        cmp_ret = 0;
+      } else if (isnan(l)) {
+        cmp_ret = 1;
+      } else {
+        cmp_ret = -1;
+      }
+    } else if (l == r || fabs(l - r) < tolerance) {
+      cmp_ret = 0;
+    } else {
+      cmp_ret = l < r ? -1 : 1;
+    }
+    res.set_int(get_cmp_ret(cmp_op, cmp_ret));
+    return OB_SUCCESS;
+  }
+};
+
+int get_runtime_decint_cmp_func(const ObExpr &expr, decint_cmp_fp &cmp_func)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(2 != expr.arg_cnt_)
+      || OB_ISNULL(expr.args_)
+      || OB_ISNULL(expr.args_[0])
+      || OB_ISNULL(expr.args_[1])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid decimal-int comparison expression", K(ret), K(expr.arg_cnt_));
+  } else {
+    const ObDatumMeta &left_meta = expr.args_[0]->datum_meta_;
+    const ObDatumMeta &right_meta = expr.args_[1]->datum_meta_;
+    const ObDecimalIntWideType left_width = get_decimalint_type(left_meta.precision_);
+    const ObDecimalIntWideType right_width = get_decimalint_type(right_meta.precision_);
+    if (OB_UNLIKELY(!ob_is_decimal_int(left_meta.type_)
+                    || !ob_is_decimal_int(right_meta.type_)
+                    || left_width < DECIMAL_INT_32
+                    || left_width >= DECIMAL_INT_MAX
+                    || right_width < DECIMAL_INT_32
+                    || right_width >= DECIMAL_INT_MAX)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid decimal-int comparison metadata",
+               K(ret), K(left_meta), K(right_meta));
+    } else {
+      const int32_t left_bytes = 2 << (static_cast<int32_t>(left_width) + 1);
+      const int32_t right_bytes = 2 << (static_cast<int32_t>(right_width) + 1);
+      cmp_func = wide::ObDecimalIntCmpSet::get_decint_decint_cmp_func(
+          left_bytes, right_bytes);
+      if (OB_ISNULL(cmp_func)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("decimal-int comparison function is null",
+                 K(ret), K(left_width), K(right_width));
+      }
+    }
+  }
+  return ret;
+}
+
+struct RuntimeDecintCmp
+{
+  int operator()(ObDatum &res,
+                 const ObDatum &l_datum,
+                 const ObDatum &r_datum,
+                 const decint_cmp_fp &cmp_func,
+                 const ObCmpOp &cmp_op) const
+  {
+    OB_ASSERT(nullptr != cmp_func);
+    const int cmp_ret = cmp_func(l_datum.get_decimal_int(), r_datum.get_decimal_int());
+    res.set_int(get_cmp_ret(cmp_op, cmp_ret));
+    return OB_SUCCESS;
+  }
+};
+
+int get_runtime_tc_cmp_func(const ObExpr &expr, ObDatumCmpFuncType &cmp_func)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(2 != expr.arg_cnt_)
+      || OB_ISNULL(expr.args_)
+      || OB_ISNULL(expr.args_[0])
+      || OB_ISNULL(expr.args_[1])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid type-class comparison expression", K(ret), K(expr.arg_cnt_));
+  } else {
+    const ObObjType left_type = expr.args_[0]->datum_meta_.type_;
+    const ObObjType right_type = expr.args_[1]->datum_meta_.type_;
+    if (OB_UNLIKELY(left_type < ObNullType || left_type >= ObMaxType
+                    || right_type < ObNullType || right_type >= ObMaxType)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid type-class comparison types", K(ret), K(left_type), K(right_type));
+    } else {
+      const ObObjTypeClass left_tc = ob_obj_type_class(left_type);
+      const ObObjTypeClass right_tc = ob_obj_type_class(right_type);
+      if (OB_UNLIKELY(ob_is_invalid_obj_tc(left_tc) || ob_is_invalid_obj_tc(right_tc))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("invalid comparison type classes", K(ret), K(left_tc), K(right_tc));
+      } else if (OB_ISNULL(cmp_func = DATUM_TC_CMP_FUNCS[left_tc][right_tc])) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("type-class comparison function is null", K(ret), K(left_tc), K(right_tc));
+      }
+    }
+  }
+  return ret;
+}
+
+struct RuntimeTCCmp
+{
+  int operator()(ObDatum &res,
+                 const ObDatum &l_datum,
+                 const ObDatum &r_datum,
+                 const ObDatumCmpFuncType &cmp_func,
+                 const ObCmpOp &cmp_op) const
+  {
+    int cmp_ret = 0;
+    int ret = cmp_func(l_datum, r_datum, cmp_ret);
+    if (OB_FAIL(ret)) {
+      LOG_WARN("fail to compare", K(ret));
+    } else {
+      res.set_int(get_cmp_ret(cmp_op, cmp_ret));
+    }
+    return ret;
+  }
+};
+
+} // namespace
+
+int ObFixedDoubleRelationFunc::eval(const ObExpr &expr,
+                                    ObEvalCtx &ctx,
+                                    ObDatum &expr_datum)
+{
+  int ret = OB_SUCCESS;
+  double tolerance = 0;
+  if (OB_FAIL(get_fixed_double_tolerance(expr, tolerance))) {
+    LOG_WARN("get fixed-double comparison tolerance failed", K(ret));
+  } else {
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    ret = def_relational_eval_func<RuntimeFixedDoubleCmp>(
+        expr, ctx, expr_datum, tolerance, cmp_op);
+  }
+  return ret;
+}
+
+int ObFixedDoubleRelationFunc::eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
+{
+  int ret = OB_SUCCESS;
+  double tolerance = 0;
+  if (OB_FAIL(get_fixed_double_tolerance(expr, tolerance))) {
+    LOG_WARN("get fixed-double comparison tolerance failed", K(ret));
+  } else {
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    ret = def_relational_eval_batch_func<RuntimeFixedDoubleCmp>(
+        BATCH_EVAL_FUNC_ARG_LIST, tolerance, cmp_op);
+  }
+  return ret;
+}
+
+int ObDecintRelationFunc::eval(const ObExpr &expr,
+                               ObEvalCtx &ctx,
+                               ObDatum &expr_datum)
+{
+  int ret = OB_SUCCESS;
+  decint_cmp_fp cmp_func = nullptr;
+  if (OB_FAIL(get_runtime_decint_cmp_func(expr, cmp_func))) {
+    LOG_WARN("get decimal-int comparison function failed", K(ret));
+  } else {
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    ret = def_relational_eval_func<RuntimeDecintCmp>(
+        expr, ctx, expr_datum, cmp_func, cmp_op);
+  }
+  return ret;
+}
+
+int ObDecintRelationFunc::eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
+{
+  int ret = OB_SUCCESS;
+  decint_cmp_fp cmp_func = nullptr;
+  if (OB_FAIL(get_runtime_decint_cmp_func(expr, cmp_func))) {
+    LOG_WARN("get decimal-int comparison function failed", K(ret));
+  } else {
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    ret = def_relational_eval_batch_func<RuntimeDecintCmp>(
+        BATCH_EVAL_FUNC_ARG_LIST, cmp_func, cmp_op);
+  }
+  return ret;
+}
+
+int ObTCRelationFunc::eval(const ObExpr &expr,
+                           ObEvalCtx &ctx,
+                           ObDatum &expr_datum)
+{
+  int ret = OB_SUCCESS;
+  ObDatumCmpFuncType cmp_func = NULL;
+  if (OB_FAIL(get_runtime_tc_cmp_func(expr, cmp_func))) {
+    LOG_WARN("get type-class comparison function failed", K(ret));
+  } else {
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    ret = def_relational_eval_func<RuntimeTCCmp>(
+        expr, ctx, expr_datum, cmp_func, cmp_op);
+  }
+  return ret;
+}
+
+int ObTCRelationFunc::eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
+{
+  int ret = OB_SUCCESS;
+  ObDatumCmpFuncType cmp_func = NULL;
+  if (OB_FAIL(get_runtime_tc_cmp_func(expr, cmp_func))) {
+    LOG_WARN("get type-class comparison function failed", K(ret));
+  } else {
+    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+    ret = def_relational_eval_batch_func<RuntimeTCCmp>(
+        BATCH_EVAL_FUNC_ARG_LIST, cmp_func, cmp_op);
+  }
+  return ret;
+}
+
+OB_NOINLINE void init_expr_cmp_func_array(ObExpr::EvalFunc *eval_funcs,
+                              ObExpr::EvalBatchFunc *batch_eval_funcs,
+                              ObDatumCmpFuncType &datum_cmp_func,
+                              ObExpr::EvalFunc eval_func,
+                              ObExpr::EvalBatchFunc batch_eval_func,
+                              ObDatumCmpFuncType datum_func,
+                              const ObExpr::EvalBatchFunc *batch_eval_overrides)
+{
+  static_assert(CO_EQ == 0 && CO_CMP + 1 == CO_MAX, "comparison operators must be contiguous");
+  for (int64_t cmp_op = CO_EQ; cmp_op < CO_MAX; ++cmp_op) {
+    eval_funcs[cmp_op] = eval_func;
+    batch_eval_funcs[cmp_op] = NULL != batch_eval_overrides
+        ? batch_eval_overrides[cmp_op]
+        : (CO_CMP == cmp_op ? NULL : batch_eval_func);
+  }
+  datum_cmp_func = datum_func;
+}
+
+OB_NOINLINE void init_str_cmp_func_array(const ObCollationType cs_type)
+{
+  OB_ASSERT(cs_type > CS_TYPE_INVALID && cs_type < CS_TYPE_MAX);
+  for (int64_t cmp_op = CO_EQ; cmp_op < CO_MAX; ++cmp_op) {
+    EVAL_STR_CMP_FUNCS[cs_type][cmp_op][0] = &ObStrRelationEvalWrap<false>::eval;
+    EVAL_STR_CMP_FUNCS[cs_type][cmp_op][1] = &ObStrRelationEvalWrap<true>::eval;
+    EVAL_TEXT_CMP_FUNCS[cs_type][cmp_op][0] = &ObTextRelationEvalWrap<false>::eval;
+    EVAL_TEXT_CMP_FUNCS[cs_type][cmp_op][1] = &ObTextRelationEvalWrap<true>::eval;
+    EVAL_TEXT_STR_CMP_FUNCS[cs_type][cmp_op][0] = &ObTextStrRelationEvalWrap<false>::eval;
+    EVAL_TEXT_STR_CMP_FUNCS[cs_type][cmp_op][1] = &ObTextStrRelationEvalWrap<true>::eval;
+    EVAL_STR_TEXT_CMP_FUNCS[cs_type][cmp_op][0] = &ObStrTextRelationEvalWrap<false>::eval;
+    EVAL_STR_TEXT_CMP_FUNCS[cs_type][cmp_op][1] = &ObStrTextRelationEvalWrap<true>::eval;
+  }
+  DATUM_STR_CMP_FUNCS[cs_type][0] = NULL;
+  DATUM_STR_CMP_FUNCS[cs_type][1] = NULL;
+  DATUM_TEXT_CMP_FUNCS[cs_type][0] = NULL;
+  DATUM_TEXT_CMP_FUNCS[cs_type][1] = NULL;
+  DATUM_TEXT_STR_CMP_FUNCS[cs_type][0] = NULL;
+  DATUM_TEXT_STR_CMP_FUNCS[cs_type][1] = NULL;
+  DATUM_STR_TEXT_CMP_FUNCS[cs_type][0] = NULL;
+  DATUM_STR_TEXT_CMP_FUNCS[cs_type][1] = NULL;
+}
 
 static int64_t fill_type_with_tc_eval_func(void)
 {
@@ -130,6 +434,16 @@ static int64_t init_all_funcs()
 }
 
 int64_t g_init_all_funcs = init_all_funcs();
+
+ObCmpOp ObExprCmpFuncsHelper::get_cmp_op(const ObExprOperatorType type)
+{
+  const ObCmpOp cmp_op = ObRelationalExprOperator::get_cmp_op(type);
+  // Comparison evaluators are installed only for relational expressions (and
+  // STRCMP).  Fail fast in debug builds if a future caller reuses one with an
+  // unrelated expression type instead of silently producing false.
+  OB_ASSERT(ob_is_valid_cmp_op(cmp_op));
+  return cmp_op;
+}
 
 ObExpr::EvalFunc ObExprCmpFuncsHelper::get_eval_expr_cmp_func(const ObObjType type1,
                                                               const ObObjType type2,

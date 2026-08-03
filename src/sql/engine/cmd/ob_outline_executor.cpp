@@ -265,7 +265,7 @@ int ObCreateOutlineExecutor::execute(ObExecContext &ctx, ObCreateOutlineStmt &st
 {
   int ret = OB_SUCCESS;
   ObString outline_key;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   ObCreateOutlineArg &arg = stmt.get_create_outline_arg();
   ObOutlineInfo &outline_info = arg.outline_info_;
   ObString first_stmt;
@@ -277,7 +277,7 @@ int ObCreateOutlineExecutor::execute(ObExecContext &ctx, ObCreateOutlineStmt &st
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(generate_outline_info(ctx, &stmt, outline_info))) {
     LOG_WARN("generate_outline_info failed", K(ret));
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
   } else if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){
@@ -293,7 +293,7 @@ int ObAlterOutlineExecutor::execute(ObExecContext &ctx, ObAlterOutlineStmt &stmt
   int ret = OB_SUCCESS;
   ObString outline_key;
   ObString outline;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   ObAlterOutlineArg &arg = stmt.get_alter_outline_arg();
   ObOutlineInfo &outline_info = arg.alter_outline_info_;
   ObDMLStmt *outline_stmt = static_cast<ObDMLStmt *>(stmt.get_outline_stmt());
@@ -324,7 +324,7 @@ int ObAlterOutlineExecutor::execute(ObExecContext &ctx, ObAlterOutlineStmt &stmt
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){
@@ -339,7 +339,7 @@ int ObDropOutlineExecutor::execute(ObExecContext &ctx, ObDropOutlineStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObDropOutlineArg arg = stmt.get_drop_outline_arg();
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  ObSqlExecutorCtx *task_exec_ctx = NULL;
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("fail to get first stmt" , K(ret));
@@ -347,7 +347,7 @@ int ObDropOutlineExecutor::execute(ObExecContext &ctx, ObDropOutlineStmt &stmt)
     arg.ddl_stmt_str_ = first_stmt;
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_outline(arg); }))) {

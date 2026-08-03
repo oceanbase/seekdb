@@ -523,29 +523,6 @@ private:
   int64_t end_stmt_cnt_;
 };
 
-class ObTaskInfo // unreferenced, need remove
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObTaskInfo()
-      : sql_no_(0),
-        active_task_cnt_(1),
-        snapshot_version_(common::OB_INVALID_VERSION),
-        seq_no_(0) {}
-  ObTaskInfo(const int32_t sql_no, const int64_t seq_no, const int64_t snapshot_version)
-      : sql_no_(sql_no),
-        active_task_cnt_(1),
-        snapshot_version_(snapshot_version),
-        seq_no_(seq_no) {}
-  bool is_task_match() const { return 0 == active_task_cnt_; }
-  TO_STRING_KV(K_(sql_no), K_(seq_no), K_(active_task_cnt), K_(snapshot_version));
-public:
-  int32_t sql_no_;
-  int32_t active_task_cnt_;
-  int64_t snapshot_version_;
-  int64_t seq_no_;
-};
-
 class ObTransVersion
 {
 public:

@@ -151,7 +151,6 @@ public:
     : ObOpInput(ctx, spec), local_task_count_(1), total_task_count_(1),
       wf_participator_shared_info_(0) {};
   virtual ~ObWindowFunctionOpInput() = default;
-  virtual int init(ObTaskInfo &task_info) override { UNUSED(task_info); return common::OB_SUCCESS; }
   virtual void reset() override { local_task_count_ = 1; total_task_count_ = 1;}
 
   void set_local_task_count(uint64_t task_count) { local_task_count_ = task_count; }
