@@ -37,10 +37,16 @@ public:
   int merge(const LogWriteBuf &rhs, bool &has_merged);
   int push_back(const char *buf,
                 const int64_t buf_len);
+  int push_fill(const char fill_char, const int64_t fill_len);
   // If can used lambad, the code is more beautiful
   int get_write_buf(const int64_t idx,
                     const char *&buf,
                     int64_t &buf_len) const;
+  int get_write_buf(const int64_t idx,
+                    const char *&buf,
+                    int64_t &buf_len,
+                    bool &is_fill,
+                    char &fill_char) const;
   int64_t get_total_size() const;
   int64_t get_buf_count() const;
   bool check_memory_is_continous() const;
@@ -52,9 +58,12 @@ public:
   static constexpr int64_t MAX_COUNT = 2;
 
   struct InnerStruct {
+    InnerStruct() : buf_(NULL), buf_len_(0), is_fill_(false), fill_char_(0) {}
     const char *buf_;
     int64_t buf_len_;
-    TO_STRING_KV(KP(buf_), K_(buf_len));
+    bool is_fill_;
+    char fill_char_;
+    TO_STRING_KV(KP(buf_), K_(buf_len), K_(is_fill), K_(fill_char));
   };
   ObSEArray<InnerStruct, MAX_COUNT> write_buf_;
 };
@@ -62,4 +71,3 @@ public:
 } // end namespace oceanbase
 
 #endif
-

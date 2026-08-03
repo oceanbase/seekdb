@@ -771,14 +771,19 @@ void ObTxLogBlock::reset()
 int ObTxLogBlock::reuse_for_fill()
 {
   int ret = OB_SUCCESS;
-  log_base_header_.reset();
-  cur_log_type_ = ObTxLogType::UNKNOWN;
-  cb_arg_array_.reset();
-  big_segment_buf_ = nullptr;
-  pos_ = 0;
-  // reserve place for headers, header will be filled back
-  pos_ += log_base_header_.get_serialize_size(); // assume FIXED size
-  pos_ += header_.get_serialize_size();
+  if (OB_FAIL(fill_buf_.ensure_buffer())) {
+    TRANS_LOG(WARN, "prepare a new transferable log buffer failed", K(ret), KPC(this));
+  } else {
+    len_ = fill_buf_.get_length();
+    log_base_header_.reset();
+    cur_log_type_ = ObTxLogType::UNKNOWN;
+    cb_arg_array_.reset();
+    big_segment_buf_ = nullptr;
+    pos_ = 0;
+    // reserve place for headers, header will be filled back
+    pos_ += log_base_header_.get_serialize_size(); // assume FIXED size
+    pos_ += header_.get_serialize_size();
+  }
   return ret;
 }
 
@@ -866,6 +871,8 @@ int ObTxLogBlock::seal(const int64_t replay_hint, const ObReplayBarrierType barr
   pos_ = 0;
   if (OB_FAIL(serialize_log_block_header_())) {
     TRANS_LOG(WARN, "serialize log block header error", K(ret));
+  } else if (OB_FAIL(fill_buf_.seal(pos_bk))) {
+    TRANS_LOG(WARN, "seal transferable log buffer failed", K(ret), K(pos_bk));
   } else {
     pos_ = pos_bk;
   }

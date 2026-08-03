@@ -21,6 +21,7 @@
 #include "share/scn.h"
 #include "fixed_sliding_window.h"
 #include "log_define.h"                         // block_id_t
+#include "palf_log_buffer.h"
 #include "lsn.h"
 
 namespace oceanbase
@@ -122,6 +123,15 @@ public:
   int set_initial_header_info(const LogTaskHeaderInfo &header_info);
   int update_header_info(const LSN &committed_end_lsn, const int64_t accum_checksum);
   int set_group_header(const LSN &lsn, const share::SCN &scn, const LogGroupEntryHeader &group_entry_header);
+  // Caller must hold LogTask::lock().
+  int insert_segment(LogBufferSegment *segment);
+  // Caller must hold LogTask::lock().
+  int calculate_group_checksum(int64_t &data_checksum) const;
+  // Caller must hold LogTask::lock().
+  int detach_group_write_buf(const LogGroupEntryHeader &header,
+                             LogGroupWriteBuf &group_write_buf);
+  // Caller must hold LogTask::lock(). Used only when enqueueing an IO task fails.
+  int restore_group_write_buf(LogGroupWriteBuf &group_write_buf);
   // update group log data_checksum
   void set_group_log_checksum(const int64_t data_checksum);
   void set_prev_lsn(const LSN &prev_lsn);
@@ -142,7 +152,7 @@ public:
   int64_t get_freeze_ts() const { return ATOMIC_LOAD(&(freeze_ts_)); }
   int64_t get_submit_ts() const { return ATOMIC_LOAD(&(submit_ts_)); }
   int64_t get_flushed_ts() const { return ATOMIC_LOAD(&(flushed_ts_)); }
-  TO_STRING_KV(K_(header), K_(state_map), K_(ref_cnt), 
+  TO_STRING_KV(K_(header), K_(state_map), K_(ref_cnt), KP_(segment_head), KP_(segment_tail),
       K_(gen_ts), K_(freeze_ts), K_(submit_ts), K_(flushed_ts),
       "gen_to_freeze cost time", freeze_ts_ - gen_ts_, 
       "gen_to_submit cost time", submit_ts_ - gen_ts_,
@@ -159,6 +169,8 @@ private:
   mutable int64_t freeze_ts_;
   mutable int64_t submit_ts_;
   mutable int64_t flushed_ts_;
+  LogBufferSegment *segment_head_;
+  LogBufferSegment *segment_tail_;
   mutable common::ObLatch lock_;
 };
 } // end namespace palf

@@ -67,6 +67,16 @@ public:
                          const bool need_nonblock,
                          const int64_t retry_timeout_us = 1000) = 0;
 
+  virtual int submit_log(palf::PalfLogBuffer &buffer,
+                         const share::SCN &base_ts,
+                         ObTxBaseLogCb *cb,
+                         const bool need_nonblock,
+                         const int64_t retry_timeout_us = 1000)
+  {
+    return submit_log(buffer.get_buf(), buffer.get_size(), base_ts, cb,
+                      need_nonblock, retry_timeout_us);
+  }
+
   virtual int get_max_decided_scn(share::SCN &scn) = 0;
   virtual int get_append_mode_initial_scn(share::SCN &ref_scn) = 0;
 };
@@ -85,6 +95,11 @@ public:
                  ObTxBaseLogCb *cb,
                  const bool need_nonblock,
                  const int64_t retry_timeout_us = 1000);
+  int submit_log(palf::PalfLogBuffer &buffer,
+                 const share::SCN &base_ts,
+                 ObTxBaseLogCb *cb,
+                 const bool need_nonblock,
+                 const int64_t retry_timeout_us = 1000) override;
   int get_max_decided_scn(share::SCN &scn);
 
   int get_append_mode_initial_scn(share::SCN &ref_scn);

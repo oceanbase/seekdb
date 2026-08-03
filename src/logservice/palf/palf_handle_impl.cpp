@@ -312,6 +312,35 @@ int PalfHandleImpl::submit_log(
   return ret;
 }
 
+int PalfHandleImpl::submit_log(const PalfAppendOptions &opts,
+                               PalfLogBuffer &buffer,
+                               const SCN &ref_scn,
+                               LSN &lsn,
+                               SCN &scn)
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (!buffer.is_valid() || !buffer.is_sealed()
+      || buffer.get_size() <= 0 || buffer.get_size() > MAX_LOG_BODY_SIZE
+      || !ref_scn.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    RLockGuard guard(lock_);
+    if (false == palf_env_impl_->check_disk_space_enough()) {
+      ret = OB_LOG_OUTOF_DISK_SPACE;
+    } else if (!state_mgr_.can_append()) {
+      ret = OB_STATE_NOT_MATCH;
+    } else if (OB_FAIL(sw_.submit_log(buffer, ref_scn, lsn, scn))) {
+      if (OB_EAGAIN != ret) {
+        PALF_LOG(WARN, "submit owned log failed", K(ret), K(buffer), K(ref_scn));
+      }
+    }
+  }
+  UNUSED(opts);
+  return ret;
+}
+
 int PalfHandleImpl::set_base_lsn(
     const LSN &lsn)
 {
@@ -905,8 +934,6 @@ int PalfHandleImpl::do_init_mem_(
   } else if (OB_FAIL(sw_.init(self, &state_mgr_, &mode_mgr_,
           &log_engine_, &fs_cb_wrapper_, alloc_mgr, palf_base_info))) {
     PALF_LOG(WARN, "sw_ init failed", K(ret));
-  } else if (OB_FAIL(log_cache_.init(this))) {
-    PALF_LOG(WARN, "log_cache_ init failed", K(ret));
   } else if (OB_FAIL(state_mgr_.init(self, &sw_, &mode_mgr_))) {
     PALF_LOG(WARN, "state_mgr_ init failed", K(ret));
   } else if (OB_FAIL(mode_mgr_.init(self, log_meta.get_log_mode_meta()))) {

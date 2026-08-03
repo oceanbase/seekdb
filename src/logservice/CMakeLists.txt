@@ -52,6 +52,7 @@ ob_set_subtarget(ob_logservice palf
   palf/log_storage.cpp
   palf/log_task.cpp
   palf/log_writer_utils.cpp
+  palf/palf_log_buffer.cpp
   palf/lsn.cpp
   palf/lsn_allocator.cpp
   palf/palf_base_info.cpp

@@ -3143,8 +3143,7 @@ int ObTxCtx::submit_log_block_out_(ObTxLogBlock &log_block,
     if (OB_FAIL(log_block.seal(replay_hint_v, barrier))) {
       TRANS_LOG(WARN, "seal log block fail", K(ret));
     } else if (OB_SUCC(ls_tx_ctx_mgr_->get_ls_log_adapter()
-                       ->submit_log(log_block.get_buf(),
-                                    log_block.get_size(),
+                       ->submit_log(log_block.get_owned_buf(),
                                     base_scn,
                                     log_cb,
                                     true,
