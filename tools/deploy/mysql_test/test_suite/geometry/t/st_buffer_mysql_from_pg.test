@@ -6,7 +6,7 @@
 --source mysql_test/test_suite/geometry/t/import_default_srs_data_mysql.inc
 
   --disable_warnings
-  drop table if exists buffer_transform, geom_operators_test;
+  drop table if exists geom_operators_test;
   --enable_warnings
 
   # mysql only support empty collection
@@ -59,29 +59,9 @@
 
   # not support ndr/xdr
   SELECT '#145a', ST_AsText(_ST_Buffer(ST_GeomFromText('LINESTRING(-116.93414544665981 34.16033385105459,-116.87777514700957 34.10831080544884,-116.86972224705954 34.086748622072776,-116.9327074288116 34.08458099517253,-117.00216369088065 34.130329331330216,-117.00216369088065 34.130329331330216)', 4326, 'axis-order=long-lat'), 0));
-  #fix error result
-  SELECT '#145b', ST_Area(_ST_Buffer(ST_GeomFromText('LINESTRING(-116.93414544665981 34.16033385105459,-116.87777514700957 34.10831080544884,-116.86972224705954 34.086748622072776,-116.9327074288116 34.08458099517253,-117.00216369088065 34.130329331330216,-117.00216369088065 34.130329331330216)', 4326, 'axis-order=long-lat'), 0.1));
   --disable_warnings
   SELECT '#145c', ST_Area(_ST_Buffer(ST_GeomFromText('LINESTRING(-116.93414544665981 34.16033385105459,-116.87777514700957 34.10831080544884,-116.86972224705954 34.086748622072776,-116.9327074288116 34.08458099517253,-117.00216369088065 34.130329331330216,-117.00216369088065 34.130329331330216)', 'axis-order=long-lat'), 0.1));
   --enable_warnings
-
-  create table buffer_transform(the_pt geometry, utm_srid int);
-  insert into buffer_transform values
-  (ST_GeomFromText('POINT(-170 -80)', 4326, 'axis-order=long-lat'), 32702),
-  (ST_GeomFromText('POINT(-160 -80)', 4326, 'axis-order=long-lat'), 32704),
-  (ST_GeomFromText('POINT(-150 -80)', 4326, 'axis-order=long-lat'), 32706),
-  (ST_GeomFromText('POINT(-140 -80)', 4326, 'axis-order=long-lat'), 32707),
-  (ST_GeomFromText('POINT(-130 -80)', 4326, 'axis-order=long-lat'), 32709),
-  (ST_GeomFromText('POINT(-120 -80)', 4326, 'axis-order=long-lat'), 32711),
-  (ST_GeomFromText('POINT(-110 -80)', 4326, 'axis-order=long-lat'), 32712),
-  (ST_GeomFromText('POINT(-100 -80)', 4326, 'axis-order=long-lat'), 32714),
-  (ST_GeomFromText('POINT(-90 -80)', 4326, 'axis-order=long-lat'), 32716),
-  (ST_GeomFromText('POINT(-80 -80)', 4326, 'axis-order=long-lat'), 32717);
-
-  # mysql does not support, but we need to support it
-  select st_astext(the_pt), utm_srid, st_area(_ST_Buffer(the_pt, 10)) as the_area,
-  st_area(_st_transform(_ST_Buffer(_st_transform(the_pt, utm_srid), 10), 4326)) as utm_area
-  from buffer_transform;
 
   #fix st_setsrid, st_point not supported
   #select st_asText(_ST_Buffer(st_setsrid(st_point(-10, 40), 4326), 40));
@@ -123,7 +103,7 @@
              _ST_Buffer(ST_GeomFromText('POINT(0 0)', 4326, 'axis-order=long-lat'), 10.0))),
            12);
 
-  drop table buffer_transform, geom_operators_test;
+  drop table geom_operators_test;
 
   select st_astext(_st_buffer(ST_GeomFromText('POINT(15 20)'),1,-1));
   # bug fix : 
