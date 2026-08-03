@@ -109,7 +109,8 @@ int ObLockTableResolver::resolve_mysql_lock_node_(const ParseNode &lock_node)
       LOG_WARN("table node is null");
     } else if (OB_FAIL(ObDMLResolver::resolve_table(*table_node, table_item))) {
       LOG_WARN("failed to resolve table", K(ret));
-    } else if (table_item->is_function_table() || table_item->is_json_table()) { // invalid lock target
+    } else if (table_item->is_function_table() || table_item->is_file_table()
+               || table_item->is_json_table()) { // invalid lock target
       ret = OB_WRONG_TABLE_NAME;
       LOG_WARN("invalid table name", K(ret));
     } else {

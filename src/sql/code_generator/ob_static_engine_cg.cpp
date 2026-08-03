@@ -28,6 +28,7 @@
 #include "sql/optimizer/ob_log_insert.h"
 #include "sql/optimizer/ob_log_expr_values.h"
 #include "sql/optimizer/ob_log_function_table.h"
+#include "sql/optimizer/ob_log_file_scan.h"
 #include "sql/optimizer/ob_log_json_table.h"
 #include "sql/optimizer/ob_log_values.h"
 #include "sql/optimizer/ob_log_subplan_filter.h"
@@ -94,6 +95,7 @@
 #include "sql/engine/pdml/static/ob_px_sstable_insert_op.h"
 #include "sql/engine/basic/ob_select_into_op.h"
 #include "sql/engine/basic/ob_function_table_op.h"
+#include "sql/engine/basic/ob_file_scan_op.h"
 #include "sql/engine/basic/ob_json_table_op.h"
 #include "sql/engine/dml/ob_table_insert_op.h"
 #include "sql/engine/basic/ob_stat_collector_op.h"
@@ -6193,7 +6195,6 @@ int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec 
     const bool in_root_job)
 {
   UNUSED(in_root_job);
-  ObIAllocator &alloc = phy_plan_->get_allocator();
   ObRawExpr *value_raw_expr = nullptr;
   ObExpr *value_expr = nullptr;
   int ret = OB_SUCCESS;
@@ -6229,6 +6230,105 @@ int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec 
         OZ (mark_expr_self_produced(col_item->expr_));
         OZ (generate_rt_expr(*col_item->expr_, rt_expr));
         OZ (spec.column_exprs_.push_back(rt_expr));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObStaticEngineCG::generate_spec(ObLogFileScan &op, ObFileScanSpec &spec,
+                                    const bool in_root_job)
+{
+  UNUSED(in_root_job);
+  int ret = OB_SUCCESS;
+  ObIAllocator &alloc = phy_plan_->get_allocator();
+  const ObFileTableDef *file_def = op.get_file_table_def();
+  if (OB_ISNULL(op.get_stmt()) || OB_ISNULL(file_def)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid logical file scan", K(ret), KP(file_def));
+  } else if (OB_FAIL(spec.column_exprs_.init(op.get_stmt()->get_column_size()))) {
+    LOG_WARN("failed to init file scan expressions", K(ret));
+  } else if (OB_FAIL(spec.output_column_idxs_.init(file_def->columns_.count()))) {
+    LOG_WARN("failed to init file output indexes", K(ret));
+  } else if (OB_FAIL(spec.file_column_names_.init(file_def->columns_.count()))) {
+    LOG_WARN("failed to init file column names", K(ret));
+  } else if (OB_FAIL(spec.file_column_types_.init(file_def->columns_.count()))) {
+    LOG_WARN("failed to init file column types", K(ret));
+  } else if (OB_FAIL(spec.source_column_names_.init(file_def->source_columns_.count()))) {
+    LOG_WARN("failed to init source column names", K(ret));
+  } else if (OB_FAIL(spec.source_original_names_.init(file_def->source_columns_.count()))) {
+    LOG_WARN("failed to init source original names", K(ret));
+  } else if (OB_FAIL(spec.source_type_names_.init(file_def->source_columns_.count()))) {
+    LOG_WARN("failed to init source type names", K(ret));
+  } else if (OB_FAIL(spec.source_column_types_.init(file_def->source_columns_.count()))) {
+    LOG_WARN("failed to init source column types", K(ret));
+  } else if (OB_FAIL(spec.source_column_nullable_.init(file_def->source_columns_.count()))) {
+    LOG_WARN("failed to init source column nullable flags", K(ret));
+  } else if (OB_FAIL(ob_write_string(alloc, file_def->canonical_path_, spec.file_path_))) {
+    LOG_WARN("failed to copy file scan path", K(ret));
+  } else if (OB_FAIL(ob_write_string(alloc, file_def->secure_file_priv_, spec.secure_file_priv_))) {
+    LOG_WARN("failed to copy secure file privilege", K(ret));
+  } else {
+    spec.kind_ = static_cast<int32_t>(file_def->kind_);
+    spec.file_format_ = static_cast<int32_t>(file_def->format_);
+    spec.device_ = file_def->device_;
+    spec.inode_ = file_def->inode_;
+    spec.file_size_ = file_def->file_size_;
+    spec.modified_time_ns_ = file_def->modified_time_ns_;
+    for (int64_t i = 0; OB_SUCC(ret) && i < file_def->columns_.count(); ++i) {
+      ObString source_name;
+      if (OB_FAIL(ob_write_string(alloc, file_def->columns_.at(i).source_name_, source_name))) {
+        LOG_WARN("failed to copy file source name", K(ret), K(i));
+      } else if (OB_FAIL(spec.file_column_names_.push_back(source_name))) {
+        LOG_WARN("failed to append file source name", K(ret), K(i));
+      } else if (OB_FAIL(spec.file_column_types_.push_back(
+                   static_cast<int32_t>(file_def->columns_.at(i).type_)))) {
+        LOG_WARN("failed to append file column type", K(ret), K(i));
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < file_def->source_columns_.count(); ++i) {
+      ObString column_name;
+      ObString source_name;
+      ObString source_type_name;
+      if (OB_FAIL(ob_write_string(alloc, file_def->source_columns_.at(i).column_name_, column_name))) {
+        LOG_WARN("failed to copy schema column name", K(ret), K(i));
+      } else if (OB_FAIL(ob_write_string(alloc, file_def->source_columns_.at(i).source_name_, source_name))) {
+        LOG_WARN("failed to copy schema source name", K(ret), K(i));
+      } else if (OB_FAIL(ob_write_string(alloc, file_def->source_columns_.at(i).source_type_name_,
+                                        source_type_name))) {
+        LOG_WARN("failed to copy schema source type", K(ret), K(i));
+      } else if (OB_FAIL(spec.source_column_names_.push_back(column_name))) {
+        LOG_WARN("failed to append schema column name", K(ret), K(i));
+      } else if (OB_FAIL(spec.source_original_names_.push_back(source_name))) {
+        LOG_WARN("failed to append schema source name", K(ret), K(i));
+      } else if (OB_FAIL(spec.source_type_names_.push_back(source_type_name))) {
+        LOG_WARN("failed to append schema source type", K(ret), K(i));
+      } else if (OB_FAIL(spec.source_column_types_.push_back(
+                   static_cast<int32_t>(file_def->source_columns_.at(i).type_)))) {
+        LOG_WARN("failed to append schema column type", K(ret), K(i));
+      } else if (OB_FAIL(spec.source_column_nullable_.push_back(
+                   file_def->source_columns_.at(i).nullable_ ? 1 : 0))) {
+        LOG_WARN("failed to append schema nullable flag", K(ret), K(i));
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < op.get_output_exprs().count(); ++i) {
+      if (OB_FAIL(mark_expr_self_produced(op.get_output_exprs().at(i)))) {
+        LOG_WARN("failed to mark file expression produced", K(ret));
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < op.get_stmt()->get_column_size(); ++i) {
+      ObExpr *rt_expr = nullptr;
+      const ColumnItem *column = op.get_stmt()->get_column_item(i);
+      if (OB_ISNULL(column) || OB_ISNULL(column->expr_)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (column->table_id_ == op.get_table_id()
+                 && column->expr_->is_explicited_reference()) {
+        if (OB_FAIL(mark_expr_self_produced(column->expr_))) {
+        } else if (OB_FAIL(generate_rt_expr(*column->expr_, rt_expr))) {
+        } else if (OB_FAIL(spec.column_exprs_.push_back(rt_expr))) {
+        } else if (OB_FAIL(spec.output_column_idxs_.push_back(
+                     static_cast<int64_t>(column->column_id_ - OB_APP_MIN_COLUMN_ID)))) {
+        }
       }
     }
   }
@@ -6868,6 +6968,10 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
     }
     case log_op_def::LOG_FUNCTION_TABLE: {
       type = PHY_FUNCTION_TABLE;
+      break;
+    }
+    case log_op_def::LOG_FILE_SCAN: {
+      type = PHY_FILE_SCAN;
       break;
     }
     case log_op_def::LOG_JSON_TABLE: {

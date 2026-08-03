@@ -92,6 +92,59 @@ bool JoinedTable::same_as(const JoinedTable &other) const
   return bret;
 }
 
+int TableItem::deep_copy_file_table_def(const ObFileTableDef &file_def, ObIAllocator *allocator)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(allocator)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("allocator is null when copying file table", K(ret));
+  } else if (OB_ISNULL(file_table_def_ = static_cast<ObFileTableDef *>(
+                         allocator->alloc(sizeof(ObFileTableDef))))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate file table def", K(ret));
+  } else {
+    file_table_def_ = new (file_table_def_) ObFileTableDef();
+    if (OB_FAIL(ob_write_string(*allocator, file_def.canonical_path_, file_table_def_->canonical_path_))) {
+      LOG_WARN("failed to copy file path", K(ret));
+    } else if (OB_FAIL(ob_write_string(*allocator, file_def.secure_file_priv_, file_table_def_->secure_file_priv_))) {
+      LOG_WARN("failed to copy secure file privilege", K(ret));
+    } else {
+      file_table_def_->kind_ = file_def.kind_;
+      file_table_def_->format_ = file_def.format_;
+      file_table_def_->estimated_rows_ = file_def.estimated_rows_;
+      file_table_def_->device_ = file_def.device_;
+      file_table_def_->inode_ = file_def.inode_;
+      file_table_def_->file_size_ = file_def.file_size_;
+      file_table_def_->modified_time_ns_ = file_def.modified_time_ns_;
+      const ObIArray<ObFileTableColumnDef> *src_arrays[] = {
+        &file_def.columns_, &file_def.source_columns_
+      };
+      ObIArray<ObFileTableColumnDef> *dst_arrays[] = {
+        &file_table_def_->columns_, &file_table_def_->source_columns_
+      };
+      for (int64_t array_idx = 0; OB_SUCC(ret) && array_idx < 2; ++array_idx) {
+        for (int64_t i = 0; OB_SUCC(ret) && i < src_arrays[array_idx]->count(); ++i) {
+          const ObFileTableColumnDef &src = src_arrays[array_idx]->at(i);
+          ObFileTableColumnDef dst;
+          dst.type_ = src.type_;
+          dst.nullable_ = src.nullable_;
+          dst.max_length_ = src.max_length_;
+          if (OB_FAIL(ob_write_string(*allocator, src.source_name_, dst.source_name_))) {
+            LOG_WARN("failed to copy file source column name", K(ret));
+          } else if (OB_FAIL(ob_write_string(*allocator, src.column_name_, dst.column_name_))) {
+            LOG_WARN("failed to copy file column name", K(ret));
+          } else if (OB_FAIL(ob_write_string(*allocator, src.source_type_name_, dst.source_type_name_))) {
+            LOG_WARN("failed to copy file source type", K(ret));
+          } else if (OB_FAIL(dst_arrays[array_idx]->push_back(dst))) {
+            LOG_WARN("failed to append file column", K(ret));
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 void ColumnItem::set_default_value(const common::ObObj &val)
 {
   default_value_ = val;
@@ -195,6 +248,7 @@ int TableItem::deep_copy(ObIRawExprCopier &expr_copier,
   ddl_schema_version_ = other.ddl_schema_version_;
   ddl_table_id_ = other.ddl_table_id_;
   ref_query_ = other.ref_query_;
+  file_table_def_ = nullptr;
   SampleInfo *buf = NULL;
   if (is_json_table() 
       && OB_FAIL(deep_copy_json_table_def(*other.json_table_def_, expr_copier, allocator))) {
@@ -203,6 +257,9 @@ int TableItem::deep_copy(ObIRawExprCopier &expr_copier,
     LOG_WARN("failed to deep copy raw expr", K(ret));
   } else if (OB_FAIL(expr_copier.copy(other.function_table_expr_, function_table_expr_))) {
     LOG_WARN("failed to copy function table expr", K(ret));
+  } else if (OB_NOT_NULL(other.file_table_def_)
+             && OB_FAIL(deep_copy_file_table_def(*other.file_table_def_, allocator))) {
+    LOG_WARN("failed to copy file table def", K(ret));
   } else if (OB_FAIL(part_ids_.assign(other.part_ids_))) {
     LOG_WARN("failed to assign part ids", K(ret));
   } else if (OB_FAIL(part_names_.assign(other.part_names_))) {
@@ -1814,6 +1871,7 @@ int ObDMLStmt::formalize_stmt_expr_reference(ObRawExprFactory *expr_factory,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(column_item.table_id_), K(column_item.expr_), K(table_item), K(ret));
       } else if (table_item->is_function_table() ||
+                 table_item->is_file_table() ||
                  table_item->is_json_table() ||
                  table_item->for_update_ ||
                  table_item->is_values_table()) {

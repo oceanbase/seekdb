@@ -66,6 +66,7 @@ class Path;
 class JoinPath;
 class SubQueryPath;
 class FunctionTablePath;
+class FileTablePath;
 class JsonTablePath;
 class TempTablePath;
 class CteTablePath;
@@ -574,6 +575,8 @@ public:
 
   int allocate_function_table_path(FunctionTablePath *func_table_path,
                                    ObLogicalOperator *&out_access_path_op);
+  int allocate_file_table_path(FileTablePath *file_table_path,
+                               ObLogicalOperator *&out_access_path_op);
 
   int allocate_values_table_path(ValuesTablePath *values_table_path,
                                  ObLogicalOperator *&out_access_path_op);

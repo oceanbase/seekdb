@@ -229,6 +229,9 @@ ob_set_subtarget(ob_sql engine_basic
   engine/basic/ob_chunk_row_store.cpp
   engine/basic/ob_expr_values_op.cpp
   engine/basic/ob_function_table_op.cpp
+  engine/basic/ob_file_scan_op.cpp
+  engine/basic/ob_file_scan_utils.cpp
+  engine/basic/ob_parquet_reader.cpp
   engine/basic/ob_group_join_buffer.cpp
   engine/basic/ob_hash_partitioning_infrastructure_op.cpp
   engine/basic/ob_json_table_op.cpp
@@ -927,6 +930,7 @@ ob_set_subtarget(ob_sql optimizer
   optimizer/ob_log_expr_values.cpp
   optimizer/ob_log_for_update.cpp
   optimizer/ob_log_function_table.cpp
+  optimizer/ob_log_file_scan.cpp
   optimizer/ob_log_granule_iterator.cpp
   optimizer/ob_log_group_by.cpp
   optimizer/ob_log_insert.cpp
