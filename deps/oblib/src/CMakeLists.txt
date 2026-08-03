@@ -354,7 +354,7 @@ else()
     ${_LIB_PATH}/libarrow.a
     ${_LIB_PATH}/libparquet.a
     $<$<NOT:$<PLATFORM_ID:Darwin>>:${_LIB_PATH}/libarrow_bundled_dependencies.a>
-    $<$<PLATFORM_ID:Darwin>:-L/opt/homebrew/lib -lutf8proc -lthrift -lre2 -lbrotlicommon -lbrotlienc -lbrotlidec -lbz2>
+    $<$<PLATFORM_ID:Darwin>:-L/opt/homebrew/lib -lutf8proc -lthrift -lbrotlicommon -lbrotlienc -lbrotlidec -lbz2>
     ${_LIB_PATH_EXTRA}/liborc.a
     ${_LIB_PATH_EXTRA}/libsnappy.a
     $<$<NOT:$<BOOL:${ANDROID}>>:${_LIB_PATH_EXTRA}/libprotoc.a>
