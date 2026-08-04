@@ -667,7 +667,6 @@ bool ObOptParamHint::is_param_val_valid(const OptParamType param_type, const ObO
   bool is_valid = false;
   switch (param_type) {
     case HIDDEN_COLUMN_VISIBLE:
-    case ROWSETS_ENABLED:
     case ENABLE_NEWSORT:
     case USE_PART_SORT_MGB:
     case USE_DEFAULT_OPT_STAT:
@@ -952,7 +951,7 @@ int ObOptParamHint::get_enum_opt_param(const OptParamType param_type, int64_t &v
   int ret = OB_SUCCESS;
   ObObj obj;
   if (OB_FAIL(get_opt_param(param_type, obj))) {
-    LOG_WARN("fail to get rowsets_enabled opt_param", K(ret));
+    LOG_WARN("fail to get opt param", K(ret), K(param_type));
   } else if (obj.is_nop_value()) {
     // do nothing
   } else if (obj.is_int()) {
@@ -990,7 +989,7 @@ int ObOptParamHint::has_opt_param(const OptParamType param_type, bool &has_hint)
   has_hint = false;
   ObObj obj;
   if (OB_FAIL(get_opt_param(param_type, obj))) {
-    LOG_WARN("fail to get rowsets_enabled opt_param", K(ret));
+    LOG_WARN("fail to get opt param", K(ret), K(param_type));
   } else {
     has_hint = !obj.is_nop_value();
   }

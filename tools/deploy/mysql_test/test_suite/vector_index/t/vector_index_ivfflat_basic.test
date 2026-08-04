@@ -233,7 +233,7 @@ drop table if exists t1;
 create table t1(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=L2, type=ivf_flat));
 insert into t1 values(1, [1,1,1]);
 select c2,123 from t1 for update;
-select /*+ opt_param('rowsets_enabled', 'false') */ c2,123 from t1 for update;
+select /*+ opt_param('rowsets_max_rows', 1) */ c2,123 from t1 for update;
 drop table t1;
 
 --echo # 单分区先建混合向量索引

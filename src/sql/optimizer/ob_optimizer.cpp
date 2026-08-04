@@ -724,7 +724,6 @@ int ObOptimizer::extract_opt_ctx_basic_flags(const ObDMLStmt &stmt, ObSQLSession
   bool push_join_pred_into_view_enabled = true;
   bool partition_wise_plan_enabled = true;
   bool exists_partition_wise_plan_enabled_hint = false;
-  bool rowsets_enabled = true && GCONF._rowsets_enabled;
   ctx_.set_is_online_ddl(session.get_ddl_info().is_ddl());  // set is online ddl first, is used by other extract operations
   bool das_keep_order_enabled = true && GCONF._enable_das_keep_order;
   bool hash_join_enabled = true && GCONF._hash_join_enabled;
@@ -753,8 +752,6 @@ int ObOptimizer::extract_opt_ctx_basic_flags(const ObDMLStmt &stmt, ObSQLSession
     LOG_WARN("failed to check force default stat", K(ret));
   } else if (OB_FAIL(init_system_stat())) {
     LOG_WARN("failed to init system stat", K(ret));
-  } else if (OB_FAIL(opt_params.get_bool_opt_param(ObOptParamHint::ROWSETS_ENABLED, rowsets_enabled))) {
-    LOG_WARN("fail to check rowsets enabled", K(ret));
   } else if (OB_FAIL(session.is_storage_estimation_enabled(storage_estimation_enabled))) {
     LOG_WARN("fail to get storage_estimation_enabled", K(ret));
   } else if (OB_FAIL(opt_params.get_bool_opt_param(ObOptParamHint::ENABLE_DAS_KEEP_ORDER, das_keep_order_enabled))) {
@@ -801,7 +798,6 @@ int ObOptimizer::extract_opt_ctx_basic_flags(const ObDMLStmt &stmt, ObSQLSession
     ctx_.set_has_var_assign(has_var_assign);
     ctx_.set_is_var_assign_only_in_root_stmt(is_var_assign_only_in_root_stmt);
     ctx_.set_has_subquery_in_function_table(has_subquery_in_function_table);
-    ctx_.set_cost_model_type(rowsets_enabled ? ObOptEstCost::VECTOR_MODEL : ObOptEstCost::NORMAL_MODEL);
     ctx_.set_das_keep_order_enabled(das_keep_order_enabled);
     ctx_.set_optimizer_index_cost_adj(optimizer_index_cost_adj);
     ctx_.set_enable_better_inlist_costing(better_inlist_costing);

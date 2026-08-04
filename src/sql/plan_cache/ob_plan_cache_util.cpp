@@ -199,7 +199,6 @@ int ObConfigInfoInPC::load_influence_plan_config()
   // Use the runtime configuration to read the current settings.
 
   pushdown_storage_level_ = GCONF._pushdown_storage_level;
-  rowsets_enabled_ = GCONF._rowsets_enabled;
   enable_px_batch_rescan_ = GCONF._enable_px_batch_rescan;
   bloom_filter_enabled_ = GCONF._bloom_filter_enabled;
   px_join_skew_handling_ = GCONF._px_join_skew_handling;
@@ -232,9 +231,6 @@ int ObConfigInfoInPC::serialize_configs(char *buf, int buf_len, int64_t &pos)
   if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", pushdown_storage_level_))) {
     SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(pushdown_storage_level_));
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                              "%d,", rowsets_enabled_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(rowsets_enabled_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", enable_px_batch_rescan_))) {
     SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_px_batch_rescan_));

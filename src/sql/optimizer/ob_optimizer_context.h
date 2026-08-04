@@ -264,7 +264,6 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
     expected_worker_count_(0),
     minimal_worker_count_(0),
     all_exprs_(false),
-    model_type_(ObOptEstCost::VECTOR_MODEL),
     px_object_sample_rate_(-1),
     plan_notes_(512, allocator),
     aggregation_optimization_settings_(0),
@@ -636,8 +635,6 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   ObIArray<DeducedExprInfo> &get_deduce_info() { return deduced_exprs_info_; }
   const ObRawExprUniqueSet &get_all_exprs() const { return all_exprs_; };
   ObRawExprUniqueSet &get_all_exprs() { return all_exprs_; };
-  inline void set_cost_model_type(ObOptEstCost::MODEL_TYPE type) { model_type_ = type; }
-  ObOptEstCost::MODEL_TYPE get_cost_model_type() const { return model_type_; }
   const ObPlanNotes &get_plan_notes() const { return plan_notes_; }
   void add_plan_note(const char *fmt, ...)
   {
@@ -793,7 +790,6 @@ private:
   int64_t expected_worker_count_;
   int64_t minimal_worker_count_;
   ObRawExprUniqueSet all_exprs_;
-  ObOptEstCost::MODEL_TYPE model_type_;
   double px_object_sample_rate_;
   ObPlanNotes plan_notes_;
   uint64_t aggregation_optimization_settings_; // for adaptive groupby/distinct

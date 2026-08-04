@@ -976,7 +976,6 @@ public:
 
   ObConfigInfoInPC()
   : pushdown_storage_level_(DEFAULT_PUSHDOWN_STORAGE_LEVEL),
-    rowsets_enabled_(false),
     enable_px_batch_rescan_(true),
     bloom_filter_enabled_(true),
     enable_newsort_(true),
@@ -1027,7 +1026,6 @@ public:
   // here to add config values
   //
   int pushdown_storage_level_;
-  bool rowsets_enabled_;
   bool enable_px_batch_rescan_;
   bool enable_px_ordered_coord_;
   bool bloom_filter_enabled_;

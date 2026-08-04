@@ -328,7 +328,7 @@ select count(*) from (select /*+leading(t1 t2) use_hash(t2)*/* from t1 where t1.
 select count(*) from (select /*+leading(t1 t2) use_merge(t2)*/* from t1 where not exists (select 1 from t2 where t1.c1 = t2.c1));
 select count(*) from (select /*+leading(t1 t2) use_hash(t2)*/* from t1 where not exists (select 1 from t2 where t1.c1 = t2.c1));
 
-alter system set _rowsets_enabled = true;
+alter system set _rowsets_max_rows = 256;
 set ob_enable_plan_cache=0;
 
 select count(*) from (select /*+leading(t1 t2) use_merge(t2)*/* from t1 where t1.c1 in (select * from t2));
