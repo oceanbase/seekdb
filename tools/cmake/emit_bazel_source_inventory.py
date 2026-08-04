@@ -37,12 +37,22 @@ class InventoryError(RuntimeError):
 def _read_value(node: ast.AST) -> Any:
     if isinstance(node, ast.Constant) and isinstance(node.value, (str, type(None))):
         return node.value
+    if isinstance(node, ast.Str):
+        return node.s
+    if isinstance(node, ast.NameConstant) and node.value is None:
+        return None
     if (
         isinstance(node, ast.Constant)
         and isinstance(node.value, int)
         and not isinstance(node.value, bool)
     ):
         return node.value
+    if (
+        isinstance(node, ast.Num)
+        and isinstance(node.n, int)
+        and not isinstance(node.n, bool)
+    ):
+        return node.n
     if isinstance(node, ast.List):
         return [_read_value(item) for item in node.elts]
     if isinstance(node, ast.Tuple):
@@ -77,8 +87,13 @@ def _read_assignments(path: Path) -> Dict[str, Any]:
     for statement in tree.body:
         if (
             isinstance(statement, ast.Expr)
-            and isinstance(statement.value, ast.Constant)
-            and isinstance(statement.value.value, str)
+            and (
+                (
+                    isinstance(statement.value, ast.Constant)
+                    and isinstance(statement.value.value, str)
+                )
+                or isinstance(statement.value, ast.Str)
+            )
         ):
             continue
         if (

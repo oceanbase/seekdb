@@ -23,6 +23,7 @@ devdeps-openssl-20260414.tar.gz
 devdeps-vsag-20260416.tar.gz
 
 [tools]
+obdevtools-cmake-20260414.tar.gz
 obdevtools-ninja-20260414.tar.gz
 obdevtools-llvm-18.1.8-20260414.tar.gz
 obdevtools-win-flex-bison-20260414.tar.gz
